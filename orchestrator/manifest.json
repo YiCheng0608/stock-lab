@@ -1,0 +1,792 @@
+{
+  "task": "stock-lab 第一期 Ingestion Pipeline：依 docs/design.md §6 第一期項目 1，建立 Python+FastAPI+PostgreSQL 的資料擷取骨架、schema、四類資料源 adapter、除權息還原價計算、APScheduler 排程與失敗通知介面。",
+  "planning": {
+    "verification_map": [
+      {
+        "task": "spec-2",
+        "verdict": "machine",
+        "how": "docker compose config 通過 ＋ from app.main import app 匯入 ＋ TestClient GET /health=200",
+        "reason": "boot 與 compose 設定是客觀可重現的裁判"
+      },
+      {
+        "task": "spec-3",
+        "verdict": "machine",
+        "how": "空 PG 跑 alembic upgrade head，斷言各表存在、broker_branch_trades 有月分區、(security,broker_branch,date) 索引、daily_prices 有原始＋還原欄位、掛 user 的表有 user_id FK、daily_prices/chips/broker_branch_trades 對 securities 有 FK",
+        "reason": "schema 存在性與結構是可查詢的客觀事實；需真 PG（分區為 PG 原生特性）"
+      },
+      {
+        "task": "spec-4",
+        "verdict": "machine",
+        "how": "匯入模組；未實作抽象方法無法實體化；@register 可註冊一個假來源並被列舉、discover() 對 adapters 套件可執行（驗機制，非真實來源清單）",
+        "reason": "ABC 契約可實體化性與註冊/發現機制可程式化斷言"
+      },
+      {
+        "task": "spec-5",
+        "verdict": "machine",
+        "how": "三通知器可匯入；LogNotifier.notify 不拋且可觀察輸出；TelegramNotifier 為 Notifier 子類、無 token 時不拋亦不發網路請求",
+        "reason": "通知器可呼叫性與 no-op 降級是客觀行為；不需真打 Telegram"
+      },
+      {
+        "task": "spec-6",
+        "verdict": "machine",
+        "how": "對上市＋上櫃兩市場各一段固定 daily-price 樣本回應，各純解析函式輸出預期正規化 OHLCV 列",
+        "reason": "解析邏輯對固定樣本可重現；不含真外站抓取"
+      },
+      {
+        "task": "spec-7",
+        "verdict": "machine",
+        "how": "對三類籌碼、上市＋上櫃兩市場的固定樣本回應，各解析函式輸出預期正規化列",
+        "reason": "解析對 fixture 可驗；真外站抓取不列為必要條件"
+      },
+      {
+        "task": "spec-8",
+        "verdict": "machine",
+        "how": "對上市＋上櫃兩市場的固定分點頁 HTML fixture，解析輸出正規化列；mock 時鐘驗節流間隔；假 CaptchaSolver 可注入",
+        "reason": "解析與節流邏輯可對 fixture/mock 重現；真外站抓取與真驗證碼辨識不列入機器驗收"
+      },
+      {
+        "task": "spec-9",
+        "verdict": "machine",
+        "how": "對三套頁面（除權息/股本/基本資料）、涵蓋上市＋上櫃的固定樣本回應，各解析輸出預期正規化列",
+        "reason": "解析對 fixture 可驗；真外站抓取不列為必要條件"
+      },
+      {
+        "task": "spec-10",
+        "verdict": "machine",
+        "how": "對已知除權息事件＋原始價序列樣本，輸出還原係數/還原價等於人工核算預期（含連乘、除息除權混合）",
+        "reason": "純數學、輸入輸出明確，是可重現的客觀裁判"
+      },
+      {
+        "task": "spec-11",
+        "verdict": "machine",
+        "how": "mock 時鐘＋mock adapter（先失敗後成功）：驗未成功源下一小時重試、成功源不重抓、全綠停止、失敗時 Notifier 被呼叫、securities 先落地、還原價整段序列回填",
+        "reason": "重試狀態機用可控時鐘可完全確定性地驗證"
+      },
+      {
+        "task": "spec-12",
+        "verdict": "machine",
+        "how": "backend/pyproject.toml 以 tomllib 解析成功、依賴清單含 ddddocr/beautifulsoup4/lxml、spec-2 原有依賴與其他區段未被刪改；preflight 安裝後 import ddddocr、import bs4、import lxml 成功",
+        "reason": "「依賴是否增列且可安裝、且未動 spec-2 既有內容」是可程式化斷言的客觀事實"
+      }
+    ],
+    "review_map": [
+      {
+        "task": "spec-2",
+        "risk": "low-med",
+        "review_depth": "focused",
+        "split_reason": "infra 設定 ownership 獨立、為全體根依賴",
+        "upgrade_triggers": [
+          "outputs 越界",
+          "smoke fail",
+          "碰到未預期的 env/port/安全面",
+          "last_failure 非空"
+        ],
+        "reason": "有客觀 boot/compose smoke，但為地基且含 env/port 面，聚焦抽查 diff"
+      },
+      {
+        "task": "spec-3",
+        "risk": "high",
+        "review_depth": "full",
+        "split_reason": "資料模型地基 ownership 獨立、失敗成本高",
+        "upgrade_triggers": [
+          "migration 無法套用",
+          "分區/索引/雙價欄位/user FK 任一缺",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "分區＋雙價＋user FK＋索引一次到位、下游全依賴，設計錯代價高"
+      },
+      {
+        "task": "spec-4",
+        "risk": "med",
+        "review_depth": "full",
+        "split_reason": "四 adapter＋排程共同依賴的介面縫（含 FinMind 替換點）",
+        "upgrade_triggers": [
+          "介面無法涵蓋任一 adapter 需求",
+          "BrokerBranchSource 未能讓來源可換",
+          "registry 改用手動清單而非 @register+discover() 掃描",
+          "discover() 掃不到已註冊 adapter",
+          "outputs 越界",
+          "下游實作時發現契約不足"
+        ],
+        "reason": "design 明列的高槓桿抽象縫，設計缺陷會擴散全下游，需完整審"
+      },
+      {
+        "task": "spec-5",
+        "risk": "low",
+        "review_depth": "defer-until-signal",
+        "split_reason": "獨立通知模組 ownership、僅排程消費、低風險且有 unit test",
+        "upgrade_triggers": [
+          "Notifier 介面無法容納未來 LINE/email",
+          "stub 會拋例外或誤發網路",
+          "spec-11/整合測試因通知介面 fail",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "低風險、ownership 清楚、有可靠 unit test，produce 前免審、失敗訊號再升 full"
+      },
+      {
+        "task": "spec-6",
+        "risk": "med",
+        "review_depth": "focused",
+        "split_reason": "獨立 adapter 模組與目標欄位、可平行",
+        "upgrade_triggers": [
+          "解析 fixture 測試 fail",
+          "只做上市漏上櫃",
+          "未用 @register 自註冊",
+          "碰到多來源端點/金鑰等未預期依賴",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "有解析單元測試，但真實政府格式易誤讀，聚焦抽查解析 diff 與 fixture 代表性"
+      },
+      {
+        "task": "spec-7",
+        "risk": "med",
+        "review_depth": "focused",
+        "split_reason": "獨立 adapter 模組與目標表、可平行",
+        "upgrade_triggers": [
+          "解析 fixture 測試 fail",
+          "三類籌碼欄位對應錯或漏做某類",
+          "只做上市漏上櫃",
+          "未用 @register 自註冊",
+          "碰到未預期端點/金鑰",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "有解析單元測試，聚焦抽查三類籌碼×兩市場欄位映射正確性"
+      },
+      {
+        "task": "spec-8",
+        "risk": "high",
+        "review_depth": "full",
+        "split_reason": "全案最高維運風險與最複雜實作（驗證碼/節流/改版/FinMind 縫），風險隔離",
+        "upgrade_triggers": [
+          "解析或節流測試 fail",
+          "BrokerBranchSource 未能整段替換",
+          "節流/驗證碼策略偏離決議",
+          "只做上市漏上櫃",
+          "universe 誤用不存在的自選股表",
+          "碰到未預期反爬手段",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "design §11 點名維運熱點，驗證碼/節流/未來替換皆高風險，須完整審"
+      },
+      {
+        "task": "spec-9",
+        "risk": "med",
+        "review_depth": "focused",
+        "split_reason": "獨立 adapter 模組與目標表、與還原計算失敗根因不同",
+        "upgrade_triggers": [
+          "解析 fixture 測試 fail",
+          "三套頁面漏做某套",
+          "除權息欄位不足以支撐 spec-10 還原計算",
+          "只做上市漏上櫃導致 securities 覆蓋不全",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "有解析單元測試，聚焦確認三套頁面齊備、除權息欄位充分性、securities 兩市場覆蓋"
+      },
+      {
+        "task": "spec-10",
+        "risk": "high",
+        "review_depth": "full",
+        "split_reason": "與除權息抓取（spec-9）失敗根因不同（數學 vs 解析），correctness 熱點",
+        "upgrade_triggers": [
+          "數學測試 fail",
+          "連乘/除息除權混合情境不符預期",
+          "碰模型定義需改",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "design §7 點名除息旺季不還原會假訊號淹沒，還原係數算錯汙染日後全部指標/回測"
+      },
+      {
+        "task": "spec-11",
+        "risk": "high",
+        "review_depth": "full",
+        "split_reason": "依賴全部下游、承載高風險重試語意，ownership 獨立",
+        "upgrade_triggers": [
+          "重試邏輯測試 fail",
+          "成功源被重抓或未成功源未重試",
+          "未先跑 securities 源致 FK 插入失敗",
+          "還原價只算當日新列未整段重算",
+          "時區非 Asia/Taipei 或無當日重試截止",
+          "失敗未觸發通知",
+          "改到 compose",
+          "last_failure 非空"
+        ],
+        "reason": "「每小時重試直到成功」記帳錯誤會造成永久缺洞或重複灌資料，須完整審"
+      },
+      {
+        "task": "spec-12",
+        "risk": "low",
+        "review_depth": "focused",
+        "split_reason": "依賴清單寫入權集中 ownership、補 spec-8/9 平行節點無合法路徑加依賴的缺口",
+        "upgrade_triggers": [
+          "增列以外動到 spec-2 已寫的既有依賴/build/metadata 區段（越界）",
+          "三套件任一未增列",
+          "破壞既有依賴解析致安裝失敗",
+          "outputs 越界",
+          "last_failure 非空"
+        ],
+        "reason": "風險與粒度都低、有客觀 machine test，但關鍵風險正是「是否只增列、未擾動 spec-2 已審過的 pyproject 其他內容」，聚焦抽查 diff 邊界即足"
+      }
+    ]
+  },
+  "specs": {
+    "spec-1": {
+      "id": "spec-1",
+      "skill": "intake",
+      "status": "verified",
+      "depends_on": [],
+      "outputs": [
+        "orchestrator/intake-analysis.md",
+        "orchestrator/intake-tasks.md",
+        "orchestrator/intake-verification-map.md",
+        "orchestrator/intake-review-map.md"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "review_gate": true,
+      "tier": "high",
+      "block_kind": null,
+      "clarify": null,
+      "last_review": {
+        "depth": "full",
+        "record": "orchestrator/review-spec-1.md"
+      },
+      "clarifications": [
+        {
+          "question": "spec-1(intake)已產出,依 review_gate 停下等使用者查看。產出檔:orchestrator/intake-analysis.md, orchestrator/intake-tasks.md, orchestrator/intake-verification-map.md, orchestrator/intake-review-map.md。請使用者查看並討論後 resume:同意續跑 → {\"approve\":true};要修改 → {\"answer\":\"<修改意見>\"}",
+          "answer": "approved",
+          "kind": "review"
+        },
+        {
+          "question": "spec-1(intake)已產出,依 review_gate 停下等使用者查看。產出檔:orchestrator/intake-analysis.md, orchestrator/intake-tasks.md, orchestrator/intake-verification-map.md, orchestrator/intake-review-map.md。請使用者查看並討論後 resume:同意續跑 → {\"approve\":true};要修改 → {\"answer\":\"<修改意見>\"}",
+          "answer": "approved",
+          "kind": "review"
+        }
+      ]
+    },
+    "spec-2": {
+      "id": "spec-2",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [],
+      "outputs": [
+        "backend/pyproject.toml",
+        "backend/Dockerfile",
+        "docker-compose.yml",
+        "backend/app/__init__.py",
+        "backend/app/main.py",
+        "backend/app/config.py",
+        "backend/.env.example",
+        "backend/app/core/__init__.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/pyproject.toml",
+        "backend/Dockerfile",
+        "docker-compose.yml",
+        "backend/app/__init__.py",
+        "backend/app/main.py",
+        "backend/app/config.py",
+        "backend/.env.example",
+        "backend/app/core/__init__.py",
+        "backend/README.md"
+      ],
+      "forbid_outputs": [
+        "backend/app/models/*",
+        "backend/app/adapters/*",
+        "backend/app/notifications/*",
+        "backend/app/ingestion/*",
+        "*_test.py",
+        "*.test.*",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "low",
+      "last_review": {
+        "depth": "focused",
+        "record": "orchestrator/review-spec-2.md"
+      }
+    },
+    "spec-3": {
+      "id": "spec-3",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-2"
+      ],
+      "outputs": [
+        "backend/app/models/__init__.py",
+        "backend/app/models/security.py",
+        "backend/app/models/daily_price.py",
+        "backend/app/models/chip.py",
+        "backend/app/models/corporate_action.py",
+        "backend/app/models/broker_branch_trade.py",
+        "backend/alembic/env.py",
+        "backend/alembic/versions/ade484fabe6f_initial_schema.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/models/*",
+        "backend/alembic.ini",
+        "backend/alembic/*"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/*",
+        "backend/app/notifications/*",
+        "backend/app/ingestion/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "medium",
+      "last_review": {
+        "depth": "full",
+        "record": "orchestrator/review-spec-3.md"
+      }
+    },
+    "spec-4": {
+      "id": "spec-4",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-2"
+      ],
+      "outputs": [
+        "backend/app/adapters/__init__.py",
+        "backend/app/adapters/base.py",
+        "backend/app/adapters/registry.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/adapters/__init__.py",
+        "backend/app/adapters/base.py",
+        "backend/app/adapters/registry.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/daily_price.py",
+        "backend/app/adapters/chips.py",
+        "backend/app/adapters/broker_branch.py",
+        "backend/app/adapters/corporate_actions.py",
+        "backend/app/models/*",
+        "backend/app/notifications/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "medium"
+    },
+    "spec-5": {
+      "id": "spec-5",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-2"
+      ],
+      "outputs": [
+        "backend/app/notifications/__init__.py",
+        "backend/app/notifications/base.py",
+        "backend/app/notifications/log_notifier.py",
+        "backend/app/notifications/telegram_notifier.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/notifications/__init__.py",
+        "backend/app/notifications/base.py",
+        "backend/app/notifications/log_notifier.py",
+        "backend/app/notifications/telegram_notifier.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/*",
+        "backend/app/models/*",
+        "backend/app/ingestion/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "low",
+      "last_review": {
+        "depth": "defer-until-signal",
+        "record": null
+      }
+    },
+    "spec-6": {
+      "id": "spec-6",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-3",
+        "spec-4"
+      ],
+      "outputs": [
+        "backend/app/adapters/daily_price.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/adapters/daily_price.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/chips.py",
+        "backend/app/adapters/broker_branch.py",
+        "backend/app/adapters/corporate_actions.py",
+        "backend/app/models/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "medium",
+      "last_review": {
+        "depth": "focused",
+        "record": "orchestrator/review-spec-6.md"
+      }
+    },
+    "spec-12": {
+      "id": "spec-12",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-2"
+      ],
+      "outputs": [
+        "backend/pyproject.toml"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/pyproject.toml"
+      ],
+      "forbid_outputs": [
+        "backend/Dockerfile",
+        "docker-compose.yml",
+        "backend/app/__init__.py",
+        "backend/app/main.py",
+        "backend/app/config.py",
+        "backend/.env.example",
+        "backend/app/core/*",
+        "backend/app/models/*",
+        "backend/app/adapters/*",
+        "backend/app/notifications/*",
+        "backend/app/ingestion/*",
+        "backend/app/pricing/*",
+        "backend/alembic.ini",
+        "backend/alembic/*",
+        "*_test.py",
+        "*.test.*",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "low"
+    },
+    "spec-7": {
+      "id": "spec-7",
+      "skill": "worker",
+      "status": "verified",
+      "depends_on": [
+        "spec-3",
+        "spec-4",
+        "spec-12"
+      ],
+      "outputs": [
+        "backend/app/adapters/chips.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/adapters/chips.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/daily_price.py",
+        "backend/app/adapters/broker_branch.py",
+        "backend/app/adapters/corporate_actions.py",
+        "backend/app/models/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "medium",
+      "last_review": {
+        "depth": "focused",
+        "record": "orchestrator/review-spec-7.md"
+      }
+    },
+    "spec-8": {
+      "id": "spec-8",
+      "skill": "worker",
+      "status": "produced",
+      "depends_on": [
+        "spec-3",
+        "spec-4",
+        "spec-12"
+      ],
+      "outputs": [
+        "backend/app/adapters/broker_branch.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/adapters/broker_branch.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/daily_price.py",
+        "backend/app/adapters/chips.py",
+        "backend/app/adapters/corporate_actions.py",
+        "backend/app/models/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "high",
+      "last_review": {
+        "depth": "full",
+        "record": "orchestrator/review-spec-8.md"
+      }
+    },
+    "spec-9": {
+      "id": "spec-9",
+      "skill": "worker",
+      "status": "produced",
+      "depends_on": [
+        "spec-3",
+        "spec-4",
+        "spec-12"
+      ],
+      "outputs": [
+        "backend/app/adapters/corporate_actions.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/adapters/corporate_actions.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/daily_price.py",
+        "backend/app/adapters/chips.py",
+        "backend/app/adapters/broker_branch.py",
+        "backend/app/models/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "medium",
+      "last_review": {
+        "depth": "focused",
+        "record": "orchestrator/review-spec-9.md"
+      }
+    },
+    "spec-10": {
+      "id": "spec-10",
+      "skill": "worker",
+      "status": "pending",
+      "depends_on": [
+        "spec-3",
+        "spec-9"
+      ],
+      "outputs": [
+        "backend/app/pricing/__init__.py",
+        "backend/app/pricing/adjustment.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/pricing/__init__.py",
+        "backend/app/pricing/adjustment.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/*",
+        "backend/app/models/*",
+        "backend/app/ingestion/*",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "high",
+      "last_review": {
+        "depth": "full",
+        "record": "orchestrator/review-spec-10.md"
+      }
+    },
+    "spec-11": {
+      "id": "spec-11",
+      "skill": "worker",
+      "status": "pending",
+      "depends_on": [
+        "spec-4",
+        "spec-5",
+        "spec-6",
+        "spec-7",
+        "spec-8",
+        "spec-9",
+        "spec-10"
+      ],
+      "outputs": [
+        "backend/app/ingestion/__init__.py",
+        "backend/app/ingestion/pipeline.py",
+        "backend/app/ingestion/scheduler.py"
+      ],
+      "last_failure": null,
+      "fix_target": null,
+      "allowed_outputs": [
+        "backend/app/ingestion/__init__.py",
+        "backend/app/ingestion/pipeline.py",
+        "backend/app/ingestion/scheduler.py"
+      ],
+      "forbid_outputs": [
+        "backend/app/adapters/*",
+        "backend/app/notifications/*",
+        "backend/app/models/*",
+        "backend/app/pricing/*",
+        "docker-compose.yml",
+        "*_test.py",
+        "backend/tests/*"
+      ],
+      "requires_test": true,
+      "tier": "high",
+      "last_review": {
+        "depth": "full",
+        "record": "orchestrator/review-spec-11.md"
+      }
+    }
+  },
+  "tests": {
+    "test-2": {
+      "id": "test-2",
+      "verifies": "spec-2",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-3": {
+      "id": "test-3",
+      "verifies": "spec-3",
+      "runner": "pytest-postgres",
+      "kind": "e2e",
+      "depends_on": [
+        "test-2"
+      ],
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-4": {
+      "id": "test-4",
+      "verifies": "spec-4",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-5": {
+      "id": "test-5",
+      "verifies": "spec-5",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-6": {
+      "id": "test-6",
+      "verifies": "spec-6",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-7": {
+      "id": "test-7",
+      "verifies": "spec-7",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-8": {
+      "id": "test-8",
+      "verifies": "spec-8",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pending",
+      "last_fail": null
+    },
+    "test-9": {
+      "id": "test-9",
+      "verifies": "spec-9",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pending",
+      "last_fail": null
+    },
+    "test-10": {
+      "id": "test-10",
+      "verifies": "spec-10",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pending",
+      "last_fail": null
+    },
+    "test-11": {
+      "id": "test-11",
+      "verifies": "spec-11",
+      "runner": "pytest",
+      "kind": "unit",
+      "status": "pending",
+      "last_fail": null
+    },
+    "test-12": {
+      "id": "test-12",
+      "verifies": "spec-12",
+      "runner": "pytest-preflight",
+      "kind": "unit",
+      "depends_on": [
+        "test-2"
+      ],
+      "status": "pass",
+      "last_fail": null
+    },
+    "test-integration": {
+      "id": "test-integration",
+      "verifies": "spec-11",
+      "runner": "pytest-postgres",
+      "kind": "e2e",
+      "depends_on": [
+        "test-3",
+        "test-11"
+      ],
+      "status": "pending",
+      "last_fail": null,
+      "evidence": {
+        "command": "cd backend && DATABASE_URL=postgresql+psycopg://stocklab:stocklab@localhost:5432/stocklab venv/bin/python -m pytest test_ingestion_integration.py -v",
+        "exit_code": 1,
+        "passed": 0,
+        "failed": 3,
+        "expected": "SQLAlchemy Enum 的 name/value 對應需與 migration 建的 PostgreSQL enum values 一致(例如 native_enum 搭配 values_callable=lambda e: [m.value for m in e],或 migration 直接用大寫 label)",
+        "actual": "backend/app/models/security.py 的 Enum(SecurityMarket, name=\"security_market\", native_enum=True) 未設 values_callable,預設用 name(LISTED/OTC);backend/alembic/versions/ade484fabe6f_initial_schema.py 建的 sa.Enum(\"listed\",\"otc\",...) 是小寫 value,兩者不符"
+      }
+    }
+  },
+  "env": {
+    "docker_available": true
+  },
+  "env_patchable": [
+    "docker_available"
+  ],
+  "orchestration": {
+    "turn": 37,
+    "maxTurns": 72,
+    "noProgressK": 3,
+    "failSignals": [],
+    "leases": [
+      "test:test-8",
+      "test:test-9"
+    ]
+  }
+}
