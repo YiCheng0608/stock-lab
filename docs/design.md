@@ -43,9 +43,29 @@
 - **手機**：先靠 RWD + PWA（加到主畫面）。React Native 延後到確定需要推播/Widget 等原生能力再開——屆時因 thick server 原則，只需寫 UI。
 - **資料庫**：PostgreSQL 單庫全包（操作型＋分析型資料）。分點表按日期**按月分區**＋（股票, 分點, 日期）索引。日後若有重度全市場掃描需求，再鏡像 Parquet 給 DuckDB 讀（加法，非重構）。
 
+### 前端構建計畫
+
+> 本節為決策摘要；**前端實作與頁面生成以 [frontend-plan.md](frontend-plan.md) 為直接依據**（該文件為本節的實作級展開，含頁面規格、元件清單與里程碑）。
+
+依 §2 thick server / thin client 原則，前端只做呈現層。構建決策如下：
+
+- **建置**：**Vite + React + TypeScript**，純 SPA——自用工具無 SEO 需求，不引入 SSR/Next.js。與後端同一 repo，`frontend/`、`backend/` 分目錄。
+- **路由**：React Router，頁面對應 §6 第一期功能：
+  - `/stock/:id` 個股頁（K 線＋技術指標＋分點個股視角）
+  - `/screener` 篩選頁（JSON 條件 schema 的 UI 條件建構器）
+  - `/broker/:id` 分點頁（分點視角＋手動標籤管理）
+  - `/strategies` 策略頁（已存策略＋每日命中歷史）
+- **狀態管理**：伺服器資料一律 **TanStack Query**（快取、重新驗證、錯誤重試），前端不複製任何業務邏輯；UI 狀態用 React 內建 state，夠用之前不引入全域狀態庫。
+- **API 契約**：**orval**（或 openapi-typescript）讀 FastAPI `/openapi.json`，codegen 出 typed client＋TanStack Query hooks；`npm run codegen` 一鍵重生。後端 schema 變動 → 重新 codegen → TypeScript 編譯錯誤即為契約漂移警報（落實 §4 型別契約）。
+- **樣式**：不用大型元件庫（MUI 等），依 §10 設計規格將 design tokens 落成 **CSS variables**、元件自建；數據表格全域套 `font-variant-numeric: tabular-nums`。
+- **圖表**：K 線用 lightweight-charts、統計類（籌碼柱狀、分點集中度等）用 ECharts；各封裝成薄 wrapper 元件，統一套用 §10 的紅漲綠跌色。
+- **PWA**：vite-plugin-pwa 產 manifest + service worker；**只快取 app shell**，盤後資料不做離線快取，一律以 API 為準。
+- **開發流程**：Mac 上 `vite dev`，proxy `/api` 到本機 FastAPI，前後端可獨立熱更新。
+- **部署**：`vite build` 產出的靜態檔**打進 FastAPI image**，由 FastAPI 以 StaticFiles 掛在 `/`（API 統一走 `/api` prefix）。compose 不新增服務、單一 port、同源無 CORS 問題；手機在家中 LAN 直連同一網址即可安裝 PWA（見 §5）。
+
 ## 5. 部署與排程
 
-- 跑在**家中常開的 Windows 機**：WSL2 + **Docker Compose**（Postgres、FastAPI、ingestion 全進 compose，`restart: unless-stopped`，重開機自動復活）。
+- 跑在**家中常開的 Windows 機**：WSL2 + **Docker Compose**（Postgres、FastAPI、ingestion 全進 compose，`restart: unless-stopped`，重開機自動復活）。前端為靜態檔、包在 FastAPI image 內（見 §4 前端構建計畫），**不是**獨立的 compose 服務。
 - 開發在 Mac、部署到 Windows，同一份 compose，環境一致。
 - 排程用 Python 內建 scheduler（APScheduler），**不依賴 Windows 工作排程器**。
 - **每日傍晚起每小時重試直到成功**（不是一天只試一次），對應分點資料錯過即缺洞的特性。
@@ -56,7 +76,7 @@
 ### 第一期（順序即優先序）
 
 1. **Ingestion pipeline** — 最急，分點累積從上線日起算。
-2. **K 線與技術指標頁** — 指標用 pandas-ta 標準集。
+2. **K 線與技術指標頁** — 指標用 pandas-ta 標準集。前端 scaffold（Vite 專案、design tokens、codegen 管線，見 §4 前端構建計畫）隨本項一併建立。
 3. **篩選引擎** — 條件存成結構化 **JSON 條件 schema**，UI 條件建構器組條件（指標比較、連續 N 天、排名/佔比、分點行為）。此 JSON 是引擎的中間表示：篩選頁即時查詢、訊號掃描每日跑、回測期翻譯成向量運算，三者共用。
 4. **分點功能** — 個股視角（哪些分點在買賣、集中度、主力成本區）＋分點視角（追蹤特定分點每日進出）＋**手動標籤**（隔日沖、地緣、外資通路…，一張標籤表，內容手動維護）。
 5. **存策略＋每日自動掃描＋命中歷史** — 篩選條件存成策略，盤後自動掃全市場，命中結果入庫。命中歷史即免費的前向測試紀錄（無前視偏差）。
