@@ -99,7 +99,17 @@
 
 此原則兼顧自用學習與未來產品化賣點。
 
-## 10. 已知風險
+## 10. UI 設計系統
+
+- 採用 [nexu-io/open-design](https://github.com/nexu-io/open-design) 的 **Linear 設計系統**（`design-systems/linear-app`），完整規格已收錄於本 repo [docs/design-system/DESIGN.md](design-system/DESIGN.md)，前端實作以該檔為準。
+- 選擇理由：dark-mode 原生（近黑畫布、以白色不透明度層級管理資訊密度）最適合盤後看數據的場景；幾乎無彩度的介面讓紅綠漲跌色成為畫面上唯一搶眼的訊號；附 Berkeley Mono 等寬字體規格，適合數字對齊的表格。
+- **台股在地化調整**（覆蓋原系統之處）：
+  - **漲跌色循台股慣例：紅漲（`#ef4444` 系）綠跌（`#10b981` 系）**，與歐美軟體相反；此二色保留給漲跌與買賣超語意，不作裝飾用途。
+  - 品牌紫（`#5e6ad2`/`#7170ff`）僅用於互動元素（CTA、選中態、連結），不與漲跌色混用。
+  - 資料表格允許比 Linear 原版更高的密度（較小行高），但維持其「以邊框透明度分層」的作法。
+  - 中文字體以 Inter 的 fallback 補上系統中文字型（`"Noto Sans TC"`, `"PingFang TC"`），數字一律等寬或 `font-variant-numeric: tabular-nums`。
+
+## 11. 已知風險
 
 - **分點爬蟲**是維運熱點：驗證碼失效、官方改版、節流被擋。緩解：故障當日 Telegram 告警＋每小時重試＋FinMind 付費回補作最後手段。
 - Windows 機停機一整天以上 → 該日分點永久缺洞（免費範圍內）。對「追蹤近期分點動向」傷害有限；嚴謹回測前可用 FinMind 補洞。
