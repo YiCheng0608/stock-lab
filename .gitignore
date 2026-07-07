@@ -18,3 +18,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# ai
+.agents
+.claude
