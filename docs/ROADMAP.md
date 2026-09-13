@@ -1,6 +1,30 @@
 # 開發路線、能力盤點與驗收
 
-更新：2026-09-13。基線依原文件整理輪的程式靜態檢查與產品討論建立；其後 C-001 已完成 R0-2 最小信心語意相容修正並經統籌 review。Round12 C012 再完成分離的 `signal-artifact/v1` 純契約與明確 opt-in、專案外 immutable SQLite store 之有限 review；Round32 C032-B 又補上 `signal-comparison/v1` 有限 offline exact descriptive library。完整保存輸入的 paired replay、API／UI、worker、PIT 與 B7 仍未完成。Round13 依使用者決定先交付可操作的個股研究頁，具名有限範圍已通過統籌 final review；當輪延後的 signal comparison 現已由 Round32 只按有限 library 範圍接受，B7 仍保留。C-002 的 R0-1 第一段純 ATR 核心也已於 D-004a 修正後通過統籌 review。C-003 已完成 R0-5/B6 的正式 SQLite 唯讀現況與隔離副本／fresh DB migration review；在 C003 驗收時正式 DB 沒有升級。Round10 C010 再加入 synthetic 0004 pre-head regression 與隔離 SQLite restore mechanics，並揭露兩個 News JSON server-default gap；Round11 C011 已修正該兩欄，且在明列的 parity 與 atomic migration regression 範圍通過統籌 review。這只結清 R0-A2 的該項具名範圍，不宣稱所有 historical schema parity、正式 restore／deployment 或 R0 整體完成。Round 04 C-004 與 Round 06 C-006 已完成 B3-persist 的有限 review：schema 1 immutable store、`atr-provenance/v2` caller-provided strict 結構及同日 legacy＋兩 as-of 離線唯讀比較。Round07 C007 完成 B5a 的 `time-evidence/v1` 本地核心／專用 store／exact reader／JSON export；Round08 C008 再完成 `product-time/v1` 的既有 News、signal、action、stock、tracking API/UI read-time 相容投影。Round09 已完成 R1-A1／G-SOURCE 的版本化唯讀 registry foundation 與首批四個官方 endpoint 人工查證；Round18 C018 再完成相同四筆的顯式 opt-in、一次一來源 `source-capture/v1` standalone runtime；Round19 C019-B 只把已保存的 `twse_stock_day_all` 單日 bundle 接入既有 selected-security bar consumer；Round20 C020-B 再只把已保存的單年度 `twse_holiday_schedule` 接成多日 positive request exclusion；Round21 C021-C 又完成既有 `tpex_spendi_today` code-only 停牌誤判的有限修正，五個具名小批皆已通過各自有限 review。整體 R1-A1、完整 legacy collector gate、內容／時間 truth、PIT 與其他來源仍未完成。Round15／16 的 ordinary industry 與 Round17 ETF／new-listing candidate lifecycle 亦已在各自明列範圍通過 review，正式分類資料仍未修復。完整小批依賴與後續驗收見 [R0–R3 執行清單](ROADMAP_EXECUTION.md)，來源證據見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)，實作細節見 [R0 契約](R0_IMPLEMENTATION.md)。方向仍以 [產品規格](PRODUCT_SPEC.md) 為準，文件責任見 [索引](README.md)。
+更新：2026-09-14。本次核對目前 Git 基準 `86ee317`、協作紀錄、現行程式與定向測試；只更新進度文件。
+
+## 目前進度（2026-09-14 核對）
+
+**最近完成的是 Round33；Round34 已建立四個角色，但尚未正式交接／派工，依使用者指示暫停。整體仍在補齊 R0，並已完成部分 R1 與前端產品功能；R0–R3 沒有任何一個完整階段可標為完成。** 角色與恢復入口見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。本次核對不是恢復派工。
+
+| 階段／範圍 | 目前已接受的成果 | 尚未完成的主要項目 |
+| --- | --- | --- |
+| R0 研究基準與時間口徑 | 信心／價位／時間的相容語意；ATR 純核心及獨立保存層；有限 SQLite migration／startup gate；signal artifact、R32 離線描述比較、R33 caller-input pure-rule replay。各項只按原驗收範圍接受。 | B2 的 worker／artifact／subject／time 關聯與完整輸入保存；B3-wire 新 ATR 接線；B4b 新交易計畫；B5b 依當時可得資料執行的 PIT gate；B7 新舊版本成對重播。R0-5 也不代表正式 migration／restore／deployment 已驗收。 |
+| R1 可靠資料與事件研究 | 四來源 registry／standalone capture、兩個有限 capture consumer、TPEx 停復牌與公司行動修正、TWSE 來源分類，以及 ordinary-industry／ETF／new-listing 的有限 collector 接線。 | 完整來源與資料品質驗證、公司行動／停復牌 coverage、官方可得時間與修訂、正式庫舊分類修復、事件群組／摘要、當沖／借券／分點與必要基本面。R1-A1 整體仍未完成。 |
+| R2 候選與完整交易計畫 | 既有 v1 候選、行動摘要與持倉功能可用；R13 個股研究頁及 R14 前端 UX 已有限 review。 | R2 執行清單仍為提案：完整交易計畫、成交／退出 lifecycle、成本／tick／gap／流動性、倉位與題材曝險，以及整合驗收。現有頁面不代表完整 R2。 |
+| R3 AI 與研究有效性 | 保留固定規則基準、追蹤與研究規格。 | 尚無已驗收的 AI／量化模型、校準機率或策略採用證據；目標／門檻待決策，walk-forward、樣本外與前瞻模擬仍待實作或樣本累積。 |
+
+恢復開發後的既有下一候選是 **R0-B2：worker 實際 evaluator 完整輸入的明確 opt-in capture／保存調查**，尚未核定實作。現行 `pipeline.py` 呼叫兩個 evaluator 時傳入當次 `close`／`volume`，但 `rule_evidence_json.inputs` 未保存這兩項，且同 key 更新會刷新 evidence；因此 R33 的 caller-provided bundle 不能直接升格為歷史訊號重建。先釐清轉換後參數、標的／市場時間、版本／結果一致性與 transaction／失敗語意，再決定接線契約。其餘缺口及依賴維持 [執行清單](ROADMAP_EXECUTION.md)。
+
+本次證據與限制：
+
+- 核對開始時 Git 工作樹乾淨，基準為 `86ee317`。現行 API lifespan 只呼叫 readiness；worker 的 `atr14` 仍為最近最多 14 根 high-low 平均；R32 comparison 仍固定 `comparable=false`，R33 replay 仍是獨立 library。
+- 實跑 `./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests/test_rule_replay.py','backend/tests/test_domain.py','backend/tests/test_signal_comparison.py','backend/tests/test_database_readiness.py')`：**330 passed、1 skipped、67 warnings，15.97 秒，exit 0**。跳過為 `test_signal_comparison.py` 的 Windows symlink privilege unavailable；使用專案外隔離目錄，入口完成清理。
+- 最近完整回歸是 [2026-09-14 開發基準紀錄](development-baseline/README.md)：backend 2,405 passed／2 skipped，前端 6 個測試檔與 TypeScript/Vite build 通過。本次未重跑全套、瀏覽器、正式 DB 現況或 live 官方來源；上述完整回歸保留其原日期與證據歸屬，不當成本次測試。
+- 歷史 Temp 附件已清理；下列輪次的 test counts、manifest 與 external 路徑保留為當時驗收紀錄，不保證附件仍可讀。新驗收使用現行原始碼、測試與 Git 基準。Round 數與測試數均不換算為產品完成百分比。
+
+## 歷次已接受的小批與驗收背景
+
+以下為截至 2026-09-13 的歷次紀錄。基線依原文件整理輪的程式靜態檢查與產品討論建立；其後 C-001 已完成 R0-2 最小信心語意相容修正並經統籌 review。Round12 C012 再完成分離的 `signal-artifact/v1` 純契約與明確 opt-in、專案外 immutable SQLite store 之有限 review；Round32 C032-B 又補上 `signal-comparison/v1` 有限 offline exact descriptive library。完整保存輸入的 paired replay、API／UI、worker、PIT 與 B7 仍未完成。Round13 依使用者決定先交付可操作的個股研究頁，具名有限範圍已通過統籌 final review；當輪延後的 signal comparison 現已由 Round32 只按有限 library 範圍接受，B7 仍保留。C-002 的 R0-1 第一段純 ATR 核心也已於 D-004a 修正後通過統籌 review。C-003 已完成 R0-5/B6 的正式 SQLite 唯讀現況與隔離副本／fresh DB migration review；在 C003 驗收時正式 DB 沒有升級。Round10 C010 再加入 synthetic 0004 pre-head regression 與隔離 SQLite restore mechanics，並揭露兩個 News JSON server-default gap；Round11 C011 已修正該兩欄，且在明列的 parity 與 atomic migration regression 範圍通過統籌 review。這只結清 R0-A2 的該項具名範圍，不宣稱所有 historical schema parity、正式 restore／deployment 或 R0 整體完成。Round 04 C-004 與 Round 06 C-006 已完成 B3-persist 的有限 review：schema 1 immutable store、`atr-provenance/v2` caller-provided strict 結構及同日 legacy＋兩 as-of 離線唯讀比較。Round07 C007 完成 B5a 的 `time-evidence/v1` 本地核心／專用 store／exact reader／JSON export；Round08 C008 再完成 `product-time/v1` 的既有 News、signal、action、stock、tracking API/UI read-time 相容投影。Round09 已完成 R1-A1／G-SOURCE 的版本化唯讀 registry foundation 與首批四個官方 endpoint 人工查證；Round18 C018 再完成相同四筆的顯式 opt-in、一次一來源 `source-capture/v1` standalone runtime；Round19 C019-B 只把已保存的 `twse_stock_day_all` 單日 bundle 接入既有 selected-security bar consumer；Round20 C020-B 再只把已保存的單年度 `twse_holiday_schedule` 接成多日 positive request exclusion；Round21 C021-C 又完成既有 `tpex_spendi_today` code-only 停牌誤判的有限修正，五個具名小批皆已通過各自有限 review。整體 R1-A1、完整 legacy collector gate、內容／時間 truth、PIT 與其他來源仍未完成。Round15／16 的 ordinary industry 與 Round17 ETF／new-listing candidate lifecycle 亦已在各自明列範圍通過 review，正式分類資料仍未修復。完整小批依賴與後續驗收見 [R0–R3 執行清單](ROADMAP_EXECUTION.md)，來源證據見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)，實作細節見 [R0 契約](R0_IMPLEMENTATION.md)。方向仍以 [產品規格](PRODUCT_SPEC.md) 為準，文件責任見 [索引](README.md)。
 
 Round22 C022-B 再完成 `tpex_spendi_history` `Serial` 身分誤用的有限資料品質修正：官方 `SecuritiesCompanyCode` 與既有 local aliases 行為保留，只把 row number 移出 identity fallback。這不是 history capture consumer、舊 Event cleanup、PIT 或完整停復牌 coverage。
 
@@ -30,7 +54,7 @@ Round33 C033-B 已通過 caller-provided current pure-rule complete-argument cap
 
 第一版暫定盤後決策、最早 T+1、數天至數週的股票研究。這是規劃假設，尚未確認精確持有期間、是否做空、風險預算或付費來源。現有 v1 為 long 策略，T+5／T+20 是追蹤窗口，不能直接當成必然出場日。
 
-| 能力 | 2026-09-11 靜態核對 | 下一步 |
+| 能力 | 現況（原 2026-09-11 盤點＋截至 R33 的有限 review） | 待完成工作 |
 | --- | --- | --- |
 | TWSE／TPEx 市場、法人／融資與 raw 稽核 | 有 adapter、收集及保存邏輯；資料完整性需逐域驗證 | 保留並補缺口，建立實際可用時間與修訂版本。 |
 | 來源 registry／capture／既有 consumer | Round09 四來源 policy foundation、Round18 四來源 standalone `local_fetch + raw_store` executor、Round19 單一 `STOCK_DAY_ALL` 日期 selected-security、Round20 單年度 `holidaySchedule` 多日 positive exclusion、Round21 today-announcement code-only、Round22 history `Serial` identity、Round23 唯一嚴格跨日 split-pair linkage、Round24 TPEx 公司行動 ratio/reference、Round25 cash precision 及 Round26 TWSE read-only source classification 均已有限 review | 公司行動、停復牌 capture、完整 collector、session／PIT 仍分批驗收；Round21–26 都不外推成第三個 capture consumer。Round24／25 只改善 paid ratio 為零的具名有效 TPEx cash／free 事件；Round26 只分類已保存 TWSE details，不修 paid/reference、raw membership、舊 action／evaluation、來源准入或 PIT。 |
@@ -176,7 +200,7 @@ R0-3/B4a 的契約、入口矩陣與 final 證據見 [R0 §6.1](R0_IMPLEMENTATIO
 - 保留官方行情、TAIEX、法人／融資、公司行動、停牌和 raw provenance，依標的／日期／用途補資料。
 - 新增來源 registry 與可用時間／修訂歷史；逐來源確認歷史範圍、費用、延遲、合法保存和摘要範圍。
 - Round09 首批只查 `STOCK_DAY_ALL`、`holidaySchedule`、`TWT48U_ALL`、`tpex_spendi_history`。免費／OGL 1.0 支持附 machine-readable conditions 的本地擷取、raw 保存與摘要 policy eligibility；rate limit、精確發布時點、完整歷史、revision lineage 與 endpoint-specific deprecation 未查到者保留 unknown。四者都沒有足以准入 `historical_pit` 的證據；詳見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。這是已 review 的局部唯讀 foundation，不是 R1 全域或 collector 接線完成。
-- Round18 只為同四筆補上一次一來源的 `local_fetch + raw_store` standalone executor；Round19 再只為保存的單日 `STOCK_DAY_ALL` bundle 補 selected-security 內容驗證與既有 `collect` 的 library opt-in；Round20 又只為保存的單年度 `holidaySchedule` 補多日 positive request exclusion。Round21 修正 today-announcement code-only 停牌誤判；Round22 只移除 history parser 的 `Serial` fallback；Round23 再只補唯一嚴格跨日 split pair 的 resume linkage；Round24／25 分別修 TPEx 公司行動 ratio/reference 與 cash precision，均已有限 review。後五批都未新增 capture consumer；Round24／25 不補 paid subscription、TWSE type/reference、來源准入、歷史自動 repair 或 replay。完整公司行動／停復牌接線、完整 legacy collector、summary、官方 first availability、C007／B5b／PIT 與正式分類仍未接。
+- Round18 只為同四筆補上一次一來源的 `local_fetch + raw_store` standalone executor；Round19 再只為保存的單日 `STOCK_DAY_ALL` bundle 補 selected-security 內容驗證與既有 `collect` 的 library opt-in；Round20 又只為保存的單年度 `holidaySchedule` 補多日 positive request exclusion。Round21 修正 today-announcement code-only 停牌誤判；Round22 只移除 history parser 的 `Serial` fallback；Round23 再只補唯一嚴格跨日 split pair 的 resume linkage；Round24／25 分別修 TPEx 公司行動 ratio/reference 與 cash precision，均已有限 review。後五批都未新增 capture consumer；Round24／25 不補 paid subscription、TWSE type/reference、來源准入、歷史自動 repair 或 replay。完整公司行動／停復牌接線、完整 legacy collector、summary、官方 first availability 與 C007／B5b／PIT 仍未完成；ordinary-industry／candidate lifecycle 已有有限接線，正式庫既有錯分類仍未修復。
 - 新聞產出事件群組、新資訊、影響對象、傳導理由、影響期間、反面證據及來源。
 - 官方產業與跨產業題材分離；成員關係保留來源、生效日、關聯方法與版本。
 - 接入當沖統計；若分點資料可取得，再建立集中度與次日反轉的描述特徵。尚無來源的功能保持不可用。

@@ -1,6 +1,14 @@
 # ROADMAP R0–R3 執行清單
 
-更新：2026-09-13。本文把 [ROADMAP](ROADMAP.md) 的 R0–R3 拆成可追蹤的小批；產品方向、能力狀態與優先順序仍以 ROADMAP 為唯一權威，R0 細節以 [R0 實作契約](R0_IMPLEMENTATION.md) 為準。Round12 C012 已新增 B2-persist 的有限本地 foundation，Round32 C032-B 再新增有限 offline exact comparison library，但 B2 整體仍未完成。Round13 的有限個股研究頁整合已通過統籌 final review；Round14 前端 UX 與輪末索引 receipt 已通過有限 review，見 [Round14 UX review](UX_REVIEW.md)。Round15 產業分類契約、程式與隔離 current／counterfactual 診斷、Round16 stock／ipo ordinary-industry normal collector 觀測期間、Round17 ETF／new-listing candidate lifecycle、Round18 四來源 standalone capture、Round19 單日 `STOCK_DAY_ALL` selected-security existing-consumer、Round20 單年度 `holidaySchedule` 多日 positive request exclusion，以及 Round21 `tpex_spendi_today` code-only 停牌誤判修正，均已通過統籌有限 review。正式資料仍未修復，完整 legacy source collector gate 仍未接。完整輸入 replay／B7 驗收保留。勾選單一批次不等於該 phase、整體研究或產品已完成。
+更新：2026-09-14。現況以 [ROADMAP 進度摘要](ROADMAP.md#目前進度2026-09-14-核對) 為準：**R33 已接受；R34 已建立但尚未正式交接／派工，仍暫停。** 本次只是進度核對，不新增 round、不派工或核定下一批實作；既有四個角色 ID 見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。
+
+R0 各項仍只局部完成，R1 已有部分資料功能，R2 仍為提案，R3 為提案／等待決策或樣本。恢復後的既有候選是 R0-B2 worker 實際 evaluator 完整參數 capture／保存調查；R33 的 caller-input replay 沒有結清 B2、B7、PIT 或產品接線。下列原完成條件保持不變。
+
+本次核對 Git 基準 `86ee317`、現行 worker／replay／comparison／API startup，並實跑四個後端模組：330 passed／1 skipped（Windows symlink 權限）／67 warnings，exit 0；命令與限制見 ROADMAP 進度摘要。最近全套回歸及目前驗證入口見 [開發基準](development-baseline/README.md)。本文件下列各輪的計數、freeze、待索引或下一輪描述均保留當時脈絡；已清理的 Temp／manifest 附件不再是新驗收的依賴。
+
+## 歷次更新背景
+
+以下為截至 2026-09-13 的歷次紀錄。本文把 [ROADMAP](ROADMAP.md) 的 R0–R3 拆成可追蹤的小批；產品方向、能力狀態與優先順序仍以 ROADMAP 為唯一權威，R0 細節以 [R0 實作契約](R0_IMPLEMENTATION.md) 為準。Round12 C012 已新增 B2-persist 的有限本地 foundation，Round32 C032-B 再新增有限 offline exact comparison library，但 B2 整體仍未完成。Round13 的有限個股研究頁整合已通過統籌 final review；Round14 前端 UX 與輪末索引 receipt 已通過有限 review，見 [Round14 UX review](UX_REVIEW.md)。Round15 產業分類契約、程式與隔離 current／counterfactual 診斷、Round16 stock／ipo ordinary-industry normal collector 觀測期間、Round17 ETF／new-listing candidate lifecycle、Round18 四來源 standalone capture、Round19 單日 `STOCK_DAY_ALL` selected-security existing-consumer、Round20 單年度 `holidaySchedule` 多日 positive request exclusion，以及 Round21 `tpex_spendi_today` code-only 停牌誤判修正，均已通過統籌有限 review。正式資料仍未修復，完整 legacy source collector gate 仍未接。完整輸入 replay／B7 驗收保留。勾選單一批次不等於該 phase、整體研究或產品已完成。
 
 Round22 C022-B 已通過 `tpex_spendi_history` `Serial` 身分誤用的有限資料品質 review；它沿用既有 history event consumer，只修 identity fallback，不新增 capture 接線、PIT 或舊資料 cleanup。
 
@@ -34,6 +42,7 @@ Round33 C033-B 已通過 `rule-replay-bundle/v1`／`rule-replay-report/v1` 的�
 | --- | --- |
 | `提案` | 契約存在，尚無對應程式／資料證據。 |
 | `進行中` | 當輪 task 正在執行，尚未收到完整交付或通過 review。 |
+| `暫停` | 已有工作範圍或角色，但依使用者指示停止；不因建立 task 或更新文件而視為開工。 |
 | `已實作` | 變更存在且有執行證據，尚未由統籌獨立重現。 |
 | `已 review` | 統籌已重現本批驗收；只代表該批明列範圍。 |
 | `等待` | 必須等待來源、時間跨度、樣本累積或已列出的決策。 |
@@ -312,6 +321,7 @@ Round09 R1-A1 有限 review 範圍與證據見 [SOURCE_REGISTRY](SOURCE_REGISTRY
 2. 實作 task 提供完整證據；文件 task 只把已核對事實回寫對應契約，不因「完成」訊息先標通過。
 3. 統籌檢查差異、正式／隔離路徑與測試，再決定 `已 review`、修正或保持原狀。
 4. 文件狀態只更新本批、ROADMAP 對應能力及必要操作限制；不以縮小原 scope 的方式把原 ROADMAP 宣稱完成。
-5. 索引 task 更新本輪涉及分區並回報 coverage；索引成功不等於功能驗收。
+5. 文件 freeze 後，索引 task 更新本輪涉及分區並回報 coverage；索引成功不等於功能驗收。
+6. 統籌接受索引結果並核定提交清單後，由索引 task 執行本地 Git commit，回報 hash／提交檔案／剩餘差異，再由統籌核對並完成本輪。無差異時須回報 HEAD 與檢查結果；具體規則及獨立維護適用範圍見 [AGENTS](../AGENTS.md#2026-09-14-補正索引完成後必須封存-git-版本)。
 
 Round 06 已完成 R0-B4／B3-persist 的有限 review；完成範圍只包含 caller-provided provenance 結構、schema 1 相容隔離保存，以及同日唯讀 legacy＋Wilder v2 兩 as-of 的 exact 離線比較。Round07 已完成 R0-C3／B5a 的 `time-evidence/v1` 本地核心／儲存 foundation；Round08 再完成分離的 `product-time/v1` News/API/UI read-time projection 與 legacy unknown 接線。Round09 已完成 R1-A1 的唯讀 registry／首批四個免費官方來源人工查證，Round18 再完成同四筆的有限 standalone capture executor，Round19／20 各接一個有限 consumer。Round12 C012 已完成 R0-B2 的分離 signal artifact pure/local store foundation；Round32 又完成有限 offline exact legacy／new descriptive comparison；Round33 再完成 caller-provided current pure-rule complete-argument capture/replay。這三個 R0-B2 slices 仍沒有共同的 artifact/subject/time/source/availability bridge或legacy-v2 paired execution；API/UI、worker、PIT 與 B7 仍未完成。後續依賴仍包含完整 legacy collector、source content／strict evidence、C007 產品／worker persistence linkage與 R0-B5/B3-wire。官方 source truth、B7、B4b 新 trade plan 及 R1–R3 中需要真實來源或前瞻時間的項目保持各自提案／等待，不能由 schema、介面、fixture、local export、HTTP 200、comparison report、rule bundle/digest、capture receipt 或 read-time projection 提前結案。
