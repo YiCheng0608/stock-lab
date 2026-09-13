@@ -1,0 +1,7 @@
+# Codebase Memory: generated/runtime and test artifacts
+.deps/
+.validation-deps/
+.pytest_cache/
+**/__pycache__/
+.decision-*/
+.p1-*/

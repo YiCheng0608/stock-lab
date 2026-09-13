@@ -1,0 +1,234 @@
+{
+  "schema_version": "source-registry/v1",
+  "policy_version": "source-policy/v1",
+  "registry_version": "r1-a1-c009-2026-09-12.1",
+  "generated_on": "2026-09-12",
+  "content_digest": "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b",
+  "profiles": {
+    "free_public_local": {
+      "version": "1",
+      "policy_version": "source-policy/v1",
+      "description": "Free public-source policy for bounded local research use; it is not a license or an availability guarantee.",
+      "source_versions": {
+        "twse_stock_day_all": "twse-stock-day-all-d011-2026-09-12",
+        "twse_holiday_schedule": "twse-holiday-schedule-d011-2026-09-12",
+        "twse_twt48u_all": "twse-twt48u-all-d011-2026-09-12",
+        "tpex_spendi_history": "tpex-spendi-history-d011-2026-09-12"
+      }
+    }
+  },
+  "sources": [
+    {
+      "schema_version": "source-registry/v1",
+      "registry_version": "r1-a1-c009-2026-09-12.1",
+      "source_id": "twse_stock_day_all",
+      "dataset_id": "data-gov-11549",
+      "source_version": "twse-stock-day-all-d011-2026-09-12",
+      "owner": {
+        "name": "Taiwan Stock Exchange (TWSE)",
+        "type": "official_exchange"
+      },
+      "source_type": "official_open_api",
+      "exact_url": "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+      "method": "GET",
+      "evidence": [
+        {
+          "url": "https://openapi.twse.com.tw/v1/swagger.json",
+          "checked_at": "2026-09-12 Asia/Taipei",
+          "claim": "Swagger documents the exact GET path, no parameters, and the official API owner."
+        },
+        {
+          "url": "https://data.gov.tw/dataset/11549",
+          "checked_at": "2026-09-12 Asia/Taipei",
+          "claim": "Dataset 11549 identifies daily update, free access, OGL 1.0, and the original data source."
+        },
+        {
+          "url": "https://data.gov.tw/license",
+          "checked_at": "2026-09-12 Asia/Taipei",
+          "claim": "The OGL 1.0 terms require attribution and preserve source-integrity conditions."
+        }
+      ],
+      "access": {
+        "free_public": {"status": "known", "value": true, "reason": "Dataset 11549 is marked free under OGL 1.0."},
+        "auth": {"status": "known", "value": false, "reason": "The checked Swagger path declares no authentication or security requirement."},
+        "documented_terms": {"status": "known", "value": "OGL 1.0", "reason": "Dataset and data.gov license pages provide the reuse terms."},
+        "rate_limit": {"status": "unknown", "reason": "No endpoint-specific numeric rate limit or SLA was documented."},
+        "latency": {"status": "unknown", "reason": "No endpoint-specific latency or release-clock commitment was documented."}
+      },
+      "temporal": {
+        "update_cadence": {"status": "known", "value": "daily", "reason": "Dataset 11549 describes a daily update."},
+        "publication": {"status": "unknown", "reason": "The exact publication time and timezone were not documented."},
+        "first_availability": {"status": "unknown", "reason": "The dataset listing date is not proof of the first available observation."},
+        "historical_coverage": {"status": "unknown", "reason": "A current response and a daily cadence do not prove complete historical availability."},
+        "revision_policy": {"status": "unknown", "reason": "No endpoint-specific correction, withdrawal, or revision history was documented."}
+      },
+      "retention": {
+        "raw_store": {"status": "known", "value": true, "reason": "OGL 1.0 permits reproduction/distribution with attribution and source-integrity conditions."},
+        "summarize": {"status": "known", "value": true, "reason": "OGL 1.0 permits adaptation with attribution and source-integrity conditions."}
+      },
+      "enabled": {"status": "known", "value": true, "reason": "The exact path appears in the current TWSE Swagger checked on 2026-09-12."},
+      "deprecation": {"status": "unknown", "reason": "No endpoint-specific deprecation, migration, or cessation notice was documented."},
+      "versioning": {"status": "unknown", "reason": "No endpoint-specific migration, deprecation notice, or version-retention promise was documented."},
+      "purposes": {
+        "local_fetch": {
+          "status": "admitted",
+          "reason": "Exact official GET endpoint, public no-auth access, and OGL 1.0 were documented.",
+          "evidence": [{"url": "https://data.gov.tw/dataset/11549", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Free public dataset with OGL 1.0."}],
+          "required_evidence": ["access.free_public", "access.auth", "access.documented_terms"],
+          "conditions": ["bounded_requests", "respect_endpoint_limits"]
+        },
+        "raw_store": {
+          "status": "admitted",
+          "reason": "Raw local retention is admitted only with OGL attribution and source-integrity conditions.",
+          "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 reuse terms."}],
+          "required_evidence": ["retention.raw_store"],
+          "conditions": ["attribute_source", "preserve_source_integrity"]
+        },
+        "summarize": {
+          "status": "admitted",
+          "reason": "Summary/adaptation is admitted only with OGL attribution and traceability conditions.",
+          "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 permits adaptation with attribution."}],
+          "required_evidence": ["retention.summarize"],
+          "conditions": ["attribute_source", "preserve_source_integrity", "retain_traceability"]
+        },
+        "historical_pit": {
+          "status": "unknown",
+          "unknown_decision": "unsupported",
+          "reason": "Exact first availability, revision/withdrawal retention, and reconstructable point-in-time snapshots are undocumented.",
+          "evidence": [{"url": "https://openapi.twse.com.tw/v1/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the endpoint but not reconstructable historical versions."}],
+          "required_evidence": ["temporal.first_availability", "temporal.historical_coverage", "temporal.revision_policy"],
+          "conditions": ["reconstructable_snapshot", "revision_history", "first_availability"]
+        }
+      }
+    },
+    {
+      "schema_version": "source-registry/v1",
+      "registry_version": "r1-a1-c009-2026-09-12.1",
+      "source_id": "twse_holiday_schedule",
+      "dataset_id": "data-gov-11761",
+      "source_version": "twse-holiday-schedule-d011-2026-09-12",
+      "owner": {"name": "Taiwan Stock Exchange (TWSE)", "type": "official_exchange"},
+      "source_type": "official_open_api",
+      "exact_url": "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule",
+      "method": "GET",
+      "evidence": [
+        {"url": "https://openapi.twse.com.tw/v1/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the exact GET path and no parameters."},
+        {"url": "https://data.gov.tw/dataset/11761", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Dataset 11761 identifies annual publication, free access, and OGL 1.0."},
+        {"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "The OGL 1.0 terms require attribution and preserve source-integrity conditions."}
+      ],
+      "access": {
+        "free_public": {"status": "known", "value": true, "reason": "Dataset 11761 is marked free under OGL 1.0."},
+        "auth": {"status": "known", "value": false, "reason": "The checked Swagger path declares no authentication or security requirement."},
+        "documented_terms": {"status": "known", "value": "OGL 1.0", "reason": "Dataset and data.gov license pages provide the reuse terms."},
+        "rate_limit": {"status": "unknown", "reason": "No endpoint-specific numeric rate limit or SLA was documented."},
+        "latency": {"status": "unknown", "reason": "No endpoint-specific latency or release-clock commitment was documented."}
+      },
+      "temporal": {
+        "update_cadence": {"status": "known", "value": "annual", "reason": "Dataset 11761 describes annual publication, usually before December for the following year."},
+        "publication": {"status": "unknown", "reason": "The exact publication time and timezone were not documented."},
+        "first_availability": {"status": "unknown", "reason": "Historical archive and exact first-availability semantics were not documented."},
+        "historical_coverage": {"status": "unknown", "reason": "An annual current schedule does not prove a complete historical archive."},
+        "revision_policy": {"status": "unknown", "reason": "No endpoint-specific correction or revision history was documented."}
+      },
+      "retention": {
+        "raw_store": {"status": "known", "value": true, "reason": "OGL 1.0 permits reproduction with attribution and source-integrity conditions."},
+        "summarize": {"status": "known", "value": true, "reason": "OGL 1.0 permits adaptation with attribution and source-integrity conditions."}
+      },
+      "enabled": {"status": "known", "value": true, "reason": "The exact path appears in the current TWSE Swagger checked on 2026-09-12."},
+      "deprecation": {"status": "unknown", "reason": "No endpoint-specific deprecation, migration, or cessation notice was documented."},
+      "versioning": {"status": "unknown", "reason": "No endpoint-specific migration, deprecation notice, or version-retention promise was documented."},
+      "purposes": {
+        "local_fetch": {"status": "admitted", "reason": "Exact official GET endpoint, public no-auth access, and OGL 1.0 were documented.", "evidence": [{"url": "https://data.gov.tw/dataset/11761", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Free public dataset with OGL 1.0."}], "required_evidence": ["access.free_public", "access.auth", "access.documented_terms"], "conditions": ["bounded_requests", "respect_endpoint_limits"]},
+        "raw_store": {"status": "admitted", "reason": "Raw local retention is admitted only with OGL attribution and source-integrity conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 reuse terms."}], "required_evidence": ["retention.raw_store"], "conditions": ["attribute_source", "preserve_source_integrity"]},
+        "summarize": {"status": "admitted", "reason": "Summary/adaptation is admitted only with OGL attribution and traceability conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 permits adaptation with attribution."}], "required_evidence": ["retention.summarize"], "conditions": ["attribute_source", "preserve_source_integrity", "retain_traceability"]},
+        "historical_pit": {"status": "unknown", "unknown_decision": "unsupported", "reason": "Exact first availability, revision/withdrawal retention, and reconstructable point-in-time snapshots are undocumented.", "evidence": [{"url": "https://openapi.twse.com.tw/v1/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the endpoint but not reconstructable historical versions."}], "required_evidence": ["temporal.first_availability", "temporal.historical_coverage", "temporal.revision_policy"], "conditions": ["reconstructable_snapshot", "revision_history", "first_availability"]}
+      }
+    },
+    {
+      "schema_version": "source-registry/v1",
+      "registry_version": "r1-a1-c009-2026-09-12.1",
+      "source_id": "twse_twt48u_all",
+      "dataset_id": "data-gov-89748",
+      "source_version": "twse-twt48u-all-d011-2026-09-12",
+      "owner": {"name": "Taiwan Stock Exchange (TWSE)", "type": "official_exchange"},
+      "source_type": "official_open_api",
+      "exact_url": "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL",
+      "method": "GET",
+      "evidence": [
+        {"url": "https://openapi.twse.com.tw/v1/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the exact GET path and no parameters."},
+        {"url": "https://data.gov.tw/dataset/89748", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Dataset 89748 identifies irregular update, free access, and OGL 1.0."},
+        {"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "The OGL 1.0 terms require attribution and preserve source-integrity conditions."}
+      ],
+      "access": {
+        "free_public": {"status": "known", "value": true, "reason": "Dataset 89748 is marked free under OGL 1.0."},
+        "auth": {"status": "known", "value": false, "reason": "The checked Swagger path declares no authentication or security requirement."},
+        "documented_terms": {"status": "known", "value": "OGL 1.0", "reason": "Dataset and data.gov license pages provide the reuse terms."},
+        "rate_limit": {"status": "unknown", "reason": "No endpoint-specific numeric rate limit or SLA was documented."},
+        "latency": {"status": "unknown", "reason": "No endpoint-specific latency or release-clock commitment was documented."}
+      },
+      "temporal": {
+        "update_cadence": {"status": "known", "value": "irregular", "reason": "Dataset 89748 describes irregular updates."},
+        "publication": {"status": "unknown", "reason": "The exact publication time and timezone were not documented."},
+        "first_availability": {"status": "unknown", "reason": "The dataset listing date is not proof of first event availability."},
+        "historical_coverage": {"status": "unknown", "reason": "A current event table does not prove complete historical coverage."},
+        "revision_policy": {"status": "unknown", "reason": "No endpoint-specific correction, withdrawal, or revision history was documented."}
+      },
+      "retention": {
+        "raw_store": {"status": "known", "value": true, "reason": "OGL 1.0 permits reproduction with attribution and source-integrity conditions."},
+        "summarize": {"status": "known", "value": true, "reason": "OGL 1.0 permits adaptation with attribution and source-integrity conditions."}
+      },
+      "enabled": {"status": "known", "value": true, "reason": "The exact path appears in the current TWSE Swagger checked on 2026-09-12."},
+      "deprecation": {"status": "unknown", "reason": "No endpoint-specific deprecation, migration, or cessation notice was documented."},
+      "versioning": {"status": "unknown", "reason": "No endpoint-specific migration, deprecation notice, or version-retention promise was documented."},
+      "purposes": {
+        "local_fetch": {"status": "admitted", "reason": "Exact official GET endpoint, public no-auth access, and OGL 1.0 were documented.", "evidence": [{"url": "https://data.gov.tw/dataset/89748", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Free public dataset with OGL 1.0."}], "required_evidence": ["access.free_public", "access.auth", "access.documented_terms"], "conditions": ["bounded_requests", "respect_endpoint_limits"]},
+        "raw_store": {"status": "admitted", "reason": "Raw local retention is admitted only with OGL attribution and source-integrity conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 reuse terms."}], "required_evidence": ["retention.raw_store"], "conditions": ["attribute_source", "preserve_source_integrity"]},
+        "summarize": {"status": "admitted", "reason": "Summary/adaptation is admitted only with OGL attribution and traceability conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 permits adaptation with attribution."}], "required_evidence": ["retention.summarize"], "conditions": ["attribute_source", "preserve_source_integrity", "retain_traceability"]},
+        "historical_pit": {"status": "unknown", "unknown_decision": "unsupported", "reason": "Exact first availability, revision/withdrawal retention, and reconstructable point-in-time snapshots are undocumented.", "evidence": [{"url": "https://openapi.twse.com.tw/v1/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the endpoint but not reconstructable historical versions."}], "required_evidence": ["temporal.first_availability", "temporal.historical_coverage", "temporal.revision_policy"], "conditions": ["reconstructable_snapshot", "revision_history", "first_availability"]}
+      }
+    },
+    {
+      "schema_version": "source-registry/v1",
+      "registry_version": "r1-a1-c009-2026-09-12.1",
+      "source_id": "tpex_spendi_history",
+      "dataset_id": "data-gov-48665",
+      "source_version": "tpex-spendi-history-d011-2026-09-12",
+      "owner": {"name": "Taipei Exchange (TPEx)", "type": "official_exchange"},
+      "source_type": "official_open_api",
+      "exact_url": "https://www.tpex.org.tw/openapi/v1/tpex_spendi_history",
+      "method": "GET",
+      "evidence": [
+        {"url": "https://www.tpex.org.tw/openapi/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the exact GET path, no parameters, and the official TPEx API server."},
+        {"url": "https://data.gov.tw/dataset/48665", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Dataset 48665 identifies irregular update, free access, and OGL 1.0."},
+        {"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "The OGL 1.0 terms require attribution and preserve source-integrity conditions."}
+      ],
+      "access": {
+        "free_public": {"status": "known", "value": true, "reason": "Dataset 48665 is marked free under OGL 1.0."},
+        "auth": {"status": "known", "value": false, "reason": "The checked Swagger path declares no authentication or security requirement."},
+        "documented_terms": {"status": "known", "value": "OGL 1.0", "reason": "Dataset and data.gov license pages provide the reuse terms."},
+        "rate_limit": {"status": "unknown", "reason": "No endpoint-specific numeric rate limit or SLA was documented."},
+        "latency": {"status": "unknown", "reason": "No endpoint-specific latency or release-clock commitment was documented."}
+      },
+      "temporal": {
+        "update_cadence": {"status": "known", "value": "irregular", "reason": "Dataset 48665 describes irregular updates."},
+        "publication": {"status": "unknown", "reason": "The exact publication time and timezone were not documented."},
+        "first_availability": {"status": "unknown", "reason": "Dataset listing and current rows do not prove the first available event."},
+        "historical_coverage": {"status": "unknown", "reason": "The name history and current rows do not prove complete historical coverage."},
+        "revision_policy": {"status": "unknown", "reason": "No endpoint-specific correction, withdrawal, or revision history was documented."}
+      },
+      "retention": {
+        "raw_store": {"status": "known", "value": true, "reason": "OGL 1.0 permits reproduction with attribution and source-integrity conditions."},
+        "summarize": {"status": "known", "value": true, "reason": "OGL 1.0 permits adaptation with attribution and source-integrity conditions."}
+      },
+      "enabled": {"status": "known", "value": true, "reason": "The exact path appears in the current TPEx Swagger checked on 2026-09-12."},
+      "deprecation": {"status": "unknown", "reason": "No endpoint-specific deprecation, migration, or cessation notice was documented."},
+      "versioning": {"status": "unknown", "reason": "No endpoint-specific migration, deprecation notice, or version-retention promise was documented."},
+      "purposes": {
+        "local_fetch": {"status": "admitted", "reason": "Exact official GET endpoint, public no-auth access, and OGL 1.0 were documented.", "evidence": [{"url": "https://data.gov.tw/dataset/48665", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Free public dataset with OGL 1.0."}], "required_evidence": ["access.free_public", "access.auth", "access.documented_terms"], "conditions": ["bounded_requests", "respect_endpoint_limits"]},
+        "raw_store": {"status": "admitted", "reason": "Raw local retention is admitted only with OGL attribution and source-integrity conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 reuse terms."}], "required_evidence": ["retention.raw_store"], "conditions": ["attribute_source", "preserve_source_integrity"]},
+        "summarize": {"status": "admitted", "reason": "Summary/adaptation is admitted only with OGL attribution and traceability conditions.", "evidence": [{"url": "https://data.gov.tw/license", "checked_at": "2026-09-12 Asia/Taipei", "claim": "OGL 1.0 permits adaptation with attribution."}], "required_evidence": ["retention.summarize"], "conditions": ["attribute_source", "preserve_source_integrity", "retain_traceability"]},
+        "historical_pit": {"status": "unknown", "unknown_decision": "unsupported", "reason": "Exact first availability, revision/withdrawal retention, and reconstructable point-in-time snapshots are undocumented.", "evidence": [{"url": "https://www.tpex.org.tw/openapi/swagger.json", "checked_at": "2026-09-12 Asia/Taipei", "claim": "Swagger documents the endpoint but not reconstructable historical versions."}], "required_evidence": ["temporal.first_availability", "temporal.historical_coverage", "temporal.revision_policy"], "conditions": ["reconstructable_snapshot", "revision_history", "first_availability"]}
+      }
+    }
+  ]
+}

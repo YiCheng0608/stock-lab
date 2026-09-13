@@ -1,0 +1,70 @@
+{
+  "fixture_id": "synthetic-pre-head-0004-news-slice-v1",
+  "scope": "Minimal synthetic 0004 pre-head NewsItem temporal regression slice; not a complete historical or production schema.",
+  "revision_before": "0004_product_news_themes",
+  "revision_after": "0005_news_temporal_contract",
+  "tables": [
+    "alembic_version",
+    "ingestion_runs",
+    "raw_payloads",
+    "instruments",
+    "events",
+    "news_items"
+  ],
+  "target_columns": {
+    "event_date": {"type": "DATE", "nullable": true, "server_default": null},
+    "time_basis": {"type": "VARCHAR(20)", "nullable": false, "server_default": "unverified"},
+    "time_precision": {"type": "VARCHAR(20)", "nullable": false, "server_default": "none"},
+    "time_consistency": {"type": "VARCHAR(20)", "nullable": false, "server_default": "verified"},
+    "display_time": {"type": "DATETIME", "nullable": true, "server_default": null}
+  },
+  "known_fresh_schema_drift": {
+    "symbols_json": {"upgraded_server_default": "[]", "fresh_server_default": null},
+    "theme_ids_json": {"upgraded_server_default": "[]", "fresh_server_default": null}
+  },
+  "common_columns": {
+    "alembic_version": ["version_num"],
+    "ingestion_runs": ["id", "run_type", "source", "run_date", "status", "records", "error", "request_key", "data_as_of", "metadata_json", "started_at", "finished_at", "updated_at"],
+    "raw_payloads": ["id", "ingestion_run_id", "source", "endpoint", "payload_path", "sha256", "data_as_of", "collected_at"],
+    "instruments": ["id", "market", "exchange", "symbol", "name", "instrument_type", "etf_category", "industry", "listing_date", "is_watchlisted", "status", "created_at"],
+    "events": ["id", "instrument_id", "event_date", "event_type", "title", "description", "details_json", "source", "endpoint", "raw_payload_id", "data_as_of", "collected_at"],
+    "news_items": ["id", "canonical_key", "dedupe_cluster_id", "category", "source_kind", "source_name", "source_url", "source_url_kind", "source_item_id", "title", "summary", "language", "published_at", "event_at", "collected_at", "symbols_json", "theme_ids_json", "impact_scope", "impact_direction", "impact_rationale", "impact_method", "confidence", "raw_payload_id", "event_id", "content_hash", "status", "supersedes_id"]
+  },
+  "expected_temporal_values": {
+    "1": {"event_date": null, "time_basis": "unverified", "time_precision": "none", "time_consistency": "verified", "display_time": null},
+    "2": {"event_date": null, "time_basis": "unverified", "time_precision": "none", "time_consistency": "verified", "display_time": null}
+  },
+  "required_foreign_keys": [
+    ["raw_payloads", ["ingestion_run_id"], "ingestion_runs", ["id"]],
+    ["events", ["instrument_id"], "instruments", ["id"]],
+    ["events", ["raw_payload_id"], "raw_payloads", ["id"]],
+    ["news_items", ["raw_payload_id"], "raw_payloads", ["id"]],
+    ["news_items", ["event_id"], "events", ["id"]],
+    ["news_items", ["supersedes_id"], "news_items", ["id"]]
+  ],
+  "required_unique_columns": [
+    ["instruments", ["exchange", "symbol"]],
+    ["events", ["instrument_id", "event_date", "event_type", "title"]],
+    ["news_items", ["canonical_key"]]
+  ],
+  "required_primary_keys": [
+    ["alembic_version", ["version_num"]],
+    ["ingestion_runs", ["id"]],
+    ["raw_payloads", ["id"]],
+    ["instruments", ["id"]],
+    ["events", ["id"]],
+    ["news_items", ["id"]]
+  ],
+  "required_upgrade_indexes": [
+    ["ix_news_display_id", ["display_time", "id"]],
+    ["ix_news_event_date", ["event_date"]],
+    ["ix_news_time_consistency", ["time_consistency"]]
+  ],
+  "expected_row_counts": {
+    "ingestion_runs": 1,
+    "raw_payloads": 1,
+    "instruments": 1,
+    "events": 1,
+    "news_items": 2
+  }
+}

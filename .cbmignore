@@ -1,0 +1,17 @@
+# Codebase Memory: generated/runtime and raw data artifacts
+data/
+.local/
+artifacts/
+evidence/
+frontend/dist/
+frontend/node_modules/
+backend/.deps/
+backend/.validation-deps/
+backend/.pytest_cache/
+**/__pycache__/
+.pytest_cache/
+**/.decision-*/
+**/.p1-*/
+backend/.decision-*/
+backend/.p1-*/
+backend/*runtime*/

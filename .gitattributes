@@ -1,0 +1,2 @@
+# Preserve the LF source bytes required by rule_replay implementation binding.
+* text=auto eol=lf
