@@ -2,18 +2,46 @@
 
 ## 目前狀態（2026-09-14）
 
-R33 功能、文件與輪末索引已接受。2026-09-14 使用者明確要求繼續 ROADMAP，已解除 R34 暫停；既有四個 task 已核對，待本次角色規則整理提交後，由 R34 新統籌確認接手並派工，不重複建立角色。
+2026-09-14 使用者明確要求繼續 ROADMAP，已解除 R34 暫停；角色規則整理已提交為 `f6e3e2a`。R34 統籌已透過 task readback 核對以下四個既有 ID 並接手，起始工作樹乾淨。R34 的明確 opt-in worker 完整參數保存通路與 exact 型別修正已通過有限功能 review，七份文件亦已接受；三來源與八份文件凍結，進入輪末索引、commit 及最終接受，不重複建立角色。
 
 | R34 角色 | 已存在的 task ID | 狀態 |
 | --- | --- | --- |
-| 統籌 | 01a09aff-24b9-7f63-bca5-f2e4473c9759 | 已獲使用者恢復授權；待維護提交後確認接手。 |
-| C034 程式 | 01a09aff-5eb3-7312-a0b7-d2435f80044b | 等待統籌分派。 |
-| D036 文件 | 01a09aff-976e-7161-9226-6c09a4a94a20 | 等待統籌分派。 |
-| I073 索引／Git commit | 01a09aff-dcf2-7e30-89b8-554677000732 | 等待統籌輪末分派；依 AGENTS 負責索引與提交。 |
+| 統籌 | 01a09aff-24b9-7f63-bca5-f2e4473c9759 | 已接手；持有本紀錄，核定範圍與驗收。 |
+| C034 程式 | 01a09aff-5eb3-7312-a0b7-d2435f80044b | B 有限功能與 exact 型別修正已主接受，三來源 freeze。 |
+| D036 文件 | 01a09aff-976e-7161-9226-6c09a4a94a20 | B 獨立 final 複核與 C 七份文件已接受並 freeze；不再寫入。 |
+| I073 索引／Git commit | 01a09aff-dcf2-7e30-89b8-554677000732 | 執行統籌核定的輪末索引，複核後才提交 11 個凍結檔案。 |
 
 恢復時先核對這四個 ID 的狀態，不重複建立角色。四角色模型、review、freeze、輪末索引及交接責任以 [AGENTS](../AGENTS.md) 為準；能力與優先順序以 [ROADMAP](ROADMAP.md) 為準。
 
-下一候選是 R0-B2 的 worker 實際 evaluator 輸入 capture／保存：現有 evidence.inputs 沒有完整 close/volume，且同 key upsert 可更新內容；SignalArtifact 尚未保存 replay body。先調查轉換後完整參數、標的／市場時間、版本／結果一致性、交易與失敗語意，再決定明確 opt-in 契約。不可把 caller 提供的資料或 private evaluator 結果直接當成歷史真相。worker/API/UI/DecisionSummary、historical availability、PIT、完整 B2/B7 仍未完成；具體實作範圍由 R34 統籌調查後核定。
+R34 已有限完成 owned external research DB 上的實際 worker evaluator capture／保存／精確讀回；一般 evidence.inputs 仍缺 close/volume且會被同 key upsert刷新，SignalArtifact 仍無 replay bridge。不得把本次觀測或 private evaluator 結果當成歷史真相；default worker、API/UI/DecisionSummary、historical availability、PIT、完整 B2/B7 仍未完成。下一輪候選是群組成員 canonical identity 調查：內部 member_metrics 有 instrument_id，但保存 member_returns只保留symbol，consumer亦只按symbol選取；先以真實group計算的跨市場同symbol fixture界定可達歧義，再核最小修正，不在R34擴張來源／策略語意。
+
+R34 寫入分工：C034 後續只寫核定程式／測試；D036 後續只寫核定文件，不改本紀錄；統籌持有本紀錄，初始化同步 ROADMAP／執行清單後交還文件角色；I073 只在 review／freeze 後索引與核准清單的本地 commit。各角色須回報交付檔案、實際命令／exit／證據、限制與 freeze，經統籌接受或退回原 task；不得自行結案。App 索引目前可用，docs exact coverage 為 no_recorded_issue／metadata_changed，已直接核原文並累積輪末刷新。新驗證用現行開發入口及專案外隔離資料，不依賴已清理 Temp 歷史。
+
+### R34 調查接受與實作核定
+
+C034-A 在外部合成 SQLite 實跑真實 `_upsert_signal`，16 次 evaluator observations 的 actual/private 結果一致，rollback 與 same-key retry 檢查通過；另實測 shared config mutation 可使 worker/private 結果分歧。這只證接點與一致性風險，不是新保存功能驗收。主修改前 worker integration＋rule replay 基準為 163 passed／663 warnings／4.96 秒／exit 0。正式 `data/stock.db` 被其他程序使用，直接 hash 失敗，不能聲稱其 bytehash unchanged 已驗；測試均隔離專案外，不為取 hash 停止程序。
+
+統籌核定 B 僅修改 `backend/worker/pipeline.py`、新增 `backend/worker/analysis_capture.py` 與 `backend/tests/test_worker_analysis_capture.py`：由 explicit external snapshot＋expected SHA 建立新 owned 研究 DB，執行抽出的既有 analysis core，以同一 transaction append 完整實際參數／結果／R33 bundle／subject-time 觀察與 attempt，再 fresh readback 驗證。新 module 提供 explicit create/run/read；default analyze／backtest、正式 ORM/migration 與 R33 binding 不變。這是研究用 worker capture，不是 SignalArtifact/v2、歷史 truth／PIT 或完整 B2。D036 獨立契約 review 仍並行，必要時退回同 task 修正；尚未功能接受或 freeze。
+
+### R34 功能接受與文件收斂
+
+主已接受 C034-B 與後續 exact primitive-type 修正，三來源 freeze：pipeline SHA-256 `D6311842C2F7F73B8925439BC706B09BEAA191BD4CDD867C613AFD0212F55BB4`、analysis_capture `3EF5F5C71FB5F9F51CE6043C7C7E1E1EDF2300924C588A7D61719FF178D7C980`、test `111C880A0D79A0384FA6B80CD779362F0393560A46E384A9F2CA293576160409`。default analyze 只抽取 Session core，原成功 commit／四 evaluator calls 保留；新入口使用 owned external DB、同 transaction capture／Signal／receipt、strict fresh readback，read 亦真正重算 R33 bundle。來源、owner、環境、record count／內部 linkage 及 canonical JSON primitive types 均有 fail-closed 驗證。
+
+- 作者一次 full-backend-01：2436 passed／2 Windows symlink skipped／17549 warnings／267.02 秒／exit 0；pipeline 同最終，但新 module 是較早 guard `87DDFED7…3A310`，不能稱最終 exact 版 full。
+- 作者最終 targeted-08：52 passed／8929 warnings／12.88 秒／exit 0，對上述 final 三 SHA。主全文核 code/diff、原始 logs 與 hashes，不重跑同一 full。
+- 主四組 exact-final scripts 各 exit 0：真 migration-ready 雙市場同symbol source、兩attempt各8calls、sameID reuse、歷史capture／來源hash不變；mismatch整批logical rollback＋同IDretry；commit前／後例外fresh分類；6個negative cases（含附著任意名trigger、重seal錯subject、passed false→0）；CLI create/run/read與missing STOCK env在default import前拒絕。不能把四腳本或6個negative與pytest數相加。
+
+主首次 exact 負例發現 Python `0 == False` 可讓重封 malformed actual result 通過；已退同 C034 改 canonical type-sensitive comparison並重驗拒絕，此為產品缺口而非 harness error。作者另保留 targeted-01 metadata mtime_ns 超 safe integer 的修正、targeted-04 subprocess encoding，以及 targeted-07 SQLAlchemy JSON dirty equality 未真正保存 malformed fixture 的兩失敗；後者以 flag_modified 修正測試，沒有隱藏失敗史。
+
+domain／R33 replay bytes及 `.local` DB hash 與接手時相同；正式 DB hash不可得限制保留。D036 收斂新 WORKER_ANALYSIS_CAPTURE 與 RULE_REPLAY、SIGNAL_ARTIFACTS、R0_IMPLEMENTATION、ROADMAP、ROADMAP_EXECUTION、docs/README 七份 docs，已經統籌 review 接受。功能接受不等於本輪結案；尚待 I073 索引/coverage、核准清單 commit 及主核對。
+
+### R34 文件接受、freeze 與輪末封存安排
+
+七份文件明確區分 create 的有限 schema 檢查、新 attempt 的 readiness／環境要求、same-ID 原讀回、strict primitive types、commit outcome 與來源／PIT 限制。D036 實際執行文件 PowerShell 範例的 create/run/read，各 exit 0，run/read 均 committed_verified、4 captures；argparse 缺必要參數 exit 2、stdout 空，與 handler JSON exit 1 分開。七份文件 187 個相對連結／錨點及格式檢查通過；主對含本紀錄八份文件另核 192 個連結／錨點，git diff --check 通過。這些文件檢查不替代或增加前述 pytest 計數。
+
+三個程式／測試與上述七份文件、本紀錄共 11 檔，在主最終雜湊核對後 freeze。I073 只刷新 app、tests、worker、docs、maintenance-tools 五個既有分區，查 status／exact coverage 並核對 freeze 前後不變；root AGENTS／README 無 root index、PowerShell partial 與 metadata freshness 的實際限制保留。統籌複核索引後才核准同一 11 檔的本地 commit，不 push 或改寫歷史。最終索引、commit hash／檔案／剩餘差異 receipt 留在 task 回覆與 external review，不為回寫 hash 反覆改來源。
+
+本輪最終接受後才建立四個新的 R35 task；新統籌核對四個 ID 並 ACK 接手後，舊統籌停止派工，只補交接。下一輪先調查前述 group-member identity 的可達問題與相容性，再核定最小實作；R34 不冒稱已修復該候選。
 
 ### 2026-09-14 索引角色 Git commit 責任補正
 

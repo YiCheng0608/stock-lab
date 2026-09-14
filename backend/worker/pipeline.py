@@ -957,6 +957,7 @@ def _upsert_signal_for_strategy(
     strategy_key: str,
     namespace: str = "analysis",
     data_cutoff: date | None = None,
+    capture: Any = None,
 ) -> bool:
     bar = db.scalar(
         select(MarketBar).where(
@@ -1006,7 +1007,7 @@ def _upsert_signal_for_strategy(
     volume = _safe_float(bar.volume)
     ma20 = _safe_float(values.get("ma20"))
     ma60 = _safe_float(values.get("ma60"))
-    breakout = evaluate_breakout_v1(
+    breakout_arguments = dict(
         close=close,
         prior_highs=prior_highs,
         volume=volume,
@@ -1015,7 +1016,12 @@ def _upsert_signal_for_strategy(
         institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
         margin_balance_change_ratio_5d=margin_ratio,
     )
-    pullback = evaluate_pullback_v1(
+    if capture is not None:
+        capture.before("breakout_v1", breakout_arguments)
+    breakout = evaluate_breakout_v1(**breakout_arguments)
+    if capture is not None:
+        capture.after("breakout_v1", breakout)
+    pullback_arguments = dict(
         bar_count=bar_count,
         close=close,
         ma20=ma20,
@@ -1026,6 +1032,11 @@ def _upsert_signal_for_strategy(
         institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
         margin_balance_change_ratio_5d=margin_ratio,
     )
+    if capture is not None:
+        capture.before("pullback_v1", pullback_arguments)
+    pullback = evaluate_pullback_v1(**pullback_arguments)
+    if capture is not None:
+        capture.after("pullback_v1", pullback)
     chosen_kind = "breakout" if strategy_key == "breakout_v1" else "pullback"
     selected = breakout if strategy_key == "breakout_v1" else pullback
     chosen = selected
@@ -1197,6 +1208,9 @@ def _upsert_signal_for_strategy(
             "return_measure": "adjusted_close_divided_by_filled_entry_minus_one_minus_round_trip_cost",
         },
     }
+    if capture is not None:
+        capture.persist(db, signal=signal, instrument=instrument, strategy=strategy,
+                        strategy_key=strategy_key, namespace=namespace)
     return True
 
 
@@ -1208,6 +1222,7 @@ def _upsert_signal(
     strategies: dict[str, StrategyVersion],
     namespace: str = "analysis",
     data_cutoff: date | None = None,
+    capture: Any = None,
 ) -> bool:
     """Persist one auditable result per canonical strategy and session."""
 
@@ -1222,6 +1237,7 @@ def _upsert_signal(
                 strategy_key=strategy_key,
                 namespace=namespace,
                 data_cutoff=data_cutoff,
+                capture=capture,
             )
             or written
         )
@@ -1235,6 +1251,7 @@ def _generate_signals(
     *,
     namespace: str = "analysis",
     data_cutoff: date | None = None,
+    capture: Any = None,
 ) -> int:
     instruments = db.scalars(
         select(Instrument).where(Instrument.instrument_type.in_({"stock", "etf", "ipo"}), Instrument.status == "active")
@@ -1249,6 +1266,7 @@ def _generate_signals(
                 strategies=strategies,
                 namespace=namespace,
                 data_cutoff=data_cutoff,
+                capture=capture,
             )
         )
     return count
@@ -2350,42 +2368,49 @@ def collect(
 def analyze() -> dict[str, Any]:
     init_db()
     with SessionLocal() as db:
-        latest_run = db.scalar(
-            select(IngestionRun).where(
-                IngestionRun.run_type == "collect",
-                IngestionRun.source == "official",
-            )
-            .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
-            .limit(1)
+        result = _analyze_session(db)
+        if result.get("status") == "success":
+            db.commit()
+        return result
+
+
+def _analyze_session(db: Session, *, capture: Any = None) -> dict[str, Any]:
+    """Run analysis in the caller's transaction; only explicit callers capture."""
+    latest_run = db.scalar(
+        select(IngestionRun).where(
+            IngestionRun.run_type == "collect",
+            IngestionRun.source == "official",
         )
-        if latest_run:
-            if latest_run.status != "success" or not latest_run.data_as_of:
-                return {
-                    "status": "skipped",
-                    "reason": "latest_official_collection_is_not_complete",
-                    "date": latest_run.data_as_of,
-                    "signals_upserted": 0,
-                }
-            try:
-                score_date = date.fromisoformat(latest_run.data_as_of[:10])
-            except ValueError:
-                return {
-                    "status": "skipped",
-                    "reason": "latest_official_collection_has_invalid_data_as_of",
-                    "date": latest_run.data_as_of,
-                    "signals_upserted": 0,
-                }
-        else:
-            return {"status": "no_data", "signals_upserted": 0}
-        instruments = db.scalars(select(Instrument).where(Instrument.status == "active")).all()
-        for instrument in instruments:
-            _calculate_features(db, instrument)
-        db.flush()
-        _calculate_group_scores(db, score_date)
-        strategies = _ensure_strategies(db)
-        signals_upserted = _generate_signals(db, score_date, strategies)
-        db.commit()
-        return {"status": "success", "date": score_date.isoformat(), "signals_upserted": signals_upserted}
+        .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
+        .limit(1)
+    )
+    if latest_run:
+        if latest_run.status != "success" or not latest_run.data_as_of:
+            return {
+                "status": "skipped",
+                "reason": "latest_official_collection_is_not_complete",
+                "date": latest_run.data_as_of,
+                "signals_upserted": 0,
+            }
+        try:
+            score_date = date.fromisoformat(latest_run.data_as_of[:10])
+        except ValueError:
+            return {
+                "status": "skipped",
+                "reason": "latest_official_collection_has_invalid_data_as_of",
+                "date": latest_run.data_as_of,
+                "signals_upserted": 0,
+            }
+    else:
+        return {"status": "no_data", "signals_upserted": 0}
+    instruments = db.scalars(select(Instrument).where(Instrument.status == "active")).all()
+    for instrument in instruments:
+        _calculate_features(db, instrument)
+    db.flush()
+    _calculate_group_scores(db, score_date)
+    strategies = _ensure_strategies(db)
+    signals_upserted = _generate_signals(db, score_date, strategies, capture=capture)
+    return {"status": "success", "date": score_date.isoformat(), "signals_upserted": signals_upserted}
 
 
 def _corporate_action_factor(

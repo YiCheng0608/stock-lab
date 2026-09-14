@@ -1,8 +1,8 @@
 # Caller-provided pure-rule replay 契約
 
-更新：2026-09-13。狀態：**已 review（Round33 C033-B 有限 current pure-rule library）**。
+更新：2026-09-14。狀態：**已 review（Round33 C033-B 有限 current pure-rule library；Round34 C034-B 由 opt-in worker capture 明確呼叫）**。
 
-本文件是 `backend/app/rule_replay.py` 的 API、資料格式、binding、錯誤與限制權威。這個 library 能在本契約有限的 native JSON 輸入域內，完整保存兩個現行規則 evaluator 所接受的 caller arguments，並在固定的本地 source／config／runtime 下重新計算 `passed`、`state` 與 ordered `reasons`。它不讀歷史資料、signal artifact、worker 或正式 DB，也不證明 caller inputs 的來源、subject、市場時間、可得性或 point-in-time 正確性。
+本文件是 `backend/app/rule_replay.py` 的 API、資料格式、binding、錯誤與限制權威。這個 library 能在本契約有限的 native JSON 輸入域內，完整保存兩個現行規則 evaluator 所接受的 caller arguments，並在固定的本地 source／config／runtime 下重新計算 `passed`、`state` 與 ordered `reasons`。Library 本身不讀歷史資料、signal artifact、worker 或正式 DB，也不證明 caller inputs 的來源、subject、市場時間、可得性或 point-in-time 正確性。Round34 新增的 [worker analysis capture](WORKER_ANALYSIS_CAPTURE.md) 是明確 opt-in 的外部 caller：它在 owned research DB 內保存 shared worker actual call 與本 library 的 private bundle，但不改本 library 的保證邊界。
 
 ## 1. 能做與不能做的事
 
@@ -18,7 +18,7 @@
 - 歷史輸入找回、來源證明、簽章、authentication 或 code signing；
 - instrument／subject identity、`market_date`、`decision_at` 或 `as_of_at` 證據；
 - official availability、revision、PIT、完整 signal reconstruction 或 paired legacy/new replay；
-- `SignalArtifactStore`、`signal-comparison/v1`、worker、API、UI、`DecisionSummary` 或預設版本接線；
+- 本 library 自身的 `SignalArtifactStore`、`signal-comparison/v1`、worker、API、UI、`DecisionSummary` 或預設版本接線；Round34 的 opt-in worker caller 另見專用契約，不能反向把 pure library 稱為已接產品；
 - hostile Python interpreter／OS／stdlib／filesystem／registry 的隔離 sandbox。
 
 因此，只要 caller 提供本契約內結構合法的完整參數，這個 API 就能回答「在目前明確綁定的 evaluator bytes/config/runtime 下，規則結果是否仍與 bundle 中的 claim 相同」。參數是否源自可信資料、是否在歷史決策時已可得，仍須由 caller 另行證明。
@@ -209,3 +209,9 @@ Frozen source：
 其餘保留的 failure／deviation history 包含：統籌第一個 binding matrix 因同名 helper shadow module 而 24 pass／1 harness error，修正 harness 後 25／25；D035 Phase B edge probe 01 使用錯誤 report keys、02 使用錯誤 expected error codes，03 才是 passing run；codebase-memory App 後期回 `Transport closed`，依專案規則改用同引擎 CLI coverage fallback，未重啟服務、啟動永久 daemon 或修改全域設定。CLI 仍會輸出 temporary-engine startup／raw-JSON deprecation 診斷；這不是 index 或永久 daemon。上述 failure 沒有被 final success 改寫成 passing product runs。
 
 本批只新增 pure library 與 tests，不修改既有 evaluator、schema、store、migration、worker、API、UI、預設版本或正式／`.local` DB。它使「caller-provided current pure-rule complete-argument capture/replay」這個有限機械能力成為已 review；R0-B2 的完整保存歷史輸入、SignalArtifact bridge／persistence、same-subject/time legacy-v2 paired replay、API／UI／DecisionSummary、worker、官方 availability／PIT，以及 B7/default adoption 全部仍未完成。相關整體邊界見 [Signal artifact 契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md) 與 [執行清單](ROADMAP_EXECUTION.md)。
+
+## 11. Round34 worker caller：有限 actual/private binding
+
+Round34 沒有修改 `rule_replay.py`、`domain.py` 或上述 R33 pins；它只在新的 opt-in `worker.analysis_capture` 通路中，於 shared evaluator 呼叫前 detach 實際轉換後 kwargs，再用 `capture_rule_inputs` 私有重算。Shared actual `passed/state/ordered reasons` 與 private `recorded_result`、實際 StrategyVersion config 與 pinned config 都使用 canonical JSON identity 比對，所以 JSON `false` 不會和 numeric `0`、`1.0` 不會和 `1` 混為相同。成功 call 同時保存 actual result 與完整 R33 bundle；兩者角色不互相取代。
+
+這使「本次 owned research analysis 實際送入 shared evaluator 的完整參數與 R33 pinned replay結果綁定」成為已 review 的有限能力；它仍不證明該參數在歷史 decision time 已可得或來自官方 truth，也不建立 SignalArtifact、legacy-v2 paired output、B5b／B7、API/UI 或 default capture。Public API、CLI、transaction、schema、同 ID 重用、錯誤/outcome 與 Round34 證據只在 [Worker analysis capture 契約](WORKER_ANALYSIS_CAPTURE.md) 維護，避免在此複製會漂移的操作說明。

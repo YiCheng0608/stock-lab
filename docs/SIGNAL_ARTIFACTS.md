@@ -1,8 +1,8 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-13。狀態：**已 review（Round12 C012 有限本地 foundation；Round32 C032-B 有限離線 comparison library；Round33 C033-B 有限 caller-provided current pure-rule replay library）**。
+更新：2026-09-14。狀態：**已 review（Round12 C012 有限本地 foundation；Round32 C032-B 有限離線 comparison；Round33 C033-B 有限 current pure-rule replay；Round34 C034-B 有限 opt-in worker evaluation capture）**。
 
-本文件固定 R0-B2／B2-persist 的獨立 signal artifact foundation。Round12 C012 已實作並 review `signal-confidence/v2` rule-only 結果的純契約、immutable revision 與明確 opt-in 的本地 SQLite store；Round32 C032-B 再加入明確 opt-in、專案外雙 snapshot 的 exact legacy／new 描述性 comparison library；Round33 C033-B 另加入不接 store、只處理 caller-provided current rule arguments 的 capture/replay library。三批都不改 legacy `signals`、evaluation／settlement、worker、API、UI、Alembic 或正式資料庫。ROADMAP 是能力狀態唯一權威；這些有限能力通過不代表 B2 或 R0 已完成。
+本文件固定 R0-B2／B2-persist 的獨立 signal artifact foundation。Round12 C012 已實作並 review `signal-confidence/v2` rule-only 結果的純契約、immutable revision 與明確 opt-in 的本地 SQLite store；Round32 C032-B 再加入專案外雙 snapshot 的 exact legacy／new 描述性 comparison；Round33 C033-B 加入 caller-provided current rule arguments 的 capture/replay library；Round34 C034-B 則新增分離的 opt-in worker evaluation capture，保存 actual worker kwargs/result、R33 private bundle、subject/date/strategy 與 legacy Signal snapshot。Round34 不寫本 store、不改預設 worker/API/UI/Alembic 或正式資料庫。ROADMAP 是能力狀態唯一權威；這些有限能力通過不代表 B2 或 R0 已完成。
 
 ## 1. 範圍與不變條件
 
@@ -122,7 +122,7 @@ reader 只提供明確 selector。C012 實際的 `get_exact` 支援 exact `artif
 - exact key 零筆可回 `null`／not-found；缺少必要 selector、候選多筆、cross-identity、version/binding mismatch 或 stored seal 不一致必須 fail-closed。
 - `list_artifacts` 只在 caller 明示 `lineage_key`，或至少一個實際支援的 subject filter（strategy name、market date、exchange、symbol）時列出 candidates；可再搭配 strategy version／revision。它不替 caller 選預設；完全無 lineage／subject filter 時拒絕，不得默認傾倒全 DB。`history` 則要求 exact `lineage_key`。
 - child exact read 必須重驗整條 ancestor chain 的 stored payload／seal、research core／revision identity、parent payload seal、binding、feature refs、lifecycle 與 attempt/run 關係；任一 parent 或 relation 缺漏／矛盾時，child 也 fail-closed。
-- 就 Round12 C012 本段而言，沒有 legacy reader、legacy/new comparison、API list/detail/action projection 或前端選擇政策。Round32 已以分離 library 補上有限 exact legacy reader／comparison；其 actual API、missing／hard-error 與不可比邊界見 [Signal comparison 離線唯讀契約](SIGNAL_COMPARISON.md)。API／UI／worker 選擇政策與完整 replay 仍是 B2 後續工作。
+- 就 Round12 C012 本段而言，沒有 legacy reader、legacy/new comparison、API list/detail/action projection 或前端選擇政策。Round32 已以分離 library 補上有限 exact legacy reader／comparison；Round34 另以 owned research DB 保存實際 worker evaluation，但仍沒有連入本 store。各自邊界見 [Signal comparison](SIGNAL_COMPARISON.md) 與 [Worker analysis capture](WORKER_ANALYSIS_CAPTURE.md)；API／UI 選擇政策、artifact bridge 與完整 paired replay 仍是 B2 後續工作。
 
 ## 8. 驗收矩陣
 
@@ -165,11 +165,17 @@ Round33 新增 `capture_rule_inputs`、`rule_replay_json` 與 `replay_rule_input
 
 這個 bundle 目前沒有 instrument／market date／decision time，也不進 `SignalArtifactStore`。`arguments_digest` 是 evaluator＋arguments 的 content identity，不是本文件第 2 節的 research-core、input snapshot hash、artifact identity 或 authentication；current-rule replay 通過也不能證明 C012 artifact 曾用相同輸入產生。完整 API、schema、error families、source hashes與驗收證據見 [Rule replay 契約](RULE_REPLAY.md)。
 
+## 9.3 Round34 C034-B：有限 opt-in worker evaluation capture
+
+Round34 的 `worker.analysis_capture` 要求 caller 用 external stable source snapshot＋expected SHA exclusive 建立新的 owned research DB；新 attempt 才在三個 explicit external STOCK 路徑與完整 readiness 通過後，於同一 transaction 執行現行 analysis core、legacy Signal upsert、actual call capture 與 receipt。每個有 bar subject/day 保存兩個 selected-strategy occurrences、共四次 evaluator call；call 同時帶 exchange-aware subject identity、observed market date、完整轉換後 kwargs、shared actual result、R33 pinned bundle、selected StrategyVersion/config與當次 Signal snapshot。同 ID 重試只 strict readback原 attempt，不重算 mutable selection。
+
+這些資料仍留在 owned legacy research copy 的 local capture tables，不是 `signal-artifact/v1` research core、revision或 store relation；`observed_market_date`／`captured_at` 也不是 verified `decision_at`／availability。完整 API、CLI、schema、outcomes、strict JSON及 final evidence見 [Worker analysis capture 契約](WORKER_ANALYSIS_CAPTURE.md)。
+
 ## 10. 完成邊界
 
-即使上述 foundation、有限 offline comparison 與 caller-provided current pure-rule replay 經 review，R0-B2／B2-persist 整體仍未完成。後續至少還需要：
+即使上述 foundation、有限 offline comparison、current pure-rule replay 與 worker evaluation capture 經 review，R0-B2／B2-persist 整體仍未完成。後續至少還需要：
 
-1. 把可證 subject/time/source/availability 的完整保存輸入連到 artifact／worker，並以同一 snapshot 實際執行隔離的 legacy／v2 paired replay；Round32 只讀既存兩側，Round33 只 replay caller 提供的 current pure-rule arguments，兩者都不能證明 artifact 輸入相同或完成 paired replay；
+1. 把 Round34 已保存的 subject／actual worker inputs 接到可證 source/availability/decision time 的 immutable artifact，並以同一 snapshot 實際執行隔離的 legacy／v2 paired replay；Round32 只讀既存兩側、Round33 只 replay caller current arguments、Round34 只保存 owned research run 的 legacy evaluation，三者都不能證明 artifact 輸入相同或完成 paired replay；
 2. API list/detail/action 與 DecisionSummary 的明確版本選取；
 3. 前端非機率呈現、legacy/new 並列及無隱式預設切換；
 4. B3-wire、B5b 官方 availability／PIT gate 與 B7 paired replay review。

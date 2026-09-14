@@ -1,25 +1,25 @@
 # 開發路線、能力盤點與驗收
 
-更新：2026-09-14。本次核對目前 Git 基準 `86ee317`、協作紀錄、現行程式與定向測試；只更新進度文件。
+更新：2026-09-14。本次以 Git 基準 `f6e3e2a` 核對 Round34 現行程式、review 證據與下一候選；只更新已接受的有限能力狀態。
 
 ## 目前進度（2026-09-14 核對）
 
-**最近完成的是 Round33；使用者已於 2026-09-14 授權繼續 ROADMAP，Round34 待角色規則整理提交後，由既有新統籌接手／派工。整體仍在補齊 R0，並已完成部分 R1 與前端產品功能；R0–R3 沒有任何一個完整階段可標為完成。** 最新接手狀態與四個角色 ID 見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。
+**Round34 的 R0-B2 opt-in worker evaluation capture 已通過統籌有限功能 review；本輪版本封存另以協作紀錄為準。整體仍在補齊 R0，並已完成部分 R1 與前端產品功能，R0–R3 沒有任何一個完整階段可標為完成。** 最新接手與輪末狀態見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。
 
 | 階段／範圍 | 目前已接受的成果 | 尚未完成的主要項目 |
 | --- | --- | --- |
-| R0 研究基準與時間口徑 | 信心／價位／時間的相容語意；ATR 純核心及獨立保存層；有限 SQLite migration／startup gate；signal artifact、R32 離線描述比較、R33 caller-input pure-rule replay。各項只按原驗收範圍接受。 | B2 的 worker／artifact／subject／time 關聯與完整輸入保存；B3-wire 新 ATR 接線；B4b 新交易計畫；B5b 依當時可得資料執行的 PIT gate；B7 新舊版本成對重播。R0-5 也不代表正式 migration／restore／deployment 已驗收。 |
+| R0 研究基準與時間口徑 | 信心／價位／時間的相容語意；ATR 純核心及獨立保存層；有限 SQLite migration／startup gate；signal artifact、R32 離線描述比較、R33 caller-input pure-rule replay、R34 owned research worker actual-input capture。各項只按原驗收範圍接受。 | B2 的 SignalArtifact／source／availability／decision-time bridge與 legacy-v2 paired output；B3-wire 新 ATR 接線；B4b 新交易計畫；B5b PIT gate；B7 成對重播。R0-5 也不代表正式 migration／restore／deployment 已驗收。 |
 | R1 可靠資料與事件研究 | 四來源 registry／standalone capture、兩個有限 capture consumer、TPEx 停復牌與公司行動修正、TWSE 來源分類，以及 ordinary-industry／ETF／new-listing 的有限 collector 接線。 | 完整來源與資料品質驗證、公司行動／停復牌 coverage、官方可得時間與修訂、正式庫舊分類修復、事件群組／摘要、當沖／借券／分點與必要基本面。R1-A1 整體仍未完成。 |
 | R2 候選與完整交易計畫 | 既有 v1 候選、行動摘要與持倉功能可用；R13 個股研究頁及 R14 前端 UX 已有限 review。 | R2 執行清單仍為提案：完整交易計畫、成交／退出 lifecycle、成本／tick／gap／流動性、倉位與題材曝險，以及整合驗收。現有頁面不代表完整 R2。 |
 | R3 AI 與研究有效性 | 保留固定規則基準、追蹤與研究規格。 | 尚無已驗收的 AI／量化模型、校準機率或策略採用證據；目標／門檻待決策，walk-forward、樣本外與前瞻模擬仍待實作或樣本累積。 |
 
-恢復開發後的既有下一候選是 **R0-B2：worker 實際 evaluator 完整輸入的明確 opt-in capture／保存調查**，尚未核定實作。現行 `pipeline.py` 呼叫兩個 evaluator 時傳入當次 `close`／`volume`，但 `rule_evidence_json.inputs` 未保存這兩項，且同 key 更新會刷新 evidence；因此 R33 的 caller-provided bundle 不能直接升格為歷史訊號重建。先釐清轉換後參數、標的／市場時間、版本／結果一致性與 transaction／失敗語意，再決定接線契約。其餘缺口及依賴維持 [執行清單](ROADMAP_EXECUTION.md)。
+Round34 已把上述候選收斂成 [Worker analysis capture](WORKER_ANALYSIS_CAPTURE.md)：只在 caller 建立的 external owned research DB，以同 transaction 保存 actual evaluator完整轉換後參數、結果、R33 bundle與legacy Signal snapshot；default不啟用，也不證歷史PIT或接SignalArtifact。下一輪優先候選是**canonical group-member identity 調查**：現行 group details／signal lookup只以symbol關聯成員，需先用至少 `MIN_GROUP_MEMBERS` 的跨市場同symbol真實fixture界定是否取錯`group_excess_return_20d`及最小修正；這只是候選，不是Round34已修缺陷或B2完成。
 
 本次證據與限制：
 
-- 核對開始時 Git 工作樹乾淨，基準為 `86ee317`。現行 API lifespan 只呼叫 readiness；worker 的 `atr14` 仍為最近最多 14 根 high-low 平均；R32 comparison 仍固定 `comparable=false`，R33 replay 仍是獨立 library。
-- 實跑 `./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests/test_rule_replay.py','backend/tests/test_domain.py','backend/tests/test_signal_comparison.py','backend/tests/test_database_readiness.py')`：**330 passed、1 skipped、67 warnings，15.97 秒，exit 0**。跳過為 `test_signal_comparison.py` 的 Windows symlink privilege unavailable；使用專案外隔離目錄，入口完成清理。
-- 最近完整回歸是 [2026-09-14 開發基準紀錄](development-baseline/README.md)：backend 2,405 passed／2 skipped，前端 6 個測試檔與 TypeScript/Vite build 通過。本次未重跑全套、瀏覽器、正式 DB 現況或 live 官方來源；上述完整回歸保留其原日期與證據歸屬，不當成本次測試。
+- Round34 final source SHA-256 為 `pipeline.py=D6311842…5BB4`、`analysis_capture.py=3EF5F5C7…C980`、`test_worker_analysis_capture.py=111C880A…0409`。作者 final exact targeted為52 passed／8,929 warnings／12.88秒／exit0；full backend 2,436 passed／2 skipped只涵蓋較早 capture guard SHA，不能稱 final-guard full-suite。
+- 統籌 final public／fault／六組 negative／CLI四組probe均exit0；D036 owner/schema/env/same-ID/type-tamper probe亦exit0。這些probe不與pytest case數相加。舊final的`false==0` blocker與作者mtime／Windows UTF-8 harness失敗均保留在驗證史。
+- 所有功能驗證使用專案外 migrated fixtures／owned copies；正式 DB 因另一process占用而無法取得byte hash，故不宣稱 unchanged 已驗。本輪未驗live來源、瀏覽器或前端；R32仍`comparable=false`，R33 pins不變，default worker仍不capture。
 - 歷史 Temp 附件已清理；下列輪次的 test counts、manifest 與 external 路徑保留為當時驗收紀錄，不保證附件仍可讀。新驗收使用現行原始碼、測試與 Git 基準。Round 數與測試數均不換算為產品完成百分比。
 
 ## 歷次已接受的小批與驗收背景
@@ -50,11 +50,13 @@ Round32 C032-B 已通過 `signal-comparison/v1` 有限 offline exact library rev
 
 Round33 C033-B 已通過 caller-provided current pure-rule complete-argument capture/replay 的有限 library review：只支援兩個現行 evaluator，bundle exact 保存 admitted arguments／ordered histories／null、完整 config、recorded result，並綁 whole `domain.py` bytes、兩個 config digests、CPython 3.12.14／binary64。Replay 只比較 `passed/state/ordered reasons`；subject、market time、historical inputs、availability、PIT 與 full signal reconstruction 六項宣稱固定 false。作者 targeted 151 passed＝141 new＋10 domain、full 2405 passed／2 skipped／12414 warnings，兩個 run 均 exit 0 且各有 165 guards unchanged；統籌 82／82 與 25／25 matrices 各有 164 guards unchanged，亦均 exit 0。完整契約見 [Rule replay](RULE_REPLAY.md)。這不是 SignalArtifact／worker／API/UI／DecisionSummary 接線、historical recovery、legacy-v2 paired replay、B2 或 B7 完成。
 
+Round34 C034-B 已通過 opt-in worker evaluation capture有限review：caller以external stable source＋expected SHA exclusive建立owned research DB，新attempt在三個external STOCK paths與readiness通過後，把現行analysis core的legacy Signal寫入、每個有bar subject/day四次actual evaluator calls、R33 private bundles與receipt放在同一transaction；same ID只strict readback原attempt。完整API/CLI/schema/outcome與證據見[Worker analysis capture](WORKER_ANALYSIS_CAPTURE.md)。它不進SignalArtifact、不證official availability／decision time／PIT、不接default/API/UI/backtest或legacy-v2 paired output。上游group member仍只按symbol，跨exchange同symbol provenance列為下一輪調查候選。
+
 ## 1. 範圍與能力盤點
 
 第一版暫定盤後決策、最早 T+1、數天至數週的股票研究。這是規劃假設，尚未確認精確持有期間、是否做空、風險預算或付費來源。現有 v1 為 long 策略，T+5／T+20 是追蹤窗口，不能直接當成必然出場日。
 
-| 能力 | 現況（原 2026-09-11 盤點＋截至 R33 的有限 review） | 待完成工作 |
+| 能力 | 現況（原 2026-09-11 盤點＋截至 R34 的有限 review） | 待完成工作 |
 | --- | --- | --- |
 | TWSE／TPEx 市場、法人／融資與 raw 稽核 | 有 adapter、收集及保存邏輯；資料完整性需逐域驗證 | 保留並補缺口，建立實際可用時間與修訂版本。 |
 | 來源 registry／capture／既有 consumer | Round09 四來源 policy foundation、Round18 四來源 standalone `local_fetch + raw_store` executor、Round19 單一 `STOCK_DAY_ALL` 日期 selected-security、Round20 單年度 `holidaySchedule` 多日 positive exclusion、Round21 today-announcement code-only、Round22 history `Serial` identity、Round23 唯一嚴格跨日 split-pair linkage、Round24 TPEx 公司行動 ratio/reference、Round25 cash precision 及 Round26 TWSE read-only source classification 均已有限 review | 公司行動、停復牌 capture、完整 collector、session／PIT 仍分批驗收；Round21–26 都不外推成第三個 capture consumer。Round24／25 只改善 paid ratio 為零的具名有效 TPEx cash／free 事件；Round26 只分類已保存 TWSE details，不修 paid/reference、raw membership、舊 action／evaluation、來源准入或 PIT。 |
@@ -64,7 +66,7 @@ Round33 C033-B 已通過 caller-provided current pure-rule complete-argument cap
 | 官方產業／族群 | R15 mapping／隔離 diagnostic、R16 stock／ipo ordinary-industry 觀測期間與 R17 ETF／new-listing candidate lifecycle 已有限 review；正式 DB 仍有大量舊錯分類 | 保留前端 guard；正式分類修復依自身資料與驗收依賴決定，不綁定 Round19／20 的兩個 source consumer 小批，也不只為罕見 type switch 疊加 foundation。 |
 | 當沖／借券／融券 | ChipSnapshot 有部分預留欄位；目前 ChipRecord 與 upsert 主要寫法人／融資 | 實際接入、驗證單位／日期／修訂，不把欄位存在當資料已存在。 |
 | 分點及疑似隔日沖 | 檢查到的主要 worker 沒有分點收集或行為模型 | 先取得可重現歷史資料，再定義短線資金特徵。 |
-| 技術與策略 | MA、量比、突破／回踩及規則價位已存在；新 ATR 純核心、B3-persist、B5a `time-evidence/v1` 本地 foundation／`product-time/v1` read-time 投影及 caller-provided current pure-rule replay 已有限 review，但仍未接入 worker／strict evidence | 下一步完成官方來源、strict evidence 與 B5b PIT 接線，建立 artifact/subject/time bridge，再做 legacy-v2 paired replay 及價位風險。 |
+| 技術與策略 | MA、量比、突破／回踩及規則價位已存在；新 ATR 純核心、B3-persist、B5a time foundation/product projection、current pure-rule replay及opt-in worker actual-input capture已有限review | 先調查group-member canonical identity；再完成官方來源、strict time evidence與SignalArtifact bridge、B5b PIT及legacy-v2 paired replay。R34 capture不等於新ATR worker接線。 |
 | 行動與持倉 | 有摘要聚合、壓縮卡、持倉新增／更新／刪除、張／股處理 | 回歸合併邊界；擴充完整交易計畫及曝險。 |
 | AI | 主流程未見已訓練、經驗證的預測模型 | 分成新聞理解、量化評估、交易風險三部分。 |
 | 追蹤／回測 | 有固定規則 replay、成本假設與 T+5／T+20 | 增加時間正確性、樣本外、模擬交易及功能增益比較。 |
@@ -191,7 +193,7 @@ C008 新增 `product-time/v1` read-time projection，覆蓋既有 News list/deta
 
 C012 的 final 四個 source/test hash 與 285-pass 完整 backend 證據見 [R0 §5.5](R0_IMPLEMENTATION.md#55-round12-c012-final-review-證據與未完成邊界)。保護目標結果是 40／41 unchanged：正式 DB 不變；唯一例外 `.local/data/stock.db` 可歸因於另一個服務 task 依使用者另行要求執行 lifespan `init_db`，不是 C012 寫入或 migration。故不得寫成全部保護檔不變，也不能把該外部 `.local` 變更納入 C012 驗收成果。
 
-R0 不改 v1 名稱下的歷史規則定義；後續公式、gate 或執行修正仍需標記 feature／strategy／execution version、配置、資料快照和修正前後差異。R0-1 目前有已 review、未接線的純核心與有限 B3-persist；R0-2 有最小相容語意、C012 local foundation、C032-B 有限 offline exact comparison 與 C033-B caller-provided current pure-rule replay，但完整 historical／paired replay、產品、worker、PIT 尚未完成；R0-3 也只有 B4a read-time presentation semantics，R0-4 也只完成 B5a local foundation 與產品 read-time projection。C007 strict evidence 的產品／worker 關聯、B3-wire、B5b PIT 與 B7 尚未完成，不能據此宣稱整個 R0 已修復。
+R0 不改 v1 名稱下的歷史規則定義；後續公式、gate 或執行修正仍需標記 feature／strategy／execution version、配置、資料快照和修正前後差異。R0-1 目前有已 review、未接線的純核心與有限 B3-persist；R0-2 有最小相容語意、C012 local foundation、R32 offline comparison、R33 current pure-rule replay與R34 opt-in legacy worker capture，但完整SignalArtifact/time/source bridge、legacy-v2 paired replay、產品、default與PIT尚未完成；R0-3也只有B4a read-time presentation semantics，R0-4也只完成B5a local foundation與產品read-time projection。C007 strict evidence的產品／worker關聯、B3-wire、B5b PIT與B7尚未完成，不能據此宣稱整個R0已修復。
 
 R0-3/B4a 的契約、入口矩陣與 final 證據見 [R0 §6.1](R0_IMPLEMENTATION.md#61-legacy-價位的強制標示)。統籌 full backend 為 180 passed；四個前端 self-executing test、production build 與專案外 fixture 的 action/stock 瀏覽器實驗通過，1/5 instruments 都是 13 queries 且無單獨 strategy query。Signal 仍沒有可採信的 legacy `decision_at`／price-basis identity：`data_cutoff`、date-only 欄位與 naive `created_at` 不提升成真實決策時間或 basis。C008 現在把這項 unknown 語意接到產品 API/UI，但仍未把 C007 strict evidence 接線。價位公式未扣成本；持倉 `average_cost`／使用者 stop、tracking `execution_price` 與規則參考價分開。signals/tracking UI 是 redirect，沒有冒稱獨立畫面驗收；fixture 也不是正式資料／真市場證據。B4b、B5b PIT 與整個 R0 仍未完成。
 
