@@ -1,21 +1,21 @@
 # 開發路線與目前能力
 
-更新：2026-09-14。能力依截至 R36 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-15。能力依截至 R37 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
 
-## 目前進度（2026-09-14 核對）
+## 目前進度（2026-09-15 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity 與 R36 的 canonical candidate producer／decision lookup 已通過有限 review；backfill typed 相容、API typed 輸出與歷史回算未完成。
+**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity、R36 的 canonical candidate producer／decision lookup，以及 R37 的 backfill／coverage typed scope 已通過有限 review；public API／UI typed 輸出與歷史回算未完成。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture。 | 完整歷史輸入與 SignalArtifact bridge、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點與必要基本面。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup；個股研究頁與全站 UX 已有限 review。 | Candidate backfill／public API typed identity、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope；個股研究頁與全站 UX 已有限 review。 | Public API／UI typed identity、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
 ### 接下來的順序
 
-1. **Candidate backfill typed 相容調查**：R36 已有限 review producer→decision 的 typed identity、score-date／as-of 同身分驗證與保守 legacy selection。下一輪先走 `_candidate_instrument_keys` 實際路徑，盤點所有 consumer，核對 source-date、inactive 與 ID 證明後才核最小修正；legacy backfill 擴大 scope 與 decision selection 語意分開。API typed 輸出另列後續，詳見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
+1. **Public typed API／UI A 調查**：R37 已有限 review backfill／coverage scope；下一輪先盤點 actual score 的 public 投影、跨日期與 member pagination，以及同 symbol 歧義連結。Score source-date identity 不得用不同日期或目前只載入的 member page 反推，DB-local ID 也不宣稱跨 DB 可攜；A 後才核最小 B。詳見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
 2. **R0 接線與比較**：補來源／subject／availability／decision-time 到 SignalArtifact 的橋接、B3-wire、B5b，依依賴完成 B4b 與 B7。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。

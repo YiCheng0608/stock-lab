@@ -79,6 +79,10 @@ R28／R29 的 migration helpers 只接受有限 canonical SQLite legacy shapes�
 
 `backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；為補足目標交易日可能讀更早候選日，但仍受迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 
+R37 已有限 review `candidates`／`priority` 的 group-score 納入範圍：typed 依 DB-local ID＋pair 精確收斂，legacy symbol 為避免漏抓可保守納入所有 active exchange；它不是 decision selection。`/api/coverage` 的同名 scope 也重用這個 resolver，但 public typed candidate payload 仍未完成。完整規則與驗收邊界見[產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約)。
+
+Backfill run 建立時把 `metadata.target_instruments` 固定為 snapshot；既有 run 的 resume／`--force` 不重新 resolve，所以 R37 修正只作用於新建或實際重新 resolve 的範圍。
+
 範例日期只作隔離研究，不表示資料已完整：
 
 ```powershell

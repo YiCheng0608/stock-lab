@@ -241,4 +241,16 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 - 最小驗收須走 actual producer→persisted score→decision：至少 5 個有效成員，top 4 只選中其中一個市場的同 symbol identity，另一個市場成員不得被額外展開；另涵蓋來源日歧義、後日退出／加入、正反插入順序、typed malformed／重複／identity conflict、legacy unique／ambiguous 與其他 action bucket 保留。
 - Decision helper 目前對每個 qualifying group 各做一次 identity／日期 projection，再合併候選；本批未驗大規模群組效能、actions cursor 遍歷或分頁，新 candidate unit suite 不能當成 pagination 驗收。
 - 2026-09-14 的有限 review 接受 producer、decision helper、新 focused suite 與既有 product／actions／producer targeted regressions；程式來源已 freeze。它不是 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
-- 下一步先獨立調查 backfill `_candidate_instrument_keys` 的 typed 相容、所有 consumer、source-date／inactive 與 ID 證明；legacy backfill 的安全擴大 scope 不等於 decision selection，不能直接套用本節的縮選語意。API typed 輸出另列後續。R36 不代表歷史資料、backfill、正式分類修復或策略有效性完成。
+- R37 已有限 review backfill／coverage 的 typed 相容，獨立納入語意見 §9.5；這不回寫 R36 的 decision 驗收範圍。下一步先調查 public typed API／UI：盤點 actual score 投影、跨日期與 member pagination，以及同 symbol 歧義連結；score source date 不得用不同日期或目前只載入的 member page 反推，DB-local ID 也不得宣稱跨 DB 可攜。A 調查後才核最小 B。R36／37 均不代表歷史資料、正式分類修復或策略有效性完成。
+
+### 9.5 Backfill／coverage 的候選納入契約
+
+狀態：R37 已有限 review。本節只規範 `resolve_backfill_scope` 的 `candidates`／`priority` 候選來源，以及直接重用該 resolver 的 `/api/coverage?scope=candidates|priority`；它們建立資料回補／coverage 的 `(exchange, symbol)` **納入集合**，不是 decision candidate selection。不得套用 §9.2／9.3 的 group qualification、rank、membership、instrument type 或 ETF category 縮選，也不改 `hot_group_v1`、score 產出、Signal 或其他 priority bucket。
+
+- 只讀 `trading_date` 落在 caller 起訖日內的 `GroupDailyScore`；score date 只作範圍邊界，不表示 source availability／PIT。非 object 的 `details_json` 略過，不由其他欄位猜測。
+- 只要 `candidate_identity_version` 或 `candidate_instruments` 任一 typed 欄位存在，就進 strict typed envelope：marker 必須精確為 `instrument-id-v1`；typed／projection 都須為最多 4 列的 list；每列 `instrument_id` 必須是非 bool 且落在 SQLite signed 64-bit 可查詢範圍 `1..2^63-1` 的整數，exchange／symbol 必須是非空字串；ID 與 pair 各自唯一，`candidate_symbols` 必須等長、同序且逐列等於 typed symbol。任何 shape、marker、超界、重複或 projection 錯誤都拒絕該 score 的整份候選貢獻，不得 fallback 到 symbol。
+- 合法 typed envelope 要先把**全部 ID（包括目前 inactive）**對照同一 DB 的 Instrument，逐列證明 exact ID 對應 payload 的 exchange＋symbol；缺 ID 或 pair conflict 拒絕整個 score。完成整份核對後才逐 ID 套目前 active filter，保留仍 active 的 exact pair；inactive 不得改綁同 symbol 的另一列。這是 local DB identity 與目前可回補範圍，不是 score-date membership、歷史 instrument metadata 或 PIT 證明。
+- Legacy 僅限 marker 與 typed 欄位都不存在。`candidate_symbols` 保留既有 list＋`str(...).strip()` 相容，空字串略過、重複值去重；每個 symbol 納入所有目前 active 的同 symbol exchange 列。這種安全擴大只避免回補漏抓，不證明哪一列可供決策，也不得反向放寬 §9.3 的 legacy selection。
+- Signal 候選與 `priority` 的 portfolio／watchlist／event 等來源各自保留；某個 malformed typed group score 只移除該 score 的候選貢獻。既有 backfill run 已保存的 `metadata.target_instruments` 是 run snapshot，resume／force 不重新解析；修正只影響新建或實際重新 resolve 的範圍。
+- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver，因此會受本契約影響；這不等於 themes／actions 等 public payload 已新增 typed candidate 欄位，public typed 展示仍是獨立缺口。
+- 2026-09-15 的有限 review 接受 worker helper 與獨立測試：實際記憶體 ORM `flush`／`expire` readback 後，走 resolver → metadata plan → scoped adapter，並直接呼叫 coverage function 檢查真 report；涵蓋 typed 精確市場／雙市場／空列、inactive、不存在、signed 64-bit 邊界／超界或衝突 ID／pair、第二列失敗不洩漏第一列、malformed envelope、legacy coercion／重複／跨市場擴大、日期範圍、跨 score union、Signal／priority 獨立來源及不套 decision type/category。它不是 HTTP、完整 targeted backfill、磁碟持久化、全 backend、效能、正式 DB、非 SQLite、availability 或 PIT 驗收。
