@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field, StrictInt, model_validator
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, OFFICIAL_MAX_BACKFILL_DAYS
+from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
-from .domain import signal_confidence_semantics
+from .domain import ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
     ChipSnapshot,
@@ -315,7 +315,70 @@ def scores_as_of(db: Session, as_of: date | None) -> dict[str, GroupDailyScore]:
     return result
 
 
-def score_dict(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
+def _score_details(score: GroupDailyScore | None) -> dict[str, Any]:
+    return score.details_json if score and isinstance(score.details_json, dict) else {}
+
+
+def _candidate_symbols(score: GroupDailyScore | None) -> list[str]:
+    symbols = _score_details(score).get("candidate_symbols")
+    # Retain ordered display text, including repeated symbols across markets.
+    # Malformed JSON is not coerced into a new symbol or a renderable object.
+    return [symbol for symbol in symbols if type(symbol) is str and symbol.strip()] if isinstance(symbols, list) else []
+
+
+def _public_candidate_identity(db: Session | None, group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
+    """Verify the whole source-day envelope; never infer legacy identities.
+
+    This is a historical display projection, not current action eligibility.
+    Status/type/category are current metadata; only membership dates have
+    historical bounds. IDs are strings on the public JSON/JavaScript boundary.
+    """
+    empty = {"public_candidate_identity_version": "instrument-id-string-v1", "candidate_instruments": []}
+    details = _score_details(score)
+    symbols, candidates = details.get("candidate_symbols"), details.get("candidate_instruments")
+    if (db is None or not score or score.group_id != group.id or not score.trading_date
+            or details.get("candidate_identity_version") != "instrument-id-v1"
+            or not isinstance(symbols, list) or not isinstance(candidates, list)
+            or len(candidates) > MAX_GROUP_CANDIDATES or len(symbols) != len(candidates)
+            or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)):
+        return empty
+    ids, pairs = set(), set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            return empty
+        item_id, exchange, symbol = (candidate.get(key) for key in ("instrument_id", "exchange", "symbol"))
+        if (type(item_id) is not int or not 0 < item_id <= 9223372036854775807
+                or type(exchange) is not str or not exchange.strip()
+                or type(symbol) is not str or not symbol.strip()
+                or item_id in ids or (exchange, symbol) in pairs):
+            return empty
+        ids.add(item_id)
+        pairs.add((exchange, symbol))
+    if [candidate["symbol"] for candidate in candidates] != symbols or not candidates:
+        return empty
+    rows = db.execute(
+        select(Instrument.id, Instrument.exchange, Instrument.symbol,
+               Instrument.instrument_type, Instrument.etf_category)
+        .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
+        .where(Instrument.id.in_(ids), GroupMembership.group_id == group.id,
+               GroupMembership.valid_from <= score.trading_date,
+               (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= score.trading_date)))
+    ).all()
+    etf_group = group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    source_members = {
+        item_id: (exchange, symbol) for item_id, exchange, symbol, kind, category in rows
+        if ((kind == "etf" and category in ETF_CATEGORIES) if etf_group else kind in {"stock", "ipo"})
+    }
+    if any(source_members.get(candidate["instrument_id"]) != (candidate["exchange"], candidate["symbol"])
+           for candidate in candidates):
+        return empty
+    return {**empty, "candidate_instruments": [
+        {"instrument_id": str(candidate["instrument_id"]), "exchange": candidate["exchange"], "symbol": candidate["symbol"]}
+        for candidate in candidates
+    ]}
+
+
+def score_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
     if not score:
         return {
             "group_id": group.id,
@@ -328,10 +391,11 @@ def score_dict(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, An
             "eligible_members": 0,
             "metrics": {},
             "candidates": [],
+            **_public_candidate_identity(db, group, None),
             "benchmark": None,
             "leaderboard": None,
         }
-    details = score.details_json or {}
+    details = _score_details(score)
     return {
         "group_id": group.id,
         "name": group.name,
@@ -351,7 +415,8 @@ def score_dict(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, An
             "institutional_flow": score.institutional_flow,
             "catalyst": score.catalyst,
         },
-        "candidates": details.get("candidate_symbols", []),
+        "candidates": _candidate_symbols(score),
+        **_public_candidate_identity(db, group, score),
         "benchmark": details.get("benchmark"),
         "benchmark_returns": details.get("benchmark_returns", {}),
         "leaderboard": details.get("leaderboard"),
@@ -380,7 +445,7 @@ def _group_display_description(group: ThemeGroup, score: GroupDailyScore | None)
 def _theme_qualified(group: ThemeGroup, score: GroupDailyScore | None) -> bool:
     if not score or not is_verified_theme(group):
         return False
-    details = score.details_json or {}
+    details = _score_details(score)
     return bool(
         score.data_quality == "complete"
         and (score.eligible_members or 0) >= 3
@@ -471,7 +536,7 @@ def _theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None) -> 
         missing.append(f"有效成員僅 {score.eligible_members or 0} 檔，至少需要 3 檔")
     if score.rank is None:
         missing.append("尚未完成排行")
-    if (score.details_json or {}).get("benchmark") != "TAIEX":
+    if _score_details(score).get("benchmark") != "TAIEX":
         missing.append("缺少 TAIEX 基準")
     return missing
 
@@ -524,7 +589,7 @@ def _safe_theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None
         missing.append(f"目前只有 {score.eligible_members or 0} 檔有效成員，至少需要 3 檔")
     if score.rank is None:
         missing.append("尚未取得有效排行")
-    if (score.details_json or {}).get("benchmark") != "TAIEX":
+    if _score_details(score).get("benchmark") != "TAIEX":
         missing.append("缺少 TAIEX 基準")
     return missing
 
@@ -546,8 +611,8 @@ def _safe_theme_why_hot(score: GroupDailyScore | None) -> list[str]:
     return reasons[:3]
 
 
-def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
-    details = score.details_json or {} if score else {}
+def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
+    details = _score_details(score)
     qualified = _theme_qualified(group, score)
     metrics = {
         "relative_return_1d": score.relative_return_1d if score else None,
@@ -573,7 +638,8 @@ def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None) -> dict
         "metrics": metrics,
         "why_hot": _safe_theme_why_hot(score) if qualified else [],
         "missing_reasons": [] if qualified else _safe_theme_missing_reasons(group, score),
-        "candidate_symbols": details.get("candidate_symbols", []) if qualified else [],
+        "candidate_symbols": _candidate_symbols(score) if qualified else [],
+        **_public_candidate_identity(db, group, score if qualified else None),
         "benchmark": details.get("benchmark") if score else None,
         "benchmark_returns": details.get("benchmark_returns", {}) if score else {},
         "leaderboard": details.get("leaderboard") if score else None,
@@ -987,21 +1053,23 @@ def compact_action_summary(item: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def compact_group_summary(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
+def compact_group_summary(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
     """Keep the compatibility dashboard group field lightweight."""
 
-    payload = score_dict(group, score)
+    payload = score_dict(group, score, db)
     payload.pop("methodology", None)
     payload["candidates"] = list(payload.get("candidates") or [])[:4]
+    payload["candidate_instruments"] = payload["candidate_instruments"][:4]
     return payload
 
 
-def compact_theme_summary(group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
+def compact_theme_summary(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
     """Return the dashboard theme card without research-detail methodology."""
 
-    payload = theme_product_dict(group, score)
+    payload = theme_product_dict(group, score, db)
     payload.pop("methodology", None)
     payload["candidate_symbols"] = list(payload.get("candidate_symbols") or [])[:4]
+    payload["candidate_instruments"] = payload["candidate_instruments"][:4]
     return payload
 
 
@@ -1113,7 +1181,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         db.commit()
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     scores = latest_scores(db)
-    group_rows = [compact_group_summary(group, scores.get(group.id)) for group in groups]
+    group_rows = [compact_group_summary(group, scores.get(group.id), db) for group in groups]
     group_rows.sort(key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"]))
 
     instruments_count = db.scalar(
@@ -1148,7 +1216,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     run, official_as_of = latest_official_as_of(db)
     product_scores = scores_as_of(db, official_as_of) if run and run.status == "success" else {}
     product_themes = [
-        compact_theme_summary(group, product_scores.get(group.id))
+        compact_theme_summary(group, product_scores.get(group.id), db)
         for group in groups
         if _product_group_taxonomy_verified(db, group, official_as_of)
     ]
@@ -1341,7 +1409,7 @@ def themes(
         if not _product_group_taxonomy_verified(db, group, as_of):
             continue
         score = score_rows.get(group.id)
-        item = theme_product_dict(group, score)
+        item = theme_product_dict(group, score, db)
         if only_qualified and not item["qualified"]:
             continue
         if leaderboard and item.get("leaderboard") != leaderboard:
@@ -1384,8 +1452,8 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
     run, as_of = latest_official_as_of(db)
     score = scores_as_of(db, as_of).get(theme_id) if run and run.status == "success" else None
     return {
-        "theme": theme_product_dict(group, score),
-        "methodology": (score.details_json or {}).get("methodology", {}) if score else {},
+        "theme": theme_product_dict(group, score, db),
+        "methodology": _score_details(score).get("methodology", {}),
         "data_as_of": run.data_as_of if run else (as_of.isoformat() if as_of else None),
     }
 
@@ -1446,7 +1514,7 @@ def theme_members(
     total = len(members)
     start = (page - 1) * page_size
     return {
-        "theme": theme_product_dict(group, scores_as_of(db, as_of).get(theme_id) if run and run.status == "success" else None),
+        "theme": theme_product_dict(group, scores_as_of(db, as_of).get(theme_id) if run and run.status == "success" else None, db),
         **_directory_response(
             members[start : start + page_size],
             page=page,
@@ -1682,7 +1750,7 @@ def groups(
     page_size = _effective_page_size(page_size, limit)
     scores = latest_scores(db)
     rows = [
-        score_dict(group, scores.get(group.id))
+        score_dict(group, scores.get(group.id), db)
         for group in db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     ]
     if q and q.strip():
@@ -1742,9 +1810,9 @@ def group_detail(group_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
         )
     members.sort(key=lambda item: (item["latest_bar"] is None, -(item["latest_bar"]["close"] if item["latest_bar"] else 0)))
     return {
-        "group": score_dict(group, score),
+        "group": score_dict(group, score, db),
         "members": members,
-        "methodology": (score.details_json or {}).get("methodology", {} if score else {}),
+        "methodology": _score_details(score).get("methodology", {}),
     }
 
 

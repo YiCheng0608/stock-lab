@@ -1,12 +1,12 @@
 # R0–R3 執行清單
 
-更新：2026-09-14。優先順序見 [ROADMAP](ROADMAP.md)，本文件只維護工作 ID、依賴與完成條件。歷史詳細驗收由各契約及 Git `69f62cf` 追溯；本輪具名驗證證據留在 task，核定結論回寫唯一契約。
+更新：2026-09-15。優先順序見 [ROADMAP](ROADMAP.md)，本文件只維護工作 ID、依賴與完成條件。歷史詳細驗收由各契約及 Git `69f62cf` 追溯；本輪具名驗證證據留在 task，核定結論回寫唯一契約。
 
 ## 1. 執行界線與狀態
 
 僅免費公開資料與本地測試；來源不可合法、穩定、可重現取得時標受限，不以 fixture、欄位或模型介面冒充接入。帳戶、付費額度、正式 DB、排程與交易的操作授權依 [AGENTS](../AGENTS.md)。
 
-R35 的 member-return identity 已通過有限 review：新 payload 保存 canonical identity，worker 精確讀取，舊列只在 as-of 有效成員身分唯一時相容，Signal 保存 lookup evidence。R36 的 candidate identity producer／decision lookup 與 R37 的 backfill／coverage typed scope 也已有限 review；既有 rows／run snapshot 未批次回算，原 score upsert 行為不變。Public API／UI typed identity 是下一個獨立缺口。
+R35 的 member-return identity、R36 的 candidate producer／decision lookup、R37 的 backfill／coverage typed scope 與 R38 的 public source-day typed candidate 顯示已通過有限 review。既有 rows／run snapshot 未批次回算，原 score upsert 行為不變；各小批的選取、回補與展示語意不得互相代換，完整規則見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
 
 | 狀態 | 意義 |
 | --- | --- |
@@ -55,7 +55,7 @@ R35 的 member-return identity 已通過有限 review：新 payload 保存 canon
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-B1／C-001 | 已 review（局部） | 無 migration | confidence 安全語意；不推論 B2 完成。 |
-| R0-B2／B2-persist | 四個小批已 review；整體未完成 | R0-A1、G-ID | [Artifact](SIGNAL_ARTIFACTS.md)、[描述比較](SIGNAL_COMPARISON.md)、[pure replay](RULE_REPLAY.md)、[worker capture](WORKER_ANALYSIS_CAPTURE.md)已有限接受。仍須可證subject／source／availability／decision-time輸入、SignalArtifact bridge、隔離legacy-v2 paired output，及API／DecisionSummary／UI／B7明確選版；marker／digest／receipt不代替歷史輸入。 |
+| R0-B2／B2-persist | 四個小批已 review；整體未完成；bridge A 待調查 | R0-A1、G-ID | [Artifact](SIGNAL_ARTIFACTS.md)、[描述比較](SIGNAL_COMPARISON.md)、[pure replay](RULE_REPLAY.md)、[worker capture](WORKER_ANALYSIS_CAPTURE.md)已有限接受。下一步先盤 actual worker capture→subject／source／availability／decision-time→artifact／consumer 與可證輸入，只核 A；不預核 B 或預設切換，也不要求正式 DB／新增外部來源。仍缺 bridge、隔離 legacy-v2 paired output 及 API／DecisionSummary／UI／B7 明確選版；marker／digest／receipt不代替歷史輸入。 |
 | R0-B3／C-002 | 已 review（純核心） | 無 I/O | Wilder ATR及strict caller inputs；未接官方來源或worker。 |
 | R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | schema1相容immutable store、atr-provenance/v2 strict完整caller snapshot／依賴、exact雙唯讀compare；無implicit latest，歧義拒絕，legacy-vs-new不可比，不相容v2 delta=null。官方truth／PIT／worker／API／B7仍缺，詳見 [R0](R0_IMPLEMENTATION.md)。 |
 | R0-B5／B3-wire | 提案 | R0-B4、G-TIME、G-SOURCE | 官方session／halt／公司行動／previous-close均有raw／版本／availability；缺來源reason code fail closed，worker explicit opt-in讀artifact，預設候選不切換。 |
@@ -81,7 +81,7 @@ R35 的 member-return identity 已通過有限 review：新 payload 保存 canon
 | R1-B1 | 提案 | R1-A1、R0-C4；官方事件與 NewsItem 時間回歸。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |
 | R1-B2 | 提案 | R1-B1；同事件 grouping 與 new-information。 | 同源與跨源 dedupe 可重跑，保留每篇來源；首次／補充／更正／撤回分開；負面或轉載不增加正向催化；所有摘要回指合法原文。 |
 | R1-B3 | 提案／可能受限 | R1-A1、G-SOURCE；免費官方 macro／可信媒體可行性。 | 每個候選以實際抓取、時間、保存／摘要權利與穩定性驗證；沒有可接受來源就記 `受限`，不以搜尋摘要或模型記憶補內文。 |
-| R1-C1 | 提案；R16／17、R35 member-return、R36 candidate identity 與 R37 backfill／coverage scope 有限接線已 review | R1-B2；正式分類修復依自身資料與驗收，不新增 R19／20 作前置。 | 產業／題材分層；membership 保存來源、方法、相關程度、生效／失效與版本，一股多題材，未核實模型關聯不進已確認分類。R35 只接受 member-return canonical identity、legacy fail-closed 與 Signal evidence；R36 只接受 candidate typed producer、score-date／as-of 同 ID lookup 與保守 legacy selection；R37 只接受 typed strict envelope＋DB ID／pair 核對後逐 ID active filter、legacy active 同 symbol exchange 安全擴大，以及同 resolver 的 coverage API function。這是 inclusion scope，不套 decision gate，也不是 HTTP／完整 backfill／PIT。下一步先調查 public typed API／UI 的 actual score 投影、跨日期、member pagination 與歧義連結，A 後才核 B。契約見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。既有 rows／run snapshot 不回算，原 score upsert 不變；R16／17 仍只證 current observation transitions。 |
+| R1-C1 | 提案；R16／17、R35–38 的 identity 小批已有限 review | R1-B2；正式分類修復依自身資料與驗收，不新增 R19／20 作前置。 | 產業／題材分層；membership 保存來源、方法、相關程度、生效／失效與版本，一股多題材，未核實模型關聯不進已確認分類。R35 member-return、R36 candidate decision、R37 backfill／coverage inclusion 與 R38 public source-day display 各自只有有限範圍；R38 使用 decimal-string DB-local ID 與 exact pair，來源日在同 DB 驗 membership／type-category，UI 不靠目前 member page 反推，legacy 只留無連結文字。它不套 current selection 或 backfill widening，也不是 full backend／正式 DB／PIT／歷史回算。契約見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。原 score upsert 不變；R16／17 仍只證 current observation transitions。 |
 | R1-C2 | 提案 | R1-C1、R1-A2；題材品質與去重。 | 相同 as-of 的相對強弱、廣度、集中度、延伸與事件方向各自有窗口／缺項；重疊題材不重複計候選或曝險；不改 `hot_group_v1` gate。 |
 | R1-D1 | 提案 | R1-A1；官方當沖資料。 | 先固定分子／分母、股數／金額、T／T+1／T+2 修訂與 availability；兩市場分開驗證；修訂可按當時版本重放。 |
 | R1-D2 | 提案 | R1-A1；融券／借券／持股欄位。 | 每欄來源、單位、日期、revision、coverage 與 null policy 有證據；欄位存在不算已收集。 |

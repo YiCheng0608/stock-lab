@@ -28,7 +28,19 @@ export type Instrument = {
 
 export type GroupMetrics = Record<string, number | null>
 
-export type GroupRow = {
+export type PublicCandidateInstrument = {
+  // Decimal string: SQLite IDs may exceed JavaScript's safe integer range.
+  instrument_id: string
+  exchange: string
+  symbol: string
+}
+
+export type PublicCandidateIdentity = {
+  public_candidate_identity_version?: 'instrument-id-string-v1'
+  candidate_instruments?: PublicCandidateInstrument[]
+}
+
+export type GroupRow = PublicCandidateIdentity & {
   group_id: string
   name: string
   group_type: string
@@ -620,7 +632,7 @@ export type NewsItem = {
   detail_url?: string
 }
 
-export type ThemeDirectoryRow = {
+export type ThemeDirectoryRow = PublicCandidateIdentity & {
   theme_id: string
   display_name: string
   description: string

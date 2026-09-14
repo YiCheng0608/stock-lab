@@ -237,11 +237,11 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 
 ### 9.4 相容邊界與驗收
 
-- API／UI 仍輸出既有 `candidate_symbols`／`candidates` 字串欄位，不新增 typed public 欄位；backfill 的 symbol 擴大相容邏輯本輪不改，另列後續缺口。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` 原 upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可由原 upsert 更新該 row，重新產出的 score 才帶新 marker。
+- R36 當輪 API／UI 仍只輸出既有 `candidate_symbols`／`candidates` 字串欄位；R38 另完成 public typed source-day 投影，見 §9.6。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` 原 upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可由原 upsert 更新該 row，重新產出的 score 才帶新 marker。
 - 最小驗收須走 actual producer→persisted score→decision：至少 5 個有效成員，top 4 只選中其中一個市場的同 symbol identity，另一個市場成員不得被額外展開；另涵蓋來源日歧義、後日退出／加入、正反插入順序、typed malformed／重複／identity conflict、legacy unique／ambiguous 與其他 action bucket 保留。
 - Decision helper 目前對每個 qualifying group 各做一次 identity／日期 projection，再合併候選；本批未驗大規模群組效能、actions cursor 遍歷或分頁，新 candidate unit suite 不能當成 pagination 驗收。
 - 2026-09-14 的有限 review 接受 producer、decision helper、新 focused suite 與既有 product／actions／producer targeted regressions；程式來源已 freeze。它不是 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
-- R37 已有限 review backfill／coverage 的 typed 相容，獨立納入語意見 §9.5；這不回寫 R36 的 decision 驗收範圍。下一步先調查 public typed API／UI：盤點 actual score 投影、跨日期與 member pagination，以及同 symbol 歧義連結；score source date 不得用不同日期或目前只載入的 member page 反推，DB-local ID 也不得宣稱跨 DB 可攜。A 調查後才核最小 B。R36／37 均不代表歷史資料、正式分類修復或策略有效性完成。
+- R37 已有限 review backfill／coverage 的 typed 相容，獨立納入語意見 §9.5；R38 的 public source-day 展示另見 §9.6。這些後續小批不回寫 R36 的 decision 驗收範圍，也不代表歷史資料、正式分類修復或策略有效性完成。
 
 ### 9.5 Backfill／coverage 的候選納入契約
 
@@ -252,5 +252,28 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 - 合法 typed envelope 要先把**全部 ID（包括目前 inactive）**對照同一 DB 的 Instrument，逐列證明 exact ID 對應 payload 的 exchange＋symbol；缺 ID 或 pair conflict 拒絕整個 score。完成整份核對後才逐 ID 套目前 active filter，保留仍 active 的 exact pair；inactive 不得改綁同 symbol 的另一列。這是 local DB identity 與目前可回補範圍，不是 score-date membership、歷史 instrument metadata 或 PIT 證明。
 - Legacy 僅限 marker 與 typed 欄位都不存在。`candidate_symbols` 保留既有 list＋`str(...).strip()` 相容，空字串略過、重複值去重；每個 symbol 納入所有目前 active 的同 symbol exchange 列。這種安全擴大只避免回補漏抓，不證明哪一列可供決策，也不得反向放寬 §9.3 的 legacy selection。
 - Signal 候選與 `priority` 的 portfolio／watchlist／event 等來源各自保留；某個 malformed typed group score 只移除該 score 的候選貢獻。既有 backfill run 已保存的 `metadata.target_instruments` 是 run snapshot，resume／force 不重新解析；修正只影響新建或實際重新 resolve 的範圍。
-- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver，因此會受本契約影響；這不等於 themes／actions 等 public payload 已新增 typed candidate 欄位，public typed 展示仍是獨立缺口。
+- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver，因此會受本契約影響；R38 的 public typed source-day 展示是另一條讀取契約，不能反向改變本節的 collection inclusion 語意，見 §9.6。
 - 2026-09-15 的有限 review 接受 worker helper 與獨立測試：實際記憶體 ORM `flush`／`expire` readback 後，走 resolver → metadata plan → scoped adapter，並直接呼叫 coverage function 檢查真 report；涵蓋 typed 精確市場／雙市場／空列、inactive、不存在、signed 64-bit 邊界／超界或衝突 ID／pair、第二列失敗不洩漏第一列、malformed envelope、legacy coercion／重複／跨市場擴大、日期範圍、跨 score union、Signal／priority 獨立來源及不套 decision type/category。它不是 HTTP、完整 targeted backfill、磁碟持久化、全 backend、效能、正式 DB、非 SQLite、availability 或 PIT 驗收。
+
+### 9.6 Public candidate 的 source-day 身分展示契約
+
+狀態：R38 已有限 review。本節只規範既有 group score 在 public API 與族群詳情 UI 的來源日身分展示；它不是 §9.2 的 requested-as-of decision selection，也不是 §9.5 的 backfill／coverage inclusion。
+
+#### 9.6.1 Public representation 與 fail-closed
+
+- Public payload 保留原有 `candidate_symbols`（theme）或 `candidates`（group）文字陣列，並新增固定 `public_candidate_identity_version="instrument-id-string-v1"` 與 `candidate_instruments[]`。Public `instrument_id` 必須是 `1..2^63-1` 的十進位字串，避免超過 JavaScript safe integer 後失真；它仍是同一 DB 的本地鍵，不宣稱跨 DB 可攜，也不改其他 API 既有的 numeric `instrument.id`。
+- `public_candidate_identity_version` 只標示 public representation，不單獨證明來源身分有效。Typed consumer 必須同時取得完整 `candidate_instruments[]`，並驗證每列非空 `exchange`／`symbol`、十進位字串 ID、最多 4 列、ID 與 pair 各自唯一，以及與文字陣列等長、同序且逐列 symbol 相同；兩個市場可有相同 symbol。
+- Server 先嚴格驗 internal `candidate_identity_version="instrument-id-v1"`、typed／文字 list、長度與上限、正整數非布林且在 SQLite signed 64-bit 範圍的 ID、非空 pair、ID／pair 唯一及 ordered projection。任一列或 envelope 不合法，整份 public `candidate_instruments` 為空，不洩漏部分成功，也不以 symbol 反推 identity。
+- 原文字陣列是相容顯示，不是身分證據：只保留原生非空字串，維持原順序與重複值；malformed 的非字串／空白項目略過，不做 `str(...)` coercion。Legacy、缺 DB／score 或 malformed typed source 都只能留下這種安全文字，不能產生 typed link。
+
+#### 9.6.2 Source-day 核對與 endpoint gate
+
+- 合法 internal envelope 的**所有** ID 必須先在同一 DB 找到 exact Instrument exchange＋symbol，並證明該 group membership 在 `score.trading_date` 有效，且通過 producer 相同的股票／IPO 或 ETF group type／category gate；任一 ID 缺失、pair conflict 或來源日不合資格即整份 typed identity 為空。
+- 這是 score-source snapshot 的展示，所以不套 Instrument 目前 active、official/requested as-of membership 或 backfill 的 active-symbol 擴大。來源日後退出或目前 inactive 的 exact identity 仍保留，且可用其 exchange＋symbol 連到個股頁；它不表示目前仍可決策、可交易或具官方 PIT。
+- Theme product 投影（dashboard themes、themes list／detail／members）保留既有 qualified gate：不 qualified 時文字與 typed 候選都為空。Legacy group 相容投影（dashboard groups、groups list／detail）不新增 theme qualification gate；即使能展示合法來源 payload，也不等於 qualified 或 actionable。Full、compact 與 route projection 共用同一驗證，compact 仍只保留原有 top 4 顯示上限。
+
+#### 9.6.3 UI、驗收與限制
+
+- 族群詳情只在 public marker、整份 typed shape、ID／pair 唯一及 ordered symbol 對齊都合法時建立 `/stocks/{exchange}/{symbol}`；文字顯示 exchange＋symbol，同 symbol 跨市場仍可分辨，React key 使用 identity 加序位。Legacy 或 malformed 只顯示文字，不查目前 member page，也不因 pagination 是否載完而改變連結。
+- 候選的「評分日期」讀 score `trading_date`；成員表的「成員資料截至」獨立讀 members response `meta.data_as_of`。不得用目前 members、不同日期或已載入的單一 member page 反推 score candidate identity。
+- 2026-09-15 的有限 review 接受 9 個 focused tests：記憶體 ORM commit／expire 與 JSON type assertion、所有 helper 與 in-process ASGI route 投影、inactive／後日退出、跨市場同 symbol、`2^53+1` 與 SQLite max ID、malformed／legacy、source membership／type-category、member pagination，以及 actual React SSR；另有 TypeScript no-emit 檢查。ASGI 使用實際 API router 與 memory DB dependency override；React SSR 的 query／router 與不相關 child 使用小型替身。沒有 socket、lifespan、真瀏覽器、full backend、正式 DB、效能、PIT 或歷史回算驗收。Instrument status／type／category 缺完整歷史版本，因此來源日核對仍不是 source-effective metadata truth。

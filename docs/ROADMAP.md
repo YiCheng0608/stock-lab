@@ -1,22 +1,22 @@
 # 開發路線與目前能力
 
-更新：2026-09-15。能力依截至 R37 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-15。能力依截至 R38 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（2026-09-15 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity、R36 的 canonical candidate producer／decision lookup，以及 R37 的 backfill／coverage typed scope 已通過有限 review；public API／UI typed 輸出與歷史回算未完成。
+**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity、R36 的 canonical candidate producer／decision lookup、R37 的 backfill／coverage typed scope，以及 R38 的 public source-day typed candidate 顯示已通過有限 review；歷史回算仍未完成。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture。 | 完整歷史輸入與 SignalArtifact bridge、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點與必要基本面。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope；個股研究頁與全站 UX 已有限 review。 | Public API／UI typed identity、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope 與 public source-day 展示；個股研究頁與全站 UX 已有限 review。 | 歷史 identity／PIT、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
 ### 接下來的順序
 
-1. **Public typed API／UI A 調查**：R37 已有限 review backfill／coverage scope；下一輪先盤點 actual score 的 public 投影、跨日期與 member pagination，以及同 symbol 歧義連結。Score source-date identity 不得用不同日期或目前只載入的 member page 反推，DB-local ID 也不宣稱跨 DB 可攜；A 後才核最小 B。詳見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
-2. **R0 接線與比較**：補來源／subject／availability／decision-time 到 SignalArtifact 的橋接、B3-wire、B5b，依依賴完成 B4b 與 B7。
+1. **R0-B2 SignalArtifact bridge A 調查**：先盤點 actual worker capture 到 subject／source／availability／decision-time，再核對 artifact 與 consumer 缺口及哪些輸入可被證明；本步只做 A，不預先核 B 或預設切換，也不要求正式 DB 或新增外部來源。詳見 [Signal artifact](SIGNAL_ARTIFACTS.md) 與 [Worker capture](WORKER_ANALYSIS_CAPTURE.md)。
+2. **R0 其餘接線與比較**：依調查結論補 SignalArtifact bridge，再做 B3-wire、B5b，並按依賴完成 B4b 與 B7。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。
 
@@ -41,6 +41,7 @@
 | R12／32／33／34 | immutable Signal artifact、描述比較、caller-input pure replay、owned DB actual worker capture；尚無共同歷史輸入 bridge 或 legacy-v2 paired replay。 | [保存與重播契約](README.md) |
 | R13／14 | 個股 K 線／量／MA 與研究流程、單位／unknown／列表至詳情 UX；不是完整交易計畫或績效驗證。 | [個股頁](STOCK_RESEARCH_PAGE.md)、[UX](UX_REVIEW.md) |
 | R15–17 | 分類 mapping、ordinary-industry 觀測期間、ETF／new-listing lifecycle；正式錯分類及歷史 PIT 未修復。 | [產業分類](INDUSTRY_CLASSIFICATION.md) |
+| R35–38 | Member-return identity、typed candidate producer／decision、backfill／coverage inclusion 與 public source-day display；四種語意分開，未回算歷史或證明 PIT。 | [產業分類 §8–9.6](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review) |
 | R09／18–20 | 四來源用途別 policy 與 standalone capture；consumer 只有 STOCK_DAY_ALL 單日 selected-security 與 holidaySchedule 單年度 positive exclusion。 | [來源 registry](SOURCE_REGISTRY.md) |
 | R21–26 | TPEx today code-only、history Serial／split-pair、公司行動 ratio／reference／cash precision；TWSE 既有 action 唯讀來源分類。不是第三個 capture consumer或舊資料修復。 | [來源 registry](SOURCE_REGISTRY.md) |
 

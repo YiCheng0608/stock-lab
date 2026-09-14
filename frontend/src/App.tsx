@@ -795,6 +795,37 @@ function ThemesPage() {
   </div>}</QueryState>
 }
 
+function ThemeCandidateTags({ theme }: { theme: ThemeDirectoryRow }) {
+  const rawSymbols = theme.candidate_symbols
+  const symbols = Array.isArray(rawSymbols) ? rawSymbols.filter((symbol) => typeof symbol === 'string' && symbol.trim()) : []
+  const candidates = theme.candidate_instruments
+  const ids = new Set<string>()
+  const pairs = new Set<string>()
+  const verified = theme.public_candidate_identity_version === 'instrument-id-string-v1'
+    && Array.isArray(rawSymbols) && symbols.length === rawSymbols.length
+    && Array.isArray(candidates) && candidates.length <= 4 && candidates.length === symbols.length
+    && candidates.every((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object') return false
+      const { instrument_id: id, exchange, symbol } = candidate
+      if (typeof id !== 'string' || !/^[1-9][0-9]*$/.test(id)
+        || id.length > 19 || (id.length === 19 && id > '9223372036854775807')
+        || typeof exchange !== 'string' || !exchange.trim()
+        || typeof symbol !== 'string' || symbol !== symbols[index]) return false
+      const pair = JSON.stringify([exchange, symbol])
+      if (ids.has(id) || pairs.has(pair)) return false
+      ids.add(id)
+      pairs.add(pair)
+      return true
+    })
+  if (!symbols.length) return <div className="empty">沒有足以顯示的候選股票。</div>
+  return <div className="tag-list">{symbols.map((symbol, index) => {
+    const candidate = verified ? candidates[index] : null
+    return candidate
+      ? <Link className="tag symbol-tag" key={`${candidate.instrument_id}:${index}`} to={'/stocks/' + encodeURIComponent(candidate.exchange) + '/' + encodeURIComponent(candidate.symbol)}>{candidate.exchange} {symbol}</Link>
+      : <span className="tag" key={`legacy:${index}`}>{symbol}</span>
+  })}</div>
+}
+
 function ThemePage() {
   const { themeId = '' } = useParams()
   const [memberPage, setMemberPage] = useState(1)
@@ -807,7 +838,6 @@ function ThemePage() {
   const item = theme.data.theme
   const metricEntries = Object.entries(item.metrics).filter(([key, value]) => themeMetricLabel(key) && value != null)
   const memberDataAsOf = typeof members.data.meta?.data_as_of === 'string' ? members.data.meta.data_as_of : theme.data.data_as_of
-  const membersFullyLoaded = typeof members.data.meta?.total === 'number' && members.data.meta.total <= members.data.items.length
   const needsTemporaryVerification = isTemporaryIndustryTheme(item)
   return <div className="page">
     <Link to="/themes" className="back-link">← 回到族群</Link>
@@ -816,9 +846,10 @@ function ThemePage() {
      {needsTemporaryVerification && <details className="technical-details"><summary>既有資料</summary><div>既有名稱：{item.display_name}</div><div>既有識別碼：{item.theme_id}</div><div>既有成員數：{item.eligible_members}</div></details>}
      <div className="detail-grid two-panels">
        <div className="panel"><h2>市場指標</h2>{item.qualified && metricEntries.length ? <div className="metric-list">{metricEntries.map(([key, value]) => <div className="metric-row" key={key}><span>{themeMetricLabel(key)}</span><b>{key.startsWith('relative_return_') ? formatSignedPercent(value) : key === 'breadth' ? formatPercent(value, 0) : formatPercent(value)}</b></div>)}</div> : <div className="empty">{item.qualified ? '尚無已命名且可核實的市場指標。' : item.data_quality === 'insufficient_data' ? '資料不足，尚未完成評估。' : '尚未評估；不代表條件不成立。'}</div>}</div>
-       <div className="panel"><h2>候選股票</h2>{item.candidate_symbols.length ? <div className="tag-list">{item.candidate_symbols.map((candidate) => { const matches = membersFullyLoaded ? members.data.items.filter((row) => (row.instrument ?? row).symbol === candidate) : []; const instrument = matches.length === 1 ? (matches[0].instrument ?? matches[0]) : null; return instrument ? <Link className="tag symbol-tag" key={candidate} to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{candidate}</Link> : <span className="tag" key={candidate}>{candidate}</span> })}</div> : <div className="empty">沒有足以顯示的候選股票。</div>}<div className="small-note">資料截至 {formatTaiwanDateTime(memberDataAsOf, true)} · 基準：<Term id="taiex">TAIEX</Term></div></div>
+       <div className="panel"><h2>候選股票</h2><ThemeCandidateTags theme={item} /><div className="small-note">評分日期 {formatTaiwanDateTime(item.trading_date, true)} · 基準：<Term id="taiex">TAIEX</Term></div></div>
     </div>
     <section className="section-head"><div><div className="eyebrow">{needsTemporaryVerification ? '既有成員 · 待重新核實' : '有效成員'}</div><h2>{needsTemporaryVerification ? '既有族群成員' : '族群成員'}</h2></div></section>
+     <div className="small-note">成員資料截至 {formatTaiwanDateTime(memberDataAsOf, true)}</div>
      {members.data.items.length ? <ThemeMemberTable rows={members.data.items} /> : <div className="empty panel">此日期沒有有效成員。</div>}
      {members.data.meta && <DirectoryPagination meta={members.data.meta} onPageChange={setMemberPage} />}
   </div>
