@@ -62,7 +62,7 @@ Round32 新增一個明確 opt-in 的 Python library，可對兩個 caller-provi
 
 先看 [文件索引與保留決策](docs/README.md)，再看 [產品規格](docs/PRODUCT_SPEC.md) 與 [開發路線](docs/ROADMAP.md)。
 
-目前 R34 暫停；角色、接手狀態與交付流程查 [專案協作規則](AGENTS.md) 及 [協作紀錄](docs/TASK_COORDINATION.md)。索引角色只維護索引與 coverage；Git commit 依使用者授權執行。
+四個角色的模型、分工、驗收交接與索引／Git commit 流程統一查 [AGENTS](AGENTS.md)；當輪角色 ID 與暫停／接手狀態查 [協作紀錄](docs/TASK_COORDINATION.md)。
 
 本機測試使用 [開發與驗證入口](docs/development-baseline/README.md)：`tools/Invoke-Validation.ps1` 會隔離資料並於結束後清理。舊 Temp 歸檔已移除；Git 保存原始碼與文件，本機資料、依賴及產物由 `.gitignore` 排除。
 

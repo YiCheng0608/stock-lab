@@ -2,24 +2,24 @@
 
 ## 目前狀態（2026-09-14）
 
-R33 功能、文件與輪末索引已接受。R34 四個 task 已建立，但尚未正式交接／派工，仍依使用者指示暫停。本次暫存清理、文件／驗證工具整理及 Git commit 是獨立維護，不啟動下一輪。
+R33 功能、文件與輪末索引已接受。2026-09-14 使用者明確要求繼續 ROADMAP，已解除 R34 暫停；既有四個 task 已核對，待本次角色規則整理提交後，由 R34 新統籌確認接手並派工，不重複建立角色。
 
 | R34 角色 | 已存在的 task ID | 狀態 |
 | --- | --- | --- |
-| 統籌 | 01a09aff-24b9-7f63-bca5-f2e4473c9759 | 等待使用者恢復指示；尚未接手。 |
+| 統籌 | 01a09aff-24b9-7f63-bca5-f2e4473c9759 | 已獲使用者恢復授權；待維護提交後確認接手。 |
 | C034 程式 | 01a09aff-5eb3-7312-a0b7-d2435f80044b | 等待統籌分派。 |
 | D036 文件 | 01a09aff-976e-7161-9226-6c09a4a94a20 | 等待統籌分派。 |
-| I073 索引／Git commit | 01a09aff-dcf2-7e30-89b8-554677000732 | 等待輪末分派；依 2026-09-14 補正規則負責索引與提交。 |
+| I073 索引／Git commit | 01a09aff-dcf2-7e30-89b8-554677000732 | 等待統籌輪末分派；依 AGENTS 負責索引與提交。 |
 
 恢復時先核對這四個 ID 的狀態，不重複建立角色。四角色模型、review、freeze、輪末索引及交接責任以 [AGENTS](../AGENTS.md) 為準；能力與優先順序以 [ROADMAP](ROADMAP.md) 為準。
 
-下一候選是 R0-B2 的 worker 實際 evaluator 輸入 capture／保存：現有 evidence.inputs 沒有完整 close/volume，且同 key upsert 可更新內容；SignalArtifact 尚未保存 replay body。先調查轉換後完整參數、標的／市場時間、版本／結果一致性、交易與失敗語意，再決定明確 opt-in 契約。不可把 caller 提供的資料或 private evaluator 結果直接當成歷史真相。worker/API/UI/DecisionSummary、historical availability、PIT、完整 B2/B7 仍未完成；這段不是恢復派工授權。
+下一候選是 R0-B2 的 worker 實際 evaluator 輸入 capture／保存：現有 evidence.inputs 沒有完整 close/volume，且同 key upsert 可更新內容；SignalArtifact 尚未保存 replay body。先調查轉換後完整參數、標的／市場時間、版本／結果一致性、交易與失敗語意，再決定明確 opt-in 契約。不可把 caller 提供的資料或 private evaluator 結果直接當成歷史真相。worker/API/UI/DecisionSummary、historical availability、PIT、完整 B2/B7 仍未完成；具體實作範圍由 R34 統籌調查後核定。
 
 ### 2026-09-14 索引角色 Git commit 責任補正
 
 使用者重申「codebase 索引更新後由索引角色執行 Git commit」。核對時現行角色規則只列索引／coverage，未列 commit；R33 等歷史分派更明寫禁止 Git mutation。`git rev-list --all --count` 為 1，唯一提交 `86ee317`（2026-09-14 00:57:17 +0800）沒有 parent；本次 ROADMAP 兩份文件更新仍是工作樹差異。因此可確認先前流程沒有落實逐輪 commit，不能把索引成功或外部 manifest 當成 Git 提交。
 
-現已在 [AGENTS](../AGENTS.md#2026-09-14-補正索引完成後必須封存-git-版本) 補上「統籌驗收／freeze → 索引更新 → 統籌複核並核定提交清單 → 索引角色 commit → 統籌核對 hash／剩餘差異」及 receipt 要求；獨立維護亦適用。本次提交範圍為已驗收的 ROADMAP／執行清單與本次角色規則文件，最終 commit receipt 留在 task 回覆。R34 保持暫停；恢復時沿用既有 I073，分派必須帶入新責任，不沿用舊禁止 commit 的指令，也不補造 R01–R33 的逐輪提交歷史。
+現已在 [AGENTS](../AGENTS.md#git-結案) 補上「統籌驗收／freeze → 索引更新 → 統籌複核並核定提交清單 → 索引角色 commit → 統籌核對 hash／剩餘差異」及 receipt 要求；獨立維護亦適用。本次提交範圍為已驗收的 ROADMAP／執行清單與本次角色規則文件，最終 commit receipt 留在 task 回覆。R34 保持暫停；恢復時沿用既有 I073，分派必須帶入新責任，不沿用舊禁止 commit 的指令，也不補造 R01–R33 的逐輪提交歷史。
 
 ## 如何使用以下歷史紀錄
 

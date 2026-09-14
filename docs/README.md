@@ -1,6 +1,6 @@
 # 文件索引與維護規則
 
-產品方向由 [PRODUCT_SPEC](PRODUCT_SPEC.md) 定義；能力狀態與優先順序以 [ROADMAP](ROADMAP.md) 為準，分批驗收查 [ROADMAP_EXECUTION](ROADMAP_EXECUTION.md)。R34 仍暫停，接手狀態與 task ID 查 [TASK_COORDINATION](TASK_COORDINATION.md)。
+產品方向查 [PRODUCT_SPEC](PRODUCT_SPEC.md)，進度與優先順序查 [ROADMAP](ROADMAP.md)，分批驗收查 [ROADMAP_EXECUTION](ROADMAP_EXECUTION.md)。
 
 ## 依工作選文件
 
@@ -13,7 +13,7 @@
 | 策略與研究有效性 | [策略](STRATEGIES.md)、[v1 基準](V1_SPEC.md)、[R0 實作契約](R0_IMPLEMENTATION.md)。 |
 | 版本化研究資料 | [Signal artifact](SIGNAL_ARTIFACTS.md)、[離線比較](SIGNAL_COMPARISON.md)、[Pure-rule replay](RULE_REPLAY.md)。 |
 | 畫面用語 | [UI 文案](UI_COPY_SPEC.md)、[詞彙表](GLOSSARY.md)。 |
-| 分派、交付與 review | [AGENTS](../AGENTS.md)、[協作紀錄](TASK_COORDINATION.md)；不在其他 README 複製角色規則。 |
+| 角色分工與每輪流程 | [AGENTS](../AGENTS.md)：模型、分派、驗收、索引、Git commit 與交接的唯一規則；[協作紀錄](TASK_COORDINATION.md)：角色 ID 與目前狀態。 |
 
 ## 現行能力與歷史資料
 

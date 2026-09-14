@@ -1,6 +1,6 @@
 # ROADMAP R0–R3 執行清單
 
-更新：2026-09-14。現況以 [ROADMAP 進度摘要](ROADMAP.md#目前進度2026-09-14-核對) 為準：**R33 已接受；R34 已建立但尚未正式交接／派工，仍暫停。** 本次只是進度核對，不新增 round、不派工或核定下一批實作；既有四個角色 ID 見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。
+更新：2026-09-14。現況以 [ROADMAP 進度摘要](ROADMAP.md#目前進度2026-09-14-核對) 為準：**R33 已接受；使用者已授權繼續 ROADMAP，R34 待角色規則整理提交後接手。** 沿用已建立的四個角色，不重複建立；最新接手狀態與 ID 見 [協作紀錄](TASK_COORDINATION.md#目前狀態2026-09-14)。
 
 R0 各項仍只局部完成，R1 已有部分資料功能，R2 仍為提案，R3 為提案／等待決策或樣本。恢復後的既有候選是 R0-B2 worker 實際 evaluator 完整參數 capture／保存調查；R33 的 caller-input replay 沒有結清 B2、B7、PIT 或產品接線。下列原完成條件保持不變。
 
@@ -317,11 +317,6 @@ Round09 R1-A1 有限 review 範圍與證據見 [SOURCE_REGISTRY](SOURCE_REGISTRY
 
 ## 8. 每輪更新方式
 
-1. round 開始由統籌建立新的程式、文件、索引 task，並指定互不衝突的寫入範圍。
-2. 實作 task 提供完整證據；文件 task 只把已核對事實回寫對應契約，不因「完成」訊息先標通過。
-3. 統籌檢查差異、正式／隔離路徑與測試，再決定 `已 review`、修正或保持原狀。
-4. 文件狀態只更新本批、ROADMAP 對應能力及必要操作限制；不以縮小原 scope 的方式把原 ROADMAP 宣稱完成。
-5. 文件 freeze 後，索引 task 更新本輪涉及分區並回報 coverage；索引成功不等於功能驗收。
-6. 統籌接受索引結果並核定提交清單後，由索引 task 執行本地 Git commit，回報 hash／提交檔案／剩餘差異，再由統籌核對並完成本輪。無差異時須回報 HEAD 與檢查結果；具體規則及獨立維護適用範圍見 [AGENTS](../AGENTS.md#2026-09-14-補正索引完成後必須封存-git-版本)。
+分派、review、freeze、索引、Git commit 與交接統一依 [AGENTS](../AGENTS.md#每輪流程)。本清單只更新已核對的本批成果、ROADMAP 對應能力及必要限制，不縮小原驗收範圍。
 
 Round 06 已完成 R0-B4／B3-persist 的有限 review；完成範圍只包含 caller-provided provenance 結構、schema 1 相容隔離保存，以及同日唯讀 legacy＋Wilder v2 兩 as-of 的 exact 離線比較。Round07 已完成 R0-C3／B5a 的 `time-evidence/v1` 本地核心／儲存 foundation；Round08 再完成分離的 `product-time/v1` News/API/UI read-time projection 與 legacy unknown 接線。Round09 已完成 R1-A1 的唯讀 registry／首批四個免費官方來源人工查證，Round18 再完成同四筆的有限 standalone capture executor，Round19／20 各接一個有限 consumer。Round12 C012 已完成 R0-B2 的分離 signal artifact pure/local store foundation；Round32 又完成有限 offline exact legacy／new descriptive comparison；Round33 再完成 caller-provided current pure-rule complete-argument capture/replay。這三個 R0-B2 slices 仍沒有共同的 artifact/subject/time/source/availability bridge或legacy-v2 paired execution；API/UI、worker、PIT 與 B7 仍未完成。後續依賴仍包含完整 legacy collector、source content／strict evidence、C007 產品／worker persistence linkage與 R0-B5/B3-wire。官方 source truth、B7、B4b 新 trade plan 及 R1–R3 中需要真實來源或前瞻時間的項目保持各自提案／等待，不能由 schema、介面、fixture、local export、HTTP 200、comparison report、rule bundle/digest、capture receipt 或 read-time projection 提前結案。

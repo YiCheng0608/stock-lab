@@ -1,14 +1,12 @@
 # 開發與驗證入口
 
-R34 狀態及既有四個 task ID 統一維護於 [協作紀錄](../TASK_COORDINATION.md)。本次文件／工具整理及 Git commit 不代表恢復 ROADMAP 派工。
+角色、驗收及索引／Git commit 流程查 [AGENTS](../../AGENTS.md)，當輪角色 ID 與暫停／接手狀態查 [協作紀錄](../TASK_COORDINATION.md)。
 
 ## 版本基準
 
-整理後以 Git 提交為原始碼基準，使用 `git status --short`、`git diff` 與 `git log -1` 核對。舊 R33 的 166 檔案／mtime 清單只描述整理前狀態，已由 Git 取代，不再維護一份會隨正常修改失效的平行基準。`.gitattributes` 固定 LF，避免 checkout 改變 pure-rule replay 所綁定的 domain.py bytes。
+以 Git 提交為原始碼基準，使用 `git status --short`、`git diff` 與 `git log -1` 核對。`.gitattributes` 固定 LF，避免 checkout 改變 pure-rule replay 所綁定的 domain.py bytes。
 
 本機 DB、原始資料、備份、依賴與測試產物由 `.gitignore` 排除。Git 不備份正式或 `.local` 資料庫；本次也沒有 migration 或資料修復。
-
-2026-09-14 起，索引角色亦負責每輪及已授權獨立維護的本地 Git commit：統籌先驗收來源／文件並 freeze，索引更新及 coverage 經複核後，索引角色只提交核准路徑，回報 hash、提交檔案與剩餘差異。完整規則見 [AGENTS](../../AGENTS.md#2026-09-14-補正索引完成後必須封存-git-版本)；不再把只有索引 receipt、沒有 commit 或具名無差異證據的結果當成版本封存完成。
 
 ## 後端驗證
 
