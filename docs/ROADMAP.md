@@ -4,7 +4,7 @@
 
 ## 目前進度（2026-09-14 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。
+**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity 修正已通過有限 review；candidate selection 與歷史回算未完成。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
@@ -15,7 +15,7 @@
 
 ### 接下來的順序
 
-1. **R35 群組成員身分調查**：member metrics 有 instrument ID，但保存及 lookup 只用 symbol；以達 `MIN_GROUP_MEMBERS` 的跨市場同 symbol 案例走實際群組計算，先確認歧義再定最小修正。這是候選，不是已驗缺陷。
+1. **群組候選身分調查**：R35 已有限 review member-return identity；下一步先以至少 5 個有效成員、top 4 排除另一個同 symbol 成員的案例，走 actual candidate→decision 路徑確認是否額外展開，再核定 canonical candidate 的最小相容修正。既有歷史 rows 不因 member-return 修正自動回算，契約見[產業分類 §8](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。
 2. **R0 接線與比較**：補來源／subject／availability／decision-time 到 SignalArtifact 的橋接、B3-wire、B5b，依依賴完成 B4b 與 B7。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。

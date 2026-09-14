@@ -643,6 +643,7 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             member_metrics.append(
                 {
                     "instrument_id": instrument.id,
+                    "exchange": instrument.exchange,
                     "symbol": instrument.symbol,
                     "instrument_type": instrument.instrument_type,
                     "etf_category": instrument.etf_category,
@@ -786,8 +787,11 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         score_row.details_json = {
             "benchmark": "TAIEX",
             "benchmark_returns": benchmark_returns,
+            "member_return_identity_version": "instrument-id-v1",
             "member_returns": [
                 {
+                    "instrument_id": member["instrument_id"],
+                    "exchange": member["exchange"],
                     "symbol": member["symbol"],
                     "excess_return_1d": member["excess"][1],
                     "excess_return_5d": member["excess"][5],
@@ -916,6 +920,87 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
     return None
 
 
+def _resolve_group_member_return(
+    db: Session, group_score: GroupDailyScore | None, instrument: Instrument, signal_date: date,
+) -> tuple[int | float | None, dict[str, Any]]:
+    """Resolve versioned member evidence without guessing an exchange identity."""
+    requested = {"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": instrument.symbol}
+    audit = {
+        "version": "group-member-return-lookup/v1",
+        "member_return_identity_version": None,
+        "group_id": group_score.group_id if group_score else None,
+        "group_score_date": group_score.trading_date.isoformat() if group_score else None,
+        "requested": requested, "matched": None, "mode": "rejected", "reason": None,
+    }
+
+    def finish(reason: str, value: int | float | None = None):
+        audit["reason"] = reason
+        if value is None:
+            audit["mode"] = "rejected"
+        if value is not None:
+            audit["matched"] = dict(requested)
+        return value, audit
+
+    if group_score is None:
+        return finish("group_missing")
+    if group_score.trading_date != signal_date:
+        return finish("score_date_mismatch")
+    details = group_score.details_json
+    if not isinstance(details, dict):
+        return finish("invalid_details")
+    marker = details.get("member_return_identity_version")
+    audit["member_return_identity_version"] = marker
+    rows = details.get("member_returns")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        return finish("invalid_member_returns")
+    if "member_return_identity_version" in details:
+        audit["mode"] = "instrument_id"
+        if marker != "instrument-id-v1":
+            return finish("unsupported_identity_version")
+        ids, pairs = set(), set()
+        for row in rows:
+            row_id, exchange, symbol = row.get("instrument_id"), row.get("exchange"), row.get("symbol")
+            if (type(row_id) is not int or row_id <= 0 or type(exchange) is not str
+                    or not exchange or type(symbol) is not str or not symbol):
+                return finish("invalid_member_identity")
+            if row_id in ids or (exchange, symbol) in pairs:
+                return finish("duplicate_member_identity")
+            ids.add(row_id)
+            pairs.add((exchange, symbol))
+        matches = [row for row in rows if row["instrument_id"] == instrument.id]
+        if not matches:
+            return finish("member_not_found")
+        member = matches[0]
+        if member["exchange"] != instrument.exchange or member["symbol"] != instrument.symbol:
+            return finish("member_identity_conflict")
+    else:
+        audit["mode"] = "legacy_symbol_unique"
+        if any("instrument_id" in row or "exchange" in row for row in rows):
+            return finish("unversioned_member_identity")
+        if any(type(row.get("symbol")) is not str or not row["symbol"] for row in rows):
+            return finish("invalid_legacy_identity")
+        group = db.get(ThemeGroup, group_score.group_id)
+        if group is None:
+            return finish("group_missing")
+        members = _allowed_group_members(group, _effective_memberships(db, group.id, signal_date))
+        matching_ids = {item.id for _membership, item in members if item.symbol == instrument.symbol}
+        if matching_ids != {instrument.id}:
+            return finish("legacy_membership_ambiguous_or_missing")
+        matches = [row for row in rows if row["symbol"] == instrument.symbol]
+        if len(matches) != 1:
+            return finish("legacy_return_ambiguous_or_missing")
+        member = matches[0]
+    value = member.get("excess_return_20d")
+    if type(value) not in (int, float):
+        return finish("invalid_member_return")
+    try:
+        if not math.isfinite(value):
+            return finish("invalid_member_return")
+    except OverflowError:
+        return finish("invalid_member_return")
+    return finish("matched", value)
+
+
 def _risk_levels(entry: float, atr: float | None) -> tuple[float, float, float, float]:
     risk = max((atr or entry * 0.02) * 1.0, entry * 0.01)
     invalid = max(0.01, entry - risk)
@@ -985,16 +1070,7 @@ def _upsert_signal_for_strategy(
         instrument.etf_category,
     )
     group_score = _best_group_for_signal(db, instrument.id, signal_date)
-    details = group_score.details_json if group_score else {}
-    member_detail = next(
-        (
-            item
-            for item in details.get("member_returns", [])
-            if item.get("symbol") == instrument.symbol
-        ),
-        {},
-    )
-    group_excess = member_detail.get("excess_return_20d")
+    group_excess, group_member_return_lookup = _resolve_group_member_return(db, group_score, instrument, signal_date)
     strategy_flow_ratio = _strategy_institutional_flow_to_average_turnover_ratio(
         db,
         instrument.id,
@@ -1178,6 +1254,7 @@ def _upsert_signal_for_strategy(
         **existing_evidence,
         "strategy": strategy_key,
         "strategy_version": strategy.version,
+        "group_member_return_lookup": group_member_return_lookup,
         "confidence_semantics": confidence_semantics,
         "actionable": status == "conditional",
         "breakout": {"state": breakout.state, "reasons": breakout.reasons},

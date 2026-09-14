@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類與隔離修復契約
 
-更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle 均只在表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
+更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle 與 R35 member-return identity 均只在各節表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
 
 ## 1. 官方證據 snapshot
 
@@ -187,3 +187,28 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 | transaction／receipt | caller rollback有效、helper failure只撤 savepoint、後段 failure不留 normalized partial write；scope receipts不互相覆蓋。 |
 
 2026-09-13 的有限 review 包含 actual parsers、本地 official-shaped fixtures、完整 `collect`、SQLite caller rollback／savepoint、integrity／FK 與保護來源檢查。未完成項：官方 capture metadata／availability truth、ETF heuristic 品質、legacy 錯誤期間、source-effective/PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 歷史轉換、舊 derived outputs 重算、metadata history治理、guard解除與策略有效性。
+
+## 8. 群組衍生成員報酬的身分契約（有限 review）
+
+群組分數仍依當日有效 membership 計算；本節只規範 `GroupDailyScore.details_json.member_returns` 到個股策略輸入的身分連結，不改 `hot_group_v1` 分數、最低成員數、`breakout_v1`／`pullback_v1` 公式或策略版本。
+
+### 8.1 新產出與精確讀取
+
+- 新產出的 `details_json` 必須有 `member_return_identity_version="instrument-id-v1"`。每個 `member_returns[]` 同時保存正整數且非布林的 `instrument_id`、非空 `exchange` 與 `symbol`；整份清單的 ID 及 `(exchange, symbol)` 各自不得重複。`instrument_id` 是該 DB 內的本地鍵，仍須用 exchange＋symbol 交叉核對；這不證明跨 DB 可攜性或來源 truth。
+- worker 只用 `instrument_id` 找目標列，並要求該列的 exchange／symbol 與目標 Instrument 完全相同；目標的 `excess_return_20d` 只接受有限的原生整數或浮點數，布林、字串、null、NaN 與 infinity 都視為不可用。
+- member-return helper 只處理已由既有 group selection 選中的 score，不取代其有效 membership、active group、score date、TAIEX benchmark、最低成員數與有限 group return gates。
+- marker 未知／空值、列結構或 identity 非法、`instrument_id`／`(exchange, symbol)` 重複、目標缺席或 identity 衝突時一律 fail closed；有 marker 的 payload 不得降級用 symbol 猜測。這個拒絕只約束 member-return 輸入，不改 `candidate_symbols` 的既有字串相容輸出。
+
+### 8.2 舊 payload 的有限相容
+
+沒有 marker 的舊 payload 只有在所有列都沒有 `instrument_id`／`exchange` 時才可能相容讀取。worker 必須以該 score 的 `group_id` 與 `signal_date` 重查有效 membership，再套用與 producer 相同的股票／ETF 類型及 category gate；相同 symbol 的有效 canonical identity 必須恰好是目標 `instrument_id`，而 payload 也必須恰有一筆同 symbol 且其 20 日超額報酬為有限數值，才可採用 `legacy_symbol_unique`。
+
+只看 payload 中同 symbol 的筆數不足以證明身分：另一市場的同 symbol 成員即使因技術資料不足而沒有寫入 `member_returns`，只要在當日仍是有效成員，就必須拒絕。期間邊界、群組、類型或 identity 無法唯一核對時，輸入保持 null，不任選第一筆。
+
+### 8.3 證據、相容邊界與後續缺口
+
+- Signal 的 `rule_evidence_json.group_member_return_lookup` 保存 `version="group-member-return-lookup/v1"`、來源 marker、group／score date、requested 與 matched identity、`instrument_id`／`legacy_symbol_unique`／`rejected` mode 及 reason。拒絕時 matched 為 null，策略仍走既有缺資料語意。
+- `group_daily_scores` 仍以 `(group_id, trading_date)` 原位重算；本輪不改 schema 或既有 upsert 行為，也不做歷史批次 migration 或回算。新 producer 重算後才有新版 identity，舊列只受 §8.2 的保守相容保護，因此不能宣稱歷史群組資料已全面 canonical。
+- `candidate_symbols` 及 decision lookup 仍是 symbol-based 的獨立缺口；API／前端可保留 symbol 顯示，但尚未具有 canonical candidate identity。本節完成不代表 candidate selection、backfill、正式分類修復、PIT 或策略有效性完成。
+
+本節的有限 review 只接受新 producer 的 member identity、worker 精確／legacy lookup、拒絕語意及 Signal evidence；未改 domain 公式、策略 pin、群組分數、candidate selection 或歷史資料。

@@ -617,7 +617,7 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         db.add(MarketBar(instrument_id=instrument.id, trading_date=score_date, open=100, high=101, low=99, close=100, adj_close=100, volume=1000, turnover=100000, source="fixture"))
         db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [110] * 20, "prior_20_volumes": [1000] * 20, "volume": 1000, "ma20": 100, "ma60": 100, "atr14": 2}, source="fixture"))
         db.flush()
-        monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_returns": [{"symbol": "OBS", "excess_return_20d": 0.1}]}))
+        monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_return_identity_version": "instrument-id-v1", "member_returns": [{"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": "OBS", "excess_return_20d": 0.1}]}))
         rejected = SimpleNamespace(passed=False, state="rejected", reasons=("rule_not_met",))
         monkeypatch.setattr(pipeline, "evaluate_breakout_v1", lambda **_kwargs: rejected)
         monkeypatch.setattr(pipeline, "evaluate_pullback_v1", lambda **_kwargs: rejected)
@@ -646,7 +646,7 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
         db.add(MarketBar(instrument_id=instrument.id, trading_date=score_date, open=100, high=101, low=99, close=100, adj_close=100, volume=2000, turnover=200000, source="fixture"))
         db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [99] * 20, "prior_20_volumes": [1000] * 20, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
         db.flush()
-        monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_returns": [{"symbol": "COND", "excess_return_20d": 0.1}]}))
+        monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_return_identity_version": "instrument-id-v1", "member_returns": [{"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": "COND", "excess_return_20d": 0.1}]}))
         monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_turnover_ratio", lambda *_args, **_kwargs: 0.0)
         monkeypatch.setattr(pipeline, "_margin_change_ratio", lambda *_args, **_kwargs: 0.0)
 
