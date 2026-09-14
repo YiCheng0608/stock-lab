@@ -10,7 +10,7 @@
 | 已實作 | 程式已存在，尚未完成獨立 review。 | 變更路徑、版本、實跑結果與未跑／失敗項。 |
 | 已 review | reviewer 已重現關鍵案例並接受有限範圍。 | 日期、隔離環境、版本、命令結果與限制。 |
 
-實作者只能標「已實作」；reviewer 才能標「已 review」。ROADMAP 狀態由統籌更新，不能由本文件的批次名稱推論。
+實作者只能標「已實作」；reviewer 才能標「已 review」。ROADMAP 狀態由統籌核定、文件角色更新，不能由本文件的批次名稱推論。
 
 目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b、B5b 與 B7仍是提案。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
 

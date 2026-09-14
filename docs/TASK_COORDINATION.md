@@ -21,8 +21,8 @@ R34 舊統籌為 `01a09aff-24b9-7f63-bca5-f2e4473c9759`，只補歷史資訊。
 
 R35 候選是群組成員 canonical identity：目前內部 member metrics 有 `instrument_id`，保存的 `member_returns` 與 signal lookup 卻以 symbol 關聯。先用達 `MIN_GROUP_MEMBERS` 的跨市場同 symbol 案例，經實際群組計算確認可達歧義及相容性，再決定最小修正；不能把候選當成已證缺陷或已修復。
 
-- 統籌持有範圍、驗收及本紀錄；程式先交調查，實作前由統籌核定契約。
-- 文件角色獨立核對身分、來源與版本相容性；索引角色等來源／文件 review 與 freeze 後工作。
+- 統籌核定範圍、完成狀態與驗收；程式先交調查，實作前由統籌核定契約。
+- 文件角色獨立核對身分、來源與版本相容性，並依統籌 review 結論維護受影響契約及本接手紀錄；索引角色等文件交付接受與 freeze 後工作。
 - 證據直接回覆 task，必要長期契約更新既有文件；不延續舊 external-review、manifest 或 Temp 交接環境。
 
 ## 必須帶入的限制
@@ -35,4 +35,4 @@ R34 final targeted 是 52 passed；2,436-pass full suite 對應較早 capture gu
 
 R01–R34 的原分派、role IDs、驗收矩陣、失敗修正史及索引 receipt 敘事，可用 `git show 69f62cf:docs/TASK_COORDINATION.md` 取閱。歷史禁止 commit、Temp 依賴或尚待 review 的指令不覆蓋現行 AGENTS；Git 也不恢復已刪除的外部附件。
 
-後續更新本文件的現況與待辦，不重複追加整輪逐步紀錄。本次文件維護的 freeze、索引與 commit receipt 留在本 task 回覆。
+後續每輪由文件角色更新本文件的現況與待辦，不重複追加整輪逐步紀錄。交接只寫已完成及驗收邊界、尚缺項目、下一步與其依賴／完成條件；詳細契約用連結。本次文件維護的 freeze、索引與 commit receipt 留在本 task 回覆。
