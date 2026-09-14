@@ -1,10 +1,10 @@
 # 開發路線與目前能力
 
-更新：2026-09-15。能力依截至 R38 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-15。能力依截至 R39 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（2026-09-15 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途。R35 的 member-return identity、R36 的 canonical candidate producer／decision lookup、R37 的 backfill／coverage typed scope，以及 R38 的 public source-day typed candidate 顯示已通過有限 review；歷史回算仍未完成。
+**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途；R39 已有限 review bridge A 的可證映射與缺口，沒有新增程式能力。R35–38 的四個 identity／candidate 小批亦已通過有限 review；歷史回算仍未完成。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
@@ -15,8 +15,8 @@
 
 ### 接下來的順序
 
-1. **R0-B2 SignalArtifact bridge A 調查**：先盤點 actual worker capture 到 subject／source／availability／decision-time，再核對 artifact 與 consumer 缺口及哪些輸入可被證明；本步只做 A，不預先核 B 或預設切換，也不要求正式 DB 或新增外部來源。詳見 [Signal artifact](SIGNAL_ARTIFACTS.md) 與 [Worker capture](WORKER_ANALYSIS_CAPTURE.md)。
-2. **R0 其餘接線與比較**：依調查結論補 SignalArtifact bridge，再做 B3-wire、B5b，並按依賴完成 B4b 與 B7。
+1. **R0-B2 SignalArtifact bridge B 候選**：依已 review 的 A 結論，下一步核定 explicit stable current capture path／hash＋attempt／ordinal＋new research decision 到 candidate 的窄 adapter；candidate 與 caller save 分離，不接 consumer 或預設。詳見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
+2. **R0 其餘接線與比較**：adapter review 後再接可證 source／availability、B3-wire、B5b，並按依賴完成 B4b 與 B7。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。
 
@@ -25,7 +25,7 @@
 | ID | 現況 | 剩餘驗收 |
 | --- | --- | --- |
 | R0-1 ATR | legacy `atr14` 仍為最近最多 14 根 high-low 平均；Wilder 純核心與 B3-persist 已有限 review，尚未接 worker。 | 官方 session／halt／公司行動／previous-close 與 availability 證據、B3-wire、PIT 及 paired replay。 |
-| R0-2 信心與保存輸入 | 新 rule-only confidence 為 null；legacy 0.75 不代表機率。四個 artifact／comparison／replay／capture 小批已有限 review。 | 可證完整歷史輸入、SignalArtifact 及產品接線、legacy-v2 paired output、明確選版；capture receipt 不證來源 truth。 |
+| R0-2 信心與保存輸入 | 新 rule-only confidence 為 null；legacy 0.75 不代表機率。四個 artifact／comparison／replay／capture 小批及 bridge A 缺口已有限 review。 | Capture→candidate adapter、可證完整歷史輸入／availability、產品接線、legacy-v2 paired output與明確選版；capture receipt 或 owner hash 不證來源 truth。 |
 | R0-3 價位 | B4a 已標示規則參考價；legacy 目標仍為 1.6R／3R，未換成完整交易計畫。 | B4b：tick 後價位順序、成本、gap、不追價、流動性、期限與不可比情況。 |
 | R0-4 時間 | legacy `data_cutoff` 的 T 日 13:30 不證資料當時可得；time-evidence foundation 與產品 read-time projection 分離。 | strict store／worker／產品關聯、`available_at <= decision_at`、live collected-at gate、修訂與 backfill 的 B5b。 |
 | R0-5 DB 邊界 | 程式 head 為 `0006_news_json_defaults`；有限 migration、canonical rebuild 與唯讀 startup gates 已 review。外部 preview 曾升級正式 DB，不算正式 migration 驗收。 | 正式 migration／restore／deployment、未支援 historical／custom schema 及服務 reload；startup 通過不代表任意 INSERT 或完整資料驗證。 |
@@ -38,7 +38,7 @@
 | --- | --- | --- |
 | R03／10／11／27–31 | 隔離 migration／restore mechanics、News defaults、canonical instruments／settlements rebuild、readiness identity gates；不等於任意 schema 或正式部署。 | [R0](R0_IMPLEMENTATION.md) |
 | R02／04／06–08 | ATR 純核心、immutable provenance store、time-evidence 與 read-time projection；官方 truth／worker／PIT 仍待接。 | [R0](R0_IMPLEMENTATION.md) |
-| R12／32／33／34 | immutable Signal artifact、描述比較、caller-input pure replay、owned DB actual worker capture；尚無共同歷史輸入 bridge 或 legacy-v2 paired replay。 | [保存與重播契約](README.md) |
+| R12／32／33／34／39A | Immutable Signal artifact、描述比較、caller-input pure replay、owned DB actual worker capture，以及 capture→artifact 可證映射／缺口；adapter 尚未實作，也無共同歷史輸入、PIT 或 legacy-v2 paired replay。 | [保存與重播契約](README.md) |
 | R13／14 | 個股 K 線／量／MA 與研究流程、單位／unknown／列表至詳情 UX；不是完整交易計畫或績效驗證。 | [個股頁](STOCK_RESEARCH_PAGE.md)、[UX](UX_REVIEW.md) |
 | R15–17 | 分類 mapping、ordinary-industry 觀測期間、ETF／new-listing lifecycle；正式錯分類及歷史 PIT 未修復。 | [產業分類](INDUSTRY_CLASSIFICATION.md) |
 | R35–38 | Member-return identity、typed candidate producer／decision、backfill／coverage inclusion 與 public source-day display；四種語意分開，未回算歷史或證明 PIT。 | [產業分類 §8–9.6](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review) |

@@ -124,11 +124,28 @@ Caller 明示兩個 external rollback-mode SQLite snapshots、expected hashes、
 
 [WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md) 從 external stable snapshot 建 owned research DB，保存 shared evaluator kwargs/result、private replay bundle、subject/date/strategy 與 legacy Signal snapshot。資料留在 local capture tables，不是 `signal-artifact/v1` core／revision／relation；captured／observed time 不證 decision 或 availability。
 
-## 10. 完成邊界
+## 10. Bridge A 可證映射與下一候選
+
+Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 因而可證 evaluator 實際收到的 arguments/result、subject、觀測 market date、selected strategy config/version、legacy Signal snapshot，以及 receipt 所記 collection run。這仍只證 capture 內部一致；沒有逐輸入 raw row／source version／availability，owner 的 SHA 只屬建立 owned DB 前的原 source snapshot bytes，不是 attempt 後 research DB 或 exact evaluator inputs 的 hash。本輪查核的 `backend/app`、`backend/worker` 與 `frontend/src` 未見 worker、API、DecisionSummary 或前端產品接線；既有 offline comparison 仍是分離 consumer。
+
+下一個 B 候選是窄、無自動保存的 adapter；最終 I/O、time、binding 與必要磁碟驗收範圍由後續統籌核定：
+
+| 明示輸入／輸出 | 候選映射 | 不可擴張的邊界 |
+| --- | --- | --- |
+| Stable current research snapshot path＋expected SHA、exact attempt＋ordinal | 在同一穩定 snapshot strict 驗完整 attempt，再選 exact ordinal；evaluator 必須等於 `selected_strategy.name`。 | Current research SHA 與 owner original-source SHA 分開；後者不可冒充當次 input hash。 |
+| Selected call | `input_snapshot.id` 綁 database id／attempt／ordinal；hash 只封 canonical input-only manifest：mapping schema、subject/date/strategy/evaluator、arguments、config／pinned evaluator binding 及明示 upstream refs。 | Manifest 排除 captured/receipt time、status/result；owner DB hash只能作 upstream container reference。 |
+| Caller 明示 aware `decision_at` | 代表這次新研究採用時間，且不得早於 selected call 與 receipt 的 `captured_at`。 | 只證時間先後；不得由 observed date、legacy `data_cutoff`／`created_at` 或 captured time 回推歷史 decision，也不證 availability／PIT。 |
+| Selected legacy Signal＋actual evaluator result | `status` 只保存 observed legacy snapshot status；`rule_state` 分開保存 actual result。Ruleset 用 selected config；confidence、`as_of_at`、`earliest_execution_at` 為 null，earliest reason 仍用固定值；basis unknown、feature refs 空。 | 不是 v2 status／levels 重算或 legacy-v2 paired replay。Pinned `domain-rules/v1` 只綁 evaluator；adapter、pipeline、legacy status／levels 未被該 digest 覆蓋，必須列 dependency unknown／missing，不得稱完整 worker implementation 可重算。 |
+| Capture／receipt 原文 | 在 `rule_evidence` 保存 exact canonical JSON opaque string；call 沿用已驗 digest，receipt 只能把重算值明標 derived seal。 | 不直接 nested decoded payload：artifact canonicalizer 會遞迴轉換 `*_at`，且 legacy naive `created_at` 會被拒絕或破壞原 bytes／seal。 |
+| Candidate mapping | Adapter 只回 candidate；caller 才能另外呼叫既有 `SignalArtifactStore.save_artifact` 並明示 attempt/run。 | 不自動寫 store、不接 default worker／consumer、不切版本。 |
+
+候選必須在 current hash／stable snapshot 不符、attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、ruleset／implementation pin 不符、input manifest digest 不符，或 decision 缺失、naive、早於 capture 時 fail closed。Unknown source／availability 必須保留 reason，不能因 digest、receipt 或新 decision time 升格為已驗證。
+
+## 11. 完成邊界
 
 R0-B2／B2-persist 仍需：
 
-1. 把已保存的 subject／actual worker inputs 接到可證 source、availability、decision time 的 immutable artifact，並在同一 snapshot 執行隔離 legacy／v2 paired replay。
+1. 實作並 review 上述 explicit capture→candidate adapter，再把 inputs 接到可證 source／availability／historical decision time，並在同一 snapshot 執行隔離 legacy／v2 paired replay。
 2. API list/detail/action、DecisionSummary 與明確版本選擇。
 3. 前端 non-probability 與 legacy/new 並列，且不得隱式切預設。
 4. B3-wire、B5b availability／PIT gate 與 B7 paired replay review。

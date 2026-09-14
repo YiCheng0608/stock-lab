@@ -55,7 +55,7 @@ R35 的 member-return identity、R36 的 candidate producer／decision lookup、
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-B1／C-001 | 已 review（局部） | 無 migration | confidence 安全語意；不推論 B2 完成。 |
-| R0-B2／B2-persist | 四個小批已 review；整體未完成；bridge A 待調查 | R0-A1、G-ID | [Artifact](SIGNAL_ARTIFACTS.md)、[描述比較](SIGNAL_COMPARISON.md)、[pure replay](RULE_REPLAY.md)、[worker capture](WORKER_ANALYSIS_CAPTURE.md)已有限接受。下一步先盤 actual worker capture→subject／source／availability／decision-time→artifact／consumer 與可證輸入，只核 A；不預核 B 或預設切換，也不要求正式 DB／新增外部來源。仍缺 bridge、隔離 legacy-v2 paired output 及 API／DecisionSummary／UI／B7 明確選版；marker／digest／receipt不代替歷史輸入。 |
+| R0-B2／B2-persist | 四個小批及 bridge A 已 review；整體未完成；B adapter 提案待核 | R0-A1、G-ID | A 只接受 source／graph 盤點。下一步核 exact stable current capture＋new aware research decision→candidate 的 explicit adapter；I/O、time、binding 與磁碟驗收仍待定。Source／availability、paired output、API／DecisionSummary／UI／B7 選版仍缺；詳見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。 |
 | R0-B3／C-002 | 已 review（純核心） | 無 I/O | Wilder ATR及strict caller inputs；未接官方來源或worker。 |
 | R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | schema1相容immutable store、atr-provenance/v2 strict完整caller snapshot／依賴、exact雙唯讀compare；無implicit latest，歧義拒絕，legacy-vs-new不可比，不相容v2 delta=null。官方truth／PIT／worker／API／B7仍缺，詳見 [R0](R0_IMPLEMENTATION.md)。 |
 | R0-B5／B3-wire | 提案 | R0-B4、G-TIME、G-SOURCE | 官方session／halt／公司行動／previous-close均有raw／版本／availability；缺來源reason code fail closed，worker explicit opt-in讀artifact，預設候選不切換。 |
