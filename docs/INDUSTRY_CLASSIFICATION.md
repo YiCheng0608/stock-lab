@@ -1,25 +1,23 @@
 # TWSE／TPEx 產業分類與隔離修復契約
 
-更新：2026-09-13。狀態：`R15 mapping／隔離診斷、R16 ordinary-industry normal collector 與 R17 ETF／new-listing candidate lifecycle 已通過有限 review；正式資料未修復`。本文件是官方代碼、fail-closed、有效期間、R15 隔離驗收、R16 ordinary-industry 與 R17 candidate lifecycle 的單一入口；不表示正式或 `.local` DB、歷史分類、族群分數或研究輸出已修復。
+更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle 均只在表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
 
 ## 1. 官方證據 snapshot
 
-`classification_evidence_at=2026-09-13`（Asia/Taipei）。官方 API raw 於 `2026-09-13T01:10:01+08:00` 擷取至專案外 `C:/Users/YiCheng/AppData/Local/Temp/stock-r15-industry-evidence/`；下列 SHA-256 固定本輪實際讀到的 bytes，網址日後更新不應覆寫此證據語意。
+`classification_evidence_at=2026-09-13`（Asia/Taipei）。TWSE current 表由 B.12.00 基表加 2023-07-03 官方變更組成，再與當次 OpenAPI code 交叉檢查；不能把舊基表單獨稱為 2026 最新版。TPEx 以 2025 v5.41 完整表為主、V12.14 為交叉驗證。API 出表日只識別公司基本資料 snapshot，不是每檔分類生效日。
 
-| 來源 | 文件／資料日期與定位 | 本輪保存證據 |
-| --- | --- | --- |
-| [TWSE IP 行情網路 B.12.00](https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf) | 107/10 修改、109/03 實施；PDF p.101（頁尾第 92 頁）附錄三是 01–31 基表。文件只給到月份，不補造日。 | `twse-ip-B12.pdf`，SHA-256 `3739F28ACBA7BDCE2C1D21016A2C8C3C8C63B2CA14D013446F9448D733F4A5DC`。 |
-| [TWSE 產業格式修改公告](https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024) | 公告 2023-05-30；2023-07-03 起代碼 16 更名，新增 35–38。 | `twse-new-categories-20230530.html`，SHA-256 `4E759E244227C29AA449482F94BC15506C9DF3905D4D4F7BE4C7EDA71C29B055`。 |
-| [TWSE 上市公司基本資料 OpenAPI](https://openapi.twse.com.tw/v1/opendata/t187ap03_L) | raw `出表日期=1150911`（2026-09-11），1,094 rows；普通分類代碼與下表一致，另有 10 筆 TDR 使用 91。 | `twse-t187ap03_L.json`，1,326,276 bytes，SHA-256 `31123B2251D0D3666F9D508B2D8404CE0AA1D68072AE93126C55C0733F6F6FB2`。 |
-| [TPEx 櫃檯買賣 IP 行情網路 v5.41](https://dsp.tpex.org.tw/storage/eb_data/11405/1140500476-1.pdf) | 文件 2025-05-13、預定 2025-06-30 上線；PDF p.27（頁尾第 26 頁）是完整 current 表。PDF p.11（頁尾第 10 頁）明載 2023-07-03 更名／新增 35–38 並刪除 18、34；v5.41 本身只新增證券別 `BS`，沒有產業碼異動。 | `tpex-2025-notice.pdf`，899,071 bytes，SHA-256 `784D29BD39A9E5C945CB01F745E83EABAF9198E6B2D7D582D2EC6483874C610A`。 |
-| [TPEx 上櫃股票 IP 行情網路 V12.14](https://dsp.tpex.org.tw/storage/eb_data/11309/1130500936-1.pdf) | 文件 2024-09-23、V12.14 自 2024-11-18 實施；PDF p.96（頁尾第 85 頁）完整表與 v5.41 一致，作跨規格交叉驗證。 | `tpex-v12.14-20240923.pdf`，806,033 bytes，SHA-256 `55D44B6E0B06497448EE70B7490D8AFA02BECAE6C7F267B96C6422CAF085D5E0`。 |
-| [TPEx 上櫃公司基本資料 OpenAPI](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) | raw `Date=1150912`（2026-09-12），891 rows；出現的普通分類碼皆在下表，沒有 18、34、80。 | `tpex-mopsfin_t187ap03_O.json`，1,072,030 bytes，SHA-256 `AC2293AAAE531FF61C422236D188D78BCE57EAA48D626924BB4D9AD32AA73F25`。 |
-
-TWSE 的完整 current 表是 B.12.00 基表套用 2023-07-03 官方變更後的結果，並以本輪 OpenAPI 實際代碼交叉檢查；不能把 B.12.00 單獨說成 2026 年最新版。TPEx 以 2025 v5.41 完整表為主、V12.14 為交叉驗證。API 出表日只表示這次公司基本資料 snapshot，不等於每檔分類的歷史生效日。
+| 來源 | 本次使用的日期／範圍 |
+| --- | --- |
+| [TWSE IP 行情網路 B.12.00](https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf) | 107/10 修改、109/03 實施；附錄三 01–31 基表。 |
+| [TWSE 產業格式公告](https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024) | 2023-05-30 公告；2023-07-03 起 code 16 更名並新增 35–38。 |
+| [TWSE 公司基本資料](https://openapi.twse.com.tw/v1/opendata/t187ap03_L) | `出表日期=1150911`，1,094 rows；另見 10 筆 TDR code 91。 |
+| [TPEx IP 行情網路 v5.41](https://dsp.tpex.org.tw/storage/eb_data/11405/1140500476-1.pdf) | 2025-05-13 文件；current 完整表，並記 2023-07-03 新增 35–38、停用 18／34。 |
+| [TPEx 上櫃股票 IP V12.14](https://dsp.tpex.org.tw/storage/eb_data/11309/1130500936-1.pdf) | 2024-09-23 文件；分類表與 v5.41 一致。 |
+| [TPEx 公司基本資料](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) | `Date=1150912`，891 rows；當次未見 18、34、80。 |
 
 ## 2. 完整市場別代碼期待表
 
-`—` 表示 current 一般產業表不支援；internal canonical 只供穩定 group identity。市場別官方原文保留在本表與證據 snapshot；既有產品仍可使用共用中文簡稱，本輪不新增 market-specific UI。`Tourism` 與 `Financial` 維持既有穩定 key，觀光的共用中文簡稱應反映 current「觀光餐旅」。
+`—` 表示 current 一般產業表不支援。internal canonical 是穩定 group identity；官方市場別名稱仍以本表為準。`Tourism`、`Financial` 保留既有 key，觀光共用中文顯示為「觀光餐旅」。
 
 | code | TWSE current 官方名稱 | TPEx current 官方名稱 | internal canonical／處理 |
 | --- | --- | --- | --- |
@@ -39,10 +37,10 @@ TWSE 的完整 current 表是 B.12.00 基表套用 2023-07-03 官方變更後的
 | 14 | 建材營造 | 建材營造 | `Construction` |
 | 15 | 航運業 | 航運業 | `Shipping` |
 | 16 | 觀光餐旅 | 觀光餐旅 | `Tourism` |
-| 17 | 金融保險 | 金融業 | `Financial`；市場別原文留在證據表 |
-| 18 | 貿易百貨 | — | `Wholesale and Retail`（TWSE only）；TPEx 自 2023-07-03 停用 |
+| 17 | 金融保險 | 金融業 | `Financial`；市場原文分別追溯 |
+| 18 | 貿易百貨 | — | `Wholesale and Retail`（TWSE only）；TPEx 已停用 |
 | 19 | 綜合 | — | `Composite`（TWSE only） |
-| 20 | 其他 | 其他 | `Other`；只接受精確 code 20，不是 fallback |
+| 20 | 其他 | 其他 | `Other`；只接受精確 code 20 |
 | 21 | 化學工業 | 化學工業 | `Chemical` |
 | 22 | 生技醫療業 | 生技醫療 | `Biotechnology` |
 | 23 | 油電燃氣業 | 油電燃氣業 | `Oil, Gas and Electricity` |
@@ -56,149 +54,136 @@ TWSE 的完整 current 表是 B.12.00 基表套用 2023-07-03 官方變更後的
 | 31 | 其他電子業 | 其他電子業 | `Other Electronics` |
 | 32 | — | 文化創意業 | `Cultural Innovation`（TPEx only） |
 | 33 | — | 農業科技業 | `Agriculture Technology`（TPEx only） |
-| 34 | — | — | TPEx 電子商務歷史碼，2023-07-03 停用；current unsupported |
+| 34 | — | — | TPEx 歷史電子商務碼；current unsupported |
 | 35 | 綠能環保 | 綠能環保 | `Green Energy` |
 | 36 | 數位雲端 | 數位雲端 | `Digital Cloud` |
 | 37 | 運動休閒 | 運動休閒 | `Sports and Leisure` |
 | 38 | 居家生活 | 居家生活 | `Household` |
-| 80 | — | 管理股票 | 特殊狀態，不建立一般 `official_industry` 排行族群 |
-| 91 | 一般產業表未列；本輪 API 僅見 TDR | — | 特殊證券碼，不建立一般 `official_industry` 排行族群 |
+| 80 | — | 管理股票 | 特殊狀態；不建一般產業排行 membership |
+| 91 | 一般表未列；當次 TWSE API 僅見 TDR | — | 特殊證券碼；不建一般產業排行 membership |
 
-現行官方表的 shared codes 沒有異義 collision；兩市場 code 22 都是生技醫療，並非 TWSE 油電／TPEx 生技。仍須以 `(exchange, code)` 查表，因市場專屬、停用及特殊碼不同。現行程式的實際 collision 是 TWSE 18 與 20–31 被錯移一格、缺 19，並把 31 錯接文化創意；TWSE 32 應是 unsupported，不是缺少的 current 分類。TPEx 18 應改為 unsupported，80 則須保留特殊狀態而非一般產業排行。
+shared current codes 沒有異義 collision；兩市場 22 都是生技醫療。查表仍必須使用 `(exchange, code)`，因市場專屬、停用與特殊碼不同。歷史錯誤是 TWSE 18、20–31 錯移、缺 19、31 誤接文化創意；TWSE 32、TPEx 18／34 應 unsupported，TPEx 80 是特殊狀態。
 
 ## 3. Mapper 與 fail-closed 契約
 
-- 官方 numeric input 必須同時具有可辨識的 `exchange` 與兩位數 `code`；只有該市場 current ordinary code 回傳 canonical string，其餘維持 `None`。本輪不新增四態 mapper schema，也不可先跨市場查全域 code。
-- 空白、`00`、TWSE `91`、TPEx `80`、TPEx `18`／`34`、任何未列碼、缺 exchange 或格式錯誤，都不得建立 verified `official_industry` membership。`20=Other` 只由精確 code 20 產生，不可承接 unknown。
-- current 官方 feed 不得以 canonical 英文 alias 取代 `(exchange, numeric code)` 證據。舊 fixture／legacy row 可相容讀取英文，但不能因此升格為官方 truth。
-- `backend/tests/fixtures/official_industry_codes.json` 只驗證兩市場 current ordinary code 集合；其中扁平、選取式的 `official_names` 只是測試樣本，不是完整或市場別名稱 oracle，也不能取代本文件的官方原文表。
-- 本輪 manifest 記錄全域官方 source URL、API 出表日、擷取時間、mapping version，以及被處理資料的 raw exchange／code。legacy row 原本沒有的逐列來源時間維持 unknown，不補造證據；隔離修復時也不以「沿用上次」冒充 current verified。
-- 只有 ordinary industry 可合併成跨市場 canonical group；membership source 至少保留 exchange，17 的市場別官方原文則由本輪 evidence snapshot 追溯。
+- 官方 numeric input 必須同時有可辨識 `exchange` 與兩位數 `code`；只對該市場 current ordinary code 回 canonical，其餘為 `None`。不得先跨市場查全域 code。
+- blank、`00`、TWSE 91、TPEx 80／18／34、未列碼、缺 exchange 或格式錯誤，都不建立 verified `official_industry`；`Other` 不能作 unknown fallback。
+- current 官方 feed 必須保留 exchange＋numeric code 證據；legacy 英文 alias 只供相容讀取，不能升格為官方 truth。
+- `backend/tests/fixtures/official_industry_codes.json` 只驗 current ordinary code 集合，其中 `official_names` 是測試樣本，不是完整市場別名稱 oracle。
+- manifest 保存 source URL、API 出表日、capture time、mapping version 與每筆 raw exchange／code。legacy 缺少的逐列時間保持 unknown。
+- 只有 ordinary industry 可合併成跨市場 canonical group；membership source 至少保留 exchange。
 
 ## 4. 三種日期與修復邊界
 
 | 欄位 | 本輪值 | 語意 |
 | --- | --- | --- |
-| `classification_evidence_at` | 2026-09-13 | 本輪擷取／核對 current 官方 code table 的日期；不是每家公司分類生效日。 |
-| `membership_effective_date` | 2026-09-13 | 本輪 current-table diagnostic 隔離副本的 period 切換日；不是 fresh 公司分類 truth。 |
-| `market_data_as_of` | 2026-09-08 | 既有價格、籌碼、features、group scores 與 signals 的市場資料截點。 |
+| `classification_evidence_at` | 2026-09-13 | current 官方碼表擷取／核對日，不是公司分類生效日。 |
+| `membership_effective_date` | 2026-09-13 | current-table diagnostic 副本的 forward transition 日，不是 fresh truth。 |
+| `market_data_as_of` | 2026-09-08 | 價格、籌碼、features、group scores 與 signals 的市場截點。 |
 
-三者不可互換。`instruments.industry` 只有 current 值，沒有分類 revision／歷史 snapshot；raw 最新收錄日、上市日或 `market_data_as_of` 都不能補成分類生效日。因此：
+`instruments.industry` 沒有 revision history，三種日期不得互換；上市日、raw 收錄日與 market as-of 都不能補造分類生效日。
 
-- current 修復副本只把 legacy raw code 依 current table 做 forward-only diagnostic transition：錯誤 open membership 於 2026-09-12 結束，expected ordinary membership 自 2026-09-13 開始；既有歷史 rows 不刪除、不改名、不回填上市日。unknown／unsupported／special 自該日沒有 verified ordinary membership。此結果不是 fresh 2026-09-13 公司分類核實。
-- current 修復副本保留 2026-09-08 舊 group scores、原 signals、evaluations 與 settlements，不回算、不覆寫；它們仍是舊 membership 下的歷史產物。
-- 另由同一份唯讀 backup 建立 `baseline` 與 `corrected` 兩個 2026-09-08 counterfactual diagnostic 副本。兩者使用相同價格、籌碼與 features；corrected 僅把本輪 current mapping 當情境輸入，以既有函式重算 group scores，signals 使用獨立 namespace。這只量測分類修正影響，不是 2026-09-08 PIT 或歷史真值。
+- current diagnostic 只在 2026-09-13 forward transition：舊錯 open membership 關在 2026-09-12，expected ordinary membership 自 2026-09-13 起；歷史列保留，unknown／unsupported／special 不建 ordinary membership。
+- current 副本保留 2026-09-08 scores、signals、evaluations、settlements，不重算或覆寫。
+- counterfactual `baseline`／`corrected` 從同一唯讀 backup 建立，價格、籌碼與 features 相同；corrected 只以 current mapping 作情境輸入並用獨立 signal namespace。這是影響量測，不是 2026-09-08 PIT／歷史真值。
 
 ## 5. 隔離驗收矩陣（有限範圍已 review）
 
-| Gate | 必須留下的實際證據 | 通過條件 |
-| --- | --- | --- |
-| mapping | 完整表逐碼正／負測試、source hashes、mapping hash；含 shared 同義、market-only、TPEx 18／34 停用、80／91 特殊、blank／00／任意 unknown、numeric-without-exchange。 | 所有 ordinary code 精確命中；其餘均 fail closed；3176／TPEx 22 為 Biotechnology，TWSE 22 亦為 Biotechnology。 |
-| baseline | 從正式 DB consistent read-only backup 產生的 before counts 與 mismatch 明細。 | 可重現 R14 的 TPEx 706／890；統籌另已重現 TWSE 845／1,094 wrong-or-unsupported。兩者只是修復前基線。 |
-| current membership | 專案外 current-table diagnostic 修復副本、period transition audit、before／after row counts。 | 每檔 supported active stock／ipo 在 2026-09-13 恰有一個 expected ordinary membership；unknown／unsupported／special 為 0；無重疊或反向期間，舊 rows 可追溯；不宣稱 fresh company truth。 |
-| current derived preservation | 2026-09-08 scores、signals、evaluations、settlements 的 row／content fingerprints。 | current 修復前後完全不變；不得以 membership 修好宣稱舊 scores 或候選已修。 |
-| counterfactual pair | baseline／corrected DB 路徑與 hashes、相同 market bars／chips／features fingerprints、重算命令與 exit code。 | 兩份只有 scenario membership、重算 scores 與獨立 namespace signals 可有預期差異；列出 members、eligible count、score、rank、quality、候選／signal 差異及因果對照。 |
-| isolation | `PRAGMA integrity_check`、`foreign_key_check`、正式與 `.local` DB 前後 SHA／size／mtime。 | 所有副本 integrity `ok`、FK 0；正式 `data/stock.db` 維持 `74A34389DBFA65429D27EA41BC9DECA2A132808F10093E2FFDE98665D96232D6`，`.local/data/stock.db` 維持 `87453D7B29954B6D506F8020B8987F321AA6749CE9BC24FBEF695DD3874B8D02`。 |
-| rerun／trace | 同一副本第二次執行的 mutation count、表 fingerprints；manifest 記錄 input/output hash、三種日期、source/mapping version、命令、exit code、限制。 | 第二次執行不新增 period／score／signal 漂移；所有產物能回指本輪 snapshot。 |
+| Gate | 有限接受範圍 |
+| --- | --- |
+| mapping | current ordinary codes 精確命中；market-only、停用、特殊、blank／00／unknown 與 numeric-without-exchange fail-closed。 |
+| current transition | 每個 supported active stock／IPO 在 2026-09-13 恰有一個 expected membership；unknown／special 為 0；舊列保留且期間無 overlap。 |
+| derived preservation | current 副本的 2026-09-08 scores、signals、evaluations、settlements 不變。 |
+| counterfactual | baseline／corrected 使用相同 market inputs，只允許 membership、重算 scores 與隔離 signals 有預期差異。 |
+| isolation／rerun | 隔離副本 integrity／FK 正常；第二次執行不再漂移；正式與 `.local` DB 不變。 |
 
-2026-09-13 統籌已獨立重現上述有限範圍：current 與 counterfactual 各有 1,974 個 supported active stock／ipo 恰有一個 expected membership，35 個 unknown／special 均為 0；關閉 1,551 個舊錯 membership（TWSE 845、TPEx 706）、新增 1,541 個 expected membership（TWSE 835、TPEx 706），原 2,403 筆 membership 全保留且只按契約切 `valid_to`。current 副本的非 group／membership 表與 prepared copy 相同；baseline／corrected 的價格、籌碼、features、raw、news、evaluations 等輸入／歷史表相同，原 signals 未改。
+2026-09-13 有限 review 的量測：current 與 counterfactual 各有 1,974 個 supported 標的取得唯一 expected membership，35 個 unknown／special 為 0；關閉 1,551 個舊錯 membership（TWSE 845、TPEx 706），新增 1,541 個 expected membership（TWSE 835、TPEx 706），原 2,403 rows 均保留。counterfactual group-score rows 41→52、45 rows 有差異，兩側各 6 個 non-null score；兩側各產生 4,616 筆隔離 signals。這些數字只屬該次隔離資料。
 
-counterfactual 的 group score rows 由 41 變 52，45 列有差異，兩側各 6 個 non-null score；兩側各產生 4,616 筆隔離 namespace signals，差異為 rationale 3,048、rule evidence 18、data quality／status 各 8，其中 9103、9105、912000、9136 的兩策略由 `observation` 轉為 `data_incomplete`。統籌另逐群核對 eligible 與 member 的 1／5／20 日平均、null score 不產 candidate、integrity `ok` 與 FK 0；完整 backend 為 372 passed／4,625 warnings／22.41 秒、exit 0。獨立證據為 `C:/Users/YiCheng/AppData/Local/Temp/stock-r15-coordinator-review/independent-final-db-review.json`；作者交付為 `C:/Users/YiCheng/AppData/Local/Temp/stock-taxonomy-diagnostic-dbv_xvgb/report.json`。
-
-正式 DB 未修復前，Round14「既有族群關聯待重新核實」guard 必須持續保留；本輪驗收不授權撤除，mapping 單元測試、文件、fixture、隔離副本或 counterfactual 成功也不能單獨撤除。正式 DB 寫入、歷史回填、策略有效性與 PIT 仍不在本批。
+正式 DB 未修復、歷史 effective date 未證、舊 derived outputs 未重算，所以文件、fixture、mapping test 或 counterfactual 成功都不能解除前端 guard，也不證策略有效性。
 
 ## 6. Round16 normal collector 觀測期間（有限接線已 review）
 
-C016 已把 normal collector 的 `stock`／`ipo` ordinary `official_industry` 關聯改為按可信 capture 觀測日向前轉換，並經統籌有限 review。ETF 分類與 `new-listings` 保留既有日期行為，本輪只驗不被 industry reconciliation 誤關；這兩個 domain 的歷史時間風險未完成。
+R16 只讓 normal collector 對 stock／IPO 的 ordinary `official_industry` 使用可信 capture 的觀測日作 forward transition；不回填歷史。ETF／new-listing lifecycle 由第 7 節另行定界。
 
 ### 6.1 觀測時間與來源綁定
 
-- 每筆 instrument 必須以 `payload_sha256` 唯一匹配本次 batch 的 authoritative universe capture，並同時核對 exchange、source、endpoint allowlist 與 digest。TWSE ordinary industry 只能來自 TWSE listed-company endpoint，TPEx 只能來自 TPEx listed-company endpoint；digest 或 raw id 單獨都不是充分證據。
-- `captured_at` 取該次 `FetchedPayload.collected_at`。現行 `capture_payload` 產生的 naive 值只因其程式契約可明確按 UTC 解讀；不得把其他任意 naive 時間猜成 UTC。正規化後還須在 fetch 完成時核對不是未來時間，再轉成 Asia/Taipei 日曆日 `observation_date=D`。
-- `D` 只表示「系統最早自此觀測日向前採用這份 current 分類」，不是公司實際分類生效日、來源宣示的 effective date 或歷史 PIT。`FetchedPayload.data_as_of` 在現行 universe fetch 是呼叫端傳入值；它與 `listing_date`、行情 `start_date`、`score_date` 都不得替代 `D` 或補造歷史分類。
-- 若 `D > score_date`，該 instrument 的 ordinary-industry membership 全部跳過，不關舊列、不新增列；行情 backfill 可繼續。run metadata 必須列 warning、skipped count、`D` 與 `score_date`，不得把 current snapshot 注入較早的 score date。
-- 成功或 partial 的 receipt 存在 `IngestionRun.metadata_json.industry_membership_observations`，物件包含 `version=industry-observation-v1`、`scope=ordinary_industry_only`、`status=observed|partial`、`skipped_count`、`unresolved_count`、`warnings` 與逐筆 `observations`。逐筆欄位包含 `exchange`、`symbol`、`source`、`endpoint`、`sha256`、`captured_at_utc`、`observed_date`、`score_date`、`raw_payload_id`、`stored_raw_collected_at_utc`、`time_semantics`、`raw_time_relationship`、`raw_classification`、`classification_status` 與 `status`。
-- 強制重跑成功時，前一份成功 receipt 追加至 `industry_observation_history`；重跑失敗時保留前一份 `industry_membership_observations`，把本次證據寫入最新 `industry_observation_attempt` 並追加 `industry_failed_attempts`。非 force idempotent reuse 會透傳已保存的成功 receipt，不以本次呼叫時間改寫它。
-- 相同 request／hash 的 `RawPayload` 可去重並保留最早收錄時間，因此 raw id 或 `stored_raw_collected_at_utc` 不能冒充本次 capture 時間。新 raw 寫入前會把 aware timestamp 正規化為 UTC，再以 UTC-naive 形式配合現有 SQLite 欄位保存；既有 naive rows 不回寫，只能依本地 capture 的既有 UTC 契約解讀，不能升格成外部時間真值。timestamp 缺失／非法時 `_upsert_raw_payload` 拒絕寫入，不能靠 DB default 或現在時間補造。此時 run 仍須可靠成為 `failed`，並以原始 payload file path、digest、null／invalid value 與 `raw_persistence_errors` 保存 failed-attempt 證據；不保證會有 raw DB row。
-- 只出現在 TWSE new-listing endpoint、尚未出現在 listed-company endpoint 的 IPO 沒有 ordinary-industry 權威 evidence：其 industry normalization 應 skip 並在 receipt 留 warning／reason，不能升格成 verified ordinary membership；這不阻斷該 IPO 其他已具證據的 instrument／行情處理。其餘 exchange、source、endpoint、digest 缺錯或不唯一仍是 evidence conflict，不得降格成一般 skip。
+- 每筆 instrument 必須以 `payload_sha256` 唯一匹配同 batch authoritative universe capture，並核對 exchange、source、endpoint allowlist 與 digest。TWSE／TPEx ordinary industry 只能各自來自 listed-company endpoint。
+- `captured_at` 取 `FetchedPayload.collected_at`；現行 local capture 的 naive 值依既有契約按 UTC 解讀，其他 naive 時間不可類推。正規化後須確認不在未來，再轉 Asia/Taipei 日曆日 `D=observation_date`。
+- `D` 是本系統開始採用 current observation 的下限，不是來源 effective date或 PIT。`data_as_of`、listing／start／score date 都不能替代。
+- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。
+- receipt 的 `industry_membership_observations` 保存 `version=industry-observation-v1`、`scope=ordinary_industry_only`、status、skipped／unresolved counts、warnings 與逐筆 source／endpoint／digest、capture／observed／score dates、raw refs、time relationship、raw classification 和 status。
+- force success 將前一成功 receipt append 到 history；force failure 保留最後成功 receipt，並另存 latest attempt／failed attempts。非 force reuse 不改寫既有成功 receipt。
+- raw 去重時間不能冒充當次 capture。新 raw 的 aware time 正規化成 UTC-naive 以符合現有 SQLite 欄位；missing／invalid timestamp 不以 DB default 或現在時間補造，run 必須成為 failed，並保留可得的原檔、digest與 persistence error。
+- 只出現在 TWSE new-listing endpoint 的 IPO 沒有 ordinary-industry authority，限縮為 skip＋warning；其他 identity／digest／source conflict 仍 fail-closed。
 
 ### 6.2 Ordinary-industry 狀態與期間轉換
 
-- normal collector 只接受帶正確 exchange 的 numeric industry code。current ordinary code 形成單一 expected canonical group；明確 non-empty numeric unknown／special／unsupported 只有在可信 listed-company capture 下才形成空集合，會關閉先前 open ordinary membership 而不猜新群組，receipt 必須保存 raw code 與 reason。可信 listed row 的缺欄／空白、非 numeric 或其他 ambiguous classification evidence 使 normalization fail closed；前節的 new-listing-only IPO 則按限定例外 skip＋warning。兩者都不能把資料缺漏當成「已確認無產業」。
-- industry reconciliation 只操作 collector-owned `official_industry` domain；manual membership 及本次 universe 未列出的 instrument 不動，不得以 hot-group overlap 掩蓋 industry 衝突。normal collector 仍可依既有流程更新 ETF／`daily_hot_group` 與行情等其他 domain，本輪只證明 ordinary-industry 處理不會誤關它們，不能宣稱成功 collect 的所有表均不變。
-- exact 同日、同 canonical open 關聯為 idempotent，重跑零 mutation。若既有 open ordinary 關聯的 `valid_from < D`，ordinary change 先把舊列關在 `D - 1 day`，再從 `D` 新增 expected 關聯；可信空集合只執行前半段。這是 observation transition，不是歷史 effective-date 回填。
-- mutation 前須整批驗證期間與 canonical identity。same-day wrong 關聯、任何 future open period、既有 overlap／多 open、inactive 或 metadata 不符的 canonical group，都因日粒度無法無損修正而拒絕 normalization；不得刪除、改寫日期或任選一列。raw capture 已先保存時應保留，membership／group mutation 則整筆交易 rollback 並留下失敗原因。
+- numeric current ordinary code 形成單一 desired canonical group。可信的 non-empty numeric unknown／special／unsupported 形成空集合，只關閉先前 ordinary membership；blank、non-numeric 或 ambiguous evidence fail-closed，不能當成「確認無產業」。
+- reconciliation 只操作 collector-owned `official_industry`；manual、ETF、`daily_hot_group` 與 universe 缺席標的不動。
+- exact 同日同 canonical open membership 是零 mutation。舊 open row 的 `valid_from < D` 時，change 先關於 `D-1` 再自 `D` 開新 row；可信空集合只關閉。
+- same-day wrong、future open、overlap／multiple-open、inactive 或 metadata 衝突須在 mutation 前拒絕；不得刪歷史、改日期或任選一列。raw 可先保存，但 membership／group mutation 整筆 rollback。
 
 ### 6.3 最小驗收矩陣
 
-| Gate | C016／統籌實際證據 | 通過條件 |
-| --- | --- | --- |
-| evidence／time | authoritative endpoint、source、exchange、digest 唯一匹配；UTC→Asia/Taipei 日界與 future-time negative cases。 | `D` 只由本次可信 capture 產生；`data_as_of`、listing／start／score date 均不能代替。 |
-| score boundary | `D < score_date`、`D = score_date`、`D > score_date` 隔離案例及 run receipt。 | 前兩者只做 forward transition；後者只跳過 ordinary industry 並明記 counts／dates，歷史 score 不受 current snapshot 污染。 |
-| state transition | ordinary unchanged／change、numeric unknown／special／unsupported、缺失／ambiguous、重跑案例。 | change gapless、可信空集合關舊不新增、缺失／ambiguous fail closed、exact rerun 零 mutation。 |
-| conflict／atomicity | same-day wrong、future period、overlap／多 open、inactive canonical 與 evidence conflict。 | 所有衝突在 membership mutation 前拒絕；raw 可追溯，group／membership 無部分寫入。 |
-| domain isolation | 同一 instrument 同時具有 industry、ETF／new-listing 或 manual 關聯，以及 universe 缺席案例。 | industry reconciliation 不改其他 domain 與缺席 instrument；collector 對其他 domain 的正常更新不在不變承諾。 |
-| receipt／retry | success、partial、idempotent reuse、force success／failure、missing／invalid timestamp 與 raw persistence error。 | 當次 capture 與去重 raw 最早時間分開；history／failed attempts 不覆蓋最後成功 receipt；非法時間不補造 raw DB timestamp，run 不停在 running。 |
-| scope／history | 專案外 Temp DB、正式與 `.local` DB 前後 hash／size／mtime、既有 derived rows fingerprints。 | 正式庫不變；成功／skip 重跑只承諾 group、membership 與既有 score 不漂移，正常 bar `collected_at` 可更新；failed rollback 另驗 instrument／bar 全欄不變。不得把 R15 counterfactual 或 R16 observation transition 稱為歷史 PIT。 |
+| Gate | 必須成立 |
+| --- | --- |
+| evidence／time | authoritative identity 唯一；D 只來自可信 capture；future time 拒絕。 |
+| score boundary | `D<=score_date` 只 forward transition；`D>score_date` skip，不污染舊 score。 |
+| transition | unchanged／change、可信空集合、ambiguous failure 與 exact rerun符合 §6.2。 |
+| conflict／atomicity | same-day、future、overlap、inactive 與 evidence conflict 在 mutation 前拒絕。 |
+| isolation | other domains、缺席 instrument、manual 與既有 score不因 industry reconciliation 漂移。 |
+| receipt／retry | 成功、partial、reuse、force failure 與 raw time error可分辨且不覆蓋最後成功 evidence。 |
 
-統籌最後以 Python 3.12.14 與既有專案外 Alembic 1.19.2 執行完整 backend：412 passed、4,902 warnings、pytest 31.67 秒（process 33.031 秒）、exit 0；作者最後完整 backend 亦為 412 passed／4,902 warnings／32.97 秒，兩者分開記錄。統籌另以實際 TWSE／TPEx universe parser 處理本地 official-shaped fixture，再走完整 `collect`，11 項檢查於 D 版再次 exit 0：涵蓋上市日不回填、跨市場共用 canonical、ordinary change、TPEx 80 關舊、exact rerun、same-day／missing evidence atomic rollback、manual／2026-09-08 score 保留、`D > score_date` skip、integrity `ok` 與 FK 0；aware timestamp probe 也由修正前失敗改為 final 通過。初版 harness 曾把正常 forced collect 會更新的 `MarketBar.collected_at` 也納入全等比較而失敗；final 已依上述正確範圍重跑，不冒稱成功 collect 所有表不變。
-
-完整證據在 `C:/Users/YiCheng/AppData/Local/Temp/stock-r16-coordinator-review/full-backend-review.json`、`full-backend.log`、`independent-collector-review.json`、`aware-timestamp-probe.json` 與 `source-review-changed.json`；C 版 410 項結果另存歷史檔，不是 final。本批沒有 live 官方網路驗證；fixture 的 capture metadata 是 caller-provided 可信假設，不證外部來源真值、availability 或歷史 PIT。正式與 `.local` DB 及保護來源前後一致。ETF／`new-listings` 期間不在 R16 範圍，後續僅由第 7 節有限接線補上 current candidate lifecycle；正式 DB 修復、來源時間 truth、既有 legacy raw 時間修復、metadata history 無界增長、舊 derived outputs 重算、前端 guard 解除與策略有效性仍未完成。
+2026-09-13 的有限 review 包含 actual universe parser→本地 official-shaped fixtures→完整 `collect`、aware timestamp、transaction、integrity／FK 與正式／`.local` DB 不變檢查。它不是 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
 
 ## 7. Round17 ETF／new-listing candidate lifecycle（有限接線已 review）
 
-C017-C 已完成 normal collector 既有 ETF 與 `new-listings` candidate membership 的來源、日期、到期、domain 切換與 SQLite transaction 修正，並經統籌有限 review。本節不改第 6 節 ordinary-industry 的 scope、counts 或觀測期間，也不授權正式／`.local` DB 修復、歷史回填或解除前端 guard。
+R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecycle；不改第 6 節 ordinary counts／scope，也不授權正式資料修復。
 
 ### 7.1 來源語意與五種日期
 
-- TWSE ETF record 的 raw 類型來自官方 ETF feed 的 free-text `FundType`；TPEx ETF record 取 ETF allowlist 的 `indexName`，再連同 symbol、name 交給現行 `normalize_etf_category(value, symbol, name)`。`broad_market`、`dividend`、`sector`、`thematic`、`commodity`、`bond`、`leveraged`、`inverse` 是本地有限集合與 token heuristic 的輸出，不是來源直接發布的共同 taxonomy、分類 effective date 或 PIT truth。未知文字及只有 symbol／name 的資料可能 fallback 為 `thematic`；文件須區分 raw description 與 local normalized category，receipt 至少回指 raw capture 並明列 normalization method／version，不能稱「官方 ETF 分類」。本批不改 mapper 的分類品質。
-- 每筆 candidate record 仍須以 `payload_sha256` 唯一匹配本次 batch 的 authoritative capture，並核對 exchange、source、endpoint allowlist 與 digest。ETF presence／category 只能由對應市場 ETF endpoint 支持；stock／IPO presence、上市日及退出判定只能由相符的 listed-company／new-listing authoritative record 支持。raw id、同碼其他 endpoint 或另一個 domain 的 membership 都不是充分證據。
-- capture `collected_at` 依第 6.1 節先正規化 UTC、拒絕未來 capture，再轉 Asia/Taipei 日曆日 `D`。這仍是「本系統自 D 起看見 current record」的 observation floor；不是來源 effective date。若 `D > score_date`，ETF 與 new-listing lifecycle 都只記 partial／skip，不關舊、不新增，也不把 current capture 插入較早的分析截點。
+- TWSE ETF raw 類型來自 `FundType`，TPEx 來自 `indexName`，再交現行 `normalize_etf_category(value, symbol, name)`。`broad_market`、`dividend`、`sector`、`thematic`、`commodity`、`bond`、`leveraged`、`inverse` 是 local heuristic，不是共同官方 taxonomy；未知文字或只有 symbol／name 可 fallback `thematic`，receipt 必須標 method/version。
+- candidate record 仍須唯一綁定相符市場與 endpoint 的 authoritative capture。ETF presence/category 只由 ETF endpoint 證明；stock／IPO presence、上市日與退出只由相符 listed-company／new-listing record 證明。
+- capture time、未來拒絕與 `D>score_date` skip 沿用 §6.1。
 
-| 名稱 | 意義 | candidate membership 可否使用 |
+| 名稱 | 意義 | lifecycle 用途 |
 | --- | --- | --- |
-| `D`／`observation_date` | 本次唯一可信 capture 的台北觀測日 | 是；新 transition 不得早於 D |
-| `L`／`listing_date` | authoritative record 報告的掛牌日／核准上市日 | 只界定 new-listing 事件與 60 個曆日窗口；不是 ETF category effective date |
-| `start_date` | 本次行情 backfill 的查詢起日 | 否；不得拿來建立 ETF／new-listing period |
-| `score_date` | 本次 collection／analysis 截點，也是 `D > score_date` 的防未來界線 | 只作截點與 skip 判斷；不是 category 或 listing effective date |
-| `E=L+60 days` | new-listing 0..60 inclusive 的最後一個曆日 | 只作 bounded `valid_to`；不得與 60 根有效 bars 混用 |
+| `D`／`observation_date` | capture 的台北觀測日 | transition 不得早於 D。 |
+| `L`／`listing_date` | authoritative 掛牌／核准上市日 | 只界定 new-listing 事件與 60 個曆日窗口。 |
+| `start_date` | 行情 backfill 起日 | 不建立 candidate period。 |
+| `score_date` | collect／analysis 截點 | 只作截點與 skip 判斷。 |
+| `E=L+60 days` | 0..60 inclusive 的最後曆日 | bounded `valid_to`；不是 60 根 bars。 |
 
 ### 7.2 ETF category lifecycle
 
-- authoritative ETF record 經現行 local normalizer 產生有限 category 後，才形成該 instrument 在 `group_type=etf` 的單一 desired canonical membership。group identity 跨市場共用；membership source 保留 exchange，receipt 另保留 endpoint、digest 與 normalization method。target group 與任何將被關閉的 collector-owned existing group 若 inactive，或 name、type、definition／source metadata 與 canonical identity 衝突，整批拒絕，不就地改寫成另一個概念。
-- 新建 ETF category membership 的 `valid_from=D`；category change 則把同 domain 的舊 open period 關在 `D - 1 day`，並自 D 開新 period。不得使用 ETF 的 `listing_date`、行情 `start_date` 或 `score_date` 回填 category history。exact 同 D、同 canonical open membership 是零 mutation；same-day wrong、future、overlap／多 open 或 closed-period 衝突須在 mutation 前 fail closed。
-- 若 normalized category 缺失、不在有限集合或 record 無法唯一綁定 authoritative ETF capture，整批 fail 並 rollback；不得把資料缺漏解讀成已確認退出，也不得關閉既有 open ETF membership。現行 mapper 對未知文字的 `thematic` fallback 只能標示為 heuristic，不能冒稱 unknown 已由來源驗證。
-- ETF↔stock／IPO 的退出只能由本次 authoritative current record 證成：ETF record 可建立／轉換 ETF domain，authoritative listed stock／IPO record 才可把既有 open ETF period於 D 前一日 forward-close。`L > D` 的 prospective new-listing row 尚不能證明 current stock／IPO state，也不得拿來關 ETF；若該 instrument 已有 collector-owned ETF／new-listing history，須保守拒絕而非改動。不得因 instrument 缺席、synthetic index、manual／industry／daily-hot membership 或另一個 category 的存在自行猜測退出。
+- valid local category 形成 `group_type=etf` 的單一 desired membership；group identity 跨市場共用，membership source 保留 exchange，receipt 保存 endpoint、digest 與 heuristic version。
+- 新 period `valid_from=D`；category change 於 `D-1` 關舊、自 D 開新。exact same-day same-category rerun 零 mutation；same-day wrong、future、overlap／multiple-open、closed conflict 或 inactive／metadata conflict fail-closed。
+- category 缺失／非法或 capture 無法唯一綁定時整批 rollback，不關既有 ETF membership。heuristic fallback 不能稱來源驗證。
+- ETF→stock／IPO 退出只接受相符 authoritative current record；`L>D` prospective row、缺席、synthetic index或其他 domain membership 都不能證明退出。
 
 ### 7.3 New-listing window 與到期
 
-- new-listing 是股票／IPO 的事件型 `daily_hot_group`，不得只看 mutable `Instrument.instrument_type=ipo` 決定歷史。authoritative `L` 的窗口是 `0 <= D-L <= 60` 個曆日且兩端 inclusive；它與 `instrument_eligibility` 的 20／60 根有效 bars 分屬 membership lifecycle 與 actionable guard，不能互相替代。官方 refresh 在第 61 個曆日把 current type 轉為 stock，也不代表已有 60 根有效 bars。
-- 對本輪新建立的 period，只有 `L <= D <= E` 時可寫入 `valid_from=max(D,L)`、`valid_to=E`。`L > D` 是尚未發生的 future listing，只能等待日後 capture，不預建 future membership；若已有任何 collector-owned ETF／new-listing history則 fail，避免用 prospective row 改寫 current state。`D > E` 不補造已過期歷史。`L` 缺失則記 unresolved 並保留既有 new-listing membership；格式非法須 fail，不得以 type、第一根 bar、backfill start 或 score date代填。
-- 新建 period 一開始即為 bounded；同一 `valid_from`／`valid_to=E` 的 exact rerun 零 mutation。既有 legacy open period若 D 仍在窗口，只補上 `valid_to=E` 且保留原 `valid_from`；若到本次 D 才首次確知已過期，只能將它 forward-close 於 `D - 1 day`，不得把本次 current observation 倒寫成過去已知的 `E`。後者須在驗收證據揭露 legacy overrun，並保留「D 前期間可能錯誤」限制。
-- authoritative listed／new-listing record 會按 L/window 決定 new-listing desired state；authoritative ETF record 才能證明 instrument 已轉入 ETF domain並退出 open new-listing。第 61 日的 ipo→stock、stock／ipo↔ETF 與 category change 都要分 domain 計算 desired state，不得用一個非空 group id 廣泛關閉所有 `etf`／`daily_hot_group` rows。
+- new-listing 是 stock／IPO 的事件型 `daily_hot_group`；窗口為 `0 <= D-L <= 60` 個曆日 inclusive，與 20／60 根有效 bars 的 actionable guard 分離。
+- 只有 `L<=D<=E` 才新建 `[max(D,L), E]`。`L>D` 不預建 future period；`D>E` 不回填過期歷史。missing L 為 unresolved 並保留舊 membership；invalid L fail-closed。
+- 新 period 一開始即 bounded，exact rerun 零 mutation。legacy open row 在窗口內只補 `valid_to=E`；本次才觀察到已過期時，只可 forward-close 於 `D-1` 並揭露 D 前可能錯誤。既有 bounded row 的 `valid_to` 與本次 E 不符時拒絕，不覆寫。
+- listed／new-listing record 依 L/window 決定 desired state；ETF record才可證明轉入 ETF。每個 domain 分別計算，不能用單一 group id 廣泛關閉其他 rows。
 
 ### 7.4 Domain isolation、atomicity 與 receipt
 
-- candidate reconciliation 只操作 collector-owned canonical `etf` 與 `new-listings` membership；兩個 domain 分別 preflight／transition。ordinary `official_industry`、manual、其他 `daily_hot_group`、缺席 instrument 與 synthetic index 均不在 candidate desired-set closure。不得以全域 `official-*` prefix 廣泛停用 legacy groups；歷史列不刪除、不改名，除上述 forward transition／bounded expiry 外不改日期。
-- candidate helper 不自行 commit，也不 rollback caller transaction；`begin_nested()` 前須先確保實體 outer transaction 已開始。特別是 sqlite3 legacy mode 在 SELECT／SAVEPOINT 前可能仍未 `BEGIN`，因此只有 SQLite driver 尚未 `in_transaction` 時才明確開 outer `BEGIN`，再建立 savepoint，避免 `RELEASE` 把 helper mutation 實質提交。helper 成功後的變更仍受 caller commit／rollback 控制；helper 失敗只撤該 savepoint，caller 先前 pending writes 保留。collect 若在 helper 後的 `sync_news_from_events` 或其他 normalized 階段失敗，instrument／bar／group／membership 必須整體 rollback；只有 normalization 前已安全 commit 的 raw capture 保留並進 failed-attempt receipt，不能把部分 candidate success 寫成整批成功。
-- 既有 `industry_membership_observations` 的 ordinary-industry `version`、`scope=ordinary_industry_only`、status、counts 與 `observations` 不改義，其 counts 不包含新增子節點。C017-C 在同一物件加入 `etf` 與 `newlisting`：`version` 分別為 `etf-observation-v1`／`newlisting-observation-v1`，`scope` 分別為 `etf`／`newlisting`，並各有 `status`、`skipped_count`、`unresolved_count` 與 `observations`。逐筆以 `raw_payload_id`、source、endpoint、sha256 回指 raw capture，不另宣稱保存 raw category 文字；ETF 另以 `classification_method_version=normalize_etf_category-v1` 明示 local heuristic。TAIEX 等 synthetic index 會在兩個子 scope 留 `unresolved_synthetic_index`，所以行情 run 可 success、ordinary receipt 可 observed，而子 scope 仍為 partial；三者須分開解讀。
-- force success、force failure 與非 force idempotent reuse 沿用第 6.1 節 receipt 保存規則：最後成功 `industry_membership_observations` 不被失敗覆蓋，成功 history、latest attempt、failed attempts 與去重 raw 的最早收錄時間仍分開；exact reuse 不以新呼叫時間重寫 D 或 lifecycle receipt。
+- reconciliation 只操作 collector-owned canonical `etf` 與 `new-listings`；ordinary industry、manual、其他 hot groups、缺席 instrument、synthetic index 不在 closure。
+- helper 不 commit／rollback caller transaction。SQLite 在 `begin_nested()` 前確保 physical outer transaction 已開始；成功仍受 caller commit／rollback，helper failure 只撤 savepoint。collect 後段失敗時 normalized instrument／bar／group／membership 全 rollback，先前安全 commit 的 raw 可保留。
+- ordinary receipt 的 version/scope/counts 不改。`etf` 與 `newlisting` 各有 version、scope、status、counts、observations；ETF 另帶 `classification_method_version=normalize_etf_category-v1`。synthetic index 可令 candidate scope partial，而行情 run與 ordinary scope仍 success／observed，三者分開解讀。
+- force history、failed attempt、raw 去重與 exact reuse 規則沿用 §6.1。
 
 ### 7.5 C017-C 最小驗收矩陣（有限範圍已 review）
 
-| Gate | C017-C／統籌實際案例 | 通過條件 |
-| --- | --- | --- |
-| ETF source／normalization | TWSE `FundType`、TPEx `indexName`、raw 未知／缺失但 local fallback 為 `thematic`，以及 normalized category 為 null／非法。 | raw 與 local normalized 值分開；heuristic 不稱官方 taxonomy；normalized null／非法使整批 failed／rollback，不猜 category 或退出。 |
-| time boundary | ETF 的 `D < score_date`、`D = score_date`、`D > score_date`；另測 `captured_at > observed_now`，並確認 L／start／score 不成為 category effective date。 | ETF period 只自 D forward；合法 capture 的 `D > score_date` 才 skip／partial，未來 capture 直接拒絕。 |
-| ETF transition | 初建、unchanged、category change、authoritative ETF→stock／IPO、缺席 instrument、exact rerun。 | 同 domain gapless、可信退出才關舊、缺席不動、exact rerun 零 mutation。 |
-| new-listing window | `D < L`、`D = L`、窗口內、`D = E`、`D > E`、第 61 日 type switch、missing L。 | 新 period 為 `[max(D,L), E]`；future 不預建、過期不補歷史、missing unresolved。 |
-| legacy expiry | 窗口內 legacy open、已過期 legacy open、同 expiry rerun。 | 窗口內只 cap E；過期只 D-1 forward-close 並揭露 overrun；既有 bounded hot row 若 `valid_to` 與本次 `L+60` 不吻合則保守拒絕，不覆寫成 current evidence 或 PIT。 |
-| conflict／isolation | same-day wrong、future／overlap／多 open、closed expiry conflict、target／existing group inactive 或 metadata conflict；future L 與同 instrument 的 industry、manual、其他 hot group。 | mutation 前拒絕衝突；future listing 不關 current ETF，只改已被可信 current record 證成的 canonical domain，其他 membership 不漂移。 |
-| receipt／retry／atomicity | success、partial、unresolved、force success／failure、idempotent reuse與 raw 已先保存的失敗。 | 兩個子節點與 ordinary receipt 可分辨；history／attempt 不覆蓋；normalized collect mutation 不部分提交。 |
-| safety | 專案外 Temp DB、完整 backend、integrity／FK、正式與 `.local` DB 及保護來源 fingerprints。 | 隔離驗收通過才可改狀態；正式庫、既有 R16 ordinary semantics、derived rows 與前端 guard 不因本批宣稱完成。 |
+| Gate | 必須成立 |
+| --- | --- |
+| ETF source／normalization | raw 與 local normalized category 分開；null／illegal category fail＋rollback。 |
+| time | D 只作 forward observation；`D>score_date` skip；future capture拒絕。 |
+| ETF transition | initial／unchanged／change／可信退出／缺席／rerun符合 §7.2。 |
+| new-listing | future、day 0、day 60、day 61、expired、missing L 符合 §7.3。 |
+| legacy／conflict | cap、forward-close、wrong expiry、same-day、overlap與 identity conflict均保守處理。 |
+| transaction／receipt | caller rollback有效、helper failure只撤 savepoint、後段 failure不留 normalized partial write；scope receipts不互相覆蓋。 |
 
-統籌以 Python 3.12.14、Alembic 1.19.2 完整重跑 backend：481 passed／5,066 warnings，pytest 49.91 秒（process 51.328 秒）、exit 0；作者 C final 另為 481 passed／5,066 warnings／51.55 秒。統籌並以實際 TWSE／TPEx universe parser 處理本地 official-shaped fixtures，再走完整 `collect` 的 11 項檢查：跨市場同 ETF category、new-listing day 60 inclusive／day 61 bounded 自然退出、ETF gapless change 與另一市場不變、same-capture group／membership／歷史 score 不變、同日／缺分類全 normalized rollback、forced failure 保留最近成功 receipt、`D > score_date` 全 membership 不變、authoritative ETF↔stock／IPO 只改 ETF／hot 而保留 industry，以及 manual／其他 hot／歷史 score 不變；integrity `ok`、FK 0。
-
-SQLite physical transaction probe 在 B 版重現 caller rollback 後仍殘留 1 筆 membership，C 修正後 caller rollback 的 group／membership 都為 0；作者四個 transaction cases 亦由 red 轉 green，並證明 helper failure 只撤 savepoint、collect 後段故障會 rollback 全部 normalized mutation而保留先前 raw。C017-C frozen source 只有 `backend/worker/pipeline.py`、`backend/tests/test_etf_listing_membership_collection.py`、`backend/tests/test_official_membership_collection.py` 與 `backend/tests/test_pipeline_integration.py`；沒有 `sources.py`、models、API、frontend 或 schema 變更。統籌完整測試期間所有保護來源與正式／`.local` DB 前後 fingerprints 不變。final 證據在 `C:/Users/YiCheng/AppData/Local/Temp/stock-r17-coordinator-review/full-backend-review.json`、`full-backend.log`、`independent-collector-review.json` 與 `savepoint-rollback-probe.json`；B 版 477 passed 與失敗 probe 均是中途結果，不是 final。初版 independent harness 曾誤把 failed force 前的倒數第二份 transition receipt 與 failure 後 receipt 比較；final 已改核最近成功 repeat receipt並重跑，不宣稱重跑 receipt 的 `action` 必須相同。
-
-本節通過只證 current capture 驅動的 candidate lifecycle。官方端 capture metadata／availability 仍是 caller-trusted assumption；ETF heuristic 品質、legacy 錯誤期間修復、真正 source-effective/PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 的歷史轉換、舊 derived outputs 重算、metadata history 長期治理、前端 guard 解除與策略有效性皆留待後續。
+2026-09-13 的有限 review 包含 actual parsers、本地 official-shaped fixtures、完整 `collect`、SQLite caller rollback／savepoint、integrity／FK 與保護來源檢查。未完成項：官方 capture metadata／availability truth、ETF heuristic 品質、legacy 錯誤期間、source-effective/PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 歷史轉換、舊 derived outputs 重算、metadata history治理、guard解除與策略有效性。

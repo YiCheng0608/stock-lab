@@ -1,33 +1,18 @@
 # Caller-provided pure-rule replay 契約
 
-更新：2026-09-14。狀態：**已 review（Round33 C033-B 有限 current pure-rule library；Round34 C034-B 由 opt-in worker capture 明確呼叫）**。
+更新：2026-09-14。`backend/app/rule_replay.py` 的有限 current pure-rule library 已 review；Round34 的 opt-in [worker analysis capture](WORKER_ANALYSIS_CAPTURE.md) 是明確 caller。本文是 API、格式、binding、錯誤與限制的權威。
 
-本文件是 `backend/app/rule_replay.py` 的 API、資料格式、binding、錯誤與限制權威。這個 library 能在本契約有限的 native JSON 輸入域內，完整保存兩個現行規則 evaluator 所接受的 caller arguments，並在固定的本地 source／config／runtime 下重新計算 `passed`、`state` 與 ordered `reasons`。Library 本身不讀歷史資料、signal artifact、worker 或正式 DB，也不證明 caller inputs 的來源、subject、市場時間、可得性或 point-in-time 正確性。Round34 新增的 [worker analysis capture](WORKER_ANALYSIS_CAPTURE.md) 是明確 opt-in 的外部 caller：它在 owned research DB 內保存 shared worker actual call 與本 library 的 private bundle，但不改本 library 的保證邊界。
+Library 只在 strict native JSON 輸入域內保存兩個 evaluator 的 caller arguments，並以固定 source／config／runtime 重算 `passed`、`state` 與 ordered `reasons`。它不讀歷史資料、SignalArtifact、worker 或正式 DB，也不證明來源、subject、market time、availability 或 PIT。
 
 ## 1. 能做與不能做的事
 
-支援的 evaluator 只有：
+只支援 `breakout_v1@1.0.0` 與 `pullback_v1@1.0.0`。成功 capture 保存完整 arguments、selected config、implementation identity、規則結果與三個 SHA-256 digest；replay 在 fresh private module 執行相同 evaluator 並 exact 比較結果。
 
-- `breakout_v1`，strategy version `1.0.0`；
-- `pullback_v1`，strategy version `1.0.0`。
+不保證：歷史輸入找回、來源／簽章／authentication、instrument identity、market／decision／as-of time、官方 availability／revision／PIT、完整 signal reconstruction、legacy/new paired replay、SignalArtifact persistence、worker／API／UI 接線或 hostile host sandbox。它只回答「caller 提供的合法參數，在本機受 pin 的 evaluator bytes/config/runtime 下是否重現 bundle claim」。
 
-一次成功 capture 會保存完整 admitted arguments、完整 selected strategy config、implementation identity、原始規則結果，以及三個用途不同的 SHA-256 digest。一次 replay 會在新的私有 module 中執行相同 evaluator，並比較 recorded／replayed result 是否完全相同。
+## 2. Public API
 
-這個有限能力不是下列任何一項：
-
-- 歷史輸入找回、來源證明、簽章、authentication 或 code signing；
-- instrument／subject identity、`market_date`、`decision_at` 或 `as_of_at` 證據；
-- official availability、revision、PIT、完整 signal reconstruction 或 paired legacy/new replay；
-- 本 library 自身的 `SignalArtifactStore`、`signal-comparison/v1`、worker、API、UI、`DecisionSummary` 或預設版本接線；Round34 的 opt-in worker caller 另見專用契約，不能反向把 pure library 稱為已接產品；
-- hostile Python interpreter／OS／stdlib／filesystem／registry 的隔離 sandbox。
-
-因此，只要 caller 提供本契約內結構合法的完整參數，這個 API 就能回答「在目前明確綁定的 evaluator bytes/config/runtime 下，規則結果是否仍與 bundle 中的 claim 相同」。參數是否源自可信資料、是否在歷史決策時已可得，仍須由 caller 另行證明。
-
-## 2. Public API 與可執行範例
-
-Public exports：
-
-```python
+~~~python
 from app.rule_replay import (
     RuleReplayBindingError,
     RuleReplayContractError,
@@ -36,64 +21,30 @@ from app.rule_replay import (
     replay_rule_inputs,
     rule_replay_json,
 )
-```
+~~~
 
-- `capture_rule_inputs(*, evaluator: str, arguments: dict) -> dict`：strict 驗證、以 fresh private module 評估一次，回傳 detached sealed bundle。
-- `rule_replay_json(bundle: dict | str) -> str`：strict 驗證 bundle 與本機 binding，回傳 canonical JSON。它**不呼叫 evaluator**，但會讀取、compile／exec 固定 source，才能核對完整 config binding。
-- `replay_rule_inputs(bundle: dict | str) -> dict`：strict 驗證後，以 fresh private module 評估一次並回傳 detached report。
+- `capture_rule_inputs(*, evaluator: str, arguments: dict) -> dict`：strict 驗證，以 fresh private module 評估一次，回 detached sealed bundle。
+- `rule_replay_json(bundle: dict | str) -> str`：驗 bundle 與本機 binding，回 canonical JSON；不呼叫 evaluator，但會 compile／exec 固定 source 核對 config。
+- `replay_rule_inputs(bundle: dict | str) -> dict`：strict 驗證、fresh private evaluation，回 detached report。
 
-在專案根目錄，以 CPython 3.12.14 且 `PYTHONPATH` 包含 `<repo>/backend` 的環境可執行：
-
-```python
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
-from app.rule_replay import capture_rule_inputs, replay_rule_inputs, rule_replay_json
-
-arguments = {
-    "close": 101.0,
-    "volume": 120.0,
-    "prior_volumes": [100.0] * 20,
-    "prior_highs": [100.0] * 20,
-    "group_excess_return_20d": 0.01,
-    "institutional_flow_to_turnover_ratio_5d": -0.003,
-    "margin_balance_change_ratio_5d": 0.05,
-}
-
-bundle = capture_rule_inputs(evaluator="breakout_v1", arguments=arguments)
-canonical_text = rule_replay_json(bundle)
-
-# Persistence is caller-owned. This example writes only to an external temporary path.
-with TemporaryDirectory(prefix="rule-replay-") as temporary_directory:
-    bundle_path = Path(temporary_directory) / "bundle.json"
-    bundle_path.write_text(canonical_text, encoding="utf-8")
-    report = replay_rule_inputs(bundle_path.read_text(encoding="utf-8"))
-
-assert report["exact_match"] is True
-assert report["recorded_result"] == report["replayed_result"]
-assert report["input_source_mode"] == "caller_provided_only"
-```
-
-API 不接收 source path、DB path 或 implicit latest selector；source selection 完全由 library 的 fixed registry 決定。
+API 不接受 source／DB path 或 implicit latest；persistence 由 caller 管理。執行環境為 repository 的 backend import path 與第 6 節固定 runtime。
 
 ## 3. Arguments contract
 
-兩個 evaluator 的 key set 都是 exact；缺 key 或多 key 都以 `argument_keys` 拒絕。數值可為 exact built-in `int`／`float` 或 `null`；`bool`、numeric subclass、numeric string 與自訂 mapping/list 不會被當成原生數值或容器。
+兩個 evaluator 的 key set 必須 exact；缺 key、多 key或錯型別以 `argument_keys` 等 code 拒絕。數值只接受 exact built-in `int`／`float`／`null`，不接受 bool、numeric subclass 或 string。
 
 | Evaluator | Exact arguments |
 | --- | --- |
 | `breakout_v1` | `close`, `volume`, `prior_volumes`, `prior_highs`, `group_excess_return_20d`, `institutional_flow_to_turnover_ratio_5d`, `margin_balance_change_ratio_5d` |
 | `pullback_v1` | `close`, `volume`, `prior_volumes`, `bar_count`, `ma20`, `ma60`, `group_excess_return_20d`, `institutional_flow_to_turnover_ratio_5d`, `margin_balance_change_ratio_5d` |
 
-`prior_volumes`／`prior_highs` 只能是 `null` 或 exact built-in list；每個 element 只能是原生 `int`／`float`／`null`。Evaluator 只使用 trailing 20 items；caller 若傳更長 list，前面的 prefix 仍會完整保存在 bundle，且會影響 `arguments_digest`，不會先裁掉。`bar_count` 只能是原生 `int`／`null`；它仍受通用整數範圍限制。
-
-`null`、空 history、短 history 與完整 history 是不同 canonical inputs；規則如何回傳 `data_incomplete`／`rejected`／`passed` 仍由固定 evaluator 決定。輸入必須 finite，但 finite inputs 在 evaluator 中造成 intermediate floating-point infinity 時，保留現行 v1 行為，不另改公式或結果。
+History 只接受 null 或原生 list；元素只可為原生 int／float／null，最多 10,000 筆。Evaluator 只使用 trailing 20，但 caller 的完整 prefix 仍保存且影響 digest。`bar_count` 只接受原生 int／null。null、空、短、完整 history 是不同輸入；規則結果由固定 evaluator 決定。輸入須 finite；由 finite input 產生的中間 floating-point infinity 沿用 v1 行為。
 
 ## 4. `rule-replay-bundle/v1`
 
-Bundle 頂層只能有下列十個 exact keys：
+Bundle 只有十個頂層 key：
 
-```json
+~~~json
 {
   "schema_version": "rule-replay-bundle/v1",
   "evaluator": "breakout_v1",
@@ -110,108 +61,80 @@ Bundle 頂層只能有下列十個 exact keys：
   "recorded_result": {"passed": true, "state": "passed", "reasons": []},
   "bundle_digest": "sha256:<64 lowercase hex>"
 }
-```
+~~~
 
-上例的空 `config_snapshot`／`arguments` 只展示欄位位置，不是合法的完整 `breakout_v1` bundle；可用 `capture_rule_inputs` 產生合法範例，但讀端不證明 bundle 一定由該函式建立。
-
-`recorded_result` 只有 exact keys `passed`、`state`、`reasons`：
-
-- `passed` 是原生 boolean；
-- `state` 只能是 `passed`、`rejected`、`data_incomplete`；
-- `reasons` 是 ordered non-empty strings list；`passed` 時必須為空，另外兩個 state 必須非空；
-- reason string 的 vocabulary 不在本契約中另設 allowlist，不能把 shape validation 說成所有 reason code 已封閉列舉。
+空 config／arguments 只示意位置，不是合法 bundle。`recorded_result` 只含 `passed`（原生 bool）、`state`（passed／rejected／data_incomplete）與 ordered nonempty-string `reasons`。passed 時 reasons 必須空；其他 state 必須非空。Reason vocabulary 不由本契約封閉列舉。
 
 ## 5. Canonical JSON 與 digest identity
 
-Canonical JSON 使用 `sort_keys=True`、`separators=(",", ":")`、`ensure_ascii=False`、`allow_nan=False`。Native mapping 先經 strict prewalk，再透過 canonical encode/decode 形成 detached transfer snapshot。回傳值仍是 mutable dict，不是 deep-immutable object：修改原 input 不影響已產生的 bundle；修改某次回傳不影響其他 detached 回傳物件或後續另行執行，但直接修改手上的 bundle 本身當然會改變其內容，且未一致重算時會破壞 seal。
+Canonical JSON 使用 `sort_keys=True`、`separators=(",", ":")`、`ensure_ascii=False`、`allow_nan=False`；strict prewalk 後 encode/decode 形成 detached snapshot。回傳 dict 可修改，但修改 caller 原 input 或另一次回傳不影響已產生 bundle／後續操作。
 
-Digest 定義：
-
-```text
+~~~text
 arguments_digest = SHA-256(canonical JSON of {evaluator, arguments})
 config_digest    = SHA-256(canonical JSON of config_snapshot)
 bundle_digest    = SHA-256(canonical JSON of every bundle field except bundle_digest)
-```
+~~~
 
-所有 digest 欄位都以 `sha256:` 加 64 個 lowercase hex 表示。`arguments_digest` 只識別 evaluator＋caller arguments；它不含 instrument、market time、source availability 或完整 signal artifact，因此**不是 historical input snapshot hash**。`bundle_digest` 才同時覆蓋 implementation/config binding、arguments identity 與 recorded-result claim。
-
-這些 digest 是 deterministic content identity／integrity check，不是簽章或 authentication。若 caller 修改 `recorded_result` 並一致重算外層 digest，資料可通過 shape/integrity；replay 仍會重新計算，只有該 claim 與實算結果不同時才得到 `exact_match=false`。Bundle 內的 recorded result 始終是一項 caller-carried claim。
+Digest 格式為 `sha256:` 加 64 lowercase hex。arguments digest 不含 subject、market time、availability 或完整 artifact；bundle digest 覆蓋 binding、arguments 與 recorded claim。它們是 deterministic identity／integrity，不是簽章。Caller 可改 claim 並重算 digest；replay 仍只以實算結果判定 exact match。
 
 ## 6. Source、config 與 runtime binding
 
-本版本固定：
-
 | 項目 | Frozen value |
 | --- | --- |
-| Source path policy | library sibling `backend/app/domain.py`；caller 不可選 path |
-| 完整 source bytes SHA-256 | `db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028` |
-| `breakout_v1` 完整 config digest | `sha256:a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd` |
-| `pullback_v1` 完整 config digest | `sha256:03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff` |
-| Runtime | CPython `3.12.14` |
-| Float model | radix 2、mantissa 53 bits、`max_exp=1024` |
+| Source path | library sibling `backend/app/domain.py`；caller 不可選 |
+| Source SHA-256 | `db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028` |
+| breakout config digest | `sha256:a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd` |
+| pullback config digest | `sha256:03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff` |
+| Runtime | CPython `3.12.14`；binary64 radix 2、mantissa 53、max_exp 1024 |
 
-每次 capture／serialize／replay 都在完成 caller 結構／identity 檢查後、讀 fixed source 前驗 runtime；接著對 fixed path 讀取最多 1 MiB 加一個 overflow sentinel，核對 hash，compile／exec **同一批已驗 bytes** 到 UUID-named fresh private module，再核對兩個完整 config digests。它不使用 shared `app.domain` config/callable 或 cached `.pyc`。
+每次 capture／serialize／replay 先驗 caller shape 與 identity，再驗 runtime；fixed source 最多讀 1 MiB＋overflow sentinel，核 hash 後把同一批 bytes compile／exec 到 UUID-named fresh private module，再核兩個完整 config digests。不使用 shared `app.domain` callable/config 或 cached pyc。
 
-Private module 只在執行期間註冊，正常與 exception path 都以 identity guard 移除自己註冊的 object。若 hostile host 把該名稱替換為 unrelated object，implementation 不會刪除別人的 object；host/interpreter/registry manipulation 原本就不在保證內。Whole-file binding 是保守政策：即使 `domain.py` 的其他區域變更，舊 bundle 也可能因 source hash 不同而不再受支援。
+Private module 正常與 exception path 都以 identity guard 移除自己註冊的 object。Host 替換 registry object、interpreter 或 filesystem 的惡意操控不在保證內。Whole-file binding 也表示 domain.py 的無關區域變更仍可能使舊 bundle unsupported。
 
 ## 7. `rule-replay-report/v1`
 
-成功 replay 的 report exact fields 包含：
+Report 保存 schema／scope／input mode、bundle 與 arguments digest、implementation／config binding、`local_source_binding_verified=true`、recorded／replayed result 及 `exact_match`。下列宣稱固定為 false：
 
-- identity：`schema_version=rule-replay-report/v1`、`scope=pure_rule_only`、`input_source_mode=caller_provided_only`、`bundle_digest`、`arguments_digest`；
-- local binding：`implementation`、`config_digest`、`local_source_binding_verified=true`；
-- result：`recorded_result`、`replayed_result`、`exact_match`；
-- 六個必為 false 的非宣稱旗標：`historical_inputs_verified`、`subject_identity_present`、`market_time_present`、`availability_verified`、`pit_verified`、`signal_reconstructed`。
+- `historical_inputs_verified`
+- `subject_identity_present`
+- `market_time_present`
+- `availability_verified`
+- `pit_verified`
+- `signal_reconstructed`
 
-`exact_match` 只比較兩個 result object 的 `passed`、`state` 與 ordered `reasons`。它不表示價格、來源、時間、instrument、artifact linkage 或其他 signal 欄位相同。
+Exact match 只比較 `passed`、`state` 與 ordered `reasons`，不表示價格、來源、時間、subject 或 artifact linkage 相同。
 
 ## 8. Strict JSON 與資源上限
 
-| 限制 | 行為 |
+| 限制 | 值／行為 |
 | --- | --- |
-| Raw JSON UTF-8 | 最多 1,048,576 bytes；字元數也先做同量級拒絕 |
-| Canonical JSON UTF-8 | 最多 1,048,576 bytes |
-| Container depth | 最多 16 層，root container 算第 1 層 |
-| History length | 每個 history 最多 10,000 elements |
+| Raw／canonical JSON UTF-8 | 各最多 1,048,576 bytes；raw 字元數先作同量級限制 |
+| Container depth | 最多 16 層，root 算第 1 層 |
+| History | 每個最多 10,000 elements |
 | Integer | `-(2^53-1)` 到 `2^53-1`，含端點 |
-| Float | input 必須 finite；JSON `NaN`／`Infinity`／overflow exponent 拒絕 |
-| Keys／containers | 只接受原生 string keys 與原生 dict/list；cycle、surrogate Unicode、duplicate JSON keys 拒絕 |
+| Float | input finite；NaN／Infinity／overflow exponent 拒絕 |
+| Keys／containers | 原生 string keys 與原生 dict/list；cycle、surrogate Unicode、duplicate JSON key 拒絕 |
 
-Raw JSON 的 depth check 在標準 parser 建出 value 後進行；1 MiB raw cap 仍提供有限界線，parser recursion error 會轉成 contract error。本 API 不是通用 untrusted-host sandbox。
+Depth check 在標準 parser 建值後執行；parser recursion error 轉為 contract error。此 API 不是通用 untrusted-host sandbox。
 
 ## 9. Error families
 
-所有 caller 應先按 exception family 處理，再使用穩定的 `.code`；不要依賴 exception message。Execution error 另提供 nullable `.exception_type`，只保存底層 exception 類名。
+Caller 應先按 exception class，再按穩定 `.code` 分支；不要解析 message。Execution error 另有 nullable `.exception_type`。
 
-| Family | 意義 | Stable codes |
-| --- | --- | --- |
-| `RuleReplayContractError` (`ValueError`) | Caller data／JSON／shape／digest 自洽性錯誤 | `json_depth_limit`, `json_cycle`, `json_size_limit`, `json_key_type`, `invalid_unicode`, `integer_out_of_range`, `nonfinite_number`, `json_native_type_required`, `json_encoding_error`, `duplicate_json_key`, `invalid_json`, `native_dict_required`, `unsupported_evaluator`, `argument_keys`, `history_type`, `history_length_limit`, `history_element_type`, `bar_count_type`, `argument_number_type`, `result_keys`, `result_passed_type`, `result_state`, `result_reasons`, `result_coherence`, `bundle_keys`, `unsupported_schema_version`, `implementation_keys`, `runtime_keys`, `invalid_digest`, `config_snapshot_type`, `config_digest_mismatch`, `arguments_digest_mismatch`, `bundle_digest_mismatch` |
-| `RuleReplayBindingError` (`RuntimeError`) | 這個 bundle 不符合受支援的本地 strategy/source/config/runtime binding | `unsupported_strategy_version`, `unsupported_implementation_binding`, `unsupported_config_binding`, `unsupported_local_runtime`, `local_source_unreadable`, `local_source_size_limit`, `local_source_hash_mismatch`, `local_config_digest_mismatch`, `local_implementation_load_failed` |
-| `RuleReplayExecutionError` (`RuntimeError`) | 已選 implementation 在載入或 evaluator 執行時失敗，不虛構 rule state | `implementation_execution_failed`, `evaluator_failed` |
+| Family | Stable codes |
+| --- | --- |
+| `RuleReplayContractError` | `json_depth_limit`, `json_cycle`, `json_size_limit`, `json_key_type`, `invalid_unicode`, `integer_out_of_range`, `nonfinite_number`, `json_native_type_required`, `json_encoding_error`, `duplicate_json_key`, `invalid_json`, `native_dict_required`, `unsupported_evaluator`, `argument_keys`, `history_type`, `history_length_limit`, `history_element_type`, `bar_count_type`, `argument_number_type`, `result_keys`, `result_passed_type`, `result_state`, `result_reasons`, `result_coherence`, `bundle_keys`, `unsupported_schema_version`, `implementation_keys`, `runtime_keys`, `invalid_digest`, `config_snapshot_type`, `config_digest_mismatch`, `arguments_digest_mismatch`, `bundle_digest_mismatch` |
+| `RuleReplayBindingError` | `unsupported_strategy_version`, `unsupported_implementation_binding`, `unsupported_config_binding`, `unsupported_local_runtime`, `local_source_unreadable`, `local_source_size_limit`, `local_source_hash_mismatch`, `local_config_digest_mismatch`, `local_implementation_load_failed` |
+| `RuleReplayExecutionError` | `implementation_execution_failed`, `evaluator_failed` |
 
 ## 10. Round33 final review 證據與完成邊界
 
-Frozen source：
+Round33 對有限 pure library、binding、fault、concurrency 與 audit contract 完成 review；frozen files 為 `backend/app/rule_replay.py`、`backend/tests/test_rule_replay.py` 與受 pin 的 domain.py。完整歷史命令、測試數、失敗修正與檔案 hash 可查 `git show 69f62cf:docs/RULE_REPLAY.md`。
 
-- `backend/app/rule_replay.py` SHA-256 `1f0e7dbd535bd4818e56eccfd08cd919e2e2bc4ce72bb64c352c22cec5e9602c`；
-- `backend/tests/test_rule_replay.py` SHA-256 `2127c1d1d255f0773709f129a89742b19e4732de8085102179bf186770727cac`；
-- bound `backend/app/domain.py` SHA-256 `db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028`，本輪未修改。
-
-分開的 final runs，不相加：
-
-- C033 author targeted：151 passed，實際為 141 個 new replay tests 加 10 個既有 non-parameterized domain tests；pytest 2.38 秒、process 2.925512899993919 秒、exit 0，165 guards unchanged。早期 `139+12` 是作者訊息的拆分錯誤，不作 final 數字。
-- C033 author full：2405 passed、2 skipped、12414 warnings；pytest 355.05 秒、process 357.94884170001023 秒、exit 0，165 guards unchanged。Skipped cases 不算 passed；本輪未另要求 `-rs`。
-- 統籌 caller-contract matrix：82／82，exit 0；binding/fault/concurrency/audit matrix：25／25，含 12 次一般並行 capture，exit 0。
-- D035 只做 source review 與小型 edge probe，沒有重跑作者 suites／統籌 matrices；修正兩次 D035 harness expectation 後，第三次 probe exit 0 且 source 未變。D035 最終 review 結論為 no in-scope blocker。
-
-前置可行性只作調查、不加進 pytest 計數：統籌有 37 個 original-evaluator assertions＋3 次 private-load prototype，D035 Phase A 有 14 個 observations＋3 次 private load；共同結論是 mutable legacy evidence/refs 不足以證明完整歷史輸入或 executed code。D035 Phase A 第一個 pure probe 的 config alias restore 失敗後才修正，統籌第一次核對 D035-A manifest 也因把 `artifact_files` 誤讀為 `files` 而 `KeyError`，之後才驗完 8 rows。
-
-其餘保留的 failure／deviation history 包含：統籌第一個 binding matrix 因同名 helper shadow module 而 24 pass／1 harness error，修正 harness 後 25／25；D035 Phase B edge probe 01 使用錯誤 report keys、02 使用錯誤 expected error codes，03 才是 passing run；codebase-memory App 後期回 `Transport closed`，依專案規則改用同引擎 CLI coverage fallback，未重啟服務、啟動永久 daemon 或修改全域設定。CLI 仍會輸出 temporary-engine startup／raw-JSON deprecation 診斷；這不是 index 或永久 daemon。上述 failure 沒有被 final success 改寫成 passing product runs。
-
-本批只新增 pure library 與 tests，不修改既有 evaluator、schema、store、migration、worker、API、UI、預設版本或正式／`.local` DB。它使「caller-provided current pure-rule complete-argument capture/replay」這個有限機械能力成為已 review；R0-B2 的完整保存歷史輸入、SignalArtifact bridge／persistence、same-subject/time legacy-v2 paired replay、API／UI／DecisionSummary、worker、官方 availability／PIT，以及 B7/default adoption 全部仍未完成。相關整體邊界見 [Signal artifact 契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md) 與 [執行清單](ROADMAP_EXECUTION.md)。
+尚未完成：可證的歷史輸入、SignalArtifact bridge／persistence、同 subject/time 的 legacy-v2 paired replay、API／UI／DecisionSummary、官方 availability／PIT、B7 與 default adoption。相關狀態見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md)、[R0_IMPLEMENTATION](R0_IMPLEMENTATION.md) 及 [ROADMAP](ROADMAP.md)。
 
 ## 11. Round34 worker caller：有限 actual/private binding
 
-Round34 沒有修改 `rule_replay.py`、`domain.py` 或上述 R33 pins；它只在新的 opt-in `worker.analysis_capture` 通路中，於 shared evaluator 呼叫前 detach 實際轉換後 kwargs，再用 `capture_rule_inputs` 私有重算。Shared actual `passed/state/ordered reasons` 與 private `recorded_result`、實際 StrategyVersion config 與 pinned config 都使用 canonical JSON identity 比對，所以 JSON `false` 不會和 numeric `0`、`1.0` 不會和 `1` 混為相同。成功 call 同時保存 actual result 與完整 R33 bundle；兩者角色不互相取代。
+Round34 未改上述 library 或 pins。Opt-in worker caller 在 shared evaluator 前 detach 實際 kwargs，再以本 library private 重算；shared actual result、private recorded result、實際 StrategyVersion config 與 pinned config 皆用 canonical JSON identity，比較時 `false` 不等於 `0`、`1.0` 不等於 `1`。成功 call 同時保存 actual result 與完整 bundle。
 
-這使「本次 owned research analysis 實際送入 shared evaluator 的完整參數與 R33 pinned replay結果綁定」成為已 review 的有限能力；它仍不證明該參數在歷史 decision time 已可得或來自官方 truth，也不建立 SignalArtifact、legacy-v2 paired output、B5b／B7、API/UI 或 default capture。Public API、CLI、transaction、schema、同 ID 重用、錯誤/outcome 與 Round34 證據只在 [Worker analysis capture 契約](WORKER_ANALYSIS_CAPTURE.md) 維護，避免在此複製會漂移的操作說明。
+這只證本次 owned research analysis 的 shared arguments 與 pinned replay 綁定，不證 historical availability 或官方 truth，也不建立 SignalArtifact、paired output、B5b／B7、API／UI 或 default capture。操作、schema、outcome 與 error 見 [WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md)。
