@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類與隔離修復契約
 
-更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle 與 R35 member-return identity 均只在各節表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
+更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle、R35 member-return identity 與 R36 candidate identity 均只在各節表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
 
 ## 1. 官方證據 snapshot
 
@@ -209,6 +209,36 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 
 - Signal 的 `rule_evidence_json.group_member_return_lookup` 保存 `version="group-member-return-lookup/v1"`、來源 marker、group／score date、requested 與 matched identity、`instrument_id`／`legacy_symbol_unique`／`rejected` mode 及 reason。拒絕時 matched 為 null，策略仍走既有缺資料語意。
 - `group_daily_scores` 仍以 `(group_id, trading_date)` 原位重算；本輪不改 schema 或既有 upsert 行為，也不做歷史批次 migration 或回算。新 producer 重算後才有新版 identity，舊列只受 §8.2 的保守相容保護，因此不能宣稱歷史群組資料已全面 canonical。
-- `candidate_symbols` 及 decision lookup 仍是 symbol-based 的獨立缺口；API／前端可保留 symbol 顯示，但尚未具有 canonical candidate identity。本節完成不代表 candidate selection、backfill、正式分類修復、PIT 或策略有效性完成。
+- `candidate_symbols` 與 decision lookup 的獨立身分缺口及 R36 核定契約見 §9；本節的 member-return 完成狀態不代表候選身分也已完成。
 
 本節的有限 review 只接受新 producer 的 member identity、worker 精確／legacy lookup、拒絕語意及 Signal evidence；未改 domain 公式、策略 pin、群組分數、candidate selection 或歷史資料。
+
+## 9. 群組候選的身分契約
+
+狀態：R36 已有限 review。本節規範 `GroupDailyScore.details_json` 的候選產出到 decision candidate selection。外層 score 仍須通過既有的 active group、`data_quality="complete"`、至少 3 個 eligible members、非空 rank 與 `benchmark="TAIEX"` gate；`hot_group_v1` 公式、候選排序、top 4 上限、策略 pins 與其他 action buckets 不變。
+
+### 9.1 新產出與顯示投影
+
+- 新 score 使用 `candidate_identity_version="instrument-id-v1"`，並把同一批已排序 member metrics 的 top 4 寫入 `candidate_instruments[]`。每列必須有正整數且非布林的 `instrument_id`，以及非空字串 `exchange`、`symbol`；整份清單的 ID 與 `(exchange, symbol)` 各自不得重複，最多 4 列。
+- `candidate_symbols` 保留為相容 API／UI 的字串投影，必須與 `candidate_instruments` 等長、同順序且逐列等於 `symbol`。兩個不同 exchange 的合法 identity 可以同 symbol，因此投影可有重複 symbol；consumer 不得再用投影反推身分。
+- producer 的 eligible member、股票／ETF 類型與 ETF category gate、20／5 日排序及「score 不成立則候選為空」語意不變。`instrument_id` 是該 DB 的本地鍵，exchange＋symbol 只供交叉核對，不宣稱跨 DB 可攜或官方來源 truth。
+
+### 9.2 Typed decision lookup
+
+- marker 只接受精確的 `instrument-id-v1`。marker unknown、null、空值，無 marker 卻混入 typed 欄位，candidate list／projection 結構錯誤、超過 4 列、ID／pair 重複或逐列投影不一致時，整個 score 的 candidate source fail closed；不得降級用 symbol 猜測。這不移除 held、watchlist、Signal、event 等其他 action bucket。
+- 每列先以 `score.trading_date` 驗證 exact `instrument_id` 對應的 Instrument exchange＋symbol、該 group 當日有效 membership，以及 producer 相同的 instrument type／ETF category gate。來源日驗證不得用 Instrument 的目前 active 狀態排除 membership 身分；任何來源日不合資格或 identity conflict 都拒絕整個 score 的候選來源。
+- 再以 requested as-of 驗證同一 `instrument_id` 仍為 active、仍有該 group 有效 membership，且仍通過相同 type／category gate。正常的 as-of 退出只逐 ID 排除，不拖垮同 score 的其他合法候選，也不得改綁另一個同 symbol Instrument。
+
+### 9.3 Legacy 相容與時間邊界
+
+- Legacy 只限沒有 marker、沒有 `candidate_instruments`，且 `candidate_symbols` 是最多 4 個非空字串的清單。其他 malformed shape 拒絕整個 score 的候選來源；重複 symbol 則保守排除該 symbol，不影響其餘可證明者。
+- 每個 legacy symbol 必須先在 `score.trading_date` 以該 group 的所有有效 membership 與 producer type／category gate 證明恰好一個 canonical `instrument_id`；此步不得用目前 active 狀態把現在 inactive 的同 symbol 成員濾掉，否則會把來源日歧義洗成唯一。其後才要求該 exact ID 在 requested as-of 仍 active、有效且通過同 gate。來源日歧義不能因後日只剩一個同 symbol 成員而解鎖；來源日唯一的舊身分退出後，也不能轉綁後加入的同 symbol 身分。
+- `Instrument.status`、instrument type 與 ETF category 目前沒有可供此 lookup 重建的完整歷史版本；上述核對只能保守使用現有 metadata 與 membership period，不構成 source-effective 歷史 truth 或 PIT 證明。
+
+### 9.4 相容邊界與驗收
+
+- API／UI 仍輸出既有 `candidate_symbols`／`candidates` 字串欄位，不新增 typed public 欄位；backfill 的 symbol 擴大相容邏輯本輪不改，另列後續缺口。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` 原 upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可由原 upsert 更新該 row，重新產出的 score 才帶新 marker。
+- 最小驗收須走 actual producer→persisted score→decision：至少 5 個有效成員，top 4 只選中其中一個市場的同 symbol identity，另一個市場成員不得被額外展開；另涵蓋來源日歧義、後日退出／加入、正反插入順序、typed malformed／重複／identity conflict、legacy unique／ambiguous 與其他 action bucket 保留。
+- Decision helper 目前對每個 qualifying group 各做一次 identity／日期 projection，再合併候選；本批未驗大規模群組效能、actions cursor 遍歷或分頁，新 candidate unit suite 不能當成 pagination 驗收。
+- 2026-09-14 的有限 review 接受 producer、decision helper、新 focused suite 與既有 product／actions／producer targeted regressions；程式來源已 freeze。它不是 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
+- 下一步先獨立調查 backfill `_candidate_instrument_keys` 的 typed 相容、所有 consumer、source-date／inactive 與 ID 證明；legacy backfill 的安全擴大 scope 不等於 decision selection，不能直接套用本節的縮選語意。API typed 輸出另列後續。R36 不代表歷史資料、backfill、正式分類修復或策略有效性完成。

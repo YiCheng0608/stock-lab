@@ -146,7 +146,7 @@ Review 使用專案外、migration-ready synthetic source 與 owned copies；正
 - 不建立 `SignalArtifactStore`，不保存官方 truth、`first_available_at`、`decision_at`，也不做 legacy-v2 same-snapshot paired replay；B2、B5b、B7 未完成。
 - 未接 default analyze、daily/backfill、backtest、API、UI 或 DecisionSummary，未切換預設策略／輸出版本。
 - `captured_at` 是 observation time；`observed_market_date` 是 collection-selected date，兩者都不是 availability/PIT。
-- R35 已有限 review 新 producer／worker 的 member-return identity 與保守 legacy lookup，規則見[產業分類契約 §8](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；R34 當時來源與既有 rows 未回算，capture 不會替舊輸入補造 identity，`candidate_symbols` 也仍未 canonical。
+- R35 已有限 review 新 producer／worker 的 member-return identity 與保守 legacy lookup，規則見[產業分類契約 §8](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。R36 的 candidate typed producer／decision lookup 也已有限 review，規則見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)；這沒有另行驗收本 capture runtime，也不替舊輸入補造 identity，API／UI／backfill 與歷史批次回算仍不在保證內。
 - Trusted-local、inactive snapshot、非敵對 filesystem/runtime 是前提；active-writer race、hostile rewrite、實體 crash/disk-full與長期保管不在有限 review。
 
 整體邊界見 [Signal artifact 持久化契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md)與[執行清單](ROADMAP_EXECUTION.md)。

@@ -715,7 +715,10 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             reverse=True,
         )
         candidates = (
-            [item["symbol"] for item in candidate_rows[:MAX_GROUP_CANDIDATES]]
+            [
+                {key: item[key] for key in ("instrument_id", "exchange", "symbol")}
+                for item in candidate_rows[:MAX_GROUP_CANDIDATES]
+            ]
             if eligible >= MIN_GROUP_MEMBERS
             else []
         )
@@ -808,8 +811,14 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 }
                 for member in item["member_metrics"]
             ],
-            "candidate_symbols": (
+            "candidate_identity_version": "instrument-id-v1",
+            "candidate_instruments": (
                 item["candidates"][:MAX_GROUP_CANDIDATES]
+                if score_row.score is not None
+                else []
+            ),
+            "candidate_symbols": (
+                [candidate["symbol"] for candidate in item["candidates"][:MAX_GROUP_CANDIDATES]]
                 if score_row.score is not None
                 else []
             ),

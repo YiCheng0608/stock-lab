@@ -17,7 +17,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from .coverage import verified_taiex_sessions
-from .domain import signal_confidence_semantics
+from .config import MAX_GROUP_CANDIDATES
+from .domain import ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, build_stop_price_semantics, utc_now_iso
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
@@ -1262,6 +1263,88 @@ def _latest_group_scores(db: Session, as_of: date | None) -> list[tuple[ThemeGro
     return result
 
 
+def _group_candidate_ids(
+    db: Session, group: ThemeGroup, score: GroupDailyScore, as_of: date,
+) -> set[int]:
+    """Resolve score-day identities, then retain the same current members.
+
+    Instrument status/type/category are current metadata, not historical
+    truth. Inactive rows remain in source-day ambiguity checks; otherwise
+    today's status could make an ambiguous old symbol appear unique.
+    """
+    details = score.details_json
+    if not isinstance(details, dict):
+        return set()
+    symbols = details.get("candidate_symbols")
+    if (not isinstance(symbols, list) or len(symbols) > MAX_GROUP_CANDIDATES
+            or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)):
+        return set()
+    versioned = "candidate_identity_version" in details
+    candidates = details.get("candidate_instruments")
+    if versioned:
+        if details["candidate_identity_version"] != "instrument-id-v1":
+            return set()
+        if not isinstance(candidates, list) or len(candidates) > MAX_GROUP_CANDIDATES:
+            return set()
+        ids, pairs = set(), set()
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                return set()
+            item_id = candidate.get("instrument_id")
+            exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
+            if (type(item_id) is not int or item_id <= 0
+                    or type(exchange) is not str or not exchange.strip()
+                    or type(symbol) is not str or not symbol.strip()):
+                return set()
+            if item_id in ids or (exchange, symbol) in pairs:
+                return set()
+            ids.add(item_id)
+            pairs.add((exchange, symbol))
+        if [candidate["symbol"] for candidate in candidates] != symbols:
+            return set()
+    elif "candidate_instruments" in details:
+        return set()
+    if not symbols:
+        return set()
+
+    # Small projections only: this runs before action-center pagination.
+    rows = db.execute(
+        select(Instrument.id, Instrument.exchange, Instrument.symbol,
+               Instrument.status, Instrument.instrument_type, Instrument.etf_category,
+               GroupMembership.valid_from, GroupMembership.valid_to)
+        .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
+        .where(GroupMembership.group_id == group.id,
+               GroupMembership.valid_from <= as_of,
+               (GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= score.trading_date)))
+    ).all()
+    is_etf_group = group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    source_members, current_ids = {}, set()
+    for item_id, exchange, symbol, status, kind, category, start, end in rows:
+        allowed = (kind == "etf" and category in ETF_CATEGORIES) if is_etf_group else kind in {"stock", "ipo"}
+        if not allowed:
+            continue
+        if start <= score.trading_date and (end is None or end >= score.trading_date):
+            source_members[item_id] = (exchange, symbol)
+        if start <= as_of and (end is None or end >= as_of) and status == "active":
+            current_ids.add(item_id)
+    if versioned:
+        for candidate in candidates:
+            if source_members.get(candidate["instrument_id"]) != (candidate["exchange"], candidate["symbol"]):
+                return set()
+        return {candidate["instrument_id"] for candidate in candidates} & current_ids
+
+    # A repeated legacy symbol cannot prove which ranked slot it represented.
+    result = set()
+    for symbol in set(symbols):
+        if symbols.count(symbol) != 1:
+            continue
+        matches = {item_id for item_id, pair in source_members.items() if pair[1] == symbol}
+        if len(matches) == 1:
+            result.update(matches & current_ids)
+    return result
+
+
 def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     """Return a deterministic, cheap action-center candidate order.
 
@@ -1324,33 +1407,13 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
         ).all()
     )
     candidate_ids: set[int] = set()
-    candidate_symbols_by_group: dict[str, set[str]] = {}
     for group, score in _latest_group_scores(db, as_of):
         if score.data_quality != "complete" or (score.eligible_members or 0) < 3 or score.rank is None:
             continue
-        details = score.details_json or {}
-        if details.get("benchmark") != "TAIEX":
+        details = score.details_json
+        if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
             continue
-        candidate_symbols = {str(symbol) for symbol in details.get("candidate_symbols", [])}
-        if not candidate_symbols:
-            continue
-        candidate_symbols_by_group[group.id] = candidate_symbols
-    if candidate_symbols_by_group:
-        all_candidate_symbols = set().union(*candidate_symbols_by_group.values())
-        candidate_rows = db.execute(
-            select(Instrument.id, Instrument.symbol, GroupMembership.group_id)
-            .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
-            .where(
-                GroupMembership.group_id.in_(candidate_symbols_by_group),
-                GroupMembership.valid_from <= as_of,
-                (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= as_of)),
-                Instrument.symbol.in_(all_candidate_symbols),
-                Instrument.status == "active",
-            )
-        ).all()
-        for item_id, symbol, group_id in candidate_rows:
-            if str(symbol) in candidate_symbols_by_group.get(group_id, set()):
-                candidate_ids.add(int(item_id))
+        candidate_ids.update(_group_candidate_ids(db, group, score, as_of))
     # Events are useful context but should not elevate the whole market.  Keep
     # only recent official event-linked instruments.
     recent_cutoff = as_of - timedelta(days=7)
