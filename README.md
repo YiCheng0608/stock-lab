@@ -64,7 +64,7 @@ Round32 新增一個明確 opt-in 的 Python library，可對兩個 caller-provi
 
 四個角色的模型、分工、驗收交接與索引／Git commit 流程統一查 [AGENTS](AGENTS.md)；當輪角色 ID 與暫停／接手狀態查 [協作紀錄](docs/TASK_COORDINATION.md)。
 
-本機測試使用 [開發與驗證入口](docs/development-baseline/README.md)：`tools/Invoke-Validation.ps1` 會隔離資料並於結束後清理。舊 Temp 歸檔已移除；Git 保存原始碼與文件，本機資料、依賴及產物由 `.gitignore` 排除。
+本機驗證先讀 [資料選擇、暫存與現行入口](docs/development-baseline/README.md)，遵守 [AGENTS 的驗證資料與暫存規則](AGENTS.md#驗證資料與暫存)。`tools/Invoke-Validation.ps1` 目前仍會建立隔離目錄，並於結束時嘗試清理；它不是無落盤入口。Git 保存原始碼與文件，本機資料、依賴及產物由 `.gitignore` 排除。
 
 - [資料來源與歷史 coverage](docs/DATA_SOURCES.md)
 - [新聞與事件規格](docs/NEWS_SPEC.md)
