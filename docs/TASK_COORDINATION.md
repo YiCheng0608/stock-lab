@@ -2,7 +2,7 @@
 
 本文件只保存目前角色、接手與待辦。角色／freeze／索引／Git 流程及暫存政策以 [AGENTS](../AGENTS.md) 為準，產品狀態以 [ROADMAP](ROADMAP.md) 為準。
 
-## 目前狀態（2026-09-15）
+## 目前狀態（2026-09-16）
 
 - R37 統籌已接受 candidate backfill／coverage typed scope、文件、索引與本地提交 `14b267662fdb207c10f003b7976c7a55f06c5045`；七個核准檔案已提交，提交後工作樹為 clean。Typed 以 DB-local ID＋pair 精確納入 active 列，legacy 保留 active 同 symbol exchange 的安全擴大；這不是 decision selection。詳細規則見[產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約)。
 - R38 統籌已有限接受 public score-source typed candidate 的 API／UI、文件與索引，並完成本地提交 `f0f09b83fd26cdb0d90da5ac70d76f4282916a3a`；提交後工作樹為 clean。Typed public ID 使用十進位字串與 exact exchange＋symbol，來源日與目前 member 日期分開，legacy 只留無連結文字；詳細規則見[產業分類 §9.6](INDUSTRY_CLASSIFICATION.md#96-public-candidate-的-source-day-身分展示契約)。
@@ -12,6 +12,8 @@
 ### R39 後的獨立 UI 文案維護（非 ROADMAP round）
 
 這項下一輪前的維護只處理日常繁中文案、ETF／族群代碼中文顯示、空數值、法人命名、表外單位、未知幣別及官方券商分點查詢入口；不改 R39 驗收，不恢復或啟動下一個 ROADMAP round。統籌已有限接受實作與文件並確認 freeze；最終索引與本地提交 receipt 以本 task 回覆為準，不回寫 commit hash。
+
+2026-09-16 文件 follow-up 只把已確認的三大法人、主力進出與券商分點三部分記為後續待做；沒有修改或啟動程式，也沒有恢復下一輪。統籌已接受本次文件範圍與待做邊界；完成差異及連結檢查後 freeze，索引與提交 receipt 留在 task。主契約見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
 | 角色 | task ID | 本次核對狀態 |
 | --- | --- | --- |

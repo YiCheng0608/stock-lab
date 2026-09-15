@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-更新：2026-09-15。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+更新：2026-09-16。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 資料庫政策
 
@@ -38,6 +38,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
 | TPEx chips | 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 |
+| TWSE 券商／分點名冊 | [券商基本資料](https://openapi.twse.com.tw/v1/brokerService/brokerList)與[券商分公司基本資料](https://openapi.twse.com.tw/v1/opendata/OpenData_BRK02)為免費官方名冊；實際 GET 已確認可讀。名冊只提供通道身分，不是交易明細。 |
 | 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
 | TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
 | MOPS／公司行動 | 重大訊息、基本面 snapshot 與 corporate actions；完整來源與 PIT 仍有限制。 |
@@ -92,7 +93,15 @@ API startup readiness 只查有限 marker 與 mapped identity，不做 migration
 | 宏觀、媒體、國際事件 | 題材與新資訊 | 原文、使用條件、發布／可得時間、去重與影響證據。 |
 | 題材 membership | 跨產業研究 | 多重歸屬、證據、相關程度、生效／失效時間與版本。 |
 
-分點是自營或受託交易通道彙總，不能由名稱推定資金國籍、同一投資人、所謂「主力」或隔日沖意圖。2026-09-15 的官方頁查證只支持免費人工查詢入口，不支持已取得可整合 API、歷史資料集或 coverage；因此 UI 可連往 TWSE／TPEx 查詢頁，不能顯示虛構分點數值或主力排行。當沖統計可能到 T+2 修訂，資料設計仍須保留當時版本；原資料定義見 [TPEx 當沖說明](https://www.tpex.org.tw/storage/zh-tw/web/stock/trading/intraday_stat/intraday_trading_statY.htm)。
+分點是自營或受託交易通道彙總，不能由名稱推定資金國籍、同一投資人、所謂「主力」或隔日沖意圖。2026-09-15 的官方頁查證只支持免費人工查詢入口，不支持已取得可整合的分點交易 API、歷史資料集或 coverage；因此 UI 可連往 TWSE／TPEx 查詢頁，不能顯示虛構分點數值或主力排行。當沖統計可能到 T+2 修訂，資料設計仍須保留當時版本；原資料定義見 [TPEx 當沖說明](https://www.tpex.org.tw/storage/zh-tw/web/stock/trading/intraday_stat/intraday_trading_statY.htm)。
+
+### 券商分點與主力統計的來源邊界（後續待做）
+
+- 官方券商／分點名冊提供券商／分點代號與名稱，但不含買賣交易；歷史更名與券商隸屬仍待驗證。官方逐檔交易查詢需要人工驗證；可評估在使用條件允許下匯入合法取得的 CSV，但尚未實作，也不能先承諾完整免費自動歷史。
+- [FinMind TaiwanStockTradingDailyReport 文件](https://finmind.github.io/tutor/TaiwanMarket/Chip/)列為 Sponsor 方案，說明歷史自 2021-06-30 起且有已知缺日。它目前只是候選，未採購、未接入，也沒有取得授權的結論。
+- CMoney 的[主力進出參考](https://www.cmoney.tw/forum/stock/8039?s=main-force)與[市場表格](https://www.cmoney.com.tw/M_Table.aspx?CMenuID=M668)可用來理解「Top 15 買超合計減 Top 15 賣超合計」的觀念；不承諾本產品數值相同。精確期間、選樣、家數差與 5／20 日集中度口徑須在實作前版本化核定。
+
+以上來源盤點不等於交易資料已接入。後續功能以[個股頁籌碼三部分](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)為準；缺資料仍留空，「主力」是可重現分點統計而非身分判定。
 
 ## 時間、版本與研究窗口（目標契約）
 
