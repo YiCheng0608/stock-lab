@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-09-16。`/stocks/:exchange/:symbol` 的有限產品範圍已於 2026-09-12 通過統籌 review，Round14 另驗收前端顯示換算與分類警示。2026-09-15 的繁中文案、法人命名、數值表格與官方分點入口維護亦已通過有限 review；本文不代表完整研究產品、R0 或 ROADMAP 已完成。
+更新：2026-09-16。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；已 review 範圍見 §5，待做籌碼契約見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -87,9 +87,7 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ### 5.1 2026-09-12 final review 證據
 
-統籌於 2026-09-12 對穩定 source snapshot 完成前端資料邊界、型別、production build、桌面／窄版及隔離唯讀真實 API 流程的有限驗收；2330 的日期、OHLCV、MA20／MA60、縮放與復位，以及 4804 的空資料狀態均有核對。驗收保留大型 JS chunk 警告，且較早分頁曾出現後來已修正的 update-depth error。
-
-此證據只結清本文矩陣，不涵蓋下一節項目。原始命令、測試次數、數值、hash 與暫存路徑可由基準版本查閱：`git show 69f62cf:docs/STOCK_RESEARCH_PAGE.md`。
+穩定 source snapshot 已完成 §5 矩陣的前端資料邊界、型別、production build、桌面／窄版與隔離唯讀 API 有限 review；大型 JS chunk 警告仍在。原始驗收紀錄可查 `git show 2acc3c5deff6fbf33ee104e2e28e3f16e8904a73:docs/STOCK_RESEARCH_PAGE.md`。此證據不涵蓋下一節或 §8。
 
 ## 6. 明確未包含
 
@@ -97,11 +95,9 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ## 7. 前端顯示契約
 
-Round13 對 API 原始股數與圖表轉換的驗證仍有效；Round14 只改台股 UI 顯示。來源明確為股數的成交量和法人買賣超以 `原值 / 1,000` 顯示為「張」，最多 3 位小數並保留正負號；TWSE／TPEx 已核實的融資欄位按其官方「張」語意顯示。不得改寫 API、圖表／策略計算或 raw evidence。來源或單位 unknown／mixed 時不換算；數值格留空，單位待核實與空白原因放在表格外。完整單位與數值格規則見 [UX_REVIEW](UX_REVIEW.md#3-單位契約) 與 [UI_COPY_SPEC](UI_COPY_SPEC.md#104-數值表格單位與空白)。
+來源明確為股數的成交量和法人買賣超以 `原值 / 1,000` 顯示為「張」；已核實融資欄位依官方「張」語意顯示。顯示換算不改 API、圖表、策略計算或 raw evidence；unknown／mixed 時不換算。完整格式、空白與幣別規則見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-壓縮卡詳情與單位文案)。
 
-正式資料另有市場別產業 membership 缺陷。重建前，個股與行動詳情顯示「既有族群關聯待重新核實」；族群中文名加「（既有分類）」與待核實 badge，原始 membership 名稱／ID 收進資料說明。不得顯示可信排名或將衍生條件宣稱已核實；這不改寫 OHLCV、單位或新聞。
-
-2026-09-15 獨立 UI 維護已有限接受日常頁的繁中文案、空數值、外資／投信／自營商欄名、ETF 與族群代碼中文顯示，以及依市場導向的官方券商分點查詢入口。具名 browser 案例核對 2330 的法人張數與融資原單位、006201 的合法 0 與「ETF · 大盤型」、MA60 不足時留空、00687C 不猜新臺幣、TAIEX／close 對應「加權指數／收盤價」、中文新聞列表及兩市場官方入口；6 份記憶體前端測試與 final production build 均以 exit 0 通過。這項維護不新增 API 欄位、分點 collector、歷史資料或「主力」身分，也不是 full backend、一般 API startup 或正式部署驗收；大型 JavaScript chunk 警告仍是既有非阻擋限制。
+市場別產業 membership 重建前，個股與行動詳情顯示「既有族群關聯待重新核實」；族群中文名加「（既有分類）」與待核實 badge。不得顯示可信排名或將衍生條件稱為已核實；這不改寫 OHLCV、單位或新聞。相關有限 UI review 只涵蓋文案、空值、法人命名、單位顯示、ETF／族群名稱及官方分點入口，不新增 API、分點資料、歷史 coverage 或主力身分。
 
 ## 8. 籌碼三部分（後續待做）
 

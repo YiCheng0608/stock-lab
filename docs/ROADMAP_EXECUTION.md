@@ -1,12 +1,10 @@
 # R0–R3 執行清單
 
-更新：2026-09-16。優先順序見 [ROADMAP](ROADMAP.md)，本文件只維護工作 ID、依賴與完成條件。歷史詳細驗收由各契約及 Git `69f62cf` 追溯；本輪具名驗證證據留在 task，核定結論回寫唯一契約。
+更新：2026-09-16。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
 
 ## 1. 執行界線與狀態
 
 僅免費公開資料與本地測試；來源不可合法、穩定、可重現取得時標受限，不以 fixture、欄位或模型介面冒充接入。帳戶、付費額度、正式 DB、排程與交易的操作授權依 [AGENTS](../AGENTS.md)。
-
-R35 的 member-return identity、R36 的 candidate producer／decision lookup、R37 的 backfill／coverage typed scope 與 R38 的 public source-day typed candidate 顯示已通過有限 review。既有 rows／run snapshot 未批次回算，原 score upsert 行為不變；各小批的選取、回補與展示語意不得互相代換，完整規則見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
 
 | 狀態 | 意義 |
 | --- | --- |
@@ -18,7 +16,7 @@ R35 的 member-return identity、R36 的 candidate producer／decision lookup、
 | 等待 | 依賴來源、樣本／時間累積或決策。 |
 | 受限 | 免費來源或 PIT 證據不足，維持不可用／探索。 |
 
-證據直接留 task：日期／reviewer、來源版本、資料／設定、命令／exit、結果與限制；涉及磁碟或 schema 時再列隔離路徑、影響及清理結果。不重跑只為重存證據，不把 mock 測試當真實 coverage／策略有效性／前瞻結果。
+驗證與證據保存依 [AGENTS](../AGENTS.md#驗證資料與暫存)；mock 測試不證真實 coverage、策略有效性或前瞻結果。
 
 ## 2. 依賴與共同 gate
 
@@ -40,24 +38,24 @@ R35 的 member-return identity、R36 的 candidate producer／decision lookup、
 
 | ID | 狀態 | 依賴 | 已接受範圍與限制 |
 | --- | --- | --- | --- |
-| R0-A1／B6 | 已 review（局部） | G-SAFE | R03 的唯讀現況／隔離升級與 fresh DB；R10 補六表 synthetic backup→故障→restore mechanics。不是正式 restore／deployment，詳見 [R0](R0_IMPLEMENTATION.md)。 |
-| R0-A2 | 已 review（局部） | R0-A1、C010／C011 | News symbols_json／theme_ids_json 的 SQL [] defaults、0004→0005→0006 與具名 atomic migration／parity。不是所有 historical／custom schema、非 SQLite 或正式升級。 |
-| R0-A3／R27 | 已 review（局部） | R0-A1／A2 | API lifespan 唯讀檢查 current marker／合法 fallback、mapped identity 與 News defaults；mutation 由明確 init-db／worker。未作完整 integrity／row／data-FK scan或服務 reload。 |
-| R0-A4／R28 | 已 review（局部） | R0-A1、G-ID | finite canonical legacy instruments rebuild、九個具名 inbound FK、rollback／same-DB retry；recognized current 只有限 no-rebuild。未知／mixed／partial／custom／scratch／false-marker shapes fail closed。 |
-| R0-A5／R29 | 已 review（局部） | R0-A1、R28 transaction envelope | known 9／14-column legacy settlements 由 signal-only 改為 signal＋horizon；missing／null horizon 正規化20，保留known payload／id。未知 inbound／outbound／custom／identity／marker拒絕；current no-rebuild不是任意schema audit。 |
-| R0-A6／R30 | 已 review（局部） | R0-A3／A5 | startup 要求完整有序 BINARY ASC UNIQUE(signal_id,horizon)，所有target-key UNIQUE同形、expression拒絕。只檢metadata，不解析predicate或稽核任意CHECK／trigger／INSERT。 |
-| R0-A7／R31 | 已 review（局部） | R0-A3／A4 | mapped market／exchange／symbol須hidden=0；identity是完整有序 BINARY ASC UNIQUE(exchange,symbol)，target-key額外UNIQUE同形，expression拒絕。market不是identity；unrelated generated／partial等依賴不解析。 |
+| R0-A1／B6 | 已 review（局部） | G-SAFE | 唯讀盤點、隔離升級／fresh DB、六表 backup→故障→restore；不是正式 restore／deployment。 |
+| R0-A2 | 已 review（局部） | R0-A1、C010／C011 | News JSON 空陣列 defaults、0004→0005→0006 的原子 migration／parity；只含具名 SQLite schema。 |
+| R0-A3／R27 | 已 review（局部） | R0-A1／A2 | API startup 唯讀 readiness；建庫／升級仍須明確 init-db。未驗完整資料 integrity 或 reload。 |
+| R0-A4／R28 | 已 review（局部） | R0-A1、G-ID | Canonical instruments rebuild、9 個 inbound FK、rollback／同 DB 重試；只支援具名形狀，未知 schema 拒絕。 |
+| R0-A5／R29 | 已 review（局部） | R0-A1、R28 transaction envelope | 9／14 欄 settlements 升為 signal＋horizon；保留 payload／id、缺 horizon 預設 20，未知形狀拒絕。 |
+| R0-A6／R30 | 已 review（局部） | R0-A3／A5 | 涉及 signal_id／horizon 的 UNIQUE 須符合 canonical 定義，任意 UNIQUE expression 拒絕；不解析 CHECK／trigger 或驗任意 INSERT。 |
+| R0-A7／R31 | 已 review（局部） | R0-A3／A4 | 檢查 market／exchange／symbol 欄位及相關 UNIQUE，任意 UNIQUE expression 拒絕；canonical identity 是 exchange＋symbol，market 不屬 identity。 |
 
-以上精確支援／拒絕形狀以 [R0 migration／readiness 契約](R0_IMPLEMENTATION.md)為準。Startup 可以比 migration 的 current no-rebuild 更嚴；init-db 不承諾修復所有 custom constraints。各批不互相回寫歷史範圍，也不代表正式 migration／restore／deployment、任意 INSERT、來源 truth／PIT 或整體 R0 完成；安全工作不被 B7 反向阻塞。
+上述精確支援／拒絕形狀與驗收案例以 [R0 migration／readiness 契約](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)為準。各批只有有限成果，不證正式 migration／restore／deployment、任意 INSERT、PIT 或整體 R0 完成；安全工作不被 B7 反向阻塞。
 
 ### R0-B：版本化 artifact 與 ATR
 
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-B1／C-001 | 已 review（局部） | 無 migration | confidence 安全語意；不推論 B2 完成。 |
-| R0-B2／B2-persist | 四個小批及 bridge A 已 review；整體未完成；B adapter 提案待核 | R0-A1、G-ID | A 只接受 source／graph 盤點。下一步核 exact stable current capture＋new aware research decision→candidate 的 explicit adapter；I/O、time、binding 與磁碟驗收仍待定。Source／availability、paired output、API／DecisionSummary／UI／B7 選版仍缺；詳見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。 |
+| R0-B2／B2-persist | 四個小批及 bridge A 已 review；整體未完成，B adapter 提案待核 | R0-A1、G-ID | A 只接受映射／缺口盤點；下一步核 capture→candidate adapter 的 I/O、time、binding 與磁碟驗收。來源／可得時間、歷史輸入、paired output 及產品選版仍缺，詳見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。 |
 | R0-B3／C-002 | 已 review（純核心） | 無 I/O | Wilder ATR及strict caller inputs；未接官方來源或worker。 |
-| R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | schema1相容immutable store、atr-provenance/v2 strict完整caller snapshot／依賴、exact雙唯讀compare；無implicit latest，歧義拒絕，legacy-vs-new不可比，不相容v2 delta=null。官方truth／PIT／worker／API／B7仍缺，詳見 [R0](R0_IMPLEMENTATION.md)。 |
+| R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | Immutable ATR store、精確雙唯讀比較及 schema1／v2 相容邊界；不相容輸出不可比，官方來源／PIT／worker 接線仍缺。完整支援與拒絕條件見 [R0](R0_IMPLEMENTATION.md)。 |
 | R0-B5／B3-wire | 提案 | R0-B4、G-TIME、G-SOURCE | 官方session／halt／公司行動／previous-close均有raw／版本／availability；缺來源reason code fail closed，worker explicit opt-in讀artifact，預設候選不切換。 |
 
 ### R0-C：價位、時間與 paired replay
@@ -75,17 +73,17 @@ R35 的 member-return identity、R36 的 candidate producer／decision lookup、
 
 | ID | 狀態 | 小批與依賴 | 可驗收完成條件 |
 | --- | --- | --- | --- |
-| R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性不必等待 R0-C4，實際 as-of 接線才依賴它。 | 四來源 registry／capture、兩個 consumer 與 R21–26 六個窄修正見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。其餘來源、完整 collector／公司行動／停復牌、paid／TWSE reference／raw membership、summary、官方時間／延遲／rate limit／歷史／修訂／停用證據及 PIT 仍須驗收。 |
+| R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性可先行，實際 as-of 接線才依賴 R0-C4。 | 四來源 registry／capture、兩個 consumer 及窄修正已有限 review；其餘 collector、公司行動／停復牌、授權、時間／修訂／歷史與 PIT 仍待驗，具名範圍見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。 |
 | R1-A2 | 提案 | R1-A1；官方行情／TAIEX／法人／融資逐域驗證。 | 以 exchange＋symbol＋session＋欄位用途產 coverage；錯日／缺日／unknown 不補 0；TWSE／TPEx 單位與 market identity 不混用；raw 可追溯。 |
 | R1-A3 | 提案 | R1-A1、R0-B5；公司行動與停復牌。 | raw／adjusted basis、因子、版本、可得時間與 applied-through 可重建；TWSE／TPEx 覆蓋分開；不足時 ATR／tracking fail-closed。 |
 | R1-B1 | 提案 | R1-A1、R0-C4；官方事件與 NewsItem 時間回歸。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |
 | R1-B2 | 提案 | R1-B1；同事件 grouping 與 new-information。 | 同源與跨源 dedupe 可重跑，保留每篇來源；首次／補充／更正／撤回分開；負面或轉載不增加正向催化；所有摘要回指合法原文。 |
 | R1-B3 | 提案／可能受限 | R1-A1、G-SOURCE；免費官方 macro／可信媒體可行性。 | 每個候選以實際抓取、時間、保存／摘要權利與穩定性驗證；沒有可接受來源就記 `受限`，不以搜尋摘要或模型記憶補內文。 |
-| R1-C1 | 提案；R16／17、R35–38 的 identity 小批已有限 review | R1-B2；正式分類修復依自身資料與驗收，不新增 R19／20 作前置。 | 產業／題材分層；membership 保存來源、方法、相關程度、生效／失效與版本，一股多題材，未核實模型關聯不進已確認分類。R35 member-return、R36 candidate decision、R37 backfill／coverage inclusion 與 R38 public source-day display 各自只有有限範圍；R38 使用 decimal-string DB-local ID 與 exact pair，來源日在同 DB 驗 membership／type-category，UI 不靠目前 member page 反推，legacy 只留無連結文字。它不套 current selection 或 backfill widening，也不是 full backend／正式 DB／PIT／歷史回算。契約見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。原 score upsert 不變；R16／17 仍只證 current observation transitions。 |
+| R1-C1 | 提案；R16／17、R35–38 的身分小批已有限 review | R1-B2；正式分類修復依自身資料與驗收，不加無關 capture 工作作前置。 | 產業／題材分層及有來源、版本、期間的 membership。成員報酬、candidate 決策、backfill 納入及 public 展示各有有限成果，語意不得互換；正式分類與歷史 PIT／回算未完成。精確規則見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。 |
 | R1-C2 | 提案 | R1-C1、R1-A2；題材品質與去重。 | 相同 as-of 的相對強弱、廣度、集中度、延伸與事件方向各自有窗口／缺項；重疊題材不重複計候選或曝險；不改 `hot_group_v1` gate。 |
 | R1-D1 | 提案 | R1-A1；官方當沖資料。 | 先固定分子／分母、股數／金額、T／T+1／T+2 修訂與 availability；兩市場分開驗證；修訂可按當時版本重放。 |
 | R1-D2 | 提案 | R1-A1；融券／借券／持股欄位。 | 每欄來源、單位、日期、revision、coverage 與 null policy 有證據；欄位存在不算已收集。 |
-| R1-D3 | 提案／可能受限 | R1-A1、G-SOURCE；券商／分點歷史可行性 gate。官方免費名冊只證通道身分，逐檔交易需人工驗證；可評估合法 CSV 局部匯入。 | 資料接入／匯入仍待做；完整驗收仍要求穩定歷史、通道識別、單位與 point-in-time。局部匯入可獨立驗收，但不等於完整歷史、PIT 或每日自動更新；不足即標 `受限`，不產生投資人身分或預測。來源見 [DATA_SOURCES](DATA_SOURCES.md#券商分點與主力統計的來源邊界後續待做)。 |
+| R1-D3 | 提案／可能受限 | R1-A1、G-SOURCE；券商／分點來源可行性。 | 交易資料接入／匯入待做；完整驗收要求穩定合法歷史、通道識別、單位與 PIT。局部匯入可獨立驗收，不等於完整歷史或每日自動更新；不足標受限，不推論投資人身分或預測。可得性見 [DATA_SOURCES](DATA_SOURCES.md#券商分點與主力統計的來源邊界後續待做)。 |
 | R1-E1 | 提案 | R1-A1、R0-C4；必要基本面。 | 只補公司品質／事件驗證所需欄位；會計期間與實際公告時間分開，更正保留版本；不擴成完整財報產品。 |
 | R1-F1 | 提案 | 當次 daily/backfill 明列的必要來源集合；條件式分點或未採用來源不作全域 blocker。 | 對所選來源做隔離 daily/backfill 重試、冪等、rate limit、觀測、備份與失敗通知；未准入／受限來源保持 unavailable 並從該 job 明確排除。排程本身需另行明確授權，且與自動交易分開。 |
 

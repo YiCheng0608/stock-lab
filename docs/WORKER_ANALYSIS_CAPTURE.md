@@ -1,10 +1,8 @@
 # Worker analysis capture 契約
 
-更新：2026-09-14。狀態：已 review；本文件定義 `backend/worker/analysis_capture.py` 的 public API、CLI、環境、local schema、結果與限制。
+更新：2026-09-16。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
 
-這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，並在該副本執行現行 analysis core。它會把 shared evaluator 實際收到的參數與結果、private replay bundle、當次 legacy `Signal` snapshot 放在同一 transaction。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
-
-它不是 `SignalArtifactStore`、`signal-artifact/v1`、完整 B2／B7、歷史 PIT／availability 證明或正式資料處理入口。
+本文件負責 `backend/worker/analysis_capture.py` 的 API、CLI、環境、local schema、結果與限制。Capture 不是 `SignalArtifactStore`、完整 B2／B7、歷史 PIT／availability 證明或正式資料處理入口。
 
 ## 1. Public API 與 CLI
 
@@ -141,7 +139,7 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 
 ## 7. Review pin 與未完成範圍
 
-Review 使用專案外、migration-ready synthetic source 與 owned copies；正式 DB 當時被其他 process 占用，未驗 byte hash。`pipeline.py`、`analysis_capture.py` 與其 test 當時的 frozen SHA、完整逐輪命令與失敗史可由 `git show 69f62cf7b9e9003c3878952cc33636ed9a063865:docs/WORKER_ANALYSIS_CAPTURE.md` 取閱；這些 SHA 是歷史 review receipt，真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
+有限 review 使用專案外、migration-ready synthetic source 與 owned copies；沒有以正式 DB 驗收 byte hash。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
 
 仍未完成／不在保證內：
 
@@ -149,7 +147,7 @@ Review 使用專案外、migration-ready synthetic source 與 owned copies；正
 - Bridge A 只完成 source／graph 缺口 review；explicit capture→candidate adapter 仍是提案，capture／receipt digest 或新研究 decision time 都不能補成 historical availability／PIT。
 - 未接 default analyze、daily/backfill、backtest、API、UI 或 DecisionSummary，未切換預設策略／輸出版本。
 - `captured_at` 是 observation time；`observed_market_date` 是 collection-selected date，兩者都不是 availability/PIT。
-- R35 已有限 review 新 producer／worker 的 member-return identity 與保守 legacy lookup，規則見[產業分類契約 §8](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。R36 的 candidate typed producer／decision lookup 也已有限 review，規則見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)；這沒有另行驗收本 capture runtime，也不替舊輸入補造 identity，API／UI／backfill 與歷史批次回算仍不在保證內。
+- 新 producer／worker 的 member-return identity 與 candidate typed lookup 見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；該能力沒有另行驗收 capture runtime，也不替舊輸入補造 identity。API／UI／backfill 與歷史批次回算仍不在保證內。
 - Trusted-local、inactive snapshot、非敵對 filesystem/runtime 是前提；active-writer race、hostile rewrite、實體 crash/disk-full與長期保管不在有限 review。
 
 整體邊界見 [Signal artifact 持久化契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md)與[執行清單](ROADMAP_EXECUTION.md)。

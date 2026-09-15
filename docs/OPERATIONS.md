@@ -1,6 +1,6 @@
 # 操作手冊
 
-更新：2026-09-14。現行測試入口、依賴與環境重建以 [開發入口](development-baseline/README.md) 為準；能力狀態與後續順序見 [ROADMAP](ROADMAP.md)。本文件只保留目前可操作入口、安全邊界與診斷順序。歷史全文可由 Git 基準 `69f62cf7b9e9003c3878952cc33636ed9a063865` 查閱。
+更新：2026-09-16。現行測試入口、依賴與環境重建以 [開發入口](development-baseline/README.md) 為準；能力狀態與後續順序見 [ROADMAP](ROADMAP.md)。本文件只保留可操作入口、安全邊界與診斷順序。
 
 ## 1. 工作目錄、環境與啟停
 
@@ -41,18 +41,9 @@ Pop-Location
 
 ## 2. 資料庫、migration 與 readiness
 
-程式的 Alembic head 是 `0006_news_json_defaults`，revision chain 為 0001→0006，另有相容 fallback markers。程式 head 不證明任何 DB 已升級。C003／Round11 的歷史正式 DB 狀態是沒有 `alembic_version`、只有五枚 fallback markers；2026-09-13 另一個 preview task 的舊 lifespan 實際將正式 DB 推到 0006。後續只讀觀察確認 current 為 0006／21 tables，但這不是正式 migration、restore 或 deployment 驗收；完整歷史與限制見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)。
+程式 Alembic head 是 `0006_news_json_defaults`，revision chain 為 0001→0006，另有相容 fallback markers；這不證明任何 DB 已升級。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)。
 
-readiness 只在一個唯讀 transaction 內檢查有限 descriptor：
-
-| 項目 | 接受條件與限制 |
-| --- | --- |
-| revision markers | `alembic_version` 恰為唯一 current head；可搭配 0001 起算的已知完整 fallback prefix。沒有 Alembic table 時，fallback 必須恰有六枚。gap、unknown、duplicate、malformed、view 或空表拒絕。 |
-| mapped schema | 19 個 mapped objects 為 real tables，且有必要欄名、ordered PK、FK、required unique 與兩個 News JSON `[]` defaults。這不是完整 type、CHECK、collation、row、integrity 或 custom-schema audit。 |
-| settlements identity | 至少一個 full、ordinary、ASC／BINARY `UNIQUE(signal_id, horizon)`；所有觸及兩 target keys 的 UNIQUE 都須同形。expression UNIQUE 拒絕；unrelated predicate／trigger語意不審核。詳見 [R0 §8.9](R0_IMPLEMENTATION.md#89-round30-c030api-startup-signal_settlements-unique-metadata-gate有限-review)。 |
-| instruments identity | mapped `market`／`exchange`／`symbol` 需 `hidden=0`；至少一個 full、ASC／BINARY `UNIQUE(exchange, symbol)`，所有觸及三 target keys 的 UNIQUE 都須同形。unrelated generated dependency、CHECK、trigger 與任意 INSERT 不在 gate。詳見 [R0 §8.10](R0_IMPLEMENTATION.md#810-round31-c031api-startup-instruments-unique-metadata-gate有限-review)。 |
-
-readiness 通過不保證任意寫入可成功，也不會執行 `quick_check`、`integrity_check`、資料 FK scan 或深層 corruption 檢查。live WAL／SHM、concurrent writer、non-SQLite 與 attached schema 也不在有限 review 內。
+readiness 只在唯讀 transaction 檢查有限 descriptor：revision marker 必須是唯一 current head 或受控的完整 fallback 形狀；mapped objects、必要欄名、ordered PK／FK／UNIQUE 與 News JSON defaults 必須符合契約；`signal_settlements` 與 `instruments` 的精確 identity gate 分見 [R0 §8.9](R0_IMPLEMENTATION.md#89-round30-c030api-startup-signal_settlements-unique-metadata-gate有限-review) 及 [§8.10](R0_IMPLEMENTATION.md#810-round31-c031api-startup-instruments-unique-metadata-gate有限-review)。它不執行 `quick_check`、`integrity_check`、資料 FK scan 或完整 type／CHECK／trigger／custom-schema audit，也不涵蓋 live WAL／SHM、concurrent writer、non-SQLite 與 attached schema；通過不保證任意寫入成功。
 
 ### 2.1 安全升級與復原順序
 
@@ -63,7 +54,7 @@ readiness 通過不保證任意寫入可成功，也不會執行 `quick_check`�
 5. 另外驗 recovery：forward-only migration 的做法是丟棄故障副本，從 consistent backup 還原到新的隔離路徑；未實跑就標未執行。
 6. 最後再次唯讀確認來源 DB 未變。正式升級、restore 與 deployment 需要各自具名授權及驗收。
 
-R28／R29 的 migration helpers 只接受有限 canonical SQLite legacy shapes，並在 destructive DDL 前拒絕 unsupported columns、constraints、indexes、triggers、views、FK、scratch／TEMP shadow、marker/schema矛盾等情況。遇到拒絕時保留 DB 與錯誤，回到 consistent backup 的新副本診斷；不要手動刪 scratch、補 marker、關 FK 或反覆執行以嘗試自動 salvage。詳細可保存形狀與 normalize 行為見 [R0 §8.7](R0_IMPLEMENTATION.md#87-round28-c028canonical-legacy-instruments-identity-rebuild-rollbackfail-closed有限-review) 及 [§8.8](R0_IMPLEMENTATION.md#88-round29-c029canonical-legacy-signal_settlements-identity-rebuild-rollbackfail-closed有限-review)。
+Migration helpers 只接受有限 canonical SQLite legacy shapes，並在 destructive DDL 前拒絕未知 schema、constraints、indexes、triggers、views、FK、scratch／TEMP shadow 或 marker 矛盾。遇到拒絕時保留 DB 與錯誤，回到 consistent backup 的新副本診斷；不要手動刪 scratch、補 marker、關 FK 或反覆執行嘗試 salvage。可保存形狀見 [R0 §8.7](R0_IMPLEMENTATION.md#87-round28-c028canonical-legacy-instruments-identity-rebuild-rollbackfail-closed有限-review) 與 [§8.8](R0_IMPLEMENTATION.md#88-round29-c029canonical-legacy-signal_settlements-identity-rebuild-rollbackfail-closed有限-review)。
 
 ## 3. 現有 worker CLI
 
@@ -79,9 +70,9 @@ R28／R29 的 migration helpers 只接受有限 canonical SQLite legacy shapes�
 
 `backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；為補足目標交易日可能讀更早候選日，但仍受迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 
-R37 已有限 review `candidates`／`priority` 的 group-score 納入範圍：typed 依 DB-local ID＋pair 精確收斂，legacy symbol 為避免漏抓可保守納入所有 active exchange；它不是 decision selection。`/api/coverage` 的同名 scope 也重用這個 resolver。R38 另完成 public score-source typed candidate 顯示，沒有改變回補集合；兩者的完整規則與驗收邊界分見[產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約)與[§9.6](INDUSTRY_CLASSIFICATION.md#96-public-candidate-的-source-day-身分展示契約)。
+`candidates`／`priority` 的 group-score 納入範圍已有限 review：typed 依 DB-local ID＋pair 精確收斂，legacy symbol 為避免漏抓可納入所有 active exchange；這不是 decision selection。`/api/coverage` 同名 scope 重用此 resolver。完整規則與 public source-day 展示分見 [產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約) 與 [§9.6](INDUSTRY_CLASSIFICATION.md#96-public-candidate-的-source-day-身分展示契約)。
 
-Backfill run 建立時把 `metadata.target_instruments` 固定為 snapshot；既有 run 的 resume／`--force` 不重新 resolve，所以 R37 修正只作用於新建或實際重新 resolve 的範圍。
+Backfill run 建立時把 `metadata.target_instruments` 固定為 snapshot；既有 run 的 resume／`--force` 不重新 resolve，修正只作用於新建或實際重新 resolve 的範圍。
 
 範例日期只作隔離研究，不表示資料已完整：
 
@@ -120,7 +111,7 @@ foreach ($purpose in 'local_fetch','raw_store','summarize','historical_pit') {
 }
 ```
 
-`allow` 是該 profile／purpose 的 eligibility；`restricted`／`unsupported` 及 reasons 必須保留。首批四來源的 `historical_pit` 均 unsupported。完整矩陣見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。
+`allow` 只代表該 profile／purpose 的 eligibility；`restricted`／`unsupported` 與 reasons 必須保留。完整矩陣見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。
 
 `source_runtime capture` 是 standalone raw capture，不是 `collect`／`daily`／`backfill`，也不碰 DB。只有驗證目標需要實際 capture 時才落盤；`source_registry validate`／`inspect` 只輸出結果，不建立 capture 產物。先選用已授權、已存在的專案外 research output parent，明確決定這次唯一 output directory；不得把範例改回每次自動建立的隨機 Temp。output directory 必須不存在或為空，且不能位於 workspace 或正式／`.local` data 路徑。
 
@@ -138,13 +129,13 @@ python -m worker.source_runtime capture `
   --output-dir $captureOutputDir
 ```
 
-`STOCK_RESEARCH_OUTPUT_PARENT` 只是操作端指向既有、已授權 parent 的變數，runtime 不會自行讀取。執行前依 [開發入口](development-baseline/README.md) 確認這次產物上限、目的與保留／清理條件：預期只有一個 `capture.zip`；body 上限為 5 MiB，另加小型 receipt／ZIP overhead。成功 bundle 是這項 capture 驗證的必要產物；是否保留取決於後續 consumer／不可重建證據需求，否則按原定條件清理。這不增加刪除其他檔案的授權，也不要求每次另行詢問。
+`STOCK_RESEARCH_OUTPUT_PARENT` 只是操作端指向既有、已授權 parent 的變數，runtime 不會自行讀取。執行前依 [開發入口](development-baseline/README.md) 確認目的、產物上限與清理條件；預期只有一個 `capture.zip`，body 上限 5 MiB，另加小型 receipt／ZIP overhead。只清理本次擁有且已核對的路徑。
 
-`--source` 只接受 `twse_stock_day_all`、`twse_holiday_schedule`、`twse_twt48u_all`、`tpex_spendi_history`。preflight failure 是 zero request、stdout failure receipt、exit 2；成功 `capture.zip` 內含 `body.bin` 與 `receipt.json`。它不 retry、不 follow redirects；identity encoding、2xx、JSON、5 MiB、timeout 與 exclusive publication 規則見 [SOURCE_REGISTRY §4](SOURCE_REGISTRY.md#4-standalone-source-capture)。capture time 不是 official published／first-available／revision time，rate limit 仍未經官方數字驗證。
+`--source` 只接受 `twse_stock_day_all`、`twse_holiday_schedule`、`twse_twt48u_all`、`tpex_spendi_history`。preflight failure 是 zero request、stdout failure receipt、exit 2；成功 bundle 內含 `body.bin` 與 `receipt.json`。request、validation、timeout、publication 與 capture-time 邊界見 [SOURCE_REGISTRY §4](SOURCE_REGISTRY.md#4-standalone-source-capture)。
 
-`STOCK_DAY_ALL` 與 holiday bundle 的現有 consumer 都是 caller 明確 opt-in 的 Python library，沒有新增 CLI。三個 `STOCK_*` 必須在 import `worker.sources`／`worker.pipeline` 前設為隔離路徑；同 request 的 `force=False` 可能直接 reuse，驗接線時才明確使用 `force=True`。前者只替換 capture date 的 TWSE selected-security input；後者只對受限 grammar 證成的 closed weekdays做 positive request exclusion，兩者都不是 all-offline、完整 collector、session truth 或 PIT。介面與資料規則見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 及 [§5.2](SOURCE_REGISTRY.md#52-holidayschedule-positive-exclusion)。
+`STOCK_DAY_ALL` 與 holiday bundle consumer 都是 caller 明確 opt-in 的 Python library，沒有 CLI。三個 `STOCK_*` 必須在 import `worker.sources`／`worker.pipeline` 前設為隔離路徑；`force=False` 可能 reuse，同 request 驗接線時才使用 `force=True`。兩者的輸入範圍、fail-closed 與非 PIT 邊界見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 及 [§5.2](SOURCE_REGISTRY.md#52-holidayschedule-positive-exclusion)。
 
-Round21–26 的 TPEx suspension／action 與 TWSE action 修正只改有限 normalization／read-time 行為，沒有 retroactive repair。`force=False` 可 reuse 舊結果；`force=True` 也不會刪舊錯 Event、修所有舊 bar 或重算既存 evaluation。操作前先讀 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 對應來源段落，不以 refetch 冒充正式 cleanup／replay。
+TPEx suspension／action 與 TWSE action 修正只有有限 normalization／read-time 行為，沒有 retroactive repair；`force=True` 不會刪舊錯 Event，也不保證修復所有舊 bar 或重算既存 evaluation。精確來源契約見 [SOURCE_REGISTRY §6](SOURCE_REGISTRY.md#6-tpextwse-有限資料品質契約)，不得把 refetch 當成 cleanup／replay。
 
 ## 5. 獨立 artifact 與時間 store
 
@@ -176,7 +167,7 @@ reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔�
 
 ## 7. 程式與前端驗證
 
-文件列出的歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，並保留每條命令的 exit、pass／fail／skip 與限制。低影響文件修改只檢查 diff、連結與內容一致性，不慣例執行完整 pytest／build。需要功能驗證時，真實唯讀資料、既有小型樣本、記憶體 fixture 與必要隔離落盤的選擇原則見 [開發入口](development-baseline/README.md)；後端測試不得指向正式 DB。
+歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，記錄命令、exit、pass／fail／skip 與限制；文件修改通常只檢查 diff、連結與內容一致性。測試資料與落盤原則見 [開發入口](development-baseline/README.md) 及 [AGENTS](../AGENTS.md#驗證資料與暫存)；後端測試不得指向正式 DB。
 
 ```powershell
 Push-Location frontend
@@ -190,6 +181,4 @@ Pop-Location
 
 ## 8. 排程與未完成工作
 
-目前沒有建立 Windows Task Scheduler 或 Codex 排程。資料收集／重試排程需先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單是另一項能力，不在第一版範圍。
-
-未完成且不可由既有有限 review 外推的範圍包括：完整來源與 availability／PIT truth、長歷史回補、媒體／分點接入、完整公司行動與停復牌、legacy cleanup／replay、正式 DB repair／migration／restore／deployment、完整 historical／custom schema、B3 worker 接線、B5b、B7 與自動交易。後續依 [ROADMAP 執行清單](ROADMAP_EXECUTION.md) 另行驗收，不因文件、fixture、外部 startup 或 readiness 通過就改判完成。
+目前沒有 Windows Task Scheduler 或 Codex 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。其餘未完成項與驗收條件以 [ROADMAP 執行清單](ROADMAP_EXECUTION.md) 為準，不能由文件、fixture、外部 startup 或 readiness 通過改判完成。

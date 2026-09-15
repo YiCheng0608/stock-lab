@@ -1,6 +1,6 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-14。有限能力已 review：本地 immutable artifact foundation、離線 exact comparison、current pure-rule replay，以及 opt-in worker evaluation capture。只有第一項使用本文件的 `signal-artifact/v1` store；其他三項是分離能力。R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
+更新：2026-09-16。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 B adapter 提案。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
 
 ## 1. 範圍與不變條件
 
@@ -110,25 +110,23 @@ Child read 會重驗全部 ancestors 的 core／revision identity、payload／se
 
 ## 9. Round12 C012 final review 證據與限制
 
-有限 foundation 已針對 canonical shape、ownership、WAL／journal、transaction、collision、lifecycle、concurrency、reader 與 nested detachment 完成 review。`backend/app/signal_artifact.py` 與 `signal_artifact_store.py` 當時的 frozen SHA、完整測試數、第三方 task 的 `.local` 變化、失敗與 guard 細節可查 `git show 69f62cf:docs/SIGNAL_ARTIFACTS.md`；它們是歷史 review receipt，不是 runtime binding，也不擴張本文件的能力邊界。
+Local foundation 的 canonical shape、ownership、WAL／journal guard、transaction、collision、lifecycle、concurrency、reader 與 nested detachment 已有限 review。這不構成 runtime binding，也不擴張下列相鄰能力。
 
-### 9.1 Round32 C032-B：有限 offline exact comparison
+<a id="91-round32-c032-b有限-offline-exact-comparison"></a>
+<a id="92-round33-c033-b有限-caller-provided-current-pure-rule-replay"></a>
+<a id="93-round34-c034-b有限-opt-in-worker-evaluation-capture"></a>
 
-Caller 明示兩個 external rollback-mode SQLite snapshots、expected hashes、legacy key 與 exact artifact selector；preflight、read-only transaction 與 report 契約見 [SIGNAL_COMPARISON](SIGNAL_COMPARISON.md)。Report 永遠 `comparable=false`，不證 shared input、PIT、execution、winner 或 replay。
-
-### 9.2 Round33 C033-B：有限 caller-provided current pure-rule replay
-
-[RULE_REPLAY](RULE_REPLAY.md) 只保存兩個 v1 evaluator 的 exact caller arguments，並綁定 CPython 3.12.14、binary64、完整 domain.py bytes 與 config digests。它沒有 subject／market／decision time，也不進本 store；arguments digest 不是 research-core、snapshot hash 或 authentication。
-
-### 9.3 Round34 C034-B：有限 opt-in worker evaluation capture
-
-[WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md) 從 external stable snapshot 建 owned research DB，保存 shared evaluator kwargs/result、private replay bundle、subject/date/strategy 與 legacy Signal snapshot。資料留在 local capture tables，不是 `signal-artifact/v1` core／revision／relation；captured／observed time 不證 decision 或 availability。
+| 分離能力 | 與 artifact 的邊界 |
+| --- | --- |
+| [Offline comparison](SIGNAL_COMPARISON.md) | 對兩個 caller-provided stable snapshots 作 exact、唯讀描述；`comparable=false`，不證 shared input、PIT、execution、winner 或 replay。 |
+| [Pure-rule replay](RULE_REPLAY.md) | 保存兩個 v1 evaluator 的 exact caller arguments 與固定 binding；沒有 subject／market／decision time，也不進本 store。Arguments digest 不是 research-core、snapshot hash 或 authentication。 |
+| [Worker capture](WORKER_ANALYSIS_CAPTURE.md) | 保存 actual evaluator kwargs／result、private replay bundle 與 legacy Signal snapshot；local capture rows 不是 artifact core／revision／relation，captured／observed time 不證 decision 或 availability。 |
 
 ## 10. Bridge A 可證映射與下一候選
 
-Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 因而可證 evaluator 實際收到的 arguments/result、subject、觀測 market date、selected strategy config/version、legacy Signal snapshot，以及 receipt 所記 collection run。這仍只證 capture 內部一致；沒有逐輸入 raw row／source version／availability，owner 的 SHA 只屬建立 owned DB 前的原 source snapshot bytes，不是 attempt 後 research DB 或 exact evaluator inputs 的 hash。本輪查核的 `backend/app`、`backend/worker` 與 `frontend/src` 未見 worker、API、DecisionSummary 或前端產品接線；既有 offline comparison 仍是分離 consumer。
+Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 可證 evaluator 實際收到的 arguments／result、subject、觀測 market date、selected strategy config／version、legacy Signal snapshot及 receipt 所記 collection run。這只證 capture 內部一致；沒有逐輸入 raw row／source version／availability，owner SHA 也只屬建立 owned DB 前的 source snapshot bytes。有限查核未見 worker、API、DecisionSummary 或前端產品接線；offline comparison 仍是分離 consumer。
 
-下一個 B 候選是窄、無自動保存的 adapter；最終 I/O、time、binding 與必要磁碟驗收範圍由後續統籌核定：
+下一個 B 候選是窄、無自動保存的 adapter；它仍是提案，最終 I/O、time、binding 與必要磁碟驗收範圍由後續統籌核定：
 
 | 明示輸入／輸出 | 候選映射 | 不可擴張的邊界 |
 | --- | --- | --- |

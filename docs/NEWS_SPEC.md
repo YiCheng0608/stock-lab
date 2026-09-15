@@ -1,6 +1,6 @@
 # 新聞與市場事件規格
 
-更新：2026-09-14。本文是新聞來源、事件、時間與呈現的現行契約；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。程式已有官方 Event → NewsItem、列表／詳情、來源時間投影與 keyset cursor 的有限能力；來源 truth、持久化 availability／revision、PIT、跨來源事件合併、外部來源及完整 AI 流程仍未完成。
+更新：2026-09-16。本文定義新聞來源、事件、時間與呈現；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。未具名驗收的欄位與流程仍是目標契約。
 
 ## 1. 目標與來源政策
 
@@ -16,10 +16,8 @@
 
 ## 2. 現有能力與缺口
 
-- events 可保存官方事件、描述、來源、raw 與日期；NewsItem 已有來源、關聯、影響、去重／狀態與時間欄位，不另建同名資料層。
-- `display_time`、`time_basis`、`time_precision`、`time_consistency`、新聞詳情與 keyset cursor 已有有限 read-time 投影；unknown fallback 和 legacy 相容不證明來源時間、availability 或 PIT 正確。
-- `published_at` 等欄位存在，不代表每筆都有來源提供的精確時間；feed URL 也不是單篇原文。
-- 跨來源事件合併、更正歷史、外部來源准入、AI 抽取／審核仍待完成。特定歷史窗口的 event unsupported 不可解讀成永遠沒有新聞。
+- 現有官方 Event、NewsItem、列表／詳情、時間投影與 keyset cursor 只有有限能力；欄位存在或 legacy fallback 不證明來源時間、availability 或 PIT 正確。
+- feed URL 不是單篇原文。跨來源合併、更正歷史、外部來源准入及 AI 抽取／審核仍待完成；特定歷史窗口 event unsupported 也不表示永遠沒有新聞。
 
 ## 3. 資料契約
 
@@ -79,6 +77,6 @@
 
 ## 8. 驗收
 
-需有可重跑案例涵蓋：同事件轉載、feed／item／none URL、來源無摘要但有／無內文、未知時間、歷史回補、MOPS 日期衝突、更正／撤回、跨市場同 symbol、低把握關聯、來源失敗及模型不受支持陳述。
+可重跑案例須涵蓋同事件轉載、三種 URL、來源有／無內文或摘要、未知時間、歷史回補、MOPS 日期衝突、更正／撤回、跨市場同 symbol、低把握關聯、來源失敗及模型不受支持陳述。
 
-驗收須證明事實未被推論覆寫、摘要可回指原文、unknown 未被補值、排序／cursor 在版本變更下有明確行為，且回測看不到尚未發布或不可得的資料。現有有限 read-time review 只支持 unknown 安全投影與產品相容；availability／revision truth、strict store 接線與 PIT gate 仍未完成。
+驗收須證明事實未被推論覆寫、摘要可回指原文、unknown 未被補值、排序／cursor 的版本行為明確，且回測看不到尚未可得的資料。現有有限 review 只支持 unknown 安全投影與產品相容；availability／revision truth、strict store 接線與 PIT gate 仍未完成。

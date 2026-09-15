@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-09-14。狀態：首批 registry、standalone capture、兩個 capture consumers，以及列於第 6 節的有限資料品質修正已 review。共同來源查證基準日是 2026-09-12；2026-09-14 只整理文件，未重新查證官方現況。
+更新：2026-09-16。首批 registry、standalone capture、兩個 capture consumers 與第 6 節有限資料品質修正已 review；共同來源查證基準日仍是 2026-09-12，之後未重新查證官方現況。
 
 本文件是首批免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。只有第 3 節四個 exact GET endpoint 已准入；一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -8,7 +8,7 @@
 
 CLI 與 policy decision 必須顯式指定 manifest。Library `load_manifest()` 只讀 bundled fixed snapshot；它不是 implicit latest，也不構成 external pin。只有外部同時 pin `registry_version` 與 canonical digest 才是 `pinned`；只有 version 是 `version_only_unverified`，兩者皆無是 `unverified`。
 
-Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每個 source row 另存相同 schema/registry version 與自己的 `source_version`。每筆至少包含：
+Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每個 source row 另存相同 schema／registry version 與自己的 `source_version`，且至少包含：
 
 | 類別 | 必要內容 |
 | --- | --- |
@@ -46,7 +46,7 @@ Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每�
 | `twse_twt48u_all` | `GET https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL` | [dataset 89748](https://data.gov.tw/dataset/89748)；TWSE `1.0` | 不定期；payload 可含未來預告，須保存 capture time。完整歷史與 revision unknown。 |
 | `tpex_spendi_history` | `GET https://www.tpex.org.tw/openapi/v1/tpex_spendi_history` | [dataset 48665](https://data.gov.tw/dataset/48665)；TPEx `1.0.0` | 不定期；名稱含「歷史」不代表逐次發布版本、完整 archive 或 PIT lineage。 |
 
-營運者分別為 TWSE／TPEx，資料集提供機關為金融監督管理委員會證券期貨局。四筆均為免費、OGL 1.0、公開 OpenAPI且未列 auth；raw/summary 可在顯名、完整性、取得時間、hash、license/version 與 traceability 條件下使用。資料集上架或 metadata 更新日不是 record first availability 或 payload revision time。
+營運者為 TWSE／TPEx，資料集提供機關為金融監督管理委員會證券期貨局。四筆均為免費、OGL 1.0、公開 OpenAPI 且未列 auth；raw／summary 僅在顯名、完整性、取得時間、hash、license／version 與 traceability 條件下使用。資料集上架或 metadata 更新日不是 record first availability 或 payload revision time。
 
 `free_public_local` decision matrix：
 
@@ -59,16 +59,9 @@ Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每�
 
 ## 4. Standalone source capture
 
-唯一已 review executor 是：
+已 review executor 是 `python -m worker.source_runtime capture`；完整參數與 PowerShell 範例見 [操作手冊 §4](OPERATIONS.md#4-source-registry-與-capture)。
 
-~~~text
-python -m worker.source_runtime capture \
-  --manifest PATH --profile PROFILE --source SOURCE_ID \
-  --expected-registry-version VERSION --expected-digest DIGEST \
-  --output-dir EXTERNAL_DIRECTORY
-~~~
-
-Library `capture(...)` 接受相同 selectors，只有 local test 可注入 transport。每次須顯式給 manifest、profile、source、兩個 external pins 與 output directory；不能由 URL 反推 source，也不會改變 legacy collect/daily/backfill。Runtime allowlist固定為第 3 節四組 `source_id + exact URL + GET`；manifest 新列不會自動可執行。
+Library `capture(...)` 接受相同 selectors，只有 local test 可注入 transport。每次須顯式給 manifest、profile、source、兩個 external pins 與 output directory；不能由 URL 反推 source，也不會改變 legacy collect／daily／backfill。Runtime allowlist 固定為第 3 節四組 `source_id + exact URL + GET`；manifest 新列不會自動可執行。
 
 任何 request/file action 前必須驗 manifest/profile/source version/endpoint/method，並取得 `local_fetch` 與 `raw_store` 的 allow decisions。每個 condition 必須有已知 handler；未知／不支援 condition 或無法履行的 numeric limit 在零 request 時 fail closed。
 
@@ -83,7 +76,7 @@ Output 必須是專案外、具名且已授權的新目錄或空目錄，不得�
 
 失敗只由 library return 或 CLI stdout 輸出 receipt：`status` 是 `rejected`（零 request）或 `capture_failed`，含 `error_reason`，移除 `artifact` 並令 `executed_purposes=[]`；CLI exit 2，不另寫 failed artifact。
 
-這條 path 只執行四來源的 `local_fetch + raw_store`；它不解析 source truth、不接 legacy collector，也未實作 summarize、historical PIT、排程、worker/product persistence或全來源 gate。
+這條 path 只執行四來源的 `local_fetch + raw_store`；不解析 source truth、不接 legacy collector，也未實作 summarize、historical PIT、排程、worker／product persistence 或全來源 gate。
 
 ## 5. 兩個 capture consumers
 
@@ -163,17 +156,15 @@ Registry pin：`registry_version=r1-a1-c009-2026-09-12.1`；canonical `content_d
 
 ### 7.1 Round18 C018 standalone source capture final review 證據
 
-有限 review證實四個 allowlisted endpoint的 capture shape、condition receipts、exclusive publish與失敗不發布；runtime live capture只涵蓋 `STOCK_DAY_ALL`，其餘三個當時只有 mock／介面驗證。Live response只證 transport與shape；逐輪命令、hash與失敗史見基準 Git版本。
+有限 review 涵蓋四個 allowlisted endpoint 的 capture shape、condition receipts、exclusive publish 與失敗不發布。該輪 live 只涵蓋 `STOCK_DAY_ALL`；其餘當時只有 mock／介面驗證，因此不能外推 live transport、來源內容或 coverage。
 
 ### 7.2 Round19 C019-B `STOCK_DAY_ALL` content／consumer final review 證據
 
-有限 review涵蓋完整 body validation、selected Decimal OHLCV、matching-date權威性、raw/capture time與缺值 partial邊界；不構成全市場/session/PIT證據。
+有限 review 涵蓋完整 body validation、selected Decimal OHLCV、matching-date 權威性、raw／capture time 與缺值 partial 邊界；不構成全市場、session 或 PIT 證據。
 
 ### 7.3 Round20 C020-B `holidaySchedule` content／consumer final review 證據
 
-有限 review另包含一次 `holidaySchedule` live capture，並涵蓋 exact fields/year/date/weekday、窄 closed grammar、多日 positive exclusion、source conflict與不修舊資料邊界；不構成完整 calendar/open-session/PIT證據。
-
-本文件原有各輪 command、case count、Temp路徑、live body hash與 probe明細可由 `git show 69f62cf7b9e9003c3878952cc33636ed9a063865:docs/SOURCE_REGISTRY.md` 取閱。
+有限 review 包含一次 `holidaySchedule` live capture，以及 exact fields／year／date／weekday、窄 closed grammar、多日 positive exclusion、source conflict 與不修舊資料邊界；不構成完整 calendar、open-session 或 PIT 證據。逐輪命令、case count、hash 與 probe 明細留在 Git 歷史。
 
 仍未完成：
 

@@ -1,6 +1,6 @@
 # Caller-provided pure-rule replay 契約
 
-更新：2026-09-14。`backend/app/rule_replay.py` 的有限 current pure-rule library 已 review；Round34 的 opt-in [worker analysis capture](WORKER_ANALYSIS_CAPTURE.md) 是明確 caller。本文是 API、格式、binding、錯誤與限制的權威。
+更新：2026-09-16。`backend/app/rule_replay.py` 的有限 current pure-rule library 已 review；本文是 API、格式、binding、錯誤與限制的權威。
 
 Library 只在 strict native JSON 輸入域內保存兩個 evaluator 的 caller arguments，並以固定 source／config／runtime 重算 `passed`、`state` 與 ordered `reasons`。它不讀歷史資料、SignalArtifact、worker 或正式 DB，也不證明來源、subject、market time、availability 或 PIT。
 
@@ -8,7 +8,7 @@ Library 只在 strict native JSON 輸入域內保存兩個 evaluator 的 caller 
 
 只支援 `breakout_v1@1.0.0` 與 `pullback_v1@1.0.0`。成功 capture 保存完整 arguments、selected config、implementation identity、規則結果與三個 SHA-256 digest；replay 在 fresh private module 執行相同 evaluator 並 exact 比較結果。
 
-不保證：歷史輸入找回、來源／簽章／authentication、instrument identity、market／decision／as-of time、官方 availability／revision／PIT、完整 signal reconstruction、legacy/new paired replay、SignalArtifact persistence、worker／API／UI 接線或 hostile host sandbox。它只回答「caller 提供的合法參數，在本機受 pin 的 evaluator bytes/config/runtime 下是否重現 bundle claim」。
+它只回答「caller 提供的合法參數，在本機受 pin 的 evaluator bytes／config／runtime 下是否重現 bundle claim」；不提供歷史輸入、來源／簽章、subject／time／PIT、Signal reconstruction、paired replay、artifact persistence 或產品接線。Trusted-local 是前提；library 不驗證 caller 資料來源真偽，也不提供敵對主機隔離。
 
 ## 2. Public API
 
@@ -129,12 +129,8 @@ Caller 應先按 exception class，再按穩定 `.code` 分支；不要解析 me
 
 ## 10. Round33 final review 證據與完成邊界
 
-Round33 對有限 pure library、binding、fault、concurrency 與 audit contract 完成 review；frozen files 為 `backend/app/rule_replay.py`、`backend/tests/test_rule_replay.py` 與受 pin 的 domain.py。完整歷史命令、測試數、失敗修正與檔案 hash 可查 `git show 69f62cf:docs/RULE_REPLAY.md`。
-
-尚未完成：可證的歷史輸入、SignalArtifact bridge／persistence、同 subject/time 的 legacy-v2 paired replay、API／UI／DecisionSummary、官方 availability／PIT、B7 與 default adoption。相關狀態見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md)、[R0_IMPLEMENTATION](R0_IMPLEMENTATION.md) 及 [ROADMAP](ROADMAP.md)。
+Pure library、binding、fault、concurrency 與 audit contract 已有限 review。可證歷史輸入、SignalArtifact bridge／persistence、同 subject/time 的 legacy-v2 paired replay、產品接線、官方 availability／PIT、B7 與 default adoption 仍未完成；狀態見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md) 與 [ROADMAP](ROADMAP.md)。
 
 ## 11. Round34 worker caller：有限 actual/private binding
 
-Round34 未改上述 library 或 pins。Opt-in worker caller 在 shared evaluator 前 detach 實際 kwargs，再以本 library private 重算；shared actual result、private recorded result、實際 StrategyVersion config 與 pinned config 皆用 canonical JSON identity，比較時 `false` 不等於 `0`、`1.0` 不等於 `1`。成功 call 同時保存 actual result 與完整 bundle。
-
-這只證本次 owned research analysis 的 shared arguments 與 pinned replay 綁定，不證 historical availability 或官方 truth，也不建立 SignalArtifact、paired output、B5b／B7、API／UI 或 default capture。操作、schema、outcome 與 error 見 [WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md)。
+Opt-in [worker analysis capture](WORKER_ANALYSIS_CAPTURE.md) 是明確 caller：在 shared evaluator 前 detach 實際 kwargs，再以本 library private 重算；actual result、recorded result、實際 StrategyVersion config 與 pinned config 皆用 canonical JSON identity，比較時 `false` 不等於 `0`、`1.0` 不等於 `1`。成功 call 同時保存 actual result 與完整 bundle；capture 的 schema、outcome 與額外邊界由其文件負責。

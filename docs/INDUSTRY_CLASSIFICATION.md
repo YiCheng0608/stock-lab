@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類與隔離修復契約
 
-更新：2026-09-14。R15 mapping／隔離診斷、R16 ordinary-industry normal collector、R17 ETF／new-listing candidate lifecycle、R35 member-return identity 與 R36 candidate identity 均只在各節表列有限範圍通過 review。正式與 `.local` DB、歷史分類、舊族群分數與研究輸出尚未修復，Round14「既有族群關聯待重新核實」guard 不得撤除。
+更新：2026-09-16。Mapping／隔離診斷、ordinary-industry collector、ETF／new-listing lifecycle 與 §8–9 身分契約均只在各節表列範圍通過有限 review。正式與 `.local` DB、歷史分類、舊族群分數及研究輸出尚未修復，「既有族群關聯待重新核實」guard 不得撤除。
 
 ## 1. 官方證據 snapshot
 
@@ -97,13 +97,11 @@ shared current codes 沒有異義 collision；兩市場 22 都是生技醫療。
 | counterfactual | baseline／corrected 使用相同 market inputs，只允許 membership、重算 scores 與隔離 signals 有預期差異。 |
 | isolation／rerun | 隔離副本 integrity／FK 正常；第二次執行不再漂移；正式與 `.local` DB 不變。 |
 
-2026-09-13 有限 review 的量測：current 與 counterfactual 各有 1,974 個 supported 標的取得唯一 expected membership，35 個 unknown／special 為 0；關閉 1,551 個舊錯 membership（TWSE 845、TPEx 706），新增 1,541 個 expected membership（TWSE 835、TPEx 706），原 2,403 rows 均保留。counterfactual group-score rows 41→52、45 rows 有差異，兩側各 6 個 non-null score；兩側各產生 4,616 筆隔離 signals。這些數字只屬該次隔離資料。
-
-正式 DB 未修復、歷史 effective date 未證、舊 derived outputs 未重算，所以文件、fixture、mapping test 或 counterfactual 成功都不能解除前端 guard，也不證策略有效性。
+2026-09-13 的隔離 review 通過上表，但只證當次副本的 current transition、preservation、counterfactual 與 rerun。正式 DB 未修復、歷史 effective date 未證、舊 derived outputs 未重算；文件、fixture、mapping test 或 counterfactual 成功都不能解除前端 guard，也不證策略有效性。
 
 ## 6. Round16 normal collector 觀測期間（有限接線已 review）
 
-R16 只讓 normal collector 對 stock／IPO 的 ordinary `official_industry` 使用可信 capture 的觀測日作 forward transition；不回填歷史。ETF／new-listing lifecycle 由第 7 節另行定界。
+Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信 capture 觀測日作 forward transition；不回填歷史。ETF／new-listing lifecycle 由第 7 節另行定界。
 
 ### 6.1 觀測時間與來源綁定
 
@@ -134,11 +132,11 @@ R16 只讓 normal collector 對 stock／IPO 的 ordinary `official_industry` 使
 | isolation | other domains、缺席 instrument、manual 與既有 score不因 industry reconciliation 漂移。 |
 | receipt／retry | 成功、partial、reuse、force failure 與 raw time error可分辨且不覆蓋最後成功 evidence。 |
 
-2026-09-13 的有限 review 包含 actual universe parser→本地 official-shaped fixtures→完整 `collect`、aware timestamp、transaction、integrity／FK 與正式／`.local` DB 不變檢查。它不是 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
+有限 review 通過 §6.3，並涵蓋 parser→`collect`、timestamp、transaction、integrity／FK 與保護來源不變；不構成 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
 
 ## 7. Round17 ETF／new-listing candidate lifecycle（有限接線已 review）
 
-R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecycle；不改第 6 節 ordinary counts／scope，也不授權正式資料修復。
+已完成的有限範圍只有 current capture 驅動的 ETF 與 `new-listings` candidate lifecycle；不改第 6 節 ordinary counts／scope，也不授權正式資料修復。
 
 ### 7.1 來源語意與五種日期
 
@@ -186,7 +184,7 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 | legacy／conflict | cap、forward-close、wrong expiry、same-day、overlap與 identity conflict均保守處理。 |
 | transaction／receipt | caller rollback有效、helper failure只撤 savepoint、後段 failure不留 normalized partial write；scope receipts不互相覆蓋。 |
 
-2026-09-13 的有限 review 包含 actual parsers、本地 official-shaped fixtures、完整 `collect`、SQLite caller rollback／savepoint、integrity／FK 與保護來源檢查。未完成項：官方 capture metadata／availability truth、ETF heuristic 品質、legacy 錯誤期間、source-effective/PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 歷史轉換、舊 derived outputs 重算、metadata history治理、guard解除與策略有效性。
+有限 review 通過 §7.5，並涵蓋 parser→`collect`、caller rollback／savepoint、integrity／FK 與保護來源不變。官方 capture metadata／availability truth、ETF heuristic 品質、legacy 錯誤期間、source-effective／PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 歷史轉換、舊 derived outputs 重算、metadata history 治理、guard 解除與策略有效性仍未完成。
 
 ## 8. 群組衍生成員報酬的身分契約（有限 review）
 
@@ -215,7 +213,7 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 
 ## 9. 群組候選的身分契約
 
-狀態：R36 已有限 review。本節規範 `GroupDailyScore.details_json` 的候選產出到 decision candidate selection。外層 score 仍須通過既有的 active group、`data_quality="complete"`、至少 3 個 eligible members、非空 rank 與 `benchmark="TAIEX"` gate；`hot_group_v1` 公式、候選排序、top 4 上限、策略 pins 與其他 action buckets 不變。
+狀態：有限 review 通過。本節規範 `GroupDailyScore.details_json` 的候選產出到 decision candidate selection。外層 score 仍須通過 active group、`data_quality="complete"`、至少 3 個 eligible members、非空 rank 與 `benchmark="TAIEX"` gate；`hot_group_v1` 公式、候選排序、top 4 上限、策略 pins 與其他 action buckets 不變。
 
 ### 9.1 新產出與顯示投影
 
@@ -237,27 +235,27 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 
 ### 9.4 相容邊界與驗收
 
-- R36 當輪 API／UI 仍只輸出既有 `candidate_symbols`／`candidates` 字串欄位；R38 另完成 public typed source-day 投影，見 §9.6。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` 原 upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可由原 upsert 更新該 row，重新產出的 score 才帶新 marker。
+- 原 API／UI 只輸出 `candidate_symbols`／`candidates` 字串；public typed source-day 投影見 §9.6。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可更新該 row，重新產出的 score 才帶新 marker。
 - 最小驗收須走 actual producer→persisted score→decision：至少 5 個有效成員，top 4 只選中其中一個市場的同 symbol identity，另一個市場成員不得被額外展開；另涵蓋來源日歧義、後日退出／加入、正反插入順序、typed malformed／重複／identity conflict、legacy unique／ambiguous 與其他 action bucket 保留。
 - Decision helper 目前對每個 qualifying group 各做一次 identity／日期 projection，再合併候選；本批未驗大規模群組效能、actions cursor 遍歷或分頁，新 candidate unit suite 不能當成 pagination 驗收。
-- 2026-09-14 的有限 review 接受 producer、decision helper、新 focused suite 與既有 product／actions／producer targeted regressions；程式來源已 freeze。它不是 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
-- R37 已有限 review backfill／coverage 的 typed 相容，獨立納入語意見 §9.5；R38 的 public source-day 展示另見 §9.6。這些後續小批不回寫 R36 的 decision 驗收範圍，也不代表歷史資料、正式分類修復或策略有效性完成。
+- 有限 review 通過 producer、decision helper 與既有相關回歸；不涵蓋 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
+- Backfill／coverage 的納入語意見 §9.5；public source-day 展示見 §9.6。兩者不改寫 decision 驗收範圍，也不代表歷史資料、正式分類修復或策略有效性完成。
 
 ### 9.5 Backfill／coverage 的候選納入契約
 
-狀態：R37 已有限 review。本節只規範 `resolve_backfill_scope` 的 `candidates`／`priority` 候選來源，以及直接重用該 resolver 的 `/api/coverage?scope=candidates|priority`；它們建立資料回補／coverage 的 `(exchange, symbol)` **納入集合**，不是 decision candidate selection。不得套用 §9.2／9.3 的 group qualification、rank、membership、instrument type 或 ETF category 縮選，也不改 `hot_group_v1`、score 產出、Signal 或其他 priority bucket。
+狀態：有限 review 通過。本節只規範 `resolve_backfill_scope` 的 `candidates`／`priority` 候選來源，以及重用該 resolver 的 `/api/coverage?scope=candidates|priority`；它們建立資料回補／coverage 的 `(exchange, symbol)` **納入集合**，不是 decision candidate selection。不得套用 §9.2／9.3 的 group qualification、rank、membership、instrument type 或 ETF category 縮選，也不改 `hot_group_v1`、score 產出、Signal 或其他 priority bucket。
 
 - 只讀 `trading_date` 落在 caller 起訖日內的 `GroupDailyScore`；score date 只作範圍邊界，不表示 source availability／PIT。非 object 的 `details_json` 略過，不由其他欄位猜測。
 - 只要 `candidate_identity_version` 或 `candidate_instruments` 任一 typed 欄位存在，就進 strict typed envelope：marker 必須精確為 `instrument-id-v1`；typed／projection 都須為最多 4 列的 list；每列 `instrument_id` 必須是非 bool 且落在 SQLite signed 64-bit 可查詢範圍 `1..2^63-1` 的整數，exchange／symbol 必須是非空字串；ID 與 pair 各自唯一，`candidate_symbols` 必須等長、同序且逐列等於 typed symbol。任何 shape、marker、超界、重複或 projection 錯誤都拒絕該 score 的整份候選貢獻，不得 fallback 到 symbol。
 - 合法 typed envelope 要先把**全部 ID（包括目前 inactive）**對照同一 DB 的 Instrument，逐列證明 exact ID 對應 payload 的 exchange＋symbol；缺 ID 或 pair conflict 拒絕整個 score。完成整份核對後才逐 ID 套目前 active filter，保留仍 active 的 exact pair；inactive 不得改綁同 symbol 的另一列。這是 local DB identity 與目前可回補範圍，不是 score-date membership、歷史 instrument metadata 或 PIT 證明。
 - Legacy 僅限 marker 與 typed 欄位都不存在。`candidate_symbols` 保留既有 list＋`str(...).strip()` 相容，空字串略過、重複值去重；每個 symbol 納入所有目前 active 的同 symbol exchange 列。這種安全擴大只避免回補漏抓，不證明哪一列可供決策，也不得反向放寬 §9.3 的 legacy selection。
 - Signal 候選與 `priority` 的 portfolio／watchlist／event 等來源各自保留；某個 malformed typed group score 只移除該 score 的候選貢獻。既有 backfill run 已保存的 `metadata.target_instruments` 是 run snapshot，resume／force 不重新解析；修正只影響新建或實際重新 resolve 的範圍。
-- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver，因此會受本契約影響；R38 的 public typed source-day 展示是另一條讀取契約，不能反向改變本節的 collection inclusion 語意，見 §9.6。
-- 2026-09-15 的有限 review 接受 worker helper 與獨立測試：實際記憶體 ORM `flush`／`expire` readback 後，走 resolver → metadata plan → scoped adapter，並直接呼叫 coverage function 檢查真 report；涵蓋 typed 精確市場／雙市場／空列、inactive、不存在、signed 64-bit 邊界／超界或衝突 ID／pair、第二列失敗不洩漏第一列、malformed envelope、legacy coercion／重複／跨市場擴大、日期範圍、跨 score union、Signal／priority 獨立來源及不套 decision type/category。它不是 HTTP、完整 targeted backfill、磁碟持久化、全 backend、效能、正式 DB、非 SQLite、availability 或 PIT 驗收。
+- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver。Public typed source-day 展示是另一條讀取契約，不能改變本節的 collection inclusion 語意，見 §9.6。
+- 有限 review 涵蓋 resolver→metadata plan→scoped adapter 與 coverage report，包括 typed identity／signed 64-bit 邊界／整包拒絕、legacy 跨市場擴大、日期／跨 score union 及其他 priority 來源隔離；不涵蓋 HTTP、完整 targeted backfill、磁碟持久化、全 backend、效能、正式 DB、非 SQLite、availability 或 PIT。
 
 ### 9.6 Public candidate 的 source-day 身分展示契約
 
-狀態：R38 已有限 review。本節只規範既有 group score 在 public API 與族群詳情 UI 的來源日身分展示；它不是 §9.2 的 requested-as-of decision selection，也不是 §9.5 的 backfill／coverage inclusion。
+狀態：有限 review 通過。本節只規範既有 group score 在 public API 與族群詳情 UI 的來源日身分展示；它不是 §9.2 的 requested-as-of decision selection，也不是 §9.5 的 backfill／coverage inclusion。
 
 #### 9.6.1 Public representation 與 fail-closed
 
@@ -276,4 +274,4 @@ R17 只完成 current capture 驅動的 ETF 與 `new-listings` candidate lifecyc
 
 - 族群詳情只在 public marker、整份 typed shape、ID／pair 唯一及 ordered symbol 對齊都合法時建立 `/stocks/{exchange}/{symbol}`；文字顯示 exchange＋symbol，同 symbol 跨市場仍可分辨，React key 使用 identity 加序位。Legacy 或 malformed 只顯示文字，不查目前 member page，也不因 pagination 是否載完而改變連結。
 - 候選的「評分日期」讀 score `trading_date`；成員表的「成員資料截至」獨立讀 members response `meta.data_as_of`。不得用目前 members、不同日期或已載入的單一 member page 反推 score candidate identity。
-- 2026-09-15 的有限 review 接受 9 個 focused tests：記憶體 ORM commit／expire 與 JSON type assertion、所有 helper 與 in-process ASGI route 投影、inactive／後日退出、跨市場同 symbol、`2^53+1` 與 SQLite max ID、malformed／legacy、source membership／type-category、member pagination，以及 actual React SSR；另有 TypeScript no-emit 檢查。ASGI 使用實際 API router 與 memory DB dependency override；React SSR 的 query／router 與不相關 child 使用小型替身。沒有 socket、lifespan、真瀏覽器、full backend、正式 DB、效能、PIT 或歷史回算驗收。Instrument status／type／category 缺完整歷史版本，因此來源日核對仍不是 source-effective metadata truth。
+- 有限 review 涵蓋 ORM readback、API route 投影、inactive／後日退出、跨市場同 symbol、大整數 ID、malformed／legacy、source membership／type-category、pagination 與 React SSR；不涵蓋 socket、lifespan、真瀏覽器、full backend、正式 DB、效能、PIT 或歷史回算。Instrument status／type／category 缺完整歷史版本，因此來源日核對仍不是 source-effective metadata truth。

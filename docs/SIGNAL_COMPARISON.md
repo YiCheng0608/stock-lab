@@ -1,6 +1,6 @@
 # Signal comparison 離線唯讀契約
 
-更新：2026-09-14。`signal-comparison/v1` 的有限 library 已 review。Caller 必須明示兩個專案外、stable、rollback-mode SQLite snapshots，再以 exact legacy key 與 exact artifact selector 取得 detached、deterministic 的描述報告。它沒有 CLI、API、UI、worker 或預設 DB 接線，不建檔、backup、checkpoint、repair 或 migrate；`comparable=false` 固定不變。
+更新：2026-09-16。`signal-comparison/v1` 的有限 library 已 review。Caller 明示兩個專案外、stable、rollback-mode SQLite snapshots，再以 exact legacy key 與 exact artifact selector 取得 detached、deterministic 描述報告；`comparable=false` 固定不變。它沒有 CLI、API、UI、worker 或預設 DB 接線，也不建檔、backup、checkpoint、repair 或 migrate。
 
 Artifact identity、revision、lifecycle、attempt/run 與 writer 契約見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md)。
 
@@ -174,6 +174,4 @@ invalid_legacy_execution_price
 
 ## 7. Round32 驗收與未完成項
 
-有限 library 的 selectors、read-only protections、legacy validation、deterministic report、corruption與 diagnostics 已 review。`signal_artifact_store.py` 與 `signal_comparison.py` 當時的 frozen SHA、完整測試數、失敗史與 test-file pin 可查 `git show 69f62cf:docs/SIGNAL_COMPARISON.md`；這些是歷史 review receipt，不是 runtime pin。
-
-仍未完成：同一已證輸入上的 legacy/new paired replay、B5b availability／PIT、B3-wire、API／DecisionSummary／UI／worker 選版、B7 差異與採用 review、預設切換、策略有效性或 winner。`comparable=false` 不得因 subject／status 相等改寫。
+Selectors、read-only protections、legacy validation、deterministic report、corruption 與 diagnostics 已有限 review。仍未完成：同一已證輸入上的 legacy/new paired replay、availability／PIT、產品選版、B7 採用 review、預設切換與策略有效性；`comparable=false` 不得因 subject／status 相等改寫。

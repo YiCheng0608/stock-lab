@@ -1,6 +1,6 @@
 # 策略、交易計畫與 AI 驗證
 
-更新：2026-09-14。固定規則基準以 [V1_SPEC](V1_SPEC.md) 為準，能力與優先順序以 [ROADMAP](ROADMAP.md) 為準。現行產品只有 rule-only 信心語意的有限相容修正、未接入 worker 的 Wilder ATR 純核心，以及 read-time 規則參考價語意；新 trade plan、PIT 接線、預測模型與完整策略驗證仍未完成。
+更新：2026-09-16。固定規則基準見 [V1_SPEC](V1_SPEC.md)，能力與優先順序見 [ROADMAP](ROADMAP.md)。本文定義下一版研究、交易計畫、AI 與驗證方法；未具名驗收的項目仍待完成。
 
 ## 1. 現行能力與已知限制
 
@@ -10,15 +10,15 @@
 | --- | --- |
 | ATR | worker 仍以最近最多 14 根 high-low 平均。已 review、未接線的 `technical_v2_atr14_wilder` 納入 prev close、14 TR seed 與 Wilder recurrence，並要求 expected sessions、decision time、共同比價 basis 與公司行動 coverage／availability；它只驗 caller metadata 一致性，不證明來源 truth。 |
 | confidence | 新 rule-only signal 的 legacy 數值為 null；既有值保留。`signal-confidence/v2` 的 `not_calibrated`、legacy `v1-fixed` 的 `legacy_fixed_value` 與 `unknown_numeric` 都不是機率。只有策略名、version 1.0.0、值 0.75 同時符合時才辨識 legacy 固定值。 |
-| 規則價位 | 現行風險距離約為 `max(atr 或 entry×2%, entry×1%)`，目標為 `entry+1.6R`／`entry+3R`。只有兩個 v1 策略 1.0.0 可套固定規則標籤；其他 identity 為 unknown。合法數值不代表預測或成交。 |
-| 價位語意 | breakout price、pullback zone、reference entry、invalid、targets、持倉 average cost、使用者 stop 與 tracking execution price 分開。pullback `zone_width=max((atr or close×1%)×0.5, close×0.5%)`，下界為 `round(max(0.01, support-zone_width))`。legacy signal 缺可驗證 price basis 或含 offset 的 decision_at 時，語意為 null＋reason，不從 date-only 或 naive timestamp 猜測。 |
+| 規則價位 | 現行風險距離約為 `max(atr 或 entry×2%, entry×1%)`，目標為 `entry+1.6R`／`entry+3R`；只對兩個 v1 策略 1.0.0 使用固定規則標籤，其他 identity 為 unknown。合法數值不代表預測或成交。 |
+| 價位語意 | breakout、pullback、reference entry、invalid、targets、持倉成本、使用者 stop 與 tracking 成交價分開。pullback `zone_width=max((atr or close×1%)×0.5, close×0.5%)`，下界為 `round(max(0.01, support-zone_width))`。legacy signal 無可驗證 basis 或 offset-aware `decision_at` 時回傳 null＋reason。 |
 | 時間 | 訊號曾寫為 T 日 13:30，但部分必要輸入盤後才公開。市場日期、資料 availability／revision 與 decision time 必須分開；現有日期 cutoff 不證明 PIT。 |
 | 成本 | 買賣各 5 bps 不利滑價、30 bps round-trip 成本是固定模型假設，不是所有商品或交易的實際費率。`cost_included=false` 只表示 level 算式未扣成本。 |
 | 當沖／分點 | model 有部分預留欄位，主要收集與訊號流程未接齊。不得從空欄位或分點推論特定資金身分。 |
 
 ## 2. v1 保留與新版本邊界
 
-- `breakout_v1`、`pullback_v1`、`hot_group_v1` 保留作可重現基準；公式、IPO／ETF eligibility、缺值與 incomparable 規則見 V1_SPEC。
+- `breakout_v1`、`pullback_v1`、`hot_group_v1` 保留作可重現基準；公式、IPO／ETF eligibility、缺值與 incomparable 規則見 [V1_SPEC](V1_SPEC.md)。
 - 新的事件方向、題材、法人拆分、ATR、價位、成本、時間或特徵不得放進同名舊模型。每次變更都需可辨識版本、設定、輸入與結果；舊 run 不可被悄悄改寫。
 - hot-group 事件數不是利多強度。有效 membership 與群組相對強度仍是 v1 必要資料；完整熱門與事件脈絡不另加成個股策略硬 gate。
 - 主／替代條件、完整 observation、資料待補與持倉風險的合併以 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge) 為準。

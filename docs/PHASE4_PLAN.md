@@ -10,15 +10,7 @@ Phase 4 原本要把資料列整理為「結論 → 關鍵數字 → 證據／�
 
 ## 現行文件
 
-| 主題 | 現行文件 |
-| --- | --- |
-| 首頁、候選、持倉優先與同日合併 | [PRODUCT_SPEC](PRODUCT_SPEC.md) |
-| 行動狀態、中文、原因碼、完整度與單位 | [UI_COPY_SPEC](UI_COPY_SPEC.md) |
-| 個股圖表、價格 basis 與詳情層級 | [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md) |
-| 新聞 list/detail、時間、排序、URL 與 conflict | [NEWS_SPEC](NEWS_SPEC.md) |
-| 單位契約與有限 UX review | [UX_REVIEW](UX_REVIEW.md) |
-| Taxonomy 顯示與正式分類缺陷 | [INDUSTRY_CLASSIFICATION](INDUSTRY_CLASSIFICATION.md) |
-| 現況、API/UI 未完成項與排程 | [ROADMAP](ROADMAP.md)、[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md) |
+功能與操作契約由[文件索引](README.md)分工；狀態和驗收只看 [ROADMAP](ROADMAP.md)／[執行清單](ROADMAP_EXECUTION.md)。
 
 ## 仍未決事項
 
@@ -29,4 +21,4 @@ Phase 4 原本要把資料列整理為「結論 → 關鍵數字 → 證據／�
 
 ## Git 取閱
 
-原頁面欄位、卡片矩陣、單位範例、API proposal與逐輪驗收可用 `git show 69f62cf7b9e9003c3878952cc33636ed9a063865:docs/PHASE4_PLAN.md` 取閱；它們是歷史紀錄，不能覆蓋上述現行文件。
+原頁面欄位、卡片矩陣、單位範例、API proposal與逐輪驗收可用 `git show 69f62cf:docs/PHASE4_PLAN.md` 取閱；它們是歷史紀錄，不能覆蓋上述現行文件。

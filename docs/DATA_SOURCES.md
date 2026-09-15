@@ -10,21 +10,19 @@
 
 ## 正式 data/stock.db：歷史 P0 結果
 
-驗收日：2026-09-10。P0 市場窗口達標，但 global status 為 `partial`；下表是當時正式資料與稽核結果，不是目前 coverage snapshot。
+驗收日：2026-09-10。P0 市場窗口達標，但 global status 為 `partial`；下表是當時的有限 coverage，不是目前資料庫 snapshot。
 
 | P0 證據 | 結果 | 限制 |
 | --- | ---: | --- |
 | verified TAIEX sessions | 65，`target_met=true` | 可作 1／5／20 日比較和 60 日策略窗口的共同基準。 |
 | 明確 no-data／skipped | 2 | 不算有效交易日，也不補成行情。 |
-| bars | 149,770，含 65 筆 TAIEX | 不代表每個標的完整。 |
-| chips | 148,346 | 仍須逐標的、日期與欄位檢查。 |
-| 2330 | bars 65、chips 65、20／60 日 gaps=0 | 單一標的證據，不可外推全市場。 |
+| bars／chips | 149,770／148,346 | 須逐標的、日期與欄位檢查；單一標的完整不能外推全市場。 |
 | 行情未達 20／60 日 | 244／333 檔 | 相關標的與群組策略結果為 `data_incomplete`。 |
 | chips 未達 20／60 日 | 139／173 檔 | 不補 0；法人／融資 gate fail-closed。 |
 | events | 65 sessions 全為 `unsupported` | 表示來源不能按日驗 empty；catalyst 為 null，不是 0。 |
 | fundamentals | 65 sessions `partial` | 不是 v1 策略輸入，也不能稱完整。 |
 | corporate actions | 2 `success`、63 `partial` | 缺可追溯調整時，價位／tracking 為 incomparable 或 `data_incomplete`。 |
-| integrity／provenance | 正常 | 當時 DB integrity、FK、provenance 通過，且已有 pre-P0 backup。 |
+| integrity／provenance | 當時檢查正常 | 不代表目前 DB 狀態。 |
 
 Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是所有未來分析的日期限制。現行 `analyze` 仍受最新 collect run gate 約束，沒有 per-as-of CLI。背景見 [PHASE3_PLAN](PHASE3_PLAN.md)，聚合契約見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
 
@@ -45,7 +43,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | 停復牌 | TPEx [tpex_spendi_history](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) 已接可稽核 event；TWSE 完整歷史 coverage 尚不完整。 |
 | raw provenance | 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。 |
 
-Round09 只查證 `STOCK_DAY_ALL`、`holidaySchedule`、`TWT48U_ALL`、`tpex_spendi_history` 四個既有 GET endpoint。四者有免費與政府資料開放授權條款的證據，可分別評估 `local_fetch`、`raw_store`、`summarize`；官方頁未提供數字 rate limit、精確發布時鐘、逐筆 first availability、完整 revision／withdrawal lineage或 endpoint-specific deprecation，相關欄位保持 `unknown + reason`。`historical_pit` 對四者都 fail-closed／unsupported；一次 HTTP 200、今日 shape、fixture 或名稱含 `history` 都不能補足 PIT。
+`STOCK_DAY_ALL`、`holidaySchedule`、`TWT48U_ALL`、`tpex_spendi_history` 四個 exact GET endpoint 已有限准入；授權、用途 decision、capture 與 consumer 契約見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。四者的數字 rate limit、精確發布時鐘、逐筆 first availability、完整 revision／withdrawal lineage 與 endpoint-specific deprecation 仍未知，`historical_pit` 均 unsupported；HTTP 200、今日 shape 或名稱含 `history` 都不能補足 PIT。
 
 日常 UI 將官方「外資及陸資」合計欄位簡稱為「外資」，但 raw、來源與稽核層保留正式統計口徑；「三大法人」只指外資、投信與自營商，不能把廣義券商或分點另併為法人類別。
 
@@ -53,14 +51,7 @@ News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位
 
 ## 0–3 個月隔離收集驗證
 
-歷史隔離驗收範圍：2026-06-10 至 2026-09-08，official-only；結果為 `partial`。
-
-| 階段 | bars | chips | raw | 結論 |
-| --- | ---: | ---: | ---: | --- |
-| 首次收集 | 145,180 | 142,149 | 381 | 有官方資料品質 warning。 |
-| 相同 request 重跑 | 145,180 | 143,520 | 389 | 同一 run id；無 duplicate key、raw orphan、bar／chip orphan。 |
-
-這只證 TPEx 三個月 OHLCV、法人、融資、raw provenance 與冪等流程在隔離 DB 接通；不表示兩市場歷史完整，也不表示正式 DB 擁有相同 coverage。
+歷史隔離驗收範圍為 2026-06-10 至 2026-09-08、official-only，結果為 `partial`。有限證據只支持 TPEx 三個月 OHLCV、法人、融資、raw provenance 與相同 request 重跑不產生 duplicate／orphan；不表示兩市場歷史完整，也不表示正式 DB 擁有相同 coverage。
 
 ## v1 資料規則與歷史來源限制
 
@@ -74,9 +65,7 @@ News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位
 
 ## 資料庫安全
 
-程式 migration head 是 Alembic `0006_news_json_defaults`，另有相容 fallback markers；這只描述程式，不代表任一 DB 已升級。實際 DB revision、外部 preview 變化與具名 preservation 證據只在 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision) 維護，不能由本文件的 coverage 結論推論。
-
-API startup readiness 只查有限 marker 與 mapped identity，不做 migration、repair、row scan 或完整 integrity；`worker.cli init-db` 才是明確 schema mutation。正式升級仍須具名授權、consistent backup、隔離副本演練及 restore／deployment 驗收，操作順序見 [操作手冊](OPERATIONS.md#2-資料庫migration-與-readiness)。
+程式 migration head、實際 DB revision 與 preservation 證據由 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision) 維護，不能由 coverage 推論。API startup 只做有限唯讀 readiness；明確 schema mutation、backup、隔離演練與 restore／deployment 順序見 [操作手冊](OPERATIONS.md#2-資料庫migration-與-readiness)。
 
 ## 下一版資料需求與可得性
 

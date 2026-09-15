@@ -1,23 +1,23 @@
 # 開發路線與目前能力
 
-更新：2026-09-16。能力依截至 R39 的有限 review 整理；具名驗收以局部邊界解讀。R39 後、下一輪前另有一項獨立 UI 文案維護已通過有限 review；其文件 follow-up 只新增籌碼待做契約，不恢復或啟動 ROADMAP round。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-16。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（2026-09-16 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途；R39 已有限 review bridge A 的可證映射與缺口，沒有新增程式能力。R35–38 的四個 identity／candidate 小批亦已通過有限 review；歷史回算仍未完成。獨立 UI 維護已有限接受繁中文案、法人命名、空數值與表外單位，以及官方分點人工查詢入口；未新增分點資料、主力排名或幣別欄位。
+**R0–R3 均未整體完成。** 下表依截至 R39 及獨立 UI 維護的有限驗收整理；本次文件精簡不新增能力或恢復 ROADMAP。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture。 | 完整歷史輸入與 SignalArtifact bridge、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面。免費官方分點人工查詢入口不等於已接資料集。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope 與 public source-day 展示；個股研究頁與全站 UX 已有限 review，含繁中、法人欄、數值格與官方分點入口維護。 | 歷史 identity／PIT、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口。 | 歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
-個股籌碼後續規劃三大法人、主力進出與券商分點三區；目前只有法人資料與官方人工查詢入口，交易明細匯入、統計、排行／歷史、券商彙總及自動更新均待做。這不改變既有優先順序或驗收邊界，主契約見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
+**籌碼三區仍待做**：三大法人沿用已有資料；主力進出與券商分點的交易匯入、統計、排行／歷史及自動更新尚未完成。定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
 ### 接下來的順序
 
-1. **R0-B2 SignalArtifact bridge B 候選**：依已 review 的 A 結論，下一步核定 explicit stable current capture path／hash＋attempt／ordinal＋new research decision 到 candidate 的窄 adapter；candidate 與 caller save 分離，不接 consumer 或預設。詳見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
+1. **R0-B2 SignalArtifact bridge B 候選**：A 的映射／缺口已有限 review；下一步只核定 capture→candidate adapter，candidate 與 caller save 分離，不接 consumer 或預設。精確輸入與限制見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
 2. **R0 其餘接線與比較**：adapter review 後再接可證 source／availability、B3-wire、B5b，並按依賴完成 B4b 與 B7。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。
@@ -26,34 +26,23 @@
 
 | ID | 現況 | 剩餘驗收 |
 | --- | --- | --- |
-| R0-1 ATR | legacy `atr14` 仍為最近最多 14 根 high-low 平均；Wilder 純核心與 B3-persist 已有限 review，尚未接 worker。 | 官方 session／halt／公司行動／previous-close 與 availability 證據、B3-wire、PIT 及 paired replay。 |
-| R0-2 信心與保存輸入 | 新 rule-only confidence 為 null；legacy 0.75 不代表機率。四個 artifact／comparison／replay／capture 小批及 bridge A 缺口已有限 review。 | Capture→candidate adapter、可證完整歷史輸入／availability、產品接線、legacy-v2 paired output與明確選版；capture receipt 或 owner hash 不證來源 truth。 |
-| R0-3 價位 | B4a 已標示規則參考價；legacy 目標仍為 1.6R／3R，未換成完整交易計畫。 | B4b：tick 後價位順序、成本、gap、不追價、流動性、期限與不可比情況。 |
-| R0-4 時間 | legacy `data_cutoff` 的 T 日 13:30 不證資料當時可得；time-evidence foundation 與產品 read-time projection 分離。 | strict store／worker／產品關聯、`available_at <= decision_at`、live collected-at gate、修訂與 backfill 的 B5b。 |
-| R0-5 DB 邊界 | 程式 head 為 `0006_news_json_defaults`；有限 migration、canonical rebuild 與唯讀 startup gates 已 review。外部 preview 曾升級正式 DB，不算正式 migration 驗收。 | 正式 migration／restore／deployment、未支援 historical／custom schema 及服務 reload；startup 通過不代表任意 INSERT 或完整資料驗證。 |
+| R0-1 ATR | Wilder 純核心與保存層已有限 review；worker 仍用 legacy 算法。 | 官方輸入與可得時間、B3-wire、PIT 及新舊重播比較。 |
+| R0-2 信心與保存輸入 | 新固定規則 confidence 為 null；legacy 值不代表機率。保存、比較、replay、capture 及 bridge A 各有有限成果。 | Capture→candidate、完整歷史輸入、產品接線、新舊輸出與選版。 |
+| R0-3 價位 | 已標規則參考價，未換成完整交易計畫。 | B4b 的 tick、成本、gap、不追價、流動性、期限及不可比案例。 |
+| R0-4 時間 | 已有時間保存與顯示基礎，兩者尚未接通；截止時間不證資料當時可得。 | Store／worker／產品關聯、可得時間 gate、修訂與回補。 |
+| R0-5 DB 邊界 | 有限 migration、canonical rebuild 與唯讀 startup gates 已 review。 | 正式 migration／restore／deployment、未支援 schema 及服務 reload。 |
 
-完整規格由 [R0 實作](R0_IMPLEMENTATION.md)負責。後續修正不能沿用 v1 名稱改歷史語意；feature、strategy、execution、presentation 及資料版本須可辨識，預設切換另需 B7 與決策。
+算法、schema 與驗收限制由 [R0 實作](R0_IMPLEMENTATION.md)負責。修正須辨識 feature、strategy、execution、presentation 及資料版本，不沿用 v1 名稱改歷史語意；預設切換另需 B7 與決策。
 
 ## 已接受成果的查閱位置
 
-| 範圍 | 有限成果與主要邊界 | 契約 |
-| --- | --- | --- |
-| R03／10／11／27–31 | 隔離 migration／restore mechanics、News defaults、canonical instruments／settlements rebuild、readiness identity gates；不等於任意 schema 或正式部署。 | [R0](R0_IMPLEMENTATION.md) |
-| R02／04／06–08 | ATR 純核心、immutable provenance store、time-evidence 與 read-time projection；官方 truth／worker／PIT 仍待接。 | [R0](R0_IMPLEMENTATION.md) |
-| R12／32／33／34／39A | Immutable Signal artifact、描述比較、caller-input pure replay、owned DB actual worker capture，以及 capture→artifact 可證映射／缺口；adapter 尚未實作，也無共同歷史輸入、PIT 或 legacy-v2 paired replay。 | [保存與重播契約](README.md) |
-| R13／14＋獨立 UI 維護 | 個股 K 線／量／MA 與研究流程、單位／unknown／列表至詳情 UX；後續有限修正繁中、法人欄、空數值、未知幣別及官方分點入口。不是完整交易計畫、分點資料或績效驗證。 | [個股頁](STOCK_RESEARCH_PAGE.md)、[UX](UX_REVIEW.md) |
-| R15–17 | 分類 mapping、ordinary-industry 觀測期間、ETF／new-listing lifecycle；正式錯分類及歷史 PIT 未修復。 | [產業分類](INDUSTRY_CLASSIFICATION.md) |
-| R35–38 | Member-return identity、typed candidate producer／decision、backfill／coverage inclusion 與 public source-day display；四種語意分開，未回算歷史或證明 PIT。 | [產業分類 §8–9.6](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review) |
-| R09／18–20 | 四來源用途別 policy 與 standalone capture；consumer 只有 STOCK_DAY_ALL 單日 selected-security 與 holidaySchedule 單年度 positive exclusion。 | [來源 registry](SOURCE_REGISTRY.md) |
-| R21–26 | TPEx today code-only、history Serial／split-pair、公司行動 ratio／reference／cash precision；TWSE 既有 action 唯讀來源分類。不是第三個 capture consumer或舊資料修復。 | [來源 registry](SOURCE_REGISTRY.md) |
-
-R34 final targeted 為 52 passed；2,436-pass full suite 對應較早 capture guard，兩者不能互換。正式 DB 當輪 hash 不可得。其餘原始測試、失敗史、雜湊與命令由 Git `69f62cf` 的舊文件及原 task 追溯，不在路線圖重複累積，也不換算成產品完成百分比。
+具名工作狀態見[執行清單](ROADMAP_EXECUTION.md)，細節按[文件索引](README.md)查各契約。歷史測試數、命令與提交證據由 Git／原 task 追溯，不換算成產品完成百分比。
 
 ## R1–R3 驗收方向
 
-- **R1**：資料按 exchange／symbol／session／用途查 coverage，unknown 不補零；來源保存／摘要／PIT 分別准入。事件保留原文、首次／更正／撤回及可得時間，去重不丟來源；產業與題材分層且有版本。當沖與借券等逐欄驗單位／修訂；分點無可靠合法歷史即受限；基本面只補研究所需。
-- **R2**：公司品質、事件機會、交易位置、持倉風險分開；計畫涵蓋 trigger／fill、進場區間、不追價、失效、目標、期限、成本與流動性。可輸出不交易／到期／無法成交；同日 stop／target 無順序不可偏向有利結果，同股多策略／題材不重複占用曝險。
-- **R3**：先定 target、持有窗口、成本、split、校準與採用門檻，再比較固定技術＋題材＋新聞＋籌碼＋AI 的增量；walk-forward／OOS 與前瞻按當時 universe／membership／資料版本執行。LLM 摘要不等於策略增益；模型 cutoff 不明的歷史分析僅探索。樣本與市場狀態不足保持等待，未校準不給機率。
+- **R1**：逐市場、標的、日期與用途驗來源／coverage，unknown 不補零；完整條件見[資料來源](DATA_SOURCES.md)、[新聞](NEWS_SPEC.md)與[產業分類](INDUSTRY_CLASSIFICATION.md)。
+- **R2**：分開公司品質、事件機會、交易位置與持倉風險；交付可拒絕交易的完整計畫，見[產品規格](PRODUCT_SPEC.md)。
+- **R3**：先定目標與採用門檻，再驗增量、樣本外與前瞻；樣本不足保持等待，未校準不給機率，見[策略驗證](STRATEGIES.md)。
 
 ## 產品取捨與待決定事項
 

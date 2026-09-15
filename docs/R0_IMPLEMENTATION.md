@@ -1,6 +1,6 @@
 # R0 實作與驗收契約
 
-更新：2026-09-14。本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為唯一權威。任何小批「已 review」只代表本文件明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。歷史逐輪 log、hash 與 Temp 路徑可由 Git 基準 `69f62cf7b9e9003c3878952cc33636ed9a063865` 查閱。
+更新：2026-09-16。本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為準。「已 review」只代表明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。整理前的逐輪命令、測試數與檔案雜湊可由 Git 基準 `2acc3c5deff6fbf33ee104e2e28e3f16e8904a73` 追溯。
 
 ## 1. 狀態語意與使用規則
 
@@ -35,29 +35,18 @@
 | `signal_output_semantics_version` | rule-only confidence 與輸出 | gate 不變、只改欄位 nullability／解讀。 |
 | `presentation_contract_version` | 使用者可見標籤與 legacy 解讀 | 呈現語意改變；不反寫研究資料。 |
 
-## 3. 小批交付順序
+<a id="3-小批交付順序"></a>
 
-下表把歷史驗收濃縮為「記錄截止／有限接受範圍／仍未完成」；不同 run 的 pass counts 不相加，也不當成目前 checkout 的驗證。
+## 3. 有限能力導覽
 
-| 批次 | 記錄截止 | 有限接受範圍 | 仍未完成 |
-| --- | --- | --- | --- |
-| D-001 | 2026-09-11 | 文件契約 | 程式能力。 |
-| B1／C-001 | 2026-09-12 | 新 rule-only confidence=null、legacy 0.75 安全解讀、API/UI 非機率標示 | 雙版本 artifact、正式回寫、prediction calibration。 |
-| B3／C-002 | 2026-09-12 | `technical_v2_atr14_wilder` 純核心與 fail-closed 案例 | worker、來源 truth、持久化接線、paired replay。 |
-| B3-persist／C-004＋C-006 | 2026-09-12 | schema 1 local ATR store、strict caller-provided provenance、legacy＋兩 as-of 唯讀比較 | worker/API、official truth、PIT、B7。 |
-| B4a／C-005 | 2026-09-12 | legacy 規則參考價的 read-time API／UI semantics | B4b trade plan、tick/gap/cost/liquidity/PIT。 |
-| B5a／C007＋C008 | 2026-09-12 | `time-evidence/v1` local store與 `product-time/v1` read-time projection | store-product linkage、source truth、worker、B5b。 |
-| R0-A2／C010＋C011 | 2026-09-12 | synthetic recovery mechanics、News JSON defaults parity 與有限 SQLite atomic regression | 所有 historical schema parity、正式 restore／deployment、non-SQLite。 |
-| B6／C-003 | 2026-09-12 | 正式 DB 歷史唯讀狀態、外部 copy／fresh DB upgrade與 preservation | 正式 upgrade；forward-only restore 未實跑。 |
-| B2／C012 | 2026-09-12 | `signal-artifact/v1` local immutable store | legacy/new comparison、worker/API/UI/default、PIT、B7。 |
-| R0-A3／C027-B | 截至 2026-09-13 | API startup finite readonly readiness | 完整 schema/data audit、正式 migration／restore／deployment。 |
-| C028／C029 | 截至 2026-09-13 | instruments／settlements 的 finite canonical legacy SQLite rebuild、rollback、retry | 任意 legacy/custom schema、auto salvage、正式 migration。 |
-| R0-A6／C030-B | 截至 2026-09-13 | settlement startup UNIQUE descriptor gate | arbitrary INSERT、CHECK/trigger/dependency audit。 |
-| R0-A7／C031-B | 截至 2026-09-13 | instruments startup UNIQUE descriptor gate | complete writability、custom-schema repair。 |
-| B2／C032-B | 截至 2026-09-14 | two-snapshot offline exact descriptive comparison | replay、shared-input／PIT truth、產品接線。 |
-| B2／C033-B | 截至 2026-09-14 | caller-provided current pure-rule replay | historical inputs、subject/time、Signal reconstruction。 |
-| B2／C034-B | 截至 2026-09-14 | opt-in worker actual evaluator input/result capture | SignalArtifact bridge、official time/source、paired output。 |
-| B4b／B5b／B7 | 提案 | 契約見後文 | 實作與獨立 review。 |
+| 範圍 | 已 review 的能力 | 仍未完成／詳細契約 |
+| --- | --- | --- |
+| R0-1 | Wilder ATR 純核心、獨立 local store 與 strict caller-provided provenance／comparison | worker、official truth、PIT 與 paired replay；見 §4。 |
+| R0-2 | confidence 安全語意、local SignalArtifact、分離的 comparison／pure replay／worker capture | bridge、legacy-v2 paired output、產品接線與 B7；見 §5 及各保存／重播文件。 |
+| R0-3 | legacy 規則參考價的 read-time API／UI 語意 | 新 trade plan、tick／gap／cost／liquidity／PIT；見 §6。 |
+| R0-4 | local time-evidence store 與產品 read-time projection | store-product linkage、source truth、worker 與 B5b；見 §7。 |
+| R0-5 | 有限 SQLite migration／recovery、canonical rebuild 與 startup readiness gates | 任意歷史／custom schema、正式 migration／restore／deployment；見 §8。 |
+| B4b／B5b／B7 | 提案 | 實作與獨立 review。 |
 
 ## 4. R0-1：ATR 定義、公司行動與 warm-up
 
@@ -107,7 +96,7 @@ feature evidence 至少保存 price basis、完整 manifest/digest、factor sour
 
 ### 4.6 C-002 final review 證據與未完成邊界
 
-2026-09-12 的有限 review 接受 Wilder 數值、gap／previous-close precedence、artifact-wide action failure、suspension conflict、aware decision time及不逐根 rounding；也確認 legacy worker未切換。未完成：官方 source truth、versioned persistence接線、worker/API、完整 replay／B7與瀏覽器驗收。這個歷史 review 不等於目前 full suite已重跑。
+有限 review 接受 Wilder 數值、gap／previous-close precedence、artifact-wide action failure、suspension conflict、aware decision time及不逐根 rounding；legacy worker 未切換。官方 source truth、versioned persistence 接線、worker／API、完整 replay／B7與瀏覽器驗收仍未完成。
 
 ### 4.7 B3 持久化最小契約
 
@@ -121,7 +110,7 @@ reader 使用 exact selectors，沒有 implicit latest／`<=as_of`。若 artifac
 
 ### 4.8 C-004 final review 證據與未完成邊界
 
-2026-09-12 的有限 review 接受 schema/version ownership、aware UTC canonicalization、single-artifact atomic save、immutable rows、retry/collision、two-connection同 identity、exact reader與 legacy DB隔離。C-004 當時缺 strict provenance及 legacy＋兩 as-of比較，後由 C-006補齊；worker/API、來源truth、PIT與B7仍未完成。
+有限 review 接受 schema/version ownership、aware UTC canonicalization、single-artifact atomic save、immutable rows、retry/collision、two-connection 同 identity、exact reader 與 legacy DB 隔離。Strict provenance 及 legacy＋兩 as-of 比較由 C-006 補齊；worker／API、來源 truth、PIT 與 B7 仍未完成。
 
 ### 4.9 C-006 provenance／compatibility final review 與完成邊界
 
@@ -150,7 +139,7 @@ legacy strategy allowlist＋version `1.0.0`＋實值0.75才可輸出 `legacy_fix
 
 ### 5.2 C-001 實際相容行為與驗證
 
-C-001 已在 domain、writer、API與frontend建立上述三種 canonical semantics；不信任 evidence自報 probability marker。它沒有 migration、沒有改策略 gate／價位／execution，也沒有批次洗掉歷史0.75。2026-09-12 有限 review接受 backend行為及新增前端語意；當時完整前端仍有一個與本改動無關的既存 presentation assertion failure，不能標整套通過。該過時期待後由C-002只改test修正，不回寫C-001當時的驗收結果。
+C-001 已在 domain、writer、API 與 frontend 建立上述三種 canonical semantics；不信任 evidence 自報 probability marker。它沒有 migration、策略 gate／價位／execution 變更或歷史 0.75 回填。有限 review 接受 backend 行為與前端語意，但不代表預測已校準。
 
 ### 5.3 B2：完整雙版本 artifact 與 replay
 
@@ -158,7 +147,7 @@ B2 要求 legacy與new使用不同 version key／namespace／artifact，不得�
 
 完整驗收仍要求同 instrument＋date可同時查舊、新artifact或用完整舊輸入重放；legacy row/hash與0.75不變；new confidence=null；輸入相同時，除列明的output-semantics差異外，rule status、levels、quality一致。還須覆蓋 writer/replay、API list/detail/action、DecisionSummary、frontend與明確default policy。
 
-C032只比較caller-selected snapshots，C033只重放caller-provided current pure rule，C034只捕捉actual legacy evaluator輸入／結果。三者都沒有證明 shared historical inputs、source/time/PIT或legacy-v2 paired output。
+C032 comparison、C033 pure replay 與 C034 worker capture 是三個分離能力；它們都沒有證明 shared historical inputs、source/time/PIT 或 legacy-v2 paired output。
 
 ### 5.4 B2 持久化最小契約
 
@@ -168,27 +157,19 @@ C032只比較caller-selected snapshots，C033只重放caller-provided current pu
 
 ### 5.5 Round12 C012 final review 證據與未完成邊界
 
-C012 的 `signal-artifact/v1` local store已有限 review：contract omission/null會補v1，未知non-null拒絕；lineage由research core導出，identity另含positive revision；root active、唯一next revision withdrawn＋supersedes；atomic save、version binding、attempt/run relation、exact／filtered reader與ownership/integrity fail-closed成立。價位只有caller放入 `rule_evidence`才保存。
-
-未完成：SignalArtifact與worker/source/time bridge、legacy-v2 paired replay、API list/detail/action、DecisionSummary、frontend/default、official availability/PIT與B7。當輪保護結果是40／41 unchanged；唯一 `.local` DB差異來自另一個已授權preview task，不是C012成果，不能改稱全部不變。
+`signal-artifact/v1` local store 的 canonical shape、immutable lineage／revision、atomic save、version binding、attempt/run relation、exact／filtered reader與 ownership／integrity fail-closed 已有限 review；完整規格與未完成邊界由 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md) 負責。
 
 ### 5.6 Round32 C032-B offline exact comparison（有限 review）
 
-`compare_signals`要求兩個 caller-provided external rollback-mode SQLite files、各自expected SHA-256、opaque exact legacy key與conjunctive exact artifact selector。兩側在open前檢查path/hash/sidecars/WAL header，read-only factory使用 `mode=ro`、`query_only`、deny-write authorizer、read transaction與前後fingerprint；不checkpoint、不用writer constructor。
-
-report固定 `signal-comparison/v1`、`comparable=false`。subject/status/linkage只作lexical observation；confidence、prices、evidence、quality、time、revision與inputs保持incomparable。zero row是structured missing；duplicate、schema/ownership/integrity或cross-identity mismatch hard fail。本批不接CLI/API/UI/worker/default，也不做replay、PIT或truth驗證。
+`signal-comparison/v1` 只對兩個 caller-provided stable snapshots 作 exact、唯讀、描述性比較；`comparable=false` 固定，不能升格為 replay、PIT 或 truth 驗證。Selector、snapshot guard、report 與錯誤契約見 [SIGNAL_COMPARISON](SIGNAL_COMPARISON.md)。
 
 ### 5.7 Round33 C033-B caller-provided current pure-rule replay（有限 review）
 
-public API為 `capture_rule_inputs`、`rule_replay_json`、`replay_rule_inputs`，只支援 `breakout_v1@1.0.0`／`pullback_v1@1.0.0`。bundle保存完整 admitted arguments、ordered histories、explicit null、config、recorded `RuleEvaluation`，以 `arguments_digest`綁 evaluator＋arguments、`bundle_digest`綁 implementation/config/arguments/result claim。
-
-binding固定完整 `domain.py` bytes、兩個config digests、CPython 3.12.14與binary64；每次 bounded-read/hash、compile/exec fresh private module並做identity-guarded cleanup。native JSON限制為raw/canonical各1MiB、depth16、history10000、integer±(2^53−1)、finite float，duplicate key/cycle/surrogate/nonfinite拒絕。report只比較 passed/state/ordered reasons，subject/time/historical/availability/PIT/signal reconstructed均false。本批不改 evaluator、schema、store、worker、API/UI/default或DB。
+`rule-replay-bundle/v1` 只保存 caller-provided current arguments，並以固定 evaluator source／config／runtime 重算結果；它沒有 historical inputs、subject/time、availability、PIT 或 Signal reconstruction。完整 API、binding、限制與錯誤見 [RULE_REPLAY](RULE_REPLAY.md)。
 
 ### 5.8 Round34 C034-B opt-in worker evaluation capture（有限 review）
 
-`backend/worker/analysis_capture.py`與 `_analyze_session(db, capture=None)`可由caller明確opt-in，以external stable rollback-mode source snapshot＋expected hash建立owned research DB；同一transaction保存actual evaluator kwargs/result、subject/date/strategy、legacy Signal snapshot、R33 private bundle與sealed receipt。同ID只strict readback，new ID才建立新attempt與驗external paths/readiness。
-
-default `analyze()`不捕捉。`observed_market_date`／`captured_at`不證decision、availability或PIT；legacy Signal不是SignalArtifact／prediction；上游group-member detail與lookup仍只按symbol，雙exchange同symbol測試不證group-excess provenance已exchange-aware。未完成範圍以 [WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md) 為準。
+Opt-in worker capture 在 owned research DB 的同一 transaction 保存 actual evaluator arguments／result、subject/date/strategy、legacy Signal snapshot、private replay bundle 與 sealed receipt；default `analyze()`不捕捉。Capture 不是 SignalArtifact，`observed_market_date`／`captured_at`也不證 decision、availability 或 PIT；完整契約見 [WORKER_ANALYSIS_CAPTURE](WORKER_ANALYSIS_CAPTURE.md)。
 
 ## 6. R0-3：規則參考價與新交易計畫
 
@@ -210,7 +191,7 @@ v1 replay公式保持：`risk=max(atr if truthy else entry×0.02, entry×0.01)`�
 
 `PortfolioPosition.average_cost`／user stop、規則levels、tracking `execution_price`與cost assumptions必須分開；沒有execution origin時不能稱券商真實成交。full/compact signal、actions、stock、tracking與DecisionSummary使用同一 helper；top-level沒有唯一selected strategy/version時整組semantics fail-closed。
 
-2026-09-12 有限 review接受跨API/UI入口標籤、known/unknown identity、數值不變、position stop origin分離與無migration/worker改動。它不驗tick、gap、cost sufficiency、liquidity、PIT或新trade-plan lifecycle。
+有限 review 接受跨 API／UI 入口標籤、known／unknown identity、數值不變、position stop origin 分離與無 migration／worker 改動；tick、gap、cost sufficiency、liquidity、PIT 與新 trade-plan lifecycle 未驗。
 
 ### 6.2 新交易計畫的隔離邊界
 
@@ -226,7 +207,7 @@ B4b必須使用新trade-plan／execution version，至少保存trigger/confirm�
 
 `TimeEvidenceStore(explicit_path)`是opt-in schema1 store，拒絕正式／`.local`、既存empty/foreign DB。每lineage只一root；revision append＋same-lineage supersedes，舊row immutable。相同identity/payload冪等，不同snapshot/payload collision。exact readers/history無latest fallback；`export_json` atomic no-clobber並拒絕既存、active store或protected target。`legacy_safe`只安全投影合法signal_date，不升格 data_cutoff/created_at/earliest_execution_date。
 
-2026-09-12 有限 review只接受caller-provided local contract/store/export；不接News/API/worker/UI，不證official availability或B5b PIT。產品read-time缺口後由C008補，但store linkage仍未完成。
+有限 review 只接受 caller-provided local contract／store／export；不接 News／API／worker／UI，不證 official availability 或 B5b PIT。產品 read-time projection 由 C008 提供，store linkage 仍未完成。
 
 ### 7.2 Round08 C008／B5a 產品 read-time projection（有限 review）
 
@@ -234,7 +215,7 @@ B4b必須使用新trade-plan／execution version，至少保存trigger/confirm�
 
 legacy signal_date/data_cutoff/earliest_execution_date/naive created_at保留但不升格decision、availability、generated或execution instant。response time獨立；News collected不等於first available；action ingestion-run finished不等於data collected；已有product contract而role unknown時，frontend不得fallback舊日期。
 
-2026-09-12 有限 review接受API/UI相容projection、跨入口一致性與legacy欄位不變；不接C007 store或worker、不保存新time、不證source truth，也未執行B5b。
+有限 review 接受 API／UI 相容 projection、跨入口一致性與 legacy 欄位不變；不接 C007 store 或 worker、不保存新 time、不證 source truth，也未執行 B5b。
 
 point-in-time gate仍未完成：每個必要版本須 `available_at<=decision_at`，live run另須 `collected_at<=decision_at`；revision只有 `revision_available_at<=decision_at`可用。unknown availability預設排除或依預先版本化保守延遲，不得只看market_date。`earliest_execution_at`不得早於decision與所有availability，且須落下一合法交易時段。驗收必須覆蓋盤後資料、T+2 revision、backfill-only collected time、offset/date-only及legacy相容輸出。
 
@@ -257,23 +238,23 @@ point-in-time gate仍未完成：每個必要版本須 `available_at<=decision_a
 
 ### 8.2 C-003 final review 證據與限制
 
-2026-09-12 的C003/B6只改migration tests。當時正式DB唯讀確認沒有 `alembic_version`、有五枚fallback markers且未upgrade；外部consistent copy與fresh DB以真Alembic到當時head 0005，copy的20個既有tables／622,399 rows與共同欄位內容保留，API smoke通過。production migrations未改，forward-only restore未實跑。dynamic 0001依current `Base.metadata`建表，未凍結歷史schema，後續migration仍須同時測pre-head copy與fresh DB。
+C003／B6 只新增 migration tests。當時正式 DB 唯讀確認沒有 `alembic_version`、只有五枚 fallback markers且未 upgrade；外部 consistent copy 與 fresh DB 曾以真 Alembic 升到當時 head 0005，受測 schema／row fingerprints 保留且 API smoke 通過。未改 migration 程式；forward-only restore 當時未實跑。Dynamic 0001 依 current `Base.metadata` 建表，未凍結歷史 schema，後續仍須同時測 pre-head copy 與 fresh DB。
 
 ### 8.3 Round10 C010 migration／restore regression assets（有限 review；R0-A2 未結清）
 
 C010新增固定六表synthetic 0004 slice的自動upgrade/recovery回歸：真Alembic到0005，驗schema/rows/PK/FK/UNIQUE/index/integrity；SQLite backup→故障copy→偵測→restore到新path；second upgrade冪等。它不是完整historical/production schema或正式restore。
 
-該輪發現dynamic fresh metadata的 `news_items.symbols_json`／`theme_ids_json` 缺SQL `[]` server defaults，與0004→0005不同；因此R0-A2未結清。這兩欄後由C011有限修正，但不反向改寫C010歷史，也不代表所有schema parity完成。
+`news_items.symbols_json`／`theme_ids_json` 的 SQL `[]` server-default parity 後由 C011 有限修正；所有 historical schema parity 仍未完成。
 
 ### 8.4 Round11 C011：JSON server-default parity 與 atomic migration 回歸（有限 review）
 
 C011新增 `0006_news_json_defaults`與fallback第六marker，使ORM fresh、old005→0006、explicit 0004→0005→0006兩欄均有SQL `[]` default；raw omission可得空array。SQLite repair可保存受測extra index、owned trigger、string default與self-FK；遇inbound FK、view、external trigger、AUTOINCREMENT、generated column、unknown non-null default等shape時在mutation前fail-closed。非SQLite未驗。
 
-Alembic runner建立explicit transaction；active external Connection在mutation前拒絕。failure matrix只對fresh／old005涵蓋Alembic engine、external Connection、fallback、FK0/1與marker前後fault；explicit0004只有success path，不能擴寫成全fault cross-product。success idempotency比較schema/research rows/version set；fallback operational `applied_at`可更新。2026-09-12有限review不含正式DB upgrade/restore/deployment，完整historical parity仍未完成。
+Alembic runner建立explicit transaction；active external Connection在mutation前拒絕。failure matrix只對fresh／old005涵蓋Alembic engine、external Connection、fallback、FK0/1與marker前後fault；explicit0004只有success path，不能擴寫成全fault cross-product。success idempotency比較schema/research rows/version set；fallback operational `applied_at`可更新。有限 review 不含正式 DB upgrade／restore／deployment，完整 historical parity 仍未完成。
 
 ### 8.5 2026-09-13 外部 preview startup 後的正式 DB 現況（非 R26 migration 驗收）
 
-另一個使用者preview task的舊lifespan log顯示對正式DB執行base→0001→…→0006。後續只讀確認 current=`0006_news_json_defaults`、21 tables；current file 296,366,080 bytes、SHA-256 `3a21772050b3053557c0798876cc0aa1efe024fcbdce5ab44e35e6abf12da018`。這項外部變化不是R26或本文件接受的正式migration／repair／restore；也不證完整preservation、資料truth或PIT。
+另一個 preview task 的舊 lifespan 對正式 DB 執行 base→0001→…→0006；後續唯讀觀察為 current=`0006_news_json_defaults`、21 tables。這項外部變化不是本文件接受的正式 migration／repair／restore，也不證完整 preservation、資料 truth 或 PIT。
 
 ### 8.6 Round27 API startup readiness（有限 review）
 

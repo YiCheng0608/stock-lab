@@ -10,16 +10,7 @@ Phase 3 原本要在有限、可稽核的官方資料中，建立用途別 cover
 
 ## 現行文件
 
-| 主題 | 現行文件 |
-| --- | --- |
-| 產品範圍、候選與行動合併 | [PRODUCT_SPEC](PRODUCT_SPEC.md) |
-| v1 公式、eligibility、hot-group、tracking | [V1_SPEC](V1_SPEC.md) |
-| Coverage、日期範圍與已驗結果 | [DATA_SOURCES](DATA_SOURCES.md) |
-| 收集、重試、DB 與執行安全 | [OPERATIONS](OPERATIONS.md) |
-| Taxonomy 與 membership | [INDUSTRY_CLASSIFICATION](INDUSTRY_CLASSIFICATION.md) |
-| 新聞來源、時間、去重與 AI 覆核 | [NEWS_SPEC](NEWS_SPEC.md) |
-| 中文、完整度、空狀態與原因碼 | [UI_COPY_SPEC](UI_COPY_SPEC.md) |
-| 現況、未完成項與排程 | [ROADMAP](ROADMAP.md)、[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md) |
+功能與操作契約由[文件索引](README.md)分工；狀態和驗收只看 [ROADMAP](ROADMAP.md)／[執行清單](ROADMAP_EXECUTION.md)。
 
 ## 仍未決事項
 
@@ -30,4 +21,4 @@ Phase 3 原本要在有限、可稽核的官方資料中，建立用途別 cover
 
 ## Git 取閱
 
-原 P0/P1 順序、coverage 數字、批次／retry 設計、驗收矩陣與逐輪證據可用 `git show 69f62cf7b9e9003c3878952cc33636ed9a063865:docs/PHASE3_PLAN.md` 取閱；它們是歷史紀錄，不能覆蓋上述現行文件。
+原 P0/P1 順序、coverage 數字、批次／retry 設計、驗收矩陣與逐輪證據可用 `git show 69f62cf:docs/PHASE3_PLAN.md` 取閱；它們是歷史紀錄，不能覆蓋上述現行文件。
