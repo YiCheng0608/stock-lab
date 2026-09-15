@@ -1,6 +1,6 @@
-# Round14 全站前端 UX review（已 review）
+# 全站前端 UX 契約與有限 review
 
-更新：2026-09-14。這是 Round14 前端資訊架構、文案、單位換算與互動的有限 review，不是整站資料、後端、DB 或 ROADMAP 完成聲明。未新增 API `units`、來源、付費服務或策略能力。
+更新：2026-09-15。Round14 前端資訊架構、文案、單位換算與互動，以及 2026-09-15 的獨立 UI 文案維護均已通過各自有限 review。本文不是整站資料、後端、DB 或 ROADMAP 完成聲明，亦未新增 API `units`、來源、付費服務或策略能力。
 
 ## 1. 逐頁問題、改法與待驗
 
@@ -28,15 +28,16 @@
 
 ## 3. 單位契約
 
-格式最多 3 位小數並移除尾端零；顯示換算不改 API、儲存值或研究計算。
+格式最多 3 位小數並移除尾端零；顯示換算不改 API、儲存值或研究計算。單位在表題、副標或緊鄰說明統一標示，數值格只顯示數字並保留正負號。null、非有限值或無法安全換算的值留空，表外說明「空白表示來源未提供」或精確原因；合法 0 仍顯示為 0。
 
 | 資料 | 顯示 | Fail closed |
 | --- | --- | --- |
+| 價格／均線／平均成本 | 表外寫「各標的報價幣別的元」；指數另標「點」。 | API 無 currency 時不得一律加 `NT$` 或猜測幣別。 |
 | TWSE／TPEx 日成交股數 | `原值 / 1,000`，單位「張」，不得為負。 | null、非有限、負值或來源不明時不造 0。 |
-| 外陸資／投信／自營商買賣超股數 | `原值 / 1,000`，單位「張」，保留正負號。 | null、unknown／mixed source 不換算。 |
+| 外資／投信／自營商買賣超股數 | `原值 / 1,000`；表外統一標示單位「張」，保留正負號。外資為官方外資及陸資合計欄位的日常簡稱。 | null、unknown／mixed source 不換算，數值格留空。 |
 | TWSE 融資增減 | 已核實官方欄位在台股 UI 以「張」顯示。 | 無法確認來源時不沿用。 |
 | TPEx 融資餘額差 | 單位「張」，保留正負號。 | null 或來源未知不補值。 |
-| unknown／mixed | 「單位待核實」；raw 若可見須標未換算。 | 不由交易所、symbol 或鄰近欄位猜單位。 |
+| unknown／mixed | 表外顯示「單位待核實」；raw 若可見須標未換算，數值格留空。 | 不由交易所、symbol 或鄰近欄位猜單位。 |
 
 持倉的 canonical quantity 是精確整數股；250、1,000、1,250 股分別顯示「250 股（零股）」「1 張」「1 張 250 股」，平均成本仍為每股。完整文案見 [UI_COPY_SPEC](UI_COPY_SPEC.md#103-張零股)。
 
@@ -44,14 +45,22 @@
 
 | 情境 | 必須顯示 | 禁止 |
 | --- | --- | --- |
-| null、無來源、缺 bar／chip 或 role unknown | 具體缺項與原因，其他區塊照常顯示。 | 補 0、日期、來源或成功狀態。 |
+| null、無來源、缺 bar／chip 或 role unknown | 數值表格的格子留空並在表外列具體原因；其他區塊照常顯示。 | 補 0、日期、來源、成功狀態、`N/A`、破折號、英文 placeholder 或示範數字。 |
 | naive datetime | 「待核實（時間格式未確認）」 | 猜 UTC、台北或發布時間。 |
 | 數量來源／單位 unknown 或 mixed | 「單位待核實」 | 除以 1,000 或套用鄰近單位。 |
 | endpoint 本來沒有 action 欄位 | 不顯示 action；必要時「此列表未評估」。 | 「尚無研究動作」或「策略判斷資料待補」。 |
 | 日期／metric 讀錯路徑 | 讀 `meta.data_as_of`；顯示「1 日／5 日相對 TAIEX」。 | 把既有日期顯示成破折號或露出匿名 key。 |
 
-## 5. Final review 證據與限制
+## 5. Round14 final review 證據與限制
 
 2026-09-13 統籌對穩定 source snapshot 完成前端 self-test、獨立資料檢查、TypeScript typecheck、production build，以及桌面與 320／390／768px 的具名 browser 流程；新聞分頁、研究 tab、個股 K 線／張數／籌碼 raw、族群「（既有分類）」警示、空行情和中文 ErrorBox 均在有限範圍通過。輪末 frontend／docs 索引 receipt 已接受。原測試次數、viewport 數值、hash 與命令可查 `git show 69f62cf:docs/UX_REVIEW.md`。
 
 此 review 只涵蓋 Round14 前端。正式產業 membership、正式 migration、持倉實寫與整站資料正確性仍未驗；一次 coverage API 程序異常退出的原因未確定，後續單次 in-process／HTTP 200 只表示未重現，不證明瀏覽器、併發或長時穩定。索引成功也不是功能驗收。
+
+## 6. 2026-09-15 獨立 UI 文案維護（已有限 review）
+
+本次維護已有限接受日常頁的正確繁中、ETF 與族群代碼中文顯示、數值格空白規則，以及「外資／投信／自營商」欄名；來源層仍保留外資及陸資合計的正式口徑。個股籌碼另提供上市／上櫃對應的官方券商分點查詢入口，沒有整合資料時明說尚未提供，不造主力排行。
+
+6 份記憶體前端測試與 final `npm run build` 均以 exit 0 通過；統籌另以不進 app lifespan 的 query-only／GET-only 唯讀 API 讀既有 2026-06-08～2026-09-08 資料做 browser review。有限案例涵蓋法人股數換算為張、融資值不重複除以 1,000、合法 0 保留、樣本不足的 MA60 留空、ETF／族群中文、未知幣別不猜新臺幣、TAIEX／close 對應「加權指數／收盤價」、中文新聞列表及兩市場官方分點入口。
+
+這是既有資料的唯讀 UI 案例，不是全市場資料正確性或 PIT 證明。正式分點資料集、歷史 coverage、主力身分／排名、完整無障礙矩陣、full backend、一般 API startup、正式 DB／部署與 ROADMAP round 均不在本維護範圍；未執行 migration。Production build 仍有既有大型 JavaScript chunk 警告，未阻擋本次有限驗收。

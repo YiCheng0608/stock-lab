@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-更新：2026-09-14。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+更新：2026-09-15。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 資料庫政策
 
@@ -36,14 +36,17 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx universe | [issuer master](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) 加 [ETF allowlist](https://info.tpex.org.tw/api/etfFilter) POST；混合 quote 的權證、CB、ETN、興櫃不 fallback 成 stock。 |
 | TWSE OHLCV | 當日 [STOCK_DAY_ALL](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；bounded history 為 [MI_INDEX](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)，依 allowlist 過濾。 |
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
-| TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。 |
-| TPEx chips | 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。 |
+| TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
+| TPEx chips | 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 |
+| 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
 | TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
 | MOPS／公司行動 | 重大訊息、基本面 snapshot 與 corporate actions；完整來源與 PIT 仍有限制。 |
 | 停復牌 | TPEx [tpex_spendi_history](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) 已接可稽核 event；TWSE 完整歷史 coverage 尚不完整。 |
 | raw provenance | 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。 |
 
 Round09 只查證 `STOCK_DAY_ALL`、`holidaySchedule`、`TWT48U_ALL`、`tpex_spendi_history` 四個既有 GET endpoint。四者有免費與政府資料開放授權條款的證據，可分別評估 `local_fetch`、`raw_store`、`summarize`；官方頁未提供數字 rate limit、精確發布時鐘、逐筆 first availability、完整 revision／withdrawal lineage或 endpoint-specific deprecation，相關欄位保持 `unknown + reason`。`historical_pit` 對四者都 fail-closed／unsupported；一次 HTTP 200、今日 shape、fixture 或名稱含 `history` 都不能補足 PIT。
+
+日常 UI 將官方「外資及陸資」合計欄位簡稱為「外資」，但 raw、來源與稽核層保留正式統計口徑；「三大法人」只指外資、投信與自營商，不能把廣義券商或分點另併為法人類別。
 
 News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信。worker 尚未接完整媒體、國際新聞或分點資料；`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有主要寫入路徑不能據此聲稱已收集。詳見 [NEWS_SPEC](NEWS_SPEC.md)。
 
@@ -83,13 +86,13 @@ API startup readiness 只查有限 marker 與 mapped identity，不做 migration
 | 行情、TAIEX、公司行動、停牌 | 價格特徵、執行與回測 | 交易日、標的、調整基礎、原始／修訂版本、停復牌與缺口。 |
 | 分類法人 | 資金持續性與分歧 | 投資人別、買賣淨額單位與官方定義。 |
 | 現股當沖 | 短線活躍度 | 股數／金額口徑、首次公布與 T+1／T+2 修訂。 |
-| 券商／分點 | 集中度與反轉特徵 | 通道、量價、歷史範圍、權限與費用；不能識別投資人。 |
+| 券商／分點 | 集中度與反轉特徵 | 官方網站可免費逐檔人工查詢，但需驗證碼，TPEx 頁面只提供當日；仍須確認可機器使用的合法來源、量價、歷史範圍、權限與費用，且不能識別投資人。 |
 | 融券／借券／持股 | 籌碼風險 | 定義、更新頻率、可得時間與市場範圍。 |
 | 財報／營收／公告 | 公司品質與事件 | 會計期間、實際公告時間及更正版本。 |
 | 宏觀、媒體、國際事件 | 題材與新資訊 | 原文、使用條件、發布／可得時間、去重與影響證據。 |
 | 題材 membership | 跨產業研究 | 多重歸屬、證據、相關程度、生效／失效時間與版本。 |
 
-分點是通道彙總，不能由名稱推定資金國籍、同一投資人或隔日沖意圖；當沖統計可能到 T+2 修訂，資料設計須保留當時版本。[TWSE 說明](https://bsr.twse.com.tw/bshtm/bsMenu.aspx)；[TPEx 說明](https://www.tpex.org.tw/storage/zh-tw/web/stock/trading/intraday_stat/intraday_trading_statY.htm)。
+分點是自營或受託交易通道彙總，不能由名稱推定資金國籍、同一投資人、所謂「主力」或隔日沖意圖。2026-09-15 的官方頁查證只支持免費人工查詢入口，不支持已取得可整合 API、歷史資料集或 coverage；因此 UI 可連往 TWSE／TPEx 查詢頁，不能顯示虛構分點數值或主力排行。當沖統計可能到 T+2 修訂，資料設計仍須保留當時版本；原資料定義見 [TPEx 當沖說明](https://www.tpex.org.tw/storage/zh-tw/web/stock/trading/intraday_stat/intraday_trading_statY.htm)。
 
 ## 時間、版本與研究窗口（目標契約）
 

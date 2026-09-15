@@ -2,6 +2,24 @@ export type ShareUnit = 'lot' | 'odd_lot'
 
 export const LOT_SIZE = 1000
 
+/** Table cells contain values only; their caller describes units outside the table. */
+export function formatTableNumber(value: unknown, digits = 3, signed = false): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ''
+  const number = value.toLocaleString('zh-TW', { maximumFractionDigits: digits })
+  return signed && value > 0 ? `+${number}` : number
+}
+
+export function formatTableVolume(shares: number | null | undefined, source: string | null | undefined): string {
+  if (!isVerifiedShareSource(source) || (typeof shares === 'number' && shares < 0)) return ''
+  return formatTableNumber(typeof shares === 'number' ? shares / LOT_SIZE : shares)
+}
+
+export function formatTableChip(value: number | null | undefined, source: string | null | undefined, margin = false): string {
+  if (!(margin ? isVerifiedMarginSource(source) : isVerifiedChipFlowSource(source))) return ''
+  const normalized = typeof value === 'number' && !margin && isVerifiedChipFlowSource(source) ? value / LOT_SIZE : value
+  return formatTableNumber(normalized, 3, true)
+}
+
 /** Format a share-count value as lots without discarding fractions or sign. */
 export function formatShareLots(shares: number | null | undefined): string {
   if (typeof shares !== 'number' || !Number.isFinite(shares)) return '待核實'

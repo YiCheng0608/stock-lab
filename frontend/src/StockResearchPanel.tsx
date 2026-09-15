@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { groupDisplayName, researchRequirementLabel } from './presentation'
+import { formatTableChip } from './units'
 import type { ActionSummary, EventRow, InstrumentDetail, NewsItem } from './types'
 import { eventTimeLabels, formatResearchDate, formatResearchDateTime, isTemporaryIndustryGroupName, newsTimeLabels, recentByDate, summarizeStockResearch } from './stockResearch'
 
@@ -12,7 +14,7 @@ function numberLabel(value: number | null | undefined, digits = 0): string {
 
 function sourceLabel(value: string | null | undefined): string {
   const source = value?.trim() ?? ''
-  return source && source.toLowerCase() !== 'unknown' ? source : '來源未提供'
+  return source === 'canonical' ? '固定研究規則' : source === 'twse' ? '臺灣證券交易所' : source === 'tpex' ? '證券櫃檯買賣中心' : /[\u3400-\u9fff]/.test(source) ? source : '來源待核實'
 }
 
 function sourceKindLabel(value: string | null | undefined): string {
@@ -20,7 +22,7 @@ function sourceKindLabel(value: string | null | undefined): string {
   const normalized = kind.toLowerCase()
   if (['official', 'government', 'regulator', 'exchange', 'official_notice', 'official_dataset'].includes(normalized)) return '官方資料'
   if (['media', 'news', 'press', 'media_article'].includes(normalized)) return '媒體來源'
-  return kind || '未提供'
+  return /[\u3400-\u9fff]/.test(kind) ? kind : '來源類型待核實'
 }
 
 function safeExternalUrl(value: string | null | undefined): string | null {
@@ -39,18 +41,18 @@ function ChipEvidence({ rows }: { rows: InstrumentDetail['chips'] }) {
   return (
     <div className="table-wrap compact-table research-table">
       <table>
-        <thead><tr><th>資料日</th><th>外陸資淨買賣超（原始欄位值）</th><th>投信淨買賣超（原始欄位值）</th><th>自營商淨買賣超（原始欄位值）</th><th>融資餘額變化（原始差值）</th><th>來源</th><th>資料截至</th></tr></thead>
+        <thead><tr><th>資料日</th><th>外資淨買賣超</th><th>投信淨買賣超</th><th>自營商淨買賣超</th><th>融資餘額變化</th><th>來源</th><th>資料截至</th></tr></thead>
         <tbody>{recent.map((row, index) => <tr key={`${row.date}-${index}`}>
           <td>{formatResearchDate(row.date)}</td>
-          <td>{numberLabel(row.foreign_buy)}</td>
-          <td>{numberLabel(row.trust_buy)}</td>
-          <td>{numberLabel(row.dealer_buy)}</td>
-          <td>{numberLabel(row.margin_change)}</td>
+          <td className="numeric-cell">{formatTableChip(row.foreign_buy, row.source)}</td>
+          <td className="numeric-cell">{formatTableChip(row.trust_buy, row.source)}</td>
+          <td className="numeric-cell">{formatTableChip(row.dealer_buy, row.source)}</td>
+          <td className="numeric-cell">{formatTableChip(row.margin_change, row.source, true)}</td>
           <td>{sourceLabel(row.source)}</td>
           <td>{formatResearchDateTime(row.data_as_of)}</td>
         </tr>)}</tbody>
       </table>
-      <div className="small-note">法人欄位：正值＝淨買入、負值＝淨賣出；融資變化：正值＝餘額增加、負值＝餘額減少。來源未提供跨來源統一單位。</div>
+      <div className="small-note">單位：張。法人正值為買超、負值為賣超；融資正值為餘額增加、負值為減少。空白表示未提供資料、數值無效或來源單位待核實。</div>
     </div>
   )
 }
@@ -60,7 +62,7 @@ function GroupEvidence({ rows }: { rows: InstrumentDetail['groups'] }) {
   return <div className="research-list">{rows.map((group) => {
     const needsTemporaryVerification = isTemporaryIndustryGroupName(group.name)
     return <div className="research-list-item" key={`${group.id}-${group.valid_from}`}>
-    <strong>{needsTemporaryVerification ? '既有產業族群關聯（待核實）' : group.name}</strong>
+    <strong>{needsTemporaryVerification ? '既有產業族群關聯（待核實）' : groupDisplayName(group.name)}</strong>
     <span className="small-note">有效期間：{formatResearchDate(group.valid_from)}～{group.valid_to ? formatResearchDate(group.valid_to) : '截止日未提供'}</span>
     {needsTemporaryVerification && <details className="technical-details"><summary>既有資料</summary><div>既有名稱：{group.name}</div><div>既有識別碼：{group.id}</div><div>既有成員有效期間：{formatResearchDate(group.valid_from)}～{group.valid_to ? formatResearchDate(group.valid_to) : '截止日未提供'}</div></details>}
   </div>})}</div>
@@ -101,9 +103,9 @@ function StrategyEvidence({ conditions }: { conditions: InstrumentDetail['strate
   const entries = Object.entries(conditions)
   if (!entries.length) return <div className="empty">尚無策略條件快照。</div>
   return <div className="research-list">{entries.map(([name, condition]) => <div className="research-list-item research-condition" key={name}>
-    <div className="position-head"><strong>{condition.label ?? name}</strong><span className="small-note">來源：{sourceLabel(condition.source)}</span></div>
+    <div className="position-head"><strong>{name === 'breakout' ? '突破條件' : name === 'pullback' ? '回踩條件' : '策略條件待核實'}</strong><span className="small-note">來源：{sourceLabel(condition.source)}</span></div>
     <div className="small-note">必要條件（僅列出要求，不代表已通過）</div>
-    <div className="tag-list">{condition.requires.map((field) => <span className="tag" key={field}>{field}</span>)}</div>
+    <div className="tag-list">{condition.requires.map((field) => <span className="tag" key={field}>{researchRequirementLabel(field)}</span>)}</div>
     {condition.technical && <details className="technical-details"><summary>查看技術資訊</summary>{Object.entries(condition.technical).map(([key, value]) => <div key={key}>{key}：{value}</div>)}</details>}
   </div>)}</div>
 }

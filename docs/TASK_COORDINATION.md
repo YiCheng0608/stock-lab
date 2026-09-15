@@ -9,6 +9,17 @@
 - R39 統籌已有限接受 R0-B2 SignalArtifact bridge A 的 source／graph 缺口 review；本輪沒有程式變更。下一個 B 窄 adapter 仍是提案，待後續統籌核 I/O、time、binding 與磁碟驗收；未授權 consumer 或預設切換。
 - R36 有限驗收涵蓋 5 個有效成員的 top 4、同 symbol 跨市場、來源日歧義、後日退出／加入、正反插入順序、malformed／legacy、其他 action buckets 與六個既有 targeted regressions；不是 full backend、actions cursor／效能、PIT、backfill 或 API typed 驗收。詳細規則見[產業分類 §9](INDUSTRY_CLASSIFICATION.md#9-群組候選的身分契約)。
 
+### R39 後的獨立 UI 文案維護（非 ROADMAP round）
+
+這項下一輪前的維護只處理日常繁中文案、ETF／族群代碼中文顯示、空數值、法人命名、表外單位、未知幣別及官方券商分點查詢入口；不改 R39 驗收，不恢復或啟動下一個 ROADMAP round。統籌已有限接受實作與文件並確認 freeze；最終索引與本地提交 receipt 以本 task 回覆為準，不回寫 commit hash。
+
+| 角色 | task ID | 本次核對狀態 |
+| --- | --- | --- |
+| 統籌 | `01a0a59b-e010-7af1-955c-3ba6fbbdf247`（`/root`） | 已有限接受實作、具名唯讀 browser review 與文件，並核定 freeze；交索引／Git 結案。 |
+| 程式 | `/root/ui_implementation` | 6 份記憶體前端測試、final build 與 diff check 均 exit 0；11 個前端檔已 freeze 並獲統籌接受，未改 API、DB 或 collector。 |
+| 文件 | `/root/ui_docs` | 七份受影響契約、驗收邊界與交接已獲統籌接受並 freeze。 |
+| 索引／Git | `/root/ui_index_git` | 輪初唯讀盤點已交付；依 freeze 更新受影響分區、驗 coverage 並提交核准檔案，最終 receipt 留在 task 回覆。 |
+
 | R39 角色 | task ID | 本次核對狀態 |
 | --- | --- | --- |
 | 統籌 | `01a0a0c9-735d-79a3-b7ce-89b13400fb24` | 已有限接受 C039 的 A 調查；待文件交付後核整輪 freeze。 |

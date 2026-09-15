@@ -1,16 +1,16 @@
 # 開發路線與目前能力
 
-更新：2026-09-15。能力依截至 R39 的有限 review 整理；具名驗收以局部邊界解讀。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-15。能力依截至 R39 的有限 review 整理；具名驗收以局部邊界解讀。R39 後、下一輪前另有一項獨立 UI 文案維護已通過有限 review，它不恢復或啟動 ROADMAP round。工作 ID 與完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色與接手見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（2026-09-15 核對）
 
-**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途；R39 已有限 review bridge A 的可證映射與缺口，沒有新增程式能力。R35–38 的四個 identity／candidate 小批亦已通過有限 review；歷史回算仍未完成。
+**仍在補齊 R0，部分 R1 與前端功能已可用；R0–R3 均未整體完成。** R34 的 opt-in worker capture 已提交為 `87b8429`，只接受其有限研究用途；R39 已有限 review bridge A 的可證映射與缺口，沒有新增程式能力。R35–38 的四個 identity／candidate 小批亦已通過有限 review；歷史回算仍未完成。獨立 UI 維護已有限接受繁中文案、法人命名、空數值與表外單位，以及官方分點人工查詢入口；未新增分點資料、主力排名或幣別欄位。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture。 | 完整歷史輸入與 SignalArtifact bridge、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點與必要基本面。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope 與 public source-day 展示；個股研究頁與全站 UX 已有限 review。 | 歷史 identity／PIT、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面。免費官方分點人工查詢入口不等於已接資料集。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選 typed producer／decision lookup、backfill／coverage scope 與 public source-day 展示；個股研究頁與全站 UX 已有限 review，含繁中、法人欄、數值格與官方分點入口維護。 | 歷史 identity／PIT、完整計畫與成交／退出 lifecycle、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
 ### 接下來的順序
@@ -39,7 +39,7 @@
 | R03／10／11／27–31 | 隔離 migration／restore mechanics、News defaults、canonical instruments／settlements rebuild、readiness identity gates；不等於任意 schema 或正式部署。 | [R0](R0_IMPLEMENTATION.md) |
 | R02／04／06–08 | ATR 純核心、immutable provenance store、time-evidence 與 read-time projection；官方 truth／worker／PIT 仍待接。 | [R0](R0_IMPLEMENTATION.md) |
 | R12／32／33／34／39A | Immutable Signal artifact、描述比較、caller-input pure replay、owned DB actual worker capture，以及 capture→artifact 可證映射／缺口；adapter 尚未實作，也無共同歷史輸入、PIT 或 legacy-v2 paired replay。 | [保存與重播契約](README.md) |
-| R13／14 | 個股 K 線／量／MA 與研究流程、單位／unknown／列表至詳情 UX；不是完整交易計畫或績效驗證。 | [個股頁](STOCK_RESEARCH_PAGE.md)、[UX](UX_REVIEW.md) |
+| R13／14＋獨立 UI 維護 | 個股 K 線／量／MA 與研究流程、單位／unknown／列表至詳情 UX；後續有限修正繁中、法人欄、空數值、未知幣別及官方分點入口。不是完整交易計畫、分點資料或績效驗證。 | [個股頁](STOCK_RESEARCH_PAGE.md)、[UX](UX_REVIEW.md) |
 | R15–17 | 分類 mapping、ordinary-industry 觀測期間、ETF／new-listing lifecycle；正式錯分類及歷史 PIT 未修復。 | [產業分類](INDUSTRY_CLASSIFICATION.md) |
 | R35–38 | Member-return identity、typed candidate producer／decision、backfill／coverage inclusion 與 public source-day display；四種語意分開，未回算歷史或證明 PIT。 | [產業分類 §8–9.6](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review) |
 | R09／18–20 | 四來源用途別 policy 與 standalone capture；consumer 只有 STOCK_DAY_ALL 單日 selected-security 與 holidaySchedule 單年度 positive exclusion。 | [來源 registry](SOURCE_REGISTRY.md) |

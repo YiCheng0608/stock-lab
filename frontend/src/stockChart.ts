@@ -1,7 +1,7 @@
 import type { EChartsOption } from 'echarts'
 
 import type { Bar } from './types'
-import { formatShareLots, formatSourceAwareShareLots, isVerifiedShareSource } from './units'
+import { formatTableNumber, formatTableVolume, isVerifiedShareSource } from './units'
 
 export type StockChartBar = {
   date: string
@@ -149,8 +149,8 @@ export function prepareStockChartData(input: readonly Bar[] | null | undefined, 
     : maStatus === 'insufficient'
       ? '有效同一來源且連續的日線不足 20 筆，MA20／MA60 暫不繪製。'
       : !ma60.some((value) => value != null)
-        ? 'MA20 依 20 筆有效 close 計算；MA60 需滿 60 筆後才顯示。'
-      : '均線僅依本頁有效 close 計算，不等同後端策略特徵。'
+        ? 'MA20 依 20 筆有效收盤價計算；MA60 需滿 60 筆後才顯示。'
+      : '均線僅依本頁有效收盤價計算，不等同後端策略特徵。'
   const points = pointsWithoutMovingAverages.map((point, index) => ({ ...point, ma20: ma20[index], ma60: ma60[index] }))
   return { bars, points, ma20, ma60, totalRows: rawRows.length, invalidDateRows, invalidRows, duplicateDates, duplicateRows, sourceNames, maStatus, maReason }
 }
@@ -205,7 +205,7 @@ function chartNumber(value: number | null | undefined, digits = 2): string {
 }
 
 function chartVolumeNumber(value: number | null | undefined, unitConfirmed: boolean): string {
-  return unitConfirmed ? formatShareLots(value) : formatSourceAwareShareLots(value, null)
+  return unitConfirmed ? formatTableNumber(typeof value === 'number' ? value / 1000 : value) : formatTableNumber(value)
 }
 
 function escapeTooltipText(value: unknown): string {
@@ -223,16 +223,17 @@ export function formatStockTooltip(data: PreparedStockChart, params: unknown): s
   const index = first?.dataIndex ?? -1
   const point = data.points[index]
   if (!point) return '資料待核實'
-  if (!point.bar) return `<strong>${escapeTooltipText(point.date)}</strong><br/>此日期沒有可繪製的完整 OHLCV；未補假 K`
+  if (!point.bar) return `<strong>${escapeTooltipText(point.date)}</strong><br/>此日期沒有可繪製的完整行情資料`
   const status = point.bar.isSuspended ? ' · 停牌／無交易標記' : ''
-  const volumeLabel = isVerifiedShareSource(point.bar.source) ? '成交量（張）' : '成交量（原值）'
+  const volumeLabel = isVerifiedShareSource(point.bar.source) ? '成交量（張）' : '成交量（單位待核實）'
   const lines = [
     `<strong>${escapeTooltipText(point.date)}${status}</strong>`,
+    '價格及均線：報價幣別元；指數：點',
     `開：${escapeTooltipText(chartNumber(point.bar.open))}`,
     `高：${escapeTooltipText(chartNumber(point.bar.high))}`,
     `低：${escapeTooltipText(chartNumber(point.bar.low))}`,
     `收：${escapeTooltipText(chartNumber(point.bar.close))}`,
-    `${volumeLabel}：${escapeTooltipText(formatSourceAwareShareLots(point.bar.volume, point.bar.source))}`,
+    `${volumeLabel}：${escapeTooltipText(formatTableVolume(point.bar.volume, point.bar.source) || '未提供或單位待核實')}`,
   ]
   if (point.ma20 != null) lines.push(`MA20：${escapeTooltipText(chartNumber(point.ma20))}`)
   if (point.ma60 != null) lines.push(`MA60：${escapeTooltipText(chartNumber(point.ma60))}`)

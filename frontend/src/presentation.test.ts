@@ -1,4 +1,4 @@
-import { formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { categoryLabel, groupDisplayName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -45,3 +45,15 @@ expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', st
 expect(productTimeRoleDateTime({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08T00:00:00+00:00' } } } as never, 'published_at') === '2026-09-08T00:00:00+00:00', 'aware instant metadata')
 expect(formatProductTimeRole({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08Z' } } } as never, 'published_at') === '待核實', 'date-only Z is not an instant')
 expect(productTimeRoleDateTime({ roles: { published_at: { role: 'published_at', status: 'known', precision: 'instant', value: '2026-09-08Z' } } } as never, 'published_at') === undefined, 'invalid instant metadata is not emitted as dateTime')
+
+expect(groupDisplayName('ETF · broad_market') === 'ETF · 大盤型', 'ETF group category is translated')
+expect(groupDisplayName('ETF · bond') === 'ETF · 債券型', 'bond ETF category is distinct')
+expect(groupDisplayName('ETF · unknown_new') === 'ETF · 分類待核實', 'unknown ETF enum is not leaked')
+expect(groupDisplayName('Industry 24') === '產業名稱待核實', 'unverified industry code is not promoted')
+expect(categoryLabel('unknown_new') === '分類待核實', 'unknown category remains unknown')
+expect(researchRequirementLabel('prior_20_highs') === '前 20 個交易日高點', 'requirement codes are translated')
+expect(researchRequirementLabel('unknown_new') === '條件名稱待核實', 'unknown requirements are not fabricated')
+expect(stockDirectoryActionLabel('new_state', 'new_state') === '研究動作待核實', 'unknown action label is not leaked')
+
+expect(stockDirectoryActionLabel('wait_pullback') === '等待回踩條件', 'known state survives an absent translated label')
+expect(researchRequirementLabel('族群相對 TAIEX 的20日超額報酬') === '族群相對 加權指數 的20日超額報酬', 'mixed Chinese requirement translates benchmark name')

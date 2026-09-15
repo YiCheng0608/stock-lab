@@ -67,7 +67,7 @@ const knownGap = prepareStockChartData(gapRows.slice(0, 20).map((row) => row), {
 expect(knownGap.points.some((point) => point.date === '2026-01-21' && point.bar === null), 'coverage-provided missing dates become explicit null slots')
 
 const tooltip = formatStockTooltip(prepared, { componentType: 'series', componentSubType: 'line', componentIndex: 0, name: '2026-09-01', dataIndex: 0, data: [9, 10, 8, 11], value: [9, 10, 8, 11], $vars: [] })
-expect(tooltip.includes('2026-09-01') && tooltip.includes('成交量（張）') && tooltip.includes('1 張'), 'tooltip contains OHLCV text in lots')
+expect(tooltip.includes('2026-09-01') && tooltip.includes('成交量（張）') && tooltip.includes('成交量（張）：1') && !tooltip.includes('1 張'), 'tooltip contains OHLCV text in lots')
 expect(!tooltip.includes('<script>'), 'tooltip does not pass through executable markup')
 
 const negativeVolume = prepareStockChartData([bar('2026-09-04', 13, { volume: -1000 })])

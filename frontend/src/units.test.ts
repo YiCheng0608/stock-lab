@@ -1,4 +1,4 @@
-import { formatShareLots, formatShareQuantity, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit } from './units'
+import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatShareQuantity, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit } from './units'
 
 if (sharesFromUnit('lot', 1) !== 1000) throw new Error('one lot must equal 1000 shares')
 if (sharesFromUnit('lot', 2) !== 2000) throw new Error('lot conversion must be exact')
@@ -32,3 +32,14 @@ for (const quantity of [0, -1, 1.5]) {
     if (!(error instanceof Error) || error.message === 'invalid share quantity was accepted') throw error
   }
 }
+
+for (const value of [null, undefined, Number.NaN, Infinity, '0']) {
+  if (formatTableNumber(value) !== '') throw new Error('missing or invalid table values must stay blank')
+}
+if (formatTableNumber(0) !== '0') throw new Error('real zero must remain visible')
+if (formatTableVolume(1250, 'twse') !== '1.25') throw new Error('table volume must convert without a unit suffix')
+if (formatTableVolume(1250, 'mixed') !== '' || formatTableVolume(-1, 'twse') !== '') throw new Error('unverified or invalid volume must stay blank')
+if (formatTableChip(-1250, 'twse_t86') !== '-1.25' || formatTableChip(250, 'tpex_3insti') !== '+0.25') throw new Error('table flow preserves direction and fractional lots')
+if (formatTableChip(0, 'twse_t86') !== '0' || formatTableChip(null, 'twse_t86') !== '') throw new Error('chip zero and missing are distinct')
+if (formatTableChip(1250, 'twse_margin', true) !== '+1,250') throw new Error('margin values already use lots and must not be divided again')
+if (formatTableChip(1250, 'twse_t86+unknown') !== '' || formatTableChip(1250, 'twse_t86', true) !== '') throw new Error('unknown field units must not mix into the lot table')

@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react'
 
 import type { Bar } from './types'
 import { buildStockChartOption, dataZoomEventWindow, normalizeStockChartWindow, prepareStockChartData, windowForRange, type StockChartRange, type StockChartWindow } from './stockChart'
-import { formatSourceAwareShareLots, isVerifiedShareSource } from './units'
+import { formatTableNumber, formatTableVolume, isVerifiedShareSource } from './units'
 
 const RANGES: Array<{ value: StockChartRange; label: string }> = [
   { value: 30, label: '近 30 日' },
@@ -15,8 +15,7 @@ const EMPTY_GAP_DATES: readonly string[] = []
 
 function sourceLabel(sources: string[]): string {
   if (sources.length === 0) return '來源未提供'
-  if (sources.length === 1 && sources[0] !== 'unknown') return sources[0]
-  return sources.map((source) => source === 'unknown' ? 'unknown（來源未提供）' : source).join('、')
+  return sources.map((source) => source === 'twse' ? '臺灣證券交易所' : source === 'tpex' ? '證券櫃檯買賣中心' : '來源待核實').join('、')
 }
 
 export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bars: readonly Bar[]; knownGapDates?: readonly string[] }) {
@@ -106,29 +105,29 @@ export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bar
             <span>MA20／MA60：{prepared.maReason}</span>
           </div>
           <details className="technical-details chart-data-table">
-            <summary>查看圖表資料表（OHLCV）</summary>
-            <div className="table-wrap compact-table">
+            <summary>查看圖表資料表（開高低收與成交量）</summary>
+            <div className="table-wrap compact-table"><p className="small-note">單位：股價及均線為各標的報價幣別的元，指數為點；成交量為張。空白表示未提供資料、均線樣本不足、數值無效或成交量單位待核實。</p>
               <table>
-                <thead><tr><th>日期</th><th>開</th><th>高</th><th>低</th><th>收</th><th>{volumeUnitConfirmed ? '成交量（張）' : '成交量（原值）'}</th><th>MA20</th><th>MA60</th></tr></thead>
+                <thead><tr><th>日期</th><th>開</th><th>高</th><th>低</th><th>收</th><th>成交量</th><th>MA20</th><th>MA60</th></tr></thead>
                 <tbody>{prepared.points.slice(currentWindow.start, currentWindow.end + 1).reverse().map((point) => <tr key={point.date}>
                   <td>{point.date}</td>
-                  {point.bar ? <><td>{point.bar.open.toLocaleString('zh-TW')}</td><td>{point.bar.high.toLocaleString('zh-TW')}</td><td>{point.bar.low.toLocaleString('zh-TW')}</td><td>{point.bar.close.toLocaleString('zh-TW')}</td><td>{formatSourceAwareShareLots(point.bar.volume, point.bar.source)}</td></> : <td colSpan={5}>此日期 OHLCV 不完整，未繪製 K</td>}
-                  <td>{point.ma20 == null ? '—' : point.ma20.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td><td>{point.ma60 == null ? '—' : point.ma60.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+                  {point.bar ? <><td>{point.bar.open.toLocaleString('zh-TW')}</td><td>{point.bar.high.toLocaleString('zh-TW')}</td><td>{point.bar.low.toLocaleString('zh-TW')}</td><td>{point.bar.close.toLocaleString('zh-TW')}</td><td className="numeric-cell">{formatTableVolume(point.bar.volume, point.bar.source)}</td></> : <td colSpan={5} aria-label="此日期行情資料不完整" />}
+                  <td className="numeric-cell">{formatTableNumber(point.ma20, 2)}</td><td className="numeric-cell">{formatTableNumber(point.ma60, 2)}</td>
                 </tr>)}</tbody>
               </table>
             </div>
           </details>
           {(prepared.invalidRows > 0 || prepared.duplicateDates.length > 0) && (
             <div className="chart-warning" role="status">
-              已略過無法安全繪製的資料：無效／格式錯誤 {prepared.invalidRows} 筆、重複日期資料 {prepared.duplicateRows} 筆；重複日期 {prepared.duplicateDates.length ? prepared.duplicateDates.join('、') : '無'}。未補入假 K。
+              已略過無法安全繪製的資料：無效／格式錯誤 {prepared.invalidRows} 筆、重複日期資料 {prepared.duplicateRows} 筆；重複日期 {prepared.duplicateDates.length ? prepared.duplicateDates.join('、') : '無'}。缺少的日線保持空缺。
             </div>
           )}
         </>
       ) : (
         <div className="empty chart-empty">
           {prepared.totalRows === 0
-            ? 'API 未提供日線資料；沒有可繪製的 OHLCV，未補入假 K。'
-            : `來源回應 ${prepared.totalRows} 筆，但可繪製日線 0 筆；無效／格式錯誤 ${prepared.invalidRows} 筆、重複日期資料 ${prepared.duplicateRows} 筆，未補入假 K。`}
+            ? '來源未提供可繪製的日線資料。'
+            : `來源回應 ${prepared.totalRows} 筆，但可繪製日線 0 筆；無效／格式錯誤 ${prepared.invalidRows} 筆、重複日期資料 ${prepared.duplicateRows} 筆，缺少的日線保持空缺。`}
         </div>
       )}
     </section>

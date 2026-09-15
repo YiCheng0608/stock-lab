@@ -61,7 +61,7 @@ export const GLOSSARY: GlossaryTerm[] = [
   },
   {
     term_id: 'institutional_flow', name: '法人籌碼', aliases: ['三大法人'], category: 'chips',
-    plain_definition: '外陸資、投信與自營商的淨買賣超資料。',
+    plain_definition: '外資、投信與自營商的淨買賣超資料。',
     use: '作為策略與族群的籌碼確認。',
     how_to_read: '必要欄位缺一或有效日數不足就標缺失，不補零。',
     limitations: '不等同於所有市場參與者的持倉方向。', related: ['margin', 'data_quality'], version: '1.0.0',
@@ -81,8 +81,8 @@ export const GLOSSARY: GlossaryTerm[] = [
     limitations: '籌碼資料不代表全部投資人的未來行為。', related: ['institutional_flow', 'margin'], version: '1.0.0',
   },
   {
-    term_id: 'foreign_flow', name: '外陸資淨買賣超', aliases: ['foreign institutional flow'], category: 'chips',
-    plain_definition: '外陸資在指定交易日的買進減賣出金額或張數。',
+    term_id: 'foreign_flow', name: '外資淨買賣超', aliases: ['foreign institutional flow'], category: 'chips',
+    plain_definition: '外資在指定交易日的買進減賣出；本頁簡稱外資，沿用官方外資及陸資合計口徑。',
     use: '作為法人籌碼確認的一部分。',
     how_to_read: '缺值不能當成零；需與投信、自營商欄位一起看。',
     limitations: '單日淨買賣超不等於持續性趨勢。', related: ['institutional_flow', 'chips'], version: '1.0.0',

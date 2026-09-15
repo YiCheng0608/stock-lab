@@ -28,8 +28,8 @@ const REASON_LABELS: Record<string, string> = {
   close_below_ma60: '收盤仍低於 MA60',
   close_outside_ma20_support_zone: '收盤不在 MA20 支撐區',
   pullback_volume_ratio_outside_range: '回踩量比不在規則範圍',
-  group_relative_strength_not_positive: '族群相對 TAIEX 的 20 日超額報酬未轉正',
-  group_excess_return_20d_missing_or_non_finite: '缺少族群相對 TAIEX 的 20 日超額報酬',
+  group_relative_strength_not_positive: '族群相對 加權指數 的 20 日超額報酬未轉正',
+  group_excess_return_20d_missing_or_non_finite: '缺少族群相對 加權指數 的 20 日超額報酬',
   institutional_flow_to_turnover_ratio_5d_missing_or_non_finite: '缺少 5 日法人流向與 20 日日均成交額',
   institutional_flow_5d_missing_or_incomplete: '5 日法人籌碼資料尚未齊備',
   margin_balance_change_ratio_5d_missing_or_non_finite: '缺少 5 日融資餘額變化率',
@@ -65,11 +65,11 @@ const REASON_LABELS: Record<string, string> = {
   market_bar: '缺少日行情',
   bars_20d: '缺少 20 日有效行情',
   bars_60d: '缺少 60 日有效行情',
-  benchmark: '缺少 TAIEX 基準',
+  benchmark: '缺少 加權指數 基準',
   theme_membership: '缺少有效族群成員關聯',
   qualified_theme: '尚無達到門檻的熱門族群',
   institutional_flow_5d: '缺少 5 日法人籌碼',
-  foreign_buy: '缺少外陸資淨買賣超',
+  foreign_buy: '缺少外資淨買賣超',
   trust_buy: '缺少投信淨買賣超',
   dealer_buy: '缺少自營商淨買賣超',
   margin_balance: '缺少融資餘額',
@@ -249,7 +249,44 @@ export function stockDirectoryActionLabel(actionState?: string, actionLabel?: st
   const state = actionState?.trim().toLowerCase() ?? ''
   const label = actionLabel?.trim() ?? ''
   if (INCOMPLETE_ACTION_STATES.has(state) || label === '資料不足') return '暫不行動'
-  return label || '尚無研究動作'
+  if (label && /[\u3400-\u9fff]/.test(label)) return label
+  const states: Record<string, string> = {
+    conditional_entry: '符合條件後可研究進場', wait_breakout: '等待突破條件', wait_pullback: '等待回踩條件',
+    hold_observe: '持倉觀察', reduce_exit: '持倉風險：減碼／退場條件', no_condition: '暫無研究條件', manual_review: '需人工判讀',
+  }
+  return states[state] ?? (state ? '研究動作待核實' : '尚無研究動作')
+}
+
+export function researchRequirementLabel(field: string): string {
+  const labels: Record<string, string> = {
+    'prior 20 highs': '前 20 個交易日高點', prior_20_highs: '前 20 個交易日高點',
+    'prior 20 volumes': '前 20 個交易日成交量', prior_20_volumes: '前 20 個交易日成交量',
+    'bar count 60d': '60 日有效行情日數', bar_count_60d: '60 日有效行情日數',
+    'taiex excess return 20d': '20 日相對加權指數報酬', group_excess_return_20d: '20 日相對加權指數報酬',
+    'institutional flow 5d': '5 日法人籌碼', institutional_flow_to_turnover_ratio_5d: '5 日法人流向與成交額比率',
+    'margin change 5d': '5 日融資變化', margin_balance_change_ratio_5d: '5 日融資餘額變化率',
+    'average daily turnover 20d': '20 日日均成交額',
+    close: '收盤價', volume: '成交量', ma20: '20 日均線', ma60: '60 日均線',
+  }
+  const value = field.trim()
+  return labels[value.toLowerCase()] ?? (/[\u3400-\u9fff]/.test(value) ? value.replace(/\bTAIEX\b/g, '加權指數') : '條件名稱待核實')
+}
+
+export function categoryLabel(value: string | null | undefined): string {
+  const labels: Record<string, string> = { industry: '產業族群', theme: '題材族群', concept: '概念族群', etf: 'ETF 族群', ipo: '新上市族群', 'new listings': '新上市族群', stock: '股票族群' }
+  return labels[value?.toLowerCase() ?? ''] ?? (value && /[\u3400-\u9fff]/.test(value) ? value : '分類待核實')
+}
+
+export function groupDisplayName(value: string | null | undefined): string {
+  const name = value?.trim() ?? ''
+  const etf = /^ETF\s*[·:：-]\s*(\w+)$/i.exec(name)
+  if (etf) {
+    const labels: Record<string, string> = { broad_market: '大盤型', dividend: '股息型', sector: '產業型', thematic: '主題型', bond: '債券型', commodity: '商品型', leveraged: '槓桿型', inverse: '反向型' }
+    return labels[etf[1].toLowerCase()] ? `ETF · ${labels[etf[1].toLowerCase()]}` : 'ETF · 分類待核實'
+  }
+  if (/^industry\b/i.test(name)) return '產業名稱待核實'
+  if (/^new listings$/i.test(name)) return '新上市族群'
+  return name || '族群名稱待核實'
 }
 
 export function stockDirectoryQualityLabel(dataQuality?: string): string {
