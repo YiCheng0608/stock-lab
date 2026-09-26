@@ -23,9 +23,9 @@
 | 角色 | 模型 | Reasoning | 責任與寫入範圍 |
 | --- | --- | --- | --- |
 | 統籌 | `gpt-6-astra` | `high` | 核定範圍、依賴與完成狀態，負責分派、驗收及接手確認；指定互不衝突的寫入範圍。 |
-| 程式 | `gpt-6-astra` | `medium` | 實作與驗證；不自行修改規格。 |
-| 文件 | `gpt-5.6-sol` | `xhigh` | 每輪依實作與統籌 review 結論，更新受影響文件及交接；不改程式。 |
-| 索引與 Git commit | `gpt-5.6-luna` | `medium` | 輪末索引更新、coverage 驗證及已驗收檔案的 commit；不改專案來源，不做輪初或中途刷新。 |
+| 程式 | `gpt-6-sol` | `ultra` | 實作與驗證；不自行修改規格。 |
+| 文件 | `gpt-6-sol` | `xhigh` | 每輪依實作與統籌 review 結論，更新受影響文件及交接；不改程式。 |
+| 索引與 Git commit | `gpt-6-luna` | `medium` | 輪末索引更新、coverage 驗證及已驗收檔案的 commit；不改專案來源，不做輪初或中途刷新。 |
 
 ## 文件與交接
 
