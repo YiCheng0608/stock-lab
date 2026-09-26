@@ -1,6 +1,6 @@
 # Worker analysis capture 契約
 
-更新：2026-09-16。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
+更新：2026-09-26。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
 
 本文件負責 `backend/worker/analysis_capture.py` 的 API、CLI、環境、local schema、結果與限制。Capture 不是 `SignalArtifactStore`、完整 B2／B7、歷史 PIT／availability 證明或正式資料處理入口。
 
@@ -43,7 +43,7 @@ Source 必須是 caller 預先建立的專案外、inactive、stable、rollback-
 
 Target 必須是 caller 指定且已授權的具名專案外 research output；它必須是 absolute external path，主檔與三種 sidecar 都不存在。實作拒絕 workspace／受保護路徑、URI、`:memory:`、symlink／junction／hard-link alias 與未知既有目標，不會認領、清空或覆寫既有檔案。真正磁碟 capture 所需的 source snapshot、new research DB 與 unused config DB path 都由 caller 管理；落盤必要性、產物／殘留 budget、保留與清理依 [AGENTS](../AGENTS.md#驗證資料與暫存)，本文件不另設示範 Temp 流程。
 
-Owner 保存的 source fingerprint 對應建立 owned DB 前的原 snapshot bytes。後續 attempt 會在 research DB 寫入 analysis／legacy Signal／capture rows，所以 owner SHA 不是目前 research DB、selected call 或 exact evaluator inputs 的 hash；任何後續 bridge 都須另驗 stable current research snapshot 與 expected SHA。候選映射與 fail-closed 邊界由 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選) 統一負責。
+Owner 保存的 source fingerprint 對應建立 owned DB 前的原 snapshot bytes。後續 attempt 會在 research DB 寫入 analysis／legacy Signal／capture rows，所以 owner SHA 不是目前 research DB、selected call 或 exact evaluator inputs 的 hash。已有限 review 的 opt-in Bridge B 要 caller 明示 current research snapshot path／expected SHA，於同一受保護的唯讀 snapshot 驗完整 attempt 後選 exact ordinal；它另外建立 input-only manifest hash，只回 candidate，不由 capture 自動保存。三種 hash、候選映射與 fail-closed 邊界由 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選) 統一負責。
 
 每個新 attempt 在 lazy import 前需要三個 process environment variables：
 
@@ -144,7 +144,7 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 仍未完成／不在保證內：
 
 - 不建立 `SignalArtifactStore`，不保存官方 truth、`first_available_at`、`decision_at`，也不做 legacy-v2 same-snapshot paired replay；B2、B5b、B7 未完成。
-- Bridge A 只完成 source／graph 缺口 review；explicit capture→candidate adapter 仍是提案，capture／receipt digest 或新研究 decision time 都不能補成 historical availability／PIT。
+- Bridge A 完成 source／graph 缺口 review，Bridge B explicit capture→candidate adapter 已有限 review；capture／receipt digest、owner SHA 或新研究 decision time 都不能補成 historical availability／PIT。`read_analysis_attempt` 的 public API／CLI 不變；Bridge B 在內部共用同一 guarded connection 做完整 strict read。
 - 未接 default analyze、daily/backfill、backtest、API、UI 或 DecisionSummary，未切換預設策略／輸出版本。
 - `captured_at` 是 observation time；`observed_market_date` 是 collection-selected date，兩者都不是 availability/PIT。
 - 新 producer／worker 的 member-return identity 與 candidate typed lookup 見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；該能力沒有另行驗收 capture runtime，也不替舊輸入補造 identity。API／UI／backfill 與歷史批次回算仍不在保證內。

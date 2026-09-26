@@ -1,6 +1,6 @@
 # R0–R3 執行清單
 
-更新：2026-09-16。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
+更新：2026-09-26。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
 
 ## 1. 執行界線與狀態
 
@@ -53,7 +53,7 @@
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-B1／C-001 | 已 review（局部） | 無 migration | confidence 安全語意；不推論 B2 完成。 |
-| R0-B2／B2-persist | 四個小批及 bridge A 已 review；整體未完成，B adapter 提案待核 | R0-A1、G-ID | A 只接受映射／缺口盤點；下一步核 capture→candidate adapter 的 I/O、time、binding 與磁碟驗收。來源／可得時間、歷史輸入、paired output 及產品選版仍缺，詳見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。 |
+| R0-B2／B2-persist | 四個小批、bridge A 與 B adapter 已有限 review；整體未完成 | R0-A1、G-ID | B 只接受 opt-in capture→detached canonical candidate；caller 明示 current snapshot path／SHA、exact attempt／ordinal 與新研究 aware decision，保存另由 caller 明示 attempt／run。來源／availability／歷史輸入、consumer、同 snapshot paired replay 及產品選版仍缺；後續接線另核，詳見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。 |
 | R0-B3／C-002 | 已 review（純核心） | 無 I/O | Wilder ATR及strict caller inputs；未接官方來源或worker。 |
 | R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | Immutable ATR store、精確雙唯讀比較及 schema1／v2 相容邊界；不相容輸出不可比，官方來源／PIT／worker 接線仍缺。完整支援與拒絕條件見 [R0](R0_IMPLEMENTATION.md)。 |
 | R0-B5／B3-wire | 提案 | R0-B4、G-TIME、G-SOURCE | 官方session／halt／公司行動／previous-close均有raw／版本／availability；缺來源reason code fail closed，worker explicit opt-in讀artifact，預設候選不切換。 |

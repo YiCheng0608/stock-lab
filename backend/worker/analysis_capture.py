@@ -6,6 +6,7 @@ Creation never adopts an existing file. Research writes use one SQLite transacti
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 from datetime import date, datetime, timezone
 import hashlib
 import json
@@ -219,10 +220,14 @@ def _attempt_id(value):
     return value
 
 
-def _read_analysis_attempt(*, research_database_path, attempt_id):
+def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=None):
     """Read an exact sealed committed attempt, without importing the worker."""
     _attempt_id(attempt_id)
-    with readonly_snapshot(research_database_path) as (connection, _):
+    # A caller that already holds a guarded read transaction can reuse this
+    # entire strict reader before selecting one of its calls on that snapshot.
+    snapshot = (readonly_snapshot(research_database_path) if _connection is None
+                else nullcontext((_connection, None)))
+    with snapshot as (connection, _):
         owner = _owner(connection)
         row = connection.execute("SELECT * FROM worker_capture_attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
         if row is None:
