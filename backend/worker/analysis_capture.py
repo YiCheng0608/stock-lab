@@ -24,8 +24,11 @@ from app.signal_artifact_store import _is_path_alias, _path_has_protected_compon
 
 KIND = "worker-analysis-capture/v1"
 KIND_V2 = "worker-analysis-capture/v2"
+KIND_V3 = "worker-analysis-capture/v3"
 INPUT_PROVENANCE_MODE = "selected-bar/v1"
+PRIOR_VOLUMES_MODE = "selected-bar-prior-volumes/v1"
 SELECTED_BAR_SCHEMA = "worker-selected-bar-provenance/v1"
+PRIOR_VOLUMES_SCHEMA = "worker-prior-volumes-provenance/v1"
 TABLES = {
     "worker_capture_owner": "CREATE TABLE worker_capture_owner (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, digest TEXT NOT NULL)",
     "worker_capture_attempts": "CREATE TABLE worker_capture_attempts (attempt_id TEXT PRIMARY KEY, payload TEXT NOT NULL, digest TEXT NOT NULL)",
@@ -178,6 +181,99 @@ def _validate_selected_bar_provenance(value, arguments, *, subject=None, market_
         raise AnalysisCaptureError("selected_bar_raw_digest_invalid")
 
 
+def _validate_prior_volumes_provenance(value, arguments, *, subject=None, market_date=None):
+    """Validate the frozen producer slice, never reconstruct it from current bars."""
+    if (type(value) is not dict or set(value) != {
+            "schema", "subject", "target_date", "window", "transform", "feature",
+            "row_count", "rows", "projected_values", "raw_bytes_verification",
+    } or value["schema"] != PRIOR_VOLUMES_SCHEMA
+            or type(value["window"]) is not int or value["window"] != 20
+            or value["transform"] != "int(volume)"
+            or value["raw_bytes_verification"] != "bytes_unverified"):
+        raise AnalysisCaptureError("prior_volumes_provenance_shape_invalid")
+    owner = value["subject"]
+    if (type(owner) is not dict or set(owner) != {"instrument_id", "market", "exchange", "symbol"}
+            or not _positive_id(owner["instrument_id"])
+            or any(type(owner[key]) is not str or not owner[key].strip()
+                   for key in ("market", "exchange", "symbol"))):
+        raise AnalysisCaptureError("prior_volumes_subject_invalid")
+    try:
+        _market_date(value["target_date"])
+    except (TypeError, ValueError) as exc:
+        raise AnalysisCaptureError("prior_volumes_date_invalid") from exc
+    if ((subject is not None and not _exact(owner, subject))
+            or (market_date is not None and value["target_date"] != market_date)):
+        raise AnalysisCaptureError("prior_volumes_subject_date_mismatch")
+    feature = value["feature"]
+    if (type(feature) is not dict or set(feature) != {"id", "instrument_id", "trading_date", "source"}
+            or not _positive_id(feature["id"]) or not _positive_id(feature["instrument_id"])
+            or feature["instrument_id"] != owner["instrument_id"]
+            or feature["trading_date"] != value["target_date"]
+            or type(feature["source"]) is not str or not feature["source"].strip()):
+        raise AnalysisCaptureError("prior_volumes_feature_invalid")
+    rows, values, count = value["rows"], value["projected_values"], value["row_count"]
+    if (type(count) is not int or not 0 <= count <= 20 or type(rows) is not list
+            or type(values) is not list or len(rows) != count or len(values) != count):
+        raise AnalysisCaptureError("prior_volumes_count_invalid")
+    seen_ids, seen_dates, previous_date = set(), set(), None
+    for ordinal, item in enumerate(rows):
+        if type(item) is not dict or set(item) != {
+                "ordinal", "bar", "raw_payload", "raw_status", "raw_reason",
+        } or type(item["ordinal"]) is not int or item["ordinal"] != ordinal:
+            raise AnalysisCaptureError("prior_volumes_row_shape_invalid")
+        bar = item["bar"]
+        if (type(bar) is not dict or set(bar) != {
+                "id", "instrument_id", "trading_date", "volume", "source", "raw_payload_id",
+        } or not _positive_id(bar["id"]) or not _positive_id(bar["instrument_id"])
+                or bar["instrument_id"] != owner["instrument_id"]
+                or type(bar["volume"]) is not int or bar["volume"] < 0
+                or type(bar["source"]) is not str or not bar["source"].strip()
+                or (bar["raw_payload_id"] is not None and not _positive_id(bar["raw_payload_id"]))):
+            raise AnalysisCaptureError("prior_volumes_bar_invalid")
+        try:
+            _market_date(bar["trading_date"])
+        except (TypeError, ValueError) as exc:
+            raise AnalysisCaptureError("prior_volumes_date_invalid") from exc
+        if (bar["id"] in seen_ids or bar["trading_date"] in seen_dates
+                or (previous_date is not None and bar["trading_date"] <= previous_date)
+                or bar["trading_date"] >= value["target_date"]):
+            raise AnalysisCaptureError("prior_volumes_order_invalid")
+        seen_ids.add(bar["id"])
+        seen_dates.add(bar["trading_date"])
+        previous_date = bar["trading_date"]
+        if type(values[ordinal]) is not int or values[ordinal] != bar["volume"]:
+            raise AnalysisCaptureError("prior_volumes_value_mismatch")
+        raw = item["raw_payload"]
+        if bar["raw_payload_id"] is None:
+            if (raw is not None or item["raw_status"] != "unknown"
+                    or item["raw_reason"] != "raw_payload_id_missing"):
+                raise AnalysisCaptureError("prior_volumes_raw_relation_invalid")
+        elif (type(raw) is not dict or set(raw) != {
+                "id", "source", "endpoint", "sha256", "ingestion_run_id",
+        } or not _positive_id(raw["id"]) or raw["id"] != bar["raw_payload_id"]
+                or type(raw["source"]) is not str or raw["source"] != bar["source"]
+                or type(raw["endpoint"]) is not str or not raw["endpoint"].strip()
+                or (raw["ingestion_run_id"] is not None and not _positive_id(raw["ingestion_run_id"]))
+                or item["raw_status"] != "linked_metadata" or item["raw_reason"] is not None):
+            raise AnalysisCaptureError("prior_volumes_raw_relation_invalid")
+        if raw is not None and (raw["sha256"] is not None and
+                (type(raw["sha256"]) is not str or
+                 re.fullmatch(r"[0-9a-fA-F]{64}", raw["sha256"]) is None)):
+            raise AnalysisCaptureError("prior_volumes_raw_digest_invalid")
+    if (type(arguments) is not dict or "prior_volumes" not in arguments
+            or not _exact(arguments["prior_volumes"], values)):
+        raise AnalysisCaptureError("prior_volumes_arguments_mismatch")
+
+
+def _validate_v3_input_provenance(value, arguments, *, subject=None, market_date=None):
+    if type(value) is not dict or set(value) != {"selected_bar", "prior_volumes"}:
+        raise AnalysisCaptureError("input_provenance_v3_shape_invalid")
+    _validate_selected_bar_provenance(value["selected_bar"], arguments,
+                                      subject=subject, market_date=market_date)
+    _validate_prior_volumes_provenance(value["prior_volumes"], arguments,
+                                       subject=subject, market_date=market_date)
+
+
 def _checked_owner(connection):
     actual = dict(connection.execute("SELECT name,sql FROM sqlite_master WHERE name LIKE 'worker_capture_%' OR tbl_name LIKE 'worker_capture_%'"))
     expected = {**SCHEMA, "sqlite_autoindex_worker_capture_attempts_1": None, "sqlite_autoindex_worker_capture_calls_1": None}
@@ -308,7 +404,7 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
         receipt = _decode(row)
         calls = connection.execute("SELECT * FROM worker_capture_calls WHERE attempt_id=? ORDER BY ordinal", (attempt_id,)).fetchall()
         if (set(receipt) != {"kind", "attempt_id", "database_id", "source_snapshot", "captured_at", "analysis", "source_collection_run_id", "call_digests", "signal_count"}
-                or receipt["kind"] not in (KIND, KIND_V2) or receipt["attempt_id"] != attempt_id
+                or receipt["kind"] not in (KIND, KIND_V2, KIND_V3) or receipt["attempt_id"] != attempt_id
                 or receipt["database_id"] != owner["database_id"] or not _exact(receipt["source_snapshot"], owner["source_snapshot"])
                 or len(calls) != len(receipt["call_digests"]) or len(calls) != receipt["signal_count"]*2):
             raise AnalysisCaptureError("attempt_manifest_mismatch")
@@ -332,7 +428,7 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
                     or payload["ordinal"] != ordinal or payload["observed_market_date"] != receipt["analysis"]["date"]):
                 raise AnalysisCaptureError("capture_relation_mismatch")
             expected_keys = {"attempt_id", "database_id", "ordinal", "evaluator", "selected_strategy", "namespace", "subject", "observed_market_date", "signal_snapshot", "arguments", "captured_at", "actual_result", "bundle"}
-            if receipt["kind"] == KIND_V2:
+            if receipt["kind"] in (KIND_V2, KIND_V3):
                 expected_keys.add("input_provenance")
             if set(payload) != expected_keys:
                 raise AnalysisCaptureError("capture_keys_mismatch")
@@ -385,12 +481,17 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
                     payload["input_provenance"], payload["arguments"],
                     subject=subject, market_date=payload["observed_market_date"],
                 )
+            elif receipt["kind"] == KIND_V3:
+                _validate_v3_input_provenance(
+                    payload["input_provenance"], payload["arguments"],
+                    subject=subject, market_date=payload["observed_market_date"],
+                )
             decoded.append(payload)
         for pos in range(0, len(decoded), 2):
             a, b = decoded[pos:pos+2]
             if (a["evaluator"], b["evaluator"]) != ("breakout_v1", "pullback_v1") or any(not _exact(a[k], b[k]) for k in ("subject", "signal_snapshot", "selected_strategy", "namespace")):
                 raise AnalysisCaptureError("capture_pair_mismatch")
-            if receipt["kind"] == KIND_V2 and not _exact(a["input_provenance"], b["input_provenance"]):
+            if receipt["kind"] in (KIND_V2, KIND_V3) and not _exact(a["input_provenance"], b["input_provenance"]):
                 raise AnalysisCaptureError("capture_pair_provenance_mismatch")
         occurrences = {(r["subject"]["instrument_id"], r["selected_strategy"]["name"]) for r in decoded}
         subjects = {r["subject"]["instrument_id"] for r in decoded}
@@ -438,10 +539,140 @@ class _Collector:
         self.owner, self.attempt_id, self.input_provenance = owner, attempt_id, input_provenance
         self.pending, self.digests = {}, []
         self.occurrences = set()
+        self.prior_volumes_by_subject = {}
+
+    @staticmethod
+    def _prior_row_snapshot(db, bar_id):
+        """Read local metadata in the producer transaction; no raw file is opened."""
+        from sqlalchemy import text
+        stored = db.execute(text(
+            "SELECT id,instrument_id,trading_date,volume,source,raw_payload_id "
+            "FROM market_bars WHERE id=:id"
+        ), {"id": bar_id}).mappings().one_or_none()
+        if stored is None:
+            raise AnalysisCaptureError("prior_volumes_source_relation_invalid")
+        bar = dict(stored)
+        raw_id = bar["raw_payload_id"]
+        raw = (db.execute(text(
+            "SELECT id,source,endpoint,sha256,ingestion_run_id "
+            "FROM raw_payloads WHERE id=:id"
+        ), {"id": raw_id}).mappings().one_or_none() if raw_id is not None else None)
+        if raw_id is not None and raw is None:
+            raise AnalysisCaptureError("prior_volumes_raw_relation_invalid")
+        if raw is not None and raw["ingestion_run_id"] is not None:
+            run = db.execute(text("SELECT id FROM ingestion_runs WHERE id=:id"),
+                             {"id": raw["ingestion_run_id"]}).scalar_one_or_none()
+            if run is None:
+                raise AnalysisCaptureError("prior_volumes_raw_relation_invalid")
+        return {
+            "bar": bar,
+            "raw_payload": dict(raw) if raw is not None else None,
+            "raw_status": "linked_metadata" if raw is not None else "unknown",
+            "raw_reason": None if raw is not None else "raw_payload_id_missing",
+        }
+
+    def freeze_prior_volumes(self, db, *, instrument, feature, bars, index, target_date, projected_values):
+        """Detach the exact producer slice before its row identities are lost in JSON."""
+        if self.input_provenance != PRIOR_VOLUMES_MODE:
+            raise AnalysisCaptureError("input_provenance_not_enabled")
+        if (type(index) is not int or not 0 <= index < len(bars)
+                or bars[index].instrument_id != instrument.id
+                or bars[index].trading_date != target_date or not _positive_id(feature.id)):
+            raise AnalysisCaptureError("prior_volumes_producer_relation_invalid")
+        subject = {"instrument_id": instrument.id, "market": instrument.market,
+                   "exchange": instrument.exchange, "symbol": instrument.symbol}
+        day = target_date.isoformat()
+        key = (instrument.id, day)
+        if key in self.prior_volumes_by_subject:
+            raise AnalysisCaptureError("prior_volumes_duplicate_producer")
+        source_bars = bars[max(0, index - 20):index]
+        rows = []
+        for ordinal, source_bar in enumerate(source_bars):
+            if (type(source_bar.volume) is not int or source_bar.volume < 0
+                    or not _positive_id(source_bar.id)):
+                raise AnalysisCaptureError("prior_volumes_bar_invalid")
+            item = self._prior_row_snapshot(db, source_bar.id)
+            expected = {"id": source_bar.id, "instrument_id": source_bar.instrument_id,
+                        "trading_date": source_bar.trading_date.isoformat(),
+                        "volume": source_bar.volume, "source": source_bar.source,
+                        "raw_payload_id": source_bar.raw_payload_id}
+            if not _exact(item["bar"], expected):
+                raise AnalysisCaptureError("prior_volumes_source_relation_invalid")
+            rows.append({"ordinal": ordinal, **item})
+        evidence = _detached({
+            "schema": PRIOR_VOLUMES_SCHEMA, "subject": subject, "target_date": day,
+            "window": 20, "transform": "int(volume)",
+            "feature": {"id": feature.id, "instrument_id": feature.instrument_id,
+                        "trading_date": feature.trading_date.isoformat(), "source": feature.source},
+            "row_count": len(rows), "rows": rows,
+            "projected_values": projected_values,
+            "raw_bytes_verification": "bytes_unverified",
+        })
+        _validate_prior_volumes_provenance(evidence, {"prior_volumes": projected_values},
+                                           subject=subject, market_date=day)
+        if (type(feature.features_json) is not dict
+                or not _exact(feature.features_json.get("prior_20_volumes"), projected_values)):
+            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
+        self.prior_volumes_by_subject[key] = evidence
+
+    def prior_volumes_provenance(self, db, *, instrument, feature, signal_date, arguments):
+        """Check the frozen producer relation against the actual selected call."""
+        from app.models import MarketBar
+        from sqlalchemy import text
+        key = (instrument.id, signal_date.isoformat())
+        frozen = self.prior_volumes_by_subject.get(key)
+        if frozen is None:
+            raise AnalysisCaptureError("prior_volumes_lineage_missing")
+        subject = {"instrument_id": instrument.id, "market": instrument.market,
+                   "exchange": instrument.exchange, "symbol": instrument.symbol}
+        expected_feature = frozen["feature"]
+        if (feature is None or feature.id != expected_feature["id"]
+                or feature.instrument_id != expected_feature["instrument_id"]
+                or feature.trading_date.isoformat() != expected_feature["trading_date"]
+                or feature.source != expected_feature["source"]
+                or type(feature.features_json) is not dict
+                or not _exact(feature.features_json.get("prior_20_volumes"), frozen["projected_values"])):
+            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
+        stored_feature = db.execute(text(
+            "SELECT instrument_id,trading_date,source,features_json "
+            "FROM technical_features WHERE id=:id"
+        ), {"id": feature.id}).mappings().one_or_none()
+        if stored_feature is None:
+            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
+        try:
+            stored_values = json.loads(stored_feature["features_json"])["prior_20_volumes"]
+        except (TypeError, ValueError, KeyError) as exc:
+            raise AnalysisCaptureError("prior_volumes_feature_mismatch") from exc
+        if (stored_feature["instrument_id"] != instrument.id
+                or stored_feature["trading_date"] != signal_date.isoformat()
+                or stored_feature["source"] != expected_feature["source"]
+                or not _exact(stored_values, frozen["projected_values"])):
+            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
+        _validate_prior_volumes_provenance(frozen, arguments, subject=subject,
+                                           market_date=signal_date.isoformat())
+        current_ids = [row[0] for row in db.execute(text(
+            "SELECT id FROM market_bars WHERE instrument_id=:instrument_id "
+            "AND trading_date<:target_date ORDER BY trading_date DESC LIMIT 20"
+        ), {"instrument_id": instrument.id, "target_date": signal_date.isoformat()})]
+        if list(reversed(current_ids)) != [item["bar"]["id"] for item in frozen["rows"]]:
+            raise AnalysisCaptureError("prior_volumes_slice_changed")
+        for item in frozen["rows"]:
+            bar_id = item["bar"]["id"]
+            current = self._prior_row_snapshot(db, bar_id)
+            if not _exact(current, {key: item[key] for key in current}):
+                raise AnalysisCaptureError("prior_volumes_source_relation_changed")
+            orm_bar = db.get(MarketBar, bar_id)
+            if (orm_bar is None or not _exact({
+                    "id": orm_bar.id, "instrument_id": orm_bar.instrument_id,
+                    "trading_date": orm_bar.trading_date.isoformat(), "volume": orm_bar.volume,
+                    "source": orm_bar.source, "raw_payload_id": orm_bar.raw_payload_id,
+            }, item["bar"])):
+                raise AnalysisCaptureError("prior_volumes_source_relation_changed")
+        return _detached(frozen)
 
     def selected_bar_provenance(self, db, *, bar, instrument, signal_date, close, volume):
         """Freeze the bar used by the evaluator; raw metadata is only a DB claim."""
-        if self.input_provenance != INPUT_PROVENANCE_MODE:
+        if self.input_provenance not in (INPUT_PROVENANCE_MODE, PRIOR_VOLUMES_MODE):
             raise AnalysisCaptureError("input_provenance_not_enabled")
         from sqlalchemy import text
         stored_bar = db.execute(text(
@@ -509,6 +740,12 @@ class _Collector:
             evidence = _detached(input_provenance)
             _validate_selected_bar_provenance(evidence, pending["arguments"])
             pending["input_provenance"] = evidence
+        elif self.input_provenance == PRIOR_VOLUMES_MODE:
+            if input_provenance is None:
+                raise AnalysisCaptureError("input_provenance_v3_required")
+            evidence = _detached(input_provenance)
+            _validate_v3_input_provenance(evidence, pending["arguments"])
+            pending["input_provenance"] = evidence
         elif input_provenance is not None:
             raise AnalysisCaptureError("input_provenance_not_enabled")
         self.pending[evaluator] = pending
@@ -538,14 +775,20 @@ class _Collector:
         snapshot = {column.name: _json_value(getattr(signal, column.name)) for column in signal.__table__.columns}
         snapshot = _detached(snapshot)
         subject = {"instrument_id": instrument.id, "market": instrument.market, "exchange": instrument.exchange, "symbol": instrument.symbol}
-        if self.input_provenance == INPUT_PROVENANCE_MODE:
+        if self.input_provenance in (INPUT_PROVENANCE_MODE, PRIOR_VOLUMES_MODE):
             if not _exact(self.pending["breakout_v1"]["input_provenance"], self.pending["pullback_v1"]["input_provenance"]):
                 raise AnalysisCaptureError("capture_pair_provenance_mismatch")
             for item in self.pending.values():
-                _validate_selected_bar_provenance(
-                    item["input_provenance"], item["arguments"],
-                    subject=subject, market_date=signal.signal_date.isoformat(),
-                )
+                if self.input_provenance == INPUT_PROVENANCE_MODE:
+                    _validate_selected_bar_provenance(
+                        item["input_provenance"], item["arguments"],
+                        subject=subject, market_date=signal.signal_date.isoformat(),
+                    )
+                else:
+                    _validate_v3_input_provenance(
+                        item["input_provenance"], item["arguments"],
+                        subject=subject, market_date=signal.signal_date.isoformat(),
+                    )
         for evaluator in ("breakout_v1", "pullback_v1"):
             item = self.pending[evaluator]
             payload = _detached({"attempt_id": self.attempt_id, "database_id": self.owner["database_id"], "ordinal": len(self.digests),
@@ -563,7 +806,7 @@ def execute_analysis_attempt(*, research_database_path, attempt_id, input_proven
     """Analyze only the owned database. No SessionLocal/default initialization."""
     _attempt_id(attempt_id)
     if input_provenance is not None and (type(input_provenance) is not str
-            or input_provenance != INPUT_PROVENANCE_MODE):
+            or input_provenance not in (INPUT_PROVENANCE_MODE, PRIOR_VOLUMES_MODE)):
         raise AnalysisCaptureError("invalid_input_provenance")
     with readonly_snapshot(research_database_path) as (connection, _):
         owner = _owner(connection)
@@ -573,7 +816,8 @@ def execute_analysis_attempt(*, research_database_path, attempt_id, input_proven
         if exc.code != "attempt_not_found":
             raise
     else:
-        expected_kind = KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND
+        expected_kind = (KIND_V3 if input_provenance == PRIOR_VOLUMES_MODE else
+                         KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND)
         if old["receipt"]["kind"] != expected_kind:
             raise AnalysisCaptureError("attempt_mode_conflict")
         old["idempotent_reuse"] = True
@@ -602,7 +846,8 @@ def execute_analysis_attempt(*, research_database_path, attempt_id, input_proven
                         or collector.occurrences != {(subject, key) for subject in subjects for key in ("breakout_v1", "pullback_v1")}):
                     raise AnalysisCaptureError("worker_capture_count_mismatch")
                 source_run = db.execute(text("SELECT id FROM ingestion_runs WHERE run_type='collect' AND source='official' ORDER BY updated_at DESC,id DESC LIMIT 1")).scalar_one()
-                receipt = {"kind": KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND,
+                receipt = {"kind": (KIND_V3 if input_provenance == PRIOR_VOLUMES_MODE else
+                                     KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND),
                     "attempt_id": attempt_id, "database_id": owner["database_id"], "source_snapshot": owner["source_snapshot"],
                     "captured_at": _now(), "analysis": result, "source_collection_run_id": source_run,
                     "call_digests": collector.digests, "signal_count": len(collector.digests)//2}

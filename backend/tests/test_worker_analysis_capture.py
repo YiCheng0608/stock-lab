@@ -710,3 +710,308 @@ def test_v2_reader_does_not_import_worker_or_config(research):
         text=True, encoding='utf-8', capture_output=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _run_prior_volumes(target, attempt='prior-one'):
+    return capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id=attempt,
+        input_provenance=capture.PRIOR_VOLUMES_MODE,
+    )
+
+
+@pytest.mark.parametrize('history_count', [0, 1, 19, 20, 64])
+def test_v3_freezes_exact_producer_tail_and_short_history(research, history_count):
+    _, target, _ = research
+    day = date(2026, 5, 1) + timedelta(days=history_count)
+    with sqlite3.connect(target) as db:
+        db.execute('UPDATE ingestion_runs SET data_as_of=?,run_date=?',
+                   (day.isoformat(), day.isoformat()))
+    result = _run_prior_volumes(target)
+    assert result['receipt']['kind'] == capture.KIND_V3
+    assert len(result['captures']) == 8
+    expected = [100 + number for number in range(max(0, history_count - 20), history_count)]
+    for call in result['captures']:
+        evidence = call['input_provenance']
+        prior = evidence['prior_volumes']
+        assert call['arguments']['prior_volumes'] == prior['projected_values'] == expected
+        assert prior['row_count'] == min(history_count, 20)
+        assert [item['ordinal'] for item in prior['rows']] == list(range(len(expected)))
+        assert [item['bar']['volume'] for item in prior['rows']] == expected
+        assert all(item['bar']['trading_date'] < day.isoformat() for item in prior['rows'])
+        assert all(item['raw_status'] == 'unknown' and item['raw_reason'] == 'raw_payload_id_missing'
+                   for item in prior['rows'])
+        assert evidence['selected_bar']['coverage'] == ['close', 'volume']
+        if history_count < 20:
+            assert call['actual_result']['state'] == 'data_incomplete'
+    assert read(target, 'prior-one')['captures'] == result['captures']
+
+
+def test_v3_zero_volume_is_preserved_and_evaluator_remains_incomplete(research):
+    _, target, _ = research
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE market_bars SET volume=0 WHERE trading_date='2026-07-03'")
+    result = _run_prior_volumes(target)
+    for call in result['captures']:
+        assert call['input_provenance']['prior_volumes']['projected_values'][-1] == 0
+        assert call['actual_result']['state'] == 'data_incomplete'
+
+
+def test_v3_equal_values_keep_distinct_row_identity_and_raw_relation(research):
+    _, target, _ = research
+    with sqlite3.connect(target) as db:
+        run_id = db.execute('SELECT id FROM ingestion_runs').fetchone()[0]
+        raw_id = db.execute(
+            'INSERT INTO raw_payloads '
+            '(ingestion_run_id,source,endpoint,payload_path,sha256,data_as_of,collected_at) '
+            'VALUES (?,?,?,?,?,?,?)',
+            (run_id, 'twse', 'local-only', 'not-opened.json', 'a' * 64, None,
+             '2026-09-27 00:00:00'),
+        ).lastrowid
+        db.execute("UPDATE market_bars SET volume=777 WHERE trading_date='2026-07-02'")
+        db.execute("UPDATE market_bars SET volume=777,source='twse',raw_payload_id=? "
+                   "WHERE trading_date='2026-07-03'", (raw_id,))
+    result = _run_prior_volumes(target)
+    rows = result['captures'][0]['input_provenance']['prior_volumes']['rows']
+    assert rows[-2]['bar']['volume'] == rows[-1]['bar']['volume'] == 777
+    assert rows[-2]['bar']['id'] != rows[-1]['bar']['id']
+    assert rows[-2]['bar']['trading_date'] != rows[-1]['bar']['trading_date']
+    assert rows[-2]['raw_status'] == 'unknown'
+    assert rows[-1]['raw_status'] == 'linked_metadata'
+    assert rows[-1]['raw_payload']['id'] == raw_id
+    assert rows[-1]['raw_payload']['sha256'] == 'a' * 64
+
+
+@pytest.mark.parametrize('change,expected', [
+    ('row', 'prior_volumes_source_relation_changed'),
+    ('feature', 'prior_volumes_feature_mismatch'),
+])
+def test_v3_change_between_producer_and_call_rolls_back(research, monkeypatch, change, expected):
+    _, target, _ = research
+    before = sha(target)
+    original = pipeline._calculate_group_scores
+
+    def mutate_after_features(db, score_date):
+        original(db, score_date)
+        if change == 'row':
+            db.execute(text('UPDATE market_bars SET volume=volume+1 WHERE id=( '
+                            'SELECT id FROM market_bars WHERE trading_date<:day '
+                            'ORDER BY trading_date DESC LIMIT 1)'), {'day': score_date.isoformat()})
+        else:
+            db.execute(text("UPDATE technical_features SET features_json='{}' "
+                            'WHERE trading_date=:day'), {'day': score_date.isoformat()})
+
+    monkeypatch.setattr(pipeline, '_calculate_group_scores', mutate_after_features)
+    with pytest.raises(capture.AnalysisCaptureError) as error:
+        _run_prior_volumes(target)
+    assert error.value.outcome == 'rollback_confirmed'
+    assert error.value.detail == expected
+    assert sha(target) == before
+    with pytest.raises(capture.AnalysisCaptureError, match='attempt_not_found'):
+        read(target, 'prior-one')
+
+
+@pytest.mark.parametrize('volume', [100.5, -1])
+def test_v3_rejects_unsupported_producer_volume_without_commit(research, volume):
+    _, target, _ = research
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE market_bars SET volume=? WHERE trading_date='2026-07-03'", (volume,))
+    before = sha(target)
+    with pytest.raises(capture.AnalysisCaptureError) as error:
+        _run_prior_volumes(target)
+    assert error.value.outcome == 'rollback_confirmed'
+    assert error.value.detail == 'prior_volumes_bar_invalid'
+    assert sha(target) == before
+
+
+def test_v3_dangling_prior_raw_fk_rejected_and_old_attempt_survives_source_change(research):
+    _, target, _ = research
+    first = _run_prior_volumes(target)
+    old = copy.deepcopy(first['captures'][0]['input_provenance']['prior_volumes'])
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE market_bars SET volume=volume+2 WHERE trading_date='2026-07-03'")
+    assert read(target, 'prior-one')['captures'][0]['input_provenance']['prior_volumes'] == old
+    second = _run_prior_volumes(target, 'prior-two')
+    assert second['captures'][0]['input_provenance']['prior_volumes']['projected_values'][-1] == old['projected_values'][-1] + 2
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE market_bars SET raw_payload_id=987654 WHERE trading_date='2026-07-03'")
+    before = sha(target)
+    with pytest.raises(capture.AnalysisCaptureError) as error:
+        _run_prior_volumes(target, 'prior-bad')
+    assert error.value.outcome == 'rollback_confirmed'
+    assert error.value.detail == 'prior_volumes_raw_relation_invalid'
+    assert sha(target) == before
+
+
+@pytest.mark.parametrize('change,expected', [
+    (lambda p: p['input_provenance']['prior_volumes'].__setitem__('row_count', 19), 'prior_volumes_count_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['rows'][0].__setitem__('ordinal', 1), 'prior_volumes_row_shape_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['rows'][0]['bar'].__setitem__('trading_date', p['observed_market_date']), 'prior_volumes_order_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['rows'][0]['bar'].__setitem__('volume', True), 'prior_volumes_bar_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['rows'][0]['bar'].__setitem__('raw_payload_id', 3), 'prior_volumes_raw_relation_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['subject'].__setitem__('instrument_id', 999), 'prior_volumes_subject_date_mismatch'),
+])
+def test_v3_resealed_prior_relation_inconsistency_fails_closed(research, change, expected):
+    _, target, _ = research
+    _run_prior_volumes(target, 'one')
+    _reseal_calls(target, change)
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        read(target)
+
+
+def test_v3_pair_mixing_and_attempt_mode_conflict(research):
+    _, target, _ = research
+    first = _run_prior_volumes(target, 'one')
+    assert _run_prior_volumes(target, 'one')['idempotent_reuse'] is True
+    for mode in (None, capture.INPUT_PROVENANCE_MODE):
+        with pytest.raises(capture.AnalysisCaptureError, match='attempt_mode_conflict'):
+            capture.execute_analysis_attempt(
+                research_database_path=target, attempt_id='one', input_provenance=mode)
+    assert read(target)['captures'] == first['captures']
+
+    def change_one(payload):
+        if payload['ordinal'] == 0:
+            payload['input_provenance']['prior_volumes']['rows'][0]['bar']['source'] = 'changed'
+
+    _reseal_calls(target, change_one)
+    with pytest.raises(capture.AnalysisCaptureError, match='capture_pair_provenance_mismatch'):
+        read(target)
+
+
+def _minimal_prior_provenance():
+    subject = {'instrument_id': 1, 'market': 'TW', 'exchange': 'TWSE', 'symbol': 'TEST'}
+    return {
+        'schema': capture.PRIOR_VOLUMES_SCHEMA, 'subject': subject,
+        'target_date': '2026-05-03', 'window': 20, 'transform': 'int(volume)',
+        'feature': {'id': 5, 'instrument_id': 1, 'trading_date': '2026-05-03',
+                    'source': 'derived'},
+        'row_count': 2,
+        'rows': [
+            {'ordinal': ordinal,
+             'bar': {'id': 11 + ordinal, 'instrument_id': 1,
+                     'trading_date': f'2026-05-0{ordinal + 1}',
+                     'volume': volume, 'source': 'twse', 'raw_payload_id': None},
+             'raw_payload': None, 'raw_status': 'unknown',
+             'raw_reason': 'raw_payload_id_missing'}
+            for ordinal, volume in enumerate((100, 200))
+        ],
+        'projected_values': [100, 200], 'raw_bytes_verification': 'bytes_unverified',
+    }
+
+
+def _link_minimal_raw(provenance):
+    row = provenance['rows'][0]
+    row['bar']['raw_payload_id'] = 7
+    row['raw_payload'] = {'id': 7, 'source': 'twse', 'endpoint': 'local-only',
+                          'sha256': None, 'ingestion_run_id': None}
+    row['raw_status'] = 'linked_metadata'
+    row['raw_reason'] = None
+
+
+@pytest.mark.parametrize('field,replacement,expected', [
+    ('window', 20.0, 'prior_volumes_provenance_shape_invalid'),
+    ('window', True, 'prior_volumes_provenance_shape_invalid'),
+    ('feature.instrument_id', 1.0, 'prior_volumes_feature_invalid'),
+    ('feature.instrument_id', True, 'prior_volumes_feature_invalid'),
+    ('rows.0.bar.instrument_id', 1.0, 'prior_volumes_bar_invalid'),
+    ('rows.0.bar.instrument_id', True, 'prior_volumes_bar_invalid'),
+    ('rows.0.raw_payload.id', 7.0, 'prior_volumes_raw_relation_invalid'),
+    ('rows.0.raw_payload.id', True, 'prior_volumes_raw_relation_invalid'),
+])
+def test_v3_identity_types_reject_equal_float_and_bool_in_memory(field, replacement, expected):
+    provenance = _minimal_prior_provenance()
+    if 'raw_payload' in field:
+        _link_minimal_raw(provenance)
+    item = provenance
+    parts = field.split('.')
+    for part in parts[:-1]:
+        item = item[int(part)] if part.isdigit() else item[part]
+    item[parts[-1]] = replacement
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        capture._validate_prior_volumes_provenance(
+            provenance, {'prior_volumes': [100, 200]},
+            subject=_minimal_prior_provenance()['subject'], market_date='2026-05-03')
+
+
+def _reverse_prior_rows(provenance):
+    provenance['rows'].reverse()
+    provenance['projected_values'].reverse()
+    for ordinal, row in enumerate(provenance['rows']):
+        row['ordinal'] = ordinal
+
+
+@pytest.mark.parametrize('change,expected', [
+    (lambda p: p['rows'][1]['bar'].__setitem__('id', 11), 'prior_volumes_order_invalid'),
+    (lambda p: p['rows'][1]['bar'].__setitem__('trading_date', '2026-05-01'), 'prior_volumes_order_invalid'),
+    (_reverse_prior_rows, 'prior_volumes_order_invalid'),
+    (lambda p: p['rows'].pop(), 'prior_volumes_count_invalid'),
+    (lambda p: p['rows'].append(copy.deepcopy(p['rows'][-1])), 'prior_volumes_count_invalid'),
+    (lambda p: p['projected_values'].__setitem__(0, 101), 'prior_volumes_value_mismatch'),
+    (lambda p: p['rows'][0]['bar'].__setitem__('volume', float('nan')), 'prior_volumes_bar_invalid'),
+])
+def test_v3_relation_shape_fail_closed_in_memory(change, expected):
+    provenance = _minimal_prior_provenance()
+    change(provenance)
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        capture._validate_prior_volumes_provenance(
+            provenance, {'prior_volumes': [100, 200]},
+            subject=_minimal_prior_provenance()['subject'], market_date='2026-05-03')
+
+
+def test_v3_nullable_raw_sha_and_missing_fk_are_distinct_valid_local_states():
+    provenance = _minimal_prior_provenance()
+    _link_minimal_raw(provenance)
+    capture._validate_prior_volumes_provenance(
+        provenance, {'prior_volumes': [100, 200]},
+        subject=provenance['subject'], market_date='2026-05-03')
+    assert provenance['rows'][0]['raw_payload']['sha256'] is None
+    assert provenance['rows'][1]['raw_status'] == 'unknown'
+
+
+@pytest.mark.parametrize('kind', ['instrument_float', 'raw_id_float'])
+def test_v3_resealed_both_pair_rows_reject_identity_type(research, kind):
+    _, target, _ = research
+    raw_id = None
+    if kind == 'raw_id_float':
+        with sqlite3.connect(target) as db:
+            run_id = db.execute('SELECT id FROM ingestion_runs').fetchone()[0]
+            raw_id = db.execute(
+                'INSERT INTO raw_payloads '
+                '(ingestion_run_id,source,endpoint,payload_path,sha256,data_as_of,collected_at) '
+                'VALUES (?,?,?,?,?,?,?)',
+                (run_id, 'twse', 'local-only', None, None, None, '2026-09-27 00:00:00'),
+            ).lastrowid
+            db.execute("UPDATE market_bars SET source='twse',raw_payload_id=? "
+                       "WHERE trading_date='2026-07-03'", (raw_id,))
+    _run_prior_volumes(target, 'one')
+    if kind == 'instrument_float':
+        _reseal_calls(target, lambda p: p['input_provenance']['prior_volumes']['feature']
+                      .__setitem__('instrument_id', float(p['subject']['instrument_id'])))
+        expected = 'prior_volumes_feature_invalid'
+    else:
+        _reseal_calls(target, lambda p: p['input_provenance']['prior_volumes']['rows'][-1]
+                      ['raw_payload'].__setitem__('id', float(raw_id)))
+        expected = 'prior_volumes_raw_relation_invalid'
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        read(target)
+
+
+@pytest.mark.parametrize('change,expected', [
+    (lambda p: p['input_provenance'].__setitem__('extra', True), 'input_provenance_v3_shape_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['rows'].pop(), 'prior_volumes_count_invalid'),
+    (lambda p: p['input_provenance']['prior_volumes']['projected_values'].__setitem__(0, 999), 'prior_volumes_value_mismatch'),
+])
+def test_v3_resealed_nonselected_call_corruption_rejected(research, change, expected):
+    _, target, _ = research
+    _run_prior_volumes(target, 'one')
+    _reseal_calls(target, lambda p: change(p) if p['evaluator'] != p['selected_strategy']['name'] else None)
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        read(target)
+
+
+def test_v3_resealed_receipt_kind_mixing_rejected(research):
+    _, target, _ = research
+    _run_prior_volumes(target, 'one')
+    _reseal_calls(target, lambda p: None,
+                  lambda receipt: receipt.__setitem__('kind', capture.KIND_V2))
+    with pytest.raises(capture.AnalysisCaptureError, match='selected_bar_provenance_shape_invalid'):
+        read(target)

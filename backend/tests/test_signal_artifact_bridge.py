@@ -92,6 +92,13 @@ def _v2(target, *, attempt_id="capture-two"):
     )
 
 
+def _v3(target, *, attempt_id="capture-three"):
+    return capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id=attempt_id,
+        input_provenance=capture.PRIOR_VOLUMES_MODE,
+    )
+
+
 def _link_raw_metadata(target, score_date):
     with sqlite3.connect(target) as db:
         run_id = db.execute("SELECT id FROM ingestion_runs ORDER BY id DESC LIMIT 1").fetchone()[0]
@@ -538,3 +545,70 @@ def test_v2_nonselected_corruption_and_caller_save_exact_reopen(research):
     _reseal(target, corrupt_unselected, attempt_id="capture-two")
     with pytest.raises(capture.AnalysisCaptureError, match="selected_bar_arguments_mismatch"):
         _candidate(target, result, ordinal, attempt_id="capture-two")
+
+
+def test_v3_manifest_seals_ordered_prior_rows_and_caller_save_reopens(research):
+    _, target, _, _ = research
+    result = _v3(target)
+    for ordinal in _selected(result):
+        call = result['captures'][ordinal]
+        candidate = _candidate(target, result, ordinal, attempt_id='capture-three')
+        evidence = candidate['rule_evidence']['capture_bridge']
+        manifest = json.loads(evidence['input_manifest_json'])
+        prior = manifest['prior_volumes_input']
+        assert candidate == normalize_signal_artifact(candidate, include_generated=True)
+        assert candidate['input_snapshot']['id'].startswith('worker-capture-input/v3:')
+        assert candidate['input_snapshot']['hash'] == bridge.digest_text(evidence['input_manifest_json'])
+        assert evidence['bridge_schema'] == 'worker-capture-candidate/v3'
+        assert manifest['schema'] == 'worker-capture-input-manifest/v3'
+        assert prior['schema'] == capture.PRIOR_VOLUMES_SCHEMA
+        assert prior['row_count'] == 20
+        assert prior['projected_values'] == call['arguments']['prior_volumes']
+        assert [item['ordinal'] for item in prior['rows']] == list(range(20))
+        assert [item['bar']['volume'] for item in prior['rows']] == prior['projected_values']
+        assert manifest['selected_bar_input']['coverage'] == ['close', 'volume']
+        assert evidence['raw_bytes_verification'] == 'bytes_unverified'
+        assert candidate['data_quality']['source_verification'] == 'not_officially_verified'
+        assert candidate['data_quality']['historical_inputs_verification'] == 'unknown'
+        assert 'prior_volumes_raw_bytes_and_source_versions_unverified' in candidate['missing_reasons']
+        store_path = target.parent / f'prior-artifacts-{ordinal}.db'
+        with SignalArtifactStore(store_path) as store:
+            saved = store.save_artifact(candidate, attempt_id=f'prior-save-{ordinal}',
+                                        run_id='prior-run', attempted_at=candidate['decision_at'])
+        with SignalArtifactStore(store_path) as store:
+            reopened = store.get_exact(artifact_key=saved.artifact_key)
+            assert reopened.artifact.to_mapping()['input_snapshot'] == candidate['input_snapshot']
+            assert reopened.artifact.to_mapping()['rule_evidence'] == candidate['rule_evidence']
+
+
+def test_v3_manifest_hash_tracks_prior_row_but_excludes_selected_observation_fields(research):
+    _, target, _, v1 = research
+    score_date = v1['receipt']['analysis']['date']
+    raw_id = _link_raw_metadata(target, score_date)
+    first = _v3(target)
+    ordinal = _selected(first)[0]
+    old = _candidate(target, first, ordinal, attempt_id='capture-three')
+    first_provenance = json.loads(old['rule_evidence']['capture_bridge']['input_provenance_json'])
+    assert first_provenance['selected_bar']['raw_payload']['payload_path'] == 'not-opened/raw.json'
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE raw_payloads SET payload_path='changed/no-open.json',"
+                   "collected_at='2026-09-27 00:00:00' WHERE id=?", (raw_id,))
+        db.execute("UPDATE market_bars SET collected_at='2026-09-27 01:00:00' "
+                   "WHERE trading_date=?", (score_date,))
+    observation_only = _v3(target, attempt_id='capture-four')
+    observed = _candidate(target, observation_only, _selected(observation_only)[0],
+                          attempt_id='capture-four')
+    assert observed['input_snapshot']['hash'] == old['input_snapshot']['hash']
+    assert observed['rule_evidence']['capture_bridge']['input_provenance_digest'] != old['rule_evidence']['capture_bridge']['input_provenance_digest']
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE market_bars SET source='different' WHERE id=("
+                   "SELECT id FROM market_bars WHERE trading_date<? ORDER BY trading_date DESC LIMIT 1)",
+                   (score_date,))
+    changed = _v3(target, attempt_id='capture-five')
+    new_candidate = _candidate(target, changed, _selected(changed)[0],
+                               attempt_id='capture-five')
+    assert new_candidate['input_snapshot']['hash'] != old['input_snapshot']['hash']
+    assert json.loads(new_candidate['rule_evidence']['capture_bridge']['input_manifest_json'])['prior_volumes_input']['projected_values'] == json.loads(old['rule_evidence']['capture_bridge']['input_manifest_json'])['prior_volumes_input']['projected_values']
+    assert capture.read_analysis_attempt(
+        research_database_path=target, attempt_id='capture-three',
+    )['captures'][ordinal]['input_provenance'] == first['captures'][ordinal]['input_provenance']

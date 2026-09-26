@@ -295,6 +295,8 @@ def _calculate_features(
     instrument: Instrument,
     *,
     as_of_date: date | None = None,
+    capture: Any = None,
+    capture_date: date | None = None,
 ) -> None:
     bars = db.scalars(
         select(MarketBar)
@@ -364,16 +366,23 @@ def _calculate_features(
             )
         )
         if not feature:
-            db.add(
-                TechnicalFeature(
-                    instrument_id=instrument.id,
-                    trading_date=bar.trading_date,
-                    features_json=feature_values,
-                    source="derived",
-                )
+            feature = TechnicalFeature(
+                instrument_id=instrument.id,
+                trading_date=bar.trading_date,
+                features_json=feature_values,
+                source="derived",
             )
+            db.add(feature)
         else:
             feature.features_json = feature_values
+        if (capture is not None and capture_date == bar.trading_date
+                and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1"):
+            db.flush()
+            capture.freeze_prior_volumes(
+                db, instrument=instrument, feature=feature, bars=bars, index=index,
+                target_date=bar.trading_date,
+                projected_values=feature_values["prior_20_volumes"],
+            )
 
 
 def _benchmark_instrument(db: Session) -> Instrument | None:
@@ -1101,17 +1110,25 @@ def _upsert_signal_for_strategy(
         institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
         margin_balance_change_ratio_5d=margin_ratio,
     )
-    selected_bar = None
-    if capture is not None and getattr(capture, "input_provenance", None) == "selected-bar/v1":
+    input_provenance = None
+    capture_mode = getattr(capture, "input_provenance", None) if capture is not None else None
+    if capture_mode in ("selected-bar/v1", "selected-bar-prior-volumes/v1"):
         selected_bar = capture.selected_bar_provenance(
             db, bar=bar, instrument=instrument, signal_date=signal_date,
             close=close, volume=volume,
         )
+        input_provenance = selected_bar
+        if capture_mode == "selected-bar-prior-volumes/v1":
+            prior_input = capture.prior_volumes_provenance(
+                db, instrument=instrument, feature=feature, signal_date=signal_date,
+                arguments=breakout_arguments,
+            )
+            input_provenance = {"selected_bar": selected_bar, "prior_volumes": prior_input}
     if capture is not None:
-        if selected_bar is None:
+        if input_provenance is None:
             capture.before("breakout_v1", breakout_arguments)
         else:
-            capture.before("breakout_v1", breakout_arguments, input_provenance=selected_bar)
+            capture.before("breakout_v1", breakout_arguments, input_provenance=input_provenance)
     breakout = evaluate_breakout_v1(**breakout_arguments)
     if capture is not None:
         capture.after("breakout_v1", breakout)
@@ -1127,10 +1144,10 @@ def _upsert_signal_for_strategy(
         margin_balance_change_ratio_5d=margin_ratio,
     )
     if capture is not None:
-        if selected_bar is None:
+        if input_provenance is None:
             capture.before("pullback_v1", pullback_arguments)
         else:
-            capture.before("pullback_v1", pullback_arguments, input_provenance=selected_bar)
+            capture.before("pullback_v1", pullback_arguments, input_provenance=input_provenance)
     pullback = evaluate_pullback_v1(**pullback_arguments)
     if capture is not None:
         capture.after("pullback_v1", pullback)
@@ -2503,7 +2520,10 @@ def _analyze_session(db: Session, *, capture: Any = None) -> dict[str, Any]:
         return {"status": "no_data", "signals_upserted": 0}
     instruments = db.scalars(select(Instrument).where(Instrument.status == "active")).all()
     for instrument in instruments:
-        _calculate_features(db, instrument)
+        if capture is not None and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1":
+            _calculate_features(db, instrument, capture=capture, capture_date=score_date)
+        else:
+            _calculate_features(db, instrument)
     db.flush()
     _calculate_group_scores(db, score_date)
     strategies = _ensure_strategies(db)
