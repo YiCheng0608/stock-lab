@@ -1101,8 +1101,17 @@ def _upsert_signal_for_strategy(
         institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
         margin_balance_change_ratio_5d=margin_ratio,
     )
+    selected_bar = None
+    if capture is not None and getattr(capture, "input_provenance", None) == "selected-bar/v1":
+        selected_bar = capture.selected_bar_provenance(
+            db, bar=bar, instrument=instrument, signal_date=signal_date,
+            close=close, volume=volume,
+        )
     if capture is not None:
-        capture.before("breakout_v1", breakout_arguments)
+        if selected_bar is None:
+            capture.before("breakout_v1", breakout_arguments)
+        else:
+            capture.before("breakout_v1", breakout_arguments, input_provenance=selected_bar)
     breakout = evaluate_breakout_v1(**breakout_arguments)
     if capture is not None:
         capture.after("breakout_v1", breakout)
@@ -1118,7 +1127,10 @@ def _upsert_signal_for_strategy(
         margin_balance_change_ratio_5d=margin_ratio,
     )
     if capture is not None:
-        capture.before("pullback_v1", pullback_arguments)
+        if selected_bar is None:
+            capture.before("pullback_v1", pullback_arguments)
+        else:
+            capture.before("pullback_v1", pullback_arguments, input_provenance=selected_bar)
     pullback = evaluate_pullback_v1(**pullback_arguments)
     if capture is not None:
         capture.after("pullback_v1", pullback)

@@ -85,12 +85,42 @@ def _candidate(target, result, ordinal, **changes):
     return bridge.build_signal_artifact_candidate(**kwargs)
 
 
-def _reseal(target, change, change_receipt=None):
+def _v2(target, *, attempt_id="capture-two"):
+    return capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id=attempt_id,
+        input_provenance="selected-bar/v1",
+    )
+
+
+def _link_raw_metadata(target, score_date):
+    with sqlite3.connect(target) as db:
+        run_id = db.execute("SELECT id FROM ingestion_runs ORDER BY id DESC LIMIT 1").fetchone()[0]
+        instrument_id = db.execute("SELECT id FROM instruments WHERE symbol='TEST'").fetchone()[0]
+        raw_id = db.execute(
+            "INSERT INTO raw_payloads (ingestion_run_id,source,endpoint,payload_path,sha256,data_as_of,collected_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (run_id, "twse", "synthetic-endpoint", "not-opened/raw.json", "b" * 64,
+             score_date, "2026-09-26 01:02:03.000000"),
+        ).lastrowid
+        db.execute(
+            "UPDATE market_bars SET source='twse',raw_payload_id=? "
+            "WHERE instrument_id=? AND trading_date=?",
+            (raw_id, instrument_id, score_date),
+        )
+    return raw_id
+
+
+def _reseal(target, change, change_receipt=None, *, attempt_id="capture-one"):
     """Change selected synthetic rows while retaining valid capture seals/schema."""
     with sqlite3.connect(target) as db:
         db.row_factory = sqlite3.Row
-        rows = db.execute("SELECT * FROM worker_capture_calls ORDER BY ordinal").fetchall()
-        receipt = json.loads(db.execute("SELECT payload FROM worker_capture_attempts").fetchone()[0])
+        rows = db.execute(
+            "SELECT * FROM worker_capture_calls WHERE attempt_id=? ORDER BY ordinal",
+            (attempt_id,),
+        ).fetchall()
+        receipt = json.loads(db.execute(
+            "SELECT payload FROM worker_capture_attempts WHERE attempt_id=?", (attempt_id,),
+        ).fetchone()[0])
         for table in ("worker_capture_calls", "worker_capture_attempts"):
             db.execute("DROP TRIGGER " + table + "_no_update")
         for row in rows:
@@ -99,14 +129,14 @@ def _reseal(target, change, change_receipt=None):
                 digest = capture._seal(payload)
                 receipt["call_digests"][row["ordinal"]] = digest
                 db.execute(
-                    "UPDATE worker_capture_calls SET payload=?,digest=? WHERE ordinal=?",
-                    (capture._canonical(payload), digest, row["ordinal"]),
+                    "UPDATE worker_capture_calls SET payload=?,digest=? WHERE attempt_id=? AND ordinal=?",
+                    (capture._canonical(payload), digest, attempt_id, row["ordinal"]),
                 )
         if change_receipt is not None:
             change_receipt(receipt)
         db.execute(
-            "UPDATE worker_capture_attempts SET payload=?,digest=?",
-            (capture._canonical(receipt), capture._seal(receipt)),
+            "UPDATE worker_capture_attempts SET payload=?,digest=? WHERE attempt_id=?",
+            (capture._canonical(receipt), capture._seal(receipt), attempt_id),
         )
         for table in ("worker_capture_calls", "worker_capture_attempts"):
             db.execute(capture.SCHEMA[table + "_no_update"])
@@ -356,3 +386,155 @@ def test_candidate_and_caller_save_are_separate_with_exact_reopen_and_collision(
         relations = {row[0] for row in db.execute("SELECT attempt_id FROM signal_artifact_run_relations")}
     assert attempts == relations == {"caller-save-1", "caller-save-2"}
     assert "capture-one" not in attempts
+
+
+def test_v2_candidate_keeps_local_bar_lineage_and_global_unknowns(research):
+    _, target, _, v1 = research
+    v1_candidate = _candidate(target, v1, _selected(v1)[0])
+    result = _v2(target)
+    assert len(_selected(result)) == 2
+    for ordinal in _selected(result):
+        call = result["captures"][ordinal]
+        candidate = _candidate(target, result, ordinal, attempt_id="capture-two")
+        assert candidate == normalize_signal_artifact(candidate, include_generated=True)
+        assert candidate["input_snapshot"]["id"].startswith("worker-capture-input/v2:")
+        assert candidate["input_snapshot"] != v1_candidate["input_snapshot"]
+        evidence = candidate["rule_evidence"]["capture_bridge"]
+        assert evidence["bridge_schema"] == "worker-capture-candidate/v2"
+        assert evidence["raw_bytes_verification"] == "bytes_unverified"
+        assert evidence["input_provenance_digest"] == bridge.digest_text(evidence["input_provenance_json"])
+        assert json.loads(evidence["input_provenance_json"]) == call["input_provenance"]
+        manifest = json.loads(evidence["input_manifest_json"])
+        assert manifest["schema"] == "worker-capture-input-manifest/v2"
+        assert manifest["selected_bar_input"]["coverage"] == ["close", "volume"]
+        assert manifest["selected_bar_input"]["bar"]["close"] == call["input_provenance"]["bar"]["close"]
+        assert "collected_at" not in manifest["selected_bar_input"]["bar"]
+        assert "data_as_of" not in manifest["selected_bar_input"]["bar"]
+        assert manifest["selected_bar_input"]["raw_status"] == "unknown"
+        assert candidate["input_snapshot"]["hash"] == bridge.digest_text(evidence["input_manifest_json"])
+        assert candidate["data_quality"]["local_input_row_linkage"] == "close_volume_metadata_captured"
+        assert candidate["data_quality"]["source_verification"] == "not_officially_verified"
+        assert candidate["data_quality"]["availability_verification"] == "unknown"
+        assert candidate["data_quality"]["historical_inputs_verification"] == "unknown"
+        assert candidate["as_of_at"] is None and candidate["earliest_execution_at"] is None
+        assert candidate["basis_manifest"]["status"] == "unknown"
+        assert "selected_bar_raw_payload_metadata_unavailable" in candidate["missing_reasons"]
+        candidate["rule_state"]["reasons"].append("caller mutation")
+        assert _candidate(target, result, ordinal, attempt_id="capture-two")["rule_state"] == call["actual_result"]
+
+
+def test_v2_raw_metadata_is_opaque_and_new_attempt_tracks_changed_input(research):
+    _, target, _, v1 = research
+    score_date = v1["receipt"]["analysis"]["date"]
+    raw_id = _link_raw_metadata(target, score_date)
+    first = _v2(target)
+    ordinal = _selected(first)[0]
+    old_candidate = _candidate(target, first, ordinal, attempt_id="capture-two")
+    old_evidence = old_candidate["rule_evidence"]["capture_bridge"]
+    old_provenance = json.loads(old_evidence["input_provenance_json"])
+    manifest = json.loads(old_evidence["input_manifest_json"])
+    assert old_provenance["bar"]["raw_payload_id"] == raw_id
+    assert old_provenance["raw_payload"]["sha256"] == "b" * 64
+    assert old_provenance["raw_payload"]["payload_path"] == "not-opened/raw.json"
+    assert old_provenance["raw_payload"]["collected_at"] == "2026-09-26 01:02:03.000000"
+    assert manifest["selected_bar_input"]["raw_payload"]["sha256"] == "b" * 64
+    assert "payload_path" not in manifest["selected_bar_input"]["raw_payload"]
+    assert "collected_at" not in manifest["selected_bar_input"]["raw_payload"]
+    assert old_candidate["data_quality"]["source_verification"] == "not_officially_verified"
+    assert old_candidate["data_quality"]["availability_verification"] == "unknown"
+    assert not (target.parent / "not-opened/raw.json").exists()
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE raw_payloads SET sha256=? WHERE id=?", ("c" * 64, raw_id))
+        db.execute("UPDATE market_bars SET close=close+1,volume=volume+1 WHERE trading_date=?", (score_date,))
+    assert _candidate(target, first, ordinal, attempt_id="capture-two")["input_snapshot"] == old_candidate["input_snapshot"]
+    assert capture.read_analysis_attempt(
+        research_database_path=target, attempt_id="capture-two",
+    )["captures"][ordinal]["input_provenance"] == old_provenance
+    second = _v2(target, attempt_id="capture-three")
+    new_candidate = _candidate(target, second, _selected(second)[0], attempt_id="capture-three")
+    assert new_candidate["input_snapshot"]["hash"] != old_candidate["input_snapshot"]["hash"]
+    assert json.loads(new_candidate["rule_evidence"]["capture_bridge"]["input_provenance_json"])["raw_payload"]["sha256"] == "c" * 64
+
+    def bad_declared_digest(payload):
+        payload["input_provenance"]["raw_payload"]["sha256"] = "not-a-sha256"
+        return True
+
+    _reseal(target, bad_declared_digest, attempt_id="capture-two")
+    with pytest.raises(capture.AnalysisCaptureError, match="selected_bar_raw_digest_invalid"):
+        _candidate(target, first, ordinal, attempt_id="capture-two")
+
+
+def test_v2_input_hash_excludes_observation_time_status_and_container(research):
+    _, target, _, _ = research
+    result = _v2(target)
+    ordinal = _selected(result)[0]
+    first = _candidate(target, result, ordinal, attempt_id="capture-two")
+    before_sha = _sha(target)
+
+    def observation_only(payload):
+        payload["captured_at"] = (
+            datetime.fromisoformat(payload["captured_at"]) + timedelta(milliseconds=100)
+        ).isoformat()
+        payload["signal_snapshot"]["status"] = "changed_observation"
+        payload["input_provenance"]["bar"]["collected_at"] = "2099-01-01 00:00:00"
+        payload["input_provenance"]["bar"]["data_as_of"] = "2099-01-01 00:00:00"
+        return True
+
+    def receipt_time_only(receipt):
+        receipt["captured_at"] = (
+            datetime.fromisoformat(receipt["captured_at"]) + timedelta(milliseconds=200)
+        ).isoformat()
+
+    _reseal(target, observation_only, receipt_time_only, attempt_id="capture-two")
+    assert _sha(target) != before_sha
+    second = _candidate(target, result, ordinal, attempt_id="capture-two")
+    assert second["status"] == "changed_observation"
+    assert second["input_snapshot"] == first["input_snapshot"]
+    assert second["rule_evidence"]["capture_bridge"]["input_provenance_digest"] != first["rule_evidence"]["capture_bridge"]["input_provenance_digest"]
+    assert second["rule_evidence"]["capture_bridge"]["research_snapshot_sha256"] != first["rule_evidence"]["capture_bridge"]["research_snapshot_sha256"]
+
+
+def test_v2_nonselected_corruption_and_caller_save_exact_reopen(research):
+    _, target, _, v1 = research
+    v1_candidate = _candidate(target, v1, _selected(v1)[0])
+    result = _v2(target)
+    ordinal = _selected(result)[0]
+    candidate = _candidate(target, result, ordinal, attempt_id="capture-two")
+    store_path = target.parent / "signal-artifacts-v2.db"
+    assert not store_path.exists()
+    with SignalArtifactStore(store_path) as store:
+        old = store.save_artifact(
+            v1_candidate, attempt_id="v1-save", run_id="capture-caller-run",
+            attempted_at=v1_candidate["decision_at"],
+        )
+        new = store.save_artifact(
+            candidate, attempt_id="v2-save", run_id="capture-caller-run",
+            attempted_at=candidate["decision_at"],
+        )
+        assert old.artifact_key != new.artifact_key
+    with SignalArtifactStore(store_path) as store:
+        readback = store.get_exact(artifact_key=new.artifact_key)
+        assert readback.artifact.to_mapping()["input_snapshot"] == candidate["input_snapshot"]
+        assert readback.artifact.to_mapping()["rule_evidence"] == candidate["rule_evidence"]
+        retry = store.save_artifact(
+            candidate, attempt_id="v2-retry", run_id="capture-caller-run",
+            attempted_at=candidate["decision_at"],
+        )
+        assert retry.artifact_key == new.artifact_key
+        changed = normalize_signal_artifact(candidate, include_generated=True)
+        changed["rule_state"]["state"] = "different"
+        with pytest.raises(SignalArtifactCollisionError):
+            store.save_artifact(
+                changed, attempt_id="v2-collision", run_id="capture-caller-run",
+                attempted_at=candidate["decision_at"],
+            )
+
+    def corrupt_unselected(payload):
+        if payload["evaluator"] == payload["selected_strategy"]["name"]:
+            return False
+        payload["input_provenance"]["bar"]["close"] = 1.0
+        return True
+
+    _reseal(target, corrupt_unselected, attempt_id="capture-two")
+    with pytest.raises(capture.AnalysisCaptureError, match="selected_bar_arguments_mismatch"):
+        _candidate(target, result, ordinal, attempt_id="capture-two")

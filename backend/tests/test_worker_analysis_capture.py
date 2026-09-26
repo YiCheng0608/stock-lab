@@ -54,6 +54,30 @@ def read(target, attempt='one'):
     return capture.read_analysis_attempt(research_database_path=target,attempt_id=attempt)
 
 
+def _link_selected_raw(target, *, exchange='TWSE'):
+    """Add one local metadata relation; the named payload file is not opened."""
+    with sqlite3.connect(target) as db:
+        run_id, score_date = db.execute(
+            "SELECT id,data_as_of FROM ingestion_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        instrument_id = db.execute(
+            "SELECT id FROM instruments WHERE exchange=?", (exchange,)
+        ).fetchone()[0]
+        source = exchange.lower()
+        raw_id = db.execute(
+            "INSERT INTO raw_payloads (ingestion_run_id,source,endpoint,payload_path,sha256,data_as_of,collected_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (run_id, source, 'local-test-endpoint', 'never-opened/raw.json', 'a'*64,
+             score_date, '2026-09-26 01:02:03.000000'),
+        ).lastrowid
+        db.execute(
+            "UPDATE market_bars SET source=?,raw_payload_id=? "
+            "WHERE instrument_id=? AND trading_date=?",
+            (source, raw_id, instrument_id, score_date),
+        )
+    return raw_id
+
+
 def test_actual_worker_durable_reuse_append_and_source_unchanged(research, monkeypatch):
     source,target,owner=research
     source_hash=sha(source)
@@ -384,7 +408,7 @@ def test_capture_actual_passed_bool_cannot_be_numeric(passed,volume):
         collector.after('breakout_v1',SimpleNamespace(passed=passed,state=actual.state,reasons=actual.reasons))
 
 
-def _reseal_calls(target, change):
+def _reseal_calls(target, change, change_receipt=None):
     """Model corruption with valid seals, so exact semantic checks are exercised."""
     with sqlite3.connect(target) as db:
         db.row_factory=sqlite3.Row
@@ -399,6 +423,8 @@ def _reseal_calls(target, change):
             receipt['call_digests'][row['ordinal']]=digest
             db.execute('UPDATE worker_capture_calls SET payload=?,digest=? WHERE ordinal=?',
                 (capture._canonical(payload),digest,row['ordinal']))
+        if change_receipt is not None:
+            change_receipt(receipt)
         db.execute('UPDATE worker_capture_attempts SET payload=?,digest=?',(capture._canonical(receipt),capture._seal(receipt)))
         for table in ('worker_capture_calls','worker_capture_attempts'):
             db.execute(capture.SCHEMA[table+'_no_update'])
@@ -464,3 +490,223 @@ def test_read_selected_config_number_cannot_be_bool(research):
         payload['selected_strategy']['config']['confirmations']['group_relative_strength']['minimum_excess_return']=False
     _reseal_calls(target,change)
     with pytest.raises(capture.AnalysisCaptureError,match='capture_strategy_link_mismatch'): read(target)
+
+
+def test_v2_selected_bar_actual_calls_raw_metadata_and_mode_conflict(research, monkeypatch):
+    source, target, _ = research
+    source_hash = sha(source)
+    raw_id = _link_selected_raw(target)
+    observed = []
+    for name in ('breakout_v1', 'pullback_v1'):
+        original = getattr(pipeline, 'evaluate_' + name)
+
+        def spy(_name=name, _original=original, **kwargs):
+            observed.append((_name, copy.deepcopy(kwargs)))
+            return _original(**kwargs)
+
+        monkeypatch.setattr(pipeline, 'evaluate_' + name, spy)
+    result = capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='v2-one',
+        input_provenance='selected-bar/v1',
+    )
+    assert result['receipt']['kind'] == capture.KIND_V2
+    assert len(result['captures']) == len(observed) == 8
+    assert read(target, 'v2-one')['captures'] == result['captures']
+    for call, (name, kwargs) in zip(result['captures'], observed):
+        evidence = call['input_provenance']
+        bar = evidence['bar']
+        assert call['evaluator'] == name and call['arguments'] == kwargs
+        assert evidence['schema'] == capture.SELECTED_BAR_SCHEMA
+        assert evidence['coverage'] == ['close', 'volume']
+        assert evidence['raw_bytes_verification'] == 'bytes_unverified'
+        assert bar['instrument_id'] == call['subject']['instrument_id']
+        assert bar['trading_date'] == call['observed_market_date']
+        assert type(call['arguments']['close']) is float
+        assert type(call['arguments']['volume']) is float
+        assert call['arguments']['close'] == float(bar['close'])
+        assert call['arguments']['volume'] == float(bar['volume'])
+        if call['subject']['exchange'] == 'TWSE':
+            assert evidence['raw_status'] == 'linked_metadata'
+            assert bar['raw_payload_id'] == evidence['raw_payload']['id'] == raw_id
+            assert evidence['raw_payload']['sha256'] == 'a'*64
+            assert evidence['raw_payload']['payload_path'] == 'never-opened/raw.json'
+            assert evidence['raw_payload']['collected_at'] == '2026-09-26 01:02:03.000000'
+        else:
+            assert evidence['raw_status'] == 'unknown'
+            assert evidence['raw_reason'] == 'raw_payload_id_missing'
+            assert evidence['raw_payload'] is None
+    for first, second in zip(result['captures'][::2], result['captures'][1::2]):
+        assert first['input_provenance'] == second['input_provenance']
+    before = sha(target)
+    assert capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='v2-one',
+        input_provenance='selected-bar/v1',
+    )['idempotent_reuse'] is True
+    with pytest.raises(capture.AnalysisCaptureError, match='attempt_mode_conflict'):
+        capture.execute_analysis_attempt(research_database_path=target, attempt_id='v2-one')
+    for bad in (True, 1, '', 'selected-bar/v2'):
+        with pytest.raises(capture.AnalysisCaptureError, match='invalid_input_provenance'):
+            capture.execute_analysis_attempt(
+                research_database_path=target, attempt_id='invalid-mode', input_provenance=bad,
+            )
+    assert sha(target) == before and sha(source) == source_hash
+    v1 = run(target, 'v1-next')
+    assert v1['receipt']['kind'] == capture.KIND
+    assert all('input_provenance' not in call for call in v1['captures'])
+    with pytest.raises(capture.AnalysisCaptureError, match='attempt_mode_conflict'):
+        capture.execute_analysis_attempt(
+            research_database_path=target, attempt_id='v1-next',
+            input_provenance='selected-bar/v1',
+        )
+    with sqlite3.connect(target) as db:
+        db.execute("UPDATE raw_payloads SET source='mismatched' WHERE id=?", (raw_id,))
+    before = sha(target)
+    with pytest.raises(capture.AnalysisCaptureError) as error:
+        capture.execute_analysis_attempt(
+            research_database_path=target, attempt_id='v2-bad-raw',
+            input_provenance='selected-bar/v1',
+        )
+    assert error.value.outcome == 'rollback_confirmed'
+    assert error.value.detail == 'selected_bar_raw_relation_invalid'
+    assert sha(target) == before
+
+
+def test_v2_old_row_evidence_survives_source_change_and_new_attempt_reads_new_row(research):
+    _, target, _ = research
+    first = capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='v2-first',
+        input_provenance='selected-bar/v1',
+    )
+    old_evidence = copy.deepcopy(first['captures'][0]['input_provenance'])
+    score_date = first['receipt']['analysis']['date']
+    with sqlite3.connect(target) as db:
+        db.execute(
+            "UPDATE market_bars SET close=close+2,volume=volume+3,source='changed' "
+            "WHERE trading_date=?", (score_date,),
+        )
+    assert read(target, 'v2-first')['captures'][0]['input_provenance'] == old_evidence
+    second = capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='v2-second',
+        input_provenance='selected-bar/v1',
+    )
+    new_evidence = second['captures'][0]['input_provenance']
+    assert new_evidence['bar']['close'] == old_evidence['bar']['close'] + 2
+    assert new_evidence['bar']['volume'] == old_evidence['bar']['volume'] + 3
+    assert new_evidence['bar']['source'] == 'changed'
+    assert read(target, 'v2-first')['captures'][0]['input_provenance'] == old_evidence
+
+
+def test_v2_selected_bar_failure_rolls_back_signal_feature_and_attempt(research, monkeypatch):
+    _, target, _ = research
+    before = sha(target)
+    original = capture._Collector.selected_bar_provenance
+    calls = 0
+
+    def fail_second(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise capture.AnalysisCaptureError('injected_selected_bar_failure')
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(capture._Collector, 'selected_bar_provenance', fail_second)
+    with pytest.raises(capture.AnalysisCaptureError) as error:
+        capture.execute_analysis_attempt(
+            research_database_path=target, attempt_id='v2-failed',
+            input_provenance='selected-bar/v1',
+        )
+    assert error.value.outcome == 'rollback_confirmed'
+    assert error.value.detail == 'injected_selected_bar_failure'
+    assert sha(target) == before
+    with pytest.raises(capture.AnalysisCaptureError, match='attempt_not_found'):
+        read(target, 'v2-failed')
+
+
+@pytest.mark.parametrize('change,expected', [
+    (lambda p: p['input_provenance']['bar'].__setitem__('instrument_id', 999), 'selected_bar_subject_date_mismatch'),
+    (lambda p: p['input_provenance']['bar'].__setitem__('trading_date', '2026-05-01'), 'selected_bar_subject_date_mismatch'),
+    (lambda p: p['input_provenance']['bar'].__setitem__('raw_payload_id', 1), 'selected_bar_raw_relation_invalid'),
+    (lambda p: p['input_provenance']['bar'].__setitem__('close', 1.0), 'selected_bar_arguments_mismatch'),
+    (lambda p: p['input_provenance']['bar'].__setitem__('volume', True), 'selected_bar_value_invalid'),
+    (lambda p: p['input_provenance'].__setitem__('schema', 'unsupported'), 'selected_bar_provenance_shape_invalid'),
+    (lambda p: p['input_provenance'].pop('coverage'), 'selected_bar_provenance_shape_invalid'),
+    (lambda p: p['input_provenance'].__setitem__('extra', True), 'selected_bar_provenance_shape_invalid'),
+])
+def test_v2_resealed_provenance_inconsistency_fails_closed(research, change, expected):
+    _, target, _ = research
+    capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='one',
+        input_provenance='selected-bar/v1',
+    )
+    _reseal_calls(target, change)
+    with pytest.raises(capture.AnalysisCaptureError, match=expected):
+        read(target)
+
+
+def test_v2_resealed_pair_and_version_mixing_fail_closed(research):
+    _, target, _ = research
+    capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='one',
+        input_provenance='selected-bar/v1',
+    )
+
+    def change_one(payload):
+        if payload['ordinal'] == 0:
+            payload['input_provenance']['bar']['source'] = 'changed'
+
+    _reseal_calls(target, change_one)
+    with pytest.raises(capture.AnalysisCaptureError, match='capture_pair_provenance_mismatch'):
+        read(target)
+    _reseal_calls(target, lambda payload: payload['input_provenance']['bar'].__setitem__('source', 'unknown'))
+    assert read(target)['receipt']['kind'] == capture.KIND_V2
+    _reseal_calls(target, lambda payload: None,
+                  lambda receipt: receipt.__setitem__('kind', capture.KIND))
+    with pytest.raises(capture.AnalysisCaptureError, match='capture_keys_mismatch'):
+        read(target)
+    _reseal_calls(target, lambda payload: None,
+                  lambda receipt: receipt.__setitem__('kind', 'worker-analysis-capture/unknown'))
+    with pytest.raises(capture.AnalysisCaptureError, match='attempt_manifest_mismatch'):
+        read(target)
+
+
+def test_v2_selected_bar_native_nonfinite_and_bool_rejected():
+    provenance = {
+        'schema': capture.SELECTED_BAR_SCHEMA,
+        'coverage': ['close', 'volume'],
+        'bar': {
+            'id': 1, 'instrument_id': 2, 'trading_date': '2026-05-01',
+            'close': 1.0, 'volume': 2, 'source': 'unknown',
+            'raw_payload_id': None, 'data_as_of': None, 'collected_at': None,
+        },
+        'raw_payload': None, 'raw_status': 'unknown',
+        'raw_reason': 'raw_payload_id_missing',
+        'raw_bytes_verification': 'bytes_unverified',
+    }
+    for bad in (True, float('nan'), float('inf'), float('-inf')):
+        changed = copy.deepcopy(provenance)
+        changed['bar']['close'] = bad
+        with pytest.raises(capture.AnalysisCaptureError, match='selected_bar_value_invalid'):
+            capture._validate_selected_bar_provenance(
+                changed, {'close': 1.0, 'volume': 2.0},
+                subject={'instrument_id': 2}, market_date='2026-05-01',
+            )
+
+
+def test_v2_reader_does_not_import_worker_or_config(research):
+    _, target, _ = research
+    capture.execute_analysis_attempt(
+        research_database_path=target, attempt_id='v2-read',
+        input_provenance='selected-bar/v1',
+    )
+    code = (
+        "from worker.analysis_capture import read_analysis_attempt; import sys; "
+        "r=read_analysis_attempt(research_database_path=sys.argv[1],attempt_id='v2-read'); "
+        "assert r['receipt']['kind']=='worker-analysis-capture/v2'; "
+        "assert 'worker.pipeline' not in sys.modules; assert 'app.config' not in sys.modules"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith('STOCK_')}
+    result = subprocess.run(
+        [sys.executable, '-B', '-c', code, str(target)], env=env,
+        text=True, encoding='utf-8', capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr

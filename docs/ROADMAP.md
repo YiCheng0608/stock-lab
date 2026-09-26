@@ -1,14 +1,14 @@
 # 開發路線與目前能力
 
-更新：2026-09-26。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-09-27。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
-## 目前進度（2026-09-26 核對）
+## 目前進度（2026-09-27 核對）
 
-**R0–R3 均未整體完成。** 下表依既有有限驗收及本輪 Bridge B capture→candidate adapter 的有限 review 整理；本輪只新增 adapter 能力。
+**R0–R3 均未整體完成。** 下表依既有有限驗收及本輪 selected bar close／volume 本地 metadata 接線的有限 review 整理。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
-| R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter。 | 完整歷史輸入與來源／availability 證據、artifact consumer、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
+| R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 本地 metadata 關係。 | 其餘衍生輸入與真正 raw bytes／來源版本、availability／歷史決策證據、artifact consumer、ATR worker 接線、新交易計畫、PIT gate、legacy-v2 paired replay。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口。 | 歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
@@ -17,7 +17,7 @@
 
 ### 接下來的順序
 
-1. **R0-B2 SignalArtifact bridge B**：A 的映射／缺口與 B 的 capture→candidate adapter 已分別有限 review；candidate 與 caller save 分離。下一步的 source／availability／historical input 接線須依缺口另行核定；consumer、paired replay 與預設切換均未核定。精確輸入與限制見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
+1. **R0-B2 SignalArtifact bridge B**：A 的映射／缺口、B 的 capture→candidate adapter，以及 opt-in selected bar close／volume 本地 metadata 接線已分別有限 review；candidate 與 caller save 分離。下一個最小候選可評估其餘衍生輸入的可封存來源關係及真正 raw bytes／版本證據，範圍須另由統籌核定；availability／historical decision 尚無證據，consumer、paired replay 與預設切換均未核定。精確輸入與限制見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
 2. **R0 其餘接線與比較**：依來源與時間證據核定 B3-wire、B5b，並按依賴處理 B4b 與 B7；尚未以 adapter 證成 paired output。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。
@@ -27,7 +27,7 @@
 | ID | 現況 | 剩餘驗收 |
 | --- | --- | --- |
 | R0-1 ATR | Wilder 純核心與保存層已有限 review；worker 仍用 legacy 算法。 | 官方輸入與可得時間、B3-wire、PIT 及新舊重播比較。 |
-| R0-2 信心與保存輸入 | 新固定規則 confidence 為 null；legacy 值不代表機率。保存、比較、replay、capture、bridge A 及 B adapter 各有有限成果。 | 可證來源／availability／完整歷史輸入、consumer／產品接線、同 snapshot 新舊 paired replay 與選版。 |
+| R0-2 信心與保存輸入 | 新固定規則 confidence 為 null；legacy 值不代表機率。保存、比較、replay、capture、bridge A、B adapter 與 selected bar close／volume 本地 metadata 關係各有有限成果。 | 逐輸入來源版本與 raw bytes（含 selected bar）、availability／完整歷史輸入、consumer／產品接線、同 snapshot 新舊 paired replay 與選版。 |
 | R0-3 價位 | 已標規則參考價，未換成完整交易計畫。 | B4b 的 tick、成本、gap、不追價、流動性、期限及不可比案例。 |
 | R0-4 時間 | 已有時間保存與顯示基礎，兩者尚未接通；截止時間不證資料當時可得。 | Store／worker／產品關聯、可得時間 gate、修訂與回補。 |
 | R0-5 DB 邊界 | 有限 migration、canonical rebuild 與唯讀 startup gates 已 review。 | 正式 migration／restore／deployment、未支援 schema 及服務 reload。 |

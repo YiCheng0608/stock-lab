@@ -1,13 +1,13 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-26。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
+更新：2026-09-27。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
 
 ## 1. 範圍與不變條件
 
 - 新 artifact 與 legacy `signals.signal_key` 使用不同 namespace；不得更新 legacy 列或只補 evidence marker 冒充雙版本。
 - Store 不註冊 legacy ORM metadata、不是 Alembic revision、沒有預設 DB path，也不寫 legacy signal／evaluation／settlement。
 - Rule-only `confidence=null`；semantics 固定為 `signal-confidence/v2`、`not_calibrated`、`is_calibrated=false`、`is_probability=false`。不得把固定值、raw score 或 unknown numeric 稱為機率。
-- Input／implementation refs 只保證 caller-provided shape 自洽，固定標 `caller_provided_only`／`not_officially_verified`；digest 不證來源、內容或 availability truth。
+- Store 的 input／implementation refs 只保證 caller-provided shape 自洽，固定標 `caller_provided_only`／`not_officially_verified`；digest 不證來源、內容或 availability truth。Bridge B 的 v2 selected bar 本地 metadata 證據另見 §10，不改此 store gate。
 - 尚無 session／PIT gate，`earliest_execution_at=null` 且 reason 固定為 `execution_time_unavailable_without_pit_session_availability`。不得從 date-only、legacy cutoff 或 naive time 推成 instant。
 
 ### 1.1 Canonical 最小 shape
@@ -126,7 +126,7 @@ Local foundation 的 canonical shape、ownership、WAL／journal guard、transac
 
 ## 10. Bridge A 可證映射與 Bridge B 有限成果
 
-Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 可證 evaluator 實際收到的 arguments／result、subject、觀測 market date、selected strategy config／version、legacy Signal snapshot 及 receipt 所記 collection run。這只證 capture 內部一致；沒有逐輸入 raw row／source version／availability，owner SHA 也只屬建立 owned DB 前的 source snapshot bytes。
+Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 可證 evaluator 實際收到的 arguments／result、subject、觀測 market date、selected strategy config／version、legacy Signal snapshot 及 receipt 所記 collection run。v1 只有 capture 內部一致性；本輪 opt-in v2 新增 selected bar close／volume 的本地列與 raw metadata 關係，仍沒有全部輸入的來源／版本／availability，owner SHA 也只屬建立 owned DB 前的 source snapshot bytes。
 
 Bridge B 已有限 review 的 opt-in API 位於 `backend/worker/signal_artifact_bridge.py`，只回 detached canonical mapping，不開 `SignalArtifactStore`、不寫 research DB 或 artifact store：
 
@@ -140,21 +140,22 @@ build_signal_artifact_candidate(
 | 明示輸入／輸出 | 已接受的候選映射 | 不可擴張的邊界 |
 | --- | --- | --- |
 | Stable current research snapshot path＋必填 expected SHA、exact attempt＋ordinal | `readonly_snapshot` 驗目前 owned research DB 的 path、bytes、sidecar 與 stable read；同一受保護 snapshot／connection 先以 capture strict reader 驗完整 attempt，再選非負 exact ordinal。只接受 `evaluator == selected_strategy.name` 的 call。 | 不接受 fallback latest、部分 attempt 或未選中的 evaluator。Current research SHA 不等於 owner original-source SHA。 |
-| Selected call | `input_snapshot.id` 為 `worker-capture-input/v1:{database_id}/{attempt_id}/{ordinal}`；`hash` 為 `worker-capture-input-manifest/v1` canonical input-only manifest 的 SHA-256。Manifest 含 subject、market date、strategy id/name/version、evaluator、arguments、selected config、pinned evaluator binding 與明示 upstream refs（原 source container SHA、collection run、legacy Signal id/key）。 | Hash 不含 current research container SHA、status/result、captured/receipt time；原 source SHA 只作 upstream container ref，不能代替逐輸入來源或 availability。 |
+| Selected v1 call | `input_snapshot.id` 為 `worker-capture-input/v1:{database_id}/{attempt_id}/{ordinal}`；`hash` 為 `worker-capture-input-manifest/v1` canonical input-only manifest 的 SHA-256。Manifest 含 subject、market date、strategy id/name/version、evaluator、arguments、selected config、pinned evaluator binding 與明示 upstream refs（原 source container SHA、collection run、legacy Signal id/key）。 | Hash 不含 current research container SHA、status/result、captured/receipt time；原 source SHA 只作 upstream container ref，不能代替逐輸入來源或 availability。 |
+| Opt-in v2 selected call | Receipt `kind=worker-analysis-capture/v2` 時，bridge、manifest、snapshot ID 分別使用 `worker-capture-candidate/v2`、`worker-capture-input-manifest/v2`、`worker-capture-input/v2:{database_id}/{attempt_id}/{ordinal}`。沿用 v1 manifest 欄位，另加 `selected_bar_input`：bar 的 id／instrument／date／close／volume／source／raw FK，以及 raw 的 id／source／endpoint／宣告 SHA／ingestion run id、status／reason。 | 只封存 selected bar close／volume 的本地 metadata 關係；其餘歷史／衍生輸入仍缺。Hash 排除 bar／raw 的 `data_as_of`、`collected_at`、raw path、current container SHA 及 capture／receipt time；不證 raw bytes 或可得時間。 |
 | Caller 明示 aware `decision_at` | 代表這次新研究採用時間，不早於 selected call 與 receipt 的 `captured_at`；`generated_at=decision_at`。 | 只證這次時間先後；observed date、legacy cutoff／created time、captured time 均不能回推歷史 decision 或證 PIT。 |
 | Selected legacy Signal＋actual evaluator result | `status` 保存 observed legacy snapshot status，`rule_state` 保存 actual result；ruleset 使用 selected config，implementation 固定驗 `domain-rules/v1` pin。`confidence`、`as_of_at`、`earliest_execution_at` 為 null，earliest reason 維持固定值；basis unknown、feature refs 空。 | 不重算 v2 status／levels。Pinned evaluator digest 不涵蓋 adapter、pipeline 或 legacy status／levels，dependency／missing reasons 保留這些缺口。 |
-| Capture／receipt 原文 | `rule_evidence.capture_bridge` 保存 exact `call_json`／`receipt_json` opaque string、已驗 call digest、明標 derived 的 receipt seal、manifest JSON／digest，以及 current snapshot path／SHA 和 original source container SHA。 | 不把 opaque 原文改成 nested decoded payload；canonicalizer 對 `*_at` 的轉換會破壞原 bytes／seal，legacy naive `created_at` 也不能當 aware time。 |
+| Capture／receipt 原文 | `rule_evidence.capture_bridge` 保存 exact `call_json`／`receipt_json` opaque string、已驗 call digest、明標 derived 的 receipt seal、manifest JSON／digest，以及 current snapshot path／SHA 和 original source container SHA。v2 另保存完整 `input_provenance_json`／digest 及 `raw_bytes_verification=bytes_unverified`。 | 不把 opaque 原文改成 nested decoded payload；canonicalizer 對 `*_at` 的轉換會破壞原 bytes／seal，legacy naive `created_at` 也不能當 aware time。v2 的 raw path／time 只在完整 provenance 證據中，不進 input-only hash。 |
 | Candidate mapping 與保存 | Adapter 只回 candidate；caller 可另行明示 `attempt_id`／`run_id` 呼叫既有 `SignalArtifactStore.save_artifact`。 | 不自動保存或接 default worker、API、DecisionSummary、前端、comparison consumer；不切預設版本。 |
 
-三種 hash 要分開讀：`expected_snapshot_sha256` 驗本次 current research snapshot，且其 path／SHA 只進 evidence；owner original-source SHA 是建立 owned DB 前的來源容器 fingerprint，僅為 manifest 的 upstream ref；`input_snapshot.hash` 才是 selected call 的 input-only manifest digest。API 沒有 caller 提供的 `input_manifest_digest` 參數；adapter 內部重算 digest，並在回傳前檢查 canonical projection 未改變。通用 store 不會在 caller 事後修改 candidate 時再執行 bridge 專屬的 manifest 檢驗。Current snapshot path／SHA 與 opaque call／receipt 都進 research payload；同一 research core 即使 input-only hash 相同，provenance 或結果若變動仍可能因不可變 payload 而 store collision，hash 相同不代表整份 artifact payload 相同。
+三種 hash 要分開讀：`expected_snapshot_sha256` 驗本次 current research snapshot，且其 path／SHA 只進 evidence；owner original-source SHA 是建立 owned DB 前的來源容器 fingerprint，僅為 manifest 的 upstream ref；`input_snapshot.hash` 才是 selected call 的 input-only manifest digest。API 沒有 caller 提供的 `input_manifest_digest` 參數；adapter 內部重算 digest，並在回傳前檢查 canonical projection 未改變；v2 亦核對完整 provenance JSON 的 digest。通用 store 不會在 caller 事後修改 candidate 時再執行 bridge 專屬的 manifest 檢驗。Current snapshot path／SHA 與 opaque call／receipt 都進 research payload；同一 research core 即使 input-only hash 相同，provenance 或結果若變動仍可能因不可變 payload 而 store collision，hash 相同不代表整份 artifact payload 相同。
 
-必須在 current hash／stable snapshot 不符、完整 attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、status 需 trim、config／`domain-rules/v1` pin 不符、candidate manifest projection 不符，或 decision 缺失、naive、早於 capture 時 fail closed。Capture reader 的 CPython／binary64／`backend/app/domain.py` bytes 與 config pins 仍依 [Worker capture §5](WORKER_ANALYSIS_CAPTURE.md#5-strict-jsonreplay-binding-與-reader)；bridge 不放寬。`data_quality` 與 missing reasons 明列 raw rows／source versions、input availability、歷史 decision time、price basis 和非 evaluator implementation 缺口；digest、receipt 或新 decision time 都不能把 unknown source／availability 升格為已驗證。本輪測試只涵蓋小型 synthetic owned research DB 的 selected／拒絕／caller save 邊界，未以正式資料驗來源、歷史輸入或 PIT。
+必須在 current hash／stable snapshot 不符、完整 attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、status 需 trim、config／`domain-rules/v1` pin 不符、candidate manifest projection 不符，或 decision 缺失、naive、早於 capture 時 fail closed。v2 reader 另以 receipt kind 驗 exact call shape、selected bar 與 arguments／subject／date、raw FK／source／宣告 digest 形狀及 pair；unknown kind 或混用兩版拒絕。Capture reader 的 CPython／binary64／`backend/app/domain.py` bytes 與 config pins 仍依 [Worker capture §5](WORKER_ANALYSIS_CAPTURE.md#5-strict-jsonreplay-binding-與-reader)；bridge 不放寬。v2 `data_quality.local_input_row_linkage=close_volume_metadata_captured`，`raw_payload_metadata` 隨 FK 為 `linked_metadata` 或 `unknown`；`source_verification=not_officially_verified`、`raw_bytes_verification=bytes_unverified`、availability／historical inputs 為 unknown；basis unknown，`as_of_at`／`earliest_execution_at` 為 null。Missing reasons 繼續標出其餘 raw inputs／source versions、selected bar raw bytes／source version、availability、歷史 decision time、price basis 和非 evaluator implementation；raw FK 缺時再標 raw metadata unavailable。prior highs／volumes、MA、groups／chips 等衍生來源尚未連接；digest、receipt 或新 decision time 都不能把 unknown source／availability 升格為已驗證。本輪測試只涵蓋小型 synthetic owned research DB 的 selected／拒絕／caller save 邊界，未以正式資料驗來源、歷史輸入、PIT 或磁碟峰值。
 
 ## 11. 完成邊界
 
 R0-B2／B2-persist 仍需：
 
-1. Bridge B adapter 只已有限 review；後續仍須把 inputs 接到可證 source／availability／historical decision time，並在同一 snapshot 執行隔離 legacy／v2 paired replay。
+1. Bridge B adapter 與 selected bar close／volume 本地 metadata 接線只已有限 review；後續仍須核定其餘衍生輸入的可封存來源關係、真正 raw bytes／source version 證據及 availability／historical decision time，再依共同依賴驗同一 snapshot 隔離 legacy／v2 paired replay。
 2. API list/detail/action、DecisionSummary 與明確版本選擇。
 3. 前端 non-probability 與 legacy/new 並列，且不得隱式切預設。
 4. B3-wire、B5b availability／PIT gate 與 B7 paired replay review。

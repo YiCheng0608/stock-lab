@@ -10,6 +10,7 @@ from contextlib import nullcontext
 from datetime import date, datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,9 @@ from app.signal_artifact_store import readonly_snapshot, snapshot_fingerprint
 from app.signal_artifact_store import _is_path_alias, _path_has_protected_component
 
 KIND = "worker-analysis-capture/v1"
+KIND_V2 = "worker-analysis-capture/v2"
+INPUT_PROVENANCE_MODE = "selected-bar/v1"
+SELECTED_BAR_SCHEMA = "worker-selected-bar-provenance/v1"
 TABLES = {
     "worker_capture_owner": "CREATE TABLE worker_capture_owner (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, digest TEXT NOT NULL)",
     "worker_capture_attempts": "CREATE TABLE worker_capture_attempts (attempt_id TEXT PRIMARY KEY, payload TEXT NOT NULL, digest TEXT NOT NULL)",
@@ -103,6 +107,75 @@ def _positive_id(value):
 def _market_date(value):
     if type(value) is not str or date.fromisoformat(value).isoformat() != value:
         raise AnalysisCaptureError("invalid_market_date")
+
+
+def _selected_bar_float(value):
+    """Mirror the worker's numeric _safe_float conversion for selected bars."""
+    if type(value) not in (int, float):
+        raise AnalysisCaptureError("selected_bar_value_invalid")
+    try:
+        converted = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise AnalysisCaptureError("selected_bar_value_invalid") from exc
+    if not math.isfinite(converted):
+        raise AnalysisCaptureError("selected_bar_value_invalid")
+    return converted
+
+
+def _validate_selected_bar_provenance(value, arguments, *, subject=None, market_date=None):
+    """Validate a sealed local row relation without rereading mutable source rows."""
+    if (type(value) is not dict or set(value) != {
+            "schema", "coverage", "bar", "raw_payload", "raw_status", "raw_reason",
+            "raw_bytes_verification",
+    } or value["schema"] != SELECTED_BAR_SCHEMA
+            or value["coverage"] != ["close", "volume"]
+            or value["raw_bytes_verification"] != "bytes_unverified"):
+        raise AnalysisCaptureError("selected_bar_provenance_shape_invalid")
+    bar = value["bar"]
+    if type(bar) is not dict or set(bar) != {
+            "id", "instrument_id", "trading_date", "close", "volume", "source",
+            "raw_payload_id", "data_as_of", "collected_at",
+    }:
+        raise AnalysisCaptureError("selected_bar_shape_invalid")
+    try:
+        _market_date(bar["trading_date"])
+    except (ValueError, TypeError) as exc:
+        raise AnalysisCaptureError("selected_bar_date_invalid") from exc
+    if (not _positive_id(bar["id"]) or not _positive_id(bar["instrument_id"])
+            or type(bar["volume"]) is not int or bar["volume"] < 0
+            or type(bar["source"]) is not str or not bar["source"].strip()
+            or any(item is not None and type(item) is not str
+                   for item in (bar["data_as_of"], bar["collected_at"]))
+            or (bar["raw_payload_id"] is not None and not _positive_id(bar["raw_payload_id"]))):
+        raise AnalysisCaptureError("selected_bar_value_invalid")
+    if (type(arguments) is not dict or "close" not in arguments or "volume" not in arguments
+            or not _exact(arguments["close"], _selected_bar_float(bar["close"]))
+            or not _exact(arguments["volume"], _selected_bar_float(bar["volume"]))):
+        raise AnalysisCaptureError("selected_bar_arguments_mismatch")
+    if ((subject is not None and bar["instrument_id"] != subject["instrument_id"])
+            or (market_date is not None and bar["trading_date"] != market_date)):
+        raise AnalysisCaptureError("selected_bar_subject_date_mismatch")
+    raw = value["raw_payload"]
+    if bar["raw_payload_id"] is None:
+        if (raw is not None or value["raw_status"] != "unknown"
+                or value["raw_reason"] != "raw_payload_id_missing"):
+            raise AnalysisCaptureError("selected_bar_raw_relation_invalid")
+        return
+    if (type(raw) is not dict or set(raw) != {
+            "id", "source", "endpoint", "payload_path", "sha256", "ingestion_run_id",
+            "data_as_of", "collected_at",
+    } or not _positive_id(raw["id"]) or raw["id"] != bar["raw_payload_id"]
+            or value["raw_status"] != "linked_metadata" or value["raw_reason"] is not None
+            or type(raw["source"]) is not str or raw["source"] != bar["source"]
+            or type(raw["endpoint"]) is not str or not raw["endpoint"].strip()
+            or any(item is not None and type(item) is not str
+                   for item in (raw["payload_path"], raw["data_as_of"], raw["collected_at"]))
+            or (raw["ingestion_run_id"] is not None and not _positive_id(raw["ingestion_run_id"]))):
+        raise AnalysisCaptureError("selected_bar_raw_relation_invalid")
+    declared_sha = raw["sha256"]
+    if (declared_sha is not None and (type(declared_sha) is not str
+            or re.fullmatch(r"[0-9a-fA-F]{64}", declared_sha) is None)):
+        raise AnalysisCaptureError("selected_bar_raw_digest_invalid")
 
 
 def _checked_owner(connection):
@@ -235,7 +308,7 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
         receipt = _decode(row)
         calls = connection.execute("SELECT * FROM worker_capture_calls WHERE attempt_id=? ORDER BY ordinal", (attempt_id,)).fetchall()
         if (set(receipt) != {"kind", "attempt_id", "database_id", "source_snapshot", "captured_at", "analysis", "source_collection_run_id", "call_digests", "signal_count"}
-                or receipt["kind"] != KIND or receipt["attempt_id"] != attempt_id
+                or receipt["kind"] not in (KIND, KIND_V2) or receipt["attempt_id"] != attempt_id
                 or receipt["database_id"] != owner["database_id"] or not _exact(receipt["source_snapshot"], owner["source_snapshot"])
                 or len(calls) != len(receipt["call_digests"]) or len(calls) != receipt["signal_count"]*2):
             raise AnalysisCaptureError("attempt_manifest_mismatch")
@@ -259,6 +332,8 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
                     or payload["ordinal"] != ordinal or payload["observed_market_date"] != receipt["analysis"]["date"]):
                 raise AnalysisCaptureError("capture_relation_mismatch")
             expected_keys = {"attempt_id", "database_id", "ordinal", "evaluator", "selected_strategy", "namespace", "subject", "observed_market_date", "signal_snapshot", "arguments", "captured_at", "actual_result", "bundle"}
+            if receipt["kind"] == KIND_V2:
+                expected_keys.add("input_provenance")
             if set(payload) != expected_keys:
                 raise AnalysisCaptureError("capture_keys_mismatch")
             _timestamp(payload["captured_at"])
@@ -305,11 +380,18 @@ def _read_analysis_attempt(*, research_database_path, attempt_id, _connection=No
                     or not _exact(payload["arguments"], bundle["arguments"])
                     or payload["evaluator"] != bundle["evaluator"]):
                 raise AnalysisCaptureError("capture_result_mismatch")
+            if receipt["kind"] == KIND_V2:
+                _validate_selected_bar_provenance(
+                    payload["input_provenance"], payload["arguments"],
+                    subject=subject, market_date=payload["observed_market_date"],
+                )
             decoded.append(payload)
         for pos in range(0, len(decoded), 2):
             a, b = decoded[pos:pos+2]
             if (a["evaluator"], b["evaluator"]) != ("breakout_v1", "pullback_v1") or any(not _exact(a[k], b[k]) for k in ("subject", "signal_snapshot", "selected_strategy", "namespace")):
                 raise AnalysisCaptureError("capture_pair_mismatch")
+            if receipt["kind"] == KIND_V2 and not _exact(a["input_provenance"], b["input_provenance"]):
+                raise AnalysisCaptureError("capture_pair_provenance_mismatch")
         occurrences = {(r["subject"]["instrument_id"], r["selected_strategy"]["name"]) for r in decoded}
         subjects = {r["subject"]["instrument_id"] for r in decoded}
         if (len(occurrences)*2 != len(decoded) or len(subjects)*4 != len(decoded)
@@ -352,14 +434,84 @@ def _json_value(value):
 
 
 class _Collector:
-    def __init__(self, owner, attempt_id):
-        self.owner, self.attempt_id = owner, attempt_id
+    def __init__(self, owner, attempt_id, input_provenance=None):
+        self.owner, self.attempt_id, self.input_provenance = owner, attempt_id, input_provenance
         self.pending, self.digests = {}, []
         self.occurrences = set()
 
-    def before(self, evaluator, arguments):
+    def selected_bar_provenance(self, db, *, bar, instrument, signal_date, close, volume):
+        """Freeze the bar used by the evaluator; raw metadata is only a DB claim."""
+        if self.input_provenance != INPUT_PROVENANCE_MODE:
+            raise AnalysisCaptureError("input_provenance_not_enabled")
+        from sqlalchemy import text
+        stored_bar = db.execute(text(
+            "SELECT id,instrument_id,trading_date,close,volume,source,raw_payload_id,"
+            "data_as_of,collected_at FROM market_bars WHERE id=:id"
+        ), {"id": bar.id}).mappings().one_or_none()
+        expected_bar = {
+            "id": bar.id, "instrument_id": bar.instrument_id,
+            "trading_date": _json_value(bar.trading_date), "close": bar.close,
+            "volume": bar.volume, "source": bar.source,
+            "raw_payload_id": bar.raw_payload_id,
+        }
+        if stored_bar is None or any(
+            not _exact(stored_bar[key], expected) for key, expected in expected_bar.items()
+        ):
+            raise AnalysisCaptureError("selected_bar_read_relation_invalid")
+        raw_id = bar.raw_payload_id
+        if raw_id is not None and not _positive_id(raw_id):
+            raise AnalysisCaptureError("selected_bar_raw_relation_invalid")
+        raw = (db.execute(text(
+            "SELECT id,source,endpoint,payload_path,sha256,ingestion_run_id,data_as_of,"
+            "collected_at FROM raw_payloads WHERE id=:id"
+        ), {"id": raw_id}).mappings().one_or_none() if raw_id is not None else None)
+        if raw_id is not None and raw is None:
+            raise AnalysisCaptureError("selected_bar_raw_relation_invalid")
+        if raw is not None and raw["ingestion_run_id"] is not None:
+            if (not _positive_id(raw["ingestion_run_id"])
+                    or db.execute(text("SELECT id FROM ingestion_runs WHERE id=:id"),
+                                  {"id": raw["ingestion_run_id"]}).scalar_one_or_none() is None):
+                raise AnalysisCaptureError("selected_bar_raw_relation_invalid")
+        evidence = {
+            "schema": SELECTED_BAR_SCHEMA,
+            "coverage": ["close", "volume"],
+            "bar": {
+                "id": bar.id, "instrument_id": bar.instrument_id,
+                "trading_date": stored_bar["trading_date"],
+                "close": bar.close, "volume": bar.volume, "source": bar.source,
+                "raw_payload_id": raw_id,
+                "data_as_of": stored_bar["data_as_of"],
+                "collected_at": stored_bar["collected_at"],
+            },
+            "raw_payload": ({
+                "id": raw["id"], "source": raw["source"], "endpoint": raw["endpoint"],
+                "payload_path": raw["payload_path"], "sha256": raw["sha256"],
+                "ingestion_run_id": raw["ingestion_run_id"],
+                "data_as_of": raw["data_as_of"],
+                "collected_at": raw["collected_at"],
+            } if raw is not None else None),
+            "raw_status": "linked_metadata" if raw is not None else "unknown",
+            "raw_reason": None if raw is not None else "raw_payload_id_missing",
+            "raw_bytes_verification": "bytes_unverified",
+        }
+        _validate_selected_bar_provenance(
+            evidence, {"close": close, "volume": volume},
+            subject={"instrument_id": instrument.id}, market_date=signal_date.isoformat(),
+        )
+        return evidence
+
+    def before(self, evaluator, arguments, *, input_provenance=None):
         # Native validation/detachment before calling shared runtime. Do not coerce.
-        self.pending[evaluator] = {"arguments": _detached(arguments), "captured_at": _now()}
+        pending = {"arguments": _detached(arguments), "captured_at": _now()}
+        if self.input_provenance == INPUT_PROVENANCE_MODE:
+            if input_provenance is None:
+                raise AnalysisCaptureError("selected_bar_provenance_required")
+            evidence = _detached(input_provenance)
+            _validate_selected_bar_provenance(evidence, pending["arguments"])
+            pending["input_provenance"] = evidence
+        elif input_provenance is not None:
+            raise AnalysisCaptureError("input_provenance_not_enabled")
+        self.pending[evaluator] = pending
 
     def after(self, evaluator, actual):
         item = self.pending[evaluator]
@@ -386,6 +538,14 @@ class _Collector:
         snapshot = {column.name: _json_value(getattr(signal, column.name)) for column in signal.__table__.columns}
         snapshot = _detached(snapshot)
         subject = {"instrument_id": instrument.id, "market": instrument.market, "exchange": instrument.exchange, "symbol": instrument.symbol}
+        if self.input_provenance == INPUT_PROVENANCE_MODE:
+            if not _exact(self.pending["breakout_v1"]["input_provenance"], self.pending["pullback_v1"]["input_provenance"]):
+                raise AnalysisCaptureError("capture_pair_provenance_mismatch")
+            for item in self.pending.values():
+                _validate_selected_bar_provenance(
+                    item["input_provenance"], item["arguments"],
+                    subject=subject, market_date=signal.signal_date.isoformat(),
+                )
         for evaluator in ("breakout_v1", "pullback_v1"):
             item = self.pending[evaluator]
             payload = _detached({"attempt_id": self.attempt_id, "database_id": self.owner["database_id"], "ordinal": len(self.digests),
@@ -399,9 +559,12 @@ class _Collector:
         self.pending.clear()
 
 
-def execute_analysis_attempt(*, research_database_path, attempt_id):
+def execute_analysis_attempt(*, research_database_path, attempt_id, input_provenance=None):
     """Analyze only the owned database. No SessionLocal/default initialization."""
     _attempt_id(attempt_id)
+    if input_provenance is not None and (type(input_provenance) is not str
+            or input_provenance != INPUT_PROVENANCE_MODE):
+        raise AnalysisCaptureError("invalid_input_provenance")
     with readonly_snapshot(research_database_path) as (connection, _):
         owner = _owner(connection)
     try:
@@ -410,6 +573,9 @@ def execute_analysis_attempt(*, research_database_path, attempt_id):
         if exc.code != "attempt_not_found":
             raise
     else:
+        expected_kind = KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND
+        if old["receipt"]["kind"] != expected_kind:
+            raise AnalysisCaptureError("attempt_mode_conflict")
         old["idempotent_reuse"] = True
         return old
     _environment(owner, research_database_path)
@@ -419,7 +585,7 @@ def execute_analysis_attempt(*, research_database_path, attempt_id):
     from worker.pipeline import _analyze_session
     check_database_readiness(research_database_path)
     engine = create_engine("sqlite:///" + Path(research_database_path).as_posix())
-    collector = _Collector(owner, attempt_id)
+    collector = _Collector(owner, attempt_id, input_provenance=input_provenance)
     committed_error = None
     try:
         with Session(engine, autoflush=False, expire_on_commit=False) as db:
@@ -436,7 +602,8 @@ def execute_analysis_attempt(*, research_database_path, attempt_id):
                         or collector.occurrences != {(subject, key) for subject in subjects for key in ("breakout_v1", "pullback_v1")}):
                     raise AnalysisCaptureError("worker_capture_count_mismatch")
                 source_run = db.execute(text("SELECT id FROM ingestion_runs WHERE run_type='collect' AND source='official' ORDER BY updated_at DESC,id DESC LIMIT 1")).scalar_one()
-                receipt = {"kind": KIND, "attempt_id": attempt_id, "database_id": owner["database_id"], "source_snapshot": owner["source_snapshot"],
+                receipt = {"kind": KIND_V2 if input_provenance == INPUT_PROVENANCE_MODE else KIND,
+                    "attempt_id": attempt_id, "database_id": owner["database_id"], "source_snapshot": owner["source_snapshot"],
                     "captured_at": _now(), "analysis": result, "source_collection_run_id": source_run,
                     "call_digests": collector.digests, "signal_count": len(collector.digests)//2}
                 db.execute(text("INSERT INTO worker_capture_attempts VALUES (:attempt,:payload,:digest)"),

@@ -26,11 +26,15 @@ from app.signal_artifact import (
     normalize_signal_artifact,
 )
 from app.signal_artifact_store import readonly_snapshot
-from worker.analysis_capture import AnalysisCaptureError, _read_analysis_attempt, _seal
+from worker.analysis_capture import (
+    AnalysisCaptureError, KIND_V2, SELECTED_BAR_SCHEMA, _read_analysis_attempt, _seal,
+)
 
 
 INPUT_MANIFEST_SCHEMA = "worker-capture-input-manifest/v1"
 INPUT_SNAPSHOT_ID_PREFIX = "worker-capture-input/v1"
+INPUT_MANIFEST_SCHEMA_V2 = "worker-capture-input-manifest/v2"
+INPUT_SNAPSHOT_ID_PREFIX_V2 = "worker-capture-input/v2"
 
 
 class SignalArtifactBridgeError(ValueError):
@@ -67,6 +71,23 @@ def _strict_attempt(connection: sqlite3.Connection, path, attempt_id: str) -> di
         raise AnalysisCaptureError("capture_integrity_error", detail=type(exc).__name__) from exc
 
 
+def _selected_bar_manifest_projection(provenance: dict) -> dict:
+    """Hash only stable input-row claims, never observation time or raw path."""
+    bar, raw = provenance["bar"], provenance["raw_payload"]
+    return {
+        "schema": SELECTED_BAR_SCHEMA,
+        "coverage": ["close", "volume"],
+        "bar": {key: bar[key] for key in (
+            "id", "instrument_id", "trading_date", "close", "volume", "source", "raw_payload_id",
+        )},
+        "raw_payload": ({key: raw[key] for key in (
+            "id", "source", "endpoint", "sha256", "ingestion_run_id",
+        )} if raw is not None else None),
+        "raw_status": provenance["raw_status"],
+        "raw_reason": provenance["raw_reason"],
+    }
+
+
 def build_signal_artifact_candidate(
     *, research_snapshot_path, expected_snapshot_sha256, attempt_id, ordinal, decision_at,
 ) -> dict:
@@ -93,6 +114,7 @@ def build_signal_artifact_candidate(
             raise SignalArtifactBridgeError("ordinal_not_found")
         call = calls[ordinal]
         receipt = verified["receipt"]
+        version_two = receipt["kind"] == KIND_V2
         selected = call["selected_strategy"]
         signal = call["signal_snapshot"]
         bundle = call["bundle"]
@@ -120,7 +142,7 @@ def build_signal_artifact_candidate(
         # A versioned input-only manifest: no result, status, captured/receipt
         # time or current research-container SHA enters this digest.
         manifest = {
-            "schema": INPUT_MANIFEST_SCHEMA,
+            "schema": INPUT_MANIFEST_SCHEMA_V2 if version_two else INPUT_MANIFEST_SCHEMA,
             "subject": subject,
             "market_date": call["observed_market_date"],
             "strategy": {"id": selected["id"], "name": selected["name"],
@@ -141,6 +163,8 @@ def build_signal_artifact_candidate(
                 "legacy_signal": {"id": signal["id"], "signal_key": signal["signal_key"]},
             },
         }
+        if version_two:
+            manifest["selected_bar_input"] = _selected_bar_manifest_projection(call["input_provenance"])
         manifest_json = _canonical(manifest)
         manifest_digest = digest_text(manifest_json)
         # Re-decode and re-encode at the candidate boundary, where the exact
@@ -163,7 +187,7 @@ def build_signal_artifact_candidate(
             raise SignalArtifactBridgeError("capture_seal_mismatch")
 
         evidence = {
-            "bridge_schema": "worker-capture-candidate/v1",
+            "bridge_schema": "worker-capture-candidate/v2" if version_two else "worker-capture-candidate/v1",
             "input_manifest_json": manifest_json,
             "input_manifest_digest": manifest_digest,
             "call_json": call_row["payload"],
@@ -176,13 +200,25 @@ def build_signal_artifact_candidate(
             "research_snapshot_sha256": "sha256:" + fingerprint["sha256"],
             "original_source_container_sha256": "sha256:" + receipt["source_snapshot"]["sha256"],
         }
+        if version_two:
+            provenance_json = _canonical(call["input_provenance"])
+            evidence.update({
+                "input_provenance_json": provenance_json,
+                "input_provenance_digest": digest_text(provenance_json),
+                "raw_bytes_verification": "bytes_unverified",
+            })
         missing = [
-            "raw_input_rows_and_source_versions_unavailable",
+            "remaining_raw_input_rows_and_source_versions_unavailable" if version_two
+                else "raw_input_rows_and_source_versions_unavailable",
             "input_availability_unverified",
             "historical_decision_time_unavailable",
             "price_basis_unverified",
             "adapter_pipeline_legacy_status_levels_implementation_unbound",
         ]
+        if version_two:
+            missing.insert(1, "selected_bar_raw_bytes_and_source_version_unverified")
+            if call["input_provenance"]["raw_status"] == "unknown":
+                missing.insert(2, "selected_bar_raw_payload_metadata_unavailable")
         candidate = normalize_signal_artifact({
             "contract": SIGNAL_ARTIFACT_VERSION,
             "instrument": {"exchange": subject["exchange"], "symbol": subject["symbol"]},
@@ -194,7 +230,7 @@ def build_signal_artifact_candidate(
             "confidence": None,
             "feature_artifact_refs": [],
             "input_snapshot": {
-                "id": f"{INPUT_SNAPSHOT_ID_PREFIX}:{receipt['database_id']}/{attempt_id}/{ordinal}",
+                "id": f"{INPUT_SNAPSHOT_ID_PREFIX_V2 if version_two else INPUT_SNAPSHOT_ID_PREFIX}:{receipt['database_id']}/{attempt_id}/{ordinal}",
                 "hash": manifest_digest,
             },
             "ruleset_snapshot": config,
@@ -215,7 +251,8 @@ def build_signal_artifact_candidate(
             "dependency_manifest": {
                 "mode": CALLER_PROVIDED_ONLY,
                 "verification": "not_officially_verified",
-                "references": ["domain-rules/v1", "worker-analysis-capture/v1"],
+                "references": (["domain-rules/v1", KIND_V2, SELECTED_BAR_SCHEMA]
+                               if version_two else ["domain-rules/v1", "worker-analysis-capture/v1"]),
                 "unknown_reasons": missing,
             },
             "rule_evidence": {"capture_bridge": evidence},
@@ -224,6 +261,11 @@ def build_signal_artifact_candidate(
                 "source_verification": "not_officially_verified",
                 "availability_verification": "unknown",
                 "historical_inputs_verification": "unknown",
+                **({
+                    "local_input_row_linkage": "close_volume_metadata_captured",
+                    "raw_payload_metadata": call["input_provenance"]["raw_status"],
+                    "raw_bytes_verification": "bytes_unverified",
+                } if version_two else {}),
             },
             "missing_reasons": missing,
             "decision_at": adopted_at,
@@ -236,6 +278,8 @@ def build_signal_artifact_candidate(
         normalized_evidence = candidate["rule_evidence"]["capture_bridge"]
         if (candidate["input_snapshot"]["hash"] != digest_text(normalized_evidence["input_manifest_json"])
                 or normalized_evidence != evidence
+                or (version_two and digest_text(normalized_evidence["input_provenance_json"])
+                    != normalized_evidence["input_provenance_digest"])
                 or candidate["status"] != signal["status"]
                 or candidate["rule_state"] != call["actual_result"]):
             raise SignalArtifactBridgeError("candidate_projection_mismatch")

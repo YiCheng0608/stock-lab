@@ -1,6 +1,6 @@
 # Worker analysis capture 契約
 
-更新：2026-09-26。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
+更新：2026-09-27。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。新增的 `selected-bar/v1` 模式僅封存選中 bar 的 close／volume 本地列關係及 raw metadata。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
 
 本文件負責 `backend/worker/analysis_capture.py` 的 API、CLI、環境、local schema、結果與限制。Capture 不是 `SignalArtifactStore`、完整 B2／B7、歷史 PIT／availability 證明或正式資料處理入口。
 
@@ -17,13 +17,13 @@ from worker.analysis_capture import (
 create_research_database(
     *, source_snapshot_path, expected_source_sha256, research_database_path
 )
-execute_analysis_attempt(*, research_database_path, attempt_id)
+execute_analysis_attempt(*, research_database_path, attempt_id, input_provenance=None)
 read_analysis_attempt(*, research_database_path, attempt_id)
 ~~~
 
 - `create_research_database` 驗證 explicit source snapshot 與 expected SHA，exclusive 建立先前不存在的 owned research DB。它只驗 migration marker、必要分析表／欄位、copy hash 與 owner/schema readback，不代表完整 analysis readiness。
-- `execute_analysis_attempt` 先驗 owner 與 exact attempt。既存 ID 只做 strict readback，回 `idempotent_reuse=true`；新 ID 才驗隔離環境、lazy import worker/config、執行 `check_database_readiness`，並在同一 transaction 執行 analysis、Signal upsert、capture 與 receipt。
-- `read_analysis_attempt` 用 fresh read-only snapshot 依 exact ID 回傳完整 committed receipt/captures；不匯入 worker/config、不需要 STOCK 環境，也沒有 latest／date／subject fallback。
+- `execute_analysis_attempt` 的 `input_provenance=None` 維持 `worker-analysis-capture/v1`；唯一新增值為 `selected-bar/v1`，寫入 `worker-analysis-capture/v2` receipt 與每個 call 的 exact `input_provenance`。其他值拒絕。先驗 owner 與 exact attempt；既存 ID strict readback 後只容許相同模式重用，回 `idempotent_reuse=true`，跨模式回 `attempt_mode_conflict`；新 ID 才驗隔離環境、lazy import worker/config、執行 `check_database_readiness`，並在同一 transaction 執行 analysis、Signal upsert、capture 與 receipt。
+- `read_analysis_attempt` 用 fresh read-only snapshot 依 exact ID 回傳完整 committed receipt/captures，strict reader 支援 v1 與 v2；不匯入 worker/config、不需要 STOCK 環境，也沒有 latest／date／subject fallback。
 
 `attempt_id` 長 1～128 字元，首字元為 ASCII 英數，其餘只允許 ASCII 英數、`_ . : -`。它代表明確 analysis attempt；receipt 另存實際 `source_collection_run_id`。
 
@@ -35,7 +35,7 @@ python -m worker.analysis_capture run --research-database-path PATH --attempt-id
 python -m worker.analysis_capture read --research-database-path PATH --attempt-id ID
 ~~~
 
-成功載入、解析並進入 handler 後，stdout 只有一個 JSON object。成功 `create` 回 owner，成功 `run`／`read` 回 verified attempt。Handler 內 runtime failure 以 exit 1 回 `{"error":"<code-or-exception-class>","outcome":null,"detail":null}`；argparse 在 handler 前的 usage error 以 exit 2 寫 stderr，不保證 stdout JSON。模組沒有 export 或 cleanup API。
+CLI `run` 沒有新模式旗標，仍產生或同模式重用 v1 attempt；若用它重跑既有 v2 ID，會回跨模式錯誤。CLI `read` 可讀兩版。成功載入、解析並進入 handler 後，stdout 只有一個 JSON object。成功 `create` 回 owner，成功 `run`／`read` 回 verified attempt。Handler 內 runtime failure 以 exit 1 回 `{"error":"<code-or-exception-class>","outcome":null,"detail":null}`；argparse 在 handler 前的 usage error 以 exit 2 寫 stderr，不保證 stdout JSON。模組沒有 export 或 cleanup API。
 
 ## 2. Source、target 與環境
 
@@ -68,7 +68,7 @@ selected pullback occurrence: breakout_v1, pullback_v1
 
 Breakout exact 7 kwargs：`close`、`prior_highs`、`volume`、`prior_volumes`、`group_excess_return_20d`、`institutional_flow_to_turnover_ratio_5d`、`margin_balance_change_ratio_5d`。Pullback 不含 `prior_highs`，加入 `bar_count`、`ma20`、`ma60`，為 exact 9 kwargs。保存的是 evaluator 呼叫前的轉換後值，含 `_safe_float(close/volume)` 與 `int(raw_bar_count)`；history 保留原順序、prefix、null、空或短 list，不從 mutable `rule_evidence_json.inputs` 回推。
 
-每列 payload exact fields：
+v1 每列 payload exact fields：
 
 ~~~text
 attempt_id, database_id, ordinal, evaluator,
@@ -77,6 +77,8 @@ namespace, subject {instrument_id, market, exchange, symbol},
 observed_market_date, signal_snapshot, arguments,
 captured_at, actual_result, bundle
 ~~~
+
+v2 保留上述欄位並且恰多一個 `input_provenance`；receipt shape 與三張 local capture 表 DDL 均不變，只以 `kind` 區分版本。未知 `kind`、混入其他版本欄位或同 attempt 跨模式重用都 fail closed。
 
 - `actual_result` 是 shared callable 實際回傳的 `passed/state/ordered reasons`。
 - `bundle` 是 `rule-replay-bundle/v1` 以同一份 detached arguments 在 fresh private module 重算的 pinned result。兩者必須 canonical JSON identity 完全相同；`false != 0`、`1.0 != 1`。
@@ -91,6 +93,12 @@ call rows     = signal_count * 2 = analysis.signals_upserted * 4
 ~~~
 
 沒有該日 bar 的 active instrument 不增加數量。
+
+### 3.1 `selected-bar/v1` 本地輸入證據
+
+新模式在 actual evaluator 呼叫前、同一 transaction 內，對這次選中的 `MarketBar` 以 parameterized SQL 讀取 `market_bars` 同列 metadata，核對 ORM bar 的 id、instrument、date、close、volume、source、raw FK；呼叫參數不變。保存的 `input_provenance` 使用 exact `worker-selected-bar-provenance/v1` schema：`coverage=["close","volume"]`；`bar` 含 id、instrument_id、trading_date、close、volume、source、raw_payload_id、data_as_of、collected_at；`raw_payload` 為 nullable，存在時含 id、source、endpoint、payload_path、sha256、ingestion_run_id、data_as_of、collected_at；另有 `raw_status`、`raw_reason`、`raw_bytes_verification=bytes_unverified`。選中 bar 的 close／volume 與兩種 evaluator 各自的實際 arguments 核對；每個 signal pair 的證據須相同。
+
+`raw_payload_id` 為 null 時，`raw_payload=null`、`raw_status=unknown`、`raw_reason=raw_payload_id_missing`。有 FK 時，要求 raw row 存在、id／source 相符，若有 `ingestion_run_id` 也須指向現存 row；宣告的 SHA 若非 null，只檢查 64 位十六進位形狀。沒有讀取 `payload_path` 所指 bytes、沒有網路取得來源，也不以宣告 SHA 證 raw 內容。`data_as_of`／`collected_at` 原樣保存，包括 SQLite 取回的 naive timestamp 字串；不補 timezone、不推導 `first_available_at` 或歷史 decision time。prior highs／volumes、MA、groups／chips 等衍生輸入尚未建立同等來源關係。
 
 ## 4. Local schema、transaction 與 ownership
 
@@ -114,7 +122,7 @@ Owner、receipt 與每個完整 call payload 都須在 canonical native-JSON dom
 
 固定 binding 為 CPython 3.12.14、binary64、完整 `backend/app/domain.py` bytes SHA-256 與兩份完整 config digest；bundle shape 與 replay errors 見 [Rule replay 契約](RULE_REPLAY.md)。Pin 不符時新 attempt 失敗，不改用 shared mutable config。
 
-Strict reader驗 owner/schema、canonical text/digest、exact attempt、row/count/ordinal、subject/date/strategy/Signal/evidence 與 pair關係，並執行 `rule_replay_json` 和 `replay_rule_inputs`。它不以目前 mutable `signals` row 反證舊 snapshot，也沒有 partial success 或 fallback latest。
+Strict reader 驗 owner/schema、canonical text/digest、exact attempt、row/count/ordinal、subject/date/strategy/Signal/evidence 與 pair 關係，並執行 `rule_replay_json` 和 `replay_rule_inputs`。v2 額外驗 exact provenance shape、選中 bar 的 subject／date／close／volume 與 arguments、raw metadata 關係及 pair 一致；舊 attempt 只讀已 sealed 證據，不再從後續可變的 market bar／raw row 補證。它不以目前 mutable `signals` row 反證舊 snapshot，也沒有 partial success 或 fallback latest。
 
 ## 6. Outcome 與錯誤
 
@@ -134,17 +142,18 @@ Strict reader驗 owner/schema、canonical text/digest、exact attempt、row/coun
 - Owner/read：`capture_schema_mismatch`、`ownership_missing`、`ownership_invalid`、`source_fingerprint_invalid`、`invalid_sealed_payload`、`invalid_capture_timestamp`、`invalid_market_date`、`attempt_not_found`、`attempt_manifest_mismatch`、`attempt_count_mismatch`、`attempt_metadata_invalid`、`capture_relation_mismatch`、`capture_keys_mismatch`、`capture_occurrence_invalid`、`capture_replay_mismatch`、`capture_signal_link_mismatch`、`capture_snapshot_shape_invalid`、`capture_snapshot_type_invalid`、`capture_signal_evidence_mismatch`、`capture_strategy_link_mismatch`、`capture_result_mismatch`、`capture_pair_mismatch`、`capture_occurrence_mismatch`、`capture_integrity_error`。
 - New-run preflight：`invalid_attempt_id`、`isolated_stock_environment_required`、`stock_directory_required`、`stock_database_parent_invalid`、`stock_database_must_be_unused`，以及 `check_database_readiness` errors。
 - Execution/transaction：`worker_private_result_mismatch`、`duplicate_or_missing_occurrence`、`worker_strategy_binding_mismatch`、`worker_capture_count_mismatch`、`analysis_failed`、`commit_readback_failed`。
+- v2 模式與 selected bar：`invalid_input_provenance`、`attempt_mode_conflict`、`input_provenance_not_enabled`、`selected_bar_provenance_required`、`selected_bar_read_relation_invalid`、`selected_bar_provenance_shape_invalid`、`selected_bar_shape_invalid`、`selected_bar_date_invalid`、`selected_bar_value_invalid`、`selected_bar_arguments_mismatch`、`selected_bar_subject_date_mismatch`、`selected_bar_raw_relation_invalid`、`selected_bar_raw_digest_invalid`、`capture_pair_provenance_mismatch`。
 
 Create 在 target 尚未出現時保留原 exception；target 一旦出現，外層固定為 `creation_failed` + `creation_outcome_unknown`，原原因在 `detail`。重試必須換全新 path。
 
 ## 7. Review pin 與未完成範圍
 
-有限 review 使用專案外、migration-ready synthetic source 與 owned copies；沒有以正式 DB 驗收 byte hash。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
+有限 review 使用專案外、migration-ready synthetic source 與 owned copies；新模式的 selected bar／raw metadata、舊 attempt 封存讀回、錯誤回滾及 v1/v2 reader／bridge 邊界已由小型 synthetic owned DB 測試，沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
 
 仍未完成／不在保證內：
 
 - 不建立 `SignalArtifactStore`，不保存官方 truth、`first_available_at`、`decision_at`，也不做 legacy-v2 same-snapshot paired replay；B2、B5b、B7 未完成。
-- Bridge A 完成 source／graph 缺口 review，Bridge B explicit capture→candidate adapter 已有限 review；capture／receipt digest、owner SHA 或新研究 decision time 都不能補成 historical availability／PIT。`read_analysis_attempt` 的 public API／CLI 不變；Bridge B 在內部共用同一 guarded connection 做完整 strict read。
+- Bridge A 完成 source／graph 缺口 review，Bridge B explicit capture→candidate adapter 及本輪 selected bar metadata 接線均已有限 review；capture／receipt digest、owner SHA 或新研究 decision time 都不能補成 historical availability／PIT。`read_analysis_attempt` 的 public API／CLI 不變；Bridge B 在內部共用同一 guarded connection 做完整 strict read。
 - 未接 default analyze、daily/backfill、backtest、API、UI 或 DecisionSummary，未切換預設策略／輸出版本。
 - `captured_at` 是 observation time；`observed_market_date` 是 collection-selected date，兩者都不是 availability/PIT。
 - 新 producer／worker 的 member-return identity 與 candidate typed lookup 見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；該能力沒有另行驗收 capture runtime，也不替舊輸入補造 identity。API／UI／backfill 與歷史批次回算仍不在保證內。
