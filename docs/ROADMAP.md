@@ -4,7 +4,7 @@
 
 ## 目前進度（2026-09-27 核對）
 
-**R0–R3 均未整體完成。** 下表依既有有限驗收及本輪 opt-in prior volumes 本地列接線的有限 review 整理；相關回歸仍待補，見[協作紀錄](TASK_COORDINATION.md)。
+**R0–R3 均未整體完成。** 下表依既有有限驗收及 opt-in prior volumes 本地列接線的有限 review 整理；新一輪 raw bytes／source version 只有唯讀盤點，沒有實作或升格。相關回歸仍待補，見[協作紀錄](TASK_COORDINATION.md)。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
@@ -17,7 +17,7 @@
 
 ### 接下來的順序
 
-1. **R0-B2 SignalArtifact bridge B**：A 的映射／缺口、B 的 capture→candidate adapter，以及 opt-in selected bar 與 prior volumes 本地 metadata 接線已有有限 review；candidate 與 caller save 分離。先補未跑回歸；必要磁碟驗證須待[協作紀錄](TASK_COORDINATION.md)所述殘留與配額條件解除。其餘衍生輸入、raw bytes／版本及 availability／historical decision 待證；consumer、paired replay 與預設切換均未核定。精確輸入與限制見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
+1. **R0-B2 SignalArtifact bridge B**：A 的映射／缺口、B 的 capture→candidate adapter，以及 opt-in selected bar 與 prior volumes 本地 metadata 接線已有有限 review；candidate 與 caller save 分離。下一最小候選限 `STOCK_DAY_ALL` selected bar 的唯讀來源證據驗證，現階段實作白名單為空，prior volumes 不升格。先補可行的未跑回歸；必要磁碟驗證須待[協作紀錄](TASK_COORDINATION.md)所述殘留與配額條件解除。真正 raw bytes／版本及 availability／historical decision 待證；consumer、paired replay 與預設切換均未核定。精確輸入與拒絕條件見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
 2. **R0 其餘接線與比較**：依來源與時間證據核定 B3-wire、B5b，並按依賴處理 B4b 與 B7；尚未以 adapter 證成 paired output。
 3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
 4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。

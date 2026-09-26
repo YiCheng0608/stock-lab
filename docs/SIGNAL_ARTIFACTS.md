@@ -1,6 +1,6 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-27。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
+更新：2026-09-27。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。Raw bytes／source version 已做唯讀缺口盤點，尚未增加驗證能力。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
 
 ## 1. 範圍與不變條件
 
@@ -126,7 +126,7 @@ Local foundation 的 canonical shape、ownership、WAL／journal guard、transac
 
 ## 10. Bridge A 可證映射與 Bridge B 有限成果
 
-Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 可證 evaluator 實際收到的 arguments／result、subject、觀測 market date、selected strategy config／version、legacy Signal snapshot 及 receipt 所記 collection run。v1 只有 capture 內部一致性；opt-in v2 新增 selected bar close／volume 的本地列與 raw metadata 關係；本輪 v3 再新增實際 prior volumes 最多 20 筆歷史列的本地 metadata 關係。兩者均沒有驗 raw bytes、來源版本或 availability；owner SHA 也只屬建立 owned DB 前的 source snapshot bytes。Producer／reader 精確規則見 [Worker capture §3.2](WORKER_ANALYSIS_CAPTURE.md#prior-volumes-capture-v3)。
+Bridge A 的有限 source／graph review 確認：`read_analysis_attempt` 依 exact attempt fail-closed 驗 owner、schema、seal、count、ordinal、pair、Signal／strategy linkage 與 private replay；單一 selected call 可證 evaluator 實際收到的 arguments／result、subject、觀測 market date、selected strategy config／version、legacy Signal snapshot 及 receipt 所記 collection run。v1 只有 capture 內部一致性；opt-in v2 新增 selected bar close／volume 的本地列與 raw metadata 關係；v3 再新增實際 prior volumes 最多 20 筆歷史列的本地 metadata 關係。兩者均沒有驗 raw bytes、來源版本或 availability；owner SHA 也只屬建立 owned DB 前的 source snapshot bytes。Producer／reader 精確規則見 [Worker capture §3.2](WORKER_ANALYSIS_CAPTURE.md#prior-volumes-capture-v3)。
 
 Bridge B 已有限 review 的 opt-in API 位於 `backend/worker/signal_artifact_bridge.py`，只回 detached canonical mapping，不開 `SignalArtifactStore`、不寫 research DB 或 artifact store：
 
@@ -150,13 +150,21 @@ build_signal_artifact_candidate(
 
 三種 hash 要分開讀：`expected_snapshot_sha256` 驗本次 current research snapshot，且其 path／SHA 只進 evidence；owner original-source SHA 是建立 owned DB 前的來源容器 fingerprint，僅為 manifest 的 upstream ref；`input_snapshot.hash` 才是 selected call 的 input-only manifest digest。API 沒有 caller 提供的 `input_manifest_digest` 參數；adapter 內部重算 digest，並在回傳前檢查 canonical projection 未改變；v2／v3 亦核對完整 provenance JSON 的 digest。v3 manifest 的 prior rows 依原順序納入身份；改動 bar／raw 關係或 projected values 會改 input hash，觀測欄位則不參與。通用 store 不會在 caller 事後修改 candidate 時再執行 bridge 專屬的 manifest 檢驗。Current snapshot path／SHA 與 opaque call／receipt 都進 research payload；同一 research core 即使 input-only hash 相同，provenance 或結果若變動仍可能因不可變 payload 而 store collision，hash 相同不代表整份 artifact payload 相同。
 
-必須在 current hash／stable snapshot 不符、完整 attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、status 需 trim、config／`domain-rules/v1` pin 不符、candidate manifest projection 不符，或 decision 缺失、naive、早於 capture 時 fail closed。v2 reader 以 receipt kind 驗 selected bar 與 arguments／subject／date、raw FK／source／宣告 digest 形狀及 pair；v3 另驗 prior volumes 的 subject／date／count／order／值／嚴格型別／raw 關係和 pair。Unknown kind 或跨版混用拒絕。Capture reader 的 CPython／binary64／`backend/app/domain.py` bytes 與 config pins 仍依 [Worker capture §5](WORKER_ANALYSIS_CAPTURE.md#5-strict-jsonreplay-binding-與-reader)；bridge 不放寬。v2 `data_quality.local_input_row_linkage=close_volume_metadata_captured`，v3 為 `close_volume_prior_volumes_metadata_captured`；`raw_payload_metadata` 是 selected bar 的 `linked_metadata` 或 `unknown`，prior rows 若缺 raw FK 則由 missing reasons 標示。`source_verification=not_officially_verified`、`raw_bytes_verification=bytes_unverified`、availability／historical inputs 為 unknown；basis unknown，`as_of_at`／`earliest_execution_at` 為 null。Missing reasons 標出其餘 raw inputs／source versions、selected bar 與 prior volumes raw bytes／source version、availability、歷史 decision time、price basis 和非 evaluator implementation；缺 raw FK 再標 raw metadata unavailable。Prior highs、MA、groups／chips 等衍生來源尚未連接；digest、receipt 或新 decision time 都不能把 unknown source／availability 升格為已驗證。本輪只有限 DB 與獨立純記憶體診斷，詳見[協作紀錄](TASK_COORDINATION.md)；其餘 pytest 案例待跑，未驗正式來源、歷史輸入、PIT 或磁碟峰值。
+必須在 current hash／stable snapshot 不符、完整 attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、status 需 trim、config／`domain-rules/v1` pin 不符、candidate manifest projection 不符，或 decision 缺失、naive、早於 capture 時 fail closed。v2 reader 以 receipt kind 驗 selected bar 與 arguments／subject／date、raw FK／source／宣告 digest 形狀及 pair；v3 另驗 prior volumes 的 subject／date／count／order／值／嚴格型別／raw 關係和 pair。Unknown kind 或跨版混用拒絕。Capture reader 的 CPython／binary64／`backend/app/domain.py` bytes 與 config pins 仍依 [Worker capture §5](WORKER_ANALYSIS_CAPTURE.md#5-strict-jsonreplay-binding-與-reader)；bridge 不放寬。v2 `data_quality.local_input_row_linkage=close_volume_metadata_captured`，v3 為 `close_volume_prior_volumes_metadata_captured`；`raw_payload_metadata` 是 selected bar 的 `linked_metadata` 或 `unknown`，prior rows 若缺 raw FK 則由 missing reasons 標示。`source_verification=not_officially_verified`、`raw_bytes_verification=bytes_unverified`、availability／historical inputs 為 unknown；basis unknown，`as_of_at`／`earliest_execution_at` 為 null。Missing reasons 標出其餘 raw inputs／source versions、selected bar 與 prior volumes raw bytes／source version、availability、歷史 decision time、price basis 和非 evaluator implementation；缺 raw FK 再標 raw metadata unavailable。Prior highs、MA、groups／chips 等衍生來源尚未連接；digest、receipt 或新 decision time 都不能把 unknown source／availability 升格為已驗證。既有 v3 接線只有有限 DB 與獨立純記憶體診斷，詳見[協作紀錄](TASK_COORDINATION.md)；其餘 pytest 案例待跑，未驗正式來源、歷史輸入、PIT 或磁碟峰值。
+
+### Raw bytes／source version 唯讀盤點與下一候選
+
+一般抓取流程若先解析 HTTP 回應，再將資料重編碼並計算 SHA，只能證重編碼後的內容，不能證原始 HTTP body bytes。既有 opt-in [`STOCK_DAY_ALL` capture](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 有 `body.bin`、`receipt.json`、對應的 SHA-256 與 registry pins，可作唯讀比對的起點；其中 `source_version` 是本地 registry 的規格宣告，不是上游資料修訂版本，也不證官方來源真實性。Local `RawPayload`、selected bar 與 prior volumes capture 尚未封存這份 receipt／version 的逐輸入關係，也未完成從原始 body bytes 重解析到已選欄位的驗證。它們目前仍是本地 metadata linkage，不能因有 SHA 或 raw FK 就宣稱 bytes／source version 已驗證。
+
+下一最小候選只限 `STOCK_DAY_ALL` selected bar 的唯讀證據驗證；目前沒有核准任何實作檔案或寫入接線，prior volumes 不升格。後續若要提出升格，須從 raw FK 唯一定位同一份封存 body／receipt，安全定位路徑並穩定唯讀讀取 body，核對長度與 SHA-256、receipt 和 registry 的來源／endpoint／version pins，再從該 body 重解析 selected bar，逐一比對 symbol、交易日期、close、volume 與 capture 欄位。單靠相同 SHA 不能選來源：不同來源或 endpoint 可以有相同內容摘要，仍須精確綁定。
+
+缺 raw FK、來源對應不唯一、路徑不安全／不存在／讀取中改變、body 長度或 SHA 不符、receipt／version pin 不符，或重解析欄位不符時，均拒絕升格並保持 unknown。這些是候選驗收條件，尚非現行 bridge 或 capture 已實作的拒絕路徑；現行缺 FK 仍按 v2／v3 契約保存 unknown。即使候選驗過，registry `source_version` 仍只是本地宣告，不證上游修訂版本或官方來源真實性；availability、歷史 decision／PIT 與 prior volumes 的 raw bytes／source version 也須另證。
 
 ## 11. 完成邊界
 
 R0-B2／B2-persist 仍需：
 
-1. Bridge B adapter、selected bar 與 prior volumes 本地 metadata 接線只已有限 review；相關回歸尚待補，見[協作紀錄](TASK_COORDINATION.md)。後續須核定其餘衍生輸入的可封存來源關係、真正 raw bytes／source version 證據及 availability／historical decision time，再依共同依賴驗同一 snapshot 隔離 legacy／v2 paired replay。
+1. Bridge B adapter、selected bar 與 prior volumes 本地 metadata 接線只已有限 review；相關回歸尚待補，見[協作紀錄](TASK_COORDINATION.md)。`STOCK_DAY_ALL` selected bar 唯讀證據驗證仍是下一候選，實作白名單為空；prior volumes 未升格。後續須核定其餘衍生輸入的可封存來源關係、真正 raw bytes／source version 證據及 availability／historical decision time，再依共同依賴驗同一 snapshot 隔離 legacy／v2 paired replay。
 2. API list/detail/action、DecisionSummary 與明確版本選擇。
 3. 前端 non-probability 與 legacy/new 並列，且不得隱式切預設。
 4. B3-wire、B5b availability／PIT gate 與 B7 paired replay review。

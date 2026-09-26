@@ -157,12 +157,12 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 
 ## 7. Review pin 與未完成範圍
 
-有限 review 使用專案外、migration-ready synthetic source 與 owned copies；本輪 v3 的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。驗證及清理數據集中記於[協作紀錄](TASK_COORDINATION.md)與原 task。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
+有限 review 使用專案外、migration-ready synthetic source 與 owned copies；v3 接線的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。驗證及清理數據集中記於[協作紀錄](TASK_COORDINATION.md)與原 task。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
 
 仍未完成／不在保證內：
 
 - 不建立 `SignalArtifactStore`，不保存官方 truth、`first_available_at`、`decision_at`，也不做 legacy-v2 same-snapshot paired replay；B2、B5b、B7 未完成。
-- Bridge A 完成 source／graph 缺口 review，Bridge B explicit capture→candidate adapter、selected bar 與本輪 prior volumes 本地 metadata 接線均只有有限 review；capture／receipt digest、owner SHA 或新研究 decision time 都不能補成 historical availability／PIT。`read_analysis_attempt` 的 public API／CLI 不變；Bridge B 在內部共用同一 guarded connection 做完整 strict read。
+- Bridge A 完成 source／graph 缺口 review，Bridge B explicit capture→candidate adapter、selected bar 與 prior volumes 本地 metadata 接線均只有有限 review；capture／receipt digest、owner SHA 或新研究 decision time 都不能補成 historical availability／PIT。`read_analysis_attempt` 的 public API／CLI 不變；Bridge B 在內部共用同一 guarded connection 做完整 strict read。Raw bytes／source version 的唯讀盤點與下一候選見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選)。
 - 未接 default analyze、daily/backfill、backtest、API、UI 或 DecisionSummary，未切換預設策略／輸出版本。
 - `captured_at` 是 observation time；`observed_market_date` 是 collection-selected date，兩者都不是 availability/PIT。
 - 新 producer／worker 的 member-return identity 與 candidate typed lookup 見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；該能力沒有另行驗收 capture runtime，也不替舊輸入補造 identity。API／UI／backfill 與歷史批次回算仍不在保證內。
