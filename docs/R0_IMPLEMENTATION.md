@@ -1,6 +1,6 @@
 # R0 實作與驗收契約
 
-更新：2026-09-16。本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為準。「已 review」只代表明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。整理前的逐輪命令、測試數與檔案雜湊可由 Git 基準 `2acc3c5deff6fbf33ee104e2e28e3f16e8904a73` 追溯。
+更新：2026-09-27。本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為準。「已 review」只代表明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。整理前的逐輪命令、測試數與檔案雜湊可由 Git 基準 `2acc3c5deff6fbf33ee104e2e28e3f16e8904a73` 追溯。
 
 ## 1. 狀態語意與使用規則
 
@@ -12,7 +12,7 @@
 
 實作者只能標「已實作」；reviewer 才能標「已 review」。ROADMAP 狀態由統籌核定、文件角色更新，不能由本文件的批次名稱推論。
 
-目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b 新增 caller-input 純核心的有限 review，B4b 全項、B5b 與 B7 仍未完成。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
+目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b 與 B5b 各有 caller-input 純核心的有限 review，兩者完整整合及 B7 仍未完成。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
 
 ## 2. 靜態基線與共同不變條件
 
@@ -44,9 +44,9 @@
 | R0-1 | Wilder ATR 純核心、獨立 local store 與 strict caller-provided provenance／comparison | worker、official truth、PIT 與 paired replay；見 §4。 |
 | R0-2 | confidence 安全語意、local SignalArtifact、分離的 comparison／pure replay／worker capture | bridge、legacy-v2 paired output、產品接線與 B7；見 §5 及各保存／重播文件。 |
 | R0-3 | legacy 規則參考價的 read-time API／UI 語意；新 trade plan 的 caller-input 事後假設純核心有限 review | 完整 B4b 的官方 tick／成本／日曆、來源／PIT、持久化與產品接線、paired replay；見 §6。 |
-| R0-4 | local time-evidence store 與產品 read-time projection | store-product linkage、source truth、worker 與 B5b；見 §7。 |
+| R0-4 | local time-evidence store、產品 read-time projection，以及 caller-declared time-cutoff 純核心有限 review | store-product linkage、source truth、完整 B5b gate／worker 整合與 PIT；見 §7。 |
 | R0-5 | 有限 SQLite migration／recovery、canonical rebuild 與 startup readiness gates | 任意歷史／custom schema、正式 migration／restore／deployment；見 §8。 |
-| B4b／B5b／B7 | B4b 僅 caller-input 純核心有限 review；B5b／B7 未開始 | B4b 其餘整合與驗收、B5b／B7 實作及獨立 review。 |
+| B4b／B5b／B7 | B4b、B5b 各僅 caller-input 純核心有限 review；B7 未開始 | B4b／B5b 其餘整合與驗收、B7 實作及獨立 review。 |
 
 ## 4. R0-1：ATR 定義、公司行動與 warm-up
 
@@ -219,9 +219,15 @@ B4b必須使用新trade-plan／execution version，至少保存trigger/confirm�
 
 legacy signal_date/data_cutoff/earliest_execution_date/naive created_at保留但不升格decision、availability、generated或execution instant。response time獨立；News collected不等於first available；action ingestion-run finished不等於data collected；已有product contract而role unknown時，frontend不得fallback舊日期。
 
-有限 review 接受 API／UI 相容 projection、跨入口一致性與 legacy 欄位不變；不接 C007 store 或 worker、不保存新 time、不證 source truth，也未執行 B5b。
+有限 review 接受 API／UI 相容 projection、跨入口一致性與 legacy 欄位不變；C008 本身不接 C007 store 或 worker、不保存新 time、不證 source truth，也不執行 B5b gate。
 
-point-in-time gate仍未完成：每個必要版本須 `available_at<=decision_at`，live run另須 `collected_at<=decision_at`；revision只有 `revision_available_at<=decision_at`可用。unknown availability預設排除或依預先版本化保守延遲，不得只看market_date。`earliest_execution_at`不得早於decision與所有availability，且須落下一合法交易時段。驗收必須覆蓋盤後資料、T+2 revision、backfill-only collected time、offset/date-only及legacy相容輸出。
+### 7.3 R0-C4／B5b caller-declared time-cutoff 純核心（有限 review）
+
+`evaluate_availability(request)`／`caller-availability-cutoff/v1` 是無 I/O 的截止時間檢查。caller 明示 `live`、`historical` 或 `backfill`、含 offset 的 `decision_at`、非空 `required_inputs` 與 `evidence`；每個必要輸入以 `input_id` 及 subject／source／snapshot／revision 四種 identity 與一筆 `time-evidence/v1` 精確配對。缺項、額外項、重複 ID／identity／evidence、identity 不符或 evidence 自帶不支援的 type 均拒絕，不推測或替換版本。evidence 的 `decision_at` 必須與 request 同一 UTC instant。
+
+對每個配對輸入，`first_available_at` 必須是已知、精確 instant，且 UTC 時間 `<=decision_at`；revision 另要求 `revision_available_at<=decision_at`，`live` 另要求 `collected_at<=decision_at`。相等可通過。只有 collected time 的歷史／回補資料不能代替首次可得時間；T+2 revision 不能回填到 T+1 的判斷，也不能偷換為 root。unknown／unavailable、date-only、粗精度、無 offset 時間或 UTC 正規化失敗一律 fail closed。結果保留 request-level 與逐輸入 reasons、額外 evidence 原因，全部必要輸入通過才有 `cutoff_satisfied=true`。
+
+此結果固定 `required_inputs_completeness=caller_declared_only`、`availability_truth=not_asserted`、`point_in_time_status=not_asserted`：核心只檢查 caller 宣告的集合與時間，不能核實來源真實性或找出所有實際依賴，也不構成 PIT、成交或正式交易核准。本輪只接受純核心有限 review；尚無 C007 store／worker／產品接線、實際來源與歷史決策驗證。完整 B5b gate 仍須驗所有實際必要版本、修訂／回補與 legacy 相容；unknown availability 預設排除，或依預先版本化的保守延遲處理，本輪純核心不實作延遲推定。`earliest_execution_at` 不得早於 `decision_at` 與所有 availability，且須落下一合法交易時段；再以同 snapshot 接 B7 比較。不得由純核心通過推定 B5b 或 R0 完成。
 
 ## 8. R0-5：migration head 與實際 DB revision
 
