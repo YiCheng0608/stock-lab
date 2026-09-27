@@ -58,6 +58,31 @@ def markers(path, alembic, fallback):
                 connection.executemany(f"INSERT INTO {name} VALUES (?)", [(value,) for value in values])
 
 
+def test_current_head_and_fallback_count_in_memory():
+    assert len(readiness.REVISIONS) == 7
+    assert readiness.REVISIONS[-1] == "0007_turnover_availability"
+    with sqlite3.connect(":memory:") as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (readiness.REVISIONS[-1],))
+        readiness._check_markers(connection, {"alembic_version"})
+        connection.execute("UPDATE alembic_version SET version_num = ?", (readiness.REVISIONS[-2],))
+        with pytest.raises(readiness.DatabaseReadinessError, match="current head revision"):
+            readiness._check_markers(connection, {"alembic_version"})
+        connection.execute("DROP TABLE alembic_version")
+        connection.execute("CREATE TABLE schema_migrations (version TEXT)")
+        connection.executemany(
+            "INSERT INTO schema_migrations VALUES (?)", [(revision,) for revision in readiness.REVISIONS]
+        )
+        readiness._check_markers(connection, {"schema_migrations"})
+        connection.execute("DELETE FROM schema_migrations WHERE version = ?", (readiness.REVISIONS[-1],))
+        with pytest.raises(readiness.DatabaseReadinessError, match="all seven revisions"):
+            readiness._check_markers(connection, {"schema_migrations"})
+        connection.execute("INSERT INTO schema_migrations VALUES (?)", (readiness.REVISIONS[-1],))
+        connection.execute("INSERT INTO schema_migrations VALUES ('future_revision')")
+        with pytest.raises(readiness.DatabaseReadinessError, match="known prefix"):
+            readiness._check_markers(connection, {"schema_migrations"})
+
+
 def test_alembic_head_repeat_and_migration_bombs(ready_db, monkeypatch):
     def bomb(*args, **kwargs):
         raise AssertionError("startup must not mutate schema")
@@ -76,7 +101,7 @@ def test_alembic_head_repeat_and_migration_bombs(ready_db, monkeypatch):
     assert fingerprint(ready_db) == before
 
 
-def test_actual_forced_fallback_six_revisions(tmp_path, monkeypatch):
+def test_actual_forced_fallback_seven_revisions(tmp_path, monkeypatch):
     path = tmp_path / "fallback.db"
     engine = create_engine(f"sqlite:///{path.as_posix()}")
     enable_sqlite_foreign_keys(engine)
@@ -89,13 +114,13 @@ def test_actual_forced_fallback_six_revisions(tmp_path, monkeypatch):
     check_unchanged(path)
 
 
-@pytest.mark.parametrize("prefix", range(1, 7))
+@pytest.mark.parametrize("prefix", range(1, 8))
 def test_head_with_known_fallback_prefix(ready_db, prefix):
     markers(ready_db, [readiness.REVISIONS[-1]], readiness.REVISIONS[:prefix])
     check_unchanged(ready_db)
 
 
-@pytest.mark.parametrize("alembic", [[], [None], [6], [b"0006_news_json_defaults"], ["unknown"], [readiness.REVISIONS[4]], [readiness.REVISIONS[-1]] * 2])
+@pytest.mark.parametrize("alembic", [[], [None], [6], [b"0007_turnover_availability"], ["unknown"], [readiness.REVISIONS[-2]], [readiness.REVISIONS[-1]] * 2])
 def test_bad_alembic_cannot_be_overridden_by_full_fallback(ready_db, alembic):
     markers(ready_db, alembic, readiness.REVISIONS)
     check_unchanged(ready_db, "Alembic")
@@ -108,10 +133,10 @@ def test_bad_fallback_markers(ready_db, alembic, fallback):
     check_unchanged(ready_db, "fallback")
 
 
-@pytest.mark.parametrize("prefix", range(1, 6))
+@pytest.mark.parametrize("prefix", range(1, 7))
 def test_fallback_only_stale_prefix(ready_db, prefix):
     markers(ready_db, None, readiness.REVISIONS[:prefix])
-    check_unchanged(ready_db, "all six")
+    check_unchanged(ready_db, "all seven")
 
 
 @pytest.mark.parametrize("kind", ["missing", "zero", "tableless", "unversioned", "not_sqlite", "directory"])
@@ -140,7 +165,7 @@ def test_unready_files(tmp_path, kind):
 def test_marker_view_or_malformed_table(ready_db, marker, column):
     with sqlite3.connect(ready_db) as connection:
         connection.execute(f"DROP TABLE IF EXISTS {marker}")
-        connection.execute(f"CREATE VIEW {marker} AS SELECT '0006_news_json_defaults' AS {column}")
+        connection.execute(f"CREATE VIEW {marker} AS SELECT '0007_turnover_availability' AS {column}")
     check_unchanged(ready_db, "real table")
     with sqlite3.connect(ready_db) as connection:
         connection.execute(f"DROP VIEW {marker}")

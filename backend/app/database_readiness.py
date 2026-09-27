@@ -25,6 +25,7 @@ REVISIONS = (
     "0004_product_news_themes",
     "0005_news_temporal_contract",
     "0006_news_json_defaults",
+    "0007_turnover_availability",
 )
 READ_TIMEOUT_SECONDS = 1.0
 _LEGACY_REQUEST_KEY_DDL = re.compile(
@@ -61,7 +62,9 @@ def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
         if rows != [(REVISIONS[-1],)]:
             _fail("Alembic must contain exactly the current head revision")
     if "schema_migrations" in tables:
-        values = [row[0] for row in connection.execute("SELECT version FROM schema_migrations LIMIT 7")]
+        values = [row[0] for row in connection.execute(
+            f"SELECT version FROM schema_migrations LIMIT {len(REVISIONS) + 1}"
+        )]
         if (
             not values
             or any(type(value) is not str for value in values)
@@ -71,7 +74,7 @@ def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
         ):
             _fail("fallback revisions must be a distinct, nonempty known prefix")
         if not has_alembic and len(values) != len(REVISIONS):
-            _fail("fallback-only database requires all six revisions")
+            _fail("fallback-only database requires all seven revisions")
     elif not has_alembic:
         _fail("database has no recognized migration markers")
 

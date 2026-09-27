@@ -174,7 +174,7 @@ def test_hot_group_does_not_mask_or_close_industry(env):
 
 def batch(cap, industry="24"):
     instruments = [record(cap, industry=industry), sources.InstrumentRecord("TAIEX", "Index", instrument_type="index", payload_sha256=cap.sha256)]
-    bars = [sources.BarRecord(r.symbol, date(2026, 9, 4), 100, 101, 99, 100, 1000, 100000, exchange="TWSE", payload_sha256=cap.sha256) for r in instruments]
+    bars = [sources.BarRecord(r.symbol, date(2026, 9, 4), 100, 101, 99, 100, 1000, 100000, exchange="TWSE", payload_sha256=cap.sha256, turnover_status="available") for r in instruments]
     return sources.OfficialBatch(instruments=instruments, bars=bars, payloads=[cap])
 
 

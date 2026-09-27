@@ -160,6 +160,8 @@ def bar_dict(item: MarketBar | None) -> dict[str, Any] | None:
         "adj_close": item.adj_close,
         "volume": item.volume,
         "turnover": item.turnover,
+        "turnover_status": item.turnover_status,
+        "turnover_reason": item.turnover_reason,
         "source": item.source,
         "data_as_of": as_datetime(item.data_as_of),
         "collected_at": as_datetime(item.collected_at),

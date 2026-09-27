@@ -32,7 +32,8 @@ INDEXES = {'ix_signal_settlements_signal_id': 'signal_id',
            'ix_signal_settlements_settlement_date': 'settlement_date'}
 REVISIONS = {'0001_schema_v1', '0002_instrument_exchange_key',
              '0003_backtest_run_metadata', '0004_product_news_themes',
-             '0005_news_temporal_contract', '0006_news_json_defaults'}
+             '0005_news_temporal_contract', '0006_news_json_defaults',
+             '0007_turnover_availability'}
 _TOKEN = re.compile(r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]")
 
 

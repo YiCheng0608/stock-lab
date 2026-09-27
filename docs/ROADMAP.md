@@ -9,7 +9,7 @@
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；產業期間、停復牌與公司行動局部修正。 | 逐域 coverage／可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面。免費官方分點人工查詢入口不等於已接資料集。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；產業期間、停復牌與公司行動局部修正。 | 成交額的磁碟 capture／legacy migration 與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口。 | 歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
@@ -40,7 +40,7 @@
 
 ## R1–R3 驗收方向
 
-- **R1**：逐市場、標的、日期與用途驗來源／coverage，unknown 不補零；完整條件見[資料來源](DATA_SOURCES.md)、[新聞](NEWS_SPEC.md)與[產業分類](INDUSTRY_CLASSIFICATION.md)。
+- **R1**：逐市場、標的、日期與用途驗來源／coverage；成交額缺失／無效依已選契約以數值 `0` 另存 `unavailable` 與原因，不能當有效零，其餘 unknown 不補零。完整條件見[資料來源](DATA_SOURCES.md)、[新聞](NEWS_SPEC.md)與[產業分類](INDUSTRY_CLASSIFICATION.md)。
 - **R2**：分開公司品質、事件機會、交易位置與持倉風險；交付可拒絕交易的完整計畫，見[產品規格](PRODUCT_SPEC.md)。
 - **R3**：先定目標與採用門檻，再驗增量、樣本外與前瞻；樣本不足保持等待，未校準不給機率，見[策略驗證](STRATEGIES.md)。
 
@@ -48,6 +48,7 @@
 
 | 項目 | 現行處理 |
 | --- | --- |
+| 成交額缺值 | 已選定保留有效 OHLC／volume，缺失或無效成交額數值存 `0` 並另存狀態／原因；明確來源零才是可用零。有限實作與待驗邊界見 [R1-A2](ROADMAP_EXECUTION.md#4-r1可靠資料與事件)。 |
 | 使用情境 | 暫以盤後 long、最早 T+1、數天至數週設計；精確期間與做空待決。T+5／T+20 是追蹤窗口，不是必然退出日。 |
 | 風險預算 | 未知時不預填個人比例或具體張數；一般研究方案可先版本化設計。 |
 | 來源／AI | 免費公開來源先做可行性；供應商、預算、歷史權限、部署、成本／隱私未選定。預測／採用門檻在看測試結果前記錄。 |

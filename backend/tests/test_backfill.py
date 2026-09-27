@@ -82,6 +82,7 @@ def _batch_for(trading_date: date, close: float = 100.0) -> sources.OfficialBatc
             close=close,
             volume=1000,
             turnover=100000,
+            turnover_status="available",
             exchange="TWSE",
             source="twse_fixture" if symbol != "TAIEX" else "twse_index_fixture",
             data_as_of=trading_date.isoformat(),

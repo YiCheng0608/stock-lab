@@ -6,6 +6,16 @@ import pytest
 import worker.sources as sources
 
 
+@pytest.mark.parametrize("amount", [0, 1])
+def test_direct_bar_record_without_turnover_evidence_defaults_unknown(amount):
+    bar = sources.BarRecord(
+        symbol="1101", trading_date=date(2026, 9, 4),
+        open=100, high=101, low=99, close=100,
+        volume=1000, turnover=amount,
+    )
+    assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == (amount, "unknown", None)
+
+
 class FixtureFetcher:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -142,6 +152,45 @@ def test_historical_parser_adds_symbol_and_backfill_is_bounded():
         sources._ensure_backfill_window(date(2026, 1, 1), date(2026, 9, 4))
 
 
+@pytest.mark.parametrize(
+    ("parser", "symbol_key", "amount_key"),
+    [
+        (sources.parse_twse_daily_rows, "Code", "TradeValue"),
+        (sources.parse_tpex_daily_rows, "SecuritiesCompanyCode", "TransactionAmount"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("raw_amount", "expected_amount", "expected_status", "expected_reason"),
+    [
+        (None, 0.0, "unavailable", "missing"),
+        ("---", 0.0, "unavailable", "missing"),
+        ("not-a-number", 0.0, "unavailable", "invalid"),
+        ("-5", 0.0, "unavailable", "invalid"),
+        ("0", 0.0, "available", None),
+        ("1,234", 1234.0, "available", None),
+    ],
+)
+def test_daily_turnover_availability_preserves_price_and_volume(
+    parser, symbol_key, amount_key, raw_amount, expected_amount, expected_status, expected_reason
+):
+    row = {
+        symbol_key: "1101",
+        "Date": "2026-09-04",
+        "OpeningPrice": "100", "HighestPrice": "105", "LowestPrice": "98", "ClosingPrice": "103",
+        "Open": "100", "High": "105", "Low": "98", "Close": "103",
+        "TradeVolume": "1000", "TradingShares": "1000",
+    }
+    if raw_amount is not None:
+        row[amount_key] = raw_amount
+    bars = parser([row])
+    assert len(bars) == 1
+    bar = bars[0]
+    assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == (100, 105, 98, 103, 1000)
+    assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == (
+        expected_amount, expected_status, expected_reason
+    )
+
+
 def test_twse_all_daily_report_parser_selects_security_table():
     payload = {
         "date": "20260904",
@@ -178,6 +227,7 @@ def test_twse_all_daily_report_parser_selects_security_table():
     assert rows[0].trading_date == date(2026, 9, 4)
     assert rows[0].close == 103
     assert rows[0].volume == 1000
+    assert (rows[0].turnover_status, rows[0].turnover_reason) == ("available", None)
 
 
 def test_twse_mi_index_explicit_no_data_is_skipped_for_non_trading_weekday(tmp_path, monkeypatch):
@@ -247,6 +297,9 @@ def test_twse_mi_index_taiex_row_uses_requested_date_and_provenance():
     assert rows[0].trading_date == date(2026, 6, 5)
     assert rows[0].close == 22123.45
     assert rows[0].payload_sha256 == "fixture-sha"
+    assert (rows[0].turnover, rows[0].turnover_status, rows[0].turnover_reason) == (
+        0, "unavailable", "synthetic_index"
+    )
 
 
 def test_twse_mi_index_selects_price_table_not_return_table():
@@ -294,6 +347,20 @@ def test_twse_openapi_adjacent_dates_select_exact_price_row():
     )
     assert [row.close for row in first] == [47326.27]
     assert [row.close for row in second] == [47105.78]
+    assert all(
+        row.turnover_status == "unavailable" and row.turnover_reason == "synthetic_index"
+        for row in [*first, *second]
+    )
+
+
+def test_twse_monthly_index_does_not_claim_synthetic_turnover_is_available():
+    rows = sources.parse_twse_index_history_payload(
+        [{"Date": "2026-09-04", "ClosingIndex": "24000"}]
+    )
+    assert len(rows) == 1
+    assert (rows[0].turnover, rows[0].turnover_status, rows[0].turnover_reason) == (
+        0, "unavailable", "synthetic_index"
+    )
 
 
 def test_twse_taiex_parser_rejects_wrong_date_duplicate_and_nonpositive_rows():

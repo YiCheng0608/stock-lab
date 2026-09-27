@@ -57,6 +57,22 @@ def test_health_endpoint():
     assert response.json()["status"] == "ok"
 
 
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [("available", None), ("unavailable", "missing"), ("unknown", "legacy_zero_ambiguous")],
+)
+def test_bar_dict_exposes_turnover_availability(status, reason):
+    bar = MarketBar(
+        trading_date=date(2026, 9, 4), open=100, high=105, low=98,
+        close=103, adj_close=103, volume=1000, turnover=0,
+        turnover_status=status, turnover_reason=reason, source="fixture",
+    )
+    payload = api_module.bar_dict(bar)
+    assert payload["turnover"] == 0
+    assert payload["turnover_status"] == status
+    assert payload["turnover_reason"] == reason
+
+
 def test_signal_api_exposes_non_probability_semantics_for_new_and_legacy_rows(isolated_api):
     with isolated_api() as db:
         instrument = Instrument(market="TW", exchange="TWSE", symbol="SEM", name="Semantics", instrument_type="stock", status="active")

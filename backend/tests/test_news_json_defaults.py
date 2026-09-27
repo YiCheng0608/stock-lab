@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "backend" / "alembic.ini"
 OLD_REVISION = "0005_news_temporal_contract"
 NEW_REVISION = "0006_news_json_defaults"
+CURRENT_HEAD = "0007_turnover_availability"
 
 
 def _normalize_default(value: Any) -> str | None:
@@ -251,7 +252,7 @@ def test_old_005_repair_preserves_bytes_self_fk_custom_objects_and_is_idempotent
         assert _news_signature(connection) == first_signature
         _assert_json_defaults(connection)
         if migration_path == "alembic":
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == NEW_REVISION
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
         else:
             versions = {
                 row[0]
@@ -292,7 +293,7 @@ def test_fresh_schema_has_json_server_defaults_and_new_head(
             "SELECT symbols_json, theme_ids_json FROM news_items"
         ).all() == [("[]", "[]")]
         if migration_path == "alembic":
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == NEW_REVISION
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
         else:
             assert connection.execute(
                 text("SELECT version FROM schema_migrations WHERE version = :version"),
@@ -517,7 +518,7 @@ def test_actual_0004_fixture_reaches_new_head_without_changing_json_defaults(tmp
         with engine.connect() as connection:
             _assert_json_defaults(connection)
             if migration_path == "alembic":
-                assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == NEW_REVISION
+                assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
             else:
                 assert connection.execute(
                     text("SELECT version FROM schema_migrations WHERE version = :version"),

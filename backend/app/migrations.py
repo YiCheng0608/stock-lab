@@ -22,6 +22,8 @@ _ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
     "market_bars": {
         "raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
         "is_suspended": "BOOLEAN NOT NULL DEFAULT 0",
+        "turnover_status": "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
+        "turnover_reason": "VARCHAR(40)",
     },
     "chip_snapshots": {
         "raw_payload_id": "INTEGER REFERENCES raw_payloads(id)",
@@ -132,6 +134,12 @@ def _fallback_upgrade_on_connection(connection) -> None:
         preflight_settlement_identity(connection)
     Base.metadata.create_all(bind=connection)
     inspector = inspect(connection)
+    # A pre-existing status is authoritative. Only rows from a schema that
+    # lacked it receive the one-time legacy classification below.
+    had_turnover_status = (
+        inspector.has_table("market_bars")
+        and "turnover_status" in _column_names(connection, "market_bars")
+    )
     for table_name, columns in _ADDITIVE_COLUMNS.items():
         if not inspector.has_table(table_name):
             continue
@@ -141,6 +149,18 @@ def _fallback_upgrade_on_connection(connection) -> None:
                 connection.execute(
                     text(f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {definition}')
                 )
+    if inspector.has_table("market_bars") and not had_turnover_status:
+        connection.execute(text(
+            "UPDATE market_bars SET turnover_status = 'available' WHERE turnover > 0"
+        ))
+        connection.execute(text(
+            "UPDATE market_bars SET turnover_reason = 'legacy_zero_ambiguous' "
+            "WHERE turnover = 0"
+        ))
+        connection.execute(text(
+            "UPDATE market_bars SET turnover_reason = 'legacy_invalid' "
+            "WHERE turnover < 0 OR turnover IS NULL"
+        ))
     _rebuild_instruments_if_needed(connection)
     _ensure_request_key_index(connection)
     _rebuild_signal_settlements_if_needed(connection)
@@ -204,6 +224,12 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0006_news_json_defaults', CURRENT_TIMESTAMP)"
+        )
+    )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0007_turnover_availability', CURRENT_TIMESTAMP)"
         )
     )
 

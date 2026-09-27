@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 import worker.pipeline as pipeline
 import worker.sources as sources
-from app.db import enable_sqlite_foreign_keys
+from app.db import Base, enable_sqlite_foreign_keys
 from app.domain import (
     LEGACY_SIGNAL_CONFIDENCE_SEMANTICS_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS_VERSION,
@@ -56,6 +56,96 @@ def _fixture_payload() -> sources.FetchedPayload:
     )
 
 
+def test_turnover_status_survives_upsert_and_gates_both_ratios_in_memory():
+    from app.api import bar_dict
+
+    engine = create_engine("sqlite:///:memory:")
+    enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    score_date = date(2026, 9, 4)
+    days = pipeline.business_days(score_date, 20)
+    try:
+        with sessionmaker(bind=engine, autoflush=False)() as db:
+            instrument = Instrument(
+                market="TW", exchange="TWSE", symbol="STATUS", name="Status fixture",
+                instrument_type="stock", status="active",
+            )
+            db.add(instrument)
+            db.flush()
+            for trading_date in days:
+                db.add(MarketBar(
+                    instrument_id=instrument.id, trading_date=trading_date,
+                    open=100, high=105, low=98, close=103, adj_close=103,
+                    volume=1000, turnover=100, turnover_status="available", source="fixture",
+                ))
+            for trading_date in days[-5:]:
+                db.add(ChipSnapshot(
+                    instrument_id=instrument.id, trading_date=trading_date,
+                    foreign_buy=10, trust_buy=10, dealer_buy=10, source="fixture",
+                ))
+            db.flush()
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is not None
+
+            positive_bar = db.scalar(select(MarketBar).where(
+                MarketBar.instrument_id == instrument.id,
+                MarketBar.trading_date == score_date,
+            ))
+            assert positive_bar is not None and positive_bar.turnover == 100
+            for status, reason in (("unavailable", "invalid"), ("unknown", "legacy_zero_ambiguous")):
+                positive_bar.turnover_status = status
+                positive_bar.turnover_reason = reason
+                db.flush()
+                assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
+                assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+            positive_bar.turnover_status = "available"
+            positive_bar.turnover_reason = None
+            db.flush()
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is not None
+
+            row = {
+                "Code": "STATUS", "Date": score_date.isoformat(),
+                "OpeningPrice": "100", "HighestPrice": "105", "LowestPrice": "98", "ClosingPrice": "103",
+                "TradeVolume": "1000",
+            }
+            missing = sources.parse_twse_daily_rows([row])[0]
+            bar = pipeline._upsert_official_bar(db, instrument, missing, None)
+            db.flush()
+            bar_id = bar.id
+            db.expire_all()
+            bar = db.get(MarketBar, bar_id)
+            assert bar is not None
+            assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == (100, 105, 98, 103, 1000)
+            assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == (0, "unavailable", "missing")
+            assert (bar_dict(bar)["turnover_status"], bar_dict(bar)["turnover_reason"]) == (
+                "unavailable", "missing"
+            )
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
+            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+
+            explicit_zero = sources.parse_twse_daily_rows([{**row, "TradeValue": "0"}])[0]
+            pipeline._upsert_official_bar(db, instrument, explicit_zero, None)
+            db.flush()
+            db.expire_all()
+            bar = db.get(MarketBar, bar_id)
+            assert bar is not None
+            assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == (0, "available", None)
+            assert (bar_dict(bar)["turnover_status"], bar_dict(bar)["turnover_reason"]) == (
+                "available", None
+            )
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
+            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+
+            bar.turnover_status = "unknown"
+            bar.turnover_reason = "legacy_zero_ambiguous"
+            db.flush()
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
+            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+    finally:
+        engine.dispose()
+
+
 def test_empty_short_backtest_summary_stays_insufficient_sample(pipeline_env):
     with pipeline_env() as db:
         run = IngestionRun(
@@ -94,7 +184,7 @@ def test_collect_is_official_only_idempotent_and_links_raw_payloads(pipeline_env
         sources.InstrumentRecord("0050", "Taiwan 50", exchange="TWSE", instrument_type="etf", etf_category="broad_market", payload_sha256=etf_payload.sha256),
     ]
     bars = [
-        sources.BarRecord(symbol=item.symbol, trading_date=score_date, open=100, high=105, low=98, close=103, volume=1000, turnover=103000, exchange="TWSE", source="twse_index" if item.symbol == "TAIEX" else "twse", data_as_of=score_date.isoformat(), payload_sha256=payload.sha256)
+        sources.BarRecord(symbol=item.symbol, trading_date=score_date, open=100, high=105, low=98, close=103, volume=1000, turnover=103000, exchange="TWSE", source="twse_index" if item.symbol == "TAIEX" else "twse", data_as_of=score_date.isoformat(), payload_sha256=payload.sha256, turnover_status="available")
         for item in instruments
     ]
     actions = [sources.ActionRecord("AAA", date(2026, 8, 20), "ex_dividend", cash_dividend=1.0, exchange="TWSE", payload_sha256=payload.sha256)]
@@ -160,6 +250,7 @@ def test_collect_marks_official_source_warning_partial(pipeline_env):
             close=103,
             volume=1000,
             turnover=103000,
+            turnover_status="available",
             exchange="TWSE",
             source="twse_index" if item.symbol == "TAIEX" else "twse",
             data_as_of=score_date.isoformat(),
@@ -199,7 +290,7 @@ def test_collect_preserves_raw_capture_when_normalization_fails(pipeline_env):
     score_date = date(2026, 9, 3)
     batch = sources.OfficialBatch(
         instruments=[sources.InstrumentRecord("AAA", "Alpha", exchange="TWSE", industry="24", payload_sha256=payload.sha256)],
-        bars=[sources.BarRecord("NOT_IN_UNIVERSE", score_date, 1, 1, 1, 1, 1, 1, exchange="TWSE", source="twse", payload_sha256=payload.sha256)],
+        bars=[sources.BarRecord("NOT_IN_UNIVERSE", score_date, 1, 1, 1, 1, 1, 1, exchange="TWSE", source="twse", payload_sha256=payload.sha256, turnover_status="available")],
         payloads=[payload],
     )
 
@@ -302,7 +393,7 @@ def test_hot_groups_require_three_members_and_keep_etfs_separate(pipeline_env):
             for instrument in [*stocks, *etfs]:
                 base = 100 if instrument.instrument_type == "stock" else 80
                 close = base * (1 + (0.004 if instrument.instrument_type == "stock" else 0.003) * index)
-                db.add(MarketBar(instrument_id=instrument.id, trading_date=trading_date, open=close, high=close + 1, low=close - 1, close=close, adj_close=close, volume=1000, turnover=close * 1000, source="fixture"))
+                db.add(MarketBar(instrument_id=instrument.id, trading_date=trading_date, open=close, high=close + 1, low=close - 1, close=close, adj_close=close, volume=1000, turnover=close * 1000, turnover_status="available", source="fixture"))
                 db.add(ChipSnapshot(instrument_id=instrument.id, trading_date=trading_date, foreign_buy=100, trust_buy=20, dealer_buy=10, margin_balance=10000 + index, margin_change=1, source="fixture"))
         for instrument in [*stocks, *etfs]:
             db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"prior_20_volumes": [1000] * 20, "volume": 1300}, source="fixture"))
@@ -398,6 +489,7 @@ def test_institutional_flow_ratios_use_canonical_hot_group_and_strategy_denomina
                     adj_close=100,
                     volume=1000,
                     turnover=100,
+                    turnover_status="available",
                     source="fixture",
                 )
             )
@@ -459,6 +551,7 @@ def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pi
                     adj_close=100,
                     volume=1000,
                     turnover=100,
+                    turnover_status="available",
                     source="fixture",
                 )
             )

@@ -7,7 +7,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from worker import source_registry as registry, source_runtime as runtime, sources, pipeline
+from worker import source_registry as registry, source_runtime as runtime, sources, pipeline, stock_day_capture
 from worker.stock_day_capture import load_stock_day_capture, StockDayCaptureError, MAX_ZIP_BYTES
 from app.models import Instrument, MarketBar, RawPayload, IngestionRun
 from app.coverage import verified_taiex_sessions
@@ -71,6 +71,7 @@ def test_exact_bytes_dates_units_and_selected_only_validation(bundle_factory):
     bars, raw, unavailable = capture.select(["00400A", "BAD", "ABSENT"], DAY)
     assert [b.symbol for b in bars] == ["00400A"]
     assert bars[0].volume == 1234 and bars[0].turnover == 250000
+    assert (bars[0].turnover_status, bars[0].turnover_reason) == ("available", None)
     assert bars[0].adj_close is None and not bars[0].is_suspended
     assert bars[0].data_as_of == "2026-09-04"
     assert raw.collected_at == datetime(2026, 9, 5, 0, 0, 1, tzinfo=timezone.utc)
@@ -86,14 +87,58 @@ def test_exact_bytes_dates_units_and_selected_only_validation(bundle_factory):
     ("OpeningPrice", ""), ("OpeningPrice", "NaN"), ("HighestPrice", "Infinity"),
     ("ClosingPrice", "0"), ("LowestPrice", "-1"), ("TradeVolume", "1.5"),
     ("TradeVolume", True), ("TradeVolume", "-1"), ("TradeVolume", "9223372036854775808"),
-    ("TradeValue", ""), ("TradeValue", None), ("TradeValue", "-1"),
-    ("TradeValue", "12xyz"), ("TradeValue", "12,34"), ("HighestPrice", "199")])
-def test_selected_bad_values_unavailable_without_zero_fill(bundle_factory, field, value):
+    ("HighestPrice", "199")])
+def test_selected_bad_ohlcv_values_unavailable_without_zero_fill(bundle_factory, field, value):
     path, args, _ = bundle_factory([row(**{field: value}), row("GOOD")])
     capture = load_stock_day_capture(path, **args)
     bars, _, reasons = capture.select(["1101", "GOOD"], DAY)
     assert [b.symbol for b in bars] == ["GOOD"]
     assert len(reasons) == 1 and reasons[0]["symbol"] == "1101"
+
+
+@pytest.mark.parametrize("case,expected_status,expected_reason,expected_amount", [
+    ("omitted", "unavailable", "missing", 0),
+    ("empty", "unavailable", "missing", 0),
+    ("none", "unavailable", "missing", 0),
+    ("negative", "unavailable", "invalid", 0),
+    ("malformed", "unavailable", "invalid", 0),
+    ("bad_commas", "unavailable", "invalid", 0),
+    ("zero", "available", None, 0),
+    ("positive", "available", None, 250000),
+])
+def test_selected_turnover_memory_contract(case, expected_status, expected_reason, expected_amount):
+    selected = row()
+    values = {
+        "empty": "", "none": None, "negative": "-1", "malformed": "12xyz",
+        "bad_commas": "12,34", "zero": "0", "positive": "250,000",
+    }
+    if case == "omitted":
+        selected.pop("TradeValue")
+    else:
+        selected["TradeValue"] = values[case]
+    rows, day = stock_day_capture._rows(json.dumps([selected]).encode())
+    bars, unavailable = stock_day_capture._select_validated_rows(rows, day, ["1101"], "memory-sha")
+    assert unavailable == []
+    assert len(bars) == 1
+    bar = bars[0]
+    assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == (200, 205, 198, 203, 1234)
+    assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == (
+        expected_amount, expected_status, expected_reason
+    )
+    assert bar.payload_sha256 == "memory-sha"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("OpeningPrice", ""), ("ClosingPrice", "0"), ("TradeVolume", "1.5"),
+    ("TradeVolume", True), ("HighestPrice", "199"),
+])
+def test_selected_ohlcv_invalid_still_rejects_whole_row_in_memory(field, value):
+    rows, day = stock_day_capture._rows(json.dumps([row(**{field: value})]).encode())
+    bars, unavailable = stock_day_capture._select_validated_rows(rows, day, ["1101"], "memory-sha")
+    assert bars == []
+    assert unavailable == [{"symbol": "1101", "reason": (
+        "inconsistent_ohlc_range" if field == "HighestPrice" else "invalid_or_missing_" + field
+    )}]
 
 
 @pytest.mark.parametrize("date_value", ["1150904", "20260904", "115/09/04", "2026-09-04"])
@@ -239,9 +284,15 @@ def test_history_never_overwrites_or_backfills_capture_day(bundle_factory):
     adapter = sources.TwseAdapter(fetcher, stock_day_capture=capture)
     bars, payloads = adapter.fetch_bars(["1101", "0050", "MISSING"], DAY, DAY)
     assert sources.TWSE_DAILY_ENDPOINT not in fetcher.calls
-    assert [(b.symbol, b.close) for b in bars] == [("1101", 203), ("TAIEX", 24000)]
-    assert len(adapter.stock_day_unavailable) == 2
+    assert [(b.symbol, b.close) for b in bars] == [("1101", 203), ("0050", 203), ("TAIEX", 24000)]
+    selected_etf = next(bar for bar in bars if bar.symbol == "0050")
+    assert (selected_etf.volume, selected_etf.turnover, selected_etf.turnover_status, selected_etf.turnover_reason) == (
+        1234, 0, "unavailable", "missing"
+    )
+    assert adapter.stock_day_unavailable == [{"symbol": "MISSING", "reason": "missing_symbol"}]
     assert len(adapter.fetch_warnings) == 2
+    assert any("stock_day_capture_turnover_unavailable" in warning and "0050" in warning for warning in adapter.fetch_warnings)
+    assert any("stock_day_capture_unavailable" in warning and "MISSING" in warning for warning in adapter.fetch_warnings)
     assert payloads[0].sha256 == capture.sha256
 
 

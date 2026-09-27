@@ -207,6 +207,8 @@ export type Bar = {
   adj_close: number
   volume: number
   turnover: number
+  turnover_status: 'available' | 'unavailable' | 'unknown'
+  turnover_reason: string | null
   source: string
   data_as_of: string | null
   collected_at: string | null

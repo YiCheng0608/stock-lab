@@ -55,21 +55,19 @@ R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAI
 
 這只修正 benchmark 的 exchange identity，未驗全市場或逐欄 coverage、真實官方 session、歷史完整性或 PIT。列數／日期數不能代表欄位用途可用；現行逐欄路徑與限制見下節。工作狀態見 [R1-A2](ROADMAP_EXECUTION.md)。
 
-### R1-A2-P2 逐欄缺值與佔位資料路徑（唯讀盤點）
+### R1-A2-P2+ 成交金額可得狀態（有限接受）
 
-本輪只接受現行程式的唯讀盤點，未修 parser、保存、schema 或 consumer，也未執行測試、DB 操作或官方 payload 擷取。以下描述現況，不是已驗的逐欄 coverage 或核定後的新契約：
+使用者已選定缺值政策：`turnover` 數值欄在來源成交金額缺失或無效時存 `0`，另以 `turnover_status`／`turnover_reason` 保存欄位狀態，不憑數值 `0` 判定來源真的為零。這是本地保存與使用契約，不代表 TWSE／TPEx 官方對缺值有相同定義。本輪程式範圍已獲統籌有限接受；尚未驗逐市場、逐標的、逐 session 的實際欄位 coverage 或官方歷史 payload。
 
-| 路徑 | 已核對現況 | 對欄位用途的限制 |
+| 路徑 | 已接受的成交金額契約 | 邊界 |
 | --- | --- | --- |
-| legacy TWSE 行情 | [`parse_twse_daily_rows`](../backend/worker/sources.py) 對 `TradeValue` 無逐欄拒收 reason；缺值經 `parse_number` 成 `None`，建 `BarRecord` 時以 `turnover or 0.0` 合併為 0。當日及歷史包裝再交此 parser，只回 bar 列。`TradeVolume` 經 `parse_integer`／`int`，小數會截整。 | 同一完整 OHLCV 列，僅 `TradeValue` 缺值或合法 0 不再可區分；小數成交量不能稱已驗官方原值。parser 若略過列，也沒有帶出 symbol／date／field／reason 的介面。 |
-| TAIEX close-only | 現行 TAIEX parser 以 close 填 O／H／L，volume／turnover 填 0；部分歷史指數欄位缺值時亦以 close 補 O／H／L。[`verified_taiex_sessions`](../backend/app/coverage.py) 驗身分、日期與 provenance，並不驗這些欄位。 | index bar 的存在與 session 計數不證真實 O／H／L 或量額。族群基準目前只取 close／session，但不能外推所有 consumer。 |
-| 保存與使用 | `BarRecord.turnover` 為 `float`，[`MarketBar.turnover`](../backend/app/models.py) 為非 nullable 且預設 0；[`_upsert_official_bar`](../backend/worker/pipeline.py) 原樣保存 record。flow consumer 對 turnover `<=0` 回 unavailable。 | consumer 可拒絕非正額，但不能從已存的 0 還原「缺值」或「合法零」來源；既存 bar 不因後續拒收而自動刪除或修復。coverage 仍按列／日期計。 |
-| 下游特徵與展示 | [`analyze`](../backend/worker/pipeline.py) 對 active instrument（含 index）計算特徵；高低差／ATR、量比、族群量能與策略輸入可沿用 bar 數值。[`bar_dict`](../backend/app/api.py) 輸出 OHLCV／turnover，[`stockChart`](../frontend/src/stockChart.ts) 繪 OHLC 與量。 | close-only 的 O／H／L 佔位及量額 0、小數量截整可能流向特徵、API 或圖表；[`units`](../frontend/src/units.ts) 不把 `twse_index` 當已驗股數單位，仍不能消除其他 consumer 的數值風險。 |
-| opt-in selected capture 與 run | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 已對缺／無效 `TradeValue` 回 `invalid_or_missing_TradeValue` 的 unavailable reason，且以 Decimal 整數 gate 拒絕小數 `TradeVolume`；adapter 可轉成 run warning，collect／backfill 可保存 run 級 JSON warning、partial 與重試。既存成功 run 可能重用。 | 這是 opt-in 選定標的路徑及 run 級訊號，不能視為 legacy 逐欄保存契約或舊資料修復。 |
+| TWSE／TPEx 日行情 | [`parse_twse_daily_rows`／`parse_tpex_daily_rows`](../backend/worker/sources.py) 分別讀 `TradeValue`／`TransactionAmount`：缺失為 `turnover=0, status=unavailable, reason=missing`，無效為 `0, unavailable, invalid`；明確、可解析的非負數（含合法 `0`）為 `available`、reason 為 null。其餘有效 OHLC／volume 保留。 | 不把缺額列整筆拒收；欄位狀態不證官方原值或歷史完整性。legacy `TradeVolume` 小數截整問題未在本批修復。 |
+| opt-in selected `STOCK_DAY_ALL` capture | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 保留既有 body／receipt／hash／日期 gate；選中列的 OHLC／volume 有效而 `TradeValue` 缺失或無效時，保留 bar 並給相同 `0 + unavailable + missing/invalid`。合法來源零為 `available`。adapter 可留成交額 unavailable warning。 | 純列 helper 有記憶體驗證；磁碟 select 端到端未跑。`TradeVolume` 仍要求精確非負整數；選中 symbol／OHLC／volume 缺失、無效或範圍不一致仍依原契約拒收。見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)。 |
+| TAIEX close-only | 指數 parser 合成的 `turnover=0` 標 `unavailable/synthetic_index`。close 補 O／H／L、volume 補 0 的既有路徑未在本批改成真實欄位。 | [`verified_taiex_sessions`](../backend/app/coverage.py) 的身分／日期／provenance gate 不證合成欄位可用；指數量額或 OHLC 不得由 session 列數升格。 |
+| 保存、舊資料與重跑 | [`BarRecord`／`MarketBar`](../backend/app/models.py) 無來源證據時預設 `unknown`。[`_upsert_official_bar`](../backend/worker/pipeline.py) 保存數值、status 與 reason。`0007_turnover_availability` 和 fallback 升級對舊資料一次性分類：正值為 `available`；舊 `0` 為 `unknown/legacy_zero_ambiguous`；負值或 NULL 為 `unknown/legacy_invalid`。已有 status 的重跑不重分類或覆寫。 | 舊零無法還原為真零或缺值；正式 DB 升級與磁碟 migration 測試未執行。既有資料不因新 parser 自動修復；migration 分類不證來源真相。 |
+| API／TS／計算 | [`bar_dict`](../backend/app/api.py) 輸出 `turnover_status`（`available`／`unavailable`／`unknown`）及 nullable `turnover_reason`；[`Bar` 型別](../frontend/src/types.ts) 對齊。hot-group 與 strategy 兩種法人 flow ratio 只在所需各日 status 為 `available` 且成交額有效、為正時使用，否則回 unavailable。 | API 仍有數值 `turnover=0`；consumer 必須讀 status。未新增成交額 UI；其他特徵、TAIEX 合成 OHLC、逐欄 coverage 與 PIT 不因本批通過。 |
 
-若只在 legacy parser 拒收整列，須由 adapter 傳出明確 symbol／date／field／reason warning；完整 OHLC 也會隨列丟失，run 可能轉 partial 並由 backfill 重試。若要保留完整 OHLC 且把成交額標為 unknown，則須另定 nullable／availability 契約、schema migration、API／consumer 行為及既存 0 的處置；不能只改 parser。這兩者都是待決設計，沒有官方 missing／zero 定義證據可替本地政策背書。
-
-下一步須由使用者在 A／B／C 中具名決定；目前三者均未選定：A 是保守拒收整列、接受 OHLC 損失並傳明確 warning，只阻止未來假 0；B 是擴大契約與 schema，保留 OHLC 和逐欄 unknown，另規劃舊 0；C 是暫不改程式並記錄現況限制。等待決策不等於已選 C。最小反例仍只完成設計、未執行：固定同一完整 OHLCV 列分別給缺值及合法 0 的 `TradeValue`，另檢小數 `TradeVolume` 與 close-only 指數佔位欄位。
+本輪證據為純記憶體 66 passed（含群組身份 25 cases），`tsc --noEmit` 與 diff-check 通過；磁碟 capture／legacy migration 測試及正式 DB 升級待驗。測試結果不等於官方實際資料 coverage。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
 
 [TWSE OpenAPI](https://openapi.twse.com.tw/) 僅作端點／欄位線索；[A05 商品規格](https://eshop.twse.com.tw/zh/product/detail/cfec9a1470e448ec91bfde006db361e8) 的內部使用標價 NT$1,000／月只供唯讀辨識其受費用限制，並非本專案資料來源、下載、授權或驗收證據。本輪未抓官方 payload。
 

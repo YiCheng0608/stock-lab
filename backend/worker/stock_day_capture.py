@@ -121,6 +121,49 @@ def _numeric(value, *, integer=False, positive=False):
         raise ValueError("invalid_number") from exc
 
 
+def _select_validated_rows(rows, day, symbols, payload_sha256):
+    """Normalize selected rows after the capture and global row gates pass."""
+    from .sources import BarRecord
+
+    by_code = {row["Code"].strip(): row for row in rows}
+    bars, unavailable = [], []
+    for symbol in dict.fromkeys(symbols):
+        row = by_code.get(symbol)
+        if row is None:
+            unavailable.append({"symbol": symbol, "reason": "missing_symbol"})
+            continue
+        values = {}
+        for field in ("OpeningPrice", "HighestPrice", "LowestPrice", "ClosingPrice", "TradeVolume"):
+            try:
+                values[field] = _numeric(row.get(field), integer=field == "TradeVolume",
+                                         positive=field.endswith("Price"))
+            except ValueError:
+                unavailable.append({"symbol": symbol, "reason": "invalid_or_missing_" + field})
+                break
+        else:
+            o, h, l, c = (values[k] for k in ("OpeningPrice", "HighestPrice", "LowestPrice", "ClosingPrice"))
+            if not (l <= o <= h and l <= c <= h):
+                unavailable.append({"symbol": symbol, "reason": "inconsistent_ohlc_range"})
+                continue
+            raw_amount = row.get("TradeValue")
+            try:
+                turnover = _numeric(raw_amount)
+                turnover_status, turnover_reason = "available", None
+            except ValueError:
+                text = raw_amount.strip() if isinstance(raw_amount, str) else None
+                missing = raw_amount is None or text == "" or (
+                    text is not None and (text.upper() in {"--", "-", "X", "N/A", "無"} or set(text) == {"-"})
+                )
+                turnover = 0.0
+                turnover_status, turnover_reason = "unavailable", "missing" if missing else "invalid"
+            bars.append(BarRecord(symbol=symbol, trading_date=day, open=o, high=h, low=l, close=c,
+                                  volume=values["TradeVolume"], turnover=turnover,
+                                  turnover_status=turnover_status, turnover_reason=turnover_reason,
+                                  exchange="TWSE", source="twse", data_as_of=day.isoformat(),
+                                  payload_sha256=payload_sha256))
+    return bars, unavailable
+
+
 @dataclass(frozen=True)
 class StockDayCapture:
     """Validated local metadata, not a cryptographic proof of origin."""
@@ -132,7 +175,7 @@ class StockDayCapture:
     body_path: Path
 
     def select(self, symbols, end):
-        from .sources import BarRecord, FetchedPayload
+        from .sources import FetchedPayload
 
         _require(end == self.market_date, "capture_date_mismatch")
         receipt = _json(self.receipt_bytes)
@@ -144,30 +187,7 @@ class StockDayCapture:
         _require(self.body_path.with_name("receipt.json").read_bytes() == self.receipt_bytes, "materialized_receipt_changed")
         rows, day = _rows(self.body)
         _require(day == self.market_date, "capture_date_mismatch")
-        by_code = {row["Code"].strip(): row for row in rows}
-        bars, unavailable = [], []
-        for symbol in dict.fromkeys(symbols):
-            row = by_code.get(symbol)
-            if row is None:
-                unavailable.append({"symbol": symbol, "reason": "missing_symbol"})
-                continue
-            values = {}
-            for field in ("OpeningPrice", "HighestPrice", "LowestPrice", "ClosingPrice", "TradeVolume", "TradeValue"):
-                try:
-                    values[field] = _numeric(row.get(field), integer=field == "TradeVolume",
-                                             positive=field.endswith("Price"))
-                except ValueError:
-                    unavailable.append({"symbol": symbol, "reason": "invalid_or_missing_" + field})
-                    break
-            else:
-                o, h, l, c = (values[k] for k in ("OpeningPrice", "HighestPrice", "LowestPrice", "ClosingPrice"))
-                if not (l <= o <= h and l <= c <= h):
-                    unavailable.append({"symbol": symbol, "reason": "inconsistent_ohlc_range"})
-                    continue
-                bars.append(BarRecord(symbol=symbol, trading_date=day, open=o, high=h, low=l, close=c,
-                                      volume=values["TradeVolume"], turnover=values["TradeValue"],
-                                      exchange="TWSE", source="twse", data_as_of=day.isoformat(),
-                                      payload_sha256=self.sha256))
+        bars, unavailable = _select_validated_rows(rows, day, symbols, self.sha256)
         raw = FetchedPayload("twse", ENDPOINT, rows, day.isoformat(), self.captured_at, self.body_path, self.sha256)
         return bars, raw, unavailable
 

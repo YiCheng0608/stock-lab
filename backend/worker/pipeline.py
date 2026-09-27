@@ -466,7 +466,10 @@ def _validated_flow_and_turnover_inputs(
         return None
     turnovers: list[float] = []
     for trading_date in dates:
-        turnover = _safe_float(bars_by_date[trading_date].turnover)
+        bar = bars_by_date[trading_date]
+        if bar.turnover_status != "available":
+            return None
+        turnover = _safe_float(bar.turnover)
         if turnover is None or turnover <= 0:
             return None
         turnovers.append(turnover)
@@ -1448,6 +1451,8 @@ def _upsert_official_bar(db: Session, instrument: Instrument, record: BarRecord,
     bar.adj_close = record.adj_close or record.close
     bar.volume = record.volume
     bar.turnover = record.turnover
+    bar.turnover_status = record.turnover_status
+    bar.turnover_reason = record.turnover_reason
     bar.source = record.source
     bar.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
     bar.collected_at = datetime.utcnow()

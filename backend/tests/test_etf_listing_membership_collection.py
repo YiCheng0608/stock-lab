@@ -326,7 +326,7 @@ def parsed_batch(monkeypatch, day=D):
     records=twse+tpex
     payloads=tpayloads+opayloads
     records.append(sources.InstrumentRecord('TAIEX','Index',instrument_type='index',payload_sha256=payloads[0].sha256))
-    bars=[sources.BarRecord(r.symbol,D,100,101,99,100,1000,100000,exchange=r.exchange,payload_sha256=r.payload_sha256) for r in records]
+    bars=[sources.BarRecord(r.symbol,D,100,101,99,100,1000,100000,exchange=r.exchange,payload_sha256=r.payload_sha256,turnover_status="available") for r in records]
     return sources.OfficialBatch(instruments=records,bars=bars,payloads=payloads)
 
 

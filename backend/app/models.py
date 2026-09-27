@@ -94,6 +94,8 @@ class MarketBar(Base):
     adj_close: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer, default=0)
     turnover: Mapped[float] = mapped_column(Float, default=0)
+    turnover_status: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
+    turnover_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source: Mapped[str] = mapped_column(String(120), default="unknown")
     data_as_of: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

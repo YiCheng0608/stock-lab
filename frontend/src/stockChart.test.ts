@@ -15,6 +15,8 @@ function bar(date: string, close: number, overrides: Partial<Bar> = {}): Bar {
     adj_close: close,
     volume: 1000,
     turnover: 1000,
+    turnover_status: 'available',
+    turnover_reason: null,
     source: 'twse',
     data_as_of: '2026-09-12T00:00:00+00:00',
     collected_at: '2026-09-12T00:00:00+00:00',

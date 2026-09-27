@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ENTRIES = ['fallback', 'engine', 'connection']
 REVISIONS = ['0001_schema_v1', '0002_instrument_exchange_key',
              '0003_backtest_run_metadata', '0004_product_news_themes',
-             '0005_news_temporal_contract', '0006_news_json_defaults']
+             '0005_news_temporal_contract', '0006_news_json_defaults',
+             '0007_turnover_availability']
 ORIGINAL = '''id INTEGER NOT NULL PRIMARY KEY, signal_id INTEGER NOT NULL,
 settlement_date DATE NOT NULL, final_status VARCHAR(80), first_trigger VARCHAR(120),
 return_or_risk FLOAT, incomparable_reason TEXT, source VARCHAR(500), data_time VARCHAR(80)'''

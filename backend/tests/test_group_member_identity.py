@@ -68,7 +68,8 @@ class GroupMemberIdentityTest(unittest.TestCase):
                         close = 100 + slope * index
                         db.add(MarketBar(instrument_id=stock.id, trading_date=day, open=close,
                                          high=close + 1, low=close - 1, close=close, adj_close=close,
-                                         volume=1000, turnover=100000, source="memory-fixture"))
+                                         volume=1000, turnover=100000, turnover_status="available",
+                                         source="memory-fixture"))
                         db.add(ChipSnapshot(instrument_id=stock.id, trading_date=day,
                                             foreign_buy=100, trust_buy=20, dealer_buy=10,
                                             margin_balance=10000, margin_change=0, source="memory-fixture"))

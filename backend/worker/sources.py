@@ -8,6 +8,7 @@ import time
 from calendar import monthrange
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable
 from urllib.parse import urlencode
@@ -72,6 +73,10 @@ class BarRecord:
     data_as_of: str | None = None
     is_suspended: bool = False
     payload_sha256: str | None = None
+    # A numeric amount alone cannot prove that the source supplied it.
+    # Parsers and validated direct producers must state availability explicitly.
+    turnover_status: str = "unknown"
+    turnover_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -795,6 +800,23 @@ def _ensure_backfill_window(start: date, end: date) -> None:
         raise ValueError(f"official backfill is limited to {OFFICIAL_MAX_BACKFILL_DAYS} days")
 
 
+def _turnover_from_row(row: dict[str, Any], *keys: str) -> tuple[float, str, str | None]:
+    raw = _text(row, *keys)
+    if not raw or raw.upper() in {"--", "-", "X", "N/A", "無"} or set(raw) == {"-"}:
+        return 0.0, "unavailable", "missing"
+    # Money must be a complete, nonnegative number; parse_number intentionally
+    # accepts numeric fragments and therefore cannot establish availability.
+    if not re.fullmatch(r"\+?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:[eE][+-]?\d+)?", raw):
+        return 0.0, "unavailable", "invalid"
+    try:
+        amount = float(Decimal(raw.replace(",", "")))
+    except (InvalidOperation, OverflowError, ValueError):
+        return 0.0, "unavailable", "invalid"
+    if not math.isfinite(amount) or amount < 0:
+        return 0.0, "unavailable", "invalid"
+    return amount, "available", None
+
+
 def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None) -> list[BarRecord]:
     result: list[BarRecord] = []
     for row in _rows(payload):
@@ -805,7 +827,9 @@ def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         low = parse_number(_text(row, "LowestPrice", "最低價", "最低"))
         close = parse_number(_text(row, "ClosingPrice", "收盤價", "收盤"))
         volume = parse_integer(_text(row, "TradeVolume", "成交股數", "成交量"))
-        turnover = parse_number(_text(row, "TradeValue", "成交金額", "成交值"))
+        turnover, turnover_status, turnover_reason = _turnover_from_row(
+            row, "TradeValue", "成交金額", "成交值"
+        )
         if not symbol or not trading_date or None in {open_price, high, low, close, volume}:
             continue
         result.append(
@@ -818,7 +842,9 @@ def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
                 close=close,
                 adj_close=close,
                 volume=volume,
-                turnover=turnover or 0.0,
+                turnover=turnover,
+                turnover_status=turnover_status,
+                turnover_reason=turnover_reason,
                 exchange="TWSE",
                 source="twse",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -838,8 +864,10 @@ def parse_tpex_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         low = parse_number(_text(row, "Low", "最低"))
         close = parse_number(_text(row, "Close", "收盤"))
         volume = parse_integer(_text(row, "TradingShares", "成交股數", "成交量"))
-        turnover = parse_number(_text(row, "TransactionAmount", "成交金額", "成交金額(元)", "成交值"))
-        if not symbol or not trading_date or None in {open_price, high, low, close, volume, turnover}:
+        turnover, turnover_status, turnover_reason = _turnover_from_row(
+            row, "TransactionAmount", "成交金額", "成交金額(元)", "成交值"
+        )
+        if not symbol or not trading_date or None in {open_price, high, low, close, volume}:
             continue
         result.append(
             BarRecord(
@@ -852,6 +880,8 @@ def parse_tpex_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
                 adj_close=close,
                 volume=volume,
                 turnover=turnover,
+                turnover_status=turnover_status,
+                turnover_reason=turnover_reason,
                 exchange="TPEx",
                 source="tpex",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1436,6 +1466,8 @@ def parse_twse_taiex_from_all_daily_payload(
             adj_close=close,
             volume=0,
             turnover=0.0,
+            turnover_status="unavailable",
+            turnover_reason="synthetic_index",
             exchange="TWSE",
             source="twse_index",
             data_as_of=data_as_of or report_date.isoformat(),
@@ -1499,6 +1531,8 @@ def parse_twse_taiex_from_index_payload(
             adj_close=close,
             volume=0,
             turnover=0.0,
+            turnover_status="unavailable",
+            turnover_reason="synthetic_index",
             exchange="TWSE",
             source="twse_index",
             data_as_of=data_as_of or report_date.isoformat(),
@@ -1536,6 +1570,8 @@ def parse_twse_index_history_payload(
                 adj_close=close,
                 volume=0,
                 turnover=0.0,
+                turnover_status="unavailable",
+                turnover_reason="synthetic_index",
                 exchange="TWSE",
                 source="twse_index",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1828,6 +1864,12 @@ class TwseAdapter:
             self.captured_payloads.append(daily_payload)
             for unavailable in self.stock_day_unavailable:
                 self.fetch_warnings.append("stock_day_capture_unavailable:" + json.dumps(unavailable, sort_keys=True))
+            for bar in daily_bars:
+                if bar.turnover_status == "unavailable":
+                    self.fetch_warnings.append(
+                        "stock_day_capture_turnover_unavailable:"
+                        + json.dumps({"symbol": bar.symbol, "reason": bar.turnover_reason}, sort_keys=True)
+                    )
         payloads.append(daily_payload)
         bars.extend(daily_bars)
         closed_dates: set[date] = set()
