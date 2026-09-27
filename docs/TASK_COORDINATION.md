@@ -31,7 +31,7 @@
 1. 已完成及驗收邊界：既有 Bridge B、v2／v3 selected bar／prior volumes 與獨立 verifier 仍各只有限 review；本輪 R0-C2 僅新增 caller-input 盤後假設純核心，15 項純記憶體測試通過且統籌已限制性接受程式範圍。這不證正式交易規則、決策時可得資料、成交或完整 B4b；B2、B7、R0 仍未完成。
 2. 尚缺項：B2 既有 70 個 pytest 案例未跑，亦缺已授權現存完整 specimen 與對應 pins／路徑，verifier 真實 tuple／實際零寫入整合待驗。B4b 缺官方 tick／費稅／日曆及來源 availability／PIT、合法最早交易時段、持久化與 worker／API／UI、完整 legacy replay／逐欄 paired comparison；個人部位及實際成交未處理。回收筒狀態只依使用者先前回報，本輪未核查。
 3. 下一步與依賴／完成條件：B2 仍待具名可唯讀 specimen／pins tuple，依 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)驗實際整合；依賴未變時不開 B2 空轉輪次。B4b 後續須先核實市場規則、來源與時間證據，再做隔離持久化、產品接線及 B7 同 snapshot paired replay；不能從純核心輸出推定 PIT、成交或預設切換。必要磁碟驗證仍受新增落盤 0 的配額限制；其他 ROADMAP 工作依各自 gate 推進。角色不自行結案或啟動下一輪。
-4. 本輪變更白名單為兩個新程式／測試檔與 `R0_IMPLEMENTATION.md`、`ROADMAP_EXECUTION.md`、`ROADMAP.md`、本文件；四份核准文件已由統籌接受並完成全輪 freeze，索引角色已更新涉及分區、驗 coverage，並依統籌准入完成六檔本地 commit。最終 freeze／coverage／commit 與本輪驗收結果以統籌 task receipt 為準，不為回寫最終 hash 再修改來源。
+4. 本輪程式有限範圍與四份文件已由統籌接受並 freeze；索引角色已完成三個既有分區的 moderate refresh，`index_status=ready`。六個核准路徑皆為 `no_recorded_issue`，但 freshness 全是 `metadata_changed`；coverage 屬 best-effort，不能確認 freshness。commit 證據及本輪提前 commit 偏差留 task receipt。
 
 ## 歷史與維護
 
