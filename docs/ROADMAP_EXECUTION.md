@@ -74,7 +74,7 @@
 | ID | 狀態 | 小批與依賴 | 可驗收完成條件 |
 | --- | --- | --- | --- |
 | R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性可先行，實際 as-of 接線才依賴 R0-C4。 | 四來源 registry／capture、兩個 consumer 及窄修正已有限 review；其餘 collector、公司行動／停復牌、授權、時間／修訂／歷史與 PIT 仍待驗，具名範圍見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。 |
-| R1-A2 | 提案（R1-A2-P1-identity 已有限 review；整體未完成） | R1-A1；官方行情／TAIEX／法人／融資逐域驗證。 | 已接受的窄修正使 TAIEX／TWII index bar 只有 `exchange=TWSE` 才計入 session 校驗與 `taiex_rows` bar 計數；TPEx 同名 index 不增加分母或普通股票有效 bar 日。session 原有 active／index／日期／provenance gate 與 raw fallback 維持，TWSE benchmark 仍可供兩市場股票使用。仍須以 exchange＋symbol＋session＋欄位用途產 coverage，核查 model／schema／storage／consumer；錯日／缺日／unknown 不補 0，合成或截斷數值不得當作可用欄位；TWSE／TPEx 單位與 identity 不混用，raw 可追溯。邊界見 [TAIEX session identity](DATA_SOURCES.md#taiex-session-identity)。 |
+| R1-A2 | 提案（P1-identity 已有限 review；P2 逐欄路徑唯讀盤點已接受；整體未完成） | R1-A1；官方行情／TAIEX／法人／融資逐域驗證。 | 已接受的窄修正使 TAIEX／TWII index bar 只有 `exchange=TWSE` 才計入 session 校驗與 `taiex_rows` bar 計數；TPEx 同名 index 不增加分母或普通股票有效 bar 日。P2 查明 legacy 缺 `TradeValue` 與合法零合流、`TradeVolume` 小數截整、TAIEX close-only 佔位及保存／consumer 限制，未修程式或跑測試；A 整列拒收、B 逐欄 unknown 契約、C 暫不修改均待使用者具名決定，等待不等於選 C。仍須以 exchange＋symbol＋session＋欄位用途產 coverage；錯日／缺日／unknown 不補 0，合成或截斷數值不得當作可用欄位；TWSE／TPEx 單位與 identity 不混用，raw 可追溯。詳細邊界見 [資料來源：TAIEX 與 P2](DATA_SOURCES.md#r1-a2-p2-逐欄缺值與佔位資料路徑唯讀盤點)。 |
 | R1-A3 | 提案 | R1-A1、R0-B5；公司行動與停復牌。 | raw／adjusted basis、因子、版本、可得時間與 applied-through 可重建；TWSE／TPEx 覆蓋分開；不足時 ATR／tracking fail-closed。 |
 | R1-B1 | 提案 | R1-A1、R0-C4；官方事件與 NewsItem 時間回歸。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |
 | R1-B2 | 提案 | R1-B1；同事件 grouping 與 new-information。 | 同源與跨源 dedupe 可重跑，保留每篇來源；首次／補充／更正／撤回分開；負面或轉載不增加正向催化；所有摘要回指合法原文。 |
