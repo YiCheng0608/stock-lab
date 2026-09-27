@@ -125,6 +125,7 @@ def verified_taiex_sessions(
         .where(
             Instrument.status == "active",
             Instrument.instrument_type == "index",
+            Instrument.exchange == "TWSE",
             Instrument.symbol.in_({"TAIEX", "TWII"}),
         )
     )

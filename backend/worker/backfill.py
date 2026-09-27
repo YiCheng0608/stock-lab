@@ -731,6 +731,7 @@ def coverage_report(
             if row.trading_date == trading_date
             and instrument_by_id.get(row.instrument_id)
             and instrument_by_id[row.instrument_id].instrument_type == "index"
+            and instrument_by_id[row.instrument_id].exchange == "TWSE"
             and instrument_by_id[row.instrument_id].symbol in {"TAIEX", "TWII"}
         )
         chip_count = sum(1 for row in all_chips if row.trading_date == trading_date)
