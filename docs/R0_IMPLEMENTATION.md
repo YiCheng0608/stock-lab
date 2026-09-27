@@ -12,7 +12,7 @@
 
 實作者只能標「已實作」；reviewer 才能標「已 review」。ROADMAP 狀態由統籌核定、文件角色更新，不能由本文件的批次名稱推論。
 
-目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b、B5b 與 B7仍是提案。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
+目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b 新增 caller-input 純核心的有限 review，B4b 全項、B5b 與 B7 仍未完成。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
 
 ## 2. 靜態基線與共同不變條件
 
@@ -43,10 +43,10 @@
 | --- | --- | --- |
 | R0-1 | Wilder ATR 純核心、獨立 local store 與 strict caller-provided provenance／comparison | worker、official truth、PIT 與 paired replay；見 §4。 |
 | R0-2 | confidence 安全語意、local SignalArtifact、分離的 comparison／pure replay／worker capture | bridge、legacy-v2 paired output、產品接線與 B7；見 §5 及各保存／重播文件。 |
-| R0-3 | legacy 規則參考價的 read-time API／UI 語意 | 新 trade plan、tick／gap／cost／liquidity／PIT；見 §6。 |
+| R0-3 | legacy 規則參考價的 read-time API／UI 語意；新 trade plan 的 caller-input 事後假設純核心有限 review | 完整 B4b 的官方 tick／成本／日曆、來源／PIT、持久化與產品接線、paired replay；見 §6。 |
 | R0-4 | local time-evidence store 與產品 read-time projection | store-product linkage、source truth、worker 與 B5b；見 §7。 |
 | R0-5 | 有限 SQLite migration／recovery、canonical rebuild 與 startup readiness gates | 任意歷史／custom schema、正式 migration／restore／deployment；見 §8。 |
-| B4b／B5b／B7 | 提案 | 實作與獨立 review。 |
+| B4b／B5b／B7 | B4b 僅 caller-input 純核心有限 review；B5b／B7 未開始 | B4b 其餘整合與驗收、B5b／B7 實作及獨立 review。 |
 
 ## 4. R0-1：ATR 定義、公司行動與 warm-up
 
@@ -196,6 +196,10 @@ v1 replay公式保持：`risk=max(atr if truthy else entry×0.02, entry×0.01)`�
 ### 6.2 新交易計畫的隔離邊界
 
 B4b必須使用新trade-plan／execution version，至少保存trigger/confirm、entry range、追價上限、invalid條件、targets、time/event expiry、tick rounding、cost/slippage、liquidity gate與earliest execution。驗收包括：rounding後仍 `invalid<entry<target1<target2`；T+1 gap超限為 `rejected_gap`；成本空間不足、低流動、停牌或同日stop/target順序未知時拒絕或incomparable；legacy replay不變且新舊差異逐欄說明。
+
+本輪有限 review 只接受 `calculate_trade_plan(plan, observation)` 的無 I/O、記憶體純核心，版本為 `caller-trade-plan/v1`／`caller-execution/v1`。入口要求 plan 與 observation 的欄位集合精確、型別嚴格；僅支援 caller 明示的 long、單一 `constant_tick`、觸發／確認、進場區間與不追價上限、失效價與事件、兩個目標、費稅／滑價、最低成交量／金額、停牌、有效期限與 aware 時間。caller 提供 tick 與已結束 session 的觀察值；核心以保守方向捨入，檢查價位順序、開盤參考價加滑價的 gap／追價上限、目標一扣成本後空間及流動性。未知／缺少或不支援的必要輸入拒絕；session 內到期／失效事件，以及同一 session 的 stop 與 target 先後無法由日線判定時回 `incomparable`。
+
+每個結果固定標 `evaluation_scope=post_session_hypothetical`、`point_in_time_status=not_asserted`、`fill_status=not_asserted`，帶完整 session 起訖與 `assessed_at`；`post_session_touches` 的 stop／target 觸及只屬事後觀察，不是成交、退出或已實現報酬。Decimal 計算使用固定 context（precision 50、`ROUND_HALF_EVEN`、Emin -100／Emax 100，對 InvalidOperation／DivisionByZero／Overflow／Underflow／FloatOperation 設 traps）；非負 Decimal 輸入的指數範圍為 -8..12、值不超過 10^12，整數 count 不超過 10^12、slippage ticks 不超過 10^6。這只驗 caller 輸入及假設下的純計算；官方 tick／費稅／交易日曆、來源真實性與 availability、合法最早交易時段、PIT、實際成交、個人部位、持久化及 worker／API／UI 均未驗。既有 legacy 1.6R／3R 路徑不變，完整 legacy replay 與新舊逐欄 paired comparison 仍待 B7；不得據此標 B4b 或 R0 完成。
 
 ## 7. R0-4：時間欄位角色與 point-in-time gate
 

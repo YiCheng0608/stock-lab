@@ -63,7 +63,7 @@
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-C1／B4a | 已 review（read-time） | G-ID | signal-level-semantics/v1涵蓋signal／action／stock／tracking及UI；僅canonical兩個v1策略推導legacy-risk-levels/v1，未知identity／basis／歷史時間fail closed。持倉與成交價不當規則價，原v1數值不改。 |
-| R0-C2／B4b | 提案 | R0-C1、G-PRODUCT | 新trade-plan／execution version；tick後仍invalid<entry<target_1<target_2；gap、成本／流動性不足、停牌、日線順序未知拒絕或不可比，legacy1.6R／3R可重現。 |
+| R0-C2／B4b | caller-input 純核心已有限 review；完整 B4b 未完成 | R0-C1、G-PRODUCT | `calculate_trade_plan` 以 `caller-trade-plan/v1`／`caller-execution/v1` 對盤後 long 假設作嚴格輸入、單一 caller tick、保守捨入、gap／成本／流動性／停牌及事件／到期判定；完整 session 的 stop／target 順序未知回不可比。結果明示 `post_session_hypothetical`、PIT／成交未主張，觸價只是觀察。官方 tick／費稅／日曆、來源與 availability／PIT、合法交易時段、持久化、worker／API／UI、完整 legacy replay 及逐欄 paired comparison 仍待驗；見 [R0 實作 §6.2](R0_IMPLEMENTATION.md#62-新交易計畫的隔離邊界)。 |
 | R0-C3／B5a | 已 review（兩個分離小批） | R0-A1、G-TIME | time-evidence/v1 caller store與product-time/v1 API/UI projection已review，但未有persisted linkage；unknown呈現不是execution gate。 |
 | R0-C4／B5b | 提案 | R0-C3 | 每個必要版本available_at<=decision_at，live另要collected_at<=decision_at；T+2修訂不改T+1 artifact，無可信first_available_at的backfill不進歷史決策。 |
 | R0-C5／B7 | 提案 | R0-B2／B5、R0-C2／C4 | 同一唯讀snapshot產隔離legacy／new；比較ATR、狀態、confidence、價位、availability、migration及不可比。重現成功、缺資料、gap、公司行動、legacy confidence、盤後與修訂案例。 |
