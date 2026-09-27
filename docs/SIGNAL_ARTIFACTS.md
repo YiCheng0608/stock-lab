@@ -1,6 +1,6 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-27。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。Raw bytes／source version 已做唯讀缺口盤點，尚未增加驗證能力。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
+更新：2026-09-27。本文件只負責 `signal-artifact/v1` local store、Bridge A 已證邊界與 Bridge B capture→candidate adapter 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。Selected bar 的 raw bytes／source version 已有靜態來源 review，尚無逐輸入驗證能力或實際資料對照。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
 
 ## 1. 範圍與不變條件
 
@@ -152,19 +152,19 @@ build_signal_artifact_candidate(
 
 必須在 current hash／stable snapshot 不符、完整 attempt 任一列損壞、ordinal 不存在、evaluator／selected strategy 不同、subject 需 trim／case 變形、status 需 trim、config／`domain-rules/v1` pin 不符、candidate manifest projection 不符，或 decision 缺失、naive、早於 capture 時 fail closed。v2 reader 以 receipt kind 驗 selected bar 與 arguments／subject／date、raw FK／source／宣告 digest 形狀及 pair；v3 另驗 prior volumes 的 subject／date／count／order／值／嚴格型別／raw 關係和 pair。Unknown kind 或跨版混用拒絕。Capture reader 的 CPython／binary64／`backend/app/domain.py` bytes 與 config pins 仍依 [Worker capture §5](WORKER_ANALYSIS_CAPTURE.md#5-strict-jsonreplay-binding-與-reader)；bridge 不放寬。v2 `data_quality.local_input_row_linkage=close_volume_metadata_captured`，v3 為 `close_volume_prior_volumes_metadata_captured`；`raw_payload_metadata` 是 selected bar 的 `linked_metadata` 或 `unknown`，prior rows 若缺 raw FK 則由 missing reasons 標示。`source_verification=not_officially_verified`、`raw_bytes_verification=bytes_unverified`、availability／historical inputs 為 unknown；basis unknown，`as_of_at`／`earliest_execution_at` 為 null。Missing reasons 標出其餘 raw inputs／source versions、selected bar 與 prior volumes raw bytes／source version、availability、歷史 decision time、price basis 和非 evaluator implementation；缺 raw FK 再標 raw metadata unavailable。Prior highs、MA、groups／chips 等衍生來源尚未連接；digest、receipt 或新 decision time 都不能把 unknown source／availability 升格為已驗證。既有 v3 接線只有有限 DB 與獨立純記憶體診斷，詳見[協作紀錄](TASK_COORDINATION.md)；其餘 pytest 案例待跑，未驗正式來源、歷史輸入、PIT 或磁碟峰值。
 
-### Raw bytes／source version 唯讀盤點與下一候選
+### Selected bar raw bytes／source version 靜態來源 review 與下一候選
 
-一般抓取流程若先解析 HTTP 回應，再將資料重編碼並計算 SHA，只能證重編碼後的內容，不能證原始 HTTP body bytes。既有 opt-in [`STOCK_DAY_ALL` capture](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 有 `body.bin`、`receipt.json`、對應的 SHA-256 與 registry pins，可作唯讀比對的起點；其中 `source_version` 是本地 registry 的規格宣告，不是上游資料修訂版本，也不證官方來源真實性。Local `RawPayload`、selected bar 與 prior volumes capture 尚未封存這份 receipt／version 的逐輸入關係，也未完成從原始 body bytes 重解析到已選欄位的驗證。它們目前仍是本地 metadata linkage，不能因有 SHA 或 raw FK 就宣稱 bytes／source version 已驗證。
+一般抓取若先解析 HTTP 回應，再將資料重編碼並計算 SHA，只能證重編碼後的內容，不能證原始 HTTP body bytes。既有 opt-in [`STOCK_DAY_ALL` capture](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 在 `source_runtime.py` 以 `iter_raw()` 取得 identity HTTP entity bytes（移除傳輸 framing 後、不作 content decoding 或 JSON 重編碼），將長度與 SHA-256 記入 receipt，並與 registry 的 source／endpoint／method／`source_version`／manifest pins 關聯。`stock_day_capture.py` 的 loader 核對 ZIP `body.bin`／`receipt.json`、receipt pins、body 長度與 SHA-256，以及全列唯一 symbol／同一交易日期；`StockDayCapture.select` 用 `Decimal` 路徑解析 selected symbol 的價格與整數量。但 loader 最後呼叫 `_publish` 寫出 `body.bin`／`receipt.json`（`stock_day_capture.py:175–207,277–278`），不能直接當零落盤的 verifier。這些是現有局部能力的靜態程式 review，本輪未以實際 body／receipt 與 research snapshot 對照，也未執行 pytest。
 
-下一最小候選只限 `STOCK_DAY_ALL` selected bar 的唯讀證據驗證；目前沒有核准任何實作檔案或寫入接線，prior volumes 不升格。後續若要提出升格，須從 raw FK 唯一定位同一份封存 body／receipt，安全定位路徑並穩定唯讀讀取 body，核對長度與 SHA-256、receipt 和 registry 的來源／endpoint／version pins，再從該 body 重解析 selected bar，逐一比對 symbol、交易日期、close、volume 與 capture 欄位。單靠相同 SHA 不能選來源：不同來源或 endpoint 可以有相同內容摘要，仍須精確綁定。
+現行逐輸入綁定仍缺：`pipeline.py:2122–2126` 的暫存 raw id key 僅為 `(source, SHA)`、不含 endpoint；`_raw_id_for_digest`（2026–2032）只按 SHA 回傳第一筆，因此跨來源或同來源跨 endpoint 的同 digest 會有歧義。`RawPayload` 有 source／endpoint／path／宣告 SHA 與 run id、`MarketBar` 有 nullable raw FK；analysis capture 的 selected bar provenance 封存本地 row、FK、path、宣告 SHA 等 metadata，bridge 的 input manifest 投影不含 path／receipt／來源或 registry version，且仍標 `raw_bytes_verification=bytes_unverified`。它們沒有精確封存 `STOCK_DAY_ALL` body／receipt／registry version 的逐輸入關係，也未從封存 bytes 重解析並比對 selected bar。相同 SHA、raw FK 或本地 `source_version` 不能單獨證明 bytes 來源；registry `source_version` 只是本地規格宣告，不證上游修訂版本或官方真實性。
 
-缺 raw FK、來源對應不唯一、路徑不安全／不存在／讀取中改變、body 長度或 SHA 不符、receipt／version pin 不符，或重解析欄位不符時，均拒絕升格並保持 unknown。這些是候選驗收條件，尚非現行 bridge 或 capture 已實作的拒絕路徑；現行缺 FK 仍按 v2／v3 契約保存 unknown。即使候選驗過，registry `source_version` 仍只是本地宣告，不證上游修訂版本或官方來源真實性；availability、歷史 decision／PIT 與 prior volumes 的 raw bytes／source version 也須另證。
+下一步只提出獨立、零寫入的 `STOCK_DAY_ALL` selected-bar evidence verifier 的明確 API、輸入範圍與拒絕條件，待統籌另核定程式白名單；目前實作白名單為空，prior volumes 不升格。候選 verifier 須從 raw FK 唯一綁定同一份 body／receipt，安全且穩定地唯讀 body 與 receipt，核對 body 長度與 SHA-256、receipt 及外部 registry 的 source／endpoint／method／version pins，重解析全列日期與 symbol，再逐一比對 selected symbol、交易日期、close、volume 與 capture 欄位及 actual evaluator arguments。缺 FK、來源或 endpoint 歧義、路徑不安全／不存在／讀取時變動、bytes 長度／SHA、receipt／外部 registry pins 或解析欄位不符，均應拒絕升格並保持 unknown。這些是未來驗收條件，尚非現行 bridge gate；現行缺 FK 按 v2／v3 契約維持 unknown。Availability、歷史 decision／PIT、prior volumes、consumer、paired replay 與預設切換仍須另證或核定。
 
 ## 11. 完成邊界
 
 R0-B2／B2-persist 仍需：
 
-1. Bridge B adapter、selected bar 與 prior volumes 本地 metadata 接線只已有限 review；相關回歸尚待補，見[協作紀錄](TASK_COORDINATION.md)。`STOCK_DAY_ALL` selected bar 唯讀證據驗證仍是下一候選，實作白名單為空；prior volumes 未升格。後續須核定其餘衍生輸入的可封存來源關係、真正 raw bytes／source version 證據及 availability／historical decision time，再依共同依賴驗同一 snapshot 隔離 legacy／v2 paired replay。
+1. Bridge B adapter、selected bar 與 prior volumes 本地 metadata 接線只已有限 review；相關回歸尚待補，見[協作紀錄](TASK_COORDINATION.md)。`STOCK_DAY_ALL` selected bar 本輪只有靜態來源 review；下一候選是先核定獨立零寫入 verifier 的 API／範圍／拒絕條件，實作白名單為空，prior volumes 未升格。後續須核定其餘衍生輸入的可封存來源關係、真正 raw bytes／source version 證據及 availability／historical decision time，再依共同依賴驗同一 snapshot 隔離 legacy／v2 paired replay。
 2. API list/detail/action、DecisionSummary 與明確版本選擇。
 3. 前端 non-probability 與 legacy/new 並列，且不得隱式切預設。
 4. B3-wire、B5b availability／PIT gate 與 B7 paired replay review。
