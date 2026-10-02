@@ -310,7 +310,7 @@ def test_other_history_days_unchanged(bundle_factory):
     assert {(b.trading_date, b.close) for b in bars if b.symbol == "1101"} == {(date(2026, 9, 3), 100), (DAY, 203)}
 
 
-def test_real_collect_force_reuse_partial_and_stale_row(pipeline_env, bundle_factory):
+def test_real_collect_force_reuse_partial_and_stale_row(pipeline_env, bundle_factory, monkeypatch):
     # Full legacy adapters, with local fixture fetchers for every HTTP request.
     first = sources.OfficialMarketDataAdapter(sources.TwseAdapter(CollectionFetcher()), sources.TpexAdapter(CollectionFetcher()))
     baseline = pipeline.collect(DAY, adapter=first, force=True)
@@ -319,8 +319,18 @@ def test_real_collect_force_reuse_partial_and_stale_row(pipeline_env, bundle_fac
         old = db.scalar(select(MarketBar).join(Instrument).where(Instrument.symbol == "9999"))
         old_id, old_raw, old_close = old.id, old.raw_payload_id, old.close
         prior_sessions = verified_taiex_sessions(db)
-    path, args, body = bundle_factory([row("1101"), row("0050")])
+    selected_row = row("1101")
+    selected_row.pop("TradeValue")
+    path, args, body = bundle_factory([selected_row, row("0050", TradeValue="0")])
     capture = load_stock_day_capture(path, **args)
+    expected_ohlcv = (200, 205, 198, 203, 1234)
+    expected_turnover = {"1101": (0, "unavailable", "missing"), "0050": (0, "available", None)}
+    selected_bars, _, unavailable = capture.select(["1101", "0050"], DAY)
+    assert unavailable == []
+    assert {bar.symbol for bar in selected_bars} == set(expected_turnover)
+    for bar in selected_bars:
+        assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == expected_ohlcv
+        assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == expected_turnover[bar.symbol]
     fetcher = CollectionFetcher()
     twse = sources.TwseAdapter(fetcher, stock_day_capture=capture)
     combined = sources.OfficialMarketDataAdapter(twse, sources.TpexAdapter(CollectionFetcher()))
@@ -331,9 +341,19 @@ def test_real_collect_force_reuse_partial_and_stale_row(pipeline_env, bundle_fac
     assert any("missing_symbol" in w and "9999" in w for w in result["warnings"])
     assert sources.TWSE_DAILY_ENDPOINT not in fetcher.calls
     with pipeline_env() as db:
-        bar = db.scalar(select(MarketBar).join(Instrument).where(Instrument.symbol == "1101"))
+        selected_db = {
+            symbol: db.scalar(select(MarketBar).join(Instrument).where(
+                Instrument.symbol == symbol, MarketBar.trading_date == DAY
+            ))
+            for symbol in expected_turnover
+        }
+        assert all(selected_db.values())
+        for symbol, bar in selected_db.items():
+            assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == expected_ohlcv
+            assert (bar.turnover, bar.turnover_status, bar.turnover_reason) == expected_turnover[symbol]
+        bar = selected_db["1101"]
         raw = db.get(RawPayload, bar.raw_payload_id)
-        assert bar.close == 203 and bar.volume == 1234
+        assert selected_db["0050"].raw_payload_id == bar.raw_payload_id
         assert raw.sha256 == capture.sha256 == hashlib.sha256(body).hexdigest()
         assert raw.endpoint == sources.TWSE_DAILY_ENDPOINT
         assert raw.collected_at == datetime(2026, 9, 5, 0, 0, 1)
@@ -343,6 +363,26 @@ def test_real_collect_force_reuse_partial_and_stale_row(pipeline_env, bundle_fac
         stale = db.get(MarketBar, old_id)
         assert (stale.raw_payload_id, stale.close) == (old_raw, old_close)
         assert db.get(IngestionRun, result["run_id"]).status == "partial"
+
+    from fastapi.testclient import TestClient
+    import app.api as api_module
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "check_database_readiness", lambda: None)
+
+    def override_get_db():
+        with pipeline_env() as db:
+            yield db
+
+    monkeypatch.setitem(main_module.app.dependency_overrides, api_module.get_db, override_get_db)
+    with TestClient(main_module.app) as client:
+        responses = {symbol: client.get(f"/api/instruments/{symbol}?exchange=TWSE") for symbol in expected_turnover}
+    for symbol, response in responses.items():
+        assert response.status_code == 200, response.text
+        bars = [item for item in response.json()["bars"] if item["date"] == DAY.isoformat()]
+        assert len(bars) == 1
+        assert tuple(bars[0][field] for field in ("open", "high", "low", "close", "volume")) == expected_ohlcv
+        assert tuple(bars[0][field] for field in ("turnover", "turnover_status", "turnover_reason")) == expected_turnover[symbol]
 
 
 def test_capture_alone_cannot_create_session(pipeline_env, bundle_factory):
