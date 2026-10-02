@@ -146,6 +146,8 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 | 突破／回踩條件 | 沿用 `breakout_v1`／`pullback_v1` identity，列既有結果日期／版本；本批均為 `data_insufficient`，附來源、時間、分類及結果缺失／早於截止的原因。 | 必要輸入、來源、時間與分類 gate 具體滿足後才可判「成立／未成立」；requires、過期 signals 或價位存在都不算通過。 |
 | 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
 
+M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已有限 review，契約與單日兩檔支持範圍見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。本批尚未接總覽 API／UI 或 5／20 交易日窗口，所以上表 `institutional` unavailable 契約維持；單日 CLI 數值不作前端 fallback。
+
 既有分類待核實提示與原策略、價位／信心語意保留；本批沒有新評分、機率、完整交易計畫或張數。缺來源只讓相關總覽區塊保持 unavailable／資料不足，不將本批價格交付擴寫成完整 M1。
 
 ### 9.4 本批有限驗收與待驗

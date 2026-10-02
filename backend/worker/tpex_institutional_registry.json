@@ -1,0 +1,223 @@
+{
+  "schema_version": "source-registry/v1",
+  "policy_version": "source-policy/v1",
+  "registry_version": "m1-p2a-tpex-institutional-2026-10-03.1",
+  "generated_on": "2026-10-03",
+  "content_digest": "sha256:7ca17724e029c6a417dd2baa1981e6396d74772e977aecd1e823fde0e0090146",
+  "profiles": {
+    "free_public_local": {
+      "version": "1",
+      "policy_version": "source-policy/v1",
+      "description": "Bounded local TPEx institutional research; explicit single-source snapshot, independent of the existing four-source registry.",
+      "source_versions": {
+        "tpex_3insti_daily_trading": "tpex-3insti-daily-trading-oas3-info1.0.0-2026-10-03"
+      }
+    }
+  },
+  "sources": [
+    {
+      "schema_version": "source-registry/v1",
+      "registry_version": "m1-p2a-tpex-institutional-2026-10-03.1",
+      "source_id": "tpex_3insti_daily_trading",
+      "dataset_id": "data-gov-11856",
+      "source_version": "tpex-3insti-daily-trading-oas3-info1.0.0-2026-10-03",
+      "owner": {
+        "name": "Taipei Exchange (TPEx)",
+        "type": "official_exchange",
+        "data_provider": "金融監督管理委員會證券期貨局",
+        "attribution_year": 2026,
+        "dataset_name": "上櫃股票三大法人買賣明細資訊",
+        "license_url": "https://data.gov.tw/license"
+      },
+      "source_type": "official_open_api",
+      "exact_url": "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading",
+      "method": "GET",
+      "data_contract": {
+        "unit": "shares",
+        "date_encoding": "ROC_YYYMMDD",
+        "selection": "exact_security_code"
+      },
+      "evidence": [
+        {
+          "url": "https://www.tpex.org.tw/openapi/swagger.json",
+          "checked_at": "2026-10-03 Asia/Taipei",
+          "claim": "OAS 3, info version 1.0.0, documents the exact GET path without parameters or authentication, welcomes API integration, and identifies the daily institutional schema. This source version names the local checked snapshot, not retained official revisions."
+        },
+        {
+          "url": "https://data.gov.tw/dataset/11856",
+          "checked_at": "2026-10-03 Asia/Taipei",
+          "claim": "Dataset 11856 identifies the institutional dataset, provider Securities and Futures Bureau, Financial Supervisory Commission, free access, daily update, OGL 1.0, and the TPEx OpenAPI resource."
+        },
+        {
+          "url": "https://data.gov.tw/license",
+          "checked_at": "2026-10-03 Asia/Taipei",
+          "claim": "OGL 1.0 permits reuse and adaptation with source attribution and source-integrity conditions."
+        },
+        {
+          "url": "https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw",
+          "checked_at": "2026-10-03 Asia/Taipei",
+          "claim": "Section 5 limits automatic downloads without consent; the checked Swagger welcomes this API integration. Section 7 provides an exception for data released on the government open-data platform and requires attribution and integrity. Admission applies only to dataset 11856's exact OpenAPI resource."
+        }
+      ],
+      "access": {
+        "free_public": {
+          "status": "known",
+          "value": true,
+          "reason": "Dataset 11856 explicitly identifies free public OGL 1.0 access."
+        },
+        "auth": {
+          "status": "known",
+          "value": false,
+          "reason": "The exact checked OpenAPI operation declares no authentication requirement."
+        },
+        "documented_terms": {
+          "status": "known",
+          "value": "OGL 1.0; TPEx disclaimer sections 5 and 7; exact OpenAPI integration only",
+          "reason": "Dataset 11856 and TPEx's open-data exception support this bounded resource with attribution and integrity."
+        },
+        "rate_limit": {
+          "status": "unknown",
+          "reason": "No endpoint-specific numeric rate limit or SLA was documented."
+        },
+        "latency": {
+          "status": "unknown",
+          "reason": "No endpoint-specific release-clock or latency commitment was documented."
+        }
+      },
+      "temporal": {
+        "update_cadence": {
+          "status": "known",
+          "value": "daily",
+          "reason": "Dataset 11856 describes a daily update."
+        },
+        "publication": {
+          "status": "unknown",
+          "reason": "The exact publication time and timezone were not documented."
+        },
+        "first_availability": {
+          "status": "unknown",
+          "reason": "A current response and dataset listing do not prove first availability."
+        },
+        "historical_coverage": {
+          "status": "unknown",
+          "reason": "The current no-parameter daily resource does not prove complete historical coverage."
+        },
+        "revision_policy": {
+          "status": "unknown",
+          "reason": "No reconstructable endpoint-specific correction or withdrawal history was documented."
+        }
+      },
+      "retention": {
+        "raw_store": {
+          "status": "known",
+          "value": true,
+          "reason": "OGL 1.0 permits local reproduction with source attribution and integrity."
+        },
+        "summarize": {
+          "status": "known",
+          "value": true,
+          "reason": "OGL 1.0 permits adaptation with source attribution, integrity and traceability."
+        }
+      },
+      "enabled": {
+        "status": "known",
+        "value": true,
+        "reason": "The exact path is in the TPEx OpenAPI snapshot checked on 2026-10-03."
+      },
+      "deprecation": {
+        "status": "unknown",
+        "reason": "No endpoint-specific retirement, migration or cessation notice was documented."
+      },
+      "versioning": {
+        "status": "unknown",
+        "reason": "OAS info version 1.0.0 does not promise retained endpoint versions or historical revisions."
+      },
+      "purposes": {
+        "local_fetch": {
+          "status": "admitted",
+          "reason": "The exact documented public GET resource is the OGL 1.0 dataset 11856 integration under TPEx's open-data exception.",
+          "evidence": [
+            {
+              "url": "https://data.gov.tw/dataset/11856",
+              "checked_at": "2026-10-03 Asia/Taipei",
+              "claim": "Free public OGL 1.0 dataset with TPEx OpenAPI resource."
+            },
+            {
+              "url": "https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw",
+              "checked_at": "2026-10-03 Asia/Taipei",
+              "claim": "The government open-data exception and the documented API integration constrain this exact resource."
+            }
+          ],
+          "required_evidence": [
+            "access.free_public",
+            "access.auth",
+            "access.documented_terms"
+          ],
+          "conditions": [
+            "bounded_requests",
+            "respect_endpoint_limits"
+          ]
+        },
+        "raw_store": {
+          "status": "admitted",
+          "reason": "Local raw retention under OGL 1.0 preserves source attribution and exact entity bytes.",
+          "evidence": [
+            {
+              "url": "https://data.gov.tw/license",
+              "checked_at": "2026-10-03 Asia/Taipei",
+              "claim": "OGL 1.0 permits reproduction with attribution and source-integrity conditions."
+            }
+          ],
+          "required_evidence": [
+            "retention.raw_store"
+          ],
+          "conditions": [
+            "attribute_source",
+            "preserve_source_integrity"
+          ]
+        },
+        "summarize": {
+          "status": "admitted",
+          "reason": "Selected-row adaptation under OGL 1.0 retains attribution, exact-source integrity and row traceability.",
+          "evidence": [
+            {
+              "url": "https://data.gov.tw/license",
+              "checked_at": "2026-10-03 Asia/Taipei",
+              "claim": "OGL 1.0 permits adaptation with source attribution and integrity."
+            }
+          ],
+          "required_evidence": [
+            "retention.summarize"
+          ],
+          "conditions": [
+            "attribute_source",
+            "preserve_source_integrity",
+            "retain_traceability"
+          ]
+        },
+        "historical_pit": {
+          "status": "unknown",
+          "unknown_decision": "unsupported",
+          "reason": "First availability, retained revisions, historical coverage and reconstructable point-in-time snapshots are undocumented.",
+          "evidence": [
+            {
+              "url": "https://www.tpex.org.tw/openapi/swagger.json",
+              "checked_at": "2026-10-03 Asia/Taipei",
+              "claim": "A documented current daily resource is not proof of reconstructable historical versions."
+            }
+          ],
+          "required_evidence": [
+            "temporal.first_availability",
+            "temporal.historical_coverage",
+            "temporal.revision_policy"
+          ],
+          "conditions": [
+            "reconstructable_snapshot",
+            "revision_history",
+            "first_availability"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -40,7 +40,7 @@ def fake_transport(body=b'[ { "Code": "2330" } ]\n', status=200, headers=None):
     return httpx.MockTransport(handler), calls
 
 
-@pytest.mark.parametrize("source_id", runtime.ENDPOINTS)
+@pytest.mark.parametrize("source_id", [source["source_id"] for source in registry.load_manifest()["sources"]])
 def test_exact_sources_preserve_bytes_and_attribution(setup_capture, source_id):
     manifest, args, _ = setup_capture
     args["source_id"] = source_id
@@ -114,6 +114,39 @@ def test_http_errors_stop_without_retries_or_artifacts(setup_capture, status):
     assert result["retry_after"] == "Wed, 16 Sep 2026 10:00:00 GMT"
     assert len(calls) == result["request_count"] == 1
     assert not args["output_dir"].exists()
+
+
+def test_tpex_institutional_uses_explicit_manifest_and_preserves_memory_capture(monkeypatch):
+    # The added endpoint does not grant admission in the original four-source
+    # manifest. This test invokes the real executor but publishes only in memory.
+    path = registry.REGISTRY_PATH.with_name("tpex_institutional_registry.json")
+    manifest = registry.load_manifest(path)
+    source = manifest["sources"][0]
+    args = dict(manifest=registry.REGISTRY_PATH, profile="free_public_local",
+                source_id="tpex_3insti_daily_trading",
+                expected_registry_version="r1-a1-c009-2026-09-12.1",
+                expected_digest="sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b",
+                output_dir=runtime.PROJECT_ROOT.parent)
+    published = []
+    monkeypatch.setattr(runtime, "_output_path", lambda value: Path(value))
+    monkeypatch.setattr(runtime, "_publish", lambda output, body, receipt: published.append((body, receipt.copy())))
+    transport, calls = fake_transport(b'[ { "Date": "1151002" } ]\n')
+    rejected = runtime.capture(**args, transport=transport)
+    assert rejected["status"] == "rejected" and rejected["error_reason"] == "source_missing"
+    assert calls == [] and published == []
+    args.update(manifest=path, expected_registry_version=manifest["registry_version"], expected_digest=manifest["content_digest"])
+    result = runtime.capture(**args, transport=transport)
+    assert result["status"] == "capture_complete", result
+    assert len(calls) == len(published) == 1
+    assert str(calls[0].url) == "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
+    assert published[0][0] == b'[ { "Date": "1151002" } ]\n'
+    assert result["body_sha256"] == hashlib.sha256(published[0][0]).hexdigest()
+    assert result["attribution"]["owner"] == source["owner"]
+    assert result["attribution"]["owner"]["attribution_year"] == 2026
+    assert result["executed_purposes"] == ["local_fetch", "raw_store"]
+    assert result["condition_receipts"]["bounded_requests"]["per_operation_timeout_seconds"] == 15.0
+    assert result["condition_receipts"]["bounded_requests"]["cooperative_deadline_seconds"] == 30.0
+    assert result["historical_pit"] == "unsupported"
 
 
 @pytest.mark.parametrize("body,headers,reason", [(b"not json", {}, "invalid_json"), (b"NaN", {}, "invalid_json"), (b"[]", {"Content-Encoding": "gzip"}, "unsupported_content_encoding"), (b"[123456789]", {}, "body_limit_exceeded")])

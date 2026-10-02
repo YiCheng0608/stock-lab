@@ -30,6 +30,7 @@ ENDPOINTS = {
     "twse_holiday_schedule": "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule",
     "twse_twt48u_all": "https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL",
     "tpex_spendi_history": "https://www.tpex.org.tw/openapi/v1/tpex_spendi_history",
+    "tpex_3insti_daily_trading": "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading",
 }
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAX_BODY_BYTES = 5 * 1024 * 1024
