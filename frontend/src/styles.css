@@ -263,3 +263,24 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .numeric-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .stock-quote-grid strong, .metric-row b, .level-grid b { font-variant-numeric: tabular-nums; }
 .broker-branch-entry { margin-top: 24px; }
+.stock-overview { margin: 0 0 26px; }
+.overview-head { margin-bottom: 8px; }
+.overview-cutoff-note { max-width: none; margin: 0 0 16px; font-size: 13px; }
+.overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 16px; }
+.overview-cutoff-control label { font-size: 13px; color: #aab4be; }
+.overview-cutoff-control input { color-scheme: dark; border: 1px solid #405060; border-radius: 3px; padding: 8px; color: #eff2f5; background: #121a22; }
+.overview-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.overview-grid .panel { min-width: 0; }
+.overview-grid h3 { margin: 0 0 10px; font-size: 17px; }
+.overview-grid p { max-width: none; font-size: 12px; line-height: 1.7; }
+.overview-range { color: #d8dde2; font-size: 13px; margin-top: 13px; }
+.overview-price .stock-quote-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.overview-price .stock-quote-grid > div:last-child { grid-column: 1 / -1; }
+.overview-price .stock-quote-grid strong { font-size: 18px; }
+.overview-ohlc { display: flex; gap: 15px; flex-wrap: wrap; margin: 13px 0; color: #cbd3dc; font-size: 12px; }
+.overview-reasons { padding-left: 18px; margin: 10px 0; color: #d9a45b; font-size: 12px; line-height: 1.8; }
+.overview-condition { padding: 12px 0; border-top: 1px solid #2a3540; }
+.overview-condition:first-of-type { border-top: 0; padding-top: 0; }
+.overview-provenance { overflow-wrap: anywhere; margin-top: 10px; }
+.overview-price caption { text-align: left; white-space: normal; margin: 8px 0; }
+@media (max-width: 820px) { .overview-grid { grid-template-columns: 1fr; } }

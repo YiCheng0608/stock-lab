@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, StrictInt, model_validator
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
@@ -66,6 +66,7 @@ from .product_time import (
     build_signal_product_time,
 )
 from .units import share_quantity_dict, shares_from_position_quantity
+from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -1593,11 +1594,18 @@ def stocks(
 
 
 @router.get("/stocks/{exchange}/{symbol}")
-def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db)) -> dict[str, Any]:
-    payload = instrument_detail(symbol, exchange, db)
+def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+    instrument_row = _find_instrument(db, symbol, exchange)
+    if not instrument_row:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    cutoff = resolve_stock_cutoff(db, instrument_row, as_of)
+    # No dated records means no shared cutoff can be established. Keep this
+    # explicit; date.min prevents current feature/decision fallback from leaking in.
+    payload = instrument_detail(symbol, exchange, db, cutoff or date.min)
     instrument = payload["instrument"]
     instrument_row = db.get(Instrument, instrument["id"])
-    payload["decision_summary"] = build_decision_summary(db, instrument_row) if instrument_row else None
+    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
+    payload["overview"] = build_stock_overview(db, instrument_row, cutoff)
     if payload["decision_summary"]:
         payload["product_time"] = payload["decision_summary"].get("product_time")
         payload["response_generated_at"] = payload["decision_summary"].get("response_generated_at")
@@ -1615,15 +1623,51 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db)) -> d
                 NewsItem.status == "active",
                 or_(NewsItem.time_consistency.is_(None), NewsItem.time_consistency != "conflict"),
                 NewsItem.symbols_json.contains([instrument_row.symbol]),
+                _stock_news_cutoff_filter(cutoff),
             )
             .outerjoin(Event, NewsItem.event_id == Event.id)
             .order_by(*_news_order_by())
             .limit(20)
         ).all()
         payload["news"] = [news_dict(db, item) for item in news_rows]
+        payload["news_cutoff"] = {"as_of": cutoff.isoformat() if cutoff else None,
+                                  "filter": "verified_publication_or_event", "limit": 20}
     else:
         payload["news"] = []
     return payload
+
+
+def _stock_news_cutoff_filter(cutoff: date | None):
+    """Apply original-time cutoff in SQL before the existing 20-row limit.
+
+    app.news persists publication/event instants as UTC-naive DateTime. Date-only
+    event roles stay dates; collection timestamps never qualify this section.
+    """
+    if cutoff is None:
+        return False
+    last_utc_instant = datetime.combine(cutoff, datetime.max.time()) - timedelta(hours=8)
+    persisted = and_(NewsItem.display_time.is_not(None), NewsItem.time_basis.in_(_NEWS_TIME_BASIS_RANK),
+                     NewsItem.time_precision.in_(_NEWS_TIME_PRECISION_RANK))
+    event_day = func.coalesce(NewsItem.event_date, Event.event_date)
+    original_fallback = or_(
+        and_(NewsItem.published_at.is_not(None), NewsItem.published_at <= last_utc_instant),
+        and_(NewsItem.published_at.is_(None), NewsItem.event_at.is_not(None), NewsItem.event_at <= last_utc_instant),
+        and_(NewsItem.published_at.is_(None), NewsItem.event_at.is_(None), event_day <= cutoff),
+    )
+    return and_(NewsItem.time_consistency == "verified", or_(
+        and_(persisted, NewsItem.time_basis.in_({"published", "event"}), NewsItem.time_precision == "datetime",
+             NewsItem.display_time <= last_utc_instant),
+        and_(persisted, NewsItem.time_basis == "event_date", NewsItem.time_precision == "date", event_day <= cutoff),
+        and_(~func.coalesce(persisted, False), original_fallback),
+    ))
+
+
+@router.get("/stocks/{exchange}/{symbol}/overview")
+def stock_overview(exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return build_stock_overview(db, instrument, as_of)
 
 
 @router.get("/actions")
@@ -1957,54 +2001,57 @@ def _source_action_classification(item: CorporateAction, instrument: Instrument)
 
 
 @router.get("/instruments/{symbol}")
-def instrument_detail(symbol: str, exchange: str | None = None, db: Session = Depends(get_db)) -> dict[str, Any]:
+def instrument_detail(symbol: str, exchange: str | None = None, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     bars = db.scalars(
         select(MarketBar)
-        .where(MarketBar.instrument_id == instrument.id)
+        .where(MarketBar.instrument_id == instrument.id, MarketBar.trading_date <= (as_of or date.max))
         .order_by(desc(MarketBar.trading_date))
         .limit(120)
     ).all()
     feature = db.scalar(
         select(TechnicalFeature)
-        .where(TechnicalFeature.instrument_id == instrument.id)
+        .where(TechnicalFeature.instrument_id == instrument.id, TechnicalFeature.trading_date <= (as_of or date.max))
         .order_by(desc(TechnicalFeature.trading_date))
         .limit(1)
     )
     memberships = db.scalars(
         select(GroupMembership)
-        .where(GroupMembership.instrument_id == instrument.id)
+        .where(GroupMembership.instrument_id == instrument.id,
+               GroupMembership.valid_from <= (as_of or date.max),
+               or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of) if as_of else True)
         .order_by(GroupMembership.valid_from)
     ).all()
     signals = db.scalars(
         select(Signal)
-        .where(Signal.instrument_id == instrument.id)
+        .where(Signal.instrument_id == instrument.id, Signal.signal_date <= (as_of or date.max))
         .order_by(desc(Signal.signal_date), desc(Signal.id))
         .limit(20)
     ).all()
     chips = db.scalars(
         select(ChipSnapshot)
-        .where(ChipSnapshot.instrument_id == instrument.id)
+        .where(ChipSnapshot.instrument_id == instrument.id, ChipSnapshot.trading_date <= (as_of or date.max))
         .order_by(desc(ChipSnapshot.trading_date))
         .limit(120)
     ).all()
     actions = db.scalars(
         select(CorporateAction)
-        .where(CorporateAction.instrument_id == instrument.id)
+        .where(CorporateAction.instrument_id == instrument.id, CorporateAction.action_date <= (as_of or date.max))
         .order_by(desc(CorporateAction.action_date))
         .limit(50)
     ).all()
     fundamentals = db.scalars(
         select(FundamentalSnapshot)
-        .where(FundamentalSnapshot.instrument_id == instrument.id)
+        .where(FundamentalSnapshot.instrument_id == instrument.id, FundamentalSnapshot.period_end <= (as_of or date.max),
+               FundamentalSnapshot.announcement_date <= as_of if as_of else True)
         .order_by(desc(FundamentalSnapshot.period_end))
         .limit(20)
     ).all()
     events = db.scalars(
         select(Event)
-        .where(Event.instrument_id == instrument.id)
+        .where(Event.instrument_id == instrument.id, Event.event_date <= (as_of or date.max))
         .order_by(desc(Event.event_date), desc(Event.id))
         .limit(50)
     ).all()
@@ -2013,11 +2060,12 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         .where(
             DataQuality.entity_type == "instrument",
             DataQuality.entity_key == f"{instrument.exchange}:{instrument.symbol}",
+            DataQuality.as_of_date <= (as_of or date.max),
         )
         .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
         .limit(10)
     ).all()
-    decision = build_decision_summary(db, instrument)
+    decision = build_decision_summary(db, instrument, as_of) if as_of is None or as_of >= date(1, 1, 8) else {}
     return {
         "instrument": instrument_dict(instrument),
         "bars": [bar_dict(item) for item in reversed(bars)],

@@ -308,8 +308,66 @@ export type InstrumentDetail = {
   }
   product_time?: ProductTime
   response_generated_at?: string
+  overview?: StockOverviewData
+  news_cutoff?: { as_of: string | null; filter: string; limit: number }
   strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
   signals: Signal[]
+}
+
+export type OverviewPriceBar = {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  turnover: number | null
+  turnover_status: 'available' | 'unavailable' | 'unknown'
+  turnover_reason: string | null
+  source: string
+  data_as_of: string
+  collected_at: string | null
+  provenance: {
+    raw_payload_id: number
+    ingestion_run_id: number
+    source_id: string
+    source_version: string
+    endpoint: string
+    body_sha256: string
+    receipt_sha256: string
+    registry_version: string
+    manifest_digest: string
+    captured_at: string
+    raw_collected_at: string
+    verification: string
+    license: unknown
+    summarize_decision: unknown
+  }
+}
+
+export type StockOverviewData = {
+  version: string
+  as_of: string | null
+  cutoff_basis: string
+  historical_pit: string
+  scope: string
+  price: {
+    status: 'available' | 'unavailable'
+    basis: string
+    window_limit: number
+    candidate_count: number
+    valid_count: number
+    from: string | null
+    to: string | null
+    latest: OverviewPriceBar | null
+    bars: OverviewPriceBar[]
+    rejected: Array<{ date: string; reason: string }>
+    reasons: string[]
+  }
+  institutional: { status: string; horizons: number[]; investors: string[]; values: null; reasons: string[] }
+  conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
+  events: { status: string; reasons: string[] }
+  limitations: string[]
 }
 
 export type InstrumentCoverage = {

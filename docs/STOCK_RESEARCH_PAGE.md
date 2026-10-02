@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-09-16。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；已 review 範圍見 §5，待做籌碼契約見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 新增總覽的契約及有限驗收見 §9，待做籌碼契約見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -10,7 +10,7 @@
 
 ### 2.1 實際 payload
 
-前端 `getStock(exchange, symbol)` 呼叫 `GET /stocks/{exchange}/{symbol}`。後端組成 instrument detail，再加入 decision summary、coverage 與 news；沒有此頁專用日期 query。
+前端 `getStock(exchange, symbol, asOf?)` 呼叫 `GET /stocks/{exchange}/{symbol}?as_of=YYYY-MM-DD`。`as_of` 可省略；後端組成同一資料日期截止的 instrument detail，再加入 decision summary、coverage、news 與 `overview`。M1-P1 總覽及日期控制見 §9；截止不代表歷史當時可得。
 
 | 區塊 | 實際欄位／上限 | 呈現限制 |
 | --- | --- | --- |
@@ -22,6 +22,7 @@
 | 事件／新聞 | `events` 最多 50、active 非 conflict `news` 最多 20 | 分開或標示類型；不能互相冒充或一律稱已核實催化劑。 |
 | 策略／行動 | `strategy_conditions`、`signals` 最多 20、`decision_summary` | requires 只是需求，不是通過；沿用既有價位、信心與 product-time 語意。 |
 | 品質 | `coverage`、`quality_summary`、`data_quality` 最多 10 | 顯示用途別完整度、缺日與 unknown；圖表存在不能替代 coverage。 |
+| M1-P1 總覽 | `overview`、`news_cutoff` | 原件合格價格、法人／事件缺項與研究條件共用資料截止；新增原件價格與既有 bars／K 線的來源驗收範圍不同，見 §9。 |
 
 ### 2.2 價格口徑
 
@@ -110,3 +111,49 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 | 券商分點 | 買賣超排行、單一分點歷史與同券商彙總。 | 目前只有依市場導向的官方逐檔人工查詢入口；尚無交易明細匯入、排行、歷史或券商彙總。 |
 
 三區整合、交易明細匯入、主力計算、券商彙總／歷史及自動更新均待後續實作與具名驗收。局部可重現匯入可獨立驗收，但不能因此宣稱已有完整免費歷史、PIT 或每日自動更新；來源邊界見 [DATA_SOURCES](DATA_SOURCES.md#券商分點與主力統計的來源邊界後續待做)。
+
+## 9. M1-P1：截止一致與來源可追溯總覽
+
+本批新增個股研究總覽、日期套用／最新資料操作，以及獨立 `GET /stocks/{exchange}/{symbol}/overview?as_of=YYYY-MM-DD`。總覽版本為 `stock-overview/p1-v1`；完整 M1 的法人窗口、官方事件及成立／未成立研究條件仍未完成。
+
+### 9.1 共用截止與時間
+
+- `as_of` 是含當日的**資料日期篩選**，`cutoff_basis=data_date_inclusive`；明示日期不自動往後推。未指定時優先最新儲存行情日；無行情時取其他研究紀錄的最新資料日期，含 active 且時間 verified 的關聯新聞。財報優先公告日，缺公告時的期間日只提供截止基準，不證公告已可得；新聞優先發布、其次事件時間，按臺北轉為日期。無可用日期則為 null，不補今日。
+- 同一 response 的行情、技術快照、法人、membership、策略／行動、公司行動、基本面、事件與品質使用同一截止；原資料日、`collected_at`、發布／事件時間保留，不改寫成截止日期。日期篩選不證來源准入、availability、修訂版本或 PIT，`historical_pit=unsupported`。
+- 新聞清單在最多 20 筆限制前，依既有已核對的發布／事件時間篩選；datetime 按臺北截止日結束換算，date-only 保留純日期，未知／衝突或超過截止的項目不混入。收集時間不充發布時間。這是既有時間欄位的有限投影，不證事件原件、first availability 或歷史 PIT。
+- 日期輸入套用後，URL query 與資料 query 使用同一 `as_of`；「最新資料」移除明示截止並回到 API 的實際資料日期。總覽保留事後研究與歷史可得性未支援的說明。
+
+### 9.2 原件合格的價格視窗
+
+本批只採已准入的 exact `STOCK_DAY_ALL`，來源／用途與 capture gate 依 [SOURCE_REGISTRY](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)，不因 legacy `source=twse`、官方名稱或歷史 P0 結果放行 `MI_INDEX`、TPEx 或其他來源。
+
+先取截止以前最多 120 筆候選行情，再逐筆核對；拒列不另抓更早資料湊滿 120 筆。`candidate_count`、`valid_count`、實際 `from/to`、`latest`、合格 `bars` 與 `rejected[].date/reason` 分開回傳；無合格列時價格 unavailable，其餘研究入口仍可使用。只說本次實際範圍／筆數，不稱完整 N 個交易日；來源本身沒有 TAIEX，不由列數推導交易 session。
+
+每筆合格價須符合：
+
+1. TWSE／symbol／資料日期精確配對，行情經 raw FK 回指指定 `body.bin` 與同目錄 `receipt.json`；原件 hash、capture receipt、成功 HTTP、收集紀錄關聯與 capture time 一致。
+2. 使用已 review registry version／digest、exact endpoint／GET 與 source version；`local_fetch`、`raw_store`、`summarize` 用途及必要 conditions 通過，保留顯名、授權與可追溯來源。
+3. selected 原件 O／H／L／C、成交量、成交額狀態與保存列一致；OHLC 為正有限數且範圍合法，成交量為非負精確整數。重複日期拒用；缺 selected row、停牌、數值或證據無效保留具體原因。
+4. 合格列保留 raw／ingestion identity、body／receipt SHA-256、來源／registry 版本、endpoint、capture／原收集時間；details 可核對每筆價格與來源。這只證**本地原件與保存值一致**，不是來源真偽、完整歷史、revision 或 PIT 的證明。
+
+價格沿用 §2.2 原始 API 口徑與報價幣別限制，不產生 adjusted OHLC。成交額 unavailable 在總覽輸出 null、保留 status／reason；來源合法零仍顯示零，不把保存用的缺值 `0` 當有效來源零。既有 `detail.bars`／K 線仍是按日期篩選的原研究資料，不會因新增總覽而自動升格本批准入來源或完整窗口；頁首新報價取總覽合格 `latest`，不從 legacy 行動價或不合格 bar 補值。
+
+### 9.3 法人、條件與新聞入口
+
+| 區塊 | 本批結果 | 待補條件 |
+| --- | --- | --- |
+| 外資／投信／自營商 5／20 日 | `institutional.status=unavailable`、`values=null`；顯示法人來源及交易日基準尚待核對，不補零、融資不併入。 | T86／dailyTrade 等所採 exact 來源及用途准入、交易日基準、逐法人欄位／單位／缺日 coverage 與窗口版本。 |
+| 突破／回踩條件 | 沿用 `breakout_v1`／`pullback_v1` identity，列既有結果日期／版本；本批均為 `data_insufficient`，附來源、時間、分類及結果缺失／早於截止的原因。 | 必要輸入、來源、時間與分類 gate 具體滿足後才可判「成立／未成立」；requires、過期 signals 或價位存在都不算通過。 |
+| 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
+
+既有分類待核實提示與原策略、價位／信心語意保留；本批沒有新評分、機率、完整交易計畫或張數。缺來源只讓相關總覽區塊保持 unavailable／資料不足，不將本批價格交付擴寫成完整 M1。
+
+### 9.4 本批有限驗收與待驗
+
+統籌已有限接受 **TWSE 1101、2330，來源資料日 2026-10-01 的單日 selected 真實樣本**：單次 exact `STOCK_DAY_ALL` capture 經既有 loader／select、記憶體 SQLite 到真實 API 的 OHLC、成交量、成交額六欄與原件逐欄一致；`as_of=2026-09-30` 排除 10 月 1 日資料。這不代表完整 collect、磁碟 DB 或正式 DB 驗收。
+
+有限產品操作包含桌面個股目錄進入 2330、總覽數值、來源 details／hash、新聞入口、日期套用與「最新資料」復原；窄版初始單欄與展開來源 details 未見 body 橫向溢出。來源 schema 可對同 gate 的 TWSE selected rows 逐列核對，但本次真實驗收範圍只含上述兩檔／單日，不外推其他標的、TAIEX、TPEx、多日價格、完整 session 或法人數值。
+
+後端最終來源復核再次確認兩檔六欄與原件一致、完整 detail 的總覽與獨立總覽端點相等；9 月 30 日截止排除 10 月 1 日，10 月 2 日截止保留 10 月 1 日且標示最新價格早於截止。新增邊界回歸已通過：Windows 檔案讀取／變更拒收、來源 gate、合法零／缺額／非有限值、空標的／非法日期、無行情／只有新聞／財報公告截止、SQL NULL、臺北跨日與超過 200 筆新新聞的 limit 前篩選、legacy 相容；測試收據留本輪 task。
+
+前端型別、總覽 React SSR 顯示檢查與 production build 已通過；大型 JS chunk 警告仍在。本輪 M1-P1 的程式與具名驗收已接受並有限 review，freeze／索引／commit 收據留本輪 task。完整 M1、R0／R1 及 R2-E1 整體均未完成；下一個可行子能力是法人與交易日來源准入後的可驗窗口，不能由本批直接宣稱 M2 已可完成。

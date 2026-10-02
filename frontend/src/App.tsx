@@ -58,6 +58,7 @@ import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots,
 import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { StockPriceChart } from './StockPriceChart'
 import { StockResearchPanel } from './StockResearchPanel'
+import { StockOverview } from './components/StockOverview'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
 function formatNumber(value: unknown, digits = 2): string {
@@ -892,17 +893,21 @@ function StocksPage() {
 
 function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
-  const query = useQuery({ queryKey: ['stock', exchange, symbol], queryFn: () => getStock(exchange, symbol), enabled: Boolean(exchange && symbol) })
+  const [searchParams, setSearchParams] = useSearchParams()
+  const asOf = searchParams.get('as_of') ?? ''
+  const [cutoffDraft, setCutoffDraft] = useState(asOf)
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
+  useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
   const [tab, setTab] = useState<StockTab>('technical')
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const latestBar = data.bars[data.bars.length - 1]
+  const latestBar = data.overview ? data.overview.price.latest ?? undefined : data.bars[data.bars.length - 1]
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
-  const currentPrice = data.decision_summary?.current_price ?? latestBar?.close ?? null
-  const priceChange = data.decision_summary?.price_change ?? (latestBar && previousBar ? latestBar.close - previousBar.close : null)
-  const priceChangePct = data.decision_summary?.price_change_pct ?? (priceChange != null && previousBar?.close ? priceChange / previousBar.close : null)
+  const currentPrice = data.overview ? latestBar?.close ?? null : data.decision_summary?.current_price ?? latestBar?.close ?? null
+  const priceChange = data.overview ? null : data.decision_summary?.price_change ?? (latestBar && previousBar ? latestBar.close - previousBar.close : null)
+  const priceChangePct = data.overview ? null : data.decision_summary?.price_change_pct ?? (priceChange != null && previousBar?.close ? priceChange / previousBar.close : null)
   const fallbackMarketComplete = Boolean(latestBar && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
@@ -939,8 +944,10 @@ function StockPage() {
         <div><span>漲跌（元／%）</span><strong className={priceChangeTone(priceChange)}>{priceChange == null ? '待核實' : `${formatSignedNumber(priceChange)}${priceChangePct == null ? '' : `（${formatSignedPercent(priceChangePct)}）`}`}</strong></div>
         <div><span>成交量（張）</span><strong>{formatTableVolume(latestBar?.volume, latestBar?.source) || (latestBar?.volume == null ? '未提供' : '數值或單位待核實')}</strong></div>
       </div>
-      <div className="small-note stock-header-meta">資料日期 {formatTaiwanDateTime(data.decision_summary?.data_cutoff ?? latestBar?.date, true)} · 來源 {sourceLabel([...new Set(data.bars.map((bar) => bar.source))])}</div>
+      <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
+      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
     </PageTitle>
+    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} />}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">

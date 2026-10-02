@@ -184,9 +184,9 @@ export const getThemeMembers = (id: string, params: PageParams & { sort?: string
 export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean } = {}) =>
   get<{ items: StockDirectoryRow[]; meta: Record<string, unknown> }>(`/stocks${queryString(params)}`)
 
-export const getStock = (exchange: string, symbol: string) =>
+export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
-    `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}`,
+    `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
 
 export const getActions = (params: CursorParams = {}) =>
