@@ -231,7 +231,7 @@ legacy signal_date/data_cutoff/earliest_execution_date/naive created_at保留但
 
 ## 8. R0-5：migration head 與實際 DB revision
 
-分開三件事：程式head=`0006_news_json_defaults`；文件head應一致；實際DB只能對指定path唯讀查 `alembic_version`與fallback markers。`schema_migrations`只證fallback marker，不等於Alembic current。
+分開三件事：目前程式 head=`0007_turnover_availability`，其前一 revision 為 `0006_news_json_defaults`；文件 head 應一致；實際 DB 只能對指定 path 唯讀查 `alembic_version` 與 fallback markers。`schema_migrations` 只證 fallback marker，不等於 Alembic current，也不證正式 DB 已升級。以下 0005／0006 與 markers 的具名結果保留各自歷史驗收範圍。
 
 ### 8.1 B6 review 驗收矩陣
 

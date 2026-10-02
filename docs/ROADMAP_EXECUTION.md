@@ -1,6 +1,6 @@
 # R0–R3 執行清單
 
-更新：2026-09-27。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
+更新：2026-10-03。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
 
 ## 1. 執行界線與狀態
 
@@ -20,7 +20,7 @@
 
 ## 2. 依賴與共同 gate
 
-來源准入可與安全基線及 artifact 工作並行；實際資料接線才等待時間／版本依賴。B2、B3-wire、B4b、B5b 匯入 B7，同 snapshot 比較後才考慮預設切換。R2／R3 只依賴該批真正採用的來源，受限且未採用來源不作全域 blocker。
+來源准入可與安全基線及 artifact 工作並行；實際資料接線才等待時間／版本依賴。B2、B3-wire、B4b、B5b 匯入 B7，同 snapshot 比較後才考慮預設切換。以下 gate 與工作依賴按本批採用的來源、用途及能力核對；受限且未採用來源只阻擋相關能力，不作全域 blocker。必需資料或時間 gate 未滿足的能力仍等待，不能以 unavailable 標示代替驗收。
 
 | Gate | 條件 | 未滿足 |
 | --- | --- | --- |
@@ -31,6 +31,18 @@
 | G-PRODUCT | 可先採盤後 long 假設；精確期間、做空、一般風險由統籌版本化，個人部位才需個人風險預算。 | 未知風險不給張數；T+5／T+20 不當退出日。 |
 | G-MODEL | target、H、成本、不可比、split、校準／採用門檻在看 final test 前預先登錄。 | 只探索，probability=null，不採用；僅個人偏好參數另詢問。 |
 | G-FORWARD | 先封存當日 plan，再等 trigger 與 H／退出完成，累積事先要求樣本／市場狀態。 | 等待，不用歷史 fixture 或短樣本結案。 |
+
+### 2.1 近期里程碑接線映射
+
+M1／M2／M3 的新增範圍由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑) 定義，均待實作。此表只列派工與操作驗收；各主題完整 gate 仍以原工作列為準。
+
+| 里程碑／工作 ID | 實際必要依賴 | 下一個可執行工作／解除條件 | 操作驗收條件 |
+| --- | --- | --- | --- |
+| M1：R2-A2、R2-D1；所採資料對應 R1-A2／R1-B1 | 本批准入來源與用途、行情／法人窗口及交易日 coverage、事件／新聞時間與版本。只依賴採用範圍；歷史或執行斷言仍須其實際時間 gate。 | 先核定 M1 窗口、交易日與缺日規則、支援資料範圍，再完成總覽所需計算、API 與 UI 接線；缺來源的區塊保持待驗，其他獨立區塊可先交付。 | 從個股入口讀到新增總覽；對來源核對 5／20 日法人數值與趨勢、研究截止一致的條件及原因，保留原資料／事件時間並開啟原始入口；缺日、資料不足與合法零可辨識，列明支持範圍。 |
+| M2：R2-A1、R2-D1；所採理由對應 R1-B1／B2、R1-C1／C2 | 已接 M1 詳情；每項關注理由所用來源、時間與版本。採用事件去重才需 R1-B2；可信族群排名須先通過分類及相應完整品質 gate。 | 在已驗收資料範圍建立今日關注，完成同股去重與詳情連結；未核實分類保留待核實，不進可信排名。 | 從今日關注進 M1，回查每項理由、時間與來源；同股只一張，零候選與缺來源結果可分辨。 |
+| M3：R2-B1／B2、R2-C1、R2-D1；R0-C2／C4／C5 | 所交付計畫／追蹤子能力的 B4／B5 來源、時間、版本、合法執行與保存 gate；新舊比較／預設切換仍依 B7 與統籌決策。 | 逐子能力核對實際依賴；滿足才接計畫保存、API、UI 與追蹤，未滿足者等待並列解除條件。 | 保存後可讀回相同版本計畫；觸發、到期、未成交、模擬與退出各自可操作、可回指證據；未知風險不輸出張數，不以觸價主張成交。 |
+
+子能力驗收不取代 R0／R1 的完整資料驗收或 R2-E1 的整合、build、backend 與瀏覽器關鍵流程。必要基礎批次須列支援里程碑與解除的依賴，拆工及續作依 [AGENTS](../AGENTS.md#每輪流程)。
 
 ## 3. R0：研究基準與時間
 
@@ -53,7 +65,7 @@
 | ID | 狀態 | 依賴 | 完成條件／目前邊界 |
 | --- | --- | --- | --- |
 | R0-B1／C-001 | 已 review（局部） | 無 migration | confidence 安全語意；不推論 B2 完成。 |
-| R0-B2／B2-persist | 四個小批、bridge A、B adapter、selected bar 與 prior volumes 本地 metadata 接線已有限 review；獨立 selected-bar verifier 有程式與純記憶體案例的有限 review；整體未完成 | R0-A1、G-ID | B 只接受 opt-in capture→detached canonical candidate；caller 明示 current snapshot path／SHA、exact attempt／ordinal 與新研究 aware decision，保存另由 caller 明示 attempt／run。Capture v2 封存 selected bar close／volume；v3 封存實際 prior volumes 最多 20 筆有序本地列與 raw metadata。獨立 `verify_selected_bar_evidence` 對 caller 指定的 snapshot、v2／v3 selected call、raw FK 所指 `body.bin`／同目錄 `receipt.json` 及外部 receipt／registry pins 回 detached `local_evidence_consistent`，只證當次本地 selected-bar 證據一致；不改 bridge 的 `bytes_unverified` 或升格 prior volumes。真實檔案／SQLite snapshot／零寫入整合未驗；下一步尋找已授權可唯讀的 snapshot／body／receipt／registry pins tuple，缺 specimen 或 pins 則保持待驗，不建附件或 fixture。70 個既有案例未跑，pytest／必要磁碟驗證受目前落盤配額所限；見[協作紀錄](TASK_COORDINATION.md)。歷史原件／上游版本、availability／歷史決策／PIT、其餘衍生輸入仍未證；consumer、同 snapshot paired replay 及產品選版仍缺。API 與拒絕條件見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)。 |
+| R0-B2／B2-persist | 四個小批、bridge A、B adapter、selected bar 與 prior volumes 本地 metadata 接線已有限 review；獨立 selected-bar verifier 有程式與純記憶體案例的有限 review；整體未完成 | R0-A1、G-ID | B 只接受 opt-in capture→detached canonical candidate；caller 明示 current snapshot path／SHA、exact attempt／ordinal 與新研究 aware decision，保存另由 caller 明示 attempt／run。Capture v2 封存 selected bar close／volume；v3 封存實際 prior volumes 最多 20 筆有序本地列與 raw metadata。獨立 `verify_selected_bar_evidence` 對 caller 指定的 snapshot、v2／v3 selected call、raw FK 所指 `body.bin`／同目錄 `receipt.json` 及外部 receipt／registry pins 回 detached `local_evidence_consistent`，只證當次本地 selected-bar 證據一致；不改 bridge 的 `bytes_unverified` 或升格 prior volumes。真實檔案／SQLite snapshot／零寫入整合未驗；完整已授權 tuple 或 pins 尚缺，依賴未變前保持待驗，不重複搜尋或建附件／fixture。70 個既有案例未跑，pytest／必要磁碟驗證受原輪落盤配額所限；見[協作紀錄](TASK_COORDINATION.md)。歷史原件／上游版本、availability／歷史決策／PIT、其餘衍生輸入仍未證；consumer、同 snapshot paired replay 及產品選版仍缺。API 與拒絕條件見 [Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)。 |
 | R0-B3／C-002 | 已 review（純核心） | 無 I/O | Wilder ATR及strict caller inputs；未接官方來源或worker。 |
 | R0-B4／B3-persist | 已 review（局部） | R0-A1、G-ID、R0-B3 | Immutable ATR store、精確雙唯讀比較及 schema1／v2 相容邊界；不相容輸出不可比，官方來源／PIT／worker 接線仍缺。完整支援與拒絕條件見 [R0](R0_IMPLEMENTATION.md)。 |
 | R0-B5／B3-wire | 提案 | R0-B4、G-TIME、G-SOURCE | 官方session／halt／公司行動／previous-close均有raw／版本／availability；缺來源reason code fail closed，worker explicit opt-in讀artifact，預設候選不切換。 |
@@ -74,12 +86,12 @@
 | ID | 狀態 | 小批與依賴 | 可驗收完成條件 |
 | --- | --- | --- | --- |
 | R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性可先行，實際 as-of 接線才依賴 R0-C4。 | 四來源 registry／capture、兩個 consumer 及窄修正已有限 review；其餘 collector、公司行動／停復牌、授權、時間／修訂／歷史與 PIT 仍待驗，具名範圍見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。 |
-| R1-A2 | 提案（P1-identity 與 P2+ 成交額 availability 各有限接受；整體未完成） | R1-A1；官方行情／TAIEX／法人／融資逐域驗證。 | P1 的 TAIEX／TWII session 與 `taiex_rows` 僅計 `exchange=TWSE` index bar。使用者已選定 P2+：TWSE `TradeValue`／TPEx `TransactionAmount` 缺失或無效時保留有效 OHLC／volume，成交額數值存 `0` 並保存 `unavailable/missing` 或 `unavailable/invalid`；明確來源零為 `available`。opt-in selected capture 納入同一契約；TAIEX 合成額為 `unavailable/synthetic_index`。舊正值保留 `available`，舊零為 `unknown/legacy_zero_ambiguous`，負值／NULL 為 `unknown/legacy_invalid`；已有 status 的 migration 重跑不覆寫。API／TS 傳 status 與 nullable reason，兩種法人 flow ratio 遇非 `available` 關閉。純記憶體 66 passed（含群組身份 25 cases），`tsc --noEmit` 與 diff-check 通過；磁碟 capture／legacy migration 測試、正式 DB 升級待驗。仍須以 exchange＋symbol＋session＋欄位用途產 coverage；除成交額的「數值 0＋狀態」保存例外，缺值不得當有效零，合成或截斷數值不得當作可用欄位；TWSE／TPEx 單位與 identity 不混用，raw 可追溯。詳細契約見 [資料來源：P2+](DATA_SOURCES.md#r1-a2-p2-成交金額可得狀態有限接受)。 |
+| R1-A2 | 提案（P1-identity 與 P2+ 成交額 availability 各有限接受；整體未完成） | 本批採用的 R1-A1 來源；官方行情／TAIEX／法人／融資逐域驗證。 | TAIEX exchange identity 與成交額狀態保存／使用已有限接受，含單一離線落盤 fixture 的缺額／明確零 capture→SQLite→API；精確契約及 migration／invalid／正式 DB 待驗範圍見 [DATA_SOURCES](DATA_SOURCES.md#r1-a2-p2-成交金額可得狀態有限接受)。完整驗收仍須以 exchange＋symbol＋session＋欄位用途產具名 coverage，單位／identity 不混用且 raw 可追溯；缺值不當有效零，合成或截斷數值不當可用欄位，fixture 不證真實來源、歷史完整性或 PIT。 |
 | R1-A3 | 提案 | R1-A1、R0-B5；公司行動與停復牌。 | raw／adjusted basis、因子、版本、可得時間與 applied-through 可重建；TWSE／TPEx 覆蓋分開；不足時 ATR／tracking fail-closed。 |
-| R1-B1 | 提案 | R1-A1、R0-C4；官方事件與 NewsItem 時間回歸。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |
+| R1-B1 | 提案 | 本批採用的 R1-A1 來源與時間／版本證據；實際 as-of gate 接線依 R0-C4 必要輸入。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |
 | R1-B2 | 提案 | R1-B1；同事件 grouping 與 new-information。 | 同源與跨源 dedupe 可重跑，保留每篇來源；首次／補充／更正／撤回分開；負面或轉載不增加正向催化；所有摘要回指合法原文。 |
 | R1-B3 | 提案／可能受限 | R1-A1、G-SOURCE；免費官方 macro／可信媒體可行性。 | 每個候選以實際抓取、時間、保存／摘要權利與穩定性驗證；沒有可接受來源就記 `受限`，不以搜尋摘要或模型記憶補內文。 |
-| R1-C1 | 提案；R16／17、R35–38 的身分小批已有限 review | R1-B2；正式分類修復依自身資料與驗收，不加無關 capture 工作作前置。 | 產業／題材分層及有來源、版本、期間的 membership。成員報酬、candidate 決策、backfill 納入及 public 展示各有有限成果，語意不得互換；正式分類與歷史 PIT／回算未完成。精確規則見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。 |
+| R1-C1 | 提案；R16／17、R35–38 的身分小批已有限 review | 本批分類來源、版本與期間；採用事件形成題材時才需 R1-B2。正式分類修復依自身資料與驗收，不加無關 capture 工作作前置。 | 產業／題材分層及有來源、版本、期間的 membership。成員報酬、candidate 決策、backfill 納入及 public 展示各有有限成果，語意不得互換；正式分類與歷史 PIT／回算未完成。精確規則見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)。 |
 | R1-C2 | 提案 | R1-C1、R1-A2；題材品質與去重。 | 相同 as-of 的相對強弱、廣度、集中度、延伸與事件方向各自有窗口／缺項；重疊題材不重複計候選或曝險；不改 `hot_group_v1` gate。 |
 | R1-D1 | 提案 | R1-A1；官方當沖資料。 | 先固定分子／分母、股數／金額、T／T+1／T+2 修訂與 availability；兩市場分開驗證；修訂可按當時版本重放。 |
 | R1-D2 | 提案 | R1-A1；融券／借券／持股欄位。 | 每欄來源、單位、日期、revision、coverage 與 null policy 有證據；欄位存在不算已收集。 |

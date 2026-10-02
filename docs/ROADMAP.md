@@ -1,6 +1,6 @@
 # 開發路線與目前能力
 
-更新：2026-09-27。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-10-03。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（2026-09-27 核對）
 
@@ -9,18 +9,23 @@
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；產業期間、停復牌與公司行動局部修正。 | 成交額的磁碟 capture／legacy migration 與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；四來源 registry／capture、兩個有限 consumer；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試已有限驗收；產業期間、停復牌與公司行動局部修正。 | 成交額的 legacy file-backed migration、其他 selected invalid 的磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口。 | 歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
 **籌碼三區仍待做**：三大法人沿用已有資料；主力進出與券商分點的交易匯入、統計、排行／歷史及自動更新尚未完成。定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
-### 接下來的順序
+### 接下來的順序：近期產品里程碑
 
-1. **R0-B2 SignalArtifact bridge B**：A 的映射／缺口、B 的 capture→candidate adapter、opt-in selected bar 與 prior volumes 本地 metadata 接線，以及獨立 `STOCK_DAY_ALL` selected-bar verifier 均只有有限 review；candidate 與 caller save 分離，verifier 不改既有 `bytes_unverified`。下一步尋找已授權可唯讀的 research snapshot／body／receipt／registry pins tuple，驗獨立 verifier 的實際整合；若缺 specimen 或 pins 則保持待驗，不建附件或 fixture。可行的未跑回歸仍待補；必要磁碟驗證須待[協作紀錄](TASK_COORDINATION.md)所述配額條件解除。歷史原件／上游版本及 availability／historical decision 待證；prior volumes 不升格，consumer、paired replay 與預設切換均未核定。精確缺口見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)。
-2. **R0 其餘接線與比較**：依來源與時間證據核定 B3-wire、B5b 的實際整合，並接續 B4b／B5b 已有限 review 的 caller-input 純核心所缺的來源／PIT、完整依賴與 B7 paired replay；純核心結果不證來源真實性、成交或 paired output。
-3. **R1 資料與事件**：來源可行性可與 R0 並行；正式分類修復依其自身資料與授權驗收，不被無關 capture 小批阻塞。
-4. **R2、R3**：按實際可用來源交付完整計畫／風險，再以預先登錄門檻做模型及前瞻驗證。受限來源只影響依賴它的功能。
+使用者已確認完整使用流程為 **今日關注 → 個股研究 → 條件計畫 → 追蹤回看**；建置先後為 **M1 個股研究 → M2 今日關注串個股 → M3 條件計畫與追蹤**。沿用既有五個主導航與量化契約；以下三個里程碑皆為後續待實作，規劃不算驗收。
+
+1. **M1 個股研究總覽**：在已有 K 線、五分頁、每日法人、新聞與行動摘要之上，新增同一研究截止（`as_of`）的研究總覽，整合價格窗口、最近 5／20 交易日外資／投信／自營商各別淨買賣超與趨勢、近期新聞／官方事件的可追溯入口，以及研究條件「成立／未成立／資料不足」與真實原因；各資料日期、新聞發布／事件原時間保留，不強改為同日。實作前由統籌核定窗口、交易日判準、來源、缺日處理及版本，數值須可回指來源且不補零。只採已准入且本批驗收的資料與既有策略版本，不跨策略拼價位或虛構事件影響；既有分類待核實標示保留。缺來源使相關區塊為 unknown／unavailable，其他獨立區塊仍可用。交付須具名列出支援市場、標的、資料範圍與未支援區塊，不將既有頁重新計成交付，也不能只有全屏不可用 placeholder 就算完成。
+2. **M2 今日關注串個股**：依本批實際採用的事件、族群與個股資料，提供可追溯的關注理由、時間與來源；同一股去重後可直接進入 M1 詳情。分類未核實時不得產生可信排名；零候選與來源不足須可區分，不能為湊名單補候選或推論事件影響。
+3. **M3 條件計畫與追蹤回看**：只對來源、時間與版本門檻具體滿足的子能力核定接線，完成計畫保存、API、UI 與追蹤操作。觸發、到期、未成交、模擬成交及退出分開驗收；未知個人風險預算不給張數。既有 B4／B5／B7 完整 gate 與預設切換決策保留，必要依賴未滿足時保持等待，不以 unknown 標示規避該子能力的必要資料或合法執行條件。
+
+各里程碑可拆成能獨立操作與驗收的子能力，但完成狀態須明列支援範圍；局部交付不等於 R0／R1 整體完成，也不取代 R2-E1 完整整合驗收。R0–R3 是技術、資料依賴與完整驗收分層，原全範圍保留；每批只處理所交付能力需要的依賴。工作映射與下一個可執行項見[執行清單](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+R0-B2 是依賴工作，並非全局第一主題。其已授權唯讀 snapshot／body／receipt／registry pins tuple 尚缺，依賴未變時保持待驗，不再重複搜尋或建 specimen／fixture 冒稱來源接入；其他可行工作依里程碑推進。精確缺口與原有限成果見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)，既有輪限制見[協作紀錄](TASK_COORDINATION.md)。
 
 ## R0 要修正的五件事
 
