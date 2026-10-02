@@ -28,8 +28,9 @@ from worker.stock_day_evidence import _assert_binding, _checked_path, _identity,
 
 from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, IngestionRun,
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
+from .institutional_daily import build_institutional_daily
 
-OVERVIEW_VERSION = "stock-overview/p1-v1"
+OVERVIEW_VERSION = "stock-overview/p2b-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -257,17 +258,21 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
         conditions.append({"strategy": name, "label": label, "version": pair[1].version if pair else None,
                            "signal_date": pair[0].signal_date.isoformat() if pair else None,
                            "status": "data_insufficient", "reasons": reasons})
+    daily = build_institutional_daily(instrument.exchange, instrument.symbol, cutoff)
     return {
         "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-P1: cutoff and traceable original-price window",
+        "scope": "M1-P2b: cutoff, traceable original-price window and selected single-day TPEx institutional evidence",
         "price": {"status": "available" if qualified else "unavailable", "basis": "original_api_ohlcv",
                   "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
                   "from": qualified[0]["date"] if qualified else None, "to": latest["date"] if latest else None,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
         "institutional": {"status": "unavailable", "horizons": [5, 20],
                           "investors": ["foreign", "trust", "dealer"], "values": None,
-                          "reasons": ["institutional_sources_not_admitted", "trading_session_source_not_admitted"]},
+                          "reasons": (["multi_session_institutional_evidence_missing", "trading_session_source_not_admitted"]
+                                      if daily["status"] == "available" else
+                                      ["institutional_sources_not_admitted", "trading_session_source_not_admitted"])},
+        "institutional_daily": daily,
         "conditions": conditions,
         "events": {"status": "unavailable", "reasons": ["event_capture_consumer_not_verified", "event_source_time_not_verified"]},
         "limitations": ["local_evidence_consistency_only", "adjustment_chain_not_provided", "complete_m1_not_delivered"],

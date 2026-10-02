@@ -1,4 +1,4 @@
-import type { StockOverviewData } from '../types'
+import type { InstitutionalDailyData, StockOverviewData } from '../types'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 
 const REASONS: Record<string, string> = {
@@ -29,6 +29,7 @@ const REASONS: Record<string, string> = {
   price_no_rows_before_cutoff: '截止日期以前沒有行情資料',
   price_latest_before_cutoff: '最新可用行情早於研究截止日期',
   institutional_sources_not_admitted: '法人資料的來源與完整性尚待核對',
+  multi_session_institutional_evidence_missing: '缺少可核對的多個交易日法人原件',
   trading_session_source_not_admitted: '缺少已核對的交易日基準',
   strategy_input_sources_not_admitted: '策略所需法人、成交額與族群資料尚待核對',
   strategy_time_evidence_not_verified: '策略輸入與結果的時間證據尚未驗收',
@@ -37,9 +38,22 @@ const REASONS: Record<string, string> = {
   strategy_result_before_cutoff: '既有策略結果早於本次截止日期',
   event_capture_consumer_not_verified: '官方事件原件與讀取結果尚待核對',
   event_source_time_not_verified: '事件來源與發布／事件時間尚未完整驗證',
+  daily_exchange_not_supported: '本區塊目前僅支援上櫃（TPEx）原件',
+  daily_shared_cutoff_missing: '尚無共同研究截止日期',
+  daily_capture_not_configured: '尚未設定本地單日法人原件',
+  daily_invalid_configuration: '本地原件設定尚待核對',
+  daily_invalid_symbol: '標的代號尚待核對',
+  daily_after_cutoff: '設定的原件資料日晚於研究截止日期，本次不採用',
+  daily_evidence_invalid: '單日法人原件無法完整驗證',
+  daily_configured_date_before_cutoff: '設定的原件資料日早於研究截止日期；尚未確認截至日前最新資料',
+  selected_row_missing: '原件中沒有這個標的的唯一資料列',
+  selected_row_duplicate: '原件中這個標的資料列重複',
+  payload_date_mismatch: '原件資料日與設定日期不一致',
 }
 
 export function overviewReason(reason: string): string {
+  if (reason.startsWith('receipt_mismatch:')) return '擷取紀錄與法人原件、來源或版本不一致'
+  if (reason.startsWith('selected_') || reason === 'invalid_share_quantity' || reason === 'negative_gross_quantity') return REASONS[reason] ?? '選中標的的法人股數或加總無法核對'
   if (reason.startsWith('body_')) return '原始資料檔案不可讀、不穩定或不符合檔案驗證條件'
   if (reason.startsWith('receipt_')) return '擷取紀錄檔案不可讀、不穩定或不符合檔案驗證條件'
   return REASONS[reason] ?? '來源證據尚待核對'
@@ -51,6 +65,38 @@ function number(value: number | null, digits = 2): string {
 
 function Reasons({ reasons }: { reasons: string[] }) {
   return reasons.length ? <ul className="overview-reasons">{reasons.map((reason) => <li key={reason}>{overviewReason(reason)}</li>)}</ul> : null
+}
+
+function exactShares(value: string): string {
+  // Format the canonical integer text directly, preserving every digit beyond
+  // Number.MAX_SAFE_INTEGER. No Number conversion or share-to-lot rounding.
+  if (!/^(?:0|-?[1-9][0-9]*)$/.test(value)) return '待核對'
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+export function InstitutionalDaily({ data }: { data?: InstitutionalDailyData }) {
+  const row = data?.status === 'available' ? data.row : null
+  const provenance = row ? data?.provenance : null
+  return <section className="panel overview-institutional-daily"><h3>單日法人原件</h3>
+    {row && provenance ? <>
+      <p>{row.company_name}（{row.symbol}） · 資料日 {formatResearchDate(row.date)} · 單位：股</p>
+      <p className="small-note">僅核對本次設定的單日原件與選中標的；不代表完整市場或截至日前最新資料。</p>
+      <div className="table-wrap"><table><caption>法人買進、賣出與淨買賣超（股）；正值為買超、負值為賣超。</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>
+        {(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><td>{row.investors[key].label}</td><td>{exactShares(row.investors[key].buy)}</td><td>{exactShares(row.investors[key].sell)}</td><td>{exactShares(row.investors[key].net)}</td></tr>)}
+        <tr><th colSpan={3}>三類法人淨買賣超合計</th><td>{exactShares(row.total_net)}</td></tr>
+      </tbody></table></div>
+      <p className="small-note">來源 <a href={provenance.endpoint} target="_blank" rel="noreferrer">證券櫃檯買賣中心 · 上櫃股票三大法人買賣明細資訊</a>；擷取 {formatResearchDateTime(provenance.captured_at)}。本地原件與數值一致；歷史當時可得（PIT）未支援。</p>
+      {data?.attribution && <p className="small-note">資料提供：{data.attribution.owner.data_provider} · {data.attribution.owner.attribution_year} · <a href={data.attribution.owner.license_url} target="_blank" rel="noreferrer">政府資料開放授權條款</a></p>}
+      <details className="technical-details"><summary>查看法人原件日期、來源版本與雜湊</summary>
+        <div className="overview-provenance">原始資料日 {row.source_date} · 原件列序 {row.row_ordinal} · {data?.version}</div>
+        <div className="overview-provenance">來源版本 {provenance.source_version} · registry {provenance.registry_version} · manifest {provenance.manifest_digest}</div>
+        <div className="overview-provenance">原件 SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256}</div>
+        <div className="overview-provenance">擷取時間原值 {provenance.captured_at}</div>
+      </details>
+    </> : <div className="data-gap">尚無可核對的單日法人原件。</div>}
+    <Reasons reasons={data?.reasons ?? ['daily_capture_not_configured']} />
+    <p className="small-note">最近 5／20 交易日法人窗口仍不可用；缺少交易日基準與多日原件。缺值不作 0，融資不併入三大法人。</p>
+  </section>
 }
 
 export function StockOverview({ data, onNews }: { data: StockOverviewData; onNews: () => void }) {
@@ -78,9 +124,10 @@ export function StockOverview({ data, onNews }: { data: StockOverviewData; onNew
         {price.rejected.length > 0 && <details className="technical-details"><summary>未採用 {price.rejected.length} 筆行情的日期與原因</summary>{price.rejected.map((row, index) => <div key={`${row.date}-${index}`}>{formatResearchDate(row.date)}：{overviewReason(row.reason)}（{row.reason}）</div>)}</details>}
       </section>
       <section className="panel"><h3>外資／投信／自營商</h3><div className="badge">資料不足</div><p>最近 5／20 交易日淨買賣超與趨勢尚不可用。</p><Reasons reasons={data.institutional.reasons} /><p className="small-note">各法人獨立計算的來源與交易日條件尚未滿足；缺值不作 0，融資不併入三大法人。</p></section>
+      <InstitutionalDaily data={data.institutional_daily} />
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>
       <section className="panel"><h3>新聞與官方事件入口</h3><p>保留既有來源連結、發布與事件時間；尚不能把入口中的資料當作已驗收事件或推論價格影響。</p><Reasons reasons={data.events.reasons} /><button type="button" className="secondary-button" onClick={onNews}>查看新聞與公告</button><p className="small-note">新聞採已核對的發布／事件時間截至；未知時間或超過截止的項目不混入本次清單。</p></section>
     </div>
-    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。M1-P1 僅包含資料日期截止與可追溯的原始價格視窗；完整 M1 的法人窗口、事件與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>
+    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。M1-P2b 包含資料日期截止、可追溯的原始價格視窗與設定的上櫃單日法人原件；完整 M1 的法人窗口、事件與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>
   </section>
 }

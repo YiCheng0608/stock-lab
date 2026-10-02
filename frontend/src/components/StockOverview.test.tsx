@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { StockOverview, overviewReason } from './StockOverview'
-import type { StockOverviewData } from '../types'
+import { InstitutionalDaily, StockOverview, overviewReason } from './StockOverview'
+import type { InstitutionalDailyData, StockOverviewData } from '../types'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -42,4 +42,31 @@ expect(missingHtml.includes('未提供') && missingHtml.includes('未補零') &&
 
 const unavailableHtml = renderToStaticMarkup(<StockOverview data={{ ...data, price: { ...data.price, status: 'unavailable', latest: null, bars: [], valid_count: 0, from: null, to: null } }} onNews={() => {}} />)
 expect(unavailableHtml.includes('尚無來源與數值已核對的價格') && unavailableHtml.includes('查看新聞與公告'), 'unavailable price does not hide independent entry points')
-console.log('StockOverview display checks passed')
+const investor = (label: string, buy: string, sell: string, net: string) => ({ label, buy, sell, net, source_fields: { buy: 'buy', sell: 'sell', net: 'net' } })
+const daily: InstitutionalDailyData = {
+  version: 'institutional-daily/p2b-v1', status: 'available', as_of: '2026-10-03', date: '2026-10-02',
+  selection_basis: 'explicit_configured_single_day', unit: 'shares', quantity_encoding: 'canonical_integer_string', historical_pit: 'unsupported',
+  reasons: ['daily_configured_date_before_cutoff'], limitations: [],
+  session_windows: { status: 'unavailable', horizons: [5, 20], reasons: ['multi_session_institutional_evidence_missing'] },
+  row: { symbol: '3105', company_name: '穩懋', date: '2026-10-02', source_date: '1151002', exchange: 'TPEx', unit: 'shares', row_ordinal: 175,
+    investors: { foreign: investor('外資及陸資（不含外資自營商）', '10547941', '3264551', '7283390'), trust: investor('投信', '0', '27000', '-27000'), dealer: investor('自營商', '1070812', '86707', '984105') }, total_net: '8240495' },
+  provenance: { source_id: 'tpex_3insti_daily_trading', source_version: 'pinned-source', endpoint: 'https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading',
+    registry_version: 'pinned-registry', manifest_digest: 'sha256:' + 'd'.repeat(64), body_sha256: 'a'.repeat(64), receipt_sha256: 'b'.repeat(64), captured_at: '2026-10-02T21:33:02+00:00', verification: 'local_evidence_consistent' },
+  attribution: { owner: { name: 'Taipei Exchange', data_provider: '金融監督管理委員會證券期貨局', dataset_name: '上櫃股票三大法人買賣明細資訊', license_url: 'https://data.gov.tw/license', attribution_year: 2026 },
+    dataset_id: 'data-gov-11856', source_id: 'tpex_3insti_daily_trading', source_url: 'https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading', terms: {}, evidence: [], purpose_evidence: {} },
+}
+const dailyHtml = renderToStaticMarkup(<StockOverview data={{ ...data, as_of: '2026-10-03', institutional_daily: daily }} onNews={() => {}} />)
+expect(dailyHtml.includes('單日法人原件') && dailyHtml.includes('穩懋（3105）') && dailyHtml.includes('單位：股'), 'selected original has its own named block, company and exact share unit')
+for (const quantity of ['10,547,941', '3,264,551', '7,283,390', '-27,000', '1,070,812', '86,707', '984,105', '8,240,495']) expect(dailyHtml.includes(quantity), 'separate investor quantities and total retained: ' + quantity)
+expect(dailyHtml.includes('原始資料日 1151002') && dailyHtml.includes('原件列序 175') && dailyHtml.includes('a'.repeat(64)) && dailyHtml.includes('b'.repeat(64)), 'source date, ordinal and both hashes retained')
+expect(dailyHtml.includes('尚未確認截至日前最新資料') && dailyHtml.includes('最近 5／20 交易日淨買賣超與趨勢尚不可用'), 'a configured date before cutoff never claims latest or completes windows')
+expect(dailyHtml.includes('金融監督管理委員會證券期貨局') && dailyHtml.includes('https://data.gov.tw/license'), 'attribution and license link visible')
+
+const large = { ...daily, row: { ...daily.row!, total_net: '-9223372036854775807', investors: { ...daily.row!.investors, foreign: investor('外資', '9223372036854775807', '0', '-9223372036854775807') } } }
+const largeHtml = renderToStaticMarkup(<InstitutionalDaily data={large} />)
+expect(largeHtml.includes('9,223,372,036,854,775,807') && largeHtml.includes('-9,223,372,036,854,775,807'), 'int64 canonical text is never rounded through Number')
+const zeroHtml = renderToStaticMarkup(<InstitutionalDaily data={{ ...daily, row: { ...daily.row!, total_net: '0' } }} />)
+expect(zeroHtml.includes('<td>0</td>'), 'verified exact zero remains a visible zero')
+const rejectedHtml = renderToStaticMarkup(<InstitutionalDaily data={{ ...daily, status: 'unavailable', row: null, provenance: null, reasons: ['daily_after_cutoff'] }} />)
+expect(rejectedHtml.includes('本次不採用') && rejectedHtml.includes('尚無可核對的單日法人原件') && !rejectedHtml.includes('10,547,941'), 'future original is hidden without legacy fallback')
+console.log('StockOverview price/daily display checks passed')

@@ -114,7 +114,7 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ## 9. M1-P1：截止一致與來源可追溯總覽
 
-本批新增個股研究總覽、日期套用／最新資料操作，以及獨立 `GET /stocks/{exchange}/{symbol}/overview?as_of=YYYY-MM-DD`。總覽版本為 `stock-overview/p1-v1`；完整 M1 的法人窗口、官方事件及成立／未成立研究條件仍未完成。
+M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨立 `GET /stocks/{exchange}/{symbol}/overview?as_of=YYYY-MM-DD`。初版總覽版本為 `stock-overview/p1-v1`；後續單日法人接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，完整 M1 的法人窗口、官方事件及成立／未成立研究條件仍未完成。
 
 ### 9.1 共用截止與時間
 
@@ -146,7 +146,7 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 | 突破／回踩條件 | 沿用 `breakout_v1`／`pullback_v1` identity，列既有結果日期／版本；本批均為 `data_insufficient`，附來源、時間、分類及結果缺失／早於截止的原因。 | 必要輸入、來源、時間與分類 gate 具體滿足後才可判「成立／未成立」；requires、過期 signals 或價位存在都不算通過。 |
 | 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
 
-M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已有限 review，契約與單日兩檔支持範圍見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。本批尚未接總覽 API／UI 或 5／20 交易日窗口，所以上表 `institutional` unavailable 契約維持；單日 CLI 數值不作前端 fallback。
+M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已有限 review，契約與單日兩檔支持範圍見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。M1-P2a 本身未接總覽 API／UI 或 5／20 交易日窗口；後續 M1-P2b 的獨立單日原件接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，上表多日 `institutional` unavailable 契約維持，單日 CLI 數值不作前端 fallback。
 
 既有分類待核實提示與原策略、價位／信心語意保留；本批沒有新評分、機率、完整交易計畫或張數。缺來源只讓相關總覽區塊保持 unavailable／資料不足，不將本批價格交付擴寫成完整 M1。
 
@@ -159,3 +159,39 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 後端最終來源復核再次確認兩檔六欄與原件一致、完整 detail 的總覽與獨立總覽端點相等；9 月 30 日截止排除 10 月 1 日，10 月 2 日截止保留 10 月 1 日且標示最新價格早於截止。新增邊界回歸已通過：Windows 檔案讀取／變更拒收、來源 gate、合法零／缺額／非有限值、空標的／非法日期、無行情／只有新聞／財報公告截止、SQL NULL、臺北跨日與超過 200 筆新新聞的 limit 前篩選、legacy 相容；測試收據留本輪 task。
 
 前端型別、總覽 React SSR 顯示檢查與 production build 已通過；大型 JS chunk 警告仍在。本輪 M1-P1 的程式與具名驗收已接受並有限 review，freeze／索引／commit 收據留本輪 task。完整 M1、R0／R1 及 R2-E1 整體均未完成；下一個可行子能力是法人與交易日來源准入後的可驗窗口，不能由本批直接宣稱 M2 已可完成。
+
+## 10. M1-P2b：單日法人原件總覽接線
+
+**已有限 review，只接受下述具名範圍。** 本批在既有總覽新增獨立 `institutional_daily` 區塊，總覽版本為 `stock-overview/p2b-v1`，單日區塊版本為 `institutional-daily/p2b-v1`；只接明示設定的 TPEx 單日原件，不改成完整 5／20 交易日窗口。來源准入、股數口徑與原件 gate 沿用 [SOURCE_REGISTRY §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。
+
+### 10.1 明示設定與共用截止
+
+[`institutional_daily.py`](../backend/app/institutional_daily.py) 從 server 執行環境讀取兩個設定：`STOCK_TPEX_INSTITUTIONAL_CAPTURE_ZIP` 是既有且核定 `capture.zip` 的絕對路徑，`STOCK_TPEX_INSTITUTIONAL_CAPTURE_DATE` 是對應原件的 Gregorian `YYYY-MM-DD` 日期。兩者須同時有效；不搜尋目錄、推算最新日、送網路 request、解壓、改原件、寫 DB／legacy 或快取。使用 M1-P2a 固定 manifest、registry version／digest 與 `free_public_local` profile，不接受 client 指定路徑或以未准入資料補值。
+
+單日區塊使用 §9.1 的共用 `as_of`。原件日期須不晚於截止，不依法人設定改總覽日期；無共用截止時仍 unavailable。未明示 `as_of` 時，設定的法人日期也不作最新資料 cutoff fallback。各失敗結果保留 reason，`row`／`provenance`／`attribution` 為 null，不回傳原件內容或 server 檔案路徑。
+
+| 條件 | 單日區塊結果 |
+| --- | --- |
+| 非 TPEx／無共用截止 | `daily_exchange_not_supported`／`daily_shared_cutoff_missing`，讀原件前停止。 |
+| 兩個設定皆未提供／設定不完整或無效 | `daily_capture_not_configured`／`daily_invalid_configuration`；未配置不讀任何法人原件。 |
+| 設定日期晚於截止 | `daily_after_cutoff`，讀原件前停止，不採用未來資料。 |
+| 原件日期、selected row、receipt 或固定 pins 不合格 | unavailable，保留可識別的拒收原因；未能安全識別的例外以 `daily_evidence_invalid` 表示，不洩漏 OS 例外。 |
+| 原件合格且日期等於／早於截止 | available；早於截止另留 `daily_configured_date_before_cutoff`，不能稱截至日前最新資料。 |
+
+### 10.2 精確股數與可追溯呈現
+
+合格 `row` 保留 symbol／company name、Gregorian `date`、原始民國 `source_date`、1-based `row_ordinal` 與三類 `source_fields`；外資及陸資（不含外資自營商）、投信、自營商的 buy／sell／net，以及 `total_net` 共十個數值均輸出 canonical 整數**字串**，`unit=shares`、`quantity_encoding=canonical_integer_string`。沿用 [SOURCE_REGISTRY §8.2](SOURCE_REGISTRY.md#82-selected-摘要契約與操作) 的整數範圍與加總 gate，合法來源零保留零，缺失或不一致不補零。
+
+此單日原件表以**股**顯示，直接在整數字串加入千分位，不轉 JavaScript `Number` 或換算成張；因此超過安全整數的正負數仍保留全部位數。它是獨立的原件核對表，既有 §7 的法人歷史表顯示換算仍沿用原契約。融資不併入三大法人，不使用單日數值補 5／20 日窗口。
+
+`provenance` 保留 exact endpoint、source／registry version、manifest digest、body／receipt 雙 SHA-256、capture time 與 `local_evidence_consistent` 語意；API 亦保留 attribution、summarize decision 與 condition receipts。畫面提供原件資料日、三類買進／賣出／淨超與合計、來源與授權入口，以及可展開的日期、列序、版本、雙 hash 和 capture time 原值。單日 available 只證選中列與本地原件一致，不證官方 origin authentication、完整市場、最新資料或 PIT。
+
+### 10.3 有限驗收與未支援範圍
+
+統籌以既有核定 ZIP、實際 API router 與記憶體 SQLite，獨立核對 **TPEx 3105／6488、2026-10-02** 各十個數值與原件逐欄一致、完整 detail 的總覽與獨立總覽端點相等，資料日、雙 hash、固定 pins 與列序正確，ZIP 讀前後不變。前端 SSR 核對兩檔數值／日期／追溯欄位、int64 邊界與拒收呈現，後端記憶體靶向回歸及本批不落盤型別檢查通過；記憶體 esbuild 全 App bundle 成功，並用於下述真實瀏覽器操作。完整 backend 與 production Vite build 本輪未跑，不能把記憶體 bundle 或 P1 結果當 P2b 的新 production build 驗收。
+
+真實瀏覽器桌面已核對 3105、從個股入口進入 6488 再套用 10 月 2 日，各十個數值正確；來源顯名／連結、展開雙 hash／列序與日期／版本可讀。`as_of=2026-10-01` 排除 10 月 2 日，10 月 3 日截止保留 10 月 2 日並提示尚未確認截至日前最新資料；「最新資料」清除明示截止後，測試用記憶體 DB 無其他 dated rows 時維持無共用截止，不由法人設定補日期。390×844 窄版展開雜湊的換行修正已複驗，body 無橫向溢出，表格自身可水平捲動。程式、上述具名操作與有限驗收已由統籌接受，不外推其他標的、多日或正式 DB／持久化。
+
+失敗、退修及最終命令、exit、測試與 freeze／索引／commit 收據留本輪 task。本輪新增測試產物為 0，額外落盤測試配額亦為 0；測試／清理限制見 [TASK_COORDINATION](TASK_COORDINATION.md)。
+
+`institutional` 的 5／20 日 `values` 仍為 null；單日可用時，窗口缺口須精確表示 `multi_session_institutional_evidence_missing` 與 `trading_session_source_not_admitted`，不能再把已准入 TPEx 單日來源說成未准入。單日區塊的 `session_windows` 同樣 unavailable。本批無新交易日曆准入，不接 TWSE T86、DB／legacy、預設 collector、多日彙總、事件或完整研究條件；`historical_pit=unsupported`，完整 M1、M2 及 R0／R1／R2-E1 仍未完成。

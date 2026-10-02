@@ -345,6 +345,35 @@ export type OverviewPriceBar = {
   }
 }
 
+export type InstitutionalDailyData = {
+  version: string
+  status: 'available' | 'unavailable'
+  as_of: string | null
+  date: string | null
+  selection_basis: string
+  unit: 'shares'
+  quantity_encoding: 'canonical_integer_string'
+  historical_pit: 'unsupported'
+  reasons: string[]
+  limitations: string[]
+  session_windows: { status: 'unavailable'; horizons: number[]; reasons: string[] }
+  row: null | {
+    symbol: string; company_name: string; date: string; source_date: string; exchange: 'TPEx'; unit: 'shares'; row_ordinal: number
+    investors: Record<'foreign' | 'trust' | 'dealer', {
+      label: string; buy: string; sell: string; net: string; source_fields: { buy: string; sell: string; net: string }
+    }>
+    total_net: string
+  }
+  provenance: null | {
+    source_id: string; source_version: string; endpoint: string; registry_version: string; manifest_digest: string
+    body_sha256: string; receipt_sha256: string; captured_at: string; verification: string
+  }
+  attribution: null | {
+    owner: { name: string; data_provider: string; dataset_name: string; license_url: string; attribution_year: number }
+    dataset_id: string; source_id: string; source_url: string; terms: unknown; evidence: unknown; purpose_evidence: unknown
+  }
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null
@@ -365,6 +394,7 @@ export type StockOverviewData = {
     reasons: string[]
   }
   institutional: { status: string; horizons: number[]; investors: string[]; values: null; reasons: string[] }
+  institutional_daily?: InstitutionalDailyData
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
   events: { status: string; reasons: string[] }
   limitations: string[]
