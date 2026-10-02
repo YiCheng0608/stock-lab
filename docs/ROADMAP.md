@@ -2,14 +2,14 @@
 
 更新：2026-10-03。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
-## 目前進度（含 2026-10-03 M1-P1／P2a／P2b 有限核對）
+## 目前進度（含 2026-10-03 M1-P1／P2a／P2b／P3a 有限核對）
 
 **R0–R3 均未整體完成。** 下表依既有有限驗收、opt-in prior volumes 本地列接線、獨立 selected-bar verifier，以及 B4b／B5b 各自 caller-input 純核心的有限 review 整理；verifier 只判定指定本地證據一致，尚無實際檔案／snapshot 整合驗收或既有流程接線。相關回歸仍待補，見[協作紀錄](TASK_COORDINATION.md)。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限 consumer；另 explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試已有限驗收；產業期間、停復牌與公司行動局部修正。 | 成交額的 legacy file-backed migration、其他 selected invalid 的磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試已有限驗收；產業期間、停復牌與公司行動局部修正。 | 成交額的 legacy file-backed migration、其他 selected invalid 的磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、事件群組／摘要與產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口；M1-P1 共用資料日期截止及來源可追溯總覽、P2b 明示設定的 TPEx 單日法人原件 API／UI 已各有限 review。 | 完整 M1 的法人／交易日窗口、事件及研究條件；歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
@@ -17,7 +17,7 @@
 
 ### 接下來的順序：近期產品里程碑
 
-使用者已確認完整使用流程為 **今日關注 → 個股研究 → 條件計畫 → 追蹤回看**；建置先後為 **M1 個股研究 → M2 今日關注串個股 → M3 條件計畫與追蹤**。沿用既有五個主導航與量化契約；M1-P1／P2a／P2b 已有下列有限交付，完整 M1、M2、M3 仍未完成，規劃不算驗收。
+使用者已確認完整使用流程為 **今日關注 → 個股研究 → 條件計畫 → 追蹤回看**；建置先後為 **M1 個股研究 → M2 今日關注串個股 → M3 條件計畫與追蹤**。沿用既有五個主導航與量化契約；M1-P1／P2a／P2b／P3a 已有下列有限交付，完整 M1、M2、M3 仍未完成，規劃不算驗收。
 
 1. **M1 個股研究總覽**：在已有 K 線、五分頁、每日法人、新聞與行動摘要之上，新增同一研究截止（`as_of`）的研究總覽，整合價格窗口、最近 5／20 交易日外資／投信／自營商各別淨買賣超與趨勢、近期新聞／官方事件的可追溯入口，以及研究條件「成立／未成立／資料不足」與真實原因；各資料日期、新聞發布／事件原時間保留，不強改為同日。實作前由統籌核定窗口、交易日判準、來源、缺日處理及版本，數值須可回指來源且不補零。只採已准入且本批驗收的資料與既有策略版本，不跨策略拼價位或虛構事件影響；既有分類待核實標示保留。缺來源使相關區塊為 unknown／unavailable，其他獨立區塊仍可用。交付須具名列出支援市場、標的、資料範圍與未支援區塊，不將既有頁重新計成交付，也不能只有全屏不可用 placeholder 就算完成。
 2. **M2 今日關注串個股**：依本批實際採用的事件、族群與個股資料，提供可追溯的關注理由、時間與來源；同一股去重後可直接進入 M1 詳情。分類未核實時不得產生可信排名；零候選與來源不足須可區分，不能為湊名單補候選或推論事件影響。
@@ -28,6 +28,8 @@
 **M1-P2a TPEx 日法人來源與 selected 摘要**：必要基礎批次已解除 M1 的 TPEx 日法人來源 gate，以另 explicit 單來源 manifest／pins 接 exact OpenAPI capture 與唯讀摘要 library／CLI；來源及程式已有限 review，3105／6488 的 2026-10-02 單日數值、具名負向拒收與純記憶體靶向回歸已接受。詳細契約見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。M1-P2a 本身未接多日、DB、總覽 API／UI 或完整交易日曆；單日總覽接線另由下列 P2b 交付，TWSE T86 准入仍未知。完整 5／20 日窗口仍需交易日與缺日判準、多日原件及逐欄 coverage。
 
 **M1-P2b 單日法人原件總覽接線**：明示 server ZIP／日期設定後，沿用 P2a gate 在總覽提供獨立 TPEx 單日原件區塊，已有限 review。3105／6488、2026-10-02 的原件→實際 API 二十個數值、detail／總覽一致與追溯欄位、桌面兩檔／截止操作及窄版展開雜湊已具名核對。契約與支持範圍見[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)。不補零、不稱最新資料，5／20 日仍 unavailable；無新 calendar 准入、DB／legacy 改寫或 PIT 完成。後端記憶體靶向回歸、前端 SSR／不落盤型別核對與記憶體全 App bundle 通過；本輪未跑完整 backend 或 production Vite build，完整 M1 不因單日接線完成。
+
+**M1-P3a TWT48U selected 官方事件原件摘要**：必要基礎批次已解除 M1 的 selected 官方事件原件 consumer 缺口，沿用原四來源 manifest／pins，以零落盤記憶體 capture 與摘要 library／CLI 交付；程式及 TWSE 0056（ETF）／1449／1463 的當次未來生效預告已有限 review。原件四欄、列序與雙 hash 可追溯，缺 selected 拒收，事件日不當發布／首次可得時間、不推論價格影響；精確支持範圍見[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)。純記憶體回歸及 source gate 縮窄後必要靶向複驗通過，未重跑現完整案例或完整 backend。本次 live 原件未保存，不能離線重播；API／UI／DB、PIT、完整歷史與產品總覽接線 M1-P3b 仍缺。
 
 各里程碑可拆成能獨立操作與驗收的子能力，但完成狀態須明列支援範圍；局部交付不等於 R0／R1 整體完成，也不取代 R2-E1 完整整合驗收。R0–R3 是技術、資料依賴與完整驗收分層，原全範圍保留；每批只處理所交付能力需要的依賴。工作映射與下一個可執行項見[執行清單](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
 

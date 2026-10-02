@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節新增 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。新增准入不修改原 snapshot 或其 pins，也不表示已重新查證其他四來源的官方現況。
+更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要已有限 review，本輪只補查該來源的現行官方證據。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -170,7 +170,7 @@ Classification不證 raw membership/hash/FK、authenticity、official event ID�
 
 仍未完成：
 
-- 四個准入來源只有 `STOCK_DAY_ALL` 與 `holidaySchedule` 兩個有限 capture consumers；`TWT48U_ALL` action capture、`tpex_spendi_history` capture接線與完整 legacy collector gate仍缺。
+- 原四來源已有 `STOCK_DAY_ALL` 與 `holidaySchedule` 兩個有限磁碟 ZIP capture consumers；第 9 節另為 TWT48U selected 事件新增已有限 review 的記憶體 consumer，不支持既有 ZIP 讀入。TWT48U 的產品／持久化接線、`tpex_spendi_history` capture 接線與完整 legacy collector gate 仍缺。
 - `historical_pit` 需逐筆 first-available、revision/withdrawal lineage及可重建 snapshots；event/date/current raw不能替代。
 - `tpex_spendi_today` 不在四來源 manifest；完整 halt/action/session/TAIEX truth、C007 store linkage、B5b/PIT與正式資料分類仍未完成。
 - Paid subscription、TWSE/TPEx action identity/duplicate修正、generic numeric hardening、舊資料 repair與既有 evaluation replay仍需獨立設計及授權。
@@ -230,3 +230,55 @@ python -m worker.tpex_institutional_capture summarize `
 M1-P2a 本身不接 DB、legacy collector、總覽 API／UI 或多日彙總；完整 5／20 交易日的市場基準、缺日與窗口 coverage 仍待核定及驗收。單日列數、官方資料日或單次真實摘要均不能補成完整交易日曆、全市場／歷史 coverage 或 PIT。工作狀態見 [M1 接線映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
 
 後續 M1-P2b 沿用本節固定來源、用途與原件 gate，唯讀 server 明示的 ZIP／日期，把單日 selected 接到總覽 API／UI，不新增來源准入或改 default manifest。兩檔真實原件的二十個 API 數值、原件／receipt 追溯與具名 UI 操作已有限 review；精確支持範圍與產品契約由[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)負責，不增加完整 session、全市場／歷史 coverage 或 PIT 完成度。
+
+## 9. M1-P3a：TWT48U selected 官方事件原件摘要
+
+M1-P3a 是支援 M1、解除 selected 官方事件原件 consumer 缺口的必要基礎批次，**程式及下述具名驗收已有限 review**。只採原四來源 snapshot 的 `twse_twt48u_all` 與 exact `GET https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL`；產品總覽接線留 M1-P3b。本節不修改原 registry、policy、source version 或 pins，也不新增 DB／legacy collector 接線。
+
+### 9.1 本輪官方補證與既有 identity
+
+統籌於 **2026-10-03** 唯讀核對 [政府資料集 89748](https://data.gov.tw/dataset/89748)：免費、政府資料開放授權條款第 1 版、不定期更新，並連到 TWSE OpenAPI。[TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json) 的 info version 為 `1.0`、description 明示歡迎介接；exact GET `/exchangeReport/TWT48U_ALL` 的 `Date` 定義為「除權息日期」，`Code`、`Name`、`Exdividend` 等十二個欄位均為 string。這些證據只支持該 exact OpenAPI 介接，不外推任意網站自動下載。[TWSE 使用條款](https://www.twse.com.tw/zh/terms/use.html) 第 6／8 點與 [OGL 1.0](https://data.gov.tw/license) 的自動下載、顯名與完整性條件仍依原契約。
+
+執行沿用 [`source_registry.json`](../backend/worker/source_registry.json) 的 `registry_version=r1-a1-c009-2026-09-12.1`、`content_digest=sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b` 與 `source_version=twse-twt48u-all-d011-2026-09-12`。本輪補證不把這個本地 snapshot 名稱改成新的官方 revision；發布／首次可得時間、完整歷史、更正／撤回版本鏈、數字 rate limit 及 historical PIT 仍未知。其餘原三來源未於本輪重新查證。
+
+### 9.2 記憶體 capture 與 selected 摘要契約
+
+[`source_runtime.py`](../backend/worker/source_runtime.py) 新增 `capture_memory(...)`，回傳 `(body bytes 或 None, receipt bytes)`。這條獨立路徑使用 `source-memory-capture/v1`、`storage=memory_only`，不含頂層 `artifact`、不建立 ZIP 或任何原件檔案；既有第 4 節 `source-capture/v1` 磁碟路徑不改。仍核對 explicit manifest／profile／source／雙 pins，履行 `local_fetch`／`raw_store` 的用途與條件；成功 receipt 記錄此兩個 executed purposes，但不表示已作磁碟持久化。單一 GET、body 上限 5 MiB、零 retry／redirect／warm-up、identity encoding 與第 4 節時間限制不變，30 秒 cooperative check 不稱 hard total deadline。失敗回 `body=None`，receipt 為 `rejected` 或 `capture_failed`、`executed_purposes=[]`，不產生失敗附件。
+
+[`twse_action_capture.py`](../backend/worker/twse_action_capture.py) 提供 `summarize_memory_capture(...)` 與 `live_summarize(...)`，輸出 `twse-action-selected/v1`。Selected symbols 必須是非空、無重複的 4–6 碼 ASCII 大寫字母或數字，原值 exact matching；`live_summarize` 於 GET 前先驗 symbols 與 fetch／store／summarize 三個用途。CLI 須 explicit source selector；memory capture 的固定 allowlist 只支持本節來源，不擴張其他來源用途。
+
+Consumer 重驗成功 memory receipt 的 source／endpoint／GET／versions／雙 pins、body bytes／SHA-256、型別敏感的 policy／condition／attribution、HTTP 2xx、`request_count=1` 與 aware、順序一致的 UTC request／capture 時間；頂層不得帶 disk artifact。全 body 必須為非空 JSON object array，各列 exact `Code` 合格、`Date` 是有效七碼 ASCII 民國日期，duplicate JSON keys／非有限值拒收。只對 selected 驗 `Name` 為 nonblank string、`Exdividend` exact `息/權/權息`，分別輸出除息／除權／除權息；不以 alias 補 canonical 欄位，也不推測 alias 語意。每個 requested symbol 至少有一個合格事件；selected 相同 `Code + Date + Exdividend` 重複即拒收，其餘多事件保留。Missing selected 是 unavailable，不代表已驗證該股沒有事件；任一 selected 不合格即不回成功 rows。
+
+摘要保留 exact `source_row`、1-based 原件列序、body／receipt 雙 hash、request／capture UTC、來源／授權／版本及 summarize condition receipts。`candidate_count` 是全 body 列數，`selected_count` 是本次合格**事件列數**，不一定等於 symbols 數；輸出依 requested symbols 順序分組，各股保留原件列序。`validation_scope=payload_codes_dates_and_selected_identity_classification` 明列全 body code／date 與 selected identity／classification 的驗證範圍，不聲稱其他欄位或全市場事件 completeness。`source_url_kind=feed` 表示來源入口是資料集，不是本則單篇原文。`provenance.verification=local_evidence_consistent` 只證本地 bytes／receipt 一致，不是官方 origin authentication。
+
+來源 `Date` 轉成 `event_date`，角色為 `effective_date`、精度為 `date`，原字串另留 `source_date`。`published_at`、`first_available_at`、`revision_available_at` 均為 null／unknown；capture time 只是本系統本次觀測。未來除權息預告保留，不作歷史 `as_of` 篩選，也不推論價格影響或產生調整因子。時間語意由[新聞與事件規格](NEWS_SPEC.md#9-m1-p3a官方事件原件摘要的時間邊界)負責。
+
+在 repo 的 `backend` 目錄、已可執行 worker 的 Python 環境中，可用以下命令作**單次 live GET**。原件只留記憶體、摘要只輸出 stdout；成功 exit 0，失敗 unavailable／exit 2，不建立檔案。Symbols 需對應當次原件，範例不能保證之後版本仍有相同事件。
+
+~~~powershell
+$env:PYTHONUTF8 = '1'
+$taskManifest = Join-Path (Get-Location) 'worker\source_registry.json'
+python -B -m worker.twse_action_capture live-summarize `
+  --manifest $taskManifest `
+  --profile free_public_local `
+  --source twse_twt48u_all `
+  --expected-registry-version r1-a1-c009-2026-09-12.1 `
+  --expected-digest sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b `
+  --symbol 0056 --symbol 1449 --symbol 1463
+~~~
+
+### 9.3 驗收與保留邊界
+
+統籌於 **2026-10-03（台北）** 已有限接受程式、記憶體回歸與 source gate 縮窄後必要靶向複驗，以及兩次成功 live：一個 `capture_memory → consumer` 直接核原 body，另一個由實際 CLI parser → capture → consumer → stdout；當次 body **58 列**，每次獨立單一 GET、HTTP 200、無 retry／原件落盤。以下三筆 exact selected 欄位、完整 `source_row`、原件列序及追溯欄位已核對；0056 是 ETF，不能稱三檔普通股票。
+
+| Code／Name | 原 Date → 生效日期 | 原 Exdividend／分類 | 原件列序 |
+| --- | --- | --- | --- |
+| `0056`／元大高股息（ETF） | `1151022` → 2026-10-22 | `息`／除息 | 5 |
+| `1449`／佳和 | `1151012` → 2026-10-12 | `權`／除權 | 49 |
+| `1463`／強盛新 | `1151015` → 2026-10-15 | `息`／除息 | 50 |
+
+三筆均為本次觀測到的**未來生效預告**，不證事件當時可得或價格影響。首次 live CLI 選到原件缺列，回 `selected_symbol_missing:6834`、exit 2，未改報通過；web 工具較舊內容不能代替實際 network 原件。測試、三次獨立 GET 的命令／版本／exit／數值／hash 及審核收據留本輪 task；現完整案例與完整 backend 未重跑，既有磁碟分支的 mock shape 驗證不當成磁碟出版驗收。本批沒有前端變更，不新增 API／UI 驗收。
+
+此 memory consumer 不支持既有 ZIP 讀入，不接 API／UI／DB，`durable_capture=false`、`historical_pit=unsupported`；完整歷史、事件群組／修訂與產品研究條件仍未完成。M1-P3b 須先核定來源取得方式、觀測截止／事件日語意、追溯與產品操作範圍。
+
+本輪 live body／receipt 不落盤，task 只留命令、數值／分類、hash 與驗收收據；**不能離線重播這次 live 原件**。下輪可重新取得來源，但內容／版本可能不同；Git 的最小 fixture 可重建邊界測試，不能代替本次 live 證據。不為不可重建證據新增附件或放寬既有落盤限制。工作與後續接線見 [M1 映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。

@@ -5,6 +5,8 @@ one capture.zip containing body.bin and receipt.json. body.bin is the HTTP
 entity body after transfer framing, before content decoding; non-identity
 Content-Encoding is rejected. No parsing/re-encoding changes the saved bytes.
 This is a per-invocation control, not a cross-process rate limiter.
+``capture_memory`` shares the same fetch controls but returns bytes in memory;
+its separate receipt schema does not claim a durable artifact.
 """
 
 from __future__ import annotations
@@ -112,19 +114,21 @@ def _publish(output: Path, body: bytes, receipt: dict[str, Any]) -> None:
                 pass
 
 
-def capture(
+def _capture(
     *,
     manifest: str | Path,
     profile: str,
     source_id: str,
     expected_registry_version: str,
     expected_digest: str,
-    output_dir: str | Path,
+    output_dir: str | Path | None = None,
     transport: Any = None,
-) -> dict[str, Any]:
-    """Capture one approved source; transport injection is for local tests only."""
+    memory_only: bool = False,
+) -> tuple[bytes | None, dict[str, Any]]:
+    """Shared policy, request and receipt engine; storage is explicit."""
+    body = None
     receipt: dict[str, Any] = {
-        "schema_version": "source-capture/v1",
+        "schema_version": "source-memory-capture/v1" if memory_only else "source-capture/v1",
         "status": "rejected",
         "source_id": source_id,
         "request_count": 0,
@@ -135,9 +139,13 @@ def capture(
         "rate_limit_scope": "one invocation; no cross-process enforcement",
         "error_reason": None,
     }
+    if memory_only:
+        receipt["storage"] = "memory_only"
     try:
-        if not expected_registry_version or not expected_digest or not profile:
+        if not expected_registry_version or not expected_digest or not profile or (memory_only and not manifest):
             raise CaptureError("explicit_pins_and_profile_required")
+        if memory_only and source_id != "twse_twt48u_all":
+            raise CaptureError("memory_source_not_supported")
         if source_id not in ENDPOINTS:
             raise CaptureError("source_not_supported")
         selected = load_manifest(manifest, expected_registry_version=expected_registry_version, expected_digest=expected_digest)
@@ -162,7 +170,7 @@ def capture(
         # must never silently inherit this unknown-quota operational policy.
         if source["access"]["rate_limit"]["status"] != "unknown":
             raise CaptureError("documented_rate_limit_not_supported")
-        output = _output_path(output_dir)
+        output = None if memory_only else _output_path(output_dir)
         receipt.update({
             "endpoint": endpoint,
             "method": "GET",
@@ -180,8 +188,8 @@ def capture(
             "condition_receipts": {
                 "bounded_requests": {"max_requests": 1, "per_operation_timeout_seconds": TIMEOUT_SECONDS, "cooperative_deadline_seconds": DEADLINE_SECONDS, "deadline_scope": "checked between streamed chunks; not a hard total deadline", "max_body_bytes": MAX_BODY_BYTES},
                 "respect_endpoint_limits": {"strategy": "single_get_stop_on_response", "retries": 0, "redirects": 0, "warmup_requests": 0, "numeric_quota_verified": False},
-                "attribute_source": {"artifact": "receipt.json:attribution"},
-                "preserve_source_integrity": {"artifact": "body.bin", "encoding": "identity HTTP entity bytes after transfer framing; no content decoding or JSON re-encoding"},
+                "attribute_source": {"artifact": "memory:receipt.attribution" if memory_only else "receipt.json:attribution"},
+                "preserve_source_integrity": {"artifact": "memory:body" if memory_only else "body.bin", "encoding": "identity HTTP entity bytes after transfer framing; no content decoding or JSON re-encoding"},
             },
             "executed_purposes": ["local_fetch", "raw_store"],
             "historical_pit": "unsupported",
@@ -215,14 +223,49 @@ def capture(
             json.loads(body, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
         except (ValueError, UnicodeError) as exc:
             raise CaptureError("invalid_json") from exc
-        receipt.update({"captured_at": _utc(), "body_bytes": len(body), "body_sha256": hashlib.sha256(body).hexdigest(), "status": "capture_complete", "artifact": str(output / "capture.zip")})
-        _publish(output, body, receipt)
+        receipt.update({"captured_at": _utc(), "body_bytes": len(body), "body_sha256": hashlib.sha256(body).hexdigest(), "status": "capture_complete"})
+        if not memory_only:
+            receipt["artifact"] = str(output / "capture.zip")
+            _publish(output, body, receipt)
     except Exception as exc:
         receipt["status"] = "capture_failed" if receipt["request_count"] else "rejected"
         receipt["error_reason"] = str(exc) if isinstance(exc, (CaptureError, RegistryError)) else type(exc).__name__
         receipt.pop("artifact", None)
         receipt["executed_purposes"] = []
+        body = None
+    return body, receipt
+
+
+def capture(
+    *, manifest: str | Path, profile: str, source_id: str,
+    expected_registry_version: str, expected_digest: str,
+    output_dir: str | Path, transport: Any = None,
+) -> dict[str, Any]:
+    """Capture one approved source to a ZIP; test-only transport injection."""
+    _, receipt = _capture(manifest=manifest, profile=profile, source_id=source_id,
+                          expected_registry_version=expected_registry_version,
+                          expected_digest=expected_digest, output_dir=output_dir,
+                          transport=transport)
     return receipt
+
+
+def capture_memory(
+    *, manifest: str | Path, profile: str, source_id: str,
+    expected_registry_version: str, expected_digest: str, transport: Any = None,
+) -> tuple[bytes | None, bytes]:
+    """Return raw bytes and a memory-only receipt, with no filesystem mutation.
+
+    This delivery admits only ``twse_twt48u_all`` in memory; other sources are
+    rejected before any request. The disk capture allowlist is unchanged.
+    Failure returns ``(None, receipt_bytes)``. Raw retention ends when the caller
+    drops the bytes; no ZIP, durable publication or historical snapshot is claimed.
+    Transport injection is only for local tests, as on ``capture``.
+    """
+    body, receipt = _capture(manifest=manifest, profile=profile, source_id=source_id,
+                             expected_registry_version=expected_registry_version,
+                             expected_digest=expected_digest, transport=transport,
+                             memory_only=True)
+    return body, json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
 
 
 def _cli(argv: list[str] | None = None) -> int:

@@ -1,6 +1,6 @@
 # 新聞與市場事件規格
 
-更新：2026-09-16。本文定義新聞來源、事件、時間與呈現；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。未具名驗收的欄位與流程仍是目標契約。
+更新：2026-10-03。本文定義新聞來源、事件、時間與呈現；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。未具名驗收的欄位與流程仍是目標契約。
 
 ## 1. 目標與來源政策
 
@@ -18,6 +18,7 @@
 
 - 現有官方 Event、NewsItem、列表／詳情、時間投影與 keyset cursor 只有有限能力；欄位存在或 legacy fallback 不證明來源時間、availability 或 PIT 正確。
 - feed URL 不是單篇原文。跨來源合併、更正歷史、外部來源准入及 AI 抽取／審核仍待完成；特定歷史窗口 event unsupported 也不表示永遠沒有新聞。
+- M1-P3a 的 TWT48U selected 官方事件原件摘要已有限 review，支持 TWSE 0056（ETF）／1449／1463 的當次未來生效預告；只解除記憶體 consumer 缺口，產品接線留 M1-P3b。來源／取得與 selected 規則見[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)，時間邊界見本文 §9。
 
 ## 3. 資料契約
 
@@ -80,3 +81,11 @@
 可重跑案例須涵蓋同事件轉載、三種 URL、來源有／無內文或摘要、未知時間、歷史回補、MOPS 日期衝突、更正／撤回、跨市場同 symbol、低把握關聯、來源失敗及模型不受支持陳述。
 
 驗收須證明事實未被推論覆寫、摘要可回指原文、unknown 未被補值、排序／cursor 的版本行為明確，且回測看不到尚未可得的資料。現有有限 review 只支持 unknown 安全投影與產品相容；availability／revision truth、strict store 接線與 PIT gate 仍未完成。
+
+## 9. M1-P3a：官方事件原件摘要的時間邊界
+
+本批 TWT48U selected 摘要已有限 review；不改寫現有 Event／NewsItem 或新聞 API。官方 `Date` 是**除權息日期**，摘要以 `event_date_role=effective_date`、`event_date_precision=date` 表示，並保留 exact 原字串；不能當成公告發布日、第一次可得日，也不補午夜或發布時鐘。
+
+本次 `request_started_at`／`captured_at` 只是系統觀測時間。`published_at`、`first_available_at`、`revision_available_at` 仍 null／unknown，`historical_pit=unsupported`；來源當次可讀不代表決策日當時已知，不能當作歷史 `as_of` 新聞特徵。未來生效預告保留，不因事件日晚於取得日就刪除，也不把未來事件日當作本次發布時間。
+
+除息／除權／除權息分類只描述來源事實，不推論正負催化、價格影響或調整因子。Selected 缺列回 unavailable，不能顯示成已驗證「無事件」。`source_url_kind=feed` 表示來源入口是官方資料集，不能標成「查看原文」或宣稱定位本則；本批不接原文單篇 URL、事件去重／群組、更正／撤回史或研究條件。M1-P3b 產品接線仍須核定截止語意與實際支援範圍。原件記憶體限制與不可離線重播本次 live 的邊界由[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)負責。
