@@ -29,8 +29,9 @@ from worker.stock_day_evidence import _assert_binding, _checked_path, _identity,
 from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, IngestionRun,
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
 from .institutional_daily import build_institutional_daily
+from .official_events import build_official_events
 
-OVERVIEW_VERSION = "stock-overview/p2b-v1"
+OVERVIEW_VERSION = "stock-overview/p3b-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -262,7 +263,7 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
     return {
         "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-P2b: cutoff, traceable original-price window and selected single-day TPEx institutional evidence",
+        "scope": "M1-P3b: cutoff, traceable price, TPEx single-day institutional and memory-observed TWSE event evidence",
         "price": {"status": "available" if qualified else "unavailable", "basis": "original_api_ohlcv",
                   "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
                   "from": qualified[0]["date"] if qualified else None, "to": latest["date"] if latest else None,
@@ -274,6 +275,6 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
                                       ["institutional_sources_not_admitted", "trading_session_source_not_admitted"])},
         "institutional_daily": daily,
         "conditions": conditions,
-        "events": {"status": "unavailable", "reasons": ["event_capture_consumer_not_verified", "event_source_time_not_verified"]},
+        "events": build_official_events(instrument.exchange, instrument.symbol, cutoff),
         "limitations": ["local_evidence_consistency_only", "adjustment_chain_not_provided", "complete_m1_not_delivered"],
     }

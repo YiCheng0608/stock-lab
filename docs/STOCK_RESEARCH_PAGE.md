@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 新增總覽的契約及有限驗收見 §9，待做籌碼契約見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -114,7 +114,7 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ## 9. M1-P1：截止一致與來源可追溯總覽
 
-M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨立 `GET /stocks/{exchange}/{symbol}/overview?as_of=YYYY-MM-DD`。初版總覽版本為 `stock-overview/p1-v1`；後續單日法人接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，完整 M1 的法人窗口、官方事件及成立／未成立研究條件仍未完成。
+M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨立 `GET /stocks/{exchange}/{symbol}/overview?as_of=YYYY-MM-DD`。初版總覽版本為 `stock-overview/p1-v1`；後續單日法人接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，selected 官方事件見[第 11 節](#11-m1-p3bselected-官方事件總覽接線)。完整 M1 的法人窗口、完整事件 coverage 及成立／未成立研究條件仍未完成。
 
 ### 9.1 共用截止與時間
 
@@ -147,6 +147,8 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 | 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
 
 M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已有限 review，契約與單日兩檔支持範圍見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。M1-P2a 本身未接總覽 API／UI 或 5／20 交易日窗口；後續 M1-P2b 的獨立單日原件接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，上表多日 `institutional` unavailable 契約維持，單日 CLI 數值不作前端 fallback。
+
+後續 M1-P3b 已以獨立觀測日期 gate 接 selected 官方事件，具名支持範圍見[第 11 節](#11-m1-p3bselected-官方事件總覽接線)；發布／首次可得時間仍 unknown，完整事件 coverage 與研究條件缺口保留。
 
 既有分類待核實提示與原策略、價位／信心語意保留；本批沒有新評分、機率、完整交易計畫或張數。缺來源只讓相關總覽區塊保持 unavailable／資料不足，不將本批價格交付擴寫成完整 M1。
 
@@ -195,3 +197,58 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 失敗、退修及最終命令、exit、測試與 freeze／索引／commit 收據留本輪 task。本輪新增測試產物為 0，額外落盤測試配額亦為 0；測試／清理限制見 [TASK_COORDINATION](TASK_COORDINATION.md)。
 
 `institutional` 的 5／20 日 `values` 仍為 null；單日可用時，窗口缺口須精確表示 `multi_session_institutional_evidence_missing` 與 `trading_session_source_not_admitted`，不能再把已准入 TPEx 單日來源說成未准入。單日區塊的 `session_windows` 同樣 unavailable。本批無新交易日曆准入，不接 TWSE T86、DB／legacy、預設 collector、多日彙總、事件或完整研究條件；`historical_pit=unsupported`，完整 M1、M2 及 R0／R1／R2-E1 仍未完成。
+
+## 11. M1-P3b：selected 官方事件總覽接線
+
+**程式、原件／API 與下述具名桌面／窄版操作已有限 review。** 本批把 [SOURCE_REGISTRY §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要) 已有限接受的 TWT48U 記憶體 consumer 接到總覽，總覽版本為 `stock-overview/p3b-v1`，`events` 版本為 `official-events/p3b-v1`。只採原四來源固定 manifest／pins、`free_public_local` profile 與 exact TWT48U GET，不增加來源准入、完整歷史或研究條件。
+
+### 11.1 明示取得與記憶體生命週期
+
+[`official_events.py`](../backend/app/official_events.py) 需 server 明示 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 才啟用取得操作；普通個股／總覽 GET 與模組 import 不送外網 request。專用 route 為 `POST /api/stocks/{exchange}/{symbol}/official-events/capture?as_of=YYYY-MM-DD`，不需要 body 參數；先確認 instrument 存在，再檢查 TWSE、4–6 碼 ASCII 大寫字母／數字 symbol 與 exact 啟用值。首次 POST 經既有 P3a capture 與 selected consumer 成功後，才發布一份 immutable body／receipt bytes tuple。取得操作不寫 DB、檔案或 ZIP，不使用 client 指定 endpoint、路徑、pins 或其他來源。
+
+成功 cache 後，GET 與 POST 都只重驗同一份 bytes／receipt 並選取標的，不重新抓取、refresh 或背景更新。首個 selected 拒收或取得失敗不發布 cache；取得中另一請求以 `event_capture_in_progress` 拒收。重啟後才可能取得新原件；cache 消失不能稱已保存、可重開讀回或可離線重播。來源失敗、不合格 receipt／selected 或缺列回 unavailable，不以 legacy Event／NewsItem、網頁搜尋或未驗數值補值；selected 缺列亦不代表已驗證「無事件」。
+
+### 11.2 共用截止與未來生效預告
+
+總覽沿用 §9.1 的共用 `as_of`。本次 capture time 轉為臺北的 `observed_date`，只有 `observed_date <= as_of`（含當日）才可呈現該原件的 selected 事件；缺共用截止或截止早於觀測日仍 unavailable。觀測日期可提供未通過原因與操作提示，但不能自動取代共用截止或作「最新資料」日期 fallback。
+
+官方 `Date` 仍是 `effective_date`，不是發布／首次可得時間；合格原件中的未來生效預告保留，不按 `event_date <= as_of` 刪掉。`published_at`、`first_available_at`、`revision_available_at` 仍 null／unknown，`historical_pit=unsupported`。本批只做本次觀測日期的事後研究篩選，不證精確時刻的 availability、歷史當時可得、完整 session 或 revision lineage。
+
+### 11.3 可追溯呈現與拒收
+
+合格 `rows` 只投影 exchange／symbol／company name、生效日期與原民國日期、原 `Exdividend` 分類字串、effective-date 角色／date 精度、分類／label、1-based 列序，以及三個 null 時間與 unknown availability。未驗金融欄位仍在 process 原 bytes，API 不公開完整 `source_row`，也不顯示其數值。`provenance` 保存 source／registry version、固定 pins、body／receipt 雙 hash、capture／request time、storage 與 `local_evidence_consistent`；API 另留 attribution、用途 decision 與 condition receipts。
+
+畫面呈現證券身分、除息／除權／除權息、生效日期、觀測日期、未來生效預告與未驗發布／首次可得時間，並可展開原日期／分類、列序、版本、雙 hash 與 capture time。TWSE 原 manifest 的顯名取 `owner.name=Taiwan Stock Exchange (TWSE)`，授權取 `terms.value=OGL 1.0` 並連到 `https://data.gov.tw/license`；不用 TPEx 的 `data_provider`／year 欄位。型別、SSR 與實際授權顯名／href 已具名核對。
+
+`source_url_kind=feed` 的連結使用「官方公告資料集」，說明未必定位本則，不能寫成「查看原文」。除權息分類不形成正負催化、價格影響、調整因子或成立／未成立條件；同一原件的選列驗證不代表全市場或完整歷史 coverage。非 TWSE、未明示啟用、尚無 cache、來源／selected 拒收、缺截止與截止早於觀測日等情境須可辨識，不補零或假事件。
+
+| 條件 | `events` 結果 |
+| --- | --- |
+| 未提供／空啟用值、啟用值不是 exact `1` | `event_capture_not_enabled`／`event_capture_configuration_invalid`；不外網取得、不曝露 cache。 |
+| 非 TWSE、invalid symbol | `event_exchange_not_supported`／`event_invalid_symbol`，不曝露 cache。 |
+| 尚無成功 cache | 普通 GET 回 `event_memory_capture_missing`。 |
+| 缺共用截止、截止早於臺北觀測日 | `event_shared_cutoff_missing`／`event_observation_after_cutoff`；可回 `observed_date` 提示，`rows=[]`、`provenance=null`，不補日期。 |
+| selected 缺列、重複／分類／receipt 無效或 HTTP 失敗 | unavailable，保留安全 consumer reason 或 `http_status:503` 等狀態；未能安全識別的例外以 `event_evidence_invalid`／`event_capture_failed` 表示，不洩漏 OS 路徑。 |
+| 合格 selected 且觀測日不晚於截止 | available，保留全部合格 selected 事件，包括晚於截止的未來生效預告；不是截至日前最新 feed 或歷史 PIT。 |
+
+### 11.4 有限驗收與未支援範圍
+
+統籌於 **2026-10-03（臺北）** 已有限接受真實畫面首次取得按鈕經專用 POST → actual capture → consumer → API；未 mock transport 或返回。普通 GET 後外網取得次數為 0，按鈕後為 1；當次 HTTP 200、單一 GET、原件 58 列，capture UTC `2026-10-02T23:28:41.219715+00:00`。以同一份真原件按 ordinal 逐列核對如下 selected；全部保留未來生效日期：
+
+| Code／Name | 原 Date → 生效日期 | 原分類／顯示 | 原件列序 |
+| --- | --- | --- | --- |
+| `0056`／元大高股息（ETF） | `1151022` → 2026-10-22 | `息`／除息 | 5 |
+| `1449`／佳和 | `1151012` → 2026-10-12 | `權`／除權 | 49 |
+| `1463`／強盛新 | `1151015` → 2026-10-15 | `息`／除息 | 50 |
+
+三個標的的 detail `overview` 與獨立總覽相等；10 月 2 日截止全部拒收、`rows=[]`／`provenance=null`，缺截止不補觀測日。再 POST 1449 重用同 cache，外網取得次數仍為 1；原件／receipt 的雙 hash、原中文四欄與列序已核對，獨立 Python assertions 通過。Harness 的記憶體 catalogue 只提供測試路由 metadata，不代表真行情、磁碟 DB 或正式 DB 證據。
+
+桌面 **1365×900** 已具名核對 0056 首次取得、ETF 名稱／除息／10 月 22 日、展開原民國日期／分類／列序 5／雙 hash／UTC raw time，以及 TWSE 顯名、OGL1.0 與 license href。10 月 2 日截止排除事件；「最新資料」移除 query 後，minimal catalogue 無其他 dated rows，保持 `as_of=null`／事件 unavailable；套回 10 月 3 日恢復，再讀未取得新原件。從目錄進入 1449／1463，名稱、除權／除息與 10 月 12／15 日均已核對。來源／授權 href 已檢查，未另開外網。
+
+**390×844** 窄版在 1463 展開來源 details 後，body 無橫向溢出；事件表可在自身範圍右捲到生效日 10 月 15 日，未迫使整頁橫向捲動。最後取得次數仍為 1、cache bytes 與雙 hash 相同；按鈕／日期操作不稱背景或最新 feed 更新。
+
+後端最終靶向記憶體回歸通過；先前 P3a consumer 回歸仍對應未變 worker，不外推完整 backend。前端型別與既有價格／法人、新增事件 SSR 通過，記憶體全 App bundle 用於上述真實 UI 操作；完整 backend 與 production Vite build 本輪未跑，記憶體 bundle 不能稱 production build。最小 fixture 不替代 live 來源證據，這次 live body／receipt 未保存，不能離線重播；先前失敗、退修後成功複驗、命令、版本、exit、hash 與 freeze／索引／commit 收據分別留 task。
+
+本輪新增測試附件／產物為 0，專用前後端 process 已終止、memory body 隨 process 釋放，測試 tab 已關閉並還原 viewport；舊落盤殘留與清理拒絕保持原限制、不重試。額外測試落盤配額為 0，入口限制見[開發與驗證入口](development-baseline/README.md)。
+
+完整 M1 仍缺可驗 5／20 交易日窗口與成立／未成立研究條件；本批不接 DB／legacy、新聞群組／更正／撤回史、自動排程或交易，不增加 R0／R1／R2-E1 整體完成度。

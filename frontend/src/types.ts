@@ -374,6 +374,32 @@ export type InstitutionalDailyData = {
   }
 }
 
+export type OfficialEventsData = {
+  version: string; status: 'available' | 'unavailable'; reasons: string[]
+  as_of: string | null; observed_date: string | null; cutoff_basis: 'observed_taipei_date_inclusive'
+  capture_enabled: boolean; can_capture: boolean; cache_present: boolean
+  capture_action: 'not_attempted' | 'acquired' | 'cached' | 'failed'
+  storage: 'memory_only'; durable_capture: false; historical_pit: 'unsupported'; source_url_kind: 'feed'
+  published_time: 'unknown'; first_availability: 'unknown'; revision_history: 'unknown'
+  rows: Array<{
+    exchange: 'TWSE'; symbol: string; company_name: string; event_date: string; source_date: string; source_classification: '息' | '權' | '權息'
+    event_date_role: 'effective_date'; event_date_precision: 'date'; kind: string; label: string; row_ordinal: number
+    published_at: null; first_available_at: null; revision_available_at: null; availability: 'unknown'
+  }>
+  provenance: null | {
+    source_id: string; source_version: string; endpoint: string; registry_version: string; manifest_digest: string
+    body_sha256: string; receipt_sha256: string; captured_at: string; request_started_at: string
+    storage: 'memory_only'; verification: 'local_evidence_consistent'
+  }
+  attribution: null | {
+    owner: { name: string; type: 'official_exchange' }
+    dataset_id: string; source_id: string; source_url: string
+    terms: { status: 'known'; value: string; reason: string }
+    evidence: Array<{ url: string; checked_at: string; claim: string }>; purpose_evidence: unknown
+  }
+  limitations: string[]
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null
@@ -396,7 +422,7 @@ export type StockOverviewData = {
   institutional: { status: string; horizons: number[]; investors: string[]; values: null; reasons: string[] }
   institutional_daily?: InstitutionalDailyData
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
-  events: { status: string; reasons: string[] }
+  events: OfficialEventsData
   limitations: string[]
 }
 

@@ -12,6 +12,7 @@ import type {
   IngestionRun,
   Instrument,
   InstrumentDetail,
+  OfficialEventsData,
   NewsItem,
   GlossaryTerm,
   StockDirectoryRow,
@@ -187,6 +188,12 @@ export const getStocks = (params: PageParams & { exchange?: string; instrument_t
 export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
+  )
+
+export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
+  post<OfficialEventsData>(
+    `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/official-events/capture${queryString({ as_of: asOf })}`,
+    {},
   )
 
 export const getActions = (params: CursorParams = {}) =>

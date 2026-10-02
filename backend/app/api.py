@@ -55,6 +55,7 @@ from .decision import (
     prioritized_instrument_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
+from .official_events import capture_official_events
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1668,6 +1669,16 @@ def stock_overview(exchange: str, symbol: str, db: Session = Depends(get_db), as
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     return build_stock_overview(db, instrument, as_of)
+
+
+@router.post("/stocks/{exchange}/{symbol}/official-events/capture")
+def stock_official_events_capture(exchange: str, symbol: str, db: Session = Depends(get_db),
+                                  as_of: date | None = None) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return capture_official_events(instrument.exchange, instrument.symbol,
+                                  resolve_stock_cutoff(db, instrument, as_of))
 
 
 @router.get("/actions")

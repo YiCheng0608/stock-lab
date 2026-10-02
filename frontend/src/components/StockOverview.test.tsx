@@ -1,8 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { InstitutionalDaily, StockOverview, overviewReason } from './StockOverview'
-import type { InstitutionalDailyData, StockOverviewData } from '../types'
+import { InstitutionalDaily, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
+import type { InstitutionalDailyData, StockOverviewData, OfficialEventsData } from '../types'
+import type { ReactElement } from 'react'
 
+let originalAssertionCount = 0
 function expect(condition: boolean, message: string): void {
+  originalAssertionCount += 1
   if (!condition) throw new Error(message)
 }
 
@@ -24,7 +27,10 @@ const data: StockOverviewData = {
     reasons: ['institutional_sources_not_admitted', 'trading_session_source_not_admitted'] },
   conditions: [{ strategy: 'breakout_v1', label: '突破條件', version: '1.0.0', signal_date: '2026-09-30', status: 'data_insufficient',
     reasons: ['strategy_input_sources_not_admitted', 'strategy_time_evidence_not_verified', 'industry_membership_not_verified'] }],
-  events: { status: 'unavailable', reasons: ['event_capture_consumer_not_verified', 'event_source_time_not_verified'] }, limitations: [],
+  events: { version: 'official-events/p3b-v1', status: 'unavailable', reasons: ['event_capture_not_enabled'],
+    as_of: '2026-10-02', observed_date: null, cutoff_basis: 'observed_taipei_date_inclusive', capture_enabled: false, can_capture: false, cache_present: false,
+    capture_action: 'not_attempted', storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported', source_url_kind: 'feed',
+    published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown', rows: [], provenance: null, attribution: null, limitations: [] }, limitations: [],
 }
 const html = renderToStaticMarkup(<StockOverview data={data} onNews={() => {}} />)
 expect(html.includes('2026/10/02') && html.includes('2026/10/01'), 'cutoff and latest usable date remain visibly separate')
@@ -69,4 +75,59 @@ const zeroHtml = renderToStaticMarkup(<InstitutionalDaily data={{ ...daily, row:
 expect(zeroHtml.includes('<td>0</td>'), 'verified exact zero remains a visible zero')
 const rejectedHtml = renderToStaticMarkup(<InstitutionalDaily data={{ ...daily, status: 'unavailable', row: null, provenance: null, reasons: ['daily_after_cutoff'] }} />)
 expect(rejectedHtml.includes('本次不採用') && rejectedHtml.includes('尚無可核對的單日法人原件') && !rejectedHtml.includes('10,547,941'), 'future original is hidden without legacy fallback')
-console.log('StockOverview price/daily display checks passed')
+console.log('StockOverview original price/daily', originalAssertionCount, 'checks passed')
+
+function check(condition: boolean, label: string): void {
+  if (!condition) throw new Error(label)
+}
+
+export function runOfficialEventsSSRTests(render: (element: ReactElement) => string): number {
+  const data: OfficialEventsData = {
+    version: 'official-events/p3b-v1', status: 'available', reasons: [], as_of: '2026-10-03', observed_date: '2026-10-03',
+    cutoff_basis: 'observed_taipei_date_inclusive', capture_enabled: true, can_capture: true, cache_present: true,
+    capture_action: 'cached', storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported', source_url_kind: 'feed',
+    published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown', limitations: [],
+    rows: [{ exchange: 'TWSE', symbol: '0056', company_name: '元大高股息', event_date: '2026-10-22', source_date: '1151022',
+      source_classification: '息', event_date_role: 'effective_date', event_date_precision: 'date', kind: 'ex_dividend', label: '除息',
+      row_ordinal: 5, published_at: null, first_available_at: null, revision_available_at: null, availability: 'unknown' },
+    { exchange: 'TWSE', symbol: '0056', company_name: '元大高股息', event_date: '2026-11-22', source_date: '1151122',
+      source_classification: '權息', event_date_role: 'effective_date', event_date_precision: 'date', kind: 'ex_right_and_dividend', label: '除權息',
+      row_ordinal: 6, published_at: null, first_available_at: null, revision_available_at: null, availability: 'unknown' }],
+    provenance: { source_id: 'twse_twt48u_all', source_version: 'twse-twt48u-all-d011-2026-09-12',
+      endpoint: 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL', registry_version: 'r1-a1-c009-2026-09-12.1',
+      manifest_digest: 'sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b',
+      body_sha256: 'a'.repeat(64), receipt_sha256: 'b'.repeat(64), captured_at: '2026-10-02T16:00:01+00:00',
+      request_started_at: '2026-10-02T16:00:00+00:00', storage: 'memory_only', verification: 'local_evidence_consistent' },
+    attribution: { owner: { name: 'Taiwan Stock Exchange (TWSE)', type: 'official_exchange' },
+      dataset_id: 'data-gov-89748', source_id: 'twse_twt48u_all', source_url: 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL',
+      terms: { status: 'known', value: 'OGL 1.0', reason: 'Dataset and data.gov license pages provide the reuse terms.' },
+      evidence: [
+        { url: 'https://openapi.twse.com.tw/v1/swagger.json', checked_at: '2026-09-12 Asia/Taipei', claim: 'Swagger documents the exact GET path and no parameters.' },
+        { url: 'https://data.gov.tw/dataset/89748', checked_at: '2026-09-12 Asia/Taipei', claim: 'Dataset 89748 identifies irregular update, free access, and OGL 1.0.' },
+        { url: 'https://data.gov.tw/license', checked_at: '2026-09-12 Asia/Taipei', claim: 'The OGL 1.0 terms require attribution and preserve source-integrity conditions.' },
+      ], purpose_evidence: {} },
+  }
+  const html = render(<OfficialEvents data={data} onCapture={() => undefined} />)
+  check(html.includes('2026/10/22') && html.includes('2026/11/22') && html.includes('元大高股息'), 'future multi-event identity/date')
+  check(html.includes('原件列序 5') && html.includes('1151022') && html.includes('原始分類 息')
+    && html.includes('a'.repeat(64)) && html.includes('b'.repeat(64)) && html.includes(data.provenance!.captured_at), 'exact provenance')
+  check(html.includes('查看官方公告資料集') && html.includes('未提供單則原文') && html.includes('發布、首次可得與修訂時間均未知')
+    && html.includes('記憶體') && html.includes('不推論價格影響') && html.includes('讀取本次官方除權息預告'), 'scope and cache copy')
+  check(html.includes('資料提供：Taiwan Stock Exchange (TWSE)') && html.includes('授權 OGL 1.0')
+    && html.includes('href="https://data.gov.tw/license"') && !html.includes('資料提供： ·'), 'actual TWSE attribution shape and pinned license href')
+  const before = render(<OfficialEvents data={{ ...data, status: 'unavailable', rows: [], provenance: null,
+    reasons: ['event_observation_after_cutoff'], as_of: '2026-10-02' }} onCapture={() => undefined} />)
+  check(before.includes('本次觀測日晚於研究截止') && before.includes('2026/10/03') && before.includes('請將研究截止日期設為此日')
+    && !before.includes('元大高股息') && !before.includes('2026/10/22'), 'cutoff rejection without event leakage')
+  const missing = render(<OfficialEvents data={{ ...data, status: 'unavailable', rows: [], provenance: null, observed_date: null,
+    reasons: ['event_memory_capture_missing'], cache_present: false }} onCapture={() => undefined} requestFailure="selected_symbol_missing:0056" />)
+  check(missing.includes('取得本次官方除權息預告') && missing.includes('無法據此宣稱沒有事件') && missing.includes('role="alert"'), 'explicit capture and failed POST copy')
+  const disabled = render(<OfficialEvents data={{ ...data, status: 'unavailable', rows: [], provenance: null, observed_date: null,
+    reasons: ['event_capture_not_enabled'], capture_enabled: false, can_capture: false, cache_present: false }} onCapture={() => undefined} />)
+  check(disabled.includes('伺服器尚未明示啟用') && !disabled.includes('<button') && !disabled.includes('元大高股息'), 'disabled operation hidden')
+  const busy = render(<OfficialEvents data={data} onCapture={() => undefined} busy requestFailure="receipt_mismatch:body_sha256" />)
+  check(busy.includes('disabled=""') && busy.includes('正在取得官方預告') && busy.includes('擷取紀錄與原件') && !busy.includes('法人原件'), 'busy and neutral evidence failure')
+  return 8
+}
+
+console.log('OfficialEvents new SSR', runOfficialEventsSSRTests(renderToStaticMarkup), 'checks passed')

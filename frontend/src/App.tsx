@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
+  captureOfficialEvents,
   deletePortfolio,
   getAction,
   getActions,
@@ -899,6 +900,25 @@ function StockPage() {
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
   useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
   const [tab, setTab] = useState<StockTab>('technical')
+  const [capturingEvents, setCapturingEvents] = useState(false)
+  const [eventRequestFailure, setEventRequestFailure] = useState<{ key: string; reason: string } | null>(null)
+  const eventRequestKey = `${exchange}:${symbol}:${asOf}`
+  const acquireEvents = async () => {
+    if (capturingEvents) return
+    setCapturingEvents(true)
+    setEventRequestFailure(null)
+    try {
+      const result = await captureOfficialEvents(exchange, symbol, asOf || undefined)
+      if (result.status === 'unavailable') {
+        setEventRequestFailure({ key: eventRequestKey, reason: result.reasons[0] ?? 'event_capture_failed' })
+      }
+      await query.refetch()
+    } catch {
+      setEventRequestFailure({ key: eventRequestKey, reason: 'event_capture_request_failed' })
+    } finally {
+      setCapturingEvents(false)
+    }
+  }
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
@@ -947,7 +967,7 @@ function StockPage() {
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
     </PageTitle>
-    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} />}
+    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">

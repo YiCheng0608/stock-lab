@@ -18,7 +18,7 @@
 
 - 現有官方 Event、NewsItem、列表／詳情、時間投影與 keyset cursor 只有有限能力；欄位存在或 legacy fallback 不證明來源時間、availability 或 PIT 正確。
 - feed URL 不是單篇原文。跨來源合併、更正歷史、外部來源准入及 AI 抽取／審核仍待完成；特定歷史窗口 event unsupported 也不表示永遠沒有新聞。
-- M1-P3a 的 TWT48U selected 官方事件原件摘要已有限 review，支持 TWSE 0056（ETF）／1449／1463 的當次未來生效預告；只解除記憶體 consumer 缺口，產品接線留 M1-P3b。來源／取得與 selected 規則見[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)，時間邊界見本文 §9。
+- M1-P3a 的 TWT48U selected 官方事件原件摘要、M1-P3b 的獨立總覽接線已各有限 review，支持 TWSE 0056（ETF）／1449／1463 各批當次未來生效預告；不代表全市場或歷史事件 coverage。來源／取得與 selected 規則見[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)，產品具名範圍見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)，時間邊界見本文 §9。
 
 ## 3. 資料契約
 
@@ -88,4 +88,6 @@
 
 本次 `request_started_at`／`captured_at` 只是系統觀測時間。`published_at`、`first_available_at`、`revision_available_at` 仍 null／unknown，`historical_pit=unsupported`；來源當次可讀不代表決策日當時已知，不能當作歷史 `as_of` 新聞特徵。未來生效預告保留，不因事件日晚於取得日就刪除，也不把未來事件日當作本次發布時間。
 
-除息／除權／除權息分類只描述來源事實，不推論正負催化、價格影響或調整因子。Selected 缺列回 unavailable，不能顯示成已驗證「無事件」。`source_url_kind=feed` 表示來源入口是官方資料集，不能標成「查看原文」或宣稱定位本則；本批不接原文單篇 URL、事件去重／群組、更正／撤回史或研究條件。M1-P3b 產品接線仍須核定截止語意與實際支援範圍。原件記憶體限制與不可離線重播本次 live 的邊界由[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)負責。
+除息／除權／除權息分類只描述來源事實，不推論正負催化、價格影響或調整因子。Selected 缺列回 unavailable，不能顯示成已驗證「無事件」。`source_url_kind=feed` 表示來源入口是官方資料集，不能標成「查看原文」或宣稱定位本則；本批不接原文單篇 URL、事件去重／群組、更正／撤回史或研究條件。原件記憶體限制與不可離線重播本次 live 的邊界由[來源契約 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)負責。
+
+M1-P3b 已有限接受三個 selected 真實原件／API 與桌面／窄版具名操作：capture 轉臺北 `observed_date` 不晚於共用 `as_of` 才可呈現，缺截止或早於觀測日 unavailable；觀測日不推導截止、不代替發布／首次可得時間，也不刪除未來生效預告。明示 POST、process cache、追溯與拒收的主契約見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)，本節時間角色與 unknown 邊界不變。
