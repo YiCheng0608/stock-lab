@@ -1,4 +1,4 @@
-import { formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip, formatShareLots, formatShareQuantity, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit } from './units'
+import { formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip, formatShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit, type ShareUnit } from './units'
 
 if (sharesFromUnit('lot', 1) !== 1000) throw new Error('one lot must equal 1000 shares')
 if (sharesFromUnit('lot', 2) !== 2000) throw new Error('lot conversion must be exact')
@@ -67,3 +67,37 @@ for (const value of [true, -1, 1.5, NaN, Infinity, 9007199254740992, Number('900
 if (formatTableVolume(9007199254740991, 'twse') !== '9,007,199,254,740.991') throw new Error('safe legacy boundary must retain every digit after conversion')
 if (formatTableVolume(1000, 'unknown', '1000') !== '' || formatTableVolumeShares(1000, 'twse+mixed', '1000') !== '') throw new Error('exact text cannot admit an unknown source unit')
 console.log('units exact volume cases passed')
+
+const exactPositionCases = [
+  ['0', '0 股（零股）'], ['1', '1 股（零股）'], ['999', '999 股（零股）'],
+  ['1000', '1 張'], ['1001', '1 張 1 股'],
+  ['9007199254740991', '9,007,199,254,740 張 991 股'],
+  ['9007199254740993', '9,007,199,254,740 張 993 股'],
+  ['9223372036854775807', '9,223,372,036,854,775 張 807 股'],
+]
+for (const [exact, mixed] of exactPositionCases) {
+  if (formatShareQuantity(Number(exact), exact) !== mixed) throw new Error(`exact mixed position lost digits: ${exact}`)
+  if (formatPositionShares(Number(exact), exact) !== exact.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 股') throw new Error(`exact original shares lost digits: ${exact}`)
+}
+for (const exact of [null, true, 1, '', '00', '01', '-0', '-1', '+1', ' 1', '1 ', '1\n', '1\r', '1\r\n', '1\t', '1\u2028', '1\u2029', '1.0', '1.5', '1e3', '1,000', '９', '9223372036854775808', '9'.repeat(1000)]) {
+  if (formatShareQuantity(1000, exact as string) !== '股數待核實' || formatPositionShares(1000, exact as string) !== '股數待核實') throw new Error('malformed exact position must not use its safe number')
+}
+for (const value of [null, undefined, true, -1, 1.5, NaN, Infinity, 9007199254740992, Number('9007199254740993'), Number('9223372036854775807')]) {
+  if (formatShareQuantity(value as number) !== '股數待核實' || formatPositionShares(value as number) !== '股數待核實') throw new Error('unsafe legacy position must stay unknown')
+}
+if (formatShareQuantity(9007199254740991) !== '9,007,199,254,740 張 991 股') throw new Error('safe absent-field position must retain remainder 991')
+if (formatPositionShares(0) !== '0 股') throw new Error('existing zero must remain visible')
+for (const [unit, raw, expected] of [['lot', '9007199254740', 9007199254740], ['odd_lot', '9007199254740991', 9007199254740991], ['lot', '0001', 1], ['odd_lot', '1500', 1500]] as const) {
+  if (positionQuantityFromText(unit, raw) !== expected) throw new Error('valid raw position input was changed')
+}
+for (const [unit, raw] of [['lot', '9007199254741'], ['odd_lot', '9007199254740992'], ['odd_lot', '9007199254740993'], ['odd_lot', '9223372036854775807'], ['wrong', '1'], ...['', '0', '000', '-1', '+1', '1.0', '1.5', '1e3', '1,000', ' 1', '1 ', '1\n', '1\u2028', '９', 'NaN', 'Infinity', '9'.repeat(1000)].map((raw) => ['lot', raw])]) {
+  let denied = false
+  try { positionQuantityFromText(unit as ShareUnit, raw) } catch { denied = true }
+  if (!denied) throw new Error(`unsafe raw position input accepted: ${unit}/${raw}`)
+}
+for (const [unit, quantity] of [['wrong', 1], ['lot', 9007199254741], ['odd_lot', 9007199254740992], ['odd_lot', Infinity], ['odd_lot', NaN]] as const) {
+  let denied = false
+  try { sharesFromUnit(unit as ShareUnit, quantity) } catch { denied = true }
+  if (!denied) throw new Error('unsafe numeric position input accepted')
+}
+console.log('units exact position and raw input boundaries passed')

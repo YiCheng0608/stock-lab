@@ -128,6 +128,20 @@ server `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 明示啟用 `POST /api/stocks/{exch
 
 Node preview／檢查只作記憶體 bundle，`write:false`、無輸出檔；preview 限本機 loopback，實際 fixture API 回應經 `Response.json()` 後的精確字串及具名操作另核。外部字型 import 只在 preview 的記憶體 CSS 略過並由 CSP 阻外網，本輪呈現驗收限 fallback font；不修改正式字型契約。新增測試／preview 產物與殘留配額均為 **0**，不使用會落盤的通用 runner 或 `KeepArtifacts`。全 App 記憶體 bundle 不當 production Vite build；完整 backend、production startup、正式 DB、磁碟重開、真官方／live 與完整 M1／PIT 不由此入口追認。自有 QA tab、兩個 server 程序與 listener 已核實關閉／不存在，測試產物／殘留為 0；direct tests／Node check 的 exit 0 與兩個 serve 的 exit 1 分報，不稱正常 exit 0 或完整 serve audit。版本、完整命令及原始收據留 task，不另建附件，舊殘留維持原狀。
 
+### M3-P1 既有庫存股數的零落盤驗證入口
+
+本批「既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收」的程式、必要驗證與具名操作已有限接受。股數 gate、精確字串、unsafe／fallback 及輸入單位上限只由 [UI 文案 §10.3](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)負責；本節只列入口、副作用與驗收邊界。專用 `backend/tests/test_share_quantity_exact_presentation.py`、前端必要記憶體驗證與 `tools/share-quantity-exact-preview.cjs` 的命令、版本、exit 及原始收據留 task，不另存附件。
+
+後端入口採 standalone unittest、`-B -X utf8` 及 AST config 常數 stub，排除真 config 的 mkdir，不載入一般 pytest conftest、`app.main`／production lifespan，也不執行 init-db 或 migration。主線既有依賴只讀，不安裝或另建環境；audit 拒絕磁碟變更、外網與未授權 subprocess。實際 router 與記憶體 SQLite 核對 POST commit／refresh→GET、unsafe 舊 Float、失精輸入 HTTP 422 及既有資料保留；純 helper 的實際 int／int64 邊界與 Float 保存支持範圍分報，記憶體保存／讀回不代表磁碟 reopen。
+
+Synthetic fixture 日期為 `2026-10-03`，只代表 TWSE／TPEx 身分下的使用者庫存數量，不當官方行情、live 或正式 DB coverage。preview 使用自有 Python `8777`／Node `8778` loopback 記憶體 server；Node bundle 使用 `write:false`、無輸出檔。必要後端複驗 **5 direct tests／0 skip／145 actual router HTTP requests**、exit 0，audit 的五次預期阻擋與 `unexpected_denials=[]` 已接受。初跑 exit 1 是非有限輸入已被 StrictInt 拒收後，error JSON 含 NaN 導致序列化失敗；before validator 將非有限原值轉成仍會拒收的 invalid 字串，修後必要複驗才 exit 0，不稱 NaN 原先被接受或首跑通過。
+
+Node **20.19.4**／TypeScript **5.9.3** 的全 src `noEmit` 型別檢查、units、**14 組 Portfolio subsection SSR**、whole main 記憶體 bundle（JS **4,176,020 bytes**／CSS **27,903 bytes**）與 **51 個 loopback product fetch／JSON HTTP 請求**均 exit 0；SSR 的 React Router `useLayoutEffect` warning 分報。Python 來源後續未改，不因換階段重跑已接受證據。具名桌面／390px 庫存操作已由統籌接受，精確支持範圍見主契約；只在 preview 記憶體 CSS 排除外部字型並以 CSP 阻外網，本次限 fallback font，正式字型不改。
+
+新增測試／preview 產物及殘留實際為 **0 files／0 directories／0 bytes**；未使用通用落盤 runner 或 `KeepArtifacts`。QA 已還原 `1365×900` 並關 tab；核實自有 commandline 後兩 server 的 `POST /__review__/shutdown` 各回 `stopping`、命令 exit 0，Node／Python serve 最終 exit 均 0，Python serve audit `unexpected_denials=[]`。統籌獨立核對兩個 exact PID、`8777`／`8778` listeners 均不存在，新增 artifacts／data／pycache／buildinfo／dist 為空或不存在；測試 exit 0 與清理 exit 0 分報，不混入前輪 serve exit 1。
+
+正常估值／決策／計畫行為不作本批驗收；正式 DB、磁碟重開、真官方／live、production startup、完整 backend／production Vite build、新計畫與完整 M3 均未驗。下一候選可信整數保存／legacy unsafe migration 證據與磁碟重開仍須新統籌有界核依賴，磁碟驗收不能由本入口替代。freeze／索引／commit／merge 狀態見[協作紀錄](../TASK_COORDINATION.md)，不另建附件。
+
 ## 歷史驗證
 
 歷史測試不代表目前來源已驗收；原始數據依[文件索引](../README.md#歷史查閱)取閱，已刪除的 Temp 附件不作接手依賴。

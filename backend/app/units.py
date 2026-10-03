@@ -13,6 +13,8 @@ from typing import Any
 
 
 LOT_SIZE = 1000
+MAX_SAFE_SHARES = 9007199254740991
+MAX_INT64_SHARES = 9223372036854775807
 
 
 def volume_exact_text(value: Any) -> str | None:
@@ -28,6 +30,13 @@ def _strict_positive_integer(value: Any, field_name: str) -> int:
     if value <= 0:
         raise ValueError(f"{field_name} must be a positive integer")
     return value
+
+
+def _position_total(value: Any, field_name: str, multiplier: int = 1) -> int:
+    total = _strict_positive_integer(value, field_name) * multiplier
+    if total > MAX_SAFE_SHARES:
+        raise ValueError(f"total shares must not exceed {MAX_SAFE_SHARES}")
+    return total
 
 
 def shares_from_position_quantity(
@@ -58,34 +67,33 @@ def shares_from_position_quantity(
     if shares is not None:
         if unit is not None:
             raise ValueError("unit cannot be used with legacy shares")
-        return _strict_positive_integer(shares, "shares")
+        return _position_total(shares, "shares")
 
     if quantity is not None:
         if unit not in {"lot", "odd_lot"}:
             raise ValueError("unit must be lot or odd_lot when quantity is provided")
-        normalized = _strict_positive_integer(quantity, "quantity")
-        return normalized * LOT_SIZE if unit == "lot" else normalized
+        return _position_total(quantity, "quantity", LOT_SIZE if unit == "lot" else 1)
 
     if unit is not None:
         raise ValueError("unit can only be used with quantity")
     if quantity_lots is not None:
-        return _strict_positive_integer(quantity_lots, "quantity_lots") * LOT_SIZE
-    return _strict_positive_integer(odd_lot_shares, "odd_lot_shares")
+        return _position_total(quantity_lots, "quantity_lots", LOT_SIZE)
+    return _position_total(odd_lot_shares, "odd_lot_shares")
 
 
 def split_shares(shares: Any) -> tuple[int, int]:
     """Return ``(whole_lots, remainder_shares)`` for a stored share count."""
 
-    if isinstance(shares, bool):
-        raise ValueError("shares must be finite")
-    try:
-        number = float(shares)
-    except (TypeError, ValueError):
-        raise ValueError("shares must be finite") from None
-    if not math.isfinite(number) or number < 0 or not number.is_integer():
-        raise ValueError("shares must be a non-negative integer")
-    total = int(number)
-    return total // LOT_SIZE, total % LOT_SIZE
+    # A real int never passes through float. Historical Float values can only
+    # establish the current stored integer within the binary64 safe range.
+    if type(shares) is int and 0 <= shares <= MAX_INT64_SHARES:
+        total = shares
+    elif (type(shares) is float and math.isfinite(shares) and shares.is_integer()
+          and 0 <= shares <= MAX_SAFE_SHARES):
+        total = int(shares)
+    else:
+        raise ValueError("shares must be an int64 integer or a safe stored Float integer")
+    return divmod(total, LOT_SIZE)
 
 
 def share_quantity_dict(shares: Any) -> dict[str, Any]:
@@ -106,7 +114,9 @@ def share_quantity_dict(shares: Any) -> dict[str, Any]:
         display = f"{remainder:,} 股（零股）"
     return {
         "total_shares": lots * LOT_SIZE + remainder,
+        "total_shares_exact": str(lots * LOT_SIZE + remainder),
         "quantity_lots": lots,
+        "quantity_lots_exact": str(lots),
         "odd_lot_shares": remainder,
         "unit": unit,
         "display": display,

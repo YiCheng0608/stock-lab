@@ -111,7 +111,8 @@ tr:last-child td { border-bottom: 0; }
 .form-panel button { border: 0; border-radius: 3px; padding: 11px 15px; color: #121820; background: #f5b85b; cursor: pointer; font-weight: 700; }
 .form-panel button:disabled { opacity: .55; cursor: wait; }
 .position-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.position-card { border: 1px solid #2a3540; padding: 15px; }
+.position-card { border: 1px solid #2a3540; padding: 15px; min-width: 0; }
+.position-quantity { overflow-wrap: anywhere; margin: 8px 0; }
 .position-head { margin-bottom: 10px; }
 .position-head strong { color: #f0c777; font: 500 18px 'DM Mono', monospace; }
 .positive { color: #e899a0 !important; }

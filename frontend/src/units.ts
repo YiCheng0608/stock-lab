@@ -100,17 +100,40 @@ export function formatSourceAwareShareLots(shares: number | null | undefined, so
 }
 
 export function sharesFromUnit(unit: ShareUnit, quantity: number): number {
-  if (!Number.isInteger(quantity) || quantity <= 0) {
+  if ((unit !== 'lot' && unit !== 'odd_lot') || !Number.isSafeInteger(quantity) || quantity <= 0
+    || quantity > (unit === 'lot' ? Math.floor(Number.MAX_SAFE_INTEGER / LOT_SIZE) : Number.MAX_SAFE_INTEGER)) {
     throw new Error('數量必須是正整數')
   }
   return unit === 'lot' ? quantity * LOT_SIZE : quantity
 }
 
-export function formatShareQuantity(shares: number): string {
-  if (!Number.isFinite(shares) || shares < 0 || !Number.isInteger(shares)) return '—'
-  const lots = Math.floor(shares / LOT_SIZE)
-  const remainder = shares % LOT_SIZE
-  if (lots > 0 && remainder > 0) return `${lots.toLocaleString('zh-TW')} 張 ${remainder.toLocaleString('zh-TW')} 股`
-  if (lots > 0) return `${lots.toLocaleString('zh-TW')} 張`
-  return `${remainder.toLocaleString('zh-TW')} 股（零股）`
+/** Check raw input before Number can round it; POST retains its integer shape. */
+export function positionQuantityFromText(unit: ShareUnit, raw: string): number {
+  if ((unit !== 'lot' && unit !== 'odd_lot') || !/^[0-9]+(?![\s\S])/.test(raw)) {
+    throw new Error('數量須輸入正整數十進位數字。')
+  }
+  const text = raw.replace(/^0+/, '')
+  const maximum = unit === 'lot' ? '9007199254740' : '9007199254740991'
+  if (!text || text.length > maximum.length || (text.length === maximum.length && text > maximum)) {
+    throw new Error('總股數須為 1 至 9,007,199,254,740,991 股。')
+  }
+  const quantity = Number(text)
+  sharesFromUnit(unit, quantity)
+  return quantity
+}
+
+export function formatShareQuantity(shares: number | null | undefined, exact?: string | null): string {
+  const text = exactVolumeText(shares, exact)
+  if (text == null) return '股數待核實'
+  const padded = text.padStart(4, '0')
+  const lots = padded.slice(0, -3)
+  const remainder = padded.slice(-3).replace(/^0+/, '') || '0'
+  if (lots !== '0' && remainder !== '0') return `${groupedInteger(lots)} 張 ${remainder} 股`
+  if (lots !== '0') return `${groupedInteger(lots)} 張`
+  return `${remainder} 股（零股）`
+}
+
+export function formatPositionShares(shares: number | null | undefined, exact?: string | null): string {
+  const text = exactVolumeText(shares, exact)
+  return text == null ? '股數待核實' : `${groupedInteger(text)} 股`
 }

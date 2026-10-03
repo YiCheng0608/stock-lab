@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import math
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -10,7 +11,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, StrictInt, model_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -67,7 +68,7 @@ from .product_time import (
     build_news_product_time,
     build_signal_product_time,
 )
-from .units import share_quantity_dict, shares_from_position_quantity, volume_exact_text
+from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
 
@@ -2357,6 +2358,15 @@ class PositionInput(BaseModel):
     risk_budget: float | None = Field(default=None, ge=0)
     note: str | None = None
 
+    @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="before")
+    @classmethod
+    def json_safe_invalid_quantity(cls, value: Any) -> Any:
+        # JSON decoders may admit NaN/Infinity. Keep them invalid StrictInt
+        # inputs while making the framework's 422 error itself JSON-safe.
+        if type(value) is float and not math.isfinite(value):
+            return str(value)
+        return value
+
     @model_validator(mode="after")
     def normalize_quantity(self) -> "PositionInput":
         self.shares = shares_from_position_quantity(
@@ -2377,13 +2387,32 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         .order_by(desc(MarketBar.trading_date))
         .limit(1)
     )
-    market_value = latest_bar.close * position.shares if latest_bar else None
-    cost_value = position.average_cost * position.shares if position.average_cost is not None else None
+    # The legacy Float column cannot establish unsafe original integers. An
+    # unknown quantity must still allow the rest of the portfolio to load.
+    quantity = None
+    if type(position.shares) in {int, float} and 0 <= position.shares <= MAX_SAFE_SHARES:
+        try:
+            quantity = share_quantity_dict(position.shares)
+        except ValueError:
+            pass
+    shares = position.shares
+    if type(shares) not in {int, float} or (type(shares) is float and not math.isfinite(shares)):
+        shares = None
+    market_value = latest_bar.close * shares if latest_bar and shares is not None else None
+    cost_value = position.average_cost * shares if position.average_cost is not None and shares is not None else None
+    unrealized_pnl = market_value - cost_value if market_value is not None and cost_value is not None else None
+    # Preserve the existing finite valuation formulas; JSON cannot encode NaN
+    # or infinity, and missing values must not be invented as zero.
+    if market_value is not None and not math.isfinite(market_value):
+        market_value = None
+    if unrealized_pnl is not None and not math.isfinite(unrealized_pnl):
+        unrealized_pnl = None
     return {
         "id": position.id,
         "instrument": instrument_dict(instrument),
-        "shares": position.shares,
-        "quantity": share_quantity_dict(position.shares),
+        "shares": shares,
+        "shares_exact": quantity["total_shares_exact"] if quantity else None,
+        "quantity": quantity,
         "average_cost": position.average_cost,
         "stop_price": position.stop_price,
         "risk_budget": position.risk_budget,
@@ -2391,7 +2420,7 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         "updated_at": as_datetime(position.updated_at),
         "latest_bar": bar_dict(latest_bar),
         "market_value": market_value,
-        "unrealized_pnl": market_value - cost_value if market_value is not None and cost_value is not None else None,
+        "unrealized_pnl": unrealized_pnl,
     }
 
 

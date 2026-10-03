@@ -545,14 +545,17 @@ export type TrackingResponse = {
 export type Position = {
   id: number
   instrument: Instrument | null
-  shares: number
+  shares: number | null
+  shares_exact?: string | null
   quantity?: {
     total_shares: number
+    total_shares_exact?: string
     quantity_lots: number
+    quantity_lots_exact?: string
     odd_lot_shares: number
     unit: 'lot' | 'odd_lot' | 'mixed'
     display: string
-  }
+  } | null
   average_cost: number | null
   stop_price: number | null
   risk_budget: number | null
