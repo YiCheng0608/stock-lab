@@ -800,6 +800,35 @@ def _ensure_backfill_window(start: date, end: date) -> None:
         raise ValueError(f"official backfill is limited to {OFFICIAL_MAX_BACKFILL_DAYS} days")
 
 
+def _volume_from_row(row: dict[str, Any], *keys: str) -> int | None:
+    """Read an exact nonnegative share count without losing its raw type."""
+
+    for key in keys:
+        raw = row.get(key)
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            continue
+        # The first nonblank alias owns the value, even when it is invalid.
+        # A float has already lost its JSON lexical precision; do not guess.
+        if isinstance(raw, bool) or not isinstance(raw, (str, int, Decimal)):
+            return None
+        if isinstance(raw, int):
+            return int(raw) if 0 <= raw <= 9223372036854775807 else None
+        if isinstance(raw, str):
+            raw = raw.strip()
+            if not re.fullmatch(r"[+]?(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]+)?", raw):
+                return None
+            raw = raw.replace(",", "")
+        try:
+            number = Decimal(raw)
+            if (not number.is_finite() or not 0 <= number <= 9223372036854775807
+                    or number != number.to_integral_value()):
+                return None
+            return int(number)
+        except (InvalidOperation, OverflowError, ValueError):
+            return None
+    return None
+
+
 def _turnover_from_row(row: dict[str, Any], *keys: str) -> tuple[float, str, str | None]:
     raw = _text(row, *keys)
     if not raw or raw.upper() in {"--", "-", "X", "N/A", "無"} or set(raw) == {"-"}:
@@ -826,7 +855,7 @@ def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         high = parse_number(_text(row, "HighestPrice", "最高價", "最高"))
         low = parse_number(_text(row, "LowestPrice", "最低價", "最低"))
         close = parse_number(_text(row, "ClosingPrice", "收盤價", "收盤"))
-        volume = parse_integer(_text(row, "TradeVolume", "成交股數", "成交量"))
+        volume = _volume_from_row(row, "TradeVolume", "成交股數", "成交量")
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TradeValue", "成交金額", "成交值"
         )
@@ -863,7 +892,7 @@ def parse_tpex_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         high = parse_number(_text(row, "High", "最高"))
         low = parse_number(_text(row, "Low", "最低"))
         close = parse_number(_text(row, "Close", "收盤"))
-        volume = parse_integer(_text(row, "TradingShares", "成交股數", "成交量"))
+        volume = _volume_from_row(row, "TradingShares", "成交股數", "成交量")
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TransactionAmount", "成交金額", "成交金額(元)", "成交值"
         )
@@ -2315,7 +2344,8 @@ class TpexAdapter:
                 for bar in parsed_rows
                 if bar.symbol in wanted and start <= bar.trading_date <= end
             ]
-            if not parsed_rows and isinstance(payload.payload, dict):
+            if (not parsed_rows and isinstance(payload.payload, dict)
+                    and not _has_tabular_rows(payload.payload)):
                 # An empty, date-validated TPEx table is explicit no-data
                 # evidence.  Do not manufacture a bar or reinterpret it as
                 # the latest available session.

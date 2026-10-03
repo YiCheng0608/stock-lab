@@ -66,6 +66,27 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-StockDayS
 
 本輪第三次實測 **1 compound unittest／0 skip** 通過，程序／測試與清理 exit 0，`residuals=[]`；統籌獨立核對本輪核定根不存在、無新增測試殘留。觀測峰值 **5 files／4 directories／517,248 bytes**，DB **458,752 bytes**，均在本輪核定額度內。先前載入前 policy 失敗未跑測試、未落盤，兩次實測失敗均清理成功；原失敗／修正與成功收據留 task，不能稱首跑通過。保留 Starlette／TestClient httpx deprecation warning；未跑完整 backend、production API startup／lifespan、UI、live、TPEx、正式 DB 或 legacy migration 八案例，不外推通過。命令／版本與原始收據只留原 task。
 
+### R1-A2 legacy 成交量的零落盤驗證入口
+
+從專案根目錄直接執行 [test_legacy_daily_volume.py](../../backend/tests/test_legacy_daily_volume.py) 的 unittest，不載入一般 pytest conftest 或真實 `app.config`，也不使用會建隔離磁碟根的 `Invoke-Validation.ps1`。精確數值格式、別名與 fixture 支持範圍只由[資料來源](../DATA_SOURCES.md#r1-a2-legacy-日行情成交量精確整數-gate有限接受)負責。
+
+```powershell
+$volumePreviousDeps = $env:STOCK_TEST_DEPS
+try {
+    $env:STOCK_TEST_DEPS = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+    & 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 ./backend/tests/test_legacy_daily_volume.py
+    $volumeTestExit = $LASTEXITCODE
+} finally {
+    $env:STOCK_TEST_DEPS = $volumePreviousDeps
+}
+```
+
+依賴是已存在且已核實的主線唯讀目錄，不另建環境；本次實際 Python **3.12.14**、httpx **0.28.1**。`-B` 與測試內 `sys.dont_write_bytecode` 禁用 pycache；standalone 入口用臨時 `app.config` module stub 提供 93 日常數及不會使用的 `memory-unused/raw`，再 import 真實 `worker.sources`。一般測試 import 不會套用此 standalone stub；若改走 pytest，須先另核其 conftest／設定副作用，不能引用本入口當零落盤證據。
+
+本入口新增產物／殘留配額均為 **0**。audit guard 在來源 import 前啟用，拒絕檔案寫入、建刪目錄、其他檔案變更、subprocess 與網路操作，必要 source／依賴檔案只讀；adapter `_fetch` 則替換為記憶體 payload／metadata，fixture path 不建立或讀取 raw body。程序 exit 與最後 `subcases`／`blocked_io` 一併核對，遭阻擋 I/O 會使程序失敗，不能只看 unittest 的方法數。
+
+首次 direct run **10 methods／219 subcases／0 skip**、exit 0、`blocked_io=0` 已由統籌有限接受；統籌獨立數值與 write／network audit 核對亦通過，`memory-unused`、`data` 與 app／worker／tests pycache 未新增。無新增測試產物，無需測試清理；舊殘留不動。這未執行 capture、collect、SQLite、API、live、UI 或 production startup，不作磁碟保存／重開或完整 backend 驗收。版本、完整命令與原始 stdout／stderr 留 task，不另建附件。
+
 ### M1-P3b 記憶體事件接線的驗收入口
 
 本輪額外測試落盤配額為 0，不能直接套用上述會建立隔離目錄的入口；也須先辨識 pytest conftest、App 啟動與 import 的 DB／目錄副作用。純計算、selected／receipt 拒收與 API 投影優先以不載入 conftest 的記憶體 fixture 驗證；實際來源與產品操作另外具名核對，不能用 fixture 或記憶體 App bundle 代替 live／production 驗收。限制與既有殘留見[協作紀錄](../TASK_COORDINATION.md)。

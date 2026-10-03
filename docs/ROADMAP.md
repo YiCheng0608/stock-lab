@@ -9,7 +9,7 @@
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件及本次 feed 記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試、legacy migration 兩路徑八案例、指定三種 selected invalid／四類拒收的磁碟重開→API 整合已各有限驗收；產業期間、停復牌與公司行動局部修正。 | 其他未覆蓋 selected invalid／拒收磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與 legacy 成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、完整事件群組／摘要與其他來源產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件及本次 feed 記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試、legacy migration 兩路徑八案例、指定三種 selected invalid／四類拒收的磁碟重開→API 整合已各有限驗收；legacy 日行情成交量精確整數 gate／TPEx 空結果條件的本地 parser／adapter fixture 已有限接受；產業期間、停復牌與公司行動局部修正。 | legacy 成交量 gate 後的 collect／SQLite／API 精確保存與拒收保留、其他未覆蓋 selected invalid／拒收磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、完整事件群組／摘要與其他來源產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口；M1-P1 截止一致總覽、P2b TPEx 單日法人原件、P3b selected 官方事件原件 API／UI、M2-P1 官方事件關注接個股總覽及 M2-P2 搜尋／研究往返已各有限 review。 | 完整 M1 的法人／交易日窗口、完整事件 coverage 及研究條件；完整 M2 的其他理由與分類品質；歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
@@ -43,9 +43,11 @@
 
 **前輪 R1-A2 legacy 成交額 migration 關閉後讀回與失敗復原（已有限接受）**：支援 M1 資料可信／R1 基線，解除 Alembic `0006→0007` 與已知 fallback-only `1→6→7` 兩路徑的指定磁碟驗證缺口；各四個可重建 synthetic fixture 案例，共八個專用 unittest 全過、無 skip，測試與清理分報成功、無新增殘留，已本地提交／合併。精確 fixture／NULL／marker 限度見[資料來源](DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)。未改產品來源或正式 DB，不增加 UI、官方 coverage、完整 5／20 日或 PIT 完成度，本輪不重跑。
 
-**本輪 R1-A2 selected invalid／拒收磁碟整合（已有限接受）**：支援 M1 研究資料可信／R1-A2 基線，解除指定三種無效成交額與四類 selected 拒收的 production capture→collect→磁碟重開→API fixture 整合缺口；第三次實測 1 compound unittest／0 skip、十一個 API 回應及測試／清理成功已限定接受，核定根已不存在。本輪未改產品來源，其他未覆蓋 invalid／拒收及 R1-A2 全域驗收仍待驗。精確範圍與來源限度見[資料來源](DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)，入口與配額見[開發入口](development-baseline/README.md#r1-a2-selected-invalid拒收的磁碟驗證入口)，四角色及接受／freeze／索引／commit／merge 狀態見[協作紀錄](TASK_COORDINATION.md)。
+**前輪 R1-A2 selected invalid／拒收磁碟整合（已有限接受並提交／合併）**：支援 M1 研究資料可信／R1-A2 基線，解除指定三種無效成交額與四類 selected 拒收的 production capture→collect→磁碟重開→API fixture 整合缺口；第三次實測 1 compound unittest／0 skip、十一個 API 回應及測試／清理成功已限定接受，核定根已不存在。該輪未改產品來源，其他未覆蓋 invalid／拒收及 R1-A2 全域驗收仍待驗。精確範圍與來源限度見[資料來源](DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)，入口與配額見[開發入口](development-baseline/README.md#r1-a2-selected-invalid拒收的磁碟驗證入口)，清理狀態見[協作紀錄](TASK_COORDINATION.md)。
 
-下一個具名候選為 **R1-A2 legacy TWSE／TPEx 日行情成交量精確整數 gate**，支援 M1 研究資料可信／R1-A2 基線。僅由新輪有界核對欄位口徑、實際呼叫者與副作用後裁定最小修復及記憶體驗證；本輪不實作、不全域修改共用 `parse_integer`，selected 整合不得外推 legacy 或解除完整 5／20 日、M3 與 PIT gate。
+**本輪 R1-A2 legacy TWSE／TPEx 日行情成交量精確整數 gate（已有限接受）**：解除兩個日行情 parser 的浮點取整缺口，保留合法零、大整數及既有欄位，並避免 TPEx 將非空全拒收表格列為合法空結果。固定 synthetic fixture 的 parser／wrapper／adapter 記憶體驗證已接受，`_fetch` 以記憶體 metadata 替換；數值格式與具名支持範圍見[資料來源](DATA_SOURCES.md#r1-a2-legacy-日行情成交量精確整數-gate有限接受)，零落盤入口見[開發入口](development-baseline/README.md#r1-a2-legacy-成交量的零落盤驗證入口)，本輪接受與封存狀態見[協作紀錄](TASK_COORDINATION.md)。本批未驗 collect、SQLite、API、live、UI、production startup 或完整 backend，不增加完整 R1-A2、5／20 日、M3 或 PIT 完成度。
+
+下一個具名候選為 **R1-A2 legacy 成交量 gate→collect／SQLite／API 精確保存與拒收保留**，支援 M1 研究資料可信／R1-A2 基線。須由下一輪新統籌先有界核對依賴、最小 production 路徑及副作用，再裁定必要記憶體與磁碟契約、配額及完成條件；磁碟保存／關閉後讀回須實際驗證，不能用 memory 當作 disk，也不能提前稱整合接受。
 
 M3 可由既有 caller-input 計畫純核心評估接線，但新計畫保存／合法執行仍須其本身的官方 tick／費稅／合法時段／來源與時間 gate，且磁碟保存驗收不能用記憶體取代；不由 legacy tracking 推論新計畫已完成。
 
