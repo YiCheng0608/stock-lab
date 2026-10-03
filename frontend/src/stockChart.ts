@@ -10,6 +10,7 @@ export type StockChartBar = {
   low: number
   close: number
   volume: number
+  volumeExact?: string | null
   source: string
   dataAsOf: string | null
   isSuspended: boolean
@@ -122,6 +123,7 @@ export function prepareStockChartData(input: readonly Bar[] | null | undefined, 
         low: row.low,
         close: row.close,
         volume: row.volume,
+        volumeExact: row.volume_exact,
         source: normalizeSource(row.source),
         dataAsOf: typeof row.data_as_of === 'string' ? row.data_as_of : null,
         isSuspended: row.is_suspended === true,
@@ -233,7 +235,7 @@ export function formatStockTooltip(data: PreparedStockChart, params: unknown): s
     `高：${escapeTooltipText(chartNumber(point.bar.high))}`,
     `低：${escapeTooltipText(chartNumber(point.bar.low))}`,
     `收：${escapeTooltipText(chartNumber(point.bar.close))}`,
-    `${volumeLabel}：${escapeTooltipText(formatTableVolume(point.bar.volume, point.bar.source) || '未提供或單位待核實')}`,
+    `${volumeLabel}：${escapeTooltipText(formatTableVolume(point.bar.volume, point.bar.source, point.bar.volumeExact) || '未提供或數值、單位待核實')}`,
   ]
   if (point.ma20 != null) lines.push(`MA20：${escapeTooltipText(chartNumber(point.ma20))}`)
   if (point.ma60 != null) lines.push(`MA60：${escapeTooltipText(chartNumber(point.ma60))}`)

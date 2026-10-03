@@ -15,6 +15,13 @@ from typing import Any
 LOT_SIZE = 1000
 
 
+def volume_exact_text(value: Any) -> str | None:
+    """Encode only a stored nonnegative int64 volume, without float conversion."""
+    if type(value) is not int or not 0 <= value <= 9223372036854775807:
+        return None
+    return str(value)
+
+
 def _strict_positive_integer(value: Any, field_name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be a positive integer")

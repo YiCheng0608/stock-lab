@@ -102,6 +102,7 @@ export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bar
             <span><i className="legend-line legend-ma20" />MA20</span>
             <span><i className="legend-line legend-ma60" />MA60</span>
             <span>{volumeUnitConfirmed ? '成交量單位：張（原始股數 ÷ 1000）' : '成交量單位：來源未核實，原值保留'}</span>
+            <span>成交量柱形與座標刻度為近似值；精確數值請查看提示或資料表。</span>
             <span>MA20／MA60：{prepared.maReason}</span>
           </div>
           <details className="technical-details chart-data-table">
@@ -111,7 +112,7 @@ export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bar
                 <thead><tr><th>日期</th><th>開</th><th>高</th><th>低</th><th>收</th><th>成交量</th><th>MA20</th><th>MA60</th></tr></thead>
                 <tbody>{prepared.points.slice(currentWindow.start, currentWindow.end + 1).reverse().map((point) => <tr key={point.date}>
                   <td>{point.date}</td>
-                  {point.bar ? <><td>{point.bar.open.toLocaleString('zh-TW')}</td><td>{point.bar.high.toLocaleString('zh-TW')}</td><td>{point.bar.low.toLocaleString('zh-TW')}</td><td>{point.bar.close.toLocaleString('zh-TW')}</td><td className="numeric-cell">{formatTableVolume(point.bar.volume, point.bar.source)}</td></> : <td colSpan={5} aria-label="此日期行情資料不完整" />}
+                  {point.bar ? <><td>{point.bar.open.toLocaleString('zh-TW')}</td><td>{point.bar.high.toLocaleString('zh-TW')}</td><td>{point.bar.low.toLocaleString('zh-TW')}</td><td>{point.bar.close.toLocaleString('zh-TW')}</td><td className="numeric-cell">{formatTableVolume(point.bar.volume, point.bar.source, point.bar.volumeExact)}</td></> : <td colSpan={5} aria-label="此日期行情資料不完整" />}
                   <td className="numeric-cell">{formatTableNumber(point.ma20, 2)}</td><td className="numeric-cell">{formatTableNumber(point.ma60, 2)}</td>
                 </tr>)}</tbody>
               </table>

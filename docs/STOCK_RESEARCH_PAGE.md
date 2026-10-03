@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現的核定契約與待驗範圍見 §14。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -15,7 +15,7 @@
 | 區塊 | 實際欄位／上限 | 呈現限制 |
 | --- | --- | --- |
 | 標的 | `instrument` | 以 exchange＋symbol 識別，顯示名稱與類型。 |
-| 行情 | `bars` 最多 120 筆，舊到新 | 含 OHLC、adj_close、volume、turnover、source、data_as_of、collected_at、is_suspended；只代表本次視窗。 |
+| 行情 | `bars` 最多 120 筆，舊到新 | 含 OHLC、adj_close、volume、volume_exact、turnover、source、data_as_of、collected_at、is_suspended；精確成交量增欄依 §14，尚待本輪驗收；只代表本次視窗。 |
 | 技術快照 | 最新一筆 `features` | 可作最新摘要，不能由單點 feature 畫歷史 MA；歷史 MA 由 response bars 算。 |
 | 族群 | `groups` | 顯示名稱與有效期，不由名稱推論題材或熱門。 |
 | 籌碼 | `chips` 最多 120 筆 | 法人／融資連同日期和來源顯示；不得推論分點或特定外資身分。 |
@@ -40,7 +40,7 @@ API 也沒有 currency 欄位，且標的可能不是新臺幣計價。價格表
 
 - date 必須合法且唯一；重複日期 fail closed，不能任選、平均或覆寫。
 - O／H／L／C 須為有限數字且 `low <= min(open, close) <= max(open, close) <= high`；非法列不生成 K 棒，不能用 close 補值。
-- volume 須為有限非負股數；null、NaN 或負值不補 0，對應列／區塊須標不可用。
+- 成交量可用性依 §14 的精確欄位與舊回應回退條件；不可用值不補 0，對應列／區塊須標不可用。
 - 合法 bars 依日期舊到新排序；停牌或無交易按原欄位標示，不造平盤棒。
 - 顯示總筆數、可畫筆數及最早／最晚日期。少於 120 筆只說實際筆數；恰為 120 筆也只能說「本次最多 120 根視窗」。
 
@@ -96,7 +96,7 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ## 7. 前端顯示契約
 
-來源明確為股數的成交量和法人買賣超以 `原值 / 1,000` 顯示為「張」；已核實融資欄位依官方「張」語意顯示。顯示換算不改 API、圖表、策略計算或 raw evidence；unknown／mixed 時不換算。完整格式、空白與幣別規則見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-壓縮卡詳情與單位文案)。
+來源明確為股數的成交量依 §14 的精確整數字串換算為「張」；法人買賣超仍以 `原值 / 1,000` 顯示為「張」，已核實融資欄位依官方「張」語意顯示。顯示換算不改原成交量、策略計算或 raw evidence；unknown／mixed 時不換算。成交量的核定增欄與圖形近似範圍見 §14；其餘格式、空白與幣別規則見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-壓縮卡詳情與單位文案)。
 
 市場別產業 membership 重建前，個股與行動詳情顯示「既有族群關聯待重新核實」；族群中文名加「（既有分類）」與待核實 badge。不得顯示可信排名或將衍生條件稱為已核實；這不改寫 OHLCV、單位或新聞。相關有限 UI review 只涵蓋文案、空值、法人命名、單位顯示、ETF／族群名稱及官方分點入口，不新增 API、分點資料、歷史 coverage 或主力身分。
 
@@ -338,3 +338,64 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 統籌已有限接受後端 **78 個純記憶體靶向測試**、前端型別、最終 **16 組 SSR** 及全 App 記憶體 bundle 的 exit 0 收據；最後 Unicode 空白／0000 年邊界修正後的必要前端複驗已接受，後端未變且既有結果仍有效，不重跑或重抓來源。程式型別／SSR 使用 bundled Node **24.19.0**，統籌 UI 使用 Node **20.19.4**，版本與命令分留 task。首輪測試 helper 11 個失敗經修正後才有 78 個通過；SSR helper 首次模組 path 失敗，改用既有 pnpm 路徑後 exit 0，未安裝依賴。原始失敗與後續成功分報，不改稱首跑通過。合法空原件、101 股以上先搜尋再截斷、匹配外壞列／receipt／pins 拒收、同股不同名稱／全部事件、query 長度與 literal 邊界只證 fixture 實作邊界，不冒充本次 live 情境。**完整 backend／production Vite build 未跑**，記憶體 bundle 不代替 production 驗收。
 
 本次原件未保存，**不能離線重播**；版本、命令、exit、hash、失敗／修正與具名驗收收據只留 task。測試與清理分報：QA tab 已關閉、viewport 已還原，專用 backend／frontend 自有進程均正常 exit 0，來源 request 共 1 次，memory body 隨程序釋放；新增附件／暫存為 0，無新增 owned 產物待清理。舊 Temp 殘留未動，不稱已清理，精確限制見[協作紀錄](TASK_COORDINATION.md)。本批不形成排名、金融推論、研究條件、持久化、DB 寫入或完整 M1／M2；後續來源可行性候選見[里程碑下一步](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+## 14. M1／R1-A2：成交量 HTTP→JavaScript→個股精確呈現
+
+**程式、必要記憶體驗證、完整字串邊界複驗與下述 TWSE／TPEx 具名操作已由統籌有限接受。** 本批支援 M1 研究資料可信／R1-A2，處理 HTTP 整數 token 經 JavaScript `Number` 後可能失去位數的呈現缺口；有限接受不代表真官方／live、完整產品或 production 驗收。
+
+### 14.1 API 增欄與舊回應相容
+
+個股行情及可用總覽的成交量新增 `volume_exact: string | null`，既有數字 `volume` 保留。精確欄位表示股數，須為 ASCII 十進位 canonical 非負整數字串：只有 `0` 或非零數字開頭的連續數字，範圍為 **0–9223372036854775807**（含上限）。不接受前導零、正負號、小數、科學記號、千分位或空白；無法提供合法精確值時為 null，不補成零。後端只新增純 helper 與本批 API 投影，不變更 portfolio、parser、selected consumer 或來源 gate。
+
+前端先驗精確欄位，不以已失真的數字覆蓋它：
+
+| 回應情況 | 成交量呈現 |
+| --- | --- |
+| `volume_exact` 是範圍內的 canonical 字串 | 使用字串保留全部位數。 |
+| 舊回應沒有該欄位，讀得 `undefined` | 僅當 `volume` 是 `Number.isSafeInteger` 的非負數時，才轉成整數字串回退。 |
+| 精確欄位為 null、非字串、格式不合法或超過 int64 上限 | 不回退到 `volume`；顯示不可用／空白及既有缺值說明。 |
+| 舊回應數字不是非負安全整數 | 不補零，不聲稱精確值可用。 |
+
+### 14.2 股、張與圖形的精度
+
+股數直接在整數字串加入千分位。來源明確為股數時，張數以字串切分末三位換算，必要時補足小數前的零；不先轉 `Number`、除法或四捨五入，不遺失零股。合法零顯示 `0`，缺值與零分開；來源單位 unknown／mixed 的原限制保留。
+
+| 精確股數 | 股數文字 | 張數文字 |
+| --- | --- | --- |
+| `0` | `0` | `0` |
+| `1` | `1` | `0.001` |
+| `9007199254740993` | `9,007,199,254,740,993` | `9,007,199,254,740.993` |
+| `9223372036854775807` | `9,223,372,036,854,775,807` | `9,223,372,036,854,775.807` |
+
+有可用成交量時，App 頂部、日行情表、總覽張數 quote 與股數表格、圖表 tooltip 及等效資料表均接相同精確值。圖形高度仍使用數字近似並須明示；核對值以 tooltip 與資料表的精確文字為準。這不改 OHLC、MA、時間／來源、策略計算或原始證據，不放寬下述 TPEx 總覽缺口。
+
+### 14.3 准入與本輪有限接受範圍
+
+TWSE 總覽仍須通過 §9 的 selected 原件證據 gate；不能因增添精確欄位而接受不合格價格。TPEx detail 可用時接本欄位，總覽維持現有 unavailable，不為本批放寬來源。單日法人精確股數、完整 5／20 日窗口、研究條件、M1-P4a unknown 權利、完整 M1／M2／M3 與 PIT 的原限制保留。
+
+固定 synthetic fixture 日期為 **2026-10-01**，TWSE／TPEx 各使用下列八個合成標的，名稱明示記憶體合成測試；不是官方標的或真實行情：
+
+| 合成標的 | 精確股數 |
+| --- | --- |
+| `ZERO0` | `0` |
+| `ONE1` | `1` |
+| `N999` | `999` |
+| `LOT1` | `1000` |
+| `LOT01` | `1001` |
+| `SAFE` | `9007199254740991` |
+| `ODD` | `9007199254740993` |
+| `MAX` | `9223372036854775807` |
+
+統籌已有限接受後端專用入口首次 **3 tests／0 skip、48 個實際 TestClient HTTP 回應**，以及 Node 全來源型別／units／chart、**32 個總覽與 8 個事件 SSR 檢查**、全 App 記憶體 bundle、**48 個 loopback HTTP 回應經 production fetch／`Response.json()`** 的結果。另追加六種尾端 ASCII／Unicode 換行或空白拒用的雙 formatter 邊界，必要前端純記憶體複驗已通過，不重跑仍有效的 Python／HTTP／UI，也不改來源、API 或既有數值行為。純 helper、相容拒用及上述兩市場案例只支持 synthetic 邊界；Node runner 與統籌複驗 wrapper 均曾失敗，修正後才通過，原始失敗／成功分留 task，不稱首跑通過。
+
+Synthetic 證據不稱官方真實樣本或 live；記憶體原件 fixture 僅 patch `_capture_evidence`，承接既有 selected gate，不重驗或代替新的磁碟驗收，不新增來源准入、正式 DB 或磁碟保存驗收。記憶體全 App bundle 不作 production Vite build 驗收；本輪零落盤入口與隔離限制見[開發入口](development-baseline/README.md#m1r1-a2-成交量精確呈現的零落盤驗證入口)，實際版本、命令、exit、失敗／修正及清理收據留 task。
+
+### 14.4 統籌具名操作與未驗邊界
+
+TWSE 桌面 `MAX` 的 headline 與總覽 quote 均為 **9,223,372,036,854,775.807 張**，總覽股數表為 **9,223,372,036,854,775,807 股**；chart 資料表、實際滑鼠 hover tooltip 與「資料說明」的日行情表保留同一精確值。`ODD` 的兩個張數 quote、股數及 chart 資料表保持全部位數；`ZERO0` 的上述成交量文字均為合法零。
+
+**390×844** 窄版的 document scroll width 為 **375**，headline／總覽數字的 `clientWidth=scrollWidth`，完整文字可讀；資料表以自身 `overflow:auto` 捲動。日期驗收先前 `fill` 回傳成功但 input 空白，未算通過；統籌改用原生 `HTMLInputElement` prototype value setter 並派送 input／change events，設定 **2026-09-30** 後實際點按「套用截止」，URL 的 `as_of` 生效且移除價格／成交量，再點按「最新」恢復 `MAX`。這證明 DOM 輸入加實際按鈕操作，不稱 native calendar 驗收。
+
+TPEx `MAX`／`ODD`／`ZERO0` 的 chart 資料表分別保持 **9,223,372,036,854,775.807／9,007,199,254,740.993／0 張**，`MAX` 的「資料說明」日行情表同樣精確；headline／總覽仍為未提供，來源 gate 為 0 passed，不冒稱兩市場總覽能力。「資料說明」以 DOM `button.click()` 觸發正式 handler 後，核實選中頁籤、展開及表格值；先前 native click 沒有切換，不當作通過。
+
+上述操作只用 memory-only 全 App esbuild preview，字型驗收限 fallback font；本次 console error 為 **0**，仍有開發提示，captured network 僅自有 loopback 或 data URL、外部 request 為 **0**。QA tab 已關閉，自有 Python／Node 程序及兩個 listener 均核實不存在，新增測試產物／殘留為 **0**。兩個 serve 程序退出皆為 **1**，與 direct tests／Node check 的 exit 0 分報，不稱 graceful exit 0；Python serve 沒有最後 audit receipt，不聲稱該 serve 的完整 audit 結果。完整 backend、production Vite build／startup、正式 DB、真官方／live、完整 5／20 日及 PIT 均未由本批驗收。

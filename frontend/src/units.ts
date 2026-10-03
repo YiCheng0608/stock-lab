@@ -9,9 +9,39 @@ export function formatTableNumber(value: unknown, digits = 3, signed = false): s
   return signed && value > 0 ? `+${number}` : number
 }
 
-export function formatTableVolume(shares: number | null | undefined, source: string | null | undefined): string {
-  if (!isVerifiedShareSource(source) || (typeof shares === 'number' && shares < 0)) return ''
-  return formatTableNumber(typeof shares === 'number' ? shares / LOT_SIZE : shares)
+const MAX_VOLUME_TEXT = '9223372036854775807'
+
+function exactVolumeText(shares: unknown, exact: unknown): string | null {
+  // Only an absent field permits compatibility with a safe legacy JSON number.
+  if (exact === undefined) {
+    return typeof shares === 'number' && Number.isSafeInteger(shares) && shares >= 0 ? String(shares) : null
+  }
+  if (typeof exact !== 'string' || !/^(?:0|[1-9][0-9]*)$/.test(exact)
+    || exact.length > MAX_VOLUME_TEXT.length
+    || (exact.length === MAX_VOLUME_TEXT.length && exact > MAX_VOLUME_TEXT)) return null
+  return exact
+}
+
+function groupedInteger(value: string): string {
+  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+/** Exact lots from canonical share text; no Number division or decimal rounding. */
+export function formatTableVolume(shares: number | null | undefined, source: string | null | undefined, exact?: string | null): string {
+  if (!isVerifiedShareSource(source)) return ''
+  const text = exactVolumeText(shares, exact)
+  if (text == null) return ''
+  const padded = text.padStart(4, '0')
+  const lots = padded.slice(0, -3)
+  const fraction = padded.slice(-3).replace(/0+$/, '')
+  return groupedInteger(lots) + (fraction ? `.${fraction}` : '')
+}
+
+/** Exact source share count for the overview's original-value table. */
+export function formatTableVolumeShares(shares: number | null | undefined, source: string | null | undefined, exact?: string | null): string {
+  if (!isVerifiedShareSource(source)) return ''
+  const text = exactVolumeText(shares, exact)
+  return text == null ? '' : groupedInteger(text)
 }
 
 export function formatTableChip(value: number | null | undefined, source: string | null | undefined, margin = false): string {

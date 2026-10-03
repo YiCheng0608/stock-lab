@@ -206,6 +206,8 @@ export type Bar = {
   close: number
   adj_close: number
   volume: number
+  /** Canonical nonnegative int64 shares; absent only on older API responses. */
+  volume_exact?: string | null
   turnover: number
   turnover_status: 'available' | 'unavailable' | 'unknown'
   turnover_reason: string | null
@@ -321,6 +323,7 @@ export type OverviewPriceBar = {
   low: number
   close: number
   volume: number
+  volume_exact?: string | null
   turnover: number | null
   turnover_status: 'available' | 'unavailable' | 'unknown'
   turnover_reason: string | null

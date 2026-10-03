@@ -120,6 +120,14 @@ server `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 明示啟用 `POST /api/stocks/{exch
 
 沿用 M2-P1 明示取得與零額外落盤入口，GET／POST 可帶 optional `q`；原始最多 100 個 Unicode 字元、全 feed 驗證後搜尋再套上限，純記憶體測試須另驗匹配外壞列、101 股以上與同股名稱／完整事件，不能只對前 100 股或 live 58 股聲稱完整邊界驗收。統籌已有限接受實際原件／API 與搜尋／M1 往返、截止切換及窄版操作，以及 78 個記憶體測試、前端型別／最終 16 組 SSR／全 App 記憶體 bundle 的 exit 0，該輪已 freeze／索引／本地 commit。精確支持範圍及未跑項見[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)；完整 backend／production Vite build 未跑，不以 fixture、memory catalogue 或記憶體 bundle 代替來源／DB／production 驗收。首輪測試／SSR helper 失敗與修正後成功分留 task；命令、版本、exit、原件 hash 與 QA 清理收據留本輪 task，不另建附件，既有殘留及零落盤限制保留。
 
+### M1／R1-A2 成交量精確呈現的零落盤驗證入口
+
+後端及 Node 必要記憶體驗證、完整字串邊界複驗、TWSE／TPEx 具名操作與新增產物／殘留為 0 已有限接受。專用 `backend/tests/test_volume_exact_presentation.py`、前端必要 units／chart／overview 記憶體測試與 `tools/volume-exact-preview.cjs` 分別核對純 helper、實際 router API／JSON parse 及具名 UI 操作；精確相容、股／張、兩市場固定 synthetic fixture、操作方式與來源 gate 只由[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)詳述。命令、版本、exit 與原始收據留 task，不另存附件。
+
+上述專用後端檔以 standalone unittest、`-B -X utf8` 直接執行，不載入一般 pytest conftest、`app.main` 或 production lifespan。僅 standalone 入口從實際 `app.config` 原文的 AST 常數建立設定 stub，略過 mkdir，DB 使用 `:memory:`；一般 suite import 不安裝這套 hook，不能把本入口當作一般 pytest 的零落盤證據。測試沿用實際 router 與記憶體 SQLite，不操作正式 DB；僅 `_capture_evidence` 的 memory patch 服務 fixture，不重驗既有檔案 gate 或替代真來源證據，TPEx 總覽的 unavailable 不放寬。audit／入口須拒絕磁碟變更、外網及未授權 subprocess，依賴只讀已核實的主線目錄，不安裝或另建環境。
+
+Node preview／檢查只作記憶體 bundle，`write:false`、無輸出檔；preview 限本機 loopback，實際 fixture API 回應經 `Response.json()` 後的精確字串及具名操作另核。外部字型 import 只在 preview 的記憶體 CSS 略過並由 CSP 阻外網，本輪呈現驗收限 fallback font；不修改正式字型契約。新增測試／preview 產物與殘留配額均為 **0**，不使用會落盤的通用 runner 或 `KeepArtifacts`。全 App 記憶體 bundle 不當 production Vite build；完整 backend、production startup、正式 DB、磁碟重開、真官方／live 與完整 M1／PIT 不由此入口追認。自有 QA tab、兩個 server 程序與 listener 已核實關閉／不存在，測試產物／殘留為 0；direct tests／Node check 的 exit 0 與兩個 serve 的 exit 1 分報，不稱正常 exit 0 或完整 serve audit。版本、完整命令及原始收據留 task，不另建附件，舊殘留維持原狀。
+
 ## 歷史驗證
 
 歷史測試不代表目前來源已驗收；原始數據依[文件索引](../README.md#歷史查閱)取閱，已刪除的 Temp 附件不作接手依賴。

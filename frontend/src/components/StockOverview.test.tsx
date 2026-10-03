@@ -48,6 +48,25 @@ expect(missingHtml.includes('未提供') && missingHtml.includes('未補零') &&
 
 const unavailableHtml = renderToStaticMarkup(<StockOverview data={{ ...data, price: { ...data.price, status: 'unavailable', latest: null, bars: [], valid_count: 0, from: null, to: null } }} onNews={() => {}} />)
 expect(unavailableHtml.includes('尚無來源與數值已核對的價格') && unavailableHtml.includes('查看新聞與公告'), 'unavailable price does not hide independent entry points')
+
+for (const [volume_exact, lots, shares] of [
+  ['0', '0', '0'],
+  ['9007199254740993', '9,007,199,254,740.993', '9,007,199,254,740,993'],
+  ['9223372036854775807', '9,223,372,036,854,775.807', '9,223,372,036,854,775,807'],
+]) {
+  const bar = { ...latest, volume: Number(volume_exact), volume_exact }
+  const exactHtml = renderToStaticMarkup(<StockOverview data={{ ...data, price: { ...data.price, latest: bar, bars: [bar] } }} onNews={() => {}} />)
+  expect(exactHtml.includes(`<strong>${lots}</strong>`) && exactHtml.includes(`<td>${shares}</td>`), 'overview latest lots and original shares both preserve canonical digits')
+}
+for (const bar of [
+  { ...latest, volume: Number('9007199254740993') },
+  { ...latest, volume: 1000, volume_exact: null },
+  { ...latest, volume: 1000, volume_exact: '01' },
+  { ...latest, volume: 1000, volume_exact: '9223372036854775808' },
+]) {
+  const invalidHtml = renderToStaticMarkup(<StockOverview data={{ ...data, price: { ...data.price, latest: bar, bars: [bar] } }} onNews={() => {}} />)
+  expect(invalidHtml.includes('數值或單位待核實') && !invalidHtml.includes('<strong>1</strong>') && !invalidHtml.includes('<td>1,000</td>'), 'overview rejects malformed exact text and unsafe legacy numbers without fallback')
+}
 const investor = (label: string, buy: string, sell: string, net: string) => ({ label, buy, sell, net, source_fields: { buy: 'buy', sell: 'sell', net: 'net' } })
 const daily: InstitutionalDailyData = {
   version: 'institutional-daily/p2b-v1', status: 'available', as_of: '2026-10-03', date: '2026-10-02',

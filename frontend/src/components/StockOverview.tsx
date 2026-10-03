@@ -1,5 +1,6 @@
 import type { InstitutionalDailyData, OfficialEventsData, StockOverviewData } from '../types'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
+import { formatTableVolume, formatTableVolumeShares } from '../units'
 
 const REASONS: Record<string, string> = {
   price_source_not_admitted: '這筆行情來源與用途尚待核對',
@@ -154,13 +155,13 @@ export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, 
         <p className="small-note">本次最多 {price.window_limit} 筆，收到 {price.candidate_count} 筆、通過 {price.valid_count} 筆；不代表完整交易日窗口。</p>
         {latest ? <>
           <div className="overview-range">可用區間 {formatResearchDate(price.from)} — {formatResearchDate(price.to)}</div>
-          <div className="stock-quote-grid"><div><span>最新可用收盤（報價幣別元）</span><strong>{number(latest.close)}</strong></div><div><span>成交量（張）</span><strong>{number(latest.volume / 1000, 3)}</strong></div><div><span>資料日</span><strong>{formatResearchDate(latest.date)}</strong></div></div>
+          <div className="stock-quote-grid"><div><span>最新可用收盤（報價幣別元）</span><strong>{number(latest.close)}</strong></div><div><span>成交量（張）</span><strong>{formatTableVolume(latest.volume, latest.source, latest.volume_exact) || '數值或單位待核實'}</strong></div><div><span>資料日</span><strong>{formatResearchDate(latest.date)}</strong></div></div>
           <div className="overview-ohlc"><span>開 {number(latest.open)}</span><span>高 {number(latest.high)}</span><span>低 {number(latest.low)}</span><span>收 {number(latest.close)}</span></div>
           <p className="small-note">成交額（來源計價單位）：{number(latest.turnover, 0)}{latest.turnover_status !== 'available' && `；原件${latest.turnover_reason === 'missing' ? '缺少成交額' : '成交額無效'}，未補零。`}</p>
           <p className="small-note">來源 <a href={latest.provenance.endpoint} target="_blank" rel="noreferrer">臺灣證券交易所 · STOCK_DAY_ALL</a>；擷取 {formatResearchDateTime(latest.provenance.captured_at)}。本地原件與數值一致，不代表來源真偽或歷史可得性已驗證。</p>
           <details className="technical-details"><summary>查看價格視窗與來源版本</summary>
             <div>總覽版本 {data.version} · 來源版本 {latest.provenance.source_version} · registry {latest.provenance.registry_version}</div>
-            <div className="table-wrap"><table><caption>原始價格（各標的報價幣別的元）與成交量（股）；成交額為來源計價單位，空白表示不可用。</caption><thead><tr><th>日期</th><th>開</th><th>高</th><th>低</th><th>收</th><th>成交量</th><th>成交額</th></tr></thead><tbody>{price.bars.map((bar) => <tr key={bar.date}><td>{formatResearchDate(bar.date)}</td><td>{number(bar.open)}</td><td>{number(bar.high)}</td><td>{number(bar.low)}</td><td>{number(bar.close)}</td><td>{number(bar.volume, 0)}</td><td>{bar.turnover == null ? '' : number(bar.turnover, 0)}</td></tr>)}</tbody></table></div>
+            <div className="table-wrap"><table><caption>原始價格（各標的報價幣別的元）與成交量（股）；成交額為來源計價單位，空白表示不可用。</caption><thead><tr><th>日期</th><th>開</th><th>高</th><th>低</th><th>收</th><th>成交量</th><th>成交額</th></tr></thead><tbody>{price.bars.map((bar) => <tr key={bar.date}><td>{formatResearchDate(bar.date)}</td><td>{number(bar.open)}</td><td>{number(bar.high)}</td><td>{number(bar.low)}</td><td>{number(bar.close)}</td><td>{formatTableVolumeShares(bar.volume, bar.source, bar.volume_exact)}</td><td>{bar.turnover == null ? '' : number(bar.turnover, 0)}</td></tr>)}</tbody></table></div>
             {price.bars.map((bar) => <div className="overview-provenance" key={bar.date}>{bar.date} · raw {bar.provenance.raw_payload_id} · 原件 SHA-256 {bar.provenance.body_sha256} · 擷取紀錄 SHA-256 {bar.provenance.receipt_sha256} · 資料時間原值 {bar.data_as_of} · 收集時間原值 {bar.collected_at ?? '未提供'}</div>)}
           </details>
         </> : <div className="data-gap">尚無來源與數值已核對的價格。其餘研究入口可繼續使用。</div>}

@@ -1,4 +1,4 @@
-import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatShareQuantity, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit } from './units'
+import { formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip, formatShareLots, formatShareQuantity, formatSignedShareLots, formatSourceAwareShareLots, formatVolumeLots, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, sharesFromUnit } from './units'
 
 if (sharesFromUnit('lot', 1) !== 1000) throw new Error('one lot must equal 1000 shares')
 if (sharesFromUnit('lot', 2) !== 2000) throw new Error('lot conversion must be exact')
@@ -43,3 +43,27 @@ if (formatTableChip(-1250, 'twse_t86') !== '-1.25' || formatTableChip(250, 'tpex
 if (formatTableChip(0, 'twse_t86') !== '0' || formatTableChip(null, 'twse_t86') !== '') throw new Error('chip zero and missing are distinct')
 if (formatTableChip(1250, 'twse_margin', true) !== '+1,250') throw new Error('margin values already use lots and must not be divided again')
 if (formatTableChip(1250, 'twse_t86+unknown') !== '' || formatTableChip(1250, 'twse_t86', true) !== '') throw new Error('unknown field units must not mix into the lot table')
+
+const exactVolumeCases = [
+  ['0', '0', '0'], ['1', '0.001', '1'], ['999', '0.999', '999'],
+  ['1000', '1', '1,000'], ['1001', '1.001', '1,001'],
+  ['9007199254740991', '9,007,199,254,740.991', '9,007,199,254,740,991'],
+  ['9007199254740993', '9,007,199,254,740.993', '9,007,199,254,740,993'],
+  ['9223372036854775807', '9,223,372,036,854,775.807', '9,223,372,036,854,775,807'],
+]
+for (const [exact, lots, shares] of exactVolumeCases) {
+  for (const source of ['twse', 'tpex']) {
+    if (formatTableVolume(Number(exact), source, exact) !== lots) throw new Error(`exact lots lost digits: ${exact}`)
+    if (formatTableVolumeShares(Number(exact), source, exact) !== shares) throw new Error(`exact shares lost digits: ${exact}`)
+  }
+}
+for (const exact of [null, true, 1, '', '00', '01', '-0', '-1', '+1', ' 1', '1 ', '1\n', '1\r', '1\r\n', '1\t', '1\u2028', '1\u2029', '1.0', '1.5', '1e3', '1,000', '9223372036854775808', '9'.repeat(1000)]) {
+  // Deliberately violate the compile-time shape to test real malformed JSON.
+  if (formatTableVolume(1000, 'twse', exact as string) !== '' || formatTableVolumeShares(1000, 'twse', exact as string) !== '') throw new Error('invalid exact field must not fall back to the safe number')
+}
+for (const value of [true, -1, 1.5, NaN, Infinity, 9007199254740992, Number('9007199254740993'), Number('9223372036854775807')]) {
+  if (formatTableVolume(value as number, 'twse') !== '' || formatTableVolumeShares(value as number, 'twse') !== '') throw new Error('unsafe legacy-only volume must not be shown as exact')
+}
+if (formatTableVolume(9007199254740991, 'twse') !== '9,007,199,254,740.991') throw new Error('safe legacy boundary must retain every digit after conversion')
+if (formatTableVolume(1000, 'unknown', '1000') !== '' || formatTableVolumeShares(1000, 'twse+mixed', '1000') !== '') throw new Error('exact text cannot admit an unknown source unit')
+console.log('units exact volume cases passed')

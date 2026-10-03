@@ -227,10 +227,10 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .data-explanation summary { color: #f5b85b; cursor: pointer; }
 .data-explanation span { display: inline-block; max-width: 720px; margin-left: 8px; }
 .stock-quote-grid { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 12px; margin-top: 18px; }
-.stock-quote-grid > div { border-left: 2px solid #405060; padding: 8px 0 8px 12px; }
+.stock-quote-grid > div { min-width: 0; border-left: 2px solid #405060; padding: 8px 0 8px 12px; }
 .stock-quote-grid span, .stock-quote-grid strong { display: block; }
 .stock-quote-grid span { color: #87909d; font-size: 12px; }
-.stock-quote-grid strong { margin-top: 5px; color: #f0c777; font: 500 20px 'DM Mono', monospace; }
+.stock-quote-grid strong { margin-top: 5px; color: #f0c777; font: 500 20px 'DM Mono', monospace; overflow-wrap: anywhere; }
 .stock-header-meta { margin-top: 12px; }
 .stock-data-gap { margin: 0 0 16px; }
 .stock-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid #2a3540; }

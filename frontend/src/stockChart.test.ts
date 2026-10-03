@@ -85,3 +85,16 @@ expect(Array.isArray(option.series) && option.series.some((series) => series && 
 expect(windowForRange(120, 30).start === 90 && windowForRange(120, 30).end === 119, 'range window has inclusive endpoints')
 expect(dataZoomEventWindow({ startValue: 3, endValue: 7 }, 10)?.start === 3 && dataZoomEventWindow({ startValue: 3, endValue: 7 }, 10)?.end === 7, 'dataZoom startValue/endValue update the metadata window')
 expect(dataZoomEventWindow({ batch: [{ startValue: 2, endValue: 5 }] }, 10)?.end === 5, 'batched dataZoom events are supported')
+
+for (const source of ['twse', 'tpex']) {
+  const exact = prepareStockChartData([bar('2026-10-01', 10, { source, volume: Number('9223372036854775807'), volume_exact: '9223372036854775807' })])
+  expect(exact.points[0].bar?.volumeExact === '9223372036854775807', 'preparation must preserve the original canonical field')
+  expect(formatStockTooltip(exact, { dataIndex: 0 }).includes('成交量（張）：9,223,372,036,854,775.807'), 'tooltip reads original text instead of the approximate series number')
+  const legacy = prepareStockChartData([bar('2026-10-01', 10, { source, volume: Number('9007199254740993') })])
+  expect(formatStockTooltip(legacy, { dataIndex: 0 }).includes('數值、單位待核實'), 'unsafe legacy-only number is not promoted to an exact tooltip')
+  for (const volume_exact of [null, '01', '9223372036854775808']) {
+    const invalid = prepareStockChartData([bar('2026-10-01', 10, { source, volume: 1000, volume_exact })])
+    expect(formatStockTooltip(invalid, { dataIndex: 0 }).includes('數值、單位待核實'), 'invalid explicit text cannot fall back in chart preparation')
+  }
+}
+console.log('stockChart exact volume cases passed')

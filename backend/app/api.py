@@ -67,7 +67,7 @@ from .product_time import (
     build_news_product_time,
     build_signal_product_time,
 )
-from .units import share_quantity_dict, shares_from_position_quantity
+from .units import share_quantity_dict, shares_from_position_quantity, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
 
@@ -162,6 +162,7 @@ def bar_dict(item: MarketBar | None) -> dict[str, Any] | None:
         "close": item.close,
         "adj_close": item.adj_close,
         "volume": item.volume,
+        "volume_exact": volume_exact_text(item.volume),
         "turnover": item.turnover,
         "turnover_status": item.turnover_status,
         "turnover_reason": item.turnover_reason,

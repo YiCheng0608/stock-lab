@@ -30,6 +30,7 @@ from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, 
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
 from .institutional_daily import build_institutional_daily
 from .official_events import build_official_events
+from .units import volume_exact_text
 
 OVERVIEW_VERSION = "stock-overview/p3b-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
@@ -197,7 +198,7 @@ def _qualified_price(row: MarketBar, instrument: Instrument, evidence: dict) -> 
              and _finite(row.turnover) and row.turnover == selected.turnover, "price_turnover_state_mismatch")
     _require(row.data_as_of is not None and row.data_as_of.date() == row.trading_date, "price_data_date_mismatch")
     return {"date": row.trading_date.isoformat(), "open": row.open, "high": row.high, "low": row.low,
-            "close": row.close, "volume": row.volume,
+            "close": row.close, "volume": row.volume, "volume_exact": volume_exact_text(row.volume),
             "turnover": row.turnover if row.turnover_status == "available" else None,
             "turnover_status": row.turnover_status, "turnover_reason": row.turnover_reason,
             "source": row.source, "data_as_of": row.data_as_of.isoformat(),
