@@ -313,4 +313,3 @@ async function serve() {
 
 Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--http-check') ? httpCheck() : check())
   .catch((error) => { esbuild.stop(); console.error(error); process.exitCode = 1 })
-
