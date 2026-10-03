@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要及第 11 節 M2-P1 本次 feed 摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查的來源候選與等待邊界，均不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
+更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要及第 11 節 M2-P1 本次 feed 摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查，第 12 節記錄 M1-P4a TWSE 單日法人有界審查的缺證與恢復條件，兩項審查均不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -306,3 +306,36 @@ python -B -m worker.twse_action_capture live-summarize `
 M2-P2 在完整 feed consumer 驗證後才按來源 `Code`／任一 `Name` 搜尋，符合結果再排序及套 100 股上限，匹配外或上限外的壞列不得跳過；搜尋不改原件事件列數、摘要版本或原件 bytes／pins。本批不新增來源／用途准入或歷史支持，來源正負向與產品驗收分開；精確搜尋／計數／返回契約及本次支持範圍由[個股頁 §13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)負責。
 
 統籌已有限接受 **2026-10-03 單次 exact memory capture、HTTP 200／單一 GET**，body **15,689 bytes、58 列／58 個代碼**，全部身分／日期／分類與列序對 actual API 一致，receipt、雙 hash、固定 pins 與追溯欄位已核對。空 `[]`、同股多事件、超過顯示上限及拒收是另行純記憶體 fixture 的邊界，不是當次 live 原件的情境，也不證全市場或完整歷史。必要記憶體回歸通過，完整 backend 未跑；原件未保存，不能離線重播，原 hash／收據只留 task。具名產品驗收、未支援範圍及清理結果見[個股頁 §12.3](STOCK_RESEARCH_PAGE.md#123-驗收與尚缺項)，不另建來源副本或 receipt 附件。
+
+## 12. M1-P4a：TWSE 單日法人有界審查與准入缺口
+
+統籌已接受 **2026-10-03** 的有界可行性及程式唯讀審查，支援 M1 的 TWSE 單日法人來源評估；**來源未准入，等待精確證據**。本輪只核對官方頁面／metadata、用途權利及既有接線，不取得法人原件，不新增 consumer、API／UI、manifest 或 pins，不增加能力完成度。這是依賴等待，不是使用者暫停，也不表示 ROADMAP 全部餘項受阻。
+
+### 12.1 官方證據與用途邊界
+
+| 官方來源 | 當次核對與限制 |
+| --- | --- |
+| [TWSE T86 公開查詢頁](https://www.twse.com.tw/zh/trading/foreign/t86.html) | 頁面提供日期、分類及 CSV 入口，提示資訊自民國 `101-05-02` 起提供。這只證 UI 提示，未取得當次法人 body，不證完整歷史、實際欄位、單位或 selected 數值。 |
+| [TWSE OpenAPI UI](https://openapi.twse.com.tw/)／[Swagger metadata](https://openapi.twse.com.tw/v1/swagger.json) | 程式以唯一一次 raw Swagger GET 檢查 **143 個 paths**，當次未見 `T86`。搜尋 `fund`／`insti`／`foreign`／`T86` 及三大法人／三法人／投信／自營商，僅找到 `MI_QFIIS_cat`、`MI_QFIIS_sort_20`；兩者為持股股數／比率，不能代替三類法人買賣流量。官方 UI 顯示 version `1.0`／OAS 2.0，不能據此補成 raw 回應的版本證據。 |
+| [TWSE 使用條款](https://www.twse.com.tw/zh/terms/use.html) | 第 6 點要求自動下載依同意的方式，第 8 點另列政府開放資料例外；查詢頁可看或舊 collector 可取，均不能代替 exact 資源／方式的准入證據。 |
+| [政府資料開放授權條款第 1 版](https://data.gov.tw/license) | OGL 1.0 適用已釋出的資料。本輪官方搜尋未取得 TWSE exact 個股三類買賣流量資源與授權的對應；不能由 TPEx 資料集 11856、其他已准入 OpenAPI 或網站可讀外推。 |
+
+上述 raw Swagger 命令 exit 0；HTTP status、raw version／timestamp／hash 未記錄，保持未知，不稱 HTTP 200、完整法人 body 通過或可離線重播，也不為補 hash 再抓。命令、版本、exit 及限制的實際收據留原 task。
+
+Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍為 `unknown`，用途未准入；本輪未建立或變更 manifest decision。欠缺正面證據不改寫成 `explicitly_prohibited`，也不宣稱 TWSE 全面禁止或永久不可用。
+
+### 12.2 缺證與恢復條件
+
+完整實際欄位、資料日、單位、全 body 列數／一致性與具名 selected 原值及數值均**未取、未驗**；不填猜值或以 mock 代替。恢復本批須依序滿足：
+
+1. 取得 exact 官方 TWSE 資源／方式對免費 `local_fetch`、`raw_store`、`summarize` 的正面權利證據，以政府開放資料的 exact 對應或其他官方明示授權，證實免費及三項用途逐一成立；不跨資源移轉授權。
+2. 統籌據此核定一次有界、純記憶體的完整單日 body，核實實際欄位、資料日、單位、完整回應與具名 selected；成功讀取本身不算 gate 通過。
+3. 所需 gate 具體滿足後，統籌才核定另 explicit 最小來源准入、consumer 精確寫入白名單及單日 M1 總覽所需子能力；此前不變更 pins 或放行實作。接線另須原件→consumer→API 數值與追溯、同截止及具名桌面／窄版操作驗收，見 [M1 接線映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+完整 5／20 交易日基準及 PIT 不作本批單日前置；本批審查也不解除多日窗口、全市場／完整歷史 coverage、研究條件或 PIT 的原門檻。
+
+### 12.3 本輪驗收邊界與下一步
+
+程式寫入白名單持續為空；本輪除 metadata／唯讀 review 及文件差異、連結、一致性檢查外，未跑 tests、backend、production build 或 UI 操作，不稱通過，也不由前輪測試追認新來源。既有開發入口的副作用與限制已核對且仍適用，見[開發與驗證入口](development-baseline/README.md)；附件與新增殘留為 0，舊殘留未處理。
+
+下一步等待第 12.2 節的 exact 權利與資源證據，再由統籌核定後續有界驗證及必要實作。當前角色與寫入範圍見[協作紀錄](TASK_COORDINATION.md)，優先順序由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑) 負責。本輪文件交由統籌接受並 freeze，coverage／commit 依核准範圍執行，實際收據留原 task。
