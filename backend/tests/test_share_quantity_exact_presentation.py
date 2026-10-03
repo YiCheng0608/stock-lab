@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -87,7 +88,7 @@ if STANDALONE:
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -110,10 +111,12 @@ QUANTITY_READS = {
 }
 QUOTE_READS = ("NORMAL", "BADPRICE", "MISSINGBAR", "DIRTYDATE", "METABAD",
                "POISON", "ZEROQ", "BADQ", "HUGEQ", "OVERFLOW")
+ACTION_READS = ("A-NORMAL", "B-CLOSE", "C-DATE", "D-METADATA", "E-SOURCE", "F-SUSPEND",
+                "G-ADJUST", "H-MISSING", "I-QUNKNOWN", "J-STOPBAD", "K-HISTORY", "L-FUTURE")
 
 
 class MemoryFixture:
-    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False):
+    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False, action_reads=False):
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         Base.metadata.create_all(self.engine)
         self.app = FastAPI()
@@ -122,13 +125,13 @@ class MemoryFixture:
         self.server = None
         with Session(self.engine) as db:
             for exchange in ("TWSE", "TPEx"):
-                for symbol in (QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
+                for symbol in (ACTION_READS if action_reads else QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
                     instrument = Instrument(market="TW", exchange=exchange, symbol=symbol,
                                             name="synthetic user quantity " + symbol,
                                             instrument_type="stock", status="active")
                     db.add(instrument)
                     db.flush()
-                    db.add(MarketBar(instrument_id=instrument.id, trading_date=READ_DAY if value_reads or quantity_trust or quote_reads else DAY,
+                    db.add(MarketBar(instrument_id=instrument.id, trading_date=READ_DAY if value_reads or quantity_trust or quote_reads or action_reads else DAY,
                                      open=10, high=11, low=9, close=10.5, adj_close=10.5,
                                       volume=1000, turnover=10500, source="fixture-portfolio-quote-read" if quote_reads else "fixture-portfolio-quantity-trust" if quantity_trust else "fixture-portfolio-value-read" if value_reads else "synthetic-user-quantity"))
                     if quote_reads:
@@ -137,19 +140,27 @@ class MemoryFixture:
                     elif quantity_trust and symbol != "ABSENT":
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=1000, shares_integer=1000,
                             average_cost=10, note="synthetic quantity trust; whole row retained", updated_at=datetime(2026, 10, 4)))
-                    elif value_reads:
+                    elif value_reads or action_reads:
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=1000, shares_integer=1000,
                             average_cost=10, note="whole row retained", updated_at=datetime(2026, 10, 4)))
                     elif symbol in CASES:
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=CASES[symbol], average_cost=10))
             db.commit()
 
-        if value_reads or quantity_trust:
+        if value_reads or quantity_trust or action_reads:
             self.seed_value_reads()
         if quantity_trust:
             self.seed_quantity_reads()
         if quote_reads:
             self.seed_quote_reads()
+        if action_reads:
+            self.seed_action_reads()
+        self.read_mutations = 0
+        if action_reads:
+            @event.listens_for(self.engine, "before_cursor_execute")
+            def count_read_mutations(_connection, _cursor, statement, _parameters, _context, _executemany):
+                if statement.lstrip().split(None, 1)[0].upper() in {"INSERT", "UPDATE", "DELETE", "REPLACE"}:
+                    self.read_mutations += 1
 
         def database():
             with Session(self.engine) as db:
@@ -165,7 +176,7 @@ class MemoryFixture:
             portfolio_delete = request.url.path.startswith("/api/portfolio/") and request.method == "DELETE"
             shutdown = request.url.path == "/__review__/shutdown" and request.method == "POST"
             if request.method not in {"GET", "OPTIONS"} and not (shutdown or (
-                    not (value_reads or quantity_trust or quote_reads) and (portfolio_write or portfolio_delete))):
+                    not (value_reads or quantity_trust or quote_reads or action_reads) and (portfolio_write or portfolio_delete))):
                 from starlette.responses import JSONResponse
                 return JSONResponse({"detail": "only owned memory portfolio writes permitted"}, status_code=405)
             return await call_next(request)
@@ -194,6 +205,16 @@ class MemoryFixture:
                 rows = self.raw_quote_rows()
                 return {"whole_sql_sha256": hashlib.sha256(repr(rows).encode("utf-8")).hexdigest(),
                         "position_count": len(rows["portfolio_positions"]), "bar_count": len(rows["market_bars"]),
+                        "includes": ["both whole tables", "all columns", "all typeof()", "note", "updated_at"],
+                        "fixture_date": str(READ_DAY), "storage": "memory_only"}
+
+        if action_reads:
+            @self.app.get("/__review__/action-read-snapshot")
+            def action_read_snapshot():
+                rows = self.raw_quote_rows()
+                return {"whole_sql_sha256": hashlib.sha256(repr(rows).encode("utf-8")).hexdigest(),
+                        "position_count": len(rows["portfolio_positions"]), "bar_count": len(rows["market_bars"]),
+                        "read_mutations": self.read_mutations,
                         "includes": ["both whole tables", "all columns", "all typeof()", "note", "updated_at"],
                         "fixture_date": str(READ_DAY), "storage": "memory_only"}
 
@@ -244,6 +265,33 @@ class MemoryFixture:
             change("portfolio_positions", "shares_integer='bad-quantity'", "BADQ")
             change("portfolio_positions", "shares_integer=?", "HUGEQ", (SAFE + 2,))
             change("market_bars", "close=1e308", "OVERFLOW")
+
+    def seed_action_reads(self):
+        with self.engine.begin() as connection:
+            def change(table, expression, symbol, parameters=()):
+                suffix = " AND trading_date=?" if table == "market_bars" else ""
+                connection.exec_driver_sql(f"UPDATE {table} SET {expression} WHERE instrument_id IN "
+                    "(SELECT id FROM instruments WHERE symbol=?)" + suffix,
+                    (*parameters, symbol, *((str(READ_DAY),) if suffix else ())))
+            change("market_bars", "close=-1", "B-CLOSE")
+            change("market_bars", "trading_date='z-invalid-date'", "C-DATE")
+            change("market_bars", "data_as_of='bad-time', collected_at='2026-02-30', open=?, high=?, volume=?",
+                   "D-METADATA", (b"unused-open", "unused-high", b"unused-volume"))
+            change("market_bars", "source=?", "E-SOURCE", (b"twse",))
+            change("market_bars", "is_suspended='bad-boolean'", "F-SUSPEND")
+            change("market_bars", "adj_close=-1", "G-ADJUST")
+            connection.exec_driver_sql("DELETE FROM market_bars WHERE instrument_id IN "
+                                      "(SELECT id FROM instruments WHERE symbol='H-MISSING')")
+            change("portfolio_positions", "shares_integer='bad-quantity'", "I-QUNKNOWN")
+            change("portfolio_positions", "stop_price=-1", "J-STOPBAD")
+            change("market_bars", "close=1e308, adj_close=1e308", "L-FUTURE")
+            connection.exec_driver_sql("UPDATE market_bars SET close=? WHERE trading_date=? AND instrument_id IN "
+                "(SELECT id FROM instruments WHERE symbol='K-HISTORY')", (b"bad-history-close", str(READ_DAY - timedelta(days=1))))
+            connection.exec_driver_sql("UPDATE instruments SET is_watchlisted=1 WHERE symbol='A-NORMAL'")
+            connection.exec_driver_sql("INSERT INTO market_bars (instrument_id, trading_date, open, high, low, close, "
+                "adj_close, volume, turnover, source, collected_at, is_suspended) SELECT id, ?, 5000, 5000, 5000, "
+                "5000, 5000, 1, 1, 'fixture-portfolio-value-read', 'bad-unused-time', 0 FROM instruments WHERE symbol='L-FUTURE'",
+                (str(READ_DAY + timedelta(days=1)),))
 
     def seed_quantity_reads(self):
         with self.engine.begin() as connection:
@@ -1060,6 +1108,277 @@ class QuantityTrustReadTest(unittest.TestCase):
             self.assertEqual(fixture.raw_quantity_rows(), before)
 
 
+class ActionMarketReadTest(unittest.TestCase):
+    def fixture(self):
+        fixture = MemoryFixture(action_reads=True)
+        self.addCleanup(fixture.close)
+        return fixture
+
+    def safe_json(self, response):
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        json.dumps(payload, allow_nan=False)
+        return payload
+
+    def read_only_gets(self, fixture, routes):
+        before = fixture.raw_quote_rows()
+        fixture.read_mutations = 0
+        with TestClient(fixture.app) as client:
+            results = [self.safe_json(client.get(route)) for route in routes]
+        self.assertEqual(fixture.raw_quote_rows(), before)
+        self.assertEqual(fixture.read_mutations, 0)
+        return results
+
+    def test_actual_lists_state_counts_search_and_cursor_keep_polluted_identity(self):
+        fixture = self.fixture()
+        routes = ["/api/actions?limit=5", "/api/actions?q=A-NORMAL&limit=20",
+                  "/api/actions?state=data_insufficient&limit=20", "/api/actions?held_only=true&limit=30",
+                  "/api/actions?watchlist_only=true&limit=20", "/api/dashboard", "/api/stocks?page_size=30"]
+        first, search, state, held, watched, dashboard, stocks = self.read_only_gets(fixture, routes)
+        self.assertEqual(first["summary"]["total"], 24)
+        self.assertEqual(first["summary"]["held"], 22)
+        self.assertEqual(first["summary"]["held_unknown"], 2)
+        self.assertEqual(first["summary"]["scope"], "page_for_actionable_and_data_insufficient_counts")
+        self.assertEqual(first["summary"]["data_insufficient"], sum(row["action_state"] == "data_insufficient" for row in first["items"]))
+        self.assertEqual(search["summary"]["total"], 2)
+        self.assertEqual(state["summary"], {"total": 12, "actionable": 0, "data_insufficient": 12,
+                         "held": 12, "held_unknown": 0, "scope": "filtered_results"})
+        self.assertEqual(held["summary"]["total"], 22)
+        self.assertEqual(held["summary"]["held_unknown"], 0)
+        self.assertFalse(any(row["instrument"]["symbol"] == "I-QUNKNOWN" for row in held["items"]))
+        self.assertEqual(watched["summary"]["total"], 2)
+        self.assertTrue(dashboard["actions"])
+        self.assertEqual(stocks["meta"]["total"], 24)
+        before = fixture.raw_quote_rows()
+        fixture.read_mutations = 0
+        pages, items, cursor = 0, [], None
+        with TestClient(fixture.app) as client:
+            while True:
+                payload = self.safe_json(client.get("/api/actions", params={"limit": 5, **({"cursor": cursor} if cursor else {})}))
+                items.extend(payload["items"]); pages += 1
+                cursor = payload["meta"]["next_cursor"]
+                if not cursor:
+                    break
+            for exchange in ("TWSE", "TPEx"):
+                for symbol in ACTION_READS:
+                    detail = self.safe_json(client.get(f"/api/actions/{exchange}/{symbol}"))["decision_summary"]
+                    row = next(row for row in items if row["instrument"]["exchange"] == exchange and row["instrument"]["symbol"] == symbol)
+                    for field in ("action_state", "market_read", "current_price", "price_change", "price_as_of", "held"):
+                        self.assertEqual(row[field], detail[field])
+                    if symbol in {"B-CLOSE", "C-DATE", "E-SOURCE", "F-SUSPEND"}:
+                        self.assertEqual(row["market_read"]["status"], "invalid")
+                        self.assertEqual(row["action_state"], "data_insufficient")
+                        self.assertIsNone(row["current_price"])
+                        self.assertIsNone(row["price_change"])
+                        self.assertEqual(row["primary_levels"], {})
+                        self.assertIn("market_bar_read_invalid", row["blocking_reasons"])
+                        self.assertTrue(any(ref.startswith("market_bar:") for ref in detail["evidence_refs"]))
+                    elif symbol == "H-MISSING":
+                        self.assertEqual(row["market_read"]["status"], "missing")
+                    elif symbol == "K-HISTORY":
+                        self.assertEqual(row["market_read"]["status"], "known")
+                        self.assertEqual(detail["coverage"]["effective_bar_sessions"], 59)
+                        self.assertEqual(row["action_state"], "data_insufficient")
+                    elif symbol in {"I-QUNKNOWN", "J-STOPBAD"}:
+                        self.assertEqual(row["action_state"], "manual_review")
+                    else:
+                        self.assertEqual(row["action_state"], "hold_observe")
+                        self.assertEqual(row["current_price"], 1e308 if symbol == "L-FUTURE" else 10.5)
+                    if symbol == "L-FUTURE":
+                        self.assertEqual(row["market_read"], {"status": "known", "invalid_fields": []})
+                        self.assertEqual(row["price_as_of"], str(READ_DAY))
+                        self.assertTrue(math.isfinite(row["price_change"]))
+                        self.assertTrue(math.isfinite(row["price_change_pct"]))
+                    if symbol == "G-ADJUST":
+                        self.assertIsNone(row["price_change"])
+                    if symbol == "D-METADATA":
+                        self.assertEqual(row["price_change"], 0)
+        self.assertEqual((pages, len(items), len({row["instrument"]["id"] for row in items})), (5, 24, 24))
+        self.assertEqual(fixture.raw_quote_rows(), before)
+        self.assertEqual(fixture.read_mutations, 0)
+
+    def test_actual_sql_types_invalid_latest_never_coerce_or_fall_back(self):
+        fixture = self.fixture()
+        with fixture.engine.connect() as connection:
+            instrument_id = connection.exec_driver_sql("SELECT id FROM instruments WHERE exchange='TWSE' AND symbol='A-NORMAL'").scalar()
+        for field, values in (
+            ("close", [-1, 0, float("inf"), float("-inf"), "not-a-price", b"bad-price"]),
+            ("source", ["", " ", "bad\nsource", b"twse"]),
+            ("is_suspended", [-1, 2, "bad-boolean", b"0"]),
+        ):
+            for value in values:
+                with self.subTest(field=field, value=repr(value)):
+                    with fixture.engine.begin() as connection:
+                        connection.exec_driver_sql(f"UPDATE market_bars SET {field}=? WHERE instrument_id=? AND trading_date=?",
+                                                   (value, instrument_id, str(READ_DAY)))
+                        stored, sql_type = connection.exec_driver_sql(f"SELECT {field}, typeof({field}) FROM market_bars "
+                            "WHERE instrument_id=? AND trading_date=?", (instrument_id, str(READ_DAY))).one()
+                        self.assertEqual(type(stored), float if field == "close" and type(value) in {int, float} else type(value))
+                        self.assertIn(sql_type, {"integer", "real", "text", "blob"})
+                    result = self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])[0]["decision_summary"]
+                    self.assertEqual(result["market_read"]["status"], "invalid")
+                    self.assertIn(field, result["market_read"]["invalid_fields"])
+                    self.assertIsNone(result["current_price"])
+                    self.assertEqual(result["action_state"], "data_insufficient")
+                    self.assertEqual(result["primary_levels"], {})
+                    with fixture.engine.begin() as connection:
+                        connection.exec_driver_sql(f"UPDATE market_bars SET {field}=? WHERE instrument_id=? AND trading_date=?",
+                            ({"close": 10.5, "source": "fixture-portfolio-value-read", "is_suspended": 0}[field], instrument_id, str(READ_DAY)))
+        # NUMERIC affinity transformations are observed, not claimed as original input types.
+        for raw, expected in [("10.5", 10.5), (True, 1.0)]:
+            with fixture.engine.begin() as connection:
+                connection.exec_driver_sql("UPDATE market_bars SET close=? WHERE instrument_id=? AND trading_date=?",
+                                          (raw, instrument_id, str(READ_DAY)))
+                stored, kind = connection.exec_driver_sql("SELECT close, typeof(close) FROM market_bars WHERE instrument_id=? AND trading_date=?",
+                                                         (instrument_id, str(READ_DAY))).one()
+            self.assertEqual((stored, kind), (expected, "real"))
+            result = self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])[0]["decision_summary"]
+            self.assertEqual((result["current_price"], result["market_read"]["status"]), (expected, "known"))
+
+    def test_unlocated_dates_outside_cutoff_and_history_cannot_expose_older_close(self):
+        from app.decision import _latest_bar, _bars
+        fixture = self.fixture()
+        for malformed in ("z-invalid-date", "!", "2026-10-00", "2026-02-30", b"bad-date"):
+            with fixture.engine.begin() as connection:
+                instrument_id, bar_id = connection.exec_driver_sql("SELECT i.id, b.id FROM instruments i JOIN market_bars b "
+                    "ON b.instrument_id=i.id WHERE i.exchange='TWSE' AND i.symbol='A-NORMAL' AND b.trading_date=?", (str(READ_DAY),)).one()
+                connection.exec_driver_sql("UPDATE market_bars SET trading_date=? WHERE id=?", (malformed, bar_id))
+            result = self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])[0]["decision_summary"]
+            self.assertEqual(result["market_read"], {"status": "invalid", "invalid_fields": ["trading_date"]})
+            self.assertIsNone(result["current_price"])
+            self.assertIsNone(result["price_as_of"])
+            self.assertEqual(result["primary_levels"], {})
+            self.assertIn(f"market_bar:{bar_id}", result["evidence_refs"])
+            with Session(fixture.engine) as db:
+                for cutoff in (None, READ_DAY, READ_DAY - timedelta(days=10)):
+                    self.assertEqual(_latest_bar(db, instrument_id, cutoff).id, bar_id)
+                    self.assertIsNone(_latest_bar(db, instrument_id, cutoff).trading_date)
+                    self.assertTrue(any(row.core_valid for row in _bars(db, instrument_id, cutoff)))
+            with fixture.engine.begin() as connection:
+                connection.exec_driver_sql("UPDATE market_bars SET trading_date=? WHERE id=?", (str(READ_DAY), bar_id))
+
+    def test_history_cap_cutoff_fallback_batch_and_scope_replacement(self):
+        from app.decision import _latest_bar, _bars, _prepare_decision_context, _instrument_coverage
+        fixture = self.fixture()
+        with fixture.engine.begin() as connection:
+            instrument_id = connection.exec_driver_sql("SELECT id FROM instruments WHERE exchange='TWSE' AND symbol='A-NORMAL'").scalar()
+            second_id = connection.exec_driver_sql("SELECT id FROM instruments WHERE exchange='TWSE' AND symbol='C-DATE'").scalar()
+            connection.exec_driver_sql("DELETE FROM market_bars WHERE instrument_id=?", (instrument_id,))
+            for index in range(122):
+                connection.exec_driver_sql("INSERT INTO market_bars (instrument_id,trading_date,open,high,low,close,adj_close,volume,turnover,source,collected_at,is_suspended) "
+                    "VALUES (?,?,10,11,9,?,10.5,1000,10500,'fixture-portfolio-value-read','unused-invalid',0)",
+                    (instrument_id, str(READ_DAY - timedelta(days=index)), b"bad-history" if index == 1 else 10.5))
+            connection.exec_driver_sql("INSERT INTO market_bars (instrument_id,trading_date,open,high,low,close,adj_close,volume,turnover,source,collected_at,is_suspended) "
+                "VALUES (?,?,100,100,100,100,100,1,1,'fixture-portfolio-value-read','unused-invalid',0)", (instrument_id, str(READ_DAY + timedelta(days=1))))
+        before = fixture.raw_quote_rows()
+        fixture.read_mutations = 0
+        with Session(fixture.engine) as db:
+            fallback = _bars(db, instrument_id, READ_DAY)
+            self.assertEqual(len(fallback), 120)
+            self.assertEqual(fallback[0].trading_date, READ_DAY - timedelta(days=119))
+            self.assertEqual(sum(row.core_valid for row in fallback), 119)
+            self.assertEqual(_latest_bar(db, instrument_id, READ_DAY).close, 10.5)
+            self.assertEqual(_latest_bar(db, instrument_id, None).close, 100)
+            self.assertEqual(_latest_bar(db, instrument_id, READ_DAY - timedelta(days=2)).trading_date, READ_DAY - timedelta(days=2))
+            old = _prepare_decision_context(db, READ_DAY, [instrument_id])
+            self.assertEqual(_bars(db, instrument_id, READ_DAY), fallback)
+            new = _prepare_decision_context(db, READ_DAY, [instrument_id, second_id])
+            self.assertIsNot(old, new)
+            self.assertEqual(new["instrument_ids"], {instrument_id, second_id})
+            self.assertIs(_prepare_decision_context(db, READ_DAY, [instrument_id]), new)
+            self.assertEqual(_bars(db, instrument_id, READ_DAY), fallback)
+            self.assertFalse(_latest_bar(db, second_id, READ_DAY).core_valid)
+            coverage = _instrument_coverage(db, db.get(Instrument, instrument_id), READ_DAY, fallback)
+            self.assertEqual(coverage["effective_bar_sessions"], 59)
+            self.assertEqual(coverage["missing_bars_to_60"], 1)
+            # Unknown-date rows outside the 120-row window still prevent latest fallback.
+            with fixture.engine.begin() as connection:
+                connection.exec_driver_sql("UPDATE market_bars SET trading_date='!' WHERE instrument_id=? AND trading_date=?",
+                                          (instrument_id, str(READ_DAY - timedelta(days=121))))
+            db.info.clear()
+            self.assertIsNone(_latest_bar(db, instrument_id, READ_DAY).trading_date)
+        # The last operation above is an intentional fixture mutation, before a new read receipt.
+        self.assertNotEqual(fixture.raw_quote_rows(), before)
+        self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])
+
+    def test_taiex_projection_retains_provenance_and_unknown_baseline(self):
+        from app.coverage import verified_taiex_sessions
+        fixture = self.fixture()
+        with fixture.engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE market_bars SET collected_at='unused-invalid',data_as_of='unused-invalid', "
+                "close=?,volume=? WHERE instrument_id IN (SELECT id FROM instruments WHERE symbol='TAIEX')", (b"unused-price", b"unused-volume"))
+        before = fixture.raw_quote_rows()
+        fixture.read_mutations = 0
+        with Session(fixture.engine) as db:
+            self.assertEqual(len(verified_taiex_sessions(db, end_date=READ_DAY)), 60)
+        self.assertEqual(fixture.raw_quote_rows(), before)
+        self.assertEqual(fixture.read_mutations, 0)
+        with fixture.engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE market_bars SET trading_date='z-invalid-date' WHERE trading_date=? "
+                "AND instrument_id IN (SELECT id FROM instruments WHERE symbol='TAIEX')", (str(READ_DAY),))
+        with Session(fixture.engine) as db:
+            self.assertEqual(len(verified_taiex_sessions(db, end_date=READ_DAY)), 59)
+            self.assertEqual(len(verified_taiex_sessions(db, require_provenance=False)), 59)
+        with fixture.engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE market_bars SET source='twse' WHERE instrument_id IN (SELECT id FROM instruments WHERE symbol='TAIEX')")
+        result = self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])[0]["decision_summary"]
+        self.assertEqual(result["coverage"]["coverage_status"], "unknown")
+        self.assertIsNone(result["coverage"]["effective_bar_sessions"])
+        self.assertIsNone(result["coverage"]["missing_bars_to_60"])
+        self.assertEqual(result["action_state"], "data_insufficient")
+        self.assertEqual(result["primary_levels"], {})
+
+    def test_adjacent_ratio_and_percent_overflow_remain_unverified_json(self):
+        fixture = self.fixture()
+        for current, previous, current_adjusted, previous_adjusted in (
+            (1e308, 1e-308, 1e308, 1e-308),  # Finite basis, overflowing percentage.
+            (1e-308, 1e-308, 1e308, 1e308),  # Both basis ratios overflow to infinity.
+            (1e308, 1e308, 1e-308, 1e-308),  # Both positive ratios underflow to zero.
+            (11, 10, 11, 10),
+        ):
+            with fixture.engine.begin() as connection:
+                for day, close, adjusted in ((READ_DAY, current, current_adjusted),
+                                             (READ_DAY - timedelta(days=1), previous, previous_adjusted)):
+                    connection.exec_driver_sql("UPDATE market_bars SET close=?,adj_close=? WHERE trading_date=? "
+                        "AND instrument_id IN (SELECT id FROM instruments WHERE symbol='A-NORMAL')", (close, adjusted, str(day)))
+            results = self.read_only_gets(fixture, ["/api/actions?q=A-NORMAL&limit=20", "/api/actions/TWSE/A-NORMAL"])
+            rows = [*results[0]["items"], results[1]["decision_summary"]]
+            for row in rows:
+                self.assertEqual(row["current_price"], current)
+                self.assertEqual(row["market_read"]["status"], "known")
+                if current == 11:
+                    self.assertEqual((row["previous_close"], row["price_change"], row["price_change_pct"]), (10, 1, 0.1))
+                else:
+                    self.assertEqual((row["previous_close"], row["price_change"], row["price_change_pct"]), (None, None, None))
+
+    def test_existing_run_cutoff_strategy_quantity_stop_and_no_asof_gates(self):
+        fixture = self.fixture()
+        for change, restore in (
+            ("UPDATE ingestion_runs SET status='failed'", "UPDATE ingestion_runs SET status='success'"),
+            ("UPDATE signals SET data_cutoff='2026-10-05'", "UPDATE signals SET data_cutoff='2026-10-04'"),
+            ("UPDATE signals SET data_quality='partial'", "UPDATE signals SET data_quality='complete'"),
+            ("UPDATE ingestion_runs SET data_as_of='invalid'", "UPDATE ingestion_runs SET data_as_of='2026-10-04'"),
+        ):
+            with fixture.engine.begin() as connection:
+                connection.exec_driver_sql(change)
+            results = self.read_only_gets(fixture, [f"/api/actions/TWSE/{symbol}" for symbol in ("A-NORMAL", "B-CLOSE", "I-QUNKNOWN", "J-STOPBAD")])
+            for result in results:
+                summary = result["decision_summary"]
+                self.assertEqual(summary["action_state"], "data_insufficient")
+                self.assertEqual(summary["primary_levels"], {})
+                self.assertTrue(summary["blocking_reasons"])
+            self.assertIsNone(results[2]["decision_summary"]["held"])
+            self.assertEqual(results[3]["decision_summary"]["stop_price_semantics"]["reason"], "invalid_position_stop")
+            with fixture.engine.begin() as connection:
+                connection.exec_driver_sql(restore)
+        with fixture.engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE portfolio_positions SET stop_price=11 WHERE instrument_id IN "
+                                      "(SELECT id FROM instruments WHERE symbol='A-NORMAL')")
+        result = self.read_only_gets(fixture, ["/api/actions/TWSE/A-NORMAL"])[0]["decision_summary"]
+        self.assertEqual(result["action_state"], "reduce_exit")
+        self.assertEqual(result["stop_price_semantics"]["kind"], "user_position_risk_input")
+
+
 def main():
     global _listen_port
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1072,25 +1391,32 @@ def main():
     parser.add_argument("--quantity-trust-fixture", action="store_true", help="serve sixteen owned read-only synthetic quantity positions")
     parser.add_argument("--quote-read-only", action="store_true", help="local quote projection and calculation boundaries; zero disk")
     parser.add_argument("--quote-read-fixture", action="store_true", help="serve twenty owned read-only local quote positions")
+    parser.add_argument("--action-read-only", action="store_true", help="action market read isolation and necessary guarded regressions; zero disk")
+    parser.add_argument("--action-read-fixture", action="store_true", help="serve twenty-four read-only synthetic action positions with explicit fixture sessions")
     args = parser.parse_args()
     if args.serve:
         if args.port != 8777:
             parser.error("only owned loopback port 8777 is authorized")
         _listen_port = args.port
-        fixture = MemoryFixture(value_reads=args.finance_read_fixture, quantity_trust=args.quantity_trust_fixture, quote_reads=args.quote_read_fixture)
+        fixture = MemoryFixture(value_reads=args.finance_read_fixture, quantity_trust=args.quantity_trust_fixture, quote_reads=args.quote_read_fixture,
+                                action_reads=args.action_read_fixture)
         try:
             import uvicorn
             fixture.server = uvicorn.Server(uvicorn.Config(fixture.app, host="127.0.0.1", port=args.port,
                                                           lifespan="off", access_log=False))
-            print(json.dumps({"mode": "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
-                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture else DAY),
+            print(json.dumps({"mode": "synthetic-action-read-memory-actual-router" if args.action_read_fixture else "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
+                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture or args.action_read_fixture else DAY),
                               "pid": os.getpid(), "url": f"http://127.0.0.1:{args.port}", "disk_artifacts": 0,
                               "disk_save_reopen": "not_tested"}), flush=True)
             fixture.server.run()
         finally:
             fixture.close()
     else:
-        if args.quote_read_only:
+        if args.action_read_only:
+            suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(ActionMarketReadTest),
+                PortfolioValueReadTest("test_existing_source_time_and_strategy_gates_precede_invalid_stop"),
+                ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
+        elif args.quote_read_only:
             suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(PortfolioQuoteReadTest),
                 QuantityTrustReadTest("test_valuation_status_missing_invalid_and_finite_guard"),
                 ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
@@ -1115,9 +1441,14 @@ def main():
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShareQuantityExactTest)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         success = result.wasSuccessful() and not UNEXPECTED_DENIALS
-        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only else DAY),
+        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only or args.action_read_only else DAY),
                           "actual_router_requests": HTTP_REQUESTS, "disk_artifacts": 0,
                           "expected_denials": EXPECTED_DENIALS, "unexpected_denials": UNEXPECTED_DENIALS,
+                          **({"action_ui_records": 24, "read_mutations": 0,
+                              "whole_sql_scope": "portfolio_positions + market_bars: all columns and all typeof()",
+                              "decision_calendar": "sixty explicit synthetic fixture dates, not real official sessions",
+                              "python": sys.version.split()[0], "sqlalchemy": sys.modules["sqlalchemy"].__version__,
+                              "pydantic": sys.modules["pydantic"].__version__} if args.action_read_only else {}),
                           **({"sqlite_read_conversions": "REAL affinity: bool/numeric text become float; NaN becomes NULL",
                               "decision_calendar": "sixty explicit synthetic fixture dates, not real official sessions",
                               "python": sys.version.split()[0], "sqlalchemy": sys.modules["sqlalchemy"].__version__,

@@ -21,10 +21,11 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.orm import Session
 
 from .models import IngestionRun, Instrument, MarketBar, RawPayload
+from .decision_market_reads import read_market_date, read_market_source
 from worker.sources import parse_twse_taiex_from_all_daily_payload
 
 
@@ -119,7 +120,10 @@ def verified_taiex_sessions(
         return []
     run_ids = _official_run_ids(db) if require_provenance else set()
     query = (
-        select(MarketBar, Instrument, RawPayload)
+        # Untyped necessary columns avoid unrelated MarketBar DateTime/price
+        # processors. RawPayload and its official file gate remain unchanged.
+        select(literal_column("market_bars.trading_date"), literal_column("market_bars.source"), RawPayload)
+        .select_from(MarketBar)
         .join(Instrument, Instrument.id == MarketBar.instrument_id)
         .outerjoin(RawPayload, RawPayload.id == MarketBar.raw_payload_id)
         .where(
@@ -135,18 +139,22 @@ def verified_taiex_sessions(
         query = query.where(MarketBar.trading_date <= end_date)
     rows = db.execute(query).all()
     sessions: set[date] = set()
-    for row, _instrument, raw in rows:
-        if not require_provenance:
-            sessions.add(row.trading_date)
+    for stored_date, stored_source, raw in rows:
+        trading_date = read_market_date(stored_date)
+        if trading_date is None:
             continue
-        if _fixture_bar_is_explicit_test_data(row):
-            sessions.add(row.trading_date)
+        if not require_provenance:
+            sessions.add(trading_date)
+            continue
+        source = read_market_source(stored_source)
+        if source is not None and "fixture" in source.casefold():
+            sessions.add(trading_date)
         elif raw is not None and _raw_is_date_verified(
             raw,
             run_ids=run_ids,
-            trading_date=row.trading_date,
+            trading_date=trading_date,
         ):
-            sessions.add(row.trading_date)
+            sessions.add(trading_date)
 
     # A prior official collect may have captured MI_INDEX but omitted the
     # TAIEX normalization (as happened for the existing one-day DB).  The raw

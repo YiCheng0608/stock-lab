@@ -17,6 +17,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from .coverage import verified_taiex_sessions
+from .decision_market_reads import DecisionMarketRead, load_decision_market_reads, market_read_status
 from .config import MAX_GROUP_CANDIDATES
 from .domain import ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, build_stop_price_semantics, utc_now_iso
@@ -32,7 +33,6 @@ from .models import (
     GroupMembership,
     IngestionRun,
     Instrument,
-    MarketBar,
     PortfolioPosition,
     Signal,
     StrategyVersion,
@@ -62,7 +62,7 @@ def _finite(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _same_adjustment_basis(left: MarketBar, right: MarketBar) -> bool:
+def _same_adjustment_basis(left: DecisionMarketRead, right: DecisionMarketRead) -> bool:
     """Check that two closes can be compared without inventing an adjustment.
 
     MarketBar keeps both raw ``close`` and the persisted ``adj_close``.  The
@@ -79,15 +79,19 @@ def _same_adjustment_basis(left: MarketBar, right: MarketBar) -> bool:
         return False
     if min(left_close, right_close, left_adjusted, right_adjusted) <= 0:
         return False
+    left_ratio = _finite(left_adjusted / left_close)
+    right_ratio = _finite(right_adjusted / right_close)
+    if left_ratio is None or right_ratio is None or min(left_ratio, right_ratio) <= 0:
+        return False
     return math.isclose(
-        left_adjusted / left_close,
-        right_adjusted / right_close,
+        left_ratio,
+        right_ratio,
         rel_tol=1e-9,
         abs_tol=1e-9,
     )
 
 
-def _trusted_bar_for_display(row: MarketBar) -> bool:
+def _trusted_bar_for_display(row: DecisionMarketRead) -> bool:
     source = str(row.source or "").casefold()
     return bool(source) and not any(token in source for token in ("legacy", "demo", "fake"))
 
@@ -95,8 +99,8 @@ def _trusted_bar_for_display(row: MarketBar) -> bool:
 def _verified_adjacent_change(
     db: Session,
     instrument: Instrument,
-    bar: MarketBar | None,
-    bars: list[MarketBar],
+    bar: DecisionMarketRead | None,
+    bars: list[DecisionMarketRead],
     as_of: date | None,
 ) -> tuple[float | None, float | None, float | None]:
     """Return a change only for the previous verified TAIEX session.
@@ -106,7 +110,7 @@ def _verified_adjacent_change(
     explicit ``unverified`` UI state.
     """
 
-    if bar is None or not as_of or not _trusted_bar_for_display(bar) or bar.is_suspended:
+    if bar is None or not bar.core_valid or not as_of or not _trusted_bar_for_display(bar) or bar.is_suspended:
         return None, None, None
     current_close = _finite(bar.close)
     if current_close is None or current_close <= 0:
@@ -129,13 +133,16 @@ def _verified_adjacent_change(
         return None, None, None
     previous_date = sessions[index - 1]
     previous = next((row for row in bars if row.trading_date == previous_date), None)
-    if previous is None or previous.is_suspended or not _trusted_bar_for_display(previous):
+    if previous is None or not previous.core_valid or previous.is_suspended or not _trusted_bar_for_display(previous):
         return None, None, None
     previous_close = _finite(previous.close)
     if previous_close is None or previous_close <= 0 or not _same_adjustment_basis(previous, bar):
         return None, None, None
     change = current_close - previous_close
-    return previous_close, change, change / previous_close
+    percent = _finite(change / previous_close)
+    if _finite(change) is None or percent is None:
+        return None, None, None
+    return previous_close, change, percent
 
 
 def _date_from_as_of(value: str | date | datetime | None) -> date | None:
@@ -186,16 +193,7 @@ def _prepare_decision_context(
     # A larger later request replaces the context for this as-of date.  This
     # keeps direct single-instrument calls and paged API calls compatible.
     instrument_rows = db.scalars(select(Instrument).where(Instrument.id.in_(ids))).all() if ids else []
-    bars_by_instrument: dict[int, list[MarketBar]] = defaultdict(list)
-    if ids:
-        bar_query = select(MarketBar).where(MarketBar.instrument_id.in_(ids))
-        if as_of:
-            bar_query = bar_query.where(MarketBar.trading_date <= as_of)
-        for row in db.scalars(
-            bar_query.order_by(MarketBar.instrument_id, desc(MarketBar.trading_date), desc(MarketBar.id))
-        ).all():
-            if len(bars_by_instrument[row.instrument_id]) < 120:
-                bars_by_instrument[row.instrument_id].append(row)
+    bars_by_instrument, unlocated_bars_by_instrument = load_decision_market_reads(db, ids, as_of)
 
     chips_by_instrument: dict[int, list[ChipSnapshot]] = defaultdict(list)
     if ids:
@@ -282,6 +280,7 @@ def _prepare_decision_context(
     context = {
         "instrument_ids": ids,
         "bars_by_instrument": bars_by_instrument,
+        "unlocated_bars_by_instrument": unlocated_bars_by_instrument,
         "chips_by_instrument": chips_by_instrument,
         "signals_by_instrument": signals_by_instrument,
         "strategy_versions_by_instrument": strategy_versions_by_instrument,
@@ -295,38 +294,29 @@ def _prepare_decision_context(
     return context
 
 
-def _latest_bar(db: Session, instrument_id: int, as_of: date | None) -> MarketBar | None:
+def _latest_bar(db: Session, instrument_id: int, as_of: date | None) -> DecisionMarketRead | None:
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
     if context and instrument_id in context["instrument_ids"]:
         rows = context["bars_by_instrument"].get(instrument_id, [])
-        return rows[0] if rows else None
-    query = select(MarketBar).where(MarketBar.instrument_id == instrument_id)
-    if as_of:
-        query = query.where(MarketBar.trading_date <= as_of)
-    return db.scalar(query.order_by(desc(MarketBar.trading_date), desc(MarketBar.id)).limit(1))
+        return context["unlocated_bars_by_instrument"].get(instrument_id) or (rows[0] if rows else None)
+    rows_by_id, unlocated = load_decision_market_reads(db, [instrument_id], as_of, limit=1)
+    rows = rows_by_id[instrument_id]
+    return unlocated.get(instrument_id) or (rows[0] if rows else None)
 
 
-def _bars(db: Session, instrument_id: int, as_of: date | None, limit: int = 120) -> list[MarketBar]:
+def _bars(db: Session, instrument_id: int, as_of: date | None, limit: int = 120) -> list[DecisionMarketRead]:
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
     if context and instrument_id in context["instrument_ids"]:
         return list(reversed(context["bars_by_instrument"].get(instrument_id, [])[:limit]))
-    query = select(MarketBar).where(MarketBar.instrument_id == instrument_id)
-    if as_of:
-        query = query.where(MarketBar.trading_date <= as_of)
-    return list(
-        reversed(
-            db.scalars(
-                query.order_by(desc(MarketBar.trading_date), desc(MarketBar.id)).limit(limit)
-            ).all()
-        )
-    )
+    rows_by_id, _unlocated = load_decision_market_reads(db, [instrument_id], as_of, limit=limit)
+    return list(reversed(rows_by_id[instrument_id]))
 
 
 def _instrument_coverage(
     db: Session,
     instrument: Instrument,
     as_of: date | None,
-    bars: list[MarketBar],
+    bars: list[DecisionMarketRead],
 ) -> dict[str, Any]:
     """Return as-of effective bar/chip gaps for product decisions.
 
@@ -378,7 +368,7 @@ def _instrument_coverage(
     bar_dates = {
         row.trading_date
         for row in bars
-        if instrument.listing_date is None or row.trading_date >= instrument.listing_date
+        if row.core_valid and (instrument.listing_date is None or row.trading_date >= instrument.listing_date)
     }
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
@@ -835,6 +825,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     invalid_held_stop = held and position_stop_status == "invalid"
     watchlisted = bool(instrument.is_watchlisted)
     bar = _latest_bar(db, instrument.id, as_of)
+    quote_read = market_read_status(bar)
     bars = _bars(db, instrument.id, as_of)
     coverage = _instrument_coverage(db, instrument, as_of, bars)
     signals = _latest_strategy_signals(db, instrument.id, as_of)
@@ -875,6 +866,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         missing.append("data_as_of")
     if bar is None:
         missing.append("market_bar")
+    elif quote_read["status"] == "invalid":
+        missing.append("market_bar_read_invalid")
     if coverage["coverage_status"] == "unknown":
         missing.append("taiex_session_baseline")
         # Keep the product-level blocker explicit even though the numeric
@@ -915,8 +908,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     # complete; absence of a Signal row is not itself a recommendation.
     data_quality = "complete" if not missing and run is not None and run.status == "success" and bar else ("missing" if not bar and not official_as_of else "partial")
 
-    current_price = _finite(bar.close) if bar else None
-    price_as_of = bar.trading_date.isoformat() if bar else None
+    current_price = bar.close if bar and bar.core_valid else None
+    price_as_of = bar.trading_date.isoformat() if bar and bar.core_valid else None
     previous_close, price_change, price_change_pct = _verified_adjacent_change(
         db,
         instrument,
@@ -1233,8 +1226,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         ),
         "primary_levels": primary_levels,
         "data_status": {
-            "source": "official_snapshot" if bar and not str(bar.source or "").lower().startswith("fixture") else "snapshot_pending",
-            "market": "complete" if bar else "missing",
+            "source": "official_snapshot" if bar and bar.core_valid and not str(bar.source or "").lower().startswith("fixture") else "snapshot_pending",
+            "market": "complete" if quote_read["status"] == "known" else "partial" if bar else "missing",
             "strategy": "complete" if data_quality == "complete" else "partial",
         },
         "context_badges": context_badges[:3],
@@ -1245,6 +1238,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         "position_quantity_status": quantity_status,
         "watchlisted": watchlisted,
         "current_price": current_price if bar else None,
+        "market_read": quote_read,
         "price_as_of": price_as_of,
         "previous_close": previous_close,
         "price_change": price_change,

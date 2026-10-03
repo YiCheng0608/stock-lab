@@ -12,7 +12,8 @@ const assert = require('node:assert/strict')
 const args = process.argv.slice(2)
 let ssrLayoutWarnings = 0
 if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')
-  || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')) {
+  || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')
+  || args.includes('--action-read-check') || args.includes('--action-read-http-check')) {
   const originalError = console.error
   console.error = (message, ...rest) => {
     if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
@@ -201,6 +202,186 @@ function syntheticDashboard(actions) {
   return { as_of: '2026-10-04', mode: 'official_partial', market: { source: 'fixture', instruments: 2, bars: 2, groups: 0 },
     data_quality: { latest_run: 'success' }, news: [], themes: [], groups: [], signals: [], actions, candidates: actions,
     empty_states: {}, action_counts: { total: actions.length, held: 0, held_unknown: actions.length, scope: 'compact_first_page' } }
+}
+
+function actionReadCardAssertions(render, action) {
+  const before = structuredClone(action)
+  const html = render('CompactActionCard', { action })
+  assert.ok(html.includes('/actions/' + action.instrument.exchange + '/' + action.instrument.symbol))
+  if (action.market_read.status === 'invalid') {
+    assert.ok(html.includes('行情讀值無效，先核對原記錄。'))
+    assert.ok(html.includes('策略判斷資料待補'))
+    assert.ok(html.includes('待核實'))
+    assert.ok(html.includes('漲跌待核實'))
+    assert.equal(action.current_price, null)
+    assert.deepEqual(action.primary_levels, {})
+  } else if (action.market_read.status === 'missing') {
+    assert.ok(html.includes('尚無行情記錄。'))
+  } else {
+    assert.ok(!html.includes('行情讀值無效'))
+    assert.ok(!html.includes('尚無行情記錄。'))
+  }
+  assert.deepEqual(action, before)
+  return html
+}
+
+async function actionReadCheck() {
+  typecheck()
+  const render = await quantityTrustRenderer()
+  let cases = 0
+  for (const exchange of ['TWSE', 'TPEx']) {
+    for (const status of ['known', 'missing', 'invalid']) {
+      const action = { ...syntheticAction('READ-' + status, true, 'known', status === 'known' ? 'hold_observe' : 'data_insufficient'),
+        instrument: { ...syntheticAction('READ-' + status).instrument, exchange },
+        current_price: status === 'known' ? 10.5 : null,
+        market_read: { status, invalid_fields: status === 'invalid' ? ['close'] : [] } }
+      actionReadCardAssertions(render, action); cases++
+      const detail = render('ActionDetailPanel', { action })
+      if (status !== 'known') assert.ok(!detail.includes('class="level-grid'))
+    }
+  }
+  let conflictingCases = 0
+  for (const marketRead of [null, {}, { status: 'known' }, { status: 'partial', invalid_fields: [] },
+    { status: 'known', invalid_fields: ['close'] }, { status: 'invalid', invalid_fields: [] },
+    { status: 'missing', invalid_fields: [] }, { status: 'known', invalid_fields: 'empty' }]) {
+    const action = { ...syntheticAction('CONFLICT', true, 'known', 'hold_observe'),
+      market_read: marketRead, current_price: 10.5, price_change: 1, price_change_pct: 0.1 }
+    const html = render('CompactActionCard', { action })
+    assert.ok(html.includes('<strong>待核實</strong>'))
+    assert.ok(html.includes('漲跌待核實'))
+    assert.ok(!html.includes('10.50'))
+    conflictingCases++
+  }
+  for (const currentPrice of ['10.5', 0, -1, Infinity, null]) {
+    const html = render('CompactActionCard', { action: { ...syntheticAction('BADPRICE', true, 'known'),
+      current_price: currentPrice, market_read: { status: 'known', invalid_fields: [] }, price_change: 1, price_change_pct: 0.1 } })
+    assert.ok(html.includes('<strong>待核實</strong>'))
+    assert.ok(html.includes('漲跌待核實'))
+    conflictingCases++
+  }
+  const legacy = render('CompactActionCard', { action: { ...syntheticAction('LEGACY', true, 'known'), price_change: 1, price_change_pct: 0.1 } })
+  assert.match(legacy, /<strong>10\.5(?:0)?<\/strong>/)
+  assert.ok(!legacy.includes('行情讀值無效'))
+  let largeFiniteCases = 0
+  const largePrice = (1e308).toLocaleString('zh-TW', { maximumFractionDigits: 2 })
+  assert.ok(largePrice.length > 400)
+  for (const sign of [1, -1]) {
+    const action = { ...syntheticAction('LARGE-FINITE', true, 'known', 'hold_observe'),
+      current_price: 1e308, market_read: { status: 'known', invalid_fields: [] },
+      price_change: sign * 1e308, price_change_pct: sign * 1e306 }
+    const html = actionReadCardAssertions(render, action)
+    assert.ok(html.includes('<strong>' + largePrice + '</strong>'))
+    assert.ok(html.includes((sign > 0 ? '+' : '-') + largePrice))
+    assert.ok(html.includes('（' + (sign > 0 ? '+' : '-') + '1e+308）'))
+    assert.ok(!html.includes('漲跌待核實'))
+    assert.ok(!html.includes('Infinity'))
+    assert.ok(html.includes('style="min-width:0;flex-wrap:wrap"'))
+    assert.ok(html.includes('style="min-width:0;flex:1 1 140px;overflow-wrap:anywhere"'))
+    assert.ok(html.includes('style="min-width:0;max-width:100%;overflow-wrap:anywhere"'))
+    largeFiniteCases++
+  }
+  const overflowPercent = render('CompactActionCard', { action: {
+    ...syntheticAction('LARGE-PERCENT', true, 'known', 'hold_observe'), current_price: 1e308,
+    market_read: { status: 'known', invalid_fields: [] }, price_change: 1e308, price_change_pct: 1e308 } })
+  assert.ok(overflowPercent.includes('<strong>' + largePrice + '</strong>'))
+  assert.ok(overflowPercent.includes('漲跌待核實'))
+  assert.ok(!overflowPercent.includes('Infinity'))
+  const bundle = await browserBuild()
+  assert.ok(bundle.outputFiles.some((file) => file.path.endsWith('.js')))
+  console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version,
+    action_read_card_ssr: cases, action_detail_panel_ssr: cases,
+    contradictory_or_partial_metadata_ssr: conflictingCases, legacy_without_metadata_ssr: 1,
+    large_finite_price_change_percent_ssr: largeFiniteCases, percentage_display_overflow_ssr: 1,
+    known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+    memory_bundle_js_bytes: bundle.outputFiles.find((file) => file.path.endsWith('.js')).contents.length,
+    memory_bundle_css_bytes: bundle.outputFiles.find((file) => file.path.endsWith('.css')).contents.length,
+    source: 'component boundary fixtures; actual HTTP checked separately', disk_artifacts: 0 }))
+  esbuild.stop()
+}
+
+async function actionReadHttpCheck() {
+  const api = await apiModule()
+  const render = await quantityTrustRenderer()
+  const guardedFetch = global.fetch
+  let routes = 0, mutations = 0, cards = 0
+  global.fetch = (url, options = {}) => {
+    routes++
+    if (options.method && options.method !== 'GET') mutations++
+    return guardedFetch(url, options)
+  }
+  const snapshot = async () => {
+    const response = await fetch(apiOrigin.origin + '/__review__/action-read-snapshot')
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  try {
+    const before = await snapshot()
+    assert.equal(before.position_count, 24)
+    assert.equal(before.read_mutations, 0)
+    const items = []
+    let cursor
+    do {
+      const page = await api.getActions({ limit: 5, cursor })
+      assert.equal(page.summary.total, 24)
+      assert.equal(page.summary.held, 22)
+      assert.equal(page.summary.held_unknown, 2)
+      assert.equal(page.summary.scope, 'page_for_actionable_and_data_insufficient_counts')
+      assert.equal(page.summary.data_insufficient, page.items.filter((row) => row.action_state === 'data_insufficient').length)
+      items.push(...page.items); cursor = page.meta.next_cursor || undefined
+    } while (cursor)
+    assert.equal(items.length, 24)
+    assert.equal(new Set(items.map((row) => row.instrument.id)).size, 24)
+    for (const action of items) {
+      const { decision_summary: detail } = await api.getAction(action.instrument.exchange, action.instrument.symbol)
+      for (const key of ['action_state', 'market_read', 'current_price', 'price_as_of', 'price_change', 'held']) {
+        assert.deepEqual(detail[key], action[key])
+      }
+      actionReadCardAssertions(render, action); cards++
+      if (action.market_read.status === 'invalid') {
+        assert.ok(detail.evidence_refs.some((ref) => ref.startsWith('market_bar:')))
+        assert.equal(action.action_state, 'data_insufficient')
+        assert.equal(action.price_as_of, null)
+        assert.equal(action.price_change, null)
+      }
+      if (['A-NORMAL', 'D-METADATA', 'G-ADJUST', 'L-FUTURE'].includes(action.instrument.symbol)) {
+        assert.equal(action.current_price, action.instrument.symbol === 'L-FUTURE' ? 1e308 : 10.5)
+        assert.equal(action.action_state, 'hold_observe')
+      }
+      if (action.instrument.symbol === 'L-FUTURE') {
+        assert.deepEqual(action.market_read, { status: 'known', invalid_fields: [] })
+        assert.equal(action.price_as_of, '2026-10-04')
+        assert.ok(Number.isFinite(action.price_change) && Number.isFinite(action.price_change_pct))
+      }
+    }
+    for (const [params, total, unknown] of [
+      [{ q: 'A-NORMAL', limit: 20 }, 2, 0], [{ state: 'data_insufficient', limit: 20 }, 12, 0],
+      [{ state: 'manual_review', limit: 20 }, 4, 2], [{ held_only: true, limit: 30 }, 22, 0],
+      [{ watchlist_only: true, limit: 20 }, 2, 0],
+    ]) {
+      const result = await api.getActions(params)
+      assert.equal(result.summary.total, total)
+      assert.equal(result.summary.held_unknown, unknown)
+      if (params.state) assert.equal(result.summary.scope, 'filtered_results')
+    }
+    const actions = await api.getActions({ limit: 20 })
+    const portfolio = await api.getPortfolio({ page: 1, page_size: 20 })
+    const html = render('ActionsPage', {}, [
+      [['actions', { search: '', cursor: undefined, state: '' }], actions], [['portfolio-subsection'], portfolio],
+    ])
+    assert.ok(html.includes('行情讀值無效，先核對原記錄。'))
+    assert.ok(html.includes('股數待核實'))
+    await api.getDashboard()
+    await api.getStocks({ page: 1, page_size: 30 })
+    const after = await snapshot()
+    assert.deepEqual(after, before, 'GET changed whole tables/all columns/all typeof/note/updated_at')
+    assert.equal(mutations, 0)
+    console.log(JSON.stringify({ passed: true, node: process.version, actual_http_routes: routes,
+      actual_action_card_ssr: cards, actual_actions_page_ssr: 1, http_mutations: mutations,
+      whole_sql_sha256: before.whole_sql_sha256, includes: before.includes,
+      known_ssr_use_layout_effect_warnings: ssrLayoutWarnings, fixture_date: '2026-10-04',
+      source: 'synthetic complete run/strategies; sixty explicit fixture dates; not official sessions',
+      excluded: 'polluted StockPage/M1 filesystem gates, production DB, save/reopen', disk_artifacts: 0 }))
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
 }
 
 function localQuote(close = 10.5, closeStatus = 'known') {
@@ -897,7 +1078,7 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
-  const fixtureLabel = args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
+  const fixtureLabel = args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
     .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
@@ -938,12 +1119,13 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') ? '2026-10-04' : '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--action-read-http-check') ? actionReadHttpCheck()
+  : args.includes('--action-read-check') ? actionReadCheck() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
   : args.includes('--quote-read-http-check') ? quoteReadHttpCheck() : args.includes('--quote-read-check') ? quoteReadCheck()
   : args.includes('--quantity-trust-http-check') ? quantityTrustHttpCheck() : args.includes('--quantity-trust-check') ? quantityTrustCheck()
   : args.includes('--finance-read-check') ? financeReadCheck() : args.includes('--finance-http-check') ? financeHttpCheck()

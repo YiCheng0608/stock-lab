@@ -917,6 +917,7 @@ export type ActionSummary = {
   position_quantity_status?: 'known' | 'unknown' | 'absent'
   watchlisted: boolean
   current_price: number | null
+  market_read?: { status: 'known' | 'missing' | 'invalid'; invalid_fields: string[] }
   price_as_of: string | null
   previous_close?: number | null
   price_change?: number | null

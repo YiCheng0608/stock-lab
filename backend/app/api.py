@@ -1027,6 +1027,7 @@ _ACTION_LIST_FIELDS = (
     "position_quantity_status",
     "watchlisted",
     "current_price",
+    "market_read",
     "price_as_of",
     "previous_close",
     "price_change",

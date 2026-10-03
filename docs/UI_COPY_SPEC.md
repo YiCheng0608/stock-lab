@@ -324,7 +324,48 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 
 初次 snapshot 的 runtime_unavailable、最後 inline JavaScript 的 PowerShell 引號 eval 失敗均分報；沿同 tab 原生恢復、改 here-string 單引號 probe 後才成功，不重建 tab、不重跑已驗操作、未開 HAR。Scoped memory fetch recorder 只涵蓋 1 GET／200、external／mutation 空，不是完整 capture；6 個 owned performance resources 含原 actions 的 **2 GET／500**，本次 console 讀 `messages=[]` 不表示整個 session 無 warnings。QA tab、viewport、自有程序／children／listeners 已核實清理，新測試磁碟產物／附件／暫存／殘留 0，舊 excluded 資源未動。
 
-原 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。本批有限接受不包含完整 ActionsPage 或行動端點回歸通過；這個具名缺口交下一候選 M3-P6b 有界核對，不 catch 後補 0 或提供建議。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，freeze／索引／commit／merge 見[協作紀錄](TASK_COORDINATION.md)。
+P6a 驗收時 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。P6a 有限接受不包含完整 ActionsPage 或行動端點回歸通過；原失敗保留，後續清單隔離的現行有限範圍見下列 P6b，不倒改 P6a 驗收。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，freeze／索引／commit／merge 見[協作紀錄](TASK_COORDINATION.md)。
+
+<a id="m3-p6b-actions-清單逐列行情讀回污染隔離"></a>
+
+#### M3-P6b Actions 清單逐列行情讀回污染隔離
+
+本批支援 M3／R2-C2；八檔實作、必要零落盤／actual HTTP／SSR 與下表具名 Actions 清單操作已由統籌有限接受。解除單列行情的 Date／DateTime／價格 processor 污染使整份清單失敗的缺口；只交付清單搜尋／清除、state、分頁與逐列狀態。`market_read.status=known` 只表示必要讀值合格，不表示來源准入、官方日期、用途、availability 或 PIT 已驗證，也不把原 source／time／strategy gates 改成語法檢核。
+
+decision 以未定型 SQL 讀八欄 `id`、`instrument_id`、`trading_date`、`close`、`adj_close`、`source`、`is_suspended`、`raw_payload_id`，避免載入完整 MarketBar。核心欄位與可選比較／追溯欄位分開：
+
+| 讀值 | 本批處置 |
+| --- | --- |
+| `trading_date` | 必須為有效且完整的 `YYYY-MM-DD` 字串；無法定位日期者不假定過去或未來。 |
+| `close` | 只接受 actual int／float（排除 bool）、有限且大於 0；不以 cast 救回 TEXT／BLOB、零、負數或非有限值。 |
+| `source` | 非空、非純空白／BOM，最多 120 字元，可合法 UTF-8 編碼，拒 C0 與 DEL；字串合格不證來源身分或用途准入。 |
+| `is_suspended` | 原儲存讀值必須為 actual int 的 0／1；其他值為 invalid，不靠 truthiness 改成合法旗標。 |
+| `adj_close` | 只供相鄰價格 basis 比較；無效時漲跌待核實，不單憑此欄使合格核心 close 無法呈現。比率須有限且為正，差額／百分比須有限；UI 另核百分比乘 100 仍有限。 |
+| `raw_payload_id` | 非 actual 正整數時投影為 null，不冒充 raw 證據；該欄存在也不等於 provenance gate 通過。 |
+
+上述 gate 分類的是 SQLite affinity 已處理的讀值；儲存前的 bool／數字文字可能已轉為 actual numeric 而成為 known，不能由目前型別恢復原始 token／意圖，不修 DB。known 亦不證合法 tick、完整 OHLC、真實停牌狀態或用途准入。
+
+按原儲存 `trading_date DESC`、`id DESC` 選候選，合法 future date 依既有 `as_of` 排除，先套最多 120 列再驗值，不以刪除壞列補較早行情。該標的任一列日期無法定位時，即使 raw 文字排序位於 cutoff／120 列窗口之外，仍保留該列身分並使最新行情 fail closed；不把非法字串作 lexical future 排除，也不 fallback 到較早合法 close。Session cache 保留此結果。歷史合格筆數只計核心欄位有效的列，不把全部 SQL 列數當成已驗來源或完整交易日窗口。
+
+`market_read` 提供 `known`／`invalid`／`missing` 與 `invalid_fields`；invalid 候選仍保留標的／候選及可用 evidence refs，價格日期、close 與漲跌投影為 null，`primary_levels={}`，不修原列或補 0。不存在行情則為 missing。TAIEX 交易日所需 MarketBar 日期／來源投影是本批必要依賴；原 RawPayload、official run、MI_INDEX 原件檔案／parser／provenance gate 保留，未讀欄位不再觸發無關 processor。漲跌仍須原已核實的相鄰 session、核心行情、停牌與同 basis 條件，不由兩個相鄰資料列推定。
+
+原來源／時間／策略 gates 優先，未知股數與非法停損的既有條件保留；不改 candidate 順序、去重、state／q／held_only、分頁與 `held_unknown` 的 scope。無 state 仍選頁後建立 decision，有 state 仍先在完整 filtered universe 建 decision，再篩 state／計數／分頁；dashboard 仍是 compact first page 範圍，不宣稱全域數量。
+
+`CompactActionCard` 明示讀值契約時，只在 known、空 `invalid_fields` 與正有限 numeric price 一致下顯數字。invalid／missing、不支援或 partial status、malformed／矛盾狀態及非法價格均顯「待核實」「漲跌待核實」及「策略判斷資料待補」；invalid 顯「行情讀值無效，先核對原記錄。」，missing 顯「尚無行情記錄。」。只有 `market_read` 完全 undefined 的舊 API 才沿原有限 number 相容，不以 malformed 新契約 fallback raw 值。合法極大有限價格在卡內換行，不因字串長度改為 unsupported；漲跌的顯示 overflow 仍待核實。
+
+本次使用 **2026-10-04 synthetic TWSE／TPEx 24 庫存、每市場 12 symbols、60 個明示 fixture 日期**及 complete run／signals，不是官方行情、日曆、來源准入或正式持倉。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| 桌面 `1298×924` Actions 清單 | 初頁 20 卡／24 total；B-CLOSE 搜尋 2、清除 20；data_insufficient 12、manual_review 4，其中 unknown 2。實際 focus＋Enter 下一頁 4／unknown 2，再回首頁 20。document 寬均 1283、card 294，未觀測橫向溢出。 |
+| `390×844`（mobile=false）Actions 清單 | C-DATE 搜尋 2、清除、state 12／manual 4 與實際 Enter 分頁同範圍；document 寬均 375、card 337，未觀測橫向溢出，不稱實體手機／觸控驗收。 |
+| 逐列隔離與價格 | B-CLOSE／C-DATE 等污染價格待核實；H-MISSING 有無行情記錄說明；G-ADJUST／K-HISTORY 漲跌待核實；D-METADATA／正常 close 10.5 可見。合法 future 5000 未混入 cutoff；股數 unknown 保留，未造 primary levels。 |
+| 必要巨大值補驗的兩尺寸預設清單 | L-FUTURE 截止日 close／adj_close 為 `1e308`，翌日 5000 仍排除；TPEx 卡片完整 411 字元與原 Intl price 相符。桌面／390px card 寬 294／337、price box 195／238，card／price box scroll width 均等於自身寬，document 寬仍均 1283／375，漲跌待核實。補驗不另宣稱搜尋／Enter 通過。 |
+| 正常卡片原導航 | 真正 Enter `A-NORMAL` 經原 `/actions/TWSE/A-NORMAL` 進 StockPage，`/api/stocks/TWSE/A-NORMAL` 為 200；M1 總覽仍拒 fixture、0／60 合格與研究資料待補，原 file／source gate 未降。污染卡片的整個詳情路徑未點、未驗。 |
+
+初操作 instance 的 scoped fetch **13 GET／200**、performance **17 owned resources／200**；巨大值補驗另 instance 為 **2 GET／200**、**6 owned resources／200**，各自 external／mutation 空，非完整 session capture。既有搜尋／state／分頁／正常導航仍有效；工具失敗與 ref click 未動分報，真正 Enter 後才接受，補驗 Enter 無新 GET 不算新操作。初 console limit 50 為空，final 同範圍有 **React DevTools info 1／既有 Router warnings 2**，不稱全域無 warning。兩 instances 各自在自身 HTTP／UI／pre-shutdown 保持 24 庫存／1,382 行情全欄＋typeof／note／updated_at 同 digest、read mutation 0，不跨 instance 比 hash。Final viewport 已還原 1365×900／寬均 1350、20 卡／details 全收合，owned tab 已關、兩 serve final exit 0，PIDs／children／8777、8778 listeners 已獨立核空；新增測試產物／附件／暫存／殘留 0，舊 excluded 資源未動。
+
+污染卡片進 StockPage 的 typed max-date／完整 120 bars／`bar_dict` 路徑仍待驗；SSR 的 action detail panel 不等於這條真實路徑。完整 ActionsPage、行情來源／日期／availability、真官方／live、M1 正向 filesystem gate、正式 DB／磁碟重開、完整 backend／production Vite build、Decimal exact、新 Plan、完整 M3／PIT 未驗。必要磁碟或原件驗收不以 memory fixture 取代；下一具名候選 P6c 由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責，重建入口見[開發入口](development-baseline/README.md#m3-p6b-actions-清單行情讀回的零落盤驗證入口)。
 
 ### 10.4 數值表格、單位與空白
 

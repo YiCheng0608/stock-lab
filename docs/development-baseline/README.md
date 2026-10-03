@@ -222,7 +222,27 @@ QA 初次 snapshot runtime_unavailable／exit 1，沿原 tab 用 native Orca 無
 
 測試與清理分報：最後 actual viewport 還原 **1365×900**、client／scroll width 均 **1350**；原 tab close exit 0／list 空。立即 exact command-line gate 後，owned Node／Python shutdown 各 exit 0，兩 serve exec final 各 0、Python `unexpected=[]`；final SQL snapshot 不變。統籌另唯讀獨立核 owned PIDs、esbuild／parents／children 及 **8777／8778 listeners 全空**。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；HAR／M3-P4 blocked logs／更早資源未動，不宣稱歷史全清。
 
-未驗行情來源／日期／availability、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、所有估值／風險行動與保存／刪除 UI／完整 M3；沒有授權 tiny 唯讀行情 artifact，需落盤的正向原件 gate 未跑，不以 memory patch 或本地語法 known 補成通過。下一具名候選 M3-P6b 的依賴與完成條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；SOURCE_REGISTRY／STOCK_RESEARCH_PAGE 的來源與 M1 價格契約已核不受本批變更影響，不造 diff。
+未驗行情來源／日期／availability、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、所有估值／風險行動與保存／刪除 UI／完整 M3；沒有授權 tiny 唯讀行情 artifact，需落盤的正向原件 gate 未跑，不以 memory patch 或本地語法 known 補成通過。本節保留 P6a 原驗收，後續 Actions 清單隔離入口見下列 P6b；SOURCE_REGISTRY／STOCK_RESEARCH_PAGE 的來源與 M1 價格契約不受該讀取隔離變更影響，不造 diff。
+
+<a id="m3-p6b-actions-清單行情讀回的零落盤驗證入口"></a>
+
+### M3-P6b Actions 清單行情讀回的零落盤驗證入口
+
+八檔實作、必要零落盤／actual HTTP／SSR 及具名桌面／390px Actions 清單操作已由統籌有限接受。逐列讀值、核心欄位／比較欄位、unlocated date、latest／as_of、原 gates／計數／相容與具名支持範圍只由 [UI 文案](../UI_COPY_SPEC.md#m3-p6b-actions-清單逐列行情讀回污染隔離)負責。本節記錄可重建入口、副作用、證據與未跑範圍；命令、原始 exit、整表 SQL digest 與 freeze／索引／commit／merge receipt 留 task，不另建附件。
+
+後端 `backend/tests/test_share_quantity_exact_presentation.py --action-read-only` 沿 standalone `-B -Xutf8`、AST config stub、既有唯讀依賴與 guarded memory SQLite／actual router，不載入一般 pytest conftest、正式 config mkdir、production lifespan／migration 或正式 DB。最終 CPython **3.12.14**／SQLAlchemy **2.0.52**／Pydantic **2.13.5**：**9 tests／0 skip／90 actual router GET**、exit 0，**6 expected audit denials／unexpected=[]**；GET mutation 0，portfolio_positions／market_bars 全部欄位與 typeof 保持。涵蓋 raw 核心欄位、窗口外無法定位日期、不較早 fallback、歷史合格筆數、adj 比較、TAIEX 必要投影及原 source／time／strategy、quantity／stop／state／scope 回歸。早期 82 router 的通過輸出誤列 legacy fixture 日期；最終採 `2026-10-04`，不改報原輸出。
+
+前端 `tools/share-quantity-exact-preview.cjs --action-read-check` 沿共用唯讀 `--deps`，Node **24.19.0**／TypeScript **5.9.3** full src noEmit、**6 CompactActionCard／6 ActionDetailPanel SSR、13 conflict／partial／bad-price cases、1 undefined legacy、2 巨大有限值／正負漲跌、1 百分比顯示 overflow case** 最終 exit 0；**52 則已知 SSR warnings** 分報。Whole main bundle `write:false`，JS **4,187,294 bytes**／CSS **27,903 bytes**，磁碟產物 0。首次 helper 誤期待 `10.50`、巨大值補驗 helper 誤期待 `%` 接在數字後，各為 exit 1；沿原單位在 label 的呈現修正測試後才通過，不改報原命令成功。Starlette TestClient／httpx deprecation 保留，不稱零 warnings 或 production Vite build 通過。
+
+Memory serve 為後端 `--serve --action-read-fixture`（**8777**）與 Node preview `--serve --action-read-fixture`（**8778**）；`2026-10-04` synthetic TWSE／TPEx **24 庫存、每市場 12 symbols、60 個明示 fixture 日期**與 complete run／signals，不是官方日曆／行情、來源准入或正式持倉。Symbols 為 A-NORMAL、B-CLOSE、C-DATE、D-METADATA、E-SOURCE、F-SUSPEND、G-ADJUST、H-MISSING、I-QUNKNOWN、J-STOPBAD、K-HISTORY、L-FUTURE；最終 L-FUTURE cutoff close／adj_close 改 `1e308`，翌日 5000 及既有計數保留。最終 `--action-read-http-check` 為 **40 actual GET／24 actual CompactActionCard SSR／1 ActionsPage SSR**、exit 0，**89 則已知 SSR warnings**；actual fetch→Response.json 核真正卡片，**24 positions／1,382 bars／read mutation 0**。兩 instances 各自在自身 HTTP／UI／pre-shutdown 保持兩整表全部欄位＋typeof、note／updated_at 同 digest，不跨 fixture instance 比 hash。
+
+真正 Actions 清單的搜尋／清除、data_insufficient／manual_review、兩尺寸 focus＋actual Enter 分頁、逐列狀態與正常原 StockPage 導航已有限接受，精確具名範圍見主契約。正常 `/api/stocks/TWSE/A-NORMAL` 為 200，M1 總覽仍拒 fixture、0／60 合格／研究資料待補，原正向 file／source gate 未降低。污染卡片整個詳情路徑未點未驗；detail SSR 不能代替 StockPage typed max-date／full 120 bars／bar_dict 路徑。
+
+Browser 錯命令、snapshot／help runtime_unavailable、PowerShell 引號與空 select 保留原 exit 1；同 tab 經 native Orca computer 無 screenshot focus、UTF-8 stdin 恢復，未重啟 Orca 或建 HAR。首次 mobile ref click 工具接受但 UI 未動／無新 GET，assertion exit 1 不改報 0；真正 Enter＋wait 後才接受。巨大值補驗用程式角色移交的同一 blank tab，pre-fix snapshot 未量測、其後 runtime／wait 失敗與 partial fill／fetch installer effects 均分報，以唯讀 DOM 核結果；Enter 無新 GET 不計新搜尋操作。此前有效 state／分頁／正常導航不重播、不作廢。
+
+測試與清理分報：初 console limit 50 為 `messages=[]`，final 同範圍為 **React DevTools info 1／既有 Router v7 future warnings 2**，不稱全域無 warning。初 scoped fetch／performance **13 GET／17 resources**，補驗 **2 GET／6 resources**，均 200、各自 external／mutation 空，非完整 capture。Final viewport **1365×900**、mobile=false、寬均 **1350**、20 卡／details 全收合，exact owned tab close exit 0／list 空。立即 exact PID／parent／command gate 後，8778／8777 owned shutdown 各 200，兩 serve final exit 0、Python unexpected=[]；統籌獨立核五 owned PIDs／children／listeners 空。Shutdown POST 不作產品 mutation，讀取 mutation 0。新增測試產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；舊 HAR／P4 blocked logs／更早資源排除未動，不重試。
+
+污染個股詳情、完整 ActionsPage、可信行情來源／日期／availability、真官方／live、M1 正向 filesystem gate、正式 DB／真正磁碟重開、完整 backend／production Vite build、Decimal exact、新 Plan、所有估值／風險行動及完整 M3／PIT 未驗，不以 memory 降低原件／磁碟條件。下一具名候選 M3-P6c 的 audit、必要依賴與完成條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；穩定來源、時間、M1 價格與 migration 契約只核對、不另造 diff。
 
 ## 歷史驗證
 
