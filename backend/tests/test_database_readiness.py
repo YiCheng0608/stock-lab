@@ -59,8 +59,8 @@ def markers(path, alembic, fallback):
 
 
 def test_current_head_and_fallback_count_in_memory():
-    assert len(readiness.REVISIONS) == 7
-    assert readiness.REVISIONS[-1] == "0007_turnover_availability"
+    assert len(readiness.REVISIONS) == 8
+    assert readiness.REVISIONS[-1] == "0008_portfolio_share_integer"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (readiness.REVISIONS[-1],))
@@ -75,7 +75,7 @@ def test_current_head_and_fallback_count_in_memory():
         )
         readiness._check_markers(connection, {"schema_migrations"})
         connection.execute("DELETE FROM schema_migrations WHERE version = ?", (readiness.REVISIONS[-1],))
-        with pytest.raises(readiness.DatabaseReadinessError, match="all seven revisions"):
+        with pytest.raises(readiness.DatabaseReadinessError, match="all eight revisions"):
             readiness._check_markers(connection, {"schema_migrations"})
         connection.execute("INSERT INTO schema_migrations VALUES (?)", (readiness.REVISIONS[-1],))
         connection.execute("INSERT INTO schema_migrations VALUES ('future_revision')")
@@ -101,7 +101,7 @@ def test_alembic_head_repeat_and_migration_bombs(ready_db, monkeypatch):
     assert fingerprint(ready_db) == before
 
 
-def test_actual_forced_fallback_seven_revisions(tmp_path, monkeypatch):
+def test_actual_forced_fallback_eight_revisions(tmp_path, monkeypatch):
     path = tmp_path / "fallback.db"
     engine = create_engine(f"sqlite:///{path.as_posix()}")
     enable_sqlite_foreign_keys(engine)
@@ -114,7 +114,7 @@ def test_actual_forced_fallback_seven_revisions(tmp_path, monkeypatch):
     check_unchanged(path)
 
 
-@pytest.mark.parametrize("prefix", range(1, 8))
+@pytest.mark.parametrize("prefix", range(1, 9))
 def test_head_with_known_fallback_prefix(ready_db, prefix):
     markers(ready_db, [readiness.REVISIONS[-1]], readiness.REVISIONS[:prefix])
     check_unchanged(ready_db)
@@ -133,10 +133,10 @@ def test_bad_fallback_markers(ready_db, alembic, fallback):
     check_unchanged(ready_db, "fallback")
 
 
-@pytest.mark.parametrize("prefix", range(1, 7))
+@pytest.mark.parametrize("prefix", range(1, 8))
 def test_fallback_only_stale_prefix(ready_db, prefix):
     markers(ready_db, None, readiness.REVISIONS[:prefix])
-    check_unchanged(ready_db, "all seven")
+    check_unchanged(ready_db, "all eight")
 
 
 @pytest.mark.parametrize("kind", ["missing", "zero", "tableless", "unversioned", "not_sqlite", "directory"])

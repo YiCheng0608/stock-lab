@@ -130,7 +130,7 @@ Node preview／檢查只作記憶體 bundle，`write:false`、無輸出檔；pre
 
 ### M3-P1 既有庫存股數的零落盤驗證入口
 
-本批「既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收」的程式、必要驗證與具名操作已有限接受。股數 gate、精確字串、unsafe／fallback 及輸入單位上限只由 [UI 文案 §10.3](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)負責；本節只列入口、副作用與驗收邊界。專用 `backend/tests/test_share_quantity_exact_presentation.py`、前端必要記憶體驗證與 `tools/share-quantity-exact-preview.cjs` 的命令、版本、exit 及原始收據留 task，不另存附件。
+本節保留 M3-P1 當時「既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收」的有限驗收；同名入口在 M3-P2 的現行模式與必要磁碟驗收見下一節，歷史計數不冒充目前來源重跑。股數 gate、精確字串、unsafe／fallback 及輸入單位上限只由 [UI 文案 §10.3](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)負責；本節只列原入口、副作用與驗收邊界。專用 `backend/tests/test_share_quantity_exact_presentation.py`、前端必要記憶體驗證與 `tools/share-quantity-exact-preview.cjs` 的命令、版本、exit 及原始收據留 task，不另存附件。
 
 後端入口採 standalone unittest、`-B -X utf8` 及 AST config 常數 stub，排除真 config 的 mkdir，不載入一般 pytest conftest、`app.main`／production lifespan，也不執行 init-db 或 migration。主線既有依賴只讀，不安裝或另建環境；audit 拒絕磁碟變更、外網與未授權 subprocess。實際 router 與記憶體 SQLite 核對 POST commit／refresh→GET、unsafe 舊 Float、失精輸入 HTTP 422 及既有資料保留；純 helper 的實際 int／int64 邊界與 Float 保存支持範圍分報，記憶體保存／讀回不代表磁碟 reopen。
 
@@ -140,7 +140,23 @@ Node **20.19.4**／TypeScript **5.9.3** 的全 src `noEmit` 型別檢查、units
 
 新增測試／preview 產物及殘留實際為 **0 files／0 directories／0 bytes**；未使用通用落盤 runner 或 `KeepArtifacts`。QA 已還原 `1365×900` 並關 tab；核實自有 commandline 後兩 server 的 `POST /__review__/shutdown` 各回 `stopping`、命令 exit 0，Node／Python serve 最終 exit 均 0，Python serve audit `unexpected_denials=[]`。統籌獨立核對兩個 exact PID、`8777`／`8778` listeners 均不存在，新增 artifacts／data／pycache／buildinfo／dist 為空或不存在；測試 exit 0 與清理 exit 0 分報，不混入前輪 serve exit 1。
 
-正常估值／決策／計畫行為不作本批驗收；正式 DB、磁碟重開、真官方／live、production startup、完整 backend／production Vite build、新計畫與完整 M3 均未驗。下一候選可信整數保存／legacy unsafe migration 證據與磁碟重開仍須新統籌有界核依賴，磁碟驗收不能由本入口替代。freeze／索引／commit／merge 狀態見[協作紀錄](../TASK_COORDINATION.md)，不另建附件。
+正常估值／決策／計畫行為不作該批驗收；正式 DB、磁碟重開、真官方／live、production startup、完整 backend／production Vite build、新計畫與完整 M3 均未由 M3-P1 驗證。可信整數保存與磁碟重開由下方 M3-P2 有限補齊，不能以本節記憶體入口替代；freeze／索引／commit／merge 狀態見[協作紀錄](../TASK_COORDINATION.md)，不另建附件。
+
+### M3-P2 可信整數保存與磁碟重開驗證入口
+
+本批核心契約與必要有限驗證已接受；股數／字串／數字相容與拒收規則只由 [UI 文案](../UI_COPY_SPEC.md#m3-p2-可信整數保存與磁碟重開契約)負責，migration／readiness 的具體 descriptor、marker 與 rollback 邊界見 [R0 §8.11](../R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。本節只管可重建入口、寫入副作用與有限驗收，完整命令、實際版本、exit、失敗修正與 SHA 收據留原 task。
+
+`backend/tests/test_share_quantity_exact_presentation.py` 與新增 `backend/tests/test_share_quantity_storage.py` 均採 standalone `-B -X utf8`、AST config 常數 stub 及共用既有依賴，不載入一般 pytest conftest、不安裝或複製環境。前者是純記憶體 router／股數 guard，後者預設也不建檔；`--memory-storage` 只跑 9 個 storage memory tests。Audit 拒絕磁碟變更、外網與未授權 subprocess；5 direct tests／0 skip／193 actual router requests 與修正後 9 個 storage memory cases 已接受。初次合併 memory suite 的 13 tests 是 12 pass／1 重複 audit probe skip，由 direct suite 的 0 skip 覆蓋，不能寫成 13 全 pass／0 skip。未重跑完整 backend 或既有舊磁碟矩陣。
+
+同一 storage runner 的磁碟模式只接受核定 `--root C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-m3-share-storage-01a10250`，明授後才執行。根與 ancestor 必須 non-reparse；最多 **2 files**（`data/quantity.db`、`data/quantity.db-journal`）、**3 directories**（root、`data`、`raw`）、總 **2 MiB**、單 DB **1 MiB**，殘留同上限。不用 WAL、pycache、一般附件或 `KeepArtifacts`，不改根避開限制。`--disk` 是四個 sequential synthetic normal／fault 案例的 compound unittest；每次驗 migration、關閉／重開、readiness 唯讀雜湊與 API int64 保存，最後對自有 exact 根嘗試清理，test／cleanup exit 分列。成功結果為 1 unittest／0 skip、四案例通過，observed peak **1 file／3 directories／425,984 bytes**、`unexpected_denials=[]`；首次連線未關閉的 cleanup 失敗與第二次 marker fixture 錯誤保留原 task，不把第三次成功倒寫成首跑通過。
+
+`--prepare` 建立唯一 owned synthetic DB，拒絕覆寫已占用 DB；`--serve` 僅以該 DB 啟動 actual `app.main` 的 loopback 8779，由 actual lifespan 做 readonly readiness，不執行正式 DB／init-db／migration。這兩模式保留同一檔供具名保存／關閉／第二程序重開，`--inspect` 以 SQLite `mode=ro` 查 storage type、已知列與 closed-file SHA，`--cleanup` 結束這次磁碟驗收。所有模式都受 exact path／audit／inventory gate 約束；標記有值不代表任意實際 DB 已升級。Fixture 日期 `2026-10-03`，兩市場只作 synthetic 使用者股數與路由身分，不當官方行情、live 或正式持倉。
+
+前端 `tools/share-quantity-exact-preview.cjs` 沿共用唯讀 `--deps`，`--check` 做 full src 型別、units、14 組 Portfolio SSR 與 whole main `write:false` 記憶體 bundle；`--http-check` 使用 actual fetch／Response.json 驗 75 個 product HTTP，`--serve` 使用自有 Node 8780 接已核定的 8779。Node 20.19.4／TypeScript 5.9.3 的必要驗證 exit 0；已知 warnings 分報，這不是 production Vite build。preview CSS 只在記憶體排除外部字型，CSP 阻外網，本次限 fallback font，不改正式字型。實際 desktop／390px 保存、第二程序重開、拒收完整列保留及刪除只支持 UI 主契約的具名案例；QA 還原／tab 關閉、兩 API 程序與 Node／esbuild child 的關閉、test／cleanup 與殘留分報於協作紀錄。
+
+**本輪 capture stop 的額外副作用**：即使 preview bundle 為 `write:false`，瀏覽器擷取停止仍自動寫出 `C:/Users/YiCheng/.agent-browser/tmp/har/har-1791044803009.har`，**1 file／64,885 bytes**，超過原附件配額 0。統籌已核檔與 parents 為 non-reparse；exact 單檔 `Remove-Item` 在 CreateProcess 前遭 automatic review 拒絕（`blocked by policy`），未執行，不重試或換工具，不掃 shared HAR 目錄或刪 parent。本輪隔離 DB 已由統籌獨立核不存在；上述 HAR 殘留仍在，兩者分報，不能再稱本輪全部新增產物／殘留為 0；後續不新增測試落盤，也不把該被拒 HAR 列為下一輪可常規重試的清理。未來使用同擷取入口須先核停止時的落盤副作用與配額；本次例外不授權保留其他附件或複製整套成果。有效產品證據仍可有限接受，HAR 待外部變化／使用者處置，實際限制見[協作紀錄](../TASK_COORDINATION.md)。
+
+本批只證 owned fixture 的有限 actual main startup、數量保存與磁碟重開；正式 DB／migration／restore、production deployment、真官方／live、完整 backend／production Vite build、大數金融估值、新 Plan、完整 M3、歷史／availability／PIT 與原來源 gate 均保持未完成。
 
 ## 歷史驗證
 

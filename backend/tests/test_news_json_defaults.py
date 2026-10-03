@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "backend" / "alembic.ini"
 OLD_REVISION = "0005_news_temporal_contract"
 NEW_REVISION = "0006_news_json_defaults"
-CURRENT_HEAD = "0007_turnover_availability"
+CURRENT_HEAD = "0008_portfolio_share_integer"
 
 
 def _normalize_default(value: Any) -> str | None:

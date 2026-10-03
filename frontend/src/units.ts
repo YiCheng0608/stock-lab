@@ -107,19 +107,17 @@ export function sharesFromUnit(unit: ShareUnit, quantity: number): number {
   return unit === 'lot' ? quantity * LOT_SIZE : quantity
 }
 
-/** Check raw input before Number can round it; POST retains its integer shape. */
-export function positionQuantityFromText(unit: ShareUnit, raw: string): number {
+/** Normalize digits without Number; POST retains a canonical int64 string. */
+export function positionQuantityFromText(unit: ShareUnit, raw: string): string {
   if ((unit !== 'lot' && unit !== 'odd_lot') || !/^[0-9]+(?![\s\S])/.test(raw)) {
     throw new Error('數量須輸入正整數十進位數字。')
   }
   const text = raw.replace(/^0+/, '')
-  const maximum = unit === 'lot' ? '9007199254740' : '9007199254740991'
+  const maximum = unit === 'lot' ? '9223372036854775' : '9223372036854775807'
   if (!text || text.length > maximum.length || (text.length === maximum.length && text > maximum)) {
-    throw new Error('總股數須為 1 至 9,007,199,254,740,991 股。')
+    throw new Error('總股數須為 1 至 9,223,372,036,854,775,807 股。')
   }
-  const quantity = Number(text)
-  sharesFromUnit(unit, quantity)
-  return quantity
+  return text
 }
 
 export function formatShareQuantity(shares: number | null | undefined, exact?: string | null): string {

@@ -200,6 +200,7 @@ def _check_existing_identity_claim(connection, objects, state: str) -> None:
         '0004_product_news_themes', '0005_news_temporal_contract',
         '0006_news_json_defaults',
         '0007_turnover_availability',
+        '0008_portfolio_share_integer',
     }
     marker_columns = {'alembic_version': 'version_num', 'schema_migrations': 'version'}
     for kind, name, sql in objects:

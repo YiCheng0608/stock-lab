@@ -131,7 +131,7 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                     text("SELECT version_num FROM alembic_version ORDER BY version_num")
                 )
             ]
-            assert revisions == ["0007_turnover_availability"]
+            assert revisions == ["0008_portfolio_share_integer"]
             assert not inspector.has_table("schema_migrations")
         else:
             assert inspector.has_table("schema_migrations")
@@ -147,6 +147,7 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                 "0005_news_temporal_contract",
                 "0006_news_json_defaults",
                 "0007_turnover_availability",
+                "0008_portfolio_share_integer",
             }
             assert not inspector.has_table("alembic_version")
 

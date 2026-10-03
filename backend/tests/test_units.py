@@ -13,6 +13,10 @@ from app.units import LOT_SIZE, share_quantity_dict, shares_from_position_quanti
         ({"unit": "odd_lot", "quantity": 999}, 999),
         ({"quantity_lots": 2}, 2000),
         ({"odd_lot_shares": 999}, 999),
+        ({"shares": "9007199254740993"}, 9007199254740993),
+        ({"unit": "odd_lot", "quantity": "9223372036854775807"}, 9223372036854775807),
+        ({"quantity_lots": "9223372036854775"}, 9223372036854775000),
+        ({"odd_lot_shares": "1"}, 1),
     ],
 )
 def test_position_quantity_converts_to_total_shares(kwargs, expected):
@@ -26,6 +30,11 @@ def test_position_quantity_converts_to_total_shares(kwargs, expected):
         {"shares": -1},
         {"shares": 1.5},
         {"shares": True},
+        {"shares": "01"},
+        {"shares": "1\n"},
+        {"shares": "9223372036854775808"},
+        {"shares": 9007199254740992},
+        {"quantity_lots": "9223372036854776"},
         {"unit": "lot", "quantity": 0},
         {"unit": "lot", "quantity": -1},
         {"unit": "lot", "quantity": 1.5},

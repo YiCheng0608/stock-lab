@@ -569,11 +569,11 @@ export type Position = {
 export type PositionInput = {
   symbol: string
   exchange?: string
-  shares?: number
+  shares?: number | string
   unit?: 'lot' | 'odd_lot'
-  quantity?: number
-  quantity_lots?: number
-  odd_lot_shares?: number
+  quantity?: number | string
+  quantity_lots?: number | string
+  odd_lot_shares?: number | string
   average_cost?: number
   stop_price?: number
   risk_budget?: number

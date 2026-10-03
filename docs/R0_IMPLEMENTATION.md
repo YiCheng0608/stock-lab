@@ -231,7 +231,7 @@ legacy signal_date/data_cutoff/earliest_execution_date/naive created_at保留但
 
 ## 8. R0-5：migration head 與實際 DB revision
 
-分開三件事：目前程式 head=`0007_turnover_availability`，其前一 revision 為 `0006_news_json_defaults`；文件 head 應一致；實際 DB 只能對指定 path 唯讀查 `alembic_version` 與 fallback markers。`schema_migrations` 只證 fallback marker，不等於 Alembic current，也不證正式 DB 已升級。以下 0005／0006 與 markers 的具名結果保留各自歷史驗收範圍。
+分開三件事：目前程式 head=`0008_portfolio_share_integer`，其前一 revision 為 `0007_turnover_availability`；文件 head 應一致；實際 DB 只能對指定 path 唯讀查 `alembic_version` 與 fallback markers。`schema_migrations` 只證 fallback marker，不等於 Alembic current，也不證正式 DB 已升級。以下 0005／0006／0007 與 markers 的具名結果保留各自歷史驗收範圍，現行有限持倉增補見 §8.11。
 
 ### 8.1 B6 review 驗收矩陣
 
@@ -297,6 +297,16 @@ gate只讀 `index_list/index_xinfo` key parts，不解析unrelated partial predi
 canonical identity是ordered `(exchange,symbol)`；`market`不是identity，但三欄都是writer mapped target，所以都必須 `table_xinfo.hidden=0`。至少一個full/non-partial、ASC/BINARY canonical UNIQUE；每個key parts觸及 `{market,exchange,symbol}` 的UNIQUE都必須同形。single、legacy、reversed、superset/mixed、partial、target DESC/non-BINARY與任意UNIQUE expression拒絕。
 
 key-unrelated named UNIQUE可含partial/DESC/non-BINARY/generated extra；gate不解析其predicate/dependency，因此仍可能阻擋某些write。CHECK、trigger、nonunique index與其他column descriptors不audit。這個startup policy可比R28 current no-rebuild更窄；`init-db`不會自動修所有被startup拒絕的custom shape。正式migration/restore/deployment、non-SQLite、attached/arbitrary schema、concurrency、data truth/PIT仍未完成。
+
+### 8.11 M3-P2：持倉精確整數 migration／readiness（有限接受）
+
+新增 forward-only `0008_portfolio_share_integer`，chain 為 0001→0008。Alembic engine、external Connection 及既有 fallback atomic runner 共用 `ensure_portfolio_share_integer`；caller 保有 transaction、marker 與 FK 恢復責任。Current Base 已有 `shares_integer`，fresh DB 走已存在欄的檢查，不再回填。既有 instrument／settlement current-head guards 延伸至 0008；必要測試常數的 head 同步只保留原歷史 fixture，不視為重新跑過所有舊矩陣。
+
+Helper 只接受 SQLite 的現有 `portfolio_positions`，新欄必須是 ordinary（`hidden=0`）、nullable、非 PK、無 SQL default 的 `INTEGER`。缺欄時 additive 新增，且只在這一次對 `0..9,007,199,254,740,991` 的有限、非負、整數舊 `shares` 回填；unsafe、負值、分數及非有限保留 NULL，舊 Float 與其餘原列資料均不改。已有合法新欄時不覆寫任何值、不再掃 backfill；錯 type／NOT NULL／default／PK／generated 形狀在成功 marker 前拒絕。這不是任意 custom schema 或已捨入數值修復；讀寫優先與輸入範圍由 [UI 文案](UI_COPY_SPEC.md#m3-p2-可信整數保存與磁碟重開契約)負責。
+
+Readiness 仍採唯讀 transaction；現行 revision 只接受唯一 Alembic 0008、可選非空完整 known prefix 的 fallback markers，或無 Alembic 且完整八枚 markers。Stale Alembic 0007 即使另有完整八枚 fallback markers 仍拒絕，不用 fallback 遮蓋舊 Alembic。只新增上述新欄 descriptor 檢查，不建欄、migration、補 default、掃歷史列或稽核 CHECK／trigger；§8.6 的六枚及先前七枚結果保留其原歷史範圍。
+
+必要記憶體有限驗證支持兩路徑 fresh／add-once／no-overwrite、guard、已測欄形拒絕、rollback／retry 與 parent rebuild 保留已知 child 新舊股數，沒有跑所有 schema 形狀的完整矩陣。External Connection 共用接線由來源核對；既有該入口的歷史有限證據保留，本輪未新增 0008 專用驗證或重新驗收此入口。指定磁碟 compound unittest 的四個 sequential synthetic 案例為 Alembic 0007→0008／fallback-only prefix 1..7→1..8，各 normal 與 backfill trigger fault；關閉／重開後驗已知列、schema／marker 的失敗 rollback、同庫 retry、冪等及兩市場 ODD／MAX 的 SQLite INTEGER 保存。磁碟 readiness 前後雜湊不變；另以兩個 actual `app.main` owned-fixture 程序證 startup／HTTP 保存／關閉重開。實際入口、副作用與配額見[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)，原始失敗／exit 與清理分報見[協作紀錄](TASK_COORDINATION.md)。未操作正式 DB 或 production deployment，不升格備份 restore、崩潰／並發／WAL、任意歷史 schema、non-SQLite、資料 truth／PIT 或完整 R0／M3。
 
 ## 9. B7：新舊版本隔離驗證與 review gate
 

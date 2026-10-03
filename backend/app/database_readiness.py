@@ -26,6 +26,7 @@ REVISIONS = (
     "0005_news_temporal_contract",
     "0006_news_json_defaults",
     "0007_turnover_availability",
+    "0008_portfolio_share_integer",
 )
 READ_TIMEOUT_SECONDS = 1.0
 _LEGACY_REQUEST_KEY_DDL = re.compile(
@@ -74,7 +75,7 @@ def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
         ):
             _fail("fallback revisions must be a distinct, nonempty known prefix")
         if not has_alembic and len(values) != len(REVISIONS):
-            _fail("fallback-only database requires all seven revisions")
+            _fail("fallback-only database requires all eight revisions")
     elif not has_alembic:
         _fail("database has no recognized migration markers")
 
@@ -181,6 +182,11 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
             _check_instrument_unique_indexes(connection, by_name)
         if name == "signal_settlements":
             _check_settlement_unique_indexes(connection)
+        if name == "portfolio_positions":
+            column = by_name["shares_integer"]
+            if (column[2].strip().upper() != "INTEGER" or column[3] != 0
+                    or column[4] is not None or column[5] != 0 or column[6] != 0):
+                _fail("portfolio_positions.shares_integer requires an ordinary nullable INTEGER without a default")
 
         unique_keys = set()
         for index in connection.execute(f"PRAGMA index_list({_quote(name)})"):

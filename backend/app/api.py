@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator, model_validator
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -68,7 +68,7 @@ from .product_time import (
     build_news_product_time,
     build_signal_product_time,
 )
-from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, volume_exact_text
+from .units import share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
 
@@ -2348,11 +2348,11 @@ def tracking_signal(signal_key: str, db: Session = Depends(get_db)) -> dict[str,
 class PositionInput(BaseModel):
     symbol: str
     exchange: str | None = None
-    shares: StrictInt | None = Field(default=None, gt=0)
+    shares: StrictInt | StrictStr | None = None
     unit: str | None = None
-    quantity: StrictInt | None = Field(default=None, gt=0)
-    quantity_lots: StrictInt | None = Field(default=None, gt=0)
-    odd_lot_shares: StrictInt | None = Field(default=None, gt=0)
+    quantity: StrictInt | StrictStr | None = None
+    quantity_lots: StrictInt | StrictStr | None = None
+    odd_lot_shares: StrictInt | StrictStr | None = None
     average_cost: float | None = Field(default=None, ge=0)
     stop_price: float | None = Field(default=None, ge=0)
     risk_budget: float | None = Field(default=None, ge=0)
@@ -2361,10 +2361,18 @@ class PositionInput(BaseModel):
     @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="before")
     @classmethod
     def json_safe_invalid_quantity(cls, value: Any) -> Any:
-        # JSON decoders may admit NaN/Infinity. Keep them invalid StrictInt
-        # inputs while making the framework's 422 error itself JSON-safe.
+        # JSON decoders may admit NaN/Infinity. An invalid JSON-safe object
+        # fails both strict branches, so 422 cannot echo a nonfinite number.
         if type(value) is float and not math.isfinite(value):
-            return str(value)
+            return {"invalid_nonfinite_quantity": str(value)}
+        return value
+
+    @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="after")
+    @classmethod
+    def validate_quantity_value(cls, value: Any) -> Any:
+        # Reject malformed quantities before model-level representation checks.
+        if value is not None:
+            shares_from_position_quantity(shares=value)
         return value
 
     @model_validator(mode="after")
@@ -2387,14 +2395,8 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         .order_by(desc(MarketBar.trading_date))
         .limit(1)
     )
-    # The legacy Float column cannot establish unsafe original integers. An
-    # unknown quantity must still allow the rest of the portfolio to load.
-    quantity = None
-    if type(position.shares) in {int, float} and 0 <= position.shares <= MAX_SAFE_SHARES:
-        try:
-            quantity = share_quantity_dict(position.shares)
-        except ValueError:
-            pass
+    total = trusted_position_shares(position.shares, position.shares_integer)
+    quantity = share_quantity_dict(total) if total is not None else None
     shares = position.shares
     if type(shares) not in {int, float} or (type(shares) is float and not math.isfinite(shares)):
         shares = None
@@ -2462,6 +2464,7 @@ def upsert_portfolio(position_input: PositionInput, db: Session = Depends(get_db
         position = PortfolioPosition(instrument_id=instrument.id)
         db.add(position)
     position.shares = position_input.shares
+    position.shares_integer = position_input.shares
     position.average_cost = position_input.average_cost
     position.stop_price = position_input.stop_price
     position.risk_budget = position_input.risk_budget

@@ -1,6 +1,6 @@
-/** Reconstructable memory-only M3-P1 quantity checks and full-App preview.
+/** Reconstructable M3-P2 memory-output quantity checks and full-App preview.
  * Existing --deps is borrowed read-only. --check needs no running server;
- * --http-check exercises the actual owned memory router after --serve starts.
+ * --http-check exercises the actual owned SQLite HTTP router after it starts.
  * No bundles, buildinfo, responses, screenshots, cache or test files are saved.
  */
 const fs = require('node:fs')
@@ -19,7 +19,7 @@ const dependencies = path.resolve(option('--deps', ''))
 if (!args.includes('--deps') || !fs.existsSync(path.join(dependencies, 'typescript/package.json'))) {
   throw new Error('--deps must name an existing read-only frontend/node_modules')
 }
-const apiOrigin = new URL(option('--api', 'http://127.0.0.1:8777'))
+const apiOrigin = new URL(option('--api', 'http://127.0.0.1:8779'))
 if (apiOrigin.protocol !== 'http:' || apiOrigin.hostname !== '127.0.0.1' || apiOrigin.pathname !== '/' || apiOrigin.search || apiOrigin.hash) {
   throw new Error('--api must be an owned 127.0.0.1 HTTP origin')
 }
@@ -184,7 +184,7 @@ async function check() {
     assert.ok(html.includes('持有 ' + mixed), 'actual portfolio component lost mixed quantity: ' + exact)
     assert.ok(html.includes('原股數 ' + original), 'actual portfolio component lost original quantity: ' + exact)
     assert.ok(html.includes('type="text" inputMode="numeric"'))
-    assert.ok(html.includes('1 至 9,007,199,254,740,991 股'))
+    assert.ok(html.includes('1 至 9,223,372,036,854,775,807 股'))
   }
   for (const exact of [null, '1\n', '9223372036854775808', '01']) {
     const html = render([syntheticPosition(1000, exact)])
@@ -225,10 +225,17 @@ async function httpCheck() {
       [{ shares: 1001 }, '1001'], [{ unit: 'lot', quantity: 2 }, '2000'],
       [{ quantity_lots: 3 }, '3000'], [{ odd_lot_shares: 999 }, '999'],
       [{ unit: 'odd_lot', quantity: 9007199254740991 }, '9007199254740991'],
+      [{ shares: '9007199254740993' }, '9007199254740993'],
+      [{ unit: 'odd_lot', quantity: '9223372036854775807' }, '9223372036854775807'],
+      [{ quantity_lots: '9223372036854775' }, '9223372036854775000'],
+      [{ odd_lot_shares: '9223372036854775807' }, '9223372036854775807'],
     ]) {
       const saved = await api.upsertPortfolio({ symbol: 'NEW', exchange, ...fields })
       routes++
       assert.equal(saved.shares_exact, exact)
+      assert.equal(typeof saved.shares_exact, 'string')
+      assert.equal(saved.quantity.odd_lot_shares, Number(exact.slice(-3)))
+      assert.ok(render([saved]).includes('原股數 ' + exact.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 股'))
       const read = await api.getPortfolio({ q: 'NEW' })
       routes++
       assert.equal(read.items.find((item) => item.id === saved.id).shares_exact, exact)
@@ -237,7 +244,8 @@ async function httpCheck() {
     routes++
     const original = before.items.find((item) => item.instrument.exchange === exchange)
     for (const fields of [{ shares: 9007199254740992 }, { unit: 'lot', quantity: 9007199254741 },
-      { unit: 'odd_lot', quantity: '9007199254740993' }, { shares: null }, { shares: true }, { shares: 1.5 }]) {
+      { unit: 'odd_lot', quantity: '9223372036854775808' }, { shares: '01' },
+      { quantity_lots: '9223372036854776' }, { shares: null }, { shares: true }, { shares: 1.5 }]) {
       const rejected = await fetch(apiOrigin.origin + '/api/portfolio', { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ symbol: 'NEW', exchange, ...fields }) })
       routes++
@@ -252,22 +260,22 @@ async function httpCheck() {
     routes++
     assert.ok(!remaining.items.some((item) => item.id === original.id))
     console.log(JSON.stringify({ exchange, safe_stored_float_exact: safe.shares_exact,
-      pure_int64_orm_claim: false, rejected_legacy: ['ODDFLOAT', 'MAXFLOAT'] }))
+      exact_string_transport: true, rejected_legacy: ['ODDFLOAT', 'MAXFLOAT'] }))
   }
   console.log(JSON.stringify({ passed: true, actual_http_routes: routes, parser: 'product fetch + Response.json',
-    source: 'synthetic user quantities, memory ORM commit/refresh/GET', disk_save_reopen: 'not_tested', disk_artifacts: 0 }))
+    source: 'synthetic user quantities through actual owned SQLite HTTP router', disk_save_reopen: 'separate disk runner required', preview_disk_artifacts: 0 }))
   esbuild.stop()
 }
 
 async function serve() {
-  const port = Number(option('--port', '8778'))
-  if (port !== 8778 || apiOrigin.origin !== 'http://127.0.0.1:8777') throw new Error('only owned ports 8777/8778 are authorized')
+  const port = Number(option('--port', '8780'))
+  if (port !== 8780 || apiOrigin.origin !== 'http://127.0.0.1:8779') throw new Error('only owned ports 8779/8780 are authorized')
   const build = await browserBuild()
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
-    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">記憶體合成使用者股數・2026-10-03・非正式持倉／磁碟保存驗收</p><div id="root"></div>')
+    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">隔離合成使用者股數・2026-10-03・非正式持倉／行情資料</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
@@ -305,8 +313,8 @@ async function serve() {
       }
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
-  server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned actual portfolio router',
-    pid: process.pid, url: 'http://127.0.0.1:8778/actions', api: apiOrigin.origin, fixture_date: '2026-10-03',
+  server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
+    pid: process.pid, url: 'http://127.0.0.1:8780/actions', api: apiOrigin.origin, fixture_date: '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }

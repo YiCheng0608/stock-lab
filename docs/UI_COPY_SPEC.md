@@ -126,7 +126,7 @@ DB／API quantity 保持精確整數股；台股 UI 的已知股數以 `原值 /
 
 #### M3-P1 既有庫存股數的有限呈現契約
 
-本批「既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收」的九個程式檔、必要驗證與具名庫存操作已由統籌有限接受。上述精確整數要求保留為目標；現有持倉 `shares` 儲存型別仍為 Float，本批只信任**目前儲存值**為有限、非負整數且不超過 `9,007,199,254,740,991` 的股數，零只供讀取。超上限、負值、分數或非有限舊值顯示「股數待核實」，不把已捨入的大數還原成原先奇數或 int64 上限，也不宣稱已修復存量或大整數保存。
+本節保留 M3-P1 當時的有限驗收，現行保存與輸入範圍由下方 [M3-P2](#m3-p2-可信整數保存與磁碟重開契約)補充。本批「既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收」的九個程式檔、必要驗證與具名庫存操作已由統籌有限接受。當時持倉 `shares` 儲存型別為 Float，本批只信任**當時儲存值**為有限、非負整數且不超過 `9,007,199,254,740,991` 的股數，零只供讀取。超上限、負值、分數或非有限舊值顯示「股數待核實」，不把已捨入的大數還原成原先奇數或 int64 上限，也不宣稱已修復存量或大整數保存。
 
 持倉 API 保留既有 `shares` 數字相容欄；非有限值不能作合法 JSON 數字時回 `null`。增添的 `shares_exact` 在可信時為 canonical ASCII 十進位整數字串，零為 `"0"`、其他值無前導零；不可信時為 `null`，`quantity` 亦為 `null`。可信 `quantity` 保留原有 numeric 欄與單位／拆分形狀，另補 `total_shares_exact`／`quantity_lots_exact` 字串；前端型別允許補欄缺失以相容舊 API。純 Python helper 接受實際 `int` 的 `0..9,223,372,036,854,775,807`，用整數 `divmod` 拆張／零股；這與 ORM Float 的安全範圍分開驗證，不把純 helper 的大數支持當成已保存的大數能力。
 
@@ -146,6 +146,30 @@ JavaScript 股數顯示 parser 支持完整 `0..9,223,372,036,854,775,807` 的 c
 | TPEx `390×844` 窄版，`1001` 股保存後刪除 | 呈現 `1 張 1 股` 及原值 `1,001 股`；document 寬 375，12 張卡的 24 個數量子元素 client／scroll width 均為 273，editor 寬 305，未觀測橫向溢出。 |
 
 具名操作的擷取範圍 console 為空；19 個網路請求均為自有 `8778`、status 200（3 POST／2 DELETE／14 GET），23 個 performance entries 均同 origin，觀測外網為 0。這些計數限該擷取範圍，不當整段 session 的完整 log。preview 只在記憶體 CSS 排除外部字型並以 CSP 阻外網，本次限 fallback font，不修改正式字型契約。QA viewport 已還原 `1365×900`，tab 已關閉，兩個自有 server／listener 已獨立核實不存在，新增測試產物／殘留為 0；測試與清理的 exit 0 分報，版本、命令、操作及清理收據留原 task。
+
+#### M3-P2 可信整數保存與磁碟重開契約
+
+本批支援 M3／R2-C1 的股數保存基線；核心契約、必要記憶體／磁碟／HTTP 與下表具名操作已有限接受。持倉保留 `shares` Float 相容欄，另用 nullable `shares_integer` 保存 `0..9,223,372,036,854,775,807` 的 SQLite 整數，零只供讀取。有效新欄優先；新欄非 NULL 卻非實際 int、為負值或溢位時，`shares_exact`／`quantity` 為 `null`，不得回退至 Float。新欄 NULL 才可沿 M3-P1 gate 使用目前有限、非負、安全整數的舊值；unsafe、分數、負值及非有限舊值仍是「股數待核實」。Migration 只一次回填可信舊值，不重建已捨入的原數，也不改舊 Float 或成本／停損／風險／note／updated_at；具體 schema／rollback 規則見 [R0 §8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
+
+新寫入同時保存 exact int 與 Float mirror。API `shares` 保持 raw Float 的有限數字相容性，非有限回 `null`；它與 `quantity` 原 numeric 欄在超過安全整數時不能作精確顯示依據。`shares_exact`、`total_shares_exact` 與 `quantity_lots_exact` 使用 canonical ASCII 整數字串，張／零股由整數拆分，`quantity` 原有 numeric／unit／display 形狀保留。JavaScript 優先用完整精確字串，不經 Number；只有精確欄缺失的舊 API 可回退至有限、非負、安全整數 number，明示 `null` 或壞字串仍不得補值。`mixed` 的已知張／零股拆分與來源單位 unknown／mixed 的語意保持 M3-P1 規則。
+
+四種互斥輸入仍為 `shares`、`unit + quantity`（`unit=lot`／`odd_lot`）、`quantity_lots`、`odd_lot_shares`，一次只能提供一種。每種欄位可用 strict 正整數 number，最終總股數仍限 `1..9,007,199,254,740,991`；或用無前導零的 canonical ASCII 正整數字串，最終總股數可到 `9,223,372,036,854,775,807`。張數以整數乘 1,000 後再驗上限；number 張數上限 `9,007,199,254,740`，string 張數上限 `9,223,372,036,854,775`。零、bool、float、負值、Unicode 數字、空白／換行、正負號、分數、科學記號、混合表示及溢位，均在 commit 前以 HTTP 422 拒收，既有持倉完整列保持不變。
+
+UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；全零仍拒收，不轉 Number 送量。表單說明 int64 保存上限，股單位與張單位分別套上述 string 上限；保留完整原股數、張數與餘股，超限時不送 POST。最大合法張數保存成 `9,223,372,036,854,775,000` 股，零股為 0。顯示 parser 的 `0..int64 MAX` 範圍不縮限，平均成本仍是每股價格，表外單位依 §10.4。
+
+本批不改正常有限估值、held／worker／risk／new Plan 行為；Float 相容欄的大數估值不宣稱 exact 或完整驗收。來源與保存範圍為 `2026-10-03` synthetic TWSE／TPEx 使用者庫存，沒有新增官方來源或正式持倉 coverage。必要磁碟 migration／close／reopen、actual `app.main` owned fixture startup 與 HTTP 支持範圍見[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)；正式 DB／migration、production deployment、真官方／live、完整 backend／production Vite build、新計畫、完整 M3、歷史／availability／PIT 及原 M1／M2 gate 仍未完成。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| Actual `1365×900` 桌面，TWSE NEW 股單位 `9007199254740993` | POST 200；完整原股數與 `9,007,199,254,740 張 993 股` 正確。 |
+| 同桌面，TPEx NEW 股單位 `9223372036854775807` | POST 200；完整原股數與 `9,223,372,036,854,775 張 807 股` 正確。 |
+| 關閉第一個 API 程序，再以第二個程序開同一磁碟庫 | actual lifespan／readiness 通過；完整兩列 NEW JSON（含 updated_at）與關閉前相同。 |
+| `390×844` reload，兩列完整 int64 呈現 | document client／scroll width 均 375，數量元素均 273，未觀測橫向溢出。 |
+| 窄版股數 MAX+1／張數 `9223372036854776` | 原生表單拒收、POST 計數 `2→2`；兩列完整 NEW JSON 不變。 |
+| 窄版最大合法張數 `9223372036854775` | 保存 200，exact 股數 `9223372036854775000`／零股 0；14 張卡的 28 個數量元素 client／scroll width 均 273，editor 305，未觀測橫向溢出。 |
+| 窄版原生刪除兩列 NEW，再讀回 | 兩次 DELETE 200；GET 200／items 空、cards 0。 |
+
+本次只接受正確 post-navigation viewport 與 focus 後實際生效的操作；初始 blank viewport、hidden 頁面的未生效 click 及 Orca runtime_unavailable 不算操作通過。擷取範圍 32 個 network requests（27 GET／3 POST／2 DELETE）均為自有 8780、status 200，reload 後 16 個 performance resources 均同 origin，觀測外網為 0；不當完整 session log。Console 的 7 entries 為 3 個 React DevTools info 與 4 個已知 React Router future warnings，無 error，不宣稱空 console。QA viewport 已還原、tab 已關閉，自有程序／child／listener 已核實不存在；隔離 DB 已清；capture stop 額外 HAR 的審核拒絕殘留分報於[協作紀錄](TASK_COORDINATION.md)。命令、版本、原始失敗與有限接受收據留原 task，不另造附件。
 
 ### 10.4 數值表格、單位與空白
 

@@ -6,6 +6,7 @@ from sqlalchemy import Engine, inspect, text
 
 from .config import ALEMBIC_CONFIG_PATH
 from .news_json_defaults import ensure_news_json_server_defaults
+from .portfolio_share_migration import ensure_portfolio_share_integer
 from .settlement_identity_migration import preflight_settlement_identity, rebuild_settlement_identity
 from .instrument_identity_migration import (
     check_sqlite_migration_integrity,
@@ -164,6 +165,7 @@ def _fallback_upgrade_on_connection(connection) -> None:
     _rebuild_instruments_if_needed(connection)
     _ensure_request_key_index(connection)
     _rebuild_signal_settlements_if_needed(connection)
+    ensure_portfolio_share_integer(connection)
     if inspect(connection).has_table("news_items"):
         connection.execute(
             text(
@@ -230,6 +232,12 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0007_turnover_availability', CURRENT_TIMESTAMP)"
+        )
+    )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0008_portfolio_share_integer', CURRENT_TIMESTAMP)"
         )
     )
 

@@ -1,6 +1,6 @@
 # 開發路線與目前能力
 
-更新：2026-10-03。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-10-04。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（含產品有限核對與 R1-A2 磁碟驗收）
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件及本次 feed 記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試、legacy migration 兩路徑八案例、指定三種 selected invalid／四類拒收的磁碟重開→API 整合已各有限驗收；legacy 日行情成交量精確整數 gate／TPEx 空結果條件及指定 capture→collect→SQLite 重開→HTTP 精確整數與拒收保留均已有限接受；產業期間、停復牌與公司行動局部修正。 | 成交量在指定 synthetic API／JavaScript／個股範圍已有限接受；真實逐欄 coverage 與其他股數投影精度仍待驗；其他未覆蓋 selected／legacy invalid 或拒收磁碟整合與正式 DB 升級待驗。逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、完整事件群組／摘要與其他來源產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口；M1-P1 截止一致總覽、P2b TPEx 單日法人原件、P3b selected 官方事件原件 API／UI、M2-P1 官方事件關注接個股總覽及 M2-P2 搜尋／研究往返已各有限 review。 | 完整 M1 的法人／交易日窗口、完整事件 coverage 及研究條件；完整 M2 的其他理由與分類品質；歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口；M1-P1 截止一致總覽、P2b TPEx 單日法人原件、P3b selected 官方事件原件 API／UI、M2-P1 官方事件關注接個股總覽、M2-P2 搜尋／研究往返，以及 M3-P1／P2 的既有庫存精確呈現、int64 保存與指定磁碟重開已各有限 review。 | 完整 M1 的法人／交易日窗口、完整事件 coverage 及研究條件；完整 M2 的其他理由與分類品質；歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
 **籌碼三區仍待做**：三大法人沿用已有資料；主力進出與券商分點的交易匯入、統計、排行／歷史及自動更新尚未完成。定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
@@ -51,9 +51,11 @@
 
 **前輪 M1／R1-A2 成交量 HTTP→JavaScript→個股精確呈現（已有限接受並提交／合併）**：支援 M1 研究資料可信／R1-A2，解除指定 synthetic API→JavaScript→個股文字的精度缺口。保留既有數字欄位、增添精確整數字串與舊回應的有限回退，接通可用的 App 頂部、行情／總覽、圖表提示及等效資料表，圖形高度明示近似，並補窄版長數字換行。程式、必要記憶體／HTTP 與完整字串邊界複驗、TWSE／TPEx `MAX`／`ODD`／`ZERO0` 具名操作、390px 與截止按鈕操作已有限接受；測試產物／殘留為 0，自有 tab／程序／listener 已核實關閉或不存在，兩個 serve 的 exit 1 與測試 exit 0 分報。主契約、fixture 及精確支持範圍見[個股頁 §14](STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)，入口見[開發入口](development-baseline/README.md#m1r1-a2-成交量精確呈現的零落盤驗證入口)，freeze／封存見[協作紀錄](TASK_COORDINATION.md)。不稱真官方／live、不放寬 TWSE selected gate 或 TPEx 總覽、不升格完整 M1、正式 DB、5／20 日或 PIT。
 
-**本輪 M3-P1 既有可信庫存股數→精確張／零股／原股呈現與失精輸入拒收（已有限接受）**：支援 M3 的既有持倉單位呈現及 R2-C1 股數基線，採目前可信的 Float 安全整數、精確字串相容表示及 commit 前輸入 guard；純 Python int／顯示 parser 的 int64 範圍與 ORM Float 安全範圍分報，不還原已失精大數。九個程式檔、必要記憶體／實際 router／HTTP／前端驗證，以及兩市場桌面／390px 的 SAFE 保存、股／張超限拒收、零與未知、讀回及刪除操作已有限接受；自有 tab／程序／listener 已核實關閉或不存在，新增測試產物／殘留為 0，測試與清理 exit 0 分報。主契約與具名支持範圍集中見 [UI 文案 §10.3](UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，驗證入口見[開發入口](development-baseline/README.md#m3-p1-既有庫存股數的零落盤驗證入口)，freeze／索引／commit／merge 狀態見[協作紀錄](TASK_COORDINATION.md)。正常估值／決策／計畫不改，記憶體保存讀回不當磁碟重開，不升格精確大數存量、正式 DB、真官方／live、完整 backend／production build 或完整 M3。
+**前輪 M3-P1 既有庫存股數呈現與失精輸入拒收（已有限接受並版本封存）**：以當時可信 Float 安全整數支持精確張／零股／原股、commit 前拒收及兩市場桌面／390px 操作；純 helper 的 int64 與 Float 保存支持分報，記憶體讀回不當磁碟重開、不還原已失精舊值。當時新增測試產物／殘留為 0，首次 cached whitespace 檢查失敗與正常 follow-up 提交／master 合併分報，詳見[協作紀錄](TASK_COORDINATION.md)。原有限契約與具名範圍見 [UI 文案](UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，原入口見[開發入口](development-baseline/README.md#m3-p1-既有庫存股數的零落盤驗證入口)。
 
-下一具名候選為**可信整數保存、legacy unsafe migration 證據與磁碟重開**；須本輪合併後由新統籌在新 worktree 有界核對資料、寫入相容、遷移與隔離磁碟驗收所需依賴，才核定修法、範圍與完成條件。本輪不固定下一輪儲存或遷移方案，也不由 SAFE 的記憶體讀回推論 unsafe 舊值可恢復。
+**本輪 M3-P2 可信整數保存與磁碟重開（已有限接受）**：支援 M3／R2-C1 保存基線，解除股數字串到 SQLite int64、必要 0008 migration／readiness 及指定 close／reopen 的斷點。26 個程式檔與必要記憶體、兩 migration 路徑 normal／fault 的四個磁碟案例、actual main owned-fixture startup／HTTP，以及兩市場桌面／390px 的 ODD／MAX 保存、第二程序重開、MAX+1／張數超限拒收與完整列保留、最大張數／刪除已有限接受。主契約見 [UI 文案](UI_COPY_SPEC.md#m3-p2-可信整數保存與磁碟重開契約)，有限 migration 與入口見 [R0 §8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)／[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)。隔離 DB 已清；額外 HAR 的審核拒絕殘留、原始失敗及 freeze／索引／commit／merge 狀態另列[協作紀錄](TASK_COORDINATION.md)。不回復捨入舊值，不宣稱大數金融估值 exact、正式 DB／production deployment、真官方／live、新 Plan、完整 backend／production build、完整 M3 或 PIT。
+
+下一具名候選為**既有庫存成本／停損／風險輸入可信檢核與拒收保留**；須本輪合併後由新統籌在新 worktree 有界核來源、所有 caller、Float 相容、資料與副作用，再核最小能力、修法及完成條件，不固定方案。因本輪 HAR 殘留已達上限，下一輪先做 memory／唯讀、零新增落盤工作，不承襲本輪 fixture、ports 或用新 session 重置限制；必要磁碟驗證須先核既有殘留與授權處理。這不停止其餘可進行的有界工作；新計畫、官方價格、risk sizing、source pins 與 PIT gates 保持。
 
 M3 可由既有 caller-input 計畫純核心評估接線，但新計畫保存／合法執行仍須其本身的官方 tick／費稅／合法時段／來源與時間 gate，且磁碟保存驗收不能用記憶體取代；不由 legacy tracking 推論新計畫已完成。
 

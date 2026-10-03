@@ -174,7 +174,12 @@ class ShareQuantityExactTest(unittest.TestCase):
                   ({"unit": "odd_lot", "quantity": 1500}, "1500"), ({"quantity_lots": 3}, "3000"),
                   ({"odd_lot_shares": 999}, "999"), ({"shares": SAFE}, str(SAFE)),
                   ({"unit": "odd_lot", "quantity": SAFE}, str(SAFE)),
-                  ({"quantity_lots": 9007199254740}, "9007199254740000")]
+                  ({"quantity_lots": 9007199254740}, "9007199254740000"),
+                  ({"shares": "9007199254740993"}, "9007199254740993"),
+                  ({"unit": "odd_lot", "quantity": str(MAXIMUM)}, str(MAXIMUM)),
+                  ({"unit": "lot", "quantity": "9223372036854775"}, "9223372036854775000"),
+                  ({"quantity_lots": "9223372036854775"}, "9223372036854775000"),
+                  ({"odd_lot_shares": str(MAXIMUM)}, str(MAXIMUM))]
         with TestClient(fixture.app) as client:
             for exchange in ("TWSE", "TPEx"):
                 for fields, expected in inputs:
@@ -188,12 +193,14 @@ class ShareQuantityExactTest(unittest.TestCase):
                         with Session(fixture.engine) as db:
                             stored = db.get(PortfolioPosition, payload["id"])
                             self.assertIs(type(stored.shares), float)
-                            self.assertEqual(stored.shares, int(expected))
+                            self.assertEqual(stored.shares, float(int(expected)))
+                            self.assertIs(type(stored.shares_integer), int)
+                            self.assertEqual(stored.shares_integer, int(expected))
                         read = client.get("/api/portfolio?q=NEW").json()["items"]
                         row = next(item for item in read if item["id"] == payload["id"])
                         self.assertEqual(row["shares_exact"], expected)
-                        self.assertEqual(row["market_value"], 10.5 * int(expected))
-                        self.assertEqual(row["unrealized_pnl"], 10.5 * int(expected) - 10 * int(expected))
+                        self.assertEqual(row["market_value"], 10.5 * float(int(expected)))
+                        self.assertEqual(row["unrealized_pnl"], 10.5 * float(int(expected)) - 10 * float(int(expected)))
 
     def test_invalid_input_refuses_before_commit_and_retains_existing_position(self):
         fixture = MemoryFixture()
@@ -202,9 +209,10 @@ class ShareQuantityExactTest(unittest.TestCase):
                    {"shares": 1, "quantity_lots": 1}, {"unit": "lot", "quantity": 1, "odd_lot_shares": 1},
                    {"shares": 1, "unit": "lot"}, {"quantity": 1}, {"quantity_lots": 1, "unit": "lot"}]
         for field in ("shares", "quantity", "quantity_lots", "odd_lot_shares"):
-            for value in (None, True, False, 0, -1, 1.5, "1", SAFE + 1, 9007199254740993, MAXIMUM):
+            for value in (None, True, False, 0, -1, 1.5, "01", "0", "1\n", "9223372036854775808", SAFE + 1, 9007199254740993, MAXIMUM):
                 invalid.append({field: value, **({"unit": "odd_lot"} if field == "quantity" else {})})
-        invalid += [{"unit": "lot", "quantity": 9007199254741}, {"quantity_lots": 9007199254741}]
+        invalid += [{"unit": "lot", "quantity": 9007199254741}, {"quantity_lots": 9007199254741},
+                    {"quantity_lots": "9223372036854776"}, {"unit": "lot", "quantity": str(MAXIMUM)}]
         with TestClient(fixture.app) as client:
             baseline = client.get("/api/portfolio?q=MIXED").json()["items"][0]
             for fields in invalid:

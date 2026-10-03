@@ -9,6 +9,7 @@ opening the production database.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 
@@ -33,10 +34,34 @@ def _strict_positive_integer(value: Any, field_name: str) -> int:
 
 
 def _position_total(value: Any, field_name: str, multiplier: int = 1) -> int:
+    limit = MAX_SAFE_SHARES
+    if type(value) is str:
+        limit = MAX_INT64_SHARES
+        # Bound length before parsing; accept canonical ASCII decimal only.
+        if len(value) > 19 or not re.fullmatch(r"[1-9][0-9]*", value, flags=re.ASCII):
+            raise ValueError(f"{field_name} must be a canonical positive integer string")
+        value = int(value)
     total = _strict_positive_integer(value, field_name) * multiplier
-    if total > MAX_SAFE_SHARES:
-        raise ValueError(f"total shares must not exceed {MAX_SAFE_SHARES}")
+    if total > limit:
+        raise ValueError(f"total shares must not exceed {limit}")
     return total
+
+
+def safe_legacy_position_shares(value: Any) -> int | None:
+    """Trust only the current safe stored number, never reconstruct an origin."""
+    if type(value) is int and 0 <= value <= MAX_SAFE_SHARES:
+        return value
+    if (type(value) is float and math.isfinite(value) and value.is_integer()
+            and 0 <= value <= MAX_SAFE_SHARES):
+        return int(value)
+    return None
+
+
+def trusted_position_shares(legacy: Any, integer: Any = None) -> int | None:
+    """A present malformed integer must not fall back to a legacy Float."""
+    if integer is not None:
+        return integer if type(integer) is int and 0 <= integer <= MAX_INT64_SHARES else None
+    return safe_legacy_position_shares(legacy)
 
 
 def shares_from_position_quantity(
@@ -50,7 +75,9 @@ def shares_from_position_quantity(
     """Normalize one explicit quantity representation to total shares.
 
     ``shares`` is the legacy input and remains accepted as a strict positive
-    integer.  New clients may send ``unit`` + ``quantity`` or one of the
+    integer or a canonical positive decimal string. Numbers retain the safe
+    total-share bound; strings may use the complete signed-int64 range.
+    New clients may send ``unit`` + ``quantity`` or one of the
     explicit ``quantity_lots`` / ``odd_lot_shares`` fields.  Mixing
     representations is rejected so a typo cannot silently double a position.
     """

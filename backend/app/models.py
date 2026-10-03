@@ -265,6 +265,7 @@ class PortfolioPosition(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), unique=True)
     shares: Mapped[float] = mapped_column(Float, default=0)
+    shares_integer: Mapped[int | None] = mapped_column(Integer, nullable=True)
     average_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_budget: Mapped[float | None] = mapped_column(Float, nullable=True)
