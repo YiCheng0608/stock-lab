@@ -19,6 +19,8 @@
 | 保存與重播 | [Signal artifact](SIGNAL_ARTIFACTS.md)、[離線描述比較](SIGNAL_COMPARISON.md)、[Pure-rule replay](RULE_REPLAY.md)、[Worker capture](WORKER_ANALYSIS_CAPTURE.md) |
 | 開發協作 | [AGENTS](../AGENTS.md)、[接手狀態](TASK_COORDINATION.md)、[驗證入口](development-baseline/README.md)、[後端](../backend/README.md)、[前端](../frontend/README.md) |
 
+角色模型與 Reasoning 以 [AGENTS「四個角色」](../AGENTS.md#四個角色)為準；新建或恢復角色時須核對該配置。實際 session／建立參數、接手與暫停狀態由[協作紀錄](TASK_COORDINATION.md)負責，修改規則不會自動切換既有 chat，也不改寫舊 session 的實際紀錄。
+
 [Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)與[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md)只保留歷史定位，不作新派工依據。
 
 ## 文件維護

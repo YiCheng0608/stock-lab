@@ -40,7 +40,7 @@ server `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 明示啟用 `POST /api/stocks/{exch
 
 ### M2-P2 搜尋與研究往返的驗收入口
 
-沿用 M2-P1 明示取得與零額外落盤入口，GET／POST 可帶 optional `q`；原始最多 100 個 Unicode 字元、全 feed 驗證後搜尋再套上限，純記憶體測試須另驗匹配外壞列、101 股以上與同股名稱／完整事件，不能只對前 100 股或 live 58 股聲稱完整邊界驗收。統籌已有限接受實際原件／API 與搜尋／M1 往返、截止切換及窄版操作，以及 78 個記憶體測試、前端型別／最終 16 組 SSR／全 App 記憶體 bundle 的 exit 0，最終文件待 freeze。精確支持範圍及未跑項見[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)；完整 backend／production Vite build 未跑，不以 fixture、memory catalogue 或記憶體 bundle 代替來源／DB／production 驗收。首輪測試／SSR helper 失敗與修正後成功分留 task；命令、版本、exit、原件 hash 與 QA 清理收據留本輪 task，不另建附件，既有殘留及零落盤限制保留。
+沿用 M2-P1 明示取得與零額外落盤入口，GET／POST 可帶 optional `q`；原始最多 100 個 Unicode 字元、全 feed 驗證後搜尋再套上限，純記憶體測試須另驗匹配外壞列、101 股以上與同股名稱／完整事件，不能只對前 100 股或 live 58 股聲稱完整邊界驗收。統籌已有限接受實際原件／API 與搜尋／M1 往返、截止切換及窄版操作，以及 78 個記憶體測試、前端型別／最終 16 組 SSR／全 App 記憶體 bundle 的 exit 0，該輪已 freeze／索引／本地 commit。精確支持範圍及未跑項見[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)；完整 backend／production Vite build 未跑，不以 fixture、memory catalogue 或記憶體 bundle 代替來源／DB／production 驗收。首輪測試／SSR helper 失敗與修正後成功分留 task；命令、版本、exit、原件 hash 與 QA 清理收據留本輪 task，不另建附件，既有殘留及零落盤限制保留。
 
 ## 歷史驗證
 
