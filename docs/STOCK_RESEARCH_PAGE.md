@@ -252,3 +252,50 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 本輪新增測試附件／產物為 0，專用前後端 process 已終止、memory body 隨 process 釋放，測試 tab 已關閉並還原 viewport；舊落盤殘留與清理拒絕保持原限制、不重試。額外測試落盤配額為 0，入口限制見[開發與驗證入口](development-baseline/README.md)。
 
 完整 M1 仍缺可驗 5／20 交易日窗口與成立／未成立研究條件；本批不接 DB／legacy、新聞群組／更正／撤回史、自動排程或交易，不增加 R0／R1／R2-E1 整體完成度。
+
+## 12. M2-P1：官方事件關注清單接個股總覽
+
+**程式、真原件／API 與下述具名桌面／窄版操作已 review（有限）。** 本批在今日頁新增官方事件關注清單，版本 `official-event-focus/p1-v1`；只採既有 exact TWT48U 記憶體來源與固定 pins，不把事件分類變成交易訊號、價格影響或可信排名。來源 consumer 契約見[來源 §11](SOURCE_REGISTRY.md#11-m2-p1本次官方事件-feed-摘要)，M1 的 5／20 日與研究條件等待狀態保留。
+
+### 12.1 明示截止、取得與同一份原件
+
+`GET /api/focus/official-events?as_of=YYYY-MM-DD` 必須明示有效日期，缺少或 invalid query 回 HTTP 422，普通 GET 與 import 不送外網 request。`POST /api/focus/official-events/capture?as_of=YYYY-MM-DD` 才是首次取得操作，不需 body 參數；沿用 server exact `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 與 §11.1 的固定來源、用途及記憶體限制，不需 client 指定 endpoint、pins 或檔案路徑。今日頁未帶 query 時，日期控制預填當下臺北日期並明示送給 API；這不更動 M1「最新資料」的 cutoff fallback。
+
+關注清單與 P3b 個股事件共用同一 process 的 cache／鎖；首次合格 capture 成功後只再用同一份 immutable body／receipt，不 refresh 或背景更新。合法空 feed 可發布成功 cache，之後 selected consumer 仍須拒收缺 selected，不能把零筆關注結果改成已證個股無事件。取得中、HTTP／receipt／feed 不合格、未明示啟用或沒有 cache 與合法零筆須分開；失敗不發布新 cache。重啟後記憶體消失，不能稱持久化或可離線重播。
+
+本次 capture 的臺北 `observed_date` 須不晚於明示 `as_of`，才可呈現清單；較早截止不回事件，也不由觀測日補日期。官方生效日期仍可晚於截止，保留為未來生效預告。觀測日／UTC capture time 與生效日分開；發布／首次可得／修訂時間仍 null／unknown，`historical_pit=unsupported`。`as_of` 只限制這次觀測的事後研究範圍，不證當時已可得、截至日前最新 feed 或完整交易日。
+
+| 情境 | 關注清單結果 |
+| --- | --- |
+| 無成功 cache 的普通 GET | `event_memory_capture_missing`；只在截止不早於當下臺北日期時允許首次取得。 |
+| 無 cache 且 POST 截止早於當下臺北日期 | `event_cutoff_before_current_observation`，零外網取得。 |
+| cache 觀測日晚於截止 | `event_observation_after_cutoff`，`items=[]`／`provenance=null`；同原件仍保留，不取得新版本。 |
+| 未啟用、設定錯誤或取得中 | `event_capture_not_enabled`、`event_capture_configuration_invalid` 或 `event_capture_in_progress`；不公開事件內容。 |
+| feed／receipt 拒收或 HTTP 失敗 | unavailable，保留安全 consumer reason 或 `http_status:503`；不發布成功 cache。 |
+| 合格 feed，觀測日不晚於截止 | available，含合法零筆；再次讀取或 POST 為 `capture_action=cached`，不 refresh。 |
+
+所有 focus 回應均無頂層 `rows`；非 available 結果的 `items=[]`，不以原件內容作 fallback。回應的 `coverage=observed_feed_only`、`research_conditions=unknown` 明列範圍。
+
+### 12.2 同股去重與可追溯理由
+
+全 feed 合格後，以 TWSE＋來源代碼組成一張關注卡，同股所有事件放在 `items[].events`，保留原件列序及各自生效日期／除權息分類。關注理由只陳述「本次官方資料集觀測到的除權息事件」，不加正負催化、分數、勝率、價位或策略成立判斷。`order=symbol_lexicographic` 是固定代碼字串順序，不表示推薦次序；`limit=100`，`total` 是本次不同標的數、`displayed` 是實際顯示標的數，`truncated` 表示是否超過上限，不讓截斷偽裝成完整清單。`candidate_count`／`selected_count` 是已驗的 feed 事件列數，不能當標的數或交易股數。
+
+來源代碼／公司名與事件先保留，`company_name` 不由 catalogue 名稱覆寫。Catalogue 的 TWSE＋代碼已知時，`stock_page_available=true`，`detail_url` 提供帶同一 `as_of` 的 M1 個股總覽入口；未知時為 false／null，保留來源名稱與事件，顯示尚無個股目錄對應，不猜 instrument 或建立連結。已知標的連結不放行 M1 缺少的價格、法人窗口或研究條件，也不把 ETF 稱普通股票。
+
+清單呈現「本次觀測」、觀測日、生效日及未來預告；原日期／分類與列序收在「事件原件值」。來源 details 提供來源／授權入口、來源與 registry version、固定 pins、雙 hash 與格式化觀測時間；API 保留 capture／request UTC 原值及用途／條件 receipts。`source_url_kind=feed` 的入口定位官方資料集，畫面來源「臺灣證券交易所原始資料」不稱本則單篇原文；未驗金融數值不公開。合法空 JSON array 只表示**這次合格 feed 零筆**，不代表全市場沒有事件；來源不足、invalid 或 cutoff 拒用仍 unavailable，不補候選。
+
+### 12.3 驗收與尚缺項
+
+統籌於 **2026-10-03（臺北）** 接受一次實際首頁首次取得按鈕 → focus POST → exact TWT48U capture → consumer → API：HTTP 200、`request_count=1`、`capture_calls=1`，capture UTC `2026-10-03T02:03:07.107068+00:00`；body **15,689 bytes、58 列／58 個不同代碼**，`total=displayed=58`、`truncated=false`。全 58 列的 `Code`／`Name`／`Date`／`Exdividend` 與 1-based 列序逐列對 API 一致；未驗金融欄位仍未公開。本次 feed 每股一個事件，同股多事件及超過 100 股的情境另由 fixture 核對，不把這次 live 當成該邊界的真實案例。
+
+同一份原件供 M1 **0056／元大高股息（ETF）、1449／佳和、1463／強盛新** 使用，detail 的總覽與獨立總覽同一 `as_of`、selected rows 及雙 hash 一致；`as_of=2026-10-02` 排除本次觀測。0056 的原值 `1151022／息／列 5`，1449 `1151012／權／列 49`，1463 `1151015／息／列 50` 已核對，未來生效預告保留。Harness 的記憶體 catalogue 只提供上述三標的路由 metadata，其餘 **55 股**保留來源名稱／事件但無個股連結；這不是正式 catalogue、真行情、磁碟 DB 或全市場 coverage 驗收。
+
+桌面真畫面已核對首次按鈕取得 **58 張卡**、10 月 2 日截止無卡且提示排除、套回 10 月 3 日恢復同 58 卡／同 cache；來源／授權入口、0056 原件值 details 及進入同截止 M1 已核對。新聞區空文字曾與上方已取得事件矛盾，局部文案退修後以同一 live cache 複驗通過，不改寫其他新聞頁或新聞 API。
+
+**390×844** 窄版已核對 58 卡、日期控制、讀取已取得原件、來源 hash 換行；document scroll width **375 < 390**，表格在自身範圍水平捲動，沒有迫使整頁橫向捲動。從 1463 進 M1 保留同截止，10 月 15 日除息可讀。截止、讀 cache 及詳情往返後取得次數仍為 1，不稱最新 feed 或背景更新。
+
+後端純記憶體 consumer／API 必要回歸、非 available 無頂層 `rows` 的退修複驗，以及前端型別／SSR／記憶體全 App bundle 通過。合法空 feed、同股多事件、100 股截斷、unknown catalogue、receipt／pins／分類拒收與取得鎖等 fixture 情境只證實作邊界；**完整 backend／production Vite build 未跑**，記憶體 bundle 不能代替 production 驗收。本次 live body／receipt 未保存，**不能離線重播**；命令、版本、exit、hash、失敗／退修與成功複驗，以及最終 freeze／索引／commit 收據留本輪 task，不另存附件。
+
+測試與清理分報：QA tab 已關閉、viewport 已還原；專用 backend、最後一次與先前兩次 frontend 自有進程皆已終止、exit 0，memory body 隨 process 釋放。新增附件／暫存為 0，舊殘留及清理拒絕維持原狀，額外落盤配額仍為 0；精確限制見[協作紀錄](TASK_COORDINATION.md)。
+
+本批不增加來源准入、DB／legacy、新聞跨源群組／更正／撤回史、族群可信排名、研究條件、完整 M1／M2、排程或交易能力；完整歷史與 PIT、R0／R1／R2-E1 整體 gate 保留。

@@ -132,6 +132,27 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
     Missing selections fail closed and never mean a verified absence of events.
     """
     requested = _symbols(symbols)
+    return _summarize_memory(body, receipt_bytes, manifest=manifest, profile=profile,
+                             expected_registry_version=expected_registry_version,
+                             expected_digest=expected_digest, requested=requested)
+
+
+def summarize_memory_feed(body: bytes, receipt_bytes: bytes, *, manifest: str | Path,
+                          profile: str, expected_registry_version: str,
+                          expected_digest: str) -> dict:
+    """Verify all observed feed rows; an empty body list proves only this feed.
+
+    Every observed code is selected for identity/classification validation.
+    This is not complete market coverage or a historical absence claim.
+    """
+    return _summarize_memory(body, receipt_bytes, manifest=manifest, profile=profile,
+                             expected_registry_version=expected_registry_version,
+                             expected_digest=expected_digest, requested=None)
+
+
+def _summarize_memory(body: bytes, receipt_bytes: bytes, *, manifest: str | Path,
+                      profile: str, expected_registry_version: str,
+                      expected_digest: str, requested: list[str] | None) -> dict:
     source, decisions = _admission(manifest=manifest, profile=profile,
                                    expected_registry_version=expected_registry_version,
                                    expected_digest=expected_digest)
@@ -177,8 +198,10 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
     _require(_timestamp(receipt.get("request_started_at")) <= _timestamp(receipt.get("captured_at")),
              "nonmonotonic_capture_timestamps")
     payload = _json(body)
-    _require(type(payload) is list and bool(payload), "nonempty_row_list_required")
-    matches = {symbol: [] for symbol in requested}
+    whole_feed = requested is None
+    _require(type(payload) is list and (whole_feed or bool(payload)),
+             "row_list_required" if whole_feed else "nonempty_row_list_required")
+    matches = {} if whole_feed else {symbol: [] for symbol in requested}
     identities = set()
     for ordinal, row in enumerate(payload, 1):
         _require(type(row) is dict, "row_object_required")
@@ -186,6 +209,8 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
         _require(isinstance(code, str) and re.fullmatch(r"[0-9A-Z]{4,6}", code) is not None,
                  "invalid_security_code")
         effective = _day(row.get("Date"))
+        if whole_feed:
+            matches.setdefault(code, [])
         if code not in matches:
             continue
         _require(isinstance(row.get("Name"), str) and bool(row["Name"].strip()), "selected_name_missing")
@@ -203,6 +228,8 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
                               "revision_available_at": None, "availability": "unknown"})
     for symbol, rows in matches.items():
         _require(bool(rows), "selected_symbol_missing:" + symbol)
+    if whole_feed:
+        requested = sorted(matches)
     rows = [row for symbol in requested for row in matches[symbol]]
     receipt_digest = hashlib.sha256(receipt_bytes).hexdigest()
     provenance = {"source_id": SOURCE_ID, "source_version": source["source_version"], "endpoint": ENDPOINT,
@@ -210,8 +237,9 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
                   "body_sha256": digest, "receipt_sha256": receipt_digest,
                   "captured_at": receipt["captured_at"], "request_started_at": receipt["request_started_at"],
                   "storage": "memory_only", "verification": "local_evidence_consistent"}
-    return {"version": SUMMARY_VERSION, "status": "available", "scope": "M1-P3a: selected observed TWT48U effective-date events",
-            "validation_scope": "payload_codes_dates_and_selected_identity_classification", "source_url_kind": "feed",
+    return {"version": "twse-action-observed-feed/v1" if whole_feed else SUMMARY_VERSION,
+            "status": "available", "scope": "M2-P1: observed TWT48U feed" if whole_feed else "M1-P3a: selected observed TWT48U effective-date events",
+            "validation_scope": "all_observed_identity_dates_classification" if whole_feed else "payload_codes_dates_and_selected_identity_classification", "source_url_kind": "feed",
             "candidate_count": len(payload), "selected_count": len(rows), "selected_symbols": requested,
             "rows": rows, "provenance": provenance, "attribution": attribution,
             "runtime_condition_receipts": conditions, "summarize_decision": decisions["summarize"],
@@ -222,7 +250,7 @@ def summarize_memory_capture(body: bytes, receipt_bytes: bytes, *, manifest: str
                                         "row_ordinals": [row["row_ordinal"] for row in rows]}},
             "historical_pit": "unsupported", "published_time": "unknown", "first_availability": "unknown",
             "revision_history": "unknown", "durable_capture": False,
-            "limitations": ["local_evidence_consistency_only", "selected_events_only", "not_complete_history",
+            "limitations": ["local_evidence_consistency_only", "observed_feed_only" if whole_feed else "selected_events_only", "not_complete_history",
                             "future_effective_dates_retained", "not_historical_as_of", "product_wiring_pending"]}
 
 

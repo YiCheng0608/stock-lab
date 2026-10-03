@@ -13,6 +13,7 @@ import type {
   Instrument,
   InstrumentDetail,
   OfficialEventsData,
+  OfficialEventFocusData,
   NewsItem,
   GlossaryTerm,
   StockDirectoryRow,
@@ -69,6 +70,10 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
+export const getOfficialEventFocus = (asOf: string) =>
+  get<OfficialEventFocusData>(`/focus/official-events${queryString({ as_of: asOf })}`)
+export const captureOfficialEventFocus = (asOf: string) =>
+  post<OfficialEventFocusData>(`/focus/official-events/capture${queryString({ as_of: asOf })}`, {})
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

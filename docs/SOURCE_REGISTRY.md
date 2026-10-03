@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查的來源候選與等待邊界，不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
+更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要及第 11 節 M2-P1 本次 feed 摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查的來源候選與等待邊界，均不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -290,3 +290,17 @@ python -B -m worker.twse_action_capture live-summarize `
 [政府資料集 11391](https://data.gov.tw/dataset/11391) 的官方名稱為「櫃買指數歷史資料」，描述為提供當日收盤後的上櫃大盤指數資訊，標示免費、每日更新與 OGL 1.0；名稱與 metadata 未證明提供完整多日原件或交易日基準。[日法人資料集 11856](https://data.gov.tw/dataset/11856) 仍是每日資料，第 8 節准入不外推歷史用途。本次官方 schema 與候選原件未成功取得，transport 結果留本輪 task；尚不能核對實際欄位、日期範圍或完整性，不推論永久不可用或禁止介接。
 
 成交日實列最多證已觀測日，不能由缺列推休市或最近 5／20 交易日完整 coverage，因此本次不建立孤立的 observed-session 計算核心冒充依賴解除。候選服務恢復後可先作有界可行性核實，成功讀取不等於來源與窗口門檻通過；主缺口、恢復條件及新統籌流程見 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。本次未重搜 TWSE T86 或 R0-B2，其原未知／待驗邊界保留。
+
+## 11. M2-P1：本次官方事件 feed 摘要
+
+**程式及下述具名驗收已 review（有限）。** 本批只支援既有 `twse_twt48u_all`、exact GET、`free_public_local` profile 與第 9 節原 manifest／source version／雙 pins，不新增准入或修改原 snapshot。Memory capture、receipt 與各用途條件仍依第 9.2 節；[`twse_action_capture.py`](../backend/worker/twse_action_capture.py) 新增 `summarize_memory_feed(...)`，輸出 `twse-action-observed-feed/v1`、`validation_scope=all_observed_identity_dates_classification`，供官方事件關注清單使用。
+
+與 selected 摘要分開，全 feed 摘要接受 JSON object array，包括合法空 `[]`；逐列驗 exact `Code`、nonblank `Name`、有效七碼 ASCII 民國 `Date`、exact `Exdividend=息/權/權息`，相同 `Code + Date + Exdividend` 重複拒收，不以 alias 或猜測補 canonical 欄位。任一列不合格即整份 unavailable，不挑剩餘列湊清單。Duplicate JSON keys、非有限值及不合格 receipt／pins／hash／時間仍拒收。這是全 body 身分、日期與分類的驗證，不放行未驗金融欄位、全市場 completeness 或事件歷史。
+
+摘要保留原件列序、原值身分／日期／分類、effective-date 角色、body／receipt 雙 hash、request／capture UTC、固定版本與 attribution／purpose／condition receipts。空摘要只證本次合格原件零列，不是官方全市場「沒有事件」；不以空結果推導單股缺 selected 可用。第 9 節 selected API 的非空請求與缺 selected 拒收契約維持。
+
+`candidate_count` 是全 body 列數，`selected_count` 是合格事件列數；全 feed 版本將全部來源代碼排序放入 `selected_symbols`，每股事件保持原件列序，與 requested-symbol selected 版本分開。合法空 `[]` 回 available、兩個 count 都是 0、`selected_symbols=[]`，仍有 receipt、雙 hash 與顯名／用途條件；之後 selected 讀同一空原件仍以 `nonempty_row_list_required` 拒收。非空 feed 的任何 invalid code／日期／名稱／分類、重複事件、非 object row 或非 list payload，分別保留 `invalid_security_code`、`invalid_effective_date`、`selected_name_missing`、`selected_event_class_unknown`、`selected_event_duplicate`、`row_object_required`、`row_list_required`；`selected_*` 在本函式指全部觀測列，不表示只檢查某幾股。
+
+來源日期仍是生效日，capture time 只是本次觀測；published／first available／revision 仍 unknown，`historical_pit=unsupported`。Consumer 不寫 DB／檔案／ZIP，不形成調整因子、價格影響或利多分類。本次 feed 到關注清單、最多 100 股與已知 catalogue 的 M1 連結由[個股頁 §12](STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)負責，產品接線不擴大來源准入或時間支持範圍。
+
+統籌已有限接受 **2026-10-03 單次 exact memory capture、HTTP 200／單一 GET**，body **15,689 bytes、58 列／58 個代碼**，全部身分／日期／分類與列序對 actual API 一致，receipt、雙 hash、固定 pins 與追溯欄位已核對。空 `[]`、同股多事件、超過顯示上限及拒收是另行純記憶體 fixture 的邊界，不是當次 live 原件的情境，也不證全市場或完整歷史。必要記憶體回歸通過，完整 backend 未跑；原件未保存，不能離線重播，原 hash／收據只留 task。具名產品驗收、未支援範圍及清理結果見[個股頁 §12.3](STOCK_RESEARCH_PAGE.md#123-驗收與尚缺項)，不另建來源副本或 receipt 附件。

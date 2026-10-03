@@ -400,6 +400,17 @@ export type OfficialEventsData = {
   limitations: string[]
 }
 
+export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
+  coverage: 'observed_feed_only'; research_conditions: 'unknown'
+  total: number; displayed: number; truncated: boolean; limit: number; order: 'symbol_lexicographic'
+  candidate_count?: number; selected_count?: number; validation_scope?: string
+  summarize_decision?: unknown; runtime_condition_receipts?: unknown; summary_condition_receipts?: unknown
+  items: Array<{
+    exchange: 'TWSE'; symbol: string; company_name: string; events: OfficialEventsData['rows']
+    stock_page_available: boolean; detail_url: string | null; research_conditions: 'unknown'
+  }>
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null

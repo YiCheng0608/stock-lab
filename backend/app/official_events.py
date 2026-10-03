@@ -1,13 +1,13 @@
 """Explicit TWT48U acquisition and read-only, process-memory event projection.
 
-Import and overview reads never fetch. One successful selected capture publishes
+Import and overview reads never fetch. One successful explicit capture publishes
 one immutable bytes pair for this process; changing the observation requires a
 restart. The cutoff gates observation in Taipei, never the effective date or
 historical availability. No DB, filesystem mutation or financial inference.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import os
 from pathlib import Path
 import re
@@ -18,6 +18,8 @@ from worker import twse_action_capture as consumer
 from worker.source_runtime import capture_memory
 
 VERSION = "official-events/p3b-v1"
+FOCUS_VERSION = "official-event-focus/p1-v1"
+FOCUS_LIMIT = 100
 CAPTURE_ENV = "STOCK_TWSE_EVENTS_MEMORY_CAPTURE"
 PINS = {
     "manifest": Path(__file__).resolve().parents[1] / "worker" / "source_registry.json",
@@ -28,7 +30,7 @@ PINS = {
 
 
 class OfficialEventMemory:
-    """A bounded single feed, published atomically only after selected validation."""
+    """A bounded single feed, published atomically after its consumer validation."""
     def __init__(self):
         self.snapshot: tuple[bytes, bytes] | None = None
         self.capture_lock = Lock()
@@ -155,6 +157,110 @@ def capture_official_events(exchange: str, symbol: str, as_of: date | None, *,
         memory.snapshot = snapshot
         result["capture_action"] = "acquired"
         return _project(result, summary, as_of)
+    except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
+        result.update(capture_action="failed", reasons=[_safe_failure(exc)])
+        return result
+    finally:
+        memory.capture_lock.release()
+
+
+def _today_taipei() -> date:
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def _focus_result(as_of: date | None) -> dict:
+    result = _result(as_of)
+    result.update(version=FOCUS_VERSION, items=[], total=0, displayed=0,
+                  truncated=False, limit=FOCUS_LIMIT, order="symbol_lexicographic",
+                  coverage="observed_feed_only", research_conditions="unknown")
+    result.pop("rows")
+    result["limitations"] = ["observed_feed_only" if value == "selected_events_only" else value
+                             for value in result["limitations"]] + ["not_a_ranking", "research_conditions_unknown"]
+    return result
+
+
+def _focus_gate(result: dict, as_of: date | None, environment: Mapping[str, str] | None) -> bool:
+    if not _gate(result, "TWSE", "0000", environment):
+        return False
+    if type(as_of) is not date:
+        result.update(can_capture=False, reasons=["event_shared_cutoff_missing"])
+        return False
+    return True
+
+
+def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
+    _project(result, summary, as_of)
+    rows = result.pop("rows", [])
+    # A valid held feed is reused even when observation is excluded by cutoff.
+    result["can_capture"] = result["status"] == "available"
+    if result["status"] != "available":
+        return result
+    grouped: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = (row["exchange"], row["symbol"])
+        if key not in grouped:
+            grouped[key] = {"exchange": row["exchange"], "symbol": row["symbol"],
+                            "company_name": row["company_name"], "events": [],
+                            "stock_page_available": False, "detail_url": None,
+                            "research_conditions": "unknown"}
+        grouped[key]["events"].append(row)
+    items = [grouped[key] for key in sorted(grouped, key=lambda key: (key[1], key[0]))]
+    result.update(total=len(items), displayed=min(len(items), FOCUS_LIMIT),
+                  truncated=len(items) > FOCUS_LIMIT, items=items[:FOCUS_LIMIT])
+    # Rows live inside each displayed card; the uncapped raw feed is not another
+    # list consumers might mistake for the bounded focus list.
+    return result
+
+
+def build_official_event_focus(as_of: date | None, *,
+                               environment: Mapping[str, str] | None = None,
+                               store: OfficialEventMemory | None = None) -> dict:
+    """Read the shared original feed without fetching or touching a database."""
+    result = _focus_result(as_of)
+    if not _focus_gate(result, as_of, environment):
+        return result
+    snapshot = (MEMORY_EVENTS if store is None else store).snapshot
+    if snapshot is None:
+        result.update(can_capture=as_of >= _today_taipei(), reasons=["event_memory_capture_missing"])
+        return result
+    result["capture_action"] = "cached"
+    try:
+        return _focus_project(result, consumer.summarize_memory_feed(*snapshot, **PINS), as_of)
+    except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
+        result.update(cache_present=True, can_capture=False, reasons=[_safe_failure(exc)])
+        return result
+
+
+def capture_official_event_focus(as_of: date | None, *,
+                                 environment: Mapping[str, str] | None = None,
+                                 store: OfficialEventMemory | None = None) -> dict:
+    """Explicit first acquisition; validate the entire feed before publication."""
+    result = _focus_result(as_of)
+    if not _focus_gate(result, as_of, environment):
+        return result
+    memory = MEMORY_EVENTS if store is None else store
+    if not memory.capture_lock.acquire(blocking=False):
+        result.update(can_capture=False, reasons=["event_capture_in_progress"])
+        return result
+    try:
+        if memory.snapshot is not None:
+            return build_official_event_focus(as_of, environment=environment, store=memory)
+        if as_of < _today_taipei():
+            result.update(can_capture=False, reasons=["event_cutoff_before_current_observation"])
+            return result
+        consumer._admission(**PINS)
+        body, receipt_bytes = capture_memory(**PINS, source_id=consumer.SOURCE_ID)
+        if body is None:
+            receipt = consumer._json(receipt_bytes)
+            reason = receipt.get("error_reason")
+            safe = reason if isinstance(reason, str) and re.fullmatch(r"(?:http_status:[0-9]{3}|[a-z_]+)", reason) else "event_capture_failed"
+            result.update(capture_action="failed", reasons=[safe])
+            return result
+        snapshot = (body, receipt_bytes)
+        summary = consumer.summarize_memory_feed(*snapshot, **PINS)
+        memory.snapshot = snapshot
+        result["capture_action"] = "acquired"
+        return _focus_project(result, summary, as_of)
     except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
         result.update(capture_action="failed", reasons=[_safe_failure(exc)])
         return result

@@ -55,7 +55,7 @@ from .decision import (
     prioritized_instrument_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
-from .official_events import capture_official_events
+from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1669,6 +1669,31 @@ def stock_overview(exchange: str, symbol: str, db: Session = Depends(get_db), as
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     return build_stock_overview(db, instrument, as_of)
+
+
+def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
+    """Attach existing stock-page links with catalogue reads only."""
+    symbols = [item["symbol"] for item in result["items"]]
+    if not symbols:
+        return result
+    with db.no_autoflush:
+        known = set(db.scalars(select(Instrument.symbol).where(
+            Instrument.exchange == "TWSE", Instrument.symbol.in_(symbols))).all())
+    for item in result["items"]:
+        if item["symbol"] in known:
+            item.update(stock_page_available=True,
+                        detail_url=f"/stocks/TWSE/{item['symbol']}?as_of={result['as_of']}")
+    return result
+
+
+@router.get("/focus/official-events")
+def official_event_focus(as_of: date = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _focus_catalogue(db, build_official_event_focus(as_of))
+
+
+@router.post("/focus/official-events/capture")
+def official_event_focus_capture(as_of: date = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _focus_catalogue(db, capture_official_event_focus(as_of))
 
 
 @router.post("/stocks/{exchange}/{symbol}/official-events/capture")

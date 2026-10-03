@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   captureOfficialEvents,
+  captureOfficialEventFocus,
   deletePortfolio,
   getAction,
   getActions,
@@ -12,6 +13,7 @@ import {
   getBacktestSummary,
   getCoverage,
   getDashboard,
+  getOfficialEventFocus,
   getDataQuality,
   getGlossary,
   getGroup,
@@ -40,6 +42,7 @@ import type {
   GroupDetail,
   GroupMember,
   InstrumentDetail,
+  OfficialEventFocusData,
   NewsItem,
   Pagination,
   Position,
@@ -715,6 +718,71 @@ function NewsDetailPage() {
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><Link to="/news" className="back-link">← 回到新聞</Link><PageTitle eyebrow="官方公告詳情" title={officialEventDisplayTitle(query.data.title)} description="此頁顯示官方事件的完整摘要與可稽核來源；國際與媒體新聞尚未接入。" /><ProductNewsCard item={query.data} detail /></div>}</QueryState>
 }
 
+function taipeiObservationDate(): string {
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const part = (type: string) => parts.find((value) => value.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+function focusUnavailableMessage(data: OfficialEventFocusData): string {
+  if (data.reasons.includes('event_memory_capture_missing')) return data.can_capture ? '尚未取得本次官方原件。可按「首次取得官方原件」進行一次觀測。' : '此截止日期尚無可用原件；過往日期不能以今日取得的資料補成歷史觀測。'
+  if (data.reasons.includes('event_observation_after_cutoff')) return '已取得原件的觀測日晚於截止日期，本清單排除該次觀測。'
+  if (data.reasons.includes('event_cutoff_before_current_observation')) return '過往截止日期且無可用原件，未執行取得。'
+  if (data.reasons.some((reason) => reason === 'event_capture_not_enabled' || reason === 'event_capture_configuration_invalid')) return '官方事件原件取得尚未啟用。'
+  if (data.reasons.includes('event_capture_in_progress')) return '官方原件正在取得，完成後可讀取已取得原件。'
+  return '本次官方原件未通過來源或內容驗證，關注清單暫不可用。'
+}
+
+export function OfficialEventFocusPanel() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const asOf = searchParams.get('as_of') || taipeiObservationDate()
+  const [draft, setDraft] = useState(asOf)
+  const [capturing, setCapturing] = useState(false)
+  const [captureError, setCaptureError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const queryKey = ['official-event-focus', asOf]
+  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf), retry: false, refetchOnWindowFocus: false })
+  useEffect(() => { setDraft(asOf); setCaptureError(null) }, [asOf])
+  const capture = async () => {
+    setCapturing(true); setCaptureError(null)
+    try { queryClient.setQueryData(queryKey, await captureOfficialEventFocus(asOf)) }
+    catch (error) { setCaptureError(error instanceof Error ? error.message : '取得失敗') }
+    finally { setCapturing(false) }
+  }
+  const data = query.data
+  const licenseEvidence = data?.attribution?.evidence.find((item) => item.url === 'https://data.gov.tw/license')
+  return <section className="panel official-event-focus" aria-labelledby="official-event-focus-title">
+    <div className="section-head overview-head"><div><div className="eyebrow">本次觀測 · 臺灣證券交易所</div><h2 id="official-event-focus-title">官方事件關注</h2></div><span className="small-note">依代碼排序</span></div>
+    <p className="small-note">本次已觀測的除權息事件供查閱；未來生效日期保留。研究條件待補，事件不表示價格影響或買賣建議。</p>
+    <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); if (!draft) return; const next = new URLSearchParams(searchParams); next.set('as_of', draft); setSearchParams(next) }}>
+      <label htmlFor="focus-observation-cutoff">觀測截止日期</label><input id="focus-observation-cutoff" type="date" required value={draft} onInput={(event) => setDraft(event.currentTarget.value)} onChange={(event) => setDraft(event.currentTarget.value)} />
+      <button type="submit" className="secondary-button" disabled={capturing}>套用截止</button>
+      <button type="button" className="secondary-button" disabled={capturing || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
+      <button type="button" className="secondary-button" disabled={capturing || query.isFetching || !data?.can_capture || data.cache_present} onClick={() => void capture()}>{capturing ? '取得中…' : '首次取得官方原件'}</button>
+    </form>
+    <div className="small-note focus-observation-note">截止 {asOf}（台北觀測日含當日）{data?.observed_date ? ` · 原件觀測日 ${data.observed_date}` : ''} · 原件只在本次服務執行期間保留；服務重啟後須重新取得，不自動更新。</div>
+    {query.isLoading && <div className="empty">讀取關注清單…</div>}
+    {(query.error || captureError) && <div className="warning-box" role="status">讀取或取得失敗：{captureError || (query.error instanceof Error ? query.error.message : '請稍後再試')}</div>}
+    {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{focusUnavailableMessage(data)}</div>}
+    {data?.status === 'available' && <>
+      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
+      {data.items.length === 0 ? <div className="empty focus-empty" role="status">本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
+        <div className="position-head"><strong>{item.symbol} {item.company_name}</strong><span>{item.exchange}</span></div>
+        <div className="table-wrap focus-event-table"><table><caption>本次觀測事件</caption><thead><tr><th>生效日期</th><th>官方事件類型</th></tr></thead><tbody>{item.events.map((event) => <tr key={`${event.event_date}:${event.kind}:${event.row_ordinal}`}><td>{event.event_date}</td><td>{event.label}</td></tr>)}</tbody></table></div>
+        <div className="small-note">研究條件：待補</div>
+        {item.stock_page_available && item.detail_url ? <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link> : <div className="small-note focus-catalogue-missing">個股頁尚無此標的</div>}
+        <details className="technical-details"><summary>事件原件值</summary>{item.events.map((event) => <div key={event.row_ordinal}>原件列 {event.row_ordinal}：Date {event.source_date} · Exdividend {event.source_classification} · Name {event.company_name}</div>)}</details>
+      </article>)}</div>}
+    </>}
+    {data && <details className="technical-details overview-provenance focus-source-details"><summary>來源、授權與驗證範圍</summary>
+      <div>來源資料集：TWSE TWT48U。發布時間、首次可得時間、修訂歷史：未知；歷史時點資料與完整市場範圍尚未驗證。</div>
+      {data.provenance && <><div>來源：{data.provenance.source_id} · 版本 {data.provenance.source_version}</div><div>觀測時間：{formatTaiwanDateTime(data.provenance.captured_at)} · 請求開始 {formatTaiwanDateTime(data.provenance.request_started_at)}</div><div>原件來源：<a href={data.provenance.endpoint} target="_blank" rel="noreferrer">臺灣證券交易所原始資料</a></div><div>Body SHA-256：{data.provenance.body_sha256}</div><div>Receipt SHA-256：{data.provenance.receipt_sha256}</div><div>Registry：{data.provenance.registry_version} · {data.provenance.manifest_digest}</div></>}
+      {data.attribution && <><div>資料提供者：{data.attribution.owner.name}</div><div>使用條款：{licenseEvidence ? <a href={licenseEvidence.url} target="_blank" rel="noreferrer">{data.attribution.terms.value}</a> : data.attribution.terms.value}</div><details><summary>來源與用途證據</summary><pre>{JSON.stringify({ evidence: data.attribution.evidence, purpose_evidence: data.attribution.purpose_evidence, summarize_decision: data.summarize_decision, runtime_conditions: data.runtime_condition_receipts, summary_conditions: data.summary_condition_receipts }, null, 2)}</pre></details></>}
+      {data.reasons.length > 0 && <div>驗證狀態：{data.reasons.join('、')}</div>}
+    </details>}
+  </section>
+}
+
 function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const homeActions = Array.from(new Map(
@@ -723,31 +791,34 @@ function TodayPage() {
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   return (
-    <QueryState loading={query.isLoading} error={query.error}>
-      {query.data && (
-        <div className="page">
+    <div className="page">
           <section className="hero home-header">
             <div>
               <div className="eyebrow">今日市場</div>
               <h1>今日市場總覽</h1>
               <p>掌握公告、熱門族群與關注標的。</p>
             </div>
-            <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data.as_of, true)}</strong><small>{query.data.market.source_label ?? sourceLabel(query.data.market.source)}</small></div>
+            <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data?.as_of, true)}</strong><small>{query.data?.market.source_label ?? sourceLabel(query.data?.market.source)}</small></div>
           </section>
+          <OfficialEventFocusPanel />
+    <QueryState loading={query.isLoading} error={query.error}>
+      {query.data && (
+        <>
           <div className={'source-banner ' + query.data.mode}>
             <strong>{query.data.mode === 'official' ? '官方單日快照' : query.data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'}</strong>
             <QualityBadge kind="market" status={query.data.data_quality.latest_run} /><details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {(query.data.themes ?? []).filter((theme) => theme.qualified).length.toLocaleString()} 個族群摘要 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
           </div>
           <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
-          {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">目前沒有已接入的官方事件；國際／媒體新聞尚未接入。</div>}
+          {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容；官方除權息事件請見上方「官方事件關注」。</div>}
           <section className="section-head"><div><div className="eyebrow">族群發現</div><h2><Term id="hot_group">熱門族群</Term></h2></div><Link to="/themes" className="text-link">查看完整排行</Link></section>
           {query.data.themes?.some((theme) => theme.qualified) ? <div className="group-grid">{query.data.themes.filter((theme) => theme.qualified).slice(0, 5).map((theme) => <ThemeCard key={theme.theme_id} theme={theme} />)}</div> : <div className="empty panel">{query.data.empty_states?.themes ?? '目前沒有足以成立的熱門族群。'}</div>}
           <section className="section-head"><div><div className="eyebrow">熱門候選／使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
           {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{query.data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
           {query.data.data_quality.error && <div className="warning-box">官方擷取警告：{query.data.data_quality.error}</div>}
-        </div>
+        </>
       )}
     </QueryState>
+    </div>
   )
 }
 

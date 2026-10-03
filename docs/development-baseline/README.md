@@ -34,6 +34,10 @@
 
 server `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 明示啟用 `POST /api/stocks/{exchange}/{symbol}/official-events/capture?as_of=YYYY-MM-DD`，不需 body 參數；普通 GET／import 不抓外網，成功後只有 process 記憶體原件再用，不寫 DB／檔案。程式、原件／API 與具名桌面／窄版操作已有限接受；API／UI 契約與驗收邊界見[個股頁 §11](../STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)。本輪靶向回歸、前端型別／SSR 與記憶體全 App bundle 通過，未跑完整 backend／production Vite build；驗收用 memory catalogue 不代表真行情或 DB 證據。測試命令、版本、exit、結果與限制留本輪 task，不另存產物或解除已有清理拒絕。
 
+### M2-P1 官方事件關注清單的驗收入口
+
+本批新增 `GET /api/focus/official-events?as_of=YYYY-MM-DD` 與首次明示 `POST /api/focus/official-events/capture?as_of=YYYY-MM-DD`，共用 P3b 的固定來源／啟用值／cache／鎖，程式與具名操作已有限 review。額外落盤配額仍為 0，不能直接載入會建立目錄的 conftest 或把隔離 memory catalogue 當真行情／正式 DB；純記憶體 consumer／API 邊界與一次真原件 58 列／API／桌面／窄版操作已分開接受。操作、未支援範圍及清理結果見[個股頁 §12](../STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)；後端必要記憶體回歸、前端型別／SSR／記憶體 bundle 通過，完整 backend／production Vite build 未跑，不因記憶體 bundle 成功稱通過。原件未保存、不能離線重播；命令／版本／exit／hash 與失敗／退修及最終收據只留本輪 task，無新增附件／暫存。
+
 ## 歷史驗證
 
 歷史測試不代表目前來源已驗收；原始數據依[文件索引](../README.md#歷史查閱)取閱，已刪除的 Temp 附件不作接手依賴。
