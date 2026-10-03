@@ -23,7 +23,20 @@
 
 ### 最近獨立維護的實際參數
 
-上次角色模型設定維護未恢復產品 round；其共同 repo 為上述 `master` 原 checkout，接手 HEAD `054ecad7fb0860797ef6c61f7b9da759b398fc2e`。維護主 chat session `01a0ffb0-9855-7e62-9c71-28234f1167ff` 實際 `gpt-6.1-sol`／`xhigh`（已核實 turn_context）；文件 canonical ID `/root/role_docs`、子 session `01a0ffb5-5ca2-7251-a5e5-a14422b71399`、`gpt-6.1-sol`／`xhigh`；索引 canonical ID `/root/role_index`、子 session `01a0ffb5-954e-76f0-97cd-9b25f7399e9a`、`gpt-6-luna`／`medium`。歷史維護範圍及 receipt 留 Git／原 task；上述不是本輪沿用角色，也不改寫最近產品輪的實際參數。
+本次為使用者已授權的協作流程文件維護，共同 repo 為上述 `master` 原 checkout，乾淨接手 HEAD `553d83e5a684b2ca576edafb955ab848f185a7d8`。本次獨立維護不恢復產品 round，M1-P4a 狀態及既有 roster 保持原實際紀錄；後續產品 round 適用 [AGENTS「每輪流程」](../AGENTS.md#每輪流程)。
+
+| 角色 | 本次 ID／已核實實際配置 | 寫入／驗收範圍 |
+| --- | --- | --- |
+| 統籌 | session `01a10067-5cd7-7d21-bbe7-3d0d4229ae05`；`gpt-6.1-sol`／`ultra` | 核定治理範圍、roster、白名單及配額；review 文件及程式唯讀審查後 freeze，複核索引與提交。 |
+| 程式 | canonical ID `/root/docs_rule_review`；子 thread `01a10088-08d9-7bd1-9c41-ebcfa90761bd`；`gpt-6.1-sol`／`xhigh` | 僅唯讀審查規則一致性；寫入白名單為空。 |
+| 文件 | canonical ID `/root/docs_update`；子 thread `01a10087-73b2-7b73-9522-849266e482fd`；`gpt-6.1-sol`／`xhigh` | 僅 `AGENTS.md`、`docs/TASK_COORDINATION.md`；依核定範圍更新，差異、連結及一致性檢查。 |
+| 索引與 Git commit | canonical ID `/root/index_git_finish`；子 thread `01a1009a-9863-7902-b04c-0ed8cae02967`；`gpt-6-luna`／`medium` | 接手複查索引連線；freeze 後更新涉及分區、驗 coverage，只 stage／commit 統籌核准檔案。 |
+
+統籌以 runtime `session_meta`／`turn_context` 核實共同 cwd、parent thread 與上述實際 model／reasoning；表列 subagent 均由本統籌以 `fork_turns=none` 新建、已接手，白名單互斥。文件增補上限 **12 KiB**，附件、暫存、測試新增產物與殘留配額均為 **0**；只驗文件，不跑 backend、不建 DB。先前 codebase-memory MCP 未暴露，合法 stdio／同引擎 CLI 路徑均遭 DACL 阻擋；使用者已授權新索引角色接手複查，同引擎 CLI 重試尚無成功收據。文件驗收後 freeze，索引／coverage 與 commit 待實際驗證，收據留本 task。
+
+原索引角色 `/root/index_git_update`、子 thread `01a10087-bb76-7ae3-b191-795ba2562b2f`、`gpt-6-luna`／`medium` 的實際參數及未完成收據保留原 task；本次依使用者授權由上述新索引角色接手。
+
+上次模型設定維護的接手 HEAD `054ecad7fb0860797ef6c61f7b9da759b398fc2e` 與實際參數保留為歷史：主 chat `01a0ffb0-9855-7e62-9c71-28234f1167ff`、`gpt-6.1-sol`／`xhigh`（已核實 turn_context）；文件 `/root/role_docs`、`01a0ffb5-5ca2-7251-a5e5-a14422b71399`、`gpt-6.1-sol`／`xhigh`；索引 `/root/role_index`、`01a0ffb5-954e-76f0-97cd-9b25f7399e9a`、`gpt-6-luna`／`medium`。該次未恢復產品 round；範圍及 receipt 留 Git／原 task，沒有沿用上述舊角色或倒改既有實際配置。
 
 ## 最近產品交付：M2-P2 官方事件清單搜尋與研究往返有限接受，已版本封存
 

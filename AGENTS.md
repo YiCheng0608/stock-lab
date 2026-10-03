@@ -25,7 +25,7 @@
 | 統籌 | `gpt-6.1-sol` | `ultra` | 核定使用操作、資料範圍、必要依賴與完成條件，負責產品操作及數值／來源驗收、分派與接手確認；指定互不衝突的寫入範圍。 |
 | 程式 | `gpt-6.1-sol` | `xhigh` | 依核定範圍完成資料、計算、API、UI 接線與驗證；不自行修改規格。 |
 | 文件 | `gpt-6.1-sol` | `xhigh` | 每輪依實作與統籌 review 結論，更新受影響文件及交接；不改程式。 |
-| 索引與 Git commit | `gpt-6-luna` | `medium` | 輪末索引更新、coverage 驗證及已驗收檔案的 commit；不改專案來源，不做輪初或中途刷新。 |
+| 索引與 Git commit | `gpt-6-luna` | `medium` | 輪末索引更新、coverage 驗證及核准提交／本地合併，依統籌指定協助結案清理；不改專案來源，不做輪初或中途刷新。 |
 
 本表是後續角色的 model／reasoning 配置依據；新建或恢復角色時先核對配置。協作紀錄中的既有 session 建立參數與已核實的實際模型保留原值，不因配置修改而改寫；修改文件不會自動切換既有 session 的模型，也不解除暫停。
 
@@ -42,18 +42,21 @@
 
 連續兩個實作批次沒有能力增量或依賴解除時，統籌必須審查拆工並重新選題；仍必要的基線須說明用途與後續接線。不能為達成畫面改動而降低安全、來源真實性或資料驗收 gate。
 
-1. 每輪只為統籌開一個新的 session；程式、文件、索引與 Git commit 三個角色由該統籌在同一 session 內用本 session 提供的 `spawn_agent` 新建 subagent，不另開 Codex task，不 fork 或沿用舊角色。同輪續作沿用該統籌 session，角色修正可 follow-up，不重複建立。各角色依上表配置 model／reasoning；統籌核對自身 session ID、三個 subagent ID、共同 repo／worktree、互不衝突的寫入白名單與接手狀態後才派工，文件角色將 roster 與接手狀態更新至協作紀錄。
+1. 每個產品 round 從 `master` 最新已驗收版本建立獨立 branch 與 Git worktree，四個角色共用該輪 worktree，不以原 checkout 代替。每輪只為統籌開一個新的 session；程式、文件、索引與 Git commit 三個角色由該統籌在同一 session 內用本 session 提供的 `spawn_agent`、`fork_turns=none` 新建 subagent，不另開 Codex task 或沿用舊角色。同輪續作沿用該統籌 session，角色修正可 follow-up，不重複建立。各角色依上表配置 model／reasoning；統籌核對自身 session ID、三個 subagent ID、共同 repo／worktree、branch、起始 HEAD、互不衝突的寫入白名單與接手狀態後才派工，文件角色將 roster 與接手狀態更新至協作紀錄。
 2. 角色交付檔案、實際驗證證據、限制與 freeze 狀態；統籌接受或退修，文件角色據此更新契約與交接。分派須明寫：角色不自行結案或啟動下一任務。
 3. 統籌檢查差異、驗證並接受文件後 freeze；索引角色更新涉及分區、驗 coverage。索引成功不等於功能驗收；來源再變更須先補文件，再補刷。
-4. 統籌複核索引、核定提交檔案；索引角色 commit，統籌核對後接受本輪。
-5. 完成後只建立下一輪的新統籌 session，由新統籌在其 session 內新建三個角色 subagent；交接列統籌 session ID、範圍、寫入分工，以及「完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件 → freeze／索引／commit」，三個 subagent ID 由新統籌建立後補入 roster 並核對。新統籌接手後，舊統籌只補交接，不再派工。
+4. 統籌複核索引、核定提交檔案；索引角色 commit，統籌核對提交與 freeze 範圍後，才授權索引角色本地合併至 `master`。統籌確認合併結果後接受本輪；合併不得混入未驗收修改或覆蓋既有工作。合併需修改來源或主線變更影響驗收時，先補受影響驗證、文件與索引，再提交／合併。
+5. 合併確認後只建立下一輪的新統籌 session，從合併後 `master` 的最新已驗收版本建立新的 branch／worktree，再由新統籌在其 session 內新建三個角色 subagent。交接列統籌 session ID、branch／worktree、範圍、寫入分工，以及「完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件 → freeze／索引／commit／merge」，三個 subagent ID 由新統籌建立後補入 roster 並核對。新統籌確認接手後，舊統籌只補交接，不再派工。平台不能建立新統籌 session／task 或 worktree 時，記錄接手限制及待辦，不沿用舊統籌或原 checkout 冒充新輪。
+6. 交接或結案確認後，先確認本輪 worktree 外的清理負責者已接手，再由其關閉並封存本輪四角色 session，移除已核對絕對路徑、本輪自有、無未保存修改且已合併的 worktree／branch。保留原 task 驗收 receipt，預設不永久刪除歷史，也不掃描或清理其他舊資源。清理失敗分報確切殘留、大小與原因，不否定已確認的合併；關閉、封存或清理未執行者須明列，不能宣稱完成。
+
+worktree 管理在已有 Orca 執行環境時可用 Orca CLI，其他環境用原生 Git；不強制安裝 Orca 或改用另一套 worker 流程。後續產品 round 適用上述流程；已授權獨立維護可由統籌核定使用 `master` 原 checkout，不恢復產品 round。
 
 未暫停時依 ROADMAP 持續推進，不逐輪詢問。ROADMAP 完成或餘項皆需外部變化／使用者決策時記錄狀態，不建空轉輪次；前瞻觀測或證據不足保持待驗，不用 mock 或縮小條件冒稱完成。
 
-恢復或定時喚醒前先核對協作紀錄，已交接的舊統籌不得重派。獨立維護不恢復暫停的 round；舊對話不自行刪除／封存，有具體需要才增角色。
+恢復或定時喚醒前先核對協作紀錄，已交接的舊統籌不得重派。獨立維護不恢復暫停的 round；既有舊對話及資源不納入新輪清理，有具體需要才增角色。
 
 ## Git 結案
 
 - 每輪及已授權獨立維護由索引角色在索引更新、統籌驗收後本地 commit，不逐次詢問。只 stage 核准且符合 freeze 的檔案，不混無關修改或被忽略產物。
-- 回報 hash、提交檔案及剩餘差異；無差異回報既有 HEAD 與檢查，失敗列原因並保持未完成。只有索引 receipt 不算版本封存。
-- 最終 receipt 留 task，不為回寫 hash 反覆刷新／提交。舊禁止 commit 指令不覆蓋本規則；本地 commit 不含 push 或歷史重寫。
+- 回報 commit hash、提交檔案及剩餘差異；產品 round 另回報 `master` 合併結果與清理狀態。無差異回報既有 HEAD 與檢查，失敗列原因並保持未完成。只有索引 receipt 不算版本封存。
+- 最終 receipt 留 task，不為回寫 hash 反覆刷新／提交。舊禁止 commit 指令不覆蓋本規則；本地 commit／merge 不含 push 或歷史重寫。
