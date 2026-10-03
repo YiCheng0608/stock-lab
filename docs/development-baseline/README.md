@@ -87,6 +87,25 @@ try {
 
 首次 direct run **10 methods／219 subcases／0 skip**、exit 0、`blocked_io=0` 已由統籌有限接受；統籌獨立數值與 write／network audit 核對亦通過，`memory-unused`、`data` 與 app／worker／tests pycache 未新增。無新增測試產物，無需測試清理；舊殘留不動。這未執行 capture、collect、SQLite、API、live、UI 或 production startup，不作磁碟保存／重開或完整 backend 驗收。版本、完整命令與原始 stdout／stderr 留 task，不另建附件。
 
+### R1-A2 legacy 成交量的磁碟整合驗證入口
+
+專用 `tools/Invoke-LegacyDailyVolumeValidation.ps1` 直接執行 `backend/tests/test_legacy_daily_volume_file_integration.py` 的一個組合 unittest，不載入一般 pytest conftest；首次實際磁碟測試 **1 compound unittest／0 skip** 已由統籌有限接受。六個合法／24 個拒收標的、兩次 force collect、磁碟重開及 60 個 HTTP 回應的精確支持邊界只由[資料來源](../DATA_SOURCES.md#r1-a2-legacy-成交量磁碟整合)負責。
+
+```powershell
+$legacyVolumeDependencyRoots = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+$legacyVolumeRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-lv-<task-approved-8-char-owner>-<task-approved-32-hex>'
+$legacyVolumePython = 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-LegacyDailyVolumeValidation.ps1 -RunOwner '<task-approved-8-char-owner>' -ValidationRoot $legacyVolumeRoot -PythonPath $legacyVolumePython -DependencyRoots $legacyVolumeDependencyRoots
+```
+
+這是參數模板，執行前須將 placeholders 換成該 task 核定的八個 ASCII 英數 owner 與 32 位小寫 hex；根須是 `LocalAppData/Temp` 的直屬目錄、位於專案外且建立前不存在，已用根拒用。exact UUID／命令留 task，不另存逐輪附件；後續執行需另由該 task 核定 owner、唯一根與落盤範圍。借用已核實的主線唯讀共用依賴，不另建環境；實際 Python **3.12.14**、SQLite **3.53.1**，其他版本留原 metrics。`ExecutionPolicy Bypass` 只作用於上述子程序，不改全域 policy；本輪首次直接 `& .ps1` 曾在載入前被 policy 拒絕，runner／test 未啟動且無 metrics／磁碟根，外層 exit 0 不支持通過，其後首次實際磁碟測試才通過。
+
+本輪只核定一個根，內容限 `data/legacy-volume.db`／journal，以及 `raw/twse/2026/09/05`、`raw/tpex/2026/09/05` 下六份 target body／六份 metadata；raw 檔名須符合 64 位小寫 SHA-256 hex 的 `.json`／`.meta.json`，ancillary payload／metadata 留記憶體。三個 `STOCK_*`、專用驗證環境及 `TEMP`／`TMP` 綁定核定根，停用 bytecode 落盤，不建立 capture ZIP、來源副本、正式 DB 或額外附件。含根與暫態檔的上限為 **14 files／11 directories／3 MiB**；DB 與 journal 各 **1 MiB**，每個 raw JSON **32 KiB**、metadata **8 KiB**；測試檢查點及程序退出時核配額。入口不提供 `KeepArtifacts`。
+
+stdout／stderr 在記憶體捕獲，程序上限 60 秒，只停止本次自有測試程序；需一份 `R1A2_LEGACY_VOLUME_METRICS`、`tests_run=1`／`skipped=0` 及 `validation_complete=true` 才支持完整執行。`R1A2_LEGACY_VOLUME_RESULT` 分報 test／cleanup exit、確切殘留路徑／大小／原因；`finally` 還原環境，成功或失敗均只嘗試清理本 task 擁有、已核對的 exact 絕對根與已知非 reparse 內容，額外檔案／目錄或 reparse 拒絕清理並分報。清理成功不把失敗測試改成通過，清理失敗不否定有效測試證據；達殘留上限只暫緩新增落盤。
+
+首次實際磁碟測試的程序／test／cleanup exit 均為 **0**、`validation_complete=true`、`residuals=[]`；統籌獨立核對核定根不存在，無本輪新增測試殘留。觀測總峰值 **14 files／11 directories／605,668 bytes**，DB 峰值 **585,728 bytes**、journal 峰值 **78,488 bytes**，均在核定上限內。audit guard 的五個預期拒絕 probe 不執行實際 I/O，unexpected denial 為 0；八個 stdlib 本地 socketpair 事件屬 TestClient／asyncio 內部喚醒，不是外網抓取。保留 Starlette TestClient deprecation warning，未新增依賴。其他未跑項見資料來源；舊 219 subcases、selected invalid 與 migration 的有效證據未重跑，舊殘留不動。版本、原始 stdout／stderr 與收據只留 task，不為回寫 hash 再改文件。
+
 ### M1-P3b 記憶體事件接線的驗收入口
 
 本輪額外測試落盤配額為 0，不能直接套用上述會建立隔離目錄的入口；也須先辨識 pytest conftest、App 啟動與 import 的 DB／目錄副作用。純計算、selected／receipt 拒收與 API 投影優先以不載入 conftest 的記憶體 fixture 驗證；實際來源與產品操作另外具名核對，不能用 fixture 或記憶體 App bundle 代替 live／production 驗收。限制與既有殘留見[協作紀錄](../TASK_COORDINATION.md)。

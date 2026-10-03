@@ -120,7 +120,24 @@ fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的
 
 有限驗收使用固定 **2026-09-04 synthetic fixture**，prior-session 日期案例另含 **2026-09-03**；[專用 unittest](../backend/tests/test_legacy_daily_volume.py) 首跑 **10 個 methods／219 個 subcases／0 skip**、exit 0，涵蓋兩個 parser、既有 row／table wrappers、TWSE history／MI_INDEX 包裝入口與 TWSE／TPEx `fetch_bars` 的具名路徑及拒收邊界。統籌另以低 `Decimal` precision 4 獨立核對 28 個數值斷言，exit 0。adapter 的 `_fetch` 由記憶體 payload／metadata 替換，並未執行 capture 或持久化；零落盤入口、隔離與 I/O 檢查由[開發入口](development-baseline/README.md#r1-a2-legacy-成交量的零落盤驗證入口)詳述，原命令／版本與收據留 task。
 
-這只解除上述 parser／adapter fixture 的精確整數與錯誤空結果缺口，不代表 collect、SQLite 關閉後讀回、API、live 官方來源、UI、production startup 或完整 backend 已驗，也不自動修復舊資料。legacy gate→collect／SQLite／API 的精確保存與拒收保留仍須下一輪有界核定並驗收；正式 DB、官方逐市場／逐欄 coverage、歷史／availability、完整 5／20 日與 PIT gate 不變。
+這只解除上述 parser／adapter fixture 的精確整數與錯誤空結果缺口，不代表該批已驗 collect、SQLite 關閉後讀回、API、live 官方來源、UI、production startup 或完整 backend，也不自動修復舊資料。後續[legacy 成交量磁碟整合](#r1-a2-legacy-成交量磁碟整合)已有下方具名有限驗收；正式 DB、官方逐市場／逐欄 coverage、歷史／availability、完整 5／20 日與 PIT gate 不變。
+
+### R1-A2 legacy 成交量磁碟整合
+
+本輪已有限接受「legacy 成交量 gate→capture／collect／SQLite／reopen／API 精確保存與拒收保留」的最小磁碟驗收，支援 M1 研究資料可信／R1-A2 基線。[專用測試](../backend/tests/test_legacy_daily_volume_file_integration.py)首次實際磁碟執行 **1 compound unittest／0 skip** 通過，兩次 force collect、六個 target captures 及 **60 個 HTTP 回應**已核對；產品來源 diff 為 0，source／pins／既有專用 gate 契約未改。前輪 219 個記憶體 subcases 與 selected invalid／legacy migration 的來源未變，沿用既已接受證據，不因換 session 重跑。
+
+fixture 為固定 **2026-09-04** 的兩市場共 **30 個 synthetic symbols**；每次 collect 的三個目標 capture 走 production pass-through 保存，兩次共六個，capture 固定日期為 **2026-09-05**。TWSE current 與 MI_INDEX 對同一拒收標的提供相同無效成交量，不使用 selected capture；TWSE／TPEx 均經真正 adapter 與 combined adapter。其他 collector 必要 payload／metadata 以記憶體 fixture 提供，不作真實官方來源證據。
+
+| 指定案例 | 已驗收的有限行為 |
+| --- | --- |
+| TWSE／TPEx 各 `0`、`9007199254740993`、`9223372036854775807` | 共六個合法標的，capture／collect 後的 SQLite `typeof(volume)=integer`、Python `int` 及 API HTTP 原始整數 token 保持精確；合法零不作缺值，既有 OHLC／成交額狀態一致。 |
+| 每市場各字串 `1.5`、`-1`、`12,34`、`9223372036854775808`，以及 JSON `true`／`1234.0` | 六類拒收各覆蓋 existing／empty 兩情境，共 24 個拒收標的；existing bar 原有 typed 值與 raw 關聯保留，empty 不產生 bar，不被 TWSE MI_INDEX fallback 補值。 |
+| 同一單日兩次 `collect(force)` | 首次為 `partial`、`records=7`（六筆股票及一筆 TAIEX）；第二次兩市場股票全部 invalid、仍有有效 TAIEX，但 run 為 `failed`、`records=0`、`no_data_dates=[]`。全部 19 筆 bar（六筆合法、十二筆 existing 與 TAIEX）及原 raw 的完整 typed 值保留，十二個 empty 仍無 bar；failed attempt 可回指第二次 raw。 |
+| dispose 後新 `NullPool` engine／current DB 讀回及 HTTP API | 由空的 current DB 正常初始化 0001→0007，再真正重開同一 SQLite 檔，核對上述合法整數與拒收保留；30 個標的兩輪各一個 HTTP 回應，共 60 個，raw HTTP int token 精確。兩次重開均 `integrity_check=ok`、`foreign_key_check` 無列。 |
+
+六個 production target captures 的 raw encoded bytes／hash／metadata 與 DB 關聯已核對，第一次 raw JSON 的前後 bytes 不變。測試／清理／程序 exit 均為 0、`validation_complete=true`、`residuals=[]`；統籌另核核定根已不存在、無本輪新增測試殘留。首次直接 `& .ps1` 在載入前遭 execution policy 拒絕，未啟動 runner／test、未有 metrics 或磁碟根；其後僅在子程序使用 `ExecutionPolicy Bypass` 的首次實際磁碟測試通過，不能改稱首個命令通過。
+
+fixture JSON 不含 Decimal；這只解除上述指定整數、拒收與保存路徑的磁碟證據缺口，不把 capture fixture 升格官方原件，也不證 JavaScript／browser 能精確保留大整數。真官方／live、UI、production startup、完整 backend、正式 DB、Decimal capture、PIT 或完整 5／20 日窗口均未驗；其他 invalid／拒收及逐市場／逐欄 coverage 保持待驗，不升格完整 R1-A2。落盤根、配額、入口副作用與清理由[開發入口](development-baseline/README.md#r1-a2-legacy-成交量的磁碟整合驗證入口)詳述；版本、實測命令、原始收據與下一步評估留 task／[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
 
 ## 0–3 個月隔離收集驗證
 
