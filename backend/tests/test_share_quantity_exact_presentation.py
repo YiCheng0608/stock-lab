@@ -47,6 +47,8 @@ def _audit(event, args):
         mode, flags = args[1:3]
         forbidden = (isinstance(mode, str) and any(char in mode for char in "wax+")) or bool(
             isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+    if event == "sqlite3.connect":
+        forbidden = str(args[0]) != ":memory:"
     if event in {"socket.bind", "socket.connect"}:
         address = args[1]
         local = isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}
@@ -64,6 +66,7 @@ def _audit(event, args):
 
 if STANDALONE:
     sys.dont_write_bytecode = True
+    sys.addaudithook(_audit)
     config_path = Path(__file__).resolve().parents[1] / "app" / "config.py"
     config_ast = ast.parse(config_path.read_text(encoding="utf-8"), filename=str(config_path))
     config_ast.body = [node for node in config_ast.body if not (
@@ -76,7 +79,6 @@ if STANDALONE:
     config_stub.RAW_DIR = config_stub.DATA_DIR / "raw"
     config_stub.DB_PATH = Path(":memory:")
     sys.modules["app.config"] = config_stub
-    sys.addaudithook(_audit)
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -273,15 +275,115 @@ class ShareQuantityExactTest(unittest.TestCase):
         global _expected_probe
         import socket
         import subprocess
+        import sqlite3
         _expected_probe = True
         try:
             for action in (lambda: os.mkdir("__share_quantity_forbidden__"), lambda: open("__share_quantity_forbidden__", "w"),
                            lambda: socket.getaddrinfo("example.com", 443), lambda: subprocess.run([sys.executable, "--version"]),
-                           lambda: sys.audit("socket.sendto", None, ("192.0.2.1", 53))):
+                           lambda: sys.audit("socket.sendto", None, ("192.0.2.1", 53)),
+                           lambda: sqlite3.connect("__share_quantity_forbidden__.db")):
                 with self.assertRaises(PermissionError):
                     action()
         finally:
             _expected_probe = False
+
+
+class PortfolioValueInputTest(unittest.TestCase):
+    """Finite Float-compatible user values; no exact-money or legacy repair claim."""
+
+    FIELDS = ("average_cost", "stop_price", "risk_budget")
+
+    def fixture(self):
+        fixture = MemoryFixture()
+        self.addCleanup(fixture.close)
+        return fixture
+
+    def stored_rows(self, fixture):
+        with Session(fixture.engine) as db:
+            return [dict(row) for row in db.execute(
+                select(PortfolioPosition.__table__).order_by(PortfolioPosition.id)).mappings()]
+
+    def assert_safe_rejection(self, response, field):
+        self.assertEqual(response.status_code, 422, response.text)
+
+        def invalid_constant(token):
+            raise AssertionError("nonfinite error JSON token: " + token)
+
+        detail = json.loads(response.text, parse_constant=invalid_constant)["detail"]
+        self.assertTrue(any(error["loc"][-1] == field for error in detail), detail)
+
+    def test_nullable_zero_and_finite_values_save_as_float_in_both_markets(self):
+        fixture = self.fixture()
+        cases = [{field: value for field in self.FIELDS} for value in (None, 0, 0.0, 12, 12.5, 1e100)]
+        cases.append({"average_cost": 10, "stop_price": 20, "risk_budget": 30})
+        cases.append({})  # Omission remains full-row clearing, not PATCH.
+        with TestClient(fixture.app) as client:
+            for exchange in ("TWSE", "TPEx"):
+                for fields in cases:
+                    with self.subTest(exchange=exchange, fields=fields):
+                        response = client.post("/api/portfolio", json={"symbol": "NEW", "exchange": exchange,
+                                                                     "shares": "9007199254740993", **fields})
+                        self.assertEqual(response.status_code, 200, response.text)
+                        row = response.json()
+                        read = client.get("/api/portfolio?q=NEW").json()["items"]
+                        self.assertEqual(next(item for item in read if item["id"] == row["id"]), row)
+                        with Session(fixture.engine) as db:
+                            stored = db.get(PortfolioPosition, row["id"])
+                            self.assertEqual(stored.shares_integer, 9007199254740993)
+                            for field in self.FIELDS:
+                                value = fields.get(field)
+                                self.assertEqual(row[field], value)
+                                self.assertEqual(getattr(stored, field), value)
+                                if value is not None:
+                                    self.assertIs(type(getattr(stored, field)), float)
+                            if fields.get("average_cost") == 0:
+                                self.assertEqual(row["unrealized_pnl"], row["market_value"])
+                            elif fields.get("average_cost") is None:
+                                self.assertIsNone(row["unrealized_pnl"])
+
+    def test_each_invalid_value_retains_entire_database_and_json_rows(self):
+        fixture = self.fixture()
+        invalid = (-1, -0.5, True, False, "0", "12.5", "Infinity", "NaN", "", [], {}, [1], {"value": 1}, 10**400)
+        with TestClient(fixture.app) as client:
+            for exchange in ("TWSE", "TPEx"):
+                saved = client.post("/api/portfolio", json={"symbol": "MIXED", "exchange": exchange,
+                    "shares": "9007199254740993", "average_cost": 10, "stop_price": 9, "risk_budget": 100,
+                    "note": "retained whole row"})
+                self.assertEqual(saved.status_code, 200, saved.text)
+            baseline_json = client.get("/api/portfolio?page_size=100").json()
+            baseline_db = self.stored_rows(fixture)
+            for exchange in ("TWSE", "TPEx"):
+                for field in self.FIELDS:
+                    for value in invalid:
+                        with self.subTest(exchange=exchange, field=field, value=value):
+                            response = client.post("/api/portfolio", json={"symbol": "MIXED", "exchange": exchange,
+                                "shares": "9223372036854775807", "average_cost": 90, "stop_price": 80,
+                                "risk_budget": 70, "note": "must not replace", field: value})
+                            self.assert_safe_rejection(response, field)
+                            self.assertEqual(self.stored_rows(fixture), baseline_db)
+                            self.assertEqual(client.get("/api/portfolio?page_size=100").json(), baseline_json)
+
+    def test_raw_nonfinite_and_nested_values_reject_with_safe_json_and_no_add(self):
+        fixture = self.fixture()
+        tokens = ("NaN", "Infinity", "-Infinity", "1e400", "-1e400", "[Infinity]", '{"value":NaN}')
+        with TestClient(fixture.app) as client:
+            baseline_json = client.get("/api/portfolio?page_size=100").json()
+            baseline_db = self.stored_rows(fixture)
+            for symbol in ("MIXED", "NEW", "UNKNOWN"):
+                for field in self.FIELDS:
+                    for token in tokens:
+                        with self.subTest(symbol=symbol, field=field, token=token):
+                            content = '{"symbol":"' + symbol + '","exchange":"TWSE","shares":1,"' + field + '":' + token + '}'
+                            response = client.post("/api/portfolio", content=content, headers={"Content-Type": "application/json"})
+                            self.assert_safe_rejection(response, field)
+                            self.assertEqual(self.stored_rows(fixture), baseline_db)
+                            self.assertEqual(client.get("/api/portfolio?page_size=100").json(), baseline_json)
+            response = client.post("/api/portfolio", json={"symbol": "NEW", "exchange": "TPEx", "shares": 1,
+                "average_cost": True, "stop_price": "9", "risk_budget": []})
+            self.assert_safe_rejection(response, "average_cost")
+            self.assert_safe_rejection(response, "stop_price")
+            self.assert_safe_rejection(response, "risk_budget")
+            self.assertEqual(self.stored_rows(fixture), baseline_db)
 
 
 def main():
@@ -289,6 +391,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--port", type=int, default=8777)
+    parser.add_argument("--finance-only", action="store_true", help="only finite portfolio input checks and the audit guard")
     args = parser.parse_args()
     if args.serve:
         if args.port != 8777:
@@ -306,7 +409,12 @@ def main():
         finally:
             fixture.close()
     else:
-        result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(ShareQuantityExactTest))
+        if args.finance_only:
+            suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(PortfolioValueInputTest),
+                                       ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
+        else:
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShareQuantityExactTest)
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
         success = result.wasSuccessful() and not UNEXPECTED_DENIALS
         print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(DAY),
                           "actual_router_requests": HTTP_REQUESTS, "disk_artifacts": 0,

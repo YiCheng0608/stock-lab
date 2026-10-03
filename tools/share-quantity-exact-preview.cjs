@@ -204,6 +204,128 @@ async function check() {
   esbuild.stop()
 }
 
+async function financeCheck() {
+  typecheck()
+  const { portfolioValueFromText } = require(path.join(sourceRoot, 'portfolioValues.ts'))
+  const accepted = [['', null], ['0', 0], ['00.00', 0], ['12', 12], ['12.5', 12.5],
+    ['.5', 0.5], ['12.', 12], ['0012.50', 12.5], ['1' + '0'.repeat(308), 1e308],
+    ['0.' + '0'.repeat(323) + '5', Number.MIN_VALUE], ['0.' + '0'.repeat(400), 0]]
+  for (const [text, value] of accepted) assert.equal(portfolioValueFromText(text, '平均成本'), value, text)
+  const rejected = [' ', '\t', '\n', '1\n', '1\r', ' 1', '1 ', '+1', '-1', '-0', '1e2', '1E2',
+    'NaN', 'Infinity', '0x10', '1,000', '$1', '１', '١', '.', '1.2.3', '1' + '0'.repeat(309),
+    '0.' + '0'.repeat(324) + '1', '0.\u00a01', '\u200b1']
+  for (const text of rejected) assert.throws(() => portfolioValueFromText(text, '停損價'), Error, text)
+
+  const api = await apiModule()
+  const guardedFetch = global.fetch
+  const bodies = []
+  let invalidCalls = 0
+  try {
+    global.fetch = async (url, options) => {
+      assert.equal(new URL(url).origin, apiOrigin.origin)
+      bodies.push(JSON.parse(options.body))
+      return new Response('{"id":1}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    for (const field of ['average_cost', 'stop_price', 'risk_budget']) {
+      for (const value of [undefined, null, 0, 12, 12.5, 1e100]) {
+        const payload = { symbol: 'NEW', shares: 1, [field]: value }
+        const before = structuredClone(payload)
+        const count = bodies.length
+        await api.upsertPortfolio(payload)
+        assert.deepEqual(payload, before, 'helper mutated accepted payload')
+        assert.equal(bodies.length, count + 1)
+        assert.deepEqual(bodies.at(-1), value === undefined ? { symbol: 'NEW', shares: 1 } : payload)
+      }
+      for (const value of [true, false, '0', '12.5', 'Infinity', NaN, Infinity, -Infinity, -1, [], {}, { value: Infinity }]) {
+        const payload = { symbol: 'NEW', shares: 1, average_cost: 10, stop_price: 9, risk_budget: 100, [field]: value }
+        const before = structuredClone(payload)
+        const count = bodies.length
+        await assert.rejects(async () => api.upsertPortfolio(payload), Error)
+        invalidCalls++
+        assert.deepEqual(payload, before, 'helper mutated rejected payload')
+        assert.equal(bodies.length, count, 'invalid helper value reached fetch')
+      }
+    }
+  } finally { global.fetch = guardedFetch }
+  const render = await portfolioRenderer()
+  for (const value of [null, 0]) {
+    const html = render([{ ...syntheticPosition(1001, '1001'), average_cost: value, stop_price: value }])
+    assert.ok(html.includes('aria-label="平均成本／每股" type="text" inputMode="decimal"'))
+    assert.ok(html.includes('aria-label="停損價" type="text" inputMode="decimal"'))
+    assert.ok(!html.includes('aria-label="風險額度"'))
+    assert.ok(html.includes('平均成本（報價幣別元／股） ' + (value === null ? '未提供' : '0')))
+  }
+  const bundle = await browserBuild()
+  console.log(JSON.stringify({ passed: true, typescript: ts.version, node: process.version,
+    portfolio_value_parser_accepted: accepted.length, portfolio_value_parser_rejected: rejected.length,
+    actual_helper_accepted_fetches: bodies.length, actual_helper_invalid_cases: invalidCalls,
+    actual_helper_invalid_fetches: 0, actual_helper_payload_mutations: 0, portfolio_form_ssr_cases: 2,
+    full_main_memory_bundle: bundle.outputFiles.map((file) => ({ extension: path.extname(file.path), bytes: file.contents.length })),
+    disk_artifacts: 0, disk_save_reopen: 'not_run', production_vite_build: 'not_run' }))
+  esbuild.stop()
+}
+
+async function financeHttpCheck() {
+  const api = await apiModule()
+  const guardedFetch = global.fetch
+  let routes = 0
+  let posts = 0
+  let rejectedHelperCases = 0
+  let helperInvalidPosts = 0
+  global.fetch = (url, options = {}) => {
+    routes++
+    if (options.method === 'POST') posts++
+    return guardedFetch(url, options)
+  }
+  try {
+    for (const exchange of ['TWSE', 'TPEx']) {
+      for (const fields of [{ average_cost: 10, stop_price: 20, risk_budget: 100 },
+        { average_cost: 0, stop_price: 0, risk_budget: 0 },
+        { average_cost: null, stop_price: null, risk_budget: null }, {}]) {
+        const payload = { symbol: 'NEW', exchange, shares: '9007199254740993', ...fields }
+        const before = structuredClone(payload)
+        const saved = await api.upsertPortfolio(payload)
+        assert.deepEqual(payload, before)
+        for (const field of ['average_cost', 'stop_price', 'risk_budget']) assert.equal(saved[field], fields[field] ?? null)
+        assert.equal(saved.shares_exact, '9007199254740993')
+        const read = await api.getPortfolio({ q: 'NEW' })
+        assert.deepEqual(read.items.find((item) => item.id === saved.id), saved)
+      }
+      const saved = await api.upsertPortfolio({ symbol: 'NEW', exchange, shares: '9007199254740993',
+        average_cost: 10, stop_price: 9, risk_budget: 100, note: 'whole JSON must remain' })
+      const baseline = await api.getPortfolio({ page: 1, page_size: 100 })
+      for (const field of ['average_cost', 'stop_price', 'risk_budget']) {
+        for (const value of [Infinity, NaN, true, '12.5', { value: 1 }, -1]) {
+          const payload = { symbol: 'NEW', exchange, shares: '9223372036854775807', note: 'must not replace', [field]: value }
+          const before = structuredClone(payload)
+          const count = posts
+          await assert.rejects(async () => api.upsertPortfolio(payload), Error)
+          rejectedHelperCases++
+          helperInvalidPosts += posts - count
+          assert.equal(posts, count, 'invalid helper value reached HTTP')
+          assert.deepEqual(payload, before)
+          assert.deepEqual(await api.getPortfolio({ page: 1, page_size: 100 }), baseline)
+        }
+        for (const token of ['Infinity', 'NaN', '1e999', '[Infinity]', '{"value":NaN}']) {
+          const body = '{"symbol":"NEW","exchange":"' + exchange + '","shares":1,"' + field + '":' + token + '}'
+          const response = await fetch(apiOrigin.origin + '/api/portfolio', { method: 'POST',
+            headers: { 'Content-Type': 'application/json' }, body })
+          assert.equal(response.status, 422)
+          const error = await response.json()
+          assert.ok(error.detail.some((item) => item.loc.at(-1) === field))
+          assert.deepEqual(await api.getPortfolio({ page: 1, page_size: 100 }), baseline)
+        }
+      }
+      await api.deletePortfolio(saved.id)
+    }
+    console.log(JSON.stringify({ passed: true, actual_http_routes: routes, actual_posts: posts,
+      actual_helper_rejected_cases: rejectedHelperCases, actual_helper_invalid_posts: helperInvalidPosts,
+      actual_helper_payload_mutations: 0, raw_nonfinite_rejection: 'JSON-safe 422; whole portfolio JSON unchanged',
+      parser: 'product fetch + Response.json', source: 'synthetic user values; Float-compatible input only',
+      disk_artifacts: 0, disk_save_reopen: 'not_run' }))
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
+}
+
 async function httpCheck() {
   const api = await apiModule()
   const render = await portfolioRenderer()
@@ -268,8 +390,9 @@ async function httpCheck() {
 }
 
 async function serve() {
-  const port = Number(option('--port', '8780'))
-  if (port !== 8780 || apiOrigin.origin !== 'http://127.0.0.1:8779') throw new Error('only owned ports 8779/8780 are authorized')
+  const pairs = new Map([['http://127.0.0.1:8777', 8778], ['http://127.0.0.1:8779', 8780]])
+  const port = Number(option('--port', String(pairs.get(apiOrigin.origin) ?? 8780)))
+  if (port !== pairs.get(apiOrigin.origin)) throw new Error('only owned pairs 8777/8778 or 8779/8780 are authorized')
   const build = await browserBuild()
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
@@ -314,10 +437,11 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: 'http://127.0.0.1:8780/actions', api: apiOrigin.origin, fixture_date: '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--http-check') ? httpCheck() : check())
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-http-check') ? financeHttpCheck()
+  : args.includes('--http-check') ? httpCheck() : args.includes('--finance-check') ? financeCheck() : check())
   .catch((error) => { esbuild.stop(); console.error(error); process.exitCode = 1 })

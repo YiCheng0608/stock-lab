@@ -158,6 +158,22 @@ Node **20.19.4**／TypeScript **5.9.3** 的全 src `noEmit` 型別檢查、units
 
 本批只證 owned fixture 的有限 actual main startup、數量保存與磁碟重開；正式 DB／migration／restore、production deployment、真官方／live、完整 backend／production Vite build、大數金融估值、新 Plan、完整 M3、歷史／availability／PIT 與原來源 gate 均保持未完成。
 
+### M3-P3 庫存價值輸入的零落盤驗證入口
+
+本批七個程式檔、必要記憶體／前端／actual HTTP 及具名庫存操作已由統籌有限接受。三欄 API、兩欄 UI 原字串、actual `upsertPortfolio` helper 的序列化前檢核、零／null／省略及拒收保留規則只由 [UI 文案 §10.3](../UI_COPY_SPEC.md#m3-p3-庫存成本停損風險輸入可信檢核與拒收保留)負責；本節管可重建入口、副作用與有限驗收。命令、版本、原始 exit、SHA 與清理收據留 task，不另建附件。
+
+`backend/tests/test_share_quantity_exact_presentation.py --finance-only` 採 standalone `-B -X utf8`、AST config 常數 stub、既有主線唯讀依賴與記憶體 SQLite／actual router，不載入一般 pytest conftest、真 config 的 mkdir、`app.main`／production lifespan，不執行 migration 或正式 DB。Python **3.12.14**／Pydantic **2.13.5** 的 finance-only 為 **4 tests／0 skip／331 router requests**、exit 0，拒收核完整 DB／JSON 不變，NEW／UNKNOWN 不新增；六次預期 audit denial、`unexpected_denials=[]`。必要既有股數回歸另為 **5 tests／0 skip／193 requests**、exit 0，不冒充本批磁碟重開或完整 backend 驗收。
+
+`tools/share-quantity-exact-preview.cjs --finance-check` 沿共用唯讀 `--deps`，Node **20.19.4**／TypeScript **5.9.3** 的 full src `noEmit`、原字串 parser **11 good／25 bad**、actual helper 的 fake fetch **18 good／36 bad**、非法 fetch **0**／payload mutation **0**、**2 組 actual form SSR** 與 whole main `write:false` 記憶體 bundle 均 exit 0；JS **4,176,717 bytes**／CSS **27,903 bytes**。SSR 既有 `useLayoutEffect` warnings 分報，不能稱 console 空或 production Vite build 通過。這些都是可重建 fixture／邊界，fake fetch 不能代替下一段 actual HTTP。
+
+本輪明授 memory server 為 Python 該入口 `--serve` 的 **8777**、Node preview `--serve` 的 **8778**，只在 owned memory fixture 保存 synthetic 使用者庫存；不承襲 M3-P2 disk fixture，不重跑其磁碟矩陣。Preview bundle 仍為 `write:false`，CSS 僅記憶體排除外部字型、CSP 阻外網；本次使用 scoped memory fetch recorder，沒有啟動會在 stop 自動落 HAR 的 capture。`--finance-http-check` 首次 exit 0，**118 actual HTTP requests／40 POST**、**36 helper 拒收／invalid POST 0／payload mutation 0**；raw 非有限輸入由 server 回 422，完整 JSON 保留。UI 原字串、helper 的序列化前輸入及 raw HTTP 各自驗收，不以 helper 拒收代替 server gate。
+
+Actual TWSE 桌面 **1298×924** 的非零保存、TPEx **390×844** 的零／空白清欄，以及 UI 自拒收和真 router 422／draft 保留已由統籌接受；具名數值、viewport、未生效刪除與原始操作失敗只由主契約／[協作紀錄](../TASK_COORDINATION.md)保留，不複製完整 log。原 12 列完整 JSON 保持，兩 NEW 僅 memory、shutdown 後釋放，不稱已刪除或磁碟保存。
+
+測試與清理分報：本輪必要測試 exit 0，QA 實際還原 **1365×900** 並關原 tab；Python／Node owned shutdown 各 exit 0、兩個 serve exec final exit 0，Python `unexpected_denials=[]`，統籌獨立核 exact PIDs／children／listeners 空。新增測試磁碟產物／殘留為 **0 files／0 directories／0 bytes**；前輪 HAR **64,885 bytes**、既有 review-blocked／occupied 或未知資源未動、不重試，不能稱全部歷史殘留為零，詳見[協作紀錄](../TASK_COORDINATION.md)。文件角色未重跑上述測試或造附件。
+
+本批只補輸入 gate，不修三欄 legacy 污染或驗全部讀回、風險行動／估值；既有 market_value／unrealized_pnl 非有限輸出保護保留。Float 不宣稱十進位 exact；正式 DB／磁碟保存與重開、production deployment／Vite build、完整 backend、risk sizing、新 Plan、完整 M3、來源／tick／歷史／availability／PIT 均未驗。下一可信讀取／未知保留候選及其有界 discovery 條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責，尚未核定修法，不把 memory 取代未來必要磁碟驗收。
+
 ## 歷史驗證
 
 歷史測試不代表目前來源已驗收；原始數據依[文件索引](../README.md#歷史查閱)取閱，已刪除的 Temp 附件不作接手依賴。

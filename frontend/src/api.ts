@@ -28,6 +28,8 @@ import type {
   TrackingResponse,
 } from './types'
 
+import { assertPortfolioValue } from './portfolioValues'
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
 async function get<T>(path: string): Promise<T> {
@@ -111,7 +113,12 @@ export const getTrackingSignal = (signalKey: string) =>
   )
 export const getPortfolio = (params: PageParams = {}) =>
   get<Paginated<Position>>(`/portfolio${queryString(params)}`)
-export const upsertPortfolio = (payload: PositionInput) => post<Position>('/portfolio', payload)
+export const upsertPortfolio = (payload: PositionInput) => {
+  assertPortfolioValue(payload.average_cost, '平均成本')
+  assertPortfolioValue(payload.stop_price, '停損價')
+  assertPortfolioValue(payload.risk_budget, '風險額度')
+  return post<Position>('/portfolio', payload)
+}
 export const deletePortfolio = (positionId: number) =>
   del<{ status: string; id: number }>(`/portfolio/${positionId}`)
 export const getDataQuality = (params: PageParams & { entity_type?: string; status?: string } = {}) =>

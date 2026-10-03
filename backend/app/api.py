@@ -2358,6 +2358,23 @@ class PositionInput(BaseModel):
     risk_budget: float | None = Field(default=None, ge=0)
     note: str | None = None
 
+    @field_validator("average_cost", "stop_price", "risk_budget", mode="before")
+    @classmethod
+    def validate_portfolio_value(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if type(value) in {int, float}:
+            try:
+                number = float(value)
+            except OverflowError:
+                number = math.inf
+            if math.isfinite(number) and number >= 0:
+                return number
+        # Invalid raw JSON may contain NaN/Infinity, even inside containers.
+        # A safe replacement fails the float field without echoing those
+        # values into a 422 response or reaching any database mutation.
+        return {"invalid_portfolio_value": "expected a finite nonnegative JSON number or null"}
+
     @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="before")
     @classmethod
     def json_safe_invalid_quantity(cls, value: Any) -> Any:

@@ -2,7 +2,46 @@
 
 本文件保留目前角色、接手與執行狀態，以及最近產品交付的實際 roster／驗收邊界；流程依 [AGENTS](../AGENTS.md)，能力與優先順序查 [ROADMAP](ROADMAP.md)。
 
-## 目前：M3-P2 已有限接受，版本封存與接手依原 task 收據
+## 目前：M3-P3 輸入檢核與拒收保留已有限接受，待文件 review／freeze
+
+本輪從前輪 M3-P2 已驗收且版本封存的 `master` 建立獨立 worktree／branch。四角色的 runtime、共同 cwd、branch、起始 HEAD、model／reasoning、三子角色 parent 及原 Orca 可見 terminal 的 `/subagents` 已由統籌獨立核實；啟動 gate 通過。有界唯讀 discovery 後，統籌已核定 M3-P3「既有庫存成本／停損／風險輸入可信檢核與拒收保留」，支援 M3／R2-C1 的可信使用者輸入基線；只補既有三個 API 欄位與兩個 UI 輸入，七個程式檔、必要記憶體／JSON／HTTP 與兩市場桌面／窄版具名操作已有限接受；五個成果文件依接受結論更新，待統籌 review 後 aggregate freeze／索引／版本封存，不升格完整 M3。各角色不自行結案或啟動下一任務。
+
+共同 repo／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m3-portfolio-value-validation-20261004`；branch：`roadmap-m3-portfolio-value-validation-20261004`；起始 HEAD：`ee376aae9cacb1d21279b4fdb27ab8da6d14dbe4`，與接手時最新已驗收且乾淨的 `master` 相同。前輪 M3-P2 的 33 個核准檔已提交 `ee376aae9cacb1d21279b4fdb27ab8da6d14dbe4`（parent `deaf2d4965d32e14e81338b69dfb2dd5ec773230`），統籌已核實 fast-forward 合併後 `master` 為同一 SHA 且乾淨；有限接受及清理邊界見下方，最終 receipt 留原 task。
+
+本輪原可見 terminal 為 `term_7fdc0cfd-af6a-453f-8a9b-3998a8133864`，tab `535ff64b-4961-4432-b06f-78c941fc9880`／pane 1。統籌已從該 terminal 的 `/subagents` 讀回 Main／root 與三角色，四個 ID 與下表一致；外部亦已獨立讀回同一組四個 ID，該畫面保留可見。共用啟動 helper 首次實際 exit 1，原 terminal 恢復後沿同一統籌 session 接手，沒有重複啟動；不能倒寫成首跑通過。runtime 已核得唯一首 task 的 UTF-8 任務可讀，共 **13,331 字元**，SHA-256 `432685720fe756f272e5235a8c25889cd8bfcb83aee8469b70d8b3559ae259c7`，turn ID `01a102c2-28ea-79e3-94c3-d8158c93e84e`。首次 turn 曾 interrupted，續作 turn `01a102c8-b093-7362-b0bf-6c858b140bad` 使用同一統籌 session，屬同輪續作；統籌已正式接受接手並派有界唯讀 discovery。原 empty default shell 已觀測 `orphaned=true`／`connected=false`／`writable=false`／`paneRuntime=-1`／`exitCause=operator_close`，但沒有 close receipt 或 `ptyKilled` 證據，不宣稱已終止 PTY。
+
+| 角色 | 本輪 ID／實際配置與接手 | 核定寫入／驗收範圍 |
+| --- | --- | --- |
+| 統籌 | canonical ID `/root`；session `01a102bf-c30f-7183-84db-3bd75b154c53`；實際 `gpt-6.1-sol`／`ultra`；已核實並接手 | 已核定 M3-P3 七檔實作／五檔文件與零新增測試落盤，接受必要記憶體／HTTP JSON 與具名產品操作；七個 source SHA 已核匹配、無退修，自有 memory preview 已關閉並核實。五文件 review 後才 aggregate freeze／輪末索引，commit／本地 merge 分別明授；已完成前輪指定外部清理。 |
+| 程式 | canonical ID `/root/implementation`；子 thread `01a102c4-1758-7f30-97fc-4c5a02f07416`；實際 `gpt-6.1-sol`／`xhigh`；已核實並接手 | 寫入限七檔：`backend/app/api.py`、`backend/tests/test_share_quantity_exact_presentation.py`、`frontend/src/App.tsx`、`frontend/src/types.ts`、新增 `frontend/src/portfolioValues.ts`、`frontend/src/api.ts`、`tools/share-quantity-exact-preview.cjs`。第七檔 `api.ts` 只補既有 upsert 的三欄 pre-JSON runtime guard，解除 `JSON.stringify` 將 NaN／Infinity 轉 null 的必要 caller 斷點，不改一般 post 或 quantity。七檔實作、必要記憶體／前端／HTTP 與具名產品操作已由統籌有限接受，待五文件 review 後 aggregate freeze；本輪 preview 不落盤、不重驗 M3-P2 磁碟保存。不自行修改規格、文件、索引或 Git，不自行結案或啟動下一任務。 |
+| 文件 | canonical ID `/root/documentation`；子 thread `01a102c4-68f7-7762-bcf0-25e130d8ea49`；實際 `gpt-6.1-sol`／`xhigh`；已自核並接手 | 白名單限五檔：`docs/TASK_COORDINATION.md`、`docs/UI_COPY_SPEC.md`、`docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/development-baseline/README.md`。五檔已依統籌接受結論更新主契約、成果、有限邊界、未完成項與下一候選，交付 SHA／bytes／差異／連結後暫停寫入，待統籌 review／freeze。只驗差異、UTF-8 讀回、連結與一致性，不改程式、其他文件、索引或 Git。 |
+| 索引與 Git commit | canonical ID `/root/index_commit`；子 thread `01a102c4-c120-7111-b1e2-0479dd1fb502`；實際 `gpt-6-luna`／`medium`；已自核並接手，統籌獨立 gate 已核實 | 來源寫入白名單為空；文件接受／aggregate freeze 後才統一更新涉及分區及驗 coverage，commit／本地 merge 各待統籌明授。不輪初／中途刷新，不 push 或重寫歷史。 |
+
+上述三個 subagent 均由本輪統籌在其 session 以 `fork_turns=none` 新建，parent 均為 `01a102bf-c30f-7183-84db-3bd75b154c53`；`CODEX_THREAD_ID`／runtime `id` 是各自子 thread，runtime `session_id` 是 root。統籌已獨立讀取 `session_meta`／`turn_context` 核得實際配置及共同 Git 起點，並從原可見 terminal 核對同一組四個 ID；canonical 名稱相同不代表沿用前輪角色。前輪實際參數保留如下，不倒改成新配置。
+
+輪初 App codebase-memory `list_projects` 成功，列出 14 個既有分區，本輪 worktree 尚未 tracking；baseline docs 索引 ready、無 recorded parse／skip gap，`TASK_COORDINATION.md` coverage 為 `metadata_changed`，因此原文補核。連線、索引及 coverage 分報，不因本輪未 tracking 或連線失敗重建 baseline；待統籌接受來源與文件後才由索引角色輪末更新。
+
+本輪維持新增測試落盤、附件、暫存及殘留配額 **0**；必要索引另核獨立配額，不解除測試限制。不跑會自動造檔的入口，不用新 session 重置既有配額。前輪 `C:/Users/YiCheng/.agent-browser/tmp/har/har-1791044803009.har` 為 **1 file／64,885 bytes** 的已知殘留，exact 清理曾在 CreateProcess 前遭 automatic review 拒絕（`blocked by policy`），未執行；本輪不重試或換工具、不掃 shared HAR directory，也不把它交本輪當正常 owned cleanup。其餘既有 review-blocked 資源及未知殘留保持原收據，未清理不得稱已刪除。零輸出有界工作可繼續，必要磁碟驗收須先核既有殘留與授權處理。
+
+本輪新統籌已完成前輪 M3-P2 的指定外部清理，與功能／合併驗收分報。四個舊 ID 為 root `01a10250-3fa0-7752-8399-d678bf3714d8`、程式 `01a1025e-ede7-73d2-a19c-c2dffb43df17`、文件 `01a1025f-377c-7921-bfe3-6bca385c9879`、索引 `01a1025f-9021-7522-aa92-058fe3c432fa`；統籌立即 Rpc 核四 ID latest completed 後關閉原 terminal，實際 exit 0／`ptyKilled=true`，再核四 ID latest completed 後 archive 舊 root，回 `archived=true`；獨立 Rpc 四 ID 均讀回 `archived_sessions`／`notLoaded`／`loaded=false`／latest completed。移除前已核 exact owned 根 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m3-share-quantity-storage-20261003` 為 non-reparse、**213 files／14 directories／3,651,329 bytes**、乾淨 HEAD `ee376aae9cacb1d21279b4fdb27ab8da6d14dbe4` 且為已合併 `master` 的 ancestor，再核 latest completed 後 Orca remove 實際 exit 0／`removed=true`。統籌獨立核根不存在、Git worktree／branch 空；Orca show 實際 exit 1／`selector_not_found` 符合不存在的預期，不把此命令改報 exit 0。
+
+前輪六個 unique aliases 限 prefix `taiwan-stock-research-roadmap-m3-share-quantity-storage-20261003-` 下的 backend-app／backend-tests／backend-alembic／frontend-src／tools／docs，App 全回 `deleted`；統籌獨立 list 核 total 8、只剩原八分區，26 個已知 exact DB／aux／兩個 returned logs 路徑全部不存在。六個舊 cache DB 的 **36,503,552 bytes** 引用前輪索引收據，本輪沒有刪前重新量測，不冒稱重測；兩個 returned logs 刪前實際核 **284／411 bytes**、Remove-Item exit 0 且統籌獨立核不存在，依前輪 DB 收據合計 **8 files／36,504,247 bytes** 已清。不掃 shared cache；HAR **64,885 bytes**、其餘舊 review-blocked／occupied 資源與未知殘留全部未動，不宣稱全部資源清零，也不等待這些清理才推產品。
+
+M3-P3 已有限接受的三層為 UI 原字串、actual `upsertPortfolio` helper 的序列化前檢核與 raw HTTP server gate；零合法、null／省略仍清欄、拒收保留完整列與 UI draft。主契約與具名支持範圍只由 [UI 文案 §10.3](UI_COPY_SPEC.md#m3-p3-庫存成本停損風險輸入可信檢核與拒收保留)負責，入口／副作用與未跑項見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)。七個 source SHA 已由統籌核匹配、無退修；七檔程式與五檔文件共十二個核准檔，待文件 review 後 aggregate freeze。
+
+必要記憶體證據已接受：Python 3.12.14／Pydantic 2.13.5 finance-only **4 tests／0 skip／331 router requests**、必要既有 quantity **5 tests／0 skip／193 requests**，各 exit 0；六次預期 audit denial、`unexpected_denials=[]`，完整 DB／JSON 拒收保留及 NEW／UNKNOWN 不新增已核。Node 20.19.4／TypeScript 5.9.3 的 full src noEmit、parser **11 good／25 bad**、actual helper fake fetch **18 good／36 bad**（非法 fetch 0、payload mutation 0）、2 組 actual form SSR 與 whole main 記憶體 bundle均 exit 0，既有 SSR warnings 分報。首次 `--finance-http-check` exit 0，**118 actual HTTP／40 POST／36 helper 拒收**、invalid POST 0／payload mutation 0；raw 非有限輸入 HTTP 422、完整 JSON 保留。三層證據分開，不把 fake fetch 或 helper 拒收當 raw HTTP／真來源驗收。
+
+具名產品操作已接受：TWSE 首次非零保存為 actual **1298×924** 桌面，TPEx 首次零值保存已切 **390×844**；UI exponent／310 位 overflow／327 字元非零 underflow 不 POST、draft／完整 JSON 不變。一次 transport fault 將原合法 POST 的成本改 false，由 actual router 回 422，draft 保留／busy 恢復，不是 mock response。原 tab `c33fa879-bb5b-4901-9ae5-38ed738b0952` 首次 runtime_unavailable 實際 exit 1，同 tab native Chrome focus 後恢復、未重建；CLI eval 的兩次 `--script` invalid_argument、API items 結構誤用 rows.find、console helper wrapper JSON parse 各 exit 1，都是操作 probe，不稱產品通過。首次 CLI 空字串操作 exit 1，誤按保存原 `12.5`／`9.75` 不算 blank 通過；後續新表單只填 TPEx 2 張，獨立證 decimal fields 為空字串、POST 200／GET 三欄 null 才接受。兩次 native Delete click tool exit 0 但沒有 DELETE，未驗收刪除。
+
+Root 最後核原 **12 rows** 的完整 JSON array 與初 baseline（含 updated_at）完全相同；兩個 NEW 最終為 TWSE `shares=1001`／cost 12.5／stop 9.75，TPEx `shares=2000`／cost、stop、risk 全 null，僅 memory、shutdown 後釋放。Scoped memory fetch recorder **21 requests／16 GET／5 POST**（20 個 200／1 個 422、external 空），不是全 session capture；26 個 performance resources 同 origin。Console **3 entries**（1 info／2 既有 warning／error 0），不稱空 console；具名窄版尺寸與結果見主契約。
+
+本輪測試與清理分報：QA 最後 actual viewport 還原 **1365×900**、document client／scroll width 均 1350，原 tab close exit 0／list 空。Owned memory Python PID **19956**／exec **20976**、Node **3548**／exec **71090**、esbuild child **12152** 的 8777／8778 shutdown 各 exit 0，兩 exec final exit 0，Python `unexpected_denials=[]`；統籌獨立核 PIDs／children／listeners 空。新增測試磁碟產物／殘留為 0，不重驗 M3-P2 disk；前輪 HAR **64,885 bytes** 與其他既有 blocked／occupied 或未知殘留未動，不重試、不稱歷史殘留清零。本文及其他四份成果文件只驗差異／連結／UTF-8，文件角色未重跑產品測試或造附件。
+
+下一具名候選為「既有庫存成本／停損／風險欄位可信讀取與未知資料保留」，須 M3-P3 有限接受並合併後交新統籌在新 worktree 有界核 `position_dict`、legacy Float、decision 的 stop consumer、JSON 及顯示，再裁定零落盤可信讀取 guard 的可行最小能力；不預先固定修法或宣稱完成。M3-P3 只處理輸入，不修既有污染，也未驗收風險行動或所有估值；下一候選不新增預算／交易建議、new Plan、來源、tick 或 PIT，不空等磁碟或重做已完成輸入。
+
+**完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件 → freeze／索引／commit／merge**：M3-P3 七檔實作、UI 原字串／actual upsert helper／raw HTTP 三層必要驗證及具名桌面／390px 操作已有限接受，原 12 列完整 JSON 保持、自有 memory 程序／tab／listeners 已核不存在，新測試磁碟產物 0；五文件已依接受結論更新，前輪指定外部清理已獨立核實 → 五文件與整體差異仍待統籌接受／freeze；既有污染可信讀回、風險行動／所有估值、正式 DB／磁碟／production build、新 Plan／risk sizing、完整 M3／PIT 未驗，HAR 及其他既有殘留保持原邊界 → 合併後交新統籌有界核下一可信讀取候選的來源、caller、未知保留與最小能力，不預定修法或重做輸入 → 十二個核准檔待統籌 aggregate freeze、輪末索引與 coverage，複核後各別明授本地 commit／merge；實際最終 receipt 留 task，不為回寫 hash 反覆更新文件。
+
+## 前輪 M3-P2：已有限接受並版本封存，實際驗收邊界
 
 使用者已明確要求開始產品輪並持續推進 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。本輪由已驗收的 M3-P1 版本建立獨立 worktree／branch，接手、roster／有界 discovery 與核定 M3-P2 的 26 個程式檔、必要記憶體／磁碟／HTTP／兩市場桌面與 390px 操作已有限接受，支援 M3／R2-C1 股數保存基線及必要 R0 migration／readiness 依賴。程式 26 檔已 freeze，7 個文件已依接受結論更新；本輪 33 個核准檔依統籌 review、aggregate freeze→輪末索引→commit→merge 版本封存，實際最終收據與接手以原 task 為準。角色配置依 [AGENTS「四個角色」](../AGENTS.md#四個角色)，三個 subagent 均由本輪統籌在其 session 以 `fork_turns=none` 新建；canonical 名稱相同不代表沿用舊角色。各角色不自行結案或啟動下一任務。
 

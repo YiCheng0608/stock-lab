@@ -574,9 +574,9 @@ export type PositionInput = {
   quantity?: number | string
   quantity_lots?: number | string
   odd_lot_shares?: number | string
-  average_cost?: number
-  stop_price?: number
-  risk_budget?: number
+  average_cost?: number | null
+  stop_price?: number | null
+  risk_budget?: number | null
   note?: string
 }
 

@@ -1,6 +1,6 @@
 # UI 文案與資訊層級規格
 
-更新：2026-09-27。本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約；繁中文案、法人命名、數值格與官方分點入口已有有限 review，成交額 availability 的 UI 語意依本輪資料契約補充，不表示已新增成交額介面或所有案例均已驗收。能力狀態見 [ROADMAP](ROADMAP.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
+更新：2026-10-04。本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約；繁中文案、法人命名、數值格與官方分點入口已有有限 review，成交額 availability 的 UI 語意依本輪資料契約補充，不表示已新增成交額介面或所有案例均已驗收。能力狀態見 [ROADMAP](ROADMAP.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
 
 ## 1. 共通原則
 
@@ -170,6 +170,38 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 | 窄版原生刪除兩列 NEW，再讀回 | 兩次 DELETE 200；GET 200／items 空、cards 0。 |
 
 本次只接受正確 post-navigation viewport 與 focus 後實際生效的操作；初始 blank viewport、hidden 頁面的未生效 click 及 Orca runtime_unavailable 不算操作通過。擷取範圍 32 個 network requests（27 GET／3 POST／2 DELETE）均為自有 8780、status 200，reload 後 16 個 performance resources 均同 origin，觀測外網為 0；不當完整 session log。Console 的 7 entries 為 3 個 React DevTools info 與 4 個已知 React Router future warnings，無 error，不宣稱空 console。QA viewport 已還原、tab 已關閉，自有程序／child／listener 已核實不存在；隔離 DB 已清；capture stop 額外 HAR 的審核拒絕殘留分報於[協作紀錄](TASK_COORDINATION.md)。命令、版本、原始失敗與有限接受收據留原 task，不另造附件。
+
+<a id="m3-p3-庫存成本停損風險輸入可信檢核與拒收保留"></a>
+
+#### M3-P3 庫存成本／停損／風險輸入可信檢核與拒收保留
+
+本批支援 M3／R2-C1 的可信使用者輸入基線；七個程式檔、必要記憶體 router／JSON／前端驗證及下表具名庫存操作已由統籌有限接受。既有 `average_cost` 是每股成本，`stop_price` 是使用者停損輸入，`risk_budget` 保留為持倉記錄欄；本批不新增風險預算 UI 或部位計算。價格及成本的幣別說明沿 §10.3，不猜成新臺幣。
+
+三層檢核各自負責不同輸入，不以其中一層的拒收冒充其他層已驗：
+
+| 層 | 現行契約 |
+| --- | --- |
+| UI 原始成本／停損字串 | 只處理兩個既有欄位。原始空字串 `""` 送 `null`；非空必須完整符合 ASCII 十進位 `digits(.digits*)?` 或 `.digits`，可有前導零，例如 `0012.5`、`12.`、`.5`。不 trim、不允正負號、空白／換行、科學記號、Unicode 數字、貨幣或千分分隔。轉 Number 後須有限且非負，原始數字有非零位但轉成零時亦拒收，避免極小非零值被當零。先驗完整表單再送請求；自拒收不 POST，保留全部 draft 並顯示錯誤。 |
+| Actual `upsertPortfolio` helper | 對三欄在 JSON 序列化前檢核，僅接受 `null`、`undefined` 或 `typeof number`、有限且非負；非法值不 fetch、不修改 payload。不能讓 `JSON.stringify` 將 NaN／Infinity 轉為 `null` 後變成合法清欄。一般 post 與 quantity 路徑不變。 |
+| Raw HTTP／server | `average_cost`、`stop_price`、`risk_budget` 僅接受已解碼的 actual JSON int／float、有限且非負，或 `null`。Bool、數字字串、container、負值、非有限值及轉 Float 溢位，均在 commit 前 HTTP 422 拒收；現有持倉完整列與 JSON 保持不變，包括精確股數、Float mirror、三個欄位、note 與 updated_at，亦不新增拒收的持倉。 |
+
+零是合法明示值，不等於 null。省略三欄仍為 `None`，沿既有 upsert 整列覆寫／清空規則；本批沒有改成 PATCH，明示 `null` 與省略都可清欄。UI 收到 API 422 或其他保存錯誤時保留 draft，busy 恢復；成功後依原流程讀回。停損不新增 `stop < cost` 或必須正值的限制，也不將 0 改成策略失效 fallback；風險資料未知時仍不提供部位數量。
+
+這是 Float／JavaScript Number 的可信輸入 gate，不是十進位精確保存。合法小數仍可有二進位近似；server 不從已解碼的數字還原原始 JSON token，UI 的原字串 underflow 檢核與 server 的已解碼值 gate 分開。沒有修改 schema、legacy Float 或既有污染列、held／worker／risk 行動、新 Plan、價格級距、來源或 PIT。
+
+本次採 `2026-10-03` synthetic TWSE／TPEx 使用者庫存與 memory server，不當正式持倉、官方行情或 live coverage。主契約支持範圍如下；完整命令、版本、失敗與清理收據見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)及[協作紀錄](TASK_COORDINATION.md)。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| Actual 桌面 `1298×924`，TWSE NEW `1001` 股、成本 `12.5`／停損 `9.75` | 原生保存 POST 200、GET 正確。最初 requested `1365×900` 未立即生效，不把它當保存時的實際 viewport。 |
+| Actual 窄版 `390×844`，TPEx NEW `1` 張、成本／停損 `0` | 原生保存 POST 200、GET 的合法零保留；這次首次零值保存已切窄版，不當兩市場桌面保存證據。 |
+| Actual `390×844`，成本 `1e2`／310 位數 overflow、停損 327 字元非零 underflow | 三種原字串均由 UI 拒收、無 POST，全部 draft 與持倉完整 JSON 不變。document client／scroll width 均 375、editor 305、input 303，未觀測橫向溢出。 |
+| 一次 transport fault 將原合法 POST 的成本改為 `false` | actual router 回 422；UI 保留 draft、busy 恢復、完整 JSON 不變，使用真拒收回應，不是 mock response。 |
+| 新表單只填 TPEx NEW `2` 張，獨立核成本／停損原字串為 `""` | POST 200、GET 的成本／停損／risk_budget 均為 null，原非零值已清。首次 CLI 空字串操作失敗及誤按保存原值不算本次空白清欄通過。 |
+
+兩次原生刪除 click 沒有 DELETE，未驗收本批刪除操作；兩列 NEW 只在記憶體，shutdown 後釋放，原 12 列完整 JSON 保持。本批 scoped memory fetch recorder 為 21 requests（16 GET／5 POST，20 個 200／1 個 422、外網 0），不是完整 session capture；26 個 performance resources 同 origin。Console 3 entries 為 1 React DevTools info／2 既有 Router future warnings，error 0，不稱空 console。QA 最後實際還原 `1365×900`、document 寬 1350 且無橫向溢出，原 tab 已關、自有 memory 程序／children／listeners 已核不存在，新測試磁碟產物為 0；前輪 HAR 仍在且不重試，兩者分報。
+
+正式 DB、磁碟保存／重開、production deployment、真官方／live、完整 backend／production Vite build、既有污染的可信讀回、風險行動與所有估值、risk sizing、新 Plan、完整 M3、歷史／availability／PIT 仍未由本批驗收。下一具名候選為既有成本／停損／風險欄位的可信讀取與未知資料保留，先由新統籌有界核讀取、legacy Float、stop consumer、JSON 與顯示，未核定修法或宣稱能力完成。
 
 ### 10.4 數值表格、單位與空白
 
