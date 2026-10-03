@@ -21,7 +21,7 @@
 
 本輪文件增補總量上限 **32 KiB**；附件、暫存、測試新增產物及殘留配額均為 **0**。文件只驗差異、連結及一致性，不跑 backend；未受影響契約不製造 diff。索引引擎管理儲存增量每分區至多 **20 MiB**、log 至多 **2 MiB**，不建 repo 附件。接手索引已核對；codebase-memory MCP 本輪未提供，改用同引擎 CLI，Markdown 文字解析不足已核定原生讀取，不在輪初刷新。**完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件**：有界審查已接受 → exact 權利及完整單日原件尚缺 → 取得正面證據後由統籌核定有界驗證，gate 具體滿足才核定必要實作。**freeze／索引／commit**：本輪文件交由統籌接受並 freeze，coverage／commit 依核准範圍執行，實際收據留原 task；不另建附件或為回寫 hash 再改文件。
 
-### 最近獨立維護的實際參數
+### 先前協作流程維護的實際參數
 
 本次為使用者已授權的協作流程文件維護，共同 repo 為上述 `master` 原 checkout，乾淨接手 HEAD `553d83e5a684b2ca576edafb955ab848f185a7d8`。本次獨立維護不恢復產品 round，M1-P4a 狀態及既有 roster 保持原實際紀錄；後續產品 round 適用 [AGENTS「每輪流程」](../AGENTS.md#每輪流程)。
 
@@ -35,6 +35,31 @@
 統籌以 runtime `session_meta`／`turn_context` 核實共同 cwd、parent thread 與上述實際 model／reasoning；表列 subagent 均由本統籌以 `fork_turns=none` 新建、已接手，白名單互斥。文件增補上限 **12 KiB**，附件、暫存、測試新增產物與殘留配額均為 **0**；只驗文件，不跑 backend、不建 DB。先前 codebase-memory MCP 未暴露，合法 stdio／同引擎 CLI 路徑均遭 DACL 阻擋；使用者已授權新索引角色接手複查，同引擎 CLI 重試尚無成功收據。文件驗收後 freeze，索引／coverage 與 commit 待實際驗證，收據留本 task。
 
 原索引角色 `/root/index_git_update`、子 thread `01a10087-bb76-7ae3-b191-795ba2562b2f`、`gpt-6-luna`／`medium` 的實際參數及未完成收據保留原 task；本次依使用者授權由上述新索引角色接手。
+
+### 本次獨立維護：共用環境與新輪啟動
+
+使用者已明確授權跨專案共用環境修復及新輪啟動順序修正。本次共同 repo 為上述 `master` 原 checkout，不改專案產品來源、不算產品 round；下列角色已接手本次維護，既有 session 的實際參數保留原值。
+
+| 角色 | 本次 ID／實際配置 | 寫入／驗收範圍 |
+| --- | --- | --- |
+| 統籌 | session `01a100cc-7538-7c00-8c36-1eb12378d00e`；實際 `gpt-6.1-sol`／`xhigh`（已核實 runtime）；不作為下一輪統籌 | 核定本次共用環境修復與文件驗收；維護本機兩份 CBM config、全域 AGENTS 及 session control 工具，不改專案產品來源。 |
+| 程式 | canonical ID `/root/cbm_runtime_fix`；子 thread `01a100f3-674c-76e1-81d8-fcc645393662`；建立參數 `fork_turns=none`、`gpt-6.1-sol`／`xhigh` | 僅本機 `.local/bin` 的 CBM 三個 launcher 與相關 User env；不改專案來源、索引或 Git。 |
+| 文件 | canonical ID `/root/docs_handoff_limit`；子 thread `01a100d9-a2d0-7af3-939b-70c2077348d4`；`gpt-6.1-sol`／`xhigh`，沿既有 follow-up 配置 | 僅 `AGENTS.md`、`docs/TASK_COORDINATION.md`；依統籌核定邊界更新、檢查差異及一致性，不改程式、索引或 Git。 |
+| 索引與 Git commit | canonical ID `/root/index_commit`；子 thread `01a100d0-ed35-7bc0-9d2d-a294a1f094c7`；實際 spawn 配置 `gpt-6-luna`／`medium` | source freeze 後才更新涉及分區、驗 coverage；核准來源僅 `AGENTS.md`、`docs/TASK_COORDINATION.md`，核准後才 stage／commit。 |
+
+**維護接受邊界**：CLI 遭 DACL 阻擋的直接原因已核定為 npm shim 未繼承 MCP config env；本機共用 Node／`.cmd` 入口已固定 runtime／cache，Codex App 與 Orca CBM config 統一使用該入口。User env 持久化已接受，新程序可從 User registry 取得環境；既有 App process 不會自動繼承，共用絕對路徑入口不依賴舊 process env。支持 reload 後本次統籌的 runtime 由 failed 恢復 connected，連續三次成功列出全部八個索引分區，coverage／read／search 亦成功。雙 stdio client 的初始化、三輪並發 list 各列出八分區、關閉 A 後 B 仍可 list，以及 A／B 各正常 exit 0 已接受。這支持缺失 env 的修正、健康檢查、重載恢復與 CLI 備援可用；舊 daemon 消失的原始原因尚未證明，不宣稱已修 upstream daemon 或永不斷線。共用入口、status／reload 的完整路徑與命令由全域 AGENTS 及原 task 保存，專案不重寫全域修復規則。
+
+**啟動 guard 的有限接受範圍**：AGENTS 第 1／5 步的順序修正已 review 接受。本機工具對原 checkout／`master` 的實測為拒絕（exit 1），未建立 session；記憶體 gate 驗證接受一個合法 worktree 情境，拒絕分支錯誤、master SHA 過時、工作區不乾淨及 worktree 未註冊四個情境，均未建立 session。這不等於實際新輪 worktree 或新統籌 runtime 已驗收。
+
+**尚缺項與下一步**：PowerShell launcher 的 UTF-8 stdin 保護及必要中文輸入複驗已接受，三個共用 launcher source 已 freeze，未建立測試附件或額外殘留。本次最終文件交統籌接受並 freeze，再交索引角色刷新、驗 coverage 及本地 commit。實際建立新產品 worktree 及核實 `gpt-6.1-sol`／`ultra` runtime 留待維護 commit 後驗證，不等待未證明的 daemon 原始根因。產品接手仍依下列待辦，不沿用本次 root 或維護 roster；各角色不自行結案或啟動下一任務。最終 receipt 留原 task，不為回寫 hash 再改文件。
+
+### 新產品 round 接手限制與待辦（2026-10-03）
+
+流程及索引維護已本地提交，新輪啟動嘗試前 `master` 工作區乾淨。使用者已要求開始新 round；本次先嘗試建立統籌 session、尚未建立產品 branch／worktree，操作順序錯誤。Codex TUI 建立的 task `01a100d2-c509-7f72-a122-4e26ae104794` 實際為 `gpt-6.1-sol`／`xhigh`，也不符合統籌的 `gpt-6.1-sol`／`ultra`；實際參數保留，不倒改。
+
+TUI readiness 限制另列：Orca 替代終端雖顯示 `ultra`，`tui-idle` 等待 60 秒及 90 秒均逾時；依 orca-cli 技能指南未送 task prompt，已關閉空終端 `term_12e18c58-da4f-4e15-887c-31fa56d464f1`。產品 branch／worktree 與新輪 roster 均未建立，尚未完成產品接手；目前 `/root` 只處理獨立維護及啟動基礎設施核實，不作為下一輪統籌。
+
+待辦：先從維護提交後最新已驗收的 `master` 建立獨立產品 branch／worktree，再在該 worktree 啟動新統籌 session；核實實際 cwd、branch、起始 HEAD 及 `gpt-6.1-sol`／`ultra` 後，由新統籌依 [ROADMAP](ROADMAP.md) 選題、新建三角色並核對 roster。啟動 gate 與接手條件由 [AGENTS「每輪流程」](../AGENTS.md#每輪流程)詳述；共用環境與 guard 的有限接受範圍見上方，實際新輪啟動驗證仍待核定。M1-P4a 的 exact 來源及權利仍等待證據，維持原准入與驗收邊界；本次啟動嘗試不增加產品完成度。
 
 上次模型設定維護的接手 HEAD `054ecad7fb0860797ef6c61f7b9da759b398fc2e` 與實際參數保留為歷史：主 chat `01a0ffb0-9855-7e62-9c71-28234f1167ff`、`gpt-6.1-sol`／`xhigh`（已核實 turn_context）；文件 `/root/role_docs`、`01a0ffb5-5ca2-7251-a5e5-a14422b71399`、`gpt-6.1-sol`／`xhigh`；索引 `/root/role_index`、`01a0ffb5-954e-76f0-97cd-9b25f7399e9a`、`gpt-6-luna`／`medium`。該次未恢復產品 round；範圍及 receipt 留 Git／原 task，沒有沿用上述舊角色或倒改既有實際配置。
 
