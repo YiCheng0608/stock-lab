@@ -733,22 +733,53 @@ function focusUnavailableMessage(data: OfficialEventFocusData): string {
   return '本次官方原件未通過來源或內容驗證，關注清單暫不可用。'
 }
 
+export function trimOfficialEventSearch(value: string): string {
+  // Fixed Python str.strip whitespace set, shared with the API's q contract.
+  return value.replace(/^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/gu, '')
+}
+
+export function officialEventFocusReturnPath(params: URLSearchParams): string | null {
+  if (params.get('from') !== 'official-events') return null
+  const asOf = params.get('focus_as_of') ?? ''
+  const q = params.get('focus_q') ?? ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || asOf.startsWith('0000-') || Array.from(q).length > 100) return null
+  const instant = new Date(`${asOf}T00:00:00Z`)
+  if (!Number.isFinite(instant.getTime()) || instant.toISOString().slice(0, 10) !== asOf) return null
+  const query = new URLSearchParams({ as_of: asOf, q: trimOfficialEventSearch(q) })
+  return `/?${query.toString()}#official-event-focus-title`
+}
+
 export function OfficialEventFocusPanel() {
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') || taipeiObservationDate()
+  const q = searchParams.get('q') ?? ''
   const [draft, setDraft] = useState(asOf)
+  const [searchDraft, setSearchDraft] = useState(q)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
-  const [captureError, setCaptureError] = useState<string | null>(null)
+  const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
   const queryClient = useQueryClient()
-  const queryKey = ['official-event-focus', asOf]
-  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf), retry: false, refetchOnWindowFocus: false })
-  useEffect(() => { setDraft(asOf); setCaptureError(null) }, [asOf])
+  const queryKey = ['official-event-focus', asOf, q]
+  const requestKey = JSON.stringify(queryKey)
+  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf, q), retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
+  useEffect(() => { setDraft(asOf); setSearchDraft(q); setSearchError(null); setCaptureError(null) }, [asOf, q])
+  const applySearch = (value: string) => {
+    if (Array.from(value).length > 100) { setSearchError('搜尋最多 100 個字元。'); return }
+    setSearchError(null)
+    const next = new URLSearchParams(searchParams)
+    next.set('as_of', asOf)
+    const normalized = trimOfficialEventSearch(value)
+    if (normalized) next.set('q', normalized); else next.delete('q')
+    setSearchDraft(normalized)
+    setSearchParams(next)
+  }
   const capture = async () => {
     setCapturing(true); setCaptureError(null)
-    try { queryClient.setQueryData(queryKey, await captureOfficialEventFocus(asOf)) }
-    catch (error) { setCaptureError(error instanceof Error ? error.message : '取得失敗') }
+    try { queryClient.setQueryData(queryKey, await captureOfficialEventFocus(asOf, q)) }
+    catch (error) { setCaptureError({ key: requestKey, message: error instanceof Error ? error.message : '取得失敗' }) }
     finally { setCapturing(false) }
   }
+  const captureMessage = captureError?.key === requestKey ? captureError.message : null
   const data = query.data
   const licenseEvidence = data?.attribution?.evidence.find((item) => item.url === 'https://data.gov.tw/license')
   return <section className="panel official-event-focus" aria-labelledby="official-event-focus-title">
@@ -760,13 +791,19 @@ export function OfficialEventFocusPanel() {
       <button type="button" className="secondary-button" disabled={capturing || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
       <button type="button" className="secondary-button" disabled={capturing || query.isFetching || !data?.can_capture || data.cache_present} onClick={() => void capture()}>{capturing ? '取得中…' : '首次取得官方原件'}</button>
     </form>
+    <form className="overview-cutoff-control focus-search-control" onSubmit={(event) => { event.preventDefault(); applySearch(searchDraft) }}>
+      <label htmlFor="focus-search">搜尋原件代碼或名稱</label><input id="focus-search" type="search" value={searchDraft} placeholder="輸入代碼或名稱片段" aria-describedby="focus-search-help" aria-invalid={Boolean(searchError)} onChange={(event) => setSearchDraft(event.currentTarget.value)} />
+      <button type="submit" className="secondary-button">搜尋</button><button type="button" className="secondary-button" onClick={() => applySearch('')}>清除搜尋</button>
+    </form>
+    <p id="focus-search-help" className="small-note">搜尋本次官方原件的代碼與名稱，不分大小寫；最多 100 個字元，僅比對連續文字。</p>
+    {searchError && <div className="warning-box" role="status">{searchError}</div>}
     <div className="small-note focus-observation-note">截止 {asOf}（台北觀測日含當日）{data?.observed_date ? ` · 原件觀測日 ${data.observed_date}` : ''} · 原件只在本次服務執行期間保留；服務重啟後須重新取得，不自動更新。</div>
     {query.isLoading && <div className="empty">讀取關注清單…</div>}
-    {(query.error || captureError) && <div className="warning-box" role="status">讀取或取得失敗：{captureError || (query.error instanceof Error ? query.error.message : '請稍後再試')}</div>}
+    {(query.error || captureMessage) && <div className="warning-box" role="status">讀取或取得失敗：{captureMessage || (query.error instanceof Error ? query.error.message : '請稍後再試')}</div>}
     {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{focusUnavailableMessage(data)}</div>}
     {data?.status === 'available' && <>
-      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
-      {data.items.length === 0 ? <div className="empty focus-empty" role="status">本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
+      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的；{data.search_query ? `搜尋「${data.search_query}」` : '全部原件標的'}符合 {data.matched} 檔，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
+      {data.items.length === 0 ? <div className="empty focus-empty" role="status">{data.total === 0 ? '本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。' : '本次原件沒有符合搜尋的標的；可清除搜尋查看本次清單。這不表示市場沒有事件。'}</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
         <div className="position-head"><strong>{item.symbol} {item.company_name}</strong><span>{item.exchange}</span></div>
         <div className="table-wrap focus-event-table"><table><caption>本次觀測事件</caption><thead><tr><th>生效日期</th><th>官方事件類型</th></tr></thead><tbody>{item.events.map((event) => <tr key={`${event.event_date}:${event.kind}:${event.row_ordinal}`}><td>{event.event_date}</td><td>{event.label}</td></tr>)}</tbody></table></div>
         <div className="small-note">研究條件：待補</div>
@@ -967,6 +1004,7 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
+  const focusReturnPath = officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
   useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
@@ -1028,7 +1066,7 @@ function StockPage() {
     { id: 'data', label: '資料說明' },
   ]
   return <div className="page">
-    <Link to="/stocks" className="back-link">← 回到個股</Link>
+    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
     <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>

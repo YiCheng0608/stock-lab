@@ -299,3 +299,42 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 測試與清理分報：QA tab 已關閉、viewport 已還原；專用 backend、最後一次與先前兩次 frontend 自有進程皆已終止、exit 0，memory body 隨 process 釋放。新增附件／暫存為 0，舊殘留及清理拒絕維持原狀，額外落盤配額仍為 0；精確限制見[協作紀錄](TASK_COORDINATION.md)。
 
 本批不增加來源准入、DB／legacy、新聞跨源群組／更正／撤回史、族群可信排名、研究條件、完整 M1／M2、排程或交易能力；完整歷史與 PIT、R0／R1／R2-E1 整體 gate 保留。
+
+## 13. M2-P2：官方事件清單搜尋與研究往返
+
+**程式、必要回歸與下述真原件／API、具名桌面／窄版操作已由統籌有限接受；最終文件待 freeze。** 本批版本為 `official-event-focus/p2-v1`，沿用 §12 的同一記憶體來源、完整 feed 驗證、首次明示取得、截止及成功 cache 契約。新增搜尋完整合格原件與 M1 返回原清單條件；來源准入／pins、發布與首次可得未知、PIT／完整 M1／M2 的原驗收條件均保留。
+
+### 13.1 先驗全原件，再搜尋與限制顯示數
+
+`GET /api/focus/official-events?as_of=YYYY-MM-DD&q=...` 與明示首次 `POST /api/focus/official-events/capture?as_of=YYYY-MM-DD&q=...` 的 `q` 為 optional，預設空字串；有效 `as_of` 仍必填。`q` 的原始長度最多 **100 個 Unicode 字元**，先驗長度再 `strip` 去除前後空白；包括 101 個空白的超長 query 皆回 HTTP 422，不取得來源。純函式另對非字串／超長值回 unavailable、`event_search_query_invalid`、`can_capture=false`，不抓外網。
+
+合法 query 在 `search_query` 保留去除前後空白後的原大小寫，以 `casefold` 作不分大小寫的 **literal substring（連續文字）** 比對；不作 regex、模糊搜尋或推薦。完整 body 身分／日期／分類、receipt／pins／hash 與截止 gate 先通過，才按來源代碼去重、搜尋、固定代碼排序及套 100 股上限。任一原件列不合格即整份 unavailable，即使該列不符合搜尋或在顯示上限以外也不得略過。
+
+搜尋只比對來源 `Code` 或該股任一事件的來源 `Name`，不使用 catalogue 名稱。某股任一名稱或代碼符合時，該卡保留該股全部合格事件及各自原件列序，不只留下符合名稱的事件。Catalogue 仍只決定是否有既有 M1 入口，不覆寫來源名稱或擴張搜尋範圍。
+
+| 回應欄位 | 意義 |
+| --- | --- |
+| `candidate_count`／`selected_count` | 已驗全 feed 的原件事件列數；搜尋不改成符合標的數。 |
+| `total` | 搜尋前原件去重標的數。 |
+| `matched` | 完整合格 feed 中符合搜尋的標的數。 |
+| `displayed` | 實際顯示標的數，等於 `min(matched, 100)`。 |
+| `truncated` | `matched > 100`；依符合結果計算，不因原清單超過 100 股而誤報搜尋截斷。 |
+| `search_query` | 已去除前後空白的 query；空字串表示查看全原件標的。 |
+
+空原件為 available、`total=matched=displayed=0`，只證本次合格原件零列；非空原件無符合為 available、`total>0`／`matched=displayed=0`，可清除搜尋回全清單；來源或截止不可用為 unavailable，不顯示結果統計或舊卡片。三者文案分開，皆不推論全市場沒有事件。unavailable 的 `items=[]`，無頂層 `rows`，初始 `total`／`matched`／`displayed` 為 0；這些零值不是已驗原件為空的證據。
+
+### 13.2 提交搜尋與固定研究返回路徑
+
+今日頁搜尋僅 Enter／「搜尋」提交，輸入中的 draft 不更新 query 或呼叫 API；「清除搜尋」保留當前 `as_of` 並回本次全清單。超長 draft 顯示錯誤，不提交。查詢 key 同時包含 `as_of`／`q`，不以舊結果作新條件的 placeholder；首次 POST 結果及錯誤保留其請求 key，不能套到已切換的條件。搜尋、截止、返回與讀 cache 均不 refresh 來源。
+
+已知 catalogue 的 `detail_url` 固定為 `/stocks/TWSE/{symbol}`，query 帶相同 `as_of`、`from=official-events`、去除前後空白的 `focus_q` 與原清單 `focus_as_of`。只有固定 `from` 值、有效原截止（含拒絕 0000 年）及不超過 100 個 Unicode 字元的原 query 才提供「返回官方事件關注」，返回固定 `/?as_of=原focus_as_of&q=原focus_q#official-event-focus-title`，參數經 URL 編碼；不接受自由 return URL。M1 內修改個股截止仍保留原清單條件，返回時恢復原搜尋／截止。前端去除空白與 Python `strip` 使用相同集合，包括 NEL／U+001C–001F，保留 FEFF，避免同 query 的字元語意分歧。參數不合格時回既有個股入口，不猜原清單；未知 catalogue 仍保留事件但無個股連結。
+
+### 13.3 本次有限驗收與尚缺項
+
+統籌於 **2026-10-03（臺北）** 已有限核對一次 exact TWT48U 記憶體取得，**58 列／58 股**的 `Code`／`Name`／`Date`／`Exdividend`／1-based 原件列序逐列對實際 router API 一致。`q=元大` 符合 **0056／00940（2 股）**、前後空白 `0056` 符合 **1 股**、`14` 符合 **00714／1449／1463／2614（4 股）**、`00400a` 符合 **00400A（1 股）**、`不存在%&?#` 符合 **0 股**；各查詢使用同一 provenance／雙 hash，不發新來源 request。0056（ETF）／1449／1463 的 M1 detail 事件與同截止卡片全等，其餘 55 股無驗收 catalogue 連結；固定記憶體 catalogue 不是正式市場、真行情或 DB coverage。
+
+桌面 **1365×900** 已核對首次取得、名稱 query 去除前後空白、0056 進 M1 後改為 10 月 2 日排除本次觀測、返回仍恢復 **10 月 3 日／元大 2 股**；查無結果、截止不可用與新條件不混舊卡。**390×844** 窄版已核對恢復 10 月 3 日、1463 搜尋 1 股 → M1 → 返回同條件、清除回 58 股，以及 0056 來源／授權展開與同 hash；document scroll width **375 ≤ 390**，事件表格可在自身範圍捲動，console errors 為 0。
+
+統籌已有限接受後端 **78 個純記憶體靶向測試**、前端型別、最終 **16 組 SSR** 及全 App 記憶體 bundle 的 exit 0 收據；最後 Unicode 空白／0000 年邊界修正後的必要前端複驗已接受，後端未變且既有結果仍有效，不重跑或重抓來源。程式型別／SSR 使用 bundled Node **24.19.0**，統籌 UI 使用 Node **20.19.4**，版本與命令分留 task。首輪測試 helper 11 個失敗經修正後才有 78 個通過；SSR helper 首次模組 path 失敗，改用既有 pnpm 路徑後 exit 0，未安裝依賴。原始失敗與後續成功分報，不改稱首跑通過。合法空原件、101 股以上先搜尋再截斷、匹配外壞列／receipt／pins 拒收、同股不同名稱／全部事件、query 長度與 literal 邊界只證 fixture 實作邊界，不冒充本次 live 情境。**完整 backend／production Vite build 未跑**，記憶體 bundle 不代替 production 驗收。
+
+本次原件未保存，**不能離線重播**；版本、命令、exit、hash、失敗／修正與具名驗收收據只留 task。測試與清理分報：QA tab 已關閉、viewport 已還原，專用 backend／frontend 自有進程均正常 exit 0，來源 request 共 1 次，memory body 隨程序釋放；新增附件／暫存為 0，無新增 owned 產物待清理。舊 Temp 殘留未動，不稱已清理，精確限制見[協作紀錄](TASK_COORDINATION.md)。本批不形成排名、金融推論、研究條件、持久化、DB 寫入或完整 M1／M2；後續來源可行性候選見[里程碑下一步](ROADMAP.md#接下來的順序近期產品里程碑)。

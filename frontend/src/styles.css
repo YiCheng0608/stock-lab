@@ -287,6 +287,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .official-event-focus { margin: 0 0 28px; min-width: 0; }
 .official-event-focus p { max-width: none; }
 .focus-observation-note, .focus-count { margin: 13px 0; }
+.focus-search-control input { flex: 1 1 220px; min-width: 0; }
 .focus-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .focus-card { min-width: 0; border: 1px solid #2a3540; border-radius: 3px; padding: 14px; }
 .focus-card .position-head { flex-wrap: wrap; gap: 6px; }

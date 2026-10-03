@@ -18,7 +18,7 @@ from worker import twse_action_capture as consumer
 from worker.source_runtime import capture_memory
 
 VERSION = "official-events/p3b-v1"
-FOCUS_VERSION = "official-event-focus/p1-v1"
+FOCUS_VERSION = "official-event-focus/p2-v1"
 FOCUS_LIMIT = 100
 CAPTURE_ENV = "STOCK_TWSE_EVENTS_MEMORY_CAPTURE"
 PINS = {
@@ -170,7 +170,7 @@ def _today_taipei() -> date:
 
 def _focus_result(as_of: date | None) -> dict:
     result = _result(as_of)
-    result.update(version=FOCUS_VERSION, items=[], total=0, displayed=0,
+    result.update(version=FOCUS_VERSION, items=[], total=0, matched=0, search_query="", displayed=0,
                   truncated=False, limit=FOCUS_LIMIT, order="symbol_lexicographic",
                   coverage="observed_feed_only", research_conditions="unknown")
     result.pop("rows")
@@ -179,7 +179,11 @@ def _focus_result(as_of: date | None) -> dict:
     return result
 
 
-def _focus_gate(result: dict, as_of: date | None, environment: Mapping[str, str] | None) -> bool:
+def _focus_gate(result: dict, as_of: date | None, q: str, environment: Mapping[str, str] | None) -> bool:
+    if not isinstance(q, str) or len(q) > 100:
+        result.update(can_capture=False, reasons=["event_search_query_invalid"])
+        return False
+    result["search_query"] = q.strip()
     if not _gate(result, "TWSE", "0000", environment):
         return False
     if type(as_of) is not date:
@@ -204,20 +208,24 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
                             "stock_page_available": False, "detail_url": None,
                             "research_conditions": "unknown"}
         grouped[key]["events"].append(row)
-    items = [grouped[key] for key in sorted(grouped, key=lambda key: (key[1], key[0]))]
-    result.update(total=len(items), displayed=min(len(items), FOCUS_LIMIT),
+    query = result["search_query"].casefold()
+    matched = {key: item for key, item in grouped.items()
+               if not query or query in item["symbol"].casefold()
+               or any(query in event["company_name"].casefold() for event in item["events"])}
+    items = [matched[key] for key in sorted(matched, key=lambda key: (key[1], key[0]))]
+    result.update(total=len(grouped), matched=len(items), displayed=min(len(items), FOCUS_LIMIT),
                   truncated=len(items) > FOCUS_LIMIT, items=items[:FOCUS_LIMIT])
     # Rows live inside each displayed card; the uncapped raw feed is not another
     # list consumers might mistake for the bounded focus list.
     return result
 
 
-def build_official_event_focus(as_of: date | None, *,
+def build_official_event_focus(as_of: date | None, *, q: str = "",
                                environment: Mapping[str, str] | None = None,
                                store: OfficialEventMemory | None = None) -> dict:
     """Read the shared original feed without fetching or touching a database."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, environment):
+    if not _focus_gate(result, as_of, q, environment):
         return result
     snapshot = (MEMORY_EVENTS if store is None else store).snapshot
     if snapshot is None:
@@ -231,12 +239,12 @@ def build_official_event_focus(as_of: date | None, *,
         return result
 
 
-def capture_official_event_focus(as_of: date | None, *,
+def capture_official_event_focus(as_of: date | None, *, q: str = "",
                                  environment: Mapping[str, str] | None = None,
                                  store: OfficialEventMemory | None = None) -> dict:
     """Explicit first acquisition; validate the entire feed before publication."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, environment):
+    if not _focus_gate(result, as_of, q, environment):
         return result
     memory = MEMORY_EVENTS if store is None else store
     if not memory.capture_lock.acquire(blocking=False):
@@ -244,7 +252,7 @@ def capture_official_event_focus(as_of: date | None, *,
         return result
     try:
         if memory.snapshot is not None:
-            return build_official_event_focus(as_of, environment=environment, store=memory)
+            return build_official_event_focus(as_of, q=q, environment=environment, store=memory)
         if as_of < _today_taipei():
             result.update(can_capture=False, reasons=["event_cutoff_before_current_observation"])
             return result

@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -1681,19 +1682,23 @@ def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
             Instrument.exchange == "TWSE", Instrument.symbol.in_(symbols))).all())
     for item in result["items"]:
         if item["symbol"] in known:
+            query = urlencode({"as_of": result["as_of"], "from": "official-events",
+                               "focus_q": result.get("search_query", ""), "focus_as_of": result["as_of"]})
             item.update(stock_page_available=True,
-                        detail_url=f"/stocks/TWSE/{item['symbol']}?as_of={result['as_of']}")
+                        detail_url=f"/stocks/TWSE/{item['symbol']}?{query}")
     return result
 
 
 @router.get("/focus/official-events")
-def official_event_focus(as_of: date = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _focus_catalogue(db, build_official_event_focus(as_of))
+def official_event_focus(as_of: date = Query(...), q: str = Query(default="", max_length=100),
+                         db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _focus_catalogue(db, build_official_event_focus(as_of, q=q))
 
 
 @router.post("/focus/official-events/capture")
-def official_event_focus_capture(as_of: date = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _focus_catalogue(db, capture_official_event_focus(as_of))
+def official_event_focus_capture(as_of: date = Query(...), q: str = Query(default="", max_length=100),
+                                 db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _focus_catalogue(db, capture_official_event_focus(as_of, q=q))
 
 
 @router.post("/stocks/{exchange}/{symbol}/official-events/capture")

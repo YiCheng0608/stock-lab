@@ -303,4 +303,6 @@ python -B -m worker.twse_action_capture live-summarize `
 
 來源日期仍是生效日，capture time 只是本次觀測；published／first available／revision 仍 unknown，`historical_pit=unsupported`。Consumer 不寫 DB／檔案／ZIP，不形成調整因子、價格影響或利多分類。本次 feed 到關注清單、最多 100 股與已知 catalogue 的 M1 連結由[個股頁 §12](STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)負責，產品接線不擴大來源准入或時間支持範圍。
 
+M2-P2 在完整 feed consumer 驗證後才按來源 `Code`／任一 `Name` 搜尋，符合結果再排序及套 100 股上限，匹配外或上限外的壞列不得跳過；搜尋不改原件事件列數、摘要版本或原件 bytes／pins。本批不新增來源／用途准入或歷史支持，來源正負向與產品驗收分開；精確搜尋／計數／返回契約及本次支持範圍由[個股頁 §13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)負責。
+
 統籌已有限接受 **2026-10-03 單次 exact memory capture、HTTP 200／單一 GET**，body **15,689 bytes、58 列／58 個代碼**，全部身分／日期／分類與列序對 actual API 一致，receipt、雙 hash、固定 pins 與追溯欄位已核對。空 `[]`、同股多事件、超過顯示上限及拒收是另行純記憶體 fixture 的邊界，不是當次 live 原件的情境，也不證全市場或完整歷史。必要記憶體回歸通過，完整 backend 未跑；原件未保存，不能離線重播，原 hash／收據只留 task。具名產品驗收、未支援範圍及清理結果見[個股頁 §12.3](STOCK_RESEARCH_PAGE.md#123-驗收與尚缺項)，不另建來源副本或 receipt 附件。

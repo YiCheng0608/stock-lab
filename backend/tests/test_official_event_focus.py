@@ -1,4 +1,4 @@
-"""M2-P1 reconstructable memory checks; no live or catalogue market evidence.
+"""M2-P1/P2 reconstructable memory checks; no live or catalogue market evidence.
 
 Run under the checked-in P3b zero-disk audit guard before importing pytest,
 with --noconftest, plugin autoload disabled and cache/logging plugins disabled.
@@ -12,6 +12,7 @@ import hashlib
 import json
 from threading import Event, Thread
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 
@@ -25,17 +26,18 @@ def fixed_observation_day(monkeypatch):
     monkeypatch.setattr(events, "_today_taipei", lambda: DAY)
 
 
-def acquire(monkeypatch, rows=None, **kwargs):
+def acquire(monkeypatch, rows=None, *, q="", **kwargs):
     body, calls = source(monkeypatch, rows, **kwargs)
     store = events.OfficialEventMemory()
-    result = events.capture_official_event_focus(DAY, environment=ENABLED, store=store)
+    result = events.capture_official_event_focus(DAY, q=q, environment=ENABLED, store=store)
     return store, body, calls, result
 
 
 def test_all_observed_symbols_grouped_multiple_events_and_dual_hash(monkeypatch):
     store, body, calls, value = acquire(monkeypatch)
-    assert value["version"] == "official-event-focus/p1-v1" and value["status"] == "available"
-    assert value["total"] == value["displayed"] == 3 and not value["truncated"]
+    assert value["version"] == "official-event-focus/p2-v1" and value["status"] == "available"
+    assert value["total"] == value["matched"] == value["displayed"] == 3 and not value["truncated"]
+    assert value["search_query"] == ""
     assert [item["symbol"] for item in value["items"]] == ["0056", "1449", "1463"]
     assert [row["row_ordinal"] for row in value["items"][0]["events"]] == [1, 4]
     assert [row["event_date"] for row in value["items"][0]["events"]] == ["2026-10-22", "2026-11-22"]
@@ -50,7 +52,7 @@ def test_all_observed_symbols_grouped_multiple_events_and_dual_hash(monkeypatch)
 def test_empty_feed_receipt_available_but_selected_still_missing(monkeypatch):
     store, body, calls, value = acquire(monkeypatch, [])
     assert body == b"[]" and value["status"] == "available" and value["items"] == []
-    assert value["candidate_count"] == value["total"] == value["displayed"] == 0
+    assert value["candidate_count"] == value["total"] == value["matched"] == value["displayed"] == 0
     assert value["provenance"] and value["attribution"] and value["summary_condition_receipts"]
     assert value["coverage"] == "observed_feed_only" and len(calls) == 1
     selected = events.build_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
@@ -61,7 +63,7 @@ def test_fixed_reading_order_cap_counts_and_whole_body_validation(monkeypatch):
     rows = [{"Code": f"{code:04}", "Name": "fixture", "Date": "1151022", "Exdividend": "息"}
             for code in reversed(range(1000, 1102))]
     store, _, calls, value = acquire(monkeypatch, rows)
-    assert value["total"] == 102 and value["displayed"] == value["limit"] == 100 and value["truncated"]
+    assert value["total"] == value["matched"] == 102 and value["displayed"] == value["limit"] == 100 and value["truncated"]
     assert [item["symbol"] for item in value["items"]] == [str(code) for code in range(1000, 1100)]
     assert value["items"][0]["events"][0]["row_ordinal"] == 102
     assert value["candidate_count"] == value["selected_count"] == 102 and len(calls) == 1
@@ -240,7 +242,7 @@ def test_actual_api_catalogue_read_only_unknown_and_same_cutoff_m1(monkeypatch):
                     assert snapshot() == before
                 assert acquired["status"] == cached["status"] == "available"
                 known, unknown = cached["items"][0], cached["items"][-1]
-                assert known["detail_url"] == "/stocks/TWSE/0056?as_of=2026-10-03" and known["stock_page_available"]
+                assert known["detail_url"] == "/stocks/TWSE/0056?as_of=2026-10-03&from=official-events&focus_q=&focus_as_of=2026-10-03" and known["stock_page_available"]
                 assert unknown["symbol"] == "9999" and unknown["company_name"] == "原件未知公司"
                 assert not unknown["stock_page_available"] and unknown["detail_url"] is None
                 # The catalogue-only focus route did not manufacture a new row.
@@ -271,4 +273,112 @@ def test_catalogue_query_cannot_autoflush_pending_row(monkeypatch):
             assert result["items"][0]["stock_page_available"]
             assert "stock_page_available" not in result["items"][1]
         finally:
+            provider.close()
+
+
+@pytest.mark.parametrize("q,symbols,normalized", [
+    ("56", ["0056"], "56"), ("  元大  ", ["0056"], "元大"),
+    ("straße", ["0056"], "straße"), (" STRASSE ", ["0056"], "STRASSE"),
+    ("aB", ["ABCD"], "aB"), ("%&?#", ["0056"], "%&?#"),
+    (".*", [], ".*"), ("元 大", [], "元 大"), ("  ", ["0056", "1449", "1463", "ABCD"], "")])
+def test_literal_substring_trim_casefold_any_source_name_preserves_all_events(monkeypatch, q, symbols, normalized):
+    rows = [*ROWS, {"Code": "0056", "Name": "Straße %&?#", "Date": "1151222", "Exdividend": "息"},
+            {"Code": "ABCD", "Name": "原件名稱", "Date": "1151222", "Exdividend": "息"}]
+    store, _, calls, acquired = acquire(monkeypatch, rows, q=q)
+    cached = events.build_official_event_focus(DAY, q=q, environment=ENABLED, store=store)
+    assert acquired == {**cached, "capture_action": "acquired"}
+    assert cached["total"] == 4 and cached["candidate_count"] == 6
+    assert cached["search_query"] == normalized
+    assert cached["matched"] == cached["displayed"] == len(symbols) and not cached["truncated"]
+    assert [item["symbol"] for item in cached["items"]] == symbols
+    if "0056" in symbols:
+        assert [row["row_ordinal"] for row in cached["items"][0]["events"]] == [1, 4, 5]
+    assert len(calls) == 1
+
+
+def test_search_before_cap_counts_and_hidden_invalid_row_rejected(monkeypatch):
+    rows = [{"Code": f"{code:04}", "Name": "Name", "Date": "1151022", "Exdividend": "息"}
+            for code in reversed(range(1000, 1102))]
+    store, _, calls, value = acquire(monkeypatch, rows, q=" 1101 ")
+    assert value["total"] == value["candidate_count"] == 102
+    assert value["matched"] == value["displayed"] == 1 and not value["truncated"]
+    assert value["search_query"] == "1101" and value["items"][0]["symbol"] == "1101"
+    broad = events.build_official_event_focus(DAY, q="nAME", environment=ENABLED, store=store)
+    assert broad["matched"] == 102 and broad["displayed"] == 100 and broad["truncated"]
+    assert len(calls) == 1
+    rows[0]["Exdividend"] = "unknown"
+    store, _, _, invalid = acquire(monkeypatch, rows, q="1000")
+    assert invalid["status"] == "unavailable" and invalid["items"] == []
+    assert invalid["reasons"] == ["selected_event_class_unknown"] and store.snapshot is None
+
+
+def test_search_no_match_distinct_from_empty_and_unavailable(monkeypatch):
+    _, _, _, no_match = acquire(monkeypatch, q="沒有匹配")
+    assert no_match["status"] == "available" and no_match["total"] == 3
+    assert no_match["matched"] == no_match["displayed"] == 0 and no_match["items"] == []
+    _, _, _, empty = acquire(monkeypatch, [], q="沒有匹配")
+    assert empty["status"] == "available" and empty["total"] == empty["matched"] == 0
+    rows = [ROWS[0], {**ROWS[1], "Exdividend": "unknown"}]
+    store, _, _, unavailable = acquire(monkeypatch, rows, q="0056")
+    assert unavailable["status"] == "unavailable" and unavailable["items"] == []
+    assert unavailable["reasons"] == ["selected_event_class_unknown"] and store.snapshot is None
+
+
+@pytest.mark.parametrize("q", [None, 1, "x" * 101, " " * 101, "😀" * 101])
+def test_invalid_search_zero_fetch_and_no_cache_change(monkeypatch, q):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    for operation in (events.build_official_event_focus, events.capture_official_event_focus):
+        value = operation(DAY, q=q, environment=ENABLED, store=store)
+        assert value["status"] == "unavailable" and value["reasons"] == ["event_search_query_invalid"]
+        assert value["search_query"] == "" and not value["can_capture"]
+        assert value["items"] == [] and store.snapshot is None
+    assert calls == []
+
+
+def test_api_search_bounds_encoding_and_source_only_catalogue_readonly(monkeypatch):
+    from sqlalchemy import event as sql_event
+    from sqlalchemy.orm import Session
+    special = "%&?#"
+    rows = [{**row, "Name": "SourceOnly " + special} if row["Code"] == "0056" else row for row in ROWS]
+    _, calls = source(monkeypatch, rows)
+    with memory_app() as app:
+        from fastapi.testclient import TestClient
+        from app.api import get_db
+        provider = app.dependency_overrides[get_db]()
+        db = next(provider)
+        engine = db.get_bind()
+        statements = []
+        def only_read(_conn, _cursor, statement, *_):
+            assert statement.lstrip().upper().startswith("SELECT"), "unexpected SQL mutation"
+            statements.append(statement)
+        def forbidden(*_, **__):
+            raise AssertionError("unexpected commit/flush")
+        sql_event.listen(engine, "before_cursor_execute", only_read)
+        try:
+            with TestClient(app) as client, patch.object(Session, "commit", forbidden), patch.object(Session, "flush", forbidden):
+                base = "/api/focus/official-events"
+                for method, path in ((client.get, base), (client.post, base + "/capture")):
+                    for q in ("x" * 101, " " * 101, "😀" * 101):
+                        assert method(path, params={"as_of": DAY.isoformat(), "q": q}).status_code == 422
+                assert not calls and not statements
+                response = client.post(base + "/capture", params={"as_of": DAY.isoformat(), "q": "  " + special + "  "})
+                assert response.status_code == 200
+                value = response.json()
+                assert value["total"] == 3 and value["matched"] == 1 and value["candidate_count"] == 4
+                assert value["search_query"] == special and len(value["items"][0]["events"]) == 2
+                link = urlsplit(value["items"][0]["detail_url"])
+                assert link.path == "/stocks/TWSE/0056" and not link.scheme and not link.netloc and not link.fragment
+                assert parse_qs(link.query, keep_blank_values=True) == {
+                    "as_of": [DAY.isoformat()], "from": ["official-events"],
+                    "focus_q": [special], "focus_as_of": [DAY.isoformat()]}
+                assert "%25%26%3F%23" in link.query and len(calls) == 1
+                for q, expected in (("SourceOnly", 1), ("元大高股息", 0), ("😀" * 100, 0)):
+                    response = client.get(base + "?" + urlencode({"as_of": DAY.isoformat(), "q": q}))
+                    assert response.status_code == 200 and response.json()["matched"] == expected
+                past = client.get(base, params={"as_of": "2026-10-02", "q": special}).json()
+                assert past["status"] == "unavailable" and past["items"] == []
+                assert len(calls) == 1 and statements
+        finally:
+            sql_event.remove(engine, "before_cursor_execute", only_read)
             provider.close()
