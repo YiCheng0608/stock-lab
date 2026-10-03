@@ -2,14 +2,14 @@
 
 更新：2026-10-03。本文件管能力、優先順序與待決事項；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，接手與暫停狀態見[協作紀錄](TASK_COORDINATION.md)。
 
-## 目前進度（含 2026-10-03 M1-P1／P2a／P2b／P3a／P3b 與 M2-P1／P2 有限核對）
+## 目前進度（含產品有限核對與 R1-A2 磁碟驗收）
 
 **R0–R3 均未整體完成。** 下表依既有有限驗收、opt-in prior volumes 本地列接線、獨立 selected-bar verifier，以及 B4b／B5b 各自 caller-input 純核心的有限 review 整理；verifier 只判定指定本地證據一致，尚無實際檔案／snapshot 整合驗收或既有流程接線。相關回歸仍待補，見[協作紀錄](TASK_COORDINATION.md)。
 
 | 階段 | 已有能力 | 主要缺口 |
 | --- | --- | --- |
 | R0：研究基準與時間 | 信心／價位／時間相容語意；ATR 純核心及獨立保存層；有限 migration／startup gate；artifact、離線比較、pure-rule replay、worker capture、Bridge B opt-in candidate adapter；selected bar close／volume 與 prior volumes 最多 20 筆本地 metadata 關係；獨立 `STOCK_DAY_ALL` selected-bar 本地證據一致性 verifier；B4b 事後假設與 B5b caller-declared time-cutoff 各有純核心有限 review。 | 待跑回歸與 verifier 真實 tuple 整合、其餘衍生輸入、歷史原件／來源版本與 availability／歷史決策證據、artifact consumer、ATR worker 接線、完整 B4b 的官方 tick／費稅／日曆、完整 B5b 的實際依賴與來源／PIT gate、產品／持久化接線與 legacy-v2 paired replay。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件及本次 feed 記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試已有限驗收；產業期間、停復牌與公司行動局部修正。 | 成交額的 legacy file-backed migration、其他 selected invalid 的磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、完整事件群組／摘要與其他來源產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資與 raw、backfill；原四來源 registry／capture、兩個有限磁碟 consumer，另 TWT48U selected 事件及本次 feed 記憶體摘要已有限 review；explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review；TAIEX 身分窄修正與 TWSE／TPEx 成交額 availability 已各有限接受；TWSE selected 缺額／明確零的單一 offline file-backed capture→SQLite→API 測試、legacy 成交額 migration 兩路徑八案例的關閉後讀回／失敗復原已各有限驗收；產業期間、停復牌與公司行動局部修正。 | 其他 selected invalid／拒收的磁碟整合與正式 DB 升級待驗；逐市場／逐欄 coverage、TAIEX 合成 OHLC／量額與成交量小數截整、可得時間／修訂、完整公司行動及停復牌、正式舊分類修復、完整事件群組／摘要與其他來源產品接線、當沖／借券／分點資料與必要基本面仍缺。免費官方分點人工查詢入口不等於已接資料集。 |
 | R2：候選與交易計畫 | v1 候選、行動摘要、持倉；群組候選身分、回補範圍及來源日展示；個股研究頁、繁中、表外單位與官方分點入口；M1-P1 截止一致總覽、P2b TPEx 單日法人原件、P3b selected 官方事件原件 API／UI、M2-P1 官方事件關注接個股總覽及 M2-P2 搜尋／研究往返已各有限 review。 | 完整 M1 的法人／交易日窗口、完整事件 coverage 及研究條件；完整 M2 的其他理由與分類品質；歷史身分／PIT、完整計畫與成交／退出流程、成本／tick／gap／流動性、倉位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、追蹤、回測及研究規格。 | 預先定義目標／採用門檻、walk-forward、樣本外／校準、前瞻樣本與模型採用；尚無經驗收 AI 預測或勝率。 |
 
@@ -39,11 +39,13 @@
 
 **M2-P2 官方事件清單搜尋與研究往返（已 review，有限；已版本封存）**：支援 M2／R2-D1，已解除完整合格清單找標的及 M1 返回原條件的斷點。先驗全原件，再依來源代碼／名稱搜尋，符合結果最後才套 100 股上限；原件、符合、顯示及截斷分列，空原件／無符合／不可用可辨識。2026-10-03 一次真原件 58 列／58 股的四欄及列序→API、具名名稱／代碼／大小寫／查無搜尋、桌面 M1 改截止後返回原條件與 390×844 窄版搜尋／清除／往返已有限核對；fixture 邊界、前端必要複驗與未跑完整 backend／production build 分報，精確支持範圍見[個股頁 §13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)。不新增排名、來源、金融推論、PIT 或 DB 寫入，不升格完整 M1／M2。
 
-**本輪 M1-P4a：TWSE 單日法人官方來源有界可行性與准入（有界審查已接受；來源未准入，等待精確證據）**。使用者本次已明確恢復 ROADMAP，統籌及本 session 新建的三個角色已核對配置、接手與寫入範圍。來源及程式唯讀審查已接受，exact 用途權利仍 unknown；未取得法人原件或實作 consumer／API／UI，不增加能力完成度。缺證與恢復條件集中見[來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)，roster 與 freeze／索引／commit 收據流程見[協作紀錄](TASK_COORDINATION.md)。取得正面證據後才由統籌核定有界完整單日驗證，gate 具體滿足才核定必要單日總覽能力與白名單，不提前准入／改 pins；完整 5／20 日及 PIT 不作本批前置，也不由有界審查追認完成。
+**前輪 M1-P4a：TWSE 單日法人官方來源有界可行性與准入（有界審查已接受；來源未准入，等待精確證據）**。來源及程式唯讀審查已接受，exact 用途權利仍 unknown；未取得法人原件或實作 consumer／API／UI，不增加能力完成度。缺證與恢復條件集中見[來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。取得正面證據後才由統籌核定有界完整單日驗證，gate 具體滿足才核定必要單日總覽能力與白名單，不提前准入／改 pins；完整 5／20 日及 PIT 不作該批前置，也不由有界審查追認完成。
+
+**本輪 R1-A2 legacy 成交額 migration 關閉後讀回與失敗復原（已有限接受）**：支援 M1 資料可信／R1 基線，解除 Alembic `0006→0007` 與已知 fallback-only `1→6→7` 兩路徑的指定磁碟驗證缺口；各四個可重建 synthetic fixture 案例，共八個專用 unittest 全過、無 skip，測試與清理分報成功、無新增殘留。精確 fixture／NULL／marker 限度見[資料來源](DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)，角色、Orca 查看及 freeze／索引／commit／merge 狀態見[協作紀錄](TASK_COORDINATION.md)。未改產品來源或正式 DB，不增加 UI、官方 coverage、完整 5／20 日或 PIT 完成度。下一個具名候選是其他 selected invalid／拒收磁碟整合的有界審查；仍須新統籌核定範圍及必要落盤配額，不能視為已通過。
 
 M3 可由既有 caller-input 計畫純核心評估接線，但新計畫保存／合法執行仍須其本身的官方 tick／費稅／合法時段／來源與時間 gate，且磁碟保存驗收不能用記憶體取代；不由 legacy tracking 推論新計畫已完成。
 
-**M1 後續依賴審查**：2026-10-03 的唯讀審查已接受，但在該次選題、既有授權與現有證據下，未找到可解除依賴的新實作，不增加能力完成度。完整 5／20 交易日窗口及成立／未成立研究條件保持**等待外部來源或完整證據**，上述依賴等待本身不是使用者暫停，也不表示 ROADMAP 全部餘項受阻。恢復窗口須有可信完整交易日基準、已准入的多日法人原件及所採範圍／缺日 coverage；研究條件另須滿足必要輸入、來源、時間與分類門檻。成交日實列只能證已觀測日，不能由缺列推休市或最近 5／20 日完整性。來源候選服務恢復時可先作有界可行性核實，服務可讀不等於上述門檻通過；詳細審查證據見[來源 §10](SOURCE_REGISTRY.md#10-m1-後續依賴審查來源候選與等待邊界)。最近 M2-P2 已沿既有事件來源有限交付並版本封存；本輪 M1-P4a 有界審查已接受但來源未准入，未解除完整窗口與研究條件門檻。角色接手依 [AGENTS](../AGENTS.md#每輪流程)，目前 roster 與範圍見[協作紀錄](TASK_COORDINATION.md)。
+**M1 後續依賴審查**：2026-10-03 的唯讀審查已接受，但在該次選題、既有授權與現有證據下，未找到可解除依賴的新實作，不增加能力完成度。完整 5／20 交易日窗口及成立／未成立研究條件保持**等待外部來源或完整證據**，上述依賴等待本身不是使用者暫停，也不表示 ROADMAP 全部餘項受阻。恢復窗口須有可信完整交易日基準、已准入的多日法人原件及所採範圍／缺日 coverage；研究條件另須滿足必要輸入、來源、時間與分類門檻。成交日實列只能證已觀測日，不能由缺列推休市或最近 5／20 日完整性。來源候選服務恢復時可先作有界可行性核實，服務可讀不等於上述門檻通過；詳細審查證據見[來源 §10](SOURCE_REGISTRY.md#10-m1-後續依賴審查來源候選與等待邊界)。最近 M2-P2 已沿既有事件來源有限交付並版本封存；前輪 M1-P4a 有界審查已接受但來源未准入，未解除完整窗口與研究條件門檻。角色接手依 [AGENTS](../AGENTS.md#每輪流程)，目前 roster 與範圍見[協作紀錄](TASK_COORDINATION.md)。
 
 R0-B2 是依賴工作，並非全局第一主題。其已授權唯讀 snapshot／body／receipt／registry pins tuple 尚缺，依賴未變時保持待驗，不再重複搜尋或建 specimen／fixture 冒稱來源接入；其他可行工作依里程碑推進。精確缺口與原有限成果見 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果)，既有輪限制見[協作紀錄](TASK_COORDINATION.md)。
 

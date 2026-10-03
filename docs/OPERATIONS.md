@@ -41,9 +41,11 @@ Pop-Location
 
 ## 2. 資料庫、migration 與 readiness
 
-程式 Alembic head 是 `0006_news_json_defaults`，revision chain 為 0001→0006，另有相容 fallback markers；這不證明任何 DB 已升級。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)。
+程式 Alembic head 是 `0007_turnover_availability`，revision chain 為 0001→0007，另有相容 fallback markers；這不證明任何 DB 已升級。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)。
 
 readiness 只在唯讀 transaction 檢查有限 descriptor：revision marker 必須是唯一 current head 或受控的完整 fallback 形狀；mapped objects、必要欄名、ordered PK／FK／UNIQUE 與 News JSON defaults 必須符合契約；`signal_settlements` 與 `instruments` 的精確 identity gate 分見 [R0 §8.9](R0_IMPLEMENTATION.md#89-round30-c030api-startup-signal_settlements-unique-metadata-gate有限-review) 及 [§8.10](R0_IMPLEMENTATION.md#810-round31-c031api-startup-instruments-unique-metadata-gate有限-review)。它不執行 `quick_check`、`integrity_check`、資料 FK scan 或完整 type／CHECK／trigger／custom-schema audit，也不涵蓋 live WAL／SHM、concurrent writer、non-SQLite 與 attached schema；通過不保證任意寫入成功。
+
+R1-A2 legacy 成交額 migration 的可重建 fixture 八案例已有限接受，只支持關閉後讀回、既存狀態保留及指定 trigger 失敗回復；不證任何正式 DB 已升級、API readiness 或 backup restore。fixture／路徑限度見[資料來源](DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)，專用驗證命令與隔離／清理行為見[開發入口](development-baseline/README.md#r1-a2-legacy-成交額-migration-的磁碟驗證入口)。正式升級與復原仍依下列順序另行授權。
 
 ### 2.1 安全升級與復原順序
 

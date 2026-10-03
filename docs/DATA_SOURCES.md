@@ -66,10 +66,27 @@ R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAI
 | TWSE／TPEx 日行情 | [`parse_twse_daily_rows`／`parse_tpex_daily_rows`](../backend/worker/sources.py) 分別讀 `TradeValue`／`TransactionAmount`：缺失為 `turnover=0, status=unavailable, reason=missing`，無效為 `0, unavailable, invalid`；明確、可解析的非負數（含合法 `0`）為 `available`、reason 為 null。其餘有效 OHLC／volume 保留。 | 不把缺額列整筆拒收；欄位狀態不證官方原值或歷史完整性。legacy `TradeVolume` 小數截整問題未在本批修復。 |
 | opt-in selected `STOCK_DAY_ALL` capture | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 保留既有 body／receipt／hash／日期 gate；選中列的 OHLC／volume 有效而 `TradeValue` 缺失或無效時，保留 bar 並給相同 `0 + unavailable + missing/invalid`。合法來源零為 `available`。adapter 可留成交額 unavailable warning。 | 純列 helper 與單一離線落盤 fixture 各有有限驗收，範圍見下段。其他 invalid 與選列拒收的磁碟整合未驗。`TradeVolume` 仍要求精確非負整數；選中 symbol／OHLC／volume 缺失、無效或範圍不一致仍依原契約拒收。見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)。 |
 | TAIEX close-only | 指數 parser 合成的 `turnover=0` 標 `unavailable/synthetic_index`。close 補 O／H／L、volume 補 0 的既有路徑未在本批改成真實欄位。 | [`verified_taiex_sessions`](../backend/app/coverage.py) 的身分／日期／provenance gate 不證合成欄位可用；指數量額或 OHLC 不得由 session 列數升格。 |
-| 保存、舊資料與重跑 | [`BarRecord`／`MarketBar`](../backend/app/models.py) 無來源證據時預設 `unknown`。[`_upsert_official_bar`](../backend/worker/pipeline.py) 保存數值、status 與 reason。`0007_turnover_availability` 和 fallback 升級對舊資料一次性分類：正值為 `available`；舊 `0` 為 `unknown/legacy_zero_ambiguous`；負值或 NULL 為 `unknown/legacy_invalid`。已有 status 的重跑不重分類或覆寫。 | 舊零無法還原為真零或缺值；正式 DB 升級與 legacy 磁碟 migration 測試未執行。既有資料不因新 parser 自動修復；migration 分類不證來源真相。 |
+| 保存、舊資料與重跑 | [`BarRecord`／`MarketBar`](../backend/app/models.py) 無來源證據時預設 `unknown`。[`_upsert_official_bar`](../backend/worker/pipeline.py) 保存數值、status 與 reason。`0007_turnover_availability` 和 fallback 升級對舊資料一次性分類：正值為 `available`；舊 `0` 為 `unknown/legacy_zero_ambiguous`；負值或 NULL 為 `unknown/legacy_invalid`。已有 status 的重跑不重分類或覆寫。 | 舊零無法還原為真零或缺值；legacy 磁碟 migration 的八案例已有限接受，精確 fixture／路徑及 NULL 限度見下節，正式 DB 升級未執行。既有資料不因新 parser 自動修復；migration 分類不證來源真相。 |
 | API／TS／計算 | [`bar_dict`](../backend/app/api.py) 輸出 `turnover_status`（`available`／`unavailable`／`unknown`）及 nullable `turnover_reason`；[`Bar` 型別](../frontend/src/types.ts) 對齊。hot-group 與 strategy 兩種法人 flow ratio 只在所需各日 status 為 `available` 且成交額有效、為正時使用，否則回 unavailable。 | API 仍有數值 `turnover=0`；consumer 必須讀 status。未新增成交額 UI；其他特徵、TAIEX 合成 OHLC、逐欄 coverage 與 PIT 不因本批通過。 |
 
-有限驗收使用可重建的離線 fixture，經 selected capture、collect force、實際落盤 SQLite 與新 session 讀回，再由 in-process API handler／serializer 回傳：TWSE selected 1101 缺額為 `0/unavailable/missing`，0050 明確零為 `0/available/null`，有效 OHLC／volume 保留。API startup readiness 在本測試被 bypass，故不證正式啟動或 deployment。這只驗指定 fixture 路徑；legacy file-backed migration、其他 selected invalid／拒收的磁碟整合、正式 DB 升級、官方真實逐欄 coverage 與 PIT 仍待驗。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
+先前有限驗收使用可重建的離線 fixture，經 selected capture、collect force、實際落盤 SQLite 與新 session 讀回，再由 in-process API handler／serializer 回傳：TWSE selected 1101 缺額為 `0/unavailable/missing`，0050 明確零為 `0/available/null`，有效 OHLC／volume 保留。API startup readiness 在該測試被 bypass，故不證正式啟動或 deployment。這仍只驗指定 fixture 路徑；其他 selected invalid／拒收的磁碟整合、正式 DB 升級、官方真實逐欄 coverage 與 PIT 保持待驗。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
+
+#### R1-A2 legacy 成交額 migration 磁碟驗收（有限接受）
+
+本輪已有限接受可重建 file-backed fixture 的關閉後讀回與失敗復原，支援 M1 資料可信與 R1 基線。兩條路徑分開驗收：Alembic 從明示 `0006_news_json_defaults` marker 升至 `0007_turnover_availability`，並拒絕偷偷改走 fallback；fallback-only 從已知完整 `schema_migrations` 0001→0006 升至 0007，沒有 `alembic_version` 表，不把它當 Alembic current 或 API readiness 證據。
+
+fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的 `turnover_status`／`turnover_reason` 兩欄，再設定上述 marker；已有 status 的案例保留兩欄。每案例 seed 一個 instrument、一筆 raw metadata 與三筆 bar，NULL variant 為四筆。raw 的 `payload_path`／`sha256` 為 NULL，未保存或複製原件 body、既有 DB 或真實來源樣本；這是 synthetic shape，不證所有歷史 0006 DB 可升級。
+
+| 每條路徑的案例 | 已驗收的有限行為 |
+| --- | --- |
+| legacy 正值／零／負值 | 正值為 `available/null`；零為 `unknown/legacy_zero_ambiguous`；負值為 `unknown/legacy_invalid`。關閉 engine、新 engine 讀回及再升級後結果一致。 |
+| synthetic nullable NULL | 只在獨立複製的 metadata 將 `turnover` 改為 nullable，NULL 分類為 `unknown/legacy_invalid`，關閉後讀回及重跑保留。目前 ORM 欄仍不可為 NULL，不推論正式 DB 的 nullable 形狀。 |
+| 起始已有 status／reason | 保留既存狀態與原因，包括與舊數值分類不同的明示狀態；關閉後讀回與重跑不覆寫。 |
+| trigger 中止與同檔重試 | 本測試 trigger 中止 backfill 後，重開確認原資料、完整 schema 及 markers 回復，availability 欄未留下、marker 未前進；只移除本測試 trigger，在同一 fixture 檔重試成功，再重開與重跑核對。這不授權刪除任意 DB trigger 來修復。 |
+
+八個案例共同核對 `instruments`、`raw_payloads`、`market_bars` 原有欄位的 typed 值與 SQLite `typeof`、欄描述／indexes／FK，以及 instrument／raw 關聯；每次重開核對 `integrity_check=ok`、`foreign_key_check` 無列與對應路徑 marker。專用 unittest 入口首跑 **8／8 通過、0 skip** 已由統籌接受；測試與清理均 exit 0，本輪唯一隔離根已清除、無新增殘留，舊殘留未處理。建構方式留[測試程式](../backend/tests/test_turnover_availability_file_migration.py)，入口、副作用與落盤限制由[開發入口](development-baseline/README.md#r1-a2-legacy-成交額-migration-的磁碟驗證入口)負責，命令／版本及逐 run 數值留原 task。
+
+本批未改產品來源，未跑完整 backend、API startup、UI、正式 DB 升級、backup restore 或 deployment，也未抓外網。這只解除上述兩路徑的磁碟讀回／失敗復原驗證缺口；官方逐市場／逐欄 coverage、歷史／availability／PIT、完整 5／20 日窗口及 TAIEX 合成欄位等原 gate 不變。其他 selected invalid／拒收的磁碟整合只列為下一個具名候選有界審查，尚未通過。
 
 [TWSE OpenAPI](https://openapi.twse.com.tw/) 僅作端點／欄位線索；[A05 商品規格](https://eshop.twse.com.tw/zh/product/detail/cfec9a1470e448ec91bfde006db361e8) 的內部使用標價 NT$1,000／月只供唯讀辨識其受費用限制，並非本專案資料來源、下載、授權或驗收證據。本輪未抓官方 payload。
 
