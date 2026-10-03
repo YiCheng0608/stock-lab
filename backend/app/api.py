@@ -68,6 +68,7 @@ from .product_time import (
     build_news_product_time,
     build_signal_product_time,
 )
+from .portfolio_values import read_portfolio_value
 from .units import share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
@@ -2417,8 +2418,11 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
     shares = position.shares
     if type(shares) not in {int, float} or (type(shares) is float and not math.isfinite(shares)):
         shares = None
+    values = {field: read_portfolio_value(getattr(position, field))
+              for field in ("average_cost", "stop_price", "risk_budget")}
+    average_cost = values["average_cost"][0]
     market_value = latest_bar.close * shares if latest_bar and shares is not None else None
-    cost_value = position.average_cost * shares if position.average_cost is not None and shares is not None else None
+    cost_value = average_cost * shares if average_cost is not None and shares is not None else None
     unrealized_pnl = market_value - cost_value if market_value is not None and cost_value is not None else None
     # Preserve the existing finite valuation formulas; JSON cannot encode NaN
     # or infinity, and missing values must not be invented as zero.
@@ -2432,9 +2436,8 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         "shares": shares,
         "shares_exact": quantity["total_shares_exact"] if quantity else None,
         "quantity": quantity,
-        "average_cost": position.average_cost,
-        "stop_price": position.stop_price,
-        "risk_budget": position.risk_budget,
+        **{field: value for field, (value, _status) in values.items()},
+        "portfolio_value_status": {field: status for field, (_value, status) in values.items()},
         "note": position.note,
         "updated_at": as_datetime(position.updated_at),
         "latest_bar": bar_dict(latest_bar),

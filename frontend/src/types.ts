@@ -559,6 +559,11 @@ export type Position = {
   average_cost: number | null
   stop_price: number | null
   risk_budget: number | null
+  portfolio_value_status?: {
+    average_cost: 'known' | 'missing' | 'invalid'
+    stop_price: 'known' | 'missing' | 'invalid'
+    risk_budget: 'known' | 'missing' | 'invalid'
+  }
   note: string | null
   updated_at: string | null
   latest_bar: Bar | null

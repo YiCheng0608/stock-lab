@@ -201,7 +201,39 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 
 兩次原生刪除 click 沒有 DELETE，未驗收本批刪除操作；兩列 NEW 只在記憶體，shutdown 後釋放，原 12 列完整 JSON 保持。本批 scoped memory fetch recorder 為 21 requests（16 GET／5 POST，20 個 200／1 個 422、外網 0），不是完整 session capture；26 個 performance resources 同 origin。Console 3 entries 為 1 React DevTools info／2 既有 Router future warnings，error 0，不稱空 console。QA 最後實際還原 `1365×900`、document 寬 1350 且無橫向溢出，原 tab 已關、自有 memory 程序／children／listeners 已核不存在，新測試磁碟產物為 0；前輪 HAR 仍在且不重試，兩者分報。
 
-正式 DB、磁碟保存／重開、production deployment、真官方／live、完整 backend／production Vite build、既有污染的可信讀回、風險行動與所有估值、risk sizing、新 Plan、完整 M3、歷史／availability／PIT 仍未由本批驗收。下一具名候選為既有成本／停損／風險欄位的可信讀取與未知資料保留，先由新統籌有界核讀取、legacy Float、stop consumer、JSON 與顯示，未核定修法或宣稱能力完成。
+正式 DB、磁碟保存／重開、production deployment、真官方／live、完整 backend／production Vite build、既有污染的可信讀回、風險行動與所有估值、risk sizing、新 Plan、完整 M3、歷史／availability／PIT 仍未由本批驗收。後續 M3-P4 已有限接受的可信讀回及非法停損隔離見下節；兩批各依具名範圍驗收，不以輸入 gate 推定所有估值／風險行動已完成。
+
+<a id="m3-p4-既有庫存價值可信讀回與非法停損隔離"></a>
+
+#### M3-P4 既有庫存價值可信讀回與非法停損隔離
+
+本批支援 M3／R2-C1 的既有庫存可信讀取；九個程式檔、必要零落盤 direct／actual API→JSON→JavaScript／UI／decision，以及下表具名操作已由統籌有限接受。三欄仍是既有 `average_cost`、`stop_price`、`risk_budget`，不改 schema 或輸入契約；新增 `portfolio_value_status`，分別記錄三欄的 `known`／`missing`／`invalid`。本批不增加 risk budget 的 UI 輸入或配置，只提供該欄 API 值及狀態。
+
+| 讀取狀態 | 核定規則與呈現 |
+| --- | --- |
+| `known` | 原讀值須為 actual int／float（排除 bool），轉為 Float 後有限且非負；0 合法且保留。API 提供可信數值，成本／停損只讀區顯示數值，幣別說明沿 §10.3。 |
+| `missing` | 只有 actual `None` 是未提供；API 數值為 null，成本／停損顯示「未提供」。不把空字串、非法型別或非有限值當未提供。 |
+| `invalid` | 其他型別、負數、非有限值或轉 Float 溢位均為待核實；API 數值為 null、狀態保留 invalid，不回傳原始污染值，成本／停損顯示「待核實」。讀取不寫回 DB、不修原列或 updated_at。 |
+
+只有可信成本可代入既有 unrealized_pnl 公式，原有限結果保護不變；missing／invalid 成本不生成損益。這是 Float／JavaScript Number 的可信性檢核，不宣稱十進位 exact，也不從目前讀值重建已丟失的輸入意圖。SQLite affinity 已將數字文字或 bool 轉成數值，或 NaN 轉為 NULL 時，讀取只能判目前型別與值，不能復原原始 token／意圖或冒稱已識別那些污染。
+
+庫存停損 `known` 優先於策略停損，包含明示 0；只有 `missing` 可沿既有策略停損 fallback。`invalid` 不 fallback、不與現價比較，停損語意為 unknown，保留 `origin=portfolio_position.stop_price` 與 `reason=invalid_position_stop`。既有來源、時間與策略 gate 仍先執行；全部原 gate 通過且確有 held position 時，非法庫存停損才走專用 manual_review，使用「庫存停損待核實，先核對原記錄。」及相應核對說明，不誤稱策略衝突或提供交易建議。早期 gate 未通過時保留原原因及行為，不以本批提示蓋過來源／時間／策略限制。
+
+前端讀回須同時核對 metadata 與值。`portfolio_value_status` 完全缺席的舊 API，raw null 顯示「未提供」，只有有限、非負 JavaScript number 可沿相容回退顯示可信數值；明示非法、缺欄或與值不一致的 metadata 一律「待核實」，不得以 metadata 存在或數字可轉換作為可信證據。成本沿既有顯示、新增既有停損的只讀數值／未提供／待核實區；risk_budget 不新增 UI input 或配置。
+
+本次使用 `2026-10-04` synthetic TWSE／TPEx 的十四個使用者庫存列及六十個明示 fixture 日期，僅為零落盤本地驗證，不當正式持倉、官方交易日或 live coverage。390×844 是窄版 viewport、mobile=false，不是硬體手機／觸控驗收；本輪未測保存／刪除，讀回 fixture 封鎖 mutation，不併入前輪保存／刪除證據。主契約的具名支持範圍如下；必要邊界、入口與清理結果見[開發入口](development-baseline/README.md#m3-p4-庫存價值可信讀回的零落盤驗證入口)，完整命令／版本／原始 exit／hash 留 task。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| Actual 桌面 `1298×924` 的既有庫存頁 | 成本／停損讀回可核，document client／scroll width 均 1283；不把最後還原的 `1365×900` 當首次桌面尺寸。 |
+| Actual 窄版 `390×844`，TWSE／TPEx 共 14 列 | 兩市場 MISSING 顯「未提供」、ZERO 的成本／停損為 0 且損益 +10,500、NORMAL 成本／停損 12.5 且損益 −2,000；NEGATIVE／INFINITY／TEXT／BLOB 顯「待核實」、損益「未提供」。Document 寬均 375，卡片 header 寬 273，未觀測橫向溢出。 |
+| 原 tab 的行動→TWSE TEXT 個股研究分頁 | 實際導頁後讀得 manual_review、專用「庫存停損待核實，先核對原記錄。」；原研究總覽的來源／時間限制仍顯示，不以 synthetic 完整 decision gate 冒充真行情或來源准入。首次 offscreen click exit 0 沒有導頁，未驗收，捲至可見並重新讀取元素後才接受。 |
+
+Actual HTTP 的十四列與十四個完整 decisions 已核三態、0 優先、missing-only fallback 與 invalid 隔離；讀取前後全十四列 SQL（全部欄位、note、updated_at 與三欄 typeof）雜湊一致，無 mutation。必要邊界及舊 API metadata 缺席／raw null、明示壞 metadata 的相容結果另由可重建 formatter／SSR 驗證，不冒充 live API 情境。
+
+原 QA tab `c0cd04e4-4539-4d73-a36d-b80f71a75328` 首次 snapshot／eval 均 runtime_unavailable、exit 1，沿同 tab 原生 focus 後恢復，未另建 tab。Scoped memory fetch 只記 3 個 GET／200（TWSE TEXT stocks、portfolio、actions），mutation 0／外網空；7 個 performance resources 為 owned，同次 Orca console 回 `messages=[]`，僅支持這個擷取範圍，不稱完整 session／所有 console 空。未使用會落 HAR 的 capture。最後 actual viewport 還原 `1365×900`、document 寬均 1350，原 tab close exit 0／list 空；兩個 owned memory serve／children／listeners 已核不存在，測試及清理分報成功，新增測試磁碟產物／殘留 0，舊 HAR／其他 blocked／occupied 資源未動。
+
+本批只接受可信讀回與非法庫存停損隔離，不修污染或已遺失 intent，不外推所有估值／風險行動。正式 DB、磁碟保存／重開、production deployment／Vite build、完整 backend、真官方／live、Decimal exact、risk sizing、new Plan、完整 M3、來源／tick／歷史／availability／PIT 未驗；下一具名候選為 M3-P5「可信庫存股數與既有估值／持倉判定一致」，由新統籌先有界核必要 caller 與數量／持有狀態 gate，範圍及完成條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)；未實作或驗收，不從可信股數推定金融估值 exact。
 
 ### 10.4 數值表格、單位與空白
 

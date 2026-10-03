@@ -134,9 +134,19 @@ def build_stop_price_semantics(
     has_position_stop: bool,
     has_rule_fallback: bool,
     rule_semantics_known: bool = False,
+    invalid_position_stop: bool = False,
 ) -> dict[str, Any]:
     """Describe the action-card stop/risk price without relabelling ownership."""
 
+    if invalid_position_stop:
+        return {
+            "kind": "unknown",
+            "label": "庫存停損待核實",
+            "origin": "portfolio_position.stop_price",
+            "source_field": "stop_price",
+            "is_rule_reference": False,
+            "reason": "invalid_position_stop",
+        }
     if has_position_stop:
         return {
             "kind": "user_position_risk_input",

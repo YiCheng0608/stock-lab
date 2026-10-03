@@ -172,7 +172,23 @@ Actual TWSE 桌面 **1298×924** 的非零保存、TPEx **390×844** 的零／�
 
 測試與清理分報：本輪必要測試 exit 0，QA 實際還原 **1365×900** 並關原 tab；Python／Node owned shutdown 各 exit 0、兩個 serve exec final exit 0，Python `unexpected_denials=[]`，統籌獨立核 exact PIDs／children／listeners 空。新增測試磁碟產物／殘留為 **0 files／0 directories／0 bytes**；前輪 HAR **64,885 bytes**、既有 review-blocked／occupied 或未知資源未動、不重試，不能稱全部歷史殘留為零，詳見[協作紀錄](../TASK_COORDINATION.md)。文件角色未重跑上述測試或造附件。
 
-本批只補輸入 gate，不修三欄 legacy 污染或驗全部讀回、風險行動／估值；既有 market_value／unrealized_pnl 非有限輸出保護保留。Float 不宣稱十進位 exact；正式 DB／磁碟保存與重開、production deployment／Vite build、完整 backend、risk sizing、新 Plan、完整 M3、來源／tick／歷史／availability／PIT 均未驗。下一可信讀取／未知保留候選及其有界 discovery 條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責，尚未核定修法，不把 memory 取代未來必要磁碟驗收。
+本批只補輸入 gate，不修三欄 legacy 污染或驗全部讀回、風險行動／估值；既有 market_value／unrealized_pnl 非有限輸出保護保留。Float 不宣稱十進位 exact；正式 DB／磁碟保存與重開、production deployment／Vite build、完整 backend、risk sizing、新 Plan、完整 M3、來源／tick／歷史／availability／PIT 均未驗。後續 M3-P4 的可信讀回／非法停損隔離已有限接受，見下節；本節仍只記 M3-P3 輸入驗收，不把 memory 取代必要磁碟驗收。
+
+### M3-P4 庫存價值可信讀回的零落盤驗證入口
+
+本批九檔實作、必要零落盤 direct／前端／actual HTTP 與具名庫存／研究頁操作已由統籌有限接受。三態、可信成本／停損、原 gates 優先、舊 API／metadata 相容及具名支持範圍只由 [UI 文案 §10.3](../UI_COPY_SPEC.md#m3-p4-既有庫存價值可信讀回與非法停損隔離)負責；本節管重建入口、副作用與未跑範圍。命令、版本、原始 exit、SHA 與清理收據留 task，不另建附件。
+
+`backend/tests/test_share_quantity_exact_presentation.py --finance-read-only` 沿 standalone `-B -Xutf8`、AST config 常數 stub、既有主線唯讀依賴與記憶體 SQLite／actual router，不載入會建一般 `_TEST_ROOT` 的 pytest conftest、真 config mkdir、production lifespan、migration 或正式 DB。Python **3.12.14**／SQLAlchemy **2.0.52**／Pydantic **2.13.5** 最終 **6 tests／0 skip／115 actual router requests**、exit 0，覆蓋 **72 SQLite read cases／20 complete stop cases／6 source-time-strategy precedence cases**；六次預期 audit denial、`unexpected_denials=[]`。首次 6 tests／5 pass／1 error／113 requests 的測試誤用 instruments decision_summary，只改為既有 quality_summary.research 後複跑，不改報首跑成功。
+
+`tools/share-quantity-exact-preview.cjs --finance-read-check` 沿共用唯讀 `--deps`，Node **20.19.4**／TypeScript **5.9.3** 的 full src noEmit、**69 format cases／23 actual PortfolioSubsection SSR／row mutations 0** 及 whole main `write:false` 記憶體 bundle 首次 exit 0；JS **4,177,574 bytes**／CSS **27,903 bytes**。既有 useLayoutEffect SSR warning 與 Starlette TestClient deprecation 分報，不稱零 warnings 或 production Vite build 通過。
+
+Memory server 為 Python 該入口 `--serve --finance-read-fixture` 的 **8777**、Node preview `--serve --finance-read-fixture` 的 **8778**，日期 **2026-10-04**，共十四個 TWSE／TPEx 使用者庫存列與六十個明示 synthetic fixture 日期，非官方日曆或正式行情／持倉；bundle `write:false`、記憶體 CSS 排除外部字型／CSP 阻外網，不承襲 M3-P2 disk fixture。`--finance-read-http-check` 首次 exit 1 為工具誤取 result.meta.total，只改 assertion 為 result.pagination.total；source 其餘未改，必要 Node syntax／差異／格式核對後，統籌複跑 actual **17 GET／14 portfolio rows／14 complete decisions／0 mutations**、exit 0。Actual getPortfolio／getAction 的 fetch→Response.json 與 PortfolioSubsection SSR 分別核三態、顯示及 decision；全十四列 SQL 全欄／note／updated_at／三欄 typeof 讀取前後 hash 相同。
+
+具名 desktop／390px 庫存讀值與 TWSE TEXT 研究頁 manual_review 已有限接受，實際 viewport 與失敗 probe 只由主契約／[協作紀錄](../TASK_COORDINATION.md)保留；首次 offscreen click 無導頁不作成功。Final whole SQL snapshot 首次誤取 sha256 屬性而 exit 1，改取 whole_row_sha256 後 exit 0／hash 一致，不是產品退修。只用 scoped memory fetch recorder，未用 stop 自動落 HAR 的 capture。
+
+測試與清理分報：必要證據最終 exit 0；QA 還原 actual 1365×900、原 tab close exit 0／list 空，8778／8777 自有 shutdown 各 exit 0、兩 serve exec final exit 0、Python `unexpected_denials=[]`，統籌另核 exact owned PIDs／children／listeners 空。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；前輪 HAR 64,885 bytes 及其他舊 review-blocked／occupied／未知資源排除、不重試，不稱歷史資源清零。文件角色未重跑上述產品測試或造附件。
+
+本批不修污染／affinity 丟失意圖或宣稱 Decimal exact；正式 DB／磁碟保存與重開、production／完整 backend、官方／live、全估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 均未驗。下一候選 M3-P5「可信庫存股數與既有估值／持倉判定一致」的有界 caller 及必要零落盤驗收由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；尚未實作，不縮減既有磁碟契約。
 
 ## 歷史驗證
 

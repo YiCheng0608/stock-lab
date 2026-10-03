@@ -265,6 +265,116 @@ async function financeCheck() {
   esbuild.stop()
 }
 
+async function financeReadCheck() {
+  typecheck()
+  const { formatPortfolioValue } = require(path.join(sourceRoot, 'portfolioValues.ts'))
+  const status = (value) => ({ average_cost: value, stop_price: value, risk_budget: value })
+  const cases = [
+    [null, undefined, '未提供'], [0, undefined, '0'], [12.5, undefined, '12.5'],
+    [-1, undefined, '待核實'], [Infinity, undefined, '待核實'], [NaN, undefined, '待核實'],
+    ['malformed-value', undefined, '待核實'], [false, undefined, '待核實'], [undefined, undefined, '待核實'],
+    [0, status('known'), '0'], [12.5, status('known'), '12.5'], [null, status('missing'), '未提供'],
+    [null, status('invalid'), '待核實'], [12.5, status('invalid'), '待核實'],
+    [null, status('known'), '待核實'], [0, status('missing'), '待核實'],
+    [-1, status('known'), '待核實'], [Infinity, status('known'), '待核實'],
+    [null, status('unsupported'), '待核實'], [12.5, {}, '待核實'],
+    [null, null, '待核實'], [0, [], '待核實'], [12.5, 'known', '待核實'],
+  ]
+  for (const field of ['average_cost', 'stop_price', 'risk_budget']) {
+    for (const [value, metadata, expected] of cases) {
+      assert.equal(formatPortfolioValue(value, metadata, field), expected)
+    }
+  }
+  const render = await portfolioRenderer()
+  for (const [value, metadata, expected] of cases) {
+    const item = { ...syntheticPosition(1000, '1000'), average_cost: value, stop_price: value }
+    if (metadata !== undefined) item.portfolio_value_status = metadata
+    const before = structuredClone(item)
+    const html = render([item])
+    assert.ok(html.includes('平均成本（報價幣別元／股） ' + expected))
+    assert.ok(html.includes('停損價（報價幣別元／股） ' + expected))
+    assert.ok(!html.includes('malformed-value'))
+    assert.ok(!html.includes('aria-label="風險額度"'))
+    assert.deepEqual(item, before, 'read presentation mutated its row')
+  }
+  const bundle = await browserBuild()
+  console.log(JSON.stringify({ passed: true, typescript: ts.version, node: process.version,
+    read_format_cases: cases.length * 3, portfolio_ssr_cases: cases.length, row_mutations: 0,
+    explicit_metadata: 'unsupported or inconsistent status is never rescued',
+    old_api: 'only absent metadata permits finite nonnegative number/null fallback',
+    full_main_memory_bundle: bundle.outputFiles.map((file) => ({ extension: path.extname(file.path), bytes: file.contents.length })),
+    disk_artifacts: 0, production_vite_build: 'not_run' }))
+  esbuild.stop()
+}
+
+async function financeReadHttpCheck() {
+  const api = await apiModule()
+  const render = await portfolioRenderer()
+  const guardedFetch = global.fetch
+  let routes = 0
+  let mutations = 0
+  global.fetch = (url, options = {}) => {
+    routes++
+    if (options.method && options.method !== 'GET') mutations++
+    return guardedFetch(url, options)
+  }
+  const snapshot = async () => {
+    const response = await fetch(apiOrigin.origin + '/__review__/value-read-snapshot')
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  try {
+    const before = await snapshot()
+    assert.equal(before.row_count, 14)
+    const result = await api.getPortfolio({ page: 1, page_size: 20 })
+    assert.equal(result.items.length, 14)
+    assert.equal(result.pagination.total, 14)
+    let rows = 0
+    let decisions = 0
+    for (const exchange of ['TWSE', 'TPEx']) {
+      for (const [symbol, expected, display] of [
+        ['MISSING', 'missing', '未提供'], ['ZERO', 'known', '0'], ['NORMAL', 'known', '12.5'],
+        ['NEGATIVE', 'invalid', '待核實'], ['INFINITY', 'invalid', '待核實'],
+        ['TEXT', 'invalid', '待核實'], ['BLOB', 'invalid', '待核實'],
+      ]) {
+        const item = result.items.find((row) => row.instrument.exchange === exchange && row.instrument.symbol === symbol)
+        assert.ok(item)
+        for (const field of ['average_cost', 'stop_price', 'risk_budget']) {
+          assert.equal(item.portfolio_value_status[field], expected)
+          assert.equal(item[field], expected === 'known' ? (symbol === 'ZERO' ? 0 : 12.5) : null)
+        }
+        if (expected !== 'known') assert.equal(item.unrealized_pnl, null)
+        if (symbol === 'ZERO') assert.equal(item.unrealized_pnl, item.market_value)
+        const html = render([item])
+        assert.ok(html.includes('平均成本（報價幣別元／股） ' + display))
+        assert.ok(html.includes('停損價（報價幣別元／股） ' + display))
+        rows++
+        const { decision_summary: summary } = await api.getAction(exchange, symbol)
+        assert.equal(summary.data_quality, 'complete')
+        assert.deepEqual(summary.blocking_reasons, [])
+        const expectedState = expected === 'invalid' ? 'manual_review' : symbol === 'NORMAL' ? 'reduce_exit' : 'hold_observe'
+        assert.equal(summary.action_state, expectedState)
+        assert.equal(summary.stop_price, expected === 'invalid' ? null : symbol === 'MISSING' ? 8 : symbol === 'ZERO' ? 0 : 12.5)
+        if (expected === 'invalid') {
+          assert.equal(summary.stop_price_semantics.kind, 'unknown')
+          assert.equal(summary.stop_price_semantics.origin, 'portfolio_position.stop_price')
+          assert.equal(summary.stop_price_semantics.reason, 'invalid_position_stop')
+          assert.equal(summary.display_instruction, '庫存停損待核實，先核對原記錄。')
+        } else assert.equal(summary.stop_price_semantics.kind, symbol === 'MISSING' ? 'rule_reference' : 'user_position_risk_input')
+        decisions++
+      }
+    }
+    const after = await snapshot()
+    assert.deepEqual(after, before, 'read HTTP changed full SQL rows/updated_at/typeof')
+    assert.equal(mutations, 0)
+    console.log(JSON.stringify({ passed: true, actual_http_routes: routes, portfolio_rows: rows, complete_decisions: decisions,
+      parser: 'actual getPortfolio/getAction fetch + Response.json; actual PortfolioSubsection SSR',
+      whole_sql_rows_sha256: before.whole_row_sha256, includes: before.includes, http_mutations: mutations,
+      source: 'fourteen synthetic user-value rows; sixty explicit synthetic fixture dates, not official sessions',
+      disk_artifacts: 0, disk_save_reopen: 'not_run' }))
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
+}
+
 async function financeHttpCheck() {
   const api = await apiModule()
   const guardedFetch = global.fetch
@@ -397,8 +507,9 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
+  const fixtureLabel = args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
-    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">隔離合成使用者股數・2026-10-03・非正式持倉／行情資料</p><div id="root"></div>')
+    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
@@ -437,11 +548,12 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-http-check') ? financeHttpCheck()
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
+  : args.includes('--finance-read-check') ? financeReadCheck() : args.includes('--finance-http-check') ? financeHttpCheck()
   : args.includes('--http-check') ? httpCheck() : args.includes('--finance-check') ? financeCheck() : check())
   .catch((error) => { esbuild.stop(); console.error(error); process.exitCode = 1 })

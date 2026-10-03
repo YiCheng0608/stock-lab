@@ -22,6 +22,7 @@ from .domain import ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, build_stop_price_semantics, utc_now_iso
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
+from .portfolio_values import read_portfolio_value
 from .models import (
     ChipSnapshot,
     DataQuality,
@@ -827,6 +828,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     else:
         held_position = db.scalar(select(PortfolioPosition).where(PortfolioPosition.instrument_id == instrument.id))
     held = bool(held_position and (held_position.shares or 0) > 0)
+    position_stop, position_stop_status = read_portfolio_value(held_position.stop_price if held_position else None)
+    invalid_held_stop = held and position_stop_status == "invalid"
     watchlisted = bool(instrument.is_watchlisted)
     bar = _latest_bar(db, instrument.id, as_of)
     bars = _bars(db, instrument.id, as_of)
@@ -958,7 +961,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
                 "entry_low": selected_levels.get("entry_low"),
                 "entry_high": selected_levels.get("entry_high"),
                 "invalid_price": selected_levels.get("invalid_price"),
-                "stop_price": held_position.stop_price if held_position and held_position.stop_price is not None else selected_levels.get("invalid_price"),
+                "stop_price": position_stop if position_stop_status != "missing" else selected_levels.get("invalid_price"),
                 "target_1": selected_levels.get("target_1"),
                 "target_2": selected_levels.get("target_2"),
                 "risk_reward": selected.get("risk_reward"),
@@ -994,6 +997,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
 
     if not complete:
         action_state = "data_insufficient" if missing else "no_condition"
+    elif invalid_held_stop:
+        action_state = "manual_review"
     elif held and current_price is not None and levels.get("stop_price") is not None and current_price <= levels["stop_price"]:
         action_state = "reduce_exit"
     elif held:
@@ -1054,7 +1059,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         action_instruction = "現在：持有觀察，等待條件或風險變化。"
         data_gap = None
     elif action_state == "manual_review":
-        action_instruction = "現在：先人工核對互相衝突的條件。"
+        action_instruction = "庫存停損待核實，先核對原記錄。" if invalid_held_stop else "現在：先人工核對互相衝突的條件。"
         data_gap = None
     else:
         action_instruction = "現在：先觀察，尚無成立條件。"
@@ -1065,6 +1070,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         reasons.append("策略判斷資料尚未齊備，暫時不能形成可執行條件")
     if held and action_state == "reduce_exit":
         reasons.append("持倉現價已觸及持倉停損／策略失效界線")
+    if action_state == "manual_review" and invalid_held_stop:
+        reasons.append("庫存停損待核實，先核對原記錄。")
     if selected and selected.get("rationale"):
         reasons.append(str(selected["rationale"]))
     if group_evidence:
@@ -1092,7 +1099,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     elif action_state == "reduce_exit":
         display_instruction = "已碰到既定風險條件，請依自己的風險規畫重新研究減碼或退場。"
     elif action_state == "manual_review":
-        display_instruction = "資料截止、價位或研究條件存在無法自動調和的衝突，先人工核對證據。"
+        display_instruction = ("庫存停損待核實，先核對原記錄。" if invalid_held_stop else
+                               "資料截止、價位或研究條件存在無法自動調和的衝突，先人工核對證據。")
     else:
         display_instruction = "資料足夠，但目前尚未符合研究條件；持續觀察。"
 
@@ -1125,12 +1133,13 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
             response_generated_at=generated_at,
         )
     stop_price_semantics = build_stop_price_semantics(
-        has_position_stop=bool(held_position and held_position.stop_price is not None),
+        has_position_stop=position_stop_status == "known",
         has_rule_fallback=bool(
-            not (held_position and held_position.stop_price is not None)
+            position_stop_status == "missing"
             and levels.get("stop_price") is not None
         ),
         rule_semantics_known=selected_level_semantics.get("kind") == "rule_reference",
+        invalid_position_stop=position_stop_status == "invalid",
     )
 
     primary_levels: dict[str, Any] = {}

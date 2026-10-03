@@ -18,3 +18,18 @@ export function assertPortfolioValue(value: unknown, label: string): void {
     throw new Error(`${label}必須是有限非負數值，或留空表示未提供。`)
   }
 }
+
+/** An explicit read status must agree with the value; only old APIs omit it. */
+export function formatPortfolioValue(value: unknown, metadata: unknown, field: 'average_cost' | 'stop_price' | 'risk_budget'): string {
+  const known = typeof value === 'number' && Number.isFinite(value) && value >= 0
+  let status: unknown = value === null ? 'missing' : known ? 'known' : 'invalid'
+  if (metadata !== undefined) {
+    status = metadata !== null && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)[field] : 'invalid'
+  }
+  if (status === 'known' && known) {
+    return (value === 0 ? 0 : value).toLocaleString('zh-TW', { maximumFractionDigits: 2 })
+  }
+  if (status === 'missing' && value === null) return '未提供'
+  return '待核實'
+}
