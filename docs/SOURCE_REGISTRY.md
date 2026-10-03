@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要已有限 review，本輪只補查該來源的現行官方證據。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
+更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查的來源候選與等待邊界，不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -279,6 +279,14 @@ python -B -m worker.twse_action_capture live-summarize `
 
 三筆均為本次觀測到的**未來生效預告**，不證事件當時可得或價格影響。首次 live CLI 選到原件缺列，回 `selected_symbol_missing:6834`、exit 2，未改報通過；web 工具較舊內容不能代替實際 network 原件。測試、三次獨立 GET 的命令／版本／exit／數值／hash 及審核收據留本輪 task；現完整案例與完整 backend 未重跑，既有磁碟分支的 mock shape 驗證不當成磁碟出版驗收。本批沒有前端變更，不新增 API／UI 驗收。
 
-此 memory consumer 不支持既有 ZIP 讀入，不接 API／UI／DB，`durable_capture=false`、`historical_pit=unsupported`；完整歷史、事件群組／修訂與產品研究條件仍未完成。M1-P3b 須先核定來源取得方式、觀測截止／事件日語意、追溯與產品操作範圍。
+此 memory consumer 不支持既有 ZIP 讀入，P3a 本身不接 API／UI／DB，`durable_capture=false`、`historical_pit=unsupported`；完整歷史、事件群組／修訂與產品研究條件仍未完成。後續 M1-P3b 的 selected 總覽接線已有限 review，精確支持範圍見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)，不由產品接線擴張本節來源與時間邊界。
 
 本輪 live body／receipt 不落盤，task 只留命令、數值／分類、hash 與驗收收據；**不能離線重播這次 live 原件**。下輪可重新取得來源，但內容／版本可能不同；Git 的最小 fixture 可重建邊界測試，不能代替本次 live 證據。不為不可重建證據新增附件或放寬既有落盤限制。工作與後續接線見 [M1 映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+## 10. M1 後續依賴審查：來源候選與等待邊界
+
+統籌已接受 **2026-10-03** 的 M1 後續依賴唯讀審查，未改程式、manifest／pins 或用途 decision，不增加能力完成度。現行 TPEx exact 日法人 resource 未列參數，`historical_coverage` 仍 unknown；第 8 節 consumer 要求全 body 日期等於單一 `expected_date`，server 為單 ZIP／日期配置。既有核定原件只支持 **2026-10-02、910 列**的單日驗收，沒有多日原件或完整窗口證據。
+
+[政府資料集 11391](https://data.gov.tw/dataset/11391) 的官方名稱為「櫃買指數歷史資料」，描述為提供當日收盤後的上櫃大盤指數資訊，標示免費、每日更新與 OGL 1.0；名稱與 metadata 未證明提供完整多日原件或交易日基準。[日法人資料集 11856](https://data.gov.tw/dataset/11856) 仍是每日資料，第 8 節准入不外推歷史用途。本次官方 schema 與候選原件未成功取得，transport 結果留本輪 task；尚不能核對實際欄位、日期範圍或完整性，不推論永久不可用或禁止介接。
+
+成交日實列最多證已觀測日，不能由缺列推休市或最近 5／20 交易日完整 coverage，因此本次不建立孤立的 observed-session 計算核心冒充依賴解除。候選服務恢復後可先作有界可行性核實，成功讀取不等於來源與窗口門檻通過；主缺口、恢復條件及新統籌流程見 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。本次未重搜 TWSE T86 或 R0-B2，其原未知／待驗邊界保留。
