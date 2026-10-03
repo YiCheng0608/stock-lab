@@ -2,30 +2,30 @@
 
 本文件保留目前角色、接手與執行狀態，以及最近產品交付的實際 roster／驗收邊界；流程依 [AGENTS](../AGENTS.md)，能力與優先順序查 [ROADMAP](ROADMAP.md)。
 
-## 目前：R1-A2 legacy 成交額 migration 磁碟驗收已有限接受
+## 目前：R1-A2 指定 selected invalid／拒收磁碟整合已有限接受
 
-使用者已明確要求開始產品輪並持續推進 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。統籌已接受 R1-A2 legacy 成交額 migration「關閉後讀回與失敗復原」的兩路徑八個可重建磁碟案例及程式交付，支援 M1 資料可信與 R1 基線，解除指定磁碟驗證缺口；未新增 UI 或改產品來源，不升格 R1-A2 整體完成。M2-P2 後的停止要求及獨立維護保留為歷史，不再拘束本輪。角色配置由 [AGENTS「四個角色」](../AGENTS.md#四個角色)負責；本輪三個 subagent 均由新統籌在本輪 session 以 `fork_turns=none` 新建，未沿用舊產品或維護角色。
+使用者已明確要求開始產品輪並持續推進 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。本輪 R1-A2 指定 selected invalid／拒收磁碟整合支援 M1 研究資料可信與 R1-A2 基線，已由統籌接受專用測試／runner 與第三次實測的限定成果，解除指定 subset 的磁碟重開→API 證據缺口；1 compound unittest／0 skip、測試與清理 exit 0，統籌獨立核對核定根已不存在、無新增測試殘留。先前載入前 policy 失敗與兩次實測失敗分開留原 task，不能稱首跑通過。精確 fixture／來源邊界見[資料來源](DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)，入口副作用／配額只由[開發入口](development-baseline/README.md#r1-a2-selected-invalid拒收的磁碟驗證入口)詳述。前輪 legacy migration 兩路徑八案例已有限接受並本地提交／合併，本輪不重跑，不升格 R1-A2 整體完成。M2-P2 後的停止要求及獨立維護保留為歷史，不再拘束本輪。角色配置由 [AGENTS「四個角色」](../AGENTS.md#四個角色)負責；本輪三個 subagent 均由新統籌在本輪 session 以 `fork_turns=none` 新建，未沿用舊產品或維護角色。
 
 前輪 M1-P4a 有界來源與程式唯讀審查已接受；TWSE exact 單日法人來源仍未准入，`local_fetch`／`raw_store`／`summarize` 權利仍 unknown，等待精確證據。未取得法人原件、未核定 consumer 或產品接線，既有 pins／抓取範圍不變；精確缺證、恢復條件與未驗範圍集中見[來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。完整 5／20 日窗口、研究條件、M2／M3 與 PIT 保留原驗收範圍，本輪選題不解除這些 gate。
 
-共同 repo／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-r1-a2-followup-20261003`；branch：`roadmap-r1-a2-followup-20261003`；起始 HEAD：`9f5605e0ee1cea5bb19676356ae07211c90c075e`，與最新已驗收 `master` 相同。獨立 worktree／branch 已先建立；新統籌及三個子角色的實際 runtime cwd、branch、起始 HEAD、model／reasoning、parent thread、乾淨接手與互斥白名單均已核實，啟動 gate 已通過。各角色不自行結案或啟動下一任務。
+共同 repo／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-r1-a2-selected-invalid-20261003`；branch：`roadmap-r1-a2-selected-invalid-20261003`；起始 HEAD：`d289fe7409a06ba3671f403de452ae271935214e`，與最新已驗收且乾淨的 `master` 相同。獨立 worktree／branch 已先建立；新統籌及三個子角色的實際 runtime cwd、branch、起始 HEAD、model／reasoning、parent thread、乾淨接手與互斥白名單均已核實，啟動 gate 已通過。各角色不自行結案或啟動下一任務。
 
-Orca 可見性已核實，使用原同一統籌及三角色，未另建 session。選本輪 worktree，開啟 terminal `term_7ea99f7e-5b6a-46c7-ae2e-6b0d35661e7b`，由目前 `/subagents` 選單查看 Main 與三角色；四個原 ID 與下表一致。統籌已核對終端可連線／可寫、實際 session 內容、model／effort／cwd，以及 Git branch／HEAD；可見性不只依背景 API receipt。
+Orca 可見性已核實，本輪 worktree 的 terminal 為 `term_0dd2f8e7-fe5c-4c7a-8c88-1b265b25631d`，可連線、可寫且非孤立終端；目前 `/subagents` 選單可見 Main 與三角色，四個原 ID 與下表一致。統籌已核對實際 session 內容、model／effort／cwd，以及 Git branch／HEAD；可見性不只依背景 API receipt。
 
 | 角色 | 本輪 ID／實際配置與接手 | 寫入／驗收範圍 |
 | --- | --- | --- |
-| 統籌 | canonical ID `/root`；session `01a10109-3cf9-7852-ad3b-8c7da3729385`；實際 `gpt-6.1-sol`／`ultra`；已核對並接手 | 核定本輪有界審查、來源、用途、必要依賴、實作與磁碟配額、產品驗收及完成條件；接受程式及文件後 freeze，複核索引，分別核准 commit／本地 merge。 |
-| 程式 | canonical ID `/root/implementation`；子 thread `01a1010a-6139-71a0-b9f8-77759f5b2b8e`；實際 `gpt-6.1-sol`／`xhigh`；已核實並接手 | 僅新增 `backend/tests/test_turnover_availability_file_migration.py`、`tools/Invoke-TurnoverMigrationValidation.ps1`；兩條 migration 路徑各四類案例已交付並由統籌接受。不自行修改規格，不改文件、既有產品程式、索引或 Git。 |
-| 文件 | canonical ID `/root/documentation`；子 thread `01a1010a-9edd-7e00-8459-84e12950216c`；實際 `gpt-6.1-sol`／`xhigh`；已核實並接手 | 僅 `docs/TASK_COORDINATION.md`、`docs/DATA_SOURCES.md`、`docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/development-baseline/README.md`、`docs/OPERATIONS.md` 與 `AGENTS.md` 每輪第 1／5 步的 Orca 可見性條件；依統籌驗收結果收斂成果，未驗不得寫通過。不改程式、manifest／pins、索引或 Git。 |
-| 索引與 Git commit | canonical ID `/root/index_commit`；子 thread `01a1010a-dd26-7b53-9cbe-2898ecb30a00`；實際 `gpt-6-luna`／`medium`；已核實並接手 | 來源寫入白名單為空；freeze 後才更新涉及分區及驗 coverage，commit／本地 merge 各待統籌明確授權。不輪初／中途刷新，不 push 或重寫歷史。 |
+| 統籌 | canonical ID `/root`；session `01a10137-a063-7702-b2eb-58521946f4bc`；實際 `gpt-6.1-sol`／`ultra`；已核對並接手 | 核定本輪有界審查、來源、用途、必要依賴、實作與磁碟配額、產品驗收及完成條件；接受程式及文件後 freeze，複核索引，分別核准 commit／本地 merge。 |
+| 程式 | canonical ID `/root/implementation`；子 thread `01a10138-ec40-7251-9846-64967871c4be`；實際 `gpt-6.1-sol`／`xhigh`；已核實並接手 | 僅新增 `backend/tests/test_stock_day_selected_invalid_file_integration.py`、`tools/Invoke-StockDaySelectedInvalidValidation.ps1`；一個組合 unittest 與第三次實測的限定成果已由統籌接受。不自行修改規格，不改文件、產品來源、consumer、pins、索引或 Git。 |
+| 文件 | canonical ID `/root/documentation`；子 thread `01a10139-2cb7-7263-aa9b-e080790d8532`；實際 `gpt-6.1-sol`／`xhigh`；已核實並接手 | 僅 `docs/TASK_COORDINATION.md`、`docs/DATA_SOURCES.md`、`docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/development-baseline/README.md`；依統籌限定接受結論收斂成果、未驗邊界與接手，未驗不得寫通過。不改程式、AGENTS、OPERATIONS、manifest／pins、索引或 Git。 |
+| 索引與 Git commit | canonical ID `/root/index_commit`；子 thread `01a10139-6680-7440-b519-432828d8d31f`；實際 `gpt-6-luna`／`medium`；已核實並接手 | 來源寫入白名單為空；freeze 後才更新涉及分區及驗 coverage，commit／本地 merge 各待統籌明確授權。不輪初／中途刷新，不 push 或重寫歷史。 |
 
-上述實際 model／reasoning 均由 UTF-8 runtime `session_meta`／`turn_context` 核實，三個子 thread 的 parent 均為本輪統籌。子角色以 `CODEX_THREAD_ID` 識別自身 thread，不能將繼承的 session 環境值當作各自 thread ID。舊 session 的實際參數保留於 Git／原 task 及下方既有紀錄，不因本輪新配置而倒改。
+上述實際 model／reasoning 均由統籌獨立讀取 UTF-8 runtime `session_meta`／`turn_context` 核實，三個子 thread 的 parent 均為本輪統籌。子角色以 `CODEX_THREAD_ID` 識別自身 thread，不能將繼承的 session 環境值或 Rpc 回覆的 root `sessionId` 當作各自子 thread ID。舊 session 的實際參數保留於 Git／原 task 及下方既有紀錄，不因本輪新配置而倒改。
 
-本輪文件增補總量上限 **32 KiB**，文件附件／暫存配額為 **0**；文件只驗差異、連結及一致性，不跑 backend，未受影響契約不製造 diff。專用 unittest 首跑 **8／8 通過、0 skip**，程序／測試與清理 exit 0 已接受；統籌另核對本輪唯一 Temp 根已不存在、無新增殘留，舊殘留未處理。入口、副作用與配額只由[開發入口](development-baseline/README.md#r1-a2-legacy-成交額-migration-的磁碟驗證入口)詳述。接手 codebase-memory App MCP 已連線；八個分區均在原 `master`，索引 HEAD 與本輪起始 HEAD 相同。本輪 worktree 尚未追蹤，相關文件 coverage 顯示 `metadata_changed`，新增驗證檔為 `missing`，允許原生讀取；輪初未刷新，待來源 freeze 後由索引角色統一更新。
+本輪文件增補總量上限 **32 KiB**，文件附件／暫存配額為 **0**；文件只驗差異、連結及一致性，不跑 backend，未受影響契約不製造 diff。前輪八個 legacy migration 案例及程序／清理 exit 0 已接受，既有證據仍對應目前來源，本輪不重跑；fixture／NULL／marker 限度由[資料來源](DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)負責。codebase-memory 初次 App list／status／coverage 成功，統籌其後遇 `Transport closed`／status failed，reload 一次回覆 queued 後以實際 list 核實恢復；文件角色的 App 仍遇 `Transport closed`，共用同引擎 CLI list／status／coverage 均成功，未把連線失敗當無索引。原 `master` docs 索引 ready，HEAD 與本輪起始 HEAD 相同；本輪 worktree 尚未追蹤，基線相關 coverage 為 `metadata_changed`，允許原生補核。輪初未刷新，待來源 freeze 後由索引角色統一更新。
 
-**完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件**：本輪啟動／Orca 可見性及四角色接手已核實，Alembic `0006→0007` 與已知 fallback-only `1→6→7` 的指定磁碟驗收已有限接受；fixture／NULL／marker 限度由[資料來源](DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)負責 → 其他 selected invalid／拒收磁碟整合、正式 DB、真實逐欄 coverage、完整 5／20 日與 PIT 尚未完成，M1-P4a exact 權利及原件仍缺 → 其他 selected invalid／拒收磁碟整合只作下一個具名有界審查候選，須新統籌核定具體範圍與必要落盤配額後才實作，不外推通過。**freeze／索引／commit／merge**：成果由統籌接受後按 freeze→索引→commit→merge 封存；實際狀態與最後 receipt 留原 task，不另建附件或為回寫 hash 再改文件。
+**完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件**：前輪 legacy migration 指定磁碟驗收已有限接受並提交／合併，本輪啟動／Orca 可見性及四角色接手已核實，指定三種 selected invalid／四類拒收×existing／empty 的 production 路徑、磁碟重開與十一個 API 回應已限定接受，測試／清理成功且無新增測試殘留 → 其他未覆蓋 invalid／拒收、legacy 日行情成交量精確整數、正式 DB、真實逐欄 coverage、完整 5／20 日與 PIT 尚未完成，M1-P4a exact 權利及原件仍缺 → 下一個具名候選為「R1-A2 legacy TWSE／TPEx 日行情成交量精確整數 gate」，僅由新輪有界核對索引別名、欄位口徑、實際呼叫者與副作用後裁定最小修復／記憶體驗證，本輪不實作、不改共用 `parse_integer`，selected 結果不得外推 legacy。**freeze／索引／commit／merge**：限定成果已接受，由統籌複核文件後按 freeze→索引→commit→merge 封存，各步依序核實且 commit／merge 各須明確授權；實際狀態與最後 receipt 留原 task，不另建附件或為回寫 hash 再改文件。
 
-現任統籌已接手前次維護四個 session 的關閉／封存責任；舊維護統籌仍執行獨立共用啟動 guard 維護，待其 turn 完成再封存，不由舊統籌重派產品任務。尚未關閉／封存者不得稱完成；本輪 worktree／branch 待交接或結案及外部清理負責者接手後，依 AGENTS 核實清理。
+前輪清理由現任統籌接手，已核實四個 session 完成 turn、可見 terminal 關閉及四 ID 封存／未載入；exact 前輪 worktree／branch 已移除、worktree 路徑不存在，該輪三個索引分區已刪除且三個 cache DB 不存在，list 僅原八分區。兩個舊索引日誌共 **545 bytes** 的清理在 CreateProcess 前遭自動審核拒絕，未執行且不重試繞過；這是索引 artifact，確切路徑／大小與拒絕收據留原 task，不能冒稱已刪除。舊維護四個 session 已封存，不納入本輪清理。本輪 worktree／branch 待交接或結案及外部清理負責者接手後，依 AGENTS 核實清理；舊歷史資料與既有測試殘留不動。
 
 ### 先前協作流程維護的實際參數
 
@@ -57,7 +57,7 @@ Orca 可見性已核實，使用原同一統籌及三角色，未另建 session�
 
 **啟動 guard 的有限接受範圍**：AGENTS 第 1／5 步的順序修正已 review 接受。本機工具對原 checkout／`master` 的實測為拒絕（exit 1），未建立 session；記憶體 gate 驗證接受一個合法 worktree 情境，拒絕分支錯誤、master SHA 過時、工作區不乾淨及 worktree 未註冊四個情境，均未建立 session。維護當時只接受這些有限 guard 證據，實際產品 worktree 與新統籌 runtime 的驗收由本輪另行完成，見上方目前狀態。
 
-**維護交接**：PowerShell launcher 的 UTF-8 stdin 保護及必要中文輸入複驗已接受，三個共用 launcher source 已 freeze，未建立測試附件或額外殘留。流程與索引維護已本地提交，最終 receipt 留原 task，不為回寫 hash 再改文件。產品接手已由本輪獨立 worktree 及實際 `gpt-6.1-sol`／`ultra` runtime 驗證解除；不等待未證明的 daemon 原始根因，也未沿用該次 root 或維護 roster。舊維護 session 的關閉／封存由現任統籌接手，尚待舊 turn 完成。
+**維護交接**：PowerShell launcher 的 UTF-8 stdin 保護及必要中文輸入複驗已接受，三個共用 launcher source 已 freeze，未建立測試附件或額外殘留。流程與索引維護已本地提交，最終 receipt 留原 task，不為回寫 hash 再改文件。產品接手已由獨立 worktree 及實際 `gpt-6.1-sol`／`ultra` runtime 驗證解除；不等待未證明的 daemon 原始根因，也未沿用該次 root 或維護 roster。當時由產品統籌接手的舊維護四個 session 已關閉／封存，實際收據留原 task。
 
 ### 新產品 round 接手：啟動待辦已解除（2026-10-03）
 
@@ -65,7 +65,7 @@ Orca 可見性已核實，使用原同一統籌及三角色，未另建 session�
 
 先前 TUI readiness 限制仍按原收據保留：Orca 替代終端雖顯示 `ultra`，`tui-idle` 等待 60 秒及 90 秒均逾時；依 orca-cli 技能指南未送 task prompt，已關閉空終端 `term_12e18c58-da4f-4e15-887c-31fa56d464f1`。本輪已先建立獨立產品 branch／worktree，再啟動並核實新統籌 runtime、新建三角色及確認接手；先前啟動限制已解除，現行 roster 與範圍見上方，舊維護統籌不再派工。
 
-啟動 gate 與接手條件由 [AGENTS「每輪流程」](../AGENTS.md#每輪流程)詳述；本輪已完成實際接手及 Orca 可見性核實。現任統籌已接受 R1-A2 指定磁碟驗收，成果及後續狀態見上方。M1-P4a 的 exact 來源及權利仍等待證據，維持原准入與驗收邊界；新輪啟動本身不增加產品完成度。
+啟動 gate 與接手條件由 [AGENTS「每輪流程」](../AGENTS.md#每輪流程)詳述；實際產品接手及 Orca 可見性核實已解除該次限制。前輪 R1-A2 legacy migration 指定磁碟驗收已接受，本輪 selected invalid／拒收整合與接手狀態見上方。M1-P4a 的 exact 來源及權利仍等待證據，維持原准入與驗收邊界；新輪啟動本身不增加產品完成度。
 
 上次模型設定維護的接手 HEAD `054ecad7fb0860797ef6c61f7b9da759b398fc2e` 與實際參數保留為歷史：主 chat `01a0ffb0-9855-7e62-9c71-28234f1167ff`、`gpt-6.1-sol`／`xhigh`（已核實 turn_context）；文件 `/root/role_docs`、`01a0ffb5-5ca2-7251-a5e5-a14422b71399`、`gpt-6.1-sol`／`xhigh`；索引 `/root/role_index`、`01a0ffb5-954e-76f0-97cd-9b25f7399e9a`、`gpt-6-luna`／`medium`。該次未恢復產品 round；範圍及 receipt 留 Git／原 task，沒有沿用上述舊角色或倒改既有實際配置。
 
@@ -96,7 +96,7 @@ runtime 提供 canonical ID 與上述子 session ID，未提供 agent UUID。文
 
 該輪 M2-P2 支援 M2／R2-D1，解除完整合格原件搜尋與 M1 返回原條件的斷點；先驗全原件再搜尋／套上限，固定返回路徑，不新增來源、排名、金融推論、PIT 或 DB 寫入。詳細 query／計數／空值／返回規則只由[個股頁 §13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)負責，不把 M1 窗口外部 gate 套到本批獨立能力。
 
-M2-P2 交接候選 **M1-P4a「TWSE 單日法人官方來源有界可行性與准入」** 已由前輪完成有界審查並接受，exact 來源及權利仍等待證據。本輪 R1-A2 指定磁碟驗收、角色與接手範圍見上方；詳細里程碑、依賴及 M3 評估見[里程碑下一步](ROADMAP.md#接下來的順序近期產品里程碑)。
+M2-P2 交接候選 **M1-P4a「TWSE 單日法人官方來源有界可行性與准入」** 已由後續輪完成有界審查並接受，exact 來源及權利仍等待證據。R1-A2 legacy migration 的前輪驗收與本輪 selected invalid／拒收整合、角色及接手範圍見上方；詳細里程碑、依賴及 M3 評估見[里程碑下一步](ROADMAP.md#接下來的順序近期產品里程碑)。
 
 該輪文件只修改白名單內既有檔案，總增補上限 **32 KiB**，文件角色額外附件／暫存配額為 **0**；文件只做差異、連結與一致性檢查，不跑 backend 測試。程式的純記憶體 fixture 與真原件／API／UI 驗收分報，完整 backend／production build 未跑不得稱通過。該輪不執行 collect／backfill 入口或正式 DB 操作；只核定統籌一次 exact 公開 TWT48U memory capture，驗收 catalogue 限 0056（ETF）／1449／1463 路由 metadata，不當真行情或 DB coverage。既有落盤 entries 已超配額，該輪額外產物及殘留上限均為 **0**，不換根或改名繞過限制。已接受的 capture 契約維持 `source-memory-capture/v1`、`storage=memory_only`，不宣稱磁碟 artifact 或持久化。舊殘留及自動審核阻擋保持原樣，不重試清理；禁止 `KeepArtifacts`，測試與清理分報，中斷、占用或自動審核拒絕不得冒稱已刪除，也不得繞過拒絕。
 

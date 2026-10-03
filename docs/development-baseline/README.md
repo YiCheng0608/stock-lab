@@ -45,6 +45,27 @@ stdout／stderr 均在記憶體捕獲，stderr 的進度或 Alembic log 不作�
 
 這是可重建 fixture 的有限磁碟驗收，不代表 API startup、正式 DB、restore／deployment、UI 或完整 backend 通過。既有 Alembic `path_separator` deprecation warning 保留，本批未改設定；來源、pins、正式資料及其餘待驗範圍不變。
 
+### R1-A2 selected invalid／拒收的磁碟驗證入口
+
+專用 `tools/Invoke-StockDaySelectedInvalidValidation.ps1` 直接執行 `backend/tests/test_stock_day_selected_invalid_file_integration.py` 的一個組合 unittest，不載入一般 pytest conftest；第三次實測已有限接受。普通 pytest 未提供專用環境時，該 module 的 `SkipTest` 不代表磁碟驗收通過。精確三種 invalid／四類拒收與來源限度由[資料來源](../DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)負責。
+
+```powershell
+$selectedInvalidDependencyRoots = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+$selectedInvalidRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-si-01a10137-<task-approved-32-hex>'
+$selectedInvalidPython = 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-StockDaySelectedInvalidValidation.ps1 -RunOwner '01a10137' -ValidationRoot $selectedInvalidRoot -PythonPath $selectedInvalidPython -DependencyRoots $selectedInvalidDependencyRoots
+```
+
+這是本輪 runner 的實際參數形式；依賴為已核實的主線唯讀共用目錄，Python 預設使用 bundled 3.12.14，也可用 `-PythonPath` 明示既有路徑。執行前將 placeholder 換成原 task 事先核定的 32 位小寫 hex；本輪完整已用命令及 exact 根留原 task。後續必須由該 task 重新核定 owner、新的唯一絕對根與額度，不能直接沿用上例已用 owner／root。`-RunOwner` 必填八個 ASCII 英數字元，`-ValidationRoot` 須為 `LocalAppData/Temp` 的直屬目錄、符合 `taiwan-stock-r1a2-si-<owner>-<32-hex>` 且位於專案外；已存在的根拒用。`ExecutionPolicy Bypass` 只作用於上述子程序，不改全域 policy，入口不提供 `KeepArtifacts`。
+
+本輪只核定一個磁碟根；環境與 import 目錄副作用均收斂於該根，將三個 `STOCK_*`、專用 runner 環境及 `TEMP`／`TMP` 設為核定範圍，並停用 bytecode 落盤。自有內容只含 `data/selected-invalid.db`／journal、`capture/capture.zip`／必要 staging／lock，以及 `raw/body.bin`／`receipt.json`／lock；不另建環境、複製正式 DB、抓外網或產生附件。含根及暫態檔的總量上限 **4 directories／5 files／2 MiB**，單個 DB **1 MiB**、ZIP／capture staging **64 KiB**、body 與 receipt 各 **32 KiB**；測試檢查點及程序退出時核對配額，DB 另限制 4096-byte page／最多 256 pages。不可改根或保留成功產物來繞過配額。
+
+核定路徑為 production capture／load／select→`TwseAdapter.fetch`→`OfficialMarketDataAdapter` 正常去重→`collect(force)`，再 dispose／新 engine 讀回同一檔並核對 API。非目標端點使用記憶體 fixture，TPEx 只給明示空 `OfficialBatch` 邊界，未驗 TPEx；測試不改產品來源或 consumer。stdout／stderr 在記憶體捕獲，程序上限 60 秒，只停止本次自有測試程序；需一份 `R1A2_SELECTED_INVALID_METRICS`、`tests_run=1`／`skipped=0` 及 `validation_complete` 才支持完整執行。`R1A2_SELECTED_INVALID_RESULT` 分報程序／測試 exit、cleanup exit 及確切殘留路徑／大小／原因。
+
+`finally` 還原環境，成功或失敗均嘗試清理已核對的本 task 自有絕對路徑；reparse point 或額外檔案／目錄會拒絕清理並分報。清理成功不能把失敗測試改報通過，清理失敗亦不否定有效測試證據；仍達殘留上限時暫緩新增落盤，依 AGENTS 繼續其他工作。
+
+本輪第三次實測 **1 compound unittest／0 skip** 通過，程序／測試與清理 exit 0，`residuals=[]`；統籌獨立核對本輪核定根不存在、無新增測試殘留。觀測峰值 **5 files／4 directories／517,248 bytes**，DB **458,752 bytes**，均在本輪核定額度內。先前載入前 policy 失敗未跑測試、未落盤，兩次實測失敗均清理成功；原失敗／修正與成功收據留 task，不能稱首跑通過。保留 Starlette／TestClient httpx deprecation warning；未跑完整 backend、production API startup／lifespan、UI、live、TPEx、正式 DB 或 legacy migration 八案例，不外推通過。命令／版本與原始收據只留原 task。
+
 ### M1-P3b 記憶體事件接線的驗收入口
 
 本輪額外測試落盤配額為 0，不能直接套用上述會建立隔離目錄的入口；也須先辨識 pytest conftest、App 啟動與 import 的 DB／目錄副作用。純計算、selected／receipt 拒收與 API 投影優先以不載入 conftest 的記憶體 fixture 驗證；實際來源與產品操作另外具名核對，不能用 fixture 或記憶體 App bundle 代替 live／production 驗收。限制與既有殘留見[協作紀錄](../TASK_COORDINATION.md)。

@@ -64,12 +64,12 @@ R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAI
 | 路徑 | 已接受的成交金額契約 | 邊界 |
 | --- | --- | --- |
 | TWSE／TPEx 日行情 | [`parse_twse_daily_rows`／`parse_tpex_daily_rows`](../backend/worker/sources.py) 分別讀 `TradeValue`／`TransactionAmount`：缺失為 `turnover=0, status=unavailable, reason=missing`，無效為 `0, unavailable, invalid`；明確、可解析的非負數（含合法 `0`）為 `available`、reason 為 null。其餘有效 OHLC／volume 保留。 | 不把缺額列整筆拒收；欄位狀態不證官方原值或歷史完整性。legacy `TradeVolume` 小數截整問題未在本批修復。 |
-| opt-in selected `STOCK_DAY_ALL` capture | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 保留既有 body／receipt／hash／日期 gate；選中列的 OHLC／volume 有效而 `TradeValue` 缺失或無效時，保留 bar 並給相同 `0 + unavailable + missing/invalid`。合法來源零為 `available`。adapter 可留成交額 unavailable warning。 | 純列 helper 與單一離線落盤 fixture 各有有限驗收，範圍見下段。其他 invalid 與選列拒收的磁碟整合未驗。`TradeVolume` 仍要求精確非負整數；選中 symbol／OHLC／volume 缺失、無效或範圍不一致仍依原契約拒收。見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)。 |
+| opt-in selected `STOCK_DAY_ALL` capture | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 保留既有 body／receipt／hash／日期 gate；選中列的 OHLC／volume 有效而 `TradeValue` 缺失或無效時，保留 bar 並給相同 `0 + unavailable + missing/invalid`。合法來源零為 `available`。adapter 可留成交額 unavailable warning。 | 純列 helper 與單一離線落盤 fixture 各有有限驗收，範圍見下段。指定三種 invalid／四類選列拒收的磁碟整合已有限接受，詳見下方專節；其他未覆蓋 invalid／拒收仍待驗。`TradeVolume` 仍要求精確非負整數；選中 symbol／OHLC／volume 缺失、無效或範圍不一致仍依原契約拒收。見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)。 |
 | TAIEX close-only | 指數 parser 合成的 `turnover=0` 標 `unavailable/synthetic_index`。close 補 O／H／L、volume 補 0 的既有路徑未在本批改成真實欄位。 | [`verified_taiex_sessions`](../backend/app/coverage.py) 的身分／日期／provenance gate 不證合成欄位可用；指數量額或 OHLC 不得由 session 列數升格。 |
 | 保存、舊資料與重跑 | [`BarRecord`／`MarketBar`](../backend/app/models.py) 無來源證據時預設 `unknown`。[`_upsert_official_bar`](../backend/worker/pipeline.py) 保存數值、status 與 reason。`0007_turnover_availability` 和 fallback 升級對舊資料一次性分類：正值為 `available`；舊 `0` 為 `unknown/legacy_zero_ambiguous`；負值或 NULL 為 `unknown/legacy_invalid`。已有 status 的重跑不重分類或覆寫。 | 舊零無法還原為真零或缺值；legacy 磁碟 migration 的八案例已有限接受，精確 fixture／路徑及 NULL 限度見下節，正式 DB 升級未執行。既有資料不因新 parser 自動修復；migration 分類不證來源真相。 |
 | API／TS／計算 | [`bar_dict`](../backend/app/api.py) 輸出 `turnover_status`（`available`／`unavailable`／`unknown`）及 nullable `turnover_reason`；[`Bar` 型別](../frontend/src/types.ts) 對齊。hot-group 與 strategy 兩種法人 flow ratio 只在所需各日 status 為 `available` 且成交額有效、為正時使用，否則回 unavailable。 | API 仍有數值 `turnover=0`；consumer 必須讀 status。未新增成交額 UI；其他特徵、TAIEX 合成 OHLC、逐欄 coverage 與 PIT 不因本批通過。 |
 
-先前有限驗收使用可重建的離線 fixture，經 selected capture、collect force、實際落盤 SQLite 與新 session 讀回，再由 in-process API handler／serializer 回傳：TWSE selected 1101 缺額為 `0/unavailable/missing`，0050 明確零為 `0/available/null`，有效 OHLC／volume 保留。API startup readiness 在該測試被 bypass，故不證正式啟動或 deployment。這仍只驗指定 fixture 路徑；其他 selected invalid／拒收的磁碟整合、正式 DB 升級、官方真實逐欄 coverage 與 PIT 保持待驗。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
+先前有限驗收使用可重建的離線 fixture，經 selected capture、collect force、實際落盤 SQLite 與新 session 讀回，再由 in-process API handler／serializer 回傳：TWSE selected 1101 缺額為 `0/unavailable/missing`，0050 明確零為 `0/available/null`，有效 OHLC／volume 保留。API startup readiness 在該測試被 bypass，故不證正式啟動或 deployment。指定三種 selected invalid／四類拒收另有下方有限磁碟驗收，本輪不重跑此缺額／明確零案例；其他未覆蓋 invalid／拒收、正式 DB 升級、官方真實逐欄 coverage 與 PIT 保持待驗。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
 
 #### R1-A2 legacy 成交額 migration 磁碟驗收（有限接受）
 
@@ -86,9 +86,24 @@ fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的
 
 八個案例共同核對 `instruments`、`raw_payloads`、`market_bars` 原有欄位的 typed 值與 SQLite `typeof`、欄描述／indexes／FK，以及 instrument／raw 關聯；每次重開核對 `integrity_check=ok`、`foreign_key_check` 無列與對應路徑 marker。專用 unittest 入口首跑 **8／8 通過、0 skip** 已由統籌接受；測試與清理均 exit 0，本輪唯一隔離根已清除、無新增殘留，舊殘留未處理。建構方式留[測試程式](../backend/tests/test_turnover_availability_file_migration.py)，入口、副作用與落盤限制由[開發入口](development-baseline/README.md#r1-a2-legacy-成交額-migration-的磁碟驗證入口)負責，命令／版本及逐 run 數值留原 task。
 
-本批未改產品來源，未跑完整 backend、API startup、UI、正式 DB 升級、backup restore 或 deployment，也未抓外網。這只解除上述兩路徑的磁碟讀回／失敗復原驗證缺口；官方逐市場／逐欄 coverage、歷史／availability／PIT、完整 5／20 日窗口及 TAIEX 合成欄位等原 gate 不變。其他 selected invalid／拒收的磁碟整合只列為下一個具名候選有界審查，尚未通過。
+本批未改產品來源，未跑完整 backend、API startup、UI、正式 DB 升級、backup restore 或 deployment，也未抓外網。這只解除上述兩路徑的磁碟讀回／失敗復原驗證缺口；官方逐市場／逐欄 coverage、歷史／availability／PIT、完整 5／20 日窗口及 TAIEX 合成欄位等原 gate 不變。後續指定 selected invalid／拒收的有限磁碟驗收見下節；兩批證據分開，不互相外推。
 
 [TWSE OpenAPI](https://openapi.twse.com.tw/) 僅作端點／欄位線索；[A05 商品規格](https://eshop.twse.com.tw/zh/product/detail/cfec9a1470e448ec91bfde006db361e8) 的內部使用標價 NT$1,000／月只供唯讀辨識其受費用限制，並非本專案資料來源、下載、授權或驗收證據。本輪未抓官方 payload。
+
+#### R1-A2 selected invalid／拒收磁碟整合（有限接受）
+
+本輪已有限接受一個 compound unittest，以可重建的離線 unsigned synthetic `STOCK_DAY_ALL` fixture 支援 M1 研究資料可信與 R1-A2 基線，解除以下指定 subset 的磁碟整合缺口。fixture 為 **2026-09-04、十一個 synthetic selected 標的**；走既有 `source_runtime.capture(MockTransport)`→load／select→`TwseAdapter.fetch`→`OfficialMarketDataAdapter.fetch` 按既有 key 正常去重→`pipeline.collect(force)`，再 dispose、以新 `NullPool` engine 讀回同一 SQLite 檔，經 production `api.router`／handler／serializer 核對十一個 HTTP 回應。原 body／receipt／hash／日期 gate 保留，未改產品來源、consumer 或 pins。
+
+| 指定案例 | 已驗收的有限行為 |
+| --- | --- |
+| `TradeValue=-1`、`12xyz`、`12,34` | 三種無效成交額各保留有效 OHLC／volume，成交額為 `0/unavailable/invalid`，關閉後讀回及 API 一致。 |
+| `missing_symbol`、`OpeningPrice` 空、`TradeVolume=1.5`、OHLC 範圍不一致 | 四類拒收各覆蓋 existing／empty 兩種情境，共八個 selected 標的；四筆既存 bar 的 typed 欄值、id、raw 關聯及 status／reason 保留，四個原無 bar 標的仍無 bar、API 為空，不被另有有效列的 MI_INDEX history fallback 補值。 |
+
+重開後另核對三筆 accepted bar 的共同 target raw source／endpoint／實體 body path／hash、UTC capture timestamp、`data_as_of`、run FK 與 `partial` 狀態，既有 raw typed 值不變；`integrity_check=ok`、`foreign_key_check` 無列。ZIP／body／receipt 的前後 hash 不變，再次 select 仍有相同拒收結果。第三次實際磁碟測試 **1 compound unittest／0 skip** 通過並由統籌限定接受，測試與清理均 exit 0，統籌獨立核對核定根已不存在、無新增測試殘留；前兩次實測失敗及載入前 policy 失敗的原始證據留原 task，不能稱首跑通過。
+
+這是一個組合測試內的指定三種 invalid 與四類拒收斷言，不是十一個獨立 unittest，也不涵蓋其他 invalid 或全域拒收。其他端點的 payload／capture metadata 以記憶體 fixture 提供，包含 collector 所需 synthetic MI_INDEX／session；TPEx 只給明示空 `OfficialBatch` 邊界，不作真實官方資料、TPEx 或全域 coverage 證據。API 核對也不證完整啟動、UI、正式 DB 或 deployment；未取得真官方樣本，不放行歷史／availability／PIT、完整 5／20 日窗口或其餘逐欄 gate。selected 整數 gate 不修正 legacy 日行情路徑的成交量小數截整，後續最小修復與驗證仍須另核定。
+
+建構方式留[專用測試](../backend/tests/test_stock_day_selected_invalid_file_integration.py)；runner 副作用、落盤配額及測試／清理分報由[開發入口](development-baseline/README.md#r1-a2-selected-invalid拒收的磁碟驗證入口)詳述。完整 backend、production API startup／lifespan、UI、live 官方來源、TPEx、正式 DB 與 migration 八案例均未跑，不外推通過；命令／版本及逐 run 數值留原 task，不另建附件。
 
 ## 0–3 個月隔離收集驗證
 
