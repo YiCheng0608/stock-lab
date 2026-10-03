@@ -204,7 +204,25 @@ Memory serve 分別為後端 `--serve --quantity-trust-fixture` 的 **8777** 與
 
 測試與清理分報：QA 還原 actual **1365×900**、client／scroll width 均 **1350**，原 tab close exit 0／tabs 空。Node 首個 serve 只為修正版 bundle 重啟，owned shutdown／exec final 各 0；final Node／Python 經 exact command-line gate 後自有 shutdown 各 0、兩 serve exec final 0、Python `unexpected_denials=[]`，統籌獨立核 owned PIDs／children／8777、8778 listeners 全空。Console 最後六則含既有 warnings，無該次 error。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；前輪兩個索引 logs **713 bytes** 的執行前自動審核拒絕與更早 HAR／blocked／occupied 排除、不重試，精確收據見[協作紀錄](../TASK_COORDINATION.md)。文件角色未跑產品測試或造附件。
 
-真正磁碟保存／重開、正式 DB／migration、真官方／live、完整 backend／production build、行情可信來源／日期／價格、Decimal exact、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 未驗；不以 memory 降低必要磁碟條件。下一候選 M3-P6 的有界來源／日期／數值與 caller／用途核對 由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責，未預定修法或稱候選能力完成。
+真正磁碟保存／重開、正式 DB／migration、真官方／live、完整 backend／production build、行情可信來源／日期／價格、Decimal exact、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 未驗；不以 memory 降低必要磁碟條件。本節保留 M3-P5 原證據，後續已有限接受的庫存本地數值隔離／試算入口見 [M3-P6a](#m3-p6a-庫存本地行情與試算的零落盤驗證入口)，不倒改歷史測試範圍。
+
+### M3-P6a 庫存本地行情與試算的零落盤驗證入口
+
+七檔實作、修正版必要零落盤驗證及具名 desktop／390px Portfolio 操作已由統籌有限接受；主契約、現行／舊 API 文案與具名範圍只由 [UI 文案](../UI_COPY_SPEC.md#m3-p6a-庫存收盤數值隔離與本地試算可檢視)負責。本節記錄可重建入口、副作用、有效證據及未驗限制；命令、原始 exit、整表 SQL hash 與 freeze／索引／commit／merge 收據留 task，不造附件。
+
+後端 `backend/tests/test_share_quantity_exact_presentation.py --quote-read-only` 沿 standalone `-B -Xutf8`、AST config stub、既有唯讀依賴、guarded memory SQLite／actual router，不載入一般 pytest conftest、正式 config mkdir、production lifespan／migration 或正式 DB。修正版 CPython **3.12.14**／SQLAlchemy **2.0.52**／Pydantic **2.13.5**：**8 tests／0 skip／42 router requests**、exit 0；**6 expected audit denials／unexpected=[]**。含兩個必要 POST caller 的 owned memory save，讀取 mutation 0；不把這兩個 memory 保存稱真正磁碟或 UI 保存驗收。純函式 close／record 邊界、實際 SQLite 型別、取最新一列且不較早 fallback、quantity／cost 優先與有限試算已核，REAL affinity 已轉換的 numeric text／bool 不冒稱識別原意圖；NOT NULL／NaN 邊界依實際 SQLite 分報。
+
+前端 `tools/share-quantity-exact-preview.cjs --quote-read-check` 沿共用唯讀 `--deps`；修正版 pinned Node **24.19.0**／TypeScript **5.9.3** 的 full src noEmit、**111 format cases／6 actual PortfolioSubsection SSR／2 P4 guard cases**、exit 0。**12 SSR warnings** 分報；whole main bundle `write:false`，JS **4,185,947 bytes**／CSS **27,903 bytes**，磁碟產物 0。Source 時間／source 長度與 C0＋DEL、非法 offset（含 `+01:99`）已對齊 Python／JavaScript，保持記錄語法與正式 source／time gates 分離。初版兩個 runner 雖 exit 0，最終支持範圍採修正版，不把初版當修正版證據。PowerShell source-edit 引號 SyntaxError／exit 1（未寫檔）、root stdlib `-c` probe 引號 SyntaxError／exit 1，改 UTF-8 stdin 後 exit 0，均為工具失敗，不改報產品 test 失敗或首個命令成功。
+
+Memory serve 為後端 `--serve --quote-read-fixture`（**8777**）與 Node preview `--serve --quote-read-fixture`（**8778**）；採 `2026-10-04` synthetic TWSE／TPEx **20 庫存／18 行情**，不是正式持倉、官方來源或交易日。統籌 `--quote-read-http-check` 最終 **3 actual GET／20 rows／20 actual Portfolio SSR**、exit 0，**40 SSR warnings**；actual fetch→Response.json 再用真正 PortfolioSubsection 核對，不以手組 JSON 或替代卡證據冒充。portfolio_positions／market_bars 兩整表全部欄位與全部 typeof、note／updated_at，在 HTTP 前後及 UI 操作後同 hash，mutation 0。
+
+真正 full App 的 `/actions` 上 Portfolio 二十張預設收合、主卡隔離、focus＋actual Enter 展開／收回及 desktop `1298×924`／`390×844`（mobile=false）的長記錄／309 位 Float 無橫向溢出已接受，精確具名條件見主契約。原 actions context 的全 MarketBar Date processor 對 `not-a-date` 拒絕，`/api/actions?limit=20` **2 GET／500** 且頁面原資料載入 error；Portfolio 可用不是完整 ActionsPage 或 actions 回歸通過。此缺口留給 M3-P6b 有界核對，不改或降低 source／time／purpose gate。
+
+QA 初次 snapshot runtime_unavailable／exit 1，沿原 tab 用 native Orca 無 screenshot 恢復；沒有重建 tab 或 HAR。最後 inline JavaScript 的 PowerShell 引號 eval error／exit 1，改 here-string 單引號 probe／exit 0後核實，不重跑已驗操作。Scoped memory fetch recorder 僅 **1 GET／200**、external／mutation 空，不是完整 capture；performance **6 owned resources** 含兩個 actions 500，本次 console `messages=[]` 不表示整個 session 無 warnings。
+
+測試與清理分報：最後 actual viewport 還原 **1365×900**、client／scroll width 均 **1350**；原 tab close exit 0／list 空。立即 exact command-line gate 後，owned Node／Python shutdown 各 exit 0，兩 serve exec final 各 0、Python `unexpected=[]`；final SQL snapshot 不變。統籌另唯讀獨立核 owned PIDs、esbuild／parents／children 及 **8777／8778 listeners 全空**。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；HAR／M3-P4 blocked logs／更早資源未動，不宣稱歷史全清。
+
+未驗行情來源／日期／availability、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、所有估值／風險行動與保存／刪除 UI／完整 M3；沒有授權 tiny 唯讀行情 artifact，需落盤的正向原件 gate 未跑，不以 memory patch 或本地語法 known 補成通過。下一具名候選 M3-P6b 的依賴與完成條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；SOURCE_REGISTRY／STOCK_RESEARCH_PAGE 的來源與 M1 價格契約已核不受本批變更影響，不造 diff。
 
 ## 歷史驗證
 

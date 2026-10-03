@@ -70,6 +70,7 @@ from .product_time import (
     build_signal_product_time,
 )
 from .portfolio_values import read_portfolio_value
+from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
@@ -2410,12 +2411,7 @@ class PositionInput(BaseModel):
 
 def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
     instrument = db.get(Instrument, position.instrument_id)
-    latest_bar = db.scalar(
-        select(MarketBar)
-        .where(MarketBar.instrument_id == position.instrument_id)
-        .order_by(desc(MarketBar.trading_date))
-        .limit(1)
-    )
+    quote, latest_bar = portfolio_quote(db, position.instrument_id)
     total = trusted_position_shares(position.shares, position.shares_integer)
     quantity = share_quantity_dict(total) if total is not None else None
     # Numeric compatibility never exposes an unsafe or conflicting raw Float.
@@ -2429,26 +2425,22 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
     elif total > MAX_SAFE_SHARES:
         market_status = pnl_status = "precision_unsupported"
     else:
-        price = latest_bar.close if latest_bar else None
-        market_status = "missing" if price is None else "invalid"
-        # Bound this guard to the calculation. It does not certify source,
-        # tick validity or strategy price semantics.
-        if type(price) in {int, float}:
+        price = quote["close"]
+        market_status = quote["close_status"]
+        if market_status == "known":
             try:
-                if math.isfinite(price):
-                    market_value = price * shares
-                    if math.isfinite(market_value):
-                        market_status = "known"
-                    else:
-                        market_value = None
+                market_value = price * shares
+                market_status = "local_estimate" if math.isfinite(market_value) else "invalid"
             except (OverflowError, TypeError, ValueError):
+                market_status = "invalid"
+            if market_status != "local_estimate":
                 market_value = None
         cost_status = values["average_cost"][1]
         pnl_status = "invalid" if cost_status == "invalid" else "missing" if cost_status == "missing" else market_status
-        if market_status == "known" and cost_status == "known":
+        if market_status == "local_estimate" and cost_status == "known":
             unrealized_pnl = market_value - average_cost * shares
-            pnl_status = "known" if math.isfinite(unrealized_pnl) else "invalid"
-            if pnl_status != "known":
+            pnl_status = "local_estimate" if math.isfinite(unrealized_pnl) else "invalid"
+            if pnl_status != "local_estimate":
                 unrealized_pnl = None
     return {
         "id": position.id,
@@ -2461,7 +2453,8 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         "portfolio_value_status": {field: status for field, (_value, status) in values.items()},
         "note": position.note,
         "updated_at": as_datetime(position.updated_at),
-        "latest_bar": bar_dict(latest_bar),
+        "latest_bar": latest_bar,
+        "portfolio_quote": quote,
         "market_value": market_value,
         "unrealized_pnl": unrealized_pnl,
         "valuation_status": {"market_value": market_status, "unrealized_pnl": pnl_status},

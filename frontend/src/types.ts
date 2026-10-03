@@ -542,6 +542,23 @@ export type TrackingResponse = {
   response_generated_at?: string
 }
 
+/** Local stored inputs for portfolio inspection, not a certified full Bar. */
+export type ProjectedPortfolioBar = {
+  date: string | null
+  close: number | null
+  source: string | null
+  data_as_of: string | null
+  collected_at: string | null
+}
+export type PortfolioQuote = {
+  close: number | null
+  close_status: 'known' | 'missing' | 'invalid'
+  recorded: Omit<ProjectedPortfolioBar, 'close'>
+  record_status: Record<'date' | 'source' | 'data_as_of' | 'collected_at', 'known' | 'missing' | 'invalid'>
+  source_verification: 'unverified'
+  date_verification: 'unverified'
+}
+
 export type Position = {
   id: number
   instrument: Instrument | null
@@ -567,12 +584,13 @@ export type Position = {
   }
   note: string | null
   updated_at: string | null
-  latest_bar: Bar | null
+  latest_bar: ProjectedPortfolioBar | null
+  portfolio_quote?: PortfolioQuote
   market_value: number | null
   unrealized_pnl: number | null
   valuation_status?: {
-    market_value: 'known' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
-    unrealized_pnl: 'known' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
+    market_value: 'known' | 'local_estimate' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
+    unrealized_pnl: 'known' | 'local_estimate' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
   }
 }
 

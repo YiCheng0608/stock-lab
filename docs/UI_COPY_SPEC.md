@@ -260,7 +260,7 @@ API 相容 `shares` 改用可信總股數：不超 safe 上限時提供 numeric�
 | `missing` | safe 股數下沒有 bar／close=None，市值為 null；成本 missing 時損益為 null。成本 known 時，損益沿市值的 missing 狀態。顯示「未提供」。 |
 | `invalid` | safe 股數下型別／非有限 close、非有限計算結果，或成本 invalid 的損益，均 null，顯示「待核實」。成本 missing／invalid 的損益狀態優先於市值狀態。 |
 
-known 只表示本批有限算式可計算，不等於行情來源、日期、價格合法性或 tick 已通過研究 gate；現行最新 bar／close 的可信讀回仍待 M3-P6 有界核對。不宣稱 Decimal 或精確金融估值。前端只在 explicit known 與有限 number 一致時顯數字；狀態存在但 malformed／矛盾時顯「待核實」，不改用 raw 值救回。只有舊 API 未提供狀態欄，才沿有限 number／null 的相容顯示。
+known 只表示本批有限算式可計算，不等於行情來源、日期、價格合法性或 tick 已通過研究 gate；本節保留 M3-P5 原有限驗收結果。現行庫存收盤隔離／本地試算狀態由已有限接受的 [M3-P6a](#m3-p6a-庫存收盤數值隔離與本地試算可檢視)負責，不倒改本批歷史支持範圍。不宣稱 Decimal 或精確金融估值。前端只在 explicit known 與有限 number 一致時顯數字；狀態存在但 malformed／矛盾時顯「待核實」，不改用 raw 值救回。只有舊 API 未提供狀態欄，才沿有限 number／null 的相容顯示。
 
 未知持倉保留為行動候選，在首頁、行動列表及真正的研究詳情 `ActionDetailPanel` 顯示「股數待核實」badge。原 source／time／strategy gates 優先：未通過仍保留原 data_insufficient 說明；全通過後 unknown 才為 manual_review，專用指示「庫存股數待核實，先核對原記錄。」，不提供 primary levels。P4 可信正數的非法停損隔離仍保留。
 
@@ -277,7 +277,54 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 
 原 tab 首次 snapshot／eval runtime_unavailable、exit 1；沿同 tab 原生 focus 恢復。工具 help、未 quote 的 PowerShell ref／JavaScript 引號失敗分報；詳情 badge 遺漏則是產品退修，補正後才有限接受。Scoped recorder 只涵蓋前版 8 GET／200、外網／mutation 空；最終詳情 performance 3 個 owned resources，不當完整 session capture。QA 最後還原 actual 1365×900、document 寬均 1350，原 tab 已關；自有程序／children／listeners 已核不存在，新測試落盤／殘留 0。最終 console 讀取六則為兩個 React DevTools info 與四個既有 Router warnings，無該讀取 error，不稱無 warning 或完整 capture。
 
-本批未驗真正磁碟保存／重開、正式 DB／migration、真官方／live、production deployment／Vite build、完整 backend、行情來源／日期／價格可信性、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT；不新增個人風險額度輸入。必要磁碟驗收不能以 memory 取代。重建入口與精確證據範圍見[開發入口](development-baseline/README.md#m3-p5-可信股數與估值持倉判定的零落盤驗證入口)，下一候選 M3-P6 見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+本批未驗真正磁碟保存／重開、正式 DB／migration、真官方／live、production deployment／Vite build、完整 backend、行情來源／日期／價格可信性、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT；不新增個人風險額度輸入。必要磁碟驗收不能以 memory 取代。重建入口與精確證據範圍見[開發入口](development-baseline/README.md#m3-p5-可信股數與估值持倉判定的零落盤驗證入口)，後續庫存本地數值隔離／試算的有限範圍見 [M3-P6a](#m3-p6a-庫存收盤數值隔離與本地試算可檢視)。
+
+<a id="m3-p6a-庫存收盤數值隔離與本地試算可檢視"></a>
+
+#### M3-P6a 庫存收盤數值隔離與本地試算可檢視
+
+本批支援 M3／R2-C1；七檔實作、修正版零落盤驗證、actual HTTP／JSON／Portfolio SSR 及下表具名桌面／390px 操作已由統籌有限接受。沿 M3-P2／P5 可信股數與 P4 成本讀回，只處理庫存收盤數值、記錄欄位及可收合的本地試算。數值可計算與來源／日期證據分開；本批來源、日期證據固定為 `unverified`，不借 M1 selected 原件或用途 gate 通過，不新增來源准入、PIT 或完整 M3 完成度。
+
+庫存端點以專用 SQL 投影讀取最新儲存行情，按原儲存 `trading_date DESC`、`id DESC` 選一列，只取必要 `close`、`trading_date`、`source`、`data_as_of`、`collected_at`；`id` 僅作同日排序。先取得未經價格 cast 的讀值，再分類／投影；不載入整個 MarketBar ORM，不改共用 `bar_dict`。所選列不合格時保留該列的 missing／invalid 狀態，不另找較早合法價格替代；此排序不證行情日曆、截止或真正最新可得資料。
+
+| 本地讀值 | API 狀態與用途 |
+| --- | --- |
+| `close` 為 actual int／float（排除 bool）、有限且大於 0 | `known`；只證當次讀值可作有限數值試算，不稱可信行情。 |
+| 沒有行情列，或 `close` 為 actual None | `missing`，值為 null；不補 0。 |
+| 其他型別、零、負數、非有限值或轉換溢位 | `invalid`，價格投影為 null；不回傳原污染 token，也不修原列。 |
+| `source`、`trading_date`、`data_as_of`、`collected_at` | 分別記錄 `known`／`missing`／`invalid`；known 只表示本地欄位符合自身語法／型別要求，缺席與非法不混用。日期語法合格不證交易日、截止、發布、first availability 或 PIT；來源字串不充來源准入。 |
+
+`portfolio_quote` 分別提供 close／close_status、recorded／record_status，以及固定 `source_verification=unverified`／`date_verification=unverified`；`latest_bar` 只提供必要投影欄位，狀態須與值一致。Datetime 記錄字串最多 **64 字元**，source 最多 **120 字元**；拒絕 C0（U+0000–U+001F）、DEL（U+007F）及無法合法 UTF-8 編碼的字串，source 也拒空白字串，不泛稱拒絕所有 Unicode 控制類別，不截斷、不正規化救回。日期須為有效 `YYYY-MM-DD`；datetime 須為有效曆日及帶秒的記錄時間，時／偏移時小於 24，分／秒及偏移分／秒小於 60，Python／JavaScript 皆拒非法 `+01:99`，不補時區。`data_as_of` 只核記錄時間語法，畫面標「記錄資料時間」，不稱資料截止或可得時間。讀取不更新任何行情／庫存欄、note 或 updated_at；SQLite affinity 已轉換或遺失的原始 token／輸入意圖不從讀值復原。
+
+`valuation_status` 仍分別描述市值及未實現損益；兩值都是本地 Float／JavaScript Number 試算，不是行情驗證結果或精確金額：
+
+| 條件與優先序 | 市值／未實現損益 |
+| --- | --- |
+| 股數未知 | 兩項皆 null／`quantity_unknown`，保留「股數待核實」。 |
+| 可信股數超 safe 上限 | 兩項皆 null／`precision_unsupported`，保留「估值精度待支援」及 exact 股數／held。 |
+| safe 股數、close known 且 close × shares 有限 | 市值為 `local_estimate`；零股的試算 0 仍是使用未核實行情的本地試算。 |
+| safe 股數、close missing／invalid，或乘積溢位／非有限 | 市值分別為 null／`missing` 或 null／`invalid`。 |
+| safe 股數、成本 missing／invalid | 損益分別為 null／`missing` 或 null／`invalid`；成本狀態優先於 close／市值狀態。 |
+| safe 股數、成本 known | close／市值不可試算時沿相應 missing／invalid；市值 − 成本 × shares 有限才為 `local_estimate`，否則為 null／invalid。 |
+
+現行 `portfolio_quote`／`local_estimate` 回應的日常庫存卡不顯示未核實的 close、市值或損益數字。可試算時顯示「行情待核實」；close missing／invalid 分別為「未提供行情」／「行情數值待核實」，估值 missing／invalid 分別沿「未提供」／「待核實」，股數未知與超 safe 沿上表提示。可信數量、成本與停損仍可正常呈現，不以本批行情隔離蓋掉既有股數／成本狀態或 decision 的早期 gate。
+
+每卡提供預設收合的 **「核對本地行情與試算」**。展開後，只有 `portfolio_quote`／本地核對 metadata 與實際值嚴格一致，才顯示可核對的 close、來源／資料日期／記錄資料時間／收集時間記錄，以及市值／損益兩項 local_estimate。明示 **「本地記錄；來源／日期待核實」** 與 **「本地試算，行情來源／日期尚未核實」**；行情 metadata 缺席、非法或矛盾不以 raw 值救回，明示 metadata 不得繞過單欄矛盾。各欄 missing／invalid 必須如實呈現，幣別與單位沿 §10.4，不猜成新臺幣。
+
+只有估值 metadata **完全 undefined** 的舊 API，日常估值仍保留原有限 numeric／null 相容顯示；null、部分缺欄或明示 malformed／矛盾的 metadata 不屬此回退。舊 API 數字可顯示不證行情已核實；此相容與現行 local_estimate 隔離分開，不放寬 `portfolio_quote`／本地核對欄位的嚴格檢核。
+
+不稱「最近收盤」「現價」「官方」或「可信行情」，不把合格來源字串／日期改寫成 admission、cutoff 或 availability 證據。本批不改原 decision／source／time／tick／stop gates、新 Plan、input／save／delete；不作 Decimal exact、風險行動或金融估值完整驗收。
+
+本次使用 `2026-10-04` synthetic TWSE／TPEx **20 筆庫存／18 筆行情**，不是正式庫存、官方行情／交易日或來源證據。Actual Response.json／真正 PortfolioSubsection 的二十列已核；portfolio_positions／market_bars 兩整表全欄、全部 typeof、note、updated_at 在 HTTP 與產品操作前後相同，讀取 mutation 0。必要入口、版本及精確驗證範圍見[開發入口](development-baseline/README.md#m3-p6a-庫存本地行情與試算的零落盤驗證入口)，命令／exit／SQL hash 留 task。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| 真正 full App 的 `/actions` 上 Portfolio，桌面 `1298×924` | 二十張卡預設收合；document client／scroll width 均 1283、card 589。TWSE NORMAL／BADPRICE／MISSINGBAR／DIRTYDATE／METABAD／POISON／BADQ／HUGEQ／ZEROQ 經 focus 後實際 Enter 展開及收回；10.5／10,500／+500 與合法零試算正確，缺席／非法／股數未知／unsupported 不造 0。 |
+| `390×844`（mobile=false）的同一 Portfolio | TPEx NORMAL／POISON／BADQ／HUGEQ／OVERFLOW 以實際 Enter 展開及收回；document 寬均 375、card 303、detail 273。120 字來源、64 字時間及 309 位 Float 本地 close 可核對，未觀測橫向溢出；不稱硬體手機／觸控驗收。 |
+
+初次 snapshot 的 runtime_unavailable、最後 inline JavaScript 的 PowerShell 引號 eval 失敗均分報；沿同 tab 原生恢復、改 here-string 單引號 probe 後才成功，不重建 tab、不重跑已驗操作、未開 HAR。Scoped memory fetch recorder 只涵蓋 1 GET／200、external／mutation 空，不是完整 capture；6 個 owned performance resources 含原 actions 的 **2 GET／500**，本次 console 讀 `messages=[]` 不表示整個 session 無 warnings。QA tab、viewport、自有程序／children／listeners 已核實清理，新測試磁碟產物／附件／暫存／殘留 0，舊 excluded 資源未動。
+
+原 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。本批有限接受不包含完整 ActionsPage 或行動端點回歸通過；這個具名缺口交下一候選 M3-P6b 有界核對，不 catch 後補 0 或提供建議。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，freeze／索引／commit／merge 見[協作紀錄](TASK_COORDINATION.md)。
 
 ### 10.4 數值表格、單位與空白
 

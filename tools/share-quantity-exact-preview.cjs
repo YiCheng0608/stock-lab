@@ -11,7 +11,8 @@ const assert = require('node:assert/strict')
 
 const args = process.argv.slice(2)
 let ssrLayoutWarnings = 0
-if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')) {
+if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')
+  || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')) {
   const originalError = console.error
   console.error = (message, ...rest) => {
     if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
@@ -202,6 +203,163 @@ function syntheticDashboard(actions) {
     empty_states: {}, action_counts: { total: actions.length, held: 0, held_unknown: actions.length, scope: 'compact_first_page' } }
 }
 
+function localQuote(close = 10.5, closeStatus = 'known') {
+  return { close, close_status: closeStatus,
+    recorded: { date: '2026-10-04', source: 'fixture-portfolio-quote-read', data_as_of: null, collected_at: '2026-10-04 00:00:00.000000' },
+    record_status: { date: 'known', source: 'known', data_as_of: 'missing', collected_at: 'known' },
+    source_verification: 'unverified', date_verification: 'unverified' }
+}
+
+function quoteCardAssertions(html, row, values) {
+  assert.ok(html.includes('<summary>核對本地行情與試算</summary>'))
+  assert.ok(html.includes('本地記錄；來源／日期待核實'))
+  assert.ok(html.includes('本地試算，行情來源／日期尚未核實'))
+  assert.ok(!/<details[^>]*\bopen(?:\s|=|>)/.test(html))
+  assert.ok(html.includes('overflow-wrap:anywhere'))
+  const visible = html.replace(/<details class="portfolio-quote-review"[^>]*>[\s\S]*?<\/details>/g, '')
+  for (const field of ['market_value', 'unrealized_pnl']) {
+    const daily = values.formatPositionValuation(row[field], row.valuation_status, field)
+    assert.ok(visible.includes((field === 'market_value' ? '市值' : '未實現損益') + '（報價幣別元） ' + daily))
+    if (row.valuation_status?.[field] === 'local_estimate') assert.equal(daily, '行情待核實')
+  }
+  assert.ok(visible.includes('收盤狀態 ' + values.formatPortfolioClose(row.portfolio_quote)))
+  assert.ok(!visible.includes('本地收盤讀值'))
+  assert.ok(html.includes('本地收盤讀值（報價幣別元／股） ' + values.formatPortfolioClose(row.portfolio_quote, true)))
+}
+
+async function quoteReadCheck() {
+  typecheck()
+  const values = require(path.join(sourceRoot, 'portfolioValues.ts'))
+  const render = await portfolioRenderer()
+  const closeCases = [
+    [localQuote(12.5), '行情待核實', '12.5'], [localQuote(null, 'missing'), '未提供行情', '未提供行情'],
+    [localQuote(null, 'invalid'), '行情數值待核實', '行情數值待核實'],
+    ...[0, -1, '12.5', true, Infinity, NaN, null].map((v) => [localQuote(v), '行情待核實', '行情待核實']),
+    [localQuote(12.5, 'invalid'), '行情待核實', '行情待核實'],
+    [null, '行情待核實', '行情待核實'], [[], '行情待核實', '行情待核實'], [undefined, '行情待核實', '行情待核實'],
+    [{ ...localQuote(), source_verification: 'verified' }, '行情待核實', '行情待核實'],
+  ]
+  let cases = 0
+  for (const [metadata, daily, inspection] of closeCases) {
+    assert.equal(values.formatPortfolioClose(metadata), daily)
+    assert.equal(values.formatPortfolioClose(metadata, true), inspection)
+    cases += 2
+  }
+  for (const field of ['market_value', 'unrealized_pnl']) {
+    const positive = field === 'unrealized_pnl' ? '+12.5' : '12.5'
+    for (const [value, metadata, daily, inspection] of [
+      [12.5, { [field]: 'local_estimate' }, '行情待核實', positive],
+      [0, { [field]: 'local_estimate' }, '行情待核實', '0'],
+      [null, { [field]: 'local_estimate' }, '待核實', '待核實'],
+      ['12.5', { [field]: 'local_estimate' }, '待核實', '待核實'],
+      [Infinity, { [field]: 'local_estimate' }, '待核實', '待核實'],
+      [12.5, { [field]: 'invalid' }, '待核實', '待核實'],
+      [12.5, null, '待核實', '待核實'], [12.5, [], '待核實', '待核實'],
+      [12.5, { [field]: 'known' }, positive, '待核實'],
+      [12.5, undefined, positive, '待核實'],
+      [null, { [field]: 'quantity_unknown' }, '股數待核實', '股數待核實'],
+      [null, { [field]: 'precision_unsupported' }, '估值精度待支援', '估值精度待支援'],
+      [null, { [field]: 'missing' }, '未提供', '未提供'],
+    ]) {
+      assert.equal(values.formatPositionValuation(value, metadata, field), daily)
+      assert.equal(values.formatLocalPositionValuation(value, metadata, field), inspection)
+      cases += 2
+    }
+  }
+  assert.equal(values.formatPositionValuation(-1, { market_value: 'local_estimate' }, 'market_value'), '待核實')
+  assert.equal(values.formatLocalPositionValuation(-1, { unrealized_pnl: 'local_estimate' }, 'unrealized_pnl'), '-1')
+  assert.equal(values.formatPositionValuation(-1, undefined, 'market_value'), '-1')
+  for (const [field, value, status, expected] of [
+    ['date', '2026-10-04', 'known', '2026-10-04'], ['date', '2026-02-30', 'known', '記錄待核實'],
+    ['date', '0000-01-01', 'known', '記錄待核實'], ['date', 20261004, 'known', '記錄待核實'],
+    ['date', null, 'missing', '記錄未提供'], ['date', '2026-10-04', 'invalid', '記錄待核實'],
+    ['source', 'twse', 'known', 'twse'], ['source', 'not-an-admitted-source', 'known', 'not-an-admitted-source'],
+    ['source', 'twse\x7f', 'known', '記錄待核實'], ['source', 's'.repeat(121), 'known', '記錄待核實'],
+    ['source', '\u{1f600}'.repeat(120), 'known', '\u{1f600}'.repeat(120)],
+    ['source', '\u{1f600}'.repeat(121), 'known', '記錄待核實'], ['source', '\ud800', 'known', '記錄待核實'],
+    ['source', '\ufeff', 'known', '記錄待核實'], ['source', '\u0085', 'known', '記錄待核實'],
+    ['data_as_of', '2026-10-04T00:00:00+00:00', 'known', '2026-10-04T00:00:00+00:00'],
+    ['collected_at', '2026-10-04 00:00:00.000000', 'known', '2026-10-04 00:00:00.000000'],
+    ['collected_at', '2026-02-30 00:00:00', 'known', '記錄待核實'],
+    ['data_as_of', '2026-10-04T00:00:00.' + '0'.repeat(46), 'known', '記錄待核實'],
+    ['data_as_of', '2026-10-04 25:00:00', 'known', '記錄待核實'],
+    ['data_as_of', '2026-10-04T00:00:00+01:99', 'known', '記錄待核實'],
+    ['data_as_of', '2026-10-04T00:00:00+0100', 'known', '記錄待核實'],
+  ]) {
+    const quote = localQuote()
+    quote.recorded[field] = value; quote.record_status[field] = status
+    assert.equal(values.formatQuoteRecord(quote, field), expected); cases++
+  }
+  for (const metadata of [null, [], undefined, { ...localQuote(), recorded: [], record_status: null }]) {
+    assert.equal(values.formatQuoteRecord(metadata, 'date'), '記錄待核實'); cases++
+  }
+  const rows = [
+    { ...syntheticPosition(1000, '1000'), portfolio_quote: localQuote(), market_value: 10500, unrealized_pnl: 500,
+      valuation_status: { market_value: 'local_estimate', unrealized_pnl: 'local_estimate' } },
+    ...['missing', 'invalid', 'quantity_unknown', 'precision_unsupported'].map((status) => ({
+      ...syntheticPosition(1000, '1000'), portfolio_quote: localQuote(null, status === 'missing' ? 'missing' : 'invalid'),
+      valuation_status: { market_value: status, unrealized_pnl: status } })),
+    { ...syntheticPosition(0, '0'), portfolio_quote: localQuote(), market_value: 0, unrealized_pnl: 0,
+      valuation_status: { market_value: 'local_estimate', unrealized_pnl: 'local_estimate' } },
+  ]
+  const before = structuredClone(rows)
+  for (const row of rows) quoteCardAssertions(render([row]), row, values)
+  assert.deepEqual(rows, before)
+  // Necessary P4 read semantics remain independent of this inspection panel.
+  assert.equal(values.formatPortfolioValue(0, { stop_price: 'known' }, 'stop_price'), '0')
+  assert.equal(values.formatPortfolioValue(null, { stop_price: 'invalid' }, 'stop_price'), '待核實')
+  const bundle = await browserBuild()
+  console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version, quote_format_cases: cases + 3,
+    actual_portfolio_subsection_ssr_cases: rows.length, row_mutations: 0, p4_status_regression_cases: 2,
+    known_ssr_use_layout_effect_warnings: ssrLayoutWarnings, source_date_evidence: 'unverified',
+    full_main_memory_bundle: bundle.outputFiles.map((f) => ({ extension: path.extname(f.path), bytes: f.contents.length })),
+    disk_artifacts: 0, production_vite_build: 'not_run' }))
+  esbuild.stop()
+}
+
+async function quoteReadHttpCheck() {
+  const api = await apiModule()
+  const values = require(path.join(sourceRoot, 'portfolioValues.ts'))
+  const render = await portfolioRenderer()
+  const snapshot = async () => {
+    const response = await fetch(apiOrigin.origin + '/__review__/quote-read-snapshot')
+    assert.equal(response.status, 200)
+    const data = await response.json()
+    assert.equal(data.storage, 'memory_only'); assert.equal(data.position_count, 20)
+    assert.ok(data.includes.includes('all typeof()'))
+    return data
+  }
+  const before = await snapshot()
+  const data = await api.getPortfolio({ page: 1, page_size: 100 })
+  assert.equal(data.items.length, 20)
+  for (const row of data.items) {
+    const symbol = row.instrument.symbol
+    assert.equal(row.portfolio_quote.source_verification, 'unverified')
+    assert.equal(row.portfolio_quote.date_verification, 'unverified')
+    const expected = { BADPRICE: 'invalid', MISSINGBAR: 'missing', BADQ: 'quantity_unknown',
+      HUGEQ: 'precision_unsupported', OVERFLOW: 'invalid' }[symbol] || 'local_estimate'
+    assert.deepEqual(row.valuation_status, { market_value: expected, unrealized_pnl: expected })
+    if (expected === 'local_estimate') {
+      assert.equal(row.market_value, symbol === 'ZEROQ' ? 0 : 10500)
+      assert.equal(row.unrealized_pnl, symbol === 'ZEROQ' ? 0 : 500)
+    } else { assert.equal(row.market_value, null); assert.equal(row.unrealized_pnl, null) }
+    if (symbol === 'DIRTYDATE') assert.equal(row.portfolio_quote.record_status.date, 'invalid')
+    if (symbol === 'METABAD') {
+      for (const field of ['source', 'data_as_of', 'collected_at']) assert.equal(row.portfolio_quote.record_status[field], 'invalid')
+    }
+    const clone = structuredClone(row)
+    quoteCardAssertions(render([row]), row, values)
+    assert.deepEqual(row, clone)
+  }
+  assert.deepEqual(await snapshot(), before)
+  console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version,
+    actual_http_routes: 3, actual_portfolio_rows: 20, actual_portfolio_subsection_ssr_cases: 20,
+    parser: 'actual getPortfolio fetch + Response.json', whole_sql_sha256: before.whole_sql_sha256,
+    read_mutations: 0, owned_http_mutations: 0, source_date_evidence: 'unverified',
+    known_ssr_use_layout_effect_warnings: ssrLayoutWarnings, disk_artifacts: 0, disk_save_reopen: 'not_tested' }))
+  esbuild.stop()
+}
+
 async function quantityTrustCheck() {
   typecheck()
   const { formatPositionValuation, formatPortfolioValue } = require(path.join(sourceRoot, 'portfolioValues.ts'))
@@ -306,8 +464,8 @@ async function quantityTrustHttpCheck() {
     const stockDetailProfiles = { complete_unknown: 0, incomplete_unknown: 0 }
     for (const exchange of ['TWSE', 'TPEx']) {
       for (const [symbol, total, held, state, valuation] of [
-        ['INTPOS', '1000', true, 'hold_observe', 'known'], ['INTZERO', '0', false, 'conditional_entry', 'known'],
-        ['LEGZERO', '0', false, 'conditional_entry', 'known'], ['BADINT', null, null, 'manual_review', 'quantity_unknown'],
+        ['INTPOS', '1000', true, 'hold_observe', 'local_estimate'], ['INTZERO', '0', false, 'conditional_entry', 'local_estimate'],
+        ['LEGZERO', '0', false, 'conditional_entry', 'local_estimate'], ['BADINT', null, null, 'manual_review', 'quantity_unknown'],
         ['UNSAFE', null, null, 'manual_review', 'quantity_unknown'],
         ['ODD', '9007199254740993', true, 'hold_observe', 'precision_unsupported'],
         ['MAX', '9223372036854775807', true, 'hold_observe', 'precision_unsupported'],
@@ -319,7 +477,7 @@ async function quantityTrustHttpCheck() {
         assert.equal(row.shares, total === '1000' ? 1000 : total === '0' ? 0 : null)
         assert.equal(row.position_quantity_status, total === null ? 'unknown' : 'known')
         assert.deepEqual(row.valuation_status, { market_value: valuation, unrealized_pnl: valuation })
-        if (valuation === 'known') assert.equal(row.market_value, total === '0' ? 0 : 10500)
+        if (valuation === 'local_estimate') assert.equal(row.market_value, total === '0' ? 0 : 10500)
         else { assert.equal(row.market_value, null); assert.equal(row.unrealized_pnl, null) }
         const rowBefore = structuredClone(row)
         const html = renderPortfolio([row])
@@ -739,7 +897,7 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
-  const fixtureLabel = args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
+  const fixtureLabel = args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
     .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
@@ -780,12 +938,13 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') ? '2026-10-04' : '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
 Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
+  : args.includes('--quote-read-http-check') ? quoteReadHttpCheck() : args.includes('--quote-read-check') ? quoteReadCheck()
   : args.includes('--quantity-trust-http-check') ? quantityTrustHttpCheck() : args.includes('--quantity-trust-check') ? quantityTrustCheck()
   : args.includes('--finance-read-check') ? financeReadCheck() : args.includes('--finance-http-check') ? financeHttpCheck()
   : args.includes('--http-check') ? httpCheck() : args.includes('--finance-check') ? financeCheck() : check())
