@@ -10,6 +10,15 @@ const Module = require('node:module')
 const assert = require('node:assert/strict')
 
 const args = process.argv.slice(2)
+let ssrLayoutWarnings = 0
+if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')) {
+  const originalError = console.error
+  console.error = (message, ...rest) => {
+    if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
+      ssrLayoutWarnings++
+    } else originalError(message, ...rest)
+  }
+}
 const option = (name, fallback) => {
   const index = args.indexOf(name)
   return index < 0 ? fallback : args[index + 1]
@@ -159,6 +168,229 @@ async function portfolioRenderer() {
         React.createElement(QueryClientProvider, { client }, React.createElement(PortfolioSubsection))))
     } finally { client.clear() }
   }
+}
+
+async function quantityTrustRenderer() {
+  const app = await appModule()
+  const React = requireDependency('react')
+  const { renderToStaticMarkup } = requireDependency('react-dom/server')
+  const { MemoryRouter } = requireDependency('react-router-dom')
+  const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+  return (component, props = {}, entries = []) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    for (const [key, data] of entries) client.setQueryData(key, data)
+    try {
+      return renderToStaticMarkup(React.createElement(MemoryRouter, null,
+        React.createElement(QueryClientProvider, { client }, React.createElement(app[component], props))))
+    } finally { client.clear() }
+  }
+}
+
+function syntheticAction(symbol, held, quantityStatus, actionState = 'data_insufficient') {
+  return { instrument: { id: 1, exchange: 'TWSE', symbol, name: 'Synthetic quantity', instrument_type: 'stock' },
+    held, position_quantity_status: quantityStatus, action_state: actionState, as_of: '2026-10-04',
+    data_quality: actionState === 'data_insufficient' ? 'partial' : 'complete', current_price: 10.5,
+    data_cutoff: '2026-10-04', price_as_of: '2026-10-04', priority: 1, watchlisted: true, event_ids: [1],
+    display_instruction: actionState === 'manual_review' ? '庫存股數待核實，先核對原記錄。' : '目前無法產生研究動作。 研究資料尚未完整。',
+    primary_levels: {}, missing_data_priority: [], strategies: [], alternative_strategies: [],
+    reasons: [], conflicts: [], evidence_refs: [], blocking_reasons: [], theme_ids: [] }
+}
+
+function syntheticDashboard(actions) {
+  return { as_of: '2026-10-04', mode: 'official_partial', market: { source: 'fixture', instruments: 2, bars: 2, groups: 0 },
+    data_quality: { latest_run: 'success' }, news: [], themes: [], groups: [], signals: [], actions, candidates: actions,
+    empty_states: {}, action_counts: { total: actions.length, held: 0, held_unknown: actions.length, scope: 'compact_first_page' } }
+}
+
+async function quantityTrustCheck() {
+  typecheck()
+  const { formatPositionValuation, formatPortfolioValue } = require(path.join(sourceRoot, 'portfolioValues.ts'))
+  const cases = [
+    [null, undefined, '未提供'], [0, undefined, '0'], [12.5, undefined, '12.5'], [-12.5, undefined, '-12.5'],
+    [Infinity, undefined, '待核實'], [NaN, undefined, '待核實'], ['12.5', undefined, '待核實'],
+    [null, 'missing', '未提供'], [0, 'known', '0'], [12.5, 'known', '12.5'], [-12.5, 'known', '-12.5'],
+    [null, 'quantity_unknown', '股數待核實'], [null, 'precision_unsupported', '估值精度待支援'],
+    [null, 'invalid', '待核實'], [12.5, 'invalid', '待核實'], [12.5, 'quantity_unknown', '待核實'],
+    [12.5, 'precision_unsupported', '待核實'], [null, 'known', '待核實'], [0, 'missing', '待核實'],
+    [Infinity, 'known', '待核實'], [null, 'unsupported', '待核實'], [12.5, {}, '待核實'],
+    [12.5, null, '待核實'], [12.5, [], '待核實'], [false, 'known', '待核實'],
+  ]
+  const renderPortfolio = await portfolioRenderer()
+  let ssrCases = 0
+  for (const field of ['market_value', 'unrealized_pnl']) {
+    for (const [value, status, expected] of cases) {
+      const metadata = typeof status === 'string' ? { [field]: status } : status
+      const display = field === 'unrealized_pnl' && value > 0 && expected === '12.5' ? '+12.5' : expected
+      assert.equal(formatPositionValuation(value, metadata, field), display)
+      const item = { ...syntheticPosition(null, null), [field]: value }
+      if (metadata !== undefined) item.valuation_status = metadata
+      const before = structuredClone(item)
+      const html = renderPortfolio([item])
+      assert.ok(html.includes((field === 'market_value' ? '市值' : '未實現損益') + '（報價幣別元） ' + display))
+      assert.deepEqual(item, before)
+      ssrCases++
+    }
+  }
+  // Keep the P4 field-status boundary without re-running its whole suite.
+  assert.equal(formatPortfolioValue(0, { stop_price: 'known' }, 'stop_price'), '0')
+  assert.equal(formatPortfolioValue(null, { stop_price: 'invalid' }, 'stop_price'), '待核實')
+  const maximum = { ...syntheticPosition(null, '9223372036854775807'), position_quantity_status: 'known',
+    valuation_status: { market_value: 'precision_unsupported', unrealized_pnl: 'precision_unsupported' } }
+  const maximumHtml = renderPortfolio([maximum])
+  assert.ok(maximumHtml.includes('原股數 9,223,372,036,854,775,807 股'))
+  assert.ok(maximumHtml.includes('估值精度待支援'))
+  const render = await quantityTrustRenderer()
+  const unknown = syntheticAction('BADINT', null, 'unknown')
+  const zero = syntheticAction('ZERO', false, 'known', 'no_condition')
+  const absent = syntheticAction('ABSENT', false, 'absent', 'no_condition')
+  const completeUnknown = syntheticAction('COMPLETE', null, 'unknown', 'manual_review')
+  const before = structuredClone([unknown, zero, absent, completeUnknown])
+  for (const action of [unknown, completeUnknown]) {
+    assert.ok(render('CompactActionCard', { action }).includes('股數待核實'))
+    const html = render('ActionDetailPanel', { action })
+    assert.ok(html.includes('class="pill ambiguous">股數待核實</span>'))
+    assert.ok(html.includes('<strong>' + action.display_instruction + '</strong>'))
+    if (action.action_state === 'data_insufficient') assert.ok(html.includes('<h2>策略判斷資料待補</h2>'))
+    assert.ok(!html.includes('class="level-grid'))
+  }
+  const actionResult = { items: [unknown, zero, absent, completeUnknown], meta: { limit: 20, total: 4, has_more: false },
+    summary: { held: 0, held_unknown: 2, scope: 'page_for_actionable_and_data_insufficient_counts' } }
+  const actionHtml = render('ActionsPage', {}, [
+    [['actions', { search: '', cursor: undefined, state: '' }], actionResult],
+    [['portfolio-subsection'], { items: [] }],
+  ])
+  assert.ok(actionHtml.includes('本次篩選股數待核實 2 筆'))
+  assert.equal((actionHtml.match(/href="\/actions\/TWSE\/BADINT"/g) || []).length, 1)
+  assert.ok(actionHtml.includes('股數待核實'))
+  const homeHtml = render('TodayPage', {}, [[['dashboard'], syntheticDashboard([unknown])]])
+  assert.equal((homeHtml.match(/href="\/actions\/TWSE\/BADINT"/g) || []).length, 1)
+  assert.ok(homeHtml.includes('股數待核實'))
+  assert.deepEqual([unknown, zero, absent, completeUnknown], before)
+  const bundle = await browserBuild()
+  console.log(JSON.stringify({ passed: true, typescript: ts.version, node: process.version,
+    valuation_format_cases: cases.length * 2, portfolio_ssr_cases: ssrCases + 1,
+    compact_action_ssr_cases: 2, actual_stock_action_detail_ssr_cases: 2,
+    actual_stock_detail_profiles: ['incomplete_unknown', 'complete_unknown'], actual_actions_page_ssr: 1, actual_home_page_ssr: 1,
+    row_mutations: 0, p4_status_regression_cases: 2,
+    known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+    full_main_memory_bundle: bundle.outputFiles.map((file) => ({ extension: path.extname(file.path), bytes: file.contents.length })),
+    disk_artifacts: 0, production_vite_build: 'not_run' }))
+  esbuild.stop()
+}
+
+async function quantityTrustHttpCheck() {
+  const api = await apiModule()
+  const renderPortfolio = await portfolioRenderer()
+  const render = await quantityTrustRenderer()
+  const guardedFetch = global.fetch
+  let routes = 0
+  let mutations = 0
+  global.fetch = (url, options = {}) => {
+    routes++
+    if (options.method && options.method !== 'GET') mutations++
+    return guardedFetch(url, options)
+  }
+  const snapshot = async () => {
+    const response = await fetch(apiOrigin.origin + '/__review__/quantity-trust-snapshot')
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  try {
+    const before = await snapshot()
+    assert.equal(before.row_count, 16)
+    const portfolio = await api.getPortfolio({ page: 1, page_size: 20 })
+    assert.equal(portfolio.items.length, 16)
+    assert.equal(portfolio.pagination.total, 16)
+    let decisions = 0
+    let stockDetailSsr = 0
+    const stockDetailProfiles = { complete_unknown: 0, incomplete_unknown: 0 }
+    for (const exchange of ['TWSE', 'TPEx']) {
+      for (const [symbol, total, held, state, valuation] of [
+        ['INTPOS', '1000', true, 'hold_observe', 'known'], ['INTZERO', '0', false, 'conditional_entry', 'known'],
+        ['LEGZERO', '0', false, 'conditional_entry', 'known'], ['BADINT', null, null, 'manual_review', 'quantity_unknown'],
+        ['UNSAFE', null, null, 'manual_review', 'quantity_unknown'],
+        ['ODD', '9007199254740993', true, 'hold_observe', 'precision_unsupported'],
+        ['MAX', '9223372036854775807', true, 'hold_observe', 'precision_unsupported'],
+        ['GATEFAIL', null, null, 'data_insufficient', 'quantity_unknown'],
+      ]) {
+        const row = portfolio.items.find((item) => item.instrument.exchange === exchange && item.instrument.symbol === symbol)
+        assert.ok(row)
+        assert.equal(row.shares_exact, total)
+        assert.equal(row.shares, total === '1000' ? 1000 : total === '0' ? 0 : null)
+        assert.equal(row.position_quantity_status, total === null ? 'unknown' : 'known')
+        assert.deepEqual(row.valuation_status, { market_value: valuation, unrealized_pnl: valuation })
+        if (valuation === 'known') assert.equal(row.market_value, total === '0' ? 0 : 10500)
+        else { assert.equal(row.market_value, null); assert.equal(row.unrealized_pnl, null) }
+        const rowBefore = structuredClone(row)
+        const html = renderPortfolio([row])
+        if (total !== null) assert.ok(html.includes('原股數 ' + total.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' 股'))
+        if (valuation === 'precision_unsupported') assert.ok(html.includes('估值精度待支援'))
+        if (valuation === 'quantity_unknown') assert.ok(html.includes('股數待核實'))
+        assert.deepEqual(row, rowBefore)
+        const { decision_summary: action } = await api.getAction(exchange, symbol)
+        decisions++
+        assert.equal(action.held, held)
+        assert.equal(action.position_quantity_status, row.position_quantity_status)
+        assert.equal(action.action_state, state)
+        if (held === null) {
+          assert.ok(action.context_badges.includes('股數待核實'))
+          assert.deepEqual(action.primary_levels, {})
+          if (state === 'manual_review') assert.equal(action.display_instruction, '庫存股數待核實，先核對原記錄。')
+          else { assert.equal(action.priority, 1); assert.ok(action.blocking_reasons.length > 0) }
+        }
+        const stock = await api.getStock(exchange, symbol)
+        for (const key of ['held', 'position_quantity_status', 'action_state', 'display_instruction']) {
+          assert.equal(stock.decision_summary[key], action[key])
+        }
+        if (held === null) {
+          // StockPage renders this panel, rather than ProductActionCard.
+          const detailHtml = render('ActionDetailPanel', { action: stock.decision_summary })
+          assert.ok(detailHtml.includes('class="pill ambiguous">股數待核實</span>'))
+          assert.ok(detailHtml.includes('<strong>' + stock.decision_summary.display_instruction + '</strong>'))
+          assert.ok(!detailHtml.includes('class="level-grid'))
+          const incomplete = state === 'data_insufficient'
+          if (incomplete) assert.ok(detailHtml.includes('<h2>策略判斷資料待補</h2>'))
+          stockDetailSsr++
+          stockDetailProfiles[incomplete ? 'incomplete_unknown' : 'complete_unknown']++
+        }
+      }
+      const { decision_summary: absent } = await api.getAction(exchange, 'ABSENT')
+      assert.equal(absent.held, false)
+      assert.equal(absent.position_quantity_status, 'absent')
+    }
+    for (const [params, total, held, unknown] of [
+      [{ limit: 4 }, 18, 6, 6], [{ held_only: true, limit: 100 }, 6, 6, 0],
+      [{ state: 'manual_review', limit: 100 }, 4, 0, 4], [{ state: 'data_insufficient', limit: 100 }, 2, 0, 2],
+      [{ state: 'data_insufficient', held_only: true, limit: 100 }, 0, 0, 0],
+      [{ q: 'INTZERO', limit: 100 }, 2, 0, 0],
+    ]) {
+      const result = await api.getActions(params)
+      assert.equal(result.meta.total, total)
+      assert.equal(result.summary.held, held)
+      assert.equal(result.summary.held_unknown, unknown)
+    }
+    const actions = await api.getActions({ limit: 20 })
+    const actionHtml = render('ActionsPage', {}, [
+      [['actions', { search: '', cursor: undefined, state: '' }], actions], [['portfolio-subsection'], portfolio],
+    ])
+    assert.ok(actionHtml.includes('本次篩選股數待核實 6 筆'))
+    const dashboard = await api.getDashboard()
+    assert.equal(dashboard.action_counts.scope, 'compact_first_page')
+    assert.equal(dashboard.action_counts.held, 6)
+    assert.equal(dashboard.action_counts.held_unknown, 2)
+    const homeHtml = render('TodayPage', {}, [[['dashboard'], dashboard]])
+    assert.ok(homeHtml.includes('股數待核實'))
+    const after = await snapshot()
+    assert.deepEqual(after, before, 'read HTTP changed all SQL columns/note/updated_at/two quantity typeof()')
+    assert.equal(mutations, 0)
+    console.log(JSON.stringify({ passed: true, actual_http_routes: routes, portfolio_rows: 16, decisions,
+      actual_stock_action_detail_ssr: stockDetailSsr, actual_stock_detail_profiles: stockDetailProfiles,
+      actual_actions_page_ssr: 1, actual_home_page_ssr: 1,
+      known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+      whole_sql_rows_sha256: before.whole_row_sha256, includes: before.includes, http_mutations: mutations,
+      fixture_date: '2026-10-04', source: 'synthetic user quantities; sixty explicit synthetic dates, not official sessions',
+      parser: 'actual product fetch + Response.json; actual components SSR', disk_artifacts: 0, disk_save_reopen: 'not_run' }))
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
 }
 
 function syntheticPosition(shares, exact) {
@@ -507,7 +739,7 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
-  const fixtureLabel = args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
+  const fixtureLabel = args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
     .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
@@ -548,12 +780,13 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') ? '2026-10-04' : '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
 Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
+  : args.includes('--quantity-trust-http-check') ? quantityTrustHttpCheck() : args.includes('--quantity-trust-check') ? quantityTrustCheck()
   : args.includes('--finance-read-check') ? financeReadCheck() : args.includes('--finance-http-check') ? financeHttpCheck()
   : args.includes('--http-check') ? httpCheck() : args.includes('--finance-check') ? financeCheck() : check())
   .catch((error) => { esbuild.stop(); console.error(error); process.exitCode = 1 })

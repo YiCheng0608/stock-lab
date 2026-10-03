@@ -339,7 +339,7 @@ class StorageMemoryTest(unittest.TestCase):
                     payload = api.position_dict(db, item)
                     self.assertIsNone(payload["shares_exact"])
                     self.assertIsNone(payload["quantity"])
-                    self.assertEqual(payload["shares"], 1000.0)
+                    self.assertIsNone(payload["shares"])
         finally:
             fixture.close()
 

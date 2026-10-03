@@ -194,7 +194,7 @@ export type Dashboard = {
   themes?: ThemeDirectoryRow[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
-  action_counts?: { total: number; actionable: number; data_insufficient: number; held: number }
+  action_counts?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string }
   empty_states?: Record<string, string | null>
 }
 
@@ -547,6 +547,7 @@ export type Position = {
   instrument: Instrument | null
   shares: number | null
   shares_exact?: string | null
+  position_quantity_status?: 'known' | 'unknown' | 'absent'
   quantity?: {
     total_shares: number
     total_shares_exact?: string
@@ -569,6 +570,10 @@ export type Position = {
   latest_bar: Bar | null
   market_value: number | null
   unrealized_pnl: number | null
+  valuation_status?: {
+    market_value: 'known' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
+    unrealized_pnl: 'known' | 'missing' | 'invalid' | 'quantity_unknown' | 'precision_unsupported'
+  }
 }
 
 export type PositionInput = {
@@ -890,7 +895,8 @@ export type ActionSummary = {
   detail_url?: string
   data_gap?: string | null
   priority: number
-  held: boolean
+  held: boolean | null
+  position_quantity_status?: 'known' | 'unknown' | 'absent'
   watchlisted: boolean
   current_price: number | null
   price_as_of: string | null

@@ -151,7 +151,7 @@ JavaScript 股數顯示 parser 支持完整 `0..9,223,372,036,854,775,807` 的 c
 
 本批支援 M3／R2-C1 的股數保存基線；核心契約、必要記憶體／磁碟／HTTP 與下表具名操作已有限接受。持倉保留 `shares` Float 相容欄，另用 nullable `shares_integer` 保存 `0..9,223,372,036,854,775,807` 的 SQLite 整數，零只供讀取。有效新欄優先；新欄非 NULL 卻非實際 int、為負值或溢位時，`shares_exact`／`quantity` 為 `null`，不得回退至 Float。新欄 NULL 才可沿 M3-P1 gate 使用目前有限、非負、安全整數的舊值；unsafe、分數、負值及非有限舊值仍是「股數待核實」。Migration 只一次回填可信舊值，不重建已捨入的原數，也不改舊 Float 或成本／停損／風險／note／updated_at；具體 schema／rollback 規則見 [R0 §8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
 
-新寫入同時保存 exact int 與 Float mirror。API `shares` 保持 raw Float 的有限數字相容性，非有限回 `null`；它與 `quantity` 原 numeric 欄在超過安全整數時不能作精確顯示依據。`shares_exact`、`total_shares_exact` 與 `quantity_lots_exact` 使用 canonical ASCII 整數字串，張／零股由整數拆分，`quantity` 原有 numeric／unit／display 形狀保留。JavaScript 優先用完整精確字串，不經 Number；只有精確欄缺失的舊 API 可回退至有限、非負、安全整數 number，明示 `null` 或壞字串仍不得補值。`mixed` 的已知張／零股拆分與來源單位 unknown／mixed 的語意保持 M3-P1 規則。
+新寫入仍同時保存 exact int 與 Float mirror。P2 當時 API `shares` 保持 raw Float 的有限數字相容性；現行讀取已由 [M3-P5](#m3-p5-可信庫存股數與既有估值持倉判定一致) 改為可信 safe 總股數 numeric，其餘 null。`quantity` 的原 numeric 欄仍不能作大數精確顯示依據。`shares_exact`、`total_shares_exact` 與 `quantity_lots_exact` 使用 canonical ASCII 整數字串，張／零股由整數拆分，`quantity` 原有 numeric／unit／display 形狀保留。JavaScript 優先用完整精確字串，不經 Number；只有精確欄缺失的舊 API 可回退至有限、非負、安全整數 number，明示 `null` 或壞字串仍不得補值。`mixed` 的已知張／零股拆分與來源單位 unknown／mixed 的語意保持 M3-P1 規則。
 
 四種互斥輸入仍為 `shares`、`unit + quantity`（`unit=lot`／`odd_lot`）、`quantity_lots`、`odd_lot_shares`，一次只能提供一種。每種欄位可用 strict 正整數 number，最終總股數仍限 `1..9,007,199,254,740,991`；或用無前導零的 canonical ASCII 正整數字串，最終總股數可到 `9,223,372,036,854,775,807`。張數以整數乘 1,000 後再驗上限；number 張數上限 `9,007,199,254,740`，string 張數上限 `9,223,372,036,854,775`。零、bool、float、負值、Unicode 數字、空白／換行、正負號、分數、科學記號、混合表示及溢位，均在 commit 前以 HTTP 422 拒收，既有持倉完整列保持不變。
 
@@ -233,7 +233,51 @@ Actual HTTP 的十四列與十四個完整 decisions 已核三態、0 優先、m
 
 原 QA tab `c0cd04e4-4539-4d73-a36d-b80f71a75328` 首次 snapshot／eval 均 runtime_unavailable、exit 1，沿同 tab 原生 focus 後恢復，未另建 tab。Scoped memory fetch 只記 3 個 GET／200（TWSE TEXT stocks、portfolio、actions），mutation 0／外網空；7 個 performance resources 為 owned，同次 Orca console 回 `messages=[]`，僅支持這個擷取範圍，不稱完整 session／所有 console 空。未使用會落 HAR 的 capture。最後 actual viewport 還原 `1365×900`、document 寬均 1350，原 tab close exit 0／list 空；兩個 owned memory serve／children／listeners 已核不存在，測試及清理分報成功，新增測試磁碟產物／殘留 0，舊 HAR／其他 blocked／occupied 資源未動。
 
-本批只接受可信讀回與非法庫存停損隔離，不修污染或已遺失 intent，不外推所有估值／風險行動。正式 DB、磁碟保存／重開、production deployment／Vite build、完整 backend、真官方／live、Decimal exact、risk sizing、new Plan、完整 M3、來源／tick／歷史／availability／PIT 未驗；下一具名候選為 M3-P5「可信庫存股數與既有估值／持倉判定一致」，由新統籌先有界核必要 caller 與數量／持有狀態 gate，範圍及完成條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)；未實作或驗收，不從可信股數推定金融估值 exact。
+本節保留 P4 信任讀回與非法庫存停損隔離的原有限驗收，不修污染或遺失 intent，不外推所有估值／風險行動。後續 [M3-P5](#m3-p5-可信庫存股數與既有估值持倉判定一致) 已有限接受股數／既有估值／held 一致接線；兩批各依具名範圍驗收，不從可信股數推定金融估值 exact 或行情信任已驗。
+
+<a id="m3-p5-可信庫存股數與既有估值持倉判定一致"></a>
+
+#### M3-P5 可信庫存股數與既有估值／持倉判定一致
+
+本批支援 M3／R2-C1；十檔程式、必要零落盤 SQLite→router→JSON→JavaScript／UI 及下表具名操作已由統籌有限接受。既有 consumer 共用 `trusted_position_shares`：`shares_integer` 非 NULL 時，只接受 actual int（排除 bool）且在 `0..9,223,372,036,854,775,807`；非法新欄不 fallback。新欄 NULL 才可取有限、非負、安全整數的 legacy int／float，上限 `9,007,199,254,740,991`。不從 Float 還原原始捨入值，不寫回污染記錄或 note／updated_at；schema、輸入與 M3-P2 磁碟契約保留。
+
+| 記錄與可信總股數 | `position_quantity_status`／held |
+| --- | --- |
+| 有記錄、可信正整數（包含 int64 大數） | `known`／true |
+| 有記錄、可信零 | `known`／false |
+| 有記錄、總股數無法核實 | `unknown`／null；保留記錄，不當作 0／無持倉 |
+| 沒有持倉記錄 | decision 為 `absent`／false；portfolio 不造空持倉列 |
+
+API 相容 `shares` 改用可信總股數：不超 safe 上限時提供 numeric，其餘回 null，不能再讀取互相衝突的 raw Float。既有 `shares_exact`、`quantity` 精確字串與張／零股拆分保留；大數顯示仍用完整字串，不依賴 `quantity` 的 Number 相容欄位。例 integer=1000／Float=0 仍為 1000 股、held=true；integer=0／Float=1000 則為零、held=false。
+
+`valuation_status` 分別記錄 `market_value` 與 `unrealized_pnl`，不能從其中一項推定另一項：
+
+| 狀態 | 計算與畫面 |
+| --- | --- |
+| `quantity_unknown` | 股數未知時兩項均 null，顯示「股數待核實」。 |
+| `precision_unsupported` | 可信總股數超過 safe 上限時兩項均 null，顯示「估值精度待支援」；exact int64 呈現與 held=true 保留。 |
+| `known` | safe 股數的市值沿既有 close × shares；close 須 actual int／float 且有限，乘積須有限。損益另須 M3-P4 成本為 known，且市值 − 成本 × shares 有限。畫面保留零、正損益加號與負值。 |
+| `missing` | safe 股數下沒有 bar／close=None，市值為 null；成本 missing 時損益為 null。成本 known 時，損益沿市值的 missing 狀態。顯示「未提供」。 |
+| `invalid` | safe 股數下型別／非有限 close、非有限計算結果，或成本 invalid 的損益，均 null，顯示「待核實」。成本 missing／invalid 的損益狀態優先於市值狀態。 |
+
+known 只表示本批有限算式可計算，不等於行情來源、日期、價格合法性或 tick 已通過研究 gate；現行最新 bar／close 的可信讀回仍待 M3-P6 有界核對。不宣稱 Decimal 或精確金融估值。前端只在 explicit known 與有限 number 一致時顯數字；狀態存在但 malformed／矛盾時顯「待核實」，不改用 raw 值救回。只有舊 API 未提供狀態欄，才沿有限 number／null 的相容顯示。
+
+未知持倉保留為行動候選，在首頁、行動列表及真正的研究詳情 `ActionDetailPanel` 顯示「股數待核實」badge。原 source／time／strategy gates 優先：未通過仍保留原 data_insufficient 說明；全通過後 unknown 才為 manual_review，專用指示「庫存股數待核實，先核對原記錄。」，不提供 primary levels。P4 可信正數的非法停損隔離仍保留。
+
+`held_only` 只收 held=true；未知與可信零不混入該篩選。`held_unknown` 與 held 採相同的各端點範圍：無 state 的 actions 使用全部 filtered IDs，有 state 時使用全部 filtered rows，dashboard 使用 compact first page；原 `scope` 字串保留，不把目前頁或 compact count 宣稱全域，也不報被篩掉資料的數量。優先集合先列可信持有、未知記錄，再沿原候選順序及去重，recorded zero 保留；無 state 路徑在選頁後才建 decision；有 state 則沿原 filtered universe 先建 decision，再篩 state／計數／分頁。
+
+本次採 `2026-10-04` synthetic TWSE／TPEx 十六列庫存、兩個無持倉 metadata 與明示 fixture 日期，不當正式庫存、官方行情／日曆或 live coverage。
+
+| 具名操作 | 已接受的有限結果 |
+| --- | --- |
+| Actual 桌面 `1298×924` 與 `390×844`（mobile=false）庫存 | 十六列 1000／zero／unknown／ODD／MAX 精確呈現，正常市值 0／10,500、損益 +500 與大數 unsupported 正確；document client／scroll width 分別均為 1283／375，窄版數量 head 273，未觀測橫向溢出。 |
+| 行動狀態篩選及實際可見 click：TWSE BADINT | 四個完整 unknown 為 manual_review；研究詳情顯專用 strong 指示及 badge，primary levels 為空。 |
+| TPEx GATEFAIL 的實際研究詳情及首頁 | 兩個 gate 未滿 unknown 仍 data_insufficient；原 heading／strong 說明保留並有 badge、levels 空。首頁保留不完整 unknown 並去重。 |
+| 詳情 badge 退修後的桌面／390px | 真正 ActionDetailPanel 的完整／不完整兩 profile 均通過；第一版 ProductActionCard SSR 不當詳情證據。 |
+
+原 tab 首次 snapshot／eval runtime_unavailable、exit 1；沿同 tab 原生 focus 恢復。工具 help、未 quote 的 PowerShell ref／JavaScript 引號失敗分報；詳情 badge 遺漏則是產品退修，補正後才有限接受。Scoped recorder 只涵蓋前版 8 GET／200、外網／mutation 空；最終詳情 performance 3 個 owned resources，不當完整 session capture。QA 最後還原 actual 1365×900、document 寬均 1350，原 tab 已關；自有程序／children／listeners 已核不存在，新測試落盤／殘留 0。最終 console 讀取六則為兩個 React DevTools info 與四個既有 Router warnings，無該讀取 error，不稱無 warning 或完整 capture。
+
+本批未驗真正磁碟保存／重開、正式 DB／migration、真官方／live、production deployment／Vite build、完整 backend、行情來源／日期／價格可信性、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT；不新增個人風險額度輸入。必要磁碟驗收不能以 memory 取代。重建入口與精確證據範圍見[開發入口](development-baseline/README.md#m3-p5-可信股數與估值持倉判定的零落盤驗證入口)，下一候選 M3-P6 見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
 
 ### 10.4 數值表格、單位與空白
 

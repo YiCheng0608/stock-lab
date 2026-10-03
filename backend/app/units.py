@@ -64,6 +64,12 @@ def trusted_position_shares(legacy: Any, integer: Any = None) -> int | None:
     return safe_legacy_position_shares(legacy)
 
 
+def position_held(legacy: Any, integer: Any = None) -> bool | None:
+    """An existing record is held, zero, or unknown from the trusted total."""
+    total = trusted_position_shares(legacy, integer)
+    return total > 0 if total is not None else None
+
+
 def shares_from_position_quantity(
     *,
     shares: Any = None,

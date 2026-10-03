@@ -209,7 +209,7 @@ export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: s
   )
 
 export const getActions = (params: CursorParams = {}) =>
-  get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number } }>(`/actions${queryString(params)}`)
+  get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string } }>(`/actions${queryString(params)}`)
 
 export const getAction = (exchange: string, symbol: string) =>
   get<{ decision_summary: ActionSummary }>(

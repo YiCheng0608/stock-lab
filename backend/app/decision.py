@@ -23,6 +23,7 @@ from .level_semantics import build_level_semantics, build_stop_price_semantics, 
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
+from .units import position_held
 from .models import (
     ChipSnapshot,
     DataQuality,
@@ -827,7 +828,9 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         held_position = context["positions_by_instrument"].get(instrument.id)
     else:
         held_position = db.scalar(select(PortfolioPosition).where(PortfolioPosition.instrument_id == instrument.id))
-    held = bool(held_position and (held_position.shares or 0) > 0)
+    held = position_held(held_position.shares, held_position.shares_integer) if held_position else False
+    quantity_status = "absent" if held_position is None else "unknown" if held is None else "known"
+    unknown_quantity = quantity_status == "unknown"
     position_stop, position_stop_status = read_portfolio_value(held_position.stop_price if held_position else None)
     invalid_held_stop = held and position_stop_status == "invalid"
     watchlisted = bool(instrument.is_watchlisted)
@@ -997,6 +1000,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
 
     if not complete:
         action_state = "data_insufficient" if missing else "no_condition"
+    elif unknown_quantity:
+        action_state = "manual_review"
     elif invalid_held_stop:
         action_state = "manual_review"
     elif held and current_price is not None and levels.get("stop_price") is not None and current_price <= levels["stop_price"]:
@@ -1015,7 +1020,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     if action_state == "reduce_exit":
         priority = 0
     elif action_state == "data_insufficient":
-        priority = 1 if held else (4 if watchlisted or has_recent_event else 6)
+        priority = 1 if held or unknown_quantity else (4 if watchlisted or has_recent_event else 6)
     elif action_state == "conditional_entry":
         priority = 2
     elif action_state in {"wait_breakout", "wait_pullback", "manual_review"}:
@@ -1059,7 +1064,9 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         action_instruction = "現在：持有觀察，等待條件或風險變化。"
         data_gap = None
     elif action_state == "manual_review":
-        action_instruction = "庫存停損待核實，先核對原記錄。" if invalid_held_stop else "現在：先人工核對互相衝突的條件。"
+        action_instruction = ("庫存股數待核實，先核對原記錄。" if unknown_quantity else
+                              "庫存停損待核實，先核對原記錄。" if invalid_held_stop else
+                              "現在：先人工核對互相衝突的條件。")
         data_gap = None
     else:
         action_instruction = "現在：先觀察，尚無成立條件。"
@@ -1072,6 +1079,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         reasons.append("持倉現價已觸及持倉停損／策略失效界線")
     if action_state == "manual_review" and invalid_held_stop:
         reasons.append("庫存停損待核實，先核對原記錄。")
+    if action_state == "manual_review" and unknown_quantity:
+        reasons.append("庫存股數待核實，先核對原記錄。")
     if selected and selected.get("rationale"):
         reasons.append(str(selected["rationale"]))
     if group_evidence:
@@ -1099,7 +1108,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     elif action_state == "reduce_exit":
         display_instruction = "已碰到既定風險條件，請依自己的風險規畫重新研究減碼或退場。"
     elif action_state == "manual_review":
-        display_instruction = ("庫存停損待核實，先核對原記錄。" if invalid_held_stop else
+        display_instruction = ("庫存股數待核實，先核對原記錄。" if unknown_quantity else
+                               "庫存停損待核實，先核對原記錄。" if invalid_held_stop else
                                "資料截止、價位或研究條件存在無法自動調和的衝突，先人工核對證據。")
     else:
         display_instruction = "資料足夠，但目前尚未符合研究條件；持續觀察。"
@@ -1172,6 +1182,8 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     context_badges: list[str] = []
     if held:
         context_badges.append("持倉")
+    elif unknown_quantity:
+        context_badges.append("股數待核實")
     if watchlisted:
         context_badges.append("自選")
     if has_recent_event:
@@ -1230,6 +1242,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         "data_gap": data_gap,
         "priority": priority,
         "held": held,
+        "position_quantity_status": quantity_status,
         "watchlisted": watchlisted,
         "current_price": current_price if bar else None,
         "price_as_of": price_as_of,
@@ -1245,7 +1258,7 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         "evidence_refs": evidence_refs,
         "data_quality": data_quality,
         "blocking_reasons": missing,
-        "missing_data_priority": _priority_missing(missing, held=held),
+        "missing_data_priority": _priority_missing(missing, held=held is True),
         "theme_ids": group_ids,
         "event_ids": [event.id for event in related_events],
         "data_cutoff": as_of.isoformat() if as_of else None,
@@ -1354,6 +1367,23 @@ def _group_candidate_ids(
     return result
 
 
+def position_holding_ids(db: Session, instrument_ids: Iterable[int] | None = None) -> tuple[set[int], set[int], set[int]]:
+    """Read cheap quantity projections; record existence never proves holding."""
+    query = select(PortfolioPosition.instrument_id, PortfolioPosition.shares, PortfolioPosition.shares_integer).join(
+        Instrument, Instrument.id == PortfolioPosition.instrument_id).where(Instrument.status == "active")
+    if instrument_ids is not None:
+        query = query.where(PortfolioPosition.instrument_id.in_(list(instrument_ids)))
+    held_ids, unknown_ids, recorded_ids = set(), set(), set()
+    for instrument_id, legacy, integer in db.execute(query):
+        recorded_ids.add(instrument_id)
+        held = position_held(legacy, integer)
+        if held is True:
+            held_ids.add(instrument_id)
+        elif held is None:
+            unknown_ids.add(instrument_id)
+    return held_ids, unknown_ids, recorded_ids
+
+
 def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     """Return a deterministic, cheap action-center candidate order.
 
@@ -1365,6 +1395,7 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     def sort_ids(ids: set[int], keys: dict[int, tuple[str, str, int]]) -> list[int]:
         return sorted(ids, key=lambda item_id: keys.get(item_id, ("", "", item_id)))
 
+    held_ids, unknown_ids, recorded_ids = position_holding_ids(db)
     if not as_of:
         rows = db.execute(
             select(Instrument.id, Instrument.exchange, Instrument.symbol)
@@ -1372,14 +1403,9 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
             .where(Instrument.status == "active", (PortfolioPosition.id.is_not(None) | Instrument.is_watchlisted.is_(True)))
         ).all()
         keys = {int(item_id): (str(exchange), str(symbol), int(item_id)) for item_id, exchange, symbol in rows}
-        return sorted(keys, key=keys.get)
-    held_ids: set[int] = set(
-        db.scalars(
-            select(PortfolioPosition.instrument_id)
-            .join(Instrument, Instrument.id == PortfolioPosition.instrument_id)
-            .where(Instrument.status == "active")
-        ).all()
-    )
+        return sorted(keys, key=lambda item_id: (
+            0 if item_id in held_ids else 1 if item_id in unknown_ids else
+            3 if item_id in recorded_ids else 2, keys[item_id]))
     watch_ids: set[int] = set(
         db.scalars(select(Instrument.id).where(Instrument.status == "active", Instrument.is_watchlisted.is_(True))).all()
     )
@@ -1435,7 +1461,7 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
             )
         ).all()
     )
-    all_ids = held_ids | watch_ids | conditional_ids | observation_ids | candidate_ids | event_ids
+    all_ids = recorded_ids | watch_ids | conditional_ids | observation_ids | candidate_ids | event_ids
     if not all_ids:
         return []
     rows = db.execute(
@@ -1449,10 +1475,12 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     seen: set[int] = set()
     for bucket in (
         held_ids,
+        unknown_ids,
         conditional_ids,
         observation_ids,
         event_ids | watch_ids,
         candidate_ids,
+        recorded_ids,
         all_ids,
     ):
         for item_id in sort_ids(bucket - seen, keys):
@@ -1474,6 +1502,7 @@ def build_action_summaries(db: Session, as_of: date | None = None, instrument_id
         key=lambda item: (
             item.get("priority", 99),
             not item.get("held", False),
+            item.get("position_quantity_status") != "unknown",
             not item.get("watchlisted", False),
             (item.get("instrument") or {}).get("exchange", ""),
             (item.get("instrument") or {}).get("symbol", ""),

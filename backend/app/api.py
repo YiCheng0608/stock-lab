@@ -55,6 +55,7 @@ from .decision import (
     build_decision_summary,
     latest_official_as_of,
     prioritized_instrument_ids,
+    position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
 from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events
@@ -69,7 +70,7 @@ from .product_time import (
     build_signal_product_time,
 )
 from .portfolio_values import read_portfolio_value
-from .units import share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
+from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 
 
@@ -1022,6 +1023,7 @@ _ACTION_LIST_FIELDS = (
     "data_gap",
     "priority",
     "held",
+    "position_quantity_status",
     "watchlisted",
     "current_price",
     "price_as_of",
@@ -1130,21 +1132,17 @@ def action_candidate_ids(
     held_only: bool = False,
     watchlist_only: bool = False,
     theme_id: str | None = None,
-) -> tuple[list[int], set[int]]:
+) -> tuple[list[int], set[int], set[int]]:
     """Filter the cheap action candidate projection before decision building."""
 
     ordered_ids = prioritized_instrument_ids(db, as_of)
     if not ordered_ids:
-        return [], set()
+        return [], set(), set()
     instruments = db.scalars(
         select(Instrument).where(Instrument.id.in_(ordered_ids), Instrument.status == "active")
     ).all()
     by_id = {item.id: item for item in instruments}
-    held_ids = set(
-        db.scalars(
-            select(PortfolioPosition.instrument_id).where(PortfolioPosition.instrument_id.in_(ordered_ids))
-        ).all()
-    )
+    held_ids, unknown_ids, _recorded_ids = position_holding_ids(db, ordered_ids)
     theme_ids: set[int] | None = None
     if theme_id:
         effective_date = as_of or date.today()
@@ -1173,7 +1171,7 @@ def action_candidate_ids(
         if needle and needle not in f"{instrument.symbol} {instrument.name}".casefold():
             continue
         filtered.append(instrument_id)
-    return filtered, held_ids
+    return filtered, held_ids, unknown_ids
 
 
 @router.get("/health")
@@ -1248,7 +1246,8 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     display_actions = [
         item
         for item in action_rows
-        if item["action_state"] != "data_insufficient" or item.get("held")
+        if item["action_state"] != "data_insufficient" or item.get("held") is True
+        or item.get("position_quantity_status") == "unknown"
     ]
     return {
         # An older row with a newer date must not make an official run
@@ -1286,7 +1285,8 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "total": len(action_candidate_ids),
             "actionable": len(actionable),
             "data_insufficient": sum(item["action_state"] == "data_insufficient" for item in action_rows),
-            "held": sum(bool(item.get("held")) for item in action_rows),
+            "held": sum(item.get("held") is True for item in action_rows),
+            "held_unknown": sum(item.get("position_quantity_status") == "unknown" for item in action_rows),
             "scope": "compact_first_page",
         },
         "empty_states": {
@@ -1726,7 +1726,7 @@ def actions(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
-    filtered_ids, held_ids = action_candidate_ids(
+    filtered_ids, held_ids, unknown_ids = action_candidate_ids(
         db,
         as_of,
         q=q,
@@ -1745,7 +1745,8 @@ def actions(
         state_rows.sort(key=lambda item: filtered_ids.index(item["instrument"]["id"]) if item.get("instrument", {}).get("id") in filtered_ids else len(filtered_ids))
         total = len(state_rows)
         page = state_rows[offset : offset + limit]
-        held_count = sum(bool(item.get("held")) for item in state_rows)
+        held_count = sum(item.get("held") is True for item in state_rows)
+        held_unknown_count = sum(item.get("position_quantity_status") == "unknown" for item in state_rows)
         actionable_count = sum(item.get("action_state") in {"conditional_entry", "wait_breakout", "wait_pullback", "hold_observe", "reduce_exit", "manual_review"} for item in state_rows)
         data_insufficient_count = sum(item.get("action_state") == "data_insufficient" for item in state_rows)
     else:
@@ -1755,6 +1756,7 @@ def actions(
         page = [by_id[item_id] for item_id in page_ids if item_id in by_id]
         total = len(filtered_ids)
         held_count = sum(item_id in held_ids for item_id in filtered_ids)
+        held_unknown_count = sum(item_id in unknown_ids for item_id in filtered_ids)
         actionable_count = sum(item.get("action_state") in {"conditional_entry", "wait_breakout", "wait_pullback", "hold_observe", "reduce_exit", "manual_review"} for item in page)
         data_insufficient_count = sum(item.get("action_state") == "data_insufficient" for item in page)
     return _cursor_response(
@@ -1771,6 +1773,7 @@ def actions(
             "actionable": actionable_count,
             "data_insufficient": data_insufficient_count,
             "held": held_count,
+            "held_unknown": held_unknown_count,
             "scope": "filtered_results" if state else "page_for_actionable_and_data_insufficient_counts",
         },
     }
@@ -2415,27 +2418,45 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
     )
     total = trusted_position_shares(position.shares, position.shares_integer)
     quantity = share_quantity_dict(total) if total is not None else None
-    shares = position.shares
-    if type(shares) not in {int, float} or (type(shares) is float and not math.isfinite(shares)):
-        shares = None
+    # Numeric compatibility never exposes an unsafe or conflicting raw Float.
+    shares = total if total is not None and total <= MAX_SAFE_SHARES else None
     values = {field: read_portfolio_value(getattr(position, field))
               for field in ("average_cost", "stop_price", "risk_budget")}
     average_cost = values["average_cost"][0]
-    market_value = latest_bar.close * shares if latest_bar and shares is not None else None
-    cost_value = average_cost * shares if average_cost is not None and shares is not None else None
-    unrealized_pnl = market_value - cost_value if market_value is not None and cost_value is not None else None
-    # Preserve the existing finite valuation formulas; JSON cannot encode NaN
-    # or infinity, and missing values must not be invented as zero.
-    if market_value is not None and not math.isfinite(market_value):
-        market_value = None
-    if unrealized_pnl is not None and not math.isfinite(unrealized_pnl):
-        unrealized_pnl = None
+    market_value = unrealized_pnl = None
+    if total is None:
+        market_status = pnl_status = "quantity_unknown"
+    elif total > MAX_SAFE_SHARES:
+        market_status = pnl_status = "precision_unsupported"
+    else:
+        price = latest_bar.close if latest_bar else None
+        market_status = "missing" if price is None else "invalid"
+        # Bound this guard to the calculation. It does not certify source,
+        # tick validity or strategy price semantics.
+        if type(price) in {int, float}:
+            try:
+                if math.isfinite(price):
+                    market_value = price * shares
+                    if math.isfinite(market_value):
+                        market_status = "known"
+                    else:
+                        market_value = None
+            except (OverflowError, TypeError, ValueError):
+                market_value = None
+        cost_status = values["average_cost"][1]
+        pnl_status = "invalid" if cost_status == "invalid" else "missing" if cost_status == "missing" else market_status
+        if market_status == "known" and cost_status == "known":
+            unrealized_pnl = market_value - average_cost * shares
+            pnl_status = "known" if math.isfinite(unrealized_pnl) else "invalid"
+            if pnl_status != "known":
+                unrealized_pnl = None
     return {
         "id": position.id,
         "instrument": instrument_dict(instrument),
         "shares": shares,
         "shares_exact": quantity["total_shares_exact"] if quantity else None,
         "quantity": quantity,
+        "position_quantity_status": "known" if total is not None else "unknown",
         **{field: value for field, (value, _status) in values.items()},
         "portfolio_value_status": {field: status for field, (_value, status) in values.items()},
         "note": position.note,
@@ -2443,6 +2464,7 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         "latest_bar": bar_dict(latest_bar),
         "market_value": market_value,
         "unrealized_pnl": unrealized_pnl,
+        "valuation_status": {"market_value": market_status, "unrealized_pnl": pnl_status},
     }
 
 

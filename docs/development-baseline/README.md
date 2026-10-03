@@ -188,7 +188,23 @@ Memory server 為 Python 該入口 `--serve --finance-read-fixture` 的 **8777**
 
 測試與清理分報：必要證據最終 exit 0；QA 還原 actual 1365×900、原 tab close exit 0／list 空，8778／8777 自有 shutdown 各 exit 0、兩 serve exec final exit 0、Python `unexpected_denials=[]`，統籌另核 exact owned PIDs／children／listeners 空。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；前輪 HAR 64,885 bytes 及其他舊 review-blocked／occupied／未知資源排除、不重試，不稱歷史資源清零。文件角色未重跑上述產品測試或造附件。
 
-本批不修污染／affinity 丟失意圖或宣稱 Decimal exact；正式 DB／磁碟保存與重開、production／完整 backend、官方／live、全估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 均未驗。下一候選 M3-P5「可信庫存股數與既有估值／持倉判定一致」的有界 caller 及必要零落盤驗收由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；尚未實作，不縮減既有磁碟契約。
+本批不修污染／affinity 丟失意圖或宣稱 Decimal exact；正式 DB／磁碟保存與重開、production／完整 backend、官方／live、全估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 均未驗。後續 M3-P5 信任股數／估值／持倉判定已有限接受，見下節；本節仍只保留 P4 原驗收，不縮減既有磁碟契約。
+
+### M3-P5 可信股數與估值／持倉判定的零落盤驗證入口
+
+本批十檔實作、必要零落盤 direct／actual HTTP→JSON→JavaScript／UI 及具名桌面／390px 操作已由統籌有限接受。股數／held 三態、相容欄、估值狀態、gate 優先與計數範圍只由 [UI 文案](../UI_COPY_SPEC.md#m3-p5-可信庫存股數與既有估值持倉判定一致)負責；本節管可重建入口、副作用及驗收限制。版本、命令、原始 exit、SQL hash 與清理 receipt 留 task，不另建附件。
+
+後端 `backend/tests/test_share_quantity_exact_presentation.py --quantity-trust-only` 採 standalone `-B -Xutf8`、AST config 常數 stub、既有唯讀依賴與 guarded memory SQLite／actual router；不載入 pytest conftest 的一般測試根、真 config mkdir、production lifespan、migration 或正式 DB。Python **3.12.14**／SQLAlchemy **2.0.52**／Pydantic **2.13.5** 的最終 **10 tests／0 skip／262 actual router requests／54 SQLite read cases**、exit 0；涵蓋 trusted helper 邊界、actual SQLite 型別／兩個量欄、safe／unknown／int64、兩條 actions 計數／篩選、dashboard／detail 及 source-time-strategy precedence，保留必要 P4／storage read 回歸。Storage 測試只補現行讀取期待，不改 migration 或磁碟契約，也不重跑其磁碟矩陣。
+
+前端 `tools/share-quantity-exact-preview.cjs --quantity-trust-check` 沿共用唯讀 `--deps`，Node **20.19.4**／TypeScript **5.9.3** 最終 full src noEmit、**50 format／51 Portfolio SSR／2 compact／2 actual ActionDetailPanel（complete 1／incomplete 1）／actions 1／home 1** 與 whole main `write:false` 記憶體 bundle、exit 0；JS **4,179,876 bytes**／CSS **27,903 bytes**，磁碟產物 0。**119 則已知 SSR warnings** 分報。Root UI 找到第一版真正詳情缺 badge 後，同輪修 App.tsx／tools 並重建記憶體 bundle；補 actual ActionDetailPanel SSR 才接受，不以 ProductActionCard SSR 冒充詳情。
+
+Memory serve 分別為後端 `--serve --quantity-trust-fixture` 的 **8777** 與 Node preview `--serve --quantity-trust-fixture` 的 **8778**，日期 **2026-10-04**。十六個 synthetic TWSE／TPEx 使用者庫存、兩個 absent metadata 及 fixture 日期不是正式庫存／行情或官方日曆；bundle `write:false`、memory CSS 排除外部字型／CSP 阻外網，不承襲 P2 disk fixture。統籌 `--quantity-trust-http-check` 最終 **45 actual HTTP routes／16 portfolio rows／16 decisions（含2資料不足）／6 actual stock-detail SSR（complete 4／incomplete 2）／actions 1／home 1**、exit 0；**84 則已知 SSR warnings** 分報。Actual getPortfolio／getAction 沿 fetch→Response.json，再核真正頁面；whole SELECT 的十六列全欄、note、updated_at 及兩 quantity typeof 在讀取前、產品操作後、shutdown 前 hash 相同，mutation 0。SHA／snapshot count 留原 task，記憶體證據不稱磁碟 reopen。
+
+實際 desktop 1298×924／390×844（mobile=false）的庫存數字、unknown／unsupported、manual_review 與原 data_insufficient、首頁去重／保留，以及退修後兩個 profile 的真正詳情 badge 已有限接受，具名結果只由主契約保留。原 tab 首次 runtime_unavailable 與 help／PowerShell ref／JavaScript 引號的工具失敗、第一版 detail badge 產品退修分報，不稱初版即通過；仍有效的證據不因角色或清理換手重跑。前版 scoped fetch 8 GET／200、外網／mutation 空及最終 3 owned performance resources 都非完整 capture，未開 HAR。
+
+測試與清理分報：QA 還原 actual **1365×900**、client／scroll width 均 **1350**，原 tab close exit 0／tabs 空。Node 首個 serve 只為修正版 bundle 重啟，owned shutdown／exec final 各 0；final Node／Python 經 exact command-line gate 後自有 shutdown 各 0、兩 serve exec final 0、Python `unexpected_denials=[]`，統籌獨立核 owned PIDs／children／8777、8778 listeners 全空。Console 最後六則含既有 warnings，無該次 error。新增測試磁碟產物／附件／暫存／殘留 **0 files／0 directories／0 bytes**；前輪兩個索引 logs **713 bytes** 的執行前自動審核拒絕與更早 HAR／blocked／occupied 排除、不重試，精確收據見[協作紀錄](../TASK_COORDINATION.md)。文件角色未跑產品測試或造附件。
+
+真正磁碟保存／重開、正式 DB／migration、真官方／live、完整 backend／production build、行情可信來源／日期／價格、Decimal exact、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT 未驗；不以 memory 降低必要磁碟條件。下一候選 M3-P6 的有界來源／日期／數值與 caller／用途核對 由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責，未預定修法或稱候選能力完成。
 
 ## 歷史驗證
 

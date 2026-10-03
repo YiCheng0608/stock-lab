@@ -58,7 +58,7 @@ import type {
 import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
 import { legacyRouteTarget } from './routes'
-import { formatPortfolioValue, portfolioValueFromText } from './portfolioValues'
+import { formatPortfolioValue, formatPositionValuation, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
 import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { StockPriceChart } from './StockPriceChart'
@@ -568,7 +568,7 @@ function ProductTimeSummary({
   )
 }
 
-function CompactActionCard({ action }: { action: ActionSummary }) {
+export function CompactActionCard({ action }: { action: ActionSummary }) {
   const instrument = action.instrument
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
   const title = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
@@ -579,6 +579,7 @@ function CompactActionCard({ action }: { action: ActionSummary }) {
     <Link className="panel compact-action-card" to={actionPath(action)} aria-label={`${instrument.symbol} ${title}`}>
       <div className="position-head"><span className="symbol-link"><strong>{instrument.symbol}</strong> {instrument.name}</span><span className="pill action-status-pill">{title}</span></div>
       <div className="small-note">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
+      {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">股數待核實</span>}
       <div className="compact-price"><div><span className="compact-label">最近收盤（報價幣別元）</span><strong>{action.current_price != null ? formatNumber(action.current_price) : '待核實'}</strong></div><span className={priceChangeTone(action.price_change)}>{change}</span></div>
       <div className="small-note">資料日 {formatTaiwanDateTime(action.data_cutoff ?? action.price_as_of, true)}</div>
       <span className="compact-detail-link">查看個股詳情 →</span>
@@ -605,6 +606,7 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
       {incomplete && <div className="action-state">目前無法產生研究動作</div>}
       {action.action_state === 'conditional_entry' && action.primary_strategy && <div className="action-state">今日{strategyLabel(action.primary_strategy)}成立</div>}
       <div className="small-note">{instrument.exchange} · {instrumentTypeLabel(instrument.instrument_type)}</div>
+      {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">股數待核實</span> 庫存股數待核實，先核對原記錄。</div>}
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {action.primary_strategy && <div className="small-note">主條件：{strategyLabel(action.primary_strategy)}{action.alternative_strategies.length ? ' · 替代：' + action.alternative_strategies.map(strategyLabel).join('、') : ''}</div>}
       <div className="action-instruction">{action.display_instruction ?? action.action_instruction ?? (incomplete ? '現在：先不行動' : actionLabel(action.action_state))}</div>
@@ -821,11 +823,11 @@ export function OfficialEventFocusPanel() {
   </section>
 }
 
-function TodayPage() {
+export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const homeActions = Array.from(new Map(
     [...(query.data?.actions ?? []), ...(query.data?.candidates ?? [])]
-      .filter((action) => action.action_state !== 'data_insufficient' || action.held)
+      .filter((action) => action.action_state !== 'data_insufficient' || action.held === true || action.position_quantity_status === 'unknown')
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   return (
@@ -1163,7 +1165,7 @@ function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] })
 
 type StockTab = 'technical' | 'chips' | 'news' | 'research' | 'data'
 
-function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
+export function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
   if (!action) return <section className="panel stock-action-detail"><h2>研究條件</h2><div className="empty">尚無行動摘要。</div></section>
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
   const actionTitle = incomplete ? '策略判斷資料待補' : action.display_action ?? actionLabel(action.action_state)
@@ -1172,6 +1174,7 @@ function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
   return <section className="panel stock-action-detail">
     <div className="section-head"><div><div className="eyebrow">研究動作</div><h2>{actionTitle}</h2></div><QualityBadge kind="research" status={action.data_quality} /></div>
     <div className="action-detail-summary"><strong>{action.display_instruction ?? action.action_instruction ?? actionLabel(action.action_state)}</strong>{action.primary_reason?.label && <span>{action.primary_reason.label}</span>}</div>
+    {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">股數待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
     {incomplete && <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>}
     <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
@@ -1198,7 +1201,7 @@ function StockEventList({ news, events }: { news: NewsItem[]; events: Instrument
   </>
 }
 
-function ActionsPage() {
+export function ActionsPage() {
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -1218,11 +1221,12 @@ function ActionsPage() {
     <PortfolioSubsection />
     <QueryState loading={query.isLoading} error={query.error}>{query.data && (() => {
       const executableStates = new Set(['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit', 'manual_review'])
-      const priorityItems = query.data.items.filter((item) => item.held || executableStates.has(item.action_state))
-      const eventOrWatchlistWaiting = query.data.items.filter((item) => !item.held && item.action_state === 'data_insufficient' && (item.watchlisted || (item.event_ids ?? []).length > 0))
-      const ordinaryWaiting = query.data.items.filter((item) => !item.held && item.action_state === 'data_insufficient' && !item.watchlisted && (item.event_ids ?? []).length === 0)
-      const otherSummaries = query.data.items.filter((item) => !item.held && item.action_state === 'no_condition')
+      const priorityItems = query.data.items.filter((item) => item.held === true || item.position_quantity_status === 'unknown' || executableStates.has(item.action_state))
+      const eventOrWatchlistWaiting = query.data.items.filter((item) => item.held === false && item.action_state === 'data_insufficient' && (item.watchlisted || (item.event_ids ?? []).length > 0))
+      const ordinaryWaiting = query.data.items.filter((item) => item.held === false && item.action_state === 'data_insufficient' && !item.watchlisted && (item.event_ids ?? []).length === 0)
+      const otherSummaries = query.data.items.filter((item) => item.held === false && item.action_state === 'no_condition')
       return <>
+        {query.data.summary?.held_unknown !== undefined && <p className="small-note">本次篩選股數待核實 {query.data.summary.held_unknown.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
         {priorityItems.length > 0 ? <section><div className="section-head"><div><div className="eyebrow">優先處理</div><h2>庫存風險／可執行條件</h2></div><span className="small-note">{priorityItems.length} 筆</span></div><div className="action-grid">{priorityItems.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></section> : (eventOrWatchlistWaiting.length === 0 && <div className="empty panel">目前沒有庫存風險或可執行條件。</div>)}
         {eventOrWatchlistWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">事件／自選</div><h2>優先補齊資料</h2></div><span className="small-note">{eventOrWatchlistWaiting.length} 筆</span></div><p className="small-note">有官方事件或自選標的的研究資料尚未齊備，優先於一般市場標的處理。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{eventOrWatchlistWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
         {ordinaryWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">資料補齊</div><h2>一般標的待補資料</h2></div><span className="small-note">本批 {ordinaryWaiting.length} 筆／共 {query.data.summary?.data_insufficient ?? ordinaryWaiting.length} 筆</span></div><p className="small-note">一般標的一日研究資料尚未齊備集中在這裡，不會淹沒庫存與可執行條件。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{ordinaryWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
@@ -1260,7 +1264,7 @@ export function PortfolioSubsection() {
     setBusy(id); setMessage('')
     try { await deletePortfolio(id); await query.refetch(); setMessage('庫存已刪除。') } catch (error) { setMessage(error instanceof Error ? error.message : '刪除失敗。') } finally { setBusy(null) }
   }
-  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div><div className="small-note">原股數 {formatPositionShares(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 最近收盤（報價幣別元） {formatNumber(position.latest_bar?.close)} · 市值（報價幣別元） {formatNumber(position.market_value)} · 未實現損益（報價幣別元） {formatSignedNumber(position.unrealized_pnl)}</div></div>)}</div> : <div className="empty">尚未建立庫存。</div>}</section>
+  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">市值與未實現損益為估算值。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div><div className="small-note">原股數 {formatPositionShares(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 最近收盤（報價幣別元） {formatNumber(position.latest_bar?.close)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div></div>)}</div> : <div className="empty">尚未建立庫存。</div>}</section>
 }
 
 function LegacyInstrumentRedirect() {

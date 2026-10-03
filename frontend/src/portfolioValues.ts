@@ -33,3 +33,23 @@ export function formatPortfolioValue(value: unknown, metadata: unknown, field: '
   if (status === 'missing' && value === null) return '未提供'
   return '待核實'
 }
+
+/** Estimates must agree with their explicit read status; do not rescue it. */
+export function formatPositionValuation(value: unknown, metadata: unknown, field: 'market_value' | 'unrealized_pnl'): string {
+  const known = typeof value === 'number' && Number.isFinite(value)
+  let status: unknown = value === null ? 'missing' : known ? 'known' : 'invalid'
+  if (metadata !== undefined) {
+    status = metadata !== null && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)[field] : 'invalid'
+  }
+  if (status === 'known' && known) {
+    const formatted = Math.abs(value).toLocaleString('zh-TW', { maximumFractionDigits: 2 })
+    return field === 'unrealized_pnl' && value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
+  }
+  if (value === null) {
+    if (status === 'missing') return '未提供'
+    if (status === 'quantity_unknown') return '股數待核實'
+    if (status === 'precision_unsupported') return '估值精度待支援'
+  }
+  return '待核實'
+}
