@@ -321,6 +321,44 @@ export type RawPayload = {
   collected_at: string | null
 }
 
+export type StockSignalReadState = {
+  status: 'known' | 'missing' | 'invalid'
+  invalid_fields: string[]
+  missing_fields: string[]
+  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
+}
+
+export type StockDetailSignal = Omit<Signal, 'signal_key' | 'signal_date' | 'status' | 'data_quality' | 'entry_type' | 'rule_evidence' | 'strategy'> & {
+  instrument_id: number
+  strategy_version_id: number | null
+  signal_key: string | null
+  signal_date: string | null
+  status: string | null
+  data_quality: string | null
+  entry_type: string | null
+  rule_evidence: Record<string, unknown> | null
+  strategy: { name: string | null; version: string | null; kind: string | null; canonical_config_snapshot: Record<string, unknown> | null }
+  signal_read: StockSignalReadState
+}
+
+export type StockResearchReadState = {
+  version: 'stock-research-read/v1'
+  status: 'known' | 'missing' | 'invalid'
+  candidate_count: number
+  candidate_order: number[]
+  window_limit: 20
+  scanned_count: number
+  future_count: number
+  unlocated_count: number
+  unlocated_signal_id: number | null
+  identity_unlocated_count: number
+  identity_unlocated_signal_id: number | null
+  latest: Record<'breakout_v1' | 'pullback_v1', { signal_id: number | null; signal_date: string | null; strategy_version_id: number | null; read: StockSignalReadState }>
+  blocked_strategies: string[]
+  decision_block_scope: 'instrument' | 'slots' | 'none'
+  verification: 'stored_value_syntax_only'
+}
+
 export type InstrumentDetail = {
   instrument: Instrument
   bars: StockDetailBar[]
@@ -343,7 +381,8 @@ export type InstrumentDetail = {
   overview?: StockOverviewData
   news_cutoff?: { as_of: string | null; filter: string; limit: number }
   strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
-  signals: Signal[]
+  signals: StockDetailSignal[]
+  research_read?: StockResearchReadState
 }
 
 export type OverviewPriceBar = {
@@ -893,10 +932,10 @@ export type MissingDataPriority = {
 export type StrategyDecision = {
   strategy: string
   signal_id: number
-  signal_key: string
-  signal_date: string
-  status: string
-  data_quality: string
+  signal_key: string | null
+  signal_date: string | null
+  status: string | null
+  data_quality: string | null
   rationale: string | null
   levels: {
     trigger_price: number | null
@@ -913,7 +952,9 @@ export type StrategyDecision = {
   response_generated_at?: string
   earliest_execution_date: string | null
   missing: string[]
-  evidence: Record<string, unknown>
+  wait_missing?: string[]
+  evidence: Record<string, unknown> | null
+  signal_read?: StockSignalReadState
 }
 
 export type ActionSummary = {
@@ -949,6 +990,7 @@ export type ActionSummary = {
   watchlisted: boolean
   current_price: number | null
   market_read?: { status: 'known' | 'missing' | 'invalid'; invalid_fields: string[] }
+  research_read?: StockResearchReadState
   price_as_of: string | null
   previous_close?: number | null
   price_change?: number | null

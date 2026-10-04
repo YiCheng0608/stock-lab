@@ -32,6 +32,7 @@ from .institutional_daily import build_institutional_daily
 from .official_events import build_official_events
 from .units import volume_exact_text
 from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
+from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
 
 OVERVIEW_VERSION = "stock-overview/p6c-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
@@ -62,14 +63,18 @@ def resolve_stock_cutoff(db: Session, instrument: Instrument, requested: date | 
         return None
     if latest_bar is not None:
         return latest_bar
+    latest_signal, unlocated_signals = stock_signal_dates(db, instrument.id)
+    if unlocated_signals:
+        return None
     # A stock with no prices may still have independent research records.
     # Their stored dates supply a common date cutoff without upgrading their source status.
     observed_dates = [db.scalar(select(func.max(field)).where(model.instrument_id == instrument.id))
                       for model, field in ((ChipSnapshot, ChipSnapshot.trading_date),
                                            (TechnicalFeature, TechnicalFeature.trading_date),
-                                           (Signal, Signal.signal_date), (Event, Event.event_date),
+                                           (Event, Event.event_date),
                                            (CorporateAction, CorporateAction.action_date),
                                            (FundamentalSnapshot, func.coalesce(FundamentalSnapshot.announcement_date, FundamentalSnapshot.period_end))) ]
+    observed_dates.append(latest_signal)
     related_news = (select(NewsItem).outerjoin(Event, NewsItem.event_id == Event.id)
                     .where(NewsItem.status == "active", NewsItem.time_consistency == "verified",
                            or_(Event.instrument_id == instrument.id,
@@ -254,22 +259,21 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
         price_reasons.append("price_latest_candidate_unqualified")
     if latest and cutoff and latest["date"] != cutoff.isoformat():
         price_reasons.append("price_latest_before_cutoff")
-    strategy_query = (select(Signal, StrategyVersion).join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-                      .where(Signal.instrument_id == instrument.id, StrategyVersion.name.in_({"breakout_v1", "pullback_v1"})))
-    strategy_query = strategy_query.where(Signal.signal_date <= cutoff) if cutoff else strategy_query.where(False)
-    latest_strategies = {}
-    for signal, version in db.execute(strategy_query.order_by(desc(Signal.signal_date), desc(Signal.id))).all():
-        latest_strategies.setdefault(version.name, (signal, version))
+    research_reads = load_stock_signal_reads(db, [instrument.id], cutoff or date.min)[instrument.id]
     conditions = []
     for name, label in (("breakout_v1", "突破條件"), ("pullback_v1", "回踩條件")):
-        pair = latest_strategies.get(name)
+        signal = research_reads.latest.get(name)
         reasons = ["strategy_input_sources_not_admitted", "strategy_time_evidence_not_verified", "industry_membership_not_verified"]
-        if pair is None:
+        if research_reads.instrument_blocked:
+            reasons.append("strategy_read_unlocated")
+        if signal is None:
             reasons.append("strategy_result_missing")
-        elif pair[0].signal_date != cutoff:
+        elif signal.read_state()["status"] != "known":
+            reasons.append("strategy_read_invalid")
+        elif signal.signal_date != cutoff:
             reasons.append("strategy_result_before_cutoff")
-        conditions.append({"strategy": name, "label": label, "version": pair[1].version if pair else None,
-                           "signal_date": pair[0].signal_date.isoformat() if pair else None,
+        conditions.append({"strategy": name, "label": label, "version": signal.strategy.version if signal else None,
+                           "signal_date": signal.signal_date.isoformat() if signal and signal.signal_date else None,
                            "status": "data_insufficient", "reasons": reasons})
     daily = build_institutional_daily(instrument.exchange, instrument.symbol, cutoff)
     return {

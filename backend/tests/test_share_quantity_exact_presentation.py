@@ -116,11 +116,17 @@ ACTION_READS = ("A-NORMAL", "B-CLOSE", "C-DATE", "D-METADATA", "E-SOURCE", "F-SU
 STOCK_READS = ("A-NORMAL", "B-CLOSE", "C-DATE", "D-METADATA", "E-SOURCE", "F-SUSPEND",
                "G-VOLUME", "H-OHLC", "I-MISSING", "J-HISTORY", "K-FUTURE", "L-WINDOW")
 STOCK_SETUP_MUTATIONS = 0
+SIGNAL_READS = ("A-NORMAL", "B-JSON", "C-DATE", "D-METADATA", "E-VERSION", "F-ALTERNATE",
+                "G-LATEST", "H-WINDOW", "I-NOBARS", "J-IDENTITY", "K-FUTURE", "L-RR", "M-OBSERVATION")
+SIGNAL_SETUP_MUTATIONS = 0
+SIGNAL_DIRECT_GETS = 0
+SIGNAL_DIGESTS = []
 
 
 class MemoryFixture:
-    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False, action_reads=False, stock_reads=False, stock_cases=False):
+    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False, action_reads=False, stock_reads=False, stock_cases=False, signal_reads=False, signal_cases=False):
         self.stock_reads = stock_reads
+        self.signal_reads = signal_reads
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         Base.metadata.create_all(self.engine)
         self.app = FastAPI()
@@ -129,7 +135,7 @@ class MemoryFixture:
         self.server = None
         with Session(self.engine) as db:
             for exchange in (("TWSE",) if stock_reads else ("TWSE", "TPEx")):
-                for symbol in (STOCK_READS if stock_reads else ACTION_READS if action_reads else QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
+                for symbol in (SIGNAL_READS if signal_reads else STOCK_READS if stock_reads else ACTION_READS if action_reads else QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
                     instrument = Instrument(market="TW", exchange=exchange, symbol=symbol,
                                             name="synthetic user quantity " + symbol,
                                             instrument_type="stock", status="active")
@@ -161,6 +167,8 @@ class MemoryFixture:
             self.seed_action_reads()
         if stock_reads and stock_cases:
             self.seed_stock_reads()
+        if signal_reads and signal_cases:
+            self.seed_signal_reads()
         self.read_mutations = 0
         if action_reads or stock_reads:
             @event.listens_for(self.engine, "before_cursor_execute")
@@ -233,6 +241,16 @@ class MemoryFixture:
                         "read_mutations": self.read_mutations, "fixture_date": str(READ_DAY), "storage": "memory_only",
                         "includes": ["both whole tables", "all columns", "all typeof()", "note", "updated_at"]}
 
+        if signal_reads:
+            @self.app.get("/__review__/signal-read-snapshot")
+            def signal_read_snapshot():
+                rows = self.raw_signal_rows()
+                return {"whole_sql_sha256": hashlib.sha256(repr(rows).encode("utf-8")).hexdigest(),
+                        "table_counts": {table: len(items) for table, items in rows.items()},
+                        "includes": ["signals", "strategy_versions", "portfolio_positions", "market_bars", "all columns", "all typeof()"],
+                        "read_mutations": self.read_mutations, "setup_mutations": SIGNAL_SETUP_MUTATIONS,
+                        "fixture_date": str(READ_DAY), "storage": "memory_only"}
+
         @self.app.post("/__review__/shutdown")
         def shutdown():
             if self.server is not None:
@@ -262,6 +280,62 @@ class MemoryFixture:
                 types = ", ".join(f"typeof({column})" for column in columns)
                 result[table] = [tuple(row) for row in connection.exec_driver_sql(f"SELECT *, {types} FROM {table} ORDER BY id")]
             return result
+
+    def raw_signal_rows(self):
+        with self.engine.connect() as connection:
+            result = {}
+            for table in ("signals", "strategy_versions", "portfolio_positions", "market_bars"):
+                columns = [row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")]
+                types = ", ".join(f"typeof({column})" for column in columns)
+                result[table] = [tuple(row) for row in connection.exec_driver_sql(f"SELECT *, {types} FROM {table} ORDER BY id")]
+            return result
+
+    def signal_change(self, statement, parameters=()):
+        global SIGNAL_SETUP_MUTATIONS
+        SIGNAL_SETUP_MUTATIONS += 1
+        if SIGNAL_SETUP_MUTATIONS > 96:
+            raise AssertionError("signal targeted setup cap exceeded")
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(statement, parameters)
+
+    def change_signal(self, symbol, expression, parameters=()):
+        self.signal_change("UPDATE signals SET " + expression + " WHERE instrument_id=(SELECT id FROM instruments WHERE symbol=?)", (*parameters, symbol))
+
+    def add_signal_copy(self, symbol, key, day, version=None):
+        self.signal_change("INSERT INTO signals (signal_key,signal_date,instrument_id,strategy_version_id,status,entry_type,breakout_price,reference_entry,pullback_low,pullback_high,invalid_price,target_1,data_quality,data_cutoff,rule_evidence_json,created_at) "
+            "SELECT ?,?,instrument_id,COALESCE(?,strategy_version_id),'conditional','conditional',12,12,11,12,8,20,'complete',data_cutoff,rule_evidence_json,created_at "
+            "FROM signals WHERE instrument_id=(SELECT id FROM instruments WHERE symbol=?) ORDER BY id LIMIT 1", (key, day, version, symbol))
+
+    def seed_signal_reads(self):
+        self.change_signal("B-JSON", "rule_evidence_json=?", ("{malformed",))
+        self.change_signal("C-DATE", "signal_date=?", ("0000-01-01",))
+        for version, symbol in (("optional-metadata", "D-METADATA"), ("9.9.9", "E-VERSION")):
+            self.signal_change("INSERT INTO strategy_versions(name,version,kind,config_json,canonical_config_snapshot,active,created_at) VALUES('breakout_v1',?,'technical','{}','{}',1,'2026-10-04 00:00:00')", (version,))
+            self.change_signal(symbol, "strategy_version_id=(SELECT id FROM strategy_versions WHERE name='breakout_v1' AND version=?)", (version,))
+        self.signal_change("UPDATE strategy_versions SET config_json='{bad',canonical_config_snapshot='[]',created_at='malformed-time' WHERE version='optional-metadata'")
+        self.change_signal("D-METADATA", "created_at=?,execution_date=?,confidence=?,source_report=?", ("bad", "2026-02-30", float("inf"), b"bad"))
+        self.signal_change("INSERT INTO strategy_versions(name,version,kind,config_json,canonical_config_snapshot,active,created_at) VALUES('pullback_v1','1.0.0','technical','{}','{}',1,'2026-10-04 00:00:00')")
+        with self.engine.connect() as connection:
+            pullback_id = connection.exec_driver_sql("SELECT id FROM strategy_versions WHERE name='pullback_v1'").scalar_one()
+        self.add_signal_copy("F-ALTERNATE", "healthy-alternate", str(READ_DAY), pullback_id)
+        self.change_signal("F-ALTERNATE", "rule_evidence_json=?", ("[]",))
+        self.signal_change("UPDATE signals SET rule_evidence_json='{}' WHERE signal_key='healthy-alternate'")
+        self.add_signal_copy("G-LATEST", "older-healthy", str(READ_DAY - timedelta(days=1)))
+        self.signal_change("UPDATE signals SET breakout_price='malformed-price' WHERE instrument_id=(SELECT id FROM instruments WHERE symbol='G-LATEST') AND signal_date=?", (str(READ_DAY),))
+        self.signal_change("INSERT INTO strategy_versions(name,version,kind,config_json,canonical_config_snapshot,active,created_at) VALUES('custom-research','1.0.0','technical','{}','{}',1,'2026-10-04 00:00:00')")
+        with self.engine.connect() as connection:
+            custom_id = connection.exec_driver_sql("SELECT id FROM strategy_versions WHERE name='custom-research'").scalar_one()
+        # One targeted statement creates the finite 22-row window boundary.
+        self.signal_change("WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<22) "
+            "INSERT INTO signals(signal_key,signal_date,instrument_id,strategy_version_id,status,entry_type,data_quality,rule_evidence_json,created_at) "
+            "SELECT 'window-'||n,?,(SELECT id FROM instruments WHERE symbol='H-WINDOW'),?,'observation','conditional','complete','{bad','2026-10-04 00:00:00' FROM seq", (str(READ_DAY), custom_id))
+        self.signal_change("DELETE FROM market_bars WHERE instrument_id=(SELECT id FROM instruments WHERE symbol='I-NOBARS')")
+        self.change_signal("I-NOBARS", "signal_date=?", ("0000-01-01",))
+        self.change_signal("J-IDENTITY", "strategy_version_id=999999")
+        self.add_signal_copy("K-FUTURE", "future-invalid", str(READ_DAY + timedelta(days=1)), 999999)
+        self.signal_change("UPDATE signals SET rule_evidence_json='null' WHERE signal_key='future-invalid'")
+        self.change_signal("L-RR", "breakout_price=?,invalid_price=?,target_1=?", (1e-308, 5e-309, 1e308))
+        self.change_signal("M-OBSERVATION", "status='observation',breakout_price=NULL,invalid_price=NULL,target_1=NULL,earliest_execution_date=NULL")
 
     def seed_quote_reads(self):
         with self.engine.begin() as connection:
@@ -1534,6 +1608,212 @@ class ActionMarketReadTest(unittest.TestCase):
         self.assertEqual(result["stop_price_semantics"]["kind"], "user_position_risk_input")
 
 
+class StockSignalReadTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if "--signal-read-case" in sys.argv:
+            return
+        cls.shared = MemoryFixture(stock_reads=True, signal_reads=True, signal_cases=True)
+        cls.addClassCleanup(cls.shared.close)
+
+    def fixture(self):
+        fixture = MemoryFixture(stock_reads=True, signal_reads=True)
+        self.addCleanup(fixture.close)
+        return fixture
+
+    def route(self, symbol, explicit=True):
+        return f"/api/stocks/TWSE/{symbol}" + ("?as_of=2026-10-04" if explicit else "")
+
+    def gets(self, fixture, routes):
+        global SIGNAL_DIRECT_GETS
+        before = fixture.raw_signal_rows()
+        fixture.read_mutations = 0
+        with TestClient(fixture.app) as client:
+            result = []
+            for route in routes:
+                SIGNAL_DIRECT_GETS += 1
+                self.assertLessEqual(SIGNAL_DIRECT_GETS, 96)
+                response = client.get(route)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertLessEqual(len(response.content), 2 * 1024 * 1024)
+                payload = response.json()
+                json.dumps(payload, allow_nan=False)
+                result.append(payload)
+        after = fixture.raw_signal_rows()
+        self.assertEqual(after, before)
+        self.assertEqual(fixture.read_mutations, 0)
+        digest = hashlib.sha256(repr(before).encode("utf-8")).hexdigest()
+        SIGNAL_DIGESTS.append({"sha256": digest, "before_after_equal": True, "table_counts": {table: len(rows) for table, rows in before.items()}})
+        self.assertLessEqual(len(before["signals"]), 64)
+        self.assertLessEqual(len(before["strategy_versions"]), 16)
+        self.assertLessEqual(len(before["market_bars"]), 1600)
+        self.assertLessEqual(len(before["portfolio_positions"]), 16)
+        with fixture.engine.connect() as connection:
+            self.assertLessEqual(connection.exec_driver_sql("SELECT count(*) FROM instruments").scalar_one(), 16)
+        return result
+
+    def test_strict_json_date_and_optional_datetime_bounds(self):
+        from app.stock_signal_reads import _datetime, read_research_json
+        from app.decision_market_reads import read_market_date
+        invalid = ["[]", "[1]", "1", '"text"', "true", "null", "{bad", '{"a":1,"a":2}',
+                   '{"n":NaN}', '{"n":Infinity}', '{"n":1e309}', '{"n":' + str(10 ** 400) + '}',
+                   '{"s":"\\ud800"}', '{"s":"' + "x" * 65536 + '"}', '{"nested":' + "[" * 34 + "0" + "]" * 34 + "}",
+                   '{"nodes":[' + ",".join("0" for _ in range(16384)) + "]}", b"{}"]
+        for raw in invalid:
+            self.assertEqual(read_research_json(raw), (None, "invalid"))
+        self.assertEqual(read_research_json(None), (None, "missing"))
+        self.assertEqual(read_research_json("{}"), ({}, "known"))
+        self.assertEqual(read_research_json('{"n":9223372036854775807}')[1], "known")
+        for raw in ("0000-01-01", "2026-02-30", " 2026-10-04", "2026-10-04T00:00:00", READ_DAY, b"2026-10-04"):
+            self.assertIsNone(read_market_date(raw))
+        self.assertIsNotNone(_datetime("2026-10-04 00:00:00"))
+        for raw in ("2026-10-04 00:00:00+00:60", "2026-10-04 00:00:00+01:99", "2026-10-04 00:00:00+24:00"):
+            self.assertIsNone(_datetime(raw))
+
+    def test_actual_router_matrix_keeps_identity_slots_and_optional_metadata(self):
+        rows = self.gets(self.shared, [self.route(symbol) for symbol in SIGNAL_READS])
+        data = dict(zip(SIGNAL_READS, rows))
+        self.assertEqual(data["A-NORMAL"]["decision_summary"]["action_state"], "hold_observe")
+        self.assertEqual(data["B-JSON"]["signals"][0]["rule_evidence"], None)
+        self.assertEqual(data["B-JSON"]["research_read"]["blocked_strategies"], ["breakout_v1"])
+        self.assertEqual(data["D-METADATA"]["research_read"]["status"], "known")
+        self.assertEqual(data["D-METADATA"]["signals"][0]["signal_read"]["metadata_fields"]["strategy.created_at"], "invalid")
+        self.assertEqual(data["D-METADATA"]["decision_summary"]["action_state"], "hold_observe")
+        self.assertEqual(data["E-VERSION"]["decision_summary"]["level_semantics"]["kind"], "unknown")
+        self.assertEqual(data["E-VERSION"]["decision_summary"]["action_state"], "hold_observe")
+        alternate = data["F-ALTERNATE"]
+        self.assertEqual(alternate["research_read"]["blocked_strategies"], ["breakout_v1"])
+        self.assertEqual(alternate["decision_summary"]["primary_strategy"], "pullback_v1")
+        self.assertEqual(alternate["decision_summary"]["action_state"], "hold_observe")
+        latest = data["G-LATEST"]
+        self.assertEqual(latest["decision_summary"]["action_state"], "data_insufficient")
+        self.assertEqual(latest["research_read"]["latest"]["breakout_v1"]["signal_id"], latest["signals"][0]["id"])
+        self.assertNotEqual(latest["signals"][0]["id"], latest["signals"][1]["id"])
+        window = data["H-WINDOW"]
+        self.assertEqual(len(window["signals"]), 20)
+        self.assertTrue(all(row["strategy"]["name"] == "custom-research" for row in window["signals"]))
+        self.assertNotIn(window["research_read"]["latest"]["breakout_v1"]["signal_id"], window["research_read"]["candidate_order"])
+        self.assertEqual(window["decision_summary"]["action_state"], "hold_observe")
+        self.assertEqual(data["J-IDENTITY"]["research_read"]["decision_block_scope"], "instrument")
+        self.assertEqual(data["K-FUTURE"]["research_read"]["future_count"], 1)
+        self.assertEqual(data["K-FUTURE"]["research_read"]["identity_unlocated_count"], 0)
+        self.assertEqual(data["K-FUTURE"]["decision_summary"]["action_state"], "hold_observe")
+        self.assertIsNone(data["L-RR"]["decision_summary"]["risk_reward"])
+        self.assertEqual(data["M-OBSERVATION"]["decision_summary"]["action_state"], "hold_observe")
+        self.assertIsNone(data["M-OBSERVATION"]["decision_summary"]["primary_strategy"])
+        for row in rows:
+            self.assertIsNone(row["overview"]["price"]["latest"])
+            self.assertTrue(all(condition["status"] == "data_insufficient" for condition in row["overview"]["conditions"]))
+
+    def test_default_nobars_unlocated_explicit_and_independent_price_cutoff(self):
+        dated, nobars, explicit, overview = self.gets(self.shared, [self.route("C-DATE", False), self.route("I-NOBARS", False), self.route("I-NOBARS"), "/api/stocks/TWSE/I-NOBARS/overview"])
+        self.assertEqual(dated["overview"]["as_of"], str(READ_DAY))
+        self.assertEqual(dated["market_read"]["status"], "known")
+        self.assertEqual(dated["decision_summary"]["action_state"], "data_insufficient")
+        self.assertIsNone(nobars["overview"]["as_of"])
+        self.assertIsNone(nobars["decision_summary"])
+        self.assertIsNone(overview["as_of"])
+        self.assertEqual(explicit["overview"]["as_of"], str(READ_DAY))
+
+    def test_unlocated_outside_twenty_blocks_research_without_hiding_bars(self):
+        fixture = self.fixture()
+        fixture.signal_change("WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<22) "
+            "INSERT INTO signals(signal_key,signal_date,instrument_id,strategy_version_id,status,entry_type,data_quality,rule_evidence_json,created_at) "
+            "SELECT 'bounded-'||n,?,(SELECT id FROM instruments WHERE symbol='A-NORMAL'),1,'observation','conditional','complete','{}','2026-10-04 00:00:00' FROM seq", (str(READ_DAY),))
+        fixture.add_signal_copy("A-NORMAL", "outside-date", "0000-01-01")
+        explicit, default = self.gets(fixture, [self.route("A-NORMAL"), self.route("A-NORMAL", False)])
+        for data in (explicit, default):
+            state = data["research_read"]
+            self.assertEqual(state["candidate_count"], 20)
+            self.assertEqual(state["unlocated_count"], 1)
+            self.assertNotIn(state["unlocated_signal_id"], state["candidate_order"])
+            self.assertEqual(state["decision_block_scope"], "instrument")
+            self.assertEqual(data["market_read"]["status"], "known")
+            self.assertEqual(data["decision_summary"]["action_state"], "data_insufficient")
+
+    def test_present_evidence_shape_affinity_and_null_fallback_at_router(self):
+        fixture = self.fixture()
+        for raw in ("[]", "1", "null", '{"inputs":[]}', '{"levels":null}', '{"inputs":{"group_excess_return_20d":"0.1"}}', '{"risk_reward":1e309}'):
+            fixture.change_signal("A-NORMAL", "rule_evidence_json=?", (raw,))
+            data = self.gets(fixture, [self.route("A-NORMAL")])[0]
+            self.assertEqual(data["research_read"]["blocked_strategies"], ["breakout_v1"])
+            self.assertEqual(data["decision_summary"]["action_state"], "data_insufficient")
+        for raw in ("{}", '{"risk_reward":null}'):
+            fixture.change_signal("A-NORMAL", "rule_evidence_json=?,breakout_price=?", (raw, "12"))
+            data = self.gets(fixture, [self.route("A-NORMAL")])[0]
+            self.assertEqual(data["decision_summary"]["action_state"], "hold_observe")
+            self.assertEqual(data["signals"][0]["breakout_price"], 12)
+            self.assertEqual(data["signals"][0]["signal_read"]["metadata_fields"]["rule_evidence"], "known")
+        # SQL NULL cannot be stored under the current NOT NULL schema. Exercise
+        # its raw projection and original RR fallback without changing that gate.
+        from app.stock_signal_reads import _project
+        from app.decision import _strategy_result
+        with fixture.engine.connect() as connection:
+            row = dict(connection.exec_driver_sql("SELECT * FROM signals WHERE instrument_id=(SELECT id FROM instruments WHERE symbol='A-NORMAL')").mappings().one())
+            version = connection.exec_driver_sql("SELECT * FROM strategy_versions WHERE id=?", (row["strategy_version_id"],)).mappings().one()
+        row.update(("version_" + key, value) for key, value in version.items())
+        row["rule_evidence_json"] = None
+        signal = _project(row)
+        self.assertIsNone(signal.to_dict(None)["rule_evidence"])
+        self.assertEqual(signal.read_state()["metadata_fields"]["rule_evidence"], "missing")
+        result = _strategy_result(signal, "breakout_v1", READ_DAY, strategy_version=signal.strategy)
+        self.assertEqual(result["missing"], [])
+        self.assertEqual(result["risk_reward"], 2)
+        self.assertIsNone(result["evidence"])
+        from app.stock_signal_reads import read_research_json
+        for raw in ('{"payload":[' + ','.join('0' for _ in range(16381)) + ']}', '{"payload":"' + 'x' * 65522 + '"}'):
+            parsed, state = read_research_json(raw)
+            self.assertEqual(state, "known")
+            row["rule_evidence_json"] = raw
+            projected = _project(row).to_dict(None)
+            self.assertEqual(projected["signal_read"]["status"], "known")
+            self.assertEqual(projected["rule_evidence"]["payload"], parsed["payload"])
+            self.assertIn("level_semantics", projected["rule_evidence"])
+
+    def test_complete_observation_with_null_expected_levels_preserves_holding(self):
+        fixture = self.fixture()
+        fixture.change_signal("A-NORMAL", "status='observation',breakout_price=NULL,invalid_price=NULL,target_1=NULL,earliest_execution_date=NULL")
+        data = self.gets(fixture, [self.route("A-NORMAL")])[0]
+        action = data["decision_summary"]
+        self.assertEqual(action["action_state"], "hold_observe")
+        self.assertEqual(action["data_quality"], "complete")
+        self.assertIsNone(action["primary_strategy"])
+        self.assertEqual(action["strategies"][0]["missing"], [])
+        self.assertTrue(action["strategies"][0]["wait_missing"])
+        fixture.change_signal("A-NORMAL", "earliest_execution_date='2026-02-30'")
+        invalid = self.gets(fixture, [self.route("A-NORMAL")])[0]
+        self.assertEqual(invalid["research_read"]["blocked_strategies"], ["breakout_v1"])
+
+    def test_run_coverage_precede_unknown_quantity_and_invalid_stop(self):
+        fixture = self.fixture()
+        fixture.signal_change("UPDATE portfolio_positions SET shares_integer='bad',stop_price='bad' WHERE instrument_id=(SELECT id FROM instruments WHERE symbol='A-NORMAL')")
+        first = self.gets(fixture, [self.route("A-NORMAL")])[0]["decision_summary"]
+        self.assertEqual(first["action_state"], "manual_review")
+        self.assertIn("股數", first["display_instruction"])
+        fixture.signal_change("UPDATE ingestion_runs SET status='failed'")
+        failed = self.gets(fixture, [self.route("A-NORMAL")])[0]["decision_summary"]
+        self.assertEqual(failed["action_state"], "data_insufficient")
+        fixture.signal_change("UPDATE ingestion_runs SET status='success'")
+        fixture.signal_change("DELETE FROM market_bars WHERE instrument_id=(SELECT id FROM instruments WHERE symbol='TAIEX')")
+        unknown = self.gets(fixture, [self.route("A-NORMAL")])[0]["decision_summary"]
+        self.assertEqual(unknown["action_state"], "data_insufficient")
+        self.assertIn("taiex_session_baseline", unknown["blocking_reasons"])
+
+    def test_stock_aliases_and_context_mode_do_not_change_legacy_callers(self):
+        fixture = self.fixture()
+        stock, instrument = self.gets(fixture, [self.route("A-NORMAL"), "/api/instruments/A-NORMAL?exchange=TWSE&as_of=2026-10-04"])
+        self.assertEqual(stock["research_read"], instrument["research_read"])
+        from app.decision import build_decision_summary
+        with Session(fixture.engine) as db:
+            item = db.scalar(select(Instrument).where(Instrument.symbol == "A-NORMAL"))
+            raw = build_decision_summary(db, item, READ_DAY, stock_research_reads=True)
+            self.assertTrue(db.info["_decision_contexts"][str(READ_DAY)]["stock_research_reads"])
+            legacy = build_decision_summary(db, item, READ_DAY)
+            self.assertFalse(db.info["_decision_contexts"][str(READ_DAY)]["stock_research_reads"])
+            self.assertEqual(legacy["action_state"], raw["action_state"])
+            self.assertNotIn("research_read", legacy)
+
+
 def main():
     global _listen_port
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1551,31 +1831,42 @@ def main():
     parser.add_argument("--stock-read-only", action="store_true", help="stock detail read isolation through actual router; zero disk")
     parser.add_argument("--stock-read-fixture", action="store_true", help="serve twelve read-only stock detail cases; no admitted M1 raw files")
     parser.add_argument("--stock-read-case", choices=["router-matrix"], help="necessary affected stock router regression only")
+    parser.add_argument("--signal-read-only", action="store_true", help="stock research raw reads through actual router; zero disk")
+    parser.add_argument("--signal-read-case", choices=["evidence-shape"], help="only the affected evidence method; preserve prior valid receipts")
+    parser.add_argument("--signal-read-fixture", action="store_true", help="serve thirteen read-only synthetic stock research cases")
     args = parser.parse_args()
     if args.serve:
         if args.port != 8777:
             parser.error("only owned loopback port 8777 is authorized")
         _listen_port = args.port
         fixture = MemoryFixture(value_reads=args.finance_read_fixture, quantity_trust=args.quantity_trust_fixture, quote_reads=args.quote_read_fixture,
-                                 action_reads=args.action_read_fixture, stock_reads=args.stock_read_fixture, stock_cases=args.stock_read_fixture)
+                                 action_reads=args.action_read_fixture, stock_reads=args.stock_read_fixture or args.signal_read_fixture, stock_cases=args.stock_read_fixture,
+                                 signal_reads=args.signal_read_fixture, signal_cases=args.signal_read_fixture)
         try:
             import uvicorn
             fixture.server = uvicorn.Server(uvicorn.Config(fixture.app, host="127.0.0.1", port=args.port,
                                                           lifespan="off", access_log=False))
-            print(json.dumps({"mode": "synthetic-stock-read-memory-actual-router" if args.stock_read_fixture else "synthetic-action-read-memory-actual-router" if args.action_read_fixture else "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
-                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture or args.action_read_fixture or args.stock_read_fixture else DAY),
+            print(json.dumps({"mode": "synthetic-signal-read-memory-actual-router" if args.signal_read_fixture else "synthetic-stock-read-memory-actual-router" if args.stock_read_fixture else "synthetic-action-read-memory-actual-router" if args.action_read_fixture else "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
+                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture or args.action_read_fixture or args.stock_read_fixture or args.signal_read_fixture else DAY),
                               "pid": os.getpid(), "url": f"http://127.0.0.1:{args.port}", "disk_artifacts": 0,
                               "disk_save_reopen": "not_tested"}), flush=True)
             fixture.server.run()
         finally:
             fixture.close()
+            if args.signal_read_fixture:
+                print(json.dumps({"mode": "signal-read-owned-server-final", "actual_http_requests_including_review_shutdown": HTTP_REQUESTS,
+                    "read_mutations": fixture.read_mutations, "setup_mutations": SIGNAL_SETUP_MUTATIONS,
+                    "unexpected_denials": UNEXPECTED_DENIALS, "disk_artifacts": 0, "disk_save_reopen": "not_tested"}), flush=True)
             if args.stock_read_fixture:
                 print(json.dumps({"mode": "stock-read-owned-server-final", "actual_http_requests_including_review_shutdown": HTTP_REQUESTS,
                     "read_mutations": fixture.read_mutations, "setup_mutations": STOCK_SETUP_MUTATIONS,
                     "unexpected_denials": UNEXPECTED_DENIALS, "disk_artifacts": 0,
                     "disk_save_reopen": "not_tested"}), flush=True)
     else:
-        if args.stock_read_only:
+        if args.signal_read_only:
+            suite = unittest.TestSuite([StockSignalReadTest("test_present_evidence_shape_affinity_and_null_fallback_at_router")]) if args.signal_read_case else unittest.TestSuite([
+                unittest.defaultTestLoader.loadTestsFromTestCase(StockSignalReadTest), ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
+        elif args.stock_read_only:
             suite = unittest.TestSuite([StockMarketReadTest("test_actual_router_polluted_identity_core_and_optional_metadata")]) if args.stock_read_case else unittest.TestSuite([
                 unittest.defaultTestLoader.loadTestsFromTestCase(StockMarketReadTest), ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
         elif args.action_read_only:
@@ -1607,9 +1898,14 @@ def main():
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShareQuantityExactTest)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         success = result.wasSuccessful() and not UNEXPECTED_DENIALS
-        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only or args.action_read_only or args.stock_read_only else DAY),
+        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only or args.action_read_only or args.stock_read_only or args.signal_read_only else DAY),
                           "actual_router_requests": HTTP_REQUESTS, "disk_artifacts": 0,
                           "expected_denials": EXPECTED_DENIALS, "unexpected_denials": UNEXPECTED_DENIALS,
+                          **({"signal_direct_gets": SIGNAL_DIRECT_GETS, "setup_mutations": SIGNAL_SETUP_MUTATIONS, "read_mutations": 0,
+                              "whole_sql_scope": "signals + strategy_versions + portfolio_positions + market_bars: all columns and all typeof()",
+                              "digest_receipts": SIGNAL_DIGESTS, "source_and_date_evidence": "synthetic only; source/time/M1 raw filesystem gates unchanged",
+                              "python": sys.version.split()[0], "sqlalchemy": sys.modules["sqlalchemy"].__version__,
+                              "pydantic": sys.modules["pydantic"].__version__} if args.signal_read_only else {}),
                           **({"stock_ui_records": 12, "read_mutations": 0, "setup_mutations": STOCK_SETUP_MUTATIONS,
                               "whole_sql_scope": "portfolio_positions + market_bars: all columns and all typeof()",
                               "source_and_date_evidence": "unverified; M1 source/raw filesystem admission unchanged",

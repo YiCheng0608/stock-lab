@@ -14,7 +14,8 @@ let ssrLayoutWarnings = 0
 if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')
   || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')
   || args.includes('--action-read-check') || args.includes('--action-read-http-check')
-  || args.includes('--stock-read-check') || args.includes('--stock-read-http-check')) {
+  || args.includes('--stock-read-check') || args.includes('--stock-read-http-check')
+  || args.includes('--signal-read-check') || args.includes('--signal-read-http-check') || args.includes('--signal-read-status-check')) {
   const originalError = console.error
   console.error = (message, ...rest) => {
     if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
@@ -143,7 +144,7 @@ async function apiModule() {
 
 
 async function appModule() {
-  const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check')
+  const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check') || args.includes('--signal-read-check') || args.includes('--signal-read-http-check')
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
     nodePaths: [dependencies], platform: 'node', format: 'cjs', packages: stockMode ? undefined : 'external',
     external: stockMode ? ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'] : [], target: 'es2020', jsx: 'automatic',
@@ -219,6 +220,173 @@ async function stockPageRenderer() {
         React.createElement(QueryClientProvider, { client }, React.createElement(app.default))))
     } finally { client.clear() }
   }
+}
+
+async function signalReadCheck() {
+  typecheck()
+  console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version, validation: 'signal mode noEmit; no SSR, HTTP or disk writes', disk_artifacts: 0 }))
+  esbuild.stop()
+}
+
+function signalReadStatusCheck() {
+  let guardCases = 0, attempts = 0, successful = 0, failed = 0
+  try {
+    const { validStockResearchRead, stockResearchAction, StockResearchPanel } = require(path.join(sourceRoot, 'StockResearchPanel.tsx'))
+    const React = requireDependency('react')
+    const { renderToStaticMarkup } = requireDependency('react-dom/server')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    const essential = ['id', 'instrument_id', 'signal_key', 'signal_date', 'strategy_version_id', 'status', 'data_quality', 'strategy.id', 'strategy.name', 'strategy.version']
+    const schema = [...essential, 'entry_type', 'reference_entry', 'pullback_low', 'pullback_high', 'breakout_price', 'invalid_price', 'target_1', 'target_2', 'execution_price', 'confidence', 'rationale', 'data_cutoff', 'source_report', 'earliest_execution_date', 'execution_date', 'created_at', 'rule_evidence', 'strategy.kind', 'strategy.config_json', 'strategy.canonical_config_snapshot', 'strategy.active', 'strategy.created_at']
+    const makeData = (status) => {
+      const fields = Object.fromEntries(schema.map((key) => [key, essential.includes(key) ? 'known' : 'missing']))
+      fields.signal_date = 'missing'
+      const read = { status, invalid_fields: [], missing_fields: ['signal_date'], metadata_fields: fields }
+      const row = { id: 1, instrument_id: 1, signal_key: 'status-probe', signal_date: null, strategy_version_id: 1, status: 'conditional', data_quality: 'complete',
+        entry_type: null, reference_entry: null, pullback_low: null, pullback_high: null, breakout_price: null, invalid_price: null, target_1: null, target_2: null,
+        execution_price: null, confidence: null, rationale: null, data_cutoff: null, source_report: null, earliest_execution_date: null, execution_date: null, rule_evidence: null,
+        strategy: { name: 'breakout_v1', version: '1.0.0', kind: null, canonical_config_snapshot: null }, signal_read: read }
+      const state = { version: 'stock-research-read/v1', status: 'invalid', window_limit: 20, candidate_count: 1, scanned_count: 1, future_count: 0,
+        unlocated_count: 1, unlocated_signal_id: 1, identity_unlocated_count: 0, identity_unlocated_signal_id: null, candidate_order: [1],
+        latest: { breakout_v1: { signal_id: 1, signal_date: null, strategy_version_id: 1, read },
+          pullback_v1: { signal_id: null, signal_date: null, strategy_version_id: null, read: { status: 'missing', invalid_fields: [], missing_fields: ['signal'], metadata_fields: {} } } },
+        blocked_strategies: ['breakout_v1'], decision_block_scope: 'instrument', verification: 'stored_value_syntax_only' }
+      const action = { action_state: 'data_insufficient', data_quality: 'missing', reasons: [], conflicts: [], missing_data_priority: [], primary_strategy: null,
+        trigger_price: null, entry_low: null, entry_high: null, invalid_price: null, stop_price: null, target_1: null, target_2: null, risk_reward: null, research_read: state,
+        strategies: [{ strategy: 'breakout_v1', signal_id: 1, signal_date: null, signal_read: read }] }
+      return { ...syntheticStock(), signals: [row], research_read: state, decision_summary: action }
+    }
+    const legal = makeData('missing')
+    assert.equal(validStockResearchRead(legal), true)
+    assert.equal(stockResearchAction(legal), legal.decision_summary)
+    guardCases++
+    for (const [name, status] of [['array', ['missing']], ['object-coercion', { toString: () => 'missing' }], ['unknown', 'unverified'], ['undefined', undefined]]) {
+      const data = makeData(status)
+      assert.equal(validStockResearchRead(data), false, name + ': candidate/latest/summary consistent malformed status')
+      assert.equal(stockResearchAction(data), null, name + ': summary withheld')
+      guardCases++
+    }
+    const ssr = (data) => {
+      if (++attempts > 2) throw new Error('signal status SSR attempt cap exceeded')
+      try {
+        const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(StockResearchPanel, { data })))
+        successful++; return html
+      } catch (error) { failed++; throw error }
+    }
+    const legalHtml = ssr(legal)
+    assert.ok(legalHtml.includes('必要讀值未提供。'))
+    const malformedHtml = ssr(makeData(['missing']))
+    assert.ok(malformedHtml.includes('研究候選讀回格式待核實'))
+    assert.ok(!malformedHtml.includes('儲存讀值語法已分類'))
+    console.log(JSON.stringify({ passed: true, pid: process.pid, node: process.version, typescript: ts.version,
+      pure_json_guard_cases: guardCases, actual_exports: ['validStockResearchRead', 'stockResearchAction', 'StockResearchPanel'],
+      ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+      product_gets: 0, review_gets: 0, db_setup: 0, disk_artifacts: 0, validation: 'pure memory JSON; candidate/latest/summary read status kept consistent; no live fixture or HTTP' }))
+  } catch (error) {
+    console.error(JSON.stringify({ signal_status_check_failed: true, pid: process.pid, pure_json_guard_cases: guardCases,
+      ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings }))
+    throw error
+  } finally { esbuild.stop() }
+}
+
+async function signalReadHttpCheck() {
+  const api = await apiModule()
+  const render = await stockPageRenderer()
+  const { validStockResearchRead, stockResearchAction, StockResearchPanel } = require(path.join(sourceRoot, 'StockResearchPanel.tsx'))
+  const React = requireDependency('react')
+  const { renderToStaticMarkup } = requireDependency('react-dom/server')
+  const { MemoryRouter } = requireDependency('react-router-dom')
+  const guardedFetch = global.fetch
+  let product = 0, review = 0, attempts = 0, successful = 0, failed = 0
+  global.fetch = async (url, options = {}) => {
+    if (options.method && options.method !== 'GET') throw new Error('signal checker permits GET only')
+    if (new URL(url).pathname.startsWith('/__review__/')) review++
+    else if (++product > 48) throw new Error('signal product GET cap exceeded')
+    const response = await guardedFetch(url, options)
+    if ((await response.clone().arrayBuffer()).byteLength > 2 * 1024 * 1024) throw new Error('signal response byte cap exceeded')
+    return response
+  }
+  const snapshot = async () => (await fetch(apiOrigin.origin + '/__review__/signal-read-snapshot')).json()
+  const ssr = (callback) => {
+    if (++attempts > 40) throw new Error('signal SSR attempt cap exceeded')
+    try { const html = callback(); successful++; return html } catch (error) { failed++; throw error }
+  }
+  try {
+    const before = await snapshot()
+    let normal
+    for (const symbol of ['A-NORMAL', 'B-JSON', 'C-DATE', 'D-METADATA', 'E-VERSION', 'F-ALTERNATE', 'G-LATEST', 'H-WINDOW', 'I-NOBARS', 'J-IDENTITY', 'K-FUTURE', 'L-RR', 'M-OBSERVATION']) {
+      const data = await api.getStock('TWSE', symbol, '2026-10-04')
+      assert.ok(validStockResearchRead(data), symbol + ': actual raw envelope')
+      assert.ok(stockResearchAction(data), symbol + ': preserve safe actual summary')
+      const html = ssr(() => render(data, `/stocks/TWSE/${symbol}?as_of=2026-10-04`))
+      assert.ok(html.includes('個股詳情分頁') && !/Infinity|NaN/.test(html), symbol + ': whole App StockPage')
+      assert.equal(data.overview.price.latest, null, 'M1 source/raw gate must still reject fixture')
+      if (symbol === 'A-NORMAL') normal = data
+      if (['B-JSON', 'F-ALTERNATE', 'H-WINDOW'].includes(symbol)) {
+        const panel = ssr(() => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(StockResearchPanel, { data }))))
+        assert.ok(panel.includes('研究候選') && panel.includes('記錄 #') && panel.includes('候選讀值無效'))
+      }
+      if (symbol === 'F-ALTERNATE') assert.equal(stockResearchAction(data).primary_strategy, 'pullback_v1')
+      if (symbol === 'M-OBSERVATION') assert.equal(stockResearchAction(data).primary_strategy, null)
+    }
+    const malformed = [
+      ['null', (p) => { p.research_read = null }],
+      ['version', (p) => { p.research_read.version = 'unverified' }],
+      ['window', (p) => { p.research_read.window_limit = 21 }],
+      ['count', (p) => { p.research_read.candidate_count = 21 }],
+      ['order', (p) => { p.research_read.candidate_order = [999999] }],
+      ['latest-id', (p) => { p.research_read.latest.breakout_v1.signal_id = 999999 }],
+      ['latest-metadata', (p) => { p.research_read.latest.breakout_v1.read.metadata_fields = {} }],
+      ['latest-date', (p) => { p.research_read.latest.breakout_v1.signal_date = null }],
+      ['candidate-state', (p) => { p.signals[0].signal_read.invalid_fields = ['rule_evidence'] }],
+      ['missing-schema', (p) => { delete p.signals[0].signal_read.metadata_fields.rule_evidence }],
+    ]
+    for (const [name, mutate] of malformed) {
+      const data = structuredClone(normal); mutate(data)
+      assert.equal(validStockResearchRead(data), false, name)
+      assert.equal(stockResearchAction(data), null, name + ': summary withheld')
+      const html = ssr(() => render(data))
+      assert.ok(html.includes('研究候選讀值無效或格式待核實') && html.includes('個股詳情分頁'), name)
+    }
+    for (const [name, mutate] of [
+      ['unknown-action', (p) => { p.decision_summary.action_state = 'unknown' }],
+      ['unknown-quality', (p) => { p.decision_summary.data_quality = 'unknown' }],
+      ['nonfinite-level', (p) => { p.decision_summary.target_1 = Infinity }],
+    ]) {
+      const data = structuredClone(normal); mutate(data)
+      assert.equal(stockResearchAction(data), null, name)
+    }
+    const duplicateText = structuredClone(normal)
+    duplicateText.decision_summary.reasons = ['相同顯示文案', '相同顯示文案']
+    duplicateText.decision_summary.display_reasons = ['相同顯示文案', '相同顯示文案']
+    assert.ok(stockResearchAction(duplicateText), 'display duplicates do not block a healthy action')
+    for (const payload of [Array(200000).fill(0), Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [String(index), 0]))]) {
+      const oversized = structuredClone(normal)
+      oversized.signals[0].rule_evidence = { payload, level_semantics: oversized.signals[0].level_semantics }
+      assert.equal(validStockResearchRead(oversized), false, 'oversized malformed JSON fails closed without an argument-limit exception')
+      assert.equal(stockResearchAction(oversized), null)
+    }
+    for (const payload of [Array(16381).fill(0), 'x'.repeat(65522)]) {
+      const boundary = structuredClone(normal)
+      boundary.signals[0].rule_evidence = { payload, level_semantics: boundary.signals[0].level_semantics }
+      assert.equal(validStockResearchRead(boundary), true, 'generated semantics must not consume raw evidence node/byte budget')
+    }
+    for (const symbol of ['C-DATE', 'I-NOBARS']) {
+      const data = await api.getStock('TWSE', symbol)
+      assert.ok(validStockResearchRead(data))
+      assert.equal(data.overview.as_of, symbol === 'I-NOBARS' ? null : '2026-10-04')
+    }
+    const after = await snapshot()
+    assert.equal(after.whole_sql_sha256, before.whole_sql_sha256)
+    assert.equal(after.read_mutations, 0)
+    console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version, fixture_date: before.fixture_date,
+      actual_getStock_response_json: product, actual_review_gets: review, full_app_stock_page_ssr: 23, panel_ssr: 3,
+      ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+      whole_sql_before: before, whole_sql_after: after, parser: 'actual getStock + fetch Response.json', disk_artifacts: 0,
+      excluded: 'real browser operations, admitted M1 raw files, production DB, disk save/reopen, legacy Signals/Actions pollution isolation' }))
+  } catch (error) {
+    console.error(JSON.stringify({ signal_check_failed: true, product_gets: product, review_gets: review, ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings }))
+    throw error
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
 }
 
 function syntheticStock() {
@@ -1237,7 +1405,7 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
-  const fixtureLabel = args.includes('--stock-read-fixture') ? '隔離合成個股行情讀回・2026-10-04・非正式行情與M1原件驗證' : args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
+  const fixtureLabel = args.includes('--signal-read-fixture') ? '隔離合成個股研究候選・2026-10-04・非正式研究來源與M1原件驗證' : args.includes('--stock-read-fixture') ? '隔離合成個股行情讀回・2026-10-04・非正式行情與M1原件驗證' : args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
     .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
@@ -1252,7 +1420,7 @@ async function serve() {
     }
     try {
       if (request.url.startsWith('/api/')) {
-        if (args.includes('--stock-read-fixture') && !['GET', 'OPTIONS'].includes(request.method)) {
+        if ((args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture')) && !['GET', 'OPTIONS'].includes(request.method)) {
           response.writeHead(405); response.end('stock read preview permits GET/OPTIONS only'); return
         }
         const url = new URL(request.url, apiOrigin)
@@ -1281,13 +1449,15 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/${args.includes('--stock-read-fixture') ? 'stocks/TWSE/A-NORMAL' : 'actions'}`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') || args.includes('--stock-read-fixture') ? '2026-10-04' : '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/${args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? 'stocks/TWSE/A-NORMAL' : 'actions'}`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') || args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, memory_build: { write: false, js_bytes: script.byteLength, css_bytes: Buffer.byteLength(css, 'utf8'), html_bytes: Buffer.byteLength(html, 'utf8') },
     node: process.version, typescript: ts.version, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--stock-read-check') ? stockReadCheck()
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--signal-read-check') ? signalReadCheck()
+  : args.includes('--signal-read-status-check') ? signalReadStatusCheck()
+  : args.includes('--signal-read-http-check') ? signalReadHttpCheck() : args.includes('--stock-read-check') ? stockReadCheck()
   : args.includes('--stock-read-http-check') ? stockReadHttpCheck() : args.includes('--action-read-http-check') ? actionReadHttpCheck()
   : args.includes('--action-read-check') ? actionReadCheck() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
   : args.includes('--quote-read-http-check') ? quoteReadHttpCheck() : args.includes('--quote-read-check') ? quoteReadCheck()

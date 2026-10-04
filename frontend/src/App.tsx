@@ -63,7 +63,7 @@ import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots,
 import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { StockPriceChart } from './StockPriceChart'
 import { isValidBar } from './stockChart'
-import { StockResearchPanel } from './StockResearchPanel'
+import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
 import { StockOverview } from './components/StockOverview'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
@@ -1047,6 +1047,8 @@ function StockPage() {
   if (!query.data) return null
   const data = query.data
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
+  const researchShapeValid = validStockResearchRead(data)
+  const researchAction = stockResearchAction(data)
   const finiteValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
   const read = data.market_read
   const readShapeValid = read != null && ['known', 'missing', 'invalid'].includes(read.status)
@@ -1124,13 +1126,14 @@ function StockPage() {
     </PageTitle>
     {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
+    {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
       {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
-      {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary} /><StockResearchPanel data={data} /></section>}
+      {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
       {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features.ma20)} ／ {formatNumber(data.features.ma60)}</b></div><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
     </div>
   </div>

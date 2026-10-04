@@ -74,6 +74,7 @@ from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
+from .stock_signal_reads import load_stock_signal_reads
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -1612,7 +1613,7 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
     payload = instrument_detail(symbol, exchange, db, cutoff or date.min)
     instrument = payload["instrument"]
     instrument_row = db.get(Instrument, instrument["id"])
-    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
+    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff, stock_research_reads=True) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
     payload["overview"] = build_stock_overview(db, instrument_row, cutoff)
     if payload["decision_summary"]:
         payload["product_time"] = payload["decision_summary"].get("product_time")
@@ -2072,12 +2073,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
                or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of) if as_of else True)
         .order_by(GroupMembership.valid_from)
     ).all()
-    signals = db.scalars(
-        select(Signal)
-        .where(Signal.instrument_id == instrument.id, Signal.signal_date <= (as_of or date.max))
-        .order_by(desc(Signal.signal_date), desc(Signal.id))
-        .limit(20)
-    ).all()
+    research_reads = load_stock_signal_reads(db, [instrument.id], as_of)[instrument.id]
     chips = db.scalars(
         select(ChipSnapshot)
         .where(ChipSnapshot.instrument_id == instrument.id, ChipSnapshot.trading_date <= (as_of or date.max))
@@ -2113,7 +2109,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
         .limit(10)
     ).all()
-    decision = build_decision_summary(db, instrument, as_of) if as_of is None or as_of >= date(1, 1, 8) else {}
+    decision = build_decision_summary(db, instrument, as_of, stock_research_reads=True) if as_of is None or as_of >= date(1, 1, 8) else {}
     return {
         "instrument": instrument_dict(instrument),
         "bars": [item.to_dict() for item in reversed(bars)],
@@ -2185,7 +2181,8 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
                 "technical": {"rule_label": "回踩條件固定版本", "basis_label": "只使用資料日以前的已驗證資料"},
             },
         },
-        "signals": [signal_dict(db, item) for item in signals],
+        "signals": [item.to_dict(instrument_dict(instrument)) for item in research_reads.candidates],
+        "research_read": research_reads.to_state(),
     }
 
 

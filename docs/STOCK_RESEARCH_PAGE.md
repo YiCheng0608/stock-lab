@@ -455,3 +455,65 @@ stored syntax known 但 M1 `overview.price.status=unavailable` 只表示未准�
 同一 fixture 的 HTTP 補驗 before／after 與 UI closing 核十二庫存／784 行情全部欄位、typeof、note／updated_at 同 digest、read mutation 0。自有 tab／程序／listener 已核關閉或不存在，新測試產物／附件／暫存／殘留 0；console 具名 limit 50 有開發提示／既有 Router warnings，不稱全域零 warnings。兩 serve 最終 exit 0，第一輪 helper compiler 與舊 preview 的並發數未即時觀測，不能宣稱全程只有一個 compiler child；結果與該程序順序限制分報。
 
 本批不證官方／live、正向 M1 filesystem gate、正式 DB／磁碟重開、Decimal exact、availability／PIT、完整 backend／production Vite build、完整 ActionsPage、M1／M3 或交易計畫。無合格來源仍拒用，不以 partial／unknown 文案降低原件／磁碟完成條件；其他研究候選讀回仍待有界審查，下一步及必要依賴由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責。
+
+## 16. M3-P6d：個股詳情研究候選讀回污染隔離
+
+本批支援 M3／R2-C2，stock／instrument detail 的 Signal／StrategyVersion 原始讀回、必要 decision／overview caller、actual API／完整 App 讀回及下述具名操作已由統籌**有限接受**。候選 read.status 非字串 coercion 的單項退修／必要補驗亦已接受，來源停寫；六文件 review 接受後才 aggregate freeze／輪末索引，commit／merge 尚未執行。本節負責精確契約，新增中文提示見 [UI 文案](UI_COPY_SPEC.md#102-個股詳情的第一屏)，命令、副作用、原始失敗與數量見[開發入口](development-baseline/README.md#m3-p6d-個股研究候選讀回的零落盤驗證入口)。P6c 的行情、來源／原件與未驗界線保留，不倒改其歷史測試。
+
+### 16.1 只在個股路徑啟用的原始投影
+
+stock／instrument detail 以 raw SQL 左連接 Signal 與 StrategyVersion，避開完整 Date／DateTime／Float／JSON processor；decision 的 `stock_research_reads=True` 只由個股 caller opt-in，cache 區分該模式。overview 的條件及無行情 Signal 日期 fallback 使用同一 raw reader；舊 Actions／tracking 等預設 typed Signal 路徑沒有擴成此模式，也不修改 models、原列、writer 或 shared 行情契約。
+
+候選保留原 `id`、`instrument_id`、`strategy_version_id`、日期與原 status；不能安全投影的欄位為 null，逐欄 `metadata_fields` 分 known／missing／invalid。SQL NULL 在投影層保留 missing，非 NULL 壞值列 invalid，不補 0、空 evidence 或較早列。這是讀回語法分類，不還原 SQLite affinity 前的 token，也不證來源、用途、可得時間、tick、PIT 或研究條件成立。
+
+| 分類 | 讀值與影響 |
+| --- | --- |
+| 必要身份 | id／instrument FK／version FK 為 actual 正 int64；signal key／status／data quality／strategy name／version 為有界、可編碼的非空字串；signal_date 為合法完整日期。核心欄位 missing／invalid 保留狀態，不構造身份。前端另核 safe integer，不能安全辨識的回應拒用。 |
+| 被策略消費的值 | breakout 使用突破／失效／目標價；pullback 使用參考進場／回踩區／失效／目標價。提供的價格須 actual int／float、排 bool、正且有限；evidence／data_cutoff／earliest_execution_date 的 present invalid 也使該候選 invalid。缺少可 nullable 的價位／時間／evidence 不新增必填 gate，仍由原策略語意判斷。 |
+| 可選 metadata | confidence、rationale、source_report、entry_type、execution 欄位、created_at，以及 strategy kind／config／snapshot／active／created_at 逐欄保留狀態；壞值投影 null，不僅因可選欄位使所有完整策略失效。讀值 known 不是 source／time／version 准入。 |
+
+`signal_read` 提供 status、invalid_fields、missing_fields、metadata_fields；invalid 優先於必要身份 missing，否則 known。合法但未知的策略 version 保留原語意，不假定所有 actionability gate 已驗；complete observation 缺少預期進場價位是原本的正常研究結果，不能被新必填條件改成污染。
+
+### 16.2 JSON 與有限計算
+
+Signal evidence 與 StrategyVersion config／canonical snapshot 只收可用 UTF-8 表示、最外層為 object 的 JSON；拒絕重複 key、非有限 constant／number、過深或過多節點。每欄最多 **65,536 UTF-8 bytes**，root depth 0、最大 **32**，最大 **16,384 nodes**，object key 也計 node。所有嵌套 integer 需能轉成有限 Float，避免 Python 可解析的巨大 integer 在 browser 變成 Infinity；這不是 Decimal exact 驗證。
+
+合法 `{}` 保留；present invalid 投影 null／invalid，不能改成 `{}` 讓下游採空 evidence。SQL None 維持 null／missing 及既有 fallback，沒有新增必填 gate；本批只在 pure projection／RR 邊界驗此語意，不稱已向 NOT NULL SQLite 欄位保存 SQL NULL。evidence 的 inputs／levels 若提供須為 object，被消費的 RR 與三項數值 inputs 須 actual 有限數字。後端附加的 level_semantics 與 raw JSON 分開處理，前端核其一致且有界，不讓生成欄位侵占合法 raw JSON 的 node／depth 預算。
+
+stock 模式 derived RR 的中間計算／結果非有限時投影 null；已有有限 evidence／fallback 規則保留，不製造 RR 或可操作結論。本批不增加 writer geometry、獨立 tick、source／time／version gate；既有規則仍決定合法研究行動。
+
+### 16.3 詳情窗口、全集 latest 與截止
+
+原儲存 signal_date DESC、id DESC 定候選次序；可定位且晚於 cutoff 的列排除，日期未知不能靠 lexical 大小當 future 略過。詳情保留最多 **20 個候選位置，先限定再驗值**，壞列不刪掉、不取較早合法列補滿。`candidate_order` 與回傳 signals 一致，不冒稱未知日期已知時間順序。
+
+每策略 canonical latest 的 scope 是符合截止的全候選集，與詳情 20 列不同。breakout_v1／pullback_v1 各取其原排序最新列，bad latest 不能換較早候選；詳情的 20 個 custom invalid 記錄也不代替窗口外的健康 canonical slot。
+
+全標的的無法定位日期檢查不受截止／20 列限制；符合截止範圍內無法定位 strategy identity（缺／壞 FK、無可定位的 joined id／name）也使整個研究 scope 拒用，而非略過未知策略。已定位 invalid core 只隔離該候選／策略 slot，其他健康策略沿原 actionability，aggregate invalid 不等於全面丟棄研究結果。
+
+Signal 污染不撤掉已有合法 bar cutoff，獨立行情沿 §15 處理。無行情時，Signal 的日期 fallback 改用 raw 日期；有任一 unlocated Signal 日且未明示 as_of，共用 cutoff 保持 null，不改成較早日或今日。明示 cutoff 保留；其他 typed 研究日期仍有原依賴，不稱 FeatureSnapshot／Chip 污染已隔離。
+
+### 16.4 回應與前端拒用界線
+
+頂層與個股 decision 提供 `research_read`，version 為 `stock-research-read/v1`、verification 為 `stored_value_syntax_only`。其 candidate_count／candidate_order／window_limit=20、scanned／future／兩種 unlocated count 與第一個 id、兩個 canonical latest slot、blocked_strategies、decision_block_scope 一起核對；scope 為 instrument／slots／none。無候選為 missing；窗口內有候選 invalid 或全標的無法定位則 aggregate invalid，但可保留健康 alternate。
+
+StockPage 核 candidate 身份、次序、欄位狀態、canonical slot 與 decision 的 envelope 一致；unsupported／矛盾／malformed 新回應不得拿 legacy 值補 summary／levels。完全 undefined 的舊回應只保留受限 action shape／有限數值相容與未提供狀態說明；null 不是 legacy。候選／slot 的 read.status 必須是 actual string known／missing／invalid，不能透過 String coercion 接受 array 或自訂 object。root 發現 `['missing']` 被 guard 接受後，只退修 builtin-string gate；合法 missing 與 array／object coercion／unknown／undefined 五個 pure case 及兩個 Panel SSR 已補驗接受，known 提示不會冒用於 malformed status。十個原 HTTP-derived malformed SSR 仍有效，精確支持範圍見開發入口，不外推所有任意型別組合皆已測。
+
+結構安全的 invalid／data_insufficient 結果可顯示，候選列表只讀原身份／日期／策略／版本／狀態，不是 Plan 或交易入口。held 的 `hold_observe`、`primary_strategy=null` 且 complete／known observation、空 missing／全 null 價位保留；正常 observation 不因沒有 expected entry levels 被抹除。summary 不可信時拒用研究行動／levels，bars 與其他獨立可用區塊保留；其中 typed models 本身的污染仍在本批範圍外。
+
+### 16.5 具名有限接受與未包含
+
+本次 fixture source 建構 **2026-10-04 synthetic 14 標的（TWSE 十三研究標的＋一個合成 TAIEX）**；初始 840 行情，I-NOBARS 移除 60 後，actual 四表 snapshot 為 **780 行情／十三庫存／38 Signals／5 StrategyVersions**，未由 instrument table snapshot 另驗標的數。這不是官方行情／來源、正式持倉或 M1 原件。actual getStock／Response.json、完整 App SSR 與以下五個桌面 case 已有限接受；每案 actual API 為 200、真正 App DOM 的研究分頁 selected，candidate count／raw identity／order／提示已核。桌面 **1298×924** 的 document client／scroll width 均 **1283**。
+
+| Case | 已接受的有限結果與操作方式 |
+| --- | --- |
+| B-JSON | 1 筆、記錄 #2，日期／version／原 status 與 invalid 提示可見；行情 gap 0，拒用研究行動。原生 ref click 最終 selected 已核，先前未切換／錯 selector assertion 不改報成功。 |
+| F-ALTERNATE | 2 筆，健康 pullback 與 invalid breakout 並存，原 hold_observe 保留，HTTP 的 primary 為 pullback_v1。程式 DOM.click 後核 actual App DOM，不稱原生點擊全部成功。 |
+| H-WINDOW | 原序 #37 至 #18、恰 20 個 custom invalid，canonical 全集仍保留健康 hold_observe。程式 DOM.click 後核實，未把這 20 筆冒充 canonical 來源全集。 |
+| I-NOBARS | 1 筆日期無法定位，default cutoff=null、無行情狀態保留，研究拒用。程式 DOM.click 後核實，不算截止表單提交。 |
+| M-OBSERVATION | 1 筆 complete／known observation，hold_observe 保留；HTTP primary=null 與原空 levels 語意已核。程式 DOM.click 後核實，不額外宣稱新行動或原生 Enter 通過。 |
+
+其他四案使用程式 DOM.click 與實際 browser DOM 核驗；工具 ack／focus／Enter 沒有實際 selected 不算操作成功，不能替換成五案全原生互動通過。原始工具／selector／viewport 失敗另報；這些 browser assertion 修正未改來源，不捏造未切換原因，另項 status guard 退修分報。
+
+同一 fixture 在 Node HTTP before／after、root UI 後，Signals／StrategyVersions／positions／bars 全欄與 SQLite typeof 同 digest、read mutation 0；自有 tab／process／child／8777、8778 listener 已清，新測試落盤／附件／暫存／殘留 0，兩個前輪 blocked logs 仍 NO-RETRY。Console 的有限查閱有 DevTools info／既有 Router warnings，非全域無 warning；短暫 helper compiler 無即時 PID／並發觀測，不宣稱全程 child cap 已證。
+
+本批未驗正向 M1 raw filesystem／磁碟重開、正式 DB／migration、完整 backend／production build、官方／live／availability／PIT、Decimal exact、新 Plan、全部行動或完整 M1／M3。P6c physical canvas、有效歷史窄版 layout、真正截止表單與其他 inherited 未驗界線保留；FeatureSnapshot／Chip、legacy tracking／Actions 等其他 typed models 尚未支持此隔離。下一具名候選／audit 與完成條件由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責，有界審查本身不當能力交付。
