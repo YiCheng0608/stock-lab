@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-更新：2026-10-03。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+更新：2026-10-04。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 資料庫政策
 
@@ -36,6 +36,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
 | TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。 |
+| TPEx W1 多日法人／交易日 | 獨立政府連結 CSV policy 已有限接受3105／6488、2026-10-02 截止的20日原件、2026-09-01～10-02完整22開市日及5／20日淨超計算；W2 同截止 API／UI 操作亦有限接受，不改 DB／legacy。Exact 來源、用途及有界日曆見[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)。 |
 | TWSE 券商／分點名冊 | [券商基本資料](https://openapi.twse.com.tw/v1/brokerService/brokerList)與[券商分公司基本資料](https://openapi.twse.com.tw/v1/opendata/OpenData_BRK02)為免費官方名冊；實際 GET 已確認可讀。名冊只提供通道身分，不是交易明細。 |
 | 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
 | TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
@@ -48,6 +49,8 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 日常 UI 將官方「外資及陸資」合計欄位簡稱為「外資」，但 raw、來源與稽核層保留正式統計口徑；「三大法人」只指外資、投信與自營商，不能把廣義券商或分點另併為法人類別。
 
 M1-P2a 的 TPEx selected 摘要以**股**為單位，外資及陸資採**不含外資自營商**欄位，投信、自營商分別計算，詳細欄位、合計 gate 與具名驗收見[來源契約 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。真實驗收只支持 **3105／6488、2026-10-02** 的單日 selected 數值與具名負向拒收；P2a 本身不代表 chips 表、總覽或 5／20 日窗口已接入。後續 M1-P2b 已有限 review 同兩檔原件→API 二十個數值及具名 UI 操作，提供明示設定的獨立單日區塊；精確契約見[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)。不能將缺值補零，來源 `Date` 與單日列數也不證交易日曆；本批不改 DB／legacy 或 PIT 邊界。
+
+後續 M1-W1 接受的 coverage 是**兩股、單一 cutoff、完整有界日曆及當次版本**，以原始成交為統計基礎，三類為外資（不含外資自營商）、投信、自營商合計，仍以股／canonical 整數字串呈現。缺日按各窗口 fail closed，不補零或縮窗；這不等於其他標的金融欄位、全市場／全年或歷史當時可得已驗證。published／first available／revision time unknown，`historical_pit=unsupported`，沒有磁碟原件／跨程序重開或研究條件接線。來源詳述與參考集中於[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，W2 操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)；不把舊候選或單日驗收升格。
 
 News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信。worker 尚未接完整媒體、國際新聞或分點資料；`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有主要寫入路徑不能據此聲稱已收集。詳見 [NEWS_SPEC](NEWS_SPEC.md)。
 

@@ -29,13 +29,14 @@ from worker.stock_day_evidence import _assert_binding, _checked_path, _identity,
 from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, IngestionRun,
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
 from .institutional_daily import build_institutional_daily
+from .institutional_windows import build_institutional_windows
 from .official_events import build_official_events
 from .units import volume_exact_text
 from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
 from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
 from .stock_independent_reads import independent_dates
 
-OVERVIEW_VERSION = "stock-overview/p6c-v1"
+OVERVIEW_VERSION = "stock-overview/w2-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -282,17 +283,13 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
     return {
         "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-P3b: cutoff, traceable price, TPEx single-day institutional and memory-observed TWSE event evidence; M3-P6c: stock quote read isolation",
+        "scope": "M1-W2: TPEx 3105/6488 5/20-session memory CSV windows at 2026-10-02; retained traceable price, single-day and event evidence; other research conditions remain insufficient",
         "price": {"status": "available" if latest else "unavailable", "basis": "original_api_ohlcv",
                    "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
                    "from": qualified[0]["date"] if qualified else None, "to": qualified[-1]["date"] if qualified else None,
                    "market_read": market_read,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
-        "institutional": {"status": "unavailable", "horizons": [5, 20],
-                          "investors": ["foreign", "trust", "dealer"], "values": None,
-                          "reasons": (["multi_session_institutional_evidence_missing", "trading_session_source_not_admitted"]
-                                      if daily["status"] == "available" else
-                                      ["institutional_sources_not_admitted", "trading_session_source_not_admitted"])},
+        "institutional": build_institutional_windows(instrument.exchange, instrument.symbol, cutoff),
         "institutional_daily": daily,
         "conditions": conditions,
         "events": build_official_events(instrument.exchange, instrument.symbol, cutoff),

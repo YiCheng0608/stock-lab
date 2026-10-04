@@ -204,6 +204,14 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 原件／磁碟重開、正式 DB、source／availability／PIT 等 gate 保留；M1／M3 核心完成條件由 [ROADMAP](../ROADMAP.md) 負責。當批方法／GET／setup／SSR／程序配額留原 task／Git；現有未清資源見協作紀錄，不重置歷史已耗額度，不預設啟動下一個隔離輪。
 
+### M1-W2 法人窗口的零落盤驗證入口
+
+[`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 預設驗 W1 memory 邊界；`--api-only` 驗5個 W2 case，`--serve` 用 MockTransport。統籌另核 `--serve --live-source-opt-in` 才取真原件，owned API／UI pair **8781／8782**；使用 Python `-B -X utf8`，不載 conftest／正式 app startup、不建 DB 或 fixture 檔。
+
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 指定共用唯讀 `--deps <既有 frontend/node_modules>`；預設 full-src noEmit／18 SSR／mock product HTTP，`--typecheck-only` 執行 noEmit／SSR、略過 HTTP，`--serve` 用完整 App 記憶體 bundle、`write:false`，字型 fallback。前述驗證及實際兩股／單截止操作已有限接受，契約與未驗項見[個股頁 §18](../STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)。舊 P2b ZIP fixture／live capture 未重跑。
+
+驗收 reader exit0；serve 主動 Ctrl+C 中斷 exit1，shutdown `db_preserved=true`／guard0。已核自有 API／Node／esbuild 三 PID、8781／8782 listeners 為0，owned tab 已關；新增測試附件／raw／DB／tmp 殘留0，舊資源及 NO-RETRY 不動。精確命令、版本與收據留原 task。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

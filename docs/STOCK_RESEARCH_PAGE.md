@@ -140,9 +140,11 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 
 ### 9.3 法人、條件與新聞入口
 
+本節保留 P1／P2b 的有限版本範圍；後續 W2 已接通具名兩股／單一截止的法人窗口，見[§18](#18-m1-w2同截止法人窗口與原件追溯)。研究條件未因此啟用。
+
 | 區塊 | 本批結果 | 待補條件 |
 | --- | --- | --- |
-| 外資／投信／自營商 5／20 日 | 目前 `build_stock_overview` 固定回傳 `institutional.status=unavailable`、`values=null`；原因依單日區塊是否可用而異，不補零、融資不併入。 | 本批採用的 exact 多日法人來源及用途准入、交易日基準、逐法人欄位／單位／缺日 coverage、窗口計算與 API／UI 接線驗收。 |
+| 外資／投信／自營商 5／20 日 | P1／P2b 版本固定回傳 `institutional.status=unavailable`、`values=null`；原因依單日區塊是否可用而異，不補零、融資不併入。 | 本批採用的 exact 多日法人來源及用途准入、交易日基準、逐法人欄位／單位／缺日 coverage、窗口計算與 API／UI 接線驗收。 |
 | 突破／回踩條件 | `conditions` 中的 `breakout_v1`／`pullback_v1` 固定為 `status=data_insufficient`，即使已有 Signal 亦同；日期、版本與 `reasons` 依讀回記錄改變。 | 必要輸入、來源、時間與適用分類 gate、版本化規則計算及 API／UI 接線驗收均滿足後，才可判「成立／未成立」；Signal 或價位存在不算通過。 |
 | 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
 
@@ -568,3 +570,27 @@ SQL None 的 features_json 只核 pure projection，不聲稱存進 NOT NULL 欄
 本批不改 P6d／P6c 的已接受操作或原失敗，不宣稱其他 typed models／legacy Actions／tracking、M1 正向原件、官方／live／availability／PIT、正式 DB／migration／磁碟重開、完整 backend／production build、新 Plan、完整 M1／M3。P6c canvas／有效歷史窄版／真正截止提交等 inherited 未驗保持待驗；memory fixture 不降低原件或磁碟條件。
 
 5／20 日法人與研究條件仍固定保守回應時，代表必要輸入／consumer 未接通；P6e 讀回可靠性改善不等於核心流程完成。後續選題優先解除具名核心依賴或新增可驗收操作，不預設新隔離輪，詳見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+## 18. M1-W2：同截止法人窗口與原件追溯
+
+**實際原件→API／UI 及下述操作已有限接受。** 支持 TPEx 3105／6488、唯一共用 `as_of=2026-10-02`；總覽 `stock-overview/w2-v1`、法人 `institutional-windows/w2-v1`。來源、policy pins、22日曆／20日原件、單位／缺日與計算版本沿用[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，不放寬 P2b 單日或其他來源。
+
+### 18.1 明示取得、共用截止與記憶體
+
+Server 必須 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。`POST /api/stocks/{exchange}/{symbol}/institutional-windows/capture?as_of=2026-10-02` 先核標的存在，再用共用截止核支持範圍；首次核定操作才調 W1 loader，最多22 GET。後續兩股 POST／detail／overview GET 重驗同一批 process-memory 原件，普通 GET／import 零外網、不寫 DB／檔案。非阻塞鎖拒並行取得；成功或失敗後不 retry、refresh 或較早 fallback。重啟後須另作新觀測，不稱保存或離線重播。
+
+未啟用／無效設定、未取得、busy、來源／日曆失敗及範圍外各有 reason。其他市場／標的／截止不返回舊窗口數值；缺共用截止不補資料日。10/03 截止無值／無載入按鈕，恢復10/02讀 held cache；取得時間不能替代資料 cutoff，也不能推論歷史當時可得。
+
+### 18.2 精確窗口與來源展開
+
+`overview.institutional.windows['5'/'20']` 各有 status、values、from／to、required／valid／missing／invalid dates、原因及 daily evidence；detail 與獨立 overview 同截止／版本。外資（不含外資自營商）／投信／自營商分列，canonical 整數字串以 BigInt 加千分位，單位股、不轉 Number。只有單位／編碼、支持 cutoff、日曆及該窗 available、三值合法才顯數值；缺日按窗顯示資料不足，不補零、縮窗或重加外資自營商。
+
+畫面顯示所需／已驗／缺日、TPEx 顯名、兩個政府資料集及 OGL1 連結。展開可查日曆規則／休市公告、版本／policy、逐日原列序與 buy／sell／net、exact CSV、body／receipt SHA、UTC取得時間。published／first available／revision unknown、PIT unsupported、不判研究條件成立；P2b 單日區塊仍獨立。
+
+### 18.3 已接受操作與未驗邊界
+
+桌面1298×924 native 首按3105載入，22新 GET／22原件 body hash 與 W1 相符，但 capture／receipt 是新觀測。兩股40原列、360個 API buy／sell／net 字串及12窗口 net 的獨立 buy－sell 重算一致；detail／overview 同截止／版本，19表全欄及 typeof 前後不變、guard0。3105／6488原生讀回六值、截止10/03 submit 拒用與恢復10/02 submit、TWSE3105範圍外無值／無按鈕均接受；全程 request_count 仍22。
+
+桌面來源原生展開、390×844原生 scroll 後展開2026-09-03原列175，外資 buy `11,221,514`／sell `11,657,008`／net `-435,494`、hash／UTC可追。body client／scroll 375／375；wrapper303、table780、overflow auto，DOM scrollLeft477後完整性末欄在 wrapper內。原生橫向工具 ack 後 scrollLeft仍0，**原生橫向手勢未驗**。首次 snapshot 斷線及視口外 click 未展開的原失敗留 task，不改報首跑全通。
+
+5個新 API case、18 SSR、full-src noEmit、mock product HTTP已有限接受；Vite build未跑，字型僅fallback，physical canvas／pending導航 race 未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件與磁碟保存仍缺，完整 M1 未完成。驗證入口見[開發文件](development-baseline/README.md#m1-w2-法人窗口的零落盤驗證入口)，細命令／UTC／full hashes 留原 task。

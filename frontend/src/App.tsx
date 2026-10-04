@@ -5,6 +5,7 @@ import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } fr
 
 import {
   captureOfficialEvents,
+  captureInstitutionalWindows,
   captureOfficialEventFocus,
   deletePortfolio,
   getAction,
@@ -1027,6 +1028,30 @@ function StockPage() {
   const [capturingEvents, setCapturingEvents] = useState(false)
   const [eventRequestFailure, setEventRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const eventRequestKey = `${exchange}:${symbol}:${asOf}`
+  const windowRequestKey = `${exchange}:${symbol}:${asOf}`
+  const currentWindowKey = useRef(windowRequestKey)
+  currentWindowKey.current = windowRequestKey
+  const windowPending = useRef(false)
+  const [windowBusyKey, setWindowBusyKey] = useState<string | null>(null)
+  const [windowRequestFailure, setWindowRequestFailure] = useState<{ key: string; reason: string } | null>(null)
+  const acquireWindows = async () => {
+    if (windowPending.current) return
+    const requestKey = windowRequestKey
+    windowPending.current = true
+    setWindowBusyKey(requestKey)
+    setWindowRequestFailure(null)
+    try {
+      const result = await captureInstitutionalWindows(exchange, symbol, asOf || undefined)
+      if (currentWindowKey.current !== requestKey) return
+      if (result.status === 'unavailable') setWindowRequestFailure({ key: requestKey, reason: result.reasons[0] ?? 'window_capture_failed' })
+      await query.refetch()
+    } catch {
+      if (currentWindowKey.current === requestKey) setWindowRequestFailure({ key: requestKey, reason: 'window_capture_request_failed' })
+    } finally {
+      windowPending.current = false
+      setWindowBusyKey((key) => key === requestKey ? null : key)
+    }
+  }
   const acquireEvents = async () => {
     if (capturingEvents) return
     setCapturingEvents(true)
@@ -1127,7 +1152,7 @@ function StockPage() {
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
     </PageTitle>
     {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
+    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>

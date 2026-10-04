@@ -69,7 +69,8 @@ def memory_api(capture_zip: str | None = None):
         assert target == REPO and target.is_dir(), "unexpected config mkdir"
 
     environment = {"STOCK_DATA_DIR": str(REPO), "STOCK_RAW_DIR": str(REPO), "STOCK_DB_PATH": ":memory:",
-                   daily.CAPTURE_ENV: capture_zip or "", daily.DATE_ENV: "2026-10-02" if capture_zip else ""}
+                   daily.CAPTURE_ENV: capture_zip or "", daily.DATE_ENV: "2026-10-02" if capture_zip else "",
+                   "STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE": ""}
     with patch.dict(os.environ, environment), patch.object(Path, "mkdir", existing_directory_only):
         from app.api import get_db, router
         from app.db import Base, enable_sqlite_foreign_keys
@@ -191,7 +192,8 @@ def test_api_defaults_are_unavailable_without_legacy_fallback():
         result = response.json()
         assert result["institutional_daily"]["reasons"] == ["daily_capture_not_configured"]
         assert result["institutional"]["values"] is None
-        assert "institutional_sources_not_admitted" in result["institutional"]["reasons"]
+        assert result["institutional"]["reasons"] == ["window_capture_not_enabled"]
+        assert result["institutional"]["windows"] == {} and result["institutional"]["capture_state"]["request_count"] == 0
 
 
 def test_real_capture_through_actual_api_router(live_capture):
@@ -205,7 +207,8 @@ def test_real_capture_through_actual_api_router(live_capture):
             assert row["row_ordinal"] == ordinal and row["total_net"] == total
             assert [row["investors"][key]["net"] for key in ("foreign", "trust", "dealer")] == nets
             assert result["institutional"]["status"] == "unavailable" and result["institutional"]["values"] is None
-            assert result["institutional"]["reasons"] == ["multi_session_institutional_evidence_missing", "trading_session_source_not_admitted"]
+            assert result["institutional"]["reasons"] == ["window_capture_not_enabled"]
+            assert result["institutional"]["windows"] == {} and result["institutional"]["capture_state"]["request_count"] == 0
             detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-02")
             assert detail.status_code == 200
             assert detail.json()["overview"]["institutional_daily"] == result["institutional_daily"]

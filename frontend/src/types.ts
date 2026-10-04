@@ -525,6 +525,33 @@ export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
   }>
 }
 
+export type InstitutionalWindowReceipt = {
+  source_id: string; source_version: string; requested_date: string; url: string; method: string
+  body_sha256: string; receipt_sha256?: string; body_bytes: number; request_started_at: string; captured_at: string
+  policy_version: string; policy_digest: string; profile: string; historical_pit: string
+}
+
+export type InstitutionalWindow = {
+  horizon: number; status: string; values: Record<'foreign' | 'trust' | 'dealer', string> | null
+  required_dates: string[]; valid_dates: string[]; missing_dates: string[]; invalid_dates: Array<{ date: string; reason: string }>
+  from?: string; to?: string; reasons: string[]
+  daily_evidence?: Array<{ row: Omit<NonNullable<InstitutionalDailyData['row']>, 'exchange' | 'unit'>; provenance: InstitutionalWindowReceipt }>
+}
+
+export type InstitutionalWindowsData = {
+  status: string; horizons: number[]; investors: string[]; values: null; reasons: string[]
+  version?: string; as_of?: string | null; unit?: string; quantity_encoding?: string; historical_pit?: string
+  supported_scope?: { exchange: string; symbols: string[]; as_of: string; calendar_from: string; calendar_to: string }
+  windows?: Record<string, InstitutionalWindow>
+  capture_state?: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; action: string; request_count: number }
+  calendar?: null | { version: string; status: string; reasons?: string[]; from?: string; to?: string; expected_dates?: string[]; valid_dates?: string[]; missing_dates?: string[]
+    basis?: { weekday_rule: string; closed_notice: string; closed_dates: string[] }; evidence?: InstitutionalWindowReceipt[] }
+  policy?: null | { version: string; digest: string; profile: string }; calculation_version?: string | null
+  attribution?: null | { source_owner: string; license: string; license_url: string }
+  provenance?: null | { worker_version: string; verification?: string; captured_versions: InstitutionalWindowReceipt[] }
+  limitations?: string[]; published_time?: string; first_available_time?: string; revision_time?: string
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null
@@ -545,7 +572,7 @@ export type StockOverviewData = {
     market_read?: StockMarketReadState
     reasons: string[]
   }
-  institutional: { status: string; horizons: number[]; investors: string[]; values: null; reasons: string[] }
+  institutional: InstitutionalWindowsData
   institutional_daily?: InstitutionalDailyData
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
   events: OfficialEventsData

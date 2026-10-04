@@ -1,8 +1,8 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 記憶體 consumer 見 §9／§11。§10／§12 只記缺證與恢復條件，不新增准入。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
+更新：2026-10-04。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 單日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 見 §9／§11。§10／§12 保留原候選缺證；§13 是另以獨立 policy 准入並驗收的 TPEx 兩股多日 CSV／有界日曆及計算。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
 
-本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
+本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
 ## 1. Registry 與 policy 契約
 
@@ -291,6 +291,8 @@ Live body／receipt 未保存，**不能離線重播這次原件**；再取得�
 
 成交日實列最多證已觀測日，不能由缺列推休市或最近 5／20 交易日完整 coverage，因此本次不建立孤立的 observed-session 計算核心冒充依賴解除。候選服務恢復後可先作有界可行性核實，成功讀取不等於來源與窗口門檻通過；主缺口、恢復條件及新統籌流程見 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。本次未重搜 TWSE T86 或 R0-B2，其原未知／待驗邊界保留。
 
+以上是2026-10-03原 OpenAPI 候選的有限審查，仍未放行該候選。後續 M1-W1 已由另外兩個政府連結 CSV、明示休市及完整正值指數行解除具名有界依賴，見[§13](#13-m1-w1tpex-多日法人與完整有界交易日)；兩者來源／用途與 coverage 不互相外推。
+
 ## 11. M2-P1：本次官方事件 feed 摘要
 
 **程式及下述具名驗收已 review（有限）。** 本批只支援既有 `twse_twt48u_all`、exact GET、`free_public_local` profile 與第 9 節原 manifest／source version／雙 pins，不新增准入或修改原 snapshot。Memory capture、receipt 與各用途條件仍依第 9.2 節；[`twse_action_capture.py`](../backend/worker/twse_action_capture.py) 新增 `summarize_memory_feed(...)`，輸出 `twse-action-observed-feed/v1`、`validation_scope=all_observed_identity_dates_classification`，供官方事件關注清單使用。
@@ -339,3 +341,50 @@ Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍�
 本批只有 metadata／唯讀 source review，程式寫入範圍為空；未取法人 body，未跑 tests／backend／build／UI，不由前輪測試追認准入。入口副作用見[開發文件](development-baseline/README.md)，角色／清理限制見[協作紀錄](TASK_COORDINATION.md)。
 
 取得 §12.2 的 exact 權利與資源證據後，才由統籌核定有界驗證及必要實作。優先順序依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，不以此來源等待暫停其他已具依賴的核心能力。
+
+## 13. M1-W1：TPEx 多日法人與完整有界交易日
+
+**來源、production consumer 與具名真資料／計算驗收已有限接受。** 支持 TPEx 3105／6488、唯一資料截止2026-10-02，日曆限2026-09-01～10-02。已解除多日原件、完整有界交易日及5／20日淨超計算依賴；後續 W2 同截止 API／UI 操作亦有限接受，見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)，不計完整 M1 或 PIT。
+
+### 13.1 獨立 policy 與四用途
+
+[`tpex_institutional_window.py`](../backend/worker/tpex_institutional_window.py) 使用 `window_policy()`，版本為 `tpex-institutional-window/w1-v1`、profile `free_public_local`。外部 pins 為 `policy_version=m1-w1-tpex-window-2026-10-04.1`、`policy_digest=sha256:5b5129cdc39ab0bac9eac89246917f8721c118e2f9c18ed02234972e6c5dc773`；型別／來源集合、四用途、整份 policy 與外部 digest 必須一致。原 registry／policy JSON、P2a manifest、bundled default 與其 pins 未改。
+
+| Source ID／版本 | 准入的政府連結 exact GET 與觀測查詢 |
+| --- | --- |
+| `tpex_government_institutional_csv`；`dataset-11856-dated-csv-observed-2026-10-04/v1` | [dataset11856](https://data.gov.tw/dataset/11856) 的 [CSV](https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data)，附 `d=115/MM/DD`，僅下述20個日期。 |
+| `tpex_government_index_csv`；`dataset-11391-month-csv-observed-2026-10-04/v1` | [dataset11391](https://data.gov.tw/dataset/11391) 的 [指數 CSV](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data)，附 `date=2026/09/01` 或 `2026/10/01`。 |
+
+統籌核實這兩個政府連結資源免費、適用[政府資料開放授權條款第1版](https://data.gov.tw/license)，及[TPEx 網站條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點的開放資料例外。`local_fetch`、`raw_store`、`summarize` 各為 `admitted`，須署名 Taipei Exchange (TPEx)、保留授權／政府資料集／exact URL、原件完整性、hash、版本及取得時間，並履行有界請求。`historical_pit=unsupported`；這不放行 legacy POST、其他日期、TWSE 或任意自動下載。查詢日期參數是本次實測行為，不是官方參數 SLA；數字 rate limit、精確發布／first availability、revision lineage 及停用承諾仍未知。
+
+### 13.2 完整有界日曆與窗口
+
+日曆版本為 `tpex-2026-09-01_2026-10-02-weekdays-11503027221/v1`。以[周一至五交易規則](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html)與[2026-09-17公告11503027221](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)明示9/25、9/28休市，建立2026-09-01～10-02的 expected dates；兩月 CSV 必須恰好包含全部22個開市日，每行 OHLC 正值、有限且界限一致。缺月、缺日、額外／重複日、休市衝突或競爭版本均使日曆及全部窗口 unavailable。不由缺列推休市，不把這段完整性外推全年或其他市場。
+
+cutoff 必須 exact `2026-10-02`，含截止日向前取 expected session，版本為 `independent-net-sum/expected-session-inclusive-v1`：
+
+- 5日：9/24、9/29、9/30、10/1、10/2。
+- 20日：9/3、9/4、9/7、9/8、9/9、9/10、9/11、9/14、9/15、9/16、9/17、9/18、9/21、9/22、9/23、9/24、9/29、9/30、10/1、10/2。
+
+### 13.3 原件、整數及缺日契約
+
+Consumer 嚴格驗 UTF-8 CSV、exact 25欄法人／6欄指數 header、全列欄數及日期。法人全列驗日期等於 requested date、代碼唯一且為4～6碼 ASCII 大寫字母／數字、名稱非空；僅3105／6488的全部金融欄位作數值驗證，兩股各須恰有一列，不稱其他標的金融數值已核。
+
+daily 股數接受 canonical ASCII 整數字串，絕對值上限 `9223372036854775807`；buy／sell 非負，每組 net 等於 buy－sell，外資合計等於不含外資自營商＋外資自營商，自營商等於自行買賣＋避險。三類窗口為**外資及陸資（不含外資自營商）／投信／自營商合計**；三大法人合計只加這三類 net，外資自營商已計入自營商，不重加。窗口 sum 使用任意精度 canonical 整數字串、`unit=shares`，不轉浮點數、補零或縮窗。合法來源零保留零。
+
+[官方日法人說明](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)的統計基礎是原始成交、不依券商錯帳／更正帳號調整後統計；這不等於下載資料永不修訂。每個 requested date 的錯日、selected 缺列／壞值、hash／receipt 不合格或競爭版本，均不採用該日、不得挑一版或較早替補。各 horizon 分別輸出 required／valid／missing／invalid dates、原因與逐日原值；5日齊備而20日缺較早日時，可僅5日 available。日曆或 policy 不合格則全窗口 fail closed。
+
+`CapturedCSV` 保留 immutable body bytes、SHA-256、URL／method／資料日、policy／source version、HTTP／content type、UTC request／capture time；重驗 body hash、exact GET、2xx、identity encoding、CSV MIME／UTF-8與時間順序。`local_evidence_consistent` 只證本地 bytes／收據一致，caller 人造 capture 不證 HTTP 來源真實性。published／first available／revision time 均 unknown，本批是本次版本的資料日期事後統計，不作歷史決策、策略條件或趨勢輸入。
+
+### 13.4 明示記憶體取得與有限接受
+
+只有 `MemoryWindowCache.load(...)` 明示核定 policy／profile／外部 pins 後可取得；`summarize_window_captures(...)`、snapshot／get 與 import 不取網路或寫檔。一次 load 最多22 GET（2 index＋20 daily），daily≤2 MiB、index≤1 MiB、總≤42 MiB，每 request HTTP timeout 15秒、零 retry／redirect、identity encoding；不是整批 hard deadline 或跨程序 rate limiter。日曆失敗時不取後續法人日檔。一次嘗試後不可重新 load；cache 只在 process memory，讀取重驗同 bytes，失敗不 fallback 舊版本。raw_store 用途准入不等於本批准許落盤；未保存原件，不支持磁碟重開或離線重播這次原件。
+
+統籌已用**實際 production consumer**取得22份原件、完整22開市日及兩股40個 selected rows，逐列原序、880個金融原字串與20日 body SHA 對獨立原件相符；12個窗口 net 各由 buy－sell 重算一致，memory guard 磁碟／mutation／未准入網路0，exit 0、零新增檔案。有限參考如下，順序為外資／投信／自營商、單位股：
+
+| 標的 | 5日 | 20日 |
+| --- | --- | --- |
+| 3105 | `[21655769, 2223800, 1578271]` | `[25496297, 16596388, 1183894]` |
+| 6488 | `[-2452286, 920329, 229491]` | `[-13191795, -1012703, 261501]` |
+
+解析／日曆／窗口與 loader 邊界由 [`test_institutional_windows.py`](../backend/tests/test_institutional_windows.py) 重建；synthetic 邊界不代真來源。W2 first POST 是新取得，22 body hash 與 W1 相符但 capture／receipt 不混同。精確命令、版本、UTC、full hashes、首 probe 失敗與修正收據留原 task。尚缺範圍外來源／日曆、更廣歷史／修訂、PIT、研究條件及完整 M1；P2a／P2b 與 §10原 OpenAPI 候選不放寬。

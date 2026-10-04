@@ -38,10 +38,12 @@
 
 | 工作 ID | 狀態與必要依賴 | 已接受範圍／完成條件 |
 | --- | --- | --- |
-| M1：R2-A2／D1 | 整體未完成；所採 R1-A2／B1 來源、窗口／交易日 coverage、時間、分類與版本。 | 5／20 日法人及突破／回踩仍是固定保守回應。須完成下方資料→計算→API／UI；行為見[個股頁 §9.3](STOCK_RESEARCH_PAGE.md#93-法人條件與新聞入口)。 |
+| M1：R2-A2／D1 | 整體未完成；所採來源、窗口／交易日 coverage、時間、分類與版本。 | W2 兩股／單截止法人已驗；範圍外 unavailable、突破／回踩仍固定保守。下一核心為9/30／10/01截止，先取9/1／9/2原件與核新版本，再驗三截止 API／UI；見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。 |
 | M1-P1 | 已 review（有限）；准入 STOCK_DAY_ALL 原件與共用日期截止。 | TWSE 1101／2330、2026-10-01 真實價格六欄、截止／追溯及桌面／窄版操作；記憶體 SQLite，不是多日、法人或 PIT。見[個股頁 §9](STOCK_RESEARCH_PAGE.md#9-m1-p1截止一致與來源可追溯總覽)。 |
 | M1-P2a | 已 review（有限）；exact TPEx 單來源 manifest／pins／profile。 | 3105／6488、2026-10-02 單日原件→capture→摘要 CLI 與具名拒收；未含多日／日曆或產品接線。見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。 |
 | M1-P2b | 已 review（有限）；P2a、明示 server ZIP／日期與總覽截止。 | 兩檔單日原件→API 二十個數值、追溯、端點一致及桌面／窄版操作；5／20 日仍 unavailable。見[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)。 |
+| M1-W1 | 已 review（有限依賴）；獨立政府 CSV policy／外部 pins、有界完整日曆與窗口版本。 | TPEx 3105／6488、唯一截止2026-10-02，20日真原件／22完整開市日、40 selected rows／880金融原字串及12窗口 net 重算已接受；解除此範圍來源／日曆／計算依賴，未交 API／UI 操作。見[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)。 |
+| M1-W2 | 已 review（有限操作）；W1 範圍、共用截止、明示首次取得及零外網 GET。 | TPEx 3105／6488、10/02的12窗口 net、原列／來源／缺日及具名 API／UI 操作已接受；22新原件不混用 W1 receipt。其他範圍／PIT／研究條件仍缺，見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)。 |
 | M1-P3a | 已 review（有限）；原四來源固定 pins 與 TWT48U memory consumer。 | 0056（ETF）／1449／1463 selected 四欄／列序／雙 hash 與拒收；發布／首次可得 unknown，原件未保存，不支持離線重播或 ZIP 輸入。見[來源 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)。 |
 | M1-P3b | 已 review（有限）；P3a、明示啟用／首次 POST、臺北觀測日 cutoff。 | selected 總覽、API 四欄／追溯、cache 再用及具名操作；普通 GET 零外網，未來生效預告保留。見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)。 |
 | M1-P4a | 審查接受；來源未准入，等待 exact 用途權利證據。 | 未取得法人原件或新增 consumer／API／UI，不計核心依賴解除；取得正面證據後才驗完整單日原件與接線。見[來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。 |
@@ -61,13 +63,14 @@
 | M3-P6d | 已 review（有限）；stock-only Signal／StrategyVersion raw reader 與原 gates。 | 20列窗口與 canonical 全集分開、bad latest 不 fallback、unlocated 拒用、健康行情／alternate 保留。見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)。 |
 | M3-P6e | 已 review（有限）；FeatureSnapshot／Chip raw reader、共同截止及原研究／持倉 gates。 | 壞特徵／籌碼只隔離該區塊，不較早 fallback，健康行情／研究保留；API／App／六個具名有限操作及六表不變已驗。見[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。 |
 
-M1 的三個缺口須依序解除：
+M1 的依賴與接線按所採範圍依序驗收；W1 已接受的具名範圍不外推：
 
 | 工作 | 必要條件 | 完成條件 |
 | --- | --- | --- |
-| 多日法人及交易日證據 | 已准入來源／用途、具名免費取得路徑與核定範圍；既有單日證據不能代多日。 | 所採市場／標的／日期有多日原件、欄位／單位／修訂及缺日 coverage，完整交易日基準可驗；缺列不能推休市。來源缺證見[§10](SOURCE_REGISTRY.md#10-m1-後續依賴審查來源候選與等待邊界)／[§12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。 |
-| 5／20 日窗口與研究規則計算 | 上述證據滿足，統籌核定窗口、交易日／缺日處理與規則版本；逐策略核輸入／時間／分類。 | 真實數值逐欄重算一致；邊界、缺日、合法零與不足可驗，成立／未成立／資料不足有真實原因，不跨策略拼值或補零。 |
-| API／UI 及產品驗收 | 已驗計算與同一研究截止。 | 具名市場／標的／日期的原件→計算→API 數值／追溯及 UI 操作通過；列支援與未支援範圍。 |
+| 多日法人及交易日證據 | 已准入來源／用途、具名免費取得路徑與核定範圍；既有單日證據不能代多日。 | W1 已接受兩股／單一 cutoff 的多日原件與完整有界交易日，見[§13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)。範圍外仍須逐欄／單位／修訂／缺日與完整基準；缺列不能推休市。原候選缺證見[§10](SOURCE_REGISTRY.md#10-m1-後續依賴審查來源候選與等待邊界)／[§12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。 |
+| 5／20 日淨超窗口計算 | 上述證據滿足，統籌核定窗口、交易日／缺日處理與版本。 | W1 具名真數值逐欄重算及有意義邊界已接受；其他範圍須另驗，缺日不補零、不縮窗。 |
+| 研究規則計算 | 所採策略輸入／時間／分類與規則版本齊備。 | 成立／未成立／資料不足有真實原因，不跨策略拼值或補零；W1 不進 Signal／研究條件，仍待實作驗收。 |
+| API／UI 及產品驗收 | 已驗計算與同一研究截止。 | W2 兩股／10/02原件→API數值／追溯及 UI 已有限接受；新增截止須另驗原件、版本／逐欄重算及切換，列未支持範圍。 |
 
 M3-P1～P6e 是既有庫存與讀回可靠性成果，不計新 Plan 或完整生命週期。最小計畫操作須先列實際資料、來源／availability、decision／execution 時間、版本及必要合法執行條件；涉及保存須驗隔離磁碟保存／跨程序讀回。
 
@@ -114,7 +117,7 @@ M3-P1～P6e 是既有庫存與讀回可靠性成果，不計新 Plan 或完整�
 
 | ID | 狀態 | 小批與依賴 | 可驗收完成條件 |
 | --- | --- | --- | --- |
-| R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性可先行，實際 as-of 接線才依賴 R0-C4。 | 原 snapshot 四來源 registry／capture、兩個磁碟 consumer 及窄修正已有限 review；另 TWT48U selected 事件／本次 feed 記憶體摘要、explicit TPEx 日法人來源准入與單日 selected 摘要已有限 review。其餘 collector、公司行動／停復牌、授權、時間／修訂／歷史與 PIT 仍待驗，具名範圍見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。 |
+| R1-A1 | 已 review（局部）；整體未完成 | G-SOURCE；來源可行性可先行，實際 as-of 接線才依賴 R0-C4。 | 原 snapshot 四來源 registry／capture、兩個磁碟 consumer 及窄修正已有限 review；另 TWT48U selected／feed、explicit TPEx 單日 selected 及 W1 獨立政府 CSV／有界日曆來源與 consumer 已有限 review。其餘 collector、公司行動／停復牌、授權、時間／修訂／歷史與 PIT 仍待驗，具名範圍見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)。 |
 | R1-A2 | 已 review（指定子批）；整體未完成 | 本批採用的 R1-A1 來源；逐市場／欄位用途驗證。 | TAIEX 身分／成交額狀態、單一離線缺額／零樣本、兩路徑八個 migration 磁碟案例、指定 selected invalid／拒收、legacy 精確整數 gate／磁碟重開及 synthetic browser 呈現已有限接受。其他 invalid／拒收、正式 DB、真實逐欄 coverage／其他股數精度待驗。完整驗收要求 exchange＋symbol＋session＋欄位用途有 raw 追溯，缺值、合成或截斷值不當有效零／可用欄位。支持範圍見[資料來源](DATA_SOURCES.md)與[個股頁 §14](STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。 |
 | R1-A3 | 提案 | R1-A1、R0-B5；公司行動與停復牌。 | raw／adjusted basis、因子、版本、可得時間與 applied-through 可重建；TWSE／TPEx 覆蓋分開；不足時 ATR／tracking fail-closed。 |
 | R1-B1 | 提案 | 本批採用的 R1-A1 來源與時間／版本證據；實際 as-of gate 接線依 R0-C4 必要輸入。 | unknown time、date conflict、backfill、revision／withdrawal、feed-only URL、無內文均有案例；排序與 cursor 綁 snapshot／version；無可信時間者不搶占「最新」。 |

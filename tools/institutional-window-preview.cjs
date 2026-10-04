@@ -1,0 +1,192 @@
+/** Memory-only W2 typecheck, product HTTP/SSR and full-App preview.
+ * Existing master node_modules are borrowed read-only via --deps. No files,
+ * bundles, buildinfo, HTTP captures, screenshots or new dependencies are made.
+ * Start the guarded Python --serve on 8781 first; --live-source-opt-in belongs
+ * exclusively to coordinator acceptance. This tool never opts into live data.
+ */
+const fs = require('node:fs')
+const path = require('node:path')
+const http = require('node:http')
+const Module = require('node:module')
+const assert = require('node:assert/strict')
+const childProcess = require('node:child_process')
+const args = process.argv.slice(2)
+const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
+const root = path.resolve(__dirname, '..')
+const dependencies = path.resolve(option('--deps', ''))
+if (!args.includes('--deps') || !fs.existsSync(path.join(dependencies, 'typescript/package.json'))) throw new Error('--deps requires existing frontend/node_modules')
+const apiOrigin = 'http://127.0.0.1:8781'
+const counts = { filesystem_mutations: 0, unapproved_network: 0, unapproved_subprocess: 0 }
+const ownedChildren = []
+const requireDependency = Module.createRequire(path.join(dependencies, '../package.json'))
+const compilerPackage = path.join(dependencies, '.pnpm/node_modules/esbuild')
+const compilerBinary = fs.realpathSync(require.resolve(`@esbuild/${process.platform}-${process.arch}/esbuild.exe`, { paths: [compilerPackage] }))
+const originalSpawn = childProcess.spawn
+childProcess.spawn = function (command, compilerArgs, options) {
+  if (fs.realpathSync(command) !== compilerBinary || !Array.isArray(compilerArgs) || !compilerArgs.some((arg) => /^--service=/.test(arg))
+    || compilerArgs.some((arg) => !/^--service=/.test(arg) && arg !== '--ping') || ownedChildren.length) {
+    counts.unapproved_subprocess++; throw new Error('unapproved subprocess')
+  }
+  const child = originalSpawn.call(this, command, compilerArgs, options)
+  ownedChildren.push(child.pid)
+  console.log(JSON.stringify({ esbuild_pid: child.pid, parent_pid: process.pid, binary: compilerBinary }))
+  return child
+}
+for (const name of ['exec', 'execSync', 'execFile', 'execFileSync', 'spawnSync', 'fork']) childProcess[name] = () => {
+  counts.unapproved_subprocess++; throw new Error('unapproved subprocess')
+}
+const denied = () => { counts.filesystem_mutations++; throw new Error('filesystem mutation denied') }
+for (const name of ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'mkdir', 'mkdirSync', 'mkdtemp', 'mkdtempSync',
+  'rename', 'renameSync', 'unlink', 'unlinkSync', 'rm', 'rmSync', 'rmdir', 'rmdirSync', 'copyFile', 'copyFileSync',
+  'truncate', 'truncateSync', 'ftruncate', 'ftruncateSync', 'chmod', 'chmodSync', 'chown', 'chownSync', 'utimes', 'utimesSync',
+  'link', 'linkSync', 'symlink', 'symlinkSync', 'createWriteStream', 'write', 'writeSync', 'writev', 'writevSync']) fs[name] = denied
+for (const name of ['writeFile', 'appendFile', 'mkdir', 'mkdtemp', 'rename', 'unlink', 'rm', 'rmdir', 'copyFile',
+  'truncate', 'chmod', 'chown', 'utimes', 'link', 'symlink']) fs.promises[name] = denied
+const safeFlags = (flags) => typeof flags === 'string' ? flags === 'r' || flags === 'rs' :
+  !(flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_APPEND))
+for (const name of ['open', 'openSync']) {
+  const original = fs[name]
+  fs[name] = function (filename, flags, ...rest) {
+    if (!safeFlags(flags)) return denied()
+    return original.call(fs, filename, flags, ...rest)
+  }
+}
+const originalPromiseOpen = fs.promises.open
+fs.promises.open = (filename, flags, ...rest) => safeFlags(flags) ? originalPromiseOpen.call(fs.promises, filename, flags, ...rest) : denied()
+const allowedPost = (url) => /^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(url.pathname)
+const originalFetch = global.fetch
+global.fetch = (input, options = {}) => {
+  const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+  const method = (options.method ?? 'GET').toUpperCase()
+  if (url.origin !== apiOrigin || (method !== 'GET' && !(method === 'POST' && allowedPost(url)))) {
+    counts.unapproved_network++; throw new Error('network destination or operation outside preview scope')
+  }
+  return originalFetch(input, { ...options, redirect: 'error' })
+}
+const ts = requireDependency('typescript')
+const esbuild = require(compilerPackage)
+const sourceRoot = path.join(root, 'frontend/src')
+const dependencySource = path.resolve(dependencies, '../src')
+const originalResolve = Module._resolveFilename
+Module._resolveFilename = function (request, parent, ...rest) {
+  try { return originalResolve.call(this, request, parent, ...rest) } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND' || request.startsWith('.') || path.isAbsolute(request)) throw error
+    return requireDependency.resolve(request)
+  }
+}
+for (const extension of ['.ts', '.tsx']) Module._extensions[extension] = (module, filename) => {
+  const result = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }, fileName: filename,
+  })
+  module._compile(result.outputText, filename)
+}
+
+function typecheck() {
+  const filename = path.join(root, 'frontend/tsconfig.app.json')
+  const config = ts.readConfigFile(filename, ts.sys.readFile)
+  if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'))
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(filename))
+  const options = { ...parsed.options, noEmit: true, incremental: false, composite: false }
+  const host = ts.createCompilerHost(options)
+  host.writeFile = denied
+  host.resolveModuleNames = (names, containingFile) => {
+    const relative = path.relative(sourceRoot, path.resolve(containingFile))
+    const ownSource = !relative.startsWith('..') && !path.isAbsolute(relative)
+    return names.map((name) => ts.resolveModuleName(name, name.startsWith('.') || !ownSource
+      ? containingFile : path.join(dependencySource, path.basename(containingFile)), options, host).resolvedModule)
+  }
+  const program = ts.createProgram(parsed.fileNames, options, host)
+  const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)]
+  if (diagnostics.length) {
+    console.error(ts.formatDiagnosticsWithColorAndContext(diagnostics.slice(0, 15), { getCanonicalFileName: (f) => f, getCurrentDirectory: () => root, getNewLine: () => '\n' }))
+    throw new Error(`TypeScript diagnostics: ${diagnostics.length}`)
+  }
+  console.log('TypeScript full src passed; no emit/buildinfo')
+}
+
+async function apiModule() {
+  const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'api.ts')], bundle: true, write: false,
+    platform: 'node', format: 'cjs', target: 'es2020', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify(apiOrigin + '/api') } })
+  const module = new Module(path.join(sourceRoot, '__memory_api__.cjs'))
+  module.filename = path.join(sourceRoot, '__memory_api__.cjs')
+  module._compile(result.outputFiles[0].text, module.filename)
+  return module.exports
+}
+
+async function check() {
+  typecheck()
+  const { renderToStaticMarkup } = requireDependency('react-dom/server')
+  const React = requireDependency('react')
+  const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
+  const { StockOverview } = require(path.join(sourceRoot, 'components/StockOverview.tsx'))
+  const ssrCases = cases.runInstitutionalWindowSSRTests(renderToStaticMarkup)
+  console.log(JSON.stringify({ new_institutional_window_ssr_cases: ssrCases, guard: counts, disk_artifacts: 0 }))
+  if (args.includes('--typecheck-only')) return
+  const api = await apiModule()
+  const before = await api.getStock('TPEx', '3105', '2026-10-02')
+  assert.equal(before.overview.institutional.capture_state.attempted, false)
+  const first = await api.captureInstitutionalWindows('TPEx', '3105', '2026-10-02')
+  assert.equal(first.capture_state.request_count, 22)
+  assert.equal(first.capture_state.action, 'acquired')
+  for (const [symbol, expected] of [['3105', '4,500'], ['6488', '-2,500']]) {
+    const repeated = await api.captureInstitutionalWindows('TPEx', symbol, '2026-10-02')
+    const stock = await api.getStock('TPEx', symbol, '2026-10-02')
+    const overview = await (await fetch(`${apiOrigin}/api/stocks/TPEx/${symbol}/overview?as_of=2026-10-02`)).json()
+    assert.deepEqual(stock.overview.institutional, repeated)
+    assert.deepEqual(overview.institutional, repeated)
+    assert.deepEqual(repeated.provenance, first.provenance)
+    const html = renderToStaticMarkup(React.createElement(StockOverview, { data: overview, onNews: () => {}, onCaptureWindows: () => {} }))
+    assert.ok(html.includes(expected))
+    assert.ok(html.includes('讀取本次法人窗口'))
+    assert.ok(!html.includes('窗口仍不可用'))
+  }
+  const refused = await api.getStock('TPEx', '3105', '2026-10-03')
+  assert.deepEqual(refused.overview.institutional.windows, {})
+  const receipt = await (await fetch(`${apiOrigin}/__window_validation/receipt`)).json()
+  assert.equal(receipt.request_count, 22)
+  assert.equal(receipt.db_preserved, true)
+  assert.ok(Object.values(receipt.guard).every((value) => value === 0))
+  console.log(JSON.stringify({ passed: true, new_ssr_cases: ssrCases, response_parser: 'product fetch + Response.json',
+    institutional_source: 'synthetic mock only', request_count: receipt.request_count, db_preserved: receipt.db_preserved,
+    guard: counts, disk_artifacts: 0, production_vite_build: 'not_run' }))
+}
+
+async function serve() {
+  const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
+    absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__',
+    platform: 'browser', format: 'esm', target: 'es2020', jsx: 'automatic',
+    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
+  const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
+  const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
+  const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
+    .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
+  const server = http.createServer(async (request, response) => {
+    response.setHeader('Cache-Control', 'no-store')
+    response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
+    const url = new URL(request.url, apiOrigin)
+    const method = request.method
+    if (method !== 'GET' && !(method === 'POST' && allowedPost(url))) { response.writeHead(405); response.end('preview operation outside scope'); return }
+    try {
+      if (url.pathname.startsWith('/api/')) {
+        const upstream = await fetch(url, { method, ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: '{}' } : {}) })
+        response.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json' })
+        response.end(Buffer.from(await upstream.arrayBuffer()))
+      } else if (url.pathname === '/app.js') {
+        response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' }); response.end(script)
+      } else if (url.pathname === '/app.css') {
+        response.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' }); response.end(css)
+      } else {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(html)
+      }
+    } catch { response.writeHead(502); response.end('preview upstream unavailable') }
+  })
+  server.listen(8782, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + limited actual router proxy',
+    pid: process.pid, parent_pid: process.ppid, child_pids: ownedChildren, port: 8782,
+    url: 'http://127.0.0.1:8782/stocks/TPEx/3105?as_of=2026-10-02', api: apiOrigin,
+    font: 'local fallback; remote font import omitted in memory', guard: counts, disk_artifacts: 0 })))
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
+}
+
+Promise.resolve().then(() => args.includes('--serve') ? serve() : check())
+  .catch((error) => { console.error(error); process.exitCode = 1 })
+  .finally(() => { if (!args.includes('--serve')) esbuild.stop() })

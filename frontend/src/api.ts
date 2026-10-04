@@ -13,6 +13,7 @@ import type {
   Instrument,
   InstrumentDetail,
   OfficialEventsData,
+  InstitutionalWindowsData,
   OfficialEventFocusData,
   NewsItem,
   GlossaryTerm,
@@ -201,6 +202,9 @@ export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
+
+export const captureInstitutionalWindows = (exchange: string, symbol: string, asOf?: string) =>
+  post<InstitutionalWindowsData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/institutional-windows/capture${queryString({ as_of: asOf })}`, {})
 
 export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
   post<OfficialEventsData>(

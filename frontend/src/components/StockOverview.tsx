@@ -1,8 +1,18 @@
-import type { InstitutionalDailyData, OfficialEventsData, StockOverviewData } from '../types'
+import type { InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatTableVolume, formatTableVolumeShares } from '../units'
 
 const REASONS: Record<string, string> = {
+  window_capture_not_enabled: '伺服器尚未明示啟用法人窗口載入。',
+  window_capture_configuration_invalid: '法人窗口設定無效，尚未啟用。',
+  window_market_or_symbol_not_supported: '目前只支持上櫃 3105、6488。',
+  window_cutoff_not_supported: '本次法人窗口只支持研究截止 2026/10/02；不沿用其他截止的數值。',
+  window_memory_capture_missing: '尚未載入本次法人窗口。',
+  window_capture_busy: '伺服器正在載入法人窗口，請稍後讀取。',
+  window_capture_failed: '本次法人窗口載入失敗；已有嘗試不自動重試。',
+  window_memory_evidence_invalid: '本次法人原件無法完整核對。',
+  window_capture_request_failed: '法人窗口請求失敗；請核對伺服器狀態後讀取。',
+  institutional_window_expected_dates_missing: '窗口缺少所需交易日原件；缺值不作 0。',
   price_source_not_admitted: '這筆行情來源與用途尚待核對',
   price_ingestion_provenance_missing: '缺少合格的收集紀錄關聯',
   price_raw_evidence_missing: '缺少可回指的原始資料與擷取證據',
@@ -92,7 +102,7 @@ function exactShares(value: string): string {
   return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
-export function InstitutionalDaily({ data }: { data?: InstitutionalDailyData }) {
+export function InstitutionalDaily({ data, windowsPresent = false }: { data?: InstitutionalDailyData; windowsPresent?: boolean }) {
   const row = data?.status === 'available' ? data.row : null
   const provenance = row ? data?.provenance : null
   return <section className="panel overview-institutional-daily"><h3>單日法人原件</h3>
@@ -113,7 +123,46 @@ export function InstitutionalDaily({ data }: { data?: InstitutionalDailyData }) 
       </details>
     </> : <div className="data-gap">尚無可核對的單日法人原件。</div>}
     <Reasons reasons={data?.reasons ?? ['daily_capture_not_configured']} />
-    <p className="small-note">最近 5／20 交易日法人窗口仍不可用；缺少交易日基準與多日原件。缺值不作 0，融資不併入三大法人。</p>
+    <p className="small-note">{windowsPresent ? '此單日區塊只核對設定原件；5／20 日窗口請見上方各窗的交易日與缺日狀態。' : '最近 5／20 交易日法人窗口仍不可用；缺少交易日基準與多日原件。'}缺值不作 0，融資不併入三大法人。</p>
+  </section>
+}
+
+export function formatWindowShares(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^(?:0|-?[1-9][0-9]*)$/.test(value)) return null
+  return BigInt(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+export function InstitutionalWindows({ data, onCapture, busy = false, requestFailure }: {
+  data: InstitutionalWindowsData; onCapture?: () => void; busy?: boolean; requestFailure?: string
+}) {
+  const state = data.capture_state
+  const evidence = data.windows?.['20']?.daily_evidence ?? data.windows?.['5']?.daily_evidence ?? []
+  return <section className="panel overview-institutional-windows"><h3>外資／投信／自營商</h3>
+    {!data.version ? <><div className="badge">資料不足</div><p>最近 5／20 交易日淨買賣超與趨勢尚不可用。</p></> : <>
+      <p className="small-note">各法人淨買賣超，單位：股；正值為買超，負值為賣超。截止包含當日，缺日不補零或改取更早日期。</p>
+      {state?.can_capture && onCapture && <button type="button" className="secondary-button" disabled={busy || state.busy} onClick={onCapture}>{busy || state.busy ? '正在載入法人窗口…' : state.attempted ? '讀取本次法人窗口' : '載入5／20日法人窗口'}</button>}
+      {requestFailure && <div className="data-gap" role="alert">{overviewReason(requestFailure)}</div>}
+      <div className="table-wrap"><table><caption>最近 5／20 交易日法人淨買賣超（股）</caption><thead><tr><th>窗口／日期</th><th>外資（不含外資自營商）</th><th>投信</th><th>自營商</th><th>交易日完整性</th></tr></thead><tbody>{[5, 20].map((horizon) => {
+        const window = data.windows?.[String(horizon)]
+        const formatted = (['foreign', 'trust', 'dealer'] as const).map((key) => formatWindowShares(window?.values?.[key]))
+        const valid = data.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string' && data.as_of === data.supported_scope?.as_of && data.calendar?.status === 'available' && window?.status === 'available' && formatted.every((value) => value !== null)
+        return <tr key={horizon}><th>{horizon} 交易日{window?.from && <div className="small-note">{formatResearchDate(window.from)} — {formatResearchDate(window.to ?? null)}</div>}</th>{valid ? formatted.map((value, index) => <td className="numeric-cell" key={index}>{value}</td>) : <td colSpan={3}><div className="data-gap">資料不足{window?.values && '：數值或窗口條件待核對'}</div></td>}<td>{window ? `所需 ${window.required_dates.length}／已驗 ${window.valid_dates.length}／缺 ${window.missing_dates.length} 日` : '尚未核對'}</td></tr>
+      })}</tbody></table></div>
+      {Object.values(data.windows ?? {}).map((window) => window.missing_dates.length > 0 && <details className="technical-details" key={window.horizon}><summary>{window.horizon} 日窗口缺日與未採用原因</summary><div>缺日：{window.missing_dates.join('、')}</div>{window.invalid_dates.map((item) => <div key={item.date}>{item.date}：{overviewReason(item.reason)}</div>)}<Reasons reasons={window.reasons} /></details>)}
+      <p className="small-note">來源：證券櫃檯買賣中心（TPEx） · <a href="https://data.gov.tw/dataset/11856" target="_blank" rel="noreferrer">上櫃股票三大法人買賣明細資訊</a> · <a href="https://data.gov.tw/dataset/11391" target="_blank" rel="noreferrer">櫃買指數歷史資料</a>；授權 <a href="https://data.gov.tw/license" target="_blank" rel="noreferrer">政府資料開放授權條款第 1 版（OGL 1.0）</a>。</p>
+      <p className="small-note">本次取得版本的資料日期統計，只留在伺服器記憶體；讀取沿用同一批原件。發布、首次可得與修訂時間均未知，不代表歷史當時可得（PIT 未支援），不推論研究條件成立。</p>
+      <details className="technical-details"><summary>查看法人窗口的每日數值、交易日與來源版本</summary>
+        <div>本次截止 {formatResearchDate(data.as_of ?? null)}；支持範圍：上櫃 3105、6488，截止 2026/10/02。</div>
+        <div>總覽法人版本 {data.version} · 計算版本 {data.calculation_version ?? '未核對'}</div>
+        <div className="overview-provenance">來源政策版本 {data.policy?.version ?? '未核對'} · 雜湊 {data.policy?.digest ?? '未核對'}</div>
+        <div>交易日基準 {data.calendar?.version ?? '未核對'}；所需 {data.calendar?.expected_dates?.length ?? 0}／已驗 {data.calendar?.valid_dates?.length ?? 0} 日。只支持 2026/09/01 — 2026/10/02。</div>
+        {data.calendar?.basis && <p>週一至週五：<a href={data.calendar.basis.weekday_rule} target="_blank" rel="noreferrer">官方交易時間規則</a>；明示休市日 {data.calendar.basis.closed_dates.join('、')}：<a href={data.calendar.basis.closed_notice} target="_blank" rel="noreferrer">官方休市公告</a>。其餘預期日期均以唯一指數原件核對，不以缺列推定休市。</p>}
+        {(data.calendar?.evidence ?? []).map((receipt) => <div className="overview-provenance" key={receipt.requested_date}>日曆原件 {receipt.requested_date} · <a href={receipt.url} target="_blank" rel="noreferrer">來源 CSV</a> · {receipt.source_version} · SHA-256 {receipt.body_sha256} · UTC 取得 {receipt.captured_at}</div>)}
+        {evidence.map(({ row, provenance }) => <details key={row.date}><summary>{row.date} · {row.company_name}（{row.symbol}） · 原件列序 {row.row_ordinal}</summary><div className="table-wrap"><table><thead><tr><th>法人</th><th>買進（股）</th><th>賣出（股）</th><th>淨買賣超（股）</th></tr></thead><tbody>{(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{formatWindowShares(row.investors[key].buy) ?? '待核對'}</td><td>{formatWindowShares(row.investors[key].sell) ?? '待核對'}</td><td>{formatWindowShares(row.investors[key].net) ?? '待核對'}</td></tr>)}</tbody></table></div><div className="overview-provenance">原始資料日 {row.source_date} · <a href={provenance.url} target="_blank" rel="noreferrer">來源 CSV</a> · {provenance.source_version} · SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256} · UTC 取得 {provenance.captured_at}</div></details>)}
+        <p>官方統計按當日原始成交，非錯帳／更正帳號調整後資料；下載版本是否修訂未知。本次原件 SHA-256 識別取得版本。</p>
+      </details>
+    </>}
+    <Reasons reasons={data.reasons} />
   </section>
 }
 
@@ -142,8 +191,9 @@ export function OfficialEvents({ data, onCapture, busy = false, requestFailure }
   </section>
 }
 
-export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, eventRequestFailure }: {
+export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
   data: StockOverviewData; onNews: () => void; onCaptureEvents?: () => void; capturingEvents?: boolean; eventRequestFailure?: string
+  onCaptureWindows?: () => void; capturingWindows?: boolean; windowRequestFailure?: string
 }) {
   const price = data.price
   const latest = price.latest
@@ -168,12 +218,12 @@ export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, 
         <Reasons reasons={price.reasons} />
         {price.rejected.length > 0 && <details className="technical-details"><summary>未採用 {price.rejected.length} 筆行情的日期與原因</summary>{price.rejected.map((row, index) => <div key={`${row.date}-${index}`}>{formatResearchDate(row.date)}：{overviewReason(row.reason)}（{row.reason}）</div>)}</details>}
       </section>
-      <section className="panel"><h3>外資／投信／自營商</h3><div className="badge">資料不足</div><p>最近 5／20 交易日淨買賣超與趨勢尚不可用。</p><Reasons reasons={data.institutional.reasons} /><p className="small-note">各法人獨立計算的來源與交易日條件尚未滿足；缺值不作 0，融資不併入三大法人。</p></section>
-      <InstitutionalDaily data={data.institutional_daily} />
+      <InstitutionalWindows data={data.institutional} onCapture={onCaptureWindows} busy={capturingWindows} requestFailure={windowRequestFailure} />
+      <InstitutionalDaily data={data.institutional_daily} windowsPresent={Boolean(data.institutional.version)} />
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>
       <OfficialEvents data={data.events} onCapture={onCaptureEvents} busy={capturingEvents} requestFailure={eventRequestFailure} />
       <section className="panel"><h3>新聞與公告入口</h3><p>保留既有來源連結、發布與事件時間。</p><button type="button" className="secondary-button" onClick={onNews}>查看新聞與公告</button><p className="small-note">新聞採已核對的發布／事件時間截至；未知時間或超過截止的項目不混入本次清單。</p></section>
     </div>
-    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。M1-P3b 包含資料日期截止、可追溯的原始價格視窗、設定的上櫃單日法人原件與明示取得的上市除權息預告；完整 M1 的法人窗口與研究條件尚未完成。事件只支持本次選中觀測，歷史當時可得（PIT）未支援。</details>
+    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。法人窗口依上方各窗狀態，只支持上櫃 3105、6488 與 2026/10/02 截止。價格、設定的單日法人原件及明示取得的除權息預告沿各自證據；其他範圍與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>
   </section>
 }

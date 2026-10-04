@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { InstitutionalDaily, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
-import type { InstitutionalDailyData, StockOverviewData, OfficialEventsData } from '../types'
+import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
+import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
 
 let originalAssertionCount = 0
@@ -150,3 +150,37 @@ export function runOfficialEventsSSRTests(render: (element: ReactElement) => str
 }
 
 console.log('OfficialEvents new SSR', runOfficialEventsSSRTests(renderToStaticMarkup), 'checks passed')
+
+export function runInstitutionalWindowSSRTests(render: (element: ReactElement) => string): number {
+  const dates = ['2026-09-24', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']
+  const base: InstitutionalWindowsData = {
+    version: 'institutional-windows/w2-v1', status: 'available', as_of: '2026-10-02', horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
+    unit: 'shares', quantity_encoding: 'canonical_integer_string', historical_pit: 'unsupported',
+    supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], as_of: '2026-10-02', calendar_from: '2026-09-01', calendar_to: '2026-10-02' },
+    capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: 22 },
+    calendar: { version: 'bounded-test', status: 'available', expected_dates: dates, valid_dates: dates, missing_dates: [],
+      basis: { weekday_rule: 'https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html', closed_notice: 'https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html', closed_dates: ['2026-09-25', '2026-09-28'] }, evidence: [] },
+    windows: { '5': { horizon: 5, status: 'available', values: { foreign: '184467440737095516140', trust: '-9007199254740993', dealer: '0' }, from: dates[0], to: dates[4], required_dates: dates, valid_dates: dates, missing_dates: [], invalid_dates: [], reasons: [] },
+      '20': { horizon: 20, status: 'unavailable', values: null, from: '2026-09-03', to: dates[4], required_dates: ['2026-09-03', ...dates], valid_dates: dates, missing_dates: ['2026-09-03'], invalid_dates: [], reasons: ['institutional_window_expected_dates_missing'] } },
+    policy: { version: 'test-version', digest: 'sha256:' + 'a'.repeat(64), profile: 'free_public_local' }, calculation_version: 'test-calc',
+  }
+  const html = render(<InstitutionalWindows data={base} onCapture={() => undefined} />)
+  check(html.includes('184,467,440,737,095,516,140') && html.includes('-9,007,199,254,740,993') && html.includes('>0</td>'), 'large signed/zero share quantities preserve every digit')
+  check(html.includes('所需 5／已驗 5／缺 0 日') && html.includes('所需 6／已驗 5／缺 1 日') && html.includes('2026/09/24') && html.includes('2026/10/02'), 'independent partial window ranges and counts')
+  check(html.includes('讀取本次法人窗口') && html.includes('OGL 1.0') && html.includes('https://data.gov.tw/dataset/11856') && html.includes('https://data.gov.tw/dataset/11391'), 'read same memory and attributed dataset links')
+  check(html.includes('<details') && html.includes('2026-09-25、2026-09-28') && html.includes('發布、首次可得與修訂時間均未知') && html.includes('PIT 未支援'), 'explicit calendar and unknown time scope in source details')
+  const initial = render(<InstitutionalWindows data={{ ...base, windows: {}, capture_state: { ...base.capture_state!, attempted: false, cache_present: false } }} onCapture={() => undefined} />)
+  check(initial.includes('載入5／20日法人窗口') && !initial.includes('184,467'), 'explicit first load without cached values')
+  const busy = render(<InstitutionalWindows data={base} busy onCapture={() => undefined} requestFailure="window_capture_failed" />)
+  check(busy.includes('disabled=""') && busy.includes('正在載入法人窗口') && busy.includes('role="alert"'), 'busy and defined request error')
+  for (const value of ['01', '-0', '1e3', 1000, null]) {
+    check(formatWindowShares(value) === null, 'malformed quantity is rejected')
+    const invalid = render(<InstitutionalWindows data={{ ...base, windows: { ...base.windows, '5': { ...base.windows!['5'], values: { ...base.windows!['5'].values!, foreign: value as string } } } }} />)
+    check(invalid.includes('數值或窗口條件待核對') && !invalid.includes('-9,007,199,254,740,993'), 'invalid horizon does not partially display numerical values')
+  }
+  const unsupported = render(<InstitutionalWindows data={{ ...base, as_of: '2026-10-03', windows: {}, reasons: ['window_cutoff_not_supported'], capture_state: { ...base.capture_state!, can_capture: false } }} onCapture={() => undefined} />)
+  check(unsupported.includes('不沿用其他截止的數值') && !unsupported.includes('184,467') && !unsupported.includes('<button'), 'unsupported cutoff cannot display or capture another cutoff')
+  const whole = render(<StockOverview data={{ ...data, institutional: base, institutional_daily: daily }} onNews={() => undefined} />)
+  check(!whole.includes('窗口仍不可用') && whole.includes('5／20 日窗口請見上方') && whole.includes('其他範圍與研究條件尚未完成'), 'single-day and footer copy agrees with independent windows')
+  return 18
+}
