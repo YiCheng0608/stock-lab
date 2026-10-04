@@ -36,7 +36,7 @@ from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_
 from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
 from .stock_independent_reads import independent_dates
 
-OVERVIEW_VERSION = "stock-overview/w7-v1"
+OVERVIEW_VERSION = "stock-overview/w8-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"

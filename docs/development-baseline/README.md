@@ -290,6 +290,20 @@ Browser首三次錯namespace help exit1；snapshot／tabswitch focus兩次connec
 
 原件僅process memory，無重啟重取／新增raw、helper、DB、pycache、附件或artifact，不稱全profile／cache0。Catalog／price seed僅synthetic；缺／壞8/26按窗口失效只必要synthetic API／SSR，actual missing0。範圍外／PIT、保存／跨程序讀回、legacy／ZIP／old live／full suite／physical canvas／native橫向手勢／Vite／production build／pending導航race未驗；既有NO-RETRY與零新增落盤限制不變。
 
+### M1-W8 八截止法人窗口的零落盤驗證入口
+
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 的 `--w8-only`為8個worker synthetic memory cases，`--w8-api-only`為5個real-router／MockTransport cases。Python3.12.14／httpx0.28.1，各first exit0；API synthetic local75 GET／36 POST／source0。沿 `-B -X utf8`、AST config stub／guarded memory SQLite，不載conftest／正式startup，不建DB／fixture檔；`--serve`預設mock，另用 `--serve --live-source-opt-in`才取W8當次原件，普通GET／import零外網，共用既有環境。
+
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs)沿共用唯讀 `--deps <既有 frontend/node_modules>`，explicit Node24.19.0／TS5.9.3／esbuild0.25.12；`--w8-only --typecheck-only` full-src noEmit／104 SSR exit0，guards0／artifact0。Full App `--w8-only --serve`以esbuild `write:false` memory bundle／fallback字型接actual API，非Vite／production build。Node mock HTTP未跑；產品fetch／Response.json的真96 net由root具名16組native覆蓋，不稱mock96 HTTP通過，不重跑old／full／legacy／ZIP／old live／build。W1–W7分節為Git當時版本收據；舊selectors僅保留歷史class byte，W8未重跑，不稱現版可pass，重現須查Git當時版本。
+
+Root source probe4 GET／146055B與first actual POST3105／9/21 production30 GET／3917863B為兩個獨立觀測；全43月列／27日曆、24383 daily full rows／54 selected／1188金融原字串、96 net／3600 API重疊字串及ALL30 body／canonical receipt SHA獨算見[來源 §19](../SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)。Root browser前具名local34 GET／33 POST，historical parser錯把`## 18.`混入小節導致assert0／exit1，前30 source／96 API及3600欄已通；修正唯讀2 GET／0 POST／source0核全84歷史及ALL30 hash canonical exit0，不重POST／外源。原JS const reassign TypeError為0tools／0GET；PS讀§18以SimpleMatch產生多行$n array後op_Subtraction exit1／0mutation，改唯讀Python補通。原命令與exit留原task，不抹首錯。
+
+ROOT-W8-NATIVE-3105-1／6488-1：各8unique可信日期spinbutton方向鍵＋FORM submit，全16組explicit390×844，96 DOM net／5及20日起迄／actual missing0通；16outer SUMMARY可信click對held30的2880 DOM金融欄、兩股新8/25 nested原列、repeat held30／source0及拒用見[個股頁 §24](../STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。初snapshot connectionclosed exit1、goto `--focus` unknown exit1／0goto、browser eval PS雙引號strip造成privatefield `#stock` SyntaxError exit1／0product、exec help unknown exit1／0product均未算pass。初focus／key／click ack無trusted／date／outer open不算成功；fresh focus／viewport scroll後可信通。6488 goto／tab focus後actual1277×924使viewport assert1／0forms，explicit重設390×844後才8unique通；不稱1277×924是窄版驗收。本輪建立1個owned page，其後無額外page／reload／restart／來源重取或附件。
+
+ROOT-W8-PREVIEW-CLOSE-1：唯一owned page `f86c37bb-b554-4f85-854a-d874bb062eaf` once close rawexit0、post tabs=[]。Node52108（parent57256／esbuild57136）Ctrl+C一次，SIGINT shutdown finalguard0／disk0正面可觀測，PTY rawexit1；esbuild exit code未觀測，不沿用W7值。API55612（venv launcher54804／shell56612）Ctrl+C一次，shutdown19表全欄／typeof preserved=true、finalguard0正面，PTY rawexit1。Fresh六PID及children／8781和8782 listeners均absent；無Stop-Process、第二signal或重啟重取。清理結果與驗證exit分報。
+
+服務清理後、文件更新前worktree225files（224tracked＋.git111B）／14dirs／4366028B，額外ignored／untracked新增0；原件僅process memory，無raw、helper、DB、pycache、附件或artifact，不稱全profile／cache0。Catalog／price seed synthetic；缺／壞8/25只有必要synthetic API／SSR，actual missing0。範圍外／PIT、保存／跨程序讀回、原生水平手勢／physical canvas／Vite production build／nav race未驗；W7外清literal `\n` SyntaxError為另案永久NO-RETRY，不混product錯誤或報approval拒，既有零新增落盤限制不變。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。
