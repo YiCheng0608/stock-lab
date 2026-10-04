@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-03。原 snapshot 四來源的 registry、standalone capture、兩個既有磁碟 capture consumers 與第 6 節有限資料品質修正已 review，來源查證基準日仍是 2026-09-12；第 8 節 TPEx 日法人 exact endpoint 的用途准入、capture／selected 摘要與具名驗收已有限 review。第 9 節 M1-P3a 的 TWT48U 記憶體 selected 事件摘要及第 11 節 M2-P1 本次 feed 摘要已有限 review；第 10 節記錄 M1 後續依賴唯讀審查，第 12 節記錄 M1-P4a TWSE 單日法人有界審查的缺證與恢復條件，兩項審查均不新增准入。新增准入或 consumer 不修改原 snapshot／pins，也不表示已重新查證其餘三個原來源的官方現況。
+更新：2026-10-03。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 記憶體 consumer 見 §9／§11。§10／§12 只記缺證與恢復條件，不新增准入。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 日法人准入；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -101,7 +101,7 @@ load_stock_day_capture(capture_zip, manifest=..., profile=...,
 
 Capture 對 matching date 的 selected TWSE security row具權威性：同日 `MI_INDEX` 不可補 capture missing/invalid symbol；其他歷史日期仍走 legacy MI_INDEX。合法列保存原 hash、capture time 與 materialized refs；`RawPayload.collected_at` 用 capture UTC，`MarketBar.collected_at` 是 ingestion-now。Raw reuse key 是 `ingestion_run_id + source + endpoint + sha256`。`adj_close = record.adj_close or record.close` 仍不是 adjustment truth。
 
-選中 symbol／OHLC／volume 缺失或無效仍可使 run partial；成交額 unavailable 可附 warning。upsert-only 不刪舊 bar。此來源沒有 TAIEX，不能單獨證交易 session；同日 MI_INDEX/TAIEX 須獨立成立。Matching date之外的 feed仍走原 adapter/fetcher，故不是完整 offline gate。純列 helper 有記憶體驗證；另已有限驗收單一離線落盤 fixture 的缺額／明確零經 selected capture→SQLite→API 路徑。其他 invalid／拒收的磁碟整合、真實官方來源與逐欄 coverage 仍待驗；範圍見 [P2+ 資料契約](DATA_SOURCES.md#r1-a2-p2-成交金額可得狀態有限接受)。
+選中 symbol／OHLC／volume 缺失或無效仍可使 run partial；成交額 unavailable 可附 warning。upsert-only 不刪舊 bar。此來源沒有 TAIEX，不能單獨證交易 session；同日 MI_INDEX/TAIEX 須獨立成立。Matching date之外的 feed仍走原 adapter/fetcher，故不是完整 offline gate。純列 helper 有記憶體驗證；另已有限驗收單一離線落盤 fixture 的缺額／明確零經 selected capture→SQLite→API 路徑。指定三種 invalid／四類拒收另有有限磁碟驗收；未覆蓋的 invalid／拒收、真官方與逐欄 coverage 仍待驗，範圍見 [P2+ 資料契約](DATA_SOURCES.md#r1-a2-p2-成交金額可得狀態有限接受)。
 
 ### 5.2 `holidaySchedule` positive exclusion
 
@@ -127,7 +127,7 @@ Calendar只控制本次 request，不寫 `OfficialBatch.no_data_dates`、不新�
 
 Split-row linkage只在同一 selected symbol全部輸入恰為兩列時成立：一列只有可解析 start、另一列只有可解析 resume，且 `start < resume`；invalid/empty/duplicate列也計入兩列上限。成功時 suspension details保留 start `source_row`，新增 `resumed_date`、`interval_end`、完整 `resumption_source_row`；resumption event保持原樣。
 
-其他形狀均沿用 row-local behavior：malformed、倒置、same-day/intraday、同列雙日期、multiple cycles或 identity ambiguity不新增拒絕/reason；`interval_end` 仍可能 null並造成 legacy無界延長。Upsert可更新同 key但不刪舊錯 event，不重算既存 evaluation；完整 history capture、PIT與 repair未完成。
+其他形狀均沿用 row-local behavior：malformed、倒置、same-day/intraday、同列雙日期、multiple cycles或 identity ambiguity不新增拒絕/reason；row-local 輸出 `interval_end=null` 時，legacy 消費此列仍有無界延長的缺陷。Upsert可更新同 key但不刪舊錯 event，不重算既存 evaluation；完整 history capture、PIT與 repair未完成。
 
 ### 6.3 TPEx corporate action mapping
 
@@ -170,7 +170,7 @@ Classification不證 raw membership/hash/FK、authenticity、official event ID�
 
 仍未完成：
 
-- 原四來源已有 `STOCK_DAY_ALL` 與 `holidaySchedule` 兩個有限磁碟 ZIP capture consumers；第 9 節另為 TWT48U selected 事件新增已有限 review 的記憶體 consumer，不支持既有 ZIP 讀入。TWT48U 的產品／持久化接線、`tpex_spendi_history` capture 接線與完整 legacy collector gate 仍缺。
+- 原四來源已有 `STOCK_DAY_ALL` 與 `holidaySchedule` 兩個有限磁碟 ZIP capture consumers；第 9 節另為 TWT48U selected 事件新增已有限 review 的記憶體 consumer，不支持既有 ZIP 讀入。TWT48U selected／feed 的有限產品接線由[個股頁 §11–13](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)負責；Event／News 持久化、`tpex_spendi_history` capture 接線與完整 legacy collector gate 仍缺。
 - `historical_pit` 需逐筆 first-available、revision/withdrawal lineage及可重建 snapshots；event/date/current raw不能替代。
 - `tpex_spendi_today` 不在四來源 manifest；完整 halt/action/session/TAIEX truth、C007 store linkage、B5b/PIT與正式資料分類仍未完成。
 - Paid subscription、TWSE/TPEx action identity/duplicate修正、generic numeric hardening、舊資料 repair與既有 evaluation replay仍需獨立設計及授權。
@@ -225,7 +225,7 @@ python -m worker.tpex_institutional_capture summarize `
 
 統籌已有限接受 **2026-10-03 單次 exact runtime capture**：1 GET、HTTP 200，來源資料日 **2026-10-02**，原件 **910 列**日期一致；**TPEx 3105／6488** 各三組 buy／sell／net 加 total、共 **20 個數值**逐欄與原件一致。Consumer CLI subprocess exit 0，讀前後 ZIP hash 不變；舊四來源 manifest bytes 與 HEAD 一致。同一真實 ZIP 的錯日期 `2026-10-01`、缺 selected `9999`、全零 expected digest 各為 unavailable／CLI exit 2，reason 分別為 `payload_date_mismatch`、`selected_row_missing`、`content_digest does not match expected pin`，不回傳 rows，讀前後 ZIP hash 不變。
 
-本批程式 review、上述正負向操作與純記憶體靶向回歸已接受；完整 backend 回歸未跑，前端未變更而沿用仍對應來源的 M1-P1 結果。首跑含一個測試 assertion 失敗與後續修正、唯讀 fixture 核對及測試／清理的分開收據留本輪 task，不將首跑改稱全通過。Freeze／索引／commit 最終 receipt 也留 task；此 review 不增加下列多日、交易 session 或產品接線完成度。
+本批程式、具名正負向操作及必要記憶體回歸已有限接受；完整 backend 未跑。原失敗／修正、命令、exit 及版本收據留 task，不增加多日、交易 session 或產品完成度。
 
 M1-P2a 本身不接 DB、legacy collector、總覽 API／UI 或多日彙總；完整 5／20 交易日的市場基準、缺日與窗口 coverage 仍待核定及驗收。單日列數、官方資料日或單次真實摘要均不能補成完整交易日曆、全市場／歷史 coverage 或 PIT。工作狀態見 [M1 接線映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
 
@@ -277,11 +277,11 @@ python -B -m worker.twse_action_capture live-summarize `
 | `1449`／佳和 | `1151012` → 2026-10-12 | `權`／除權 | 49 |
 | `1463`／強盛新 | `1151015` → 2026-10-15 | `息`／除息 | 50 |
 
-三筆均為本次觀測到的**未來生效預告**，不證事件當時可得或價格影響。首次 live CLI 選到原件缺列，回 `selected_symbol_missing:6834`、exit 2，未改報通過；web 工具較舊內容不能代替實際 network 原件。測試、三次獨立 GET 的命令／版本／exit／數值／hash 及審核收據留本輪 task；現完整案例與完整 backend 未重跑，既有磁碟分支的 mock shape 驗證不當成磁碟出版驗收。本批沒有前端變更，不新增 API／UI 驗收。
+三筆均為本次觀測到的**未來生效預告**，不證當時 availability 或價格影響。另一次 live CLI 因原件缺 selected 6834 回 unavailable／exit 2；未改報成功，web 較舊內容不代替 network 原件。P3a 無前端變更、不新增 API／UI 驗收；完整 backend／磁碟出版未驗，原收據留 task。
 
 此 memory consumer 不支持既有 ZIP 讀入，P3a 本身不接 API／UI／DB，`durable_capture=false`、`historical_pit=unsupported`；完整歷史、事件群組／修訂與產品研究條件仍未完成。後續 M1-P3b 的 selected 總覽接線已有限 review，精確支持範圍見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)，不由產品接線擴張本節來源與時間邊界。
 
-本輪 live body／receipt 不落盤，task 只留命令、數值／分類、hash 與驗收收據；**不能離線重播這次 live 原件**。下輪可重新取得來源，但內容／版本可能不同；Git 的最小 fixture 可重建邊界測試，不能代替本次 live 證據。不為不可重建證據新增附件或放寬既有落盤限制。工作與後續接線見 [M1 映射](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+Live body／receipt 未保存，**不能離線重播這次原件**；再取得的內容／版本可能不同，Git fixture 只重建邊界測試。命令、分類、hash 及收據留原 task；後續產品支持由[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)負責。
 
 ## 10. M1 後續依賴審查：來源候選與等待邊界
 
@@ -305,7 +305,7 @@ python -B -m worker.twse_action_capture live-summarize `
 
 M2-P2 在完整 feed consumer 驗證後才按來源 `Code`／任一 `Name` 搜尋，符合結果再排序及套 100 股上限，匹配外或上限外的壞列不得跳過；搜尋不改原件事件列數、摘要版本或原件 bytes／pins。本批不新增來源／用途准入或歷史支持，來源正負向與產品驗收分開；精確搜尋／計數／返回契約及本次支持範圍由[個股頁 §13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)負責。
 
-統籌已有限接受 **2026-10-03 單次 exact memory capture、HTTP 200／單一 GET**，body **15,689 bytes、58 列／58 個代碼**，全部身分／日期／分類與列序對 actual API 一致，receipt、雙 hash、固定 pins 與追溯欄位已核對。空 `[]`、同股多事件、超過顯示上限及拒收是另行純記憶體 fixture 的邊界，不是當次 live 原件的情境，也不證全市場或完整歷史。必要記憶體回歸通過，完整 backend 未跑；原件未保存，不能離線重播，原 hash／收據只留 task。具名產品驗收、未支援範圍及清理結果見[個股頁 §12.3](STOCK_RESEARCH_PAGE.md#123-驗收與尚缺項)，不另建來源副本或 receipt 附件。
+已有限接受 **2026-10-03** 單次 exact memory GET 的 **58 列／58 代碼**：全身分、日期、分類及列序與 actual API 一致，receipt／雙 hash／pins 已核。空 feed、同股多事件、上限及拒收是另行記憶體 fixture，不作當次 live 情境或全市場證據。完整 backend 未跑；原件未保存，不能離線重播。產品具名範圍見[個股頁 §12.3](STOCK_RESEARCH_PAGE.md#123-驗收與尚缺項)，收據留 task。
 
 ## 12. M1-P4a：TWSE 單日法人有界審查與准入缺口
 
@@ -336,6 +336,6 @@ Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍�
 
 ### 12.3 本輪驗收邊界與下一步
 
-程式寫入白名單持續為空；本輪除 metadata／唯讀 review 及文件差異、連結、一致性檢查外，未跑 tests、backend、production build 或 UI 操作，不稱通過，也不由前輪測試追認新來源。既有開發入口的副作用與限制已核對且仍適用，見[開發與驗證入口](development-baseline/README.md)；附件與新增殘留為 0，舊殘留未處理。
+本批只有 metadata／唯讀 source review，程式寫入範圍為空；未取法人 body，未跑 tests／backend／build／UI，不由前輪測試追認准入。入口副作用見[開發文件](development-baseline/README.md)，角色／清理限制見[協作紀錄](TASK_COORDINATION.md)。
 
-下一步等待第 12.2 節的 exact 權利與資源證據，再由統籌核定後續有界驗證及必要實作。當前角色與寫入範圍見[協作紀錄](TASK_COORDINATION.md)，優先順序由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑) 負責。本輪文件交由統籌接受並 freeze，coverage／commit 依核准範圍執行，實際收據留原 task。
+取得 §12.2 的 exact 權利與資源證據後，才由統籌核定有界驗證及必要實作。優先順序依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，不以此來源等待暫停其他已具依賴的核心能力。

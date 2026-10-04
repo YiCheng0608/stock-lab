@@ -21,4 +21,4 @@ npm run dev
 - [UI 文案](../docs/UI_COPY_SPEC.md)：中文狀態、單位、未知與卡片；[個股研究頁](../docs/STOCK_RESEARCH_PAGE.md)：圖表與研究流程。
 - [新聞契約](../docs/NEWS_SPEC.md)：來源、去重、時間；[詞彙表](../docs/GLOSSARY.md)：術語。
 
-股數以精確 shares 保存，成本為每股；張／股只作輸入與呈現。最近收盤不稱即時價，固定 confidence 不稱勝率。新能力與歷史 UI review 分開，這份入口不宣稱目前服務已重啟或重新驗收。
+股數以精確 shares 保存，成本為每股；張／股只作輸入與呈現。最近收盤不稱即時價，固定 confidence 不稱勝率。現行能力與驗收邊界以 ROADMAP 及上述契約為準。

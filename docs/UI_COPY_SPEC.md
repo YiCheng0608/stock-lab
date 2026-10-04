@@ -120,7 +120,7 @@
 
 依「今日研究結論 → 現在怎麼做 → 關鍵價位 → 為何如此 → 資料時間與完整度」排列；技術、籌碼、事件、替代條件和稽核置後並可收合。固定附註：「此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。」
 
-M3-P6c 個股行情讀回隔離的下列文案已有限接受。StockPage 無行情記錄時提示「尚無行情記錄。」；真 invalid／partial、malformed 或 conflicting 讀值契約時提示「行情讀值無效，先核對原記錄。」。兩者接續「最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。」；頁首最近收盤與漲跌顯示「待核實」，不把拒用改稱零或負面訊號。stored syntax known 而 M1 尚未准入／缺原件證據時，只呈現報價待核實與既有來源不足說明，不加「行情讀值無效」。missing 0／空 metadata 保留無行情文案；兩項退修經必要 HTTP／SSR 及具名畫面後才接受。其餘獨立研究入口保留。精確 API／窗口／來源 gate、有限相容、實際操作與未驗界線只由[個股頁 §15](STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)詳述，不在此複製。
+M3-P6c 個股行情讀回隔離的下列文案已有限接受。StockPage 無行情記錄時提示「尚無行情記錄。」；真 invalid／partial、malformed 或 conflicting 讀值契約時提示「行情讀值無效，先核對原記錄。」。兩者接續「最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。」；頁首最近收盤與漲跌顯示「待核實」，不把拒用改稱零或負面訊號。stored syntax known 而 M1 尚未准入／缺原件證據時，只呈現報價待核實與既有來源不足說明，不加「行情讀值無效」。missing 0／空 metadata 保留無行情文案；其餘獨立研究入口保留。精確 API／窗口／來源 gate、有限相容、實際操作與未驗界線只由[個股頁 §15](STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)詳述，不在此複製。
 
 M3-P6d 研究候選讀回隔離與候選 read.status 非字串 guard 的單項退修已有限接受。新版 invalid／malformed 提示為「研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。」；可定位的 slots 隔離續接「各策略分別核對，不以較早候選代替。」。拒用研究 summary／levels 不把獨立行情改為零或壞值，也不抹除健康 alternate 與原 complete observation／hold_observe／primary=null。精確資料契約、十個已核 malformed case、非字串 focused 補驗與具名 browser 操作界線只由[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)負責。
 
@@ -136,11 +136,11 @@ M3-P6d 研究候選讀回隔離與候選 read.status 非字串 guard 的單項�
 | malformed | 「研究候選讀回格式待核實，先核對原記錄。」 |
 | 完全 undefined 舊回應 | 「舊版回應未提供研究候選讀回狀態。」；null／矛盾的新狀態不當舊回應。 |
 
-全標的 unknown date 用「全標的有 N 筆候選日期無法定位（記錄 #ID）；研究結論待核實。」；未知策略 identity 改為「策略身分無法定位」。無日期／版本／原 status 時寫「待核實」，未知策略名為「策略身分待核實」，不捏造較早候選或成立結論。已接受五案中的 B-JSON 最終原生分頁切換；其餘四案是程式 DOM.click 後核實 actual browser DOM，不泛稱五案原生互動通過。非字串 status 必須拒用，必要 pure 補驗中合法 missing 提示保留、malformed 提示存在、known 提示不冒用。
+全標的 unknown date 用「全標的有 N 筆候選日期無法定位（記錄 #ID）；研究結論待核實。」；未知策略 identity 改為「策略身分無法定位」。無日期／版本／原 status 時寫「待核實」，未知策略名為「策略身分待核實」，不捏造較早候選或成立結論。具名操作範圍見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)。非字串 status 必須拒用，必要 pure 補驗中合法 missing 提示保留、malformed 提示存在、known 提示不冒用。
 
 #### M3-P6e 獨立特徵／籌碼區塊文案（有限接受）
 
-以下文案已由統籌在必要 actual HTTP／App 及具名操作範圍有限接受；來源／具名操作有限接受、主線說明已整合；版本封存與 merge 收據以 Git／原 task 為準。六案中只有 B 最終原生切 tab，其餘 DOM.click 支持與原失敗分報，不外推全部原生互動。精確讀值／窗口／截止與欄位 gate 只由[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)負責。
+下列文案已在必要 actual HTTP／App 及具名操作範圍有限接受；精確讀值、窗口、截止、欄位 gate 與原生／DOM.click 驗收邊界由[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)負責。
 
 | 區塊與狀態 | 實際文案 |
 | --- | --- |
@@ -166,7 +166,7 @@ JavaScript 股數顯示 parser 支持完整 `0..9,223,372,036,854,775,807` 的 c
 
 新增／更新保留四種互斥的 StrictInt 正整數輸入：`shares`、`unit + quantity`（`unit=lot` 或 `odd_lot`）、`quantity_lots`、`odd_lot_shares`，一次只能提供一種。最終股數須為 `1..9,007,199,254,740,991`；張數乘 1,000 後再檢查上限，unsafe 請求在 commit 前以 HTTP 422 拒收並保留既有持倉。UI 先以原始 ASCII 數字與所選單位檢查正整數及上限，再轉 Number 送出；股單位上限為上述安全整數，張單位上限為 `9,007,199,254,740`。表單須說明目前可保存範圍並顯示結果／錯誤，不讓輸入捨入後成為另一個合法值。
 
-本批只處理股數呈現與失精輸入 gate，正常估值、決策與計畫計算不變。純記憶體 SQLite 的保存／讀回不代表磁碟重開；正式 DB、真官方／live、估值、新計畫、完整 backend、production build 與完整 M3 均未由本批驗收。實際證據與待驗項依[開發入口](development-baseline/README.md#m3-p1-既有庫存股數的零落盤驗證入口)及[協作紀錄](TASK_COORDINATION.md)，尚未通過的項目不得稱完成。
+本批只處理股數呈現與失精輸入 gate，正常估值、決策與計畫計算不變。純記憶體 SQLite 的保存／讀回不代表磁碟重開；正式 DB、真官方／live、估值、新計畫、完整 backend、production build 與完整 M3 均未由本批驗收。實際入口與待驗邊界見[開發入口](development-baseline/README.md#m3-p1-既有庫存股數的零落盤驗證入口)，歷史收據留原 task／Git；尚未通過的項目不得稱完成。
 
 本次產品驗收採 `2026-10-03` 的 TWSE／TPEx synthetic 使用者庫存，不是官方行情或正式 DB 樣本。實際 router、記憶體 SQLite commit／refresh→GET、product fetch／`Response.json()` 與具名庫存操作已有限接受；純 helper 的實際 int `ODD`／int64 `MAX` 及 SSR 字串 formatter 另驗，未把 ORM `ODDFLOAT`／`MAXFLOAT` 的未知股數升格成可信大數。
 
@@ -177,7 +177,7 @@ JavaScript 股數顯示 parser 支持完整 `0..9,223,372,036,854,775,807` 的 c
 | 桌面張單位 `9007199254741`／`9007199254740` | 超限拒收，該列完整 JSON 不變；最大合法張數保存後讀回，該 TWSE 測試持倉的刪除亦已核對。 |
 | TPEx `390×844` 窄版，`1001` 股保存後刪除 | 呈現 `1 張 1 股` 及原值 `1,001 股`；document 寬 375，12 張卡的 24 個數量子元素 client／scroll width 均為 273，editor 寬 305，未觀測橫向溢出。 |
 
-具名操作的擷取範圍 console 為空；19 個網路請求均為自有 `8778`、status 200（3 POST／2 DELETE／14 GET），23 個 performance entries 均同 origin，觀測外網為 0。這些計數限該擷取範圍，不當整段 session 的完整 log。preview 只在記憶體 CSS 排除外部字型並以 CSP 阻外網，本次限 fallback font，不修改正式字型契約。QA viewport 已還原 `1365×900`，tab 已關閉，兩個自有 server／listener 已獨立核實不存在，新增測試產物／殘留為 0；測試與清理的 exit 0 分報，版本、命令、操作及清理收據留原 task。
+具名操作限 memory preview／fallback font，不改正式字型；console／network 只支持該擷取範圍。歷史程序／清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)，不作完整 session 穩定性證據。
 
 #### M3-P2 可信整數保存與磁碟重開契約
 
@@ -201,7 +201,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 | 窄版最大合法張數 `9223372036854775` | 保存 200，exact 股數 `9223372036854775000`／零股 0；14 張卡的 28 個數量元素 client／scroll width 均 273，editor 305，未觀測橫向溢出。 |
 | 窄版原生刪除兩列 NEW，再讀回 | 兩次 DELETE 200；GET 200／items 空、cards 0。 |
 
-本次只接受正確 post-navigation viewport 與 focus 後實際生效的操作；初始 blank viewport、hidden 頁面的未生效 click 及 Orca runtime_unavailable 不算操作通過。擷取範圍 32 個 network requests（27 GET／3 POST／2 DELETE）均為自有 8780、status 200，reload 後 16 個 performance resources 均同 origin，觀測外網為 0；不當完整 session log。Console 的 7 entries 為 3 個 React DevTools info 與 4 個已知 React Router future warnings，無 error，不宣稱空 console。QA viewport 已還原、tab 已關閉，自有程序／child／listener 已核實不存在；隔離 DB 已清；capture stop 額外 HAR 的審核拒絕殘留分報於[協作紀錄](TASK_COORDINATION.md)。命令、版本、原始失敗與有限接受收據留原 task，不另造附件。
+具名操作只接受實際生效的 viewport／focus／保存／拒收／刪除，不以工具 ack 作成功。曾有未生效操作及 runtime 失敗，原收據留 task；capture stop 的額外 HAR 審核拒絕殘留由[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)及[協作紀錄](TASK_COORDINATION.md)負責。
 
 <a id="m3-p3-庫存成本停損風險輸入可信檢核與拒收保留"></a>
 
@@ -221,7 +221,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 
 這是 Float／JavaScript Number 的可信輸入 gate，不是十進位精確保存。合法小數仍可有二進位近似；server 不從已解碼的數字還原原始 JSON token，UI 的原字串 underflow 檢核與 server 的已解碼值 gate 分開。沒有修改 schema、legacy Float 或既有污染列、held／worker／risk 行動、新 Plan、價格級距、來源或 PIT。
 
-本次採 `2026-10-03` synthetic TWSE／TPEx 使用者庫存與 memory server，不當正式持倉、官方行情或 live coverage。主契約支持範圍如下；完整命令、版本、失敗與清理收據見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)及[協作紀錄](TASK_COORDINATION.md)。
+本次採 `2026-10-03` synthetic TWSE／TPEx 使用者庫存與 memory server，不當正式持倉、官方行情或 live coverage。主契約支持範圍如下；可重建入口見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)；歷史命令、版本、失敗與清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
 
 | 具名操作 | 已接受的有限結果 |
 | --- | --- |
@@ -231,7 +231,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 | 一次 transport fault 將原合法 POST 的成本改為 `false` | actual router 回 422；UI 保留 draft、busy 恢復、完整 JSON 不變，使用真拒收回應，不是 mock response。 |
 | 新表單只填 TPEx NEW `2` 張，獨立核成本／停損原字串為 `""` | POST 200、GET 的成本／停損／risk_budget 均為 null，原非零值已清。首次 CLI 空字串操作失敗及誤按保存原值不算本次空白清欄通過。 |
 
-兩次原生刪除 click 沒有 DELETE，未驗收本批刪除操作；兩列 NEW 只在記憶體，shutdown 後釋放，原 12 列完整 JSON 保持。本批 scoped memory fetch recorder 為 21 requests（16 GET／5 POST，20 個 200／1 個 422、外網 0），不是完整 session capture；26 個 performance resources 同 origin。Console 3 entries 為 1 React DevTools info／2 既有 Router future warnings，error 0，不稱空 console。QA 最後實際還原 `1365×900`、document 寬 1350 且無橫向溢出，原 tab 已關、自有 memory 程序／children／listeners 已核不存在，新測試磁碟產物為 0；前輪 HAR 仍在且不重試，兩者分報。
+兩次原生刪除沒有 DELETE，**本批刪除未驗**；兩 NEW 列只在記憶體，shutdown 後釋放，原十二列完整 JSON 不變。Console／network 為有限擷取，不證完整 session；歷史程序清理留原 task／Git，現有 HAR／blocked 殘留見[協作紀錄](TASK_COORDINATION.md)。
 
 正式 DB、磁碟保存／重開、production deployment、真官方／live、完整 backend／production Vite build、既有污染的可信讀回、風險行動與所有估值、risk sizing、新 Plan、完整 M3、歷史／availability／PIT 仍未由本批驗收。後續 M3-P4 已有限接受的可信讀回及非法停損隔離見下節；兩批各依具名範圍驗收，不以輸入 gate 推定所有估值／風險行動已完成。
 
@@ -263,7 +263,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 
 Actual HTTP 的十四列與十四個完整 decisions 已核三態、0 優先、missing-only fallback 與 invalid 隔離；讀取前後全十四列 SQL（全部欄位、note、updated_at 與三欄 typeof）雜湊一致，無 mutation。必要邊界及舊 API metadata 缺席／raw null、明示壞 metadata 的相容結果另由可重建 formatter／SSR 驗證，不冒充 live API 情境。
 
-原 QA tab `c0cd04e4-4539-4d73-a36d-b80f71a75328` 首次 snapshot／eval 均 runtime_unavailable、exit 1，沿同 tab 原生 focus 後恢復，未另建 tab。Scoped memory fetch 只記 3 個 GET／200（TWSE TEXT stocks、portfolio、actions），mutation 0／外網空；7 個 performance resources 為 owned，同次 Orca console 回 `messages=[]`，僅支持這個擷取範圍，不稱完整 session／所有 console 空。未使用會落 HAR 的 capture。最後 actual viewport 還原 `1365×900`、document 寬均 1350，原 tab close exit 0／list 空；兩個 owned memory serve／children／listeners 已核不存在，測試及清理分報成功，新增測試磁碟產物／殘留 0，舊 HAR／其他 blocked／occupied 資源未動。
+Runtime／offscreen 操作曾失敗，恢復後的具名操作才接受，原收據留 task。HTTP／console／network 只支持有限查閱；歷史程序／頁籤收據留原 task／Git，現有 HAR／blocked 殘留依[協作紀錄](TASK_COORDINATION.md)。
 
 本節保留 P4 信任讀回與非法庫存停損隔離的原有限驗收，不修污染或遺失 intent，不外推所有估值／風險行動。後續 [M3-P5](#m3-p5-可信庫存股數與既有估值持倉判定一致) 已有限接受股數／既有估值／held 一致接線；兩批各依具名範圍驗收，不從可信股數推定金融估值 exact 或行情信任已驗。
 
@@ -307,7 +307,7 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 | TPEx GATEFAIL 的實際研究詳情及首頁 | 兩個 gate 未滿 unknown 仍 data_insufficient；原 heading／strong 說明保留並有 badge、levels 空。首頁保留不完整 unknown 並去重。 |
 | 詳情 badge 退修後的桌面／390px | 真正 ActionDetailPanel 的完整／不完整兩 profile 均通過；第一版 ProductActionCard SSR 不當詳情證據。 |
 
-原 tab 首次 snapshot／eval runtime_unavailable、exit 1；沿同 tab 原生 focus 恢復。工具 help、未 quote 的 PowerShell ref／JavaScript 引號失敗分報；詳情 badge 遺漏則是產品退修，補正後才有限接受。Scoped recorder 只涵蓋前版 8 GET／200、外網／mutation 空；最終詳情 performance 3 個 owned resources，不當完整 session capture。QA 最後還原 actual 1365×900、document 寬均 1350，原 tab 已關；自有程序／children／listeners 已核不存在，新測試落盤／殘留 0。最終 console 讀取六則為兩個 React DevTools info 與四個既有 Router warnings，無該讀取 error，不稱無 warning 或完整 capture。
+詳情 badge 原先缺失，修正後才按兩個 profile 接受。其他工具／runtime 原失敗留 task，不稱初版即通過；console／network 為有限查閱，歷史程序清理留原 task／Git，現有 blocked 殘留依[協作紀錄](TASK_COORDINATION.md)。
 
 本批未驗真正磁碟保存／重開、正式 DB／migration、真官方／live、production deployment／Vite build、完整 backend、行情來源／日期／價格可信性、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT；不新增個人風險額度輸入。必要磁碟驗收不能以 memory 取代。重建入口與精確證據範圍見[開發入口](development-baseline/README.md#m3-p5-可信股數與估值持倉判定的零落盤驗證入口)，後續庫存本地數值隔離／試算的有限範圍見 [M3-P6a](#m3-p6a-庫存收盤數值隔離與本地試算可檢視)。
 
@@ -354,9 +354,9 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 | 真正 full App 的 `/actions` 上 Portfolio，桌面 `1298×924` | 二十張卡預設收合；document client／scroll width 均 1283、card 589。TWSE NORMAL／BADPRICE／MISSINGBAR／DIRTYDATE／METABAD／POISON／BADQ／HUGEQ／ZEROQ 經 focus 後實際 Enter 展開及收回；10.5／10,500／+500 與合法零試算正確，缺席／非法／股數未知／unsupported 不造 0。 |
 | `390×844`（mobile=false）的同一 Portfolio | TPEx NORMAL／POISON／BADQ／HUGEQ／OVERFLOW 以實際 Enter 展開及收回；document 寬均 375、card 303、detail 273。120 字來源、64 字時間及 309 位 Float 本地 close 可核對，未觀測橫向溢出；不稱硬體手機／觸控驗收。 |
 
-初次 snapshot 的 runtime_unavailable、最後 inline JavaScript 的 PowerShell 引號 eval 失敗均分報；沿同 tab 原生恢復、改 here-string 單引號 probe 後才成功，不重建 tab、不重跑已驗操作、未開 HAR。Scoped memory fetch recorder 只涵蓋 1 GET／200、external／mutation 空，不是完整 capture；6 個 owned performance resources 含原 actions 的 **2 GET／500**，本次 console 讀 `messages=[]` 不表示整個 session 無 warnings。QA tab、viewport、自有程序／children／listeners 已核實清理，新測試磁碟產物／附件／暫存／殘留 0，舊 excluded 資源未動。
+Runtime／引用工具失敗留 task；具名操作及有限 console／network 查閱不證完整 session。歷史程式／fixture 清理收據留原 task／Git，現有未清資源依[協作紀錄](TASK_COORDINATION.md)，P6a 的 Actions 500 失敗見下段。
 
-P6a 驗收時 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。P6a 有限接受不包含完整 ActionsPage 或行動端點回歸通過；原失敗保留，後續清單隔離的現行有限範圍見下列 P6b，不倒改 P6a 驗收。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，freeze／索引／commit／merge 見[協作紀錄](TASK_COORDINATION.md)。
+P6a 驗收時 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。P6a 有限接受不包含完整 ActionsPage 或行動端點回歸通過；原失敗保留，後續清單隔離的現行有限範圍見下列 P6b，不倒改 P6a 驗收。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，歷史 freeze／索引／commit／merge 收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
 
 <a id="m3-p6b-actions-清單逐列行情讀回污染隔離"></a>
 
@@ -395,9 +395,9 @@ decision 以未定型 SQL 讀八欄 `id`、`instrument_id`、`trading_date`、`c
 | 必要巨大值補驗的兩尺寸預設清單 | L-FUTURE 截止日 close／adj_close 為 `1e308`，翌日 5000 仍排除；TPEx 卡片完整 411 字元與原 Intl price 相符。桌面／390px card 寬 294／337、price box 195／238，card／price box scroll width 均等於自身寬，document 寬仍均 1283／375，漲跌待核實。補驗不另宣稱搜尋／Enter 通過。 |
 | 正常卡片原導航 | 真正 Enter `A-NORMAL` 經原 `/actions/TWSE/A-NORMAL` 進 StockPage，`/api/stocks/TWSE/A-NORMAL` 為 200；M1 總覽仍拒 fixture、0／60 合格與研究資料待補，原 file／source gate 未降。污染卡片的整個詳情路徑未點、未驗。 |
 
-初操作 instance 的 scoped fetch **13 GET／200**、performance **17 owned resources／200**；巨大值補驗另 instance 為 **2 GET／200**、**6 owned resources／200**，各自 external／mutation 空，非完整 session capture。既有搜尋／state／分頁／正常導航仍有效；工具失敗與 ref click 未動分報，真正 Enter 後才接受，補驗 Enter 無新 GET 不算新操作。初 console limit 50 為空，final 同範圍有 **React DevTools info 1／既有 Router warnings 2**，不稱全域無 warning。兩 instances 各自在自身 HTTP／UI／pre-shutdown 保持 24 庫存／1,382 行情全欄＋typeof／note／updated_at 同 digest、read mutation 0，不跨 instance 比 hash。Final viewport 已還原 1365×900／寬均 1350、20 卡／details 全收合，owned tab 已關、兩 serve final exit 0，PIDs／children／8777、8778 listeners 已獨立核空；新增測試產物／附件／暫存／殘留 0，舊 excluded 資源未動。
+兩 instances 各自在自己的 HTTP／UI／pre-shutdown 核對二十四持倉／1,382 行情全欄、typeof、note／updated_at 同 digest、read mutation 0，不跨 instance 比 hash。Console 有既有 warnings，network 只作有限查閱；工具原失敗與 owned 程序／頁籤清理收據留原 task／Git，現有未清資源依[協作紀錄](TASK_COORDINATION.md)。
 
-污染卡片進 StockPage 的 typed max-date／完整 120 bars／`bar_dict` 路徑仍待驗；SSR 的 action detail panel 不等於這條真實路徑。完整 ActionsPage、行情來源／日期／availability、真官方／live、M1 正向 filesystem gate、正式 DB／磁碟重開、完整 backend／production Vite build、Decimal exact、新 Plan、完整 M3／PIT 未驗。必要磁碟或原件驗收不以 memory fixture 取代；下一具名候選 P6c 由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責，重建入口見[開發入口](development-baseline/README.md#m3-p6b-actions-清單行情讀回的零落盤驗證入口)。
+P6b 本身未驗污染卡片完整 StockPage 路徑，SSR action detail panel 不能代替操作；後續個股行情／研究讀回的有限支持由[個股頁 §15–17](STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)負責。完整 ActionsPage、可信來源／availability、官方／live、M1 正向 filesystem、正式 DB／磁碟重開、完整 backend／production build、Decimal exact、Plan／完整 M3／PIT 未由 P6b 驗收；必要原件／磁碟條件不以 memory 取代。入口見[開發文件](development-baseline/README.md#m3-p6b-actions-清單行情讀回的零落盤驗證入口)，優先順序依[ROADMAP](ROADMAP.md)。
 
 ### 10.4 數值表格、單位與空白
 

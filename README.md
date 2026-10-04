@@ -1,8 +1,8 @@
 # 台股研究專案
 
-以免費公開市場資料支援台股盤後研究：新聞事件 → 族群／題材 → 個股證據 → 行動與持倉追蹤。
+以免費公開資料支援台股盤後研究：今日關注 → 個股研究 → 條件計畫 → 追蹤回看。
 
-目前已有官方資料收集與回補、固定突破／回踩規則、行動摘要、持倉、技術回測和研究介面。可信媒體／國際新聞、分點分析、完整交易計畫及經驗證的 AI 預測仍待完成；現有訊號不代表校準勝率。
+已有官方資料收集／回補、v1 規則、行動摘要、持倉、技術回測及研究介面。M1 的5／20日法人窗口與研究判定、完整交易計畫／追蹤、分點分析及經驗證 AI 預測未完成；現有訊號不代表校準勝率。支援範圍與核心優先順序見[開發路線](docs/ROADMAP.md)。
 
 ## 從這裡開始
 
@@ -17,7 +17,7 @@
 
 - [後端](backend/README.md)：FastAPI、SQLAlchemy／SQLite、資料 worker。
 - [前端](frontend/README.md)：React、TypeScript、Vite、React Query、ECharts。
-- [驗證方式](docs/development-baseline/README.md)：依變更選測試；現行入口仍會建立隔離目錄。
+- [驗證方式](docs/development-baseline/README.md)：入口、副作用、驗收範圍與落盤限制。
 - [協作規則](AGENTS.md)與[接手狀態](docs/TASK_COORDINATION.md)：角色、驗收、索引、Git 及暫存政策。
 
-API 啟動只做唯讀 schema readiness，不自動 migration；request handlers、worker 與設定載入仍可能寫入。啟動前依操作手冊確認資料路徑及授權。Git 保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。
+API 啟動執行唯讀 schema readiness，不自動 migration。設定載入、request handlers 與 worker 的寫入入口及資料路徑須依操作手冊核對授權；readiness 通過不代表整個程序唯讀。Git 保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。

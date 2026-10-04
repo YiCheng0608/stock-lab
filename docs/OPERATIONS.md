@@ -26,7 +26,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 `init-db` 會改 schema。執行前必須解析三個路徑、確認目標與授權，並為既有 DB 建 consistent backup。API startup 只跑 `check_database_readiness()`，不會自動建庫、migration、repair 或 stamp；缺檔、空檔、不可讀或不相容時拒絕啟動。以 `Ctrl+C` 停止自己啟動的前景服務；不要停止或重啟其他 task／使用者管理的 process。source 更新也不會改變已載入舊 lifespan 的 running process。
 
-`app.config` import 仍可能建立設定的 data／raw 目錄；API handlers、worker、collect／daily／backfill／analyze／evaluate／backtest 仍可能寫入。要做只讀查驗，應直接使用 SQLite `mode=ro`＋`PRAGMA query_only=ON`，不能用一般 app startup 代替。
+`app.config` import 執行設定的 data／raw 目錄建立；API 的資料變更 handlers 及 collect／daily／backfill／analyze／evaluate／backtest 是寫入入口。要做只讀查驗，應直接使用 SQLite `mode=ro`＋`PRAGMA query_only=ON`，不能用一般 app startup 代替。
 
 前端開發服務：
 
@@ -50,7 +50,7 @@ R1-A2 legacy 成交額 migration 的可重建 fixture 八案例已有限接受�
 ### 2.1 安全升級與復原順序
 
 1. 唯讀解析實際 DB 絕對路徑，記錄 revision、schema、size、mtime、hash。
-2. 使用 SQLite backup API 或等價一致性機制建立專案外具名副本；不要在可能有 WAL 時裸複製主檔。
+2. 使用 SQLite backup API 或等價一致性機制建立專案外具名副本；有 WAL 或尚未確認 writer／sidecar 狀態時，不裸複製主檔。
 3. 在副本記錄完整 before evidence，確認 Alembic 可 import 且版本正確，再執行 `init-db`／upgrade。
 4. 驗 revision、schema diff、共同欄位內容、row counts、PK／FK／UNIQUE、`integrity_check`、`foreign_key_check` 與第二次執行冪等。
 5. 另外驗 recovery：forward-only migration 的做法是丟棄故障副本，從 consistent backup 還原到新的隔離路徑；未實跑就標未執行。
@@ -70,7 +70,7 @@ Migration helpers 只接受有限 canonical SQLite legacy shapes，並在 destru
 | `python -m worker.cli evaluate` | 更新 execution／tracking 與 T+5／T+20 settlement；會寫 DB。 |
 | `python -m worker.cli backtest --start-date YYYY-MM-DD --end-date YYYY-MM-DD` | 回放既有資料並保存 audit；不下載歷史資料。 |
 
-`backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；為補足目標交易日可能讀更早候選日，但仍受迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
+`backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；目標有效交易日不足時，候選查詢可早於輸入起日，但不得超過迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 
 `candidates`／`priority` 的 group-score 納入範圍已有限 review：typed 依 DB-local ID＋pair 精確收斂，legacy symbol 為避免漏抓可納入所有 active exchange；這不是 decision selection。`/api/coverage` 同名 scope 重用此 resolver。完整規則與 public source-day 展示分見 [產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約) 與 [§9.6](INDUSTRY_CLASSIFICATION.md#96-public-candidate-的-source-day-身分展示契約)。
 
@@ -135,7 +135,7 @@ python -m worker.source_runtime capture `
 
 `--source` 只接受 `twse_stock_day_all`、`twse_holiday_schedule`、`twse_twt48u_all`、`tpex_spendi_history`。preflight failure 是 zero request、stdout failure receipt、exit 2；成功 bundle 內含 `body.bin` 與 `receipt.json`。request、validation、timeout、publication 與 capture-time 邊界見 [SOURCE_REGISTRY §4](SOURCE_REGISTRY.md#4-standalone-source-capture)。
 
-`STOCK_DAY_ALL` 與 holiday bundle consumer 都是 caller 明確 opt-in 的 Python library，沒有 CLI。三個 `STOCK_*` 必須在 import `worker.sources`／`worker.pipeline` 前設為隔離路徑；`force=False` 可能 reuse，同 request 驗接線時才使用 `force=True`。兩者的輸入範圍、fail-closed 與非 PIT 邊界見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 及 [§5.2](SOURCE_REGISTRY.md#52-holidayschedule-positive-exclusion)。
+`STOCK_DAY_ALL` 與 holiday bundle consumer 都是 caller 明確 opt-in 的 Python library，沒有 CLI。三個 `STOCK_*` 必須在 import `worker.sources`／`worker.pipeline` 前設為隔離路徑；同 request key 已有 `status=success` 的 run、`records>0`、metadata 的 `taiex_records>0` 且 `force=False` 時直接 reuse；需要驗本次 consumer 接線時用 `force=True` 重新處理該 request。兩者的輸入範圍、fail-closed 與非 PIT 邊界見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 及 [§5.2](SOURCE_REGISTRY.md#52-holidayschedule-positive-exclusion)。
 
 TPEx suspension／action 與 TWSE action 修正只有有限 normalization／read-time 行為，沒有 retroactive repair；`force=True` 不會刪舊錯 Event，也不保證修復所有舊 bar 或重算既存 evaluation。精確來源契約見 [SOURCE_REGISTRY §6](SOURCE_REGISTRY.md#6-tpextwse-有限資料品質契約)，不得把 refetch 當成 cleanup／replay。
 
@@ -169,7 +169,7 @@ reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔�
 
 ## 7. 程式與前端驗證
 
-歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，記錄命令、exit、pass／fail／skip 與限制；文件修改通常只檢查 diff、連結與內容一致性。測試資料與落盤原則見 [開發入口](development-baseline/README.md) 及 [AGENTS](../AGENTS.md#驗證資料與暫存)；後端測試不得指向正式 DB。
+歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，記錄命令、exit、pass／fail／skip 與限制；文件修改只檢查 diff、連結與內容一致性。測試資料與落盤原則見 [開發入口](development-baseline/README.md) 及 [AGENTS](../AGENTS.md#驗證資料與暫存)；後端測試不得指向正式 DB。
 
 ```powershell
 Push-Location frontend

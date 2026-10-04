@@ -163,7 +163,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 
 - new-listing 是 stock／IPO 的事件型 `daily_hot_group`；窗口為 `0 <= D-L <= 60` 個曆日 inclusive，與 20／60 根有效 bars 的 actionable guard 分離。
 - 只有 `L<=D<=E` 才新建 `[max(D,L), E]`。`L>D` 不預建 future period；`D>E` 不回填過期歷史。missing L 為 unresolved 並保留舊 membership；invalid L fail-closed。
-- 新 period 一開始即 bounded，exact rerun 零 mutation。legacy open row 在窗口內只補 `valid_to=E`；本次才觀察到已過期時，只可 forward-close 於 `D-1` 並揭露 D 前可能錯誤。既有 bounded row 的 `valid_to` 與本次 E 不符時拒絕，不覆寫。
+- 新 period 一開始即 bounded，exact rerun 零 mutation。legacy open row 在窗口內只補 `valid_to=E`；本次才觀察到已過期時，只可 forward-close 於 `D-1` 並標示 D 前的期間未獲本次驗證。既有 bounded row 的 `valid_to` 與本次 E 不符時拒絕，不覆寫。
 - listed／new-listing record 依 L/window 決定 desired state；ETF record才可證明轉入 ETF。每個 domain 分別計算，不能用單一 group id 廣泛關閉其他 rows。
 
 ### 7.4 Domain isolation、atomicity 與 receipt
@@ -199,7 +199,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 
 ### 8.2 舊 payload 的有限相容
 
-沒有 marker 的舊 payload 只有在所有列都沒有 `instrument_id`／`exchange` 時才可能相容讀取。worker 必須以該 score 的 `group_id` 與 `signal_date` 重查有效 membership，再套用與 producer 相同的股票／ETF 類型及 category gate；相同 symbol 的有效 canonical identity 必須恰好是目標 `instrument_id`，而 payload 也必須恰有一筆同 symbol 且其 20 日超額報酬為有限數值，才可採用 `legacy_symbol_unique`。
+沒有 marker 的舊 payload 只有在所有列都沒有 `instrument_id`／`exchange` 時才允許進入下述 legacy 身分核對。worker 必須以該 score 的 `group_id` 與 `signal_date` 重查有效 membership，再套用與 producer 相同的股票／ETF 類型及 category gate；相同 symbol 的有效 canonical identity 必須恰好是目標 `instrument_id`，而 payload 也必須恰有一筆同 symbol 且其 20 日超額報酬為有限數值，才可採用 `legacy_symbol_unique`。
 
 只看 payload 中同 symbol 的筆數不足以證明身分：另一市場的同 symbol 成員即使因技術資料不足而沒有寫入 `member_returns`，只要在當日仍是有效成員，就必須拒絕。期間邊界、群組、類型或 identity 無法唯一核對時，輸入保持 null，不任選第一筆。
 

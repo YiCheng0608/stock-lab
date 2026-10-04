@@ -88,7 +88,7 @@ Top-level exact keys 為 `contract`、`comparable`、`inputs`、`legacy`、`new`
 | linkage | match／conflict／unknown／unavailable | new legacy_reference 與**requested** opaque key byte-for-byte 比較；match 只是 caller declaration。 |
 | confidence、prices、evidence、quality、time、revision、inputs | incomparable | 不算 delta、不推機率／共同 levels／availability／PIT／execution。 |
 
-Legacy date／cutoff／naive created、new caller-provided decision/as-of、store first-generated／created 均不能單獨證明 availability 或 execution time。Artifact normalizer 會 trim optional legacy_reference，requested legacy key 不 trim，因此含空白 key 可能 exact 命中但 linkage=conflict。
+Legacy date／cutoff／naive created、new caller-provided decision/as-of、store first-generated／created 均不能單獨證明 availability 或 execution time。Artifact normalizer 會 trim optional legacy_reference，requested legacy key 不 trim，requested key 含前後空白仍可 exact 命中 legacy 列；new legacy_reference 非 null 且 trim 後與 requested key 不同時，linkage=conflict，null 仍為 unknown。
 
 `comparison_json` 採 sorted keys、compact separators、`ensure_ascii=False`、`allow_nan=False`，不加入 wall clock。Report 經 JSON round-trip detached。
 

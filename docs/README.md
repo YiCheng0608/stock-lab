@@ -19,14 +19,14 @@
 | 保存與重播 | [Signal artifact](SIGNAL_ARTIFACTS.md)、[離線描述比較](SIGNAL_COMPARISON.md)、[Pure-rule replay](RULE_REPLAY.md)、[Worker capture](WORKER_ANALYSIS_CAPTURE.md) |
 | 開發協作 | [AGENTS](../AGENTS.md)、[接手狀態](TASK_COORDINATION.md)、[驗證入口](development-baseline/README.md)、[後端](../backend/README.md)、[前端](../frontend/README.md) |
 
-角色模型與 Reasoning 以 [AGENTS「四個角色」](../AGENTS.md#四個角色)為準；新建或恢復角色時須核對該配置。實際 session／建立參數、接手與暫停狀態由[協作紀錄](TASK_COORDINATION.md)負責，修改規則不會自動切換既有 chat，也不改寫舊 session 的實際紀錄。
+角色配置、核心選題及跨輪停滯判定以 [AGENTS](../AGENTS.md) 為準；實際 session、接手與停滯紀錄由[協作紀錄](TASK_COORDINATION.md)管理。
 
 [Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)與[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md)只保留歷史定位，不作新派工依據。
 
 ## 文件維護
 
-同一規則只在上表的負責文件詳述，其他處放摘要與連結；更新與交接依 [AGENTS](../AGENTS.md#文件與交接)。`已 review` 僅代表具名有限驗收，文件整理不增加功能完成度或操作授權。
+按上表分工：流程規則寫 AGENTS、產品優先寫 ROADMAP、工作條件寫 ROADMAP_EXECUTION、接手現況寫 TASK_COORDINATION、精確行為寫主題契約；其他處放摘要與連結。文件更新依 [AGENTS](../AGENTS.md#文件與交接)，不增加功能完成度或操作授權。
 
 ## 歷史查閱
 
-2026-09-14 精簡前的文件在 Git `69f62cf`；本次全面整理前的版本在 `2acc3c5`，例如 `git show 2acc3c5:docs/TASK_COORDINATION.md`。歷史命令、測試數與逐輪交付由 Git／原 task 追溯，不作目前來源的新驗收，也不能恢復已刪除的 Temp 附件。
+本次整理前的29份 Markdown 在 Git `5ae84d2`，例如 `git show 5ae84d2:docs/TASK_COORDINATION.md`。更早整理前版本為 `69f62cf`、`2acc3c5`。歷史命令、測試數、實際 roster 與逐輪收據查 Git／原 task；不作目前來源的新驗收。

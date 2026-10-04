@@ -89,7 +89,7 @@ Digest 格式為 `sha256:` 加 64 lowercase hex。arguments digest 不含 subjec
 
 每次 capture／serialize／replay 先驗 caller shape 與 identity，再驗 runtime；fixed source 最多讀 1 MiB＋overflow sentinel，核 hash 後把同一批 bytes compile／exec 到 UUID-named fresh private module，再核兩個完整 config digests。不使用 shared `app.domain` callable/config 或 cached pyc。
 
-Private module 正常與 exception path 都以 identity guard 移除自己註冊的 object。Host 替換 registry object、interpreter 或 filesystem 的惡意操控不在保證內。Whole-file binding 也表示 domain.py 的無關區域變更仍可能使舊 bundle unsupported。
+Private module 正常與 exception path 都以 identity guard 移除自己註冊的 object。Host 替換 registry object、interpreter 或 filesystem 的惡意操控不在保證內。Whole-file binding 涵蓋 domain.py 全檔；任何區域的 bytes 改變而不符合固定 hash 時，即拒絕 bundle，不只檢查 evaluator 區域。
 
 ## 7. `rule-replay-report/v1`
 

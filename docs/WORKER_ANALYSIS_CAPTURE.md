@@ -142,11 +142,11 @@ Strict reader 驗 owner/schema、canonical text/digest、exact attempt、row/cou
 | `rollback_confirmed` | Pre-commit error 後 rollback 成功；外層 error 為 `analysis_failed`。 |
 | `not_committed_verified` | Commit 拋錯，fresh exact read 確認 attempt 不存在。 |
 | `commit_outcome_unknown` | Commit/rollback/readback 無法判定；不得宣稱成功或 rollback。 |
-| `creation_outcome_unknown` | Exclusive target 出現後 create 失敗；檔案可能 partial 或完整 owned。不可用同 path retry，須由 caller 核實並管理。 |
+| `creation_outcome_unknown` | Exclusive target 出現後 create 失敗；自有目標是否完整尚未判定。不可用同 path retry，須由 caller 核實並管理。 |
 
 `AnalysisCaptureError` 提供 `.code`、nullable `.outcome`、nullable `.detail`；caller 應依 code/outcome 處理，不解析 message。
 
-- Path/create：`absolute_external_path_required`、`protected_path`、`path_alias`、`expected_source_sha256_required`、`target_exists`、`source_migration_not_ready`、`source_analysis_schema_missing`、`source_already_owned`、`copied_source_hash_mismatch`、`creation_readback_mismatch`、`creation_failed`；snapshot 前置亦可能拋 `ReadonlySnapshotError` 的 path/hash/sidecar/WAL/change code。
+- Path/create：`absolute_external_path_required`、`protected_path`、`path_alias`、`expected_source_sha256_required`、`target_exists`、`source_migration_not_ready`、`source_analysis_schema_missing`、`source_already_owned`、`copied_source_hash_mismatch`、`creation_readback_mismatch`、`creation_failed`；snapshot 前置失敗另拋 `ReadonlySnapshotError` 的 path/hash/sidecar/WAL/change code。
 - Owner/read：`capture_schema_mismatch`、`ownership_missing`、`ownership_invalid`、`source_fingerprint_invalid`、`invalid_sealed_payload`、`invalid_capture_timestamp`、`invalid_market_date`、`attempt_not_found`、`attempt_manifest_mismatch`、`attempt_count_mismatch`、`attempt_metadata_invalid`、`capture_relation_mismatch`、`capture_keys_mismatch`、`capture_occurrence_invalid`、`capture_replay_mismatch`、`capture_signal_link_mismatch`、`capture_snapshot_shape_invalid`、`capture_snapshot_type_invalid`、`capture_signal_evidence_mismatch`、`capture_strategy_link_mismatch`、`capture_result_mismatch`、`capture_pair_mismatch`、`capture_occurrence_mismatch`、`capture_integrity_error`。
 - New-run preflight：`invalid_attempt_id`、`isolated_stock_environment_required`、`stock_directory_required`、`stock_database_parent_invalid`、`stock_database_must_be_unused`，以及 `check_database_readiness` errors。
 - Execution/transaction：`worker_private_result_mismatch`、`duplicate_or_missing_occurrence`、`worker_strategy_binding_mismatch`、`worker_capture_count_mismatch`、`analysis_failed`、`commit_readback_failed`。
@@ -157,7 +157,7 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 
 ## 7. Review pin 與未完成範圍
 
-有限 review 使用專案外、migration-ready synthetic source 與 owned copies；v3 接線的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。驗證及清理數據集中記於[協作紀錄](TASK_COORDINATION.md)與原 task。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
+有限 review 使用專案外、migration-ready synthetic source 與 owned copies；v3 接線的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。歷史驗證及清理數據留原 task／Git；現有未清資源見[協作紀錄](TASK_COORDINATION.md)。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
 
 仍未完成／不在保證內：
 
