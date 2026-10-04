@@ -1,9 +1,10 @@
 """Standalone, reconstructable synthetic boundary checks, entirely in memory.
 
-Default execution checks W1 without importing the app. ``--api-only`` checks
-W2 through the real router with an AST config stub and SQLite :memory:;
+``--w3-only`` checks the changed worker contract without importing the app.
+``--w3-api-only`` checks three cutoffs through the real router with an AST
+config stub and SQLite :memory:; the original suites remain selectable;
 ``--serve`` starts an empty MockTransport cache on owned loopback 8781.
-Coordinator-only ``--serve --live-source-opt-in`` admits the exact 22 source
+Coordinator-only ``--serve --live-source-opt-in`` admits the exact 24 source
 GETs once. All modes guard disk writes before imports and use no conftest,
 pytest cache, capture file or app.main. Synthetic CSVs are contract checks,
 not real source acceptance.
@@ -25,7 +26,7 @@ import unittest
 from unittest.mock import patch
 
 GUARD_COUNTS = {"disk_write_attempts": 0, "network_connect_attempts": 0, "mutation_attempts": 0}
-API_MODE = "--api-only" in sys.argv or "--serve" in sys.argv
+API_MODE = "--api-only" in sys.argv or "--w3-api-only" in sys.argv or "--serve" in sys.argv
 LIVE_OPT_IN = "--serve" in sys.argv and "--live-source-opt-in" in sys.argv
 LISTEN_PORT = 8781 if "--serve" in sys.argv else None
 LIVE_REQUEST_ACTIVE = False
@@ -93,7 +94,7 @@ def csv_bytes(header, rows):
     return stream.getvalue().encode("utf-8")
 
 
-def synthetic_row(day, symbol="3105", *, large=False, zero=False):
+def synthetic_row(day, symbol="3105", *, large=False, zero=False, ordinal=0):
     """Independent synthetic component arithmetic; no saved official raw rows."""
     if zero:
         groups = [(0, 0, 0)] * 7
@@ -110,6 +111,14 @@ def synthetic_row(day, symbol="3105", *, large=False, zero=False):
         groups = [(100, 600, -500), (2, 1, 1), (102, 601, -499), (50, 20, 30),
                   (10, 0, 10), (0, 15, -15), (10, 15, -5)]
         total = -475  # -500 + 30 - 5.
+    if ordinal:
+        groups = list(groups)
+        for index, buy_delta, sell_delta in ((0, ordinal * 100, 0), (3, 0, ordinal), (4, ordinal * 3, 0)):
+            buy, sell, _ = groups[index]
+            groups[index] = (buy + buy_delta, sell + sell_delta, buy + buy_delta - sell - sell_delta)
+        groups[2] = tuple(a + b for a, b in zip(groups[0], groups[1]))
+        groups[6] = tuple(a + b for a, b in zip(groups[4], groups[5]))
+        total = sum(groups[index][2] for index in (0, 3, 6))
     return [f"{day.year - 1911:03d}{day.month:02d}{day.day:02d}", symbol, "Synthetic " + symbol] + [
         str(quantity) for group in groups for quantity in group] + [str(total)]
 
@@ -121,14 +130,15 @@ def make_capture(source_id, day, body, **overrides):
     return replace(capture, **overrides)
 
 
-def synthetic_captures(*, large=False, zero=False):
+def synthetic_captures(*, large=False, zero=False, varying=False):
     captures = []
     for month in window.MONTH_REQUESTS:
         rows = [[day.strftime("%Y%m%d"), "100", "105", "95", "101", "-1"]
                 for day in window.EXPECTED_SESSIONS if day.month == month.month]
         captures.append(make_capture(window.INDEX_SOURCE_ID, month, csv_bytes(window.INDEX_HEADER, rows)))
-    for day in window.WINDOW_DATES[20]:
-        rows = [synthetic_row(day, symbol, large=large, zero=zero) for symbol in ("3105", "6488")]
+    for ordinal, day in enumerate(window.DAILY_REQUESTS, 1):
+        rows = [synthetic_row(day, symbol, large=large, zero=zero, ordinal=ordinal if varying else 0)
+                for symbol in ("3105", "6488")]
         captures.append(make_capture(window.DAILY_SOURCE_ID, day, csv_bytes(window.DAILY_HEADER, rows)))
     return captures
 
@@ -180,7 +190,7 @@ class WindowCalculationTests(unittest.TestCase):
         self.assertEqual(self.window(result)["daily_evidence"][0]["row"]["total_net"], "835")
         self.assertEqual(result["historical_pit"], "unsupported")
         self.assertEqual(result["revision_time"], "unknown")
-        self.assertEqual(len(result["captured_versions"]), 22)
+        self.assertEqual(len(result["captured_versions"]), window.MAX_REQUESTS)
 
     def test_verified_zero_and_unbounded_integer_window_sum(self):
         zero = self.window(summarize(synthetic_captures(zero=True)), 20)
@@ -199,7 +209,8 @@ class WindowCalculationTests(unittest.TestCase):
         self.assertEqual(self.window(result, 20)["required_dates"][0], "2026-09-03")
 
     def test_invalid_early_day_keeps_five_available(self):
-        bad = self.captures[2]
+        bad = next(item for item in self.captures if item.source_id == window.DAILY_SOURCE_ID
+                   and item.requested_date == window.WINDOW_DATES[20][0])
         captures = [replace(bad, body_sha256="0" * 64) if item is bad else item for item in self.captures]
         result = summarize(captures)
         self.assertEqual(self.window(result)["status"], "available")
@@ -208,7 +219,10 @@ class WindowCalculationTests(unittest.TestCase):
                          [{"date": "2026-09-03", "reason": "capture_body_hash_mismatch"}])
 
     def test_competing_daily_revision_discards_both_versions(self):
-        captures = self.captures[:3] + [self.captures[2]] + self.captures[4:]
+        early = next(item for item in self.captures if item.source_id == window.DAILY_SOURCE_ID
+                     and item.requested_date == window.WINDOW_DATES[20][0])
+        captures = [item for item in self.captures if not (
+            item.source_id == window.DAILY_SOURCE_ID and item.requested_date == date(2026, 9, 1))] + [early]
         result = summarize(captures)
         self.assertEqual(self.window(result)["status"], "available")
         self.assertIsNone(self.window(result, 20)["values"])
@@ -225,7 +239,7 @@ class WindowCalculationTests(unittest.TestCase):
             ({"expected_policy_digest": "sha256:" + "0" * 64}, "policy_digest_mismatch"),
             ({"policy": refused}, "policy_purpose_not_admitted"),
             ({"policy": altered}, "policy_digest_mismatch"),
-            ({"as_of": date(2026, 10, 1)}, "cutoff_not_supported"),
+            ({"as_of": date(2026, 9, 29)}, "cutoff_not_supported"),
             ({"calendar_version": "unknown"}, "calendar_version_not_supported"),
         ]:
             with self.subTest(reason=reason):
@@ -391,23 +405,23 @@ class LoaderTests(unittest.TestCase):
                             transport=httpx.MockTransport(handler or self.handler))
         return cache, result
 
-    def test_one_22_request_load_shared_by_two_symbols_and_read_get_never_fetches(self):
+    def test_one_bounded_load_shared_by_two_symbols_and_read_get_never_fetches(self):
         cache, result = self.load()
         self.assertEqual(result["status"], "available")
-        self.assertEqual(result["request_count"], 22)
-        self.assertEqual(len(self.requests), 22)
-        self.assertEqual(len(cache.raw_captures), 22)
+        self.assertEqual(result["request_count"], window.MAX_REQUESTS)
+        self.assertEqual(len(self.requests), window.MAX_REQUESTS)
+        self.assertEqual(len(cache.raw_captures), window.MAX_REQUESTS)
         for symbol in ("3105", "6488"):
             read = cache.get("TPEx", symbol, window.CUTOFF)
             self.assertEqual(set(read["stocks"]), {symbol})
             read["stocks"][symbol]["windows"]["5"]["values"]["foreign"] = "tampered"
             self.assertNotEqual(cache.get("TPEx", symbol, window.CUTOFF)["stocks"][symbol]["windows"]["5"]["values"]["foreign"], "tampered")
-        self.assertEqual(len(self.requests), 22)
+        self.assertEqual(len(self.requests), window.MAX_REQUESTS)
         self.assertEqual(cache.get("TWSE", "3105", window.CUTOFF)["reasons"], ["window_market_or_symbol_not_supported"])
         self.assertEqual(cache.get("TPEx", "3105", None)["reasons"], ["cutoff_not_supported"])
         self.assertEqual(cache.load(as_of=window.CUTOFF, calendar_version=window.CALENDAR_VERSION)["reasons"],
                          ["window_load_already_attempted"])
-        self.assertEqual(len(self.requests), 22)
+        self.assertEqual(len(self.requests), window.MAX_REQUESTS)
         with self.assertRaises(FrozenInstanceError):
             cache.raw_captures[0].body = b"tampered"
 
@@ -415,7 +429,7 @@ class LoaderTests(unittest.TestCase):
         for cache, arguments, reason in [
             (make_cache(expected_policy_version="wrong"), {}, "policy_version_mismatch"),
             (make_cache(profile="other"), {}, "policy_profile_not_supported"),
-            (make_cache(), {"as_of": date(2026, 10, 1)}, "cutoff_not_supported"),
+            (make_cache(), {"as_of": date(2026, 9, 29)}, "cutoff_not_supported"),
             (make_cache(), {"calendar_version": "unknown"}, "calendar_version_not_supported")]:
             result = cache.load(**({"as_of": window.CUTOFF, "calendar_version": window.CALENDAR_VERSION} | arguments),
                                 transport=httpx.MockTransport(self.handler))
@@ -424,7 +438,8 @@ class LoaderTests(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_daily_timeout_redirect_http_failure_are_not_retried_and_keep_other_dates(self):
-        first_daily = self.captures[2].url
+        first_daily = next(item.url for item in self.captures if item.source_id == window.DAILY_SOURCE_ID
+                           and item.requested_date == window.WINDOW_DATES[20][0])
         for failure in ("timeout", "redirect", "refused"):
             with self.subTest(failure=failure):
                 self.requests = []
@@ -437,7 +452,7 @@ class LoaderTests(unittest.TestCase):
                     return httpx.Response(302 if failure == "redirect" else 403,
                                           headers={"Location": "https://example.com/forbidden"})
                 cache, result = self.load(handler=handler)
-                self.assertEqual(len(self.requests), 22)
+                self.assertEqual(len(self.requests), window.MAX_REQUESTS)
                 self.assertEqual(sum(str(request.url) == first_daily for request in self.requests), 1)
                 self.assertEqual(result["stocks"]["3105"]["windows"]["5"]["status"], "available")
                 self.assertIsNone(result["stocks"]["3105"]["windows"]["20"]["values"])
@@ -449,7 +464,7 @@ class LoaderTests(unittest.TestCase):
         last_url = self.captures[-1].url
         self.bodies[last_url] = csv_bytes(["bad header"], [["1151002"]])
         cache, result = self.load()
-        self.assertEqual(len(cache.raw_captures), 22)
+        self.assertEqual(len(cache.raw_captures), window.MAX_REQUESTS)
         self.assertIsNone(result["stocks"]["3105"]["windows"]["5"]["values"])
         self.assertEqual(cache.raw_captures[-1].body_sha256, hashlib.sha256(self.bodies[last_url]).hexdigest())
         self.assertEqual(cache.raw_captures[-1].captured_at.utcoffset(), timedelta(0))
@@ -483,8 +498,8 @@ class LoaderTests(unittest.TestCase):
             return httpx.Response(200, headers={"Content-Type": "application/csv;charset=utf-8"},
                                   stream=httpx.ByteStream(b"x" * (2 * 1024 * 1024 + 1)))
         cache, result = self.load(handler=handler)
-        self.assertEqual(len(self.requests), 22)
-        self.assertEqual(len(cache.raw_captures), 21)
+        self.assertEqual(len(self.requests), window.MAX_REQUESTS)
+        self.assertEqual(len(cache.raw_captures), window.MAX_REQUESTS - 1)
         self.assertIn("capture_body_size_limit", [item["reason"] for item in result["failures"]])
         self.assertIsNone(result["stocks"]["3105"]["windows"]["5"]["values"])
 
@@ -527,7 +542,7 @@ class ApprovedLiveTransport(httpx.BaseTransport):
     def handle_request(self, request):
         global LIVE_REQUEST_ACTIVE
         target = str(request.url)
-        if request.method != "GET" or target not in self.urls or target in self.requests or len(self.requests) >= 22:
+        if request.method != "GET" or target not in self.urls or target in self.requests or len(self.requests) >= window.MAX_REQUESTS:
             raise AssertionError("unapproved_source_request")
         self.requests.append(target)
         LIVE_REQUEST_ACTIVE = True
@@ -545,7 +560,7 @@ class ApprovedLiveTransport(httpx.BaseTransport):
 
 class MemoryAPIFixture:
     """Synthetic catalog only; institution data is MockTransport unless opt-in."""
-    def __init__(self, *, live=False, failure=None, large=False):
+    def __init__(self, *, live=False, failure=None, large=False, varying=False):
         from fastapi import FastAPI
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
@@ -572,7 +587,7 @@ class MemoryAPIFixture:
                 yield db
         self.app.dependency_overrides[self.api.get_db] = database
         self.requests = []
-        captures = synthetic_captures()
+        captures = synthetic_captures(varying=varying)
         self.bodies = {capture.url: capture.body for capture in captures}
         if large:
             for capture in captures[2:]:
@@ -581,7 +596,9 @@ class MemoryAPIFixture:
             self.requests.append(str(request.url))
             if failure == "calendar" and str(request.url) == captures[0].url:
                 return httpx.Response(200, headers={"Content-Type": "application/csv"}, stream=httpx.ByteStream(b"bad\n"))
-            if failure == "partial" and str(request.url) == captures[2].url:
+            failed_date = date(2026, 9, 3) if failure == "partial" else failure
+            if any(str(request.url) == item.url and item.source_id == window.DAILY_SOURCE_ID
+                   and item.requested_date == failed_date for item in captures):
                 raise httpx.ReadTimeout("synthetic timeout", request=request)
             return httpx.Response(200, headers={"Content-Type": "application/csv;charset=utf-8"}, stream=httpx.ByteStream(self.bodies[str(request.url)]))
         self.transport = ApprovedLiveTransport() if live else httpx.MockTransport(handler)
@@ -603,7 +620,12 @@ class MemoryAPIFixture:
         @self.app.get("/__window_validation/receipt")
         def receipt():
             value = self.receipt()
-            print(json.dumps(value, ensure_ascii=True), flush=True)
+            print(json.dumps({"validation_receipt": True, "mode": value["mode"], "pid": value["pid"],
+                              "request_count": value["request_count"], "captures": len(value["captures"]),
+                              "selected_raw_rows": len(value["selected_raw_rows"]),
+                              "supported_cutoffs": list(value["cutoff_snapshots"]),
+                              "db_preserved": value["db_preserved"], "db_tables": value["db_tables"],
+                              "guard": value["guard"], "disk_artifacts": 0}), flush=True)
             return value
 
     def database_snapshot(self):
@@ -631,7 +653,9 @@ class MemoryAPIFixture:
                                               "row_ordinal": ordinal, "fields": row})
         return {"mode": "live-approved-source-memory" if LIVE_OPT_IN else "synthetic-memory",
                 "pid": os.getpid(), "parent_pid": os.getppid(), "port": LISTEN_PORT, "request_count": cache.request_count if cache else 0,
-                "captures": [capture.receipt() for capture in captures], "snapshot": snapshot, "selected_raw_rows": selected_raw_rows,
+                "captures": [capture.receipt() for capture in captures], "snapshot": snapshot,
+                "cutoff_snapshots": {day.isoformat(): cache.snapshot(day) for day in window.CUTOFFS} if cache else {},
+                "selected_raw_rows": selected_raw_rows,
                 "db_preserved": self.before == self.database_snapshot(), "db_tables": len(self.before),
                 "guard": dict(GUARD_COUNTS), "live_socket_scope": "exact transport URL + resolved www.tpex.org.tw:443 addresses while request active",
                 "live_resolved_addresses": sorted(LIVE_APPROVED_ADDRESSES), "disk_artifacts": 0}
@@ -661,7 +685,7 @@ class InstitutionalWindowAPITests(unittest.TestCase):
             first = client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-02").json()
             self.assertEqual(first["status"], "available")
             self.assertEqual(first["capture_state"]["action"], "acquired")
-            self.assertEqual(len(fixture.requests), 22)
+            self.assertEqual(len(fixture.requests), window.MAX_REQUESTS)
             for symbol, expected in (("3105", "4500"), ("6488", "-2500")):
                 repeated = client.post(f"/api/stocks/TPEx/{symbol}/institutional-windows/capture?as_of=2026-10-02").json()
                 detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-02").json()
@@ -674,8 +698,8 @@ class InstitutionalWindowAPITests(unittest.TestCase):
                 self.assertEqual(repeated["provenance"], first["provenance"])
             default = client.post("/api/stocks/TPEx/3105/institutional-windows/capture").json()
             self.assertEqual(default["as_of"], "2026-10-02")
-            self.assertEqual(default["capture_state"]["request_count"], 22)
-            self.assertEqual(len(fixture.requests), 22)
+            self.assertEqual(default["capture_state"]["request_count"], window.MAX_REQUESTS)
+            self.assertEqual(len(fixture.requests), window.MAX_REQUESTS)
 
     def test_disabled_invalid_unknown_market_symbol_and_cutoff_never_fetch(self):
         from fastapi.testclient import TestClient
@@ -693,10 +717,10 @@ class InstitutionalWindowAPITests(unittest.TestCase):
             for route, reason in (("TWSE/3105", "window_market_or_symbol_not_supported"), ("TPEx/9999", "window_market_or_symbol_not_supported")):
                 self.assertEqual(client.post(f"/api/stocks/{route}/institutional-windows/capture?as_of=2026-10-02").json()["reasons"], [reason])
             self.assertEqual(client.post("/api/stocks/TPEx/missing/institutional-windows/capture?as_of=2026-10-02").status_code, 404)
-            for cutoff in ("2026-09-30", "2026-10-03", "2099-01-01"):
+            for cutoff in ("2026-09-29", "2026-10-03", "2099-01-01"):
                 result = client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=" + cutoff).json()
                 self.assertEqual(result["as_of"], cutoff)
-                self.assertEqual(result["supported_scope"]["as_of"], "2026-10-02")
+                self.assertEqual(result["supported_scope"]["supported_cutoffs"], [day.isoformat() for day in window.CUTOFFS])
                 self.assertEqual(result["windows"], {})
                 self.assertEqual(result["reasons"], ["window_cutoff_not_supported"])
             self.assertEqual(client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=bad").status_code, 422)
@@ -705,7 +729,7 @@ class InstitutionalWindowAPITests(unittest.TestCase):
 
     def test_partial_keeps_five_failed_calendar_keeps_all_unavailable_and_never_retries(self):
         from fastapi.testclient import TestClient
-        for failure, requests in (("partial", 22), ("calendar", 2)):
+        for failure, requests in (("partial", window.MAX_REQUESTS), ("calendar", 2)):
             fixture = MemoryAPIFixture(failure=failure)
             try:
                 with TestClient(fixture.app) as client:
@@ -746,7 +770,258 @@ class InstitutionalWindowAPITests(unittest.TestCase):
             refused = client.get("/api/stocks/TPEx/3105/overview?as_of=2026-10-03").json()
             self.assertEqual(refused["institutional"]["windows"], {})
             self.assertEqual(refused["institutional"]["reasons"], ["window_cutoff_not_supported"])
-            self.assertEqual(len(fixture.requests), 22)
+            self.assertEqual(len(fixture.requests), window.MAX_REQUESTS)
+
+
+W3_SESSIONS = tuple(date.fromisoformat(day) for day in (
+    "2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08",
+    "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16",
+    "2026-09-17", "2026-09-18", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24",
+    "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"))
+W3_DATES = {
+    date(2026, 9, 30): {5: W3_SESSIONS[15:20], 20: W3_SESSIONS[:20]},
+    date(2026, 10, 1): {5: W3_SESSIONS[16:21], 20: W3_SESSIONS[1:21]},
+    date(2026, 10, 2): {5: W3_SESSIONS[17:22], 20: W3_SESSIONS[2:22]},
+}
+
+
+def w3_expected(symbol, days):
+    # Independent arithmetic over the fixed test dates, not production windows
+    # or reported net values. Day variation makes leaked/fallback dates visible.
+    base = (900, -30, -35) if symbol == "3105" else (-500, 30, -5)
+    ordinals = [W3_SESSIONS.index(day) + 1 for day in days]
+    return {key: str(sum(base[index] + ordinal * delta for ordinal in ordinals))
+            for index, (key, delta) in enumerate((("foreign", 100), ("trust", -1), ("dealer", 3)))}
+
+
+class WindowCutoffTests(unittest.TestCase):
+    def setUp(self):
+        self.captures = synthetic_captures(varying=True)
+
+    def test_exact_external_policy_pin_and_new_bounded_request_union(self):
+        encoded = json.dumps(window.window_policy(), ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False).encode("utf-8")
+        self.assertEqual("sha256:" + hashlib.sha256(encoded).hexdigest(),
+                         "sha256:9de27224cc57512f4e38455717eb51f8512eb890667119a5d02444810e0ad4db")
+        self.assertEqual(window.POLICY_DIGEST, "sha256:9de27224cc57512f4e38455717eb51f8512eb890667119a5d02444810e0ad4db")
+        self.assertEqual(window.POLICY_VERSION, "m1-w3-tpex-window-2026-10-04.1")
+        self.assertEqual(window.DAILY_REQUESTS, W3_SESSIONS)
+        self.assertEqual((window.MAX_REQUESTS, window.MAX_TOTAL_BYTES), (24, 48234496))
+        self.assertEqual(len(self.captures), 24)
+        self.assertEqual(window.window_policy()["scope"]["supported_cutoffs"], [day.isoformat() for day in W3_DATES])
+        self.assertNotIn("as_of", window.window_policy()["scope"])
+
+    def test_three_fixed_cutoffs_all_36_nets_and_no_future_window_evidence(self):
+        checked = 0
+        for cutoff, horizons in W3_DATES.items():
+            result = summarize(self.captures, as_of=cutoff)
+            self.assertEqual(result["as_of"], cutoff.isoformat())
+            self.assertEqual(result["version"], "tpex-institutional-window/w3-v1")
+            self.assertEqual(result["calendar"]["valid_dates"], [day.isoformat() for day in W3_SESSIONS])
+            for symbol in ("3105", "6488"):
+                for horizon, days in horizons.items():
+                    item = result["stocks"][symbol]["windows"][str(horizon)]
+                    self.assertEqual(item["required_dates"], [day.isoformat() for day in days])
+                    self.assertEqual(item["valid_dates"], item["required_dates"])
+                    self.assertEqual(item["values"], w3_expected(symbol, days))
+                    self.assertEqual([row["row"]["date"] for row in item["daily_evidence"]], item["required_dates"])
+                    self.assertTrue(all(row["row"]["date"] <= result["as_of"] for row in item["daily_evidence"]))
+                    self.assertTrue(all(row["provenance"]["requested_date"] == row["row"]["date"]
+                                        for row in item["daily_evidence"]))
+                    checked += len(item["values"])
+            self.assertEqual(len(result["captured_versions"]), 24)
+            self.assertEqual(result["historical_pit"], "unsupported")
+        self.assertEqual(checked, 36)
+
+    def test_missing_or_invalid_dates_only_affect_windows_that_require_them(self):
+        for failed_day in (date(2026, 9, 1), date(2026, 9, 2), date(2026, 10, 2)):
+            for invalid in (False, True):
+                with self.subTest(failed_day=failed_day, invalid=invalid):
+                    captures = [replace(item, body_sha256="0" * 64) if invalid and item.source_id == window.DAILY_SOURCE_ID
+                                and item.requested_date == failed_day
+                                else item for item in self.captures if invalid or not (
+                                    item.source_id == window.DAILY_SOURCE_ID and item.requested_date == failed_day)]
+                    for cutoff, horizons in W3_DATES.items():
+                        result = summarize(captures, as_of=cutoff)
+                        for symbol in ("3105", "6488"):
+                            for horizon, days in horizons.items():
+                                item = result["stocks"][symbol]["windows"][str(horizon)]
+                                missing = [failed_day.isoformat()] if failed_day in days else []
+                                self.assertEqual(item["missing_dates"], missing)
+                                self.assertEqual(item["required_dates"], [day.isoformat() for day in days])
+                                self.assertEqual(item["values"], None if missing else w3_expected(symbol, days))
+                                self.assertEqual(item["invalid_dates"], [{"date": failed_day.isoformat(),
+                                                  "reason": "capture_body_hash_mismatch"}] if missing and invalid else [])
+
+    def test_competing_new_date_discards_both_versions_without_fallback(self):
+        duplicate = next(item for item in self.captures if item.source_id == window.DAILY_SOURCE_ID
+                         and item.requested_date == date(2026, 9, 2))
+        captures = self.captures[:-1] + [duplicate]  # 24 total: competing 9/2 and missing 10/2.
+        for cutoff, horizons in W3_DATES.items():
+            result = summarize(captures, as_of=cutoff)
+            for horizon, days in horizons.items():
+                item = result["stocks"]["3105"]["windows"][str(horizon)]
+                missing = [day.isoformat() for day in days if day in (date(2026, 9, 2), date(2026, 10, 2))]
+                self.assertEqual(item["missing_dates"], missing)
+                self.assertEqual(item["values"], None if missing else w3_expected("3105", days))
+            self.assertIn("daily_competing_revision", [item["reason"] for item in result["failures"]])
+
+    def test_full_calendar_failure_rejects_even_the_earlier_cutoff(self):
+        index = self.captures[1]
+        rows = list(csv.reader(io.StringIO(index.body.decode("utf-8"))))[1:-1]
+        captures = self.captures[:1] + [replace_body(index, rows)] + self.captures[2:]
+        for cutoff in W3_DATES:
+            result = summarize(captures, as_of=cutoff)
+            self.assertEqual(result["calendar"]["status"], "unavailable")
+            self.assertEqual(result["as_of"], cutoff.isoformat())
+            self.assertTrue(all(item["values"] is None for stock in result["stocks"].values()
+                                for item in stock["windows"].values()))
+
+    def test_once_only_loader_and_cutoff_reads_share_immutable_24_capture_batch(self):
+        bodies = {item.url: item.body for item in self.captures}
+        requests = []
+        def handler(request):
+            requests.append(str(request.url))
+            return httpx.Response(200, headers={"Content-Type": "application/csv;charset=utf-8"},
+                                  stream=httpx.ByteStream(bodies[str(request.url)]))
+        cache = make_cache()
+        first = cache.load(as_of=date(2026, 9, 30), calendar_version=window.CALENDAR_VERSION,
+                           transport=httpx.MockTransport(handler))
+        self.assertEqual(first["as_of"], "2026-09-30")
+        self.assertEqual(len(requests), 24)
+        self.assertEqual(len(set(requests)), 24)
+        versions = first["captured_versions"]
+        for cutoff in W3_DATES:
+            for symbol in ("3105", "6488"):
+                item = cache.get("TPEx", symbol, cutoff)
+                self.assertEqual(item["captured_versions"], versions)
+                self.assertEqual(item["stocks"][symbol]["windows"]["20"]["values"], w3_expected(symbol, W3_DATES[cutoff][20]))
+                item["stocks"][symbol]["windows"]["20"]["values"]["foreign"] = "tampered"
+                self.assertNotEqual(cache.get("TPEx", symbol, cutoff)["stocks"][symbol]["windows"]["20"]["values"]["foreign"], "tampered")
+        self.assertEqual(cache.load(as_of=date(2026, 10, 1), calendar_version=window.CALENDAR_VERSION)["reasons"],
+                         ["window_load_already_attempted"])
+        self.assertEqual(len(requests), 24)
+
+    def test_new_pin_and_outside_cutoff_or_request_date_are_rejected(self):
+        altered = window.window_policy()
+        altered["scope"]["supported_cutoffs"].append("2026-10-03")
+        self.assertEqual(summarize(self.captures, policy=altered)["reasons"], ["policy_digest_mismatch"])
+        for cutoff in (date(2026, 9, 29), date(2026, 10, 3)):
+            result = summarize(self.captures, as_of=cutoff)
+            self.assertEqual(result["as_of"], cutoff.isoformat())
+            self.assertEqual(result["reasons"], ["cutoff_not_supported"])
+            self.assertEqual(result["stocks"]["3105"]["windows"], {})
+        for day in (date(2026, 8, 31), date(2026, 9, 25), date(2026, 10, 5)):
+            with self.assertRaises(window.WindowEvidenceError):
+                window.source_url(window.DAILY_SOURCE_ID, day)
+        for arguments in ({"as_of": date(2026, 9, 29)}, {"calendar_version": "wrong"}):
+            cache = make_cache()
+            result = cache.load(**({"as_of": date(2026, 9, 30), "calendar_version": window.CALENDAR_VERSION} | arguments),
+                                transport=httpx.MockTransport(lambda request: self.fail("must not request")))
+            self.assertEqual(cache.request_count, 0)
+            self.assertEqual(result["status"], "unavailable")
+        cache = make_cache(expected_policy_digest="sha256:" + "0" * 64)
+        cache.load(as_of=date(2026, 9, 30), calendar_version=window.CALENDAR_VERSION,
+                   transport=httpx.MockTransport(lambda request: self.fail("must not request")))
+        self.assertEqual(cache.request_count, 0)
+
+
+class WindowCutoffAPITests(unittest.TestCase):
+    def fixture(self, **kwargs):
+        fixture = MemoryAPIFixture(varying=True, **kwargs)
+        self.addCleanup(fixture.close)
+        self.addCleanup(lambda: self.assertEqual(fixture.before, fixture.database_snapshot()))
+        return fixture
+
+    def test_actual_router_detail_overview_and_posts_share_three_cutoffs_and_one_batch(self):
+        from fastapi.testclient import TestClient
+        fixture = self.fixture()
+        with TestClient(fixture.app) as client:
+            for cutoff in W3_DATES:
+                for symbol in ("3105", "6488"):
+                    before = client.get(f"/api/stocks/TPEx/{symbol}/overview?as_of={cutoff}").json()
+                    self.assertEqual(before["institutional"]["reasons"], ["window_memory_capture_missing"])
+            self.assertEqual(fixture.requests, [])
+            first = client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-09-30").json()
+            self.assertEqual(first["capture_state"]["action"], "acquired")
+            for cutoff, horizons in W3_DATES.items():
+                for symbol in ("3105", "6488"):
+                    item = client.post(f"/api/stocks/TPEx/{symbol}/institutional-windows/capture?as_of={cutoff}").json()
+                    detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of={cutoff}").json()
+                    overview = client.get(f"/api/stocks/TPEx/{symbol}/overview?as_of={cutoff}").json()
+                    self.assertEqual((overview["version"], item["version"]), ("stock-overview/w3-v1", "institutional-windows/w3-v1"))
+                    self.assertEqual(overview["as_of"], str(cutoff))
+                    self.assertEqual(detail["overview"]["as_of"], str(cutoff))
+                    self.assertEqual(item["as_of"], str(cutoff))
+                    self.assertEqual(item, overview["institutional"])
+                    self.assertEqual(item, detail["overview"]["institutional"])
+                    self.assertEqual(item["provenance"], first["provenance"])
+                    for horizon, days in horizons.items():
+                        self.assertEqual(item["windows"][str(horizon)]["values"], w3_expected(symbol, days))
+                    self.assertTrue(all(condition["status"] == "data_insufficient" for condition in overview["conditions"]))
+            self.assertEqual(len(fixture.requests), 24)
+            self.assertEqual(fixture.receipt()["request_count"], 24)
+
+    def test_first_post_also_accepts_each_later_supported_cutoff(self):
+        from fastapi.testclient import TestClient
+        for cutoff in (date(2026, 10, 1), date(2026, 10, 2)):
+            fixture = MemoryAPIFixture(varying=True)
+            try:
+                with TestClient(fixture.app) as client:
+                    item = client.post(f"/api/stocks/TPEx/6488/institutional-windows/capture?as_of={cutoff}").json()
+                    self.assertEqual(item["as_of"], str(cutoff))
+                    self.assertEqual(item["windows"]["20"]["values"], w3_expected("6488", W3_DATES[cutoff][20]))
+                    self.assertEqual(item["capture_state"]["request_count"], 24)
+                self.assertEqual(fixture.before, fixture.database_snapshot())
+            finally:
+                fixture.close()
+
+    def test_unsupported_before_or_after_cache_and_independent_app_pin_never_fetch(self):
+        from fastapi.testclient import TestClient
+        fixture = self.fixture()
+        with TestClient(fixture.app) as client:
+            for cutoff in ("2026-09-29", "2026-10-03", "2099-01-01"):
+                item = client.post(f"/api/stocks/TPEx/3105/institutional-windows/capture?as_of={cutoff}").json()
+                self.assertEqual(item["windows"], {})
+                self.assertEqual(item["reasons"], ["window_cutoff_not_supported"])
+            self.assertEqual(fixture.requests, [])
+            self.assertFalse(fixture.store._attempted)
+            client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-01")
+            for cutoff in ("2026-09-29", "2026-10-03", "2099-01-01"):
+                item = client.get(f"/api/stocks/TPEx/3105/overview?as_of={cutoff}").json()["institutional"]
+                self.assertEqual(item["as_of"], cutoff)
+                self.assertEqual(item["windows"], {})
+                self.assertEqual(item["reasons"], ["window_cutoff_not_supported"])
+            self.assertEqual(len(fixture.requests), 24)
+        isolated = fixture.wrapper.InstitutionalWindowStore(transport=httpx.MockTransport(lambda request: self.fail("must not fetch")))
+        with patch.object(fixture.wrapper, "POLICY_DIGEST", "sha256:" + "0" * 64):
+            result = isolated.capture("TPEx", "3105", date(2026, 9, 30))
+        self.assertEqual(result["reasons"], ["policy_digest_mismatch"])
+        self.assertEqual(isolated.capture("TPEx", "6488", date(2026, 10, 1))["capture_state"]["request_count"], 0)
+
+    def test_future_daily_failure_keeps_earlier_api_windows_available(self):
+        from fastapi.testclient import TestClient
+        fixture = self.fixture(failure=date(2026, 10, 2))
+        with TestClient(fixture.app) as client:
+            first = client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-09-30").json()
+            self.assertEqual(first["status"], "available")
+            for cutoff in W3_DATES:
+                for symbol in ("3105", "6488"):
+                    item = client.get(f"/api/stocks/TPEx/{symbol}/overview?as_of={cutoff}").json()["institutional"]
+                    self.assertEqual(item["status"], "unavailable" if cutoff == date(2026, 10, 2) else "available")
+                    for horizon in (5, 20):
+                        self.assertEqual(item["windows"][str(horizon)]["missing_dates"],
+                                         ["2026-10-02"] if cutoff == date(2026, 10, 2) else [])
+            self.assertEqual(len(fixture.requests), 24)
+
+    def test_new_cutoff_api_keeps_window_integer_strings_exact(self):
+        from fastapi.testclient import TestClient
+        fixture = self.fixture(large=True)
+        with TestClient(fixture.app) as client:
+            first = client.post("/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-01").json()
+            overview = client.get("/api/stocks/TPEx/3105/overview?as_of=2026-10-01").json()
+            self.assertEqual(first["windows"]["20"]["values"]["foreign"], "184467440737095516140")
+            self.assertEqual(overview["institutional"]["windows"], first["windows"])
 
 
 def main():
@@ -754,7 +1029,7 @@ def main():
         raise ValueError("live_requires_serve")
     if "--serve" in sys.argv:
         import uvicorn
-        fixture = MemoryAPIFixture(live=LIVE_OPT_IN)
+        fixture = MemoryAPIFixture(live=LIVE_OPT_IN, varying="--w3-only" in sys.argv)
         try:
             print(json.dumps({"mode": "live-opt-in-empty-cache" if LIVE_OPT_IN else "mock-empty-cache", "pid": os.getpid(),
                               "parent_pid": os.getppid(), "port": LISTEN_PORT, "api": "http://127.0.0.1:8781",
@@ -764,10 +1039,18 @@ def main():
             print(json.dumps({"shutdown": True, "db_preserved": fixture.before == fixture.database_snapshot(), "guard": GUARD_COUNTS}), flush=True)
             fixture.close()
         return 0
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(InstitutionalWindowAPITests) if API_MODE else unittest.TestSuite([
-        unittest.defaultTestLoader.loadTestsFromTestCase(WindowCalculationTests), unittest.defaultTestLoader.loadTestsFromTestCase(LoaderTests)])
+    if "--w3-api-only" in sys.argv:
+        suite, suite_name = unittest.defaultTestLoader.loadTestsFromTestCase(WindowCutoffAPITests), "w3-api-only"
+    elif "--w3-only" in sys.argv:
+        suite, suite_name = unittest.defaultTestLoader.loadTestsFromTestCase(WindowCutoffTests), "w3-worker-only"
+    elif API_MODE:
+        suite, suite_name = unittest.defaultTestLoader.loadTestsFromTestCase(InstitutionalWindowAPITests), "new-api-only"
+    else:
+        suite, suite_name = unittest.TestSuite([
+            unittest.defaultTestLoader.loadTestsFromTestCase(WindowCalculationTests),
+            unittest.defaultTestLoader.loadTestsFromTestCase(LoaderTests)]), "legacy-worker"
     outcome = unittest.TextTestRunner(verbosity=2).run(suite)
-    print(json.dumps({"synthetic_only": True, "suite": "new-api-only" if API_MODE else "w1-worker", "cases": outcome.testsRun,
+    print(json.dumps({"synthetic_only": True, "suite": suite_name, "cases": outcome.testsRun,
                       "python": sys.version.split()[0], "httpx": httpx.__version__, "policy_version": window.POLICY_VERSION,
                       "policy_digest": window.POLICY_DIGEST, "guard": GUARD_COUNTS, "disk_artifacts": 0}), flush=True)
     return 0 if outcome.wasSuccessful() and not any(GUARD_COUNTS.values()) else 1

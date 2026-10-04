@@ -3,7 +3,7 @@
 Only ``MemoryWindowCache.load`` can make requests, and callers must explicitly
 select the pinned policy/profile. ``summarize_window_captures`` and cache reads
 never fetch, write, discover files, import the application, or infer closed days.
-This contract covers two securities and one retrospective data-date cutoff;
+This contract covers two securities and three retrospective data-date cutoffs;
 observation time is not publication, first availability, or historical PIT.
 """
 from __future__ import annotations
@@ -21,8 +21,8 @@ import re
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
-VERSION = "tpex-institutional-window/w1-v1"
-POLICY_VERSION = "m1-w1-tpex-window-2026-10-04.1"
+VERSION = "tpex-institutional-window/w3-v1"
+POLICY_VERSION = "m1-w3-tpex-window-2026-10-04.1"
 PROFILE = "free_public_local"
 CALENDAR_VERSION = "tpex-2026-09-01_2026-10-02-weekdays-11503027221/v1"
 CALCULATION_VERSION = "independent-net-sum/expected-session-inclusive-v1"
@@ -32,13 +32,14 @@ DAILY_BASE_URL = "https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_h
 INDEX_BASE_URL = "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data"
 START = date(2026, 9, 1)
 CUTOFF = date(2026, 10, 2)
+CUTOFFS = (date(2026, 9, 30), date(2026, 10, 1), CUTOFF)
 SYMBOLS = ("3105", "6488")
 CLOSED_DATES = (date(2026, 9, 25), date(2026, 9, 28))
 MONTH_REQUESTS = (date(2026, 9, 1), date(2026, 10, 1))
 MAX_DAILY_BYTES = 2 * 1024 * 1024
 MAX_INDEX_BYTES = 1024 * 1024
-MAX_TOTAL_BYTES = 42 * 1024 * 1024
-MAX_REQUESTS = 22
+MAX_TOTAL_BYTES = 46 * 1024 * 1024
+MAX_REQUESTS = 24
 TIMEOUT_SECONDS = 15.0
 MAX_DAILY_SHARES = 9223372036854775807
 INVESTORS = ("foreign", "trust", "dealer")
@@ -60,7 +61,13 @@ EXPECTED_SESSIONS = tuple(
     if (START + timedelta(days=offset)).weekday() < 5
     and START + timedelta(days=offset) not in CLOSED_DATES
 )
-WINDOW_DATES = {horizon: EXPECTED_SESSIONS[-horizon:] for horizon in (5, 20)}
+WINDOW_DATES_BY_CUTOFF = {
+    cutoff: {horizon: tuple(day for day in EXPECTED_SESSIONS if day <= cutoff)[-horizon:]
+             for horizon in (5, 20)}
+    for cutoff in CUTOFFS
+}
+WINDOW_DATES = WINDOW_DATES_BY_CUTOFF[CUTOFF]
+DAILY_REQUESTS = EXPECTED_SESSIONS
 
 
 def _digest(value: Mapping[str, Any]) -> str:
@@ -70,10 +77,10 @@ def _digest(value: Mapping[str, Any]) -> str:
 
 _POLICY = {
     "version": POLICY_VERSION, "profile": PROFILE,
-    "scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "as_of": CUTOFF.isoformat(),
+    "scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "supported_cutoffs": [day.isoformat() for day in CUTOFFS],
               "calendar_from": START.isoformat(), "calendar_to": CUTOFF.isoformat()},
     "sources": {
-        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-04/v1",
+        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-04/v2",
                           "government_dataset": "https://data.gov.tw/dataset/11856", "exact_url": DAILY_BASE_URL,
                           "method": "GET", "date_parameter": "d=ROC_YYY/MM/DD", "header": list(DAILY_HEADER),
                           "max_body_bytes": MAX_DAILY_BYTES,
@@ -104,7 +111,7 @@ _POLICY = {
 }
 # External pin for this reviewed policy version. Editing the policy cannot
 # silently change the expected digest; a new policy needs explicit repinning.
-POLICY_DIGEST = "sha256:5b5129cdc39ab0bac9eac89246917f8721c118e2f9c18ed02234972e6c5dc773"
+POLICY_DIGEST = "sha256:9de27224cc57512f4e38455717eb51f8512eb890667119a5d02444810e0ad4db"
 
 
 class WindowEvidenceError(ValueError):
@@ -143,7 +150,7 @@ def source_url(source_id: str, requested_date: date) -> str:
     """Only the two approved government URLs and bounded, observed query forms."""
     _require(type(requested_date) is date, "request_date_invalid")
     if source_id == DAILY_SOURCE_ID:
-        _require(requested_date in WINDOW_DATES[20], "daily_request_outside_scope")
+        _require(requested_date in DAILY_REQUESTS, "daily_request_outside_scope")
         value = f"{requested_date.year - 1911:03d}/{requested_date.month:02d}/{requested_date.day:02d}"
         return DAILY_BASE_URL + "&" + urlencode({"d": value})
     if source_id == INDEX_SOURCE_ID:
@@ -338,16 +345,17 @@ def _index(capture: CapturedCSV) -> tuple[dict, dict]:
     return selected, receipt
 
 
-def _blank(reason: str) -> dict:
-    return {"version": VERSION, "status": "unavailable", "as_of": CUTOFF.isoformat(), "unit": "shares",
+def _blank(reason: str, as_of: date | None = CUTOFF) -> dict:
+    dates = WINDOW_DATES_BY_CUTOFF.get(as_of, {}) if type(as_of) is date else {}
+    return {"version": VERSION, "status": "unavailable", "as_of": as_of.isoformat() if type(as_of) is date else None, "unit": "shares",
             "quantity_encoding": "canonical_integer_string", "historical_pit": "unsupported", "reasons": [reason],
             "calendar": {"version": CALENDAR_VERSION, "status": "unavailable", "reasons": [reason]},
             "stocks": {symbol: {"symbol": symbol, "windows": {
                 str(horizon): {"status": "unavailable", "horizon": horizon, "values": None,
-                               "required_dates": [day.isoformat() for day in WINDOW_DATES[horizon]],
-                               "valid_dates": [], "missing_dates": [day.isoformat() for day in WINDOW_DATES[horizon]],
-                               "invalid_dates": [], "reasons": [reason]}
-                for horizon in (5, 20)}} for symbol in SYMBOLS}}
+                                "required_dates": [day.isoformat() for day in expected],
+                                "valid_dates": [], "missing_dates": [day.isoformat() for day in expected],
+                                "invalid_dates": [], "reasons": [reason]}
+                for horizon, expected in dates.items()}} for symbol in SYMBOLS}}
 
 
 def summarize_window_captures(
@@ -363,7 +371,7 @@ def summarize_window_captures(
     """
     try:
         _check_policy(policy, profile, expected_policy_version, expected_policy_digest)
-        _require(type(as_of) is date and as_of == CUTOFF, "cutoff_not_supported")
+        _require(type(as_of) is date and as_of in CUTOFFS, "cutoff_not_supported")
         _require(calendar_version == CALENDAR_VERSION, "calendar_version_not_supported")
         _require(not isinstance(captures, (str, bytes)) and len(captures) <= MAX_REQUESTS, "capture_count_limit")
         for capture in captures:
@@ -371,7 +379,8 @@ def summarize_window_captures(
         _require(sum(len(capture.body) for capture in captures) <= MAX_TOTAL_BYTES, "capture_total_size_limit")
         _require(all(capture.source_id in {DAILY_SOURCE_ID, INDEX_SOURCE_ID} for capture in captures), "source_not_supported")
     except (WindowEvidenceError, TypeError, AttributeError) as exc:
-        return _blank(str(exc) if isinstance(exc, WindowEvidenceError) else "capture_input_invalid")
+        return _blank(str(exc) if isinstance(exc, WindowEvidenceError) else "capture_input_invalid", as_of)
+    window_dates = WINDOW_DATES_BY_CUTOFF[as_of]
     by_source = {source_id: defaultdict(list) for source_id in (DAILY_SOURCE_ID, INDEX_SOURCE_ID)}
     for capture in captures:
         by_source[capture.source_id][capture.requested_date].append(capture)
@@ -387,24 +396,25 @@ def summarize_window_captures(
             calendar_evidence.append(receipt)
         _require(set(observed) == set(EXPECTED_SESSIONS), "calendar_expected_dates_missing")
     except (WindowEvidenceError, TypeError, ValueError, AttributeError) as exc:
-        result = _blank(str(exc) if isinstance(exc, WindowEvidenceError) else "calendar_evidence_invalid")
+        result = _blank(str(exc) if isinstance(exc, WindowEvidenceError) else "calendar_evidence_invalid", as_of)
         result["calendar"].update(expected_dates=[day.isoformat() for day in EXPECTED_SESSIONS],
                                   valid_dates=[day.isoformat() for day in sorted(observed)],
                                   missing_dates=[day.isoformat() for day in EXPECTED_SESSIONS if day not in observed],
                                   evidence=calendar_evidence)
         result["failures"] = [dict(item) for item in failures]
         return result
-    result = _blank("institutional_evidence_missing")
+    result = _blank("institutional_evidence_missing", as_of)
     result.update(policy={"version": expected_policy_version, "digest": expected_policy_digest, "profile": profile},
                   scope={"exchange": "TPEx", "symbols": list(SYMBOLS), "calendar_from": START.isoformat(),
-                         "calendar_to": CUTOFF.isoformat(), "supported_cutoff": CUTOFF.isoformat()},
+                          "calendar_to": CUTOFF.isoformat(), "supported_cutoffs": [day.isoformat() for day in CUTOFFS]},
                   calculation_version=CALCULATION_VERSION, verification="local_evidence_consistent",
                   published_time="unknown", first_available_time="unknown", revision_time="unknown",
                   attribution=copy.deepcopy(_POLICY["attribution"]), storage="process_memory",
                   statistical_basis=copy.deepcopy(_POLICY["statistical_basis"]),
                   limitations=["bounded_calendar_and_two_selected_securities_only", "data_date_retrospective_not_historical_pit",
                                "observation_not_publication_or_first_availability", "source_authentication_not_proven",
-                               "no_strategy_condition_or_trend_calculation", "no_cross_process_rate_limit"],
+                                "no_strategy_condition_or_trend_calculation", "no_cross_process_rate_limit",
+                                "captured_versions_describe_full_batch_not_window_adoption"],
                   calendar={"version": CALENDAR_VERSION, "status": "available", "reasons": [],
                             "from": START.isoformat(), "to": CUTOFF.isoformat(),
                             "basis": copy.deepcopy(_POLICY["calendar"]),
@@ -414,7 +424,7 @@ def summarize_window_captures(
     valid, invalid, receipts, errors = {}, {}, {}, [dict(item) for item in failures]
     for day, entries in by_source[DAILY_SOURCE_ID].items():
         try:
-            _require(day in WINDOW_DATES[20], "daily_date_outside_scope")
+            _require(day in DAILY_REQUESTS, "daily_date_outside_scope")
             _require(len(entries) == 1, "daily_competing_revision")
             selected, receipt = _daily(entries[0])
             valid[day], receipts[day] = selected, receipt
@@ -424,7 +434,7 @@ def summarize_window_captures(
             errors.append({"source_id": DAILY_SOURCE_ID, "requested_date": day.isoformat(), "reason": reason,
                            "observations": [_safe_observation(capture) for capture in entries]})
     for symbol in SYMBOLS:
-        for horizon, expected in WINDOW_DATES.items():
+        for horizon, expected in window_dates.items():
             known = [day for day in expected if day in valid]
             missing = [day for day in expected if day not in valid]
             complete = not missing
@@ -439,8 +449,8 @@ def summarize_window_captures(
                 "reasons": [] if complete else ["institutional_window_expected_dates_missing"],
                 "daily_evidence": [{"row": valid[day][symbol], "provenance": receipts[day]} for day in known],
             }
-    result.update(status="available" if all(day in valid for day in WINDOW_DATES[20]) else "unavailable",
-                  reasons=[] if all(day in valid for day in WINDOW_DATES[20]) else ["institutional_window_expected_dates_missing"],
+    result.update(status="available" if all(day in valid for day in window_dates[20]) else "unavailable",
+                  reasons=[] if all(day in valid for day in window_dates[20]) else ["institutional_window_expected_dates_missing"],
                   failures=errors, captured_versions=[_safe_observation(capture) for capture in captures])
     return result
 
@@ -467,39 +477,39 @@ class MemoryWindowCache:
     def raw_captures(self) -> tuple[CapturedCSV, ...]:
         return self._captures
 
-    def snapshot(self) -> dict:
+    def snapshot(self, as_of: date = CUTOFF) -> dict:
         if self._fatal or not self._attempted:
-            return _blank(self._fatal or "window_memory_capture_missing")
+            return _blank(self._fatal or "window_memory_capture_missing", as_of)
         return summarize_window_captures(self._captures, policy=self._policy, profile=self._profile,
                                          expected_policy_version=self._version, expected_policy_digest=self._digest,
-                                         as_of=CUTOFF, calendar_version=CALENDAR_VERSION, failures=self._failures)
+                                         as_of=as_of, calendar_version=CALENDAR_VERSION, failures=self._failures)
 
     def get(self, exchange: str, symbol: str, as_of: date | None) -> dict:
         if exchange != "TPEx" or symbol not in SYMBOLS:
-            return _blank("window_market_or_symbol_not_supported")
-        if type(as_of) is not date or as_of != CUTOFF:
-            return _blank("cutoff_not_supported")
-        result = self.snapshot()
+            return _blank("window_market_or_symbol_not_supported", as_of)
+        if type(as_of) is not date or as_of not in CUTOFFS:
+            return _blank("cutoff_not_supported", as_of)
+        result = self.snapshot(as_of)
         result["stocks"] = {symbol: result["stocks"][symbol]}
         return result
 
     def load(self, *, as_of: date, calendar_version: str, transport: Any = None) -> dict:
         if self._attempted:
-            return _blank("window_load_already_attempted")
+            return _blank("window_load_already_attempted", as_of)
         self._attempted = True
         try:
             _check_policy(self._policy, self._profile, self._version, self._digest)
-            _require(type(as_of) is date and as_of == CUTOFF, "cutoff_not_supported")
+            _require(type(as_of) is date and as_of in CUTOFFS, "cutoff_not_supported")
             _require(calendar_version == CALENDAR_VERSION, "calendar_version_not_supported")
         except WindowEvidenceError as exc:
             self._fatal = str(exc)
-            return self.snapshot()
+            return self.snapshot(as_of)
         import httpx  # HTTP is available only at the explicit load operation.
 
         captured, total_bytes = [], 0
         with httpx.Client(transport=transport, trust_env=False, follow_redirects=False, timeout=TIMEOUT_SECONDS) as client:
             for source_id, day in [(INDEX_SOURCE_ID, day) for day in MONTH_REQUESTS] + [
-                    (DAILY_SOURCE_ID, day) for day in WINDOW_DATES[20]]:
+                    (DAILY_SOURCE_ID, day) for day in DAILY_REQUESTS]:
                 url = source_url(source_id, day)
                 started = datetime.now(timezone.utc)
                 body = bytearray()
@@ -509,7 +519,7 @@ class MemoryWindowCache:
                     _require(self.request_count < MAX_REQUESTS, "request_count_limit")
                     self.request_count += 1
                     with client.stream("GET", url, headers={"Accept-Encoding": "identity",
-                                                           "User-Agent": "taiwan-stock-research/tpex-window-w1"}) as response:
+                                                            "User-Agent": "taiwan-stock-research/tpex-window-w3"}) as response:
                         status = response.status_code
                         content_type = response.headers.get("Content-Type", "")
                         content_encoding = response.headers.get("Content-Encoding", "identity")
@@ -541,12 +551,12 @@ class MemoryWindowCache:
                 if source_id == INDEX_SOURCE_ID and day == MONTH_REQUESTS[-1]:
                     check = summarize_window_captures(captured, policy=self._policy, profile=self._profile,
                                                       expected_policy_version=self._version, expected_policy_digest=self._digest,
-                                                      as_of=CUTOFF, calendar_version=CALENDAR_VERSION, failures=self._failures)
+                                                      as_of=as_of, calendar_version=CALENDAR_VERSION, failures=self._failures)
                     if check["calendar"]["status"] != "available":
                         break
                 if reason == "capture_total_size_limit":
                     break
         self._captures = tuple(captured)
-        result = self.snapshot()
+        result = self.snapshot(as_of)
         result["request_count"] = self.request_count
         return result

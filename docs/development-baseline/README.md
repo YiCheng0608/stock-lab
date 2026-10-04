@@ -206,11 +206,27 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 ### M1-W2 法人窗口的零落盤驗證入口
 
+以下保留 W2當時的 case／版本／操作邊界；現行入口與三截止驗收見[下節](#m1-w3-三截止法人窗口的零落盤驗證入口)。
+
 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 預設驗 W1 memory 邊界；`--api-only` 驗5個 W2 case，`--serve` 用 MockTransport。統籌另核 `--serve --live-source-opt-in` 才取真原件，owned API／UI pair **8781／8782**；使用 Python `-B -X utf8`，不載 conftest／正式 app startup、不建 DB 或 fixture 檔。
 
 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 指定共用唯讀 `--deps <既有 frontend/node_modules>`；預設 full-src noEmit／18 SSR／mock product HTTP，`--typecheck-only` 執行 noEmit／SSR、略過 HTTP，`--serve` 用完整 App 記憶體 bundle、`write:false`，字型 fallback。前述驗證及實際兩股／單截止操作已有限接受，契約與未驗項見[個股頁 §18](../STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)。舊 P2b ZIP fixture／live capture 未重跑。
 
 驗收 reader exit0；serve 主動 Ctrl+C 中斷 exit1，shutdown `db_preserved=true`／guard0。已核自有 API／Node／esbuild 三 PID、8781／8782 listeners 為0，owned tab 已關；新增測試附件／raw／DB／tmp 殘留0，舊資源及 NO-RETRY 不動。精確命令、版本與收據留原 task。
+
+### M1-W3 三截止法人窗口的零落盤驗證入口
+
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 仍保留 legacy預設 suite；本輪已跑 `--w3-only`的7個 worker memory case及 `--w3-api-only`的5個 actual router case。`--serve`使用 MockTransport，只有另核 `--serve --live-source-opt-in`才取當次真原件。沿既有 Python `-B -X utf8`與 owned API／UI pair **8781／8782**，不載 conftest／正式 app startup、不建 DB或 fixture檔；W3記憶體 loader只准當次 pins／三截止scope，不能把此入口直接用於 W4新日期。
+
+現行 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 沿共用唯讀 `--deps <既有 frontend/node_modules>`；本輪需 `--w3-only`才選 full-src noEmit／24 SSR／三截止 mock product HTTP，預設仍為舊 suite。可合 `--typecheck-only`略過 HTTP，或合 `--serve`以完整 App、esbuild `write:false`作記憶體 bundle，字型 fallback。worker7、actual router5、SSR24、noEmit及 mock HTTP／BigInt三 cutoff36 net均 exit0；程式驗證的43 GET／22 POST為本地 product HTTP，source外網0／guard0／19表不變，不當成真來源請求。首 worker fixture誤污染 index致 exit1，改為僅污染 daily後7例通過；原失敗留 task，舊 ZIP／live及 full suite未重跑。
+
+統籌另驗新增日期 probe與 production first POST兩個觀測：probe2 GET／287,489 body bytes；actual API3105／9/30首次 production24 GET／3,191,051 body bytes，合計外部26 GET，並非一次26原件 batch或 process峰值。native兩股三 cutoff使用其同一 held24原件，repeat POST／普通 GET不新增來源請求。獨立真值及來源 gate見[來源 §14](../SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)，native可信事件／setup與未驗項見[個股頁 §19](../STOCK_RESEARCH_PAGE.md#19-m1-w3三截止法人窗口與原件追溯)。
+
+驗收用 catalog與 price seed僅 synthetic-memory；真來源驗收限 TPEx法人／指數原件，不證測試 catalog身分或 seed是真行情／正式 DB。19表不變包含這些 dummy price／catalog原欄，沒有將它們升格為正式資料證據。
+
+驗收 reader exit0，19表全欄／typeof由 before至 shutdown不變。owned API／Node服務均主動 Ctrl+C，原 exit均1；API shutdown為 `db_preserved=true`／guard0，Node未輸出最終 guard計數，不補稱 exit0或有 finalcounter。自有 API／Node／esbuild PID、8781／8782 listeners及唯一 owned page已獨立核缺席，ownedpageclose=true／tabs空。新測試附件／raw／tmp／DB／artifact0；這不代表全 cache或歷史殘留0。
+
+最初 Orca snapshot／eval兩次 connection failure及未 focus時 ack但0 trusted事件的操作保留；後 `--focus`原生成功，未重啟 browser或重新取來源。horizontal原生手勢、physical canvas、Vite／production build與 pending導航 race未驗。詳細命令、UTC、full hashes、首跑失敗／修正與清理收據留原 task；不建立新附件，原 NO-RETRY仍適用。
 
 ## 歷史驗證
 

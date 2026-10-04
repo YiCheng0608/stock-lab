@@ -2,34 +2,38 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
-## 目前：M1 多日法人窗口新產品輪
+## 目前：M1-W3 法人窗口截止擴充新產品輪
 
-2026-10-04，本輪由已驗收 master `7b3212a990361dcd3effb8e69b75ba8087b1c655` 建立新 branch／Orca worktree，已新建統籌與三個子角色。四角色 runtime、Git 與接手已由統籌複核；舊維護統籌已完成可見終端 `/subagents` 核對，啟動 gate 通過。新統籌已完整接手自主續作，舊維護統籌已結案，不再派本輪任務。W1 真資料／計算依賴及 W2 同截止 API／UI 核心操作均已有限接受；完整 M1 未完成。
+2026-10-04，本輪由已驗收 master `f716526ddcd98ddbaa155c2fd9fe70f776ed4e2a` 建立新 branch／Orca worktree，已新建統籌及三個子角色。統籌已複核四角色 runtime、Git、loaded 狀態與接手，舊統籌已完成可見 `/subagents` 同組 ID核對，完整啟動 gate通過。**M1-W3新增兩日真來源、三截止計算及 actual API／native具名操作已有限接受；完整 M1未完成。** 下方七份文件更新後待統籌驗收／freeze，本輪 index／commit／master merge尚未執行。下一單一核心選定 M1-W4，尚未取得新來源或實作。
 
-共同 cwd／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-institutional-window-core-20261004`；branch：`roadmap-m1-institutional-window-core-20261004`；repo：`C:/Users/YiCheng/Desktop/taiwan-stock-research`；common Git dir：`C:/Users/YiCheng/Desktop/taiwan-stock-research/.git`。實際 runtime cwd 與 Git 根目錄一致，起始 HEAD／master 均為上述 SHA，初始 Git 乾淨。
+共同 cwd／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-window-cutoff-expansion-20261004`；branch：`roadmap-m1-window-cutoff-expansion-20261004`；repo：`C:/Users/YiCheng/Desktop/taiwan-stock-research`；common Git dir：`C:/Users/YiCheng/Desktop/taiwan-stock-research/.git`。四角色實際 runtime cwd 與 Git 根目錄一致，起始 HEAD／master 均為上述 SHA，改文書前 Git 乾淨。
 
-Orca 登錄、branch、HEAD 與 runtime／Git 一致。可見 terminal handle 為 `term_03bd2ec7-251d-4ea1-845e-1f76ac47a01b`，已核 connected／writable／non-orphaned，終端實際顯示本輪工具操作與 GPT-6.1-Sol／ultra。第一 turn 完成且 Main 與三子角色 idle 時，舊維護統籌實際以 `/subagents` 核到 Main [default]、`/root/program`、`/root/documents`、`/root/index_git`，ID 與下表及 runtime／parent／配置相符；`No sub-agents running` 為 bootstrap idle，已 Esc 回 Main，未切角色。另核實 model／effort、cwd／branch／HEAD，首個 UTF-8 交接 task 已完整比對一致。
+Orca 登錄、branch、HEAD 與 runtime／Git 一致。唯一本輪可見 terminal handle 為 `term_3ed777be-064c-4a05-8492-0b3ae2134ddd`，已實核 connected／writable／non-orphaned，終端顯示本輪工具操作與 GPT-6.1-Sol／ultra，對應本輪統籌。舊統籌在四角色 runtime idle 時實際操作 `/subagents`，`source=screen` 顯示 Main [current/default] 及三個 `/root/` child，四 ID 均與下表及 runtime 相同；`No sub-agents running` 只表示 bootstrap idle，已 Esc 回 Main，未選 child。另核配置／parent／session／depth／cwd 與三次 `fork_turns=none` 收據一致，首個 UTF-8 任務全文比對一致。首次 timeout exit1／未送 task及後續啟動完整收據留原 task，不重建或 resume 另一 thread，不補造或重試。
 
-空白 MINGW shell `term_9e2a9f68-4938-4a52-82de-4449b95295d6` 已由舊維護統籌精確關閉，收據為 `ptyKilled=true`、無 agent；其他舊資源未碰，既有殘留及 NO-RETRY 不變。
+本輪原空白 shell `term_efdd5217-b8d9-4dce-a725-762b68888ec9` 已 exact close；`ptyKilled=false`，後驗 orphaned、connected／writable=false、exitCause=`operator_close`，不重試或宣稱 PTY 已 kill。其他舊資源未碰，既有殘留及 NO-RETRY 不變。
 
 | 角色 | 角色 thread ID／實際配置 | 寫入白名單與接手 |
 | --- | --- | --- |
-| 統籌 | `01a10611-ae2c-7f23-a1f8-f9eb0ce7d130`；`gpt-6.1-sol`／`ultra` | 已接手；本 checkpoint 只核證、派工與驗收，未寫來源。 |
-| 程式 | `01a10613-ab4f-7350-8f69-34686ce02a97`；`gpt-6.1-sol`／`xhigh` | 已接手；W1 兩新檔、W2 下方11檔已有限接受，worker W1 只讀；交付停寫，沿用本 ID。 |
-| 文件 | `01a10614-2017-7800-9ff6-20796eb42098`；`gpt-6.1-sol`／`xhigh` | 已接手；只准七份既有 docs：TASK_COORDINATION、SOURCE_REGISTRY、ROADMAP_EXECUTION、ROADMAP、DATA_SOURCES、STOCK_RESEARCH_PAGE、development-baseline/README；依 W2 實際驗收補最終契約／交接，交付停寫。 |
-| 索引與 Git commit | `01a10614-7f52-7f30-8f64-dec6b9d5997a`；`gpt-6-luna`／`medium` | 已接手；零專案來源寫入。文件接受並 freeze 後才刷新涉及分區、驗 coverage、提交核准檔案；本地 merge 另待統籌核對提交後授權。 |
+| 統籌 | `01a10690-dce1-7e81-901c-4051c657d2e5`；`gpt-6.1-sol`／`ultra` | 已正式接手；已接受 W3有限來源／產品驗收，待文件驗收後 freeze；W4須新來源 gate才派精確實作。 |
+| 程式 | `01a10695-0577-7450-ac80-85d1d6263cc5`；`gpt-6.1-sol`／`xhigh` | W3下方8檔交付已接受，停寫沿用本 ID；不取得／實作 W4或擴白名單。 |
+| 文件 | `01a10695-9514-7aa3-b1ef-aa960a0e3d7d`；`gpt-6.1-sol`／`xhigh` | DOC-FINAL1只准既有 TASK_COORDINATION、SOURCE_REGISTRY、ROADMAP_EXECUTION、ROADMAP、DATA_SOURCES、STOCK_RESEARCH_PAGE、development-baseline/README七檔；交付停寫待驗收。 |
+| 索引與 Git commit | `01a10696-22b1-7502-aa33-8da59d536742`；`gpt-6-luna`／`medium` | 已接手；零專案來源寫入。接受文件並 freeze 後才刷新相關分區及驗 coverage；核准 commit 才提交，統籌核提交後另准本地 merge，目前均未執行。 |
 
-上表列角色 thread ID，不是四個獨立 top-level session。統籌 `parentThreadId=null`；三子角色的 `parentThreadId` 與 `source.subAgent.thread_spawn.parent_thread_id` 均為統籌 ID，depth 均為1，runtime 欄位 `sessionId` 也均為統籌 ID。實際模型／reasoning 由 `thread/read` 核實，不由設定或 prompt 推定。四角色初始未產品實作、來源研究、測試、索引、commit、merge 或清理。
+上表列角色 thread ID，不是四個獨立 top-level session。統籌 `parentThreadId=null`，四角色 `forkedFromId=null`；三子角色由本輪統籌以 `fork_turns=none` 新建，其 `parentThreadId` 與 `source.subAgent.thread_spawn.parent_thread_id` 均為統籌 ID，depth 均為1，agent_path 依序為 `/root/program`、`/root/documents`、`/root/index_git`。四者 runtime `sessionId` 均為統籌 ID。統籌重新 `thread/read` 核實模型／reasoning／cwd／parent，loaded list 核四者均 loaded，各角色自行核 Git 與接手後回報；不由設定或 prompt 推定。同輪沿用這組 ID，不恢復舊角色。
 
-App MCP 連線成功，八分區仍屬 master 原根。docs 分區為443 nodes／442 edges，已記錄的 partial／skipped／not-indexed files 均為0；README、ROADMAP、ROADMAP_EXECUTION、TASK_COORDINATION 四檔為 `metadata_changed`，已補讀本 worktree 原文。這不是本 worktree fresh 或完整 coverage 的證明；輪初不刷新或複製索引，待輪末更新。
+App MCP連線成功，前輪6項已精確清理，現僅 master原根8區；本輪新根未索引。master docs受影響七檔 recording_status=`complete`、`no_recorded_issue`，freshness均為 `metadata_changed`，已採本 worktree原文。AGENTS在既有分區根外亦用原文；原根 coverage不證本輪 fresh或完整，不中途刷新或複製索引，文件接受／freeze後才由索引角色更新。
 
-本輪繼承零新增測試產物、附件、暫存與殘留及既有 NO-RETRY；舊資源不動。正式 Git 程式／測試來源不是 fixture 附件；原件、ZIP、測試 DB／tmp／cache／pycache／log附件新增仍0。文件限上述七份既有檔，合計至多增加24 KiB、TASK 本檔上限24 KiB，UTF-8 無 BOM／LF，不建立新 Markdown 或檢查附件。尚未 freeze／索引／commit／merge，封存起點仍為 `7b3212a`。
+本輪繼承零新增測試附件／暫存／殘留及既有 NO-RETRY；測試用途的原件／ZIP／DB／tmp／cache／pycache／log／artifact附件新增仍0，來源原件僅 process memory、raw落盤0。正式程式／測試來源8檔已交付；DOC-FINAL1正式文書限七個既有檔，淨增加合計≤24 KiB、本 TASK≤24 KiB，UTF-8無 BOM／LF，不建 Markdown附件／manifest。Bootstrap與文件更新不算產品實作批次；W3真驗收已接受，freeze=false，本輪 index／commit／merge未執行，版本起點為 `f716526`；後續正式索引落盤須由統籌在原 task另核，不把附件0稱為全 cache0。
 
 ## 已結案獨立文件維護
 
 前次獨立維護以 `1596fe1` 完成全部29份 Markdown 精簡；唯一 P2 修正只改 ROADMAP 一行並補 R0 §5.1 連結，已由 `7b3212a` 完成。舊維護統籌已確認 master 乾淨，無 push；該維護不是產品實作批次。舊維護 roster、索引落盤核定與最終收據留 Git／原 task，不沿用為本輪角色或新產物授權。
 
-## 最近產品交付與原 roster
+## 前輪版本接手與歷史產品 roster
+
+前輪 M1-W1／W2 的19檔已接受 freeze／index／commit／master merge，版本為 `f716526ddcd98ddbaa155c2fd9fe70f776ed4e2a`，以原 task 最終 receipt 為準；原文的 pending 交接狀態已過時，不擴張功能驗收。前輪 worktree／branch 為 `roadmap-m1-institutional-window-core-20261004`，原統籌 `01a10611-ae2c-7f23-a1f8-f9eb0ce7d130` 與三角色 `01a10613-ab4f-7350-8f69-34686ce02a97`、`01a10614-2017-7800-9ff6-20796eb42098`、`01a10614-7f52-7f30-8f64-dec6b9d5997a` 只作前輪接手與清理辨識，不是當前 roster。
+
+CLEAN-OLD-W2已完成並由新統籌獨立後驗：實核舊輪 idle／clean／merged及 owned範圍後，索引角色精確關閉舊 terminal，`ptyKilled=true`且後驗無連線／不可寫／orphaned；**本輪新統籌**一次封存前輪 root含三 child，四 thread均在 archived_sessions／notLoaded，歷史保留。索引角色續以 Orca移除 exact舊 worktree／branch、逐個 delete前輪6項；舊根／branch及6 exact DB／固定 -wal／-shm／-journal均已核缺席，本輪 root／branch／HEAD不變，App僅 master8。範圍內剩0，沒有擴掃或重試；其他 cache aux／logs未核清，既有 NO-RETRY不變，不從此推定全清。
 
 M3-P6e 特徵／籌碼獨立讀回隔離已有限接受，其16檔提交 `5ae84d2` 已在 master，包含主線文件維護 `453ca2b`；前輪 P6d 版本為 `0f8ac4a`。產品 session／terminal 的關閉與封存狀態沿用原 task，不從 Git 推定；歷史封存不代本輪啟動 gate。
 
@@ -42,7 +46,7 @@ P6e 原 worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadm
 | 文件 | `01a104f2-50d4-79e2-96a2-d4f9ccb864f8` | `gpt-6.1-sol`／`xhigh` |
 | 索引與 Git commit | `01a104f2-91b0-7ec3-94b0-ccc982949b5a` | `gpt-6-luna`／`medium` |
 
-原角色不作新輪 roster，已交接舊統籌不得重派，也不恢復舊角色。M2-P2 後的停止要求已由後續明確恢復授權解除；本輪為新建角色，runtime／Git／接手與可見終端 `/subagents` 啟動 gate 均已通過，由新統籌依下方真資料及必要 gate 核定實作派工。
+原角色不作新輪 roster，已交接舊統籌不得重派，也不恢復舊角色。M2-P2後停止要求已由後續明確恢復授權解除；本輪 runtime／Git／接手及可見 `/subagents`已核，同輪沿用新三 child。W3具名產品已驗，下一 W4實作仍等新來源 gate。
 
 P6e 已接受兩表讀回隔離、必要 API／App、六個具名桌面操作與同 fixture 六表不變；原生／DOM.click 範圍見[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。未增加多日法人、新 Plan 或完整 M1／M3。P6c 有效歷史窄版溢出未通過，physical canvas、真正截止表單提交及其他未覆蓋 typed／legacy 讀回仍待驗。正式 DB、官方／availability／PIT、正向原件及必要磁碟 gate 保留。
 
@@ -50,16 +54,16 @@ P6e 已接受兩表讀回隔離、必要 API／App、六個具名桌面操作與
 
 | 接手項目 | 狀態與動作 |
 | --- | --- |
-| 本輪單一核心目標 | M1：同研究截止查看5／20交易日外資、投信、自營商各別淨買賣超及來源／缺日。W1 具名依賴與 W2 同截止操作已有限接受，範圍限 TPEx 3105／6488、2026-10-02。 |
-| 已有真實證據與缺口 | 20日真原件、完整22開市日與12窗口重算見[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)；新 first POST／零外網 GET 與具名操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)。其他日期／標的／TWSE、修訂／PIT、研究條件／保存仍缺，P2b 不變。 |
-| 下一步與實作前條件 | 結案 gate 後由新統籌先驗同 CSV 115/09/01、02真原件及兩股22日金融欄位，核新 policy／窗口，才接9/30、10/01與既有10/02三截止切換。既有日曆不代新日原件；精確工作 ID／白名單另縮限，本輪不加實作，不重做 P4a。 |
-| 核心拆工與完成條件 | 依實際取得及驗證，分批核定窗口／交易日／缺日處理與版本，逐欄重算5／20日及邊界，再驗同截止 API／UI 具名操作。多日與完整交易日依賴→計算→API／UI 是本輪核心，不預設可靠性批次；孤立 observed-session、fixture、planning 或 unknown 標示不算依賴解除。 |
+| 本輪單一核心目標 | M1-W3已有限接受：TPEx3105／6488新增9/30、10/1並保留10/2，native切三 cutoff各看5／20日三類 net／來源／缺日0。研究條件／PIT／保存不在本子能力；完整 M1未完成。 |
+| 已有真實證據與缺口 | 新9/1、9/2與22日全金融、完整有界日曆及36 net重算見[來源 §14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)；actual API首次新觀測／同 held24原件及 native三 cutoff見[個股頁 §19](STOCK_RESEARCH_PAGE.md#19-m1-w3三截止法人窗口與原件追溯)。其他日期／標的／TWSE、修訂／PIT、研究條件／保存仍缺，P2b不變。 |
+| 下一單一核心及實作前條件 | M1-W4同兩股新增2026-09-29、保留三 cutoff，使用者切四截止各看5／20日 net／來源／缺日。候選 dataset11856 CSV `d=115/08/31`＋dataset11391月 index `date=2026/08/01`皆尚未真取；先核新增兩股全金融／單位／全列日期結構，8月 index於新8/31～10/2有限範圍的正面集合／閉日，及新 calendar／policy／外部 pins／請求上限／觀測版本與缺日契約，不能沿 W3白名單放行。現在只選題交接，不在本輪取得或實作 W4。 |
+| 核心拆工與完成條件 | W4先實際解除上述來源／完整23 sessions依賴；9/29應恰20 sessions，5日起9/21、20日起8/31。真來源 gate通過才精確派工／核新版本、獨立重算四 cutoff48 net及邊界，再驗 native四截止／來源／缺日。每窗只採≤cutoff，缺／錯日不補零、縮窗或較早／未來 fallback，保持非 PIT；孤立 fixture／planning／unknown標示不算依賴解除，每批分報操作、依賴、可靠性及剩餘。 |
 | 改選條件 | M1 沒有新取得路徑時，任何實作前依新證據改選必要 gate 齊備的最小 M3 計畫操作，列來源／availability、decision／execution、版本、tick／費稅／合法時段及必要磁碟保存／跨程序讀回條件。仍無可執行項則等待，不開空轉、隔離或重複審查輪。 |
 | 繼承停滯的兩個已驗收批次 | 起始統籌已核當時最近兩批 Git 變更與文件：P6d `0f8ac4a`、P6e `5ae84d2` 均為讀回可靠性改善；未接多日法人或新 Plan，未解除當時已列核心來源／時間依賴。 |
-| 連續未推進核心批次 | 現為0：繼承至少2批（更早未知）由 W1 真依賴驗收重置，W2 核心操作驗收後仍0；P6d／P6e 仍為可靠性。已審最近兩批重新選 M1 來源→計算→產品；每批分報操作、依賴、可靠性與剩餘，只有前兩項真證據才重置。 |
-| 啟動與文件維護 | 舊獨立維護及本輪啟動／roster 更新均不是產品實作批次，不增加或重置上述計數。 |
+| 連續未推進核心批次 | 現為0：繼承至少2批（更早未知）由 W1真依賴重置，W2真操作後仍0，W3新增日期／三截止真驗收後維持0；P6d／P6e仍為可靠性歷史。已審拆工重新選 M1來源→計算→產品；只有核心操作／真依賴解除才重置，不因換輪歸零。 |
+| 啟動與文件維護 | 舊獨立維護、本輪 bootstrap／roster及 DOC-FINAL1均不是產品實作批次，不增加或重置計數。 |
 
-M1 來源、計算、產品驗收與 M3 必要 gate 見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。本輪仍為單一 M1；下一核心已由統籌核定，改選證據與理由留原 task。
+M1來源、計算、產品驗收與 M3必要 gate見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。本輪核心為 W3，下一 W4已由統籌選定，仍待真來源／新版本；改選證據與理由留原 task。
 
 ### M1-W1：有限依賴已接受
 
@@ -69,7 +73,7 @@ M1 來源、計算、產品驗收與 M3 必要 gate 見[執行清單 §2.1](ROAD
 
 ### M1-W2：同截止核心操作已有限接受
 
-原程式角色沿用，worker W1 只讀；最終11檔白名單如下：
+前輪程式角色同輪沿用，worker W1 只讀；當時最終11檔白名單如下，不作 M1-W3 寫入授權：
 
 | 範圍 | 精確檔案 |
 | --- | --- |
@@ -82,11 +86,29 @@ M1 來源、計算、產品驗收與 M3 必要 gate 見[執行清單 §2.1](ROAD
 
 本批分報：**核心操作增量為兩股單截止查看5／20日三類 net／來源／缺日；已解除接線依賴為同截止 API／UI（不重計 W1 來源／日曆）；可靠性0；停滯仍0。** 其他日期／標的／TWSE、PIT／修訂、研究條件／保存及完整 M1 仍缺。必要 API／SSR／noEmit／mock HTTP 有限接受；舊 ZIP fixture 未重跑，build／canvas／導航 race 未驗。
 
-本次 owned API／Node／esbuild 與8781／8782 listeners、Orca tab 已核關閉；serve 主動中斷 exit1，shutdown db_preserved=true／guard0，驗收與清理分報。新增測試附件／tmp／raw／DB 殘留0；舊 NO-RETRY 尾段不變。
+W2 owned API／Node／esbuild 與8781／8782 listeners、Orca tab 已核關閉；serve 主動中斷 exit1，shutdown db_preserved=true／guard0，驗收與清理分報。當時新增測試附件／tmp／raw／DB 殘留0；舊 NO-RETRY 尾段不變。
 
-正式索引已核定、未執行：本輪前綴 `taiwan-stock-research-roadmap-m1-institutional-window-core-20261004-` 的 backend-app／backend-worker／backend-tests／frontend-src／tools／docs 共6區，DB固定 `C:/Users/YiCheng/cbm-cache/<ID>.db`，各≤24 MiB、合計≤64 MiB；逐區正常路徑 response／log各1、stage DB1≤24 MiB、sidecars aux≤16 MiB；最終 coverage 回傳自有 logs≤6檔／48 KiB，根為 cache/logs。這是本輪核定配額，非工具硬限或舊維護額度。App頂層呼叫每區一次；任一 error／超額停餘項、NO-RETRY，不改 cache／ACL／daemon，CBM0.10.8內部恢復不可設0。只核清 exact 回傳且自有／非 reparse／未占用路徑；失敗缺 exact path 就列未核清缺口，不掃 cache。6正式可重建 DB 保留至外部 owner 接手，移除 worktree 後按6 ID delete_project／核，不作下一輪 fresh；舊8索引不動。
+前輪正式6區索引／coverage曾完成，前綴 `taiwan-stock-research-roadmap-m1-institutional-window-core-20261004-`，後綴為 backend-app／backend-worker／backend-tests／frontend-src／tools／docs；6 DB合計44,302,336 bytes、每區≤24 MiB／合計≤64 MiB。根移除後已按6 ID delete_project，exact DB及固定 -wal／-shm／-journal皆核缺席，不作新輪 fresh。兩個 returned logs（287／414 bytes）早先已驗缺席，但刪前 `Split-Path AmbiguousParameterSet` 未 fail-fast，不能後驗追認刪前 gate；其他 cache aux狀態未知。前輪索引 error／超額停餘項的 NO-RETRY 限制保留，CBM0.10.8內部恢復不可設0。完整路徑／命令與逐區收據留原 task；只核清 exact 自有／非 reparse／未占用路徑，缺 exact path 列缺口，不掃 cache，不改 cache／ACL／daemon，不動 master8。
 
-下一步：文件接受／freeze→本輪索引／coverage→統籌批准 commit／核→授權本地 merge→新可見統籌及外部清理接手；均 pending，無 push。精確執行／封存收據留原 task，不為 hash反覆回寫。文件交付停寫，沿用本 ID。
+前輪版本封存／master merge及核定外部清理已完成；本輪可見啟動 gate通過，W3有限驗收已接受，freeze／index／commit／merge未執行，無 push。精確封存／清理收據留原 task，不為 hash反覆回寫；本輪文件交付即停寫待統籌接受。
+
+### M1-W3：三截止核心操作已有限接受
+
+程式角色本輪8檔已交付接受，白名單如下；W4尚無實作授權：
+
+| 範圍 | 精確檔案 |
+| --- | --- |
+| backend app／worker | `backend/app/institutional_windows.py`、`backend/app/stock_overview.py`、`backend/worker/tpex_institutional_window.py` |
+| backend test | `backend/tests/test_institutional_windows.py` |
+| frontend／preview | `frontend/src/types.ts`、`frontend/src/components/StockOverview.tsx`、`frontend/src/components/StockOverview.test.tsx`、`tools/institutional-window-preview.cjs` |
+
+統籌已接受新兩日 probe與 first actual API POST兩個獨立真觀測、44 selected原列全金融／完整日曆／36 net及重複 API字串核對；native兩股依序切三 cutoff、來源原列、390×844新9/1原列、9/29與 TWSE拒用／恢復均具名有限接受。首次取得是 actual API，native讀同 held instance；完整來源及數值集中[§14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)，操作與 setup／trusted事件界線集中[§19](STOCK_RESEARCH_PAGE.md#19-m1-w3三截止法人窗口與原件追溯)。
+
+本批分報：**核心操作增量＝兩股新增9/30／10/1並可 native切三截止查看5／20日 net／來源／缺日0，保留10/2；已解除真依賴＝新兩日期原件及三截止窗口／API／UI；可靠性0；停滯維持0。** 完整 M1、範圍外標的／日期／TWSE、PIT／修訂、研究條件／保存仍缺。
+
+worker7／actual router5／SSR24／full-src noEmit／mock product HTTP36 net與 BigInt已有限接受。首 fixture污染 index exit1及修正、初始 Orca connection／未 focus工具 ack失敗均留原 task；Vite／production build、canvas／horizontal原生手勢、pending導航 race及舊 ZIP／live／完整回歸未驗或未重跑。19表全欄／typeof至 shutdown不變；自有服務／ports／owned page清理已獨立核，兩服務 Ctrl+C原 exit1、Node無最終 guard計數，詳見[開發入口](development-baseline/README.md#m1-w3-三截止法人窗口的零落盤驗證入口)。新測試附件／raw／tmp／DB／artifact0，不能推定全 cache或歷史殘留0。
+
+下一步為統籌接受七檔文件→freeze→本輪索引／coverage→核准 commit及核對→另准 master本地 FF merge→新輪可見統籌／外部清理接手；均未執行。W4來源 gate先由下一輪核，不降低真實性／磁碟／執行條件；不在本輪續取新來源。
 
 ## 未解驗證與資源限制
 

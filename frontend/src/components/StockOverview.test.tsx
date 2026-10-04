@@ -3,6 +3,7 @@ import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOver
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
 
+const windowOnly = (globalThis as typeof globalThis & { __institutionalWindowSSRSelection?: string }).__institutionalWindowSSRSelection === 'w3-only'
 let originalAssertionCount = 0
 function expect(condition: boolean, message: string): void {
   originalAssertionCount += 1
@@ -32,6 +33,7 @@ const data: StockOverviewData = {
     capture_action: 'not_attempted', storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported', source_url_kind: 'feed',
     published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown', rows: [], provenance: null, attribution: null, limitations: [] }, limitations: [],
 }
+if (!windowOnly) {
 const html = renderToStaticMarkup(<StockOverview data={data} onNews={() => {}} />)
 expect(html.includes('2026/10/02') && html.includes('2026/10/01'), 'cutoff and latest usable date remain visibly separate')
 expect(html.includes('25.55') && html.includes('成交額（來源計價單位）：0'), 'price and explicit zero amount are retained')
@@ -67,6 +69,7 @@ for (const bar of [
   const invalidHtml = renderToStaticMarkup(<StockOverview data={{ ...data, price: { ...data.price, latest: bar, bars: [bar] } }} onNews={() => {}} />)
   expect(invalidHtml.includes('數值或單位待核實') && !invalidHtml.includes('<strong>1</strong>') && !invalidHtml.includes('<td>1,000</td>'), 'overview rejects malformed exact text and unsafe legacy numbers without fallback')
 }
+}
 const investor = (label: string, buy: string, sell: string, net: string) => ({ label, buy, sell, net, source_fields: { buy: 'buy', sell: 'sell', net: 'net' } })
 const daily: InstitutionalDailyData = {
   version: 'institutional-daily/p2b-v1', status: 'available', as_of: '2026-10-03', date: '2026-10-02',
@@ -80,6 +83,7 @@ const daily: InstitutionalDailyData = {
   attribution: { owner: { name: 'Taipei Exchange', data_provider: '金融監督管理委員會證券期貨局', dataset_name: '上櫃股票三大法人買賣明細資訊', license_url: 'https://data.gov.tw/license', attribution_year: 2026 },
     dataset_id: 'data-gov-11856', source_id: 'tpex_3insti_daily_trading', source_url: 'https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading', terms: {}, evidence: [], purpose_evidence: {} },
 }
+if (!windowOnly) {
 const dailyHtml = renderToStaticMarkup(<StockOverview data={{ ...data, as_of: '2026-10-03', institutional_daily: daily }} onNews={() => {}} />)
 expect(dailyHtml.includes('單日法人原件') && dailyHtml.includes('穩懋（3105）') && dailyHtml.includes('單位：股'), 'selected original has its own named block, company and exact share unit')
 for (const quantity of ['10,547,941', '3,264,551', '7,283,390', '-27,000', '1,070,812', '86,707', '984,105', '8,240,495']) expect(dailyHtml.includes(quantity), 'separate investor quantities and total retained: ' + quantity)
@@ -95,6 +99,7 @@ expect(zeroHtml.includes('<td>0</td>'), 'verified exact zero remains a visible z
 const rejectedHtml = renderToStaticMarkup(<InstitutionalDaily data={{ ...daily, status: 'unavailable', row: null, provenance: null, reasons: ['daily_after_cutoff'] }} />)
 expect(rejectedHtml.includes('本次不採用') && rejectedHtml.includes('尚無可核對的單日法人原件') && !rejectedHtml.includes('10,547,941'), 'future original is hidden without legacy fallback')
 console.log('StockOverview original price/daily', originalAssertionCount, 'checks passed')
+}
 
 function check(condition: boolean, label: string): void {
   if (!condition) throw new Error(label)
@@ -149,15 +154,15 @@ export function runOfficialEventsSSRTests(render: (element: ReactElement) => str
   return 8
 }
 
-console.log('OfficialEvents new SSR', runOfficialEventsSSRTests(renderToStaticMarkup), 'checks passed')
+if (!windowOnly) console.log('OfficialEvents new SSR', runOfficialEventsSSRTests(renderToStaticMarkup), 'checks passed')
 
 export function runInstitutionalWindowSSRTests(render: (element: ReactElement) => string): number {
   const dates = ['2026-09-24', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']
   const base: InstitutionalWindowsData = {
-    version: 'institutional-windows/w2-v1', status: 'available', as_of: '2026-10-02', horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
+    version: 'institutional-windows/w3-v1', status: 'available', as_of: '2026-10-02', horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
     unit: 'shares', quantity_encoding: 'canonical_integer_string', historical_pit: 'unsupported',
-    supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], as_of: '2026-10-02', calendar_from: '2026-09-01', calendar_to: '2026-10-02' },
-    capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: 22 },
+    supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], supported_cutoffs: ['2026-09-30', '2026-10-01', '2026-10-02'], calendar_from: '2026-09-01', calendar_to: '2026-10-02' },
+    capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: 24 },
     calendar: { version: 'bounded-test', status: 'available', expected_dates: dates, valid_dates: dates, missing_dates: [],
       basis: { weekday_rule: 'https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html', closed_notice: 'https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html', closed_dates: ['2026-09-25', '2026-09-28'] }, evidence: [] },
     windows: { '5': { horizon: 5, status: 'available', values: { foreign: '184467440737095516140', trust: '-9007199254740993', dealer: '0' }, from: dates[0], to: dates[4], required_dates: dates, valid_dates: dates, missing_dates: [], invalid_dates: [], reasons: [] },
@@ -183,4 +188,49 @@ export function runInstitutionalWindowSSRTests(render: (element: ReactElement) =
   const whole = render(<StockOverview data={{ ...data, institutional: base, institutional_daily: daily }} onNews={() => undefined} />)
   check(!whole.includes('窗口仍不可用') && whole.includes('5／20 日窗口請見上方') && whole.includes('其他範圍與研究條件尚未完成'), 'single-day and footer copy agrees with independent windows')
   return 18
+}
+
+export function runInstitutionalWindowCutoffSSRTests(render: (element: ReactElement) => string): number {
+  let checks = 0
+  const verify = (condition: boolean, message: string) => { checks++; if (!condition) throw new Error(message) }
+  const sessions = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-07', '2026-09-08',
+    '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18',
+    '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']
+  const cutoffs = ['2026-09-30', '2026-10-01', '2026-10-02']
+  for (const [offset, cutoff] of cutoffs.entries()) {
+    const dates = sessions.slice(offset, offset + 20)
+    const windows = Object.fromEntries([5, 20].map((horizon) => {
+      const selected = dates.slice(-horizon)
+      return [String(horizon), { horizon, status: 'available', values: { foreign: '184467440737095516140', trust: '-9007199254740993', dealer: '0' },
+        from: selected[0], to: cutoff, required_dates: selected, valid_dates: selected, missing_dates: [], invalid_dates: [], reasons: [],
+        daily_evidence: selected.map((day) => ({ row: { symbol: '3105', company_name: `TRACE-${day}`, date: day, source_date: day.replace(/-/g, ''), row_ordinal: 1,
+          investors: { foreign: investor('外資', '100', '0', '100'), trust: investor('投信', '0', '0', '0'), dealer: investor('自營商', '0', '0', '0') }, total_net: '100' },
+          provenance: { source_id: 'synthetic', source_version: 'v2', requested_date: day, url: 'https://data.gov.tw/dataset/11856', method: 'GET',
+            body_sha256: 'a'.repeat(64), body_bytes: 100, captured_at: '2026-10-04T00:00:01+00:00', request_started_at: '2026-10-04T00:00:00+00:00',
+            policy_version: 'test', policy_digest: 'test', profile: 'free_public_local', historical_pit: 'unsupported' } })) }]
+    })) as NonNullable<InstitutionalWindowsData['windows']>
+    const base: InstitutionalWindowsData = {
+      version: 'institutional-windows/w3-v1', status: 'available', as_of: cutoff, horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
+      unit: 'shares', quantity_encoding: 'canonical_integer_string', historical_pit: 'unsupported', windows,
+      supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], supported_cutoffs: cutoffs, calendar_from: sessions[0], calendar_to: sessions[21] },
+      calendar: { version: 'bounded', status: 'available', expected_dates: sessions, valid_dates: sessions, missing_dates: [] },
+      capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: 24 },
+    }
+    const html = render(<InstitutionalWindows data={base} onCapture={() => undefined} />)
+    verify(html.includes('184,467,440,737,095,516,140') && html.includes('-9,007,199,254,740,993') && html.includes('>0</td>'), 'three cutoff exact signed and zero strings')
+    verify(html.includes('所需 20／已驗 20／缺 0 日') && html.includes('所需 5／已驗 5／缺 0 日'), 'two complete fixed horizons')
+    verify(html.includes(`TRACE-${dates[0]}`) && html.includes(`TRACE-${cutoff}`) && html.includes(cutoff.replace(/-/g, '/')), 'same cutoff source expansion')
+    verify(html.includes('2026/09/30、2026/10/01、2026/10/02') && html.includes('各窗口只採用截至所選日期的原件'), 'supported cutoffs and batch/adoption scope')
+    const noScope = render(<InstitutionalWindows data={{ ...base, supported_scope: { ...base.supported_scope!, supported_cutoffs: [] } }} onCapture={() => undefined} />)
+    verify(!noScope.includes('184,467') && !noScope.includes('<button') && !noScope.includes('TRACE-'), 'unsupported scope hides values/action/source rows')
+    const wrongEnd = render(<InstitutionalWindows data={{ ...base, windows: { '20': { ...windows['20'], to: '2026-10-03' } } }} />)
+    verify(!wrongEnd.includes('184,467') && wrongEnd.includes('數值或窗口條件待核對'), 'another cutoff cannot supply a displayed net')
+    const partial = render(<InstitutionalWindows data={{ ...base, windows: { ...windows, '20': { ...windows['20'], status: 'unavailable', values: null,
+      valid_dates: dates.slice(1), missing_dates: [dates[0]], reasons: ['institutional_window_expected_dates_missing'] } } }} />)
+    verify(partial.includes('所需 20／已驗 19／缺 1 日') && partial.includes(`缺日：${dates[0]}`) && partial.includes('184,467'), 'partial twenty keeps five and exact missing date')
+    const futureRow = { ...windows['20'].daily_evidence![0], row: { ...windows['20'].daily_evidence![0].row, date: '2026-10-03', company_name: 'FUTURE-SENTINEL' } }
+    const future = render(<InstitutionalWindows data={{ ...base, windows: { ...windows, '20': { ...windows['20'], daily_evidence: [...windows['20'].daily_evidence!, futureRow] } } }} />)
+    verify(!future.includes('FUTURE-SENTINEL'), 'batch future records never appear as adopted source rows')
+  }
+  return checks
 }

@@ -140,7 +140,7 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 
 ### 9.3 法人、條件與新聞入口
 
-本節保留 P1／P2b 的有限版本範圍；後續 W2 已接通具名兩股／單一截止的法人窗口，見[§18](#18-m1-w2同截止法人窗口與原件追溯)。研究條件未因此啟用。
+本節保留 P1／P2b 的有限版本範圍；W2 單截止見[§18](#18-m1-w2同截止法人窗口與原件追溯)，現行 W3 兩股／三截止法人窗口見[§19](#19-m1-w3三截止法人窗口與原件追溯)。研究條件未因此啟用。
 
 | 區塊 | 本批結果 | 待補條件 |
 | --- | --- | --- |
@@ -573,6 +573,8 @@ SQL None 的 features_json 只核 pure projection，不聲稱存進 NOT NULL 欄
 
 ## 18. M1-W2：同截止法人窗口與原件追溯
 
+本節保留 W2 的歷史版本／單截止操作；現行三截止與新版來源沿[§19](#19-m1-w3三截止法人窗口與原件追溯)。
+
 **實際原件→API／UI 及下述操作已有限接受。** 支持 TPEx 3105／6488、唯一共用 `as_of=2026-10-02`；總覽 `stock-overview/w2-v1`、法人 `institutional-windows/w2-v1`。來源、policy pins、22日曆／20日原件、單位／缺日與計算版本沿用[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，不放寬 P2b 單日或其他來源。
 
 ### 18.1 明示取得、共用截止與記憶體
@@ -594,3 +596,32 @@ Server 必須 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。`POST /
 桌面來源原生展開、390×844原生 scroll 後展開2026-09-03原列175，外資 buy `11,221,514`／sell `11,657,008`／net `-435,494`、hash／UTC可追。body client／scroll 375／375；wrapper303、table780、overflow auto，DOM scrollLeft477後完整性末欄在 wrapper內。原生橫向工具 ack 後 scrollLeft仍0，**原生橫向手勢未驗**。首次 snapshot 斷線及視口外 click 未展開的原失敗留 task，不改報首跑全通。
 
 5個新 API case、18 SSR、full-src noEmit、mock product HTTP已有限接受；Vite build未跑，字型僅fallback，physical canvas／pending導航 race 未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件與磁碟保存仍缺，完整 M1 未完成。驗證入口見[開發文件](development-baseline/README.md#m1-w2-法人窗口的零落盤驗證入口)，細命令／UTC／full hashes 留原 task。
+
+## 19. M1-W3：三截止法人窗口與原件追溯
+
+**實際原件→API／完整 App 原生操作已有限接受。** 支持 TPEx 3105／6488、共用 `as_of` 為2026-09-30／10-01／10-02；總覽 `stock-overview/w3-v1`、法人 `institutional-windows/w3-v1`、worker `tpex-institutional-window/w3-v1`。當次 policy／來源版本、完整日曆、窗口與36 net參考由[來源 §14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)管理；§18及§13來源 W1 pins僅為歷史，不作本版設定。
+
+### 19.1 共用截止、一次取得及精確呈現
+
+明示 server設定仍為 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。capture POST先核標的存在與 supported cutoff；首次核定操作取得同一 instance 的22 daily＋2 month process-memory union，後續兩股 POST／detail／overview GET重驗 held同24份原件，普通 GET／import零外網、不寫 DB／檔案。非阻塞鎖、一次嘗試／拒 retry／refresh／較早 fallback及重啟須新觀測的界線不變；**W3 first POST 為 actual API 3105／9/30，原生操作讀取其 held instance**。
+
+日期輸入與原生「套用截止」提交後，總覽及每窗採同 cutoff。5／20日各列三類 canonical整數字串、股單位、BigInt千分位與 required／valid／missing／invalid dates；需該日的窗口缺資料就拒用，不補零、縮窗或採 future／earlier值。三 cutoff均驗缺日0。範圍外截止或市場／標的移除先前所有 net及窗口載入按鈕，恢復支持 cutoff才讀同 held值。
+
+來源詳情保留 TPEx署名、政府資料集／授權、exact CSV、原列序及 buy／sell／net、body／receipt SHA、UTC、policy／source／calendar／calculation版本。所選 cutoff只顯≤cutoff的窗口 daily evidence；例如9/30的20日列集合9/1～9/30，union中較晚的10/1、10/2不混入。published／first available／revision仍 unknown、PIT unsupported，突破／回踩仍固定保守，單日 P2b與其他來源區塊保持獨立。
+
+### 19.2 具名原生操作驗收
+
+| 操作 | 已接受的有限結果 |
+| --- | --- |
+| 兩股三截止切換 | 完整 App同 instance，3105與6488各 Date input填寫及原生「套用截止」依序9/30→10/1→10/2；DOM36 net全部對獨立原件真值。3105明核 trusted pointerdown／up／click及日期填寫鍵事件；兩股原生讀取按鈕的 repeat POST仍讀 held同24原件。 |
+| 6488來源詳情 | 10/2原生展開，cutoff／policy／calendar／calculation、hashes及UTC與同批收據一致。 |
+| 390×844新日原列 | 切9/30，原生展開6488的9/1原列646，九個 buy／sell／net真欄位及來源版本／hash／UTC可見，日原列開啟 isTrusted=true；20日日列為9/1～9/30，無未來日。body client／scroll375／375，wrapper303／table780、overflow auto。 |
+| 未支持 cutoff與市場 | 原生提交9/29後無舊 net／無窗口按鈕，恢復9/30讀同 held值；TWSE3105／9/30亦無 net／按鈕，actual API同樣拒用。 |
+
+`DOM.scrollIntoView`僅作定位 setup，不列為原生橫向手勢。最初兩次 Orca snapshot／eval runtime connection failure、未 focus時工具 ack但 trusted事件／來源展開均0的操作保留為原失敗；後續 `--focus`才使 browser pane實際聚焦，原生操作成功，未 restart／換 browser／重取來源。詳細證據留原 task，不把早先 ack當 native通過。
+
+### 19.3 已驗與未驗的界線
+
+兩股／三截止 actual API的6組 detail.overview等於直接overview，cutoff／版本／batch一致；原件與重複 API字串核對集中[來源 §14.4](SOURCE_REGISTRY.md#144-w3-真資料與有限數值核對)。19表全欄／typeof由 before至 shutdown不變、reader exit0／guard0，測試及自有服務清理見[開發入口](development-baseline/README.md#m1-w3-三截止法人窗口的零落盤驗證入口)。
+
+worker7、actual router5、24 SSR、full-src noEmit及 mock product HTTP／BigInt36 net已有限接受。完整 backend／舊 ZIP／live未重跑；horizontal原生手勢、physical canvas、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件、原件保存與跨程序讀回及完整 M1未完成；9/29是下一輪候選，未被本版放行。

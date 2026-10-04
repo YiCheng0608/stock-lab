@@ -1,4 +1,4 @@
-/** Memory-only W2 typecheck, product HTTP/SSR and full-App preview.
+/** Memory-only W3 typecheck, product HTTP/SSR and full-App preview.
  * Existing master node_modules are borrowed read-only via --deps. No files,
  * bundles, buildinfo, HTTP captures, screenshots or new dependencies are made.
  * Start the guarded Python --serve on 8781 first; --live-source-opt-in belongs
@@ -117,37 +117,60 @@ async function check() {
   typecheck()
   const { renderToStaticMarkup } = requireDependency('react-dom/server')
   const React = requireDependency('react')
+  const w3 = args.includes('--w3-only')
+  if (w3) globalThis.__institutionalWindowSSRSelection = 'w3-only'
   const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
   const { StockOverview } = require(path.join(sourceRoot, 'components/StockOverview.tsx'))
-  const ssrCases = cases.runInstitutionalWindowSSRTests(renderToStaticMarkup)
+  const ssrCases = w3 ? cases.runInstitutionalWindowCutoffSSRTests(renderToStaticMarkup) : cases.runInstitutionalWindowSSRTests(renderToStaticMarkup)
   console.log(JSON.stringify({ new_institutional_window_ssr_cases: ssrCases, guard: counts, disk_artifacts: 0 }))
   if (args.includes('--typecheck-only')) return
   const api = await apiModule()
-  const before = await api.getStock('TPEx', '3105', '2026-10-02')
+  const cutoffs = w3 ? ['2026-09-30', '2026-10-01', '2026-10-02'] : ['2026-10-02']
+  const before = await api.getStock('TPEx', '3105', cutoffs[0])
   assert.equal(before.overview.institutional.capture_state.attempted, false)
-  const first = await api.captureInstitutionalWindows('TPEx', '3105', '2026-10-02')
-  assert.equal(first.capture_state.request_count, 22)
+  const first = await api.captureInstitutionalWindows('TPEx', '3105', cutoffs[0])
+  assert.equal(first.capture_state.request_count, 24)
   assert.equal(first.capture_state.action, 'acquired')
-  for (const [symbol, expected] of [['3105', '4,500'], ['6488', '-2,500']]) {
-    const repeated = await api.captureInstitutionalWindows('TPEx', symbol, '2026-10-02')
-    const stock = await api.getStock('TPEx', symbol, '2026-10-02')
-    const overview = await (await fetch(`${apiOrigin}/api/stocks/TPEx/${symbol}/overview?as_of=2026-10-02`)).json()
+  let netChecks = 0
+  for (const [cutoffIndex, cutoff] of cutoffs.entries()) for (const symbol of ['3105', '6488']) {
+    const repeated = await api.captureInstitutionalWindows('TPEx', symbol, cutoff)
+    const stock = await api.getStock('TPEx', symbol, cutoff)
+    const overview = await (await fetch(`${apiOrigin}/api/stocks/TPEx/${symbol}/overview?as_of=${cutoff}`)).json()
     assert.deepEqual(stock.overview.institutional, repeated)
     assert.deepEqual(overview.institutional, repeated)
     assert.deepEqual(repeated.provenance, first.provenance)
+    assert.equal(overview.as_of, cutoff)
+    assert.equal(repeated.as_of, cutoff)
+    for (const horizon of [5, 20]) {
+      const item = repeated.windows[String(horizon)]
+      assert.equal(item.to, cutoff)
+      assert.equal(item.required_dates.length, horizon)
+      assert.ok(item.daily_evidence.every(({ row, provenance }) => row.date <= cutoff && provenance.requested_date === row.date))
+      const ordinalEnd = 20 + cutoffIndex
+      const ordinalSum = horizon * (2 * ordinalEnd - horizon + 1) / 2
+      const base = symbol === '3105' ? [900, -30, -35] : [-500, 30, -5]
+      for (const [index, investor] of ['foreign', 'trust', 'dealer'].entries()) {
+        const expected = String(base[index] * horizon + (w3 ? ordinalSum * [100, -1, 3][index] : 0))
+        assert.equal(item.values[investor], expected)
+        assert.equal(BigInt(item.values[investor]).toString(), expected)
+        netChecks++
+      }
+    }
     const html = renderToStaticMarkup(React.createElement(StockOverview, { data: overview, onNews: () => {}, onCaptureWindows: () => {} }))
-    assert.ok(html.includes(expected))
+    const displayed = repeated.windows['5'].values.foreign.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    assert.ok(html.includes(displayed))
     assert.ok(html.includes('讀取本次法人窗口'))
     assert.ok(!html.includes('窗口仍不可用'))
   }
   const refused = await api.getStock('TPEx', '3105', '2026-10-03')
   assert.deepEqual(refused.overview.institutional.windows, {})
   const receipt = await (await fetch(`${apiOrigin}/__window_validation/receipt`)).json()
-  assert.equal(receipt.request_count, 22)
+  assert.equal(receipt.request_count, 24)
   assert.equal(receipt.db_preserved, true)
   assert.ok(Object.values(receipt.guard).every((value) => value === 0))
   console.log(JSON.stringify({ passed: true, new_ssr_cases: ssrCases, response_parser: 'product fetch + Response.json',
-    institutional_source: 'synthetic mock only', request_count: receipt.request_count, db_preserved: receipt.db_preserved,
+    institutional_source: 'synthetic mock only', net_checks: netChecks, supported_cutoffs: cutoffs,
+    loopback_requests: { get: cutoffs.length * 4 + 3, post: cutoffs.length * 2 + 1 }, request_count: receipt.request_count, db_preserved: receipt.db_preserved,
     guard: counts, disk_artifacts: 0, production_vite_build: 'not_run' }))
 }
 

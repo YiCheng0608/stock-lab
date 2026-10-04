@@ -1,7 +1,7 @@
 """Explicit, single-attempt process-memory institutional window store.
 
 Import and ordinary reads do not create files, import app.config, open a DB,
-or fetch. The POST action is the only caller of the accepted W1 loader.
+or fetch. The POST action is the only caller of the bounded W3 loader.
 """
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import Any, Mapping
 
 from worker.tpex_institutional_window import MemoryWindowCache, window_policy
 
-VERSION = "institutional-windows/w2-v1"
+VERSION = "institutional-windows/w3-v1"
 ENABLE_ENV = "STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE"
-POLICY_VERSION = "m1-w1-tpex-window-2026-10-04.1"
-POLICY_DIGEST = "sha256:5b5129cdc39ab0bac9eac89246917f8721c118e2f9c18ed02234972e6c5dc773"
+POLICY_VERSION = "m1-w3-tpex-window-2026-10-04.1"
+POLICY_DIGEST = "sha256:9de27224cc57512f4e38455717eb51f8512eb890667119a5d02444810e0ad4db"
 CALENDAR_VERSION = "tpex-2026-09-01_2026-10-02-weekdays-11503027221/v1"
-CUTOFF = date(2026, 10, 2)
+CUTOFFS = (date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2))
 SYMBOLS = ("3105", "6488")
-SUPPORTED_SCOPE = {"exchange": "TPEx", "symbols": list(SYMBOLS), "as_of": "2026-10-02",
+SUPPORTED_SCOPE = {"exchange": "TPEx", "symbols": list(SYMBOLS), "supported_cutoffs": [day.isoformat() for day in CUTOFFS],
                    "calendar_from": "2026-09-01", "calendar_to": "2026-10-02"}
 
 
@@ -38,7 +38,8 @@ class InstitutionalWindowStore:
     def _base(self, as_of: date | None, enabled: bool, reason: str | None, action: str) -> dict:
         busy = self._lock.locked()
         return {"version": VERSION, "status": "unavailable", "as_of": as_of.isoformat() if type(as_of) is date else None,
-                "supported_scope": {**SUPPORTED_SCOPE, "symbols": list(SYMBOLS)}, "horizons": [5, 20],
+                "supported_scope": {**SUPPORTED_SCOPE, "symbols": list(SYMBOLS),
+                                    "supported_cutoffs": list(SUPPORTED_SCOPE["supported_cutoffs"])}, "horizons": [5, 20],
                 "investors": ["foreign", "trust", "dealer"], "values": None, "windows": {},
                 "unit": "shares", "quantity_encoding": "canonical_integer_string", "historical_pit": "unsupported",
                 "published_time": "unknown", "first_available_time": "unknown", "revision_time": "unknown",
@@ -60,7 +61,7 @@ class InstitutionalWindowStore:
             return enabled, "window_market_or_symbol_not_supported"
         if not enabled:
             return False, "window_capture_not_enabled"
-        if type(as_of) is not date or as_of != CUTOFF:
+        if type(as_of) is not date or as_of not in CUTOFFS:
             return enabled, "window_cutoff_not_supported"
         return True, None
 
@@ -112,7 +113,7 @@ class InstitutionalWindowStore:
                     self._cache = MemoryWindowCache(policy=window_policy(), profile="free_public_local",
                                                     expected_policy_version=POLICY_VERSION,
                                                     expected_policy_digest=POLICY_DIGEST)
-                    self._cache.load(as_of=CUTOFF, calendar_version=CALENDAR_VERSION, transport=self._transport)
+                    self._cache.load(as_of=as_of, calendar_version=CALENDAR_VERSION, transport=self._transport)
                 except Exception:
                     self._error = "window_capture_failed"
                     action = "failed"
