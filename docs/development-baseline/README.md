@@ -260,6 +260,20 @@ Actual owned page `e73b4c86-93e6-44ee-9cbf-2ee8c8ca65fe`單次close成功、tabs
 
 Catalog／price seed僅synthetic-memory，19表不變不證seed是真行情或正式DB。缺／壞8/28局部窗口失效只必要synthetic API／SSR，實際missing0；非actual缺日原生。Legacy／ZIP／old live／full suite／Vite／production build未重跑，physical canvas／native horizontal gesture／pending導航race未驗；既有NO-RETRY及零新增落盤限制不變。
 
+### M1-W6 六截止法人窗口的零落盤驗證入口
+
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 的 `--w6-only`為worker synthetic memory、`--w6-api-only`為real-router／MockTransport；具名case沿 `--w6-api-case`。沿既有Python3.12.14／httpx0.28.1、`-B -X utf8`、AST config stub／guarded memory SQLite，不載conftest／正式startup，不建DB／fixture檔。`--serve`預設mock；另核 `--serve --live-source-opt-in`才取W6當次原件，普通GET／import零外網。
+
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 沿共用唯讀 `--deps <既有 frontend/node_modules>`；`--w6-only`選full-src noEmit／SSR／六cutoff72 net mock HTTP，可合 `--typecheck-only`或 `--serve`。完整App採esbuild `write:false` memory bundle／fallback字型，非Vite／production build。W3／W4／W5 selectors保留，不稱新globals下整套重驗。新增owned shutdown guardcounter／esbuild exit收據接線本身不代已核清理。
+
+必要mock已有限接受：Python3.12.14／httpx0.28.1 worker首11 cases exit1（10 passed／1 fixture誤8/27越界），修8/26後 `--w6-worker-case calendar-scope`局部1 exit0；API首5 cases exit1（4 passed／1期待60而actual72），修72後 `--w6-api-case batch`局部1 exit0。原API56 GET／29 POST、補26 GET／13 POST，guards均0、19 memory表全欄／typeof保留；只補受影響case，不稱11／5全套首跑通過。
+
+Bundled Node24.19.0／TS5.9.3／esbuild0.25.12 full-src noEmit／76 SSR首exit0；mock HTTP76 SSR／72 BigInt net exit0，28 GET／12 POST、held28，三preview asset GET200。首node-e因PS5 quoting SyntaxError exit1／0HTTP，改ASCII stdin後exit0。Mock兩serve Ctrl+C各raw exit1；API shutdown preserved／guards0，Node SIGINT／final guards0已觀測，esbuild自身exit未知。五owned PID及checker／esbuild／children與8781／8782 listeners後驗缺席，新增artifact0。Actual probe4 GET／147446B與first POST3105／9/23新production28 GET／3630280B分開，共32 external GET非單批／峰值。Root獨立raw／policy／25日曆／1100金融原字串、72 net／2700重疊API字串及19表全部欄／typeof保留／guards0見[來源 §17](../SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)；12可信日期form／72 DOM net、2160來源金融欄及390×844新原列／拒用已有限接受，見[個股頁 §22](../STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯)。
+
+Root actual owned page `26adac27-0ecb-4e01-89e0-227ff0d41304` once close成功、tabs=[]；API37524／shell55520、Node25384／shell43920／esbuild43476及children後驗缺席，8781／8782 GetActiveTcpListeners各0。兩actual serve Ctrl+C各raw exit1保留；API shutdown19表preserved／guards0，Node SIGINT／final guards0已觀測，esbuild自身exit仍unknown，不補exit0。
+
+原probe shared httpx ModuleNotFoundError、只讀code純數字AssertionError／detail path KeyError，以及snapshot／tabswitch focus／wait URL glob connectionclosed均原exit1保留；direct PS eval quoting、CSS ack未open、outer-open／trusted檢查及date-reader JSON誤parse（0submit）留原task，修正後不重取來源或新建證據檔。明示來源原件只存process memory；附件／raw／DB／tmp／pycache／log／artifact新增0不等於全cache0。Catalog／price seed僅synthetic-memory，19表保留不證seed是真行情或正式DB；範圍外／PIT、保存／跨程序讀回、legacy／ZIP／old live／full suite／physical canvas／native橫向手勢／Vite／production build／pending導航race未驗，既有NO-RETRY與零落盤限制不變。逐次命令、runtime、原失敗、hash與清理收據留原task／Git，不新增附件。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

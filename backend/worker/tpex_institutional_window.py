@@ -3,7 +3,7 @@
 Only ``MemoryWindowCache.load`` can make requests, and callers must explicitly
 select the pinned policy/profile. ``summarize_window_captures`` and cache reads
 never fetch, write, discover files, import the application, or infer closed days.
-This contract covers two securities and five retrospective data-date cutoffs;
+This contract covers two securities and six retrospective data-date cutoffs;
 observation time is not publication, first availability, or historical PIT.
 """
 from __future__ import annotations
@@ -21,25 +21,25 @@ import re
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
-VERSION = "tpex-institutional-window/w5-v1"
-POLICY_VERSION = "m1-w5-tpex-window-2026-10-05.1"
+VERSION = "tpex-institutional-window/w6-v1"
+POLICY_VERSION = "m1-w6-tpex-window-2026-10-05.1"
 PROFILE = "free_public_local"
-CALENDAR_VERSION = "tpex-2026-08-28_2026-10-02-weekdays-11503027221/v1"
+CALENDAR_VERSION = "tpex-2026-08-27_2026-10-02-weekdays-11503027221/v1"
 CALCULATION_VERSION = "independent-net-sum/expected-session-inclusive-v1"
 DAILY_SOURCE_ID = "tpex_government_institutional_csv"
 INDEX_SOURCE_ID = "tpex_government_index_csv"
 DAILY_BASE_URL = "https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data"
 INDEX_BASE_URL = "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data"
-START = date(2026, 8, 28)
+START = date(2026, 8, 27)
 CUTOFF = date(2026, 10, 2)
-CUTOFFS = (date(2026, 9, 24), date(2026, 9, 29), date(2026, 9, 30), date(2026, 10, 1), CUTOFF)
+CUTOFFS = (date(2026, 9, 23), date(2026, 9, 24), date(2026, 9, 29), date(2026, 9, 30), date(2026, 10, 1), CUTOFF)
 SYMBOLS = ("3105", "6488")
 CLOSED_DATES = (date(2026, 9, 25), date(2026, 9, 28))
 MONTH_REQUESTS = (date(2026, 8, 1), date(2026, 9, 1), date(2026, 10, 1))
 MAX_DAILY_BYTES = 2 * 1024 * 1024
 MAX_INDEX_BYTES = 1024 * 1024
-MAX_TOTAL_BYTES = 51 * 1024 * 1024
-MAX_REQUESTS = 27
+MAX_TOTAL_BYTES = 53 * 1024 * 1024
+MAX_REQUESTS = 28
 TIMEOUT_SECONDS = 15.0
 MAX_DAILY_SHARES = 9223372036854775807
 INVESTORS = ("foreign", "trust", "dealer")
@@ -80,13 +80,13 @@ _POLICY = {
     "scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "supported_cutoffs": [day.isoformat() for day in CUTOFFS],
               "calendar_from": START.isoformat(), "calendar_to": CUTOFF.isoformat()},
     "sources": {
-        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-05/v4",
+        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-05/v5",
                           "government_dataset": "https://data.gov.tw/dataset/11856", "exact_url": DAILY_BASE_URL,
                           "method": "GET", "date_parameter": "d=ROC_YYY/MM/DD", "header": list(DAILY_HEADER),
                           "max_body_bytes": MAX_DAILY_BYTES,
                           "purposes": {**{purpose: "admitted" for purpose in ("local_fetch", "raw_store", "summarize")},
                                        "historical_pit": "unsupported"}},
-        INDEX_SOURCE_ID: {"source_version": "dataset-11391-month-csv-observed-2026-10-05/v3",
+        INDEX_SOURCE_ID: {"source_version": "dataset-11391-month-csv-observed-2026-10-05/v4",
                           "government_dataset": "https://data.gov.tw/dataset/11391", "exact_url": INDEX_BASE_URL,
                           "method": "GET", "date_parameter": "date=YYYY/MM/01", "header": list(INDEX_HEADER),
                           "max_body_bytes": MAX_INDEX_BYTES,
@@ -113,7 +113,7 @@ _POLICY = {
 }
 # External pin for this reviewed policy version. Editing the policy cannot
 # silently change the expected digest; a new policy needs explicit repinning.
-POLICY_DIGEST = "sha256:e78104735c815801a73fe9eab78fcabf2e9a79a61ab74d3fe3e80fa206129643"
+POLICY_DIGEST = "sha256:b9d5377278eb3c70f94ff994c7e43a48ca82198a0fabb21ec30b87e535c1c3fc"
 
 
 class WindowEvidenceError(ValueError):
@@ -531,7 +531,7 @@ class MemoryWindowCache:
                     _require(self.request_count < MAX_REQUESTS, "request_count_limit")
                     self.request_count += 1
                     with client.stream("GET", url, headers={"Accept-Encoding": "identity",
-                                                            "User-Agent": "taiwan-stock-research/tpex-window-w5"}) as response:
+                                                            "User-Agent": "taiwan-stock-research/tpex-window-w6"}) as response:
                         status = response.status_code
                         content_type = response.headers.get("Content-Type", "")
                         content_encoding = response.headers.get("Content-Encoding", "identity")

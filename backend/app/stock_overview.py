@@ -36,7 +36,7 @@ from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_
 from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
 from .stock_independent_reads import independent_dates
 
-OVERVIEW_VERSION = "stock-overview/w5-v1"
+OVERVIEW_VERSION = "stock-overview/w6-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -283,7 +283,7 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
     return {
         "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-W5: TPEx 3105/6488 5/20-session memory CSV windows at 2026-09-24, 2026-09-29, 2026-09-30, 2026-10-01 or 2026-10-02; retained traceable price, single-day and event evidence; other research conditions remain insufficient",
+        "scope": "M1-W6: TPEx 3105/6488 5/20-session memory CSV windows at 2026-09-23, 2026-09-24, 2026-09-29, 2026-09-30, 2026-10-01 or 2026-10-02; retained traceable price, single-day and event evidence; other research conditions remain insufficient",
         "price": {"status": "available" if latest else "unavailable", "basis": "original_api_ohlcv",
                    "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
                    "from": qualified[0]["date"] if qualified else None, "to": qualified[-1]["date"] if qualified else None,
