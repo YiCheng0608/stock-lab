@@ -58,7 +58,7 @@ M3-P1～P6e 改善既有庫存與讀回可靠性，不計新 Plan 或完整生�
 | ID | 已有能力 | 剩餘驗收 |
 | --- | --- | --- |
 | R0-1 ATR | Wilder 純核心與保存層；worker 仍用 legacy 算法。 | 官方輸入與時間、B3-wire、PIT 及新舊重播比較。 |
-| R0-2 信心與保存輸入 | 固定規則 confidence=null；artifact／capture／Bridge B 與獨立本地證據 verifier。 | 真實 tuple 整合、其餘輸入及歷史原件／版本／availability、consumer 與 paired replay／選版。 |
+| R0-2 信心與保存輸入 | 新產出固定規則 confidence=null；legacy 值保留且非機率（[R0 §5.1](R0_IMPLEMENTATION.md#51-欄位語意)）；artifact／capture／Bridge B 與獨立本地證據 verifier。 | 真實 tuple 整合、其餘輸入及歷史原件／版本／availability、consumer 與 paired replay／選版。 |
 | R0-3 價位 | 規則參考價與 B4b 盤後 long caller-input 純核心。 | 官方 tick／費稅／日曆、來源／時間、保存與產品接線、完整 replay／paired comparison；未形成產品計畫。 |
 | R0-4 時間 | 時間保存、API／UI 投影與 caller-declared cutoff 純核心。 | 保存與產品關聯、完整實際依賴／來源／歷史決策、合法執行、修訂／回補與 PIT。 |
 | R0-5 DB 邊界 | 有限 migration、canonical rebuild、唯讀 startup gate。 | 正式 migration／restore／deployment、其他 schema 與服務 reload。 |
