@@ -1,5 +1,5 @@
 import { buildStockChartOption, dataZoomEventWindow, formatStockTooltip, movingAverage, prepareStockChartData, rangeStartIndex, windowForRange } from './stockChart'
-import type { Bar } from './types'
+import type { Bar, StockDetailBar, StockMarketReadState } from './types'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -98,3 +98,25 @@ for (const source of ['twse', 'tpex']) {
   }
 }
 console.log('stockChart exact volume cases passed')
+
+const knownRead: StockMarketReadState = { status: 'known', invalid_fields: [], missing_fields: [], metadata_fields: {} }
+const projected = (overrides: Partial<StockDetailBar> = {}): StockDetailBar => ({ ...bar('2026-10-04', 10), market_read: knownRead, ...overrides })
+for (const market_read of [null, {}, { status: 'partial' }, { ...knownRead, invalid_fields: ['source'] }, { ...knownRead, missing_fields: ['volume'] }]) {
+  const result = prepareStockChartData([projected({ market_read: market_read as StockMarketReadState })])
+  expect(result.bars.length === 0 && result.points[0].bar === null, 'explicit malformed or conflicting read status preserves a gap')
+}
+for (const overrides of [{ source: null }, { source: '\ud800' }, { source: '\ufeff ' }, { is_suspended: null }, { volume: -1 }, { volume: 1.5 }, { close: 0 }]) {
+  const result = prepareStockChartData([projected(overrides)])
+  expect(result.bars.length === 0 && result.points.length === 1, 'known status cannot admit an invalid projected core value')
+}
+const metadataOnly = prepareStockChartData([projected({ data_as_of: null, collected_at: null, adj_close: null,
+  market_read: { ...knownRead, metadata_fields: { data_as_of: 'invalid', collected_at: 'invalid', adj_close: 'invalid' } } })])
+expect(metadataOnly.bars.length === 1 && metadataOnly.bars[0].close === 10, 'optional metadata does not remove legal OHLCV')
+const nullableDate = prepareStockChartData([projected({ date: null }), ...enough.bars.map((row) => bar(row.date, row.close))])
+expect(nullableDate.invalidDateRows === 1 && nullableDate.ma60.every((value) => value === null), 'nullable date is retained as an unlocated MA blocker')
+const outsideWindow = prepareStockChartData(enough.bars.map((row) => bar(row.date, row.close)), { unlocatedDateRows: 1 })
+expect(outsideWindow.invalidDateRows === 1 && outsideWindow.ma20.every((value) => value === null), 'unknown date outside the window still blocks MA')
+expect(movingAverage(Array(60).fill(1e308), 20).every((value) => value === null), 'overflowing sum cannot escape as an infinite MA')
+const noRefill = prepareStockChartData(Array.from({ length: 120 }, (_, index) => ({ ...projected(), date: new Date(Date.UTC(2026, 0, index + 1)).toISOString().slice(0, 10), ...(index === 60 ? { volume: null } : {}) })))
+expect(noRefill.totalRows === 120 && noRefill.bars.length === 119 && noRefill.points[60].bar === null, 'invalid candidate retains its 120-window slot')
+console.log('stockChart nullable read, core status and finite MA cases passed')

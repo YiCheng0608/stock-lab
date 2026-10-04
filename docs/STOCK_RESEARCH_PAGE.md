@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-03。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現的核定契約與待驗範圍見 §14。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-04。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -15,7 +15,7 @@
 | 區塊 | 實際欄位／上限 | 呈現限制 |
 | --- | --- | --- |
 | 標的 | `instrument` | 以 exchange＋symbol 識別，顯示名稱與類型。 |
-| 行情 | `bars` 最多 120 筆，舊到新 | 含 OHLC、adj_close、volume、volume_exact、turnover、source、data_as_of、collected_at、is_suspended；精確成交量增欄依 §14，尚待本輪驗收；只代表本次視窗。 |
+| 行情 | `bars` 最多 120 個候選位置，回傳舊到新；新增 `market_read` | 精確成交量依 §14；M3-P6c 的 nullable 讀回、欄位狀態、拒列不回填及有限接受範圍依 [§15](#15-m3-p6c個股詳情行情讀回污染隔離)。只代表本次視窗，known 不等於來源准入。 |
 | 技術快照 | 最新一筆 `features` | 可作最新摘要，不能由單點 feature 畫歷史 MA；歷史 MA 由 response bars 算。 |
 | 族群 | `groups` | 顯示名稱與有效期，不由名稱推論題材或熱門。 |
 | 籌碼 | `chips` 最多 120 筆 | 法人／融資連同日期和來源顯示；不得推論分點或特定外資身分。 |
@@ -118,7 +118,7 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 
 ### 9.1 共用截止與時間
 
-- `as_of` 是含當日的**資料日期篩選**，`cutoff_basis=data_date_inclusive`；明示日期不自動往後推。未指定時優先最新儲存行情日；無行情時取其他研究紀錄的最新資料日期，含 active 且時間 verified 的關聯新聞。財報優先公告日，缺公告時的期間日只提供截止基準，不證公告已可得；新聞優先發布、其次事件時間，按臺北轉為日期。無可用日期則為 null，不補今日。
+- `as_of` 是含當日的**資料日期篩選**，`cutoff_basis=data_date_inclusive`；明示日期不自動往後推。未指定時優先最新儲存行情日；M3-P6c 對無法定位行情日期的截止處置依 [§15.2](#152-候選窗口截止與未知日期)，不回退較早日期。無行情時仍取其他研究紀錄的最新資料日期，含 active 且時間 verified 的關聯新聞。財報優先公告日，缺公告時的期間日只提供截止基準，不證公告已可得；新聞優先發布、其次事件時間，按臺北轉為日期。無可用日期則為 null，不補今日。
 - 同一 response 的行情、技術快照、法人、membership、策略／行動、公司行動、基本面、事件與品質使用同一截止；原資料日、`collected_at`、發布／事件時間保留，不改寫成截止日期。日期篩選不證來源准入、availability、修訂版本或 PIT，`historical_pit=unsupported`。
 - 新聞清單在最多 20 筆限制前，依既有已核對的發布／事件時間篩選；datetime 按臺北截止日結束換算，date-only 保留純日期，未知／衝突或超過截止的項目不混入。收集時間不充發布時間。這是既有時間欄位的有限投影，不證事件原件、first availability 或歷史 PIT。
 - 日期輸入套用後，URL query 與資料 query 使用同一 `as_of`；「最新資料」移除明示截止並回到 API 的實際資料日期。總覽保留事後研究與歷史可得性未支援的說明。
@@ -127,7 +127,7 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 
 本批只採已准入的 exact `STOCK_DAY_ALL`，來源／用途與 capture gate 依 [SOURCE_REGISTRY](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)，不因 legacy `source=twse`、官方名稱或歷史 P0 結果放行 `MI_INDEX`、TPEx 或其他來源。
 
-先取截止以前最多 120 筆候選行情，再逐筆核對；拒列不另抓更早資料湊滿 120 筆。`candidate_count`、`valid_count`、實際 `from/to`、`latest`、合格 `bars` 與 `rejected[].date/reason` 分開回傳；無合格列時價格 unavailable，其餘研究入口仍可使用。只說本次實際範圍／筆數，不稱完整 N 個交易日；來源本身沒有 TAIEX，不由列數推導交易 session。
+先取截止以前最多 120 筆候選行情，再逐筆核對；拒列不另抓更早資料湊滿 120 筆。`candidate_count`、`valid_count`、實際 `from/to`、`latest`、合格 `bars` 與 `rejected[].date/reason` 分開回傳。M3-P6c 最新候選不合格時的 `latest=null`、歷史合格列保留與 nullable rejected 依 [§15.4](#154-m1-總覽版本與最新價格)，其餘研究入口仍可使用。只說本次實際範圍／筆數，不稱完整 N 個交易日；來源本身沒有 TAIEX，不由列數推導交易 session。
 
 每筆合格價須符合：
 
@@ -399,3 +399,59 @@ TWSE 桌面 `MAX` 的 headline 與總覽 quote 均為 **9,223,372,036,854,775.80
 TPEx `MAX`／`ODD`／`ZERO0` 的 chart 資料表分別保持 **9,223,372,036,854,775.807／9,007,199,254,740.993／0 張**，`MAX` 的「資料說明」日行情表同樣精確；headline／總覽仍為未提供，來源 gate 為 0 passed，不冒稱兩市場總覽能力。「資料說明」以 DOM `button.click()` 觸發正式 handler 後，核實選中頁籤、展開及表格值；先前 native click 沒有切換，不當作通過。
 
 上述操作只用 memory-only 全 App esbuild preview，字型驗收限 fallback font；本次 console error 為 **0**，仍有開發提示，captured network 僅自有 loopback 或 data URL、外部 request 為 **0**。QA tab 已關閉，自有 Python／Node 程序及兩個 listener 均核實不存在，新增測試產物／殘留為 **0**。兩個 serve 程序退出皆為 **1**，與 direct tests／Node check 的 exit 0 分報，不稱 graceful exit 0；Python serve 沒有最後 audit receipt，不聲稱該 serve 的完整 audit 結果。完整 backend、production Vite build／startup、正式 DB、真官方／live、完整 5／20 日及 PIT 均未由本批驗收。
+
+## 15. M3-P6c：個股詳情行情讀回污染隔離
+
+本批支援 M3／R2-C2；十一檔實作、必要記憶體／actual API／完整 App 讀回及下述具名操作已由統籌**有限接受**，來源停寫、文件 review 後才 aggregate freeze。本節集中新的讀回契約，中文提示只由 [UI 文案](UI_COPY_SPEC.md#102-個股詳情的第一屏)負責，驗證入口及原始結果見[開發入口](development-baseline/README.md#m3-p6c-個股詳情行情讀回的零落盤驗證入口)。P6b 只接受清單及正常卡片導航，不追認其污染詳情已驗；本批不新增來源准入、可信即時價格、Plan 或交易能力。
+
+### 15.1 原始投影、nullable 值與讀值狀態
+
+Stock detail／instrument detail 與 M1 候選行情以未定型 SQL 讀十七欄：`id`、`instrument_id`、`trading_date`、`open`、`high`、`low`、`close`、`adj_close`、`volume`、`turnover`、`turnover_status`、`turnover_reason`、`source`、`data_as_of`、`collected_at`、`raw_payload_id`、`is_suspended`；不載入完整 MarketBar 的 Date／DateTime／Float processor，也不修改 shared `bar_dict`、decision read 或 portfolio quote。
+
+公開 `bars` 保留候選 `id`，`date` 及必要數值／metadata 無法安全投影時為 null，不補 0、不 cast 救回 TEXT／BLOB 或修原列。逐欄原值為 SQL NULL 時記 missing，非 NULL 但未通過讀值規則時記 invalid；OHLC 幾何不成立另記 `ohlc=invalid`。這是 SQLite affinity 已處理的讀值，不恢復保存前的 token 或原始意圖。
+
+| 分類 | 讀值規則與影響 |
+| --- | --- |
+| 核心 | 日期為合法完整 `YYYY-MM-DD`；OHLC 為 actual int／float、排除 bool、正有限且 low／high 範圍成立；volume 為 actual int、0–9223372036854775807；source 沿既有可編碼、非空與控制字元限制；停牌旗標只收 actual int 0／1。合法 volume 0 保留，精確文字依 §14。 |
+| 可選 metadata | `adj_close`、turnover／status／reason、`data_as_of`、`collected_at`、raw FK 逐欄列於 `metadata_fields`；壞 metadata 投影 null，不單憑該欄使可畫的核心 OHLC 無效。turnover 只收非負有限數，status 只收 available／unavailable／unknown；raw FK 只收正 actual int。這些讀值仍不等於 M1 原件或來源證據。 |
+| `market_read` | 列與頂層提供 known／missing／invalid、`invalid_fields`、`missing_fields`、`metadata_fields`；核心 invalid 優先，其次 missing，均無者才 known。known 只證語法，`verification=stored_value_syntax_only`，不證用途、官方日期、availability、tick 或 PIT。 |
+
+頂層另提供 `candidate_count`、`window_limit=120`、`unlocated_count` 與第一個 `unlocated_market_bar_id`。無候選列為 missing、`missing_fields=["market_bar"]`；任何無法定位日期使頂層 invalid，即使該列不在回傳的 120 個位置內。完整條件與原始日期不可由 status 單獨推定。
+
+### 15.2 候選窗口、截止與未知日期
+
+原儲存 `trading_date DESC`、`id DESC` 決定候選位置；合法 future date 依明示／共用截止排除，最多 120 個位置**先限定再驗值**。拒列保留其位置，不先 filter 合格列、較早 fallback 或另取較早資料補滿；detail 回傳這個候選窗口的反向次序，非法日期不冒充已知的時間順序。
+
+無法定位日期的檢查涵蓋該標的全部儲存行情，不受 cutoff／120 列窗口限制；非法字串不能當 lexical future 略過。未明示 `as_of` 時，有任一無法定位日期即使其他行情日期合法，共用 cutoff 仍為 null，不改用較早日或今日。明示合法 `as_of` 保留原值，可用研究區塊沿該日期篩選，但未知行情日仍阻止頁首報價與 M1 latest。完全沒有行情時，§9.1 的其他研究日期 fallback 維持。
+
+### 15.3 圖表缺口、有限均線與頁首
+
+圖表只畫核心讀值合格、日期合法且唯一的 bar；已知日期的拒列／重複列保留空位置。coverage 的已知缺日可加入 gap，但不建立 K 棒或收盤值；均線不跨 gap，之後須重新累積完整 20／60 個合格 close。日期無法定位時，包含窗口外的 unknown，整個視窗 MA20／MA60 均為 null；同一來源與價格基準限制保留。即使每個 close 有限，平均的中間加總或結果非有限也投影 null，不輸出 Infinity／NaN。
+
+StockPage 核對頂層 status、各狀態陣列／metadata、120 窗口與候選數、unknown 數及 verification；known 必須至少一個候選、核心無缺項／invalid、七個 metadata key 完整。合法 missing 且 candidate_count=0 可保留空 metadata，不誤標 invalid。只有一致的 known 和合格候選可進價格呈現；invalid／missing、不支援或 malformed 新契約、狀態矛盾、候選值矛盾及非有限價格拒用。完全 undefined 的舊 API 才沿原有限數值相容，不用 malformed 新回應 fallback legacy 值。
+
+stored syntax known 但 M1 `overview.price.status=unavailable` 只表示未准入／缺原件證據，頁首價格／漲跌待核實，不能因此顯示「行情讀值無效」。真 invalid／missing、partial 或 conflicting 回應才用新增讀值缺口提示；其餘獨立可用研究區塊保留。正常 M1 unavailable 與 missing 0／空 metadata 的兩項退修，經受影響 actual HTTP／完整 App SSR 及具名畫面後才有限接受，原失敗另報。
+
+### 15.4 M1 總覽版本與最新價格
+
+新總覽 presentation version 為 `stock-overview/p6c-v1`，反映 nullable rejected、讀值狀態與 no-fallback 語義；registry／source／purpose／version／digest pins 未改。§9.2 的 selected 原件、raw FK／body／receipt、hash、來源、用途及時間 gate 保留，`_stable_read`／`_capture_evidence` 未修改；未驗必要原件／磁碟條件不以記憶體替代。
+
+`price.latest` 只在**最新候選本身**通過完整 M1 核對、且該標的無無法定位日期時成立。最新候選未准入／證據或數值不合格時，不改用較早合格價格；`price.status=unavailable`、latest=null，可保留較早真正合格的歷史 `bars`、`valid_count` 與 from／to。`rejected` 保留候選 id、nullable date 與具體 reason；unknown 日期及最新候選未合格分別列出原因。M1 可用價格與 detail 語法 known 仍是不同驗收層。
+
+### 15.5 具名有限接受與未包含
+
+本次 served fixture 為 **2026-10-04 synthetic TWSE 十二個標的／十二庫存／784 行情**；不是官方行情／日曆或 M1 原件。原 Node／Python 邊界、actual getStock／Response.json／完整 App 詳情讀回與以下具名操作已有限接受。數量、原始失敗、退修與程序限制由開發入口／task 分報，不把 SSR 當真正操作。
+
+| 具名操作 | 已接受的有限結果及界線 |
+| --- | --- |
+| 桌面 `1298×924` 原 B-CLOSE action Link | 真正進入 `/actions/TWSE/B-CLOSE`，actual getStock 為 200；行情讀值無效與頁首待核實可辨識。native 研究分頁真正 selected，研究條件 data_insufficient、20 of 60 的條件範圍可讀；document client／scroll width 均 1283。 |
+| D-METADATA／I-MISSING | D 核心 known、60／60 歷史讀回，M1 仍拒 fixture且不顯 invalid gap；I 明示「尚無行情記錄。」。這不將 D metadata 或 source syntax 升格准入來源。 |
+| C-DATE 預設無截止，`390×844`／mobile=false | 先 goto 再設 viewport；default cutoff=null、日期 input 空、invalid／一個 unlocated 候選、eligible=0。document 寬均 375；只接受這個無有效歷史的窄版 DOM，不稱有效歷史窄版或表單提交已驗。 |
+| C-DATE 明示截止的 direct URL | `as_of` GET 為 200，但 390px 的 client 375／scroll 1228，橫向溢出 assertion exit 1。resize／ResizeObserver／requestAnimationFrame probes 未形成原因證據；visible／hasFocus 為 true，canvas 0、圖表 instance inner 1193／outer 305px。原因未證，不接受窄版歷史 layout 或實際 canvas 畫圖。 |
+| L-WINDOW／K-FUTURE 桌面 | L 回傳 eligible 120／120，窗口外 unlocated 日期仍阻止 MA；K 保留 10 月 4 日、排除 10 月 5 日。兩者 document 寬均 1283、API 200；候選／歷史範圍與原 M1 gates 保留，不外推完整交易日或來源驗收。 |
+
+原 native date fill／ref click／Enter 曾多次 ack，但沒有對應 URL／API／DOM 事件，不算截止表單成功。隱藏表格 `innerText` 空白不能證明 MA 全空或第一個日期；只接受 `textContent` 日期、Node 算術邊界及 UI 的 MA reason。既有 renderer 與截止 form 本輪未改，physical canvas、有效歷史窄版 layout 及真正截止表單提交保持未驗；early runtime／timeout／ref、viewport 時機與 StopIteration 原失敗不倒改通過。
+
+同一 fixture 的 HTTP 補驗 before／after 與 UI closing 核十二庫存／784 行情全部欄位、typeof、note／updated_at 同 digest、read mutation 0。自有 tab／程序／listener 已核關閉或不存在，新測試產物／附件／暫存／殘留 0；console 具名 limit 50 有開發提示／既有 Router warnings，不稱全域零 warnings。兩 serve 最終 exit 0，第一輪 helper compiler 與舊 preview 的並發數未即時觀測，不能宣稱全程只有一個 compiler child；結果與該程序順序限制分報。
+
+本批不證官方／live、正向 M1 filesystem gate、正式 DB／磁碟重開、Decimal exact、availability／PIT、完整 backend／production Vite build、完整 ActionsPage、M1／M3 或交易計畫。無合格來源仍拒用，不以 partial／unknown 文案降低原件／磁碟完成條件；其他研究候選讀回仍待有界審查，下一步及必要依賴由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責。

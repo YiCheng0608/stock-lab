@@ -1,6 +1,6 @@
 import type { EChartsOption } from 'echarts'
 
-import type { Bar } from './types'
+import type { StockDetailBar } from './types'
 import { formatTableNumber, formatTableVolume, isVerifiedShareSource } from './units'
 
 export type StockChartBar = {
@@ -40,7 +40,7 @@ export type PreparedStockChart = {
 
 export type StockChartRange = 30 | 60 | 120 | 'all'
 export type StockChartWindow = { start: number; end: number }
-export type StockChartPreparationOptions = { knownGapDates?: readonly string[] }
+export type StockChartPreparationOptions = { knownGapDates?: readonly string[]; unlocatedDateRows?: number }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -59,7 +59,7 @@ function normalizeSource(value: unknown): string {
   return value.trim()
 }
 
-function isValidBar(value: unknown): value is Bar & {
+export function isValidBar(value: unknown): value is StockDetailBar & {
   date: string
   open: number
   high: number
@@ -68,8 +68,20 @@ function isValidBar(value: unknown): value is Bar & {
   volume: number
 } {
   if (!value || typeof value !== 'object') return false
-  const row = value as Partial<Bar>
-  return isValidDate(row.date)
+  const row = value as Partial<StockDetailBar>
+  const read = row.market_read
+  const projectedCoreValid = read === undefined || (read?.status === 'known'
+    && Array.isArray(read.invalid_fields) && read.invalid_fields.length === 0
+    && Array.isArray(read.missing_fields) && read.missing_fields.length === 0
+    && typeof row.source === 'string' && row.source.length > 0 && Array.from(row.source).length <= 120
+    && !/^[\s\ufeff]+$/.test(row.source) && !/[\u0000-\u001f\u007f]/.test(row.source)
+    && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(row.source)
+    && typeof row.is_suspended === 'boolean'
+    && [row.open, row.high, row.low, row.close].every((price) => isFiniteNumber(price) && price > 0)
+    && isFiniteNumber(row.volume) && Number.isInteger(row.volume) && row.volume >= 0
+    && row.volume <= Number('9223372036854775807'))
+  return projectedCoreValid
+    && isValidDate(row.date)
     && isFiniteNumber(row.open)
     && isFiniteNumber(row.high)
     && isFiniteNumber(row.low)
@@ -87,14 +99,15 @@ export function movingAverage(values: Array<number | null>, period: number): Arr
     const window = values.slice(index - period + 1, index + 1)
     const numericValues = window.filter(isFiniteNumber)
     if (numericValues.length !== period) return null
-    return numericValues.reduce((sum, value) => sum + value, 0) / period
+    const average = numericValues.reduce((sum, value) => sum + value, 0) / period
+    return Number.isFinite(average) ? average : null
   })
 }
 
-export function prepareStockChartData(input: readonly Bar[] | null | undefined, options: StockChartPreparationOptions = {}): PreparedStockChart {
+export function prepareStockChartData(input: readonly StockDetailBar[] | null | undefined, options: StockChartPreparationOptions = {}): PreparedStockChart {
   const rawRows = Array.isArray(input) ? input as readonly unknown[] : []
-  const dateRows = rawRows.filter((row): row is { date: string } => Boolean(row && typeof row === 'object' && isValidDate((row as Partial<Bar>).date)))
-  const invalidDateRows = rawRows.length - dateRows.length
+  const dateRows = rawRows.filter((row): row is { date: string } => Boolean(row && typeof row === 'object' && isValidDate((row as Partial<StockDetailBar>).date)))
+  const invalidDateRows = Math.max(rawRows.length - dateRows.length, options.unlocatedDateRows ?? 0)
   const dateCounts = new Map<string, number>()
   dateRows.forEach((row) => dateCounts.set(row.date, (dateCounts.get(row.date) ?? 0) + 1))
   const duplicateDates = [...dateCounts.entries()]
@@ -103,7 +116,7 @@ export function prepareStockChartData(input: readonly Bar[] | null | undefined, 
     .sort()
   const duplicateSet = new Set(duplicateDates)
   const duplicateRows = duplicateDates.reduce((count, date) => count + (dateCounts.get(date) ?? 0), 0)
-  const invalidRows = rawRows.length - duplicateRows - rawRows.filter((row): row is Bar => isValidBar(row) && !duplicateSet.has(row.date)).length
+  const invalidRows = rawRows.length - duplicateRows - rawRows.filter((row) => isValidBar(row) && !duplicateSet.has(row.date)).length
   const slotsByDate = new Map<string, unknown | null>()
   dateRows.forEach((row) => {
     slotsByDate.set(row.date, duplicateSet.has(row.date) ? null : row)
@@ -131,7 +144,7 @@ export function prepareStockChartData(input: readonly Bar[] | null | undefined, 
     }
   })
   const bars = pointsWithoutMovingAverages.flatMap((point) => point.bar ? [point.bar] : [])
-  const sourceNames = [...new Set(rawRows.map((row) => row && typeof row === 'object' ? normalizeSource((row as Partial<Bar>).source) : 'unknown'))].sort()
+  const sourceNames = [...new Set(rawRows.map((row) => row && typeof row === 'object' ? normalizeSource((row as Partial<StockDetailBar>).source) : 'unknown'))].sort()
   const sameKnownSource = sourceNames.length === 1 && sourceNames[0] !== 'unknown'
   const closes = pointsWithoutMovingAverages.map((point) => point.bar?.close ?? null)
   const ma20 = sameKnownSource && invalidDateRows === 0 ? movingAverage(closes, 20) : closes.map(() => null)

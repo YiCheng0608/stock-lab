@@ -244,6 +244,28 @@ Browser 錯命令、snapshot／help runtime_unavailable、PowerShell 引號與�
 
 污染個股詳情、完整 ActionsPage、可信行情來源／日期／availability、真官方／live、M1 正向 filesystem gate、正式 DB／真正磁碟重開、完整 backend／production Vite build、Decimal exact、新 Plan、所有估值／風險行動及完整 M3／PIT 未驗，不以 memory 降低原件／磁碟條件。下一具名候選 M3-P6c 的 audit、必要依賴與完成條件由 [ROADMAP](../ROADMAP.md#接下來的順序近期產品里程碑)負責；穩定來源、時間、M1 價格與 migration 契約只核對、不另造 diff。
 
+### M3-P6c 個股詳情行情讀回的零落盤驗證入口
+
+十一檔實作、必要驗證及具名讀回／操作已由統籌有限接受，來源停寫、六文件接受後才 aggregate freeze。raw 十七欄、nullable 讀值／候選窗口、日期缺口、均線與 M1 latest 的契約及窄版／canvas／截止表單未驗界線集中見[個股頁 §15](../STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)；本節只記可重建入口、副作用與結果。版本、命令、exit、原失敗、整表 digest、統籌具名操作與 freeze／索引／commit／merge 收據留 task，不另存附件。
+
+後端 `backend/tests/test_share_quantity_exact_presentation.py --stock-read-only` 沿 standalone `-B -Xutf8`、AST config stub、既有唯讀依賴與 guarded memory SQLite／actual router；不載一般 pytest conftest、正式 config mkdir、production lifespan／migration 或正式 DB。首批 **6 tests／27 router GET／19 setup mutations、exit 0**；原輸出誤列 fixture_date 為 `2026-10-03`，actual fixture 一直是 `2026-10-04`，不改報原輸出。必要受影響矩陣以 `--stock-read-only --stock-read-case router-matrix` 補驗 **1 method／13 GET／12 setup、exit 0**，累計 **40 direct router GET／31 targeted setup**，不重跑完整 suite。`backend/tests/test_stock_overview.py` 只更新受影響 latest no-fallback case 的契約，僅 AST／diff 核對；磁碟 suite 本輪不跑，正向 M1 file gate 保持待驗。
+
+前端 `tools/share-quantity-exact-preview.cjs --stock-read-check --deps <既有依賴目錄>` 的 full src noEmit／stockChart 邊界與 **22 個完整 App StockPage SSR** 已有 exit 0 收據；此前另有 **2 次失敗的實際 render attempts**，原錯誤留 task。該成功輸出沒有 warning counter，不捏造 0 或警告數，也不為補數重跑。兩項 UI 退修均只追加必要 noEmit（TypeScript **5.9.3**），實際回應／呈現由下述 HTTP 補驗接受。整輪 **39 actual SSR attempts／36 successful／3 failed**，包括 direct 22 successful＋2 early failed 與 HTTP 14 successful＋1 failed；在核定 **40** 之內，不再追加 SSR。
+
+受控 fixture 使用後端 `--stock-read-fixture --serve --port 8777` 及 Node preview `--stock-read-fixture --serve --port 8778 --deps <既有依賴目錄>`；只是 synthetic `2026-10-04` 十二標的／十二庫存／784 行情，無已准入的 M1 原件。`--stock-read-http-check` 經 production fetch／Response.json 及完整 App StockPage SSR，首輪於 I-MISSING 的合法空 metadata 誤判而 **exit 1**：**9 product GET＋1 review digest／11 SSR attempts（10 successful＋1 failed）**。修正後 `--stock-read-followup` 只續驗 I／J／K／L 四個 SSR、C／L 兩個 default GET 及兩次 digest，不重播前八個 normal／B／C alias；同一 Python fixture 的續驗 **exit 0／6 product GET＋2 review／4 successful SSR／56 known SSR warnings**。兩模式累計 **15 product GET／3 review digest／14 successful HTTP SSR＋1 failed**，不改報首輪通過。
+
+同一 fixture 的 HTTP 補驗 before／after 與 UI closing 核 portfolio_positions／market_bars 全欄、SQLite typeof、note／updated_at 同 digest；read mutation **0**、setup **12**、unexpected audit **[]**。後端 final audit 記 **30 actual HTTP（含 review／shutdown）**，其中 Node product 15、統籌 UI product **10** 分報；review＋shutdown 共 **7／8** 配額，不再新增 fixture。真正操作／來源限度依主契約，不用 SSR 或 hidden table `innerText` 空白代替 canvas／MA／首日驗收。
+
+核定 direct setup mutations 最多 **32**、direct router GET 最多 **96**；另單 fixture HTTP＋UI 的 product GET 最多 **96**（Node／統籌 UI 各 **48**），static resources 最多 **32**、review digest＋shutdown 最多 **8**，整輪新增 product GET 最多 **192**。fixture／serve／tab 的其他上限依[協作紀錄](../TASK_COORDINATION.md)，新測試磁碟產物／附件／暫存仍為 **0**、不重置。測試與自有 tab／process／listener 清理分報，不把未跑、程序原 exit 或工具失敗改報成功。前輪 P6b 外部自有清理已確認，額外 child archive 失敗及舊 excluded 殘留見協作紀錄，不重試。
+
+記憶體 `write:false` main bundle 為 JS **4,192,460 bytes**／CSS **27,737 bytes**／HTML **514 bytes**，在 JS **6 MiB**、CSS／HTML 各 **64 KiB** 上限內，API response 上限 **2 MiB**。原 preview JS **4,192,399 bytes**，只替換一次；first Node HTTP 在舊 preview 開著時另用短暫 helper compiler，沒有即時 PID／並發數觀測，不能宣稱整輪從未超過 one compiler child。後續先核舊 preview／child 已退出再續驗，checker 已 exit 才開新版 preview；這項程序順序限制獨立保留，磁碟仍為 0，不因該限制重跑。
+
+Browser 接受範圍只限主契約的具名操作；有效歷史窄版溢出未通過、physical canvas／真正截止表單未驗，不以工具 ack 當完成。原失敗及 console 的有限查閱結果留 task。
+
+清理結果另報：exact owned tab 已 close／list 空；即時 command line／ports gate 後兩 shutdown 各 200，兩 serve final **exit 0**。統籌獨立核自有五 PID、children 及 **8777／8778 listeners 0**，新增測試磁碟產物／附件／暫存／殘留 **0**；exact receipts 與前輪 P6b 外部清理、excluded no-retry 範圍見[協作紀錄](../TASK_COORDINATION.md)，不重做。
+
+`_stable_read`／`_capture_evidence`／shared `bar_dict` AST 與起始版本相同；來源 registry／purpose／version／digest pins、decision market reads、portfolio quotes、models 未改，記憶體拒用結果不驗正向 filesystem 原件、磁碟重開或正式 DB。完整 backend／production build／startup、官方／live／availability／PIT、Decimal exact、新 Plan 與完整 M1／M3 均未由本批驗收。
+
 ## 歷史驗證
 
 歷史測試不代表目前來源已驗收；原始數據依[文件索引](../README.md#歷史查閱)取閱，已刪除的 Temp 附件不作接手依賴。

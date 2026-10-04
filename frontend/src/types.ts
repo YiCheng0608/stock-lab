@@ -217,6 +217,35 @@ export type Bar = {
   is_suspended: boolean
 }
 
+export type StockMarketReadState = {
+  status: 'known' | 'missing' | 'invalid'
+  invalid_fields: string[]
+  missing_fields: string[]
+  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
+  candidate_count?: number
+  window_limit?: number
+  unlocated_count?: number
+  unlocated_market_bar_id?: number | null
+  verification?: 'stored_value_syntax_only'
+}
+
+/** A nullable read projection retains candidate slots without admitting prices. */
+export type StockDetailBar = Omit<Bar, 'date' | 'open' | 'high' | 'low' | 'close' | 'adj_close' | 'volume' | 'turnover' | 'turnover_status' | 'source' | 'is_suspended'> & {
+  id?: number
+  date: string | null
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  adj_close: number | null
+  volume: number | null
+  turnover: number | null
+  turnover_status: Bar['turnover_status'] | null
+  source: string | null
+  is_suspended: boolean | null
+  market_read?: StockMarketReadState
+}
+
 export type ChipSnapshot = {
   date: string
   foreign_buy: number | null
@@ -294,7 +323,8 @@ export type RawPayload = {
 
 export type InstrumentDetail = {
   instrument: Instrument
-  bars: Bar[]
+  bars: StockDetailBar[]
+  market_read?: StockMarketReadState
   features: Record<string, number | string | null>
   groups: Array<{ id: string; name: string; valid_from: string; valid_to: string | null }>
   chips: ChipSnapshot[]
@@ -430,7 +460,8 @@ export type StockOverviewData = {
     to: string | null
     latest: OverviewPriceBar | null
     bars: OverviewPriceBar[]
-    rejected: Array<{ date: string; reason: string }>
+    rejected: Array<{ id?: number; date: string | null; reason: string }>
+    market_read?: StockMarketReadState
     reasons: string[]
   }
   institutional: { status: string; horizons: number[]; investors: string[]; values: null; reasons: string[] }

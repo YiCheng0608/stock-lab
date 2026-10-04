@@ -31,8 +31,9 @@ from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, 
 from .institutional_daily import build_institutional_daily
 from .official_events import build_official_events
 from .units import volume_exact_text
+from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
 
-OVERVIEW_VERSION = "stock-overview/p3b-v1"
+OVERVIEW_VERSION = "stock-overview/p6c-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -56,7 +57,9 @@ def resolve_stock_cutoff(db: Session, instrument: Instrument, requested: date | 
     """Default to the latest stored data date; an explicit date is never advanced."""
     if requested is not None:
         return requested
-    latest_bar = db.scalar(select(func.max(MarketBar.trading_date)).where(MarketBar.instrument_id == instrument.id))
+    latest_bar, _total_bars, unlocated = stock_market_dates(db, instrument.id)
+    if unlocated:
+        return None
     if latest_bar is not None:
         return latest_bar
     # A stock with no prices may still have independent research records.
@@ -182,10 +185,10 @@ def _capture_evidence(raw: RawPayload, run: IngestionRun | None, manifest: dict)
                            "verification": "local_evidence_consistent"}}
 
 
-def _qualified_price(row: MarketBar, instrument: Instrument, evidence: dict) -> dict:
+def _qualified_price(row: StockMarketRead | MarketBar, instrument: Instrument, evidence: dict) -> dict:
     _require(instrument.exchange == "TWSE" and row.source == "twse", "price_source_not_admitted")
     _require(row.trading_date == evidence["date"] and row.instrument_id == instrument.id, "price_identity_date_mismatch")
-    _require(not row.is_suspended, "price_suspended")
+    _require(type(row.is_suspended) is bool and not row.is_suspended, "price_suspended")
     prices = [row.open, row.high, row.low, row.close]
     _require(all(_finite(value) and value > 0 for value in prices)
              and row.low <= min(row.open, row.close) <= max(row.open, row.close) <= row.high, "price_invalid_ohlc")
@@ -197,6 +200,8 @@ def _qualified_price(row: MarketBar, instrument: Instrument, evidence: dict) -> 
     _require(row.turnover_status == selected.turnover_status and row.turnover_reason == selected.turnover_reason
              and _finite(row.turnover) and row.turnover == selected.turnover, "price_turnover_state_mismatch")
     _require(row.data_as_of is not None and row.data_as_of.date() == row.trading_date, "price_data_date_mismatch")
+    if isinstance(row, StockMarketRead):
+        _require(row.fields["collected_at"] != "invalid", "price_collection_time_invalid")
     return {"date": row.trading_date.isoformat(), "open": row.open, "high": row.high, "low": row.low,
             "close": row.close, "volume": row.volume, "volume_exact": volume_exact_text(row.volume),
             "turnover": row.turnover if row.turnover_status == "available" else None,
@@ -208,17 +213,17 @@ def _qualified_price(row: MarketBar, instrument: Instrument, evidence: dict) -> 
 
 def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None = None) -> dict:
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
-    query = select(MarketBar).where(MarketBar.instrument_id == instrument.id)
-    query = query.where(MarketBar.trading_date <= cutoff) if cutoff else query.where(False)
-    rows = list(db.scalars(query.order_by(desc(MarketBar.trading_date), desc(MarketBar.id)).limit(120)).all())
+    rows, market_read = load_stock_market_reads(db, instrument.id, cutoff or date.min)
     duplicate_dates = {day for day, count in Counter(row.trading_date for row in rows).items() if count > 1}
     qualified, rejected, evidence_cache = [], [], {}
+    latest = None
     try:
         manifest = load_manifest(MANIFEST_PATH, expected_registry_version=REGISTRY_VERSION, expected_digest=REGISTRY_DIGEST)
     except (ValueError, OSError, TypeError):
         manifest = None
     for row in reversed(rows):
         try:
+            _require(row.trading_date is not None, "price_trading_date_invalid")
             _require(row.trading_date not in duplicate_dates, "price_duplicate_date")
             _require(manifest is not None, "price_registry_pin_mismatch")
             _require(instrument.exchange == "TWSE" and row.source == "twse", "price_source_not_admitted")
@@ -233,14 +238,20 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
             evidence = evidence_cache[row.raw_payload_id]
             if isinstance(evidence, Exception):
                 raise evidence
-            qualified.append(_qualified_price(row, instrument, evidence))
+            qualified_price = _qualified_price(row, instrument, evidence)
+            qualified.append(qualified_price)
+            if row.id == rows[0].id and not market_read["unlocated_count"]:
+                latest = qualified_price
         except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
             reason = getattr(exc, "code", None) or (str(exc) if isinstance(exc, OverviewEvidenceError) else "price_evidence_invalid")
-            rejected.append({"date": row.trading_date.isoformat(), "reason": reason})
+            rejected.append({"id": row.id, "date": row.trading_date.isoformat() if row.trading_date else None, "reason": reason})
     price_reasons = list(dict.fromkeys(item["reason"] for item in rejected))
     if not rows:
         price_reasons.append("price_no_rows_before_cutoff")
-    latest = qualified[-1] if qualified else None
+    if market_read["unlocated_count"]:
+        price_reasons.append("price_trading_date_unlocated")
+    elif rows and latest is None:
+        price_reasons.append("price_latest_candidate_unqualified")
     if latest and cutoff and latest["date"] != cutoff.isoformat():
         price_reasons.append("price_latest_before_cutoff")
     strategy_query = (select(Signal, StrategyVersion).join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
@@ -264,10 +275,11 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
     return {
         "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-P3b: cutoff, traceable price, TPEx single-day institutional and memory-observed TWSE event evidence",
-        "price": {"status": "available" if qualified else "unavailable", "basis": "original_api_ohlcv",
-                  "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
-                  "from": qualified[0]["date"] if qualified else None, "to": latest["date"] if latest else None,
+        "scope": "M1-P3b: cutoff, traceable price, TPEx single-day institutional and memory-observed TWSE event evidence; M3-P6c: stock quote read isolation",
+        "price": {"status": "available" if latest else "unavailable", "basis": "original_api_ohlcv",
+                   "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
+                   "from": qualified[0]["date"] if qualified else None, "to": qualified[-1]["date"] if qualified else None,
+                   "market_read": market_read,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
         "institutional": {"status": "unavailable", "horizons": [5, 20],
                           "investors": ["foreign", "trust", "dealer"], "values": None,

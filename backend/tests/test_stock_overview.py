@@ -217,14 +217,18 @@ class StockOverviewTest(unittest.TestCase):
         self.assertEqual(validator.call_count, 1)
         self.assertEqual(value["price"]["valid_count"], 0)
 
-    def test_newer_unadmitted_row_preserves_older_qualified_price(self):
+    def test_newer_unadmitted_row_blocks_latest_and_retains_qualified_history(self):
         self.db.add(MarketBar(instrument_id=self.instrument.id, trading_date=DAY + timedelta(days=1),
                              open=30, high=31, low=29, close=30, adj_close=30, volume=10, source="twse"))
         self.db.flush()
         value = build_stock_overview(self.db, self.instrument)
         self.assertEqual(value["as_of"], "2026-10-02")
-        self.assertEqual(value["price"]["latest"]["date"], "2026-10-01")
-        self.assertIn("price_latest_before_cutoff", value["price"]["reasons"])
+        self.assertIsNone(value["price"]["latest"])
+        self.assertEqual(value["price"]["status"], "unavailable")
+        self.assertEqual([row["date"] for row in value["price"]["bars"]], ["2026-10-01"])
+        self.assertEqual(value["price"]["valid_count"], 1)
+        self.assertEqual(value["price"]["candidate_count"], 2)
+        self.assertIn("price_latest_candidate_unqualified", value["price"]["reasons"])
         self.assertIn("price_raw_evidence_missing", value["price"]["reasons"])
 
     def test_cutoff_excludes_later_bar_feature_signal_chip_event_and_membership(self):

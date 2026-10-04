@@ -62,6 +62,7 @@ import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValua
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
 import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { StockPriceChart } from './StockPriceChart'
+import { isValidBar } from './stockChart'
 import { StockResearchPanel } from './StockResearchPanel'
 import { StockOverview } from './components/StockOverview'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
@@ -1045,12 +1046,44 @@ function StockPage() {
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const latestBar = data.overview ? data.overview.price.latest ?? undefined : data.bars[data.bars.length - 1]
+  const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
+  const finiteValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+  const read = data.market_read
+  const readShapeValid = read != null && ['known', 'missing', 'invalid'].includes(read.status)
+    && Array.isArray(read.invalid_fields) && read.invalid_fields.every((field) => typeof field === 'string')
+    && Array.isArray(read.missing_fields) && read.missing_fields.every((field) => typeof field === 'string')
+    && read.metadata_fields != null && typeof read.metadata_fields === 'object' && !Array.isArray(read.metadata_fields)
+    && Object.values(read.metadata_fields).every((state) => ['known', 'missing', 'invalid'].includes(state))
+    && ((read.status === 'missing' && read.candidate_count === 0) || ['adj_close', 'turnover', 'turnover_status', 'turnover_reason', 'data_as_of', 'collected_at', 'raw_payload_id'].every((key) => ['known', 'missing', 'invalid'].includes(read.metadata_fields[key])))
+    && Number.isInteger(read.candidate_count) && read.candidate_count! >= 0 && read.candidate_count! <= 120
+    && read.window_limit === 120 && Number.isInteger(read.unlocated_count) && read.unlocated_count! >= 0
+    && read.verification === 'stored_value_syntax_only'
+  const readKnown = read === undefined || (readShapeValid && read.status === 'known'
+    && read.candidate_count! >= 1 && read.invalid_fields.length === 0 && read.missing_fields.length === 0 && read.unlocated_count === 0)
+  const candidate = data.overview ? data.overview.price.status === 'available' ? data.overview.price.latest : null : data.bars[data.bars.length - 1]
+  const candidateRow = data.bars[data.bars.length - 1]
+  const candidateRead = candidateRow?.market_read
+  const candidateCoreKnown = read === undefined || (candidateRead?.status === 'known' && isValidBar(candidateRow))
+  const candidateConflict = read !== undefined && data.overview?.price.status === 'available'
+    && (!candidate || candidateRow?.date !== candidate.date || candidateRow?.close !== candidate.close)
+  const candidateKnown = candidateCoreKnown && !candidateConflict
+  const latestBar = readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
-  const currentPrice = data.overview ? latestBar?.close ?? null : data.decision_summary?.current_price ?? latestBar?.close ?? null
-  const priceChange = data.overview ? null : data.decision_summary?.price_change ?? (latestBar && previousBar ? latestBar.close - previousBar.close : null)
-  const priceChangePct = data.overview ? null : data.decision_summary?.price_change_pct ?? (priceChange != null && previousBar?.close ? priceChange / previousBar.close : null)
-  const fallbackMarketComplete = Boolean(latestBar && !latestBar.source.toLowerCase().includes('fixture'))
+  const legacyPrice = data.decision_summary?.current_price
+  const priceConflict = read !== undefined && !data.overview && legacyPrice != null && (!finitePrice(legacyPrice) || legacyPrice !== latestBar?.close)
+  const currentPrice = !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
+  const legacyChange = data.decision_summary?.price_change
+  const previousKnown = read === undefined || (previousBar?.market_read?.status === 'known' && isValidBar(previousBar) && previousBar.date < candidateRow.date!)
+  const calculatedChange = previousKnown && latestBar && finitePrice(latestBar.close) && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
+  const changeConflict = read !== undefined && legacyChange != null && (!finiteValue(legacyChange) || legacyChange !== calculatedChange)
+  const change = read === undefined ? finiteValue(legacyChange) ? legacyChange : calculatedChange : !changeConflict ? calculatedChange : null
+  const priceChange = data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
+  const legacyPercent = data.decision_summary?.price_change_pct
+  const calculatedPercent = priceChange != null && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
+  const percentConflict = read !== undefined && legacyPercent != null && (!finiteValue(legacyPercent) || legacyPercent !== calculatedPercent)
+  const percent = read === undefined ? finiteValue(legacyPercent) ? legacyPercent : calculatedPercent : !percentConflict ? calculatedPercent : null
+  const priceChangePct = !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
   const hasTemporaryIndustryGroup = data.groups.some((group) => isTemporaryIndustryGroupName(group.name))
@@ -1089,15 +1122,16 @@ function StockPage() {
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
     </PageTitle>
+    {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary} /><StockResearchPanel data={data} /></section>}
-      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features.ma20)} ／ {formatNumber(data.features.ma60)}</b></div><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
+      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features.ma20)} ／ {formatNumber(data.features.ma60)}</b></div><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
     </div>
   </div>
 }
@@ -1113,7 +1147,7 @@ function BrokerBranchEntry({ exchange }: { exchange: string }) {
 }
 
 function BarTable({ rows }: { rows: InstrumentDetail['bars'] }) {
-  return <div className="table-wrap compact-table"><p className="small-note">單位：股價為各標的報價幣別的元，指數為點；成交量為張。空白表示未提供資料、數值無效或成交量來源單位待核實。</p><table><thead><tr><th>日期</th><th>收盤</th><th>最高</th><th>最低</th><th>成交量</th></tr></thead><tbody>{rows.map((row) => <tr key={row.date}><td>{formatTaiwanDateTime(row.date, true)}</td><td className="numeric-cell">{formatTableNumber(row.close, 2)}</td><td className="numeric-cell">{formatTableNumber(row.high, 2)}</td><td className="numeric-cell">{formatTableNumber(row.low, 2)}</td><td className="numeric-cell">{formatTableVolume(row.volume, row.source, row.volume_exact)}</td></tr>)}</tbody></table></div>
+  return <div className="table-wrap compact-table"><p className="small-note">單位：股價為各標的報價幣別的元，指數為點；成交量為張。空白表示未提供資料、數值無效或成交量來源單位待核實。</p><table><thead><tr><th>日期</th><th>收盤</th><th>最高</th><th>最低</th><th>成交量</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}><td>{formatTaiwanDateTime(row.date, true)}</td><td className="numeric-cell">{formatTableNumber(row.close, 2)}</td><td className="numeric-cell">{formatTableNumber(row.high, 2)}</td><td className="numeric-cell">{formatTableNumber(row.low, 2)}</td><td className="numeric-cell">{formatTableVolume(row.volume, row.source, row.volume_exact)}</td></tr>)}</tbody></table></div>
 }
 
 function formatRawChipValue(value: number | null): string {

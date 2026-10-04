@@ -112,11 +112,15 @@ QUANTITY_READS = {
 QUOTE_READS = ("NORMAL", "BADPRICE", "MISSINGBAR", "DIRTYDATE", "METABAD",
                "POISON", "ZEROQ", "BADQ", "HUGEQ", "OVERFLOW")
 ACTION_READS = ("A-NORMAL", "B-CLOSE", "C-DATE", "D-METADATA", "E-SOURCE", "F-SUSPEND",
-                "G-ADJUST", "H-MISSING", "I-QUNKNOWN", "J-STOPBAD", "K-HISTORY", "L-FUTURE")
+               "G-ADJUST", "H-MISSING", "I-QUNKNOWN", "J-STOPBAD", "K-HISTORY", "L-FUTURE")
+STOCK_READS = ("A-NORMAL", "B-CLOSE", "C-DATE", "D-METADATA", "E-SOURCE", "F-SUSPEND",
+               "G-VOLUME", "H-OHLC", "I-MISSING", "J-HISTORY", "K-FUTURE", "L-WINDOW")
+STOCK_SETUP_MUTATIONS = 0
 
 
 class MemoryFixture:
-    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False, action_reads=False):
+    def __init__(self, *, value_reads=False, quantity_trust=False, quote_reads=False, action_reads=False, stock_reads=False, stock_cases=False):
+        self.stock_reads = stock_reads
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         Base.metadata.create_all(self.engine)
         self.app = FastAPI()
@@ -124,30 +128,30 @@ class MemoryFixture:
         self.app.include_router(api.router)
         self.server = None
         with Session(self.engine) as db:
-            for exchange in ("TWSE", "TPEx"):
-                for symbol in (ACTION_READS if action_reads else QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
+            for exchange in (("TWSE",) if stock_reads else ("TWSE", "TPEx")):
+                for symbol in (STOCK_READS if stock_reads else ACTION_READS if action_reads else QUOTE_READS if quote_reads else (*QUANTITY_READS, "ABSENT") if quantity_trust else READ_VALUES if value_reads else (*CASES, "NEW")):
                     instrument = Instrument(market="TW", exchange=exchange, symbol=symbol,
                                             name="synthetic user quantity " + symbol,
                                             instrument_type="stock", status="active")
                     db.add(instrument)
                     db.flush()
-                    db.add(MarketBar(instrument_id=instrument.id, trading_date=READ_DAY if value_reads or quantity_trust or quote_reads or action_reads else DAY,
+                    db.add(MarketBar(instrument_id=instrument.id, trading_date=READ_DAY if value_reads or quantity_trust or quote_reads or action_reads or stock_reads else DAY,
                                      open=10, high=11, low=9, close=10.5, adj_close=10.5,
-                                      volume=1000, turnover=10500, source="fixture-portfolio-quote-read" if quote_reads else "fixture-portfolio-quantity-trust" if quantity_trust else "fixture-portfolio-value-read" if value_reads else "synthetic-user-quantity"))
+                                      volume=1000, turnover=10500, source="fixture-stock-detail" if stock_reads else "fixture-portfolio-quote-read" if quote_reads else "fixture-portfolio-quantity-trust" if quantity_trust else "fixture-portfolio-value-read" if value_reads else "synthetic-user-quantity"))
                     if quote_reads:
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=1000, shares_integer=1000,
                             average_cost=10, stop_price=9, note="synthetic local quote; all SQL columns retained", updated_at=datetime(2026, 10, 4)))
                     elif quantity_trust and symbol != "ABSENT":
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=1000, shares_integer=1000,
                             average_cost=10, note="synthetic quantity trust; whole row retained", updated_at=datetime(2026, 10, 4)))
-                    elif value_reads or action_reads:
+                    elif value_reads or action_reads or stock_reads:
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=1000, shares_integer=1000,
                             average_cost=10, note="whole row retained", updated_at=datetime(2026, 10, 4)))
                     elif symbol in CASES:
                         db.add(PortfolioPosition(instrument_id=instrument.id, shares=CASES[symbol], average_cost=10))
             db.commit()
 
-        if value_reads or quantity_trust or action_reads:
+        if value_reads or quantity_trust or action_reads or stock_reads:
             self.seed_value_reads()
         if quantity_trust:
             self.seed_quantity_reads()
@@ -155,8 +159,10 @@ class MemoryFixture:
             self.seed_quote_reads()
         if action_reads:
             self.seed_action_reads()
+        if stock_reads and stock_cases:
+            self.seed_stock_reads()
         self.read_mutations = 0
-        if action_reads:
+        if action_reads or stock_reads:
             @event.listens_for(self.engine, "before_cursor_execute")
             def count_read_mutations(_connection, _cursor, statement, _parameters, _context, _executemany):
                 if statement.lstrip().split(None, 1)[0].upper() in {"INSERT", "UPDATE", "DELETE", "REPLACE"}:
@@ -176,7 +182,7 @@ class MemoryFixture:
             portfolio_delete = request.url.path.startswith("/api/portfolio/") and request.method == "DELETE"
             shutdown = request.url.path == "/__review__/shutdown" and request.method == "POST"
             if request.method not in {"GET", "OPTIONS"} and not (shutdown or (
-                    not (value_reads or quantity_trust or quote_reads or action_reads) and (portfolio_write or portfolio_delete))):
+                    not (value_reads or quantity_trust or quote_reads or action_reads or stock_reads) and (portfolio_write or portfolio_delete))):
                 from starlette.responses import JSONResponse
                 return JSONResponse({"detail": "only owned memory portfolio writes permitted"}, status_code=405)
             return await call_next(request)
@@ -217,6 +223,15 @@ class MemoryFixture:
                         "read_mutations": self.read_mutations,
                         "includes": ["both whole tables", "all columns", "all typeof()", "note", "updated_at"],
                         "fixture_date": str(READ_DAY), "storage": "memory_only"}
+
+        if stock_reads:
+            @self.app.get("/__review__/stock-read-snapshot")
+            def stock_read_snapshot():
+                rows = self.raw_quote_rows()
+                return {"whole_sql_sha256": hashlib.sha256(repr(rows).encode("utf-8")).hexdigest(),
+                        "position_count": len(rows["portfolio_positions"]), "bar_count": len(rows["market_bars"]),
+                        "read_mutations": self.read_mutations, "fixture_date": str(READ_DAY), "storage": "memory_only",
+                        "includes": ["both whole tables", "all columns", "all typeof()", "note", "updated_at"]}
 
         @self.app.post("/__review__/shutdown")
         def shutdown():
@@ -265,6 +280,36 @@ class MemoryFixture:
             change("portfolio_positions", "shares_integer='bad-quantity'", "BADQ")
             change("portfolio_positions", "shares_integer=?", "HUGEQ", (SAFE + 2,))
             change("market_bars", "close=1e308", "OVERFLOW")
+
+    def stock_change(self, symbol, expression, parameters=(), day=READ_DAY):
+        global STOCK_SETUP_MUTATIONS
+        STOCK_SETUP_MUTATIONS += 1
+        if STOCK_SETUP_MUTATIONS > 32:
+            raise AssertionError("stock setup mutation cap exceeded")
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql("UPDATE market_bars SET " + expression + " WHERE trading_date=? AND instrument_id IN "
+                "(SELECT id FROM instruments WHERE symbol=?)", (*parameters, str(day), symbol))
+
+    def seed_stock_reads(self):
+        global STOCK_SETUP_MUTATIONS
+        self.stock_change("B-CLOSE", "close=?", (b"bad-close",))
+        self.stock_change("C-DATE", "trading_date='z-invalid-date'")
+        self.stock_change("D-METADATA", "data_as_of='bad-time',collected_at='2026-02-30',adj_close=?,turnover=?", (b"bad-adjustment", float("inf")))
+        self.stock_change("E-SOURCE", "source=?", (b"twse",))
+        self.stock_change("F-SUSPEND", "is_suspended='bad-boolean'")
+        self.stock_change("G-VOLUME", "volume=?", (b"bad-volume",))
+        self.stock_change("H-OHLC", "high=1")
+        self.stock_change("J-HISTORY", "close=?", (float("inf"),), READ_DAY - timedelta(days=1))
+        STOCK_SETUP_MUTATIONS += 4
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql("DELETE FROM market_bars WHERE instrument_id IN (SELECT id FROM instruments WHERE symbol='I-MISSING')")
+            connection.exec_driver_sql("INSERT INTO market_bars (instrument_id,trading_date,open,high,low,close,adj_close,volume,turnover,source,collected_at,is_suspended) "
+                "SELECT id,?,10,11,9,10.5,10.5,1000,10500,'fixture-stock-detail','bad-unused-time',0 FROM instruments WHERE symbol='K-FUTURE'", (str(READ_DAY + timedelta(days=1)),))
+            connection.exec_driver_sql("INSERT INTO market_bars (instrument_id,trading_date,open,high,low,close,adj_close,volume,turnover,source,collected_at,is_suspended) "
+                "SELECT id,?,10,11,9,10.5,10.5,1000,10500,'fixture-stock-detail','2026-10-04 00:00:00',0 FROM instruments WHERE symbol='L-WINDOW'",
+                [(str(READ_DAY - timedelta(days=index)),) for index in range(60, 122)])
+            connection.exec_driver_sql("INSERT INTO market_bars (instrument_id,trading_date,open,high,low,close,adj_close,volume,turnover,source,collected_at,is_suspended) "
+                "SELECT id,'0000-invalid',10,11,9,10.5,10.5,1000,10500,'fixture-stock-detail','2026-10-04 00:00:00',0 FROM instruments WHERE symbol='L-WINDOW'")
 
     def seed_action_reads(self):
         with self.engine.begin() as connection:
@@ -328,7 +373,7 @@ class MemoryFixture:
                         continue
                     db.add(MarketBar(instrument_id=instrument.id, trading_date=trading_date,
                         open=10, high=11, low=9, close=10.5, adj_close=10.5, volume=1000, turnover=10500,
-                        source="fixture-portfolio-value-read"))
+                        source="fixture-stock-detail" if self.stock_reads else "fixture-portfolio-value-read"))
             for instrument in instruments:
                 db.add(Signal(signal_key=f"read-fixture-{instrument.id}", signal_date=READ_DAY,
                     instrument_id=instrument.id, strategy_version_id=version.id, status="conditional",
@@ -1108,6 +1153,116 @@ class QuantityTrustReadTest(unittest.TestCase):
             self.assertEqual(fixture.raw_quantity_rows(), before)
 
 
+class StockMarketReadTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.shared = MemoryFixture(stock_reads=True, stock_cases=True)
+        cls.addClassCleanup(cls.shared.close)
+
+    def fixture(self):
+        fixture = MemoryFixture(stock_reads=True)
+        self.addCleanup(fixture.close)
+        return fixture
+
+    def gets(self, fixture, routes):
+        before = fixture.raw_quote_rows()
+        fixture.read_mutations = 0
+        with TestClient(fixture.app) as client:
+            results = []
+            for route in routes:
+                response = client.get(route)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertLessEqual(len(response.content), 2 * 1024 * 1024)
+                payload = response.json()
+                json.dumps(payload, allow_nan=False)
+                results.append(payload)
+        self.assertEqual(fixture.raw_quote_rows(), before)
+        self.assertEqual(fixture.read_mutations, 0)
+        with Session(fixture.engine) as db:
+            self.assertLessEqual(len(db.scalars(select(Instrument)).all()), 16)
+            self.assertLessEqual(len(db.scalars(select(Signal)).all()), 32)
+        self.assertLessEqual(len(before["market_bars"]), 1600)
+        self.assertLessEqual(len(before["portfolio_positions"]), 16)
+        return results
+
+    def route(self, symbol, explicit=True):
+        return f"/api/stocks/TWSE/{symbol}" + (f"?as_of={READ_DAY}" if explicit else "")
+
+    def test_actual_router_polluted_identity_core_and_optional_metadata(self):
+        results = self.gets(self.shared, [self.route(symbol) for symbol in STOCK_READS])
+        for symbol, payload in zip(STOCK_READS, results):
+            self.assertEqual(payload["instrument"]["symbol"], symbol)
+            self.assertIsNone(payload["overview"]["price"]["latest"])
+            self.assertEqual(payload["overview"]["version"], "stock-overview/p6c-v1")
+            if symbol in {"B-CLOSE", "C-DATE", "E-SOURCE", "F-SUSPEND", "G-VOLUME", "H-OHLC", "L-WINDOW"}:
+                self.assertEqual(payload["market_read"]["status"], "invalid")
+                self.assertNotEqual(payload["quality_summary"]["market"]["status"], "complete")
+            elif symbol == "I-MISSING":
+                self.assertEqual(payload["market_read"]["status"], "missing")
+                self.assertEqual(payload["bars"], [])
+            else:
+                self.assertEqual(payload["market_read"]["status"], "known")
+            if symbol == "D-METADATA":
+                latest = payload["bars"][-1]
+                self.assertEqual((latest["open"], latest["high"], latest["low"], latest["close"], latest["volume_exact"]), (10, 11, 9, 10.5, "1000"))
+                for field in ("data_as_of", "collected_at", "adj_close", "turnover"):
+                    self.assertIsNone(latest[field])
+                    self.assertEqual(latest["market_read"]["metadata_fields"][field], "invalid")
+        instrument = self.gets(self.shared, [f"/api/instruments/D-METADATA?exchange=TWSE&as_of={READ_DAY}"])[0]
+        self.assertEqual(instrument["market_read"]["status"], "known")
+
+    def test_default_unknown_date_has_no_older_or_independent_cutoff_fallback(self):
+        for symbol in ("C-DATE", "L-WINDOW"):
+            default, explicit = self.gets(self.shared, [self.route(symbol, False), self.route(symbol)])
+            self.assertIsNone(default["overview"]["as_of"])
+            self.assertIsNone(default["decision_summary"])
+            self.assertEqual(explicit["overview"]["as_of"], str(READ_DAY))
+            self.assertIsNotNone(explicit["decision_summary"])
+            self.assertEqual(default["market_read"]["unlocated_count"], 1)
+            self.assertEqual(explicit["market_read"]["unlocated_count"], 1)
+            self.assertIsNone(explicit["overview"]["price"]["latest"])
+
+    def test_window_cap_order_future_filter_and_outside_unknown_date(self):
+        window, future = self.gets(self.shared, [self.route("L-WINDOW"), self.route("K-FUTURE")])
+        self.assertEqual(len(window["bars"]), 120)
+        self.assertEqual(window["market_read"]["candidate_count"], 120)
+        self.assertEqual(window["overview"]["price"]["candidate_count"], 120)
+        self.assertEqual(window["bars"][0]["date"], str(READ_DAY - timedelta(days=119)))
+        self.assertTrue(all(row["date"] is not None for row in window["bars"]))
+        self.assertEqual(window["market_read"]["unlocated_count"], 1)
+        self.assertEqual(future["bars"][-1]["date"], str(READ_DAY))
+        self.assertEqual(len(future["bars"]), 60)
+        history = self.gets(self.shared, [self.route("J-HISTORY")])[0]
+        self.assertEqual(len(history["bars"]), 60)
+        self.assertIsNone(history["bars"][-2]["close"])
+        self.assertEqual(history["bars"][-1]["close"], 10.5)
+
+    def test_volume_affinity_exact_string_and_optional_time_classification(self):
+        fixture = self.fixture()
+        for value, expected in ((0, 0), (9223372036854775807, 9223372036854775807), (1.5, None), (-1, None), (b"0", None)):
+            fixture.stock_change("A-NORMAL", "volume=?", (value,))
+            latest = self.gets(fixture, [self.route("A-NORMAL")])[0]["bars"][-1]
+            self.assertEqual(latest["volume"], expected)
+            self.assertEqual(latest["volume_exact"], str(expected) if expected is not None else None)
+        fixture.stock_change("A-NORMAL", "volume=1000,data_as_of=?,collected_at=?", ("2026-10-04 00:00:00", "2026-10-04T01:02:03+08:00"))
+        latest = self.gets(fixture, [self.route("A-NORMAL")])[0]["bars"][-1]
+        self.assertEqual(latest["market_read"]["status"], "known")
+        self.assertEqual(latest["data_as_of"], "2026-10-04T00:00:00")
+        self.assertEqual(latest["collected_at"], "2026-10-04T01:02:03+08:00")
+
+    def test_original_m1_source_and_raw_evidence_gates_still_reject(self):
+        fixture = self.fixture()
+        fixture.stock_change("A-NORMAL", "source='twse',data_as_of='2026-10-04 00:00:00'")
+        result = self.gets(fixture, [self.route("A-NORMAL")])[0]
+        self.assertEqual(result["market_read"]["status"], "known")
+        self.assertIsNone(result["overview"]["price"]["latest"])
+        self.assertIn("price_raw_evidence_missing", result["overview"]["price"]["reasons"])
+        self.assertIn("price_latest_candidate_unqualified", result["overview"]["price"]["reasons"])
+        self.assertEqual(result["overview"]["price"]["valid_count"], 0)
+        self.assertEqual(result["overview"]["price"]["candidate_count"], 60)
+        self.assertEqual(result["overview"]["historical_pit"], "unsupported")
+
+
 class ActionMarketReadTest(unittest.TestCase):
     def fixture(self):
         fixture = MemoryFixture(action_reads=True)
@@ -1393,26 +1548,37 @@ def main():
     parser.add_argument("--quote-read-fixture", action="store_true", help="serve twenty owned read-only local quote positions")
     parser.add_argument("--action-read-only", action="store_true", help="action market read isolation and necessary guarded regressions; zero disk")
     parser.add_argument("--action-read-fixture", action="store_true", help="serve twenty-four read-only synthetic action positions with explicit fixture sessions")
+    parser.add_argument("--stock-read-only", action="store_true", help="stock detail read isolation through actual router; zero disk")
+    parser.add_argument("--stock-read-fixture", action="store_true", help="serve twelve read-only stock detail cases; no admitted M1 raw files")
+    parser.add_argument("--stock-read-case", choices=["router-matrix"], help="necessary affected stock router regression only")
     args = parser.parse_args()
     if args.serve:
         if args.port != 8777:
             parser.error("only owned loopback port 8777 is authorized")
         _listen_port = args.port
         fixture = MemoryFixture(value_reads=args.finance_read_fixture, quantity_trust=args.quantity_trust_fixture, quote_reads=args.quote_read_fixture,
-                                action_reads=args.action_read_fixture)
+                                 action_reads=args.action_read_fixture, stock_reads=args.stock_read_fixture, stock_cases=args.stock_read_fixture)
         try:
             import uvicorn
             fixture.server = uvicorn.Server(uvicorn.Config(fixture.app, host="127.0.0.1", port=args.port,
                                                           lifespan="off", access_log=False))
-            print(json.dumps({"mode": "synthetic-action-read-memory-actual-router" if args.action_read_fixture else "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
-                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture or args.action_read_fixture else DAY),
+            print(json.dumps({"mode": "synthetic-stock-read-memory-actual-router" if args.stock_read_fixture else "synthetic-action-read-memory-actual-router" if args.action_read_fixture else "synthetic-local-quote-memory-actual-router" if args.quote_read_fixture else "synthetic-quantity-trust-memory-actual-router" if args.quantity_trust_fixture else "synthetic-value-read-memory-actual-router" if args.finance_read_fixture else "synthetic-user-quantity-memory-actual-router",
+                              "fixture_date": str(READ_DAY if args.finance_read_fixture or args.quantity_trust_fixture or args.quote_read_fixture or args.action_read_fixture or args.stock_read_fixture else DAY),
                               "pid": os.getpid(), "url": f"http://127.0.0.1:{args.port}", "disk_artifacts": 0,
                               "disk_save_reopen": "not_tested"}), flush=True)
             fixture.server.run()
         finally:
             fixture.close()
+            if args.stock_read_fixture:
+                print(json.dumps({"mode": "stock-read-owned-server-final", "actual_http_requests_including_review_shutdown": HTTP_REQUESTS,
+                    "read_mutations": fixture.read_mutations, "setup_mutations": STOCK_SETUP_MUTATIONS,
+                    "unexpected_denials": UNEXPECTED_DENIALS, "disk_artifacts": 0,
+                    "disk_save_reopen": "not_tested"}), flush=True)
     else:
-        if args.action_read_only:
+        if args.stock_read_only:
+            suite = unittest.TestSuite([StockMarketReadTest("test_actual_router_polluted_identity_core_and_optional_metadata")]) if args.stock_read_case else unittest.TestSuite([
+                unittest.defaultTestLoader.loadTestsFromTestCase(StockMarketReadTest), ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
+        elif args.action_read_only:
             suite = unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromTestCase(ActionMarketReadTest),
                 PortfolioValueReadTest("test_existing_source_time_and_strategy_gates_precede_invalid_stop"),
                 ShareQuantityExactTest("test_audit_denies_disk_external_network_and_subprocess")])
@@ -1441,9 +1607,14 @@ def main():
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShareQuantityExactTest)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         success = result.wasSuccessful() and not UNEXPECTED_DENIALS
-        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only or args.action_read_only else DAY),
+        print(json.dumps({"tests": result.testsRun, "success": success, "fixture_date": str(READ_DAY if args.finance_read_only or args.quantity_trust_only or args.quote_read_only or args.action_read_only or args.stock_read_only else DAY),
                           "actual_router_requests": HTTP_REQUESTS, "disk_artifacts": 0,
                           "expected_denials": EXPECTED_DENIALS, "unexpected_denials": UNEXPECTED_DENIALS,
+                          **({"stock_ui_records": 12, "read_mutations": 0, "setup_mutations": STOCK_SETUP_MUTATIONS,
+                              "whole_sql_scope": "portfolio_positions + market_bars: all columns and all typeof()",
+                              "source_and_date_evidence": "unverified; M1 source/raw filesystem admission unchanged",
+                              "python": sys.version.split()[0], "sqlalchemy": sys.modules["sqlalchemy"].__version__,
+                              "pydantic": sys.modules["pydantic"].__version__} if args.stock_read_only else {}),
                           **({"action_ui_records": 24, "read_mutations": 0,
                               "whole_sql_scope": "portfolio_positions + market_bars: all columns and all typeof()",
                               "decision_calendar": "sixty explicit synthetic fixture dates, not real official sessions",

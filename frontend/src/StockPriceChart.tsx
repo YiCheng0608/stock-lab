@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 
-import type { Bar } from './types'
+import type { StockDetailBar } from './types'
 import { buildStockChartOption, dataZoomEventWindow, normalizeStockChartWindow, prepareStockChartData, windowForRange, type StockChartRange, type StockChartWindow } from './stockChart'
 import { formatTableNumber, formatTableVolume, isVerifiedShareSource } from './units'
 
@@ -18,10 +18,10 @@ function sourceLabel(sources: string[]): string {
   return sources.map((source) => source === 'twse' ? '臺灣證券交易所' : source === 'tpex' ? '證券櫃檯買賣中心' : '來源待核實').join('、')
 }
 
-export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bars: readonly Bar[]; knownGapDates?: readonly string[] }) {
+export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES, unlocatedDateRows = 0 }: { bars: readonly StockDetailBar[]; knownGapDates?: readonly string[]; unlocatedDateRows?: number }) {
   const stableGapDates = knownGapDates.length === 0 ? EMPTY_GAP_DATES : knownGapDates
   const gapDateKey = stableGapDates.join('\u0000')
-  const prepared = useMemo(() => prepareStockChartData(bars, { knownGapDates: stableGapDates }), [bars, gapDateKey])
+  const prepared = useMemo(() => prepareStockChartData(bars, { knownGapDates: stableGapDates, unlocatedDateRows }), [bars, gapDateKey, unlocatedDateRows])
   const [preset, setPreset] = useState<StockChartRange | null>('all')
   const [window, setWindow] = useState<StockChartWindow>(() => windowForRange(0, 'all'))
 

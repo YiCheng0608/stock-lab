@@ -13,7 +13,8 @@ const args = process.argv.slice(2)
 let ssrLayoutWarnings = 0
 if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')
   || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')
-  || args.includes('--action-read-check') || args.includes('--action-read-http-check')) {
+  || args.includes('--action-read-check') || args.includes('--action-read-http-check')
+  || args.includes('--stock-read-check') || args.includes('--stock-read-http-check')) {
   const originalError = console.error
   console.error = (message, ...rest) => {
     if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
@@ -89,10 +90,12 @@ const dependencySource = path.resolve(dependencies, '../src')
 // Source is compiled inside CommonJS modules; dependency resolution borrows
 // master node_modules and never creates a junction in this worktree.
 const originalResolve = Module._resolveFilename
+let resolvingBorrowedDependency = false
 Module._resolveFilename = function (request, parent, ...rest) {
   try { return originalResolve.call(this, request, parent, ...rest) } catch (error) {
-    if (error.code !== 'MODULE_NOT_FOUND' || request.startsWith('.') || path.isAbsolute(request)) throw error
-    return requireDependency.resolve(request)
+    if (resolvingBorrowedDependency || error.code !== 'MODULE_NOT_FOUND' || request.startsWith('.') || path.isAbsolute(request)) throw error
+    resolvingBorrowedDependency = true
+    try { return requireDependency.resolve(request) } finally { resolvingBorrowedDependency = false }
   }
 }
 for (const extension of ['.ts', '.tsx']) {
@@ -140,8 +143,20 @@ async function apiModule() {
 
 
 async function appModule() {
+  const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check')
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
-    nodePaths: [dependencies], platform: 'node', format: 'cjs', packages: 'external', target: 'es2020', jsx: 'automatic',
+    nodePaths: [dependencies], platform: 'node', format: 'cjs', packages: stockMode ? undefined : 'external',
+    external: stockMode ? ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'] : [], target: 'es2020', jsx: 'automatic',
+    plugins: [{ name: 'actual-chart-cjs', setup(build) {
+      if (!stockMode) return
+      build.onResolve({ filter: /^echarts-for-react$/ }, () => ({ path: 'actual-echarts-react-class', namespace: 'actual-chart' }))
+      build.onLoad({ filter: /.*/, namespace: 'actual-chart' }, () => ({
+        // Keep the installed chart class; bridge its CJS default export for the
+        // Node SSR bundle without replacing the chart or changing browser code.
+        contents: `module.exports = require(${JSON.stringify(requireDependency.resolve('echarts-for-react'))}).default;`,
+        loader: 'js', resolveDir: path.dirname(requireDependency.resolve('echarts-for-react')),
+      }))
+    } }],
     define: { 'import.meta.env.VITE_API_BASE': JSON.stringify(apiOrigin.origin + '/api') } })
   const module = new Module(path.join(sourceRoot, '__memory_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_app__.cjs')
@@ -186,6 +201,150 @@ async function quantityTrustRenderer() {
         React.createElement(QueryClientProvider, { client }, React.createElement(app[component], props))))
     } finally { client.clear() }
   }
+}
+
+async function stockPageRenderer() {
+  const app = await appModule()
+  const React = requireDependency('react')
+  const { renderToStaticMarkup } = requireDependency('react-dom/server')
+  const { MemoryRouter } = requireDependency('react-router-dom')
+  const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+  return (data, route = '/stocks/TWSE/A-NORMAL?as_of=2026-10-04') => {
+    const url = new URL(route, apiOrigin)
+    const asOf = url.searchParams.get('as_of') || ''
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(['stock', data.instrument.exchange, data.instrument.symbol, asOf], data)
+    try {
+      return renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route] },
+        React.createElement(QueryClientProvider, { client }, React.createElement(app.default))))
+    } finally { client.clear() }
+  }
+}
+
+function syntheticStock() {
+  const metadata = Object.fromEntries(['adj_close', 'turnover', 'turnover_status', 'turnover_reason', 'data_as_of', 'collected_at', 'raw_payload_id'].map((key) => [key, 'missing']))
+  const core = { status: 'known', invalid_fields: [], missing_fields: [], metadata_fields: metadata }
+  return { instrument: { id: 1, exchange: 'TWSE', symbol: 'A-NORMAL', name: 'Synthetic stock read', instrument_type: 'stock' },
+    bars: [{ id: 1, date: '2026-10-04', open: 10, high: 11, low: 9, close: 10.5, adj_close: null, volume: 1000, volume_exact: '1000',
+      turnover: null, turnover_status: 'unknown', turnover_reason: null, source: 'fixture-stock-detail', data_as_of: null, collected_at: null,
+      is_suspended: false, market_read: core }],
+    market_read: { ...core, candidate_count: 1, window_limit: 120, unlocated_count: 0, unlocated_market_bar_id: null, verification: 'stored_value_syntax_only' },
+    features: {}, groups: [], chips: [], corporate_actions: [], fundamentals: [], events: [], data_quality: [], signals: [], news: [],
+    decision_summary: null, strategy_conditions: {} }
+}
+
+async function stockReadCheck() {
+  typecheck()
+  if (args.includes('--type-only')) {
+    console.log(JSON.stringify({ passed: true, node: process.version, typescript: ts.version, validation: 'noEmit only', disk_artifacts: 0 }))
+    esbuild.stop(); return
+  }
+  require(path.join(sourceRoot, 'stockChart.test.ts'))
+  const render = await stockPageRenderer()
+  let cases = 0
+  const checks = [
+    ['metadata-only', (p) => { p.market_read.metadata_fields.data_as_of = 'invalid'; p.bars[0].market_read.metadata_fields.collected_at = 'invalid' }, false],
+    ['invalid', (p) => { p.market_read.status = 'invalid'; p.market_read.invalid_fields = ['close'] }, true],
+    ['missing', (p) => { p.market_read.status = 'missing'; p.market_read.candidate_count = 0; p.market_read.missing_fields = ['market_bar']; p.bars = [] }, true],
+    ['null', (p) => { p.market_read = null }, true],
+    ['partial', (p) => { p.market_read = { status: 'known' } }, true],
+    ['known-invalid', (p) => { p.market_read.invalid_fields = ['source'] }, true],
+    ['known-missing', (p) => { p.market_read.missing_fields = ['volume'] }, true],
+    ['no-count', (p) => { delete p.market_read.candidate_count }, true],
+    ['no-metadata-keys', (p) => { p.market_read.metadata_fields = {} }, true],
+    ['no-verifier', (p) => { delete p.market_read.verification }, true],
+    ['zero-candidates', (p) => { p.market_read.candidate_count = 0 }, true],
+    ['bar-invalid', (p) => { p.bars[0].market_read = { ...p.bars[0].market_read, invalid_fields: ['source'] } }, true],
+    ['invalid-date', (p) => { p.bars[0].date = '2026-02-30' }, true],
+    ['decision-conflict', (p) => { p.decision_summary = { current_price: 900, price_change: 50, price_change_pct: 3 } }, true],
+    ['legacy-infinity', (p) => { delete p.market_read; delete p.bars[0].market_read; p.bars[0].close = Infinity; p.decision_summary = { current_price: Infinity, price_change: Infinity, price_change_pct: Infinity } }, true],
+    ['percent-overflow', (p) => { delete p.market_read; delete p.bars[0].market_read; p.decision_summary = { current_price: 10.5, price_change: 1, price_change_pct: 1e308 } }, false],
+    ['core-source-null', (p) => { p.bars[0].source = null }, true],
+    ['core-nonpositive', (p) => { p.bars[0].close = 0 }, true],
+    ['unicode-source', (p) => { p.bars[0].source = '😀'.repeat(120) }, false],
+    ['change-conflict', (p) => { p.bars.unshift({ ...p.bars[0], id: 2, date: '2026-10-03', close: 10 }); p.decision_summary = { current_price: 10.5, price_change: 99, price_change_pct: 0.05 } }, false],
+    ['percent-conflict', (p) => { p.bars.unshift({ ...p.bars[0], id: 2, date: '2026-10-03', close: 10 }); p.decision_summary = { current_price: 10.5, price_change: 0.5, price_change_pct: 99 } }, false],
+    ['previous-invalid', (p) => { p.bars.unshift({ ...p.bars[0], id: 2, date: '2026-10-03', close: 10, source: null }); p.decision_summary = { current_price: 10.5, price_change: 0.5, price_change_pct: 0.05 } }, false],
+  ]
+  for (const [name, mutate, unverified] of checks) {
+    const data = syntheticStock(); mutate(data)
+    const before = structuredClone(data)
+    const html = render(data)
+    assert.ok(html.includes('個股詳情分頁') && html.includes('研究條件'), name + ': actual StockPage')
+    assert.ok(!/Infinity|NaN/.test(html), name + ': non-finite display')
+    assert.ok(html.includes('最近收盤（報價幣別元）</span><strong>' + (unverified ? '待核實' : '10.5') + '</strong>'), name + ': headline')
+    if (name === 'decision-conflict') assert.ok(html.includes('漲跌（元／%）</span><strong class="">待核實</strong>'))
+    if (['change-conflict', 'previous-invalid'].includes(name)) assert.ok(html.includes('漲跌（元／%）</span><strong class="">待核實</strong>'), name + ': delta isolation')
+    if (name === 'percent-conflict') assert.ok(!html.includes('9,900%') && html.includes('>+0.5</strong>'), name + ': percentage isolation')
+    assert.deepEqual(data, before, name + ': mutated input')
+    cases++
+  }
+  const bundle = await browserBuild()
+  assert.ok(bundle.outputFiles.some((file) => file.path.endsWith('.js')))
+  console.log(JSON.stringify({ passed: true, node: process.version, stock_page_full_app_ssr: cases,
+    typescript: ts.version, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+    memory_build: { write: false, js_bytes: bundle.outputFiles.filter((file) => file.path.endsWith('.js')).reduce((sum, file) => sum + file.contents.byteLength, 0),
+      css_bytes: bundle.outputFiles.filter((file) => file.path.endsWith('.css')).reduce((sum, file) => sum + file.contents.byteLength, 0) },
+    source: 'synthetic read classifications only; not admitted M1 price evidence', disk_artifacts: 0,
+    excluded: 'real browser operations, production DB, M1 filesystem positive, save/reopen' }))
+  esbuild.stop()
+}
+
+async function stockReadHttpCheck() {
+  const api = await apiModule()
+  const render = await stockPageRenderer()
+  let routes = 0, ssr = 0
+  const guardedFetch = global.fetch
+  global.fetch = async (url, options = {}) => {
+    if (options.method && options.method !== 'GET') throw new Error('stock read HTTP check is GET only')
+    if (++routes > 48) throw new Error('stock read HTTP route cap exceeded')
+    const response = await guardedFetch(url, options)
+    const copy = response.clone()
+    if ((await copy.arrayBuffer()).byteLength > 2 * 1024 * 1024) throw new Error('stock response cap exceeded')
+    return response
+  }
+  const snapshot = async () => (await fetch(apiOrigin.origin + '/__review__/stock-read-snapshot')).json()
+  try {
+    const before = await snapshot()
+    const followup = args.includes('--stock-read-followup')
+    const symbols = followup ? ['I-MISSING', 'J-HISTORY', 'K-FUTURE', 'L-WINDOW'] : ['A-NORMAL', 'B-CLOSE', 'C-DATE', 'D-METADATA', 'E-SOURCE', 'F-SUSPEND', 'G-VOLUME', 'H-OHLC', 'I-MISSING', 'J-HISTORY', 'K-FUTURE', 'L-WINDOW']
+    for (const symbol of symbols) {
+      const data = await api.getStock('TWSE', symbol, '2026-10-04')
+      assert.equal(data.instrument.symbol, symbol)
+      assert.equal(data.overview.price.latest, null)
+      const { prepareStockChartData } = require(path.join(sourceRoot, 'stockChart.ts'))
+      const prepared = prepareStockChartData(data.bars, { unlocatedDateRows: data.market_read.unlocated_count })
+      if (symbol === 'D-METADATA') assert.equal(prepared.bars.length, 60)
+      if (symbol === 'L-WINDOW') {
+        assert.equal(prepared.totalRows, 120)
+        assert.equal(prepared.invalidDateRows, 1)
+        assert.ok(prepared.ma20.every((value) => value === null))
+      }
+      for (const entry of ['stocks', ...(!followup && ['B-CLOSE', 'C-DATE'].includes(symbol) ? ['actions'] : [])]) {
+        const html = render(data, `/${entry}/TWSE/${symbol}?as_of=2026-10-04`)
+        assert.ok(html.includes('最近收盤（報價幣別元）</span><strong>待核實</strong>'))
+        assert.ok(html.includes('尚無來源與數值已核對的價格。'))
+        if (data.market_read.status === 'invalid') assert.ok(html.includes('行情讀值無效，先核對原記錄。'))
+        if (data.market_read.status === 'missing') assert.ok(html.includes('尚無行情記錄。'))
+        if (data.market_read.status === 'known') assert.ok(!html.includes('行情讀值無效，先核對原記錄。'), 'M1 admission failure is not invalid stored syntax')
+        assert.ok(!/Infinity|NaN/.test(html))
+        ssr++
+      }
+    }
+    for (const symbol of ['C-DATE', 'L-WINDOW']) {
+      const data = await api.getStock('TWSE', symbol)
+      assert.equal(data.overview.as_of, null)
+      assert.equal(data.decision_summary, null)
+    }
+    const after = await snapshot()
+    assert.deepEqual(after, before, 'whole SQL tables/typeof/note/updated_at changed')
+    assert.equal(after.read_mutations, 0)
+    console.log(JSON.stringify({ passed: true, node: process.version, actual_http_routes: routes, product_gets: routes - 2, review_digest_gets: 2,
+      typescript: ts.version, known_ssr_use_layout_effect_warnings: ssrLayoutWarnings,
+      stock_page_full_app_ssr: ssr, whole_sql_sha256: before.whole_sql_sha256, read_mutations: 0,
+      scope: followup ? 'remaining four stock cases; two default-cutoff GETs; no replay of accepted cases' : 'twelve stock cases; two action aliases; two default-cutoff GETs',
+      disk_artifacts: 0, excluded: 'M1 positive filesystem, browser interaction, production DB, save/reopen' }))
+  } finally { global.fetch = guardedFetch; esbuild.stop() }
 }
 
 function syntheticAction(symbol, held, quantityStatus, actionState = 'data_insufficient') {
@@ -1078,7 +1237,7 @@ async function serve() {
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
-  const fixtureLabel = args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
+  const fixtureLabel = args.includes('--stock-read-fixture') ? '隔離合成個股行情讀回・2026-10-04・非正式行情與M1原件驗證' : args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情與交易日資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
     .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
@@ -1093,6 +1252,9 @@ async function serve() {
     }
     try {
       if (request.url.startsWith('/api/')) {
+        if (args.includes('--stock-read-fixture') && !['GET', 'OPTIONS'].includes(request.method)) {
+          response.writeHead(405); response.end('stock read preview permits GET/OPTIONS only'); return
+        }
         const url = new URL(request.url, apiOrigin)
         if (url.origin !== apiOrigin.origin) throw new Error('invalid upstream destination')
         const chunks = []
@@ -1119,12 +1281,14 @@ async function serve() {
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/actions`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') ? '2026-10-04' : '2026-10-03',
-    disk_artifacts: 0, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
+    pid: process.pid, url: `http://127.0.0.1:${port}/${args.includes('--stock-read-fixture') ? 'stocks/TWSE/A-NORMAL' : 'actions'}`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') || args.includes('--stock-read-fixture') ? '2026-10-04' : '2026-10-03',
+    disk_artifacts: 0, memory_build: { write: false, js_bytes: script.byteLength, css_bytes: Buffer.byteLength(css, 'utf8'), html_bytes: Buffer.byteLength(html, 'utf8') },
+    node: process.version, typescript: ts.version, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--action-read-http-check') ? actionReadHttpCheck()
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--stock-read-check') ? stockReadCheck()
+  : args.includes('--stock-read-http-check') ? stockReadHttpCheck() : args.includes('--action-read-http-check') ? actionReadHttpCheck()
   : args.includes('--action-read-check') ? actionReadCheck() : args.includes('--finance-read-http-check') ? financeReadHttpCheck()
   : args.includes('--quote-read-http-check') ? quoteReadHttpCheck() : args.includes('--quote-read-check') ? quoteReadCheck()
   : args.includes('--quantity-trust-http-check') ? quantityTrustHttpCheck() : args.includes('--quantity-trust-check') ? quantityTrustCheck()
