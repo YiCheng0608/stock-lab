@@ -274,6 +274,22 @@ Root actual owned page `26adac27-0ecb-4e01-89e0-227ff0d41304` once close成功�
 
 原probe shared httpx ModuleNotFoundError、只讀code純數字AssertionError／detail path KeyError，以及snapshot／tabswitch focus／wait URL glob connectionclosed均原exit1保留；direct PS eval quoting、CSS ack未open、outer-open／trusted檢查及date-reader JSON誤parse（0submit）留原task，修正後不重取來源或新建證據檔。明示來源原件只存process memory；附件／raw／DB／tmp／pycache／log／artifact新增0不等於全cache0。Catalog／price seed僅synthetic-memory，19表保留不證seed是真行情或正式DB；範圍外／PIT、保存／跨程序讀回、legacy／ZIP／old live／full suite／physical canvas／native橫向手勢／Vite／production build／pending導航race未驗，既有NO-RETRY與零落盤限制不變。逐次命令、runtime、原失敗、hash與清理收據留原task／Git，不新增附件。
 
+### M1-W7 七截止法人窗口的零落盤驗證入口
+
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 的 `--w7-only`為8個worker synthetic memory cases，`--w7-api-only`為5個real-router／MockTransport cases。Python3.12.14／httpx0.28.1，`-B -X utf8`、AST config stub／guarded memory SQLite，不載conftest／正式startup、不建DB／fixture檔；`--serve`預設mock，另核 `--serve --live-source-opt-in`才取W7當次原件，普通GET／import零外網。Backend/.venv metadata誤入口首exit1保留，改用master根共用.venv，未建立環境。
+
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 沿共用唯讀 `--deps <既有 frontend/node_modules>`；`--w7-only`選full-src noEmit／90 SSR／七cutoff84 net mock HTTP，可合 `--typecheck-only`或 `--serve`。完整App採esbuild `write:false` memory bundle／fallback字型，非Vite／production build；舊selectors保留，不稱本輪整套重驗。
+
+Python8 worker／5 API mock首各exit0；5 API local66 GET／33 POST、source外網0、19表全部欄／typeof保留及guards0。Node先由PATH20.19.4跑過，為非pinned收據；後explicit Node24.19.0／TS5.9.3／esbuild0.25.12補核full-src noEmit／90 SSR／mock84 BigInt net exit0，32 GET／14 POST、held29，不稱首次即pinned。只跑本輪必要驗證，未跑項不報通過。
+
+Root PROBE-1取得1body後因ZoneInfo formatter缺tzdata exit1、未完成全驗／byteshash收據；PROBE-2獨立4 GET／146640B，first actual POST3105／9/22另production29 GET／3774364B。合計1＋4＋29=34 external GET為三觀測，首body bytes未知，不稱一批34、總bytes全已知或peak memory。完整43月列／26日曆、23485daily full rows／52 selected／1144金融原字串、84 net／3150 API重疊字串及ALL29 receipt SHA獨算見[來源 §18](../SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)；root browser前actual local32 GET／15 POST不含browser總數。14可信form／84 DOM net、2520來源金融欄、兩股390×844新8/26原列及拒用界線見[個股頁 §23](../STOCK_RESEARCH_PAGE.md#23-m1-w7七截止法人窗口與原件追溯)。
+
+Browser首三次錯namespace help exit1；snapshot／tabswitch focus兩次connectionclosed，unquoted @ref splat invalid argument，focus ack／keyup未出trusted事件均不算pass。Audit normcase(None) TypeError在spawn前、0process；goto後漏--focus使draft未變，讀W6 archived成功receipt後核exact own terminal＋same page --focus才通，未恢復舊角色。Monthend ArrowUp9/31空draft assert exit1／0submit，修有效方向只補剩6、未重跑已通8。String.raw backtick SyntaxError為0tools；額外長命令os206 rejected／0process屬長命令限制，非approval review。Extras viewport兩次connectionclosed、誤worktree switch unknown exit1／0mutation，核own terminal switch＋same page focus後補通。無reload／restart／新page或來源重取；原命令／exit／trusted evidence留原task，不新增附件。
+
+本輪唯一owned page `9ec9559e-a34e-4467-8122-c0aaad36605c` once close ok=true／post tabs=[]。API55348／shell49668、Node1856／shell21680／esbuild37568及children fresh後驗absent，8781／8782 listeners0。API Ctrl+C raw exit1，shutdown19表preserved／guards0可觀測。Node兩Ctrl+C使listener關閉、active connection仍等待，final guard無觀測；root fresh PID／parent21680／explicit24 executable／cmdline核後 `ROOT-W7-PREVIEW-STOP-1` Stop-Process exact1856 exit0、PTY raw exit1，不稱Node SIGINT final guard通過。Esbuild已觀測exit code3221225786／signal=null，不再unknown；清理結果與驗證exit分報。
+
+原件僅process memory，無重啟重取／新增raw、helper、DB、pycache、附件或artifact，不稱全profile／cache0。Catalog／price seed僅synthetic；缺／壞8/26按窗口失效只必要synthetic API／SSR，actual missing0。範圍外／PIT、保存／跨程序讀回、legacy／ZIP／old live／full suite／physical canvas／native橫向手勢／Vite／production build／pending導航race未驗；既有NO-RETRY與零新增落盤限制不變。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

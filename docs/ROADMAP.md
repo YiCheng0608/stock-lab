@@ -9,11 +9,11 @@
 | 階段 | 已驗收範圍 | 未完成核心 |
 | --- | --- | --- |
 | R0：研究基準與時間 | ATR 純核心／獨立保存、有限 migration／startup、artifact／比較／replay／capture、Bridge B 本地 metadata、獨立 selected-bar verifier、B4b／B5b caller-input 純核心。 | 真實檔案／snapshot verifier 整合與待跑回歸、完整歷史原件／來源／availability、ATR worker、產品保存與時間接線、官方 tick／費稅／日曆、PIT、新舊同 snapshot 比較及選版。 |
-| R1：可靠資料與事件 | 官方行情／法人／融資收集與回補；指定來源准入及 consumer、TAIEX 身分與成交額狀態、指定 synthetic 磁碟／精確整數案例、產業期間與停復牌／公司行動局部修正；W6兩股25日CSV／完整有界交易日及六截止窗口計算。 | 範圍外真實逐市場／逐欄 coverage、多日法人與完整交易日、時間／修訂、完整事件與公司行動、正式 DB 升級／分類修復、其他股數精度、當沖／借券／分點／必要基本面。 |
-| R2：候選與交易計畫 | v1 候選、行動摘要、持倉、個股頁；M1 單日原件／截止總覽、W6兩股六截止法人窗口及具名可信原生切換、M2 官方事件搜尋與研究往返、既有庫存精確保存及讀回隔離。 | 範圍外 M1 法人及研究判定、M2 其他關注理由與分類品質、行情來源／日期證據、完整 ActionsPage、新 Plan 保存與觸發／成交／退出、部位／題材曝險及整合驗收。 |
+| R1：可靠資料與事件 | 官方行情／法人／融資收集與回補；指定來源准入及 consumer、TAIEX 身分與成交額狀態、指定 synthetic 磁碟／精確整數案例、產業期間與停復牌／公司行動局部修正；W7兩股26日CSV／完整有界交易日及七截止84 net窗口計算。 | 範圍外真實逐市場／逐欄 coverage、多日法人與完整交易日、時間／修訂、完整事件與公司行動、正式 DB 升級／分類修復、其他股數精度、當沖／借券／分點／必要基本面。 |
+| R2：候選與交易計畫 | v1 候選、行動摘要、持倉、個股頁；M1 單日原件／截止總覽、W7兩股七截止法人窗口及具名可信原生切換、M2 官方事件搜尋與研究往返、既有庫存精確保存及讀回隔離。 | 範圍外 M1 法人及研究判定、M2 其他關注理由與分類品質、行情來源／日期證據、完整 ActionsPage、新 Plan 保存與觸發／成交／退出、部位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、既有追蹤與回測、研究規格。 | 預先定義目標／採用門檻、樣本外／校準、walk-forward、前瞻樣本及模型採用；沒有經驗收 AI 預測或勝率。 |
 
-W6已有限接受TPEx3105／6488、2026-09-23／09-24／09-29／09-30／10-01／10-02六截止的5／20日法人來源／缺日與72 net actual API；兩股具名可信native及owned服務清理已接受，見[個股頁 §22](STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯)。範圍外仍unavailable，突破／回踩固定保守；補資料或Signal不自動啟用trend／研究條件。
+W7已有限接受TPEx3105／6488、2026-09-22／09-23／09-24／09-29／09-30／10-01／10-02七截止5／20日法人來源／缺日、84 net actual API與兩股具名可信native及owned服務清理，見[個股頁 §23](STOCK_RESEARCH_PAGE.md#23-m1-w7七截止法人窗口與原件追溯)。範圍外仍unavailable，突破／回踩固定保守；補資料或Signal不自動啟用trend／研究條件，完整M1未完成。
 
 籌碼三區：三大法人已有資料；主力進出與券商分點的匯入、統計、排行、歷史及更新待做。免費官方人工查詢入口不是已接資料集，定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
@@ -27,12 +27,12 @@ W6已有限接受TPEx3105／6488、2026-09-23／09-24／09-29／09-30／10-01／
 | M2 今日關注串個股 | 查看可追溯關注理由，同股去重後進入 M1，再返回原條件。 | 每項理由有已驗收來源、時間與版本；零候選和來源不足可區分。分類未核實不作可信排名，不為湊名單補候選。 |
 | M3 條件計畫與追蹤 | 保存並讀回版本化計畫，操作觸發、到期、未成交、模擬成交與退出。 | 逐子能力滿足來源、時間、版本、官方 tick／費稅、合法時段及必要執行 gate；磁碟保存／跨程序讀回驗收。未知風險預算不給張數，觸價不當成交，legacy tracking 不代新計畫生命週期。B4／B5／B7 與預設切換 gate 保留。 |
 
-**下一單一核心候選M1-W7：同兩股新增2026-09-22、保留六個已驗cutoff，原生切七截止。** 新8/26 dataset11856 daily尚未取得／准入；8/26～10/2候選26sessions／29GET（3index＋26daily）／55MiB，9/22候選恰20、5日起9/16／20日起8/26。須下一輪正式接手及真來源全列／兩股金融欄、新完整calendar／consumer policy／external pins正面，再exact計算／API／native驗收；本版W6 pins不放行新範圍。本輪W6已有限接受新8/27／25日曆、六截止72 net／actual API、具名可信native及owned服務清理，見[來源 §17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)；文件／freeze／索引／commit／master合併尚待結案，完整M1未完成。無positive路徑依證改gate齊的最小M3或等待，不空轉／降gate；選題與計數依[AGENTS](../AGENTS.md#核心選題與進度判定)。
+**下一單一核心候選M1-W8：同兩股新增2026-09-21、保留七個已驗cutoff。** 新dataset11856 `d=115/08/25` daily尚未取得／驗證／准入；8/25～10/2完整日曆、新policy／external pins須下一輪正面核，27sessions／30GET（3index＋27daily）／57MiB僅候選，9/21應恰20、5日起9/15／20日起8/25皆待驗，不預先取得8/25。W7真8/26／26日曆、七截止84 net／actual API／具名native與owned清理已有限接受，見[來源 §18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)；文件／freeze／索引／commit／master合併仍pending，最終receipt留原task，不為回寫hash重刷／提交。無positive路徑依證改必要gate全齊的最小M3或等待，不空轉／降gate；選題與計數依[AGENTS](../AGENTS.md#核心選題與進度判定)。
 
 | 核心路徑 | 目前缺口 | 下一步與驗收 |
 | --- | --- | --- |
-| M1 資料證據 | W6已解除新8/27 daily／完整25日曆及新policy／pins依賴；範圍外／PIT／修訂／TWSE用途仍缺。 | 新範圍另驗真來源與新版本，缺列不推休市；已驗來源見[§17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)。 |
-| M1 計算與接線 | W6六cutoff72 net／actual API與具名可信native已有限接受，研究規則未接。 | 新範圍另驗同cutoff來源／獨立net／可信操作及清理，不混觀測receipt；條件見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
+| M1 資料證據 | W7已解除新8/26 daily／完整26日曆與新policy／pins依賴；範圍外／PIT／修訂／TWSE用途仍缺。 | 新範圍另驗真來源與新版本，缺列不推休市；已驗來源見[§18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)。 |
+| M1 計算與接線 | W7七cutoff84 net／actual API、14具名可信native及owned清理已有限接受，研究規則未接。 | 新範圍另驗同cutoff來源／獨立net／可信操作及清理，不混觀測receipt；條件見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
 | M3 計畫操作 | caller-input 純核心已驗，實際來源／時間與新 Plan 產品保存未接。 | 具名列最小操作、真實資料及其必要 gate；滿足後接保存、API、UI 與追蹤。未滿足項列解除條件，不以 unknown 顯示代替必要條件。 |
 
 R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線才交付獨立核心操作。R0-B2 不是全域第一主題；其 snapshot／body／receipt／registry pins tuple 未齊，保持待驗，不重複搜尋或建 fixture 冒稱接入。[Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果) 管理精確缺口。
@@ -49,6 +49,7 @@ R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線
 | M1-W4 | 同兩股新增9/29並切四截止的48 net／actual API／可信原生表單已有限接受；26原件memory，服務清理已核，非PIT／保存。 | [來源 §15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)、[個股頁 §20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯) |
 | M1-W5 | 同兩股新增9/24並切五截止60 net／actual API／可信原生表單、來源／新8/28原列與拒用已有限接受；27原件memory、服務已核清，非PIT／保存。 | [來源 §16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)、[個股頁 §21](STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯) |
 | M1-W6 | 同兩股新增9/23、六截止72 net／actual API已有限接受；新8/27 daily／25日曆／28原件memory，具名可信native／服務已核清，非PIT／保存。 | [來源 §17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)、[個股頁 §22](STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯) |
+| M1-W7 | 同兩股新增9/22、七截止84 net／actual API與14具名可信native已有限接受；新8/26 daily／26日曆／29原件memory，全部29 receipt SHA獨算、owned服務已核清，非PIT／保存。 | [來源 §18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)、[個股頁 §23](STOCK_RESEARCH_PAGE.md#23-m1-w7七截止法人窗口與原件追溯) |
 | M1-P3a／P3b | TWT48U selected 0056（ETF）／1449／1463 四欄、追溯與總覽操作；發布／首次可得 unknown，未保存 live 原件。 | [來源 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)、[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線) |
 | M2-P1／P2 | 2026-10-03 真原件 58 列／58 股的官方事件清單、搜尋與研究往返；測試 catalogue 只有三檔可連 M1，其餘 55 股無連結。 | [個股頁 §12](STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)、[§13](STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返) |
 | M1-P4a | 有界來源審查接受；TWSE 法人來源與 exact 用途權利未准入，未取得原件或增加功能。 | [來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口) |

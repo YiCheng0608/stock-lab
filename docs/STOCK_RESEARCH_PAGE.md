@@ -720,3 +720,31 @@ Native續接只用同owned page／session，一次sameURL goto不重取來源。
 ### 22.3 仍未支持的界線
 
 實際missing0；缺／壞8/27與按窗口失效須分報synthetic API／SSR及actual範圍，不稱actual缺日native。Legacy／ZIP／old live／完整backend、physical canvas、原生橫向手勢、Vite／production build與pending導航race未驗；範圍外日期／標的／TWSE、修訂／PIT、trend／研究條件、raw保存／跨程序讀回及完整M1仍未完成。必要mock及已核owned page／服務清理收據由[開發入口](development-baseline/README.md#m1-w6-六截止法人窗口的零落盤驗證入口)管理，原失敗及完整證據留原task。
+
+## 23. M1-W7：七截止法人窗口與原件追溯
+
+**真來源→七截止84 net／actual API及兩股具名可信native已有限接受；owned page／服務清理已核。** 支持TPEx3105／6488，共用 `as_of=2026-09-22／09-23／09-24／09-29／09-30／10-01／10-02`；總覽 `stock-overview/w7-v1`、法人 `institutional-windows/w7-v1`、worker `tpex-institutional-window/w7-v1`。來源／policy／26日曆及唯一84 net集中[來源 §18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)；§18–22原byte保留歷史，不作本版設定。
+
+### 23.1 同截止、一次取得及原列追溯
+
+沿server opt-in `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`與既有capture POST，先核標的存在與supported cutoff；first actual POST3105／9/22新取3month＋26daily，後續POST／detail／overview GET重驗同held29 process-memory原件，普通GET／import零外網、不寫DB／檔案。鎖／一次嘗試、拒retry／refresh／較早fallback及重啟新觀測界線不變。
+
+原生「套用截止」後兩窗同cutoff，canonical整數字串以BigInt千分位／股呈現，5／20日三類net及required／valid／missing／invalid分列。來源詳情沿署名／資料集／授權、exact URL／daily raw ordinal／buy／sell／net、雙SHA／UTC與policy／source／calendar／calculation版本。月原件全返回已驗、有界採用、界線前未採分開，8月21／4／17；daily只列≤cutoff required evidence。發布／first availability／revision unknown、PIT unsupported；突破／回踩固定保守，未新增trend／研究條件或Signal接線，其他來源區塊獨立。
+
+### 23.2 具名可信原生操作與有限驗收
+
+| 操作 | 已接受的有限結果 |
+| --- | --- |
+| 兩股七截止切換 | 同完整App／held29 instance，兩股各七次unique可信date spinbutton Arrow及FORM submit，共14組；首3105／9/22 Enter，其餘Apply BUTTON。84 DOM net、5／20日起迄及missing0對root獨立raw真值；恢復不算第15唯一。兩股各一次native讀取BUTTON repeat POST仍held29。 |
+| 來源外層展開 | 14組outer SUMMARY可信open，各20 required daily≤cutoff、180 raw金融textContent／hash／daily v6／ordinal逐欄核通，共2520欄。不稱全部20 nested日子表曾原生展開，不混API3150或1144 distinct raw金融欄。 |
+| 390×844新8/26原列 | 兩股9/22 nested SUMMARY可信open：日期1150826、各9個buy／sell／net raw字串、body hash及daily v6一致，ordinal3105=175／6488=637；hash與84值集中來源§18。 |
+| Unsupported與恢復 | 6488 native9/28清舊值：numeric／window button／daily evidence均0；native恢復9/22後6 net與真值一致、held29不重取。 |
+| 範圍外市場 | TWSE3105／9/22 route DOM numeric／window button／daily evidence均0；goto僅route setup，不稱native市場navigation。 |
+
+14組日期操作中13組explicit390×844，首組viewport未獨立印出；另兩股9/22新8/26nested原列均於390×844可信展開。實測innerWidth390／body.clientWidth375／wrapper303／table780／overflow auto；375是clientWidth，不是scrollWidth或新375 viewport驗收。新375 viewport、原生水平手勢、physical canvas、Vite／production build及pending導航race未驗。
+
+只續用同owned page，無reload／restart／新page／來源重取。Focus ack／keyup無trusted事件不算成功；goto後缺--focus使draft未變、monthend ArrowUp形成9/31空draft（assert exit1／0submit）均未計通過，修exact own terminal＋same page --focus及有效方向後才接受，只補剩6日期而非重跑已通8組。其他namespace／connectionclosed／@ref／quote／長命令及viewport原錯、原exit、可信證據與服務清理集中[開發入口](development-baseline/README.md#m1-w7-七截止法人窗口的零落盤驗證入口)及原task，不以ack／定位代可信輸入。
+
+### 23.3 仍未支持的界線
+
+Actual missing0；缺／壞8/26局部窗口失效只有必要synthetic API／SSR，不稱actual missing native。Catalog／price seed僅synthetic-memory，19表保留不證真行情或正式DB；legacy／ZIP／old live／完整backend、physical canvas、原生橫向手勢、Vite／production build與pending導航race未驗。範圍外日期／標的／TWSE、修訂／PIT、trend／研究條件／Signal、raw保存／跨程序讀回及完整M1仍未完成。

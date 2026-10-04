@@ -2,50 +2,61 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
-## 目前：M1-W6 法人窗口第六截止新產品輪
+## 目前：M1-W7 法人窗口第七截止新產品輪
 
-2026-10-05從最新已驗收master `56c745861e1d96a88fb179561165a4dd3d81725a` 建立獨立branch／Orca worktree及新統籌，通過visible／runtime／Git gate後以fork_turns=none新建三child。`BOOT-W6-ROSTER-1`已接受；**正式可見接手gate通過**，`DOC-W6-FORMAL-1`更新現況。First turn `01a10805-c8df-79a1-8f16-ffd8b1be4cac` task_complete及四idle後，上一W5root在下述唯一terminal實送 `/subagents`一次，source=screen正面同四ID／Main [default] (current)；No sub-agents running只代表idle，Esc一次回Main、未切child。上一root獨立loaded／spawn配置與root rollout核runtime／parent／commonGit及roster，不以prompt代收據。
+2026-10-05從最新已驗收master `67e032f7e73b93a0f56196836d946502a6deed84`建立獨立branch／Orca worktree。BOOT-W7-ROSTER-1與DOC-W7-FORMAL-1已接受：上一W6root核first turn `01a10868-29b1-7a02-9755-b8aa0160ca72` task_complete／四idle後，在唯一visible terminal `term_7038dae6-664a-49e3-b06a-ce99aab4345e`實送/subagents一次，source=screen正面同四ID／Main default current；No sub-agents running為idle，slash menu warning不重送，Esc一次回Main未切child。FORMAL-W7-RECEIPT-1正式送達、root接受可見接手gate；actual runtime／rollout／process／Git與spawn核通，不以prompt／config代證據。
 
-共同runtime／process cwd／Git根：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-window-sixth-cutoff-20261005`；branch `roadmap-m1-window-sixth-cutoff-20261005`；repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`、common Git dir為其 `.git`。四者起始HEAD／master均為上述完整SHA、初始status乾淨；實際Rpc／Git核對一致，不由設定推定。唯一visible terminal `term_55fa5540-b620-4228-b784-2070e6b4c4d9` 已核connected／writable／non-orphaned、正確session／cwd／branch與root ultra，screen正面Main／四ID已核；其他handle不作啟動證據。
+共同runtime／process cwd／Git根 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-window-seventh-cutoff-20261005`，branch同末段；repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`、common Git dir為其 `.git`。四者起始HEAD／master為上述完整SHA、初始clean；root parent=null／source=vscode，三child以fork_turns=none新建、parent／sessionId／source.thread_spawn parent同root、depth1、forkedFromId=null。沿用本組ID／實際配置，不另角色或沿用W6角色。
 
-唯一start-coordinator原raw exit1／timeout waiting terminal handle且未送；原請求延遲產生同terminal，Trust Enter一次後核actual idle／runtime／Git／visible及own rollout usermsg0／turnevent0，才structured UTF-8首次唯一turn/start。首task15589UTF-8B／11962chars，SHA256=`419ab391bc0b8544b7dcd14536dc7f2dd329b500c644ac17dd3c14c90fbb637a`，turn為上述first turn。includeTurns只讀list_turns unsupported原exit1兩次／0mutation；首次formalreceipt JS字串SyntaxError為0tools／0send，首predispatch誤assert W5 terminal connected原exit1／0turnstart／0send，修正actual描述後才首次正式送出、非重送。未另launch／resume；未用MINGW once close --tab收據留原task（ptyKilled=false、不稱PTY kill）。
-
-| 角色 | Thread ID／實際配置 | 本checkpoint白名單與接手 |
+| 角色 | Thread ID／實際配置 | 本輪白名單與接手 |
 | --- | --- | --- |
-| 統籌 | `01a10803-5b84-7e92-b252-bdf48a8b51d5`；`gpt-6.1-sol`／`ultra` | 核定派工、來源、產品及數值驗收；來源mutation=[]。已接受bootstrap與正式接手；已review B1 exact6及必要mock、真來源／計算／actual API；具名可信native及owned page／服務清理已有限接受，待文件接受後freeze。 |
-| 程式 | `01a10807-ac3a-7c21-8613-05dcf1665e84`；`gpt-6.1-sol`／`xhigh` | 已自核接手、idle；B1 exact6：backend/app institutional_windows／stock_overview、backend/worker tpex_institutional_window、backend/tests test_institutional_windows、frontend/src/components StockOverview.test、tools institutional-window-preview；已交付接受、停寫idle。 |
-| 文件 | `01a10808-2845-7212-a762-ee78399a701f`；`gpt-6.1-sol`／`xhigh` | 已自核接手；RESULT-1僅SOURCE_REGISTRY、DATA_SOURCES、ROADMAP、ROADMAP_EXECUTION、STOCK_RESEARCH_PAGE、development-baseline/README、TASK七既有文件；更新有限成果／缺口，依root final receipt更新後交付停寫。 |
-| 索引與Git commit | `01a10808-b97a-7720-986f-3814e64af40f`；`gpt-6-luna`／`medium` | 來源寫入[]、本輪index／commit／merge尚未授權；W5外清已接手，四history已封存，exact根share-none被占用NO-RETRY，六index／DB及branch保留。 |
+| 統籌 | `01a10866-06f5-7f50-a024-c7ff6bc9b367`；`gpt-6.1-sol`／`ultra`；/root | 核定來源及產品／數值驗收，已接受M1-W7-B1有限操作與依賴解除；來源mutation=[]。待文件接受後freeze。 |
+| 程式 | `01a1086a-7fa1-7470-b1e6-cadce4f53011`；`gpt-6.1-sol`／`xhigh`；/root/program | 已交付B1、停寫idle；exact6為backend/app institutional_windows.py／stock_overview.py、backend/worker tpex_institutional_window.py、backend/tests test_institutional_windows.py、frontend/src/components StockOverview.test.tsx及tools institutional-window-preview.cjs。 |
+| 文件 | `01a1086b-0759-7093-9f59-7045a9aaf6cb`；`gpt-6.1-sol`／`xhigh`；/root/documents | UPDATE-1僅docs/SOURCE_REGISTRY.md、STOCK_RESEARCH_PAGE.md、DATA_SOURCES.md、ROADMAP.md、ROADMAP_EXECUTION.md、development-baseline/README.md、TASK_COORDINATION.md七既有文件；更新有限成果／缺口，交付後停寫。README／docs README／PRODUCT_SPEC不改。 |
+| 索引與Git commit | `01a1086b-9498-7203-9d66-9755a12a89ca`；`gpt-6-luna`／`medium`；/root/index_git | 來源寫入[]，W7 index／commit／merge尚未授權。W6外owner已接手，四history已封存；根移除parse階段失敗NO-RETRY、根／branch／六index DB保留。 |
 
-四者forkedFromId=null、sessionId同root；root parent=null／source=vscode，三child parent及source.subAgent.thread_spawn parent同root、depth1，agent_path依序/root/program／/root/documents／/root/index_git。三child配置與root獨立核對一致；同輪續作沿本組ID，不沿用W5角色。正式可見接手已核；B1已准exact取得與實作，source／API有限接受，產品freeze／本輪index／commit／merge仍pending。
+啟動原收據：唯一Orca create成功、新branch／當時無既有thread history，225files4294240B（224tracked＋Gitcontrol112B）在8MiB內；unused MINGW `term_d7312946-6cfc-4f0c-a49f-ea8931a04756`唯一close --tab回ptyKilled=false／post list=[]／operator_close，不補PTY kill。共用start-coordinator唯一raw exit1 timeout、無returned handle／task未送；原延遲產生上述唯一visible terminal，無另create／launch／resume。Once window restore、Trust Enter一次、worktree switch --help不存在exit1／0mutation及file open AGENTS僅reveal留原task；無GUI click／typing／screenshot file，internal temp未知。首rollout FileNotFoundError為0mutation，不推prestart messages／events為0；首次structured UTF-8任務21226B／16750chars、SHA `e9fc49411d9abe6e7a6b2387ddaab3dc8279b1fe86430530dd98bc776b91f3d2`由上一root獨核exact initialtask。首useritems=1誤assert（actual2）exit1／0mutation，修exact match後exit0、無重送。
 
-App MCP connected，master8＋W4舊根6＋W5舊根6共20分區仍原根；W6未索引，W5 docs README／ROADMAP／ROADMAP_EXECUTION／TASK coverage metadata_changed後採本根原文。此為新根coverage缺口，不稱MCP阻擋；不輪初／中途刷新、clone、改ACL／cache或終止其他session。本次TASK≤20352B（HEAD16256B＋4096B且≤24576B）、UTF-8無BOM／LF；GPG兩段1040B／565B及3713B尾逐byte保留，不新增附件／backup／helper／manifest。
+PS file-size foreach EmptyPipeElement、documents兩coverage缺paths及root existingdocs少空格validator首錯均保留原task；補正後核通、不抹首錯。App MCP connected，master8／W4W5W6各6共26分區仍原根，W7未索引；W6 docs七路徑metadata_changed、graph僅branch後讀本根原文，不稱MCP阻擋。Reload／CLI0，不輪初或中途刷新、clone、改ACL／cache或終止其他session，七docs待輪末索引。
 
-文件角色外網／tests／DB／index／Git／外清均0；本輪root後續probe4與production28 external GET分開，不改FORMALcheckpoint當時0GET。原件只存process memory，繼承零新增測試／raw／ZIP／DB／tmp／cache／pycache／log／artifact限制；正式來源6與docs7不當附件，不稱全cache0。原命令／首錯與收據留原task／Git，不新增附件。
+TASK有效≤24377B（HEAD20281B＋4096B且≤24576B）、UTF-8無BOM／LF；protected尾3713B及GPG1040B／565B含末LF完全保留。SOURCE§13–17、個股頁§22及更早、W6驗證入口原byte保留；新W7分節不覆寫歷史。文件角色外網／backend tests／DB／index mutation／Git mutation／外清0；不新增附件／backup／helper／manifest。繼承零新增測試／raw／ZIP／DB／tmp／cache／pycache／log／artifact限制，不稱全profile／cache0。
 
-## 本輪單一核心、驗收條件與停滯
+## 本輪核心成果、剩餘缺口與停滯
 
-| 接手項目 | 已核成果／尚缺驗收 |
+| 項目 | 已接受有限範圍／未完成 |
 | --- | --- |
-| 單一核心M1-W6 | 同TPEx3105／6488新增9/23，保留9/24／9/29／9/30／10/1／10/2；六截止5／20日三類共72 net的真來源／計算／actual API已有限接受，12具名可信表單、來源／新原列／拒用及owned服務清理已有限接受；完整M1未完成。 |
-| 真依賴解除 | 新8/27 dated CSV905全列／兩股44金融欄／全部關係及三月43全OHLC、完整25日曆（8月21／3／18）、新3561B consumer policy／external pins已核。Probe4 GET／147446B與production28 GET／3630280B獨立，新8/27hash一致但receipt不混；metadata／UTC及唯一72net集中[來源 §17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)。 |
-| 計算／API／必要mock | Production25daily共22585全列／50selected／1100金融欄，72獨立net及2700重疊API原字串逐欄核通；三端點同cutoff／held28／版本，repeat POST／GET外網0，19表全欄／typeof保留、guards0。必要mock原11／5首exit1與各修1局部exit0、Node76SSR／72 mock net及原退出完整見[開發入口](development-baseline/README.md#m1-w6-六截止法人窗口的零落盤驗證入口)，不稱首跑全通。 |
-| 操作與邊界 | 12unique可信日期form／72 DOM net及起迄／missing0、12outer SUMMARY／2160金融欄、兩股390×844新8/27原列及9個raw值／hash／v5／ordinal176及647已核；native BUTTON repeat held28、6488 9/28清舊值→9/23恢復及TWSE route拒用已接受，見[個股頁 §22](STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯)。非PIT，範圍外／修訂、trend／研究條件、raw保存及跨程序讀回仍缺；突破／回踩gate不由補資料解除。 |
-| 分報／停滯 | 核心操作+1＝新增9/23並保五cutoff；真必要依賴解除+1＝8/27daily／25日曆／新policy及pins。附帶可靠性1項＝preview shutdown guard可觀測，非獨立batch／不另計core。Stall0依真驗收，W1依賴及W2–W5實際操作支持繼承0；historical P6d／P6e至少2批可靠性無核心、更早unknown。Bootstrap／文書／索引／提交不算產品批次，不重置。 |
+| 單一核心M1-W7-B1 | TPEx3105／6488新增2026-09-22並保9/23／9/24／9/29／9/30／10/1／10/2；七截止84 net／actual API及14具名可信native、來源／新原列／拒用及owned清理已接受，完整M1未完成。 |
+| 真依賴解除 | 真8/26 dataset11856 dated CSV900全列25欄／兩股44金融欄／relations，三月43全OHLC先驗、採26／pre17（Aug21／4／17），新policy3587B／external pins與完整8/26～10/2日曆已核；來源gate正面後才實作。Observed版本據actual Asia/Taipei2026-10-05，UTC取得時間另記，不由branch推日期。 |
+| 計算／API／來源 | Production29原件、23485full daily rows／52selected／1144金融欄、84buy－sell net與原W672一致、3150重疊API金融字串逐欄核、全部29 receipt SHA獨算已通；held29／普通GET及import外網0、19表全欄／typeof保留、guards0。唯一數值／版本／逐次UTC見[來源 §18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)。 |
+| 觀測界線 | PROBE-1取1body後ZoneInfo formatter缺tzdata exit1／未完整驗、byteshash未知；PROBE-2獨立4GET146640B，production29GET3774364B為另一新觀測。合計34GET分三觀測，不稱一批34／全部bytes已知／peak memory。新8/26 daily144084B在成功probe與production同body、不同capture／receipt。 |
+| 操作／清理 | 14unique可信form／84 DOM net及起迄／actual missing0、14 outerSUMMARY／2520金融欄、兩股390×844新8/26 nested原列／拒用已核；13組日期explicit390×844、首viewport未獨印。詳見[個股頁 §23](STOCK_RESEARCH_PAGE.md#23-m1-w7七截止法人窗口與原件追溯)。唯一owned page已close／tabs=[]，exact API／Node／esbuild及children與8781／82 listeners後驗absent。API Ctrl+C rawexit1／shutdown preserved guards0；Node兩Ctrl+C後final guard無觀測、root核exact1856後Stop-Process exit0／PTY rawexit1；esbuild exit3221225786／signalnull。見[開發入口](development-baseline/README.md#m1-w7-七截止法人窗口的零落盤驗證入口)。 |
+| 未完成邊界 | 非PIT／修訂、trend／研究條件／Signal、raw保存／跨程序讀回／正式DB；突破／回踩gate不由補資料解除。缺／壞8/26僅synthetic API／SSR，不稱actual缺日native；catalog／price seed synthetic不證真行情。新375 viewport／原生水平手勢／physical canvas／Vite／production build／pending導航race及範圍外仍未驗。 |
+| 分報／停滯 | 核心操作+1＝新增9/22並保六cutoff；真dependency+1＝真8/26／完整26日曆／新pins；新獨立reliability改善0，stall0。W6 preview guard改善附帶1、非獨立batch；P6d／P6e歷史至少2批可靠性無核心、更早unknown。Planning／fixture／bootstrap／文書／索引／Git不計產品batch，不重置；前兩項皆無則+1，連續兩批須重選。 |
 
-下一核心候選M1-W7：同兩股新增9/22、保留六cutoff／七截止。新8/26 dataset11856 daily未取得／准入；候選26sessions／29GET（3index＋26daily）／55MiB，9/22恰20、5日起9/16／20日起8/26。下一formal接手後先驗真來源全列／兩股金融欄及新完整calendar／consumer policy／external pins，再exact計算／API／native，不由W6放行。W6待文件接受→freeze→index／coverage→核准commit→核對後另准master merge；無positive路徑依證改必要來源／時間／版本／tick／費稅／合法時段及磁碟／跨程序gate齊的最小M3或等待，不空轉／降gate。
+原Python8worker／5API首exit0，Node非pinned20.19.4後explicit24.19.0補noEmit／90SSR／84mock net通；backend/.venv錯metadata、browser namespace／connectionclosed／@ref／focus無trusted／normcase(None)／月末9/31空draft0submit／String.raw／os206等原錯與補驗留原task及開發入口，不改原exit、不重跑已通8組。無reload／restart／newpage／來源重取或新增產物；os206非approval review。
 
-Root probe首shared httpx未明示ModuleNotFoundError exit1／無寫，修shared paths後exit0；root raw-reader首誤code純數字AssertionError及detail path KeyError各exit1，修正後exit0／無重取。Native snapshot／tabswitch focus／wait URL glob connectionclosed各exit1，exact terminal及existing tab focus後有效；PS eval quoting、CSS ack未open／trusted檢查及helper date-string JSON誤parse（0submit／9/24draft）原錯留task，scroll setup及修reader同date up／down後可信submit才接受。無reload／新page／來源重取，snapshot trunc僅tool output。390inner／body clientWidth375／wrapper303／table780／auto（15px scrollbar）已核，goto曾reset desktop再set390；375新驗／native橫向／canvas／Vite／build／pending導航race未驗，route setup非native市場導航。
+下一單一核心候選M1-W8：同兩股加9/21保七cutoff，新free dataset11856 `d=115/08/25` daily尚未取得／驗／准入；下一新root先核8/25真來源、完整8/25～10/2 bounded日曆／新policy及pins。27sessions／30GET／57MiB、9/21應恰20／5start9/15／20start8/25僅候選待正面核，不預先取8/25。無positive path依證選必要gate全齊最小M3或waiting，不空轉／降gate。W7待七文件接受→freeze→index／coverage→核准commit→root核後另准master merge；最終receipt留原task，不為回寫hash重索引／提交。
 
-Root actual page once close／tabs=[]，API37524／shell55520、Node25384／shell43920／esbuild43476及children後驗absent，8781／8782 listeners0。兩serve Ctrl+C raw exit1；API19表preserved／guards0、Node SIGINT／final guards0已核，esbuild自身exit未知，不補exit0。Actual missing0；缺／壞8/27仍mock API／SSR，不稱actual缺日native。
+## W6已接受版本與指定外清結果
+
+W6 FREEZE-W6-1 source6／docs7共13files575325B、net+49586B（source27035／docs22551），13blob逐byte／hash、六coverage／root複核、本地commit與另准master FF均完成；正式SHA `67e032f7e73b93a0f56196836d946502a6deed84`、唯一parent `56c745861e1d96a88fb179561165a4dd3d81725a`。原task正式receipt覆蓋舊doc pending、不為hash重刷。W6來源／72 net／API／native／owned服務清理有限接受仍有效，權威在[來源 §17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)／[個股頁 §22](STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯)，不外推完整M1。
+
+新index_git已承接W6外owner；exact terminal唯一close exit0／ptyKilled=true、post operator_close／list=[]；root一次set_thread_archived exact4，post四notLoaded／historyexists，保留歷史不永久刪除。根移除在parse階段失敗，永久NO-RETRY，清理失敗不否定有效W6合併或W7驗收。
+
+| W6指定資源 | Exact結果／殘留與NO-RETRY |
+| --- | --- |
+| 四角色／terminal | Root `01a10803-5b84-7e92-b252-bdf48a8b51d5`；child `01a10807-ac3a-7c21-8613-05dcf1665e84`／`01a10808-2845-7212-a762-ee78399a701f`／`01a10808-b97a-7720-986f-3814e64af40f`；terminal `term_55fa5540-b620-4228-b784-2070e6b4c4d9`已close／absent。四history保留，最後bytes依序8821563／2360953／2076631／2270827；archive／notLoaded已核，不恢復角色。 |
+| Worktree／branch | `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-window-sixth-cutoff-20261005`、branch同末段保留；225files（224tracked＋.git110B）／14subdirs／4294238B。CLEAN-W6-PREFLIGHT-1A all-ancestor actual owner含profile SYSTEM／canonical／nonreparse／fresh Git只讀gate核通，owner SID首格式錯補正、原錯保留。CLEAN-W6-RM-1 inline Python -c引號剝除SyntaxError／exit1在parse階段，CreateFileW0、exclusive未執行、Orca rm0／delete0；root正式永久NO-RETRY，不修引號／stdin或換root／角色／工具／指令再做，不kill。此非sharing violation或approval review。 |
+| 六App index／DB | 前綴 `taiwan-stock-research-roadmap-m1-window-sixth-cutoff-20261005-`；suffix backend-app／backend-worker／backend-tests／frontend-src／tools／docs；六DB bytes依序9633792／7143424／16842752／5046272／3145728／2490368，共44302336B retained。根未移除，禁止App delete／DB delete；18fixed aux此前absent、stage／其他aux未知，不掃cache。 |
+| Returned logs另案NO-RETRY | `C:/Users/YiCheng/cbm-cache/logs/taiwan-stock-research-roadmap-m1-window-sixth-cutoff-20261005-backend-tests-1791141319.log`281B及`C:/Users/YiCheng/cbm-cache/logs/taiwan-stock-research-roadmap-m1-window-sixth-cutoff-20261005-tools-1791141327.log`408B，共689B retained。CLEAN-W6-LOG-1 strict slash／backslash比較實作canonical=false、0delete／exclusive及predelete未做；root正式NO-RETRY，不normalization／換roletoolcommand補刪，非approval blocked。與根移除parse失敗及六DB保留分開。 |
 
 ## W5已接受成果與版本封存
 
-W5 `FREEZE-W5-1` source8／docs7共15檔逐byte／hash、六區coverage、本地commit、root核對及另准master FF均完成；本輪基底 `56c745861e1d96a88fb179561165a4dd3d81725a`，parent `b93c75954f0d954fec79e2f41ad21a0636b7cbe3`。原task正式receipt覆蓋舊文書pending，不為hash重刷／提交。W5新8/28／24日曆、五截止60net／actual API、具名可信native與owned服務清理已有限接受；歷史數值／版本見[來源 §16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)，10表單、來源外層／窄版原列／拒用及未驗邊界見[個股頁 §21](STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯)。不外推範圍外／PIT／保存／研究條件；原quote／connection／os206／snapshot截斷／unsupported setup等失敗及完整測試／退出留W5原task／Git。
+W5 `FREEZE-W5-1` source8／docs7共15檔逐byte／hash、六區coverage、本地commit、root核對及另准master FF均完成；W6起始基底 `56c745861e1d96a88fb179561165a4dd3d81725a`，parent `b93c75954f0d954fec79e2f41ad21a0636b7cbe3`。原task正式receipt覆蓋舊文書pending，不為hash重刷／提交。W5新8/28／24日曆、五截止60net／actual API、具名可信native與owned服務清理已有限接受；歷史數值／版本見[來源 §16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)，10表單、來源外層／窄版原列／拒用及未驗邊界見[個股頁 §21](STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯)。不外推範圍外／PIT／保存／研究條件；原quote／connection／os206／snapshot截斷／unsupported setup等失敗及完整測試／退出留W5原task／Git。
 
 ## 指定W5外清：四history已封存，根被占用NO-RETRY
 
-本輪index_git已承接W5 worktree外owner。Root新鮮核old root notLoaded／last task completed、三old child idle、exact terminal operator_close absence／exitCause與Git兩根clean／merged後，單次exact set_thread_archived將W5root archived=true；獨立後驗四ID全notLoaded／archived_sessions path／historyexists。Terminal actor／close command／ptyKilled仍未觀測，不重送close、不追認本owner執行close。CLEAN-W5-PREFLIGHT-1完整只讀gate後exact根share-none readonly open因WinError32停止，0rm／0delete、NO-RETRY；清理失敗不否定W5合併或W6有效產品驗收。
+W6 index_git已承接W5 worktree外owner。Root新鮮核old root notLoaded／last task completed、三old child idle、exact terminal operator_close absence／exitCause與Git兩根clean／merged後，單次exact set_thread_archived將W5root archived=true；獨立後驗四ID全notLoaded／archived_sessions path／historyexists。Terminal actor／close command／ptyKilled仍未觀測，不重送close、不追認本owner執行close。CLEAN-W5-PREFLIGHT-1完整只讀gate後exact根share-none readonly open因WinError32停止，0rm／0delete、NO-RETRY；清理失敗不否定W5合併或W6有效產品驗收。
 
 | W5指定資源 | Exact範圍／順序與目前限制 |
 | --- | --- |
