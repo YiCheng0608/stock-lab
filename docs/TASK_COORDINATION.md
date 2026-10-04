@@ -2,7 +2,25 @@
 
 本文件保留目前角色、接手與執行狀態，以及最近產品交付的實際 roster／驗收邊界；流程依 [AGENTS](../AGENTS.md)，能力與優先順序查 [ROADMAP](ROADMAP.md)。
 
-## 目前：M3-P6d 已有限接受，六文件 review 後才 freeze
+## 獨立文件維護／目前狀態
+
+2026-10-04 依使用者「幫我修正一下文件」在 `master` 原 checkout 進行獨立維護；主線已接受版本為 `0f8ac4ab3af8ec44353c2181eb18ae3c9a9fe6cb`。本次只修正本文件、ROADMAP、ROADMAP_EXECUTION 與 STOCK_RESEARCH_PAGE 的能力判斷、固定保守回應、依賴及下一優先，不改產品目標、程式、AGENTS 或來源契約。實際配置與接手如下；本維護不是新產品 round，也不宣稱產品統籌啟動 gate 通過。
+
+| 本次維護角色 | thread ID／實際配置 | 分工與接手 |
+| --- | --- | --- |
+| 維護 root | `01a1052c-252d-7a42-bcf9-5f87fafa57a4`；`gpt-6.1-sol`／`xhigh` | 核定四文件內容與驗收，已核自身及子角色實際 runtime／共同 cwd／Git；不重新派產品工作。 |
+| 文件 | `01a10535-63f3-7b51-a95b-973b51c6c831`；`gpt-6.1-sol`／`xhigh` | 已接手，只寫上述四檔；交付文件差異、連結／UTF-8／LF及一致性檢查後停寫待 root review，不自行結案。 |
+| 索引與 Git commit | `01a10536-e958-7b23-9926-ecbec0cfc6c0`；`gpt-6-luna`／`medium` | 已只讀接手，待四文件接受／freeze 後才依 root 明授刷新涉及分區、驗 coverage 及本地 commit；最終 hash／收據留 task，不為回寫反覆刷新提交。 |
+
+上述子角色 parent 均為維護 root，共同 cwd 為 `C:/Users/YiCheng/Desktop/taiwan-stock-research`、branch `master`、起始 HEAD 同上。App MCP list／status／coverage 可用，docs ready，相關文件 `metadata_changed` 已補讀原文；不輪初／中途刷新。本次額外測試、暫存、附件、落盤及殘留為 0，不跑完整 backend、不建 DB，舊資源清理 0。
+
+**產品狀態另列**：P6d 已有限接受、freeze／輪末索引／正常本地 commit／master ff-only merge 至上述主線版本。P6e 既有統籌為 `01a104ef-f17a-7f81-9ba6-c2d7483d6891`（`gpt-6.1-sol`／`ultra`），worktree 為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m3-stock-detail-independent-read-isolation-20261004`，branch 為 `roadmap-m3-stock-detail-independent-read-isolation-20261004`、起始 HEAD 同上。最初原文核對時 actual HTTP／App 尚待驗；維護 root 隨後以原可見 terminal／thread 核實新進度：原統籌已有限接受來源與具名操作，自有伺服器／程序／listener／tab 已清、新落盤／殘留 0，六文件正在更新及 review，aggregate freeze／索引／commit／master 整合待確認。精確接受範圍以該輪更新契約及原 task 為準。本次不啟動、恢復、重派、修改或擴大該任務，不解除任何暫停。
+
+本次四檔與 P6e 六文件有重疊；維護 root 已與 P6e 原統籌討論文字衝突，對方確認先不合併、不開新輪或清理，收到本維護 commit SHA 後由原文件角色整合兩邊內容及新實測，再 review→freeze→原索引角色刷新／commit，主線合併另待核實。須先完成本維護接受／freeze／輪末索引／coverage／本地 commit，目前不稱已整合。P6e 保留本次能力／優先說明及該輪實測／歷史邊界，不覆蓋主線維護；後續選題雙方已同意依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑) 對應新增操作或具名核心依賴解除，不預設隔離輪。最終收據留本維護 task。
+
+## 最近 M3-P6d 交付：封存前歷史狀態
+
+以下保留 P6d 原 roster、驗收、失敗及清理記錄；「本輪」與未 freeze／commit／merge 語句是封存前當時狀態，目前版本狀態以上方為準，不恢復舊角色派工權。
 
 本輪從 M3-P6c 最新已驗收且乾淨的 `master` 建立獨立 worktree／branch，支援 M3／R2-C2 的「個股詳情研究候選讀回污染隔離」九檔實作、必要 direct／actual HTTP／完整 App 讀回與五個桌面 case 已由統籌**有限接受**；候選 status 非字串 coercion 的單項退修／必要 pure 補驗亦已接受，來源停寫。精確契約與 native／DOM.click 支持界線集中見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)，原始 exit／方法與副作用見[開發入口](development-baseline/README.md#m3-p6d-個股研究候選讀回的零落盤驗證入口)。新四角色、可見名單與正式接手已由舊統籌獨立接受，initial TASK review `64cb72`／`852be3`、後續 scope／cleanup review 與 final handover receipt 留 task。六文件接受後才 aggregate freeze，輪末索引／commit／merge 尚未執行；不升格完整 M1／M3，不改 P6c 歷史實測或未驗界線。
 

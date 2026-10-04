@@ -142,11 +142,13 @@ M1-P1 新增個股研究總覽、日期套用／最新資料操作，以及獨�
 
 | 區塊 | 本批結果 | 待補條件 |
 | --- | --- | --- |
-| 外資／投信／自營商 5／20 日 | `institutional.status=unavailable`、`values=null`；顯示法人來源及交易日基準尚待核對，不補零、融資不併入。 | T86／dailyTrade 等所採 exact 來源及用途准入、交易日基準、逐法人欄位／單位／缺日 coverage 與窗口版本。 |
-| 突破／回踩條件 | 沿用 `breakout_v1`／`pullback_v1` identity，列既有結果日期／版本；本批均為 `data_insufficient`，附來源、時間、分類及結果缺失／早於截止的原因。 | 必要輸入、來源、時間與分類 gate 具體滿足後才可判「成立／未成立」；requires、過期 signals 或價位存在都不算通過。 |
+| 外資／投信／自營商 5／20 日 | 目前 `build_stock_overview` 固定回傳 `institutional.status=unavailable`、`values=null`；原因依單日區塊是否可用而異，不補零、融資不併入。 | 本批採用的 exact 多日法人來源及用途准入、交易日基準、逐法人欄位／單位／缺日 coverage、窗口計算與 API／UI 接線驗收。 |
+| 突破／回踩條件 | `conditions` 中的 `breakout_v1`／`pullback_v1` 固定為 `status=data_insufficient`，即使已有 Signal 亦同；日期、版本與 `reasons` 依讀回記錄改變。 | 必要輸入、來源、時間與適用分類 gate、版本化規則計算及 API／UI 接線驗收均滿足後，才可判「成立／未成立」；Signal 或價位存在不算通過。 |
 | 新聞與官方事件入口 | 可切到既有新聞／公告分頁，保留原時間與來源連結；`events.status=unavailable`，顯示原件 consumer 與來源時間待驗。 | 具名事件原件、consumer、發布／事件時間、來源用途與相應 coverage 驗收；入口不是已驗收催化劑，不推論價格影響。 |
 
 M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已有限 review，契約與單日兩檔支持範圍見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。M1-P2a 本身未接總覽 API／UI 或 5／20 交易日窗口；後續 M1-P2b 的獨立單日原件接線見[第 10 節](#10-m1-p2b單日法人原件總覽接線)，上表多日 `institutional` unavailable 契約維持，單日 CLI 數值不作前端 fallback。
+
+上述兩項固定狀態是核心能力尚未接通的保守回應，不能解讀為本次行情或使用者設定暫時缺資料。補入資料或換研究截止不會自動啟用 5／20 日計算或條件判定；仍須先具名驗證來源、交易日與缺日證據，再完成窗口／規則計算、API／UI 接線及產品驗收，解除條件見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。條件原因會反映來源／時間／分類待核實、記錄缺失、無法定位、讀值無效或早於截止；原因變動不代表已能判定成立或未成立。分類是否必要須按所採策略／場景核對，不假定所有場景可省；門檻未滿足仍保持資料不足，不補零或猜結論。已准入且有限接受的 TPEx 單日能力依 §10 保留，不與多日窗口混用。
 
 後續 M1-P3b 已以獨立觀測日期 gate 接 selected 官方事件，具名支持範圍見[第 11 節](#11-m1-p3bselected-官方事件總覽接線)；發布／首次可得時間仍 unknown，完整事件 coverage 與研究條件缺口保留。
 
@@ -458,7 +460,7 @@ stored syntax known 但 M1 `overview.price.status=unavailable` 只表示未准�
 
 ## 16. M3-P6d：個股詳情研究候選讀回污染隔離
 
-本批支援 M3／R2-C2，stock／instrument detail 的 Signal／StrategyVersion 原始讀回、必要 decision／overview caller、actual API／完整 App 讀回及下述具名操作已由統籌**有限接受**。候選 read.status 非字串 coercion 的單項退修／必要補驗亦已接受，來源停寫；六文件 review 接受後才 aggregate freeze／輪末索引，commit／merge 尚未執行。本節負責精確契約，新增中文提示見 [UI 文案](UI_COPY_SPEC.md#102-個股詳情的第一屏)，命令、副作用、原始失敗與數量見[開發入口](development-baseline/README.md#m3-p6d-個股研究候選讀回的零落盤驗證入口)。P6c 的行情、來源／原件與未驗界線保留，不倒改其歷史測試。
+本批支援 M3／R2-C2，stock／instrument detail 的 Signal／StrategyVersion 原始讀回、必要 decision／overview caller、actual API／完整 App 讀回及下述具名操作已由統籌**有限接受**。候選 read.status 非字串 coercion 的單項退修／必要補驗亦已接受；九檔實作與六文件已 aggregate freeze／輪末索引／正常本地 commit／master ff-only merge，主線已接受版本為 `0f8ac4a`，版本收據留原 task。本節負責精確契約，新增中文提示見 [UI 文案](UI_COPY_SPEC.md#102-個股詳情的第一屏)，命令、副作用、原始失敗與數量見[開發入口](development-baseline/README.md#m3-p6d-個股研究候選讀回的零落盤驗證入口)。P6c 的行情、來源／原件與未驗界線保留，不倒改其歷史測試。
 
 ### 16.1 只在個股路徑啟用的原始投影
 
