@@ -573,7 +573,7 @@ SQL None 的 features_json 只核 pure projection，不聲稱存進 NOT NULL 欄
 
 ## 18. M1-W2：同截止法人窗口與原件追溯
 
-本節保留 W2 的歷史版本／單截止操作；現行三截止與新版來源沿[§19](#19-m1-w3三截止法人窗口與原件追溯)。
+本節保留 W2 的歷史版本／單截止操作；現行四截止與新版來源沿[§20](#20-m1-w4四截止法人窗口與原件追溯)。
 
 **實際原件→API／UI 及下述操作已有限接受。** 支持 TPEx 3105／6488、唯一共用 `as_of=2026-10-02`；總覽 `stock-overview/w2-v1`、法人 `institutional-windows/w2-v1`。來源、policy pins、22日曆／20日原件、單位／缺日與計算版本沿用[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，不放寬 P2b 單日或其他來源。
 
@@ -598,6 +598,8 @@ Server 必須 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。`POST /
 5個新 API case、18 SSR、full-src noEmit、mock product HTTP已有限接受；Vite build未跑，字型僅fallback，physical canvas／pending導航 race 未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件與磁碟保存仍缺，完整 M1 未完成。驗證入口見[開發文件](development-baseline/README.md#m1-w2-法人窗口的零落盤驗證入口)，細命令／UTC／full hashes 留原 task。
 
 ## 19. M1-W3：三截止法人窗口與原件追溯
+
+本節保留 W3歷史版本／三截止操作；現行四截止見[§20](#20-m1-w4四截止法人窗口與原件追溯)。
 
 **實際原件→API／完整 App 原生操作已有限接受。** 支持 TPEx 3105／6488、共用 `as_of` 為2026-09-30／10-01／10-02；總覽 `stock-overview/w3-v1`、法人 `institutional-windows/w3-v1`、worker `tpex-institutional-window/w3-v1`。當次 policy／來源版本、完整日曆、窗口與36 net參考由[來源 §14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)管理；§18及§13來源 W1 pins僅為歷史，不作本版設定。
 
@@ -624,4 +626,35 @@ Server 必須 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。`POST /
 
 兩股／三截止 actual API的6組 detail.overview等於直接overview，cutoff／版本／batch一致；原件與重複 API字串核對集中[來源 §14.4](SOURCE_REGISTRY.md#144-w3-真資料與有限數值核對)。19表全欄／typeof由 before至 shutdown不變、reader exit0／guard0，測試及自有服務清理見[開發入口](development-baseline/README.md#m1-w3-三截止法人窗口的零落盤驗證入口)。
 
-worker7、actual router5、24 SSR、full-src noEmit及 mock product HTTP／BigInt36 net已有限接受。完整 backend／舊 ZIP／live未重跑；horizontal原生手勢、physical canvas、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件、原件保存與跨程序讀回及完整 M1未完成；9/29是下一輪候選，未被本版放行。
+worker7、actual router5、24 SSR、full-src noEmit及 mock product HTTP／BigInt36 net已有限接受。完整 backend／舊 ZIP／live未重跑；horizontal原生手勢、physical canvas、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE、修訂／PIT、研究條件、原件保存與跨程序讀回及完整 M1未完成；W3本版未放行9/29；後續 W4新範圍另見§20。
+
+## 20. M1-W4：四截止法人窗口與原件追溯
+
+**實際原件→API及兩股各四 cutoff可信原生表單操作已有限接受。** 支持 TPEx3105／6488、共用 `as_of=2026-09-29／09-30／10-01／10-02`；總覽 `stock-overview/w4-v1`、法人 `institutional-windows/w4-v1`、worker `tpex-institutional-window/w4-v1`。來源、policy pins、23日曆／全月 index核對及唯一48 net真值見[來源 §15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)，W1–W3設定與觀測只保留歷史。
+
+### 20.1 共用截止、一次取得及精確呈現
+
+沿 exact server opt-in `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`及既有 capture POST。先核標的存在與 supported cutoff；W4 first actual API POST為3105／9/29，新取3 month＋23 daily。後續兩股 POST／detail／overview GET重驗 held同26份 process-memory原件；普通 GET／import零外網、不寫 DB／檔案。鎖／一次嘗試、拒 retry／refresh／較早 fallback及重啟須新觀測界線不變，原生操作讀同一 instance。
+
+日期原生「套用截止」後每窗採同 cutoff，canonical整數字串以 BigInt千分位、單位股；5／20日各列三類 net及 required／valid／missing／invalid dates。八組兩股／四截止共48 DOM net對獨立真值，from／to正確且 missing0；缺日按窗拒用，不補零、縮窗或採 future／earlier值。
+
+來源詳情保留 TPEx署名／政府資料集／授權、exact URL／日原列序／buy／sell／net、body／receipt SHA／UTC及 policy／source／calendar／calculation版本。月原件顯示完整月已驗列數、有界採用列數及界線前已驗但未採用列數；8月為21／1／20。日窗口只顯≤cutoff的 required daily evidence，不把界線前已驗 index或 union未來日加入。發布／first availability／revision unknown、PIT unsupported；突破／回踩固定保守，P2b單日與其他來源區塊保持獨立。
+
+### 20.2 具名原生操作與驗收邊界
+
+| 操作 | 已接受的有限結果 |
+| --- | --- |
+| 兩股四截止切換 | 同完整 App／held instance，3105、6488各原生日期填寫及可信 form submit四截止；48 DOM net、5／20日起迄與missing0均核通。兩股各一次可信 BUTTON click的repeat POST仍 held26，不新增來源取得。 |
+| 不支持 cutoff | 6488原生提交9/28後舊 net消失／窗口button0，原生恢復9/29讀 held值已接受；source request_count仍26。 |
+| 390×844新增原列 | 在390×844，兩股原生 trusted SUMMARY展開8/31原列：3105列176／6488列645、各九個 DOM raw金融欄位及 hash／v3 source version均與原件一致。另一次375×844窄版量測為 innerWidth375、body scrollWidth360（15px垂直 scrollbar）、wrapper288／table780、overflow auto；定位／scroll setup不列原生橫向手勢。 |
+| 範圍外市場 | TWSE3105／9/29 route DOM為資料不足／無舊數值／窗口button0已核；route setup不稱原生市場導航。 |
+
+其後六組 source outer SUMMARY（兩股×9/30／10/1／10/2）各原生展開；20個 required日列／日期≤cutoff及每組180個 buy／sell／net raw欄位均以 DOM/textContent核對（含未原生展開的子表），合計1080欄對獨立原件。9/29兩股來源的 policy／calendar／日列及8/31新原列亦已核。
+
+初期 connection failure、JS quoting錯誤、locator參數錯誤、鍵盤／type ack無輸入、視口外窄版定位及6488轉頁後0可信事件均不計成功。後續同 visible terminal切回、tab focus／locator及原生方向鍵分段操作才核可信表單；一次 same-owned-page reload不重取 source。Win32 focus回false不是成功，Computer Use guide讀取未發生 GUI操作／operation file。細節原失敗與 setup留 task，不把工具 ack、DOM定位或 readback當原生輸入證據。
+
+### 20.3 驗證與尚缺邊界
+
+來源／actual API數值核對集中[§15.4](SOURCE_REGISTRY.md#154-w4真資料與唯一48-net參考)；19表全欄／typeof及guards、具名測試補驗與服務清理界線見[開發入口](development-baseline/README.md#m1-w4-四截止法人窗口的零落盤驗證入口)。Worker9首跑exit0；API首suite exit1的失敗保留，僅修正後具名 first-post案例補驗exit0；noEmit／40 SSR／48 mock HTTP BigInt net exit0。本輪 actual API／具名原生操作及 owned服務清理已有限接受。缺／錯8/31造成局部窗口失效由必要 synthetic API／SSR驗證，不稱 actual缺日原生操作。
+
+未重跑 legacy／ZIP／old live／完整 backend；physical canvas、原生橫向手勢、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE數值、修訂／PIT、研究條件、raw保存／跨程序讀回與完整 M1未完成；W5新9/24及8/28 daily未取得／准入，不由本版放行。

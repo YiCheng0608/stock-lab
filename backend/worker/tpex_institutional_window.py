@@ -3,7 +3,7 @@
 Only ``MemoryWindowCache.load`` can make requests, and callers must explicitly
 select the pinned policy/profile. ``summarize_window_captures`` and cache reads
 never fetch, write, discover files, import the application, or infer closed days.
-This contract covers two securities and three retrospective data-date cutoffs;
+This contract covers two securities and four retrospective data-date cutoffs;
 observation time is not publication, first availability, or historical PIT.
 """
 from __future__ import annotations
@@ -21,25 +21,25 @@ import re
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
-VERSION = "tpex-institutional-window/w3-v1"
-POLICY_VERSION = "m1-w3-tpex-window-2026-10-04.1"
+VERSION = "tpex-institutional-window/w4-v1"
+POLICY_VERSION = "m1-w4-tpex-window-2026-10-04.1"
 PROFILE = "free_public_local"
-CALENDAR_VERSION = "tpex-2026-09-01_2026-10-02-weekdays-11503027221/v1"
+CALENDAR_VERSION = "tpex-2026-08-31_2026-10-02-weekdays-11503027221/v1"
 CALCULATION_VERSION = "independent-net-sum/expected-session-inclusive-v1"
 DAILY_SOURCE_ID = "tpex_government_institutional_csv"
 INDEX_SOURCE_ID = "tpex_government_index_csv"
 DAILY_BASE_URL = "https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data"
 INDEX_BASE_URL = "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data"
-START = date(2026, 9, 1)
+START = date(2026, 8, 31)
 CUTOFF = date(2026, 10, 2)
-CUTOFFS = (date(2026, 9, 30), date(2026, 10, 1), CUTOFF)
+CUTOFFS = (date(2026, 9, 29), date(2026, 9, 30), date(2026, 10, 1), CUTOFF)
 SYMBOLS = ("3105", "6488")
 CLOSED_DATES = (date(2026, 9, 25), date(2026, 9, 28))
-MONTH_REQUESTS = (date(2026, 9, 1), date(2026, 10, 1))
+MONTH_REQUESTS = (date(2026, 8, 1), date(2026, 9, 1), date(2026, 10, 1))
 MAX_DAILY_BYTES = 2 * 1024 * 1024
 MAX_INDEX_BYTES = 1024 * 1024
-MAX_TOTAL_BYTES = 46 * 1024 * 1024
-MAX_REQUESTS = 24
+MAX_TOTAL_BYTES = 49 * 1024 * 1024
+MAX_REQUESTS = 26
 TIMEOUT_SECONDS = 15.0
 MAX_DAILY_SHARES = 9223372036854775807
 INVESTORS = ("foreign", "trust", "dealer")
@@ -80,16 +80,18 @@ _POLICY = {
     "scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "supported_cutoffs": [day.isoformat() for day in CUTOFFS],
               "calendar_from": START.isoformat(), "calendar_to": CUTOFF.isoformat()},
     "sources": {
-        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-04/v2",
+        DAILY_SOURCE_ID: {"source_version": "dataset-11856-dated-csv-observed-2026-10-04/v3",
                           "government_dataset": "https://data.gov.tw/dataset/11856", "exact_url": DAILY_BASE_URL,
                           "method": "GET", "date_parameter": "d=ROC_YYY/MM/DD", "header": list(DAILY_HEADER),
                           "max_body_bytes": MAX_DAILY_BYTES,
                           "purposes": {**{purpose: "admitted" for purpose in ("local_fetch", "raw_store", "summarize")},
                                        "historical_pit": "unsupported"}},
-        INDEX_SOURCE_ID: {"source_version": "dataset-11391-month-csv-observed-2026-10-04/v1",
+        INDEX_SOURCE_ID: {"source_version": "dataset-11391-month-csv-observed-2026-10-04/v2",
                           "government_dataset": "https://data.gov.tw/dataset/11391", "exact_url": INDEX_BASE_URL,
                           "method": "GET", "date_parameter": "date=YYYY/MM/01", "header": list(INDEX_HEADER),
                           "max_body_bytes": MAX_INDEX_BYTES,
+                          "row_validation_scope": "all_returned_month_rows",
+                          "calendar_adoption": "bounded_dates_only; pre_calendar_rows_validated_not_adopted",
                           "purposes": {**{purpose: "admitted" for purpose in ("local_fetch", "raw_store", "summarize")},
                                        "historical_pit": "unsupported"}},
     },
@@ -111,7 +113,7 @@ _POLICY = {
 }
 # External pin for this reviewed policy version. Editing the policy cannot
 # silently change the expected digest; a new policy needs explicit repinning.
-POLICY_DIGEST = "sha256:9de27224cc57512f4e38455717eb51f8512eb890667119a5d02444810e0ad4db"
+POLICY_DIGEST = "sha256:576e72676c23efedd3fc857a90e57c2e58f438a8669ba39dea2faa132f7616df"
 
 
 class WindowEvidenceError(ValueError):
@@ -328,20 +330,30 @@ def _decimal(value: str, *, positive: bool) -> Decimal:
 
 
 def _index(capture: CapturedCSV) -> tuple[dict, dict]:
+    """Validate every returned monthly row before adopting the bounded dates."""
     _require(capture.source_id == INDEX_SOURCE_ID, "index_source_mismatch")
     receipt = _check_capture(capture)
-    selected = {}
-    for ordinal, row in enumerate(_rows(capture.body, INDEX_HEADER), 1):
+    selected, seen, pre_calendar_count = {}, set(), 0
+    rows = _rows(capture.body, INDEX_HEADER)
+    for ordinal, row in enumerate(rows, 1):
         day = _market_date(row[0], roc=False)
-        _require(START <= day <= CUTOFF and (day.year, day.month) == (capture.requested_date.year, capture.requested_date.month),
+        _require(day <= CUTOFF and (day.year, day.month) == (capture.requested_date.year, capture.requested_date.month),
                  "index_date_outside_scope")
-        _require(day not in selected, "index_date_duplicate")
-        _require(day in EXPECTED_SESSIONS, "index_closed_date_conflict")
+        _require(day not in seen, "index_date_duplicate")
+        seen.add(day)
+        _require(day.weekday() < 5, "index_closed_date_conflict")
         opening, high, low, close = (_decimal(value, positive=True) for value in row[1:5])
         _decimal(row[5], positive=False)
         _require(low <= min(opening, close) <= max(opening, close) <= high, "index_ohlc_bounds_invalid")
+        if day < START:
+            _require(capture.requested_date == MONTH_REQUESTS[0], "index_date_outside_scope")
+            pre_calendar_count += 1
+            continue
+        _require(day in EXPECTED_SESSIONS, "index_closed_date_conflict")
         selected[day] = {"date": day.isoformat(), "row_ordinal": ordinal, "source_values": dict(zip(INDEX_HEADER, row)),
                          "body_sha256": receipt["body_sha256"]}
+    receipt.update(candidate_count=len(rows), adopted_count=len(selected),
+                   pre_calendar_row_count=pre_calendar_count, validation_scope="all_returned_month_rows")
     return selected, receipt
 
 
@@ -519,7 +531,7 @@ class MemoryWindowCache:
                     _require(self.request_count < MAX_REQUESTS, "request_count_limit")
                     self.request_count += 1
                     with client.stream("GET", url, headers={"Accept-Encoding": "identity",
-                                                            "User-Agent": "taiwan-stock-research/tpex-window-w3"}) as response:
+                                                            "User-Agent": "taiwan-stock-research/tpex-window-w4"}) as response:
                         status = response.status_code
                         content_type = response.headers.get("Content-Type", "")
                         content_encoding = response.headers.get("Content-Encoding", "identity")

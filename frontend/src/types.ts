@@ -529,6 +529,7 @@ export type InstitutionalWindowReceipt = {
   source_id: string; source_version: string; requested_date: string; url: string; method: string
   body_sha256: string; receipt_sha256?: string; body_bytes: number; request_started_at: string; captured_at: string
   policy_version: string; policy_digest: string; profile: string; historical_pit: string
+  candidate_count?: number; adopted_count?: number; pre_calendar_row_count?: number; validation_scope?: string
 }
 
 export type InstitutionalWindow = {

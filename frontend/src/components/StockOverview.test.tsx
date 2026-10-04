@@ -3,7 +3,7 @@ import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOver
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
 
-const windowOnly = (globalThis as typeof globalThis & { __institutionalWindowSSRSelection?: string }).__institutionalWindowSSRSelection === 'w3-only'
+const windowOnly = ['w3-only', 'w4-only'].includes((globalThis as typeof globalThis & { __institutionalWindowSSRSelection?: string }).__institutionalWindowSSRSelection ?? '')
 let originalAssertionCount = 0
 function expect(condition: boolean, message: string): void {
   originalAssertionCount += 1
@@ -190,13 +190,13 @@ export function runInstitutionalWindowSSRTests(render: (element: ReactElement) =
   return 18
 }
 
-export function runInstitutionalWindowCutoffSSRTests(render: (element: ReactElement) => string): number {
+export function runInstitutionalWindowCutoffSSRTests(render: (element: ReactElement) => string, earlier = false): number {
   let checks = 0
   const verify = (condition: boolean, message: string) => { checks++; if (!condition) throw new Error(message) }
-  const sessions = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-07', '2026-09-08',
+  const sessions = [...(earlier ? ['2026-08-31'] : []), '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-07', '2026-09-08',
     '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18',
     '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02']
-  const cutoffs = ['2026-09-30', '2026-10-01', '2026-10-02']
+  const cutoffs = [...(earlier ? ['2026-09-29'] : []), '2026-09-30', '2026-10-01', '2026-10-02']
   for (const [offset, cutoff] of cutoffs.entries()) {
     const dates = sessions.slice(offset, offset + 20)
     const windows = Object.fromEntries([5, 20].map((horizon) => {
@@ -210,18 +210,24 @@ export function runInstitutionalWindowCutoffSSRTests(render: (element: ReactElem
             policy_version: 'test', policy_digest: 'test', profile: 'free_public_local', historical_pit: 'unsupported' } })) }]
     })) as NonNullable<InstitutionalWindowsData['windows']>
     const base: InstitutionalWindowsData = {
-      version: 'institutional-windows/w3-v1', status: 'available', as_of: cutoff, horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
+      version: earlier ? 'institutional-windows/w4-v1' : 'institutional-windows/w3-v1', status: 'available', as_of: cutoff, horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: [],
       unit: 'shares', quantity_encoding: 'canonical_integer_string', historical_pit: 'unsupported', windows,
-      supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], supported_cutoffs: cutoffs, calendar_from: sessions[0], calendar_to: sessions[21] },
-      calendar: { version: 'bounded', status: 'available', expected_dates: sessions, valid_dates: sessions, missing_dates: [] },
-      capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: 24 },
+      supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], supported_cutoffs: cutoffs, calendar_from: sessions[0], calendar_to: sessions[sessions.length - 1] },
+      calendar: { version: 'bounded', status: 'available', expected_dates: sessions, valid_dates: sessions, missing_dates: [],
+        evidence: earlier ? [{ ...windows['20'].daily_evidence![0].provenance, source_id: 'synthetic-index', requested_date: '2026-08-01',
+          candidate_count: 21, adopted_count: 1, pre_calendar_row_count: 20, validation_scope: 'all_returned_month_rows' }] : [] },
+      capture_state: { enabled: true, attempted: true, busy: false, can_capture: true, cache_present: true, action: 'cached', request_count: earlier ? 26 : 24 },
     }
     const html = render(<InstitutionalWindows data={base} onCapture={() => undefined} />)
-    verify(html.includes('184,467,440,737,095,516,140') && html.includes('-9,007,199,254,740,993') && html.includes('>0</td>'), 'three cutoff exact signed and zero strings')
+    verify(html.includes('184,467,440,737,095,516,140') && html.includes('-9,007,199,254,740,993') && html.includes('>0</td>'), 'supported cutoff exact signed and zero strings')
     verify(html.includes('所需 20／已驗 20／缺 0 日') && html.includes('所需 5／已驗 5／缺 0 日'), 'two complete fixed horizons')
     verify(html.includes(`TRACE-${dates[0]}`) && html.includes(`TRACE-${cutoff}`) && html.includes(cutoff.replace(/-/g, '/')), 'same cutoff source expansion')
-    verify(html.includes('2026/09/30、2026/10/01、2026/10/02') && html.includes('各窗口只採用截至所選日期的原件'), 'supported cutoffs and batch/adoption scope')
-    const noScope = render(<InstitutionalWindows data={{ ...base, supported_scope: { ...base.supported_scope!, supported_cutoffs: [] } }} onCapture={() => undefined} />)
+    verify(html.includes(cutoffs.map((day) => day.replace(/-/g, '/')).join('、')) && html.includes('各窗口只採用截至所選日期的原件'), 'supported cutoffs and batch/adoption scope')
+    if (earlier) {
+      verify(html.includes('2026/08/31 — 2026/10/02') && !html.includes('只支持 2026/09/01'), 'earlier calendar scope is displayed')
+      verify(html.includes('完整月原件已驗 21 列／本範圍採用 1 列／界線前已驗但未採用 20 列'), 'full-month validation differs from adopted dates')
+    }
+    const noScope = render(<InstitutionalWindows data={earlier ? { ...base, as_of: '2026-09-28' } : { ...base, supported_scope: { ...base.supported_scope!, supported_cutoffs: [] } }} onCapture={() => undefined} />)
     verify(!noScope.includes('184,467') && !noScope.includes('<button') && !noScope.includes('TRACE-'), 'unsupported scope hides values/action/source rows')
     const wrongEnd = render(<InstitutionalWindows data={{ ...base, windows: { '20': { ...windows['20'], to: '2026-10-03' } } }} />)
     verify(!wrongEnd.includes('184,467') && wrongEnd.includes('數值或窗口條件待核對'), 'another cutoff cannot supply a displayed net')
@@ -233,4 +239,8 @@ export function runInstitutionalWindowCutoffSSRTests(render: (element: ReactElem
     verify(!future.includes('FUTURE-SENTINEL'), 'batch future records never appear as adopted source rows')
   }
   return checks
+}
+
+export function runInstitutionalWindowEarlierCutoffSSRTests(render: (element: ReactElement) => string): number {
+  return runInstitutionalWindowCutoffSSRTests(render, true)
 }
