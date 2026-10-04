@@ -244,6 +244,22 @@ Actual-source驗收的19表全欄／typeof至 shutdown不變。兩 serve均 Ctrl
 
 Catalog／price seed僅 synthetic-memory，19表不變不證 seed是真行情、正式DB或 catalog身分。原API斷言失敗、checker GET404及原生工具／quote／focus失敗留原 task；不改原exit，不新增驗收附件。Legacy／ZIP／old live／full suite／build未重跑；horizontal原生手勢、physical canvas與pending導航 race未驗，既有 NO-RETRY及零新增落盤限制保持。
 
+### M1-W5 五截止法人窗口的零落盤驗證入口
+
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 用 `--w5-only`驗11個worker synthetic memory cases，`--w5-api-only`驗5個real-router／MockTransport cases；`--w5-api-case`只限具名case。沿核定既有Python3.12.14／httpx0.28.1、`-B -X utf8`、AST config stub／guarded memory SQLite，不載conftest／正式startup，不建DB／fixture檔。`--serve`預設mock；另核 `--serve --live-source-opt-in`才取當次W5原件，不由普通GET／import取得外來源。
+
+現行 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 沿共用唯讀 `--deps <既有 frontend/node_modules>`；`--w5-only`選full-src noEmit／62 SSR／五截止60 net mock HTTP，可合 `--typecheck-only`或 `--serve`。完整App採esbuild `write:false` memory bundle／fallback字型，不代production build；W3／W4 selectors保留，但本輪不稱新globals下其整套已重驗。
+
+Python11 worker首exit0、5 API mock首exit0；API為48 local GET／26 POST，每fixture19表全欄／typeof前後不變、guards0、source外網0。核定Node24.19.0／TS5.9.3／esbuild0.25.12的noEmit／62 SSR／60 mock BigInt首exit0，24 GET／10 POST、guards0。較早Node20.19.4 exit0保留為非核定runtime收據；只補受影響檢查，不將原runtime誤稱核定。兩mock服務Ctrl+C原exit1保留，不補exit0。
+
+統籌actual來源probe4 GET／150,072B、first actual POST3105／9/24新production27 GET／3,485,390B為獨立觀測；合計31 external GET不是一批31原件／process峰值。Root獨立memory reader首exit0，24 local GET／11 POST含initial capture及10 held組；後追加唯讀DOM expected／最後guard核，沒有重取外來源。兩股原生BUTTON重複POST仍held27。43全月index／24日曆、全daily／selected金融欄、60 net及2250重疊API字串集中[來源 §16](../SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)；10可信表單、來源外層／新8/28日列及拒用界線集中[個股頁 §21](../STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯)。
+
+Actual owned page `e73b4c86-93e6-44ee-9cbf-2ee8c8ca65fe`單次close成功、tabs=[]。Node及API各Ctrl+C原exit1；API shutdown19表preserved／guards0，Node無final guardcounter、esbuild exit未獨立觀測，不補通過。自有API55556／shell29188、Node5032／shell11624／esbuild52988及owned children後驗缺席；GetActiveTcpListeners在8781／8782成功回count0，不以connect_ex不足結果證absence。附件／tmp／raw／DB／pycache／log／artifact新增0；正式程式8檔及docs7檔不當附件，不稱全cache0。
+
+原connection／quote／os206／snapshot截斷／ack0 trusted及unsupported日期setup錯誤留原task，不改原exit、不把ack當native證據。PS預設Get-Content中文mojibake僅stdout，後以UTF-8原文／DOM核，不採亂碼為來源；App search_code缺pattern一次isError經更正、無mutation，不把所有toolerrors稱0。詳細命令／raw收據留原task，不新增附件。
+
+Catalog／price seed僅synthetic-memory，19表不變不證seed是真行情或正式DB。缺／壞8/28局部窗口失效只必要synthetic API／SSR，實際missing0；非actual缺日原生。Legacy／ZIP／old live／full suite／Vite／production build未重跑，physical canvas／native horizontal gesture／pending導航race未驗；既有NO-RETRY及零新增落盤限制不變。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

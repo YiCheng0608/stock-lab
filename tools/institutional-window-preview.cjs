@@ -1,4 +1,4 @@
-/** Memory-only W4 typecheck, product HTTP/SSR and full-App preview.
+/** Memory-only W5 typecheck, product HTTP/SSR and full-App preview.
  * Existing master node_modules are borrowed read-only via --deps. No files,
  * bundles, buildinfo, HTTP captures, screenshots or new dependencies are made.
  * Start the guarded Python --serve on 8781 first; --live-source-opt-in belongs
@@ -119,15 +119,17 @@ async function check() {
   const React = requireDependency('react')
   const w3 = args.includes('--w3-only')
   const w4 = args.includes('--w4-only')
-  if (w3 || w4) globalThis.__institutionalWindowSSRSelection = w4 ? 'w4-only' : 'w3-only'
+  const w5 = args.includes('--w5-only')
+  if (w3 || w4 || w5) globalThis.__institutionalWindowSSRSelection = w5 ? 'w5-only' : w4 ? 'w4-only' : 'w3-only'
   const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
   const { StockOverview } = require(path.join(sourceRoot, 'components/StockOverview.tsx'))
-  const ssrCases = w4 ? cases.runInstitutionalWindowEarlierCutoffSSRTests(renderToStaticMarkup) : w3 ? cases.runInstitutionalWindowCutoffSSRTests(renderToStaticMarkup) : cases.runInstitutionalWindowSSRTests(renderToStaticMarkup)
-  console.log(JSON.stringify({ new_institutional_window_ssr_cases: ssrCases, guard: counts, disk_artifacts: 0 }))
+  const ssrCases = w5 ? cases.runInstitutionalWindowFifthCutoffSSRTests(renderToStaticMarkup) : w4 ? cases.runInstitutionalWindowEarlierCutoffSSRTests(renderToStaticMarkup) : w3 ? cases.runInstitutionalWindowCutoffSSRTests(renderToStaticMarkup) : cases.runInstitutionalWindowSSRTests(renderToStaticMarkup)
+  console.log(JSON.stringify({ new_institutional_window_ssr_cases: ssrCases,
+    runtime: { node: process.versions.node, typescript: ts.version, esbuild: esbuild.version }, guard: counts, disk_artifacts: 0 }))
   if (args.includes('--typecheck-only')) return
   const api = await apiModule()
-  const cutoffs = w4 ? ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'] : w3 ? ['2026-09-30', '2026-10-01', '2026-10-02'] : ['2026-10-02']
-  const expectedRequests = w4 ? 26 : 24
+  const cutoffs = w5 ? ['2026-09-24', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'] : w4 ? ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02'] : w3 ? ['2026-09-30', '2026-10-01', '2026-10-02'] : ['2026-10-02']
+  const expectedRequests = w5 ? 27 : w4 ? 26 : 24
   const before = await api.getStock('TPEx', '3105', cutoffs[0])
   assert.equal(before.overview.institutional.capture_state.attempted, false)
   const first = await api.captureInstitutionalWindows('TPEx', '3105', cutoffs[0])
@@ -135,7 +137,7 @@ async function check() {
   assert.equal(first.capture_state.action, 'acquired')
   let netChecks = 0
   for (const [cutoffIndex, cutoff] of cutoffs.entries()) for (const symbol of ['3105', '6488']) {
-    const repeated = w4 && cutoffIndex === 0 && symbol === '3105'
+    const repeated = (w4 || w5) && cutoffIndex === 0 && symbol === '3105'
       ? (await api.getStock('TPEx', symbol, cutoff)).overview.institutional
       : await api.captureInstitutionalWindows('TPEx', symbol, cutoff)
     const stock = await api.getStock('TPEx', symbol, cutoff)
@@ -154,7 +156,7 @@ async function check() {
       const ordinalSum = horizon * (2 * ordinalEnd - horizon + 1) / 2
       const base = symbol === '3105' ? [900, -30, -35] : [-500, 30, -5]
       for (const [index, investor] of ['foreign', 'trust', 'dealer'].entries()) {
-        const expected = String(base[index] * horizon + (w3 || w4 ? ordinalSum * [100, -1, 3][index] : 0))
+        const expected = String(base[index] * horizon + (w3 || w4 || w5 ? ordinalSum * [100, -1, 3][index] : 0))
         assert.equal(item.values[investor], expected)
         assert.equal(BigInt(item.values[investor]).toString(), expected)
         netChecks++
@@ -174,7 +176,7 @@ async function check() {
   assert.ok(Object.values(receipt.guard).every((value) => value === 0))
   console.log(JSON.stringify({ passed: true, new_ssr_cases: ssrCases, response_parser: 'product fetch + Response.json',
     institutional_source: 'synthetic mock only', net_checks: netChecks, supported_cutoffs: cutoffs,
-    loopback_requests: { get: cutoffs.length * 4 + 3 + (w4 ? 1 : 0), post: cutoffs.length * 2 + (w4 ? 0 : 1) }, request_count: receipt.request_count, db_preserved: receipt.db_preserved,
+    loopback_requests: { get: cutoffs.length * 4 + 3 + (w4 || w5 ? 1 : 0), post: cutoffs.length * 2 + (w4 || w5 ? 0 : 1) }, request_count: receipt.request_count, db_preserved: receipt.db_preserved,
     guard: counts, disk_artifacts: 0, production_vite_build: 'not_run' }))
 }
 

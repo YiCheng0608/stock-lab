@@ -1,8 +1,10 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-04。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 單日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 見 §9／§11。§10／§12 保留原候選缺證；§13 是另以獨立 policy 准入並驗收的 TPEx 兩股多日 CSV／有界日曆及計算。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
+更新：2026-10-05。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 單日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 見 §9／§11。§10／§12 保留原候選缺證；§13 是另以獨立 policy 准入並驗收的 TPEx 兩股多日 CSV／有界日曆及計算。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
+
+現行兩股五截止W5版本／來源／日曆與唯一60 net集中[§16](#16-m1-w5五截止法人來源與完整有界日曆)；§13–15各自保留歷史觀測，不作implicit latest。
 
 ## 1. Registry 與 policy 契約
 
@@ -445,6 +447,8 @@ UTF-8、exact 25／6欄 header、全列日期／欄數／唯一代碼／非空�
 
 ## 15. M1-W4：四截止法人來源與全月日曆核對
 
+本節保留W4歷史觀測、policy與原數值；現行W5五截止／24日曆見[§16](#16-m1-w5五截止法人來源與完整有界日曆)，不沿本節pins放行新範圍。
+
 **新增真來源、四截止計算、actual API及兩股四截止原生表單操作已有限接受。** 範圍為 TPEx 3105／6488、2026-09-29／09-30／10-01／10-02；日曆限2026-08-31～10-02。W4新增8/31 daily與8月 index，完整有界23 sessions已由真原件正面核實。具名個股操作及未驗邊界見[§20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯)；W1／W3 policy與觀測保留為歷史，不作本版設定。
 
 ### 15.1 新版 policy、來源與有界取得
@@ -500,4 +504,68 @@ Worker為 `tpex-institutional-window/w4-v1`，profile `free_public_local`；外�
 | 6488 | 2026-10-01 | `[-7671733, 1177490, 60743]` | `[-14064055, -1335785, -142974]` |
 | 6488 | 2026-10-02 | `[-2452286, 920329, 229491]` | `[-13191795, -1012703, 261501]` |
 
-具名原生四截止操作與收尾界線見[個股頁 §20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯)，驗證入口見[開發文件](development-baseline/README.md#m1-w4-四截止法人窗口的零落盤驗證入口)。命令、UTC、full hashes與原失敗留原 task；未保存 raw。範圍外日期／標的／TWSE、PIT／修訂、研究條件與完整 M1仍缺。W5只選題8/28 daily候選，W4未取得或准入該日。
+具名原生四截止操作與收尾界線見[個股頁 §20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯)，驗證入口見[開發文件](development-baseline/README.md#m1-w4-四截止法人窗口的零落盤驗證入口)。命令、UTC、full hashes與原失敗留原 task；未保存 raw。範圍外日期／標的／TWSE、PIT／修訂、研究條件與完整 M1仍缺。W4當時只選題8/28 daily候選、未取得或准入該日；W5後續獨立觀測見§16，本節原值保留歷史。
+
+## 16. M1-W5：五截止法人來源與完整有界日曆
+
+**新8/28真來源、24日曆、五截止計算、actual API及兩股各五截止可信原生操作已有限接受。** 支持 TPEx3105／6488、2026-09-24／09-29／09-30／10-01／10-02；日曆限2026-08-28～10-02。W1–W4的policy、觀測與數值保留歷史，不作本版設定；具名操作見[個股頁 §21](STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯)。
+
+### 16.1 新版policy、用途與取得上限
+
+Worker `tpex-institutional-window/w5-v1`，profile `free_public_local`；外部pins為 `policy_version=m1-w5-tpex-window-2026-10-05.1`、`policy_digest=sha256:e78104735c815801a73fe9eab78fcabf2e9a79a61ab74d3fe3e80fa206129643`，canonical policy3535 UTF-8 bytes。整份policy／來源集合／四用途／五個supported cutoffs與digest須一致，不沿舊pins放行新範圍；原registry／P2a manifest／bundled pins未改。
+
+| Source ID | W5來源版本與准入查詢 |
+| --- | --- |
+| `tpex_government_institutional_csv` | `dataset-11856-dated-csv-observed-2026-10-05/v4`；沿[§13.1](#131-獨立-policy-與四用途)的dataset11856 exact GET，`d=115/MM/DD`只取8/28～10/2的24個expected sessions。 |
+| `tpex_government_index_csv` | `dataset-11391-month-csv-observed-2026-10-05/v3`；沿§13.1的dataset11391 exact GET，`date=2026/08/01`／`2026/09/01`／`2026/10/01`；全返回月列先驗，再採有界日期。 |
+
+來源版本的observed date以Asia/Taipei明示為2026-10-05；精確取得時間另記UTC，不把UTC的2026-10-04誤當臺北觀測日。政府開放授權／TPEx署名、原始成交統計基礎及外資不重加口徑沿§13.1／13.3；`local_fetch`／`raw_store`／`summarize`僅本policy範圍admitted，`historical_pit=unsupported`。raw_store准入不授權本輪落盤，原件只存process memory；其他日期／標的金融值、TWSE或任意自動下載未放行。
+
+一次明示load最多27 GET＝3 month＋24 daily；daily≤2 MiB、index≤1 MiB、總≤51 MiB（53,477,376 bytes），每request timeout15秒、identity encoding、retry0／redirect0。日曆失敗不續取daily；一次嘗試後不重取、refresh或較早fallback。import／snapshot／普通GET零外網、不寫檔／DB。數字rate limit、整批hard deadline及跨程序rate limiter仍未提供。
+
+### 16.2 全月驗證、24日曆與各截止窗口
+
+Calendar `tpex-2026-08-28_2026-10-02-weekdays-11503027221/v1`；沿既有周一至五規則及9/25、9/28明示閉日，不由缺列推休市。三月43列＝8月21、9月20、10月2，全部返回列須驗exact六欄、requested month、日期≤10/2、唯一／平日、有限正OHLC與上下界，漲跌為有限數值。界線前列壞值、錯月或重複亦拒整份日曆。
+
+`validation_scope=all_returned_month_rows`；8月candidate21／adopted2／pre-calendar19，採8/28及8/31；8/27以前19列已驗但未採入W5日曆／窗口。界線內正面集合須恰好等於24個expected sessions；缺月／缺日、額外日期／閉日衝突或競爭版本使日曆與全部窗口unavailable。界線前index OHLC已驗不代該日法人daily或新的用途准入。
+
+計算版本 `independent-net-sum/expected-session-inclusive-v1`未變。每窗只取≤cutoff的required sessions；union較晚日不入較早窗口。
+
+| cutoff | 截止內sessions | 5日起點 | 20日起點 |
+| --- | ---: | --- | --- |
+| 2026-09-24 | 20 | 2026-09-18 | 2026-08-28 |
+| 2026-09-29 | 21 | 2026-09-21 | 2026-08-31 |
+| 2026-09-30 | 22 | 2026-09-22 | 2026-09-01 |
+| 2026-10-01 | 23 | 2026-09-23 | 2026-09-02 |
+| 2026-10-02 | 24 | 2026-09-24 | 2026-09-03 |
+
+### 16.3 原件、精確整數與按窗口拒用
+
+§13.3的25欄／全列日期、欄數、唯一代碼及非空名稱，selected兩股各22金融欄canonical int64、七組buy－sell／外資與自營商組成／total關係、股單位及任意精度窗口sum不變。金融值檢核限兩股，不稱其他標的金融數值已驗。缺／錯／壞日、selected缺列、hash／receipt不合格或競爭revision，只拒需要該日的窗口；不補零、縮窗、挑版或採較早／未來替代。Policy／日曆壞則全部拒用。
+
+各窗列required／valid／missing／invalid dates、原因、原列／版本／hash及UTC收據，讀回重驗同immutable bytes。published／first available／revision time及下載修訂保障／lineage仍unknown；本次事後統計不是PIT、Signal／研究條件、原件保存或跨程序重播。
+
+### 16.4 真來源、獨立觀測與唯一60 net參考
+
+`SRC-W5-PROBE-1`首exit0：獨立4 GET／150,072 body bytes。新8/28 dated CSV147,516B，body SHA256=`9b5685be891106979c54043832d1eb0acec99ee17a029a58aa22087df10241a4`；917列／25欄header、全日期1150828、unique codes／width／names核通。兩股44金融原字串、canonical int64及全部關係核通；3105穩懋raw ordinal175，6488環球晶652。三index原件8月1221B／21列、9月1170B／20列、10月165B／2列；全43月列及完整24日曆正面核通。Probe UTC2026-10-04T16:13:40.248714～16:13:40.778349+00:00，Asia/Taipei為2026-10-05T00:13:40.248714～00:13:40.778349+08:00。
+
+後續 **first actual API POST為3105／9/24**，新觀測一次取得27原件／3,485,390 body bytes；UTC2026-10-04T16:34:12.460839～16:34:34.024462+00:00，臺北2026-10-05T00:34:12.460839～00:34:34.024462+08:00。24 daily共21,680全列的日期／code／name／width核通；兩股48 selected rows／1056金融原字串、int64及全部關係逐欄核通。三月43列全OHLC、採24日期及界線前19列核通；新8/28 body hash與probe相符。Probe4與production27的capture／receipt分開，合計31 external GET不是一批31原件或process峰值。
+
+五截止60 net皆由原件buy－sell獨立重算；actual API共2250次重疊window buy／sell／net字串逐欄一致，不當作2250個distinct raw欄位。兩股10組held POST／detail GET／overview GET採同cutoff／版本／batch，source request_count保持27；19表全欄／typeof不變、guards0。具名原生表單另核60 DOM net；十組source outer SUMMARY的required dates及1800 raw金融字串核對是另一組DOM證據，不與2250 API字串或1056 distinct selected欄位混算。
+
+本版唯一60值集中於此表；順序為外資（不含外資自營商）／投信／自營商，單位股。其餘四cutoff的48值與W4基準一致，W4原表仍保留歷史：
+
+| 標的 | cutoff | 5日net | 20日net |
+| --- | --- | --- | --- |
+| 3105 | 2026-09-24 | `[11619934, 2453900, 554128]` | `[3598977, 20383588, 492586]` |
+| 3105 | 2026-09-29 | `[1233280, 2655000, -140568]` | `[709262, 18045588, 543694]` |
+| 3105 | 2026-09-30 | `[16854574, 2227000, 975486]` | `[19834870, 17802588, 1159585]` |
+| 3105 | 2026-10-01 | `[10450479, 3045800, 345161]` | `[11360445, 16718388, -227745]` |
+| 3105 | 2026-10-02 | `[21655769, 2223800, 1578271]` | `[25496297, 16596388, 1183894]` |
+| 6488 | 2026-09-24 | `[-7696805, 222092, 103774]` | `[-14680682, -3475784, -500087]` |
+| 6488 | 2026-09-29 | `[-8857542, 285175, -12038]` | `[-13581580, -3551184, -446637]` |
+| 6488 | 2026-09-30 | `[-3715832, 180211, 77751]` | `[-8274270, -2271295, -104392]` |
+| 6488 | 2026-10-01 | `[-7671733, 1177490, 60743]` | `[-14064055, -1335785, -142974]` |
+| 6488 | 2026-10-02 | `[-2452286, 920329, 229491]` | `[-13191795, -1012703, 261501]` |
+
+來源／API／具名native有限接受，不證範圍外日期／標的／TWSE、PIT／修訂、研究條件或完整M1；原件未落盤。原失敗、full hashes及逐次UTC收據留原task；入口及服務清理見[開發文件](development-baseline/README.md#m1-w5-五截止法人窗口的零落盤驗證入口)。下一M1-W6的8/27 daily尚未取得／准入，不能由界線前index正面OHLC或本版pins放行。

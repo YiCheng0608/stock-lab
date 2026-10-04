@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-04。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-05。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -630,6 +630,8 @@ worker7、actual router5、24 SSR、full-src noEmit及 mock product HTTP／BigIn
 
 ## 20. M1-W4：四截止法人窗口與原件追溯
 
+本節是W4已驗收的歷史操作／版本；現行W5五截止見[§21](#21-m1-w5五截止法人窗口與原件追溯)，原W4數值及未驗界線仍保留。
+
 **實際原件→API及兩股各四 cutoff可信原生表單操作已有限接受。** 支持 TPEx3105／6488、共用 `as_of=2026-09-29／09-30／10-01／10-02`；總覽 `stock-overview/w4-v1`、法人 `institutional-windows/w4-v1`、worker `tpex-institutional-window/w4-v1`。來源、policy pins、23日曆／全月 index核對及唯一48 net真值見[來源 §15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)，W1–W3設定與觀測只保留歷史。
 
 ### 20.1 共用截止、一次取得及精確呈現
@@ -657,4 +659,36 @@ worker7、actual router5、24 SSR、full-src noEmit及 mock product HTTP／BigIn
 
 來源／actual API數值核對集中[§15.4](SOURCE_REGISTRY.md#154-w4真資料與唯一48-net參考)；19表全欄／typeof及guards、具名測試補驗與服務清理界線見[開發入口](development-baseline/README.md#m1-w4-四截止法人窗口的零落盤驗證入口)。Worker9首跑exit0；API首suite exit1的失敗保留，僅修正後具名 first-post案例補驗exit0；noEmit／40 SSR／48 mock HTTP BigInt net exit0。本輪 actual API／具名原生操作及 owned服務清理已有限接受。缺／錯8/31造成局部窗口失效由必要 synthetic API／SSR驗證，不稱 actual缺日原生操作。
 
-未重跑 legacy／ZIP／old live／完整 backend；physical canvas、原生橫向手勢、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE數值、修訂／PIT、研究條件、raw保存／跨程序讀回與完整 M1未完成；W5新9/24及8/28 daily未取得／准入，不由本版放行。
+未重跑 legacy／ZIP／old live／完整 backend；physical canvas、原生橫向手勢、Vite／production build及 pending導航 race仍未驗。範圍外日期／證券／TWSE數值、修訂／PIT、研究條件、raw保存／跨程序讀回與完整 M1未完成；本W4觀測未取得／准入W5新9/24及8/28 daily；後續W5獨立版本／操作見§21，不由W4 pins放行。
+
+## 21. M1-W5：五截止法人窗口與原件追溯
+
+**原件→actual API及兩股各五截止可信原生操作已有限接受。** 支持TPEx3105／6488、共用 `as_of=2026-09-24／09-29／09-30／10-01／10-02`；總覽 `stock-overview/w5-v1`、法人 `institutional-windows/w5-v1`、worker `tpex-institutional-window/w5-v1`。Policy／source versions、24日曆與唯一60 net真值集中[來源 §16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)，W1–W4設定／觀測只保留歷史。
+
+### 21.1 共用截止、一次取得及精確來源呈現
+
+沿server opt-in `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`及既有capture POST。先核標的存在與supported cutoff；W5 first actual POST為3105／9/24，新取3 month＋24 daily。後續POST／detail／overview GET重驗同held27份process-memory原件；普通GET／import零外網、不寫DB／檔案。鎖／一次嘗試、拒retry／refresh／較早fallback及重啟須新觀測界線不變，所有原生操作讀同一instance。
+
+日期原生「套用截止」後每窗採同cutoff；canonical整數字串以BigInt千分位、單位股，5／20日各列三類net與required／valid／missing／invalid dates。缺日按窗拒用，不補零、縮窗或較早／未來替代。
+
+來源詳情保留TPEx署名／資料集／授權、exact URL／daily raw ordinal／buy／sell／net、body／receipt SHA／UTC及policy／source／calendar／calculation版本。來源版本觀測日期明示Asia/Taipei2026-10-05，UTC精確收據另列。月原件顯示全返回月已驗、有界採用與界線前已驗未採列數；8月21／2／19。日窗口只顯≤cutoff的required daily evidence，不把較晚union日或界線前index當作窗口daily。發布／first availability／revision unknown、PIT unsupported；突破／回踩固定保守，P2b與其他來源區塊獨立。
+
+### 21.2 具名原生操作與有限驗收
+
+| 操作 | 已接受的有限結果 |
+| --- | --- |
+| 兩股五截止切換 | 同完整App／held instance，兩股各五個可信原生日期表單submit；isTrusted input／change／submit／KEYDOWN正面核。10組共60 DOM net、5／20日起迄及missing0逐欄對獨立真值。兩股各一次native BUTTON重複POST仍held27。 |
+| 來源原生外層展開 | 兩股×五cutoff共10組source outer SUMMARY可信展開，每組20 required dates≤cutoff及180 buy／sell／net原字串以textContent核，合計1800金融欄與原件一致；不稱全部20個daily子表都曾原生展開。 |
+| 390×844新8/28原列 | 兩股9/24原生trusted daily SUMMARY展開8/28，日期1150828、各9個DOM raw金融欄、body hash及daily v4一致；raw ordinal3105=175、6488=652。新body hash見來源§16.4，不重抄數值。 |
+| 不支持cutoff與恢復 | 6488原生9/28後舊DOM net／raw evidence／window button均0；原生恢復9/24的6 net與真值一致，source request_count仍27。 |
+| 範圍外市場 | TWSE3105／9/24 route DOM numeric0／window button0；goto只作route setup，不稱原生市場導航。 |
+
+390×844實測innerWidth390、body scrollWidth375（15px垂直scrollbar）、wrapper303／table780／overflow auto；375×844另實測innerWidth375、body360／wrapper288／table780／auto。原生展開及寬度核對不代原生橫向手勢、physical canvas或production build。
+
+Native續接只用同owned page／session，一次sameURL goto不重取來源。Connection／JS quote／os206／ack0 trusted／source-closed assert／snapshot截斷及日期中間值誤到9/29均不計成功；原wait9/28 exit1及詳細raw／error留原task，核實actual date並原生修正後才接受9/28拒用／恢復。工具ack／DOM定位不代可信輸入，未換page／session或重取來源。
+
+### 21.3 驗證及仍未支持的界線
+
+來源／actual API逐欄及60真值集中[§16.4](SOURCE_REGISTRY.md#164-真來源獨立觀測與唯一60-net參考)；11 worker／5 real-router mock、核定Node noEmit／62 SSR／60 mock BigInt及owned服務清理見[開發入口](development-baseline/README.md#m1-w5-五截止法人窗口的零落盤驗證入口)。實際missing0；缺／壞8/28導致局部窗口失效只由必要synthetic API／SSR驗證，不稱actual缺日原生操作。
+
+未重跑legacy／ZIP／old live／完整backend；physical canvas、原生橫向手勢、Vite／production build及pending導航race仍未驗。範圍外日期／標的／TWSE、修訂／PIT、研究條件、raw保存／跨程序讀回與完整M1未完成；W6新9/23及8/27 daily仍待真來源／新版本gate，不由本版放行。

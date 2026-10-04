@@ -1,7 +1,7 @@
 """Explicit, single-attempt process-memory institutional window store.
 
 Import and ordinary reads do not create files, import app.config, open a DB,
-or fetch. The POST action is the only caller of the bounded W4 loader.
+or fetch. The POST action is the only caller of the bounded W5 loader.
 """
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ from typing import Any, Mapping
 
 from worker.tpex_institutional_window import MemoryWindowCache, window_policy
 
-VERSION = "institutional-windows/w4-v1"
+VERSION = "institutional-windows/w5-v1"
 ENABLE_ENV = "STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE"
-POLICY_VERSION = "m1-w4-tpex-window-2026-10-04.1"
-POLICY_DIGEST = "sha256:576e72676c23efedd3fc857a90e57c2e58f438a8669ba39dea2faa132f7616df"
-CALENDAR_VERSION = "tpex-2026-08-31_2026-10-02-weekdays-11503027221/v1"
-CUTOFFS = (date(2026, 9, 29), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2))
+POLICY_VERSION = "m1-w5-tpex-window-2026-10-05.1"
+POLICY_DIGEST = "sha256:e78104735c815801a73fe9eab78fcabf2e9a79a61ab74d3fe3e80fa206129643"
+CALENDAR_VERSION = "tpex-2026-08-28_2026-10-02-weekdays-11503027221/v1"
+CUTOFFS = (date(2026, 9, 24), date(2026, 9, 29), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 2))
 SYMBOLS = ("3105", "6488")
 SUPPORTED_SCOPE = {"exchange": "TPEx", "symbols": list(SYMBOLS), "supported_cutoffs": [day.isoformat() for day in CUTOFFS],
-                   "calendar_from": "2026-08-31", "calendar_to": "2026-10-02"}
+                   "calendar_from": "2026-08-28", "calendar_to": "2026-10-02"}
 
 
 class InstitutionalWindowStore:

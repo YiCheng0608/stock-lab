@@ -36,7 +36,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
 | TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。 |
-| TPEx 多日法人／交易日 | 現行 W4獨立政府 CSV policy已有限接受3105／6488、9/29／9/30／10/1／10/2四截止的5／20日窗口、actual API及具名原生查看；union為8/31～10/2完整23開市日法人＋三月 index，僅 process memory，不改DB／legacy。來源／用途見[§15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)，歷史W1／W3見§13／14。 |
+| TPEx 多日法人／交易日 | 現行W5獨立政府CSV policy有限接受3105／6488、9/24／9/29／9/30／10/1／10/2五截止的5／20日窗口、actual API及具名原生查看；union為8/28～10/2完整24開市日法人＋三月index，僅process memory，不改DB／legacy。來源／用途見[§16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)，W1／W3／W4保留§13–15歷史。 |
 | TWSE 券商／分點名冊 | [券商基本資料](https://openapi.twse.com.tw/v1/brokerService/brokerList)與[券商分公司基本資料](https://openapi.twse.com.tw/v1/opendata/OpenData_BRK02)為免費官方名冊；實際 GET 已確認可讀。名冊只提供通道身分，不是交易明細。 |
 | 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
 | TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
@@ -52,7 +52,9 @@ M1-P2a 的 TPEx selected 摘要以**股**為單位，外資及陸資採**不含�
 
 後續 M1-W1 接受的 coverage 是**兩股、單一 cutoff、完整有界日曆及當次版本**，以原始成交為統計基礎，三類為外資（不含外資自營商）、投信、自營商合計，仍以股／canonical 整數字串呈現。缺日按各窗口 fail closed，不補零或縮窗；這不等於其他標的金融欄位、全市場／全年或歷史當時可得已驗證。published／first available／revision time unknown，`historical_pit=unsupported`，沒有磁碟原件／跨程序重開或研究條件接線。來源詳述與參考集中於[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，W2 操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)；不把舊候選或單日驗收升格。
 
-W3歷史 coverage為兩股三 cutoff／22日曆，見[來源 §14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)。現行 W4擴為**同兩股、四個明列 cutoff、有界23日曆與新 policy**，新增8/31 daily／8月 index；23 daily全列結構與兩股46 selected rows／1012金融欄檢核分開，不外推其他標的數值。三月43 index列全 OHLC先驗，8月21列中只採8/31、界線前20列已驗未採。窗口只採≤cutoff，缺／錯／壞日或競爭 revision按需該日的窗口拒用，不補零、縮窗或較早／未來替代。原始成交、股／canonical整數字串、未知發布／first availability／revision及非 PIT界線不變。現行版本與唯一48 net見[來源 §15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)，具名操作／未驗邊界見[個股頁 §20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯)；未保存 raw／跨程序讀回或接研究條件。8/28 daily僅 W5候選，未取得／准入，8月 OHLC已驗不授權取得該日法人。
+W3歷史 coverage為兩股三 cutoff／22日曆，見[來源 §14](SOURCE_REGISTRY.md#14-m1-w3三截止法人來源與窗口)。W4歷史擴為**同兩股、四個明列 cutoff、有界23日曆與新 policy**，新增8/31 daily／8月 index；23 daily全列結構與兩股46 selected rows／1012金融欄檢核分開，不外推其他標的數值。三月43 index列全 OHLC先驗，8月21列中只採8/31、界線前20列已驗未採。窗口只採≤cutoff，缺／錯／壞日或競爭 revision按需該日的窗口拒用，不補零、縮窗或較早／未來替代。原始成交、股／canonical整數字串、未知發布／first availability／revision及非 PIT界線不變。W4歷史版本與48 net見[來源 §15](SOURCE_REGISTRY.md#15-m1-w4四截止法人來源與全月日曆核對)，具名操作／未驗邊界見[個股頁 §20](STOCK_RESEARCH_PAGE.md#20-m1-w4四截止法人窗口與原件追溯)；未保存 raw／跨程序讀回或接研究條件。W4當時未取得／准入8/28 daily，當時8月OHLC已驗不代法人daily。
+
+現行W5已有限接受同兩股五個明列cutoff／24日曆，新8/28真daily及三月全43 index列驗證後採8/28／8/31、界線前19列未採。當次24daily全列結構與兩股48selected／1056金融欄檢核分開，不外推其他標的；60獨立net、actual API與具名原生操作見[來源 §16](SOURCE_REGISTRY.md#16-m1-w5五截止法人來源與完整有界日曆)／[個股頁 §21](STOCK_RESEARCH_PAGE.md#21-m1-w5五截止法人窗口與原件追溯)。原始成交、股／精確字串、按窗口缺日拒用、metadata未知及non-PIT／未保存界線不變；W6的8/27 daily仍候選未取／准入。
 
 News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信。worker 尚未接完整媒體、國際新聞或分點資料；`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有主要寫入路徑不能據此聲稱已收集。詳見 [NEWS_SPEC](NEWS_SPEC.md)。
 

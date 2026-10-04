@@ -6,7 +6,7 @@ const REASONS: Record<string, string> = {
   window_capture_not_enabled: '伺服器尚未明示啟用法人窗口載入。',
   window_capture_configuration_invalid: '法人窗口設定無效，尚未啟用。',
   window_market_or_symbol_not_supported: '目前只支持上櫃 3105、6488。',
-  window_cutoff_not_supported: '本次法人窗口只支持研究截止 2026/09/30、2026/10/01、2026/10/02；不沿用其他截止的數值。',
+  window_cutoff_not_supported: '所選日期不在本次法人窗口的支持截止範圍；不沿用其他截止的數值。',
   window_memory_capture_missing: '尚未載入本次法人窗口。',
   window_capture_busy: '伺服器正在載入法人窗口，請稍後讀取。',
   window_capture_failed: '本次法人窗口載入失敗；已有嘗試不自動重試。',
@@ -232,6 +232,6 @@ export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, 
       <OfficialEvents data={data.events} onCapture={onCaptureEvents} busy={capturingEvents} requestFailure={eventRequestFailure} />
       <section className="panel"><h3>新聞與公告入口</h3><p>保留既有來源連結、發布與事件時間。</p><button type="button" className="secondary-button" onClick={onNews}>查看新聞與公告</button><p className="small-note">新聞採已核對的發布／事件時間截至；未知時間或超過截止的項目不混入本次清單。</p></section>
     </div>
-    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。法人窗口依上方各窗狀態，只支持上櫃 3105、6488 與 2026/09/30、2026/10/01、2026/10/02 截止。價格、設定的單日法人原件及明示取得的除權息預告沿各自證據；其他範圍與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>
+    <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。法人窗口依上方各窗狀態，支持範圍及截止見法人區塊；價格、設定的單日法人原件及明示取得的除權息預告沿各自證據；其他範圍與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>
   </section>
 }

@@ -539,10 +539,14 @@ export type InstitutionalWindow = {
   daily_evidence?: Array<{ row: Omit<NonNullable<InstitutionalDailyData['row']>, 'exchange' | 'unit'>; provenance: InstitutionalWindowReceipt }>
 }
 
+export type InstitutionalWindowScope = {
+  exchange: string; symbols: string[]; supported_cutoffs: string[]; calendar_from: string; calendar_to: string
+}
+
 export type InstitutionalWindowsData = {
   status: string; horizons: number[]; investors: string[]; values: null; reasons: string[]
   version?: string; as_of?: string | null; unit?: string; quantity_encoding?: string; historical_pit?: string
-  supported_scope?: { exchange: string; symbols: string[]; supported_cutoffs: string[]; calendar_from: string; calendar_to: string }
+  supported_scope?: InstitutionalWindowScope
   windows?: Record<string, InstitutionalWindow>
   capture_state?: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; action: string; request_count: number }
   calendar?: null | { version: string; status: string; reasons?: string[]; from?: string; to?: string; expected_dates?: string[]; valid_dates?: string[]; missing_dates?: string[]
