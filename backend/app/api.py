@@ -75,6 +75,7 @@ from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_qu
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
 from .stock_signal_reads import load_stock_signal_reads
+from .stock_independent_reads import load_stock_chip_reads, load_stock_feature_reads
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -2060,12 +2061,8 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     bars, market_read = load_stock_market_reads(db, instrument.id, as_of)
-    feature = db.scalar(
-        select(TechnicalFeature)
-        .where(TechnicalFeature.instrument_id == instrument.id, TechnicalFeature.trading_date <= (as_of or date.max))
-        .order_by(desc(TechnicalFeature.trading_date))
-        .limit(1)
-    )
+    feature_reads = load_stock_feature_reads(db, instrument.id, as_of)
+    feature = feature_reads.candidates[0] if feature_reads.candidates else None
     memberships = db.scalars(
         select(GroupMembership)
         .where(GroupMembership.instrument_id == instrument.id,
@@ -2074,12 +2071,8 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         .order_by(GroupMembership.valid_from)
     ).all()
     research_reads = load_stock_signal_reads(db, [instrument.id], as_of)[instrument.id]
-    chips = db.scalars(
-        select(ChipSnapshot)
-        .where(ChipSnapshot.instrument_id == instrument.id, ChipSnapshot.trading_date <= (as_of or date.max))
-        .order_by(desc(ChipSnapshot.trading_date))
-        .limit(120)
-    ).all()
+    chip_reads = load_stock_chip_reads(db, [instrument.id], as_of)[instrument.id]
+    chips = chip_reads.candidates
     actions = db.scalars(
         select(CorporateAction)
         .where(CorporateAction.instrument_id == instrument.id, CorporateAction.action_date <= (as_of or date.max))
@@ -2114,7 +2107,9 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         "instrument": instrument_dict(instrument),
         "bars": [item.to_dict() for item in reversed(bars)],
         "market_read": market_read,
-        "features": feature.features_json if feature else {},
+        "features": feature.features_json if feature and feature.features_json is not None else {},
+        "feature_snapshot": feature.to_dict() if feature else None,
+        "feature_read": feature_reads.to_state(),
         "groups": [
             {
                 "id": membership.group_id,
@@ -2124,7 +2119,8 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
             }
             for membership in memberships
         ],
-        "chips": [chip_dict(item) for item in reversed(chips)],
+        "chips": [item.to_dict() for item in reversed(chips)],
+        "chip_read": chip_reads.to_state(),
         "corporate_actions": [
             {
                 "date": as_date(item.action_date),

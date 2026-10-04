@@ -15,7 +15,8 @@ if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-h
   || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')
   || args.includes('--action-read-check') || args.includes('--action-read-http-check')
   || args.includes('--stock-read-check') || args.includes('--stock-read-http-check')
-  || args.includes('--signal-read-check') || args.includes('--signal-read-http-check') || args.includes('--signal-read-status-check')) {
+  || args.includes('--signal-read-check') || args.includes('--signal-read-http-check') || args.includes('--signal-read-status-check')
+  || args.includes('--independent-read-check') || args.includes('--independent-read-http-check')) {
   const originalError = console.error
   console.error = (message, ...rest) => {
     if (typeof message === 'string' && message.startsWith('Warning: useLayoutEffect does nothing on the server')) {
@@ -41,13 +42,25 @@ const compilerPackage = path.join(dependencies, '.pnpm/node_modules/esbuild')
 const compilerBinary = fs.realpathSync(require.resolve(`@esbuild/${process.platform}-${process.arch}/esbuild.exe`, { paths: [compilerPackage] }))
 const childProcess = require('node:child_process')
 const originalSpawn = childProcess.spawn
+const independentMode = args.some((arg) => arg.startsWith('--independent-read-'))
+const compilerChildren = []
+if (independentMode) console.log(JSON.stringify({ process_started: true, pid: process.pid, commandline: [process.execPath, ...process.argv.slice(1)], disk_artifacts: 0 }))
 childProcess.spawn = function (command, compilerArgs, options) {
   if (fs.realpathSync(command) !== compilerBinary || !Array.isArray(compilerArgs)
     || !compilerArgs.some((arg) => /^--service=/.test(arg))
     || compilerArgs.some((arg) => !/^--service=/.test(arg) && arg !== '--ping')) {
     throw new Error('memory-only preview denied an unowned subprocess')
   }
-  return originalSpawn.call(this, command, compilerArgs, options)
+  if (independentMode && compilerChildren.length >= 1) throw new Error('independent compiler child cap exceeded')
+  const child = originalSpawn.call(this, command, compilerArgs, options)
+  if (independentMode) {
+    const receipt = { pid: child.pid, commandline: [command, ...compilerArgs], exited: false }
+    compilerChildren.push(receipt)
+    console.log(JSON.stringify({ compiler_child_started: receipt }))
+    child.on('exit', (code, signal) => { receipt.exited = true; receipt.exit_code = code; receipt.signal = signal
+      console.log(JSON.stringify({ compiler_child_exit: receipt })) })
+  }
+  return child
 }
 for (const name of ['exec', 'execSync', 'execFile', 'execFileSync', 'spawnSync', 'fork']) {
   childProcess[name] = () => { throw new Error('memory-only preview denied an unowned subprocess') }
@@ -144,7 +157,7 @@ async function apiModule() {
 
 
 async function appModule() {
-  const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check') || args.includes('--signal-read-check') || args.includes('--signal-read-http-check')
+  const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check') || args.includes('--signal-read-check') || args.includes('--signal-read-http-check') || independentMode
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
     nodePaths: [dependencies], platform: 'node', format: 'cjs', packages: stockMode ? undefined : 'external',
     external: stockMode ? ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'] : [], target: 'es2020', jsx: 'automatic',
@@ -220,6 +233,141 @@ async function stockPageRenderer() {
         React.createElement(QueryClientProvider, { client }, React.createElement(app.default))))
     } finally { client.clear() }
   }
+}
+
+function independentSyntheticStock() {
+  const featureFields = Object.fromEntries(['id', 'instrument_id', 'trading_date', 'features_json', 'source', 'created_at', 'ma20', 'ma60'].map((key) => [key, 'known']))
+  const numbers = ['foreign_buy', 'trust_buy', 'dealer_buy', 'margin_balance', 'margin_change', 'short_balance', 'borrowed_sell', 'day_trade_ratio']
+  const chipFields = Object.fromEntries(['id', 'instrument_id', 'trading_date', ...numbers, 'source', 'data_as_of', 'collected_at', 'raw_payload_id'].map((key) => [key, key === 'raw_payload_id' ? 'missing' : 'known']))
+  const read = (fields) => ({ status: 'known', invalid_fields: [], missing_fields: [], metadata_fields: fields })
+  const envelope = (limit) => ({ version: 'stock-independent-read/v1', status: 'known', window_limit: limit, candidate_count: 1,
+    candidate_order: [1], scanned_count: 1, future_count: 0, unlocated_count: 0, unlocated_id: null, verification: 'stored_value_syntax_only' })
+  const data = syntheticStock()
+  const features = { ma20: -1, ma60: 0 }
+  return { ...data, features, feature_snapshot: { id: 1, instrument_id: data.instrument.id, trading_date: '2026-10-04', features_json: features,
+    source: 'fixture-derived', created_at: '2026-10-04T00:00:00', row_read: read(featureFields) }, feature_read: envelope(1), chip_read: envelope(120),
+    chips: [{ id: 1, instrument_id: data.instrument.id, date: '2026-10-04', ...Object.fromEntries(numbers.map((key) => [key, -1])),
+      source: 'twse_t86+twse_margin', data_as_of: '2026-10-04T00:00:00+08:00', collected_at: '2026-10-04T00:00:00', raw_payload_id: null, row_read: read(chipFields) }] }
+}
+
+async function independentReadCheck() {
+  typecheck()
+  const { validStockFeatureRead, validStockChipRead, stockIndependentView } = require(path.join(sourceRoot, 'stockIndependentReads.ts'))
+  const normal = independentSyntheticStock()
+  assert.equal(validStockFeatureRead(normal), true)
+  assert.equal(validStockChipRead(normal), true)
+  assert.equal(stockIndependentView(normal).features.ma20, -1)
+  let cases = 1
+  const probes = [
+    ['feature', (p) => { p.feature_read = null }], ['feature', (p) => { p.feature_read.status = ['known'] }],
+    ['feature', (p) => { p.feature_read.status = { toString: () => 'known' } }],
+    ['feature', (p) => { p.feature_read.candidate_order = [99] }], ['feature', (p) => { p.feature_read.scanned_count = 0 }],
+    ['feature', (p) => { p.features = [] }], ['feature', (p) => { p.features.ma20 = '10' }],
+    ['feature', (p) => { p.feature_snapshot.features_json.ma20 = Infinity }],
+    ['feature', (p) => { p.feature_snapshot.source = {} }], ['feature', (p) => { p.feature_snapshot.created_at = '2026-02-30T00:00:00' }],
+    ['feature', (p) => { p.feature_snapshot.row_read.metadata_fields.ma20 = 'missing' }],
+    ['feature', (p) => { p.features.large = 'x'.repeat(524289) }],
+    ['feature', (p) => { p.features.large = '\u0001'.repeat(100000) }],
+    ['feature', (p) => { p.features['x'.repeat(524289)] = 1 }],
+    ['feature', (p) => { p.features.large = Array(16384).fill(1) }],
+    ['feature', (p) => { p.features.large = Object.fromEntries(Array.from({ length: 8192 }, (_, i) => ['k' + i, 1])) }],
+    ['feature', (p) => { p.features = {}; p.feature_snapshot.features_json = null
+      p.feature_snapshot.row_read = { status: 'invalid', invalid_fields: ['ma20'], missing_fields: ['features_json'],
+        metadata_fields: { ...p.feature_snapshot.row_read.metadata_fields, features_json: 'missing', ma20: 'invalid', ma60: 'missing' } }
+      p.feature_read.status = 'invalid' }],
+    ['chips', (p) => { p.chips = {} }], ['chips', (p) => { p.chip_read.status = ['known'] }],
+    ['chips', (p) => { p.chip_read = null }], ['chips', (p) => { p.chip_read.window_limit = 121 }],
+    ['chips', (p) => { p.chip_read.unlocated_count = 1 }], ['chips', (p) => { p.chips[0].source = {} }],
+    ['chips', (p) => { p.chips[0].margin_change = '1' }], ['chips', (p) => { p.chips[0].collected_at = 'bad-time' }],
+    ['chips', (p) => { p.chips[0].row_read.metadata_fields = {} }],
+  ]
+  for (const [kind, mutate] of probes) {
+    const data = structuredClone(normal); mutate(data)
+    assert.equal(kind === 'feature' ? validStockFeatureRead(data) : validStockChipRead(data), false, kind + ': malformed segment')
+    const safe = stockIndependentView(data)
+    assert.equal(kind === 'feature' ? safe.chipValid : safe.featureValid, true, 'unrelated segment preserved')
+    assert.equal(kind === 'feature' ? Object.keys(safe.features).length : safe.chips.length, 0)
+    cases++
+  }
+  const unavailable = structuredClone(normal)
+  unavailable.feature_read.status = 'invalid'; unavailable.feature_read.unlocated_count = 1; unavailable.feature_read.unlocated_id = 9
+  unavailable.feature_read.scanned_count = 2
+  assert.equal(validStockFeatureRead(unavailable), true)
+  assert.deepEqual(stockIndependentView(unavailable).features, {})
+  cases++
+  const expanded = structuredClone(normal)
+  expanded.features.values = Array(11000).fill(1e20)
+  assert.equal(validStockFeatureRead(expanded), true, 'valid raw numeric spelling may expand beyond 65536 projected bytes')
+  cases++
+  const legacy = syntheticStock()
+  assert.equal(validStockFeatureRead(legacy), true)
+  assert.equal(validStockChipRead(legacy), true)
+  cases++
+  console.log(JSON.stringify({ passed: true, pid: process.pid, node: process.version, typescript: ts.version,
+    pure_json_guard_cases: cases, actual_exports: ['validStockFeatureRead', 'validStockChipRead', 'stockIndependentView'],
+    product_gets: 0, ssr_attempts: 0, compiler_children: compilerChildren, disk_artifacts: 0, validation: 'noEmit and pure independent JSON; finite negative/zero retained' }))
+  esbuild.stop()
+}
+
+async function independentReadHttpCheck() {
+  const api = await apiModule(), render = await stockPageRenderer()
+  const { validStockFeatureRead, validStockChipRead, stockIndependentView } = require(path.join(sourceRoot, 'stockIndependentReads.ts'))
+  const { stockResearchAction, StockResearchPanel } = require(path.join(sourceRoot, 'StockResearchPanel.tsx'))
+  const React = requireDependency('react'), { renderToStaticMarkup } = requireDependency('react-dom/server'), { MemoryRouter } = requireDependency('react-router-dom')
+  const guardedFetch = global.fetch
+  let product = 0, review = 0, attempts = 0, successful = 0, failed = 0
+  global.fetch = async (url, options = {}) => {
+    if (options.method && options.method !== 'GET') throw new Error('independent HTTP checker permits GET only')
+    if (new URL(url).pathname.startsWith('/__review__/')) { if (++review > 2) throw new Error('independent review cap exceeded') }
+    else if (++product > 48) throw new Error('independent Node product cap exceeded')
+    const response = await guardedFetch(url, options)
+    if ((await response.clone().arrayBuffer()).byteLength > 2 * 1024 * 1024) throw new Error('independent response byte cap exceeded')
+    return response
+  }
+  const snapshot = async () => (await fetch(apiOrigin.origin + '/__review__/independent-read-snapshot')).json()
+  const ssr = (callback) => {
+    if (++attempts > 40) throw new Error('independent SSR cap exceeded')
+    try { const html = callback(); successful++; return html } catch (error) { failed++; throw error }
+  }
+  try {
+    const before = await snapshot()
+    let normal
+    for (const symbol of ['A-NORMAL', 'B-JSON', 'C-DATE', 'D-METADATA', 'E-CHIP', 'F-UNLOCATED', 'G-FUTURE', 'H-WINDOW', 'I-NOBARS', 'J-OBSERVATION']) {
+      const data = await api.getStock('TWSE', symbol, '2026-10-04')
+      assert.equal(validStockFeatureRead(data), true, symbol + ': feature DTO')
+      assert.equal(validStockChipRead(data), true, symbol + ': chip DTO')
+      assert.ok(stockResearchAction(data), symbol + ': P6d safe summary preserved')
+      const html = ssr(() => render(data, `/stocks/TWSE/${symbol}?as_of=2026-10-04`))
+      assert.ok(html.includes('個股詳情分頁') && !/Infinity|NaN/.test(html), symbol + ': full App default technical tab')
+      assert.equal(data.overview.price.latest, null, 'M1 source/raw gate still rejects fixture')
+      if (symbol === 'A-NORMAL') normal = data
+      if (['B-JSON', 'C-DATE'].includes(symbol)) assert.deepEqual(stockIndependentView(data).features, {})
+      if (symbol === 'D-METADATA') assert.equal(stockIndependentView(data).features.ma20, 10)
+      if (symbol === 'J-OBSERVATION') assert.equal(stockResearchAction(data).primary_strategy, null)
+    }
+    for (const [name, mutate] of [['feature-map', (p) => { p.features = null }], ['feature-status', (p) => { p.feature_read.status = ['known'] }],
+      ['chips-object', (p) => { p.chips = {} }], ['chip-source', (p) => { p.chips[0].source = {} }], ['chip-status', (p) => { p.chip_read.status = ['known'] }]]) {
+      const data = structuredClone(normal); mutate(data)
+      assert.equal(stockResearchAction(data).action_state, normal.decision_summary.action_state, name + ': research action kept')
+      const html = ssr(() => render(data))
+      assert.ok(html.includes('個股詳情分頁'), name + ': full page survives')
+      const panel = ssr(() => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(StockResearchPanel, { data }))))
+      assert.ok(panel.includes('研究條件'), name + ': actual Panel inventory survives')
+    }
+    const after = await snapshot()
+    assert.equal(after.whole_sql_sha256, before.whole_sql_sha256)
+    assert.deepEqual(after.table_counts, before.table_counts)
+    assert.equal(after.read_mutations, 0)
+    console.log(JSON.stringify({ passed: true, pid: process.pid, node: process.version, typescript: ts.version, product_gets: product, review_gets: review,
+      ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, compiler_children: compilerChildren,
+      whole_sql_sha256: after.whole_sql_sha256, table_counts: after.table_counts, all_columns_and_all_typeof: true, read_mutations: 0,
+      known_ssr_use_layout_effect_warnings: ssrLayoutWarnings, disk_artifacts: 0,
+      remaining: 'root must operate actual browser chips/data tabs; SSR only default technical tab and actual Panel' }))
+  } catch (error) {
+    console.error(JSON.stringify({ independent_http_failed: true, pid: process.pid, product_gets: product, review_gets: review,
+      ssr_attempts: attempts, ssr_successful: successful, ssr_failed: failed, compiler_children: compilerChildren }))
+    throw error
+  } finally { esbuild.stop() }
 }
 
 async function signalReadCheck() {
@@ -1407,22 +1555,29 @@ async function serve() {
     .replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const fixtureLabel = args.includes('--signal-read-fixture') ? '隔離合成個股研究候選・2026-10-04・非正式研究來源與M1原件驗證' : args.includes('--stock-read-fixture') ? '隔離合成個股行情讀回・2026-10-04・非正式行情與M1原件驗證' : args.includes('--action-read-fixture') ? '隔離合成行動行情讀回・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quote-read-fixture') ? '隔離合成庫存本地行情・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--quantity-trust-fixture') ? '隔離合成庫存股數・2026-10-04・非正式持倉／行情與交易日資料' : args.includes('--finance-read-fixture') ? '隔離合成庫存讀值・2026-10-04・非正式持倉／行情資料' : '隔離合成使用者股數・2026-10-03・非正式持倉／行情資料'
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
-    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + fixtureLabel + '</p><div id="root"></div>')
+    .replace('<div id="root"></div>', '<p style="padding:8px 16px;color:#f5b85b">' + (independentMode ? '隔離合成個股技術與籌碼讀回・2026-10-04・非正式來源與M1原件驗證' : fixtureLabel) + '</p><div id="root"></div>')
     .replace('src="/src/main.tsx"', 'src="/app.js"').replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
+  if (independentMode && (script.byteLength > 6 * 1024 * 1024 || Buffer.byteLength(css, 'utf8') > 65536 || Buffer.byteLength(html, 'utf8') > 65536)) {
+    throw new Error('independent browser bundle budget exceeded')
+  }
+  let independentProduct = 0, independentStatic = 0
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     if (request.url === '/__review__/shutdown' && request.method === 'POST') {
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(JSON.stringify({ owned_memory_preview: 'stopping' }))
+      if (independentMode) console.log(JSON.stringify({ preview_stopping: true, pid: process.pid,
+        product_requests: independentProduct, static_requests: independentStatic, compiler_children: compilerChildren, disk_artifacts: 0 }))
       server.close(() => { esbuild.stop(); process.exit(0) })
       return
     }
     try {
       if (request.url.startsWith('/api/')) {
-        if ((args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture')) && !['GET', 'OPTIONS'].includes(request.method)) {
+        if ((args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') || independentMode) && !['GET', 'OPTIONS'].includes(request.method)) {
           response.writeHead(405); response.end('stock read preview permits GET/OPTIONS only'); return
         }
+        if (independentMode && ++independentProduct > 48) throw new Error('independent root UI product cap exceeded')
         const url = new URL(request.url, apiOrigin)
         if (url.origin !== apiOrigin.origin) throw new Error('invalid upstream destination')
         const chunks = []
@@ -1435,27 +1590,33 @@ async function serve() {
         const upstream = await fetch(url.href, { method: request.method,
           headers: { 'Content-Type': 'application/json' },
           body: request.method === 'GET' || request.method === 'HEAD' ? undefined : Buffer.concat(chunks) })
+        const body = Buffer.from(await upstream.arrayBuffer())
+        if (independentMode && body.byteLength > 2 * 1024 * 1024) throw new Error('independent upstream response cap exceeded')
         response.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json' })
-        response.end(Buffer.from(await upstream.arrayBuffer()))
+        response.end(body)
       } else if (request.method !== 'GET') {
         response.writeHead(405); response.end('owned preview only')
       } else if (request.url === '/app.js') {
+        if (independentMode && ++independentStatic > 32) throw new Error('independent static resource cap exceeded')
         response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' }); response.end(script)
       } else if (request.url === '/app.css') {
+        if (independentMode && ++independentStatic > 32) throw new Error('independent static resource cap exceeded')
         response.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' }); response.end(css)
       } else {
+        if (independentMode && ++independentStatic > 32) throw new Error('independent static resource cap exceeded')
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(html)
       }
     } catch (error) { response.writeHead(502); response.end(String(error)) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + owned SQLite portfolio router',
-    pid: process.pid, url: `http://127.0.0.1:${port}/${args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? 'stocks/TWSE/A-NORMAL' : 'actions'}`, api: apiOrigin.origin, fixture_date: args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') || args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? '2026-10-04' : '2026-10-03',
+    pid: process.pid, url: `http://127.0.0.1:${port}/${independentMode || args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? 'stocks/TWSE/A-NORMAL' : 'actions'}`, api: apiOrigin.origin, fixture_date: independentMode || args.includes('--finance-read-fixture') || args.includes('--quantity-trust-fixture') || args.includes('--quote-read-fixture') || args.includes('--action-read-fixture') || args.includes('--stock-read-fixture') || args.includes('--signal-read-fixture') ? '2026-10-04' : '2026-10-03',
     disk_artifacts: 0, memory_build: { write: false, js_bytes: script.byteLength, css_bytes: Buffer.byteLength(css, 'utf8'), html_bytes: Buffer.byteLength(html, 'utf8') },
     node: process.version, typescript: ts.version, font: 'local fallback; external imports omitted in memory; CSP blocks external requests' })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { esbuild.stop(); process.exit(0) }))
 }
 
-Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--signal-read-check') ? signalReadCheck()
+Promise.resolve().then(() => args.includes('--serve') ? serve() : args.includes('--independent-read-check') ? independentReadCheck()
+  : args.includes('--independent-read-http-check') ? independentReadHttpCheck() : args.includes('--signal-read-check') ? signalReadCheck()
   : args.includes('--signal-read-status-check') ? signalReadStatusCheck()
   : args.includes('--signal-read-http-check') ? signalReadHttpCheck() : args.includes('--stock-read-check') ? stockReadCheck()
   : args.includes('--stock-read-http-check') ? stockReadHttpCheck() : args.includes('--action-read-http-check') ? actionReadHttpCheck()

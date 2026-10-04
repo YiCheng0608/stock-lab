@@ -33,6 +33,7 @@ from .official_events import build_official_events
 from .units import volume_exact_text
 from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
 from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
+from .stock_independent_reads import independent_dates
 
 OVERVIEW_VERSION = "stock-overview/p6c-v1"
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
@@ -66,15 +67,17 @@ def resolve_stock_cutoff(db: Session, instrument: Instrument, requested: date | 
     latest_signal, unlocated_signals = stock_signal_dates(db, instrument.id)
     if unlocated_signals:
         return None
+    latest_independent, unlocated_independent = independent_dates(db, instrument.id)
+    if unlocated_independent:
+        return None
     # A stock with no prices may still have independent research records.
     # Their stored dates supply a common date cutoff without upgrading their source status.
     observed_dates = [db.scalar(select(func.max(field)).where(model.instrument_id == instrument.id))
-                      for model, field in ((ChipSnapshot, ChipSnapshot.trading_date),
-                                           (TechnicalFeature, TechnicalFeature.trading_date),
-                                           (Event, Event.event_date),
+                      for model, field in ((Event, Event.event_date),
                                            (CorporateAction, CorporateAction.action_date),
                                            (FundamentalSnapshot, func.coalesce(FundamentalSnapshot.announcement_date, FundamentalSnapshot.period_end))) ]
     observed_dates.append(latest_signal)
+    observed_dates.append(latest_independent)
     related_news = (select(NewsItem).outerjoin(Event, NewsItem.event_id == Event.id)
                     .where(NewsItem.status == "active", NewsItem.time_consistency == "verified",
                            or_(Event.instrument_id == instrument.id,

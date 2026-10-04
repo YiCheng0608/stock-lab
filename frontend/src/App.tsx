@@ -64,6 +64,7 @@ import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel
 import { StockPriceChart } from './StockPriceChart'
 import { isValidBar } from './stockChart'
 import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
+import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview } from './components/StockOverview'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
@@ -1046,6 +1047,7 @@ function StockPage() {
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
+  const independent = stockIndependentView(data)
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
   const researchShapeValid = validStockResearchRead(data)
   const researchAction = stockResearchAction(data)
@@ -1131,10 +1133,10 @@ function StockPage() {
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
       {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
-      {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
+      {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
-      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features.ma20)} ／ {formatNumber(data.features.ma60)}</b></div><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
+      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div>{independent.featureStatus !== 'known' && <div className="data-gap stock-feature-read-gap" role="status">後端特徵讀值缺失或無效，先核對原記錄；不以較早快照替代，行情與研究條件仍可查看。</div>}<div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(independent.features.ma20)} ／ {formatNumber(independent.features.ma60)}</b></div>{independent.featureValid && data.feature_snapshot && <div className="small-note">快照資料日 {formatTaiwanDateTime(data.feature_snapshot.trading_date, true)} · 來源 {sourceLabel(data.feature_snapshot.source)} · 建立 {formatTaiwanDateTime(data.feature_snapshot.created_at)}；讀值語法不證明來源或當時可用性。</div>}<details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
     </div>
   </div>
 }
@@ -1163,7 +1165,7 @@ function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
     <div className="table-wrap compact-table">
       <table>
         <thead><tr><th>日期</th><th><Term id="foreign_flow">外資買賣超</Term></th><th><Term id="trust_flow">投信</Term></th><th><Term id="dealer_flow">自營商</Term></th><th><Term id="margin">融資增減</Term></th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.date}>
+        <tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}>
           <td>{formatTaiwanDateTime(row.date, true)}</td>
           <td className="numeric-cell">{formatTableChip(row.foreign_buy, row.source)}</td>
           <td className="numeric-cell">{formatTableChip(row.trust_buy, row.source)}</td>

@@ -26,6 +26,7 @@ from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
 from .units import position_held
 from .stock_signal_reads import StockSignalRead, load_stock_signal_reads
+from .stock_independent_reads import StockChipRead, load_stock_chip_reads
 from .models import (
     ChipSnapshot,
     DataQuality,
@@ -197,8 +198,11 @@ def _prepare_decision_context(
     instrument_rows = db.scalars(select(Instrument).where(Instrument.id.in_(ids))).all() if ids else []
     bars_by_instrument, unlocated_bars_by_instrument = load_decision_market_reads(db, ids, as_of)
 
-    chips_by_instrument: dict[int, list[ChipSnapshot]] = defaultdict(list)
-    if ids:
+    chips_by_instrument: dict[int, list[ChipSnapshot | StockChipRead]] = defaultdict(list)
+    chip_reads = load_stock_chip_reads(db, ids, as_of) if stock_research_reads else {}
+    if stock_research_reads:
+        chips_by_instrument.update((item_id, reads.candidates) for item_id, reads in chip_reads.items())
+    elif ids:
         chip_query = select(ChipSnapshot).where(ChipSnapshot.instrument_id.in_(ids))
         if as_of:
             chip_query = chip_query.where(ChipSnapshot.trading_date <= as_of)
@@ -289,6 +293,7 @@ def _prepare_decision_context(
         "instrument_ids": ids,
         "stock_research_reads": stock_research_reads,
         "research_reads_by_instrument": research_reads,
+        "chip_reads_by_instrument": chip_reads,
         "bars_by_instrument": bars_by_instrument,
         "unlocated_bars_by_instrument": unlocated_bars_by_instrument,
         "chips_by_instrument": chips_by_instrument,
@@ -382,7 +387,8 @@ def _instrument_coverage(
     }
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
-        chip_dates = {row.trading_date for row in context["chips_by_instrument"].get(instrument.id, [])}
+        chip_dates = {row.trading_date for row in context["chips_by_instrument"].get(instrument.id, [])
+                      if not context.get("stock_research_reads") or row.core_valid}
     else:
         chip_dates = set(
             db.scalars(
@@ -504,7 +510,7 @@ def _latest_strategy_signals(db: Session, instrument_id: int, as_of: date | None
     return result
 
 
-def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tuple[bool, list[str], list[ChipSnapshot]]:
+def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tuple[bool, list[str], list[ChipSnapshot | StockChipRead]]:
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
     if context and instrument_id in context["instrument_ids"]:
         rows = list(reversed(context["chips_by_instrument"].get(instrument_id, [])[:5]))
@@ -520,6 +526,9 @@ def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tupl
             )
         )
     missing: list[str] = []
+    raw_scope = context.get("chip_reads_by_instrument", {}).get(instrument_id) if context else None
+    if raw_scope and (raw_scope.unlocated_count or any(not row.core_valid for row in rows)):
+        missing.append("institutional_flow_5d")
     if len({row.trading_date for row in rows}) < 5:
         missing.append("institutional_flow_5d")
     for field in ("foreign_buy", "trust_buy", "dealer_buy", "margin_balance", "margin_change"):

@@ -268,6 +268,8 @@ Browser 接受範圍只限主契約的具名操作；有效歷史窄版溢出未
 
 ### M3-P6d 個股研究候選讀回的零落盤驗證入口
 
+P6d 九 source＋六 docs 已版本封存；以下保留當時 freeze 前的原分派、實測與失敗，不覆蓋上方或本輪 P6e 狀態。P6d 指定外部 owned 清理與五 DB 刪前檢查缺口見[協作紀錄](../TASK_COORDINATION.md)，不為換輪重跑有效證據。
+
 九檔 stock-only Signal／StrategyVersion 實作、必要 direct／actual HTTP／完整 App 讀回與具名操作已由統籌有限接受；候選 read.status 非字串 coercion 的單項退修／必要 pure 補驗亦已接受，來源停寫、六文件接受後才 aggregate freeze。精確投影／JSON／窗口／canonical latest／截止與正常 observation 語意只由[個股頁 §16](../STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)負責。本節留可重建入口、副作用、原始 exit 與限制；命令、版本、SQL digest、root 具名收據與最終 freeze／索引／commit／merge 留 task，不另造附件，不重跑仍有效證據。
 
 後端 `backend/tests/test_share_quantity_exact_presentation.py --signal-read-only` 沿 standalone `-B -Xutf8`、AST config stub、共享唯讀依賴與 guarded memory SQLite／actual router；不載一般 pytest conftest、正式 config mkdir、production lifespan／migration 或正式 DB。首批 **9 methods／8 pass／1 error、33 router GET／39 setup、exit 1**：evidence fixture 嘗試寫 SQL None 觸發 SQLite NOT NULL，不能稱首跑全通。`--signal-read-only --signal-read-case evidence-shape` 只補受影響 method，**9 GET／9 setup、exit 0**；合法 JSON node／depth 邊界的必要同 method 補驗另 **9 GET／9 setup、exit 0**。累計 **51 direct router GET／57 targeted setup**，未完整重播 suite。SQL None 只由 pure projection／RR 語意核對，不冒稱保存到 NOT NULL SQLite 或正式資料已有該列。
@@ -287,6 +289,30 @@ Preview 首次 API **8777／8780** 錯 pair 被 guard 拒絕，exit 1、發生�
 測試與清理另報：root 一個 owned tab 內五案均在 **1298×924、client＝scroll 1283**。Final viewport 已設 **1365×900／mobile=false**，修正 eval 後核寬均 **1350／details 0**，owned tab close／list 空。Console limit **50** 是 **15 messages（5 DevTools info＋10 Router warnings，兩 unique warnings）／nonroutine=[]**，不是全域零 warning。立即 exact command-line／listener gate 後 owned Node **8072**／esbuild **14868**／Python **51788** 的兩個 shutdown 各 200；Node／Python serve final 各 exit 0，root 獨立核 PIDs／children／**8777、8778 listeners count 0**，其後 status 補驗 PID **29996** 與先前 PIDs／children／helper Node／esbuild／listeners 也獨立核為 0。新測試落盤／附件／暫存／殘留 **0**，前輪兩 logs **717 bytes** 的 pre-CreateProcess automatic review 拒絕與更早 excluded／NO-RETRY 保留，不重試、不重置配額。
 
 核定方法／資料／GET／setup／SSR attempts（含失敗）、response／bundle／process／tab 上限集中見[協作紀錄](../TASK_COORDINATION.md)，這些是上限而非全部已驗。Source 只 stock opt-in Signal／StrategyVersion；legacy tracking／Actions、FeatureSnapshot／Chip 與其他 typed models 未納入此隔離。正向 M1 filesystem、真正磁碟保存／重開、正式 DB／migration、完整 backend／production build／startup、官方／live／availability／PIT、Decimal exact、新 Plan、完整 M1／M3 與 P6c physical canvas／有效歷史窄版／真正截止表單保持未驗，不用 memory fixture 降低原件或磁碟條件。
+
+### M3-P6e 個股獨立特徵／籌碼讀回的零落盤驗證入口
+
+本輪十檔 stock opt-in `TechnicalFeature`／`ChipSnapshot` raw 接線、必要 direct 補驗／actual HTTP／App 及六個具名操作已有限接受；來源／具名操作有限接受、主線說明已整合；版本封存與 merge 收據以 Git／原 task 為準。P6d 原測試不重新計為本輪通過。精確資料與拒用界線見[個股頁 §17](../STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)，方法／資料／GET／SSR／程序上限見[協作紀錄](../TASK_COORDINATION.md)。
+
+目前新增入口為 standalone `backend/tests/test_share_quantity_exact_presentation.py --independent-read-only`，以及 `tools/share-quantity-exact-preview.cjs --independent-read-check --deps <既有依賴目錄>`、`--independent-read-http-check --api http://127.0.0.1:8777 --deps <既有依賴目錄>`。後端仍以已核定 Python `-B -Xutf8`、AST config stub、guarded memory SQLite／actual router 使用共享唯讀依賴；不載一般 pytest conftest、正式 config mkdir、main／production lifespan、migration 或正式 DB，不 install／另建環境。文件角色未執行這些命令；完整命令與 root 原收據留 task，以下記錄實際有限結果。
+
+單一 actual HTTP fixture 入口為 Python `--independent-read-fixture --serve --port 8777`；Node 記憶體 preview 必須使用已核定 owned pair **8777／8778**，同 instance GET／Response.json／App／Panel、root 一個 tab 的必要操作與最後 digest。本輪只使用這一 fixture，未重啟／reseed／replay B；不以舊 `--signal-read-fixture` 橫移當本輪已驗。serve／compiler 必須順序啟動，bundle write:false；同 instance bars、positions、Signals、StrategyVersions、TechnicalFeature、ChipSnapshot 六表全欄／typeof 的 before／after／UI 後不變與 read mutation 0 是完成條件，不以列數或單一成功回應代替。
+
+首輪 `--independent-read-only`（`09afb2`）原 exit **1**：**9 methods／8 pass／1 新 held observation assertion fail、107 direct GET／202 targeted setup**。實際 primary_risk.kind／stop:null／semantics 保留原契約，錯的是新測試 expected={}；只改受影響 expectation。named router-matrix（`8b78b6`）**1 pass／10 GET／24 setup／exit 0**，沒有重跑八個有效 case。累計 **117 direct GET／226 targeted setup**；**87 六表全欄／typeof digest receipts** 均同 instance before／after 相同、read mutation **0**／unexpected=[]。首輪 audit 六個 expected denials 與 targeted none 分報，原失敗不改成全 suite 通過。
+
+Node **1352**（`db6f85`）必要 noEmit＋**30 pure guard cases／exit 0**，HTTP **0**／SSR **0**／child **0**；合法數字展開與 malformed giant string／key／object／array、null metadata／state array 等 pure cases 不外推 actual HTTP／Response.json／App。root `a7feeb` 獨立核 PID 1352 ceased、8777／8778 ports 缺席。版本為 **Python 3.12.14／SQLAlchemy 2.0.52／Pydantic 2.13.5／Node 24.19.0／TypeScript 5.9.3**。
+
+單 Python fixture `b722e0`／PID **17712** 的 seed **24** 已執行，累計 targeted setup **250／256**、剩六、不重置。六表 counts 為 **12 features／253 chips／10 Signals／1 version／10 positions／600 bars**，instruments **11**；start review一次、Node before／after、root `e46101`／`e04bcd` 與 UI後 `1c3434` 全欄／typeof digest均為 `b905c93e88977d3c06338ef49123e8697ad5acd4556eb304f078e5ffadfe1806`、read mutation **0**。SQL None只核 pure projection，不當 NOT NULL SQL 保存；SQLite affinity 已數值化的 numeric string／bool 不證恢復原意圖。
+
+HTTP checker `9cdeb3` 原 exit **0**、Node **31720**／child **4728**：**10 product GET＋2 review、20 SSR attempts／20 success／0 fail＝15 App＋5 Panel**，**215 known useLayout warnings**。Child exit code未觀測；`020a62` 核 Node＋child ceased 後才開 preview，不宣稱未觀測區間或整輪從未超 child cap。Preview `9333ae` Node **24096**／compiler **42608**，`2d3290` 即時 CIM核 exact pinned command／parent／8777、8778；write:false **JS4,222,519／CSS27,737／HTML523 bytes**，不是 production build。六具名產品case及native／DOM.click界線由個股頁§17負責。
+
+原失敗不改為pass：首 snapshot `1f2ef1` runtime closed；B `bf2a6e` 原生ACK無事件（offscreen y1620>924），visible scroll後 `e444c8`／`0957c3` 才原生成功。D `955034` ACK仍 technical、actual UI assertion fail而API健康；RAF `378272` timeout、`df8c8e`／`c19f70` runtime closed。第一 QA page `440831df…` 經 `ff07fa` exact close／`3226bb` list[]、取消 pending await後才開replacement `11707c43…`（`099efb`）；最多同時1、兩個順序pages。replacement `130659` wait.selector timeout，`9111e3` direct DOM可用後不再RAF／wait；D／E／H／F／I據實核selected。`write_stdin` 跨角色session56950 unknown scope tool error後，由角色收據核 owned sessions仍活，無重啟／reseed。computer-use SKILL `38d895` 明確排除embedded browser，未作GUI操作。H錯CSS candidateRows0不當真候選數。
+
+`691526` console limit50只核目前page **12 messages＝4 DevTools info＋8 Router warnings／2 unique／nonroutine=[]**；network limit50目前page **27 records／11 stockGET均200／other non200=[]**，不是全區間無錯誤。Final **1298×924／mobile=false／cw=sw1283／details0**，不證390px／canvas／真正截止表單；`790d3f` 核replacementunused後close/list[]，兩順序QA pages均已關。
+
+測試與清理分報：root即時CIM gate後Node own shutdown POST200（`5f62a7`），exec98112 final **exit0**（`ad07ff`）、root product **16**／static **32**；再Python own POST200（`d615d5`），exec56950 final **exit0**（`a6721c`），actual HTTP **33＝26 product（Node10＋root16）＋7 review（含Python shutdown1）**。Node own shutdown1另計，review＋shutdown **8／8**。`f30eea` 獨立核全部captured PIDs **17712／31720／4728／24096／42608**及children、8777／8778 listeners缺席；compiler exit code仍未觀測、不冒稱exit0。新落盤／tmp／artifacts／residual均0、不重置；既有excluded殘留未動。
+
+新測試落盤／附件／暫存／殘留上限 **0，不重置**；原件、保存／重開、正式 DB 或 source／time／PIT 等 gate 不因 memory fixture 通過而降低。測試 exit、程序關閉、owned tab／child／listeners 與清理結果各自報；未跑不稱 pass。P6d 指定外部 owned 清理及五索引刪前檢查缺口由 TASK 負責，P6c／更早 blocked／occupied／HAR 等 excluded／NO-RETRY 不重試；P6d 原實測／失敗與其有限支持範圍保留原文。
 
 ## 歷史驗證
 

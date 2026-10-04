@@ -519,3 +519,56 @@ StockPage 核 candidate 身份、次序、欄位狀態、canonical slot 與 deci
 同一 fixture 在 Node HTTP before／after、root UI 後，Signals／StrategyVersions／positions／bars 全欄與 SQLite typeof 同 digest、read mutation 0；自有 tab／process／child／8777、8778 listener 已清，新測試落盤／附件／暫存／殘留 0，兩個前輪 blocked logs 仍 NO-RETRY。Console 的有限查閱有 DevTools info／既有 Router warnings，非全域無 warning；短暫 helper compiler 無即時 PID／並發觀測，不宣稱全程 child cap 已證。
 
 本批未驗正向 M1 raw filesystem／磁碟重開、正式 DB／migration、完整 backend／production build、官方／live／availability／PIT、Decimal exact、新 Plan、全部行動或完整 M1／M3。P6c physical canvas、有效歷史窄版 layout、真正截止表單與其他 inherited 未驗界線保留；FeatureSnapshot／Chip、legacy tracking／Actions 等其他 typed models 尚未支持此隔離。下一具名候選／audit 與完成條件由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責，有界審查本身不當能力交付。
+
+## 17. M3-P6e：個股特徵／籌碼獨立區塊讀回隔離
+
+本批支援 M3／R2-C2，接續 §16 未納入的特徵與籌碼區塊。十檔實作、必要 direct 補驗、actual HTTP／App 與下列六個具名操作已由統籌**有限接受**；污染特徵或籌碼在自己的區塊保留缺值／無效提示，健康行情與研究仍可查看，不因 typed processor 例外讓整個詳情失效。來源／具名操作有限接受、主線說明已整合；版本封存與 merge 收據以 Git／原 task 為準。P6d 原實測與失敗只適用 §16，不由本節重新計為通過。
+
+### 17.1 個股 opt-in raw 投影與欄位狀態
+
+產品稱呼 FeatureSnapshot／Chip 的實際保存模型為 `TechnicalFeature`／`ChipSnapshot`。只在 stock／instrument detail 及必要 stock decision／overview caller 啟用兩表 raw reader：`technical_features` 全 **6** 欄、`chip_snapshots` 全 **15** 欄繞過 Date／DateTime／JSON processor，**不使用 CAST**、不修資料或改 writer。其他 typed routes、legacy Actions／tracking 不在此 opt-in 隔離範圍。
+
+feature snapshot 保留 id、instrument_id、trading_date、features_json、source、created_at；chip 保留 id／instrument_id／日期、八數值、source／data_as_of／collected_at／raw_payload_id。raw 身份僅接受正 int64、不 coercion；前端 section 身份另要求 JavaScript safe integer，不能把超 safe 的原始身份捨入後當同一列。每個欄位分 known／missing／invalid，missing／invalid 投影為 null，拒絕把數字字串、布林或非有限數字當可信數值。row_read 描述欄位狀態；feature_read／chip_read 使用 `stock-independent-read/v1`，含候選筆數／順序、scanned／future／unlocated count 與位置。`stored_value_syntax_only` 只證儲存讀值語法，known 不證來源、可得時間、用途或 PIT。
+
+### 17.2 截止、窗口與無較早替代
+
+raw 候選排序為 trading_date DESC／id DESC；先在完整該標的 scope 辨識日期，可定位且晚於截止的 known future 先排除，再固定 **feature 1／chips 120** 候選位置後驗值。不先刪 invalid 列湊窗口、不 refill；bad latest 不回到較早 feature，chips 壞列保留位置與 null 欄位。unlocated 在全 scope 判定，窗口外的無法定位日期不能因未顯示而消失。chips API 將同一固定候選反向供顯示，不重新查較早列；scanned／future／unlocated counts 指完整該標的 scope，與 coverage 分開。coverage 只採這 120 候選中日期合法且原五 consumed core 完整、並落在既有 TAIEX window 的交集；不證完整來源／市場 coverage。
+
+健康 bars 的截止沿原優先規則；無 bars 時，兩獨立表任一 unlocated 使 default cutoff 保持 None，不取其他較早合法日冒充。明示 as_of 保留原值，但不把 unlocated 變成可用列；feature invalid／unlocated envelope 拒用 MA 呈現、不以較早快照替代。這是日期篩選與語法隔離，不證完整交易日、來源時間或歷史當時可得。
+
+### 17.3 特徵 JSON、MA 與籌碼既有依賴
+
+後端 features_json 沿原 strict dict reader，檢查原 JSON **65,536 UTF-8 bytes／depth 32／nodes 16,384**、合法 Unicode 與有限數字；不是 dict 或超限拒用。MA20／MA60 只接受內建有限數值，**零與負值保留**，不新增 positive gate；可選 source／created_at 無效只投影 null。feature 原始 JSON byte 限額與前端投影值的限額分開，parse／數字表示可能改變 JSON 拼法，前端不宣稱重證原 byte budget。
+
+chip 八數值為 foreign_buy／trust_buy／dealer_buy／margin_balance／margin_change／short_balance／borrowed_sell／day_trade_ratio，有限數值或 null 逐欄呈現。原五個 consumed core（foreign_buy、trust_buy、dealer_buy、margin_balance、margin_change）與身份／日期仍支援原 5 日完整性 gate；其餘 optional 數值／metadata 的 invalid 不另加 blanket actionability gate。原 conditional、完整 observation、held quantity／stop 與必要 source 優先不改；不把 feature／chip known 自動當研究成立或新 Plan。
+
+### 17.4 前端獨立區塊與有限相容
+
+StockPage／StockResearchPanel 共用純 guard 核 shape、builtin-string state、field metadata、身份、數量與順序一致性。malformed feature 只拒用 feature／MA，malformed chip envelope 只拒用 chips；結構合法的 chip 列保留各欄有限數值與 missing／invalid null，並顯示自己區塊的 gap，健康 bars／研究不被整體抹除。前端 normalized／projected JSON 採 **512 KiB** 呈現限額，另核 **depth 32／nodes 16,384** 的有限樹與合法 Unicode；原 JSON 解析後的合法數字可能展開成較長拼法，這項上限與後端原 raw **65,536 bytes** 分開，不證原件或來源。合法數字展開與 giant string／key／object／array、null metadata／非字串 state 等 pure 邊界已由必要 helper 核對，必要 actual HTTP／App 支持已有限接受，不外推其他路徑。全部新讀值欄位 undefined 的舊 API 僅有有限數值相容；null／矛盾的新 envelope 不當舊回應。shared `ChipSnapshot` type 保持原樣。
+
+actual getStock／Response.json、完整 App／Panel、具名兩分頁操作與同 instance 六表全欄／SQLite typeof 在讀回前後及 UI 後不變、read mutation 0 已在以下有限範圍接受。方法／資料／HTTP／SSR／程序及零落盤上限見[協作紀錄](TASK_COORDINATION.md)，可重建入口及原始 exit 由[開發入口](development-baseline/README.md#m3-p6e-個股獨立特徵籌碼讀回的零落盤驗證入口)負責；文案見 [UI 規格](UI_COPY_SPEC.md#m3-p6e-獨立特徵籌碼區塊文案有限接受)。
+
+### 17.5 具名有限接受與未包含
+
+必要 direct 首輪新 held observation 測試誤期望 primary_risk={}，實際原 kind／stop:null／semantics 正確；只修該 expectation 後單項補驗通過，八個有效 case 未重播。必要 noEmit／pure guards、actual getStock／Response.json、App／Panel 已有限接受；原 exit、數量、SQL receipts 與 warnings 由[開發入口](development-baseline/README.md#m3-p6e-個股獨立特徵籌碼讀回的零落盤驗證入口)詳述，不把 pure cases 全改稱 HTTP-derived JSON。
+
+SQL None 的 features_json 只核 pure projection，不聲稱存進 NOT NULL 欄；SQLite affinity 已數值化的 numeric string／bool 只能核現在 storage，不能還原遺失輸入意圖。
+
+本次 **2026-10-04 synthetic** 單一 Python fixture 含十個研究標的與一個合成 TAIEX，不是官方行情、正式持倉或 M1 原件；actual HTTP／App／Panel 已接受，具名六案 API 均 200。資料筆數及 SSR／HTTP 計數由開發入口負責。桌面 **1298×924／mobile=false／client＝scroll 1283**，以下分頁 selected／實際 DOM 與必要數值已核。
+
+| Case | 已接受的有限結果與實際操作 |
+| --- | --- |
+| B-JSON | 資料 tab 原生 click 最終成功；feature candidate 1、invalid、features={}，不呈較早 MA999，60 bars 與 hold_observe 保留。首次 offscreen ACK 沒事件不算成功；捲至可見後才核原生操作。 |
+| D-METADATA | data＋chips 以程式 DOM.click 核 selected；MA20／60為10／9、source／時間 null、1 chip 各合法值保留、未知單位空白、無 core gap；60 bars／hold_observe 保留。原生 ACK 仍 technical 的 assertion 失敗另報。 |
+| E-CHIP | DOM.click chips selected；1 列 foreign_buy／margin_change 無效空白，其他有限數值保留，不以整列零代替。 |
+| H-WINDOW | DOM.click chips selected；120 candidates／scanned121，最新 invalid 仍在、不 refill；30 UI 列日期10/04至9/05。另 DOM.click research 可見持有觀察、Panel及4價位；錯 CSS 的 candidateRows=0查詢不當實際候選數。 |
+| F-UNLOCATED | DOM.click chips selected；120 candidates／scanned122、窗口外unlocated1／id252，候選日期皆合法仍保留區塊 gap，不把窗口合法當全 scope 無污染。 |
+| I-NOBARS | 無 as_of 的 default cutoff=None、bars0／summary=null；1 unlocated／id251／date=null，DOM.click chips 核「未提供」，不偽造日期或截止。 |
+
+只有 B 最終為已核原生分頁操作，其餘依 DOM.click／真正 App DOM驗值，不泛稱六案全原生。首次 snapshot runtime closed、D 原生未切換、RAF timeout／runtime closed、replacement wait.selector timeout、錯跨角色 process scope 等原失敗由開發入口保留；兩個 QA pages 順序使用、最大同時1，不重啟／reseeding fixture 或 replay B。
+
+同 fixture 六表全欄／typeof digest 在 start、Node before／after、root必要讀回與 UI後皆相同，read mutation0；兩 QA pages／owned serves／captured children／8777與8778 listeners已清，測試產物／暫存／殘留0。known layout／Router warnings 與 bounded console／network 結果不稱全域零 warning；compiler exit code未觀測，不能從 ceased 推零。精確計數／副作用／清理與限制見開發入口。
+
+本批不改 P6d／P6c 的已接受操作或原失敗，不宣稱其他 typed models／legacy Actions／tracking、M1 正向原件、官方／live／availability／PIT、正式 DB／migration／磁碟重開、完整 backend／production build、新 Plan、完整 M1／M3。P6c canvas／有效歷史窄版／真正截止提交等 inherited 未驗保持待驗；memory fixture 不降低原件或磁碟條件。
+
+5／20 日法人與研究條件仍固定保守回應時，代表必要輸入／consumer 未接通；P6e 讀回可靠性改善不等於核心流程完成。後續選題優先解除具名核心依賴或新增可驗收操作，不預設新隔離輪，詳見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。

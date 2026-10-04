@@ -2,7 +2,75 @@
 
 本文件保留目前角色、接手與執行狀態，以及最近產品交付的實際 roster／驗收邊界；流程依 [AGENTS](../AGENTS.md)，能力與優先順序查 [ROADMAP](ROADMAP.md)。
 
-## 獨立文件維護／目前狀態
+## 目前：M3-P6e 來源／具名操作有限接受，主線說明已整合
+
+M3-P6d 九檔程式與六文件已有限接受、aggregate freeze、輪末索引／coverage、正常本地 commit 及乾淨 `master` ff-only merge；該輪已驗收產品版本為 `0f8ac4ab3af8ec44353c2181eb18ae3c9a9fe6cb`，parent 為 `d85769c7456d0101245b853f585b1ebf7cae294d`。最終驗收與版本封存 receipt 留原 task，不為逐條回寫 hash 另行刷新或提交。P6d 精確能力與未驗界線仍依[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)，下方保留該輪原 roster 與實測；封存不升格完整 M1／M3，也不改 P6c 歷史驗收。
+
+本輪先由最新已驗收且乾淨的 `master` 建立 NEW 獨立 worktree／branch，再在其原可見 Codex terminal 啟動 NEW 統籌；不是沿用 P6d root 或三角色。**M3-P6e「個股其他 typed 獨立區塊讀回隔離（FeatureSnapshot／Chip）」**支援 M3／R2-C2；必要 caller 有界唯讀 audit 已完成，統籌已有限接受下列十檔實作、必要 actual API／App／六個具名操作及零落盤驗證範圍。正式接手與外部清理責任移轉已獨立接受（`562448`／`751ef9`），不再反覆初始 roster review；有限能力與native／DOM.click支持界線集中見個股頁§17；來源／具名操作有限接受、主線說明已整合；版本封存與 merge 收據以 Git／原 task 為準，不升格完整 M1／M3。
+
+### P6e 啟動、授權與 freeze 前整合交付快照
+
+以下保留此輪啟動、當時授權／待辦、實測及清理 receipt；後續 freeze／索引／commit／merge 的完成狀態依 Git／原 task，不為回寫 hash 再刷新或提交。主線維護 `453ca2b9e770474686d9faed2a05a960154e5c1b` 已完成版本封存，本 worktree 已包含其內容；手動文件整合不等於 root review 或 master merge 已接受。本節當時 intrinsic staged／UU 與仍在用角色資源亦屬 freeze 前快照。
+
+共同 repo／worktree：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m3-stock-detail-independent-read-isolation-20261004`；branch：`roadmap-m3-stock-detail-independent-read-isolation-20261004`；起始 HEAD：`0f8ac4ab3af8ec44353c2181eb18ae3c9a9fe6cb`。統籌以 `CODEX_THREAD_ID`、Rpc `thread/read`、rollout `session_meta`／`turn_context` 與 Git 自核實際 cwd／branch／HEAD、`gpt-6.1-sol`／`ultra`、parent=null（`36ba6e`）；另以 includeTurns／runtime 獨立核三個 NEW 子 ID、actual model／effort、parent 與共同 cwd／branch／HEAD 均相符（`317cc8`）。文件角色自核亦相符（`e06c38`／`db4105`，exit 0）。
+
+本輪原可見 terminal `term_935e0735-4482-4cda-88a7-c60a0fadcc68`，tab `f94cd2c5-c495-4cb6-a11d-0422c8142712`／pane 1；exact show（`b8fa12f4`）／read（`b5d0e573`）已核原統籌 terminal。`/subagents` 原 OPEN（`cf6a7e3b`）已讀回 Main 與下表三個子 ID；舊統籌 startup／menu／config 已讀（`bd6de0`／`b8c80e`／`23a983`、targeted `beeeba`）。bare Enter（`99ca72c3`）／read（`4a6c0dfc`）已回 Main、未 Escape，舊統籌亦獨立讀回（`d0935f`）。含三個子 ID、配置、cwd／branch／HEAD 與白名單的正式接手 commentary 已由舊統籌獨立觀測（`9fd8c6`），完整初始 TASK review 後最終 handoff／清理責任移轉亦已接受；最終 receipt 留 task，不為 hash 另行刷新或提交。新的未使用 default shell `term_29d40838-2a96-49c1-8803-5a76e4b7b38f` 經 exact show（`e050`）／read（`64d7`）後 close（`b84102ec`），`ptyKilled=true`；舊 shell 已 close（`f6b01d6e`），兩者不重做，正式統籌 terminal 保留。
+
+| 角色 | 本輪 ID／實際配置與啟動核對 | 目前核定寫入／接手範圍 |
+| --- | --- | --- |
+| 統籌 | canonical ID `/root`；thread／session `01a104ef-f17a-7f81-9ba6-c2d7483d6891`；實際 `gpt-6.1-sol`／`ultra`；parent=null；已自核及獨立核三角色，正式接手及清理責任移轉已獨立接受 | 已有限接受十檔實作、必要direct／actual HTTP／App與六具名操作；六文件review後才aggregate freeze，索引／commit／merge分別明授。P6d 指定外部 owned 清理已完成，五索引刪前流程缺口仍保留；本輪四角色／terminal／worktree／branch 仍在用，產品與清理分報。 |
+| 程式 | canonical ID `/root/implementation`；子 thread `01a104f2-0748-74a1-bc7a-1bc97afe4433`；實際 `gpt-6.1-sol`／`xhigh`；runtime／parent／cwd／Git 已獨立核實並接手 | 初始 startup／baseline 與必要 caller READ-ONLY audit、source write／tests 0 的歷史保留；現 **ONLY 十檔**：新增 `backend/app/stock_independent_reads.py`、`backend/app/api.py`（stock／instrument detail 必要接線）、`backend/app/decision.py`（stock context）、`backend/app/stock_overview.py`（必要 cutoff／coverage／evidence）、`frontend/src/types.ts`（獨立區塊 nullable projection）、新增 `frontend/src/stockIndependentReads.ts`（StockPage／Panel 共用純 shape／state／count／order／value guard）、`frontend/src/App.tsx`（StockPage）、`frontend/src/StockResearchPanel.tsx`（必要兩分頁）、`backend/tests/test_share_quantity_exact_presentation.py`（必要記憶體模式）、`tools/share-quantity-exact-preview.cjs`（必要 preview／HTTP／前端驗證）。`stockResearch.ts` 僅必要 caller 唯讀。十檔整輪來源正向 UTF-8＋LF cap **131,072 bytes**，追加 helper 不重置；來源已有限接受並停寫，root 核 current positive **65,801 bytes**／cumulative patch **67,636／131,072 bytes**，尚非 aggregate freeze；不改規格、文件、索引或 Git，不自行結案／下一任務。 |
+| 文件 | canonical ID `/root/documentation`；子 thread `01a104f2-50d4-79e2-96a2-d4f9ccb864f8`；實際 `gpt-6.1-sol`／`xhigh`；已自核及獨立核實並接手 | 初始 ONLY TASK cap **16,384 bytes** 的交付 **13,481 bytes** 已 review 接受；現 **ONLY 六份既有文件**：`docs/TASK_COORDINATION.md`、`docs/STOCK_RESEARCH_PAGE.md`、`docs/UI_COPY_SPEC.md`、`docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/development-baseline/README.md`。整輪正向 UTF-8＋LF總 cap **65,536 bytes**，包含初始 TASK 全量及修正、不重置。六文件依 root 有限接受結論補成果／未驗／下一步，文件最終review仍待；只驗差異、UTF-8／LF、連結與一致性，不改穩定規格、不另造附件。交付停寫，不自行 freeze／結案。 |
+| 索引與 Git commit | canonical ID `/root/index_commit`；子 thread `01a104f2-91b0-7ec3-94b0-ccc982949b5a`；實際 `gpt-6-luna`／`medium`；runtime／parent／cwd／Git 已獨立核實 | 初始來源／索引／Git 寫入 0；現舊五 exact aliases 的另行明授清理，以及單次 OWN worktree ff-only／autostash 整合已做，結果與流程缺口見下文。本輪 source write／索引刷新／commit 仍 **0**，不輪初或中途刷新。startup 三次未知 Rpc method 失敗與 runtime JSONL 成功補核分報、不重試。來源／文件接受並 aggregate freeze 後，才另依明授更新本輪分區、驗 coverage、提交及本地合併；不自行結案。 |
+
+文件配額追加僅用於已授權主線四文件維護整合：原 **49,152** 加 **16,384**，現整輪 **65,536 bytes**；仍以 original start `0f8ac4a` 的正向 UTF-8＋LF 全量計算，initial TASK **13,481**、先前 `437165` 的六文件累計 **45,587** 及後續修正均包含、不 reset。完整內容合併的記憶體估算 **56,244 bytes** 比原 cap 多 **7,092**，root 因保留主線依賴、roster／歷史、P6e 原失敗及 gates 而有界追加；不是擴張六 docs 白名單、sources／tests 或產品能力。test disk／tmp／artifacts／residual 仍永久 0。
+
+三個 subagent 均由本輪統籌在其 session 以 `spawn_agent`、`fork_turns=none` 新建；Rpc `parentThreadId` 與 runtime `parent_thread_id` 均為 `01a104ef-f17a-7f81-9ba6-c2d7483d6891`，各自 runtime id 為表列子 thread，cwd／branch／起始 HEAD 均相符。canonical 名稱相同不表示沿用前輪角色；四角色不自行結案或啟動下一任務。
+
+文件角色 CBM App 輪初 list／status／coverage 可用，list **13 aliases／has_more=false**；只用前輪 prefix `taiwan-stock-research-roadmap-m3-stock-detail-signal-read-isolation-20261004-` 的 docs baseline，不用原八 aliases。該 docs ready、**447 nodes／446 edges**，status 的 Git HEAD 為本輪起始 HEAD；`TASK_COORDINATION.md`／`ROADMAP.md`／`README.md` 均 `no_recorded_issue`／`metadata_changed`，`../AGENTS.md` 為 `outside_project`，scope `.` 為 total 0／has_more=false。統籌亦已核完整五分區 baseline／metadata_changed，已依相關界線補讀本輪必要原文；本輪尚未 tracking，不稱 fresh，不輪初／中途刷新。本輪四角色均已 actual ceased 舊五 aliases／舊 rootpath 查詢，逐角色收據已收到，所有調用已返回、無 pending／queued，後續只讀本輪未索引／變更原文。App 連線、索引、coverage、產品驗收及下述已明授舊索引清理分報，沒有因連線故障重建索引。
+
+本輪新增測試落盤、附件、暫存及殘留上限均為 **0，永不因新 session 或清理重置**；文件驗證不跑 backend、不建 DB。既有 HAR、M3-P4 blocked logs、其他 blocked／occupied／未知殘留與更早資源沿用原 receipt、**excluded／NO-RETRY**；已清資源也不重做。新 root 已完成下列 P6d 指定外部 owned 清理；五索引刪前檢查缺口仍分報，不推定歷史資源全清，產品實作繼續、不因清理結果增加產品驗收。
+
+核定能力範圍限 stock／instrument detail 的 FeatureSnapshot／Chip 兩表 full raw 讀回，**不使用 CAST**：已知 future 先排除，再固定 feature **1**／chips **120** 候選位置後驗值；unlocated 在完整該標的 scope 判定、不以較早值 fallback。無 bars 時兩表有 unlocated，default cutoff 保持 None、explicit cutoff 保留；健康 bars 仍優先沿原規則。MA20／60 只要求有限數值、不新增 positive gate；非法 optional metadata 為 null，不新增 feature／chip blanket actionability gate。原 P6d conditional／完整 observation 與 held quantity／stop 優先保留；前端 malformed 只隔離該 section，健康 bars／研究獨立。必要 caller 僅 default cutoff、stock decision context、chips complete／coverage／evidence，以及 StockPage／Panel 兩分頁，實際模型為 `TechnicalFeature`（6 欄）／`ChipSnapshot`（15 欄）；後端原 JSON strict dict 的 **65,536 UTF-8 bytes／depth 32／nodes 16,384** 不改，前端 normalized／projected JSON 呈現限額另核 **512 KiB／depth 32／nodes 16,384**，不重證原 byte budget 或來源。兩表隔離、必要 noEmit／pure guards／actual HTTP／App及六具名操作已有限接受；其他typed／legacy、M1原件／正式DB／磁碟／官方／PIT／完整M1／M3未驗。
+
+必要驗證**上限，非已跑結果**：新增 methods **12**、direct GET **160**、direct setup **256**；每 fixture instruments **16**／bars **1,600**／positions **16**／signals **64**／versions **16**／features **32**／chips **256**。單 actual HTTP fixture product **96**（Node／root 各 **48**），review＋shutdown **8**、static resources **32**；response **2 MiB**、記憶體 JS **6 MiB**、CSS／HTML 各 **64 KiB**；SSR **40 attempts（含失敗）**、最多 **2 serve＋1 child** 且 sequential、統籌 **1 tab**。同 instance 六表 whole SQL 全欄／all typeof 在讀回前後與 UI 後核不變，read mutation **0**；落盤／附件／暫存／殘留始終 **0**。Borrowed dependencies 僅唯讀、不 install，不啟用 main／lifespan／conftest／config mkdir 等寫入入口；記憶體測試不降低 M1 file／磁碟條件，其他 typed／legacy Actions／tracking、來源／時間／PIT 等未驗界線保留。
+
+必要 direct 首輪新 held observation expectation 失敗，實際原 primary_risk.kind／stop:null／semantics 正確；只修該 expectation／單項補驗通過，八有效 case 未重播。累計 **117 direct GET／226 targeted setup**，單 actual fixture seed **24** 後總 **250／256**（剩六、不重置）。同 instance 六表全欄／typeof 在讀回前後與 UI 後不變、read mutation0；Node HTTP／20 App與Panel SSR全部成功，actual product總 **26**（Node10＋root16）、review／shutdown **8／8**。六具名操作已有限接受，只有B最終原生分頁，其餘DOM.click界線見[個股頁§17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。兩順序QA pages／自有serves／capturedPID與children／8777、8778 listeners均已核清，新產物／殘留0；版本、digest、warnings、boundedconsole-network、原runtime／ACK／RAF／wrongselector／toolscope失敗與compilerexit未觀測由[開發入口](development-baseline/README.md#m3-p6e-個股獨立特徵籌碼讀回的零落盤驗證入口)留詳，不泛稱全區間或全部原生互動通過。六文件接受後才freeze。
+
+主線四文件維護已提交 `453ca2b9e770474686d9faed2a05a960154e5c1b`（parent 為起始 `0f8ac4a`）。索引角色僅按 root 另授，在本 worktree 單次 ff-only／autostash，原命令 exit 0、HEAD 已 453；autostash apply 另有 ROADMAP／EXECUTION／TASK 三個內容衝突，不能把 exit 0 當整合已接受。精確 autostash `ff8a0e5e19aace56fdec9abc0319b63de8397423` 保存 14 tracked changes 及復原資料，暫留 Git 內部、不 drop、不當測試附件；兩新增 helpers 不變，root `a94d56` 核十 sources raw SHA 前後相同，沿用仍適用的有效測試。文件角色另授 ONLY 六 docs 手動整合，主線 §9／§16 與核心依賴說明、P6e 實測／roster／完整歷史均保留，不以 ours／theirs 整檔覆蓋；本次工作稿已消除三檔文字 conflict markers，仍待 root 整合 review。工作 HEAD 453、initial start 仍 0f8；文件內容完成不等於 stage empty，merge intrinsic staged／UU 待索引角色另授 exact approved paths 清 staged 並保留工作內容，aggregate freeze 前核 16 檔及暫存恢復狀態。六文件 review／freeze／本輪索引／commit 及 master merge 仍待，不開下一輪／不清本輪。
+
+六文件 owner 分工不變：個股頁負責主契約、UI 文件負責實際文案、ROADMAP／EXECUTION 負責能力與依賴、開發入口負責 actual 命令／副作用／限制、TASK 負責 roster／授權與清理。穩定公式、source／time 契約及未受影響規格只核對，不以日期或措辭製造 diff；實作授權與驗證上限均不代表已通過。
+
+### 本輪繼承的 P6d 清理清單、實際結果與驗證限制
+
+本節只指本輪接手的 **P6d** owned 資源；下方歷史 P6d 所清 P6c 清單不是本節範圍。Exact owned 絕對 worktree 為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m3-stock-detail-signal-read-isolation-20261004`，branch 為 `roadmap-m3-stock-detail-signal-read-isolation-20261004`。交接盤點 `1091660` 為 **219 files／14 child directories（不含 root）／4,111,641 bytes**，all ancestors／children non-reparse、clean 且已合併至 `master` `0f8ac4a`；這是最後已知交接盤點，**不是刪除當下 gate**，不得改稱 fresh。
+
+| P6d 舊角色 | exact thread／session ID |
+| --- | --- |
+| 統籌 | `01a10486-7f78-7890-b896-5b9d228dfca2` |
+| 程式 | `01a10488-632e-7a72-b7c6-45c7645d27cf` |
+| 文件 | `01a10488-adcf-70d2-a86d-1bcfbba5ae4c` |
+| 索引與 Git commit | `01a10488-eb18-7fd3-9f3a-a7c692109a56` |
+
+舊原 terminal 為 `term_a912ec44-78f0-4b20-a897-493fedd5699d`，tab `84b0e813-94d6-4824-8704-2fb58a23c965`／pane 1。舊 root first turn `01a10486-834b-7ae3-a53c-d8ab11f7f9f4` 在 OLD final 前 inProgress 的歷史保留；`2f1a69` 已以 includeTurns 核 actual latest completed、四角色 idle／all stopped，原 terminal show（`05faa`）／read（`edab`）核 final／Main composer／unused。**close 前** `7e5851` 又立即 Rpc includeTurns 核四角色 latest completed／idle、no queued／unused，才 close 原 terminal，exit 0、`ptyKilled=true`。**archive 前** `078567` 再即核四角色 completed／idle、terminals=[]，其後 root cascade archive；`051d3f` 獨立核上表四 exact IDs 均 `archived_sessions`、history file 存在、`notLoaded`／loaded=false／latest completed，歷史保留、不永久刪除。
+
+worktree rm 前 `051d3f` 即時核 exact owned inventory **219 files／14 child directories（不含 root）／4,111,641 bytes**、all ancestors／children non-reparse，old／main clean、old HEAD `0f8ac4a`、`master` ancestor、old terminal 0；這項 immediate 證據與 `1091660` 交接盤點分開。其後 Orca 對 owned 絕對根執行 rm，**NO force／exit 0／removed=true**。`6d80ce` 獨立核 old 絕對根、Git worktree／branch 均缺席；Orca old show 的原 exit **1／selector_not_found** 是預期缺席，不改成驗證 wrapper 的 exit 0。OLD／NEW 已關 default shells 不重做；本輪 P6e 四角色、原可見 terminal、independent worktree／branch 仍在用，未清理。
+
+五個 exact aliases 僅 prefix `taiwan-stock-research-roadmap-m3-stock-detail-signal-read-isolation-20261004-`，suffix 依序為 `backend-app`／`backend-tests`／`frontend-src`／`tools`／`docs`；對應 exact DB 絕對路徑為 `C:/Users/YiCheng/cbm-cache/{prefix}{suffix}.db`。最後已核 bytes 依序 **10,027,008／16,515,072／4,980,736／2,883,584／2,490,368**，合計 **36,896,768 bytes**；十五 exact DB `-wal`／`-shm`／`-journal` aux 在 `ea41ea` 核缺席，均非新的 immediate 核對。
+
+ONLY tool-returned logs 為 `C:/Users/YiCheng/cbm-cache/logs/taiwan-stock-research-roadmap-m3-stock-detail-signal-read-isolation-20261004-backend-tests-1791083203.log`（**296 bytes**）及 `C:/Users/YiCheng/cbm-cache/logs/taiwan-stock-research-roadmap-m3-stock-detail-signal-read-isolation-20261004-tools-1791083301.log`（**423 bytes**），合計 **719 bytes**；原五 DB 加兩 logs 的交接盤點共 **7 owned files／36,897,487 bytes**。兩 logs 已各按下述 immediate gate 正常刪除，未新增 shared-cache scan、其他 log／parent delete 或來源副本。
+
+四個目前角色的 **ALL actual users ceased、無 pending／queued** 收據已收到；統籌另行明授 only 舊五 exact aliases App delete，索引角色每個各執行 **一次**、均回 deleted，合計 **36,896,768 bytes**。統籌 `fa2e3c` 獨立核五 DB／十五 aux 全缺席，App list 為原八 aliases／has_more=false、原八未動；本輪沒有 early refresh、current 索引仍未建立。完整五個 delete receipt 留原 task，不補操作或重試。
+
+**刪前流程缺口**：索引角色只核 exact DB leaf 存在／大小／leaf 非 reparse，並以 `FileStream` ReadWrite、`FileShare.None` exclusive open 成功；**未核所有 ancestors 非 reparse，也未核十五 exact aux 在刪前缺席**。`ea41ea` 是較早交接盤點，`fa2e3c` 是刪後缺席證據，均不能追認未執行的 delete-time gate。有效缺席結果與這項限制分報，不把缺口改稱全 gate 通過，不補操作或重試。
+
+兩 returned logs 各在單次命令內立即核 exact 絕對路徑／大小、all ancestors non-reparse、`FileStream` ReadWrite／`FileShare.None` exclusive unused，才用單一 `Remove-Item -LiteralPath` 刪除：backend-tests **296 bytes**（`3ca822`／exit 0）、tools **423 bytes**（`b46604`／exit 0）；統籌 `d556f6` 再核兩 exact 路徑缺席。兩者不是 automatic blocked logs，新增殘留 0，不把後續 root／logs 完整 gate 追認為先前五 DB 刪前 gate；已清項目不重做、清理不新增來源寫入權。
+
+P6c 兩 logs **717 bytes** 原被 automatic review 在 CreateProcess 前拒絕，immediate gate 與刪除均未跑、不能稱已刪除；它們列 excluded／NO-RETRY，與原 HAR **64,885 bytes**、P4 logs 及更早 blocked／occupied／未知資源完全未動，**不得 retry、換工具、shared scan 或 parent delete**。P6c／更早已接受清理保留原 receipt。本節 P6d 指定四 session／terminal／worktree／branch／五索引／兩 logs 已完成外部 owned 清理，其中 **7 owned files／36,897,487 bytes** 缺席已驗；這不表示歷史資源全清，也不重置 test disk／tmp／artifacts／residual 0。
+
+**完成及驗收邊界 → 尚缺項 → 下一步與依賴／完成條件 → freeze／索引／commit／merge**：P6e十檔兩表隔離、必要direct／actual API／App與六具名操作已有限接受、來源停寫；同fixture六表UI後不變／readmutation0、自有QA／程序已清／新產物0，P6d外部owned清理已確認且五DB刪前缺口保留 → 六文件最終review、aggregate freeze／本輪索引／commit／merge尚缺，M1原件／官方／PIT／正式DB／磁碟／完整M1／M3、P6c canvas／390px有效歷史／真正截止表單與其他legacy未驗保留 → 下一輪優先核核心來源／時間／coverage／consumer依賴，具名選可解除依賴或新增使用者操作的最小可驗收能力；5／20法人／研究條件固定保守回應代表未接通，P6e可靠性改善不代表核心流程完成，不預設新隔離輪或把audit當交付 → P6d版本封存已確認；P6e六文件接受後才freeze，另明授輪末索引／coverage／正常commit及master合併，本輪四session／terminal／worktree／branch仍在用，最終receipt留task、不自行結案。
+
+## 主線獨立文件維護（已版本封存；以下為提交時歷史）
 
 2026-10-04 依使用者「幫我修正一下文件」在 `master` 原 checkout 進行獨立維護；主線已接受版本為 `0f8ac4ab3af8ec44353c2181eb18ae3c9a9fe6cb`。本次只修正本文件、ROADMAP、ROADMAP_EXECUTION 與 STOCK_RESEARCH_PAGE 的能力判斷、固定保守回應、依賴及下一優先，不改產品目標、程式、AGENTS 或來源契約。實際配置與接手如下；本維護不是新產品 round，也不宣稱產品統籌啟動 gate 通過。
 
@@ -18,9 +86,11 @@
 
 本次四檔與 P6e 六文件有重疊；維護 root 已與 P6e 原統籌討論文字衝突，對方確認先不合併、不開新輪或清理，收到本維護 commit SHA 後由原文件角色整合兩邊內容及新實測，再 review→freeze→原索引角色刷新／commit，主線合併另待核實。須先完成本維護接受／freeze／輪末索引／coverage／本地 commit，目前不稱已整合。P6e 保留本次能力／優先說明及該輪實測／歷史邊界，不覆蓋主線維護；後續選題雙方已同意依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑) 對應新增操作或具名核心依賴解除，不預設隔離輪。最終收據留本維護 task。
 
-## 最近 M3-P6d 交付：封存前歷史狀態
+此節保留維護提交時的狀態與 roster；維護提交為 `453ca2b9e770474686d9faed2a05a960154e5c1b`，本輪整合與目前角色以上方 P6e 節為準。
 
-以下保留 P6d 原 roster、驗收、失敗及清理記錄；「本輪」與未 freeze／commit／merge 語句是封存前當時狀態，目前版本狀態以上方為準，不恢復舊角色派工權。
+## 最近 M3-P6d 交付：研究候選讀回隔離已有限接受並版本封存
+
+M3-P6d 九 source＋六 docs 已完成 aggregate freeze、輪末索引／coverage、正常本地 commit `0f8ac4ab3af8ec44353c2181eb18ae3c9a9fe6cb`（parent `d85769c7456d0101245b853f585b1ebf7cae294d`）及乾淨 `master` ff-only merge，最終 receipt 留原 task。以下保留該輪原 roster、實際配置、有限驗收邊界、原實測與當時分派；文中的「本輪」及 freeze／索引／commit／merge 待辦語句均指 P6d 封存前當時狀態，不覆蓋上方 P6e 現況，也不恢復舊統籌派工權。P6d 指定外部 owned 清理已確認，精確範圍、結果與五 DB 刪前限制以上方目前節為準；P6c 原已接受清理及 NO-RETRY 殘留不倒改。
 
 本輪從 M3-P6c 最新已驗收且乾淨的 `master` 建立獨立 worktree／branch，支援 M3／R2-C2 的「個股詳情研究候選讀回污染隔離」九檔實作、必要 direct／actual HTTP／完整 App 讀回與五個桌面 case 已由統籌**有限接受**；候選 status 非字串 coercion 的單項退修／必要 pure 補驗亦已接受，來源停寫。精確契約與 native／DOM.click 支持界線集中見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)，原始 exit／方法與副作用見[開發入口](development-baseline/README.md#m3-p6d-個股研究候選讀回的零落盤驗證入口)。新四角色、可見名單與正式接手已由舊統籌獨立接受，initial TASK review `64cb72`／`852be3`、後續 scope／cleanup review 與 final handover receipt 留 task。六文件接受後才 aggregate freeze，輪末索引／commit／merge 尚未執行；不升格完整 M1／M3，不改 P6c 歷史實測或未驗界線。
 

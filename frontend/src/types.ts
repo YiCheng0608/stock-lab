@@ -261,6 +261,45 @@ export type ChipSnapshot = {
   collected_at: string | null
 }
 
+export type StockIndependentRowRead = {
+  status: 'known' | 'missing' | 'invalid'
+  invalid_fields: string[]
+  missing_fields: string[]
+  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
+}
+
+export type StockIndependentRead = {
+  version: 'stock-independent-read/v1'
+  status: 'known' | 'missing' | 'invalid'
+  window_limit: 1 | 120
+  candidate_count: number
+  candidate_order: Array<number | null>
+  scanned_count: number
+  future_count: number
+  unlocated_count: number
+  unlocated_id: number | null
+  verification: 'stored_value_syntax_only'
+}
+
+export type StockDetailChip = Omit<ChipSnapshot, 'date' | 'source'> & {
+  date: string | null
+  source: string | null
+  id?: number | null
+  instrument_id?: number | null
+  raw_payload_id?: number | null
+  row_read?: StockIndependentRowRead
+}
+
+export type StockFeatureSnapshot = {
+  id: number | null
+  instrument_id: number | null
+  trading_date: string | null
+  features_json: Record<string, unknown> | null
+  source: string | null
+  created_at: string | null
+  row_read: StockIndependentRowRead
+}
+
 export type CorporateAction = {
   date: string
   type: string
@@ -363,9 +402,12 @@ export type InstrumentDetail = {
   instrument: Instrument
   bars: StockDetailBar[]
   market_read?: StockMarketReadState
-  features: Record<string, number | string | null>
+  features: Record<string, unknown>
+  feature_snapshot?: StockFeatureSnapshot | null
+  feature_read?: StockIndependentRead
+  chip_read?: StockIndependentRead
   groups: Array<{ id: string; name: string; valid_from: string; valid_to: string | null }>
-  chips: ChipSnapshot[]
+  chips: StockDetailChip[]
   corporate_actions: CorporateAction[]
   fundamentals: FundamentalSnapshot[]
   events: EventRow[]

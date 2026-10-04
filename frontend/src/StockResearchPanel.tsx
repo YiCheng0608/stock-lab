@@ -3,6 +3,7 @@ import { groupDisplayName, researchRequirementLabel } from './presentation'
 import { formatTableChip } from './units'
 import type { ActionSummary, EventRow, InstrumentDetail, NewsItem } from './types'
 import { eventTimeLabels, formatResearchDate, formatResearchDateTime, isTemporaryIndustryGroupName, newsTimeLabels, recentByDate, summarizeStockResearch } from './stockResearch'
+import { stockIndependentView } from './stockIndependentReads'
 
 type StockDetailData = InstrumentDetail & { news: NewsItem[]; decision_summary?: ActionSummary | null }
 
@@ -201,7 +202,7 @@ function safeExternalUrl(value: string | null | undefined): string | null {
 }
 
 function ChipEvidence({ rows }: { rows: InstrumentDetail['chips'] }) {
-  const recent = recentByDate(rows, 20)
+  const recent = recentByDate(rows.filter((row): row is typeof row & { date: string } => typeof row.date === 'string'), 20)
   if (!recent.length) return <div className="empty">尚無官方籌碼資料；策略判斷資料待補。</div>
   return (
     <div className="table-wrap compact-table research-table">
@@ -276,7 +277,7 @@ function StrategyEvidence({ conditions }: { conditions: InstrumentDetail['strate
 }
 
 export function StockResearchPanel({ data }: { data: StockDetailData }) {
-  const inventory = summarizeStockResearch(data)
+  const inventory = summarizeStockResearch({ ...data, chips: stockIndependentView(data).chips })
   return (
     <section className="stock-research-panel" aria-labelledby="stock-research-title">
       <div className="section-head">
