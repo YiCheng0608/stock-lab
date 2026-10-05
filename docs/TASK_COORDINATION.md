@@ -2,7 +2,16 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
-## 目前：M1-W8 法人窗口第八截止新產品輪
+## 目前：2026-10-05 獨立資源清理（尚有殘留）
+
+- 使用者要求移除本專案所有附加 worktree 與留存暫存；本次不派產品新輪。清理起始版本為 `dde733d7f7261807aba00dcfcf972909778bf65a`；下方 W8 pending 為歷史狀態，不代表仍有可接手角色。
+- 登錄／程序：6 個 Git／Orca 附加 worktree 均 clean、ignored=0、HEAD 包含於 master，已由 Orca rm 解除登錄；目前唯一登錄 worktree 是 master 主目錄。兩個存活終端已 close，專用 Codex PID 已退出。
+- 封存：W7／W8／W9 統籌與 descendants 已經 set_thread_archived 封存並保留歷史；W4／W5／W6 先前已封存。
+- 磁碟：30 個 worktree index／DB 已 delete_project 並核對磁碟缺席，共 222,298,112 bytes；master 8 個 index 保留。仍有 5 個空 workspace 根：W7／W8／W9、legacy-volume-integration、selected-invalid。
+- 清理拒絕：這 5 個空根、15 個歷史 cbm logs、可讀測試 Temp／HAR／GPG 殘留及主目錄舊測試 runtime／cache／build／log 的刪除，皆被 automatic approval review 於 CreateProcess 前以 `blocked by policy` 拒絕；未執行、未換工具重試，殘留仍在。
+- 未知／證據：12 個 Temp `taiwan-stock-research-tests-*` 與 4 個主目錄 legacy runtime 的內容讀取為 Windows WinError5，完整大小未知，不改 ACL。精確路徑與 Bash 清理指令留本次原 task，不另建附件／manifest；不稱全清。
+
+## 歷史狀態：M1-W8 法人窗口第八截止新產品輪
 
 2026-10-05從已驗收master `b6359f9d1149345a27d739a1fb8a2bb33baaaba0`建立獨立branch／Orca worktree。BOOT-W8-ROSTER-1／ROOT-BOOT-W8-DOC-1／FORMAL-W8-RECEIPT-1已接受；上一root實核first turn `01a108f7-5c6d-7212-8c64-8fceb010a2eb` task_complete／四idle後，在唯一visible terminal `term_ececc12a-0eb3-40be-8040-3c80fba5dd92`實送/subagents一次，source=screen同四ID／Main default current，No sub-agents running為idle；menu warning不重送、Esc一次回Main、不選child。Helper唯一call rawexit0／startup_verified／surface visible，runtime／Git／可見gate先核才structured UTF-8派送，無timeout／重建／重啟／resume。首次task plain UTF-8讀回19107B／15428chars，SHA `8ba1289179c414c6cda274d48072c2583d381c31550fcdb6aeaed1c4b7c5a348`、turn `01a108f7-5c6d-7212-8c64-8fceb010a2eb`；exact initial task1／user items2／validator首exit0。完整啟動命令／收據留原task。
 
