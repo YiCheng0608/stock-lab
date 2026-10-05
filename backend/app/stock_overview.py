@@ -30,6 +30,7 @@ from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, 
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
 from .institutional_daily import build_institutional_daily
 from .institutional_windows import build_institutional_windows
+from .tpex_price import build_tpex_price
 from .official_events import build_official_events
 from .units import volume_exact_text
 from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
@@ -290,6 +291,7 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
                    "market_read": market_read,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
         "institutional": build_institutional_windows(instrument.exchange, instrument.symbol, cutoff),
+        "price_memory": build_tpex_price(instrument, cutoff),
         "institutional_daily": daily,
         "conditions": conditions,
         "events": build_official_events(instrument.exchange, instrument.symbol, cutoff),

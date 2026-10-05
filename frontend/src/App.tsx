@@ -6,6 +6,7 @@ import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } fr
 import {
   captureOfficialEvents,
   captureInstitutionalWindows,
+  captureStockPriceMemory,
   captureOfficialEventFocus,
   deletePortfolio,
   getAction,
@@ -67,6 +68,7 @@ import { isValidBar } from './stockChart'
 import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
 import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview } from './components/StockOverview'
+import { memoryPriceChartBars, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
 function formatNumber(value: unknown, digits = 2): string {
@@ -590,7 +592,7 @@ export function CompactActionCard({ action }: { action: ActionSummary }) {
     <Link className="panel compact-action-card" to={actionPath(action)} aria-label={`${instrument.symbol} ${title}`}>
       <div className="position-head"><span className="symbol-link"><strong>{instrument.symbol}</strong> {instrument.name}</span><span className="pill action-status-pill">{title}</span></div>
       <div className="small-note">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">股數待核實</span>}
+      {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">庫存數量待核實</span>}
       <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={priceChangeTone(validChange ? action.price_change : null)}>{change}</span></div>
       {explicitRead && !validRead && read?.status !== 'missing' && <div className="small-note">行情讀值無效，先核對原記錄。</div>}
       {read?.status === 'missing' && <div className="small-note">尚無行情記錄。</div>}
@@ -619,7 +621,7 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
       {incomplete && <div className="action-state">目前無法產生研究動作</div>}
       {action.action_state === 'conditional_entry' && action.primary_strategy && <div className="action-state">今日{strategyLabel(action.primary_strategy)}成立</div>}
       <div className="small-note">{instrument.exchange} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">股數待核實</span> 庫存股數待核實，先核對原記錄。</div>}
+      {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 庫存數量待核實，先核對原記錄。</div>}
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {action.primary_strategy && <div className="small-note">主條件：{strategyLabel(action.primary_strategy)}{action.alternative_strategies.length ? ' · 替代：' + action.alternative_strategies.map(strategyLabel).join('、') : ''}</div>}
       <div className="action-instruction">{action.display_instruction ?? action.action_instruction ?? (incomplete ? '現在：先不行動' : actionLabel(action.action_state))}</div>
@@ -1052,6 +1054,30 @@ function StockPage() {
       setWindowBusyKey((key) => key === requestKey ? null : key)
     }
   }
+  const priceRequestKey = `${exchange}:${symbol}:${asOf}`
+  const currentPriceKey = useRef(priceRequestKey)
+  currentPriceKey.current = priceRequestKey
+  const pricePending = useRef(false)
+  const [priceBusyKey, setPriceBusyKey] = useState<string | null>(null)
+  const [priceRequestFailure, setPriceRequestFailure] = useState<{ key: string; reason: string } | null>(null)
+  const acquirePrice = async () => {
+    if (pricePending.current || asOf !== '2026-10-05') return
+    const requestKey = priceRequestKey
+    pricePending.current = true
+    setPriceBusyKey(requestKey)
+    setPriceRequestFailure(null)
+    try {
+      const result = await captureStockPriceMemory(exchange, symbol, asOf)
+      if (currentPriceKey.current !== requestKey) return
+      if (result.status !== 'available') setPriceRequestFailure({ key: requestKey, reason: result.reasons[0] ?? 'price_capture_failed' })
+      await query.refetch()
+    } catch {
+      if (currentPriceKey.current === requestKey) setPriceRequestFailure({ key: requestKey, reason: 'price_capture_request_failed' })
+    } finally {
+      pricePending.current = false
+      setPriceBusyKey((key) => key === requestKey ? null : key)
+    }
+  }
   const acquireEvents = async () => {
     if (capturingEvents) return
     setCapturingEvents(true)
@@ -1072,6 +1098,10 @@ function StockPage() {
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
+  const priceMemory = data.overview?.price_memory
+  const priceCutoff = asOf || data.overview?.as_of || null
+  const memoryKnown = (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
+  const memoryRejected = priceMemory?.status === 'available' && !memoryKnown
   const independent = stockIndependentView(data)
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
   const researchShapeValid = validStockResearchRead(data)
@@ -1096,27 +1126,27 @@ function StockPage() {
   const candidateConflict = read !== undefined && data.overview?.price.status === 'available'
     && (!candidate || candidateRow?.date !== candidate.date || candidateRow?.close !== candidate.close)
   const candidateKnown = candidateCoreKnown && !candidateConflict
-  const latestBar = readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
+  const latestBar = memoryKnown ? priceMemory.latest : !memoryRejected && readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
   const legacyPrice = data.decision_summary?.current_price
   const priceConflict = read !== undefined && !data.overview && legacyPrice != null && (!finitePrice(legacyPrice) || legacyPrice !== latestBar?.close)
-  const currentPrice = !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
+  const currentPrice = memoryKnown ? priceMemory.latest.close : memoryRejected || !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
   const legacyChange = data.decision_summary?.price_change
   const previousKnown = read === undefined || (previousBar?.market_read?.status === 'known' && isValidBar(previousBar) && previousBar.date < candidateRow.date!)
   const calculatedChange = previousKnown && latestBar && finitePrice(latestBar.close) && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
   const changeConflict = read !== undefined && legacyChange != null && (!finiteValue(legacyChange) || legacyChange !== calculatedChange)
   const change = read === undefined ? finiteValue(legacyChange) ? legacyChange : calculatedChange : !changeConflict ? calculatedChange : null
-  const priceChange = data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
+  const priceChange = memoryKnown || data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
   const legacyPercent = data.decision_summary?.price_change_pct
   const calculatedPercent = priceChange != null && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
   const percentConflict = read !== undefined && legacyPercent != null && (!finiteValue(legacyPercent) || legacyPercent !== calculatedPercent)
   const percent = read === undefined ? finiteValue(legacyPercent) ? legacyPercent : calculatedPercent : !percentConflict ? calculatedPercent : null
-  const priceChangePct = !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const priceChangePct = !memoryKnown && !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
   const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
   const hasTemporaryIndustryGroup = data.groups.some((group) => isTemporaryIndustryGroupName(group.name))
-  const qualitySummary = data.quality_summary ?? {
+  const storedQualitySummary = data.quality_summary ?? {
     market: {
       status: fallbackMarketComplete ? 'complete' : latestBar ? 'partial' : 'missing',
       label: fallbackMarketComplete ? '當日行情來源完整' : '當日行情來源尚未完整',
@@ -1133,6 +1163,10 @@ function StockPage() {
     },
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
+  const qualitySummary = memoryKnown ? { ...storedQualitySummary, market: {
+    status: 'complete', label: '10/5 單日官方行情已核對', as_of: priceMemory.latest.date,
+    missing_fields: [], source: 'tpex',
+  } } : storedQualitySummary
   const tabs: Array<{ id: StockTab; label: string }> = [
     { id: 'technical', label: '技術走勢' },
     { id: 'chips', label: '法人籌碼' },
@@ -1150,14 +1184,15 @@ function StockPage() {
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
+      {asOf === '2026-10-05' && exchange === 'TPEx' && <div className="small-note">同截止切換：<Link to="/stocks/TPEx/3105?as_of=2026-10-05">3105 穩懋</Link> · <Link to="/stocks/TPEx/6488?as_of=2026-10-05">6488 環球晶</Link></div>}
     </PageTitle>
-    {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {data.overview && <StockOverview data={data.overview} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
+    {!memoryKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
+    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel">{memoryKnown && <p className="small-note">10/5 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : memoryRejected ? [] : data.bars} unlocatedDateRows={memoryKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={memoryKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
@@ -1184,7 +1219,7 @@ function formatRawChipValue(value: number | null): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-TW', { maximumFractionDigits: 3 }) : '未提供'
 }
 
-function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
+export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
     <div className="small-note chip-unit-note">單位：張。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始值與來源見下方說明。</div>
     <div className="table-wrap compact-table">
@@ -1199,7 +1234,7 @@ function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
         </tr>)}</tbody>
       </table>
     </div>
-    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>原始：外資 {formatRawChipValue(row.foreign_buy)} · 投信 {formatRawChipValue(row.trust_buy)} · 自營商 {formatRawChipValue(row.dealer_buy)} · 融資 {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
+    <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
 }
 
@@ -1248,7 +1283,7 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
   return <section className="panel stock-action-detail">
     <div className="section-head"><div><div className="eyebrow">研究動作</div><h2>{actionTitle}</h2></div><QualityBadge kind="research" status={action.data_quality} /></div>
     <div className="action-detail-summary"><strong>{action.display_instruction ?? action.action_instruction ?? actionLabel(action.action_state)}</strong>{action.primary_reason?.label && <span>{action.primary_reason.label}</span>}</div>
-    {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">股數待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
+    {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 請先核對原記錄，再確認持倉狀態。</div>}
     {incomplete && <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>}
     <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
@@ -1300,7 +1335,7 @@ export function ActionsPage() {
       const ordinaryWaiting = query.data.items.filter((item) => item.held === false && item.action_state === 'data_insufficient' && !item.watchlisted && (item.event_ids ?? []).length === 0)
       const otherSummaries = query.data.items.filter((item) => item.held === false && item.action_state === 'no_condition')
       return <>
-        {query.data.summary?.held_unknown !== undefined && <p className="small-note">本次篩選股數待核實 {query.data.summary.held_unknown.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
+        {query.data.summary?.held_unknown !== undefined && <p className="small-note">本次篩選庫存數量待核實 {query.data.summary.held_unknown.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
         {priorityItems.length > 0 ? <section><div className="section-head"><div><div className="eyebrow">優先處理</div><h2>庫存風險／可執行條件</h2></div><span className="small-note">{priorityItems.length} 筆</span></div><div className="action-grid">{priorityItems.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></section> : (eventOrWatchlistWaiting.length === 0 && <div className="empty panel">目前沒有庫存風險或可執行條件。</div>)}
         {eventOrWatchlistWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">事件／自選</div><h2>優先補齊資料</h2></div><span className="small-note">{eventOrWatchlistWaiting.length} 筆</span></div><p className="small-note">有官方事件或自選標的的研究資料尚未齊備，優先於一般市場標的處理。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{eventOrWatchlistWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
         {ordinaryWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">資料補齊</div><h2>一般標的待補資料</h2></div><span className="small-note">本批 {ordinaryWaiting.length} 筆／共 {query.data.summary?.data_insufficient ?? ordinaryWaiting.length} 筆</span></div><p className="small-note">一般標的一日研究資料尚未齊備集中在這裡，不會淹沒庫存與可執行條件。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{ordinaryWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
@@ -1338,8 +1373,9 @@ export function PortfolioSubsection() {
     setBusy(id); setMessage('')
     try { await deletePortfolio(id); await query.refetch(); setMessage('庫存已刪除。') } catch (error) { setMessage(error instanceof Error ? error.message : '刪除失敗。') } finally { setBusy(null) }
   }
-  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div><div className="small-note">原股數 {formatPositionShares(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
-        <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>核對本地行情與試算</summary>
+  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
+        <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>核對庫存原股數、本地行情與試算</summary>
+          <div className="small-note">來源稽核原股數 {formatPositionShares(position.shares, position.shares_exact)}</div>
           <p className="small-note">本地記錄；來源／日期待核實。記錄日期不表示交易日或原件證據已核實。</p>
           <div className="small-note">本地收盤讀值（報價幣別元／股） {formatPortfolioClose(position.portfolio_quote, true)}</div>
           <div className="small-note">記錄來源 {formatQuoteRecord(position.portfolio_quote, 'source')} · 記錄日期 {formatQuoteRecord(position.portfolio_quote, 'date')}</div>

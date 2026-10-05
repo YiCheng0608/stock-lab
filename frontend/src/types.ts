@@ -557,6 +557,42 @@ export type InstitutionalWindowsData = {
   limitations?: string[]; published_time?: string; first_available_time?: string; revision_time?: string
 }
 
+export type StockPriceMemoryBar = {
+  id: null; origin: 'process_memory'; exchange: 'TPEx'; symbol: string; company_name: string; currency: 'TWD'
+  date: string; open: number; high: number; low: number; close: number
+  volume: number | null; volume_exact: string; turnover: number | null; turnover_exact: string | null
+  turnover_status: 'available' | 'unavailable'; turnover_reason: 'missing' | null
+  source: 'tpex'; source_date: string; row_ordinal: number; source_fields: Record<string, string>
+  is_suspended: false; adj_close: null; data_as_of: string; collected_at: string
+  provenance: StockPriceMemoryProvenance
+}
+
+export type StockPriceMemoryProvenance = {
+  worker_version: string; source_id: string; source_version: string; endpoint: string; method: 'GET'; http_status: number
+  request_count: number; request_started_at: string; captured_at: string; body_sha256: string; receipt_sha256: string; body_bytes: number
+  policy_version: string; policy_digest: string; profile: string; storage: 'process_memory'; historical_pit: 'unsupported'
+  structural_validation: string; financial_validation: string; row_count: number; selected_symbols: string[]
+  raw_payload_id: null; ingestion_run_id: null; memory_capture_id: string; verification: string
+  attribution: StockPriceMemoryAttribution; limitations: string[]
+}
+
+export type StockPriceMemoryAttribution = {
+  owners: string[]; dataset_name: string; year: number; release_version: string; license: string; license_url: string
+  publication_time: 'unknown'; first_available_time: 'unknown'; revision_time: 'unknown'
+}
+
+export type StockPriceMemoryData = {
+  version: string; origin: 'process_memory'; status: 'available' | 'unavailable'; exchange: string; symbol: string; as_of: string | null
+  supported_scope: { exchange: 'TPEx'; asset_type: 'stock'; currency: 'TWD'; symbols: string[]; cutoff: string }
+  unit: 'shares'; quantity_encoding: 'canonical_integer_string'; price_unit: 'TWD_per_share'
+  latest: StockPriceMemoryBar | null; bars: StockPriceMemoryBar[]; provenance: StockPriceMemoryProvenance | null
+  attribution: StockPriceMemoryAttribution | null; historical_pit: 'unsupported'
+  published_time: 'unknown'; first_available_time: 'unknown'; revision_time: 'unknown'
+  reasons: string[]; limitations: string[]
+  capture_state: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; request_count: number; action: string }
+}
+
+
 export type StockOverviewData = {
   version: string
   as_of: string | null
@@ -577,6 +613,7 @@ export type StockOverviewData = {
     market_read?: StockMarketReadState
     reasons: string[]
   }
+  price_memory?: StockPriceMemoryData
   institutional: InstitutionalWindowsData
   institutional_daily?: InstitutionalDailyData
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>

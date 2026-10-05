@@ -32,7 +32,7 @@
 
 這不等於已確認「未還原」，也不代表還原已完成。
 
-API 也沒有 currency 欄位，且標的可能不是新臺幣計價。價格表外統一寫「各標的報價幣別的元」，指數寫「點」；在取得可驗證幣別前，不得一律加 `NT$` 或猜測幣別。
+原DB bars沒有currency欄位，標的可能不是新臺幣計價；表外寫「各標的報價幣別的元」，指數寫「點」，未證幣別不得猜NT$。M1-PRICE-1的兩股memory另有正面TWD typed契約，依[§25](#25-m1-price-1上櫃兩股單日價量閉環有限接受)，不外推原DB或其他市場。
 
 ## 3. 圖表資料契約
 
@@ -96,9 +96,17 @@ MA20／MA60 是前端由合格、唯一日期 bar 的最近 20／60 個 close �
 
 ## 7. 前端顯示契約
 
-來源明確為股數的成交量依 §14 的精確整數字串換算為「張」；法人買賣超仍以 `原值 / 1,000` 顯示為「張」，已核實融資欄位依官方「張」語意顯示。顯示換算不改原成交量、策略計算或 raw evidence；unknown／mixed 時不換算。成交量的核定增欄與圖形近似範圍見 §14；其餘格式、空白與幣別規則見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-壓縮卡詳情與單位文案)。
+UNIT-LOTS-1 的現行日常主值以張顯示，單日／5與20日法人及成交量保留精確零股，原股數移入預設收合的來源稽核 details；已為張的融資不再除1,000。來源單位 unknown／mixed 不猜，合法零及正負方向保留，顯示換算不改 API／DB／計算或 raw evidence。統一格式、canonical邊界、輸入與每股價格口徑只由 [UI_COPY_SPEC §10.3](UI_COPY_SPEC.md#103-張零股) 詳述；成交量 exact欄位與圖形近似界線依 §14。§10、§14與§18～24的原股表／DOM值是各批當時驗收，保留歷史原值；現行主表與原股收合方式依下節。
 
 市場別產業 membership 重建前，個股與行動詳情顯示「既有族群關聯待重新核實」；族群中文名加「（既有分類）」與待核實 badge。不得顯示可信排名或將衍生條件稱為已核實；這不改寫 OHLCV、單位或新聞。相關有限 UI review 只涵蓋文案、空值、法人命名、單位顯示、ETF／族群名稱及官方分點入口，不新增 API、分點資料、歷史 coverage 或主力身分。
+
+### 7.1 UNIT-LOTS-1 日常張數與原股稽核（有限接受）
+
+單日法人主表列張，原 buy／sell／net及合計股字串在來源 details可核對；5／20日主表使用對應 horizon的精確張數，daily evidence details保留每日原股。5／20日數值只在 shares單位／canonical編碼、支持截止與available日曆／窗口一致時顯示；required／valid日期須各恰為該horizon、唯一、升序且逐項相等，起訖／同cutoff及缺／壞日為空均須一致。拒用不補零或採較早／future值；日期、版本、來源及缺日顯示保留，不放寬原准入。價格主表／quote的成交量以張呈現，原股數在價格來源 details保留；庫存與原始籌碼的日常／稽核分工依 UI契約。
+
+Root已對10個既有W8 net獨立換算，桌面 `1277×924` 的單日／窗口／量主值與原股details同值；庫存可信原生輸入／提交見[UI §10.3](UI_COPY_SPEC.md#103-張零股)。`390×844`、client375的單日／窗口／庫存／chip DOM數值及layout已核，page375內的表格由自己的table-wrap捲動，原值details預設收合。Chip頁籤的native切換未觸發event，DOM選擇只支持數值／layout，不能稱全部窄版流程為native通過。初始fill/select輔助與後續具名trusted操作分開。
+
+此為已接受的數量前置，沒有新來源／價格准入、磁碟保存或完整M1驗收；價格、trend及突破／回踩gates不因換算而通過。固定樣本、memory預覽／guard及未跑項見[開發入口](development-baseline/README.md#unit-lots-1-台股張數前置的記憶體驗證入口)，完整原始驗收及程序清理收據留原task。
 
 ## 8. 籌碼三部分（後續待做）
 
@@ -777,3 +785,25 @@ Actual missing0；缺／壞8/26局部窗口失效只有必要synthetic API／SSR
 ### 24.3 仍未支持的界線
 
 Actual missing0；缺／壞8/25按窗口失效只有必要synthetic API／SSR，不稱actual missing native。Node mock HTTP未跑；上述16組native已覆蓋actual full App產品fetch／Response.json真96 net。Catalog／price seed僅synthetic memory，19表保留不證真行情或正式DB；legacy／ZIP／old live／完整backend、physical canvas、原生橫向手勢、Vite／production build與pending導航race未驗。範圍外日期／標的／TWSE、修訂／PIT、trend／研究條件／Signal、raw保存／跨程序讀回及完整M1仍未完成。
+
+## 25. M1-PRICE-1：上櫃兩股單日價量閉環（有限接受）
+
+**TPEx3105穩懋／6488環球晶、2026-10-05的真單日價量、actual API與具名可信操作已由root有限接受。** 來源／用途、固定policy／body pins、兩股唯一金融值及production capture權威見[來源 §20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)。原§9／15的DB行情／來源gate保留；memory價格不替它們取得准入或保存驗收。
+
+### 25.1 具名操作與同股／同截止契約
+
+使用者明示研究截止2026-10-05後，在「櫃買官方單日行情」按「載入 10/5 官方行情」。`POST /stocks/{exchange}/{symbol}/prices/capture?as_of=2026-10-05` 使用空object body；每程序僅首次合法明示POST可有界取得1份官方CSV，從3105切到6488用同process cache。普通GET／重複POST／切股不增加外網，失敗cache不自動retry，import不能自動取得。精確啟用值及外部policy pins見[開發入口](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)。
+
+`price_memory` 的 `stock-price-memory/m1-v1` 與原DB路徑雙軌；source／版本／完整性、同symbol／asof有效才接headline、單日OHLC／成交量圖與新價格面板，三處使用同一股／日。預設asof不為新價格前移；明選2026-10-02或「最新資料」返回既有default10/02時，10/05 memory不可滲入，漲跌仍待核實。沒有其他cutoff歷史取得或較早／未來fallback。
+
+Memory typed契約明示TWD，正面wrapper身分檢核依來源§20.1；其他unknown市場不外推。價格為元／股、成交額為TWD元，成交量依[單位契約](UI_COPY_SPEC.md#103-張零股)顯示精確張；source details保留canonical股及金融原字串。quote-date、request開始／capture UTC、source／policy／body／receipt SHA與署名可追溯；publication／first available／revision未知，非PIT。bar `id`／`raw_payload_id`／`ingestion_run_id` 為null，不偽裝DB記錄。
+
+### 25.2 已接受操作與未驗界線
+
+Root獨立核官方CSV全結構、兩股12個金融cell及API／chart／audit精確張；3105與6488的headline、價格面板及chart同stock／day。真正native日期3次ArrowUp→套用→載入→3105 audit／chart table→同cutoff6488→窄版audit／chart table→最新資料default10/02，全為isTrusted；default與explicit10/02都不滲入10/05。GET／重複POST兩股同cache、0額外source，DB tables preserved=true及guards0已核。
+
+桌面1277×924、client1262無page overflow；窄版390×844、client375／page375，canvas305有真resize、SHA原列305無overflow，780寬chart table在303寬local scroll容器。這是具名兩股與控制的有限桌面／窄版接受。輔助typedkeypress／type ACK未改日期、root Python引號SyntaxError exit1，以及獨立CSV ordinal混用assert exit1均保留原task；後續具名native與修正exit0另核，不把輔助ACK當操作通過。
+
+本批core+1／dependency+1、stall0；loader／validator修正與必要UNIT回歸屬同批，不另算可靠性batch。UNIT-LOTS-1前置core0／dep0、當時stall1另報。必要tests及owned服務／page清理由[開發入口](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)詳述；清理的PTY rawexit1不改成驗收exit0。
+
+本server catalogue及10/02是synthetic，只有official10/05單日價格為actual；只存memory，重啟須重載。沒有正式資料目錄、DB保存／跨程序、backend full、MA20／MA60／trend、完整M1／M2／M3、研究條件／Signal／Plan或PIT驗收。MA20／趨勢仍缺20／21真實歷史close及對應日曆，index11391不能作個股價格；下一核心及其待滿足條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。

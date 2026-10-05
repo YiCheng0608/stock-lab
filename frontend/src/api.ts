@@ -14,6 +14,7 @@ import type {
   InstrumentDetail,
   OfficialEventsData,
   InstitutionalWindowsData,
+  StockPriceMemoryData,
   OfficialEventFocusData,
   NewsItem,
   GlossaryTerm,
@@ -205,6 +206,9 @@ export const getStock = (exchange: string, symbol: string, asOf?: string) =>
 
 export const captureInstitutionalWindows = (exchange: string, symbol: string, asOf?: string) =>
   post<InstitutionalWindowsData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/institutional-windows/capture${queryString({ as_of: asOf })}`, {})
+
+export const captureStockPriceMemory = (exchange: string, symbol: string, asOf: string) =>
+  post<StockPriceMemoryData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/capture${queryString({ as_of: asOf })}`, {})
 
 export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
   post<OfficialEventsData>(

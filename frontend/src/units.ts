@@ -11,15 +11,39 @@ export function formatTableNumber(value: unknown, digits = 3, signed = false): s
 
 const MAX_VOLUME_TEXT = '9223372036854775807'
 
+const SHARE_LIMITS = { 1: MAX_VOLUME_TEXT, 5: '46116860184273879035', 20: '184467440737095516140' } as const
+type ShareHorizon = keyof typeof SHARE_LIMITS
+
+function canonicalShareText(value: unknown, horizon: ShareHorizon, nonnegative: boolean): string | null {
+  const maximum = SHARE_LIMITS[horizon]
+  if (!maximum || typeof value !== 'string' || value.length > maximum.length + 1
+    || !/^(?:0|-?[1-9][0-9]*)(?![\s\S])/.test(value) || (nonnegative && value.startsWith('-'))) return null
+  const magnitude = value.startsWith('-') ? value.slice(1) : value
+  return magnitude.length > maximum.length || (magnitude.length === maximum.length && magnitude > maximum) ? null : value
+}
+
+/** Bounded canonical shares, including signed 5/20-day sums, displayed exactly as lots. */
+export function formatCanonicalShareLots(value: unknown, horizon: ShareHorizon = 1, nonnegative = false): string | null {
+  const text = canonicalShareText(value, horizon, nonnegative)
+  if (text == null) return null
+  const negative = text.startsWith('-')
+  const padded = (negative ? text.slice(1) : text).padStart(4, '0')
+  const fraction = padded.slice(-3).replace(/0+$/, '')
+  return (negative ? '-' : '') + groupedInteger(padded.slice(0, -3)) + (fraction ? `.${fraction}` : '')
+}
+
+/** Original share text belongs in explicitly labelled source-audit details. */
+export function formatCanonicalShares(value: unknown, horizon: ShareHorizon = 1, nonnegative = false): string | null {
+  const text = canonicalShareText(value, horizon, nonnegative)
+  return text == null ? null : groupedInteger(text)
+}
+
 function exactVolumeText(shares: unknown, exact: unknown): string | null {
   // Only an absent field permits compatibility with a safe legacy JSON number.
   if (exact === undefined) {
     return typeof shares === 'number' && Number.isSafeInteger(shares) && shares >= 0 ? String(shares) : null
   }
-  if (typeof exact !== 'string' || !/^(?:0|[1-9][0-9]*)$/.test(exact)
-    || exact.length > MAX_VOLUME_TEXT.length
-    || (exact.length === MAX_VOLUME_TEXT.length && exact > MAX_VOLUME_TEXT)) return null
-  return exact
+  return canonicalShareText(exact, 1, true)
 }
 
 function groupedInteger(value: string): string {
@@ -31,10 +55,7 @@ export function formatTableVolume(shares: number | null | undefined, source: str
   if (!isVerifiedShareSource(source)) return ''
   const text = exactVolumeText(shares, exact)
   if (text == null) return ''
-  const padded = text.padStart(4, '0')
-  const lots = padded.slice(0, -3)
-  const fraction = padded.slice(-3).replace(/0+$/, '')
-  return groupedInteger(lots) + (fraction ? `.${fraction}` : '')
+  return formatCanonicalShareLots(text, 1, true) ?? ''
 }
 
 /** Exact source share count for the overview's original-value table. */
@@ -46,24 +67,26 @@ export function formatTableVolumeShares(shares: number | null | undefined, sourc
 
 export function formatTableChip(value: number | null | undefined, source: string | null | undefined, margin = false): string {
   if (!(margin ? isVerifiedMarginSource(source) : isVerifiedChipFlowSource(source))) return ''
-  const normalized = typeof value === 'number' && !margin && isVerifiedChipFlowSource(source) ? value / LOT_SIZE : value
-  return formatTableNumber(normalized, 3, true)
+  if (margin) return formatTableNumber(value, 3, true)
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) return ''
+  const lots = formatCanonicalShareLots(String(value))
+  return lots == null ? '' : (value > 0 ? '+' : '') + lots
 }
 
 /** Format a share-count value as lots without discarding fractions or sign. */
 export function formatShareLots(shares: number | null | undefined): string {
-  if (typeof shares !== 'number' || !Number.isFinite(shares)) return '待核實'
-  return `${(shares / LOT_SIZE).toLocaleString('zh-TW', { maximumFractionDigits: 3 })} 張`
+  if (typeof shares !== 'number' || !Number.isSafeInteger(shares)) return '待核實'
+  return `${formatCanonicalShareLots(String(shares))} 張`
 }
 
 export function formatSignedShareLots(shares: number | null | undefined): string {
-  if (typeof shares !== 'number' || !Number.isFinite(shares)) return '待核實'
+  if (typeof shares !== 'number' || !Number.isSafeInteger(shares)) return '待核實'
   const formatted = formatShareLots(Math.abs(shares))
   return shares > 0 ? `+${formatted}` : shares < 0 ? `-${formatted}` : formatted
 }
 
 export function formatVolumeLots(shares: number | null | undefined): string {
-  if (typeof shares !== 'number' || !Number.isFinite(shares) || shares < 0) return '待核實'
+  if (typeof shares !== 'number' || !Number.isSafeInteger(shares) || shares < 0) return '待核實'
   return formatShareLots(shares)
 }
 
@@ -93,7 +116,7 @@ export function isVerifiedMarginSource(source: string | null | undefined): boole
 
 /** Convert only exchange-verified share sources; preserve raw values otherwise. */
 export function formatSourceAwareShareLots(shares: number | null | undefined, source: string | null | undefined): string {
-  if (typeof shares !== 'number' || !Number.isFinite(shares) || shares < 0) return '待核實'
+  if (typeof shares !== 'number' || !Number.isSafeInteger(shares) || shares < 0) return '待核實'
   return isVerifiedShareSource(source)
     ? formatVolumeLots(shares)
     : `${shares.toLocaleString('zh-TW', { maximumFractionDigits: 3 })}（單位待提供）`
@@ -122,13 +145,7 @@ export function positionQuantityFromText(unit: ShareUnit, raw: string): string {
 
 export function formatShareQuantity(shares: number | null | undefined, exact?: string | null): string {
   const text = exactVolumeText(shares, exact)
-  if (text == null) return '股數待核實'
-  const padded = text.padStart(4, '0')
-  const lots = padded.slice(0, -3)
-  const remainder = padded.slice(-3).replace(/^0+/, '') || '0'
-  if (lots !== '0' && remainder !== '0') return `${groupedInteger(lots)} 張 ${remainder} 股`
-  if (lots !== '0') return `${groupedInteger(lots)} 張`
-  return `${remainder} 股（零股）`
+  return text == null ? '庫存數量待核實' : `${formatCanonicalShareLots(text, 1, true)} 張`
 }
 
 export function formatPositionShares(shares: number | null | undefined, exact?: string | null): string {

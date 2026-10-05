@@ -112,6 +112,30 @@ GET／首次明示 POST 共用 P3b 的來源、啟用值、cache 與鎖。Consum
 
 沿 M2-P1 零額外落盤入口；GET／POST 可帶 `q`。全原件驗證、搜尋後截斷、matching 外壞列、同股多事件、query 邊界與 M1 返回依[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)。記憶體回歸及真原件／API／具名往返已有限接受；完整 backend／production Vite build 未跑。最小 fixture 不代替來源或持久化驗收。
 
+### UNIT-LOTS-1 台股張數前置的記憶體驗證入口
+
+[`tools/unit-lots-preview.cjs`](../../tools/unit-lots-preview.cjs) 預設 `--check --deps <既有 frontend/node_modules>`；借用共用依賴唯讀，不另建環境。Node20.19.4／TypeScript5.9.3／esbuild0.25.12的本輪check exit0，核current24個src的 `noEmit:true`、`incremental:false`、`composite:false` 並拒絕writeFile；App與preview bundle採 `write:false`。已核canonical48／overview43／現行W8 SSR104／App與chart18個斷言，涵蓋精確張／原股、單位／日期窗口、預設lot輸入、零股相容與unsafe拒用；不外推W1–W7舊suite或完整backend。
+
+最小fixture只存memory，本輪14,771B，受8MiB上限；Git測試工具22,074B≤32KiB是可重建來源，不是附件。Filesystem／network／未授權subprocess guard均0，額外DB／raw／bundle／buildinfo／HAR／截圖／cache／log／disk artifact=0。`--serve` 只供root另核具名Full App預覽／loopback fixture API，重啟即消失，非正式庫存或本次新來源；保存API／payload未改，不重跑舊storage回歸，memory不能替代未來必要磁碟重開。
+
+具名桌面／390px顯示與可信輸入／提交只按[UI §10.3](../UI_COPY_SPEC.md#103-張零股)及[個股頁 §7.1](../STOCK_RESEARCH_PAGE.md#71-unit-lots-1-日常張數與原股稽核有限接受)範圍接受。初始stock chip的date-only fixture被既有validator拒用，改為ISO instant並補2個projection checks，沒有產品source退修。Orca owner短暫unavailable／runtime connectionclosed的原exit保留；tab show／後snapshot正面恢復，未重啟Orca或root，不把初始fill/select event=false或Chip DOM選擇稱native通過。
+
+清理另報：兩組owned preview server／compiler有SIGINT shutdown receipt，兩PTY rawexit1不改；exact CIM與8794 listener後驗均absent，三個exact owned pages已關閉且tab list=[]。完整PID／handle／命令／原exit留root原task，不保存整套成功資料。沒有新行情原件、來源驗收、backend／正式DB、磁碟保存、Vite production build或完整M1／M3證據；本前置不解除研究條件／價格gate。
+
+M1-PRICE-1接線後的必要UNIT回歸另已exit0：沿同Node20.19.4／TS5.9.3／esbuild0.25.12，current26個src noEmit、canonical48／Overview43／W8 SSR104／App-chart18、fixture14,771B，guards／source_requests／artifacts皆0；19 source前後SHA相同、owned shell／Node／esbuild後驗absent。這是同core batch兼容回歸，原24src前置收據保留，不新增native／DB保存宣稱。
+
+### M1-PRICE-1 單日價量的記憶體驗證入口
+
+後端入口[tools/tpex-price-api.py](../../tools/tpex-price-api.py)為 `python -B -X utf8 ... --check --deps <既有 backend/.deps>`，前端[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)為 `node ... --check --deps <既有 frontend/node_modules>`，共用依賴唯讀。Python在import前隔離memory config／SQLite `:memory:` 並拒絕disk寫入；Node核現行26src `noEmit:true`、`incremental:false`、`composite:false`，writeFile拒用、bundle `write:false`，不落buildinfo／bundle。
+
+必要後端18項exit0（[parser10](../../backend/tests/test_tpex_price_capture.py)／[store6](../../backend/tests/test_tpex_price_store.py)／[router2](../../backend/tests/test_tpex_price_api.py)）；前端validator52／SSR26／App-chart18及noEmit exit0。check fixture為重建selected值與synthetic邊界，非official capture。CJS default interop初exit1已修，reverse-cutoff兩方向本批修＋驗；必要checks與具名actual源／API／native分報，版本／命令／原exit留root原task，不泛跑backend full。
+
+`--serve` 與API `--live-source-opt-in` 只供root核定的loopback／actual router驗收；API需 `--policy-version`／`--policy-digest` 沿[來源 §20](../SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)的外部pins。程式明示啟用須 `STOCK_TPEX_PRICE_MEMORY_CAPTURE=1`、`STOCK_TPEX_PRICE_POLICY_VERSION` 與 `STOCK_TPEX_PRICE_POLICY_DIGEST` 均符合固定pins；check不抓live source，import／ordinary GET零外網。首次合法POST最多1 bounded GET，同程序重複／切股與失敗cache不重取；原件／receipt只process memory，重啟釋放，不能離線重播或作磁碟保存證據。
+
+Root唯一production capture、兩股12金融值／API／chart／audit及真正native桌面／390px操作已有限接受，精確界線見[個股頁 §25](../STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)。catalogue與10/02是synthetic，只有official10/05價格actual；source／filesystem／未授權subprocess guards0、額外DB／raw file／bundle／HAR／截圖／cache／log／artifact0，DB tables preserved=true不外推正式資料目錄。
+
+清理另已核：core唯一owned page關閉、tab list=[]；owned API與兩組UI／compiler及PS parent exact CIM後均absent，8795／8796無listener。SIGINT shutdown=true、guards0／artifacts0；PTY rawexit1保留，不改為check exit0。UNIT先前三pages／server也已核清0；完整PID／handle／原exit留原task，舊資源拒絕／NO-RETRY維持。本入口不證正式DB、跨程序、MA20、完整M1／PIT或全市場，未新增成功產物附件。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

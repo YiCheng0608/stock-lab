@@ -15,6 +15,12 @@
 
 W8已有限接受TPEx3105／6488、2026-09-21／09-22／09-23／09-24／09-29／09-30／10-01／10-02八截止5／20日法人來源／缺日、96 net actual API及16組具名可信native與owned服務清理，見[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。範圍外仍unavailable，突破／回踩固定保守；補資料或Signal不自動啟用trend／研究條件，完整M1未完成。
 
+UNIT-LOTS-1台股數量主值／輸入前置已有限接受：日常張值、精確零股／原股稽核，DB／API／來源仍canonical股，價格／成本仍元／股；見[UI §10.3](UI_COPY_SPEC.md#103-張零股)／[個股頁 §7.1](STOCK_RESEARCH_PAGE.md#71-unit-lots-1-日常張數與原股稽核有限接受)。本前置1批、core0／dep0、當時stall1；M1後必要UNIT兼容回歸current26src及原斷言已核，原24src收據保留，見[開發入口](development-baseline/README.md#unit-lots-1-台股張數前置的記憶體驗證入口)。
+
+M1-PRICE-1已有限接受TPEx3105／6488、2026-10-05真單日價量、唯一production capture、actual API、headline／chart／面板及具名trusted桌面／窄版；切股／GET／重複POST同cache零新增外網，default／explicit10/02不滲10/05。core+1／dep+1、stall0；source／操作／保存界線見[來源 §20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)／[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)。Loader／validator與必要回歸屬同批；完整M1及趨勢／研究條件未完成。
+
+W8已本地合併 `dde733d7f7261807aba00dcfcf972909778bf65a`；本輪起始／當前HEAD仍 `15935fba48e76f9d9ad96a09210bb6b37e5ab737`，27exact files（source19／docs8）已交付待最終文件review／freeze／index／commit／merge，尚未版本封存；見[協作紀錄](TASK_COORDINATION.md)。
+
 籌碼三區：三大法人已有資料；主力進出與券商分點的匯入、統計、排行、歷史及更新待做。免費官方人工查詢入口不是已接資料集，定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
 ### 接下來的順序：近期產品里程碑
@@ -27,12 +33,17 @@ W8已有限接受TPEx3105／6488、2026-09-21／09-22／09-23／09-24／09-29／
 | M2 今日關注串個股 | 查看可追溯關注理由，同股去重後進入 M1，再返回原條件。 | 每項理由有已驗收來源、時間與版本；零候選和來源不足可區分。分類未核實不作可信排名，不為湊名單補候選。 |
 | M3 條件計畫與追蹤 | 保存並讀回版本化計畫，操作觸發、到期、未成交、模擬成交與退出。 | 逐子能力滿足來源、時間、版本、官方 tick／費稅、合法時段及必要執行 gate；磁碟保存／跨程序讀回驗收。未知風險預算不給張數，觸價不當成交，legacy tracking 不代新計畫生命週期。B4／B5／B7 與預設切換 gate 保留。 |
 
-**下一單一核心候選M1-W9：同兩股新增2026-09-18、保留八個已驗cutoff。** 新free可執行候選dataset11856 `d=115/08/24` daily尚未取得／驗證／准入；8/24全OHLC已驗未採不代daily，不需8/21。28sessions／31GET（3index＋28daily）／59MiB、9/18應恰20／5日起9/14／20日起8/24僅候選，須下一新root正面驗真8/24、完整8/24～10/2日曆／新policy及external pins，再計算／API／native，不預先取8/24。W8真8/25／27日曆／八cutoff96 net與owned清理已有限接受，見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)；文件／freeze／index／commit／master合併仍pending，最終receipt留原task，不為hash重刷。無positive取得路徑，implementation前依證改必要gate全齊的最小M3具名Plan或等待，不空轉reliability／降gate；選題與計數依[AGENTS](../AGENTS.md#核心選題與進度判定)。
+**下一核心已選M2-FOCUS-LOTS-1，尚未派工／實作。** 現行今日頁只有官方事件關注及legacy action，缺真日價量的張數關注入口。使用者明選10/05與最小成交張數，在已驗兩股範圍依代碼排序（非ranking）查看來源日／版本、原股／精確張與門檻理由，進同cutoff個股再回原 `as_of`／`min_lots`。門檻為精確至0.001張的字串、canonical比較不Number；20,000張預期只3105，10,000張兩股，50,000張真零候選須與未載入／unavailable區分。這是下一操作的完成條件，不是已通過。
+
+依賴本輪M1合併後latest HEAD、相同兩股／10/05真來源的fresh GET與exact pins／instrument准入、共同cutoff及安全URLstate／返回；ordinary GET零外網，首次載入沿原唯一bounded price capture，其餘cache。下一root先核可交付M1；目前20／21真歷史close／日曆及策略inputs／time gate未齊，單日11370與index不代替，沒有正面新歷史取得路徑就採本M2閉環。不得新增來源／cutoff、marketwide／排名／題材、Signal／Plan或保存宣稱；新worktree／可見root與四角色gate、該root的exact程序／測試budget及白名單核定後才派工。
+
+M1-W9已封存，只有bootstrap／接手、沒有implementation batch；原「新增9/18第九cutoff／108 net」只是未實作歷史候選，不機械續作。歷史W8真8/25／27日曆／96 net仍按已驗範圍有效。下一題與跨輪計數依[AGENTS](../AGENTS.md#核心選題與進度判定)，不因文件／索引／Git歸零。
 
 | 核心路徑 | 目前缺口 | 下一步與驗收 |
 | --- | --- | --- |
 | M1 資料證據 | W8已解除真8/25 daily／完整27日曆／新policy及pins依賴；範圍外／PIT／修訂／TWSE用途仍缺。 | 新範圍另驗真來源與新版本，缺列不推休市；已驗來源見[§19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)。 |
-| M1 計算與接線 | W8八cutoff96 net／actual API、16具名可信native及owned清理已有限接受，研究規則未接。 | 新範圍另驗同cutoff來源／獨立net／可信操作及清理，不混觀測receipt；條件見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
+| M1 計算與接線 | W8法人及M1-PRICE-1兩股單日價量／actual API／具名操作已有限接受；20／21真歷史close／日曆與研究策略必要inputs／time gate未齊。 | 有正面新來源取得／執行路徑才接趨勢／研究，單日與index不代替；無可交付M1則採已選M2張數關注。見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
+| M2 張數關注 | 已選M2-FOCUS-LOTS-1；尚無此具名入口或驗收。 | 明選as_of／min_lots、真兩股價量與門檻理由、同股去重／code順序、同cutoff進個股並返回；精確比較及三組真候選／零候選，來源不足分開。新root gate與fresh來源條件滿足後才派工。 |
 | M3 計畫操作 | caller-input 純核心已驗，實際來源／時間與新 Plan 產品保存未接。 | 具名列最小操作、真實資料及其必要 gate；滿足後接保存、API、UI 與追蹤。未滿足項列解除條件，不以 unknown 顯示代替必要條件。 |
 
 R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線才交付獨立核心操作。R0-B2 不是全域第一主題；其 snapshot／body／receipt／registry pins tuple 未齊，保持待驗，不重複搜尋或建 fixture 冒稱接入。[Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果) 管理精確缺口。

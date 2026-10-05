@@ -4,7 +4,7 @@
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
-現行兩股七截止W7版本／來源／26日曆與唯一84 net集中[§18](#18-m1-w7七截止法人來源與完整有界日曆)；§13–17原byte保留各自歷史觀測／數值，不作implicit latest。
+法人現行兩股八截止W8版本／來源／27日曆與96 net見[§19](#19-m1-w8八截止法人來源與完整有界日曆)；§13–18保留歷史觀測／數值，不作implicit latest。M1-PRICE-1的dataset11370新價格來源、production capture／API及兩股具名操作已有限接受，權威見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
 
 ## 1. Registry 與 policy 契約
 
@@ -787,3 +787,36 @@ Native另核16組unique可信日期form／96 DOM net及5／20日起迄／actual 
 | 6488 | 2026-10-02 | `[-2452286, 920329, 229491]` | `[-13191795, -1012703, 261501]` |
 
 有限接受不證範圍外／TWSE、修訂／PIT、trend／研究條件／Signal、raw保存／跨程序讀回或完整M1。測試、原失敗／補驗及owned服務清理見[開發入口](development-baseline/README.md#m1-w8-八截止法人窗口的零落盤驗證入口)與原task；不改原exit或重跑已通驗收。下一M1-W9僅候選新增9/18／保八cutoff，新dataset11856 `d=115/08/24` daily尚未取得／驗證／准入；8/24全OHLC已驗未採不代daily，不需8/21。須下一新root另核新完整日曆／policy／pins／native，不由本版放行。
+
+## 20. M1-PRICE-1：TPEx 兩股單日價格來源與准入
+
+**來源、production capture／consumer、actual API及兩股具名可信操作已由root有限接受。** 範圍只限TPEx3105／6488、2026-10-05單日價量；本來源獨立於原四來源registry、P2a及W8法人policy。產品操作與未驗界線見[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)。
+
+### 20.1 Exact資源、用途與固定policy
+
+來源ID為 `tpex_11370_daily_close_csv`、source_version為 `tpex-11370/2026-10-05`；官方[dataset11370「上櫃股票行情」](https://data.gov.tw/dataset/11370)所連唯一exact GET資源為 [CSV](https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data)。限公開免費本地使用、TPEx／stock／TWD、3105穩懋與6488環球晶、quote-date 2026-10-05；不外推其他stock／ETF／指數或新日期。
+
+Wrapper須正面核對instrument的market=TW／exchange=TPEx、selected symbol＋exact known name、instrument類型為stock及etf_category為空，才可按兩股policy scope固定TWD。原Instrument未有currency欄，DB／model未改；未來若有currency欄且非TWD須拒用。此來源typed memory明示TWD，unknown／mixed來源與其他市場不猜幣別。
+
+獨立嵌入policy `policy_version=m1-price-tpex-11370-2026-10-05.1`，canonical UTF-8 1462B，`policy_digest=sha256:452b9b8cfa3d050b79ea1a85b3e4ed643c40cf3d17882b8cb809ffdb7143deea`；完整policy／來源／範圍與digest須一致，root獨算已exit0。本次production沿同pins，既有TWSE／global registry、bundled default與法人pins維持。
+
+准入依dataset11370的[政府資料開放授權條款第1版](https://data.gov.tw/license)及既有[TPEx網站條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點政府開放資料例外；第5點的自動下載限制未由可讀endpoint略過。此exact政府資源的 `local_fetch`、`raw_store`、`summarize` 有限admitted，仍須有界取得、顯名、完整性、原件hash／版本／時間及traceability；本輪只process memory，raw_store准入沒有授權磁碟保存。署名保留「證期局＋櫃買中心／上櫃股票行情／2026／OGL1.0」，data-date為2026-10-05。不放行legacy POST、附加 `d` 的歷史查詢、其他URL或任意自動下載，`historical_pit=unsupported`。
+
+每程序首次合法明示POST最多1外部GET；重複POST／普通GET／切股cache不新增外網，失敗cache不自動retry。body≤3MiB（3,145,728B）、deadline30秒、redirect0／retry0；固定 `expected_body_sha256=bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d0772989243550ca36149`。URL無歷史日期參數，返回不同body／日期不得悄悄換版或重試。只有quote-date及observed capture；精確publication／first available／revision、rate limit及endpoint SLA仍未證實。
+
+### 20.2 Root前置原件與兩股金融驗證
+
+Root前置共2 GET：第一次選錯代碼欄位（row0是日期，應取row1代碼），未找到selected rows；第二次修正欄位後核同body，原錯誤／exit留原task。第二次HTTP200／application CSV、1,773,012B，12,060 data rows／18 fields，ROC `1151005` 對應2026-10-05、date-code唯一；金融驗證僅兩股。原body未落盤，capture UTC為 `2026-10-05T14:01:51.813710+00:00`，body SHA同上。
+
+| Selected股／data列序（1-based）／含header行號 | O／H／L／C（元／股） | 成交股數（canonical股） | 日常成交量（張） | 成交金額（元） |
+| --- | --- | --- | --- | --- |
+| 3105穩懋／205／206 | 614／630／604／615 | 48127911 | 48,127.911 | 29694939981 |
+| 6488環球晶／717／718 | 1220／1235／1175／1180 | 18982607 | 18,982.607 | 22887612060 |
+
+原前置摘要把含header行206／718誤稱data ordinal，現核正為205／717；價量值不變。Root獨立CSV ordinal混用的assert exit1及修正exit0保留原task。此前置兩GET與下述production capture是不同觀測，不合稱一次POST或一批3GET。
+
+### 20.3 Production唯一capture與有限接受
+
+原native載入的trusted POST觸發唯一official GET、HTTP200：`request_started_at=2026-10-05T14:53:12.683229+00:00`、`captured_at=2026-10-05T14:53:13.943096+00:00`；body仍1,773,012B／12,060 data rows／18欄、SHA同§20.1。`receipt_sha256=abf32de2e110de56b24cb84fd776c42cbdbfd301a1b6f8c2f7f5c9a8ef8fc140`，policy原pins不變。Root獨立全結構、兩股12個金融cell、API／chart／audit與精確張逐值核通；不外推其他金融列。
+
+兩股GET／重複POST使用同cache、0額外source；DB tables preserved=true，guards=0。原件／receipt只留memory，owned程序結束已釋放，無DB／raw file／HAR／截圖保存；bar id／raw_payload_id／ingestion_run_id為null。測試目錄及10/02資料是synthetic catalogue，只有本次official 10/05價格是actual；不證專案正式資料目錄、DB保存／跨程序、歷史close／日曆、完整M1或PIT。操作與清理分報見[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)／[開發入口](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)。

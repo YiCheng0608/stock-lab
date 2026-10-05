@@ -73,6 +73,7 @@ from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
+from .tpex_price import capture_tpex_price
 from .institutional_windows import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
 from .stock_signal_reads import load_stock_signal_reads
@@ -1689,6 +1690,17 @@ def stock_institutional_windows_capture(exchange: str, symbol: str, db: Session 
         raise HTTPException(status_code=404, detail="instrument not found")
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
     return capture_institutional_windows(instrument.exchange, instrument.symbol, cutoff)
+
+
+@router.post("/stocks/{exchange}/{symbol}/prices/capture")
+def stock_price_memory_capture(exchange: str, symbol: str, db: Session = Depends(get_db),
+                               as_of: date | None = None) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    # Only the explicitly supplied query date admits capture. Never default to
+    # a current feed date or silently move an existing research cutoff.
+    return capture_tpex_price(instrument, as_of)
 
 
 def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:

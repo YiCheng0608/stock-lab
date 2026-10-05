@@ -2,7 +2,50 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
-## 目前：2026-10-05 獨立資源清理（尚有殘留）
+## 目前：UNIT-LOTS-1／M1-PRICE-1 已接受，待 freeze 與版本封存
+
+2026-10-05 從 master 最新已驗收版本 `15935fba48e76f9d9ad96a09210bb6b37e5ab737` 建立 Orca worktree／branch `roadmap-m1-core-lots-20261005`；共同 cwd／worktree 為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-core-lots-20261005`，repo 為 `C:/Users/YiCheng/Desktop/taiwan-stock-research`，common Git dir 為其 `.git`。四者 runtime／environment cwd、branch、起始 HEAD 與實際模型已核一致；起始 clean。此節是本輪狀態，下方清理、W8 與更早 roster 為歷史，沒有新派工權。
+
+### 四角色 roster 與本次白名單
+
+| 角色 | Thread ID／實際配置 | 接手及目前寫入範圍 |
+| --- | --- | --- |
+| 統籌 | `01a10c16-112b-70f1-b8e1-06ec0c8612b2`；`gpt-6.1-sol`／`ultra`；/root | 已有限接受UNIT／M1-PRICE-1、必要checks及自有清理；目前stall0。最終文件review後才freeze；下一核心已選M2-FOCUS-LOTS-1，尚未派工。 |
+| 程式 | `01a10c1a-530f-76d1-b389-49af75c88857`；`gpt-6.1-sol`／`xhigh`；/root/program | 本輪19 source已交付／root接受，SHA及必要post-core UNIT回歸已核，停寫。loader／validator修正／回歸屬同core batch。 |
+| 文件 | `01a10c1a-d6bf-79c2-a922-68256e967ad6`；`gpt-6.1-sol`／`xhigh`；/root/documents | DOC最終僅下列8既有文件，更新有限接受／邊界／下一核心及pending版本封存；交付停寫等root review。 |
+| 索引與 Git commit | `01a10c1b-4cc1-7bf2-a5b1-8d1f84111897`；`gpt-6-luna`／`medium`；/root/index_git | 唯讀接手已交付並 idle；`source=[]`，freeze 前不 index／commit／merge／cleanup。 |
+
+Root actual parent=null、threadSource=user、source=vscode、forkedFromId=null；三 child 為本 root native spawn_agent、fork_turns=none 新建，actual parent／sessionId／source.subAgent.thread_spawn parent 同 root、depth=1、forkedFromId=null。原 session 的可見 gate 已正式接受：root 與三 child idle 時，唯一 `/subagents` send accepted／source=screen，Main default current 及同四 ID 已核；No sub-agents running 表示 idle，Esc 一次回 Main，未選 child／重送。沿用此組角色，不恢復舊角色。
+
+唯一可見 terminal `term_1cf2dca0-7744-4d03-ba25-970318a147da` 對應同 root session；connected／writable／nonorphaned、paneRuntimeId=1，screen 顯示本 task 與 GPT-6.1-Sol ultra。Helper 首次 create timeout／rawexit1 未送任務；舊入口找回唯一 handle，未重啟。同 root includeTurns=true 讀取遇 list_turns unsupported／exit1，在送 task 前停止；改 false 核 idle 後以原 session structured turn/start 唯一送達。兩者不是功能或 MCP 阻擋，原 exit 不改；完整 initial 及 completed bootturn 收據留 root 原 task。
+
+### 已承接優先、範圍與完成邊界
+
+UNIT-LOTS-1已有限接受：台股主值／預設輸入張、精確零股，價格／成本元／股、canonical股／歷史原值維持、來源unknown／mixed不猜／已張不重換。後續M1-PRICE-1已完成TPEx3105／6488、2026-10-05同股同日真價量→API／headline／chart／面板及具名可信操作；default／explicit10/02不滲10/05。兩者分報，不稱完整M1或研究條件／Signal／Plan。
+
+本輪accepted source19＋docs8＝27exact files，19 source精確範圍／SHA留root原task（backend API／overview／TPEx price worker-store-tests，frontend unit／typed price／overview-App接線及必要Git tools）；角色停寫後僅root另核退修才可變更。文件白名單為 `docs/UI_COPY_SPEC.md`、`docs/STOCK_RESEARCH_PAGE.md`、`docs/development-baseline/README.md`、`docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/TASK_COORDINATION.md`、`docs/SOURCE_REGISTRY.md`、`docs/DATA_SOURCES.md`，本輪新增內容合計≤52KiB；不新增附件／manifest。
+
+本前置只驗變更需要的最小 memory fixture（≤8 MiB），額外落盤 DB／raw／bundle／buildinfo／HAR／截圖／cache／log／artifact 為 0；必要 Git 測試工具≤32 KiB，屬測試來源而非附件。具名UI與預覽依原task核定；實際兩組owned server／compiler有正常SIGINT shutdown receipt，PTY各rawexit1不改，exact CIM及8794 listener後驗absent；三個exact owned pages已關、tab list=[]。完整PID／handle／命令／原exit留原task，不保存整套成功資料。保存 API／payload 未變，不重跑舊 storage 回歸；將來核心確需磁碟驗收時，由 root 在原 task另核最小範圍。歷史 budget 只屬歷史，不全域禁止必要新核心磁碟驗收。
+
+前置的數量／輸入驗收已有限接受：root核10個既有W8 net獨立換算、桌面main／原股details同值，以及1張／1股／超safe股數的真正trusted輸入／提交與字串POST；平均成本25.55元／股不改。390px僅按DOM數值／layout與具名native範圍接受，Chip頁籤DOM選擇不當native通過；無新來源／磁碟保存驗收。可重建入口、fixture原錯／guard與未跑項見[開發入口](development-baseline/README.md#unit-lots-1-台股張數前置的記憶體驗證入口)，契約見[UI §10.3](UI_COPY_SPEC.md#103-張零股)／[個股頁 §7.1](STOCK_RESEARCH_PAGE.md#71-unit-lots-1-日常張數與原股稽核有限接受)。
+
+App MCP connected，list_projects=8 分區、has_more=false；master docs／frontend ready，相關 paths metadata_changed、coverage 為 best effort，故讀本 worktree source。本 worktree 未索引，輪末由索引角色建立涉及分區；本次 refresh／CLI／reload=0。文件任務不跑 backend／tests、不建 DB、不外網、不新增附件／backup／helper／manifest、不清理或盤點歷史資源。完整範圍與工具收據留 root 原 task。
+
+### 繼承版本、停滯與待辦
+
+W8 已正式合併版本為 `dde733d7f7261807aba00dcfcf972909778bf65a`，parent=`b6359f9d1149345a27d739a1fb8a2bb33baaaba0`（W7）；本輪起始 `15935fba48e76f9d9ad96a09210bb6b37e5ab737` 是獨立清理文件版本。下方 W8 pending 是未回寫的歷史描述，由正式 Git／原 task 合併收據覆蓋，不代表尚待合併或可恢復派工。
+
+W9只bootstrap／讀取／接手，mutation／來源／產品／tests=0、無implementation batch；舊角色notLoaded／不restore。此前W8／W7各core+1／dep+1／reliability0／stall0，更早P6d／P6e可靠性無核心及unknown保持。UNIT前置1批core0／dep0，當時stall1；M1-PRICE-1本批core+1／dep+1，因此目前stall0。Loader／validator修正與post-core UNIT回歸是同批必要工作，不增可靠性／implementation batch；文件／索引／Git不算核心增量。
+
+M1-PRICE-1已接受dataset11370獨立policy／body pins、唯一production trusted POST→1官方GET、兩股原件12金融值／actual API／chart／audit精確張，GET／重複POST／切股同cache0額外source。Root前置第一GET選錯代碼欄位及兩次觀測保持；production與前置分開，data ordinal核正205／717、含header行206／718，原數值不變。權威見[來源 §20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)／[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)。
+
+Core owned page已關、tab list=[]，API／兩組UI-compiler與parent exact CIM absent，8795／8796無listener；SIGINT shutdown=true、guards0／artifacts0，PTY rawexit1保持。UNIT先前3pages／server也清0；raw／receipt只memory、程序結束釋放，無DB／file／HAR／截圖產物。必要backend18／frontend與post-core UNIT current26src已exit0，原CJS／root核對／Orca輔助原exit不改；完整receipt、PID／handle／限制留原task，入口見[開發文件](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)。
+
+下一核心正式選M2-FOCUS-LOTS-1，尚未派工／實作：明選10/05與精確min_lots門檻、真兩股依code順序的可追溯理由→同cutoff個股→回原as_of/min_lots；20,000只3105／10,000兩股／50,000真零是待驗預期，不當已通過。依賴M1 merged/latest HEAD、fresh GET fixed pins／instrument／URL安全；M1歷史close／日曆／策略gates缺時採此M2，next root可見四角色gate及exact budget／白名單後才派工。完整完成條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)／[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+本輪HEAD仍 `15935fba48e76f9d9ad96a09210bb6b37e5ab737`；27exact files待最終文件review／freeze，index／coverage更新／commit／master merge皆pending、未授權，未有版本封存。新worktree／可見next root及四角色gate未建／未核，不派下一implementation；目前四ID沿用，交付停寫。舊角色、空根、historical logs、Temp／HAR／GPG、舊runtime／cache／NO-RETRY不恢復或清理，拒絕及殘留保留如下，不稱全清。
+
+## 歷史：2026-10-05 獨立資源清理（尚有殘留）
 
 - 使用者要求移除本專案所有附加 worktree 與留存暫存；本次不派產品新輪。清理起始版本為 `dde733d7f7261807aba00dcfcf972909778bf65a`；下方 W8 pending 為歷史狀態，不代表仍有可接手角色。
 - 登錄／程序：6 個 Git／Orca 附加 worktree 均 clean、ignored=0、HEAD 包含於 master，已由 Orca rm 解除登錄；目前唯一登錄 worktree 是 master 主目錄。兩個存活終端已 close，專用 Codex PID 已退出。
@@ -26,7 +69,7 @@
 
 App MCP connected／list32／has_more=false，master8與W4／W5／W6／W7各6仍原根，W8未索引；master／W7七docs metadata_changed後讀W8 exact source，coverage為best effort，不稱MCP阻擋。CLI／reload／refresh0，不輪初或中途刷新／clone／改ACL或cache／終止其他session。TASK≤24576B且net起始HEAD22917B≤4096B、UTF-8無BOM／LF；W6 heading到EOF14261B／protected尾3713B／GPG1040B及565B含末LF原byte保留。SOURCE原94062B、個股頁原105376B與W7驗證入口保留，不覆寫歷史候選。文件外網／backend tests／DB／index及Git mutation／清理0；不新增附件／backup／helper／manifest。既有零新增測試／raw／ZIP／DB／tmp／cache／pycache／log／artifact限制不因新session重置。
 
-## 本輪核心成果、剩餘缺口與停滯
+## 歷史 W8 核心成果、剩餘缺口與停滯
 
 | 項目 | 已接受有限範圍／未完成 |
 | --- | --- |

@@ -1,8 +1,16 @@
-import type { InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
+import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
+import { memoryPriceCaptureReady, PRICE_HEADERS, priceMemoryInstrumentSupported, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
-import { formatTableVolume, formatTableVolumeShares } from '../units'
+import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
 const REASONS: Record<string, string> = {
+  price_memory_capture_missing: '尚未載入本次官方單日行情。',
+  price_cutoff_not_supported: '此來源只支持 2026/10/5；請明示套用該日期。',
+  price_capture_not_enabled: '伺服器尚未明示啟用此官方行情載入。',
+  price_instrument_not_supported: '此來源僅核准兩檔上櫃普通股。',
+  price_external_policy_pins_mismatch: '此官方行情的授權版本設定待核實。',
+  price_capture_busy: '官方行情正在載入。',
+  price_body_version_mismatch: '來源原件版本已變更，未採用數值。',
   window_capture_not_enabled: '伺服器尚未明示啟用法人窗口載入。',
   window_capture_configuration_invalid: '法人窗口設定無效，尚未啟用。',
   window_market_or_symbol_not_supported: '目前只支持上櫃 3105、6488。',
@@ -95,27 +103,27 @@ function Reasons({ reasons }: { reasons: string[] }) {
   return reasons.length ? <ul className="overview-reasons">{reasons.map((reason) => <li key={reason}>{overviewReason(reason)}</li>)}</ul> : null
 }
 
-function exactShares(value: string): string {
-  // Format the canonical integer text directly, preserving every digit beyond
-  // Number.MAX_SAFE_INTEGER. No Number conversion or share-to-lot rounding.
-  if (!/^(?:0|-?[1-9][0-9]*)$/.test(value)) return '待核對'
-  return value.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-}
-
 export function InstitutionalDaily({ data, windowsPresent = false }: { data?: InstitutionalDailyData; windowsPresent?: boolean }) {
   const row = data?.status === 'available' ? data.row : null
   const provenance = row ? data?.provenance : null
+  const unitKnown = data?.unit === 'shares' && row?.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string'
+  const lots = (value: unknown, gross = false) => unitKnown ? formatCanonicalShareLots(value, 1, gross) ?? '待核對' : '單位待核實'
+  const original = (value: unknown, gross = false) => unitKnown ? formatCanonicalShares(value, 1, gross) ?? '待核對' : '單位待核實'
   return <section className="panel overview-institutional-daily"><h3>單日法人原件</h3>
     {row && provenance ? <>
-      <p>{row.company_name}（{row.symbol}） · 資料日 {formatResearchDate(row.date)} · 單位：股</p>
+      <p>{row.company_name}（{row.symbol}） · 資料日 {formatResearchDate(row.date)} · 單位：{unitKnown ? '張' : '來源單位待核實'}</p>
       <p className="small-note">僅核對本次設定的單日原件與選中標的；不代表完整市場或截至日前最新資料。</p>
-      <div className="table-wrap"><table><caption>法人買進、賣出與淨買賣超（股）；正值為買超、負值為賣超。</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>
-        {(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><td>{row.investors[key].label}</td><td>{exactShares(row.investors[key].buy)}</td><td>{exactShares(row.investors[key].sell)}</td><td>{exactShares(row.investors[key].net)}</td></tr>)}
-        <tr><th colSpan={3}>三類法人淨買賣超合計</th><td>{exactShares(row.total_net)}</td></tr>
+      <div className="table-wrap"><table><caption>法人買進、賣出與淨買賣超（{unitKnown ? '張' : '單位待核實'}）；正值為買超、負值為賣超。</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>
+        {(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><td>{row.investors[key].label}</td><td>{lots(row.investors[key].buy, true)}</td><td>{lots(row.investors[key].sell, true)}</td><td>{lots(row.investors[key].net)}</td></tr>)}
+        <tr><th colSpan={3}>三類法人淨買賣超合計</th><td>{lots(row.total_net)}</td></tr>
       </tbody></table></div>
       <p className="small-note">來源 <a href={provenance.endpoint} target="_blank" rel="noreferrer">證券櫃檯買賣中心 · 上櫃股票三大法人買賣明細資訊</a>；擷取 {formatResearchDateTime(provenance.captured_at)}。本地原件與數值一致；歷史當時可得（PIT）未支援。</p>
       {data?.attribution && <p className="small-note">資料提供：{data.attribution.owner.data_provider} · {data.attribution.owner.attribution_year} · <a href={data.attribution.owner.license_url} target="_blank" rel="noreferrer">政府資料開放授權條款</a></p>}
       <details className="technical-details"><summary>查看法人原件日期、來源版本與雜湊</summary>
+        <div className="table-wrap"><table><caption>來源稽核原值（{unitKnown ? '股' : '單位待核實'}）</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>
+          {(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{original(row.investors[key].buy, true)}</td><td>{original(row.investors[key].sell, true)}</td><td>{original(row.investors[key].net)}</td></tr>)}
+          <tr><th colSpan={3}>三類法人淨買賣超合計</th><td>{original(row.total_net)}</td></tr>
+        </tbody></table></div>
         <div className="overview-provenance">原始資料日 {row.source_date} · 原件列序 {row.row_ordinal} · {data?.version}</div>
         <div className="overview-provenance">來源版本 {provenance.source_version} · registry {provenance.registry_version} · manifest {provenance.manifest_digest}</div>
         <div className="overview-provenance">原件 SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256}</div>
@@ -127,46 +135,55 @@ export function InstitutionalDaily({ data, windowsPresent = false }: { data?: In
   </section>
 }
 
-export function formatWindowShares(value: unknown): string | null {
-  if (typeof value !== 'string' || !/^(?:0|-?[1-9][0-9]*)$/.test(value)) return null
-  return BigInt(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+export function formatWindowShares(value: unknown, horizon: 1 | 5 | 20 = 1): string | null {
+  return formatCanonicalShares(value, horizon)
+}
+
+function knownWindowLots(data: InstitutionalWindowsData, horizon: 5 | 20): string[] | null {
+  const window = data.windows?.[String(horizon)]
+  if (!window || window.horizon !== horizon || !data.horizons.includes(horizon)
+    || data.unit !== 'shares' || data.quantity_encoding !== 'canonical_integer_string'
+    || typeof data.as_of !== 'string' || data.supported_scope?.supported_cutoffs.includes(data.as_of) !== true
+    || data.calendar?.status !== 'available' || window.status !== 'available'
+    || window.required_dates.length !== horizon || window.valid_dates.length !== horizon
+    || new Set(window.required_dates).size !== horizon || window.missing_dates.length !== 0 || window.invalid_dates.length !== 0
+    || window.from !== window.required_dates[0] || window.to !== data.as_of || window.required_dates[horizon - 1] !== data.as_of
+    || !window.required_dates.every((day, index) => day === window.valid_dates[index] && day <= data.as_of! && (index === 0 || day > window.required_dates[index - 1]))) return null
+  const values = (['foreign', 'trust', 'dealer'] as const).map((key) => formatCanonicalShareLots(window.values?.[key], horizon))
+  return values.every((value) => value !== null) ? values as string[] : null
 }
 
 export function InstitutionalWindows({ data, onCapture, busy = false, requestFailure }: {
   data: InstitutionalWindowsData; onCapture?: () => void; busy?: boolean; requestFailure?: string
 }) {
   const state = data.capture_state
+  const unitKnown = data.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string'
   const cutoffSupported = typeof data.as_of === 'string' && data.supported_scope?.supported_cutoffs?.includes(data.as_of) === true
   const sourceWindow = data.windows?.['20'] ?? data.windows?.['5']
   const evidence = cutoffSupported ? (sourceWindow?.daily_evidence ?? []).filter(({ row }) =>
     row.date <= data.as_of! && sourceWindow?.required_dates.includes(row.date)) : []
   return <section className="panel overview-institutional-windows"><h3>外資／投信／自營商</h3>
     {!data.version ? <><div className="badge">資料不足</div><p>最近 5／20 交易日淨買賣超與趨勢尚不可用。</p></> : <>
-      <p className="small-note">各法人淨買賣超，單位：股；正值為買超，負值為賣超。截止包含當日，缺日不補零或改取更早日期。</p>
+      <p className="small-note">各法人淨買賣超，單位：{unitKnown ? '張' : '來源單位待核實'}；正值為買超，負值為賣超。截止包含當日，缺日不補零或改取更早日期。</p>
       {cutoffSupported && state?.can_capture && onCapture && <button type="button" className="secondary-button" disabled={busy || state.busy} onClick={onCapture}>{busy || state.busy ? '正在載入法人窗口…' : state.attempted ? '讀取本次法人窗口' : '載入5／20日法人窗口'}</button>}
       {requestFailure && <div className="data-gap" role="alert">{overviewReason(requestFailure)}</div>}
-      <div className="table-wrap"><table><caption>最近 5／20 交易日法人淨買賣超（股）</caption><thead><tr><th>窗口／日期</th><th>外資（不含外資自營商）</th><th>投信</th><th>自營商</th><th>交易日完整性</th></tr></thead><tbody>{[5, 20].map((horizon) => {
+      <div className="table-wrap"><table><caption>最近 5／20 交易日法人淨買賣超（{unitKnown ? '張' : '單位待核實'}）</caption><thead><tr><th>窗口／日期</th><th>外資（不含外資自營商）</th><th>投信</th><th>自營商</th><th>交易日完整性</th></tr></thead><tbody>{([5, 20] as const).map((horizon) => {
         const window = data.windows?.[String(horizon)]
-        const formatted = (['foreign', 'trust', 'dealer'] as const).map((key) => formatWindowShares(window?.values?.[key]))
-        const datesMatch = window?.required_dates.length === horizon && window.valid_dates.length === horizon
-          && new Set(window.required_dates).size === horizon && window.missing_dates.length === 0 && window.invalid_dates.length === 0
-          && window.from === window.required_dates[0] && window.to === data.as_of && window.required_dates[horizon - 1] === data.as_of
-          && window.required_dates.every((day, index) => day === window.valid_dates[index] && day <= data.as_of! && (index === 0 || day > window.required_dates[index - 1]))
-        const valid = cutoffSupported && datesMatch && data.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string'
-          && data.calendar?.status === 'available' && window?.status === 'available' && formatted.every((value) => value !== null)
-        return <tr key={horizon}><th>{horizon} 交易日{window?.from && <div className="small-note">{formatResearchDate(window.from)} — {formatResearchDate(window.to ?? null)}</div>}</th>{valid ? formatted.map((value, index) => <td className="numeric-cell" key={index}>{value}</td>) : <td colSpan={3}><div className="data-gap">資料不足{window?.values && '：數值或窗口條件待核對'}</div></td>}<td>{window ? `所需 ${window.required_dates.length}／已驗 ${window.valid_dates.length}／缺 ${window.missing_dates.length} 日` : '尚未核對'}</td></tr>
+        const formatted = knownWindowLots(data, horizon)
+        return <tr key={horizon}><th>{horizon} 交易日{window?.from && <div className="small-note">{formatResearchDate(window.from)} — {formatResearchDate(window.to ?? null)}</div>}</th>{formatted ? formatted.map((value, index) => <td className="numeric-cell" key={index}>{value}</td>) : <td colSpan={3}><div className="data-gap">資料不足{window?.values && '：數值或窗口條件待核對'}</div></td>}<td>{window ? `所需 ${window.required_dates.length}／已驗 ${window.valid_dates.length}／缺 ${window.missing_dates.length} 日` : '尚未核對'}</td></tr>
       })}</tbody></table></div>
       {Object.values(data.windows ?? {}).map((window) => window.missing_dates.length > 0 && <details className="technical-details" key={window.horizon}><summary>{window.horizon} 日窗口缺日與未採用原因</summary><div>缺日：{window.missing_dates.join('、')}</div>{window.invalid_dates.map((item) => <div key={item.date}>{item.date}：{overviewReason(item.reason)}</div>)}<Reasons reasons={window.reasons} /></details>)}
       <p className="small-note">來源：證券櫃檯買賣中心（TPEx） · <a href="https://data.gov.tw/dataset/11856" target="_blank" rel="noreferrer">上櫃股票三大法人買賣明細資訊</a> · <a href="https://data.gov.tw/dataset/11391" target="_blank" rel="noreferrer">櫃買指數歷史資料</a>；授權 <a href="https://data.gov.tw/license" target="_blank" rel="noreferrer">政府資料開放授權條款第 1 版（OGL 1.0）</a>。</p>
       <p className="small-note">本次取得版本的資料日期統計，只留在伺服器記憶體；讀取沿用同一批原件。取得批次涵蓋 {data.supported_scope?.supported_cutoffs.length ?? 0} 個支持截止，各窗口只採用截至所選日期的原件。發布、首次可得與修訂時間均未知，不代表歷史當時可得（PIT 未支援），不推論研究條件成立。</p>
       <details className="technical-details"><summary>查看法人窗口的每日數值、交易日與來源版本</summary>
+        <div className="table-wrap"><table><caption>窗口來源稽核原值（{unitKnown ? '股' : '單位待核實'}）</caption><thead><tr><th>窗口</th><th>外資</th><th>投信</th><th>自營商</th></tr></thead><tbody>{([5, 20] as const).map((horizon) => <tr key={horizon}><th>{horizon} 交易日</th>{(['foreign', 'trust', 'dealer'] as const).map((key) => <td key={key}>{knownWindowLots(data, horizon) ? formatWindowShares(data.windows?.[String(horizon)]?.values?.[key], horizon) : '待核對'}</td>)}</tr>)}</tbody></table></div>
         <div>本次截止 {formatResearchDate(data.as_of ?? null)}；支持範圍：上櫃 3105、6488，截止 {data.supported_scope?.supported_cutoffs?.map((day) => formatResearchDate(day)).join('、') ?? '未核對'}。</div>
         <div>總覽法人版本 {data.version} · 計算版本 {data.calculation_version ?? '未核對'}</div>
         <div className="overview-provenance">來源政策版本 {data.policy?.version ?? '未核對'} · 雜湊 {data.policy?.digest ?? '未核對'}</div>
         <div>交易日基準 {data.calendar?.version ?? '未核對'}；所需 {data.calendar?.expected_dates?.length ?? 0}／已驗 {data.calendar?.valid_dates?.length ?? 0} 日。只支持 {formatResearchDate(data.supported_scope?.calendar_from ?? null)} — {formatResearchDate(data.supported_scope?.calendar_to ?? null)}。</div>
         {data.calendar?.basis && <p>週一至週五：<a href={data.calendar.basis.weekday_rule} target="_blank" rel="noreferrer">官方交易時間規則</a>；明示休市日 {data.calendar.basis.closed_dates.join('、')}：<a href={data.calendar.basis.closed_notice} target="_blank" rel="noreferrer">官方休市公告</a>。其餘預期日期均以唯一指數原件核對，不以缺列推定休市。</p>}
         {(data.calendar?.evidence ?? []).map((receipt) => <div className="overview-provenance" key={receipt.requested_date}>日曆原件 {receipt.requested_date} · <a href={receipt.url} target="_blank" rel="noreferrer">來源 CSV</a> · {receipt.source_version} · SHA-256 {receipt.body_sha256} · UTC 取得 {receipt.captured_at}{receipt.validation_scope === 'all_returned_month_rows' && <span> · 完整月原件已驗 {receipt.candidate_count} 列／本範圍採用 {receipt.adopted_count} 列／界線前已驗但未採用 {receipt.pre_calendar_row_count} 列；不推論完整月交易日曆。</span>}</div>)}
-        {evidence.map(({ row, provenance }) => <details key={row.date}><summary>{row.date} · {row.company_name}（{row.symbol}） · 原件列序 {row.row_ordinal}</summary><div className="table-wrap"><table><thead><tr><th>法人</th><th>買進（股）</th><th>賣出（股）</th><th>淨買賣超（股）</th></tr></thead><tbody>{(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{formatWindowShares(row.investors[key].buy) ?? '待核對'}</td><td>{formatWindowShares(row.investors[key].sell) ?? '待核對'}</td><td>{formatWindowShares(row.investors[key].net) ?? '待核對'}</td></tr>)}</tbody></table></div><div className="overview-provenance">原始資料日 {row.source_date} · <a href={provenance.url} target="_blank" rel="noreferrer">來源 CSV</a> · {provenance.source_version} · SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256} · UTC 取得 {provenance.captured_at}</div></details>)}
+        {evidence.map(({ row, provenance }) => <details key={row.date}><summary>{row.date} · {row.company_name}（{row.symbol}） · 原件列序 {row.row_ordinal}</summary><div className="table-wrap"><table><caption>每日來源稽核原值（{unitKnown ? '股' : '單位待核實'}）</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>{(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{unitKnown ? formatCanonicalShares(row.investors[key].buy, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatCanonicalShares(row.investors[key].sell, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatWindowShares(row.investors[key].net) ?? '待核對' : '單位待核實'}</td></tr>)}</tbody></table></div><div className="overview-provenance">原始資料日 {row.source_date} · <a href={provenance.url} target="_blank" rel="noreferrer">來源 CSV</a> · {provenance.source_version} · SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256} · UTC 取得 {provenance.captured_at}</div></details>)}
         <p>官方統計按當日原始成交，非錯帳／更正帳號調整後資料；下載版本是否修訂未知。本次原件 SHA-256 識別取得版本。</p>
       </details>
     </>}
@@ -199,17 +216,53 @@ export function OfficialEvents({ data, onCapture, busy = false, requestFailure }
   </section>
 }
 
-export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
+function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy, failure }: {
+  data: StockOverviewData['price_memory']; instrument?: Instrument; cutoff: string | null; explicitCutoff?: string
+  onCapture?: () => void; busy?: boolean; failure?: string
+}) {
+  if (!data || !instrument || instrument.exchange !== 'TPEx' || !['3105', '6488'].includes(instrument.symbol)) return null
+  const known = (!explicitCutoff || explicitCutoff === cutoff) && validStockPriceMemoryRead(data, instrument, explicitCutoff || cutoff)
+  const ready = priceMemoryInstrumentSupported(instrument) && explicitCutoff === '2026-10-05' && memoryPriceCaptureReady(data, instrument.exchange, instrument.symbol, cutoff)
+  const bar = known ? data.latest : null
+  return <section className="panel overview-price-memory" aria-labelledby="price-memory-title">
+    <h3 id="price-memory-title">櫃買官方單日行情</h3>
+    <p className="small-note">支持 2026/10/5 的上櫃 3105、6488；請先明示套用截止日期，再載入行情。同一次原件可讀取兩股，未提供歷史窗口。</p>
+    <button type="button" className="secondary-button" onClick={onCapture} disabled={!ready || busy || !onCapture}>{busy ? '載入官方行情中…' : '載入 10/5 官方行情'}</button>
+    {known ? <>
+      <div className="stock-quote-grid"><div><span>收盤（元／股）</span><strong>{number(bar!.close)}</strong></div><div><span>成交量（張）</span><strong>{formatTableVolume(bar!.volume, bar!.source, bar!.volume_exact)}</strong></div><div><span>成交額（新臺幣元）</span><strong>{bar!.turnover_exact === null ? '未提供' : formatCanonicalShares(bar!.turnover_exact, 1, true)}</strong></div></div>
+      <div className="overview-ohlc"><span>開 {number(bar!.open)}</span><span>高 {number(bar!.high)}</span><span>低 {number(bar!.low)}</span><span>收 {number(bar!.close)}</span></div>
+      <p className="small-note">資料日 {formatResearchDate(bar!.date)} · <a href={bar!.provenance.endpoint} target="_blank" rel="noreferrer">櫃買中心 · 上櫃股票行情（11370）</a>；本次暫存，重啟後需重新載入。擷取時間不是發布時間，歷史當時可得未支援。</p>
+      <p className="small-note">{data.attribution!.owners.join('、')} · {data.attribution!.year} · {data.attribution!.release_version} · <a href={data.attribution!.license_url} target="_blank" rel="noreferrer">政府資料開放授權條款 OGL 1.0</a>。</p>
+      <details className="technical-details"><summary>查看官方價格原列、來源版本與 SHA</summary>
+        <div className="overview-provenance">單一原件：全 {data.provenance!.row_count} 列已核結構；金融數值僅核 3105、6488。CSV 資料列序 {bar!.row_ordinal}；記憶體 ID {data.provenance!.memory_capture_id}。</div>
+        <div className="table-wrap"><table><caption>官方 CSV 原字串：價格為元／股，成交股數為股，成交金額為新臺幣元；空白成交額表示未提供。</caption><thead><tr><th>欄位</th><th>來源原值</th></tr></thead><tbody>{PRICE_HEADERS.map((field) => <tr key={field}><th>{field}</th><td>{bar!.source_fields[field]}</td></tr>)}</tbody></table></div>
+        <div className="overview-provenance">原件 SHA-256 {data.provenance!.body_sha256}</div><div className="overview-provenance">擷取紀錄 SHA-256 {data.provenance!.receipt_sha256}</div>
+        <div className="overview-provenance">政策 {data.provenance!.policy_version} · {data.provenance!.policy_digest}</div>
+        <div>請求開始 UTC {data.provenance!.request_started_at} · 完成 UTC {data.provenance!.captured_at}</div>
+        <div>raw_payload_id null · ingestion_run_id null · bar id null；沒有建立 DB 記錄。發布／首次可得／修訂時間未知。</div>
+      </details>
+    </> : <div className="data-gap">{data.status === 'available' ? '記憶體行情契約待核實，未採用數值。' : '此截止尚無已核對的官方單日行情。'} 不以其他日期行情補值。</div>}
+    {!known && <Reasons reasons={data.reasons} />}
+    {failure && <><p role="status">官方行情載入未完成；請核對來源詳情。此批次不自動重試。</p><details className="technical-details"><summary>查看載入原因</summary>{overviewReason(failure)}（{failure}）</details></>}
+    <p className="small-note">此資料只含一天，趨勢與研究條件仍待補；載入失敗後不自動重試。</p>
+  </section>
+}
+
+
+export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
   data: StockOverviewData; onNews: () => void; onCaptureEvents?: () => void; capturingEvents?: boolean; eventRequestFailure?: string
   onCaptureWindows?: () => void; capturingWindows?: boolean; windowRequestFailure?: string
+  instrument?: Instrument; explicitCutoff?: string; onCapturePrice?: () => void; capturingPrice?: boolean; priceRequestFailure?: string
 }) {
   const price = data.price
   const latest = price.latest
+  const memoryKnown = instrument && (!explicitCutoff || explicitCutoff === data.as_of) ? validStockPriceMemoryRead(data.price_memory, instrument, explicitCutoff || data.as_of) : false
   return <section className="stock-overview" aria-labelledby="stock-overview-title">
-    <div className="section-head overview-head"><div><div className="eyebrow">研究總覽</div><h2 id="stock-overview-title">資料截止 {formatResearchDate(data.as_of)}</h2></div><span className="badge">{latest ? '價格來源已核對／部分資料待補' : '研究資料待補'}</span></div>
+    <div className="section-head overview-head"><div><div className="eyebrow">研究總覽</div><h2 id="stock-overview-title">資料截止 {formatResearchDate(data.as_of)}</h2></div><span className="badge">{memoryKnown || latest ? '價格來源已核對／部分資料待補' : '研究資料待補'}</span></div>
     <p className="overview-cutoff-note">依資料日期截至的事後研究；不代表歷史當時可得。價格保留原始口徑，尚未提供完整還原鏈。</p>
     <div className="overview-grid">
-      <section className="panel overview-price"><h3>價格與實際視窗</h3>
+      <PriceMemory data={data.price_memory} instrument={instrument} cutoff={data.as_of} explicitCutoff={explicitCutoff} onCapture={onCapturePrice} busy={capturingPrice} failure={priceRequestFailure} />
+      {!memoryKnown && <section className="panel overview-price"><h3>既有價格與實際視窗</h3>
         <p className="small-note">本次最多 {price.window_limit} 筆，收到 {price.candidate_count} 筆、通過 {price.valid_count} 筆；不代表完整交易日窗口。</p>
         {latest ? <>
           <div className="overview-range">可用區間 {formatResearchDate(price.from)} — {formatResearchDate(price.to)}</div>
@@ -225,7 +278,7 @@ export function StockOverview({ data, onNews, onCaptureEvents, capturingEvents, 
         </> : <div className="data-gap">尚無來源與數值已核對的價格。其餘研究入口可繼續使用。</div>}
         <Reasons reasons={price.reasons} />
         {price.rejected.length > 0 && <details className="technical-details"><summary>未採用 {price.rejected.length} 筆行情的日期與原因</summary>{price.rejected.map((row, index) => <div key={`${row.date}-${index}`}>{formatResearchDate(row.date)}：{overviewReason(row.reason)}（{row.reason}）</div>)}</details>}
-      </section>
+      </section>}
       <InstitutionalWindows data={data.institutional} onCapture={onCaptureWindows} busy={capturingWindows} requestFailure={windowRequestFailure} />
       <InstitutionalDaily data={data.institutional_daily} windowsPresent={Boolean(data.institutional.version)} />
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>

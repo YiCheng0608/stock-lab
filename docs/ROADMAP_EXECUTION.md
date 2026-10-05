@@ -38,6 +38,9 @@
 
 | 工作 ID | 狀態與必要依賴 | 已接受範圍／完成條件 |
 | --- | --- | --- |
+| UNIT-LOTS-1 | 已review（功能前置，非核心完成）；canonical股／int64及相容輸入契約不變。 | 日常張數／精確零股／原股稽核與具名輸入已接受；前置1批、core0／dep0、當時stall1，M1後current26src必要兼容回歸已核。見[UI §10.3](UI_COPY_SPEC.md#103-張零股)／[個股頁 §7.1](STOCK_RESEARCH_PAGE.md#71-unit-lots-1-日常張數與原股稽核有限接受)。 |
+| M1-PRICE-1 | 已review（有限核心）；dataset11370獨立policy／固定body及兩股2026-10-05真價量。 | 唯一trusted載入→1 GET→actual API／headline／chart／面板同股同日；切6488同cache、GET／重複POST零額外source、default／explicit10/02不滲新日、具名桌面／窄版及owned清理已核。core+1／dep+1／stall0，fixes／UNIT兼容回歸同批；非MA20／trend／研究／PIT／保存。見[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)。 |
+| M2-FOCUS-LOTS-1 | 下一核心已選，未派工／實作；M1 merged/latest HEAD、同兩股／10/05 fresh GET exact pins與instrument准入、共同cutoff／URLstate／安全返回；新root可見四角色gate及exact budget／白名單。 | 今日明選as_of／精確至0.001張的min_lots字串，canonical比較不Number，依code排序而非排名；20,000張只3105、10,000張兩股、50,000張真零候選須與未載入／unavailable區分。來源日／版本／原股／精確張及門檻理由→同cutoff個股→返回原as_of/min_lots；ordinary GET0外網，首次沿原唯一bounded capture其餘cache。不新增來源／cutoff／全市場／題材／Signal／Plan／保存claim；全項待新輪驗收。 |
 | M1：R2-A2／D1 | 整體未完成；所採來源、窗口／交易日coverage、時間、分類與版本。 | W8兩股八截止來源、96 net／actual API及16具名可信native已有限接受，owned清理已核；範圍外unavailable、突破／回踩固定保守。真8/25／27日曆／新policy及pins已核，非PIT／保存／研究；餘項見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。 |
 | M1-P1 | 已 review（有限）；准入 STOCK_DAY_ALL 原件與共用日期截止。 | TWSE 1101／2330、2026-10-01 真實價格六欄、截止／追溯及桌面／窄版操作；記憶體 SQLite，不是多日、法人或 PIT。見[個股頁 §9](STOCK_RESEARCH_PAGE.md#9-m1-p1截止一致與來源可追溯總覽)。 |
 | M1-P2a | 已 review（有限）；exact TPEx 單來源 manifest／pins／profile。 | 3105／6488、2026-10-02 單日原件→capture→摘要 CLI 與具名拒收；未含多日／日曆或產品接線。見[來源 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。 |
@@ -50,7 +53,7 @@
 | M1-W6 | 已review（有限真來源／計算／actual API／具名可信native）；owned服務清理已核。 | 同兩股新增9/23、保留五cutoff，共72 net。真8/27全列／44金融欄、三月43全OHLC／完整25日曆、新policy／固定pins，production28原件及獨立72 net／2700重疊API原字串已核；9/23恰20、5日起9/17／20日起8/27。見[來源 §17](SOURCE_REGISTRY.md#17-m1-w6六截止法人來源與完整有界日曆)／[個股頁 §22](STOCK_RESEARCH_PAGE.md#22-m1-w6六截止法人窗口與原件追溯)，非PIT／trend／研究條件／保存。 |
 | M1-W7 | 已review（有限真來源／計算／actual API／具名可信native）；owned page／服務清理已核。 | 同兩股新增9/22、保留六cutoff，共84 net。真8/26全列／44金融欄、三月43全OHLC／完整26日曆、新policy／固定pins，production29原件及ALL29 receipt SHA獨算、1144金融原字串／3150重疊API字串已核；9/22恰20、5日起9/16／20日起8/26。見[來源 §18](SOURCE_REGISTRY.md#18-m1-w7七截止法人來源與完整有界日曆)／[個股頁 §23](STOCK_RESEARCH_PAGE.md#23-m1-w7七截止法人窗口與原件追溯)，非PIT／trend／研究條件／Signal／保存。 |
 | M1-W8 | 已review（有限真來源／計算／actual API／具名可信native）；owned page／服務清理已核。 | 同兩股新增9/21、保留七cutoff，共96 net。真8/25全列／44金融欄、三月43全OHLC／完整27日曆、新policy／pins，production30原件及ALL30 body／canonical receipt SHA獨算、1188金融原字串／3600重疊API字串已核；9/21恰20、5日起9/15／20日起8/25。見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)／[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)，非PIT／trend／研究條件／Signal／保存。 |
-| M1-W9 | 下一單一核心候選；新8/24 daily未取得／驗證／准入，新calendar／consumer policy／pins待gate。 | 同兩股新增9/18、保留八cutoff，九截止108 net；候選28sessions／31GET／59MiB、9/18恰20／5日起9/14／20日起8/24皆待新root正面核。8/24全OHLC已驗未採不代daily，不需8/21；真來源／完整日曆／新版本正面後才計算／API／native，無路徑在實作前重選必要gate全齊最小M3具名Plan或waiting，不空轉可靠性或降gate。 |
+| M1-W9（歷史候選） | 已封存；只有bootstrap／接手，無implementation batch，未採為本輪下一工作；8/24 daily／新policy／pins仍未准入。 | 原未實作計畫： 同兩股新增9/18、保留八cutoff，九截止108 net；候選28sessions／31GET／59MiB、9/18恰20／5日起9/14／20日起8/24皆待新root正面核。8/24全OHLC已驗未採不代daily，不需8/21；真來源／完整日曆／新版本正面後才計算／API／native，無路徑在實作前重選必要gate全齊最小M3具名Plan或waiting，不空轉可靠性或降gate。 |
 | M1-P3a | 已 review（有限）；原四來源固定 pins 與 TWT48U memory consumer。 | 0056（ETF）／1449／1463 selected 四欄／列序／雙 hash 與拒收；發布／首次可得 unknown，原件未保存，不支持離線重播或 ZIP 輸入。見[來源 §9](SOURCE_REGISTRY.md#9-m1-p3atwt48u-selected-官方事件原件摘要)。 |
 | M1-P3b | 已 review（有限）；P3a、明示啟用／首次 POST、臺北觀測日 cutoff。 | selected 總覽、API 四欄／追溯、cache 再用及具名操作；普通 GET 零外網，未來生效預告保留。見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)。 |
 | M1-P4a | 審查接受；來源未准入，等待 exact 用途權利證據。 | 未取得法人原件或新增 consumer／API／UI，不計核心依賴解除；取得正面證據後才驗完整單日原件與接線。見[來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口)。 |
@@ -69,6 +72,8 @@
 | M3-P6c | 已 review（有限）；個股行情日期／窗口與原來源／時間／raw file gates。 | 行情讀回隔離與具名有限操作；有效歷史窄版溢出未通過，canvas／真正截止表單未驗。見[個股頁 §15](STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)。 |
 | M3-P6d | 已 review（有限）；stock-only Signal／StrategyVersion raw reader 與原 gates。 | 20列窗口與 canonical 全集分開、bad latest 不 fallback、unlocated 拒用、健康行情／alternate 保留。見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)。 |
 | M3-P6e | 已 review（有限）；FeatureSnapshot／Chip raw reader、共同截止及原研究／持倉 gates。 | 壞特徵／籌碼只隔離該區塊，不較早 fallback，健康行情／研究保留；API／App／六個具名有限操作及六表不變已驗。見[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。 |
+
+W8已本地合併 `dde733d7f7261807aba00dcfcf972909778bf65a`，本輪HEAD仍 `15935fba48e76f9d9ad96a09210bb6b37e5ab737`；UNIT與M1-PRICE-1已接受，27exact files待文件review／freeze／index／commit／merge。M1價格本批core+1／dep+1／stall0，下一已選M2-FOCUS-LOTS-1尚未派工／實作；新root先核可交付M1，20／21歷史close與日曆／策略gates未齊時採M2，依[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
 
 M1依賴與接線按所採範圍驗收；W1–W7歷史及W8有限接受不外推：
 
