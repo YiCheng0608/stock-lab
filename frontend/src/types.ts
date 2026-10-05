@@ -593,6 +593,18 @@ export type StockPriceMemoryData = {
 }
 
 
+export type PriceLotFocusItem = {
+  exchange: 'TPEx'; symbol: string; name: string; volume_exact: string; volume_lots: string
+  min_lots: string; min_shares: string; reason: 'volume_at_least_min_lots'; source_date: string; source_version: string; detail_url: string
+}
+
+export type PriceLotFocusData = {
+  version: string; status: 'available' | 'unavailable'; as_of: string | null; min_lots: string; min_shares: string
+  count: number | null; items: PriceLotFocusItem[]; reads: Array<{ instrument: Instrument & { currency?: string }; price_memory: StockPriceMemoryData | null }>
+  supported_scope: { exchange: 'TPEx'; symbols: string[]; cutoff: string; currency: 'TWD'; asset_type: 'stock' }
+  can_capture: boolean; reasons: string[]; historical_pit: 'unsupported'; sort: 'code_ascending'
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null

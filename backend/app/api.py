@@ -74,6 +74,7 @@ from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price
+from .price_focus import build_price_focus
 from .institutional_windows import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
 from .stock_signal_reads import load_stock_signal_reads
@@ -1718,6 +1719,28 @@ def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
             item.update(stock_page_available=True,
                         detail_url=f"/stocks/TWSE/{item['symbol']}?{query}")
     return result
+
+
+def _price_focus(db: Session, as_of: date, min_lots: str, *, capture: bool = False) -> dict[str, Any]:
+    with db.no_autoflush:
+        instruments = list(db.scalars(select(Instrument).where(
+            Instrument.exchange == "TPEx", Instrument.symbol.in_(("3105", "6488"))).order_by(Instrument.symbol)).all())
+    try:
+        return build_price_focus(instruments, as_of, min_lots, capture=capture)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/focus/price-lots")
+def price_lot_focus(as_of: date = Query(...), min_lots: str = Query(..., max_length=20),
+                    db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _price_focus(db, as_of, min_lots)
+
+
+@router.post("/focus/price-lots/capture")
+def price_lot_focus_capture(as_of: date = Query(...), min_lots: str = Query(..., max_length=20),
+                            db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _price_focus(db, as_of, min_lots, capture=True)
 
 
 @router.get("/focus/official-events")

@@ -820,3 +820,9 @@ Root前置共2 GET：第一次選錯代碼欄位（row0是日期，應取row1代
 原native載入的trusted POST觸發唯一official GET、HTTP200：`request_started_at=2026-10-05T14:53:12.683229+00:00`、`captured_at=2026-10-05T14:53:13.943096+00:00`；body仍1,773,012B／12,060 data rows／18欄、SHA同§20.1。`receipt_sha256=abf32de2e110de56b24cb84fd776c42cbdbfd301a1b6f8c2f7f5c9a8ef8fc140`，policy原pins不變。Root獨立全結構、兩股12個金融cell、API／chart／audit與精確張逐值核通；不外推其他金融列。
 
 兩股GET／重複POST使用同cache、0額外source；DB tables preserved=true，guards=0。原件／receipt只留memory，owned程序結束已釋放，無DB／raw file／HAR／截圖保存；bar id／raw_payload_id／ingestion_run_id為null。測試目錄及10/02資料是synthetic catalogue，只有本次official 10/05價格是actual；不證專案正式資料目錄、DB保存／跨程序、歷史close／日曆、完整M1或PIT。操作與清理分報見[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)／[開發入口](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)。
+
+### 20.4 M2-FOCUS-LOTS-1 同來源的本輪觀測與採用
+
+2026-10-06臺北的M2輪，root另作唯一fresh exact GET200：`request_started_at=2026-10-05T18:13:08.071535+00:00`、`captured_at=2026-10-05T18:13:08.907693+00:00`，body仍1,773,012B／12,060 data rows／18欄，固定body SHA與§20.1完全相同；本輪 `receipt_sha256=52acb105b78fc74ae56d29593f7f47616f6b54b11f541dd57f45f60e12c1377d`。Root獨立全結構、兩股12金融欄、exact名稱／普通stock／TPEx／TWD身分gate及精確股→張已核，source guards四項0。此為新的取得觀測，不覆寫§20.2／20.3原UTC或receipt；policy／source_version／用途准入與pins未變，資料日仍10/05，不稱10/06今日行情或PIT。
+
+M2 consumer版本 `price-lot-focus/m2-v1` 以同程序TpexPriceStore採用合格兩股成交量，按精確張門檻給可追溯理由與同cutoff個股往返；產品契約由[個股頁 §26](STOCK_RESEARCH_PAGE.md#26-m2-focus-lots-1精確成交張數關注與同截止往返有限接受)負責。本輪API／UI服務以root此次held memory的preloaded Store運行，來源累計1 GET、runner新增0，stock／focus POST只再用cache；不是舊M1失效memory、fixture、磁碟copy或replay。Owned服務已結束、raw／receipt釋放，沒有新DB、raw檔或保存驗收；不擴市場／cutoff／歷史取得權限。

@@ -807,3 +807,45 @@ Root獨立核官方CSV全結構、兩股12個金融cell及API／chart／audit精
 本批core+1／dependency+1、stall0；loader／validator修正與必要UNIT回歸屬同批，不另算可靠性batch。UNIT-LOTS-1前置core0／dep0、當時stall1另報。必要tests及owned服務／page清理由[開發入口](development-baseline/README.md#m1-price-1-單日價量的記憶體驗證入口)詳述；清理的PTY rawexit1不改成驗收exit0。
 
 本server catalogue及10/02是synthetic，只有official10/05單日價格為actual；只存memory，重啟須重載。沒有正式資料目錄、DB保存／跨程序、backend full、MA20／MA60／trend、完整M1／M2／M3、研究條件／Signal／Plan或PIT驗收。MA20／趨勢仍缺20／21真實歷史close及對應日曆，index11391不能作個股價格；下一核心及其待滿足條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+## 26. M2-FOCUS-LOTS-1：精確成交張數關注與同截止往返（有限接受）
+
+**已有限接受 TPEx 3105穩懋／6488環球晶、選定來源日2026-10-05的成交張數關注、actual API與下述具名操作。** 版本 `price-lot-focus/m2-v1`；只採[來源 §20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)已准入的單日價格，沒有新增市場、日期或可信排名。本輪 fresh 觀測與 M2 consumer 用途見[§20.4](SOURCE_REGISTRY.md#204-m2-focus-lots-1-同來源的本輪觀測與採用)；§12／13官方事件與§25 M1歷史界線保留。
+
+### 26.1 明選條件、精確比較與來源完整性
+
+`GET /api/focus/price-lots?as_of=YYYY-MM-DD&min_lots=...` 與明示 `POST /api/focus/price-lots/capture` 使用相同 query，client POST body為空object。兩參數必填；缺值、無效日期或非法門檻回HTTP422，不取得來源。`min_lots` 必須是最長20字元的非負ASCII十進位字串，整數部為 `0` 或無前導零的正整數，小數可有1～3位；不接受正負號、逗號、空白、科學記號、尾點或第四位小數。換算後canonical股數不得超過 `9223372036854775807`，即 `9,223,372,036,854,775.807` 張；`0`、`0.001`與`20000.000`可表達精確門檻。
+
+回應保留原 `min_lots` 字串，另給canonical `min_shares`；後端以精確整數股比較，前端以canonical股字串長度與字典序重算，不經Number或小數除法。成交量日常主值為精確張，原股留稽核；價格／成本仍元／股，既有庫存的整數 `unit + quantity` POST不改，單位規則見[UI §10.3](UI_COPY_SPEC.md#103-張零股)。
+
+來源範圍須恰為兩個已核exact名稱的TW／TPEx普通stock、無ETF分類，typed TWD gate仍依§20.1。`reads` 按3105／6488給兩股memory讀值；available前須各有同股／同cutoff的完整價格、shares單位、canonical成交股數、可追溯provenance，而且兩股provenance一致。前端再驗scope、版本、全部reads、候選集合、數量與固定detail URL；即使沒有候選仍驗兩股reads。不合格不拿legacy、其他日期、較早值或原件片段補數。
+
+每股最多一張卡，依代碼升序；item帶 `volume_exact`、精確 `volume_lots`、原門檻／canonical股門檻、`reason=volume_at_least_min_lots`、來源日／版本與固定個股URL。主理由為成交量達門檻，不推論資金流向、前日漲跌或研究結論。
+
+### 26.2 真零、來源不足與取得生命週期
+
+只有 `status=available`、兩股完整來源與候選重算均合格時，`count` 才是候選數；未達門檻的合法結果為 `count=0`／`items=[]`。未載入、有效但不支持的日期、身分或來源拒用為 `status=unavailable`／`count=null`／`items=[]`，另給reasons，不把空清單當真零。`can_capture` 只在來源可合法首次取得時開放；不支持2026-10-02，也不以10/05補該日。
+
+普通GET與import不送外網；首次合法明示capture仍沿同一TpexPriceStore／固定policy及body pins，每程序最多1個bounded GET，重複POST、切股、讀取與門檻變更共用cache，失敗不自動retry。表單draft只在「套用條件」提交後改URL／query；查詢與capture結果依原 `as_of/min_lots` key保存，無舊結果placeholder或window-focus來源refresh。本輪 actual 採root新GET所持的**同程序 preloaded Store**供真router／UI讀取，後續stock與focus POST只是cache再用，不冒稱本輪native首次POST才取得外網。check fixture與preloaded服務界線見[開發入口](development-baseline/README.md#m2-focus-lots-1-精確張數關注的記憶體驗證入口)。
+
+### 26.3 固定個股路徑與返回原字串
+
+detail固定 `/stocks/TPEx/{symbol}`，query只有 `as_of`、`from=price-lots`、`focus_as_of`、`focus_min_lots`，進入同cutoff M1。返回只接受這四個參數各恰一次、沒有未知參數、兩日期有效且原門檻合法，固定組成 `/?as_of=原focus_as_of&min_lots=原focus_min_lots#price-lot-focus-title`，由URLSearchParams編碼；不接受自由return URL。個股內更改cutoff仍保存原關注條件，返回保留 `20000.000` 的尾零；非法或重複參數不猜原條件，回既有個股入口。原官方事件返回仍用其既有契約。
+
+### 26.4 已接受操作與未驗邊界
+
+Root以本輪同程序真原件核兩股12金融欄、actual focus／M1 API與以下結果；原股及唯一金融值仍以來源§20為權威，不另複製金融表。
+
+| 明選來源日／最小張數 | 已接受結果 |
+| --- | --- |
+| 2026-10-05／`20000` | 只3105，48,127.911張；同cutoff個股→返回20000。 |
+| 2026-10-05／`10000` | 3105／6488依code順序，6488為18,982.607張；兩股同cutoff往返。 |
+| 2026-10-05／`50000` | available、count0，兩股原件合格後的真零候選。 |
+| 2026-10-05／`48127.911`與`48127.912` | actual API分別count1／count0，精確零股門檻無捨入。 |
+| 2026-10-02／合法門檻 | unavailable、countnull，候選未知，不借10/05價格。 |
+
+1277寬桌面具名click／submit已核20k／10k兩股往返；390寬窄版另核50k真零與10/02候選未知。修wrap後以可信focus＋Enter展開3105來源details，docWidth375，原股48127911、data row205、門檻20000000股及完整body／receipt SHA可讀；進M1顯示615元／股、48,127.911張、canvas305，再原生返回 `20000.000` 且表單／URL原字串一致。初版長SHA展開溢出438已退修，補驗後page375；屬同核心批次必要退修。Orca fill的input／change事件為isTrusted=false，只是draft設定；可信click／submit／Enter產生的click另核，不稱trusted文字輸入。
+
+兩個stock POST、兩個focus POST及重複GET同cache零新增外網；M1 default／explicit10/02不滲10/05已核。核心操作+1＝真張數關注與同截止往返；dependency0（既有來源複用）、reliability0、stall0。必要checks與owned服務清理另見開發入口，原非零工具／PTY收據保留原task。
+
+本次只含已核兩股與選定10/05單日；catalogue／10/02仍synthetic，沒有正式DB、磁碟保存／跨程序、離線replay、PIT、全市場、排名／題材、MA20／trend、研究條件／Signal／Plan或完整M1／M2／M3驗收。取得時間不代表發布或首次可得；原件只存本次process memory，owned服務結束已釋放。下一日內O/C方向條件尚未實作／驗收，依[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，不稱前日漲跌或趨勢。

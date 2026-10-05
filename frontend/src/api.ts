@@ -15,6 +15,7 @@ import type {
   OfficialEventsData,
   InstitutionalWindowsData,
   StockPriceMemoryData,
+  PriceLotFocusData,
   OfficialEventFocusData,
   NewsItem,
   GlossaryTerm,
@@ -209,6 +210,12 @@ export const captureInstitutionalWindows = (exchange: string, symbol: string, as
 
 export const captureStockPriceMemory = (exchange: string, symbol: string, asOf: string) =>
   post<StockPriceMemoryData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/capture${queryString({ as_of: asOf })}`, {})
+
+export const getPriceLotFocus = (asOf: string, minLots: string) =>
+  get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots })}`)
+
+export const capturePriceLotFocus = (asOf: string, minLots: string) =>
+  post<PriceLotFocusData>(`/focus/price-lots/capture${queryString({ as_of: asOf, min_lots: minLots })}`, {})
 
 export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
   post<OfficialEventsData>(

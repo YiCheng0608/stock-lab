@@ -7,6 +7,7 @@ import {
   captureOfficialEvents,
   captureInstitutionalWindows,
   captureStockPriceMemory,
+  capturePriceLotFocus,
   captureOfficialEventFocus,
   deletePortfolio,
   getAction,
@@ -16,6 +17,7 @@ import {
   getCoverage,
   getDashboard,
   getOfficialEventFocus,
+  getPriceLotFocus,
   getDataQuality,
   getGlossary,
   getGroup,
@@ -69,6 +71,8 @@ import { StockResearchPanel, stockResearchAction, validStockResearchRead } from 
 import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview } from './components/StockOverview'
 import { memoryPriceChartBars, validStockPriceMemoryRead } from './stockPriceMemoryRead'
+import { minLotsShares, priceFocusReturnPath, validFocusDate, validPriceLotFocus } from './priceFocus'
+import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
 function formatNumber(value: unknown, digits = 2): string {
@@ -838,6 +842,77 @@ export function OfficialEventFocusPanel() {
   </section>
 }
 
+export function PriceLotFocusPanel() {
+  const [params, setParams] = useSearchParams()
+  const asOf = params.get('as_of') ?? '', minLots = params.get('min_lots') ?? ''
+  const [dateDraft, setDateDraft] = useState(asOf), [lotsDraft, setLotsDraft] = useState(minLots)
+  const [formError, setFormError] = useState<string | null>(null), [busy, setBusy] = useState(false)
+  const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
+  const pending = useRef(false), currentKey = useRef('')
+  const key = JSON.stringify([asOf, minLots]); currentKey.current = key
+  const enabled = validFocusDate(asOf) && minLotsShares(minLots) !== null
+  const queryKey = ['price-lot-focus', asOf, minLots]
+  const client = useQueryClient()
+  const query = useQuery({ queryKey, queryFn: () => getPriceLotFocus(asOf, minLots), enabled, retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
+  useEffect(() => { setDateDraft(asOf); setLotsDraft(minLots); setFormError(null); setCaptureError(null) }, [asOf, minLots])
+  const apply = (event: FormEvent) => {
+    event.preventDefault()
+    if (!validFocusDate(dateDraft) || minLotsShares(lotsDraft) === null) { setFormError('請選擇有效日期，並輸入非負成交張數；最多三位小數，上限 9,223,372,036,854,775.807 張。'); return }
+    const next = new URLSearchParams(params); next.set('as_of', dateDraft); next.set('min_lots', lotsDraft)
+    setFormError(null); setParams(next)
+  }
+  const capture = async () => {
+    if (pending.current || !enabled) return
+    pending.current = true; setBusy(true); setCaptureError(null)
+    try {
+      const data = await capturePriceLotFocus(asOf, minLots)
+      client.setQueryData(queryKey, data)
+    } catch (error) {
+      if (currentKey.current === key) setCaptureError({ key, message: error instanceof Error ? error.message : '取得失敗' })
+    } finally { pending.current = false; setBusy(false) }
+  }
+  const accepted = enabled && validPriceLotFocus(query.data, asOf, minLots)
+  const data = accepted ? query.data : undefined
+  return <section className="panel official-event-focus" aria-labelledby="price-lot-focus-title">
+    <div className="section-head overview-head"><div><div className="eyebrow">指定來源日 · 上櫃兩股</div><h2 id="price-lot-focus-title">成交張數關注</h2></div><span className="small-note">依代碼排序</span></div>
+    <p className="small-note">明選來源日與最小成交張數，查看符合門檻的標的。支援 2026-10-05 的 3105 穩懋、6488 環球晶；此順序供閱讀，不是排名或買賣建議。</p>
+    <form className="overview-cutoff-control" onSubmit={apply}>
+      <label htmlFor="price-focus-date">來源日期</label><input id="price-focus-date" type="date" required value={dateDraft} onChange={(event) => setDateDraft(event.currentTarget.value)} />
+      <label htmlFor="price-focus-min-lots">最小成交張數</label><input id="price-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} placeholder="例如 20000，最多三位小數" onChange={(event) => setLotsDraft(event.currentTarget.value)} />
+      <button type="submit" className="secondary-button" disabled={busy}>套用條件</button>
+      <button type="button" className="secondary-button" disabled={!enabled || busy || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
+      <button type="button" className="secondary-button" disabled={!data?.can_capture || busy || query.isFetching} onClick={() => void capture()}>{busy ? '取得中…' : '首次載入官方單日行情'}</button>
+    </form>
+    {formError && <div className="warning-box" role="status">{formError}</div>}
+    {!enabled && <div className="empty" role="status">請明選來源日期與成交張數條件；尚未查詢候選。</div>}
+    {enabled && query.isLoading && <div className="empty">讀取成交張數關注…</div>}
+    {(query.error || captureError?.key === key) && <div className="warning-box" role="status">{captureError?.key === key ? captureError.message : '關注清單讀取失敗。'}</div>}
+    {enabled && query.data && !accepted && <div className="warning-box" role="status">來源、日期或條件回應未通過核對，關注清單暫不可用。</div>}
+    {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{data.reasons.includes('price_memory_capture_missing') ? '尚未取得指定日期原件，候選數未知；可首次載入官方單日行情。' : '此日期或來源資料不足，候選數未知。'}這與符合條件的零候選不同。</div>}
+    {data?.status === 'available' && <>
+      <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {minLots} 張 · 已核兩股，符合 {data.count} 檔。</div>
+      {data.count === 0 ? <div className="empty focus-empty" role="status">已核兩股原件，沒有成交張數達到 {minLots} 張的標的；這是此範圍的零候選。</div> : <div className="focus-grid">{data.items.map((item) => {
+        const memory = data.reads.find((read) => read.instrument.symbol === item.symbol)!.price_memory!
+        return <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
+          <div className="position-head"><strong>{item.symbol} {item.name}</strong><span>{item.exchange}</span></div>
+          <p>成交 {formatCanonicalShareLots(item.volume_exact, 1, true)} 張 ≥ 門檻 {minLots} 張</p>
+          <div className="small-note">來源日 {item.source_date} · 版本 {item.source_version}</div>
+          <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link>
+          <details className="technical-details" style={{ overflowWrap: 'anywhere' }}><summary>原股、來源與驗證範圍</summary>
+            <div>原件成交股數：{formatCanonicalShares(item.volume_exact, 1, true)} 股 · 原件列 {memory.latest!.row_ordinal}</div>
+            <div>門檻：{data.min_shares} 股 · 取得時間：{formatTaiwanDateTime(memory.provenance!.captured_at)}</div>
+            <a href={memory.provenance!.endpoint} target="_blank" rel="noreferrer">櫃買中心原始資料</a>
+            <div>Body SHA-256：{memory.provenance!.body_sha256}</div><div>Receipt SHA-256：{memory.provenance!.receipt_sha256}</div>
+            <div>{memory.attribution!.owners.join('、')} · {memory.attribution!.dataset_name} · <a href={memory.attribution!.license_url} target="_blank" rel="noreferrer">{memory.attribution!.license}</a></div>
+            <div>發布、首次可得及修訂時間未知；取得時間不代表發布時間。僅單日、非歷史時點資料；原件只保留在本次服務記憶體，重啟後需重新取得。</div>
+          </details>
+        </article>
+      })}</div>}
+    </>}
+    <p className="small-note">10/05 是來源日期，不表示今日即時資料；未驗全市場、研究條件、Signal、Plan 或保存。</p>
+  </section>
+}
+
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const homeActions = Array.from(new Map(
@@ -855,6 +930,7 @@ export function TodayPage() {
             </div>
             <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data?.as_of, true)}</strong><small>{query.data?.market.source_label ?? sourceLabel(query.data?.market.source)}</small></div>
           </section>
+          <PriceLotFocusPanel />
           <OfficialEventFocusPanel />
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
@@ -1022,7 +1098,8 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
-  const focusReturnPath = officialEventFocusReturnPath(searchParams)
+  const lotFocusReturnPath = priceFocusReturnPath(searchParams)
+  const focusReturnPath = lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
   useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
@@ -1175,7 +1252,7 @@ function StockPage() {
     { id: 'data', label: '資料說明' },
   ]
   return <div className="page">
-    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
+    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{lotFocusReturnPath ? '← 回到成交張數關注（原條件）' : focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
     <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>

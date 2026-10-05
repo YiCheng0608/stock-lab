@@ -10,12 +10,14 @@ import socket
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--deps", required=True, help="existing backend/.deps, read-only")
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check", action="store_true")
+mode.add_argument("--focus-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
 parser.add_argument("--live-source-opt-in", action="store_true")
@@ -32,6 +34,8 @@ COUNTS = {"disk_writes": 0, "mutations": 0, "unapproved_network": 0, "subprocess
 LIVE_ACTIVE = False
 APPROVED_ADDRESSES = set()
 SOURCE_REQUESTS = []
+PRELOADED_SOURCE = False
+RUNNER_SOURCE_REQUESTS = 0
 original_resolver = socket.getaddrinfo
 
 
@@ -109,6 +113,7 @@ def receipt(fixture=None, include_raw=False):
     import fastapi, sqlalchemy, httpx
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
               "guard": dict(COUNTS), "disk_artifacts": 0, "source_requests": list(SOURCE_REQUESTS),
+              "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
               "policy_version": tpex_price.POLICY_VERSION, "policy_digest": tpex_price.POLICY_DIGEST,
               "scope": "two ordinary TPEx stocks, 2026-10-05, single day; no history/MA20/PIT/save acceptance"}
     if fixture:
@@ -117,7 +122,7 @@ def receipt(fixture=None, include_raw=False):
         result["capture_state"] = fixture.store.read("TPEx", "3105", worker.CUTOFF, instrument_type="stock", currency="TWD")["capture_state"]
         result["capture_receipt"] = raw.receipt if raw else None
         result["selected"] = raw.parsed["selected"] if raw else None
-        result["fixture_kind"] = "synthetic catalogue with live admitted source" if ARGS.live_source_opt_in else "synthetic private test anchors; not official raw"
+        result["fixture_kind"] = "synthetic catalogue with live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "synthetic private test anchors; not official raw"
         if include_raw:
             result["raw_base64"] = base64.b64encode(raw.body).decode("ascii") if raw else None
             result["receipt_base64"] = base64.b64encode(raw.receipt_bytes).decode("ascii") if raw else None
@@ -126,7 +131,7 @@ def receipt(fixture=None, include_raw=False):
 
 def check():
     suite = unittest.TestSuite()
-    for name in ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api"):
+    for name in (("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
@@ -135,20 +140,34 @@ def check():
     return 0 if run.wasSuccessful() and not any(COUNTS.values()) else 1
 
 
-def serve():
+def serve(preloaded_store=None):
+    global PRELOADED_SOURCE
     from starlette.responses import JSONResponse
     import uvicorn
     if ARGS.live_source_opt_in and (ARGS.policy_version != tpex_price.POLICY_VERSION or ARGS.policy_digest != tpex_price.POLICY_DIGEST):
         raise ValueError("external accepted policy pins required for live preview")
-    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in)
-    if ARGS.live_source_opt_in:
+    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None)
+    if preloaded_store is not None:
+        raw = preloaded_store.raw_capture
+        if not isinstance(preloaded_store, tpex_price.TpexPriceStore) or raw is None or not preloaded_store._attempted or preloaded_store._request_count != 1 or preloaded_store._error:
+            fixture.close()
+            raise ValueError("existing admitted same-process capture required")
+        tpex_price.TpexPriceStore._validated_capture(raw)
+        fixture.store = preloaded_store
+        fixture.stack.enter_context(patch.object(tpex_price, "STORE", preloaded_store))
+        PRELOADED_SOURCE = True
+        SOURCE_REQUESTS.append({"method": "GET", "url": raw.receipt["endpoint"], "origin": "preloaded_same_process_capture",
+                                "request_started_at": raw.receipt["request_started_at"], "captured_at": raw.receipt["captured_at"], "body_sha256": raw.receipt["body_sha256"]})
+    elif ARGS.live_source_opt_in:
         def loader(**kwargs):
-            global LIVE_ACTIVE
+            global LIVE_ACTIVE, RUNNER_SOURCE_REQUESTS
             if SOURCE_REQUESTS:
                 raise worker.PriceCaptureError("price_capture_already_attempted")
             original_on_request = kwargs.pop("on_request")
             def on_request():
+                global RUNNER_SOURCE_REQUESTS
                 SOURCE_REQUESTS.append({"method": "GET", "url": worker.ENDPOINT})
+                RUNNER_SOURCE_REQUESTS += 1
                 original_on_request()
             LIVE_ACTIVE = True
             try:
@@ -159,7 +178,7 @@ def serve():
     @fixture.app.middleware("http")
     async def scope(request, call_next):
         allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in {
-            "/api/stocks/TPEx/3105/prices/capture", "/api/stocks/TPEx/6488/prices/capture"})
+            "/api/stocks/TPEx/3105/prices/capture", "/api/stocks/TPEx/6488/prices/capture", "/api/focus/price-lots/capture"})
         if not allowed: return JSONResponse({"detail": "preview operation outside scope"}, status_code=405)
         return await call_next(request)
     @fixture.app.get("/__price_validation/receipt")

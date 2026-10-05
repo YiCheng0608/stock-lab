@@ -13,8 +13,9 @@ const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
-assert(args.every((arg, index) => ['--deps', '--check', '--serve', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
+assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--serve', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
+assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
 const root = path.resolve(__dirname, '..')
 const dependencies = path.resolve(option('--deps', ''))
 assert(args.includes('--deps') && fs.existsSync(path.join(dependencies, 'typescript/package.json')), '--deps needs existing frontend/node_modules')
@@ -151,6 +152,7 @@ global.__institutionalWindowSSRSelection = 'unit-lots-only'
 const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
 const memoryCases = require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
+const focusCases = require(path.join(sourceRoot, 'priceFocus.test.ts'))
 const React = requireDependency('react')
 const { renderToStaticMarkup } = requireDependency('react-dom/server')
 const runtime = () => ({ node: process.versions.node, typescript: ts.version, esbuild: esbuild.version })
@@ -178,6 +180,47 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (args.includes('--focus-check')) {
+    const helperChecks = focusCases.runPriceFocusTests()
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    const App = await appSSRModule()
+    let appChecks = 0
+    const verify = (value, message) => { appChecks++; assert(value, message) }
+    for (const minimum of ['20000', '10000', '50000']) {
+      const data = focusCases.createPriceFocusFixture(minimum)
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      client.setQueryData(['price-lot-focus', '2026-10-05', minimum], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-05&min_lots=${minimum}`] }, React.createElement(App.default))))
+      verify(html.includes('成交張數關注') && html.includes('來源日期 2026-10-05'), 'full Today App renders selected source date')
+      verify((html.match(/class="focus-card"/g) || []).length === data.count, 'exact expected candidate count')
+      verify(minimum !== '50000' || (html.includes('零候選') && !html.includes('候選數未知')), 'true zero separate from missing source')
+      if (minimum !== '50000') verify(html.includes('48,127.911') && html.includes(`focus_min_lots=${minimum}`), 'exact lots and fixed-state stock link')
+      if (minimum === '10000') verify(html.indexOf('3105 穩懋') < html.indexOf('6488 環球晶') && html.includes('18,982.607'), 'two stocks sorted by code')
+      client.clear()
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    client.setQueryData(['price-lot-focus', '2026-10-05', '50000'], focusCases.createUnloadedFocusFixture())
+    const missing = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+      { initialEntries: ['/?as_of=2026-10-05&min_lots=50000'] }, React.createElement(App.default))))
+    verify(missing.includes('候選數未知') && !missing.includes('這是此範圍的零候選'), 'unloaded panel never claims available zero')
+    client.clear()
+    for (const symbol of ['3105', '6488']) {
+      const stock = stockFixture(symbol), queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      queryClient.setQueryData(['stock', 'TPEx', symbol, '2026-10-05'], stock)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
+        { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=20000.000`] }, React.createElement(App.default))))
+      verify(html.includes('回到成交張數關注（原條件）') && html.includes('/?as_of=2026-10-05&amp;min_lots=20000.000#price-lot-focus-title'), 'full App retains exact original conditions')
+      verify(html.includes(symbol === '3105' ? '48,127.911' : '18,982.607') && html.includes(symbol === '3105' ? '>615<' : '>1,180<'), 'shared M1 lots and per-share close unchanged')
+      queryClient.clear()
+    }
+    verify(App.officialEventFocusReturnPath(new URLSearchParams('from=official-events&focus_as_of=2026-10-05&focus_q=3105')) === '/?as_of=2026-10-05&q=3105#official-event-focus-title', 'existing event return preserved')
+    assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
+    console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('10000'))),
+      known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(), not_run: ['actual source', 'native browser operation', 'disk persistence', 'production build', 'full prior suite'] }))
+    return
+  }
   const validatorChecks = memoryCases.runStockPriceMemoryReadTests()
   const overviewChecks = cases.runPriceMemoryOverviewSSRTests(renderToStaticMarkup)
   const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
@@ -228,7 +271,7 @@ const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (request.method === 'POST' && /^\/api\/stocks\/TPEx\/(?:3105|6488)\/prices\/capture$/.test(url.pathname))
+  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|6488)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
@@ -275,6 +318,16 @@ async function serve() {
     server.closeIdleConnections()
   })
 }
+async function stopCheckCompiler() {
+  const waits = ownedChildren.map((child) => new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) return resolve({ pid: child.pid, code: child.exitCode, signal: child.signalCode, exited: true })
+    child.ref()
+    const timeout = setTimeout(() => { child.unref(); resolve({ pid: child.pid, exited: false, reason: 'normal stop exit not observed within 5 seconds' }) }, 5000)
+    child.once('exit', (code, signal) => { clearTimeout(timeout); resolve({ pid: child.pid, code, signal, exited: true }) })
+  }))
+  esbuild.stop()
+  console.log(JSON.stringify({ compiler_cleanup: await Promise.all(waits) }))
+}
 Promise.resolve().then(() => args.includes('--serve') ? serve() : check())
-  .catch((error) => { console.error(error); process.exitCode = 1; esbuild.stop() })
-  .finally(() => { if (!args.includes('--serve')) esbuild.stop() })
+  .catch((error) => { console.error(error); process.exitCode = 1; if (args.includes('--serve')) esbuild.stop() })
+  .finally(async () => { if (!args.includes('--serve')) await stopCheckCompiler() })
