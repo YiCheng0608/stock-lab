@@ -8,7 +8,7 @@ import os
 from threading import Lock
 from typing import Any, Mapping
 
-from worker.tpex_price_capture import CUTOFF, NEW_CUTOFF, APPROVED_CUTOFFS, ENDPOINT, SOURCE_ID, SYMBOLS, SCOPE_POLICY_VERSION, EXTENDED_SCOPE_POLICY_VERSION, PriceCapture, PriceCaptureError, canonical_bytes, capture_price, parse_price_csv, price_policy, validate_policy, worker_version
+from worker.tpex_price_capture import CUTOFF, NEW_CUTOFF, APPROVED_CUTOFFS, ENDPOINT, SOURCE_ID, SYMBOLS, SCOPE_POLICY_VERSION, EXTENDED_SCOPE_POLICY_VERSION, FIFTH_SCOPE_POLICY_VERSION, PriceCapture, PriceCaptureError, canonical_bytes, capture_price, parse_price_csv, price_policy, validate_policy, worker_version
 
 VERSION = "stock-price-memory/m1-v1"
 ENABLE_ENV = "STOCK_TPEX_PRICE_MEMORY_CAPTURE"
@@ -21,12 +21,15 @@ POLICY_VERSION_20261006 = "m1-price-tpex-11370-2026-10-06.1"
 POLICY_DIGEST_20261006 = "sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288"
 POLICY_DIGEST_STOCK_SCOPE = "sha256:6e662d5fc91957b586becdf41f351d5abf2c41cec09909de468e62e76cda4a78"
 POLICY_DIGEST_STOCK_SCOPE_V2 = "sha256:eb378f12e85462855d8271f1e977e4e84878882dd0944c004840a2ad21ab4434"
+POLICY_DIGEST_STOCK_SCOPE_V3 = "sha256:57fb2dd808d71d43e89aca3fb42ef8dc53d9338093dd92a296858e62c41152ca"
 
 
 def policy_pins(cutoff: date, *, policy_version: str | None = None) -> tuple[str, str]:
     if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
     version = price_policy(cutoff, policy_version=policy_version)["version"]
+    if version == FIFTH_SCOPE_POLICY_VERSION:
+        return version, POLICY_DIGEST_STOCK_SCOPE_V3
     if version == EXTENDED_SCOPE_POLICY_VERSION:
         return version, POLICY_DIGEST_STOCK_SCOPE_V2
     if version == SCOPE_POLICY_VERSION:
@@ -51,6 +54,8 @@ def supported_symbols(cutoff: date | None, environment: Mapping[str, str] | None
 
 
 def projection_version(policy_version: str) -> str:
+    if policy_version == FIFTH_SCOPE_POLICY_VERSION:
+        return "stock-price-memory/m2-stock-scope-v3"
     if policy_version == EXTENDED_SCOPE_POLICY_VERSION:
         return "stock-price-memory/m2-stock-scope-v2"
     return "stock-price-memory/m2-stock-scope-v1" if policy_version == SCOPE_POLICY_VERSION else VERSION

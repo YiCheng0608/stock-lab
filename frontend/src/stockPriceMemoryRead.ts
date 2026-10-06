@@ -7,12 +7,14 @@ export const PRICE_BODY_SHA = 'bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d07729
 export const PRICE_APPROVED_DATES = ['2026-10-05', '2026-10-06'] as const
 export const PRICE_SCOPE_POLICY_VERSION = 'm2-stock-scope-tpex-11370-2026-10-06.1'
 export const PRICE_SCOPE_POLICY_VERSION_V2 = 'm2-stock-scope-tpex-11370-2026-10-06.2'
-export const PRICE_SYMBOL_NAMES: Record<string, string> = { '3105': '穩懋', '5274': '信驊', '5347': '世界', '6488': '環球晶' }
+export const PRICE_SCOPE_POLICY_VERSION_V3 = 'm2-stock-scope-tpex-11370-2026-10-06.3'
+export const PRICE_SYMBOL_NAMES: Record<string, string> = { '3105': '穩懋', '3293': '鈊象', '5274': '信驊', '5347': '世界', '6488': '環球晶' }
 export function priceSourcePins(cutoff: string | null, policyVersion?: string) {
   if (cutoff === '2026-10-05' && (!policyVersion || policyVersion === PRICE_POLICY_VERSION)) return { policyVersion: PRICE_POLICY_VERSION, policyDigest: PRICE_POLICY_DIGEST, bodySha: PRICE_BODY_SHA, workerVersion: 'tpex-price-capture/m1-v1', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
   if (cutoff === '2026-10-06' && policyVersion === 'm1-price-tpex-11370-2026-10-06.1') return { policyVersion, policyDigest: 'sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288', bodySha: 'aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a', workerVersion: 'tpex-price-capture/m1-v2', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
   if (cutoff === '2026-10-06' && policyVersion === PRICE_SCOPE_POLICY_VERSION) return { policyVersion: PRICE_SCOPE_POLICY_VERSION, policyDigest: 'sha256:6e662d5fc91957b586becdf41f351d5abf2c41cec09909de468e62e76cda4a78', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v1', memoryVersion: 'stock-price-memory/m2-stock-scope-v1', symbols: ['3105', '5347', '6488'] }
-  if (cutoff === '2026-10-06' && (!policyVersion || policyVersion === PRICE_SCOPE_POLICY_VERSION_V2)) return { policyVersion: PRICE_SCOPE_POLICY_VERSION_V2, policyDigest: 'sha256:eb378f12e85462855d8271f1e977e4e84878882dd0944c004840a2ad21ab4434', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v2', memoryVersion: 'stock-price-memory/m2-stock-scope-v2', symbols: ['3105', '5274', '5347', '6488'] }
+  if (cutoff === '2026-10-06' && policyVersion === PRICE_SCOPE_POLICY_VERSION_V2) return { policyVersion: PRICE_SCOPE_POLICY_VERSION_V2, policyDigest: 'sha256:eb378f12e85462855d8271f1e977e4e84878882dd0944c004840a2ad21ab4434', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v2', memoryVersion: 'stock-price-memory/m2-stock-scope-v2', symbols: ['3105', '5274', '5347', '6488'] }
+  if (cutoff === '2026-10-06' && (!policyVersion || policyVersion === PRICE_SCOPE_POLICY_VERSION_V3)) return { policyVersion: PRICE_SCOPE_POLICY_VERSION_V3, policyDigest: 'sha256:57fb2dd808d71d43e89aca3fb42ef8dc53d9338093dd92a296858e62c41152ca', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v3', memoryVersion: 'stock-price-memory/m2-stock-scope-v3', symbols: ['3105', '3293', '5274', '5347', '6488'] }
   return null
 }
 export const PRICE_ENDPOINT = 'https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data'
@@ -46,7 +48,7 @@ export function priceMemoryInstrumentSupported(instrument: Instrument): boolean 
 
 export function validPriceMemoryEnvelope(value: StockPriceMemoryData | undefined, exchange: string, symbol: string, cutoff: string | null): value is StockPriceMemoryData {
   if (!value) return false
-  const pins = priceSourcePins(cutoff, value.provenance?.policy_version ?? (cutoff === '2026-10-06' && value.version === PRICE_MEMORY_VERSION ? 'm1-price-tpex-11370-2026-10-06.1' : cutoff === '2026-10-06' && value.version === 'stock-price-memory/m2-stock-scope-v1' ? PRICE_SCOPE_POLICY_VERSION : undefined))
+  const pins = priceSourcePins(cutoff, value.provenance?.policy_version ?? (cutoff === '2026-10-06' && value.version === PRICE_MEMORY_VERSION ? 'm1-price-tpex-11370-2026-10-06.1' : cutoff === '2026-10-06' && value.version === 'stock-price-memory/m2-stock-scope-v1' ? PRICE_SCOPE_POLICY_VERSION : cutoff === '2026-10-06' && value.version === 'stock-price-memory/m2-stock-scope-v2' ? PRICE_SCOPE_POLICY_VERSION_V2 : undefined))
   if (value.version !== (pins?.memoryVersion ?? PRICE_MEMORY_VERSION) || value.origin !== 'process_memory' || value.exchange !== exchange || value.symbol !== symbol
     || value.as_of !== cutoff || !['available', 'unavailable'].includes(value.status)
     || value.unit !== 'shares' || value.quantity_encoding !== 'canonical_integer_string' || value.price_unit !== 'TWD_per_share'

@@ -214,7 +214,21 @@ Actual由root同一guarded程序在改程式前唯一new quote GET並held raw，
 
 Owned唯一page `5028fdbb-3c34-42dd-a406-537ee5559f2a` exact closed／tabs0；API35548／preview51332／compiler54688後驗absent，8801／8802 listeners none。Structured stopped／guards0／DB preserved已核；preview interrupt與interactive API terminal最後raw exit1保留，獨立清理後驗exit0分報，不改原exit或否定有效產品驗收。未建立Edge profile、screenshots／HAR／artifacts／DB copy／KeepArtifacts產物。前輪STOCK-SCOPE四session已outside關閉封存接受，worktree／branch移除仍待新輪涉及索引；DAY-RANGE full containing worktree／NO-RETRY與TURNOVER／cache／Temp／其他歷史排除，不稱所有歷史資源已清。
 
-Coreoperation+1／scope dependency+1／reliability0／stall0。M1 parameterless單日JSON observation沒有解除多日close／calendar／strategy／time／execution，也不計implementation batch；保存／跨程序、PIT／全市場、完整M1／M2／M3仍未驗。
+該四股版source13＋DOC8 freeze21／qualified索引／exact commit與正常ff-only master merge `899fa62260e495075cc756ff31869a57df6b3895` 已接受；後續五股入口見下節。Coreoperation+1／scope dependency+1／reliability0／stall0。M1 parameterless單日JSON observation沒有解除多日close／calendar／strategy／time／execution，也不計implementation batch；保存／跨程序、PIT／全市場、完整M1／M2／M3仍未驗。
+
+### M2-FOCUS-STOCK-SCOPE-3 五股範圍的記憶體驗證入口
+
+沿既有tools/tpex-price-api.py／tools/tpex-price-preview.cjs的 --check／--focus-check及共用唯讀依賴；Python -B／SQLite :memory:、Node write:false／noEmit／incremental:false／composite:false、guards拒寫保持。沒有新環境、helper或disk fixture；建構方式留Git，來源／版本見[來源 §25](../SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)，actual API／可信操作見[個股頁 §32](../STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)。
+
+必要checks final exit0：Python worker／store／API29與focus24；Node memory validators111／Overview SSR46／App chart32，focus helpers366／full-App SSR167，兩組28src noEmit。Python3.12.14／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1、Node20.19.4／TypeScript5.9.3／esbuild0.25.12；依賴與warnings如實保留，child sourceGET0／guards0／artifacts0，未跑full suite／production build或磁碟保存／跨程序。
+
+新增3293鈊象的五股tuple，ordinary fixture最多5 CSV rows、serialized cap80KiB／object cap512KiB；actual Python53717B／graph147897B、Node55693B／estimate243488B低於各cap，estimate不是RSS。Explicit舊tuple64KiB／512KiB斷言保留；separate virtual oversize仍只memory驗拒收，不以新cap放寬舊policy。
+
+本輪CSV GET共3次，不能把final Store1／runner1稱全輪一次。OBS1 root名稱Unicode預期錯而exit1／raw釋放；OBS2金融與pure admitpass，但root custom network audit漏Windows loopback socketpair，startup network_denied1／API無listener。原guard失敗保留；structured helper stopped／DB preserved，root stdlib獨立重現並exact stop30296 exit0／absence後驗0，無raw轉移。OBS3 existing guarded API36908／live-source-opt-in／preloaded=false，native firstload在程式修改後觸發唯一NEW workerGET；final DB preserved／guards0／sourcecount1／runnerGET1，cached再讀不增加GET。Source金融觀測與版本由來源§25.2管理，不拿fixture／body replay／preedit同程序替代final actual。
+
+清理另已root獨立接受：唯一lifetime owned page `ad99ff9a-1f83-4c09-98f6-5d8716ff0804` exact closed／tabs0；API36908／preview55908／compiler34308／old observer30296均absent，8871／8801／8802 listeners none，獨立verify exit0、held raw隨process exit釋放。中斷API／preview terminal rawexit1與清理verify0分報；停止前structured diagnostic guards0／disk0／DB preserved／sourcecount1／runner1／preloadedfalse。不改原exit、不否定有效驗收；未建立screenshot／HAR／Edge profile／DB copy／env install／KeepArtifacts或新artifact。
+
+Coreoperation+1／selected scope dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git不算implementation batch。歷史前任session封存與NO-RETRY由[協作紀錄](../TASK_COORDINATION.md)管理；本worktree／branch不自刪，不掃Temp／cache／logs。未驗保存／跨程序、PIT／全市場、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
 
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 

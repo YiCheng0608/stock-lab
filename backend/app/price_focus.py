@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from . import tpex_price
 from worker.tpex_price_capture import CUTOFF, APPROVED_CUTOFFS, SYMBOLS
 
-VERSION = "price-lot-focus/m2-v6"
+VERSION = "price-lot-focus/m2-v7"
 MAX_SHARES = "9223372036854775807"
 DAY_MOVES = ("all", "up", "down", "flat")
 DAY_MOVE_REASONS = {"up": "close_above_open", "down": "close_below_open", "flat": "close_equal_open"}
@@ -135,7 +135,8 @@ def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, day_mo
     parse_min_turnover(min_turnover)
     minimum_range = parse_min_range_pct(min_range_pct)
     symbols = tpex_price.supported_symbols(as_of)
-    version = VERSION if tpex_price.active_policy_version(as_of) == tpex_price.EXTENDED_SCOPE_POLICY_VERSION else "price-lot-focus/m2-v5"
+    policy_version = tpex_price.active_policy_version(as_of)
+    version = VERSION if policy_version == tpex_price.FIFTH_SCOPE_POLICY_VERSION else "price-lot-focus/m2-v6" if policy_version == tpex_price.EXTENDED_SCOPE_POLICY_VERSION else "price-lot-focus/m2-v5"
     result = {"version": version, "status": "unavailable", "as_of": as_of.isoformat() if type(as_of) is date else None,
               "min_lots": min_lots, "min_shares": minimum, "day_move": day_move, "min_turnover": min_turnover, "min_range_pct": min_range_pct, "count": None, "items": [], "reads": [],
               "supported_scope": {"exchange": "TPEx", "symbols": list(symbols), "cutoff": as_of.isoformat() if type(as_of) is date and as_of in APPROVED_CUTOFFS else CUTOFF.isoformat(), "currency": "TWD", "asset_type": "stock"},

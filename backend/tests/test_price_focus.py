@@ -7,6 +7,91 @@ from test_tpex_price_capture import SyntheticPolicyScope, csv_body, fixture_rows
 
 
 class PriceFocusTests(unittest.TestCase):
+    def test_five_stock_router_exact_boundaries_complete_reads_and_return_strings(self):
+        from fastapi.testclient import TestClient
+        from urllib.parse import parse_qs, urlsplit, urlencode
+        from worker import tpex_price_capture as worker
+        import json, sys
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.FIFTH_SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                client.post("/api/focus/price-lots/capture?as_of=2026-10-06&min_lots=0")
+                cases = (("0.000", "all", "0", "0.000", ["3105", "3293", "5274", "5347", "6488"]),
+                         ("1495.462", "down", "0", "0", ["3105", "3293"]), ("1495.463", "down", "0", "0", ["3105"]),
+                         ("0", "down", "1164617657", "0", ["3105", "3293", "5274"]), ("0", "down", "1164617658", "0", ["3105", "5274"]),
+                         ("0.000", "down", "0", "2.770", ["3105", "3293", "5274"]), ("0.000", "down", "0", "2.771", ["3105", "5274"]),
+                         ("1495.462", "down", "1164617657", "2.770", ["3105", "3293"]), ("35000", "all", "0", "0", []))
+                for lots, move, amount, minimum_range, expected in cases:
+                    conditions = dict(as_of="2026-10-06", min_lots=lots, day_move=move, min_turnover=amount, min_range_pct=minimum_range)
+                    query = urlencode(conditions)
+                    data = client.get("/api/focus/price-lots?" + query).json()
+                    self.assertEqual((data["version"], data["status"], data["count"]), ("price-lot-focus/m2-v7", "available", len(expected)))
+                    self.assertEqual([item["symbol"] for item in data["items"]], expected)
+                    self.assertEqual([read["instrument"]["symbol"] for read in data["reads"]], ["3105", "3293", "5274", "5347", "6488"])
+                    self.assertTrue(all(read["price_memory"]["provenance"] == data["reads"][0]["price_memory"]["provenance"] for read in data["reads"]))
+                    for item in data["items"]:
+                        self.assertEqual((len(item["reasons"]), len(set(item["reasons"]))), (4, 4))
+                        self.assertEqual(parse_qs(urlsplit(item["detail_url"]).query), {"as_of": [conditions["as_of"]], "from": ["price-lots"], **{"focus_" + key: [value] for key, value in conditions.items()}})
+                        if item["symbol"] == "3293":
+                            self.assertEqual((item["volume_lots"], item["turnover_exact"], item["open_exact"], item["high_exact"], item["low_exact"], item["close_exact"]), ("1495.462", "1164617657", "794.00", "794.00", "772.00", "780.00"))
+                            overview = client.get(item["detail_url"].replace("/stocks/", "/api/stocks/", 1)).json()["overview"]
+                            self.assertEqual((overview["as_of"], overview["price_memory"]["latest"]["symbol"]), ("2026-10-06", "3293"))
+                            self.assertTrue(all(condition["status"] == "data_insufficient" for condition in overview["conditions"]))
+                    self.assertEqual(client.post("/api/focus/price-lots/capture?" + query).json()["count"], len(expected))
+                    for symbol in ("3105", "3293", "5274", "5347", "6488"):
+                        self.assertEqual(client.post(f"/api/stocks/TPEx/{symbol}/prices/capture?as_of=2026-10-06").json()["capture_state"]["action"], "cached")
+                    sample = (data, fixture.before, fixture.snapshot(), fixture.fixture.body)
+                    serialized = len(json.dumps(sample[:3], ensure_ascii=False).encode("utf-8")) + len(sample[3])
+                    seen = set()
+                    def size(value):
+                        if id(value) in seen: return 0
+                        seen.add(id(value)); total = sys.getsizeof(value)
+                        if isinstance(value, dict): total += sum(size(k) + size(v) for k, v in value.items())
+                        elif isinstance(value, (tuple, list)): total += sum(size(v) for v in value)
+                        return total
+                    footprint = size(sample)
+                    self.assertLessEqual(serialized, 80 * 1024); self.assertLessEqual(footprint, 512 * 1024)
+                    self.assertEqual(len(fixture_rows(worker.NEW_CUTOFF, policy_version=worker.FIFTH_SCOPE_POLICY_VERSION)), 5)
+                    print(json.dumps({"five_stock_fixture_serialized_bytes": serialized, "fixture_object_bytes": footprint, "max_csv_rows": 5}), flush=True)
+                for suffix in ("", "?as_of=2026-10-02", "?as_of=2026-10-05"):
+                    self.assertIsNone(client.get("/api/stocks/TPEx/3293" + suffix).json()["overview"]["price_memory"]["latest"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_fifth_filtered_out_read_and_catalogue_still_block_true_zero(self):
+        from app import tpex_price
+        from app.price_focus import build_price_focus
+        from worker import tpex_price_capture as worker
+        from copy import deepcopy
+        from types import SimpleNamespace
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.FIFTH_SCOPE_POLICY_VERSION)
+        try:
+            good = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None, currency="TWD") for s, n in worker.policy_symbols(worker.NEW_CUTOFF).items()]
+            for key, value in (("name", "鈐象"), ("market", "US"), ("exchange", "TWSE"), ("instrument_type", "etf"), ("etf_category", "mixed"), ("currency", "unknown")):
+                bad = deepcopy(good); setattr(bad[1], key, value)
+                self.assertEqual(build_price_focus(bad, worker.NEW_CUTOFF, "35000", capture=True)["reasons"], ["price_focus_catalogue_not_supported"])
+            for bad in (good[:1] + good[2:], good + good[1:2]):
+                self.assertIsNone(build_price_focus(bad, worker.NEW_CUTOFF, "35000", capture=True)["count"])
+            self.assertEqual(fixture.fixture.opener.calls, [])
+            tpex_price.capture_tpex_price(good[0], worker.NEW_CUTOFF)
+            real = tpex_price.build_tpex_price
+            for failure in ("missing", "turnover", "range", "provenance"):
+                def polluted(item, cutoff):
+                    value = deepcopy(real(item, cutoff))
+                    if item.symbol == "3293":
+                        if failure == "missing": value.update(status="unavailable", latest=None, reasons=["price_memory_capture_missing"])
+                        elif failure == "turnover": value["latest"]["source_fields"]["成交金額"] = ""
+                        elif failure == "range": value["latest"]["source_fields"]["最高"] = "0"
+                        else: value["provenance"]["receipt_sha256"] = "b" * 64
+                    return value
+                with patch.object(tpex_price, "build_tpex_price", polluted): data = build_price_focus(good, worker.NEW_CUTOFF, "35000")
+                self.assertEqual((data["status"], data["count"], data["items"]), ("unavailable", None, []))
+                self.assertEqual(len(data["reasons"]), len(set(data["reasons"])))
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_four_stock_router_exact_new_boundaries_and_same_cutoff_strings(self):
         from fastapi.testclient import TestClient
         from urllib.parse import parse_qs, urlsplit, urlencode
@@ -66,7 +151,7 @@ class PriceFocusTests(unittest.TestCase):
         from types import SimpleNamespace
         fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.EXTENDED_SCOPE_POLICY_VERSION)
         try:
-            good = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None, currency="TWD") for s, n in worker.policy_symbols(worker.NEW_CUTOFF).items()]
+            good = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None, currency="TWD") for s, n in worker.policy_symbols(worker.NEW_CUTOFF, policy_version=worker.EXTENDED_SCOPE_POLICY_VERSION).items()]
             for key, value in (("name", "wrong"), ("market", "US"), ("exchange", "TWSE"), ("instrument_type", "etf"), ("etf_category", "mixed"), ("currency", "unknown")):
                 bad = deepcopy(good); setattr(bad[1], key, value)
                 self.assertEqual(build_price_focus(bad, worker.NEW_CUTOFF, "35000", capture=True)["reasons"], ["price_focus_catalogue_not_supported"])

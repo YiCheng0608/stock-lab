@@ -152,11 +152,19 @@ STOCK-SCOPE-1當時三股scope稱「指定來源日 · 上櫃普通股」，另�
 
 #### M2-FOCUS-STOCK-SCOPE-2 上櫃四股（有限接受）
 
-現行default10/06維持「指定來源日 · 上櫃普通股」與「依代碼排序」，動態支援數為「已核4股」，列3105穩懋／5274信驊／5347世界／6488環球晶；資料日不因10/07取得改成即時行情。Explicit舊三股／兩股policy按自身scope顯示，不用四股文案覆蓋舊tuple，未知／malformed scope仍安全拒用。
+該四股版default10/06維持「指定來源日 · 上櫃普通股」與「依代碼排序」，動態支援數為「已核4股」，列3105穩懋／5274信驊／5347世界／6488環球晶；資料日不因10/07取得改成即時行情。Explicit舊三股／兩股policy按自身scope顯示，不用四股文案覆蓋舊tuple，未知／malformed scope仍安全拒用。
 
 全部required四股reads合格後才filter或稱「此範圍的零候選」；任一不足仍「候選數未知」，不補0或縮scope。卡片仍四理由、精確張／整數元、元／股、O/C與「約」振幅，§10.3穩定換算不改；候選用exact原價比較。來源details保留raw原名稱外側空白、18原欄、當次body／receipt／policy與同cutoff來源日；金融權威由[來源 §23](SOURCE_REGISTRY.md#23-m2-focus-stock-scope-2四股來源准入)管理。
 
 Desktop／窄版可信lower5.327／upper5.328、5274研究／raw summary／back及五原字串保留已接受，窄版真零／四股恢復和SHA換行無page溢出已核。Draft fill／select只作準備，不稱trusted typing；操作／安全URL與未驗界線由[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)管理。前三股與更早文案節保留當時範圍。
+
+#### M2-FOCUS-STOCK-SCOPE-3 上櫃五股（有限接受）
+
+現行default10/06「指定來源日 · 上櫃普通股」與「依代碼排序」保持，動態顯示「已核5股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶。10/07取得不改10/06來源日，explicit舊四股／三股／兩股按自身scope顯示；不以五股文案覆蓋舊policy。
+
+全五股required reads合格才filter與顯示「此範圍的零候選」；任一不足維持「候選數未知」，不補0、縮scope或給未准入排行。四理由、精確張／整數元、元／股、O/C及「約」振幅文案不改，候選仍exact比較；raw外側空白、18原欄、當次body／receipt／policy與cutoff保留。金融權威見[來源 §25](SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)。
+
+Desktop1277×924／窄版390×844的lower2.770／upper2.771、3293同cutoff研究／raw展開／back及五原字串已核；窄版真零與五股恢復、來源換行無水平溢出已接受。Draft fill／select屬setup，不稱trusted typing；有效native與首offscreen miss邊界見[個股頁 §32](STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)。
 
 ### 10.2 個股詳情的第一屏
 

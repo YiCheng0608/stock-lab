@@ -914,7 +914,7 @@ Root 實際只作 1 GET：`https://www.tpex.org.tw/openapi/v1/tpex_daily_market_
 
 ## 23. M2-FOCUS-STOCK-SCOPE-2：四股來源准入
 
-**普通TPEx支援3→4、四股計算／actual API及可信桌面／窄版往返已由root有限接受。** 新增5274信驊，與3105穩懋／5347世界／6488環球晶使用同一2026-10-06 quote-date。來源值及版本由本節管理，操作由[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)管理；§20～21保留原兩股／三股immutable tuples、金融值與觀測，不覆寫舊policy。
+**普通TPEx支援3→4、四股計算／actual API及可信桌面／窄版往返已由root有限接受。** 新增5274信驊，與3105穩懋／5347世界／6488環球晶使用同一2026-10-06 quote-date。該版source13＋DOC8 freeze21／qualified索引／exact commit與正常ff-only master merge `899fa62260e495075cc756ff31869a57df6b3895` 已接受；現行五股另見§25。來源值及版本由本節管理，操作由[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)管理；§20～21保留原兩股／三股immutable tuples、金融值與觀測，不覆寫舊policy。
 
 ### 23.1 身分、用途與獨立四股版本
 
@@ -941,3 +941,45 @@ Root四股18欄逐欄核對：身分前三欄去除外側空白後一致，其�
 Root accepted四股完整reads／同tuple／provenance、四理由去重、精確inclusive門檻、cached五POST及samecutoff五條件往返；preloaded Store sourcecount1／runner新增GET0、guards0、DB preserved=true。具名desktop／窄版操作與owned清理已接受，B1 coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0；M1 §22 observation仍core0／dep0，不計implementation batch。
 
 本輪唯一page已closed／tabs0、API／preview／compiler absent、8801／8802 listeners none；held raw已釋放，未落盤／DB IDs null。Raw terminal interrupt exit1與獨立清理後驗exit0分報，詳見[開發入口](development-baseline/README.md#m2-focus-stock-scope-2-四股範圍的記憶體驗證入口)與原task。Quote-date不等於published／first available／revision；後三仍unknown，historical_pit unsupported。未驗磁碟保存／跨程序、20／21歷史個股close／完整calendar、strategy inputs／membership／time／execution、MA／trend／研究／Signal／Plan或完整M1／M2／M3。下一來源或scope另需正面准入，見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+## 24. M1-HISTORY-QUERY-1：官方月查詢線索與准入缺口
+
+`M1-HISTORY-QUERY-1-METADATA-1`已接受有限只讀review，沒有歷史金融body、API／UI或核心依賴解除。官方[首頁](https://www.tpex.org.tw/zh-tw/index.html)導向[個股日成交資訊](https://www.tpex.org.tw/zh-tw/mainboard/trading/info/stock-pricing.html)；該primary HTML於2026-10-06T19:13:45.888930Z→19:13:46.064929Z GET200、12078B，SHA256 `a8a205fcdc43ced8ce2b329c3f8cb10240752633a4ac9916704c67d0785e9823`。這是metadata取得時間，不能推成歷史行情availability。
+
+頁面inline action為 `afterTrading/tradingStock`；表單欄名 `code`／`date`，其中 `code` required、date-format M（`data-format=M`）、start19940101，列html／csv／utf-8匯出選項。Primary [main.js](https://www.tpex.org.tw/rsrc/js/main.js)的 `API_PATTERN=/www/{LANG}/{ACTION}`／lang=zh-tw與[tables.js](https://www.tpex.org.tw/rsrc/js/tables.js)的serializedForm／export GET支援這個NEW查詢線索；不將既有legacy `dailyQuotes` collector當官方query准入。
+
+**仍未准入exact M月參數wire encoding與exact歷史自動使用權。** Dataset11371 metadata已取得，但extractor輸出截斷、resource LINK未准入；未再GET或造fallback證據。頁面與export GET方法線索不放行猜日期／參數、legacy POST或歷史body取得；11370當日CSV的用途也不自動擴張到月查詢。歷史金融body GET0，未解除普通股20／21真close、完整calendar及strategy／membership／time／execution；core0／dep0、不是implementation batch，stall0保持，不作全域不可能主張。
+
+下一 `M1-HISTORY-MONTH-WIRE-1`須在原task核primary exact月wire／source-use／時間版本／instrument／execution，另核bounded memory、一次HTTP／timeout／redirect0／retry0／disk0，再作金融觀測。必要缺口仍缺時依[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)選獨立正面核心；命令、JS版本及原失敗留原task，不建立新附件。
+
+## 25. M2-FOCUS-STOCK-SCOPE-3：五股來源准入
+
+**普通TPEx支援4→5的來源／計算、actual API與可信桌面／窄版操作已由root有限接受。** 新增3293鈊象，selected依code為3105／3293／5274／5347／6488，quote-date仍2026-10-06。§20～23保留原兩股／三股／四股policy、金融表及觀測；具名操作由[個股頁 §32](STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)管理。
+
+### 25.1 普通股身分、用途與獨立版本
+
+Root本輪NEW官方ISIN catalogue GET：2983574B、SHA256 `68bc970ecc575e36a7820623d21691c44ca0a8d9d2d694dc021518a4e4fee71b`，逐股核普通TPEx／stock／TWD。新增3293鈊象、ISIN `TW0003293007`、掛牌日2006-07-12、上櫃文化創意業、CFI `ESVUFR`、ETF分類空；known name／code／身分須全合格。Catalogue日期與同hash新觀測不補歷史membership或PIT。
+
+Fresh [dataset11370](https://data.gov.tw/dataset/11370)免費／OGL1.0與[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點政府開放平台例外已核；僅沿§20.1 [exact政府CSV資源GET](https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data)的有限local_fetch／raw_store／summarize、顯名／完整性／hash／version／time／traceability條件。Metadata528827B、license484470B、disclaimer13535B的版本與full receipts留原task；當日用途不放行歷史日期參數、其他自動下載或磁碟保存。
+
+New policy `m2-stock-scope-tpex-11370-2026-10-06.3`，canonical UTF-8 **1516B**、digest `sha256:57fb2dd808d71d43e89aca3fb42ef8dc53d9338093dd92a296858e62c41152ca`。Worker `tpex-price-capture/m2-stock-scope-v3`、projection `stock-price-memory/m2-stock-scope-v3`、focus `price-lot-focus/m2-v7`；default10/06採五股 `.3`，explicit舊 `.2`四股／m2-v6、`.1`三股／m2-v5、更早10/06兩股／m2-v4及10/05tuples保持自身immutable字典／pins／scope。公開URL仍原五條件，沒有第六條或新的automatic pins；每合法程序一次明示取得、30秒／3MiB／redirect0／retry0／disk0保持。
+
+### 25.2 三次行情觀測與final actual原件
+
+**本輪金融行情CSV GET總共3次，不是全輪一次。** OBSERVE-1因root預期名稱誤用U+9210、正確應為U+920A而assert失敗，raw釋放、exit1，未准入金融。OBSERVE-2新fresh body的金融核對／pure admit成功，但root自製outer network audit未含Windows loopback socketpair情境，API startup `network_denied1`、無8801 listener；structured helper stopped／DB preserved，不把此guard失敗改為全0。Root以stdlib獨立重現後，exact PID30296 Stop-Process exit0、absence／ports後驗0、raw隨process exit釋放，未transfer／export／replay。
+
+OBSERVE-3用既有guarded actual API／live-source-opt-in與新pins，PID36908；trusted UI首次load button觸發一個NEW worker GET，sourcecount1／runnerGET1／preloaded=false。`request_started_at=2026-10-06T19:44:48.018375Z`、`captured_at=2026-10-06T19:44:48.918374Z`，HTTP200、**1788599B／12194 data rows／18欄／全1151006**；body SHA256 `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200`。Admitted receipt **1447B**、SHA256 `e5e16747fd593b0014e3c6b3ca56b2e2f60876e2cad708904e519fb746120879`。Final actual body於程式修改後取得，與OBS2 fullbody SHA相同供獨立核對；不稱PID30296同程序preedit capture或final preloaded，沒有body copy／fixture替代。三次皆有原task明確授權，不是retry loop。
+
+Root核selected五股共90欄：身分15欄去除外側空白比對，其餘75原字串exact；30金融值核實，raw／source_fields保留原名稱空白與追溯。新增金融值如下，其餘四股按§21～23原表沿用：
+
+| Selected股／data ordinal／含header行號 | O／H／L／C原字串（元／股） | 成交股數（canonical股） | 日常成交量（張） | 成交金額（TWD元） |
+| --- | --- | --- | --- | --- |
+| 3293鈊象／255／256 | 794.00／794.00／772.00／780.00 | 1495462 | 1495.462 | 1164617657 |
+
+3293 O/C為down，本日振幅精確 `1100/397`%；精確張、TWD整數元及原價比較沿穩定契約，不以「約」顯示值篩選。OBS2 parsed graph estimate4165915B低於24MiB，不是RSS；raw及receipt只memory，owned process結束後已釋放，DB IDs null。
+
+### 25.3 有限接受與剩餘邊界
+
+五股全部reads／同tuple／provenance先gate後filter，四理由去重／code順與safe五原字串保持。Root actual API10案、六cached POST零追加GET、同cutoff3293／可信桌面與窄版往返、真零及五股恢復已核；final guarded runner DB preserved／guards0。有效來源及產品驗收不抹去兩個earlier observer的原exit與custom guard失敗。
+
+B1 coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0；BOOT／§24 metadata／DOC／index／Git不計implementation batch。Owned page／服務／compiler／observer清理已接受，rawexit1與後驗0由[開發入口](development-baseline/README.md#m2-focus-stock-scope-3-五股範圍的記憶體驗證入口)分報。Quote-date不是published／first available／revision，後三仍unknown、historical_pit unsupported；未驗磁碟保存／跨程序、全市場、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。

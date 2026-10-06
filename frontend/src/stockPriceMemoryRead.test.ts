@@ -1,7 +1,7 @@
 import type { Instrument, StockPriceMemoryData } from './types'
-import { memoryPriceCaptureReady, memoryPriceChartBars, priceSourcePins, PRICE_ENDPOINT, PRICE_HEADERS, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SYMBOL_NAMES, validStockPriceMemoryRead } from './stockPriceMemoryRead'
+import { memoryPriceCaptureReady, memoryPriceChartBars, priceSourcePins, PRICE_ENDPOINT, PRICE_HEADERS, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SCOPE_POLICY_VERSION_V3, PRICE_SYMBOL_NAMES, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 export const priceFixtureInstrument = (symbol = '3105'): Instrument => ({
-  id: ({ '3105': 1, '5274': 4, '5347': 3, '6488': 2 } as Record<string, number>)[symbol], market: 'TW', exchange: 'TPEx', symbol, name: PRICE_SYMBOL_NAMES[symbol],
+  id: ({ '3105': 1, '3293': 5, '5274': 4, '5347': 3, '6488': 2 } as Record<string, number>)[symbol], market: 'TW', exchange: 'TPEx', symbol, name: PRICE_SYMBOL_NAMES[symbol],
   instrument_type: 'stock', etf_category: null, is_watchlisted: false, status: 'active',
 })
 
@@ -9,7 +9,7 @@ export const priceFixtureInstrument = (symbol = '3105'): Instrument => ({
 export function createPriceMemoryFixture(symbol = '3105', cutoff = '2026-10-05', policyVersion?: string): StockPriceMemoryData {
   const instrument = priceFixtureInstrument(symbol)
   const values: Record<string, [number, number, number, number, string, string]> = cutoff === '2026-10-06'
-    ? { '3105': [615, 623, 588, 592, '19731700', '11863581093'], '5274': [19520, 19895, 18855, 18985, '188693', '3627465565'], '5347': [184.5, 195, 184.5, 191, '34637793', '6615109776'], '6488': [1175, 1260, 1145, 1205, '13913614', '16835605385'] }
+    ? { '3105': [615, 623, 588, 592, '19731700', '11863581093'], '3293': [794, 794, 772, 780, '1495462', '1164617657'], '5274': [19520, 19895, 18855, 18985, '188693', '3627465565'], '5347': [184.5, 195, 184.5, 191, '34637793', '6615109776'], '6488': [1175, 1260, 1145, 1205, '13913614', '16835605385'] }
     : { '3105': [614, 630, 604, 615, '48127911', '29694939981'], '6488': [1220, 1235, 1175, 1180, '18982607', '22887612060'] }
   const pins = priceSourcePins(cutoff, policyVersion ?? (cutoff === '2026-10-06' ? 'm1-price-tpex-11370-2026-10-06.1' : undefined))!
   if (!pins || !pins.symbols.includes(symbol) || !values[symbol]) throw new Error('fixture tuple/symbol not supported')
@@ -28,7 +28,7 @@ export function createPriceMemoryFixture(symbol = '3105', cutoff = '2026-10-05',
     memory_capture_id: 'tpex-11370:' + cutoff + ':' + pins.bodySha, verification: 'pinned_raw_csv_selected_values', attribution, limitations }
   const bar = { id: null, origin: 'process_memory' as const, exchange: 'TPEx' as const, symbol, company_name: instrument.name, currency: 'TWD' as const,
     date: cutoff, open, high, low, close, volume: Number(volume), volume_exact: volume, turnover: Number(amount), turnover_exact: amount,
-    turnover_status: 'available' as const, turnover_reason: null, source: 'tpex' as const, source_date: row[0], row_ordinal: ({ '3105': 205, '5274': 513, '5347': 532, '6488': 717 } as Record<string, number>)[symbol],
+    turnover_status: 'available' as const, turnover_reason: null, source: 'tpex' as const, source_date: row[0], row_ordinal: ({ '3105': 205, '3293': 255, '5274': 513, '5347': 532, '6488': 717 } as Record<string, number>)[symbol],
     source_fields: Object.fromEntries(PRICE_HEADERS.map((field, index) => [field, row[index]])), is_suspended: false as const, adj_close: null,
     data_as_of: cutoff, collected_at: provenance.captured_at, provenance }
   return { version: pins.memoryVersion, origin: 'process_memory', status: 'available', exchange: 'TPEx', symbol, as_of: cutoff,
@@ -41,7 +41,28 @@ export function createPriceMemoryFixture(symbol = '3105', cutoff = '2026-10-05',
 export function runStockPriceMemoryReadTests(): number {
   let count = 0
   const check = (value: boolean, message: string) => { count++; if (!value) throw new Error(message) }
-  check(priceSourcePins('2026-10-06')!.policyVersion === PRICE_SCOPE_POLICY_VERSION_V2 && priceSourcePins('2026-10-06')!.symbols.join() === '3105,5274,5347,6488', 'four-stock default pins')
+  check(priceSourcePins('2026-10-06')!.policyVersion === PRICE_SCOPE_POLICY_VERSION_V3 && priceSourcePins('2026-10-06')!.symbols.join() === '3105,3293,5274,5347,6488', 'five-stock default pins')
+  check(priceSourcePins('2026-10-06', PRICE_SCOPE_POLICY_VERSION_V2)!.symbols.join() === '3105,5274,5347,6488', 'four-stock explicit immutable pins')
+  const fifth = createPriceMemoryFixture('3293', '2026-10-06', PRICE_SCOPE_POLICY_VERSION_V3), fifthInstrument = priceFixtureInstrument('3293')
+  check(validStockPriceMemoryRead(fifth, fifthInstrument, '2026-10-06') && fifth.latest!.volume_exact === '1495462' && fifth.latest!.turnover_exact === '1164617657', 'fifth exact selected financial values')
+  check(memoryPriceChartBars(fifth, fifthInstrument, '2026-10-06')[0].close === 780, 'fifth single-day chart preserves per-share price')
+  for (const policy of [PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SCOPE_POLICY_VERSION, 'm1-price-tpex-11370-2026-10-06.1']) check(!priceSourcePins('2026-10-06', policy)!.symbols.includes('3293'), 'all old immutable scopes exclude fifth')
+  for (const mutate of [
+    (x: StockPriceMemoryData) => { x.provenance!.policy_version = PRICE_SCOPE_POLICY_VERSION_V2 },
+    (x: StockPriceMemoryData) => { x.supported_scope.symbols = ['3105', '5274', '5347', '6488'] },
+    (x: StockPriceMemoryData) => { x.provenance!.selected_symbols = ['3105', '5274', '5347', '6488'] },
+    (x: StockPriceMemoryData) => { x.latest!.source_fields['名稱'] = '鈐象' },
+    (x: StockPriceMemoryData) => { x.latest!.source_fields['成交股數'] = '01495462' },
+    (x: StockPriceMemoryData) => { x.latest!.source_fields['最高'] = '0' },
+  ]) {
+    const altered = structuredClone(fifth); mutate(altered); altered.latest!.provenance = altered.provenance!; altered.bars = [altered.latest!]
+    check(!validStockPriceMemoryRead(altered, fifthInstrument, '2026-10-06'), 'fifth crossed tuple or invalid selected field rejected')
+  }
+  for (const [key, value] of [['name', '鈐象'], ['instrument_type', 'etf'], ['etf_category', 'domestic'], ['exchange', 'TWSE']] as const) check(!validStockPriceMemoryRead(fifth, { ...fifthInstrument, [key]: value }, '2026-10-06'), 'fifth identity guard ' + key)
+  const unloadedFifth = structuredClone(fifth)
+  unloadedFifth.status = 'unavailable'; unloadedFifth.latest = null; unloadedFifth.bars = []; unloadedFifth.provenance = null; unloadedFifth.attribution = null
+  unloadedFifth.reasons = ['price_memory_capture_missing']; unloadedFifth.capture_state = { enabled: true, attempted: false, busy: false, can_capture: true, cache_present: false, request_count: 0, action: 'not_attempted' }
+  check(memoryPriceCaptureReady(unloadedFifth, 'TPEx', '3293', '2026-10-06'), 'fifth unloaded explicit scope ready')
   const fourth = createPriceMemoryFixture('5274', '2026-10-06', PRICE_SCOPE_POLICY_VERSION_V2), fourthInstrument = priceFixtureInstrument('5274')
   check(validStockPriceMemoryRead(fourth, fourthInstrument, '2026-10-06') && fourth.latest!.volume_exact === '188693' && fourth.latest!.turnover_exact === '3627465565', 'new fourth stock exact source fields and accepted tuple')
   check(memoryPriceChartBars(fourth, fourthInstrument, '2026-10-06')[0].close === 18985, 'fourth chart keeps TWD per share')
