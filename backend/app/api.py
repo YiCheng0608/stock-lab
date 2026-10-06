@@ -73,7 +73,7 @@ from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
-from .tpex_price import capture_tpex_price
+from .tpex_price import capture_tpex_price, supported_symbols
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
 from .institutional_windows import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
@@ -1734,7 +1734,7 @@ def _price_focus(db: Session, as_of: date, min_lots: str, day_move: str, min_tur
         parse_min_range_pct(min_range_pct)
         with db.no_autoflush:
             instruments = list(db.scalars(select(Instrument).where(
-                Instrument.exchange == "TPEx", Instrument.symbol.in_(("3105", "6488"))).order_by(Instrument.symbol)).all())
+                Instrument.exchange == "TPEx", Instrument.symbol.in_(supported_symbols(as_of))).order_by(Instrument.symbol)).all())
         return build_price_focus(instruments, as_of, min_lots, day_move, min_turnover, min_range_pct, capture=capture)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

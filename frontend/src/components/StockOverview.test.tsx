@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatCanonicalShareLots } from '../units'
 import { createPriceMemoryFixture, priceFixtureInstrument } from '../stockPriceMemoryRead.test'
-import { PRICE_BODY_SHA } from '../stockPriceMemoryRead'
+import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION } from '../stockPriceMemoryRead'
 import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
@@ -9,6 +9,24 @@ import type { ReactElement } from 'react'
 export function runPriceMemoryOverviewSSRTests(render: (element: ReactElement) => string): number {
   let count = 0
   const check = (value: boolean, message: string) => { count++; if (!value) throw new Error(message) }
+  const third = createUnitLotsFixture()
+  third.as_of = '2026-10-06'; third.price_memory = createPriceMemoryFixture('5347', '2026-10-06', PRICE_SCOPE_POLICY_VERSION)
+  const thirdHtml = render(<StockOverview data={third} instrument={priceFixtureInstrument('5347')} explicitCutoff="2026-10-06" onNews={() => {}} onCapturePrice={() => {}} />)
+  check(thirdHtml.includes('34,637.793') && thirdHtml.includes('6,615,109,776') && thirdHtml.includes('>191<'), 'third ordinary stock exact lots/TWD and per-share close')
+  check(thirdHtml.includes('金融數值僅核 3105、5347、6488') && thirdHtml.includes('資料列序 532'), 'third policy scope and original row visible')
+  const thirdConflict = render(<StockOverview data={third} instrument={priceFixtureInstrument('5347')} explicitCutoff="2026-10-05" onNews={() => {}} />)
+  check(!thirdConflict.includes('34,637.793') && !thirdConflict.includes('查看官方價格原列、來源版本與 SHA'), 'third cutoff conflict rejects raw projection')
+  for (const scope of [undefined, null, {}, { ...third.price_memory!.supported_scope, symbols: 'bad' },
+    { ...third.price_memory!.supported_scope, symbols: ['3105', '9999', '6488'] }]) {
+    const malformed = structuredClone(third)
+    malformed.price_memory!.supported_scope = scope as unknown as NonNullable<StockOverviewData['price_memory']>['supported_scope']
+    const html = render(<StockOverview data={malformed} instrument={priceFixtureInstrument('5347')} explicitCutoff="2026-10-06" onNews={() => {}} />)
+    check(html.includes('支持範圍待核實') && !html.includes('本次政策支持的上櫃普通股：') && !html.includes('金融數值僅核') && !html.includes('34,637.793'), 'missing/malformed/unknown scope renders a gap without approved scope or values')
+  }
+  const unknownTuple = structuredClone(third)
+  unknownTuple.price_memory!.provenance!.policy_version = 'unknown'
+  const unknownTupleHtml = render(<StockOverview data={unknownTuple} instrument={priceFixtureInstrument('5347')} explicitCutoff="2026-10-06" onNews={() => {}} />)
+  check(unknownTupleHtml.includes('支持範圍待核實') && !unknownTupleHtml.includes('本次政策支持的上櫃普通股：'), 'unknown policy cannot advertise an approved scope')
   for (const symbol of ['3105', '6488']) {
     const fixture = createUnitLotsFixture()
     fixture.as_of = '2026-10-05'

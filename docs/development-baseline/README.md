@@ -190,6 +190,20 @@ Root判定B1有限核心驗收已接受：core+1／dep+1／reliability0／stall0
 
 Python／Node入口guards0／artifact0只屬各入口；browser profile metadata是額外artifact，不稱本輪全域artifact0。沒有正式DB、行情raw／fixture／HAR／screenshot複本；未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／歷史close／日曆／MA／trend／研究／Signal／Plan。舊turnover及本輪outside-owner由協作紀錄管理，不自刪cwd。
 
+### M2-FOCUS-STOCK-SCOPE-1 三股範圍的記憶體驗證入口
+
+沿既有tools/tpex-price-api.py、tools/tpex-price-preview.cjs的 --check／--focus-check與唯讀shared deps；Python -B、SQLite :memory:、Node write:false／noEmit／incremental:false／composite:false及guard拒寫。新三股fixture可由Git中的測試建構方式重建，只memory，不建立DB／raw／HAR／screenshot／profile／附件或環境副本。來源與actual金融值由[來源 §21](../SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)管理，API／可信操作由[個股頁 §30](../STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)管理。
+
+本批必要checks接受：backend worker／store／API25、focus20；TS focus helper297／full-App SSR132、memory reader75／Overview SSR35／App chart30、28個src完整noEmit。Overview的六個malformed／unknown scope SSR屬同批必要退修，不另計核心或可靠性。版本為Python3.12.14／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1、Node20.19.4／TypeScript5.9.3／esbuild0.25.12；命令、原非零／後pass與逐檔hash留原task。未跑full suite／production build或磁碟保存／跨程序驗收，不將已驗範圍升格。
+
+Ordinary fixture最大serialized49,759B／object estimate221,060B，三個新增CSV rows；virtual oversize3,145,729B只在memory驗3MiB拒收。仍在memory≤8MiB／serialized≤256KiB內，object estimate不是RSS。Program sourceGET0／全部guards0／artifact0；不能因此說root本輪quoteGET0，root有兩次獨立觀測。
+
+Actual由第二root程序held原件，程式更新後同程序pure builder准入，再供preloaded API／UI。首個非TTY觀測在stdin EOF後正常結束，memory釋放，不能聲稱兩觀測共同供一個cached Store；第二Store sourcecount1／runner新增GET0。Root REPL初importlib.util AttributeError發生runner import前，顯式import修正後未新增GET或磁碟；這些原錯留task，不重取或修改原exit。
+
+本輪owned清理完成：唯一Orca page `46b2bf07-29d1-4ae5-bfb8-3259a8e94f1b` exact closed／tabs0；API PID60400、preview30672及compiler8280 absent，8801／8802 listeners none後驗raw0，raw memory釋放。Compiler8280是新的esbuild lifetime，不能與先前已結束的Python同PID混作同程序。Node SIGINT structured shutdown保存proxy API GET15／POST0／rejected0、guards0／disk0，terminal rawexit1；API serve finally stopped／DB preserved／Store1／runner0／guards0返回0，後REPL sys.exit(0)的terminal rawexit1保留，與清理後驗0分報。沒有建立isolated Edge profile或disk fixture。
+
+舊day-range exact四session closure／history archive已另驗，worktree／branch及2,555,430B／232files／94dirs profile NO-RETRY仍保留、不重掃／刪除；舊turnover與其他歷史不納入，責任與接手由[協作紀錄](../TASK_COORDINATION.md)管理。當前功能接受不等於全域artifact0或所有歷史資源已清；仍只跑本變更必要驗證。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

@@ -97,6 +97,11 @@ _POLICY_20261006["version"] = "m1-price-tpex-11370-2026-10-06.1"
 _POLICY_20261006["scope"]["cutoff"] = "2026-10-06"
 _POLICY_20261006["validation"]["expected_body_sha256"] = "aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a"
 _POLICY_20261006["attribution"]["release_version"] = "data-date-2026-10-06"
+SCOPE_POLICY_VERSION = "m2-stock-scope-tpex-11370-2026-10-06.1"
+_POLICY_STOCK_SCOPE_20261006 = deepcopy(_POLICY_20261006)
+_POLICY_STOCK_SCOPE_20261006["version"] = SCOPE_POLICY_VERSION
+_POLICY_STOCK_SCOPE_20261006["scope"]["symbols"] = {"3105": "穩懋", "5347": "世界", "6488": "環球晶"}
+_POLICY_STOCK_SCOPE_20261006["validation"]["expected_body_sha256"] = "ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200"
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)", re.ASCII)
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", re.ASCII)
 _CODE = re.compile(r"[0-9A-Z]{4,12}", re.ASCII)
@@ -114,15 +119,26 @@ def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_bytes(value)).hexdigest()
 
 
-def price_policy(cutoff: date = CUTOFF) -> dict:
+def price_policy(cutoff: date = CUTOFF, *, policy_version: str | None = None) -> dict:
     if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
-    return deepcopy(_POLICY if cutoff == CUTOFF else _POLICY_20261006)
+    policies = [_POLICY] if cutoff == CUTOFF else [_POLICY_20261006, _POLICY_STOCK_SCOPE_20261006]
+    if policy_version is None:
+        return deepcopy(policies[-1])
+    for policy in policies:
+        if policy_version == policy["version"]:
+            return deepcopy(policy)
+    raise PriceCaptureError("price_policy_pins_mismatch")
 
 
-def worker_version(cutoff: date) -> str:
-    if cutoff not in APPROVED_CUTOFFS:
-        raise PriceCaptureError("price_cutoff_not_supported")
+def policy_symbols(cutoff: date, *, policy_version: str | None = None) -> dict[str, str]:
+    return price_policy(cutoff, policy_version=policy_version)["scope"]["symbols"]
+
+
+def worker_version(cutoff: date, *, policy_version: str | None = None) -> str:
+    policy = price_policy(cutoff, policy_version=policy_version)
+    if policy["version"] == SCOPE_POLICY_VERSION:
+        return "tpex-price-capture/m2-stock-scope-v1"
     return VERSION if cutoff == CUTOFF else "tpex-price-capture/m1-v2"
 
 
@@ -130,7 +146,7 @@ def validate_policy(policy: dict, expected_version: str, expected_digest: str) -
     # The caller supplies independently accepted pins; computing a hash is not admission.
     try:
         cutoff = date.fromisoformat(policy["scope"]["cutoff"])
-        accepted = price_policy(cutoff)
+        accepted = price_policy(cutoff, policy_version=policy["version"])
     except (KeyError, TypeError, ValueError):
         raise PriceCaptureError("price_policy_pins_mismatch") from None
     if policy != accepted or expected_version != accepted["version"] or digest(policy) != expected_digest:
@@ -154,11 +170,12 @@ def positive_decimal(value: str) -> Decimal:
     return result
 
 
-def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF) -> dict:
+def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF, policy_version: str | None = None) -> dict:
     if type(body) is not bytes or not body or len(body) > MAX_BODY_BYTES:
         raise PriceCaptureError("price_body_size_invalid")
     if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
+    symbols = policy_symbols(cutoff, policy_version=policy_version)
     try:
         rows = csv.reader(io.StringIO(body.decode("utf-8-sig"), newline=""), strict=True)
         if tuple(next(rows)) != HEADER:
@@ -178,9 +195,9 @@ def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF) -> dict:
             if key in seen:
                 raise PriceCaptureError("price_csv_duplicate")
             seen.add(key)
-            if row[1] not in SYMBOLS:
+            if row[1] not in symbols:
                 continue  # All-row structural verification is not all-market financial verification.
-            if row[2] != SYMBOLS[row[1]]:
+            if row[2] != symbols[row[1]]:
                 raise PriceCaptureError("price_selected_name_mismatch")
             prices = {field: positive_decimal(row[index]) for field, index in
                       (("open", 5), ("high", 6), ("low", 7), ("close", 3))}
@@ -199,7 +216,7 @@ def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF) -> dict:
                 "turnover_reason": "missing" if amount is None else None,
                 "row_ordinal": ordinal, "source_date": row[0], "source_fields": dict(zip(HEADER, row)),
             }
-        if not count or set(selected) != set(SYMBOLS):
+        if not count or set(selected) != set(symbols):
             raise PriceCaptureError("price_selected_rows_missing")
         return {"row_count": count, "structural_validation": "all_rows_header_width_date_unique_date_code",
                 "financial_validation": "selected_symbols_only", "date": cutoff.isoformat(), "selected": selected}
@@ -311,16 +328,16 @@ def admit_observed_price_capture(*, body: bytes, http_status: int, endpoint: str
     if body_sha != policy["validation"]["expected_body_sha256"]:
         raise PriceCaptureError("price_body_version_mismatch")
     cutoff = date.fromisoformat(policy["scope"]["cutoff"])
-    parsed = parse_price_csv(body, cutoff=cutoff)
+    parsed = parse_price_csv(body, cutoff=cutoff, policy_version=expected_policy_version)
     receipt = {
-        "worker_version": worker_version(cutoff), "source_id": SOURCE_ID, "source_version": "tpex-11370/" + cutoff.isoformat(),
+        "worker_version": worker_version(cutoff, policy_version=expected_policy_version), "source_id": SOURCE_ID, "source_version": "tpex-11370/" + cutoff.isoformat(),
         "endpoint": ENDPOINT, "method": "GET", "http_status": 200, "request_count": 1,
         "request_started_at": request_started_at, "captured_at": captured_at,
         "body_sha256": body_sha, "body_bytes": len(body), "policy_version": expected_policy_version,
         "policy_digest": expected_policy_digest, "profile": policy["profile"],
         "storage": "process_memory", "historical_pit": "unsupported",
         "structural_validation": parsed["structural_validation"], "financial_validation": parsed["financial_validation"],
-        "row_count": parsed["row_count"], "selected_symbols": list(SYMBOLS),
+        "row_count": parsed["row_count"], "selected_symbols": list(policy["scope"]["symbols"]),
         "attribution": deepcopy(policy["attribution"]), "limitations": list(policy["limitations"]),
     }
     return PriceCapture(body, canonical_bytes(receipt), parsed)

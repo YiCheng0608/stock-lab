@@ -9,7 +9,7 @@ from worker import tpex_price_capture as worker
 
 
 class MemoryAPIFixture:
-    def __init__(self, *, live=False, cutoff=worker.CUTOFF):
+    def __init__(self, *, live=False, cutoff=worker.CUTOFF, policy_version=None):
         from fastapi import FastAPI
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
@@ -19,11 +19,14 @@ class MemoryAPIFixture:
         from app.models import Instrument, MarketBar
         self.api, self.wrapper = api, tpex_price
         self.stack = ExitStack()
+        version = policy_version or (worker.price_policy(cutoff)["version"] if live else worker.POLICY_VERSION if cutoff == worker.CUTOFF else "m1-price-tpex-11370-2026-10-06.1")
+        selected = worker.policy_symbols(cutoff, policy_version=version)
+        self.catalogue_kind = "memory operational catalogue from root-verified selected identities; retained bars and unsupported anchors synthetic" if live else "synthetic contract catalogue"
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         Base.metadata.create_all(self.engine)
         with Session(self.engine) as db:
             for exchange, symbol, name, kind, market, category in (
-                ("TPEx", "3105", "穩懋", "stock", "TW", None), ("TPEx", "6488", "環球晶", "stock", "TW", None),
+                *(("TPEx", symbol, name, "stock", "TW", None) for symbol, name in selected.items()),
                 ("TWSE", "3105", "穩懋", "stock", "TW", None), ("TPEx", "9999", "unknown", "stock", "TW", None),
                 ("TPEx", "00620", "synthetic ETF", "etf", "TW", "domestic")):
                 item = Instrument(exchange=exchange, symbol=symbol, name=name, instrument_type=kind, market=market, etf_category=category)
@@ -40,10 +43,10 @@ class MemoryAPIFixture:
         if live:
             self.fixture = None
             self.store = tpex_price.TpexPriceStore()
-            version, pin = tpex_price.policy_pins(cutoff)
+            version, pin = tpex_price.policy_pins(cutoff, policy_version=version)
             env = {tpex_price.ENABLE_ENV: "1", tpex_price.POLICY_VERSION_ENV: version, tpex_price.POLICY_DIGEST_ENV: pin}
         else:
-            self.fixture = self.stack.enter_context(SyntheticPolicyScope(cutoff=cutoff))
+            self.fixture = self.stack.enter_context(SyntheticPolicyScope(cutoff=cutoff, policy_version=version))
             self.store = tpex_price.TpexPriceStore(loader=self.fixture.loader)
             env = self.fixture.env
         self.stack.enter_context(patch.object(tpex_price, "STORE", self.store))
@@ -61,6 +64,23 @@ class MemoryAPIFixture:
 
 
 class PriceAPITests(unittest.TestCase):
+    def test_third_stock_actual_router_cache_and_catalogue_scope_are_read_only(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                first = client.post("/api/stocks/TPEx/5347/prices/capture?as_of=2026-10-06").json()
+                self.assertEqual((first["status"], first["latest"]["open"], first["latest"]["close"]), ("available", 184.5, 191))
+                for symbol in ("3105", "5347", "6488"):
+                    detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-06").json()
+                    self.assertEqual(detail["overview"]["price_memory"]["provenance"], first["provenance"])
+                    self.assertEqual(client.post(f"/api/stocks/TPEx/{symbol}/prices/capture?as_of=2026-10-06").json()["capture_state"]["action"], "cached")
+                for suffix in ("", "?as_of=2026-10-02", "?as_of=2026-10-05"):
+                    self.assertIsNone(client.get("/api/stocks/TPEx/5347" + suffix).json()["overview"]["price_memory"]["latest"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_new_date_m1_exact_values_and_legacy_default_do_not_leak(self):
         from fastapi.testclient import TestClient
         fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF)

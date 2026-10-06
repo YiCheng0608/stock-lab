@@ -116,15 +116,15 @@ def receipt(fixture=None, include_raw=False):
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
               "guard": dict(COUNTS), "disk_artifacts": 0, "source_requests": list(SOURCE_REQUESTS),
               "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
-              "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff))[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff))[1],
-              "scope": "two ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT/save acceptance"}
+              "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[1],
+              "scope": "tuple-scoped ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT/save acceptance"}
     if fixture:
         raw = fixture.store.raw_capture
         result["db_preserved"] = fixture.before == fixture.snapshot()
         result["capture_state"] = fixture.store.read("TPEx", "3105", date.fromisoformat(ARGS.cutoff), instrument_type="stock", currency="TWD")["capture_state"]
         result["capture_receipt"] = raw.receipt if raw else None
         result["selected"] = raw.parsed["selected"] if raw else None
-        result["fixture_kind"] = "synthetic catalogue with live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "synthetic private test anchors; not official raw"
+        result["fixture_kind"] = fixture.catalogue_kind + ("; live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "; synthetic private test anchors; not official raw")
         if include_raw:
             result["raw_base64"] = base64.b64encode(raw.body).decode("ascii") if raw else None
             result["receipt_base64"] = base64.b64encode(raw.receipt_bytes).decode("ascii") if raw else None
@@ -147,9 +147,9 @@ def serve(preloaded_store=None):
     from starlette.responses import JSONResponse
     import uvicorn
     cutoff = date.fromisoformat(ARGS.cutoff)
-    if (ARGS.live_source_opt_in or preloaded_store is not None) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff):
+    if (ARGS.live_source_opt_in or preloaded_store is not None) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
-    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None, cutoff=cutoff)
+    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None, cutoff=cutoff, policy_version=ARGS.policy_version)
     if preloaded_store is not None:
         raw = preloaded_store.raw_capture
         if not isinstance(preloaded_store, tpex_price.TpexPriceStore) or raw is None or not preloaded_store._attempted or preloaded_store._request_count != 1 or preloaded_store._error:
@@ -180,8 +180,8 @@ def serve(preloaded_store=None):
         fixture.store._loader = loader
     @fixture.app.middleware("http")
     async def scope(request, call_next):
-        allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in {
-            "/api/stocks/TPEx/3105/prices/capture", "/api/stocks/TPEx/6488/prices/capture", "/api/focus/price-lots/capture"})
+        capture_paths = {f"/api/stocks/TPEx/{symbol}/prices/capture" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)}
+        allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in capture_paths | {"/api/focus/price-lots/capture"})
         if not allowed: return JSONResponse({"detail": "preview operation outside scope"}, status_code=405)
         return await call_next(request)
     @fixture.app.get("/__price_validation/receipt")

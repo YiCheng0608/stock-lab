@@ -1,6 +1,6 @@
 # UI 文案與資訊層級規格
 
-更新：2026-10-06。本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約；繁中文案、法人命名、數值格與官方分點入口已有有限 review，成交額 availability 的 UI 語意依本輪資料契約補充，不表示已新增成交額介面或所有案例均已驗收。能力狀態見 [ROADMAP](ROADMAP.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
+更新：2026-10-07。本文是日常頁的中文、資訊層級、單位、unknown 與 reason code 契約；繁中文案、法人命名、數值格與官方分點入口已有有限 review，成交額 availability 的 UI 語意依本輪資料契約補充，不表示已新增成交額介面或所有案例均已驗收。能力狀態見 [ROADMAP](ROADMAP.md)，策略合併判定見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
 
 ## 1. 共通原則
 
@@ -141,6 +141,14 @@
 套用摘要含五條件；同卡呈現張、精確成交額、實際O/C及本日振幅四理由，O/H/L/C仍元／股。振幅可從精確有理數half-up至三位小數、明示「約」，候選及門檻判定仍用原價精確比較；近似呈現不當exact值。完整兩股合格而無符合時才稱「此範圍的零候選」，缺O/H/L或衝突仍「候選數未知」；非法／duplicate不查詢且讀取／capture停用。返回保留日期、張／百分比尾零、方向與金額；收合來源與SHA換行保持。
 
 本輪10/06 actual API、文案修正及可信桌面／窄版五原條件往返已有限接受，core+1／dep+1／reliability0／stall0；初固定10/05 footer已修。先前三頁只有工具ACK、events／值／URL未改的失敗收據保留；續驗以trusted native click／submit／input核對，最後額外invalid fallback click仍未送達，不稱該case已通。四owned pages已關／tabs0、owned服務及compiler已停，清理與profile NO-RETRY殘留由開發入口管理。API／safe URL及驗收邊界只由[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)管理；§26～28保留舊consumer驗收，張／零股契約不改。
+
+#### M2-FOCUS-STOCK-SCOPE-1 上櫃三股（有限接受）
+
+現行新scope稱「指定來源日 · 上櫃普通股」，另外顯示動態支援數「已核3股」，明列3105穩懋／5347世界／6488環球晶與「依代碼排序」；資料日2026-10-06，不把10/07取得當即時行情。內部policy選新三股或explicit舊兩股immutable tuple，仍五個條件，不新增公開URL條件。未知／malformed scope安全拒用，不拼出未驗支援文字。
+
+三股全部原件合格後才filter或稱「此範圍的零候選」；任一required read不足仍「候選數未知」，不補0或縮回兩股。同卡仍四理由、精確張／整數元、O/C及「約」振幅；單位與§10.3換算保持，候選用exact比較。Source details呈現當次body／receipt／policy、selected原欄與samecutoff來源日，金融權威見[來源 §21](SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)。
+
+已有限接受桌面／窄版的trusted座標套用、5347研究／raw summary／返回五原字串；draft fill／select只作設定，不稱trusted typing。窄版真零／恢復及三股code順、展開原件不擴page已核；未跑native案例保留待驗。API／safe URL與操作邊界只由[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)管理；§26～29文案保留當時範圍。
 
 ### 10.2 個股詳情的第一屏
 

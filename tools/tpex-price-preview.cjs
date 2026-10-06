@@ -169,10 +169,10 @@ const estimateGraph = (value, seen = new Set()) => {
   seen.add(value)
   return 128 + Object.entries(value).reduce((total, [key, child]) => total + 32 + estimateGraph(key, seen) + estimateGraph(child, seen), 0)
 }
-function stockFixture(symbol = '3105', cutoff = '2026-10-05') {
+function stockFixture(symbol = '3105', cutoff = '2026-10-05', policyVersion) {
   const overview = cases.createUnitLotsFixture()
   overview.as_of = cutoff
-  overview.price_memory = memoryCases.createPriceMemoryFixture(symbol, cutoff)
+  overview.price_memory = memoryCases.createPriceMemoryFixture(symbol, cutoff, policyVersion)
   overview.price = { ...overview.price, status: 'unavailable', latest: null, bars: [], reasons: ['price_raw_evidence_missing'] }
   overview.institutional = { status: 'unavailable', horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: ['window_cutoff_not_supported'] }
   overview.institutional_daily = undefined
@@ -198,6 +198,25 @@ async function check() {
     const App = await appSSRModule()
     let appChecks = 0
     const verify = (value, message) => { appChecks++; assert(value, message) }
+    for (const [lots, move, amount, range, expected] of [['0', 'all', '0', '0', '3105,5347,6488'], ['20000.000', 'up', '0', '5.691', '5347'], ['20000.000', 'up', '0', '5.692', '']]) {
+      const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      client.setQueryData(['price-lot-focus', '2026-10-06', lots, move, amount, range], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-06&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}`] }, React.createElement(App.default))))
+      verify(data.items.map((item) => item.symbol).join() === expected && (html.match(/class="focus-card"/g) || []).length === data.count, 'three-stock focus native contract rendered')
+      verify(html.includes('已核 3 股') && (expected !== '' || html.includes('零候選')), 'complete three-stock true zero remains distinct')
+      if (expected.includes('5347')) verify(html.includes('5347 世界') && html.includes('34,637.793') && html.includes('6,615,109,776'), 'third exact lots and TWD original amount displayed')
+      if (expected.includes(',')) verify(html.indexOf('3105 穩懋</strong>') < html.indexOf('5347 世界</strong>') && html.indexOf('5347 世界</strong>') < html.indexOf('6488 環球晶</strong>'), 'three admitted stocks code order')
+      client.clear()
+    }
+    const thirdClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    thirdClient.setQueryData(['stock', 'TPEx', '5347', '2026-10-06'], stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION))
+    const thirdHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: thirdClient }, React.createElement(MemoryRouter,
+      { initialEntries: ['/stocks/TPEx/5347?as_of=2026-10-06&from=price-lots&focus_as_of=2026-10-06&focus_min_lots=20000.000&focus_day_move=up&focus_min_turnover=0&focus_min_range_pct=5.691'] }, React.createElement(App.default))))
+    verify(thirdHTML.includes('5347 世界') && thirdHTML.includes('34,637.793') && thirdHTML.includes('>191<'), 'third full stock page same-cutoff per-share quote')
+    verify(thirdHTML.includes('/?as_of=2026-10-06&amp;min_lots=20000.000&amp;day_move=up&amp;min_turnover=0&amp;min_range_pct=5.691#price-lot-focus-title'), 'third safe all-five return URL')
+    thirdClient.clear()
     for (const [minimum, dayMove, minTurnover] of [['20000', 'all', '0'], ['10000', 'all', '0'], ['50000', 'all', '0'],
       ['10000.000', 'up', '0'], ['10000.000', 'down', '0'], ['10000.000', 'flat', '0'],
       ['10000.000', 'all', '25000000000'], ['10000.000', 'all', '20000000000'], ['10000.000', 'down', '25000000000']]) {
@@ -286,10 +305,10 @@ async function check() {
       queryClient.clear()
     }
     assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
-    const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('10000'))), stock: Buffer.byteLength(JSON.stringify(stockFixture())) }
+    const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION))), stock: Buffer.byteLength(JSON.stringify(stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION))) }
     fixtureBytes.combined = fixtureBytes.focus + fixtureBytes.stock
     assert(fixtureBytes.combined <= 256 * 1024 && fixtureBytes.combined <= 8 * 1024 * 1024, 'bounded synthetic fixture serialization')
-    const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('10000'), stockFixture()])
+    const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION), stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)])
     assert(fixtureObjectEstimate <= 8 * 1024 * 1024, 'conservative fixture object graph estimate, not process RSS')
     console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: fixtureBytes,
       fixture_object_estimated_bytes: fixtureObjectEstimate,
@@ -304,6 +323,16 @@ async function check() {
   let appChecks = 0
   const verify = (value, message) => { appChecks++; assert(value, message) }
   const { formatStockTooltip, prepareStockChartData } = require(path.join(sourceRoot, 'stockChart.ts'))
+  const thirdStock = stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)
+  const thirdClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+  thirdClient.setQueryData(['stock', 'TPEx', '5347', '2026-10-06'], thirdStock)
+  const thirdHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: thirdClient }, React.createElement(MemoryRouter,
+    { initialEntries: ['/stocks/TPEx/5347?as_of=2026-10-06'] }, React.createElement(App.default))))
+  verify(thirdHTML.includes('34,637.793') && thirdHTML.includes('>191<') && thirdHTML.includes('金融數值僅核 3105、5347、6488'), 'third full App ordinary quote and scope')
+  const thirdBars = memoryRead.memoryPriceChartBars(thirdStock.overview.price_memory, thirdStock.instrument, '2026-10-06')
+  const thirdChart = prepareStockChartData(thirdBars)
+  verify(thirdChart.ma20.every((value) => value === null) && formatStockTooltip(thirdChart, { dataIndex: 0 }).includes('34,637.793'), 'third chart exact lots without invented history')
+  thirdClient.clear()
   for (const symbol of ['3105', '6488']) {
     const stock = stockFixture(symbol, '2026-10-06')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
@@ -312,7 +341,7 @@ async function check() {
       { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-06`] }, React.createElement(App.default))))
     verify(html.includes(symbol === '3105' ? '19,731.7' : '13,913.614') && html.includes(symbol === '3105' ? '>592<' : '>1,205<'), 'new immutable tuple produces same-date M1 exact lots and per-share close')
     verify(html.includes('10/6 官方單日行情') && html.includes('/stocks/TPEx/3105?as_of=2026-10-06') && html.includes('/stocks/TPEx/6488?as_of=2026-10-06'), 'new M1 labels and navigation follow explicit admitted cutoff')
-    verify(html.includes('data-date-2026-10-06') && html.includes(memoryRead.priceSourcePins('2026-10-06').bodySha), 'new original-row source card uses exact date/version/body pin')
+    verify(html.includes('data-date-2026-10-06') && html.includes(memoryRead.priceSourcePins('2026-10-06', stock.overview.price_memory.provenance.policy_version).bodySha), 'legacy original-row source card uses exact date/version/body pin')
     const bars = memoryRead.memoryPriceChartBars(stock.overview.price_memory, stock.instrument, '2026-10-06'), chart = prepareStockChartData(bars)
     verify(bars.length === 1 && bars[0].date === '2026-10-06' && bars[0].id === undefined && chart.ma20.every((value) => value === null), 'new date is one unsaved bar without synthetic ID or history')
     const tooltip = formatStockTooltip(chart, { dataIndex: 0 })
@@ -352,7 +381,7 @@ async function check() {
     reversedClient.clear()
   }
   assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
-  const m1Fixtures = [stockFixture('3105'), stockFixture('6488'), stockFixture('3105', '2026-10-06'), stockFixture('6488', '2026-10-06')]
+  const m1Fixtures = [stockFixture('3105'), stockFixture('6488'), stockFixture('3105', '2026-10-06'), stockFixture('6488', '2026-10-06'), thirdStock]
   const fixtureBytes = Buffer.byteLength(JSON.stringify(m1Fixtures)), fixtureObjectEstimate = estimateGraph(m1Fixtures)
   assert(fixtureBytes <= 256 * 1024 && fixtureObjectEstimate <= 8 * 1024 * 1024, 'bounded old/new M1 fixture graphs; estimate is not RSS')
   console.log(JSON.stringify({ passed: true, validator_checks: validatorChecks, affected_overview_ssr_checks: overviewChecks,
@@ -364,7 +393,7 @@ const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|6488)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|5347|6488)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
@@ -387,7 +416,7 @@ async function serve() {
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
-    .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：目錄及既有資料為合成樣本；官方行情由明示載入取得，來源可在個股詳情核對。</div><div id="root">')
+    .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方行情使用同程序已准入原件，來源可在個股詳情核對。</div><div id="root">')
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")

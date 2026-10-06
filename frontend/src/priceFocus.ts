@@ -2,7 +2,6 @@ import type { PriceFocusDayMove, PriceLotFocusData } from './types'
 import { memoryPriceCaptureReady, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 
 const maximum = '9223372036854775807'
-const symbols = ['3105', '6488']
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
 export const priceFocusDayMoveLabels = { all: '全部', up: '收高於開', down: '收低於開', flat: '平收' } as const
 const directionReasons = { up: 'close_above_open', down: 'close_below_open', flat: 'close_equal_open' } as const
@@ -112,29 +111,36 @@ export function priceFocusReturnPath(params: URLSearchParams): string | null {
   return `/?${new URLSearchParams({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}#price-lot-focus-title`
 }
 
-/** Check the two source reads even when no stock meets the threshold. */
+/** Check every admitted source read even when no stock meets the threshold. */
 export function validPriceLotFocus(value: unknown, asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0'): value is PriceLotFocusData {
   if (!value || typeof value !== 'object' || !validFocusDate(asOf)) return false
   const data = value as PriceLotFocusData, minimum = minLotsShares(minLots)
-  if (minimum === null || minTurnoverValue(minTurnover) === null || minRangeMilliPct(minRangePct) === null || !validPriceFocusDayMove(dayMove) || data.version !== 'price-lot-focus/m2-v4' || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
+  const symbols = data.supported_scope?.symbols
+  const newScope = same(symbols, ['3105', '5347', '6488'])
+  const pins = priceSourcePins(asOf, !newScope && asOf === '2026-10-06' ? 'm1-price-tpex-11370-2026-10-06.1' : undefined)
+  const expectedSymbols = pins?.symbols ?? ['3105', '6488']
+  if (!same(symbols, expectedSymbols) || minimum === null || minTurnoverValue(minTurnover) === null || minRangeMilliPct(minRangePct) === null || !validPriceFocusDayMove(dayMove)
+    || !(data.version === 'price-lot-focus/m2-v5' || (!newScope && data.version === 'price-lot-focus/m2-v4')) || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
     || !['available', 'unavailable'].includes(data.status) || data.historical_pit !== 'unsupported' || data.sort !== 'code_ascending'
     || typeof data.can_capture !== 'boolean' || !Array.isArray(data.items) || !Array.isArray(data.reads) || !Array.isArray(data.reasons)
     || data.reasons.some((reason) => typeof reason !== 'string')
-    || !same(data.supported_scope, { exchange: 'TPEx', symbols, cutoff: priceSourcePins(asOf) ? asOf : '2026-10-05', currency: 'TWD', asset_type: 'stock' })) return false
+    || !same(data.supported_scope, { exchange: 'TPEx', symbols: expectedSymbols, cutoff: pins ? asOf : '2026-10-05', currency: 'TWD', asset_type: 'stock' })) return false
   if (data.status === 'unavailable') {
-    if (data.count !== null || data.items.length !== 0 || data.reasons.length === 0 || ![0, 2].includes(data.reads.length)) return false
-    return !data.can_capture || (data.reads.length === 2 && data.reads.every((read, index) => read?.instrument?.symbol === symbols[index]
-      && priceMemoryInstrumentSupported(read.instrument) && memoryPriceCaptureReady(read.price_memory ?? undefined, 'TPEx', symbols[index], asOf)))
+    if (data.count !== null || data.items.length !== 0 || data.reasons.length === 0 || ![0, expectedSymbols.length].includes(data.reads.length)) return false
+    return !data.can_capture || (data.reads.length === expectedSymbols.length && data.reads.every((read, index) => read?.instrument?.symbol === expectedSymbols[index]
+      && priceMemoryInstrumentSupported(read.instrument) && memoryPriceCaptureReady(read.price_memory ?? undefined, 'TPEx', expectedSymbols[index], asOf)
+      && same(read.price_memory?.supported_scope.symbols, expectedSymbols)))
   }
-  if (!priceSourcePins(asOf) || data.can_capture || data.reasons.length || data.reads.length !== 2 || !Number.isInteger(data.count) || data.count !== data.items.length) return false
-  for (let index = 0; index < 2; index++) {
+  if (!pins || data.can_capture || data.reasons.length || data.reads.length !== expectedSymbols.length || !Number.isInteger(data.count) || data.count !== data.items.length) return false
+  for (let index = 0; index < expectedSymbols.length; index++) {
     const read = data.reads[index]
-    if (!read?.instrument || read.instrument.symbol !== symbols[index] || !validStockPriceMemoryRead(read.price_memory ?? undefined, read.instrument, asOf)
+    if (!read?.instrument || read.instrument.symbol !== expectedSymbols[index] || !validStockPriceMemoryRead(read.price_memory ?? undefined, read.instrument, asOf)
+      || read.price_memory!.provenance!.policy_version !== pins.policyVersion
       || exactDayMove(read.price_memory!.latest!.source_fields['開盤'], read.price_memory!.latest!.source_fields['收盤']) === null
       || exactDayRange(read.price_memory!.latest!.source_fields['開盤'], read.price_memory!.latest!.source_fields['最高'], read.price_memory!.latest!.source_fields['最低']) === null
       || minTurnoverValue(read.price_memory!.latest!.turnover_exact) === null || read.price_memory!.latest!.turnover_status !== 'available') return false
   }
-  if (!same(data.reads[0].price_memory!.provenance, data.reads[1].price_memory!.provenance)) return false
+  if (data.reads.slice(1).some((read) => !same(data.reads[0].price_memory!.provenance, read.price_memory!.provenance))) return false
   const expected = data.reads.filter((read) => {
     const bar = read.price_memory!.latest!, move = exactDayMove(bar.source_fields['開盤'], bar.source_fields['收盤'])
     return sharesMeetMinimum(bar.volume_exact, minimum) && sharesMeetMinimum(bar.turnover_exact!, minTurnover) && (dayMove === 'all' || move === dayMove)

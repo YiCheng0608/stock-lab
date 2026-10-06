@@ -1,5 +1,5 @@
 import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
-import { memoryPriceCaptureReady, PRICE_HEADERS, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
+import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
@@ -7,7 +7,7 @@ const REASONS: Record<string, string> = {
   price_memory_capture_missing: '尚未載入本次官方單日行情。',
   price_cutoff_not_supported: '此來源只支持 2026/10/5、2026/10/6；請明示套用其中一日。',
   price_capture_not_enabled: '伺服器尚未明示啟用此官方行情載入。',
-  price_instrument_not_supported: '此來源僅核准兩檔上櫃普通股。',
+  price_instrument_not_supported: '此政策只支援已核准的上櫃普通股。',
   price_external_policy_pins_mismatch: '此官方行情的授權版本設定待核實。',
   price_capture_busy: '官方行情正在載入。',
   price_body_version_mismatch: '來源原件版本已變更，未採用數值。',
@@ -220,13 +220,14 @@ function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy
   data: StockOverviewData['price_memory']; instrument?: Instrument; cutoff: string | null; explicitCutoff?: string
   onCapture?: () => void; busy?: boolean; failure?: string
 }) {
-  if (!data || !instrument || instrument.exchange !== 'TPEx' || !['3105', '6488'].includes(instrument.symbol)) return null
+  if (!data || !instrument || instrument.exchange !== 'TPEx' || !Object.prototype.hasOwnProperty.call(PRICE_SYMBOL_NAMES, instrument.symbol)) return null
   const known = (!explicitCutoff || explicitCutoff === cutoff) && validStockPriceMemoryRead(data, instrument, explicitCutoff || cutoff)
   const ready = priceMemoryInstrumentSupported(instrument) && priceSourcePins(explicitCutoff ?? null) !== null && memoryPriceCaptureReady(data, instrument.exchange, instrument.symbol, cutoff)
   const bar = known ? data.latest : null
+  const scope = known || ready ? data.supported_scope : null
   return <section className="panel overview-price-memory" aria-labelledby="price-memory-title">
     <h3 id="price-memory-title">櫃買官方單日行情</h3>
-    <p className="small-note">支持 2026/10/5、2026/10/6 的上櫃 3105、6488；請先明示套用截止日期，再載入行情。每次服務只取得一份指定日期原件，可讀取兩股，未提供歷史窗口。</p>
+    <p className="small-note">{scope ? <>本次政策支持的上櫃普通股：{scope.symbols.join('、')}，來源日 {scope.cutoff}。</> : <>支持範圍待核實。</>}請先明示套用截止日期，再載入行情。每次服務只取得一份指定日期原件，未提供歷史窗口。</p>
     <button type="button" className="secondary-button" onClick={onCapture} disabled={!ready || busy || !onCapture}>{busy ? '載入官方行情中…' : `載入 ${explicitCutoff ?? '指定日期'} 官方行情`}</button>
     {known ? <>
       <div className="stock-quote-grid"><div><span>收盤（元／股）</span><strong>{number(bar!.close)}</strong></div><div><span>成交量（張）</span><strong>{formatTableVolume(bar!.volume, bar!.source, bar!.volume_exact)}</strong></div><div><span>成交額（新臺幣元）</span><strong>{bar!.turnover_exact === null ? '未提供' : formatCanonicalShares(bar!.turnover_exact, 1, true)}</strong></div></div>
@@ -234,7 +235,7 @@ function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy
       <p className="small-note">資料日 {formatResearchDate(bar!.date)} · <a href={bar!.provenance.endpoint} target="_blank" rel="noreferrer">櫃買中心 · 上櫃股票行情（11370）</a>；本次暫存，重啟後需重新載入。擷取時間不是發布時間，歷史當時可得未支援。</p>
       <p className="small-note">{data.attribution!.owners.join('、')} · {data.attribution!.year} · {data.attribution!.release_version} · <a href={data.attribution!.license_url} target="_blank" rel="noreferrer">政府資料開放授權條款 OGL 1.0</a>。</p>
       <details className="technical-details"><summary>查看官方價格原列、來源版本與 SHA</summary>
-        <div className="overview-provenance">單一原件：全 {data.provenance!.row_count} 列已核結構；金融數值僅核 3105、6488。CSV 資料列序 {bar!.row_ordinal}；記憶體 ID {data.provenance!.memory_capture_id}。</div>
+        <div className="overview-provenance">單一原件：全 {data.provenance!.row_count} 列已核結構；金融數值僅核 {data.provenance!.selected_symbols.join('、')}。CSV 資料列序 {bar!.row_ordinal}；記憶體 ID {data.provenance!.memory_capture_id}。</div>
         <div className="table-wrap"><table><caption>官方 CSV 原字串：價格為元／股，成交股數為股，成交金額為新臺幣元；空白成交額表示未提供。</caption><thead><tr><th>欄位</th><th>來源原值</th></tr></thead><tbody>{PRICE_HEADERS.map((field) => <tr key={field}><th>{field}</th><td>{bar!.source_fields[field]}</td></tr>)}</tbody></table></div>
         <div className="overview-provenance">原件 SHA-256 {data.provenance!.body_sha256}</div><div className="overview-provenance">擷取紀錄 SHA-256 {data.provenance!.receipt_sha256}</div>
         <div className="overview-provenance">政策 {data.provenance!.policy_version} · {data.provenance!.policy_digest}</div>

@@ -1,18 +1,20 @@
 import type { PriceFocusDayMove, PriceLotFocusData } from './types'
 import { createPriceMemoryFixture, priceFixtureInstrument } from './stockPriceMemoryRead.test'
+import { PRICE_SCOPE_POLICY_VERSION, priceSourcePins } from './stockPriceMemoryRead'
 import { approximateRangePct, exactDayMove, exactDayRange, exactLotsText, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDetailPath, priceFocusReturnPath, rangeMeetsMinimum, sharesMeetMinimum, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 
 /** Reconstructed client contract only; never an actual source capture. */
-export function createPriceFocusFixture(minLots = '20000', dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0', cutoff = '2026-10-05'): PriceLotFocusData {
-  const reads = ['3105', '6488'].map((symbol) => ({ instrument: priceFixtureInstrument(symbol), price_memory: createPriceMemoryFixture(symbol, cutoff) }))
+export function createPriceFocusFixture(minLots = '20000', dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0', cutoff = '2026-10-05', policyVersion?: string): PriceLotFocusData {
+  const pins = priceSourcePins(cutoff, policyVersion ?? (cutoff === '2026-10-06' ? 'm1-price-tpex-11370-2026-10-06.1' : undefined))!
+  const reads = pins.symbols.map((symbol) => ({ instrument: priceFixtureInstrument(symbol), price_memory: createPriceMemoryFixture(symbol, cutoff, pins.policyVersion) }))
   // Independent fixed-data expectations; fixtures never establish source admission.
-  const rangeLimits = cutoff === '2026-10-05' ? [1300 / 307, 300 / 61] : [700 / 123, 460 / 47]
-  const scope = reads.filter((read, index) => {
-    const bar = read.price_memory.latest!, move = cutoff === '2026-10-05' ? index === 0 ? 'up' : 'down' : index === 0 ? 'down' : 'up'
+  const rangeLimits: Record<string, number> = cutoff === '2026-10-05' ? { '3105': 1300 / 307, '6488': 300 / 61 } : { '3105': 700 / 123, '5347': 700 / 123, '6488': 460 / 47 }
+  const scope = reads.filter((read) => {
+    const bar = read.price_memory.latest!, move = cutoff === '2026-10-05' ? read.instrument.symbol === '3105' ? 'up' : 'down' : read.instrument.symbol === '3105' ? 'down' : 'up'
     return sharesMeetMinimum(bar.volume_exact, minLotsShares(minLots)!) && sharesMeetMinimum(bar.turnover_exact!, minTurnover)
-      && (dayMove === 'all' || move === dayMove) && Number(minRangePct) <= rangeLimits[index]
+      && (dayMove === 'all' || move === dayMove) && Number(minRangePct) <= rangeLimits[read.instrument.symbol]
   })
-  return { version: 'price-lot-focus/m2-v4', status: 'available', as_of: cutoff, min_lots: minLots, min_shares: minLotsShares(minLots)!, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct,
+  return { version: 'price-lot-focus/m2-v5', status: 'available', as_of: cutoff, min_lots: minLots, min_shares: minLotsShares(minLots)!, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct,
     count: scope.length, items: scope.map((read) => {
       const bar = read.price_memory.latest!, move = exactDayMove(bar.source_fields['開盤'], bar.source_fields['收盤'])!
       return { exchange: 'TPEx', symbol: read.instrument.symbol, name: read.instrument.name, volume_exact: bar.volume_exact, volume_lots: exactLotsText(bar.volume_exact),
@@ -21,7 +23,7 @@ export function createPriceFocusFixture(minLots = '20000', dayMove: PriceFocusDa
         reasons: ['volume_at_least_min_lots', 'turnover_at_least_min_turnover', move === 'up' ? 'close_above_open' : 'close_below_open', 'range_at_least_min_range_pct'], source_date: cutoff, source_version: 'tpex-11370/' + cutoff,
         detail_url: priceFocusDetailPath(read.instrument.symbol, cutoff, minLots, dayMove, minTurnover, minRangePct) }
     }), reads,
-    supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], cutoff, currency: 'TWD', asset_type: 'stock' },
+    supported_scope: { exchange: 'TPEx', symbols: pins.symbols, cutoff, currency: 'TWD', asset_type: 'stock' },
     can_capture: false, reasons: [], historical_pit: 'unsupported', sort: 'code_ascending' }
 }
 
@@ -40,6 +42,35 @@ export function createUnloadedFocusFixture(): PriceLotFocusData {
 export function runPriceFocusTests(): number {
   let checks = 0
   const check = (value: boolean, message: string) => { checks++; if (!value) throw new Error(message) }
+  for (const [lots, move, amount, range, expected] of [
+    ['0', 'all', '0', '0', '3105,5347,6488'], ['20000.000', 'up', '0', '5.691', '5347'], ['20000.000', 'up', '0', '5.692', ''],
+    ['34637.793', 'up', '0', '0', '5347'], ['34637.794', 'up', '0', '0', ''],
+    ['20000', 'up', '6615109776', '0', '5347'], ['20000', 'up', '6615109777', '0', ''], ['35000', 'all', '0', '0', ''],
+  ] as const) {
+    const data = createPriceFocusFixture(lots, move, amount, range, '2026-10-06', PRICE_SCOPE_POLICY_VERSION)
+    check(validPriceLotFocus(data, '2026-10-06', lots, move, amount, range) && data.items.map((item) => item.symbol).join() === expected, 'independent three-stock boundaries ' + lots + '/' + range + '/' + amount)
+    for (const item of data.items) check(priceFocusReturnPath(new URLSearchParams(item.detail_url.split('?')[1])) === `/?as_of=2026-10-06&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}#price-lot-focus-title`, 'third safe all-five raw strings returned')
+  }
+  for (const mutate of [
+    (x: PriceLotFocusData) => { x.supported_scope.symbols.push('9999') },
+    (x: PriceLotFocusData) => { x.reads.splice(1, 1) },
+    (x: PriceLotFocusData) => { x.reads[1].instrument.name = 'wrong' },
+    (x: PriceLotFocusData) => { x.reads[1].price_memory!.latest!.source_fields['成交金額'] = '' },
+    (x: PriceLotFocusData) => { x.reads[1].price_memory!.latest!.source_fields['最高'] = '0' },
+    (x: PriceLotFocusData) => { x.reads[1].price_memory!.provenance!.receipt_sha256 = 'b'.repeat(64) },
+    (x: PriceLotFocusData) => { x.reads[2].price_memory!.provenance!.receipt_sha256 = 'b'.repeat(64) },
+    (x: PriceLotFocusData) => { x.reads[1].price_memory!.provenance!.policy_version = 'unknown' },
+    (x: PriceLotFocusData) => { x.reads.reverse() },
+  ]) {
+    const empty = createPriceFocusFixture('35000', 'all', '0', '0', '2026-10-06', PRICE_SCOPE_POLICY_VERSION); mutate(empty)
+    check(!validPriceLotFocus(empty, '2026-10-06', '35000'), 'filtered-out third or final read still gates true zero')
+  }
+  const legacyFocus = createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', 'm1-price-tpex-11370-2026-10-06.1')
+  legacyFocus.version = 'price-lot-focus/m2-v4'
+  check(validPriceLotFocus(legacyFocus, '2026-10-06', '0') && legacyFocus.reads.length === 2, 'explicit legacy same-date two-stock tuple and m2-v4 receipt accepted')
+  const falseLegacyScope = createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', PRICE_SCOPE_POLICY_VERSION)
+  falseLegacyScope.version = 'price-lot-focus/m2-v4'
+  check(!validPriceLotFocus(falseLegacyScope, '2026-10-06', '0'), 'legacy consumer cannot claim the new three-stock scope')
   for (const [raw, expected] of [['0', '0'], ['0.001', '1'], ['20000.000', '20000000'], ['9007199254740.993', '9007199254740993'], ['9223372036854775.807', '9223372036854775807']]) {
     check(minLotsShares(raw) === expected, 'exact threshold ' + raw)
   }

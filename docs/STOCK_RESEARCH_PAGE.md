@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-06。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-07。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -971,3 +971,43 @@ Draft經「套用條件」submit後才改URL；query／capture key含全部五�
 桌面range10是真0、0是兩股，5.691兩股／5.692只6488已真正操作核對；native inserttext6.0001產生trusted beforeinput／input，三個price buttons disabled、cards0／focus query0。10/02配0.000仍missing／unknown，非真0；duplicate range URL亦cards0／read及capture disabled／focus query0。合法stock path帶foreign next只暴露本地fallback `/stocks`，無focus-return／foreign link；最後額外fallback native click僅ACK、無DOM event，未完成該追加case，不稱拒收返回click已通。有效五條件safe return早已真正native通過；上述href／零query觀測及既有helper／API拒收證據支持安全契約。
 
 新source／tuple→Store→真router／可信具名操作解除old pins依賴並交付有限核心，root計數core+1／dep+1／reliability0／stall0；B1有限核心驗收已接受。沿原root／三child完成文件review與版本封存，不new round／BOOT、追加quote GET未核定，feature freeze／index／Git／master merge／next coordinator均pending。四owned pages皆closed／tabs0；兩owned RAM服務與compiler已停止、ports無listener，held原件memory於Python process absence釋放；清理後驗0與Ctrl+C rawexit1分報。Edge profile超cap後停止且兩清理請求被automatic review拒絕，殘留NO-RETRY／exact path及服務範圍只詳見[開發入口](development-baseline/README.md#m2-focus-day-range-1-新日期與五條件返回的記憶體驗證入口)。行情／receipt僅memory，profile metadata是額外artifact；未驗保存／跨程序、full suite／production build、全市場／PIT／MA／trend／研究／Signal／Plan或完整M1／M2／M3。
+
+## 30. M2-FOCUS-STOCK-SCOPE-1：三股關注與同截止往返
+
+**TPEx普通股支援2→3、actual計算／API及可信桌面／窄版操作已有限接受。** 新增5347世界，與3105穩懋／6488環球晶在同一2026-10-06來源日使用；consumer `price-lot-focus/m2-v5`、projection `stock-price-memory/m2-stock-scope-v1`。新身分、政策、原件、金融值與兩次觀測只由[來源 §21](SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)管理；§25～29保留兩股當時驗收與舊tuple。單日scope擴大不解除M1歷史／日曆／strategy／time／execution gate。
+
+### 30.1 三股完整gate與既有五條件
+
+沿§29的精確張／canonical股、O/C方向、int64 TWD成交額、原百分比≤3小數／scaled int64及OHL整數交叉比較。五條件仍 `as_of/min_lots/day_move/min_turnover/min_range_pct`；沒有第六個URL條件，內部policy選擇不讓使用者混拼scope。Default10/06採新三股tuple；explicit舊10/06 m1 policy及10/05舊兩股tuple保留原immutable pins與原scope，不把第三股灌入舊policy。
+
+Filter前必須取得**所選policy的全部普通股reads**，逐股核code／name／TW-TPEx／stock／TWD／空ETF分類、同cutoff／tuple／provenance及全部required金融原字串。三股scope有一股缺、壞、衝突便unavailable／count=null／items=[]，不能跳過壞股或縮回兩股。All與最後零候選仍經完整gate；available/count0才是此範圍真零。Raw source詳情可回指新body／receipt／policy與各股18個原欄。
+
+候選仍每股一張卡、code升序、四理由固定順序且同股去重；前端獨立重驗reads／候選／reason／欄位及URL，不僅驗卡片。Unknown或malformed scope於StockOverview安全拒用，包含六個malformed／unknown SSR案例，避免未驗scope被join或呈現；本次必要防錯屬同一核心批次，不另計可靠性增量。
+
+### 30.2 Actual API與精確邊界
+
+Root live router核九組actual案例，每次都先驗三股原件及同provenance；全零門檻／all得到依code排序三股。新第三股的具名邊界為：
+
+| 原條件或邊界 | 已接受結果 |
+| --- | --- |
+| 20000.000張／up／成交額0／振幅5.691 | 只有5347。 |
+| 上述振幅改5.692 | available0。 |
+| 5347成交張數等額門檻／增加0.001張 | 5347／available0。 |
+| 5347成交額等額門檻／增加1元 | 5347／available0。 |
+| 0張／all／成交額0／振幅6.000，再改10 | 6488／available0。 |
+
+等額原值見[來源 §21.2](SOURCE_REGISTRY.md#212-本輪觀測原件與三股金融值)。All3 stock reads、四理由、五原字串、samecutoff detail、cached focus POST及三股stock POST均核通；Store1／runner新增GET0、preloaded=true、DB preserved／全部guards0。Default10/02與舊10/05不洩第三股新原件的API隔離已核；未將這些API證據升格為本輪未跑的native10/02、6.0001或額外invalid fallback案例。
+
+### 30.3 桌面／窄版可信往返
+
+本輪唯一owned Orca page；桌面1277×900、窄版390×844，以真正座標mouse move／down／up得到 `isTrusted=true` 的click／submit、5347連結、原件summary展開與返回，實際URL／卡片均改變。Draft fill／select的 `isTrusted=false` 只屬條件準備，不稱trusted typing。
+
+桌面與窄版均以原五字串 `2026-10-06 / 20000.000 / up / 6615109776 / 5.691` 套用，唯一5347→同cutoff個股→展開該股18原欄及body／receipt／policy→返回，五字串含尾零完整保留。Safe local URL與拒收契約仍沿§29.2；不增加新的返回條件。
+
+窄版另以5.692取得真零、5.691恢復一股，再以 `0.000/all/0/0.000` 得三股code順。開啟raw details時桌面scrollWidth1262≤1277，窄版375≤390；來源SHA及原欄換行無page水平溢出。這些是已接受的具名操作，不含未執行的其他native案例。
+
+### 30.4 完成與驗收界線
+
+Root接受B1 coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。唯一page已exact closed、tabs0；本輪API／preview／compiler已停、listeners none、第二原件memory釋放，測試及原exit／清理收據見[開發入口](development-baseline/README.md#m2-focus-stock-scope-1-三股範圍的記憶體驗證入口)／原task。舊day-range NO-RETRY profile及其他歷史資源不納入本輪清理。
+
+本輪source17與功能驗收已接受；DOC review→freeze→七涉及scope索引／qualified coverage→exact local commit→另准local master merge尚待完成。未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／20／21歷史close／完整日曆／MA／trend／研究／Signal／Plan或完整M1／M2／M3。既有有效證據沿用，不因換角色重跑。

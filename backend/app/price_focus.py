@@ -1,4 +1,4 @@
-"""Two admitted TPEx stocks filtered by exact lots, turnover, O/C and range."""
+"""Tuple-scoped admitted TPEx stocks filtered by exact lots, turnover, O/C and range."""
 from __future__ import annotations
 
 from datetime import date
@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from . import tpex_price
 from worker.tpex_price_capture import CUTOFF, APPROVED_CUTOFFS, SYMBOLS
 
-VERSION = "price-lot-focus/m2-v4"
+VERSION = "price-lot-focus/m2-v5"
 MAX_SHARES = "9223372036854775807"
 DAY_MOVES = ("all", "up", "down", "flat")
 DAY_MOVE_REASONS = {"up": "close_above_open", "down": "close_below_open", "flat": "close_equal_open"}
@@ -106,10 +106,10 @@ def detail_path(symbol: str, as_of: str, min_lots: str, day_move: str = "all", m
     return f"/stocks/TPEx/{symbol}?{query}"
 
 
-def _identity(item: Any) -> bool:
+def _identity(item: Any, symbols: dict[str, str]) -> bool:
     return (getattr(item, "market", None) == "TW" and getattr(item, "exchange", None) == "TPEx"
-            and SYMBOLS.get(getattr(item, "symbol", None)) == getattr(item, "name", None)
-            and getattr(item, "symbol", None) in SYMBOLS and getattr(item, "instrument_type", None) == "stock"
+            and symbols.get(getattr(item, "symbol", None)) == getattr(item, "name", None)
+            and getattr(item, "symbol", None) in symbols and getattr(item, "instrument_type", None) == "stock"
             and not getattr(item, "etf_category", None) and getattr(item, "currency", "TWD") == "TWD")
 
 
@@ -134,20 +134,21 @@ def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, day_mo
     parse_day_move(day_move)
     parse_min_turnover(min_turnover)
     minimum_range = parse_min_range_pct(min_range_pct)
+    symbols = tpex_price.supported_symbols(as_of)
     result = {"version": VERSION, "status": "unavailable", "as_of": as_of.isoformat() if type(as_of) is date else None,
               "min_lots": min_lots, "min_shares": minimum, "day_move": day_move, "min_turnover": min_turnover, "min_range_pct": min_range_pct, "count": None, "items": [], "reads": [],
-              "supported_scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "cutoff": as_of.isoformat() if type(as_of) is date and as_of in APPROVED_CUTOFFS else CUTOFF.isoformat(), "currency": "TWD", "asset_type": "stock"},
+              "supported_scope": {"exchange": "TPEx", "symbols": list(symbols), "cutoff": as_of.isoformat() if type(as_of) is date and as_of in APPROVED_CUTOFFS else CUTOFF.isoformat(), "currency": "TWD", "asset_type": "stock"},
               "can_capture": False, "reasons": [], "historical_pit": "unsupported", "sort": "code_ascending"}
     if type(as_of) is not date or as_of not in APPROVED_CUTOFFS:
         result["reasons"] = ["price_cutoff_not_supported"]
         return result
     by_symbol = {getattr(item, "symbol", None): item for item in instruments}
-    if len(instruments) != 2 or set(by_symbol) != set(SYMBOLS) or not all(_identity(item) for item in instruments):
+    if len(instruments) != len(symbols) or set(by_symbol) != set(symbols) or not all(_identity(item, symbols) for item in instruments):
         result["reasons"] = ["price_focus_catalogue_not_supported"]
         return result
     if capture:
-        tpex_price.capture_tpex_price(by_symbol["3105"], as_of)
-    for symbol in sorted(SYMBOLS):
+        tpex_price.capture_tpex_price(by_symbol[sorted(symbols)[0]], as_of)
+    for symbol in sorted(symbols):
         instrument = by_symbol[symbol]
         try:
             memory = tpex_price.build_tpex_price(instrument, as_of)
@@ -161,7 +162,7 @@ def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, day_mo
         if not result["reasons"]:
             result["reasons"] = ["price_focus_read_invalid"]
         return result
-    if memories[0]["provenance"] != memories[1]["provenance"]:
+    if any(memory["provenance"] != memories[0]["provenance"] for memory in memories[1:]):
         result["reasons"] = ["price_focus_source_mismatch"]
         return result
     directions = [exact_day_move(memory["latest"]) for memory in memories]

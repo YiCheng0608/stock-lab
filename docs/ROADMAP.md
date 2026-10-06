@@ -1,6 +1,6 @@
 # 開發路線與目前能力
 
-更新：2026-10-06。優先順序與產品範圍由本文件管理；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色、停滯紀錄與接手狀態見[協作紀錄](TASK_COORDINATION.md)。
+更新：2026-10-07。優先順序與產品範圍由本文件管理；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色、停滯紀錄與接手狀態見[協作紀錄](TASK_COORDINATION.md)。
 
 ## 目前進度（含產品有限核對與 R1-A2 磁碟驗收）
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | R0：研究基準與時間 | ATR 純核心／獨立保存、有限 migration／startup、artifact／比較／replay／capture、Bridge B 本地 metadata、獨立 selected-bar verifier、B4b／B5b caller-input 純核心。 | 真實檔案／snapshot verifier 整合與待跑回歸、完整歷史原件／來源／availability、ATR worker、產品保存與時間接線、官方 tick／費稅／日曆、PIT、新舊同 snapshot 比較及選版。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資收集與回補；指定來源准入及 consumer、TAIEX 身分與成交額狀態、指定 synthetic 磁碟／精確整數案例、產業期間與停復牌／公司行動局部修正；W8兩股27日CSV／完整有界交易日及八截止96 net窗口計算。 | 範圍外真實逐市場／逐欄 coverage、多日法人與完整交易日、時間／修訂、完整事件與公司行動、正式 DB 升級／分類修復、其他股數精度、當沖／借券／分點／必要基本面。 |
-| R2：候選與交易計畫 | v1候選、行動摘要、持倉、個股頁；W8有限法人窗口／具名操作、M1單日價量、M2官方事件及兩股精確張數／O-C方向／成交額往返；本輪10/06振幅四理由與五條件actual API及可信桌面／窄版往返已有限接受；既有庫存精確保存／讀回隔離。 | 範圍外M1法人／歷史研究、M2其他來源與分類品質、完整ActionsPage、新Plan保存及觸發／成交／退出、部位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1候選、行動摘要、持倉、個股頁；W8有限法人窗口／具名操作、M1單日價量、M2官方事件及精確張／O-C／成交額／振幅四理由；本輪普通TPEx支援2→3、三股actual API及可信桌面／窄版五條件往返已有限接受；既有庫存精確保存／讀回隔離。 | 範圍外M1法人／歷史研究、M2其他來源與分類品質、完整ActionsPage、新Plan保存及觸發／成交／退出、部位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、既有追蹤與回測、研究規格。 | 預先定義目標／採用門檻、樣本外／校準、walk-forward、前瞻樣本及模型採用；沒有經驗收 AI 預測或勝率。 |
 
 W8已有限接受TPEx3105／6488、2026-09-21／09-22／09-23／09-24／09-29／09-30／10-01／10-02八截止5／20日法人來源／缺日、96 net actual API及16組具名可信native與owned服務清理，見[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。範圍外仍unavailable，突破／回踩固定保守；補資料或Signal不自動啟用trend／研究條件，完整M1未完成。
@@ -27,7 +27,7 @@ M2-FOCUS-TURNOVER-1已有限接受同兩股／10/05的精確TWD成交額條件�
 
 M2-FOCUS-DAY-RANGE-1已有限接受新10/06來源准入、actual API及可信桌面／窄版操作，consumer `price-lot-focus/m2-v4`：本日精確振幅配既有張／O-C／成交額，四理由、五原條件同截止safe往返；6.000只6488、10真零、精確邊界及缺資料≠0已核。core+1／dep+1／reliability0／stall0；四owned pages已關、兩RAM服務及compiler已停止，held原件memory釋放；最後額外invalid fallback click未送達，不稱該case已通。詳見[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)／[來源 §20.7](SOURCE_REGISTRY.md#207-m2-focus-day-range-1新日期來源准入與本日振幅-consumer)。
 
-W8及UNIT／M1-PRICE-1、M2-FOCUS-LOTS-1、M2-FOCUS-DAY-MOVE-1、M2-FOCUS-TURNOVER-1已正式本地合併；本輪starting／current HEAD `b485ca2376fbc034ce5a79362bce381296f95452`。本輪文件review／freeze／index／commit／master merge pending；角色與最終版本收據見[協作紀錄](TASK_COORDINATION.md)，不以舊pending快照覆蓋Git／原task最終收據。
+W8及UNIT／M1-PRICE-1、LOTS／DAY-MOVE／TURNOVER／DAY-RANGE已正式本地合併，本輪starting／current HEAD `2cbd4e1842f7dc1929469a245287e6dbdd019861`。M2-FOCUS-STOCK-SCOPE-1 source17與有限核心驗收已接受，DOC review／freeze／索引／commit／master merge pending；角色及最終版本收據見[協作紀錄](TASK_COORDINATION.md)。
 
 籌碼三區：三大法人已有資料；主力進出與券商分點的匯入、統計、排行、歷史及更新待做。免費官方人工查詢入口不是已接資料集，定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
@@ -41,17 +41,17 @@ W8及UNIT／M1-PRICE-1、M2-FOCUS-LOTS-1、M2-FOCUS-DAY-MOVE-1、M2-FOCUS-TURNOV
 | M2 今日關注串個股 | 查看可追溯關注理由，同股去重後進入 M1，再返回原條件。 | 每項理由有已驗收來源、時間與版本；零候選和來源不足可區分。分類未核實不作可信排名，不為湊名單補候選。 |
 | M3 條件計畫與追蹤 | 保存並讀回版本化計畫，操作觸發、到期、未成交、模擬成交與退出。 | 逐子能力滿足來源、時間、版本、官方 tick／費稅、合法時段及必要執行 gate；磁碟保存／跨程序讀回驗收。未知風險預算不給張數，觸價不當成交，legacy tracking 不代新計畫生命週期。B4／B5／B7 與預設切換 gate 保留。 |
 
-**本輪M2-FOCUS-DAY-RANGE-1新來源依賴解除，兩股振幅與五條件可信往返已有限接受。** 只支援3105／6488及10/05、10/06兩個明確immutable source tuples；本日`100×(H−L)/O`及非負原百分比≤3小數／scaled int64、四理由／code順、同cutoff研究與全部五條件返回依[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)。Old10/05 4／4.5／5%是歷史fixture，不當本輪actual。新10/06 6%只有6488、10%真零已核；不稱前日漲跌／trend／ATR／排名／Signal／Plan。
+**本輪M2-FOCUS-STOCK-SCOPE-1已有限接受普通TPEx支援2→3。** 3105穩懋／5347世界／6488環球晶在2026-10-06來源日具名計算／API及可信桌面／窄版往返；consumer `price-lot-focus/m2-v5`，四理由、code順、同cutoff五原條件返回，core+1／selected identity-source scope dependency+1／reliability0／stall0。新三股policy／body與explicit舊兩股immutable tuples分開；金融／來源由[§21](SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)管理，操作由[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)管理。完整M1／M2／M3仍未完成。
 
-本輪沿原root／三child完成文件review與版本封存，不new round／BOOT或追加quote GET；feature freeze／index／Git／master merge／next coordinator pending。四owned pages已關、兩RAM服務及compiler停止／memory釋放，清理後驗exit0；profile清理被automatic review拒絕、exact scope NO-RETRY，詳見[開發入口](development-baseline/README.md#m2-focus-day-range-1-新日期與五條件返回的記憶體驗證入口)。後續選題仍先評估M1真20／21個股歷史close／完整日曆及strategy inputs／time／execution的新正面取得路徑，無path不重複metadata空轉。無可交付M1時，可考慮M2普通股支援2→3的有界來源／個股往返，先核新增instrument／catalogue／source policy／date／版本與真金融列；具名標的與scope待核，不繼續疊相似filters。Fresh來源日期／body變更先新准入，不自動改pins、借已釋放memory或用unknown草稿代Plan；依[AGENTS](../AGENTS.md#核心選題與進度判定)核完成與跨輪計數。
+本輪唯一page／RAM服務／compiler已核清、raw memory釋放，既有day-range NO-RETRY profile與歷史資源排除清理；詳見[開發入口](development-baseline/README.md#m2-focus-stock-scope-1-三股範圍的記憶體驗證入口)。下一優先M1新正面20／21普通股close／完整calendar與strategy／time／execution。新增metadata／executor線索為[dataset17257](https://data.gov.tw/dataset/17257)與[TPEx Swagger](https://www.tpex.org.tw/openapi/swagger.json)的exact GET `/tpex_daily_market_value`，server `https://www.tpex.org.tw/openapi/v1`、parameters=[]；尚未取endpoint body，日期範圍未知，不計依賴解除。下一新root啟動gate後可先正面核exact source／用途，再有界inspect一份fresh body；不自行加日期參數／legacy POST。無完整窗口則選其他可獨立交付、必要gates正面的核心，不重複空metadata審查；未有下一symbol／policy／scope准入。 新標的或日期／body／scope仍先獨立准入，不機械換pins或用unknown草稿代Plan；進度與跨輪計數依[AGENTS](../AGENTS.md#核心選題與進度判定)。
 
 M1-W9已封存，只有bootstrap／接手、沒有implementation batch；原「新增9/18第九cutoff／108 net」只是未實作歷史候選，不機械續作。歷史W8真8/25／27日曆／96 net仍按已驗範圍有效。下一題與跨輪計數依[AGENTS](../AGENTS.md#核心選題與進度判定)，不因文件／索引／Git歸零。
 
 | 核心路徑 | 目前缺口 | 下一步與驗收 |
 | --- | --- | --- |
 | M1 資料證據 | W8已解除真8/25 daily／完整27日曆／新policy及pins依賴；範圍外／PIT／修訂／TWSE用途仍缺。 | 新範圍另驗真來源與新版本，缺列不推休市；已驗來源見[§19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)。 |
-| M1 計算與接線 | W8法人、兩股單日價量及本輪10/06價量consumer API已有限核；20／21真個股歷史close／日曆、strategy inputs／time／execution仍缺。 | 有新正面取得／執行路徑才接歷史研究，單日與指數不代個股歷史；無路徑先選必要gate齊的獨立核心。見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
-| M2 關注理由 | 張門檻／O-C／成交額具名往返已接受；本輪10/06振幅四理由與五條件API／可信桌面窄版往返已有限接受、core+1／dep+1，分類品質及更多標的仍缺。 | 原root／roles完成文件review及feature freeze／索引／Git；後續可交付普通股範圍另核身分、來源／版本及同cutoff操作，非新增相似filter；權威契約見[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)。 |
+| M1 計算與接線 | W8法人與有限單日價量已核；本輪三股scope不補20／21真個股close／日曆、strategy inputs／time／execution。 | dataset17257＋Swagger `/tpex_daily_market_value` 是新exact executor線索，endpoint body未取、日期範圍未知；先正面准入再有界驗body，不計依賴解除。見[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。 |
+| M2 關注理由 | 三股單日張／O-C／成交額／振幅四理由、five-condition API與可信往返有限接受；分類品質及範圍外仍缺。 | 原root／roles完成DOC review、freeze／索引／Git；新範圍另核身分／來源／版本／同cutoff操作。[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)為現行契約。 |
 | M3 計畫操作 | caller-input 純核心已驗，實際來源／時間與新 Plan 產品保存未接。 | 具名列最小操作、真實資料及其必要 gate；滿足後接保存、API、UI 與追蹤。未滿足項列解除條件，不以 unknown 顯示代替必要條件。 |
 
 R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線才交付獨立核心操作。R0-B2 不是全域第一主題；其 snapshot／body／receipt／registry pins tuple 未齊，保持待驗，不重複搜尋或建 fixture 冒稱接入。[Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果) 管理精確缺口。
@@ -75,7 +75,8 @@ R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線
 | M2-FOCUS-LOTS-1 | TPEx3105／6488、明選10/05與精確成交張門檻；真候選／零候選／來源不足分清，同cutoff個股往返及原字串保留。 | [個股頁 §26](STOCK_RESEARCH_PAGE.md#26-m2-focus-lots-1精確成交張數關注與同截止往返有限接受) |
 | M2-FOCUS-DAY-MOVE-1 | 同兩股／10/05、精確張門檻＋全部／收高／收低／平收，actual API與具名桌面／窄版往返保留日期／尾零／方向。 | [個股頁 §27](STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受) |
 | M2-FOCUS-TURNOVER-1 | 同兩股／10/05、精確張門檻＋O/C＋TWD整數元成交額三理由，actual API與具名桌面／窄版同cutoff往返保留日期／張尾零／方向／金額四條件。 | [個股頁 §28](STOCK_RESEARCH_PAGE.md#28-m2-focus-turnover-1精確成交金額與四條件往返有限接受) |
-| M2-FOCUS-DAY-RANGE-1 | 新10/06來源／兩股精確振幅四理由與五條件actual API／可信往返已有限接受；core+1／dep+1／reliability0／stall0，feature freeze及版本封存pending。 | [個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返) |
+| M2-FOCUS-DAY-RANGE-1 | 新10/06兩股精確振幅四理由／五條件可信往返有限接受，core+1／dep+1／reliability0／stall0；已正式合併 `2cbd4e1`，舊profile NO-RETRY保留。 | [個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返) |
+| M2-FOCUS-STOCK-SCOPE-1 | 新5347普通股身分／scope與來源版本准入，三股計算／API及可信桌面／窄版samecutoff五原條件往返有限接受；core+1／dep+1／reliability0／stall0，owned清理已核，DOC review／freeze／版本封存pending。 | [來源 §21](SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)、[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返) |
 | M1-P4a | 有界來源審查接受；TWSE 法人來源與 exact 用途權利未准入，未取得原件或增加功能。 | [來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口) |
 | R1-A2／M1 成交量 | 指定成交額 migration、selected 拒收、legacy 精確整數磁碟案例及 synthetic HTTP／JavaScript／個股呈現；不證真實全市場 coverage。 | [資料來源](DATA_SOURCES.md)、[個股頁 §14](STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現) |
 | M3-P1～P5 | 既有庫存精確股數、int64 保存／指定磁碟重開、成本／停損／風險輸入與讀回、估值／持倉判定一致。 | [UI 文案](UI_COPY_SPEC.md)、[R0 §8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受) |

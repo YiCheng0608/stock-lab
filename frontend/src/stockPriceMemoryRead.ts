@@ -5,13 +5,16 @@ export const PRICE_POLICY_VERSION = 'm1-price-tpex-11370-2026-10-05.1'
 export const PRICE_POLICY_DIGEST = 'sha256:452b9b8cfa3d050b79ea1a85b3e4ed643c40cf3d17882b8cb809ffdb7143deea'
 export const PRICE_BODY_SHA = 'bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d0772989243550ca36149'
 export const PRICE_APPROVED_DATES = ['2026-10-05', '2026-10-06'] as const
-export function priceSourcePins(cutoff: string | null) {
-  if (cutoff === '2026-10-05') return { policyVersion: PRICE_POLICY_VERSION, policyDigest: PRICE_POLICY_DIGEST, bodySha: PRICE_BODY_SHA, workerVersion: 'tpex-price-capture/m1-v1' }
-  if (cutoff === '2026-10-06') return { policyVersion: 'm1-price-tpex-11370-2026-10-06.1', policyDigest: 'sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288', bodySha: 'aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a', workerVersion: 'tpex-price-capture/m1-v2' }
+export const PRICE_SCOPE_POLICY_VERSION = 'm2-stock-scope-tpex-11370-2026-10-06.1'
+export const PRICE_SYMBOL_NAMES: Record<string, string> = { '3105': '穩懋', '5347': '世界', '6488': '環球晶' }
+export function priceSourcePins(cutoff: string | null, policyVersion?: string) {
+  if (cutoff === '2026-10-05' && (!policyVersion || policyVersion === PRICE_POLICY_VERSION)) return { policyVersion: PRICE_POLICY_VERSION, policyDigest: PRICE_POLICY_DIGEST, bodySha: PRICE_BODY_SHA, workerVersion: 'tpex-price-capture/m1-v1', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
+  if (cutoff === '2026-10-06' && policyVersion === 'm1-price-tpex-11370-2026-10-06.1') return { policyVersion, policyDigest: 'sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288', bodySha: 'aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a', workerVersion: 'tpex-price-capture/m1-v2', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
+  if (cutoff === '2026-10-06' && (!policyVersion || policyVersion === PRICE_SCOPE_POLICY_VERSION)) return { policyVersion: PRICE_SCOPE_POLICY_VERSION, policyDigest: 'sha256:6e662d5fc91957b586becdf41f351d5abf2c41cec09909de468e62e76cda4a78', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v1', memoryVersion: 'stock-price-memory/m2-stock-scope-v1', symbols: ['3105', '5347', '6488'] }
   return null
 }
 export const PRICE_ENDPOINT = 'https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data'
-const names: Record<string, string> = { '3105': '穩懋', '6488': '環球晶' }
+const names = PRICE_SYMBOL_NAMES
 const limitations = ['single_day_only', 'historical_pit_unsupported', 'no_history_calendar_ma20_signal_or_plan', 'capture_time_is_not_publication_time']
 const maxInt64 = '9223372036854775807'
 const maxSafe = '9007199254740991'
@@ -40,7 +43,9 @@ export function priceMemoryInstrumentSupported(instrument: Instrument): boolean 
 }
 
 export function validPriceMemoryEnvelope(value: StockPriceMemoryData | undefined, exchange: string, symbol: string, cutoff: string | null): value is StockPriceMemoryData {
-  if (!value || value.version !== PRICE_MEMORY_VERSION || value.origin !== 'process_memory' || value.exchange !== exchange || value.symbol !== symbol
+  if (!value) return false
+  const pins = priceSourcePins(cutoff, value.provenance?.policy_version ?? (cutoff === '2026-10-06' && value.version === PRICE_MEMORY_VERSION ? 'm1-price-tpex-11370-2026-10-06.1' : undefined))
+  if (value.version !== (pins?.memoryVersion ?? PRICE_MEMORY_VERSION) || value.origin !== 'process_memory' || value.exchange !== exchange || value.symbol !== symbol
     || value.as_of !== cutoff || !['available', 'unavailable'].includes(value.status)
     || value.unit !== 'shares' || value.quantity_encoding !== 'canonical_integer_string' || value.price_unit !== 'TWD_per_share'
     || value.historical_pit !== 'unsupported' || value.published_time !== 'unknown' || value.first_available_time !== 'unknown' || value.revision_time !== 'unknown'
@@ -48,7 +53,7 @@ export function validPriceMemoryEnvelope(value: StockPriceMemoryData | undefined
   const scope = value.supported_scope
   const state = value.capture_state
   return scope != null && scope.exchange === 'TPEx' && scope.asset_type === 'stock' && scope.currency === 'TWD'
-    && scope.cutoff === (priceSourcePins(cutoff) ? cutoff : '2026-10-05') && same(scope.symbols, ['3105', '6488'])
+    && scope.cutoff === (pins ? cutoff : '2026-10-05') && same(scope.symbols, pins?.symbols ?? ['3105', '6488'])
     && state != null && [state.enabled, state.attempted, state.busy, state.can_capture, state.cache_present].every((item) => typeof item === 'boolean')
     && Number.isInteger(state.request_count) && state.request_count >= 0 && state.request_count <= 1 && typeof state.action === 'string'
     && (value.status !== 'unavailable' || (value.latest === null && value.bars.length === 0 && value.provenance === null && value.attribution === null))
@@ -56,15 +61,16 @@ export function validPriceMemoryEnvelope(value: StockPriceMemoryData | undefined
 
 export function memoryPriceCaptureReady(value: StockPriceMemoryData | undefined, exchange: string, symbol: string, cutoff: string | null): boolean {
   return validPriceMemoryEnvelope(value, exchange, symbol, cutoff) && exchange === 'TPEx' && Object.prototype.hasOwnProperty.call(names, symbol) && priceSourcePins(cutoff) !== null
+    && value.supported_scope.symbols.includes(symbol)
     && value.status === 'unavailable' && value.reasons.length === 1 && value.reasons[0] === 'price_memory_capture_missing'
     && value.capture_state.enabled && value.capture_state.can_capture && !value.capture_state.attempted
     && !value.capture_state.busy && !value.capture_state.cache_present && value.capture_state.request_count === 0
 }
 
 export function validStockPriceMemoryRead(value: StockPriceMemoryData | undefined, instrument: Instrument, cutoff: string | null): value is StockPriceMemoryData & { latest: StockPriceMemoryBar } {
-  const pins = priceSourcePins(cutoff)
+  const pins = priceSourcePins(cutoff, value?.provenance?.policy_version)
   if (!validPriceMemoryEnvelope(value, instrument.exchange, instrument.symbol, cutoff) || value.status !== 'available'
-    || !priceMemoryInstrumentSupported(instrument) || !pins
+    || !priceMemoryInstrumentSupported(instrument) || !pins || !pins.symbols.includes(instrument.symbol)
     || value.reasons.length || value.bars.length !== 1 || !value.latest || !same(value.latest, value.bars[0])
     || !value.capture_state.enabled || !value.capture_state.attempted || value.capture_state.busy
     || value.capture_state.can_capture || !value.capture_state.cache_present || value.capture_state.request_count !== 1
@@ -79,8 +85,8 @@ export function validStockPriceMemoryRead(value: StockPriceMemoryData | undefine
     || p.storage !== 'process_memory' || p.raw_payload_id !== null || p.ingestion_run_id !== null
     || p.memory_capture_id !== 'tpex-11370:' + cutoff + ':' + pins.bodySha || p.verification !== 'pinned_raw_csv_selected_values'
     || p.structural_validation !== 'all_rows_header_width_date_unique_date_code' || p.financial_validation !== 'selected_symbols_only'
-    || !same(p.selected_symbols, ['3105', '6488']) || p.historical_pit !== 'unsupported'
-    || !Number.isInteger(p.row_count) || p.row_count < 2 || !Number.isInteger(p.body_bytes) || p.body_bytes < 1 || p.body_bytes > 3145728
+    || !same(p.selected_symbols, pins.symbols) || p.historical_pit !== 'unsupported'
+    || !Number.isInteger(p.row_count) || p.row_count < pins.symbols.length || !Number.isInteger(p.body_bytes) || p.body_bytes < 1 || p.body_bytes > 3145728
     || !utc(p.request_started_at) || !utc(p.captured_at) || Date.parse(p.captured_at) < Date.parse(p.request_started_at)
     || Date.parse(p.captured_at) - Date.parse(p.request_started_at) > 30000 || !attributionValid(p.attribution, cutoff)
     || !same(p.attribution, value.attribution) || !same(p.limitations, limitations)) return false
