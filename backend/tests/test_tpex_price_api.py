@@ -64,6 +64,27 @@ class MemoryAPIFixture:
 
 
 class PriceAPITests(unittest.TestCase):
+    def test_six_stock_router_cache_and_sixth_cutoff_do_not_mutate_catalogue(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.SIXTH_SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                self.assertEqual(client.post("/api/stocks/TPEx/8069/prices/capture?as_of=2026-10-06").json()["status"], "available")
+                for symbol in ("3105", "3293", "5274", "5347", "6488", "8069"):
+                    detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-06").json()
+                    memory = detail["overview"]["price_memory"]
+                    self.assertEqual(memory["version"], "stock-price-memory/m2-stock-scope-v4")
+                    self.assertEqual(memory["provenance"]["selected_symbols"], ["3105", "3293", "5274", "5347", "6488", "8069"])
+                    self.assertIsNone(memory["latest"]["id"])
+                    self.assertEqual(client.post(f"/api/stocks/TPEx/{symbol}/prices/capture?as_of=2026-10-06").json()["capture_state"]["action"], "cached")
+                    if symbol == "8069":
+                        self.assertEqual(tuple(memory["latest"][key] for key in ("open", "high", "low", "close", "volume_exact", "turnover_exact")), (147, 151.5, 145, 149, "10796741", "1607943663"))
+                for suffix in ("", "?as_of=2026-10-02", "?as_of=2026-10-05"):
+                    self.assertIsNone(client.get("/api/stocks/TPEx/8069" + suffix).json()["overview"]["price_memory"]["latest"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_third_stock_actual_router_cache_and_catalogue_scope_are_read_only(self):
         from fastapi.testclient import TestClient
         fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.SCOPE_POLICY_VERSION)

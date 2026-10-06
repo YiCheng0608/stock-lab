@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | R0：研究基準與時間 | ATR 純核心／獨立保存、有限 migration／startup、artifact／比較／replay／capture、Bridge B 本地 metadata、獨立 selected-bar verifier、B4b／B5b caller-input 純核心。 | 真實檔案／snapshot verifier 整合與待跑回歸、完整歷史原件／來源／availability、ATR worker、產品保存與時間接線、官方 tick／費稅／日曆、PIT、新舊同 snapshot 比較及選版。 |
 | R1：可靠資料與事件 | 官方行情／法人／融資收集與回補；指定來源准入及 consumer、TAIEX 身分與成交額狀態、指定 synthetic 磁碟／精確整數案例、產業期間與停復牌／公司行動局部修正；W8兩股27日CSV／完整有界交易日及八截止96 net窗口計算。 | 範圍外真實逐市場／逐欄 coverage、多日法人與完整交易日、時間／修訂、完整事件與公司行動、正式 DB 升級／分類修復、其他股數精度、當沖／借券／分點／必要基本面。 |
-| R2：候選與交易計畫 | v1候選、行動摘要、持倉、個股頁；W8有限法人窗口／具名操作、M1單日價量、M2官方事件及精確張／O-C／成交額／振幅四理由；普通TPEx支援4→5、五股actual API及可信桌面／窄版五條件往返已有限接受；既有庫存精確保存／讀回隔離。 | 範圍外M1法人／歷史研究、M2其他來源與分類品質、完整ActionsPage、新Plan保存及觸發／成交／退出、部位／題材曝險及整合驗收。 |
+| R2：候選與交易計畫 | v1候選、行動摘要、持倉、個股頁；W8有限法人窗口／具名操作、M1單日價量、M2官方事件及精確張／O-C／成交額／振幅四理由；普通TPEx支援5→6、六股actual API及可信桌面／窄版五條件往返已有限接受；既有庫存精確保存／讀回隔離。 | 範圍外M1法人／歷史研究、M2其他來源與分類品質、完整ActionsPage、新Plan保存及觸發／成交／退出、部位／題材曝險及整合驗收。 |
 | R3：AI 與有效性 | 固定規則、既有追蹤與回測、研究規格。 | 預先定義目標／採用門檻、樣本外／校準、walk-forward、前瞻樣本及模型採用；沒有經驗收 AI 預測或勝率。 |
 
 W8已有限接受TPEx3105／6488、2026-09-21／09-22／09-23／09-24／09-29／09-30／10-01／10-02八截止5／20日法人來源／缺日、96 net actual API及16組具名可信native與owned服務清理，見[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。範圍外仍unavailable，突破／回踩固定保守；補資料或Signal不自動啟用trend／研究條件，完整M1未完成。
@@ -27,7 +27,7 @@ M2-FOCUS-TURNOVER-1已有限接受同兩股／10/05的精確TWD成交額條件�
 
 M2-FOCUS-DAY-RANGE-1已有限接受新10/06來源准入、actual API及可信桌面／窄版操作，consumer `price-lot-focus/m2-v4`：本日精確振幅配既有張／O-C／成交額，四理由、五原條件同截止safe往返；6.000只6488、10真零、精確邊界及缺資料≠0已核。core+1／dep+1／reliability0／stall0；四owned pages已關、兩RAM服務及compiler已停止，held原件memory釋放；最後額外invalid fallback click未送達，不稱該case已通。詳見[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)／[來源 §20.7](SOURCE_REGISTRY.md#207-m2-focus-day-range-1新日期來源准入與本日振幅-consumer)。
 
-W8／UNIT／M1-PRICE-1、LOTS／DAY-MOVE／TURNOVER／DAY-RANGE及M2-FOCUS-STOCK-SCOPE-1／2已正式本地合併；前輪source13＋DOC8 freeze21／qualified七分區索引／exact commit與正常ff-only master merge已接受。此輪starting／current／master HEAD `899fa62260e495075cc756ff31869a57df6b3895`；本輪五股已有限功能接受，完整freeze／版本封存仍pending，最終收據留[協作紀錄](TASK_COORDINATION.md)與原task，不為回填hash重刷。
+W8／UNIT／M1-PRICE-1、LOTS／DAY-MOVE／TURNOVER／DAY-RANGE及STOCK-SCOPE-1／2／3已正式本地合併。前輪`.3` source12＋DOC8／freeze20、qualified七分區索引／exact commit與正常ff-only master merge `fb94570845edf78887dd61ea34fd6d9cb846f49f` 已接受；此為本輪starting／current／master HEAD。現行`.4`六股source13／net25368B與root功能驗收已完成，DOC review／freeze／qualified affected index／exact local commit／另准merge／新統籌gate仍pending；最終hash留原task，不為回填hash重刷或另commit。
 
 籌碼三區：三大法人已有資料；主力進出與券商分點的匯入、統計、排行、歷史及更新待做。免費官方人工查詢入口不是已接資料集，定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
@@ -43,19 +43,23 @@ W8／UNIT／M1-PRICE-1、LOTS／DAY-MOVE／TURNOVER／DAY-RANGE及M2-FOCUS-STOCK
 
 **前輪M2-FOCUS-STOCK-SCOPE-1已有限接受普通TPEx支援2→3。** 3105穩懋／5347世界／6488環球晶在2026-10-06來源日具名計算／API及可信桌面／窄版往返；consumer `price-lot-focus/m2-v5`，四理由、code順、同cutoff五原條件返回，core+1／selected identity-source scope dependency+1／reliability0／stall0。新三股policy／body與explicit舊兩股immutable tuples分開；金融／來源由[§21](SOURCE_REGISTRY.md#21-m2-focus-stock-scope-1三股來源准入)管理，操作由[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)管理。完整M1／M2／M3仍未完成。
 
-M1-CLOSE-RESOURCE-1單日觀測與前輪M2-FOCUS-STOCK-SCOPE-2四股 `.2`／m2-v6依原範圍已接受並合併 `899fa62260e495075cc756ff31869a57df6b3895`，來源與操作留[§22～23](SOURCE_REGISTRY.md#22-m1-close-resource-1有界單日-json-觀測)／[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)。本輪M1-HISTORY-QUERY-1-METADATA-1找到官方stock-pricing／tradingStock月查詢NEW線索，但exact M wire與歷史自動用途仍未准入，歷史金融body GET0，core0／dep0、不是implementation batch，stall0保持；詳見[來源 §24](SOURCE_REGISTRY.md#24-m1-history-query-1官方月查詢線索與准入缺口)。
+M1-CLOSE-RESOURCE-1單日觀測與前輪M2-FOCUS-STOCK-SCOPE-2四股 `.2`／m2-v6依原範圍已接受並合併 `899fa62260e495075cc756ff31869a57df6b3895`，來源與操作留[§22～23](SOURCE_REGISTRY.md#22-m1-close-resource-1有界單日-json-觀測)／[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)。前輪M1-HISTORY-QUERY-1-METADATA-1找到官方stock-pricing／tradingStock月查詢NEW線索，但exact M wire與歷史自動用途仍未准入，歷史金融body GET0，core0／dep0、不是implementation batch，stall0保持；詳見[來源 §24](SOURCE_REGISTRY.md#24-m1-history-query-1官方月查詢線索與准入缺口)。
 
-統籌因此改選獨立正面核心M2-FOCUS-STOCK-SCOPE-3-B1，普通TPEx支援4→5新增3293鈊象，五股同10/06四理由／五條件actual API及可信desktop1277×924／窄版390×844往返已有限接受。新 `.3`／m2-v7與explicit舊tuples分開；coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。金融CSV總GET3及final non-preloaded workerGET1／失敗界線由[來源 §25](SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)管理，API10案／精確門檻／3293 raw返回／真零恢復見[個股頁 §32](STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)。Owned page／服務／compiler／observer已核清、held raw釋放；DOC review／完整freeze／索引／commit及另准merge仍pending，完整M1／M2／M3未完成。
+前輪M2-FOCUS-STOCK-SCOPE-3-B1已合併：普通TPEx支援4→5新增3293鈊象，五股10/06四理由／五條件actual API10案及可信desktop1277×924／窄版390×844往返已有限接受。`.3`／m2-v7與explicit舊tuples分開；coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。當輪金融CSV GET3與final non-preloaded worker1、原失敗界線由[來源 §25](SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)管理，操作見[個股頁 §32](STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)。Owned page／服務／compiler／observer清理與source12＋DOC8／freeze20／qualified索引／正常ff-only merge已接受。
 
-下一優先 `M1-HISTORY-MONTH-WIRE-1`：沿本輪actual NEW官方stock-pricing／tradingStock月查詢線索，先核exact月wire／primary source-use／時間版本／instrument／execution；另在原task核memory／一次HTTP／timeout／redirect0／retry0／disk0，gate滿足才作歷史金融GET。Legacy dailyQuotes仍不執行，不猜POST／日期、不重做17257空審查；只有取得20／21真普通股close＋完整calendar與strategy／time／execution才計依賴解除。缺口仍缺時選其他獨立正面核心；可能有限普通股scope from5須fresh symbol／catalogue／body／policy／financial／date准入，未准入下一exact symbol／date／policy，不建空轉輪或用ranking／trend／ATR代替核心。
+本輪`M1-HISTORY-MONTH-WIRE-1-DISCOVERY-1`以primary HTML／JS支持Gregorian YYYY/MM/01的script wire推論與export GET／JSON POST方法，沒有server／historical finance／automated-use准入。Core0／dep0、非implementation batch、stall0保持；資格與來源版本見[來源 §26](SOURCE_REGISTRY.md#26-m1-history-month-wire-1月參數推論與用途缺口)，不作全域不可能主張。
+
+本輪獨立正面核心`M2-FOCUS-STOCK-SCOPE-4-B1`已有限接受：普通TPEx支援5→6新增8069元太，六股10/06的四理由／五原條件actual API10案與可信desktop1277×924／窄版390×844往返、精確inclusive邊界及真零／恢復已核。新`.4`／m2-v8與explicit舊tuples分開；coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0。金融CSV本輪GET3，final修改後native firstload觸發NEW worker1／Store1／preloadedfalse；金融與原件由[來源 §27](SOURCE_REGISTRY.md#27-m2-focus-stock-scope-4六股來源准入)、具名操作由[個股頁 §33](STOCK_RESEARCH_PAGE.md#33-m2-focus-stock-scope-4六股關注與同截止往返)管理。Owned清理已接受；完整M1／M2／M3未完成。
+
+下一優先 `M1-HISTORY-OPEN-DATA-LINK-1`：找NEW primary metadata對exact歷史月資源的政府開放平台linkage／automated-use eligibility；月wire僅script推論，server與finance未執行。Exact next resource／query／symbol／date／policy未准入，不以同一失敗extractor重GET11371、不猜params／POST／legacy collector或重複parameterless17257。原task先核bounded memory／timeout／redirect0／retry0／disk0，再金融觀測；只有actual20／21普通股close＋complete calendar＋strategy／time／execution才解除M1。無新可執行path時依ROADMAP重選獨立正面核心；有限scope beyond6另需fresh identity／catalogue／name／ISIN／CFI／body／policy gates，不建空轉輪或以ranking／ATR／Signal／Plan代核心。
 
 M1-W9已封存，只有bootstrap／接手、沒有implementation batch；原「新增9/18第九cutoff／108 net」只是未實作歷史候選，不機械續作。歷史W8真8/25／27日曆／96 net仍按已驗範圍有效。下一題與跨輪計數依[AGENTS](../AGENTS.md#核心選題與進度判定)，不因文件／索引／Git歸零。
 
 | 核心路徑 | 目前缺口 | 下一步與驗收 |
 | --- | --- | --- |
 | M1 資料證據 | W8已解除真8/25 daily／完整27日曆／新policy及pins依賴；範圍外／PIT／修訂／TWSE用途仍缺。 | 新範圍另驗真來源與新版本，缺列不推休市；已驗來源見[§19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)。 |
-| M1 計算與接線 | W8法人與五股有限單日價量已核；20／21真普通股close／完整calendar、strategy inputs／membership／time／execution仍缺。 | `M1-HISTORY-MONTH-WIRE-1`核NEW官方stock-pricing／tradingStock的exact M wire及歷史自動用途；正面source／時間版本／instrument／execution與有界HTTP條件滿足才歷史GET，不猜legacy POST或重複17257單日body。 |
-| M2 關注理由 | 五股張／O-C／成交額／振幅四理由、同cutoff五原條件actual API及可信往返已有限接受；分類品質及範圍外仍缺。 | 本輪core+1／selected scope dependency+1／reliability0／stall0，見[個股頁 §32](STOCK_RESEARCH_PAGE.md#32-m2-focus-stock-scope-3五股關注與同截止往返)；完成DOC／freeze／索引／Git再交接，下一symbol／date／policy未准入。 |
+| M1 計算與接線 | W8法人與六股有限單日價量已核；20／21真普通股close／complete calendar、strategy inputs／membership／time／execution仍缺。 | `M1-HISTORY-OPEN-DATA-LINK-1`核NEW primary歷史月資源open-platform linkage／automated-use；exact source／時間版本／instrument／execution與有界條件正面後才金融觀測，月wire script推論不代server／用途准入，見[來源 §26](SOURCE_REGISTRY.md#26-m1-history-month-wire-1月參數推論與用途缺口)。 |
+| M2 關注理由 | 六股張／O-C／成交額／振幅四理由、同cutoff五原條件actual API及可信往返已有限接受；分類品質及範圍外仍缺。 | 本B1 coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0，見[個股頁 §33](STOCK_RESEARCH_PAGE.md#33-m2-focus-stock-scope-4六股關注與同截止往返)；完成DOC／freeze／索引／Git再交接，下一resource／symbol／date／policy未准入。 |
 | M3 計畫操作 | caller-input 純核心已驗，實際來源／時間與新 Plan 產品保存未接。 | 具名列最小操作、真實資料及其必要 gate；滿足後接保存、API、UI 與追蹤。未滿足項列解除條件，不以 unknown 顯示代替必要條件。 |
 
 R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線才交付獨立核心操作。R0-B2 不是全域第一主題；其 snapshot／body／receipt／registry pins tuple 未齊，保持待驗，不重複搜尋或建 fixture 冒稱接入。[Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果) 管理精確缺口。

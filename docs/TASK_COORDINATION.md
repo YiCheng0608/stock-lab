@@ -1,3 +1,52 @@
+## 目前：M2-FOCUS-STOCK-SCOPE-4 六股核心已有限接受；待 DOC review／freeze
+
+2026-10-07 Asia/Taipei。Main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；共同cwd／worktree／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-month-wire-20261007`，branch `roadmap-m1-history-month-wire-20261007`；starting／current／master HEAD `fb94570845edf78887dd61ea34fd6d9cb846f49f`。前輪五股source12＋DOC8／freeze20、qualified七scope索引／exact commit與正常ff-only local master merge已接受。下方完整99323B歷史byte全留，舊pending由原task／Git final receipt覆蓋，舊roster不再派工。
+
+### 本輪四角色與已接受可見gate
+
+| 角色 | Actual ID／配置 | 現行白名單／接手 |
+| --- | --- | --- |
+| 統籌 | `01a112dd-fba2-75e1-91e6-bdfb73184fe5`；gpt-6.1-sol／ultra；/root | parent=null／sessionId=self／source=vscode；已接受來源、計算、actual API／可信操作，核DOC後freeze。 |
+| 程式 | `01a112df-a905-7f12-b64d-6536b453c8eb`（Franklin）；gpt-6.1-sol／xhigh | 明確接受；source13／net25368B已root接受，交付停寫，未新增實作批次。 |
+| 文件 | `01a112df-e317-7b52-8a00-a02b6bab65e8`（Lovelace）；gpt-6.1-sol／xhigh | 明確接受；只SOURCE_REGISTRY／STOCK_RESEARCH_PAGE／UI_COPY_SPEC／DATA_SOURCES／development-baseline/README／ROADMAP／ROADMAP_EXECUTION／本檔八既有DOC；aggregate net≤32768B含BOOT5377B，strict UTF-8／LF／noBOM、原suffix全留，交付停寫待review。 |
+| 索引與 Git | `01a112e0-1a04-7332-9bf5-fd9add4c4eec`（Dalton）；gpt-6-luna／medium | 明確接受；source=[]，本輪freeze前不refresh／stage／commit／merge；前任exact terminal closure已接受。 |
+
+三child由本root native spawn_agent／fork_turns=none新建；RPC核actual model／reasoning、parentThreadId／sessionId／source.subAgent.thread_spawn.parent_thread_id同root、depth1／forkedFromId=null。四者actual local environments cwd／nested runtimeWorkspaceRoots、Git branch／HEAD同根；runtime CLI0.160.0與visible pinned `C:/Program Files/nodejs/codex.cmd` 0.160.1分列。沿原三角色follow-up，未relaunch／reuse前輪角色。
+
+Own terminal `term_6373198e-8b60-4104-b5d8-58294c2cfa7e`，incarnation `f464f242-9207-4f88-acdb-b20dd56cebbc`、PTY `@@316aac09`、pane1、connected／writable／nonorphaned；Orca list／show、own screen、actual root／session_meta／initial turn `01a112de-0275-7c82-80aa-1ec2a83986b1`已連結。Common helper SINGLE invocation rawexit0／startup=verified／surface=visible／task=SENT及initial收到由前任原task確認；無timeout／recovery／relaunch／resend，inherited ENV `term_53e...` stale排除。
+
+BOOT5377B與visible gate已root獨立接受。四者actual idle後唯一`/subagents` request `28ac4015-22c9-48f1-9957-d736716b5636`／fresh screen `98c5866b-c36b-46c4-a426-3408536f02db`核Main/default、同四exact ID／no subagents running；一次Esc `05aa1a8f-9f60-4fa2-a10f-a5a058ee82f5`後fresh screen `f5c5a687-d759-484a-a2ba-249f2cc3f969`核Ask Codex／Main/default／Sol ultra／exact cwd。向本ORIGINAL root的SINGLE continuation已正式接受，才沿同三角色續作，不以BOOT當implementation batch。
+
+App connected0.10.8／list61／has_more=false；七個`taiwan-stock-research-roadmap-m1-history-query-20261007-{backend-app,backend-worker,backend-tests,frontend-src,frontend-full,tools,docs}` ready baseline。Qualified coverage best_effort／metadata_changed／no_recorded_issue、generation_matches／hash_records_complete=true，原因未核；依advisory讀本根，不稱fresh／complete、不輪初或中途重建／複製索引。五known parser partial為既有qualified邊界，BOOT未改解析狀態，完整review／freeze後才由index角色輪末更新。
+
+### Discovery界線、六股核心與進度
+
+`M1-HISTORY-MONTH-WIRE-1-DISCOVERY-1`只接受primary metadata review：Gregorian YYYY/MM/01→YYYY%2FMM%2F01為script inference，offered export GET與regular JSON POST方法不代server／monthly金融／自動用途准入。程式四metadata GET／root條款與OGL receipts均在原task；Web403與actualroot200分報、不作全域不可能。Exact historical automated-use／open-platform linkage、20／21普通股close／complete calendar／strategy／time／execution仍未解除。Core0／dep0、非implementation batch、不增加stall，權威見[來源 §26](SOURCE_REGISTRY.md#26-m1-history-month-wire-1月參數推論與用途缺口)。
+
+Root改選獨立正面`M2-FOCUS-STOCK-SCOPE-4-B1`：普通TPEx支援5→6新增8069元太，fresh ordinary identity／catalogue／exact11370用途／source-date／`.4` policy與金融正面准入。現行m2-v8／new v4、six fullscope先gate後filter、108原件欄／36金融值與四理由去重／code順已核；explicit舊`.3`五股及更早immutable tuples保持，舊兩股backend producer=m2-v5／frontend legacy m2-v4相容不重寫。金融表與policy／body／receipt只由[來源 §27](SOURCE_REGISTRY.md#27-m2-focus-stock-scope-4六股來源准入)管理。
+
+本輪financial CSV GET總3：OBS1 optional Content-Length root diagnostic在GET後失敗／raw釋放未准入；OBS2 rootfresh金融接受後釋放；final修改後API38684 native firstload觸發NEW workerGET1／Store1／runner1／preloaded=false，非OBS2 preload或body replay。Final guards0／disk0／DB preserved，原失敗不改exit或稱全輪一次。
+
+Root actual API10案：全六股／provenance、張／元／振幅inclusive及upper排除、combined lower與upper、all六股／真零、default／10/02／old10/05對8069缺資料已核。六stock POST＋focus POST cached無新增source，samecutoff五原字串保持。Trusted desktop1277×924 lower→8069 detail／raw／back→upper；窄版390×844 upper→lower→detail／raw／back→upper→真零→恢復；13 states／21 native events、raw／hash與無水平溢出已接受。Draft programmatic只setup，card label extractor null及shell formatter失敗只diagnostics、在相應admission前更正，沒有bad native action／新增source；操作由[個股頁 §33](STOCK_RESEARCH_PAGE.md#33-m2-focus-stock-scope-4六股關注與同截止往返)管理。
+
+繼承前輪core+1／dep+1／reliability0／stall0；本B1 coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0，以正面核心驗收保持0。BOOT／metadata／DOC／index／Git不計implementation batch，較早unknown歷史保持，完整ROADMAP／M1／M2／M3未完成。
+
+### 驗證、清理與版本待辦
+
+Source13／net25368B與必要checks已root接受。Python32＋26；Node validators129／Overview46／Appchart32、helpers392／AppSSR184及兩組28src noEmit，finalraw0／childfinancialGETPOST0／guards0／disk0；六row fixture caps80KiB／512KiB與舊64KiB保持，實測與版本由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理，不拿fixture代actual金融。
+
+唯一lifetime owned page `f4b2101d-4728-447c-8405-ba9d4c431100`已closed／tabs0；preview15520／compiler26492／API38684 absent，8801／8802／8871 listeners none、held raw全釋放。API／preview normalCtrl+C rawexit1與independent cleanup verify0分報，stopped receipts guards0／DB preserved。無sourcecopies／profiles／screenshots／HAR／env install／KeepArtifacts或新附件。未跑磁碟保存／跨程序、full suite／production build／全市場／PIT／20／21歷史close／完整calendar／MA／trend／ATR／研究／Signal／Plan。
+
+DOC review→完整freeze→qualified affected index→exact local commit→另准master merge→新統籌visible gate皆pending。候選source13＋DOC8共21unique／七scope；只stage root核准freeze檔，不用index代功能驗收，finalhash留原task、不為回填反覆刷新／提交。新root需從最新已驗master用Orca登錄worktree／可見gate、核actualruntime/Git後新建三角色並接受；本root未交接前不冒稱新round。
+
+下一優先 `M1-HISTORY-OPEN-DATA-LINK-1`：找NEW primary metadata對exact歷史月資源的政府開放平台linkage／automated-use eligibility；月wire僅script推論，server與finance未執行。Exact next resource／query／symbol／date／policy未准入，不以同一失敗extractor重GET11371、不猜params／POST／legacy collector或重複parameterless17257。原task先核bounded memory／timeout／redirect0／retry0／disk0，再金融觀測；只有actual20／21普通股close＋complete calendar＋strategy／time／execution才解除M1。無新可執行path時依ROADMAP重選獨立正面核心；有限scope beyond6另需fresh identity／catalogue／name／ISIN／CFI／body／policy gates，不建空轉輪或以ranking／ATR／Signal／Plan代核心。
+
+### 前任outside-owner已完成與保留範圍
+
+本root outside-owner只接受HISTORY-QUERY exact四session：root `01a11291-b2f2-7fb1-8e80-1d3964a79650`、program `01a11294-ca63-7d52-9351-7eba531f9017`、documents `01a11295-2b50-74a0-bbf3-444b70de737b`、index `01a11295-9002-7a53-b5bf-f7499450b3da`。前任self-contained final已保存／四者actual idle／exact oldterminal-runtime核後，index ONE normalterminalclose raw0／ptyKilled=true；root ONE native archive涵蓋root＋descendants，獨立核all4notLoaded／original rollouts absent、archive4 bytes＋SHA不變共15074947B，歷史不永久刪除。Terminal disconnected／operator_close／pane-1；closure／archive已接受，不重做。
+
+Old worktree `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-query-20261007`／branch `roadmap-m1-history-query-20261007`仍保留，七baseline indexes仍需，不移除。移除另待new qualified affected indexes／baseline unneeded，再核merged／clean／無未保存修改或新artifact／resolved absolute scopedpath及outside-owner接手；不刪自身cwd。DAY-RANGE整個worktree／branch及NO-RETRY留存；已closed／archived／removed CLOSE-RESOURCE＋STOCK-SCOPE不重做；TURNOVER／Temp／cache／log／GPG／其他history sweeping排除。本輪四session／terminal／worktree／branch保留，下一outside-owner未接受，current closure／archive／移除未執行。
+
 ## 目前：M2-FOCUS-STOCK-SCOPE-3 五股核心已有限接受；待DOC review／freeze
 
 2026-10-07 Asia/Taipei。Main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；共同cwd／worktree／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-query-20261007`；branch `roadmap-m1-history-query-20261007`，starting／current／master HEAD `899fa62260e495075cc756ff31869a57df6b3895`。前輪source13＋DOC8 freeze21／net53430B、qualified七scope索引／exact commit與正常ff-only local master merge已接受；下方完整90395B歷史byte全留，舊pending由Git／原task final receipt覆蓋，舊roster不再派工。

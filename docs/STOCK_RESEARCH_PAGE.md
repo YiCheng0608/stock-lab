@@ -1044,11 +1044,13 @@ All4 reads、四理由同股去重、五原字串與samecutoff detail已核；pr
 
 ### 31.4 完成與未驗範圍
 
-Root接受同一B1 source13與核心驗收：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。唯一page已closed／tabs0，owned服務及compiler已停、ports none、held raw釋放；測試與raw exit／清理分報由[開發入口](development-baseline/README.md#m2-focus-stock-scope-2-四股範圍的記憶體驗證入口)管理。該版source13＋DOC8 freeze21／七scope索引與qualified coverage／exact commit及正常ff-only master merge `899fa62260e495075cc756ff31869a57df6b3895` 已接受；本節保留四股版本，現行五股見§32。
+Root接受同一B1 source13與核心驗收：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。唯一page已closed／tabs0，owned服務及compiler已停、ports none、held raw釋放；測試與raw exit／清理分報由[開發入口](development-baseline/README.md#m2-focus-stock-scope-2-四股範圍的記憶體驗證入口)管理。該版source13＋DOC8 freeze21／七scope索引與qualified coverage／exact commit及正常ff-only master merge `899fa62260e495075cc756ff31869a57df6b3895` 已接受；本節保留四股版本，五股見§32，現行六股見§33。
 
 未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／20／21歷史close／完整日曆、MA／trend／研究／Signal／Plan或完整M1／M2／M3。既有通過證據按範圍沿用，NO-RETRY歷史資源不納入本輪功能清理。
 
 ## 32. M2-FOCUS-STOCK-SCOPE-3：五股關注與同截止往返
+
+本節五股版本已合併至本輪starting master；原pending由原task／Git final receipt覆蓋，現行六股見§33，舊操作證據按原範圍保留。
 
 **普通TPEx支援4→5的資料／計算、actual API與可信desktop／窄版操作已有限接受。** 新增3293鈊象，scope3105／3293／5274／5347／6488、source-date2026-10-06；focus `price-lot-focus/m2-v7`、projection `stock-price-memory/m2-stock-scope-v3`。Identity／policy／raw金融值只由[來源 §25](SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)管理，§25～31保留舊版本的有限範圍。
 
@@ -1085,3 +1087,42 @@ Actual desktop **1277×924**、窄版**390×844**均已核 `2026-10-06 / 1495.46
 Root accepted source12／net24911B及核心：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0；來源與具名產品已驗不等於版本封存。八DOC review→完整freeze→七scope索引／qualified coverage→exact local commit→另准master merge仍pending。Owned page／API／preview／compiler／observer已清、held raw隨process exit釋放；必要checks、rawexit及清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-3-五股範圍的記憶體驗證入口)管理。
 
 未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／完整日曆、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。歷史NO-RETRY資源排除，既有有效證據按適用範圍沿用。
+
+## 33. M2-FOCUS-STOCK-SCOPE-4：六股關注與同截止往返
+
+**普通TPEx支援5→6的資料／計算、actual API與可信desktop／窄版操作已有限接受。** 新增8069元太，scope依code為3105／3293／5274／5347／6488／8069、source-date2026-10-06；focus `price-lot-focus/m2-v8`、projection `stock-price-memory/m2-stock-scope-v4`。Identity／policy／原件金融由[來源 §27](SOURCE_REGISTRY.md#27-m2-focus-stock-scope-4六股來源准入)管理，舊版本有限範圍與金融表保持。
+
+### 33.1 六股完整gate與五條件
+
+沿§29.1精確張／canonical股、原O/C、int64 TWD元及振幅。Default10/06採`.4`六股；explicit舊`.3`五股、`.2`四股、`.1`三股與更早兩股immutable tuples保持。舊兩股backend producer=m2-v5、frontend legacy consumer的m2-v4相容是既有基線，本輪未改producer。公開條件仍`as_of/min_lots/day_move/min_turnover/min_range_pct`，不增加第六條或讓使用者拼policy。
+
+全部required reads、逐股身分／金融原字串、同cutoff／tuple／provenance先gate後filter；任一missing／invalid／conflict仍unavailable、count=null、items=[]，不跳壞股或縮scope。Available/count0才是完整六股的真零；每股一張卡、code升序、四理由固定順序去重，frontend獨立重驗候選／理由／raw reads與safe local五條件URL。
+
+### 33.2 Actual API與精確inclusive邊界
+
+Root actual API10案已接受：全六股108原件欄／36金融值、完整reads／共cutoff／provenance及四理由；六symbol POST＋focus POST共七cached calls不新增source。Default／explicit10/02／舊10/05對8069unavailable已核，不升格未跑的native歷史日期案例。Source修改後final actual Store sourcecount1／runnerGET1／preloaded=false、guards0／disk0／DB preserved；本輪總financial GET3的觀測與失敗界線見來源§27.2。
+
+8069張10796.741 inclusive／10796.742排除、成交額1607943663元inclusive／1607943664排除、振幅4.421 inclusive／4.422排除，方向up均按原exact值核對。Combined結果如下：
+
+| 10/06完整條件（除as_of外） | 已接受API候選（code順） |
+| --- | --- |
+| 10796.741／up／1607943663／4.421 | 5347＋6488＋8069 |
+| 10796.741／up／1607943663／4.422 | 5347＋6488 |
+| 0.000／all／0／0.000 | 全六股 |
+| 0.000／all／0／10 | available/count0／items=[] |
+
+門檻字串尾零與同cutoff detail／safe返回保留；顯示「約」不替代原值比較，真零≠unknown。
+
+### 33.3 Desktop／窄版可信往返與真零恢復
+
+同一owned page的desktop **1277×924**按lower→8069 detail→raw open→back same五原字串→upper；窄版 **390×844**按upper→lower→8069 detail→raw open→back→upper→true zero→restore。Lower為`2026-10-06 / 10796.741 / up / 1607943663 / 4.421`，upper只改振幅4.422；原五字串含尾零完整返回。8069原件追溯核data ordinal12098（含header行12099）。
+
+21個native click／submit／toggle events均isTrusted=true，含firstload／link／raw／back；draft programmatic fill／select只作setup，不稱trusted typing。Desktop及窄版各實測focus／detail／raw open的scrollWidth1262≤1277／375≤390，無水平溢出。窄版`0.000 / all / 0 / 10`真零，振幅改0.000恢復全六股code順。
+
+Root首次card anchor label extractor為null、第二state shell inner-doublequote formatter失敗只屬diagnostics；在相應admission前更正，沒有bad native action、追加source或產品故障證據，不寫成首次全通過。
+
+### 33.4 完成、版本與未驗邊界
+
+Root accepted source13／net25368B與B1核心：coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0。Owned page／API／preview／compiler已清、held raw已釋放；necessary checks與原exit／清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理。DOC review／freeze／qualified affected index／exact local commit／另准master merge／下一統籌gate仍pending，功能接受不等於版本封存。
+
+未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。歷史NO-RETRY排除，既有有效證據按範圍沿用。

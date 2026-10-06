@@ -230,6 +230,20 @@ Owned唯一page `5028fdbb-3c34-42dd-a406-537ee5559f2a` exact closed／tabs0；AP
 
 Coreoperation+1／selected scope dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git不算implementation batch。歷史前任session封存與NO-RETRY由[協作紀錄](../TASK_COORDINATION.md)管理；本worktree／branch不自刪，不掃Temp／cache／logs。未驗保存／跨程序、PIT／全市場、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
 
+### M2-FOCUS-STOCK-SCOPE-4 六股範圍的記憶體驗證入口
+
+沿既有tools/tpex-price-api.py／tools/tpex-price-preview.cjs的 --check／--focus-check與共用唯讀依賴；Python -B／SQLite :memory:、Node write:false／noEmit／incremental:false／composite:false、guards拒寫保持。沒有新環境、helper或disk fixture；建構方式留Git，來源版本見[來源 §27](../SOURCE_REGISTRY.md#27-m2-focus-stock-scope-4六股來源准入)，actual API／可信操作見[個股頁 §33](../STOCK_RESEARCH_PAGE.md#33-m2-focus-stock-scope-4六股關注與同截止往返)。
+
+必要checks final rawexit0：Python worker／store／API32與focus26；Node memory validators129／Overview SSR46／App chart32、focus helpers392／full-App SSR184，兩組28src noEmit。Python3.12.14／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1、Node20.19.4／TypeScript5.9.3／esbuild0.25.12沿既有版本；child financial GET／POST0、guards0／disk0。未跑full suite／production build、磁碟保存／跨程序。
+
+六股tuple ordinary fixture最多6 CSV rows，serialized cap80KiB／object cap512KiB；Python最大64040B serialized／174694B object graph，Node64943B serialized／282220B estimate，estimate不是RSS。舊64KiB／512KiB cap及原斷言保留；virtual oversize仍只memory，不放寬舊policy。
+
+本輪financial CSV GET總3次，不能把final Store1／runner1稱全輪一次。OBS1 optional Content-Length root diagnostic在GET後失敗，raw釋放／未准入；OBS2 root fresh金融接受後釋放；final OBS3 PID38684於source修改後native首次load觸發NEW workerGET1／preloaded=false，沒有OBS2 preload、raw transfer／export或replay。Final sourcecount1／runner1／guards0／disk0／DB preserved；金融值與原件receipt只由來源§27.2管理。
+
+清理另經root獨立接受：唯一lifetime owned page `f4b2101d-4728-447c-8405-ba9d4c431100` exact closed／tabs0；preview15520／compiler26492／API38684 absent，8801／8802／8871 listeners none，held raw全釋放。Normal Ctrl+C API／preview rawexit1與independent cleanup verify exit0分報；stopped receipts guards0／DB preserved，不改原exit或否定有效驗收。無source copies／profiles／screenshots／HAR／env install／KeepArtifacts。
+
+Coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git非implementation batch。前任exact四session closure／archive與baseline仍需保留的舊worktree見[協作紀錄](../TASK_COORDINATION.md)，不重做歷史清理。未驗保存／跨程序、PIT／全市場、20／21歷史close／complete calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

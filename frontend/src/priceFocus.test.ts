@@ -1,6 +1,6 @@
 import type { PriceFocusDayMove, PriceLotFocusData } from './types'
 import { createPriceMemoryFixture, priceFixtureInstrument } from './stockPriceMemoryRead.test'
-import { PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SCOPE_POLICY_VERSION_V3, priceSourcePins } from './stockPriceMemoryRead'
+import { PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SCOPE_POLICY_VERSION_V3, PRICE_SCOPE_POLICY_VERSION_V4, priceSourcePins } from './stockPriceMemoryRead'
 import { approximateRangePct, exactDayMove, exactDayRange, exactLotsText, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDetailPath, priceFocusReturnPath, rangeMeetsMinimum, sharesMeetMinimum, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 
 /** Reconstructed client contract only; never an actual source capture. */
@@ -8,13 +8,13 @@ export function createPriceFocusFixture(minLots = '20000', dayMove: PriceFocusDa
   const pins = priceSourcePins(cutoff, policyVersion ?? (cutoff === '2026-10-06' ? 'm1-price-tpex-11370-2026-10-06.1' : undefined))!
   const reads = pins.symbols.map((symbol) => ({ instrument: priceFixtureInstrument(symbol), price_memory: createPriceMemoryFixture(symbol, cutoff, pins.policyVersion) }))
   // Independent fixed-data expectations; fixtures never establish source admission.
-  const rangeLimits: Record<string, number> = cutoff === '2026-10-05' ? { '3105': 1300 / 307, '6488': 300 / 61 } : { '3105': 700 / 123, '3293': 1100 / 397, '5274': 325 / 61, '5347': 700 / 123, '6488': 460 / 47 }
+  const rangeLimits: Record<string, number> = cutoff === '2026-10-05' ? { '3105': 1300 / 307, '6488': 300 / 61 } : { '3105': 700 / 123, '3293': 1100 / 397, '5274': 325 / 61, '5347': 700 / 123, '6488': 460 / 47, '8069': 650 / 147 }
   const scope = reads.filter((read) => {
     const bar = read.price_memory.latest!, move = cutoff === '2026-10-05' ? read.instrument.symbol === '3105' ? 'up' : 'down' : ['3105', '3293', '5274'].includes(read.instrument.symbol) ? 'down' : 'up'
     return sharesMeetMinimum(bar.volume_exact, minLotsShares(minLots)!) && sharesMeetMinimum(bar.turnover_exact!, minTurnover)
       && (dayMove === 'all' || move === dayMove) && Number(minRangePct) <= rangeLimits[read.instrument.symbol]
   })
-  return { version: pins.policyVersion === PRICE_SCOPE_POLICY_VERSION_V3 ? 'price-lot-focus/m2-v7' : pins.policyVersion === PRICE_SCOPE_POLICY_VERSION_V2 ? 'price-lot-focus/m2-v6' : 'price-lot-focus/m2-v5', status: 'available', as_of: cutoff, min_lots: minLots, min_shares: minLotsShares(minLots)!, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct,
+  return { version: pins.policyVersion === PRICE_SCOPE_POLICY_VERSION_V4 ? 'price-lot-focus/m2-v8' : pins.policyVersion === PRICE_SCOPE_POLICY_VERSION_V3 ? 'price-lot-focus/m2-v7' : pins.policyVersion === PRICE_SCOPE_POLICY_VERSION_V2 ? 'price-lot-focus/m2-v6' : 'price-lot-focus/m2-v5', status: 'available', as_of: cutoff, min_lots: minLots, min_shares: minLotsShares(minLots)!, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct,
     count: scope.length, items: scope.map((read) => {
       const bar = read.price_memory.latest!, move = exactDayMove(bar.source_fields['開盤'], bar.source_fields['收盤'])!
       return { exchange: 'TPEx', symbol: read.instrument.symbol, name: read.instrument.name, volume_exact: bar.volume_exact, volume_lots: exactLotsText(bar.volume_exact),
@@ -42,6 +42,30 @@ export function createUnloadedFocusFixture(): PriceLotFocusData {
 export function runPriceFocusTests(): number {
   let checks = 0
   const check = (value: boolean, message: string) => { checks++; if (!value) throw new Error(message) }
+  for (const [lots, move, amount, range, expected] of [
+    ['0.000', 'all', '0', '0.000', '3105,3293,5274,5347,6488,8069'],
+    ['10796.741', 'up', '0', '0', '5347,6488,8069'], ['10796.742', 'up', '0', '0', '5347,6488'],
+    ['0', 'up', '1607943663', '0', '5347,6488,8069'], ['0', 'up', '1607943664', '0', '5347,6488'],
+    ['0.000', 'up', '0', '4.421', '5347,6488,8069'], ['0.000', 'up', '0', '4.422', '5347,6488'],
+    ['10796.741', 'up', '1607943663', '4.421', '5347,6488,8069'], ['0', 'all', '0', '10', ''],
+  ] as const) {
+    const data = createPriceFocusFixture(lots, move, amount, range, '2026-10-06', PRICE_SCOPE_POLICY_VERSION_V4)
+    check(data.version === 'price-lot-focus/m2-v8' && data.items.map(item => item.symbol).join() === expected && data.reads.length === 6 && validPriceLotFocus(data, '2026-10-06', lots, move, amount, range), 'six-stock independent exact boundary ' + lots + '/' + amount + '/' + range)
+    if (expected.includes('8069')) {
+      const item = data.items.find(item => item.symbol === '8069')!
+      check(item.volume_lots === '10796.741' && item.turnover_exact === '1607943663' && item.open_exact === '147.00' && item.high_exact === '151.50' && item.low_exact === '145.00' && item.close_exact === '149.00', 'sixth exact units and original decimals')
+      check(priceFocusReturnPath(new URLSearchParams(item.detail_url.split('?')[1])) === `/?as_of=2026-10-06&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}#price-lot-focus-title`, 'sixth preserves all five raw return conditions')
+    }
+  }
+  for (const mutate of [
+    (data: PriceLotFocusData) => { data.version = 'price-lot-focus/m2-v7' },
+    (data: PriceLotFocusData) => { data.reads.pop() },
+    (data: PriceLotFocusData) => { data.reads[5] = data.reads[4] },
+    (data: PriceLotFocusData) => { data.reads[5].instrument.name = 'wrong' },
+    (data: PriceLotFocusData) => { data.reads[5].price_memory!.provenance!.policy_version = PRICE_SCOPE_POLICY_VERSION_V3 },
+    (data: PriceLotFocusData) => { data.reads[5].price_memory!.latest!.source_fields['成交金額'] = '' },
+    (data: PriceLotFocusData) => { data.reads[5].price_memory!.latest!.source_fields['最高'] = '0' },
+  ]) { const empty = createPriceFocusFixture('0', 'all', '0', '10', '2026-10-06', PRICE_SCOPE_POLICY_VERSION_V4); mutate(empty); check(!validPriceLotFocus(empty, '2026-10-06', '0', 'all', '0', '10'), 'filtered-out sixth still gates complete tuple before true zero') }
   for (const [lots, move, amount, range, expected] of [
     ['0.000', 'all', '0', '0.000', '3105,3293,5274,5347,6488'], ['1495.462', 'down', '0', '0', '3105,3293'], ['1495.463', 'down', '0', '0', '3105'],
     ['0', 'down', '1164617657', '0', '3105,3293,5274'], ['0', 'down', '1164617658', '0', '3105,5274'],
