@@ -899,3 +899,45 @@ ISIN當次資料日10/07正面確認5347世界、ISIN `TW0005347009`、掛牌日
 Root在第二程序的preloaded Store驗三股同tuple／provenance、all3完整reads後filter、cached focus POST與三股stock POST；source Store1／runnerGET0、DB preserved=true、server／client guards0。Samecutoff具名可信桌面／窄版操作及owned清理已有限接受，core+1／selected identity-source scope dependency+1／reliability0／stall0；數值及操作由[個股頁 §30](STOCK_RESEARCH_PAGE.md#30-m2-focus-stock-scope-1三股關注與同截止往返)負責，入口與資源由[開發文件](development-baseline/README.md#m2-focus-stock-scope-1-三股範圍的記憶體驗證入口)負責，不將pure builder後讀cache說成首次UI click發fresh GET。
 
 兩次觀測的原件memory現均已釋放，raw／receipt未落盤、DB IDs仍null。Quote-date不等於即時、published／first available／revision time；後三仍unknown，historical_pit unsupported。未驗磁碟保存／跨程序、20／21個股歷史close／完整calendar、strategy inputs／time／execution、MA／trend／研究／Signal／Plan或完整M1／M2／M3；範圍外標的／日期另須新正面准入。
+
+## 22. M1-CLOSE-RESOURCE-1：有界單日 JSON 觀測
+
+**M1-CLOSE-RESOURCE-1-OBSERVE-1 已由統籌有限接受；只接受指定 endpoint 的單份實際 body 觀測，沒有解除多日研究依賴或新增產品操作。** 官方 [dataset17257「上櫃歷史個股市值排行」](https://data.gov.tw/dataset/17257) metadata 為免費、OGL 1.0、每日更新的線索；前輪 [TPEx Swagger](https://www.tpex.org.tw/openapi/swagger.json) 476923B、SHA256 `05af7755d0d528626c104f7a8ccd7b00c6a0cf228d30bcb4669020e514eb0c7e` 記載 server `https://www.tpex.org.tw/openapi/v1`、exact GET `/tpex_daily_market_value`、parameters=[]。名稱含「歷史」與每日更新都不證 20／21 日可取窗口。用途與執行核定只涵蓋本次 exact 免費公開資源的有界本地記憶體觀測；不沿用 dataset11370 的 policy／pins，不增加 registry default、日期參數、legacy POST 或其他自動取得路徑。
+
+Root 實際只作 1 GET：`https://www.tpex.org.tw/openapi/v1/tpex_daily_market_value`，無參數、redirect0／retry0、timeout20秒、raw≤3MiB、parsed≤24MiB、disk0。`request_started_at=2026-10-06T18:02:26.378163+00:00`、`captured_at=2026-10-06T18:02:26.446163+00:00`；HTTP200、Content-Type `application/json`、body137622B、SHA256 `612a0a516be4ac2f0a902a55a8911c0039b93ed592d9cadd60202e36ceddb61c`。Parsed object estimate870827B 只為本次物件估計，不是 RSS 或程序峰值；原件未落盤，owned 程序正常結束 exit0 後已釋放。
+
+返回 890 rows／890 unique codes、無重複代碼；datecount1，全部 `Date=1151006`，只支持該 body 的2026-10-06資料日。實際七欄為 `Capitals`、`ClosePrice`、`CompanyName`、`Date`、`MarketValue`、`Rank`、`SecuritiesCompanyCode`；與政府 metadata 的 `StockPerShare`／`Close` 名稱不一致，不默認等義、單位或排序權威。三既有 symbol 的 close 與已驗10/06資料相符，但5347的 JSON `CompanyName=世界先進` 不等於 quote policy 的 exact name「世界」，不能自動擴 scope／換 pins。未核實全部890個 instrument 為普通股，MarketValue／Capitals 單位與 Rank 的產品用途未准入。
+
+此單日 body **不是 20／21 日個股歷史 close 或完整交易日曆**；publication／first availability／revision lineage／PIT、strategy inputs、membership、decision／execution time 與所採合法執行條件仍缺。HTTP Date／Last-Modified／ETag 僅為回應 metadata，不改寫成資料發布或首次可得時間。不追加第二次取得、猜日期參數或宣稱全域無可行來源；本有限結論只適用這次 exact observation。
+
+統籌依此單日結果改選獨立正面核心M2-FOCUS-STOCK-SCOPE-2-B1，四股操作後續已按[§23](#23-m2-focus-stock-scope-2四股來源准入)有限接受；本節只管理M1 observation，仍core0／dep0、不計implementation batch，沒有解除20／21close／完整calendar及strategy／time／execution。下一歷史資源須新正面query metadata／用途與執行核定，不重做本parameterless endpoint；工作與完成條件見[執行清單](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+## 23. M2-FOCUS-STOCK-SCOPE-2：四股來源准入
+
+**普通TPEx支援3→4、四股計算／actual API及可信桌面／窄版往返已由root有限接受。** 新增5274信驊，與3105穩懋／5347世界／6488環球晶使用同一2026-10-06 quote-date。來源值及版本由本節管理，操作由[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)管理；§20～21保留原兩股／三股immutable tuples、金融值與觀測，不覆寫舊policy。
+
+### 23.1 身分、用途與獨立四股版本
+
+Root fresh官方ISIN catalogue資料日2026-10-07、2983574B、SHA256 `68bc970ecc575e36a7820623d21691c44ca0a8d9d2d694dc021518a4e4fee71b`，正面核5274信驊、ISIN `TW0005274005`、掛牌日2013-04-30、TPEx／半導體業、普通股CFI `ESVUFR`。Wrapper仍逐股核TW／TPEx／stock／TWD、exact known name與空ETF分類；混合quote或890列JSON不能代普通股准入。Catalogue觀測日不改quote-date，也不補歷史membership／PIT。
+
+Fresh [dataset11370「上櫃股票行情」](https://data.gov.tw/dataset/11370) 的免費／OGL1.0／每日metadata及[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點政府開放平台例外已重核；僅沿§20.1的 [exact CSV GET](https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data) 有限local_fetch／raw_store／summarize用途與顯名、完整性、hash／version／time及traceability條件。只process memory，未授權磁碟保存、附加歷史日期參數、legacy POST或其他自動下載。
+
+New policy `m2-stock-scope-tpex-11370-2026-10-06.2`、canonical UTF-8 **1500B**、digest `sha256:eb378f12e85462855d8271f1e977e4e84878882dd0944c004840a2ad21ab4434`，default10/06 scope依code為3105／5274／5347／6488。Worker `tpex-price-capture/m2-stock-scope-v2`、projection `stock-price-memory/m2-stock-scope-v2`、consumer `price-lot-focus/m2-v6`。Explicit `.1` 三股及更早10/06、10/05兩股tuple保持自身immutable pins／scope；policy選擇仍是內部設定，公開URL只有原五條件，不加入第六條。每程序一次合法明示取得、3MiB／30秒／redirect0／retry0與普通GET／cache零新增外網的既有條件保持。
+
+### 23.2 Fresh原件、四股逐欄核對與5274金融值
+
+Root owned同一程序在程式修改前先作唯一new CSV GET並held raw，修改後在同PID以pure builder准入新policy，再供preloaded actual API／UI；不是UI首次POST另作fresh GET。`request_started_at=2026-10-06T18:09:03.677364Z`、`captured_at=2026-10-06T18:09:04.958683Z`，HTTP200、body **1788599B／12194 data rows／18欄**、ROC1151006；SHA256 `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200`。此為獨立fresh觀測，即使SHA與§21相同也不改寫為沿用舊memory或官方修訂證據。新admitted receipt **1440B**、SHA256 `3f4811496ab892e2dc3f88f78ed8f642839c206d8767fbf2b126d1a55ded8059`。
+
+Root四股18欄逐欄核對：身分前三欄去除外側空白後一致，其餘60欄原字串一致；24個金融值一致。Worker／API `source_fields` 保留原名稱外側空白，5274原CSV名稱為 ` 信驊`，raw body未改；不稱72欄byte-equal或全市場金融coverage。既有三股金融值仍見§21.2，新股如下：
+
+| Selected股／data ordinal／含header行號 | O／H／L／C原字串（元／股） | 成交股數（canonical股） | 日常成交量（張） | 成交金額（TWD元） |
+| --- | --- | --- | --- | --- |
+| 5274信驊／513／514 | 19520.00／19895.00／18855.00／18985.00 | 188693 | 188.693 | 3627465565 |
+
+5274 O/C為down，本日振幅精確 `325/61`%；精確張、TWD整數元與原價比較沿穩定契約，不以「約」顯示值作門檻。API／可信往返、真零與缺資料界線見[個股頁 §31](STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)。
+
+### 23.3 有限接受與剩餘邊界
+
+Root accepted四股完整reads／同tuple／provenance、四理由去重、精確inclusive門檻、cached五POST及samecutoff五條件往返；preloaded Store sourcecount1／runner新增GET0、guards0、DB preserved=true。具名desktop／窄版操作與owned清理已接受，B1 coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0；M1 §22 observation仍core0／dep0，不計implementation batch。
+
+本輪唯一page已closed／tabs0、API／preview／compiler absent、8801／8802 listeners none；held raw已釋放，未落盤／DB IDs null。Raw terminal interrupt exit1與獨立清理後驗exit0分報，詳見[開發入口](development-baseline/README.md#m2-focus-stock-scope-2-四股範圍的記憶體驗證入口)與原task。Quote-date不等於published／first available／revision；後三仍unknown，historical_pit unsupported。未驗磁碟保存／跨程序、20／21歷史個股close／完整calendar、strategy inputs／membership／time／execution、MA／trend／研究／Signal／Plan或完整M1／M2／M3。下一來源或scope另需正面准入，見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。

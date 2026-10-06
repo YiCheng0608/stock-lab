@@ -204,6 +204,18 @@ Actual由第二root程序held原件，程式更新後同程序pure builder准入
 
 舊day-range exact四session closure／history archive已另驗，worktree／branch及2,555,430B／232files／94dirs profile NO-RETRY仍保留、不重掃／刪除；舊turnover與其他歷史不納入，責任與接手由[協作紀錄](../TASK_COORDINATION.md)管理。當前功能接受不等於全域artifact0或所有歷史資源已清；仍只跑本變更必要驗證。
 
+### M2-FOCUS-STOCK-SCOPE-2 四股範圍的記憶體驗證入口
+
+沿既有tools/tpex-price-api.py／tools/tpex-price-preview.cjs的 --check／--focus-check及共用唯讀依賴；Python -B／SQLite :memory:、Node write:false／noEmit／incremental:false／composite:false與guards拒寫保持。Fixture建構方式在Git，可重建四股selected與synthetic邊界，只memory；不建DB／raw／HAR／screenshot／Edge profile／附件或新環境。金融／版本由[來源 §23](../SOURCE_REGISTRY.md#23-m2-focus-stock-scope-2四股來源准入)管理，actual API／可信操作由[個股頁 §31](../STOCK_RESEARCH_PAGE.md#31-m2-focus-stock-scope-2四股關注與同截止往返)管理。
+
+本變更必要checks已接受：Python worker／store／API27與focus22；Node focus helper327／full-App SSR150、memory validator94／Overview SSR46／App chart32，兩組28src noEmit；全部final exit0、sourceGET0／guards0／disk0／DB preserved。沿共用既有版本與依賴，沒有env install；命令、原失敗及逐檔hash留原task，不跑full suite／production build或磁碟保存／跨程序。Ordinary fixture最大serialized59815B／object estimate264092B（各低於64KiB／512KiB）、最多四CSV rows；separate virtual oversize仍只在memory驗既有拒收，object estimate不是RSS／程序峰值。
+
+Actual由root同一guarded程序在改程式前唯一new quote GET並held raw，改後pure builder准入四股 `.2`、preloaded Store供真router與UI。Source Store1／runner新增GET0、guard0／DB preserved=true；不是UI首次capture click取得新body，也不用fixture／disk／舊程序memory當actual。原件與receipt只memory，所有held raw現已釋放。
+
+Owned唯一page `5028fdbb-3c34-42dd-a406-537ee5559f2a` exact closed／tabs0；API35548／preview51332／compiler54688後驗absent，8801／8802 listeners none。Structured stopped／guards0／DB preserved已核；preview interrupt與interactive API terminal最後raw exit1保留，獨立清理後驗exit0分報，不改原exit或否定有效產品驗收。未建立Edge profile、screenshots／HAR／artifacts／DB copy／KeepArtifacts產物。前輪STOCK-SCOPE四session已outside關閉封存接受，worktree／branch移除仍待新輪涉及索引；DAY-RANGE full containing worktree／NO-RETRY與TURNOVER／cache／Temp／其他歷史排除，不稱所有歷史資源已清。
+
+Coreoperation+1／scope dependency+1／reliability0／stall0。M1 parameterless單日JSON observation沒有解除多日close／calendar／strategy／time／execution，也不計implementation batch；保存／跨程序、PIT／全市場、完整M1／M2／M3仍未驗。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

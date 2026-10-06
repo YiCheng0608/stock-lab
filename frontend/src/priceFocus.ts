@@ -1,5 +1,5 @@
 import type { PriceFocusDayMove, PriceLotFocusData } from './types'
-import { memoryPriceCaptureReady, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
+import { memoryPriceCaptureReady, PRICE_SCOPE_POLICY_VERSION, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 
 const maximum = '9223372036854775807'
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
@@ -116,11 +116,12 @@ export function validPriceLotFocus(value: unknown, asOf: string, minLots: string
   if (!value || typeof value !== 'object' || !validFocusDate(asOf)) return false
   const data = value as PriceLotFocusData, minimum = minLotsShares(minLots)
   const symbols = data.supported_scope?.symbols
-  const newScope = same(symbols, ['3105', '5347', '6488'])
-  const pins = priceSourcePins(asOf, !newScope && asOf === '2026-10-06' ? 'm1-price-tpex-11370-2026-10-06.1' : undefined)
+  const fourScope = same(symbols, ['3105', '5274', '5347', '6488'])
+  const threeScope = same(symbols, ['3105', '5347', '6488'])
+  const pins = priceSourcePins(asOf, asOf === '2026-10-06' ? fourScope ? undefined : threeScope ? PRICE_SCOPE_POLICY_VERSION : 'm1-price-tpex-11370-2026-10-06.1' : undefined)
   const expectedSymbols = pins?.symbols ?? ['3105', '6488']
   if (!same(symbols, expectedSymbols) || minimum === null || minTurnoverValue(minTurnover) === null || minRangeMilliPct(minRangePct) === null || !validPriceFocusDayMove(dayMove)
-    || !(data.version === 'price-lot-focus/m2-v5' || (!newScope && data.version === 'price-lot-focus/m2-v4')) || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
+    || !(fourScope ? data.version === 'price-lot-focus/m2-v6' : data.version === 'price-lot-focus/m2-v5' || (!threeScope && data.version === 'price-lot-focus/m2-v4')) || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
     || !['available', 'unavailable'].includes(data.status) || data.historical_pit !== 'unsupported' || data.sort !== 'code_ascending'
     || typeof data.can_capture !== 'boolean' || !Array.isArray(data.items) || !Array.isArray(data.reads) || !Array.isArray(data.reasons)
     || data.reasons.some((reason) => typeof reason !== 'string')

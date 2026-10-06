@@ -179,7 +179,7 @@ function stockFixture(symbol = '3105', cutoff = '2026-10-05', policyVersion) {
   const data = { instrument: memoryCases.priceFixtureInstrument(symbol), overview,
     bars: [{ date: '2026-10-02', open: 10, high: 11, low: 9, close: 10, adj_close: 10, volume: 1000, source: 'synthetic', is_suspended: false }],
     features: {}, chips: [], groups: [], news: [], events: [], corporate_actions: [], fundamentals: [], data_quality: [], signals: [], strategy_conditions: {}, decision_summary: null }
-  assert(Buffer.byteLength(JSON.stringify(data)) <= 8 * 1024 * 1024, 'small memory fixture bound')
+  assert(Buffer.byteLength(JSON.stringify(data)) <= 64 * 1024 && estimateGraph(data) <= 512 * 1024, 'bounded ordinary memory fixture; estimate is not RSS')
   return data
 }
 
@@ -198,6 +198,26 @@ async function check() {
     const App = await appSSRModule()
     let appChecks = 0
     const verify = (value, message) => { appChecks++; assert(value, message) }
+    for (const [lots, move, amount, range, expected] of [['0.000', 'all', '0', '0.000', '3105,5274,5347,6488'], ['188.693', 'down', '0', '0', '3105,5274'], ['188.694', 'down', '0', '0', '3105'], ['0.000', 'down', '3627465565', '5.327', '3105,5274'], ['0.000', 'down', '3627465566', '5.328', '3105'], ['35000', 'all', '0', '0', '']]) {
+      const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2)
+      assert(Buffer.byteLength(JSON.stringify(data)) <= 64 * 1024 && estimateGraph(data) <= 512 * 1024, 'four-stock focus fixture budget')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      client.setQueryData(['price-lot-focus', '2026-10-06', lots, move, amount, range], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-06&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}`] }, React.createElement(App.default))))
+      verify(data.items.map((item) => item.symbol).join() === expected && (html.match(/class="focus-card"/g) || []).length === data.count, 'four-stock exact focus rendered')
+      verify(html.includes('已核 4 股') && (expected !== '' || html.includes('零候選')), 'four-stock scope and true zero')
+      if (expected.includes('5274')) verify(html.includes('5274 信驊') && html.includes('188.693') && html.includes('3,627,465,565') && html.includes('收低於開：'), 'fourth exact reasons and financial fields')
+      if (expected.split(',').length === 4) verify(html.indexOf('3105 穩懋</strong>') < html.indexOf('5274 信驊</strong>') && html.indexOf('5274 信驊</strong>') < html.indexOf('5347 世界</strong>') && html.indexOf('5347 世界</strong>') < html.indexOf('6488 環球晶</strong>'), 'four admitted ordinary stocks code order')
+      client.clear()
+    }
+    const fourthClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    fourthClient.setQueryData(['stock', 'TPEx', '5274', '2026-10-06'], stockFixture('5274', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2))
+    const fourthHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: fourthClient }, React.createElement(MemoryRouter,
+      { initialEntries: ['/stocks/TPEx/5274?as_of=2026-10-06&from=price-lots&focus_as_of=2026-10-06&focus_min_lots=0.000&focus_day_move=down&focus_min_turnover=3627465565&focus_min_range_pct=5.327'] }, React.createElement(App.default))))
+    verify(fourthHTML.includes('188.693') && fourthHTML.includes('>18,985<') && fourthHTML.includes('金融數值僅核 3105、5274、5347、6488'), 'fourth full App same-cutoff quote and raw scope')
+    verify(fourthHTML.includes('/?as_of=2026-10-06&amp;min_lots=0.000&amp;day_move=down&amp;min_turnover=3627465565&amp;min_range_pct=5.327#price-lot-focus-title'), 'fourth safe five original strings return')
+    fourthClient.clear()
     for (const [lots, move, amount, range, expected] of [['0', 'all', '0', '0', '3105,5347,6488'], ['20000.000', 'up', '0', '5.691', '5347'], ['20000.000', 'up', '0', '5.692', '']]) {
       const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
@@ -305,11 +325,11 @@ async function check() {
       queryClient.clear()
     }
     assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
-    const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION))), stock: Buffer.byteLength(JSON.stringify(stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION))) }
+    const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2))), stock: Buffer.byteLength(JSON.stringify(stockFixture('5274', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2))) }
     fixtureBytes.combined = fixtureBytes.focus + fixtureBytes.stock
-    assert(fixtureBytes.combined <= 256 * 1024 && fixtureBytes.combined <= 8 * 1024 * 1024, 'bounded synthetic fixture serialization')
-    const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION), stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)])
-    assert(fixtureObjectEstimate <= 8 * 1024 * 1024, 'conservative fixture object graph estimate, not process RSS')
+    assert(fixtureBytes.combined <= 64 * 1024, 'bounded synthetic fixture serialization')
+    const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2), stockFixture('5274', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2)])
+    assert(fixtureObjectEstimate <= 512 * 1024, 'conservative fixture object graph estimate, not process RSS')
     console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: fixtureBytes,
       fixture_object_estimated_bytes: fixtureObjectEstimate,
       known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(), not_run: ['actual source', 'native browser operation', 'disk persistence', 'production build', 'full prior suite'] }))
@@ -323,6 +343,15 @@ async function check() {
   let appChecks = 0
   const verify = (value, message) => { appChecks++; assert(value, message) }
   const { formatStockTooltip, prepareStockChartData } = require(path.join(sourceRoot, 'stockChart.ts'))
+  const fourthStock = stockFixture('5274', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V2)
+  const fourthClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+  fourthClient.setQueryData(['stock', 'TPEx', '5274', '2026-10-06'], fourthStock)
+  const fourthHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: fourthClient }, React.createElement(MemoryRouter,
+    { initialEntries: ['/stocks/TPEx/5274?as_of=2026-10-06'] }, React.createElement(App.default))))
+  verify(fourthHTML.includes('188.693') && fourthHTML.includes('>18,985<') && fourthHTML.includes('金融數值僅核 3105、5274、5347、6488'), 'fourth full App ordinary quote and finite scope')
+  const fourthChart = prepareStockChartData(memoryRead.memoryPriceChartBars(fourthStock.overview.price_memory, fourthStock.instrument, '2026-10-06'))
+  verify(fourthChart.ma20.every((value) => value === null) && formatStockTooltip(fourthChart, { dataIndex: 0 }).includes('188.693'), 'fourth exact chart lots without invented history')
+  fourthClient.clear()
   const thirdStock = stockFixture('5347', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION)
   const thirdClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
   thirdClient.setQueryData(['stock', 'TPEx', '5347', '2026-10-06'], thirdStock)
@@ -381,9 +410,9 @@ async function check() {
     reversedClient.clear()
   }
   assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
-  const m1Fixtures = [stockFixture('3105'), stockFixture('6488'), stockFixture('3105', '2026-10-06'), stockFixture('6488', '2026-10-06'), thirdStock]
+  const m1Fixtures = [stockFixture('3105'), stockFixture('6488'), stockFixture('3105', '2026-10-06'), stockFixture('6488', '2026-10-06'), thirdStock, fourthStock]
   const fixtureBytes = Buffer.byteLength(JSON.stringify(m1Fixtures)), fixtureObjectEstimate = estimateGraph(m1Fixtures)
-  assert(fixtureBytes <= 256 * 1024 && fixtureObjectEstimate <= 8 * 1024 * 1024, 'bounded old/new M1 fixture graphs; estimate is not RSS')
+  assert(fixtureBytes <= 64 * 1024 && fixtureObjectEstimate <= 512 * 1024, 'bounded old/new M1 fixture graphs; estimate is not RSS')
   console.log(JSON.stringify({ passed: true, validator_checks: validatorChecks, affected_overview_ssr_checks: overviewChecks,
     full_app_chart_checks: appChecks, known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, fixture_bytes: fixtureBytes, fixture_object_estimated_bytes: fixtureObjectEstimate,
     ...receipt(), not_run: ['backend rerun', 'external source', 'browser native UI', 'disk persistence', 'full build', 'historical price/MA20'] }))
@@ -393,7 +422,7 @@ const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|5347|6488)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|5274|5347|6488)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,

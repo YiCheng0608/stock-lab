@@ -884,7 +884,7 @@ export function PriceLotFocusPanel() {
   const data = accepted ? query.data : undefined
   return <section className="panel official-event-focus" aria-labelledby="price-lot-focus-title">
     <div className="section-head overview-head"><div><div className="eyebrow">指定來源日 · 上櫃普通股</div><h2 id="price-lot-focus-title">成交張數關注</h2></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。10/5 已核 3105 穩懋、6488 環球晶；2026-10-06 新來源政策另含 5347 世界，舊兩股政策仍可讀取。每次服務只取得一份指定日期原件，依本次已核範圍篩選。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
+    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。10/5 已核 3105 穩懋、6488 環球晶；2026-10-06 本次政策支持 3105 穩懋、5274 信驊、5347 世界、6488 環球晶四股，既有三股及兩股政策仍可讀取。每次服務只取得一份指定日期原件，依本次已核範圍篩選。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
     <form className="overview-cutoff-control" onSubmit={apply}>
       <label htmlFor="price-focus-date">來源日期</label><input id="price-focus-date" type="date" required value={dateDraft} onChange={(event) => setDateDraft(event.currentTarget.value)} />
       <label htmlFor="price-focus-min-lots">最小成交張數</label><input id="price-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} placeholder="例如 20000，最多三位小數" onChange={(event) => setLotsDraft(event.currentTarget.value)} />

@@ -1010,4 +1010,40 @@ Root live router核九組actual案例，每次都先驗三股原件及同provena
 
 Root接受B1 coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。唯一page已exact closed、tabs0；本輪API／preview／compiler已停、listeners none、第二原件memory釋放，測試及原exit／清理收據見[開發入口](development-baseline/README.md#m2-focus-stock-scope-1-三股範圍的記憶體驗證入口)／原task。舊day-range NO-RETRY profile及其他歷史資源不納入本輪清理。
 
-本輪source17與功能驗收已接受；DOC review→freeze→七涉及scope索引／qualified coverage→exact local commit→另准local master merge尚待完成。未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／20／21歷史close／完整日曆／MA／trend／研究／Signal／Plan或完整M1／M2／M3。既有有效證據沿用，不因換角色重跑。
+前輪source17與三股功能驗收已接受，DOC review／freeze／七涉及scope索引及qualified coverage／exact commit與另准master merge `50c228d` 已完成；§30保留該範圍，現行四股見[§31](#31-m2-focus-stock-scope-2四股關注與同截止往返)。未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／20／21歷史close／完整日曆／MA／trend／研究／Signal／Plan或完整M1／M2／M3。既有有效證據沿用，不因換角色重跑。
+
+## 31. M2-FOCUS-STOCK-SCOPE-2：四股關注與同截止往返
+
+**普通TPEx支援3→4的來源／計算、actual API及可信desktop／窄版操作已有限接受。** 新增5274信驊，scope為3105／5274／5347／6488，來源日2026-10-06；consumer `price-lot-focus/m2-v6`、projection `stock-price-memory/m2-stock-scope-v2`。來源identity／policy／raw金融值只由[來源 §23](SOURCE_REGISTRY.md#23-m2-focus-stock-scope-2四股來源准入)管理；§25～30保留舊兩股／三股範圍與版本，本節不解除M1多日／日曆／strategy／time／execution缺口。
+
+### 31.1 四股完整gate與五條件
+
+精確張／canonical股、O/C、int64 TWD元與振幅仍沿§29.1／§30.1。Default10/06採新四股 `.2` tuple；explicit `.1` 三股、更早10/06與10/05兩股tuple保持自身scope／pins，不把第四股灌入舊policy。公開條件仍 `as_of/min_lots/day_move/min_turnover/min_range_pct`，不增加第六個URL條件或讓使用者混拼policy。
+
+Filter前驗所選policy全部required reads、逐股身分／金融原字串、同cutoff／tuple／provenance。任一股missing／invalid／conflict時unavailable、count=null、items=[]；不能跳過壞股、縮scope或將未知當0。Available/count0才是四股完整gate後的真零。每股一張卡、code升序、四理由固定順序去重，前端仍獨立重驗候選／理由／raw reads與safe local五條件URL。
+
+### 31.2 Actual API與精確邊界
+
+Root actual API八組案例已接受，含全四股code順、四股reads／samecutoff、五cached POST及舊日期隔離；四股18欄的身分前三欄外側空白正規化比對、其餘60原字串與24金融值核對見來源§23.2。下表振幅兩案的direct API成交額條件為0元；§31.3具名native往返另用3627465565元，候選結果相同。5274具名inclusive邊界為：
+
+| 條件／邊界 | 已接受結果 |
+| --- | --- |
+| 10/06、0.000張、down、0元、振幅5.327 | 3105＋5274，依code排序。 |
+| 上述振幅改5.328 | 只有3105。 |
+| 5274張門檻188.693／188.694 | 5274在等額包含，增加0.001張排除。 |
+| 5274成交額3627465565／3627465566元 | 等額包含，增加1元排除。 |
+| 0.000張／all／0元／振幅10 | available/count0／items=[]。 |
+
+All4 reads、四理由同股去重、五原字串與samecutoff detail已核；preloaded Store1／runnerGET0、guards0／DB preserved=true。Default、10/02及舊10/05 missing12的API隔離已核，未將此API邊界升格為未執行的native歷史日期案例。
+
+### 31.3 桌面／窄版具名可信操作
+
+1277×900 desktop與390×844窄版均以真正mouse click／submit套用下列五原字串：`2026-10-06 / 0.000 / down / 3627465565 / 5.327` 得3105＋5274；百分比改5.328得3105，再恢復5.327，點5274→同cutoff個股→raw summary展開→返回。Click／submit／link／summary／back的isTrusted=true、actual URL與卡片變化已核，返回保留全部五字串含尾零；draft fill／select的isTrusted=false只屬設定，不稱trusted typing。
+
+窄版另以 `2026-10-06 / 0.000 / all / 0 / 10` 得真零，再以 `2026-10-06 / 0.000 / all / 0 / 0.000` 恢復四股code順。Desktop關注頁scrollWidth1262≤1277；窄版關注、5274詳情與raw展開375≤390，無水平溢出。Source欄位／SHA仍可追溯與換行；safe local返回及拒收契約不改。
+
+### 31.4 完成與未驗範圍
+
+Root接受同一B1 source13與核心驗收：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。唯一page已closed／tabs0，owned服務及compiler已停、ports none、held raw釋放；測試與raw exit／清理分報由[開發入口](development-baseline/README.md#m2-focus-stock-scope-2-四股範圍的記憶體驗證入口)管理。DOC review→full freeze→七涉及scope索引／qualified coverage→exact local commit→另准master merge仍pending；功能接受不等於版本封存。
+
+未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／20／21歷史close／完整日曆、MA／trend／研究／Signal／Plan或完整M1／M2／M3。既有通過證據按範圍沿用，NO-RETRY歷史資源不納入本輪功能清理。

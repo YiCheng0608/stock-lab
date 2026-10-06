@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { formatCanonicalShareLots } from '../units'
 import { createPriceMemoryFixture, priceFixtureInstrument } from '../stockPriceMemoryRead.test'
-import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION } from '../stockPriceMemoryRead'
+import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2 } from '../stockPriceMemoryRead'
 import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
@@ -9,6 +9,23 @@ import type { ReactElement } from 'react'
 export function runPriceMemoryOverviewSSRTests(render: (element: ReactElement) => string): number {
   let count = 0
   const check = (value: boolean, message: string) => { count++; if (!value) throw new Error(message) }
+  const fourth = createUnitLotsFixture()
+  fourth.as_of = '2026-10-06'; fourth.price_memory = createPriceMemoryFixture('5274', '2026-10-06', PRICE_SCOPE_POLICY_VERSION_V2)
+  const fourthInstrument = priceFixtureInstrument('5274')
+  const fourthHtml = render(<StockOverview data={fourth} instrument={fourthInstrument} explicitCutoff="2026-10-06" onNews={() => {}} />)
+  check(fourthHtml.includes('188.693') && fourthHtml.includes('3,627,465,565') && fourthHtml.includes('>18,985<'), 'fourth stock exact daily lots/TWD and per-share close')
+  check(fourthHtml.includes('金融數值僅核 3105、5274、5347、6488') && fourthHtml.includes('資料列序 513') && fourthHtml.includes('19520.00') && fourthHtml.includes('188693'), 'fourth finite scope and original eighteen fields')
+  check(fourthHtml.includes('政府資料開放授權條款 OGL 1.0') && fourthHtml.includes('此資料只含一天，趨勢與研究條件仍待補'), 'fourth attribution and limited operation')
+  for (const scope of [undefined, null, {}, { ...fourth.price_memory!.supported_scope, symbols: 'bad' }, { ...fourth.price_memory!.supported_scope, symbols: ['3105', '5347', '6488'] }]) {
+    const malformed = structuredClone(fourth)
+    malformed.price_memory!.supported_scope = scope as unknown as NonNullable<StockOverviewData['price_memory']>['supported_scope']
+    const html = render(<StockOverview data={malformed} instrument={fourthInstrument} explicitCutoff="2026-10-06" onNews={() => {}} />)
+    check(html.includes('支持範圍待核實') && !html.includes('金融數值僅核') && !html.includes('188.693'), 'fourth malformed or crossed scope hides values')
+  }
+  for (const instrument of [{ ...fourthInstrument, instrument_type: 'etf' }, { ...fourthInstrument, etf_category: 'domestic' }, { ...fourthInstrument, name: 'wrong' }]) {
+    const html = render(<StockOverview data={fourth} instrument={instrument} explicitCutoff="2026-10-06" onNews={() => {}} />)
+    check(!html.includes('188.693') && !html.includes('金融數值僅核'), 'fourth ETF or name guard')
+  }
   const third = createUnitLotsFixture()
   third.as_of = '2026-10-06'; third.price_memory = createPriceMemoryFixture('5347', '2026-10-06', PRICE_SCOPE_POLICY_VERSION)
   const thirdHtml = render(<StockOverview data={third} instrument={priceFixtureInstrument('5347')} explicitCutoff="2026-10-06" onNews={() => {}} onCapturePrice={() => {}} />)
