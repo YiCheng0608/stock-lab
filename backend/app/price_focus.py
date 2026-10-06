@@ -1,7 +1,8 @@
-"""Two admitted TPEx stocks filtered by exact lots; no database or source I/O on import."""
+"""Two admitted TPEx stocks filtered by exact lots and same-day O/C direction."""
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 import re
 from typing import Any
 from urllib.parse import urlencode
@@ -9,8 +10,29 @@ from urllib.parse import urlencode
 from . import tpex_price
 from worker.tpex_price_capture import CUTOFF, SYMBOLS
 
-VERSION = "price-lot-focus/m2-v1"
+VERSION = "price-lot-focus/m2-v2"
 MAX_SHARES = "9223372036854775807"
+DAY_MOVES = ("all", "up", "down", "flat")
+DAY_MOVE_REASONS = {"up": "close_above_open", "down": "close_below_open", "flat": "close_equal_open"}
+
+
+def parse_day_move(value: Any) -> str:
+    if type(value) is not str or value not in DAY_MOVES:
+        raise ValueError("day_move must be all, up, down or flat")
+    return value
+
+
+def exact_day_move(bar: Any) -> tuple[str, str, str] | None:
+    fields = bar.get("source_fields") if isinstance(bar, dict) else None
+    if not isinstance(fields, dict):
+        return None
+    prices = [fields.get(key) for key in ("開盤", "收盤")]
+    if any(type(value) is not str or len(value) > 64 or not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", value, flags=re.ASCII) for value in prices):
+        return None
+    opening, closing = (Decimal(value) for value in prices)
+    if not opening.is_finite() or not closing.is_finite() or opening <= 0 or closing <= 0:
+        return None
+    return ("up" if closing > opening else "down" if closing < opening else "flat", *prices)
 
 
 def parse_min_lots(value: Any) -> str:
@@ -30,8 +52,8 @@ def lots_text(shares: str) -> str:
     return padded[:-3] + ("." + fraction if fraction else "")
 
 
-def detail_path(symbol: str, as_of: str, min_lots: str) -> str:
-    query = urlencode({"as_of": as_of, "from": "price-lots", "focus_as_of": as_of, "focus_min_lots": min_lots})
+def detail_path(symbol: str, as_of: str, min_lots: str, day_move: str = "all") -> str:
+    query = urlencode({"as_of": as_of, "from": "price-lots", "focus_as_of": as_of, "focus_min_lots": min_lots, "focus_day_move": day_move})
     return f"/stocks/TPEx/{symbol}?{query}"
 
 
@@ -58,10 +80,11 @@ def _available(read: dict, as_of: date) -> bool:
             and (len(volume), volume) <= (len(MAX_SHARES), MAX_SHARES) and isinstance(memory.get("provenance"), dict))
 
 
-def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, *, capture: bool = False) -> dict:
+def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, day_move: str = "all", *, capture: bool = False) -> dict:
     minimum = parse_min_lots(min_lots)
+    parse_day_move(day_move)
     result = {"version": VERSION, "status": "unavailable", "as_of": as_of.isoformat() if type(as_of) is date else None,
-              "min_lots": min_lots, "min_shares": minimum, "count": None, "items": [], "reads": [],
+              "min_lots": min_lots, "min_shares": minimum, "day_move": day_move, "count": None, "items": [], "reads": [],
               "supported_scope": {"exchange": "TPEx", "symbols": list(SYMBOLS), "cutoff": CUTOFF.isoformat(), "currency": "TWD", "asset_type": "stock"},
               "can_capture": False, "reasons": [], "historical_pit": "unsupported", "sort": "code_ascending"}
     if type(as_of) is not date or as_of != CUTOFF:
@@ -90,15 +113,21 @@ def build_price_focus(instruments: list[Any], as_of: date, min_lots: str, *, cap
     if memories[0]["provenance"] != memories[1]["provenance"]:
         result["reasons"] = ["price_focus_source_mismatch"]
         return result
-    for read in result["reads"]:
+    directions = [exact_day_move(memory["latest"]) for memory in memories]
+    if any(direction is None for direction in directions):
+        result["reasons"] = ["price_focus_direction_unavailable"]
+        return result
+    for read, direction in zip(result["reads"], directions):
         memory = read["price_memory"]
         bar = memory["latest"]
         volume = bar["volume_exact"]
-        if int(volume) >= int(minimum):
+        actual_move, opening, closing = direction
+        if int(volume) >= int(minimum) and (day_move == "all" or day_move == actual_move):
             symbol = read["instrument"]["symbol"]
             result["items"].append({"exchange": "TPEx", "symbol": symbol, "name": read["instrument"]["name"],
                                     "volume_exact": volume, "volume_lots": lots_text(volume), "min_lots": min_lots,
-                                    "min_shares": minimum, "reason": "volume_at_least_min_lots", "source_date": bar["date"],
-                                    "source_version": memory["provenance"]["source_version"], "detail_url": detail_path(symbol, as_of.isoformat(), min_lots)})
+                                    "min_shares": minimum, "day_move": actual_move, "open_exact": opening, "close_exact": closing,
+                                    "reasons": ["volume_at_least_min_lots", DAY_MOVE_REASONS[actual_move]], "source_date": bar["date"],
+                                    "source_version": memory["provenance"]["source_version"], "detail_url": detail_path(symbol, as_of.isoformat(), min_lots, day_move)})
     result.update(status="available", count=len(result["items"]), reasons=[], can_capture=False)
     return result

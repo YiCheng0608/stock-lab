@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-05。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+更新：2026-10-06。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 1. 使用者工作與資訊順序
 
@@ -849,3 +849,46 @@ Root以本輪同程序真原件核兩股12金融欄、actual focus／M1 API與�
 兩個stock POST、兩個focus POST及重複GET同cache零新增外網；M1 default／explicit10/02不滲10/05已核。核心操作+1＝真張數關注與同截止往返；dependency0（既有來源複用）、reliability0、stall0。必要checks與owned服務清理另見開發入口，原非零工具／PTY收據保留原task。
 
 本次只含已核兩股與選定10/05單日；catalogue／10/02仍synthetic，沒有正式DB、磁碟保存／跨程序、離線replay、PIT、全市場、排名／題材、MA20／trend、研究條件／Signal／Plan或完整M1／M2／M3驗收。取得時間不代表發布或首次可得；原件只存本次process memory，owned服務結束已釋放。下一日內O/C方向條件尚未實作／驗收，依[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，不稱前日漲跌或趨勢。
+
+## 27. M2-FOCUS-DAY-MOVE-1：單日方向關注與完整條件往返（有限接受）
+
+**已有限接受TPEx3105穩懋／6488環球晶、選定來源日2026-10-05的精確成交張門檻＋單日O/C方向、actual API及下述具名往返操作。** 現行consumer為 `price-lot-focus/m2-v2`；§26是m2-v1當時的驗收快照，現行方向與返回契約依本節。Fresh觀測／用途／版本見[來源 §20.5](SOURCE_REGISTRY.md#205-m2-focus-day-move-1-同來源的新觀測與方向-consumer)，§20.1固定policy／pins與§20.2金融表保持。M1仍缺20／21真歷史close／日曆、策略inputs／time gate，單日操作不放行MA／trend或研究判定。
+
+### 27.1 三個條件與精確單日比較
+
+`GET /api/focus/price-lots` 與明示 `POST /api/focus/price-lots/capture` 沿既有 `as_of/min_lots`，新增 `day_move=all|up|down|flat`，省略時為all；對應「全部／收高於開／收低於開／平收」，比較當日收盤與當日開盤，不是前收盤漲跌。日期／門檻仍必填；三條件任一重複、日期／門檻／方向非法，在capture前HTTP422。Client POST body仍空object。門檻20字元／最多三位小數／int64 canonical股與原尾零依§26.1、[UI §10.3](UI_COPY_SPEC.md#103-張零股)，不改穩定換算。
+
+O/C取每股 `source_fields`「開盤／收盤」原字串，各最長64字元，只接受無正負號、前導零、空白、科學記號或尾點的正ASCII十進位價格；可有小數，合法值必須大於0。後端以Decimal比較，前端以整數部分長度／字典序與補齊小數字串獨立重算，不經JS Number。收大於開為up、收小於開為down、同值為flat；缺失／無效／零價格不猜方向。
+
+候選同時達精確股門檻及所選方向；all只略過方向篩選，仍核每股O/C並顯示實際up／down／flat。每股一張卡、依code升序，item保留 `volume_exact/volume_lots/min_lots/min_shares`，新增實際 `day_move/open_exact/close_exact`；固定兩理由 `volume_at_least_min_lots` 加 `close_above_open|close_below_open|close_equal_open`。前端重算兩股reads、全部候選、原值／理由與固定URL，不只驗顯示卡片。
+
+### 27.2 來源完整性、真零與cache
+
+恰為已核兩股普通stock／TPEx／TWD、同股／同截止完整原件及一致provenance後才可available。任何O/C缺失／invalid為 `unavailable/count=null/items=[]`，理由 `price_focus_direction_unavailable`；未載入、來源拒用及不支持10/02依既有原因拒用。即使count0，也先驗兩股完整reads及實際方向；只有available0才是此範圍真零，不以空清單補0。
+
+首次取得與cache沿來源§20.1：每程序最多1 bounded GET、3MiB／30秒／redirect0／retry0；普通GET／import零外網、失敗不自動retry。本輪actual在同程序已驗held Store供真router／UI，source1／runner0，後續focus／stock POST只再用cache。Draft在「套用條件」submit後才改URL，query／capture結果key包含 `as_of/min_lots/day_move`，不混方向，不以舊placeholder或window-focus刷新來源。
+
+### 27.3 同截止研究與安全返回
+
+固定detail為 `/stocks/TPEx/{symbol}`，query是 `as_of/from=price-lots/focus_as_of/focus_min_lots/focus_day_move`，進同cutoff M1。返回白名單只有上述五key，前四各恰一次，`focus_day_move`最多一次且合法；legacy省略方向按all。日期有效且 `as_of` 必須等於原 `focus_as_of`，原門檻合法，才由URLSearchParams固定組成 `/?as_of=原日期&min_lots=原字串&day_move=原方向#price-lot-focus-title`。
+
+返回保留 `10000.000/20000.000` 尾零及方向，不是自由return URL。未知key（含next）、重複key、錯日期／門檻／方向或研究截止與原日期不一致時，拒原條件返回，使用本地 `/stocks`，不導向外部。今日頁重複條件不啟query；原官方事件返回契約保持。
+
+### 27.4 已接受actual結果與具名操作
+
+Root以本輪fresh原件獨立核actual HTTP及以下結果；O/C與唯一金融值由來源§20管理，不另建金融表。
+
+| 明選來源日／min_lots／day_move | 已接受actual API結果 |
+| --- | --- |
+| 10/05／`10000.000`／all、up、down、flat | all依code為3105／6488；up只3105；down只6488；flat為available0。 |
+| 10/05／`20000.000`／all、down | all只3105；down為available0。 |
+| 10/05／`48127.911`→`48127.912`／up | count1→0，精確零股門檻無捨入。 |
+| 10/05／`18982.607`→`18982.608`／down | count1→0，精確零股門檻無捨入。 |
+| 10/05／`50000`／all | available0。 |
+| 10/02／合法條件 | unavailable／countnull，不借10/05值。 |
+
+另核6組非法query各GET／POST共12次422、focus POST2／stock POST2 cache再用及M1 default10/02不滲10/05。1277桌面與390×844窄版具名native click／submit／link／back為isTrusted=true；up／down兩股M1同cutoff往返保留 `10000.000` 與方向，20k／all返回 `20000.000/all`；all2、flat0及10/02未知actual UI已核。重複URL未query，detail的外部next拒用回本地/stocks；窄版source details經native展開，doc375／details305／canvas305。
+
+Orca select／fill的input/change=false只設draft；ArrowDown no-event、未submit點擊不算完成，實際定位後click／submit另核。原工具／編碼／輔助觀測收據保留原task，後正面結果不覆寫原exit。必要Python10／Node28src noEmit、110helper／44SSR及owned清理見[開發入口](development-baseline/README.md#m2-focus-day-move-1-單日方向與完整返回的記憶體驗證入口)；source1／runner0、各guard0、DB preserved=true與額外檔案0已核。
+
+本輪core+1／dep0（複用既有來源）／reliability0／stall0；必要退修／重驗同核心批次。原件只process memory，服務結束已釋放；catalogue／10/02仍synthetic，無正式DB／磁碟保存／跨程序、PIT、全市場／排名／題材、MA／trend、研究／Signal／Plan或完整M1／M2／M3驗收。下一精確成交金額條件仍待新root來源及具名操作gate，見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。

@@ -148,6 +148,16 @@ Root獨立原件／actual API與桌面、390寬具名操作已有限接受，數
 
 Owned清理另已核：兩個pages各close exit0／tabs=[]；兩組UI／compiler與root同程序API各有shutdown，final source1／runner0、DB preserved=true、guards四項0／artifacts0，raw／receipt已隨程序結束釋放。Exact五PID與8797／8798 listener後驗count0、結構化查核exit0；Ctrl+C外層PTY rawexit1及初始空listener查詢exit1原樣保留，不改成tests exit0。無raw／DB／Temp／HAR／screenshot／build產物；其他歷史資源及NO-RETRY不動。完整命令、PID／handle、原exit與Git收據留原task，不新增附件。本入口不證正式DB、跨程序、PIT、全市場、MA／trend、研究／Signal／Plan、下一日內方向條件或production build。
 
+### M2-FOCUS-DAY-MOVE-1 單日方向與完整返回的記憶體驗證入口
+
+沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>` 與[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --focus-check --deps <既有 frontend/node_modules>`，只跑本輪必要[test_price_focus.py](../../backend/tests/test_price_focus.py)10項、[priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)110helper／44 full-App SSR與現行28src noEmit，均exit0。仍採memory config／SQLite `:memory:`、既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境；M1／UNIT／m2-v1仍適用證據沿用，不泛跑full suite或production build。
+
+Checks涵蓋all／up／down／flat、Decimal／前端原字串O/C比較、缺失／invalid方向拒用、精確股門檻、兩股讀值／理由重算、三條件重複與safe返回、legacy omitted direction=all。Fixture只synthetic，不代actual來源：Python serialized22,587B、object graph＋snapshot＋CSV合計69,487B，Node27,690B，均最小可重建memory、在核定8MiB內；這些不是RSS或程序峰值。執行版本、命令、原warning／錯誤及exit留原task，不建附件／manifest。
+
+Actual另由root唯一fresh GET後以**同一程序held Store**供真router／UI，沿[來源 §20.5](../SOURCE_REGISTRY.md#205-m2-focus-day-move-1-同來源的新觀測與方向-consumer)；全結構／兩股金融與用途gate先核，不用check fixture、base64或disk replay。根獨立HTTP核12次invalid422、合法方向／精確邊界、focus POST2／stock POST2同cache及default隔離；native／窄版範圍見[個股頁 §27](../STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)。Source累計1／runner新增0、ordinaryGET外網0，Python四項／root四項／UI三項guard均0、DB preserved=true；額外DB／raw／Temp／HAR／screenshot／bundle／buildinfo／log／artifact0。
+
+清理另已核：唯一owned browser page close exit0，exact五個API／UI／compiler／parent PID後驗absent、8799／8800 listeners0、worktree新增untracked／ignored0。UI／Python PTY Ctrl+C rawexit1保留，結構化後驗exit0；root附加診斷／stdout解碼原錯及後UTF-8正面結果留原task，不把原工具exit改0。Raw／receipt／memory已隨owned程序結束釋放，沒有磁碟保存／跨程序驗收。舊資源清理與NO-RETRY另由協作紀錄管理；本入口不證全市場、PIT、歷史close／日曆、MA／trend、研究／Signal／Plan或下一成交額條件。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

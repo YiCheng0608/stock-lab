@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-05。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 單日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 見 §9／§11。§10／§12 保留原候選缺證；§13 是另以獨立 policy 准入並驗收的 TPEx 兩股多日 CSV／有界日曆及計算。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
+更新：2026-10-06。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。原四來源查證基準為 2026-09-12；TPEx 單日法人另需 explicit 單來源 manifest（§8），TWT48U selected／feed 見 §9／§11。§10／§12 保留原候選缺證；§13 是另以獨立 policy 准入並驗收的 TPEx 兩股多日 CSV／有界日曆及計算。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -826,3 +826,11 @@ Root前置共2 GET：第一次選錯代碼欄位（row0是日期，應取row1代
 2026-10-06臺北的M2輪，root另作唯一fresh exact GET200：`request_started_at=2026-10-05T18:13:08.071535+00:00`、`captured_at=2026-10-05T18:13:08.907693+00:00`，body仍1,773,012B／12,060 data rows／18欄，固定body SHA與§20.1完全相同；本輪 `receipt_sha256=52acb105b78fc74ae56d29593f7f47616f6b54b11f541dd57f45f60e12c1377d`。Root獨立全結構、兩股12金融欄、exact名稱／普通stock／TPEx／TWD身分gate及精確股→張已核，source guards四項0。此為新的取得觀測，不覆寫§20.2／20.3原UTC或receipt；policy／source_version／用途准入與pins未變，資料日仍10/05，不稱10/06今日行情或PIT。
 
 M2 consumer版本 `price-lot-focus/m2-v1` 以同程序TpexPriceStore採用合格兩股成交量，按精確張門檻給可追溯理由與同cutoff個股往返；產品契約由[個股頁 §26](STOCK_RESEARCH_PAGE.md#26-m2-focus-lots-1精確成交張數關注與同截止往返有限接受)負責。本輪API／UI服務以root此次held memory的preloaded Store運行，來源累計1 GET、runner新增0，stock／focus POST只再用cache；不是舊M1失效memory、fixture、磁碟copy或replay。Owned服務已結束、raw／receipt釋放，沒有新DB、raw檔或保存驗收；不擴市場／cutoff／歷史取得權限。
+
+### 20.5 M2-FOCUS-DAY-MOVE-1 同來源的新觀測與方向 consumer
+
+2026-10-06臺北本輪，root重新正面核dataset11370 metadata／OGL1.0、exact endpoint、有限本地用途與執行gate後，作唯一fresh GET200：`request_started_at=2026-10-06T00:05:01.697761+00:00`、`captured_at=2026-10-06T00:05:03.113904+00:00`。Body仍1,773,012B／12,060 data rows／18欄，SHA `bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d0772989243550ca36149`；本次canonical `receipt_sha256=49f40ed7317d9af1d1a27c19d04a16dbe3ab1975dccee8e9e4d0914d0e5ae46a`。此為新取得觀測，不覆寫§20.2～20.4原UTC／receipt；§20.1的policy版本／digest、source_version、用途准入及body pins未變。
+
+Root獨立核全結構、同日date-code唯一、兩股12金融欄、exact名稱／普通stock／TW-TPEx／TWD及原股→張。金融值與data ordinal仍同§20.2表，來源O/C原字串分別為3105的`614.00/615.00`、6488的`1220.00/1180.00`；不複製或修改舊金融表。資料日仍2026-10-05，10/06取得不代表今日即時行情、發布／首次可得、PIT或多日歷史。
+
+方向consumer升版為 `price-lot-focus/m2-v2`，採同兩股／同截止原件的成交量及O/C給兩個可追溯理由；API、精確方向比較、去重及安全往返由[個股頁 §27](STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)管理。Root在**同一程序**以本次held Store供真API／UI，來源累計1 GET、runner新增0；ordinary GET、focus POST2／stock POST2及條件變更同cache，無新外網。不借舊memory、fixture、disk copy或replay當actual。原件→API→具名操作與owned服務清理已接受；raw／receipt隨程序結束釋放，新增落盤0，保存／跨程序、全市場、歷史close／日曆及PIT未驗。

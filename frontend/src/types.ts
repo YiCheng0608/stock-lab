@@ -593,13 +593,17 @@ export type StockPriceMemoryData = {
 }
 
 
+export type PriceFocusDayMove = 'all' | 'up' | 'down' | 'flat'
+
 export type PriceLotFocusItem = {
   exchange: 'TPEx'; symbol: string; name: string; volume_exact: string; volume_lots: string
-  min_lots: string; min_shares: string; reason: 'volume_at_least_min_lots'; source_date: string; source_version: string; detail_url: string
+  min_lots: string; min_shares: string; day_move: Exclude<PriceFocusDayMove, 'all'>; open_exact: string; close_exact: string
+  reasons: ['volume_at_least_min_lots', 'close_above_open' | 'close_below_open' | 'close_equal_open']
+  source_date: string; source_version: string; detail_url: string
 }
 
 export type PriceLotFocusData = {
-  version: string; status: 'available' | 'unavailable'; as_of: string | null; min_lots: string; min_shares: string
+  version: string; status: 'available' | 'unavailable'; as_of: string | null; min_lots: string; min_shares: string; day_move: PriceFocusDayMove
   count: number | null; items: PriceLotFocusItem[]; reads: Array<{ instrument: Instrument & { currency?: string }; price_memory: StockPriceMemoryData | null }>
   supported_scope: { exchange: 'TPEx'; symbols: string[]; cutoff: string; currency: 'TWD'; asset_type: 'stock' }
   can_capture: boolean; reasons: string[]; historical_pit: 'unsupported'; sort: 'code_ascending'

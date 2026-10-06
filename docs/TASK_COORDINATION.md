@@ -2,6 +2,49 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
+## 目前：M2-FOCUS-DAY-MOVE-1 已有限接受，待文件 review 與版本封存
+
+2026-10-06 本輪Orca worktree／branch `roadmap-m2-day-move-20261006`；共同environment cwd／runtime workspace／Git根為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-move-20261006`，repo為 `C:/Users/YiCheng/Desktop/taiwan-stock-research`，common Git dir為其 `.git`。starting／master／current HEAD均 `a7bcdd37ae35ee27fd520a6682467b3b9f9355ae`，initial clean；前輪M2-FOCUS-LOTS-1已正式本地合併。下方所有原byte保留為歷史快照，舊pending由Git／原task最終收據覆蓋，舊roster無派工權。
+
+### 本輪四角色、可見 gate 與責任
+
+| 角色 | Actual Thread ID／配置 | Parent／接手與寫入範圍 |
+| --- | --- | --- |
+| 統籌 | `01a10e74-0ce2-7672-a37f-4c5fa340fb51`；`gpt-6.1-sol`／`ultra`；/root | parent=null、sessionId=self；source=[]，已有限接受來源／API／具名操作及owned清理；文件review後才freeze。 |
+| 程式 | `01a10e78-0b8f-78c2-877c-bb0a8414391a`；`gpt-6.1-sol`／`xhigh`；/root/program（Bohr） | parent=本root；source9交付／root核完整SHA接受，停寫；必要退修／重驗同核心批次。 |
+| 文件 | `01a10e78-901d-7df1-a92c-c2548d73404b`；`gpt-6.1-sol`／`xhigh`；/root/documents（McClintock） | parent=本root；DOC只下列8既有文件，更新受影響契約／交接，交付停寫待review。 |
+| 索引與 Git commit | `01a10e78-fe64-7751-ac9b-5fd672848a81`；`gpt-6-luna`／`medium`；/root/index_git（Singer） | parent=本root；source=[]；本輪index／commit／merge尚未授權。 |
+
+Root actual source=vscode、threadSource=user、forkedFromId=null；三child由本root native spawn_agent／fork_turns=none新建，actual parentThreadId／sessionId／source.subAgent.thread_spawn.parent_thread_id均同root，depth1、forkedFromId=null。Root以shared RPC thread/read（includeTurns=false）獨立核四IDs／模型／reasoning、共同cwd／workspace／repo／branch／HEAD及shell Git，沿用同組session。
+
+唯一可見Codex terminal `term_1d246108-55ec-4534-8278-368df7bcd503` 對應本root，connected／writable／nonorphaned、paneRuntimeId1，screen正面核本task／cwd／GPT-6.1-Sol ultra。Helper首次create timeout／rawexit1、task未送，以原deferred handle找回、Trust Enter一次，未重create／start／restart；兩次tui-idle timeout／exit1保留。Unique initial前的native root idle及screen啟動證據獨立成立。Unused Bash `term_811eda5a-ac61-4fef-8089-2adb157f2cca` 由舊入口核空閒prompt後Orca close exit0／ptyKilled=true，root只讀list亦核只剩Codex，不追認root執行該close。
+
+BOOT final／四idle後，舊入口唯一/subagents request `d6eae81a-3d0c-4653-9748-e8bc58307cf1`，source=screen核Main current／同四IDs、no-sub-agents-running表示idle；Esc一次，menu no-turn-start warning保留、不重送。可見gate及唯一原root continuation已accepted，之後才派本輪核心；BOOT／READ／文件／索引／Git不增implementation batch。
+
+### 本輪有限成果與資源
+
+兩優先保持：台股日常數量用張且零股精確；核心功能優先。Canonical股整數、精確0.001張、元／股、負／零／missing分清、mixed／unknown不猜及已張融資不重換均保持。先核M1，20／21真歷史close／日曆、策略inputs／time gate仍缺且無新正面取得路徑，依ROADMAP採獨立M2方向。
+
+`price-lot-focus/m2-v2` 已接受精確成交張門檻＋全部／收高於開／收低於開／平收，兩來源理由同股去重／code順→同cutoff研究→安全返回日期／min_lots原字串尾零／方向。10k all2／up3105／down6488／flat0、20k all3105／down0、兩股精確零股邊界、50k真零與10/02 unavailable countnull actual API已核；非法query GET／POST共12次422。完整API／來源完整性與safe whitelist由[個股頁 §27](STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)管理，非前日漲跌／MA／trend／排名／題材或Signal／Plan。
+
+1277桌面與390×844窄版具名native click／submit／link／back true；up／down兩股M1往返保留10000.000／方向，20k all返回20000.000／all，all2／flat0／10/02未知及duplicate未query／external next本地拒用已核。Source details native展開doc375／details305／canvas305。Orca select／fill false只設draft，ArrowDown no-event與未submit點擊不當完成，定位後真正click／submit另核；原warning／工具／stdout解碼與後UTF-8正面收據留原task，不cosmetic改exit。
+
+本root唯一fresh exact11370 GET沿原policy／digest／body pins，重核metadata／OGL／用途／instrument／execution後，在同程序held Store供真API／UI；source1／runner0、ordinaryGET外網0。Root真HTTP focus POST2／stock POST2同cache，M1 default10/02不洩10/05；不冒稱native capture click。新UTC／receipt及原件核對由[來源 §20.5](SOURCE_REGISTRY.md#205-m2-focus-day-move-1-同來源的新觀測與方向-consumer)負責，不複製金融表；資料日10/05不是10/06今日行情或PIT。Catalogue／10/02仍synthetic，raw／memory隨owned程序結束已釋放。
+
+Accepted source9為 `backend/app/api.py`、`backend/app/price_focus.py`、`backend/tests/test_price_focus.py`、`frontend/src/App.tsx`、`frontend/src/api.ts`、`frontend/src/priceFocus.ts`、`frontend/src/priceFocus.test.ts`、`frontend/src/types.ts`、`tools/tpex-price-preview.cjs`，net19,589B。Docs只 `docs/ROADMAP.md`、`docs/ROADMAP_EXECUTION.md`、`docs/STOCK_RESEARCH_PAGE.md`、`docs/UI_COPY_SPEC.md`、`docs/SOURCE_REGISTRY.md`、`docs/DATA_SOURCES.md`、`docs/development-baseline/README.md`、`docs/TASK_COORDINATION.md`；總net≤52KiB含BOOT7,036B，不建附件／backup／manifest，不改舊policy、pins／金融表或穩定公式。
+
+必要Python10、Node28src noEmit／110helper／44SSR均exit0；最小synthetic memory fixture尺寸與actual分界見[開發入口](development-baseline/README.md#m2-focus-day-move-1-單日方向與完整返回的記憶體驗證入口)，不當RSS或磁碟保存。Python4／root4／UI3 guard均0、DB preserved=true；owned唯一page close0，exact五PID後驗absent、8799／8800 listeners0、worktree extra／untracked／ignored0。UI／Python PTY Ctrl+C rawexit1保留，structured後驗0；root附加diagnostic原錯及後正面source1／guard0收據留原task。額外DB／raw／Temp／HAR／screenshots／bundle／buildinfo／log／artifact0；未驗完整suite／production build、正式DB／跨程序、PIT、全市場、研究或完整M1／M2／M3。
+
+App MCP connected／list21；舊M2根清理後coverage freshness=missing，index記錄與檔案缺席分報。本輪新分區尚未建立，讀本worktree source；best-effort coverage不當功能證明。CLI／reload／refresh0，索引角色只在文件review／freeze後處理涉及分區，不碰共用舊cache。當前文件review／freeze／index／coverage更新／local commit／master merge均pending，未有本輪版本封存；最終hash留原task，不為回寫重刷。
+
+### 核心計數、下一目標與指定外清
+
+本輪一核心批次core+1／dep0（既有來源複用）／reliability0／stall0；必要退修／重驗同批。繼承M2-FOCUS-LOTS-1 core+1／dep0／reliability0／stall0；M1-PRICE-1 core+1／dep+1／stall0，UNIT前置core0／dep0、當時stall1。W7／W8各core+1／dep+1／stall0，W9僅BOOT無implementation；P6d／P6e至少兩批可靠性無核心及更早unknown保持，不因換session／round、文件／索引／Git重置。
+
+下一選M2-FOCUS-TURNOVER-1，未派工／實作：張門檻＋O/C新增精確 `min_turnover`（TWD整數元／int64／字串保留），三理由去重／code順、同cutoff研究及safe返回全部條件。10k all配25,000,000,000元只3105／20,000,000,000元兩股、down配25,000,000,000元真零為待驗預期，不是金額排名／全市場／Signal／Plan。無新外部依賴；下一root先檢M1，再核fresh actual／版本／用途、exact白名單／budget，須本輪正式merge後master最新clean、新Orca worktree／可見root及新三child gate，IDs待bootstrap，不借失效memory或建空轉輪。完成條件見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)／[執行清單 §2.1](ROADMAP_EXECUTION.md#21-近期里程碑接線映射)。
+
+上一M2 outside-owner指定範圍已核收尾：根 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-focus-lots-20261005`／同branch，四old IDs即下方舊roster。Old final／四idle與exact自有cleanmerged／untracked0／master a7祖先先核，terminal `term_c0ec492b-e623-4ef4-99e2-e3f778f1f81a` close0；root archive一次自動封存四者，後續program archive `32600/no rollout` rawexit1已STOP／NO-RETRY。獨立exact四archived files／task final正面核全部封存，共13,046,867B歷史保留、未永久刪除。Orca exact rm0並自動移除branch，root核path／registration／branch absent，owned殘留0files／0B；原失敗exit不否定已核封存／移除，不再補做。已清M1不重做，共用cache、其他舊root、Temp／profile／GPG及歷史NO-RETRY不碰。當前本輪四roles／terminal／worktree保留；下一outside-owner接手並核final／idle、cleanmerged後才可清理，目前未執行。
+
 ## 目前：M2-FOCUS-LOTS-1 已有限接受，待文件 review 與版本封存
 
 2026-10-06 本輪共用 Orca worktree／branch `roadmap-m2-focus-lots-20261005`；runtime／environment cwd／Git 根為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-focus-lots-20261005`，repo 為 `C:/Users/YiCheng/Desktop/taiwan-stock-research`，common Git dir 為其 `.git`。starting／master／current HEAD 仍 `704b2df9cbc8a79fee0245e733255513420fb6ad`，initial clean；M1-PRICE-1 已正式有限接受並本地合併。下方 UNIT／M1 與更早各節原 byte 保留為歷史快照，其舊 pending 由 Git／原 task 收據覆蓋，舊 roster 沒有派工權。

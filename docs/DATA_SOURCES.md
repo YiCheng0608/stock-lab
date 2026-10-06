@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-更新：2026-10-05。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+更新：2026-10-06。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 資料庫政策
 
@@ -34,7 +34,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx universe | [issuer master](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) 加 [ETF allowlist](https://info.tpex.org.tw/api/etfFilter) POST；混合 quote 的權證、CB、ETN、興櫃不 fallback 成 stock。 |
 | TWSE OHLCV | 當日 [STOCK_DAY_ALL](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；bounded history 為 [MI_INDEX](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)，依 allowlist 過濾。 |
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
-| TPEx selected價格（M1-PRICE-1／M2-FOCUS-LOTS-1） | dataset11370 exact GET／獨立固定policy已有限接受3105／6488、2026-10-05單日真價量；M1唯一production capture→actual API／headline／chart／面板及具名桌面／窄版已核。M2本輪新觀測沿同policy／body pins，真API／精確成交張門檻／同截止往返已有限接受；普通GET／重複stock與focus POST同cache零新增外網。只process memory、DB IDs null；目錄／10/02是synthetic，非歷史／PIT／保存，不放行legacy POST。來源／版本／唯一金融值與本輪觀測見[§20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)，操作見[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)／[§26](STOCK_RESEARCH_PAGE.md#26-m2-focus-lots-1精確成交張數關注與同截止往返有限接受)。 |
+| TPEx selected價格（M1-PRICE-1／M2精確張數與單日方向） | Dataset11370 exact GET／獨立固定policy有限接受3105／6488、2026-10-05單日真價量；M1 production及m2-v1歷史收據保留。本輪fresh觀測沿同policy／body pins，m2-v2精確張門檻＋O/C兩理由、actual API與完整條件往返已有限接受；普通GET／focusPOST2／stockPOST2同cache零新增外網。只process memory、DB IDs null，程序結束已釋放；目錄／10/02 synthetic，非歷史／PIT／保存，不放行legacy POST。新觀測見[§20.5](SOURCE_REGISTRY.md#205-m2-focus-day-move-1-同來源的新觀測與方向-consumer)、准入與唯一金融值見[§20](SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)，現行操作見[個股頁 §27](STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
 | TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。 |
 | TPEx 多日法人／交易日 | 現行W8獨立政府CSV policy有限接受3105／6488、9/21／9/22／9/23／9/24／9/29／9/30／10/1／10/2八截止5／20日窗口、96 net actual API及具名可信native；union為8/25～10/2完整27開市日法人＋三月index，只存process memory，不改DB／legacy。來源／用途見[§19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)，§13–18保留歷史。 |

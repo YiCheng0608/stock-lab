@@ -1,16 +1,19 @@
-import type { PriceLotFocusData } from './types'
+import type { PriceFocusDayMove, PriceLotFocusData } from './types'
 import { createPriceMemoryFixture, priceFixtureInstrument } from './stockPriceMemoryRead.test'
-import { exactLotsText, minLotsShares, priceFocusReturnPath, validPriceLotFocus } from './priceFocus'
+import { exactDayMove, exactLotsText, minLotsShares, priceFocusDetailPath, priceFocusReturnPath, validPriceFocusDayMove, validPriceLotFocus } from './priceFocus'
 
 /** Reconstructed client contract only; never an actual source capture. */
-export function createPriceFocusFixture(minLots = '20000'): PriceLotFocusData {
-  const scope = minLots === '50000' ? [] : minLots === '10000' || minLots === '0.000' ? ['3105', '6488'] : ['3105']
+export function createPriceFocusFixture(minLots = '20000', dayMove: PriceFocusDayMove = 'all'): PriceLotFocusData {
+  const volumeScope = minLots === '50000' ? [] : minLots === '10000' || minLots === '10000.000' || minLots === '0.000' ? ['3105', '6488'] : ['3105']
+  const scope = volumeScope.filter((symbol) => dayMove === 'all' || dayMove === (symbol === '3105' ? 'up' : 'down'))
   const minimum: Record<string, string> = { '20000': '20000000', '20000.000': '20000000', '10000': '10000000', '50000': '50000000', '0.000': '0' }
-  return { version: 'price-lot-focus/m2-v1', status: 'available', as_of: '2026-10-05', min_lots: minLots, min_shares: minimum[minLots],
+  return { version: 'price-lot-focus/m2-v2', status: 'available', as_of: '2026-10-05', min_lots: minLots, min_shares: minimum[minLots] ?? minLotsShares(minLots)!, day_move: dayMove,
     count: scope.length, items: scope.map((symbol) => ({ exchange: 'TPEx', symbol, name: symbol === '3105' ? '穩懋' : '環球晶',
       volume_exact: symbol === '3105' ? '48127911' : '18982607', volume_lots: symbol === '3105' ? '48127.911' : '18982.607',
-      min_lots: minLots, min_shares: minimum[minLots], reason: 'volume_at_least_min_lots', source_date: '2026-10-05', source_version: 'tpex-11370/2026-10-05',
-      detail_url: `/stocks/TPEx/${symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=${minLots}` })),
+      min_lots: minLots, min_shares: minimum[minLots] ?? minLotsShares(minLots)!, day_move: symbol === '3105' ? 'up' : 'down',
+      open_exact: symbol === '3105' ? '614.00' : '1220.00', close_exact: symbol === '3105' ? '615.00' : '1180.00',
+      reasons: ['volume_at_least_min_lots', symbol === '3105' ? 'close_above_open' : 'close_below_open'], source_date: '2026-10-05', source_version: 'tpex-11370/2026-10-05',
+      detail_url: priceFocusDetailPath(symbol, '2026-10-05', minLots, dayMove) })),
     reads: ['3105', '6488'].map((symbol) => ({ instrument: priceFixtureInstrument(symbol), price_memory: createPriceMemoryFixture(symbol) })),
     supported_scope: { exchange: 'TPEx', symbols: ['3105', '6488'], cutoff: '2026-10-05', currency: 'TWD', asset_type: 'stock' },
     can_capture: false, reasons: [], historical_pit: 'unsupported', sort: 'code_ascending' }
@@ -49,6 +52,11 @@ export function runPriceFocusTests(): number {
     (data) => { data.reads[1].instrument.currency = 'USD' }, (data) => { data.items[0].detail_url = 'https://foreign.example/' },
     (data) => { data.items[0].volume_exact = '0' }, (data) => { data.reads[1].price_memory!.as_of = '2026-10-02' },
     (data) => { data.reads[1].price_memory!.provenance!.captured_at = '2026-10-06T00:00:00Z' },
+    (data) => { data.items[0].day_move = 'flat' }, (data) => { data.items[0].open_exact = '614' },
+    (data) => { data.items[0].reasons[1] = 'close_below_open' }, (data) => { data.items[0].reasons.pop() },
+    (data) => { delete data.reads[0].price_memory!.latest!.source_fields['開盤'] },
+    (data) => { data.reads[0].price_memory!.latest!.source_fields['收盤'] = '-1' },
+    (data) => { data.day_move = 'up' },
   ]
   for (const corrupt of corruptions) { const data = createPriceFocusFixture('10000'); corrupt(data); check(!validPriceLotFocus(data, '2026-10-05', '10000'), 'reject incomplete or conflicting proof') }
   const falseEmpty = createUnloadedFocusFixture(); falseEmpty.status = 'available'; falseEmpty.count = 0; falseEmpty.can_capture = false; falseEmpty.reasons = []
@@ -58,7 +66,7 @@ export function runPriceFocusTests(): number {
   const bar = unsafe.reads[0].price_memory!.latest!
   bar.volume_exact = '9007199254740993'; bar.volume = null; bar.source_fields['成交股數'] = bar.volume_exact
   Object.assign(unsafe.items[0], { volume_exact: '9007199254740993', volume_lots: '9007199254740.993', min_lots: unsafe.min_lots, min_shares: unsafe.min_shares,
-    detail_url: '/stocks/TPEx/3105?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=9007199254740.993' })
+    detail_url: priceFocusDetailPath('3105', '2026-10-05', '9007199254740.993') })
   check(validPriceLotFocus(unsafe, '2026-10-05', '9007199254740.993'), 'above safe integer still selects exact equality')
   unsafe.min_lots = '9007199254740.994'; unsafe.min_shares = '9007199254740994'; unsafe.items = []; unsafe.count = 0
   check(validPriceLotFocus(unsafe, '2026-10-05', '9007199254740.994'), 'one share higher threshold excludes unsafe number')
@@ -73,15 +81,48 @@ export function runPriceFocusTests(): number {
       bar.volume_exact = volume; bar.volume = volume.length > 16 ? null : Number(volume); bar.source_fields['成交股數'] = volume
     }
     data.items = expectedCount === 0 ? [] : data.items.map((item) => ({ ...item, volume_exact: volume, volume_lots: lots,
-      min_lots: minimum, min_shares: shares, detail_url: `/stocks/TPEx/${item.symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=${minimum}` }))
+      min_lots: minimum, min_shares: shares, detail_url: priceFocusDetailPath(item.symbol, '2026-10-05', minimum) }))
     check(validPriceLotFocus(data, '2026-10-05', minimum), 'zero, one share and int64 complete-response boundary')
   }
   const good = 'as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=20000.000'
-  check(priceFocusReturnPath(new URLSearchParams(good)) === '/?as_of=2026-10-05&min_lots=20000.000#price-lot-focus-title', 'returns original equivalent threshold string')
+  check(priceFocusReturnPath(new URLSearchParams(good)) === '/?as_of=2026-10-05&min_lots=20000.000&day_move=all#price-lot-focus-title', 'legacy URL returns original threshold string and default direction')
   for (const bad of [good + '&next=https://foreign.example', good + '&focus_min_lots=1', good.replace('2026-10-05', '2026-02-30'),
-    good.replace('focus_as_of=2026-10-05', 'focus_as_of=https://foreign.example'), good.replace('20000.000', '1e3'), good.replace('from=price-lots', 'from=https://foreign.example')]) {
+    good.replace('focus_as_of=2026-10-05', 'focus_as_of=https://foreign.example'), good.replace('20000.000', '1e3'), good.replace('from=price-lots', 'from=https://foreign.example'),
+    good + '&focus_day_move=unknown', good + '&focus_day_move=up&focus_day_move=down', good + '&focus_day_move=',
+    good.replace('as_of=2026-10-05', 'as_of=2026-10-02'), good + '&from=price-lots', good + '&focus_as_of=2026-10-05']) {
     check(priceFocusReturnPath(new URLSearchParams(bad)) === null, 'reject malformed/foreign/duplicate return state')
   }
   check(!validPriceLotFocus(createPriceFocusFixture(), '2026-10-02', '20000'), 'reject response URL cutoff mismatch')
+  for (const move of ['all', 'up', 'down', 'flat'] as const) {
+    const data = createPriceFocusFixture('10000.000', move)
+    const expected = move === 'all' ? ['3105', '6488'] : move === 'up' ? ['3105'] : move === 'down' ? ['6488'] : []
+    check(data.items.map((item) => item.symbol).join() === expected.join() && validPriceLotFocus(data, '2026-10-05', '10000.000', move), 'all directions complete expected set ' + move)
+    check(priceFocusReturnPath(new URLSearchParams(good + '&focus_day_move=' + move)) === `/?as_of=2026-10-05&min_lots=20000.000&day_move=${move}#price-lot-focus-title`, 'complete original conditions ' + move)
+    check(!validPriceLotFocus(data, '2026-10-05', '10000.000', move === 'up' ? 'down' : 'up'), 'reject stale other direction ' + move)
+  }
+  for (const [opening, closing, expected] of [['1.000000000000000001', '1.000000000000000002', 'up'], ['1.000000000000000002', '1.000000000000000001', 'down'],
+    ['1', '1.000', 'flat'], ['0.0010', '0.001', 'flat'], ['9.9', '10.0', 'up'], ['0.0001', '0.001', 'up']]) {
+    check(exactDayMove(opening, closing) === expected, 'source exact decimal ' + opening + '/' + closing)
+  }
+  check(Number('1.000000000000000001') === Number('1.000000000000000002'), 'precision case actually projects to same Number')
+  for (const value of [null, 1, '', '0', '0.000', '-1', 'NaN', 'Infinity', '1e0', '01', '1.', '１', ' 1', '1\n', '1'.repeat(65)]) {
+    check(exactDayMove(value, '1') === null && exactDayMove('1', value) === null, 'reject invalid O/C ' + String(value))
+  }
+  for (const invalid of [null, 1, '', 'UP', 'all\n', 'unknown']) check(!validPriceFocusDayMove(invalid), 'reject invalid direction')
+  const precise = createPriceFocusFixture('10000', 'up')
+  const preciseBar = precise.reads[0].price_memory!.latest!
+  preciseBar.open = preciseBar.close = 1; preciseBar.low = 1; preciseBar.high = 2
+  Object.assign(preciseBar.source_fields, { '開盤': '1.000000000000000001', '收盤': '1.000000000000000002', '最低': '1', '最高': '2' })
+  Object.assign(precise.items[0], { open_exact: '1.000000000000000001', close_exact: '1.000000000000000002' })
+  check(validPriceLotFocus(precise, '2026-10-05', '10000', 'up'), 'validator selects up despite same projected Number')
+  const flat = createPriceFocusFixture('10000')
+  flat.day_move = 'flat'
+  for (const read of flat.reads) {
+    const bar = read.price_memory!.latest!
+    bar.open = bar.close = 1; bar.low = 1; bar.high = 2
+    Object.assign(bar.source_fields, { '開盤': '1.0', '收盤': '1.000', '最低': '1', '最高': '2' })
+  }
+  for (const item of flat.items) Object.assign(item, { day_move: 'flat', open_exact: '1.0', close_exact: '1.000', reasons: ['volume_at_least_min_lots', 'close_equal_open'], detail_url: priceFocusDetailPath(item.symbol, '2026-10-05', '10000', 'flat') })
+  check(validPriceLotFocus(flat, '2026-10-05', '10000', 'flat'), 'equal value with different trailing decimals selects flat')
   return checks
 }

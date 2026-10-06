@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator, model_validator
 from sqlalchemy import and_, desc, func, or_, select
@@ -1721,26 +1721,28 @@ def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _price_focus(db: Session, as_of: date, min_lots: str, *, capture: bool = False) -> dict[str, Any]:
+def _price_focus(db: Session, as_of: date, min_lots: str, day_move: str, request: Request, *, capture: bool = False) -> dict[str, Any]:
+    if any(len(request.query_params.getlist(key)) > 1 for key in ("as_of", "min_lots", "day_move")):
+        raise HTTPException(status_code=422, detail="duplicate price focus conditions")
     with db.no_autoflush:
         instruments = list(db.scalars(select(Instrument).where(
             Instrument.exchange == "TPEx", Instrument.symbol.in_(("3105", "6488"))).order_by(Instrument.symbol)).all())
     try:
-        return build_price_focus(instruments, as_of, min_lots, capture=capture)
+        return build_price_focus(instruments, as_of, min_lots, day_move, capture=capture)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/focus/price-lots")
-def price_lot_focus(as_of: date = Query(...), min_lots: str = Query(..., max_length=20),
+def price_lot_focus(request: Request, as_of: date = Query(...), min_lots: str = Query(..., max_length=20), day_move: str = Query("all", max_length=4),
                     db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _price_focus(db, as_of, min_lots)
+    return _price_focus(db, as_of, min_lots, day_move, request)
 
 
 @router.post("/focus/price-lots/capture")
-def price_lot_focus_capture(as_of: date = Query(...), min_lots: str = Query(..., max_length=20),
+def price_lot_focus_capture(request: Request, as_of: date = Query(...), min_lots: str = Query(..., max_length=20), day_move: str = Query("all", max_length=4),
                             db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _price_focus(db, as_of, min_lots, capture=True)
+    return _price_focus(db, as_of, min_lots, day_move, request, capture=True)
 
 
 @router.get("/focus/official-events")
