@@ -114,6 +114,10 @@ SIXTH_SCOPE_POLICY_VERSION = "m2-stock-scope-tpex-11370-2026-10-06.4"
 _POLICY_STOCK_SCOPE_20261006_V4 = deepcopy(_POLICY_STOCK_SCOPE_20261006_V3)
 _POLICY_STOCK_SCOPE_20261006_V4["version"] = SIXTH_SCOPE_POLICY_VERSION
 _POLICY_STOCK_SCOPE_20261006_V4["scope"]["symbols"] = {"3105": "穩懋", "3293": "鈊象", "5274": "信驊", "5347": "世界", "6488": "環球晶", "8069": "元太"}
+SEVENTH_SCOPE_POLICY_VERSION = "m2-stock-scope-tpex-11370-2026-10-06.5"
+_POLICY_STOCK_SCOPE_20261006_V5 = deepcopy(_POLICY_STOCK_SCOPE_20261006_V4)
+_POLICY_STOCK_SCOPE_20261006_V5["version"] = SEVENTH_SCOPE_POLICY_VERSION
+_POLICY_STOCK_SCOPE_20261006_V5["scope"]["symbols"] = {"3105": "穩懋", "3293": "鈊象", "5274": "信驊", "5347": "世界", "6488": "環球晶", "6510": "精測", "8069": "元太"}
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)", re.ASCII)
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", re.ASCII)
 _CODE = re.compile(r"[0-9A-Z]{4,12}", re.ASCII)
@@ -134,7 +138,7 @@ def digest(value: Any) -> str:
 def price_policy(cutoff: date = CUTOFF, *, policy_version: str | None = None) -> dict:
     if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
-    policies = [_POLICY] if cutoff == CUTOFF else [_POLICY_20261006, _POLICY_STOCK_SCOPE_20261006, _POLICY_STOCK_SCOPE_20261006_V2, _POLICY_STOCK_SCOPE_20261006_V3, _POLICY_STOCK_SCOPE_20261006_V4]
+    policies = [_POLICY] if cutoff == CUTOFF else [_POLICY_20261006, _POLICY_STOCK_SCOPE_20261006, _POLICY_STOCK_SCOPE_20261006_V2, _POLICY_STOCK_SCOPE_20261006_V3, _POLICY_STOCK_SCOPE_20261006_V4, _POLICY_STOCK_SCOPE_20261006_V5]
     if policy_version is None:
         return deepcopy(policies[-1])
     for policy in policies:
@@ -149,6 +153,8 @@ def policy_symbols(cutoff: date, *, policy_version: str | None = None) -> dict[s
 
 def worker_version(cutoff: date, *, policy_version: str | None = None) -> str:
     policy = price_policy(cutoff, policy_version=policy_version)
+    if policy["version"] == SEVENTH_SCOPE_POLICY_VERSION:
+        return "tpex-price-capture/m2-stock-scope-v5"
     if policy["version"] == SIXTH_SCOPE_POLICY_VERSION:
         return "tpex-price-capture/m2-stock-scope-v4"
     if policy["version"] == FIFTH_SCOPE_POLICY_VERSION:

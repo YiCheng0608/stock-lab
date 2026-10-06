@@ -64,6 +64,27 @@ class MemoryAPIFixture:
 
 
 class PriceAPITests(unittest.TestCase):
+    def test_seven_stock_router_cache_and_seventh_cutoff_preserve_catalogue(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.SEVENTH_SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                self.assertEqual(client.post("/api/stocks/TPEx/6510/prices/capture?as_of=2026-10-06").json()["status"], "available")
+                symbols = ["3105", "3293", "5274", "5347", "6488", "6510", "8069"]
+                for symbol in symbols:
+                    memory = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-06").json()["overview"]["price_memory"]
+                    self.assertEqual(memory["version"], "stock-price-memory/m2-stock-scope-v5")
+                    self.assertEqual(memory["provenance"]["selected_symbols"], symbols)
+                    self.assertIsNone(memory["latest"]["id"])
+                    self.assertEqual(client.post(f"/api/stocks/TPEx/{symbol}/prices/capture?as_of=2026-10-06").json()["capture_state"]["action"], "cached")
+                    if symbol == "6510":
+                        self.assertEqual(tuple(memory["latest"][key] for key in ("open", "high", "low", "close", "volume_exact", "turnover_exact")), (3125, 3140, 3050, 3055, "560518", "1729347985"))
+                for suffix in ("", "?as_of=2026-10-02", "?as_of=2026-10-05"):
+                    self.assertIsNone(client.get("/api/stocks/TPEx/6510" + suffix).json()["overview"]["price_memory"]["latest"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_six_stock_router_cache_and_sixth_cutoff_do_not_mutate_catalogue(self):
         from fastapi.testclient import TestClient
         fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF, policy_version=worker.SIXTH_SCOPE_POLICY_VERSION)

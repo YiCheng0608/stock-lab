@@ -137,7 +137,7 @@ def check():
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
-    output.update(tests=run.testsRun, failures=len(run.failures), errors=len(run.errors), fixtures="reconstructed selected six values plus synthetic rows, memory only")
+    output.update(tests=run.testsRun, failures=len(run.failures), errors=len(run.errors), fixtures="reconstructed tuple-scoped selected values plus synthetic rows, memory only")
     print(json.dumps(output, ensure_ascii=False), flush=True)
     return 0 if run.wasSuccessful() and not any(COUNTS.values()) else 1
 

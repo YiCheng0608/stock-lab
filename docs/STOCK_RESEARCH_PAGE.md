@@ -1084,7 +1084,7 @@ Actual desktop **1277×924**、窄版**390×844**均已核 `2026-10-06 / 1495.46
 
 ### 32.4 完成、版本與未驗邊界
 
-Root accepted source12／net24911B及核心：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0；來源與具名產品已驗不等於版本封存。八DOC review→完整freeze→七scope索引／qualified coverage→exact local commit→另准master merge仍pending。Owned page／API／preview／compiler／observer已清、held raw隨process exit釋放；必要checks、rawexit及清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-3-五股範圍的記憶體驗證入口)管理。
+Root accepted source12／net24911B及核心：coreoperation+1／selected identity-source scope dependency+1／reliability0／stall0。五股source12＋DOC8／freeze20／七scope qualified索引、exact commit及正常ff-only local master merge已接受；收據留原task。Owned page／API／preview／compiler／observer已清、held raw隨process exit釋放；必要checks、rawexit及清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-3-五股範圍的記憶體驗證入口)管理。
 
 未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／完整日曆、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。歷史NO-RETRY資源排除，既有有效證據按適用範圍沿用。
 
@@ -1123,6 +1123,39 @@ Root首次card anchor label extractor為null、第二state shell inner-doublequo
 
 ### 33.4 完成、版本與未驗邊界
 
-Root accepted source13／net25368B與B1核心：coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0。Owned page／API／preview／compiler已清、held raw已釋放；necessary checks與原exit／清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理。DOC review／freeze／qualified affected index／exact local commit／另准master merge／下一統籌gate仍pending，功能接受不等於版本封存。
+Root accepted source13／net25368B與B1核心：coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0。六股source13＋DOC8／freeze21／七分區qualified索引、exact commit／正常ff-only local master merge及下一統籌visible gate已接受。Owned page／API／preview／compiler已清、held raw已釋放；necessary checks與原exit／清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理。
 
 未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。歷史NO-RETRY排除，既有有效證據按範圍沿用。
+
+## 34. M2-FOCUS-STOCK-SCOPE-5：七股關注與同截止往返
+
+普通TPEx支援6→7新增6510精測的資料／計算、actual API及可信桌面／窄版操作已有限接受。Scope code順3105／3293／5274／5347／6488／6510／8069、source-date2026-10-06；focus `price-lot-focus/m2-v9`、projection `stock-price-memory/m2-stock-scope-v5`。身份／policy／金融原件權威見[來源 §29](SOURCE_REGISTRY.md#29-m2-focus-stock-scope-5七股來源准入)。
+
+### 34.1 完整gate與actual API
+
+沿§29.1精確張／canonical股、原O/C、int64 TWD元及振幅公式。Default10/06採`.5`七股，explicit舊六股及更早immutable tuples／舊兩股producer相容保持；公開條件仍`as_of/min_lots/day_move/min_turnover/min_range_pct`，不增加第六條。
+
+全部required reads／逐股身份及金融／同cutoff／tuple／provenance先gate後filter；任一missing／invalid／conflict為unavailable、count=null、items=[]，不跳壞股或縮scope。完整七股available/count0才是真零；四理由固定順序去重、一股一卡／code升序，frontend獨立重驗raw與safe local五條件URL。
+
+Root actual API10案已核126欄／42金融值及原六股canonical保持；七symbol POST＋一focus POSTcached零新增source。Default／explicit10/02／old10/05對6510unavailable已核，後者不升格未跑native日期case。Source修改後final Store1／runner1／preloaded=false／guards0／disk0／DB preserved；兩次financial GET版本由來源§29.2管理。
+
+| 10/06門檻（min_lots／day_move／min_turnover／min_range_pct） | 已接受結果（code順） |
+| --- | --- |
+| 560.518／down／1729347985／2.880 | 3105＋6510 |
+| 560.518／down／1729347985／2.881 | 3105 |
+| 0.000／all／0／0.000 | 全七股 |
+| 0.000／all／0／10 | available/count0／items=[] |
+
+6510張560.518 inclusive／560.519排除、成交額1729347985 inclusive／1729347986排除、振幅2.880 inclusive／2.881排除均按原exact值核。顯示約值或3,055千分位不替代原3055.00與精確比較。
+
+### 34.2 Desktop／窄版往返
+
+唯一owned page `045cdead-1528-460f-adc2-949aa3fc0fa1`：desktop1277×924全七股→lower→6510同cutoff detail→raw open→back保留五原字串→upper；窄版390×844 upper→lower→6510 detail／raw open／back→upper→真零→restore。Lower為`2026-10-06 / 560.518 / down / 1729347985 / 2.880`，upper只改2.881，原尾零完整返回；raw追溯ordinal726／含header727。
+
+21個native click／submit／toggle均isTrusted=true；draft programmatic fill／select只setup，不稱trusted typing。14個states含full raw open，desktop scrollWidth1262≤1277／窄版375≤390；窄版`0.000 / all / 0 / 10`真零，振幅0.000恢復七股code順。
+
+### 34.3 完成及未驗
+
+Source14及本B1核心已root接受：coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0；owned page／API／preview／compiler已清，raw已釋放。Checks與cleanup／原exit見[開發入口](development-baseline/README.md#m2-focus-stock-scope-5-七股範圍的記憶體驗證入口)。DOC review→freeze→qualified affected index→exact local commit→另准master merge／新統籌gate尚待。
+
+未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／complete calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。下一M1-PRICE-SAVE-1需新用途／私有磁碟範圍准入及actual跨程序API／UI；當前操作仍process memory。

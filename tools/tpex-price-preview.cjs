@@ -179,7 +179,7 @@ function stockFixture(symbol = '3105', cutoff = '2026-10-05', policyVersion) {
   const data = { instrument: memoryCases.priceFixtureInstrument(symbol), overview,
     bars: [{ date: '2026-10-02', open: 10, high: 11, low: 9, close: 10, adj_close: 10, volume: 1000, source: 'synthetic', is_suspended: false }],
     features: {}, chips: [], groups: [], news: [], events: [], corporate_actions: [], fundamentals: [], data_quality: [], signals: [], strategy_conditions: {}, decision_summary: null }
-  const serializedCap = [memoryRead.PRICE_SCOPE_POLICY_VERSION_V3, memoryRead.PRICE_SCOPE_POLICY_VERSION_V4].includes(policyVersion) ? 80 * 1024 : 64 * 1024
+  const serializedCap = [memoryRead.PRICE_SCOPE_POLICY_VERSION_V3, memoryRead.PRICE_SCOPE_POLICY_VERSION_V4, memoryRead.PRICE_SCOPE_POLICY_VERSION_V5].includes(policyVersion) ? 80 * 1024 : 64 * 1024
   assert(Buffer.byteLength(JSON.stringify(data)) <= serializedCap && estimateGraph(data) <= 512 * 1024, 'tuple-scoped bounded ordinary memory fixture; estimate is not RSS')
   return data
 }
@@ -199,6 +199,26 @@ async function check() {
     const App = await appSSRModule()
     let appChecks = 0
     const verify = (value, message) => { appChecks++; assert(value, message) }
+    for (const [lots, move, amount, range, expected] of [['0.000', 'all', '0', '0.000', '3105,3293,5274,5347,6488,6510,8069'], ['560.518', 'down', '1729347985', '2.880', '3105,6510'], ['560.519', 'down', '1729347985', '2.880', '3105'], ['560.518', 'down', '1729347986', '2.880', '3105'], ['560.518', 'down', '1729347985', '2.881', '3105'], ['0', 'all', '0', '10', '']]) {
+      const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5)
+      assert(data.reads.length === 7 && Buffer.byteLength(JSON.stringify(data)) <= 80 * 1024 && estimateGraph(data) <= 512 * 1024, 'seven-stock ordinary fixture budget')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      client.setQueryData(['price-lot-focus', '2026-10-06', lots, move, amount, range], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-06&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}`] }, React.createElement(App.default))))
+      verify(data.items.map((item) => item.symbol).join() === expected && (html.match(/class="focus-card"/g) || []).length === data.count, 'seven-stock exact focus rendered')
+      verify(html.includes('已核 7 股') && (expected !== '' || html.includes('零候選')), 'seven-stock scope and true zero')
+      if (expected.includes('6510')) verify(html.includes('6510 精測') && html.includes('560.518') && html.includes('1,729,347,985') && html.includes('收低於開：'), 'seventh exact selected reasons')
+      if (data.items.length === 7) verify(html.indexOf('6488 環球晶</strong>') < html.indexOf('6510 精測</strong>') && html.indexOf('6510 精測</strong>') < html.indexOf('8069 元太</strong>'), 'seventh between 6488 and 8069 in admitted code order')
+      client.clear()
+    }
+    const seventhClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    seventhClient.setQueryData(['stock', 'TPEx', '6510', '2026-10-06'], stockFixture('6510', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5))
+    const seventhHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: seventhClient }, React.createElement(MemoryRouter,
+      { initialEntries: ['/stocks/TPEx/6510?as_of=2026-10-06&from=price-lots&focus_as_of=2026-10-06&focus_min_lots=560.518&focus_day_move=down&focus_min_turnover=1729347985&focus_min_range_pct=2.880'] }, React.createElement(App.default))))
+    verify(seventhHTML.includes('560.518') && seventhHTML.includes('>3,055<') && seventhHTML.includes('金融數值僅核 3105、3293、5274、5347、6488、6510、8069') && seventhHTML.includes('資料列序 726'), 'seventh same-cutoff detail and reconstructed raw summary')
+    verify(seventhHTML.includes('/?as_of=2026-10-06&amp;min_lots=560.518&amp;day_move=down&amp;min_turnover=1729347985&amp;min_range_pct=2.880#price-lot-focus-title'), 'seventh safe exact five-string return')
+    seventhClient.clear()
     for (const [lots, move, amount, range, expected] of [['0.000', 'all', '0', '0.000', '3105,3293,5274,5347,6488,8069'], ['10796.741', 'up', '1607943663', '4.421', '5347,6488,8069'], ['10796.742', 'up', '1607943663', '4.421', '5347,6488'], ['10796.741', 'up', '1607943664', '4.421', '5347,6488'], ['10796.741', 'up', '1607943663', '4.422', '5347,6488'], ['0', 'all', '0', '10', '']]) {
       const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V4)
       assert(data.reads.length === 6 && Buffer.byteLength(JSON.stringify(data)) <= 80 * 1024 && estimateGraph(data) <= 512 * 1024, 'six-stock ordinary fixture budget')
@@ -377,9 +397,12 @@ async function check() {
     const sixthFixtures = [focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V4), stockFixture('8069', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V4)]
     const sixthFixtureBytes = Buffer.byteLength(JSON.stringify(sixthFixtures)), sixthObjectEstimate = estimateGraph(sixthFixtures)
     assert(sixthFixtures[0].reads.length === 6 && sixthFixtureBytes <= 80 * 1024 && sixthObjectEstimate <= 512 * 1024, 'six-stock combined bounded fixtures; old bounds retained')
+    const seventhFixtures = [focusCases.createPriceFocusFixture('0', 'all', '0', '0', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5), stockFixture('6510', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5)]
+    const seventhFixtureBytes = Buffer.byteLength(JSON.stringify(seventhFixtures)), seventhObjectEstimate = estimateGraph(seventhFixtures)
+    assert(seventhFixtures[0].reads.length === 7 && seventhFixtureBytes <= 80 * 1024 && seventhObjectEstimate <= 512 * 1024, 'seven-stock combined bounded fixtures; old bounds retained')
     console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: fixtureBytes,
       fixture_object_estimated_bytes: fixtureObjectEstimate, fifth_fixture_bytes: fifthFixtureBytes, fifth_object_estimated_bytes: fifthObjectEstimate,
-      sixth_fixture_bytes: sixthFixtureBytes, sixth_object_estimated_bytes: sixthObjectEstimate, max_selected_rows: 6,
+      sixth_fixture_bytes: sixthFixtureBytes, sixth_object_estimated_bytes: sixthObjectEstimate, seventh_fixture_bytes: seventhFixtureBytes, seventh_object_estimated_bytes: seventhObjectEstimate, max_selected_rows: 7,
       known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(), not_run: ['actual source', 'native browser operation', 'disk persistence', 'production build', 'full prior suite'] }))
     return
   }

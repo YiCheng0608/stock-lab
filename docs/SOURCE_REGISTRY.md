@@ -6,7 +6,7 @@
 
 法人現行兩股八截止W8版本／來源／27日曆與96 net見[§19](#19-m1-w8八截止法人來源與完整有界日曆)；§13–18保留歷史觀測／數值，不作implicit latest。M1-PRICE-1的dataset11370新價格來源、production capture／API及兩股具名操作已有限接受，權威見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
 
-現行M2普通TPEx六股scope與same-date新body／policy准入見[§27](#27-m2-focus-stock-scope-4六股來源准入)；source日期仍10/06、臺北取得10/07。§20～25保留舊policy／金融表，月wire metadata與用途缺口見[§26](#26-m1-history-month-wire-1月參數推論與用途缺口)；不放行多日close、PIT或保存。
+現行M2普通TPEx七股scope、same-date新body／policy准入見[§29](#29-m2-focus-stock-scope-5七股來源准入)；quote-date仍2026-10-06、臺北取得10/07。§20～27保留已驗舊policy／金融表與月wire推論；NEW開放平台metadata及用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。現行`.5`仍只process memory，私人磁碟保存另須exact用途／版本准入。
 
 ## 1. Registry 與 policy 契約
 
@@ -1041,4 +1041,62 @@ Root逐欄核selected六股108欄：18身分欄只去外側空白比對，其餘
 
 Root actual API10案、六stock POST＋一focus POST cached且無新增source、四理由去重／code順／全六股先gate後filter；8069 samecutoff五原字串raw往返、desktop1277×924／窄版390×844與真零／恢復已核。B1 coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0；BOOT／§26 metadata／DOC／index／Git非implementation batch。Necessary checks與rawexit1／cleanup verify0分報由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理。
 
-未驗磁碟保存／跨程序、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。版本封存尚需DOC review→freeze→qualified affected index→exact local commit→另准master merge，最終hash留原task；其他來源與scope不由本節自動准入。
+未驗磁碟保存／跨程序、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。六股source13＋DOC8／freeze21／qualified七分區索引、exact commit及正常ff-only local master merge已接受；後續統籌visible gate亦已接受，收據留原task／協作紀錄。其他來源與scope不由本節自動准入。
+
+## 28. M1-HISTORY-OPEN-DATA-LINK-1：開放平台metadata與歷史用途缺口
+
+本輪三份完整native metadata body已有限review；歷史金融GET／POST0、core0／dep0、非implementation batch、stall0保持。§26月wire仍僅script推論，以下證據未建立exact月資源open-platform linkage／automated-use eligibility，不作全域禁止或歷史來源不可能主張。
+
+### 28.1 Exact REST／SSR版本及觀測邊界
+
+官方rendered [dataset介面說明](https://data.gov.tw/about/doc?chapter=27&doc=8)與[suggests介面說明](https://data.gov.tw/about/doc?chapter=76&doc=13)支持GET `/{datasetId}`／`/{suggestId}`、無query的REST wire；rendered指南不是native body receipt。Root首次native guide GET在1MiB／20秒raw／deadline assertion失敗、exit1，未取得可准入完整body／hash，raw已釋放，未自動retry。
+
+| Native metadata／HTTP200完整body | request→capture UTC（2026-10-06） | Bytes／SHA256 |
+| --- | --- | --- |
+| [REST dataset11371](https://data.gov.tw/api/v2/rest/dataset/11371) | 21:47:46.801710→21:47:47.016911 | 3128／`600e7a88bce62c4594ff51a7785bc47442013e29dac33329a2d6af9227dd1002` |
+| [suggest136936 SSR](https://data.gov.tw/suggests/136936) | 21:50:22.892381→21:50:23.292382 | 473658／`5bf70f34d43a687a5b85677ac55802a63afccb836645a74cfa75140fe336269a` |
+| [REST suggest136936](https://data.gov.tw/api/v2/rest/suggests/136936) | 21:52:46.630982→21:52:46.793982 | 3090／`bf16525d2b8f5d6e56ecdc6d5cce68f86b1f0f84d74df0f8c6fccd0b116cd984` |
+
+三次各先核one GET／20秒／raw1MiB／parsed8MiB、redirect0／retry0／disk0，完整body合計479876B；parsed graph estimates分別12381／1429333／6870B，不是RSS。每次process結束釋放，沒有附件、原件保存或金融驗證。
+
+11371標題上櫃股票收盤行情，identifier `A45020000D-000079`、published2015-12-03／modified2024-12-05 09:28:05；免費／license1、每日收盤後stocks／warrants／ETF／ETN，唯一UTF-8 CSV為[exact daily resource](https://www.tpex.org.tw/web/stock/aftertrading/otc_quotes_no1430/stk_wn1430_result.php?l=zh-tw&se=EW&o=data)。16欄、method／OAS空、request path parameters=[]；quality2026-08-19 17:15:25及resourceAmount934不等於金融body核對、歷史coverage或月alias。
+
+### 28.2 Reply history、身份未證與剩餘缺口
+
+SSR題名為上市與上櫃個股日成交資訊歷史查詢，顯示FSC分派／已回覆；此SSR未見agency reply文字、TPEx／TWSE外部anchor為空，僅是該surface邊界。完整REST另有reply history，不由SSR空白推成沒有回覆。
+
+REST top comment554663／pid0／2025-01-24 17:02:27稱歷史資料提供販售、政府平台只提供最新資料，連到TWSE／TPEx e-shop並帶「證交所及櫃買中心謹復」署名。suggest_type無法開放／reply_status已回復／status已結案(未開放)、notopen_reason無資料，尚未蒐集建置；open_datasetID／application_url空。這不提供免費exact月alias或自動用途准入。
+
+Nested554664／pid554663詢問每天更新及自行累積歷史，是提問而非授權。Nested554666／pid554664／2025-02-13 13:51:42回覆約交易日下午2點每天更新並引OGL1.0無需額外書面許可的權利；只支持latest每日收集邊界，不補成archive／月資源grant。Top masked author `z****6`、nested作者role未提供，top comment subject實為信用卡特約商店分類與帳務資料，與主題不符；帳號身份仍unverified，不能把署名當獨立官方帳號證明。
+
+Exact歷史月資源linkage／用途仍缺，actual20／21普通股close＋complete calendar＋strategy／time／execution未解除。Root據新證據重選§29獨立正面核心；無新可執行歷史path時保留待驗，不反覆相同wire／extractor或legacy retry。
+
+## 29. M2-FOCUS-STOCK-SCOPE-5：七股來源准入
+
+普通TPEx支援6→7新增6510精測已由root有限接受，code順3105／3293／5274／5347／6488／6510／8069、quote-date2026-10-06；原六股canonical byte-equal。具名操作由[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)管理，§20～27歷史版本保持。
+
+### 29.1 Fresh身份／政府linkage與獨立版本
+
+Root fresh [ISIN catalogue](https://isin.twse.com.tw/isin/C_public.jsp?strMode=4)於2026-10-06T21:56:55.796038Z→21:56:58.334663Z GET200、2983574B／strict ms950；SHA `68bc970ecc575e36a7820623d21691c44ca0a8d9d2d694dc021518a4e4fee71b`。6510精測／ISIN `TW0006510001`／掛牌2016-03-24／上櫃半導體業／CFI `ESVUFR`／ETF分類空；全七股TW／TPEx／stock／TWD已核。這是operational catalogue，不補歷史membership／PIT。
+
+Fresh [REST dataset11370](https://data.gov.tw/api/v2/rest/dataset/11370)於21:56:58.521664Z→21:56:58.741663Z GET200、3184B，SHA `64950fc1b492ee223fe86e16fb7d49a27426d1697c0c1f4553330279ca09fbe4`，linkage為[exact政府daily CSV](https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data)。同批fresh [OGL1.0](https://data.gov.tw/license)484470B／SHA `1155d5e33bfcf113a5554de7c27d60084244044ea0625f7f56c0280225b109ba`及[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)14834B／SHA `74564ae8a0bb7dfe38c7dad17f13dd0bf3ca28ae40bcd813dffb81d53ce2d6b7`，均HTTP200；四metadata GET共3486062B、memory已釋放。沿政府平台例外／顯名完整性，僅准入此exact daily資源的bounded process-memory local_fetch／raw_store／summarize，不放行磁碟保存、歷史參數或其他自動下載。
+
+New policy `m2-stock-scope-tpex-11370-2026-10-06.5` canonical UTF-8 1548B／digest `sha256:5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040`；worker `tpex-price-capture/m2-stock-scope-v5`、projection `stock-price-memory/m2-stock-scope-v5`、focus `price-lot-focus/m2-v9`。Default10/06採七股；explicit舊`.4`六股及更早tuples／pins／scope immutable，舊兩股producer／consumer相容保持；原五URL條件不增第六條。
+
+### 29.2 兩次金融GET與final actual原件
+
+本輪financial CSV GET總2：OBS1 root獨立fresh於21:57:26.781009Z→21:57:27.625218Z、rawexit0後釋放；retained graph estimate5133807B≤32MiB，不是RSS。OBS2是source修改後actual API PID8752的native首次load觸發NEW worker GET，於22:11:43.161045Z→22:11:43.943046Z、Store1／runner1／preloaded=false，沒有OBS1 preload／copy／replay，不稱全輪只GET1。
+
+Final HTTP200、1788599B／12194 data rows／18欄／全1151006，body SHA `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200`與root OBS1相同。Admitted receipt1461B／SHA `3df8b33c7518b730ae21e89dd82ef4297ea0ed535dbe4cb1af8e2f0d005d4757`。Root核七股126欄：21身份欄只去外側空白比對，其餘105原字串exact、42金融值、全部required reads／cutoff／provenance合格；raw source_fields原空白保持。Guards0／disk0／DB preserved／DB IDs null，API exit後held raw已釋放。
+
+| 新股／data ordinal／含header行 | O／H／L／C（元／股原字串） | canonical股 | 日常張 | 成交金額（TWD元） |
+| --- | --- | --- | --- | --- |
+| 6510精測／726／727 | 3125.00／3140.00／3050.00／3055.00 | 560518 | 560.518 | 1729347985 |
+
+6510 O/C為down，本日振幅exact2.880%；比較沿穩定精確契約，不以顯示「約」或千分位替代原值。Quote-date不等於published／first availability／revision，後三仍unknown、historical_pit unsupported。
+
+### 29.3 有限接受、進度及保存缺口
+
+Source14／net27343B、actual API10案及可信desktop／窄版samecutoff往返已接受；coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0。BOOT／§28 metadata／DOC／index／Git不計implementation batch。必要checks與原exit／清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-5-七股範圍的記憶體驗證入口)管理；DOC review／freeze／qualified affected index／exact local commit／另准master merge尚待。
+
+下一優先M1-PRICE-SAVE-1是PRIVATE local store保存已准入單日capture／provenance並跨程序讀回的產品操作；目前`.5`仍只process memory，新disk用途policy／schema／private path／files caps及清理尚未准入。新root須先核fresh source／storage-purpose／time／version及具體bounded原task範圍，再金融GET／落盤；完整body SHA讀回需one bounded raw＋canonical receipt，selected projection不足。須actual disk與cross-process API／UI驗收，不宣稱20／21close／calendar／strategy／execution或完整M1／M2／M3完成，亦不以ATR／Signal／Plan／ranking替代。

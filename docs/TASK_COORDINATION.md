@@ -1,3 +1,77 @@
+## 目前：M2-FOCUS-STOCK-SCOPE-5 七股核心已有限接受；待 DOC review／freeze
+
+2026-10-07 Asia/Taipei。Main repo／共同cwd／runtimeWorkspaceRoots／branch同下方unchanged BOOT，本輪root／三child不變；starting／current／master HEAD `54c1f879936b29dbbb2a410b27e75fa362e7256d`。前輪六股source13＋DOC8／freeze21／net56664B、qualified七分區索引／exact commit／正常ff-only master merge、本輪唯一visible gate／ORIGINAL root SINGLE continuation已接受。下方完整115268B pre-core suffix byte全留，含BOOT5673B及109595B／99323B歷史；舊pending由原task／Git receipt及本節覆蓋，舊roster不再派工。
+
+### 本輪原四角色及目前白名單
+
+| 角色 | Actual ID／配置 | 已接受範圍／交付 |
+| --- | --- | --- |
+| 統籌 | `01a1131f-7678-7c11-b75c-318e58a88ac4`；gpt-6.1-sol／ultra | 已核來源／金融／actual API／trusted native及清理；DOC review後freeze。 |
+| 程式 | `01a11321-a05f-7a01-aded-c89c2ad5bfcc`（Kierkegaard）；gpt-6.1-sol／xhigh | 原task核准source14／net27343B已root接受，交付停寫。 |
+| 文件 | `01a11321-d0c2-7413-b707-7752b8941e8d`（Rawls）；gpt-6.1-sol／xhigh | 原task核准八既有DOC，aggregate net≤32768B含BOOT5673B，新handoff prefix≤6144B；UTF-8／LF／noBOM／歷史byte全留，交付停寫待review。 |
+| 索引與 Git | `01a11322-04ff-72f3-adb4-deea8e3c07d0`（Aquinas）；gpt-6-luna／medium | source=[]，完整freeze前不refresh／stage／commit／merge；已接受前任exact正常closure／archive。 |
+
+沿本root native fork_turns=none原三角色續作；actual配置／parent／sessionId／共同根與唯一visible gate收據見下方BOOT，不relaunch／reuse。App connected／list68完整、七month-wire baseline仍用；best_effort／metadata_changed與五parser partial保持、不稱fresh complete，freeze前不refresh／copy。
+
+### Metadata邊界、七股核心與進度
+
+`M1-HISTORY-OPEN-DATA-LINK-1`三native metadata有限review；REST11371 daily-only、suggest SSR／REST reply及masked帳號／錯subject邊界見[來源 §28](SOURCE_REGISTRY.md#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。Original guide GET raw／deadline assertion exit1，未准入完整body/hash、raw釋放／不autoretry；歷史金融GET0、exact月linkage／用途未准入，core0／dep0／非implementation batch／stall0保持。
+
+Root改選`M2-FOCUS-STOCK-SCOPE-5-B1`，普通TPEx6→7新增6510精測。Fresh身份／11370 REST／用途／date與`.5`／m2-v9已准入，全七股gate／四理由／code順、原六股canonical及舊tuples保持。金融兩次GET及final post-edit NEW worker1／Store1／runner1／preloadedfalse權威見[來源 §29](SOURCE_REGISTRY.md#29-m2-focus-stock-scope-5七股來源准入)，不稱全輪只GET1或OBS1 preload。
+
+Actual API10案、八cached POST零新增source，6510精確inclusive／upper排除及日期不足已核；desktop1277×924／窄版390×844 detail／raw／back五原字串、真零／七股恢復、14states無溢出已接受。21trusted events／draft只setup，權威見[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。
+
+繼承六股core+1／dep+1／reliability0／stall0；本B1 coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0。BOOT／M1 metadata／DOC／index／Git不計implementation batch，較早unknown歷史保留，完整ROADMAP／M1／M2／M3未完成。
+
+### 必要驗證、清理及版本待辦
+
+Source14／necessary checks已接受；bulk preflight及首Node focus原exit1保留，受影響focus修正後才exit0。七row fixture及舊caps不放寬，版本／完整結果／原失敗由[開發入口](development-baseline/README.md)管理，fixture不代金融驗收。
+
+唯一lifetime page045cdead-1528-460f-adc2-949aa3fc0fa1 closed／tabs0；API8752／preview48316／compiler39468 absent、8801／8802／8871 listeners none、held raw釋放。Ctrl+C API／preview rawexit1與cleanup verify0分報，stop guards0／disk0／DB preserved；無profiles／screenshots／HAR／env install／KeepArtifacts／新附件。未跑保存／跨程序／full suite／production build、全市場／PIT／歷史研究。
+
+本輪八DOC review→完整freeze→qualified七分區index→exact local commit→另准master merge→新root visible gate尚待。只stage root核准檔；source再變需補DOC再補刷，index不代功能驗收，finalhash留原task、不反覆刷新提交。
+
+### 下一核心及outside owner
+
+下一優先`M1-PRICE-SAVE-1`：PRIVATE local store保存已准入單日capture／provenance並new process讀回；observed capture time≠publication／PIT。目前`.5`只process memory，exact disk用途／policy／schema／private path／file caps／cleanup未准入，不用正式DB。新root原task先核fresh source／storage-purpose／time／version及bounded範圍，再金融GET／disk；fullbody SHA重驗需one bounded raw＋canonical receipt，selected projection不足，完成須actual disk／cross-process API／UI。歷史close／calendar／strategy／execution仍缺；月rights／wire無NEW path保持pending，不作不可能主張或以ATR／Signal／Plan／ranking替代。
+
+前任month-wire exact四session正常closure／archive已root接受：ONE terminalclose raw0／ptyKilledtrue／disconnected／operator_close／pane-1；四者loaded idle後ONE normal archive，all4notLoaded／original rollouts absent，archive4 bytes及SHA不變15237458B，歷史保留。Oldmonth-wire worktree／branch因baseline使用保留至DOCfreeze；後續new qualified七分區＋current已合併／clean、無未保存修改／新artifact、resolved absolute scopedpath後才由new root outside owner核原task正常移除收據，不刪own cwd或提前稱完成。
+
+DAY-RANGE whole worktree／branch及NO-RETRY排除所有清理，較早已完成移除不重做；TURNOVER／Temp／cache／log／其他history不掃除。本輪四session／terminal／worktree／branch保留，下一outside owner未接受，current closure／archive／移除未執行。
+
+## 目前：BOOT-M1-HISTORY-OPEN-DATA-LINK-1 接手與 visible gate 已接受
+
+2026-10-07 Asia/Taipei。Main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；共同 cwd／worktree／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-open-data-link-20261007`，branch `roadmap-m1-history-open-data-link-20261007`；starting／current／master HEAD `54c1f879936b29dbbb2a410b27e75fa362e7256d`。前輪六股 source13＋DOC8／freeze21／net56664B、qualified 七分區索引、exact commit 與正常 ff-only local master merge 已接受；下方完整109595B及內層99323B歷史 byte 保留，舊 pending 由原 task／Git final receipt 覆蓋，舊 roster 不再派工。
+
+### 本輪四角色及白名單
+
+| 角色 | Actual ID／配置 | 已接受範圍 |
+| --- | --- | --- |
+| 統籌 | `01a1131f-7678-7c11-b75c-318e58a88ac4`；gpt-6.1-sol／ultra | parent=null／sessionId=self／source=vscode／originator=codex-tui；本次只 BOOT 接手，不派實作。 |
+| 程式 | `01a11321-a05f-7a01-aded-c89c2ad5bfcc`（Kierkegaard）；gpt-6.1-sol／xhigh | 明確接受；write=[]，等待原 root follow-up。 |
+| 文件 | `01a11321-d0c2-7413-b707-7752b8941e8d`（Rawls）；gpt-6.1-sol／xhigh | 明確接受；只本檔 BOOT prefix，aggregate net≤6144B、strict UTF-8／LF／noBOM、完整歷史 suffix byte-equal；交付後停寫。 |
+| 索引與 Git | `01a11322-04ff-72f3-adb4-deea8e3c07d0`（Aquinas）；gpt-6-luna／medium | 明確接受；source=[]；BOOT 不 refresh／stage／commit／merge／cleanup。 |
+
+本 root native spawn_agent／fork_turns=none 新建恰三 child；RPC及 readonly rollout 已核 actual 配置、child parentThreadId／sessionId／spawn parent 同本 root、source.subAgent.thread_spawn／depth1／forkedFromId=null。四者 actual environments／共同根、Git branch／HEAD 相符，寫前 clean／stage empty。Runtime CLI0.160.0與 pinned `C:/Program Files/nodejs/codex.cmd` 0.160.1分列。
+
+Own visible terminal `term_77b96a8a-4c4f-44c2-9e31-4be6c882c432`／incarnation `9ef132f9-230c-4b67-a68e-02c39ce84b9c`／PTY suffix `@@7e2fc097`／pane1 connected、writable、nonorphaned；actual node36496→codex56492、root RPC／own screen／helper receipt 已連結。Common helper 單次 raw0／startup=verified／surface=visible／taskSent=true，initial turn `01a1131f-7d3f-7653-bc6e-2d9b225db482`；無 timeout／recovery／relaunch／resend，inherited stale `term_53e...` ENV 不作 own handle。
+
+**Visible `/subagents` gate及本 ORIGINAL root SINGLE continuation 已正式接受。** Root／前任已接受 BOOT 文件；四者 actual idle 後唯一 CLI request `bf607b86-c66e-49cb-bb36-d9966cacd7a2`／fresh screen `003e0d9f-0e42-4ae1-bea8-ca909accf440` 核 Main[default](current)、同四 exact ID及 no subagents running；slash未觀測 turn start 為正常 ACK。一次 Esc `0b9ed079-ed9d-46bd-b1a4-0e241dfd416c`（1 byte）後 fresh screen `bebe414e-060e-4da4-8ab0-65bafc3d127b` 核 Ask Codex／Sol ultra／exact cwd／Main[default]；原 root SINGLE continuation 已收到並正式接受，未 relaunch／重送／另建角色。新輪實作尚未派工，freeze／索引／commit／merge 未執行。
+
+App CBM connected／list68／pagination complete；七個 `taiwan-stock-research-roadmap-m1-history-month-wire-20261007-` baseline 已存在。Coverage best_effort、generation_matches／hash_records_complete=true；docs metadata_changed 原因未核，依 advisory 讀本根，不稱 fresh／complete。五個既有 parser partial 保留，不輪初或中途刷新／複製索引。
+
+### 下一核心與繼承邊界
+
+明確接手下一優先 `M1-HISTORY-OPEN-DATA-LINK-1`：NEW 可執行 primary metadata 核 exact 歷史月資源的政府開放平台 linkage／automated-use eligibility，先於金融觀測。已接受 Gregorian YYYY/MM/01 編碼仍僅 script inference，未證 server 准入。Exact next resource／query／symbol／date／policy 未准入；後續先由 root 在原 task 核 bounded scope／memory、one HTTP／timeout／redirect0／retry0／disk0，再派工。不重複同 wire／11371 GET／失敗 extractor／parameterless17257，不猜日期參數、POST或 legacy retry collector。
+
+Actual20／21普通股 close＋complete calendar＋strategy／time／execution 仍未解除；無 NEW 可執行 path 時依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)重選獨立正面核心。有限 ordinary scope beyond6 仍需 fresh complete identity／catalogue／name／ISIN／CFI／date／body／policy／financial gate，next symbol 未核。繼承六股 scope4 coreoperation+1／dependency+1／reliability0／stall0，較早 unknown 歷史保持；BOOT／metadata／DOC／index／Git 不計核心批次，完整 ROADMAP／M1／M2／M3 未完成。
+
+### Outside owner 接受及保留
+
+本 root 只接受前任 exact 四 session 的 outside owner：root `01a112dd-fba2-75e1-91e6-bdfb73184fe5`、program `01a112df-a905-7f12-b64d-6536b453c8eb`、documents `01a112df-e317-7b52-8a00-a02b6bab65e8`、index `01a112e0-1a04-7332-9bf5-fd9add4c4eec`。Closure／archive 待前任 final saved／四者 actual idle／exact visible-runtime 再執行；接受不等於執行，BOOT 不 cleanup。
+
+Exact month-wire worktree／branch 移除另待 merged／clean／無未保存修改或新 artifact／resolved absolute scoped path及 new qualified indexes／baseline unneeded；不刪 own cwd。DAY-RANGE整個worktree／branch與NO-RETRY排除；較早已完成清理不重做，TURNOVER／Temp／cache／log／其他history不掃除。本輪四 session／terminal／worktree／branch 保留，current closure／archive／移除未執行。
+
 ## 目前：M2-FOCUS-STOCK-SCOPE-4 六股核心已有限接受；待 DOC review／freeze
 
 2026-10-07 Asia/Taipei。Main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；共同cwd／worktree／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-month-wire-20261007`，branch `roadmap-m1-history-month-wire-20261007`；starting／current／master HEAD `fb94570845edf78887dd61ea34fd6d9cb846f49f`。前輪五股source12＋DOC8／freeze20、qualified七scope索引／exact commit與正常ff-only local master merge已接受。下方完整99323B歷史byte全留，舊pending由原task／Git final receipt覆蓋，舊roster不再派工。

@@ -12,6 +12,30 @@ from test_tpex_price_capture import SyntheticPolicyScope
 
 
 class PriceStoreTests(unittest.TestCase):
+    def test_seven_stock_cache_identity_and_six_stock_version_boundary(self):
+        with SyntheticPolicyScope(cutoff=worker.NEW_CUTOFF, policy_version=worker.SEVENTH_SCOPE_POLICY_VERSION) as f:
+            cache = store.TpexPriceStore(loader=f.loader)
+            scope = dict(instrument_type="stock", currency="TWD")
+            first = cache.capture("TPEx", "6510", worker.NEW_CUTOFF, environment=f.env, **scope)
+            self.assertEqual((first["version"], first["latest"]["close"], first["latest"]["volume_exact"]), ("stock-price-memory/m2-stock-scope-v5", 3055, "560518"))
+            for symbol in ("3105", "3293", "5274", "5347", "6488", "6510", "8069"):
+                read = cache.capture("TPEx", symbol, worker.NEW_CUTOFF, environment=f.env, **scope)
+                self.assertEqual(read["provenance"], first["provenance"])
+                self.assertEqual(read["capture_state"]["action"], "cached")
+            old = dict(f.env)
+            old[store.POLICY_VERSION_ENV], old[store.POLICY_DIGEST_ENV] = store.policy_pins(worker.NEW_CUTOFF, policy_version=worker.SIXTH_SCOPE_POLICY_VERSION)
+            self.assertEqual(cache.read("TPEx", "3105", worker.NEW_CUTOFF, environment=old, **scope)["reasons"], ["price_memory_capture_policy_mismatch"])
+            self.assertEqual(cache.capture("TPEx", "6510", worker.NEW_CUTOFF, environment=old, **scope)["reasons"], ["price_instrument_not_supported"])
+            base = dict(market="TW", exchange="TPEx", symbol="6510", name="精測", instrument_type="stock", etf_category=None)
+            with patch.object(store, "STORE", cache), patch.dict("os.environ", f.env):
+                for key, bad in (("name", "wrong"), ("market", "US"), ("exchange", "TWSE"), ("instrument_type", "etf"), ("etf_category", "mixed"), ("currency", "unknown")):
+                    self.assertEqual(store.capture_tpex_price(SimpleNamespace(**{**base, key: bad}), worker.NEW_CUTOFF)["reasons"], ["price_instrument_not_supported"])
+            self.assertEqual(len(f.opener.calls), 1)
+            raw = cache.raw_capture
+            for key, bad in (("worker_version", "tpex-price-capture/m2-stock-scope-v4"), ("policy_version", worker.SIXTH_SCOPE_POLICY_VERSION), ("selected_symbols", ["3105", "3293", "5274", "5347", "6488", "8069"])):
+                receipt = raw.receipt; receipt[key] = bad
+                with self.assertRaises(worker.PriceCaptureError): store.TpexPriceStore._validated_capture(worker.PriceCapture(raw.body, worker.canonical_bytes(receipt), raw.parsed))
+
     def test_six_stock_cache_identity_and_five_stock_version_boundary(self):
         with SyntheticPolicyScope(cutoff=worker.NEW_CUTOFF, policy_version=worker.SIXTH_SCOPE_POLICY_VERSION) as f:
             cache = store.TpexPriceStore(loader=f.loader)

@@ -160,9 +160,9 @@ Desktop／窄版可信lower5.327／upper5.328、5274研究／raw summary／back�
 
 #### M2-FOCUS-STOCK-SCOPE-3 上櫃五股（有限接受）
 
-本節已合併五股policy按原範圍保留；現行default六股見下節，不以舊五股數覆蓋新scope。
+本節已合併五股policy按原範圍保留；現行default七股見scope5節，不以舊五股數覆蓋新scope。
 
-現行default10/06「指定來源日 · 上櫃普通股」與「依代碼排序」保持，動態顯示「已核5股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶。10/07取得不改10/06來源日，explicit舊四股／三股／兩股按自身scope顯示；不以五股文案覆蓋舊policy。
+本節五股policy的default10/06「指定來源日 · 上櫃普通股」與「依代碼排序」保持，動態顯示「已核5股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶。10/07取得不改10/06來源日，explicit舊四股／三股／兩股按自身scope顯示；不以五股文案覆蓋舊policy。
 
 全五股required reads合格才filter與顯示「此範圍的零候選」；任一不足維持「候選數未知」，不補0、縮scope或給未准入排行。四理由、精確張／整數元、元／股、O/C及「約」振幅文案不改，候選仍exact比較；raw外側空白、18原欄、當次body／receipt／policy與cutoff保留。金融權威見[來源 §25](SOURCE_REGISTRY.md#25-m2-focus-stock-scope-3五股來源准入)。
 
@@ -170,11 +170,21 @@ Desktop1277×924／窄版390×844的lower2.770／upper2.771、3293同cutoff研�
 
 #### M2-FOCUS-STOCK-SCOPE-4 上櫃六股（有限接受）
 
-現行default10/06「指定來源日 · 上櫃普通股」與「依代碼排序」保持，動態顯示「已核6股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶／8069元太。10/07取得不改10/06來源日；explicit舊五股／四股／三股／兩股按自身scope顯示，不用六股文案覆蓋舊policy。
+本節六股policy已合併、按explicit舊scope保留；現行default七股見下節。
+
+本節六股policy的default10/06「指定來源日 · 上櫃普通股」與「依代碼排序」保持，動態顯示「已核6股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶／8069元太。10/07取得不改10/06來源日；explicit舊五股／四股／三股／兩股按自身scope顯示，不用六股文案覆蓋舊policy。
 
 全六股required reads合格才filter，完整範圍count0顯示「此範圍的零候選」；不足仍「候選數未知」，不補0、縮scope或給排行。四理由、精確張／TWD整數元、元／股、O/C及「約」振幅文案不改；raw原欄與空白、當次body／receipt／policy、cutoff保持，金融權威見[來源 §27](SOURCE_REGISTRY.md#27-m2-focus-stock-scope-4六股來源准入)。
 
 Desktop1277×924／窄版390×844的10796.741／up／1607943663與lower4.421／upper4.422、8069同cutoff raw／五原字串返回已核；窄版真零與六股恢復、原件換行無水平溢出已接受。Draft fill／select只作setup，21個trusted native events與diagnostic失敗界線見[個股頁 §33](STOCK_RESEARCH_PAGE.md#33-m2-focus-stock-scope-4六股關注與同截止往返)。
+
+#### M2-FOCUS-STOCK-SCOPE-5 上櫃七股（有限接受）
+
+現行default10/06「指定來源日 · 上櫃普通股」／「依代碼排序」保持，動態顯示「已核7股」：3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶／6510精測／8069元太。10/07取得不改10/06來源日，explicit舊scope按自身數量顯示。
+
+完整七股required reads先gate後filter；真零用「此範圍的零候選」，不足仍「候選數未知」。既有四理由、張／TWD整數元、元／股、O/C與約振幅文案及exact比較不改；source date／cutoff／raw追溯保持，金融權威見[來源 §29](SOURCE_REGISTRY.md#29-m2-focus-stock-scope-5七股來源准入)。
+
+6510 lower2.880／upper2.881、同cutoff detail／raw／back五原字串、窄版真零及恢復七股已核；14states無水平溢出。21trusted native events與draft setup界線見[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。
 
 ### 10.2 個股詳情的第一屏
 
