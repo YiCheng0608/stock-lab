@@ -929,3 +929,45 @@ Root新原件與真HTTP已核以下結果；來源O/H/L/C／股／元唯一值�
 1277×924桌面doc1262：原生click／submit套20e9兩股，3105同cutoff link／back保留四條件。390×844窄版doc375、card rect305／client303、開source details275／canvas305：trusted Enter／submit驗down25e9真0、6488等額／加1元真0、down20e9→6488→返回原日期／`10000.000/down/20000000000`；10/02顯候選數未知。Click／Enter／submit／link／back均isTrusted=true，fill／select的input/change=false只設draft；初offscreen背景click不當通過，scroll至可見後才接受，原選擇器assert與後正面核對分報。非法duplicate／negative及next首頁focus request0／disabled／card0，stock外域next無原條件link且只回本地/stocks。
 
 本輪core+1／dep0（既有來源）／reliability0／stall0，wrap及測試退修同批。必要驗證、synthetic尺寸與owned清理由[開發入口](development-baseline/README.md#m2-focus-turnover-1-精確成交金額與四條件返回的記憶體驗證入口)管理。只process memory、owned服務已結束，catalogue／10/02仍synthetic；未驗正式DB／磁碟保存／跨程序、full suite／production build、全市場／PIT／MA／trend／研究／Signal／Plan或完整M1／M2／M3。下一本日振幅條件待新輪gate與actual，見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+## 29. M2-FOCUS-DAY-RANGE-1：本日振幅與五條件往返
+
+**程式、10/06新來源准入、actual API及可信桌面／窄版具名操作已有限接受；B1 core+1／dep+1／reliability0／stall0。** Consumer `price-lot-focus/m2-v4`；§26～28保留m2-v1／v2／v3當時範圍。新來源與金融值由[來源 §20.7](SOURCE_REGISTRY.md#207-m2-focus-day-range-1新日期來源准入與本日振幅-consumer)管理；10/05固定tuple與§20.1～20.6歷史不覆寫。只有TPEx3105穩懋／6488環球晶、stock／TWD及明確核准10/05、10/06兩日期，非任意新日期或自動最新。單日資料不解除M1的20／21真歷史close／日曆、strategy inputs／time／execution gate。
+
+### 29.1 原百分比、精確比較與完整來源gate
+
+沿 `GET /api/focus/price-lots` 與明示 `POST /api/focus/price-lots/capture`，五條件為 `as_of/min_lots/day_move/min_turnover/min_range_pct`，POST body仍空object。新百分比門檻省略採原字串 `0`；明示空值非法。只接受非負ASCII十進位原字串，整數部分為0或非零開頭、最多三位小數、總長≤20字元，保留尾零；不接受符號、前導零、科學記號、空白、逗號、Unicode數字或超限。千分之一百分點scaled int64≤`9223372036854775807`，故原門檻最高`9223372036854775.807`%。API未知key、重複或非法五條件均在catalogue／capture前HTTP422；首頁非法不查focus，讀取／capture停用。原張／股及元／股口徑不改。
+
+本日振幅為 `100×(H−L)/O`。O/H/L取原件「開盤／最高／最低」十進位字串，各≤64字元、非負標準形狀並實際正值，對齊共同小數位後轉Python int／JS BigInt；須`H≥O≥L>0`。候選比較精確使用 `100000×(H−L)≥minimum_scaled×O`，不先除法、轉JS Number或四捨五入。不要求振幅為正：合法H=L可得0；門檻0仍須完整O/H/L，missing、壞形狀或矛盾不得補0。
+
+先核兩股完整reads、同股／同截止、source tuple／provenance一致、canonical成交股數、原O/C、TWD成交額/status/reason/raw一致及O/H/L，才filter。振幅不合格為`price_focus_range_unavailable`／count=null／items=[]，不跳過壞股；all與最後零候選也不略過完整gate。只有available／count0是此範圍真零。回應與item保留原min_range_pct，item新增high_exact／low_exact；原open_exact／close_exact仍取原值。
+
+每股一張卡、code升序，同時滿足張門檻、成交額、方向與振幅。固定四理由順序為`volume_at_least_min_lots`、`turnover_at_least_min_turnover`、實際`close_above_open|close_below_open|close_equal_open`、`range_at_least_min_range_pct`。前端獨立重驗全部reads、精確候選／理由／欄位／URL，並非只驗顯示卡。振幅百分比可half-up至三位小數、標「約」，僅供閱讀；候選與邊界一律精確比較。
+
+### 29.2 同截止研究、五條件返回與兩日期隔離
+
+固定detail `/stocks/TPEx/{symbol}`，query白名單為`as_of/from/focus_as_of/focus_min_lots/focus_day_move/focus_min_turnover/focus_min_range_pct`；前四各恰一次，後三各最多一次，legacy省略分別all／0／0。研究as_of須等於focus_as_of；門檻與方向均合法後，返回固定本地 `/?as_of=原日期&min_lots=原字串&day_move=原方向&min_turnover=原金額&min_range_pct=原百分比#price-lot-focus-title`。日期、張與百分比尾零、方向、金額完整保留；未知key（含next）、duplicate、非法值或截止不一致拒原條件返回，只fallback本地/stocks。Shared q與原官方事件往返保持。
+
+Draft經「套用條件」submit後才改URL；query／capture key含全部五條件，無placeholder／window-focus來源refresh。每程序只能採一份所選日期原件；兩日期各自需要匹配外部policy pins與immutable tuple，10/06不得給10/05、default或explicit10/02。新服務用10/06 pins時，10/05為external pins mismatch，不能聲稱另持有歷史body。Ordinary GET、切條件、切股與重複POST共用Store、不新增source GET；失敗不retry。新來源的root先取得觀測與後pure builder准入見§20.7，不將cached UI操作說成fresh GET。
+
+### 29.3 已核actual API與有限原生操作
+
+本輪actual是**2026-10-06**，不是舊10/05 fixture的4／4.5／5%預期。Root同程序held原件／新tuple供真router，明選`10000.000/all/0`時：
+
+| min_range_pct／方向 | 已核actual API |
+| --- | --- |
+| 0、4／all | 依code兩股。 |
+| 6.000／all、6.000／up | 僅6488。 |
+| 10／all、6／down | available0。 |
+| 5.691→5.692／all | 兩股→僅6488。 |
+| 9.787→9.788／all | 僅6488→available0。 |
+
+兩股M1 samecutoff六金融值、四理由與五條件原字串、cached POST零新增GET、精度／duplicate GET及POST422已核。Blank／default10/02、explicit10/02與10/05不洩10/06；10/05 external pins mismatch與舊接受範圍分開。DB preserved=true、server／client guards皆0；router載入前importlib.util與runner NameError後更正，body仍held、未重取，原非零收據留task。
+
+先前可信桌面／窄版submit、link／back及拒收操作曾卡在外部native delivery。Footer10/05文案退修與必要check已通，actual render正確；當時三owned Orca pages的click／keypress／inserttext只有ACK，events空、值／React／URL未改，未接受原生操作。當時三頁皆exact closed、tabs0；readonly未證明可用且符合不改runtime／不落盤的不同native路徑，等待外部delivery／provider或真正window聚焦等變化，未斷言唯一原因。
+
+續驗由root有限接受：外部Orca從1.4.220更新為1.4.221，非root執行更新、不宣稱因果修復；同原root／roles、同10/06 held body，source_request_count1／runner追加GET0／DB preserved／entry guards0不變。桌面1277及窄版390以真正座標mouse move／down／up產生trusted click／submit，不用DOM click／radius。Range6.000只6488，個股→研究條件同cutoff10/06→safe back保留全部五原條件，包括min_lots=10000.000、day_move=up、min_turnover=10000000000、min_range_pct=6.000；四理由與source detail窄版換行正確，document client／scroll375／375。
+
+桌面range10是真0、0是兩股，5.691兩股／5.692只6488已真正操作核對；native inserttext6.0001產生trusted beforeinput／input，三個price buttons disabled、cards0／focus query0。10/02配0.000仍missing／unknown，非真0；duplicate range URL亦cards0／read及capture disabled／focus query0。合法stock path帶foreign next只暴露本地fallback `/stocks`，無focus-return／foreign link；最後額外fallback native click僅ACK、無DOM event，未完成該追加case，不稱拒收返回click已通。有效五條件safe return早已真正native通過；上述href／零query觀測及既有helper／API拒收證據支持安全契約。
+
+新source／tuple→Store→真router／可信具名操作解除old pins依賴並交付有限核心，root計數core+1／dep+1／reliability0／stall0；B1有限核心驗收已接受。沿原root／三child完成文件review與版本封存，不new round／BOOT、追加quote GET未核定，feature freeze／index／Git／master merge／next coordinator均pending。四owned pages皆closed／tabs0；兩owned RAM服務與compiler已停止、ports無listener，held原件memory於Python process absence釋放；清理後驗0與Ctrl+C rawexit1分報。Edge profile超cap後停止且兩清理請求被automatic review拒絕，殘留NO-RETRY／exact path及服務範圍只詳見[開發入口](development-baseline/README.md#m2-focus-day-range-1-新日期與五條件返回的記憶體驗證入口)。行情／receipt僅memory，profile metadata是額外artifact；未驗保存／跨程序、full suite／production build、全市場／PIT／MA／trend／研究／Signal／Plan或完整M1／M2／M3。

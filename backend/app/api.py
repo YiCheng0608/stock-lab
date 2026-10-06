@@ -74,7 +74,7 @@ from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price
-from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover
+from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
 from .institutional_windows import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
 from .stock_signal_reads import load_stock_signal_reads
@@ -1721,8 +1721,8 @@ def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _price_focus(db: Session, as_of: date, min_lots: str, day_move: str, min_turnover: str, request: Request, *, capture: bool = False) -> dict[str, Any]:
-    allowed = ("as_of", "min_lots", "day_move", "min_turnover")
+def _price_focus(db: Session, as_of: date, min_lots: str, day_move: str, min_turnover: str, min_range_pct: str, request: Request, *, capture: bool = False) -> dict[str, Any]:
+    allowed = ("as_of", "min_lots", "day_move", "min_turnover", "min_range_pct")
     if any(len(request.query_params.getlist(key)) > 1 for key in allowed):
         raise HTTPException(status_code=422, detail="duplicate price focus conditions")
     if any(key not in allowed for key in request.query_params):
@@ -1731,24 +1731,25 @@ def _price_focus(db: Session, as_of: date, min_lots: str, day_move: str, min_tur
         parse_min_lots(min_lots)
         parse_day_move(day_move)
         parse_min_turnover(min_turnover)
+        parse_min_range_pct(min_range_pct)
         with db.no_autoflush:
             instruments = list(db.scalars(select(Instrument).where(
                 Instrument.exchange == "TPEx", Instrument.symbol.in_(("3105", "6488"))).order_by(Instrument.symbol)).all())
-        return build_price_focus(instruments, as_of, min_lots, day_move, min_turnover, capture=capture)
+        return build_price_focus(instruments, as_of, min_lots, day_move, min_turnover, min_range_pct, capture=capture)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/focus/price-lots")
 def price_lot_focus(request: Request, as_of: date = Query(...), min_lots: str = Query(..., max_length=20), day_move: str = Query("all", max_length=4),
-                    min_turnover: str = Query("0", max_length=19), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _price_focus(db, as_of, min_lots, day_move, min_turnover, request)
+                    min_turnover: str = Query("0", max_length=19), min_range_pct: str = Query("0", max_length=20), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _price_focus(db, as_of, min_lots, day_move, min_turnover, min_range_pct, request)
 
 
 @router.post("/focus/price-lots/capture")
 def price_lot_focus_capture(request: Request, as_of: date = Query(...), min_lots: str = Query(..., max_length=20), day_move: str = Query("all", max_length=4),
-                            min_turnover: str = Query("0", max_length=19), db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _price_focus(db, as_of, min_lots, day_move, min_turnover, request, capture=True)
+                            min_turnover: str = Query("0", max_length=19), min_range_pct: str = Query("0", max_length=20), db: Session = Depends(get_db)) -> dict[str, Any]:
+    return _price_focus(db, as_of, min_lots, day_move, min_turnover, min_range_pct, request, capture=True)
 
 
 @router.get("/focus/official-events")

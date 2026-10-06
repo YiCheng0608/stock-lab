@@ -2,6 +2,51 @@
 
 流程與角色配置由 [AGENTS](../AGENTS.md) 管理；能力與優先順序見 [ROADMAP](ROADMAP.md)，工作完成條件見 [執行清單](ROADMAP_EXECUTION.md)。
 
+## 目前：M2-FOCUS-DAY-RANGE-1 已有限接受，待文件review與版本封存
+
+共同repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；worktree／cwd／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-range-20261006`，branch `roadmap-m2-day-range-20261006`。Starting／master／current HEAD `b485ca2376fbc034ce5a79362bce381296f95452`，初始clean已核；前輪TURNOVER已正式本地合併。下方舊本文byte全留，舊pending由Git／原task最終receipt覆蓋，舊roster無派工權。
+
+### 本輪四角色與可見接手
+
+| 角色 | Actual ID／配置 | 現行責任 |
+| --- | --- | --- |
+| 統籌 | `01a1106d-bd71-7111-b0b6-be99bb9a7456`；`gpt-6.1-sol/ultra`；/root | parent=null、sessionId=self、source=vscode；source／API／可信桌面窄版操作已有限接受；B1 core+1／dep+1／reliability0／stall0。 |
+| 程式 | `01a11070-ffeb-7d01-b79f-68544aa3ca42`；`gpt-6.1-sol/xhigh`；/root/program（James） | source18與文案退修交付、最後readonly路徑結論已回，停寫idle。 |
+| 文件 | `01a11071-3699-7941-a96d-ec356836b0ab`；`gpt-6.1-sol/xhigh`；/root/documents（Cicero） | 只八既有DOC、net≤52KiB含BOOT3912B；交付停寫待review。 |
+| 索引與Git commit | `01a11071-7e94-7be3-adcc-c57452238298`；`gpt-6-luna/medium`；/root/index_git（Hooke） | source=[]，freeze前不index／commit／merge。 |
+
+三child由本root native spawn_agent、fork_turns=none新建；actual sessionId／parentThreadId／source.subAgent.thread_spawn.parent_thread_id皆root、depth1、forkedFromId=null，共同environment／runtimeWorkspaceRoots／cwd／branch／HEAD一致。RPC與三接手正面，沿同組原session／roles，不以派工label代runtime證據。
+
+唯一visible terminal `term_8fe3eab0-7b74-4d76-b1d2-a09cbcead7da`，connected／writable／nonorphaned、paneRuntimeId1、exact worktree／branch。原BOOT turn `01a1106e-4112-79c3-86cd-fb37a6f8278b`實核gpt-6.1-sol／xhigh；既有/model s只改session為ultra、不retroactive，未new root／restart。Runtime cliVersion0.160.0與入口pinned0.160.1分開。Shared helper既有root拒絕rawexit1發生terminal create前／initial未送，原ID續用。四角色BOOT交付idle後，原入口唯一/subagents `94710d6a-6448-4e19-8764-9c543d598efa`核同四ID／idle、Esc `ae063bdd-d50c-4e06-9b57-26229d44bd4b`；原session唯一gate continuation已接受。新turn `01a11078-9336-7382-b202-1e6b290909a4`的RPC／turn_context均ultra，才派B1；BOOT不是implementation batch。
+
+### B1已核範圍、待驗與版本
+
+日常張／精確0.001張、canonical source／API股整數、價格／成本元／股保持，mixed／unknown不猜、已張不重轉。M1有界metadata審查無新已准入20／21真歷史close／calendar與strategy inputs／time／execution取得路徑，採M2本日振幅；未由單日資料放行研究。
+
+Fixed10/05 pins的fresh body拒收後，root先核新10/06 source／use／instrument／schema／金融／time／version／policy。新tuple、四獨立quote觀測（前三rawexit1）、最後成功held body與pure builder准入由[來源 §20.7](SOURCE_REGISTRY.md#207-m2-focus-day-range-1新日期來源准入與本日振幅-consumer)負責；舊10/05政策／金融／receipt不覆寫。成功GET發生m1-v2改動前，後同程序准入供cached actual API／UI，不稱m1-v2原先發GET或UI首次click觸發真GET。Source用途僅exact免費公開本地／process memory，published／first available／revision unknown、PIT unsupported。
+
+`price-lot-focus/m2-v4`新增原min_range_pct≤3小數／scaled int64、正值原O/H/L對齊整數交叉比較；合法0≠missing。完整兩股先gate、四理由去重／code順、samecutoff研究與safe保留五條件。Root actual10/06 API：10k／all／amount0配0／4兩股、6.000只6488、10真0；down6真0／up6只6488，5.691→5.692及9.787→9.788精確邊界、兩股M1六金融值、原五字串、cached POST零新增GET、invalid422及default／10/02／10/05隔離已核。API source Store count1／runnerGET0、DB preserved=true／server及client guards0。Router準備importlib.util／runner NameError後更正、held body未失／未重取，原exit保留。權威契約與有限UI驗收見[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)。
+
+Backend22／focus18、Node M1 validator66／Overview26／Appchart28及focus272 helper／121SSR／28src noEmit通過；前兩Node TS2345／錯期望19731.700與後pass分報。Fixture／guard與資源收據由[開發入口](development-baseline/README.md#m2-focus-day-range-1-新日期與五條件返回的記憶體驗證入口)管理，不當RSS或保存。Footer10/05已修、actual render正確；先前三owned Orca pages的click／keypress／inserttext只ACK、events空／值／React／URL未改，不接受可信操作。當時三頁exact close accepted、tabs[]後驗0；最後readonly未證實可用且符合不改runtime／不落盤的不同native路徑，待外部變化後沿原root／三child follow-up續驗，未斷言唯一原因，未new round／BOOT／追加quote GET。第一preview rawexit1／guards0 shutdown、最初absence raw1與後CIM own PID absent0分報。
+
+續驗原root／三child配置／parent不變；外部Orca1.4.220→1.4.221更新非root執行、不作因果修復主張，原terminal續用、turn `01a111b5-2000-76a3-84a3-ce98eeef9e33`實核gpt-6.1-sol／ultra。桌面1277／窄版390真正座標move／down／up與trusted click／submit／input通過6.000／10真0／0兩股／5.691與5.692精確邊界，研究同cutoff10/06、四理由與safe返回保留全部五原條件；6.0001拒收、10/02 missing≠0、duplicate URL與foreign next href／零query已核。最後額外invalid fallback click只有ACK／無DOM event，追加native case未完成；有效五條件native往返已接受。詳細有限操作由[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)負責，root錯path／assertion／V8用法修正收據留原task。
+
+Independent Edge/CDP一個`.range-ui-01a1106d`profile超原核定32MiB／128files／64dirs中的counts，產品UI測試前停止；正常關閉Edge、八PID後驗absent，driver rawexit1是budget失敗。Flush後殘留2,555,430B／232files／94dirs，exact `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-range-20261006/.range-ui-01a1106d`。兩PS Remove-Item均在CreateProcess前被automatic review以blocked by policy拒絕、刪除未執行，exact scope NO-RETRY／外部policy與owner待辦；不新增落盤profiles／tests或換工具／路徑繞過。Python／Node guards／artifact0只屬該入口，browser profile metadata是額外artifact，不能稱本輪全域artifact0；有效source／API不失效。
+
+同兩owned RAM服務曾按原task核定保留同body續驗，完成後Python PID25192／session42499／8799、Node PID1412／session84779／8800及compiler16392已停止；exact PID absent、8799／8800 listeners none後驗exit0。第四page `8a6e95c0-6ebf-4cc5-9597-a2771b732da0`已exact closed／tabs[]0，四lifetime owned pages皆closed。服務structured shutdown／stopped true、guards0／DB preserved，Ctrl+C／exit() rawexit1與清理後驗0分報；Store sourcecount1／追加GET0不變，Python process absence釋放held原件memory，未raw export。Profile NO-RETRY及歷史outside owner仍pending，不稱所有資源已清。行情DB／raw／fixture／HAR／screenshot未另存；未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／MA／trend／研究／Signal／Plan或完整M1／M2／M3。
+
+Approved source18（net41,332B、root核最後交付SHA吻合，未stage／feature freeze）為backend/app的api.py／price_focus.py／tpex_price.py，backend/tests的test_price_focus.py／test_tpex_price_api.py／test_tpex_price_capture.py／test_tpex_price_store.py，backend/worker/tpex_price_capture.py，frontend/src的App.tsx／api.ts／priceFocus.ts／priceFocus.test.ts／stockPriceMemoryRead.ts／stockPriceMemoryRead.test.ts／types.ts及components/StockOverview.tsx，tools/tpex-price-api.py／tpex-price-preview.cjs。DOC只ROADMAP／ROADMAP_EXECUTION／STOCK_RESEARCH_PAGE／UI_COPY_SPEC／SOURCE_REGISTRY／DATA_SOURCES／development-baseline/README／TASK_COORDINATION八既有檔；不新附件／backup／helper／manifest。最終freeze候選26unique／7涉及分區，待review核准，不預先stage。
+
+App MCP connected／list33／has_more=false；本輪未index，前輪turnover docs ready同starting HEAD、exact八DOC metadata_changed／best-effort，native本根read、不稱fresh。B1有限source／API／可信桌面窄版操作已接受；文件review、feature freeze／index／coverage更新／commit／master merge／next coordinator皆pending；未有本輪版本封存，最終hash留Git／原task，不為回填重刷。
+
+### 跨輪計數、下一候選與清理接手
+
+既有合併`704b2df9`、`a7bcdd37`、`230af7ea`、`b485ca2`；DAY-MOVE及TURNOVER各core+1／dep0／reliability0／stall0。本輪新source／use／instrument／全結構／金融／time／version正面准入，同held pure builder→Store→真router／可信具名操作解除old pins依賴並交付有限核心，root接受B1 core+1／dep+1／reliability0／stall0。BOOT／文件／索引／Git不計implementation batch；stall因本B1正面核心驗收為0，較早unknown保留。
+
+本輪有限核心驗收已接受，沿同root／三child完成文件review與版本封存，不預先啟動下一統籌／新round。後續選題先檢M1是否有新正面20／21真價格與完整日曆取得路徑，才接歷史研究；無新path時考慮M2已支援普通股2→3的有界操作，先核新增instrument／catalogue／source policy／date／版本及真金融列，不能只加相似filter或用unknown草稿當Plan。下一核心／具名標的與budget待統籌核定，完成條件依[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+Outside owner尚未接手舊turnover清理；舊四role／terminal `term_bac12133-5b3a-413f-b9cf-a7f10a3debdd`／舊資源及Temp／HAR／GPG log／cache／NO-RETRY保持。自身round outside owner也pending，不自刪cwd；本輪四角色session關閉／封存與worktree／branch清理未執行。
+
 ## 目前：M2-FOCUS-TURNOVER-1 已有限接受，待文件 review 與版本封存
 
 2026-10-06 本輪Orca worktree／branch `roadmap-m2-turnover-20261006`；共同runtime／environment cwd、workspace／Git根為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-turnover-20261006`，repo為 `C:/Users/YiCheng/Desktop/taiwan-stock-research`，common Git dir為其 `.git`。Starting／master／current HEAD為 `230af7ea1bf031eea698f937d8ce6f713ba275f6`，initial clean已核；前輪M2-FOCUS-DAY-MOVE-1正式接受／合併至此版本。下方原byte全留歷史快照，舊pending以Git／原task最終receipt為準，舊roster無派工權。

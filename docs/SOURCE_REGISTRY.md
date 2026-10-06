@@ -844,3 +844,22 @@ Root獨立核全結構、同日date-code唯一、兩股12金融欄、exact名稱
 此為新觀測，不覆寫§20.2～20.5 UTC／receipt；資料日仍2026-10-05，不稱10/06今日行情、發布／首次可得、PIT或歷史close。Consumer升版 `price-lot-focus/m2-v3`，新增精確成交額條件與三理由，由[個股頁 §28](STOCK_RESEARCH_PAGE.md#28-m2-focus-turnover-1精確成交金額與四條件往返有限接受)管理，不擴source scope／金融表／用途。
 
 Actual在同一程序以本次held Store供真API／UI，source累計1／runner新增0；ordinary GET、focus POST2／stock POST2與條件變更同cache，extra GET0。非舊memory、check fixture、disk copy或replay。原件→API→具名操作與owned清理已有限接受，raw／receipt隨程序結束釋放；落盤0，未驗保存／跨程序、全市場、歷史close／日曆及PIT。
+
+### 20.7 M2-FOCUS-DAY-RANGE-1：新日期來源准入與本日振幅 consumer
+
+本輪固定10/05 pins對fresh exact11370出現`price_body_version_mismatch`，不能機械換日期／hash。Root另核dataset11370 metadata／exact resource／OGL1.0、TPEx條款第5限制及第7政府資料例外、ISIN兩股exact名稱與普通stock CFI `ESVUFR`／上櫃市場後，才核新日期全結構、金融與版本；web provider403／timeout與direct200分報。ISIN初2MiB／Big5 probe exit1，後MS950／3MB selected strict pass；這些metadata／身分probe不是quote GET。
+
+新policy `m1-price-tpex-11370-2026-10-06.1`，source_version `tpex-11370/2026-10-06`；以舊policy deepcopy只改version、scope.cutoff、新expected body SHA及attribution.release_version=`data-date-2026-10-06`。Canonical UTF-8仍1462B，digest `sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288`；用途／exact URL／兩股／stock／TWD／process_memory及1 GET／3MiB／30秒／redirect0／retry0不變。原10/05完整policy／digest／body／金融表及§20.1～20.6收據保留；程式准入只限已明確核准10/05、10/06兩immutable tuples，不自動接新日。10/05 worker m1-v1保持，新10/06 builder／worker `tpex-price-capture/m1-v2`；memory projection版本仍m1-v1。
+
+Root四次獨立quote觀測：old pins拒收、獨立old cutoff parser拒收、prospective script regex assert失敗、最後成功held新原件；前三rawexit1保留，不稱單一程序retry或一次成功capture。最後exact GET200：`request_started_at=2026-10-06T09:21:17.268510+00:00`、`captured_at=2026-10-06T09:21:22.201440+00:00`，body **1,788,599B／12,194 data rows／18欄**，ROC1151006、全date-code唯一。SHA `aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a`。
+
+此成功GET在m1-v2程式改動前由root取得並held；之後**同一程序**以新pure builder准入、獨立核全結構／原18欄／ordinal及下表12金融值，再供preloaded guarded runner。Canonical admitted receipt UTF-8 1408B，SHA `fe2c9513792df43378e0aa8e77c24a2f1f2d0baad8f47ff1c8716f6d7877d7dd`，新tuple／old digest不變核通。不能稱m1-v2原先發GET，也不能稱UI首次click觸發此次真GET；actual產品讀cached觀測，first-loader行為由synthetic另驗。長console命令曾被PTY截斷SyntaxError，body未失、短命令後核digest；原錯留task。
+
+| 10/06 selected股／data ordinal／含header行號 | O／H／L／C原值（元／股） | 成交股數（canonical股） | 日常成交量（張） | 成交金額（TWD元） |
+| --- | --- | --- | --- | --- |
+| 3105穩懋／205／206 | 615.00／623.00／588.00／592.00 | 19731700 | 19,731.7 | 11863581093 |
+| 6488環球晶／717／718 | 1175.00／1260.00／1145.00／1205.00 | 13913614 | 13,913.614 | 16835605385 |
+
+兩股金融單位仍股、精確0.001張、TWD元及元／股；新表是來源版本實質變更，不覆寫10/05表。振幅分別精確`700/123`%及`460/47`%，O/C為down／up；產品精確門檻／四理由／五條件返回由[個股頁 §29](STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)管理，不稱前日漲跌／ATR或策略。
+
+Root actual API與UI render已有限核，preloaded Store source_request_count=1／runner新增GET0、server／client guards0、DB preserved=true；新source／policy／body經pure builder→Store→真router／render解除old pins阻擋，依賴增量dep+1。10/06不洩default／10/02／10/05；new pins服務不持有10/05歷史body。續驗可信桌面／窄版振幅與五條件同cutoff往返已由root有限接受，B1 core+1／dep+1／reliability0／stall0；最後額外invalid fallback native click未送達，不以tool ACK代操作。四owned pages已closed、兩owned RAM服務與compiler已停／listeners none，held原件memory於Python process absence釋放；服務shutdown rawexit1與清理後驗0分報，profile NO-RETRY殘留見[開發入口](development-baseline/README.md#m2-focus-day-range-1-新日期與五條件返回的記憶體驗證入口)。Raw／receipt只memory、無DB IDs／行情原件保存；資料日10/06不等於即時或精確發布／首次可得／修訂，後三unknown、PIT unsupported，不外推歷史close／日曆／全市場或磁碟保存。

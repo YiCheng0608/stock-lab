@@ -12,6 +12,28 @@ from test_tpex_price_capture import SyntheticPolicyScope
 
 
 class PriceStoreTests(unittest.TestCase):
+    def test_new_date_pins_same_capture_and_other_date_unknown_without_retry(self):
+        with SyntheticPolicyScope() as old, SyntheticPolicyScope(cutoff=worker.NEW_CUTOFF) as new:
+            cache = store.TpexPriceStore(loader=new.loader)
+            scope = dict(instrument_type="stock", currency="TWD")
+            crossed = cache.capture("TPEx", "3105", worker.NEW_CUTOFF, environment=old.env, **scope)
+            self.assertEqual(crossed["reasons"], ["price_external_policy_pins_mismatch"])
+            self.assertFalse(cache._attempted)
+            result = cache.capture("TPEx", "3105", worker.NEW_CUTOFF, environment=new.env, **scope)
+            self.assertEqual((result["latest"]["date"], result["latest"]["close"], result["supported_scope"]["cutoff"]), ("2026-10-06", 592, "2026-10-06"))
+            for method in (cache.read, cache.capture):
+                other = method("TPEx", "6488", worker.CUTOFF, environment=old.env, **scope)
+                self.assertEqual((other["status"], other["latest"], other["reasons"]), ("unavailable", None, ["price_memory_capture_date_mismatch"]))
+                self.assertFalse(other["capture_state"]["can_capture"])
+                self.assertEqual(method("TPEx", "6488", worker.NEW_CUTOFF, environment=new.env, **scope)["latest"]["close"], 1205)
+            self.assertEqual(len(new.opener.calls), 1)
+            raw = cache.raw_capture
+            with self.assertRaises(worker.PriceCaptureError): store.TpexPriceStore._validated_capture(raw, worker.CUTOFF)
+            for key, bad in (("worker_version", worker.VERSION), ("source_version", "tpex-11370/2026-10-05"),
+                             ("policy_version", store.POLICY_VERSION), ("policy_digest", store.POLICY_DIGEST)):
+                receipt = raw.receipt; receipt[key] = bad
+                with self.assertRaises(worker.PriceCaptureError): store.TpexPriceStore._validated_capture(worker.PriceCapture(raw.body, worker.canonical_bytes(receipt), raw.parsed))
+
     def test_reads_gates_env_pins_and_default_make_zero_requests(self):
         with SyntheticPolicyScope() as f:
             cache = store.TpexPriceStore(loader=f.loader)
@@ -108,4 +130,3 @@ class PriceStoreTests(unittest.TestCase):
                     self.assertEqual(result["reasons"], ["price_instrument_not_supported"])
                 self.assertEqual(f.opener.calls, [])
                 self.assertEqual(store.capture_tpex_price(SimpleNamespace(**base), worker.CUTOFF)["status"], "available")
-

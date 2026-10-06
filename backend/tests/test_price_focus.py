@@ -7,6 +7,99 @@ from test_tpex_price_capture import SyntheticPolicyScope, csv_body, fixture_rows
 
 
 class PriceFocusTests(unittest.TestCase):
+    def test_range_contract_and_independent_exact_boundaries(self):
+        from app.price_focus import exact_day_range, parse_min_range_pct, range_meets_minimum
+        for raw, scaled in (("0", "0"), ("0.000", "0"), ("4.500", "4500"), ("9223372036854775.807", "9223372036854775807")):
+            self.assertEqual(parse_min_range_pct(raw), scaled)
+        for value in (None, True, 1, "", "01", "-1", "+1", "1e0", "1.0001", "1.", ".1", " 1", "1\n", "1,000", "１", "9223372036854775.808"):
+            with self.subTest(value=value), self.assertRaises(ValueError): parse_min_range_pct(value)
+        precise = "1.000000000000000000000000000001"
+        for opening, high, low, minimum, expected in (
+            ("100", "104", "100", "4", True), ("100.00", "104.000", "100.0", "4.001", False),
+            ("3", "3.0001", "3.0", "0.003", True), ("3.00", "3.0001", "3", "0.004", False),
+            (precise, "1.040000000000000000000000000001", precise, "4", False),
+            (precise, "1.040000000000000000000000000001", precise, "3.999", True),
+            ("1", "92233720368548.75807", "1", "9223372036854775.807", True),
+            ("1", "92233720368548.75806", "1", "9223372036854775.807", False),
+            ("1.0", "1.000", "1", "0.000", True), ("1", "1", "1", "0.001", False)):
+            prices = exact_day_range({"source_fields": {"開盤": opening, "最高": high, "最低": low}})
+            self.assertIsNotNone(prices)
+            self.assertEqual(range_meets_minimum(prices, parse_min_range_pct(minimum)), expected)
+        for key in ("開盤", "最高", "最低"):
+            for bad in (None, 1, "", "0", "-1", "01", "1e0", "1\n", "1" * 65):
+                fields = {"開盤": "1", "最高": "1", "最低": "1"}; fields[key] = bad
+                self.assertIsNone(exact_day_range({"source_fields": fields}))
+        self.assertIsNone(exact_day_range({"source_fields": {"開盤": "2", "最高": "1", "最低": "1"}}))
+
+    def test_range_invalid_both_routes_before_lookup_and_capture(self):
+        from fastapi.testclient import TestClient
+        from urllib.parse import urlencode
+        fixture = MemoryAPIFixture()
+        try:
+            with TestClient(fixture.app) as client, patch("sqlalchemy.orm.Session.scalars") as lookup, patch.object(fixture.api, "build_price_focus") as build:
+                bad = ("", "01", "-1", "+1", "1e0", "1.0001", "1.", ".1", " 1", "1\n", "1,000", "１", "9223372036854775.808")
+                queries = [urlencode({"as_of": "2026-10-05", "min_lots": "0", "min_range_pct": value}) for value in bad]
+                queries += ["as_of=2026-10-05&min_lots=0&min_range_pct=0&min_range_pct=1", "as_of=2026-10-05&min_lots=0&q=3105"]
+                for query in queries:
+                    for path, method in (("/api/focus/price-lots", client.get), ("/api/focus/price-lots/capture", client.post)):
+                        self.assertEqual(method(path + "?" + query).status_code, 422)
+                lookup.assert_not_called(); build.assert_not_called()
+            self.assertEqual(fixture.fixture.opener.calls, [])
+        finally: fixture.close()
+
+    def test_new_day_four_reasons_five_params_exact_expected_sets_and_shared_m1(self):
+        from fastapi.testclient import TestClient
+        from urllib.parse import parse_qs, urlsplit
+        from worker.tpex_price_capture import NEW_CUTOFF
+        fixture = MemoryAPIFixture(cutoff=NEW_CUTOFF)
+        try:
+            with TestClient(fixture.app) as client:
+                client.post("/api/focus/price-lots/capture?as_of=2026-10-06&min_lots=10000.000&min_range_pct=4")
+                for minimum, move, expected in (("0", "all", ["3105", "6488"]), ("4", "all", ["3105", "6488"]),
+                                                 ("6.000", "all", ["6488"]), ("10", "all", []), ("6", "down", []), ("6", "up", ["6488"]),
+                                                 ("5.691", "all", ["3105", "6488"]), ("5.692", "all", ["6488"]),
+                                                 ("9.787", "all", ["6488"]), ("9.788", "all", [])):
+                    query = f"as_of=2026-10-06&min_lots=10000.000&day_move={move}&min_turnover=0&min_range_pct={minimum}"
+                    data = client.get("/api/focus/price-lots?" + query).json()
+                    self.assertEqual((data["status"], data["count"], data["min_range_pct"]), ("available", len(expected), minimum))
+                    self.assertEqual([item["symbol"] for item in data["items"]], expected)
+                    for item in data["items"]:
+                        self.assertEqual(item["reasons"][-1], "range_at_least_min_range_pct")
+                        self.assertEqual(len(item["reasons"]), 4)
+                        self.assertEqual((item["high_exact"], item["low_exact"]), ("623.00", "588.00") if item["symbol"] == "3105" else ("1260.00", "1145.00"))
+                        self.assertEqual(parse_qs(urlsplit(item["detail_url"]).query), {"as_of": ["2026-10-06"], "from": ["price-lots"], "focus_as_of": ["2026-10-06"], "focus_min_lots": ["10000.000"], "focus_day_move": [move], "focus_min_turnover": ["0"], "focus_min_range_pct": [minimum]})
+                    client.post("/api/focus/price-lots/capture?" + query)
+                self.assertEqual(client.get("/api/focus/price-lots?as_of=2026-10-06&min_lots=10000").json()["min_range_pct"], "0")
+                self.assertEqual(client.get("/api/stocks/TPEx/6488?as_of=2026-10-06").json()["overview"]["price_memory"]["latest"]["volume_exact"], "13913614")
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_range_zero_vs_missing_even_with_zero_or_empty_candidate_filter(self):
+        from app import tpex_price
+        from app.price_focus import build_price_focus
+        from copy import deepcopy
+        from types import SimpleNamespace
+        fixture = MemoryAPIFixture()
+        try:
+            instruments = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None) for s, n in (("3105", "穩懋"), ("6488", "環球晶"))]
+            tpex_price.capture_tpex_price(instruments[0], date(2026, 10, 5))
+            real = tpex_price.build_tpex_price
+            def zero(item, cutoff):
+                value = deepcopy(real(item, cutoff)); value["latest"]["source_fields"].update({"開盤": "1.0", "最高": "1.000", "最低": "1", "收盤": "1"}); return value
+            with patch.object(tpex_price, "build_tpex_price", zero):
+                self.assertEqual(build_price_focus(instruments, date(2026, 10, 5), "0", min_range_pct="0.000")["count"], 2)
+                self.assertEqual(build_price_focus(instruments, date(2026, 10, 5), "0", min_range_pct="0.001")["count"], 0)
+            for key in ("最高", "最低"):
+                for bad in (None, "", "0", "01", "-1"):
+                    def missing(item, cutoff):
+                        value = deepcopy(real(item, cutoff)); value["latest"]["source_fields"][key] = bad; return value
+                    with patch.object(tpex_price, "build_tpex_price", missing):
+                        data = build_price_focus(instruments, date(2026, 10, 5), "50000", min_range_pct="0")
+                        self.assertEqual((data["status"], data["count"], data["reasons"]), ("unavailable", None, ["price_focus_range_unavailable"]))
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_decimal_contract_exact_int64_and_rejections(self):
         from app.price_focus import parse_min_lots, lots_text
         for raw, shares in (("0", "0"), ("0.000", "0"), ("0.001", "1"), ("20000", "20000000"),
@@ -54,7 +147,7 @@ class PriceFocusTests(unittest.TestCase):
                     self.assertEqual([item["symbol"] for item in result["items"]], expected)
                     for item in result["items"]:
                         query = parse_qs(urlsplit(item["detail_url"]).query)
-                        self.assertEqual(query, {"as_of": ["2026-10-05"], "from": ["price-lots"], "focus_as_of": ["2026-10-05"], "focus_min_lots": [minimum], "focus_day_move": ["all"], "focus_min_turnover": ["0"]})
+                        self.assertEqual(query, {"as_of": ["2026-10-05"], "from": ["price-lots"], "focus_as_of": ["2026-10-05"], "focus_min_lots": [minimum], "focus_day_move": ["all"], "focus_min_turnover": ["0"], "focus_min_range_pct": ["0"]})
                 m1 = client.get("/api/stocks/TPEx/6488?as_of=2026-10-05").json()["overview"]["price_memory"]
                 self.assertEqual(m1["latest"]["volume_exact"], "18982607")
                 self.assertEqual(m1["latest"]["close"], 1180)
@@ -79,7 +172,7 @@ class PriceFocusTests(unittest.TestCase):
                 for move, expected in (("all", ["3105", "6488"]), ("up", ["3105"]), ("down", ["6488"]), ("flat", [])):
                     query = "as_of=2026-10-05&min_lots=10000.000&day_move=" + move
                     result = client.get("/api/focus/price-lots?" + query).json()
-                    self.assertEqual((result["version"], result["status"], result["day_move"], result["count"]), ("price-lot-focus/m2-v3", "available", move, len(expected)))
+                    self.assertEqual((result["version"], result["status"], result["day_move"], result["count"]), ("price-lot-focus/m2-v4", "available", move, len(expected)))
                     self.assertEqual([item["symbol"] for item in result["items"]], expected)
                     if move == "all":
                         sample = {"api": result, "before": fixture.before, "after": fixture.snapshot(), "csv": fixture.fixture.body}
@@ -98,7 +191,7 @@ class PriceFocusTests(unittest.TestCase):
                         print(json.dumps({"synthetic_fixture_serialized_bytes": serialized, "fixture_object_bytes": footprint, "scope": "one complete focus response plus before/after memory DB snapshots and synthetic CSV"}), flush=True)
                     for item in result["items"]:
                         expected_move, opening, closing, reason = ("up", "614.00", "615.00", "close_above_open") if item["symbol"] == "3105" else ("down", "1220.00", "1180.00", "close_below_open")
-                        self.assertEqual((item["day_move"], item["open_exact"], item["close_exact"], item["reasons"]), (expected_move, opening, closing, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason]))
+                        self.assertEqual((item["day_move"], item["open_exact"], item["close_exact"], item["reasons"]), (expected_move, opening, closing, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason, "range_at_least_min_range_pct"]))
                         state = parse_qs(urlsplit(item["detail_url"]).query)
                         self.assertEqual((state["as_of"], state["focus_as_of"], state["focus_min_lots"], state["focus_day_move"]), (["2026-10-05"], ["2026-10-05"], ["10000.000"], [move]))
                     client.post("/api/focus/price-lots/capture?" + query)
@@ -143,12 +236,12 @@ class PriceFocusTests(unittest.TestCase):
                     self.assertEqual((result["status"], result["count"], result["items"], result["reasons"]), ("unavailable", None, [], ["price_focus_direction_unavailable"]))
             def flat(item, cutoff):
                 value = deepcopy(real(item, cutoff))
-                value["latest"]["source_fields"].update({"開盤": "1.0", "收盤": "1.000"})
+                value["latest"]["source_fields"].update({"開盤": "1.0", "收盤": "1.000", "最高": "2", "最低": "1"})
                 return value
             with patch.object(tpex_price, "build_tpex_price", flat):
                 result = build_price_focus(good, date(2026,10,5), "10000", "flat")
                 self.assertEqual((result["status"], result["count"]), ("available", 2))
-                self.assertTrue(all(item["reasons"] == ["volume_at_least_min_lots", "turnover_at_least_min_turnover", "close_equal_open"] for item in result["items"]))
+                self.assertTrue(all(item["reasons"] == ["volume_at_least_min_lots", "turnover_at_least_min_turnover", "close_equal_open", "range_at_least_min_range_pct"] for item in result["items"]))
             self.assertEqual(fixture.before, fixture.snapshot())
         finally: fixture.close()
 
@@ -225,9 +318,9 @@ class PriceFocusTests(unittest.TestCase):
                         actual = "29694939981" if item["symbol"] == "3105" else "22887612060"
                         reason = "close_above_open" if item["symbol"] == "3105" else "close_below_open"
                         self.assertEqual((item["turnover_exact"], item["min_turnover"], item["reasons"]),
-                                         (actual, amount, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason]))
+                                         (actual, amount, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason, "range_at_least_min_range_pct"]))
                         self.assertEqual(parse_qs(urlsplit(item["detail_url"]).query), {"as_of": ["2026-10-05"], "from": ["price-lots"],
-                                         "focus_as_of": ["2026-10-05"], "focus_min_lots": ["10000.000"], "focus_day_move": [move], "focus_min_turnover": [amount]})
+                                         "focus_as_of": ["2026-10-05"], "focus_min_lots": ["10000.000"], "focus_day_move": [move], "focus_min_turnover": [amount], "focus_min_range_pct": ["0"]})
                     client.post("/api/focus/price-lots/capture?" + query)
                 self.assertEqual(client.get("/api/focus/price-lots?as_of=2026-10-05&min_lots=10000").json()["min_turnover"], "0")
                 unknown = client.get("/api/focus/price-lots?as_of=2026-10-02&min_lots=0&min_turnover=0").json()

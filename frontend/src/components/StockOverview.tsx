@@ -1,11 +1,11 @@
 import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
-import { memoryPriceCaptureReady, PRICE_HEADERS, priceMemoryInstrumentSupported, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
+import { memoryPriceCaptureReady, PRICE_HEADERS, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
 const REASONS: Record<string, string> = {
   price_memory_capture_missing: '尚未載入本次官方單日行情。',
-  price_cutoff_not_supported: '此來源只支持 2026/10/5；請明示套用該日期。',
+  price_cutoff_not_supported: '此來源只支持 2026/10/5、2026/10/6；請明示套用其中一日。',
   price_capture_not_enabled: '伺服器尚未明示啟用此官方行情載入。',
   price_instrument_not_supported: '此來源僅核准兩檔上櫃普通股。',
   price_external_policy_pins_mismatch: '此官方行情的授權版本設定待核實。',
@@ -222,12 +222,12 @@ function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy
 }) {
   if (!data || !instrument || instrument.exchange !== 'TPEx' || !['3105', '6488'].includes(instrument.symbol)) return null
   const known = (!explicitCutoff || explicitCutoff === cutoff) && validStockPriceMemoryRead(data, instrument, explicitCutoff || cutoff)
-  const ready = priceMemoryInstrumentSupported(instrument) && explicitCutoff === '2026-10-05' && memoryPriceCaptureReady(data, instrument.exchange, instrument.symbol, cutoff)
+  const ready = priceMemoryInstrumentSupported(instrument) && priceSourcePins(explicitCutoff ?? null) !== null && memoryPriceCaptureReady(data, instrument.exchange, instrument.symbol, cutoff)
   const bar = known ? data.latest : null
   return <section className="panel overview-price-memory" aria-labelledby="price-memory-title">
     <h3 id="price-memory-title">櫃買官方單日行情</h3>
-    <p className="small-note">支持 2026/10/5 的上櫃 3105、6488；請先明示套用截止日期，再載入行情。同一次原件可讀取兩股，未提供歷史窗口。</p>
-    <button type="button" className="secondary-button" onClick={onCapture} disabled={!ready || busy || !onCapture}>{busy ? '載入官方行情中…' : '載入 10/5 官方行情'}</button>
+    <p className="small-note">支持 2026/10/5、2026/10/6 的上櫃 3105、6488；請先明示套用截止日期，再載入行情。每次服務只取得一份指定日期原件，可讀取兩股，未提供歷史窗口。</p>
+    <button type="button" className="secondary-button" onClick={onCapture} disabled={!ready || busy || !onCapture}>{busy ? '載入官方行情中…' : `載入 ${explicitCutoff ?? '指定日期'} 官方行情`}</button>
     {known ? <>
       <div className="stock-quote-grid"><div><span>收盤（元／股）</span><strong>{number(bar!.close)}</strong></div><div><span>成交量（張）</span><strong>{formatTableVolume(bar!.volume, bar!.source, bar!.volume_exact)}</strong></div><div><span>成交額（新臺幣元）</span><strong>{bar!.turnover_exact === null ? '未提供' : formatCanonicalShares(bar!.turnover_exact, 1, true)}</strong></div></div>
       <div className="overview-ohlc"><span>開 {number(bar!.open)}</span><span>高 {number(bar!.high)}</span><span>低 {number(bar!.low)}</span><span>收 {number(bar!.close)}</span></div>

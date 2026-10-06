@@ -168,6 +168,28 @@ Root沿[來源 §20.6](../SOURCE_REGISTRY.md#206-m2-focus-turnover-1-同來源�
 
 Owned清理另已核：唯一browser page exact close accepted、tabs0；owned API／Node／esbuild皆停止、8799／8800 listeners0，raw／receipt／memory已釋放，額外DB／raw／Temp／HAR／screenshot／bundle／buildinfo／log／artifact0。SIGINT兩PTY rawexit1保留，shutdown receipt與獨立PID／listener後驗0另報。前輪outside-owner及歷史NO-RETRY由協作紀錄管理；本輪worktree不自刪。未跑磁碟保存／跨程序、full suite／production build；不證全市場、PIT、歷史close／日曆、MA／trend／研究／Signal／Plan或下一振幅條件。
 
+### M2-FOCUS-DAY-RANGE-1 新日期與五條件返回的記憶體驗證入口
+
+沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --check/--focus-check --deps <既有backend/.deps>`、[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --check/--focus-check --deps <既有frontend/node_modules>`。必要backend --check22／focus18、Node M1 validator66／Overview26／App chart28及focus272 helper／121 full-App SSR、現行28src noEmit已exit0；舊適用驗證沿用，不重跑全套或production build。前兩Node失敗TS2345與誤期望19731.700（正確精確張呈現19731.7）及後修正pass分報，不降低契約。
+
+最小synthetic只memory config／SQLite `:memory:`，既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境。Checks涵蓋百分比原字串／千分scaled int64、精確OHL交叉比較、H=L合法0與missing、四理由／完整reads、safe五條件／尾零／legacy省略，以及兩明確immutable source tuples／store與前端日期隔離、錯pins／body／receipt拒收。10/05的4／4.5／5%屬歷史fixture，不當本輪10/06 actual。
+
+Fixture尺寸：Python focus serialized23,096B／object70,355B；Node M1四fixtures合計39,743B／object estimate180,176B，focus combined28,171B／estimate130,736B，均在memory≤8MiB／serialized≤256KiB內；object估計非RSS或程序峰值。各入口guards0／artifact0，命令、版本、原exit與精確PID收據留task，不建附件／manifest／來源副本。
+
+Actual另由root先取得並held10/06新body，程式更新後**同一程序**pure builder准入新tuple，再供preloaded真API／UI；來源、four observations及receipt由[來源 §20.7](../SOURCE_REGISTRY.md#207-m2-focus-day-range-1新日期來源准入與本日振幅-consumer)負責。Actual source Store count1／runner新GET0、DB preserved=true／API與client guards0；不使用fixture／base64／disk replay，不將cached UI首次click說成真fresh GET，也不稱m1-v2較早發出該GET。Root router讀入前importlib.util／runner NameError更正後無重取，原失敗保留。Actual數值／422／日期隔離及有限UI驗收見[個股頁 §29](../STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)。
+
+Owned清理分報：第一preview因footer10/05退修停止，Ctrl+C rawexit1／guard0 shutdown、最初absence命令rawexit1、後CIM own PID43224／33028 absent0分報；修正後focus272／121／noEmit28通過。先前三個owned Orca pages的click／keypress／inserttext只有ACK，events空、value／React／URL未改；第三頁fresh-ref聚焦後inserttext6.000仍value0／URL min0，未接受native操作。三頁exact close全部accepted、tabs[]後驗0。當時最後readonly確認走ChromiumInput.insertText，但未證實可用且符合不改runtime／不落盤的不同native路徑；Orca visible／nonminimized而非foreground、guestfocus=false只是觀測，未斷言唯一原因。
+
+獨立Edge154.0.4258.53 headless/CDP驗證先核一個`.range-ui-01a1106d`隔離profile，budget≤32MiB／128files／64dirs；建立後1,911,561B／167files／68dirs超出count上限，因此在產品UI測試前停止，不把profile準備當UI通過。Edge PID50476由owned CDP Browser.close正常exit0，driver51236 rawexit1為budget失敗；該owned family八PID後驗absent。Flush後殘留2,555,430B／232files／94dirs，Exact path `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-range-20261006/.range-ui-01a1106d`.Computed及exact literal PowerShell Remove-Item均於CreateProcess前被automatic review以blocked by policy拒絕，刪除未執行；此exact scope列NO-RETRY，等外部policy／owner，不改工具／路徑繞過。殘留超cap時不新增落盤UI profiles／tests，其餘memory工作續作；有效來源／API驗證不失效。
+
+Root續驗同held body的可信桌面1277／窄版390座標mouse move／down／up及trusted input，接受6.000／真0／精確邊界／missing、四理由及五原條件samecutoff安全往返；詳見[個股頁 §29](../STOCK_RESEARCH_PAGE.md#29-m2-focus-day-range-1本日振幅與五條件往返)。外部Orca1.4.220→1.4.221更新非root執行、不作因果修復主張。最後額外invalid fallback native click僅ACK、無DOM event，未完成；先前有效往返不需重跑。Root錯stock path的expected wait timeout raw1、scoped unknown assertion及V8 URL用法錯誤已修正，收據保留原task，不列產品失敗。
+
+Root判定B1有限核心驗收已接受：core+1／dep+1／reliability0／stall0。沿原root／三child完成文件review與版本封存；不new round／BOOT或追加quote GET，feature freeze／index／commit／merge／next coordinator均pending。
+
+原task曾核定兩owned RAM服務保留同body續驗：Python PID25192／session42499／127.0.0.1:8799，同已准入raw1,788,599B／receipt1408B及Store；Node PID1412／session84779／127.0.0.1:8800與compiler16392。驗收完成後第四owned page `8a6e95c0-6ebf-4cc5-9597-a2771b732da0` exact close=true，worktree tabs[]後驗0，四lifetime owned pages皆closed；未新profile／screenshot／HAR／附件。Preview Ctrl+C rawexit1、structured shutdown=true／guards0／disk_artifacts0，proxy API GET32／POST0不是32次quote GET，esbuild exit3221225786；API structured stopped=true／entry guards0／DB preserved／sourcecount1／runner0，之後exit() rawexit1。Exact25192／1412／16392 absent及8799／8800 listeners none後驗exit0；Python process absence才釋放held原件memory，未落盤／raw export。有效驗收、interruption rawexit1、清理後驗0分報，非所有歷史資源已清。不得新增落盤profile／tests，profile自動審查拒絕的exact scope仍NO-RETRY，外部policy／owner另處理。
+
+Python／Node入口guards0／artifact0只屬各入口；browser profile metadata是額外artifact，不稱本輪全域artifact0。沒有正式DB、行情raw／fixture／HAR／screenshot複本；未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／歷史close／日曆／MA／trend／研究／Signal／Plan。舊turnover及本輪outside-owner由協作紀錄管理，不自刪cwd。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。

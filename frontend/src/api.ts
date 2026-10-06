@@ -212,11 +212,11 @@ export const captureInstitutionalWindows = (exchange: string, symbol: string, as
 export const captureStockPriceMemory = (exchange: string, symbol: string, asOf: string) =>
   post<StockPriceMemoryData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/capture${queryString({ as_of: asOf })}`, {})
 
-export const getPriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0') =>
-  get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover })}`)
+export const getPriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
+  get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)
 
-export const capturePriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0') =>
-  post<PriceLotFocusData>(`/focus/price-lots/capture${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover })}`, {})
+export const capturePriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
+  post<PriceLotFocusData>(`/focus/price-lots/capture${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`, {})
 
 export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
   post<OfficialEventsData>(

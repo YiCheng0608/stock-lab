@@ -24,6 +24,8 @@ POLICY_VERSION = "m1-price-tpex-11370-2026-10-05.1"
 SOURCE_ID = "tpex_11370_daily_close_csv"
 ENDPOINT = "https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data"
 CUTOFF = date(2026, 10, 5)
+NEW_CUTOFF = date(2026, 10, 6)
+APPROVED_CUTOFFS = (CUTOFF, NEW_CUTOFF)
 MAX_BODY_BYTES = 3 * 1024 * 1024
 DEADLINE_SECONDS = 30
 MAX_INT64 = "9223372036854775807"
@@ -90,6 +92,11 @@ _POLICY = {
     "capture_time_is_not_publication_time"
   ]
 }
+_POLICY_20261006 = deepcopy(_POLICY)
+_POLICY_20261006["version"] = "m1-price-tpex-11370-2026-10-06.1"
+_POLICY_20261006["scope"]["cutoff"] = "2026-10-06"
+_POLICY_20261006["validation"]["expected_body_sha256"] = "aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a"
+_POLICY_20261006["attribution"]["release_version"] = "data-date-2026-10-06"
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)", re.ASCII)
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", re.ASCII)
 _CODE = re.compile(r"[0-9A-Z]{4,12}", re.ASCII)
@@ -107,13 +114,26 @@ def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_bytes(value)).hexdigest()
 
 
-def price_policy() -> dict:
-    return deepcopy(_POLICY)
+def price_policy(cutoff: date = CUTOFF) -> dict:
+    if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
+        raise PriceCaptureError("price_cutoff_not_supported")
+    return deepcopy(_POLICY if cutoff == CUTOFF else _POLICY_20261006)
+
+
+def worker_version(cutoff: date) -> str:
+    if cutoff not in APPROVED_CUTOFFS:
+        raise PriceCaptureError("price_cutoff_not_supported")
+    return VERSION if cutoff == CUTOFF else "tpex-price-capture/m1-v2"
 
 
 def validate_policy(policy: dict, expected_version: str, expected_digest: str) -> None:
     # The caller supplies independently accepted pins; computing a hash is not admission.
-    if policy != _POLICY or expected_version != POLICY_VERSION or digest(policy) != expected_digest:
+    try:
+        cutoff = date.fromisoformat(policy["scope"]["cutoff"])
+        accepted = price_policy(cutoff)
+    except (KeyError, TypeError, ValueError):
+        raise PriceCaptureError("price_policy_pins_mismatch") from None
+    if policy != accepted or expected_version != accepted["version"] or digest(policy) != expected_digest:
         raise PriceCaptureError("price_policy_pins_mismatch")
 
 
@@ -137,7 +157,7 @@ def positive_decimal(value: str) -> Decimal:
 def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF) -> dict:
     if type(body) is not bytes or not body or len(body) > MAX_BODY_BYTES:
         raise PriceCaptureError("price_body_size_invalid")
-    if type(cutoff) is not date or cutoff != CUTOFF:
+    if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
     try:
         rows = csv.reader(io.StringIO(body.decode("utf-8-sig"), newline=""), strict=True)
@@ -150,7 +170,7 @@ def parse_price_csv(body: bytes, *, cutoff: date = CUTOFF) -> dict:
             count += 1
             if len(row) != len(HEADER):
                 raise PriceCaptureError("price_csv_width_invalid")
-            if row[0] != "1151005":
+            if row[0] != f"{cutoff.year - 1911:03d}{cutoff.month:02d}{cutoff.day:02d}":
                 raise PriceCaptureError("price_feed_date_mismatch")
             if not _CODE.fullmatch(row[1]) or not row[2]:
                 raise PriceCaptureError("price_csv_identity_invalid")
@@ -267,12 +287,33 @@ def capture_price(*, policy: dict, expected_policy_version: str, expected_policy
         raise
     except (HTTPError, HTTPException, OSError, socket.timeout) as error:
         raise PriceCaptureError("price_capture_http_failed") from error
+    return admit_observed_price_capture(body=body, http_status=200, endpoint=ENDPOINT,
+        request_started_at=request_started_at, captured_at=captured_at, policy=policy,
+        expected_policy_version=expected_policy_version, expected_policy_digest=expected_policy_digest)
+
+
+def admit_observed_price_capture(*, body: bytes, http_status: int, endpoint: str,
+                                 request_started_at: str, captured_at: str, policy: dict,
+                                 expected_policy_version: str, expected_policy_digest: str) -> PriceCapture:
+    """Pure admission of one independently observed same-process HTTP body."""
+    validate_policy(policy, expected_policy_version, expected_policy_digest)
+    if type(http_status) is not int or http_status != 200 or endpoint != ENDPOINT:
+        raise PriceCaptureError("price_response_rejected")
+    if type(body) is not bytes or not body or len(body) > MAX_BODY_BYTES:
+        raise PriceCaptureError("price_body_size_invalid")
+    try:
+        start, end = (datetime.fromisoformat(value) for value in (request_started_at, captured_at))
+        if start.utcoffset() != timezone.utc.utcoffset(start) or end.utcoffset() != timezone.utc.utcoffset(end) or not 0 <= (end - start).total_seconds() <= DEADLINE_SECONDS:
+            raise ValueError()
+    except (TypeError, ValueError) as error:
+        raise PriceCaptureError("price_capture_time_invalid") from error
     body_sha = hashlib.sha256(body).hexdigest()
     if body_sha != policy["validation"]["expected_body_sha256"]:
         raise PriceCaptureError("price_body_version_mismatch")
-    parsed = parse_price_csv(body)
+    cutoff = date.fromisoformat(policy["scope"]["cutoff"])
+    parsed = parse_price_csv(body, cutoff=cutoff)
     receipt = {
-        "worker_version": VERSION, "source_id": SOURCE_ID, "source_version": "tpex-11370/2026-10-05",
+        "worker_version": worker_version(cutoff), "source_id": SOURCE_ID, "source_version": "tpex-11370/" + cutoff.isoformat(),
         "endpoint": ENDPOINT, "method": "GET", "http_status": 200, "request_count": 1,
         "request_started_at": request_started_at, "captured_at": captured_at,
         "body_sha256": body_sha, "body_bytes": len(body), "policy_version": expected_policy_version,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import base64
+from datetime import date
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ parser.add_argument("--port", type=int, default=8795)
 parser.add_argument("--live-source-opt-in", action="store_true")
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
+parser.add_argument("--cutoff", choices=("2026-10-05", "2026-10-06"), default="2026-10-05")
 ARGS = parser.parse_args()
 if ARGS.live_source_opt_in and not ARGS.serve:
     parser.error("live source is only admitted in root-owned serve")
@@ -114,12 +116,12 @@ def receipt(fixture=None, include_raw=False):
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
               "guard": dict(COUNTS), "disk_artifacts": 0, "source_requests": list(SOURCE_REQUESTS),
               "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
-              "policy_version": tpex_price.POLICY_VERSION, "policy_digest": tpex_price.POLICY_DIGEST,
-              "scope": "two ordinary TPEx stocks, 2026-10-05, single day; no history/MA20/PIT/save acceptance"}
+              "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff))[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff))[1],
+              "scope": "two ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT/save acceptance"}
     if fixture:
         raw = fixture.store.raw_capture
         result["db_preserved"] = fixture.before == fixture.snapshot()
-        result["capture_state"] = fixture.store.read("TPEx", "3105", worker.CUTOFF, instrument_type="stock", currency="TWD")["capture_state"]
+        result["capture_state"] = fixture.store.read("TPEx", "3105", date.fromisoformat(ARGS.cutoff), instrument_type="stock", currency="TWD")["capture_state"]
         result["capture_receipt"] = raw.receipt if raw else None
         result["selected"] = raw.parsed["selected"] if raw else None
         result["fixture_kind"] = "synthetic catalogue with live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "synthetic private test anchors; not official raw"
@@ -144,15 +146,16 @@ def serve(preloaded_store=None):
     global PRELOADED_SOURCE
     from starlette.responses import JSONResponse
     import uvicorn
-    if ARGS.live_source_opt_in and (ARGS.policy_version != tpex_price.POLICY_VERSION or ARGS.policy_digest != tpex_price.POLICY_DIGEST):
+    cutoff = date.fromisoformat(ARGS.cutoff)
+    if (ARGS.live_source_opt_in or preloaded_store is not None) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff):
         raise ValueError("external accepted policy pins required for live preview")
-    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None)
+    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None, cutoff=cutoff)
     if preloaded_store is not None:
         raw = preloaded_store.raw_capture
         if not isinstance(preloaded_store, tpex_price.TpexPriceStore) or raw is None or not preloaded_store._attempted or preloaded_store._request_count != 1 or preloaded_store._error:
             fixture.close()
             raise ValueError("existing admitted same-process capture required")
-        tpex_price.TpexPriceStore._validated_capture(raw)
+        tpex_price.TpexPriceStore._validated_capture(raw, cutoff)
         fixture.store = preloaded_store
         fixture.stack.enter_context(patch.object(tpex_price, "STORE", preloaded_store))
         PRELOADED_SOURCE = True
@@ -199,4 +202,3 @@ def serve(preloaded_store=None):
 
 if __name__ == "__main__":
     raise SystemExit(serve() if ARGS.serve else check())
-

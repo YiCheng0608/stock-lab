@@ -1,5 +1,6 @@
 /** M1-PRICE-1: scoped checks and a full-App actual API preview, entirely in memory.
- * Fixtures and provenance are synthetic; no source/DB/save acceptance is implied.
+ * Check fixtures/provenance are synthetic. Serve proxies the root-owned API;
+ * actual acquisition/admission provenance comes from that API's receipt.
  * Borrow existing --deps read-only. --check is the default; --serve belongs to root.
  */
 const fs = require('node:fs')
@@ -157,11 +158,21 @@ const React = requireDependency('react')
 const { renderToStaticMarkup } = requireDependency('react-dom/server')
 const runtime = () => ({ node: process.versions.node, typescript: ts.version, esbuild: esbuild.version })
 const receipt = () => ({ runtime: runtime(), guard: counts, disk_artifacts: 0, owned_pid: process.pid,
-  child_pids: ownedChildren.map((child) => child.pid), fixture_kind: 'synthetic client contract; source capture occurs only on actual API explicit POST' })
-function stockFixture(symbol = '3105') {
+  child_pids: ownedChildren.map((child) => child.pid), fixture_kind: args.includes('--serve')
+    ? 'full App proxy of root-owned API; acquisition/admission provenance supplied by API receipt'
+    : 'synthetic client contract only; no actual source acquisition' })
+const estimateGraph = (value, seen = new Set()) => {
+  if (value === null || value === undefined) return 16
+  if (typeof value === 'string') return 64 + value.length * 4
+  if (typeof value !== 'object') return 16
+  if (seen.has(value)) return 0
+  seen.add(value)
+  return 128 + Object.entries(value).reduce((total, [key, child]) => total + 32 + estimateGraph(key, seen) + estimateGraph(child, seen), 0)
+}
+function stockFixture(symbol = '3105', cutoff = '2026-10-05') {
   const overview = cases.createUnitLotsFixture()
-  overview.as_of = '2026-10-05'
-  overview.price_memory = memoryCases.createPriceMemoryFixture(symbol)
+  overview.as_of = cutoff
+  overview.price_memory = memoryCases.createPriceMemoryFixture(symbol, cutoff)
   overview.price = { ...overview.price, status: 'unavailable', latest: null, bars: [], reasons: ['price_raw_evidence_missing'] }
   overview.institutional = { status: 'unavailable', horizons: [5, 20], investors: ['foreign', 'trust', 'dealer'], values: null, reasons: ['window_cutoff_not_supported'] }
   overview.institutional_daily = undefined
@@ -192,7 +203,7 @@ async function check() {
       ['10000.000', 'all', '25000000000'], ['10000.000', 'all', '20000000000'], ['10000.000', 'down', '25000000000']]) {
       const data = focusCases.createPriceFocusFixture(minimum, dayMove, minTurnover)
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-      client.setQueryData(['price-lot-focus', '2026-10-05', minimum, dayMove, minTurnover], data)
+      client.setQueryData(['price-lot-focus', '2026-10-05', minimum, dayMove, minTurnover, '0'], data)
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
         { initialEntries: [`/?as_of=2026-10-05&min_lots=${minimum}&day_move=${dayMove}${minTurnover === '0' ? '' : '&min_turnover=' + minTurnover}`] }, React.createElement(App.default))))
       verify(html.includes('成交張數關注') && html.includes('來源日期 2026-10-05'), 'full Today App renders selected source date')
@@ -207,7 +218,7 @@ async function check() {
       client.clear()
     }
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-    client.setQueryData(['price-lot-focus', '2026-10-05', '50000', 'all', '0'], focusCases.createUnloadedFocusFixture())
+    client.setQueryData(['price-lot-focus', '2026-10-05', '50000', 'all', '0', '0'], focusCases.createUnloadedFocusFixture())
     const missing = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
       { initialEntries: ['/?as_of=2026-10-05&min_lots=50000'] }, React.createElement(App.default))))
     verify(missing.includes('候選數未知') && !missing.includes('這是此範圍的零候選'), 'unloaded panel never claims available zero')
@@ -217,12 +228,12 @@ async function check() {
       queryClient.setQueryData(['stock', 'TPEx', symbol, '2026-10-05'], stock)
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
         { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=10000.000&focus_day_move=${dayMove}${amount === '0' ? '' : '&focus_min_turnover=' + amount}`] }, React.createElement(App.default))))
-      verify(html.includes('回到成交張數關注（原條件）') && html.includes(`/?as_of=2026-10-05&amp;min_lots=10000.000&amp;day_move=${dayMove}&amp;min_turnover=${amount}#price-lot-focus-title`), 'full App retains exact original conditions and legacy zero amount')
+      verify(html.includes('回到成交張數關注（原條件）') && html.includes(`/?as_of=2026-10-05&amp;min_lots=10000.000&amp;day_move=${dayMove}&amp;min_turnover=${amount}&amp;min_range_pct=0#price-lot-focus-title`), 'full App retains exact original conditions and legacy zero amount')
       verify(html.includes(symbol === '3105' ? '48,127.911' : '18,982.607') && html.includes(symbol === '3105' ? '>615<' : '>1,180<'), 'shared M1 lots and per-share close unchanged')
       queryClient.clear()
     }
     for (const suffix of ['&day_move=unknown', '&day_move=up&day_move=down', '&as_of=2026-10-02', '&min_lots=0',
-      '&min_turnover=', '&min_turnover=-1', '&min_turnover=01', '&min_turnover=1.0', '&min_turnover=1&min_turnover=2', '&next=https://foreign.example']) {
+      '&min_turnover=', '&min_turnover=-1', '&min_turnover=01', '&min_turnover=1.0', '&min_turnover=1&min_turnover=2', '&min_range_pct=', '&min_range_pct=-1', '&min_range_pct=01', '&min_range_pct=1.0001', '&min_range_pct=1&min_range_pct=2', '&next=https://foreign.example']) {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
         { initialEntries: ['/?as_of=2026-10-05&min_lots=10000' + suffix] }, React.createElement(App.default))))
@@ -230,7 +241,7 @@ async function check() {
       queryClient.clear()
     }
     for (const suffix of ['&focus_day_move=unknown', '&focus_day_move=up&focus_day_move=down', '&next=https://foreign.example',
-      '&focus_min_turnover=', '&focus_min_turnover=-1', '&focus_min_turnover=1&focus_min_turnover=2']) {
+      '&focus_min_turnover=', '&focus_min_turnover=-1', '&focus_min_turnover=1&focus_min_turnover=2', '&focus_min_range_pct=', '&focus_min_range_pct=-1', '&focus_min_range_pct=1&focus_min_range_pct=2', '&q=3105']) {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       queryClient.setQueryData(['stock', 'TPEx', '3105', '2026-10-05'], stockFixture())
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
@@ -240,23 +251,44 @@ async function check() {
     }
     verify(App.officialEventFocusReturnPath(new URLSearchParams('from=official-events&focus_as_of=2026-10-05&focus_q=3105')) === '/?as_of=2026-10-05&q=3105#official-event-focus-title', 'existing event return preserved')
     const staleClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-    staleClient.setQueryData(['price-lot-focus', '2026-10-05', '10000', 'all', '0'], focusCases.createPriceFocusFixture('10000'))
+    staleClient.setQueryData(['price-lot-focus', '2026-10-05', '10000', 'all', '0', '0'], focusCases.createPriceFocusFixture('10000'))
     const stale = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: staleClient }, React.createElement(MemoryRouter,
       { initialEntries: ['/?as_of=2026-10-05&min_lots=10000&day_move=all&min_turnover=25000000000&q=3105'] }, React.createElement(App.default))))
     verify(!stale.includes('class="focus-card"') && stale.includes('value="25000000000"'), 'amount belongs to query key; shared q remains valid')
     staleClient.clear()
+    for (const [minimum, move, expected] of [['0', 'all', '3105,6488'], ['4', 'all', '3105,6488'], ['6.000', 'all', '6488'], ['10', 'all', ''], ['6', 'down', ''], ['6', 'up', '6488']]) {
+      const data = focusCases.createPriceFocusFixture('10000.000', move, '0', minimum, '2026-10-06')
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      queryClient.setQueryData(['price-lot-focus', '2026-10-06', '10000.000', move, '0', minimum], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-06&min_lots=10000.000&day_move=${move}&min_turnover=0&min_range_pct=${minimum}`] }, React.createElement(App.default))))
+      verify(data.items.map((item) => item.symbol).join() === expected && (html.match(/class="focus-card"/g) || []).length === data.count, 'new date independent exact range candidate set ' + minimum + '/' + move)
+      verify(html.includes('最小本日振幅（%）') && html.includes('100×(最高−最低)/開盤') && html.includes('來源日期 2026-10-06'), 'range control and formula with selected admitted date')
+      verify(data.count !== 0 || (html.includes('零候選') && !html.includes('候選數未知')), 'new range true zero from two admitted reads')
+      for (const item of data.items) {
+        verify(html.includes(`最高 ${item.high_exact} − 最低 ${item.low_exact}`) && html.includes(`/開盤 ${item.open_exact}`) && html.includes(`門檻 ${minimum}%`), 'fourth reason keeps exact O/H/L and raw threshold')
+        verify(html.includes(item.symbol === '3105' ? '約 5.691%' : '約 9.787%') && html.includes(`focus_min_range_pct=${minimum}`), 'display rounded percent and same-cutoff five-condition detail URL')
+      }
+      queryClient.clear()
+    }
+    const backClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    backClient.setQueryData(['stock', 'TPEx', '6488', '2026-10-06'], stockFixture('6488', '2026-10-06'))
+    const back = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: backClient }, React.createElement(MemoryRouter,
+      { initialEntries: ['/stocks/TPEx/6488?as_of=2026-10-06&from=price-lots&focus_as_of=2026-10-06&focus_min_lots=10000.000&focus_day_move=up&focus_min_turnover=0&focus_min_range_pct=6.000'] }, React.createElement(App.default))))
+    verify(back.includes('/?as_of=2026-10-06&amp;min_lots=10000.000&amp;day_move=up&amp;min_turnover=0&amp;min_range_pct=6.000#price-lot-focus-title') && back.includes('13,913.614') && back.includes('>1,205<'), 'new M1 detail and safe return preserve all five conditions and tail zeros')
+    backClient.clear()
+    for (const query of ['min_range_pct=6', 'min_range_pct=-1', 'min_range_pct=01', 'min_range_pct=1&min_range_pct=2']) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      queryClient.setQueryData(['price-lot-focus', '2026-10-06', '10000', 'all', '0', '0'], focusCases.createPriceFocusFixture('10000', 'all', '0', '0', '2026-10-06'))
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
+        { initialEntries: ['/?as_of=2026-10-06&min_lots=10000&day_move=all&min_turnover=0&' + query] }, React.createElement(App.default))))
+      verify(!html.includes('class="focus-card"'), 'range condition owns cache key and invalid inputs cannot display stale cards')
+      queryClient.clear()
+    }
     assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
     const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('10000'))), stock: Buffer.byteLength(JSON.stringify(stockFixture())) }
     fixtureBytes.combined = fixtureBytes.focus + fixtureBytes.stock
     assert(fixtureBytes.combined <= 256 * 1024 && fixtureBytes.combined <= 8 * 1024 * 1024, 'bounded synthetic fixture serialization')
-    const estimateGraph = (value, seen = new Set()) => {
-      if (value === null || value === undefined) return 16
-      if (typeof value === 'string') return 64 + value.length * 4
-      if (typeof value !== 'object') return 16
-      if (seen.has(value)) return 0
-      seen.add(value)
-      return 128 + Object.entries(value).reduce((total, [key, child]) => total + 32 + estimateGraph(key, seen) + estimateGraph(child, seen), 0)
-    }
     const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('10000'), stockFixture()])
     assert(fixtureObjectEstimate <= 8 * 1024 * 1024, 'conservative fixture object graph estimate, not process RSS')
     console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: fixtureBytes,
@@ -272,6 +304,21 @@ async function check() {
   let appChecks = 0
   const verify = (value, message) => { appChecks++; assert(value, message) }
   const { formatStockTooltip, prepareStockChartData } = require(path.join(sourceRoot, 'stockChart.ts'))
+  for (const symbol of ['3105', '6488']) {
+    const stock = stockFixture(symbol, '2026-10-06')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    client.setQueryData(['stock', 'TPEx', symbol, '2026-10-06'], stock)
+    const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+      { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-06`] }, React.createElement(App.default))))
+    verify(html.includes(symbol === '3105' ? '19,731.7' : '13,913.614') && html.includes(symbol === '3105' ? '>592<' : '>1,205<'), 'new immutable tuple produces same-date M1 exact lots and per-share close')
+    verify(html.includes('10/6 官方單日行情') && html.includes('/stocks/TPEx/3105?as_of=2026-10-06') && html.includes('/stocks/TPEx/6488?as_of=2026-10-06'), 'new M1 labels and navigation follow explicit admitted cutoff')
+    verify(html.includes('data-date-2026-10-06') && html.includes(memoryRead.priceSourcePins('2026-10-06').bodySha), 'new original-row source card uses exact date/version/body pin')
+    const bars = memoryRead.memoryPriceChartBars(stock.overview.price_memory, stock.instrument, '2026-10-06'), chart = prepareStockChartData(bars)
+    verify(bars.length === 1 && bars[0].date === '2026-10-06' && bars[0].id === undefined && chart.ma20.every((value) => value === null), 'new date is one unsaved bar without synthetic ID or history')
+    const tooltip = formatStockTooltip(chart, { dataIndex: 0 })
+    verify(tooltip.includes(symbol === '3105' ? '19,731.7' : '13,913.614') && tooltip.includes(symbol === '3105' ? '收：592' : '收：1,205'), 'new M1 tooltip exact shares-to-lots and close')
+    client.clear()
+  }
   for (const symbol of ['3105', '6488']) {
     const stock = stockFixture(symbol)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
@@ -305,8 +352,11 @@ async function check() {
     reversedClient.clear()
   }
   assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
+  const m1Fixtures = [stockFixture('3105'), stockFixture('6488'), stockFixture('3105', '2026-10-06'), stockFixture('6488', '2026-10-06')]
+  const fixtureBytes = Buffer.byteLength(JSON.stringify(m1Fixtures)), fixtureObjectEstimate = estimateGraph(m1Fixtures)
+  assert(fixtureBytes <= 256 * 1024 && fixtureObjectEstimate <= 8 * 1024 * 1024, 'bounded old/new M1 fixture graphs; estimate is not RSS')
   console.log(JSON.stringify({ passed: true, validator_checks: validatorChecks, affected_overview_ssr_checks: overviewChecks,
-    full_app_chart_checks: appChecks, known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, fixture_bytes: Buffer.byteLength(JSON.stringify([stockFixture('3105'), stockFixture('6488')])),
+    full_app_chart_checks: appChecks, known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, fixture_bytes: fixtureBytes, fixture_object_estimated_bytes: fixtureObjectEstimate,
     ...receipt(), not_run: ['backend rerun', 'external source', 'browser native UI', 'disk persistence', 'full build', 'historical price/MA20'] }))
 }
 
@@ -372,5 +422,5 @@ async function stopCheckCompiler() {
   console.log(JSON.stringify({ compiler_cleanup: await Promise.all(waits) }))
 }
 Promise.resolve().then(() => args.includes('--serve') ? serve() : check())
-  .catch((error) => { console.error(error); process.exitCode = 1; if (args.includes('--serve')) esbuild.stop() })
+  .catch((error) => { console.error(error); console.log(JSON.stringify({ passed: false, ...receipt() })); process.exitCode = 1; if (args.includes('--serve')) esbuild.stop() })
   .finally(async () => { if (!args.includes('--serve')) await stopCheckCompiler() })

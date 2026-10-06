@@ -70,8 +70,8 @@ import { isValidBar } from './stockChart'
 import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
 import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview } from './components/StockOverview'
-import { memoryPriceChartBars, validStockPriceMemoryRead } from './stockPriceMemoryRead'
-import { exactTurnoverText, minLotsShares, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
+import { memoryPriceChartBars, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
+import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 
@@ -847,64 +847,70 @@ export function PriceLotFocusPanel() {
   const asOf = params.get('as_of') ?? '', minLots = params.get('min_lots') ?? ''
   const direction = params.get('day_move') ?? 'all', dayMove = validPriceFocusDayMove(direction) ? direction : 'all'
   const minTurnover = params.get('min_turnover') ?? '0'
+  const minRangePct = params.get('min_range_pct') ?? '0'
   const [dateDraft, setDateDraft] = useState(asOf), [lotsDraft, setLotsDraft] = useState(minLots)
   const [moveDraft, setMoveDraft] = useState(direction)
   const [turnoverDraft, setTurnoverDraft] = useState(minTurnover)
+  const [rangeDraft, setRangeDraft] = useState(minRangePct)
   const [formError, setFormError] = useState<string | null>(null), [busy, setBusy] = useState(false)
   const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
   const pending = useRef(false), currentKey = useRef('')
-  const key = JSON.stringify([asOf, minLots, direction, minTurnover]); currentKey.current = key
-  const enabled = validPriceFocusParams(params)
-  const queryKey = ['price-lot-focus', asOf, minLots, direction, minTurnover]
+  const key = JSON.stringify([asOf, minLots, direction, minTurnover, minRangePct]); currentKey.current = key
+  const draftsValid = validFocusDate(dateDraft) && minLotsShares(lotsDraft) !== null && validPriceFocusDayMove(moveDraft) && minTurnoverValue(turnoverDraft) !== null && minRangeMilliPct(rangeDraft) !== null
+  const enabled = validPriceFocusParams(params) && draftsValid
+  const queryKey = ['price-lot-focus', asOf, minLots, direction, minTurnover, minRangePct]
   const client = useQueryClient()
-  const query = useQuery({ queryKey, queryFn: () => getPriceLotFocus(asOf, minLots, dayMove, minTurnover), enabled, retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
-  useEffect(() => { setDateDraft(asOf); setLotsDraft(minLots); setMoveDraft(direction); setTurnoverDraft(minTurnover); setFormError(null); setCaptureError(null) }, [asOf, minLots, direction, minTurnover])
+  const query = useQuery({ queryKey, queryFn: () => getPriceLotFocus(asOf, minLots, dayMove, minTurnover, minRangePct), enabled, retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
+  useEffect(() => { setDateDraft(asOf); setLotsDraft(minLots); setMoveDraft(direction); setTurnoverDraft(minTurnover); setRangeDraft(minRangePct); setFormError(null); setCaptureError(null) }, [asOf, minLots, direction, minTurnover, minRangePct])
   const apply = (event: FormEvent) => {
     event.preventDefault()
     if (!validFocusDate(dateDraft) || minLotsShares(lotsDraft) === null || !validPriceFocusDayMove(moveDraft)) { setFormError('請選擇有效日期與單日方向，並輸入非負成交張數；最多三位小數，上限 9,223,372,036,854,775.807 張。'); return }
     if (minTurnoverValue(turnoverDraft) === null) { setFormError('最小成交金額須為非負整數元，上限 9,223,372,036,854,775,807 元；請勿使用逗號、小數或前導零。'); return }
-    const next = new URLSearchParams(params); next.set('as_of', dateDraft); next.set('min_lots', lotsDraft); next.set('day_move', moveDraft); next.set('min_turnover', turnoverDraft)
+    if (minRangeMilliPct(rangeDraft) === null) { setFormError('最小本日振幅須為非負百分比，最多三位小數，上限 9,223,372,036,854,775.807%；請勿使用前導零、符號或逗號。'); return }
+    const next = new URLSearchParams(params); next.set('as_of', dateDraft); next.set('min_lots', lotsDraft); next.set('day_move', moveDraft); next.set('min_turnover', turnoverDraft); next.set('min_range_pct', rangeDraft)
     setFormError(null); setParams(next)
   }
   const capture = async () => {
     if (pending.current || !enabled) return
     pending.current = true; setBusy(true); setCaptureError(null)
     try {
-      const data = await capturePriceLotFocus(asOf, minLots, dayMove, minTurnover)
+      const data = await capturePriceLotFocus(asOf, minLots, dayMove, minTurnover, minRangePct)
       client.setQueryData(queryKey, data)
     } catch (error) {
       if (currentKey.current === key) setCaptureError({ key, message: error instanceof Error ? error.message : '取得失敗' })
     } finally { pending.current = false; setBusy(false) }
   }
-  const accepted = enabled && validPriceLotFocus(query.data, asOf, minLots, dayMove, minTurnover)
+  const accepted = enabled && validPriceLotFocus(query.data, asOf, minLots, dayMove, minTurnover, minRangePct)
   const data = accepted ? query.data : undefined
   return <section className="panel official-event-focus" aria-labelledby="price-lot-focus-title">
     <div className="section-head overview-head"><div><div className="eyebrow">指定來源日 · 上櫃兩股</div><h2 id="price-lot-focus-title">成交張數關注</h2></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">明選來源日、最小成交張數、成交金額與單日收盤相對開盤方向，查看同時符合條件的標的。支援 2026-10-05 的 3105 穩懋、6488 環球晶；此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。</p>
+    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。支援 2026-10-05、2026-10-06 的 3105 穩懋、6488 環球晶；每次服務只取得一份指定日期原件。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
     <form className="overview-cutoff-control" onSubmit={apply}>
       <label htmlFor="price-focus-date">來源日期</label><input id="price-focus-date" type="date" required value={dateDraft} onChange={(event) => setDateDraft(event.currentTarget.value)} />
       <label htmlFor="price-focus-min-lots">最小成交張數</label><input id="price-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} placeholder="例如 20000，最多三位小數" onChange={(event) => setLotsDraft(event.currentTarget.value)} />
       <label htmlFor="price-focus-min-turnover">最小成交金額（元）</label><input id="price-focus-min-turnover" type="text" inputMode="numeric" required value={turnoverDraft} placeholder="例如 25000000000，整數元" onChange={(event) => setTurnoverDraft(event.currentTarget.value)} />
       <label htmlFor="price-focus-day-move">單日方向（收盤相對開盤）</label><select id="price-focus-day-move" value={moveDraft} onChange={(event) => setMoveDraft(event.currentTarget.value)}>{Object.entries(priceFocusDayMoveLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-      <button type="submit" className="secondary-button" disabled={busy}>套用條件</button>
+      <label htmlFor="price-focus-min-range">最小本日振幅（%）</label><input id="price-focus-min-range" type="text" inputMode="decimal" required value={rangeDraft} placeholder="例如 6.000，最多三位小數" onChange={(event) => setRangeDraft(event.currentTarget.value)} />
+      <button type="submit" className="secondary-button" disabled={busy || !draftsValid}>套用條件</button>
       <button type="button" className="secondary-button" disabled={!enabled || busy || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
       <button type="button" className="secondary-button" disabled={!data?.can_capture || busy || query.isFetching} onClick={() => void capture()}>{busy ? '取得中…' : '首次載入官方單日行情'}</button>
     </form>
     {formError && <div className="warning-box" role="status">{formError}</div>}
-    {!enabled && <div className="empty" role="status">請設定有效且不重複的來源日期、成交張數、成交金額與單日方向條件；尚未查詢候選。</div>}
+    {!enabled && <div className="empty" role="status">請設定有效且不重複的來源日期、成交張數、成交金額、單日方向與本日振幅條件；尚未查詢候選。</div>}
     {enabled && query.isLoading && <div className="empty">讀取成交張數關注…</div>}
     {(query.error || captureError?.key === key) && <div className="warning-box" role="status">{captureError?.key === key ? captureError.message : '關注清單讀取失敗。'}</div>}
     {enabled && query.data && !accepted && <div className="warning-box" role="status">來源、日期或條件回應未通過核對，關注清單暫不可用。</div>}
     {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{data.reasons.includes('price_memory_capture_missing') ? '尚未取得指定日期原件，候選數未知；可首次載入官方單日行情。' : '此日期或來源資料不足，候選數未知。'}這與符合條件的零候選不同。</div>}
     {data?.status === 'available' && <>
-      <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {minLots} 張 · 金額 ≥ {exactTurnoverText(minTurnover)} 元 · 方向 {priceFocusDayMoveLabels[dayMove]} · 已核兩股，符合 {data.count} 檔。</div>
-      {data.count === 0 ? <div className="empty focus-empty" role="status">已核兩股原件，沒有同時符合最小 {minLots} 張、成交金額 {exactTurnoverText(minTurnover)} 元與方向「{priceFocusDayMoveLabels[dayMove]}」的標的；這是此範圍的零候選。</div> : <div className="focus-grid">{data.items.map((item) => {
+      <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {minLots} 張 · 金額 ≥ {exactTurnoverText(minTurnover)} 元 · 方向 {priceFocusDayMoveLabels[dayMove]} · 振幅 ≥ {minRangePct}% · 已核兩股，符合 {data.count} 檔。</div>
+      {data.count === 0 ? <div className="empty focus-empty" role="status">已核兩股原件，沒有同時符合最小 {minLots} 張、成交金額 {exactTurnoverText(minTurnover)} 元、方向「{priceFocusDayMoveLabels[dayMove]}」與本日振幅 {minRangePct}% 的標的；這是此範圍的零候選。</div> : <div className="focus-grid">{data.items.map((item) => {
         const memory = data.reads.find((read) => read.instrument.symbol === item.symbol)!.price_memory!
         return <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
           <div className="position-head"><strong>{item.symbol} {item.name}</strong><span>{item.exchange}</span></div>
           <p>成交 {formatCanonicalShareLots(item.volume_exact, 1, true)} 張 ≥ 門檻 {minLots} 張</p>
           <p>成交金額 {exactTurnoverText(item.turnover_exact)} 元 ≥ 門檻 {exactTurnoverText(minTurnover)} 元</p>
           <p>{priceFocusDayMoveLabels[item.day_move]}：開盤 {item.open_exact} 元／股 · 收盤 {item.close_exact} 元／股</p>
+          <p>本日振幅 約 {approximateRangePct(item.open_exact, item.high_exact, item.low_exact)}% ≥ 門檻 {item.min_range_pct}%：100×(最高 {item.high_exact} − 最低 {item.low_exact})/開盤 {item.open_exact}；價格單位元／股，門檻以精確值核對。</p>
           <div className="small-note">來源日 {item.source_date} · 版本 {item.source_version}</div>
           <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link>
           <details className="technical-details" style={{ overflowWrap: 'anywhere' }}><summary>原股、來源與驗證範圍</summary>
@@ -918,7 +924,7 @@ export function PriceLotFocusPanel() {
         </article>
       })}</div>}
     </>}
-    <p className="small-note">10/05 是來源日期，不表示今日即時資料；未驗全市場、研究條件、Signal、Plan 或保存。</p>
+    <p className="small-note">所選日期是原件的來源日期，不表示今日即時資料；未驗全市場、研究條件、Signal、Plan 或保存。</p>
   </section>
 }
 
@@ -1147,7 +1153,7 @@ function StockPage() {
   const [priceBusyKey, setPriceBusyKey] = useState<string | null>(null)
   const [priceRequestFailure, setPriceRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const acquirePrice = async () => {
-    if (pricePending.current || asOf !== '2026-10-05') return
+    if (pricePending.current || !priceSourcePins(asOf)) return
     const requestKey = priceRequestKey
     pricePending.current = true
     setPriceBusyKey(requestKey)
@@ -1250,7 +1256,7 @@ function StockPage() {
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
   const qualitySummary = memoryKnown ? { ...storedQualitySummary, market: {
-    status: 'complete', label: '10/5 單日官方行情已核對', as_of: priceMemory.latest.date,
+    status: 'complete', label: `${priceMemory.latest.date} 單日官方行情已核對`, as_of: priceMemory.latest.date,
     missing_fields: [], source: 'tpex',
   } } : storedQualitySummary
   const tabs: Array<{ id: StockTab; label: string }> = [
@@ -1270,7 +1276,7 @@ function StockPage() {
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
-      {asOf === '2026-10-05' && exchange === 'TPEx' && <div className="small-note">同截止切換：<Link to="/stocks/TPEx/3105?as_of=2026-10-05">3105 穩懋</Link> · <Link to="/stocks/TPEx/6488?as_of=2026-10-05">6488 環球晶</Link></div>}
+      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：<Link to={`/stocks/TPEx/3105?as_of=${asOf}`}>3105 穩懋</Link> · <Link to={`/stocks/TPEx/6488?as_of=${asOf}`}>6488 環球晶</Link></div>}
     </PageTitle>
     {!memoryKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
@@ -1278,7 +1284,7 @@ function StockPage() {
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel">{memoryKnown && <p className="small-note">10/5 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : memoryRejected ? [] : data.bars} unlocatedDateRows={memoryKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={memoryKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel">{memoryKnown && <p className="small-note">{priceMemory.latest!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : memoryRejected ? [] : data.bars} unlocatedDateRows={memoryKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={memoryKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}

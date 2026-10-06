@@ -9,7 +9,7 @@ from worker import tpex_price_capture as worker
 
 
 class MemoryAPIFixture:
-    def __init__(self, *, live=False):
+    def __init__(self, *, live=False, cutoff=worker.CUTOFF):
         from fastapi import FastAPI
         from sqlalchemy import create_engine
         from sqlalchemy.orm import Session
@@ -40,9 +40,10 @@ class MemoryAPIFixture:
         if live:
             self.fixture = None
             self.store = tpex_price.TpexPriceStore()
-            env = {tpex_price.ENABLE_ENV: "1", tpex_price.POLICY_VERSION_ENV: tpex_price.POLICY_VERSION, tpex_price.POLICY_DIGEST_ENV: tpex_price.POLICY_DIGEST}
+            version, pin = tpex_price.policy_pins(cutoff)
+            env = {tpex_price.ENABLE_ENV: "1", tpex_price.POLICY_VERSION_ENV: version, tpex_price.POLICY_DIGEST_ENV: pin}
         else:
-            self.fixture = self.stack.enter_context(SyntheticPolicyScope())
+            self.fixture = self.stack.enter_context(SyntheticPolicyScope(cutoff=cutoff))
             self.store = tpex_price.TpexPriceStore(loader=self.fixture.loader)
             env = self.fixture.env
         self.stack.enter_context(patch.object(tpex_price, "STORE", self.store))
@@ -60,6 +61,26 @@ class MemoryAPIFixture:
 
 
 class PriceAPITests(unittest.TestCase):
+    def test_new_date_m1_exact_values_and_legacy_default_do_not_leak(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture(cutoff=worker.NEW_CUTOFF)
+        try:
+            with TestClient(fixture.app) as client:
+                result = client.post("/api/stocks/TPEx/3105/prices/capture?as_of=2026-10-06").json()
+                self.assertEqual((result["status"], result["latest"]["close"]), ("available", 592))
+                for symbol, prices in (("3105", (615, 623, 588, 592, "19731700", "11863581093")), ("6488", (1175, 1260, 1145, 1205, "13913614", "16835605385"))):
+                    overview = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-06").json()["overview"]
+                    bar = overview["price_memory"]["latest"]
+                    self.assertEqual(tuple(bar[key] for key in ("open", "high", "low", "close", "volume_exact", "turnover_exact")), prices)
+                    self.assertEqual((overview["as_of"], bar["data_as_of"]), ("2026-10-06", "2026-10-06"))
+                default = client.get("/api/stocks/TPEx/3105").json()["overview"]
+                self.assertEqual(default["as_of"], "2026-10-02")
+                self.assertIsNone(default["price_memory"]["latest"])
+                self.assertIsNone(client.get("/api/stocks/TPEx/3105?as_of=2026-10-05").json()["overview"]["price_memory"]["latest"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_actual_router_get_default_and_unsupported_are_zero_source(self):
         from fastapi.testclient import TestClient
         fixture = MemoryAPIFixture()
@@ -109,4 +130,3 @@ class PriceAPITests(unittest.TestCase):
             self.assertEqual(len(fixture.fixture.opener.calls), 1)
             self.assertEqual(fixture.before, fixture.snapshot())
         finally: fixture.close()
-
