@@ -187,45 +187,50 @@ async function check() {
     const App = await appSSRModule()
     let appChecks = 0
     const verify = (value, message) => { appChecks++; assert(value, message) }
-    for (const [minimum, dayMove] of [['20000', 'all'], ['10000', 'all'], ['50000', 'all'], ['10000.000', 'up'], ['10000.000', 'down'], ['10000.000', 'flat']]) {
-      const data = focusCases.createPriceFocusFixture(minimum, dayMove)
+    for (const [minimum, dayMove, minTurnover] of [['20000', 'all', '0'], ['10000', 'all', '0'], ['50000', 'all', '0'],
+      ['10000.000', 'up', '0'], ['10000.000', 'down', '0'], ['10000.000', 'flat', '0'],
+      ['10000.000', 'all', '25000000000'], ['10000.000', 'all', '20000000000'], ['10000.000', 'down', '25000000000']]) {
+      const data = focusCases.createPriceFocusFixture(minimum, dayMove, minTurnover)
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-      client.setQueryData(['price-lot-focus', '2026-10-05', minimum, dayMove], data)
+      client.setQueryData(['price-lot-focus', '2026-10-05', minimum, dayMove, minTurnover], data)
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
-        { initialEntries: [`/?as_of=2026-10-05&min_lots=${minimum}&day_move=${dayMove}`] }, React.createElement(App.default))))
+        { initialEntries: [`/?as_of=2026-10-05&min_lots=${minimum}&day_move=${dayMove}${minTurnover === '0' ? '' : '&min_turnover=' + minTurnover}`] }, React.createElement(App.default))))
       verify(html.includes('成交張數關注') && html.includes('來源日期 2026-10-05'), 'full Today App renders selected source date')
       verify((html.match(/class="focus-card"/g) || []).length === data.count, 'exact expected candidate count')
       verify(data.count !== 0 || (html.includes('零候選') && !html.includes('候選數未知')), 'true zero separate from missing source')
       for (const item of data.items) {
-        verify(html.includes(item.symbol === '3105' ? '48,127.911' : '18,982.607') && html.includes(`focus_min_lots=${minimum}&amp;focus_day_move=${dayMove}`), 'exact lots and complete fixed-state stock link')
+        verify(html.includes(item.symbol === '3105' ? '48,127.911' : '18,982.607') && html.includes(`focus_min_lots=${minimum}&amp;focus_day_move=${dayMove}&amp;focus_min_turnover=${minTurnover}`), 'exact lots and complete fixed-state stock link')
         verify(html.includes(`開盤 ${item.open_exact} 元／股`) && html.includes(`收盤 ${item.close_exact} 元／股`) && html.includes(item.day_move === 'up' ? '收高於開：' : '收低於開：'), 'each stock has exact volume and actual direction reasons including all')
+        verify(html.includes(item.symbol === '3105' ? '29,694,939,981' : '22,887,612,060') && html.includes('成交金額'), 'third reason displays exact TWD original amount')
       }
       if (minimum === '10000') verify(html.indexOf('3105 穩懋') < html.indexOf('6488 環球晶') && html.includes('18,982.607'), 'two stocks sorted by code')
       client.clear()
     }
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-    client.setQueryData(['price-lot-focus', '2026-10-05', '50000', 'all'], focusCases.createUnloadedFocusFixture())
+    client.setQueryData(['price-lot-focus', '2026-10-05', '50000', 'all', '0'], focusCases.createUnloadedFocusFixture())
     const missing = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
       { initialEntries: ['/?as_of=2026-10-05&min_lots=50000'] }, React.createElement(App.default))))
     verify(missing.includes('候選數未知') && !missing.includes('這是此範圍的零候選'), 'unloaded panel never claims available zero')
     client.clear()
-    for (const [symbol, dayMove] of [['3105', 'up'], ['6488', 'down'], ['3105', 'all']]) {
+    for (const [symbol, dayMove, amount] of [['3105', 'up', '25000000000'], ['6488', 'down', '20000000000'], ['3105', 'all', '0']]) {
       const stock = stockFixture(symbol), queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
       queryClient.setQueryData(['stock', 'TPEx', symbol, '2026-10-05'], stock)
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
-        { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=10000.000&focus_day_move=${dayMove}`] }, React.createElement(App.default))))
-      verify(html.includes('回到成交張數關注（原條件）') && html.includes(`/?as_of=2026-10-05&amp;min_lots=10000.000&amp;day_move=${dayMove}#price-lot-focus-title`), 'full App retains exact original conditions')
+        { initialEntries: [`/stocks/TPEx/${symbol}?as_of=2026-10-05&from=price-lots&focus_as_of=2026-10-05&focus_min_lots=10000.000&focus_day_move=${dayMove}${amount === '0' ? '' : '&focus_min_turnover=' + amount}`] }, React.createElement(App.default))))
+      verify(html.includes('回到成交張數關注（原條件）') && html.includes(`/?as_of=2026-10-05&amp;min_lots=10000.000&amp;day_move=${dayMove}&amp;min_turnover=${amount}#price-lot-focus-title`), 'full App retains exact original conditions and legacy zero amount')
       verify(html.includes(symbol === '3105' ? '48,127.911' : '18,982.607') && html.includes(symbol === '3105' ? '>615<' : '>1,180<'), 'shared M1 lots and per-share close unchanged')
       queryClient.clear()
     }
-    for (const suffix of ['&day_move=unknown', '&day_move=up&day_move=down', '&as_of=2026-10-02', '&min_lots=0']) {
+    for (const suffix of ['&day_move=unknown', '&day_move=up&day_move=down', '&as_of=2026-10-02', '&min_lots=0',
+      '&min_turnover=', '&min_turnover=-1', '&min_turnover=01', '&min_turnover=1.0', '&min_turnover=1&min_turnover=2', '&next=https://foreign.example']) {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
         { initialEntries: ['/?as_of=2026-10-05&min_lots=10000' + suffix] }, React.createElement(App.default))))
       verify(html.includes('尚未查詢候選') && !html.includes('class="focus-card"'), 'invalid/duplicate conditions never render accepted candidates')
       queryClient.clear()
     }
-    for (const suffix of ['&focus_day_move=unknown', '&focus_day_move=up&focus_day_move=down', '&next=https://foreign.example']) {
+    for (const suffix of ['&focus_day_move=unknown', '&focus_day_move=up&focus_day_move=down', '&next=https://foreign.example',
+      '&focus_min_turnover=', '&focus_min_turnover=-1', '&focus_min_turnover=1&focus_min_turnover=2']) {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       queryClient.setQueryData(['stock', 'TPEx', '3105', '2026-10-05'], stockFixture())
       const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MemoryRouter,
@@ -234,11 +239,28 @@ async function check() {
       queryClient.clear()
     }
     verify(App.officialEventFocusReturnPath(new URLSearchParams('from=official-events&focus_as_of=2026-10-05&focus_q=3105')) === '/?as_of=2026-10-05&q=3105#official-event-focus-title', 'existing event return preserved')
+    const staleClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    staleClient.setQueryData(['price-lot-focus', '2026-10-05', '10000', 'all', '0'], focusCases.createPriceFocusFixture('10000'))
+    const stale = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: staleClient }, React.createElement(MemoryRouter,
+      { initialEntries: ['/?as_of=2026-10-05&min_lots=10000&day_move=all&min_turnover=25000000000&q=3105'] }, React.createElement(App.default))))
+    verify(!stale.includes('class="focus-card"') && stale.includes('value="25000000000"'), 'amount belongs to query key; shared q remains valid')
+    staleClient.clear()
     assert(Object.values(counts).every((count) => count === 0), 'guard counts zero')
     const fixtureBytes = { focus: Buffer.byteLength(JSON.stringify(focusCases.createPriceFocusFixture('10000'))), stock: Buffer.byteLength(JSON.stringify(stockFixture())) }
     fixtureBytes.combined = fixtureBytes.focus + fixtureBytes.stock
     assert(fixtureBytes.combined <= 256 * 1024 && fixtureBytes.combined <= 8 * 1024 * 1024, 'bounded synthetic fixture serialization')
+    const estimateGraph = (value, seen = new Set()) => {
+      if (value === null || value === undefined) return 16
+      if (typeof value === 'string') return 64 + value.length * 4
+      if (typeof value !== 'object') return 16
+      if (seen.has(value)) return 0
+      seen.add(value)
+      return 128 + Object.entries(value).reduce((total, [key, child]) => total + 32 + estimateGraph(key, seen) + estimateGraph(child, seen), 0)
+    }
+    const fixtureObjectEstimate = estimateGraph([focusCases.createPriceFocusFixture('10000'), stockFixture()])
+    assert(fixtureObjectEstimate <= 8 * 1024 * 1024, 'conservative fixture object graph estimate, not process RSS')
     console.log(JSON.stringify({ passed: true, focus_helper_checks: helperChecks, focus_app_ssr_checks: appChecks, fixture_bytes: fixtureBytes,
+      fixture_object_estimated_bytes: fixtureObjectEstimate,
       known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(), not_run: ['actual source', 'native browser operation', 'disk persistence', 'production build', 'full prior suite'] }))
     return
   }

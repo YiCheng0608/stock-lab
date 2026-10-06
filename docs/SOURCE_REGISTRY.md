@@ -834,3 +834,13 @@ M2 consumer版本 `price-lot-focus/m2-v1` 以同程序TpexPriceStore採用合格
 Root獨立核全結構、同日date-code唯一、兩股12金融欄、exact名稱／普通stock／TW-TPEx／TWD及原股→張。金融值與data ordinal仍同§20.2表，來源O/C原字串分別為3105的`614.00/615.00`、6488的`1220.00/1180.00`；不複製或修改舊金融表。資料日仍2026-10-05，10/06取得不代表今日即時行情、發布／首次可得、PIT或多日歷史。
 
 方向consumer升版為 `price-lot-focus/m2-v2`，採同兩股／同截止原件的成交量及O/C給兩個可追溯理由；API、精確方向比較、去重及安全往返由[個股頁 §27](STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)管理。Root在**同一程序**以本次held Store供真API／UI，來源累計1 GET、runner新增0；ordinary GET、focus POST2／stock POST2及條件變更同cache，無新外網。不借舊memory、fixture、disk copy或replay當actual。原件→API→具名操作與owned服務清理已接受；raw／receipt隨程序結束釋放，新增落盤0，保存／跨程序、全市場、歷史close／日曆及PIT未驗。
+
+### 20.6 M2-FOCUS-TURNOVER-1 同來源的新觀測與成交額 consumer
+
+2026-10-06臺北本輪，root正面重核Gov dataset11370 metadata200／exact href／OGL1.0、TPEx條款第5限制與第7政府資料例外，以及ISIN兩selected exact名稱、上櫃普通stock CFI `ESVUFR`。Wrapper沿TW／TPEx／stock／TWD／空ETF分類，金融單位為股、TWD元與元／股；source_version／§20.1 policy版本／1462B canonical digest／body pins均未變，worker仍 `tpex-price-capture/m1-v1`。用途、instrument與execution先核通，沒有以可讀endpoint或legacy collector外推准入。
+
+唯一fresh exact GET200：`request_started_at=2026-10-06T04:34:40.994381+00:00`、`captured_at=2026-10-06T04:34:42.907564+00:00`；body1,773,012B／12,060 data rows／18欄，SHA `bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d0772989243550ca36149`，canonical `receipt_sha256=8bc021810a3fbb148d60c02d112fd6516a491b4c0215d8543dc68d8c50aa6205`。Root獨立全結構、date-code唯一、兩股12金融欄及股→精確張／成交額核通，data ordinal205／717及唯一值依§20.2，不複製金融表。來源guards四項0；准入probe／編碼及assert原非零收據留原task，後正面准入與capture另核，原exit不改。
+
+此為新觀測，不覆寫§20.2～20.5 UTC／receipt；資料日仍2026-10-05，不稱10/06今日行情、發布／首次可得、PIT或歷史close。Consumer升版 `price-lot-focus/m2-v3`，新增精確成交額條件與三理由，由[個股頁 §28](STOCK_RESEARCH_PAGE.md#28-m2-focus-turnover-1精確成交金額與四條件往返有限接受)管理，不擴source scope／金融表／用途。
+
+Actual在同一程序以本次held Store供真API／UI，source累計1／runner新增0；ordinary GET、focus POST2／stock POST2與條件變更同cache，extra GET0。非舊memory、check fixture、disk copy或replay。原件→API→具名操作與owned清理已有限接受，raw／receipt隨程序結束釋放；落盤0，未驗保存／跨程序、全市場、歷史close／日曆及PIT。

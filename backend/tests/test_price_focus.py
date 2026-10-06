@@ -54,7 +54,7 @@ class PriceFocusTests(unittest.TestCase):
                     self.assertEqual([item["symbol"] for item in result["items"]], expected)
                     for item in result["items"]:
                         query = parse_qs(urlsplit(item["detail_url"]).query)
-                        self.assertEqual(query, {"as_of": ["2026-10-05"], "from": ["price-lots"], "focus_as_of": ["2026-10-05"], "focus_min_lots": [minimum], "focus_day_move": ["all"]})
+                        self.assertEqual(query, {"as_of": ["2026-10-05"], "from": ["price-lots"], "focus_as_of": ["2026-10-05"], "focus_min_lots": [minimum], "focus_day_move": ["all"], "focus_min_turnover": ["0"]})
                 m1 = client.get("/api/stocks/TPEx/6488?as_of=2026-10-05").json()["overview"]["price_memory"]
                 self.assertEqual(m1["latest"]["volume_exact"], "18982607")
                 self.assertEqual(m1["latest"]["close"], 1180)
@@ -79,7 +79,7 @@ class PriceFocusTests(unittest.TestCase):
                 for move, expected in (("all", ["3105", "6488"]), ("up", ["3105"]), ("down", ["6488"]), ("flat", [])):
                     query = "as_of=2026-10-05&min_lots=10000.000&day_move=" + move
                     result = client.get("/api/focus/price-lots?" + query).json()
-                    self.assertEqual((result["version"], result["status"], result["day_move"], result["count"]), ("price-lot-focus/m2-v2", "available", move, len(expected)))
+                    self.assertEqual((result["version"], result["status"], result["day_move"], result["count"]), ("price-lot-focus/m2-v3", "available", move, len(expected)))
                     self.assertEqual([item["symbol"] for item in result["items"]], expected)
                     if move == "all":
                         sample = {"api": result, "before": fixture.before, "after": fixture.snapshot(), "csv": fixture.fixture.body}
@@ -98,7 +98,7 @@ class PriceFocusTests(unittest.TestCase):
                         print(json.dumps({"synthetic_fixture_serialized_bytes": serialized, "fixture_object_bytes": footprint, "scope": "one complete focus response plus before/after memory DB snapshots and synthetic CSV"}), flush=True)
                     for item in result["items"]:
                         expected_move, opening, closing, reason = ("up", "614.00", "615.00", "close_above_open") if item["symbol"] == "3105" else ("down", "1220.00", "1180.00", "close_below_open")
-                        self.assertEqual((item["day_move"], item["open_exact"], item["close_exact"], item["reasons"]), (expected_move, opening, closing, ["volume_at_least_min_lots", reason]))
+                        self.assertEqual((item["day_move"], item["open_exact"], item["close_exact"], item["reasons"]), (expected_move, opening, closing, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason]))
                         state = parse_qs(urlsplit(item["detail_url"]).query)
                         self.assertEqual((state["as_of"], state["focus_as_of"], state["focus_min_lots"], state["focus_day_move"]), (["2026-10-05"], ["2026-10-05"], ["10000.000"], [move]))
                     client.post("/api/focus/price-lots/capture?" + query)
@@ -148,7 +148,7 @@ class PriceFocusTests(unittest.TestCase):
             with patch.object(tpex_price, "build_tpex_price", flat):
                 result = build_price_focus(good, date(2026,10,5), "10000", "flat")
                 self.assertEqual((result["status"], result["count"]), ("available", 2))
-                self.assertTrue(all(item["reasons"] == ["volume_at_least_min_lots", "close_equal_open"] for item in result["items"]))
+                self.assertTrue(all(item["reasons"] == ["volume_at_least_min_lots", "turnover_at_least_min_turnover", "close_equal_open"] for item in result["items"]))
             self.assertEqual(fixture.before, fixture.snapshot())
         finally: fixture.close()
 
@@ -173,6 +173,123 @@ class PriceFocusTests(unittest.TestCase):
                     self.assertEqual((result["status"], result["count"]), ("available", count))
                     if int(volume) > 9007199254740991:
                         self.assertIsNone(result["reads"][0]["price_memory"]["latest"]["volume"])
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_turnover_contract_and_invalid_router_before_catalogue_or_capture(self):
+        from app.price_focus import exact_turnover, parse_min_turnover
+        from fastapi.testclient import TestClient
+        from urllib.parse import urlencode
+        for value in ("0", "1", "29694939981", "9007199254740993", "9223372036854775807"):
+            self.assertEqual(parse_min_turnover(value), value)
+        bad = (None, True, 1, "", "00", "01", "-1", "+1", "1.0", "1e3", "1,000", " 1", "1\n", "１", "9223372036854775808")
+        for value in bad:
+            with self.subTest(value=value), self.assertRaises(ValueError): parse_min_turnover(value)
+        complete = {"currency": "TWD", "turnover_exact": "0", "source_fields": {"成交金額": "0"}, "turnover_status": "available", "turnover_reason": None}
+        self.assertEqual(exact_turnover(complete), "0")
+        del complete["turnover_reason"]
+        self.assertIsNone(exact_turnover(complete))
+        fixture = MemoryAPIFixture()
+        try:
+            with TestClient(fixture.app) as client, patch("sqlalchemy.orm.Session.scalars") as lookup, patch.object(fixture.api, "build_price_focus") as build:
+                queries = [urlencode({"as_of": "2026-10-05", "min_lots": "10000", "min_turnover": value}) for value in bad if type(value) is str]
+                queries += ["as_of=2026-10-05&min_lots=10000&min_turnover=0&min_turnover=1",
+                            "as_of=2026-10-05&min_lots=10000&next=https://foreign.example",
+                            "as_of=2026-10-05&min_lots=-1&min_turnover=0"]
+                for query in queries:
+                    for path, method in (("/api/focus/price-lots", client.get), ("/api/focus/price-lots/capture", client.post)):
+                        self.assertEqual(method(path + "?" + query).status_code, 422)
+                lookup.assert_not_called()
+                build.assert_not_called()
+            self.assertEqual(fixture.fixture.opener.calls, [])
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_turnover_three_reasons_exact_selected_values_and_complete_links(self):
+        from fastapi.testclient import TestClient
+        from urllib.parse import parse_qs, urlsplit
+        fixture = MemoryAPIFixture()
+        try:
+            with TestClient(fixture.app) as client:
+                client.post("/api/focus/price-lots/capture?as_of=2026-10-05&min_lots=10000.000&min_turnover=25000000000")
+                for amount, move, expected in (("25000000000", "all", ["3105"]), ("20000000000", "all", ["3105", "6488"]),
+                                              ("25000000000", "down", []), ("29694939981", "all", ["3105"]),
+                                              ("29694939982", "all", []), ("22887612060", "down", ["6488"]),
+                                              ("22887612061", "down", []), ("0", "all", ["3105", "6488"])):
+                    query = "as_of=2026-10-05&min_lots=10000.000&day_move=" + move + "&min_turnover=" + amount
+                    data = client.get("/api/focus/price-lots?" + query).json()
+                    self.assertEqual((data["status"], data["count"], data["min_turnover"]), ("available", len(expected), amount))
+                    self.assertEqual([item["symbol"] for item in data["items"]], expected)
+                    self.assertEqual(len(data["reads"]), 2)
+                    for item in data["items"]:
+                        actual = "29694939981" if item["symbol"] == "3105" else "22887612060"
+                        reason = "close_above_open" if item["symbol"] == "3105" else "close_below_open"
+                        self.assertEqual((item["turnover_exact"], item["min_turnover"], item["reasons"]),
+                                         (actual, amount, ["volume_at_least_min_lots", "turnover_at_least_min_turnover", reason]))
+                        self.assertEqual(parse_qs(urlsplit(item["detail_url"]).query), {"as_of": ["2026-10-05"], "from": ["price-lots"],
+                                         "focus_as_of": ["2026-10-05"], "focus_min_lots": ["10000.000"], "focus_day_move": [move], "focus_min_turnover": [amount]})
+                    client.post("/api/focus/price-lots/capture?" + query)
+                self.assertEqual(client.get("/api/focus/price-lots?as_of=2026-10-05&min_lots=10000").json()["min_turnover"], "0")
+                unknown = client.get("/api/focus/price-lots?as_of=2026-10-02&min_lots=0&min_turnover=0").json()
+                self.assertEqual((unknown["status"], unknown["count"]), ("unavailable", None))
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_turnover_zero_one_unsafe_and_int64_boundaries(self):
+        from app import tpex_price
+        from app.price_focus import build_price_focus
+        from app.models import Instrument
+        from sqlalchemy.orm import Session
+        from sqlalchemy import select
+        fixture = MemoryAPIFixture()
+        try:
+            with Session(fixture.engine) as db:
+                instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx", Instrument.symbol.in_(("3105", "6488")))))
+                for amount, minimum, count in (("0", "0", 2), ("0", "1", 0), ("1", "1", 2), ("1", "2", 0),
+                                               ("9007199254740993", "9007199254740993", 2), ("9007199254740993", "9007199254740994", 0),
+                                               ("9223372036854775807", "9223372036854775807", 2)):
+                    rows = fixture_rows()
+                    for row in rows[:2]: row[10] = amount
+                    with SyntheticPolicyScope(csv_body(rows)) as source:
+                        with patch.object(tpex_price, "STORE", tpex_price.TpexPriceStore(loader=source.loader)), patch.dict("os.environ", source.env):
+                            data = build_price_focus(instruments, date(2026, 10, 5), "10000", "all", minimum, capture=True)
+                    self.assertEqual((data["status"], data["count"]), ("available", count))
+                    if int(amount) > 9007199254740991:
+                        self.assertIsNone(data["reads"][0]["price_memory"]["latest"]["turnover"])
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_turnover_missing_or_conflicting_is_unknown_before_filter(self):
+        from app import tpex_price
+        from app.price_focus import build_price_focus
+        from copy import deepcopy
+        from types import SimpleNamespace
+        fixture = MemoryAPIFixture()
+        try:
+            instruments = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None) for s, n in (("3105", "穩懋"), ("6488", "環球晶"))]
+            rows = fixture_rows(); rows[1][10] = ""
+            with SyntheticPolicyScope(csv_body(rows)) as source:
+                with patch.object(tpex_price, "STORE", tpex_price.TpexPriceStore(loader=source.loader)), patch.dict("os.environ", source.env):
+                    missing = build_price_focus(instruments, date(2026, 10, 5), "50000", "flat", "0", capture=True)
+            self.assertEqual((missing["status"], missing["count"], missing["reasons"]), ("unavailable", None, ["price_focus_turnover_unavailable"]))
+            tpex_price.capture_tpex_price(instruments[0], date(2026, 10, 5))
+            real = tpex_price.build_tpex_price
+            for change in ({"turnover_exact": "-1"}, {"turnover_exact": "01"}, {"turnover_exact": "9223372036854775808"},
+                           {"turnover_status": "unavailable"}, {"turnover_reason": "missing"}, {"currency": "USD"}, {"currency": "mixed"}, {"currency": "unknown"}):
+                def invalid(item, cutoff):
+                    value = deepcopy(real(item, cutoff))
+                    if item.symbol == "6488": value["latest"].update(change)
+                    return value
+                with patch.object(tpex_price, "build_tpex_price", invalid):
+                    data = build_price_focus(instruments, date(2026, 10, 5), "50000", "flat", "0")
+                    self.assertEqual((data["status"], data["count"], data["reasons"]), ("unavailable", None, ["price_focus_turnover_unavailable"]))
+            def mismatch(item, cutoff):
+                value = deepcopy(real(item, cutoff))
+                if item.symbol == "6488": value["latest"]["source_fields"]["成交金額"] = "0"
+                return value
+            with patch.object(tpex_price, "build_tpex_price", mismatch):
+                self.assertEqual(build_price_focus(instruments, date(2026, 10, 5), "50000")["reasons"], ["price_focus_turnover_unavailable"])
             self.assertEqual(fixture.before, fixture.snapshot())
         finally: fixture.close()
 
