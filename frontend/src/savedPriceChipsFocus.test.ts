@@ -1,7 +1,7 @@
 import type { InstitutionalWindowsData, PriceFocusDayMove, PriceSavedFocusData } from './types'
 import { createSavedPriceFocusFixture } from './savedPriceFocus.test'
-import { CHIPS1006_DAILY_FIELDS, CHIPS1006_POLICY_DIGEST } from './components/StockOverview'
-import { JOINT_KEYS, JOINT_FOCUS_VERSION, JOINT_FOCUS_POLICY, JOINT_FOCUS_DIGEST, JOINT_SYMBOLS, netLotsShares, jointParams, jointDetailPath, jointReturnPath, jointDetailContext, jointDetailEvidenceInvalid, validJointFocus, focusTransition, type JointConditions, type JointFocusData } from './savedPriceChipsFocus'
+import { CHIPS1006_DAILY_FIELDS, CHIPS1006_POLICY_DIGEST, SCOPE7_SYMBOL_NAMES } from './components/StockOverview'
+import { JOINT_KEYS, JOINT_FOCUS_VERSION, JOINT_FOCUS_POLICY, JOINT_FOCUS_DIGEST, JOINT_SYMBOLS, SCOPE7_SYMBOLS, SCOPE7_FOCUS_VERSION, SCOPE7_FOCUS_POLICY, SCOPE7_FOCUS_DIGEST, netLotsShares, jointParams, jointDetailPath, jointReturnPath, jointDetailContext, jointDetailEvidenceInvalid, validJointFocus, focusTransition, type JointConditions, type JointFocusData } from './savedPriceChipsFocus'
 
 // Reconstructable synthetic input; pure existing fixture builders run no old tests.
 export const jointFixtureConditions = (changes: Partial<JointConditions> = {}): JointConditions => ({ as_of: '2026-10-06', min_lots: '0.000', day_move: 'all', min_turnover: '0', min_range_pct: '0.000', investor: 'foreign', horizon: '5', min_net_lots: '0.000', ...changes })
@@ -211,5 +211,88 @@ export function runCalendarFocusTests(): number {
   check(state.failure && state.price && !state.chips, 'new private snapshot alone cannot recover')
   state = focusTransition(state, 'now', 1, 'chips')
   check(!state.failure && state.price && state.chips, 'new snapshot plus held full verification recovers')
+  return checks
+}
+
+// Synthetic seven-stock source fixtures; no actual capture, cache, policy or producer state is reused.
+export function scope7JointFixture(values = jointFixtureConditions(), shared?: JointFocusData): JointFocusData {
+  const original = shared ?? calendarJointFixture(values)
+  let institutional = original.institutional
+  if (!shared) {
+    const template = original.institutional[0]
+    institutional = SCOPE7_SYMBOLS.map((symbol, index) => {
+      let text = JSON.stringify(template)
+      for (const [from, to] of [
+        ['chips-1006-calendar-v2', 'chips-1006-stock-scope-7-v1'],
+        ['chips-calendar-v2', 'chips-stock-scope-7-v1'],
+        ['m1-chips-cutoff-calendar-tpex-2026-10-06.2', 'm1-chips-cutoff-stock-scope-7-tpex-2026-10-06.1'],
+        ['sha256:1acf97b7dd0f13b9b49ed3293497e52ca52ea077256b8d99d9bc21ed5761d403', 'sha256:b2f939100bd76de12bd974abb80f267596bf5a55f839271a5f4cc61409f9c220'],
+        ['free_public_local_full_month_cutoff', 'free_public_local_full_month_cutoff_stock_scope_7'],
+      ]) text = text.split(from).join(to)
+      const read = JSON.parse(text) as InstitutionalWindowsData
+      read.symbol = symbol
+      read.supported_scope!.symbols = SCOPE7_SYMBOLS
+      read.supported_scope!.identities = Object.fromEntries(SCOPE7_SYMBOLS.map((code) => [code, {
+        as_of: '2026-10-06', currency: 'TWD', exchange: 'TPEx', market: 'TW', name: SCOPE7_SYMBOL_NAMES[code], pit_membership: false, security_type: 'stock',
+      }]))
+      for (const horizon of ['5', '20']) for (const evidence of read.windows![horizon].daily_evidence!) {
+        const row = evidence.row
+        row.symbol = symbol; row.company_name = SCOPE7_SYMBOL_NAMES[symbol] + ' '; row.row_ordinal = index + 1
+        row.source_values!['代號'] = symbol; row.source_values!['名稱'] = row.company_name
+        evidence.provenance.selected_count = 7
+        evidence.provenance.validation_scope = 'all_row_structure_dates_unique_codes_names; selected_seven_exact_pinned_names_all_22_financial_fields'
+      }
+      return read
+    })
+  }
+  const projected = createSavedPriceFocusFixture(values.min_lots, values.day_move as PriceFocusDayMove, values.min_turnover, values.min_range_pct)
+  const price = shared ? { ...projected, reads: shared.price!.reads, consumer_provenance: shared.price!.consumer_provenance } : projected
+  const minimum = netLotsShares(values.min_net_lots)!
+  const items = price.items.filter((item) => {
+    const read = institutional[SCOPE7_SYMBOLS.indexOf(item.symbol)]
+    return BigInt(read.windows![values.horizon].values![values.investor as 'foreign' | 'trust' | 'dealer']) >= BigInt(minimum)
+  }).map((item) => ({ ...item, investor: values.investor, horizon: values.horizon,
+    net_shares: institutional[SCOPE7_SYMBOLS.indexOf(item.symbol)].windows![values.horizon].values![values.investor as 'foreign' | 'trust' | 'dealer'],
+    min_net_lots: values.min_net_lots, min_net_shares: minimum, reasons: [...item.reasons, 'selected_net_at_least_min_net_lots'],
+    detail_url: jointDetailPath(item.symbol, values, false, true) }))
+  const result: JointFocusData = { ...values, version: SCOPE7_FOCUS_VERSION, policy_version: SCOPE7_FOCUS_POLICY,
+    policy_digest: SCOPE7_FOCUS_DIGEST, min_net_shares: minimum, status: 'available', count: items.length, items,
+    price, institutional, price_ready: true, chips_ready: true, capture_attempted: true, can_capture: false,
+    reasons: [], sort: 'code_ascending', supported_symbols: SCOPE7_SYMBOLS, excluded_price_symbols: [], historical_pit: 'unsupported' }
+  return shared ? result : compactFixture(result)
+}
+
+export function scope7FixtureInputBytes(data: JointFocusData): number {
+  return new TextEncoder().encode(JSON.stringify({ conditions: jointFixtureConditions(), daily_header: CHIPS1006_DAILY_FIELDS,
+    price_rows: data.price!.reads.map((read) => Object.values(read.price_saved.latest!.source_fields)),
+    calendar: data.institutional[0].calendar!.original_rows!.map((row) => Object.values(row.source_values)),
+    daily: data.institutional.map((read) => read.windows!['20'].daily_evidence!.map((evidence) => CHIPS1006_DAILY_FIELDS.map((field) => evidence.row.source_values![field]))) })).byteLength
+}
+
+export let largestScope7FixtureGraphBytes = 0
+export function runScope7FocusTests(): number {
+  let checks = 0
+  const check = (condition: unknown, label: string) => { checks++; if (!condition) throw new Error(label) }
+  const values = jointFixtureConditions({ min_net_lots: '-0.001', min_lots: '0.000', min_range_pct: '0.000' })
+  const data = scope7JointFixture(values)
+  check(data.count === 7 && validJointFocus(data, values, false, true), 'seven complete matching identities')
+  check(!validJointFocus(data, values, true) && !validJointFocus(data, values), 'independent profile cannot enter old validators')
+  const zeroValues = jointFixtureConditions({ min_lots: '1000000.000' }), zero = scope7JointFixture(zeroValues, data)
+  check(zero.count === 0 && validJointFocus(zero, zeroValues, false, true), 'full joint price-only zero')
+  for (let index = 0; index < 7; index++) {
+    const params = new URL(jointDetailPath(SCOPE7_SYMBOLS[index], values, false, true), 'http://owned.invalid').searchParams
+    check(jointDetailContext('TPEx', SCOPE7_SYMBOLS[index], params, false, true), 'each seven detail identity')
+    check(jointReturnPath(params, false, true) === '/saved-price-chips-focus-stock-scope-7?' + new URLSearchParams(values), 'eight exact RAW values')
+    check(jointReturnPath(params, true) === null && jointReturnPath(new URLSearchParams(params + '&focus_horizon=5'), false, true) === null, 'old profile and duplicates rejected')
+    const missing = { ...zero, institutional: zero.institutional.filter((_, at) => at !== index) }
+    check(!validJointFocus(missing, zeroValues, false, true), 'no missing identity bypass at price zero')
+    const read = data.institutional[index], window = read.windows!['20'], evidence = window.daily_evidence![0]
+    const bad = { ...zero, institutional: data.institutional.map((value, at) => at !== index ? value : { ...value, windows: { ...value.windows, '20': {
+      ...window, daily_evidence: [{ ...evidence, row: { ...evidence.row, source_values: { ...evidence.row.source_values, '名稱': 'Wrong identity' } } }, ...window.daily_evidence!.slice(1)]
+    } } }) }
+    check(!validJointFocus(bad, zeroValues, false, true), 'every identity raw name verified before zero')
+    largestScope7FixtureGraphBytes = Math.max(largestScope7FixtureGraphBytes, jointFixtureGraphBytes([data, zero, bad, missing]))
+  }
+  check(scope7FixtureInputBytes(data) <= 81920 && largestScope7FixtureGraphBytes <= 524288, `seven bounded shared source fixtures input=${scope7FixtureInputBytes(data)} graph=${largestScope7FixtureGraphBytes}`)
   return checks
 }

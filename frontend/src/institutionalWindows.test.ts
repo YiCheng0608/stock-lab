@@ -1,5 +1,5 @@
-import { calendarJointFixture, jointFixtureGraphBytes } from './savedPriceChipsFocus.test'
-import { validCalendarWindowIdentity, validCalendarWindowRead } from './institutionalWindows'
+import { calendarJointFixture, scope7JointFixture, jointFixtureGraphBytes } from './savedPriceChipsFocus.test'
+import { validCalendarWindowIdentity, validCalendarWindowRead, validScope7WindowIdentity, validScope7WindowRead } from './institutionalWindows'
 
 export let largestCalendarWindowFixtureGraphBytes = 0
 
@@ -29,5 +29,23 @@ export function runCalendarWindowTests(): number {
   reject((copy) => { copy.provenance!.captured_versions.pop() }, 'all22 captures required')
   reject((copy) => { copy.windows!['20'].daily_evidence![19].row.investors.foreign.net = '1' }, 'full raw relation validation')
   reject((copy) => { copy.windows!['20'].daily_evidence![19].row.source_values!['外資及陸資買賣超股數'] = '1' }, 'exclude external dealer and preserve seven financial relations')
+  return checks
+}
+
+export let largestScope7WindowFixtureGraphBytes = 0
+export function runScope7WindowTests(): number {
+  let checks = 0
+  const check = (value: unknown, label: string) => { checks++; if (!value) throw new Error(label) }
+  const data = scope7JointFixture()
+  for (const read of data.institutional) {
+    check(validScope7WindowIdentity(read, 'TPEx', read.symbol, '2026-10-06'), 'seven pinned identity')
+    check(validScope7WindowRead(read, 'TPEx', read.symbol, '2026-10-06'), 'all25 calendar and5/20 exact windows')
+    check(!validCalendarWindowIdentity(read) && !validCalendarWindowRead(read), 'calendar old policy rejects scope7')
+    const identity = read.supported_scope!.identities!
+    const bad = { ...read, supported_scope: { ...read.supported_scope!, identities: { ...identity, [read.symbol!]: { ...identity[read.symbol!], currency: 'USD' } } } }
+    check(!validScope7WindowIdentity(bad), 'currency binding required')
+    largestScope7WindowFixtureGraphBytes = Math.max(largestScope7WindowFixtureGraphBytes, jointFixtureGraphBytes([data, bad]))
+  }
+  check(largestScope7WindowFixtureGraphBytes <= 524288, 'seven original source and corruption shared graph cap')
   return checks
 }

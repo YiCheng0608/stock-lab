@@ -1,6 +1,6 @@
 import type { InstitutionalWindowsData, PriceFocusDayMove, PriceSavedFocusData } from './types'
 import { validSavedPriceFocus } from './savedPriceFocus'
-import { validChips1006Identity, validChips1006Read } from './components/StockOverview'
+import { validChips1006Identity, validChips1006Read, SCOPE7_SYMBOLS } from './components/StockOverview'
 import { validFocusDate, minLotsShares, minTurnoverValue, minRangeMilliPct, validPriceFocusDayMove } from './priceFocus'
 
 export const JOINT_FOCUS_VERSION = 'price-saved-chips-focus/m1-v1'
@@ -9,6 +9,10 @@ export const JOINT_FOCUS_DIGEST = 'sha256:1b48fc6bb23b021f3d289c797b8d077af4576f
 export const CALENDAR_FOCUS_VERSION = 'price-saved-chips-focus-calendar/m1-v2'
 export const CALENDAR_FOCUS_POLICY = 'm1-saved-price-chips-focus-calendar-tpex-2026-10-06.2'
 export const CALENDAR_FOCUS_DIGEST = 'sha256:42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc'
+export const SCOPE7_FOCUS_VERSION = 'price-saved-chips-focus-stock-scope-7/m1-v1'
+export const SCOPE7_FOCUS_POLICY = 'm1-saved-price-chips-focus-stock-scope-7-tpex-2026-10-06.1'
+export const SCOPE7_FOCUS_DIGEST = 'sha256:2f6d3a91337363e5700d7fdf6c16c63b8a14f45362d4407c8b73b01dabfe860e'
+export { SCOPE7_SYMBOLS }
 export const JOINT_KEYS = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct', 'investor', 'horizon', 'min_net_lots'] as const
 export const JOINT_SYMBOLS = ['3105', '6488']
 export type JointConditions = Record<typeof JOINT_KEYS[number], string>
@@ -45,38 +49,39 @@ export function jointParams(params: URLSearchParams): JointConditions | null {
   return validJointConditions(value) ? value : null
 }
 
-export function jointDetailPath(symbol: string, value: JointConditions, calendar = false): string {
-  return `/stocks/TPEx/${symbol}?${new URLSearchParams({ as_of: value.as_of, from: calendar ? 'price-saved-chips-focus-calendar' : 'price-saved-chips-focus', source_mode: 'private_saved',
+export function jointDetailPath(symbol: string, value: JointConditions, calendar = false, scope7 = false): string {
+  return `/stocks/TPEx/${symbol}?${new URLSearchParams({ as_of: value.as_of, from: scope7 ? 'price-saved-chips-focus-stock-scope-7' : calendar ? 'price-saved-chips-focus-calendar' : 'price-saved-chips-focus', source_mode: 'private_saved',
     ...Object.fromEntries(JOINT_KEYS.map((key) => [`focus_${key}`, value[key]])) })}`
 }
 
-export function jointReturnPath(params: URLSearchParams, calendar = false): string | null {
+export function jointReturnPath(params: URLSearchParams, calendar = false, scope7 = false): string | null {
   const allowed = ['as_of', 'from', 'source_mode', ...JOINT_KEYS.map((key) => `focus_${key}`)]
   if ([...params].length !== 11 || allowed.some((key) => params.getAll(key).length !== 1)
-    || params.get('from') !== (calendar ? 'price-saved-chips-focus-calendar' : 'price-saved-chips-focus') || params.get('source_mode') !== 'private_saved') return null
+    || params.get('from') !== (scope7 ? 'price-saved-chips-focus-stock-scope-7' : calendar ? 'price-saved-chips-focus-calendar' : 'price-saved-chips-focus') || params.get('source_mode') !== 'private_saved') return null
   const values = Object.fromEntries(JOINT_KEYS.map((key) => [key, params.get(`focus_${key}`)!])) as JointConditions
   return params.get('as_of') === values.as_of && values.as_of === '2026-10-06' && validJointConditions(values)
-    ? `/saved-price-chips-focus${calendar ? '-calendar' : ''}?${new URLSearchParams(values)}` : null
+    ? `/saved-price-chips-focus${scope7 ? '-stock-scope-7' : calendar ? '-calendar' : ''}?${new URLSearchParams(values)}` : null
 }
 
-export function jointDetailContext(exchange: string, symbol: string, params: URLSearchParams, calendar = false): boolean {
-  return exchange === 'TPEx' && JOINT_SYMBOLS.includes(symbol) && jointReturnPath(params, calendar) !== null
+export function jointDetailContext(exchange: string, symbol: string, params: URLSearchParams, calendar = false, scope7 = false): boolean {
+  return exchange === 'TPEx' && (scope7 ? SCOPE7_SYMBOLS : JOINT_SYMBOLS).includes(symbol) && jointReturnPath(params, calendar, scope7) !== null
 }
 
-export function jointDetailEvidenceInvalid(data: InstitutionalWindowsData, exchange: string, symbol: string, cutoff: string, calendar = false): boolean {
+export function jointDetailEvidenceInvalid(data: InstitutionalWindowsData, exchange: string, symbol: string, cutoff: string, calendar = false, scope7 = false): boolean {
   const evidence = data.calendar?.status === 'available' || Object.values(data.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
-  return !validChips1006Identity(data, exchange, symbol, cutoff, calendar)
-    || Boolean(data.capture_state?.attempted || evidence) && (data.status !== 'available' || !validChips1006Read(data, exchange, symbol, cutoff, calendar))
+  return !validChips1006Identity(data, exchange, symbol, cutoff, calendar, scope7)
+    || Boolean(data.capture_state?.attempted || evidence) && (data.status !== 'available' || !validChips1006Read(data, exchange, symbol, cutoff, calendar, scope7))
 }
 
-export function validJointFocus(value: unknown, conditions: JointConditions, calendar = false): value is JointFocusData {
+export function validJointFocus(value: unknown, conditions: JointConditions, calendar = false, scope7 = false): value is JointFocusData {
+  const symbols = scope7 ? SCOPE7_SYMBOLS : JOINT_SYMBOLS
   try {
     if (!value || typeof value !== 'object' || Array.isArray(value) || !validJointConditions(conditions)) return false
     const data = value as JointFocusData
-    if (data.version !== (calendar ? CALENDAR_FOCUS_VERSION : JOINT_FOCUS_VERSION) || data.policy_version !== (calendar ? CALENDAR_FOCUS_POLICY : JOINT_FOCUS_POLICY) || data.policy_digest !== (calendar ? CALENDAR_FOCUS_DIGEST : JOINT_FOCUS_DIGEST)
+    if (data.version !== (scope7 ? SCOPE7_FOCUS_VERSION : calendar ? CALENDAR_FOCUS_VERSION : JOINT_FOCUS_VERSION) || data.policy_version !== (scope7 ? SCOPE7_FOCUS_POLICY : calendar ? CALENDAR_FOCUS_POLICY : JOINT_FOCUS_POLICY) || data.policy_digest !== (scope7 ? SCOPE7_FOCUS_DIGEST : calendar ? CALENDAR_FOCUS_DIGEST : JOINT_FOCUS_DIGEST)
       || JOINT_KEYS.some((key) => data[key] !== conditions[key]) || data.min_net_shares !== netLotsShares(conditions.min_net_lots)
-      || data.sort !== 'code_ascending' || data.historical_pit !== 'unsupported' || !same(data.supported_symbols, JOINT_SYMBOLS)
-      || !same(data.excluded_price_symbols, ['3293', '5274', '5347', '6510', '8069'])
+      || data.sort !== 'code_ascending' || data.historical_pit !== 'unsupported' || !same(data.supported_symbols, symbols)
+      || !same(data.excluded_price_symbols, scope7 ? [] : ['3293', '5274', '5347', '6510', '8069'])
       || !Array.isArray(data.items) || !Array.isArray(data.institutional) || !Array.isArray(data.reasons)
       || !data.reasons.every((reason) => typeof reason === 'string') || !['price_ready', 'chips_ready', 'capture_attempted', 'can_capture'].every((key) => typeof data[key as keyof JointFocusData] === 'boolean')) return false
     if (data.status === 'unavailable') return data.count === null && data.items.length === 0 && data.price === null && data.institutional.length === 0
@@ -84,23 +89,23 @@ export function validJointFocus(value: unknown, conditions: JointConditions, cal
       && data.can_capture === (data.price_ready && !data.capture_attempted)
     if (data.status !== 'available' || data.as_of !== '2026-10-06' || !data.price_ready || !data.chips_ready || !data.capture_attempted || data.can_capture
       || data.reasons.length || !data.price || !validSavedPriceFocus(data.price, data.as_of, data.min_lots, data.day_move as PriceFocusDayMove, data.min_turnover, data.min_range_pct)
-      || data.price.status !== 'available' || data.institutional.length !== 2) return false
-    for (let index = 0; index < 2; index++) {
+      || data.price.status !== 'available' || data.institutional.length !== symbols.length) return false
+    for (let index = 0; index < symbols.length; index++) {
       const read = data.institutional[index]
-      if (read.status !== 'available' || !validChips1006Read(read, 'TPEx', JOINT_SYMBOLS[index], data.as_of, calendar)
+      if (read.status !== 'available' || !validChips1006Read(read, 'TPEx', symbols[index], data.as_of, calendar, scope7)
         || read.provenance?.captured_versions.length !== 22
         || !['5', '20'].every((horizon) => read.windows?.[horizon]?.status === 'available' && read.windows[horizon]?.missing_dates.length === 0)) return false
     }
-    if (!same(data.institutional[0].calendar, data.institutional[1].calendar) || !same(data.institutional[0].provenance, data.institutional[1].provenance)) return false
-    const expected = data.price.items.filter((item) => JOINT_SYMBOLS.includes(item.symbol)).filter((item) => {
-      const read = data.institutional[JOINT_SYMBOLS.indexOf(item.symbol)]
+    if (data.institutional.some((read) => !same(data.institutional[0].calendar, read.calendar) || !same(data.institutional[0].provenance, read.provenance))) return false
+    const expected = data.price.items.filter((item) => symbols.includes(item.symbol)).filter((item) => {
+      const read = data.institutional[symbols.indexOf(item.symbol)]
       const net = read.windows![data.horizon].values![data.investor as 'foreign' | 'trust' | 'dealer']
       return BigInt(net) >= BigInt(data.min_net_shares)
     })
     return Number.isInteger(data.count) && data.count === data.items.length && expected.length === data.items.length && expected.every((item, index) => {
-      const net = data.institutional[JOINT_SYMBOLS.indexOf(item.symbol)].windows![data.horizon].values![data.investor as 'foreign' | 'trust' | 'dealer']
+      const net = data.institutional[symbols.indexOf(item.symbol)].windows![data.horizon].values![data.investor as 'foreign' | 'trust' | 'dealer']
       return same(data.items[index], { ...item, investor: data.investor, horizon: data.horizon, net_shares: net, min_net_lots: data.min_net_lots,
-        min_net_shares: data.min_net_shares, reasons: [...item.reasons, 'selected_net_at_least_min_net_lots'], detail_url: jointDetailPath(item.symbol, conditions, calendar) })
+        min_net_shares: data.min_net_shares, reasons: [...item.reasons, 'selected_net_at_least_min_net_lots'], detail_url: jointDetailPath(item.symbol, conditions, calendar, scope7) })
     })
   } catch { return false }
 }

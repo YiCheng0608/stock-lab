@@ -41,6 +41,9 @@ OVERVIEW_VERSION = "stock-overview/w8-v1"
 
 
 def _institutional_windows(exchange, symbol, cutoff, *, explicit_as_of=None):
+    from . import institutional_windows_1006_scope7 as scope7
+    if os.environ.get(scope7.ENABLE_ENV) == "1":
+        return scope7.build_institutional_windows(exchange, symbol, cutoff, explicit_as_of=explicit_as_of)
     from . import institutional_windows_1006_calendar as calendar
     reader = calendar.build_institutional_windows if os.environ.get(calendar.ENABLE_ENV) == "1" else build_institutional_windows
     return reader(exchange, symbol, cutoff, explicit_as_of=explicit_as_of)

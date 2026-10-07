@@ -1693,9 +1693,11 @@ def stock_institutional_windows_capture(exchange: str, symbol: str, db: Session 
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
+    from . import institutional_windows_1006_scope7 as scope7_windows
     from . import institutional_windows_1006_calendar as calendar_windows
     import os
-    capture = (calendar_windows.capture_institutional_windows if os.environ.get(calendar_windows.ENABLE_ENV) == "1"
+    capture = (scope7_windows.capture_institutional_windows if os.environ.get(scope7_windows.ENABLE_ENV) == "1"
+               else calendar_windows.capture_institutional_windows if os.environ.get(calendar_windows.ENABLE_ENV) == "1"
                else capture_institutional_windows)
     return capture(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=as_of)
 
@@ -2960,3 +2962,31 @@ def configure_cors(app) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+
+async def _saved_chips_scope7_request(request: Request) -> dict[str, str]:
+    from .saved_price_chips_scope7_focus import STATE, request_error
+    async for chunk in request.stream():
+        if chunk:
+            STATE.observe()
+            raise HTTPException(status_code=422, detail="joint_focus_empty_get_body_required")
+    error = request_error("GET", request.url.path, request.url.query, b"")
+    if error:
+        STATE.observe()
+        raise HTTPException(status_code=error[0], detail=error[1])
+    return dict(request.query_params.multi_items())
+
+
+@router.get("/focus/price-saved-chips-stock-scope-7")
+def price_saved_chips_scope7_focus(values: dict[str, str] = Depends(_saved_chips_scope7_request),
+                                  db: Session = Depends(get_db)) -> dict[str, Any]:
+    from .saved_price_chips_scope7_focus import STATE, build_focus
+    try:
+        with db.no_autoflush:
+            instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx",
+                Instrument.symbol.in_(focus_policy()["scope"]["symbols"])).order_by(Instrument.symbol)).all())
+        return build_focus(instruments, values)
+    except ValueError as error:
+        STATE.observe()
+        raise HTTPException(status_code=422, detail=str(error)) from error

@@ -553,6 +553,20 @@ ONE actualFIRST22／2907155B及兩股12net見來源§36；API/proxy50guards、na
 Cleanup分報：API session83980／Python5840、preview80879／Node53608 normal Ctrl+C各rawexit1、不restart；ROOT86760b raw0核5840/33436/53608/13008/esbuild44944 absent、8799+8800無listener。ONE intendedpage正常close、fresh tabs[]；兩misfocus about:blank pages各正常close，不作globaltabs清理聲明。Final proxy22 localGET/1POST/23rejected非financialGET；19DB全schema/index/trigger/values/每cell typeof保留。Actual26producer＋ROOT2＋inherited7＝35snapshots/105logicalfiles，post-stop原三檔bytes/SHA/mtimeNS不變。PrivateATCAP與DAY/TURNOVER/MAIN五cache、較舊資源NO-RETRY排除fence不改；功能與清理分報，非globaldisk0/allrawreleased。Coreoperation+1/standalone dep0/reliability+1/stall0；DOC/freeze/qualified index/Git仍待ROOT接受。
 
 
+### M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1 七股八條件的零落盤驗證入口
+
+沿共用pinned Python3.12.14 `-B -X utf8`／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12；guarded SQLite `:memory:`，不install/helper/fixture檔/DB複製/正式DB。New API/preview `--serve --saved-source-only --saved-price-chips-focus-stock-scope-7-opt-in`，與old/calendar flags互斥；API另需 `--cutoff 2026-10-06 --private-store-root` 原task exactroot，preview `--api-port 8799`／memory bundle，compile `VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7='m1-v1'`、old flags OFF。
+
+外部capture/storage/saved-focus/chips/joint/joint-focus六組version/digest args沿前節；前三price pins不變，新三canonical version/bytes/SHA由[來源 §37](../SOURCE_REGISTRY.md#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入)管理。ROOT先核用途與pins才implementation/GET/privateIO；原啟動/check commands／版本／exit及各failed invocation留原task，本節不授權重跑或來源配額。
+
+Final必要checks：Python15＋168 aggregate cases raw0，含全7×2×3 net aggregate signed int64越界guard；Node38src noEmit／68validators／10proxy／21SSR raw0，compiler15500 normalexit0，ROOT獨立接受。Python fixture56276B/graph151199B、Node21898B/graph506788B，各在80KiB/512KiB界線內；不同process估算不當RSSpeak。NoEmit／write:false／incremental:false／composite:false、guard0/artifact0/children actual GET-private0；未跑old/fullsuite/install/productionbuild/diskcases。
+
+Actual FIRST22／2907155B／140rows／42nets見來源§37；12 API ops及58 preFIRST guards、七股desktop/narrow positive／新profile negative cards／fullseven真零／七detail／八RAWback／actual detail和focus502清兩來源見[個股頁 §42](../STOCK_RESEARCH_PAGE.md#42-m1-saved-price-chips-focus-stock-scope-7-1006-1七股八條件與同截止往返)。First API harness KeyError raw1後剩11有限案raw0、不重首request；大raw輸出truncated／local猜POST405→正capture409、failed CLI/offscreen/selectionmiss原收據保持。Actual missingfile/recovery NOT RUN，synthetic不代actual；old calendar negative-card history不改。
+
+Cleanup分報：ONE API34519 Python38660/parent18404，normalCtrlC＋SAMEpoll rawexit1；ONE preview34887 Node43592/parent18576/esbuild39252 normalCtrlC rawexit1。ROOT核五PIDs absent／8799+8800none；ONE intendedpage normalclose/fresh tabs[]，未restart。Finalproxy26GET/1POST/27rejected localNOTfinancialGET；19DB schema/index/trigger/values/everycelltypeof preserved，financeSeed0/preloadedfalse/formalDB0/newdisk0/childIO0。
+
+Private inherited35＋producer26＋ROOT2＝FINAL63bundles/189logicalfiles≤shared64/192，reserve1unused且非future grant；原三檔full SHA/bytes/mtime與receipts不變，producer26 SPENT。ATCAP／preCreateProcess拒絕STRICT NO-RETRY及ENTIRE DAY/TURNOVER/MAIN五literal cache＋holiday CRLF/older資源排除不改，不掃Temp/HAR/GPG/cache/log/history，非globaldisk0/allrawreleased。Coreoperation+1/standalone coredependency0/reliability+1/stall0→0；DOC review/freeze/qualified index/commit/另准master merge待。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

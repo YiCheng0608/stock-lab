@@ -531,7 +531,7 @@ export type InstitutionalWindowReceipt = {
   body_sha256: string; receipt_sha256?: string; body_bytes: number; request_started_at: string; captured_at: string
   policy_version: string; policy_digest: string; historical_pit: string
   storage?: string; published_time?: string; first_available_time?: string; revision_time?: string; request_count?: number
-  candidate_count?: number; adopted_count?: number; pre_calendar_row_count?: number; post_cutoff_row_count?: number; validation_scope?: string
+  candidate_count?: number; selected_count?: number; adopted_count?: number; pre_calendar_row_count?: number; post_cutoff_row_count?: number; validation_scope?: string
 }
 
 export type InstitutionalWindow = {
@@ -543,7 +543,8 @@ export type InstitutionalWindow = {
 
 export type InstitutionalWindowScope = {
   exchange: string; symbols: string[]; supported_cutoffs: string[]; calendar_from: string; calendar_to: string
-  financial_dates?: string[]; selection?: string
+  financial_dates?: string[]; selection?: string; identity_binding?: string
+  identities?: Record<string, { as_of: string; currency: string; exchange: string; market: string; name: string; pit_membership: boolean; security_type: string }>
 }
 
 export type InstitutionalWindowsData = {

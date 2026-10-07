@@ -80,7 +80,7 @@ import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPr
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
 import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
 import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
-import { JOINT_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
+import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
@@ -1046,7 +1046,7 @@ export function TodayPage() {
           </section>
           <PriceLotFocusPanel />
           <p><Link className="text-link" to="/focus/price-saved?as_of=2026-10-06&min_lots=0&day_move=all&min_turnover=0&min_range_pct=0">已保存行情關注：讀取本機七股並套用條件</Link></p>
-          {JOINT_FOCUS && <p><Link className="text-link" to={`/saved-price-chips-focus${JOINT_CALENDAR ? '-calendar' : ''}?as_of=2026-10-06&min_lots=10000.000&day_move=all&min_turnover=0&min_range_pct=0.000&investor=foreign&horizon=5&min_net_lots=0.000`}>保存行情與法人條件關注：設定八條件</Link></p>}
+          {JOINT_FOCUS && <p><Link className="text-link" to={`/saved-price-chips-focus${JOINT_SCOPE7 ? '-stock-scope-7' : JOINT_CALENDAR ? '-calendar' : ''}?as_of=2026-10-06&min_lots=10000.000&day_move=all&min_turnover=0&min_range_pct=0.000&investor=foreign&horizon=5&min_net_lots=0.000`}>保存行情與法人條件關注：設定八條件</Link></p>}
           <OfficialEventFocusPanel />
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
@@ -1222,7 +1222,8 @@ export function jointSavedContext(exchange: string, symbol: string, params: URLS
 }
 const JOINT_PRICE_CHIPS = import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION === 'm1-v1'
 const JOINT_CALENDAR = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR === 'm1-v2'
-const JOINT_FOCUS = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS === 'm1-v1' || JOINT_CALENDAR
+const JOINT_SCOPE7 = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7 === 'm1-v1'
+const JOINT_FOCUS = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS === 'm1-v1' || JOINT_CALENDAR || JOINT_SCOPE7
 const JOINT_MODE = JOINT_PRICE_CHIPS || JOINT_FOCUS
 
 function StockPage() {
@@ -1230,12 +1231,12 @@ function StockPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
   const lotFocusReturnPath = priceFocusReturnPath(searchParams)
-  const jointFocusBack = JOINT_FOCUS ? jointReturnPath(searchParams, JOINT_CALENDAR) : null
+  const jointFocusBack = JOINT_FOCUS ? jointReturnPath(searchParams, JOINT_CALENDAR, JOINT_SCOPE7) : null
   const jointFocusConditions = jointFocusBack ? jointParams(new URLSearchParams(jointFocusBack.split('?')[1])) : null
   const savedFocusBack = JOINT_FOCUS ? jointFocusBack : savedFocusReturnPath(searchParams)
   const privateSavedOnly = searchParams.has('source_mode') || searchParams.get('from') === 'price-saved-focus'
-  const jointContextValid = JOINT_FOCUS ? jointDetailContext(exchange, symbol, searchParams, JOINT_CALENDAR) : jointSavedContext(exchange, symbol, searchParams)
-  const jointScope = JOINT_MODE && jointContextValid && ['3105', '6488'].includes(symbol)
+  const jointContextValid = JOINT_FOCUS ? jointDetailContext(exchange, symbol, searchParams, JOINT_CALENDAR, JOINT_SCOPE7) : jointSavedContext(exchange, symbol, searchParams)
+  const jointScope = JOINT_MODE && jointContextValid && (JOINT_SCOPE7 ? SCOPE7_SYMBOLS : ['3105', '6488']).includes(symbol)
   const focusReturnPath = savedFocusBack ?? lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_MODE && privateSavedOnly && !jointContextValid), ...(JOINT_MODE ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
@@ -1265,7 +1266,7 @@ function StockPage() {
   useEffect(() => { if (jointScope && query.error) failJoint('window_read_request_failed') }, [query.error, privateToken, jointScope])
   const currentChips = query.data?.overview?.institutional
   const hasJointEvidence = Boolean(currentChips?.calendar?.status === 'available' || Object.values(currentChips?.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0))
-  const jointEvidenceInvalid = jointScope && currentChips != null && (JOINT_FOCUS ? jointDetailEvidenceInvalid(currentChips, exchange, symbol, asOf, JOINT_CALENDAR) : !validChips1006Identity(currentChips, exchange, symbol, asOf, JOINT_CALENDAR) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf, JOINT_CALENDAR))
+  const jointEvidenceInvalid = jointScope && currentChips != null && (JOINT_FOCUS ? jointDetailEvidenceInvalid(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7) : !validChips1006Identity(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7))
   useEffect(() => { if (jointEvidenceInvalid) failJoint('chips_memory_evidence_invalid') }, [jointEvidenceInvalid, privateToken])
   const privateAction = async (save: boolean) => {
     const instrument = query.data?.instrument
@@ -1325,11 +1326,11 @@ function StockPage() {
     setWindowBusyKey(windowToken)
     if (asOf !== '2026-10-06') setWindowRequestFailure(null)
     try {
-      if (jointScope && jointValidation.current.failure) {
+      if (jointScope && (jointValidation.current.failure || JOINT_SCOPE7 && currentChips?.capture_state?.attempted)) {
         const refreshed = await query.refetch()
         if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation || jointValidation.current.epoch !== jointEpoch) return
         const held = refreshed.data?.overview?.institutional
-        if (refreshed.isError || !held?.capture_state?.cache_present || !validChips1006Read(held, exchange, symbol, asOf, JOINT_CALENDAR)) {
+        if (refreshed.isError || !held?.capture_state?.cache_present || !validChips1006Read(held, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)) {
           failJoint('window_read_request_failed'); return
         }
         setWindowRequestFailure(null)
@@ -1339,8 +1340,8 @@ function StockPage() {
       const result = await captureInstitutionalWindows(exchange, symbol, asOf || undefined)
       if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation) return
       const hasNewEvidence = result.calendar?.status === 'available' || Object.values(result.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
-      if (asOf === '2026-10-06' && (!validChips1006Identity(result, exchange, symbol, asOf, JOINT_CALENDAR)
-        || (hasNewEvidence && !validChips1006Read(result, exchange, symbol, asOf, JOINT_CALENDAR)))) {
+      if (asOf === '2026-10-06' && (!validChips1006Identity(result, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)
+        || (hasNewEvidence && !validChips1006Read(result, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)))) {
         setWindowRequestFailure({ key: windowToken, reason: 'chips_memory_evidence_invalid' })
         failJoint('chips_memory_evidence_invalid')
         return
@@ -1353,7 +1354,7 @@ function StockPage() {
       const refreshed = await query.refetch()
       if (asOf === '2026-10-06' && currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
         const currentRead = refreshed.data?.overview?.institutional
-        if (refreshed.isError || jointScope && (!currentRead || !validChips1006Read(currentRead, exchange, symbol, asOf, JOINT_CALENDAR))) {
+        if (refreshed.isError || jointScope && (!currentRead || !validChips1006Read(currentRead, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7))) {
           setWindowRequestFailure({ key: windowToken, reason: 'window_read_request_failed' }); failJoint('window_read_request_failed')
         } else if (hasNewEvidence) {
           setWindowRequestFailure(null); validateJoint(jointToken, jointEpoch, 'chips')
@@ -1509,11 +1510,11 @@ function StockPage() {
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
-      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(jointFocusConditions ? JOINT_SYMBOLS : (memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols).map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={jointFocusConditions ? jointDetailPath(symbol, jointFocusConditions, JOINT_CALENDAR) : privateSavedOnly && savedFocusBack ? savedFocusDetailPath(symbol, asOf, searchParams.get('focus_min_lots')!, searchParams.get('focus_day_move') as 'all' | 'up' | 'down' | 'flat', searchParams.get('focus_min_turnover')!, searchParams.get('focus_min_range_pct')!) : `/stocks/TPEx/${symbol}?as_of=${asOf}${privateSavedOnly ? '&source_mode=private_saved' : ''}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
+      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(jointFocusConditions ? (JOINT_SCOPE7 ? SCOPE7_SYMBOLS : JOINT_SYMBOLS) : (memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols).map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={jointFocusConditions ? jointDetailPath(symbol, jointFocusConditions, JOINT_CALENDAR, JOINT_SCOPE7) : privateSavedOnly && savedFocusBack ? savedFocusDetailPath(symbol, asOf, searchParams.get('focus_min_lots')!, searchParams.get('focus_day_move') as 'all' | 'up' | 'down' | 'flat', searchParams.get('focus_min_turnover')!, searchParams.get('focus_min_range_pct')!) : `/stocks/TPEx/${symbol}?as_of=${asOf}${privateSavedOnly ? '&source_mode=private_saved' : ''}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {displayOverview && <StockOverview institutionalCalendar={JOINT_CALENDAR} data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
+    {displayOverview && <StockOverview institutionalCalendar={JOINT_CALENDAR} institutionalScope7={JOINT_SCOPE7} data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
@@ -1799,8 +1800,9 @@ export default function App() {
   return <Shell><Routes>
     <Route path="/" element={<TodayPage />} />
     <Route path="/focus/price-saved" element={<SavedPriceFocusPage />} />
-    {JOINT_FOCUS && !JOINT_CALENDAR && <Route path="/saved-price-chips-focus" element={<SavedPriceChipsFocusPage />} />}
+    {JOINT_FOCUS && !JOINT_CALENDAR && !JOINT_SCOPE7 && <Route path="/saved-price-chips-focus" element={<SavedPriceChipsFocusPage />} />}
     {JOINT_CALENDAR && <Route path="/saved-price-chips-focus-calendar" element={<SavedPriceChipsFocusPage calendar />} />}
+    {JOINT_SCOPE7 && <Route path="/saved-price-chips-focus-stock-scope-7" element={<SavedPriceChipsFocusPage scope7 />} />}
     <Route path="/news/:newsId" element={<NewsDetailPage />} />
     <Route path="/news" element={<NewsPage />} />
     <Route path="/themes" element={<ThemesPage />} />

@@ -1405,3 +1405,42 @@ ONE API normalstop後，same3105 trusted Read的ResourceTiming實際502，原pos
 初次20日negative card文字空白保留為actual發現；只calendar-v2 signed formatter修正，old expression不改，final SSR驗negative5／20及zero。當前preview仍用修正前bundle，**POSTFIX NEGATIVE CARD ACTUAL NOT RUN**；negative精確API／detail受驗不代修正後card native驗收。Actual missing-private-file UI也未跑。
 
 ROOT接受source20／coreoperation+1／standalone dep0／reliability+1（current source失敗清兩來源）／stall0。19 memory SQLite全schema/index/trigger/value/every-cell typeof preserved、guards0／financeSeed0／preloadedfalse／newdisk0／formalDB0，children actual GET/private0。必要checks及owned退出由[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-calendar-1006-2-全月日曆八條件的零落盤驗證入口)管理；private與排除清理fences保持。Freeze／qualified索引／commit／另准master merge仍待；完整ROADMAP未完成。
+
+## 42. M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股八條件與同截止往返
+
+ROOT有限接受saved七股＋七股法人的explicit2026-10-06八條件關注；來源identity／新policies/pins／ALL140daily／42net／private cap由[來源 §37](SOURCE_REGISTRY.md#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入)單一管理。§41兩股calendar及修正後negative card未驗的歷史保持，本節只描述本次新profile。
+
+### 42.1 新入口、共同來源與返回
+
+新頁 `/saved-price-chips-focus-stock-scope-7`、compile `VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7='m1-v1'`；new GET `/api/focus/price-saved-chips-stock-scope-7`接受 `as_of/min_lots/day_move/min_turnover/min_range_pct/investor/horizon/min_net_lots` 八required keys各一次、body0；old/calendar flags與route保留獨立且不能補值。Invalid／duplicate／unknown在IO前拒用；valid unsupported日期先unavailable。Signed grammar、int64、inclusive AND、code順與exact價格公式沿來源§32.2／34.1。
+
+明示「讀取保存來源」→「首次取得法人來源」→「核對共同來源並篩選」；entry／apply／切股／capture completion／back不auto-private read。Price-only即使held chips已獨立核實仍不jointready；先fullALL7price＋ALL7chips gate，再篩選，真零也須完整來源。初次saved未讀只清price，held chips可顯示；actual current source failure則清BOTH，不把unknown寫count0。
+
+Detail context沿11keys：`as_of/from=price-saved-chips-focus-stock-scope-7/source_mode=private_saved`及八 `focus_*` 原字串；samecutoff／exchange／symbol／pins／generation不合拒用。Back保留全部八RAW及尾零，不借old route/default；沒有implicit read。顯示provenance欄位與原列，不聲稱整份original receipt JSON直接呈現在UI。
+
+### 42.2 Actual API與可信七股操作
+
+BASE八RAW `2026-10-06 / 0.000 / all / 0 / 0.000 / foreign / 20 / -9223372036854775.808`得到七股code順3105／3293／5274／5347／6488／6510／8069。ROOT以原saved價格／Decimal及FULL42nets獨立判定十二個actual API案例：
+
+| 條件 | 已核結果 |
+| --- | --- |
+| min_lots188.693／188.694 | 前者含5274，後者排5274。 |
+| min_turnover1164617657／1164617658 | 前者含3293，後者排3293。 |
+| min_range_pct2.770／2.771 | 前者七股，後者排3293。 |
+| day_move up／down／flat | up＝5347/6488/8069；down＝3105/3293/5274/6510；flat＝available0。 |
+| foreign／20／-319.920與-319.919 | 前者5股含6510，後者4股。 |
+| trust／5／-66.756 | 6股，排6510。 |
+
+First harness已完成ONE request後因 `code`對actual `symbol`的KeyError raw1，首結果七股獨立接受且不重跑；剩11案沿SAME finite plan完成raw0。First large raw output被truncated，不稱完整APIresponse輸出；FULL financial原件另由ROOT獨立核實。錯猜local cachedPOST focuspath先405，修正ONE actual capture endpoint才409/alreadyattempted，source22/private26不增，兩者均非upstream POST；58 preFIRST API/proxy guards受驗、IO0。原failed CLI `--keys`／offscreen HTML／Control+A selectionmiss留task，不改寫通過。
+
+ONE intended page `12403d60-029f-4ed0-9a5f-1a09929549e4`；desktop1277×924/doc1262及narrow390×844/doc375/scroll375皆actual七卡positive且無horizontal overflow。新profile foreign20 negative cards6488 `-14155.476`張、6510 `-319.92`張、8069 `-9278.025`張已native受驗；不retroclaim舊calendar formatter。Observer80events＝45click/30input/3change/2submit ALLisTrustedtrue，含missteps；無fill/value assignment/fakeevents。
+
+All7同cutoff detail均經native focus/Enter與明示read，完整18原price欄／SHA／provenance、六net及ALL25×6calendar由ROOT對original held body／private snapshot獨立核對。新五股3293窄版、5274／5347／6510／8069，以及本newroute3105／6488皆實跑；各單日1K／MA未支援。6510原source delta `-50.00 `尾空白保持，與C−O的−70分開。Native back核全部八RAW／private counter不增；可信Backspace/inserttext高張1000000.000得到fullseven available0，restore七卡及八RAW已核。
+
+### 42.3 Current failure、未跑項與剩餘能力
+
+ONE API normal Ctrl+C退出raw1後，same5274 native Read具positive ResourceTiming actual502，先前positive價量／price raw/chart與法人nets／calendar/dailyraw同時mask，canvas0/alltables0。Native back＋focus Read再核actual502、cards0／countunknown、FIRST及joint disabled／全部八RAW保留。未restart／retry／actual recovery；missing-private-file與post-stop recovery NOT RUN，僅synthetic契約驗證。
+
+ONE preview normal Ctrl+C raw1；ROOT核五ownPIDs absent、8799/8800無listener；ONE intended page normalclose、fresh tabs[]。Final proxy26GET/1POST/27rejected為local，非financialGET。19 memory SQLite全schema/index/trigger/values/everycelltypeof保持，guards0／financeSeed0／preloadedfalse／formalDB0／privatewrites0／newproductdisk0／childactualIO0。必要checks、原exit與清理邊界見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-stock-scope-7-1006-1-七股八條件的零落盤驗證入口)。
+
+Coreoperation+1／standalone coredependency0／reliability+1（新scope7 aggregate int64 overflow guard）／stall0→0；source20已接受、DOC/freeze/qualified index/Git仍待ROOT。新七股daily raw追溯不等於每日net圖／精確日期表／running cumulative已交付；下一 `M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`未准入，見[執行清單](ROADMAP_EXECUTION.md)。完整ROADMAP、ordinary20/21closes／trend／strategy／time／PIT／Plan／execution未完成。

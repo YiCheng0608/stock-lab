@@ -558,6 +558,12 @@ Available摘要明列「已核七股行情與兩股法人，篩選範圍為 3105
 Full-month追溯分清ALL25原觀測列與採用24日曆、所需20daily；10/07保留為原件，不是10/06窗口資料。Net正值買超／負值賣超／合法零照精確張呈現，canonical股仍在收合稽核；舊§10.8 expression不改。新negative card formatter只final SSR受驗，修正後actual card NOT RUN；API／detail負值不能代card驗收。Actual操作範圍、未跑項只由§41管理，不擴PIT／trend／strategy／Plan。
 
 
+### 10.10 七股保存行情與法人條件關注
+
+新stock-scope-7入口與actual範圍見[個股頁 §42](STOCK_RESEARCH_PAGE.md#42-m1-saved-price-chips-focus-stock-scope-7-1006-1七股八條件與同截止往返)；沿§10.3精確股／張、§10.8八欄與含等號、不稱code順為排名。三個明示來源按鈕與全部八RAW／尾零返回保持；available摘要改為七股行情＋七股法人，列3105/3293/5274/5347/6488/6510/8069，真零以完整七股共同來源且沒有同時符合條件解釋，不延用「其餘五股排除」。
+
+Initial saved unread只mask價量，獨立驗證的held chips可呈現，joint仍不ready；price-only／unknown不顯count0。Actual source failure同時清兩來源數值／原列／chart、保留八RAW與原因。New profile正值買超／負值賣超／合法零使用精確signed張；negative cards已native驗6488/6510/8069，§10.9舊calendar postfix native NOT RUN不改。Full-month分清ALL25原列、採24、20daily，10/07不進10/06窗口；provenance欄位不等於整份原receipt JSON展示。每日net圖／running cumulative尚未交付，不擴PIT／trend／strategy／Plan。
+
 ## 11. 現行信心語意與下一版 AI、題材及短線資金文案
 
 | 資訊 | 允許 | 禁止 |

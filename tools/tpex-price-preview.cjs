@@ -16,7 +16,7 @@ const crypto = require('node:crypto')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
-assert(args.every((arg, index) => ['--deps', '--check', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
+assert(args.every((arg, index) => ['--deps', '--check', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--saved-price-chips-focus-stock-scope-7-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--saved-price-chips-focus-stock-scope-7-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
 assert(!args.includes('--scope-check') || !['--serve', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one scope check mode')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
@@ -24,13 +24,16 @@ assert(!(args.includes('--private-save-check') && (args.includes('--serve') || a
 assert(!args.includes('--saved-focus-check') || !['--serve', '--check', '--focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
 assert(!args.includes('--saved-source-only') || args.includes('--serve'), 'saved-source-only is an owned serve mode')
 const root = path.resolve(__dirname, '..')
+const scope7Active = args.includes('--saved-price-chips-focus-stock-scope-7-opt-in')
+const scope7Check = args.includes('--saved-price-chips-focus-stock-scope-7-check')
+const scope7Mode = scope7Active || scope7Check
 const calendarActive = args.includes('--saved-price-chips-focus-calendar-opt-in')
 const calendarCheck = args.includes('--saved-price-chips-focus-calendar-check')
 const calendarMode = calendarActive || calendarCheck
-const focusActive = args.includes('--saved-price-chips-focus-opt-in') || calendarActive
-const focusCheck = args.includes('--saved-price-chips-focus-check') || calendarCheck
-const focusAPIPath = calendarMode ? '/api/focus/price-saved-chips-calendar' : '/api/focus/price-saved-chips'
-assert([args.includes('--saved-price-chips-opt-in'), args.includes('--saved-price-chips-focus-opt-in'), calendarActive].filter(Boolean).length <= 1, 'choose one independently bound joint mode')
+const focusActive = args.includes('--saved-price-chips-focus-opt-in') || calendarActive || scope7Active
+const focusCheck = args.includes('--saved-price-chips-focus-check') || calendarCheck || scope7Check
+const focusAPIPath = scope7Mode ? '/api/focus/price-saved-chips-stock-scope-7' : calendarMode ? '/api/focus/price-saved-chips-calendar' : '/api/focus/price-saved-chips'
+assert([args.includes('--saved-price-chips-opt-in'), args.includes('--saved-price-chips-focus-opt-in'), calendarActive, scope7Active].filter(Boolean).length <= 1, 'choose one independently bound joint mode')
 assert(!focusActive || !args.includes('--saved-price-chips-opt-in'), 'choose one joint consumer')
 assert(!focusCheck || !['--serve', '--check', '--joint-check', '--focus-check', '--saved-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
 const jointActive = args.includes('--saved-price-chips-opt-in') || focusActive
@@ -45,19 +48,19 @@ if (stockScope6Active) {
 assert(!jointActive || args.includes('--serve') && args.includes('--saved-source-only'), 'joint opt-in requires saved-only serve')
 assert(jointActive || stockScope6Active || !pinOptions.some((name) => args.includes(name)), 'pins require an admitted opt-in')
 let jointPolicy
-const jointDigest = calendarMode ? 'sha256:bfb9abeca3546f2dcedfcacaf5b3dece1709c05b49a839bce3fea5ded1936765' : 'sha256:a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14'
+const jointDigest = scope7Mode ? 'sha256:8e55142cce367fd44d64ea9d6d9e756c1fdd5b091c928669bbe94de1df950de8' : calendarMode ? 'sha256:bfb9abeca3546f2dcedfcacaf5b3dece1709c05b49a839bce3fea5ded1936765' : 'sha256:a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14'
 if (jointActive || args.includes('--joint-check') || focusCheck) {
-  const jointPolicyText = fs.readFileSync(path.join(root, calendarMode ? 'backend/app/saved_price_chips_calendar_entry.py' : 'backend/app/saved_price_chips_entry.py'), 'utf8').match(/_POLICY = json.loads\(r'''([\s\S]*?)'''\)/)[1]
+  const jointPolicyText = fs.readFileSync(path.join(root, scope7Mode ? 'backend/app/saved_price_chips_scope7_entry.py' : calendarMode ? 'backend/app/saved_price_chips_calendar_entry.py' : 'backend/app/saved_price_chips_entry.py'), 'utf8').match(/_POLICY = json.loads\(r'''([\s\S]*?)'''\)/)[1]
   jointPolicy = JSON.parse(jointPolicyText)
-  assert(Buffer.byteLength(jointPolicyText) === (calendarMode ? 12009 : 10702) && 'sha256:' + crypto.createHash('sha256').update(jointPolicyText).digest('hex') === jointDigest, 'canonical joint policy intact')
+  assert(Buffer.byteLength(jointPolicyText) === (scope7Mode ? 13404 : calendarMode ? 12009 : 10702) && 'sha256:' + crypto.createHash('sha256').update(jointPolicyText).digest('hex') === jointDigest, 'canonical joint policy intact')
 }
 let focusPolicy
-const focusDigest = calendarMode ? 'sha256:42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc' : 'sha256:1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416'
+const focusDigest = scope7Mode ? 'sha256:2f6d3a91337363e5700d7fdf6c16c63b8a14f45362d4407c8b73b01dabfe860e' : calendarMode ? 'sha256:42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc' : 'sha256:1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416'
 if (focusActive || focusCheck) {
-  const source = fs.readFileSync(path.join(root, calendarMode ? 'backend/app/saved_price_chips_calendar_focus.py' : 'backend/app/saved_price_chips_focus.py'), 'utf8')
+  const source = fs.readFileSync(path.join(root, scope7Mode ? 'backend/app/saved_price_chips_scope7_focus.py' : calendarMode ? 'backend/app/saved_price_chips_calendar_focus.py' : 'backend/app/saved_price_chips_focus.py'), 'utf8')
   const literal = source.match(/^_POLICY = json.loads\(r'''(.+)'''\)$/m)
   assert(literal, 'exact admitted focus policy literal required')
-  assert(Buffer.byteLength(literal[1]) === (calendarMode ? 15487 : 14399) && 'sha256:' + crypto.createHash('sha256').update(literal[1]).digest('hex') === focusDigest, 'ROOT focus policy intact')
+  assert(Buffer.byteLength(literal[1]) === (scope7Mode ? 17021 : calendarMode ? 15487 : 14399) && 'sha256:' + crypto.createHash('sha256').update(literal[1]).digest('hex') === focusDigest, 'ROOT focus policy intact')
   focusPolicy = JSON.parse(literal[1])
 }
 if (focusActive) {
@@ -182,7 +185,7 @@ function typecheck() {
   console.log(JSON.stringify({ typecheck: 'current full src noEmit', source_files: parsed.fileNames.length, incremental: false, composite: false }))
 }
 
-async function appSSRModule(joint = false, focus = false, calendar = false) {
+async function appSSRModule(joint = false, focus = false, calendar = false, scope7 = false) {
   // The package's CJS entry returns { default: Component }. Normalize only
   // this Node SSR import; the browser bundle keeps its real ECharts component.
   const originalLoad = Module._load
@@ -190,11 +193,11 @@ async function appSSRModule(joint = false, focus = false, calendar = false) {
     const value = originalLoad.call(this, request, parent, ...rest)
     return request === 'echarts-for-react' && value && typeof value.default === 'function' ? value.default : value
   }
-  const entry = focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'" + (calendar ? "; export { InstitutionalWindows, PriceSaved } from './components/StockOverview'; export { jointValidationTransition } from './App'" : ''), resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
+  const entry = focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'" + ((calendar || scope7) ? "; export { InstitutionalWindows, PriceSaved } from './components/StockOverview'; export { jointValidationTransition } from './App'" : ''), resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
   const result = await esbuild.build({ ...entry, bundle: true, write: false,
     platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies],
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'],
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(joint ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focus && !calendar ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(calendar ? 'm1-v2' : '') } })
+    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(joint ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focus && !calendar && !scope7 ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(calendar ? 'm1-v2' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify(scope7 ? 'm1-v1' : '') } })
   const module = new Module(path.join(sourceRoot, '__memory_unit_lots_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_unit_lots_app__.cjs')
   module.paths = Module._nodeModulePaths(sourceRoot)
@@ -205,8 +208,8 @@ async function appSSRModule(joint = false, focus = false, calendar = false) {
 
 // Check fixtures are synthetic; serving proxies the root-owned actual Python API.
 global.__institutionalWindowSSRSelection = 'unit-lots-only'
-const cases = (focusActive || focusCheck) && !calendarCheck ? {} : require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
-const memoryCases = (focusActive || focusCheck) && !calendarCheck ? {} : require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
+const cases = (focusActive || focusCheck) && !(calendarCheck || scope7Check) ? {} : require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
+const memoryCases = (focusActive || focusCheck) && !(calendarCheck || scope7Check) ? {} : require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
 const savedCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
 const savedFocusCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'savedPriceFocus.test.ts'))
@@ -305,6 +308,92 @@ async function check() {
     verify(previewBanner(true).includes('首次載入前沒有行情資料') && !previewBanner(true).includes('合成樣本') && previewBanner(false).includes('既有行情與未支持標的仍為合成樣本'), 'new empty-finance banner and retained old banner')
     assert(Object.values(counts).every((x) => x === 0), 'scope guards')
     console.log(JSON.stringify({ passed: true, memory_checks: memoryChecks, focus_checks: focusChecks, scope_app_ssr_checks: ssrChecks, scope_request_guard_checks: guardChecks, max_fixture_serialized_bytes: maxSerialized, max_held_fixture_graph_estimated_bytes: maxGraph, estimate_not_rss: true, max_selected_rows: 8, ...receipt(), not_run: ['actual source', 'native operation', 'private files', 'disk cases', 'prior full suites'] }))
+    return
+  }
+  if (scope7Check) {
+    const tests = require(path.join(sourceRoot, 'savedPriceChipsFocus.test.ts'))
+    const validator = require(path.join(sourceRoot, 'institutionalWindows.test.ts'))
+    const checks = tests.runScope7FocusTests() + validator.runScope7WindowTests()
+    const data = tests.scope7JointFixture()
+    let fixtureBytes = tests.scope7FixtureInputBytes(data)
+    const results = await appSSRModule(false, true, false, true)
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    let ssrChecks = 0
+    const verify = (condition, message) => { ssrChecks++; assert(condition, message) }
+    const focusRoute = '/saved-price-chips-focus-stock-scope-7?' + new URLSearchParams(tests.jointFixtureConditions())
+    const page = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [focusRoute] }, React.createElement(results.default)))
+    for (const text of ['讀取保存來源', '首次取得法人來源', '核對共同來源並篩選', '候選數未知']) verify(page.includes(text), text)
+    verify(page.indexOf('讀取保存來源</button>') < page.indexOf('首次取得法人來源</button>') && page.indexOf('首次取得法人來源</button>') < page.indexOf('核對共同來源並篩選</button>'), 'three explicit actions ordered saved read then FIRST then joint read')
+    verify(!page.includes('class="focus-card"'), 'new route performs no private read on entry')
+    const positive = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(results.SavedPriceChipsFocusResults, { data, scope7: true })))
+    verify(['3105', '3293', '5274', '5347', '6488', '6510', '8069'].every(code => positive.includes(code)), 'seven matching cards')
+    const conditions = tests.jointFixtureConditions({ min_net_lots: '1000000.000' })
+    const zero = tests.scope7JointFixture(conditions, data)
+    const html = renderToStaticMarkup(React.createElement(results.SavedPriceChipsFocusResults, { data: zero, scope7: true }))
+    verify(html.includes('零候選'), 'full joint verification before available zero')
+
+    let signedSSRFixtureGraph = 0
+    for (const [horizon, net] of [['5', '-0.125'], ['20', '-0.35']]) {
+      const negativeConditions = tests.jointFixtureConditions({ investor: 'trust', horizon, min_net_lots: net })
+      const negative = tests.scope7JointFixture(negativeConditions, data)
+      const negativeHTML = renderToStaticMarkup(React.createElement(MemoryRouter, null,
+        React.createElement(results.SavedPriceChipsFocusResults, { data: negative, scope7: true })))
+      verify(negative.count === 7 && negativeHTML.includes(`${horizon} 交易日淨買賣超 ${net} 張 ≥ ${net} 張`), 'scope7 exact signed negative net rendered for ' + horizon)
+      fixtureBytes += Buffer.byteLength(JSON.stringify(negativeConditions))
+      signedSSRFixtureGraph = Math.max(signedSSRFixtureGraph, tests.jointFixtureGraphBytes([data, zero, negative]))
+    }
+    const institutional = data.institutional[0]
+    const windowProps = { data: institutional, scope7: true, onCapture: () => {}, expectedExchange: 'TPEx', expectedSymbol: '3105', expectedCutoff: '2026-10-06' }
+    const windowHTML = renderToStaticMarkup(React.createElement(results.InstitutionalWindows, windowProps))
+    verify(windowHTML.includes('25個已驗月原件交易日（24日採用）') && windowHTML.includes('2026-10-07／5') && windowHTML.includes('20261007'), 'all25 original calendar rows render, including unadopted 10/07')
+    verify(windowHTML.includes('此日完整25欄官方原字串') && windowHTML.includes('窗口來源稽核原值'), 'daily and window raw source evidence')
+    const failedHTML = renderToStaticMarkup(React.createElement(results.InstitutionalWindows, { ...windowProps, requestFailure: 'window_read_request_failed' }))
+    verify(!failedHTML.includes('20261007') && !failedHTML.includes('窗口來源稽核原值') && !failedHTML.includes('此日完整25欄官方原字串') && failedHTML.includes('未能通過核對'), 'current read failure masks held chips nets and both raw families')
+    verify(failedHTML.includes('讀取本次法人窗口'), 'current failure retains explicit held verification action without another FIRST')
+    const priceRead = data.price.reads[0]
+    const priceDetail = { ...priceRead.price_saved, focus_consumer: data.price.consumer_provenance }
+    const priceProps = { data: priceDetail, instrument: priceRead.instrument, cutoff: '2026-10-06', canSave: false, readonly: true }
+    const knownPrice = renderToStaticMarkup(React.createElement(results.PriceSaved, priceProps))
+    verify(knownPrice.includes('保存原件的官方原字串') && knownPrice.includes('19,731.7'), 'held saved original values render only after verification')
+    const failedPrice = renderToStaticMarkup(React.createElement(results.PriceSaved, { ...priceProps, failure: 'joint_source_read_failed' }))
+    verify(!failedPrice.includes('19,731.7') && !failedPrice.includes('保存原件的官方原字串') && failedPrice.includes('未能通過核對'), 'current joint failure masks saved values and original raw')
+    const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts'))
+    const expectedMarketRoute = '/saved-price-chips-focus-stock-scope-7?' + new URLSearchParams({ as_of: '2026-10-06', min_lots: '10000.000', day_move: 'all', min_turnover: '0', min_range_pct: '0.000', investor: 'foreign', horizon: '5', min_net_lots: '0.000' })
+    let largestSSRFixtureGraph = tests.jointFixtureGraphBytes([data, zero, priceDetail])
+    for (const route of ['/', helper.jointDetailPath('3105', tests.jointFixtureConditions(), false, true), helper.jointDetailPath('3105', tests.jointFixtureConditions(), false, true) + '&focus_horizon=5']) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      const detail = stockFixture('3105', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5)
+      detail.overview.institutional = institutional
+      largestSSRFixtureGraph = Math.max(largestSSRFixtureGraph, tests.jointFixtureGraphBytes([data, zero, priceDetail, detail]))
+      client.setQueryData(['stock', 'TPEx', '3105', '2026-10-06'], detail)
+      const output = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [route] }, React.createElement(results.default))))
+      verify(route === '/' ? output.includes('href="' + expectedMarketRoute.replaceAll('&', '&amp;') + '"') : new URL(route, 'http://owned.invalid').searchParams.getAll('focus_horizon').length > 1 ? output.includes('未讀取來源') && !output.includes('保存原件的官方原字串') : output.includes(helper.jointReturnPath(new URL(route, 'http://owned.invalid').searchParams, false, true).replaceAll('&', '&amp;')) && !output.includes('保存原件的官方原字串'), 'full App independent route and strict RAW context with no implicit private read: ' + route)
+      client.clear()
+    }
+    const failed = results.jointValidationTransition({ token: 'current', epoch: 0, failure: null, price: true, chips: true }, 'current', 0, 'failure')
+    verify(failed.failure && !failed.price && !failed.chips && results.jointValidationTransition(failed, 'current', 0, 'price') === failed, 'current detail failure clears both and rejects stale completion')
+    const freshPrice = results.jointValidationTransition(failed, 'current', 1, 'price')
+    verify(freshPrice.failure && freshPrice.price && !freshPrice.chips && !results.jointValidationTransition(freshPrice, 'current', 1, 'chips').failure, 'same generation new private read plus held chips verification required to recover')
+    const fixtureGraph = Math.max(signedSSRFixtureGraph, largestSSRFixtureGraph, tests.largestScope7FixtureGraphBytes, validator.largestScope7WindowFixtureGraphBytes)
+    assert(fixtureBytes <= 81920 && fixtureGraph <= 524288, 'aggregate calendar fixture caps')
+    let guardChecks = 0
+    const checkGate = (method, route, body, expected) => { assert.equal(focusRequestError(method, new URL(route, 'http://owned.invalid'), Buffer.from(body))?.[0] ?? 200, expected); guardChecks++ }
+    checkGate('GET', focusAPIPath + '?' + new URLSearchParams(tests.jointFixtureConditions()), '', 200)
+    checkGate('GET', focusAPIPath + '?' + new URLSearchParams(tests.jointFixtureConditions()) + '&investor=foreign', '', 422)
+    checkGate('GET', focusAPIPath + '?' + new URLSearchParams(tests.jointFixtureConditions()), '{}', 422)
+    checkGate('GET', '/api/focus/price-saved-chips?' + new URLSearchParams(tests.jointFixtureConditions()), '', 405)
+    checkGate('POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06', '{}', 409)
+    completeFocusProxy(focusProxyGeneration, true)
+    checkGate('POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06', ' {} ', 200)
+    checkGate('POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06', 'null', 422)
+    checkGate('POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06&x=1', '{}', 422)
+    checkGate('GET', '/api/stocks/TPEx/3105?as_of=2026-10-06&x=1', '', 422)
+    checkGate('GET', '/__price_validation/chips/raw?index=22', '', 422)
+    assert(Object.values(counts).every(value => value === 0))
+    console.log(JSON.stringify({ passed: true, scope7_validator_checks: checks, preview_guard_checks: guardChecks, ssr_checks: ssrChecks,
+      fixture_input_serialized_bytes: fixtureBytes, fixture_retained_graph_estimated_bytes: fixtureGraph,
+      max_serialized_bytes: 81920, max_graph_estimated_bytes: 524288, actual_source_get: 0, actual_private_reads: 0, old_test_suites_run: 0, ...receipt() }))
     return
   }
   if (calendarCheck) {
@@ -935,7 +1024,7 @@ function scope6RequestError(method, url, body) {
 }
 function jointStaticError(method, pathname) {
   if (pathname.endsWith('/prices/saved')) return [405, 'use_the_admitted_saved_focus_reader']
-  if (method === 'POST' && !/^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(pathname)) return [405, 'joint_post_outside_scope']
+  if (method === 'POST' && !(scope7Mode ? /^\/api\/stocks\/TPEx\/(3105|3293|5274|5347|6488|6510|8069)\/institutional-windows\/capture$/ : /^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/).test(pathname)) return [405, 'joint_post_outside_scope']
   if (!['GET', 'POST'].includes(method)) return [405, 'joint_method_outside_scope']
   return null
 }
@@ -974,7 +1063,7 @@ function jointRequestError(method, url, body) {
   try {
     if (url.pathname.endsWith('/prices/saved')) return [405, 'use_the_admitted_saved_focus_reader']
     if (method === 'POST') {
-      if (!/^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(url.pathname)) return [405, 'joint_post_outside_scope']
+      if (!(scope7Mode ? /^\/api\/stocks\/TPEx\/(3105|3293|5274|5347|6488|6510|8069)\/institutional-windows\/capture$/ : /^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/).test(url.pathname)) return [405, 'joint_post_outside_scope']
       if (params(['as_of'], ['as_of']).as_of !== '2026-10-06') return [422, 'joint_cutoff_not_supported']
       if (body.length > 4096) return [413, 'joint_request_body_bound']
       if (!body.length) return [422, 'joint_empty_json_object_required']
@@ -1047,7 +1136,7 @@ async function proxy(request, response) {
         const raw = Buffer.concat(chunks)
         try {
           const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts')), conditions = helper.jointParams(url.searchParams), data = JSON.parse(raw.toString('utf8'))
-          completeFocusProxy(focusTicket, incoming.statusCode === 200 && conditions !== null && helper.validJointFocus(data, conditions, calendarMode) && data.price_ready)
+          completeFocusProxy(focusTicket, incoming.statusCode === 200 && conditions !== null && helper.validJointFocus(data, conditions, calendarMode, scope7Mode) && data.price_ready)
         } catch { if (focusTicket === focusProxyGeneration) invalidateFocusProxy() }
         response.writeHead(incoming.statusCode, { 'Content-Type': incoming.headers['content-type'] || 'application/json; charset=utf-8' }); response.end(raw)
       })
@@ -1083,7 +1172,7 @@ function previewBanner(newScope = stockScope6Active) {
 async function serve() {
   const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
     absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__', platform: 'browser', format: 'esm',
-    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(jointActive && !focusActive ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focusActive && !calendarActive ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(calendarActive ? 'm1-v2' : ''), 'process.env.NODE_ENV': JSON.stringify('development') } })
+    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(jointActive && !focusActive ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focusActive && !calendarActive && !scope7Active ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(calendarActive ? 'm1-v2' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify(scope7Active ? 'm1-v1' : ''), 'process.env.NODE_ENV': JSON.stringify('development') } })
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
