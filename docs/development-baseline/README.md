@@ -567,6 +567,31 @@ Cleanup分報：ONE API34519 Python38660/parent18404，normalCtrlC＋SAMEpoll ra
 
 Private inherited35＋producer26＋ROOT2＝FINAL63bundles/189logicalfiles≤shared64/192，reserve1unused且非future grant；原三檔full SHA/bytes/mtime與receipts不變，producer26 SPENT。ATCAP／preCreateProcess拒絕STRICT NO-RETRY及ENTIRE DAY/TURNOVER/MAIN五literal cache＋holiday CRLF/older資源排除不改，不掃Temp/HAR/GPG/cache/log/history，非globaldisk0/allrawreleased。Coreoperation+1/standalone coredependency0/reliability+1/stall0→0；DOC review/freeze/qualified index/commit/另准master merge待。
 
+### M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1 七股每日淨超的零落盤驗證入口
+
+本次獨立chips-only入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用old saved/joint producer、private root或price fetch。沿pinned Python3.12.14 `-B -X utf8`、FastAPI0.141.1／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12，只讀既有backend/.deps與frontend/node_modules，不install、建helper／fixture檔、DB或整套來源副本。新policy version／外部digest由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理。
+
+下列為已驗入口形狀，原exact commands／版本／raw exit留原task；文件不授權再FIRST／重啟或更新配額。API只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用；新preview flag與old flags獨立互斥，GET/capture僅as_of，三UI RAW不可當額外API keys。
+
+```powershell
+$seriesNode = 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe'
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check
+& $seriesNode tools/tpex-chips-series-preview.cjs --check
+& $seriesNode tools/tpex-chips-series-preview.cjs --check --check-ui-only
+& $seriesNode tools/tpex-chips-series-preview.cjs --check --check-startup-only
+# 本批受驗serve的有限local ports；必須沿ROOT原task准入與外部pins
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --serve --chips-series-stock-scope-7-opt-in --port 8801 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
+& $seriesNode tools/tpex-chips-series-preview.cjs --serve --chips-series-stock-scope-7-opt-in --api-port 8801 --port 8802 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
+```
+
+Necessary checks：Python15、41src noEmit＋25validators＋84SSR、targeted41／UI follow-up與startup-only DNS/CSS guard修正均raw0。ROOT已獨立接受；沒有因換角色重跑。NoEmit／write:false及guard0/newdisk0；fixture／數值／零窗口仍synthetic，不代actual來源／操作，未跑production build／完整old suites／diskcases。必要compiler／Node已核absent。政策cap中的retained8748386B為estimate，非RSS／construction peak；headers／deadline的postcheck／cooperative限制由來源§38管理。
+
+ONE API保持empty新generation；首次preview BEFORELISTEN因literal local DNS／font CSS失敗raw1，financial/private/proxy/disk0。SAME程式角色只修preview一檔，後一次成功；不是one preview attempt total，API未restart，FIRST前source0。Scoped42窗口／525prefix／dated point-row／ALL25calendar、477 trusted events與unsupported／502 actual見[個股頁 §43](../STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)。Local receipt cap8193首raw1後修正cachedPOST409，未financial retry；original harness／鍵盤／RT失敗及未跑actual whole-window zero／post-stop recovery保留，不報通過。
+
+退出分報：API normal Ctrl+C rawexit1（source22／guards0），成功preview SAMEhandle normal Ctrl+C rawexit1；final localproxy8GET／3POST／34reject非financial。ROOT核五owned PIDs absent、8801／8802無listener；ONE page normalclose／fresh tabs[]，不重啟服務／browser。Current privateactualIO0／metadataGET0／ordinarypriceGET0／正式DB0／newdisk0；私人三檔與FINAL63/189、remaining1非grant／STRICTNO-RETRY、DAY／MAIN／older資源fences見[協作紀錄](../TASK_COORDINATION.md)，不稱globaldisk0或MAINignored0。
+
+Coreoperation+1／standalone dep0／reliability+1／stall0→0。使用者要求本批DOC／freeze／qualified索引／commit／另准local master merge後暫停；文件截止以上版本工作待ROOT，不回寫hash或重做成功驗證。Current四角色／worktree保留，沒有outside owner接手own4清理；前任四角色normalclose/archive已接受，exact前任worktree/branch removal仍須另滿足qualified indexes／mergedmaster／freshclean／baselineunneeded。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

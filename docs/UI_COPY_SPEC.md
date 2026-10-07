@@ -564,6 +564,16 @@ Full-month追溯分清ALL25原觀測列與採用24日曆、所需20daily；10/07
 
 Initial saved unread只mask價量，獨立驗證的held chips可呈現，joint仍不ready；price-only／unknown不顯count0。Actual source failure同時清兩來源數值／原列／chart、保留八RAW與原因。New profile正值買超／負值賣超／合法零使用精確signed張；negative cards已native驗6488/6510/8069，§10.9舊calendar postfix native NOT RUN不改。Full-month分清ALL25原列、採24、20daily，10/07不進10/06窗口；provenance欄位不等於整份原receipt JSON展示。每日net圖／running cumulative尚未交付，不擴PIT／trend／strategy／Plan。
 
+### 10.11 七股每日法人淨超與窗口累計
+
+新chips-only入口稱「每日法人淨超與窗口累計」，欄位「截止日期」「法人」「窗口」，窗口為「最近5／20個交易日」，外資明示不含外資自營商。沿§10.3精確股／張與signed張口徑；actual範圍由[個股頁 §43](STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)管理，不改舊保存行情或calendar文案。
+
+明示「首次取得來源（僅一次）」「明確讀取已持有來源」；卡片「查看每日圖與精確日期表」，返回「返回七股（保留原始條件）」。Busy清值並提示「正在驗證完整來源，所有數值暫不顯示。」；未讀／失敗顯示已驗證股數「未知」，不補0。套用、切換及返回不自動讀取，不恢復失敗前數值。
+
+圖名「每日淨超」「窗口累計淨超」，精確日期表分每日與累計股／張；說明累計在每個窗口首日前歸零，圖形為近似比例，精確值見日期表與可操作資料點。正負號保留；合法daily0稱「已驗證當日淨超為零」，不能寫成整個窗口零。Actual3293trust9/29當日零已驗，ALL42窗口totals非零；未驗actual零窗口不稱通過。
+
+失敗／unsupported後圖表、日期表、原列、日曆皆不顯示；提示「資料不可用」及原因、明確READ才可恢復。來源說明分ALL25原觀測、採24及5／20日窗口，10/07截止後排除；不是普通股收盤歷史。發布／首次可得／修訂未知、PIT未支援，不能稱即時股價trend、strategy或Plan已完成。
+
 ## 11. 現行信心語意與下一版 AI、題材及短線資金文案
 
 | 資訊 | 允許 | 禁止 |

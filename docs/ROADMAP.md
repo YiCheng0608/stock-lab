@@ -31,6 +31,14 @@ M2-FOCUS-DAY-RANGE-1已有限接受新10/06來源准入、actual API及可信桌
 
 籌碼三區：三大法人已有資料；主力進出與券商分點的匯入、統計、排行、歷史及更新待做。免費官方人工查詢入口不是已接資料集，定義見[個股頁 §8](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)。
 
+### 本批七股每日法人淨超已有限接受；完成合併後暫停
+
+`M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`已交付同explicit10/06七股chips-only的三法人×5／20日每日net圖、精確日期表、每窗口首日前0起算的running cumulative及point/row來源追溯。ONE新FIRST22與ALL140原daily、ALL42 totals／525prefix、可信desktop／narrow同截止controls／返回、實際當日零及失敗mask已有限接受；coreoperation+1／standalone dependency0／reliability+1（preview startup guard／CSS修正）／stall0→0。來源與邊界由[來源 §38](SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)／[個股頁 §43](STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)管理；actual daily0不等於actual零窗口，ALL42窗口totals皆非零。
+
+使用者「這裡做完先幫我停下來」：完成本批DOC review／freeze／new qualified affectedindexes／commit／另准local master merge後**暫停**；文件截止版本步驟尚待，收據留原task。沒有下一NEW coordinator／worktree／roles，本輪四角色／worktree保留，不自行清理。後述舊「下一未准入／DOC待」按原歷史保留，以此當前摘要及原task接受為準。
+
+下一未完成候選為「M1普通股20／21交易日真實收盤序列與同截止趨勢接線」，**PENDING使用者恢復**與新精確ROOT admission，包含來源rights／time／calendar／schema／profile／外部pins／finite quota與操作驗收；不虛構work ID或已取得的可執行來源。不沿用本批22或歷史136GET為新grant，不retry／restart／clone／hydrate／replay／preload，privateactualIO0／remaining1bundle非grant。Index calendar不是普通股closes；不重複舊monthly／legacy審查冒稱解除依賴。Ordinarycloses／股價trend／strategy／PIT／execution及完整M1／M2／M3仍未完成；nextcoreless→1，連兩批先重選，暫停不reset停滯計數。
+
 ### 接下來的順序：近期產品里程碑
 
 使用流程：**今日關注 → 個股研究 → 條件計畫 → 追蹤回看**。建置順序：**M1 個股研究 → M2 今日關注串個股 → M3 條件計畫與追蹤**。沿用五個主導航與既有量化契約；每批只核對所採能力需要的依賴。

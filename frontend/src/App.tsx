@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   captureOfficialEvents,
@@ -80,6 +80,8 @@ import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPr
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
 import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
 import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
+import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
+import { SERIES_ROUTE } from './chipsSeries'
 import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
@@ -1797,6 +1799,14 @@ function NotFound() {
 }
 
 export default function App() {
+  const location = useLocation()
+  if (import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(SERIES_ROUTE)) {
+    return <ChipsSeriesProvider><Routes>
+      <Route path={SERIES_ROUTE} element={<ChipsSeriesPage />} />
+      <Route path={SERIES_ROUTE + '/:symbol'} element={<ChipsSeriesPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes></ChipsSeriesProvider>
+  }
   return <Shell><Routes>
     <Route path="/" element={<TodayPage />} />
     <Route path="/focus/price-saved" element={<SavedPriceFocusPage />} />

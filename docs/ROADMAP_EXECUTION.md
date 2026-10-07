@@ -2,6 +2,14 @@
 
 更新：2026-10-07。本文件管理工作 ID、狀態、依賴與完成條件；優先順序見 [ROADMAP](ROADMAP.md)，精確規格見各列連結。
 
+## 本批：每日法人淨超已 review；合併後依使用者指示暫停
+
+`M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`：ROOT已有限接受source12／ONE fresh22／七股三法人5／20日daily net圖、日期表與window-reset累計、ALL42 sums／525prefix／25欄point-row追溯及可信samecutoff／三RAWback／missing mask；coreoperation+1／standalone dependency0／reliability+1（preview startup guard／CSS修正）／stall0→0。Actual3293trust9/29當日零已驗；ALL42窗口totals非零，whole-window zero及post-stop recovery未跑。來源[§38](SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)、操作[§43](STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)負責細節；本段是當前狀態，後面同ID「下一候選／未准入」及舊pending列保留歷史，不作當前派工依據。
+
+文件截止DOC review→freeze→new qualified affectedindexes→核准commit→另准local master merge尚待；須完成這些已授權本批工作後，依使用者「這裡做完先幫我停下來」**暫停**。不開下一NEW統籌／worktree／roles，不以文件更新恢復產品round；本輪四角色與worktree保留，沒有outside owner接手own4清理。Git／merge最終收據留原task，不因回寫hash再次refresh／commit。
+
+下一缺口「M1普通股20／21交易日真實收盤序列與同截止趨勢接線」PENDING使用者恢復及新ROOT precise admission：真實source／rights／time／calendar／schema／profile／外部pins／finite quota、接線與具名驗收；沒有虛構ID或已准入取得路徑。本批Source22 SPENT／歷史136不是新grant，privateactualIO0、FINAL63/189剩1bundle非grant，禁止oldproducerrestart／clone／hydrate／replay／preload／copy與重複舊monthly/legacy審查。Ordinary stock closes／股價trend／strategy／PIT／execution及完整ROADMAP未完成；stall0繼承，nextcoreless→1、連兩批先重選，不因暫停／換session歸零。
+
 ## 1. 執行界線與狀態
 
 僅免費公開資料與本地測試；來源不可合法、穩定、可重現取得時標受限，不以 fixture、欄位或模型介面冒充接入。帳戶、付費額度、正式 DB、排程與交易的操作授權依 [AGENTS](../AGENTS.md)。

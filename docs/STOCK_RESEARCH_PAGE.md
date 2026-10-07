@@ -1444,3 +1444,37 @@ ONE API normal Ctrl+C退出raw1後，same5274 native Read具positive ResourceTim
 ONE preview normal Ctrl+C raw1；ROOT核五ownPIDs absent、8799/8800無listener；ONE intended page normalclose、fresh tabs[]。Final proxy26GET/1POST/27rejected為local，非financialGET。19 memory SQLite全schema/index/trigger/values/everycelltypeof保持，guards0／financeSeed0／preloadedfalse／formalDB0／privatewrites0／newproductdisk0／childactualIO0。必要checks、原exit與清理邊界見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-stock-scope-7-1006-1-七股八條件的零落盤驗證入口)。
 
 Coreoperation+1／standalone coredependency0／reliability+1（新scope7 aggregate int64 overflow guard）／stall0→0；source20已接受、DOC/freeze/qualified index/Git仍待ROOT。新七股daily raw追溯不等於每日net圖／精確日期表／running cumulative已交付；下一 `M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`未准入，見[執行清單](ROADMAP_EXECUTION.md)。完整ROADMAP、ordinary20/21closes／trend／strategy／time／PIT／Plan／execution未完成。
+
+## 43. M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日淨超與累計操作
+
+ROOT有限接受同explicit2026-10-06的chips-only七股操作。新policy／profile／完整來源與int64累計契約只由[來源 §38](SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)管理；§42 saved/chips及old calendar、失敗／未跑與版本pending歷史不改。本批不讀保存價格，不以法人每日net冒稱股價趨勢或完整M1。
+
+### 43.1 新入口、明示動作與追溯
+
+Route `/chips-stock-scope-7-daily-net-trend`、compile `VITE_CHIPS_SERIES_STOCK_SCOPE_7=m1-v1`及runner `--chips-series-stock-scope-7-opt-in`；old flags保持獨立。GET `/api/chips/series-stock-scope-7?as_of=2026-10-06`，body0；POST同route的 `/capture?as_of=2026-10-06`，empty JSON object≤4096B。兩端只接受exact as_of key各一次；duplicate／unknown／invalid先拒，合法unsupported cutoff在state／IO前unavailable。Investor／horizon是UI RAW controls，不能寫成GET或capture query keys。
+
+選外資（不含外資自營商）／投信／自營商及5／20日，七股卡→同截止daily detail→back保留as_of／investor／horizon三RAW。明示「首次取得來源（僅一次）」或「明確讀取已持有來源」；套用、切股、法人／窗口及返回不auto-fetch／read。FIRST latch已用不能再取得。Detail列兩SVG每日淨超／窗口累計、精確日期表（股／張）、窗口起迄及累計起點0；SVG比例只供定位，dated operable point與row開原25字串／ordinal／兩SHA／calendar，不用圖形約值作精確數值。
+
+### 43.2 Actual正負值、每日零與42窗口
+
+ONE intentional page。Desktop1277×924／doc1262：ROOT把七股×三法人×兩窗口的42份日期表及兩SVG aria值完整比對original signed arithmetic；ALL525 prefixes／42期末值受驗，5日窗口從本窗口首日前0重算。All7 foreign20的首／末point均核ALL25原字串與body／original receipt SHA。
+
+Narrow390×844／doc375／scroll375無horizontal overflow；ROOT核all7 foreign5卡／samecutoff detail／表與兩圖／三RAW返回。ROOT逐一native開啟ALL25 calendar原列，核150原字串與原receipts，10/07保留但排除。Actual negative每日／累計值沿signed精確股／張；外資口徑保持。
+
+Actual verified zero為3293／trust／2026-09-29 ordinal221，日期表row及每日SVG point回指original25欄。「已驗證當日淨超為零」僅指該日；ALL42窗口totals皆非零，沒有actual whole-window zero驗收。Synthetic zero-window契約不能取代實際零窗口。
+
+### 43.3 Unsupported、current failure與未跑項
+
+Native 10/07日期mask全部數值；恢復10/06仍masked，須明示held READ成功才恢復same generation／Source22，ROOT已核。FIRST不能重複；完整local cached POST核409／already_attempted且Source22不增。兩次local cached POST：首harness cap8193 short read raw1；修正後再核完整10303B HTTP409／already_attempted local rejection response，無financial GET retry。
+
+API normal Ctrl+C rawexit1後，5274／foreign5明示READ的owned proxy完整response502／owned_api_unavailable由ROOT獨立接受；UI mask ALL SVG／日期表／raw／calendar。Native back、改dealer20及cards READ不能unmask。瀏覽器positive502 ResourceTiming未觀測，不宣稱該RT斷言通過；沒有post-stop restart／actual recovery。
+
+Observer477 events＝154click／263keydown／26input／24change／10submit，ALLisTrusted=true，無fill／value assignment／fakeevents。Offscreen HTML click、錯誤--keys／linklabel、ConPTY511-char reviewinput、PRE keyboard tab focus與RT assertion失敗原收據留task；它們不是已通case，也不改寫成product/source failure。Actual僅採ROOT具名接受證據。
+
+### 43.4 退出、進度與使用者暫停
+
+ONE API原source22不變、guards0，normal Ctrl+C rawexit1；成功preview SAMEhandle normal Ctrl+C亦rawexit1，local proxy8GET／3POST／34reject非financial。Preview最初一次BEFORELISTEN失敗（local DNS／CSS），SAME角色修ONE preview file後一次成功；不是只有一次preview attempt，API沒有重啟，FIRST前source0。
+
+ROOT核五owned PIDs absent、8801／8802無listener；ONE intentional page normalclose、fresh tabs[]，原receipt留task。必要checks及限制見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)；privateactualIO／newdisk／正式DB／upstreamPOST0，無source／service／browser restart。
+
+Coreoperation+1／standalone dependency0／reliability+1／stall0→0；此處接受daily-net圖／日期表／window-reset累計，不解除ordinary20／21closes、股價trend／strategy／PIT／execution。使用者「這裡做完先幫我停下來」：本批DOC／freeze／索引／commit／另准local master merge後暫停；文件截止版本封存仍待。下一普通股收盤序列與趨勢候選等待恢復及新准入，current四角色／worktree保留，不建立下一輪。

@@ -1447,3 +1447,35 @@ ROOT接受source20及七股positive／verifiedzero／samecutoff七detail／八RA
 Private3files1791644B＋original3dirs ATCAP／preCreateProcess approval REJECTED／process0/delete0 STRICT NO-RETRY，禁alternate tool/path/owner/tree bypass與新disk/copy/export/publish/delete。DAY/TURNOVER/MAIN五cache＋holiday/older資源排除及禁sweep完整條件見[協作紀錄](TASK_COORDINATION.md)；清理與功能分報。
 
 下一未准入 `M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`以本次140原daily／42 totals支持七股每日net曲線／精確日期表／running cumulative新操作；條件及fresh finite source／new series policies/pins由[執行清單](ROADMAP_EXECUTION.md)管理。Current22非下一grant、next private actualIO0；ordinary20/21 closes／trend／strategy／time／PIT／execution仍缺。
+
+## 38. M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日法人淨超與窗口累計
+
+ROOT已有限接受本批chips-only核心操作；同explicit2026-10-06、普通TPEx／TWD七股3105／3293／5274／5347／6488／6510／8069，外資不含外資自營商、投信、自營商各別5／20日每日淨超及窗口累計。操作及actual邊界由[個股頁 §43](STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)管理。本節新版本獨立；§37及old calendar政策、defaults、失敗、pending與未跑歷史原樣保持，不能以本次接受回寫舊驗收。
+
+### 38.1 獨立政策與有界來源
+
+ROOT原task的precise admission先於implementation／financial GET；獨立canonical policy `m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1`，9733 UTF-8 bytes，外部SHA-256 `143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31`。Expected pin不得由received policy自建。New profile `free_public_local_chips_only_daily_net_series_stock_scope_7`；worker `tpex-institutional-series/chips-stock-scope-7-v1`、capture `tpex-institutional-series-capture/chips-stock-scope-7-v1`、read `institutional-daily-net-series-read/chips-stock-scope-7-v1`，計算版本 `signed-daily-net-running-sum/window-reset-int64-v1`。Old producers／profiles immutable；只有純解析與數值函式可重用，不restart／clone／hydrate／replay／preload或用old capture取代新來源。
+
+沿[§31](#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)的dataset11391／11856 exact用途、OGL1.0署名與TPEx政府資料例外，只另准ONE empty producer的FIRST一次：2份2026/09/01、10/01月index＋9/07～10/06 last20 daily，exact URL/query、HTTP200／CSV UTF-8／identity依canonical policy。Daily source version `dataset-11856-dated-csv-observed-2026-10-07/chips-daily-net-series-stock-scope-7-v1`；index為 `dataset-11391-month-csv-observed-2026-10-07/chips-daily-net-series-stock-scope-7-v1`。
+
+先驗ALL25月原列／150原字串與日期唯一性，再採≤10/06 exact24；10/07六原欄保留追溯而不採入。Last20為9/07～10/06，last5為9/30、10/01、10/02、10/05、10/06；9/25／9/28 closure沿原契約。Index是observed calendar，不能當普通股收盤序列；缺列不推休市、不補零／縮窗／跳壞股。新觀測或來源不符合exact bound即停止，不重試或機械續抓。
+
+### 38.2 每日、累計與完整性契約
+
+Canonical為signed int64股，以canonical integer string傳遞；張精確除1000、最多三位小數，既有單位公式不改。各窗口從第一日前的0重新累計，按日期做exact prefix sum；5日不延用20日累計起點。每個dated point／row保留ALL25原字串、原列ordinal、body SHA-256、original canonical receipt SHA-256與calendar。
+
+ALL7×兩窗口×三法人須完整驗daily、aggregate及每個running prefix，才可顯示任何available series或合法零。任一daily／aggregate／prefix超過−9223372036854775808～9223372036854775807，整個七股profile unavailable，不只拒目前所選股。ALL42期末累計必須等於獨立窗口淨超和；source relations與component檢查沿完整25欄口徑。Unknown／missing／conflict不能變0，亦不能以先得到零省略ALL7 gate。
+
+### 38.3 本次actual來源與資源界線
+
+ONE新API generation `7e5fb646-d205-4d77-b452-c459a0b10efd`，no seed／preloaded=false；native FIRST receipt `89e14f3d-83cc-4b36-975b-39e245e63f60`。2026-10-07 UTC16:07:22.869778～16:07:39.341222，22 GET／2907155B，全部HTTP200 identity。ROOT獨立核FULL22原body＋ORIGINAL22 canonical receipts的bytes／SHA／UTC／method／exact URL、全daily結構／日期／code／name／關係、ALL25 calendar採24排10/07、140 selected rows／3500原字串／3080 int64、ALL42窗口總和及525累計前綴。
+
+Index1MiB／daily2MiB／aggregate42MiB、22 requests／ONE attempt／無redirect／retry；15s per request與180s batch為cooperative boundary checks，非OS強制中止。Received headers16KiB是收到後檢查，非socket硬cap；retained graph8748386B在64MiB estimate界線內，為deduplicated getsizeof estimate，非RSS／construction peak。GET診斷回應界線16MiB；process memory，new disk0。Publication／first availability／revision unknown，historical PIT unsupported；原成交統計未反映券商帳號更正。
+
+Current metadataGET0／ordinarypriceGET0／privateactualIO0／upstreamPOST0；Source22 SPENT。Inherited114＋22＝136 chips GET，known17444540B另有first old Sep body unknown，不稱所有歷史bytes已知。控制項、返回及held READ不能重取得來源；FIRST不能重複。Private FINAL63bundles／189logicalfiles、剩1bundle／3files不是新grant／reset／retry／thirdROOTread；完整ATCAP、STRICT NO-RETRY及DAY／MAIN／其他資源fences見[協作紀錄](TASK_COORDINATION.md)，本批不碰private。
+
+### 38.4 有限接受與暫停
+
+Coreoperation+1／standalone coredependency0／reliability+1（preview startup guard／CSS修正）／stall0→0。Actual當日零為3293／trust／2026-09-29，原列ordinal221；ALL42完整窗口總和均非零，不能稱actual零窗口。驗證命令、原exit及owned退出見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。
+
+文件截止時DOC review／freeze／qualified indexes／commit／另准local master merge待；使用者要求完成本批合併後暫停，不啟動下一輪。未完成候選「M1普通股20／21交易日真實收盤序列與同截止趨勢接線」等待使用者恢復及新精確來源／rights／time／calendar／schema／profile／pins／finite quota准入，非可執行來源已取得；ordinary closes／股價trend／strategy／PIT／execution與完整ROADMAP仍未完成。
