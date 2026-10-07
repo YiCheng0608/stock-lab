@@ -519,6 +519,12 @@ P6b 本身未驗污染卡片完整 StockPage 路徑，SSR action detail panel �
 
 Actual desktop／窄版五原條件往返、6510原列、真零及focus/detail502清值的範圍只由[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)管理；actual missing-file UI仍未跑。原memory／私人保存文案維持自身契約，不用新source mode擴張PIT、歷史窗口或研究完成度。
 
+### 10.7 保存行情與法人窗口共同入口
+
+Joint preview只在 `VITE_SAVED_PRICE_CHIPS_INTEGRATION='m1-v1'` 及合法3105／6488 saved-focus detail context啟用法人BUTTON；保留§10.5／10.6既有名稱、單位、四price條件／五RAW返回與明示read。Saved入口／apply／切股／back不auto-read或capture，不把其餘五股說成法人已支援。
+
+Current讀取／provenance失敗同時清saved headline／volume／原列／chart及chips nets／calendar／dailyraw；留兩read buttons與ONE原因，不用零或舊值掩蓋。恢復須same context／generation明示saved snapshot＋held法人核對皆成功；held不外網重抓、failed capture不retry。Actual same-token502／桌面窄版範圍及missing-file UI未跑由[個股頁 §38](STOCK_RESEARCH_PAGE.md#38-m1-saved-price-chips-integration-1006-1共同入口與同截止往返)管理；compile flag不擴大來源或PIT。
+
 ## 11. 現行信心語意與下一版 AI、題材及短線資金文案
 
 | 資訊 | 允許 | 禁止 |

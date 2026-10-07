@@ -12,15 +12,34 @@ const tls = require('node:tls')
 const Module = require('node:module')
 const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
+const crypto = require('node:crypto')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
-assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--private-save-check', '--serve', '--saved-source-only', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
+const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest']
+assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--private-save-check', '--serve', '--saved-source-only', '--saved-price-chips-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
 assert(!(args.includes('--private-save-check') && (args.includes('--serve') || args.includes('--check') || args.includes('--focus-check'))), 'choose one check mode')
 assert(!args.includes('--saved-focus-check') || !['--serve', '--check', '--focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
 assert(!args.includes('--saved-source-only') || args.includes('--serve'), 'saved-source-only is an owned serve mode')
 const root = path.resolve(__dirname, '..')
+const jointActive = args.includes('--saved-price-chips-opt-in')
+assert(!jointActive || args.includes('--serve') && args.includes('--saved-source-only'), 'joint opt-in requires saved-only serve')
+assert(jointActive || !pinOptions.some((name) => args.includes(name)), 'joint pins require joint opt-in')
+let jointPolicy
+const jointDigest = 'sha256:a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14'
+if (jointActive || args.includes('--joint-check')) {
+  const jointPolicyText = fs.readFileSync(path.join(root, 'backend/app/saved_price_chips_entry.py'), 'utf8').match(/_POLICY = json.loads\(r'''([\s\S]*?)'''\)/)[1]
+  jointPolicy = JSON.parse(jointPolicyText)
+  assert(Buffer.byteLength(jointPolicyText) === 10702 && 'sha256:' + crypto.createHash('sha256').update(jointPolicyText).digest('hex') === jointDigest, 'canonical joint policy intact')
+}
+if (jointActive) {
+  assert(option('--joint-policy-version') === jointPolicy.version && option('--joint-policy-digest') === jointDigest, 'independent external joint pins required')
+  for (const [name, prefix] of [['price_capture', 'policy'], ['price_storage', 'private-policy'], ['saved_focus', 'saved-focus-policy'], ['institutional', 'chips-policy']]) {
+    const pin = jointPolicy.independent_pins[name]
+    assert(option(`--${prefix}-version`) === pin.policy_version && option(`--${prefix}-digest`) === `sha256:${pin.sha256}`, `external ${name} pins required`)
+  }
+}
 const dependencies = path.resolve(option('--deps', ''))
 assert(args.includes('--deps') && fs.existsSync(path.join(dependencies, 'typescript/package.json')), '--deps needs existing frontend/node_modules')
 const port = Number(option('--port', '8796'))
@@ -131,7 +150,7 @@ function typecheck() {
   console.log(JSON.stringify({ typecheck: 'current full src noEmit', source_files: parsed.fileNames.length, incremental: false, composite: false }))
 }
 
-async function appSSRModule() {
+async function appSSRModule(joint = false) {
   // The package's CJS entry returns { default: Component }. Normalize only
   // this Node SSR import; the browser bundle keeps its real ECharts component.
   const originalLoad = Module._load
@@ -142,7 +161,7 @@ async function appSSRModule() {
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
     platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies],
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'],
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api') } })
+    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(joint ? 'm1-v1' : '') } })
   const module = new Module(path.join(sourceRoot, '__memory_unit_lots_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_unit_lots_app__.cjs')
   module.paths = Module._nodeModulePaths(sourceRoot)
@@ -197,6 +216,81 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (args.includes('--joint-check')) {
+    let gateChecks = 0, stateChecks = 0, appChecks = 0
+    const verifyGate = (method, route, body, expected) => {
+      const error = jointRequestError(method, new URL(route, 'http://owned.invalid'), Buffer.from(body))
+      assert.equal(error?.[0] ?? 200, expected); gateChecks++
+    }
+    const capture = '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06'
+    for (const body of ['{}', ' \r\n{ }\t']) verifyGate('POST', capture, body, 200)
+    for (const body of ['', 'null', '[]', '1', '{"x":1}', '{bad']) verifyGate('POST', capture, body, 422)
+    verifyGate('POST', capture, ' '.repeat(4097), 413)
+    for (const suffix of ['&x=1', '&as_of=2026-10-06']) verifyGate('POST', capture + suffix, '{}', 422)
+    verifyGate('POST', capture.replace('3105', '6510'), '{}', 405)
+    for (const path of ['/api/stocks/TPEx/3105/prices/capture', '/api/stocks/TPEx/3105/prices/save', '/api/focus/price-lots/capture']) verifyGate('POST', path, '{}', 405)
+    for (const suffix of ['', '/overview', '/prices/saved-focus']) {
+      verifyGate('GET', '/api/stocks/TPEx/3105' + suffix + '?as_of=2026-10-06', '', 200)
+      verifyGate('GET', '/api/stocks/TPEx/3105' + suffix + '?as_of=2026-10-06&x=1', '', 422)
+      verifyGate('GET', '/api/stocks/TPEx/3105' + suffix + '?as_of=2026-10-05', '', 422)
+    }
+    verifyGate('GET', '/api/focus/price-saved?as_of=2026-10-05&min_lots=0', '', 200)
+    verifyGate('GET', '/api/focus/price-saved?as_of=2026-10-06&min_lots=-1', '', 422)
+    verifyGate('GET', '/api/stocks/TPEx/3105/prices/saved?as_of=2026-10-06', '', 405)
+    verifyGate('GET', '/api/stocks/TPEx/3105?as_of=2026-10-06', '{}', 422)
+    for (const index of ['0', '9', '10', '21']) verifyGate('GET', '/__price_validation/chips/raw?index=' + index, '', 200)
+    for (const index of ['', '00', '01', '-1', '22', '1.0']) verifyGate('GET', '/__price_validation/chips/raw?index=' + index, '', 422)
+    verifyGate('GET', '/__price_validation/chips/raw?index=0&index=0', '', 422)
+    verifyGate('GET', '/__price_validation/receipt?include_raw=true&x=1', '', 422)
+    const { Readable } = require('node:stream')
+    for (const [method, text, status] of [['POST', ' '.repeat(4097), 413], ['GET', '{}', 422]]) {
+      const request = Readable.from([Buffer.from(text)])
+      request.method = method
+      await assert.rejects(boundedJointBody(request), (error) => error.status === status); gateChecks++
+    }
+    const App = await appSSRModule(true)
+    let state = { token: 'current', epoch: 0, failure: null, price: true, chips: true }
+    state = App.jointValidationTransition(state, 'current', 0, 'failure', 'source_failed')
+    assert(state.failure && !state.price && !state.chips && state.epoch === 1); stateChecks++
+    assert.equal(App.jointValidationTransition(state, 'previous', 1, 'price'), state); stateChecks++
+    assert.equal(App.jointValidationTransition(state, 'current', 0, 'price'), state); stateChecks++
+    state = App.jointValidationTransition(state, 'current', 1, 'chips')
+    assert(state.failure && state.chips && !state.price); stateChecks++
+    state = App.jointValidationTransition(state, 'current', 1, 'price')
+    assert.equal(state.failure, null); stateChecks++
+    const helper = require(path.join(sourceRoot, 'savedPriceFocus.ts'))
+    const good = helper.savedFocusDetailPath('3105', '2026-10-06', '10000.000', 'all', '0', '0.000')
+    const query = new URL(good, 'http://owned.invalid').searchParams
+    assert(App.jointSavedContext('TPEx', '3105', query)); stateChecks++
+    for (const variant of [new URLSearchParams(query + '&x=1'), new URLSearchParams(query + '&as_of=2026-10-06'), new URLSearchParams(query.toString().replace('2026-10-06', '2026-10-05'))]) {
+      assert(!App.jointSavedContext('TPEx', '3105', variant)); stateChecks++
+    }
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    let maxBytes = 0, maxGraph = 0
+    for (const [route, valid] of [[good, true], [good + '&x=1', false], [good + '&as_of=2026-10-06', false]]) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      const data = stockFixture('3105', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5)
+      maxBytes = Math.max(maxBytes, Buffer.byteLength(JSON.stringify(data))); maxGraph = Math.max(maxGraph, estimateGraph(data))
+      client.setQueryData(['stock', 'TPEx', '3105', '2026-10-06'], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [route] }, React.createElement(App.default))))
+      assert(valid ? html.includes('回到已保存行情關注（原條件）') : html.includes('未讀取來源')); appChecks++
+      assert(!html.includes('查看官方價格原列、來源版本與 SHA') && !html.includes('既有價格與實際視窗')); appChecks++
+      client.clear()
+    }
+    const baseline = await appSSRModule(false)
+    const baselineClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    baselineClient.setQueryData(['stock', 'TPEx', '3105', '2026-10-06'], stockFixture('3105', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5))
+    const baselineHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client: baselineClient }, React.createElement(MemoryRouter,
+      { initialEntries: [good + '&x=1'] }, React.createElement(baseline.default))))
+    assert(baselineHTML.includes('目前只採已保存行情') && !baselineHTML.includes('未讀取來源')); appChecks++
+    baselineClient.clear()
+    assert(maxBytes <= 81920 && maxGraph <= 524288 && Object.values(counts).every((count) => count === 0))
+    console.log(JSON.stringify({ passed: true, joint_gate_checks: gateChecks, joint_recovery_checks: stateChecks, joint_app_ssr_checks: appChecks,
+      fixture_bytes: maxBytes, fixture_object_estimated_bytes: maxGraph, source_requests: 0, ...receipt(),
+      not_run: ['actual source/private bundle', 'native UI', 'disk cases', 'full historical SSR suite', 'production build'] }))
+    return
+  }
   if (args.includes('--saved-focus-check')) {
     const helperChecks = savedFocusCases.runSavedPriceFocusTests()
     const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
@@ -542,9 +636,78 @@ async function check() {
 
 const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
+function jointStaticError(method, pathname) {
+  if (pathname.endsWith('/prices/saved')) return [405, 'use_the_admitted_saved_focus_reader']
+  if (method === 'POST' && !/^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(pathname)) return [405, 'joint_post_outside_scope']
+  if (!['GET', 'POST'].includes(method)) return [405, 'joint_method_outside_scope']
+  return null
+}
+function jointRequestError(method, url, body) {
+  const staticError = jointStaticError(method, url.pathname)
+  if (staticError) return staticError
+  const pairs = [...url.searchParams]
+  const params = (allowed, required = []) => {
+    if (pairs.some(([key]) => !allowed.includes(key)) || allowed.some((key) => url.searchParams.getAll(key).length > 1)
+      || required.some((key) => url.searchParams.getAll(key).length !== 1)) throw new Error('joint conditions')
+    return Object.fromEntries(pairs)
+  }
+  try {
+    if (url.pathname.endsWith('/prices/saved')) return [405, 'use_the_admitted_saved_focus_reader']
+    if (method === 'POST') {
+      if (!/^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(url.pathname)) return [405, 'joint_post_outside_scope']
+      if (params(['as_of'], ['as_of']).as_of !== '2026-10-06') return [422, 'joint_cutoff_not_supported']
+      if (body.length > 4096) return [413, 'joint_request_body_bound']
+      if (!body.length) return [422, 'joint_empty_json_object_required']
+      const value = JSON.parse(body.toString('utf8'))
+      if (!value || Array.isArray(value) || typeof value !== 'object' || Object.keys(value).length) return [422, 'joint_empty_json_object_required']
+      return null
+    }
+    if (method !== 'GET') return [405, 'joint_method_outside_scope']
+    if (body.length) return [422, 'joint_get_body_forbidden']
+    if (url.pathname === '/api/focus/price-saved') {
+      const p = params(['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct'], ['as_of', 'min_lots'])
+      const helper = require(path.join(sourceRoot, 'priceFocus.ts'))
+      if (!helper.validFocusDate(p.as_of) || helper.minLotsShares(p.min_lots) === null || !helper.validPriceFocusDayMove(p.day_move ?? 'all')
+        || helper.minTurnoverValue(p.min_turnover ?? '0') === null || helper.minRangeMilliPct(p.min_range_pct ?? '0') === null) throw new Error('joint focus conditions')
+    } else {
+      const stock = url.pathname.match(/^\/api\/stocks\/([^/]+)\/([^/]+)(\/(overview|prices\/saved-focus))?$/)
+      if (stock) {
+        if (stock[1] !== 'TPEx' || !jointPolicy.scope.saved_symbols.includes(stock[2])) return [405, 'joint_stock_outside_scope']
+        if (params(['as_of'], ['as_of']).as_of !== '2026-10-06') return [422, 'joint_cutoff_not_supported']
+      } else if (url.pathname.includes('/prices/saved-focus') || url.pathname.includes('/prices/saved')) return [405, 'joint_sensitive_path_outside_scope']
+      else if (url.pathname === '/__price_validation/receipt') {
+        if (!['false', 'true'].includes(params(['include_raw']).include_raw ?? 'false')) throw new Error('joint diagnostic')
+      } else if (url.pathname === '/__price_validation/chips/raw') {
+        if (!/^(0|[1-9]|1[0-9]|2[01])$/.test(params(['index'], ['index']).index)) throw new Error('joint raw index')
+      }
+    }
+    return null
+  } catch { return [422, 'joint_request_conditions_invalid'] }
+}
+async function boundedJointBody(request) {
+  const limit = request.method === 'POST' ? 4096 : 0
+  let size = 0
+  const chunks = []
+  // Keep the response socket alive on an early refusal so the caller receives
+  // the admitted 413/422 status rather than a connection reset.
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+    size += chunk.length
+    if (size > limit) { request.resume(); throw { status: limit ? 413 : 422, detail: limit ? 'joint_request_body_bound' : 'joint_get_body_forbidden' } }
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  let body
+  if (jointActive) {
+    const refusedBeforeBody = jointStaticError(request.method, url.pathname)
+    if (refusedBeforeBody) { requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
+    try { body = await boundedJointBody(request) } catch (error) { requests.rejected++; return json(response, error.status ?? 422, { detail: error.detail ?? 'joint body invalid' }) }
+    const refused = jointRequestError(request.method, url, body)
+    if (refused) { requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
+  }
+  const allowed = jointActive || request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
@@ -555,14 +718,17 @@ async function proxy(request, response) {
     incoming.pipe(response)
   })
   upstream.on('error', (error) => json(response, 502, { detail: error.message }))
-  let length = 0
-  request.on('data', (part) => { length += part.length; if (length > 4096) { request.destroy(); upstream.destroy() } })
-  request.pipe(upstream)
+  if (jointActive) upstream.end(body)
+  else {
+    let length = 0
+    request.on('data', (part) => { length += part.length; if (length > 4096) { request.destroy(); upstream.destroy() } })
+    request.pipe(upstream)
+  }
 }
 async function serve() {
   const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
     absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__', platform: 'browser', format: 'esm',
-    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
+    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(jointActive ? 'm1-v1' : ''), 'process.env.NODE_ENV': JSON.stringify('development') } })
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')

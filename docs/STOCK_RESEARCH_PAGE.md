@@ -1260,3 +1260,34 @@ Desktop1277×924／doc1262與narrow390×844／doc375均完成trusted read、6510
 ### 37.4 完成與未驗邊界
 
 本B1 coreoperation+1／necessary derived saved-source readonly-use dep+1／reliability0／stall0；source13已獨立接受，必要驗證與owned runtime清理由[開發入口](development-baseline/README.md#m1-saved-price-focus-1006-1-保存來源關注的零落盤驗證入口)管理。Raw disk仍保留；三檔NO-RETRY與整個DAY-RANGE fence不變。Actual missing-file UI未跑；synthetic integrity／schema不改稱actual missing-file，HTTP502不改稱缺檔驗收。未跑full suite／production build／diskcases／install；未驗其他平台、全市場／PIT、普通20／21close／trend／strategy／time／execution或完整M1／M2／M3。
+
+## 38. M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1：共同入口與同截止往返
+
+**Saved-focus→3105／6488同explicit10/06的saved OHLC＋真5／20net→追溯→原五條件返回已有限接受。** 是NEW共同guarded API／preview的具名操作；source-use／五獨立policies、原件／金融與caps由[來源 §33](SOURCE_REGISTRY.md#33-m1-saved-price-chips-integration-1006-1保存行情與法人窗口共同入口)管理。原§34～37各自有限能力與pins保持，其他五saved股只有既有price能力。
+
+### 38.1 明示讀取與同一context
+
+Joint preview以 `VITE_SAVED_PRICE_CHIPS_INTEGRATION='m1-v1'` 啟用；條件、URL與saved-focus detail須同context，3105／6488才可首次載入法人。Saved入口／套用／切股／back不自動private read／capture；先明示讀保存行情，再trusted首次「載入5／20日法人窗口」。成功後同一SINGLE NEW API提供saved headline／OHLC／成交張與§31完整日曆／20daily真5／20交易日12 net；切兩股不重啟、不取得live price／hydrate old memory，不擴大cutoff。
+
+當current private／chips／stock read／refetch或provenance核對失敗，兩區數值、raw與chart一併清除，留下read buttons及ONE原因。恢復須same current context／generation內成功的明示NEW saved snapshot和明示held chips read；成功一邊或舊generation成功不足，held read不取得外網，failed capture不自動重試。
+
+### 38.2 Actual具名操作
+
+原RAW五條件 `2026-10-06 / 10000.000 / all / 0 / 0.000` 產生code順四卡3105／5347／6488／8069；以下全在ONE page／ONE producer：
+
+1. 明示saved-focus read、3105同10/06 detail saved read；trusted FIRST chipsload取得新22，headline／OHLC／5／20net同頁可讀。
+2. 切6488同cutoff明示read，查看兩股來源與raw provenance，再back回五完全相同原字串。
+3. 既有capture的held button POST200新增source0；正常停止API後，同token6488 trusted heldbutton POST actual HTTP502（request52352.26），不restart。
+4. 502同時清saved headline／volume／原列／chart及chips nets／calendar／dailyraw；tables0／canvas0、兩read buttons保留、ONE chips alert；再窄版trusted back五RAW同值。
+
+Desktop1277×924／doc1262：四卡、兩股headlines＋12net；price drawer各18原欄（ROOT兩股36原字串／12金融、ord205＋717核對），calendar drawer完整24×6，10/06 daily各25原欄／ord176＋646。Native未逐一開20dailyraw；ROOT獨立原件驗證不改稱native全20日逐欄。Narrow390×844／doc375：四卡、兩identity headlines＋12net及五RAW往返已核，未驗窄版rawdrawer。
+
+ONE lifetime page `ee33ac1b-e221-47d3-8331-2d73c0c40328` 40events全trusted。兩次ineffective TD-selector與兩次offscreen HTML clicks，由same page實際SUMMARY／A修正；首次selectors／readonly eval quoting／syntax／help失敗保留，沒有implementation／source retry。Source新22為當次首次native取得、非舊capture replay。
+
+### 38.3 驗收與未完成
+
+ROOT接受source實作、fresh22／all原receipt／金融、actual API及上列trusted操作；API50788／parent55084 SINGLE empty stores、finance seed0／preloadedfalse、guards0／19DB full schema與values／typeof preserved。本批price金融GET0／外部來源metadataGET0／new product disk0／DBmut0；private12bundles／36files含ROOT，existing private三檔仍在。
+
+B1 coreoperation+1／necessary joint-source-use-guard dep+1／reliability0／stall0。必要Py6／Node42guard＋9recovery＋7AppSSR／33src noEmit及首次失敗、normal exit與cleanup分報由[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)管理，命令與逐輪receipt留原task。Memory invalid／recovery／provenance tests不當actual missing-file UI；因NO-RETRY後者NOT RUN。未跑full suite／old full SSR／install／production build／diskcases，不外推其他平台／全市場／PIT或完整M1／M2／M3。
+
+下一候選 `M1-SAVED-PRICE-CHIPS-FOCUS-1006-1` 缺institutional predicate consumer／API／form／result；現saved-focus只有四price predicates、API五query fields，API和preview guards皆拒institutional query。擬僅3105／6488按選定investor、5或20日、signed net threshold精確篩選，再joint detail／全RAW返回；verified zero與unavailable分開，非ranking／strategy／PIT。NEW root先核缺失操作、選定語義／新policy、兩finite uses／pins／caps／errors，才private read／implementation／金融GET；目前未准新用途或producer，memory已釋放，fresh22須新必要grant。普通20／21stock closes／trend／strategy／time／execution及完整ROADMAP仍缺。

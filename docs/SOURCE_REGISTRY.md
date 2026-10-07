@@ -1228,3 +1228,50 @@ Current external financial GET **TOTAL0**、metadata GET0、new disk writes0／D
 Source13／net84588B已獨立接受；coreoperation+1／necessary derived saved-source readonly-use dependency+1／reliability0／stall0。19 memory DB表的table/index/trigger定義、全部values及cell typeof在兩reader前後相等，guards全部0；無capture_attempt／cache／raw／DB hydration。必要checks與owned runtime清理分報，見[開發入口](development-baseline/README.md#m1-saved-price-focus-1006-1-保存來源關注的零落盤驗證入口)。DOC review→freeze→qualified affected index→exact commit→另准master merge仍待。
 
 既有1791644B三檔仍在磁碟；私人清理的auto-review在CreateProcess前 `blocked by policy`，未啟動process／未刪除，STRICT NO-RETRY及at-cap禁新增diskcases保持。Actual missing-file UI未跑，完整性／schema等negative是必要synthetic memory證據；actual native失敗為HTTP502。不得稱global disk0、所有raw已釋放或磁碟清理成功。普通20／21close、trend／strategy／time／PIT／execution、全市場與完整M1／M2／M3仍未完成。
+
+## 33. M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1：保存行情與法人窗口共同入口
+
+**Saved-focus→3105／6488同10/06 saved OHLC＋真5／20net→追溯／五原條件back已有限接受。** NEW guarded API/preview解除原saved-only/chips准入缺口；co-render/duplicate capture不計核心。操作見[個股頁 §38](STOCK_RESEARCH_PAGE.md#38-m1-saved-price-chips-integration-1006-1共同入口與同截止往返)，§29～32保持。
+
+### 33.1 先准共同用途，獨立核五份policy
+
+ROOT在implementation/private read/financial GET前核joint policy `m1-saved-price-chips-integration-tpex-2026-10-06.1`：canonical UTF-8 **10702B**，SHA `a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14`；consumer `saved-price-chips-entry/m1-v1`。外部version／digest及完整canonical同驗，received policy不自建expected pin；舊8853B draft未准。
+
+| 獨立原policy／canonical bytes | SHA-256 | schema權威 |
+| --- | --- | --- |
+| `m2-stock-scope-tpex-11370-2026-10-06.5`／1548 | `5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040` | §29 |
+| `m1-price-save-tpex-11370-2026-10-06.1`／2437 | `0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e` | §30 |
+| `m1-saved-price-focus-tpex-11370-2026-10-06.1`／2677 | `93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b` | §32 |
+| `m1-chips-cutoff-tpex-2026-10-06.1`／4264 | `36c761a5f6e22afee86ad414769b88c06e97ae792141879a5660cf0856c180d5` | §31 |
+
+TW／TPEx ordinary stock／TWD price七identities：3105／3293／5274／5347／6488／6510／8069；institutional只3105／6488、explicit10/06。原capture process_memory／storage private_local及schemas獨立，joint不改receipt／default／W8／DB或hydrate。
+
+### 33.2 Existing private有限只讀
+
+唯一root `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367`、bundle `tpex-11370-2026-10-06-m1-v1`；原1791644B／3files／3dirs全raw／canonical／mtimeNS重驗：
+
+| literal file／bytes | SHA-256 | mtime_ns |
+| --- | --- | --- |
+| body.csv／1788599 | `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200` | 1791329565505432100 |
+| capture-receipt.json／1461 | `871a6887a3b87bd7c23c20fc3a25ec98d369d0df2ed8eedbe8cb040e5242cd36` | 1791329565507431000 |
+| storage-receipt.json／1584 | `436465b4d13d604965327fe1be7eff98edf65274b0f16c7871474280feb0197b` | 1791329565509430100 |
+
+Raw/capture/storage caps3145728/8192/16384B，bundle≤3170304B／one bundle。Shared64bundle/192file reads含ROOT，producer ceiling61＋ROOT3。Actual producer9（native6＋local API3）／ROOT3＝12/36，含首次Unicode assertion raw1；corrected OBS2／post-stop OBS3全bytes/SHA/mtimeNS通過。Entry/apply/switch/back無明示read則private0。
+
+Price UTC2026-10-06 started23:32:17.666931／captured23:32:21.005311／saved23:32:45.499432；publication/first availability/revision unknown、PIT unsupported。Snapshot10s cooperative／graph32MiB，actual1950740/1950828B retained estimates，非OS硬deadline/RSS/peak。
+
+### 33.3 Fresh金融集合/guards
+
+只准SINGLE NEW empty producer／capture_attempt1，external metadataGET0、price financialGET0；trusted首次chips POST才取得§31 exact2 index＋20daily＝22 official GET。API與preview各自在upstream前限 `POST /api/stocks/TPEx/(3105|6488)/institutional-windows/capture?as_of=2026-10-06`；query一次，非空UTF8 body≤4096B且須空JSON物件，壞body/query422、oversize413、其他POST405。其他五股不capture；GET unknown/duplicate query先422，舊/prices/saved405，focus unsupported日期先unavailable/private0。UI核saved detail context／五RAW。
+
+僅admitted chips network context准exact HTTP／TPEx443 DNS-connect，redirect/retry0；index≤1MiB、daily≤2MiB、aggregate≤42MiB、received header≤16KiB。Request min(15s, remaining budget)、batch180s在response／chunk邊界檢查；chips64MiB／joint96MiB retained graph估算。非OS硬wall、socket header搶占或RSS／peak。
+
+Actual22＝2907099B；24index dates/144原欄、18098daily全列width/date/code唯一及40selected/1000原字串/880 canonical int64全驗。ROOT獨立核all22 body＋ORIGINAL canonical receipt SHA/times、12net同§31真值，fresh非replay。Capture UTC2026-10-07T04:19:33.546820～04:19:43.937624、10.391s cooperative；chips graph3273840B。歷史§31 financial46＋metadata6／§30price2／focus0依原輪分列。
+
+啟動時NEW price/chips/W8 Stores空／finance seed0；19 SQLite full schema/values/cell typeof不變，guards0/new product disk0/DBmut0。Current private read、chips capture／stock read／refetch或provenance核對失敗，同時mask saved prices／chart／raw與nets／calendar／dailyraw，保留ONE diagnostic。恢復須same context／generation兩次成功：明示NEW private snapshot＋明示held institutional read；held不外網refetch。舊generation成功不unmask，failed capture不retry／restart，無有效held raw維持unavailable。ROOT-only memory diagnostics／held原body＋receipt不capture/snapshot或回HTTP private fullbody。
+
+### 33.4 接受與殘留邊界
+
+B1 coreoperation+1／necessary joint-source-use-guard dependency+1／reliability0／stall0；BOOT／DOC／index／Git不計核心。Actual same-token502清兩來源已接受，missing-private-file UI未跑；必要checks／原失敗及owned runtime退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)。
+
+3files at-cap；cleanup preCreateProcess auto-review拒絕、process/deletion0，STRICT NO-RETRY；禁換tool/path/owner、逐檔/rename/containing-tree、copy/export/publish/newdiskcases。ENTIRE DAY-RANGE worktree/branch＋.range-ui-01a1106d2555430B/232files/94dirs兩次拒絕同fence，排除ALLcleanup；不掃Temp/HAR/GPG/cache/log/history。Chips memory隨正常退出釋放，private disk仍在；功能與清理分報，非global disk0／all raw released。24index calendar不代20／21 stock closes；trend／strategy／PIT／time／execution及完整ROADMAP未完成。Freeze／索引／commit／merge尚待原task，不回寫final hash。

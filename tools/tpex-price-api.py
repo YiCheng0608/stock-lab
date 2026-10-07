@@ -14,6 +14,7 @@ import stat
 import sys
 import types
 import unittest
+from threading import local
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,7 @@ mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check", action="store_true")
 mode.add_argument("--focus-check", action="store_true")
 mode.add_argument("--saved-focus-check", action="store_true")
+mode.add_argument("--joint-check", action="store_true")
 mode.add_argument("--private-save-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
@@ -36,6 +38,11 @@ parser.add_argument("--private-policy-digest")
 parser.add_argument("--saved-source-only", action="store_true")
 parser.add_argument("--saved-focus-policy-version")
 parser.add_argument("--saved-focus-policy-digest")
+parser.add_argument("--saved-price-chips-opt-in", action="store_true")
+parser.add_argument("--chips-policy-version")
+parser.add_argument("--chips-policy-digest")
+parser.add_argument("--joint-policy-version")
+parser.add_argument("--joint-policy-digest")
 parser.add_argument("--disk-phase", choices=("check", "write", "read", "faults", "cleanup"), default="check")
 ARGS = parser.parse_args()
 if ARGS.live_source_opt_in and not ARGS.serve:
@@ -60,6 +67,12 @@ if SAVED_FOCUS_ACTIVE and (not ARGS.saved_source_only or
         (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest) !=
         ("m1-saved-price-focus-tpex-11370-2026-10-06.1", "sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b")):
     parser.error("saved focus requires saved-source-only and independently admitted consumer pins")
+JOINT_ACTIVE = ARGS.saved_price_chips_opt_in
+if JOINT_ACTIVE and (not ARGS.serve or not ARGS.saved_source_only or not SAVED_FOCUS_ACTIVE or PRIVATE_ROOT is None
+        or ARGS.cutoff != "2026-10-06" or ARGS.live_source_opt_in):
+    parser.error("joint entry requires explicit saved-only 10/06 serve and all consumer pins")
+if not JOINT_ACTIVE and any((ARGS.chips_policy_version, ARGS.chips_policy_digest, ARGS.joint_policy_version, ARGS.joint_policy_digest)):
+    parser.error("joint pins require explicit joint entry opt-in")
 if ARGS.disk_phase != "check" and not ARGS.private_save_check:
     parser.error("disk phases are private synthetic checks only")
 sys.dont_write_bytecode = True
@@ -71,6 +84,7 @@ PRIVATE_STAGING = ".pending-" + PRIVATE_DIRECTORY
 PRIVATE_FILES = {"body.csv", "capture-receipt.json", "storage-receipt.json"}
 DISK_ACTIVE = bool(PRIVATE_ROOT and (ARGS.serve or ARGS.disk_phase != "check") and not ARGS.saved_source_only)
 LIVE_ACTIVE = False
+CHIPS_CONTEXT = local()
 APPROVED_ADDRESSES = set()
 SOURCE_REQUESTS = []
 PRELOADED_SOURCE = False
@@ -122,8 +136,9 @@ def audit(event, args):
         if event == "socket.bind": allowed = allowed or (ARGS.serve and local and address[1] == ARGS.port)
         if event in {"socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr"}:
             allowed = allowed or address in {"localhost", "127.0.0.1", "::1", None}
-            allowed = allowed or (ARGS.live_source_opt_in and LIVE_ACTIVE and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
-        if event == "socket.connect" and ARGS.live_source_opt_in and LIVE_ACTIVE:
+            scoped_live = ARGS.live_source_opt_in and LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)
+            allowed = allowed or (scoped_live and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
+        if event == "socket.connect" and (ARGS.live_source_opt_in and LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)):
             allowed = isinstance(address, tuple) and (address[0], address[1]) in APPROVED_ADDRESSES
         if not allowed:
             COUNTS["unapproved_network"] += 1
@@ -171,7 +186,7 @@ sys.addaudithook(audit)
 
 def resolver(host, port, *args, **kwargs):
     answers = original_resolver(host, port, *args, **kwargs)
-    if LIVE_ACTIVE and host in {"www.tpex.org.tw", b"www.tpex.org.tw"} and port == 443:
+    if (LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)) and host in {"www.tpex.org.tw", b"www.tpex.org.tw"} and port == 443:
         APPROVED_ADDRESSES.update((answer[4][0], answer[4][1]) for answer in answers)
     return answers
 
@@ -248,10 +263,53 @@ def saved_consumer_fixture():
     return fixture
 
 
+def configure_joint(fixture):
+    """Only the admitted transport's current thread may open the exact source URLs."""
+    import httpx
+    from app import saved_price_chips_entry as entry, institutional_windows_1006 as windows, institutional_windows as old
+    from app import price_saved_focus as focus
+    from worker import tpex_institutional_1006 as chips
+    entry.validate_admission(ARGS.joint_policy_version, ARGS.joint_policy_digest, {
+        "price_capture": (ARGS.policy_version, ARGS.policy_digest),
+        "price_storage": (ARGS.private_policy_version, ARGS.private_policy_digest),
+        "saved_focus": (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest),
+        "institutional": (ARGS.chips_policy_version, ARGS.chips_policy_digest)})
+    if str(PRIVATE_ROOT).replace("\\", "/") != entry.entry_policy()["private_use"]["root"]:
+        raise ValueError("joint_literal_private_root_not_admitted")
+    class ChipsTransport(httpx.BaseTransport):
+        def __init__(self):
+            self.urls, self.requests = set(entry.source_urls()), []
+            self.inner = httpx.HTTPTransport(retries=0, trust_env=False)
+        def handle_request(self, request):
+            target = str(request.url)
+            if (not JOINT_ACTIVE or request.method != "GET" or target not in self.urls
+                    or target in {item["url"] for item in self.requests} or len(self.requests) >= 22):
+                raise AssertionError("joint_unapproved_or_repeated_source_request")
+            self.requests.append({"method": "GET", "url": target})
+            CHIPS_CONTEXT.active = True
+            try:
+                return self.inner.handle_request(request)
+            finally:
+                CHIPS_CONTEXT.active = False
+        def close(self):
+            self.inner.close()
+    fixture.chips_transport = ChipsTransport()
+    fixture.stack.callback(fixture.chips_transport.close)
+    fixture.chips_store = windows.InstitutionalWindowStore1006(transport=fixture.chips_transport)
+    fixture.old_chips_store = old.InstitutionalWindowStore(transport=httpx.MockTransport(
+        lambda request: (_ for _ in ()).throw(AssertionError("old_chips_source_denied"))))
+    fixture.stack.enter_context(patch.object(windows, "STORE", fixture.chips_store))
+    fixture.stack.enter_context(patch.object(old, "STORE", fixture.old_chips_store))
+    fixture.stack.enter_context(patch.object(focus, "MAX_READS", entry.PRODUCER_READ_LIMIT))
+    fixture.stack.enter_context(patch.dict(os.environ, {windows.ENABLE_ENV: "1", windows.VERSION_ENV: ARGS.chips_policy_version,
+        windows.DIGEST_ENV: ARGS.chips_policy_digest, old.ENABLE_ENV: "0"}))
+    entry.install_request_gate(fixture.app)
+
+
 def receipt(fixture=None, include_raw=False):
     import fastapi, sqlalchemy, httpx
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
-              "guard": dict(COUNTS), "allowed_private_disk": dict(ALLOWED_DISK), "disk_artifacts": private_disk_metrics(), "source_requests": list(SOURCE_REQUESTS),
+              "guard": dict(COUNTS), "allowed_private_disk": dict(ALLOWED_DISK), "disk_artifacts": {"not_observed": True, "owner": "ROOT"} if JOINT_ACTIVE else private_disk_metrics(), "source_requests": list(SOURCE_REQUESTS),
               "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
               "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[1],
               "scope": "tuple-scoped ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT; "
@@ -281,6 +339,13 @@ def receipt(fixture=None, include_raw=False):
     if SAVED_FOCUS_ACTIVE:
         from app.price_saved_focus import read_diagnostics
         result["saved_focus_consumer"] = read_diagnostics()
+    if JOINT_ACTIVE and fixture:
+        from app import saved_price_chips_entry as entry
+        result["joint_entry"] = entry.held_diagnostic(fixture.chips_store)
+        result["joint_entry"].update(source_requests=list(fixture.chips_transport.requests),
+            source_request_count=len(fixture.chips_transport.requests), old_store_empty=not fixture.old_chips_store._attempted and not fixture.old_chips_store.raw_captures,
+            price_store_empty=not fixture.store._attempted and fixture.store.raw_capture is None,
+            private_metadata_io_by_diagnostic=0, preloaded_source=False)
     return result
 
 
@@ -323,7 +388,7 @@ def check():
         print(json.dumps(output, ensure_ascii=False), flush=True)
         return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
-    for name in (("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
+    for name in (("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
@@ -337,11 +402,15 @@ def serve(preloaded_store=None):
     from starlette.responses import JSONResponse
     import uvicorn
     cutoff = date.fromisoformat(ARGS.cutoff)
+    if JOINT_ACTIVE and preloaded_store is not None:
+        raise ValueError("joint entry forbids a preloaded Store")
     if (ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
     fixture = saved_consumer_fixture() if SAVED_FOCUS_ACTIVE else MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
     if SAVED_FOCUS_ACTIVE:
         fixture.validation_baseline = database_snapshot(fixture)
+    if JOINT_ACTIVE:
+        configure_joint(fixture)
     if PRIVATE_ROOT:
         from app import tpex_price_saved
         fixture.stack.enter_context(patch.dict(os.environ, {tpex_price_saved.ENABLE_ENV: "1", tpex_price_saved.ROOT_ENV: str(PRIVATE_ROOT),
@@ -389,7 +458,8 @@ def serve(preloaded_store=None):
     async def scope(request, call_next):
         capture_paths = {f"/api/stocks/TPEx/{symbol}/prices/capture" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)}
         save_paths = {f"/api/stocks/TPEx/{symbol}/prices/save" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)} if PRIVATE_ROOT else set()
-        post_paths = set() if ARGS.saved_source_only else capture_paths | save_paths | {"/api/focus/price-lots/capture"}
+        post_paths = ({f"/api/stocks/TPEx/{symbol}/institutional-windows/capture" for symbol in ("3105", "6488")} if JOINT_ACTIVE
+                      else set()) if ARGS.saved_source_only else capture_paths | save_paths | {"/api/focus/price-lots/capture"}
         # All private reads in the new mode pass through the consumer's shared budget.
         if SAVED_FOCUS_ACTIVE and request.url.path.endswith("/prices/saved"):
             return JSONResponse({"detail": "use the admitted saved-focus reader"}, status_code=405)
@@ -402,6 +472,15 @@ def serve(preloaded_store=None):
         if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > 8 * 1024 * 1024:
             return JSONResponse({"detail": "diagnostic response bound"}, status_code=413)
         return result
+    if JOINT_ACTIVE:
+        from app import saved_price_chips_entry as entry
+        @fixture.app.get("/__price_validation/chips/raw")
+        def raw_diagnostic(index: int):
+            try:
+                result = entry.held_raw(fixture.chips_store, index)
+            except (ValueError, TypeError, KeyError):
+                return JSONResponse({"detail": "held chips diagnostic invalid"}, status_code=422)
+            return result if result is not None else JSONResponse({"detail": "held chips capture absent"}, status_code=404)
     print(json.dumps({"mode": "owned actual router, memory catalogue", "live_source_opt_in": ARGS.live_source_opt_in,
                       "pid": os.getpid(), "host": "127.0.0.1", "port": ARGS.port, "initial_receipt": receipt(fixture)}, ensure_ascii=False), flush=True)
     try:

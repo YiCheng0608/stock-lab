@@ -502,6 +502,18 @@ Owned reader1／reader2及preview normal Ctrl+C各rawexit1，ROOT獨立runtime c
 
 整個historic DAY-RANGE worktree／branch與 `.range-ui`2555430B／232files／94dirs strict NO-RETRY retain；不掃Temp／HAR／profile／cache／history。功能通過與owned runtime清理通過不把以上受保護殘留稱已刪。普通20／21close、trend／strategy／time／PIT／execution及完整ROADMAP仍缺；既有通過證據不因換角色重跑。
 
+### M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1 共同入口的零落盤驗證入口
+
+只沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`、共用dependencies及guarded SQLite `:memory:`；Python3.12.14 `-B -X utf8`、pinned Node24.19.0、TypeScript5.9.3／esbuild0.25.12。Shell node20.19.4另列，不代pinned runtime；不install、建helper／fixture檔、startup mkdir、正式DB或複製環境。來源／quota由[§33](../SOURCE_REGISTRY.md#33-m1-saved-price-chips-integration-1006-1保存行情與法人窗口共同入口)管理，本節不另授權重跑。
+
+API／preview皆需 `--serve --saved-source-only --saved-price-chips-opt-in`；API另需 `--cutoff 2026-10-06 --private-root` 原task literal root，preview `--api-port 8799`／memory bundle。外部五組pins：capture `--policy-version/--policy-digest`、storage `--private-policy-version/--private-policy-digest`、saved consumer `--saved-focus-policy-version/--saved-focus-policy-digest`、chips `--chips-policy-version/--chips-policy-digest`、joint `--joint-policy-version/--joint-policy-digest`。Joint不允 `--live-source-opt-in`；僅此preview compile `VITE_SAVED_PRICE_CHIPS_INTEGRATION='m1-v1'`，write:false／noEmit／incremental:false／composite:false。
+
+Necessary final各rawexit0：Py6、Node42guard／9recovery／7AppSSR、full33src noEmit。首次Node TS narrowing exit1與首次Python synthetic cutoff fixture exit1修正後0，原exit保留；小型memory fixtures只驗invalid／provenance／same-generation兩成功recovery，不代actual missing-private-file UI。未跑full old SSR／suite／install／production build／diskcases。
+
+Actual SINGLE producer／NEW stores／finance seed0、trusted FIRST22；ROOT independently全22 body／原canonical receipt／times及金融raw0。19 SQLite完整schema／allvalues／cell typeof前後相等，guards0／product newdisk0／DBmut0。Private actual9producer＋3ROOT＝12snapshots／36logicalfiles；首ROOT Unicode assertion raw1計入quota、OBS2 corrected0／OBS3 post-stop0，原三檔bytes／SHA／mtimeNS不變。Exact命令、raw errors／request／版本封存receipt留原task。
+
+API50788／parent55084、preview28516／parent44304 normal Ctrl+C各rawexit1／stoppedtrue，DISTINCT ROOT cleanup `bb71a4` raw0核上述及esbuild37844 absent、8799／8800無listener。Local preview /__price_ui/receipt GET1為只讀memory metadata，無proxy/private I/O；api_get14／api_post3／rejected6非金融GET；held POST200 source0後同token502清兩來源，無APIrestart。ONE page正常closed `443dd850-d6ff-40c1-beae-9a3acd7246b9` raw0，fresh tabs[] `460238f7-04d5-4a2c-919c-a28c17e94432`。Chips graph隨退出釋放，private disk仍1791644B／3files／3dirs at-cap；actualmissing-file UI NOT RUN。Strict NO-RETRY及ENTIRE DAY-RANGE fence見來源§33，功能／清理分報，非global disk0或allrawreleased。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

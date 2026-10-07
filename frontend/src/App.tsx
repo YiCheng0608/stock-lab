@@ -78,7 +78,7 @@ import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview, validChips1006Identity, validChips1006Read } from './components/StockOverview'
 import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
-import { savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
+import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
@@ -1205,6 +1205,18 @@ function StocksPage() {
   </div>}</QueryState>
 }
 
+type JointValidation = { token: string; epoch: number; failure: string | null; price: boolean; chips: boolean }
+export function jointValidationTransition(state: JointValidation, token: string, epoch: number, source: 'price' | 'chips' | 'failure', reason = 'joint_source_read_failed'): JointValidation {
+  if (state.token !== token || source !== 'failure' && state.epoch !== epoch) return state
+  if (source === 'failure') return { token, epoch: state.epoch + 1, failure: reason, price: false, chips: false }
+  const next = { ...state, [source]: true }
+  return { ...next, failure: next.price && next.chips ? null : next.failure }
+}
+export function jointSavedContext(exchange: string, symbol: string, params: URLSearchParams): boolean {
+  return exchange === 'TPEx' && SAVED_FOCUS_SYMBOLS.includes(symbol) && params.get('as_of') === '2026-10-06' && savedFocusReturnPath(params) !== null
+}
+const JOINT_PRICE_CHIPS = import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION === 'm1-v1'
+
 function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1212,9 +1224,11 @@ function StockPage() {
   const lotFocusReturnPath = priceFocusReturnPath(searchParams)
   const savedFocusBack = savedFocusReturnPath(searchParams)
   const privateSavedOnly = searchParams.has('source_mode') || searchParams.get('from') === 'price-saved-focus'
+  const jointContextValid = jointSavedContext(exchange, symbol, searchParams)
+  const jointScope = JOINT_PRICE_CHIPS && jointContextValid && ['3105', '6488'].includes(symbol)
   const focusReturnPath = savedFocusBack ?? lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_PRICE_CHIPS && privateSavedOnly && !jointContextValid), ...(JOINT_PRICE_CHIPS ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
   const privateKey = `${exchange}:${symbol}:${asOf}${privateSavedOnly ? `:private_saved:${searchParams.toString()}` : ''}`
   const privateRoute = useRef({ key: privateKey, generation: 0 })
   if (privateRoute.current.key !== privateKey) privateRoute.current = { key: privateKey, generation: privateRoute.current.generation + 1 }
@@ -1224,30 +1238,53 @@ function StockPage() {
   const [privateFailure, setPrivateFailure] = useState<{ token: string; reason: string } | null>(null)
   const [privateRead, setPrivateRead] = useState<{ token: string; data: StockPriceSavedData } | null>(null)
   const privateToken = `${privateGeneration}:${privateKey}`
+  const jointValidation = useRef<JointValidation>({ token: privateToken, epoch: 0, failure: null, price: false, chips: false })
+  if (jointValidation.current.token !== privateToken) jointValidation.current = { token: privateToken, epoch: 0, failure: null, price: false, chips: false }
+  const [, setJointRevision] = useState(0)
+  const failJoint = (reason: string) => {
+    if (!jointScope) return
+    jointValidation.current = jointValidationTransition(jointValidation.current, privateToken, jointValidation.current.epoch, 'failure', reason)
+    setPrivateRead((value) => value?.token === privateToken ? null : value)
+    setJointRevision((value) => value + 1)
+  }
+  const validateJoint = (token: string, epoch: number, source: 'price' | 'chips') => {
+    if (!jointScope) return
+    jointValidation.current = jointValidationTransition(jointValidation.current, token, epoch, source)
+    setJointRevision((value) => value + 1)
+  }
+  useEffect(() => { if (jointScope && query.error) failJoint('window_read_request_failed') }, [query.error, privateToken, jointScope])
+  const currentChips = query.data?.overview?.institutional
+  const hasJointEvidence = Boolean(currentChips?.calendar?.status === 'available' || Object.values(currentChips?.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0))
+  const jointEvidenceInvalid = jointScope && currentChips != null && (!validChips1006Identity(currentChips, exchange, symbol, asOf) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf))
+  useEffect(() => { if (jointEvidenceInvalid) failJoint('chips_memory_evidence_invalid') }, [jointEvidenceInvalid, privateToken])
   const privateAction = async (save: boolean) => {
     const instrument = query.data?.instrument
     if (!instrument || !privatePriceSupported(instrument, asOf) || privatePending.current.has(privateToken)) return
     if (privateSavedOnly && (save || !savedFocusBack)) {
       setPrivateRead(null); setPrivateFailure({ token: privateToken, reason: 'price_saved_focus_context_invalid' }); return
     }
-    const token = privateToken, generation = privateGeneration, key = privateKey
+    const token = privateToken, generation = privateGeneration, key = privateKey, jointEpoch = jointValidation.current.epoch
     privatePending.current.add(token)
     setPrivateBusy(token)
     setPrivateFailure(null)
     setPrivateRead((value) => value?.token === token ? null : value)
     try {
       const result = await (privateSavedOnly ? getSavedFocusStockPrice : save ? saveStockPrice : getSavedStockPrice)(exchange, symbol, asOf)
-      if (privateRoute.current.key !== key || privateRoute.current.generation !== generation) return
-      if (privateSavedOnly ? validSavedFocusStock(result, instrument, asOf) : validStockPriceSavedRead(result, instrument, asOf)) setPrivateRead({ token, data: result })
+      if (privateRoute.current.key !== key || privateRoute.current.generation !== generation || jointScope && jointValidation.current.epoch !== jointEpoch) return
+      if (privateSavedOnly ? validSavedFocusStock(result, instrument, asOf) : validStockPriceSavedRead(result, instrument, asOf)) {
+        setPrivateRead({ token, data: result }); validateJoint(token, jointEpoch, 'price')
+      }
       else {
         setPrivateRead((value) => value?.token === token ? null : value)
         setPrivateFailure({ token, reason: result.status === 'unavailable' && Array.isArray(result.reasons)
           ? result.reasons[0] ?? 'price_saved_contract_invalid' : 'price_saved_contract_invalid' })
+        failJoint('price_saved_contract_invalid')
       }
     } catch {
       if (privateRoute.current.key === key && privateRoute.current.generation === generation) {
         setPrivateRead((value) => value?.token === token ? null : value)
         setPrivateFailure({ token, reason: 'price_private_request_failed' })
+        failJoint('price_private_request_failed')
       }
     } finally {
       privatePending.current.delete(token)
@@ -1259,7 +1296,7 @@ function StockPage() {
   const [capturingEvents, setCapturingEvents] = useState(false)
   const [eventRequestFailure, setEventRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const eventRequestKey = `${exchange}:${symbol}:${asOf}`
-  const windowRequestKey = `${exchange}:${symbol}:${asOf}`
+  const windowRequestKey = `${exchange}:${symbol}:${asOf}${jointScope ? `:joint:${searchParams.toString()}` : ''}`
   const currentWindowKey = useRef(windowRequestKey)
   currentWindowKey.current = windowRequestKey
   const windowRoute = useRef({ key: windowRequestKey, generation: 0 })
@@ -1269,29 +1306,53 @@ function StockPage() {
   const [windowBusyKey, setWindowBusyKey] = useState<string | null>(null)
   const [windowRequestFailure, setWindowRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const acquireWindows = async () => {
-    if (windowPending.current) return
+    if (windowPending.current || JOINT_PRICE_CHIPS && !jointScope) return
+    if (jointScope && !jointValidation.current.failure && (privateRead?.token !== privateToken || !query.data?.instrument || !validSavedFocusStock(privateRead.data, query.data.instrument, asOf))) return
     const requestKey = windowRequestKey
     const generation = windowRoute.current.generation
+    const jointToken = privateToken, jointEpoch = jointValidation.current.epoch
     windowPending.current = true
     setWindowBusyKey(windowToken)
     if (asOf !== '2026-10-06') setWindowRequestFailure(null)
     try {
+      if (jointScope && jointValidation.current.failure) {
+        const refreshed = await query.refetch()
+        if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation || jointValidation.current.epoch !== jointEpoch) return
+        const held = refreshed.data?.overview?.institutional
+        if (refreshed.isError || !held?.capture_state?.cache_present || !validChips1006Read(held, exchange, symbol, asOf)) {
+          failJoint('window_read_request_failed'); return
+        }
+        setWindowRequestFailure(null)
+        validateJoint(jointToken, jointEpoch, 'chips')
+        return
+      }
       const result = await captureInstitutionalWindows(exchange, symbol, asOf || undefined)
       if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation) return
       const hasNewEvidence = result.calendar?.status === 'available' || Object.values(result.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
       if (asOf === '2026-10-06' && (!validChips1006Identity(result, exchange, symbol, asOf)
         || (hasNewEvidence && !validChips1006Read(result, exchange, symbol, asOf)))) {
         setWindowRequestFailure({ key: windowToken, reason: 'chips_memory_evidence_invalid' })
+        failJoint('chips_memory_evidence_invalid')
         return
       }
-      if (result.status === 'unavailable' && !(asOf === '2026-10-06' && hasNewEvidence)) setWindowRequestFailure({ key: windowToken, reason: result.reasons[0] ?? 'window_capture_failed' })
+      if (result.status === 'unavailable' && !(asOf === '2026-10-06' && hasNewEvidence)) {
+        setWindowRequestFailure({ key: windowToken, reason: result.reasons[0] ?? 'window_capture_failed' })
+        failJoint(result.reasons[0] ?? 'window_capture_failed')
+        if (jointScope) return
+      }
       const refreshed = await query.refetch()
       if (asOf === '2026-10-06' && currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
-        if (refreshed.isError) setWindowRequestFailure({ key: windowToken, reason: 'window_read_request_failed' })
-        else if (hasNewEvidence) setWindowRequestFailure(null)
+        const currentRead = refreshed.data?.overview?.institutional
+        if (refreshed.isError || jointScope && (!currentRead || !validChips1006Read(currentRead, exchange, symbol, asOf))) {
+          setWindowRequestFailure({ key: windowToken, reason: 'window_read_request_failed' }); failJoint('window_read_request_failed')
+        } else if (hasNewEvidence) {
+          setWindowRequestFailure(null); validateJoint(jointToken, jointEpoch, 'chips')
+        }
       }
     } catch {
-      if (currentWindowKey.current === requestKey && windowRoute.current.generation === generation) setWindowRequestFailure({ key: windowToken, reason: 'window_capture_request_failed' })
+      if (currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
+        setWindowRequestFailure({ key: windowToken, reason: 'window_capture_request_failed' }); failJoint('window_capture_request_failed')
+      }
     } finally {
       windowPending.current = false
       setWindowBusyKey((key) => key === windowToken ? null : key)
@@ -1338,6 +1399,7 @@ function StockPage() {
     }
   }
   if (query.isLoading) return <Loading />
+  if (JOINT_PRICE_CHIPS && privateSavedOnly && !jointContextValid) return <div className="data-gap" role="alert">保存來源模式、日期或返回條件未通過核對，未讀取來源。</div>
   if (query.error && !(asOf === '2026-10-06' && query.data)) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
@@ -1346,7 +1408,8 @@ function StockPage() {
   const memoryKnown = !privateSavedOnly && (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
   const memoryRejected = priceMemory?.status === 'available' && !memoryKnown
   const priceSaved = privateRead?.token === privateToken ? privateRead.data : undefined
-  const savedKnown = privateFailure?.token !== privateToken && asOf === data.overview?.as_of && validStockPriceSavedRead(priceSaved, data.instrument, asOf) && (!privateSavedOnly || Boolean(savedFocusBack) && validSavedFocusStock(priceSaved, data.instrument, asOf))
+  const jointFailure = jointScope ? jointValidation.current.failure ?? (query.error ? 'window_read_request_failed' : jointEvidenceInvalid ? 'chips_memory_evidence_invalid' : null) : null
+  const savedKnown = !jointFailure && privateFailure?.token !== privateToken && asOf === data.overview?.as_of && validStockPriceSavedRead(priceSaved, data.instrument, asOf) && (!privateSavedOnly || Boolean(savedFocusBack) && validSavedFocusStock(priceSaved, data.instrument, asOf))
   const officialKnown = memoryKnown || savedKnown
   const officialBar = memoryKnown ? priceMemory.latest : savedKnown ? priceSaved.latest : null
   const independent = stockIndependentView(data)
@@ -1435,7 +1498,7 @@ function StockPage() {
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined} />}
+    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_PRICE_CHIPS ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
