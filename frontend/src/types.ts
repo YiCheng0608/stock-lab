@@ -526,9 +526,11 @@ export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
 }
 
 export type InstitutionalWindowReceipt = {
+  schema_version?: string; profile: string; http_status?: number; content_type?: string; content_encoding?: string
   source_id: string; source_version: string; requested_date: string; url: string; method: string
   body_sha256: string; receipt_sha256?: string; body_bytes: number; request_started_at: string; captured_at: string
-  policy_version: string; policy_digest: string; profile: string; historical_pit: string
+  policy_version: string; policy_digest: string; historical_pit: string
+  storage?: string; published_time?: string; first_available_time?: string; revision_time?: string; request_count?: number
   candidate_count?: number; adopted_count?: number; pre_calendar_row_count?: number; validation_scope?: string
 }
 
@@ -536,24 +538,27 @@ export type InstitutionalWindow = {
   horizon: number; status: string; values: Record<'foreign' | 'trust' | 'dealer', string> | null
   required_dates: string[]; valid_dates: string[]; missing_dates: string[]; invalid_dates: Array<{ date: string; reason: string }>
   from?: string; to?: string; reasons: string[]
-  daily_evidence?: Array<{ row: Omit<NonNullable<InstitutionalDailyData['row']>, 'exchange' | 'unit'>; provenance: InstitutionalWindowReceipt }>
+  daily_evidence?: Array<{ row: Omit<NonNullable<InstitutionalDailyData['row']>, 'exchange' | 'unit'> & { source_values?: Record<string, string> }; provenance: InstitutionalWindowReceipt }>
 }
 
 export type InstitutionalWindowScope = {
   exchange: string; symbols: string[]; supported_cutoffs: string[]; calendar_from: string; calendar_to: string
+  financial_dates?: string[]; selection?: string
 }
 
 export type InstitutionalWindowsData = {
+  schema_version?: string; exchange?: string; symbol?: string
   status: string; horizons: number[]; investors: string[]; values: null; reasons: string[]
   version?: string; as_of?: string | null; unit?: string; quantity_encoding?: string; historical_pit?: string
   supported_scope?: InstitutionalWindowScope
   windows?: Record<string, InstitutionalWindow>
   capture_state?: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; action: string; request_count: number }
-  calendar?: null | { version: string; status: string; reasons?: string[]; from?: string; to?: string; expected_dates?: string[]; valid_dates?: string[]; missing_dates?: string[]
+  calendar?: null | { schema_version?: string; version: string; status: string; reasons?: string[]; from?: string; to?: string; expected_dates?: string[]; valid_dates?: string[]; missing_dates?: string[]
+    rows?: Array<{ date: string; row_ordinal: number; source_values: Record<string, string>; body_sha256: string }>
     basis?: { weekday_rule: string; closed_notice: string; closed_dates: string[] }; evidence?: InstitutionalWindowReceipt[] }
   policy?: null | { version: string; digest: string; profile: string }; calculation_version?: string | null
   attribution?: null | { source_owner: string; license: string; license_url: string }
-  provenance?: null | { worker_version: string; verification?: string; captured_versions: InstitutionalWindowReceipt[] }
+  provenance?: null | { worker_version: string; worker_schema_version?: string; verification?: string; captured_versions: InstitutionalWindowReceipt[] }
   limitations?: string[]; published_time?: string; first_available_time?: string; revision_time?: string
 }
 

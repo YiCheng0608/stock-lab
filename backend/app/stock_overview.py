@@ -29,7 +29,7 @@ from worker.stock_day_evidence import _assert_binding, _checked_path, _identity,
 from .models import (ChipSnapshot, CorporateAction, Event, FundamentalSnapshot, IngestionRun,
                      Instrument, MarketBar, NewsItem, RawPayload, Signal, StrategyVersion, TechnicalFeature)
 from .institutional_daily import build_institutional_daily
-from .institutional_windows import build_institutional_windows
+from .institutional_windows_1006 import build_institutional_windows
 from .tpex_price import build_tpex_price
 from .official_events import build_official_events
 from .units import volume_exact_text
@@ -221,7 +221,7 @@ def _qualified_price(row: StockMarketRead | MarketBar, instrument: Instrument, e
             "provenance": evidence["provenance"]}
 
 
-def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None = None) -> dict:
+def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None = None, *, explicit_as_of: date | None = None) -> dict:
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
     rows, market_read = load_stock_market_reads(db, instrument.id, cutoff or date.min)
     duplicate_dates = {day for day, count in Counter(row.trading_date for row in rows).items() if count > 1}
@@ -282,15 +282,15 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
                            "status": "data_insufficient", "reasons": reasons})
     daily = build_institutional_daily(instrument.exchange, instrument.symbol, cutoff)
     return {
-        "version": OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
+        "version": "stock-overview/chips-1006-v1" if explicit_as_of == date(2026, 10, 6) else OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
-        "scope": "M1-W7: TPEx 3105/6488 5/20-session memory CSV windows at 2026-09-22, 2026-09-23, 2026-09-24, 2026-09-29, 2026-09-30, 2026-10-01 or 2026-10-02; retained traceable price, single-day and event evidence; other research conditions remain insufficient",
+        "scope": "M1-CHIPS-CUTOFF-1006-1: explicit TPEx 3105/6488 2026-10-06 5/20-session memory windows; observed 24-session calendar; no PIT or strategy conditions" if explicit_as_of == date(2026, 10, 6) else "M1-W7: TPEx 3105/6488 5/20-session memory CSV windows at 2026-09-22, 2026-09-23, 2026-09-24, 2026-09-29, 2026-09-30, 2026-10-01 or 2026-10-02; retained traceable price, single-day and event evidence; other research conditions remain insufficient",
         "price": {"status": "available" if latest else "unavailable", "basis": "original_api_ohlcv",
                    "window_limit": 120, "candidate_count": len(rows), "valid_count": len(qualified),
                    "from": qualified[0]["date"] if qualified else None, "to": qualified[-1]["date"] if qualified else None,
                    "market_read": market_read,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
-        "institutional": build_institutional_windows(instrument.exchange, instrument.symbol, cutoff),
+        "institutional": build_institutional_windows(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=explicit_as_of),
         "price_memory": build_tpex_price(instrument, cutoff),
         "institutional_daily": daily,
         "conditions": conditions,

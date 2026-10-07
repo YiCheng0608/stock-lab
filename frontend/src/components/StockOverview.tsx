@@ -1,4 +1,4 @@
-import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData } from '../types'
+import type { Instrument, InstitutionalDailyData, InstitutionalWindowReceipt, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData } from '../types'
 import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { privatePriceSupported, validStockPriceSavedRead } from '../stockPriceSavedRead'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
@@ -21,6 +21,8 @@ const REASONS: Record<string, string> = {
   window_capture_failed: '本次法人窗口載入失敗；已有嘗試不自動重試。',
   window_memory_evidence_invalid: '本次法人原件無法完整核對。',
   window_capture_request_failed: '法人窗口請求失敗；請核對伺服器狀態後讀取。',
+  window_read_request_failed: '本次法人窗口讀取失敗；可再次讀取已取得的同批原件。',
+  chips_memory_evidence_invalid: '本次法人窗口原件與版本未能通過核對。',
   institutional_window_expected_dates_missing: '窗口缺少所需交易日原件；缺值不作 0。',
   price_source_not_admitted: '這筆行情來源與用途尚待核對',
   price_ingestion_provenance_missing: '缺少合格的收集紀錄關聯',
@@ -140,7 +142,159 @@ export function formatWindowShares(value: unknown, horizon: 1 | 5 | 20 = 1): str
   return formatCanonicalShares(value, horizon)
 }
 
+export const CHIPS1006_POLICY_DIGEST = 'sha256:36c761a5f6e22afee86ad414769b88c06e97ae792141879a5660cf0856c180d5'
+const chipsDates = ['09-01', '09-02', '09-03', '09-04', '09-07', '09-08', '09-09', '09-10', '09-11', '09-14', '09-15', '09-16', '09-17', '09-18', '09-21', '09-22', '09-23', '09-24', '09-29', '09-30', '10-01', '10-02', '10-05', '10-06'].map((day) => `2026-${day}`)
+const chipsPolicy = 'm1-chips-cutoff-tpex-2026-10-06.1'
+const chipsCalendar = 'tpex-2026-09-01_2026-10-06-weekdays-11503027221/chips-v1'
+export const CHIPS1006_DAILY_FIELDS = ['資料日期', '代號', '名稱',
+  '外資及陸資不含外資自營商買進股數', '外資及陸資不含外資自營商賣出股數', '外資及陸資不含外資自營商買賣超股數',
+  '外資自營商買進股數', '外資自營商賣出股數', '外資自營商買賣超股數', '外資及陸資買進股數', '外資及陸資賣出股數', '外資及陸資買賣超股數',
+  '投信買進股數', '投信賣出股數', '投信買賣超股數', '自營商自行買賣買進股數', '自營商自行買賣賣出股數', '自營商自行買賣買賣超股數',
+  '自營商避險買進股數', '自營商避險賣出股數', '自營商避險買賣超股數', '自營商買進股數', '自營商賣出股數', '自營商買賣超股數', '三大法人買賣超股數合計']
+const chipsIndexFields = ['資料日期', '開市', '最高價', '最低價', '收市', '漲跌']
+const chipsOriginalReceiptFields: Array<keyof InstitutionalWindowReceipt> = ['schema_version', 'source_id', 'source_version', 'requested_date', 'url', 'method', 'body_sha256', 'body_bytes', 'request_started_at', 'captured_at', 'policy_version', 'policy_digest', 'profile', 'http_status', 'content_type', 'content_encoding', 'storage', 'published_time', 'first_available_time', 'revision_time', 'historical_pit', 'request_count']
+const sameOriginalReceipt = (expanded: InstitutionalWindowReceipt, original?: InstitutionalWindowReceipt) => !!original && chipsOriginalReceiptFields.every((field) => expanded[field] === original[field])
+const sameStrings = (value: unknown, expected: string[]) => Array.isArray(value) && value.length === expected.length && value.every((item, index) => item === expected[index])
+const exactKeys = (value: unknown, expected: string[]) => value !== null && typeof value === 'object' && !Array.isArray(value)
+  && sameStrings(Object.keys(value).sort(), [...expected].sort())
+
+function chipsFinancialOriginals(values: Record<string, string> | undefined) {
+  if (!exactKeys(values, CHIPS1006_DAILY_FIELDS) || !values) return null
+  const groups: bigint[][] = []
+  for (let offset = 3; offset < 24; offset += 3) {
+    const group: bigint[] = []
+    for (let index = 0; index < 3; index++) {
+      const text = values[CHIPS1006_DAILY_FIELDS[offset + index]]
+      if (typeof text !== 'string' || text.length > 20 || !/^(?:0|-?[1-9][0-9]*)$/.test(text)) return null
+      const quantity = BigInt(text)
+      if (quantity > 9223372036854775807n || quantity < -9223372036854775807n || (index < 2 && quantity < 0n)) return null
+      group.push(quantity)
+    }
+    if (group[0] - group[1] !== group[2]) return null
+    groups.push(group)
+  }
+  if (![0, 1, 2].every((index) => groups[2][index] === groups[0][index] + groups[1][index]
+    && groups[6][index] === groups[4][index] + groups[5][index])) return null
+  const total = values[CHIPS1006_DAILY_FIELDS[24]]
+  if (typeof total !== 'string' || total.length > 20 || !/^(?:0|-?[1-9][0-9]*)$/.test(total)
+    || BigInt(total) > 9223372036854775807n || BigInt(total) < -9223372036854775807n
+    || BigInt(total) !== groups[0][2] + groups[3][2] + groups[6][2]) return null
+  return { foreign: groups[0], trust: groups[3], dealer: groups[6], total }
+}
+
+export function validChips1006Identity(data: InstitutionalWindowsData, exchange?: string, symbol?: string, cutoff?: string): boolean {
+  try {
+    return data.schema_version === 'institutional-windows-read/chips-1006-v1' && data.version === 'institutional-windows/chips-1006-v1'
+      && data.exchange === 'TPEx' && ['3105', '6488'].includes(data.symbol ?? '') && data.as_of === '2026-10-06'
+      && (exchange === undefined || exchange === data.exchange) && (symbol === undefined || symbol === data.symbol)
+      && (cutoff === undefined || cutoff === data.as_of) && data.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string'
+      && data.historical_pit === 'unsupported' && sameStrings(data.investors, ['foreign', 'trust', 'dealer'])
+      && sameStrings(data.horizons?.map(String), ['5', '20']) && data.supported_scope?.exchange === 'TPEx'
+      && sameStrings(data.supported_scope.symbols, ['3105', '6488']) && sameStrings(data.supported_scope.supported_cutoffs, ['2026-10-06'])
+      && data.supported_scope.calendar_from === '2026-09-01' && data.supported_scope.calendar_to === '2026-10-06'
+      && sameStrings(data.supported_scope.financial_dates, chipsDates.slice(-20)) && data.supported_scope.selection === 'explicit_requested_as_of_only'
+  } catch { return false }
+}
+
+export function validChips1006Read(data: InstitutionalWindowsData, exchange?: string, symbol?: string, cutoff?: string): boolean {
+  try {
+    if (!validChips1006Identity(data, exchange, symbol, cutoff) || data.policy?.version !== chipsPolicy || data.policy.digest !== CHIPS1006_POLICY_DIGEST
+      || data.policy.profile !== 'free_public_local' || data.calculation_version !== 'independent-net-sum/expected-session-inclusive-v1'
+      || data.provenance?.worker_version !== 'tpex-institutional-window/chips-1006-v1'
+      || data.provenance.worker_schema_version !== 'tpex-institutional-window-summary/chips-1006-v1'
+      || data.provenance.verification !== 'local_evidence_consistent' || data.calendar?.schema_version !== 'tpex-observed-calendar/chips-1006-v1'
+      || data.calendar.version !== chipsCalendar || data.calendar.status !== 'available'
+      || data.calendar.from !== '2026-09-01' || data.calendar.to !== '2026-10-06'
+      || !sameStrings(data.calendar.expected_dates, chipsDates) || !sameStrings(data.calendar.valid_dates, chipsDates)
+      || !sameStrings(data.calendar.missing_dates, []) || data.published_time !== 'unknown'
+      || data.first_available_time !== 'unknown' || data.revision_time !== 'unknown') return false
+    const receiptValid = (receipt: NonNullable<InstitutionalWindowsData['provenance']>['captured_versions'][number], daily: boolean, requested: string, checked: boolean) => {
+      const base = daily ? 'https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data&d=' : 'https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date='
+      const parameter = daily ? `115/${requested.slice(5).replace('-', '/')}` : requested.replaceAll('-', '/')
+      const type = receipt.content_type?.toLowerCase().split(';').map((part) => part.trim()) ?? []
+      return receipt.schema_version === 'tpex-institutional-memory-capture/chips-1006-v1'
+        && receipt.source_id === (daily ? 'tpex_government_institutional_csv' : 'tpex_government_index_csv')
+        && receipt.source_version === (daily ? 'dataset-11856-dated-csv-observed-2026-10-07/chips-v1' : 'dataset-11391-month-csv-observed-2026-10-07/chips-v1')
+        && receipt.requested_date === requested && receipt.url === base + encodeURIComponent(parameter) && receipt.method === 'GET'
+        && /^[0-9a-f]{64}$/.test(receipt.body_sha256) && (!checked || /^sha256:[0-9a-f]{64}$/.test(receipt.receipt_sha256 ?? ''))
+        && Number.isInteger(receipt.body_bytes) && receipt.body_bytes > 0 && receipt.body_bytes <= (daily ? 2097152 : 1048576)
+        && receipt.policy_version === chipsPolicy && receipt.policy_digest === CHIPS1006_POLICY_DIGEST && receipt.profile === 'free_public_local'
+        && receipt.historical_pit === 'unsupported' && Number.isInteger(receipt.http_status) && receipt.http_status! >= 200 && receipt.http_status! < 300
+        && receipt.storage === 'process_memory' && receipt.request_count === 1 && receipt.published_time === 'unknown'
+        && receipt.first_available_time === 'unknown' && receipt.revision_time === 'unknown'
+        && ['application/csv', 'text/csv'].includes(type[0]) && type.slice(1).every((part) => ['charset=utf-8', 'charset="utf-8"'].includes(part))
+        && ['', 'identity'].includes(receipt.content_encoding?.toLowerCase().trim() ?? 'invalid')
+        && [receipt.request_started_at, receipt.captured_at].every((instant) => /(?:Z|\+00:00)$/.test(instant) && Number.isFinite(Date.parse(instant)))
+        && Date.parse(receipt.request_started_at) <= Date.parse(receipt.captured_at)
+    }
+    const months = ['2026-09-01', '2026-10-01']
+    if (!Array.isArray(data.calendar.evidence) || data.calendar.evidence.length !== 2
+      || !data.calendar.evidence.every((receipt, index) => receiptValid(receipt, false, months[index], true)
+        && receipt.validation_scope === 'all_returned_month_rows' && receipt.candidate_count === [20, 4][index]
+        && receipt.adopted_count === [20, 4][index] && receipt.pre_calendar_row_count === 0)) return false
+    const calendarRows = data.calendar.rows
+    if (!Array.isArray(calendarRows) || calendarRows.length !== 24 || !calendarRows.every((row, index) => {
+      const month = row.date?.slice(0, 7) === '2026-09' ? 0 : 1
+      if (row.date !== chipsDates[index] || !exactKeys(row.source_values, chipsIndexFields)
+        || !Object.values(row.source_values).every((value) => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 64)
+        || row.source_values['資料日期'] !== row.date.replaceAll('-', '') || row.body_sha256 !== data.calendar!.evidence![month].body_sha256
+        || !Number.isInteger(row.row_ordinal) || row.row_ordinal <= 0 || row.row_ordinal > [20, 4][month]) return false
+      if (!chipsIndexFields.slice(1).every((key) => /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(row.source_values[key]))) return false
+      const [open, high, low, close, change] = chipsIndexFields.slice(1).map((key) => Number(row.source_values[key]))
+      return [open, high, low, close, change].every(Number.isFinite) && [open, high, low, close].every((value) => value > 0)
+        && low <= Math.min(open, close) && Math.max(open, close) <= high
+    }) || new Set(calendarRows.map((row) => `${row.body_sha256}:${row.row_ordinal}`)).size !== 24) return false
+    const captured = data.provenance.captured_versions
+    const requested = [...months, ...chipsDates.slice(-20)]
+    if (!Array.isArray(captured) || captured.length < 2 || captured.length > 22
+      || new Set(captured.map((receipt) => `${receipt.source_id}:${receipt.requested_date}`)).size !== captured.length
+      || !captured.every((receipt, index) => index < 2 ? receiptValid(receipt, false, months[index], false)
+        : chipsDates.slice(-20).includes(receipt.requested_date) && receiptValid(receipt, true, receipt.requested_date, false)
+          && (index === 2 || receipt.requested_date > captured[index - 1].requested_date))) return false
+    if (!data.calendar.evidence.every((receipt, index) => sameOriginalReceipt(receipt, captured[index]))) return false
+    const adoptedRows = new Map<string, string>()
+    for (const horizon of [5, 20] as const) {
+      const window = data.windows?.[String(horizon)], expected = chipsDates.slice(-horizon)
+      if (!window || window.horizon !== horizon || !sameStrings(window.required_dates, expected)) return false
+      const known = expected.filter((day) => window.valid_dates?.includes(day)), missing = expected.filter((day) => !known.includes(day))
+      if (!sameStrings(window.valid_dates, known) || !sameStrings(window.missing_dates, missing)
+        || !Array.isArray(window.invalid_dates) || new Set(window.invalid_dates.map((item) => item.date)).size !== window.invalid_dates.length
+        || !window.invalid_dates.every((item) => missing.includes(item.date) && typeof item.reason === 'string' && item.reason.length > 0)
+        || window.from !== expected[0] || window.to !== '2026-10-06'
+        || !Array.isArray(window.daily_evidence) || window.daily_evidence.length !== known.length) return false
+      if (window.status === 'available') {
+        if (missing.length || window.invalid_dates.length || !window.values
+          || !(['foreign', 'trust', 'dealer'] as const).every((key) => formatWindowShares(window.values![key], horizon) !== null)) return false
+      } else if (window.status !== 'unavailable' || window.values !== null || !missing.length) return false
+      const sums = { foreign: 0n, trust: 0n, dealer: 0n }
+      if (!window.daily_evidence.every(({ row, provenance }, index) => {
+        const original = chipsFinancialOriginals(row.source_values)
+        if (!original || !exactKeys(row.investors, ['foreign', 'trust', 'dealer']) || row.total_net !== original.total) return false
+        for (const [key, offset, label] of [['foreign', 3, '外資及陸資（不含外資自營商）'], ['trust', 12, '投信'], ['dealer', 21, '自營商']] as const) {
+          const investor = row.investors[key]
+          if (investor.label !== label || investor.buy !== String(original[key][0]) || investor.sell !== String(original[key][1]) || investor.net !== String(original[key][2])
+            || !exactKeys(investor.source_fields, ['buy', 'sell', 'net']) || investor.source_fields.buy !== CHIPS1006_DAILY_FIELDS[offset]
+            || investor.source_fields.sell !== CHIPS1006_DAILY_FIELDS[offset + 1] || investor.source_fields.net !== CHIPS1006_DAILY_FIELDS[offset + 2]) return false
+          sums[key] += original[key][2]
+        }
+        const adopted = JSON.stringify([row.row_ordinal, ...CHIPS1006_DAILY_FIELDS.map((field) => row.source_values![field]), provenance.receipt_sha256, provenance.body_sha256])
+        if (adoptedRows.has(row.date) && adoptedRows.get(row.date) !== adopted) return false
+        adoptedRows.set(row.date, adopted)
+        return row.symbol === data.symbol && row.date === known[index]
+        && row.source_date === '115' + known[index].slice(5).replace('-', '') && Number.isInteger(row.row_ordinal) && row.row_ordinal > 0
+        && typeof row.company_name === 'string' && row.company_name.trim().length > 0 && receiptValid(provenance, true, known[index], true)
+        && requested.includes(known[index]) && sameOriginalReceipt(provenance, captured.find((item) => item.source_id === 'tpex_government_institutional_csv' && item.requested_date === known[index]))
+        && row.source_values && Object.keys(row.source_values).length === 25 && Object.values(row.source_values).every((value) => typeof value === 'string')
+        && row.source_values['資料日期'] === row.source_date && row.source_values['代號'] === data.symbol && row.source_values['名稱'] === row.company_name
+      })) return false
+      if (window.status === 'available' && !(['foreign', 'trust', 'dealer'] as const).every((key) => window.values![key] === String(sums[key]))) return false
+    }
+    return true
+  } catch { return false }
+}
+
 function knownWindowLots(data: InstitutionalWindowsData, horizon: 5 | 20): string[] | null {
+  if ((data.as_of === '2026-10-06' || data.version?.includes('chips-1006')) && !validChips1006Read(data)) return null
   const window = data.windows?.[String(horizon)]
   if (!window || window.horizon !== horizon || !data.horizons.includes(horizon)
     || data.unit !== 'shares' || data.quantity_encoding !== 'canonical_integer_string'
@@ -154,9 +308,19 @@ function knownWindowLots(data: InstitutionalWindowsData, horizon: 5 | 20): strin
   return values.every((value) => value !== null) ? values as string[] : null
 }
 
-export function InstitutionalWindows({ data, onCapture, busy = false, requestFailure }: {
+export function InstitutionalWindows({ data, onCapture, busy = false, requestFailure, expectedExchange, expectedSymbol, expectedCutoff }: {
   data: InstitutionalWindowsData; onCapture?: () => void; busy?: boolean; requestFailure?: string
+  expectedExchange?: string; expectedSymbol?: string; expectedCutoff?: string
 }) {
+  const claimsNew = data.as_of === '2026-10-06' || data.version?.includes('chips-1006') || data.schema_version?.includes('chips-1006')
+  const hasNewEvidence = data.calendar?.status === 'available' || Object.values(data.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
+  if (claimsNew && (!validChips1006Identity(data, expectedExchange, expectedSymbol, expectedCutoff)
+    || (hasNewEvidence && !validChips1006Read(data, expectedExchange, expectedSymbol, expectedCutoff)))) {
+    return <section className="panel overview-institutional-windows"><h3>外資／投信／自營商</h3><div className="data-gap">資料不足：法人窗口來源、版本或截止未能通過核對。</div></section>
+  }
+  if (claimsNew && requestFailure) return <section className="panel overview-institutional-windows"><h3>外資／投信／自營商</h3>
+    {data.capture_state?.can_capture && onCapture && <button type="button" className="secondary-button" disabled={busy || data.capture_state.busy} onClick={onCapture}>{busy ? '正在載入法人窗口…' : '讀取本次法人窗口'}</button>}
+    <div className="data-gap" role="alert">資料不足：本次法人窗口讀取未能通過核對。{overviewReason(requestFailure)}</div></section>
   const state = data.capture_state
   const unitKnown = data.unit === 'shares' && data.quantity_encoding === 'canonical_integer_string'
   const cutoffSupported = typeof data.as_of === 'string' && data.supported_scope?.supported_cutoffs?.includes(data.as_of) === true
@@ -183,8 +347,9 @@ export function InstitutionalWindows({ data, onCapture, busy = false, requestFai
         <div className="overview-provenance">來源政策版本 {data.policy?.version ?? '未核對'} · 雜湊 {data.policy?.digest ?? '未核對'}</div>
         <div>交易日基準 {data.calendar?.version ?? '未核對'}；所需 {data.calendar?.expected_dates?.length ?? 0}／已驗 {data.calendar?.valid_dates?.length ?? 0} 日。只支持 {formatResearchDate(data.supported_scope?.calendar_from ?? null)} — {formatResearchDate(data.supported_scope?.calendar_to ?? null)}。</div>
         {data.calendar?.basis && <p>週一至週五：<a href={data.calendar.basis.weekday_rule} target="_blank" rel="noreferrer">官方交易時間規則</a>；明示休市日 {data.calendar.basis.closed_dates.join('、')}：<a href={data.calendar.basis.closed_notice} target="_blank" rel="noreferrer">官方休市公告</a>。其餘預期日期均以唯一指數原件核對，不以缺列推定休市。</p>}
-        {(data.calendar?.evidence ?? []).map((receipt) => <div className="overview-provenance" key={receipt.requested_date}>日曆原件 {receipt.requested_date} · <a href={receipt.url} target="_blank" rel="noreferrer">來源 CSV</a> · {receipt.source_version} · SHA-256 {receipt.body_sha256} · UTC 取得 {receipt.captured_at}{receipt.validation_scope === 'all_returned_month_rows' && <span> · 完整月原件已驗 {receipt.candidate_count} 列／本範圍採用 {receipt.adopted_count} 列／界線前已驗但未採用 {receipt.pre_calendar_row_count} 列；不推論完整月交易日曆。</span>}</div>)}
-        {evidence.map(({ row, provenance }) => <details key={row.date}><summary>{row.date} · {row.company_name}（{row.symbol}） · 原件列序 {row.row_ordinal}</summary><div className="table-wrap"><table><caption>每日來源稽核原值（{unitKnown ? '股' : '單位待核實'}）</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>{(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{unitKnown ? formatCanonicalShares(row.investors[key].buy, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatCanonicalShares(row.investors[key].sell, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatWindowShares(row.investors[key].net) ?? '待核對' : '單位待核實'}</td></tr>)}</tbody></table></div><div className="overview-provenance">原始資料日 {row.source_date} · <a href={provenance.url} target="_blank" rel="noreferrer">來源 CSV</a> · {provenance.source_version} · SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256} · UTC 取得 {provenance.captured_at}</div></details>)}
+        {claimsNew && data.calendar?.status === 'available' && <><p>完整已觀測交易日曆：2026-09-01 — 2026-10-06。9月20列，10月截至10/6為4列；全部24列已驗並採用。</p><div className="table-wrap"><table><caption>24個已觀測交易日的完整6欄指數原字串</caption><thead><tr><th>交易日／原件列序</th>{chipsIndexFields.map((field) => <th key={field}>{field}</th>)}<th>原件SHA-256</th></tr></thead><tbody>{data.calendar.rows?.map((row) => <tr key={row.date}><th>{row.date}／{row.row_ordinal}</th>{chipsIndexFields.map((field) => <td key={field}>{row.source_values[field]}</td>)}<td>{row.body_sha256}</td></tr>)}</tbody></table></div></>}
+        {(data.calendar?.evidence ?? []).map((receipt) => <div className="overview-provenance" key={receipt.requested_date}>日曆原件 {receipt.requested_date} · <a href={receipt.url} target="_blank" rel="noreferrer">來源 CSV</a> · {receipt.source_version} · SHA-256 {receipt.body_sha256} · UTC 取得 {receipt.captured_at}{receipt.validation_scope === 'all_returned_month_rows' && <span> · {claimsNew ? '完整返回原件' : '完整月原件'}已驗 {receipt.candidate_count} 列／本範圍採用 {receipt.adopted_count} 列{claimsNew ? '；只證此已觀測有界交易日曆。' : <>／界線前已驗但未採用 {receipt.pre_calendar_row_count} 列；不推論完整月交易日曆。</>}</span>}</div>)}
+        {evidence.map(({ row, provenance }) => <details key={row.date}><summary>{row.date} · {row.company_name}（{row.symbol}） · 原件列序 {row.row_ordinal}</summary><div className="table-wrap"><table><caption>每日來源稽核原值（{unitKnown ? '股' : '單位待核實'}）</caption><thead><tr><th>法人</th><th>買進</th><th>賣出</th><th>淨買賣超</th></tr></thead><tbody>{(['foreign', 'trust', 'dealer'] as const).map((key) => <tr key={key}><th>{row.investors[key].label}</th><td>{unitKnown ? formatCanonicalShares(row.investors[key].buy, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatCanonicalShares(row.investors[key].sell, 1, true) ?? '待核對' : '單位待核實'}</td><td>{unitKnown ? formatWindowShares(row.investors[key].net) ?? '待核對' : '單位待核實'}</td></tr>)}</tbody></table></div>{claimsNew && row.source_values && <div className="table-wrap"><table><caption>此日完整25欄官方原字串</caption><thead><tr><th>來源欄位</th><th>原字串</th></tr></thead><tbody>{Object.entries(row.source_values).map(([field, value]) => <tr key={field}><th>{field}</th><td>{value}</td></tr>)}</tbody></table></div>}<div className="overview-provenance">原始資料日 {row.source_date} · <a href={provenance.url} target="_blank" rel="noreferrer">來源 CSV</a> · {provenance.source_version} · SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256} · UTC 取得 {provenance.captured_at}</div></details>)}
         <p>官方統計按當日原始成交，非錯帳／更正帳號調整後資料；下載版本是否修訂未知。本次原件 SHA-256 識別取得版本。</p>
       </details>
     </>}
@@ -317,7 +482,7 @@ export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice
         <Reasons reasons={price.reasons} />
         {price.rejected.length > 0 && <details className="technical-details"><summary>未採用 {price.rejected.length} 筆行情的日期與原因</summary>{price.rejected.map((row, index) => <div key={`${row.date}-${index}`}>{formatResearchDate(row.date)}：{overviewReason(row.reason)}（{row.reason}）</div>)}</details>}
       </section>}
-      <InstitutionalWindows data={data.institutional} onCapture={onCaptureWindows} busy={capturingWindows} requestFailure={windowRequestFailure} />
+      <InstitutionalWindows data={data.institutional} expectedExchange={instrument?.exchange} expectedSymbol={instrument?.symbol} expectedCutoff={explicitCutoff ?? data.as_of ?? undefined} onCapture={onCaptureWindows} busy={capturingWindows} requestFailure={windowRequestFailure} />
       <InstitutionalDaily data={data.institutional_daily} windowsPresent={Boolean(data.institutional.version)} />
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>
       <OfficialEvents data={data.events} onCapture={onCaptureEvents} busy={capturingEvents} requestFailure={eventRequestFailure} />

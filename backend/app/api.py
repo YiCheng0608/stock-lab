@@ -76,7 +76,7 @@ from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price, supported_symbols
 from .tpex_price_saved import private_price
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
-from .institutional_windows import capture_institutional_windows
+from .institutional_windows_1006 import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
 from .stock_signal_reads import load_stock_signal_reads
 from .stock_independent_reads import load_stock_chip_reads, load_stock_feature_reads
@@ -1619,7 +1619,7 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
     instrument = payload["instrument"]
     instrument_row = db.get(Instrument, instrument["id"])
     payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff, stock_research_reads=True) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
-    payload["overview"] = build_stock_overview(db, instrument_row, cutoff)
+    payload["overview"] = build_stock_overview(db, instrument_row, cutoff, explicit_as_of=as_of)
     if payload["decision_summary"]:
         payload["product_time"] = payload["decision_summary"].get("product_time")
         payload["response_generated_at"] = payload["decision_summary"].get("response_generated_at")
@@ -1681,7 +1681,7 @@ def stock_overview(exchange: str, symbol: str, db: Session = Depends(get_db), as
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
-    return build_stock_overview(db, instrument, as_of)
+    return build_stock_overview(db, instrument, as_of, explicit_as_of=as_of)
 
 
 @router.post("/stocks/{exchange}/{symbol}/institutional-windows/capture")
@@ -1691,7 +1691,7 @@ def stock_institutional_windows_capture(exchange: str, symbol: str, db: Session 
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
-    return capture_institutional_windows(instrument.exchange, instrument.symbol, cutoff)
+    return capture_institutional_windows(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=as_of)
 
 
 @router.post("/stocks/{exchange}/{symbol}/prices/capture")

@@ -2,6 +2,8 @@
 
 更新：2026-10-07。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約；原個股頁 review 範圍見 §5，M1-P1 總覽見 §9，M1-P2b 單日法人見 §10，M1-P3b selected 官方事件見 §11，待做籌碼見 §8；成交量精確呈現見 §14，M3-P6c 個股行情讀回隔離的核定契約與有限接受範圍見 §15。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
+現行新增3105／6488 explicit10/06真5／20日法人窗口、完整24日曆、具名可信操作與失敗讀取清值見[§36](#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)；W8依§24原cutoff／pins保留，不自動提升default。
+
 ## 1. 使用者工作與資訊順序
 
 使用者先確認標的、實際資料區間與價格口徑，再依序讀取行動摘要、日 K／成交量／MA20／MA60、族群、法人籌碼、官方事件／新聞、策略條件，以及 coverage／來源。頁面允許零行動、零新聞、缺籌碼或均線不足；不得為填滿畫面造資料。它不是 AI 選股、下單或完整交易計畫。
@@ -1185,3 +1187,35 @@ Normal停止owned reader後，同一token實際重讀經proxy502失敗，`price_
 本B1 operation+1／necessary private-save及跨程序dependency+1／reliability0／stall0。Source13已root接受，checks／文件範圍／配額及三檔NO-RETRY殘留見[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)；DOC review／freeze／qualified index／exact commit／另准master merge仍待。
 
 Actual missing-file native UI未跑，完整性／schema／部分bundle拒用有synthetic證據；actual failed reread則是proxy502。產品磁碟raw未刪，memory raw已隨程序停止釋放；不把清理拒絕稱成功。未驗full suite／production build／其他平台路徑、跨日自動累積、全市場／PIT、20／21歷史close／complete calendar／strategy time execution或完整M1／M2／M3。
+
+## 36. M1-CHIPS-CUTOFF-1006-1：同截止法人窗口與完整日曆
+
+**3105穩懋／6488環球晶、explicit10/06的真5／20交易日法人窗口、actual API及可信desktop／窄版已有限接受。** 總覽 `stock-overview/chips-1006-v1`、法人 `institutional-windows/chips-1006-v1`／read `institutional-windows-read/chips-1006-v1`。Exact來源／policy pins、完整24日曆與唯一12 canonical net由[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)管理；§24 W8保持原10/02截止／版本，其他區塊未借法人grant取得准入。
+
+### 36.1 顯式截止、同批讀取與失敗清值
+
+沿 `POST /stocks/{exchange}/{symbol}/institutional-windows/capture?as_of=2026-10-06`；detail／overview帶同explicit日期。只有10/06選新獨立Store及pins，省略日期／resolved default／舊cutoff仍走W8；不自動把default提升至10/06。最初「載入5／20日法人窗口」合法明示BUTTON取2月＋20daily一次，後續「讀取本次法人窗口」／切兩股／普通GET重驗held22，source0；failed attempt不另取得或重啟。
+
+畫面先核expected exchange／symbol／explicit cutoff、schema／worker／policy／body／原canonical receipt、完整24calendar與兩窗required dates、原25欄／金融關係／BigInt sum，再顯示張值與來源。5日9/30～10/6、20日9/7～10/6；合法0保留、missing／invalid不補0、不縮窗或fallback。日常張值使用[§10.3](UI_COPY_SPEC.md#103-張零股)穩定公式，最多三位小數去尾零；外資簡稱仍保留「不含外資自營商」。
+
+Outer「查看法人窗口的每日數值、交易日與來源版本」列完整24日六欄日曆，與20法人daily分開；閉日9/25、9/28明示依官方公告。每日日子表提供全25原字串、row ordinal、source／policy／calendar／calculation版本、body／receipt SHA及UTC。觀測非publication／revision／first availability，PIT未支援，不推論trend／研究條件成立。
+
+同token讀取network失敗或回應核對失敗時，立即隱藏net數值、窗口表及verified raw／details，只留可讀原因與同批讀取button；不能因React query保留舊cache而繼續顯示舊數值。返回有效10/06且成功核對後才能恢復；source重試權不由讀button取得。
+
+### 36.2 具名actual API與可信native
+
+| 已接受操作 | 範圍與證據 |
+| --- | --- |
+| NEW first load及held讀取 | Trusted BUTTON前空新／W8 Stores、finance seed0、source0；唯一first load22 fresh。Actual capture POST response200三次＝firstload1＋heldreads2，source始終22；另有最後502一次。 |
+| 兩股desktop與窄版 | 1277×924／scrollWidth1262及390×844／375，全12張值對root獨立真值；3105→6488→3105恢復正確。 |
+| 日曆與原列追溯 | 兩股outer實際展開完整24日六欄；各股實際展開9/7、10/5、10/6三daily的25原字串。兩股20daily×25 DOM全部對raw相等，不稱40daily均曾native展開。 |
+| 截止隔離與恢復 | 可信鍵盤input／change／FORM submit套10/07及舊10/02，新數值清除；恢復10/06正常且held讀無新增source。只驗新值隔離，不把空W8 Store說成舊W8來源失效。 |
+| 同token失敗讀取 | 正常停止API後，native讀button實際responseStatus502；nets／table／details／verified raw均0，保留button與失敗原因，無producer restart。 |
+
+同一可見page共54events／53 trustedtrue／1 untrusted CLI fill失敗。首次CLI點到HTML、source0；滾至actual BUTTON才取得唯一22。CSS未命中、runtime connectionclosed讀失敗與無效fill ACK不算成功；沿same page讀回，沒有Orca重啟／capture retry；日期案例以後續真鍵盤事件通過。CLI填值只屬setup，不能冒稱可信輸入。
+
+### 36.3 完成、清理與未驗
+
+Root接受operation+1／必要來源用途＋觀測日曆＋daily dependency+1／reliability0／stall0；唯一owned page正常closed／tabs[]、API／preview／compiler及listeners已核不存在，raw只memory已釋放、diskartifact0。Normal Ctrl+C rawexit1與cleanup proof exit0分報，收據見[開發入口](development-baseline/README.md#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口)。
+
+缺／壞來源按窗失效、污染／busy／pins等邊界只以必要synthetic驗證；actual missing-source native未跑。未驗全市場／TWSE、普通股20／21close、完整strategy／time／execution、PIT、trend／Signal／Plan、法人磁碟保存／跨程序、full suite／production build或完整M1／M2／M3。舊private三檔及整個DAY-RANGE NO-RETRY保持；既有通過證據不因新角色重跑。

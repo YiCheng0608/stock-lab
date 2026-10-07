@@ -72,7 +72,7 @@ import { StockPriceChart } from './StockPriceChart'
 import { isValidBar } from './stockChart'
 import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
 import { stockIndependentView } from './stockIndependentReads'
-import { StockOverview } from './components/StockOverview'
+import { StockOverview, validChips1006Identity, validChips1006Read } from './components/StockOverview'
 import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
@@ -1165,25 +1165,39 @@ function StockPage() {
   const windowRequestKey = `${exchange}:${symbol}:${asOf}`
   const currentWindowKey = useRef(windowRequestKey)
   currentWindowKey.current = windowRequestKey
+  const windowRoute = useRef({ key: windowRequestKey, generation: 0 })
+  if (windowRoute.current.key !== windowRequestKey) windowRoute.current = { key: windowRequestKey, generation: windowRoute.current.generation + 1 }
+  const windowToken = `${windowRoute.current.generation}:${windowRequestKey}`
   const windowPending = useRef(false)
   const [windowBusyKey, setWindowBusyKey] = useState<string | null>(null)
   const [windowRequestFailure, setWindowRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const acquireWindows = async () => {
     if (windowPending.current) return
     const requestKey = windowRequestKey
+    const generation = windowRoute.current.generation
     windowPending.current = true
-    setWindowBusyKey(requestKey)
-    setWindowRequestFailure(null)
+    setWindowBusyKey(windowToken)
+    if (asOf !== '2026-10-06') setWindowRequestFailure(null)
     try {
       const result = await captureInstitutionalWindows(exchange, symbol, asOf || undefined)
-      if (currentWindowKey.current !== requestKey) return
-      if (result.status === 'unavailable') setWindowRequestFailure({ key: requestKey, reason: result.reasons[0] ?? 'window_capture_failed' })
-      await query.refetch()
+      if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation) return
+      const hasNewEvidence = result.calendar?.status === 'available' || Object.values(result.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
+      if (asOf === '2026-10-06' && (!validChips1006Identity(result, exchange, symbol, asOf)
+        || (hasNewEvidence && !validChips1006Read(result, exchange, symbol, asOf)))) {
+        setWindowRequestFailure({ key: windowToken, reason: 'chips_memory_evidence_invalid' })
+        return
+      }
+      if (result.status === 'unavailable' && !(asOf === '2026-10-06' && hasNewEvidence)) setWindowRequestFailure({ key: windowToken, reason: result.reasons[0] ?? 'window_capture_failed' })
+      const refreshed = await query.refetch()
+      if (asOf === '2026-10-06' && currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
+        if (refreshed.isError) setWindowRequestFailure({ key: windowToken, reason: 'window_read_request_failed' })
+        else if (hasNewEvidence) setWindowRequestFailure(null)
+      }
     } catch {
-      if (currentWindowKey.current === requestKey) setWindowRequestFailure({ key: requestKey, reason: 'window_capture_request_failed' })
+      if (currentWindowKey.current === requestKey && windowRoute.current.generation === generation) setWindowRequestFailure({ key: windowToken, reason: 'window_capture_request_failed' })
     } finally {
       windowPending.current = false
-      setWindowBusyKey((key) => key === requestKey ? null : key)
+      setWindowBusyKey((key) => key === windowToken ? null : key)
     }
   }
   const priceRequestKey = `${exchange}:${symbol}:${asOf}`
@@ -1227,7 +1241,7 @@ function StockPage() {
     }
   }
   if (query.isLoading) return <Loading />
-  if (query.error) return <ErrorBox error={query.error} />
+  if (query.error && !(asOf === '2026-10-06' && query.data)) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
   const priceMemory = data.overview?.price_memory
@@ -1323,7 +1337,7 @@ function StockPage() {
       {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols.map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={`/stocks/TPEx/${symbol}?as_of=${asOf}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} savedPrice={priceSaved} onSavePrice={() => privateAction(true)} onReadSavedPrice={() => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
+    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} savedPrice={priceSaved} onSavePrice={() => privateAction(true)} onReadSavedPrice={() => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>

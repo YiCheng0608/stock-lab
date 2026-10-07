@@ -470,6 +470,22 @@ ROOT-W8-PREVIEW-CLOSE-1：唯一owned page `f86c37bb-b554-4f85-854a-d874bb062eaf
 
 服務清理後、文件更新前worktree225files（224tracked＋.git111B）／14dirs／4366028B，額外ignored／untracked新增0；原件僅process memory，無raw、helper、DB、pycache、附件或artifact，不稱全profile／cache0。Catalog／price seed synthetic；缺／壞8/25只有必要synthetic API／SSR，actual missing0。範圍外／PIT、保存／跨程序讀回、原生水平手勢／physical canvas／Vite production build／nav race未驗；W7外清literal `\n` SyntaxError為另案永久NO-RETRY，不混product錯誤或報approval拒，既有零新增落盤限制不變。
 
+### M1-CHIPS-CUTOFF-1006-1 同截止法人窗口的零落盤驗證入口
+
+沿共用Python3.12.14／httpx0.28.1、`-B -X utf8`、既有唯讀dependencies及guarded SQLite `:memory:`；不載conftest／正式config mkdir／startup，不建DB／raw／fixture檔／pycache／helper或附件。Exact來源／pins及執行上限由[來源 §31](../SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)管理，具名操作與未驗由[個股頁 §36](../STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)管理；本文不另授權金融重跑。
+
+新[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py)的`--worker-only`／`--worker-case <具名case>`及`--api-only`只使用最小synthetic memory，`--serve`預設mock。Root另核`--serve --live-source-opt-in --policy-version <新version> --policy-digest <新digest>`才開NEW empty新／W8 Store，finance seed0，不preload／samecapture replay；API／preview owned pair8799／8800。新啟用變數為`STOCK_TPEX_INSTITUTIONAL_1006_MEMORY_CAPTURE=1`及`STOCK_TPEX_INSTITUTIONAL_1006_POLICY_VERSION/DIGEST`，import／普通startup／GET不fetch。
+
+沿[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs)及共用唯讀`--deps <既有frontend/node_modules>`；explicit Node24.19.0／TypeScript5.9.3／esbuild0.25.12，`--chips-1006-only --typecheck-only`核new SSR／full-src noEmit；`--serve`完整App esbuild `write:false` memory bundle，非production build。原W8 StockOverview受影響SSR另局部核對，不把old selector歷史整套升格為現版pass。
+
+Program final worker10＋唯一新增bound case1、actual-router synthetic API3、new SSR98／full-src noEmit及受影響W8 StockOverviewSSR104 rawexit均0；19 memory DB表schema／values／每cell typeof保留、guards0／sourceGET0／diskartifact0。Synthetic18396B、retained graph284153～284960B估算非RSS／peak。Frontend中途detached provenance fixture修正前exit1保留，final98／104／typecheck0；原命令、版本與exit留原task，不抹首錯。Root policy／source／API／manual獨立proof各exit0。
+
+ROOT metadata6與financial總46分項見來源§31.4，不稱整輪22或整輪total body bytes完整。OBS2 22及post-source-edit native NEW22各2907099B／18098 daily full rows；獨立reader source0／disk0／guards0、22body與原22canonical receipt hash、40selected1000欄／880金融、144calendar欄及12nets核通，graph9568313B只估算。全部真值與可見操作由兩份主題契約負責，不重存原件或manifest。
+
+ROOT清理proof exit0：API13668／parent34328、preview59284／parent14996、esbuild35088 absent，8799／8800無listener；ONE page `34a24963-6f67-43dc-810d-57439fab7e91` lifetime1正常closed／tabs[]。先正常停API再沿same-token native讀得502及清值，未重啟producer。兩次Normal Ctrl+C各rawexit1，不能改成exit0；服務／reader退出釋放本輪memory raw，diskartifact0。
+
+只跑變更所需驗證，未跑full DB／backend suite／production build／install；child financial GET／POST0，沒有disk cases／KeepArtifacts。舊price private1791644B／3files＋3dirs仍因CreateProcess前auto-review拒絕而NO-RETRY、at-cap不新增disk測試；整個DAY-RANGE worktree／branch兩次拒絕fence及其他歷史資源保持，功能與清理分報。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

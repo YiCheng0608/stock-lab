@@ -1,4 +1,4 @@
-/** Memory-only W8 typecheck, product HTTP/SSR and full-App preview.
+/** Memory-only institutional typecheck, product HTTP/SSR and full-App preview.
  * Existing master node_modules are borrowed read-only via --deps. No files,
  * bundles, buildinfo, HTTP captures, screenshots or new dependencies are made.
  * Start the guarded Python --serve on 8781 first; --live-source-opt-in belongs
@@ -15,7 +15,10 @@ const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name)
 const root = path.resolve(__dirname, '..')
 const dependencies = path.resolve(option('--deps', ''))
 if (!args.includes('--deps') || !fs.existsSync(path.join(dependencies, 'typescript/package.json'))) throw new Error('--deps requires existing frontend/node_modules')
-const apiOrigin = 'http://127.0.0.1:8781'
+const apiPort = Number(option('--api-port', '8781'))
+const previewPort = Number(option('--port', '8782'))
+if (![apiPort, previewPort].every((port) => Number.isInteger(port) && port >= 1024 && port <= 65535)) throw new Error('invalid loopback port')
+const apiOrigin = `http://127.0.0.1:${apiPort}`
 const counts = { filesystem_mutations: 0, unapproved_network: 0, unapproved_subprocess: 0 }
 const ownedChildren = []
 const requireDependency = Module.createRequire(path.join(dependencies, '../package.json'))
@@ -118,6 +121,14 @@ async function check() {
   typecheck()
   const { renderToStaticMarkup } = requireDependency('react-dom/server')
   const React = requireDependency('react')
+  if (args.includes('--chips-1006-only')) {
+    const cases = require(path.join(sourceRoot, 'institutionalWindows1006.test.tsx'))
+    const ssrCases = cases.runChips1006SSRTests(renderToStaticMarkup)
+    console.log(JSON.stringify({ passed: true, chips_1006_ssr_cases: ssrCases, full_src_no_emit: true,
+      runtime: { node: process.versions.node, typescript: ts.version, esbuild: esbuild.version },
+      institutional_source: 'synthetic memory only', source_requests: 0, loopback_requests: 0, guard: counts, disk_artifacts: 0 }))
+    return
+  }
   const w3 = args.includes('--w3-only')
   const w4 = args.includes('--w4-only')
   const w5 = args.includes('--w5-only')
@@ -217,9 +228,9 @@ async function serve() {
       }
     } catch { response.writeHead(502); response.end('preview upstream unavailable') }
   })
-  server.listen(8782, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + limited actual router proxy',
-    pid: process.pid, parent_pid: process.ppid, child_pids: ownedChildren, port: 8782,
-    url: 'http://127.0.0.1:8782/stocks/TPEx/3105?as_of=2026-10-02', api: apiOrigin,
+  server.listen(previewPort, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'memory full App + limited actual router proxy',
+    pid: process.pid, parent_pid: process.ppid, child_pids: ownedChildren, port: previewPort,
+    url: `http://127.0.0.1:${previewPort}/stocks/TPEx/3105?as_of=${args.includes('--chips-1006-only') ? '2026-10-06' : '2026-10-02'}`, api: apiOrigin,
     font: 'local fallback; remote font import omitted in memory', guard: counts, disk_artifacts: 0 })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => {
     console.log(JSON.stringify({ shutdown: true, signal, pid: process.pid, child_pids: ownedChildren, guard: counts, disk_artifacts: 0 }))

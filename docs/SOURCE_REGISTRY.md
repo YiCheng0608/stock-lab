@@ -4,7 +4,7 @@
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
-法人現行兩股八截止W8版本／來源／27日曆與96 net見[§19](#19-m1-w8八截止法人來源與完整有界日曆)；§13–18保留歷史觀測／數值，不作implicit latest。M1-PRICE-1的dataset11370新價格來源、production capture／API及兩股具名操作已有限接受，權威見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
+法人現行explicit10/06兩股5／20日窗口、完整24日曆及新pins見[§31](#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)；W8八截止／27日曆與96 net依[§19](#19-m1-w8八截止法人來源與完整有界日曆)原範圍保留，§13–18保留歷史，不作implicit latest。M1-PRICE-1單日價格見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
 
 現行M2普通TPEx七股scope、same-date新body／policy准入見[§29](#29-m2-focus-stock-scope-5七股來源准入)；quote-date仍2026-10-06、臺北取得10/07。§20～27保留已驗舊policy／金融表與月wire推論；NEW開放平台metadata及用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。`.5`仍只process memory；獨立`.1`私人保存／跨程序讀回已有限接受，見[§30](#30-m1-price-save-1私人單日保存與跨程序讀回)，不改舊capture bytes。
 
@@ -1132,3 +1132,53 @@ Producer停止後NEW reader PID33208 empty Store／memory disabled／source0／p
 Source13／net70181B與必要checks已root接受；本B1 coreoperation+1／finite private-save source-use、fullraw＋canonical storage及NEW process dependency+1／reliability0／stall0。BOOT／DOC／index／Git不是implementation batch。Actual缺cutoff／10/05／10/07拒用、empty memory save拒用、reader capture POST405及具名API／UI邊界見個股頁§35。
 
 產品三檔清理被automatic review在CreateProcess前以`blocked by policy`拒絕，未執行刪除、維持NO-RETRY；不否定有效功能驗收。Actual missing-file native UI未跑，corruption／schema／partial gate只具synthetic證據；actual失敗UI是connection/proxy502，不改稱missing-file驗收。完整M1／M2／M3、20／21普通股close／complete calendar／strategy time execution、全市場／PIT仍未完成。
+
+## 31. M1-CHIPS-CUTOFF-1006-1：同10/06法人窗口與完整有界日曆
+
+**新來源用途、完整24日曆、20真daily、兩股12 net／actual API及可信desktop／窄版已由root有限接受。** 僅TPEx3105穩懋／6488環球晶、explicit `as_of=2026-10-06`；原件為當次事後觀測、process memory，非PIT。§19 W8的3613B canonical／SHA `6a7e4aa786edf6ff801d411daeb254623ca9dce4815b771d51aa9a57e1da89cb`、截止10/02及worker／API pins immutable；舊六價格canonicals與default日期不自動提升。產品操作見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。
+
+### 31.1 Exact集合、用途與版本
+
+新policy `m1-chips-cutoff-tpex-2026-10-06.1`，profile `free_public_local`；canonical UTF-8 **4264B**，外部 `policy_digest=sha256:36c761a5f6e22afee86ad414769b88c06e97ae792141879a5660cf0856c180d5`。完整policy／exact集合／用途／scope及digest須同時匹配，不能自行計算expected pin或沿用W8、global registry、單日price／private storage grant。
+
+| Source ID／observed版本 | 准入GET資源與exact參數 |
+| --- | --- |
+| `tpex_government_index_csv`／`dataset-11391-month-csv-observed-2026-10-07/chips-v1` | [dataset11391](https://data.gov.tw/dataset/11391) exact [inx](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data)，`date=2026/09/01`及`2026/10/01`（wire依URL encoding）；先驗全部返回月列。 |
+| `tpex_government_institutional_csv`／`dataset-11856-dated-csv-observed-2026-10-07/chips-v1` | [dataset11856](https://data.gov.tw/dataset/11856) exact [dated daily](https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data)，`d=115/MM/DD`只限下述20 required sessions。 |
+
+Root先核REST兩dataset、[OGL1.0](https://data.gov.tw/license)、[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點政府開放資料例外、[平日交易規則](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html)與[11503027221休市公告](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)，共6 metadata GET／546788B、memory only／redirect0／retry0／disk0。第5點限制不因endpoint可讀而消失；新grant只准此集合的 `local_fetch/raw_store/summarize`，raw_store本輪只process memory，不授權磁碟／正式DB或任意自動下載。署名保留櫃買中心、兩dataset、OGL1.0及資料／觀測版本；publication、first availability、revision time／lineage與數字rate limit未知，`historical_pit=unsupported`。
+
+Worker `tpex-institutional-window/chips-1006-v1`；summary `tpex-institutional-window-summary/chips-1006-v1`、capture `tpex-institutional-memory-capture/chips-1006-v1`、calendar schema `tpex-observed-calendar/chips-1006-v1`。API `institutional-windows/chips-1006-v1`／read schema `institutional-windows-read/chips-1006-v1`；總覽 `stock-overview/chips-1006-v1`只在explicit10/06選取。計算仍 `independent-net-sum/expected-session-inclusive-v1`。
+
+### 31.2 24日完整觀測日曆與20日金融集合
+
+Calendar version `tpex-2026-09-01_2026-10-06-weekdays-11503027221/chips-v1`；9/1～10/6周一至五扣除公告明示9/25、9/28閉日，須與兩月全部返回正面集合exact相等。Sep20＋Oct4＝24；不從缺列推休市、不採10/06後資料，不以index替daily。
+
+- Sep20：9/1、2、3、4、7、8、9、10、11、14、15、16、17、18、21、22、23、24、29、30。
+- Oct4：10/1、2、5、6。
+- 20日daily：上述集合最後20日，9/7～10/6；5日為9/30、10/1、10/2、10/5、10/6。
+
+全返回24列先驗exact六欄／Gregorian日期、requested month、唯一平日、finite正OHLC及上下界／漲跌；全部144 calendar原欄受驗，較早9/1～9/4也不能略驗。缺月／日、額外日期、閉日衝突、future、壞列或版本衝突使日曆不可用。日曆完整不代表股票20／21日close或strategy inputs已取得。
+
+Daily沿[§13.3](#133-原件整數及缺日契約)的25欄、日期／欄數／唯一合法code與非空名稱、selected各22金融canonical int64、七組buy−sell及外資／自營商／total關係；全18,098列結構驗證與兩股40 selected／1000原字串／880金融欄逐欄驗證分開，不外推其他股金融coverage。每窗只採≤10/06 required日期、任意精度sum；缺／壞日、selected缺列／競爭版本／hash或receipt不合格按所需窗口拒用，不補0、縮窗、挑版或取較早／未來替代。
+
+### 31.3 一次取得與可證執行上限
+
+空新Store只在首次合法explicit POST一次取得2 index＋20 daily＝**22 one-shot GET**；held read／普通GET／import不新增source，失敗不retry／refresh，無磁碟／DB。每次request起點設定httpx network timeout為min(15s, batch剩餘budget)，約束各次I/O等待而非整個request wall duration；index≤1MiB、daily≤2MiB、aggregate≤42MiB；180s batch budget在response／chunk邊界檢查，**不是OS硬搶占deadline**。Response header收到後限制≤16KiB，非socket-level header搶占；retained graph≤64MiB為deduplicated `sys.getsizeof`估算，不是RSS／peak。Redirect0／retry0／identity encoding；calendar失敗不續取daily。
+
+### 31.4 獨立觀測、金融真值與完整性
+
+本輪financial **TOTAL46 GET**：首次Sep probe1（root唯讀腳本錯把index日期當ROC而exit1，body bytes／SHA未記錄；不證來源width／contract failure）＋獨立Oct diagnostic1＋修正後ROOT OBS2 22＋post-source-edit native fresh22。Metadata6另計；兩個成功22批各2907099B，不是整輪22或同capture預載／重放。Known body bytes5814474＝2×2907099＋Oct diagnostic276，另有首次Sep probe unrecorded body；不能宣稱整輪total bytes完整。
+
+OBS2與native均24 full index rows／18,098 full daily rows。Native producer13668為NEW empty新／W8 Stores、finance seed0、只有兩actual identities；trusted BUTTON前source0，首次22於UTC `2026-10-07T01:12:55.829688`～`01:13:15.496773`取得。Root獨立reader externalGET0／disk0／guards0，驗全部22 body bytes／SHA與原22 canonical capture receipt SHA（不對augmented provenance重算）、40原列1000原字串／880金融欄、144 calendar fields、全部ordinals及12 net。Native與OBS2全部22 body hash＋1000欄相等；reader value graph9568313B為估算非RSS／peak。19 DB表schema／values／每cell typeof前後相等。
+
+唯一金融真值集中下表，順序外資（不含外資自營商）／投信／自營商，單位canonical股；日常UI依穩定張公式除1000、最多三位小數去尾零：
+
+| 標的 | 5日net（9/30～10/6） | 20日net（9/7～10/6） |
+| --- | --- | --- |
+| 3105穩懋 | `[27460450, 2352400, 2227304]` | `[36689368, 17747988, 2886699]` |
+| 6488環球晶 | `[594644, 1330929, -11515]` | `[-14155476, -553503, -367682]` |
+
+### 31.5 有限接受與剩餘缺口
+
+Core operation+1／必要source-use＋24 observed calendar＋true daily dependency+1／reliability0／stall0。Actual API／native及失敗清值界線見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)，測試／原exit及owned清理見[開發入口](development-baseline/README.md#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口)。本輪raw隨producer／reader正常退出釋放、diskartifact0，不改舊price私人三檔仍存在事實；新有限日曆不解除普通股20／21close、trend／strategy、PIT／time／execution、保存／跨程序或完整M1／M2／M3。
