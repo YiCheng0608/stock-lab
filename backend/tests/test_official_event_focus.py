@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 import hashlib
+import base64
 import json
 from threading import Event, Thread
 from unittest.mock import patch
@@ -26,11 +27,174 @@ def fixed_observation_day(monkeypatch):
     monkeypatch.setattr(events, "_today_taipei", lambda: DAY)
 
 
-def acquire(monkeypatch, rows=None, *, q="", from_date=None, to_date=None, **kwargs):
+def acquire(monkeypatch, rows=None, *, q="", from_date=None, to_date=None, event_kind="all", **kwargs):
     body, calls = source(monkeypatch, rows, **kwargs)
     store = events.OfficialEventMemory()
-    result = events.capture_official_event_focus(DAY, q=q, from_date=from_date, to_date=to_date, environment=ENABLED, store=store)
+    result = events.capture_official_event_focus(DAY, q=q, from_date=from_date, to_date=to_date,
+                                               event_kind=event_kind, environment=ENABLED, store=store)
     return store, body, calls, result
+
+
+@pytest.mark.parametrize("kind,expected", [
+    ("all", [("0056", 1), ("0056", 5), ("0056", 6), ("1449", 2), ("1463", 3)]),
+    ("ex_dividend", [("0056", 1), ("1463", 3)]),
+    ("ex_right", [("0056", 5), ("1449", 2)]),
+    ("ex_right_and_dividend", [("0056", 6)])])
+def test_kind_retains_exact_event_rows_after_range_without_changing_source_counts(monkeypatch, kind, expected):
+    rows = [*ROWS, {**ROWS[0], "Name": "RightsOnlyName", "Exdividend": "權"},
+            {**ROWS[0], "Exdividend": "權息"}]
+    store, body, calls, value = acquire(monkeypatch, rows, from_date="2026-10-12",
+                                       to_date="2026-10-22", event_kind=kind)
+    assert value["candidate_count"] == value["selected_count"] == 6 and value["total"] == 3
+    assert value["range_event_count"] == 5 and value["range_matched"] == 3
+    assert value["event_kind"] == kind and value["kind_event_count"] == len(expected)
+    assert value["kind_matched"] == value["matched"] == len({symbol for symbol, _ in expected})
+    projected = [row for item in value["items"] for row in item["events"]]
+    assert [(row["symbol"], row["row_ordinal"]) for row in projected] == expected
+    for row in projected:
+        original = rows[row["row_ordinal"] - 1]
+        assert row["source_date"] == original["Date"] and row["source_classification"] == original["Exdividend"]
+        assert kind == "all" or row["kind"] == kind
+    assert value["provenance"]["body_sha256"] == hashlib.sha256(body).hexdigest()
+    snapshot = store.snapshot
+    wrong_name = events.build_official_event_focus(DAY, q="RightsOnlyName", from_date="2026-10-12",
+        to_date="2026-10-22", event_kind="ex_dividend", environment=ENABLED, store=store)
+    assert wrong_name["kind_event_count"] == wrong_name["kind_matched"] == 2 and wrong_name["matched"] == 0
+    restored = events.capture_official_event_focus(DAY, event_kind="all", environment=ENABLED, store=store)
+    assert restored["kind_event_count"] == restored["range_event_count"] == 6
+    assert restored["kind_matched"] == restored["range_matched"] == 3
+    assert store.snapshot is snapshot and len(calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["", "ALL", "Ex_Dividend", "息", "ex_dividend ", " ex_right", "unknown", None, 1, [], {}])
+def test_invalid_kind_never_spends_capture_or_enters_source_admission(monkeypatch, kind):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    with patch.object(consumer, "_admission", side_effect=AssertionError("unexpected source admission")):
+        for operation in (events.build_official_event_focus, events.capture_official_event_focus):
+            value = operation(DAY, event_kind=kind, environment=ENABLED, store=store)
+            assert value["reasons"] == ["event_kind_invalid"] and not value["can_capture"]
+            assert value["items"] == [] and value["kind_event_count"] == value["kind_matched"] == 0
+    assert not store.attempted and store.snapshot is None and calls == []
+
+
+def test_api_kind_rejection_precedes_catalogue_and_all_source_operations(monkeypatch):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    with memory_app(store=store) as app:
+        from app.api import get_db
+        from fastapi.testclient import TestClient
+        entered = []
+        def forbidden_db():
+            entered.append(True)
+            raise AssertionError("unexpected catalogue dependency")
+        app.dependency_overrides[get_db] = forbidden_db
+        tails = ["event_kind=", "event_kind=ALL", "event_kind=ex_dividend%20", "event_kind=%E6%81%AF",
+                 "event_kind=unknown", "event_kind=all&event_kind=all", "event_kind=all&kind=ex_right"]
+        with TestClient(app) as client, patch.object(consumer, "_admission", side_effect=AssertionError("unexpected admission")):
+            for tail in tails:
+                for method, path in ((client.get, "/api/focus/official-events"),
+                                     (client.post, "/api/focus/official-events/capture")):
+                    assert method(path + "?as_of=2026-10-03&" + tail).status_code == 422
+        assert entered == [] and calls == [] and not store.attempted
+
+
+@pytest.mark.parametrize("bad,reason", [
+    ({"Code": "9999", "Name": "Outside", "Date": "1150101", "Exdividend": "unknown"}, "selected_event_class_unknown"),
+    ({"Code": "9999", "Name": " ", "Date": "1150101", "Exdividend": "權"}, "selected_name_missing"),
+    ({"Code": "9999", "Name": "Outside", "Date": "1150230", "Exdividend": "權"}, "invalid_effective_date"),
+    ({"Code": "bad!", "Name": "Outside", "Date": "1150101", "Exdividend": "權"}, "invalid_security_code")])
+def test_kind_range_search_and_cap_never_hide_invalid_raw_rows(monkeypatch, bad, reason):
+    rows = [{"Code": str(1000 + i), "Name": "Company", "Date": "1151022", "Exdividend": "息"} for i in range(101)]
+    store, _, calls, value = acquire(monkeypatch, [*rows, bad], q="1000", from_date="2026-10-22",
+                                     to_date="2026-10-22", event_kind="ex_dividend")
+    assert value["status"] == "unavailable" and value["reasons"] == [reason]
+    assert store.snapshot is None and store.attempted and len(calls) == 1
+    assert all(value[key] == 0 for key in ("candidate_count", "selected_count", "total", "range_event_count",
+                                          "range_matched", "kind_event_count", "kind_matched", "matched", "displayed"))
+    retry = events.capture_official_events("TWSE", "1000", DAY, environment=ENABLED, store=store)
+    changed = events.capture_official_event_focus(DAY, event_kind="ex_right", environment=ENABLED, store=store)
+    assert retry["reasons"] == changed["reasons"] == [reason] and len(calls) == 1
+
+
+def test_duplicate_outside_kind_range_and_search_seals_whole_feed(monkeypatch):
+    outside = {"Code": "9999", "Name": "Outside", "Date": "1150101", "Exdividend": "權"}
+    store, _, calls, value = acquire(monkeypatch, [*ROWS, outside, outside], q="0056",
+        from_date="2026-10-22", to_date="2026-10-22", event_kind="ex_dividend")
+    assert value["reasons"] == ["selected_event_duplicate"] and store.snapshot is None
+    assert store.attempted and not value["can_capture"] and len(calls) == 1
+
+
+def test_kind_search_precedes_cap_and_read_reuses_same_original(monkeypatch):
+    rows = [{"Code": str(code), "Name": "Company", "Date": "1151022", "Exdividend": "權"}
+            for code in reversed(range(1000, 1102))]
+    rows += [{"Code": "1000", "Name": "DividendOnlyName", "Date": "1151022", "Exdividend": "息"},
+             {"Code": "9999", "Name": "Outside", "Date": "1150101", "Exdividend": "權"}]
+    store, _, calls, value = acquire(monkeypatch, rows, from_date="2026-10-22", to_date="2026-10-22", event_kind="ex_right")
+    assert value["candidate_count"] == value["selected_count"] == 104 and value["total"] == 103
+    assert value["range_event_count"] == 103 and value["range_matched"] == 102
+    assert value["kind_event_count"] == value["kind_matched"] == value["matched"] == 102
+    assert value["displayed"] == 100 and value["truncated"]
+    assert value["items"][0]["events"][0]["row_ordinal"] == 102 and len(value["items"][0]["events"]) == 1
+    targeted = events.build_official_event_focus(DAY, q="1101", from_date="2026-10-22", to_date="2026-10-22",
+        event_kind="ex_right", environment=ENABLED, store=store)
+    assert targeted["matched"] == targeted["displayed"] == 1 and targeted["items"][0]["symbol"] == "1101"
+    excluded = events.build_official_event_focus(DAY, q="DividendOnlyName", event_kind="ex_right", environment=ENABLED, store=store)
+    assert excluded["matched"] == 0 and len(calls) == 1
+
+
+def test_kind_zero_empty_and_observation_exclusion_keep_distinct_evidence(monkeypatch):
+    store, _, calls, zero = acquire(monkeypatch, [ROWS[0]], event_kind="ex_right")
+    assert zero["status"] == "available" and zero["provenance"]
+    assert zero["candidate_count"] == zero["total"] == zero["range_event_count"] == zero["range_matched"] == 1
+    assert zero["kind_event_count"] == zero["kind_matched"] == zero["matched"] == zero["displayed"] == 0
+    assert zero["items"] == []
+    past = events.build_official_event_focus(date(2026, 10, 2), event_kind="ex_dividend", environment=ENABLED, store=store)
+    assert past["status"] == "unavailable" and past["provenance"] is None and past["kind_event_count"] == 0
+    restored = events.build_official_event_focus(DAY, event_kind="ex_dividend", environment=ENABLED, store=store)
+    assert restored["matched"] == 1 and len(calls) == 1
+    _, _, _, empty = acquire(monkeypatch, [], event_kind="ex_right")
+    assert empty["status"] == "available" and empty["provenance"] and empty["candidate_count"] == empty["total"] == 0
+
+
+def test_optional_catalogue_and_original_diagnostic_use_exact_shared_snapshot(monkeypatch):
+    rows = [*ROWS, {"Code": "2614", "Name": "SyntheticRoute", "Date": "1151006", "Exdividend": "權息"}]
+    body, calls = source(monkeypatch, rows)
+    store = events.OfficialEventMemory()
+    routes = (("0056", "ETF route", "etf"), ("1449", "Route 1449", "stock"),
+              ("1463", "Route 1463", "stock"), ("2614", "Route 2614", "stock"))
+    with memory_api(store=store, catalogue=routes, diagnostics=True) as client:
+        before = client.get("/__event_validation/original").json()
+        assert before["attempted"] is False and before["cache_present"] is False and before["body_base64"] is None
+        assert store.snapshot is None and calls == []
+        conditions = {"as_of": DAY.isoformat(), "q": "2614", "from": "2026-10-06", "to": "2026-10-06", "event_kind": "ex_right_and_dividend"}
+        focus = client.post("/api/focus/official-events/capture", params=conditions).json()
+        assert focus["matched"] == 1 and focus["items"][0]["stock_page_available"]
+        item = focus["items"][0]
+        link = parse_qs(urlsplit(item["detail_url"]).query)
+        assert link == {"as_of": [DAY.isoformat()], "from": ["official-events"], "focus_as_of": [DAY.isoformat()],
+                        "focus_q": ["2614"], "focus_from": ["2026-10-06"], "focus_to": ["2026-10-06"],
+                        "focus_event_kind": ["ex_right_and_dividend"]}
+        detail = client.get("/api" + item["detail_url"]).json()
+        assert detail["overview"]["events"]["provenance"] == focus["provenance"]
+        original = store.snapshot
+        diagnostic = client.get("/__event_validation/original").json()
+        assert base64.b64decode(diagnostic["body_base64"], validate=True) == original[0] == body
+        assert base64.b64decode(diagnostic["receipt_base64"], validate=True) == original[1]
+        assert diagnostic["body_sha256"] == focus["provenance"]["body_sha256"]
+        assert diagnostic["receipt_sha256"] == focus["provenance"]["receipt_sha256"]
+        assert client.get("/api/focus/official-events", params=conditions).json()["items"] == focus["items"]
+        assert store.snapshot is original and len(calls) == 1
+
+
+def test_optional_original_diagnostic_reads_failed_spent_state_without_fetch(monkeypatch):
+    _, calls = source(monkeypatch, status=503)
+    store = events.OfficialEventMemory()
+    with memory_api(store=store, diagnostics=True) as client:
+        assert client.post("/api/focus/official-events/capture", params={"as_of": DAY.isoformat(), "event_kind": "ex_right"}).json()["capture_action"] == "failed"
+        value = client.get("/__event_validation/original").json()
+        assert value["attempted"] and not value["cache_present"] and value["failure_reason"] == "http_status:503"
+        assert value["body_base64"] is value["receipt_base64"] is None and len(calls) == 1
 
 
 def test_effective_range_is_inclusive_event_first_and_preserves_full_feed_counts(monkeypatch):
@@ -132,7 +296,8 @@ def test_api_range_links_preserve_original_cutoff_and_all_four_conditions(monkey
         item = focus["items"][0]
         detail_query = parse_qs(urlsplit(item["detail_url"]).query)
         assert detail_query == {"as_of": [DAY.isoformat()], "from": ["official-events"], "focus_as_of": [DAY.isoformat()],
-                                "focus_q": ["0056"], "focus_from": ["2026-10-22"], "focus_to": ["2026-10-22"]}
+                                "focus_q": ["0056"], "focus_from": ["2026-10-22"], "focus_to": ["2026-10-22"],
+                                "focus_event_kind": ["all"]}
         detail = client.get("/api" + item["detail_url"]).json()
         assert detail["overview"]["as_of"] == DAY.isoformat() and detail["overview"]["events"]["provenance"] == focus["provenance"]
         assert item["events"][0] in detail["overview"]["events"]["rows"]
@@ -142,7 +307,7 @@ def test_api_range_links_preserve_original_cutoff_and_all_four_conditions(monkey
 
 def test_all_observed_symbols_grouped_multiple_events_and_dual_hash(monkeypatch):
     store, body, calls, value = acquire(monkeypatch)
-    assert value["version"] == "official-event-focus/p3-v1" and value["status"] == "available"
+    assert value["version"] == "official-event-focus/p4-v1" and value["status"] == "available"
     assert value["total"] == value["matched"] == value["displayed"] == 3 and not value["truncated"]
     assert value["search_query"] == ""
     assert [item["symbol"] for item in value["items"]] == ["0056", "1449", "1463"]
@@ -355,7 +520,7 @@ def test_actual_api_catalogue_read_only_unknown_and_same_cutoff_m1(monkeypatch):
                     assert snapshot() == before
                 assert acquired["status"] == cached["status"] == "available"
                 known, unknown = cached["items"][0], cached["items"][-1]
-                assert known["detail_url"] == "/stocks/TWSE/0056?as_of=2026-10-03&from=official-events&focus_q=&focus_as_of=2026-10-03" and known["stock_page_available"]
+                assert known["detail_url"] == "/stocks/TWSE/0056?as_of=2026-10-03&from=official-events&focus_q=&focus_as_of=2026-10-03&focus_event_kind=all" and known["stock_page_available"]
                 assert unknown["symbol"] == "9999" and unknown["company_name"] == "原件未知公司"
                 assert not unknown["stock_page_available"] and unknown["detail_url"] is None
                 # The catalogue-only focus route did not manufacture a new row.
@@ -382,7 +547,7 @@ def test_catalogue_query_cannot_autoflush_pending_row(monkeypatch):
         try:
             db.add(Instrument(exchange="TWSE", symbol="9999", name="pending fixture"))
             with patch.object(Session, "flush", side_effect=AssertionError("autoflush forbidden")):
-                result = api._focus_catalogue(db, {"items": [{"symbol": "0056"}, {"symbol": "9999"}], "as_of": "2026-10-03"})
+                result = api._focus_catalogue(db, {"items": [{"symbol": "0056"}, {"symbol": "9999"}], "as_of": "2026-10-03", "event_kind": "all"})
             assert result["items"][0]["stock_page_available"]
             assert "stock_page_available" not in result["items"][1]
         finally:
@@ -484,7 +649,7 @@ def test_api_search_bounds_encoding_and_source_only_catalogue_readonly(monkeypat
                 assert link.path == "/stocks/TWSE/0056" and not link.scheme and not link.netloc and not link.fragment
                 assert parse_qs(link.query, keep_blank_values=True) == {
                     "as_of": [DAY.isoformat()], "from": ["official-events"],
-                    "focus_q": [special], "focus_as_of": [DAY.isoformat()]}
+                    "focus_q": [special], "focus_as_of": [DAY.isoformat()], "focus_event_kind": ["all"]}
                 assert "%25%26%3F%23" in link.query and len(calls) == 1
                 for q, expected in (("SourceOnly", 1), ("元大高股息", 0), ("😀" * 100, 0)):
                     response = client.get(base + "?" + urlencode({"as_of": DAY.isoformat(), "q": q}))

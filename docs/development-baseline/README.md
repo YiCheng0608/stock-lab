@@ -605,3 +605,17 @@ Checks使用可重建記憶體fixture與既有依賴，不install／建helper、
 Actual ONE金融GET／62列及[來源 §39.1](../SOURCE_REGISTRY.md#391-m2-official-event-date-range-20261008-1實際來源結果)已接受；可信desktop／390px／同截止往返／真零／API停止後502清值見[個股頁 §44](../STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。Preview共16GET／1POST均loopback，不另算金融GET；RAM原件隨API終了釋放，不replay／restart。
 
 退出分報：API／Node preview normal SIGINT各raw1，不改報exit0；ROOT核owned49216／8484／62180 absent、8797／8798無listener，唯一tab `f9a30d71-ea8a-4190-b875-3cf6c977602f` 正常close、本根tabs=[]。本批filesystem／privateIO／磁碟DB／cache／build／raw／附件產物0；功能驗收與退出分報，非全專案清理。Coreoperation+1／dependency0／reliability+1／stall0→0；DOC review／freeze／索引／commit／merge與下輪交接、關閉封存清理待ROOT，見[協作紀錄](../TASK_COORDINATION.md)。
+
+### M2-OFFICIAL-EVENT-KIND-20261008-1/B1 官方事件類型的零落盤驗證入口
+
+ROOT已接受必要checks，文件角色不重跑。Python3.12.14／pytest8.4.2：[test_official_events.py](../../backend/tests/test_official_events.py)及[test_official_event_focus.py](../../backend/tests/test_official_event_focus.py)，126passed／51warnings／raw0。原task UTF8 stdin以Python `-B -X utf8`、PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1，sys.path先放本根backend／backend/tests及main backend/.deps；AST僅抽install_zero_disk_guard，以os／sys／Path globals編譯並先執行，再import pytest。pytest參數 `--noconftest -q -s -p no:cacheprovider -p no:logging` 加上述兩檔；只memory SQLite，禁止写入／mutation／subprocess／外網，完整inline命令留原task，不建helper或環境。
+
+Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)独立零網路check：
+
+```powershell
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --event-kind-check
+```
+
+41src noEmit＋116checks（helper58／response24／SSR13／API5／proxy16）raw0；RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。原collection縮排raw1、125passed＋1fixturefail raw1、ROOT AST／quoting及browser ACK未delivery收據均保留，不改exit或擴為通過。
+
+真来源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0，版本待辦見[協作紀錄](../TASK_COORDINATION.md)。

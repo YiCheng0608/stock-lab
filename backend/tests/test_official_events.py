@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date
+import base64
 import hashlib
 import json
 import os
@@ -56,8 +57,10 @@ def install_zero_disk_guard() -> None:
 
 
 @contextmanager
-def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None = None):
-    """Actual router, :memory: SQLite and fixed three-instrument test catalog.
+def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None = None,
+               catalogue: tuple[tuple[str, str, str], ...] | None = None,
+               diagnostics: bool = False):
+    """Actual router and :memory: SQLite; the default three routes stay fixed.
 
     No app.main lifespan/readiness, capture mock or network configuration. A
     reviewer can serve this yielded app, with separately authorized network
@@ -68,6 +71,11 @@ def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None =
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
+    routes = catalogue if catalogue is not None else (
+        ("0056", "元大高股息", "etf"), ("1449", "佳和", "stock"), ("1463", "強盛新", "stock"))
+    consumer._symbols([row[0] for row in routes])
+    memory = store if store is not None else events.OfficialEventMemory()
+
     def existing_directory_only(target, *args, **kwargs):
         assert target == REPO and target.is_dir(), "unexpected config mkdir"
 
@@ -75,7 +83,7 @@ def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None =
                    events.CAPTURE_ENV: enabled, "STOCK_TPEX_INSTITUTIONAL_CAPTURE_ZIP": "",
                    "STOCK_TPEX_INSTITUTIONAL_CAPTURE_DATE": ""}
     with patch.dict(os.environ, environment), patch.object(Path, "mkdir", existing_directory_only), \
-            patch.object(events, "MEMORY_EVENTS", store if store is not None else events.OfficialEventMemory()):
+            patch.object(events, "MEMORY_EVENTS", memory):
         from app.api import configure_cors, get_db, router
         from app.db import Base, enable_sqlite_foreign_keys
         from app.models import Instrument
@@ -85,8 +93,7 @@ def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None =
         sessions = sessionmaker(bind=engine, expire_on_commit=False)
         with sessions() as db:
             db.add_all([Instrument(exchange="TWSE", symbol=symbol, name=name, instrument_type=kind)
-                        for symbol, name, kind in [("0056", "元大高股息", "etf"), ("1449", "佳和", "stock"),
-                                                   ("1463", "強盛新", "stock")]])
+                        for symbol, name, kind in routes])
             db.add(Instrument(exchange="TPEx", symbol="0056", name="同代號市場測試"))
             db.commit()
         def memory_db():
@@ -96,6 +103,27 @@ def memory_app(*, enabled: str = "1", store: events.OfficialEventMemory | None =
         configure_cors(app)
         app.include_router(router)
         app.dependency_overrides[get_db] = memory_db
+        if diagnostics:
+            @app.get("/__event_validation/original")
+            def original_snapshot():
+                """Read the held original pair; never fetch or re-encode its JSON."""
+                snapshot = memory.snapshot
+                body, receipt_bytes = snapshot if snapshot is not None else (None, None)
+                result = {
+                    "storage": "memory_only", "attempted": memory.attempted,
+                    "busy": memory.capture_lock.locked(), "cache_present": snapshot is not None,
+                    "failure_reason": memory.failure_reason,
+                    "body_bytes": len(body) if body is not None else 0,
+                    "receipt_bytes": len(receipt_bytes) if receipt_bytes is not None else 0,
+                    "body_sha256": hashlib.sha256(body).hexdigest() if body is not None else None,
+                    "receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest() if receipt_bytes is not None else None,
+                    "body_base64": base64.b64encode(body).decode("ascii") if body is not None else None,
+                    "receipt_base64": base64.b64encode(receipt_bytes).decode("ascii") if receipt_bytes is not None else None,
+                }
+                if len(json.dumps(result).encode("utf-8")) > 8 * 1024 * 1024:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse({"detail": "original diagnostic bound"}, status_code=413)
+                return result
         try:
             yield app
         finally:

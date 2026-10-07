@@ -18,8 +18,9 @@ from worker import twse_action_capture as consumer
 from worker.source_runtime import capture_memory
 
 VERSION = "official-events/p3b-v1"
-FOCUS_VERSION = "official-event-focus/p3-v1"
+FOCUS_VERSION = "official-event-focus/p4-v1"
 FOCUS_LIMIT = 100
+EVENT_KINDS = ("all", "ex_dividend", "ex_right", "ex_right_and_dividend")
 CAPTURE_ENV = "STOCK_TWSE_EVENTS_MEMORY_CAPTURE"
 PINS = {
     "manifest": Path(__file__).resolve().parents[1] / "worker" / "source_registry.json",
@@ -101,6 +102,12 @@ def effective_range(from_date: str | None, to_date: str | None) -> tuple[str | N
     if from_date is not None and to_date is not None and from_date > to_date:
         raise ValueError("event_effective_range_reversed")
     return from_date, to_date
+
+
+def canonical_event_kind(value: str) -> str:
+    if not isinstance(value, str) or value not in EVENT_KINDS:
+        raise ValueError("event_kind_invalid")
+    return value
 
 
 def _missing(result: dict, memory: OfficialEventMemory) -> dict:
@@ -213,7 +220,8 @@ def _focus_result(as_of: date | None) -> dict:
                   truncated=False, limit=FOCUS_LIMIT, order="symbol_lexicographic",
                   coverage="observed_feed_only", research_conditions="unknown",
                   candidate_count=0, selected_count=0, effective_from=None, effective_to=None,
-                  range_event_count=0, range_matched=0)
+                  range_event_count=0, range_matched=0, event_kind="all",
+                  kind_event_count=0, kind_matched=0)
     result.pop("rows")
     result["limitations"] = ["observed_feed_only" if value == "selected_events_only" else value
                              for value in result["limitations"]] + ["not_a_ranking", "research_conditions_unknown"]
@@ -221,7 +229,13 @@ def _focus_result(as_of: date | None) -> dict:
 
 
 def _focus_gate(result: dict, as_of: date | None, q: str, environment: Mapping[str, str] | None,
-                from_date: str | None = None, to_date: str | None = None) -> bool:
+                from_date: str | None = None, to_date: str | None = None,
+                event_kind: str = "all") -> bool:
+    try:
+        result["event_kind"] = canonical_event_kind(event_kind)
+    except (ValueError, TypeError):
+        result.update(can_capture=False, reasons=["event_kind_invalid"])
+        return False
     if not isinstance(q, str) or len(q) > 100:
         result.update(can_capture=False, reasons=["event_search_query_invalid"])
         return False
@@ -248,9 +262,11 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
         return result
     grouped: dict[tuple[str, str], dict] = {}
     total = len({(row["exchange"], row["symbol"]) for row in rows})
-    retained = [row for row in rows
+    ranged = [row for row in rows
                 if (result["effective_from"] is None or row["event_date"] >= result["effective_from"])
                 and (result["effective_to"] is None or row["event_date"] <= result["effective_to"])]
+    retained = [row for row in ranged
+                if result["event_kind"] == "all" or row["kind"] == result["event_kind"]]
     for row in retained:
         key = (row["exchange"], row["symbol"])
         if key not in grouped:
@@ -264,7 +280,9 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
                if not query or query in item["symbol"].casefold()
                or any(query in event["company_name"].casefold() for event in item["events"])}
     items = [matched[key] for key in sorted(matched, key=lambda key: (key[1], key[0]))]
-    result.update(total=total, range_event_count=len(retained), range_matched=len(grouped),
+    result.update(total=total, range_event_count=len(ranged),
+                  range_matched=len({(row["exchange"], row["symbol"]) for row in ranged}),
+                  kind_event_count=len(retained), kind_matched=len(grouped),
                   matched=len(items), displayed=min(len(items), FOCUS_LIMIT),
                   truncated=len(items) > FOCUS_LIMIT, items=items[:FOCUS_LIMIT])
     # Rows live inside each displayed card; the uncapped raw feed is not another
@@ -274,11 +292,12 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
 
 def build_official_event_focus(as_of: date | None, *, q: str = "", from_date: str | None = None,
                                to_date: str | None = None,
+                               event_kind: str = "all",
                                environment: Mapping[str, str] | None = None,
                                store: OfficialEventMemory | None = None) -> dict:
     """Read the shared original feed without fetching or touching a database."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, q, environment, from_date, to_date):
+    if not _focus_gate(result, as_of, q, environment, from_date, to_date, event_kind):
         return result
     memory = MEMORY_EVENTS if store is None else store
     snapshot = memory.snapshot
@@ -295,11 +314,12 @@ def build_official_event_focus(as_of: date | None, *, q: str = "", from_date: st
 
 def capture_official_event_focus(as_of: date | None, *, q: str = "", from_date: str | None = None,
                                  to_date: str | None = None,
+                                 event_kind: str = "all",
                                  environment: Mapping[str, str] | None = None,
                                  store: OfficialEventMemory | None = None) -> dict:
     """Explicit first acquisition; validate the entire feed before publication."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, q, environment, from_date, to_date):
+    if not _focus_gate(result, as_of, q, environment, from_date, to_date, event_kind):
         return result
     memory = MEMORY_EVENTS if store is None else store
     if not memory.capture_lock.acquire(blocking=False):
@@ -307,7 +327,8 @@ def capture_official_event_focus(as_of: date | None, *, q: str = "", from_date: 
         return result
     try:
         if memory.snapshot is not None:
-            return build_official_event_focus(as_of, q=q, from_date=from_date, to_date=to_date, environment=environment, store=memory)
+            return build_official_event_focus(as_of, q=q, from_date=from_date, to_date=to_date,
+                                             event_kind=event_kind, environment=environment, store=memory)
         if memory.attempted:
             return _missing(result, memory)
         if as_of < _today_taipei():

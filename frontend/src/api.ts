@@ -22,6 +22,7 @@ import type {
   StockPriceSavedFocusData,
   PriceFocusDayMove,
   OfficialEventFocusData,
+  OfficialEventKind,
   NewsItem,
   GlossaryTerm,
   StockDirectoryRow,
@@ -80,10 +81,10 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
-export const getOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string) =>
-  get<OfficialEventFocusData>(`/focus/official-events${queryString({ as_of: asOf, q, from, to })}`)
-export const captureOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string) =>
-  post<OfficialEventFocusData>(`/focus/official-events/capture${queryString({ as_of: asOf, q, from, to })}`, {})
+export const getOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string, eventKind: OfficialEventKind = 'all') =>
+  get<OfficialEventFocusData>(`/focus/official-events${queryString({ as_of: asOf, q, from, to, event_kind: eventKind })}`)
+export const captureOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string, eventKind: OfficialEventKind = 'all') =>
+  post<OfficialEventFocusData>(`/focus/official-events/capture${queryString({ as_of: asOf, q, from, to, event_kind: eventKind })}`, {})
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

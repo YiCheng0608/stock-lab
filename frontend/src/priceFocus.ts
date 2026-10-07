@@ -1,4 +1,5 @@
 import type { PriceFocusDayMove, PriceLotFocusData } from './types'
+import { officialEventKinds } from './types'
 import { memoryPriceCaptureReady, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2, PRICE_SCOPE_POLICY_VERSION_V3, PRICE_SCOPE_POLICY_VERSION_V4, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 
 const maximum = '9223372036854775807'
@@ -69,17 +70,18 @@ export function exactTurnoverText(value: string): string {
   return value.replace(/\B(?=(?:[0-9]{3})+(?![0-9]))/g, ',')
 }
 
-/** Event search/range are shared homepage state, never price API conditions. */
+/** Event conditions are shared homepage state, never price API conditions. */
 export function validPriceFocusParams(params: URLSearchParams): boolean {
-  const allowed = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to']
+  const allowed = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to', 'event_kind']
   return !Array.from(params.keys()).some((key) => !allowed.includes(key))
     && ['as_of', 'min_lots'].every((key) => params.getAll(key).length === 1)
-    && ['day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to'].every((key) => params.getAll(key).length <= 1)
+    && ['day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to', 'event_kind'].every((key) => params.getAll(key).length <= 1)
     && validFocusDate(params.get('as_of') ?? '') && minLotsShares(params.get('min_lots')) !== null
     && validPriceFocusDayMove(params.get('day_move') ?? 'all') && minTurnoverValue(params.get('min_turnover') ?? '0') !== null
     && minRangeMilliPct(params.get('min_range_pct') ?? '0') !== null
     && (!params.has('from') || validFocusDate(params.get('from')!)) && (!params.has('to') || validFocusDate(params.get('to')!))
     && (!params.has('from') || !params.has('to') || params.get('from')! <= params.get('to')!)
+    && (!params.has('event_kind') || officialEventKinds.some((kind) => kind === params.get('event_kind')))
 }
 
 export function validFocusDate(value: string): boolean {

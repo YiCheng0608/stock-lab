@@ -16,11 +16,13 @@ const crypto = require('node:crypto')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
-assert(args.every((arg, index) => ['--deps', '--check', '--event-range-check', '--event-range', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--saved-price-chips-focus-stock-scope-7-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--saved-price-chips-focus-stock-scope-7-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
-const eventRangeCheck = args.includes('--event-range-check'), eventRangeActive = args.includes('--event-range')
+assert(args.every((arg, index) => ['--deps', '--check', '--event-range-check', '--event-range', '--event-kind-check', '--event-kind', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--saved-price-chips-focus-stock-scope-7-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--saved-price-chips-focus-stock-scope-7-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
+const eventKindCheck = args.includes('--event-kind-check'), eventKindActive = args.includes('--event-kind')
+const eventRangeCheck = args.includes('--event-range-check') || eventKindCheck, eventRangeActive = args.includes('--event-range') || eventKindActive
+assert([eventKindCheck, eventKindActive, args.includes('--event-range-check'), args.includes('--event-range')].filter(Boolean).length <= 1, 'choose one event mode')
 assert(!(eventRangeCheck && eventRangeActive), 'choose event check or serve')
 assert(!eventRangeActive || args.includes('--serve'), 'event-range is an owned serve mode')
-assert(!(eventRangeCheck || eventRangeActive) || !args.some((arg) => arg !== '--event-range-check' && (arg.endsWith('-check') || arg.endsWith('-opt-in') || ['--check', '--saved-source-only', ...pinOptions].includes(arg))), 'event range excludes other consumers')
+assert(!(eventRangeCheck || eventRangeActive) || !args.some((arg) => !['--event-range-check', '--event-kind-check'].includes(arg) && (arg.endsWith('-check') || arg.endsWith('-opt-in') || ['--check', '--saved-source-only', ...pinOptions].includes(arg))), 'event mode excludes other consumers')
 assert(!eventRangeCheck || !args.includes('--serve'), 'event check has zero network')
 assert(!args.includes('--scope-check') || !['--serve', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one scope check mode')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
@@ -198,7 +200,7 @@ async function appSSRModule(joint = false, focus = false, calendar = false, scop
     const value = originalLoad.call(this, request, parent, ...rest)
     return request === 'echarts-for-react' && value && typeof value.default === 'function' ? value.default : value
   }
-  const entry = eventRangeCheck ? { stdin: { contents: "export * from './App'; export { default } from './App'; export { getOfficialEventFocus, captureOfficialEventFocus } from './api'", resolveDir: sourceRoot, loader: 'ts', sourcefile: 'event-range-ssr-memory.ts' } } : focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'" + ((calendar || scope7) ? "; export { InstitutionalWindows, PriceSaved } from './components/StockOverview'; export { jointValidationTransition } from './App'" : ''), resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
+  const entry = eventRangeCheck ? { stdin: { contents: "export * from './App'; export { default } from './App'; export { getOfficialEventFocus, captureOfficialEventFocus, getPriceLotFocus, capturePriceLotFocus } from './api'", resolveDir: sourceRoot, loader: 'ts', sourcefile: 'event-range-ssr-memory.ts' } } : focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'" + ((calendar || scope7) ? "; export { InstitutionalWindows, PriceSaved } from './components/StockOverview'; export { jointValidationTransition } from './App'" : ''), resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
   const result = await esbuild.build({ ...entry, bundle: true, write: false,
     ...(eventRangeCheck ? { loader: { '.css': 'empty' } } : {}),
     platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies],
@@ -261,7 +263,7 @@ async function check() {
   if (eventRangeCheck) {
     const checks = await checkEventRange()
     assert(Object.values(counts).every((count) => count === 0), 'event guards zero')
-    console.log(JSON.stringify({ passed: true, contract: 'official-event-focus/p3-v1', ...checks,
+    console.log(JSON.stringify({ passed: true, contract: 'official-event-focus/p4-v1', ...checks,
       known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(),
       not_run: ['external source', 'browser native UI', 'disk persistence', 'production build', 'ordinary-stock price history'] }))
     return
@@ -1035,13 +1037,29 @@ async function checkEventRange() {
   verify('helper', App.officialEventConditions(duplicatePrice) === null && !price.validPriceFocusParams(duplicatePrice), 'shared price multiplicity remains enforced')
   const invalidPriceRange = new URLSearchParams(shared); invalidPriceRange.set('from', '2026-10-23')
   verify('helper', !price.validPriceFocusParams(invalidPriceRange), 'shared event dates fail before price request')
+  for (const [kind, expected] of [['all', true], ['ex_dividend', true], ['ex_right', true], ['ex_right_and_dividend', true], ['', false], ['ALL', false], ['ex_dividend ', false], ['息', false], [null, false], [1, false]]) verify('helper', App.validOfficialEventKind(kind) === expected, 'strict canonical event kind')
+  const kindShared = new URLSearchParams(shared); kindShared.set('event_kind', 'ex_right')
+  verify('helper', App.officialEventConditions(kindShared).eventKind === 'ex_right' && price.validPriceFocusParams(kindShared), 'kind and original four price conditions coexist')
+  const kindSubmitted = App.officialEventSubmissionParams(kindShared, conditions.asOf, '0056', conditions.from, conditions.to, 'ex_right_and_dividend')
+  verify('helper', kindSubmitted.get('event_kind') === 'ex_right_and_dividend' && kindSubmitted.get('min_lots') === '0.000' && kindShared.get('event_kind') === 'ex_right', 'kind draft submission preserves applied price state')
+  const kindNoSearch = App.officialEventSubmissionParams(kindSubmitted, conditions.asOf, '', conditions.from, conditions.to)
+  const kindNoDates = App.officialEventSubmissionParams(kindSubmitted, conditions.asOf, '0056', '', '')
+  verify('helper', kindNoSearch.get('event_kind') === 'ex_right_and_dividend' && !kindNoSearch.has('q'), 'clear search preserves kind')
+  verify('helper', kindNoDates.get('event_kind') === 'ex_right_and_dividend' && !kindNoDates.has('from') && kindNoDates.get('q') === '0056', 'clear dates preserves kind and q')
+  const noKind = App.officialEventSubmissionParams(kindSubmitted, conditions.asOf, '0056', conditions.from, conditions.to, 'all')
+  verify('helper', !noKind.has('event_kind') && App.officialEventConditions(noKind).eventKind === 'all' && noKind.get('q') === '0056' && noKind.get('from') === conditions.from && noKind.get('min_lots') === '0.000', 'clear kind restores all and preserves other conditions')
+  for (const tail of ['&event_kind=', '&event_kind=ALL', '&event_kind=ex_right&event_kind=ex_right']) {
+    const invalid = new URLSearchParams(shared + tail)
+    verify('helper', App.officialEventConditions(invalid) === null && !price.validPriceFocusParams(invalid), 'bad shared kind refused before API use')
+  }
 
   const fixture = (search = '') => {
-    const detail = new URLSearchParams({ as_of: conditions.asOf, from: 'official-events', focus_q: search, focus_as_of: conditions.asOf, focus_from: conditions.from, focus_to: conditions.to })
-    return { version: 'official-event-focus/p3-v1', status: 'available', reasons: [], as_of: conditions.asOf,
+    const detail = new URLSearchParams({ as_of: conditions.asOf, from: 'official-events', focus_q: search, focus_as_of: conditions.asOf, focus_from: conditions.from, focus_to: conditions.to, focus_event_kind: conditions.eventKind })
+    return { version: 'official-event-focus/p4-v1', status: 'available', reasons: [], as_of: conditions.asOf,
       observed_date: '2026-10-08', cutoff_basis: 'observed_taipei_date_inclusive', capture_enabled: true, can_capture: true, cache_present: true, capture_action: 'cached',
       storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported', source_url_kind: 'feed', published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown',
       coverage: 'observed_feed_only', research_conditions: 'unknown', effective_from: conditions.from, effective_to: conditions.to,
+      event_kind: conditions.eventKind, kind_event_count: 1, kind_matched: 1,
       candidate_count: 4, selected_count: 4, validation_scope: 'all_observed_identity_dates_classification', total: 3, range_event_count: 1, range_matched: 1, matched: 1, displayed: 1, truncated: false, limit: 100, order: 'symbol_lexicographic', search_query: search,
       provenance: { source_id: 'twse_twt48u_all', source_version: 'twse-twt48u-all-d011-2026-09-12', endpoint: 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL', registry_version: 'r1-a1-c009-2026-09-12.1', manifest_digest: 'sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b', body_sha256: 'a'.repeat(64), receipt_sha256: 'b'.repeat(64), captured_at: '2026-10-08T01:00:01+00:00', request_started_at: '2026-10-08T01:00:00+00:00', storage: 'memory_only', verification: 'local_evidence_consistent' },
       attribution: { owner: { name: '臺灣證券交易所', type: 'official_exchange' }, dataset_id: 'data-gov-89748', source_id: 'twse_twt48u_all', source_url: 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL', terms: { status: 'known', value: 'Open Government Data License v1.0', reason: 'synthetic contract fixture' }, evidence: [{ url: 'https://data.gov.tw/license', checked_at: '2026-09-12', claim: 'synthetic fixture' }], purpose_evidence: {} }, limitations: ['not_complete_history', 'not_a_ranking'],
@@ -1049,6 +1067,30 @@ async function checkEventRange() {
   }
   const value = fixture()
   verify('response', App.validOfficialEventFocus(value, conditions), 'fresh whole-feed response fits effective boundary')
+  const kindFixture = kind => {
+    const data = fixture(), variants = [['息', 'ex_dividend', '除息'], ['權', 'ex_right', '除權'], ['權息', 'ex_right_and_dividend', '除權息']]
+    const rows = variants.map(([classification, eventKind, label], index) => ({ ...data.items[0].events[0], source_classification: classification, kind: eventKind, label, row_ordinal: index + 1 }))
+    Object.assign(data, { candidate_count: 5, selected_count: 5, event_kind: kind, range_event_count: 3, range_matched: 1, kind_event_count: kind === 'all' ? 3 : 1, kind_matched: 1 })
+    data.items[0].events = rows.filter(row => kind === 'all' || row.kind === kind)
+    const link = new URL(data.items[0].detail_url, 'https://local.invalid'); link.searchParams.set('focus_event_kind', kind)
+    data.items[0].detail_url = link.pathname + link.search
+    return data
+  }
+  for (const kind of ['all', 'ex_dividend', 'ex_right', 'ex_right_and_dividend']) {
+    const typed = kindFixture(kind), typedConditions = { ...conditions, eventKind: kind }
+    verify('response', App.validOfficialEventFocus(typed, typedConditions), 'same-symbol multiple exact kinds retain original event rows')
+    const detail = new URL(typed.items[0].detail_url, 'https://local.invalid').searchParams; detail.set('as_of', '2026-10-07')
+    const original = new URL(App.officialEventFocusReturnPath(detail), 'https://local.invalid').searchParams
+    verify('helper', original.get('event_kind') === kind && original.get('as_of') === conditions.asOf && original.get('from') === conditions.from && original.get('to') === conditions.to, 'kind return retains original five conditions after M1 cutoff change')
+  }
+  const wrongKind = kindFixture('ex_dividend'); wrongKind.items[0].events.push({ ...wrongKind.items[0].events[0], source_classification: '權息', kind: 'ex_right_and_dividend', label: '除權息', row_ordinal: 3 })
+  verify('response', !App.validOfficialEventFocus(wrongKind, { ...conditions, eventKind: 'ex_dividend' }), 'dividend response cannot contain combined event')
+  const duplicatedKindReturn = new URLSearchParams(value.items[0].detail_url.split('?')[1]); duplicatedKindReturn.append('focus_event_kind', 'all')
+  verify('helper', App.officialEventFocusReturnPath(duplicatedKindReturn) === null, 'duplicate return kind refused')
+  for (const kind of ['', 'ALL', 'unknown']) {
+    const invalid = new URLSearchParams(value.items[0].detail_url.split('?')[1]); invalid.set('focus_event_kind', kind)
+    verify('helper', App.officialEventFocusReturnPath(invalid) === null, 'invalid return kind refused')
+  }
   const special = fixture('元大~!()*股份')
   // Python urlencode leaves ~ unescaped and escapes !()*; both encode one value.
   special.items[0].detail_url = special.items[0].detail_url.replace(/%7E/gi, '~')
@@ -1057,16 +1099,16 @@ async function checkEventRange() {
   detailParams.set('as_of', '2026-10-07')
   const back = App.officialEventFocusReturnPath(detailParams)
   const backQuery = new URL(back, 'https://local.invalid').searchParams
-  verify('helper', backQuery.get('as_of') === '2026-10-08' && backQuery.get('q') === special.search_query && backQuery.get('from') === conditions.from && backQuery.get('to') === conditions.to, 'detail cutoff change returns original four conditions')
-  for (const tail of ['&focus_from=2026-10-22', '&focus_to=2026-10-22', '&from=official-events', '&focus_q=x', '&focus_as_of=2026-10-08', '&return=//outside.invalid', '&next=//outside.invalid']) verify('helper', App.officialEventFocusReturnPath(new URLSearchParams(detailParams + tail)) === null, 'return cannot accept duplicates or arbitrary destination')
+  verify('helper', backQuery.get('as_of') === '2026-10-08' && backQuery.get('q') === special.search_query && backQuery.get('from') === conditions.from && backQuery.get('to') === conditions.to && backQuery.get('event_kind') === 'all', 'detail cutoff change returns original five conditions')
+  for (const tail of ['&focus_from=2026-10-22', '&focus_to=2026-10-22', '&focus_event_kind=all', '&from=official-events', '&focus_q=x', '&focus_as_of=2026-10-08', '&return=//outside.invalid', '&next=//outside.invalid']) verify('helper', App.officialEventFocusReturnPath(new URLSearchParams(detailParams + tail)) === null, 'return cannot accept duplicates or arbitrary destination')
   const legacy = new URLSearchParams({ as_of: '2026-10-08', from: 'official-events', focus_as_of: '2026-10-08', focus_q: '0056' })
   verify('helper', App.officialEventFocusReturnPath(legacy) === '/?as_of=2026-10-08&q=0056#official-event-focus-title', 'legacy no-range links remain valid')
-  for (const mutate of [v => v.effective_from = '2026-10-01', v => v.total = null, v => v.range_event_count = 0, v => v.matched = 101, v => v.items[0].events[0].event_date = '2026-10-23', v => v.items[0].events[0].source_classification = 'unknown', v => v.items[0].detail_url += '&next=//outside.invalid', v => v.items[0].detail_url += '&focus_to=2026-10-22', v => v.items[0].detail_url = 'https://outside.invalid' + v.items[0].detail_url, v => v.items[0].detail_url += '#outside', v => v.provenance.body_sha256 = 'bad', v => v.provenance.captured_at = '2026-10-09T01:00:00Z']) {
+  for (const mutate of [v => v.effective_from = '2026-10-01', v => v.event_kind = 'ex_right', v => v.kind_event_count = 0, v => v.kind_matched = 2, v => v.total = null, v => v.range_event_count = 0, v => v.matched = 101, v => v.items[0].events[0].event_date = '2026-10-23', v => v.items[0].events[0].source_classification = 'unknown', v => v.items[0].detail_url += '&next=//outside.invalid', v => v.items[0].detail_url += '&focus_to=2026-10-22', v => v.items[0].detail_url = 'https://outside.invalid' + v.items[0].detail_url, v => v.items[0].detail_url += '#outside', v => v.provenance.body_sha256 = 'bad', v => v.provenance.captured_at = '2026-10-09T01:00:00Z']) {
     const invalid = structuredClone(value); mutate(invalid)
     verify('response', !App.validOfficialEventFocus(invalid, conditions), 'invalid response masked')
   }
   const zero = structuredClone(value)
-  Object.assign(zero, { items: [], range_event_count: 0, range_matched: 0, matched: 0, displayed: 0 })
+  Object.assign(zero, { items: [], range_event_count: 0, range_matched: 0, kind_event_count: 0, kind_matched: 0, matched: 0, displayed: 0 })
   verify('response', App.validOfficialEventFocus(zero, conditions), 'valid zero retains source counts and provenance')
   const empty = structuredClone(zero); Object.assign(empty, { total: 0, candidate_count: 0, selected_count: 0 })
   const failed = structuredClone(zero)
@@ -1074,7 +1116,7 @@ async function checkEventRange() {
   verify('response', App.validOfficialEventFocus(failed, conditions), 'sealed failure has clear cards counts and provenance')
   const render = (data, params = query, failure = false, seedConditions = conditions, stock = false) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
-    const key = ['official-event-focus', seedConditions.asOf, seedConditions.q, seedConditions.from, seedConditions.to]
+    const key = ['official-event-focus', seedConditions.asOf, seedConditions.q, seedConditions.from, seedConditions.to, seedConditions.eventKind]
     client.setQueryData(key, data)
     if (failure) client.getQueryCache().find({ queryKey: key }).setState({ status: 'error', error: new Error('synthetic refetch failure') })
     let entry = '/?' + params, component = App.OfficialEventFocusPanel
@@ -1087,8 +1129,17 @@ async function checkEventRange() {
     finally { client.clear() }
   }
   const html = render(value)
+  for (const kind of ['ex_dividend', 'ex_right', 'ex_right_and_dividend']) {
+    const typedQuery = new URLSearchParams(query); typedQuery.set('event_kind', kind)
+    const typedHtml = render(kindFixture(kind), typedQuery, false, { ...conditions, eventKind: kind })
+    verify('ssr', typedHtml.includes(`value="${kind}" selected=""`) && typedHtml.includes('focus_event_kind=' + kind) && typedHtml.includes('清除類型'), 'applied kind control and original return render together')
+  }
+  const staleKindQuery = new URLSearchParams(query); staleKindQuery.set('event_kind', 'ex_right')
+  verify('ssr', !render(value, staleKindQuery, false, { ...conditions, eventKind: 'ex_right' }).includes('class="focus-card"'), 'stale success from another kind clears cards')
+  const invalidKindQuery = new URLSearchParams(query); invalidKindQuery.set('event_kind', 'ALL')
+  verify('ssr', !render(value, invalidKindQuery).includes('class="focus-card"'), 'invalid kind URL clears prior cards')
   verify('ssr', html.includes('class="focus-card"') && html.includes('生效日起日') && html.includes('生效日迄日') && html.includes('focus_from=2026-10-22'), 'current panel date controls and range drilldown rendered')
-  verify('ssr', render(zero).includes('沒有符合日期與搜尋條件') && render(empty).includes('本次官方原件為零筆'), 'zero range and empty original have distinct copy')
+  verify('ssr', render(zero).includes('沒有符合日期、類型與搜尋條件') && render(empty).includes('本次官方原件為零筆'), 'zero range and empty original have distinct copy')
   for (const [data, error] of [[failed, false], [value, true], [{ ...value, effective_to: '2026-10-23' }, false]]) {
     const hidden = render(data, query, error)
     verify('ssr', !hidden.includes('class="focus-card"') && !hidden.includes('class="focus-count"'), 'failure never renders stale cards or counts')
@@ -1101,19 +1152,34 @@ async function checkEventRange() {
   const fetched = [], originalFetch = global.fetch
   global.fetch = async (url, options) => { fetched.push({ url, options }); return { ok: true, json: async () => value } }
   try {
-    await App.getOfficialEventFocus(conditions.asOf, '元大~!()*股份', conditions.from, conditions.to)
-    await App.captureOfficialEventFocus(conditions.asOf, '元大~!()*股份', conditions.from, conditions.to)
+    await App.getOfficialEventFocus(conditions.asOf, '元大~!()*股份', conditions.from, conditions.to, 'ex_right')
+    await App.captureOfficialEventFocus(conditions.asOf, '元大~!()*股份', conditions.from, conditions.to, 'ex_right')
   } finally { global.fetch = originalFetch }
   for (const [index, request] of fetched.entries()) {
     const url = new URL(request.url, 'https://local.invalid')
-    verify('api', url.pathname === '/api/focus/official-events' + (index ? '/capture' : '') && [...url.searchParams.keys()].sort().join(',') === 'as_of,from,q,to' && url.searchParams.get('q') === '元大~!()*股份' && url.searchParams.get('from') === conditions.from && url.searchParams.get('to') === conditions.to, 'GET and POST carry only full event conditions')
+    verify('api', url.pathname === '/api/focus/official-events' + (index ? '/capture' : '') && [...url.searchParams.keys()].sort().join(',') === 'as_of,event_kind,from,q,to' && url.searchParams.get('event_kind') === 'ex_right' && url.searchParams.get('q') === '元大~!()*股份' && url.searchParams.get('from') === conditions.from && url.searchParams.get('to') === conditions.to, 'GET and POST carry only full event conditions')
     if (index) verify('api', request.options.method === 'POST' && request.options.body === '{}', 'explicit capture uses empty JSON only')
+  }
+  const priceFetched = []
+  global.fetch = async (url, options) => { priceFetched.push({ url, options }); return { ok: true, json: async () => ({}) } }
+  try {
+    await App.getPriceLotFocus(kindShared.get('as_of'), kindShared.get('min_lots'), kindShared.get('day_move'), kindShared.get('min_turnover'), kindShared.get('min_range_pct'))
+    await App.capturePriceLotFocus(kindShared.get('as_of'), kindShared.get('min_lots'), kindShared.get('day_move'), kindShared.get('min_turnover'), kindShared.get('min_range_pct'))
+  } finally { global.fetch = originalFetch }
+  for (const [index, request] of priceFetched.entries()) {
+    const url = new URL(request.url, 'https://local.invalid')
+    verify('api', url.pathname === '/api/focus/price-lots' + (index ? '/capture' : '') && [...url.searchParams.keys()].sort().join(',') === 'as_of,day_move,min_lots,min_range_pct,min_turnover' && url.searchParams.get('min_lots') === '0.000' && url.searchParams.get('day_move') === 'all' && url.searchParams.get('min_turnover') === '0' && url.searchParams.get('min_range_pct') === '0.000', 'existing exact price conditions exclude every event field')
   }
   for (const [method, route, tail, body, status] of [
     ['POST', '/api/focus/official-events/capture', query.toString(), '{}', null],
     ['POST', '/api/stocks/TWSE/0056/official-events/capture', 'as_of=2026-10-08', '{}', null],
     ['GET', '/api/focus/official-events', query.toString(), '', null],
     ['GET', '/api/focus/official-events', query + '&from=2026-10-22', '', 422],
+    ['GET', '/api/focus/official-events', query + '&event_kind=ex_right', '', null],
+    ['POST', '/api/focus/official-events/capture', query + '&event_kind=ex_right_and_dividend', '{}', null],
+    ['GET', '/api/focus/official-events', query + '&event_kind=', '', 422],
+    ['POST', '/api/focus/official-events/capture', query + '&event_kind=ALL', '{}', 422],
+    ['GET', '/api/focus/official-events', query + '&event_kind=all&event_kind=all', '', 422],
     ['POST', '/api/focus/official-events/capture', 'as_of=2026-10-07', '{}', 422],
     ['POST', '/api/focus/official-events/capture', query.toString(), '{"extra":1}', 422],
     ['POST', '/api/focus/price-lots/capture', '', '{}', 405],
@@ -1150,10 +1216,11 @@ function eventRangeRequestError(method, url, body) {
     const pairs = [...url.searchParams], keys = pairs.map(([key]) => key), values = Object.fromEntries(pairs)
     if (new Set(keys).size !== keys.length) throw new Error('duplicate query')
     const focus = url.pathname.startsWith('/api/focus/official-events')
-    const allowed = focus ? ['as_of', 'q', 'from', 'to'] : url.pathname === '/api/dashboard' ? [] : ['as_of']
+    const allowed = focus ? ['as_of', 'q', 'from', 'to', 'event_kind'] : url.pathname === '/api/dashboard' ? [] : ['as_of']
     if (keys.some((key) => !allowed.includes(key)) || (focus || method === 'POST') && !keys.includes('as_of')) throw new Error('query keys')
     const validDate = value => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) && !value.startsWith('0000-') && Number.isFinite(Date.parse(value + 'T00:00:00Z')) && new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value
     if (['as_of', 'from', 'to'].some(key => keys.includes(key) && !validDate(values[key])) || keys.includes('from') && keys.includes('to') && values.from > values.to || Array.from(values.q ?? '').length > 100) throw new Error('date or search conditions')
+    if (keys.includes('event_kind') && !['all', 'ex_dividend', 'ex_right', 'ex_right_and_dividend'].includes(values.event_kind)) throw new Error('event kind')
     if (method === 'POST' && values.as_of !== '2026-10-08') throw new Error('fresh observation cutoff')
     return null
   } catch { return [422, 'event_range_request_conditions_invalid'] }
@@ -1340,7 +1407,7 @@ async function proxy(request, response) {
   }
 }
 function previewBanner(newScope = stockScope6Active) {
-  if (eventRangeActive) return '<div style="padding:8px;background:#573e18;color:#fff">官方事件日期範圍驗收：個股目錄僅為合成路由身分，本次官方事件由 ROOT 的新公開原件提供。目錄不證明普通股、價格、市場完整性或歷史可得性；原件僅留本程序記憶體。</div><div id="root">'
+  if (eventRangeActive) return '<div style="padding:8px;background:#573e18;color:#fff">官方事件條件驗收：個股目錄僅為合成路由身分。本次官方事件須經明示首次取得；原件僅留本程序記憶體。</div><div id="root">'
   return newScope
     ? '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：八股操作目錄身分已核對。首次載入前沒有行情資料；只有本次明示取得且通過核對的官方單日行情可採用。來源日期與狀態可在個股詳情核對。</div><div id="root">'
     : '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方單日行情須經本次擷取或私有保存原件讀回核對後才採用；來源狀態可在個股詳情核對。</div><div id="root">'
@@ -1372,7 +1439,7 @@ async function serve() {
     } catch (error) { json(response, 500, { detail: error.message }) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'full App + root-owned actual API proxy', port, api_port: apiPort,
-    url: eventRangeActive ? `http://127.0.0.1:${port}/?as_of=2026-10-08&from=2026-10-01&to=2026-12-31` : stockScope6Active ? `http://127.0.0.1:${port}/?as_of=2026-10-07&min_lots=0.000&day_move=all&min_turnover=0&min_range_pct=0.000` : `http://127.0.0.1:${port}/stocks/TPEx/3105?as_of=2026-10-02`, official_event_range: eventRangeActive ? { contract: 'official-event-focus/p3-v1', capture_as_of: '2026-10-08', catalogue: 'synthetic routing identity only' } : null, stock_scope6: stockScope6Active ? { version: stockScope6Version, digest: stockScope6Digest } : null, ...receipt() })))
+    url: eventRangeActive ? `http://127.0.0.1:${port}/?as_of=2026-10-08&from=2026-10-01&to=2026-12-31&event_kind=all` : stockScope6Active ? `http://127.0.0.1:${port}/?as_of=2026-10-07&min_lots=0.000&day_move=all&min_turnover=0&min_range_pct=0.000` : `http://127.0.0.1:${port}/stocks/TPEx/3105?as_of=2026-10-02`, official_event_range: eventRangeActive ? { contract: 'official-event-focus/p4-v1', capture_as_of: '2026-10-08', catalogue: 'synthetic routing identity only' } : null, stock_scope6: stockScope6Active ? { version: stockScope6Version, digest: stockScope6Digest } : null, ...receipt() })))
   let stopping = false
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
     if (stopping) return

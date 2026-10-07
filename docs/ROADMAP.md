@@ -1,3 +1,21 @@
+## 目前：官方事件類型與同截止研究返回已有限接受
+
+2026-10-08。`M2-OFFICIAL-EVENT-KIND-20261008-1/B1` 已交付精確息／權／權息配 effective 日期／q、匹配事件追溯、同截止detail及原五條件返回。`official-event-focus/p4-v1` 完整feed先驗再range／kind／q，息不含權息；新Taipei10/08金融原件62事件62標的（55／6／1）、actual API、可信desktop1365×900／narrow390×844 三型、真零／恢復與502清值已有限接受，詳[個股頁](STOCK_RESEARCH_PAGE.md) §45／[來源准入](SOURCE_REGISTRY.md) §40。
+
+Coreoperation+1／standalone dependency0／reliability0／stall0→0，完整M1／M2／M3未完成。synthetic4只routing，不擴ordinary／fullmarket／price、payout數值、PIT／forecast／Plan／save。M1普通股20／21closes＋MA20trend仍缺exact dataRights／calendar；有新正面路徑才核，不以MIT軟體license代資料權利或全域禁止。下一核心由ROOT依近期M1→M2→M3優先，重核具名操作／真實支持／依賴／quota及驗收，不機械延filter或重審無新path。
+
+本批SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；owned runtime及前任精確worktree／branch清理已接受，有限收據見[協作紀錄](TASK_COORDINATION.md)，完成條件見[執行清單](ROADMAP_EXECUTION.md)。下方已接受BOOT10758B／原suffix／舊pending與hash保留歷史。
+
+下一UNADMITTED候選 `M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1`：1449／1463／2614在M1查看真TWSE公司原code／全名／簡稱／出表／上市日／行業原碼trace及同cutoff事件，再回原五條件。listedcompany不證ordinary／ETF／產業分類，不冒稱0056 ETF profile支持；新visible ROOT的准入條件見[執行清單](ROADMAP_EXECUTION.md)。
+
+## 目前：BOOT-M2-OFFICIAL-EVENT-KIND-20261008-1；原 ROOT 正式接手，下一核心尚未准入
+
+2026-10-08。前輪官方事件日期區間／q／同截止研究返回已有限接受，source9＋DOC6 EXACT15 已 commit／local master merge `4bcdd24f8897bd94fd57380e6d4eaa5316b4ba70`，功能邊界沿[個股頁](STOCK_RESEARCH_PAGE.md) §44。新 ROOT 四 actual runtime／Git／可見 terminal 與同三角色接手已接受；外部 `/subagents` gate 已正式接受、ONE 原 session continuation 已收到，產品流程由本 ROOT 正式接手續作，詳[協作紀錄](TASK_COORDINATION.md)。本次只更新自有 BOOT prefix，尚未准入來源／實作；下方舊 pending／hash 保留歷史。
+
+下一候選是 M2 官方事件息／權／權息配 effective 日期／q、同 cutoff 理由 detail 與原條件返回，**UNADMITTED**。1449 權10/12、1463 息10/15、2614 權息10/06 只屬前輪正面路徑的繼承事實；原件已釋放，不能重用。continuation 已收到；ROOT 下一 precise admission 須先核可交付核心、新來源／quota／pins 與具名驗收，完成條件見[執行清單](ROADMAP_EXECUTION.md)；沒有可執行核心就重選，不機械加 filter 或冒稱完整 M2。
+
+M1 普通股20／21真實 closes＋MA20 trend 仍缺 exact dataRights／calendar；有新正面取得路徑才核，MIT 軟體 license 不代資料權利，未採用來源不作全域不可用。優先仍 M1→M2→M3。繼承 coreoperation+1／dependency0／reliability+1／stall0→0；BOOT 新增核心／依賴解除／可靠性均0，非實作批次，不增計數或 reset，nextcoreless→1／連兩批先重選。完整 M1／M2／M3 未完成；原 BOOT prefix review／freeze 已接受；本次 gate 摘要待 ROOT review，BOOT 索引／版本封存未授且未執行。
+
 ## 目前：官方事件日期區間已有限接受
 
 `M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1` 已交付from／to inclusive配q、真零／恢復、同截止detail返回原條件；新10/08觀測62事件62標的及可信desktop／390px有限接受，詳[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。Coreoperation+1／dependency0／reliability+1／stall0→0，完整M1／M2／M3未完成。

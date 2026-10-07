@@ -1,3 +1,25 @@
+## 目前：M2-OFFICIAL-EVENT-KIND-20261008-1/B1 已 review（有限）
+
+2026-10-08。ROOT已接受新真原件／逐列映射／計數／actual API，以及可信desktop1365×900與narrow390×844的三型positive、真零／恢復、同cutoff detail返回、clear controls及502清值。consumer `official-event-focus/p4-v1`：完整feed驗後range→kind→q／group／code／cap100；原whole-feed與range counts不變，kind_event_count／kind_matched及q後matched精確語義、home event_kind／detail focus_event_kind與安全返回由[個股頁](STOCK_RESEARCH_PAGE.md) §45管理，原registry／pins不改。
+
+ONE新empty generation可信FIRST後金融GET1，62事件62標的／744原字串，held ORIGINAL body／receipt兩same_object已核；息55／權6／權息1。15 focus＋8 detail cutoff＋4cached POST＋4unavailable、8invalid先於source／catalogue422均接受，金融外網仍1。metadata4／金融1 SPENT；來源、quota及effective date非published／PIT的邊界見[來源准入](SOURCE_REGISTRY.md) §40。
+
+必要126 backend／51warnings、41src noEmit＋116靶向checks raw0，原raw1與未delivery receipts保留；可信same-key READ／cross-kind apply後502清card／count／provenance，工具可見輸入修正不計reliability。命令／版本／synthetic邊界及owned退出見[開發入口](development-baseline/README.md)。本批privateIO／新增test及product files0B；API／preview／compiler已退出、兩ports無listener、ownedpage close／tabs[]，原件RAM已釋放，不restart／replay／hydrate。
+
+Coreoperation+1／standalone dependency0／reliability0／stall0→0，完整M1／M2／M3未完成；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save。下一核心尚待ROOT具名選題及新操作／支持／依賴／finite quota／驗收核定，不機械延filter或重審無新path。SOURCE9＋DOC6待review／freeze、索引／commit／merge未完成；接手與前任有限清理見[協作紀錄](TASK_COORDINATION.md)，優先見[ROADMAP](ROADMAP.md)。原BOOT／starting suffix／nested histories不改。
+
+下一 `M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1` 仍UNADMITTED：M1目前只有synthetic routing身份，t187ap03_L為可執行公司profile新路徑，schema／fresh原件未驗；legacy fetch_universe會追加newlisting／rawsave，不直接復用。下一NEW visible ROOT須先核ownerRights／use、出表／上市日／觀測角色／非PIT、exact Code join／原名衝突規則、新獨立profile／consumer／sourceversion／external pins／有限新quota、完整原件／數值API／可信desktop窄版positive／zero／unavailable／samecutoff返回、白名單與0落盤清理，再實作／GET。listedcompany不證ordinary／ETF／產業分類，0056 profile不在此支持範圍；舊snapshot／SPENT quota不續用。下一BOOT與缺口見[協作紀錄](TASK_COORDINATION.md)。
+
+## 目前：BOOT-M2-OFFICIAL-EVENT-KIND-20261008-1；可見 gate 已接受，下一准入待核
+
+2026-10-08。前輪日期區間有限功能及 source9＋DOC6 EXACT15 commit／local master merge `4bcdd24f8897bd94fd57380e6d4eaa5316b4ba70` 已接受，原 task 收據與下方歷史 freeze 不改。新 ROOT 四 runtime／Git／唯一新 terminal 與同三角色接手已接受；外部可見 gate 已正式接受、ONE 原 session continuation 已收到，產品流程由本 ROOT 正式接手續作。本次只更新三 DOC 自有 prefix，產品來源／實作尚未准入。roster／共同根／責任與清理範圍見[協作紀錄](TASK_COORDINATION.md)，優先與候選見[ROADMAP](ROADMAP.md)。
+
+BOOT gate 已完成：外部舊 ROOT 在本 BOOT finalsaved／四 actual idle 後，於新唯一 terminal 核 Main＋同三 `/subagents` actual IDs、退出 menu、ONE continuation 給本 ROOT 原 session，且本 ROOT 已收到。精簡收據見協作紀錄；不自行 restart／replacement／resend／newroles。原9437B BOOT prefix review／freeze 已接受，本次 gate 更新交付後停寫待 ROOT 獨立 review；BOOT 索引刷新／stage／commit／merge 未授且未執行。
+
+下一候選 M2 官方事件息／權／權息配日期／q／同 cutoff detail 返回 **UNADMITTED**。continuation 已收到；ROOT 下一 precise admission 先在原 task 核具名 core／新增使用者操作／真實支持、source owner／rights／use、time／schema／profile／external pins／finite 新 quota、完整原件與 numeric／API／可信 desktop／窄版操作、白名單及最小驗證；本候選落盤／清理0。核定後才派同三角色實作／GET，舊58／62 feed、已釋放 producer、SPENT metadata8／financial1、舊22／136 與私人 remaining1 均不續 grant。無可執行核心須重選，未知或未驗保留缺口，不降低來源與操作 gate。精確金融契約沿[來源准入](SOURCE_REGISTRY.md)，BOOT 不回寫。
+
+繼承 coreoperation+1／dependency0／reliability+1／stall0→0；BOOT 新操作／依賴解除／可靠性0，非 implementation batch，不 increment／reset，nextcoreless→1／連兩批先重選。完整 M1／M2／M3 未完成；本 BOOT GET／privateIO／tests／artifacts／索引刷新／Git mutation／cleanup 全0，其他歷史 NO-RETRY 與 gate 依[AGENTS](../AGENTS.md)保留。
+
 ## 目前：M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 已 review（有限）
 
 ROOT已接受新真原件／計數／API／可信desktop與390px的日期區間、真零／恢復、detail改截止後返回原條件及API停止後502清值。新版 `official-event-focus/p3-v1` 完整feed先驗後range／q／cap100，精確契約由[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)管理；原來源pins不改。

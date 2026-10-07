@@ -58,7 +58,7 @@ from .decision import (
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
-from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events, canonical_event_date, effective_range
+from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events, canonical_event_date, canonical_event_kind, effective_range
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1820,7 +1820,8 @@ def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
     for item in result["items"]:
         if item["symbol"] in known:
             query = urlencode({"as_of": result["as_of"], "from": "official-events",
-                               "focus_q": result.get("search_query", ""), "focus_as_of": result["as_of"]})
+                               "focus_q": result.get("search_query", ""), "focus_as_of": result["as_of"],
+                               "focus_event_kind": result["event_kind"]})
             for field, key in (("effective_from", "focus_from"), ("effective_to", "focus_to")):
                 if result.get(field) is not None:
                     query += "&" + urlencode({key: result[field]})
@@ -1864,18 +1865,19 @@ def _official_event_focus_query(request: Request) -> dict[str, Any]:
     """Validate exact query spelling and multiplicity before any DB dependency."""
     pairs = list(request.query_params.multi_items())
     keys = [key for key, _ in pairs]
-    if len(keys) != len(set(keys)) or set(keys) - {"as_of", "q", "from", "to"} or "as_of" not in keys:
+    if len(keys) != len(set(keys)) or set(keys) - {"as_of", "q", "from", "to", "event_kind"} or "as_of" not in keys:
         raise HTTPException(status_code=422, detail="invalid official event query keys")
     values = dict(pairs)
     try:
         as_of = canonical_event_date(values["as_of"])
         from_date, to_date = effective_range(values.get("from"), values.get("to"))
+        event_kind = canonical_event_kind(values.get("event_kind", "all"))
         q = values.get("q", "")
         if len(q) > 100:
             raise ValueError("event_search_query_invalid")
     except (ValueError, TypeError) as error:
-        raise HTTPException(status_code=422, detail="invalid official event dates or search") from error
-    return {"as_of": as_of, "q": q, "from_date": from_date, "to_date": to_date}
+        raise HTTPException(status_code=422, detail="invalid official event dates, kind or search") from error
+    return {"as_of": as_of, "q": q, "from_date": from_date, "to_date": to_date, "event_kind": event_kind}
 
 
 @router.get("/focus/official-events")

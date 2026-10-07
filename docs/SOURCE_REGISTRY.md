@@ -1493,3 +1493,19 @@ ROOT已接受ONE fresh exact TWT48U金融GET，HTTP200／16876B／62事件62標�
 沿§9原source_version `twse-twt48u-all-d011-2026-09-12`、registry `r1-a1-c009-2026-09-12.1`、external digest `sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b`，不改pins／原snapshot。新consumer `official-event-focus/p3-v1` 的range只投影effective date，完整feed／receipt驗後才篩選；精確計數、API及具名操作由[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)管理。Published／first available／revision仍unknown，historical PIT unsupported；capture time不代發布，synthetic catalogue不證普通股／行情。
 
 本輪metadata8 SPENT（FinMind6、TWT48U權利2）、金融1 SPENT；5MiB、20秒per-operation／30秒cooperative、redirect0／retry0與RAM用途維持。首次失敗亦耗額度、focus／selected共享seal，不跨入口自動再取。FinMind歷史金融GET0，exact data owner／use rights及獨立calendar仍缺，不因MIT授權放行；舊22／136／private remaining1不續grant。API正常結束後原件RAM釋放，無落盤／replay／restart；下一分類操作須新ROOT准入，完整metadata／command／exit收據留原task。
+
+## 40. M2-OFFICIAL-EVENT-KIND-20261008-1/B1：事件類型實際來源與有限接受
+
+2026-10-08。ROOT已有限接受新consumer `official-event-focus/p4-v1` 的精確息／權／權息配effective range／q；新metadata4（兩official web＋兩direct requests）與金融1均SPENT。完整feed先驗後篩，API及可信desktop／窄版操作見[個股頁](STOCK_RESEARCH_PAGE.md) §45。本節只更新本輪§40，§39與既有pins保持。
+
+[Gov REST dataset89748](https://data.gov.tw/api/v2/rest/dataset/89748)：HTTP200／2658B，SHA-256 `d0227595f62abe139128aeac295231f1c2ce40d850b4724180ed52af062dd1b0`，UTC2026-10-07T20:44:58.522584Z～20:44:58.711184Z。上市股票除權除息預告表、cost free／license1／irregular，metadata modified2026-06-30；distribution 是 TWSE exchangeReport 的 response=open_data CSV URL，notes 指向 Swagger 與 OGL。metadata 更新日不代事件 availability。
+
+[TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json)：HTTP200／309960B，SHA-256 `06e1cea82448361e733a0ad1ae16e52f5d5d6b71905acd078472f852c32c0eb0`，UTC2026-10-07T20:44:58.711184Z～20:44:58.821751Z；Swagger2.0／info1.0／HTTPS，exact GET `/exchangeReport/TWT48U_ALL`、owner TWSE、十二 string fields／未宣告 auth，Date 為除權息生效日。ROOT 已核 linked doc 與 exact same operation 映射。
+
+ROOT 本次核[OGL1.0](https://data.gov.tw/license)與[TWSE 使用條款](https://www.twse.com.tw/zh/terms/use.html)第6同意方式／第8政府資料例外；兩者是 parsed pages，不虛構 raw HTTP／SHA，未另取得 Swagger info 裡舊 page/terms 路徑。local_fetch／raw_store 僅 RAM，summarize 保留 TWSE 署名、完整性及 trace。registry `r1-a1-c009-2026-09-12.1`、external digest `sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b`、source_version `twse-twt48u-all-d011-2026-09-12`／free_public_local 與原雙 pins 不改。
+
+可信可見FIRST觸發新empty OfficialEventMemory generation `49e5b5c3-88a8-4b78-83d3-a1fdf798b19c`，ONE exact HTTPS GET `/exchangeReport/TWT48U_ALL`：HTTP200／16876B／62事件62標的，UTC2026-10-07T21:14:07.222732+00:00～21:14:07.267759+00:00，Taipei觀測10/08。body SHA-256 `660bf15d488b36223c36c63cc7ec1bc7fc5339da36fed409e48eaa7748e31b3b`；ORIGINAL receipt4463B、SHA-256 `c2b0ae35a19c55ab198173cc1eb14951552b677fd0edd867d7c0ab067e59ad86`。body SHA同前輪，新GET／empty generation／新receipt及兩same_object核對證明本批fresh來源；全62×12原string（744）／使用欄位映射及ordinal逐列核，息55／權6／權息1。
+
+5MiB／identity／核定per-operation上限20秒、實際httpx15秒／30秒cooperative，非hard deadline；retry／redirect／warmup0、首次失敗亦SPENT／共享seal。15focus＋8detail＋4cached POST＋4unavailable與8invalid先拒422已接受，最終source_gets1／guards0／private_reads0。完整原件／receipt只同RAM snapshot；API結束後釋放，禁舊原件／producer reuse、restart／replay／preload／hydrate。舊metadata8／finance1、22／136／private remaining1不續grant，privateIO／新增test及product檔案0B，indexcache另報；完整收據留ROOT原task。
+
+本能力只按Date生效日，不需交易日calendar；published／first availability／revision unknown，historical PIT unsupported。synthetic4（0056 ETF／1449／1463／2614）只routing，不證ordinary／行情／全市場；payout numeric／forecast／Plan／save未驗。M1歷史closes權利／calendar仍缺新路徑，不重審。本批actual核心操作+1／standalone dependency0／reliability0／stall0→0，metadata／DOC本身不增核心或reset，完整M1／M2／M3未完成；[執行清單](ROADMAP_EXECUTION.md)管理版本待辦。

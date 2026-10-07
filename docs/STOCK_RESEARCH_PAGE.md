@@ -1516,3 +1516,42 @@ Desktop1365×900：0056日期22 draft套用前不查詢、提交後1卡、detail
 ### 44.4 尚缺與後續
 
 Coreoperation+1／dependency0／reliability+1／stall0→0。發布／first availability／revision／歷史PIT、事件價格影響及完整M1／M2／M3仍未驗。下一候選息／權／權息類型組合日期／q與同截止往返，雖有本次三分類來源路徑，仍須新ROOT核新quota／pins／具名驗收；本批金融GET與metadata均SPENT，不復用producer或已釋放原件。必要checks／原失敗及owned runtime退出見[開發入口](development-baseline/README.md#m2-official-event-date-range-20261008-1-官方事件區間的零落盤驗證入口)。
+
+## 45. M2-OFFICIAL-EVENT-KIND-20261008-1/B1：官方事件精確類型與研究往返
+
+2026-10-08。ROOT已有限接受新 `official-event-focus/p4-v1`：官方事件精確類型配effective inclusive日期／q、原事件trace、同cutoff M1及原五條件安全返回。新真原件62事件62標的，息55／權6／權息1；来源及完整body／ORIGINAL receipt雙SHA由[來源准入](SOURCE_REGISTRY.md) §40管理，原§44與舊pins不改。
+
+### 45.1 類型、篩選與精確計數
+
+home／API `event_kind` 為精確 all／ex_dividend／ex_right／ex_right_and_dividend，分別全部／息／權／權息；息不含權息。日期grammar／range／q／kind／duplicate／unknown先於source及catalogue拒422。完整feed與receipt先驗，再逐event range→kind，group及q→code排序→cap100；每卡只保留range＋kind真匹配的原events、日期／分類／ordinal與雙SHA，來源名稱不由synthetic catalogue覆寫。
+
+| 欄位 | 精確語義 |
+| --- | --- |
+| candidate_count／selected_count／total | 全合格feed事件列數／全合格feed事件列數／全feed去重標的數；range／kind／q不改。 |
+| effective_from／effective_to | canonical日期邊界或null；含首末日、缺側不限。 |
+| range_event_count／range_matched | range後、kind與q前的事件列數／去重標的數。 |
+| event_kind | canonical精確類型。 |
+| kind_event_count／kind_matched | range＋kind後、q前的事件列數／去重標的數。 |
+| matched／displayed／truncated | 再q後標的數／min(matched,100)／matched>100。 |
+
+任一保留event的Name或Code符合q即可留下該股全部range＋kind事件。available真零可顯示0；unavailable／失敗不得保留成功卡、count或provenance，也不冒稱真零。
+
+### 45.2 明確套用、共用URL與返回
+
+日期／q／event_kind皆draft，明確提交後才查詢；query key與response guard含event_kind，切換條件清舊成功狀態。清類型還原all且保留q／date／as_of，清日期或清q保留kind。四price條件共享首頁URL相容；事件參數不送price API。
+
+已知catalogue detail固定`/stocks/TWSE/{symbol}`，帶as_of、from=official-events、focus_as_of／focus_q／可選focus_from／focus_to及focus_event_kind。返回固定首頁official-event-focus-title anchor，恢復原as_of／q／from／to／event_kind；M1內改as_of不改原清單截止。日期／query multiplicity及safe local URL／回應条件仍須驗，不接受任意return URL。synthetic4（0056ETF／1449／1463／2614）只證routing，無M1入口仍保留事件。
+
+### 45.3 本次具名actual接受
+
+FIRST前8invalid422／source_gets0；新generation一金融GET後15focus＋8detail cutoff＋4cached POST＋4unavailable接受，外網仍1。Desktop1365×900：1449權10/12 range1／kind1／q1、0056息10/22 1／1／1、2614權息10/06 2／1／1，原ordinal分別49／5／53及雙SHA可追溯。draft不先套用；1449同08進M1、改07 unavailable、返回原08及五條件已核。
+
+Narrow390×844：2614權息、1449權、1463息（10/15 range2／kind2／q1，ordinal50）positive；1463 M1同08改07後返回原08五條件；1463權10/15 available真0。清類保留q／date／as_of，清日期與q保留kind，cutoff07 unavailable→08恢復均受驗，無horizontal overflow。
+
+API停止後same-key READ與cross-kind ex_right apply是真實trusted操作，本地502且cards／count／provenance清0。曾ACK未delivery的讀取不算成功；typed tab switch --focus恢復可見輸入後才接受。首次offscreen／日期fill ACK未改值等原失敗留task，不宣稱金融GET失败、不改產品碼或新增reliability；Date是生效日，不代published／availability／PIT。
+
+### 45.4 清理、版本與尚缺
+
+API48848／preview10296／compiler46848 absent、8803／8804無listener；ownedpage close／tabs[]。API與preview正常SIGINT均raw1；API無shutdownprint，preview有shutdown／loopback31GET＋1POST／rejected0／guard0／disk_artifact0。原件RAM隨API退出釋放，無restart／replay／hydrate；privateIO／新增test及product檔案0B，indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
+
+Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。接手及前任精確清理見[協作紀錄](TASK_COORDINATION.md)，收據留原task，不回寫hash。
