@@ -1275,3 +1275,35 @@ Actual22＝2907099B；24index dates/144原欄、18098daily全列width/date/code�
 B1 coreoperation+1／necessary joint-source-use-guard dependency+1／reliability0／stall0；BOOT／DOC／index／Git不計核心。Actual same-token502清兩來源已接受，missing-private-file UI未跑；必要checks／原失敗及owned runtime退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)。
 
 3files at-cap；cleanup preCreateProcess auto-review拒絕、process/deletion0，STRICT NO-RETRY；禁換tool/path/owner、逐檔/rename/containing-tree、copy/export/publish/newdiskcases。ENTIRE DAY-RANGE worktree/branch＋.range-ui-01a1106d2555430B/232files/94dirs兩次拒絕同fence，排除ALLcleanup；不掃Temp/HAR/GPG/cache/log/history。Chips memory隨正常退出釋放，private disk仍在；功能與清理分報，非global disk0／all raw released。24index calendar不代20／21 stock closes；trend／strategy／PIT／time／execution及完整ROADMAP未完成。Freeze／索引／commit／merge尚待原task，不回寫final hash。
+
+## 34. M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：保存行情與法人條件關注准入及日曆缺口
+
+**本批只接受 guarded unavailable 操作；正向法人篩選、真零候選、joint detail及八RAW返回未驗收。** 新入口／consumer／API／guards已實作，但首次金融capture的10月日曆含10/7，超出原immutable10/6用途；20daily GET0、沒有本輪12net。操作界線見[個股頁 §39](STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)，原§29～33的具名歷史驗收不擴張成本輪成功。
+
+### 34.1 新用途及精確篩選契約
+
+ROOT在implementation及兩項有限來源使用前准入 `m1-saved-price-chips-focus-tpex-2026-10-06.1`，canonical UTF-8 **14399B**、SHA `1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416`；新schema `price-saved-chips-focus/m1-v1`。New pin與§33原capture／storage／saved-focus／chips／joint五組version/digest各自重驗；不以received policy自建expected pin，不改原schemas、W8、calendar、default、七股private pins或兩股chips scope。
+
+新 `GET /api/focus/price-saved-chips`只接受一次且全部required的 `as_of/min_lots/day_move/min_turnover/min_range_pct/investor/horizon/min_net_lots`，body須0；missing／duplicate／unknown／invalid為422，unsupported cutoff先unavailable／private0。僅explicit2026-10-06；investor為foreign／trust／dealer、horizon原字串5或20。四price條件沿§32.2精確AND，再AND selected investor的true horizon net shares ≥ signed張門檻換算的shares，含等號，依code排序，不是ranking。
+
+`min_net_lots`最多21字、grammar `-?(0|[1-9][0-9]*)([.][0-9]{1,3})?`，另拒negative zero、超出signed int64 shares、加號／空白／逗號／exponent／前導零。最多三位小數，以精確整數scaled1000，`-0.001`為-1股；不用浮點或顯示約值filter。Eight RAW原字串及尾零應保留；這是實作契約，負門檻actual操作尚未驗收。
+
+Prices先完整驗原七股，joint候選只3105／6488；3293／5274／5347／6510／8069為scope排除，不記成法人零。Only ALL7 price＋BOTH chips來源／窗口完整並同cutoff／provenance才可宣告available count0；其他情況count=null／items=[]。同generation明示NEW private snapshot及held chips核對成功才能解除BOTH mask；失敗capture不可retry／restart／newproducer或hydrate舊memory。
+
+### 34.2 Existing private用途與本輪讀取
+
+唯一root/bundle及三檔full bytes/SHA/mtimeNS、兩層UTC沿[§33.2](#332-existing-private有限只讀)原值；本批另准有限只讀，不擴保存／copy/export/publish用途。Raw/capture/storage caps3145728/8192/16384B，bundle3170304B／one bundle／3files／原3dirs；shared≤64snapshots/192files，producer61、ROOT reserve3。Actual4producer＋3ROOT＝7/21，首次未完成assertion仍計quota；完整七股126原欄／42金融、12194data rows／18欄header及canonical relationships已核，post-stop三檔bytes/SHA/mtimeNS不變。原始失敗與修正收據留ROOT task，沒有private來源完整性失敗。
+
+Entry/apply/switch/back/capture completion無明示read則private0；new productdisk0／DBmut0，19DB schema/values/cell typeof與guards0保持。Snapshot10s／batch180s為cooperative檢查，32/64/96MiB retained graph bounds為估算，非OS硬deadline／RSSpeak。
+
+### 34.3 首次capture的實際日曆阻擋
+
+ONE fresh producer／ONE trusted FIRST capture沿§31有界兩份11391 index＋20daily用途；實際只取index2＝1502B，daily0、price financialGET0／外部metadataGET0。Sep1170B有效20rows／120原欄；Oct332B有5rows／30原欄，含10/7 extra row而超出原immutable10/6 schema/policy。ROOT獨立兩body＋ORIGINAL canonical receipts／Gregorian六欄／provenance／時間全核；完整SHA/UTC及累積來源用量留原task，不把index讀取換算成20daily或本輪12net。
+
+新focus consumer capture_attempted=true／can_capture=false；legacy institutional can_capture=true僅cached guard（actioncached/request_count2），不增加fetch。後續private read仍unavailable，不取daily／retry／restart／另開producer／oldhydrate。兩held原body與receipts的ROOT memory核對不增加financialGET。日後calendar替代方案須另有fresh parser/schema/policy／用途准入，不自動授權略過extra date。
+
+### 34.4 接受與未完成
+
+Coreoperation0／dependency0／reliability0／**stall1**（承前0）；新增seam、memory checks及actual拒用不算解除正向joint操作依賴。Matching／verifiedzero／jointdetail／八RAWback、負門檻actual與actual missing-private-file UI均未驗收；後者NOT RUN。必要checks、原失敗與owned退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)。
+
+私人1791644B／3files／原3dirs ATCAP，原cleanup preCreateProcess auto-review拒絕／process0／deletion0，STRICT NO-RETRY；禁alternative tool/path/owner、逐檔／rename／containingtree、copy/export/publish/delete/newdiskcases。ENTIRE historic DAY-RANGE worktree／branch＋.range-ui-01a1106d2555430B／232files／94dirs兩次拒絕，retain／excludeALLcleanup；不掃Temp/HAR/GPG/cache/log/history、TURNOVER或較舊資源。Chips held memory隨正常退出釋放，private disk保留；功能／清理分報。完整ROADMAP、20／21stock closes、trend／strategy／PIT／time／execution未完成。

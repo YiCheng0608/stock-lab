@@ -1291,3 +1291,33 @@ ROOT接受source實作、fresh22／all原receipt／金融、actual API及上列t
 B1 coreoperation+1／necessary joint-source-use-guard dep+1／reliability0／stall0。必要Py6／Node42guard＋9recovery＋7AppSSR／33src noEmit及首次失敗、normal exit與cleanup分報由[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)管理，命令與逐輪receipt留原task。Memory invalid／recovery／provenance tests不當actual missing-file UI；因NO-RETRY後者NOT RUN。未跑full suite／old full SSR／install／production build／diskcases，不外推其他平台／全市場／PIT或完整M1／M2／M3。
 
 下一候選 `M1-SAVED-PRICE-CHIPS-FOCUS-1006-1` 缺institutional predicate consumer／API／form／result；現saved-focus只有四price predicates、API五query fields，API和preview guards皆拒institutional query。擬僅3105／6488按選定investor、5或20日、signed net threshold精確篩選，再joint detail／全RAW返回；verified zero與unavailable分開，非ranking／strategy／PIT。NEW root先核缺失操作、選定語義／新policy、兩finite uses／pins／caps／errors，才private read／implementation／金融GET；目前未准新用途或producer，memory已釋放，fresh22須新必要grant。普通20／21stock closes／trend／strategy／time／execution及完整ROADMAP仍缺。
+
+## 39. M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：八條件入口與不可用驗收邊界
+
+**八條件guarded入口及具名unavailable操作已有限接受；法人matching、verifiedzero、jointdetail和八RAWback仍待驗。** 來源與14399B新policy／schema、signed精確比較、scope／quota及calendar拒用由[來源 §34](SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)管理，不以fixture或前輪joint成功代本輪正向操作。
+
+### 39.1 已實作操作契約
+
+新頁 `/saved-price-chips-focus`僅 `VITE_SAVED_PRICE_CHIPS_FOCUS='m1-v1'` 啟用，獨立於既有saved-focus／joint入口。八欄為原 `as_of/min_lots/day_move/min_turnover/min_range_pct` ＋ `investor/horizon/min_net_lots`；僅3105／6488的selected investor／true5或20日net與四price條件同時成立才列卡。全七price仍須完整核對，其餘五股不屬joint scope。
+
+兩個來源按鈕承接三次明示動作：①「讀取保存來源並篩選」核NEW private snapshot；②「首次取得法人來源」啟動一次新capture；③再按「讀取保存來源並篩選」核NEW private snapshot＋held chips。Entry／apply／切股／back／capture completion不auto-private read，也不在失敗capture後自動重抓。讀成功price而缺chips，候選仍未知；只有七price／兩股chips完整才可宣告真零。
+
+新focus GET要求八keys各一次／body0、壞query422，unsupported cutoff在I/O前unavailable；路由名稱與source模式不變成第九filter。預定detail context為11keys：`as_of/from=price-saved-chips-focus/source_mode=private_saved`＋`focus_as_of/focus_min_lots/focus_day_move/focus_min_turnover/focus_min_range_pct/focus_investor/focus_horizon/focus_min_net_lots`；只合法同cutoff兩股才可進joint detail，返回必須保留全部八原字串。此detail/back為已實作但未actual驗收的契約。
+
+Current source／snapshot／chips或provenance失敗須同時mask prices／chart／raw與chips nets／calendar／dailyraw；只留明示操作及原因。解除mask需same generation的新private及held chips皆成功，late／舊generation成功不能回填。Preview建置後曾補新flag下attempted失敗detail guard並跑memory checks；沒有重開preview／後續native，actual detail NOT RUN，原joint flag expression保持。
+
+### 39.2 Actual unavailable操作
+
+ONE page的具名桌面／窄版操作已接受；25trusted events及首次未送達動作／輸入修正的完整收據留ROOT原task。
+
+- Desktop1277×924/doc1262：home→八欄apply private0→明示read1七price仍unknown→ONE trusted FIRST只取兩index、Oct10/7超scope失敗→明示read2仍unknown。
+- Narrow390×844/doc375：10/5apply/read為unsupported、private0；回10/6配min_lots1000000.000，明示read3仍unknown。ROOT actualAPI read4核count=null/items=[]/price=null/institutional=[]/bothready=false/capture_attempted=true/can_capture=false，這個高門檻案例沒有驗出真零。
+- API正常停止後最後trusted read保持masked；沒有具名actual HTTP502status或positive→clear證據，不能沿用前輪same-token502驗收。
+
+Matchingcards／verifiedzero／jointdetail／八RAWback／負門檻actual均未驗，沒有本輪正向rawdrawer／chart驗收。ROOT價格／index原欄核對不代native逐欄驗收；actual missing-private-file UI NOT RUN。
+
+### 39.3 驗收、停滯與下一候選
+
+ROOT只接受以上unavailable及owned退出。Actual private7snapshots/21files、financial index2/daily0、metadata0／new productdisk0／DBmut0，原三檔post-stop不變；guards0／19DB全量保留。Coreoperation0／dependency0／reliability0／stall1（前0），正向source gap未解除。Py6／Node59/17/7／36src noEmit的必要checks與未跑項見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)；原失敗／runtime／關閉收據留ROOT task，memory測試不代產品正向驗收。
+
+下一conditional candidate `M2-FOCUS-STOCK-SCOPE-6-B1`：新增ordinary第八股的單日四理由→同截止個股→五RAWback，尚未准入。Current worker只fixed10/5／10/6、最新.5七股；fresh身份／實際date／scope用途及必要versioned date guard須在金融GET前另核，不能承諾目前wire仍10/6或擴private七股／joint兩股。Calendar替代也須另准parser/schema/policy；本failed producer禁retry／restart／newproducer。完整M1／M2／M3及20／21stock closes／trend／strategy／PIT／time／execution仍未完成。

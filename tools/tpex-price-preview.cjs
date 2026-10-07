@@ -15,23 +15,41 @@ const childProcess = require('node:child_process')
 const crypto = require('node:crypto')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
-const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest']
-assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--private-save-check', '--serve', '--saved-source-only', '--saved-price-chips-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
+const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
+assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check', '--serve', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
 assert(!(args.includes('--private-save-check') && (args.includes('--serve') || args.includes('--check') || args.includes('--focus-check'))), 'choose one check mode')
 assert(!args.includes('--saved-focus-check') || !['--serve', '--check', '--focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
 assert(!args.includes('--saved-source-only') || args.includes('--serve'), 'saved-source-only is an owned serve mode')
 const root = path.resolve(__dirname, '..')
-const jointActive = args.includes('--saved-price-chips-opt-in')
+const focusActive = args.includes('--saved-price-chips-focus-opt-in')
+const focusCheck = args.includes('--saved-price-chips-focus-check')
+assert(!focusActive || !args.includes('--saved-price-chips-opt-in'), 'choose one joint consumer')
+assert(!focusCheck || !['--serve', '--check', '--joint-check', '--focus-check', '--saved-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
+const jointActive = args.includes('--saved-price-chips-opt-in') || focusActive
 assert(!jointActive || args.includes('--serve') && args.includes('--saved-source-only'), 'joint opt-in requires saved-only serve')
 assert(jointActive || !pinOptions.some((name) => args.includes(name)), 'joint pins require joint opt-in')
 let jointPolicy
 const jointDigest = 'sha256:a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14'
-if (jointActive || args.includes('--joint-check')) {
+if (jointActive || args.includes('--joint-check') || focusCheck) {
   const jointPolicyText = fs.readFileSync(path.join(root, 'backend/app/saved_price_chips_entry.py'), 'utf8').match(/_POLICY = json.loads\(r'''([\s\S]*?)'''\)/)[1]
   jointPolicy = JSON.parse(jointPolicyText)
   assert(Buffer.byteLength(jointPolicyText) === 10702 && 'sha256:' + crypto.createHash('sha256').update(jointPolicyText).digest('hex') === jointDigest, 'canonical joint policy intact')
+}
+let focusPolicy
+const focusDigest = 'sha256:1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416'
+if (focusActive || focusCheck) {
+  const source = fs.readFileSync(path.join(root, 'backend/app/saved_price_chips_focus.py'), 'utf8')
+  const literal = source.match(/^_POLICY = json.loads\(r'''(.+)'''\)$/m)
+  assert(literal, 'exact admitted focus policy literal required')
+  assert(Buffer.byteLength(literal[1]) === 14399 && 'sha256:' + crypto.createHash('sha256').update(literal[1]).digest('hex') === focusDigest, 'ROOT focus policy intact')
+  focusPolicy = JSON.parse(literal[1])
+}
+if (focusActive) {
+  assert(option('--joint-focus-policy-version') === focusPolicy.version && option('--joint-focus-policy-digest') === focusDigest, 'independent external new focus pins required')
+  const pin = focusPolicy.independent_pins.joint_entry
+  assert(option('--joint-policy-version') === pin.policy_version && option('--joint-policy-digest') === `sha256:${pin.sha256}`, 'fifth independent policy pair required')
 }
 if (jointActive) {
   assert(option('--joint-policy-version') === jointPolicy.version && option('--joint-policy-digest') === jointDigest, 'independent external joint pins required')
@@ -150,7 +168,7 @@ function typecheck() {
   console.log(JSON.stringify({ typecheck: 'current full src noEmit', source_files: parsed.fileNames.length, incremental: false, composite: false }))
 }
 
-async function appSSRModule(joint = false) {
+async function appSSRModule(joint = false, focus = false) {
   // The package's CJS entry returns { default: Component }. Normalize only
   // this Node SSR import; the browser bundle keeps its real ECharts component.
   const originalLoad = Module._load
@@ -158,10 +176,11 @@ async function appSSRModule(joint = false) {
     const value = originalLoad.call(this, request, parent, ...rest)
     return request === 'echarts-for-react' && value && typeof value.default === 'function' ? value.default : value
   }
-  const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
+  const entry = focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'", resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
+  const result = await esbuild.build({ ...entry, bundle: true, write: false,
     platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies],
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'],
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(joint ? 'm1-v1' : '') } })
+    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(joint ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focus ? 'm1-v1' : '') } })
   const module = new Module(path.join(sourceRoot, '__memory_unit_lots_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_unit_lots_app__.cjs')
   module.paths = Module._nodeModulePaths(sourceRoot)
@@ -172,12 +191,12 @@ async function appSSRModule(joint = false) {
 
 // Check fixtures are synthetic; serving proxies the root-owned actual Python API.
 global.__institutionalWindowSSRSelection = 'unit-lots-only'
-const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
-const memoryCases = require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
+const cases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
+const memoryCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
-const savedCases = require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
-const savedFocusCases = require(path.join(sourceRoot, 'savedPriceFocus.test.ts'))
-const focusCases = require(path.join(sourceRoot, 'priceFocus.test.ts'))
+const savedCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
+const savedFocusCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'savedPriceFocus.test.ts'))
+const focusCases = focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'priceFocus.test.ts'))
 const React = requireDependency('react')
 const { renderToStaticMarkup } = requireDependency('react-dom/server')
 const runtime = () => ({ node: process.versions.node, typescript: ts.version, esbuild: esbuild.version })
@@ -216,6 +235,75 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (focusCheck) {
+    const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts'))
+    const tests = require(path.join(sourceRoot, 'savedPriceChipsFocus.test.ts'))
+    const checks = tests.runJointFocusTests()
+    let gateChecks = 0, ssrChecks = 0
+    const verify = (method, route, body, status) => {
+      assert.equal(focusRequestError(method, new URL(route, 'http://owned.invalid'), Buffer.from(body))?.[0] ?? 200, status); gateChecks++
+    }
+    const conditions = tests.jointFixtureConditions()
+    const query = new URLSearchParams(conditions).toString()
+    const focusRoute = '/api/focus/price-saved-chips?' + query
+    verify('GET', focusRoute, '', 200)
+    verify('GET', focusRoute + '&investor=foreign', '', 422)
+    verify('GET', focusRoute + '&x=1', '', 422)
+    verify('GET', focusRoute.replace('horizon=5', 'horizon=05'), '', 422)
+    verify('GET', focusRoute, '{}', 422)
+    verify('GET', focusRoute.replace('2026-10-06', '2026-10-05'), '', 200)
+    const captureRoute = '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06'
+    verify('POST', captureRoute, '{}', 409)
+    focusProxyReady = true
+    verify('POST', captureRoute, '{}', 200)
+    verify('POST', captureRoute, 'null', 422)
+    verify('POST', captureRoute, ' '.repeat(4097), 413)
+    verify('POST', captureRoute.replace('3105', '5347'), '{}', 405)
+    verify('GET', '/api/focus/price-saved?as_of=2026-10-06&min_lots=0', '', 405)
+    invalidateFocusProxy()
+    const slowTicket = focusProxyGeneration
+    assert(focusRequestError('GET', new URL(focusRoute + '&unknown=1', 'http://owned.invalid'), Buffer.alloc(0)))
+    invalidateFocusProxy()
+    assert(!completeFocusProxy(slowTicket, true) && !focusProxyReady); gateChecks++
+    verify('POST', captureRoute, '{}', 409)
+    const currentTicket = focusProxyGeneration
+    assert(completeFocusProxy(currentTicket, true)); verify('POST', captureRoute, '{}', 200)
+    assert(completeFocusProxy(currentTicket, false) && !focusProxyReady && !completeFocusProxy(currentTicket, true)); gateChecks++
+    verify('POST', captureRoute, '{}', 409)
+    const App = await appSSRModule(false, true)
+    const results = App
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    for (const route of ['/', '/saved-price-chips-focus?' + query, helper.jointDetailPath('3105', conditions) + '&focus_horizon=5']) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [route] }, React.createElement(App.default))))
+      if (route === '/') {
+        const expected = '/saved-price-chips-focus?' + new URLSearchParams({ as_of: '2026-10-06', min_lots: '10000.000', day_move: 'all', min_turnover: '0', min_range_pct: '0.000', investor: 'foreign', horizon: '5', min_net_lots: '0.000' })
+        assert(html.includes('href="' + expected.replaceAll('&', '&amp;') + '"') && html.includes('保存行情與法人條件關注：設定八條件'))
+      } else assert(route.startsWith('/saved-price-chips-focus') ? html.includes('保存行情與法人條件關注') && html.includes('首次取得法人來源') : html.includes('未讀取來源'))
+      ssrChecks++
+      client.clear()
+    }
+    const data = tests.jointFixture()
+    for (const item of [data, tests.jointFixture(tests.jointFixtureConditions({ min_net_lots: '1000000' }), data.price, data.institutional)]) {
+      const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(results.SavedPriceChipsFocusResults, { data: item })))
+      assert(item.count ? html.includes('3105') && html.includes('6488') && html.includes('交易日淨買賣超') : html.includes('零候選')); ssrChecks++
+    }
+    for (const cutoff of ['2026-10-05', '2026-10-07']) {
+      const unavailable = { ...data, as_of: cutoff, status: 'unavailable', count: null, items: [], price: null, institutional: [], price_ready: false, chips_ready: false, capture_attempted: false, can_capture: false, reasons: ['joint_focus_cutoff_not_supported'] }
+      const html = renderToStaticMarkup(React.createElement(results.SavedPriceChipsFocusResults, { data: unavailable }))
+      assert(html.includes(`來源日期 ${cutoff} 不在本次範圍`) && html.includes('候選數未知') && !html.includes('零候選') && !html.includes('請明示重新讀取')); ssrChecks++
+    }
+    const fixtureBytes = tests.jointFixtureInputBytes(data)
+    const fixtureGraph = tests.jointFixtureGraphBytes(data)
+    assert(fixtureBytes <= 81920 && fixtureGraph <= 524288, `bounded new joint fixtures: ${fixtureBytes}/${fixtureGraph}`)
+    assert(Object.values(counts).every((value) => value === 0), 'zero mutation/network guard counts')
+    console.log(JSON.stringify({ passed: true, new_validator_parser_context_recovery_checks: checks, new_guard_checks: gateChecks, new_ssr_checks: ssrChecks,
+      fixture_input_serialized_bytes: fixtureBytes, fixture_retained_graph_estimated_bytes: fixtureGraph, max_serialized_bytes: 81920, max_graph_estimated_bytes: 524288,
+      largest_shared_fixture_branch_graph_estimated_bytes: tests.largestJointFixtureGraphBytes, fixture_graph_estimate: 'explicitly interned immutable object/string payloads once; every property slot counted; not RSS or peak',
+      old_test_suites_run: 0, known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt() }))
+    return
+  }
   if (args.includes('--joint-check')) {
     let gateChecks = 0, stateChecks = 0, appChecks = 0
     const verifyGate = (method, route, body, expected) => {
@@ -642,6 +730,28 @@ function jointStaticError(method, pathname) {
   if (!['GET', 'POST'].includes(method)) return [405, 'joint_method_outside_scope']
   return null
 }
+let focusProxyReady = false
+let focusProxyGeneration = 0
+function invalidateFocusProxy() { focusProxyGeneration++; focusProxyReady = false }
+function completeFocusProxy(ticket, ready) {
+  if (ticket !== focusProxyGeneration) return false
+  if (ready) focusProxyReady = true
+  else invalidateFocusProxy()
+  return true
+}
+function focusRequestError(method, url, body) {
+  if (url.pathname === '/api/focus/price-saved-chips') {
+    if (method !== 'GET') return [405, 'joint_focus_method_outside_scope']
+    if (body.length) return [422, 'joint_focus_get_body_forbidden']
+    const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts'))
+    return helper.jointParams(url.searchParams) ? null : [422, 'joint_focus_conditions_invalid']
+  }
+  if (url.pathname === '/api/focus/price-saved') return [405, 'use_the_new_joint_focus_consumer']
+  const refused = jointRequestError(method, url, body)
+  if (refused) return refused
+  if (method === 'POST' && !focusProxyReady) return [409, 'joint_focus_explicit_price_validation_required']
+  return null
+}
 function jointRequestError(method, url, body) {
   const staticError = jointStaticError(method, url.pathname)
   if (staticError) return staticError
@@ -702,22 +812,46 @@ async function proxy(request, response) {
   let body
   if (jointActive) {
     const refusedBeforeBody = jointStaticError(request.method, url.pathname)
-    if (refusedBeforeBody) { requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
-    try { body = await boundedJointBody(request) } catch (error) { requests.rejected++; return json(response, error.status ?? 422, { detail: error.detail ?? 'joint body invalid' }) }
-    const refused = jointRequestError(request.method, url, body)
-    if (refused) { requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
+    if (refusedBeforeBody) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
+    try { body = await boundedJointBody(request) } catch (error) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, error.status ?? 422, { detail: error.detail ?? 'joint body invalid' }) }
+    const refused = (focusActive ? focusRequestError : jointRequestError)(request.method, url, body)
+    if (refused) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
   }
   const allowed = jointActive || request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
+  if (focusActive && url.pathname === '/api/focus/price-saved-chips') invalidateFocusProxy()
+  const focusTicket = focusProxyGeneration
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
     headers: { 'Content-Type': 'application/json' }, agent: false }, (incoming) => {
+    if (focusActive && url.pathname === '/api/focus/price-saved-chips') {
+      const chunks = []; let total = 0
+      incoming.on('data', (part) => { total += part.length; if (total > 8 * 1024 * 1024) { incoming.destroy(); response.destroy() } else chunks.push(part) })
+      incoming.on('end', () => {
+        const raw = Buffer.concat(chunks)
+        try {
+          const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts')), conditions = helper.jointParams(url.searchParams), data = JSON.parse(raw.toString('utf8'))
+          completeFocusProxy(focusTicket, incoming.statusCode === 200 && conditions !== null && helper.validJointFocus(data, conditions) && data.price_ready)
+        } catch { if (focusTicket === focusProxyGeneration) invalidateFocusProxy() }
+        response.writeHead(incoming.statusCode, { 'Content-Type': incoming.headers['content-type'] || 'application/json; charset=utf-8' }); response.end(raw)
+      })
+      return
+    }
+    if (focusActive && incoming.statusCode >= 400) completeFocusProxy(focusTicket, false)
+    incoming.on('error', () => { if (focusActive) completeFocusProxy(focusTicket, false) })
     response.writeHead(incoming.statusCode, { 'Content-Type': incoming.headers['content-type'] || 'application/json; charset=utf-8' })
     let total = 0
-    incoming.on('data', (part) => { total += part.length; if (total > 8 * 1024 * 1024) { incoming.destroy(); response.destroy() } })
+    const sourceChunks = focusActive && /\/prices\/saved|\/institutional-windows(?:\/capture)?$/.test(url.pathname) ? [] : null
+    incoming.on('data', (part) => { total += part.length; if (total > 8 * 1024 * 1024) { if (focusActive) completeFocusProxy(focusTicket, false); incoming.destroy(); response.destroy() } else sourceChunks?.push(part) })
+    incoming.on('end', () => {
+      if (sourceChunks) {
+        try { if (JSON.parse(Buffer.concat(sourceChunks).toString('utf8')).status !== 'available') completeFocusProxy(focusTicket, false) }
+        catch { completeFocusProxy(focusTicket, false) }
+      }
+    })
     incoming.pipe(response)
   })
-  upstream.on('error', (error) => json(response, 502, { detail: error.message }))
+  upstream.on('error', (error) => { if (focusActive && focusTicket === focusProxyGeneration) invalidateFocusProxy(); json(response, 502, { detail: error.message }) })
   if (jointActive) upstream.end(body)
   else {
     let length = 0
@@ -728,7 +862,7 @@ async function proxy(request, response) {
 async function serve() {
   const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
     absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__', platform: 'browser', format: 'esm',
-    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(jointActive ? 'm1-v1' : ''), 'process.env.NODE_ENV': JSON.stringify('development') } })
+    target: 'es2020', jsx: 'automatic', define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(jointActive && !focusActive ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(focusActive ? 'm1-v1' : ''), 'process.env.NODE_ENV': JSON.stringify('development') } })
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')

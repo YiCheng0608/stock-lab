@@ -1,3 +1,95 @@
+## 目前：M1-SAVED-PRICE-CHIPS-FOCUS-1006-1-B1 僅guarded unavailable已接受；正向操作待驗/待DOC review
+
+2026-10-07 Asia/Taipei。ROOT接受source11/checks/unavailable/owned退出；正向操作未驗。新coreprepend≤6144B；完整下方175029B SHA `605e8c79bd7e3ed7805cc9c55d719d8b274dc57715886e3cb32322ba11614af9` byte-equal，含frozenBOOT5977及全部nested歷史。DOC含BOOT≤32768B、UTF-8/LF/noBOM；舊pending依原task/Git，禁finalhash回寫。
+
+### SAME四角色與範圍
+
+四個Actual ID/配置/parent/sessionId與完整roster同下方frozenBOOT，無新角色。
+
+| 角色 | 本批責任/狀態 |
+| --- | --- |
+| 統籌 | 接受source/unavailable/owned退出，待DOC review。 |
+| 程式 | source11 net93272B/131072B，接受/STOPWRITE。 |
+| 文件 | exact7 SOURCE_REGISTRY/STOCK_RESEARCH_PAGE/UI_COPY_SPEC/development-baseline/README/ROADMAP/ROADMAP_EXECUTION/本檔；交付停寫。 |
+| 索引與Git | source=[]；freeze前不refresh/stage/commit/merge。 |
+
+Repo/worktree/branch/runtime/HEAD及visible/SINGLE gate同frozenBOOT；只same follow-up。
+
+### 已實作契約與實際缺口
+
+新policy `m1-saved-price-chips-focus-tpex-2026-10-06.1` canonical14399B/schema `price-saved-chips-focus/m1-v1`，BOTHfiniteuses/implementation前准入；old五pins/private7/chips2 immutable。[來源 §34](SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)管理。
+
+八RAW為原五price欄+investor/horizon/min_net_lots，joint3105/6488/10/6；ALL7price+BOTHchips完整才可真零，其餘5股排除。精確AND/GET/detail/BOTHmask見來源§34；detail新flag guard在previewbuild後修正，actual detailNOTRUN、oldexpression不改。
+
+兩buttons/三次明示動作：先「讀取保存來源並篩選」→「首次取得法人來源」→再獨立read/filter；entry/apply/switch/back/capturecompletion不auto-private，capture失敗禁止retry/newproducer/restart/oldhydrate。
+
+Actual financialGET2/index1502B，Sep1170有效、Oct332含10/7超出immutable10/6而拒用；兩body+原canonical receipts/150原欄/時間全核，dailyGET0/無current12net。歷史70GET/bytes未知部分與metadata依ROOT原task另列。Price financialGET0/currentmetadata0/newproductdisk0/DBmut0，19DB schema/values/typeof preserved/guards0。
+
+ONEpage `72673909-0cd4-44bc-a97f-1396812231e5`/25ALLtrusted：desktop八欄apply private0→read1七price仍unknown→FIRST2GET失敗→read2未知；narrow10/5unsupported private0→10/6 min_lots1000000.000 read3未知。ROOTAPI read4核countnull/items[]/pricenull/institutional[]/bothreadyfalse/attemptedtrue/can_capturefalse。[個股頁 §39](STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)管理；兩次無效輸入於SAMEpage修正。
+
+API normalstop1後read25保持masked，無HTTP502status/positive→clear證據；matching/真零/jointdetail/八RAWback/負門檻未驗。Private4producer+3ROOT=7/21≤64/192；expected3293 Unicode raw1已計quota，corrected驗證/poststop raw0，原三檔不變。
+
+Py6沿用；final Node raw0=59checks/17guards/7SSR/36srcnoEmit，首10optionalwindowsdiagnostics1保留。Fixture估算非RSSpeak。API/preview各normalstop1，ROOTcleanup82ff42raw0/ownedprocessabsent/8799+8800nolisteners；ONEpageclose raw0/freshtabs[]。命令/原失敗/未跑項見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)。
+
+### 計數、下一條件候選與結案
+
+**Coreoperation0/dependency0/reliability0/stall1（前0）**；guarded seam/tests/拒用不解正向操作依賴，BOOT/DOC/index/Git不計核心。Calendar替代須另准fresh parser/schema/policy/use，本failedproducer禁retry/restart/newproducer。
+
+NEXT conditional `M2-FOCUS-STOCK-SCOPE-6-B1` 未准入：ordinary第8股單日四理由→同cutoff個股→五RAWback。Current worker只fixed10/5+10/6/latest.5七股；新ROOT須GET前核freshidentity/實際date/scope/profile/use及可能versioned日期guard，date未知、不承諾10/6或10/7、不擴private7/joint2。Planned `roadmap-m2-focus-stock-scope-6-20261007`/`BOOT-M2-FOCUS-STOCK-SCOPE-6-1` 待本輪封存及新統籌gate；完整ROADMAP未完成。
+
+DOC→ROOT接受→freeze source11+DOC7→七currentstem qualified分區（workerreplacement/full一次/persistencefalse）→核准exactcommit→另准localmastermerge待。Predecessor outside-owner條件同frozenBOOT，接受≠執行、原task receipts為準，不重做olderlifecycle。Main trackedclean/stageempty，另5 untracked Windows cache files/1884960B owner/cause未知，保留並排除commit/cleanup，不作productdata或wholeclean聲稱。
+
+### 私人/歷史保留fence
+
+Retained `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`：
+body.csv1788599B SHA `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200` mtimeNS1791329565505432100；
+capture-receipt.json1461B SHA `871a6887a3b87bd7c23c20fc3a25ec98d369d0df2ed8eedbe8cb040e5242cd36` mtimeNS1791329565507431000；
+storage-receipt.json1584B SHA `436465b4d13d604965327fe1be7eff98edf65274b0f16c7871474280feb0197b` mtimeNS1791329565509430100。
+Total1791644B/3files/原3dirs ATCAP；maxbundle1/files3/dirs3/raw3145728/capture8192/storage16384/bundle3170304。Started/captured/saved2026-10-06T23:32:17.666931/23:32:21.005311/23:32:45.499432Z，非publication/firstavailable/revision（unknown）/PIT（unsupported）。
+
+Auto-review cleanup preCreateProcess拒絕/process0/deletion0 STRICT NO-RETRY；禁alternatetool/path/owner/filebyfile/rename/containingtree/copy/export/publish/delete/newdiskcases。ENTIRE historic `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-range-20261006` worktree/branch+.range-ui-01a1106d2555430B/232files/94dirs兩次拒絕，retain/excludeALLcleanup；不掃Temp/HAR/GPG/cache/log/history、TURNOVER或較舊資源。Actualmissing-private-file UI未跑；Owned退出不當原件已刪；功能/清理分報、交付停寫。
+
+## 目前：M1-SAVED-PRICE-CHIPS-FOCUS-1006-1 BOOT gate已接受；候選未准入
+
+2026-10-07 Asia/Taipei。只BOOT，非implementation batch；ROOT已核all4 runtime／rollout／Git及三child接手。只本檔prepend；完整下方169052B SHA `d2fc52f264e96611189c4ca07f966ff89fe9e5225f1ec350dfa3c6aa631f5903`ALLnested byte-equal；initial≤5500B／aggregate≤6144B、strict UTF-8／LF／noBOM。舊pending依原task/Git。
+
+### 四角色
+
+| 角色 | Actual ID／配置 | 接手／BOOT白名單 |
+| --- | --- | --- |
+| 統籌 | `01a114c2-39a6-7980-8609-e666fd58a464`；gpt-6.1-sol／ultra | 本輪root；BOOT／outside-owner acceptance。 |
+| 程式 | `01a114c4-17c8-7e81-8c98-acb60b814647`（Pascal）；gpt-6.1-sol／xhigh | 接受；write=[]，待follow-up。 |
+| 文件 | `01a114c4-6cff-7551-832c-215d7177741e`（Plato）；gpt-6.1-sol／xhigh | 接受；只本檔prefix，交付停寫。 |
+| 索引與Git | `01a114c4-bff4-7b00-b3ae-277543ac329d`（James）；gpt-6-luna／medium | 接受；source=[]，BOOT不refresh／stage／commit／merge／cleanup。 |
+
+Repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；all4 cwd／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-saved-price-chips-focus-20261007`；branch `roadmap-m1-saved-price-chips-focus-20261007`；start/current/master `08d16922136f8d35819a8e67a8e6f1fc8e5cbf44`，寫前clean/stageempty。
+
+Root parent=null／sessionId=self／source=vscode／forknull；native spawn_agent／fork_turns=none恰三新child。Child ACTUAL sessionId=root（非self）、parentThreadId／thread_spawn parent同root，depth1／forknull，paths /root/program、/root/documents、/root/index_git；THREAD＋turn_context為runtime依據。
+
+Visible terminal `term_f9f93cf5-bd2a-48ad-ba2c-d44e972fcff1`／incarnation `9ddfcd1b-c21d-4f12-ba1a-1cc6cd7e0736`／pane1；ROOT已核可見layout與actual runtime連結。唯一helper raw0／startupverified／taskSent=true；initial turn `01a114c2-3f5d-7d71-9a0f-0ae0271c4eb7`。RuntimeCLI0.160.0／pinnedvisible0.160.1分列。
+
+App connected／list103；same-source saved-price-chips七indexes已接受ready。Docs best_effort/no_recorded_issue/metadata_changed，advisory讀current；非freshcomplete、不refresh/rebuild/copy/vendorrepair，partial保留。
+
+### 繼承成果、下一操作與gate
+
+前批B1 core+1/necessaryjoint-guard dep+1/reliability0/stall0；source/DOC/freeze/qualified索引/exactcommit/正常master merge原task與Git已接受。BOOT/DOC/index/Git不增核心、不重置stall；完整ROADMAP未完成，見[ROADMAP](ROADMAP.md)。
+
+候選 `M1-SAVED-PRICE-CHIPS-FOCUS-1006-1`：僅3105／6488explicit10/06，四price predicates＋investor／true5或20horizon／signednet threshold → matching／verifiedzero／unavailable分列 → samecutoff jointdetail → allRAWback。Consumer/API/form/result未接。ROOT SINGLE continuation後先在原task定exact語義／newpolicy／schema／pins／BOTH finite source uses／caps／errors，才准privateRead／GET／implementation；chipsmemory已釋放，fresh22僅必要且新准入用途才可取得，不hydrate舊memory／default／history／PIT。
+
+本root BOOTfinalsaved2026-10-07T05:16:55.443Z／taskcomplete2026-10-07T05:16:55.717Z＋ALL4actualidle先核。前任才做UNIQUE /subagents request `82578cd5-b892-47a5-97db-18585140787b`／raw0／accepted=true／replayed=false；freshSCREEN `b28c7b29-a1c2-4e1c-bcda-0150c3430381` 為MainDefault／本節exact四ID／No sub-agents running。ONE Esc `d54ec02d-28b4-4b1f-8bfe-8bde7e267a44` raw0／accepted=true；SCREEN `2592a878-a175-4103-be29-6e78f3f2a114` menuclosed。SINGLE continuation已送達ORIGINAL root `01a114c2-39a6-7980-8609-e666fd58a464`；gate已接受，候選仍未准入／核心未派工，前任停寫後須自身final／idle才執行後述條件close/archive。Exact receipts依原root task；禁relaunch/resend/newroles/GUIbypass。[流程](../AGENTS.md#啟動驗收與交接)適用。
+
+ROOT接受outside-owner條件範圍：前任exact四ID root `01a1145d-1619-7ee2-a9de-e500a7075194`／program `01a1145f-6b0d-71c0-95b4-0dc5f5a69315`／docs `01a11460-07b8-73d0-a56e-fe3a9607f1d0`／index `01a11460-7742-7390-8d6a-11e60af5034d`；其自身finalsaved／all4idle／fresh exactterminal-runtime proof後才normalclose／archive。Acceptance≠execution，前任root仍active／BOOT cleanup0。Worktree／branch removal另待newqualified affectedindexes／baselineunneeded／mergedclean／無unsaved或newartifacts／resolvedabsolute outside-owner exactscope；不移owncwd／重做olderresources。
+
+### 私人保留
+
+Retained `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`，BOOT read0：
+body.csv1788599B SHA `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200` mtimeNS1791329565505432100；
+capture-receipt.json1461B SHA `871a6887a3b87bd7c23c20fc3a25ec98d369d0df2ed8eedbe8cb040e5242cd36` mtimeNS1791329565507431000；
+storage-receipt.json1584B SHA `436465b4d13d604965327fe1be7eff98edf65274b0f16c7871474280feb0197b` mtimeNS1791329565509430100。
+Total1791644B／3files／原3dirs ATCAP；maxbundle1/files3/dirs3/raw3145728/capture8192/storage16384/bundle3170304。Started/captured/saved2026-10-06T23:32:17.666931/23:32:21.005311/23:32:45.499432Z，非publication／firstavailable／revision（unknown）／PIT（unsupported）。
+
+Automatic cleanup rejection在CreateProcess前／process0／deletion0，STRICT NO-RETRY：禁alternate tool/path/owner／逐檔／rename／containingtree／copy/export/publish/newdiskcases。ENTIRE historic `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m2-day-range-20261006` worktree／branch＋.range-ui-01a1106d 2555430B／232files／94dirs兩次拒絕，MUST RETAIN／excludeALLcleanup；不掃Temp/HAR/GPG/cache/log/history。BOOT禁GET/privateRead/tests/fixtures/diskcases/DB/accounts/trading/index/Git/cleanup；無附件/backups/helpers/copies。交付停寫待ROOT。
+
 ## 目前：M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1-B1 核心已有限接受；待DOC review／freeze
 
 2026-10-07 Asia/Taipei。ROOT已接受source／actual操作及owned清理。只NEW core prepend≤6144B；完整下方162910B SHA `026dd751b6d1095a98ae1cab56fddcdee1c49a537c9c58fd9ee336180d9cf017` byte-equal，含frozenBOOT6047／原156863及allnested歷史；BOOT不改。

@@ -79,6 +79,8 @@ import { StockOverview, validChips1006Identity, validChips1006Read } from './com
 import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
 import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
+import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
+import { JOINT_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
@@ -1042,6 +1044,7 @@ export function TodayPage() {
           </section>
           <PriceLotFocusPanel />
           <p><Link className="text-link" to="/focus/price-saved?as_of=2026-10-06&min_lots=0&day_move=all&min_turnover=0&min_range_pct=0">已保存行情關注：讀取本機七股並套用條件</Link></p>
+          {JOINT_FOCUS && <p><Link className="text-link" to="/saved-price-chips-focus?as_of=2026-10-06&min_lots=10000.000&day_move=all&min_turnover=0&min_range_pct=0.000&investor=foreign&horizon=5&min_net_lots=0.000">保存行情與法人條件關注：設定八條件</Link></p>}
           <OfficialEventFocusPanel />
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
@@ -1216,19 +1219,23 @@ export function jointSavedContext(exchange: string, symbol: string, params: URLS
   return exchange === 'TPEx' && SAVED_FOCUS_SYMBOLS.includes(symbol) && params.get('as_of') === '2026-10-06' && savedFocusReturnPath(params) !== null
 }
 const JOINT_PRICE_CHIPS = import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION === 'm1-v1'
+const JOINT_FOCUS = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS === 'm1-v1'
+const JOINT_MODE = JOINT_PRICE_CHIPS || JOINT_FOCUS
 
 function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
   const lotFocusReturnPath = priceFocusReturnPath(searchParams)
-  const savedFocusBack = savedFocusReturnPath(searchParams)
+  const jointFocusBack = JOINT_FOCUS ? jointReturnPath(searchParams) : null
+  const jointFocusConditions = jointFocusBack ? jointParams(new URLSearchParams(jointFocusBack.split('?')[1])) : null
+  const savedFocusBack = JOINT_FOCUS ? jointFocusBack : savedFocusReturnPath(searchParams)
   const privateSavedOnly = searchParams.has('source_mode') || searchParams.get('from') === 'price-saved-focus'
-  const jointContextValid = jointSavedContext(exchange, symbol, searchParams)
-  const jointScope = JOINT_PRICE_CHIPS && jointContextValid && ['3105', '6488'].includes(symbol)
+  const jointContextValid = JOINT_FOCUS ? jointDetailContext(exchange, symbol, searchParams) : jointSavedContext(exchange, symbol, searchParams)
+  const jointScope = JOINT_MODE && jointContextValid && ['3105', '6488'].includes(symbol)
   const focusReturnPath = savedFocusBack ?? lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_PRICE_CHIPS && privateSavedOnly && !jointContextValid), ...(JOINT_PRICE_CHIPS ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_MODE && privateSavedOnly && !jointContextValid), ...(JOINT_MODE ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
   const privateKey = `${exchange}:${symbol}:${asOf}${privateSavedOnly ? `:private_saved:${searchParams.toString()}` : ''}`
   const privateRoute = useRef({ key: privateKey, generation: 0 })
   if (privateRoute.current.key !== privateKey) privateRoute.current = { key: privateKey, generation: privateRoute.current.generation + 1 }
@@ -1255,7 +1262,7 @@ function StockPage() {
   useEffect(() => { if (jointScope && query.error) failJoint('window_read_request_failed') }, [query.error, privateToken, jointScope])
   const currentChips = query.data?.overview?.institutional
   const hasJointEvidence = Boolean(currentChips?.calendar?.status === 'available' || Object.values(currentChips?.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0))
-  const jointEvidenceInvalid = jointScope && currentChips != null && (!validChips1006Identity(currentChips, exchange, symbol, asOf) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf))
+  const jointEvidenceInvalid = jointScope && currentChips != null && (JOINT_FOCUS ? jointDetailEvidenceInvalid(currentChips, exchange, symbol, asOf) : !validChips1006Identity(currentChips, exchange, symbol, asOf) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf))
   useEffect(() => { if (jointEvidenceInvalid) failJoint('chips_memory_evidence_invalid') }, [jointEvidenceInvalid, privateToken])
   const privateAction = async (save: boolean) => {
     const instrument = query.data?.instrument
@@ -1306,7 +1313,7 @@ function StockPage() {
   const [windowBusyKey, setWindowBusyKey] = useState<string | null>(null)
   const [windowRequestFailure, setWindowRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const acquireWindows = async () => {
-    if (windowPending.current || JOINT_PRICE_CHIPS && !jointScope) return
+    if (windowPending.current || JOINT_MODE && !jointScope) return
     if (jointScope && !jointValidation.current.failure && (privateRead?.token !== privateToken || !query.data?.instrument || !validSavedFocusStock(privateRead.data, query.data.instrument, asOf))) return
     const requestKey = windowRequestKey
     const generation = windowRoute.current.generation
@@ -1399,7 +1406,7 @@ function StockPage() {
     }
   }
   if (query.isLoading) return <Loading />
-  if (JOINT_PRICE_CHIPS && privateSavedOnly && !jointContextValid) return <div className="data-gap" role="alert">保存來源模式、日期或返回條件未通過核對，未讀取來源。</div>
+  if (JOINT_MODE && privateSavedOnly && !jointContextValid) return <div className="data-gap" role="alert">保存來源模式、日期或返回條件未通過核對，未讀取來源。</div>
   if (query.error && !(asOf === '2026-10-06' && query.data)) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
@@ -1485,7 +1492,7 @@ function StockPage() {
     { id: 'data', label: '資料說明' },
   ]
   return <div className="page">
-    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{savedFocusBack ? '← 回到已保存行情關注（原條件）' : lotFocusReturnPath ? '← 回到成交張數關注（原條件）' : focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
+    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{jointFocusBack ? '← 回到保存行情與法人關注（原八條件）' : savedFocusBack ? '← 回到已保存行情關注（原條件）' : lotFocusReturnPath ? '← 回到成交張數關注（原條件）' : focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
     <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>
@@ -1494,11 +1501,11 @@ function StockPage() {
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
-      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols.map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={privateSavedOnly && savedFocusBack ? savedFocusDetailPath(symbol, asOf, searchParams.get('focus_min_lots')!, searchParams.get('focus_day_move') as 'all' | 'up' | 'down' | 'flat', searchParams.get('focus_min_turnover')!, searchParams.get('focus_min_range_pct')!) : `/stocks/TPEx/${symbol}?as_of=${asOf}${privateSavedOnly ? '&source_mode=private_saved' : ''}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
+      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(jointFocusConditions ? JOINT_SYMBOLS : (memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols).map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={jointFocusConditions ? jointDetailPath(symbol, jointFocusConditions) : privateSavedOnly && savedFocusBack ? savedFocusDetailPath(symbol, asOf, searchParams.get('focus_min_lots')!, searchParams.get('focus_day_move') as 'all' | 'up' | 'down' | 'flat', searchParams.get('focus_min_turnover')!, searchParams.get('focus_min_range_pct')!) : `/stocks/TPEx/${symbol}?as_of=${asOf}${privateSavedOnly ? '&source_mode=private_saved' : ''}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_PRICE_CHIPS ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
+    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
@@ -1784,6 +1791,7 @@ export default function App() {
   return <Shell><Routes>
     <Route path="/" element={<TodayPage />} />
     <Route path="/focus/price-saved" element={<SavedPriceFocusPage />} />
+    {JOINT_FOCUS && <Route path="/saved-price-chips-focus" element={<SavedPriceChipsFocusPage />} />}
     <Route path="/news/:newsId" element={<NewsDetailPage />} />
     <Route path="/news" element={<NewsPage />} />
     <Route path="/themes" element={<ThemesPage />} />

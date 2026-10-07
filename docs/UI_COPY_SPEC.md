@@ -525,6 +525,22 @@ Joint preview只在 `VITE_SAVED_PRICE_CHIPS_INTEGRATION='m1-v1'` 及合法3105�
 
 Current讀取／provenance失敗同時清saved headline／volume／原列／chart及chips nets／calendar／dailyraw；留兩read buttons與ONE原因，不用零或舊值掩蓋。恢復須same context／generation明示saved snapshot＋held法人核對皆成功；held不外網重抓、failed capture不retry。Actual same-token502／桌面窄版範圍及missing-file UI未跑由[個股頁 §38](STOCK_RESEARCH_PAGE.md#38-m1-saved-price-chips-integration-1006-1共同入口與同截止往返)管理；compile flag不擴大來源或PIT。
 
+
+### 10.8 保存行情與法人條件關注
+
+新 `VITE_SAVED_PRICE_CHIPS_FOCUS='m1-v1'`入口沿§10.6五price欄，增加「法人」（外資／投信／自營商）、「交易日窗口」（5／20交易日）、「最小淨買賣超（張，可負值）」；門檻含等號、允負數且最多三位小數，拒負零／加號／空白／逗號／前導零／exponent及超限值。稱「四項行情條件與選定法人窗口條件同時成立」，不把code順稱排名。只3105／6488有joint候選資格，其餘五price股為scope排除。
+
+首頁入口「保存行情與法人條件關注：設定八條件」、heading「保存行情與法人條件關注」。兩個來源按鈕承接三次明示動作：先「讀取保存來源並篩選」、再「首次取得法人來源」、完成後另按「讀取保存來源並篩選」；apply／切換／返回／capture完成不自動讀private。狀態使用actual literal：
+
+- 未讀取：「目前條件尚未完整明示讀取，候選數未知。套用、切股與返回都不自動讀取來源。」
+- Price-only：「七股保存來源已核對，尚未取得完整兩股法人來源。候選數未知。」
+- 失敗：「共同來源讀取或核對失敗，候選數未知。請明示重新讀取兩來源；失敗的來源取得不重試。」
+- 10/5：「來源日期 2026-10-05 不在本次範圍；只支持 2026-10-06 的 3105、6488。候選數未知。」
+
+Failed capture不retry；source/provenance失敗同時清兩區數值、raw與chart，price成功也不顯示0。
+
+只有完整七price＋兩股chips才可顯示具名真零原因；eight RAW及尾零應完整返回。這些為實作契約，本輪只有unavailable流程actual接受；未驗matching／真零／jointdetail／八RAWback／負門檻。Actual範圍與日曆10/7拒用見[個股頁 §39](STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)／[來源 §34](SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)；不以「高門檻無候選」掩蓋unavailable。
+
 ## 11. 現行信心語意與下一版 AI、題材及短線資金文案
 
 | 資訊 | 允許 | 禁止 |

@@ -514,6 +514,18 @@ Actual SINGLE producer／NEW stores／finance seed0、trusted FIRST22；ROOT ind
 
 API50788／parent55084、preview28516／parent44304 normal Ctrl+C各rawexit1／stoppedtrue，DISTINCT ROOT cleanup `bb71a4` raw0核上述及esbuild37844 absent、8799／8800無listener。Local preview /__price_ui/receipt GET1為只讀memory metadata，無proxy/private I/O；api_get14／api_post3／rejected6非金融GET；held POST200 source0後同token502清兩來源，無APIrestart。ONE page正常closed `443dd850-d6ff-40c1-beae-9a3acd7246b9` raw0，fresh tabs[] `460238f7-04d5-4a2c-919c-a28c17e94432`。Chips graph隨退出釋放，private disk仍1791644B／3files／3dirs at-cap；actualmissing-file UI NOT RUN。Strict NO-RETRY及ENTIRE DAY-RANGE fence見來源§33，功能／清理分報，非global disk0或allrawreleased。
 
+
+### M1-SAVED-PRICE-CHIPS-FOCUS-1006-1 八條件入口的零落盤驗證入口
+
+沿前節共用pinned dependencies、API/preview及guarded SQLite `:memory:`，不install／建helper或fixture檔／startup mkdir／正式DB／另建環境。新 `--saved-price-chips-focus-opt-in` 與 `VITE_SAVED_PRICE_CHIPS_FOCUS='m1-v1'` 獨立；本preview old integration flag OFF。New pair為 `--joint-focus-policy-version m1-saved-price-chips-focus-tpex-2026-10-06.1 --joint-focus-policy-digest sha256:1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416`；另核原capture/storage/saved-focus/chips/joint五組pins、原task literal private root及finite quota，原flags/公式不改。
+
+必要checks：Py6 raw0沿用；final pinned Node raw0＝59checks／17guards／7SSR／36src noEmit。首次10個optional windows type diagnostics exit1修正後0；write:false/noEmit/incremental:false/composite:false。Memory fixture serialized41039B／graph279196B、largest287512B為interned payload＋slot估算，非RSSpeak。Full命令／版本／原exit與read-only assertion/quoting修正收據留ROOT原task，本節不另授權重跑。
+
+Actual只FIRST index2／1502B、daily0，Oct10/7超immutable10/6scope而拒用；[§39](../STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)管理桌面／窄版unavailable。Private4producer＋3ROOT＝7/21（含首次assertion），post-stop原三檔bytes/SHA/mtimeNS不變；19DB schema/values/cell typeof保留、guards0/DBmut0/new productdisk0。Detail新flag attempted失敗guard在previewbuild後修正並驗memory，無previewrestart／後續native，actual detail NOT RUN；oldexpression保持。
+
+API／preview正常stop各raw1，ROOT owned cleanup raw0核processes absent／8799+8800無listener，ONEpageclose raw0／fresh tabs[]；commands/PIDs/lifecycle receipts留ROOT task，功能與清理分報。停API後native只證masked，沒有HTTP502status／positive→clear驗收。Matching／verifiedzero／jointdetail／八RAWback／負門檻actual未驗；actual missing-file NOT RUN，未跑fullsuite/install/productionbuild/diskcases。
+
+來源/caps/no-retry由[§34](../SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)管理。Private1791644B／3files／原3dirs ATCAP仍disk保留；ENTIRE DAY-RANGE worktree/branch及.range-ui、TURNOVER/較舊資源排除cleanup，禁替代tool/path/owner／逐檔/rename/containingtree、copy/export/publish/delete/newdiskcases。Core0/dep0/reliability0/stall1；unavailable受驗不解除正向來源依賴。
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

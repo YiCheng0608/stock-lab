@@ -1,3 +1,4 @@
+import type { JointConditions, JointFocusData } from './savedPriceChipsFocus'
 import type {
   BacktestSummary,
   BackfillRun,
@@ -226,6 +227,9 @@ export const getSavedFocusStockPrice = (exchange: string, symbol: string, asOf: 
 
 export const getSavedPriceFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove, minTurnover: string, minRangePct: string) =>
   get<PriceSavedFocusData>(`/focus/price-saved${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)
+
+export const getSavedPriceChipsFocus = (values: JointConditions) =>
+  get<JointFocusData>(`/focus/price-saved-chips${queryString(values)}`)
 
 export const getPriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
   get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)

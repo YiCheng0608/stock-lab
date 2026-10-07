@@ -25,6 +25,7 @@ mode.add_argument("--check", action="store_true")
 mode.add_argument("--focus-check", action="store_true")
 mode.add_argument("--saved-focus-check", action="store_true")
 mode.add_argument("--joint-check", action="store_true")
+mode.add_argument("--saved-price-chips-focus-check", action="store_true")
 mode.add_argument("--private-save-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
@@ -43,6 +44,9 @@ parser.add_argument("--chips-policy-version")
 parser.add_argument("--chips-policy-digest")
 parser.add_argument("--joint-policy-version")
 parser.add_argument("--joint-policy-digest")
+parser.add_argument("--saved-price-chips-focus-opt-in", action="store_true")
+parser.add_argument("--joint-focus-policy-version")
+parser.add_argument("--joint-focus-policy-digest")
 parser.add_argument("--disk-phase", choices=("check", "write", "read", "faults", "cleanup"), default="check")
 ARGS = parser.parse_args()
 if ARGS.live_source_opt_in and not ARGS.serve:
@@ -67,7 +71,12 @@ if SAVED_FOCUS_ACTIVE and (not ARGS.saved_source_only or
         (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest) !=
         ("m1-saved-price-focus-tpex-11370-2026-10-06.1", "sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b")):
     parser.error("saved focus requires saved-source-only and independently admitted consumer pins")
-JOINT_ACTIVE = ARGS.saved_price_chips_opt_in
+JOINT_FOCUS_ACTIVE = ARGS.saved_price_chips_focus_opt_in
+if JOINT_FOCUS_ACTIVE and ARGS.saved_price_chips_opt_in:
+    parser.error("choose one independently admitted joint consumer")
+if not JOINT_FOCUS_ACTIVE and any((ARGS.joint_focus_policy_version, ARGS.joint_focus_policy_digest)):
+    parser.error("new focus pins require explicit new focus opt-in")
+JOINT_ACTIVE = ARGS.saved_price_chips_opt_in or JOINT_FOCUS_ACTIVE
 if JOINT_ACTIVE and (not ARGS.serve or not ARGS.saved_source_only or not SAVED_FOCUS_ACTIVE or PRIVATE_ROOT is None
         or ARGS.cutoff != "2026-10-06" or ARGS.live_source_opt_in):
     parser.error("joint entry requires explicit saved-only 10/06 serve and all consumer pins")
@@ -274,6 +283,18 @@ def configure_joint(fixture):
         "price_storage": (ARGS.private_policy_version, ARGS.private_policy_digest),
         "saved_focus": (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest),
         "institutional": (ARGS.chips_policy_version, ARGS.chips_policy_digest)})
+    if JOINT_FOCUS_ACTIVE:
+        from app import saved_price_chips_focus as joint_focus
+        joint_focus.validate_admission(ARGS.joint_focus_policy_version, ARGS.joint_focus_policy_digest, {
+            "price_capture": (ARGS.policy_version, ARGS.policy_digest),
+            "price_storage": (ARGS.private_policy_version, ARGS.private_policy_digest),
+            "saved_focus": (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest),
+            "institutional": (ARGS.chips_policy_version, ARGS.chips_policy_digest),
+            "joint_entry": (ARGS.joint_policy_version, ARGS.joint_policy_digest)})
+        fixture.stack.enter_context(patch.object(joint_focus, "STATE", joint_focus.ConsumerState()))
+        fixture.stack.enter_context(patch.dict(os.environ, {joint_focus.ENABLE_ENV: "1",
+            joint_focus.VERSION_ENV: ARGS.joint_focus_policy_version, joint_focus.DIGEST_ENV: ARGS.joint_focus_policy_digest,
+            joint_focus.JOINT_VERSION_ENV: ARGS.joint_policy_version, joint_focus.JOINT_DIGEST_ENV: ARGS.joint_policy_digest}))
     if str(PRIVATE_ROOT).replace("\\", "/") != entry.entry_policy()["private_use"]["root"]:
         raise ValueError("joint_literal_private_root_not_admitted")
     class ChipsTransport(httpx.BaseTransport):
@@ -303,7 +324,7 @@ def configure_joint(fixture):
     fixture.stack.enter_context(patch.object(focus, "MAX_READS", entry.PRODUCER_READ_LIMIT))
     fixture.stack.enter_context(patch.dict(os.environ, {windows.ENABLE_ENV: "1", windows.VERSION_ENV: ARGS.chips_policy_version,
         windows.DIGEST_ENV: ARGS.chips_policy_digest, old.ENABLE_ENV: "0"}))
-    entry.install_request_gate(fixture.app)
+    (joint_focus if JOINT_FOCUS_ACTIVE else entry).install_request_gate(fixture.app)
 
 
 def receipt(fixture=None, include_raw=False):
@@ -346,6 +367,9 @@ def receipt(fixture=None, include_raw=False):
             source_request_count=len(fixture.chips_transport.requests), old_store_empty=not fixture.old_chips_store._attempted and not fixture.old_chips_store.raw_captures,
             price_store_empty=not fixture.store._attempted and fixture.store.raw_capture is None,
             private_metadata_io_by_diagnostic=0, preloaded_source=False)
+        if JOINT_FOCUS_ACTIVE:
+            from app import saved_price_chips_focus as joint_focus
+            result["joint_focus"] = joint_focus.STATE.diagnostic()
     return result
 
 
@@ -388,7 +412,7 @@ def check():
         print(json.dumps(output, ensure_ascii=False), flush=True)
         return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
-    for name in (("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
+    for name in (("test_saved_price_chips_focus",) if ARGS.saved_price_chips_focus_check else ("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()

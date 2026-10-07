@@ -76,6 +76,7 @@ from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price, supported_symbols
 from .tpex_price_saved import private_price
 from .price_saved_focus import build_saved_focus, focus_policy, read_saved_focus_stock
+from .saved_price_chips_focus import build_focus as build_saved_chips_focus, conditions as saved_chips_conditions
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
 from .institutional_windows_1006 import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
@@ -1734,6 +1735,24 @@ def stock_price_saved_focus_read(request: Request, exchange: str, symbol: str,
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     return read_saved_focus_stock(instrument, as_of)
+
+
+@router.get("/focus/price-saved-chips")
+def price_saved_chips_focus(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    from .saved_price_chips_focus import KEYS, STATE
+    pairs = list(request.query_params.multi_items())
+    try:
+        if len(pairs) != 8 or len(dict(pairs)) != 8:
+            raise ValueError("joint_focus_exact_eight_query_required")
+        values = dict(pairs)
+        saved_chips_conditions(values)
+        with db.no_autoflush:
+            instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx",
+                Instrument.symbol.in_(focus_policy()["scope"]["symbols"])).order_by(Instrument.symbol)).all())
+        return build_saved_chips_focus(instruments, values)
+    except ValueError as error:
+        STATE.observe()
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/focus/price-saved")
