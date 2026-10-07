@@ -18,7 +18,7 @@ from worker import twse_action_capture as consumer
 from worker.source_runtime import capture_memory
 
 VERSION = "official-events/p3b-v1"
-FOCUS_VERSION = "official-event-focus/p2-v1"
+FOCUS_VERSION = "official-event-focus/p3-v1"
 FOCUS_LIMIT = 100
 CAPTURE_ENV = "STOCK_TWSE_EVENTS_MEMORY_CAPTURE"
 PINS = {
@@ -34,6 +34,8 @@ class OfficialEventMemory:
     def __init__(self):
         self.snapshot: tuple[bytes, bytes] | None = None
         self.capture_lock = Lock()
+        self.attempted = False
+        self.failure_reason: str | None = None
 
 
 MEMORY_EVENTS = OfficialEventMemory()
@@ -83,6 +85,44 @@ def _summary(snapshot: tuple[bytes, bytes], symbol: str) -> dict:
     return consumer.summarize_memory_capture(*snapshot, **PINS, symbols=[symbol])
 
 
+def canonical_event_date(value: str) -> date:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        raise ValueError("event_date_not_canonical")
+    parsed = date.fromisoformat(value)
+    if parsed.isoformat() != value:
+        raise ValueError("event_date_not_canonical")
+    return parsed
+
+
+def effective_range(from_date: str | None, to_date: str | None) -> tuple[str | None, str | None]:
+    for value in (from_date, to_date):
+        if value is not None:
+            canonical_event_date(value)
+    if from_date is not None and to_date is not None and from_date > to_date:
+        raise ValueError("event_effective_range_reversed")
+    return from_date, to_date
+
+
+def _missing(result: dict, memory: OfficialEventMemory) -> dict:
+    result.update(reasons=[memory.failure_reason or "event_memory_capture_missing"],
+                  can_capture=result["can_capture"] and not memory.attempted)
+    if memory.failure_reason:
+        result["capture_action"] = "failed"
+    return result
+
+
+def _failed(result: dict, memory: OfficialEventMemory, reason: str) -> dict:
+    if memory.attempted and memory.snapshot is None:
+        memory.failure_reason = reason
+    result.update(capture_action="failed", reasons=[reason], can_capture=False)
+    return result
+
+
+def _http_failure(receipt_bytes: bytes) -> str:
+    reason = consumer._json(receipt_bytes).get("error_reason")
+    return reason if isinstance(reason, str) and re.fullmatch(r"(?:http_status:[0-9]{3}|[a-z_]+)", reason) else "event_capture_failed"
+
+
 def _project(result: dict, summary: dict, as_of: date | None) -> dict:
     observed = (consumer._timestamp(summary["provenance"]["captured_at"]) + timedelta(hours=8)).date()
     result.update(observed_date=observed.isoformat(), cache_present=True)
@@ -115,15 +155,15 @@ def build_official_events(exchange: str, symbol: str, as_of: date | None, *,
     result = _result(as_of)
     if not _gate(result, exchange, symbol, environment):
         return result
-    snapshot = (MEMORY_EVENTS if store is None else store).snapshot
+    memory = MEMORY_EVENTS if store is None else store
+    snapshot = memory.snapshot
     if snapshot is None:
-        result["reasons"] = ["event_memory_capture_missing"]
-        return result
+        return _missing(result, memory)
     result["capture_action"] = "cached"
     try:
         return _project(result, _summary(snapshot, symbol), as_of)
     except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
-        result.update(cache_present=True, reasons=[_safe_failure(exc)])
+        result.update(cache_present=True, can_capture=False, reasons=[_safe_failure(exc)])
         return result
 
 
@@ -136,30 +176,29 @@ def capture_official_events(exchange: str, symbol: str, as_of: date | None, *,
         return result
     memory = MEMORY_EVENTS if store is None else store
     if not memory.capture_lock.acquire(blocking=False):
-        result["reasons"] = ["event_capture_in_progress"]
+        result.update(can_capture=False, reasons=["event_capture_in_progress"])
         return result
     try:
         if memory.snapshot is not None:
             return build_official_events(exchange, symbol, as_of, environment=environment, store=memory)
+        if memory.attempted:
+            return _missing(result, memory)
         # The summarize purpose is checked before the one allowed GET as in P3a.
         consumer._symbols([symbol])
         consumer._admission(**PINS)
+        memory.attempted = True
         body, receipt_bytes = capture_memory(**PINS, source_id=consumer.SOURCE_ID)
         if body is None:
-            receipt = consumer._json(receipt_bytes)
-            reason = receipt.get("error_reason")
-            safe = reason if isinstance(reason, str) and re.fullmatch(r"(?:http_status:[0-9]{3}|[a-z_]+)", reason) else "event_capture_failed"
-            result.update(capture_action="failed", reasons=[safe])
-            return result
+            return _failed(result, memory, _http_failure(receipt_bytes))
         snapshot = (body, receipt_bytes)
+        consumer.summarize_memory_feed(*snapshot, **PINS)
         summary = _summary(snapshot, symbol)
         # No assignment on a failed/missing selection, and no prior success fallback.
         memory.snapshot = snapshot
         result["capture_action"] = "acquired"
         return _project(result, summary, as_of)
     except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
-        result.update(capture_action="failed", reasons=[_safe_failure(exc)])
-        return result
+        return _failed(result, memory, _safe_failure(exc))
     finally:
         memory.capture_lock.release()
 
@@ -172,18 +211,26 @@ def _focus_result(as_of: date | None) -> dict:
     result = _result(as_of)
     result.update(version=FOCUS_VERSION, items=[], total=0, matched=0, search_query="", displayed=0,
                   truncated=False, limit=FOCUS_LIMIT, order="symbol_lexicographic",
-                  coverage="observed_feed_only", research_conditions="unknown")
+                  coverage="observed_feed_only", research_conditions="unknown",
+                  candidate_count=0, selected_count=0, effective_from=None, effective_to=None,
+                  range_event_count=0, range_matched=0)
     result.pop("rows")
     result["limitations"] = ["observed_feed_only" if value == "selected_events_only" else value
                              for value in result["limitations"]] + ["not_a_ranking", "research_conditions_unknown"]
     return result
 
 
-def _focus_gate(result: dict, as_of: date | None, q: str, environment: Mapping[str, str] | None) -> bool:
+def _focus_gate(result: dict, as_of: date | None, q: str, environment: Mapping[str, str] | None,
+                from_date: str | None = None, to_date: str | None = None) -> bool:
     if not isinstance(q, str) or len(q) > 100:
         result.update(can_capture=False, reasons=["event_search_query_invalid"])
         return False
     result["search_query"] = q.strip()
+    try:
+        result["effective_from"], result["effective_to"] = effective_range(from_date, to_date)
+    except (ValueError, TypeError):
+        result.update(can_capture=False, reasons=["event_effective_range_invalid"])
+        return False
     if not _gate(result, "TWSE", "0000", environment):
         return False
     if type(as_of) is not date:
@@ -200,7 +247,11 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
     if result["status"] != "available":
         return result
     grouped: dict[tuple[str, str], dict] = {}
-    for row in rows:
+    total = len({(row["exchange"], row["symbol"]) for row in rows})
+    retained = [row for row in rows
+                if (result["effective_from"] is None or row["event_date"] >= result["effective_from"])
+                and (result["effective_to"] is None or row["event_date"] <= result["effective_to"])]
+    for row in retained:
         key = (row["exchange"], row["symbol"])
         if key not in grouped:
             grouped[key] = {"exchange": row["exchange"], "symbol": row["symbol"],
@@ -213,24 +264,27 @@ def _focus_project(result: dict, summary: dict, as_of: date) -> dict:
                if not query or query in item["symbol"].casefold()
                or any(query in event["company_name"].casefold() for event in item["events"])}
     items = [matched[key] for key in sorted(matched, key=lambda key: (key[1], key[0]))]
-    result.update(total=len(grouped), matched=len(items), displayed=min(len(items), FOCUS_LIMIT),
+    result.update(total=total, range_event_count=len(retained), range_matched=len(grouped),
+                  matched=len(items), displayed=min(len(items), FOCUS_LIMIT),
                   truncated=len(items) > FOCUS_LIMIT, items=items[:FOCUS_LIMIT])
     # Rows live inside each displayed card; the uncapped raw feed is not another
     # list consumers might mistake for the bounded focus list.
     return result
 
 
-def build_official_event_focus(as_of: date | None, *, q: str = "",
+def build_official_event_focus(as_of: date | None, *, q: str = "", from_date: str | None = None,
+                               to_date: str | None = None,
                                environment: Mapping[str, str] | None = None,
                                store: OfficialEventMemory | None = None) -> dict:
     """Read the shared original feed without fetching or touching a database."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, q, environment):
+    if not _focus_gate(result, as_of, q, environment, from_date, to_date):
         return result
-    snapshot = (MEMORY_EVENTS if store is None else store).snapshot
+    memory = MEMORY_EVENTS if store is None else store
+    snapshot = memory.snapshot
     if snapshot is None:
-        result.update(can_capture=as_of >= _today_taipei(), reasons=["event_memory_capture_missing"])
-        return result
+        result["can_capture"] = as_of >= _today_taipei()
+        return _missing(result, memory)
     result["capture_action"] = "cached"
     try:
         return _focus_project(result, consumer.summarize_memory_feed(*snapshot, **PINS), as_of)
@@ -239,12 +293,13 @@ def build_official_event_focus(as_of: date | None, *, q: str = "",
         return result
 
 
-def capture_official_event_focus(as_of: date | None, *, q: str = "",
+def capture_official_event_focus(as_of: date | None, *, q: str = "", from_date: str | None = None,
+                                 to_date: str | None = None,
                                  environment: Mapping[str, str] | None = None,
                                  store: OfficialEventMemory | None = None) -> dict:
     """Explicit first acquisition; validate the entire feed before publication."""
     result = _focus_result(as_of)
-    if not _focus_gate(result, as_of, q, environment):
+    if not _focus_gate(result, as_of, q, environment, from_date, to_date):
         return result
     memory = MEMORY_EVENTS if store is None else store
     if not memory.capture_lock.acquire(blocking=False):
@@ -252,25 +307,23 @@ def capture_official_event_focus(as_of: date | None, *, q: str = "",
         return result
     try:
         if memory.snapshot is not None:
-            return build_official_event_focus(as_of, q=q, environment=environment, store=memory)
+            return build_official_event_focus(as_of, q=q, from_date=from_date, to_date=to_date, environment=environment, store=memory)
+        if memory.attempted:
+            return _missing(result, memory)
         if as_of < _today_taipei():
             result.update(can_capture=False, reasons=["event_cutoff_before_current_observation"])
             return result
         consumer._admission(**PINS)
+        memory.attempted = True
         body, receipt_bytes = capture_memory(**PINS, source_id=consumer.SOURCE_ID)
         if body is None:
-            receipt = consumer._json(receipt_bytes)
-            reason = receipt.get("error_reason")
-            safe = reason if isinstance(reason, str) and re.fullmatch(r"(?:http_status:[0-9]{3}|[a-z_]+)", reason) else "event_capture_failed"
-            result.update(capture_action="failed", reasons=[safe])
-            return result
+            return _failed(result, memory, _http_failure(receipt_bytes))
         snapshot = (body, receipt_bytes)
         summary = consumer.summarize_memory_feed(*snapshot, **PINS)
         memory.snapshot = snapshot
         result["capture_action"] = "acquired"
         return _focus_project(result, summary, as_of)
     except (ValueError, OSError, TypeError, KeyError, OverflowError, RecursionError) as exc:
-        result.update(capture_action="failed", reasons=[_safe_failure(exc)])
-        return result
+        return _failed(result, memory, _safe_failure(exc))
     finally:
         memory.capture_lock.release()

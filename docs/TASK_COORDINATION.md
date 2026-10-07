@@ -1,3 +1,60 @@
+## 目前：M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 已有限接受；待版本封存
+
+2026-10-08。同四角色／可見gate／原ROOT continuation沿已接受BOOT，不重啟或換角色。ROOT已接受新日期區間操作：effective date from／to inclusive配q、真零／恢復、同截止detail與原條件返回，完整feed先驗後篩；精確計數與具名邊界見[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。
+
+ONE fresh金融GET已用盡：HTTP200／16876B／62事件62標的，Taipei10/08完整原件與ORIGINAL receipt同RAM物件受核，非舊58列。可信desktop／390px同截止往返、真零／恢復及API停止後502清值有限接受；既有四price URL條件相容，事件參數不送價量API。
+
+必要101 backend／41src noEmit／69checks已接受；原失敗與未送達收據保留，詳[開發入口](development-baseline/README.md#m2-official-event-date-range-20261008-1-官方事件區間的零落盤驗證入口)。Owned API／preview已normal SIGINT，各raw1；三PID absent／8797、8798無listener，唯一tab已關／本根tabs=[]。原件RAM隨API結束釋放，無replay／restart；本批privateIO／DB／cache／build／raw／附件落盤0。
+
+Coreoperation+1／dependency0／reliability+1（跨入口首次失敗seal／0retry）／stall0→0，完整M1／M2／M3未完成。metadata8／finance1 SPENT，M1權利／calendar仍缺證、金融0；舊quota／私人餘量不續grant，詳[§39.1](SOURCE_REGISTRY.md#391-m2-official-event-date-range-20261008-1實際來源結果)管理。
+
+下一候選M2三事件類型配日期／q／返回；新ROOT先依ROADMAP核可交付核心及quota／pins／驗收，禁機械加filter或復用producer／原件。M1新rights／calendar路徑成立再重選。六DOC待ROOTreview／freeze，索引／commit／merge／新ROOT交接／本輪關閉封存清理未執行。下方plan／BOOT／原HEAD與nested histories完整保留，不回寫舊pending／hash；交付停寫。
+
+## 目前：M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1；重選已核，實作與操作待驗
+
+2026-10-08。SAME ROOT／Bohr／Chandrasekhar／Hume 四 actual IDs及共同 worktree沿下方已接受 BOOT；可見 gate已接受、使用者 continuation已恢復產品流程，本輪不再只 BOOT，不開新角色。ROOT核定新增操作：按官方事件 effective date的可選 from／to含首末日區間篩選，再搜尋 q、分組與上限100；進個股研究後，以 `focus_from/focus_to` 往返同 `as_of/q`。本批尚未實作驗收，不能宣稱已交付。
+
+M1普通股20／21真實收盤候選仍未准入。這次 FinMind官方 TaiwanStockPrice API／條款是新證據；2026-07-13 terms、2026-07-12 disclaimer／licenses仍未證 exact資料 owner／用途權利與獨立 calendar／consumer pins，MIT軟體授權或一般公開管道聲明不能代資料權利。這是具名缺證，不是全域禁止；不重複舊monthly／legacy審查，改選可沿既有合法來源接線的M2能力，詳[來源 §39](SOURCE_REGISTRY.md#39-2026-10-08歷史收盤新候選審查與官方事件重選)。
+
+ROOT已核 effectiveDate可選邊界：缺側不限，empty／非strict ASCII有效日期／from>to／duplicate／unknown須在source或catalogue前拒收；完整feed驗後，先逐event套range，再q／grouping／cap100。全feed的total／candidate／selected不改；`range_event_count/range_matched/matched` 精確語義待程式final與ROOT審查，本文不先寫定。
+
+來源只exact `TWT48U_ALL / free_public_local`，沿原registry／digest／sourceversion及pins。ROOT本次gov89748／Swagger兩metadataGET已完成；本摘要核定時尚未取得新金融原件，另grant一次fresh financial GET，5MiB／20秒per-operation／30秒cooperative、redirect0／retry0，完整body及receipt只RAM，不能沿用舊58列當本批真資料。FinMind六metadataGET也已完成、金融GET0／落盤0；完整命令／bytes／SHA／UTC留ROOT原task。
+
+待驗具名操作：本批 `as_of=2026-10-08`，事件10/01～12/31、實際單日inclusive、01/01～01/02真零及恢復；desktop／390px同截止往返、失敗清值。synthetic三instrument catalogue只routing，不證普通股／行情／PIT。首次失敗須同程序跨入口seal、retry0，屬必要可靠性驗收，與核心操作分報；日期篩選不是發布／first-availability／historical PIT。
+
+繼承stall0；來源審查／DOC／BOOT不增核心、不reset。本批core／dependency解除／reliability增量均待驗；無核心的實作批次才nextcoreless→1，連兩批先重選，完整M1／M2／M3未完成。白名單六DOC，本階段只前三檔當前摘要及SOURCE精簡段；STOCK／開發入口待實作驗收後更新。金融契約與下方已接受BOOT10204B／原HEAD suffix／nested histories完整保留，舊pending／hash不回寫。正式DB／privateIO／artifacts／額外檔案／refresh／stage／commit／merge／cleanup0；交付停寫，待ROOT review。[執行清單](ROADMAP_EXECUTION.md)管理驗收條件。
+
+## 目前：BOOT-M1-STOCK-CLOSE-HISTORY-20261008-1；可見 gate 已接受，原 ROOT 續作
+
+2026-10-08。使用者明確恢復「幫我繼續走流程，請照著文件上的流程以及步驟做」。本 turn 只 BOOT，尚未准入來源取得或實作。ROOT 已接受四 actual runtime／Git／唯一 terminal 與三角色唯讀接手；可見 `/subagents` gate 已正式接受，SINGLE ORIGINAL CONTINUATION 已收到；原 ROOT 正式接手持續流程，下一核心仍未准入。下方原 bytes／nested histories／舊 pending／hash／retain 全部保留；目前狀態以此摘要與原 task 接受為準。
+
+| 角色 | Actual ID／模型／reasoning | 本 BOOT 範圍 |
+| --- | --- | --- |
+| ROOT | `01a11792-c746-74d2-9c79-c464dce7cf4e`；`gpt-6.1-sol / ultra` | 已核啟動與接手，產品准入尚待。 |
+| 程式 Bohr | `01a11794-a072-7262-ba55-9f6518d47195`；`gpt-6.1-sol / xhigh` | 接手已接受；write=[]。 |
+| 文件 Chandrasekhar | `01a11795-0fd4-79e1-be49-c697ca7fdc52`；`gpt-6.1-sol / xhigh` | 接手已接受；只本 BOOT 三檔 prepend，交付停寫。 |
+| 索引與 Git Hume | `01a11795-6d87-7c51-a2ba-ec94b4dbe283`；`gpt-6-luna / medium` | 接手已接受；source/write=[]。 |
+
+ROOT actual source=vscode／originator=codex-tui／threadSource=user／parent=null／sessionId=self／fork=null。三 child 由同 ROOT native `spawn_agent / fork_turns=none` 新建，actual parent／session／spawnparent 同 ROOT、threadSource=subagent、depth=1、fork=null；runtime CLI 0.160.0。四者唯一共同 cwd／repo／worktree／runtimeWorkspaceRoot為 `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-stock-close-history-20261008`，branch `roadmap-m1-stock-close-history-20261008`，starting／current／master HEAD 同 `297b91d57e977d7601d6c94f8f1a6541d6bf8f6d`，起始 clean。main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；Orca repo `2d3efa33-2fe3-4416-933d-9f635ab058fe`／runtime `32c072d5-7f95-49ef-bad9-270aeaf5e197` 與本輪登錄已核。
+
+唯一 terminal `term_30082c95-1cc7-45f5-a75b-a01137d1fe4c`，incarnation `0477a6da-80f5-4424-93c0-e94175073190`，full PTY `2d3efa33-2fe3-4416-933d-9f635ab058fe::C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-stock-close-history-20261008@@745477c7`；connected=true／writable=true／orphaned=false／pane=1。ROOT 獨立核 fresh screen 的本輪當前動作／原 ID 對應、模型 ultra、同 cwd／task；terminal／runtime 與後述可見四角色 gate 均已正式接受，完整收據留原 task。
+
+本 BOOT finalsaved／all4 actual idle後，外部啟動者已在唯一 terminal ONE `/subagents` 核同四 IDs、ONE Esc 退出 menu，再 ONE continuation 給原 ROOT；原 ROOT 已收到並正式接手。使用者新 continuation 撤回舊暫停，依 [AGENTS](../AGENTS.md#啟動驗收與交接) 持續流程；沿用同四 IDs，無 reboot／newroles／resend。下一核心仍未准入，ROOT 接受本 gate DOC 後才核 precise admission。
+
+可見 gate 正式接受收據：all4idle runtimeguard `2d1ce1`；terminalshow `1584808f-bf78-4091-9566-9960fbfb77a6` 同 handle／incarnation；ONE `/subagents` accepted=true／replayed=false，mutation `ac750caa-894a-4c7b-b7f0-9fb1ee29ac0b`；fresh SCREEN `48baf3fa-a51b-43a9-b70c-b078f9b1bad5` exact4 IDs／No sub-agents running；ONE Esc `5ea67676-7591-4326-8795-4e8276763daa`／fresh `340bea95-b117-4af0-8af4-8d2f318adf9a` menuclosed。
+
+上一批七股同 explicit 2026-10-06 三法人 × 5／20 日每日 net 圖、精確日期表、window-reset running cumulative及來源追溯等有限能力已接受；原 whole-window zero／post-stop recovery未跑邊界保留。19檔 source12＋DOC7 commit `297b91d57e977d7601d6c94f8f1a6541d6bf8f6d` 已 local merge master後暫停，本次才恢復。舊 ROOT `01a116d3-4082-7cc3-86c8-622e6f010a09` 及其三角色已 normal archive／notLoaded，舊 worktree由獨立外部負責者移除。DAY 現在 Git／Orca 不存在；TURNOVER 登錄／terminal已外清、四 session已 normal archive。舊 retain／pending是歷史快照，本輪不掃舊資源、不重做舊驗證／Git／清理。
+
+繼承 coreoperation+1／standalone dependency0／reliability+1／stall0→0。本 BOOT 新增操作0／解除依賴0／可靠性增量0，非 implementation batch；BOOT／DOC／index／Git不增核心、不 reset。nextcoreless→1，連兩批先審查拆工與重選；完整 M1／M2／M3未完成，優先依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
+
+下一候選「M1普通股20／21交易日真實收盤序列與同研究截止趨勢接線」**未准入**。continuation 已收到；後續 ROOT 才在原 task 核 specific標的／window／source version／consumer、source owner／rights／用途、time／calendar／schema／profile、外部 pins／finite quota、完整原件與數值／API／UI具名驗收，先於取得或實作；不虛構新核心 ID或已取得來源。index calendar／法人 net非普通股 closes；舊22 SPENT／歷史136 GET不續 grant，禁舊 producer retry／restart／clone／hydrate／replay／preload。有新路徑才核必要依賴；monthly／legacy無新取得路徑時不重複審查，依 ROADMAP重選，不降必要 gate。完成條件見[執行清單](ROADMAP_EXECUTION.md)。
+
+正式 DB／私源不動；private三檔1791644B、FINAL63 bundles／189 logical files／remaining1 bundle非 grant／reset／retry／新磁碟案例，privateIO0。歷史 automatic approval review `preCreateProcess / blockedpolicy / delete0` 與 STRICT NO-RETRY保留；恢復未授新刪除 grant，禁換工具／路徑／owner／逐檔／rename／tree繞過。
+
+App MCP connected；主 repo八分區存在、docs ready，指定五 paths `metadata_changed`，故必要時直讀本 worktree，coverage為 best effort。本輪未索引，不輪初 refresh／複製／改 ACL／終止其他 session。BOOT metadataGET／financialGET／privateIO／tests／artifacts／indexrefresh／stage／commit／merge／cleanup全0，正式 DB／採購／外部帳戶／交易0。
+
+本 BOOT 只寫 `TASK_COORDINATION.md`、`ROADMAP.md`、`ROADMAP_EXECUTION.md` 三檔 prefix；TASK新增≤12288 UTF-8 bytes、aggregate≤20480，UTF-8／LF／no BOM，原 suffix與全部nested histories byte-equal。金融契約不改，不新增附件／helper／manifest／Temp／來源副本。只核差異／編碼／連結／一致性，不跑 backend或建 DB；交付停寫／idle，待 ROOT獨立 review／freeze。BOOT 階段索引／Git／清理未執行，後續依 ROOT precise admission；最終收據留原 task，不回寫hash反覆刷新提交。
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1 核心有限接受；本批合併後暫停
 
 2026-10-08。ROOT已接受source12／actual核心及退出。只本CORE prepend≤6144B；DOC7總net≤32768B含BOOT5844B。完整下方221812B SHA `a1933bcb6d1792a94d6628a9e9b590ab1955232e37d0d7e2126015f937f26998`含accepted BOOT及ALLnested histories byte-equal；strictUTF8/LF/noBOM。舊pending／hash不改，本段為當前摘要，最終版本收據留原task。

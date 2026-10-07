@@ -764,6 +764,7 @@ function focusUnavailableMessage(data: OfficialEventFocusData): string {
   if (data.reasons.includes('event_cutoff_before_current_observation')) return '過往截止日期且無可用原件，未執行取得。'
   if (data.reasons.some((reason) => reason === 'event_capture_not_enabled' || reason === 'event_capture_configuration_invalid')) return '官方事件原件取得尚未啟用。'
   if (data.reasons.includes('event_capture_in_progress')) return '官方原件正在取得，完成後可讀取已取得原件。'
+  if (data.capture_action === 'failed' && !data.can_capture) return '本次首次取得未通過驗證，額度已耗用；不再取得，關注清單不可用。'
   return '本次官方原件未通過來源或內容驗證，關注清單暫不可用。'
 }
 
@@ -772,72 +773,194 @@ export function trimOfficialEventSearch(value: string): string {
   return value.replace(/^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/gu, '')
 }
 
+export function validOfficialEventDate(value: string): boolean {
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000-')) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+export type OfficialEventConditions = { asOf: string; q: string; from: string | null; to: string | null }
+
+export function officialEventConditions(params: URLSearchParams, defaultAsOf?: string): OfficialEventConditions | null {
+  const allowed = ['as_of', 'q', 'from', 'to', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct']
+  if ([...params.keys()].some((key) => !allowed.includes(key) || params.getAll(key).length !== 1)) return null
+  const asOf = params.get('as_of') ?? defaultAsOf ?? ''
+  const q = params.get('q') ?? '', from = params.get('from'), to = params.get('to')
+  if (!validOfficialEventDate(asOf) || Array.from(q).length > 100
+    || from !== null && !validOfficialEventDate(from) || to !== null && !validOfficialEventDate(to)
+    || from !== null && to !== null && from > to) return null
+  return { asOf, q: trimOfficialEventSearch(q), from, to }
+}
+
 export function officialEventFocusReturnPath(params: URLSearchParams): string | null {
+  const allowed = ['as_of', 'from', 'focus_as_of', 'focus_q', 'focus_from', 'focus_to']
+  if ([...params.keys()].some((key) => !allowed.includes(key) || params.getAll(key).length !== 1)) return null
   if (params.get('from') !== 'official-events') return null
   const asOf = params.get('focus_as_of') ?? ''
   const q = params.get('focus_q') ?? ''
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || asOf.startsWith('0000-') || Array.from(q).length > 100) return null
-  const instant = new Date(`${asOf}T00:00:00Z`)
-  if (!Number.isFinite(instant.getTime()) || instant.toISOString().slice(0, 10) !== asOf) return null
+  if (Array.from(q).length > 100) return null
+  if (params.has('as_of') && !validOfficialEventDate(params.get('as_of')!)) return null
   const query = new URLSearchParams({ as_of: asOf, q: trimOfficialEventSearch(q) })
+  for (const [field, key] of [['focus_from', 'from'], ['focus_to', 'to']]) {
+    if (params.has(field)) query.set(key, params.get(field)!)
+  }
+  if (!officialEventConditions(query)) return null
   return `/?${query.toString()}#official-event-focus-title`
+}
+
+export function officialEventSubmissionParams(current: URLSearchParams, asOf: string, q: string, from: string, to: string): URLSearchParams | null {
+  const next = new URLSearchParams(current)
+  next.set('as_of', asOf); next.set('q', q)
+  if (from) next.set('from', from); else next.delete('from')
+  if (to) next.set('to', to); else next.delete('to')
+  if (!officialEventConditions(next)) return null
+  const normalized = trimOfficialEventSearch(q)
+  if (normalized) next.set('q', normalized); else next.delete('q')
+  return next
+}
+
+export function validOfficialEventFocus(value: unknown, conditions: OfficialEventConditions): value is OfficialEventFocusData {
+  try {
+    if (!value || typeof value !== 'object' || new TextEncoder().encode(JSON.stringify(value)).length > 8 * 1024 * 1024) return false
+    const data = value as OfficialEventFocusData
+    const natural = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
+    if (data.version !== 'official-event-focus/p3-v1' || data.as_of !== conditions.asOf || data.search_query !== conditions.q
+      || data.effective_from !== conditions.from || data.effective_to !== conditions.to
+      || data.coverage !== 'observed_feed_only' || data.research_conditions !== 'unknown'
+      || data.cutoff_basis !== 'observed_taipei_date_inclusive' || data.storage !== 'memory_only'
+      || data.durable_capture !== false || data.historical_pit !== 'unsupported' || data.source_url_kind !== 'feed'
+      || data.published_time !== 'unknown' || data.first_availability !== 'unknown' || data.revision_history !== 'unknown'
+      || ![data.total, data.matched, data.displayed, data.range_event_count, data.range_matched, data.candidate_count, data.selected_count].every(natural)
+      || data.limit !== 100 || data.order !== 'symbol_lexicographic' || !Array.isArray(data.items)
+      || !Array.isArray(data.reasons) || !data.reasons.every((reason) => typeof reason === 'string')
+      || typeof data.can_capture !== 'boolean' || typeof data.capture_enabled !== 'boolean' || typeof data.cache_present !== 'boolean'
+      || !['not_attempted', 'acquired', 'cached', 'failed'].includes(data.capture_action)) return false
+    if (data.status === 'unavailable') return data.items.length === 0 && data.provenance === null && data.attribution === null
+      && [data.total, data.matched, data.displayed, data.range_event_count, data.range_matched, data.candidate_count, data.selected_count].every((n) => n === 0)
+      && data.truncated === false && data.reasons.length > 0
+    const provenance = data.provenance
+    if (data.status !== 'available' || !provenance || !data.attribution || !validOfficialEventDate(data.observed_date ?? '')
+      || data.observed_date! > conditions.asOf || data.reasons.length !== 0 || !data.cache_present || !data.capture_enabled
+      || data.validation_scope !== 'all_observed_identity_dates_classification'
+      || data.attribution.source_id !== 'twse_twt48u_all' || data.attribution.source_url !== 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
+      || data.attribution.dataset_id !== 'data-gov-89748' || data.attribution.terms?.status !== 'known' || !Array.isArray(data.attribution.evidence)
+      || provenance.source_id !== 'twse_twt48u_all' || provenance.endpoint !== 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
+      || provenance.source_version !== 'twse-twt48u-all-d011-2026-09-12'
+      || provenance.registry_version !== 'r1-a1-c009-2026-09-12.1'
+      || provenance.manifest_digest !== 'sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b'
+      || provenance.storage !== 'memory_only' || provenance.verification !== 'local_evidence_consistent'
+      || !/^[a-f0-9]{64}$/.test(provenance.body_sha256) || !/^[a-f0-9]{64}$/.test(provenance.receipt_sha256)
+      || !/(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(provenance.captured_at) || !/(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(provenance.request_started_at)) return false
+    const captured = Date.parse(provenance.captured_at), started = Date.parse(provenance.request_started_at)
+    if (!Number.isFinite(captured) || !Number.isFinite(started) || started > captured
+      || new Date(captured + 8 * 3600000).toISOString().slice(0, 10) !== data.observed_date
+      || data.candidate_count !== data.selected_count || data.total > data.candidate_count!
+      || data.range_event_count > data.candidate_count! || data.range_matched > data.total || data.range_matched > data.range_event_count
+      || data.matched > data.range_matched || data.displayed !== Math.min(data.matched, 100)
+      || data.items.length !== data.displayed || data.truncated !== (data.matched > 100)) return false
+    const ordinals = new Set<number>()
+    let previous = '', visibleEvents = 0
+    for (const item of data.items) {
+      if (item.exchange !== 'TWSE' || !/^[0-9A-Z]{4,6}$/.test(item.symbol) || item.symbol <= previous
+        || typeof item.company_name !== 'string' || !item.company_name.trim() || item.research_conditions !== 'unknown'
+        || !Array.isArray(item.events) || item.events.length === 0 || typeof item.stock_page_available !== 'boolean') return false
+      previous = item.symbol
+      const detail = new URLSearchParams({ as_of: conditions.asOf, from: 'official-events', focus_q: conditions.q, focus_as_of: conditions.asOf })
+      if (conditions.from !== null) detail.set('focus_from', conditions.from)
+      if (conditions.to !== null) detail.set('focus_to', conditions.to)
+      if (item.stock_page_available) {
+        if (typeof item.detail_url !== 'string' || !item.detail_url.startsWith(`/stocks/TWSE/${item.symbol}?`)) return false
+        const link = new URL(item.detail_url, 'https://local.invalid')
+        if (link.origin !== 'https://local.invalid' || link.pathname !== `/stocks/TWSE/${item.symbol}` || link.hash
+          || [...link.searchParams.keys()].length !== [...detail.keys()].length
+          || [...link.searchParams].some(([key, value]) => link.searchParams.getAll(key).length !== 1 || detail.get(key) !== value)) return false
+      } else if (item.detail_url !== null) return false
+      for (const row of item.events) {
+        if (row.exchange !== 'TWSE' || row.symbol !== item.symbol || !validOfficialEventDate(row.event_date)
+          || conditions.from !== null && row.event_date < conditions.from || conditions.to !== null && row.event_date > conditions.to
+          || typeof row.company_name !== 'string' || !row.company_name.trim() || !/^[0-9]{7}$/.test(row.source_date)
+          || String(Number(row.source_date.slice(0, 3)) + 1911).padStart(4, '0') + '-' + row.source_date.slice(3, 5) + '-' + row.source_date.slice(5) !== row.event_date
+          || row.event_date_role !== 'effective_date' || row.event_date_precision !== 'date'
+          || row.published_at !== null || row.first_available_at !== null || row.revision_available_at !== null || row.availability !== 'unknown'
+          || !natural(row.row_ordinal) || row.row_ordinal < 1 || row.row_ordinal > data.selected_count! || ordinals.has(row.row_ordinal)
+          || !['息', '權', '權息'].includes(row.source_classification)
+          || ({ '息': 'ex_dividend', '權': 'ex_right', '權息': 'ex_right_and_dividend' }[row.source_classification] !== row.kind)
+          || ({ '息': '除息', '權': '除權', '權息': '除權息' }[row.source_classification] !== row.label)) return false
+        ordinals.add(row.row_ordinal); visibleEvents++
+      }
+    }
+    return visibleEvents <= data.range_event_count && (data.matched !== data.range_matched || data.truncated || visibleEvents === data.range_event_count)
+  } catch { return false }
 }
 
 export function OfficialEventFocusPanel() {
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') || taipeiObservationDate()
   const q = searchParams.get('q') ?? ''
+  const from = searchParams.get('from'), to = searchParams.get('to')
+  const conditions = officialEventConditions(searchParams, asOf)
   const [draft, setDraft] = useState(asOf)
   const [searchDraft, setSearchDraft] = useState(q)
+  const [fromDraft, setFromDraft] = useState(from ?? ''), [toDraft, setToDraft] = useState(to ?? '')
   const [searchError, setSearchError] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
   const queryClient = useQueryClient()
-  const queryKey = ['official-event-focus', asOf, q]
+  const queryKey = ['official-event-focus', asOf, q, from, to]
   const requestKey = JSON.stringify(queryKey)
-  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf, q), retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
-  useEffect(() => { setDraft(asOf); setSearchDraft(q); setSearchError(null); setCaptureError(null) }, [asOf, q])
-  const applySearch = (value: string) => {
-    if (Array.from(value).length > 100) { setSearchError('搜尋最多 100 個字元。'); return }
+  const activeRequest = useRef(requestKey); activeRequest.current = requestKey
+  const pendingCapture = useRef(false)
+  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf, q, from ?? undefined, to ?? undefined), enabled: conditions !== null, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false, placeholderData: undefined })
+  useEffect(() => { setDraft(asOf); setSearchDraft(q); setFromDraft(from ?? ''); setToDraft(to ?? ''); setSearchError(null); setCaptureError(null) }, [asOf, q, from, to])
+  const applySearch = (value: string, start = from ?? '', end = to ?? '') => {
+    const next = officialEventSubmissionParams(searchParams, asOf, value, start, end)
+    if (!next) { setSearchError('請輸入有效日期；生效日起日不得晚於迄日，搜尋最多 100 個字元。'); return }
     setSearchError(null)
-    const next = new URLSearchParams(searchParams)
-    next.set('as_of', asOf)
     const normalized = trimOfficialEventSearch(value)
-    if (normalized) next.set('q', normalized); else next.delete('q')
     setSearchDraft(normalized)
     setSearchParams(next)
   }
   const capture = async () => {
+    if (pendingCapture.current || !conditions) return
+    pendingCapture.current = true
     setCapturing(true); setCaptureError(null)
-    try { queryClient.setQueryData(queryKey, await captureOfficialEventFocus(asOf, q)) }
-    catch (error) { setCaptureError({ key: requestKey, message: error instanceof Error ? error.message : '取得失敗' }) }
-    finally { setCapturing(false) }
+    try {
+      const result = await captureOfficialEventFocus(asOf, q, from ?? undefined, to ?? undefined)
+      if (activeRequest.current === requestKey) queryClient.setQueryData(queryKey, result)
+    }
+    catch (error) { if (activeRequest.current === requestKey) setCaptureError({ key: requestKey, message: error instanceof Error ? error.message : '取得失敗' }) }
+    finally { pendingCapture.current = false; setCapturing(false) }
   }
   const captureMessage = captureError?.key === requestKey ? captureError.message : null
-  const data = query.data
+  const responseValid = conditions !== null && query.data !== undefined && validOfficialEventFocus(query.data, conditions)
+  const data = !query.error && !captureMessage && responseValid ? query.data : undefined
+  const responseFailure = conditions === null ? '日期或網址條件無效，未讀取來源。' : query.data !== undefined && !responseValid ? '回應的條件、來源或事件內容未通過驗證。' : null
   const licenseEvidence = data?.attribution?.evidence.find((item) => item.url === 'https://data.gov.tw/license')
   return <section className="panel official-event-focus" aria-labelledby="official-event-focus-title">
     <div className="section-head overview-head"><div><div className="eyebrow">本次觀測 · 臺灣證券交易所</div><h2 id="official-event-focus-title">官方事件關注</h2></div><span className="small-note">依代碼排序</span></div>
     <p className="small-note">本次已觀測的除權息事件供查閱；未來生效日期保留。研究條件待補，事件不表示價格影響或買賣建議。</p>
-    <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); if (!draft) return; const next = new URLSearchParams(searchParams); next.set('as_of', draft); setSearchParams(next) }}>
+    <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); if (!validOfficialEventDate(draft)) { setSearchError('請輸入有效觀測截止日期。'); return }; const next = new URLSearchParams(searchParams); next.set('as_of', draft); setSearchParams(next) }}>
       <label htmlFor="focus-observation-cutoff">觀測截止日期</label><input id="focus-observation-cutoff" type="date" required value={draft} onInput={(event) => setDraft(event.currentTarget.value)} onChange={(event) => setDraft(event.currentTarget.value)} />
       <button type="submit" className="secondary-button" disabled={capturing}>套用截止</button>
-      <button type="button" className="secondary-button" disabled={capturing || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
+      <button type="button" className="secondary-button" disabled={!conditions || capturing || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
       <button type="button" className="secondary-button" disabled={capturing || query.isFetching || !data?.can_capture || data.cache_present} onClick={() => void capture()}>{capturing ? '取得中…' : '首次取得官方原件'}</button>
     </form>
-    <form className="overview-cutoff-control focus-search-control" onSubmit={(event) => { event.preventDefault(); applySearch(searchDraft) }}>
+    <form className="overview-cutoff-control focus-search-control" onSubmit={(event) => { event.preventDefault(); applySearch(searchDraft, fromDraft, toDraft) }}>
+      <label htmlFor="focus-effective-from">生效日起日（含當日）</label><input id="focus-effective-from" type="date" value={fromDraft} onChange={(event) => setFromDraft(event.currentTarget.value)} />
+      <label htmlFor="focus-effective-to">生效日迄日（含當日）</label><input id="focus-effective-to" type="date" value={toDraft} onChange={(event) => setToDraft(event.currentTarget.value)} />
       <label htmlFor="focus-search">搜尋原件代碼或名稱</label><input id="focus-search" type="search" value={searchDraft} placeholder="輸入代碼或名稱片段" aria-describedby="focus-search-help" aria-invalid={Boolean(searchError)} onChange={(event) => setSearchDraft(event.currentTarget.value)} />
-      <button type="submit" className="secondary-button">搜尋</button><button type="button" className="secondary-button" onClick={() => applySearch('')}>清除搜尋</button>
+      <button type="submit" className="secondary-button">套用搜尋與日期</button><button type="button" className="secondary-button" onClick={() => applySearch('')}>清除搜尋</button><button type="button" className="secondary-button" onClick={() => applySearch(q, '', '')}>清除日期</button>
     </form>
     <p id="focus-search-help" className="small-note">搜尋本次官方原件的代碼與名稱，不分大小寫；最多 100 個字元，僅比對連續文字。</p>
     {searchError && <div className="warning-box" role="status">{searchError}</div>}
+    {responseFailure && <div className="warning-box" role="status">{responseFailure}</div>}
     <div className="small-note focus-observation-note">截止 {asOf}（台北觀測日含當日）{data?.observed_date ? ` · 原件觀測日 ${data.observed_date}` : ''} · 原件只在本次服務執行期間保留；服務重啟後須重新取得，不自動更新。</div>
     {query.isLoading && <div className="empty">讀取關注清單…</div>}
     {(query.error || captureMessage) && <div className="warning-box" role="status">讀取或取得失敗：{captureMessage || (query.error instanceof Error ? query.error.message : '請稍後再試')}</div>}
     {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{focusUnavailableMessage(data)}</div>}
     {data?.status === 'available' && <>
-      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的；{data.search_query ? `搜尋「${data.search_query}」` : '全部原件標的'}符合 {data.matched} 檔，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
-      {data.items.length === 0 ? <div className="empty focus-empty" role="status">{data.total === 0 ? '本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。' : '本次原件沒有符合搜尋的標的；可清除搜尋查看本次清單。這不表示市場沒有事件。'}</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
+      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的；生效日 {data.effective_from ?? '不限起日'} 至 {data.effective_to ?? '不限迄日'}，{data.range_event_count} 筆事件 · {data.range_matched} 檔標的；{data.search_query ? `搜尋「${data.search_query}」` : '區間內標的'}符合 {data.matched} 檔，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
+      {data.items.length === 0 ? <div className="empty focus-empty" role="status">{data.total === 0 ? '本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。' : '本次原件沒有符合日期與搜尋條件的標的；可清除條件查看本次清單。這不表示市場沒有事件。'}</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
         <div className="position-head"><strong>{item.symbol} {item.company_name}</strong><span>{item.exchange}</span></div>
         <div className="table-wrap focus-event-table"><table><caption>本次觀測事件</caption><thead><tr><th>生效日期</th><th>官方事件類型</th></tr></thead><tbody>{item.events.map((event) => <tr key={`${event.event_date}:${event.kind}:${event.row_ordinal}`}><td>{event.event_date}</td><td>{event.label}</td></tr>)}</tbody></table></div>
         <div className="small-note">研究條件：待補</div>

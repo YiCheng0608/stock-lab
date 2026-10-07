@@ -516,6 +516,7 @@ export type OfficialEventsData = {
 
 export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
   coverage: 'observed_feed_only'; research_conditions: 'unknown'
+  effective_from: string | null; effective_to: string | null; range_event_count: number; range_matched: number
   total: number; matched: number; search_query: string; displayed: number; truncated: boolean; limit: number; order: 'symbol_lexicographic'
   candidate_count?: number; selected_count?: number; validation_scope?: string
   summarize_decision?: unknown; runtime_condition_receipts?: unknown; summary_condition_receipts?: unknown

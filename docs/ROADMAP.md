@@ -1,3 +1,21 @@
+## 目前：官方事件日期區間已有限接受
+
+`M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1` 已交付from／to inclusive配q、真零／恢復、同截止detail返回原條件；新10/08觀測62事件62標的及可信desktop／390px有限接受，詳[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。Coreoperation+1／dependency0／reliability+1／stall0→0，完整M1／M2／M3未完成。
+
+下一候選息／權／權息類型配日期／q／返回，須新ROOT依ROADMAP重核可交付核心及新quota／pins／驗收，禁機械加filter或復用原件。M1歷史收盤仍缺exact權利／calendar，新路徑成立再重選。DOC／freeze／索引／Git／交接清理尚待，詳[協作紀錄](TASK_COORDINATION.md)。
+
+## 目前：2026-10-08 重選官方事件日期區間；核心操作待驗
+
+使用者 continuation已恢復產品流程，同四角色與可見gate沿[協作紀錄](TASK_COORDINATION.md)；下方BOOT只作該階段快照。M1普通股20／21真實收盤候選經新FinMind官方API／條款核對，exact資料權利與calendar／consumer pins仍缺證、未准入；不以MIT軟體授權代資料准入、不作全域禁止或重複monthly／legacy審查，理由見[來源 §39](SOURCE_REGISTRY.md#39-2026-10-08歷史收盤新候選審查與官方事件重選)。
+
+ROOT重選 `M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1`：從既有exact TWT48U來源按effective date可選from／to inclusive，再q搜尋，進個股後同as_of／q／日期區間返回。新金融原件與具名數值／API／desktop／390px／真零／失敗清值均待驗，完成條件見[執行清單](ROADMAP_EXECUTION.md)。繼承stall0；審查與DOC不增核心、不reset，完整M1／M2／M3仍未完成，官方事件生效日不代普通股歷史價格或PIT。
+
+## 目前：2026-10-08 已恢復流程；本 turn 只 BOOT
+
+使用者明確指示「幫我繼續走流程，請照著文件上的流程以及步驟做」。前批七股每日法人 net 的有限成果與19檔 commit `297b91d57e977d7601d6c94f8f1a6541d6bf8f6d` local master merge已接受，暫停後本次才恢復。`BOOT-M1-STOCK-CLOSE-HISTORY-20261008-1` 四角色 actual runtime／Git／唯一 terminal及接手已接受；可見 `/subagents` gate 已正式接受、SINGLE ORIGINAL CONTINUATION 已收到；原 ROOT 以同四 IDs 正式接手持續流程，詳[協作紀錄](TASK_COORDINATION.md)。下方原 bytes／nested histories及舊 pending／retain保留歷史，不當目前派工依據。
+
+下一候選「M1普通股20／21交易日真實收盤序列與同研究截止趨勢接線」**未准入**；continuation 已收到，仍須由 ROOT 核具體來源權利／用途／時間／日曆／版本／pins／quota與完整原件、數值／API／UI具名驗收，詳[執行清單](ROADMAP_EXECUTION.md)。index calendar／法人 net不能代普通股 closes，舊22 SPENT／136 GET不是新 grant。BOOT新增操作／依賴解除／可靠性增量均0，非實作批次；繼承前批 coreoperation+1／dependency0／reliability+1／stall0→0、不 reset，nextcoreless→1，連兩批先重選。普通股歷史收盤／股價趨勢及完整 M1／M2／M3仍未完成；BOOT 階段來源取得／privateIO／tests／artifacts／索引／Git／cleanup全0；後續依 ROOT precise admission。
+
 # 開發路線與目前能力
 
 更新：2026-10-07。優先順序與產品範圍由本文件管理；工作 ID／完成條件見[執行清單](ROADMAP_EXECUTION.md)，角色、停滯紀錄與接手狀態見[協作紀錄](TASK_COORDINATION.md)。

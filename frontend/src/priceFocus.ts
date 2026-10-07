@@ -69,15 +69,17 @@ export function exactTurnoverText(value: string): string {
   return value.replace(/\B(?=(?:[0-9]{3})+(?![0-9]))/g, ',')
 }
 
-/** q is the existing official-event panel's shared homepage search state. */
+/** Event search/range are shared homepage state, never price API conditions. */
 export function validPriceFocusParams(params: URLSearchParams): boolean {
-  const allowed = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct', 'q']
+  const allowed = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to']
   return !Array.from(params.keys()).some((key) => !allowed.includes(key))
     && ['as_of', 'min_lots'].every((key) => params.getAll(key).length === 1)
-    && ['day_move', 'min_turnover', 'min_range_pct', 'q'].every((key) => params.getAll(key).length <= 1)
+    && ['day_move', 'min_turnover', 'min_range_pct', 'q', 'from', 'to'].every((key) => params.getAll(key).length <= 1)
     && validFocusDate(params.get('as_of') ?? '') && minLotsShares(params.get('min_lots')) !== null
     && validPriceFocusDayMove(params.get('day_move') ?? 'all') && minTurnoverValue(params.get('min_turnover') ?? '0') !== null
     && minRangeMilliPct(params.get('min_range_pct') ?? '0') !== null
+    && (!params.has('from') || validFocusDate(params.get('from')!)) && (!params.has('to') || validFocusDate(params.get('to')!))
+    && (!params.has('from') || !params.has('to') || params.get('from')! <= params.get('to')!)
 }
 
 export function validFocusDate(value: string): boolean {

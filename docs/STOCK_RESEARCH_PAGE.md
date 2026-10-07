@@ -1478,3 +1478,41 @@ ONE API原source22不變、guards0，normal Ctrl+C rawexit1；成功preview SAME
 ROOT核五owned PIDs absent、8801／8802無listener；ONE intentional page normalclose、fresh tabs[]，原receipt留task。必要checks及限制見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)；privateactualIO／newdisk／正式DB／upstreamPOST0，無source／service／browser restart。
 
 Coreoperation+1／standalone dependency0／reliability+1／stall0→0；此處接受daily-net圖／日期表／window-reset累計，不解除ordinary20／21closes、股價trend／strategy／PIT／execution。使用者「這裡做完先幫我停下來」：本批DOC／freeze／索引／commit／另准local master merge後暫停；文件截止版本封存仍待。下一普通股收盤序列與趨勢候選等待恢復及新准入，current四角色／worktree保留，不建立下一輪。
+
+## 44. M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1：官方事件日期區間與研究往返
+
+ROOT已有限接受 `official-event-focus/p3-v1` 的effective date區間、搜尋、真零與同截止往返。只沿[來源 §39.1](SOURCE_REGISTRY.md#391-m2-official-event-date-range-20261008-1實際來源結果)的本次exact TWT48U觀測；§12／13舊版本與58列歷史不改。範圍是觀測feed的身分／日期／分類及來源追溯，不是全市場完整事件、普通股身分／行情或PIT。
+
+### 44.1 請求、順序與計數
+
+`GET /api/focus/official-events`及明示首次`POST /api/focus/official-events/capture`均要求as_of，optional q／from／to。日期須有效ASCII YYYY-MM-DD且非0000年；缺側不限，已提供empty、無效日期、from>to、duplicate／unknown keys在source／catalogue前HTTP422。q沿§13原100 Unicode字元上限、先長度後strip、casefold literal substring。原件完整身分／日期／分類、receipt／pins／hash及觀測截止全部通過後，才逐event按effective date含首末篩選、依標的分組、按來源Code或保留事件Name搜尋、symbol排序及cap100；區間外／搜尋外／cap外壞列不得跳過。
+
+| 回應欄位 | p3-v1語義 |
+| --- | --- |
+| candidate_count／selected_count | 全合格feed事件列數，range／q不改。 |
+| total | 全feed去重標的數，range／q不改。 |
+| effective_from／effective_to | canonical邊界或null。 |
+| range_event_count | 區間內事件列數，先於q。 |
+| range_matched | 區間內去重標的數，先於q。 |
+| matched | 區間內再符合q的標的數，先於cap。 |
+| displayed／truncated | min(matched,100)／matched>100。 |
+
+每卡只保留該股落在區間內的合格事件；任一保留Name或Code符合q即可留下該卡全部區間內事件，保持原件ordinal。available真零與unavailable／未知分開；不得拿初始零計數當已驗空原件。
+
+### 44.2 提交、同截止返回與共用URL
+
+日期／q draft須明示提交後才查詢；查詢key含as_of／q／from／to，條件切換不沿用舊成功卡片或count。清除日期／搜尋維持研究截止。首頁原張／方向／成交額／振幅四條件仍相容，事件提交保留它們；q／from／to只作共享首頁狀態，不送價量API。
+
+已知catalogue detail固定`/stocks/TWSE/{symbol}`，帶as_of、from=official-events、focus_as_of／focus_q與可選focus_from／focus_to。返回固定首頁official-event-focus-title anchor並恢復原as_of／q／from／to；個股內改as_of不改原清單截止。安全URL／日期／query multiplicity與回應條件驗證仍必須通過，不接受任意return URL。三instrument synthetic catalogue只證routing；來源卡名稱不由catalogue覆寫，無M1入口仍保留事件。
+
+### 44.3 本次真來源及具名接受邊界
+
+本次Taipei2026-10-08 ONE fresh GET為62事件／62標的；ROOT逐列日期／分類／名稱／ordinal與actual API一致。具名接受：as_of10/08全62；10/01～12/31 62；10/22＋q0056 1；to10/22含首末58、from10/22含首末5；01/01～01/02 available真零，清除條件恢復。q trim、重複GET／POST及focus／selected共用held原件不增加金融GET；as_of10/07觀測晚於截止，unavailable。
+
+Desktop1365×900：0056日期22 draft套用前不查詢、提交後1卡、detail同10/08；M1改07再返回仍為原08＋q＋range。Narrow390×844：Jan1～2真零、清除日期／搜尋、1463detail往返均受驗且無horizontal overflow。這些依實際可信事件接受；offscreen／type ACK／Ctrl+A未選中等工具失敗不算操作成功，原failed receipts留task。
+
+停止API後native讀取回本地proxy502，cards清0且count清除，不保留成功狀態，不把失敗當真零。首次取得前全feed先驗才publish；focus／selected共享首次attempt及失敗seal，首次失敗耗額度，換入口不再取。這項可靠性有必要記憶體邊界驗證，不宣稱本次真金融GET曾失敗。原件／receipt只RAM，API結束後釋放，沒有重播／restart／durable保存。
+
+### 44.4 尚缺與後續
+
+Coreoperation+1／dependency0／reliability+1／stall0→0。發布／first availability／revision／歷史PIT、事件價格影響及完整M1／M2／M3仍未驗。下一候選息／權／權息類型組合日期／q與同截止往返，雖有本次三分類來源路徑，仍須新ROOT核新quota／pins／具名驗收；本批金融GET與metadata均SPENT，不復用producer或已釋放原件。必要checks／原失敗及owned runtime退出見[開發入口](development-baseline/README.md#m2-official-event-date-range-20261008-1-官方事件區間的零落盤驗證入口)。

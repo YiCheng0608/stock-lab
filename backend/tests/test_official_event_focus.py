@@ -26,16 +26,123 @@ def fixed_observation_day(monkeypatch):
     monkeypatch.setattr(events, "_today_taipei", lambda: DAY)
 
 
-def acquire(monkeypatch, rows=None, *, q="", **kwargs):
+def acquire(monkeypatch, rows=None, *, q="", from_date=None, to_date=None, **kwargs):
     body, calls = source(monkeypatch, rows, **kwargs)
     store = events.OfficialEventMemory()
-    result = events.capture_official_event_focus(DAY, q=q, environment=ENABLED, store=store)
+    result = events.capture_official_event_focus(DAY, q=q, from_date=from_date, to_date=to_date, environment=ENABLED, store=store)
     return store, body, calls, result
+
+
+def test_effective_range_is_inclusive_event_first_and_preserves_full_feed_counts(monkeypatch):
+    rows = [*ROWS[:3], {**ROWS[0], "Name": "OutsideName", "Date": "1151122"}]
+    store, _, calls, value = acquire(monkeypatch, rows, from_date="2026-10-12", to_date="2026-10-22")
+    assert value["candidate_count"] == value["selected_count"] == 4
+    assert value["total"] == value["range_matched"] == value["matched"] == value["displayed"] == 3
+    assert value["range_event_count"] == 3 and len(value["items"][0]["events"]) == 1
+    assert value["effective_from"] == "2026-10-12" and value["effective_to"] == "2026-10-22"
+    exact = events.build_official_event_focus(DAY, from_date="2026-10-22", to_date="2026-10-22", environment=ENABLED, store=store)
+    assert exact["total"] == 3 and exact["range_event_count"] == exact["range_matched"] == exact["matched"] == 1
+    assert exact["items"][0]["symbol"] == "0056" and exact["items"][0]["events"][0]["row_ordinal"] == 1
+    excluded_name = events.build_official_event_focus(DAY, q="outsidename", to_date="2026-10-22", environment=ENABLED, store=store)
+    assert excluded_name["range_matched"] == 3 and excluded_name["matched"] == 0 and excluded_name["items"] == []
+    restored = events.build_official_event_focus(DAY, q="OUTSIDENAME", from_date="2026-11-22", environment=ENABLED, store=store)
+    assert restored["range_event_count"] == restored["range_matched"] == restored["matched"] == 1
+    assert restored["items"][0]["events"][0]["row_ordinal"] == 4 and len(calls) == 1
+
+
+def test_range_zero_and_empty_feed_have_distinct_source_counts_and_no_new_fetch(monkeypatch):
+    store, _, calls, value = acquire(monkeypatch, from_date="2026-01-01", to_date="2026-01-02")
+    assert value["status"] == "available" and value["candidate_count"] == 4 and value["total"] == 3
+    assert value["range_event_count"] == value["range_matched"] == value["matched"] == value["displayed"] == 0
+    assert value["items"] == [] and value["provenance"] and len(calls) == 1
+    changed = events.capture_official_event_focus(DAY, from_date="2026-10-22", to_date="2026-10-22", environment=ENABLED, store=store)
+    assert changed["matched"] == 1 and len(calls) == 1
+    _, _, empty_calls, empty = acquire(monkeypatch, [], from_date="2026-01-01", to_date="2026-01-02")
+    assert empty["status"] == "available" and empty["candidate_count"] == empty["total"] == empty["range_matched"] == 0
+    assert empty["provenance"] and len(empty_calls) == 1
+
+
+@pytest.mark.parametrize("from_date,to_date", [("", None), (None, ""), ("2026-2-01", None), ("2026-02-30", None),
+    ("0000-01-01", None), ("２０２６-10-01", None), ("2026-10-01T00:00:00Z", None),
+    ("2026-10-23", "2026-10-22"), (date(2026, 10, 1), None)])
+def test_invalid_effective_range_does_not_consume_first_attempt(monkeypatch, from_date, to_date):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    for operation in (events.build_official_event_focus, events.capture_official_event_focus):
+        value = operation(DAY, from_date=from_date, to_date=to_date, environment=ENABLED, store=store)
+        assert value["status"] == "unavailable" and value["reasons"] == ["event_effective_range_invalid"]
+        assert value["items"] == [] and value["total"] == value["range_event_count"] == value["matched"] == 0
+    assert not store.attempted and calls == []
+    assert events.capture_official_event_focus(DAY, environment=ENABLED, store=store)["status"] == "available"
+    assert len(calls) == 1
+
+
+def test_effective_range_never_skips_invalid_outside_rows_or_truncation(monkeypatch):
+    invalid = {"Code": "9999", "Name": "InvalidOutside", "Date": "1150101", "Exdividend": "unknown"}
+    store, _, calls, value = acquire(monkeypatch, [*ROWS, invalid], q="0056", from_date="2026-10-22", to_date="2026-10-22")
+    assert value["status"] == "unavailable" and value["items"] == [] and store.snapshot is None
+    assert all(value[key] == 0 for key in ("candidate_count", "selected_count", "total", "range_event_count", "range_matched", "matched", "displayed"))
+    assert store.attempted and not value["can_capture"] and len(calls) == 1
+    later = events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
+    assert later["reasons"] == value["reasons"] and not later["can_capture"] and len(calls) == 1
+
+
+def test_effective_range_precedes_grouping_cap_and_search(monkeypatch):
+    rows = [{"Code": str(1000 + i), "Name": "Company" + str(i), "Date": "1151022", "Exdividend": "息"} for i in range(101)]
+    rows += [{"Code": "9999", "Name": "Outside", "Date": "1151122", "Exdividend": "息"}]
+    store, _, calls, value = acquire(monkeypatch, rows, from_date="2026-10-22", to_date="2026-10-22")
+    assert value["total"] == 102 and value["range_event_count"] == value["range_matched"] == value["matched"] == 101
+    assert value["displayed"] == 100 and value["truncated"] and len(value["items"]) == 100
+    targeted = events.build_official_event_focus(DAY, q="1100", to_date="2026-10-22", environment=ENABLED, store=store)
+    assert targeted["matched"] == targeted["displayed"] == 1 and targeted["items"][0]["symbol"] == "1100"
+    assert not targeted["truncated"] and len(calls) == 1
+
+
+def test_api_range_validation_occurs_before_db_dependency_or_capture(monkeypatch):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    with memory_app(store=store) as app:
+        from app.api import get_db
+        from fastapi.testclient import TestClient
+        entered = []
+        def forbidden_db():
+            entered.append(True)
+            raise AssertionError("DB dependency entered before query rejection")
+        app.dependency_overrides[get_db] = forbidden_db
+        queries = ["", "as_of=", "as_of=2026-2-03", "as_of=2026-02-30", "as_of=1759449600",
+                   "as_of=2026-10-03&as_of=2026-10-03", "as_of=2026-10-03&q=a&q=b",
+                   "as_of=2026-10-03&from=", "as_of=2026-10-03&to=2026-02-30",
+                   "as_of=2026-10-03&from=2026-10-23&to=2026-10-22",
+                   "as_of=2026-10-03&from=2026-10-01&from=2026-10-01",
+                   "as_of=2026-10-03&to=2026-10-22&to=2026-10-22",
+                   "as_of=2026-10-03&next=https://example.invalid", "as_of=2026-10-03&q=" + "a" * 101]
+        with TestClient(app) as client:
+            for query in queries:
+                assert client.get("/api/focus/official-events?" + query).status_code == 422
+                assert client.post("/api/focus/official-events/capture?" + query).status_code == 422
+        assert entered == [] and calls == [] and not store.attempted
+
+
+def test_api_range_links_preserve_original_cutoff_and_all_four_conditions(monkeypatch):
+    _, calls = source(monkeypatch)
+    with memory_api() as client:
+        query = urlencode({"as_of": DAY.isoformat(), "q": "  0056  ", "from": "2026-10-22", "to": "2026-10-22"})
+        focus = client.post("/api/focus/official-events/capture?" + query).json()
+        assert focus["status"] == "available" and focus["matched"] == 1 and focus["search_query"] == "0056"
+        item = focus["items"][0]
+        detail_query = parse_qs(urlsplit(item["detail_url"]).query)
+        assert detail_query == {"as_of": [DAY.isoformat()], "from": ["official-events"], "focus_as_of": [DAY.isoformat()],
+                                "focus_q": ["0056"], "focus_from": ["2026-10-22"], "focus_to": ["2026-10-22"]}
+        detail = client.get("/api" + item["detail_url"]).json()
+        assert detail["overview"]["as_of"] == DAY.isoformat() and detail["overview"]["events"]["provenance"] == focus["provenance"]
+        assert item["events"][0] in detail["overview"]["events"]["rows"]
+        assert client.get("/api/focus/official-events?" + query).json()["items"] == focus["items"]
+        assert len(calls) == 1
 
 
 def test_all_observed_symbols_grouped_multiple_events_and_dual_hash(monkeypatch):
     store, body, calls, value = acquire(monkeypatch)
-    assert value["version"] == "official-event-focus/p2-v1" and value["status"] == "available"
+    assert value["version"] == "official-event-focus/p3-v1" and value["status"] == "available"
     assert value["total"] == value["matched"] == value["displayed"] == 3 and not value["truncated"]
     assert value["search_query"] == ""
     assert [item["symbol"] for item in value["items"]] == ["0056", "1449", "1463"]
@@ -137,11 +244,13 @@ def test_shared_selected_cache_read_only_feed_validation_and_missing_selection(m
     assert store.snapshot is original and store.snapshot[0] == body and len(calls) == 1
 
 
-def test_selected_unselected_class_contract_preserved_but_focus_rejects(monkeypatch):
+def test_shared_capture_rejects_unselected_class_before_publishing_and_seals_focus(monkeypatch):
     rows = [ROWS[0], {**ROWS[1], "Exdividend": "unknown"}]
     _, calls = source(monkeypatch, rows)
     store = events.OfficialEventMemory()
-    assert events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)["status"] == "available"
+    selected = events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
+    assert selected["reasons"] == ["selected_event_class_unknown"] and selected["status"] == "unavailable"
+    assert store.snapshot is None and store.attempted and not selected["can_capture"]
     value = events.build_official_event_focus(DAY, environment=ENABLED, store=store)
     assert value["reasons"] == ["selected_event_class_unknown"] and not value["can_capture"]
     assert len(calls) == 1
@@ -171,7 +280,11 @@ def test_http_and_admission_failure_no_cache_and_sanitized(monkeypatch):
         raise consumer.ActionCaptureError("purpose_not_admitted:summarize")
     monkeypatch.setattr(consumer, "_admission", denied)
     value = events.capture_official_event_focus(DAY, environment=ENABLED, store=store)
+    assert value["reasons"] == ["http_status:503"] and not value["can_capture"]
+    unspent = events.OfficialEventMemory()
+    value = events.capture_official_event_focus(DAY, environment=ENABLED, store=unspent)
     assert value["reasons"] == ["purpose_not_admitted:summarize"] and len(calls) == 1
+    assert not unspent.attempted and unspent.snapshot is None
 
 
 def test_lock_shared_with_selected_and_get_does_not_wait_or_fetch(monkeypatch):

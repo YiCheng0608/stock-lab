@@ -1479,3 +1479,17 @@ Current metadataGET0／ordinarypriceGET0／privateactualIO0／upstreamPOST0；So
 Coreoperation+1／standalone coredependency0／reliability+1（preview startup guard／CSS修正）／stall0→0。Actual當日零為3293／trust／2026-09-29，原列ordinal221；ALL42完整窗口總和均非零，不能稱actual零窗口。驗證命令、原exit及owned退出見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。
 
 文件截止時DOC review／freeze／qualified indexes／commit／另准local master merge待；使用者要求完成本批合併後暫停，不啟動下一輪。未完成候選「M1普通股20／21交易日真實收盤序列與同截止趨勢接線」等待使用者恢復及新精確來源／rights／time／calendar／schema／profile／pins／finite quota准入，非可執行來源已取得；ordinary closes／股價trend／strategy／PIT／execution與完整ROADMAP仍未完成。
+
+## 39. 2026-10-08：歷史收盤新候選審查與官方事件重選
+
+本次新FinMind primary核對提供 [TaiwanStockPrice technical API線索](https://finmind.github.io/tutor/TaiwanMarket/Technical/)，與舊Sponsor broker候選分開。[2026-07-13使用條款](https://finmindtrade.com/analysis/#/Sponsor/terms_of_use)與[2026-07-12 disclaimer／licenses](https://finmindtrade.com/analysis/#/Sponsor/disclaimer)依方案界定API／SDK服務用途；服務不包含對外再散布／轉售／鏡像，對外公開仍須自行確認原資料機關授權要求。這些新證據尚未建立本專案exact普通股歷史source owner／rights／各用途與獨立calendar／consumer pins；MIT軟體license或一般公開管道聲明不代data permission。M1普通股20／21收盤候選仍未准入，不改成全域禁止；無新取得路徑不重複monthly／legacy審查。六次metadataGET已完成、金融GET／落盤0；完整收據留ROOT原task，不另建report或來源副本。
+
+ROOT改選 `M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1`，只沿[§9](#9-m1-p3atwt48u-selected-官方事件原件摘要)／[§11](#11-m2-p1本次官方事件-feed-摘要)已准入exact TWT48U／free_public_local／原registry、digest、sourceversion與pins。2026-10-08 Taipei的新核對為[政府dataset89748](https://data.gov.tw/dataset/89748)免費／OGL1.0／不定期、metadata詮釋更新2026-06-30；[TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json) info1.0、exact GET／十二string欄、Date為除權息日期。兩metadataGET完成，UTC2026-10-07T19:04:41～42，非金融原件；metadata更新日不是事件availability。ROOT另grant一次fresh financial GET，body≤5MiB、20秒per-operation／30秒cooperative／redirect0／retry0、body／receipt只RAM；本摘要核定時尚未取得，不沿用舊58列。range consumer／計數／產品數值與具名操作仍待final實作及ROOT驗收，不先改原契約；日期區間篩的是effective date，published／first available／revision／historical PIT支持不擴張。
+
+### 39.1 M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1：實際來源結果
+
+ROOT已接受ONE fresh exact TWT48U金融GET，HTTP200／16876B／62事件62標的；request UTC2026-10-07T19:39:48.116667+00:00、captured19:39:48.192610+00:00，Taipei觀測日10/08。完整ORIGINAL body／receipt在同RAM物件受核，日期／分類／名稱／ordinal逐列對actual API；body SHA-256 `660bf15d488b36223c36c63cc7ec1bc7fc5339da36fed409e48eaa7748e31b3b`，receipt SHA-256 `2893769f263c3128746a169dff6c56cbd5bf5d9bbfb2a71f681e92fbbc44f6ed`。這是本次原件，非§11舊58列重播。
+
+沿§9原source_version `twse-twt48u-all-d011-2026-09-12`、registry `r1-a1-c009-2026-09-12.1`、external digest `sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b`，不改pins／原snapshot。新consumer `official-event-focus/p3-v1` 的range只投影effective date，完整feed／receipt驗後才篩選；精確計數、API及具名操作由[個股頁 §44](STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)管理。Published／first available／revision仍unknown，historical PIT unsupported；capture time不代發布，synthetic catalogue不證普通股／行情。
+
+本輪metadata8 SPENT（FinMind6、TWT48U權利2）、金融1 SPENT；5MiB、20秒per-operation／30秒cooperative、redirect0／retry0與RAM用途維持。首次失敗亦耗額度、focus／selected共享seal，不跨入口自動再取。FinMind歷史金融GET0，exact data owner／use rights及獨立calendar仍缺，不因MIT授權放行；舊22／136／private remaining1不續grant。API正常結束後原件RAM釋放，無落盤／replay／restart；下一分類操作須新ROOT准入，完整metadata／command／exit收據留原task。

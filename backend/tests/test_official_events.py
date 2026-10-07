@@ -21,6 +21,7 @@ import pytest
 
 from app import official_events as events
 from worker import source_runtime as runtime
+from worker import twse_action_capture as consumer
 
 REPO = Path(__file__).resolve().parents[2]
 DAY = date(2026, 10, 3)
@@ -344,5 +345,61 @@ def test_router_post_failure_keeps_selected_reason_and_publishes_no_original(mon
         assert value["status"] == "unavailable" and value["capture_action"] == "failed"
         assert value["reasons"] == ["selected_symbol_missing:0056"] and len(calls) == 1
         assert events.MEMORY_EVENTS.snapshot is None
-        assert client.get(path + "/overview?as_of=2026-10-03").json()["events"]["reasons"] == ["event_memory_capture_missing"]
+        held_failure = client.get(path + "/overview?as_of=2026-10-03").json()["events"]
+        assert held_failure["reasons"] == ["selected_symbol_missing:0056"] and not held_failure["can_capture"]
         assert len(calls) == 1
+
+
+@pytest.mark.parametrize("first", ["focus", "selected"])
+@pytest.mark.parametrize("failure", ["http", "receipt", "full_feed"])
+def test_first_failed_attempt_seals_focus_and_selected_across_conditions(monkeypatch, first, failure):
+    monkeypatch.setattr(events, "_today_taipei", lambda: DAY)
+    rows = [*ROWS, {**ROWS[0], "Code": "9999", "Date": "1150101", "Exdividend": "unknown"}] if failure == "full_feed" else ROWS
+    _, calls = source(monkeypatch, rows, status=503 if failure == "http" else 200)
+    if failure == "receipt":
+        real = events.capture_memory
+        def invalid_receipt(**kwargs):
+            body, receipt = real(**kwargs)
+            value = json.loads(receipt)
+            value["body_sha256"] = "0" * 64
+            return body, encoded(value)
+        monkeypatch.setattr(events, "capture_memory", invalid_receipt)
+    store = events.OfficialEventMemory()
+    value = events.capture_official_event_focus(DAY, from_date="2026-10-22", to_date="2026-10-22", environment=ENABLED, store=store) if first == "focus" else events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
+    assert value["status"] == "unavailable" and value["capture_action"] == "failed"
+    assert store.attempted and store.snapshot is None and not value["can_capture"] and len(calls) == 1
+    reason = value["reasons"]
+    for operation in (events.build_official_event_focus, events.capture_official_event_focus):
+        held = operation(DAY, q="1449", from_date="2026-01-01", to_date="2026-12-31", environment=ENABLED, store=store)
+        assert held["reasons"] == reason and held["items"] == [] and not held["can_capture"]
+        assert all(held[key] == 0 for key in ("total", "matched", "displayed", "range_event_count", "range_matched", "candidate_count", "selected_count"))
+    for symbol in ("0056", "1449"):
+        for operation in (events.build_official_events, events.capture_official_events):
+            held = operation("TWSE", symbol, DAY, environment=ENABLED, store=store)
+            assert held["reasons"] == reason and held["rows"] == [] and held["provenance"] is None and not held["can_capture"]
+    assert len(calls) == 1 and store.snapshot is None
+
+
+def test_selected_missing_failure_cannot_retry_another_symbol_or_focus(monkeypatch):
+    monkeypatch.setattr(events, "_today_taipei", lambda: DAY)
+    _, calls = source(monkeypatch, [ROWS[1]])
+    store = events.OfficialEventMemory()
+    failed = events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
+    assert failed["reasons"] == ["selected_symbol_missing:0056"] and not failed["can_capture"]
+    assert events.capture_official_events("TWSE", "1449", DAY, environment=ENABLED, store=store)["reasons"] == failed["reasons"]
+    assert events.capture_official_event_focus(DAY, environment=ENABLED, store=store)["reasons"] == failed["reasons"]
+    assert store.snapshot is None and len(calls) == 1
+
+
+def test_preflight_admission_failure_does_not_spend_capture_attempt(monkeypatch):
+    _, calls = source(monkeypatch)
+    store = events.OfficialEventMemory()
+    admission = consumer._admission
+    def refused(**kwargs):
+        raise consumer.ActionCaptureError("source_not_admitted")
+    monkeypatch.setattr(consumer, "_admission", refused)
+    value = events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)
+    assert value["status"] == "unavailable" and not store.attempted and calls == []
+    monkeypatch.setattr(consumer, "_admission", admission)
+    assert events.capture_official_events("TWSE", "0056", DAY, environment=ENABLED, store=store)["status"] == "available"
+    assert len(calls) == 1

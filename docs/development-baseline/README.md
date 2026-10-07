@@ -595,3 +595,13 @@ Coreoperation+1／standalone dep0／reliability+1／stall0→0。使用者要求
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。
+
+### M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 官方事件區間的零落盤驗證入口
+
+ROOT已接受本批必要checks與actual操作；文件角色不重跑。Backend入口為[test_official_events.py](../../backend/tests/test_official_events.py)／[test_official_event_focus.py](../../backend/tests/test_official_event_focus.py)，101 passed／38 warnings／raw0；首輪99 passed＋2failed／raw1保留。Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs) `--event-range-check` 為獨立零網路模式，41src noEmit／69checks raw0；初SSR設定raw1保留。既有price query四條件共享URL相容與事件不滲價量API屬必要檢查，不擴舊price來源驗收。
+
+Checks使用可重建記憶體fixture與既有依賴，不install／建helper、DB、cache、build／raw／附件；noEmit與memory-only consumer保持。範圍包含日期grammar／inclusive／單側／invalid先於source與catalogue、完整feed先驗後range／q、計數／cap／返回、首次失敗跨focus／selected shared seal及retry0。Synthetic邊界不代真原件、原三instrument catalogue只routing。原exact命令／版本／所有raw exit與工具參數、quoting、offscreen／未送達操作收據留task；本段不授權重跑金融來源或producer。
+
+Actual ONE金融GET／62列及[來源 §39.1](../SOURCE_REGISTRY.md#391-m2-official-event-date-range-20261008-1實際來源結果)已接受；可信desktop／390px／同截止往返／真零／API停止後502清值見[個股頁 §44](../STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。Preview共16GET／1POST均loopback，不另算金融GET；RAM原件隨API終了釋放，不replay／restart。
+
+退出分報：API／Node preview normal SIGINT各raw1，不改報exit0；ROOT核owned49216／8484／62180 absent、8797／8798無listener，唯一tab `f9a30d71-ea8a-4190-b875-3cf6c977602f` 正常close、本根tabs=[]。本批filesystem／privateIO／磁碟DB／cache／build／raw／附件產物0；功能驗收與退出分報，非全專案清理。Coreoperation+1／dependency0／reliability+1／stall0→0；DOC review／freeze／索引／commit／merge與下輪交接、關閉封存清理待ROOT，見[協作紀錄](../TASK_COORDINATION.md)。
