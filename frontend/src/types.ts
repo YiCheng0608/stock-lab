@@ -530,6 +530,28 @@ export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
   }>
 }
 
+export type TwseIssuerProfileData = {
+  version: string; status: 'available' | 'unavailable'; reasons: string[]; exchange: string; symbol: string
+  as_of: string | null; cutoff_basis: 'observed_taipei_date_inclusive'; observed_date: string | null
+  capture_enabled: boolean; can_capture: boolean; capture_action: 'not_attempted' | 'acquired' | 'cached' | 'failed'
+  attempted: boolean; busy: boolean; cache_present: boolean; storage: 'memory_only'; durable_capture: false
+  historical_pit: 'unsupported'; published_time: 'unknown'; first_availability: 'unknown'; revision_history: 'unknown'
+  classification: 'unsupported'; feed_status: 'available' | 'unavailable'; profile_present: boolean | null; candidate_count: number | null
+  row: null | {
+    exchange: 'TWSE'; symbol: string; full_name: string; short_name: string; report_date_raw: string; report_date: string
+    report_date_role: 'issuer_report_date'; listing_date_raw: string; listing_date: string; listing_date_role: 'listing_date'
+    industry_code_raw: string; row_ordinal: number; source_row: Record<string, string>; event_names: string[]
+    body_sha256: string; receipt_sha256: string
+  }
+  provenance: null | {
+    source_id: string; source_version: string; endpoint: string; profile: string; registry_version: string; manifest_digest: string
+    generation_id: string; request_started_at: string; captured_at: string; body_sha256: string; body_bytes: number; receipt_sha256: string
+    storage: 'memory_only'; verification: 'local_evidence_consistent'; validation_scope: 'all_33_string_fields_unique_company_codes'
+  }
+  attribution: null | NonNullable<OfficialEventsData['attribution']>
+  policy: { version: string; digest: string; profile: string }; limitations: string[]
+}
+
 export type InstitutionalWindowReceipt = {
   schema_version?: string; profile: string; http_status?: number; content_type?: string; content_encoding?: string
   source_id: string; source_version: string; requested_date: string; url: string; method: string
@@ -680,6 +702,7 @@ export type StockOverviewData = {
   institutional_daily?: InstitutionalDailyData
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
   events: OfficialEventsData
+  issuer_profile?: TwseIssuerProfileData
   limitations: string[]
 }
 

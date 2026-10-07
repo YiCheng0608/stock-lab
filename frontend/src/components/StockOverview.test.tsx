@@ -4,8 +4,9 @@ import { createPriceMemoryFixture, priceFixtureInstrument } from '../stockPriceM
 import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2 } from '../stockPriceMemoryRead'
 import { createPriceSavedFixture } from '../stockPriceSavedRead.test'
 import { createSavedFocusStockFixture } from '../savedPriceFocus.test'
-import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, PriceSaved, overviewReason, OfficialEvents } from './StockOverview'
-import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
+import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, PriceSaved, overviewReason, OfficialEvents, TwseIssuerProfile } from './StockOverview'
+import { ISSUER_FIELDS, ISSUER_ENDPOINT, ISSUER_VERSION, ISSUER_POLICY_DIGEST, ISSUER_REGISTRY_VERSION, ISSUER_REGISTRY_DIGEST, validTwseIssuerProfile, unavailableIssuer } from '../twseIssuerProfile'
+import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData, TwseIssuerProfileData } from '../types'
 import type { ReactElement } from 'react'
 
 export function runPriceSavedOverviewSSRTests(render: (element: ReactElement) => string): number {
@@ -120,7 +121,7 @@ export function runPriceMemoryOverviewSSRTests(render: (element: ReactElement) =
 }
 
 
-const windowOnly = ['unit-lots-only', 'w3-only', 'w4-only', 'w5-only', 'w6-only', 'w7-only', 'w8-only'].includes((globalThis as typeof globalThis & { __institutionalWindowSSRSelection?: string }).__institutionalWindowSSRSelection ?? '')
+const windowOnly = ['issuer-only', 'unit-lots-only', 'w3-only', 'w4-only', 'w5-only', 'w6-only', 'w7-only', 'w8-only'].includes((globalThis as typeof globalThis & { __institutionalWindowSSRSelection?: string }).__institutionalWindowSSRSelection ?? '')
 let originalAssertionCount = 0
 function expect(condition: boolean, message: string): void {
   originalAssertionCount += 1
@@ -429,6 +430,77 @@ export function createUnitLotsFixture(): StockOverviewData {
       capture_state: { enabled: false, attempted: true, busy: false, can_capture: false, cache_present: true, action: 'cached', request_count: 0 },
     },
   }
+}
+
+/** Small reconstructable issuer fixtures; their hashes are synthetic. */
+export function createTwseIssuerFixture(symbol = '1449'): { data: TwseIssuerProfileData; events: OfficialEventsData; overview: StockOverviewData } {
+  const names: Record<string, string> = { '1449': '佳和', '1463': '強盛新', '2614': '東森' }
+  const short = names[symbol], full = short + '股份有限公司'
+  const raw = Object.fromEntries(ISSUER_FIELDS.map(field => [field, '']))
+  Object.assign(raw, { '公司代號': symbol, '公司名稱': full, '公司簡稱': short, '出表日期': '1151008', '上市日期': '19900102', '產業別': '91' })
+  const events: OfficialEventsData = {
+    version: 'official-events/p3b-v1', status: 'available', reasons: [], as_of: '2026-10-08', observed_date: '2026-10-08',
+    cutoff_basis: 'observed_taipei_date_inclusive', capture_enabled: true, can_capture: true, cache_present: true, capture_action: 'cached',
+    storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported', source_url_kind: 'feed',
+    published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown', limitations: [],
+    rows: [{ exchange: 'TWSE', symbol, company_name: short, event_date: '2026-10-12', source_date: '1151012', source_classification: '權',
+      event_date_role: 'effective_date', event_date_precision: 'date', kind: 'ex_right', label: '除權', row_ordinal: 49,
+      published_at: null, first_available_at: null, revision_available_at: null, availability: 'unknown' }],
+    provenance: { source_id: 'twse_twt48u_all', source_version: 'twse-twt48u-all-d011-2026-09-12',
+      endpoint: 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL', registry_version: 'r1-a1-c009-2026-09-12.1',
+      manifest_digest: 'sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b', body_sha256: 'a'.repeat(64),
+      receipt_sha256: 'b'.repeat(64), request_started_at: '2026-10-07T22:00:00+00:00', captured_at: '2026-10-07T22:00:01+00:00',
+      storage: 'memory_only', verification: 'local_evidence_consistent' }, attribution: null,
+  }
+  const profile: TwseIssuerProfileData = {
+    version: ISSUER_VERSION, status: 'available', reasons: [], exchange: 'TWSE', symbol, as_of: '2026-10-08',
+    cutoff_basis: 'observed_taipei_date_inclusive', observed_date: '2026-10-08', capture_enabled: true, can_capture: true, capture_action: 'cached',
+    attempted: true, busy: false, cache_present: true, storage: 'memory_only', durable_capture: false, historical_pit: 'unsupported',
+    published_time: 'unknown', first_availability: 'unknown', revision_history: 'unknown', classification: 'unsupported',
+    feed_status: 'available', profile_present: true, candidate_count: 3,
+    row: { exchange: 'TWSE', symbol, full_name: full, short_name: short, report_date_raw: '1151008', report_date: '2026-10-08',
+      report_date_role: 'issuer_report_date', listing_date_raw: '19900102', listing_date: '1990-01-02', listing_date_role: 'listing_date',
+      industry_code_raw: '91', row_ordinal: 1, source_row: raw, event_names: [short], body_sha256: '1'.repeat(64), receipt_sha256: '2'.repeat(64) },
+    provenance: { source_id: 'twse_t187ap03_l', source_version: 'twse-t187ap03-l-d18419-2026-10-08', endpoint: ISSUER_ENDPOINT,
+      profile: 'twse_issuer_free_public_local', registry_version: ISSUER_REGISTRY_VERSION, manifest_digest: ISSUER_REGISTRY_DIGEST,
+      generation_id: '00000000-0000-4000-8000-000000000001', request_started_at: '2026-10-07T22:00:00+00:00', captured_at: '2026-10-07T22:00:01+00:00',
+      body_sha256: '1'.repeat(64), body_bytes: 6000, receipt_sha256: '2'.repeat(64), storage: 'memory_only', verification: 'local_evidence_consistent',
+      validation_scope: 'all_33_string_fields_unique_company_codes' },
+    attribution: { owner: { name: 'Taiwan Stock Exchange (TWSE)', type: 'official_exchange' }, dataset_id: 'data-gov-18419',
+      source_id: 'twse_t187ap03_l', source_url: ISSUER_ENDPOINT, terms: { status: 'known', value: 'OGL 1.0', reason: 'Synthetic presentation fixture' },
+      evidence: Array.from({ length: 4 }, () => ({ url: 'https://data.gov.tw/dataset/18419', checked_at: 'synthetic fixture', claim: 'synthetic fixture' })),
+      purpose_evidence: {} }, policy: { version: ISSUER_VERSION, digest: ISSUER_POLICY_DIGEST, profile: 'twse_issuer_free_public_local' }, limitations: [],
+  }
+  return { data: profile, events, overview: { ...data, as_of: '2026-10-08', events, issuer_profile: profile,
+    price: { ...data.price, latest: null, bars: [], candidate_count: 0, valid_count: 0, from: null, to: null, rejected: [], reasons: [] },
+    price_memory: undefined, institutional_daily: undefined,
+    institutional: { status: 'unavailable', horizons: [5, 20], investors: [], values: null, reasons: [] } } }
+}
+
+export function runTwseIssuerProfileSSRTests(render: (element: ReactElement) => string): number {
+  let checks = 0
+  const check = (value: boolean, message: string) => { checks++; if (!value) throw new Error(message) }
+  for (const symbol of ['1449', '1463', '2614']) {
+    const { data: profile, events } = createTwseIssuerFixture(symbol)
+    check(validTwseIssuerProfile(profile, 'TWSE', symbol, '2026-10-08', events), 'exact independent issuer response')
+    const html = render(<TwseIssuerProfile data={profile} events={events} exchange="TWSE" symbol={symbol} cutoff="2026-10-08" onCapture={() => {}} />)
+    check(html.includes(profile.row!.full_name) && html.includes('1151008') && html.includes('19900102') && html.includes('>91<'), 'six original issuer fields')
+    check(html.includes('讀取本次公司基本資料') && html.includes(ISSUER_ENDPOINT) && html.includes('1'.repeat(64)) && html.includes('2'.repeat(64)), 'explicit cached read and independent dual hashes')
+    const failed = render(<TwseIssuerProfile data={profile} events={events} exchange="TWSE" symbol={symbol} cutoff="2026-10-08" requestFailure="issuer_read_request_failed" />)
+    check(!failed.includes(profile.row!.full_name) && !failed.includes('1'.repeat(64)) && failed.includes('role="alert"'), 'failure clears original values and provenance')
+  }
+  const { data: profile, events } = createTwseIssuerFixture()
+  const unavailable = unavailableIssuer(profile, 'issuer_symbol_absent_from_valid_feed')
+  check(validTwseIssuerProfile(unavailable, 'TWSE', '1449', '2026-10-08', events), 'unavailable contract is clear')
+  const missing = render(<TwseIssuerProfile data={unavailable} events={events} exchange="TWSE" symbol="1449" cutoff="2026-10-08" />)
+  check(missing.includes('未見此代號') && !missing.includes(profile.row!.full_name), 'missing does not substitute catalogue or zero')
+  check(!validTwseIssuerProfile(profile, 'TWSE', '1449', '2026-10-07', events), 'earlier cutoff response rejected')
+  check(!validTwseIssuerProfile(profile, 'TWSE', '0056', '2026-10-08', events), 'ETF has no issuer fallback')
+  const long = structuredClone(profile), longEvents = structuredClone(events)
+  long.row!.full_name = '很長的公司名稱'.repeat(30)
+  long.row!.source_row['公司名稱'] = long.row!.full_name
+  check(validTwseIssuerProfile(long, 'TWSE', '1449', '2026-10-08', longEvents), 'long original full name retained')
+  return checks
 }
 
 export function runUnitLotsSSRTests(render: (element: ReactElement) => string): number {

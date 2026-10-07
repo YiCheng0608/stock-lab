@@ -1,3 +1,19 @@
+## 目前：TWSE公司原欄位與同截止事件研究已有限接受
+
+2026-10-08。`M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1` 交付1449／1463／2614真TWSE公司六原欄trace、同cutoff事件及原五條件返回；1095公司／58事件新原件／API／desktop／390px／真零／恢復／502清值已接受，詳[個股頁 §46](STOCK_RESEARCH_PAGE.md)／[來源 §41](SOURCE_REGISTRY.md)。
+
+Coreoperation+1／standalone dep0／reliability0／stall0→0；完整M1／M2／M3未完成。不外推產業名稱／ordinary／0056ETF／行情／PIT；20／21closes＋MA20仍缺rights／calendar新path。
+
+下一 `M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` **UNADMITTED**：raw04／20依官方碼表版本／生效日追溯名稱及五條件返回，依[完成條件](ROADMAP_EXECUTION.md)重核fresh來源／新quota。本批quota SPENT／原件釋放；DOC／freeze／索引／Git仍待，已接受有限清理見[協作紀錄](TASK_COORDINATION.md)，BOOT與歷史不回改。
+
+## 目前：BOOT-M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1；可見 gate 已接受，原 ROOT 正式接手
+
+2026-10-08。前批M2官方事件類型及source9＋DOC6 exact15 commit／local master ff-only merge `204fe8532b88090d95bcdb5881eea0d70bc84381` 已接受，未push。四NEW actual身分／接手與外部可見gate已接受，ONE原session continuation已收到，產品派工由本ROOT以同四IDs正式接手；此更新只限自有BOOTprefix，來源／實作未准入，見[協作紀錄](TASK_COORDINATION.md)。
+
+下一 `M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1` **UNADMITTED**：1449／1463／2614真TWSE公司原欄位profile trace＋同cutoff官方事件＋原五條件返回。歷史t187ap03_L1094／10TDR只提供路徑、不證matching／ordinary／0056ETF／分類／PIT；新來源與操作依[執行清單](ROADMAP_EXECUTION.md)准入。
+
+優先M1→M2→M3；ordinary20／21closes＋MA20trend仍缺rights／calendar，有新path才重審。繼承core+1／dep0／reliability0／stall0→0；BOOT增量0、非實作不計數或reset，nextcoreless→1／兩批先重選，M1／M2／M3未完成。metadata4／finance1 SPENT／raw釋放；BOOT索引／Git／cleanup0，原BOOTreview／freeze已接受，本次更新待ROOTreview；舊四session清理仍pending。
+
 ## 目前：官方事件類型與同截止研究返回已有限接受
 
 2026-10-08。`M2-OFFICIAL-EVENT-KIND-20261008-1/B1` 已交付精確息／權／權息配 effective 日期／q、匹配事件追溯、同截止detail及原五條件返回。`official-event-focus/p4-v1` 完整feed先驗再range／kind／q，息不含權息；新Taipei10/08金融原件62事件62標的（55／6／1）、actual API、可信desktop1365×900／narrow390×844 三型、真零／恢復與502清值已有限接受，詳[個股頁](STOCK_RESEARCH_PAGE.md) §45／[來源准入](SOURCE_REGISTRY.md) §40。

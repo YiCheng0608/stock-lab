@@ -14,6 +14,7 @@ import type {
   Instrument,
   InstrumentDetail,
   OfficialEventsData,
+  TwseIssuerProfileData,
   InstitutionalWindowsData,
   StockPriceMemoryData,
   StockPriceSavedData,
@@ -243,6 +244,9 @@ export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: s
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/official-events/capture${queryString({ as_of: asOf })}`,
     {},
   )
+
+export const captureTwseIssuerProfile = (exchange: string, symbol: string, asOf: string) =>
+  post<TwseIssuerProfileData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/issuer-profile/capture${queryString({ as_of: asOf })}`, {})
 
 export const getActions = (params: CursorParams = {}) =>
   get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string } }>(`/actions${queryString(params)}`)

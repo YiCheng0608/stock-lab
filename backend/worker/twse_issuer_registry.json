@@ -1,0 +1,228 @@
+{
+  "content_digest": "sha256:7488da20a3bdf94aaa548c896d19077628bf93529208226d49b2a02896972f89",
+  "generated_on": "2026-10-08",
+  "policy_version": "source-policy/v1",
+  "profiles": {
+    "twse_issuer_free_public_local": {
+      "description": "Independent issuer RAM-only local consumer; no ordinary/ETF/classification/PIT inference.",
+      "policy_version": "source-policy/v1",
+      "source_versions": {
+        "twse_t187ap03_l": "twse-t187ap03-l-d18419-2026-10-08"
+      },
+      "version": "1"
+    }
+  },
+  "registry_version": "twse-issuer-r1-2026-10-08.1",
+  "schema_version": "source-registry/v1",
+  "sources": [
+    {
+      "access": {
+        "auth": {
+          "reason": "ROOT checked exact Swagger operation declares no authentication.",
+          "status": "known",
+          "value": false
+        },
+        "documented_terms": {
+          "reason": "Dataset18419 license1 and current OGL1.0 with TWSE clauses6/8; RAM-only admitted scope.",
+          "status": "known",
+          "value": "OGL 1.0"
+        },
+        "free_public": {
+          "reason": "ROOT dataset18419 review: cost free, license1; Swagger maps exact issuer operation.",
+          "status": "known",
+          "value": true
+        },
+        "latency": {
+          "reason": "No endpoint-specific latency or release-clock commitment was documented.",
+          "status": "unknown"
+        },
+        "rate_limit": {
+          "reason": "No endpoint-specific numeric rate limit or SLA was documented.",
+          "status": "unknown"
+        }
+      },
+      "dataset_id": "data-gov-18419",
+      "deprecation": {
+        "reason": "No endpoint-specific deprecation, migration, or cessation notice was documented.",
+        "status": "unknown"
+      },
+      "enabled": {
+        "reason": "ROOT exact Swagger operation and dataset18419 mapping checked 2026-10-08.",
+        "status": "known",
+        "value": true
+      },
+      "evidence": [
+        {
+          "checked_at": "2026-10-08 Asia/Taipei",
+          "claim": "ROOT verified free access/license 1; TWSE issuer dataset supplied via SFB; exact CSV resource and explicit Swagger note. Metadata HTTP200 4759B SHA256 a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9.",
+          "url": "https://data.gov.tw/api/v2/rest/dataset/18419"
+        },
+        {
+          "checked_at": "2026-10-08 Asia/Taipei",
+          "claim": "ROOT verified exact GET /opendata/t187ap03_L, 33 string properties and no auth declaration. HTTP200 309960B SHA256 06e1cea82448361e733a0ad1ae16e52f5d5d6b71905acd078472f852c32c0eb0.",
+          "url": "https://openapi.twse.com.tw/v1/swagger.json"
+        },
+        {
+          "checked_at": "2026-10-08 Asia/Taipei",
+          "claim": "ROOT reviewed parsed OGL1.0 reuse and attribution; no raw HTTP/hash claimed.",
+          "url": "https://data.gov.tw/license"
+        },
+        {
+          "checked_at": "2026-10-08 Asia/Taipei",
+          "claim": "ROOT reviewed parsed clauses 6 approved access and 8 government-open-data exception; no raw HTTP/hash claimed.",
+          "url": "https://www.twse.com.tw/zh/terms/use.html"
+        }
+      ],
+      "exact_url": "https://openapi.twse.com.tw/v1/opendata/t187ap03_L",
+      "method": "GET",
+      "owner": {
+        "name": "Taiwan Stock Exchange (TWSE)",
+        "type": "official_exchange"
+      },
+      "purposes": {
+        "historical_pit": {
+          "conditions": [
+            "reconstructable_snapshot",
+            "revision_history",
+            "first_availability"
+          ],
+          "evidence": [
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT verified free access/license 1; TWSE issuer dataset supplied via SFB; exact CSV resource and explicit Swagger note. Metadata HTTP200 4759B SHA256 a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9.",
+              "url": "https://data.gov.tw/api/v2/rest/dataset/18419"
+            },
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT reviewed parsed OGL1.0 reuse and attribution; no raw HTTP/hash claimed.",
+              "url": "https://data.gov.tw/license"
+            }
+          ],
+          "reason": "Published/first availability/revision history unknown; current report/listing dates cannot reconstruct historical knowledge.",
+          "required_evidence": [
+            "temporal.first_availability",
+            "temporal.historical_coverage",
+            "temporal.revision_policy"
+          ],
+          "status": "unknown",
+          "unknown_decision": "unsupported"
+        },
+        "local_fetch": {
+          "conditions": [
+            "bounded_requests",
+            "respect_endpoint_limits"
+          ],
+          "evidence": [
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT verified free access/license 1; TWSE issuer dataset supplied via SFB; exact CSV resource and explicit Swagger note. Metadata HTTP200 4759B SHA256 a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9.",
+              "url": "https://data.gov.tw/api/v2/rest/dataset/18419"
+            },
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT reviewed parsed OGL1.0 reuse and attribution; no raw HTTP/hash claimed.",
+              "url": "https://data.gov.tw/license"
+            }
+          ],
+          "reason": "ROOT admits only bounded exact GET, original RAM retention and attributed source-preserving projection; no durable save/publication grant.",
+          "required_evidence": [
+            "access.free_public",
+            "access.auth",
+            "access.documented_terms"
+          ],
+          "status": "admitted"
+        },
+        "raw_store": {
+          "conditions": [
+            "attribute_source",
+            "preserve_source_integrity"
+          ],
+          "evidence": [
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT verified free access/license 1; TWSE issuer dataset supplied via SFB; exact CSV resource and explicit Swagger note. Metadata HTTP200 4759B SHA256 a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9.",
+              "url": "https://data.gov.tw/api/v2/rest/dataset/18419"
+            },
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT reviewed parsed OGL1.0 reuse and attribution; no raw HTTP/hash claimed.",
+              "url": "https://data.gov.tw/license"
+            }
+          ],
+          "reason": "ROOT admits only bounded exact GET, original RAM retention and attributed source-preserving projection; no durable save/publication grant.",
+          "required_evidence": [
+            "retention.raw_store"
+          ],
+          "status": "admitted"
+        },
+        "summarize": {
+          "conditions": [
+            "attribute_source",
+            "preserve_source_integrity",
+            "retain_traceability"
+          ],
+          "evidence": [
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT verified free access/license 1; TWSE issuer dataset supplied via SFB; exact CSV resource and explicit Swagger note. Metadata HTTP200 4759B SHA256 a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9.",
+              "url": "https://data.gov.tw/api/v2/rest/dataset/18419"
+            },
+            {
+              "checked_at": "2026-10-08 Asia/Taipei",
+              "claim": "ROOT reviewed parsed OGL1.0 reuse and attribution; no raw HTTP/hash claimed.",
+              "url": "https://data.gov.tw/license"
+            }
+          ],
+          "reason": "ROOT admits only bounded exact GET, original RAM retention and attributed source-preserving projection; no durable save/publication grant.",
+          "required_evidence": [
+            "retention.summarize"
+          ],
+          "status": "admitted"
+        }
+      },
+      "registry_version": "twse-issuer-r1-2026-10-08.1",
+      "retention": {
+        "raw_store": {
+          "reason": "OGL 1.0 permits reproduction/distribution with attribution and source-integrity conditions.",
+          "status": "known",
+          "value": true
+        },
+        "summarize": {
+          "reason": "OGL 1.0 permits adaptation with attribution and source-integrity conditions.",
+          "status": "known",
+          "value": true
+        }
+      },
+      "schema_version": "source-registry/v1",
+      "source_id": "twse_t187ap03_l",
+      "source_type": "official_open_api",
+      "source_version": "twse-t187ap03-l-d18419-2026-10-08",
+      "temporal": {
+        "first_availability": {
+          "reason": "Report/listing dates and a current issuer feed do not establish historical availability or revision coverage.",
+          "status": "unknown"
+        },
+        "historical_coverage": {
+          "reason": "Report/listing dates and a current issuer feed do not establish historical availability or revision coverage.",
+          "status": "unknown"
+        },
+        "publication": {
+          "reason": "Report/listing dates and a current issuer feed do not establish historical availability or revision coverage.",
+          "status": "unknown"
+        },
+        "revision_policy": {
+          "reason": "Report/listing dates and a current issuer feed do not establish historical availability or revision coverage.",
+          "status": "unknown"
+        },
+        "update_cadence": {
+          "reason": "Metadata modification date is not an endpoint release-clock or availability guarantee.",
+          "status": "unknown"
+        }
+      },
+      "versioning": {
+        "reason": "No endpoint-specific migration, deprecation notice, or version-retention promise was documented.",
+        "status": "unknown"
+      }
+    }
+  ]
+}

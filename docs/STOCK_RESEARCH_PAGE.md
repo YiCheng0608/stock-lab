@@ -1555,3 +1555,27 @@ API停止後same-key READ與cross-kind ex_right apply是真實trusted操作，�
 API48848／preview10296／compiler46848 absent、8803／8804無listener；ownedpage close／tabs[]。API與preview正常SIGINT均raw1；API無shutdownprint，preview有shutdown／loopback31GET＋1POST／rejected0／guard0／disk_artifact0。原件RAM隨API退出釋放，無restart／replay／hydrate；privateIO／新增test及product檔案0B，indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
 Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。接手及前任精確清理見[協作紀錄](TASK_COORDINATION.md)，收據留原task，不回寫hash。
+
+## 46. M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真公司原欄位與同截止事件研究
+
+2026-10-08。ROOT已有限接受 `twse-issuer-event-profile/m1-v1`：1449／1463／2614真TWSE原Code／全名／簡稱／出表日期／上市日期／行業原碼及trace，配同cutoff官方事件，再回原五條件。1095公司／58事件全原件、dualSHA／ordinal／原始欄位由[來源 §41](SOURCE_REGISTRY.md)管理；原四源／defaults／pins及§45保留，catalogue只供routing，不能證普通股或ETF身分。
+
+### 46.1 明示取得與原欄位
+
+先明示取得本次官方事件，再以公司「讀取本次公司基本資料」送 `POST /api/stocks/TWSE/{code}/issuer-profile/capture?as_of=2026-10-08`、body `{}`；issuer只支持1449／1463／2614、本cutoff及獨立外部pins。new empty producer各single attempt／FIRST失敗SPENT；同程序其他選定代號／重複POST／GET只用已核cache，不新增外網。missing／較早cutoff／unsupported／未取得皆保留unavailable，不能補0／較早fallback；0056公司不支持，文案不暗示ETF類型。
+
+公司headline用同cutoff受核原簡稱；完整公司全名與原eventName各自保留，Code exact join、eventName須等於issuer全名或簡稱，否則unavailable。raw report／listing／industry及原ordinal／body與receipt SHA可展開trace，report／listing raw＋ISO與event effective Date分列；published／availability／revision未知、nonPIT，不作ordinary／產業名稱／分類品質／行情／capital或payout數值結論。原industry04／20保持字串，不以未准入碼表翻成名稱。
+
+### 46.2 本次 actual positives 與安全返回
+
+API20 TestClient calls：FIRST前8invalid issuerPOST全422／sourceGET0／DB0，初始1449unavailable；三detail positive＋三cachedissuerPOST／missing-cutoff／07／0056unavailable／1449恢復08受驗。1463權10/15 available真零：全feed58、range2、kind0、items[]，不是公司缺證或失敗當零。
+
+Desktop1365×900及narrow390×844三股：1449佳和／權10/12、1463強盛新／息10/15、2614東森／權息10/06；六原公司欄、上市raw／ISO、industry04／04／20、原事件Date／Name／Exdividend、雙trace展開與原件雙SHA已核，無horizontal overflow。Narrow1463權10/15真0／0056unsupported、missing-cutoff兩viewport受驗。2614可信native07 unavailable→08cache恢復，再改07後安全返回原清單08／q2614／from=to10/06／ex_right_and_dividend五條件；M1改cutoff不改原focus_as_of／focus_q／focus_from／focus_to／focus_event_kind。原p4-v1 draft／apply／clear語義保持；這些日期是來源／研究／事件生效角色，不代歷史可得性。
+
+### 46.3 真失敗清值與執行邊界
+
+API正常STOP後，same-key1449可信native公司READ POST實際502，headline改公司名稱待核對，issuerRows0／eventRows0／provenance0；crossselected1463GET502整頁error／fields0，均為失敗拒用，不算positive。network request IDs `51488.115`／`51488.121` 留task。先前selector／offscreen／ACK未delivery／syntax與inspection錯誤原exit保持，只有實際狀態效果才計接受，不把工具錯誤當來源／MCP失敗或reliability增量。
+
+API26328正常STOP raw0／server_stoppedtrue／兩source_gets各1／四audit0，RAM原件已釋放。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 reject0；修字後只RAM rebuild preview34000／compiler61744 normalSIGINT raw1／shutdown GET3 POST1 reject0，API未restart／無新金融GET，兩preview guard／artifacts0。ROOT核5PID absent、8805／8806無listen、唯一ownedpage `9b4d13a6…` 正常closed／tabs[]，所有test／product／artifactfiles0B／privateIO0；shared indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
+
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。SOURCE13＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge，下一產業trace尚未准入，見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。

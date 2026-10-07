@@ -1,4 +1,5 @@
-import type { Instrument, InstitutionalDailyData, InstitutionalWindowReceipt, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData } from '../types'
+import type { Instrument, InstitutionalDailyData, InstitutionalWindowReceipt, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData, TwseIssuerProfileData } from '../types'
+import { issuerSupported, validTwseIssuerProfile } from '../twseIssuerProfile'
 import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { privatePriceSupported, validStockPriceSavedRead } from '../stockPriceSavedRead'
 import { validSavedFocusStock } from '../savedPriceFocus'
@@ -6,6 +7,18 @@ import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
 const REASONS: Record<string, string> = {
+  issuer_memory_capture_missing: '尚未明示取得本次公司基本資料。先取得同截止的官方事件，再載入公司資料。',
+  issuer_capture_not_enabled: '公司基本資料來源尚未啟用。',
+  issuer_symbol_not_supported: '此公司資料只支持 1449、1463、2614；0056 不在此來源支持範圍。',
+  issuer_shared_cutoff_missing: '請先明示研究截止日期。',
+  issuer_external_policy_pins_mismatch: '公司資料的来源或用途版本設定未通過核對。',
+  issuer_symbol_absent_from_valid_feed: '已核對本次完整公司清單，但其中未見此代號；不以目錄名稱補值。',
+  issuer_event_name_conflict: '公司原名與同代號事件原名不一致，未採用合併身分。',
+  issuer_same_cutoff_event_unavailable: '同研究截止的官方事件尚未通過核對，未採用公司身分。',
+  issuer_current_cutoff_event_required: '請先取得本次同截止官方事件。',
+  issuer_observation_after_cutoff: '公司資料觀測日在研究截止之後，未沿用到較早日期。',
+  issuer_read_request_failed: '公司與事件讀取失敗，已清除本次顯示值及來源追溯。',
+  issuer_response_invalid: '公司資料回應未通過代號、日期及來源核對，未採用顯示值。',
   price_memory_capture_missing: '尚未載入本次官方單日行情。',
   price_cutoff_not_supported: '此來源只支持 2026/10/5、2026/10/6；請明示套用其中一日。',
   price_capture_not_enabled: '伺服器尚未明示啟用此官方行情載入。',
@@ -385,6 +398,37 @@ export function InstitutionalWindows({ data, onCapture, busy = false, requestFai
   </section>
 }
 
+export function TwseIssuerProfile({ data, events, exchange, symbol, cutoff, onCapture, busy = false, requestFailure }: {
+  data: TwseIssuerProfileData; events: OfficialEventsData; exchange: string; symbol: string; cutoff: string | null
+  onCapture?: () => void; busy?: boolean; requestFailure?: string
+}) {
+  const valid = validTwseIssuerProfile(data, exchange, symbol, cutoff, events)
+  const row = valid && !requestFailure && data.status === 'available' ? data.row : null
+  const provenance = row ? data.provenance : null
+  return <section className="panel overview-issuer-profile"><h3>上市公司基本資料</h3>
+    <p className="small-note">公司資料與官方事件依同一研究截止核對。出表日、上市日與事件生效日各自保留；來源只支持所選三家公司。</p>
+    {valid && issuerSupported(exchange, symbol) && data.can_capture && onCapture && <button type="button" className="secondary-button" disabled={busy} onClick={onCapture}>{busy ? '正在載入公司資料…' : data.cache_present ? '讀取本次公司基本資料' : '取得本次公司基本資料'}</button>}
+    {(requestFailure || !valid) && <div className="data-gap" role="alert">{overviewReason(requestFailure || 'issuer_response_invalid')}</div>}
+    {valid && <Reasons reasons={data.reasons} />}
+    {row && provenance && <>
+      <div className="table-wrap"><table><caption>本次 TWSE 公司原值</caption><tbody>
+        <tr><th>公司代號</th><td>{row.symbol}</td></tr><tr><th>公司全名</th><td>{row.full_name}</td></tr><tr><th>公司簡稱</th><td>{row.short_name}</td></tr>
+        <tr><th>出表日期</th><td>{formatResearchDate(row.report_date)}（原值 {row.report_date_raw}）</td></tr>
+        <tr><th>上市日期</th><td>{formatResearchDate(row.listing_date)}（原值 {row.listing_date_raw}）</td></tr>
+        <tr><th>原始產業代碼</th><td>{row.industry_code_raw}</td></tr>
+      </tbody></table></div>
+      <p className="small-note">事件原名：{row.event_names.join('、')}；以相同代號及原名核對，保留事件的原始日期與名稱。</p>
+      <p className="small-note">資料提供：臺灣證券交易所 · OGL 1.0 · <a href={provenance.endpoint} target="_blank" rel="noreferrer">官方公司資料清單</a> · <a href="https://data.gov.tw/dataset/18419" target="_blank" rel="noreferrer">政府開放資料</a></p>
+      <details className="technical-details"><summary>查看公司資料觀測與來源追溯</summary>
+        <div className="overview-provenance">臺北觀測日 {data.observed_date} · 擷取時間 {provenance.captured_at} · 原件列序 {row.row_ordinal}</div>
+        <div className="overview-provenance">來源版本 {provenance.source_version} · registry {provenance.registry_version} · manifest {provenance.manifest_digest}</div>
+        <div className="overview-provenance">原件 SHA-256 {provenance.body_sha256} · 擷取紀錄 SHA-256 {provenance.receipt_sha256}</div>
+      </details>
+    </>}
+    <p className="small-note">原始產業碼尚未轉為產業分類，公司清單不證普通股或 ETF 身分。發布、首次可得及修訂時間未知；觀測日不代表發布日，未支援歷史當時可得。</p>
+  </section>
+}
+
 export function OfficialEvents({ data, onCapture, busy = false, requestFailure }: {
   data: OfficialEventsData; onCapture?: () => void; busy?: boolean; requestFailure?: string
 }) {
@@ -477,9 +521,10 @@ export function PriceSaved({ data, instrument, cutoff, canSave, onSave, onRead, 
   </section>
 }
 
-export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, savedPrice, onSavePrice, onReadSavedPrice, privatePriceBusy, privatePriceFailure, privateSavedOnly = false, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure, institutionalCalendar = false, institutionalScope7 = false }: {
+export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, savedPrice, onSavePrice, onReadSavedPrice, privatePriceBusy, privatePriceFailure, privateSavedOnly = false, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureIssuer, capturingIssuer, issuerRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure, institutionalCalendar = false, institutionalScope7 = false }: {
   data: StockOverviewData; onNews: () => void; onCaptureEvents?: () => void; capturingEvents?: boolean; eventRequestFailure?: string
   onCaptureWindows?: () => void; capturingWindows?: boolean; windowRequestFailure?: string
+  onCaptureIssuer?: () => void; capturingIssuer?: boolean; issuerRequestFailure?: string
   instrument?: Instrument; explicitCutoff?: string; onCapturePrice?: () => void; capturingPrice?: boolean; priceRequestFailure?: string
   savedPrice?: StockPriceSavedData; onSavePrice?: () => void; onReadSavedPrice?: () => void; privatePriceBusy?: boolean; privatePriceFailure?: string
   privateSavedOnly?: boolean; institutionalCalendar?: boolean; institutionalScope7?: boolean
@@ -514,6 +559,7 @@ export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice
       <InstitutionalWindows calendar={institutionalCalendar} scope7={institutionalScope7} data={data.institutional} expectedExchange={instrument?.exchange} expectedSymbol={instrument?.symbol} expectedCutoff={explicitCutoff ?? data.as_of ?? undefined} onCapture={onCaptureWindows} busy={capturingWindows} requestFailure={windowRequestFailure} />
       <InstitutionalDaily data={data.institutional_daily} windowsPresent={Boolean(data.institutional.version)} />
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>
+      {data.issuer_profile && instrument?.exchange === 'TWSE' && <TwseIssuerProfile data={data.issuer_profile} events={data.events} exchange={instrument.exchange} symbol={instrument.symbol} cutoff={explicitCutoff || data.as_of} onCapture={onCaptureIssuer} busy={capturingIssuer} requestFailure={issuerRequestFailure} />}
       <OfficialEvents data={data.events} onCapture={onCaptureEvents} busy={capturingEvents} requestFailure={eventRequestFailure} />
       <section className="panel"><h3>新聞與公告入口</h3><p>保留既有來源連結、發布與事件時間。</p><button type="button" className="secondary-button" onClick={onNews}>查看新聞與公告</button><p className="small-note">新聞採已核對的發布／事件時間截至；未知時間或超過截止的項目不混入本次清單。</p></section>
     </div>

@@ -619,3 +619,27 @@ Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../
 41src noEmit＋116checks（helper58／response24／SSR13／API5／proxy16）raw0；RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。原collection縮排raw1、125passed＋1fixturefail raw1、ROOT AST／quoting及browser ACK未delivery收據均保留，不改exit或擴為通過。
 
 真来源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0，版本待辦見[協作紀錄](../TASK_COORDINATION.md)。
+
+## M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1：公司與事件的零落盤驗證入口
+
+2026-10-08。ROOT接受Source13／actual及本入口有限證據；DOC不重跑成功checks。原44backend／7warnings raw0、42src noEmit＋80targetchecks raw0沿用；0056不暗示ETF的最小文案修正後，2SSR＋42noEmit raw0。scope／provenance／date／Code與Namejoin／duplicate與conflict拒收／pins／single attempt FIRST failure SPENT／unavailable／failure clear用RAM fixtures驗，不代真來源或可信UI。實際1095×33 issuer及58×12event原件／全部映射由[來源](../SOURCE_REGISTRY.md) §41管理；可信desktop1365×900／390×844三股與五條件往返／502清值由[個股頁](../STOCK_RESEARCH_PAGE.md) §46管理。
+
+### 記憶體測試與既有入口
+
+後端[Test module](../../backend/tests/test_twse_issuer_profile.py)要求先安裝[test_official_events.py](../../backend/tests/test_official_events.py)的 `install_zero_disk_guard`，再import pytest／新module；原task以Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1、main repo既有backend/.deps及本根import paths、AST抽取guard方式執行。pytest用 `--noconftest -q -s -p no:cacheprovider -p no:logging`，只RAM fixture／SQLite，不import app.main／conftest或寫DB；完整inline命令、版本、原exit與範圍留原task，不另建helper／環境。
+
+前端新mode沿[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的既有RAM編譯／guard入口；必要已接受命令：
+
+```powershell
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --issuer-event-check
+```
+
+42src noEmit／80targetchecks只synthetic tuple／SSR／response／routing／proxy邊界，非金融／browser／磁碟保存／production build／普通股history證據；修字2SSR＋42noEmit是最小回歸，不因session／DOC換人重跑全部。初始backend／frontend raw1與ROOT引用／TTY／selector／offscreen ACK／rows-vs-items／read-onlyinspection錯誤原exit全保留，後續修正與actual接受分報，不回寫為全通或MCP／來源gate失敗。
+
+### actual 與退出結果
+
+ROOT actual20 TestClient calls含8invalid issuerPOST先422／sourceGET0／DB0、initial1449unavailable、三股positive／cachedPOST、missing-cutoff／07／0056unavailable、1463權10/15真零與恢復08；來源各只freshGET1。可信兩viewport六原欄／rawindustry／事件三型／雙trace、missing／earlier／2614原五條件back及nooverflow受驗。API停止後same-key1449READ POST502清兩區／headline／provenance、crossselected1463GET502 error／fields0是實際失敗拒用，不作positive；所有工具ACK須有狀態效果才計驗收。
+
+API26328 normalSTOP raw0，shutdown實際印server_stoppedtrue／兩sourcegets各1／四audit0，完整原件RAM釋放不restart／replay／clone／hydrate／preload。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 rejected0；修字後preview34000／compiler61744 RAM rebuild／normalSIGINT raw1／shutdown GET3 POST1 rejected0，API從未重啟／無新金融GET，兩preview guards／artifacts0。ROOT核5PID absent、8805／8806無listener、唯一ownedpage closed／tabs[]；全部test／product／artifactfiles0B／privateIO0，shared indexcache另報。metadata5／金融2已SPENT，無新quota／diskcase／private／正式DBgrant。
+
+coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成；capital／payout numeric未驗、raw industry不代分類，ordinary20／21closes仍缺rights／calendar。版本及outside-cleanup接受見[協作紀錄](../TASK_COORDINATION.md)，DOCreview／freeze19／qualified7／commit／另准merge仍待；不建附件／來源副本／manifest報表。

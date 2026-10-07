@@ -58,7 +58,8 @@ from .decision import (
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
-from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events, canonical_event_date, canonical_event_kind, effective_range
+from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events, canonical_event_date, canonical_event_kind, effective_range, build_official_events
+from .twse_issuer_profile import capture_issuer_profile
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1890,6 +1891,29 @@ def official_event_focus(values: dict[str, Any] = Depends(_official_event_focus_
 def official_event_focus_capture(values: dict[str, Any] = Depends(_official_event_focus_query),
                                  db: Session = Depends(get_db)) -> dict[str, Any]:
     return _focus_catalogue(db, capture_official_event_focus(**values))
+
+
+async def _issuer_profile_query(request: Request) -> date:
+    keys = [key for key, _ in request.query_params.multi_items()]
+    try:
+        if keys != ["as_of"] or request.path_params.get("exchange") != "TWSE" or request.path_params.get("symbol") not in {"1449", "1463", "2614"}:
+            raise ValueError("issuer_query_invalid")
+        cutoff = canonical_event_date(request.query_params["as_of"])
+        raw = await request.body()
+        if len(raw) > 4096 or not raw or json.loads(raw) != {}:
+            raise ValueError("issuer_empty_object_required")
+        return cutoff
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid issuer identity, cutoff or body") from exc
+
+
+@router.post("/stocks/{exchange}/{symbol}/issuer-profile/capture")
+def stock_issuer_profile_capture(exchange: str, symbol: str, as_of: date = Depends(_issuer_profile_query),
+                                 db: Session = Depends(get_db)) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return capture_issuer_profile(exchange, symbol, as_of, events=build_official_events(exchange, symbol, as_of))
 
 
 @router.post("/stocks/{exchange}/{symbol}/official-events/capture")

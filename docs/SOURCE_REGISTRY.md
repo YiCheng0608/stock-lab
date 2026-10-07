@@ -1509,3 +1509,47 @@ ROOT 本次核[OGL1.0](https://data.gov.tw/license)與[TWSE 使用條款](https:
 5MiB／identity／核定per-operation上限20秒、實際httpx15秒／30秒cooperative，非hard deadline；retry／redirect／warmup0、首次失敗亦SPENT／共享seal。15focus＋8detail＋4cached POST＋4unavailable與8invalid先拒422已接受，最終source_gets1／guards0／private_reads0。完整原件／receipt只同RAM snapshot；API結束後釋放，禁舊原件／producer reuse、restart／replay／preload／hydrate。舊metadata8／finance1、22／136／private remaining1不續grant，privateIO／新增test及product檔案0B，indexcache另報；完整收據留ROOT原task。
 
 本能力只按Date生效日，不需交易日calendar；published／first availability／revision unknown，historical PIT unsupported。synthetic4（0056 ETF／1449／1463／2614）只routing，不證ordinary／行情／全市場；payout numeric／forecast／Plan／save未驗。M1歷史closes權利／calendar仍缺新路徑，不重審。本批actual核心操作+1／standalone dependency0／reliability0／stall0→0，metadata／DOC本身不增核心或reset，完整M1／M2／M3未完成；[執行清單](ROADMAP_EXECUTION.md)管理版本待辦。
+
+## 41. M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真 issuer 與同截止事件有限接受
+
+2026-10-08。ROOT已有限接受1449／1463／2614真TWSE公司六原欄trace、同cutoff官方事件與原五條件返回；完整新issuer／event body及ORIGINAL receipt同heldobjects、全原string／映射／dates／ordinals／dualSHA已獨立逐列驗。metadata5 NEW（official dataset search／OGL／TWSE terms三parsed＋Swagger／Gov兩raw）及financial2均SPENT；local_fetch／raw_store只RAM／summarize須TWSE署名、完整性／追溯，不含磁碟／private／account／historical PIT授權。行為與具名操作見[個股頁 §46](STOCK_RESEARCH_PAGE.md)。
+
+[Gov dataset18419](https://data.gov.tw/api/v2/rest/dataset/18419)：HTTP200／4759B、SHA-256 `a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9`，UTC `2026-10-07T22:35:06.570713+00:00`～`2026-10-07T22:35:06.872799+00:00`；license1／costfree、modified2024-11-25，distribution CSV `https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv`，notes明示Swagger。此Gov請求只取得metadata，modified不代公司出表／availability，CSV金融原件未取。
+
+[TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json)：HTTP200／309960B、SHA-256 `06e1cea82448361e733a0ad1ae16e52f5d5d6b71905acd078472f852c32c0eb0`，UTC `2026-10-07T22:34:44.589098+00:00`～`2026-10-07T22:34:44.954299+00:00`；exact HTTPS GET `/opendata/t187ap03_L` 宣告33 string fields，exact TWT48U12欄保持。本批金融top-array／全33原string及schema已由actual FIRST／ROOT核，不只憑Swagger當transport通過。
+
+ROOT核[OGL1.0](https://data.gov.tw/license)／[TWSE使用條款](https://www.twse.com.tw/zh/terms/use.html)第6approved method／第8政府資料例外，連同official dataset search為parsed；沒有raw HTTP／SHA就不捏造。新獨立[issuer code manifest](../backend/worker/twse_issuer_registry.json)：sourceversion `twse-t187ap03-l-d18419-2026-10-08`、registry `twse-issuer-r1-2026-10-08.1`／external digest `sha256:7488da20a3bdf94aaa548c896d19077628bf93529208226d49b2a02896972f89`、source profile `twse_issuer_free_public_local`；consumer `twse-issuer-event-profile/m1-v1`／external policy digest `sha256:02bf2422129c46490516557bccd188f7d550d2516c4b5e49e9acc2faf5338244` 已ROOT review。DOC不另建manifest附件；原四source／defaults／pins及§40完整不變。
+
+### 41.1 本批兩份 FIRST 原件
+
+可信loopback FIRST先取得fresh TWT48U，再取得issuer，各producer ONE exact HTTPS GET／NEW empty獨立generation／single attempt，FIRST失敗亦SPENT；5MiB／identity／per-operation上限20秒（實際timeout15）／30秒cooperative非deadline、redirect／retry／warmup0。完整原body與ORIGINAL receipt只同RAM物件；issuer1095 unique rows×33＝36135 strings，event58列58標的×12＝696 strings（息52／權5／權息1）。ROOT已全列全欄核，capital／payout numeric **NOT VALIDATED**。
+
+| 原件 | issuer：t187ap03_L | event：TWT48U_ALL |
+| --- | --- | --- |
+| HTTP／body bytes | 200／1327573B | 200／15728B |
+| body SHA-256 | `154d8129ab0db28404b93ca46ce8057f71f036d440d1592b53f8dd5fc2048115` | `eaeb52d866a371f7062dd019c38aee13534f024a44fc47d24b7ec3f591533640` |
+| ORIGINAL receipt bytes | 6965B | 4463B |
+| receipt SHA-256 | `f1685d2091fee1476512263ccc77933bd78fe94c9ad1c1393d39905aa7d467fb` | `eb951717d348df4c5ad265ac9e04b5c00c913dc010facd25dc2feb9f06cf0af6` |
+| UTC start | `2026-10-07T23:14:18.052370+00:00` | `2026-10-07T23:11:25.852717+00:00` |
+| UTC end | `2026-10-07T23:14:21.119396+00:00` | `2026-10-07T23:11:25.907740+00:00` |
+| producer generation | `008f3923-5d9b-4ed3-9bdd-01ed2b613aa8` | `db4041c6-9fc4-42c1-b7cc-91a6ba6a2afc`（外部generation，不是receipt欄位） |
+
+Taipei觀測10/08，選定研究cutoff2026-10-08；本批公司原出表1151007／ISO2026-10-07，不當發布／first availability。1095公司與58事件是本批fresh原件，不重用歷史1094／10TDR或上一62事件snapshot。
+
+### 41.2 同代號原欄位與時間
+
+| Code | 原全名／簡稱 | 原上市日／ISO | 原industry | issuer／event ordinal |
+| --- | --- | --- | --- | --- |
+| 1449 | 佳和實業股份有限公司／佳和 | 19920506／1992-05-06 | 04 | 78／46 |
+| 1463 | 強盛新投資控股股份有限公司／強盛新 | 19961205／1996-12-05 | 04 | 88／47 |
+| 2614 | 東森國際股份有限公司／東森 | 19950923／1995-09-23 | 20 | 440／51 |
+
+公司Code exact join eventCode；issuer全名／簡稱與eventName分列，三股eventName本次各exact等於原簡稱；事件Name若不等任一公司原名即unavailable，duplicate／conflict拒用、不silent overwrite／fallback。出表ROC7、上市Gregorian8或ROC7 strict有效，raw與ISO保留；report／listing／Taipei observed／cutoff／effective event日分離，published／first availability／revision仍unknown、nonPIT。行業只原04／20，不證產業名稱／分類品質／ordinary／0056ETF／fullmarket／price／capital數值；0056issuer不支持，不由此判斷security類型。
+
+### 41.3 已接受與釋放邊界
+
+20 actual TestClient calls含8invalid issuerPOST先422／sourceGET0／DB0、三股positive／cachedPOST、missing-cutoff／07／0056unavailable、1463權10/15事件available真零（全feed58／range2／kind0／items[]）及1449恢復08；可信desktop／narrow三股／trace／返回／502清值見個股頁§46。ROOT inspector rows-vs-items KeyError原失敗保留；修正tail未重複調來源或API，再獨立核全原件通過，不冒稱來源gate失敗。
+
+API26328正常STOP raw0實際印server_stoppedtrue／issuer_source_gets1／event_source_gets1／四audit0；完整原件隨API釋放，不restart／replay／clone／hydrate／preload。兩preview只RAM rebuild、無重啟API／新GET，五PID absent／8805、8806無listen／onlyownedpage關閉／tabs[]、test／product／artifactfiles0B／privateIO0已ROOT接受，shared indexcache另報，驗證及正常SIGINT raw1收據見[開發入口](development-baseline/README.md)。
+
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；metadata／DOC不計依賴解除，完整M1／M2／M3未完成。SOURCE13＋DOC6待review／freeze／索引／commit／另准merge，下一產業trace與finite新quota未准入，詳[執行清單](ROADMAP_EXECUTION.md)；正式DB／採購／外部帳戶／交易未授，完整原始收據留ROOT原task。

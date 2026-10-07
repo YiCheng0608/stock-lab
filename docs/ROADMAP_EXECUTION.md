@@ -1,3 +1,27 @@
+## 目前：M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1 已 review（有限）
+
+2026-10-08。ROOT接受1095公司×33／58事件×12完整原string、原body／ORIGINAL receipt同heldobjects及全映射／dates／ordinals／dualSHA。actual API20calls、可信1365×900／390×844三股真公司六欄／原事件trace、真零／unavailable／恢復／同cutoff五條件back／poststop502清值已核。source13含最小0056文案修字、必要44backend／42src80checks及修字2SSR／42noEmit均受驗，詳[來源 §41](SOURCE_REGISTRY.md)／[個股頁 §46](STOCK_RESEARCH_PAGE.md)／[開發入口](development-baseline/README.md)。
+
+Code exact join；issuer全名／簡稱與eventName分列，eventName必須等於其中一原名，否則unavailable；duplicate／conflict拒用、不fallback。出表ROC7／上市Gregorian8或ROC7 strict raw＋ISO，report／listing／台北observed／cutoff／effective事件日分離；published／revision未知／nonPIT，capital／payout numeric未驗。原四源defaults／pins未改，newregistry／consumer外部pins獨立。catalogue僅routing；0056unsupported不暗示ETF，缺資料不當0。ROOT接受三股／具名操作，不外推ordinary／產業分類／全市場／行情／保存／Plan。
+
+API STOP raw0／兩preview SIGINT raw1，修字RAM rebuild未restart API／新增GET；5PID／ports／ownedpage清理及原件釋放已核，test／product／artifact0B／privateIO0，原失敗收據保留；前輪精確outside-cleanup已接受、BOOTcleanup0不回改，見[協作紀錄](TASK_COORDINATION.md)。coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成。
+
+下一 `M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` **UNADMITTED**：三公司同cutoff raw04／20映射官方市場別碼表的產業名稱、source版本／生效日trace，再回原五條件；不驗ordinarysecurity／可信排名／groupmembership／PIT。正面路徑[產業分類 §1](INDUSTRY_CLASSIFICATION.md) exact TWSE B.12.00 PDF＋2023-07-03生效變更公告及本批raw04／20；舊snapshot只路徑，不能代fresh metadata／taxonomy。
+
+下一NEW ROOT須於原task先准入ownerRights／use／time／version／schema／表碼支持、新externalconsumer pins、finite NEW metadata及fresh issuer＋event兩producer quota、完整ORIGINAL body／receipt只RAM與ROOT全列欄驗、三profile API／可信desktop窄版positive／missing／earlier unavailable／failure clear／samecutoffback、白名單／0落盤清理，再派同輪SAME三角色／GET；本批metadata5／金融2均SPENT不承襲。資料不足可具理由重選，不用unknown／fixture／機械filter降gate；普通20／21closes／MA20仍缺dataRights／calendar新path，不重審FinMind／monthly／legacy。
+
+本輪SOURCE13＋DOC6待ROOTreview／freeze19→qualified7 affected partitions含worker→核准commit→另准master merge→main7，未執行不稱完成。DOC停寫；BOOT11920B及startingHEAD完整suffix／nested歷史不改，角色與工具範圍沿[AGENTS](../AGENTS.md)。
+
+## 目前：BOOT-M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1；可見 gate 已接受，候選尚未准入
+
+2026-10-08。前批M2官方事件類型及source9＋DOC6 exact15 commit／local master ff-only merge `204fe8532b88090d95bcdb5881eea0d70bc84381` 已接受，未push，有限契約沿[來源 §40](SOURCE_REGISTRY.md)／[個股頁 §45](STOCK_RESEARCH_PAGE.md)。四actual接手與外部可見gate已接受，ONE原session continuation已收到，本ROOT以同四IDs正式接手產品派工；原BOOTreview／freeze已接受，此自有prefix更新交付停寫待ROOTreview，BOOT索引／Git／產品fullscopefreeze未授，候選仍UNADMITTED。roster／terminal／有限outside-cleanup pending及下一原task准入條件見[協作紀錄](TASK_COORDINATION.md)，優先見[ROADMAP](ROADMAP.md)。
+
+`M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1` **UNADMITTED**：M1事件detail僅synthetic routing；候選新增1449／1463／2614真TWSE原code／全名／簡稱／出表／上市日／行業原碼profile trace、同cutoff官方事件與原五條件back。歷史t187ap03_L1094／10TDR只提供取得路徑，不驗matching／ordinary／0056ETF／分類／PIT；issuer1GET＋fresh TWT48U1GET非grant，不續用snapshot／SPENT quotas。
+
+准入及ROOT原件逐欄／actual API／可信desktop窄版／真零／unavailable／failure clear／samecutoffback完成後，才計核心操作。exact公司Code join事件Code；公司原全名／簡稱與事件Name分列，同code衝突／重複／未核名稱矛盾不silent overwrite／fallback。出表／上市日／台北觀測日／研究cutoff／事件生效日分離，published／revision未知、nonPIT；兩producer各須NEW empty獨立generation／單attempt，FIRST失敗亦SPENT；完整原body／receipt只RAM，由ROOT獨立逐列逐欄驗；新獨立issuer source／profile／consumer manifest／policy／external pins是未來code契約，此刻不新增附件／檔案，原四源defaults不改。Legacy fetch_universe追加newlisting／重編碼／rawsave，不能直接作memory producer。缺證不降gate，無新rights／calendar路徑不重審普通20／21closes。
+
+繼承coreoperation+1／standalone dep0／reliability0／stall0→0；BOOT非implementation、增量0、不increment／reset，nextcoreless→1／兩批先重選，完整M1／M2／M3未完成。BOOT GET／privateIO／tests／build／DB／新artifacts／indexrefresh／Git mutation／cleanup全0；正式DB／採購／帳戶／交易未授，私人／STRICT NO-RETRY沿協作紀錄／[AGENTS](../AGENTS.md)。下方startingHEAD suffix／nested歷史／舊pending／hash完整保留。
+
 ## 目前：M2-OFFICIAL-EVENT-KIND-20261008-1/B1 已 review（有限）
 
 2026-10-08。ROOT已接受新真原件／逐列映射／計數／actual API，以及可信desktop1365×900與narrow390×844的三型positive、真零／恢復、同cutoff detail返回、clear controls及502清值。consumer `official-event-focus/p4-v1`：完整feed驗後range→kind→q／group／code／cap100；原whole-feed與range counts不變，kind_event_count／kind_matched及q後matched精確語義、home event_kind／detail focus_event_kind與安全返回由[個股頁](STOCK_RESEARCH_PAGE.md) §45管理，原registry／pins不改。

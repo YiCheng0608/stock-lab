@@ -5,6 +5,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams, useSear
 
 import {
   captureOfficialEvents,
+  captureTwseIssuerProfile,
   captureInstitutionalWindows,
   captureStockPriceMemory,
   getSavedStockPrice,
@@ -88,6 +89,7 @@ import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceI
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
+import { issuerSupported, unavailableIssuer, validTwseIssuerProfile } from './twseIssuerProfile'
 
 function formatNumber(value: unknown, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value)
@@ -1377,6 +1379,8 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
+  const issuerScope = issuerSupported(exchange, symbol)
+  const issuerQueryClient = useQueryClient()
   const lotFocusReturnPath = priceFocusReturnPath(searchParams)
   const jointFocusBack = JOINT_FOCUS ? jointReturnPath(searchParams, JOINT_CALENDAR, JOINT_SCOPE7) : null
   const jointFocusConditions = jointFocusBack ? jointParams(new URLSearchParams(jointFocusBack.split('?')[1])) : null
@@ -1386,7 +1390,7 @@ function StockPage() {
   const jointScope = JOINT_MODE && jointContextValid && (JOINT_SCOPE7 ? SCOPE7_SYMBOLS : ['3105', '6488']).includes(symbol)
   const focusReturnPath = savedFocusBack ?? lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_MODE && privateSavedOnly && !jointContextValid), ...(JOINT_MODE ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_MODE && privateSavedOnly && !jointContextValid), ...(JOINT_MODE || issuerScope ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
   const privateKey = `${exchange}:${symbol}:${asOf}${privateSavedOnly ? `:private_saved:${searchParams.toString()}` : ''}`
   const privateRoute = useRef({ key: privateKey, generation: 0 })
   if (privateRoute.current.key !== privateKey) privateRoute.current = { key: privateKey, generation: privateRoute.current.generation + 1 }
@@ -1454,6 +1458,12 @@ function StockPage() {
   const [capturingEvents, setCapturingEvents] = useState(false)
   const [eventRequestFailure, setEventRequestFailure] = useState<{ key: string; reason: string } | null>(null)
   const eventRequestKey = `${exchange}:${symbol}:${asOf}`
+  const issuerRoute = useRef({ key: eventRequestKey, generation: 0 })
+  if (issuerRoute.current.key !== eventRequestKey) issuerRoute.current = { key: eventRequestKey, generation: issuerRoute.current.generation + 1 }
+  const issuerToken = `${issuerRoute.current.generation}:${eventRequestKey}`
+  const issuerPending = useRef(new Set<string>())
+  const [issuerBusyToken, setIssuerBusyToken] = useState<string | null>(null)
+  const [issuerFailure, setIssuerFailure] = useState<{ token: string; reason: string } | null>(null)
   const windowRequestKey = `${exchange}:${symbol}:${asOf}${jointScope ? `:joint:${searchParams.toString()}` : ''}`
   const currentWindowKey = useRef(windowRequestKey)
   currentWindowKey.current = windowRequestKey
@@ -1540,6 +1550,26 @@ function StockPage() {
       setPriceBusyKey((key) => key === requestKey ? null : key)
     }
   }
+  const acquireIssuer = async () => {
+    if (!issuerScope || !validOfficialEventDate(asOf) || issuerPending.current.has(issuerToken)) return
+    const token = issuerToken, key = eventRequestKey, generation = issuerRoute.current.generation
+    issuerPending.current.add(token); setIssuerBusyToken(token); setIssuerFailure(null)
+    try {
+      const result = await captureTwseIssuerProfile(exchange, symbol, asOf)
+      if (issuerRoute.current.key !== key || issuerRoute.current.generation !== generation) return
+      if (!validTwseIssuerProfile(result, exchange, symbol, asOf, query.data?.overview?.events)) {
+        setIssuerFailure({ token, reason: 'issuer_response_invalid' }); return
+      }
+      issuerQueryClient.setQueryData<InstrumentDetail>(['stock', exchange, symbol, asOf], current => current?.overview
+        ? { ...current, overview: { ...current.overview, issuer_profile: result } } : current)
+      if (result.status !== 'available') setIssuerFailure({ token, reason: result.reasons[0] ?? 'issuer_response_invalid' })
+      await query.refetch({ throwOnError: true })
+    } catch {
+      if (issuerRoute.current.key === key && issuerRoute.current.generation === generation) setIssuerFailure({ token, reason: 'issuer_read_request_failed' })
+    } finally {
+      issuerPending.current.delete(token); setIssuerBusyToken(current => current === token ? null : current)
+    }
+  }
   const acquireEvents = async () => {
     if (capturingEvents) return
     setCapturingEvents(true)
@@ -1562,10 +1592,25 @@ function StockPage() {
   if (!query.data) return null
   const data = query.data
   const currentScopePriceFailure = asOf === '2026-10-07' && priceRequestFailure?.key === priceRequestKey
-  const displayOverview = currentScopePriceFailure && data.overview?.price_memory ? { ...data.overview, price_memory: {
+  const priceDisplayOverview = currentScopePriceFailure && data.overview?.price_memory ? { ...data.overview, price_memory: {
     ...data.overview.price_memory, status: 'unavailable' as const, latest: null, bars: [], provenance: null, attribution: null,
     reasons: ['price_read_request_failed'], capture_state: { ...data.overview.price_memory.capture_state, can_capture: false },
   } } : data.overview
+  const issuerRead = priceDisplayOverview?.issuer_profile
+  const issuerInvalid = issuerRead != null && !validTwseIssuerProfile(issuerRead, exchange, symbol, asOf || null, priceDisplayOverview?.events)
+  const issuerRequestFailure = issuerFailure?.token === issuerToken ? issuerFailure.reason
+    : issuerScope && eventRequestFailure?.key === eventRequestKey ? 'issuer_read_request_failed'
+      : issuerInvalid ? 'issuer_response_invalid' : undefined
+  const displayOverview = issuerScope && issuerRequestFailure && priceDisplayOverview ? {
+    ...priceDisplayOverview,
+    issuer_profile: issuerRead ? unavailableIssuer(issuerRead, issuerRequestFailure) : undefined,
+    events: { ...priceDisplayOverview.events, status: 'unavailable' as const, rows: [], provenance: null, attribution: null,
+      observed_date: null, cache_present: false, candidate_count: 0, selected_count: 0, capture_action: 'failed' as const,
+      reasons: ['issuer_read_request_failed'], can_capture: false },
+  } : priceDisplayOverview
+  const issuerName = issuerScope && !issuerRequestFailure && displayOverview?.issuer_profile?.status === 'available'
+    && validTwseIssuerProfile(displayOverview.issuer_profile, exchange, symbol, asOf || null, displayOverview.events)
+      ? displayOverview.issuer_profile.row?.short_name : null
   const priceMemory = displayOverview?.price_memory
   const priceCutoff = asOf || data.overview?.as_of || null
   const memoryKnown = !privateSavedOnly && (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
@@ -1649,7 +1694,7 @@ function StockPage() {
   ]
   return <div className="page">
     <Link to={focusReturnPath ?? '/stocks'} className="back-link">{jointFocusBack ? '← 回到保存行情與法人關注（原八條件）' : savedFocusBack ? '← 回到已保存行情關注（原條件）' : lotFocusReturnPath ? '← 回到成交張數關注（原條件）' : focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
-    <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
+    <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + (issuerScope ? '公司基本資料' : instrumentTypeLabel(data.instrument.instrument_type))} title={data.instrument.symbol + ' ' + (issuerScope ? issuerName ?? '公司名稱待核對' : data.instrument.name)}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>
         <div><span>漲跌（元／%）</span><strong className={priceChangeTone(priceChange)}>{priceChange == null ? '待核實' : `${formatSignedNumber(priceChange)}${priceChangePct == null ? '' : `（${formatSignedPercent(priceChangePct)}）`}`}</strong></div>
@@ -1661,7 +1706,7 @@ function StockPage() {
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {displayOverview && <StockOverview institutionalCalendar={JOINT_CALENDAR} institutionalScope7={JOINT_SCOPE7} data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
+    {displayOverview && <StockOverview institutionalCalendar={JOINT_CALENDAR} institutionalScope7={JOINT_SCOPE7} data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureIssuer={acquireIssuer} capturingIssuer={issuerBusyToken === issuerToken} issuerRequestFailure={issuerRequestFailure} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
