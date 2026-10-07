@@ -4,14 +4,16 @@ export const PRICE_MEMORY_VERSION = 'stock-price-memory/m1-v1'
 export const PRICE_POLICY_VERSION = 'm1-price-tpex-11370-2026-10-05.1'
 export const PRICE_POLICY_DIGEST = 'sha256:452b9b8cfa3d050b79ea1a85b3e4ed643c40cf3d17882b8cb809ffdb7143deea'
 export const PRICE_BODY_SHA = 'bdfcead65b5c36d2bd75d20fe7b790fa56ce39d2547d0772989243550ca36149'
-export const PRICE_APPROVED_DATES = ['2026-10-05', '2026-10-06'] as const
+export const PRICE_APPROVED_DATES = ['2026-10-05', '2026-10-06', '2026-10-07'] as const
 export const PRICE_SCOPE_POLICY_VERSION = 'm2-stock-scope-tpex-11370-2026-10-06.1'
 export const PRICE_SCOPE_POLICY_VERSION_V2 = 'm2-stock-scope-tpex-11370-2026-10-06.2'
 export const PRICE_SCOPE_POLICY_VERSION_V3 = 'm2-stock-scope-tpex-11370-2026-10-06.3'
 export const PRICE_SCOPE_POLICY_VERSION_V4 = 'm2-stock-scope-tpex-11370-2026-10-06.4'
 export const PRICE_SCOPE_POLICY_VERSION_V5 = 'm2-stock-scope-tpex-11370-2026-10-06.5'
-export const PRICE_SYMBOL_NAMES: Record<string, string> = { '3105': '穩懋', '3293': '鈊象', '5274': '信驊', '5347': '世界', '6488': '環球晶', '6510': '精測', '8069': '元太' }
+export const PRICE_SCOPE_POLICY_VERSION_V6 = 'm2-stock-scope-tpex-11370-2026-10-07.1'
+export const PRICE_SYMBOL_NAMES: Record<string, string> = { '3105': '穩懋', '3293': '鈊象', '5274': '信驊', '5347': '世界', '6223': '旺矽', '6488': '環球晶', '6510': '精測', '8069': '元太' }
 export function priceSourcePins(cutoff: string | null, policyVersion?: string) {
+  if (cutoff === '2026-10-07' && (!policyVersion || policyVersion === PRICE_SCOPE_POLICY_VERSION_V6)) return { policyVersion: PRICE_SCOPE_POLICY_VERSION_V6, policyDigest: 'sha256:bdad10af9090dd15319b3f3e8dca2952f75c4caf6d46b3032e706a5006ccbab2', bodySha: 'eaa1eaf37ff3e2305629dced8b0f6945a063b05841c69d75f826960e6bd819c8', workerVersion: 'tpex-price-capture/m2-stock-scope-v6', memoryVersion: 'stock-price-memory/m2-stock-scope-v6', symbols: ['3105', '3293', '5274', '5347', '6223', '6488', '6510', '8069'] }
   if (cutoff === '2026-10-05' && (!policyVersion || policyVersion === PRICE_POLICY_VERSION)) return { policyVersion: PRICE_POLICY_VERSION, policyDigest: PRICE_POLICY_DIGEST, bodySha: PRICE_BODY_SHA, workerVersion: 'tpex-price-capture/m1-v1', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
   if (cutoff === '2026-10-06' && policyVersion === 'm1-price-tpex-11370-2026-10-06.1') return { policyVersion, policyDigest: 'sha256:fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288', bodySha: 'aae44dcb35107299a9f2cd47191301fe2cc2d980b6eae152927587df015bfd9a', workerVersion: 'tpex-price-capture/m1-v2', memoryVersion: PRICE_MEMORY_VERSION, symbols: ['3105', '6488'] }
   if (cutoff === '2026-10-06' && policyVersion === PRICE_SCOPE_POLICY_VERSION) return { policyVersion: PRICE_SCOPE_POLICY_VERSION, policyDigest: 'sha256:6e662d5fc91957b586becdf41f351d5abf2c41cec09909de468e62e76cda4a78', bodySha: 'ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200', workerVersion: 'tpex-price-capture/m2-stock-scope-v1', memoryVersion: 'stock-price-memory/m2-stock-scope-v1', symbols: ['3105', '5347', '6488'] }
@@ -99,7 +101,7 @@ export function validStockPriceMemoryRead(value: StockPriceMemoryData | undefine
     || Date.parse(p.captured_at) - Date.parse(p.request_started_at) > 30000 || !attributionValid(p.attribution, cutoff)
     || !same(p.attribution, value.attribution) || !same(p.limitations, limitations)) return false
   const fields = bar.source_fields
-  const rocDate = cutoff === '2026-10-05' ? '1151005' : '1151006'
+  const rocDate = cutoff === '2026-10-07' ? '1151007' : cutoff === '2026-10-05' ? '1151005' : '1151006'
   if (bar.id !== null || bar.origin !== 'process_memory' || bar.exchange !== 'TPEx' || bar.symbol !== instrument.symbol
     || bar.company_name !== instrument.name || bar.currency !== 'TWD' || bar.source !== 'tpex' || bar.date !== cutoff
     || bar.data_as_of !== cutoff || bar.source_date !== rocDate || bar.is_suspended !== false || bar.adj_close !== null

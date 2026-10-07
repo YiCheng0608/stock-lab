@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import hashlib
 from http.client import HTTPResponse
 import io
+import json
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +21,9 @@ def csv_body(rows=None, header=None):
 
 
 def fixture_rows(cutoff=worker.CUTOFF, *, policy_version=None):
+    if cutoff == worker.EIGHTH_CUTOFF:
+        # Test-only prices; neither these rows nor receipts are actual source evidence.
+        return [["1151007", s, n, "110.00" if s == "6223" else "100.00", "0", "100.00", "110.00" if s == "6223" else "101.00", "100.00" if s == "6223" else "99.00", "0", "896441" if s == "6223" else "100", "4984488555" if s == "6223" else "10000", "0", "0", "0", "0", "0", "0", "0"] for s, n in worker.policy_symbols(cutoff, policy_version=policy_version).items()]
     # Reconstructed tuple-scoped selected values from root receipt; other fields are synthetic.
     if cutoff == worker.NEW_CUTOFF:
         rows = [
@@ -80,8 +84,9 @@ class SyntheticPolicyScope:
         fifth = self.policy_version == worker.FIFTH_SCOPE_POLICY_VERSION
         sixth = self.policy_version == worker.SIXTH_SCOPE_POLICY_VERSION
         seventh = self.policy_version == worker.SEVENTH_SCOPE_POLICY_VERSION
-        self.stack.enter_context(patch.object(worker, "_POLICY_STOCK_SCOPE_20261006_V5" if seventh else "_POLICY_STOCK_SCOPE_20261006_V4" if sixth else "_POLICY_STOCK_SCOPE_20261006_V3" if fifth else "_POLICY_STOCK_SCOPE_20261006_V2" if extended else "_POLICY_STOCK_SCOPE_20261006" if scope else "_POLICY" if self.cutoff == worker.CUTOFF else "_POLICY_20261006", policy))
-        self.stack.enter_context(patch.object(store, "POLICY_DIGEST_STOCK_SCOPE_V5" if seventh else "POLICY_DIGEST_STOCK_SCOPE_V4" if sixth else "POLICY_DIGEST_STOCK_SCOPE_V3" if fifth else "POLICY_DIGEST_STOCK_SCOPE_V2" if extended else "POLICY_DIGEST_STOCK_SCOPE" if scope else "POLICY_DIGEST" if self.cutoff == worker.CUTOFF else "POLICY_DIGEST_20261006", worker.digest(policy)))
+        eighth = self.policy_version == worker.EIGHTH_SCOPE_POLICY_VERSION
+        self.stack.enter_context(patch.object(worker, "_POLICY_STOCK_SCOPE_20261007" if eighth else "_POLICY_STOCK_SCOPE_20261006_V5" if seventh else "_POLICY_STOCK_SCOPE_20261006_V4" if sixth else "_POLICY_STOCK_SCOPE_20261006_V3" if fifth else "_POLICY_STOCK_SCOPE_20261006_V2" if extended else "_POLICY_STOCK_SCOPE_20261006" if scope else "_POLICY" if self.cutoff == worker.CUTOFF else "_POLICY_20261006", policy))
+        self.stack.enter_context(patch.object(store, "POLICY_DIGEST_STOCK_SCOPE_V6" if eighth else "POLICY_DIGEST_STOCK_SCOPE_V5" if seventh else "POLICY_DIGEST_STOCK_SCOPE_V4" if sixth else "POLICY_DIGEST_STOCK_SCOPE_V3" if fifth else "POLICY_DIGEST_STOCK_SCOPE_V2" if extended else "POLICY_DIGEST_STOCK_SCOPE" if scope else "POLICY_DIGEST" if self.cutoff == worker.CUTOFF else "POLICY_DIGEST_20261006", worker.digest(policy)))
         self.store_module = store
         version, pin = store.policy_pins(self.cutoff, policy_version=self.policy_version)
         self.env = {store.ENABLE_ENV: "1", store.POLICY_VERSION_ENV: version, store.POLICY_DIGEST_ENV: pin}
@@ -97,6 +102,34 @@ class SyntheticPolicyScope:
 
 
 class PriceParserTests(unittest.TestCase):
+    def test_eight_stock_new_day_and_all_immutable_pins(self):
+        from app import tpex_price as store
+        policy = worker.price_policy(worker.EIGHTH_CUTOFF)
+        self.assertEqual((len(worker.canonical_bytes(policy)), worker.digest(policy)), (1564, "sha256:bdad10af9090dd15319b3f3e8dca2952f75c4caf6d46b3032e706a5006ccbab2"))
+        worker.validate_policy(policy, worker.EIGHTH_SCOPE_POLICY_VERSION, store.POLICY_DIGEST_STOCK_SCOPE_V6)
+        expected = deepcopy(worker.price_policy(worker.NEW_CUTOFF)); expected["version"] = worker.EIGHTH_SCOPE_POLICY_VERSION
+        expected["scope"]["cutoff"] = "2026-10-07"; expected["scope"]["symbols"] = policy["scope"]["symbols"]
+        expected["validation"]["expected_body_sha256"] = "eaa1eaf37ff3e2305629dced8b0f6945a063b05841c69d75f826960e6bd819c8"
+        expected["attribution"]["release_version"] = "data-date-2026-10-07"; self.assertEqual(policy, expected)
+        old = ((worker.CUTOFF, worker.POLICY_VERSION, "452b9b8cfa3d050b79ea1a85b3e4ed643c40cf3d17882b8cb809ffdb7143deea"),
+               (worker.NEW_CUTOFF, "m1-price-tpex-11370-2026-10-06.1", "fc7b1451f6ae47145a5b40c3e08cdcad7ac8b9dafc64c7bf89f95c67cfefc288"),
+               *((worker.NEW_CUTOFF, version, pin) for version, pin in ((worker.SCOPE_POLICY_VERSION, "6e662d5fc91957b586becdf41f351d5abf2c41cec09909de468e62e76cda4a78"), (worker.EXTENDED_SCOPE_POLICY_VERSION, "eb378f12e85462855d8271f1e977e4e84878882dd0944c004840a2ad21ab4434"), (worker.FIFTH_SCOPE_POLICY_VERSION, "57fb2dd808d71d43e89aca3fb42ef8dc53d9338093dd92a296858e62c41152ca"), (worker.SIXTH_SCOPE_POLICY_VERSION, "03738997b4d8ec27872c58cfedef75c602aa17251b4a7724d1a375b6b85d8afc"), (worker.SEVENTH_SCOPE_POLICY_VERSION, "5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040"))))
+        for cutoff, version, pin in old:
+            prior = worker.price_policy(cutoff, policy_version=version)
+            self.assertEqual(worker.digest(prior), "sha256:" + pin); self.assertNotIn("6223", prior["scope"]["symbols"])
+            with self.assertRaises(worker.PriceCaptureError): worker.price_policy(worker.EIGHTH_CUTOFF, policy_version=version)
+        self.assertEqual(worker.price_policy()["version"], worker.POLICY_VERSION)
+        self.assertEqual(worker.price_policy(worker.NEW_CUTOFF)["version"], worker.SEVENTH_SCOPE_POLICY_VERSION)
+        rows = fixture_rows(worker.EIGHTH_CUTOFF); body = csv_body(rows)
+        self.assertEqual(list(worker.parse_price_csv(body, cutoff=worker.EIGHTH_CUTOFF)["selected"]), list(policy["scope"]["symbols"]))
+        for column, value in ((0, "1151006"), (2, "wrong"), (3, "0"), (6, "99.00"), (9, "0896441"), (10, "9223372036854775808")):
+            bad = deepcopy(rows); bad[4][column] = value
+            with self.assertRaises(worker.PriceCaptureError): worker.parse_price_csv(csv_body(bad), cutoff=worker.EIGHTH_CUTOFF)
+        for bad in (rows[:4] + rows[5:], rows + rows[4:5]):
+            with self.assertRaises(worker.PriceCaptureError): worker.parse_price_csv(csv_body(bad), cutoff=worker.EIGHTH_CUTOFF)
+        with self.assertRaises(worker.PriceCaptureError): worker.parse_price_csv(body, cutoff=worker.NEW_CUTOFF)
+        print(json.dumps({"immutable_prior_policies": 7, "new_policy_canonical_bytes": 1564, "synthetic_csv_rows": 8, "synthetic_csv_bytes": len(body)}), flush=True)
+
     def test_seven_stock_new_policy_preserves_six_and_rejects_seventh_bad_rows(self):
         previous = worker.price_policy(worker.NEW_CUTOFF, policy_version=worker.SIXTH_SCOPE_POLICY_VERSION)
         new = worker.price_policy(worker.NEW_CUTOFF)

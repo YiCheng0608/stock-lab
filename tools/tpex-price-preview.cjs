@@ -16,7 +16,8 @@ const crypto = require('node:crypto')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
-assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check', '--serve', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
+assert(args.every((arg, index) => ['--deps', '--check', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--port', '--api-port', ...pinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions].includes(args[index - 1])), 'unknown argument')
+assert(!args.includes('--scope-check') || !['--serve', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one scope check mode')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
 assert(!(args.includes('--private-save-check') && (args.includes('--serve') || args.includes('--check') || args.includes('--focus-check'))), 'choose one check mode')
@@ -28,8 +29,16 @@ const focusCheck = args.includes('--saved-price-chips-focus-check')
 assert(!focusActive || !args.includes('--saved-price-chips-opt-in'), 'choose one joint consumer')
 assert(!focusCheck || !['--serve', '--check', '--joint-check', '--focus-check', '--saved-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
 const jointActive = args.includes('--saved-price-chips-opt-in') || focusActive
+const stockScope6Active = args.includes('--stock-scope6-opt-in')
+const stockScope6Version = 'm2-stock-scope-tpex-11370-2026-10-07.1'
+const stockScope6Digest = 'sha256:bdad10af9090dd15319b3f3e8dca2952f75c4caf6d46b3032e706a5006ccbab2'
+assert(!stockScope6Active || args.includes('--serve') && !jointActive && !args.includes('--saved-source-only'), 'new stock scope requires ordinary owned serve')
+if (stockScope6Active) {
+  assert(option('--policy-version') === stockScope6Version && option('--policy-digest') === stockScope6Digest, 'independent external stock-scope6 pins required')
+  assert(!pinOptions.slice(2).some((name) => args.includes(name)), 'new stock scope excludes private/chips pins')
+}
 assert(!jointActive || args.includes('--serve') && args.includes('--saved-source-only'), 'joint opt-in requires saved-only serve')
-assert(jointActive || !pinOptions.some((name) => args.includes(name)), 'joint pins require joint opt-in')
+assert(jointActive || stockScope6Active || !pinOptions.some((name) => args.includes(name)), 'pins require an admitted opt-in')
 let jointPolicy
 const jointDigest = 'sha256:a5e6ecda19952e4f6dc44ad9660e4cbbcc2e4a0a3670229ab63900cf74678d14'
 if (jointActive || args.includes('--joint-check') || focusCheck) {
@@ -235,6 +244,64 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (args.includes('--scope-check')) {
+    const memoryChecks = memoryCases.runScopeMemoryReadTests(), focusChecks = focusCases.runScopeFocusTests()
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    const App = await appSSRModule()
+    let ssrChecks = 0, maxSerialized = 0, maxGraph = 0
+    const verify = (value, message) => { ssrChecks++; assert(value, message) }
+    for (const [lots, amount, range, expected] of [['0.000', '0', '0.000', 8], ['896.441', '4984488555', '10.000', 1], ['896.442', '4984488555', '10.000', 0], ['896.441', '4984488556', '10.000', 0], ['896.441', '4984488555', '10.001', 0]]) {
+      const move = expected === 8 ? 'all' : 'up'
+      const data = focusCases.createPriceFocusFixture(lots, move, amount, range, '2026-10-07')
+      maxSerialized = Math.max(maxSerialized, Buffer.byteLength(JSON.stringify(data))); maxGraph = Math.max(maxGraph, estimateGraph(data))
+      assert(maxSerialized <= 80 * 1024 && maxGraph <= 512 * 1024, 'eight-stock synthetic fixture caps; estimate is not RSS')
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+      client.setQueryData(['price-lot-focus', '2026-10-07', lots, move, amount, range], data)
+      const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+        { initialEntries: [`/?as_of=2026-10-07&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}`] }, React.createElement(App.default))))
+      verify((html.match(/class="focus-card"/g) || []).length === expected && html.includes('已核 8 股'), 'eight-stock complete scope rendered')
+      verify(expected !== 0 || html.includes('零候選'), 'verified zero distinct')
+      if (expected === 1) verify(html.includes('6223 旺矽') && html.includes('4984488555') && html.includes('focus_min_range_pct=10.000'), 'eighth exact reason and detail link')
+      if (expected === 1) {
+        client.getQueryCache().find({ queryKey: ['price-lot-focus', '2026-10-07', lots, move, amount, range] }).setState({ status: 'error', error: new Error('synthetic_current_refetch_failure') })
+        const failed = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter,
+          { initialEntries: [`/?as_of=2026-10-07&min_lots=${lots}&day_move=${move}&min_turnover=${amount}&min_range_pct=${range}`] }, React.createElement(App.default))))
+        verify(!failed.includes('class="focus-card"') && !failed.includes('focus-count') && failed.includes('候選數未知') && failed.includes('讀取已取得原件'), 'current failure masks cached positive candidates and keeps explicit read')
+      }
+      client.clear()
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    client.setQueryData(['stock', 'TPEx', '6223', '2026-10-07'], stockFixture('6223', '2026-10-07'))
+    const route = '/stocks/TPEx/6223?as_of=2026-10-07&from=price-lots&focus_as_of=2026-10-07&focus_min_lots=896.441&focus_day_move=up&focus_min_turnover=4984488555&focus_min_range_pct=10.000'
+    const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [route] }, React.createElement(App.default))))
+    verify(html.includes('2026-10-07 官方單日行情') && html.includes('旺矽'), 'new source date and eighth detail')
+    verify(html.includes('/?as_of=2026-10-07&amp;min_lots=896.441&amp;day_move=up&amp;min_turnover=4984488555&amp;min_range_pct=10.000#price-lot-focus-title'), 'five raw strings safe return')
+    client.getQueryCache().find({ queryKey: ['stock', 'TPEx', '6223', '2026-10-07'] }).setState({ status: 'error', error: new Error('synthetic_current_refetch_failure') })
+    const failedDetail = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [route] }, React.createElement(App.default))))
+    verify(!failedDetail.includes('overview-price-memory') && !failedDetail.includes('stock-quote-grid') && !failedDetail.includes('stock-price-chart') && !failedDetail.includes('官方單日行情原始列'), 'detail failure masks retained numeric headline/chart/raw')
+    client.clear()
+    let guardChecks = 0
+    const guard = (method, route, body, status) => { assert.equal(scope6RequestError(method, new URL(route, 'http://owned.invalid'), Buffer.from(body))?.[0] ?? 200, status); guardChecks++ }
+    const query = 'as_of=2026-10-07&min_lots=896.441&day_move=up&min_turnover=4984488555&min_range_pct=10.000'
+    for (const method of ['GET', 'POST']) {
+      const base = '/api/focus/price-lots' + (method === 'POST' ? '/capture' : '') + '?' + query, body = method === 'POST' ? '{}' : ''
+      guard(method, base, body, 200)
+      for (const suffix of ['&x=1', '&min_lots=896.441']) guard(method, base + suffix, body, 422)
+      guard(method, base.replace('&min_range_pct=10.000', ''), body, 422)
+      guard(method, base.replace('896.441', '9223372036854775.808'), body, 422)
+      if (method === 'POST') for (const value of ['', 'null', '[]', '{"x":1}', '\ufffd', ' '.repeat(4097)]) guard(method, base, value, value.length > 4096 ? 413 : 422)
+      else guard(method, base, '{}', 422)
+    }
+    for (const symbol of ['3105', '3293', '5274', '5347', '6223', '6488', '6510', '8069']) guard('POST', `/api/stocks/TPEx/${symbol}/prices/capture?as_of=2026-10-07`, '{}', 200)
+    guard('POST', '/api/stocks/TPEx/6223/prices/capture?as_of=2026-10-06', '{}', 422)
+    for (const path of ['/api/stocks/TPEx/6223/prices/save', '/api/stocks/TPEx/6223/institutional-windows/capture', '/api/stocks/TPEx/9999/prices/capture']) guard('POST', path + '?as_of=2026-10-07', '{}', 405)
+    guard('POST', '/__price_ui/receipt', '{}', 405)
+    verify(previewBanner(true).includes('首次載入前沒有行情資料') && !previewBanner(true).includes('合成樣本') && previewBanner(false).includes('既有行情與未支持標的仍為合成樣本'), 'new empty-finance banner and retained old banner')
+    assert(Object.values(counts).every((x) => x === 0), 'scope guards')
+    console.log(JSON.stringify({ passed: true, memory_checks: memoryChecks, focus_checks: focusChecks, scope_app_ssr_checks: ssrChecks, scope_request_guard_checks: guardChecks, max_fixture_serialized_bytes: maxSerialized, max_held_fixture_graph_estimated_bytes: maxGraph, estimate_not_rss: true, max_selected_rows: 8, ...receipt(), not_run: ['actual source', 'native operation', 'private files', 'disk cases', 'prior full suites'] }))
+    return
+  }
   if (focusCheck) {
     const helper = require(path.join(sourceRoot, 'savedPriceChipsFocus.ts'))
     const tests = require(path.join(sourceRoot, 'savedPriceChipsFocus.test.ts'))
@@ -724,6 +791,39 @@ async function check() {
 
 const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
+function scope6StaticError(method, pathname) {
+  if (!['GET', 'POST'].includes(method) || method === 'POST' && pathname !== '/api/focus/price-lots/capture' && !/^\/api\/stocks\/TPEx\/(3105|3293|5274|5347|6223|6488|6510|8069)\/prices\/capture$/.test(pathname)) return [405, 'scope6_operation_outside_scope']
+  if (['/prices/save', '/prices/saved', '/focus/price-saved'].some((value) => pathname.includes(value))) return [405, 'scope6_private_reader_outside_scope']
+  return null
+}
+function scope6RequestError(method, url, body) {
+  const refused = scope6StaticError(method, url.pathname)
+  if (refused) return refused
+  if (method === 'GET' && body.length) return [422, 'scope6_get_body_forbidden']
+  if (body.length > 4096) return [413, 'scope6_request_body_bound']
+  try {
+    if (method === 'POST') {
+      if (!body.length) throw new Error('empty object required')
+      const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body))
+      if (!value || Array.isArray(value) || typeof value !== 'object' || Object.keys(value).length) throw new Error('empty object required')
+    }
+    const pairs = [...url.searchParams], keys = pairs.map(([key]) => key), values = Object.fromEntries(pairs)
+    if (new Set(keys).size !== keys.length) throw new Error('duplicates')
+    const isFocus = ['/api/focus/price-lots', '/api/focus/price-lots/capture'].includes(url.pathname)
+    const isStock = url.pathname.startsWith('/api/stocks/')
+    if (isFocus) {
+      const allowed = ['as_of', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct']
+      const required = values.as_of === '2026-10-07' ? allowed : ['as_of', 'min_lots']
+      const helper = require(path.join(sourceRoot, 'priceFocus.ts'))
+      if (keys.some((key) => !allowed.includes(key)) || required.some((key) => !keys.includes(key)) || helper.minLotsShares(values.min_lots) === null
+        || !helper.validPriceFocusDayMove(values.day_move ?? 'all') || helper.minTurnoverValue(values.min_turnover ?? '0') === null || helper.minRangeMilliPct(values.min_range_pct ?? '0') === null) throw new Error('focus conditions')
+    } else if (isStock) {
+      if (keys.some((key) => key !== 'as_of') || method === 'POST' && !keys.includes('as_of')) throw new Error('stock conditions')
+    } else return null
+    if (values.as_of !== undefined && !['2026-10-05', '2026-10-06', '2026-10-07'].includes(values.as_of) || method === 'POST' && values.as_of !== '2026-10-07') throw new Error('cutoff')
+    return null
+  } catch { return [422, 'scope6_request_conditions_invalid'] }
+}
 function jointStaticError(method, pathname) {
   if (pathname.endsWith('/prices/saved')) return [405, 'use_the_admitted_saved_focus_reader']
   if (method === 'POST' && !/^\/api\/stocks\/TPEx\/(3105|6488)\/institutional-windows\/capture$/.test(pathname)) return [405, 'joint_post_outside_scope']
@@ -810,14 +910,20 @@ async function boundedJointBody(request) {
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
   let body
-  if (jointActive) {
+  if (stockScope6Active) {
+    const refusedBeforeBody = scope6StaticError(request.method, url.pathname)
+    if (refusedBeforeBody) { requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
+    try { body = await boundedJointBody(request) } catch (error) { requests.rejected++; return json(response, error.status ?? 422, { detail: error.detail ?? 'scope6 body invalid' }) }
+    const refused = scope6RequestError(request.method, url, body)
+    if (refused) { requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
+  } else if (jointActive) {
     const refusedBeforeBody = jointStaticError(request.method, url.pathname)
     if (refusedBeforeBody) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
     try { body = await boundedJointBody(request) } catch (error) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, error.status ?? 422, { detail: error.detail ?? 'joint body invalid' }) }
     const refused = (focusActive ? focusRequestError : jointRequestError)(request.method, url, body)
     if (refused) { if (focusActive) invalidateFocusProxy(); requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
   }
-  const allowed = jointActive || request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  const allowed = stockScope6Active || jointActive || request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   if (focusActive && url.pathname === '/api/focus/price-saved-chips') invalidateFocusProxy()
@@ -852,12 +958,17 @@ async function proxy(request, response) {
     incoming.pipe(response)
   })
   upstream.on('error', (error) => { if (focusActive && focusTicket === focusProxyGeneration) invalidateFocusProxy(); json(response, 502, { detail: error.message }) })
-  if (jointActive) upstream.end(body)
+  if (jointActive || stockScope6Active) upstream.end(body)
   else {
     let length = 0
     request.on('data', (part) => { length += part.length; if (length > 4096) { request.destroy(); upstream.destroy() } })
     request.pipe(upstream)
   }
+}
+function previewBanner(newScope = stockScope6Active) {
+  return newScope
+    ? '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：八股操作目錄身分已核對。首次載入前沒有行情資料；只有本次明示取得且通過核對的官方單日行情可採用。來源日期與狀態可在個股詳情核對。</div><div id="root">'
+    : '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方單日行情須經本次擷取或私有保存原件讀回核對後才採用；來源狀態可在個股詳情核對。</div><div id="root">'
 }
 async function serve() {
   const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
@@ -867,12 +978,16 @@ async function serve() {
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
-    .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方單日行情須經本次擷取或私有保存原件讀回核對後才採用；來源狀態可在個股詳情核對。</div><div id="root">')
+    .replace('<div id="root">', previewBanner())
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     const url = new URL(request.url, `http://127.0.0.1:${port}`)
     try {
+      if (stockScope6Active) {
+        const refused = scope6StaticError(request.method, url.pathname)
+        if (refused) { requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
+      }
       if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/__price_validation/')) return await proxy(request, response)
       if (url.pathname === '/__price_ui/receipt') return json(response, 200, { requests, ...receipt() })
       if (request.method !== 'GET') return json(response, 405, { detail: 'read-only UI' })
@@ -882,7 +997,7 @@ async function serve() {
     } catch (error) { json(response, 500, { detail: error.message }) }
   })
   server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ mode: 'full App + root-owned actual API proxy', port, api_port: apiPort,
-    url: `http://127.0.0.1:${port}/stocks/TPEx/3105?as_of=2026-10-02`, ...receipt() })))
+    url: stockScope6Active ? `http://127.0.0.1:${port}/?as_of=2026-10-07&min_lots=0.000&day_move=all&min_turnover=0&min_range_pct=0.000` : `http://127.0.0.1:${port}/stocks/TPEx/3105?as_of=2026-10-02`, stock_scope6: stockScope6Active ? { version: stockScope6Version, digest: stockScope6Digest } : null, ...receipt() })))
   let stopping = false
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
     if (stopping) return

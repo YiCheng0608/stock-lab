@@ -186,6 +186,14 @@ Desktop1277×924／窄版390×844的10796.741／up／1607943663與lower4.421／u
 
 6510 lower2.880／upper2.881、同cutoff detail／raw／back五原字串、窄版真零及恢復七股已核；14states無水平溢出。21trusted native events與draft setup界線見[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。
 
+#### M2-FOCUS-STOCK-SCOPE-6 上櫃八股與新指定來源日（有限接受）
+
+新explicit2026-10-07範圍使用「指定來源日 · 上櫃普通股」／「依代碼排序」及「已核8股，符合N檔」；code順3105穩懋／3293鈊象／5274信驊／5347世界／6223旺矽／6488環球晶／6510精測／8069元太。10/07是來源日，capture時間另外顯示；不以implicit latest更新old defaults。舊.5七股／private10/06及兩股chips文案依自身契約保持。
+
+完整八股先gate後filter；真零稱「此範圍的零候選」，unavailable仍「候選數未知」。四理由固定張／TWD整數元／O-C方向／本日振幅；價格元／股、振幅「約」供閱讀，filter沿exact值，不以約4.383代替4.382與4.383的邊界。五RAW含日期／方向／尾零完整返回，具名數值由[來源 §35](SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)管理。
+
+Desktop正向／張邊界／6223 disclosure與窄版390×844/docWidth390真零／恢復／同截止往返已驗。停止API後Read的HTTP502清cards/count、保留五RAW並停用首次取得按鈕已驗；停止後detail錯誤actual未跑。可信typing／select及無效輸入修正全部計183events，actual邊界見[個股頁 §40](STOCK_RESEARCH_PAGE.md#40-m2-focus-stock-scope-6八股四條件與同截止往返)。
+
 ### 10.2 個股詳情的第一屏
 
 依「今日研究結論 → 現在怎麼做 → 關鍵價位 → 為何如此 → 資料時間與完整度」排列；技術、籌碼、事件、替代條件和稽核置後並可收合。固定附註：「此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。」

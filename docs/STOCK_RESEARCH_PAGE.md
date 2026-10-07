@@ -1321,3 +1321,44 @@ Matchingcards／verifiedzero／jointdetail／八RAWback／負門檻actual均未�
 ROOT只接受以上unavailable及owned退出。Actual private7snapshots/21files、financial index2/daily0、metadata0／new productdisk0／DBmut0，原三檔post-stop不變；guards0／19DB全量保留。Coreoperation0／dependency0／reliability0／stall1（前0），正向source gap未解除。Py6／Node59/17/7／36src noEmit的必要checks與未跑項見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)；原失敗／runtime／關閉收據留ROOT task，memory測試不代產品正向驗收。
 
 下一conditional candidate `M2-FOCUS-STOCK-SCOPE-6-B1`：新增ordinary第八股的單日四理由→同截止個股→五RAWback，尚未准入。Current worker只fixed10/5／10/6、最新.5七股；fresh身份／實際date／scope用途及必要versioned date guard須在金融GET前另核，不能承諾目前wire仍10/6或擴private七股／joint兩股。Calendar替代也須另准parser/schema/policy；本failed producer禁retry／restart／newproducer。完整M1／M2／M3及20／21stock closes／trend／strategy／PIT／time／execution仍未完成。
+
+
+## 40. M2-FOCUS-STOCK-SCOPE-6：八股四條件與同截止往返
+
+ROOT已有限接受explicit2026-10-07、ordinary TPEx第八股6223旺矽的四price predicates→同cutoff detail→五RAWback。八股code順3105／3293／5274／5347／6223／6488／6510／8069；新focus `price-lot-focus/m2-v10`／projection `stock-price-memory/m2-stock-scope-v6`。身份、授權、新policy／原件／時間及finance quota由[來源 §35](SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)管理；原defaults、七股.5／private及兩股chips不改。
+
+### 40.1 完整gate與actual API
+
+公開條件仍 `as_of/min_lots/day_move/min_turnover/min_range_pct` 五RAW；精確張／O-C方向／int64 TWD元／本日振幅四predicate沿穩定AND與inclusive比較，依code排序，不是ranking。全部八股required reads及cutoff／tuple／provenance先gate後filter；缺失／invalid／conflict回count=null/items=[]，完整available才可判count0。
+
+ROOT local API九案已接受；未改欄位的案例均沿base `2026-10-07 / 896.441 / down / 4984488555 / 4.000`：
+
+| 案例 | 已核結果 |
+| --- | --- |
+| Base | count2，3105＋6223。 |
+| min_lots896.442 | 排除6223；native亦核只3105。 |
+| min_turnover4984488556 | 排除6223。 |
+| min_range_pct4.382 | 含6223。 |
+| min_range_pct4.383 | 排除6223，顯示約4.383不作比較值。 |
+| 0.000／all／0／0.000 | 全八股。 |
+| min_lots1000000.000 | available/count0/read8。 |
+| 0.000／flat／0／0.000（平收） | available/count0/read8。 |
+| as_of2026-10-06 | unavailable/count=null/read7、no source GET。 |
+
+同cutoff6223 detail已核收盤5530元／股、896.441張、成交額4984488555元、OHLC5590／5725／5480／5530；只有單日1K，不產生MA20／MA60。原18欄／full SHA／ORIGINAL receipt／provenance可由明示disclosure追溯。
+
+### 40.2 ONE page可信輸入與往返
+
+唯一page `67cccd5f-d0a0-494e-875c-387273d83e53`：來源日期先以explicit URL設定10/07，其他四欄由native typing／select後Apply；Apply不auto source。ONE trusted FIRST click `6a79f608-879b-47c5-883a-69a48a3867e3`觸發空producer首次GET，preloaded=false／financeSeed0；沒有JS fill、value assignment或fake events。
+
+Desktop1277×924/doc1262：base兩卡→6223同cutoff detail→native Tab＋Enter開disclosure核18 ORIGINAL fields／full SHA／receipt／provenance→back五RAW exact→張門檻896.442只3105→restore兩卡。窄版SAME page390×844/mobile、actual docWidth390：1000000.000顯示「已核8股、符合0檔」→restore base兩卡→6223 detail→back同五RAW，尾零保留。
+
+Ctrl+A曾造成append；在SAME page用native Home／exact Delete再native Type修正，無效動作也保留於完整183events：23click／143input／12change／5submit、ALL isTrusted=true。Canonical receipt19741B／SHA `98c372d856a25dac3e56fcaab8eb7a6990e5f30ba15a66261087395a7dfdd762`留ROOT原task，不另建附件。
+
+### 40.3 Current failure清值與驗收邊界
+
+ONE API normalstop後，SAME page ONE trusted Read `82f93e10-2446-414a-acdc-a43f0d06565f`的browser ResourceTiming核HTTP502；原positive cards/count清除，候選未知／無cards／無count，五RAW仍保留且FIRST disabled。沒有restart。**停止後detail錯誤actual NOT RUN**，只有synthetic SSR，不能升格該case或沿用舊502收據。
+
+ROOT接受source14、actual操作及owned退出；coreoperation+1／standalone dependency0／reliability+1（current failure清stale values）／stall1→0。Final preview20 local API GET／1POST／14rejected不是financialGET；19 memory tables的schema／indexes／triggers／全部values／每cell typeof保留，guards0／private0／newdisk0。必要checks、原失敗與退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。
+
+DOC review→freeze→qualified索引→exact commit→另准master merge尚待。完整M1／M2／M3、ordinary20／21close history／trend／strategy／PIT／time／Signal／Plan／execution仍未完成；下一未准入候選見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。Private／chips／failed producer及既有cleanup fences保持。

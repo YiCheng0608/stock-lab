@@ -7,6 +7,109 @@ from test_tpex_price_capture import SyntheticPolicyScope, csv_body, fixture_rows
 
 
 class PriceFocusTests(unittest.TestCase):
+    def test_eighth_new_day_exact_boundaries_and_raw_five_return(self):
+        from fastapi.testclient import TestClient
+        from urllib.parse import parse_qs, urlsplit, urlencode
+        from worker import tpex_price_capture as worker
+        import json, sys
+        fixture = MemoryAPIFixture(cutoff=worker.EIGHTH_CUTOFF, policy_version=worker.EIGHTH_SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                unloaded = client.get("/api/focus/price-lots?as_of=2026-10-07&min_lots=0").json()
+                self.assertEqual((unloaded["count"], unloaded["can_capture"]), (None, True)); self.assertEqual(fixture.fixture.opener.calls, [])
+                del unloaded
+                self.assertEqual(client.post("/api/focus/price-lots/capture?as_of=2026-10-07&min_lots=0").status_code, 200)
+                for lots, move, amount, range_pct, expected in (("0.000", "all", "0", "0.000", list(worker.policy_symbols(worker.EIGHTH_CUTOFF))),
+                    ("896.441", "up", "4984488555", "10.000", ["6223"]), ("896.442", "up", "4984488555", "10.000", []),
+                    ("896.441", "up", "4984488556", "10.000", []), ("896.441", "up", "4984488555", "10.001", []),
+                    ("0", "down", "0", "0", [])):
+                    conditions = dict(as_of="2026-10-07", min_lots=lots, day_move=move, min_turnover=amount, min_range_pct=range_pct)
+                    data = client.get("/api/focus/price-lots?" + urlencode(conditions)).json()
+                    self.assertEqual((data["version"], data["status"], data["count"]), ("price-lot-focus/m2-v10", "available", len(expected)))
+                    self.assertEqual([x["symbol"] for x in data["items"]], expected)
+                    self.assertEqual([x["instrument"]["symbol"] for x in data["reads"]], list(worker.policy_symbols(worker.EIGHTH_CUTOFF)))
+                    self.assertTrue(all(x["price_memory"]["provenance"] == data["reads"][0]["price_memory"]["provenance"] for x in data["reads"]))
+                    for item in data["items"]:
+                        self.assertEqual(len(set(item["reasons"])), 4)
+                        self.assertEqual(parse_qs(urlsplit(item["detail_url"]).query), {"as_of": ["2026-10-07"], "from": ["price-lots"], **{"focus_" + k: [v] for k, v in conditions.items()}})
+                    sample = (data, fixture.before, fixture.fixture.body)
+                    serialized = len(json.dumps(sample[:2], ensure_ascii=False).encode("utf-8")) + len(sample[2])
+                    seen = set()
+                    def size(value):
+                        if id(value) in seen: return 0
+                        seen.add(id(value)); result = sys.getsizeof(value)
+                        if isinstance(value, dict): result += sum(size(k) + size(v) for k, v in value.items())
+                        elif isinstance(value, (tuple, list)): result += sum(size(v) for v in value)
+                        return result
+                    footprint = size(sample)
+                    self.assertLessEqual(serialized, 80 * 1024); self.assertLessEqual(footprint, 512 * 1024)
+                    print(json.dumps({"eight_stock_fixture_serialized_bytes": serialized, "held_fixture_graph_estimated_bytes": footprint, "estimate_not_rss": True, "max_csv_rows": 8}), flush=True)
+                    del sample, data
+                self.assertEqual(client.get("/api/stocks/TPEx/6223?as_of=2026-10-07").json()["overview"]["price_memory"]["latest"]["source_date"], "1151007")
+                for cutoff in ("2026-10-06", "2026-10-08"):
+                    self.assertIsNone(client.get("/api/focus/price-lots?as_of=" + cutoff + "&min_lots=0").json()["count"])
+            self.assertEqual(len(fixture.fixture.opener.calls), 1); self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_eighth_missing_identity_and_filtered_read_block_zero(self):
+        from app import tpex_price
+        from app.price_focus import build_price_focus
+        from worker import tpex_price_capture as worker
+        from copy import deepcopy
+        from types import SimpleNamespace
+        fixture = MemoryAPIFixture(cutoff=worker.EIGHTH_CUTOFF, policy_version=worker.EIGHTH_SCOPE_POLICY_VERSION)
+        try:
+            instruments = [SimpleNamespace(market="TW", exchange="TPEx", symbol=s, name=n, instrument_type="stock", etf_category=None, currency="TWD") for s, n in worker.policy_symbols(worker.EIGHTH_CUTOFF).items()]
+            for key, value in (("name", "wrong"), ("market", "US"), ("exchange", "TWSE"), ("instrument_type", "etf"), ("etf_category", "mixed"), ("currency", "USD")):
+                prior = getattr(instruments[4], key); setattr(instruments[4], key, value)
+                self.assertEqual(build_price_focus(instruments, worker.EIGHTH_CUTOFF, "1000000", capture=True)["reasons"], ["price_focus_catalogue_not_supported"])
+                setattr(instruments[4], key, prior)
+            for bad in (instruments[:4] + instruments[5:], instruments + instruments[4:5]):
+                self.assertIsNone(build_price_focus(bad, worker.EIGHTH_CUTOFF, "1000000", capture=True)["count"])
+            self.assertEqual(fixture.fixture.opener.calls, [])
+            tpex_price.capture_tpex_price(instruments[0], worker.EIGHTH_CUTOFF); real = tpex_price.build_tpex_price
+            for failure in ("missing", "turnover", "range", "provenance"):
+                def polluted(item, cutoff):
+                    value = real(item, cutoff)
+                    if item.symbol == "6223":
+                        if failure == "missing": value.update(status="unavailable", latest=None, reasons=["price_memory_capture_missing"])
+                        elif failure == "turnover": value["latest"]["source_fields"]["成交金額"] = ""
+                        elif failure == "range": value["latest"]["source_fields"]["最高"] = "99.00"
+                        else: value["provenance"]["receipt_sha256"] = "d" * 64
+                    return value
+                with patch.object(tpex_price, "build_tpex_price", polluted): result = build_price_focus(instruments, worker.EIGHTH_CUTOFF, "1000000")
+                self.assertEqual((result["status"], result["count"], result["items"]), ("unavailable", None, []))
+                del result
+            self.assertEqual(len(fixture.fixture.opener.calls), 1); self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+    def test_eighth_invalid_routes_and_failed_attempt_never_retry(self):
+        from fastapi.testclient import TestClient
+        from worker import tpex_price_capture as worker
+        from app.price_focus import parse_min_lots, parse_min_turnover, range_meets_minimum, exact_day_range
+        fixture = MemoryAPIFixture(cutoff=worker.EIGHTH_CUTOFF, policy_version=worker.EIGHTH_SCOPE_POLICY_VERSION)
+        try:
+            with TestClient(fixture.app) as client:
+                for route in ("/api/focus/price-lots", "/api/focus/price-lots/capture"):
+                    invoke = client.post if route.endswith("capture") else client.get
+                    for suffix in ("&as_of=2026-10-07", "&extra=1", "&day_move=sideways", "&min_turnover=9223372036854775808", "&min_range_pct=-1", "&min_lots=1"):
+                        self.assertEqual(invoke(route + "?as_of=2026-10-07&min_lots=0" + suffix).status_code, 422)
+                self.assertEqual(fixture.fixture.opener.calls, [])
+                def failed(**kwargs): kwargs["on_request"](); raise worker.PriceCaptureError("synthetic_source_failure")
+                fixture.store._loader = failed
+                for _ in range(2):
+                    result = client.post("/api/focus/price-lots/capture?as_of=2026-10-07&min_lots=0").json()
+                    self.assertEqual((result["count"], result["can_capture"]), (None, False)); self.assertEqual(fixture.store._request_count, 1)
+                    del result
+                self.assertEqual(parse_min_lots("9223372036854775.807"), "9223372036854775807")
+                self.assertEqual(parse_min_turnover("9223372036854775807"), "9223372036854775807")
+                for parse, value in ((parse_min_lots, "9223372036854775.808"), (parse_min_turnover, "9223372036854775808")):
+                    with self.assertRaises(ValueError): parse(value)
+                prices = exact_day_range({"source_fields": {"開盤": "3.00", "最高": "3.10", "最低": "3.00"}})
+                self.assertTrue(range_meets_minimum(prices, "3333")); self.assertFalse(range_meets_minimum(prices, "3334"))
+            self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
     def test_seven_stock_router_exact_boundaries_complete_reads_and_return_strings(self):
         from fastapi.testclient import TestClient
         from urllib.parse import parse_qs, urlsplit, urlencode

@@ -6,7 +6,7 @@
 
 法人現行explicit10/06兩股5／20日窗口、完整24日曆及新pins見[§31](#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)；W8八截止／27日曆與96 net依[§19](#19-m1-w8八截止法人來源與完整有界日曆)原範圍保留，§13–18保留歷史，不作implicit latest。M1-PRICE-1單日價格見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
 
-現行M2普通TPEx七股scope、same-date新body／policy准入見[§29](#29-m2-focus-stock-scope-5七股來源准入)；quote-date仍2026-10-06、臺北取得10/07。§20～27保留已驗舊policy／金融表與月wire推論；NEW開放平台metadata及用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。`.5`仍只process memory；獨立`.1`私人保存／跨程序讀回已有限接受，見[§30](#30-m1-price-save-1私人單日保存與跨程序讀回)，不改舊capture bytes。
+M2既有10/06七股scope見[§29](#29-m2-focus-stock-scope-5七股來源准入)；新explicit10/07八股／新body及獨立policy見[§35](#35-m2-focus-stock-scope-6八股與新來源日准入)，不提升old defaults或沿用舊capture bytes。§20～34保留已驗歷史版本與金融表；開放平台歷史用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。獨立私人保存／跨程序讀回見[§30](#30-m1-price-save-1私人單日保存與跨程序讀回)，本批沒有private I/O或chips GET。
 
 ## 1. Registry 與 policy 契約
 
@@ -1307,3 +1307,37 @@ ONE fresh producer／ONE trusted FIRST capture沿§31有界兩份11391 index＋2
 Coreoperation0／dependency0／reliability0／**stall1**（承前0）；新增seam、memory checks及actual拒用不算解除正向joint操作依賴。Matching／verifiedzero／jointdetail／八RAWback、負門檻actual與actual missing-private-file UI均未驗收；後者NOT RUN。必要checks、原失敗與owned退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)。
 
 私人1791644B／3files／原3dirs ATCAP，原cleanup preCreateProcess auto-review拒絕／process0／deletion0，STRICT NO-RETRY；禁alternative tool/path/owner、逐檔／rename／containingtree、copy/export/publish/delete/newdiskcases。ENTIRE historic DAY-RANGE worktree／branch＋.range-ui-01a1106d2555430B／232files／94dirs兩次拒絕，retain／excludeALLcleanup；不掃Temp/HAR/GPG/cache/log/history、TURNOVER或較舊資源。Chips held memory隨正常退出釋放，private disk保留；功能／清理分報。完整ROADMAP、20／21stock closes、trend／strategy／PIT／time／execution未完成。
+
+
+## 35. M2-FOCUS-STOCK-SCOPE-6：八股與新來源日准入
+
+`M2-FOCUS-STOCK-SCOPE-6-B1` 已有限接受 ordinary TPEx 新增6223旺矽、explicit2026-10-07的八股四條件操作。Code順3105／3293／5274／5347／6223／6488／6510／8069；原七組policy bytes與defaults、10/06七股private及兩股chips不變。具名操作由[個股頁 §40](STOCK_RESEARCH_PAGE.md#40-m2-focus-stock-scope-6八股四條件與同截止往返)管理，§20～34按原範圍保留。
+
+### 35.1 身份、用途與新版本
+
+ROOT的TPEx basic OBS2為原Date1151006／893列，核6223旺矽、掛牌20030106、industry24、preferred0／NTD10；准入operational ordinary TPEx／TWD。CFI與ISIN未核實，不能稱ISIN catalogue已驗或PIT membership。Metadata共7attempts，完整已知2052524B加未知partial；ISIN timeout與首次basic short-read的partial未知，原失敗留ROOT task，不宣稱全輪metadata bytes已知。
+
+Fresh [政府dataset11370](https://data.gov.tw/api/v2/rest/dataset/11370)連至[exact TPEx daily CSV](https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data)。本批依[OGL1.0](https://data.gov.tw/license)免費利用與署名要求、[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)政府開放資料例外，先准入bounded process-memory用途；不授權保存、歷史參數或其他資源。引用／產品追溯仍須保留來源署名及原件完整性，精確metadata receipts以ROOT原task為準。
+
+Implementation前准入新policy `m2-stock-scope-tpex-11370-2026-10-07.1`：canonical UTF-8 **1564B**，digest `sha256:bdad10af9090dd15319b3f3e8dca2952f75c4caf6d46b3032e706a5006ccbab2`；deep copy舊.5，只改version／cutoff／八股集合／bodySHA／release_version。新worker `tpex-price-capture/m2-stock-scope-v6`、projection `stock-price-memory/m2-stock-scope-v6`、consumer `price-lot-focus/m2-v10`，sourceversion `tpex-11370/2026-10-07`。10/07只explicit採用，不提升old defaults；不hydrate舊body或擴private／chips scope。
+
+Finance quota為ROOT OBS1＋ONE empty producer FIRST各一次，**兩次已用盡**；body cap3MiB；已收headers16KiB後檢查，非socket cap；30s cooperative檢查，非OS preemption；graph32MiB estimate、redirect0／retry0／disk0。兩GET後禁retry／restart／newproducer；graph estimate不代表RSS或OS硬deadline。
+
+### 35.2 原件與金融核對
+
+| 本輪financial GET | 原始UTC start→capture | ORIGINAL receipt bytes／SHA-256 |
+| --- | --- | --- |
+| ROOT OBS1 | 2026-10-07T08:20:02.488665Z→08:20:11.382011Z | 1805B／`273abb5cbc48ac258ed30120e6c179e38a90a738d6ed4455a1f69023450c6b0e` |
+| Actual empty producer FIRST | 2026-10-07T08:55:24.331973+00:00→08:55:32.267100+00:00 | 1468B／`d975da7dc97dec2755dd32f84cae14302c92fafcced71df07611f1e779e4cf3d` |
+
+Financial GET總2、known3586610B；每份body1793305B、SHA `eaa1eaf37ff3e2305629dced8b0f6945a063b05841c69d75f826960e6bd819c8`，producer HTTP200。全部12245 data rows width18／Date1151007／date-code unique；ROOT在server停止前獨立核held raw及完整ORIGINAL receipt bytes、八股144原欄／48金融值，非replay／preload／disk。ROOT graph9010451B是retained estimate，非RSS。
+
+6223已核O/H/L/C＝5590／5725／5480／5530元／股、canonical896441股＝896.441張、TWD成交額4984488555元，O/C為down。本日振幅沿既有exact公式；門檻4.382含6223、4.383排除6223，即使顯示「約4.383%」也不按約值filter。144原字串由實際追溯保留，不以本段格式替代raw。
+
+Source-date10/07及capture UTC分開；publication／first availability／revision仍unknown、historical_pit unsupported。完整八股required reads及身份／金融／cutoff／pins／provenance先gate後filter，任一缺失或衝突仍unavailable/count=null/items=[]，不縮scope；只有完整八股available才可判真零。原精確張、int64 TWD、O/C及振幅公式不改。
+
+### 35.3 接受與邊界
+
+ROOT接受source14及本批coreoperation+1／standalone dependency0／reliability+1／stall1→0。API／trusted desktop及窄版同cutoff往返、真零與positive→HTTP502清值已驗；停止後detail錯誤actual NOT RUN，SSR不能代替。必要checks及owned退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。DOC review／freeze／qualified七分區索引／exact commit／另准master merge尚待，不回寫final hash。
+
+本批privateIO0／chipsGET0／newdisk0；既有私人及DAY-RANGE保留fences不變。完整M1／M2／M3、ordinary20／21close history、strategy／time／PIT／Signal／Plan／execution仍未完成；index calendar不代ordinary closes。下一候選及新准入條件由[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)管理，本節不授予下一用途。

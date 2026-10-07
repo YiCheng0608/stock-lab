@@ -23,6 +23,7 @@ parser.add_argument("--deps", required=True, help="existing backend/.deps, read-
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check", action="store_true")
 mode.add_argument("--focus-check", action="store_true")
+mode.add_argument("--scope-check", action="store_true")
 mode.add_argument("--saved-focus-check", action="store_true")
 mode.add_argument("--joint-check", action="store_true")
 mode.add_argument("--saved-price-chips-focus-check", action="store_true")
@@ -32,7 +33,7 @@ parser.add_argument("--port", type=int, default=8795)
 parser.add_argument("--live-source-opt-in", action="store_true")
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
-parser.add_argument("--cutoff", choices=("2026-10-05", "2026-10-06"), default="2026-10-05")
+parser.add_argument("--cutoff", choices=("2026-10-05", "2026-10-06", "2026-10-07"), default="2026-10-05")
 parser.add_argument("--private-store-root")
 parser.add_argument("--private-policy-version")
 parser.add_argument("--private-policy-digest")
@@ -84,6 +85,8 @@ if not JOINT_ACTIVE and any((ARGS.chips_policy_version, ARGS.chips_policy_digest
     parser.error("joint pins require explicit joint entry opt-in")
 if ARGS.disk_phase != "check" and not ARGS.private_save_check:
     parser.error("disk phases are private synthetic checks only")
+if ARGS.cutoff == "2026-10-07" and ARGS.live_source_opt_in and (PRIVATE_ROOT or ARGS.saved_source_only or JOINT_ACTIVE):
+    parser.error("new eight-stock live entry requires an empty memory Store without private or chips modes")
 sys.dont_write_bytecode = True
 sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "backend/tests"), str(Path(ARGS.deps).resolve())]
 COUNTS = {"disk_writes": 0, "mutations": 0, "unapproved_network": 0, "subprocesses": 0}
@@ -94,11 +97,36 @@ PRIVATE_FILES = {"body.csv", "capture-receipt.json", "storage-receipt.json"}
 DISK_ACTIVE = bool(PRIVATE_ROOT and (ARGS.serve or ARGS.disk_phase != "check") and not ARGS.saved_source_only)
 LIVE_ACTIVE = False
 CHIPS_CONTEXT = local()
+PRICE_CONTEXT = local()
+NEW_PRICE_LIVE = ARGS.live_source_opt_in and ARGS.cutoff == "2026-10-07"
+PRICE_ENDPOINT_URL = "https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data"
+PRICE_HTTP_REQUESTS = 0
 APPROVED_ADDRESSES = set()
 SOURCE_REQUESTS = []
 PRELOADED_SOURCE = False
 RUNNER_SOURCE_REQUESTS = 0
 original_resolver = socket.getaddrinfo
+
+
+def price_live_active():
+    return getattr(PRICE_CONTEXT, "active", False) if NEW_PRICE_LIVE else LIVE_ACTIVE
+
+
+def price_transport_allowed(event, args):
+    """New-date authority belongs only to the exact request's current thread."""
+    if not NEW_PRICE_LIVE or not getattr(PRICE_CONTEXT, "active", False):
+        return False
+    count = getattr(PRICE_CONTEXT, "request_count", 0)
+    if event == "urllib.Request":
+        return count == 0 and args[0] == PRICE_ENDPOINT_URL and args[1] in (None, b"") and args[3] == "GET"
+    if count != 1:
+        return False
+    if event == "socket.getaddrinfo":
+        return args[0] in {"www.tpex.org.tw", b"www.tpex.org.tw"} and args[1] == 443
+    if event == "socket.connect":
+        address = args[1]
+        return isinstance(address, tuple) and (address[0], address[1]) in getattr(PRICE_CONTEXT, "addresses", set())
+    return False
 
 
 def socketpair_context():
@@ -111,6 +139,13 @@ def socketpair_context():
 
 
 def audit(event, args):
+    global PRICE_HTTP_REQUESTS
+    if event == "urllib.Request" and NEW_PRICE_LIVE:
+        if not price_transport_allowed(event, args):
+            COUNTS["unapproved_network"] += 1
+            raise AssertionError("new price request outside admitted URL/method/body/single-attempt scope")
+        PRICE_CONTEXT.request_count += 1
+        PRICE_HTTP_REQUESTS += 1
     if event == "open":
         mode, flags = args[1], args[2]
         if (isinstance(mode, str) and any(char in mode for char in "wax+")) or (
@@ -145,10 +180,10 @@ def audit(event, args):
         if event == "socket.bind": allowed = allowed or (ARGS.serve and local and address[1] == ARGS.port)
         if event in {"socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr"}:
             allowed = allowed or address in {"localhost", "127.0.0.1", "::1", None}
-            scoped_live = ARGS.live_source_opt_in and LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)
-            allowed = allowed or (scoped_live and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
-        if event == "socket.connect" and (ARGS.live_source_opt_in and LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)):
-            allowed = isinstance(address, tuple) and (address[0], address[1]) in APPROVED_ADDRESSES
+            scoped_live = ARGS.live_source_opt_in and price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)
+            allowed = allowed or (price_transport_allowed(event, args) if NEW_PRICE_LIVE else scoped_live and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
+        if event == "socket.connect" and (ARGS.live_source_opt_in and price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)):
+            allowed = price_transport_allowed(event, args) if NEW_PRICE_LIVE else isinstance(address, tuple) and (address[0], address[1]) in APPROVED_ADDRESSES
         if not allowed:
             COUNTS["unapproved_network"] += 1
             raise AssertionError("network outside owned scope denied")
@@ -195,8 +230,9 @@ sys.addaudithook(audit)
 
 def resolver(host, port, *args, **kwargs):
     answers = original_resolver(host, port, *args, **kwargs)
-    if (LIVE_ACTIVE or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)) and host in {"www.tpex.org.tw", b"www.tpex.org.tw"} and port == 443:
-        APPROVED_ADDRESSES.update((answer[4][0], answer[4][1]) for answer in answers)
+    if (price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)) and host in {"www.tpex.org.tw", b"www.tpex.org.tw"} and port == 443:
+        addresses = PRICE_CONTEXT.addresses if NEW_PRICE_LIVE else APPROVED_ADDRESSES
+        addresses.update((answer[4][0], answer[4][1]) for answer in answers)
     return answers
 
 
@@ -332,6 +368,7 @@ def receipt(fixture=None, include_raw=False):
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
               "guard": dict(COUNTS), "allowed_private_disk": dict(ALLOWED_DISK), "disk_artifacts": {"not_observed": True, "owner": "ROOT"} if JOINT_ACTIVE else private_disk_metrics(), "source_requests": list(SOURCE_REQUESTS),
               "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
+              "new_price_transport": {"request_local": NEW_PRICE_LIVE, "http_request_count": PRICE_HTTP_REQUESTS, "active_in_diagnostic_thread": price_live_active() if NEW_PRICE_LIVE else False},
               "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[1],
               "scope": "tuple-scoped ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT; "
                   + ("scoped private save/reopen enabled; helper receipt does not prove product acceptance" if PRIVATE_ROOT
@@ -346,13 +383,14 @@ def receipt(fixture=None, include_raw=False):
         result["selected"] = raw.parsed["selected"] if raw else None
         result["fixture_kind"] = fixture.catalogue_kind + ("; retained independently admitted private source, explicit read only" if SAVED_FOCUS_ACTIVE else
             "; live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "; synthetic private test anchors; not official raw")
-        if SAVED_FOCUS_ACTIVE:
+        if hasattr(fixture, "validation_baseline"):
             current = database_snapshot(fixture)
             before = fixture.validation_baseline
             result["database_preservation"] = {"table_count": len(current), "schema_preserved": set(before) == set(current) and all(before[name]["schema"] == current[name]["schema"] for name in before),
                 "all_values_preserved": set(before) == set(current) and all(before[name]["values"] == current[name]["values"] for name in before),
                 "cell_typeofs_preserved": set(before) == set(current) and all(before[name]["cell_typeofs"] == current[name]["cell_typeofs"] for name in before)}
-            result["finance_seed_rows"] = 0
+            result["finance_seed_rows"] = getattr(fixture, "finance_seed_rows", 0)
+            result["source_initial_empty_store"] = fixture.source_initial_empty_store
             result["empty_store"] = raw is None and not fixture.store._attempted and fixture.store._request_count == 0
         if include_raw:
             result["raw_base64"] = base64.b64encode(raw.body).decode("ascii") if raw else None
@@ -412,7 +450,7 @@ def check():
         print(json.dumps(output, ensure_ascii=False), flush=True)
         return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
-    for name in (("test_saved_price_chips_focus",) if ARGS.saved_price_chips_focus_check else ("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
+    for name in (("test_tpex_price_capture.PriceParserTests.test_eight_stock_new_day_and_all_immutable_pins", "test_tpex_price_store.PriceStoreTests.test_eighth_new_day_single_attempt_and_old_tuple_isolation", "test_tpex_price_api.PriceAPITests.test_eighth_new_day_router_read_only_and_explicit_cutoff", "test_tpex_price_api.PriceAPITests.test_eighth_runner_request_local_transport", "test_tpex_price_api.PriceAPITests.test_eighth_runner_body_and_request_gate_before_loader", "test_price_focus.PriceFocusTests.test_eighth_new_day_exact_boundaries_and_raw_five_return", "test_price_focus.PriceFocusTests.test_eighth_missing_identity_and_filtered_read_block_zero", "test_price_focus.PriceFocusTests.test_eighth_invalid_routes_and_failed_attempt_never_retry") if ARGS.scope_check else ("test_saved_price_chips_focus",) if ARGS.saved_price_chips_focus_check else ("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
@@ -421,18 +459,92 @@ def check():
     return 0 if run.wasSuccessful() and not any(COUNTS.values()) else 1
 
 
+def scope_request_error(method, path, pairs, body):
+    """Refuse malformed new-runtime calls before any loader or private reader."""
+    from app import price_focus as focus
+    symbols = ("3105", "3293", "5274", "5347", "6223", "6488", "6510", "8069")
+    capture_paths = {f"/api/stocks/TPEx/{symbol}/prices/capture" for symbol in symbols}
+    focus_paths = {"/api/focus/price-lots", "/api/focus/price-lots/capture"}
+    if method not in {"GET", "POST"} or method == "POST" and path not in capture_paths | {"/api/focus/price-lots/capture"}:
+        return 405, "scope6_operation_outside_scope"
+    if method == "GET" and body:
+        return 422, "scope6_get_body_forbidden"
+    if any(token in path for token in ("/prices/save", "/prices/saved", "/focus/price-saved")):
+        return 405, "scope6_private_reader_outside_scope"
+    if method == "POST":
+        if len(body) > 4096:
+            return 413, "scope6_request_body_bound"
+        try:
+            if not body or json.loads(body.decode("utf-8")) != {}:
+                raise ValueError("empty object required")
+        except (ValueError, UnicodeError):
+            return 422, "scope6_empty_json_object_required"
+    try:
+        keys = [key for key, value in pairs]
+        values = dict(pairs)
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate conditions")
+        if path in focus_paths:
+            allowed = {"as_of", "min_lots", "day_move", "min_turnover", "min_range_pct"}
+            required = allowed if values.get("as_of") == "2026-10-07" else {"as_of", "min_lots"}
+            if not set(keys) <= allowed or not required <= set(keys):
+                raise ValueError("focus conditions")
+            focus.parse_min_lots(values["min_lots"])
+            focus.parse_day_move(values.get("day_move", "all"))
+            focus.parse_min_turnover(values.get("min_turnover", "0"))
+            focus.parse_min_range_pct(values.get("min_range_pct", "0"))
+        elif path in capture_paths or path.startswith("/api/stocks/"):
+            if not set(keys) <= {"as_of"} or method == "POST" and keys != ["as_of"]:
+                raise ValueError("stock conditions")
+        else:
+            return None
+        cutoff = values.get("as_of")
+        if cutoff is not None and cutoff not in {"2026-10-05", "2026-10-06", "2026-10-07"}:
+            raise ValueError("unsupported cutoff")
+        if method == "POST" and cutoff != "2026-10-07":
+            raise ValueError("capture cutoff")
+        return None
+    except (ValueError, TypeError, KeyError):
+        return 422, "scope6_request_conditions_invalid"
+
+
+def install_scope6_guard(app):
+    from starlette.responses import JSONResponse
+    @app.middleware("http")
+    async def scope6(request, call_next):
+        pairs = list(request.query_params.multi_items())
+        refused = scope_request_error(request.method, request.url.path, pairs, b"{}" if request.method == "POST" else b"")
+        if refused:
+            return JSONResponse({"detail": refused[1]}, status_code=refused[0])
+        limit = 4096 if request.method == "POST" else 0
+        chunks, size = [], 0
+        async for part in request.stream():
+            size += len(part)
+            if size > limit:
+                return JSONResponse({"detail": "scope6_request_body_bound" if limit else "scope6_get_body_forbidden"}, status_code=413 if limit else 422)
+            chunks.append(part)
+        body = b"".join(chunks)
+        refused = scope_request_error(request.method, request.url.path, pairs, body)
+        if refused:
+            return JSONResponse({"detail": refused[1]}, status_code=refused[0])
+        request._body = body
+        return await call_next(request)
+
+
 def serve(preloaded_store=None):
     global PRELOADED_SOURCE
     from starlette.responses import JSONResponse
     import uvicorn
     cutoff = date.fromisoformat(ARGS.cutoff)
+    if cutoff == worker.EIGHTH_CUTOFF and preloaded_store is not None:
+        raise ValueError("new eight-stock entry forbids preloading or replay")
     if JOINT_ACTIVE and preloaded_store is not None:
         raise ValueError("joint entry forbids a preloaded Store")
     if (ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
     fixture = saved_consumer_fixture() if SAVED_FOCUS_ACTIVE else MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
-    if SAVED_FOCUS_ACTIVE:
-        fixture.validation_baseline = database_snapshot(fixture)
+    fixture.validation_baseline = database_snapshot(fixture)
+    fixture.source_initial_empty_store = not fixture.store._attempted and fixture.store.raw_capture is None and fixture.store._request_count == 0
     if JOINT_ACTIVE:
         configure_joint(fixture)
     if PRIVATE_ROOT:
@@ -472,11 +584,17 @@ def serve(preloaded_store=None):
                 SOURCE_REQUESTS.append({"method": "GET", "url": worker.ENDPOINT})
                 RUNNER_SOURCE_REQUESTS += 1
                 original_on_request()
-            LIVE_ACTIVE = True
+            if NEW_PRICE_LIVE:
+                PRICE_CONTEXT.active = True; PRICE_CONTEXT.request_count = 0; PRICE_CONTEXT.addresses = set()
+            else:
+                LIVE_ACTIVE = True
             try:
                 return worker.capture_price(**kwargs, on_request=on_request)
             finally:
-                LIVE_ACTIVE = False
+                if NEW_PRICE_LIVE:
+                    PRICE_CONTEXT.active = False; PRICE_CONTEXT.addresses.clear()
+                else:
+                    LIVE_ACTIVE = False
         fixture.store._loader = loader
     @fixture.app.middleware("http")
     async def scope(request, call_next):
@@ -490,6 +608,8 @@ def serve(preloaded_store=None):
         allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in post_paths)
         if not allowed: return JSONResponse({"detail": "preview operation outside scope"}, status_code=405)
         return await call_next(request)
+    if NEW_PRICE_LIVE:
+        install_scope6_guard(fixture.app)
     @fixture.app.get("/__price_validation/receipt")
     def diagnostic(include_raw: bool = False):
         result = receipt(fixture, include_raw)

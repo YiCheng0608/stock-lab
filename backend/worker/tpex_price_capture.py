@@ -25,7 +25,8 @@ SOURCE_ID = "tpex_11370_daily_close_csv"
 ENDPOINT = "https://www.tpex.org.tw/web/stock/aftertrading/DAILY_CLOSE_quotes/stk_quote_result.php?l=zh-tw&o=data"
 CUTOFF = date(2026, 10, 5)
 NEW_CUTOFF = date(2026, 10, 6)
-APPROVED_CUTOFFS = (CUTOFF, NEW_CUTOFF)
+EIGHTH_CUTOFF = date(2026, 10, 7)
+APPROVED_CUTOFFS = (CUTOFF, NEW_CUTOFF, EIGHTH_CUTOFF)
 MAX_BODY_BYTES = 3 * 1024 * 1024
 DEADLINE_SECONDS = 30
 MAX_INT64 = "9223372036854775807"
@@ -118,6 +119,13 @@ SEVENTH_SCOPE_POLICY_VERSION = "m2-stock-scope-tpex-11370-2026-10-06.5"
 _POLICY_STOCK_SCOPE_20261006_V5 = deepcopy(_POLICY_STOCK_SCOPE_20261006_V4)
 _POLICY_STOCK_SCOPE_20261006_V5["version"] = SEVENTH_SCOPE_POLICY_VERSION
 _POLICY_STOCK_SCOPE_20261006_V5["scope"]["symbols"] = {"3105": "穩懋", "3293": "鈊象", "5274": "信驊", "5347": "世界", "6488": "環球晶", "6510": "精測", "8069": "元太"}
+EIGHTH_SCOPE_POLICY_VERSION = "m2-stock-scope-tpex-11370-2026-10-07.1"
+_POLICY_STOCK_SCOPE_20261007 = deepcopy(_POLICY_STOCK_SCOPE_20261006_V5)
+_POLICY_STOCK_SCOPE_20261007["version"] = EIGHTH_SCOPE_POLICY_VERSION
+_POLICY_STOCK_SCOPE_20261007["scope"]["cutoff"] = "2026-10-07"
+_POLICY_STOCK_SCOPE_20261007["scope"]["symbols"] = {"3105": "穩懋", "3293": "鈊象", "5274": "信驊", "5347": "世界", "6223": "旺矽", "6488": "環球晶", "6510": "精測", "8069": "元太"}
+_POLICY_STOCK_SCOPE_20261007["validation"]["expected_body_sha256"] = "eaa1eaf37ff3e2305629dced8b0f6945a063b05841c69d75f826960e6bd819c8"
+_POLICY_STOCK_SCOPE_20261007["attribution"]["release_version"] = "data-date-2026-10-07"
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)", re.ASCII)
 _DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", re.ASCII)
 _CODE = re.compile(r"[0-9A-Z]{4,12}", re.ASCII)
@@ -138,7 +146,8 @@ def digest(value: Any) -> str:
 def price_policy(cutoff: date = CUTOFF, *, policy_version: str | None = None) -> dict:
     if type(cutoff) is not date or cutoff not in APPROVED_CUTOFFS:
         raise PriceCaptureError("price_cutoff_not_supported")
-    policies = [_POLICY] if cutoff == CUTOFF else [_POLICY_20261006, _POLICY_STOCK_SCOPE_20261006, _POLICY_STOCK_SCOPE_20261006_V2, _POLICY_STOCK_SCOPE_20261006_V3, _POLICY_STOCK_SCOPE_20261006_V4, _POLICY_STOCK_SCOPE_20261006_V5]
+    policies = ([_POLICY] if cutoff == CUTOFF else [_POLICY_STOCK_SCOPE_20261007] if cutoff == EIGHTH_CUTOFF else
+                [_POLICY_20261006, _POLICY_STOCK_SCOPE_20261006, _POLICY_STOCK_SCOPE_20261006_V2, _POLICY_STOCK_SCOPE_20261006_V3, _POLICY_STOCK_SCOPE_20261006_V4, _POLICY_STOCK_SCOPE_20261006_V5])
     if policy_version is None:
         return deepcopy(policies[-1])
     for policy in policies:
@@ -153,6 +162,8 @@ def policy_symbols(cutoff: date, *, policy_version: str | None = None) -> dict[s
 
 def worker_version(cutoff: date, *, policy_version: str | None = None) -> str:
     policy = price_policy(cutoff, policy_version=policy_version)
+    if policy["version"] == EIGHTH_SCOPE_POLICY_VERSION:
+        return "tpex-price-capture/m2-stock-scope-v6"
     if policy["version"] == SEVENTH_SCOPE_POLICY_VERSION:
         return "tpex-price-capture/m2-stock-scope-v5"
     if policy["version"] == SIXTH_SCOPE_POLICY_VERSION:

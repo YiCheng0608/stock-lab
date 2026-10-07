@@ -116,6 +116,7 @@ export function validPriceLotFocus(value: unknown, asOf: string, minLots: string
   if (!value || typeof value !== 'object' || !validFocusDate(asOf)) return false
   const data = value as PriceLotFocusData, minimum = minLotsShares(minLots)
   const symbols = data.supported_scope?.symbols
+  const eightScope = asOf === '2026-10-07' && same(symbols, ['3105', '3293', '5274', '5347', '6223', '6488', '6510', '8069'])
   const sevenScope = same(symbols, ['3105', '3293', '5274', '5347', '6488', '6510', '8069'])
   const sixScope = same(symbols, ['3105', '3293', '5274', '5347', '6488', '8069'])
   const fiveScope = same(symbols, ['3105', '3293', '5274', '5347', '6488'])
@@ -124,7 +125,7 @@ export function validPriceLotFocus(value: unknown, asOf: string, minLots: string
   const pins = priceSourcePins(asOf, asOf === '2026-10-06' ? sevenScope ? undefined : sixScope ? PRICE_SCOPE_POLICY_VERSION_V4 : fiveScope ? PRICE_SCOPE_POLICY_VERSION_V3 : fourScope ? PRICE_SCOPE_POLICY_VERSION_V2 : threeScope ? PRICE_SCOPE_POLICY_VERSION : 'm1-price-tpex-11370-2026-10-06.1' : undefined)
   const expectedSymbols = pins?.symbols ?? ['3105', '6488']
   if (!same(symbols, expectedSymbols) || minimum === null || minTurnoverValue(minTurnover) === null || minRangeMilliPct(minRangePct) === null || !validPriceFocusDayMove(dayMove)
-    || !(sevenScope ? data.version === 'price-lot-focus/m2-v9' : sixScope ? data.version === 'price-lot-focus/m2-v8' : fiveScope ? data.version === 'price-lot-focus/m2-v7' : fourScope ? data.version === 'price-lot-focus/m2-v6' : data.version === 'price-lot-focus/m2-v5' || (!threeScope && data.version === 'price-lot-focus/m2-v4')) || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
+    || !(eightScope ? data.version === 'price-lot-focus/m2-v10' : sevenScope ? data.version === 'price-lot-focus/m2-v9' : sixScope ? data.version === 'price-lot-focus/m2-v8' : fiveScope ? data.version === 'price-lot-focus/m2-v7' : fourScope ? data.version === 'price-lot-focus/m2-v6' : data.version === 'price-lot-focus/m2-v5' || (!threeScope && data.version === 'price-lot-focus/m2-v4')) || data.day_move !== dayMove || data.min_turnover !== minTurnover || data.min_range_pct !== minRangePct || data.as_of !== asOf || data.min_lots !== minLots || data.min_shares !== minimum
     || !['available', 'unavailable'].includes(data.status) || data.historical_pit !== 'unsupported' || data.sort !== 'code_ascending'
     || typeof data.can_capture !== 'boolean' || !Array.isArray(data.items) || !Array.isArray(data.reads) || !Array.isArray(data.reasons)
     || data.reasons.some((reason) => typeof reason !== 'string')

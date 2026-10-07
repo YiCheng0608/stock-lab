@@ -890,11 +890,12 @@ export function PriceLotFocusPanel() {
       if (currentKey.current === key) setCaptureError({ key, message: error instanceof Error ? error.message : '取得失敗' })
     } finally { pending.current = false; setBusy(false) }
   }
-  const accepted = enabled && validPriceLotFocus(query.data, asOf, minLots, dayMove, minTurnover, minRangePct)
+  const currentScopeFailure = asOf === '2026-10-07' && Boolean(query.error || captureError?.key === key)
+  const accepted = enabled && !currentScopeFailure && validPriceLotFocus(query.data, asOf, minLots, dayMove, minTurnover, minRangePct)
   const data = accepted ? query.data : undefined
   return <section className="panel official-event-focus" aria-labelledby="price-lot-focus-title">
     <div className="section-head overview-head"><div><div className="eyebrow">指定來源日 · 上櫃普通股</div><h2 id="price-lot-focus-title">成交張數關注</h2></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。10/5 已核 3105 穩懋、6488 環球晶；2026-10-06 本次政策支持 3105 穩懋、3293 鈊象、5274 信驊、5347 世界、6488 環球晶、6510 精測、8069 元太七股，既有六股、五股、四股、三股及兩股政策仍可讀取。每次服務只取得一份指定日期原件，依本次已核範圍篩選。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
+    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。2026-10-07 政策支持 3105 穩懋、3293 鈊象、5274 信驊、5347 世界、6223 旺矽、6488 環球晶、6510 精測、8069 元太八股。10/5 原兩股與10/6 原七股及較早政策保留；不同日期與政策的原件分開核對。每次服務只取得一份指定日期原件，依本次已核範圍篩選。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
     <form className="overview-cutoff-control" onSubmit={apply}>
       <label htmlFor="price-focus-date">來源日期</label><input id="price-focus-date" type="date" required value={dateDraft} onChange={(event) => setDateDraft(event.currentTarget.value)} />
       <label htmlFor="price-focus-min-lots">最小成交張數</label><input id="price-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} placeholder="例如 20000，最多三位小數" onChange={(event) => setLotsDraft(event.currentTarget.value)} />
@@ -909,7 +910,8 @@ export function PriceLotFocusPanel() {
     {!enabled && <div className="empty" role="status">請設定有效且不重複的來源日期、成交張數、成交金額、單日方向與本日振幅條件；尚未查詢候選。</div>}
     {enabled && query.isLoading && <div className="empty">讀取成交張數關注…</div>}
     {(query.error || captureError?.key === key) && <div className="warning-box" role="status">{captureError?.key === key ? captureError.message : '關注清單讀取失敗。'}</div>}
-    {enabled && query.data && !accepted && <div className="warning-box" role="status">來源、日期或條件回應未通過核對，關注清單暫不可用。</div>}
+    {currentScopeFailure && <div className="empty focus-unavailable" role="status">本次讀取失敗，候選數未知；請明示讀取已取得原件後再核對。</div>}
+    {enabled && query.data && !accepted && !currentScopeFailure && <div className="warning-box" role="status">來源、日期或條件回應未通過核對，關注清單暫不可用。</div>}
     {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{data.reasons.includes('price_memory_capture_missing') ? '尚未取得指定日期原件，候選數未知；可首次載入官方單日行情。' : '此日期或來源資料不足，候選數未知。'}這與符合條件的零候選不同。</div>}
     {data?.status === 'available' && <>
       <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {minLots} 張 · 金額 ≥ {exactTurnoverText(minTurnover)} 元 · 方向 {priceFocusDayMoveLabels[dayMove]} · 振幅 ≥ {minRangePct}% · 已核 {data.reads.length} 股，符合 {data.count} 檔。</div>
@@ -1410,10 +1412,15 @@ function StockPage() {
   if (query.error && !(asOf === '2026-10-06' && query.data)) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const priceMemory = data.overview?.price_memory
+  const currentScopePriceFailure = asOf === '2026-10-07' && priceRequestFailure?.key === priceRequestKey
+  const displayOverview = currentScopePriceFailure && data.overview?.price_memory ? { ...data.overview, price_memory: {
+    ...data.overview.price_memory, status: 'unavailable' as const, latest: null, bars: [], provenance: null, attribution: null,
+    reasons: ['price_read_request_failed'], capture_state: { ...data.overview.price_memory.capture_state, can_capture: false },
+  } } : data.overview
+  const priceMemory = displayOverview?.price_memory
   const priceCutoff = asOf || data.overview?.as_of || null
   const memoryKnown = !privateSavedOnly && (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
-  const memoryRejected = priceMemory?.status === 'available' && !memoryKnown
+  const memoryRejected = currentScopePriceFailure || priceMemory?.status === 'available' && !memoryKnown
   const priceSaved = privateRead?.token === privateToken ? privateRead.data : undefined
   const jointFailure = jointScope ? jointValidation.current.failure ?? (query.error ? 'window_read_request_failed' : jointEvidenceInvalid ? 'chips_memory_evidence_invalid' : null) : null
   const savedKnown = !jointFailure && privateFailure?.token !== privateToken && asOf === data.overview?.as_of && validStockPriceSavedRead(priceSaved, data.instrument, asOf) && (!privateSavedOnly || Boolean(savedFocusBack) && validSavedFocusStock(priceSaved, data.instrument, asOf))
@@ -1505,12 +1512,12 @@ function StockPage() {
     </PageTitle>
     {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
     {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
+    {displayOverview && <StockOverview data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : privateSavedOnly || memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-07' ? officialBar!.date : officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : privateSavedOnly || memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}

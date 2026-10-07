@@ -526,6 +526,20 @@ Actual只FIRST index2／1502B、daily0，Oct10/7超immutable10/6scope而拒用�
 API／preview正常stop各raw1，ROOT owned cleanup raw0核processes absent／8799+8800無listener，ONEpageclose raw0／fresh tabs[]；commands/PIDs/lifecycle receipts留ROOT task，功能與清理分報。停API後native只證masked，沒有HTTP502status／positive→clear驗收。Matching／verifiedzero／jointdetail／八RAWback／負門檻actual未驗；actual missing-file NOT RUN，未跑fullsuite/install/productionbuild/diskcases。
 
 來源/caps/no-retry由[§34](../SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)管理。Private1791644B／3files／原3dirs ATCAP仍disk保留；ENTIRE DAY-RANGE worktree/branch及.range-ui、TURNOVER/較舊資源排除cleanup，禁替代tool/path/owner／逐檔/rename/containingtree、copy/export/publish/delete/newdiskcases。Core0/dep0/reliability0/stall1；unavailable受驗不解除正向來源依賴。
+### M2-FOCUS-STOCK-SCOPE-6 八股新來源日的零落盤驗證入口
+
+沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`、共用pinned dependencies、Python `-B -X utf8`／guarded SQLite `:memory:`、Node `write:false/noEmit/incremental:false/composite:false`；未install／建helper／disk fixture／新環境／正式DB。新policy／worker／projection／consumer pins及有限FIRST範圍由[來源 §35](../SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)管理，exact啟動命令及所有raw exits留ROOT原task，不另授權重跑。
+
+必要final證據已接受：Py8＋30guards raw0；pinned Node18＋19＋16SSR＋30guards及full36src noEmit raw0。Early synthetic flat方向預期錯誤SSR raw1修正後0；intermediate compiler SIGTERM不當通過，final PID28028 exit0。Read-only DOM selector raw1及native Ctrl+A append／SAME page Home/Delete修正收據保留，不抹除無效動作。
+
+Memory fixture caps80KiB serialized／512KiB graph：Py max81050B／213428B、Node72387B／307860B；都是estimate，非RSS或construction peak。19 memory tables的schema／index／trigger／全values／每cell typeof preserved；guards0／newdisk0／private0／financeSeed0／preloaded=false。Metadata7 attempts包含兩未知partial，不聲稱總bytes已知；financialGET2／known3586610B／兩份1793305B原件及ORIGINAL receipts見來源§35。
+
+ONE native page、183 ALLtrusted events、actual API九案、desktop／窄版detail＋五RAWback、真零／恢復及same page post-stop HTTP502清值由[個股頁 §40](../STOCK_RESEARCH_PAGE.md#40-m2-focus-stock-scope-6八股四條件與同截止往返)管理。Final preview20 localAPI GET／1POST／14rejected不是finance GET。停止後detail error actual NOT RUN（SSR不代actual）；沒有restart或重抓。
+
+Cleanup分報：API normalstop session13309 rawexit1、preview15835 rawexit1；ROOT2920ca raw0獨立核54084／14816／50816／13292／23404／esbuild43744 absent、8799＋8800無listener。ONE pageclose `8c35344b-edac-4d7a-8078-4c6b09112f3c` raw0，fresh tabs[] receipt `1e80df05-2273-4180-9efd-e79229f5b8b4`；只此owned scope，沒有刪私人或其他worktree。Inherited private／DAY-RANGE／MAIN5／holiday及failed chips NO-RETRY依[協作紀錄](../TASK_COORDINATION.md)保持。
+
+Coreoperation+1／standalone dependency0／reliability+1／stall1→0；未跑old/full suite／production build／install／diskcases／actual post-stop detail error。完整M1／M2／M3、PIT／ordinary20或21close history／strategy／time／execution未完成。DOC／freeze／qualified index／Git尚待ROOT original-task接受。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。
