@@ -38,6 +38,14 @@ from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
 from .stock_independent_reads import independent_dates
 
 OVERVIEW_VERSION = "stock-overview/w8-v1"
+
+
+def _institutional_windows(exchange, symbol, cutoff, *, explicit_as_of=None):
+    from . import institutional_windows_1006_calendar as calendar
+    reader = calendar.build_institutional_windows if os.environ.get(calendar.ENABLE_ENV) == "1" else build_institutional_windows
+    return reader(exchange, symbol, cutoff, explicit_as_of=explicit_as_of)
+
+
 REGISTRY_VERSION = "r1-a1-c009-2026-09-12.1"
 REGISTRY_DIGEST = "sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b"
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "worker" / "source_registry.json"
@@ -290,7 +298,7 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
                    "from": qualified[0]["date"] if qualified else None, "to": qualified[-1]["date"] if qualified else None,
                    "market_read": market_read,
                   "latest": latest, "bars": qualified, "rejected": rejected, "reasons": price_reasons},
-        "institutional": build_institutional_windows(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=explicit_as_of),
+        "institutional": _institutional_windows(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=explicit_as_of),
         "price_memory": build_tpex_price(instrument, cutoff),
         "institutional_daily": daily,
         "conditions": conditions,

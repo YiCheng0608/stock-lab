@@ -27,6 +27,7 @@ mode.add_argument("--scope-check", action="store_true")
 mode.add_argument("--saved-focus-check", action="store_true")
 mode.add_argument("--joint-check", action="store_true")
 mode.add_argument("--saved-price-chips-focus-check", action="store_true")
+mode.add_argument("--saved-price-chips-focus-calendar-check", action="store_true")
 mode.add_argument("--private-save-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
@@ -46,6 +47,7 @@ parser.add_argument("--chips-policy-digest")
 parser.add_argument("--joint-policy-version")
 parser.add_argument("--joint-policy-digest")
 parser.add_argument("--saved-price-chips-focus-opt-in", action="store_true")
+parser.add_argument("--saved-price-chips-focus-calendar-opt-in", action="store_true")
 parser.add_argument("--joint-focus-policy-version")
 parser.add_argument("--joint-focus-policy-digest")
 parser.add_argument("--disk-phase", choices=("check", "write", "read", "faults", "cleanup"), default="check")
@@ -72,8 +74,9 @@ if SAVED_FOCUS_ACTIVE and (not ARGS.saved_source_only or
         (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest) !=
         ("m1-saved-price-focus-tpex-11370-2026-10-06.1", "sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b")):
     parser.error("saved focus requires saved-source-only and independently admitted consumer pins")
-JOINT_FOCUS_ACTIVE = ARGS.saved_price_chips_focus_opt_in
-if JOINT_FOCUS_ACTIVE and ARGS.saved_price_chips_opt_in:
+CALENDAR_ACTIVE = ARGS.saved_price_chips_focus_calendar_opt_in
+JOINT_FOCUS_ACTIVE = ARGS.saved_price_chips_focus_opt_in or CALENDAR_ACTIVE
+if sum((ARGS.saved_price_chips_opt_in, ARGS.saved_price_chips_focus_opt_in, CALENDAR_ACTIVE)) > 1:
     parser.error("choose one independently admitted joint consumer")
 if not JOINT_FOCUS_ACTIVE and any((ARGS.joint_focus_policy_version, ARGS.joint_focus_policy_digest)):
     parser.error("new focus pins require explicit new focus opt-in")
@@ -138,6 +141,22 @@ def socketpair_context():
     return False
 
 
+def calendar_transport_allowed(event, args):
+    """Authority is bounded to the currently admitted request's own thread."""
+    if (not CALENDAR_ACTIVE or not getattr(CHIPS_CONTEXT, "active", False)
+            or getattr(CHIPS_CONTEXT, "method", None) != "GET"
+            or getattr(CHIPS_CONTEXT, "body", None) != b""
+            or getattr(CHIPS_CONTEXT, "request_count", 0) != 1
+            or getattr(CHIPS_CONTEXT, "target", None) not in getattr(CHIPS_CONTEXT, "urls", ())):
+        return False
+    if event == "socket.getaddrinfo":
+        return args[0] in {"www.tpex.org.tw", b"www.tpex.org.tw"} and args[1] == 443
+    if event == "socket.connect":
+        address = args[1]
+        return isinstance(address, tuple) and (address[0], address[1]) in getattr(CHIPS_CONTEXT, "addresses", set())
+    return False
+
+
 def audit(event, args):
     global PRICE_HTTP_REQUESTS
     if event == "urllib.Request" and NEW_PRICE_LIVE:
@@ -181,9 +200,9 @@ def audit(event, args):
         if event in {"socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyaddr"}:
             allowed = allowed or address in {"localhost", "127.0.0.1", "::1", None}
             scoped_live = ARGS.live_source_opt_in and price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)
-            allowed = allowed or (price_transport_allowed(event, args) if NEW_PRICE_LIVE else scoped_live and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
+            allowed = allowed or (calendar_transport_allowed(event, args) if CALENDAR_ACTIVE else price_transport_allowed(event, args) if NEW_PRICE_LIVE else scoped_live and address in {"www.tpex.org.tw", b"www.tpex.org.tw"} and (event != "socket.getaddrinfo" or args[1] == 443))
         if event == "socket.connect" and (ARGS.live_source_opt_in and price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)):
-            allowed = price_transport_allowed(event, args) if NEW_PRICE_LIVE else isinstance(address, tuple) and (address[0], address[1]) in APPROVED_ADDRESSES
+            allowed = calendar_transport_allowed(event, args) if CALENDAR_ACTIVE else price_transport_allowed(event, args) if NEW_PRICE_LIVE else isinstance(address, tuple) and (address[0], address[1]) in APPROVED_ADDRESSES
         if not allowed:
             COUNTS["unapproved_network"] += 1
             raise AssertionError("network outside owned scope denied")
@@ -231,7 +250,7 @@ sys.addaudithook(audit)
 def resolver(host, port, *args, **kwargs):
     answers = original_resolver(host, port, *args, **kwargs)
     if (price_live_active() or JOINT_ACTIVE and getattr(CHIPS_CONTEXT, "active", False)) and host in {"www.tpex.org.tw", b"www.tpex.org.tw"} and port == 443:
-        addresses = PRICE_CONTEXT.addresses if NEW_PRICE_LIVE else APPROVED_ADDRESSES
+        addresses = CHIPS_CONTEXT.addresses if CALENDAR_ACTIVE else PRICE_CONTEXT.addresses if NEW_PRICE_LIVE else APPROVED_ADDRESSES
         addresses.update((answer[4][0], answer[4][1]) for answer in answers)
     return answers
 
@@ -311,16 +330,24 @@ def saved_consumer_fixture():
 def configure_joint(fixture):
     """Only the admitted transport's current thread may open the exact source URLs."""
     import httpx
-    from app import saved_price_chips_entry as entry, institutional_windows_1006 as windows, institutional_windows as old
+    from app import institutional_windows as old
+    if CALENDAR_ACTIVE:
+        from app import saved_price_chips_calendar_entry as entry, institutional_windows_1006_calendar as windows
+    else:
+        from app import saved_price_chips_entry as entry, institutional_windows_1006 as windows
     from app import price_saved_focus as focus
-    from worker import tpex_institutional_1006 as chips
+    if CALENDAR_ACTIVE:
+        from worker import tpex_institutional_1006_calendar as chips
+    else:
+        from worker import tpex_institutional_1006 as chips
     entry.validate_admission(ARGS.joint_policy_version, ARGS.joint_policy_digest, {
         "price_capture": (ARGS.policy_version, ARGS.policy_digest),
         "price_storage": (ARGS.private_policy_version, ARGS.private_policy_digest),
         "saved_focus": (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest),
         "institutional": (ARGS.chips_policy_version, ARGS.chips_policy_digest)})
     if JOINT_FOCUS_ACTIVE:
-        from app import saved_price_chips_focus as joint_focus
+        from importlib import import_module
+        joint_focus = import_module('app.saved_price_chips_calendar_focus' if CALENDAR_ACTIVE else 'app.saved_price_chips_focus')
         joint_focus.validate_admission(ARGS.joint_focus_policy_version, ARGS.joint_focus_policy_digest, {
             "price_capture": (ARGS.policy_version, ARGS.policy_digest),
             "price_storage": (ARGS.private_policy_version, ARGS.private_policy_digest),
@@ -340,24 +367,39 @@ def configure_joint(fixture):
         def handle_request(self, request):
             target = str(request.url)
             if (not JOINT_ACTIVE or request.method != "GET" or target not in self.urls
-                    or target in {item["url"] for item in self.requests} or len(self.requests) >= 22):
+                    or target in {item["url"] for item in self.requests} or len(self.requests) >= 22
+                    or CALENDAR_ACTIVE and request.content != b""):
                 raise AssertionError("joint_unapproved_or_repeated_source_request")
             self.requests.append({"method": "GET", "url": target})
+            if CALENDAR_ACTIVE:
+                CHIPS_CONTEXT.addresses = set()
+                CHIPS_CONTEXT.target, CHIPS_CONTEXT.method, CHIPS_CONTEXT.body = target, request.method, request.content
+                CHIPS_CONTEXT.request_count, CHIPS_CONTEXT.urls = 1, frozenset(self.urls)
             CHIPS_CONTEXT.active = True
             try:
                 return self.inner.handle_request(request)
             finally:
                 CHIPS_CONTEXT.active = False
+                if CALENDAR_ACTIVE:
+                    CHIPS_CONTEXT.addresses.clear()
+                    CHIPS_CONTEXT.target, CHIPS_CONTEXT.urls = None, ()
         def close(self):
             self.inner.close()
     fixture.chips_transport = ChipsTransport()
     fixture.stack.callback(fixture.chips_transport.close)
-    fixture.chips_store = windows.InstitutionalWindowStore1006(transport=fixture.chips_transport)
+    store_type = windows.InstitutionalWindowStore1006Calendar if CALENDAR_ACTIVE else windows.InstitutionalWindowStore1006
+    fixture.chips_store = store_type(transport=fixture.chips_transport)
     fixture.old_chips_store = old.InstitutionalWindowStore(transport=httpx.MockTransport(
         lambda request: (_ for _ in ()).throw(AssertionError("old_chips_source_denied"))))
     fixture.stack.enter_context(patch.object(windows, "STORE", fixture.chips_store))
     fixture.stack.enter_context(patch.object(old, "STORE", fixture.old_chips_store))
     fixture.stack.enter_context(patch.object(focus, "MAX_READS", entry.PRODUCER_READ_LIMIT))
+    if CALENDAR_ACTIVE:
+        if focus._READ_COUNT != 0:
+            raise ValueError("calendar_producer_requires_fresh_private_counter")
+        from app import api as router_api, stock_overview
+        fixture.stack.enter_context(patch.object(router_api, "capture_institutional_windows", windows.capture_institutional_windows))
+        fixture.stack.enter_context(patch.object(stock_overview, "build_institutional_windows", windows.build_institutional_windows))
     fixture.stack.enter_context(patch.dict(os.environ, {windows.ENABLE_ENV: "1", windows.VERSION_ENV: ARGS.chips_policy_version,
         windows.DIGEST_ENV: ARGS.chips_policy_digest, old.ENABLE_ENV: "0"}))
     (joint_focus if JOINT_FOCUS_ACTIVE else entry).install_request_gate(fixture.app)
@@ -399,14 +441,16 @@ def receipt(fixture=None, include_raw=False):
         from app.price_saved_focus import read_diagnostics
         result["saved_focus_consumer"] = read_diagnostics()
     if JOINT_ACTIVE and fixture:
-        from app import saved_price_chips_entry as entry
+        from importlib import import_module
+        entry = import_module('app.saved_price_chips_calendar_entry' if CALENDAR_ACTIVE else 'app.saved_price_chips_entry')
         result["joint_entry"] = entry.held_diagnostic(fixture.chips_store)
         result["joint_entry"].update(source_requests=list(fixture.chips_transport.requests),
             source_request_count=len(fixture.chips_transport.requests), old_store_empty=not fixture.old_chips_store._attempted and not fixture.old_chips_store.raw_captures,
             price_store_empty=not fixture.store._attempted and fixture.store.raw_capture is None,
             private_metadata_io_by_diagnostic=0, preloaded_source=False)
         if JOINT_FOCUS_ACTIVE:
-            from app import saved_price_chips_focus as joint_focus
+            from importlib import import_module
+            joint_focus = import_module('app.saved_price_chips_calendar_focus' if CALENDAR_ACTIVE else 'app.saved_price_chips_focus')
             result["joint_focus"] = joint_focus.STATE.diagnostic()
     return result
 
@@ -450,7 +494,7 @@ def check():
         print(json.dumps(output, ensure_ascii=False), flush=True)
         return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
-    for name in (("test_tpex_price_capture.PriceParserTests.test_eight_stock_new_day_and_all_immutable_pins", "test_tpex_price_store.PriceStoreTests.test_eighth_new_day_single_attempt_and_old_tuple_isolation", "test_tpex_price_api.PriceAPITests.test_eighth_new_day_router_read_only_and_explicit_cutoff", "test_tpex_price_api.PriceAPITests.test_eighth_runner_request_local_transport", "test_tpex_price_api.PriceAPITests.test_eighth_runner_body_and_request_gate_before_loader", "test_price_focus.PriceFocusTests.test_eighth_new_day_exact_boundaries_and_raw_five_return", "test_price_focus.PriceFocusTests.test_eighth_missing_identity_and_filtered_read_block_zero", "test_price_focus.PriceFocusTests.test_eighth_invalid_routes_and_failed_attempt_never_retry") if ARGS.scope_check else ("test_saved_price_chips_focus",) if ARGS.saved_price_chips_focus_check else ("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
+    for name in (("test_tpex_price_capture.PriceParserTests.test_eight_stock_new_day_and_all_immutable_pins", "test_tpex_price_store.PriceStoreTests.test_eighth_new_day_single_attempt_and_old_tuple_isolation", "test_tpex_price_api.PriceAPITests.test_eighth_new_day_router_read_only_and_explicit_cutoff", "test_tpex_price_api.PriceAPITests.test_eighth_runner_request_local_transport", "test_tpex_price_api.PriceAPITests.test_eighth_runner_body_and_request_gate_before_loader", "test_price_focus.PriceFocusTests.test_eighth_new_day_exact_boundaries_and_raw_five_return", "test_price_focus.PriceFocusTests.test_eighth_missing_identity_and_filtered_read_block_zero", "test_price_focus.PriceFocusTests.test_eighth_invalid_routes_and_failed_attempt_never_retry") if ARGS.scope_check else ("test_tpex_institutional_1006_calendar", "test_saved_price_chips_calendar_focus") if ARGS.saved_price_chips_focus_calendar_check else ("test_saved_price_chips_focus",) if ARGS.saved_price_chips_focus_check else ("test_saved_price_chips_entry",) if ARGS.joint_check else ("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
@@ -617,7 +661,8 @@ def serve(preloaded_store=None):
             return JSONResponse({"detail": "diagnostic response bound"}, status_code=413)
         return result
     if JOINT_ACTIVE:
-        from app import saved_price_chips_entry as entry
+        from importlib import import_module
+        entry = import_module('app.saved_price_chips_calendar_entry' if CALENDAR_ACTIVE else 'app.saved_price_chips_entry')
         @fixture.app.get("/__price_validation/chips/raw")
         def raw_diagnostic(index: int):
             try:

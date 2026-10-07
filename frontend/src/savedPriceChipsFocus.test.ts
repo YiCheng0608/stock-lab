@@ -140,3 +140,76 @@ export function jointFixtureInputBytes(data: JointFocusData): number {
     price_rows: data.price!.reads.map((read) => read.price_saved.latest!.source_fields),
     calendar: data.institutional[0].calendar!.rows!.map((row) => row.source_values), daily: data.institutional.map((read) => read.windows!['20'].daily_evidence!.map((evidence) => evidence.row.source_values)) })).byteLength
 }
+
+export function calendarJointFixture(values = jointFixtureConditions(), shared?: JointFocusData): JointFocusData {
+  const original = shared ? jointFixture(values, shared.price!, shared.institutional) : jointFixture(values)
+  if (shared) return { ...original, version: 'price-saved-chips-focus-calendar/m1-v2',
+    policy_version: 'm1-saved-price-chips-focus-calendar-tpex-2026-10-06.2',
+    policy_digest: 'sha256:42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc',
+    items: original.items.map((item) => ({ ...item, detail_url: jointDetailPath(item.symbol, values, true) })) }
+  const replacements: Array<[string, string]> = [
+    ['chips-1006-v1', 'chips-1006-calendar-v2'],
+    ['m1-chips-cutoff-tpex-2026-10-06.1', 'm1-chips-cutoff-calendar-tpex-2026-10-06.2'],
+    [CHIPS1006_POLICY_DIGEST, 'sha256:1acf97b7dd0f13b9b49ed3293497e52ca52ea077256b8d99d9bc21ed5761d403'],
+    [calendarVersion, 'tpex-2026-09-01_2026-10-06-full-month-observed-2026-10-07-11503027221/chips-calendar-v2'],
+    ['/chips-v1', '/chips-calendar-v2'],
+    ['free_public_local', 'free_public_local_full_month_cutoff'],
+  ]
+  let text = JSON.stringify(original.institutional)
+  for (const [from, to] of replacements) text = text.split(from).join(to)
+  const institutional = JSON.parse(text) as InstitutionalWindowsData[]
+  for (const read of institutional) {
+    read.capture_state!.can_capture = false
+    const calendar = read.calendar!
+    calendar.observation_date = '2026-10-07'
+    calendar.original_expected_dates = [...dates, '2026-10-07']
+    calendar.original_valid_dates = [...dates, '2026-10-07']
+    calendar.post_cutoff_dates = ['2026-10-07']
+    const last = calendar.rows![23]
+    calendar.original_rows = [...calendar.rows!, { ...last, date: '2026-10-07', row_ordinal: 5,
+      source_values: { ...last.source_values, '資料日期': '20261007' } }]
+    calendar.evidence = calendar.evidence!.map((receipt, index) => ({ ...receipt,
+      candidate_count: [20, 5][index], post_cutoff_row_count: [0, 1][index],
+      validation_scope: 'all_returned_month_rows_including_valid_post_cutoff_rows' }))
+  }
+  return compactFixture({ ...original, version: 'price-saved-chips-focus-calendar/m1-v2',
+    policy_version: 'm1-saved-price-chips-focus-calendar-tpex-2026-10-06.2',
+    policy_digest: 'sha256:42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc',
+    institutional, items: original.items.map((item) => ({ ...item, detail_url: jointDetailPath(item.symbol, values, true) })) })
+}
+
+export let largestCalendarFixtureGraphBytes = 0
+
+export function runCalendarFocusTests(): number {
+  let checks = 0
+  const check = (condition: unknown, message: string) => { checks++; if (!condition) throw new Error(message) }
+  const values = jointFixtureConditions({ min_net_lots: '-0.001', min_lots: '0.000', min_range_pct: '0.000' })
+  const data = calendarJointFixture(values)
+  check(validJointFocus(data, values, true), 'calendar complete positive')
+  check(!validJointFocus(data, values), 'old validator rejects independent calendar policy')
+  const zeroValues = jointFixtureConditions({ min_net_lots: '1000000.000' })
+  const zero = calendarJointFixture(zeroValues, data)
+  check(zero.count === 0 && validJointFocus(zero, zeroValues, true), 'calendar verified zero')
+  const params = new URL(jointDetailPath('3105', values, true), 'http://owned.invalid').searchParams
+  check(jointReturnPath(params, true) === '/saved-price-chips-focus-calendar?' + new URLSearchParams(values), 'all eight original RAW values preserved')
+  check(jointReturnPath(params) === null, 'old detail route cannot adopt calendar context')
+  check(jointReturnPath(new URLSearchParams(params + '&focus_horizon=5'), true) === null, 'duplicate detail rejects')
+  check(jointReturnPath(new URLSearchParams(params + '&unknown=1'), true) === null, 'unknown detail rejects')
+  check(jointReturnPath(new URLSearchParams(params.toString().replace('as_of=2026-10-06', 'as_of=2026-10-07')), true) === null, 'detail cutoff mismatch rejects')
+  check(jointDetailContext('TPEx', '3105', params, true) && !jointDetailContext('TPEx', '6510', params, true), 'calendar institutional universe')
+  check(!jointDetailEvidenceInvalid(data.institutional[0], 'TPEx', '3105', values.as_of, true), 'calendar joint detail valid')
+  const partial = { ...data, price: { ...data.price!, reads: data.price!.reads.slice(0, 6) } }
+  check(!validJointFocus(partial, values, true), 'all seven saved prices precede counts')
+  const missing = { ...zero, institutional: [zero.institutional[0], { ...zero.institutional[1], windows: {} }] }
+  check(!validJointFocus(missing, zeroValues, true), 'price zero cannot bypass both full windows')
+  largestCalendarFixtureGraphBytes = jointFixtureGraphBytes([data, zero, partial, missing])
+  check(largestCalendarFixtureGraphBytes <= 524288, 'aggregate shared calendar boundary graph cap')
+  let state = focusTransition({ token: 'now', epoch: 0, failure: null, price: true, chips: true }, 'now', 0, 'failure')
+  check(state.failure && !state.price && !state.chips, 'current failure clears both')
+  check(focusTransition(state, 'now', 0, 'joint') === state, 'old success cannot unmask')
+  state = focusTransition(state, 'now', 1, 'price')
+  check(state.failure && state.price && !state.chips, 'new private snapshot alone cannot recover')
+  state = focusTransition(state, 'now', 1, 'chips')
+  check(!state.failure && state.price && state.chips, 'new snapshot plus held full verification recovers')
+  return checks
+}

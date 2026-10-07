@@ -549,6 +549,15 @@ Failed capture不retry；source/provenance失敗同時清兩區數值、raw與ch
 
 只有完整七price＋兩股chips才可顯示具名真零原因；eight RAW及尾零應完整返回。這些為實作契約，本輪只有unavailable流程actual接受；未驗matching／真零／jointdetail／八RAWback／負門檻。Actual範圍與日曆10/7拒用見[個股頁 §39](STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)／[來源 §34](SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)；不以「高門檻無候選」掩蓋unavailable。
 
+### 10.9 全月日曆版保存行情與法人條件關注
+
+新calendar-v2入口與schema見[個股頁 §41](STOCK_RESEARCH_PAGE.md#41-m1-saved-price-chips-focus-calendar-1006-2八條件正向關注與同截止往返)。沿§10.8八欄、投資人名稱／signed張、含等號與code順，保留§10.3精確單位；新版本三個明示按鈕分別為「讀取保存來源」「首次取得法人來源」「核對共同來源並篩選」。Price-only讀取即使已有held法人也提示「保存來源已核對，法人原件已持有。請明示核對共同來源並篩選。」；capture完成不自動列候選。
+
+Available摘要明列「已核七股行情與兩股法人，篩選範圍為 3105、6488；符合 N 檔。其餘五股不在本次法人範圍。」；真零為「兩股完整來源已核對，沒有同時符合價格與法人條件的標的；這是此範圍的零候選。」。Unknown／price-only／失敗仍不顯count0；current failure同時清兩來源數值／原列／chart，保留八RAW與原因。
+
+Full-month追溯分清ALL25原觀測列與採用24日曆、所需20daily；10/07保留為原件，不是10/06窗口資料。Net正值買超／負值賣超／合法零照精確張呈現，canonical股仍在收合稽核；舊§10.8 expression不改。新negative card formatter只final SSR受驗，修正後actual card NOT RUN；API／detail負值不能代card驗收。Actual操作範圍、未跑項只由§41管理，不擴PIT／trend／strategy／Plan。
+
+
 ## 11. 現行信心語意與下一版 AI、題材及短線資金文案
 
 | 資訊 | 允許 | 禁止 |

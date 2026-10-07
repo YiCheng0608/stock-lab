@@ -1341,3 +1341,48 @@ Source-date10/07及capture UTC分開；publication／first availability／revisi
 ROOT接受source14及本批coreoperation+1／standalone dependency0／reliability+1／stall1→0。API／trusted desktop及窄版同cutoff往返、真零與positive→HTTP502清值已驗；停止後detail錯誤actual NOT RUN，SSR不能代替。必要checks及owned退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。DOC review／freeze／qualified七分區索引／exact commit／另准master merge尚待，不回寫final hash。
 
 本批privateIO0／chipsGET0／newdisk0；既有私人及DAY-RANGE保留fences不變。完整M1／M2／M3、ordinary20／21close history、strategy／time／PIT／Signal／Plan／execution仍未完成；index calendar不代ordinary closes。下一候選及新准入條件由[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)管理，本節不授予下一用途。
+
+## 36. M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：全月日曆與八條件來源准入
+
+本批已有限接受saved七股與TPEx3105／6488同explicit2026-10-06的八條件正向操作；新來源與舊§31／33／34各自獨立。§34的Oct10/7拒用及failed producer保留，不retry／restart／clone／hydrate；具名操作見[個股頁 §41](STOCK_RESEARCH_PAGE.md#41-m1-saved-price-chips-focus-calendar-1006-2八條件正向關注與同截止往返)。
+
+### 36.1 新准入、全月驗證與採用集合
+
+ROOT在implementation／GET／private read前於原task核定三份新canonical UTF-8 policy及外部固定pins；不由received policy自建expected pins：
+
+| Policy version | Bytes／SHA-256 |
+| --- | --- |
+| m1-chips-cutoff-calendar-tpex-2026-10-06.2 | 5263／`1acf97b7dd0f13b9b49ed3293497e52ca52ea077256b8d99d9bc21ed5761d403` |
+| m1-saved-price-chips-integration-calendar-tpex-2026-10-06.2 | 12009／`bfb9abeca3546f2dcedfcacaf5b3dece1709c05b49a839bce3fea5ded1936765` |
+| m1-saved-price-chips-focus-calendar-tpex-2026-10-06.2 | 15487／`42c232a3f533683dce727ce1279e767038a6ee0f6295ce85b5aee07e998972bc` |
+
+新worker／capture／summary／calendar／read使用 `chips-1006-calendar-v2`，entry `saved-price-chips-entry-calendar/m1-v2`、focus `price-saved-chips-focus-calendar/m1-v2`；calendar version `tpex-2026-09-01_2026-10-06-full-month-observed-2026-10-07-11503027221/chips-calendar-v2`。原capture1548B／storage2437B／saved-focus2677B pins、old chips／joint／focus、W8／defaults及身分scope保持，原精確公式見§32.2／34.1。
+
+沿§31已核dataset11391／11856的exact用途、OGL1.0署名及TPEx政府開放資料例外；本批另准ONE新empty producer、memory-only有限22 GET，不取得metadata或普通股price。兩month index為2026/09/01及10/01，daily為9/07～10/06的既有exact20日期；原daily URL／query沿§31，redirect／retry0。新parser先驗ALL25原月列150欄及date uniqueness，再採≤10/06 exact24 observed dates；完整保留合法10/07原六欄供追溯但不採入窗口。9/25／9/28closure notice保持；last20為9/07～10/06、last5為9/30／10/01／10/02／10/05／10/06，不補零／縮窗／推休市／用index代ordinary stock closes。
+
+### 36.2 Actual原件與獨立淨超
+
+ONE trusted FIRST完成2index＋20daily＝22 GET／2907155B，UTC start2026-10-07T11:33:50.447150Z→final capture11:34:03.496330Z；無preload／replay／disk／metadataGET／ordinarypriceGET／restart。ROOT停止前獨立核ALL22 held body及ORIGINAL canonical receipt的完整bytes／SHA／UTC／policy／exact URL；daily全結構、日期、唯一alnum code及非空name已核，兩股40selected rows／1000原欄／880 int64與七組buy-sell-net／component relations、12nets獨立重算：
+
+| 股／窗口 | 外資shares | 投信shares | 自營商shares |
+| --- | --- | --- | --- |
+| 3105／5 | 27460450 | 2352400 | 2227304 |
+| 3105／20 | 36689368 | 17747988 | 2886699 |
+| 6488／5 | 594644 | 1330929 | -11515 |
+| 6488／20 | -14155476 | -553503 | -367682 |
+
+外資不含外資自營商；canonical shares、精確張及口徑保持。Publication／first availability／revision unknown，historical PIT unsupported。新22使歷史已記錄GET70→92、known body8723075＋2907155＝11630230B；另有首次舊Sep未記錄bytes，不能稱全部歷史bytes已知。這些不擴大舊用途或授予下一capture。
+
+Index1MiB／daily2MiB／aggregate42MiB、22 requests／ONE attempt／15s per-request及180s batch cooperative；received headers16KiB為收到後檢查，非socket硬cap。Chips retained graph3312443B是estimate，受64MiB界線；private32MiB／joint96MiB與10s snapshot也是estimate／cooperative，非RSSpeak／OS preemption。
+
+### 36.3 Existing private與完整joint gate
+
+唯一private root／bundle、三檔full bytes／SHA／mtimeNS、兩層UTC及ATCAP／NO-RETRY沿§33.2與[協作紀錄](TASK_COORDINATION.md)，本批只准精確有限READ-only，不新增保存／copy／export／publish／delete。Producer新上限54snapshots、ROOT reserve3、新總57；承前7後shared≤64bundles／192logicalfiles，不能用oldconsumer96作本批上限。Actual26producer＋2ROOT＋inherited7＝35bundles／105logicalfiles，ROOT reserve1未用；ROOT兩次實讀含post-stop原三檔bytes／SHA／mtimeNS不變，children actualprivate0。
+
+ALL7 price與BOTH3105／6488的完整calendar／20daily／5及20窗口、同cutoff／pins／provenance先gate再filter；其餘五股scope排除，非法人零。即使price條件先得零也不略chips驗證；只有完整available可count0，缺／衝突為count=null/items=[]。Signed張grammar／int64／inclusive AND沿§34.1；current failure mask兩來源，same-generation恢復須明示NEW private＋held chips兩次成功，held不外網重抓，舊generation不得回填。
+
+### 36.4 接受與邊界
+
+Coreoperation+1／standalone dependency0／reliability+1／stall0；source20及具名正向／真零／往返與focus、detail實際502清值已ROOT接受。負值card修正後僅SSR受驗，POSTFIX NEGATIVE CARD ACTUAL NOT RUN；actual missing-private-file及停止後恢復未跑。必要checks／owned退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-calendar-1006-2-全月日曆八條件的零落盤驗證入口)，freeze／qualified索引／commit／另准master merge待。
+
+Private1791644B／3files／原3dirs ATCAP與preCreateProcess拒絕／process0/delete0 STRICT NO-RETRY不變；ENTIRE DAY-RANGE及.range-ui、TURNOVER／MAIN五unknown-owner cache／較舊資源全部保留，禁止替代tool/path/owner／逐檔／rename／containingtree或掃Temp/HAR/GPG/cache/log/history。完整M1／M2／M3、ordinary20/21closes／trend／strategy／time／PIT／execution仍缺；本批global daily codes/names受驗不代表另五股存在、identity-name／金融窗口已驗。下一scope須新ROOT准入，current22額度已用盡。

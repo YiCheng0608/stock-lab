@@ -1362,3 +1362,46 @@ ONE API normalstop後，SAME page ONE trusted Read `82f93e10-2446-414a-acdc-a43f
 ROOT接受source14、actual操作及owned退出；coreoperation+1／standalone dependency0／reliability+1（current failure清stale values）／stall1→0。Final preview20 local API GET／1POST／14rejected不是financialGET；19 memory tables的schema／indexes／triggers／全部values／每cell typeof保留，guards0／private0／newdisk0。必要checks、原失敗與退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。
 
 DOC review→freeze→qualified索引→exact commit→另准master merge尚待。完整M1／M2／M3、ordinary20／21close history／trend／strategy／PIT／time／Signal／Plan／execution仍未完成；下一未准入候選見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。Private／chips／failed producer及既有cleanup fences保持。
+
+## 41. M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：八條件正向關注與同截止往返
+
+ROOT已有限接受2026-10-06保存七股與3105／6488法人的八條件positive／verifiedzero／jointdetail／八RAW返回；新full-month用途、policy／pins、原件／12net與執行cap由[來源 §36](SOURCE_REGISTRY.md#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入)管理。舊§39的unavailable批次及原flag不改，當輪失敗不改寫成功。
+
+### 41.1 新入口與明示來源操作
+
+新頁 `/saved-price-chips-focus-calendar`、`VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR='m1-v2'` 與舊joint／focus flag互斥；新GET `/api/focus/price-saved-chips-calendar`要求 `as_of/min_lots/day_move/min_turnover/min_range_pct/investor/horizon/min_net_lots` 全八keys各一次／body0，invalid／duplicate／unknown422。只explicit10/06／joint3105與6488；valid unsupported date在private/source I/O前unavailable/countnull。
+
+三個明示按鈕順序是「讀取保存來源」→「首次取得法人來源」→「核對共同來源並篩選」。第三步核NEW private snapshot＋held chips；entry／apply／切股／back／capture completion均不auto-read。已有held來源時，單按price read仍不能列joint候選，須第三步明示核對。完整whole7＋both gate、signed淨超與AND／含等號沿來源§36，不因高price門檻省略chips。
+
+Detail沿11keys同cutoff context：`as_of/from=price-saved-chips-focus-calendar/source_mode=private_saved`＋八個 `focus_*` 原字串；exchange／symbol／cutoff／pins不合拒用。返回新頁保留全部八RAW及尾零；不能以old route／defaults或另一generation補值。
+
+### 41.2 Actual API與可信操作
+
+Base八RAW為 `2026-10-06 / 13913.614 / all / 11863581093 / 5.691 / foreign / 5 / 594.644`，count2＝3105＋6488。ROOT actual API十二案在未改欄位時沿base：
+
+| 條件變更 | 已核結果 |
+| --- | --- |
+| min_lots13913.615 | 只3105。 |
+| min_turnover11863581094 | 只6488。 |
+| min_range_pct5.692 | 只6488。 |
+| day_move down／up | 分別只3105／6488。 |
+| min_net_lots594.645 | 只3105。 |
+| min_lots1000000.000 | available0，仍驗完整七price與both chips。 |
+| 全price條件0／flat | available0。 |
+| foreign／20／-14155.476 | 兩股，精確含等號。 |
+| foreign／20／-14155.475 | 只3105。 |
+| as_of2026-10-07 | unavailable/countnull、private0。 |
+
+所有上述case source維持22；cached POST回409/alreadyattempted且不新增source/private。API／proxy各23invalid＋valid unsupported4共50guards在I/O前核：GET body422、oversizePOST413、old savePOST405、emptyFIRST在price readiness前409；不把local API requests計成financial GET。
+
+ONE intended page `42c7d462`（完整ID／receipts留原task），desktop1277×924/doc1262與窄版390×844/doc375（scrollbar、無horizontal overflow）均核base兩卡、6488 samecutoff detail／明示read與back全部八RAW；native高張1000000.000真零→restore兩卡已驗。Desktop6488 detail核同日OHLC／精確張與TWD、六net含negative20、單日1K／MA未支援；native Tab＋Enter開price disclosure核18原欄／full SHA，calendar disclosure核ALL25六欄含保留10/07。3105 detail明示read核收盤592元／股、19731.7張、TWD11863581093、六net及1K。兩source dates同10/06，capture／saved UTC與發布未知分開。
+
+Desktop及narrow原條件返回前後private counter23相等，無implicit read；133 recorded events＝33click/90input/6change/4submit、ALL trusted，沒有JS fill／value assignment／fakeevents。原keyboard offscreen／focus mistakes仍留task；兩個accidental about:blank tabs為nullorigin／no network resource、各正常關閉，不能視為額外financial證據或globaltabs清理。
+
+### 41.3 Current failure、修正與驗收邊界
+
+ONE API normalstop後，same3105 trusted Read的ResourceTiming實際502，原positive同時清price headline／volume／chart／raw與chips nets／calendar／dailyraw，canvas0/table0；再native back並trusted joint Read核focus實際502，cards0／count不顯示／候選未知，FIRST及joint disabled、全部八RAW保留。沒有restart／source retry；停止後actual recovery NOT RUN，只synthetic same-generation雙成功recovery。
+
+初次20日negative card文字空白保留為actual發現；只calendar-v2 signed formatter修正，old expression不改，final SSR驗negative5／20及zero。當前preview仍用修正前bundle，**POSTFIX NEGATIVE CARD ACTUAL NOT RUN**；negative精確API／detail受驗不代修正後card native驗收。Actual missing-private-file UI也未跑。
+
+ROOT接受source20／coreoperation+1／standalone dep0／reliability+1（current source失敗清兩來源）／stall0。19 memory SQLite全schema/index/trigger/value/every-cell typeof preserved、guards0／financeSeed0／preloadedfalse／newdisk0／formalDB0，children actual GET/private0。必要checks及owned退出由[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-calendar-1006-2-全月日曆八條件的零落盤驗證入口)管理；private與排除清理fences保持。Freeze／qualified索引／commit／另准master merge仍待；完整ROADMAP未完成。

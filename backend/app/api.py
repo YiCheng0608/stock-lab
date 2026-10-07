@@ -1693,7 +1693,11 @@ def stock_institutional_windows_capture(exchange: str, symbol: str, db: Session 
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     cutoff = resolve_stock_cutoff(db, instrument, as_of)
-    return capture_institutional_windows(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=as_of)
+    from . import institutional_windows_1006_calendar as calendar_windows
+    import os
+    capture = (calendar_windows.capture_institutional_windows if os.environ.get(calendar_windows.ENABLE_ENV) == "1"
+               else capture_institutional_windows)
+    return capture(instrument.exchange, instrument.symbol, cutoff, explicit_as_of=as_of)
 
 
 @router.post("/stocks/{exchange}/{symbol}/prices/capture")
@@ -1750,6 +1754,34 @@ def price_saved_chips_focus(request: Request, db: Session = Depends(get_db)) -> 
             instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx",
                 Instrument.symbol.in_(focus_policy()["scope"]["symbols"])).order_by(Instrument.symbol)).all())
         return build_saved_chips_focus(instruments, values)
+    except ValueError as error:
+        STATE.observe()
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+async def _empty_saved_chips_calendar_body(request: Request) -> None:
+    # Route dependencies run before the DB dependency and synchronous consumer.
+    # Inspect streaming chunks without collecting a body or blocking the loop.
+    async for chunk in request.stream():
+        if chunk:
+            from .saved_price_chips_calendar_focus import STATE
+            STATE.observe()
+            raise HTTPException(status_code=422, detail="joint_focus_empty_get_body_required")
+
+
+@router.get("/focus/price-saved-chips-calendar", dependencies=[Depends(_empty_saved_chips_calendar_body)])
+def price_saved_chips_calendar_focus(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    from .saved_price_chips_calendar_focus import STATE, conditions, build_focus
+    pairs = list(request.query_params.multi_items())
+    try:
+        if len(pairs) != 8 or len(dict(pairs)) != 8:
+            raise ValueError("joint_focus_exact_eight_query_required")
+        values = dict(pairs)
+        conditions(values)
+        with db.no_autoflush:
+            instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx",
+                Instrument.symbol.in_(focus_policy()["scope"]["symbols"])).order_by(Instrument.symbol)).all())
+        return build_focus(instruments, values)
     except ValueError as error:
         STATE.observe()
         raise HTTPException(status_code=422, detail=str(error)) from error

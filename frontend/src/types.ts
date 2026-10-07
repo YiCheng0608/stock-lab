@@ -531,7 +531,7 @@ export type InstitutionalWindowReceipt = {
   body_sha256: string; receipt_sha256?: string; body_bytes: number; request_started_at: string; captured_at: string
   policy_version: string; policy_digest: string; historical_pit: string
   storage?: string; published_time?: string; first_available_time?: string; revision_time?: string; request_count?: number
-  candidate_count?: number; adopted_count?: number; pre_calendar_row_count?: number; validation_scope?: string
+  candidate_count?: number; adopted_count?: number; pre_calendar_row_count?: number; post_cutoff_row_count?: number; validation_scope?: string
 }
 
 export type InstitutionalWindow = {
@@ -554,6 +554,8 @@ export type InstitutionalWindowsData = {
   windows?: Record<string, InstitutionalWindow>
   capture_state?: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; action: string; request_count: number }
   calendar?: null | { schema_version?: string; version: string; status: string; reasons?: string[]; from?: string; to?: string; expected_dates?: string[]; valid_dates?: string[]; missing_dates?: string[]
+    observation_date?: string; original_expected_dates?: string[]; original_valid_dates?: string[]; post_cutoff_dates?: string[]
+    original_rows?: Array<{ date: string; row_ordinal: number; source_values: Record<string, string>; body_sha256: string }>
     rows?: Array<{ date: string; row_ordinal: number; source_values: Record<string, string>; body_sha256: string }>
     basis?: { weekday_rule: string; closed_notice: string; closed_dates: string[] }; evidence?: InstitutionalWindowReceipt[] }
   policy?: null | { version: string; digest: string; profile: string }; calculation_version?: string | null

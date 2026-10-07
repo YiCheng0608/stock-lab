@@ -540,6 +540,19 @@ Cleanup分報：API normalstop session13309 rawexit1、preview15835 rawexit1；R
 
 Coreoperation+1／standalone dependency0／reliability+1／stall1→0；未跑old/full suite／production build／install／diskcases／actual post-stop detail error。完整M1／M2／M3、PIT／ordinary20或21close history／strategy／time／execution未完成。DOC／freeze／qualified index／Git尚待ROOT original-task接受。
 
+### M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2 全月日曆八條件的零落盤驗證入口
+
+沿共用pinned Python3.12.14 `-B -X utf8`、Node24.19／TypeScript5.9.3／esbuild0.25.12、既有API/preview及guarded SQLite `:memory:`；不install/helper/fixture檔/DB複製/正式DB。新API／preview `--serve --saved-source-only --saved-price-chips-focus-calendar-opt-in`，與old joint/focus flags互斥；API另需 `--cutoff 2026-10-06 --private-root` 原task literal root，preview `--api-port 8799`／memory bundle。新compile `VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR='m1-v2'`，old flags OFF。
+
+外部六組pairs仍為capture `--policy-version/--policy-digest`、storage `--private-policy-version/--private-policy-digest`、saved-focus `--saved-focus-policy-version/--saved-focus-policy-digest`、new chips `--chips-policy-version/--chips-policy-digest`、new entry `--joint-policy-version/--joint-policy-digest`、new focus `--joint-focus-policy-version/--joint-focus-policy-digest`；前三不改、新三version／canonical bytes／digest由[來源 §36](../SOURCE_REGISTRY.md#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入)單一管理。Exact啟動／check命令與原exit留ROOT task，本節不另授權重跑。
+
+必要final checks：Python12／47034B serialized／142547B graph raw0，含正常GET route非空body首chunk在DB/source前拒用；pinned Node full38src noEmit／validators41／proxy10／SSR22 raw0，compiler29380正常exit0。Aggregate77473B／453892B≤80KiB／512KiB，為estimate非RSSpeak；write:false/noEmit/incremental:false/composite:false，guard0/artifact0/child actual GET/private0。早期Py404／Node／JSON quoting／alnum validator／command-length206/process0 failures保留原task，修正後必要checks被ROOT獨立接受，不抹原exit；未跑old/fullsuite／install／productionbuild／diskcases。
+
+ONE actualFIRST22／2907155B及兩股12net見來源§36；API/proxy50guards、native positive／真零／samecutoff detail／八RAWback與實際focus/detail502清兩來源見[個股頁 §41](../STOCK_RESEARCH_PAGE.md#41-m1-saved-price-chips-focus-calendar-1006-2八條件正向關注與同截止往返)。Current preview為negative card repair前bundle；POSTFIX NEGATIVE CARD ACTUAL NOT RUN，僅final SSR／API／detail負值受驗；actual missing-file及post-stop recovery亦未跑。
+
+Cleanup分報：API session83980／Python5840、preview80879／Node53608 normal Ctrl+C各rawexit1、不restart；ROOT86760b raw0核5840/33436/53608/13008/esbuild44944 absent、8799+8800無listener。ONE intendedpage正常close、fresh tabs[]；兩misfocus about:blank pages各正常close，不作globaltabs清理聲明。Final proxy22 localGET/1POST/23rejected非financialGET；19DB全schema/index/trigger/values/每cell typeof保留。Actual26producer＋ROOT2＋inherited7＝35snapshots/105logicalfiles，post-stop原三檔bytes/SHA/mtimeNS不變。PrivateATCAP與DAY/TURNOVER/MAIN五cache、較舊資源NO-RETRY排除fence不改；功能與清理分報，非globaldisk0/allrawreleased。Coreoperation+1/standalone dep0/reliability+1/stall0；DOC/freeze/qualified index/Git仍待ROOT接受。
+
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。
