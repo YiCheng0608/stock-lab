@@ -1,3 +1,73 @@
+## 目前：M1-PRICE-SAVE-1-B1 私人保存與跨程序核心已有限接受；待DOC review／freeze
+
+2026-10-07 Asia/Taipei。Main repo／共同cwd／runtimeWorkspaceRoots／branch及原四角色同下方已接受BOOT；starting／current／master HEAD `a315e539da82205bc3bab6f1577c51bc0cc910cf`。單次visible /subagents／ORIGINAL root SINGLE continuation已核；完整下方127214B suffix byte保留（含BOOT5818B、121396B及nested歷史），舊pending由原task／Git receipt及本節覆蓋。
+
+### 原四角色與白名單
+
+| 角色 | Actual ID／配置 | 交付及範圍 |
+| --- | --- | --- |
+| 統籌 | `01a11367-90ba-7640-8de6-961fa50440ab`；gpt-6.1-sol／ultra | 已核source-purpose／private disk／actual API／trusted native；接受DOC後freeze。 |
+| 程式 | `01a11369-956b-71b0-8dd3-ca19cd8cd308`（Galileo）；gpt-6.1-sol／xhigh | 原task source13／net70181B已接受；交付停寫。 |
+| 文件 | `01a11369-d164-7e21-8652-693699f46283`（Boyle）；gpt-6.1-sol／xhigh | exact八DOC：SOURCE_REGISTRY／STOCK_RESEARCH_PAGE／UI_COPY_SPEC／DATA_SOURCES／development-baseline/README／ROADMAP／ROADMAP_EXECUTION／本檔；aggregate net≤32768B含BOOT5818B，coreprefix≤6144B，UTF8／LF／noBOM／完整suffix byte-equal；交付停寫待review。 |
+| 索引與 Git | `01a1136a-0562-7a83-be22-3a0f26c226f8`（Nash）；gpt-6-luna／medium | source=[]；freeze前不refresh／stage／commit／merge；舊正常close accepted，archive由root能力執行。 |
+
+沿同原root native三child follow-up。App75／既有OPENDATALINK七baseline，metadata_changed原因unresolved／五parserpartial保持；新路徑missing依advisory讀來源，freeze前不refresh／copy，不稱fresh complete。
+
+### 核心、驗證及未驗
+
+獨立storage`.1`／三literal files／`tpex-price-storage-receipt/m1-v1`及`stock-price-saved/m1-v1`已核，原`.5` process_memory receipt不改寫成disk capture。Fresh3metadata／source-use、OBS1獨立金融＋OBS2post-edit NEW worker，CURRENT financialGET總2／final source1／runner1／preloadedfalse；UTC／完整raw／canonical／1791644B三檔權威見[來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)。
+
+Actual save／idempotent、producer停止後NEW reader empty Store／memorydisabled／source0／writes0/mut0/guards0/DB preserved；同三檔bytes/SHA、all126欄／42金融及七one-based ordinals已核。API negative5、desktop全七股／窄版6510／3105／6488、full18原列尾空白、單日chart、date05拒用→06explicit恢復／token隔離及same-token proxy502失敗清值已接受；40trusted events／15states無水平溢出，draft只SETUP，詳見[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。
+
+Inherited scope-5 core+1／dep+1／reliability0／stall0；本B1 operation+1／finite private-save source-use及fullraw＋canonical storage／NEWprocess dependency+1／reliability0／stall0。BOOT／DOC／index／Git非implementation batch，較早unknown歷史保留，完整ROADMAP／M1／M2／M3未完成。Windows path protection僅Windows；quote10/06／10/07觀測、原pins及default保持，不auto-fetch／hydrate／正式DB／PIT。
+
+必要backend／synthetic磁碟／frontend checks已接受，fdopen guard與ordinal首exit1保留、修正affected raw0；synthetic cleanup0／testroot absent。Actual missing-file native UI未跑，schema／corruption／partial gate是synthetic，actual失敗UI是connection502；未跑full suite／production build／非Windows／全市場／PIT／20／21close／calendar／strategy time execution。入口、副作用、原exit及quota見[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)。
+
+### 清理、版本及下一核心
+
+Owned服務／compiler及唯一page均已關；stop rawexit1／獨立cleanup proof0分報，memoryraw釋放。無附件／HAR／profile／export／env install／KeepArtifacts。
+
+產品EXACT三檔＋empty dirs的PowerShell刪除被automatic review在CreateProcess前以`blocked by policy`拒絕，刪除未執行。1791644B／3files＋commonparent/productroot/final3dirs仍在`C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`；new private NO-RETRY，不換工具／path／owner／rename／containingtree繞過。Filecap3達限停止新增diskcases；有效功能與清理未完成分報，disk raw未刪。
+
+候選freeze source13＋DOC8共21unique；DOC review→freeze→qualified七分區index→exact local commit→另准master merge→新root visible gate尚待。只stage核准freeze，source再變先補DOC再刷，index不代功能驗收，finalhash留原task、不receipt-only重寫BOOT。
+
+下一優先候選`M1-CHIPS-CUTOFF-1006-1`：3105／6488同10/06真5／20日net；原task先核fresh用途／newdates／pins／bounds及dataset11391 Sep／Oct全返回indexcalendar，再取得dataset11856 dateddaily required sessions／原列、獨立計算及actualAPI／native。Exact新集合尚未准入，舊W8只至10/02／immutable、不借price diskgrant；ordinary monthlyrights／wire／20／21close仍waiting，不重做失敗monthly／11371／17257。M2saved-focus／nextordinaryscope為fallback；strategy／M3 gates缺時不以fixtures替代。
+
+前任OPENDATALINK exact四ID（下方BOOT）final保存／all4idle／exactterminal核後ONE正常close raw0／ptyKilledtrue及ONE正常archive已接受；all4notLoaded／原rollouts absent／archive4bytes及SHA不變15192927B，歷史保留，index缺archive能力由root tool完成。Old OPENDATALINK worktree／branch＋其他shell仍保留baseline，待new qualified replacement／baseline unneeded及mergedclean／無新artifact／resolvedabsolute原taskscope後才正常移除，不刪owncwd。Oldercompleted不重做，DAY-RANGE整個worktree／branch／NO-RETRY不動；TURNOVER／Temp／cache／log／其他資源不掃。本輪四session／terminal／worktree／branch保留，下一outside owner及current closure／archive／移除未執行。
+
+## 目前：BOOT-M1-PRICE-SAVE-1 接手與 visible /subagents 已接受
+
+2026-10-07 Asia/Taipei。Main repo `C:/Users/YiCheng/Desktop/taiwan-stock-research`；共同 cwd／worktree／runtimeWorkspaceRoots `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-price-save-20261007`；branch `roadmap-m1-price-save-20261007`，starting／current／master HEAD `a315e539da82205bc3bab6f1577c51bc0cc910cf`。前輪七股核心、qualified 七分區索引、exact local commit／正常 ff-only master merge 已接受；下方完整121396B歷史 byte 全留，舊 pending 由原 task／Git receipt 及本節覆蓋，舊 roster 不再派工。
+
+### 本輪四角色及接手白名單
+
+| 角色 | Actual ID／配置 | BOOT 範圍 |
+| --- | --- | --- |
+| 統籌 | `01a11367-90ba-7640-8de6-961fa50440ab`；gpt-6.1-sol／ultra | parent=null／sessionId=self／source=vscode／originator=codex-tui；BOOT 已接受；沿原 session follow-up。 |
+| 程式 | `01a11369-956b-71b0-8dd3-ca19cd8cd308`（Galileo）；gpt-6.1-sol／xhigh | 明確接受；write=[]，等待原 root follow-up。 |
+| 文件 | `01a11369-d164-7e21-8652-693699f46283`（Boyle）；gpt-6.1-sol／xhigh | 明確接受；只本檔 BOOT initial prefix≤5500B、aggregate net≤6144B／final≤127540B；UTF-8／LF／noBOM、完整歷史 byte-equal；root review 已接受，停寫待 follow-up。 |
+| 索引與 Git | `01a1136a-0562-7a83-be22-3a0f26c226f8`（Nash）；gpt-6-luna／medium | 同 child 更正自核已接受；source=[]，BOOT 不 refresh／stage／commit／merge／cleanup。 |
+
+本 root native spawn_agent／fork_turns=none 新建恰三 child；RPC／native rollout 已核 actual 配置、自核及明確接手。Child parentThreadId／sessionId／spawn parent 同 root、depth1、forkedFromId=null；四者 actual cwd／environments.local.runtimeWorkspaceRoots／branch／HEAD 一致，寫前 Git clean／stage empty。Runtime CLI0.160.0、pinned visible CLI0.160.1 分列。
+
+Own visible terminal `term_b3b18a95-e6d7-45d5-9b68-474beedded2f`／incarnation `b846e885-d086-431c-94cc-8a534d0c8613`／PTY suffix `@@19bb958a`／pane1；correct tab／leaf connected、writable、nonorphaned，actual node32876→codex9468 與本 root／remote cwd／model／ultra 相符。共用 helper 單次 raw0／startup=verified／surface=visible／taskSent=true，initial turn `01a11367-97c0-72d3-a6a5-2d8b8ac52739`；無 timeout／recovery／relaunch／resend，stale inherited handle 不作本輪身分。
+
+**Visible /subagents gate 與本 ORIGINAL root SINGLE continuation 已正式接受。** BOOT 文件 root review／final 保存及四者 actual idle 後，前任對 exact NEW terminal／pane1 執行 /subagents 恰一次；request `0f000fcf-8e31-4152-922f-e1543edcd6c7`／fresh screen `9d94186d-1b30-49d5-b041-e2ddc2130e7c` 核 Main[default]／本 root＋exact 三 child／No sub-agents running。Esc 恰一次後 fresh screen `7eba8c47-9517-437f-bd89-7b7b73906a9e` 已核，SINGLE turn/start continuation 已送達本 ORIGINAL root／同 cwd／model；無 reboot／新角色，沿原三 child follow-up。本 BOOT 不實作、不清理、無附件或新檔。
+
+App MCP connected／list75、has_more=false；既有 `taiwan-stock-research-roadmap-m1-history-open-data-link-20261007-*` 七分區 ready baseline。Coverage best_effort／metadata_changed 原因 unresolved，五 historical parser partial 保持；依 advisory 讀本根，不稱 fresh complete，不輪初或中途重建／複製／刷新。BOOT 文件 root review 已接受；索引／stage／commit／merge 尚未執行。
+
+### 繼承核心與下一步
+
+繼承 `M2-FOCUS-STOCK-SCOPE-5-B1` coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0；BOOT／DOC／index／Git 不計 implementation batch，較早 unknown 歷史保持，完整 ROADMAP／M1／M2／M3 未完成。
+
+下一優先候選 `M1-PRICE-SAVE-1`：PRIVATE local store 保存已准入單日完整 raw＋canonical receipt／provenance，NEW process 驗 disk／hash／讀回並完成具名 API／UI 操作；selected projection 不足以重驗 fullbody SHA。`.5` 現僅 PROCESS MEMORY，不是 storage grant；quote2026-10-06／觀測2026-10-07及原 pins 不變，不自動升版。Exact source／time／version／source-use／storage purpose／schema／private path／counts／caps／atomic temp／cleanup 仍待本 ORIGINAL root 原 task 核定；continuation 後先核，再金融 GET／disk／dispatch，不用正式 DB。Observed capture time≠publication／PIT；歷史20／21普通股 close／完整 calendar／strategy／time／execution、monthly exact rights／wire 保持 pending，無新取得路徑不重複隔離輪或以 ranking／ATR／Signal／Plan 代核心。
+
+### Outside owner 接手邊界
+
+本 root 已接受 outside-owner 責任，只限前任 OPENDATALINK exact 四 session：root `01a1131f-7678-7c11-b75c-318e58a88ac4`、program `01a11321-a05f-7a01-aded-c89c2ad5bfcc`、documents `01a11321-d0c2-7413-b707-7752b8941e8d`、index `01a11322-04ff-72f3-adb4-deea8e3c07d0`。前任 final 保存／四者 actual idle／exact old handle-runtime 核後才執行正常 closure／archive；接手不等於已執行，BOOT 不清理。
+
+Old `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-history-open-data-link-20261007` worktree／同名 branch 暫留；待 new qualified affected indexes／baseline unneeded，再核 merged／clean／無未保存修改或新 artifacts／resolved absolute path及 outside-owner 原 task scope後才正常移除，不刪自身 cwd。較早 completed resources 不重做；整個 DAY-RANGE worktree／branch及 NO-RETRY 排除，TURNOVER／其他資源未接受，Temp／cache／log／history 不掃除。本輪四 session／terminal／worktree／branch 保留，current closure／archive／移除未執行。
+
 ## 目前：M2-FOCUS-STOCK-SCOPE-5 七股核心已有限接受；待 DOC review／freeze
 
 2026-10-07 Asia/Taipei。Main repo／共同cwd／runtimeWorkspaceRoots／branch同下方unchanged BOOT，本輪root／三child不變；starting／current／master HEAD `54c1f879936b29dbbb2a410b27e75fa362e7256d`。前輪六股source13＋DOC8／freeze21／net56664B、qualified七分區索引／exact commit／正常ff-only master merge、本輪唯一visible gate／ORIGINAL root SINGLE continuation已接受。下方完整115268B pre-core suffix byte全留，含BOOT5673B及109595B／99323B歷史；舊pending由原task／Git receipt及本節覆蓋，舊roster不再派工。

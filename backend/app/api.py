@@ -74,6 +74,7 @@ from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price, supported_symbols
+from .tpex_price_saved import private_price
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
 from .institutional_windows import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
@@ -1702,6 +1703,24 @@ def stock_price_memory_capture(exchange: str, symbol: str, db: Session = Depends
     # Only the explicitly supplied query date admits capture. Never default to
     # a current feed date or silently move an existing research cutoff.
     return capture_tpex_price(instrument, as_of)
+
+
+@router.post("/stocks/{exchange}/{symbol}/prices/save")
+def stock_price_private_save(exchange: str, symbol: str, db: Session = Depends(get_db),
+                             as_of: date | None = None) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return private_price(instrument, as_of, save=True)
+
+
+@router.get("/stocks/{exchange}/{symbol}/prices/saved")
+def stock_price_private_read(exchange: str, symbol: str, db: Session = Depends(get_db),
+                             as_of: date | None = None) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return private_price(instrument, as_of)
 
 
 def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:

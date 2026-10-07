@@ -7,6 +7,8 @@ import {
   captureOfficialEvents,
   captureInstitutionalWindows,
   captureStockPriceMemory,
+  getSavedStockPrice,
+  saveStockPrice,
   capturePriceLotFocus,
   captureOfficialEventFocus,
   deletePortfolio,
@@ -55,6 +57,7 @@ import type {
   SignalEvaluation,
   SignalSettlement,
   StockDirectoryRow,
+  StockPriceSavedData,
   ThemeDirectoryRow,
   TrackingResponse,
   ProductTime,
@@ -71,6 +74,7 @@ import { StockResearchPanel, stockResearchAction, validStockResearchRead } from 
 import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview } from './components/StockOverview'
 import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
+import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
@@ -1117,6 +1121,42 @@ function StockPage() {
   const focusReturnPath = lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
+  const privateKey = `${exchange}:${symbol}:${asOf}`
+  const privateRoute = useRef({ key: privateKey, generation: 0 })
+  if (privateRoute.current.key !== privateKey) privateRoute.current = { key: privateKey, generation: privateRoute.current.generation + 1 }
+  const privateGeneration = privateRoute.current.generation
+  const privatePending = useRef(new Set<string>())
+  const [privateBusy, setPrivateBusy] = useState<string | null>(null)
+  const [privateFailure, setPrivateFailure] = useState<{ token: string; reason: string } | null>(null)
+  const [privateRead, setPrivateRead] = useState<{ token: string; data: StockPriceSavedData } | null>(null)
+  const privateToken = `${privateGeneration}:${privateKey}`
+  const privateAction = async (save: boolean) => {
+    const instrument = query.data?.instrument
+    if (!instrument || !privatePriceSupported(instrument, asOf) || privatePending.current.has(privateToken)) return
+    const token = privateToken, generation = privateGeneration, key = privateKey
+    privatePending.current.add(token)
+    setPrivateBusy(token)
+    setPrivateFailure(null)
+    setPrivateRead((value) => value?.token === token ? null : value)
+    try {
+      const result = await (save ? saveStockPrice : getSavedStockPrice)(exchange, symbol, asOf)
+      if (privateRoute.current.key !== key || privateRoute.current.generation !== generation) return
+      if (validStockPriceSavedRead(result, instrument, asOf)) setPrivateRead({ token, data: result })
+      else {
+        setPrivateRead((value) => value?.token === token ? null : value)
+        setPrivateFailure({ token, reason: result.status === 'unavailable' && Array.isArray(result.reasons)
+          ? result.reasons[0] ?? 'price_saved_contract_invalid' : 'price_saved_contract_invalid' })
+      }
+    } catch {
+      if (privateRoute.current.key === key && privateRoute.current.generation === generation) {
+        setPrivateRead((value) => value?.token === token ? null : value)
+        setPrivateFailure({ token, reason: 'price_private_request_failed' })
+      }
+    } finally {
+      privatePending.current.delete(token)
+      setPrivateBusy((value) => value === token ? null : value)
+    }
+  }
   useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
   const [tab, setTab] = useState<StockTab>('technical')
   const [capturingEvents, setCapturingEvents] = useState(false)
@@ -1194,6 +1234,10 @@ function StockPage() {
   const priceCutoff = asOf || data.overview?.as_of || null
   const memoryKnown = (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
   const memoryRejected = priceMemory?.status === 'available' && !memoryKnown
+  const priceSaved = privateRead?.token === privateToken ? privateRead.data : undefined
+  const savedKnown = privateFailure?.token !== privateToken && asOf === data.overview?.as_of && validStockPriceSavedRead(priceSaved, data.instrument, asOf)
+  const officialKnown = memoryKnown || savedKnown
+  const officialBar = memoryKnown ? priceMemory.latest : savedKnown ? priceSaved.latest : null
   const independent = stockIndependentView(data)
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
   const researchShapeValid = validStockResearchRead(data)
@@ -1218,22 +1262,22 @@ function StockPage() {
   const candidateConflict = read !== undefined && data.overview?.price.status === 'available'
     && (!candidate || candidateRow?.date !== candidate.date || candidateRow?.close !== candidate.close)
   const candidateKnown = candidateCoreKnown && !candidateConflict
-  const latestBar = memoryKnown ? priceMemory.latest : !memoryRejected && readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
+  const latestBar = officialKnown ? officialBar! : !memoryRejected && readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
   const legacyPrice = data.decision_summary?.current_price
   const priceConflict = read !== undefined && !data.overview && legacyPrice != null && (!finitePrice(legacyPrice) || legacyPrice !== latestBar?.close)
-  const currentPrice = memoryKnown ? priceMemory.latest.close : memoryRejected || !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
+  const currentPrice = officialKnown ? officialBar!.close : memoryRejected || !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
   const legacyChange = data.decision_summary?.price_change
   const previousKnown = read === undefined || (previousBar?.market_read?.status === 'known' && isValidBar(previousBar) && previousBar.date < candidateRow.date!)
   const calculatedChange = previousKnown && latestBar && finitePrice(latestBar.close) && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
   const changeConflict = read !== undefined && legacyChange != null && (!finiteValue(legacyChange) || legacyChange !== calculatedChange)
   const change = read === undefined ? finiteValue(legacyChange) ? legacyChange : calculatedChange : !changeConflict ? calculatedChange : null
-  const priceChange = memoryKnown || data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
+  const priceChange = officialKnown || data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
   const legacyPercent = data.decision_summary?.price_change_pct
   const calculatedPercent = priceChange != null && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
   const percentConflict = read !== undefined && legacyPercent != null && (!finiteValue(legacyPercent) || legacyPercent !== calculatedPercent)
   const percent = read === undefined ? finiteValue(legacyPercent) ? legacyPercent : calculatedPercent : !percentConflict ? calculatedPercent : null
-  const priceChangePct = !memoryKnown && !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const priceChangePct = !officialKnown && !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
   const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
@@ -1255,8 +1299,8 @@ function StockPage() {
     },
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
-  const qualitySummary = memoryKnown ? { ...storedQualitySummary, market: {
-    status: 'complete', label: `${priceMemory.latest.date} 單日官方行情已核對`, as_of: priceMemory.latest.date,
+  const qualitySummary = officialKnown ? { ...storedQualitySummary, market: {
+    status: 'complete', label: `${officialBar!.date} 單日官方行情已核對`, as_of: officialBar!.date,
     missing_fields: [], source: 'tpex',
   } } : storedQualitySummary
   const tabs: Array<{ id: StockTab; label: string }> = [
@@ -1278,13 +1322,13 @@ function StockPage() {
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
       {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols.map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={`/stocks/TPEx/${symbol}?as_of=${asOf}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
     </PageTitle>
-    {!memoryKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
+    {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
+    {data.overview && <StockOverview data={data.overview} instrument={data.instrument} explicitCutoff={asOf} savedPrice={priceSaved} onSavePrice={() => privateAction(true)} onReadSavedPrice={() => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={acquireWindows} capturingWindows={windowBusyKey === windowRequestKey} windowRequestFailure={windowRequestFailure?.key === windowRequestKey ? windowRequestFailure.reason : undefined} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel">{memoryKnown && <p className="small-note">{priceMemory.latest!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : memoryRejected ? [] : data.bars} unlocatedDateRows={memoryKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={memoryKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}

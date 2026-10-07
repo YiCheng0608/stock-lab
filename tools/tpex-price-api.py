@@ -1,13 +1,15 @@
-"""M1-PRICE-1: guarded checks or root-owned actual router preview, no disk artifacts."""
+"""Guarded memory checks/router preview; private files require explicit scoped opt-in."""
 from __future__ import annotations
 import argparse
 import ast
 import base64
+import ctypes
 from datetime import date
 import json
 import os
 from pathlib import Path
 import socket
+import stat
 import sys
 import types
 import unittest
@@ -19,20 +21,46 @@ parser.add_argument("--deps", required=True, help="existing backend/.deps, read-
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check", action="store_true")
 mode.add_argument("--focus-check", action="store_true")
+mode.add_argument("--private-save-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
 parser.add_argument("--live-source-opt-in", action="store_true")
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
 parser.add_argument("--cutoff", choices=("2026-10-05", "2026-10-06"), default="2026-10-05")
+parser.add_argument("--private-store-root")
+parser.add_argument("--private-policy-version")
+parser.add_argument("--private-policy-digest")
+parser.add_argument("--saved-source-only", action="store_true")
+parser.add_argument("--disk-phase", choices=("check", "write", "read", "faults", "cleanup"), default="check")
 ARGS = parser.parse_args()
 if ARGS.live_source_opt_in and not ARGS.serve:
     parser.error("live source is only admitted in root-owned serve")
 if not 1024 <= ARGS.port <= 65535:
     parser.error("invalid owned port")
+PRIVATE_ROOT = Path(ARGS.private_store_root).absolute() if ARGS.private_store_root else None
+PRIVATE_PARENT = Path(os.environ.get("LOCALAPPDATA", "")) / "taiwan-stock-research"
+PRODUCT_ROOT = PRIVATE_PARENT / "price-save-01a11367"
+TEST_ROOT = PRIVATE_PARENT / "price-save-tests-01a11367"
+if PRIVATE_ROOT:
+    if PRIVATE_ROOT != (TEST_ROOT if ARGS.private_save_check else PRODUCT_ROOT) or not (ARGS.private_save_check or ARGS.serve):
+        parser.error("private root outside exact owned scope")
+    if (ARGS.private_policy_version, ARGS.private_policy_digest) != ("m1-price-save-tpex-11370-2026-10-06.1", "sha256:0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e"):
+        parser.error("independently accepted private storage pins required")
+elif ARGS.private_save_check or ARGS.saved_source_only or ARGS.disk_phase != "check":
+    parser.error("explicit private root required")
+if ARGS.saved_source_only and (not ARGS.serve or ARGS.live_source_opt_in):
+    parser.error("saved-source-only requires serve and excludes source acquisition")
+if ARGS.disk_phase != "check" and not ARGS.private_save_check:
+    parser.error("disk phases are private synthetic checks only")
 sys.dont_write_bytecode = True
 sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "backend/tests"), str(Path(ARGS.deps).resolve())]
 COUNTS = {"disk_writes": 0, "mutations": 0, "unapproved_network": 0, "subprocesses": 0}
+ALLOWED_DISK = {"writes": 0, "mutations": 0}
+PRIVATE_DIRECTORY = "tpex-11370-2026-10-06-m1-v1"
+PRIVATE_STAGING = ".pending-" + PRIVATE_DIRECTORY
+PRIVATE_FILES = {"body.csv", "capture-receipt.json", "storage-receipt.json"}
+DISK_ACTIVE = bool(PRIVATE_ROOT and (ARGS.serve or ARGS.disk_phase != "check"))
 LIVE_ACTIVE = False
 APPROVED_ADDRESSES = set()
 SOURCE_REQUESTS = []
@@ -55,11 +83,24 @@ def audit(event, args):
         mode, flags = args[1], args[2]
         if (isinstance(mode, str) and any(char in mode for char in "wax+")) or (
                 isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)):
-            COUNTS["disk_writes"] += 1
-            raise AssertionError("disk write denied")
+            if DISK_ACTIVE and (approved_private_path(args[0], file=True) or approved_private_fd(args[0])):
+                ALLOWED_DISK["writes"] += 1
+            else:
+                COUNTS["disk_writes"] += 1
+                raise AssertionError("disk write denied")
     if event in {"os.mkdir", "os.remove", "os.rmdir", "os.rename", "os.link", "os.symlink", "tempfile.mkstemp", "tempfile.mkdtemp"}:
-        COUNTS["mutations"] += 1
-        raise AssertionError("filesystem mutation denied")
+        allowed = DISK_ACTIVE and event in {"os.mkdir", "os.remove", "os.rmdir", "os.rename", "os.link"}
+        if event == "os.rename":
+            allowed = allowed and approved_private_path(args[0]) and approved_private_path(args[1])
+        elif event == "os.link":
+            allowed = allowed and ARGS.private_save_check and approved_private_path(args[0], file=True) and approved_private_path(args[1], file=True)
+        else:
+            allowed = allowed and approved_private_path(args[0], parent=event in {"os.mkdir", "os.rmdir"})
+        if allowed:
+            ALLOWED_DISK["mutations"] += 1
+        else:
+            COUNTS["mutations"] += 1
+            raise AssertionError("filesystem mutation denied")
     if event == "subprocess.Popen":
         COUNTS["subprocesses"] += 1
         raise AssertionError("subprocess denied")
@@ -78,6 +119,42 @@ def audit(event, args):
         if not allowed:
             COUNTS["unapproved_network"] += 1
             raise AssertionError("network outside owned scope denied")
+
+
+def approved_private_path(value, *, file=False, parent=False):
+    if not isinstance(value, (str, bytes, os.PathLike)) or isinstance(value, bytes):
+        return False
+    path = Path(value).absolute()
+    if parent and path == PRIVATE_PARENT:
+        return True
+    if not PRIVATE_ROOT or not path.is_relative_to(PRIVATE_ROOT):
+        return False
+    parts = path.relative_to(PRIVATE_ROOT).parts
+    if not parts:
+        return not file
+    if parts[0] not in {PRIVATE_DIRECTORY, PRIVATE_STAGING}:
+        return False
+    if len(parts) == 1:
+        return not file
+    return len(parts) == 2 and parts[1] in PRIVATE_FILES | ({"probe.json"} if ARGS.private_save_check else set())
+
+
+def approved_private_fd(value):
+    if type(value) is not int or os.name != "nt":
+        return False
+    import msvcrt
+    try:
+        info = os.fstat(value)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or getattr(info, "st_file_attributes", 0) & 1024:
+            return False
+        function = ctypes.WinDLL("kernel32", use_last_error=True).GetFinalPathNameByHandleW
+        function.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
+        function.restype = ctypes.c_uint32
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = function(msvcrt.get_osfhandle(value), buffer, len(buffer), 0)
+        return 0 < length < len(buffer) and approved_private_path(buffer.value.removeprefix("\\\\?\\"), file=True)
+    except (OSError, ValueError):
+        return False
 
 
 sys.addaudithook(audit)
@@ -114,10 +191,14 @@ from test_tpex_price_api import MemoryAPIFixture
 def receipt(fixture=None, include_raw=False):
     import fastapi, sqlalchemy, httpx
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
-              "guard": dict(COUNTS), "disk_artifacts": 0, "source_requests": list(SOURCE_REQUESTS),
+              "guard": dict(COUNTS), "allowed_private_disk": dict(ALLOWED_DISK), "disk_artifacts": private_disk_metrics(), "source_requests": list(SOURCE_REQUESTS),
               "source_request_count": len(SOURCE_REQUESTS), "runner_source_request_count": RUNNER_SOURCE_REQUESTS, "preloaded_source": PRELOADED_SOURCE,
               "policy_version": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[0], "policy_digest": tpex_price.policy_pins(date.fromisoformat(ARGS.cutoff), policy_version=ARGS.policy_version)[1],
-              "scope": "tuple-scoped ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT/save acceptance"}
+              "scope": "tuple-scoped ordinary TPEx stocks, " + ARGS.cutoff + ", single day; no history/MA20/PIT; "
+                  + ("scoped private save/reopen enabled; helper receipt does not prove product acceptance" if PRIVATE_ROOT
+                     else "process memory only, no disk save/reopen"),
+              "private_storage": {"enabled": bool(PRIVATE_ROOT), "saved_source_only": ARGS.saved_source_only,
+                  "policy_version": ARGS.private_policy_version, "policy_digest": ARGS.private_policy_digest}}
     if fixture:
         raw = fixture.store.raw_capture
         result["db_preserved"] = fixture.before == fixture.snapshot()
@@ -131,7 +212,44 @@ def receipt(fixture=None, include_raw=False):
     return result
 
 
+def private_disk_metrics():
+    if not PRIVATE_ROOT or not PRIVATE_ROOT.exists():
+        return 0
+    def plain_directory(path):
+        info = path.lstat()
+        if not stat.S_ISDIR(info.st_mode) or getattr(info, "st_file_attributes", 0) & 1024:
+            raise AssertionError("unsafe private metrics directory")
+    plain_directory(PRIVATE_ROOT)
+    folders = list(PRIVATE_ROOT.iterdir())
+    if len(folders) > 2 or any(folder.name not in {PRIVATE_DIRECTORY, PRIVATE_STAGING} for folder in folders):
+        raise AssertionError("private metrics unexpected root entries")
+    sizes = {}
+    for folder in folders:
+        plain_directory(folder)
+        children = list(folder.iterdir())
+        if len(children) > 6:
+            raise AssertionError("private metrics bounded entries exceeded")
+        for item in children:
+            info = item.lstat()
+            if (item.name not in PRIVATE_FILES | ({"probe.json"} if ARGS.private_save_check else set())
+                    or not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & 1024):
+                raise AssertionError("unsafe private metrics file")
+            sizes[str(item.relative_to(PRIVATE_ROOT))] = info.st_size
+    directories = 1 + len(folders)
+    limit = 262144 if ARGS.private_save_check else 3170304
+    if len(sizes) > (6 if ARGS.private_save_check else 3) or directories > 3 or sum(sizes.values()) > limit:
+        raise AssertionError("private owned disk quota exceeded")
+    return {"files": len(sizes), "directories": directories, "bytes": sum(sizes.values()), "sizes": sizes}
+
+
 def check():
+    if ARGS.private_save_check:
+        from test_tpex_price_saved import run_phase
+        result = run_phase(ARGS.disk_phase, PRIVATE_ROOT)
+        output = receipt()
+        output.update(private_save=result, disk_phase=ARGS.disk_phase)
+        print(json.dumps(output, ensure_ascii=False), flush=True)
+        return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
     for name in (("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
@@ -149,7 +267,18 @@ def serve(preloaded_store=None):
     cutoff = date.fromisoformat(ARGS.cutoff)
     if (ARGS.live_source_opt_in or preloaded_store is not None) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
-    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None, cutoff=cutoff, policy_version=ARGS.policy_version)
+    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
+    if PRIVATE_ROOT:
+        from app import tpex_price_saved
+        fixture.stack.enter_context(patch.dict(os.environ, {tpex_price_saved.ENABLE_ENV: "1", tpex_price_saved.ROOT_ENV: str(PRIVATE_ROOT),
+            tpex_price_saved.VERSION_ENV: ARGS.private_policy_version, tpex_price_saved.DIGEST_ENV: ARGS.private_policy_digest}))
+    if ARGS.saved_source_only:
+        if preloaded_store is not None:
+            raise ValueError("reopen uses a new empty Store, not preloaded memory")
+        fixture.stack.enter_context(patch.dict(os.environ, {tpex_price.ENABLE_ENV: "0"}))
+        def no_source(**kwargs):
+            raise AssertionError("saved-source-only must never call a source loader")
+        fixture.store._loader = no_source
     if preloaded_store is not None:
         raw = preloaded_store.raw_capture
         if not isinstance(preloaded_store, tpex_price.TpexPriceStore) or raw is None or not preloaded_store._attempted or preloaded_store._request_count != 1 or preloaded_store._error:
@@ -181,7 +310,9 @@ def serve(preloaded_store=None):
     @fixture.app.middleware("http")
     async def scope(request, call_next):
         capture_paths = {f"/api/stocks/TPEx/{symbol}/prices/capture" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)}
-        allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in capture_paths | {"/api/focus/price-lots/capture"})
+        save_paths = {f"/api/stocks/TPEx/{symbol}/prices/save" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)} if PRIVATE_ROOT else set()
+        post_paths = save_paths if ARGS.saved_source_only else capture_paths | save_paths | {"/api/focus/price-lots/capture"}
+        allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in post_paths)
         if not allowed: return JSONResponse({"detail": "preview operation outside scope"}, status_code=405)
         return await call_next(request)
     @fixture.app.get("/__price_validation/receipt")

@@ -2,9 +2,31 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { formatCanonicalShareLots } from '../units'
 import { createPriceMemoryFixture, priceFixtureInstrument } from '../stockPriceMemoryRead.test'
 import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2 } from '../stockPriceMemoryRead'
-import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, overviewReason, OfficialEvents } from './StockOverview'
+import { createPriceSavedFixture } from '../stockPriceSavedRead.test'
+import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, PriceSaved, overviewReason, OfficialEvents } from './StockOverview'
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
+
+export function runPriceSavedOverviewSSRTests(render: (element: ReactElement) => string): number {
+  let count = 0
+  const check = (condition: boolean, message: string) => { count++; if (!condition) throw new Error(message) }
+  const data = createPriceSavedFixture(), instrument = priceFixtureInstrument('6510')
+  const html = render(<PriceSaved data={data} instrument={instrument} cutoff="2026-10-06" canSave={false} onRead={() => {}} />)
+  check(html.includes('讀取已保存行情') && html.includes('已從本機讀回並核對原件'), 'named saved operation and action')
+  check(html.includes('560.518') && html.includes('1,729,347,985') && html.includes('>3,055<'), 'saved selected lots/amount/close')
+  check(html.includes('3125.00') && html.includes('560518') && html.includes('1729347985'), 'saved original source strings')
+  check(html.includes('保存紀錄 SHA-256') && html.includes('原始擷取紀錄 storage process_memory') && html.includes('目前保存 origin private_local'), 'independent storage facts')
+  check(html.includes('政府資料開放授權條款 OGL 1.0') && html.includes('歷史當時可得'), 'attribution and limitations')
+  for (const cutoff of ['2026-10-05', undefined]) check(render(<PriceSaved data={data} instrument={instrument} cutoff={cutoff} canSave={false} />) === '', 'outside saved date absent')
+  const corrupted = structuredClone(data); corrupted.storage_provenance!.capture_receipt_sha256 = 'e'.repeat(64)
+  const rejected = render(<PriceSaved data={corrupted} instrument={instrument} cutoff="2026-10-06" canSave={false} failure="price_saved_capture_invalid" />)
+  check(!rejected.includes('560.518') && rejected.includes('未能通過核對'), 'bad receipt does not display values')
+  const failedReread = render(<PriceSaved data={data} instrument={instrument} cutoff="2026-10-06" canSave={false} failure="price_saved_capture_invalid" />)
+  check(!failedReread.includes('560.518') && !failedReread.includes('已從本機讀回並核對原件'), 'explicit failed reread hides formerly valid saved projection')
+  const waiting = render(<PriceSaved instrument={instrument} cutoff="2026-10-06" canSave={true} onSave={() => {}} onRead={() => {}} />)
+  check(waiting.includes('保存此日行情') && waiting.includes('尚未讀取') && !waiting.includes('官方原字串'), 'explicit save/read before adoption')
+  return count
+}
 
 export function runPriceMemoryOverviewSSRTests(render: (element: ReactElement) => string): number {
   let count = 0

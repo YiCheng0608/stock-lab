@@ -6,7 +6,7 @@
 
 法人現行兩股八截止W8版本／來源／27日曆與96 net見[§19](#19-m1-w8八截止法人來源與完整有界日曆)；§13–18保留歷史觀測／數值，不作implicit latest。M1-PRICE-1的dataset11370新價格來源、production capture／API及兩股具名操作已有限接受，權威見[§20](#20-m1-price-1tpex-兩股單日價格來源與准入)。
 
-現行M2普通TPEx七股scope、same-date新body／policy准入見[§29](#29-m2-focus-stock-scope-5七股來源准入)；quote-date仍2026-10-06、臺北取得10/07。§20～27保留已驗舊policy／金融表與月wire推論；NEW開放平台metadata及用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。現行`.5`仍只process memory，私人磁碟保存另須exact用途／版本准入。
+現行M2普通TPEx七股scope、same-date新body／policy准入見[§29](#29-m2-focus-stock-scope-5七股來源准入)；quote-date仍2026-10-06、臺北取得10/07。§20～27保留已驗舊policy／金融表與月wire推論；NEW開放平台metadata及用途缺口見[§28](#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口)。`.5`仍只process memory；獨立`.1`私人保存／跨程序讀回已有限接受，見[§30](#30-m1-price-save-1私人單日保存與跨程序讀回)，不改舊capture bytes。
 
 ## 1. Registry 與 policy 契約
 
@@ -1100,3 +1100,35 @@ Final HTTP200、1788599B／12194 data rows／18欄／全1151006，body SHA `ab34
 Source14／net27343B、actual API10案及可信desktop／窄版samecutoff往返已接受；coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0。BOOT／§28 metadata／DOC／index／Git不計implementation batch。必要checks與原exit／清理由[開發入口](development-baseline/README.md#m2-focus-stock-scope-5-七股範圍的記憶體驗證入口)管理；DOC review／freeze／qualified affected index／exact local commit／另准master merge尚待。
 
 下一優先M1-PRICE-SAVE-1是PRIVATE local store保存已准入單日capture／provenance並跨程序讀回的產品操作；目前`.5`仍只process memory，新disk用途policy／schema／private path／files caps及清理尚未准入。新root須先核fresh source／storage-purpose／time／version及具體bounded原task範圍，再金融GET／落盤；完整body SHA讀回需one bounded raw＋canonical receipt，selected projection不足。須actual disk與cross-process API／UI驗收，不宣稱20／21close／calendar／strategy／execution或完整M1／M2／M3完成，亦不以ATR／Signal／Plan／ranking替代。
+
+## 30. M1-PRICE-SAVE-1：私人單日保存與跨程序讀回
+
+**TPEx七股／2026-10-06的完整原件保存、NEW process重驗、actual API及具名操作已由root有限接受。** Scope仍3105／3293／5274／5347／6488／6510／8069、ordinary stock／TWD；操作由[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)管理。§29的`.5` process-memory capture／pins／金融值全留；新增獨立storage overlay，不改原capture事實。
+
+### 30.1 Fresh用途與獨立storage版本
+
+Root於2026-10-06T23:03:24.074791Z～23:03:24.687792Z fresh取得[REST11370](https://data.gov.tw/api/v2/rest/dataset/11370)3184B／SHA `64950fc1b492ee223fe86e16fb7d49a27426d1697c0c1f4553330279ca09fbe4`、[OGL1.0](https://data.gov.tw/license)484470B／SHA `f123f1949f22db90d61d8142051a91ab49b1887133c3d477648aec57256b3c9b`及[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)14834B／SHA `ead63b3a74530eb996accdbf96c750e01769149c9d8a7622b6277855b79095d5`；三metadata GET共502488B、rawexit0／disk0。Exact政府daily CSV linkage不變；政府例外、local copy、署名與完整性支持有限私人保存，未准入普通股月歷史或任意自動下載。
+
+Storage policy `m1-price-save-tpex-11370-2026-10-06.1` canonical UTF-8 2437B、digest `sha256:0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e`；須同時核原`.5` capture pins及新storage pins。保存對象是已准入、完整可重驗的capture；原receipt仍`storage=process_memory`，不改寫成落盤capture。Storage receipt `tpex-price-storage-receipt/m1-v1`另記`storage=private_local`；projection為`stock-price-saved/m1-v1`。不自動變更default date／pins、fetch、hydrate或正式DB。
+
+### 30.2 三檔、原子出版與嚴格重驗
+
+唯一bundle literal files為`body.csv`、`capture-receipt.json`、`storage-receipt.json`。前兩者保持完整原body及原canonical receipt bytes；storage receipt exact schema含`version`／`storage`、storage/capture policy version＋digest、source identity/version／endpoint／GET／as_of／selected_symbols、body SHA/bytes、capture receipt SHA/bytes、request_started_at／captured_at／saved_at、attribution與limitations。Saved time須為aware UTC且不早於capture；它不是publication／first availability／revision。
+
+先驗完整raw、canonical／schema／receipt／pins／來源日期與七股，再在exclusive staging建三檔並atomic rename至唯一final目錄。既有final須完整驗證；idempotent回傳既有bytes／saved_at，不覆寫或挑其他版。NEW process重開再驗完整body、兩份canonical receipt exact bytes及所有上述關係，不以selected projection替代fullbody hash；缺檔、部分bundle、污染／schema／pin／日期衝突均拒用，不較早fallback。API不以saved檔自動hydrate memory Store，原DB IDs仍null。
+
+Windows private path保護目前只驗Windows；未提供其他平台保證。核定product root為`C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367`，final子目錄`tpex-11370-2026-10-06-m1-v1`；max one bundle／3files、raw≤3MiB、capture receipt≤8KiB、storage receipt≤16KiB、合計≤3170304B。測試quota、精確殘留及清理拒絕由[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)詳述；本准入不是其他scope的磁碟grant。
+
+### 30.3 本輪兩次金融capture與actual保存
+
+CURRENT round financial GET總2：OBS1 root獨立fresh於23:10:37.153166Z→23:10:38.119320Z，normal exit0後釋放／disk0；OBS2 post-source-edit producer PID29780的native首次load觸發NEW worker於23:32:17.666931Z→23:32:21.005311Z，Store1／runner1／preloaded=false，沒有OBS1 preload／copy。兩次capture分開記時，不稱全輪只GET1。
+
+Final HTTP200、1788599B／12194 data rows／18欄／全1151006，body SHA `ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200`。23:32:45.499432Z native save actual三檔1791644B：body1788599B、原capture receipt1461B／SHA `871a6887a3b87bd7c23c20fc3a25ec98d369d0df2ed8eedbe8cb040e5242cd36`、storage receipt1584B／SHA `436465b4d13d604965327fe1be7eff98edf65274b0f16c7871474280feb0197b`。Root獨立核full raw結構、兩receipt canonical、126 source fields（21身份欄外側trim比對／105原字串exact）、42金融值與七one-based ordinals；6510 ordinal726／含header727。重按保存files／timestamp／write／source均不變。
+
+Producer停止後NEW reader PID33208 empty Store／memory disabled／source0／preloaded=false；same三檔bytes/hash與all126／42 actual saved API已root接受，reads writes0／mutations0／guards0／DB preserved。Memory raw在程序停止釋放；磁碟body仍保留，不稱原件全刪。Observed／save時鐘不證publication／PIT。
+
+### 30.4 有限接受及未驗
+
+Source13／net70181B與必要checks已root接受；本B1 coreoperation+1／finite private-save source-use、fullraw＋canonical storage及NEW process dependency+1／reliability0／stall0。BOOT／DOC／index／Git不是implementation batch。Actual缺cutoff／10/05／10/07拒用、empty memory save拒用、reader capture POST405及具名API／UI邊界見個股頁§35。
+
+產品三檔清理被automatic review在CreateProcess前以`blocked by policy`拒絕，未執行刪除、維持NO-RETRY；不否定有效功能驗收。Actual missing-file native UI未跑，corruption／schema／partial gate只具synthetic證據；actual失敗UI是connection/proxy502，不改稱missing-file驗收。完整M1／M2／M3、20／21普通股close／complete calendar／strategy time execution、全市場／PIT仍未完成。

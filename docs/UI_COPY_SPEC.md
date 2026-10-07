@@ -214,6 +214,14 @@ M3-P6d 研究候選讀回隔離與候選 read.status 非字串 guard 的單項�
 
 缺該截止時顯示「此截止尚無已核對的官方單日行情。」並說明不以其他日期補值；memory為available但契約拒用時顯示「記憶體行情契約待核實，未採用數值。」；載入失敗提示核對來源詳情、此批次不自動重試。正文明示只含一天、重啟需重載、擷取不是發布時間，趨勢及研究條件待補；原股、版本／SHA／UTC與null DB IDs收合於「查看官方價格原列、來源版本與 SHA」。同截止原生操作與窄版邊界依[個股頁 §25](STOCK_RESEARCH_PAGE.md#25-m1-price-1上櫃兩股單日價量閉環有限接受)，不以本段擴張歷史DB或保存驗收。
 
+#### M1-PRICE-SAVE-1 私人保存與讀回（有限接受）
+
+七股／10/06獨立saved契約提供「保存此日行情」及「讀取已保存行情」；保存先需合法已載入原件，讀回只讀私人檔案。主值仍收盤元／股、精確成交張、TWD元及同日OHLC；來源日10/06、擷取與保存時間分開，不用「最新」或重啟時自動載入。
+
+成功saved數值同時接headline／表／單日圖；原列／capture版與SHA、私人保存receipt與時間可追溯。切股或日期清除舊saved值、恢復日期要explicit read；拒用或讀取失敗不保留舊saved headline／table、不補零或其他日期。原capture process_memory事實不改寫成private_local capture，storage來源另列；擷取／保存不證發布時間或PIT。
+
+actual桌面全七股／窄版三股、原列／chart／日期隔離及proxy502失敗清值已核；missing-file UI未跑。精確schema及具名操作由[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)管理；原`.5`及兩股memory文案按自身契約保持。
+
 #### M3-P6e 獨立特徵／籌碼區塊文案（有限接受）
 
 下列文案已在必要 actual HTTP／App 及具名操作範圍有限接受；精確讀值、窗口、截止、欄位 gate 與原生／DOM.click 驗收邊界由[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)負責。

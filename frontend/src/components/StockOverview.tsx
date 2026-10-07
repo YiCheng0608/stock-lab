@@ -1,5 +1,6 @@
-import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData } from '../types'
+import type { Instrument, InstitutionalDailyData, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData } from '../types'
 import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
+import { privatePriceSupported, validStockPriceSavedRead } from '../stockPriceSavedRead'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
@@ -250,20 +251,56 @@ function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy
 }
 
 
-export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
+export function PriceSaved({ data, instrument, cutoff, canSave, onSave, onRead, busy, failure }: {
+  data?: StockPriceSavedData; instrument?: Instrument; cutoff?: string; canSave: boolean
+  onSave?: () => void; onRead?: () => void; busy?: boolean; failure?: string
+}) {
+  if (!instrument || !privatePriceSupported(instrument, cutoff ?? null)) return null
+  const known = !failure && validStockPriceSavedRead(data, instrument, cutoff ?? null)
+  const bar = known ? data.latest : null
+  return <section className="panel overview-price-memory" aria-labelledby="price-saved-title">
+    <h3 id="price-saved-title">本機保存的單日行情</h3>
+    <p className="small-note">保存此日完整官方原件，服務重啟後可讀回核對。僅支持本次核定的七股及 2026-10-06。</p>
+    <div className="filter-row"><button type="button" className="secondary-button" onClick={onSave} disabled={!canSave || busy || !onSave}>保存此日行情</button>
+      <button type="button" className="secondary-button" onClick={onRead} disabled={busy || !onRead}>{busy ? '核對保存資料中…' : '讀取已保存行情'}</button></div>
+    {known ? <>
+      <p role="status">{data.storage_state.action === 'reopened' ? '已從本機讀回並核對原件。' : data.storage_state.action === 'already_saved' ? '此份原件已保存並重新核對。' : '此日行情已保存並核對。'}</p>
+      <div className="stock-quote-grid"><div><span>收盤（元／股）</span><strong>{number(bar!.close)}</strong></div><div><span>成交量（張）</span><strong>{formatTableVolume(bar!.volume, bar!.source, bar!.volume_exact)}</strong></div><div><span>成交額（新臺幣元）</span><strong>{bar!.turnover_exact === null ? '未提供' : formatCanonicalShares(bar!.turnover_exact, 1, true)}</strong></div></div>
+      <p className="small-note">資料日 {formatResearchDate(bar!.date)} · <a href={data.provenance!.endpoint} target="_blank" rel="noreferrer">櫃買中心 · 上櫃股票行情（11370）</a>。{data.attribution!.owners.join('、')} · {data.attribution!.year} · {data.attribution!.release_version} · <a href={data.attribution!.license_url} target="_blank" rel="noreferrer">政府資料開放授權條款 OGL 1.0</a>。</p>
+      <details className="technical-details"><summary>查看保存原件、官方原列與 SHA</summary>
+        <div>來源全 {data.provenance!.row_count} 列核結構；金融數值僅核 {data.provenance!.selected_symbols.join('、')}。CSV 資料列序 {bar!.row_ordinal}；{data.provenance!.source_version}。</div>
+        <div className="table-wrap"><table><caption>保存原件的官方原字串：價格為元／股，成交股數為股，成交金額為新臺幣元。</caption><thead><tr><th>欄位</th><th>來源原值</th></tr></thead><tbody>{PRICE_HEADERS.map((field) => <tr key={field}><th>{field}</th><td>{bar!.source_fields[field]}</td></tr>)}</tbody></table></div>
+        <div className="overview-provenance">原件 SHA-256 {data.provenance!.body_sha256}</div>
+        <div className="overview-provenance">原始擷取紀錄 SHA-256 {data.provenance!.receipt_sha256}</div>
+        <div className="overview-provenance">保存紀錄 SHA-256 {data.storage_provenance!.storage_receipt_sha256}</div>
+        <div className="overview-provenance">原始擷取政策 {data.provenance!.policy_version} · {data.provenance!.policy_digest}</div>
+        <div className="overview-provenance">私有保存政策 {data.storage_provenance!.storage_policy_version} · {data.storage_provenance!.storage_policy_digest}</div>
+        <div>原始擷取 UTC {data.provenance!.request_started_at} — {data.provenance!.captured_at}；保存 UTC {data.storage_provenance!.saved_at}。</div>
+        <div>原始擷取紀錄 storage process_memory；目前保存 origin private_local。讀回網路請求 0；bar／raw_payload／ingestion_run id 均 null，沒有 DB 記錄。</div>
+      </details>
+    </> : <p className="small-note">尚未讀取已保存行情；請先套用截止日期，再明示保存或讀取。</p>}
+    {failure && <><p role="status">保存資料未能通過核對，請查看原因。</p><details className="technical-details"><summary>查看保存／讀回原因</summary>{failure}</details></>}
+    <p className="small-note">仍只含一天；擷取與保存時間不是發布時間，歷史當時可得、歷史窗口與研究條件待補。</p>
+  </section>
+}
+
+export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, savedPrice, onSavePrice, onReadSavedPrice, privatePriceBusy, privatePriceFailure, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
   data: StockOverviewData; onNews: () => void; onCaptureEvents?: () => void; capturingEvents?: boolean; eventRequestFailure?: string
   onCaptureWindows?: () => void; capturingWindows?: boolean; windowRequestFailure?: string
   instrument?: Instrument; explicitCutoff?: string; onCapturePrice?: () => void; capturingPrice?: boolean; priceRequestFailure?: string
+  savedPrice?: StockPriceSavedData; onSavePrice?: () => void; onReadSavedPrice?: () => void; privatePriceBusy?: boolean; privatePriceFailure?: string
 }) {
   const price = data.price
   const latest = price.latest
   const memoryKnown = instrument && (!explicitCutoff || explicitCutoff === data.as_of) ? validStockPriceMemoryRead(data.price_memory, instrument, explicitCutoff || data.as_of) : false
+  const savedKnown = !privatePriceFailure && instrument && explicitCutoff === data.as_of && validStockPriceSavedRead(savedPrice, instrument, explicitCutoff || null)
   return <section className="stock-overview" aria-labelledby="stock-overview-title">
-    <div className="section-head overview-head"><div><div className="eyebrow">研究總覽</div><h2 id="stock-overview-title">資料截止 {formatResearchDate(data.as_of)}</h2></div><span className="badge">{memoryKnown || latest ? '價格來源已核對／部分資料待補' : '研究資料待補'}</span></div>
+    <div className="section-head overview-head"><div><div className="eyebrow">研究總覽</div><h2 id="stock-overview-title">資料截止 {formatResearchDate(data.as_of)}</h2></div><span className="badge">{memoryKnown || savedKnown || latest ? '價格來源已核對／部分資料待補' : '研究資料待補'}</span></div>
     <p className="overview-cutoff-note">依資料日期截至的事後研究；不代表歷史當時可得。價格保留原始口徑，尚未提供完整還原鏈。</p>
     <div className="overview-grid">
       <PriceMemory data={data.price_memory} instrument={instrument} cutoff={data.as_of} explicitCutoff={explicitCutoff} onCapture={onCapturePrice} busy={capturingPrice} failure={priceRequestFailure} />
-      {!memoryKnown && <section className="panel overview-price"><h3>既有價格與實際視窗</h3>
+      <PriceSaved data={savedKnown ? savedPrice : undefined} instrument={instrument} cutoff={explicitCutoff === data.as_of ? explicitCutoff : undefined} canSave={Boolean(memoryKnown && data.price_memory?.provenance?.policy_version === 'm2-stock-scope-tpex-11370-2026-10-06.5')} onSave={onSavePrice} onRead={onReadSavedPrice} busy={privatePriceBusy} failure={privatePriceFailure} />
+      {!memoryKnown && !savedKnown && <section className="panel overview-price"><h3>既有價格與實際視窗</h3>
         <p className="small-note">本次最多 {price.window_limit} 筆，收到 {price.candidate_count} 筆、通過 {price.valid_count} 筆；不代表完整交易日窗口。</p>
         {latest ? <>
           <div className="overview-range">可用區間 {formatResearchDate(price.from)} — {formatResearchDate(price.to)}</div>

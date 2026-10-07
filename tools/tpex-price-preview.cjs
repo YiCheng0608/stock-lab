@@ -14,9 +14,10 @@ const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
-assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--serve', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
+assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--private-save-check', '--serve', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
+assert(!(args.includes('--private-save-check') && (args.includes('--serve') || args.includes('--check') || args.includes('--focus-check'))), 'choose one check mode')
 const root = path.resolve(__dirname, '..')
 const dependencies = path.resolve(option('--deps', ''))
 assert(args.includes('--deps') && fs.existsSync(path.join(dependencies, 'typescript/package.json')), '--deps needs existing frontend/node_modules')
@@ -153,6 +154,7 @@ global.__institutionalWindowSSRSelection = 'unit-lots-only'
 const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
 const memoryCases = require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
+const savedCases = require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
 const focusCases = require(path.join(sourceRoot, 'priceFocus.test.ts'))
 const React = requireDependency('react')
 const { renderToStaticMarkup } = requireDependency('react-dom/server')
@@ -406,6 +408,17 @@ async function check() {
       known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(), not_run: ['actual source', 'native browser operation', 'disk persistence', 'production build', 'full prior suite'] }))
     return
   }
+  if (args.includes('--private-save-check')) {
+    const savedValidatorChecks = savedCases.runStockPriceSavedReadTests()
+    const savedSSRChecks = cases.runPriceSavedOverviewSSRTests(renderToStaticMarkup)
+    const fixtures = savedCases.createPriceSavedFixture()
+    const bytes = Buffer.byteLength(JSON.stringify(fixtures)), estimate = estimateGraph(fixtures)
+    assert(bytes <= 80 * 1024 && estimate <= 512 * 1024, 'bounded saved synthetic frontend fixture')
+    assert(Object.values(counts).every((x) => x === 0), 'private frontend guards')
+    console.log(JSON.stringify({ passed: true, saved_validator_checks: savedValidatorChecks, saved_ssr_checks: savedSSRChecks,
+      fixture_bytes: bytes, fixture_object_estimated_bytes: estimate, source_requests: 0, ...receipt() }))
+    return
+  }
   const validatorChecks = memoryCases.runStockPriceMemoryReadTests()
   const overviewChecks = cases.runPriceMemoryOverviewSSRTests(renderToStaticMarkup)
   const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
@@ -493,7 +506,7 @@ const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|8069)\/prices\/capture$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
@@ -516,7 +529,7 @@ async function serve() {
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
-    .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方行情使用同程序已准入原件，來源可在個股詳情核對。</div><div id="root">')
+    .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">受控驗收：所選普通股身分由統籌核對後建構記憶體操作目錄；既有行情與未支持標的仍為合成樣本。官方單日行情須經本次擷取或私有保存原件讀回核對後才採用；來源狀態可在個股詳情核對。</div><div id="root">')
   const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")

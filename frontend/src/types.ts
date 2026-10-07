@@ -592,6 +592,25 @@ export type StockPriceMemoryData = {
   capture_state: { enabled: boolean; attempted: boolean; busy: boolean; can_capture: boolean; cache_present: boolean; request_count: number; action: string }
 }
 
+export type StockPriceSavedProvenance = Omit<StockPriceMemoryProvenance, 'memory_capture_id' | 'verification'> & {
+  capture_id: string; verification: 'private_raw_csv_selected_values'
+}
+export type StockPriceSavedBar = Omit<StockPriceMemoryBar, 'origin' | 'provenance'> & {
+  origin: 'private_local'; provenance: StockPriceSavedProvenance
+}
+export type StockPriceStorageReceipt = {
+  version: string; storage: 'private_local'; storage_policy_version: string; storage_policy_digest: string
+  capture_policy_version: string; capture_policy_digest: string; source_id: string; source_version: string
+  endpoint: string; method: 'GET'; as_of: string; selected_symbols: string[]; body_sha256: string; body_bytes: number
+  capture_receipt_sha256: string; capture_receipt_bytes: number; captured_at: string; request_started_at: string
+  saved_at: string; attribution: StockPriceMemoryAttribution; limitations: string[]; storage_receipt_sha256: string
+}
+export type StockPriceSavedData = Omit<StockPriceMemoryData, 'origin' | 'latest' | 'bars' | 'provenance' | 'capture_state'> & {
+  origin: 'private_local'; latest: StockPriceSavedBar | null; bars: StockPriceSavedBar[]
+  provenance: StockPriceSavedProvenance | null; storage_provenance: StockPriceStorageReceipt | null
+  storage_state: { enabled: boolean; action: string; verified: boolean; network_requests: 0 }
+}
+
 
 export type PriceFocusDayMove = 'all' | 'up' | 'down' | 'flat'
 

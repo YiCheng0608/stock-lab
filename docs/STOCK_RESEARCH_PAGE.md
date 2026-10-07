@@ -1159,3 +1159,29 @@ Root actual API10案已核126欄／42金融值及原六股canonical保持；七s
 Source14及本B1核心已root接受：coreoperation+1／selected identity-source-date-policy dependency+1／reliability0／stall0；owned page／API／preview／compiler已清，raw已釋放。Checks與cleanup／原exit見[開發入口](development-baseline/README.md#m2-focus-stock-scope-5-七股範圍的記憶體驗證入口)。DOC review→freeze→qualified affected index→exact local commit→另准master merge／新統籌gate尚待。
 
 未驗磁碟保存／跨程序、full suite／production build、全市場／PIT、20／21歷史close／complete calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。下一M1-PRICE-SAVE-1需新用途／私有磁碟範圍准入及actual跨程序API／UI；當前操作仍process memory。
+
+## 35. M1-PRICE-SAVE-1：私人單日保存與跨程序操作
+
+**七股／2026-10-06的實際磁碟保存、NEW reader、actual API及具名桌面／窄版已有限接受。** 原件、dual pins、三檔schema及時間權威見[來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)；原`.5` memory及§34 focus不自動切換storage來源。
+
+### 35.1 明示保存、讀回與同股同截止
+
+`POST /api/stocks/{exchange}/{symbol}/prices/save?as_of=2026-10-06`只保存現有合法memory capture，不觸發金融GET；無capture拒用。`GET /api/stocks/{exchange}/{symbol}/prices/saved?as_of=2026-10-06`只重開核定私人bundle；須exact supported TPEx identity／scope／date與兩種policy pins。缺cutoff、10/05、10/07皆unavailable，不能用較早或較晚資料補值。
+
+Saved payload `stock-price-saved/m1-v1`以`origin=private_local`區分，`latest`／單bar接同股同日headline／表／圖；`provenance`保留原capture的process_memory事實及UTC，`storage_provenance`另存storage receipt／SHA／saved_at。Source raw欄位、canonical股、精確張與TWD元／股維持；DB IDs null，published／first_available／revision unknown／historical_pit unsupported。Frontend先重驗saved schema／scope／units／raw金融值／same symbol-cutoff／兩層provenance與hash，再採數值。
+
+使用者分別按「保存此日行情」及「讀取已保存行情」；切stock／date隔離request token及舊saved值，日期恢復仍須explicit read。讀回不hydrate memory／不auto-fetch；NEW saved-only reader empty Store／禁止capture，讀與空memory save均零金融GET。原default截止／legacy memory及DB讀值gate保持；具名文案由[UI §10.2](UI_COPY_SPEC.md#102-個股詳情的第一屏)管理。
+
+### 35.2 已接受actual API與原生操作
+
+Root保存及producer停止後重啟NEW reader，actual七股saved API核all126 source fields／42金融、fullbody及兩receipt exact bytes/hash，writes0／mutations0／guards0／DB preserved。Negative5：缺cutoff、10/05、10/07 unavailable；empty memory save unavailable；reader capture POST405。Native idempotent save保存原files／saved_at，沒有追加source或write。
+
+桌面1277×924逐一讀全七股；窄版390×844讀6510／3105／6488，6510full18原列DOM含`-50.00 `尾空白、desktop／窄版raw open均核。6510單日chart實際O3125／H3140／L3050／C3055、成交560.518張，MA空，不假造20日趨勢。日期10/05拒用→10/06恢復只在explicit read後採值；stock／date token隔離已核。
+
+Normal停止owned reader後，同一token實際重讀經proxy502失敗，`price_private_request_failed`清除舊saved headline／table；這是connection failure，並非actual missing-file。Producer5＋reader35共40trusted native events；draft programmatic只SETUP。15個已測states：desktop scroll1262≤1277、narrow375≤390，無水平溢出。
+
+### 35.3 完成、清理及驗收邊界
+
+本B1 operation+1／necessary private-save及跨程序dependency+1／reliability0／stall0。Source13已root接受，checks／文件範圍／配額及三檔NO-RETRY殘留見[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)；DOC review／freeze／qualified index／exact commit／另准master merge仍待。
+
+Actual missing-file native UI未跑，完整性／schema／部分bundle拒用有synthetic證據；actual failed reread則是proxy502。產品磁碟raw未刪，memory raw已隨程序停止釋放；不把清理拒絕稱成功。未驗full suite／production build／其他平台路徑、跨日自動累積、全市場／PIT、20／21歷史close／complete calendar／strategy time execution或完整M1／M2／M3。

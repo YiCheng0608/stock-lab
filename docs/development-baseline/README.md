@@ -258,6 +258,26 @@ Cleanup另經root獨立接受：唯一lifetime page045cdead-1528-460f-adc2-949aa
 
 Coreoperation+1／selected dependency+1／reliability0／stall0；BOOT／M1 metadata／DOC／index／Git非implementation batch。未跑full suite／production build、磁碟保存／跨程序／全市場／PIT／20／21歷史close及完整M1／M2／M3。新保存操作另須source-purpose及actual disk驗收，不以本入口的memory fixture替代。
 
+### M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口
+
+沿既有`tools/tpex-price-api.py`及`tools/tpex-price-preview.cjs`／唯讀共用依賴，無新環境或helper。Python `-B -X utf8`、SQLite :memory:及AST config stub保留；只有已核定private scope例外寫檔，DB不變。Source／storage dual pins及三檔schema見[來源 §30](../SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)，actual操作見[個股頁 §35](../STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。Windows path保護目前僅Windows。
+
+Product runner producer用`--serve --cutoff 2026-10-06 --live-source-opt-in`及原`.5` source `--policy-version/--policy-digest`、新`--private-store-root/--private-policy-version/--private-policy-digest`；NEW reader以`--saved-source-only`取代live opt-in，同source/storage pins及root，empty Store／capture禁用。Private設定為`STOCK_TPEX_PRICE_PRIVATE_STORE=1`、`STOCK_TPEX_PRICE_PRIVATE_ROOT`、`STOCK_TPEX_PRICE_PRIVATE_POLICY_VERSION/DIGEST`；import／普通startup不fetch／hydrate。Exact pins見來源§30，product/private entry都需原task核範圍，本文不授權重跑。
+
+Testroot `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-tests-01a11367`；productroot同parent下`price-save-01a11367`。Parent起初不存在；combined≤9files／7dirs／3432448B（含parent），product≤3files／3dirs／3170304B，synthetic≤6files／256KiB、一case一份最小bundle；ordinary fixture≤7rows／serialized80KiB／object512KiB。只清本次created／owned exact scopes，parent限created且empty；不掃Temp、不留整套successful產物。
+
+Root接受必要rawexit0：backend gate1 compound、bounded disk write/read/faults 10／71／18 checks（獨立PIDs28452／2620／20388）；synthetic CSV821B／7rows，三檔3826B，writes／mutations依phase為6／3、0／0、34／15，unapproved guards0。Synthetic cleanup exit0／testroot absent。初次write fdopen guard integration exit1保留，owned staging清後separate cleanup0，再修Windows fd guard；fixture不代實際金融保存。
+
+Final backend35；frontend30src noEmit、新validator68／saved SSR10、原affected147／46／32均raw0。Node記憶體write:false、noEmit／incremental:false／composite:false；synthetic9834B／object estimate36236B，非RSS；compiler已停。既有Python3.12.14／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1、Node20.19.4／TypeScript5.9.3／esbuild0.25.12。逐輪exact命令、原exit、版本／hash收據留原task，synthetic命令不在此重複。
+
+Root actual OBS1獨立fresh後memory釋放，OBS2是post-edit producer29780 native NEW worker1／Store1／runner1／preloaded=false；CURRENT financial GET總2，完整body／capture／storage時間及SHA由來源§30.3負責。Producer save／idempotent、停止後NEW reader33208 fullraw＋兩receipt／all126欄42金融、saved API／原生desktop窄版已驗；reader writes0／mutations0／network0／guards0／DB preserved。
+
+**測試／功能通過，產品清理未完成。** EXACT product三檔及empty dirs的native PowerShell刪除被automatic review在CreateProcess前以`blocked by policy`拒絕，刪除未執行。殘留final `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`：`body.csv`1788599B、`capture-receipt.json`1461B、`storage-receipt.json`1584B，共1791644B／3files及common parent／productroot／final 3dirs；root readonly residue hash proof0。Filecount cap3已達，停止新增disk cases；NO-RETRY、不換工具／path／owner／rename／containing tree繞過。Testroot已absent，清理拒絕不否定有效驗收、不要求使用者刪除或重跑。
+
+Actual missing-file native UI未跑；corruption／schema／partial gate是synthetic，actual同token failed reread是在normal停止reader後proxy502→清除舊saved值。Root readonly checker最初zero-based ordinal assertion exit1保留，改ONE-BASED後proof0；6510 ordinal726／header727，沒有新增GET或mutation。
+
+Producer／reader／preview normal Ctrl+C各rawexit1；independent root PID29780／33208／6024／compiler40916 absent及8801／8802無listener proof0分報。唯一lifetime page已closed／tabs0；memory raw隨程序停止釋放，disk raw仍留。無screenshot／HAR／profile／export／env install／KeepArtifacts。未跑full suite／production build／非Windows保護／actual missing-file UI；全市場／PIT／20／21close／完整calendar／strategy time execution仍缺。
+
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
 `backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。
