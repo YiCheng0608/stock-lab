@@ -53,17 +53,19 @@ M1-CLOSE-RESOURCE-1單日觀測與前輪M2-FOCUS-STOCK-SCOPE-2四股 `.2`／m2-v
 
 `M1-PRICE-SAVE-1-B1`有限接受七股10/06完整raw／兩canonical receipt私人保存、NEW empty Store reader及actual API／UI；`.1`獨立storage grant，`.5`memory事實不改，captured／saved time非publication／PIT。來源與操作見[§30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)／[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。Actual missing-file UI未跑，清理拒絕與功能驗收分報。
 
-本輪 `M1-CHIPS-CUTOFF-1006-1-B1`來源用途／完整24 observed calendar／20真daily、同10/06兩股12net、actual API／可信desktop與窄版／失敗讀取清值已有限接受；source10，coreoperation+1／necessary source-use-calendar-daily dep+1／reliability0／stall0。金融TOTAL46與觀測分項由[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)管理，操作見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。DOC review→freeze→qualified affected index→exact commit→另准master merge仍待。
+前輪 `M1-CHIPS-CUTOFF-1006-1-B1`已有限接受並正常commit／另准ff-only master merge `fc4a35b67535a7d21b1bba080f799ac6ad46529f`；source10＋DOC8／freeze18、qualified七分區與原task收據已接受。新來源用途／完整24 observed calendar／20真daily、同10/06兩股12net與可信操作按[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)／[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)原範圍保持；coreoperation+1／necessary dep+1／reliability0／stall0，memory raw已釋放。
 
-下一優先候選 `M1-SAVED-PRICE-FOCUS-1006-1`：既有私人保存七股同10/06，以張／單日O-C方向／成交額／振幅篩選並返回detail；NEW process emptyStore／sourceGET0／newdiskwrite0。NEXT新root先准入existing `.1`policy／storage receipt pins的只讀使用、七identities／derived math／caps及獨立saved-focus projection；不假hydrate舊memory／m2-v9、不升default／泛化historygrant、不加at-cap diskcases。候選尚未派工，ordinary20／21close／strategy／PIT／time／execution及完整ROADMAP仍缺。
+`M1-SAVED-PRICE-FOCUS-1006-1-B1`已有限接受：七股10/06既有private來源精確四條件篩選→saved detail→五原字串返回；NEW empty Store／memorydisabled，current metadata／financial GET0、新diskwrites0／DBmut0。Coreoperation+1／necessary derived saved-source readonly-use dependency+1／reliability0／stall0；完整原件／新consumer pins由[來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)管理，actual API／可信desktop窄版及focus/detail502清值見[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。文件review／freeze／qualified索引／commit／另准master merge尚待，清理fences不變。
+
+條件式下一優先候選 `M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1`：既有co-render不算新增核心；當前saved-only runner禁全部POST且chips Store未准入，尚缺可執行的saved-focus→3105／6488同10/06價格＋真5／20net→五原條件返回共同guarded entry。NEXT新root先核private只讀與兩source-use／consumer policies、samecutoff／來源時間及共同入口；oldchips raw已釋放，若准入才fresh bounded22 official GET（2index＋20daily），不繼承舊fetchgrant或為duplicate capture計dep。Actual qualified joined flow才計核心；若已可執行或route不可行，拒絕redundant round，改ordinary第八股前先fresh identity／scope／用途。此候選與fallback均未准入；普通20／21close／trend／strategy／time／PIT／execution及完整ROADMAP仍缺。
 
 M1-W9已封存，只有bootstrap／接手、沒有implementation batch；原「新增9/18第九cutoff／108 net」只是未實作歷史候選，不機械續作。歷史W8真8/25／27日曆／96 net仍按已驗範圍有效。下一題與跨輪計數依[AGENTS](../AGENTS.md#核心選題與進度判定)，不因文件／索引／Git歸零。
 
 | 核心路徑 | 目前缺口 | 下一步與驗收 |
 | --- | --- | --- |
 | M1 資料證據 | W8及新explicit10/06兩股用途／24觀測日曆／20真daily依賴已解除；範圍外、PIT／修訂／TWSE用途仍缺。 | 只按已驗exact集合／新版本使用；缺列不推休市，權威見[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)。 |
-| M1 計算與接線 | 新兩股10/06真5／20日net／完整日曆、W8及七股私人價格有限接受；普通20／21close、strategy inputs／membership／time／execution仍缺。 | 下一saved-source focus先准入existing bundle只讀用途與獨立projection，不借新法人日曆完成trend／研究；操作見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。 |
-| M2 關注理由 | 七股四理由與五條件往返已有限接受；分類品質、範圍外及saved來源focus尚待。 | M2 saved-focus／next ordinary scope為fallback；另核所採來源版本／時間及actual API／native，不自動用`.1`升級`.5`focus，見[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。 |
+| M1 計算與接線 | 兩股10/06真5／20net／完整有界日曆、W8及七股私人價格有限接受；新saved-source focus亦已接actual API／UI，普通20／21close／trend／strategy inputs／membership／time／execution仍缺。 | 條件式下一saved-price＋chips共同入口須有新增可執行操作及必要source-use，不能為co-render或duplicate capture另計核心；來源與操作見[§32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)／[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。 |
+| M2 關注理由 | 七股memory與saved兩種來源的四理由／五原條件往返均有限接受；分類品質及範圍外仍待。 | ordinary第八股是conditional fallback，先核fresh identity／scope／來源用途與actual API／native，不擴大既有private七股pins，見[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。 |
 | M3 計畫操作 | caller-input 純核心已驗，實際來源／時間與新 Plan 產品保存未接。 | 具名列最小操作、真實資料及其必要 gate；滿足後接保存、API、UI 與追蹤。未滿足項列解除條件，不以 unknown 顯示代替必要條件。 |
 
 R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線才交付獨立核心操作。R0-B2 不是全域第一主題；其 snapshot／body／receipt／registry pins tuple 未齊，保持待驗，不重複搜尋或建 fixture 冒稱接入。[Artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與-bridge-b-有限成果) 管理精確缺口。
@@ -96,6 +98,7 @@ R0–R3 是完整資料、技術與驗收分層，不要求先清完全部基線
 | M1-HISTORY-OPEN-DATA-LINK-1 | 三份native metadata有限review，REST11371 daily-only／suggest REST有reply history；月資源用途未准入、歷史金融GET0／core0／dep0／非implementation batch。 | [來源 §28](SOURCE_REGISTRY.md#28-m1-history-open-data-link-1開放平台metadata與歷史用途缺口) |
 | M2-FOCUS-STOCK-SCOPE-5-B1 | 七股`.5`／source14／actual API及可信往返有限接受，core+1／selected dep+1／reliability0／stall0；七scope索引／本地merge已接受。 | [來源 §29](SOURCE_REGISTRY.md#29-m2-focus-stock-scope-5七股來源准入)、[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返) |
 | M1-PRICE-SAVE-1-B1 | 七股10/06 private三檔／NEW reader／actual API及可信操作，core+1／necessary dep+1／reliability0／stall0；source13＋DOC8 freeze21／qualified索引與本地master merge c1388b1已接受，三檔NO-RETRY保持。 | [來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)、[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作) |
+| M1-SAVED-PRICE-FOCUS-1006-1-B1 | 七股10/06既有保存來源精確四條件篩選、NEW reader／actual API及可信五原字串往返／focus與detail502清值；core+1／necessary readonly-use dep+1／reliability0／stall0，DOC／索引／Git待。 | [來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)、[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返) |
 | M1-P4a | 有界來源審查接受；TWSE 法人來源與 exact 用途權利未准入，未取得原件或增加功能。 | [來源 §12](SOURCE_REGISTRY.md#12-m1-p4atwse-單日法人有界審查與准入缺口) |
 | R1-A2／M1 成交量 | 指定成交額 migration、selected 拒收、legacy 精確整數磁碟案例及 synthetic HTTP／JavaScript／個股呈現；不證真實全市場 coverage。 | [資料來源](DATA_SOURCES.md)、[個股頁 §14](STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現) |
 | M3-P1～P5 | 既有庫存精確股數、int64 保存／指定磁碟重開、成本／停損／風險輸入與讀回、估值／持倉判定一致。 | [UI 文案](UI_COPY_SPEC.md)、[R0 §8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受) |

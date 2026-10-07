@@ -14,10 +14,12 @@ const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
-assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--private-save-check', '--serve', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
+assert(args.every((arg, index) => ['--deps', '--check', '--focus-check', '--saved-focus-check', '--private-save-check', '--serve', '--saved-source-only', '--port', '--api-port'].includes(arg) || ['--deps', '--port', '--api-port'].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
 assert(!(args.includes('--private-save-check') && (args.includes('--serve') || args.includes('--check') || args.includes('--focus-check'))), 'choose one check mode')
+assert(!args.includes('--saved-focus-check') || !['--serve', '--check', '--focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one check mode')
+assert(!args.includes('--saved-source-only') || args.includes('--serve'), 'saved-source-only is an owned serve mode')
 const root = path.resolve(__dirname, '..')
 const dependencies = path.resolve(option('--deps', ''))
 assert(args.includes('--deps') && fs.existsSync(path.join(dependencies, 'typescript/package.json')), '--deps needs existing frontend/node_modules')
@@ -155,6 +157,7 @@ const cases = require(path.join(sourceRoot, 'components/StockOverview.test.tsx')
 const memoryCases = require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
 const savedCases = require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
+const savedFocusCases = require(path.join(sourceRoot, 'savedPriceFocus.test.ts'))
 const focusCases = require(path.join(sourceRoot, 'priceFocus.test.ts'))
 const React = requireDependency('react')
 const { renderToStaticMarkup } = requireDependency('react-dom/server')
@@ -194,6 +197,41 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (args.includes('--saved-focus-check')) {
+    const helperChecks = savedFocusCases.runSavedPriceFocusTests()
+    const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+    const { MemoryRouter } = requireDependency('react-router-dom')
+    const App = await appSSRModule()
+    let appChecks = 0
+    const verify = (value, message) => { appChecks++; assert(value, message) }
+    for (const [lots, move, amount, range, expected] of [['0.000', 'all', '0', '0.000', '3105,3293,5274,5347,6488,6510,8069'],
+      ['560.518', 'down', '1729347985', '2.880', '3105,6510'], ['560.519', 'down', '1729347985', '2.880', '3105'],
+      ['560.518', 'down', '1729347986', '2.880', '3105'], ['560.518', 'down', '1729347985', '2.881', '3105'], ['0', 'all', '0', '10', '']]) {
+      const data = savedFocusCases.createSavedPriceFocusFixture(lots, move, amount, range)
+      assert(Buffer.byteLength(JSON.stringify(data)) <= 80 * 1024 && estimateGraph(data) <= 512 * 1024, 'bounded synthetic saved focus')
+      const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(App.SavedPriceFocusResults, { data })))
+      verify(data.items.map((item) => item.symbol).join() === expected && (html.match(/class="focus-card"/g) || []).length === data.count, 'saved-focus exact cards')
+      verify(html.includes('已核 7 股') && (expected || html.includes('零候選')), 'full snapshot true zero')
+      if (expected.includes('6510')) verify(html.includes('560.518') && html.includes('1,729,347,985') && html.includes('3125.00') && html.includes('3055.00'), 'seventh exact saved reasons')
+    }
+    const componentChecks = cases.runSavedFocusOverviewSSRTests(renderToStaticMarkup)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    const initial = '/focus/price-saved?as_of=2026-10-06&min_lots=560.518&day_move=down&min_turnover=1729347985&min_range_pct=2.880'
+    const waiting = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [initial] }, React.createElement(App.default))))
+    verify(waiting.includes('讀取已保存行情') && waiting.includes('候選數未知') && !waiting.includes('class="focus-card"'), 'no private auto-read on route mount')
+    client.setQueryData(['stock', 'TPEx', '6510', '2026-10-06'], stockFixture('6510', '2026-10-06', memoryRead.PRICE_SCOPE_POLICY_VERSION_V5))
+    const detail = require(path.join(sourceRoot, 'savedPriceFocus.ts')).savedFocusDetailPath('6510', '2026-10-06', '560.518', 'down', '1729347985', '2.880')
+    const detailHTML = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: [detail] }, React.createElement(App.default))))
+    verify(detailHTML.includes('回到已保存行情關注（原條件）') && detailHTML.includes('目前只採已保存行情') && detailHTML.includes('讀取已保存行情'), 'source mode and exact return')
+    verify(!detailHTML.includes('查看官方價格原列、來源版本與 SHA') && !detailHTML.includes('既有價格與實際視窗') && !detailHTML.includes('>3,055<'), 'old memory and DB values excluded before explicit saved read')
+    client.clear()
+    const fixture = savedFocusCases.createSavedPriceFocusFixture()
+    assert(Object.values(counts).every((x) => x === 0), 'saved focus frontend guards')
+    console.log(JSON.stringify({ passed: true, saved_focus_helper_checks: helperChecks, saved_focus_app_ssr_checks: appChecks,
+      affected_overview_ssr_checks: componentChecks, fixture_bytes: Buffer.byteLength(JSON.stringify(fixture)), fixture_object_estimated_bytes: estimateGraph(fixture),
+      max_selected_rows: 7, source_requests: 0, ...receipt(), not_run: ['actual private bundle', 'native browser operation', 'disk cases', 'production build', 'full prior suite'] }))
+    return
+  }
   if (args.includes('--focus-check')) {
     const helperChecks = focusCases.runPriceFocusTests()
     const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
@@ -506,7 +544,7 @@ const requests = { api_get: 0, api_post: 0, rejected: 0 }
 const json = (response, status, value) => { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)) }
 async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
-  const allowed = request.method === 'GET' || (request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
+  const allowed = request.method === 'GET' || (!args.includes('--saved-source-only') && request.method === 'POST' && (/^\/api\/stocks\/TPEx\/(?:3105|3293|5274|5347|6488|6510|8069)\/prices\/(?:capture|save)$/.test(url.pathname) || url.pathname === '/api/focus/price-lots/capture'))
   if (!allowed) { requests.rejected++; return json(response, 405, { detail: 'outside preview operation' }) }
   requests[request.method === 'POST' ? 'api_post' : 'api_get']++
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,

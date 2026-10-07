@@ -11,6 +11,8 @@ from typing import Any, Mapping
 from worker.tpex_price_capture import NEW_CUTOFF, SEVENTH_SCOPE_POLICY_VERSION, PriceCaptureError
 from worker.tpex_price_storage import (CAPTURE_POLICY_DIGEST, STORAGE_POLICY_VERSION, STORAGE_POLICY_DIGEST,
     PriceStorageError, reopen_capture, save_capture, storage_policy, validate_storage_policy)
+from worker import tpex_price_storage as _storage
+from worker.tpex_price_capture import canonical_bytes
 from . import tpex_price
 
 VERSION = "stock-price-saved/m1-v1"
@@ -103,3 +105,49 @@ def private_price(instrument: Any, as_of: date | None, *, save: bool = False, en
         _LOCK.release()
     result["storage_state"]["action"] = "failed"
     return result
+
+
+def read_private_snapshot(instruments: list[Any], as_of: date, *, environment: Mapping[str, str],
+                          on_start, on_bytes, on_parsed) -> list[dict]:
+    """Independent consumer read: one protected three-file snapshot, no Store/cache.
+
+    Consumer callbacks admit purpose, bytes and cooperative phase bounds. The
+    original single-stock save/read action above deliberately keeps its contract.
+    """
+    if not instruments or len(instruments) > 7:
+        raise PriceStorageError("price_saved_snapshot_scope_invalid")
+    for instrument in instruments:
+        _, reason = _gate(instrument, as_of, environment)
+        if reason:
+            raise PriceStorageError(reason)
+    if not _LOCK.acquire(blocking=False):
+        raise PriceStorageError("price_storage_busy")
+    try:
+        policy = storage_policy()
+        validate_storage_policy(policy, environment[VERSION_ENV], environment[DIGEST_ENV])
+        on_start()
+        with _storage._root_scope(environment[ROOT_ENV], create=False) as root:
+            _storage._tree(root)
+            final = root / _storage.DIRECTORY
+            if not final.exists():
+                raise PriceStorageError("price_saved_capture_missing")
+            with _storage._hold_directory(final):
+                if {item.name for item in final.iterdir()} != set(_storage.FILES):
+                    raise PriceStorageError("price_storage_entries_invalid")
+                bounds = policy["bounds"]
+                body = _storage._read(final / "body.csv", bounds["max_raw_bytes"])
+                encoded = _storage._read(final / "capture-receipt.json", bounds["max_capture_receipt_bytes"])
+                storage_bytes = _storage._read(final / "storage-receipt.json", bounds["max_storage_receipt_bytes"])
+                if len(body) + len(encoded) + len(storage_bytes) > bounds["max_bundle_bytes"]:
+                    raise PriceStorageError("price_saved_size_invalid")
+                on_bytes(body, encoded, storage_bytes)
+                capture = _storage.verified_capture(body, encoded, policy)
+                receipt = _storage._json(storage_bytes)
+                if canonical_bytes(_storage._receipt(capture, policy, receipt.get("saved_at"))) != storage_bytes:
+                    raise PriceStorageError("price_saved_storage_receipt_invalid")
+                on_parsed(capture, receipt, storage_bytes)
+                receipt_sha = hashlib.sha256(storage_bytes).hexdigest()
+                return [_project(_base(item, as_of, True, "reopened"), capture, receipt, receipt_sha, "reopened")
+                        for item in instruments]
+    finally:
+        _LOCK.release()

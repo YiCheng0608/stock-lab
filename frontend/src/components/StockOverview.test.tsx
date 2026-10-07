@@ -3,6 +3,7 @@ import { formatCanonicalShareLots } from '../units'
 import { createPriceMemoryFixture, priceFixtureInstrument } from '../stockPriceMemoryRead.test'
 import { PRICE_BODY_SHA, PRICE_SCOPE_POLICY_VERSION, PRICE_SCOPE_POLICY_VERSION_V2 } from '../stockPriceMemoryRead'
 import { createPriceSavedFixture } from '../stockPriceSavedRead.test'
+import { createSavedFocusStockFixture } from '../savedPriceFocus.test'
 import { InstitutionalDaily, InstitutionalWindows, formatWindowShares, StockOverview, PriceSaved, overviewReason, OfficialEvents } from './StockOverview'
 import type { InstitutionalDailyData, InstitutionalWindowsData, StockOverviewData, OfficialEventsData } from '../types'
 import type { ReactElement } from 'react'
@@ -25,6 +26,27 @@ export function runPriceSavedOverviewSSRTests(render: (element: ReactElement) =>
   check(!failedReread.includes('560.518') && !failedReread.includes('已從本機讀回並核對原件'), 'explicit failed reread hides formerly valid saved projection')
   const waiting = render(<PriceSaved instrument={instrument} cutoff="2026-10-06" canSave={true} onSave={() => {}} onRead={() => {}} />)
   check(waiting.includes('保存此日行情') && waiting.includes('尚未讀取') && !waiting.includes('官方原字串'), 'explicit save/read before adoption')
+  return count
+}
+
+export function runSavedFocusOverviewSSRTests(render: (element: ReactElement) => string): number {
+  let count = 0
+  const check = (condition: boolean, message: string) => { count++; if (!condition) throw new Error(message) }
+  const data = createUnitLotsFixture(), instrument = priceFixtureInstrument('6510')
+  data.as_of = '2026-10-06'
+  data.price_memory = createPriceMemoryFixture('6510', '2026-10-06', 'm2-stock-scope-tpex-11370-2026-10-06.5')
+  const saved = createSavedFocusStockFixture()
+  const view = (extra: { savedPrice?: typeof saved; privatePriceFailure?: string } = {}) => render(<StockOverview data={data} instrument={instrument}
+    explicitCutoff="2026-10-06" privateSavedOnly onReadSavedPrice={() => {}} onNews={() => {}} {...extra} />)
+  const waiting = view()
+  check(waiting.includes('讀取已保存行情') && !waiting.includes('保存此日行情'), 'readonly named user action')
+  check(!waiting.includes('查看官方價格原列、來源版本與 SHA') && !waiting.includes('既有價格與實際視窗') && !waiting.includes('560.518'), 'source mode excludes memory and DB prices before read')
+  const accepted = view({ savedPrice: saved })
+  check(accepted.includes('560.518') && accepted.includes('1,729,347,985') && accepted.includes('>3,055<'), 'admitted saved mode values')
+  const failed = view({ savedPrice: saved, privatePriceFailure: 'price_private_request_failed' })
+  check(!failed.includes('560.518') && !failed.includes('保存原件的官方原字串') && failed.includes('未能通過核對'), 'same token failure clears saved values and raw')
+  const corrupt = structuredClone(saved); corrupt.focus_consumer!.policy_digest = 'wrong'
+  check(!view({ savedPrice: corrupt }).includes('560.518'), 'consumer proof required')
   return count
 }
 

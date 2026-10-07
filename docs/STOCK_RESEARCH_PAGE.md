@@ -1219,3 +1219,44 @@ Outer「查看法人窗口的每日數值、交易日與來源版本」列完整
 Root接受operation+1／必要來源用途＋觀測日曆＋daily dependency+1／reliability0／stall0；唯一owned page正常closed／tabs[]、API／preview／compiler及listeners已核不存在，raw只memory已釋放、diskartifact0。Normal Ctrl+C rawexit1與cleanup proof exit0分報，收據見[開發入口](development-baseline/README.md#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口)。
 
 缺／壞來源按窗失效、污染／busy／pins等邊界只以必要synthetic驗證；actual missing-source native未跑。未驗全市場／TWSE、普通股20／21close、完整strategy／time／execution、PIT、trend／Signal／Plan、法人磁碟保存／跨程序、full suite／production build或完整M1／M2／M3。舊private三檔及整個DAY-RANGE NO-RETRY保持；既有通過證據不因新角色重跑。
+
+## 37. M1-SAVED-PRICE-FOCUS-1006-1：保存來源關注與同截止往返
+
+**保存七股／2026-10-06的四條件篩選→同股同截止detail→五原條件返回已有限接受。** `price-saved-focus/m1-v1`獨立於memory `price-lot-focus/m2-v9`；exact consumer/storage/capture pins、fullraw與金融真值只由[來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)管理，原§34／§35／§36不自動取得新准入。
+
+### 37.1 明示只讀、全七股gate與exact條件
+
+`GET /api/focus/price-saved`只接受 `as_of/min_lots/day_move/min_turnover/min_range_pct` 五條件，前兩required；duplicate／unknown／invalid query回422。合法但unsupported10/05、10/07為unavailable／count=null／items=[]且不讀檔。Supported僅explicit10/06、來源§32七identities；完整原件／全七股required reads及同tuple／日期／provenance先gate後filter。四項條件AND、inclusive精確比較、code升序、一股一卡；available真零不等於來源不足。精確張／int64 TWD／C對O方向／振幅公式與原漲跌欄區別見來源§32.2。
+
+Entry、套用條件、切換及返回都不auto-read；使用者按「讀取已保存行情」才核目前條件。同一stock／date／source-mode／條件組有generation token；busy、回應失敗及切換隔離舊值，late response不回填其他狀態。頁面為 `/focus/price-saved`，詳情帶 `source_mode=private_saved`、`from=price-saved-focus` 與safe local返回條件；來源模式不新增第六個公開filter。
+
+### 37.2 Saved detail、來源追溯與失敗隔離
+
+新consumer detail為 `GET /api/stocks/{exchange}/{symbol}/prices/saved-focus?as_of=2026-10-06`；old `/prices/saved` 在guarded mode外保持。NEW consumer runner只讀且全部POST禁止，guarded mode的old saved入口405，避免繞過shared read budget。切同股／日期／source-mode先清saved值，合法返回五條件才啟用新read；不save、capture、hydrate memory或採old memory／DB價格fallback。
+
+Frontend先重驗新consumer及原saved schema／兩層provenance／hash／scope／cutoff／raw金融值，再接headline、成交張、表與單日chart；原列drawer保留18 source fields、row ordinal與capture/storage receipt。返回留 `as_of/min_lots/day_move/min_turnover/min_range_pct` 的**五個原字串**，含 `0.000`／`2.880` 尾零；不正規化成另一組輸入。原capture process_memory及現在private_local並列，擷取／保存UTC不是發布時間，MA／trend／研究條件仍待補。
+
+Actual focus same-token HTTP502立即清全部cards、count、來源blocks及raw；detail same-token HTTP502清headline、成交張、table、原列drawer及canvas，保留read button與ONE「讀取原因」diagnostic details。Diagnostic details不是raw drawer，不以其存在誤報舊原件仍顯示。缺／壞來源不用0、其他日期或memory／DB補值；恢復後仍須明示讀取。具名文案由[UI §10.6](UI_COPY_SPEC.md#106-保存來源關注與同截止返回)管理。
+
+### 37.3 Actual API、精確邊界與可信native
+
+Root獨立API驗全部七股detail的126原字串／42金融、完整三檔hash與兩receipt canonical，不稱七股都曾native開raw drawer。Actual focus結果如下，門檻順序為張／方向／TWD元／振幅%：
+
+| 條件 | code順結果 |
+| --- | --- |
+| 560.518／down／1729347985／2.880 | 3105＋6510 |
+| 560.519／down／1729347985／2.880 | 3105 |
+| 560.518／down／1729347986／2.880 | 3105 |
+| 560.518／down／1729347985／2.881 | 3105 |
+| 0／all／0／0 | 全七股 |
+| 0／up／0／0 | 5347＋6488＋8069 |
+| 0／down／0／0 | 3105＋3293＋5274＋6510 |
+| 0／flat／0／0 | available genuine0／items=[] |
+
+Desktop1277×924／doc1262與narrow390×844／doc375均完成trusted read、6510 detail及五原字串back，無水平溢出。Desktop驗七exact cards、三mixed boundary與flat真零；6510 headline／560.518張、source18 drawer均對actual raw，ordinal726／含header727，原 `-50.00 ` 保持。Narrow只驗mixed3105＋6510、genuine6510 read及headline收盤3055／560.518張／成交額1729347985、五原字串返回；未驗窄版native raw drawer展開。Entry／apply／back沒有自動read；同stock/date/source-mode token隔離與focus／detail兩個actual same-token502清值均核通。
+
+同ONE lifetime page共96 browser events，全isTrusted=true；含兩次offscreen HTML miss後在同頁actual SUMMARY／A改正。首次Ctrl+A沒有選取而append invalid字串，後以trusted End／Backspace／inserttext改正；只後續正確輸入通過，不稱首次選取成功。CLI讀取／prefix／quoting／ref失敗不是產品成功操作，不據此重啟或重放。首次root detail assertion把diagnostic details當raw而exit1，後readonly proof0釐清；產品不用source edit／rerun。
+
+### 37.4 完成與未驗邊界
+
+本B1 coreoperation+1／necessary derived saved-source readonly-use dep+1／reliability0／stall0；source13已獨立接受，必要驗證與owned runtime清理由[開發入口](development-baseline/README.md#m1-saved-price-focus-1006-1-保存來源關注的零落盤驗證入口)管理。Raw disk仍保留；三檔NO-RETRY與整個DAY-RANGE fence不變。Actual missing-file UI未跑；synthetic integrity／schema不改稱actual missing-file，HTTP502不改稱缺檔驗收。未跑full suite／production build／diskcases／install；未驗其他平台、全市場／PIT、普通20／21close／trend／strategy／time／execution或完整M1／M2／M3。

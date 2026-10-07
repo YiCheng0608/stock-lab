@@ -17,6 +17,8 @@ import type {
   StockPriceMemoryData,
   StockPriceSavedData,
   PriceLotFocusData,
+  PriceSavedFocusData,
+  StockPriceSavedFocusData,
   PriceFocusDayMove,
   OfficialEventFocusData,
   NewsItem,
@@ -218,6 +220,12 @@ export const saveStockPrice = (exchange: string, symbol: string, asOf: string) =
 
 export const getSavedStockPrice = (exchange: string, symbol: string, asOf: string) =>
   get<StockPriceSavedData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/saved${queryString({ as_of: asOf })}`)
+
+export const getSavedFocusStockPrice = (exchange: string, symbol: string, asOf: string) =>
+  get<StockPriceSavedFocusData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/saved-focus${queryString({ as_of: asOf })}`)
+
+export const getSavedPriceFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove, minTurnover: string, minRangePct: string) =>
+  get<PriceSavedFocusData>(`/focus/price-saved${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)
 
 export const getPriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
   get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)

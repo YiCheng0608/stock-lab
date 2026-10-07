@@ -1,6 +1,7 @@
 import type { Instrument, InstitutionalDailyData, InstitutionalWindowReceipt, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData } from '../types'
 import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { privatePriceSupported, validStockPriceSavedRead } from '../stockPriceSavedRead'
+import { validSavedFocusStock } from '../savedPriceFocus'
 import { formatResearchDate, formatResearchDateTime } from '../stockResearch'
 import { formatCanonicalShareLots, formatCanonicalShares, formatTableVolume, formatTableVolumeShares } from '../units'
 
@@ -416,17 +417,17 @@ function PriceMemory({ data, instrument, cutoff, explicitCutoff, onCapture, busy
 }
 
 
-export function PriceSaved({ data, instrument, cutoff, canSave, onSave, onRead, busy, failure }: {
+export function PriceSaved({ data, instrument, cutoff, canSave, onSave, onRead, busy, failure, readonly = false }: {
   data?: StockPriceSavedData; instrument?: Instrument; cutoff?: string; canSave: boolean
-  onSave?: () => void; onRead?: () => void; busy?: boolean; failure?: string
+  onSave?: () => void; onRead?: () => void; busy?: boolean; failure?: string; readonly?: boolean
 }) {
   if (!instrument || !privatePriceSupported(instrument, cutoff ?? null)) return null
-  const known = !failure && validStockPriceSavedRead(data, instrument, cutoff ?? null)
+  const known = !failure && validStockPriceSavedRead(data, instrument, cutoff ?? null) && (!readonly || validSavedFocusStock(data, instrument, cutoff ?? ''))
   const bar = known ? data.latest : null
   return <section className="panel overview-price-memory" aria-labelledby="price-saved-title">
     <h3 id="price-saved-title">本機保存的單日行情</h3>
-    <p className="small-note">保存此日完整官方原件，服務重啟後可讀回核對。僅支持本次核定的七股及 2026-10-06。</p>
-    <div className="filter-row"><button type="button" className="secondary-button" onClick={onSave} disabled={!canSave || busy || !onSave}>保存此日行情</button>
+    <p className="small-note">{readonly ? '明示讀取本機保存的完整原件並核對，只採用目前同股同日的結果。' : '保存此日完整官方原件，服務重啟後可讀回核對。'}僅支持本次核定的七股及 2026-10-06。</p>
+    <div className="filter-row">{!readonly && <button type="button" className="secondary-button" onClick={onSave} disabled={!canSave || busy || !onSave}>保存此日行情</button>}
       <button type="button" className="secondary-button" onClick={onRead} disabled={busy || !onRead}>{busy ? '核對保存資料中…' : '讀取已保存行情'}</button></div>
     {known ? <>
       <p role="status">{data.storage_state.action === 'reopened' ? '已從本機讀回並核對原件。' : data.storage_state.action === 'already_saved' ? '此份原件已保存並重新核對。' : '此日行情已保存並核對。'}</p>
@@ -449,23 +450,24 @@ export function PriceSaved({ data, instrument, cutoff, canSave, onSave, onRead, 
   </section>
 }
 
-export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, savedPrice, onSavePrice, onReadSavedPrice, privatePriceBusy, privatePriceFailure, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
+export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice, capturingPrice, priceRequestFailure, savedPrice, onSavePrice, onReadSavedPrice, privatePriceBusy, privatePriceFailure, privateSavedOnly = false, onNews, onCaptureEvents, capturingEvents, eventRequestFailure, onCaptureWindows, capturingWindows, windowRequestFailure }: {
   data: StockOverviewData; onNews: () => void; onCaptureEvents?: () => void; capturingEvents?: boolean; eventRequestFailure?: string
   onCaptureWindows?: () => void; capturingWindows?: boolean; windowRequestFailure?: string
   instrument?: Instrument; explicitCutoff?: string; onCapturePrice?: () => void; capturingPrice?: boolean; priceRequestFailure?: string
   savedPrice?: StockPriceSavedData; onSavePrice?: () => void; onReadSavedPrice?: () => void; privatePriceBusy?: boolean; privatePriceFailure?: string
+  privateSavedOnly?: boolean
 }) {
   const price = data.price
-  const latest = price.latest
-  const memoryKnown = instrument && (!explicitCutoff || explicitCutoff === data.as_of) ? validStockPriceMemoryRead(data.price_memory, instrument, explicitCutoff || data.as_of) : false
-  const savedKnown = !privatePriceFailure && instrument && explicitCutoff === data.as_of && validStockPriceSavedRead(savedPrice, instrument, explicitCutoff || null)
+  const latest = privateSavedOnly ? null : price.latest
+  const memoryKnown = !privateSavedOnly && instrument && (!explicitCutoff || explicitCutoff === data.as_of) ? validStockPriceMemoryRead(data.price_memory, instrument, explicitCutoff || data.as_of) : false
+  const savedKnown = !privatePriceFailure && instrument && explicitCutoff === data.as_of && validStockPriceSavedRead(savedPrice, instrument, explicitCutoff || null) && (!privateSavedOnly || validSavedFocusStock(savedPrice, instrument, explicitCutoff || ''))
   return <section className="stock-overview" aria-labelledby="stock-overview-title">
     <div className="section-head overview-head"><div><div className="eyebrow">研究總覽</div><h2 id="stock-overview-title">資料截止 {formatResearchDate(data.as_of)}</h2></div><span className="badge">{memoryKnown || savedKnown || latest ? '價格來源已核對／部分資料待補' : '研究資料待補'}</span></div>
     <p className="overview-cutoff-note">依資料日期截至的事後研究；不代表歷史當時可得。價格保留原始口徑，尚未提供完整還原鏈。</p>
     <div className="overview-grid">
-      <PriceMemory data={data.price_memory} instrument={instrument} cutoff={data.as_of} explicitCutoff={explicitCutoff} onCapture={onCapturePrice} busy={capturingPrice} failure={priceRequestFailure} />
-      <PriceSaved data={savedKnown ? savedPrice : undefined} instrument={instrument} cutoff={explicitCutoff === data.as_of ? explicitCutoff : undefined} canSave={Boolean(memoryKnown && data.price_memory?.provenance?.policy_version === 'm2-stock-scope-tpex-11370-2026-10-06.5')} onSave={onSavePrice} onRead={onReadSavedPrice} busy={privatePriceBusy} failure={privatePriceFailure} />
-      {!memoryKnown && !savedKnown && <section className="panel overview-price"><h3>既有價格與實際視窗</h3>
+      {!privateSavedOnly && <PriceMemory data={data.price_memory} instrument={instrument} cutoff={data.as_of} explicitCutoff={explicitCutoff} onCapture={onCapturePrice} busy={capturingPrice} failure={priceRequestFailure} />}
+      <PriceSaved readonly={privateSavedOnly} data={savedKnown ? savedPrice : undefined} instrument={instrument} cutoff={explicitCutoff === data.as_of ? explicitCutoff : undefined} canSave={Boolean(memoryKnown && data.price_memory?.provenance?.policy_version === 'm2-stock-scope-tpex-11370-2026-10-06.5')} onSave={onSavePrice} onRead={onReadSavedPrice} busy={privatePriceBusy} failure={privatePriceFailure} />
+      {!privateSavedOnly && !memoryKnown && !savedKnown && <section className="panel overview-price"><h3>既有價格與實際視窗</h3>
         <p className="small-note">本次最多 {price.window_limit} 筆，收到 {price.candidate_count} 筆、通過 {price.valid_count} 筆；不代表完整交易日窗口。</p>
         {latest ? <>
           <div className="overview-range">可用區間 {formatResearchDate(price.from)} — {formatResearchDate(price.to)}</div>

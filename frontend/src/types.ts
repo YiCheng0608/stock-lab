@@ -634,6 +634,19 @@ export type PriceLotFocusData = {
   can_capture: boolean; reasons: string[]; historical_pit: 'unsupported'; sort: 'code_ascending'
 }
 
+export type PriceSavedFocusConsumer = {
+  policy_version: string; policy_digest: string; projection_version: 'price-saved-focus/m1-v1'; origin: 'private_local'
+  source_requests: 0; disk_writes: 0; db_mutations: 0; deadline_seconds: 10
+  deadline_semantics: 'cooperative_post_read_and_parse'; retained_graph_estimated_bytes: number; max_retained_graph_bytes: 33554432
+}
+
+export type StockPriceSavedFocusData = StockPriceSavedData & { focus_consumer: PriceSavedFocusConsumer | null }
+
+export type PriceSavedFocusData = Omit<PriceLotFocusData, 'reads'> & {
+  origin: 'private_local'; consumer_provenance: PriceSavedFocusConsumer | null; limitations: string[]
+  reads: Array<{ instrument: Instrument & { currency?: string }; price_saved: StockPriceSavedData }>
+}
+
 export type StockOverviewData = {
   version: string
   as_of: string | null

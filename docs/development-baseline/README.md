@@ -486,6 +486,22 @@ ROOT清理proof exit0：API13668／parent34328、preview59284／parent14996、es
 
 只跑變更所需驗證，未跑full DB／backend suite／production build／install；child financial GET／POST0，沒有disk cases／KeepArtifacts。舊price private1791644B／3files＋3dirs仍因CreateProcess前auto-review拒絕而NO-RETRY、at-cap不新增disk測試；整個DAY-RANGE worktree／branch兩次拒絕fence及其他歷史資源保持，功能與清理分報。
 
+### M1-SAVED-PRICE-FOCUS-1006-1 保存來源關注的零落盤驗證入口
+
+沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`及唯讀共用dependencies；Python `-B -X utf8`、guarded SQLite `:memory:`，Node `write:false`／full-src noEmit／incremental:false／composite:false。不載正式DB、一般startup mkdir或conftest，不建新環境／helper／backup／fixture檔。來源用途與精確pins由[來源 §32](../SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)管理，actual操作見[個股頁 §37](../STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)；本節不另授權重跑。
+
+NEW product reader用 `--serve --cutoff 2026-10-06 --saved-source-only`、原capture `--policy-version/--policy-digest`、原storage `--private-store-root/--private-policy-version/--private-policy-digest`，另需新 `--saved-focus-policy-version/--saved-focus-policy-digest`。只有原task核定existing private root／finite讀取quota後可啟用；consumer opt-in不允live-source opt-in、preloaded Store、POST、old saved入口繞過或memory／DB hydration。來源§32的10s cooperative／32MiB graph estimate、檔案bounds與兩reader共用96 quota不作OS deadline／RSS保證。Actual成功snapshot28、logical file reads84＋root獨立9＝93；preview observed api_get30／api_post0不是外部金融GET30。
+
+本B1 current metadata／external financial GET均0、新disk writes0／DBmut0；NEW reader1與為尚未驗detail failure分支另准的NEW reader2都empty Store／finance seed0／memorydisabled／preloaded=false。19 DB表PRAGMA與sqlite_master table/index/trigger definitions、全部values／每cell typeof在兩reader前後相等；guards全部0、無capture_attempt／cache／raw持久化。原三檔full bytes／SHA／mtimeNS前後不變，完整觀測、原canonical receipt及時間由來源§32管理，不重存原件或manifest。
+
+Necessary final rawexit0：backend saved-focus6；frontend55 helper／17 App SSR／5 Overview SSR及33src noEmit。Frontend首次typecheck exit1／23 narrowing diagnostics已修正，final0；不抹首次失敗。最小synthetic memory七列，quota serialized≤80KiB／graph≤512KiB，actual frontend76367B／480088B；fixture不代實際私人讀取。既有Python3.12.14／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1，Node24.19.0／TypeScript5.9.3／esbuild0.25.12。逐輪exact命令／ID／原exit／版本封存收據留原task，只跑變更所需checks，未跑full suite／production build／install／diskcases。
+
+Owned reader1／reader2及preview normal Ctrl+C各rawexit1，ROOT獨立runtime cleanup proof0分報：兩reader與parents、preview／parent／esbuild皆absent，8799／8800無listener；ONE lifetime page正常closed、fresh tabs=[]，compiler正常exit0／無本輪repo artifacts。Focus502與新detail502由各自正常停止reader後同page／同token驗，不重啟producer，不replay／HAR／screenshot／export。Native96 events全trusted；CLI讀取／quoting等失敗、首次selection失敗與root diagnostic/raw assertion exit1及後續readonly0保持分報，不稱首次皆成功。
+
+**既有私人disk原件仍1791644B／3files，不是global disk0。** 原scope common parent／productroot／bundle共3dirs；runner只計root＋bundle兩層，不把兩種口徑混成殘留消失。原清理auto-review在CreateProcess前以 `blocked by policy` 拒絕，process／deletion0，STRICT NO-RETRY：不換工具／path／owner、逐檔、rename／containing tree繞過。Filecount已at-cap，本輪不新增diskcases／copy／export／publish／delete；actual missing-file UI NOT RUN，synthetic integrity拒用與actual HTTP502分別保留。
+
+整個historic DAY-RANGE worktree／branch與 `.range-ui`2555430B／232files／94dirs strict NO-RETRY retain；不掃Temp／HAR／profile／cache／history。功能通過與owned runtime清理通過不把以上受保護殘留稱已刪。普通20／21close、trend／strategy／time／PIT／execution及完整ROADMAP仍缺；既有通過證據不因換角色重跑。
+
 ## 歷史驗證
 
 完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。

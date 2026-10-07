@@ -1182,3 +1182,49 @@ OBS2與native均24 full index rows／18,098 full daily rows。Native producer136
 ### 31.5 有限接受與剩餘缺口
 
 Core operation+1／必要source-use＋24 observed calendar＋true daily dependency+1／reliability0／stall0。Actual API／native及失敗清值界線見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)，測試／原exit及owned清理見[開發入口](development-baseline/README.md#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口)。本輪raw隨producer／reader正常退出釋放、diskartifact0，不改舊price私人三檔仍存在事實；新有限日曆不解除普通股20／21close、trend／strategy、PIT／time／execution、保存／跨程序或完整M1／M2／M3。
+
+## 32. M1-SAVED-PRICE-FOCUS-1006-1：保存來源的七股關注准入
+
+**七股／2026-10-06保存來源的四項條件篩選、actual API及同截止原生往返已由root有限接受。** 只含3105穩懋／3293鈊象／5274信驊／5347世界／6488環球晶／6510精測／8069元太，TW／TPEx ordinary stock／TWD，code升序。使用者操作由[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)管理；§29 memory focus、§30私人保存及§31法人窗口各自保留原契約。
+
+### 32.1 先准入只讀用途，再讀既有原件
+
+本root在private read／implementation前於原task核定finite saved read-use。依§30已接受的政府例外、local private copy、署名與完整性，只准既有三檔的本機只讀重驗及有限衍生，不新增metadata／financial GET、複製、export／publish、hydrate、磁碟保存或正式DB用途。此准入不繼承未採來源的history／PIT／自動下載權，也不改default。
+
+新consumer policy `m1-saved-price-focus-tpex-11370-2026-10-06.1` canonical UTF-8 **2677B**，外部digest `sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b`；projection `price-saved-focus/m1-v1`。須另核原capture `m2-stock-scope-tpex-11370-2026-10-06.5`／digest `sha256:5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040`，及storage `m1-price-save-tpex-11370-2026-10-06.1`／digest `sha256:0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e`。三種policy角色獨立；不把新consumer pins寫入原receipt或擴大七股scope。
+
+唯一existing bundle為 `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`。Literal三檔、原canonical schema／bytes／SHA及Windows path保護仍由§30.2～30.3管理；本輪重驗結果與該表完全相同。原capture `storage=process_memory`／`request_count=1`是歷史capture事實；當前來源另標 `origin=private_local`、storage receipt仍 `private_local`。Augmented provenance不當作原canonical receipt重算hash。
+
+### 32.2 完整重驗與有限衍生
+
+每次合法snapshot重新驗完整body、兩份**原canonical** receipt、全部三檔full hash、source identity／version／endpoint／method／日期／七symbols、capture/storage/consumer pins與時間關係；不以selected projection代替body hash。全12194 data rows／18欄header、global width、ROC1151006與date-code唯一性受驗；金融值只宣稱七股126 source fields／42金融值，原字串保持。
+
+Capture UTC `2026-10-06T23:32:21.005311+00:00`、saved UTC `2026-10-06T23:32:45.499432+00:00`保持；不等於publication／first availability／revision，後三unknown、historical_pit unsupported。Body1788599B、capture receipt1461B、storage receipt1584B，共1791644B／3files；hash仍§30.3原值，所有mtimeNS不變。
+
+Required七股先完整gate再filter；任一missing／invalid／conflict拒用，不跳壞股、縮scope、挑版、補零或較早／未來fallback。全七股合格才可available／count0。Canonical股與成交額是int64；張數精確除1000、最多三位小數，O/C方向只比較收盤與開盤。振幅為 `100×(H−L)/O`，OHLC按共同decimal scale化整數，inclusive門檻以 `100000×(Hscaled−Lscaled) >= minRangeThousandths×Oscaled` 核對；顯示「約」值不參與filter。
+
+本次獨立真值如下，OHLC為元／股canonical值、成交額為TWD整數元；原source_fields的格式另保留，不以表內格式替代原列。
+
+| 股號 | O／H／L／C | canonical股／精確張 | 成交額 |
+| --- | --- | --- | --- |
+| 3105 | 615／623／588／592 | 19731700／19731.7 | 11863581093 |
+| 3293 | 794／794／772／780 | 1495462／1495.462 | 1164617657 |
+| 5274 | 19520／19895／18855／18985 | 188693／188.693 | 3627465565 |
+| 5347 | 184.5／195／184.5／191 | 34637793／34637.793 | 6615109776 |
+| 6488 | 1175／1260／1145／1205 | 13913614／13913.614 | 16835605385 |
+| 6510 | 3125／3140／3050／3055 | 560518／560.518 | 1729347985 |
+| 8069 | 147／151.5／145／149 | 10796741／10796.741 | 1607943663 |
+
+6510原漲跌字串 `-50.00 ` 含尾空白保持；它不是本consumer的C−O方向計算，不改成−70。來源金融權威只在本表詳述，操作門檻結果見§37。
+
+### 32.3 實際讀取與可證上限
+
+ROOT OBS1為pre-edit完整三檔讀取；OBS2為post-edit完整原件解析與獨立manual API核對；OBS3為normal停止後full SHA核對，共3bundle／9file reads。實際NEW readonly reader1 empty Store／preloaded=false／financeSeedRows0／memorydisabled，26成功snapshots；原task另准NEW reader2以相同空Store驗尚未驗的detail失敗分支，2成功snapshots。Total28在root兩程序共用96 quota內；implementation counter是各程序96，不可稱一個程序或把reset當成額外授權。實際snapshot logical file reads84＋獨立9＝93。
+
+Current external financial GET **TOTAL0**、metadata GET0、new disk writes0／DB mutations0／audit0；原capture request_count1不計成本輪GET。每read 10s為read後與parse後的**cooperative檢查**，不是OS搶占或hard wall。單bundle／3files：raw≤3145728B、capture≤8192B、storage≤16384B、合計≤3170304B；retained graph≤32MiB為object graph估算，不是RSS／peak。本輪root observed graph1950700～2553056B。超限／不合schema／hash／pins／日期的拒用與不讀unsupported日期界線由§37管理。
+
+### 32.4 有限接受與保存邊界
+
+Source13／net84588B已獨立接受；coreoperation+1／necessary derived saved-source readonly-use dependency+1／reliability0／stall0。19 memory DB表的table/index/trigger定義、全部values及cell typeof在兩reader前後相等，guards全部0；無capture_attempt／cache／raw／DB hydration。必要checks與owned runtime清理分報，見[開發入口](development-baseline/README.md#m1-saved-price-focus-1006-1-保存來源關注的零落盤驗證入口)。DOC review→freeze→qualified affected index→exact commit→另准master merge仍待。
+
+既有1791644B三檔仍在磁碟；私人清理的auto-review在CreateProcess前 `blocked by policy`，未啟動process／未刪除，STRICT NO-RETRY及at-cap禁新增diskcases保持。Actual missing-file UI未跑，完整性／schema等negative是必要synthetic memory證據；actual native失敗為HTTP502。不得稱global disk0、所有raw已釋放或磁碟清理成功。普通20／21close、trend／strategy／time／PIT／execution、全市場與完整M1／M2／M3仍未完成。

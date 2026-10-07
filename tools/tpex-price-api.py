@@ -4,6 +4,7 @@ import argparse
 import ast
 import base64
 import ctypes
+from contextlib import ExitStack
 from datetime import date
 import json
 import os
@@ -21,6 +22,7 @@ parser.add_argument("--deps", required=True, help="existing backend/.deps, read-
 mode = parser.add_mutually_exclusive_group()
 mode.add_argument("--check", action="store_true")
 mode.add_argument("--focus-check", action="store_true")
+mode.add_argument("--saved-focus-check", action="store_true")
 mode.add_argument("--private-save-check", action="store_true")
 mode.add_argument("--serve", action="store_true")
 parser.add_argument("--port", type=int, default=8795)
@@ -32,6 +34,8 @@ parser.add_argument("--private-store-root")
 parser.add_argument("--private-policy-version")
 parser.add_argument("--private-policy-digest")
 parser.add_argument("--saved-source-only", action="store_true")
+parser.add_argument("--saved-focus-policy-version")
+parser.add_argument("--saved-focus-policy-digest")
 parser.add_argument("--disk-phase", choices=("check", "write", "read", "faults", "cleanup"), default="check")
 ARGS = parser.parse_args()
 if ARGS.live_source_opt_in and not ARGS.serve:
@@ -51,6 +55,11 @@ elif ARGS.private_save_check or ARGS.saved_source_only or ARGS.disk_phase != "ch
     parser.error("explicit private root required")
 if ARGS.saved_source_only and (not ARGS.serve or ARGS.live_source_opt_in):
     parser.error("saved-source-only requires serve and excludes source acquisition")
+SAVED_FOCUS_ACTIVE = bool(ARGS.saved_focus_policy_version or ARGS.saved_focus_policy_digest)
+if SAVED_FOCUS_ACTIVE and (not ARGS.saved_source_only or
+        (ARGS.saved_focus_policy_version, ARGS.saved_focus_policy_digest) !=
+        ("m1-saved-price-focus-tpex-11370-2026-10-06.1", "sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b")):
+    parser.error("saved focus requires saved-source-only and independently admitted consumer pins")
 if ARGS.disk_phase != "check" and not ARGS.private_save_check:
     parser.error("disk phases are private synthetic checks only")
 sys.dont_write_bytecode = True
@@ -60,7 +69,7 @@ ALLOWED_DISK = {"writes": 0, "mutations": 0}
 PRIVATE_DIRECTORY = "tpex-11370-2026-10-06-m1-v1"
 PRIVATE_STAGING = ".pending-" + PRIVATE_DIRECTORY
 PRIVATE_FILES = {"body.csv", "capture-receipt.json", "storage-receipt.json"}
-DISK_ACTIVE = bool(PRIVATE_ROOT and (ARGS.serve or ARGS.disk_phase != "check"))
+DISK_ACTIVE = bool(PRIVATE_ROOT and (ARGS.serve or ARGS.disk_phase != "check") and not ARGS.saved_source_only)
 LIVE_ACTIVE = False
 APPROVED_ADDRESSES = set()
 SOURCE_REQUESTS = []
@@ -188,6 +197,57 @@ from app import tpex_price
 from test_tpex_price_api import MemoryAPIFixture
 
 
+def database_snapshot(fixture):
+    """All memory tables: schema, stored values and every SQLite cell typeof."""
+    with fixture.engine.connect() as connection:
+        names = [row[0] for row in connection.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        result = {}
+        for name in names:
+            table = '"' + name.replace('"', '""') + '"'
+            schema = [tuple(row) for row in connection.exec_driver_sql('PRAGMA table_info(' + table + ')')]
+            definitions = [tuple(row) for row in connection.exec_driver_sql(
+                "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name=? ORDER BY type,name", (name,))]
+            columns = ['"' + row[1].replace('"', '""') + '"' for row in schema]
+            values = [tuple(row) for row in connection.exec_driver_sql('SELECT * FROM ' + table + ' ORDER BY rowid')]
+            types = [tuple(row) for row in connection.exec_driver_sql('SELECT ' + ','.join('typeof(' + column + ')' for column in columns) + ' FROM ' + table + ' ORDER BY rowid')]
+            result[name] = {"schema": {"columns": schema, "definitions": definitions}, "values": values, "cell_typeofs": types}
+        return result
+
+
+def saved_consumer_fixture():
+    """Seven verified identities only; zero seeded finance, no private read at startup."""
+    from fastapi import FastAPI
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+    from app import api
+    from app.db import Base
+    from app.models import Instrument
+    from app.price_saved_focus import focus_policy
+    fixture = MemoryAPIFixture.__new__(MemoryAPIFixture)
+    fixture.api, fixture.wrapper, fixture.fixture = api, tpex_price, None
+    fixture.stack = ExitStack()
+    fixture.catalogue_kind = "memory ordinary identity catalogue; finance_seed_rows=0; actual private raw read only after explicit product action"
+    fixture.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(fixture.engine)
+    with Session(fixture.engine) as db:
+        for symbol, name in focus_policy()["scope"]["symbols"].items():
+            db.add(Instrument(exchange="TPEx", symbol=symbol, name=name, instrument_type="stock", market="TW", etf_category=None))
+        db.commit()
+    fixture.app = FastAPI()
+    fixture.app.include_router(api.router)
+    def database():
+        with Session(fixture.engine) as db:
+            yield db
+    fixture.app.dependency_overrides[api.get_db] = database
+    fixture.store = tpex_price.TpexPriceStore()
+    fixture.stack.enter_context(patch.object(tpex_price, "STORE", fixture.store))
+    fixture.stack.enter_context(patch.dict(os.environ, {tpex_price.ENABLE_ENV: "0", tpex_price.POLICY_VERSION_ENV: ARGS.policy_version,
+        tpex_price.POLICY_DIGEST_ENV: ARGS.policy_digest}))
+    fixture.before = fixture.snapshot()
+    return fixture
+
+
 def receipt(fixture=None, include_raw=False):
     import fastapi, sqlalchemy, httpx
     result = {"pid": os.getpid(), "runtime": {"python": sys.version.split()[0], "fastapi": fastapi.__version__, "sqlalchemy": sqlalchemy.__version__, "httpx": httpx.__version__},
@@ -205,10 +265,22 @@ def receipt(fixture=None, include_raw=False):
         result["capture_state"] = fixture.store.read("TPEx", "3105", date.fromisoformat(ARGS.cutoff), instrument_type="stock", currency="TWD")["capture_state"]
         result["capture_receipt"] = raw.receipt if raw else None
         result["selected"] = raw.parsed["selected"] if raw else None
-        result["fixture_kind"] = fixture.catalogue_kind + ("; live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "; synthetic private test anchors; not official raw")
+        result["fixture_kind"] = fixture.catalogue_kind + ("; retained independently admitted private source, explicit read only" if SAVED_FOCUS_ACTIVE else
+            "; live admitted source" if ARGS.live_source_opt_in or PRELOADED_SOURCE else "; synthetic private test anchors; not official raw")
+        if SAVED_FOCUS_ACTIVE:
+            current = database_snapshot(fixture)
+            before = fixture.validation_baseline
+            result["database_preservation"] = {"table_count": len(current), "schema_preserved": set(before) == set(current) and all(before[name]["schema"] == current[name]["schema"] for name in before),
+                "all_values_preserved": set(before) == set(current) and all(before[name]["values"] == current[name]["values"] for name in before),
+                "cell_typeofs_preserved": set(before) == set(current) and all(before[name]["cell_typeofs"] == current[name]["cell_typeofs"] for name in before)}
+            result["finance_seed_rows"] = 0
+            result["empty_store"] = raw is None and not fixture.store._attempted and fixture.store._request_count == 0
         if include_raw:
             result["raw_base64"] = base64.b64encode(raw.body).decode("ascii") if raw else None
             result["receipt_base64"] = base64.b64encode(raw.receipt_bytes).decode("ascii") if raw else None
+    if SAVED_FOCUS_ACTIVE:
+        from app.price_saved_focus import read_diagnostics
+        result["saved_focus_consumer"] = read_diagnostics()
     return result
 
 
@@ -251,7 +323,7 @@ def check():
         print(json.dumps(output, ensure_ascii=False), flush=True)
         return 0 if result["passed"] and not any(COUNTS.values()) else 1
     suite = unittest.TestSuite()
-    for name in (("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
+    for name in (("test_price_saved_focus",) if ARGS.saved_focus_check else ("test_price_focus",) if ARGS.focus_check else ("test_tpex_price_capture", "test_tpex_price_store", "test_tpex_price_api")):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     run = unittest.TextTestRunner(verbosity=2).run(suite)
     output = receipt()
@@ -265,9 +337,11 @@ def serve(preloaded_store=None):
     from starlette.responses import JSONResponse
     import uvicorn
     cutoff = date.fromisoformat(ARGS.cutoff)
-    if (ARGS.live_source_opt_in or preloaded_store is not None) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
+    if (ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
-    fixture = MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
+    fixture = saved_consumer_fixture() if SAVED_FOCUS_ACTIVE else MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
+    if SAVED_FOCUS_ACTIVE:
+        fixture.validation_baseline = database_snapshot(fixture)
     if PRIVATE_ROOT:
         from app import tpex_price_saved
         fixture.stack.enter_context(patch.dict(os.environ, {tpex_price_saved.ENABLE_ENV: "1", tpex_price_saved.ROOT_ENV: str(PRIVATE_ROOT),
@@ -279,6 +353,10 @@ def serve(preloaded_store=None):
         def no_source(**kwargs):
             raise AssertionError("saved-source-only must never call a source loader")
         fixture.store._loader = no_source
+    if SAVED_FOCUS_ACTIVE:
+        from app import price_saved_focus as focus
+        fixture.stack.enter_context(patch.dict(os.environ, {focus.ENABLE_ENV: "1", focus.VERSION_ENV: ARGS.saved_focus_policy_version,
+            focus.DIGEST_ENV: ARGS.saved_focus_policy_digest}))
     if preloaded_store is not None:
         raw = preloaded_store.raw_capture
         if not isinstance(preloaded_store, tpex_price.TpexPriceStore) or raw is None or not preloaded_store._attempted or preloaded_store._request_count != 1 or preloaded_store._error:
@@ -311,7 +389,10 @@ def serve(preloaded_store=None):
     async def scope(request, call_next):
         capture_paths = {f"/api/stocks/TPEx/{symbol}/prices/capture" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)}
         save_paths = {f"/api/stocks/TPEx/{symbol}/prices/save" for symbol in worker.policy_symbols(cutoff, policy_version=ARGS.policy_version)} if PRIVATE_ROOT else set()
-        post_paths = save_paths if ARGS.saved_source_only else capture_paths | save_paths | {"/api/focus/price-lots/capture"}
+        post_paths = set() if ARGS.saved_source_only else capture_paths | save_paths | {"/api/focus/price-lots/capture"}
+        # All private reads in the new mode pass through the consumer's shared budget.
+        if SAVED_FOCUS_ACTIVE and request.url.path.endswith("/prices/saved"):
+            return JSONResponse({"detail": "use the admitted saved-focus reader"}, status_code=405)
         allowed = request.method in {"GET", "OPTIONS"} or (request.method == "POST" and request.url.path in post_paths)
         if not allowed: return JSONResponse({"detail": "preview operation outside scope"}, status_code=405)
         return await call_next(request)

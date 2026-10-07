@@ -75,6 +75,7 @@ from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_qu
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price, supported_symbols
 from .tpex_price_saved import private_price
+from .price_saved_focus import build_saved_focus, focus_policy, read_saved_focus_stock
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
 from .institutional_windows_1006 import capture_institutional_windows
 from .stock_market_reads import StockMarketRead, load_stock_market_reads
@@ -1721,6 +1722,38 @@ def stock_price_private_read(exchange: str, symbol: str, db: Session = Depends(g
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     return private_price(instrument, as_of)
+
+
+@router.get("/stocks/{exchange}/{symbol}/prices/saved-focus")
+def stock_price_saved_focus_read(request: Request, exchange: str, symbol: str,
+                                 db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+    if any(key != "as_of" for key in request.query_params) or len(request.query_params.getlist("as_of")) > 1:
+        raise HTTPException(status_code=422, detail="invalid saved focus stock conditions")
+    with db.no_autoflush:
+        instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return read_saved_focus_stock(instrument, as_of)
+
+
+@router.get("/focus/price-saved")
+def price_saved_focus(request: Request, as_of: date = Query(...), min_lots: str = Query(..., max_length=20),
+                      day_move: str = Query("all", max_length=4), min_turnover: str = Query("0", max_length=19),
+                      min_range_pct: str = Query("0", max_length=20), db: Session = Depends(get_db)) -> dict[str, Any]:
+    allowed = ("as_of", "min_lots", "day_move", "min_turnover", "min_range_pct")
+    if any(key not in allowed for key in request.query_params) or any(len(request.query_params.getlist(key)) > 1 for key in allowed):
+        raise HTTPException(status_code=422, detail="invalid saved focus conditions")
+    try:
+        parse_min_lots(min_lots)
+        parse_day_move(day_move)
+        parse_min_turnover(min_turnover)
+        parse_min_range_pct(min_range_pct)
+        with db.no_autoflush:
+            instruments = list(db.scalars(select(Instrument).where(Instrument.exchange == "TPEx",
+                Instrument.symbol.in_(focus_policy()["scope"]["symbols"])).order_by(Instrument.symbol)).all())
+        return build_saved_focus(instruments, as_of, min_lots, day_move, min_turnover, min_range_pct)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
