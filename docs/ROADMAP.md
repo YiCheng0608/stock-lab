@@ -1,3 +1,19 @@
+## 目前：七股gross買賣、累計與同截止研究已有限接受
+
+2026-10-08。`M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` 新FIRST22原件／42窗口126totals與prefix、desktop＋narrow各七股六組態、真每日gross0／三RAW返回／停止後502清值已ROOT接受，見[來源 §43](SOURCE_REGISTRY.md)／[個股頁 §48](STOCK_RESEARCH_PAGE.md)。Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，old daily net接受不重計。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1` **UNADMITTED**：七股10/06每日三法人net方向一致／分歧、各法人5／20正負零計數與連續區段／窗口內最新run，segment-date→原25欄→同三RAW返回。140當批資料只支持新取得路徑，不能reuse capture／quota或計新增core；下一NEW ROOT先另核新rights-use／來源calendar／版本pins／empty FIRST22／完整數值與可信操作，見[完成條件](ROADMAP_EXECUTION.md)。
+
+quota已SPENT／原件RAM釋放，普通股closes／MA20仍缺rights／calendar新path，不重審FinMind／monthly／legacy。source10＋DOC6待ROOTreview／freeze／索引／commit／另准localmastermerge，outsidecleanup分報見[協作紀錄](TASK_COORDINATION.md)；acceptedBOOT12497B＋starting c686完整suffix／nested／舊pending與hash原bytes保留。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-20261008-1；可見 gate 已接受，原 ROOT 正式接手
+
+2026-10-08。前批三公司完整產業名稱／trace及同截止研究有限成果、SOURCE12＋DOC7 exact19 正常 commit／local master ff-only merge `c6867506c5b4ccad3a14d1bc526affd6241752b6` 已接受，未 push。四 NEW actual 配置與接手、外部 `/subagents` 可見 gate 已接受；原 session SINGLE continuation 已收到，本 ROOT 沿用 SAME 三角色正式接手產品派工。來源／實作／quota 仍 UNADMITTED，本次只更新三 status 自有 BOOT prefix，詳[協作紀錄](TASK_COORDINATION.md)。
+
+下一 `M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` **UNADMITTED**：七 TPEx 股同 explicit10/06 三法人 gross 買／賣、5或20日從0起累計、原25欄 trace 與既有 net 對照及原 controls 返回；既有 daily net 已接受，不重派算新 core。真實支持與新准入條件見[執行清單](ROADMAP_EXECUTION.md)；fresh22 只建議非 grant，舊22 SPENT／原件已釋放。
+
+優先 M1→M2→M3；ordinary closes／MA20 仍缺 rights／calendar 新 path，不重審 FinMind／monthly／legacy。繼承 coreoperation+1／standalone dependency0／reliability0／stall0→0；BOOT／DOC／index／Git／審查增量0，非 implementation batch，不 increment／reset；完整 M1／M2／M3 未完成。原 BOOT 文件 review 已接受，本次更新待 ROOT review、未產品 fullscope freeze；索引／Git未授，cleanup0；starting HEAD 完整 suffix／nested／舊 pending／hash 保留原 bytes。
+
 ## 目前：TWSE兩碼完整名稱與同截止研究已有限接受
 
 2026-10-08。`M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` 三公司04／04／20完整名稱／引用trace、同cutoff五條件往返與真失敗清值已接受，詳[個股頁 §47](STOCK_RESEARCH_PAGE.md)。Core+1／dep0／reliability0／stall0→0；完整M1／M2／M3未完成，不外推完整分類／ordinary／membership／PIT。

@@ -1595,3 +1595,52 @@ ROOT核完整schema／maps／dates／ordinals／dualSHA；新body SHA與§41相�
 停止前ROOT另核完整same held originals identity／全schema／1095 unique／58及dualSHA，sourceGET仍各1、所有guards0。API52996正常STOP raw0，實際SHUTDOWN／server_stopped=true／artifact0B；兩ORIGINAL RAM隨process終止釋放，不restart／replay／clone／hydrate。Preview55124／compiler31816正常SIGINT raw1，實際SHUTDOWN GET46／POST7／rejected0、FS／network／subprocess guard0／diskartifact0。三PID absent、8807／8808無listen、唯一ownedpage正常closed／tabs[]已核；new test／productartifactfiles0B／privateIO0／DBfiles0，shared indexcache另報。必要41backend／7warnings與45src noEmit＋71targetchecks raw0；原失敗／ACK未delivery及viewport讀回界線留[開發入口](development-baseline/README.md)／ROOT原task，不改exit。
 
 本批僅兩碼本地引用及三公司具名研究操作；capital／issuedshares／payout numeric、ordinary／0056ETF／完整current taxonomy／membership／排名／歷史price／PIT／策略／Plan／保存未驗。Financial quota2 SPENT、舊originals不可重開或重用；下一具名新核心與新source／時間／保存gate另核，見[執行清單](ROADMAP_EXECUTION.md)。SOURCE12＋DOC7 exact19待ROOT DOC review／freeze／索引／commit／另准merge；正式DB／採購／外部帳戶／交易未授，最終收據留原task。
+
+## 43. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與新來源准入
+
+2026-10-08。ROOT precise grant先於implementation／financialGET，source10及fresh原件／數值／具名操作已有限接受；financial22已SPENT。本節只管理本B1獨立政策與來源／數值契約；已接受§31／37／38、oldprofiles／defaultpins、failed producer及其未跑歷史不改。新操作及完成條件見[個股頁 §48](STOCK_RESEARCH_PAGE.md)／[執行清單](ROADMAP_EXECUTION.md)，進度與清理沿[協作紀錄](TASK_COORDINATION.md)。
+
+### 43.1 新版本與外部pins
+
+ROOT獨立RAM canonical policy **10654 UTF-8 bytes**，version `m1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1`，外部digest `sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144`；profile及API caller外部EXPECTED_PROFILE皆為 `free_public_local_chips_only_daily_gross_trade_stock_scope_7`。Expected pin不能由received policy自建；不能以oldcapture／shareddefaults代新准入。只有純解析／計算函式可重用，不restart／replay／clone／hydrate／preload舊producer或已釋放originals。
+
+| Identity | 本B1 exact版本 |
+| --- | --- |
+| worker | `tpex-institutional-gross/chips-stock-scope-7-v1` |
+| capture | `tpex-institutional-gross-capture/chips-stock-scope-7-v1` |
+| read | `institutional-daily-gross-read/chips-stock-scope-7-v1` |
+| calculation | `gross-buy-sell-net-running-sum/window-reset-int64-v1` |
+| daily source | `dataset-11856-dated-csv-observed-2026-10-08/chips-gross-trade-stock-scope-7-v1` |
+| index source | `dataset-11391-month-csv-observed-2026-10-08/chips-gross-trade-stock-scope-7-v1` |
+
+新canonical未另設calendar_schema／calendar_version key。Calendar identity由本B1 policy version＋digest、新index sourceversion及 `observation_date=2026-10-08` 固定約束；上述read schema涵蓋calendar結構，不沿用oldcalendar版本或自行命名額外常數。Selected為TPEx3105／3293／5274／5347／6488／6510／8069；explicit researchcutoff `2026-10-06`，不提升default日期或其他profiles。
+
+### 43.2 新metadata核對、用途與署名
+
+ROOT新DIRECT首6：REST11391／REST11856、[OGL1.0](https://data.gov.tw/license)、[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)、[交易規則](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html)及[11503027221公告](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)；首metadata抽取未輸出所需terms／rules clauses後，再兩專用extractiondiagnostic GET，合計**8GET／585451B**、HTTP200 identity／redirect0／retry0、只RAM，不能冒稱只有6GET。UTC2026-10-08首6在02:01、兩diagnostic在02:02；完整逐件hash／UTC／原不足留ROOT原task。另兩web reader支援核對OGL與TPEx：OGL成功、TPEx403 InternalError保留且不retry；reader operations不證raw HTTP總量。
+
+[REST11391](https://data.gov.tw/api/v2/rest/dataset/11391)「Index historical data」與[REST11856](https://data.gov.tw/api/v2/rest/dataset/11856)「Information on the trading details of OTC stocks three major institutional investors」，owner櫃買中心／TPEx、license1／free／CSV UTF-8／exactresourceURL已核；body2310B／4205B的SHA留ROOTtask，不代金融原件。
+
+OGL1.0完整署名義務及TPEx條款§7政府資料開放例外已ROOT核，§5並未全局取消；僅准本B1 `local_fetch/raw_store/summarize`，raw_store限processRAM，summarize限gross買／賣／net本地研究。完整署名保留owner／year2026／上述兩完整dataset名／observedversions／OGL1.0 URL，保留原件完整性。Metadata發布／修改時間不代金融row發布；published／firstavailability／revisionunknown，nonPIT／historical PIT unsupported，不授權磁碟保存／正式DB／採購／帳戶／交易或任意自動抓取。
+
+### 43.3 Finite FIRST與完整originals
+
+新grant為ONE NEW empty producer，由ROOT先核APIempty後native trustedFIRST一次，程序不得probeGET／seed。先2index exact [inx](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data)，`date=2026/09/01`及`2026/10/01`；驗日曆後採last20，才取exact [dated daily](https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data)的calendar-derived `d=115/MM/DD`，9/07～10/06。最多2＋20＝22GET，1attempt失敗亦SPENT；redirect／retry／warmup0。FIRST_once及cached409，切股／套用／back／heldREAD不得另fetch。准入時financial0；本次trustedFIRST已完成22／SPENT，完整actual原件見§43.5，不重開或重試。
+
+15s每request／180s batch在response及chunk邊界cooperative檢查，非OS硬deadline；收到header後16KiB檢查，非socket硬cap。Index1MiB／daily2MiB／total42MiB；retained64MiB為deduplicated getsizeof estimate，非RSS／peak，診斷16MiB。ALL22 ORIGINAL body及未增補的canonical receipts只RAM，bodySHA／ORIGINALreceiptSHA／exactURL／method／HTTP identity／UTC／generation須由ROOT在same held objects獨立核；不得用augmented provenance重造receipt或以相同bodySHA冒freshoriginal。0privateIO／priceGET／DB／productartifacts，保存／跨程序未授。
+
+### 43.4 全日曆、ALL25原欄與gross計算
+
+不硬沿舊25rows。兩月**全部返回**原6欄先驗日期／unique／requested month／weekday／nonclosed／≤observation10-08／finite positiveOHLC及上下界；postcutoff合法原列完整保留追溯而不採，不假定25或26列，不從缺列推休市。採≤10/06的完整24weekday正面集合扣公告9/25、9/28，與§31 required24相符；last20為9/07～10/06，last5為9/30、10/1、10/2、10/5、10/6。完整calendar不代ordinary stock20／21closes或MA20。
+
+Daily全部來源列先驗25string、日期／code唯一及非空name；ALL7×20＝140selected rows的3500原strings／3080金融int64與七組買−賣＝net、外資／dealercomponents及total關係全驗，不能只驗目前所選股或外推其他股金融coverage。Selected investor原欄以0-based索引：foreign買／賣／net＝3／4／5（不含外資自營商）、trust＝12／13／14、dealer＝21／22／23（自行＋避險總）；驗components不換foreign口徑。
+
+Canonical單位股，integer string傳遞；gross買／賣為非負int64，net為signed int64，張精確÷1000、既有單位公式不改。每日、buy／sell／net三種running prefix與ALL84gross＋42net window totals均須exact計算且在int64範圍：0～9223372036854775807（gross）／−9223372036854775808～9223372036854775807（net）；期末prefix與獨立window sum對帳，buy−sell＝net。每一5／20窗口buy／sell／net均從第一日前0起算，5不延用20prefix。任一daily／prefix／total、完整性／pins／來源關係不合使whole7profile failclosed，unknown／missing不補0或縮窗。
+
+每point-date-row保ALL25原string／原ordinal／bodySHA／ORIGINALreceiptSHA及全部calendar原列。fresh有gross0cell且ALL7完整gate成立才可驗actualzero，fixture不代真值；本次27每日gross0cells已核，ALL84窗口gross totals均非0，不稱actual零窗口。新每日gross／累計／net對照及返回有限接受，old daily net不重計；coreoperation+1／standalonecoredependency0／reliability0／stall0→0，完整M1／M2／M3未完成。
+
+### 43.5 本次完整actual與釋放邊界
+
+NEWgen `7a69c0e8-a019-41c6-9a24-d0b7e2833b3b` nativeFIRST_once完成22financialHTTP200identity、body2907155B／ORIGINALreceipts23319B，UTC2026-10-08T02:27:08.158379～02:27:18.782558+00:00。ROOT獨立核FULL22 heldbody＋未增補canonical receipts／dualSHA／UTC／exactURL、full18098dailyrows、ALL140×25strings／3080int64／components及total關係；calendar25returned→24採≤10/06→last20／5，postcutoff10/07原6欄保留不採。全部42windows84gross＋42nettotals、525points1575prefixcomponents精確獨立對帳；停止前sameheld ORIGINAL body＋receipt equality再核raw0。完整逐件hash／數值表留ROOT原task，不另建附件或重造receipt。
+
+Actual每日gross0共27cells，desktop3105／trust／9/18sell0與narrow5274／trust／9/30buy0均有ALL25trace；84窗口gross totals全非0。完整可信UI／API／mask／failureclear沿PAGE48。Metadata8direct＋2webreader及financial22已SPENT，reader403保留；原件隨API正常SIGINT／SHUTDOWNtrue raw1釋放、guards0／source_requests22 producer22，無restart／replay／hydrate。test／productartifacts0files0B、privateIO／DB／priceGET0；完整退出／錯誤／命令見[開發入口](development-baseline/README.md)。Source10＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge；不以索引或Git代功能驗收。

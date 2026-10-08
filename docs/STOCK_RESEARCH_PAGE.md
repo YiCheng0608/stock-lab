@@ -1603,3 +1603,31 @@ API停止後，same-key1449 native公司READ實際讀取失敗，headline改「�
 停止前完整same held ORIGINAL identity／dualSHA／全schema再核，sourceGET各1／guards0。API52996正常STOP raw0／server_stopped=true、兩原件RAM釋放；preview55124／compiler31816正常SIGINT raw1／SHUTDOWN GET46 POST7 rejected0／guards與artifacts0。三PID absent、8807／8808無listen、唯一ownedpage `d6ad81a9-215b-433c-b9a7-da164326a12b` 正常close／tabs[]、新test／productartifactfiles0B／privateIO0／DBfiles0已核，不restart／replay／clone／hydrate。原工具失敗／viewport重設及實際效果門檻見[開發入口](development-baseline/README.md)。
 
 本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；下一 gross 買／賣拆解候選 UNADMITTED，詳 ROADMAP／[協作紀錄](TASK_COORDINATION.md)，完成條件見[執行清單](ROADMAP_EXECUTION.md)。
+
+## 48. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與net對照有限操作
+
+2026-10-08。ROOT先准入獨立新來源／policy-pins與finite FIRST22，現已有限接受source10、actual來源與下列可信具名操作。本節只接受列明範圍，不外推完整M1。來源、版本、OGL署名、calendar及gross數值只由[來源 §43](SOURCE_REGISTRY.md)管理；old daily-net §43及saved／calendar profiles／flags／defaultpins與歷史不變，ordinary closes／MA20／股價趨勢仍缺新rights／calendar，不以此交付完整M1。
+
+### 48.1 獨立入口與明示取得
+
+新route `/chips-stock-scope-7-gross-trade`、compile `VITE_CHIPS_GROSS_STOCK_SCOPE_7=m1-v1`、runner `--chips-gross-stock-scope-7-opt-in`；API `/api/chips/gross-stock-scope-7`及其 `/capture`。Worker／capture／read與profile須完整匹配SOURCE43外部expectedpins，不從receivedpolicy自建pin、不升olddefaults；有效命令與synthetic邊界見[開發入口](development-baseline/README.md)。
+
+同explicit `as_of=2026-10-06`，選foreign（不含外資自營商）／trust／dealer及5／20日，七股3105／3293／5274／5347／6488／6510／8069卡→同cutoff detail→back保原as_of／investor／horizon三RAWcontrols。套用／切股／改法人或窗口／back不auto-fetch或READ；來源只允許明示FIRST_once一次，重複cachedcapture409／不新增來源；heldREAD只讀same generation。本次新增gross操作，已接受daily net不重派算新增core。
+
+### 48.2 每日買賣、窗口累計與精確trace
+
+新detail顯示買／賣daily圖及買／賣累計圖、exact日期表與net對照、各窗口buy／sell／net totals；股／張依SOURCE43精確canonical字串，不以SVG約值當數值。5／20的三個累計均從本窗口首日前0開始，窗口起迄清楚，5不沿20起點。ALL7×3investor×2window＝126 totals（84gross／42net）及全部prefix／每日對帳已ROOT獨立核，不能只核當前股或非零樣本。
+
+Dated operable point與對應date-row展開ALL25原string、原ordinal、bodySHA、ORIGINALreceiptSHA與完整calendar原列；合法postcutoff列保留但不採入。維持TPEx／year2026／兩完整dataset名／observedversions／OGL1.0 URL及來源完整性署名、observation2026-10-08／researchcutoff10-06分離；published／firstavailability／revision未知、nonPIT，不把metadata時間冒row發布或決策時可知。
+
+### 48.3 Mask、缺證與安全返回
+
+Unsupported10/07必須mask全部values／charts／raw／calendar；改回10/06仍masked，只有明示heldREAD成功才恢復同generation。Unknownstock／missing-date／actualsourcefail與讀取失敗均清ALLvalues／charts／raw／calendar，不留舊數值；back只恢復三RAWcontrols，不能unmask或暗讀。Whole7profile依SOURCE43 failclosed，不補0／縮窗／跳壞股。Fresh實件有gross0cell並通過完整gate才驗actualzero；無則明列缺口，不以fixture或missing當真零。
+
+### 48.4 已接受的具名操作與未跑邊界
+
+ROOT已核NEW empty／nativeFIRST_once22及FULL22 ORIGINAL／完整calendar／ALL140數值、126totals與525points1575prefixcomponents。可信desktop1365×900與narrow390×844**各**六組態×ALL7：合84detailwindows／1050date rows／252totals、兩graphs、每detail firstpoint25raw／canonicalreceipt／dualSHA／ordinal；ALL25calendar×6原欄、各ALL7foreign20 outerexpanded trace及10/06native date-row／same三RAWback／nooverflow已核。Actual27每日gross0中desktop3105trust9/18sell0、narrow5274trust9/30buy0完整trace通過；ALL84gross窗口totals非0，actual零窗口未驗。
+
+兩viewport實際10/07及empty mask，apply無APIcall；10/06restore仍mask、explicitheldREAD才恢復samegen。9999→nativeback valid仍mask→explicitREAD已受驗；back不暗讀或unmask。APIstop後same-key5274 nativeREAD actual502（CDP20640.26）及另3105READ502（CDP20640.32），desktop／narrow清ALLvalues／graphs／tables／raw／calendar，nativeback仍mask且保三RAW；以actual同READ CDP核，不把stale ResourceTiming200或failed assertion改成pass。
+
+Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，source10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。

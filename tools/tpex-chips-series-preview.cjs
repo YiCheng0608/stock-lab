@@ -11,7 +11,7 @@ const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
 const args = process.argv.slice(2)
-const allowed = new Set(['--check', '--check-ui-only', '--check-startup-only', '--serve', '--chips-series-stock-scope-7-opt-in', '--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
+const allowed = new Set(['--check', '--check-ui-only', '--check-startup-only', '--serve', '--chips-series-stock-scope-7-opt-in', '--chips-gross-stock-scope-7-opt-in', '--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
 const optionNames = new Set(['--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
 const seen = new Set(), options = new Map()
 for (let i = 0; i < args.length; i++) {
@@ -24,10 +24,12 @@ const serve = seen.has('--serve'), check = seen.has('--check')
 assert(serve !== check, 'choose exactly --check or --serve')
 assert(!seen.has('--check-ui-only') || check, '--check-ui-only requires --check')
 assert(!seen.has('--check-startup-only') || check && !seen.has('--check-ui-only'), '--check-startup-only requires --check without --check-ui-only')
-assert(!serve || seen.has('--chips-series-stock-scope-7-opt-in'), 'explicit new frontend flag required')
+const gross = seen.has('--chips-gross-stock-scope-7-opt-in')
+assert(!gross || !seen.has('--chips-series-stock-scope-7-opt-in'), 'gross and daily-net profiles cannot be enabled together')
+assert(!serve || seen.has('--chips-series-stock-scope-7-opt-in') || gross, 'explicit new frontend flag required')
 assert(process.version === 'v24.19.0', 'pinned Node24.19.0 required')
-const version = 'm1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1'
-const pin = 'sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31'
+const version = gross ? 'm1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1' : 'm1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1'
+const pin = gross ? 'sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144' : 'sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31'
 assert((options.get('--policy-version') ?? version) === version && (options.get('--policy-digest') ?? pin) === pin, 'independent external pins mismatch')
 const port = Number(options.get('--port') ?? 8800), apiPort = Number(options.get('--api-port') ?? 8799)
 assert([port, apiPort].every((p) => Number.isInteger(p) && p >= 1024 && p <= 65535) && port !== apiPort, 'finite distinct local ports')
@@ -131,7 +133,7 @@ function typecheck() {
   }
   console.log(JSON.stringify({ typecheck: 'current full src noEmit', source_files: parsed.fileNames.length }))
 }
-const definitions = { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7': JSON.stringify('m1-v1'), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify('') }
+const definitions = { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7': JSON.stringify(gross ? '' : 'm1-v1'), 'import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7': JSON.stringify(gross ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify('') }
 function stripFontImports(css) {
   return css.replace(/@import\s+url\([^)]*\)\s*;/gi, '')
 }
@@ -169,12 +171,12 @@ async function startupCheckOnly() {
 }
 async function checkOnly() {
   typecheck()
-  const literal = fs.readFileSync(path.join(root, 'backend/worker/tpex_institutional_series_scope7.py'), 'utf8').match(/POLICY_CANONICAL = r'''([\s\S]*?)'''/)[1]
-  assert(Buffer.byteLength(literal) === 9733 && 'sha256:' + crypto.createHash('sha256').update(literal).digest('hex') === pin, 'independent canonical policy check')
-  const tests = require(path.join(sourceRoot, 'chipsSeries.test.ts'))
-  const fixture = await tests.createSeriesFixture(JSON.parse(literal))
+  const literal = fs.readFileSync(path.join(root, gross ? 'backend/worker/tpex_institutional_gross_scope7.py' : 'backend/worker/tpex_institutional_series_scope7.py'), 'utf8').match(/POLICY_CANONICAL = r'''([\s\S]*?)'''/)[1]
+  assert(Buffer.byteLength(literal) === (gross ? 10654 : 9733) && 'sha256:' + crypto.createHash('sha256').update(literal).digest('hex') === pin, 'independent canonical policy check')
+  const tests = require(path.join(sourceRoot, gross ? 'chipsGross.test.ts' : 'chipsSeries.test.ts'))
+  const fixture = await (gross ? tests.createGrossFixture : tests.createSeriesFixture)(JSON.parse(literal))
   assert(fixture.sourceInputBytes <= 96 * 1024, 'small test source input cap')
-  const checked = seen.has('--check-ui-only') ? 0 : await tests.runSeriesChecks(fixture.read, assert)
+  const checked = seen.has('--check-ui-only') ? 0 : await (gross ? tests.runGrossChecks : tests.runSeriesChecks)(fixture.read, assert)
   const visited = new Set()
   function estimate(value) {
     if (value === null || value === undefined) return 0
@@ -186,7 +188,8 @@ async function checkOnly() {
   }
   const retainedEstimate = estimate(fixture.read)
   assert(retainedEstimate <= 1024 * 1024, 'shared derived graph estimate cap')
-  const result = await esbuild.build({ stdin: { contents: "export { default as App } from './App'; export { SeriesChart, SeriesEvidence } from './ChipsSeriesPage'", resolveDir: sourceRoot, loader: 'ts' }, bundle: true, write: false, platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [deps], external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'], loader: { '.css': 'empty' }, define: definitions })
+  const exports = gross ? "export { GrossChart as SeriesChart, GrossEvidence as SeriesEvidence } from './ChipsGrossPage'" : "export { SeriesChart, SeriesEvidence } from './ChipsSeriesPage'"
+  const result = await esbuild.build({ stdin: { contents: "export { default as App } from './App'; " + exports, resolveDir: sourceRoot, loader: 'ts' }, bundle: true, write: false, platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [deps], external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'], loader: { '.css': 'empty' }, define: definitions })
   const mod = new Module(path.join(sourceRoot, '__series_ssr_memory__.cjs'))
   mod.filename = path.join(sourceRoot, '__series_ssr_memory__.cjs'); mod.paths = Module._nodeModulePaths(sourceRoot)
   mod._compile(result.outputFiles[0].text, mod.filename)
@@ -197,8 +200,13 @@ async function checkOnly() {
   global.fetch = () => { forbiddenFetch++; throw new Error('SSR automatic fetch') }
   let chartChecks = 0
   try {
-    const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/chips-stock-scope-7-daily-net-trend?as_of=2026-10-06&investor=foreign&horizon=20'] }, React.createElement(App)))
+    const route = gross ? '/chips-stock-scope-7-gross-trade' : '/chips-stock-scope-7-daily-net-trend'
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '?as_of=2026-10-06&investor=foreign&horizon=20'] }, React.createElement(App)))
     assert(html.includes('首次取得來源') && html.includes('已驗證股數') && html.includes('未知') && !html.includes('<svg'), 'initial fullApp has identities, no unverified charts')
+    if (gross) {
+      const unknown = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '/9999?as_of=2026-10-06&investor=foreign&horizon=20'] }, React.createElement(App)))
+      assert(unknown.includes('此標的不在核定七股範圍') && !unknown.includes('<svg') && !unknown.includes('精確日期買進賣出淨超與累計') && /disabled=""[^>]*>明確讀取已持有來源/.test(unknown), 'unknown selected stock masks data and forbids READ before returning to supported scope')
+    }
     for (const stock of seen.has('--check-ui-only') ? [] : fixture.read.stocks) for (const investor of ['foreign', 'trust', 'dealer']) for (const horizon of ['5', '20']) {
       const window = stock.series[investor][horizon]
       for (const cumulative of [false, true]) {
@@ -211,7 +219,7 @@ async function checkOnly() {
     const zero = fixture.read.stocks[0].series.foreign['20'].points.find((p) => p.net_shares === '0')
     const negativeHTML = renderToStaticMarkup(React.createElement(SeriesEvidence, { point: negative, read: fixture.read }))
     assert(negativeHTML.includes(negative.net_lots) && negativeHTML.includes(negative.receipt_sha256) && negativeHTML.includes(negative.body_sha256), 'exact negative lots and original receipts')
-    assert(renderToStaticMarkup(React.createElement(SeriesEvidence, { point: zero, read: fixture.read })).includes('已驗證當日淨超為零'), 'verified daily zero SSR')
+    assert(renderToStaticMarkup(React.createElement(SeriesEvidence, { point: zero, read: fixture.read })).includes(gross ? '已驗證當日買進及賣出為零' : '已驗證當日淨超為零'), 'verified synthetic daily zero SSR')
     assert(forbiddenFetch === 0, 'SSR network zero')
   } finally { global.fetch = previousFetch }
   console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, chart_ssr: chartChecks, initial_full_app_ssr: true, evidence_negative_and_zero_ssr: true, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, derived_expanded_serialization_bytes: Buffer.byteLength(JSON.stringify(fixture.read)), estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
@@ -220,15 +228,16 @@ async function serveOnly() {
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false, outfile: path.join(sourceRoot, '__series_memory__.js'), platform: 'browser', format: 'iife', target: 'es2020', jsx: 'automatic', nodePaths: [deps], define: definitions, plugins: [{ name: 'system-fonts-memory', setup(build) { build.onLoad({ filter: /\.css$/ }, (args) => ({ contents: stripFontImports(fs.readFileSync(args.path, 'utf8')), loader: 'css' })) } }] })
   const js = result.outputFiles.find((f) => f.path.endsWith('.js')).contents
   const css = result.outputFiles.find((f) => f.path.endsWith('.css'))?.contents ?? Buffer.alloc(0)
-  const html = Buffer.from('<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>七股每日法人淨超</title><link rel="stylesheet" href="/series-memory.css"></head><body><div id="root"></div><script src="/series-memory.js"></script></body></html>')
+  const html = Buffer.from('<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (gross ? '七股法人買進與賣出' : '七股每日法人淨超') + '</title><link rel="stylesheet" href="/series-memory.css"></head><body><div id="root"></div><script src="/series-memory.js"></script></body></html>')
   function reply(res, status, body, type = 'application/json; charset=utf-8') { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:" }); res.end(body) }
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://127.0.0.1:' + port)
       if (req.method === 'GET' && ['/series-memory.js', '/series-memory.css'].includes(url.pathname)) return reply(res, 200, url.pathname.endsWith('.js') ? js : css, url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8')
-      if (req.method === 'GET' && /^\/chips-stock-scope-7-daily-net-trend(?:\/(?:3105|3293|5274|5347|6488|6510|8069))?$/.test(url.pathname)) return reply(res, 200, html, 'text/html; charset=utf-8')
-      if (req.method === 'GET' && url.pathname === '/__series_preview_receipt' && !url.search) return reply(res, 200, JSON.stringify({ pid: process.pid, versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, policy_digest: pin, js_bytes: js.length, css_bytes: css.length, write: false, guard_counts: counts }))
-      const allowedPath = '/api/chips/series-stock-scope-7'
+      const routePattern = gross ? /^\/chips-stock-scope-7-gross-trade(?:\/[0-9A-Za-z]{1,16})?$/ : /^\/chips-stock-scope-7-daily-net-trend(?:\/(?:3105|3293|5274|5347|6488|6510|8069))?$/
+      if (req.method === 'GET' && routePattern.test(url.pathname)) return reply(res, 200, html, 'text/html; charset=utf-8')
+      if (req.method === 'GET' && url.pathname === (gross ? '/__gross_preview_receipt' : '/__series_preview_receipt') && !url.search) return reply(res, 200, JSON.stringify({ pid: process.pid, versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, policy_digest: pin, js_bytes: js.length, css_bytes: css.length, write: false, guard_counts: counts }))
+      const allowedPath = gross ? '/api/chips/gross-stock-scope-7' : '/api/chips/series-stock-scope-7'
       const keys = [...url.searchParams.keys()]
       const date = url.searchParams.get('as_of')
       if (!((url.pathname === allowedPath && req.method === 'GET') || (url.pathname === allowedPath + '/capture' && req.method === 'POST')) || keys.length !== 1 || keys[0] !== 'as_of' || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) {

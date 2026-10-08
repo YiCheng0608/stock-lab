@@ -84,6 +84,8 @@ import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } 
 import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
 import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
 import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
+import ChipsGrossPage, { ChipsGrossProvider } from './ChipsGrossPage'
+import { GROSS_ROUTE } from './chipsGross'
 import { SERIES_ROUTE } from './chipsSeries'
 import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
 import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
@@ -1995,7 +1997,15 @@ function NotFound() {
 }
 
 export default function App() {
+  if (import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7 === 'm1-v1' && import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7 === 'm1-v1') throw new Error('gross and daily-net profiles cannot be enabled together')
   const location = useLocation()
+  if (import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(GROSS_ROUTE)) {
+    return <ChipsGrossProvider><Routes>
+      <Route path={GROSS_ROUTE} element={<ChipsGrossPage />} />
+      <Route path={GROSS_ROUTE + '/:symbol'} element={<ChipsGrossPage />} />
+      <Route path="*" element={<Navigate to={GROSS_ROUTE} replace />} />
+    </Routes></ChipsGrossProvider>
+  }
   if (import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(SERIES_ROUTE)) {
     return <ChipsSeriesProvider><Routes>
       <Route path={SERIES_ROUTE} element={<ChipsSeriesPage />} />

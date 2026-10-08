@@ -1,3 +1,21 @@
+## 目前：M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1 已有限接受
+
+2026-10-08。ROOT接受NEWgen／trustedFIRST22、完整2907155B body及23319B ORIGINAL receipts、25returnedcalendar→24adopted→last20／5、ALL140selected／3500strings／3080int64、84gross＋42nettotals及525points／1575prefixcomponents；停止前sameheldoriginals／dualSHA再核raw0，見[來源 §43](SOURCE_REGISTRY.md)。Desktop1365×900與narrow390×844各六組態×ALL7、合84detailwindows／1050date rows／252totals／兩圖與原欄trace、gross0實件、10/07／empty mask／10/06 held恢復／9999返回仍mask／same-key與另股502清值受驗，見[個股頁 §48](STOCK_RESEARCH_PAGE.md)。11backend及48src noEmit＋29validator＋84chartSSR、unknownmask局部修正後48src noEmit與局部SSR raw0屬synthetic邊界，實際入口與原失敗見[開發入口](development-baseline/README.md)。
+
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成；gross0僅27每日cell、ALL84窗口gross totals均非0，不聲稱actual零窗口。Metadata8direct／2reader及financial22已SPENT；API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、PIDs／ports／ownedpage退出及原件釋放已接受，test／productartifacts0files0B／privateIO0／DB0／priceGET0，不restart／replay／hydrate。Source10停寫，DOC6待ROOTreview／freeze→索引coverage→核准commit→另准localmastermerge；outsidecleanup仍分報，不冒Git成功。
+
+下一 `M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1` **UNADMITTED**：七股同10/06每日三net符號一致／分歧，各investor5／20正負零計數、contiguous signed／zero segments及latest window-limited run，segment/date→ALL25 originals→同三RAWcontrols。當批140支持99相反符號／23全正／17全負／1單向含零／全零0，僅positivepath、不能reuse capture或算新core。下一NEW ROOT須先准新owner-use／calendar-sourceversions／profiles／ROOT外部pins、新empty FIRST22完整RAM originals、whole140triples與42window groups／counts／segments、actualAPI＋可信desktop+narrow／failureclear；窗口起點截斷須明示earlierunknown，零結束正／負run。無price／Signal／Plan／ranking；ordinary closes／MA20缺rights／calendar新path，不重審舊來源。nextcoreless→1／連兩implementation批無core先重選，acceptedBOOT與starting完整歷史／hash不回改。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-20261008-1；可見 gate 已接受，候選未准入
+
+2026-10-08。四 NEW actual runtime／共同根／branch／HEAD 與各角色接手已核，外部 `/subagents` 可見 gate 已接受，原 session SINGLE continuation 已收到，本 ROOT 沿用 SAME 三角色正式接手產品派工；本次只更新三 status BOOT prefix，來源／金融實作／quota **UNADMITTED**。前批 exact19 正常 commit／local master ff-only merge `c6867506c5b4ccad3a14d1bc526affd6241752b6`（parent `c4f697421f0a3e7fe68b7aacd406001e656e7604`）已有限接受，未 push；原驗收沿用，不因換 ROOT 重跑。roster／可見 terminal／清理 fences 見[協作紀錄](TASK_COORDINATION.md)。
+
+下一 `M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` **UNADMITTED**：3105／3293／5274／5347／6488／6510／8069，同 explicit10/06 三法人 gross 買／賣與 net 精確對照、5或20窗口從0起累計、point-date 原25欄 trace 及三 RAW controls 返回。既有7×20×25原欄／42 net只支持取得路徑；已接受 daily net／cumulative 不重派算新增 core，詳[來源 §31／37／38](SOURCE_REGISTRY.md)／[個股頁 §43](STOCK_RESEARCH_PAGE.md)。
+
+continuation 已收到；ROOT接續須先在原 task另核 rights-use／source-time-calendar／ALL25 schema／新 worker-consumer profiles及 external pins、fresh2index＋20daily finite22GET（僅建議非grant）、全日曆先驗再採last20／5、84gross＋42net對帳、NEW ORIGINAL只RAM，以及actual API／可信desktop+narrow ALL7／缺日恢復／controls返回／failureclear，才派 SAME三角色／GET。fresh實件有gross0 cell才驗actualzero，無則保留缺口；0 productartifacts／privateIO／DB／priceGET。缺真支持可具理由重選，不降gate或以fixture代實件；此段僅摘要，金融契約未改。
+
+ordinary closes／MA20仍缺 rights／calendar 新 path，不重審 FinMind／monthly／legacy；舊22 SPENT／前批兩 ORIGINAL RAM已釋放，不 restart／replay／clone／hydrate／preload。繼承 coreoperation+1／standalone dependency0／reliability0／stall0→0，BOOT／DOC／index／Git／審查0、不增計數或 reset；nextcoreless→1，連兩 implementation 批前重選，完整 M1／M2／M3 未完成。原 BOOT 文件 review已接受，本次更新待 ROOT review、未產品 fullscope freeze，index／Git／cleanup0；完整 starting suffix／nested歷史／舊 pending／hash／原契約保留原 bytes，流程沿[AGENTS](../AGENTS.md)。
+
 ## 目前：M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1 已有限接受
 
 2026-10-08。兩完整碼名本地引用／新pins與fresh兩ORIGINAL RAM全欄／dualSHA、21 API、可信desktop／narrow三股六原欄＋名稱／三事件型／完整trace／真零／unavailable恢復／原五條件back／停止後清值已ROOT接受，詳[來源 §42](SOURCE_REGISTRY.md)／[產業 §10](INDUSTRY_CLASSIFICATION.md)／[個股頁 §47](STOCK_RESEARCH_PAGE.md)。Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。API STOP raw0／preview SIGINT raw1、原件釋放及owned清理已核；SOURCE12＋DOC7 exact19待review／freeze／索引／commit／另准merge，詳[協作紀錄](TASK_COORDINATION.md)。

@@ -667,3 +667,21 @@ ROOT可信desktop1365×900／narrow390×844三股六原欄＋04／04／20完整�
 API52996／session88784正常STOP raw0，實際SHUTDOWN／server_stopped=true／artifact0B，兩完整ORIGINAL RAM隨process終止釋放；preview55124／compiler31816／session47349正常SIGINT raw1，SHUTDOWN GET46／POST7／rejected0／FS、network、subprocess guards0／diskartifact0。三PID absent、8807／8808無listen、唯一ownedpage正常close receipt `a01ac02e-171e-4de1-acfa-54cb2c026833`／tabs[]核raw0；new test／productartifactfiles0B／privateIO0／DBfiles0。服務清理與正常SIGINT raw1分報，不restart／replay／clone／hydrate、不改退出值。
 
 本批coreoperation+1／standalone coredependency0／reliability0／stall0→0、完整M1／M2／M3未完成；未跑production build／full suite／DB／diskcase／privateIO，shared indexcache另報。詳細命令／版本與一次性驗收留原task，不新增來源副本／manifest附件或保留整套成功產物。版本與有限outside cleanup見[協作紀錄](../TASK_COORDINATION.md)，DOC review／freeze／索引／commit／另准merge仍待。
+
+## M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：gross零落盤驗證入口
+
+2026-10-08。ROOT接受source10及具名actual；本DOC不重跑。來源與操作邊界見[來源 §43](../SOURCE_REGISTRY.md)／[個股頁 §48](../STOCK_RESEARCH_PAGE.md)。Actual Python3.12.14／Nodev24.19.0／TS5.9.3／esbuild0.25.12／FastAPI0.141.1／httpx0.28.1／uvicorn0.52.4；SSR useLayoutEffect warnings原樣保留。
+
+三命令在本worktree根實際通過raw0，未附`--deps`／policy-version／digest參數；runner預設共用main依賴，grossflag選獨立硬coded policy version／外部digest（SOURCE43），不提升oldpins：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-gross-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-gross-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --check-ui-only --chips-gross-stock-scope-7-opt-in
+```
+
+依序11backend RAMtests；48src noEmit＋29validator＋84chartSSR；unknown-mask修正後48src noEmit／局部SSR、validator0／chart0沿用前證據。Fixtures／syntheticzero與SSR不代金融truth／nativeUI；checks sourceGET／network／disk-private-DB寫入0、各rejectionguard0，未跑productionbuild／fullsuite／磁碟保存。Actual SAMEgenFIRST22／雙SHA／ALL126totals與1575prefixcomponents、兩viewport ALL7矩陣／每日gross0／502清值由ROOT獨立接受。
+
+API18464正常SIGINT raw1／SHUTDOWNtrue，source_requests22／producer22及disk_writes／mutations／private_reads／databases／subprocesses／network_rejections0。Preview42276／compiler35212正常SIGINT raw1／SHUTDOWNtrue，GET8／POST1／rejected_requests233，不記0或推原因；disk／private／network／subprocessrejection0。18464／42276／35212／7768absent、8809／8810nolisten、ownpage正常close／tabs[]；test／productartifacts0files0B／privateIO0／DB0／priceGET0，ORIGINAL RAM已釋放、不restart／replay／hydrate。
+
+原raw1（missingimport／quote／PATHNode20guard／fixturemutation／JSONDecodeError／hiddenbrowser-board-RT-card assertions）保留；Ctrl+A ACK未選造成draftappend、execstoreundefined suppressedinner outcomeunknown亦留ROOTtask。更正後UTF8stdin／同READ actualCDP502分報，不改exit／重送金融；ignorednetworklimit／stdouttruncation不作取得證據，無helper／附件。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完成；版本封存及outsidecleanup見[協作紀錄](../TASK_COORDINATION.md)。
