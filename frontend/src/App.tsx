@@ -87,6 +87,8 @@ import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
 import ChipsGrossPage, { ChipsGrossProvider } from './ChipsGrossPage'
 import ChipsDirectionPage, { ChipsDirectionProvider } from './ChipsDirectionPage'
 import ChipsAdjacentPage, { ChipsAdjacentProvider } from './ChipsAdjacentPage'
+import ChipsDealerComponentsPage, { ChipsDealerComponentsProvider } from './ChipsDealerComponentsPage'
+import { DEALER_COMPONENTS_ROUTE } from './chipsDealerComponents'
 import { ADJACENT_ROUTE } from './chipsAdjacent'
 import { DIRECTION_ROUTE } from './chipsDirection'
 import { GROSS_ROUTE } from './chipsGross'
@@ -2001,8 +2003,15 @@ function NotFound() {
 }
 
 export default function App() {
-  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
+  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
   const location = useLocation()
+  if (import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DEALER_COMPONENTS_ROUTE)) {
+    return <ChipsDealerComponentsProvider><Routes>
+      <Route path={DEALER_COMPONENTS_ROUTE} element={<ChipsDealerComponentsPage />} />
+      <Route path={DEALER_COMPONENTS_ROUTE + '/:symbol'} element={<ChipsDealerComponentsPage />} />
+      <Route path="*" element={<Navigate to={DEALER_COMPONENTS_ROUTE} replace />} />
+    </Routes></ChipsDealerComponentsProvider>
+  }
   if (import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(ADJACENT_ROUTE)) {
     return <ChipsAdjacentProvider><Routes>
       <Route path={ADJACENT_ROUTE} element={<ChipsAdjacentPage />} />

@@ -725,3 +725,28 @@ API20584 normalSIGINT raw1／SHUTDOWNtrue、source12／guards0；舊preview29600
 FIRST input ACK無效與focus修正、unsupported Nonecalendar錯assert／correctedblank200、viewport／selector／expectedmask等原raw1保留，不改exit或當成功。CachedPOST含asof409／missing422已核；correctedunsupported及sameheld再驗source仍12。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0，原件RAM全釋放，不restart／replay／clone／hydrate／preload；shared indexcache另報。文件命令首SyntaxError／CreateProcess長度等原失敗留task，無helper／附件或sourcecopy；不掃old／private／Temp／cache。
 
 Core+1／standalone dep0／reliability+1／stall0→0，完整M1／M2／M3未完成；outsidecleanup已有限完成、版本freeze／索引／commit／另准merge待ROOT，詳[協作紀錄](../TASK_COORDINATION.md)。
+
+## M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：三組對帳零落盤驗證入口
+
+2026-10-08。ROOT接受SOURCE9及具名actual，本DOC不重跑已接受checks。新source／canonical9245B與外部digest／774B署名見[來源 §46](../SOURCE_REGISTRY.md)，actual操作見[個股頁 §51](../STOCK_RESEARCH_PAGE.md)。共用main現成backend/.deps及frontend/node_modules，不另建環境；pinned Node24.19.0／TypeScript5.9.3／esbuild0.25.12，精確Python runtime／命令／raw exit及逐次收據留原task。
+
+本worktree根的必要check入口（memory-only、不得藉此重新啟動已釋放financial producer）：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-dealer-components-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-dealer-components-stock-scope-7-opt-in
+```
+
+Backend15RAM raw0；front57src noEmit＋52validator/lifecycle＋42SSR raw0，warnings保留。Overflow／zero／missing／components／lifecycle fixture及SSR不代financial truth或trusted nativeUI；未跑productionbuild／fullsuite／DB／磁碟保存。本DOC只引用已接受收據，未執行產品checks。Wrongpin Python nativeexit2／tool2、Node nativeexit1／tool1在imports／compiler前拒收；原exit不改0。初TS nullableclosure raw1及patch tail rawfail保留。
+
+首6metadata direct holder在完整ROOT transfer前EOF、raw0退出／RAM釋放，全6SPENT且gate未過，不稱來源失敗；2reader／NEW3完整准入界線見SOURCE46。ROOT AST stdout mojibake9472B／ca6d93…錯pin撤回於source／finance grant前，改ASCII JSON讀回9245B後才核，不沿用錯pin。New metadataholder54396／port56176正常SIGINT raw1、RAMreleasedtrue後PID／port absent、artifact0，不retry或留附件。
+
+ROOT最初ALL7 ORIGINAL bodies及未增補receipt／math／fullAPI全核，停前完整再核一次；不冒3次fullmath或額外GET。金融source仍7SPENT。首次5newsource doubleEOF使原NUL diff raw3；每檔精確刪ONE LF共5B後ROOT以舊hash重組核bytes、tracked diffcheck raw0／new NULdiff raw1且空輸出。僅EOF修正，功能未變、不重驗；原raw3／raw1保留。
+
+可信FIRST visible但productgoto viewport reset1277×924，當時未beforeclickassert1365；原gap保留，後續1365×900及390×844完整矩陣沿PAGE51。PRIMARY70 rawrows／70canonicalopens及52calendar opens不代表全batch click總數。ROOT `new Function`內await SyntaxError、兩offscreen link ACK未navigate、table clip下rawbutton點到DIV、typedscroll right invalid_argument、完整DOMprojection被序列化截成9calendar／錯count、postcutoff實際「截止後排除」而預設「否」錯assert原raw1保留。修ROOT auditor／scroll定位後 `scrollIntoView`只定位，fresh snapshot／native click及isTrusted actualtarget再核；不改source／重GET。
+
+Canonical換列保留open，auditor直接toggle變closed的原assert raw1，改先close再open；PS ErrorActionPreference Stop遇既有Orca crashpad stderr提前raw1，當次改Continue仍核nativeexit／JSONok／targettrust，不把stderr改成功。大DOM eval超max輸出／JSON parse失敗後用compact projection及live DOM逐條比全26欄位。Blank PS CLI丟empty值／primitive JSON parse／Control+A ACK無keydown原raw1，改native End＋Backspace得真空值。全部harness失敗只修auditor，不混產品source或通過checks。
+
+停前samekey5274／dealer／5／10/06兩viewportlive完整原列／54metrics／calendar先核；API normalSIGINT後narrow native READ actual502 fromlive清ALL、desktop同keyrepeat502由masked保持ALL清，RAW3back仍mask；非兩獨立producer。API32860 SHUTDOWNtrue／requests7／guards0 normalSIGINT toolraw1；preview15564／compiler25940 SHUTDOWNtrue、proxyGET23／POST1／rejected44，其餘guards0、normalSIGINT raw1，不推reject原因或改0。Auditor54880 normalSIGINT raw1／RAMreleasedtrue／guards0；停前RAMreaudit61996 raw0，metadataholder54396先前退出。六exactPIDs32860／15564／25940／54880／61996／54396 absent、8812–14無listener ROOTraw0；ownedpage正常close收據 `2298c5f3-9762-450b-9740-71291aff4a5e`／tabs[]已核。
+
+ROOT ORIGINAL及derivedlist RAM全release，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0；source／indexcache另報，無附件／helper／manifest／Temp，未掃older／private／cache。Core+1／standalone dep0／reliability0／stall0→0；outsidecleanup已接受、freeze／索引／commit／另准merge仍待ROOT，見[協作紀錄](../TASK_COORDINATION.md)。

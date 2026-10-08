@@ -1,3 +1,27 @@
+## 目前：M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1 已有限接受
+
+2026-10-08。ROOT接受SOURCE9完整來源／數值及可信兩viewport七股操作，見[來源 §46](SOURCE_REGISTRY.md)／[個股頁 §51](STOCK_RESEARCH_PAGE.md)。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完；quota SPENT／RAM釋放。SOURCE9＋DOC6待ROOT review／freeze→qualified索引→核准commit→另准merge；BOOT／完整starting suffix與outsidecleanup接受沿[協作紀錄](TASK_COORDINATION.md)。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENT-DIRECTIONS-5-1006-20261008-1/B1` **UNADMITTED**：七TPEx同10/06近5，以self原17／hedge20的正／負／零形成九類daily組合與反向日數、各正負零counts／完整maximal連續段／window-limited latest；零中斷正負run、首段窗口前未知，區段→日期→ALL25原列trace／同三RAWback。Current只有amount對帳；old direction／adjacent取net5／14／23，不含此self／hedge操作，已接受core不重計。
+
+下一NEW owner原task另核coregap／用途／完整署名、新namespace／worker-read-calendarSchema-sourceversions-profile／ROOT外部canonical pins、finite新metadata金融quota與routeAPI白名單才派工GET；fresh2index＋5daily7只建議。NEW empty FIRST失敗SPENT／retryredirectpreload0，ROOT全ORIGINAL／未增補receipts同RAM逐byteequal／dualSHA、全calendar先驗後last5、ALL原欄／方向counts segments latest／API及可信兩viewport ALL7／trace／mask／heldREAD恢復／failureclear另驗；fresh真零才驗、fixture不補、不reuse capture。
+
+只reuse pure parser／math，oldpins／defaults immutable；無save／crossprocess／ranking／filter／price／Signal／Plan。保存另需durableRights／diskbudget／真跨程序gate；ordinary20／21closes＋MA20／trend缺rights／calendar，無新path不重審舊來源，未採來源不作全域阻擋。Nextcoreless→1／連兩implementation無core前重選，DOC／index／Git／cleanup不reset。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1；可見gate已接受，原ROOT正式接手
+
+2026-10-08。前批 exact15（SOURCE9＋DOC6）commit／另准master ff-only merge `214b668bf43d980fb87270cf62fb0e49fbcd7e45`（parent3476、1457add29del）已前ROOT接受、未push；[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)有限驗收沿用。四NEW runtime／接手／Git已核；外部gate accepted／SINGLE原session continuation已收，沿SAME三roles接手，roster／cleanup／fences見[協作紀錄](TASK_COORDINATION.md)。只三prepend，非productfreeze，索引／Git／cleanup0，完整starting suffix／nested／舊pendinghash保留。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1` **UNADMITTED**：TPEx3105／3293／5274／5347／6488／6510／8069同explicit2026-10-06近5交易日，自行買賣（0-based15／16／17）／避險（18／19／20）／合計（21／22／23）daily及5日buy／sell／net三組並列、components對帳、ALL25 trace／fullcalendar及同as_of／investor／horizon三RAW返回。Gross已有TOTAL，舊net／adjacent不改名重計core；old70rows全22金融欄／components只證取得路徑，released originals不可seed。
+
+Continuation已收到；ROOT仍須原task另核，才沿SAME三roles派工及GET：
+
+- Newoperation／coregap、ownerRights-use／完整OGL署名、新worker-read-calendarSchema-sourceversions-profile、ROOT外部canonical pins、finite新metadata金融quota及白名單route／API；fresh2index＋5daily7GET僅建議非grant。
+- NEW empty FIRST_once，失敗亦SPENT，retry／redirect／preload0；ROOT全ORIGINAL bodies與未增補receipts同RAM逐byteequal／dualSHA。全returnedcalendar先驗才last5，不硬26／舊dates；ALL35rows875strings770int64、全部components／sumsteps／daily與window buy-sell-net／fullidentity／missingduplicates／int64／APIgraph完整對帳。
+- Trusted desktop＋narrow ALL7三組daily／total與每原列trace、三RAWback、unsupported／empty mask、explicit heldREAD同generation恢復、failureclear ALL值與trace；僅fresh完整gate支持真零才驗，缺實件待驗、fixture不代actual；0artifact／privateIO／DB／ordinarypriceGET。
+
+只reuse pure parser／math、不capture；old namespaces／pins／defaults immutable，無ranking／filter／price／Signal／Plan／save／crossprocess；保存另需durableRights／diskbudget／真跨程序gate。Ordinary20／21closes＋同cutoff MA20／trend缺exactRights／calendar，無新positivepath不重審FinMind／monthly／legacy；MIT license不代dataRights，未採來源不作全域阻擋，index／calendar／net／fixture不冒price。繼承core+1／standalone dep0／reliability+1／stall0→0；BOOT非implementation、不increment／reset，nextcoreless→1、連兩implementation無core前重選；完整M1／M2／M3未完。
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1 已有限接受
 
 2026-10-08。ROOT接受fresh12全原件、兩窗比較／paired trace與可信兩viewport操作，見[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)。Core+1／standalone dep0／reliability+1／stall0→0；完整M1／M2／M3未完。Quota SPENT／raw RAM釋放；SOURCE9＋DOC6待ROOT freeze→qualified索引→核准commit→另准merge，完整BOOT及starting suffix保留，見[協作紀錄](TASK_COORDINATION.md)。

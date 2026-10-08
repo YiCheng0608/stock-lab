@@ -1,3 +1,15 @@
+## 目前：七股自行買賣／避險／合計5日對帳已有限接受
+
+2026-10-08。ROOT接受三組daily／window買賣淨額、原列trace與兩viewport七股往返／真零／失敗清值，見[來源 §46](SOURCE_REGISTRY.md)／[個股頁 §51](STOCK_RESEARCH_PAGE.md)。Core+1／dep0／reliability0／stall0→0；完整M1／M2／M3未完。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENT-DIRECTIONS-5-1006-20261008-1/B1` **UNADMITTED**：自行／避險九類方向組合、counts／segments／latest及原列trace，fresh7GET只是建議，見[完成條件](ROADMAP_EXECUTION.md)。Ordinarycloses／MA20仍缺rights／calendar新path。Quota SPENT／RAM釋放，SOURCE9＋DOC6待freeze／索引／commit／另准merge；outsidecleanup及歷史保護見[協作紀錄](TASK_COORDINATION.md)。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1；可見gate已接受，原ROOT正式接手
+
+2026-10-08。前批相鄰5日 SOURCE9＋DOC6 exact15已commit／local master ff-only merge `214b668bf43d980fb87270cf62fb0e49fbcd7e45`（parent3476）、前ROOT接受、未push；有限操作沿[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)。四NEW runtime／共同根／Git及接手已核；外部gate accepted／SINGLE原session continuation已收，沿SAME三roles接手，roster／fences／outsidecleanup actual0見[協作紀錄](TASK_COORDINATION.md)。
+
+NEXT dealer-components **UNADMITTED**：七股10/06近5，自行買賣／避險／合計daily與5日買賣淨額並列及原欄追溯，具名准入見[完成條件](ROADMAP_EXECUTION.md)；fresh7GET僅建議非grant。Ordinary closes／MA20缺rights／calendar新path。繼承core+1／dep0／reliability+1／stall0→0，BOOT非implementation、不reset；完整M1／M2／M3未完。非productfreeze，索引／Git／cleanup0，starting suffix／歷史保留，前quota SPENT／原件釋放不重用。
+
 ## 目前：七股相鄰5日窗口比較已有限接受
 
 2026-10-08。前5／近5比較與雙原列追溯已ROOT接受，見[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)。Core+1／dep0／reliability+1／stall0→0；M1／M2／M3未完。

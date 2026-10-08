@@ -1751,3 +1751,67 @@ NEWgen `e9a265f3-4fbd-44c6-a81f-0d76c10cc7b9`，唯一trusted native FIRST12 HTT
 Fresh每日net0只有3293trust9/29、8069trust9/23，皆1day zero segment；前窗3293trust latestzero1day／earlier_unknown=false為新actual正面路徑，兩尺寸native受驗。Actual allzero triple／整窗全零／net sum0／total delta0／pair delta0均無實件，缺口保留，fixture不充真值。完整actual API／兩viewport／清值見PAGE50，canonical API133856B、SHA `5fe1d272fdecfdfaf4e9778683e80466b38097779ccae94d6026261bf1bdf515`，完整逐件receipt及數值留ROOT原task。
 
 Financial12／metadata6direct＋2reader SPENT；ORIGINAL RAM已隨正常退出及auditor release釋放，不restart／replay／clone／hydrate／preload。Test／productartifacts0files0B、privateIO／DB／ordinaryprice GET0；不外推price／ranking／filter／Signal／Plan／完整M1，保存／跨程序未授。
+
+## 46. M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳
+
+2026-10-08。ROOT有限接受SOURCE9及具名actual對帳，操作見[個股頁 §51](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)，核心與封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。本節只管理新namespace，old series／gross／direction／adjacent／defaultpins與四TWSE profiles immutable。
+
+### 46.1 獨立版本與外部pins
+
+本worker exact literal canonical9245 UTF-8 bytes，version `m1-chips-dealer-components-stock-scope-7-tpex-2026-10-06.1`、ROOT外部SHA `54347a73a5d725e702599eb582e9c75550f2c24c6839afd61c890e37bed99eab`，profile `free_public_local_chips_only_dealer_components_stock_scope_7`；本根AST唯讀核bytes／SHA及署名774B，不import或重跑產品。Worker／capture／read／consumer須完整匹配外部expected pins，不能從receivedpolicy自建pin或提升olddefaults。
+
+| Identity | 本B1 exact版本 |
+| --- | --- |
+| worker | `tpex-institutional-dealer-components/chips-stock-scope-7-v1` |
+| capture | `tpex-institutional-dealer-components-capture/chips-stock-scope-7-v1` |
+| read | `institutional-dealer-components-read/chips-stock-scope-7-v1` |
+| calculation | `dealer-self-hedge-total-buy-sell-net/five-session-step-int64-v1` |
+| calendar schema | `institutional-dealer-components-calendar/chips-stock-scope-7-v1` |
+| calendar／index version | `dataset-11391-month-csv-observed-2026-10-08/chips-dealer-components-stock-scope-7-v1` |
+| daily version | `dataset-11856-dated-csv-observed-2026-10-08/chips-dealer-components-stock-scope-7-v1` |
+
+TPEx3105／3293／5274／5347／6488／6510／8069，explicit cutoff2026-10-06、observation2026-10-08，dealer only／horizon5 only；self／hedge／total三組始終並列，不將old TOTAL改名冒新增操作。
+
+### 46.2 Metadata准入、用途與完整署名
+
+首6 direct metadata HTTP200、body542891B，但holder stdin EOF／正常raw0退出，在全部ROOT transfer前原RAM釋放；6均SPENT、gate未過，不稱完整新規則audit或來源failure、不retry。另2reader一次：OGL完整primary clauses成功，Chinese TPEx InternalError／rendered403；此不是native HTTP counter，兩reader均SPENT。
+
+正面新路徑為NEW3 direct官方[dataset11391](https://data.gov.tw/dataset/11391)／[dataset11856](https://data.gov.tw/dataset/11856) HTML及TPEx English terms，共1061024B ORIGINAL bodies／3813B未增補canonical receipts，UTC2026-10-08T10:33:43.323647～10:33:44.968013+00:00。ROOT完整originals／receipts同RAM逐byteequal／dualSHA及獨立完整HTMLclauses已核；provider金融監督管理委員會證券期貨局（FSC SFB）、ownerTPEx、free CSV／license1／exact resource links、OGL1完整notice及TPEx English §7政府開放資料例外／§5一般下載限制均保留。只有有限local RAM dealer-components比較用途；source45已接受的weekday／9/25、9/28 closure完整規則clauses沿用，不沿用舊financialcalendar或capture，也不將首6重稱完整新audit。
+
+| NEW完整metadata | Body bytes／SHA256 | Original receipt bytes／SHA256 |
+| --- | --- | --- |
+| 官方11391 HTML | 520853／`6850cab3474a6277c4aedc34c6d30e04bfaffd45fb36017f0caccb6844e358b6` | 1238／`e37f0b8f07f53808d18741cbcdf9cfcb08e323e70536ee82498fd9bb09030f39` |
+| 官方11856 HTML | 526582／`b78bd658d22af66fc2d77509ad409195cd6cf8f561e8a495a783dad03dc869c8` | 1239／`b53cf73e050578dca50c66df9a37c61febf02ff728dabd8c8d331d9ccf48d7f1` |
+| TPEx English terms | 13589／`f6d74dbad4cdbd40c8f4f4171fa4ed032eb2e6af0e7bd08739e14bbf5152f565` | 1336／`14774d2082f7c9525396dc5e887cbb9c37219c419ecfbccdaac1d965dc90e6b6` |
+
+本worker774 UTF-8 bytes完整署名逐字如下（不是前批685B或mojibake候選）：
+
+> 金融監督管理委員會證券期貨局提供、財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 櫃買指數歷史資料（dataset11391；dataset-11391-month-csv-observed-2026-10-08/chips-dealer-components-stock-scope-7-v1）及上櫃股票三大法人買賣明細資訊（dataset11856；dataset-11856-dated-csv-observed-2026-10-08/chips-dealer-components-stock-scope-7-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；自行買賣、避險及總額之每日與五日比較為本地衍生結果。
+
+Metadata觀測不代金融列publication／firstavailability／revision，三者仍unknown、nonPIT；統計依原成交、未含券商帳戶更正。磁碟保存／跨程序／正式DB／交易未授，MIT軟體license不代dataRights。ROOT AST stdout mojibake9472B／ca6d93…候選於任何source／finance grant前撤回，正確ASCII JSON讀回9245B才核定；原fail留task，不沿用錯pins。
+
+### 46.3 Finite FIRST與全calendar
+
+ONE NEW empty distinct producer，seed0／preload=false；明示trusted FIRST_once先2index，全部returnedcalendar原6欄先驗requested month／unique日期／weekday／nonclosed／≤observation、finite positive OHLC與上下界及finite漲跌，再將≤cutoff採入日期與完整weekday扣已核9/25、9/28休市對帳，才fresh derive last5、動態5daily。失敗亦SPENT；retry／redirect／probe／warmup／preload0，不硬26或舊dates。合法postcutoff保原列excluded；index calendar不代ordinary closes。
+
+Exact GET sequence：本新index base URL `https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data`，加percent-encoded Gregorian `date=2026/09/01`及`2026/10/01`；再新daily base URL `https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data`加各derived日期percent-encoded ROC `d`。Body空、HTTP200／identity／UTF-8 CSV，完整ALL7 ORIGINAL bodies及未增補canonical receipts只RAM，同RAM producer與ROOT auditor原bytes逐byteequal、逐件URL／UTC／dualSHA；不以receipt重造或released capture作seed。
+
+Max7requests／12MiB aggregate／1MiB index／2MiB daily；retained64MiB為deduplicated getsizeof estimate，非RSS／建構peak；diagnostic16MiB。15s/request／180s/batch只cooperative request-response-chunk檢查，非OS硬deadline；16KiB headers為received postcheck，非socket cap。
+
+### 46.4 ALL25原欄與每日／窗口計算
+
+全部daily先驗25原strings／date／code唯一／name及ALL7 identity／missing，selected35×25=875strings、35×22=770金融int64全部合格後才available。Canonical signed-int64股數、gross非負、每buy−sell=net，ALL22／七buy-sell-net triplets／foreign components／dealer components／三法人合計關係完整核，不只取三組顯示欄。任一來源／pins／calendar／結構／數值／identity conflict則whole7 unavailable，不跳壞股／補0／縮窗。
+
+| Dealer component | 0-based買／賣／淨額 |
+| --- | --- |
+| 自行買賣 self | 15／16／17 |
+| 避險 hedge | 18／19／20 |
+| 合計 total | 21／22／23 |
+
+Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／sell／net各自按本fresh5順序累加，everycomponent addition／subtraction及每sumstep檢signed-int64。股／張精確÷1000、至多3 decimals，不以float或圖形約值對帳。每列保ALL25原strings／header／ordinal／bodySHA／未增補ORIGINALreceiptSHA／URL與9component metrics；全returnedcalendar原欄可追溯。Zero predicates只針對合格原數值，missing／unknown不當0。
+
+### 46.5 本次actual與未驗
+
+NEWgen `edb7ac56-f36f-4fab-bff8-85dc916a2fbb`，唯一trusted FIRST7 HTTP200／identity，body732030B／未增補original receipts7530B，UTC2026-10-08T11:15:02.253776～11:15:05.281361+00:00。ROOT全部7original／receipts、stdlib CSV／Decimal／dates、4557 full daily rows／ALL35×25／770int64／ALL22 components與sumsteps及fullAPI graph完整核，停前再核原bytesequal／math／API；不冒3次fullmath。26 returnedcalendar→≤10/06 exact24 adopted→last5：9/30、10/1、10/2、10/5、10/6；315daily／63window metrics精確對帳。Full API79080B，SHA `0c3ac2b80a65c3bb8bad9225195d18ba3e8d106763e51e4bd9c36bf316465a38`。
+
+Actual零只有5274 self sell 10/5及10/6，兩viewportdaily與原列trace皆核；windowzero／triplezero／netzero缺實件未驗，fixture不補actual。可信FIRST是1277×924，當時未beforeclickassert1365，不聲稱FIRST1365；之後兩viewportALL7及清值見PAGE51。金融7／metadata首6＋2reader＋新3全SPENT；原件與derived RAM已釋放，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO／DB／ordinarypriceGET0；無save／crossprocess／ranking／filter／price／Signal／Plan或完整M1外推。

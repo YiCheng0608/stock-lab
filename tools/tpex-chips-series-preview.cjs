@@ -11,7 +11,7 @@ const crypto = require('node:crypto')
 const assert = require('node:assert/strict')
 const root = path.resolve(__dirname, '..')
 const args = process.argv.slice(2)
-const allowed = new Set(['--check', '--check-ui-only', '--check-startup-only', '--serve', '--chips-series-stock-scope-7-opt-in', '--chips-gross-stock-scope-7-opt-in', '--chips-direction-stock-scope-7-opt-in', '--chips-adjacent-stock-scope-7-opt-in', '--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
+const allowed = new Set(['--check', '--check-ui-only', '--check-startup-only', '--serve', '--chips-series-stock-scope-7-opt-in', '--chips-gross-stock-scope-7-opt-in', '--chips-direction-stock-scope-7-opt-in', '--chips-adjacent-stock-scope-7-opt-in', '--chips-dealer-components-stock-scope-7-opt-in', '--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
 const optionNames = new Set(['--deps', '--api-port', '--port', '--policy-version', '--policy-digest'])
 const seen = new Set(), options = new Map()
 for (let i = 0; i < args.length; i++) {
@@ -27,11 +27,12 @@ assert(!seen.has('--check-startup-only') || check && !seen.has('--check-ui-only'
 const gross = seen.has('--chips-gross-stock-scope-7-opt-in')
 const direction = seen.has('--chips-direction-stock-scope-7-opt-in')
 const adjacent = seen.has('--chips-adjacent-stock-scope-7-opt-in')
-assert([gross, direction, adjacent, seen.has('--chips-series-stock-scope-7-opt-in')].filter(Boolean).length <= 1, 'chips profiles cannot be enabled together')
-assert(!serve || seen.has('--chips-series-stock-scope-7-opt-in') || gross || direction || adjacent, 'explicit new frontend flag required')
+const dealerComponents = seen.has('--chips-dealer-components-stock-scope-7-opt-in')
+assert([gross, direction, adjacent, dealerComponents, seen.has('--chips-series-stock-scope-7-opt-in')].filter(Boolean).length <= 1, 'chips profiles cannot be enabled together')
+assert(!serve || seen.has('--chips-series-stock-scope-7-opt-in') || gross || direction || adjacent || dealerComponents, 'explicit new frontend flag required')
 assert(process.version === 'v24.19.0', 'pinned Node24.19.0 required')
-const version = adjacent ? 'm1-chips-adjacent-windows-stock-scope-7-tpex-2026-10-06.1' : direction ? 'm1-chips-direction-segments-stock-scope-7-tpex-2026-10-06.1' : gross ? 'm1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1' : 'm1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1'
-const pin = adjacent ? 'sha256:092f86d7fd2797b88f12f92e0474beb120139143ba5c3f3e27edb0c52f5c235e' : direction ? 'sha256:eb7a4dd688907855dd91250bfbec96b4dd8b2cb65085dce49e7e12c3a80c5348' : gross ? 'sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144' : 'sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31'
+const version = dealerComponents ? 'm1-chips-dealer-components-stock-scope-7-tpex-2026-10-06.1' : adjacent ? 'm1-chips-adjacent-windows-stock-scope-7-tpex-2026-10-06.1' : direction ? 'm1-chips-direction-segments-stock-scope-7-tpex-2026-10-06.1' : gross ? 'm1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1' : 'm1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1'
+const pin = dealerComponents ? 'sha256:54347a73a5d725e702599eb582e9c75550f2c24c6839afd61c890e37bed99eab' : adjacent ? 'sha256:092f86d7fd2797b88f12f92e0474beb120139143ba5c3f3e27edb0c52f5c235e' : direction ? 'sha256:eb7a4dd688907855dd91250bfbec96b4dd8b2cb65085dce49e7e12c3a80c5348' : gross ? 'sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144' : 'sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31'
 assert((options.get('--policy-version') ?? version) === version && (options.get('--policy-digest') ?? pin) === pin, 'independent external pins mismatch')
 const port = Number(options.get('--port') ?? 8800), apiPort = Number(options.get('--api-port') ?? 8799)
 assert([port, apiPort].every((p) => Number.isInteger(p) && p >= 1024 && p <= 65535) && port !== apiPort, 'finite distinct local ports')
@@ -135,7 +136,7 @@ function typecheck() {
   }
   console.log(JSON.stringify({ typecheck: 'current full src noEmit', source_files: parsed.fileNames.length }))
 }
-const definitions = { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7': JSON.stringify(adjacent ? 'm1-v1' : ''), 'import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7': JSON.stringify(direction ? 'm1-v1' : ''), 'import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7': JSON.stringify(gross || direction || adjacent ? '' : 'm1-v1'), 'import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7': JSON.stringify(gross ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify('') }
+const definitions = { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7': JSON.stringify(dealerComponents ? 'm1-v1' : ''), 'import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7': JSON.stringify(adjacent ? 'm1-v1' : ''), 'import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7': JSON.stringify(direction ? 'm1-v1' : ''), 'import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7': JSON.stringify(gross || direction || adjacent || dealerComponents ? '' : 'm1-v1'), 'import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7': JSON.stringify(gross ? 'm1-v1' : ''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR': JSON.stringify(''), 'import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7': JSON.stringify('') }
 function stripFontImports(css) {
   return css.replace(/@import\s+url\([^)]*\)\s*;/gi, '')
 }
@@ -173,12 +174,12 @@ async function startupCheckOnly() {
 }
 async function checkOnly() {
   typecheck()
-  const literal = fs.readFileSync(path.join(root, adjacent ? 'backend/worker/tpex_institutional_adjacent_scope7.py' : direction ? 'backend/worker/tpex_institutional_direction_scope7.py' : gross ? 'backend/worker/tpex_institutional_gross_scope7.py' : 'backend/worker/tpex_institutional_series_scope7.py'), 'utf8').match(/POLICY_CANONICAL = r'''([\s\S]*?)'''/)[1]
-  assert(Buffer.byteLength(literal) === (adjacent ? 9284 : direction ? 12382 : gross ? 10654 : 9733) && 'sha256:' + crypto.createHash('sha256').update(literal).digest('hex') === pin, 'independent canonical policy check')
-  const tests = require(path.join(sourceRoot, adjacent ? 'chipsAdjacent.test.ts' : direction ? 'chipsDirection.test.ts' : gross ? 'chipsGross.test.ts' : 'chipsSeries.test.ts'))
-  const fixture = await (adjacent ? tests.createAdjacentFixture : direction ? tests.createDirectionFixture : gross ? tests.createGrossFixture : tests.createSeriesFixture)(JSON.parse(literal))
+  const literal = fs.readFileSync(path.join(root, dealerComponents ? 'backend/worker/tpex_institutional_dealer_components_scope7.py' : adjacent ? 'backend/worker/tpex_institutional_adjacent_scope7.py' : direction ? 'backend/worker/tpex_institutional_direction_scope7.py' : gross ? 'backend/worker/tpex_institutional_gross_scope7.py' : 'backend/worker/tpex_institutional_series_scope7.py'), 'utf8').match(/POLICY_CANONICAL = r'''([\s\S]*?)'''/)[1]
+  assert(Buffer.byteLength(literal) === (dealerComponents ? 9245 : adjacent ? 9284 : direction ? 12382 : gross ? 10654 : 9733) && 'sha256:' + crypto.createHash('sha256').update(literal).digest('hex') === pin, 'independent canonical policy check')
+  const tests = require(path.join(sourceRoot, dealerComponents ? 'chipsDealerComponents.test.ts' : adjacent ? 'chipsAdjacent.test.ts' : direction ? 'chipsDirection.test.ts' : gross ? 'chipsGross.test.ts' : 'chipsSeries.test.ts'))
+  const fixture = await (dealerComponents ? tests.createDealerFixture : adjacent ? tests.createAdjacentFixture : direction ? tests.createDirectionFixture : gross ? tests.createGrossFixture : tests.createSeriesFixture)(JSON.parse(literal))
   assert(fixture.sourceInputBytes <= 96 * 1024, 'small test source input cap')
-  const checked = seen.has('--check-ui-only') ? 0 : await (adjacent ? tests.runAdjacentChecks : direction ? tests.runDirectionChecks : gross ? tests.runGrossChecks : tests.runSeriesChecks)(fixture.read, assert)
+  const checked = seen.has('--check-ui-only') ? 0 : await (dealerComponents ? tests.runDealerChecks : adjacent ? tests.runAdjacentChecks : direction ? tests.runDirectionChecks : gross ? tests.runGrossChecks : tests.runSeriesChecks)(fixture.read, assert)
   const visited = new Set()
   function estimate(value) {
     if (value === null || value === undefined) return 0
@@ -190,27 +191,47 @@ async function checkOnly() {
   }
   const retainedEstimate = estimate(fixture.read)
   assert(retainedEstimate <= 1024 * 1024, 'shared derived graph estimate cap')
-  const exports = adjacent ? "export { AdjacentSummary, AdjacentPairs, AdjacentEvidence } from './ChipsAdjacentPage'" : direction ? "export { DirectionSummary, DirectionSegments, DirectionEvidence } from './ChipsDirectionPage'" : gross ? "export { GrossChart as SeriesChart, GrossEvidence as SeriesEvidence } from './ChipsGrossPage'" : "export { SeriesChart, SeriesEvidence } from './ChipsSeriesPage'"
+  const exports = dealerComponents ? "export { DealerSummary, DealerDaily, DealerEvidence, DealerCalendar } from './ChipsDealerComponentsPage'" : adjacent ? "export { AdjacentSummary, AdjacentPairs, AdjacentEvidence } from './ChipsAdjacentPage'" : direction ? "export { DirectionSummary, DirectionSegments, DirectionEvidence } from './ChipsDirectionPage'" : gross ? "export { GrossChart as SeriesChart, GrossEvidence as SeriesEvidence } from './ChipsGrossPage'" : "export { SeriesChart, SeriesEvidence } from './ChipsSeriesPage'"
   const result = await esbuild.build({ stdin: { contents: "export { default as App } from './App'; " + exports, resolveDir: sourceRoot, loader: 'ts' }, bundle: true, write: false, platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [deps], external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'], loader: { '.css': 'empty' }, define: definitions })
   const mod = new Module(path.join(sourceRoot, '__series_ssr_memory__.cjs'))
   mod.filename = path.join(sourceRoot, '__series_ssr_memory__.cjs'); mod.paths = Module._nodeModulePaths(sourceRoot)
   mod._compile(result.outputFiles[0].text, mod.filename)
   const React = requireDeps('react'), { renderToStaticMarkup } = requireDeps('react-dom/server'), { MemoryRouter } = requireDeps('react-router-dom')
-  const { App, SeriesChart, SeriesEvidence, DirectionSummary, DirectionSegments, DirectionEvidence, AdjacentSummary, AdjacentPairs, AdjacentEvidence } = mod.exports
+  const { App, SeriesChart, SeriesEvidence, DirectionSummary, DirectionSegments, DirectionEvidence, AdjacentSummary, AdjacentPairs, AdjacentEvidence, DealerSummary, DealerDaily, DealerEvidence, DealerCalendar } = mod.exports
   const previousFetch = global.fetch
   let forbiddenFetch = 0
   global.fetch = () => { forbiddenFetch++; throw new Error('SSR automatic fetch') }
   let chartChecks = 0
   try {
-    const route = adjacent ? '/chips-stock-scope-7-adjacent-windows' : direction ? '/chips-stock-scope-7-direction-segments' : gross ? '/chips-stock-scope-7-gross-trade' : '/chips-stock-scope-7-daily-net-trend'
-    const horizon = adjacent ? '5' : '20'
-    const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '?as_of=2026-10-06&investor=foreign&horizon=' + horizon] }, React.createElement(App)))
+    const route = dealerComponents ? '/chips-stock-scope-7-dealer-components' : adjacent ? '/chips-stock-scope-7-adjacent-windows' : direction ? '/chips-stock-scope-7-direction-segments' : gross ? '/chips-stock-scope-7-gross-trade' : '/chips-stock-scope-7-daily-net-trend'
+    const horizon = dealerComponents || adjacent ? '5' : '20', selectedInvestor = dealerComponents ? 'dealer' : 'foreign'
+    const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '?as_of=2026-10-06&investor=' + selectedInvestor + '&horizon=' + horizon] }, React.createElement(App)))
     assert(html.includes('首次取得來源') && html.includes('已驗證股數') && html.includes('未知') && !html.includes('<svg'), 'initial fullApp has identities, no unverified charts')
-    if (gross || direction || adjacent) {
-      const unknown = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '/9999?as_of=2026-10-06&investor=foreign&horizon=' + horizon] }, React.createElement(App)))
+    if (gross || direction || adjacent || dealerComponents) {
+      const unknown = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '/9999?as_of=2026-10-06&investor=' + selectedInvestor + '&horizon=' + horizon] }, React.createElement(App)))
       assert(unknown.includes('此標的不在核定七股範圍') && !unknown.includes('<svg') && !unknown.includes('精確日期買進賣出淨超與累計') && /disabled=""[^>]*>明確讀取已持有來源/.test(unknown), 'unknown selected stock masks data and forbids READ before returning to supported scope')
     }
-    if (adjacent) {
+    if (dealerComponents) {
+      for (const stock of fixture.read.stocks) {
+        const summary = renderToStaticMarkup(React.createElement(DealerSummary, { stock }))
+        const daily = renderToStaticMarkup(React.createElement(DealerDaily, { stock, onPoint: () => {} }))
+        assert((summary.match(/data-dealer-total=/g) ?? []).length === 9 && summary.includes('自行買賣') && summary.includes('避險') && summary.includes('自營商總額'), 'ALL7 three components/nine window metrics always parallel')
+        assert((daily.match(/data-dealer-daily-date=/g) ?? []).length === 45 && (daily.match(/data-dealer-point-button=/g) ?? []).length === 5, 'ALL7 five dates/all45 daily metrics/five native trace buttons')
+        for (let index = 0; index < 5; index++) {
+          const evidence = renderToStaticMarkup(React.createElement(DealerEvidence, { stock, index, read: fixture.read }))
+          assert((evidence.match(/data-dealer-raw-field=/g) ?? []).length === 25 && (evidence.match(/data-dealer-original-metric=/g) ?? []).length === 9 && evidence.includes(stock.window.points[index].receipt_sha256) && evidence.includes(stock.window.points[index].body_sha256), 'ALL35 complete original fields/nine metrics/dualSHA')
+          chartChecks++
+        }
+        chartChecks++
+      }
+      const calendar = renderToStaticMarkup(React.createElement(DealerCalendar, { read: fixture.read }))
+      assert((calendar.match(/data-dealer-calendar-field=/g) ?? []).length === fixture.read.calendar.rows.length * 6, 'ALL returned calendar six original fields')
+      assert(!html.includes('data-dealer-summary') && !html.includes('data-dealer-row-date') && html.includes('金融監督管理委員會證券期貨局提供'), 'initial App masks graph and retains complete provider attribution')
+      for (const query of ['as_of=&investor=dealer&horizon=5', 'as_of=2026-10-07&investor=dealer&horizon=5', 'as_of=2026-10-06&investor=foreign&horizon=5', 'as_of=2026-10-06&investor=dealer&horizon=20']) {
+        const masked = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + '/3105?' + query] }, React.createElement(App)))
+        assert(!masked.includes('data-dealer-summary') && /disabled=""[^>]*>明確讀取已持有來源/.test(masked), 'invalid RAW controls mask all and disable READ')
+      }
+    } else if (adjacent) {
       for (const width of [1365, 390]) for (const stock of fixture.read.stocks) for (const investor of ['foreign', 'trust', 'dealer']) {
         // These are 42 server renders labelled for later native viewport acceptance, not CSS/browser proof.
         const markup = renderToStaticMarkup(React.createElement('div', { 'data-intended-viewport': width }, React.createElement(AdjacentSummary, { stock, investor }), React.createElement(AdjacentPairs, { stock, investor, onPair: () => {} })))
@@ -254,22 +275,22 @@ async function checkOnly() {
     }
     assert(forbiddenFetch === 0, 'SSR network zero')
   } finally { global.fetch = previousFetch }
-  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, ...(adjacent ? { adjacent_group_ssr: chartChecks, paired_original_trace_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : { chart_ssr: direction ? 0 : chartChecks, direction_group_ssr: direction ? chartChecks : 0, evidence_negative_and_zero_ssr: true }), initial_full_app_ssr: true, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, derived_expanded_serialization_bytes: Buffer.byteLength(JSON.stringify(fixture.read)), estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
+  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, ...(dealerComponents ? { dealer_window_daily_groups_ssr: 7, dealer_original_rows_ssr: 35, dealer_group_ssr: chartChecks, full_calendar_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : adjacent ? { adjacent_group_ssr: chartChecks, paired_original_trace_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : { chart_ssr: direction ? 0 : chartChecks, direction_group_ssr: direction ? chartChecks : 0, evidence_negative_and_zero_ssr: true }), initial_full_app_ssr: true, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, derived_expanded_serialization_bytes: Buffer.byteLength(JSON.stringify(fixture.read)), estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
 }
 async function serveOnly() {
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false, outfile: path.join(sourceRoot, '__series_memory__.js'), platform: 'browser', format: 'iife', target: 'es2020', jsx: 'automatic', nodePaths: [deps], define: definitions, plugins: [{ name: 'system-fonts-memory', setup(build) { build.onLoad({ filter: /\.css$/ }, (args) => ({ contents: stripFontImports(fs.readFileSync(args.path, 'utf8')), loader: 'css' })) } }] })
   const js = result.outputFiles.find((f) => f.path.endsWith('.js')).contents
   const css = result.outputFiles.find((f) => f.path.endsWith('.css'))?.contents ?? Buffer.alloc(0)
-  const html = Buffer.from('<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (adjacent ? '七股前5與近5法人比較' : direction ? '七股三法人方向與連續區段' : gross ? '七股法人買進與賣出' : '七股每日法人淨超') + '</title><link rel="stylesheet" href="/series-memory.css"></head><body><div id="root"></div><script src="/series-memory.js"></script></body></html>')
+  const html = Buffer.from('<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (dealerComponents ? '七股自營商自行買賣與避險對帳' : adjacent ? '七股前5與近5法人比較' : direction ? '七股三法人方向與連續區段' : gross ? '七股法人買進與賣出' : '七股每日法人淨超') + '</title><link rel="stylesheet" href="/series-memory.css"></head><body><div id="root"></div><script src="/series-memory.js"></script></body></html>')
   function reply(res, status, body, type = 'application/json; charset=utf-8') { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:" }); res.end(body) }
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://127.0.0.1:' + port)
       if (req.method === 'GET' && ['/series-memory.js', '/series-memory.css'].includes(url.pathname)) return reply(res, 200, url.pathname.endsWith('.js') ? js : css, url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8')
-      const routePattern = adjacent ? /^\/chips-stock-scope-7-adjacent-windows(?:\/[0-9A-Za-z]{1,16})?$/ : direction ? /^\/chips-stock-scope-7-direction-segments(?:\/[0-9A-Za-z]{1,16})?$/ : gross ? /^\/chips-stock-scope-7-gross-trade(?:\/[0-9A-Za-z]{1,16})?$/ : /^\/chips-stock-scope-7-daily-net-trend(?:\/(?:3105|3293|5274|5347|6488|6510|8069))?$/
+      const routePattern = dealerComponents ? /^\/chips-stock-scope-7-dealer-components(?:\/[0-9A-Za-z]{1,16})?$/ : adjacent ? /^\/chips-stock-scope-7-adjacent-windows(?:\/[0-9A-Za-z]{1,16})?$/ : direction ? /^\/chips-stock-scope-7-direction-segments(?:\/[0-9A-Za-z]{1,16})?$/ : gross ? /^\/chips-stock-scope-7-gross-trade(?:\/[0-9A-Za-z]{1,16})?$/ : /^\/chips-stock-scope-7-daily-net-trend(?:\/(?:3105|3293|5274|5347|6488|6510|8069))?$/
       if (req.method === 'GET' && routePattern.test(url.pathname)) return reply(res, 200, html, 'text/html; charset=utf-8')
-      if (req.method === 'GET' && url.pathname === (adjacent ? '/__adjacent_preview_receipt' : direction ? '/__direction_preview_receipt' : gross ? '/__gross_preview_receipt' : '/__series_preview_receipt') && !url.search) return reply(res, 200, JSON.stringify({ pid: process.pid, compiler_pids: children.map((child) => child.pid), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, policy_digest: pin, js_bytes: js.length, css_bytes: css.length, write: false, guard_counts: counts }))
-      const allowedPath = adjacent ? '/api/chips/adjacent-stock-scope-7' : direction ? '/api/chips/direction-stock-scope-7' : gross ? '/api/chips/gross-stock-scope-7' : '/api/chips/series-stock-scope-7'
+      if (req.method === 'GET' && url.pathname === (dealerComponents ? '/__dealer_components_preview_receipt' : adjacent ? '/__adjacent_preview_receipt' : direction ? '/__direction_preview_receipt' : gross ? '/__gross_preview_receipt' : '/__series_preview_receipt') && !url.search) return reply(res, 200, JSON.stringify({ pid: process.pid, compiler_pids: children.map((child) => child.pid), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, policy_digest: pin, js_bytes: js.length, css_bytes: css.length, write: false, guard_counts: counts }))
+      const allowedPath = dealerComponents ? '/api/chips/dealer-components-stock-scope-7' : adjacent ? '/api/chips/adjacent-stock-scope-7' : direction ? '/api/chips/direction-stock-scope-7' : gross ? '/api/chips/gross-stock-scope-7' : '/api/chips/series-stock-scope-7'
       const keys = [...url.searchParams.keys()]
       const date = url.searchParams.get('as_of')
       if (!((url.pathname === allowedPath && req.method === 'GET') || (url.pathname === allowedPath + '/capture' && req.method === 'POST')) || keys.length !== 1 || keys[0] !== 'as_of' || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) {

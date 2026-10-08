@@ -1694,3 +1694,41 @@ Desktop1365×900及narrow390×844各ALL7×3investor=21detailconfigs，共42detai
 API normalSIGINT raw1／SHUTDOWNtrue source12／guards0，兩代preview及compiler正常停、auditor release12 ORIGINAL exitraw0；六ownedPIDs absent、8812–8814無listener、ownedpage正常close／tabs[]已ROOT獨立核。API poststop暫仍在的raw1保留，後自然退出、無forcekill，後assert0；詳盡退出／rejected counts及原錯誤見開發入口。Product／testartifacts0files0B、privateIO／DB／ordinaryprice GET0，全部raw RAM釋放，不restart／replay／clone／hydrate／preload、保存／跨程序未授。
 
 Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+
+## 51. M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳
+
+2026-10-08。ROOT有限接受SOURCE9及以下具名actual，不代表完整M1。新版本／pins／provider-owner／774B完整署名、calendar與數值只由[來源 §46](SOURCE_REGISTRY.md)管理；old series／gross／direction／adjacent／defaultpins及四TWSE profiles不改。Synthetic／原fail與退出見[開發入口](development-baseline/README.md)。
+
+### 51.1 獨立入口與明示動作
+
+Route `/chips-stock-scope-7-dealer-components`、flag `VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7=m1-v1`、runner `--chips-dealer-components-stock-scope-7-opt-in`；API `/api/chips/dealer-components-stock-scope-7`及`/capture`完整匹配SOURCE46外部pins。GET exact一次as_of query／body0；POST exact as_of／空JSON object（4096B上限），不接受unknown／duplicate keys。Explicit as_of2026-10-06、investor=dealer、horizon=5；七股卡→同cutoff detail→back保as_of／investor／horizon三RAWcontrols，三components始終並列，不篩self／hedge來改名old TOTAL。
+
+Apply／切股／back不暗fetch／READ；僅一次明示trusted FIRST取得fresh7，之後明示成功heldREAD只讀same generation。Masked時valid Apply／back不能unmask或沿用舊數值。SOURCE46日期／pins／全部whole7 gate失敗均unavailable，不補0／縮窗／跳壞股。
+
+### 51.2 三組買賣淨額與完整追溯
+
+List及detail並列self／hedge／total的buy／sell／net五日totals，detail列五日各9metrics、component對帳與精確股／張。Each day及window顯示buy−sell=net、self＋hedge=total的可核結果；股／張依canonical精確字串，不用視覺約值對帳。
+
+每日期原列可native展開ALL25 header／原string、ordinal、bodySHA、未增補ORIGINALreceiptSHA／URL及canonicalreceipt；三components／9metrics與原欄對帳。完整returnedcalendar（本次26列）原6欄、含合法postcutoff excluded與canonical亦可操作，不只採入五日；TPEx owner／FSC SFB provider、year2026／完整兩dataset名／新observedversions／OGL1.0 URL與774B署名保留。Observation10/08與researchcutoff10/06分離，publication／firstavailability／revision unknown、nonPIT。
+
+### 51.3 可信矩陣及零值
+
+FIRST為visible trusted，但product goto將viewport重設1277×924，ROOT未beforeclickassert1365；原gap保留，不稱FIRST1365。後續desktop1365×900與narrow390×844各ALL7 details，每viewport315daily＋63window metrics、list各63亦全核；合14primarydetail／630daily／126window。
+
+70primary native rawrowclicks（每viewport35）及70primary canonicalreceiptopens，合1750原strings，全部header25／ordinal／bodySHA／originalreceiptSHA／URL／9metrics精確核。每detail完整26×6calendar及canonical全核；primary nativecalendar rowopens為26each=52，probes／close／finalsamples另算，不稱52為全批總數。三RAWback、no document overflow、back仍mask→explicit heldREAD samegen受驗。
+
+Actual零僅5274 self sell 10/5、10/6，兩viewportdaily及完整原列皆核；windowzero／triplezero／netzero缺實件。Fixture與RAM lifecycle checks不代actual；原harness／clip／canonicalopen／truncatedDOM／PS crashpad失敗留ROOT原task，不計成功或歸責未變source。
+
+### 51.4 Mask、browser return與同key失敗清ALL
+
+10/07及真空值native Apply兩viewport清全部daily／window totals／componentchecks／raw／receipts／calendar，proxy GET／POST counters不變、無APIcall；valid Apply仍masked，只有trusted READ成功才恢復samegen。9999 SAME native fullgoto／browserback兩viewport全mask→explicit READ同gen受驗。Lifecycle含pagehide flushSync mask、pageshow persisted守門及popstate mask；實際persisted=true BFCache未觀察、lifecycle[]，不聲稱actual BFCache或以RAM tests補證。
+
+停前samekey5274／dealer／5／10/06兩viewportlive，全部五原列／54metrics／fullcalendar先核。API正常SIGINT後，narrow trusted READ actual502 fromlive清ALL；desktop同keyrepeat502由masked保持ALL清，三RAWback保同cutoff且mask。不是兩獨立producer；source／read／schema失敗不留舊值，不把ACK／stale HTTP當actual成功。
+
+### 51.5 驗證、退出及剩餘邊界
+
+Backend15RAM raw0／front57src noEmit＋52validator/lifecycle＋42SSR raw0及warnings只證synthetic，詳開發入口。數值／source9功能已STOPWRITE，五newsource只各刪ONE EOF LF共5B後ROOT核bytes及diff，功能未變、不重金融GET或重驗。
+
+API32860 requests7／guards0／SHUTDOWNtrue正常SIGINT raw1；preview15564／compiler25940正常SIGINT raw1、SHUTDOWNtrue，auditor54880正常SIGINT raw1／RAMreleasedtrue；停前RAMreaudit61996 raw0及metadataholder54396先前正常退出，六exactPIDs absent／8812–14無listener、ownedpage normalclose／tabs[]已ROOT獨立核。原件及derived RAM釋放，不restart／replay／clone／hydrate／preload；0product-testartifacts／privateIO／DB／ordinarypriceGET、save／crossprocess未授。
+
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
