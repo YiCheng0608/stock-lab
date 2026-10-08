@@ -1,3 +1,27 @@
+## 目前：M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1 已有限接受
+
+2026-10-08。ROOT接受fresh12全原件、兩窗比較／paired trace與可信兩viewport操作，見[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)。Core+1／standalone dep0／reliability+1／stall0→0；完整M1／M2／M3未完。Quota SPENT／raw RAM釋放；SOURCE9＋DOC6待ROOT freeze→qualified索引→核准commit→另准merge，完整BOOT及starting suffix保留，見[協作紀錄](TASK_COORDINATION.md)。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1` **UNADMITTED**：七股10/06近5，自行買賣(0-based15/16/17)／避險(18/19/20)／合計(21/22/23)daily及5日買／賣／淨額並列、精確components對帳；原25欄／dualSHA／fullcalendar／同cutoff controls及真操作另驗。現70rows全22欄已核只提供取得路徑，released originals不可seed；舊core不重計。
+
+下一NEW visible ROOT先核coregap／完整rights-OGL、新worker-read-calendarSchema-profile-sourceversions及外部canonical pins／finite新metadata金融quota／白名單routeAPI；2index＋5daily7GET僅提案非grant。NEWempty FIRST失敗SPENT、retry／redirect／preload0；全returnedcalendar先驗再last5，ALL35rows875strings770int64／完整ORIGINAL RAM逐列math與API、可信desktop＋narrow ALL7／positive／fresh支持真零／清ALL，0artifact-private-DB-price。缺真零不以fixture補，僅pure parser／math可reuse，無ranking／filter／price／Signal／Plan。Ordinary20／21closes＋MA20／trend無新rights／calendar path不重審舊來源；nextcoreless→1／連兩implementation批無core前重選。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1；可見 gate已接受，原 ROOT正式接手
+
+2026-10-08。前批 direction SOURCE10＋DOC6 exact16 正常 commit／local master ff-only merge `3476a3df99b66d58822e60a3ec50a06e5acde523`（parent31ce680、1342add30del）已前 ROOT接受、未 push；[來源 §44](SOURCE_REGISTRY.md)／[個股頁 §49](STOCK_RESEARCH_PAGE.md)有限驗收沿用。四 NEW runtime／接手／本根 Git及外部 gate已接受；SINGLE原 session continuation已收到，本 ROOT沿 SAME三角色正式接手產品派工。精確 roster／可見收據及唯一 terminal見[協作紀錄](TASK_COORDINATION.md)。文件交付後 STOPWRITE；ROOT review／終止 turn收據留原 task，非產品 freeze；index／Git／cleanup0，完整 starting bytes／nested／舊 pending／hash不回改。
+
+下一 `M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1` **UNADMITTED**：3105／3293／5274／5347／6488／6510／8069同 explicit10/06最近5／前5相鄰窗三法人正負零 counts、net及delta並列；paired日期原25欄／ordinal／bodySHA＋receiptSHA／fullcalendar追溯，同 asof／investor三 RAW返回。先驗全部 returnedcalendar再 last10 split5／5，不硬日期或25rows。3293trust9/29 net0僅舊 positivepath，候選前窗 latestzero-run未驗，fixture不補 actual。
+
+SINGLE continuation已收到；ROOT仍須在原 task另准入，才沿 SAME三角色派工及 GET：
+
+- 核具名 newoperation／coregap、完整 OGL ownerRights-use、新 calendar／sourceversions／schema／worker-consumer profiles、ROOT外部 canonical pins、finite新 metadata／financial quota與白名單；2index＋10daily12GET僅建議非 grant。
+- NEW empty generation／FIRST_once，失敗亦 SPENT、retry／redirect／preload0；ALL12 ORIGINAL body＋receipts同 RAM heldobject逐件 dualSHA，先驗 fullcalendar再分窗，核 7×10=70rows／70×25=1750strings／70×22=1540int64、兩窗 counts／net／delta及逐列 paired trace。
+- Actual API＋可信 desktop／narrow ALL7，核日期及原25欄、三 RAWback、missing／unsupported、explicit held READ恢復、failureclear全部值及 trace；actual與fixture分報，缺實件保持未驗。
+
+Old series／gross／defaultpins／四 TWSE source immutable，只 pure parser／math可 reuse；old金融22／metadata8direct＋2reader SPENT且 raw RAM已釋放，不 reuse capture／restart／replay／clone／hydrate／preload。無 ranking／filter／price／Signal／Plan／save／crossprocess；ordinary closes／MA20缺 exact rights／calendar新 path，不重審 FinMind／monthly／legacy，MIT軟體 license不代 dataRights、未採來源不作全域阻擋。
+
+繼承 coreoperation+1／standalone coredependency0／reliability0／stall0→0；BOOT0非 implementation batch、不 increment／reset，nextcoreless→1、連兩 implementation批無 core前重選，完整 M1／M2／M3未完。BOOT來源 GET／privateIO／tests／build／DB／環境／產物／indexGit／cleanup0；outsidecleanup及私人／STRICT NO-RETRY fences沿協作紀錄。
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1 已有限接受
 
 2026-10-08。ROOT核FIRST22完整原件／ALL140／42groups／258segments與全calendar，見[來源 §44](SOURCE_REGISTRY.md)。Desktop＋narrow合84configs／164native trace、真net零／count0、三RAW返回與samekey502清ALL值受驗，見[個股頁 §49](STOCK_RESEARCH_PAGE.md)；全零triple／整窗zero run／latestzero缺實件。Checks／退出見[開發入口](development-baseline/README.md)。

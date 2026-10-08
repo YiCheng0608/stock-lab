@@ -1697,3 +1697,57 @@ NEWgen `819af242-616e-4e28-8302-87b0062a2ecc`，唯一trustedFIRST22 HTTP200 ide
 Fresh每日net零2格：8069trust9/23、3293trust9/29，各為獨立1day zero run。44個統計count0不代表44個每日net零。Actual all-zero triple／整窗zero run／latestzero無實件，保留驗收缺口，不以fixture聲稱通過。完整UI／API／清值邊界沿PAGE49。
 
 停止前ROOT再核FULL22 sameheld bodies＋ORIGINAL receipts逐byteequal與全API graph raw0；financial22仍SPENT，原件正常退出後釋放，不restart／replay／clone／hydrate／preload。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0；命令、guards、原失敗及清理見開發入口。
+
+## 45. M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰5日比較與新來源准入
+
+2026-10-08。ROOT有限接受SOURCE9、新來源／數值與具名比較操作；本節只管理新namespace，old series／gross／direction／defaultpins及四TWSE profiles immutable。操作見[個股頁 §50](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)，核心及封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+
+### 45.1 獨立版本與外部pins
+
+本worker canonical9284 UTF-8 bytes，version `m1-chips-adjacent-windows-stock-scope-7-tpex-2026-10-06.1`，ROOT外部SHA `092f86d7fd2797b88f12f92e0474beb120139143ba5c3f3e27edb0c52f5c235e`，profile `free_public_local_chips_only_adjacent_windows_stock_scope_7`；本根literal已唯讀核bytes／SHA／685B署名。Worker／capture／read及consumer必須完整匹配外部expectedpins，不能從receivedpolicy自建pin或提升old defaults。
+
+| Identity | 本B1 exact版本 |
+| --- | --- |
+| worker | `tpex-institutional-adjacent/chips-stock-scope-7-v1` |
+| capture | `tpex-institutional-adjacent-capture/chips-stock-scope-7-v1` |
+| read | `institutional-adjacent-windows-read/chips-stock-scope-7-v1` |
+| calculation | `adjacent-five-session-counts-net-pairs-deltas/window-limited-int64-v1` |
+| calendar schema | `institutional-adjacent-calendar/chips-stock-scope-7-v1` |
+| calendar／index version | `dataset-11391-month-csv-observed-2026-10-08/chips-adjacent-windows-stock-scope-7-v1` |
+| daily version | `dataset-11856-dated-csv-observed-2026-10-08/chips-adjacent-windows-stock-scope-7-v1` |
+
+TPEx3105／3293／5274／5347／6488／6510／8069、explicit cutoff2026-10-06、observed2026-10-08，foreign／trust／dealer、兩個各5交易日窗口；本namespace不提升舊日期或來源。
+
+### 45.2 本輪metadata、用途與完整署名
+
+ROOT NEW6direct HTTP200 identity共545489B／完整ORIGINAL canonical receipts3145B，UTC2026-10-08T07:35:07.686030～07:35:13.984924+00:00；全body／receipt同RAM逐byte／hash及clauses已核後釋放。另2webreader：OGL成功、TPEx InternalError失敗不retry；沒有新reader rawHTTP403證據。6direct＋2reader均SPENT，不冒前輪8件完整receipts或補舊receipt。
+
+[REST11391](https://data.gov.tw/api/v2/rest/dataset/11391)／[REST11856](https://data.gov.tw/api/v2/rest/dataset/11856)之ownerTPEx／license1／free／CSV UTF-8／exact resource及header已核；[OGL1.0](https://data.gov.tw/license)完整署名義務、[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)§7政府開放資料例外及§5非全域取消已核，只授有限local RAM comparison、nondurable用途。685 UTF-8 bytes canonical署名逐字如下，不沿用舊686B：
+
+> 財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 櫃買指數歷史資料（dataset11391；dataset-11391-month-csv-observed-2026-10-08/chips-adjacent-windows-stock-scope-7-v1）及上櫃股票三大法人買賣明細資訊（dataset11856；dataset-11856-dated-csv-observed-2026-10-08/chips-adjacent-windows-stock-scope-7-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；相鄰窗口比較為本地衍生結果。
+
+Observation10/08不代金融列發布或10/06決策時可知；published／firstavailability／revision未知、nonPIT。磁碟保存／跨程序／正式DB／交易未授，MIT軟體license不代dataRights。
+
+### 45.3 Finite FIRST與完整日曆
+
+ONE NEW empty distinct generation，seed0／preload=false，trusted FIRST_once先2index再全部calendar驗證後動態10daily，總12GET；失敗亦SPENT，retry／redirect／probe／warmup0。只RAM保存ALL12 ORIGINAL bodies及未增補canonical receipts，producer持有原件與ROOT auditor RAM原件逐byteequal、逐件核exact URL／UTC／identity／dualSHA；不能重造receipt、重開producer或reuse released capture。Apply／切股／back／held READ不新增來源，cachedcapture409。
+
+Policy15s/request／180s/batch僅request-response-chunk邊界cooperative檢查；16KiB header為收到後postcheck，非socket硬cap。Index1MiB／daily2MiB／aggregate22MiB；retained64MiB為deduplicated getsizeof estimate，非RSS或建構peak；diagnostic16MiB。原件、privateIO／DB／ordinaryprice GET及落盤產物受本B1有限gate約束。
+
+全returnedcalendar每列原6欄先驗unique日期／requested month／weekday／nonclosed／≤observation、finite positive OHLC及上下界，再與完整weekday集合扣[9/25、9/28休市公告](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)對帳；[交易規則](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html)只支持本輪已核weekday條件。不硬25rows或從缺列推休市；合法postcutoff列保原件但不採。此批26returned→≤10/06 exact24adopted→last10 split5／5：前5為9/21、9/22、9/23、9/24、9/29，近5為9/30、10/1、10/2、10/5、10/6；10/7及10/8保原欄excluded。Index calendar不代ordinary closes／MA20。
+
+### 45.4 原欄、窗口及positional pair計算
+
+全部daily來源列先驗25strings／日期／code唯一／非空name；ALL7×10=70selected、1750原strings／1540金融int64及ALL22欄buy-sell-net、foreign／dealer components／total關係全驗，才可available。Foreign原net5不含外資自營商、trust14、dealer23為自行＋避險總（0-based）；canonical signedint64股數及精確股／張規則沿既有契約，本輪每個加減／窗口sum步／pair與total delta步均檢overflow。
+
+每investor各5窗positive／negative／zero predicates互斥，counts總和=5；兩窗net各為五原net之和，count delta及net delta均為近5減前5。Maximal同sign連續segments完整覆蓋各窗一次、無gap／overlap／相鄰同sign；zero獨立且終止正負run。Latest僅各窗末段，首段earlier_unknown=true，不外推完整歷史。
+
+每股5 positional pairs依前窗第1～5日配近窗第1～5日，兩個不同日期而非同日比較。Each pair delta=recent原net−previous原net，五pair delta之和=window net delta；每股三investor共21net deltas／63count deltas，35pairs×3=105pair deltas精確核。每pair保兩列ALL25原strings／header／ordinal／bodySHA＋ORIGINALreceiptSHA／三net及全returnedcalendar。Daily net0、統計count0、窗口sum0、delta0各有不同predicate，不把missing或unknown當0；任一來源／pins／calendar／結構／數值／pair conflict，whole7 failclosed，不跳壞股或縮窗。
+
+### 45.5 本次actual及未驗邊界
+
+NEWgen `e9a265f3-4fbd-44c6-a81f-0d76c10cc7b9`，唯一trusted native FIRST12 HTTP200 identity、body1459857B／ORIGINAL canonical receipts12823B，UTC2026-10-08T08:48:54.698286～08:49:06.502104+00:00。ROOT同RAM全12body／未增補receiptbytes／base64、stdlib CSV／Decimal／dates／ALL22selected numeric／components／identity／dualSHA及完整APIgraph核；fullDaily9088rows、selected70×25strings與1540int64。42windowgroups／126counts／125maximal segments／latest42、21delta／63countDelta／105pairDelta及26calendar精確對帳，停前共3次full ORIGINAL／math再核，無額外GET。
+
+Fresh每日net0只有3293trust9/29、8069trust9/23，皆1day zero segment；前窗3293trust latestzero1day／earlier_unknown=false為新actual正面路徑，兩尺寸native受驗。Actual allzero triple／整窗全零／net sum0／total delta0／pair delta0均無實件，缺口保留，fixture不充真值。完整actual API／兩viewport／清值見PAGE50，canonical API133856B、SHA `5fe1d272fdecfdfaf4e9778683e80466b38097779ccae94d6026261bf1bdf515`，完整逐件receipt及數值留ROOT原task。
+
+Financial12／metadata6direct＋2reader SPENT；ORIGINAL RAM已隨正常退出及auditor release釋放，不restart／replay／clone／hydrate／preload。Test／productartifacts0files0B、privateIO／DB／ordinaryprice GET0；不外推price／ranking／filter／Signal／Plan／完整M1，保存／跨程序未授。

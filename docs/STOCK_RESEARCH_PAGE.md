@@ -1658,3 +1658,39 @@ Actual每日net零只8069trust9/23、3293trust9/29，各1day zero run；44個統
 唯一trustedFIRST22與完整原件／API graph受驗；15backend RAM、51src noEmit＋37validator＋42groupSSR raw0，後UI局部51src＋42SSR raw0／validator37沿用，SSRwarnings保留且不代actualUI。API／preview normalSIGINT raw1且SHUTDOWNtrue；compiler隨preview正常停、auditor /stop釋放22原件後最後raw0；四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]已ROOT核。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，不restart／replay／clone／hydrate／preload，保存／跨程序未授；原errors與exit見開發入口，不冒全passed。
 
 Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。SOURCE10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+
+## 50. M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰5日比較與雙原列操作
+
+2026-10-08。ROOT有限接受SOURCE9及以下具名actual操作，不代表完整M1。來源／版本／pins／完整685B署名、calendar及計算只由[來源 §45](SOURCE_REGISTRY.md)管理；old series／gross／direction／defaultpins及四TWSE profiles不改。Check入口與synthetic邊界見[開發入口](development-baseline/README.md)。
+
+### 50.1 獨立入口與明示來源動作
+
+Route `/chips-stock-scope-7-adjacent-windows`，flag `VITE_CHIPS_ADJACENT_STOCK_SCOPE_7=m1-v1`，runner `--chips-adjacent-stock-scope-7-opt-in`；API `/api/chips/adjacent-stock-scope-7`及 `/capture`匹配SOURCE45外部pins。GET exact一次as_of query、body0；POST exact as_of、空JSON object（4096B上限），不接受unknown／duplicate keys。Explicit `as_of=2026-10-06`、foreign／trust／dealer、horizon5 only；七股3105／3293／5274／5347／6488／6510／8069卡→detail→back保as_of／investor／horizon三RAWcontrols。
+
+Apply／切股／切法人／back不暗fetch或READ；只有一次明示trusted FIRST取得fresh12，明示成功held READ讀同generation。已mask時有效apply／back不能unmask或沿用舊值。FIRST前8invalid422／source0、unsupported blank200／held409受驗；FIRST後cached POST含as_of409、missingquery422分報，不混作同一契約。
+
+### 50.2 Counts、net、差異與兩個日期原列
+
+Board及detail並排前5／近5正負零日數、net總和（股／張）及近5−前5 count／net delta，明示各窗起迄與完整window-limited latest run及segments；起點earlier_unknown限制保留。數值用精確canonical股／張，不把視覺約值當對帳。每股5列pair清楚顯示兩不同日期、各原net與近減前差異；「查看兩份原始列」一次展開兩側完整ALL25 header／原strings、ordinal、bodySHA／ORIGINALreceiptSHA、三net及未增補canonical receipt。
+
+完整calendar原26列（含postcutoff）與原6欄／receipt trace可操作，excluded仍追溯，不僅顯示採入十日。TPEx／year2026／兩完整dataset名／observed versions／OGL1.0與完整署名保持，observation10/08與cutoff10/06分離，published／firstavailability／revision未知、nonPIT。
+
+### 50.3 可信矩陣與actual零值
+
+Desktop1365×900及narrow390×844各ALL7×3investor=21detailconfigs，共42detail／84兩窗；各detail summary counts／net／delta、完整canonical125segments及26calendar全核，RAW3back／nooverflow受驗。210 native pairclicks／420原列views，70unique原列各viewport×3investor，ALL25／header／ordinal／dualSHA／三net全核。Primary native calendar逐列open為desktop26＋narrow26=52，**只計primary，非全批總數**；每detail完整26×6原欄另全對帳。
+
+兩actual每日net0（3293trust9/29、8069trust9/23）各1day zero segment完整雙原列trace；新增前窗3293trust latestzero1day／earlier_unknown=false兩viewport native受驗。Allzero triple／整窗全零／net sum0／total delta0／pair delta0缺實件，fixture不補actual。未成功harness不計通過，原工具ACK無效果／viewport重設／selector及assert failures留ROOT原task。
+
+### 50.4 Mask、browser return及same-key failureclear
+
+兩viewport10/07及empty native Apply不API、清ALLcounts／totals／deltas／pairs／segments／latest／raw／receipts／calendar；valid back仍mask，explicit READ200才恢復samegen。Unknown9999 Page.navigate＋native browser back曾回live，局部修後兩viewport均mask→explicit READ同gen受驗；`pagehide`以flushSync遮罩並清selected，`pageshow`於persisted時亦遮罩，保持lifecycle listener。此次實際未觀察persisted=true BFCache，不聲稱BFCache復原已受驗；7RAM lifecycle checks是synthetic邊界，不能代native return操作。
+
+停止前samekey5274trust5兩viewportlive雙窗、五pairs完整25欄及calendar26已核。API正常SIGINT後，narrow explicit READ502先fromlive清ALL，desktop同keyrepeat502仍清ALL；RAW3back保同cutoff且mask。不是兩獨立producer，requestFailure或schema失敗不留舊值，不把stale HTTP或ACK當actualpass。Whole7 source conflict／missing／unsupported均failclosed，不補0或縮窗。
+
+### 50.5 驗收、退出及限制
+
+必要backend19 RAM raw0沿用；局部UI修後54src noEmit／56validator（49＋7RAM lifecycle）／42SSR raw0，SSRwarnings保留。Src7、sourcepins／math／DOM數值契約不變，初ALL42數值actual適用性已ROOT接受；preview只RAM重編UI、不動API／auditor、不新增financial GET。FIRST input原ACK無效，官方同頁focus後isTrusted=true才唯一FIRST，原失敗不抹除。
+
+API normalSIGINT raw1／SHUTDOWNtrue source12／guards0，兩代preview及compiler正常停、auditor release12 ORIGINAL exitraw0；六ownedPIDs absent、8812–8814無listener、ownedpage正常close／tabs[]已ROOT獨立核。API poststop暫仍在的raw1保留，後自然退出、無forcekill，後assert0；詳盡退出／rejected counts及原錯誤見開發入口。Product／testartifacts0files0B、privateIO／DB／ordinaryprice GET0，全部raw RAM釋放，不restart／replay／clone／hydrate／preload、保存／跨程序未授。
+
+Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。

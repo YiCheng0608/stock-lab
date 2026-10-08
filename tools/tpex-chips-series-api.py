@@ -21,6 +21,7 @@ parser.add_argument("--serve", action="store_true")
 parser.add_argument("--chips-series-stock-scope-7-opt-in", action="store_true")
 parser.add_argument("--chips-gross-stock-scope-7-opt-in", action="store_true")
 parser.add_argument("--chips-direction-stock-scope-7-opt-in", action="store_true")
+parser.add_argument("--chips-adjacent-stock-scope-7-opt-in", action="store_true")
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
 parser.add_argument("--port", type=int, default=8799)
@@ -28,7 +29,7 @@ parser.add_argument("--deps", default="C:/Users/YiCheng/Desktop/taiwan-stock-res
 ARGS = parser.parse_args()
 if ARGS.check == ARGS.serve or not 1024 <= ARGS.port <= 65535:
     parser.error("select exactly --check or --serve and a finite local port")
-if sum((ARGS.chips_series_stock_scope_7_opt_in, ARGS.chips_gross_stock_scope_7_opt_in, ARGS.chips_direction_stock_scope_7_opt_in)) > 1:
+if sum((ARGS.chips_series_stock_scope_7_opt_in, ARGS.chips_gross_stock_scope_7_opt_in, ARGS.chips_direction_stock_scope_7_opt_in, ARGS.chips_adjacent_stock_scope_7_opt_in)) > 1:
     parser.error("chips profiles cannot be enabled together")
 if ARGS.chips_gross_stock_scope_7_opt_in:
     EXPECTED_VERSION = "m1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1"
@@ -36,9 +37,12 @@ if ARGS.chips_gross_stock_scope_7_opt_in:
 if ARGS.chips_direction_stock_scope_7_opt_in:
     EXPECTED_VERSION = "m1-chips-direction-segments-stock-scope-7-tpex-2026-10-06.1"
     EXPECTED_DIGEST = "sha256:eb7a4dd688907855dd91250bfbec96b4dd8b2cb65085dce49e7e12c3a80c5348"
+if ARGS.chips_adjacent_stock_scope_7_opt_in:
+    EXPECTED_VERSION = "m1-chips-adjacent-windows-stock-scope-7-tpex-2026-10-06.1"
+    EXPECTED_DIGEST = "sha256:092f86d7fd2797b88f12f92e0474beb120139143ba5c3f3e27edb0c52f5c235e"
 ARGS.policy_version = ARGS.policy_version or EXPECTED_VERSION
 ARGS.policy_digest = ARGS.policy_digest or EXPECTED_DIGEST
-if ARGS.serve and not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in):
+if ARGS.serve and not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in or ARGS.chips_adjacent_stock_scope_7_opt_in):
     parser.error("serve requires explicit chips-only source opt-in")
 if (ARGS.policy_version, ARGS.policy_digest) != (EXPECTED_VERSION, EXPECTED_DIGEST):
     parser.error("independent external policy pins mismatch")
@@ -106,7 +110,10 @@ def socketpair(*args, **kwargs):
 
 socket.getaddrinfo = resolver
 socket.socketpair = socketpair
-if ARGS.chips_direction_stock_scope_7_opt_in:
+if ARGS.chips_adjacent_stock_scope_7_opt_in:
+    from worker import tpex_institutional_adjacent_scope7 as series
+    from app.institutional_adjacent_scope7 import create_app
+elif ARGS.chips_direction_stock_scope_7_opt_in:
     from worker import tpex_institutional_direction_scope7 as series
     from app.institutional_direction_scope7 import create_app
 elif ARGS.chips_gross_stock_scope_7_opt_in:
@@ -117,11 +124,14 @@ else:
     from app.institutional_series_scope7 import create_app
 series.check_policy(series.policy(), ARGS.policy_version, ARGS.policy_digest)
 REQUESTS = 0
+ACTIVE_PRODUCER = None
 
 
 def fetch(url, cap, deadline):
     global REQUESTS
-    if not ARGS.serve or not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in) or REQUESTS >= 22 or url != series.URLS[REQUESTS]:
+    adjacent = getattr(ARGS, "chips_adjacent_stock_scope_7_opt_in", False)
+    sequence = ACTIVE_PRODUCER.request_urls if adjacent and ACTIVE_PRODUCER is not None else () if adjacent else series.URLS
+    if not ARGS.serve or not (adjacent or ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in) or REQUESTS >= (12 if adjacent else 22) or REQUESTS >= len(sequence) or url != sequence[REQUESTS]:
         raise PermissionError("finite exact source sequence required")
     parsed = urlsplit(url)
     assert parsed.scheme == "https" and parsed.hostname == "www.tpex.org.tw" and parsed.port is None and not parsed.fragment
@@ -175,10 +185,11 @@ def fetch(url, cap, deadline):
 
 
 def main():
+    global ACTIVE_PRODUCER
     print(json.dumps({"python": sys.version.split()[0], "policy_version": EXPECTED_VERSION, "policy_digest": EXPECTED_DIGEST, "seed_count": 0, "preloaded": False, "guards": COUNTS}), flush=True)
     if ARGS.check:
         import unittest
-        names = ["test_institutional_direction_scope7"] if ARGS.chips_direction_stock_scope_7_opt_in else ["test_institutional_gross_scope7"] if ARGS.chips_gross_stock_scope_7_opt_in else ["test_tpex_institutional_series_scope7", "test_institutional_series_scope7"]
+        names = ["test_institutional_adjacent_scope7"] if ARGS.chips_adjacent_stock_scope_7_opt_in else ["test_institutional_direction_scope7"] if ARGS.chips_direction_stock_scope_7_opt_in else ["test_institutional_gross_scope7"] if ARGS.chips_gross_stock_scope_7_opt_in else ["test_tpex_institutional_series_scope7", "test_institutional_series_scope7"]
         suite = unittest.defaultTestLoader.loadTestsFromNames(names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         import fastapi
@@ -189,6 +200,8 @@ def main():
     import fastapi
     import uvicorn
     producer = series.Producer(fetch, version=ARGS.policy_version, pin=ARGS.policy_digest)
+    if ARGS.chips_adjacent_stock_scope_7_opt_in:
+        ACTIVE_PRODUCER = producer
     print(json.dumps({"fastapi": fastapi.__version__, "uvicorn": uvicorn.__version__, "pid": os.getpid(), "owned_host": "127.0.0.1", "port": ARGS.port, "source_requests": 0}), flush=True)
     try:
         uvicorn.run(create_app(producer), host="127.0.0.1", port=ARGS.port, access_log=False, log_config=None, lifespan="off", loop="asyncio")

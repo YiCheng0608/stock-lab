@@ -702,3 +702,26 @@ API18464正常SIGINT raw1／SHUTDOWNtrue，source_requests22／producer22及disk
 API36576／preview15748 normalSIGINT raw1且SHUTDOWNtrue，各guard0／source22；compiler9288隨preview停，auditor52704 /stop釋放22原件後最後raw0。四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]；previewproxy GET8／POST1／rejected_requests211保原數、不推原因。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，indexcache另報。
 
 原quote／AXACK-noeffect／PSsyntax／Ctrl+A未選先assert／punctuation／offscreen／queryless POST422wrongassert／tablist--page等raw1保留ROOTtask；/stop已有效不重送，只修harness、不改exit或重送GET。Metadata截斷／receipts及reader403限制見SOURCE44；outsidecleanup與freeze/index/Git待辦見[協作紀錄](../TASK_COORDINATION.md)，不掃其他old／private／Temp／cache。
+
+## M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：相鄰窗口零落盤驗證入口
+
+2026-10-08。ROOT接受SOURCE9及具名actual，本DOC不重跑成功驗證。來源／pins與操作見[來源 §45](../SOURCE_REGISTRY.md)／[個股頁 §50](../STOCK_RESEARCH_PAGE.md)。本根opt-in使用獨立ROOT外部canonical9284B及digest，不提升olddefaults；共用main依賴／pinned Node24.19.0，不另建環境。精確runtime版本、每次命令與raw exit留ROOT原task。
+
+本worktree根的必要check入口：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-adjacent-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-adjacent-stock-scope-7-opt-in
+```
+
+初backend19 RAM raw0仍適用、不因UI修再跑；frontend修後54src noEmit＋56validator（49原checks＋7RAM lifecycle）＋42SSR raw0，SSRwarnings保留。純fixture／overflow／zero／lifecycle及SSR不證financial truth／trusted nativeUI；未跑productionbuild／fullsuite／DB／磁碟保存。本DOC引用已接受證據，不執行產品check。
+
+ROOT同RAM ORIGINAL／完整math停前共3次對帳，sourceGET仍12；581成功UI checks（含31masked）及未過harness逐項留原task。兩viewport42detailconfigs／210native pairclicks／420雙原列views、primary52 nativecalendaropens（非全批總數）、新前窗latestzero／同三RAWback及samekey502清ALL沿PAGE50。
+
+Native return原live缺口局部修：pagehide flushSync mask＋selected清除／持續pageshow persisted守門；native Page.navigate／browser back→mask→READ兩viewport已核，persisted=true BFCache未觀察、不冒actual BFCache證據。兩source實質UI修後只重編RAM preview，不改API／auditor／既有數值與pins，不新增金融GET。
+
+API20584 normalSIGINT raw1／SHUTDOWNtrue、source12／guards0；舊preview29600／compiler51012正常SIGINT raw1／SHUTDOWNtrue、GET15／POST1／rejected105，final preview37668／compiler34260正常SIGINT raw1／SHUTDOWNtrue、GET13／POST0／rejected26，不推rejected原因或改0。Auditor56144正常release／exitraw0、ORIGINAL12released／guards0；sixownedPIDs20584／29600／51012／37668／34260／56144最終absent、8812–8814 bindcheck無listener、ownedpage正常close／tabs[]已ROOT獨立核。初poststopAPIpid仍在raw1保留，後自然退出、無forcekill、後assert0。
+
+FIRST input ACK無效與focus修正、unsupported Nonecalendar錯assert／correctedblank200、viewport／selector／expectedmask等原raw1保留，不改exit或當成功。CachedPOST含asof409／missing422已核；correctedunsupported及sameheld再驗source仍12。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0，原件RAM全釋放，不restart／replay／clone／hydrate／preload；shared indexcache另報。文件命令首SyntaxError／CreateProcess長度等原失敗留task，無helper／附件或sourcecopy；不掃old／private／Temp／cache。
+
+Core+1／standalone dep0／reliability+1／stall0→0，完整M1／M2／M3未完成；outsidecleanup已有限完成、版本freeze／索引／commit／另准merge待ROOT，詳[協作紀錄](../TASK_COORDINATION.md)。

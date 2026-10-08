@@ -1,3 +1,44 @@
+## 目前：M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1 已有限接受；待freeze／封存
+
+2026-10-08。同四 actual IDs／SAME三角色及已接受可見 gate續作。ROOT接受七股同10/06前5／近5 counts／net／近減前delta、35日期配對雙原欄追溯及同三 RAW返回，詳[來源 §45](SOURCE_REGISTRY.md)／[個股頁 §50](STOCK_RESEARCH_PAGE.md)。Fresh12完整原件／70rows、42groups／21delta／105pairDelta及26returned calendar已核；金融12／metadata6direct＋2reader SPENT、全部 raw RAM已釋放，不 restart／replay／hydrate。
+
+兩viewport合42detailconfigs／210native pairclicks／420原列views、兩真net0及前窗3293trust latestzero受驗；native browser return masking局部修後 READ恢復與同key502清值已接受，BFCache persisted=true未觀察，其他真零缺口保留。Coreoperation+1／standalone coredependency0／reliability+1／stall0→0；完整M1／M2／M3未完成。必要checks／原raw1／退出及0artifact-private-DB-price邊界見[開發入口](development-baseline/README.md)。
+
+前direction exactold4正常close／archive保history、Orca精確worktree／branch移除已ROOT獨立接受，residual0files0B、無force；其他old／private／Temp／cache不動，歷史BOOT pending不回改。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1` **UNADMITTED**：近5自行買賣／避險／合計daily及5日買／賣／淨額並列對帳、原25欄trace，是新操作；fresh7GET只提案，完整准入見[執行清單](ROADMAP_EXECUTION.md)。Ordinary closes／MA20仍缺rights／calendar新path，不重審舊來源。
+
+SOURCE9＋DOC6交付STOPWRITE，待ROOT review／freeze→qualified索引→核准commit→另准master merge，未封存。Accepted BOOT／continuation＋starting3476完整suffix／nested／pendinghash逐byte保留；私人及STRICT NO-RETRY承BOOT，無附件／helper／sourcecopy。本角色GET／tests／DB／indexGit／cleanup0，原task留驗收收據。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1；可見 gate已接受，原 ROOT正式接手
+
+2026-10-08。前批 direction SOURCE10＋DOC6 exact16 已正常 commit／local master ff-only merge `3476a3df99b66d58822e60a3ec50a06e5acde523`（parent `31ce680246faafd05e2b897897ee051f341cbc1a`、1342add30del）、前 ROOT接受、未 push；本 ROOT核 exact16、HEAD／parent／main初 clean。原 task source／math／API／可信 desktop＋narrow全範圍接受沿[來源 §44](SOURCE_REGISTRY.md)／[個股頁 §49](STOCK_RESEARCH_PAGE.md)：42groups／258segments、84configs／164native traces、兩 actual net0／44derived counts0；allzero triple／整窗 zero run／latestzero無實件。不重跑舊驗收，下方 starting HEAD完整 suffix／nested／舊 pending／hash／金融契約逐 byte保留，舊待封存是歷史 freeze。
+
+| 角色 | Actual ID／模型／reasoning | BOOT 白名單 |
+| --- | --- | --- |
+| ROOT | `01a11a50-a57d-75b0-83da-98150cbd655c`；`gpt-6.1-sol / ultra` | 原 session正式接手產品派工；來源／實作／quota未准入。 |
+| 程式 Russell | `01a11a52-ef78-7eb0-9832-a11bb236c546`；`gpt-6.1-sol / xhigh` | sourcewrites=[]。 |
+| 文件 Halley | `01a11a53-60a1-72f3-9d66-cdb2596f8820`；`gpt-6.1-sol / xhigh` | 僅本 BOOT三 status文件 prepend；交付 STOPWRITE。 |
+| 索引與 Git Carson | `01a11a53-ff79-7152-9ff5-0f8d338c3866`；`gpt-6-luna / medium` | source／indexrefresh／stage／commit／merge=[]。 |
+
+共同唯一 cwd／worktree／local runtimeWorkspaceRoot：`C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-chips-adjacent-windows-5-1006-20261008`；branch同 basename，starting／current／master HEAD同上述3476a3d，BOOT初 clean及三文件 exact HEAD bytes已核。ROOT source=vscode／threadSource=user／originator=codex-tui／sessionId=self／parent、fork=null。三 child為本 ROOT native `spawn_agent / fork_turns=none` NEW，parent／session／source.spawnparent=ROOT、depth1、fork=null、threadSource=subagent，paths `/root/program`／`/root/documents`／`/root/index_git`；CLI0.160.0。ROOT獨立核四 runtime／唯一 environments、roots／Git，三角色各核本人並接受接手；無舊角色或另一角色根。
+
+Orca sole fresh handle `term_a1981713-cdf6-4be2-a36d-b1ab72afae4d`，incarnation `2c6d78ed-35d0-4910-be12-1f31ab7f34da`；full PTY `2d3efa33-2fe3-4416-933d-9f635ab058fe::C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-chips-adjacent-windows-5-1006-20261008@@3438e8a8`，runtime `32c072d5-7f95-49ef-bad9-270aeaf5e197`、pane1、connected／writable=true、orphaned=false。Fresh registry唯一1；SCREEN `5cb2eed4-47e3-4cfd-905d-03bae5f39c88` 核 Main default／Sol ultra／current cwd＋Completed program／index；truncated／limited為 tail取樣，非 failure，不稱完整 history。繼承 envhandle stale不用；unused bare shell已前 ROOT normal close／ptyKilled=false、非本 ROOT，不重試。
+
+外部 visible `/subagents` gate **已接受**：前 ROOT `01a119b2-4e54-73a0-9ee0-29cf2f8958ef` 已獨立接受四 actual runtime／rollout meta／turncontext、恰好三 native fork_turns=none spawn、四 latest final／taskcomplete／all4idle，再只在上述 NEW solehandle核 Main＋同三 IDs一次、退出 menu、SINGLE continuation給本 ROOT原 session。本 ROOT已收到，沿 SAME Russell／Halley／Carson正式接手產品派工；前 ROOT只保存原 final、不再產品派工，產品權已移交本 ROOT。無 newroles／replacement／restart／resend／背景 API thread，不再 menu或重驗 gate。候選／來源／quota／實作仍 UNADMITTED。文件交付後 STOPWRITE；ROOT review／終止 turn收據留原 task，非產品 freeze，index／Git0。
+
+精簡外部收據：ONE `/subagents` `c8d58407-d8f4-4aa5-906f-198c5b1051f3`／mutation `93abe4f5-4364-4719-ad43-f1a5e11270ea` accepted=true／replayed=false；SCREEN `a8871b6d-ec93-423f-b483-c7cda97255b4` 核 Main原 ROOT＋Russell／Halley／Carson同三 IDs／No sub-agents running。ONE Esc `b1279d25-f956-46dc-94a2-34899e0a6d28`／1byte；SCREEN `0503219b-0ba1-400f-8740-bade2bfc0e56` 核 menuclosed／Main default／Sol ultra。Terminalshow `966661d8-3c59-4443-8a0a-dcfef160cbc2` 同 sole原 handle／incarnation／PTY／runtime及原 ID mapping、connected／writable=true、orphaned=false、pane1；完整收據留原 task。
+
+App MCP connected、list55／has_more=false、main8現成 ready；docs935nodes／934edges，generation `2026-10-08T06:56:40Z`。ROOT七入口及本角色四入口 coverage no_recorded_issue／metadata_changed／best_effort，hash_records_complete／generation_matches=true，依此直讀本根，不稱 freshcomplete；AGENTS在索引外直讀。CLI／reload／indexrefresh0，未建本輪 qualified，不初刷或複製 cache；前 qualified7＋main7接受、knownpartial／bydesign excluded及既有 artifacts保留，不清 cache或同 generation重刷。原工具失敗及修正收據留原 task，原 raw1不改0。
+
+繼承 coreoperation+1／standalone coredependency0／reliability0／stall0→0；BOOT／DOC／索引／Git／審查增量0，非 implementation batch、不 increment／reset；nextcoreless→1、連兩 implementation批無 core前重選。完整 M1／M2／M3未完成，已接受 net／gross／direction不重計 core。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1` **UNADMITTED**：七 TPEx同 explicit10/06最近5／前5三法人 counts／net／delta並列、paired日期原25欄／ordinal／bodySHA＋receiptSHA／fullcalendar與同 asof／investor三 RAW返回；先驗全 returnedcalendar再 last10 split5／5，不硬沿25rows或日期。3293trust9/29 net0只舊 positivepath，前窗 latestzero-run未驗，fixture不補 actual。Continuation已收到；ROOT仍須另核 newoperation／coregap、完整 OGL ownerRights-use、新 calendar／sourceversions／schema／worker-consumer、ROOT外部 canonical pins、finite新 metadata／financial quota、NEW empty FIRST_once（失敗 SPENT、retry／redirect／preload0）、ALL12 ORIGINAL body＋receipts同 RAM dualSHA、7×10=70rows／70×25=1750strings／70×22=1540int64及 counts／net／delta、actual API＋可信 desktop／narrow ALL7／逐列 paired trace／RAWback／missing-unsupported／held READ恢復／failureclear值與 trace及白名單，才沿 SAME三角色派工 GET，見[完成條件](ROADMAP_EXECUTION.md)。2index＋10daily12GET僅建議非 grant。Old series／gross／defaultpins／四 TWSE source immutable；只 pure parser／math可 reuse，非 capture。無 ranking／filter／price／Signal／Plan／save／crossprocess。Ordinary closes／MA20缺 exact rights／calendar新 path，不重審 FinMind／monthly／legacy，MIT軟體 license不代 dataRights，未採來源不作全域阻擋。
+
+本 ROOT先接 outsidecleanup有限責任，actual0、未提前 grant。只含前 ROOT如上＋Kepler `01a119b4-433c-7793-9090-7f0e249160dd`／Galileo `01a119b4-98dd-7c61-b0fe-eb14cadd0a56`／Tesla `01a119b4-e4a5-73f3-a145-e36719b43de5`，old solehandle `term_252f8a53-5b80-46ee-be06-dccc0240c2e2`，exactoldpath `C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/roadmap-m1-chips-direction-segments-20-1006-20261008`／同 basename branch。Oldfinalsaved／all4idle真核後重核 exact16 mergedclean／unsaved0／oldHEAD3476／mastercontains／registered path及原 task數量、大小、方法，才 normal close／archive4保 history／Orca正常 delete。繼承307files6871495B／14descdirs／.git123B／no reparse（os.walk followlinks=false＋lstat含.gitfile）非新核，不提前盤點。禁 force／purge／旁路／self／master／private／Temp／cache／old20；blocked列精確殘留／delete0、不重試、不阻 core；更前 gross／industry／issuer／M2／stockhistory清理已接受，不重做。
+
+僅三 tracked BOOT prefixes（總≤20480B／TASK≤12288B）、UTF8 LF noBOM，留 continuation餘額，無 helper／附件／manifest／報表副本／Temp／HAR／screenshot／sourcecopy或契約變更。本 BOOT其他 sourcewrites／metadatafinancial GET／privateIO／tests／build／DB／priceGET／save／crossprocess／env／productartifacts／indexrefresh／Gitmutations／cleanup0。Prior金融22／metadata8direct＋2reader SPENT，全 raw RAM釋放，不 reuse／restart／replay／clone／hydrate／preload。私人3files1791644B、exact `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367`、FINAL63bundles189logical／remaining1非 grant，禁 read／write／copy／publish／delete。Old DAY／TURNOVER／MAIN／Temp20 preCreateProcessblocked／process0／delete0 **STRICT NO-RETRY**，不換 tool／path／owner／rename／父樹繞過，不掃 Temp／cache／舊資源或磁碟 case；正式 DB／採購／帳戶／交易未授。流程依[AGENTS](../AGENTS.md)，詳盡收據留原 task。
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1 已有限接受；待freeze／封存
 
 2026-10-08。同四actual IDs／SAME三角色與已接受visible gate續作。ROOT接受七股explicit10/06三net方向、各法人5／20counts／signed與zero segments／window-limited latest run、原25欄trace及同三RAW返回；契約見[來源 §44](SOURCE_REGISTRY.md)，actual操作見[個股頁 §49](STOCK_RESEARCH_PAGE.md)。

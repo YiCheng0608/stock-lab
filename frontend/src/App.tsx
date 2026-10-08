@@ -86,6 +86,8 @@ import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
 import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
 import ChipsGrossPage, { ChipsGrossProvider } from './ChipsGrossPage'
 import ChipsDirectionPage, { ChipsDirectionProvider } from './ChipsDirectionPage'
+import ChipsAdjacentPage, { ChipsAdjacentProvider } from './ChipsAdjacentPage'
+import { ADJACENT_ROUTE } from './chipsAdjacent'
 import { DIRECTION_ROUTE } from './chipsDirection'
 import { GROSS_ROUTE } from './chipsGross'
 import { SERIES_ROUTE } from './chipsSeries'
@@ -1999,8 +2001,15 @@ function NotFound() {
 }
 
 export default function App() {
-  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
+  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
   const location = useLocation()
+  if (import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(ADJACENT_ROUTE)) {
+    return <ChipsAdjacentProvider><Routes>
+      <Route path={ADJACENT_ROUTE} element={<ChipsAdjacentPage />} />
+      <Route path={ADJACENT_ROUTE + '/:symbol'} element={<ChipsAdjacentPage />} />
+      <Route path="*" element={<Navigate to={ADJACENT_ROUTE} replace />} />
+    </Routes></ChipsAdjacentProvider>
+  }
   if (import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DIRECTION_ROUTE)) {
     return <ChipsDirectionProvider><Routes>
       <Route path={DIRECTION_ROUTE} element={<ChipsDirectionPage />} />
