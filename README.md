@@ -18,6 +18,7 @@
 - [後端](backend/README.md)：FastAPI、SQLAlchemy／SQLite、資料 worker。
 - [前端](frontend/README.md)：React、TypeScript、Vite、React Query、ECharts。
 - [驗證方式](docs/development-baseline/README.md)：入口、副作用、驗收範圍與落盤限制。
-- [協作規則](AGENTS.md)與[接手狀態](docs/TASK_COORDINATION.md)：角色、驗收、索引、Git 及暫存政策。
+- [協作規則](AGENTS.md)與[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)：六角色、任務狀態、獨立 QA、索引與串行整合。
+- [GitHub 遷移入口](docs/TASK_COORDINATION.md)：設定缺口與歷史紀錄；即時派工和交接只在 GitHub Issues／Projects。
 
 API 啟動執行唯讀 schema readiness，不自動 migration。設定載入、request handlers 與 worker 的寫入入口及資料路徑須依操作手冊核對授權；readiness 通過不代表整個程序唯讀。Git 保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。

@@ -1,3 +1,36 @@
+# GitHub 遷移入口與歷史協作紀錄
+
+自 2026-10-09 起，即時任務、owner、依賴、狀態與交接只在 GitHub Issues／Projects 管理，流程見 [AGENTS](../AGENTS.md)，設定及模板見 [GitHub 工作手冊](GITHUB_WORKFLOW.md)。本檔只保留穩定入口與一次性遷移缺口，不再增加逐輪 roster 或派工狀態。
+
+## 導入基線
+
+本次使用者明示授權整體流程改造，不啟動舊產品輪次。讀取時原 checkout 在 master、HEAD 為 `b9809c5ff73c3bbbb52c3088968db9a3a22ef218`，Git 工作樹乾淨；本次修改存於本機流程 branch `workflow/github-task-process-20261009`，尚未併入正式 master。
+
+| 入口／項目 | 本次確認與待辦 |
+| --- | --- |
+| GitHub repository | 本機未設定 remote；尚無已確認 URL，不推測為沒有遠端 repository。 |
+| GitHub Project／治理 Issue | 未配置／未查現有帳號資源；登入、外部寫入及權限設定待授權後核實。 |
+| 正式 master／整合入口 | 本機基線如上；正式 remote、保護設定與整合者須在 GitHub 導入時確認。 |
+| 模型配置 | 本機 config.toml 設定為 gpt-6-astra／high；只記配置，不當本 session 或舊角色 runtime 證據。新角色預設見 AGENTS；本次未修改全域配置、未重啟角色。 |
+| 文件索引 | 初查 App MCP 可連、docs 索引 ready；相關文件 freshness=metadata_changed，已依原檔核對。最終刷新／coverage 與 commit 收據留本次對話。 |
+| 產品能力 | 完整 M1／M2／M3 仍未完成；有限能力與缺口見 ROADMAP／主題契約，不因流程改造提升。 |
+| 全局停滯計數 | 最近兩份歷史摘要皆記 core+1、stall0→0；尚未重新對原 task 完整驗證，遷移時標待核，不預設零。本次非產品實作批次。 |
+| session／worktree／私人資源 | 本次未啟動、恢復、關閉或清理；歷史存在、暫停、已交接、NO-RETRY 等事實保留，沒有新授權不動。 |
+| 導入完成界線 | 本機規則及模板可審查；GitHub 設定、待辦匯入、真實單任務試跑及兩張並行均未完成。 |
+
+## 下一位接手者
+
+先核本次流程 branch／commit 與 Git 差異，再確認使用者授權的 repository／Project、帳號、可見性及外部操作範圍。依工作手冊先讀現有 Issues／PR 去重、配置狀態與唯一整合入口，再遷移必要待辦及 owner。歷史「NEXT／UNADMITTED」是候選線索，不是已派工任務。
+
+設定完成後把確切 Repo／Project／治理 Issue URL 回填上表，後續即時交接留原 Issue。本機未連線期間不建立第二份任務台帳；舊已驗能力不重開，舊未完成項不得以「已 review」直接轉 Done。
+
+## 歷史紀錄的使用界線
+
+以下原文是改造前快照。「目前」「下一輪」「正式接手」「待 merge」只代表當時敘述，最終版本應查 Git／原 task，不據此恢復或重派。歷史來源授權、私人資料保護、已用 quota、拒絕重試與未驗限制不因換流程失效。原文保留作驗收追溯，既有 session ID 不作現行 roster。
+
+<details>
+<summary>展開改造前協作紀錄（唯讀歷史）</summary>
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1 已有限接受；待freeze／封存
 
 2026-10-08。同四actual IDs／原ROOT及SAME三roles續作，ROOT接受七股explicit10/06近5自行買賣／避險／合計daily與window buy／sell／net並列、完整原列trace及三RAW往返，詳[來源 §46](SOURCE_REGISTRY.md)／[個股頁 §51](STOCK_RESEARCH_PAGE.md)。FIRST7原件／receipts、完整數值／API及可信兩viewportALL7／真零／失敗清值已核；FIRSTviewport／BFCache／零窗口等缺口沿PAGE51，不補fixture。
@@ -1622,3 +1655,5 @@ W3版本c6018e3及指定外清已接受：舊四archived／notLoaded、history�
 ## 歷史與維護
 
 只更新現況、下一核心交接與未解限制，不追加逐輪流水。歷史 roster／實際模型、首跑失敗／補驗、freeze／索引／commit／merge 及清理收據留 Git／原 task；舊分派不恢復派工權。查閱方式見[文件索引](README.md#歷史查閱)。
+
+</details>

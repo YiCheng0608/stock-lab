@@ -1,3 +1,17 @@
+# 驗收拆解參考與歷史執行清單
+
+本檔自 2026-10-09 起停止管理任務狀態、依賴排程及 owner；唯一任務來源是 GitHub Issues／Projects，入口見[遷移說明](TASK_COORDINATION.md)。規則見 [AGENTS](../AGENTS.md)，模板及遷移方法見[工作手冊](GITHUB_WORKFLOW.md)。
+
+## 使用方式
+
+- 全局統籌依 [ROADMAP](ROADMAP.md) 建立去重待辦時，可引用下列 R0–R3 拆解、既有工作 ID、共同 gate 與驗收邊界；工作 ID 只是歷史對照，不取代 GitHub Issue 編號。
+- 長期精確契約以[文件索引](README.md)指向的來源／產品／計算文件為準；更新行為時改負責契約，不在此維護第二張待辦表。
+- 舊狀態「提案／進行中／已 review／等待／受限」只供解讀歷史，不能直接映射成新流程的「完成」。遷移須核已整合版本、逐 AC 證據、尚缺項及原授權。
+- 新進度、排序、阻塞、接手與下一步只寫原 Issue；本檔的歷史更新方式及舊四角色 gate 不再適用。來源、安全、時間、版本、真實資料、磁碟與前瞻驗收條件維持。
+
+<details>
+<summary>展開改造前執行清單與驗收拆解（唯讀歷史）</summary>
+
 ## 目前：M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1 已有限接受
 
 2026-10-08。ROOT接受SOURCE9完整來源／數值及可信兩viewport七股操作，見[來源 §46](SOURCE_REGISTRY.md)／[個股頁 §51](STOCK_RESEARCH_PAGE.md)。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完；quota SPENT／RAM釋放。SOURCE9＋DOC6待ROOT review／freeze→qualified索引→核准commit→另准merge；BOOT／完整starting suffix與outsidecleanup接受沿[協作紀錄](TASK_COORDINATION.md)。
@@ -383,3 +397,5 @@ M3-P1～P6e 是既有庫存與讀回可靠性成果，不計新 Plan 或完整�
 ## 更新方式
 
 文件角色每輪依統籌核定的完成狀態與驗收邊界，在 freeze／索引前更新受影響的工作列及主題契約。穩定內容不重寫，文件交付與結案依 [AGENTS](../AGENTS.md#文件與交接)。來源／前瞻樣本不足保持提案、等待或受限，不縮小原驗收條件。
+
+</details>
