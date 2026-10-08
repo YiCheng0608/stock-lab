@@ -1,3 +1,21 @@
+## 目前：七股方向與窗口區段已有限接受
+
+2026-10-08。42groups／258segments、兩viewport84configs／164native trace／真net零2／同key502清值已ROOT接受，見[來源 §44](SOURCE_REGISTRY.md)／[個股頁 §49](STOCK_RESEARCH_PAGE.md)。Core+1／dep0／reliability0／stall0→0，完整M1／M2／M3未完成。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1` **UNADMITTED**：近5／前5counts與net差異並排、paired原列trace；新准入與真操作另核，12GET只提案，見[完成條件](ROADMAP_EXECUTION.md)。
+
+Quota SPENT／原件釋放；ordinarycloses／MA20缺rights／calendar。SOURCE10＋DOC6待freeze／索引／commit／merge；outsidecleanup有限接受及BOOT／歷史保護見[協作紀錄](TASK_COORDINATION.md)。
+
+## 目前：BOOT-M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1；可見 gate 已接受，原 ROOT 正式接手
+
+2026-10-08。前批七股 gross 買賣、累計與同截止研究 SOURCE10＋DOC6 exact16 已正常 commit／local master ff-only merge `31ce680246faafd05e2b897897ee051f341cbc1a`、前 ROOT 接受、未 push；有限能力沿[來源 §43](SOURCE_REGISTRY.md)／[個股頁 §48](STOCK_RESEARCH_PAGE.md)，完整 starting suffix／舊 pending／hash 保留原 bytes。
+
+四 NEW actual 配置、唯一根／branch／HEAD、接手及外部 `/subagents` 可見 gate已接受；原 session SINGLE continuation已收到，本 ROOT沿 SAME三角色正式接手產品派工，精確收據見[協作紀錄](TASK_COORDINATION.md)。候選／來源／metadata金融quota／實作仍 UNADMITTED；此次只原 BOOTprefix更新，非產品 freeze，索引／Git／cleanup0。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1` **UNADMITTED**：七股10/06三法人 net 方向一致／分歧、5／20正負零 counts／連續區段／窗口內最新 run、原25欄 trace與同三 RAW 返回；新 rights-use／calendar／versions／pins／finite fresh capture及真操作按[完成條件](ROADMAP_EXECUTION.md)另准入，fresh22只是建議非 grant，舊 quota SPENT／原件釋放。
+
+優先 M1→M2→M3；ordinary closes／MA20 仍缺 rights／calendar 新 path，不重審 FinMind／monthly／legacy。繼承 core+1／dep0／reliability0／stall0→0；BOOT0 非 implementation batch、不 increment／reset，完整 M1／M2／M3 未完成，daily net／gross不重計 core。未有新產品驗收；權限及 outsidecleanup pending沿協作紀錄。
+
 ## 目前：七股gross買賣、累計與同截止研究已有限接受
 
 2026-10-08。`M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` 新FIRST22原件／42窗口126totals與prefix、desktop＋narrow各七股六組態、真每日gross0／三RAW返回／停止後502清值已ROOT接受，見[來源 §43](SOURCE_REGISTRY.md)／[個股頁 §48](STOCK_RESEARCH_PAGE.md)。Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，old daily net接受不重計。

@@ -1631,3 +1631,30 @@ ROOT已核NEW empty／nativeFIRST_once22及FULL22 ORIGINAL／完整calendar／AL
 兩viewport實際10/07及empty mask，apply無APIcall；10/06restore仍mask、explicitheldREAD才恢復samegen。9999→nativeback valid仍mask→explicitREAD已受驗；back不暗讀或unmask。APIstop後same-key5274 nativeREAD actual502（CDP20640.26）及另3105READ502（CDP20640.32），desktop／narrow清ALLvalues／graphs／tables／raw／calendar，nativeback仍mask且保三RAW；以actual同READ CDP核，不把stale ResourceTiming200或failed assertion改成pass。
 
 Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，source10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。
+## 49. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作
+
+2026-10-08。ROOT有限接受source10、fresh來源／數值與下列actual操作，非完整M1。新來源／OGL署名／pins／分類與計算由[來源 §44](SOURCE_REGISTRY.md)管理；oldnet／gross／defaultpins與四TWSE profiles不改。入口與synthetic邊界見[開發入口](development-baseline/README.md)。
+
+### 49.1 獨立入口與RAW controls
+
+Route `/chips-stock-scope-7-direction-segments`、flag `VITE_CHIPS_DIRECTION_STOCK_SCOPE_7=m1-v1`、runner `--chips-direction-stock-scope-7-opt-in`；API `/api/chips/direction-stock-scope-7`及 `/capture`，外部expectedpins完整匹配SOURCE44。Explicit `as_of=2026-10-06`，七股3105／3293／5274／5347／6488／6510／8069，foreign／trust／dealer與5／20窗口。卡→detail→back保as_of／investor／horizon三RAWcontrols；apply／切股／改法人／窗口／back不暗fetch或READ，只有明示FIRST_once及成功explicit heldREAD可顯示同generation。
+
+每日三net分類、各法人正負零counts、maximal signed／zero segments起迄與長度、窗口內latest run均用精確值；zero獨立並終止正負run。Window首段earlierunknown，不能稱完整歷史連續日數。Segment native展開對應日期，再展開三原net／ALL25 header與原strings／ordinal／dualSHA／未增補canonicalreceipt及calendar；署名保TPEx／year2026／兩完整dataset名／observedversions／OGL1.0 URL。Observed10/08與cutoff10/06分離，published／firstavailability／revision未知、nonPIT。
+
+### 49.2 完整actual矩陣與零值邊界
+
+可信desktop1365×900＋narrow390×844各ALL7×3investor×2horizon，合84detailconfigs／1050daterows／3150exactnetcells／252counts／516segmentrows／latest84；每detail windowfirstunknown與無整頁overflow已核。164 native segment→date→ALL25 original/header／ordinal／dualSHA／三net／canonicalreceipt trace，含兩actualzero各viewport2＝4；first與latest segment均native受驗，one-segment只一次。完整calendar25原列每detail對帳，各viewportALL25 native rowdetails合50；不聲稱全部140date各native點。
+
+Actual每日net零只8069trust9/23、3293trust9/29，各1day zero run；44個統計count0由ROOT逐原列predicate核，不能混稱每日零。99opposite／23allpositive／17allnegative／1singlewithzero／allzero0及全部42groups／258segments／latest42精確核沿SOURCE44。Actual all-zero triple／整窗zero run／latestzero缺實件，仍未驗；fixture不代真值。原生combobox鍵盤input、trustedbuttons／nativeEnter構成可信操作；syntheticselect isTrusted=false只harness診斷，不充gate。
+
+### 49.3 Mask、明示恢復與同key失敗清值
+
+兩viewport10/7或empty apply均mask ALLcounts／category／segments／latest／dates／trace／raw／calendar且無APIcall；改回10/6仍mask，explicitheldREAD200才恢復同gen。Unknown9999→BACKvalid仍mask→explicitREAD同gen已核；back保三RAW而不unmask／暗讀。PreFIRST8invalid422／source0、unsupportedblank／held409已核；cachedPOST帶正確query409無GET，missingquery422分報，不把queryless422當cached409。
+
+停止前samekey5274trust5在兩viewport完整數值／trace／calendar已核；APIstop後同keynativeREAD502，narrowCDP10700.23先fromlive清值、desktop10700.24同keyrepeat502仍清ALLcounts／category／segments／dates／trace／raw／calendar；BACK保同三RAW且仍mask。不虛稱兩獨立producer或將ACK／staleHTTP值當actualpass。Whole7profile依SOURCE44 failclosed，不補0／縮窗或跳壞股。
+
+### 49.4 驗收及退出限制
+
+唯一trustedFIRST22與完整原件／API graph受驗；15backend RAM、51src noEmit＋37validator＋42groupSSR raw0，後UI局部51src＋42SSR raw0／validator37沿用，SSRwarnings保留且不代actualUI。API／preview normalSIGINT raw1且SHUTDOWNtrue；compiler隨preview正常停、auditor /stop釋放22原件後最後raw0；四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]已ROOT核。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，不restart／replay／clone／hydrate／preload，保存／跨程序未授；原errors與exit見開發入口，不冒全passed。
+
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。SOURCE10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。

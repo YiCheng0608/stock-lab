@@ -85,6 +85,8 @@ import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validS
 import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
 import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
 import ChipsGrossPage, { ChipsGrossProvider } from './ChipsGrossPage'
+import ChipsDirectionPage, { ChipsDirectionProvider } from './ChipsDirectionPage'
+import { DIRECTION_ROUTE } from './chipsDirection'
 import { GROSS_ROUTE } from './chipsGross'
 import { SERIES_ROUTE } from './chipsSeries'
 import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
@@ -1997,8 +1999,15 @@ function NotFound() {
 }
 
 export default function App() {
-  if (import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7 === 'm1-v1' && import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7 === 'm1-v1') throw new Error('gross and daily-net profiles cannot be enabled together')
+  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
   const location = useLocation()
+  if (import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DIRECTION_ROUTE)) {
+    return <ChipsDirectionProvider><Routes>
+      <Route path={DIRECTION_ROUTE} element={<ChipsDirectionPage />} />
+      <Route path={DIRECTION_ROUTE + '/:symbol'} element={<ChipsDirectionPage />} />
+      <Route path="*" element={<Navigate to={DIRECTION_ROUTE} replace />} />
+    </Routes></ChipsDirectionProvider>
+  }
   if (import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(GROSS_ROUTE)) {
     return <ChipsGrossProvider><Routes>
       <Route path={GROSS_ROUTE} element={<ChipsGrossPage />} />

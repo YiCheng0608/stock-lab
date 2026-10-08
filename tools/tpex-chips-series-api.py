@@ -20,6 +20,7 @@ parser.add_argument("--check", action="store_true")
 parser.add_argument("--serve", action="store_true")
 parser.add_argument("--chips-series-stock-scope-7-opt-in", action="store_true")
 parser.add_argument("--chips-gross-stock-scope-7-opt-in", action="store_true")
+parser.add_argument("--chips-direction-stock-scope-7-opt-in", action="store_true")
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
 parser.add_argument("--port", type=int, default=8799)
@@ -27,14 +28,17 @@ parser.add_argument("--deps", default="C:/Users/YiCheng/Desktop/taiwan-stock-res
 ARGS = parser.parse_args()
 if ARGS.check == ARGS.serve or not 1024 <= ARGS.port <= 65535:
     parser.error("select exactly --check or --serve and a finite local port")
-if ARGS.chips_series_stock_scope_7_opt_in and ARGS.chips_gross_stock_scope_7_opt_in:
-    parser.error("gross and daily-net profiles cannot be enabled together")
+if sum((ARGS.chips_series_stock_scope_7_opt_in, ARGS.chips_gross_stock_scope_7_opt_in, ARGS.chips_direction_stock_scope_7_opt_in)) > 1:
+    parser.error("chips profiles cannot be enabled together")
 if ARGS.chips_gross_stock_scope_7_opt_in:
     EXPECTED_VERSION = "m1-chips-gross-trade-stock-scope-7-tpex-2026-10-06.1"
     EXPECTED_DIGEST = "sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144"
+if ARGS.chips_direction_stock_scope_7_opt_in:
+    EXPECTED_VERSION = "m1-chips-direction-segments-stock-scope-7-tpex-2026-10-06.1"
+    EXPECTED_DIGEST = "sha256:eb7a4dd688907855dd91250bfbec96b4dd8b2cb65085dce49e7e12c3a80c5348"
 ARGS.policy_version = ARGS.policy_version or EXPECTED_VERSION
 ARGS.policy_digest = ARGS.policy_digest or EXPECTED_DIGEST
-if ARGS.serve and not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in):
+if ARGS.serve and not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in):
     parser.error("serve requires explicit chips-only source opt-in")
 if (ARGS.policy_version, ARGS.policy_digest) != (EXPECTED_VERSION, EXPECTED_DIGEST):
     parser.error("independent external policy pins mismatch")
@@ -102,7 +106,10 @@ def socketpair(*args, **kwargs):
 
 socket.getaddrinfo = resolver
 socket.socketpair = socketpair
-if ARGS.chips_gross_stock_scope_7_opt_in:
+if ARGS.chips_direction_stock_scope_7_opt_in:
+    from worker import tpex_institutional_direction_scope7 as series
+    from app.institutional_direction_scope7 import create_app
+elif ARGS.chips_gross_stock_scope_7_opt_in:
     from worker import tpex_institutional_gross_scope7 as series
     from app.institutional_gross_scope7 import create_app
 else:
@@ -114,7 +121,7 @@ REQUESTS = 0
 
 def fetch(url, cap, deadline):
     global REQUESTS
-    if not ARGS.serve or not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in) or REQUESTS >= 22 or url != series.URLS[REQUESTS]:
+    if not ARGS.serve or not (ARGS.chips_series_stock_scope_7_opt_in or ARGS.chips_gross_stock_scope_7_opt_in or ARGS.chips_direction_stock_scope_7_opt_in) or REQUESTS >= 22 or url != series.URLS[REQUESTS]:
         raise PermissionError("finite exact source sequence required")
     parsed = urlsplit(url)
     assert parsed.scheme == "https" and parsed.hostname == "www.tpex.org.tw" and parsed.port is None and not parsed.fragment
@@ -171,7 +178,7 @@ def main():
     print(json.dumps({"python": sys.version.split()[0], "policy_version": EXPECTED_VERSION, "policy_digest": EXPECTED_DIGEST, "seed_count": 0, "preloaded": False, "guards": COUNTS}), flush=True)
     if ARGS.check:
         import unittest
-        names = ["test_institutional_gross_scope7"] if ARGS.chips_gross_stock_scope_7_opt_in else ["test_tpex_institutional_series_scope7", "test_institutional_series_scope7"]
+        names = ["test_institutional_direction_scope7"] if ARGS.chips_direction_stock_scope_7_opt_in else ["test_institutional_gross_scope7"] if ARGS.chips_gross_stock_scope_7_opt_in else ["test_tpex_institutional_series_scope7", "test_institutional_series_scope7"]
         suite = unittest.defaultTestLoader.loadTestsFromNames(names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         import fastapi
@@ -186,7 +193,7 @@ def main():
     try:
         uvicorn.run(create_app(producer), host="127.0.0.1", port=ARGS.port, access_log=False, log_config=None, lifespan="off", loop="asyncio")
     finally:
-        print(json.dumps({"shutdown": True, "source_requests": REQUESTS, "producer_requests": producer.request_count, "guards": COUNTS}), flush=True)
+        print(json.dumps({"shutdown": True, "pid": os.getpid(), "generation": producer.generation, "attempted": producer.attempted, "source_requests": REQUESTS, "producer_requests": producer.request_count, "guards": COUNTS}), flush=True)
     return 0
 
 

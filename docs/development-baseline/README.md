@@ -685,3 +685,20 @@ API52996／session88784正常STOP raw0，實際SHUTDOWN／server_stopped=true／
 API18464正常SIGINT raw1／SHUTDOWNtrue，source_requests22／producer22及disk_writes／mutations／private_reads／databases／subprocesses／network_rejections0。Preview42276／compiler35212正常SIGINT raw1／SHUTDOWNtrue，GET8／POST1／rejected_requests233，不記0或推原因；disk／private／network／subprocessrejection0。18464／42276／35212／7768absent、8809／8810nolisten、ownpage正常close／tabs[]；test／productartifacts0files0B／privateIO0／DB0／priceGET0，ORIGINAL RAM已釋放、不restart／replay／hydrate。
 
 原raw1（missingimport／quote／PATHNode20guard／fixturemutation／JSONDecodeError／hiddenbrowser-board-RT-card assertions）保留；Ctrl+A ACK未選造成draftappend、execstoreundefined suppressedinner outcomeunknown亦留ROOTtask。更正後UTF8stdin／同READ actualCDP502分報，不改exit／重送金融；ignorednetworklimit／stdouttruncation不作取得證據，無helper／附件。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完成；版本封存及outsidecleanup見[協作紀錄](../TASK_COORDINATION.md)。
+## M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：方向區段零落盤入口
+
+2026-10-08。ROOT有限接受actual，本DOC不重跑；來源及操作見[來源 §44](../SOURCE_REGISTRY.md)／[個股頁 §49](../STOCK_RESEARCH_PAGE.md)。Python3.12.14／Node24.19.0／TS5.9.3／esbuild0.25.12；新opt-in使用獨立ROOT外部pins，不升olddefaults。
+
+本worktree根的三個check入口：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-direction-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-direction-stock-scope-7-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --check-ui-only --chips-direction-stock-scope-7-opt-in
+```
+
+15backendRAM／51src noEmit＋37validator＋42groupSSR raw0；後UI局部51src＋42SSR raw0，validator37沿用。SSRwarnings、fixture／27signcases邊界與actualUI分報，不代金融truth；未跑productionbuild／fullsuite／磁碟保存。ROOT受驗FIRST22／完整原件API graph、84trustedconfigs／164native trace／真net零2及502清值沿PAGE49。
+
+API36576／preview15748 normalSIGINT raw1且SHUTDOWNtrue，各guard0／source22；compiler9288隨preview停，auditor52704 /stop釋放22原件後最後raw0。四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]；previewproxy GET8／POST1／rejected_requests211保原數、不推原因。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，indexcache另報。
+
+原quote／AXACK-noeffect／PSsyntax／Ctrl+A未選先assert／punctuation／offscreen／queryless POST422wrongassert／tablist--page等raw1保留ROOTtask；/stop已有效不重送，只修harness、不改exit或重送GET。Metadata截斷／receipts及reader403限制見SOURCE44；outsidecleanup與freeze/index/Git待辦見[協作紀錄](../TASK_COORDINATION.md)，不掃其他old／private／Temp／cache。

@@ -1644,3 +1644,56 @@ Canonical單位股，integer string傳遞；gross買／賣為非負int64，net�
 NEWgen `7a69c0e8-a019-41c6-9a24-d0b7e2833b3b` nativeFIRST_once完成22financialHTTP200identity、body2907155B／ORIGINALreceipts23319B，UTC2026-10-08T02:27:08.158379～02:27:18.782558+00:00。ROOT獨立核FULL22 heldbody＋未增補canonical receipts／dualSHA／UTC／exactURL、full18098dailyrows、ALL140×25strings／3080int64／components及total關係；calendar25returned→24採≤10/06→last20／5，postcutoff10/07原6欄保留不採。全部42windows84gross＋42nettotals、525points1575prefixcomponents精確獨立對帳；停止前sameheld ORIGINAL body＋receipt equality再核raw0。完整逐件hash／數值表留ROOT原task，不另建附件或重造receipt。
 
 Actual每日gross0共27cells，desktop3105／trust／9/18sell0與narrow5274／trust／9/30buy0均有ALL25trace；84窗口gross totals全非0。完整可信UI／API／mask／failureclear沿PAGE48。Metadata8direct＋2webreader及financial22已SPENT，reader403保留；原件隨API正常SIGINT／SHUTDOWNtrue raw1釋放、guards0／source_requests22 producer22，無restart／replay／hydrate。test／productartifacts0files0B、privateIO／DB／priceGET0；完整退出／錯誤／命令見[開發入口](development-baseline/README.md)。Source10＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge；不以索引或Git代功能驗收。
+## 44. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段
+
+2026-10-08。ROOT已有限接受新來源／數值與具名操作，financial22及metadata已SPENT。本節只管理新namespace；oldnet／oldgross／defaultpins與四TWSE profiles不改。操作見[個股頁 §49](STOCK_RESEARCH_PAGE.md)，入口見[開發入口](development-baseline/README.md)，進度及封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+
+### 44.1 獨立版本與外部pins
+
+ROOT canonical12382 UTF-8 bytes，version `m1-chips-direction-segments-stock-scope-7-tpex-2026-10-06.1`，外部SHA `eb7a4dd688907855dd91250bfbec96b4dd8b2cb65085dce49e7e12c3a80c5348`，profile `free_public_local_chips_only_direction_segments_stock_scope_7`。本根新worker原文已唯讀核對canonical bytes／SHA及下列identity；expectedpins由ROOT外部提供，不從receivedpolicy自建。
+
+| Identity | 本B1 exact版本 |
+| --- | --- |
+| worker | `tpex-institutional-direction/chips-stock-scope-7-v1` |
+| capture | `tpex-institutional-direction-capture/chips-stock-scope-7-v1` |
+| read | `institutional-direction-segments-read/chips-stock-scope-7-v1` |
+| calculation | `net-sign-triples-counts-contiguous-segments/window-limited-int64-v1` |
+| calendar schema | `institutional-direction-calendar/chips-stock-scope-7-v1` |
+| calendar／index version | `dataset-11391-month-csv-observed-2026-10-08/chips-direction-segments-stock-scope-7-v1` |
+| daily version | `dataset-11856-dated-csv-observed-2026-10-08/chips-direction-segments-stock-scope-7-v1` |
+
+本B1新設calendar_schema／calendar_version，不回改§43無此key的gross契約。TPEx3105／3293／5274／5347／6488／6510／8069、explicit cutoff2026-10-06／observed2026-10-08；不提升default日期或profiles。
+
+### 44.2 Metadata、用途與原件限制
+
+新8direct共581122B／HTTP200 identity／redirect、retry0，另2webreader：OGL成功、TPEx403 InternalError不retry；reader不證rawHTTP總量。首6共542891B，stdout HTML截斷且ord3／4 ORIGINAL receipts未保存，不能聲稱8件完整receipts。另terms13535B＋rules24696B＝38231B的兩專用診斷完整clauses已ROOT核；原不足留task；8direct SPENT，不補舊receipts／不再GET。
+
+[REST11391](https://data.gov.tw/api/v2/rest/dataset/11391)／[REST11856](https://data.gov.tw/api/v2/rest/dataset/11856)已核ownerTPEx、license1、free、CSV UTF-8。[OGL1.0](https://data.gov.tw/license)完整署名義務、[TPEx條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)§7政府資料開放例外及§5非全局取消已核。僅授本地RAM方向用途。完整canonical署名逐字如下：
+
+> 財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 櫃買指數歷史資料（dataset11391；dataset-11391-month-csv-observed-2026-10-08/chips-direction-segments-stock-scope-7-v1）及上櫃股票三大法人買賣明細資訊（dataset11856；dataset-11856-dated-csv-observed-2026-10-08/chips-direction-segments-stock-scope-7-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；方向與區段為本地衍生結果。
+
+Published／firstavailability／revision未知、nonPIT，metadata時間不代金融row發布或決策時可知；磁碟保存／跨程序／正式DB／交易未授。
+
+### 44.3 Finite FIRST及完整日曆
+
+ONE NEW empty distinct producer，無seed／preload；trustedFIRST_once先2index月CSV，再完整calendar驗證後last20的20daily，總22GET，失敗亦SPENT；retry／redirect／probe／warmup0。只RAM保存ALL22 ORIGINAL bodies及未增補canonical receipts；ROOT同heldobjects獨立核完整identity／exactURL／UTC／dualSHA，不重造receipt、重開producer或重用舊capture。切股／套用／back／heldREAD不另fetch，cachedcapture409。
+
+新policy15s/request、180s/batch為request／response／chunk邊界cooperative檢查；16KiB header為收到後postcheck，非socket硬cap。Index1MiB／daily2MiB／total42MiB；retained64MiB為deduplicated getsizeof estimate，非RSS／建構peak；diagnostic16MiB。原件／產物／privateIO／DB／priceGET均受本B1有限gate約束。
+
+全部返回calendar原6欄先驗unique日期／requested month／weekday／nonclosed／≤observation／finite positiveOHLC及上下界，再與採入完整weekday集合扣[9/25、9/28公告](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)對帳；不硬定returned25或從缺列推休市。合法postcutoff原列保留追溯但不採。此次25returned→24adopted→last20為9/07～10/06，last5為9/30、10/1、10/2、10/5、10/6；10/7保原欄excluded。Index calendar不代ordinary closes／MA20。
+
+### 44.4 原欄、分類、counts與segments
+
+全部daily來源列先驗25strings／日期／code唯一／非空name；ALL140selected的3500strings／3080金融int64及買−賣、components／total關係完整核。Foreign原net欄5不含外資自營商、trust14、dealer23為自行＋避險總（0-based）；原signed int64 canonical股數與精確股／張公式不改，unknown／missing不補0。
+
+三net符號五類互斥且涵蓋27signcases：`all_positive`三正、`all_negative`三負、`opposite`至少一正一負且可含零、`single_direction_with_zero`單一非零方向且含零、`all_zero`三個精確零。每investor×5／20窗口正負零counts總和＝窗口長度；segments按窗口交易日期順序為maximal同sign連續區段，完整覆蓋一次、無重疊／缺口／相鄰同sign，zero獨立且終止正負run。Latest run僅最後一段，首段earlier_unknown=true，不以較長窗口或完整歷史外推更早日數。任一來源／pins／結構／數值／分類／區段不合，whole7profile failclosed，不縮窗或跳壞股。
+
+Segment-date展開三原net、ALL25原strings／header／ordinal／bodySHA／ORIGINALreceiptSHA及完整calendar。Actualzero只由fresh原net精確0證明；derived count=0須逐原列predicate核，fixture不補實件。
+
+### 44.5 本次actual與已知缺口
+
+NEWgen `819af242-616e-4e28-8302-87b0062a2ecc`，唯一trustedFIRST22 HTTP200 identity，body2907155B／完整ORIGINAL canonical receipts23737B，UTC2026-10-08T05:16:30.625464～05:16:42.788936+00。ROOT同RAM independent stdlibCSV／日期／components／identity／fullschema／dualSHA／URL／UTC／int64及safeintMath核full18098rows、ALL140與完整API graph；API234695B canonicalSHA `048f72ea5fe7a8ccd318dc92916dcc9d39a32a9f437ecff1a5051b930591ce8d`。42groups／258segments／latest42、count0 predicates44已逐列對帳；140triples為99opposite／23allpositive／17allnegative／1singlewithzero／allzero0。
+
+Fresh每日net零2格：8069trust9/23、3293trust9/29，各為獨立1day zero run。44個統計count0不代表44個每日net零。Actual all-zero triple／整窗zero run／latestzero無實件，保留驗收缺口，不以fixture聲稱通過。完整UI／API／清值邊界沿PAGE49。
+
+停止前ROOT再核FULL22 sameheld bodies＋ORIGINAL receipts逐byteequal與全API graph raw0；financial22仍SPENT，原件正常退出後釋放，不restart／replay／clone／hydrate／preload。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0；命令、guards、原失敗及清理見開發入口。
