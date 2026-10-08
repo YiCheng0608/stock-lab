@@ -1,3 +1,17 @@
+## 目前：TWSE兩碼完整名稱與同截止研究已有限接受
+
+2026-10-08。`M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` 三公司04／04／20完整名稱／引用trace、同cutoff五條件往返與真失敗清值已接受，詳[個股頁 §47](STOCK_RESEARCH_PAGE.md)。Core+1／dep0／reliability0／stall0→0；完整M1／M2／M3未完成，不外推完整分類／ordinary／membership／PIT。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` **UNADMITTED**：七股10/06三法人gross買／賣、5或20日累計與原欄trace對照既有net；依[完成條件](ROADMAP_EXECUTION.md)新准入。Daily net已接受不重驗算新core，closes／MA20仍缺rights／calendar新path；quota SPENT／RAM已釋放，freeze／Git待[協作紀錄](TASK_COORDINATION.md)，BOOT／歷史不回改。
+
+## 目前：BOOT-M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1；可見 gate 已接受，原 ROOT 正式接手
+
+2026-10-08。前批三真 TWSE 公司六原欄／同 cutoff 事件／五條件返回有限能力與 SOURCE13＋DOC6 exact19 正常 commit／另准 local master ff-only merge `c4f697421f0a3e7fe68b7aacd406001e656e7604` 已接受，未 push；原契約沿[來源 §41](SOURCE_REGISTRY.md)／[個股頁 §46](STOCK_RESEARCH_PAGE.md)。四 NEW actual 配置／接手與外部 `/subagents` 可見 gate 已接受，原 session SINGLE continuation 已收到，本 ROOT 沿用 SAME 三角色正式接手產品派工。本次僅自有 BOOT prefix 更新，來源／實作／quota 仍 UNADMITTED，詳[協作紀錄](TASK_COORDINATION.md)。
+
+下一 `M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` **UNADMITTED**：1449／1463／2614 同 cutoff raw04／04／20 依官方市場別碼表版本／生效日／來源 trace 顯示名稱，再回原五條件。[產業分類 §1](INDUSTRY_CLASSIFICATION.md) 的 B.12.00 PDF＋2023-07-03 公告只證取得路徑／舊 snapshot；fresh taxonomy／用途／新 quota／pins 與操作驗收須依[執行清單](ROADMAP_EXECUTION.md)另准入，不冒稱 current、ordinary／0056 ETF／membership／排名／行情／PIT。
+
+優先 M1→M2→M3；ordinary20／21 true closes＋MA20 仍缺 dataRights／calendar 新 path，無新正面路徑不重審 FinMind／monthly／legacy。繼承 coreoperation+1／standalone coredependency0／reliability0／stall0→0；BOOT／DOC／index／Git／審查增量0、非實作不增計數或 reset，nextcoreless→1／連兩 implementation 批前重選，完整 M1／M2／M3 未完成。前批 metadata5＋financial2 SPENT／ORIGINAL RAM 已釋放；BOOT來源取得／indexGit／cleanup0，DOC待 ROOT review，尚未產品 fullscope freeze。原 suffix／nested 歷史／舊 pending／hash 不回改；有限 outside cleanup 責任與所有 NO-RETRY fences 見[協作紀錄](TASK_COORDINATION.md)。
+
 ## 目前：TWSE公司原欄位與同截止事件研究已有限接受
 
 2026-10-08。`M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1` 交付1449／1463／2614真TWSE公司六原欄trace、同cutoff事件及原五條件返回；1095公司／58事件新原件／API／desktop／390px／真零／恢復／502清值已接受，詳[個股頁 §46](STOCK_RESEARCH_PAGE.md)／[來源 §41](SOURCE_REGISTRY.md)。

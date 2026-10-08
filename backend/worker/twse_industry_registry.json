@@ -1,0 +1,63 @@
+{
+  "schema_version": "twse-industry-citation-registry/v1",
+  "registry_version": "twse-industry-citation-r1-2026-10-08.1",
+  "content_digest": "sha256:75b7667f65a9da7397a72a1e9c494a35364f7563faedc4df2cda21f12e61b647",
+  "profile": "twse_two_code_complete_name_local_citation",
+  "declaration": {
+    "version": "twse-two-code-citations/b12-notice-fl007104-2025-06-09-v1",
+    "exchange": "TWSE",
+    "metadata_observed_date": "2026-10-08",
+    "evidence_kind": "parsed_official_document",
+    "entries": [
+      {"code_raw": "04", "name_zh": "紡織纖維"},
+      {"code_raw": "20", "name_zh": "其他"}
+    ],
+    "sources": [
+      {
+        "source_id": "twse_b12_appendix3",
+        "url": "https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf",
+        "document_version": "B.12.00",
+        "revision_month": "2018-10",
+        "implementation_month": "2020-03",
+        "date_precision": "month",
+        "locator": {"appendix": "3", "printed_page": 92, "zero_based_page": 100, "parsed_page_count": 104},
+        "supports": "exact_code_name_pairs"
+      },
+      {
+        "source_id": "twse_industry_notice_20230530",
+        "url": "https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024",
+        "announcement_date": "2023-05-30",
+        "patch_effective_date": "2023-07-03",
+        "date_precision": "day",
+        "supports": "code16_rename_and_code35_to38_additions_context"
+      },
+      {
+        "source_id": "twse_fl007104_section2",
+        "url": "https://twse-regulation.twse.com.tw/TW/law/DAT0201_print.aspx?FLCODE=FL007104",
+        "rule_id": "FL007104",
+        "section": "2",
+        "revision_date": "2025-06-09",
+        "date_precision": "day",
+        "supports": "both_complete_names_present_in_33_name_list"
+      }
+    ],
+    "source_use": {
+      "purpose": "bounded_local_research_complete_name_citation",
+      "basis": "TWSE_terms_section_8",
+      "terms_url": "https://www.twse.com.tw/zh/terms/use.html",
+      "conditions": ["identify_source", "preserve_complete_name_integrity"],
+      "full_table_redistribution": "not_admitted",
+      "original_document_download": "not_admitted",
+      "complete_current_taxonomy": "not_validated",
+      "company_membership_effective_date": "unknown",
+      "historical_pit": "unsupported"
+    }
+  },
+  "canonical_root_attested_excerpt_sha256": "sha256:dfba7e99fdb9343d71b34361afc04c0198a3ab1ebc31ff8a175fee588aa0fac8",
+  "evidence_delivery": {
+    "kind": "parsed_official_document",
+    "attestation": "root_reviewed_bounded_citation",
+    "original_body_sha256": null,
+    "original_receipt_sha256": null
+  }
+}

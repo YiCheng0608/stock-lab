@@ -552,6 +552,28 @@ export type TwseIssuerProfileData = {
   policy: { version: string; digest: string; profile: string }; limitations: string[]
 }
 
+export type TwseIndustryCitation = {
+  schema_version: 'twse-industry-citation-registry/v1'; registry_version: string; content_digest: string; profile: string
+  declaration: {
+    version: string; exchange: 'TWSE'; metadata_observed_date: string; evidence_kind: 'parsed_official_document'
+    entries: Array<{ code_raw: string; name_zh: string }>; sources: Array<Record<string, unknown>>
+    source_use: Record<string, unknown>
+  }
+  canonical_root_attested_excerpt_sha256: string
+  evidence_delivery: {
+    kind: 'parsed_official_document'; attestation: 'root_reviewed_bounded_citation'
+    original_body_sha256: null; original_receipt_sha256: null
+  }
+}
+
+export type TwseIssuerIndustryData = {
+  version: string; status: 'available' | 'unavailable'; reasons: string[]; exchange: string; symbol: string; as_of: string | null
+  cutoff_basis: 'observed_taipei_date_inclusive'; metadata_observed_date: string | null
+  row: null | { industry_code_raw: string; name_zh: string; issuer_row_ordinal: number; event_row_ordinals: number[]; company_classification_effective_date: 'unknown' }
+  provenance: null | { issuer: NonNullable<TwseIssuerProfileData['provenance']>; event: NonNullable<OfficialEventsData['provenance']>; taxonomy_citation: TwseIndustryCitation }
+  policy: { version: string; digest: string; profile: string }; limitations: string[]
+}
+
 export type InstitutionalWindowReceipt = {
   schema_version?: string; profile: string; http_status?: number; content_type?: string; content_encoding?: string
   source_id: string; source_version: string; requested_date: string; url: string; method: string
@@ -703,6 +725,7 @@ export type StockOverviewData = {
   conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
   events: OfficialEventsData
   issuer_profile?: TwseIssuerProfileData
+  issuer_industry_trace?: TwseIssuerIndustryData
   limitations: string[]
 }
 

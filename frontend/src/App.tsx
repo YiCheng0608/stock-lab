@@ -90,6 +90,7 @@ import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct
 import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 import { issuerSupported, unavailableIssuer, validTwseIssuerProfile } from './twseIssuerProfile'
+import { unavailableIndustry, validTwseIssuerIndustry } from './twseIssuerIndustry'
 
 function formatNumber(value: unknown, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value)
@@ -1598,15 +1599,20 @@ function StockPage() {
   } } : data.overview
   const issuerRead = priceDisplayOverview?.issuer_profile
   const issuerInvalid = issuerRead != null && !validTwseIssuerProfile(issuerRead, exchange, symbol, asOf || null, priceDisplayOverview?.events)
+  const industryRead = priceDisplayOverview?.issuer_industry_trace
+  const industryInvalid = industryRead != null && !validTwseIssuerIndustry(industryRead, exchange, symbol, asOf || null, issuerRead, priceDisplayOverview?.events)
   const issuerRequestFailure = issuerFailure?.token === issuerToken ? issuerFailure.reason
     : issuerScope && eventRequestFailure?.key === eventRequestKey ? 'issuer_read_request_failed'
       : issuerInvalid ? 'issuer_response_invalid' : undefined
   const displayOverview = issuerScope && issuerRequestFailure && priceDisplayOverview ? {
     ...priceDisplayOverview,
     issuer_profile: issuerRead ? unavailableIssuer(issuerRead, issuerRequestFailure) : undefined,
+    issuer_industry_trace: industryRead ? unavailableIndustry(industryRead, issuerRequestFailure) : undefined,
     events: { ...priceDisplayOverview.events, status: 'unavailable' as const, rows: [], provenance: null, attribution: null,
       observed_date: null, cache_present: false, candidate_count: 0, selected_count: 0, capture_action: 'failed' as const,
       reasons: ['issuer_read_request_failed'], can_capture: false },
+  } : industryInvalid && priceDisplayOverview && industryRead ? {
+    ...priceDisplayOverview, issuer_industry_trace: unavailableIndustry(industryRead, 'industry_response_invalid'),
   } : priceDisplayOverview
   const issuerName = issuerScope && !issuerRequestFailure && displayOverview?.issuer_profile?.status === 'available'
     && validTwseIssuerProfile(displayOverview.issuer_profile, exchange, symbol, asOf || null, displayOverview.events)

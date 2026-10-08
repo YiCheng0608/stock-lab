@@ -33,6 +33,7 @@ from .institutional_windows_1006 import build_institutional_windows
 from .tpex_price import build_tpex_price
 from .official_events import build_official_events
 from .twse_issuer_profile import build_issuer_profile
+from .twse_issuer_industry import build_issuer_industry
 from .units import volume_exact_text
 from .stock_market_reads import StockMarketRead, load_stock_market_reads, stock_market_dates
 from .stock_signal_reads import load_stock_signal_reads, stock_signal_dates
@@ -294,6 +295,7 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
                            "status": "data_insufficient", "reasons": reasons})
     daily = build_institutional_daily(instrument.exchange, instrument.symbol, cutoff)
     official_events = build_official_events(instrument.exchange, instrument.symbol, cutoff)
+    issuer_profile = build_issuer_profile(instrument.exchange, instrument.symbol, cutoff, events=official_events)
     return {
         "version": "stock-overview/chips-1006-v1" if explicit_as_of == date(2026, 10, 6) else OVERVIEW_VERSION, "as_of": cutoff.isoformat() if cutoff else None,
         "cutoff_basis": "data_date_inclusive", "historical_pit": "unsupported",
@@ -308,6 +310,8 @@ def build_stock_overview(db: Session, instrument: Instrument, as_of: date | None
         "institutional_daily": daily,
         "conditions": conditions,
         "events": official_events,
-        "issuer_profile": build_issuer_profile(instrument.exchange, instrument.symbol, cutoff, events=official_events),
+        "issuer_profile": issuer_profile,
+        "issuer_industry_trace": build_issuer_industry(instrument.exchange, instrument.symbol, cutoff,
+                                                     issuer_profile=issuer_profile, events=official_events),
         "limitations": ["local_evidence_consistency_only", "adjustment_chain_not_provided", "complete_m1_not_delivered"],
     }

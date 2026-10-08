@@ -1,3 +1,21 @@
+## 目前：M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1 已有限接受
+
+2026-10-08。兩完整碼名本地引用／新pins與fresh兩ORIGINAL RAM全欄／dualSHA、21 API、可信desktop／narrow三股六原欄＋名稱／三事件型／完整trace／真零／unavailable恢復／原五條件back／停止後清值已ROOT接受，詳[來源 §42](SOURCE_REGISTRY.md)／[產業 §10](INDUSTRY_CLASSIFICATION.md)／[個股頁 §47](STOCK_RESEARCH_PAGE.md)。Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。API STOP raw0／preview SIGINT raw1、原件釋放及owned清理已核；SOURCE12＋DOC7 exact19待review／freeze／索引／commit／另准merge，詳[協作紀錄](TASK_COORDINATION.md)。
+
+NEXT `M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1` **UNADMITTED**；branch候選 `roadmap-m1-chips-gross-trade-20-1006-20261008`。新增七股explicit10/06三法人gross買進／賣出每日精確表、5或20日累計與point-row原25欄trace，對照現有daily net並同cutoff controls返回。既有7×20×25＝3500 rawstrings／3080 int64及42 net支持取得路徑，見[來源 §37–38](SOURCE_REGISTRY.md)／[個股頁 §43](STOCK_RESEARCH_PAGE.md)；daily net／cumulative已接受，不重派或重驗算新增core，nested舊next snapshot誤判已撤回。
+
+下一NEW ROOT先核fresh2index＋20daily finite建議quota（未grant）、完整NEW empty producer／calendar全返回先驗再採≤10/06 last20／5（不硬沿舊25rows）、ALL25string／gross非負int64與net signed／components、84gross totals＋42net totals對帳、新獨立worker-schema-consumer profiles／external pins、ownerRights-use／日期角色／非PIT；再核actual API及可信desktop／narrow positive／fresh實件有gross0 cell才驗actualzero，沒有則保留缺口、不以fixture代替／缺證／unknown date／samecutoff返回／failureclear，0productartifacts／privateIO／DB／priceGET，才派同輪NEW三角色／GET。舊22 SPENT／本批兩ORIGINAL RAM已釋放，不restart／clone／replay／hydrate；缺真支持須重選、不降gate。Ordinary20／21closes＋MA20仍缺rights／calendar新path，不重審FinMind／monthly／legacy，不以index calendar／net代行情或Plan。Stall0繼承，nextcoreless→1／連兩implementation批前重選；BOOT與完整starting歷史不改。
+
+## 目前：BOOT-M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1；可見 gate 已接受，候選尚未准入
+
+2026-10-08。四 NEW actual runtime／共同根／branch／HEAD 與三角色接手、外部 `/subagents` 可見 gate 已接受，原 session SINGLE continuation 已收到，本 ROOT 沿用 SAME 三角色正式接手產品派工。本次僅更新自有 BOOT prefix，來源／實作／quota 仍 UNADMITTED。前批 SOURCE13＋DOC6 exact19 正常 commit／另准 local master ff-only merge `c4f697421f0a3e7fe68b7aacd406001e656e7604`、parent `204fe8532b88090d95bcdb5881eea0d70bc84381` 已接受、未 push；有限三公司六原欄／同截止事件／五條件返回沿[來源 §41](SOURCE_REGISTRY.md)／[個股頁 §46](STOCK_RESEARCH_PAGE.md)，roster、唯一可見 handle、停滯與清理 fences 見[協作紀錄](TASK_COORDINATION.md)。
+
+下一 `M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1` **UNADMITTED**。新增操作候選：1449／1463／2614 同研究 cutoff 查看 raw04／04／20 與官方市場別碼表名稱、版本／生效日／來源 trace，再安全返回原五條件。[產業分類 §1](INDUSTRY_CLASSIFICATION.md) B.12.00 PDF＋2023-07-03 公告僅正面路徑／舊 snapshot，不代 fresh metadata／taxonomy／用途 grant；(exchange,code) 精確，Other 只20，特殊／停用／未知／缺證 unavailable，不證 ordinarysecurity／groupmembership／可信排名／行情／PIT／策略。
+
+continuation 已收到；ROOT 下一 precise admission 須先於原 task 核具名 core／新操作／真支持、ownerRights-use／時間角色、新 sourceversion-schema-taxonomyprofile-externalpins、finite NEW metadata 與 fresh issuer1GET＋fresh TWT1GET（僅建議非 grant），各 NEW empty distinct generation、完整 ORIGINAL body／receipt 只 RAM 及 ROOT 全列 mapping review、三 profile actual API／可信 desktop＋narrow positive／missing-earlier unavailable／failure clear／samecutoffback、白名單／0落盤與必要清理，才派 SAME 三 roles／GET。完整支援與具名驗收成立才計核心；缺證可具理由重選，不以 unknown／fixture／機械 filter 降 gate。ordinary20／21 true closes＋MA20 仍缺 dataRights／calendar 新 path，無新 path 不重審 FinMind／monthly／legacy，不以 MIT software license、index calendar／net／Signal／Plan 代資料權利或行情。
+
+繼承 coreoperation+1／standalone coredependency0／reliability0／stall0→0；BOOT／DOC／index／Git／審查0、非 implementation batch，不 increment／reset，nextcoreless→1／連兩批前重選，完整 M1／M2／M3 未完成。前批 metadata5＋financial2 全 SPENT／原件釋放，不 restart／replay／clone／hydrate／preload。BOOT來源取得／privateIO／tests／build／DB／newartifacts／indexrefresh／stage／commit／merge／cleanup 全0；只三 DOC prefix 待 ROOT review，未授產品 fullscope freeze；starting HEAD 完整 suffix／nested 歷史／舊 pending／hash／金融契約保留原 bytes。共同流程與權限沿[AGENTS](../AGENTS.md)。
+
 ## 目前：M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1 已 review（有限）
 
 2026-10-08。ROOT接受1095公司×33／58事件×12完整原string、原body／ORIGINAL receipt同heldobjects及全映射／dates／ordinals／dualSHA。actual API20calls、可信1365×900／390×844三股真公司六欄／原事件trace、真零／unavailable／恢復／同cutoff五條件back／poststop502清值已核。source13含最小0056文案修字、必要44backend／42src80checks及修字2SSR／42noEmit均受驗，詳[來源 §41](SOURCE_REGISTRY.md)／[個股頁 §46](STOCK_RESEARCH_PAGE.md)／[開發入口](development-baseline/README.md)。

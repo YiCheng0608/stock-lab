@@ -1579,3 +1579,27 @@ API正常STOP後，same-key1449可信native公司READ POST實際502，headline�
 API26328正常STOP raw0／server_stoppedtrue／兩source_gets各1／四audit0，RAM原件已釋放。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 reject0；修字後只RAM rebuild preview34000／compiler61744 normalSIGINT raw1／shutdown GET3 POST1 reject0，API未restart／無新金融GET，兩preview guard／artifacts0。ROOT核5PID absent、8805／8806無listen、唯一ownedpage `9b4d13a6…` 正常closed／tabs[]，所有test／product／artifactfiles0B／privateIO0；shared indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
 本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。SOURCE13＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge，下一產業trace尚未准入，見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+
+## 47. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：公司原碼與產業名稱追溯
+
+2026-10-08。ROOT已有限接受SOURCE12、41backend／7warnings與45src noEmit＋71targetchecks raw0、完整fresh originals／21 direct API、可信desktop／narrow具名操作及停止後failure clear。來源／新pins見[來源 §42](SOURCE_REGISTRY.md)，兩碼及日期邊界見[產業 §10](INDUSTRY_CLASSIFICATION.md)，必要驗證見[開發入口](development-baseline/README.md)。
+
+### 47.1 同截止與獨立名稱區塊
+
+`twse-issuer-industry-trace/m1-v1` 是detail `overview.issuer_industry_trace` 新pure-read投影；原 `twse_issuer_profile` v1／六原欄／Code與Name join／capture端點保持，產業不另建capture endpoint或taxonomy GET。先明示取得本次事件，再公司READ沿§46 issuer POST；兩NEW empty producer各attempt1，cachedPOST／其他selected detail GET只用本程序cache。需要 `STOCK_TWSE_INDUSTRY_TRACE=1` 及獨立registry／consumer四external version-digest pins；無pin／缺證unavailable，不升default。
+
+「產業名稱與碼表追溯」顯示1449／1463原04配紡織纖維、2614原20配其他，公司分類生效日明示未知；原Code及名稱分欄、TWSE署名、B.12.00／2023公告／分類規則第2條三official links保持完整。展開「查看產業名稱版本與來源追溯」顯示引用version／metadata observed、issuer／event ordinals、兩sourceversion／body及receipt雙SHA、registry／canonical引用宣告pin與所有日期角色；清楚說明宣告SHA不是PDF／公告／規則原件SHA、沒有原始文件擷取紀錄。
+
+same cutoff須共同核issuer六原欄、exact exchange／code與eventName等於原full_name或short_name、完整原件pins／SHA／觀測日及精確兩碼宣告。missing-cutoff／earlier07／0056unsupported／其他raw碼／特殊或停用碼／名稱或source conflict均保留unavailable，row／provenance為null，不補名稱／零／較早fallback、不用Other吞unknown。原profile classification仍unsupported；新名稱不證ordinary／ETF／membership／完整current分類／排名／行情／PIT。
+
+### 47.2 本次實際驗收與安全返回
+
+ROOT21 direct API已核FIRST前8 invalid422／sourceGET0／DB0、三股同cutoff真碼名／雙原件trace、三cachedPOST、missing／07／0056 unavailable及08 restore；1463權10/15清單真零仍58／range2／kind0／items[]，不是公司分類缺證當零。原focus `official-event-focus/p4-v1` 類型／q／effective from-to語意與五個原條件保持。
+
+可信desktop1365×900及narrow390×844三公司六原欄、原04／04／20配紡織纖維／紡織纖維／其他、三事件型、三完整展開引用trace／issuer與event dualSHA／ordinals、公司分類effective未知、safe back原as_of／q／from／to／kind、nooverflow全部受驗。Native select除權→apply為1463真零：total58／range2／kind0／matched0；narrow07以day ArrowDown／apply為unavailable（三table0／trace0），ArrowUp／apply08恢復三table，再07detail／back仍保原08五條件。1449 missing-cutoff與0056 unavailable row／trace0，窄390及該case實際桌面1277無overflow；0056不證ETF身分。
+
+API停止後，same-key1449 native公司READ實際讀取失敗，headline改「公司名稱待核對」、公司／event／industry三table0、provenance summaries0，舊fullname及紡織纖維均消失；desktop1365與narrow390已實際核。Crossselected1463 GET實際502／performance responseStatus502、mainerror／values0／provenance0，narrow390無overflow。這是實際拒用與清值，不作positive；requestFailure／response核對失敗不沿用舊query值。
+
+停止前完整same held ORIGINAL identity／dualSHA／全schema再核，sourceGET各1／guards0。API52996正常STOP raw0／server_stopped=true、兩原件RAM釋放；preview55124／compiler31816正常SIGINT raw1／SHUTDOWN GET46 POST7 rejected0／guards與artifacts0。三PID absent、8807／8808無listen、唯一ownedpage `d6ad81a9-215b-433c-b9a7-da164326a12b` 正常close／tabs[]、新test／productartifactfiles0B／privateIO0／DBfiles0已核，不restart／replay／clone／hydrate。原工具失敗／viewport重設及實際效果門檻見[開發入口](development-baseline/README.md)。
+
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；下一 gross 買／賣拆解候選 UNADMITTED，詳 ROADMAP／[協作紀錄](TASK_COORDINATION.md)，完成條件見[執行清單](ROADMAP_EXECUTION.md)。

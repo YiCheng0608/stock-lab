@@ -17,18 +17,23 @@ const args = process.argv.slice(2)
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
 const issuerPinOptions = ['--issuer-registry-version', '--issuer-registry-digest', '--issuer-profile-version', '--issuer-profile-digest']
-assert(args.every((arg, index) => ['--deps', '--check', '--event-range-check', '--event-range', '--event-kind-check', '--event-kind', '--issuer-event-check', '--issuer-event', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--saved-price-chips-focus-stock-scope-7-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--saved-price-chips-focus-stock-scope-7-opt-in', '--port', '--api-port', ...pinOptions, ...issuerPinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions, ...issuerPinOptions].includes(args[index - 1])), 'unknown argument')
+const industryPinOptions = ['--industry-registry-version', '--industry-registry-digest', '--industry-consumer-version', '--industry-consumer-digest']
+assert(args.every((arg, index) => ['--deps', '--check', '--event-range-check', '--event-range', '--event-kind-check', '--event-kind', '--issuer-event-check', '--issuer-event', '--issuer-industry-check', '--issuer-industry', '--scope-check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--saved-price-chips-focus-calendar-check', '--saved-price-chips-focus-stock-scope-7-check', '--private-save-check', '--serve', '--stock-scope6-opt-in', '--saved-source-only', '--saved-price-chips-opt-in', '--saved-price-chips-focus-opt-in', '--saved-price-chips-focus-calendar-opt-in', '--saved-price-chips-focus-stock-scope-7-opt-in', '--port', '--api-port', ...pinOptions, ...issuerPinOptions, ...industryPinOptions].includes(arg) || ['--deps', '--port', '--api-port', ...pinOptions, ...issuerPinOptions, ...industryPinOptions].includes(args[index - 1])), 'unknown argument')
 const eventKindCheck = args.includes('--event-kind-check'), eventKindActive = args.includes('--event-kind')
 const issuerEventCheck = args.includes('--issuer-event-check'), issuerEventActive = args.includes('--issuer-event')
-const eventRangeCheck = args.includes('--event-range-check') || eventKindCheck || issuerEventCheck, eventRangeActive = args.includes('--event-range') || eventKindActive || issuerEventActive
-assert([eventKindCheck, eventKindActive, issuerEventCheck, issuerEventActive, args.includes('--event-range-check'), args.includes('--event-range')].filter(Boolean).length <= 1, 'choose one event mode')
+const issuerIndustryCheck = args.includes('--issuer-industry-check'), issuerIndustryActive = args.includes('--issuer-industry')
+const eventRangeCheck = args.includes('--event-range-check') || eventKindCheck || issuerEventCheck || issuerIndustryCheck, eventRangeActive = args.includes('--event-range') || eventKindActive || issuerEventActive || issuerIndustryActive
+assert([eventKindCheck, eventKindActive, issuerEventCheck, issuerEventActive, issuerIndustryCheck, issuerIndustryActive, args.includes('--event-range-check'), args.includes('--event-range')].filter(Boolean).length <= 1, 'choose one event mode')
 assert(!(eventRangeCheck && eventRangeActive), 'choose event check or serve')
 assert(!eventRangeActive || args.includes('--serve'), 'event-range is an owned serve mode')
-assert(!(eventRangeCheck || eventRangeActive) || !args.some((arg) => !['--event-range-check', '--event-kind-check', '--issuer-event-check'].includes(arg) && (arg.endsWith('-check') || arg.endsWith('-opt-in') || ['--check', '--saved-source-only', ...pinOptions].includes(arg))), 'event mode excludes other consumers')
+assert(!(eventRangeCheck || eventRangeActive) || !args.some((arg) => !['--event-range-check', '--event-kind-check', '--issuer-event-check', '--issuer-industry-check'].includes(arg) && (arg.endsWith('-check') || arg.endsWith('-opt-in') || ['--check', '--saved-source-only', ...pinOptions].includes(arg))), 'event mode excludes other consumers')
 assert(!eventRangeCheck || !args.includes('--serve'), 'event check has zero network')
-assert(issuerEventActive || !issuerPinOptions.some(name => args.includes(name)), 'issuer pins require the admitted issuer serve mode')
+assert(issuerEventActive || issuerIndustryActive || !issuerPinOptions.some(name => args.includes(name)), 'issuer pins require the admitted issuer serve mode')
 const issuerPins = { registry_version: 'twse-issuer-r1-2026-10-08.1', registry_digest: 'sha256:7488da20a3bdf94aaa548c896d19077628bf93529208226d49b2a02896972f89', profile_version: 'twse-issuer-event-profile/m1-v1', profile_digest: 'sha256:02bf2422129c46490516557bccd188f7d550d2516c4b5e49e9acc2faf5338244' }
-if (issuerEventActive) for (const [key, expected] of Object.entries(issuerPins)) assert(option('--issuer-' + key.replace('_', '-')) === expected, 'independent external issuer pins required: ' + key)
+if (issuerEventActive || issuerIndustryActive) for (const [key, expected] of Object.entries(issuerPins)) assert(option('--issuer-' + key.replace('_', '-')) === expected, 'independent external issuer pins required: ' + key)
+const industryPins = { registry_version: 'twse-industry-citation-r1-2026-10-08.1', registry_digest: 'sha256:75b7667f65a9da7397a72a1e9c494a35364f7563faedc4df2cda21f12e61b647', consumer_version: 'twse-issuer-industry-trace/m1-v1', consumer_digest: 'sha256:e9815a28d0ec22d29cd82c5524b02612debff4fec0110465002f6016afbae9b8' }
+assert(issuerIndustryActive || !industryPinOptions.some(name => args.includes(name)), 'industry pins require the admitted industry serve mode')
+if (issuerIndustryActive) for (const [key, expected] of Object.entries(industryPins)) assert(option('--industry-' + key.replace('_', '-')) === expected, 'independent external industry pins required: ' + key)
 assert(!args.includes('--scope-check') || !['--serve', '--check', '--focus-check', '--saved-focus-check', '--joint-check', '--saved-price-chips-focus-check', '--private-save-check'].some((flag) => args.includes(flag)), 'choose one scope check mode')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
 assert(!(args.includes('--focus-check') && (args.includes('--serve') || args.includes('--check'))), 'choose one check mode')
@@ -100,7 +105,7 @@ const compilerPackage = path.join(dependencies, '.pnpm/node_modules/esbuild')
 const compilerBinary = fs.realpathSync(require.resolve(`@esbuild/${process.platform}-${process.arch}/esbuild.exe`, { paths: [compilerPackage] }))
 const originalSpawn = childProcess.spawn
 childProcess.spawn = function (command, compilerArgs, options) {
-  if (fs.realpathSync(command) !== compilerBinary || !Array.isArray(compilerArgs) || !compilerArgs.some((arg) => /^--service=/.test(arg))
+  if (issuerIndustryCheck || fs.realpathSync(command) !== compilerBinary || !Array.isArray(compilerArgs) || !compilerArgs.some((arg) => /^--service=/.test(arg))
     || compilerArgs.some((arg) => !/^--service=/.test(arg) && arg !== '--ping') || ownedChildren.length) {
     counts.unapproved_subprocess++; throw new Error('unapproved subprocess')
   }
@@ -169,11 +174,15 @@ Module._resolveFilename = function (request, parent, ...rest) {
   }
 }
 for (const extension of ['.ts', '.tsx']) Module._extensions[extension] = (module, filename) => {
-  const result = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+  const source = fs.readFileSync(filename, 'utf8')
+  // This scoped check uses TypeScript in-process; no esbuild child or emit.
+  const input = issuerIndustryCheck ? source.replace(/import\.meta\.env\.([A-Z0-9_]+)/g, (_match, name) => JSON.stringify(name === 'VITE_API_BASE' ? '/api' : '')) : source
+  const result = ts.transpileModule(input, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }, fileName: filename,
   })
   module._compile(result.outputText, filename)
 }
+if (issuerIndustryCheck) Module._extensions['.css'] = () => {}
 function typecheck() {
   const filename = path.join(root, 'frontend/tsconfig.app.json')
   const config = ts.readConfigFile(filename, ts.sys.readFile)
@@ -205,6 +214,7 @@ async function appSSRModule(joint = false, focus = false, calendar = false, scop
     const value = originalLoad.call(this, request, parent, ...rest)
     return request === 'echarts-for-react' && value && typeof value.default === 'function' ? value.default : value
   }
+  if (issuerIndustryCheck) return require(path.join(sourceRoot, 'App.tsx'))
   const entry = eventRangeCheck ? { stdin: { contents: "export * from './App'; export { default } from './App'; export { getOfficialEventFocus, captureOfficialEventFocus, getPriceLotFocus, capturePriceLotFocus, captureTwseIssuerProfile } from './api'", resolveDir: sourceRoot, loader: 'ts', sourcefile: 'event-range-ssr-memory.ts' } } : focus ? { stdin: { contents: "export { default } from './App'; export { SavedPriceChipsFocusResults } from './SavedPriceChipsFocusPage'" + ((calendar || scope7) ? "; export { InstitutionalWindows, PriceSaved } from './components/StockOverview'; export { jointValidationTransition } from './App'" : ''), resolveDir: sourceRoot, loader: 'ts', sourcefile: 'joint-focus-ssr-memory.ts' } } : { entryPoints: [path.join(sourceRoot, 'App.tsx')] }
   const result = await esbuild.build({ ...entry, bundle: true, write: false,
     ...(eventRangeCheck ? { loader: { '.css': 'empty' } } : {}),
@@ -220,8 +230,8 @@ async function appSSRModule(joint = false, focus = false, calendar = false, scop
 
 
 // Check fixtures are synthetic; serving proxies the root-owned actual Python API.
-global.__institutionalWindowSSRSelection = issuerEventCheck ? 'issuer-only' : 'unit-lots-only'
-const cases = !issuerEventCheck && (eventRangeCheck || eventRangeActive || (focusActive || focusCheck) && !(calendarCheck || scope7Check)) ? {} : require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
+global.__institutionalWindowSSRSelection = issuerEventCheck || issuerIndustryCheck ? 'issuer-only' : 'unit-lots-only'
+const cases = !issuerEventCheck && !issuerIndustryCheck && (eventRangeCheck || eventRangeActive || (focusActive || focusCheck) && !(calendarCheck || scope7Check)) ? {} : require(path.join(sourceRoot, 'components/StockOverview.test.tsx'))
 const memoryCases = eventRangeCheck || eventRangeActive || (focusActive || focusCheck) && !(calendarCheck || scope7Check) ? {} : require(path.join(sourceRoot, 'stockPriceMemoryRead.test.ts'))
 const memoryRead = require(path.join(sourceRoot, 'stockPriceMemoryRead.ts'))
 const savedCases = eventRangeCheck || eventRangeActive || focusActive || focusCheck ? {} : require(path.join(sourceRoot, 'stockPriceSavedRead.test.ts'))
@@ -265,6 +275,14 @@ async function check() {
     originalError(...values)
   }
   typecheck()
+  if (issuerIndustryCheck) {
+    const checks = await checkIssuerIndustry()
+    assert(Object.values(counts).every(count => count === 0) && ownedChildren.length === 0, 'industry guards and compiler children zero')
+    console.log(JSON.stringify({ passed: true, contract: industryPins.consumer_version, ...checks, compiler_children: 0,
+      known_react_router_ssr_useLayoutEffect_warnings: knownSSRWarnings, ...receipt(),
+      not_run: ['external source', 'browser native UI', 'disk persistence', 'production build', 'old regression suites'] }))
+    return
+  }
   if (issuerEventCheck) {
     const checks = await checkIssuerEvent()
     assert(Object.values(counts).every(count => count === 0), 'issuer guards zero')
@@ -1016,6 +1034,61 @@ async function check() {
     ...receipt(), not_run: ['backend rerun', 'external source', 'browser native UI', 'disk persistence', 'full build', 'historical price/MA20'] }))
 }
 
+async function checkIssuerIndustry() {
+  const tests = require(path.join(sourceRoot, 'twseIssuerIndustry.test.ts'))
+  const contract = require(path.join(sourceRoot, 'twseIssuerIndustry.ts'))
+  const targeted = tests.runTwseIssuerIndustryTests(renderToStaticMarkup)
+  const registry = JSON.parse(fs.readFileSync(path.join(root, 'backend/worker/twse_industry_registry.json'), 'utf8'))
+  assert.deepEqual(registry, contract.INDUSTRY_CITATION, 'backend and frontend declarations are the same exact citation')
+  const { content_digest, ...registryPayload } = registry
+  assert.equal('sha256:' + crypto.createHash('sha256').update(contract.industryCanonical(registryPayload)).digest('hex'), industryPins.registry_digest)
+  assert.equal('sha256:' + crypto.createHash('sha256').update(contract.industryCanonical(registry.declaration)).digest('hex'), contract.INDUSTRY_EXCERPT_DIGEST)
+  const App = await appSSRModule()
+  const { QueryClient, QueryClientProvider } = requireDependency('@tanstack/react-query')
+  const { MemoryRouter } = requireDependency('react-router-dom')
+  let appChecks = 0, returnChecks = 0, proxyChecks = 0
+  const verify = (condition, message, kind = 'app') => {
+    if (kind === 'return') returnChecks++; else if (kind === 'proxy') proxyChecks++; else appChecks++
+    assert(condition, message)
+  }
+  const renderStock = (symbol, cutoff = '2026-10-08', failure = false, mutate = () => {}) => {
+    const f = tests.createIndustryFixture(symbol)
+    const instrument = { id: 1, exchange: 'TWSE', symbol, name: 'Synthetic route identity', instrument_type: 'stock' }
+    const data = { instrument, overview: f.overview, bars: [], features: {}, chips: [], groups: [], news: [], events: [], corporate_actions: [], fundamentals: [], data_quality: [], signals: [], strategy_conditions: {}, decision_summary: null }
+    mutate(data)
+    const query = new URLSearchParams({ as_of: cutoff, from: 'official-events', focus_as_of: '2026-10-08', focus_q: symbol, focus_from: '2026-10-06', focus_to: '2026-10-15', focus_event_kind: 'all' })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+    const key = ['stock', 'TWSE', symbol, cutoff]
+    client.setQueryData(key, data)
+    if (failure) client.getQueryCache().find({ queryKey: key }).setState({ status: 'error', error: new Error('synthetic trusted 502') })
+    try { return renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MemoryRouter, { initialEntries: ['/stocks/TWSE/' + symbol + '?' + query] }, React.createElement(App.default)))) }
+    finally { client.clear() }
+  }
+  for (const symbol of ['1449', '1463', '2614']) {
+    const f = tests.createIndustryFixture(symbol), html = renderStock(symbol)
+    verify(html.includes('<td>' + f.trace.row.name_zh + '</td>') && html.includes(f.data.row.full_name) && html.includes('官方文件觀測日'), 'App adds quoted name beside original identity and event sources')
+    verify(html.includes('dfba7e99') && html.includes('2025-06-09') && html.includes('official-event-focus-title'), 'App wires typed citation and original focus return')
+    for (const [cutoff, failure] of [['2026-10-07', false], ['2026-10-08', true]]) {
+      const rejected = renderStock(symbol, cutoff, failure)
+      verify(!rejected.includes('<td>' + f.trace.row.name_zh + '</td>') && !rejected.includes('dfba7e99') && !rejected.includes('1'.repeat(64)), 'earlier or failed read clears name and all citation provenance')
+    }
+    const bad = renderStock(symbol, '2026-10-08', false, data => { data.overview.issuer_industry_trace.provenance.taxonomy_citation.evidence_delivery.original_body_sha256 = 'fake' })
+    verify(!bad.includes('<td>' + f.trace.row.name_zh + '</td>') && !bad.includes('dfba7e99'), 'invalid citation clears only the new trace')
+    const conflict = renderStock(symbol, '2026-10-08', false, data => { data.overview.events.rows[0].company_name = 'conflict' })
+    verify(!conflict.includes('<td>' + f.trace.row.name_zh + '</td>') && !conflict.includes('dfba7e99') && !conflict.includes(f.data.row.full_name), 'same token event name conflict clears all three dependent displays')
+  }
+  const back = new URL(App.officialEventFocusReturnPath(new URLSearchParams({ as_of: '2026-10-07', from: 'official-events', focus_as_of: '2026-10-08', focus_q: '2614', focus_from: '2026-10-06', focus_to: '2026-10-06', focus_event_kind: 'ex_right_and_dividend' })), 'https://local.invalid').searchParams
+  verify(back.get('as_of') === '2026-10-08' && back.get('q') === '2614' && back.get('from') === '2026-10-06' && back.get('to') === '2026-10-06' && back.get('event_kind') === 'ex_right_and_dividend', 'all original five conditions survive changed detail cutoff', 'return')
+  for (const [method, target, body, expected] of [
+    ['POST', '/api/stocks/TWSE/1449/issuer-profile/capture?as_of=2026-10-08', '{}', null],
+    ['GET', '/api/stocks/TWSE/2614?as_of=2026-10-07', '', null],
+    ['POST', '/api/stocks/TWSE/0056/issuer-profile/capture?as_of=2026-10-08', '{}', 405],
+    ['POST', '/api/stocks/TWSE/1449/issuer-profile/capture?as_of=2026-10-08&as_of=2026-10-08', '{}', 422],
+    ['GET', '/__price_validation/receipt', '', 405],
+  ]) verify((issuerEventRequestError(method, new URL(target, 'https://local.invalid'), Buffer.from(body))?.[0] ?? null) === expected, 'industry mode reuses the exact bounded issuer/event API scope', 'proxy')
+  return { citation_and_component_checks: targeted, full_app_checks: appChecks, original_five_return_checks: returnChecks, proxy_checks: proxyChecks }
+}
+
 async function checkIssuerEvent() {
   const App = await appSSRModule()
   const helper = require(path.join(sourceRoot, 'twseIssuerProfile.ts'))
@@ -1473,10 +1546,10 @@ async function proxy(request, response) {
   const url = new URL(request.url, `http://127.0.0.1:${port}`)
   let body
   if (eventRangeActive) {
-    const refusedBeforeBody = (issuerEventActive ? issuerEventStaticError : eventRangeStaticError)(request.method, url.pathname)
+    const refusedBeforeBody = (issuerEventActive || issuerIndustryActive ? issuerEventStaticError : eventRangeStaticError)(request.method, url.pathname)
     if (refusedBeforeBody) { requests.rejected++; return json(response, refusedBeforeBody[0], { detail: refusedBeforeBody[1] }) }
     try { body = await boundedJointBody(request) } catch (error) { requests.rejected++; return json(response, error.status ?? 422, { detail: 'event_range_request_body_invalid' }) }
-    const refused = (issuerEventActive ? issuerEventRequestError : eventRangeRequestError)(request.method, url, body)
+    const refused = (issuerEventActive || issuerIndustryActive ? issuerEventRequestError : eventRangeRequestError)(request.method, url, body)
     if (refused) { requests.rejected++; return json(response, refused[0], { detail: refused[1] }) }
   } else if (stockScope6Active) {
     const refusedBeforeBody = scope6StaticError(request.method, url.pathname)
@@ -1534,6 +1607,7 @@ async function proxy(request, response) {
   }
 }
 function previewBanner(newScope = stockScope6Active) {
+  if (issuerIndustryActive) return '<div style="padding:8px;background:#573e18;color:#fff">公司產業名稱驗收：公司目錄僅供路由，先明示取得本次事件與公司資料。碼名引用僅支持 TWSE 04、20，不代表完整分類或族群成員。</div><div id="root">'
   if (issuerEventActive) return '<div style="padding:8px;background:#573e18;color:#fff">公司與事件驗收：公司目錄僅供路由。先取得本次官方事件，再明示取得三個代號的官方公司基本資料；原件僅留本程序記憶體。</div><div id="root">'
   if (eventRangeActive) return '<div style="padding:8px;background:#573e18;color:#fff">官方事件條件驗收：個股目錄僅為合成路由身分。本次官方事件須經明示首次取得；原件僅留本程序記憶體。</div><div id="root">'
   return newScope

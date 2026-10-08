@@ -275,3 +275,20 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 - 族群詳情只在 public marker、整份 typed shape、ID／pair 唯一及 ordered symbol 對齊都合法時建立 `/stocks/{exchange}/{symbol}`；文字顯示 exchange＋symbol，同 symbol 跨市場仍可分辨，React key 使用 identity 加序位。Legacy 或 malformed 只顯示文字，不查目前 member page，也不因 pagination 是否載完而改變連結。
 - 候選的「評分日期」讀 score `trading_date`；成員表的「成員資料截至」獨立讀 members response `meta.data_as_of`。不得用目前 members、不同日期或已載入的單一 member page 反推 score candidate identity。
 - 有限 review 涵蓋 ORM readback、API route 投影、inactive／後日退出、跨市場同 symbol、大整數 ID、malformed／legacy、source membership／type-category、pagination 與 React SSR；不涵蓋 socket、lifespan、真瀏覽器、full backend、正式 DB、效能、PIT 或歷史回算。Instrument status／type／category 缺完整歷史版本，因此來源日核對仍不是 source-effective metadata truth。
+
+## 10. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩完整碼名本地引用
+
+2026-10-08。本節只規範三公司原碼到兩條TWSE完整名稱的引用展示；新來源／canonical declaration pins及本次fresh原件由[來源 §42](SOURCE_REGISTRY.md)管理，ROOT已有限接受資料／API及[個股頁 §47](STOCK_RESEARCH_PAGE.md)的可信desktop／narrow具名操作與真失敗清值。§1–9既有完整期待表、canonical group、collector／membership／DB修復與前端guard保持原文，不因本展示升格或解除。
+
+| exact exchange／raw code | 完整官方名稱 | 本次selected |
+| --- | --- | --- |
+| TWSE／`04` | 紡織纖維 | 1449、1463 |
+| TWSE／`20` | 其他 | 2614 |
+
+引用profile `twse_two_code_complete_name_local_citation`／consumer `twse-issuer-industry-trace/m1-v1` 不使用全域code或ordinary mapper替代證據。raw碼保留原string，只有精確TWSE／04或20可命中；不trim、補零、轉數字、跨市場或用Other作unknown fallback。特殊／停用／unknown／missing／格式錯誤／其他碼或市場皆unavailable；名稱／來源URL／日期精度／宣告結構／external pin任一矛盾亦拒用。只兩碼引用、不代表其他碼已重新驗證或整張2026 current表通過。
+
+來源分工：B.12.00附錄三直接支持兩完整code-name pairs；2023-05-30公告的2023-07-03變更支持16及35–38版本脈絡；FL007104第2條2025-06-09修正的33名稱清單支持兩完整名稱仍在列。官方文件是parsed evidence，sourceUse限TWSE條款§8下ROOT核定的有來源、保完整名稱本地研究；沒有PDF／公告raw body或receipt SHA，canonical ROOT-attested excerpt hash只識別引用宣告，不是原件hash。引用不自動准整碼表OGL／重發布／原文件下載或保存。
+
+B.12.00修訂2018-10、實施2020-03維持month precision，不補造月首日；公告published2023-05-30／patch effective2023-07-03及規則revision2025-06-09各自保留，不能替代公司分類effective。本輪metadata observed2026-10-08、公司出表2026-10-07、listing、Taipei觀測、研究cutoff及事件effective再分列；`company_classification_effective_date=unknown`，publication／firstavailability／revision未知／nonPIT。
+
+展示同時要求精確公司Code／名稱join、同cutoff issuer及event originals／版本／dualSHA、兩碼引用registry／consumer外部pins與原row ordinal；metadata或任一原件observed晚於cutoff拒用。原issuer v1 classification仍unsupported；此名稱不證ordinarysecurity／0056 ETF、完整market universe、group membership／排名、分類歷史、price／MA20／策略／Plan。不得更新正式／.local DB、membership periods或重算舊scores／signals，也不撤除既有族群關聯guard。

@@ -1,5 +1,6 @@
 import type { Instrument, InstitutionalDailyData, InstitutionalWindowReceipt, InstitutionalWindowsData, OfficialEventsData, StockOverviewData, StockPriceSavedData, TwseIssuerProfileData } from '../types'
 import { issuerSupported, validTwseIssuerProfile } from '../twseIssuerProfile'
+import { TwseIssuerIndustry } from './TwseIssuerIndustry'
 import { memoryPriceCaptureReady, PRICE_HEADERS, PRICE_SYMBOL_NAMES, priceMemoryInstrumentSupported, priceSourcePins, validStockPriceMemoryRead } from '../stockPriceMemoryRead'
 import { privatePriceSupported, validStockPriceSavedRead } from '../stockPriceSavedRead'
 import { validSavedFocusStock } from '../savedPriceFocus'
@@ -561,6 +562,7 @@ export function StockOverview({ data, instrument, explicitCutoff, onCapturePrice
       <section className="panel overview-conditions"><h3>研究條件</h3>{data.conditions.map((condition) => <div className="overview-condition" key={condition.strategy}><div className="position-head"><strong>{condition.label}</strong><span className="badge">{condition.status === 'met' ? '成立' : condition.status === 'not_met' ? '未成立' : '資料不足'}</span></div><p className="small-note">既有結果日期 {formatResearchDate(condition.signal_date)}</p><Reasons reasons={condition.reasons} /><details className="technical-details"><summary>查看策略版本</summary>{condition.strategy} · 版本 {condition.version ?? '尚無可核對結果'}</details></div>)}<p className="small-note">沿用既有固定規則；輸入需求不等於條件成立，仍需補齊資料後才能形成完整交易計畫。</p></section>
       {data.issuer_profile && instrument?.exchange === 'TWSE' && <TwseIssuerProfile data={data.issuer_profile} events={data.events} exchange={instrument.exchange} symbol={instrument.symbol} cutoff={explicitCutoff || data.as_of} onCapture={onCaptureIssuer} busy={capturingIssuer} requestFailure={issuerRequestFailure} />}
       <OfficialEvents data={data.events} onCapture={onCaptureEvents} busy={capturingEvents} requestFailure={eventRequestFailure} />
+      {data.issuer_industry_trace && instrument?.exchange === 'TWSE' && <TwseIssuerIndustry data={data.issuer_industry_trace} issuer={data.issuer_profile} events={data.events} exchange={instrument.exchange} symbol={instrument.symbol} cutoff={explicitCutoff || data.as_of} requestFailure={issuerRequestFailure} />}
       <section className="panel"><h3>新聞與公告入口</h3><p>保留既有來源連結、發布與事件時間。</p><button type="button" className="secondary-button" onClick={onNews}>查看新聞與公告</button><p className="small-note">新聞採已核對的發布／事件時間截至；未知時間或超過截止的項目不混入本次清單。</p></section>
     </div>
     <details className="technical-details"><summary>研究範圍與總覽版本</summary>總覽版本 {data.version}。法人窗口依上方各窗狀態，支持範圍及截止見法人區塊；價格、設定的單日法人原件及明示取得的除權息預告沿各自證據；其他範圍與研究條件尚未完成。歷史當時可得（PIT）未支援。</details>

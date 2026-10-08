@@ -643,3 +643,27 @@ ROOT actual20 TestClient calls含8invalid issuerPOST先422／sourceGET0／DB0、
 API26328 normalSTOP raw0，shutdown實際印server_stoppedtrue／兩sourcegets各1／四audit0，完整原件RAM釋放不restart／replay／clone／hydrate／preload。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 rejected0；修字後preview34000／compiler61744 RAM rebuild／normalSIGINT raw1／shutdown GET3 POST1 rejected0，API從未重啟／無新金融GET，兩preview guards／artifacts0。ROOT核5PID absent、8805／8806無listener、唯一ownedpage closed／tabs[]；全部test／product／artifactfiles0B／privateIO0，shared indexcache另報。metadata5／金融2已SPENT，無新quota／diskcase／private／正式DBgrant。
 
 coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成；capital／payout numeric未驗、raw industry不代分類，ordinary20／21closes仍缺rights／calendar。版本及outside-cleanup接受見[協作紀錄](../TASK_COORDINATION.md)，DOCreview／freeze19／qualified7／commit／另准merge仍待；不建附件／來源副本／manifest報表。
+
+## M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼追溯的零落盤驗證入口
+
+2026-10-08。ROOT接受SOURCE12、41backend／7warnings及45src noEmit＋71target checks raw0；本DOC不重跑。新[Test module](../../backend/tests/test_twse_issuer_industry.py)覆蓋two-code exact lookup、其他市場／空白／numeric／special／unknown拒用、external pins／宣告hash／date precision／source URLs、duplicate／conflict、同cutoff與完整dualSHA／ordinal、名稱與raw mappings。RAM fixtures是邊界計算證據，不代真公司／官方文件／可信UI；authority分別見[來源 §42](../SOURCE_REGISTRY.md)、[產業 §10](../INDUSTRY_CLASSIFICATION.md)、[個股頁 §47](../STOCK_RESEARCH_PAGE.md)。
+
+沿[test_official_events.py](../../backend/tests/test_official_events.py)既有zero-disk guard，先安裝audit guard再import pytest／新module；用既有backend/.deps／本根路徑、Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1及pytest noconftest、no cacheprovider／logging。只RAM fixtures／SQLite，不import app.main／conftest、建DB或寫Temp；完整本輪實際命令／版本／exit與限制留ROOT原task，不另建helper／環境／附件。
+
+前端沿既有[RAM preview入口](../../tools/tpex-price-preview.cjs)的新bounded mode：
+
+```powershell
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --issuer-industry-check
+```
+
+45src noEmit＋71target checks是synthetic tuple／validator／SSR／query error與routing／proxy guard證據，不是financial truth／native UI／production build／磁碟保存。Serve只proxy ROOT-owned API，`--issuer-industry` 必須另有exact industry registry／consumer四external pins及已准入issuer／event pins；舊defaults／其他opt-in不自動升格。
+
+ROOT兩fresh financial GET各1、NEW empty distinct generation、全1095×33 issuer與58×12event ORIGINAL body／receipt同RAM逐列核及21 direct API已受驗；金融quota2已SPENT，metadata parsed reader不證raw HTTP總數。Gov／Swagger新actual200及Swagger extractor KeyError raw1不重GET由來源§42記錄。Swagger抽取／offscreen ACK未delivery／inspection SyntaxError／DOC首命令CreateProcess os206（process0／write0）原失敗保留，不改exit或當來源／MCP阻擋；後續有效接受分報。
+
+ROOT可信desktop1365×900／narrow390×844三股六原欄＋04／04／20完整名稱／三事件型、三完整trace與雙原件SHA／ordinals、分類effective未知、原五條件back／真零／missing／earlier07→08恢復、真失敗清值／nooverflow已接受。Missing／0056拒用另有narrow390及實際desktop1277核對；native select／navigation會重設emulated viewport到1277，ROOT重新設390並讀回才計窄版，不冒稱原一次尺寸。
+
+原ROOT Orca eval shell quoting SyntaxError raw1、RAM reader regex escaping四Python SyntaxError raw1（filewrites0）、offscreen／非可見tab ACK未delivery、一次NaN scroll raw1保留。UI assertion使用URL未定義ReferenceError但actual DOM正確，修reader後成功、沒有source change；network limit6未被host限制、stdout truncation raw0，沒有HAR／落盤。只以 computer-use 恢復 Orca 視窗及選自有瀏覽器 tab（no screenshot），後續Orca trusted native按實際效果驗，不DOM mutation／新source GET；錯誤不改exit、不記passed。
+
+API52996／session88784正常STOP raw0，實際SHUTDOWN／server_stopped=true／artifact0B，兩完整ORIGINAL RAM隨process終止釋放；preview55124／compiler31816／session47349正常SIGINT raw1，SHUTDOWN GET46／POST7／rejected0／FS、network、subprocess guards0／diskartifact0。三PID absent、8807／8808無listen、唯一ownedpage正常close receipt `a01ac02e-171e-4de1-acfa-54cb2c026833`／tabs[]核raw0；new test／productartifactfiles0B／privateIO0／DBfiles0。服務清理與正常SIGINT raw1分報，不restart／replay／clone／hydrate、不改退出值。
+
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0、完整M1／M2／M3未完成；未跑production build／full suite／DB／diskcase／privateIO，shared indexcache另報。詳細命令／版本與一次性驗收留原task，不新增來源副本／manifest附件或保留整套成功產物。版本與有限outside cleanup見[協作紀錄](../TASK_COORDINATION.md)，DOC review／freeze／索引／commit／另准merge仍待。

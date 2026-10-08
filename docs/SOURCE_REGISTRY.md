@@ -1553,3 +1553,45 @@ Taipei觀測10/08，選定研究cutoff2026-10-08；本批公司原出表1151007�
 API26328正常STOP raw0實際印server_stoppedtrue／issuer_source_gets1／event_source_gets1／四audit0；完整原件隨API釋放，不restart／replay／clone／hydrate／preload。兩preview只RAM rebuild、無重啟API／新GET，五PID absent／8805、8806無listen／onlyownedpage關閉／tabs[]、test／product／artifactfiles0B／privateIO0已ROOT接受，shared indexcache另報，驗證及正常SIGINT raw1收據見[開發入口](development-baseline/README.md)。
 
 本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；metadata／DOC不計依賴解除，完整M1／M2／M3未完成。SOURCE13＋DOC6待review／freeze／索引／commit／另准merge，下一產業trace與finite新quota未准入，詳[執行清單](ROADMAP_EXECUTION.md)；正式DB／採購／外部帳戶／交易未授，完整原始收據留ROOT原task。
+
+## 42. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼引用與同截止原件
+
+2026-10-08。ROOT已有限接受SOURCE12、兩完整TWSE碼名有來源引用本地研究、兩fresh金融原件、21 direct API與可信desktop／narrow全矩陣及實際停止後failure clear。本批coreoperation+1／standalone coredependency0／reliability0／stall0→0，不外推完整M1／M2／M3。分類語意見[產業 §10](INDUSTRY_CLASSIFICATION.md)，操作及待驗見[個股頁 §47](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)。
+
+### 42.1 官方引用與用途
+
+| 官方證據 | 本輪核對內容／日期角色 |
+| --- | --- |
+| [TWSE B.12.00](https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf) | 附錄三完整 `04＝紡織纖維`、`20＝其他`；printed p92／zero-based p100／parsed104頁。107/10修訂、109/03實施，分別2018-10／2020-03，保留month precision。 |
+| [2023產業格式公告](https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024) | published2023-05-30、patch effective2023-07-03；16更名及35–38新增作版本脈絡，不代公司分類生效。 |
+| [FL007104第2條](https://twse-regulation.twse.com.tw/TW/law/DAT0201_print.aspx?FLCODE=FL007104) | 修正2025-06-09；33名稱清單仍含兩完整名稱，並非本輪完整code表或2026完整current證明。 |
+
+以上是ROOT核對的 `parsed_official_document`，沒有原始文件body／ORIGINAL receipt SHA，不能捏造PDF／公告／規則raw傳輸雜湊。依[TWSE使用條款](https://www.twse.com.tw/zh/terms/use.html) §8，ROOT本輪限縮解釋僅准兩條完整碼名的本地研究引用，條件為identify_source及preserve_complete_name_integrity；不將政府issuer資料OGL移轉為整碼表OGL，不准完整表重發布或原文件下載／保存。此引用不證完整current taxonomy、ordinary／ETF身分、membership、公司分類effective／PIT或策略。
+
+新[引用registry](../backend/worker/twse_industry_registry.json)：`twse-industry-citation-r1-2026-10-08.1`／profile `twse_two_code_complete_name_local_citation`，external registry digest `sha256:75b7667f65a9da7397a72a1e9c494a35364f7563faedc4df2cda21f12e61b647`；consumer `twse-issuer-industry-trace/m1-v1`／policy digest `sha256:e9815a28d0ec22d29cd82c5524b02612debff4fec0110465002f6016afbae9b8`。引用宣告version `twse-two-code-citations/b12-notice-fl007104-2025-06-09-v1`／canonical ROOT-attested excerpt digest `sha256:dfba7e99fdb9343d71b34361afc04c0198a3ab1ebc31ff8a175fee588aa0fac8`；這些是canonical宣告pin，不是來源文件raw SHA。原四源defaults／pins、issuer v1及§41原契約保持。
+
+新Gov／Swagger actual directRAW均HTTP200，日期為UTC2026-10-08；Gov [dataset18419](https://data.gov.tw/api/v2/rest/dataset/18419)4759B，SHA `a12cfebfba57d5666d12c57f1e094a7802b001359d2c189c5857cb1f6d19b6d9`，00:25:30.156443～00:25:30.388763+00:00，license1／free／33欄；[Swagger](https://openapi.twse.com.tw/v1/swagger.json)309960B，SHA `06e1cea82448361e733a0ad1ae16e52f5d5d6b71905acd078472f852c32c0eb0`，00:25:30.388763～00:25:30.524342+00:00，適用既有33 string schema。bytes／SHA與前版相同仍是本次新actual GET；ROOT extractor假設items造成KeyError raw1保留，未重GET，不改寫extractor成功。其他官方metadata reader只證parsed核對，不推算raw HTTP請求總數。
+
+### 42.2 兩份本輪fresh ORIGINAL
+
+各producer NEW empty distinct generation、ONE exact HTTPS GET／single attempt；FIRST失敗亦SPENT。5MiB／identity／retry0／redirect0／warmup0、per-operation20秒上限（實際timeout15）及30秒cooperative非harddeadline沿issuer／event已准入契約。完整原body＋ORIGINAL receipt停止前在ROOT本程序同RAM held objects逐列獨立核，taxonomy runtime GET0；financial quota2已SPENT，不以body相同重用舊receipt／generation。
+
+| 原件 | issuer：t187ap03_L | event：TWT48U_ALL |
+| --- | --- | --- |
+| HTTP／body bytes／完整範圍 | 200／1327573B／1095 unique×33＝36135原string | 200／15728B／58列×12＝696原string；52息／5權／1權息 |
+| body SHA-256 | `154d8129ab0db28404b93ca46ce8057f71f036d440d1592b53f8dd5fc2048115` | `eaeb52d866a371f7062dd019c38aee13534f024a44fc47d24b7ec3f591533640` |
+| ORIGINAL receipt bytes／SHA-256 | 6965B／`5d6c5f2a8219e680ce4b7a04a37d8a74b1314f55b0cce1baabbea2bd9bf37445` | 4463B／`68a7a10c423a64fd84174740d248f20796de1d3d9df7c1203a3006070d4a77f2` |
+| UTC start／end | 2026-10-08T00:51:57.321860+00:00／2026-10-08T00:52:04.316732+00:00 | 2026-10-08T00:51:54.752129+00:00／2026-10-08T00:51:57.291640+00:00 |
+| producer generation | `b8652dd0-db12-4662-bf2b-e1e8ea21dbfc` | `19c0d5cb-ee45-4a48-baed-1819c56db1fa`（外部generation，非receipt欄） |
+
+ROOT核完整schema／maps／dates／ordinals／dualSHA；新body SHA與§41相同，但本次fresh GET／receipt／generation不同。selected1449／1463／2614 raw04／04／20精確引用紡織纖維／紡織纖維／其他；公司六原欄、原Code／Name exact join與report1151007／listing日期保持，capital／issuedshares／payout numeric NOT VALIDATED。Taipei觀測及metadata觀測2026-10-08／研究cutoff2026-10-08；publication／firstavailability／revision與公司分類生效仍unknown／nonPIT。
+
+### 42.3 已接受與釋放邊界
+
+21 direct API checks已ROOT接受：FIRST前8 invalid422／sourceGET0／DB0；三真公司同cutoff碼名及完整issuer／event dualSHA，三cachedPOST／missing／earlier07／0056 unavailable、08恢復；1463權10/15真零仍total58／range2／kind0／items[]。既有issuer capture明示取得，industry是同資料pure-read投影、不新增producer／外網／DB寫入。
+
+可信desktop1365×900／narrow390×844三股公司六原欄／04、04、20與完整碼名／三事件型、完整引用trace／dualSHA／ordinals／分類effective未知、真零／missing／earlier恢復／原五條件back／nooverflow已接受，詳個股頁§47。API停止後same-key1449 READ實際失敗清headline及三table／provenance、crossselected1463 GET502整頁error與清值均受驗，不作positive。
+
+停止前ROOT另核完整same held originals identity／全schema／1095 unique／58及dualSHA，sourceGET仍各1、所有guards0。API52996正常STOP raw0，實際SHUTDOWN／server_stopped=true／artifact0B；兩ORIGINAL RAM隨process終止釋放，不restart／replay／clone／hydrate。Preview55124／compiler31816正常SIGINT raw1，實際SHUTDOWN GET46／POST7／rejected0、FS／network／subprocess guard0／diskartifact0。三PID absent、8807／8808無listen、唯一ownedpage正常closed／tabs[]已核；new test／productartifactfiles0B／privateIO0／DBfiles0，shared indexcache另報。必要41backend／7warnings與45src noEmit＋71targetchecks raw0；原失敗／ACK未delivery及viewport讀回界線留[開發入口](development-baseline/README.md)／ROOT原task，不改exit。
+
+本批僅兩碼本地引用及三公司具名研究操作；capital／issuedshares／payout numeric、ordinary／0056ETF／完整current taxonomy／membership／排名／歷史price／PIT／策略／Plan／保存未驗。Financial quota2 SPENT、舊originals不可重開或重用；下一具名新核心與新source／時間／保存gate另核，見[執行清單](ROADMAP_EXECUTION.md)。SOURCE12＋DOC7 exact19待ROOT DOC review／freeze／索引／commit／另准merge；正式DB／採購／外部帳戶／交易未授，最終收據留原task。
