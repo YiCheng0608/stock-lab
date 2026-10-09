@@ -1,12 +1,12 @@
 # 開發與驗證入口
 
-協作、資料選擇、產物配額、保留例外與清理失敗依 [AGENTS](../../AGENTS.md#驗證資料與暫存)；現行接手與未清資源記在原 GitHub Issue；[遷移入口](../TASK_COORDINATION.md)只保留設定缺口及歷史。本文負責可重建入口、副作用與驗收方式。新任務的命令、版本、exit、計數、hash、退修及提交收據留原 Issue／Git；下列既有 task／ROOT／freeze 收據是歷史證據，不能當現行派工或授權，歷史 pass 不代表目前來源已驗收。
+本文管理可重建入口、副作用與驗收方式；資料、產物配額、保留及清理依 [AGENTS](../../AGENTS.md#驗證資料與暫存)。接手與未清資源記原 GitHub Issue；命令／版本／exit／計數／hash／退修／提交收據留原 Issue／Git，入口見[遷移說明](../TASK_COORDINATION.md)。下列 task／ROOT／freeze 收據只證歷史，不授權現行派工，也不證目前來源通過。
 
 ## 版本與資料
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
-使用已啟動 API／preview 時，另依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核 PID、載入來源／bundle、埠及 proxy upstream；commit 不會更新舊程序。並行任務先分配資源，無法隔離就順序驗證。原件生命週期、quota 與 NO-RETRY 維持，不能為補版本證據擅自重啟或重取來源。
+使用 API／preview 前，依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核實載入版本與資源隔離；commit 不更新舊程序，補版本證據仍須遵守原件生命週期、quota 與 NO-RETRY。
 
 ## 後端驗證
 

@@ -179,8 +179,8 @@ Pop-Location
 & ./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests')
 ```
 
-個股頁驗收見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md)，全站 UX 見 [UX_REVIEW](UX_REVIEW.md)。瀏覽器只使用隔離 API，或已確認安全、owner 同意且實際載入版本適用本候選的其他任務既存服務；PID、來源版本、埠與 proxy 對應依[執行資源與服務版本](GITHUB_WORKFLOW.md#執行資源與服務版本)核對，不以可連線或乾淨工作樹代替。不得為驗收啟動會寫正式／`.local` DB 的舊 lifespan，也不得干擾其他服務。fixture、screenshot、typecheck、build 與真 API 各自證明不同層次，不能互相取代。
+個股頁驗收見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md)，全站 UX 見 [UX_REVIEW](UX_REVIEW.md)。瀏覽器使用隔離 API；沿用其他任務服務須確認安全、owner 同意及版本適用，依[服務版本規則](GITHUB_WORKFLOW.md#執行資源與服務版本)核對實際載入與連線。不得啟動會寫正式／`.local` DB 的舊 lifespan 或干擾其他服務。fixture、screenshot、typecheck、build 與真 API 的證據不能互相取代。
 
 ## 8. 排程與未完成工作
 
-目前沒有 Windows Task Scheduler 或 Codex 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。現行任務與驗收條件查原 GitHub Issue 及其連結的規格，[ROADMAP 執行清單](ROADMAP_EXECUTION.md)只供歷史驗收拆解參考，不能由文件、fixture、外部 startup 或 readiness 通過改判完成。
+目前沒有 Windows Task Scheduler 或 Codex 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格，[執行清單](ROADMAP_EXECUTION.md)只供歷史參考；文件、fixture、外部 startup 或 readiness 不證任務完成。
