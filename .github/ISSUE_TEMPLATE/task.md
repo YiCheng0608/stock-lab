@@ -27,6 +27,7 @@ Milestone：使用 GitHub 原生欄位；新增必要工作列受阻的既定 AC
 
 真實來源／日期／市場標的／用途／授權與版本：
 必要依賴與已驗收且可使用的版本證據：
+本單開工所需條件／執行後才驗收的交付結果（資料取得或准入評估勿倒置成先完成本單）：
 建立原生母單、blocked-by／blocking 關係；沒有母單填獨立小功能：
 無原生支援時依手冊填兩組獨立關係連結：
 Priority／Status／Kind／Ready／Blocked／Paused 請填 Project 欄位；排序理由：
@@ -36,6 +37,7 @@ Priority／Status／Kind／Ready／Blocked／Paused 請填 Project 欄位；排�
 全局統籌／任務統籌具名 owner：
 工程師／獨立 QA／文件／索引 Git角色負責範圍：
 寫入白名單／共用檔案協調：
+可與哪些任務獨立執行／真正衝突的操作與隔離安排；派工及補位依[工作手冊](../../docs/GITHUB_WORKFLOW.md#平行派工與補位)：
 UI／API／auditor 埠、資料／輸出目錄與 owner／隔離或順序驗證安排（不適用理由）：
 程式索引 project／worktree root／scope／版本依據／刷新者（沿用 GitHub Issue ID，不另編任務索引）：
 必要規格與驗證入口：
@@ -49,3 +51,4 @@ branch／worktree／base SHA：全局派工並預留名額後建立；terminal�
 新增能力／實際解除依賴／可靠性改善／剩餘缺口／全局停滯收據／下一步理由：
 合併後檢查通過才關單；worktree 清理另行授權。
 PR CI 觀察／處置 owner 與離線接手依工作手冊；失敗回原單，同 branch 修正、受影響 QA 後推同 PR 重跑。
+一般退修由任務統籌在原授權內交回工程角色、核 ACK 及獨立重驗；不新增 WIP 名額或逐輪等使用者指令，外部操作及範圍變更仍依原 gate。
