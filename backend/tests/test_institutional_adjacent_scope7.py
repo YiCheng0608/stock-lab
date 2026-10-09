@@ -10,6 +10,8 @@ import httpx
 from app.institutional_adjacent_scope7 import API_PATH, DIAGNOSTIC_PATH, create_app
 from worker import tpex_institutional_adjacent_scope7 as w
 
+NOW = datetime(2026, 10, 8, tzinfo=timezone.utc)
+
 
 def fixtures(transform=None, extra_dates=("2026-10-07", "2026-10-08"), foreign=None):
     p = w.policy()
@@ -23,7 +25,7 @@ def fixtures(transform=None, extra_dates=("2026-10-07", "2026-10-08"), foreign=N
     requested = ["2026-09-01", "2026-10-01", *daily]
     captures = []
     patterns = (1, -2, 0, 3, 0, -3, 2, 1, 0, -1)
-    start = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    start = NOW
     for ordinal, target in enumerate(requested):
         if ordinal < 2:
             rows = [[d.replace("-", ""), "100", "102", "99", "101", "1"] for d in (*dates, *extra_dates) if d[:7] == target[:7]]
@@ -61,6 +63,9 @@ def producer(captures, fail=None):
 
 
 class AdjacentTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(w, "utcnow", return_value=NOW))
+
     def test_root_literal_and_independent_policy(self):
         raw = w.POLICY_CANONICAL.encode()
         self.assertEqual((len(raw), w.digest(raw)), (9284, "092f86d7fd2797b88f12f92e0474beb120139143ba5c3f3e27edb0c52f5c235e"))
@@ -236,6 +241,9 @@ class AdjacentTests(unittest.TestCase):
 
 
 class APITests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.enterContext(patch.object(w, "utcnow", return_value=NOW))
+
     async def asyncSetUp(self):
         self.p, self.seen = producer(fixtures())
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(self.p)), base_url="http://testclient")
