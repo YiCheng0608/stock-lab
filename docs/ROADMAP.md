@@ -1,6 +1,6 @@
 # 產品路線與能力邊界
 
-本文件管理產品方向、已驗收能力及未完成核心；版本任務集合只在 GitHub milestone，任務排序、依賴、執行狀態與接手只在 GitHub Issues／Projects，入口見[遷移說明](TASK_COORDINATION.md)。流程依 [AGENTS](../AGENTS.md)。2026-10-09 核定 V1 範圍邊界及協作流程，沒有新增產品驗收；核定範圍不解除既有暫停。
+本文件管理產品方向、已驗能力及未完成核心；版本任務在 GitHub milestone，排序與交接在 Issues／Projects，見[遷移入口](TASK_COORDINATION.md)。流程依 [AGENTS](../AGENTS.md)。2026-10-09 核定 V1 範圍及協作流程，未新增產品驗收或解除暫停。
 
 ## 目前產品能力
 
@@ -24,7 +24,7 @@
 
 使用者核定首版完成 **盤後研究 → 保存條件計畫 → 模擬追蹤回看** 的完整流程，先支援 TPEx 普通股 **3105、3293、5274、5347、6488、6510、8069**，後續版本再擴市場及標的。七股是使用者操作範圍，不代表策略必要的基準、有效群組成員或資料來源只需這七股。首版須可手動更新及在多個明選研究截止重複操作，不能只交付固定 2026-10-06 的展示。
 
-本節保存版本承諾與必要能力 gate，逐項版本化 AC、來源／證據對應及必要任務由全局統籌在[治理 Issue](https://github.com/YiCheng0608/stock-lab/issues/1) 與 [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1) 管理，整體操作／發布 gate 由 [V1 整體驗收 Issue](https://github.com/YiCheng0608/stock-lab/issues/26) 承接；repo 不另維護即時 Issue 矩陣。正式產品派工前先完成完整盤點、去重及必要工作對應；尚未核實的來源可用性與依賴保留阻塞，不能稱準備完成。核定邊界、盤點缺口為 0、功能驗收與發布完成是不同結果；判定契約見[版本範圍與完成判定](GITHUB_WORKFLOW.md#版本範圍與完成判定)。
+版本化 AC 及來源／證據對應由全局統籌存於[治理 Issue](https://github.com/YiCheng0608/stock-lab/issues/1)，必要任務納入 [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1)，整體操作／發布 gate 由 [#26](https://github.com/YiCheng0608/stock-lab/issues/26) 承接。派工前盤點、依賴准入及完成判定依[工作手冊](GITHUB_WORKFLOW.md#版本範圍與完成判定)；範圍核定、盤點無缺口、功能驗收與發布完成分別核實。
 
 | 能力 gate | V1 必要邊界與驗收要點 |
 | --- | --- |
