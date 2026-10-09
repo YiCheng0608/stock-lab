@@ -24,6 +24,22 @@
 
 建議看板視圖：產品母單排序、Ready 執行待辦、進行中工作（含阻塞）、待整合、候選待辦。Project 以 Issue 為任務卡；PR 連在 Issue，避免把 PR 和 Issue 算成兩張工作。WIP 是治理規則，未裝自動化不聲稱系統會強制上限。Blocked 不自動釋放名額；全局統籌依 AGENTS 明確掛起並確認停寫後，才可安排前置任務，恢復也須重新排程。
 
+## 待辦涵蓋與補單
+
+GitHub 保存所有已登錄任務；現有 Issues 數量不證全部產品文件已盤點。全局統籌以 PRODUCT_SPEC、ROADMAP、ROADMAP_EXECUTION 與文件索引所指的現行契約為來源，對照已整合及未整合成果。每個目標需能定位到具名 Issue、已驗收版本／證據，或暫緩／不做及其理由；只有寬泛母單標題不算可派工的完整 AC。已驗有限能力不重開，遠期保留粗分，不把所有歷史段落各造一張任務。
+
+初次完整盤點與需求變更時，將「來源章節／版本 → Issue 或既有證據／決策 → 尚缺範圍」的收據留治理 Issue，細項放負責母單；repo 不另建即時任務表。不確定是否已做就記待核，不由程式存在或 closed 狀態推論驗收通過。現有初始匯入未完成逐契約核對前，不宣稱全部遷移完成。
+
+| 時機 | 責任與動作 |
+| --- | --- |
+| 每日第一次開始工作／恢復全局統籌 | 先讀暫停／交接及治理決策，再核新增／變動需求、Ready 任務、依賴與名額；有缺口才補單，不為日期換新而造單。這不是排程，未授權時不建立定時 worker。 |
+| 可開工待辦不足以補滿已核定名額 | 全局統籌細化下一個近期子能力、查可實際解除的依賴；沒有可行工作就回報阻塞／待決，不硬標 Ready。 |
+| 任務驗收或母單整體驗收 | 全局統籌核剩餘 AC、實際新能力、下一個依賴與未覆蓋契約，必要時補單；原 AC 失敗留原單退修。 |
+| 規格、ROADMAP 或產品決策改變 | 全局統籌更新來源對應、去重並調整既有單或建新單；保存 AC 修訂與重新驗證範圍。 |
+| 執行中發現獨立前置／無關 bug／新想法 | 發現者回報原單；任務統籌去重後可建關聯單／候選，附來源、證據與阻擋方向，交全局統籌排序、核 Ready／派工。不能自行追加 worker。 |
+
+補單權限不等於執行授權。通過完整單任務試跑並由全局統籌正式把上限改為 2 後，按空位持續補派；A、B 可同時開發／測試，A 關單釋放名額後可派 C，不必等 B。共用資源依規則隔離或順序驗證，master 整合仍一次一張。
+
 ## 任務識別與程式索引
 
 GitHub Issue ID 回答「做哪件事」，commit SHA 回答「哪個程式版本」，codebase-memory index 回答「從哪份來源查函式、檔案與相依關係」。取得 Issue 不需要另外替任務建索引；純管理、排序及派工操作也不以建立程式索引為前置。程式索引不儲存第二份任務狀態。
@@ -58,6 +74,23 @@ QA 與合併後檢查都須核：
 - 依核准權限配置 master 的 PR review／必要 checks、禁止直接推送／強推／刪除及可寫入主線的整合者；必要 checks 依變更類型選定，不杜撰尚不存在的 CI。設定未驗證就記未設，不能把程序規則說成技術保護。
 
 GitHub 支援自動關單關鍵字，Projects 也有關閉／合併時改狀態的內建 automation，故必須核對這些設定：[連結 PR 與 Issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)、[Projects 內建自動化](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-built-in-automations)。
+
+## GitHub CI 與本機 review／QA
+
+[CI workflow](../.github/workflows/ci.yml) 在往 master 的 PR 建立／更新及 master push 時執行。使用標準 GitHub-hosted Ubuntu runner、唯讀 repository 權限，不取得行情、私人資料、正式 DB 或部署憑證，不啟用付費 Copilot。Actions 的工具安裝、依賴與 build 只在一次性 runner 工作區；不上傳測試產物或另建持久 cache。
+
+| 檢查 | 範圍與限制 |
+| --- | --- |
+| `repository` | 每個 PR／master push 檢查差異空白、變更檔案 UTF-8、Python 語法、JSON／YAML 語法、Markdown 相對檔案連結；Python 變更另跑 Ruff 的 E9／F63／F7／F82。外部網址、標題 anchor 與文件語意仍由 review 核對；不為既有風格差異批量重排產品程式。 |
+| `backend` | backend／工具／CI 或驗證依賴異動時，使用既有 chips API 的五個 `--check` profiles，驗記憶體 fixture、計算及 API 邊界；guard 禁來源 GET、DB 與檔案寫入。不等於完整 backend suite、真實來源或磁碟驗收。 |
+| `frontend` | frontend／backend／工具／CI 異動時，以 pnpm frozen lock 安裝，跑既有 units、search、routes、presentation、stockChart 五個 standalone 回歸模組及 TypeScript／Vite production build。不等於可信瀏覽器操作或所有專用 guarded frontend 測試。 |
+| `required` | 固定名稱的彙整檢查，永遠核對變更分類與所有適用工作的結果；只有不適用的工作可 skipped。失敗、取消、未執行或分類失敗均不得放行。 |
+
+master ruleset 要求來源為 GitHub Actions 的 `required` check，並要求 PR 與最新 base 一致；檢查必須在實際首次成功後配置並讀回，不能把 YAML 存在當作技術保護已啟用。Workflow 本身不使用 paths-ignore，避免必要檢查整體消失；文件-only 的變更仍執行 repository／required，省略產品測試。合併後 master CI 失敗，依 AGENTS 暫停整合並回原 Issue 處理。
+
+本機獨立 AI review／QA 保留：review 查邏輯、差異、規格與潛在缺陷，QA 依原 AC 驗指定版本及真實操作；不由 CI 綠燈取代。AI 審查可用既有獨立 session，意見由任務統籌處理；本流程沒有自動啟用付費雲端 AI reviewer，也不把 CI 成功或 PR merged 自動轉 Done。
+
+CI 是初始回歸範圍。新增功能須在原 Issue 指定適用驗收；若可穩定自動化，工程師於同一 PR 擴充對應 CI 測試入口並由 QA review。外部來源、磁碟、跨程序及可信 UI 仍按本機 gate 授權，不能為 CI 而縮減原 AC。CI 設定或 helper 變更會重跑兩個產品檢查工作；前端依賴與後端驗證版本清單各觸發其所屬檢查，backend 來源變更亦驗前端契約。
 
 ## 模板入口
 
