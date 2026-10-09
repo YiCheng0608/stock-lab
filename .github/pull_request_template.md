@@ -15,6 +15,13 @@ QA 服務版本收據：PID／啟動時間／來源 worktree／載入 SHA 或來
 文件 freeze 範圍／程式索引 project、絕對 root／scope、branch、內容版本依據、generation、coverage 限制與刷新者：
 核准提交檔案／剩餘差異：
 
+## CI 觀察與退修
+
+任務統籌／CI 觀察 owner；離線時下一 owner 及接手確認：
+最新 run URL／attempt、base／head／實際驗證 SHA、必要 checks 結果：
+失敗 job／step／原錯誤與原 Issue 處置收據；未失敗填不適用：
+修正留同 branch／PR，受影響 QA 後重跑；舊 head 成功不覆蓋新版本。暫態重試及釋放整合入口依工作手冊，不以刪除／略過檢查湊綠燈。
+
 ## 串行整合
 
 整合治理 Issue／當前持有者：
