@@ -125,7 +125,7 @@ class Clock:
 
 
 class Response:
-    def __init__(self, body, *, declared=True, eof=True, clock=None, read_delay=0, status=200, headers=None):
+    def __init__(self, body, *, declared=True, eof=True, clock=None, read_delay=0, status=200, headers=None, close_raises=False):
         self.body = body
         self.offset = 0
         self.status = status
@@ -135,6 +135,8 @@ class Response:
         self.clock = clock
         self.read_delay = read_delay
         self.read_calls = []
+        self.close_raises = close_raises
+        self.close_calls = 0
 
     @property
     def known_eof(self):
@@ -151,6 +153,9 @@ class Response:
 
     def close(self):
         self.closed = True
+        self.close_calls += 1
+        if self.close_raises:
+            raise OSError("DO_NOT_RETAIN_RAW" * 1000)
 
 
 class Transport:
@@ -546,6 +551,112 @@ class Boundaries(unittest.TestCase):
             self.assertEqual(len(transport.opens), 1)
             snapshot.release()
 
+    def test_capture_primary_survives_close_raise_and_cleanup_only_rejects(self):
+        for status, code, stage, secondary in ((302, "http_status", "capture_headers", 1),
+                                               (200, "cleanup_failure", "capture_response_close", 0)):
+            transport = Transport(response_options={0: {"status": status, "close_raises": True}})
+            snapshot, _, _ = build(transport=transport)
+            error = self.assertFailure(code, snapshot.acquire)
+            self.assertEqual(error.diagnostics["primary_code"], code)
+            self.assertEqual(error.diagnostics["primary_stage"], stage)
+            self.assertEqual(error.diagnostics["secondary_cleanup_count"], secondary)
+            self.assertEqual(snapshot.diagnostics["code"], code)
+            self.assertEqual(snapshot.diagnostics["primary_stage"], stage)
+            if secondary:
+                self.assertEqual(snapshot.diagnostics["secondary_cleanup_1_stage"], "capture_response_close")
+                self.assertEqual(snapshot.diagnostics["secondary_cleanup_1_code"], "cleanup_failure")
+            self.assertTrue(all(type(value) in (str, int) for value in snapshot.diagnostics.values()))
+            self.assertNotIn("DO_NOT_RETAIN_RAW", repr(dict(snapshot.diagnostics)))
+            self.assertEqual(transport.responses[0].close_calls, 1)
+            self.assertEqual(snapshot.state, "failed")
+            self.assertEqual(snapshot.ledger.attempted, (0,))
+            self.assertEqual(snapshot.ledger.unrun, tuple(range(1, 8)))
+            self.assertEqual(snapshot._capture_buffer, b"")
+            self.assertEqual(len(snapshot.inspection()["captures"]), int(status == 200))
+            self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
+            self.assertFailure("oracle_pending_required", snapshot.admit_independent_verification, admission(snapshot))
+            snapshot.release()
+            self.assertFailure("snapshot_already_attempted", snapshot.acquire)
+
+    def test_https_response_both_closes_attempted_first_cleanup_preserved(self):
+        calls = []
+        class Body:
+            status = 200
+            fp = None
+            def getheaders(self):
+                return ()
+            def close(self):
+                calls.append("response")
+                raise OSError("DO_NOT_RETAIN_RAW_response")
+        class Connection:
+            sock = object()
+            def close(self):
+                calls.append("connection")
+                raise RuntimeError("DO_NOT_RETAIN_RAW_connection")
+        response = source._HTTPSResponse(Connection(), Body())
+        error = self.assertFailure("cleanup_failure", response.close)
+        self.assertEqual(calls, ["response", "connection"])
+        self.assertIsNone(response.socket)
+        self.assertEqual(error.diagnostics["primary_stage"], "https_response_close")
+        self.assertEqual(error.diagnostics["secondary_cleanup_count"], 1)
+        self.assertEqual(error.diagnostics["secondary_cleanup_1_stage"], "https_connection_close")
+        self.assertNotIn("DO_NOT_RETAIN_RAW", repr(dict(error.diagnostics)))
+        # The outer capture already has an HTTP failure: preserve that primary
+        # while flattening both close failures from the real response wrapper.
+        calls.clear()
+        class WrappedTransport:
+            def open(self, url, timeout):
+                body = Body()
+                body.status = 302
+                return source._HTTPSResponse(Connection(), body)
+        snapshot, _, _ = build(transport=WrappedTransport())
+        error = self.assertFailure("http_status", snapshot.acquire)
+        self.assertEqual(calls, ["response", "connection"])
+        self.assertEqual(error.diagnostics["primary_stage"], "capture_headers")
+        self.assertEqual(error.diagnostics["secondary_cleanup_count"], 2)
+        self.assertEqual(error.diagnostics["secondary_cleanup_1_stage"], "https_response_close")
+        self.assertEqual(error.diagnostics["secondary_cleanup_2_stage"], "https_connection_close")
+        self.assertTrue(all(type(value) in (str, int) for value in snapshot.diagnostics.values()))
+        self.assertNotIn("DO_NOT_RETAIN_RAW", repr(dict(snapshot.diagnostics)))
+        self.assertEqual(snapshot.ledger.attempted, (0,))
+        self.assertEqual(snapshot.state, "failed")
+        snapshot.release()
+
+    def test_https_open_connect_header_primary_survives_multiple_cleanup(self):
+        clock = Clock()
+        for phase in ("connect", "headers"):
+            calls = []
+            class Body:
+                def close(self):
+                    calls.append("response_close")
+                    raise OSError("DO_NOT_RETAIN_RAW_response")
+            class Socket:
+                def settimeout(self, value):
+                    pass
+            class Connection:
+                def __init__(self, *args, **kwargs):
+                    self.sock = Socket()
+                def connect(self):
+                    calls.append("connect")
+                    if phase == "connect":
+                        raise OSError("DO_NOT_RETAIN_RAW_connect")
+                def request(self, *args, **kwargs):
+                    calls.append("request")
+                def getresponse(self):
+                    calls.append("headers")
+                    clock.now += 21
+                    return Body()
+                def close(self):
+                    calls.append("connection_close")
+                    raise RuntimeError("DO_NOT_RETAIN_RAW_connection")
+            expected = "https_connect_failure" if phase == "connect" else "cooperative_deadline"
+            with patch.object(source.time, "monotonic", clock), patch.object(source.http.client, "HTTPSConnection", Connection), patch.object(source.ssl, "create_default_context", lambda: object()):
+                error = self.assertFailure(expected, source._HTTPSTransport().open, source.CALENDAR_URL, 20)
+            self.assertEqual(error.diagnostics["primary_stage"], "https_" + phase)
+            self.assertEqual(error.diagnostics["secondary_cleanup_count"], 1 if phase == "connect" else 2)
+            self.assertEqual(calls, ["connect", "connection_close"] if phase == "connect" else ["connect", "request", "headers", "response_close", "connection_close"])
+            self.assertNotIn("DO_NOT_RETAIN_RAW", repr(dict(error.diagnostics)))
+
     def test_cumulative_request_and_batch_cooperative_deadlines(self):
         clock = Clock()
         transport = Transport(clock=clock, open_delay=12,
@@ -578,6 +689,97 @@ class Boundaries(unittest.TestCase):
         self.assertFailure("retained_roots_estimate_cap", build, transport=transport, observer_roots=lambda: (huge,))
         self.assertEqual(transport.opens, [])
         huge.clear()
+
+    def test_cleanup_primary_survives_later_failure_roots_cap(self):
+        external = []
+        failure_checks = []
+        def observer():
+            if external:
+                failure_checks.append(True)
+            return external
+        class GrowingCloseTransport(Transport):
+            def open(self, url, timeout):
+                response = super().open(url, timeout)
+                def close():
+                    response.closed = True
+                    response.close_calls += 1
+                    external.append(bytearray(source.ROOTS_CAP))
+                    raise OSError("DO_NOT_RETAIN_RAW" * 1000)
+                response.close = close
+                return response
+        snapshot, transport, _ = build(transport=GrowingCloseTransport(), observer_roots=observer)
+        try:
+            error = self.assertFailure("cleanup_failure", snapshot.acquire)
+            self.assertEqual(error.diagnostics["primary_stage"], "capture_response_close")
+            self.assertEqual(error.diagnostics["secondary_cleanup_count"], 0)
+            self.assertEqual(error.diagnostics["secondary_validation_count"], 1)
+            self.assertEqual(error.diagnostics["secondary_validation_1_code"], "retained_roots_estimate_cap")
+            self.assertEqual(error.diagnostics["secondary_validation_1_stage"], "batch_failure_roots")
+            self.assertGreater(error.diagnostics["secondary_validation_1_estimate_bytes"], source.ROOTS_CAP)
+            self.assertEqual(failure_checks, [True])
+            self.assertEqual(transport.responses[0].close_calls, 1)
+            self.assertEqual(snapshot.ledger.attempted, (0,))
+            self.assertEqual(snapshot.ledger.unrun, tuple(range(1, 8)))
+            self.assertEqual(snapshot.state, "failed")
+            self.assertEqual(snapshot._capture_buffer, b"")
+            self.assertEqual(len(snapshot.inspection()["captures"]), 1)
+            self.assertEqual(snapshot.diagnostics["primary_code"], "cleanup_failure")
+            self.assertEqual(snapshot.diagnostics["secondary_validation_count"], 1)
+            self.assertTrue(all(type(value) in (str, int) for value in snapshot.diagnostics.values()))
+            self.assertNotIn("DO_NOT_RETAIN_RAW", repr(dict(snapshot.diagnostics)))
+            self.assertFailure("oracle_pending_required", snapshot.admit_independent_verification, admission(snapshot))
+            self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
+            self.assertFailure("snapshot_already_attempted", snapshot.acquire)
+        finally:
+            snapshot.release()
+            external.clear()
+
+    def test_parse_primary_survives_later_failure_roots_caps(self):
+        external = []
+        failure_checks = []
+        def observer():
+            if external:
+                failure_checks.append(True)
+            return external
+        calendar, documents = corpus()
+        documents[0]["data"][0]["close"] = 0
+        snapshot, transport, _ = build(transport=Transport(body_docs(calendar, documents)), observer_roots=observer)
+        def trace(frame, event, arg):
+            if (frame.f_globals.get("__name__") == spec.name and frame.f_code.co_name == "_prices"
+                    and event == "exception" and isinstance(arg[1], source.SourceError)
+                    and arg[1].code == "nonpositive_price" and not external):
+                # Add the observed alias only after the actual price validator
+                # has failed. The mandatory failure-path checks must still run.
+                external.append(bytearray(source.ROOTS_CAP))
+            return trace
+        try:
+            sys.settrace(trace)
+            error = self.assertFailure("nonpositive_price", snapshot.acquire)
+            sys.settrace(None)
+            self.assertEqual(error.diagnostics["primary_stage"], "decode_parse")
+            self.assertEqual(error.diagnostics["secondary_cleanup_count"], 0)
+            self.assertEqual(error.diagnostics["secondary_validation_count"], 2)
+            for index, stage in enumerate(("parse_failure_roots", "batch_failure_roots"), 1):
+                self.assertEqual(error.diagnostics[f"secondary_validation_{index}_code"], "retained_roots_estimate_cap")
+                self.assertEqual(error.diagnostics[f"secondary_validation_{index}_stage"], stage)
+                self.assertGreater(error.diagnostics[f"secondary_validation_{index}_estimate_bytes"], source.ROOTS_CAP)
+            self.assertEqual(failure_checks, [True, True])
+            self.assertEqual([response.close_calls for response in transport.responses], [1, 1])
+            self.assertEqual(snapshot.ledger.attempted, (0, 1))
+            self.assertEqual(snapshot.ledger.unrun, tuple(range(2, 8)))
+            self.assertEqual(snapshot.state, "failed")
+            self.assertEqual(snapshot._capture_buffer, b"")
+            self.assertEqual(len(snapshot.inspection()["captures"]), 2)
+            self.assertEqual(snapshot.diagnostics["primary_code"], "nonpositive_price")
+            self.assertEqual(snapshot.diagnostics["secondary_validation_count"], 2)
+            self.assertTrue(all(type(value) in (str, int) for value in snapshot.diagnostics.values()))
+            self.assertFailure("oracle_pending_required", snapshot.admit_independent_verification, admission(snapshot))
+            self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
+            self.assertFailure("snapshot_already_attempted", snapshot.acquire)
+        finally:
+            sys.settrace(None)
+            snapshot.release()
+            external.clear()
 
     def test_active_root_cap_invalidates_consumers_and_handles_are_immutable(self):
         external = []
@@ -685,6 +887,8 @@ class Boundaries(unittest.TestCase):
             self.assertEqual(len(body), receipt.body_bytes)
             self.assertTrue(receipt.full_eof)
         self.assertTrue(any(event["document"] is not None and event["decoded_text"] is not None for event in events["error"]))
+        self.assertEqual(snapshot.diagnostics["primary_code"], "nonpositive_price")
+        self.assertEqual(snapshot.diagnostics["primary_stage"], "decode_parse")
         self.assertTrue(all(type(value) in (str, int) for value in snapshot.diagnostics.values()))
         snapshot.release()
         events.clear()

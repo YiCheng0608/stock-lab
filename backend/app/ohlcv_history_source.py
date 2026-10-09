@@ -34,6 +34,12 @@ QA must independently check its full launcher/oracle/consumer span against the
 180-second batch budget. Product acquisition checks that budget at its own
 boundaries and caps the pending/available lease at the same batch deadline; it
 cannot preempt time spent inside the external oracle, tracing or arbitrary code.
+Cleanup preserves primary_code/primary_stage and separately reports at most two
+secondary_cleanup_N_code/stage pairs plus an omitted count. Diagnostics never
+retain exception messages/objects, responses, frames or tracebacks. Emitted
+exception context is ephemeral and still requires the QA finally alias cleanup.
+Cleanup-only failure rejects the batch; successful capture never implies that
+response/connection cleanup succeeded.
 """
 
 from __future__ import annotations
@@ -124,6 +130,69 @@ class SourceError(ValueError):
 
 def _fail(code, **diagnostics):
     raise SourceError(code, **diagnostics)
+
+
+def _failure_values(exception, stage, fallback="transport_or_parse_failure"):
+    """Copy only bounded plain metadata; never message/args/object chains."""
+    def label(value, default):
+        return value if type(value) is str and re.fullmatch(r"[a-z0-9_]{1,64}", value) else default
+    original = exception.diagnostics if isinstance(exception, SourceError) else {}
+    code = label(exception.code, fallback) if isinstance(exception, SourceError) else fallback
+    values = {"code": code, "primary_code": code,
+              "primary_stage": label(original.get("primary_stage"), stage),
+              "secondary_cleanup_count": 0, "secondary_cleanup_omitted": 0,
+              "secondary_validation_count": 0, "secondary_validation_omitted": 0}
+    for name in ("source_index", "estimate_bytes", "attempts", "raw_bytes"):
+        value = original.get(name)
+        if type(value) is int and 0 <= value <= sys.maxsize:
+            values[name] = value
+    for kind in ("cleanup", "validation"):
+        prefix = "secondary_" + kind
+        count = original.get(prefix + "_count", 0)
+        if type(count) is int and 0 <= count <= 2:
+            for index in range(1, count + 1):
+                item = f"{prefix}_{index}"
+                values[item + "_code"] = label(original.get(item + "_code"), kind + "_failure")
+                values[item + "_stage"] = label(original.get(item + "_stage"), kind)
+                estimate = original.get(item + "_estimate_bytes")
+                if kind == "validation" and type(estimate) is int and 0 <= estimate <= sys.maxsize:
+                    values[item + "_estimate_bytes"] = estimate
+            values[prefix + "_count"] = count
+        omitted = original.get(prefix + "_omitted", 0)
+        if type(omitted) is int and 0 <= omitted <= 4:
+            values[prefix + "_omitted"] = omitted
+    return values
+
+
+def _close_all(operations, primary_failure=None):
+    """Every necessary close is attempted, even when earlier closes raise."""
+    failure = primary_failure
+    def secondary(code, stage):
+        count = failure["secondary_cleanup_count"]
+        if count < 2:
+            count += 1
+            failure["secondary_cleanup_count"] = count
+            failure[f"secondary_cleanup_{count}_code"] = code
+            failure[f"secondary_cleanup_{count}_stage"] = stage
+        else:
+            failure["secondary_cleanup_omitted"] += 1
+    for stage, close in operations:
+        try:
+            close()
+        except BaseException as cleanup_exception:
+            cleanup = _failure_values(cleanup_exception, stage, "cleanup_failure")
+            if failure is None:
+                failure = cleanup
+            else:
+                secondary(cleanup["primary_code"], cleanup["primary_stage"])
+                for index in range(1, cleanup["secondary_cleanup_count"] + 1):
+                    secondary(cleanup[f"secondary_cleanup_{index}_code"], cleanup[f"secondary_cleanup_{index}_stage"])
+                failure["secondary_cleanup_omitted"] += cleanup["secondary_cleanup_omitted"]
+    return failure
+
+
+def _raise_failure(values):
+    raise SourceError(values["code"], **{key: value for key, value in values.items() if key != "code"}) from None
 
 
 def _unique_pairs(pairs):
@@ -373,10 +442,12 @@ class _HTTPSResponse:
 
     def close(self):
         try:
-            self.response.close()
+            failure = _close_all((("https_response_close", self.response.close),
+                                  ("https_connection_close", self.connection.close)))
         finally:
-            self.connection.close()
             self.socket = None
+        if failure is not None:
+            _raise_failure(failure)
 
 
 class _HTTPSTransport:
@@ -395,25 +466,29 @@ class _HTTPSTransport:
             if budget <= 0:
                 _fail("cooperative_deadline")
             return budget
+        stage = "https_connect"
         try:
             # Socket waits get the remaining cumulative open budget. Checks are
             # cooperative; DNS/SSL/library calls are not OS-hard preempted.
             connection.timeout = remaining()
             connection.connect()
             connection.sock.settimeout(remaining())
+            stage = "https_request"
             connection.request("GET", parsed.path + "?" + parsed.query,
                                headers={"Accept-Encoding": "identity", "Connection": "close"})
             connection.sock.settimeout(remaining())
+            stage = "https_headers"
             response = connection.getresponse()
             remaining()
+            stage = "https_wrap"
             return _HTTPSResponse(connection, response)
-        except BaseException:
-            try:
-                if response is not None:
-                    response.close()
-            finally:
-                connection.close()
-            raise
+        except BaseException as exception:
+            primary_failure = _failure_values(exception, stage, stage + "_failure")
+            operations = (("https_connection_close", connection.close),)
+            if response is not None:
+                operations = (("https_response_close", response.close),) + operations
+            failure = _close_all(operations, primary_failure)
+            _raise_failure(failure)
 
 
 @dataclass(frozen=True, slots=True)
@@ -730,6 +805,24 @@ class HistorySource:
                 self._state = "failed"
             _fail("retained_roots_estimate_cap", estimate_bytes=self._roots_estimate)
 
+    def _check_failure_roots(self, primary_failure, stage, *stage_roots):
+        """Check every failure alias without replacing the saved first failure."""
+        try:
+            self._check_roots(*stage_roots, primary_failure)
+        except BaseException as validation_exception:
+            validation = _failure_values(validation_exception, stage, "roots_check_failure")
+            count = primary_failure["secondary_validation_count"]
+            if count < 2:
+                count += 1
+                primary_failure["secondary_validation_count"] = count
+                prefix = f"secondary_validation_{count}"
+                primary_failure[prefix + "_code"] = validation["primary_code"]
+                primary_failure[prefix + "_stage"] = stage
+                if "estimate_bytes" in validation:
+                    primary_failure[prefix + "_estimate_bytes"] = validation["estimate_bytes"]
+            else:
+                primary_failure["secondary_validation_omitted"] = min(4, primary_failure["secondary_validation_omitted"] + 1)
+
     def _capture_ready(self, capture):
         # Stable BEFORE-DECODE trace point. Failure paths also reach this point.
         full_body, receipt = capture.body, capture.receipt
@@ -745,8 +838,11 @@ class HistorySource:
         capture_buffer.clear()
         request_started_utc = datetime.now(timezone.utc).isoformat()
         full_body = receipt = None
+        primary_failure = None
+        stage = "capture_open"
         try:
             response = self._transport.open(url, self._remaining())
+            stage = "capture_headers"
             self._remaining()
             if type(response.status) is not int or response.status != 200:
                 _fail("http_status", source_index=index)
@@ -771,6 +867,7 @@ class HistorySource:
             transfer = header_values.get("transfer-encoding", "").strip().lower()
             if transfer not in ("", "chunked") or (transfer and declared_length is not None):
                 _fail("ambiguous_framing")
+            stage = "capture_body"
             while True:
                 self._remaining()
                 if response.known_eof is True:
@@ -794,6 +891,7 @@ class HistorySource:
                 _fail("incomplete_content_length")
             if not capture_buffer:
                 _fail("empty_body")
+            stage = "capture_finalize"
             full_body = bytes(capture_buffer)
             source_id = "tpex_government_index_csv" if index == 0 else "finmind_nominal_ohlcv/" + SYMBOLS[index - 1]
             source_version = self._policy["calendar_source"]["version"] if index == 0 else self._policy["version"]
@@ -805,12 +903,16 @@ class HistorySource:
             self._captures.append(capture)
             self._check_roots(capture_buffer, full_body, receipt)
             return self._capture_ready(capture)
+        except BaseException as exception:
+            primary_failure = _failure_values(exception, stage)
         finally:
             try:
-                if response is not None:
-                    response.close()
+                operations = () if response is None else (("capture_response_close", response.close),)
+                failure = _close_all(operations, primary_failure)
             finally:
                 capture_buffer.clear()
+            if failure is not None:
+                _raise_failure(failure)
 
     def _parse_capture(self, capture, index, dates):
         full_body, receipt = capture.body, capture.receipt
@@ -838,8 +940,11 @@ class HistorySource:
             self._remaining()
             return parse_results
         except BaseException as exception:
-            self._check_roots(full_body, receipt, decoded_text, document, parse_results, diagnostics, exception)
-            raise
+            primary_failure = _failure_values(exception, "decode_parse")
+            primary_failure["source_index"] = index
+            self._check_failure_roots(primary_failure, "parse_failure_roots", full_body, receipt,
+                                      decoded_text, document, parse_results, diagnostics, exception)
+            _raise_failure(primary_failure)
         finally:
             self._request_deadline = None
 
@@ -871,15 +976,14 @@ class HistorySource:
             self._state = "pending"
             return pending
         except BaseException as exception:
+            primary_failure = _failure_values(exception, "batch")
             self._state = "failed"
-            diagnostics = {"stage": "batch", "attempts": len(self._ledger.attempted),
-                           "raw_bytes": self._raw_bytes,
-                           "code": exception.code if isinstance(exception, SourceError) else "transport_or_parse_failure"}
+            primary_failure.update(attempts=len(self._ledger.attempted), raw_bytes=self._raw_bytes)
+            diagnostics = {"stage": "batch", **primary_failure}
             self._diagnostics = MappingProxyType(diagnostics)
-            self._check_roots(pending, results, diagnostics, exception)
-            if isinstance(exception, SourceError):
-                raise
-            raise SourceError("transport_or_parse_failure", attempts=len(self._ledger.attempted), raw_bytes=self._raw_bytes) from None
+            self._check_failure_roots(primary_failure, "batch_failure_roots", pending, results, diagnostics, exception)
+            diagnostics.update(primary_failure)
+            _raise_failure(primary_failure)
         finally:
             self._capture_buffer.clear()
             self._request_deadline = None
