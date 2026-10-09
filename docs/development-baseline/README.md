@@ -6,6 +6,8 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
+使用已啟動 API／preview 時，另依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核 PID、載入來源／bundle、埠及 proxy upstream；commit 不會更新舊程序。並行任務先分配資源，無法隔離就順序驗證。原件生命週期、quota 與 NO-RETRY 維持，不能為補版本證據擅自重啟或重取來源。
+
 ## 後端驗證
 
 從專案根目錄依變更選必要範圍；文件只查差異、連結與一致性。

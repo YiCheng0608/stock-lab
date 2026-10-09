@@ -33,13 +33,15 @@ Priority／Status／Kind／Ready／Blocked／Paused 請填 Project 欄位；排�
 全局統籌／任務統籌具名 owner：
 工程師／獨立 QA／文件／索引 Git角色負責範圍：
 寫入白名單／共用檔案協調：
+UI／API／auditor 埠、資料／輸出目錄與 owner／隔離或順序驗證安排（不適用理由）：
+程式索引 project／worktree root／scope／版本依據／刷新者（沿用 GitHub Issue ID，不另編任務索引）：
 必要規格與驗證入口：
 資料／測試／外部操作授權收據：
 產物數量、大小、建立與清理方式／殘留上限：
-branch／worktree／base SHA：派工後建立並補接手收據
+branch／worktree／base SHA：全局派工並預留名額後建立；terminal／session 核實並送達後，由任務統籌確認接手，再轉開發中
 
 ## 交付與結案
 
-依工作手冊在本單記角色接手、候選 SHA、QA 逐 AC 結果、文件 freeze、索引 coverage、PR 與整合後檢查。
+依工作手冊在本單記角色接手、候選 SHA、QA 被測服務／載入版本與逐 AC 結果、文件 freeze、對應 worktree／內容版本的程式索引 coverage、PR 與整合後檢查。
 新增能力／實際解除依賴／可靠性改善／剩餘缺口／全局停滯收據／下一步理由：
 合併後檢查通過才關單；worktree 清理另行授權。

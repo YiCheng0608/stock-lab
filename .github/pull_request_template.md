@@ -10,8 +10,9 @@ Refs #<issue-number>
 candidate 完整 SHA／AC 修訂：
 工程師自測與原始失敗：
 獨立 QA session／逐 AC 結果／未驗及限制：
+QA 服務版本收據：PID／啟動時間／來源 worktree／載入 SHA 或來源與 bundle 雜湊／UI-API 對應；不適用理由：
 真實來源／數值／API／UI／磁碟跨程序證據或不適用理由：
-文件 freeze 範圍／索引 project、generation、coverage 限制：
+文件 freeze 範圍／程式索引 project、絕對 root／scope、branch、內容版本依據、generation、coverage 限制與刷新者：
 核准提交檔案／剩餘差異：
 
 ## 串行整合
@@ -24,6 +25,7 @@ candidate 完整 SHA／AC 修訂：
 ## 合併後檢查
 
 檢查執行者／必要命令／通過條件：
+被測服務對應合併版本的核對／正式 root 的受影響程式索引核對：
 失敗處理、暫停整合及復原決策者：
 合併後 master SHA／實際結果：待執行，回原 Issue 留收據
 worktree／branch／session 清理：另行授權，不隨合併自動刪除
