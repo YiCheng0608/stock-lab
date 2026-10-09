@@ -4,25 +4,23 @@
 
 ## 導入基線
 
-使用者明示授權整體流程改造及 GitHub 導入。規則／模板與獨立 review 修正已合併至 master；經使用者指定，以本機歷史取代舊測試 remote/master，導入版本為 `ecf6d4479ddda26d68669d285256eb4f2473bdde`。這是設定基線，後續正式版本查 Git／PR，不在本檔維護即時狀態。
+以下為 2026-10-09 初次 GitHub 導入快照，非即時狀態。使用者已授流程改造／GitHub 導入，規則與獨立 review 修正已合併；依使用者指定，以本機歷史取代舊測試 remote/master，導入版本為 `ecf6d4479ddda26d68669d285256eb4f2473bdde`。後續版本查 Git／PR，狀態查治理 Issue。
 
-| 入口／項目 | 本次確認與待辦 |
+| 入口／項目 | 導入時確認／後續查閱 |
 | --- | --- |
 | GitHub repository | [YiCheng0608/stock-lab](https://github.com/YiCheng0608/stock-lab)，依使用者決定維持 public；origin 指向此 repository。 |
 | GitHub Project／治理 Issue | [產品開發看板](https://github.com/users/YiCheng0608/projects/1)；[治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理 WIP、停滯計數、派工與整合收據。 |
 | 正式 master／整合入口 | 正式 branch 為 origin/master；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、禁止強推／刪除。唯一整合持有者、排隊、授權及精確版本以治理 Issue 最新收據為準；協作串行不冒稱自動鎖。 |
-| 模型配置 | 本機 config.toml 設定為 gpt-6-astra／high；只記配置，不當本 session 或舊角色 runtime 證據。新角色預設見 AGENTS；本次未修改全域配置、未重啟角色。 |
-| 文件索引 | GitHub Issue ID 識別任務，codebase-memory 用於程式／文件查詢。導入時 App MCP 可連，docs freshness=metadata_changed，依原檔核對；刷新／coverage 與 commit 收據留治理 Issue／本次對話，不把連線成功當完整 coverage。 |
+| 模型配置 | 導入時 config.toml 為 gpt-6-astra／high，未改全域配置或重啟角色；配置不證實際 runtime。新角色預設見 AGENTS，實際配置查接手收據。 |
+| 文件索引 | codebase-memory 查程式／文件，不管理任務。導入時 App MCP 可連，但 docs 為 metadata_changed，已核原檔；刷新／coverage／commit 收據留治理 Issue／原對話，連線不證完整 coverage。 |
 | 產品能力 | 完整 M1／M2／M3 仍未完成；有限能力與缺口見 ROADMAP／主題契約，不因流程改造提升。 |
-| 全局停滯計數 | 遷移查到另有未整合的暫停 checkpoint，其紀錄晚於 master 歷史摘要；以治理 Issue 的來源、待核事項及接受順序為準，不由主線摘要預設零。本次非產品實作批次。 |
-| session／worktree／私人資源 | 本次未啟動、恢復、關閉或清理；歷史存在、暫停、已交接、NO-RETRY 等事實保留，沒有新授權不動。 |
-| 導入完成界線 | 規則／模板、GitHub 設定及待辦匯入有各自收據；完整單任務試跑、並行名額准入及實際並行驗證分別留證。上限與逐次准入依 AGENTS／工作手冊，不能由看板建立或上限調高推論試跑完成。實際進度與剩餘缺口只查治理 Issue。 |
+| 全局停滯計數 | 遷移查到較晚的未整合暫停 checkpoint；計數依治理 Issue 原證據、待核項與接受順序，不由 master 摘要預設零。遷移不是產品實作批次。 |
+| session／worktree／私人資源 | 導入時未啟動、恢復、關閉或清理；歷史暫停、交接、NO-RETRY 與私人資源保護保留，無新授權不動。 |
+| 導入完成界線 | 規則／模板、GitHub 設定與待辦匯入各有收據；產品試跑及並行驗收依[工作手冊](GITHUB_WORKFLOW.md#導入項目與驗收)另核，實際進度與缺口只查治理 Issue。 |
 
 ## 下一位接手者
 
-先讀治理 Issue、Project 與原任務最新收據，核實正式 master、既有未合併 branch／成果、owner、暫停與授權，再依工作手冊接手。歷史「NEXT／UNADMITTED」是候選線索，不是已派工任務；主線未包含的 checkpoint 也須去重，不能直接重新實作。
-
-後續即時交接留原 Issue，本檔只更新穩定入口與規則變更。GitHub 不可用時不建立第二份任務台帳；舊已驗能力不重開，舊未完成項不得以「已 review」直接轉 Done。
+接手先讀治理 Issue、Project 與原任務最新收據，核正式 master、未合併成果、owner、暫停與授權。歷史 NEXT／UNADMITTED 及未合併 checkpoint 先去重，不產生派工權；舊已驗能力不重開，「已 review」不直接轉 Done。即時交接留原 Issue，GitHub 不可用不另建任務台帳；本檔只更新穩定入口與規則變更。
 
 ## 歷史紀錄的使用界線
 
