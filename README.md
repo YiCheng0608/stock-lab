@@ -19,6 +19,6 @@
 - [前端](frontend/README.md)：React、TypeScript、Vite、React Query、ECharts。
 - [驗證方式](docs/development-baseline/README.md)：入口、副作用、驗收範圍與落盤限制。
 - [協作規則](AGENTS.md)與[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)：六角色、任務狀態、獨立 QA、索引與串行整合。
-- [GitHub 遷移入口](docs/TASK_COORDINATION.md)：設定缺口與歷史紀錄；即時派工和交接只在 GitHub Issues／Projects。
+- [任務看板](https://github.com/users/YiCheng0608/projects/1)與[治理／整合入口](https://github.com/YiCheng0608/stock-lab/issues/1)：即時任務、依賴、派工及交接；[遷移入口](docs/TASK_COORDINATION.md)保留設定連結與歷史界線。
 
 API 啟動執行唯讀 schema readiness，不自動 migration。設定載入、request handlers 與 worker 的寫入入口及資料路徑須依操作手冊核對授權；readiness 通過不代表整個程序唯讀。Git 保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。
