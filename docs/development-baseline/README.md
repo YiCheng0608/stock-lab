@@ -2,6 +2,8 @@
 
 本文管理可重建入口、副作用與驗收方式；資料、產物配額、保留及清理依 [AGENTS](../../AGENTS.md#驗證資料與暫存)。接手與未清資源記原 GitHub Issue；命令／版本／exit／計數／hash／退修／提交收據留原 Issue／Git，入口見[遷移說明](../TASK_COORDINATION.md)。下列 task／ROOT／freeze 收據只證歷史，不授權現行派工，也不證目前來源通過。
 
+任務名額、ACK 與角色排程依[平行派工／補位](../GITHUB_WORKFLOW.md#平行派工與補位)。下列單次測試與具名來源的 GET／RAM／落盤上限只約束其授權範圍，不是全專案只能開一張任務的限制；跨任務仍須核共用資源及各自授權，不因另開 worktree 擴大配額。
+
 ## 版本與資料
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。

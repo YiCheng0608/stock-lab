@@ -4,25 +4,25 @@
 
 ## 導入基線
 
-使用者明示授權整體流程改造及 GitHub 導入。規則／模板與獨立 review 修正已合併至 master；經使用者指定，以本機歷史取代舊測試 remote/master，導入版本為 `ecf6d4479ddda26d68669d285256eb4f2473bdde`。這是設定基線，後續正式版本查 Git／PR，不在本檔維護即時狀態。
+以下為 2026-10-09 初次 GitHub 導入快照，非即時狀態。使用者已授流程改造／GitHub 導入，規則與獨立 review 修正已合併；依使用者指定，以本機歷史取代舊測試 remote/master，導入版本為 `ecf6d4479ddda26d68669d285256eb4f2473bdde`。後續版本查 Git／PR，狀態查治理 Issue。
 
-| 入口／項目 | 本次確認與待辦 |
+| 入口／項目 | 導入時確認／後續查閱 |
 | --- | --- |
 | GitHub repository | [YiCheng0608/stock-lab](https://github.com/YiCheng0608/stock-lab)，依使用者決定維持 public；origin 指向此 repository。 |
 | GitHub Project／治理 Issue | [產品開發看板](https://github.com/users/YiCheng0608/projects/1)；[治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理 WIP、停滯計數、派工與整合收據。 |
 | 正式 master／整合入口 | 正式 branch 為 origin/master；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、禁止強推／刪除。唯一整合持有者、排隊、授權及精確版本以治理 Issue 最新收據為準；協作串行不冒稱自動鎖。 |
-| 模型配置 | 本機 config.toml 設定為 gpt-6-astra／high；只記配置，不當本 session 或舊角色 runtime 證據。新角色預設見 AGENTS；本次未修改全域配置、未重啟角色。 |
-| 文件索引 | GitHub Issue ID 識別任務，codebase-memory 用於程式／文件查詢。導入時 App MCP 可連，docs freshness=metadata_changed，依原檔核對；刷新／coverage 與 commit 收據留治理 Issue／本次對話，不把連線成功當完整 coverage。 |
+| 模型配置 | 導入時 config.toml 為 gpt-6-astra／high，未改全域配置或重啟角色；配置不證實際 runtime。新角色預設見 AGENTS，實際配置查接手收據。 |
+| 文件索引 | codebase-memory 查程式／文件，不管理任務。導入時 App MCP 可連，但 docs 為 metadata_changed，已核原檔；刷新／coverage／commit 收據留治理 Issue／原對話，連線不證完整 coverage。 |
 | 產品能力 | 完整 M1／M2／M3 仍未完成；有限能力與缺口見 ROADMAP／主題契約，不因流程改造提升。 |
-| 全局停滯計數 | 遷移查到另有未整合的暫停 checkpoint，其紀錄晚於 master 歷史摘要；以治理 Issue 的來源、待核事項及接受順序為準，不由主線摘要預設零。本次非產品實作批次。 |
-| session／worktree／私人資源 | 本次未啟動、恢復、關閉或清理；歷史存在、暫停、已交接、NO-RETRY 等事實保留，沒有新授權不動。 |
-| 導入完成界線 | 規則／模板、GitHub 設定及待辦匯入有各自收據；單任務試跑與放寬並行須另有完整驗收，不能由看板建立推論完成。實際進度與剩餘缺口只查治理 Issue。 |
+| 全局停滯計數 | 遷移查到較晚的未整合暫停 checkpoint；計數依治理 Issue 原證據、待核項與接受順序，不由 master 摘要預設零。遷移不是產品實作批次。 |
+| session／worktree／私人資源 | 導入時未啟動、恢復、關閉或清理；歷史暫停、交接、NO-RETRY 與私人資源保護保留，無新授權不動。 |
+| 導入完成界線 | 規則／模板、GitHub 設定與待辦匯入各有收據；產品試跑及並行驗收依[工作手冊](GITHUB_WORKFLOW.md#導入項目與驗收)另核，實際進度與缺口只查治理 Issue。 |
 
 ## 下一位接手者
 
-先讀治理 Issue、Project 與原任務最新收據，核實正式 master、既有未合併 branch／成果、owner、暫停與授權，再依工作手冊接手。歷史「NEXT／UNADMITTED」是候選線索，不是已派工任務；主線未包含的 checkpoint 也須去重，不能直接重新實作。
+接手先讀治理 Issue、Project 與原任務最新收據，核正式 master、未合併成果、owner、暫停與授權。歷史 NEXT／UNADMITTED 及未合併 checkpoint 先去重，不產生派工權；舊已驗能力不重開，「已 review」不直接轉 Done。即時交接留原 Issue，GitHub 不可用不另建任務台帳；本檔只更新穩定入口與規則變更。
 
-後續即時交接留原 Issue，本檔只更新穩定入口與規則變更。GitHub 不可用時不建立第二份任務台帳；舊已驗能力不重開，舊未完成項不得以「已 review」直接轉 Done。
+派工以[現行 WIP 規則](../AGENTS.md#建立任務與派工)及[平行補位流程](GITHUB_WORKFLOW.md#平行派工與補位)為準；本檔歷史的一張試跑、容量與逐輪 ACK 不構成全專案串行條件。規則未整合的適用差異由全局在治理 Issue 交接，不改被測工作樹或升格管理候選為產品 base。
 
 ## 歷史紀錄的使用界線
 
@@ -649,7 +649,7 @@ B1 **coreoperation0/dependency0/reliability0/stall1（前0）**；unavailable接
 
 候選 `M2-FOCUS-STOCK-SCOPE-6-B1`：ordinary TPEx第8股單日四predicate→同cutoff個股→五RAWback；未准入identity/date/sourceuse/profile/schema/pins/caps/writes。SINGLE後ROOT原task先核exact missing operation/new action、fresh identity/date/type/currency/sourceuse/profile/schema/pins、finitecaps/guards/acceptance/whitelist，才GET/implementation。日期未知、不猜10/6或10/7；private7/chips2/oldpins immutable。Failed chips producer Octindex10/7禁止retry/restart/newproducer/dailyappend/oldhydrate；不重做monthly/legacy audits/tests，不以ATR/Signal/Plan/ranking替代。下一批無actual core增量則stall2，再派工前重選。
 
-ROOT BOOT finalsaved2026-10-07T08:01:31.239Z/taskcomplete08:01:31.506Z；前任freshRPC93ad8a+af64cf先核all4 ACTUALidle。ONE /subagents mutation `e3a835fd-bd24-4c16-bcb1-e11f1a363563` raw0/acceptedtrue/replayedfalse；SCREEN `22a8f113-b257-4eec-8fb3-9b649d04bfad` Main[default](current)/本節exact四ID/No sub-agents running。ONE Esc `2b0bc811-9645-4fd6-8443-b11752c9c6b7` raw0/acceptedtrue；menuclosed SCREEN `f541c248-800b-49a9-8b36-7745c33dcf60`。SINGLE continuation已達ORIGINAL ROOT，**gate formally accepted**；候選仍NOTadmitted/core未派工，須ROOT獨立接受本gate DOC後才coredispatch。無human confirmation wait/relaunch/resend/newroles；[流程](../AGENTS.md#啟動驗收與交接)。
+ROOT BOOT finalsaved2026-10-07T08:01:31.239Z/taskcomplete08:01:31.506Z；前任freshRPC93ad8a+af64cf先核all4 ACTUALidle。ONE /subagents mutation `e3a835fd-bd24-4c16-bcb1-e11f1a363563` raw0/acceptedtrue/replayedfalse；SCREEN `22a8f113-b257-4eec-8fb3-9b649d04bfad` Main\[default\]\(current\)/本節exact四ID/No sub-agents running。ONE Esc `2b0bc811-9645-4fd6-8443-b11752c9c6b7` raw0/acceptedtrue；menuclosed SCREEN `f541c248-800b-49a9-8b36-7745c33dcf60`。SINGLE continuation已達ORIGINAL ROOT，**gate formally accepted**；候選仍NOTadmitted/core未派工，須ROOT獨立接受本gate DOC後才coredispatch。無human confirmation wait/relaunch/resend/newroles；[流程](../AGENTS.md#啟動驗收與交接)。
 
 ROOT條件接受outside-owner CURRENT前任exact4：root `01a114c2-39a6-7980-8609-e666fd58a464`／program `01a114c4-17c8-7e81-8c98-acb60b814647`／docs `01a114c4-6cff-7551-832c-215d7177741e`／index `01a114c4-bff4-7b00-b3ae-277543ac329d`。須其ownfinalsaved+all4actualidle+fresh exactterminal/runtime proof才close/archive；前任active禁earlyclose。Acceptance≠execution、THISBOOT cleanup0。Worktree/branch removal待newqualified affectedindexes ROOT接受/baselineunneeded/freshmergedclean/無unsaved newartifacts/resolvedABS outside-own exactscope；不移owncwd/private/DAY/較舊資源。
 
@@ -1121,7 +1121,7 @@ DAY-RANGE whole worktree／branch及NO-RETRY排除所有清理，較早已完成
 
 Own visible terminal `term_77b96a8a-4c4f-44c2-9e31-4be6c882c432`／incarnation `9ef132f9-230c-4b67-a68e-02c39ce84b9c`／PTY suffix `@@7e2fc097`／pane1 connected、writable、nonorphaned；actual node36496→codex56492、root RPC／own screen／helper receipt 已連結。Common helper 單次 raw0／startup=verified／surface=visible／taskSent=true，initial turn `01a1131f-7d3f-7653-bc6e-2d9b225db482`；無 timeout／recovery／relaunch／resend，inherited stale `term_53e...` ENV 不作 own handle。
 
-**Visible `/subagents` gate及本 ORIGINAL root SINGLE continuation 已正式接受。** Root／前任已接受 BOOT 文件；四者 actual idle 後唯一 CLI request `bf607b86-c66e-49cb-bb36-d9966cacd7a2`／fresh screen `003e0d9f-0e42-4ae1-bea8-ca909accf440` 核 Main[default](current)、同四 exact ID及 no subagents running；slash未觀測 turn start 為正常 ACK。一次 Esc `0b9ed079-ed9d-46bd-b1a4-0e241dfd416c`（1 byte）後 fresh screen `bebe414e-060e-4da4-8ab0-65bafc3d127b` 核 Ask Codex／Sol ultra／exact cwd／Main[default]；原 root SINGLE continuation 已收到並正式接受，未 relaunch／重送／另建角色。新輪實作尚未派工，freeze／索引／commit／merge 未執行。
+**Visible `/subagents` gate及本 ORIGINAL root SINGLE continuation 已正式接受。** Root／前任已接受 BOOT 文件；四者 actual idle 後唯一 CLI request `bf607b86-c66e-49cb-bb36-d9966cacd7a2`／fresh screen `003e0d9f-0e42-4ae1-bea8-ca909accf440` 核 Main\[default\]\(current\)、同四 exact ID及 no subagents running；slash未觀測 turn start 為正常 ACK。一次 Esc `0b9ed079-ed9d-46bd-b1a4-0e241dfd416c`（1 byte）後 fresh screen `bebe414e-060e-4da4-8ab0-65bafc3d127b` 核 Ask Codex／Sol ultra／exact cwd／Main[default]；原 root SINGLE continuation 已收到並正式接受，未 relaunch／重送／另建角色。新輪實作尚未派工，freeze／索引／commit／merge 未執行。
 
 App CBM connected／list68／pagination complete；七個 `taiwan-stock-research-roadmap-m1-history-month-wire-20261007-` baseline 已存在。Coverage best_effort、generation_matches／hash_records_complete=true；docs metadata_changed 原因未核，依 advisory 讀本根，不稱 fresh／complete。五個既有 parser partial 保留，不輪初或中途刷新／複製索引。
 
