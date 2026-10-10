@@ -62,6 +62,19 @@ SYMBOLS = tuple(ANCHORS)
 CUTOFFS = ("2026-10-05", "2026-10-06")
 NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1"
 
+# External role expectations: Issue 32 decisions 6093906581/6094008599 and
+# engineer self ACK 6093999818, never derived from product role constants.
+REVIEWED_GLOBAL_ISSUER = "01a1240a-495c-7b51-bc4a-cfb13897fcf3"
+REVIEWED_QA_HOLDER = "01a12416-7c0d-7143-87e3-5da9e0ab4394"
+REVIEWED_NON_QA_HOLDERS = (
+    "01a12102-9891-7293-8c66-a342094e0990",
+    "01a12185-0e76-73c1-ad90-f47aded769b4",
+    "01a12191-e54b-7b11-a081-428c5deee49d",
+    "01a1240a-495c-7b51-bc4a-cfb13897fcf3",
+    "01a12410-51fb-7720-ad57-689143fb02cb",
+    "01a1242a-f4c9-78b3-ade5-ad1592d76489",
+)
+
 
 def days(start, stop):
     value, end = date.fromisoformat(start), date.fromisoformat(stop)
@@ -272,7 +285,7 @@ class Boundaries(unittest.TestCase):
         binding = source.ExecutionBinding("f0000000-0000-0000-0000-00000000000b", "f0000000-0000-0000-0000-00000000000b", None,
                                           "gpt-6.1-sol", "xhigh", "a" * 40, "b" * 64, "c" * 64,
                                           "python -B -X utf8 independently-reviewed-script")
-        start = source.FinancialStart("issue32-financial-start-v1", source.GLOBAL_ISSUER,
+        start = source.FinancialStart("issue32-financial-start-v1", REVIEWED_GLOBAL_ISSUER,
                                       NAMESPACE, EXTERNAL_PIN,
                                       "https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-9999999999",
                                       binding, True, True)
@@ -290,6 +303,56 @@ class Boundaries(unittest.TestCase):
         for seal, runtime, code in cases:
             self.assertFailure(code, source._financial_start, seal, runtime)
         self.assertFailure("financial_start_with_boundary_transport", build, financial_start=start, execution_binding=binding)
+
+    def test_financial_start_current_issuer_pure_guards(self):
+        # NOAUTH: synthetic declarations validate only the pure guard. The URL
+        # identifies writer GO, not a financial seal; no constructor/acquire.
+        def declaration(holder):
+            binding = source.ExecutionBinding(holder, holder, None, "gpt-6.1-sol", "xhigh",
+                                              "a" * 40, "b" * 64, "c" * 64,
+                                              "NOAUTH RAM pure guard; no financial execution")
+            start = source.FinancialStart("issue32-financial-start-v1", REVIEWED_GLOBAL_ISSUER,
+                                          NAMESPACE, EXTERNAL_PIN,
+                                          "https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6094008599",
+                                          binding, True, True)
+            return start, binding
+
+        for holder in ("f0000000-0000-0000-0000-00000000000b", REVIEWED_QA_HOLDER):
+            with self.subTest(case="independent_qa", holder=holder):
+                self.assertIsNone(source._financial_start(*declaration(holder)))
+        start, binding = declaration(REVIEWED_QA_HOLDER)
+        for issuer in (REVIEWED_NON_QA_HOLDERS[0], "f0000000-0000-0000-0000-00000000000c"):
+            with self.subTest(case="wrong_issuer", issuer=issuer):
+                self.assertFailure("financial_start_scope", source._financial_start,
+                                   replace(start, issuer_thread_id=issuer), binding)
+        for holder in REVIEWED_NON_QA_HOLDERS:
+            with self.subTest(case="coordinator_or_implementer", holder=holder):
+                self.assertFailure("financial_qa_identity", source._financial_start, *declaration(holder))
+
+        cases = (
+            ("start_type", None, binding, "financial_start_required"),
+            ("binding_type", start, None, "financial_start_required"),
+            ("seal_binding_type", replace(start, binding=None), binding, "financial_binding_type"),
+            ("authorized_bool", replace(start, authorized=1), binding, "financial_start_not_authorized"),
+            ("authorized_false", replace(start, authorized=False), binding, "financial_start_not_authorized"),
+            ("whole_batch_bool", replace(start, whole_batch=1), binding, "financial_start_not_authorized"),
+            ("whole_batch_false", replace(start, whole_batch=False), binding, "financial_start_not_authorized"),
+            ("namespace", replace(start, namespace="other"), binding, "financial_start_scope"),
+            ("policy_pin", replace(start, policy_sha256="0" * 64), binding, "financial_start_scope"),
+            ("seal_threshold", replace(start, seal_comment_url="https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6084911117"), binding, "financial_new_explicit_seal_required"),
+            ("candidate_mismatch", start, replace(binding, candidate_sha="d" * 40), "financial_binding_mismatch"),
+            ("script_mismatch", start, replace(binding, script_sha256="e" * 64), "financial_binding_mismatch"),
+        )
+        for label, seal, runtime, code in cases:
+            with self.subTest(case=label):
+                self.assertFailure(code, source._financial_start, seal, runtime)
+        for label, runtime, code in (
+                ("not_top_level", replace(binding, parent_thread_id=REVIEWED_GLOBAL_ISSUER), "financial_qa_not_top_level"),
+                ("session_mismatch", replace(binding, holder_session_id=REVIEWED_GLOBAL_ISSUER), "financial_qa_identity"),
+                ("model", replace(binding, model="other"), "financial_qa_identity"),
+                ("effort", replace(binding, reasoning_effort="ultra"), "financial_qa_identity")):
+            with self.subTest(case=label):
+                self.assertFailure(code, source._financial_start, replace(start, binding=runtime), runtime)
 
     def test_calendar_csv_exact_all_rows_and_stop_unrun(self):
         calendar, documents = corpus()

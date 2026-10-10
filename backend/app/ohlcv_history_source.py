@@ -80,7 +80,7 @@ RAW_CAP = 8388608
 ROOTS_CAP = 33554432
 REQUEST_SECONDS = 20
 BATCH_SECONDS = 180
-GLOBAL_ISSUER = "01a12102-9891-7293-8c66-a342094e0990"
+GLOBAL_ISSUER = "01a1240a-495c-7b51-bc4a-cfb13897fcf3"
 
 # A schema, not a bundled policy or a source of expected financial values.
 _POLICY_SHAPE = {
@@ -375,7 +375,13 @@ def _financial_start(start, binding):
         _fail("financial_qa_identity")
     if not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", binding.holder_thread_id):
         _fail("financial_qa_identity")
-    if binding.holder_thread_id in (GLOBAL_ISSUER, "01a12185-0e76-73c1-ad90-f47aded769b4", "01a12191-e54b-7b11-a081-428c5deee49d"):
+    if binding.holder_thread_id in (
+            "01a12102-9891-7293-8c66-a342094e0990",
+            "01a12185-0e76-73c1-ad90-f47aded769b4",
+            "01a12191-e54b-7b11-a081-428c5deee49d",
+            GLOBAL_ISSUER,
+            "01a12410-51fb-7720-ad57-689143fb02cb",
+            "01a1242a-f4c9-78b3-ade5-ad1592d76489"):
         _fail("financial_qa_identity")
     if not re.fullmatch(r"[0-9a-f]{40}", binding.candidate_sha):
         _fail("financial_candidate")
