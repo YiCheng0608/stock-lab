@@ -230,7 +230,11 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 
 送達未知保留名額；確定未送達且無可執行 session，或撤權且 session 停寫才釋放。逾時／ACK 遺失不釋放或重派。
 
-角色（工程、QA、文件、索引／Git）在原單留交回收據後，以 Orca 對該單任務統籌的可見 terminal 送一則短通知（Issue、留言連結、下一動作）；這是事件通知，不是定時監看，統籌讀回前不算接手。
+角色之間以「原單留言＋Orca 短通知」聯繫：先在原單留收據或請求，再用 `orca terminal send` 對收件者的可見 terminal 送一則短通知，開頭標 `【#Issue 發送角色 → 收件角色】`，附發送者 session ID、terminal handle、留言連結與下一動作。適用於：
+- 角色（工程、QA、文件、索引／Git）交回任務統籌；
+- 任務統籌向全局請求處置，全局處置後回送任務統籌。
+
+派工收據與任務 prompt 附全局 session ID、terminal handle；任務統籌的 ACK 附自己的 session ID、handle。全局換 session 或 handle 時以 #1 最新任命收據為準，並通知進行中的任務統籌。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
 
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
