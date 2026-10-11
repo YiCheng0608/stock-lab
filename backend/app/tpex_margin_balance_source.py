@@ -1,4 +1,4 @@
-"""Issue 31's bounded, nondurable TPEx margin snapshot adapter.
+"""Issue 31's bounded, nondurable FinMind margin snapshot adapter for seven TPEx stocks.
 
 No application/worker/config imports, import-time I/O, automatic fetching, DB,
 disk persistence, or strategy integration. A reviewed external financial-start
@@ -27,21 +27,23 @@ Request/batch time limits are cooperative: remaining socket timeouts are
 refreshed between blocking phases and elapsed budgets are checked afterwards.
 DNS/OS/native operations cannot be forcibly interrupted by this RAM adapter.
 
-Predeclared official CSV layout: exactly OFFICIAL_FIELDS, first CSV record is
-the header, subsequent records are all 21 columns including an explicit source
-date. UTF-8 with optional initial BOM; no preamble/footer/blank records, aliases,
-header repair, or title-date inference. Source dates: YYYY-MM-DD, YYYY/MM/DD,
-YYYYMMDD, ROCYYY/MM/DD, or ROCYYYMMDD; month/day always two digits. Unknown actual
-layout/date grammar STOPs without adapting to the observed body. Metadata only
-suggested this layout; it does not prove the actual financial CSV has it.
+Single source (AC revision 2): seven FinMind ``TaiwanStockMarginPurchaseShortSale``
+requests, no TPEx official CSV and no official anchor. Rows follow the documented
+16-column schema: fifteen required columns (``date`` and ``stock_id`` strings, thirteen
+non-bool int64) with no extra key, plus the optional ``Note`` (absent, null or a string of
+at most 256 characters; it never enters a computation). Instead of an anchor the
+batch is checked internally: per symbol the sorted rows chain
+(Yesterday[i+1] == Today[i]), the dates through 2026-10-06 are exactly the seven
+verified calendar days, at least one row follows 2026-10-06 (chain check only, never
+the formula), and all seven symbols have the same date set. Any failure rejects the
+whole batch. The unit (lots) is an explicit provider inference, not an official
+verification. The real response shape is unverified and an unknown shape STOPs.
 """
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import http.client
-import io
 import json
 import os
 import re
@@ -50,7 +52,6 @@ import time
 import traceback
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
-from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Callable
@@ -67,21 +68,21 @@ MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
 TERMINAL_PATTERN = r"term_[A-Za-z0-9_-]{1,80}"
 # Fixed, non-personal; the one TPEx batch that succeeded (Issue 36) also identified itself this way.
 REQUEST_USER_AGENT = "stock-lab-issue31-local-ram/1"
-# Response media types. TPEx answered the official CSV with ``application/csv;charset=utf-8`` (qa2), the
-# type the Issue 36 batch also accepted; text/plain and octet-stream were already declared for this route.
-OFFICIAL_MEDIA = ("text/csv", "application/csv", "text/plain", "application/octet-stream")
+# Response media type (same parameter rule as the Issue 36 batch that succeeded against TPEx).
 FINMIND_MEDIA = ("application/json",)
 CHARSETS = ("charset=utf-8", 'charset="utf-8"')
 # qa1 and qa2 are both SPENT / NO-RETRY and are never re-armed (qa1: constructor
 # failure, no request; qa2: the official CSV answered ``application/csv`` and was
 # refused before its body was read). qa3 is the new one-time source-use quota the
 # user granted in https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111567857
-# (same 8 GET plan and caps as https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412).
-# The canonical external policy (2399 bytes) differs from the qa1 and qa2 texts
-# only in its ``namespace`` field.
+# and narrowed to FinMind only (seven GET) in
+# https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111752011.
+# POLICY_* pin the canonical external policy v2 (``ordinary-margin-source-policy/v2``, 2886 bytes) exactly as the
+# global published it in https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6112134098 .
 NAMESPACE = "issue31-margin-seven-cutoffs-1005-1006-v1/qa3"
-POLICY_SHA256 = "92f9d86b020250ef594269813c7fc6600214dd18fab80083140ef708dd6a77f2"
-VERSION = "ordinary-margin-cutoffs-1005-1006-v1"
+POLICY_SHA256 = "7d8cd5b1835b84138e2bc982d86a93d4b3b4a3bba809842341c279fe566a9ceb"
+POLICY_BYTES = 2886
+VERSION = "ordinary-margin-cutoffs-1005-1006-v2"
 CONSUMER = "ordinary-margin-change-ratio-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
 WINDOWS = (
@@ -89,37 +90,39 @@ WINDOWS = (
     ("2026-10-06", ("2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06")),
 )
 DAYS = ("2026-09-24", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06")
-ANCHOR_DATES = ("2026-10-08", "2026-10-09")
-OFFICIAL_URL = "https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data"
-FINMIND_URLS = tuple(
+RANGE_FIRST, RANGE_LAST = "2026-09-24", "2026-10-09"
+CUTOFF_LAST = DAYS[-1]  # 2026-10-06; rows after it are chain evidence only.
+URLS = tuple(
     "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockMarginPurchaseShortSale&data_id="
-    + symbol + "&start_date=2026-09-24&end_date=2026-10-09" for symbol in SYMBOLS
+    + symbol + "&start_date=" + RANGE_FIRST + "&end_date=" + RANGE_LAST for symbol in SYMBOLS
 )
-URLS = (OFFICIAL_URL,) + FINMIND_URLS
 INT64_MAX = (1 << 63) - 1
-OFFICIAL_FIELDS = (
-    "資料日期", "代號", "名稱", "前資餘額", "資買", "資賣", "現償", "資餘額", "資屬證金",
-    "資使用率", "資限額", "前券餘額", "券賣", "券買", "券償", "券餘額", "券屬證金",
-    "券使用率", "券限額", "資券相抵", "備註",
-)
+# The 16 columns documented by FinMind for this dataset (finmind.github.io, Chip page, DataFrameSchema), in
+# the documented order. date, stock_id and Note are strings; the other thirteen are int64.
 FINMIND_FIELDS = (
     "date", "stock_id", "MarginPurchaseBuy", "MarginPurchaseCashRepayment", "MarginPurchaseLimit",
-    "MarginPurchaseSell", "MarginPurchaseTodayBalance", "MarginPurchaseYesterdayBalance", "ShortSaleBuy",
-    "ShortSaleCashRepayment", "ShortSaleLimit", "ShortSaleSell", "ShortSaleTodayBalance",
-    "ShortSaleYesterdayBalance", "OffsetLoanAndShort",
+    "MarginPurchaseSell", "MarginPurchaseTodayBalance", "MarginPurchaseYesterdayBalance", "Note",
+    "OffsetLoanAndShort", "ShortSaleBuy", "ShortSaleCashRepayment", "ShortSaleLimit", "ShortSaleSell",
+    "ShortSaleTodayBalance", "ShortSaleYesterdayBalance",
 )
+STRING_FIELDS = ("date", "stock_id", "Note")
+# Note is documented but does not enter any computation, so it is optional (absent, str or null): a shape
+# difference there must not spend the one-time quota. Every other documented column is required and strict.
+OPTIONAL_FIELDS = ("Note",)
+REQUIRED_FIELDS = tuple(name for name in FINMIND_FIELDS if name not in OPTIONAL_FIELDS)
+NOTE_MAX_CHARS = 256  # A policy bound (global decision 6112016286), not a FinMind documentation fact.
 UNKNOWN = ("publication_time", "first_availability", "revision_history", "historical_eligibility", "historical_membership")
 ATTRIBUTION = (
     "FinMind: TaiwanStockMarginPurchaseShortSale; local personal noncommercial RAM snapshot only; "
-    "no raw redistribution/mirror. TPEx / Financial Supervisory Commission Securities and Futures Bureau "
-    "[2026]: 上櫃股票融資融券餘額 (dataset11387, exact current CSV); Open Government Data License 1.0 "
-    "https://data.gov.tw/license; original fields and integrity preserved. FinMind is the service provider; "
-    "this is not an official direct feed."
+    "no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed "
+    "and the lot unit is an explicit provider inference, not an official verification."
 )
 RIGHTS_RECEIPTS = (
     "https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6084167671",
     "https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6077922990",
     "https://github.com/YiCheng0608/stock-lab/issues/21#issuecomment-6083237569",
+    "https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111752011",
+    "https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111788122",
 )
 
 
@@ -181,31 +184,17 @@ def _check_live_runtime(holder_actual: str, effort: str) -> None:
     _require(live_effort == effort, "runtime_effort_conflict")
 
 
-def _day(value: str, *, official: bool = False) -> str:
+def _day(value: str) -> str:
+    """ISO ``YYYY-MM-DD`` only (ASCII digits); no other date grammar is accepted."""
     _require(type(value) is str, "date_type")
-    if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
-        parts = (int(value[:4]), int(value[5:7]), int(value[8:]))
-    elif official and re.fullmatch(r"[0-9]{4}/[0-9]{2}/[0-9]{2}", value):
-        parts = (int(value[:4]), int(value[5:7]), int(value[8:]))
-    elif official and re.fullmatch(r"[0-9]{8}", value):
-        parts = (int(value[:4]), int(value[4:6]), int(value[6:]))
-    elif official and re.fullmatch(r"[0-9]{3}/[0-9]{2}/[0-9]{2}", value):
-        parts = (int(value[:3]) + 1911, int(value[4:6]), int(value[7:]))
-    elif official and re.fullmatch(r"[0-9]{7}", value):
-        parts = (int(value[:3]) + 1911, int(value[3:5]), int(value[5:]))
-    else:
-        raise MarginSourceError("date_grammar")
+    _require(re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is not None, "date_grammar")
     try:
-        return date(*parts).isoformat()
+        return date(int(value[:4]), int(value[5:7]), int(value[8:])).isoformat()
     except ValueError:
         raise MarginSourceError("date_invalid") from None
 
 
-def _integer(value: object, *, csv_text: bool = False) -> int:
-    if csv_text:
-        _require(type(value) is str and re.fullmatch(r"(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)", value) is not None,
-                 "integer_grammar")
-        value = int(value.replace(",", ""))
+def _integer(value: object) -> int:
     _require(type(value) is int and 0 <= value <= INT64_MAX, "integer_int64")
     return value
 
@@ -217,7 +206,7 @@ class Caps:
     retained_roots_estimate_bytes: int = 33_554_432
     request_seconds: int = 20
     batch_cooperative_seconds: int = 180
-    max_requests: int = 8
+    max_requests: int = 7
     redirects: int = 0
     retries: int = 0
 
@@ -381,7 +370,7 @@ class RamRoots:
                 visit(value.document)
                 visit(value.parsed)
                 value.text = value.document = value.parsed = None
-            elif type(value) in (OfficialOracleApproval, OracleApproval):
+            elif type(value) is OracleApproval:
                 # A declared alias of the same approval is cleared as well;
                 # do not merely delete one reference to its numeric tuples.
                 for child in value.__dict__.values():
@@ -417,7 +406,7 @@ def retained_estimate(*values: object) -> int:
             return total + sum(size(item) for item in value)
         if isinstance(value, Original):
             return total + size(value.__dict__)
-        if type(value) in (OfficialOracleApproval, OracleApproval):
+        if type(value) is OracleApproval:
             return total + size(value.__dict__)
         return total
 
@@ -456,27 +445,14 @@ class Original:
 
 
 @dataclass(frozen=True)
-class OfficialOracleApproval:
-    """Independent full official-body audit, required before seven FinMind GETs.
-
-    Anchors are seven ordered (symbol, source date, previous, current, 1-based
-    CSV record ordinal) tuples. The caller must independently validate the full
-    header, every row, date/identity/numerics and anchors from the original body.
-    """
-
-    holder_actual: str
-    body_sha256: str
-    fields: tuple[str, ...]
-    anchors: tuple[tuple[str, str, int, int, int], ...]
-
-
-@dataclass(frozen=True)
 class OracleApproval:
-    """QA builds every value independently from all eight fresh originals.
+    """QA builds every value independently from all seven fresh originals.
 
-    Ordered balances: (symbol, source date, TodayBalance), all 49 points.
+    Ordered balances: (symbol, date, TodayBalance), all 49 points.
     Ordered ratios: (symbol, cutoff, numerator, positive denominator), all 14.
-    Ordered anchors: (symbol, official source date, previous, current), all 7.
+    Ordered chain links: (symbol, previous date, next date, previous Today,
+    next Yesterday) for every adjacent pair of every symbol's date-sorted rows,
+    symbol-major in SYMBOLS order, including the rows after the last cutoff.
     This explicit caller assertion is compared to product results; it cannot
     prove independence by itself. QA must not derive it from product projections.
     """
@@ -485,7 +461,7 @@ class OracleApproval:
     body_sha256: tuple[str, ...]
     balances: tuple[tuple[str, str, int], ...]
     ratios: tuple[tuple[str, str, int, int], ...]
-    anchors: tuple[tuple[str, str, int, int], ...]
+    chain_links: tuple[tuple[str, str, str, int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -517,7 +493,7 @@ class OriginalView:
         self._capture, self._ordinal = capture, ordinal
 
     def _original(self) -> Original:
-        self._capture._oracle_live(self._ordinal)
+        self._capture._oracle_live()
         return self._capture._originals[self._ordinal]
 
     @property
@@ -550,20 +526,15 @@ class SixSessionWindow:
     def provenance(self) -> dict:
         self._read()
         capture = self._capture
-        item = capture._originals[SYMBOLS.index(self.symbol) + 1]
-        official = capture._originals[0]
+        item = capture._originals[SYMBOLS.index(self.symbol)]
         return {
             "provider": "FinMind", "source_dataset": "TaiwanStockMarginPurchaseShortSale", "version": VERSION,
             "market": "TPEx", "instrument": "ordinary_stock", "symbol": self.symbol, "cutoff": self.cutoff,
-            "unit": "lots", "unit_kind": "conditional_combination_inference", "provider_literal_unit": False,
-            "historical_unit_extension": "explicit_limited_snapshot_inference", "numeric_scale": 1,
+            "unit": "lots", "unit_kind": "explicit_provider_inference", "provider_literal_unit": False,
+            "official_anchor_verified": False, "numeric_scale": 1,
             "source_field": "MarginPurchaseTodayBalance", "receipt": item.receipt,
             "raw_row_ordinals": tuple(capture._ordinals[(self.symbol, day)] for day in dict(WINDOWS)[self.cutoff]),
-            "official_receipt": official.receipt, "official_source_date": capture._anchor_date,
-            "official_original_fields": OFFICIAL_FIELDS, "official_record_ordinal": capture._anchors[self.symbol][2],
-            "official_previous_field_ordinal": 3, "official_current_field_ordinal": 7,
-            "official_previous_current": capture._anchors[self.symbol][:2],
-            "anchor_relation": "same_date_both_exact_each_symbol_at_least_one_nonzero",
+            "internal_consistency": ("chain", "calendar_through_cutoff", "post_cutoff_row", "same_date_set"),
             "policy_sha256": POLICY_SHA256, "canonical_calendar": "d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2",
             "supported_use": "local_personal_noncommercial_process_ram_snapshot_margin5_only",
             "historical_pit": False, "unknown": UNKNOWN, "attribution": ATTRIBUTION, "rights_receipts": RIGHTS_RECEIPTS,
@@ -609,7 +580,7 @@ class MarginCapture:
                  runtime: RuntimeIdentity, full_script_utf8: bytes, full_command: str,
                  connection_factory: Callable[[str, float], object] | None = None):
         use.validate()  # Reject unsupported uses before even considering a source operation.
-        _require(type(external_policy_utf8) is bytes and len(external_policy_utf8) == 2399
+        _require(type(external_policy_utf8) is bytes and len(external_policy_utf8) == POLICY_BYTES
                  and hashlib.sha256(external_policy_utf8).hexdigest() == POLICY_SHA256, "external_policy_pin")
         _require(type(seal) is FinancialStartSeal and type(runtime) is RuntimeIdentity, "seal_type")
         _require(all(type(getattr(seal, name)) is str for name in (
@@ -661,8 +632,8 @@ class MarginCapture:
         self._originals: list[Original] = []
         self._balances: dict[tuple[str, str], int] = {}
         self._ordinals: dict[tuple[str, str], int] = {}
-        self._anchors: dict[str, tuple[int, int, int]] = {}
-        self._anchor_date: str | None = None
+        self._links: list[tuple[str, str, str, int, int]] = []
+        self._dates: tuple[str, ...] | None = None
         self._attempted: list[str] = []
         self._raw_total = 0
         self._deadline: float | None = None
@@ -685,14 +656,13 @@ class MarginCapture:
             self._state = "expired"
             raise
 
-    def _oracle_live(self, ordinal: int) -> None:
-        _require(self._state == "pending_independent_oracle"
-                 or (self._state == "pending_official_oracle" and ordinal == 0), "read_unavailable")
+    def _oracle_live(self) -> None:
+        _require(self._state == "pending_independent_oracle", "read_unavailable")
         self._clock()
 
     def _measure(self) -> None:
         self._clock()
-        measured = retained_estimate(self._originals, self._balances, self._ordinals, self._anchors, self.roots.values)
+        measured = retained_estimate(self._originals, self._balances, self._ordinals, self._links, self.roots.values)
         self._high_water = max(self._high_water, measured)
         _require(measured <= CAPS.retained_roots_estimate_bytes, "retained_roots_cap")
 
@@ -764,8 +734,7 @@ class MarginCapture:
             # Same parameter rule as the Issue 36 batch that succeeded against TPEx: the media type, then only
             # charset=utf-8 parameters (whitespace around ';' is ignored).
             parts = [part.strip() for part in raw_content_type.split(";")]
-            _require(parts[0] in (OFFICIAL_MEDIA if ordinal == 0 else FINMIND_MEDIA)
-                     and all(part in CHARSETS for part in parts[1:]), "http_content_type")
+            _require(parts[0] in FINMIND_MEDIA and all(part in CHARSETS for part in parts[1:]), "http_content_type")
             content_type = ";".join(parts)  # Only prevalidated, bounded metadata reaches a receipt.
             raw_content_type = parts = None
             while True:
@@ -809,11 +778,10 @@ class MarginCapture:
             return original
         finally:
             # No complete SHA is reported for a bounded prefix/truncation.
-            original.receipt = Receipt(url, "TPEx" if ordinal == 0 else "FinMind",
-                "dataset11387-current-csv" if ordinal == 0 else "TaiwanStockMarginPurchaseShortSale", start,
+            original.receipt = Receipt(url, "FinMind", "TaiwanStockMarginPurchaseShortSale", start,
                 datetime.now(timezone.utc).isoformat(), len(original.buffer),
                 hashlib.sha256(original.buffer).hexdigest() if full_eof else None, full_eof, status, content_type,
-                OFFICIAL_FIELDS if ordinal == 0 else FINMIND_FIELDS, request_started=request_started)
+                FINMIND_FIELDS, request_started=request_started)
             if response is not None:
                 try:
                     response.close()
@@ -833,59 +801,15 @@ class MarginCapture:
             if completed and close_failed:
                 raise MarginSourceError("transport_cleanup_failed")
 
-    def _decode(self, original: Original, *, csv_body: bool = False) -> str:
+    def _decode(self, original: Original) -> str:
         _require(original.receipt.full_eof and _sha(original.receipt.body_sha256), "original_not_complete")
+        _require(not original.buffer.startswith(b"\xef\xbb\xbf"), "bom_rejected")
         try:
-            original.text = original.buffer.decode("utf-8-sig" if csv_body else "utf-8", errors="strict")
+            original.text = original.buffer.decode("utf-8", errors="strict")
         except UnicodeDecodeError:
             raise MarginSourceError("utf8_invalid") from None
         self._measure()
         return original.text
-
-    def _official(self, original: Original) -> None:
-        stream = io.StringIO(self._decode(original, csv_body=True), newline="")
-        rows: list[list[str]] = []
-        original.document = rows
-        anchors: dict[str, tuple[int, int, int]] = {}
-        original.parsed = anchors
-        seen, report_day = set(), None
-        try:
-            reader = csv.reader(stream, strict=True)
-            for ordinal, row in enumerate(reader, 1):
-                self._clock()
-                rows.append(row)
-                self._measure()
-                _require(len(row) == 21 and all(not any(ord(c) < 32 for c in cell) for cell in row), "csv_row_shape")
-                if ordinal == 1:
-                    _require(tuple(row) == OFFICIAL_FIELDS, "csv_header")
-                    continue
-                _require(ordinal <= 10_001, "csv_row_limit")
-                day = _day(row[0], official=True)
-                _require(day in ANCHOR_DATES and (report_day is None or report_day == day), "official_source_date")
-                report_day = day
-                code = row[1]
-                _require(re.fullmatch(r"[0-9A-Z]{4,6}", code) is not None and code not in seen, "official_identity")
-                _require(bool(row[2].strip()) and row[2] == row[2].strip(), "official_name")
-                seen.add(code)
-                values = {}
-                for index in range(3, 20):
-                    if index in (9, 17):
-                        _require(re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?%?", row[index]) is not None, "csv_rate")
-                        _require(Decimal(row[index].removesuffix("%")) <= 100, "csv_rate")
-                    else:
-                        values[index] = _integer(row[index], csv_text=True)
-                if code in SYMBOLS:
-                    previous, current = values[3], values[7]
-                    _require(previous != 0 or current != 0, "ambiguous_zero_scale")
-                    anchors[code] = (previous, current, ordinal)
-            _require(set(anchors) == set(SYMBOLS), "official_selected_missing")
-            self._anchors, self._anchor_date = anchors, report_day
-            original.receipt = replace(original.receipt, schema_validated=True)
-        except csv.Error:
-            raise MarginSourceError("csv_invalid") from None
-        finally:
-            stream.close()
-            stream = reader = None
 
     def _finmind(self, original: Original, symbol: str) -> None:
         original.document = _strict_json(self._decode(original))
@@ -899,25 +823,36 @@ class MarginCapture:
         original.parsed = by_day
         for ordinal, row in enumerate(rows, 1):
             self._clock()
-            _require(type(row) is dict and set(row) == set(FINMIND_FIELDS), "finmind_schema")
+            # The fifteen required columns, optionally Note, and no other key.
+            _require(type(row) is dict and set(REQUIRED_FIELDS) <= set(row) <= set(FINMIND_FIELDS), "finmind_schema")
             day = _day(row["date"])
-            _require("2026-09-24" <= day <= "2026-10-09", "finmind_date_range")
+            _require(RANGE_FIRST <= day <= RANGE_LAST, "finmind_date_range")
             _require(type(row["stock_id"]) is str and row["stock_id"] == symbol and day not in by_day, "finmind_identity")
-            for name in FINMIND_FIELDS[2:]:
-                _integer(row[name])
+            note = row.get("Note")
+            _require(note is None or (type(note) is str and len(note) <= NOTE_MAX_CHARS), "finmind_schema")
+            for name in FINMIND_FIELDS:
+                if name not in STRING_FIELDS:
+                    _integer(row[name])
             by_day[day] = (row["MarginPurchaseYesterdayBalance"], row["MarginPurchaseTodayBalance"], ordinal)
             self._measure()
-        _require(set(DAYS) <= set(by_day), "required_day_missing")
-        _require(self._anchor_date in by_day, "anchor_day_missing")
-        previous, current, _ = by_day[self._anchor_date]
-        _require((previous, current) == self._anchors[symbol][:2], "anchor_exact_mismatch")
-        # No rescaling and no inferred post-cutoff calendar. Only the seven
-        # externally pinned dates are admitted to the historical computation.
+        # Internal consistency replaces the official anchor. ISO dates sort chronologically.
+        days = sorted(by_day)
+        _require(tuple(day for day in days if day <= CUTOFF_LAST) == DAYS, "required_day_set_mismatch")
+        _require(days[-1] > CUTOFF_LAST, "post_cutoff_row_missing")
+        links = []
+        for previous_day, next_day in zip(days, days[1:]):
+            today_before, yesterday_after = by_day[previous_day][1], by_day[next_day][0]
+            _require(yesterday_after == today_before, "finmind_chain_break")
+            links.append((symbol, previous_day, next_day, today_before, yesterday_after))
+        _require(self._dates is None or tuple(days) == self._dates, "symbol_date_set_mismatch")
+        # Rows after the last cutoff only served the chain; no post-cutoff value enters a window.
         for day in DAYS:
             self._balances[(symbol, day)] = by_day[day][1]
             self._ordinals[(symbol, day)] = by_day[day][2]
-        for _cutoff, days in WINDOWS:
-            _require(self._balances[(symbol, days[0])] > 0, "zero_denominator")
+        for _cutoff, window in WINDOWS:
+            _require(self._balances[(symbol, window[0])] > 0, "zero_denominator")
+        self._dates = tuple(days)
+        self._links.extend(links)
         original.receipt = replace(original.receipt, schema_validated=True)
         self._measure()
 
@@ -927,13 +862,12 @@ class MarginCapture:
                  and approval.holder_actual == self._seal.holder_actual, "oracle_holder")
         self.roots.hold("oracle.approval", approval)
         self._measure()
-        _require(type(approval.body_sha256) is tuple and len(approval.body_sha256) == 8
+        _require(type(approval.body_sha256) is tuple and len(approval.body_sha256) == len(SYMBOLS)
                  and all(_sha(v) for v in approval.body_sha256)
                  and approval.body_sha256 == tuple(item.receipt.body_sha256 for item in self._originals), "oracle_hashes")
         balances = tuple((symbol, day, self._balances[(symbol, day)]) for symbol in SYMBOLS for day in DAYS)
         ratios = tuple((symbol, cutoff, self._balances[(symbol, days[-1])] - self._balances[(symbol, days[0])],
                         abs(self._balances[(symbol, days[0])])) for symbol in SYMBOLS for cutoff, days in WINDOWS)
-        anchors = tuple((symbol, self._anchor_date, *self._anchors[symbol][:2]) for symbol in SYMBOLS)
         _require(type(approval.balances) is tuple and len(approval.balances) == 49
                  and all(type(row) is tuple and len(row) == 3 and type(row[0]) is str and type(row[1]) is str
                          and type(row[2]) is int and 0 <= row[2] <= INT64_MAX for row in approval.balances)
@@ -942,36 +876,17 @@ class MarginCapture:
                  and all(type(row) is tuple and len(row) == 4 and type(row[0]) is str and type(row[1]) is str
                          and type(row[2]) is int and type(row[3]) is int and -INT64_MAX <= row[2] <= INT64_MAX
                          and 0 < row[3] <= INT64_MAX for row in approval.ratios) and approval.ratios == ratios, "oracle_ratios")
-        _require(type(approval.anchors) is tuple and all(type(row) is tuple and len(row) == 4
-                 and type(row[0]) is str and type(row[1]) is str and type(row[2]) is int and type(row[3]) is int
-                 and 0 <= row[2] <= INT64_MAX and 0 <= row[3] <= INT64_MAX for row in approval.anchors)
-                 and approval.anchors == anchors, "oracle_anchors")
+        _require(type(approval.chain_links) is tuple and len(approval.chain_links) == len(self._links) > 0
+                 and all(type(row) is tuple and len(row) == 5 and all(type(v) is str for v in row[:3])
+                         and type(row[3]) is int and type(row[4]) is int
+                         and 0 <= row[3] <= INT64_MAX and 0 <= row[4] <= INT64_MAX and row[3] == row[4]
+                         for row in approval.chain_links)
+                 and approval.chain_links == tuple(self._links), "oracle_chain_links")
         self._state = "available"
 
-    def _approve_official(self, approval: OfficialOracleApproval) -> None:
-        self._live("pending_official_oracle")
-        _require(type(approval) is OfficialOracleApproval and _uuid(approval.holder_actual)
-                 and approval.holder_actual == self._seal.holder_actual, "official_oracle_holder")
-        self.roots.hold("oracle.official_approval", approval)
-        self._measure()
-        _require(_sha(approval.body_sha256) and approval.body_sha256 == self._originals[0].receipt.body_sha256,
-                 "official_oracle_hash")
-        _require(type(approval.fields) is tuple and len(approval.fields) == 21
-                 and all(type(v) is str for v in approval.fields) and approval.fields == OFFICIAL_FIELDS,
-                 "official_oracle_fields")
-        expected = tuple((symbol, self._anchor_date, *self._anchors[symbol]) for symbol in SYMBOLS)
-        _require(type(approval.anchors) is tuple and len(approval.anchors) == 7
-                 and all(type(row) is tuple and len(row) == 5 and type(row[0]) is str and type(row[1]) is str
-                         and type(row[2]) is int and type(row[3]) is int and type(row[4]) is int
-                         and 0 <= row[2] <= INT64_MAX and 0 <= row[3] <= INT64_MAX
-                         and (row[2] != 0 or row[3] != 0) and 2 <= row[4] <= 10_001 for row in approval.anchors)
-                 and approval.anchors == expected, "official_oracle_anchors")
-        self._state = "capturing"
-
     def originals(self) -> tuple[OriginalView, ...]:
-        self._oracle_live(0)
-        count = 1 if self._state == "pending_official_oracle" else 8
-        return tuple(OriginalView(self, ordinal) for ordinal in range(count))
+        self._oracle_live()
+        return tuple(OriginalView(self, ordinal) for ordinal in range(len(SYMBOLS)))
 
     def getter(self, symbol: str, cutoff: str, *, use: UseRequest = UseRequest()) -> SixSessionWindow:
         use.validate()
@@ -994,10 +909,11 @@ class MarginCapture:
             self.roots.hold("capture.originals", self._originals)
             self.roots.hold("capture.parsed_balances", self._balances)
             self.roots.hold("capture.parsed_ordinals", self._ordinals)
-            self.roots.hold("capture.parsed_anchors", self._anchors)
+            self.roots.hold("capture.parsed_links", self._links)
+        self._dates = None
         return self.roots.clear()
 
-    def _oracle_call(self, callback: Callable) -> OfficialOracleApproval | OracleApproval:
+    def _oracle_call(self, callback: Callable) -> OracleApproval:
         # A new traced module frame also records exceptions raised in the
         # independent caller, without inspecting/saving that caller's frame.
         return callback(self)
@@ -1006,13 +922,11 @@ class MarginCapture:
         return callback(self)
 
     def run(self, independent_oracle: Callable[[MarginCapture], OracleApproval],
-            positive_consumer: Callable[[MarginCapture], None], *,
-            independent_official_oracle: Callable[[MarginCapture], OfficialOracleApproval]) -> CaptureReport:
+            positive_consumer: Callable[[MarginCapture], None]) -> CaptureReport:
         _require(self._state == "new", "capture_once")
         _require(sys.gettrace() is None, "trace_already_active")
         _require(NAMESPACE not in _SPENT_NAMESPACES, "namespace_already_spent")
-        _require(callable(independent_official_oracle) and callable(independent_oracle)
-                 and callable(positive_consumer), "callbacks_required")
+        _require(callable(independent_oracle) and callable(positive_consumer), "callbacks_required")
         # Everything below is checked before the namespace or any URL is spent.
         _check_live_runtime(self._seal.holder_actual, self._seal.effort)
         # An auditor's wrapper composes the native class and must not replace the global either.
@@ -1024,15 +938,7 @@ class MarginCapture:
         self._state = "capturing"
         sys.settrace(self._trace)  # Before any transport/decode/parse/oracle.
         try:
-            self._stage = "official_capture"
-            original = self._fetch(0)
-            self._stage = "official_parse"
-            self._official(original)
-            self._state, self._stage = "pending_official_oracle", "independent_official_oracle"
-            approval = self._oracle_call(independent_official_oracle)
-            self._approve_official(approval)
-            approval = None
-            for ordinal, symbol in enumerate(SYMBOLS, 1):
+            for ordinal, symbol in enumerate(SYMBOLS):
                 self._stage = "finmind_capture"
                 original = self._fetch(ordinal)
                 self._stage = "finmind_parse"
@@ -1069,7 +975,7 @@ class MarginCapture:
                 self._diagnostics.append("roots_cleanup_failed")
                 _scrub_exception(cleanup_exc)
                 success = False
-            independent_official_oracle = independent_oracle = positive_consumer = None
+            independent_oracle = positive_consumer = None
             transport = "native_direct" if self._connection_factory is None else "caller_factory"
             self._connection_factory = None  # Drop the auditor's closure with the other caller references.
         return CaptureReport(success, self._state, tuple(self._attempted), URLS[len(self._attempted):], receipts,
