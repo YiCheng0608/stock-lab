@@ -103,6 +103,23 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 - Serve／compiler 順序啟動，核對 owned command、PID／parent、port 後才停止；readback 前後核同一 fixture 的全欄與 SQLite `typeof`，不能跨 instance 比 hash。
 - 產物／附件／暫存／殘留預設為 0；每次實跑仍由原 task 核定範圍與上限。一般測試 import 不安裝 standalone hook。測試和清理分報，不以工具 ack、wrapper exit 或程序消失推定成功。
 
+### 不由 pytest 收集的 standalone-only 測試檔
+
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 8 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+
+| 檔 | 執行方式（專案根目錄） |
+| --- | --- |
+| [`test_share_quantity_storage.py`](../../backend/tests/test_share_quantity_storage.py) | 見[M3-P2](#m3-p2-可信整數保存與磁碟重開驗證入口) |
+| [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) | 見[M1-W8](#m1-w8-八截止法人窗口的零落盤驗證入口) |
+| [`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) | 見[M1-CHIPS-CUTOFF-1006-1](#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口) |
+| [`test_conditional_plan_store.py`](../../backend/tests/test_conditional_plan_store.py) | `python -B -X utf8 backend/tests/test_conditional_plan_store.py`，僅標準函式庫，不需 `--deps` |
+| [`test_saved_price_chips_entry.py`](../../backend/tests/test_saved_price_chips_entry.py) | `python -B -X utf8 tools/tpex-price-api.py --joint-check --deps <既有 backend/.deps>` |
+| [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
+| [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
+| [`test_saved_price_chips_scope7_focus.py`](../../backend/tests/test_saved_price_chips_scope7_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-stock-scope-7-check` |
+
+後四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
+
 ### R1-A2 legacy 成交額 migration 的磁碟驗證入口
 
 `tools/Invoke-TurnoverMigrationValidation.ps1` 直接用 unittest 執行 Alembic／fallback 兩路徑各四個案例，共八個子程序，不載入一般 pytest conftest。一般 pytest 缺專用環境時的八個 skip 不算磁碟驗收。Fixture 與 NULL 限度見[資料來源](../DATA_SOURCES.md#r1-a2-legacy-成交額-migration-磁碟驗收有限接受)。
