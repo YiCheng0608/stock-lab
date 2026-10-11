@@ -66,11 +66,11 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 
-POLICY_SHA256 = "0f8c95eca6f0dcd08ca9b874996c4f41f8f8cf356f3282fee1e1c3f23734292d"
-POLICY_BYTES = 3266
+POLICY_SHA256 = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
+POLICY_BYTES = 3497
 FORMAL_SHA256 = "b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde"
 FORMAL_BLOB = "d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md"
-NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1"
+NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2"
 PURPOSE = "local_personal_noncommercial_observed_nominal_ohlcv_snapshot"
 CONSUMER_VERSION = "ordinary-nominal-ohlcv-window-summary-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
@@ -651,7 +651,9 @@ def _calendar(text):
         rows = list(csv.reader(io.StringIO(text), strict=True))
     except csv.Error:
         _fail("calendar_csv_syntax")
-    if not rows or tuple(rows[0]) != CSV_HEADER or len(rows) != 24:
+    # Observed trading days are whatever the official CSV returns: no fixed row
+    # count and no closure inference; at least one data row, each checked below.
+    if not rows or tuple(rows[0]) != CSV_HEADER or len(rows) < 2:
         _fail("calendar_header_or_count")
     dates = []
     for row in rows[1:]:
@@ -666,7 +668,8 @@ def _calendar(text):
             _fail("calendar_number")
         _bounds(*numbers[:4])
         dates.append(observed)
-    if len(set(dates)) != 23 or set(dates) != set(JULY_DATES):
+    # JULY_DATES is the set of July weekdays: unique, in 2026-07, and a weekday.
+    if len(set(dates)) != len(dates) or not set(dates) <= set(JULY_DATES):
         _fail("calendar_exact_dates")
     return rows, tuple(sorted(dates))
 
@@ -676,7 +679,7 @@ def _prices(document, symbol, dates, source_index, check_roots):
         _fail("price_document")
     if type(document["status"]) is not int or document["status"] != 200 or document["msg"] != "success" or type(document["msg"]) is not str:
         _fail("price_document_status")
-    if type(document["data"]) is not list or len(document["data"]) != 68:
+    if type(document["data"]) is not list or len(document["data"]) != len(dates):
         _fail("price_row_count")
     required = {"date", "stock_id", "open", "max", "min", "close", "Trading_Volume", "Trading_money"}
     allowed = required | {"spread", "Trading_turnover"}
@@ -979,8 +982,11 @@ class HistorySource:
         try:
             july = self._parse_capture(self._capture(0, CALENDAR_URL), 0, None)
             dates = july + self._prior_dates
-            if len(dates) != 68 or len(set(dates)) != 68:
+            if len(set(dates)) != len(dates) or tuple(sorted(dates)) != dates:
                 _fail("calendar_combination")
+            # Each cutoff needs a full last60 window; never shrink it.
+            if any(sum(day <= cutoff for day in dates) < 60 for cutoff in CUTOFFS):
+                _fail("calendar_window_insufficient")
             self._dates = dates
             for index, symbol in enumerate(SYMBOLS, 1):
                 results[symbol] = self._parse_capture(self._capture(index, PRICE_URL.format(symbol)), index, dates)
@@ -1024,7 +1030,9 @@ class HistorySource:
             _fail("oracle_scope")
         if any(type(value) is not str or not re.fullmatch(r"[0-9a-f]{64}", value) for value in admission.receipt_sha256s):
             _fail("oracle_receipt_type")
-        if (admission.calendar_rows, admission.price_rows, admission.price_fields, admission.latest_anchor_fields) != (23, 476, 2856, 42):
+        days = len(self._dates)
+        if (admission.calendar_rows, admission.price_rows, admission.price_fields, admission.latest_anchor_fields) != (
+                days - len(self._prior_dates), 7 * days, 42 * days, 42):
             _fail("oracle_complete_scope")
         hashes = tuple(capture.receipt.canonical_sha256 for capture in self._captures)
         if len(hashes) != 8 or admission.receipt_sha256s != hashes:

@@ -2,9 +2,11 @@
 
 Run: python -B -X utf8 backend/tests/test_ohlcv_history_source.py
 Reads only this source/test and the public pinned repo SOURCE_REGISTRY reference.
-The policy literal below was independently read from original Issue 32 comment
-6084911117, not obtained from product policy/expected-value helpers. Synthetic
-prices exercise boundaries and arithmetic; they are not QA financial truth.
+The policy v2 literal below was independently parsed from the single json fence
+of Issue 32 comment 6111290434 (global approval, AC revision 2) and matches its
+3,497 B pin; the v1 reference values come from original comment 6084911117. Neither
+was obtained from product policy/expected-value helpers. Synthetic prices exercise
+boundaries and arithmetic; they are not QA financial truth.
 """
 from __future__ import annotations
 
@@ -36,8 +38,8 @@ if not sys.dont_write_bytecode:
     raise RuntimeError("Use -B: the boundary runner does not permit bytecode artifacts")
 sys.addaudithook(_audit_boundary)
 
-EXTERNAL_POLICY = b'{"acquisition":{"accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1","order":"newJuly calendar then seven price ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"calendar_source":{"expected_scope":"2026-07 full 23 weekdays; exact positive dates required; no missing-day closure inference","format":"UTF8_CSV","government_dataset":11391,"header":["\xe8\xb3\x87\xe6\x96\x99\xe6\x97\xa5\xe6\x9c\x9f","\xe9\x96\x8b\xe5\xb8\x82","\xe6\x9c\x80\xe9\xab\x98\xe5\x83\xb9","\xe6\x9c\x80\xe4\xbd\x8e\xe5\x83\xb9","\xe6\x94\xb6\xe5\xb8\x82","\xe6\xbc\xb2\xe8\xb7\x8c"],"method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"TPEx","rights":"OGL-1.0 government dataset resource / TPEx terms section 7 exception; TPEx attribution","url":"https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01","version":"tpex-july23-plus-formal-aug21-sep20-oct4/issue32-v1"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v1"}'
-EXTERNAL_PIN = "0f8c95eca6f0dcd08ca9b874996c4f41f8f8cf356f3282fee1e1c3f23734292d"
+EXTERNAL_POLICY = b'{"acquisition":{"accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2","order":"newJuly calendar then seven price ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"calendar_source":{"expected_scope":"2026-07 observed official trading dates; each unique, in July 2026, weekday, header exact; no fixed count; no closure inference; each of seven FinMind price date sets must equal observed July plus formal 45 dates exactly; any unexplained mismatch rejects whole batch; at least 60 sessions at or before each cutoff","format":"UTF8_CSV","government_dataset":11391,"header":["\xe8\xb3\x87\xe6\x96\x99\xe6\x97\xa5\xe6\x9c\x9f","\xe9\x96\x8b\xe5\xb8\x82","\xe6\x9c\x80\xe9\xab\x98\xe5\x83\xb9","\xe6\x9c\x80\xe4\xbd\x8e\xe5\x83\xb9","\xe6\x94\xb6\xe5\xb8\x82","\xe6\xbc\xb2\xe8\xb7\x8c"],"method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"TPEx","rights":"OGL-1.0 government dataset resource / TPEx terms section 7 exception; TPEx attribution","url":"https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01","version":"tpex-july-observed-plus-formal-aug21-sep20-oct4/issue32-v2"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v2"}'
+EXTERNAL_PIN = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "backend/app/ohlcv_history_source.py"
@@ -60,7 +62,7 @@ ANCHORS = {
 }
 SYMBOLS = tuple(ANCHORS)
 CUTOFFS = ("2026-10-05", "2026-10-06")
-NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1"
+NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2"
 
 # Issue 32 financial-start identity guard (user approval 6109493002, design
 # 6109319936): issuer/coordinator/implementer ids arrive in the seal and the QA
@@ -96,18 +98,29 @@ def days(start, stop):
 
 DATES = days("2026-07-01", "2026-10-06")
 JULY = days("2026-07-01", "2026-07-31")
-assert len(DATES) == 68 and len(JULY) == 23
+PRIOR = days("2026-08-01", "2026-10-06")
+assert len(DATES) == 68 and len(JULY) == 23 and len(PRIOR) == 45 and DATES == JULY + PRIOR
 assert hashlib.sha256(FORMAL).hexdigest() == "b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde"
+# Policy v1 / qa1 reference values (original comment 6084911117): must now be rejected.
+V1_PIN = "0f8c95eca6f0dcd08ca9b874996c4f41f8f8cf356f3282fee1e1c3f23734292d"
+V1_BYTES = 3266
+V1_NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1"
 
 
-def corpus():
+def july_without(*missing):
+    """Observed-July subset for a synthetic closure; not a claim about a real closure day."""
+    assert all(day in JULY for day in missing)
+    return tuple(day for day in JULY if day not in missing)
+
+
+def corpus(july=JULY):
     """Small regenerable RAM corpus; no provider transport or fixture files."""
     header = "資料日期,開市,最高價,最低價,收市,漲跌\n"
-    calendar = header + "".join(day.replace("-", "") + ",100,105,95,101,-1\n" for day in JULY)
+    calendar = header + "".join(day.replace("-", "") + ",100,105,95,101,-1\n" for day in july)
     documents = []
     for stock_index, symbol in enumerate(SYMBOLS):
         rows = []
-        for index, day in enumerate(DATES):
+        for index, day in enumerate(july + PRIOR):
             close = 100 + stock_index * 10 + index
             if index == 8:
                 close += 1  # force a nonterminating /60 mean at one cutoff
@@ -130,8 +143,8 @@ def canonical(value):
                       separators=(",", ":"), allow_nan=False).encode("utf8")
 
 
-def body_docs(calendar=None, documents=None):
-    default_calendar, default_documents = corpus()
+def body_docs(calendar=None, documents=None, july=JULY):
+    default_calendar, default_documents = corpus(july)
     return [calendar if calendar is not None else default_calendar] + [
         json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode("utf8")
         for document in (documents if documents is not None else default_documents)]
@@ -209,12 +222,14 @@ def build(*, transport=None, clock=None, ledger=None, **kwargs):
     return snapshot, transport, clock
 
 
-def admission(snapshot):
+def admission(snapshot, july_days=len(JULY)):
+    # Independent arithmetic: N = observed July days + 45 formal days.
     captures = snapshot.inspection()["captures"]
+    total = july_days + len(PRIOR)
     return source.OracleAdmission(NAMESPACE, EXTERNAL_PIN, "synthetic-boundary-oracle",
                                   "a" * 40, "b" * 64,
                                   tuple(c.receipt.canonical_sha256 for c in captures),
-                                  23, 476, 2856, 42, True)
+                                  july_days, 7 * total, 42 * total, 42, True)
 
 
 def available():
@@ -232,10 +247,12 @@ class Boundaries(unittest.TestCase):
         return caught.exception
 
     def test_external_policy_all_recursive_keys_types_values_and_canonical(self):
-        self.assertEqual(len(EXTERNAL_POLICY), 3266)
+        self.assertEqual(len(EXTERNAL_POLICY), 3497)
         self.assertEqual(hashlib.sha256(EXTERNAL_POLICY).hexdigest(), EXTERNAL_PIN)
         source.validate_policy(EXTERNAL_POLICY, EXTERNAL_PIN)
         policy = json.loads(EXTERNAL_POLICY)
+        self.assertEqual(policy["acquisition"]["namespace"], NAMESPACE)
+        self.assertNotIn("23", policy["calendar_source"]["expected_scope"])  # no fixed day count
         nodes = []
         def visit(value):
             if isinstance(value, dict):
@@ -279,6 +296,31 @@ class Boundaries(unittest.TestCase):
         self.assertFailure("policy_canonical_mismatch", source.validate_policy, EXTERNAL_POLICY + b" ", EXTERNAL_PIN)
         self.assertFailure("duplicate_json_key", source.validate_policy, EXTERNAL_POLICY.replace(b'{', b'{"version":"duplicate",', 1), EXTERNAL_PIN)
 
+    def test_v1_policy_and_qa1_namespace_are_rejected(self):
+        # Rebuild v1 from v2 by restoring its four leaves; the pin/length prove it is exactly v1.
+        v1 = json.loads(EXTERNAL_POLICY)
+        v1["version"] = "issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v1"
+        v1["calendar_source"]["expected_scope"] = "2026-07 full 23 weekdays; exact positive dates required; no missing-day closure inference"
+        v1["calendar_source"]["version"] = "tpex-july23-plus-formal-aug21-sep20-oct4/issue32-v1"
+        v1["acquisition"]["namespace"] = V1_NAMESPACE
+        v1_policy = canonical(v1)
+        self.assertEqual((len(v1_policy), hashlib.sha256(v1_policy).hexdigest()), (V1_BYTES, V1_PIN))
+        self.assertNotEqual(V1_NAMESPACE, NAMESPACE)
+        self.assertFailure("policy_pin", source.validate_policy, v1_policy, V1_PIN)
+        self.assertFailure("policy_canonical_mismatch", source.validate_policy, v1_policy, EXTERNAL_PIN)
+        self.assertFailure("policy_pin", source.validate_policy, EXTERNAL_POLICY, V1_PIN)
+        self.assertFailure("policy_pin", source.HistorySource, policy_canonical=v1_policy, policy_sha256=V1_PIN,
+                           formal_blob=FORMAL, transport=Transport(), ledger=source.AttemptLedger(NAMESPACE))
+        self.assertFailure("quota_namespace", source.AttemptLedger, V1_NAMESPACE)
+        snapshot, transport, _ = build()
+        snapshot.acquire()
+        proof = admission(snapshot)
+        for label, mutation in (("namespace", replace(proof, namespace=V1_NAMESPACE)),
+                                ("policy", replace(proof, policy_sha256=V1_PIN))):
+            with self.subTest(case=label):
+                self.assertFailure("oracle_scope", snapshot.admit_independent_verification, mutation)
+        snapshot.release()
+
     def test_unsupported_every_purpose_before_transport(self):
         for purpose in json.loads(EXTERNAL_POLICY)["unsupported"] + ["strategy", "storage", "random", None]:
             transport = Transport()
@@ -295,7 +337,9 @@ class Boundaries(unittest.TestCase):
         cases = [
             (replace(start, authorized=1), binding, "financial_start_not_authorized"),
             (replace(start, namespace="other"), binding, "financial_start_scope"),
+            (replace(start, namespace=V1_NAMESPACE), binding, "financial_start_scope"),
             (replace(start, policy_sha256="0" * 64), binding, "financial_start_scope"),
+            (replace(start, policy_sha256=V1_PIN), binding, "financial_start_scope"),
             (replace(start, seal_comment_url="https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6084911117"), binding, "financial_new_explicit_seal_required"),
             (start, replace(binding, candidate_sha="d" * 40), "financial_binding_mismatch"),
             (start, replace(binding, script_sha256="e" * 64), "financial_binding_mismatch"),
@@ -386,11 +430,15 @@ class Boundaries(unittest.TestCase):
             (b'{"data":[]}', "calendar_header_or_count"),
             (b"<html>failed</html>", "calendar_header_or_count"),
             (calendar.replace("資料日期".encode(), "日期".encode()), "calendar_header_or_count"),
-            ("\n".join(lines[:-1]).encode(), "calendar_header_or_count"),
-            ((calendar.decode() + lines[1] + "\n").encode(), "calendar_header_or_count"),
+            ((lines[0] + "\n").encode(), "calendar_header_or_count"),  # header only: zero observed days
+            ((calendar.decode() + lines[1] + "\n").encode(), "calendar_exact_dates"),  # duplicate date
+            ((calendar.decode() + "20260803,100,105,95,101,-1\n").encode(), "calendar_exact_dates"),  # extra non-July
             (calendar.replace(b"20260701", b"20260702", 1), "calendar_exact_dates"),
             (calendar.replace(b"20260701", b"20260803", 1), "calendar_exact_dates"),
-            (calendar.replace(b"20260701", b"20260704", 1), "calendar_exact_dates"),
+            (calendar.replace(b"20260701", b"20260630", 1), "calendar_exact_dates"),
+            (calendar.replace(b"20260701", b"20260704", 1), "calendar_exact_dates"),  # Saturday
+            (calendar.replace(b"20260701", b"20260705", 1), "calendar_exact_dates"),  # Sunday
+            (calendar.replace(b"20260731", b"2026073", 1), "calendar_row"),  # malformed last row
             (calendar.replace(b"20260701", b"20260230", 1), "calendar_value"),
             (calendar.replace(b"20260701", b"1150701", 1), "calendar_row"),
             (calendar.replace(b",105,95,", b",99,95,", 1), "ohlc_bounds"),
@@ -409,6 +457,121 @@ class Boundaries(unittest.TestCase):
                 self.assertEqual(snapshot._capture_buffer, b"")
                 self.assertEqual(len(snapshot.inspection()["captures"]), 1)
                 self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
+                snapshot.release()
+
+    def test_observed_july_days_variable_count_accepted_with_exact_windows(self):
+        # Window arithmetic is derived here, not from product helpers.
+        self.assertEqual(sum(day <= "2026-10-05" for day in PRIOR), 44)
+        self.assertEqual(sum(day <= "2026-10-06" for day in PRIOR), 45)
+        for label, july in (("23_all_weekdays", JULY), ("22_one_gap", july_without("2026-07-15")),
+                            ("16_minimum", july_without(*JULY[1:8]))):
+            with self.subTest(case=label):
+                total = len(july) + 45
+                snapshot, transport, _ = build(transport=Transport(body_docs(july=july)))
+                snapshot.acquire()
+                self.assertEqual(len(transport.opens), 8)
+                results = snapshot.inspection()["results"]
+                self.assertEqual(tuple(results), SYMBOLS)
+                for symbol in SYMBOLS:
+                    self.assertEqual(tuple(bar.date for bar in results[symbol]), july + PRIOR)
+                self.assertEqual(len(results["3105"]), total)
+                proof = admission(snapshot, len(july))
+                self.assertEqual((proof.calendar_rows, proof.price_rows, proof.price_fields, proof.latest_anchor_fields),
+                                 (len(july), 7 * total, 42 * total, 42))
+                if len(july) != 23:  # the old fixed scope no longer describes this snapshot
+                    self.assertFailure("oracle_complete_scope", snapshot.admit_independent_verification,
+                                       replace(proof, calendar_rows=23, price_rows=476, price_fields=2856))
+                for field, delta in (("calendar_rows", 1), ("price_rows", -1), ("price_fields", 1), ("latest_anchor_fields", -1)):
+                    self.assertFailure("oracle_complete_scope", snapshot.admit_independent_verification,
+                                       replace(proof, **{field: getattr(proof, field) + delta}))
+                snapshot.admit_independent_verification(proof)
+                self.assertEqual(snapshot.provenance["calendar_dates"], july + PRIOR)
+                _, documents = corpus(july)
+                for index, symbol in enumerate(SYMBOLS):
+                    for cutoff in CUTOFFS:
+                        expected = tuple(day for day in july + PRIOR if day <= cutoff)[-60:]
+                        window = snapshot.get_nominal_ohlcv60(symbol, cutoff)
+                        self.assertEqual(tuple(bar.date for bar in window.bars), expected)
+                        self.assertEqual(len(window.bars), 60)
+                        summary = snapshot.summarize_nominal_ohlcv60(symbol, cutoff).values
+                        rows = {row["date"]: row for row in documents[index]["data"]}
+                        self.assertEqual(summary["start_date"], expected[0])
+                        self.assertEqual(summary["end_date"], cutoff)
+                        prior = tuple(day for day in july + PRIOR if day < cutoff)[-20:]
+                        self.assertEqual((summary["prior20_start"], summary["prior20_end"]), (prior[0], prior[-1]))
+                        total_close = sum((Fraction(str(rows[day]["close"])) for day in expected), Fraction(0))
+                        expected_ma60 = total_close / 60
+                        self.assertEqual((summary["ma60_close"].numerator, summary["ma60_close"].denominator),
+                                         (expected_ma60.numerator, expected_ma60.denominator))
+                snapshot.release()
+
+    def test_insufficient_window_rejects_before_any_price_get_without_shrinking(self):
+        for count in (15, 1):
+            with self.subTest(observed_july_days=count):
+                # 10/05 needs 44 + count >= 60 (count >= 16); 10/06 needs count >= 15.
+                snapshot, transport, _ = build(transport=Transport(body_docs(july=JULY[:count])))
+                self.assertFailure("calendar_window_insufficient", snapshot.acquire)
+                self.assertEqual(len(transport.opens), 1)
+                self.assertEqual(snapshot.ledger.attempted, (0,))
+                self.assertEqual(snapshot.ledger.unrun, tuple(range(1, 8)))
+                self.assertEqual(snapshot.state, "failed")
+                self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
+                snapshot.release()
+
+    def test_calendar_combination_must_be_unique_and_ascending(self):
+        for label, rewrite in (("duplicate_with_prior", lambda prior: ("2026-07-31",) + prior),
+                               ("descending_prior", lambda prior: tuple(reversed(prior)))):
+            with self.subTest(case=label):
+                snapshot, transport, _ = build()
+                snapshot._prior_dates = rewrite(snapshot._prior_dates)
+                self.assertFailure("calendar_combination", snapshot.acquire)
+                self.assertEqual(len(transport.opens), 1)
+                self.assertEqual(snapshot.ledger.attempted, (0,))
+                snapshot.release()
+
+    def test_price_dates_must_equal_observed_calendar_for_every_symbol(self):
+        gap = "2026-07-15"
+        july = july_without(gap)
+        calendar, original = corpus(july)
+
+        def mutated(symbol_index, change):
+            documents = copy.deepcopy(original)
+            change(documents[symbol_index]["data"])
+            return body_docs(calendar, documents, july)
+
+        def add_gap_row(rows):
+            rows.append({**rows[0], "date": gap})
+
+        def swap_in_gap(rows):
+            rows[3]["date"] = gap
+
+        cases = (
+            ("extra_day_not_in_calendar", 0, add_gap_row, "price_row_count", 2),
+            ("missing_day", 0, lambda rows: rows.pop(5), "price_row_count", 2),
+            ("same_count_wrong_date", 0, swap_in_gap, "price_duplicate_or_calendar", 2),
+            ("duplicate_date_hides_missing", 0, lambda rows: rows.__setitem__(4, copy.deepcopy(rows[5])), "price_duplicate_or_calendar", 2),
+            ("only_third_symbol_missing_day", 2, lambda rows: rows.pop(9), "price_row_count", 4),
+            ("only_fifth_symbol_wrong_date", 4, swap_in_gap, "price_duplicate_or_calendar", 6),
+            ("only_last_symbol_extra_day", 6, add_gap_row, "price_row_count", 8),
+        )
+        for label, symbol_index, change, code, opens in cases:
+            with self.subTest(case=label):
+                snapshot, transport, _ = build(transport=Transport(mutated(symbol_index, change)))
+                self.assertFailure(code, snapshot.acquire)
+                self.assertEqual(len(transport.opens), opens)
+                self.assertEqual(snapshot.ledger.attempted, tuple(range(opens)))
+                self.assertEqual(snapshot.state, "failed")
+                self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
+                snapshot.release()
+        # Cross-source disagreement in either direction: provider has one more or one fewer
+        # trading day than the official observed calendar, for every symbol.
+        full_calendar, full_documents = corpus()
+        for label, bodies in (("provider_has_extra_day", body_docs(calendar, full_documents, july)),
+                              ("provider_lacks_day", body_docs(full_calendar, original, JULY))):
+            with self.subTest(case=label):
+                snapshot, transport, _ = build(transport=Transport(bodies))
+                self.assertFailure("price_row_count", snapshot.acquire)
+                self.assertEqual(len(transport.opens), 2)
                 snapshot.release()
 
     def test_all_price_rows_gate_no_partial_symbol_or_calendar(self):
