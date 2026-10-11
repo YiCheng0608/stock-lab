@@ -1681,4 +1681,3 @@ if __name__ == "__main__":
     finally:
         GUARD[0] = False
         print("Selftest process exiting; independent QA and real HTTPS positives remain Unverified; artifact writes=0B", flush=True)
-
