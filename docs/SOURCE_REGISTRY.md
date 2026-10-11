@@ -32,6 +32,8 @@ Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每�
 
 `source-policy/v1` validator 固定最小 evidence 與 condition 集：`local_fetch` 要求 `free_public=true`、`auth=false`、documented terms；`raw_store`／`summarize` 各要求自己的 retention evidence；所有用途要求 `enabled=true`。Manifest 不得刪減集合繞過 gate。
 
+測試樣本重用：真實資料進[唯讀樣本庫](development-baseline/README.md#測試資料庫分層)前，須依保存形式取得該 source 的 `raw_store` 或 `summarize` admitted，並記 `source_id`、`source_version`、`policy_version`。重用只限本機開發與 QA，不公開散布或上 GitHub；權利 unknown／denied 不收錄，取得當時的配額與 NO-RETRY 不因樣本重用而重置。
+
 ## 2. 官方共同證據與限制
 
 - [TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json) 是 Swagger 2.0，HTTPS、`host=openapi.twse.com.tw`、`basePath=/v1`、info version `1.0`。
@@ -342,7 +344,7 @@ Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍�
 
 ### 12.3 本輪驗收邊界與下一步
 
-本批只有 metadata／唯讀 source review，程式寫入範圍為空；未取法人 body，未跑 tests／backend／build／UI，不由前輪測試追認准入。入口副作用見[開發文件](development-baseline/README.md)，角色／清理限制見[協作紀錄](TASK_COORDINATION.md)。
+本批只有 metadata／唯讀 source review，程式寫入範圍為空；未取法人 body，未跑 tests／backend／build／UI，不由前輪測試追認准入。入口副作用見[開發文件](development-baseline/README.md)，角色／清理限制見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)。
 
 取得 §12.2 的 exact 權利與資源證據後，才由統籌核定有界驗證及必要實作。優先順序依 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，不以此來源等待暫停其他已具依賴的核心能力。
 
@@ -1041,7 +1043,7 @@ Root逐欄核selected六股108欄：18身分欄只去外側空白比對，其餘
 
 Root actual API10案、六stock POST＋一focus POST cached且無新增source、四理由去重／code順／全六股先gate後filter；8069 samecutoff五原字串raw往返、desktop1277×924／窄版390×844與真零／恢復已核。B1 coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0；BOOT／§26 metadata／DOC／index／Git非implementation batch。Necessary checks與rawexit1／cleanup verify0分報由[開發入口](development-baseline/README.md#m2-focus-stock-scope-4-六股範圍的記憶體驗證入口)管理。
 
-未驗磁碟保存／跨程序、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。六股source13＋DOC8／freeze21／qualified七分區索引、exact commit及正常ff-only local master merge已接受；後續統籌visible gate亦已接受，收據留原task／協作紀錄。其他來源與scope不由本節自動准入。
+未驗磁碟保存／跨程序、全市場／PIT、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。六股source13＋DOC8／freeze21／qualified七分區索引、exact commit及正常ff-only local master merge已接受；後續統籌visible gate亦已接受，收據留原task。其他來源與scope不由本節自動准入。
 
 ## 28. M1-HISTORY-OPEN-DATA-LINK-1：開放平台metadata與歷史用途缺口
 
@@ -1377,7 +1379,7 @@ Index1MiB／daily2MiB／aggregate42MiB、22 requests／ONE attempt／15s per-req
 
 ### 36.3 Existing private與完整joint gate
 
-唯一private root／bundle、三檔full bytes／SHA／mtimeNS、兩層UTC及ATCAP／NO-RETRY沿§33.2與[協作紀錄](TASK_COORDINATION.md)，本批只准精確有限READ-only，不新增保存／copy／export／publish／delete。Producer新上限54snapshots、ROOT reserve3、新總57；承前7後shared≤64bundles／192logicalfiles，不能用oldconsumer96作本批上限。Actual26producer＋2ROOT＋inherited7＝35bundles／105logicalfiles，ROOT reserve1未用；ROOT兩次實讀含post-stop原三檔bytes／SHA／mtimeNS不變，children actualprivate0。
+唯一private root／bundle、三檔full bytes／SHA／mtimeNS、兩層UTC及ATCAP／NO-RETRY沿§33.2與[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，本批只准精確有限READ-only，不新增保存／copy／export／publish／delete。Producer新上限54snapshots、ROOT reserve3、新總57；承前7後shared≤64bundles／192logicalfiles，不能用oldconsumer96作本批上限。Actual26producer＋2ROOT＋inherited7＝35bundles／105logicalfiles，ROOT reserve1未用；ROOT兩次實讀含post-stop原三檔bytes／SHA／mtimeNS不變，children actualprivate0。
 
 ALL7 price與BOTH3105／6488的完整calendar／20daily／5及20窗口、同cutoff／pins／provenance先gate再filter；其餘五股scope排除，非法人零。即使price條件先得零也不略chips驗證；只有完整available可count0，缺／衝突為count=null/items=[]。Signed張grammar／int64／inclusive AND沿§34.1；current failure mask兩來源，same-generation恢復須明示NEW private＋held chips兩次成功，held不外網重抓，舊generation不得回填。
 
@@ -1436,7 +1438,7 @@ Index1MiB／daily2MiB／aggregate42MiB、22 requests／ONE attempt／15s per-req
 
 每次先完整ALL7 price＋ALL7 chips/calendar／20daily／5及20窗口／同cutoff／pins／provenance，再filter；高price門檻或先得零仍不得省略七股法人。Only full available才count0，missing／invalid／conflict為count=null/items=[]，不縮scope／跳壞股／補零。Initial saved unread只mask price，獨立核實held chips可呈現，但joint不ready；actual current source failure同時mask BOTH。恢復仍須same-generation明示NEW private＋held chips雙成功，未跑actual recovery。
 
-Private exactroot／三檔full SHA／mtimeNS／原receipts／UTC沿§33.2及[協作紀錄](TASK_COORDINATION.md)，只READ-only，禁止新增保存／copy／export／publish／delete。承前35bundles/105logicalfiles，新producer26＋ROOTreserve3＝29/87另准；實際producer26＋ROOT2，使FINAL63/189≤shared64/192，producer26 SPENT／ROOTreserve1未用；oldconsumer96不改，不reset quota，剩1bundle/3files非未來grant。
+Private exactroot／三檔full SHA／mtimeNS／原receipts／UTC沿§33.2及[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，只READ-only，禁止新增保存／copy／export／publish／delete。承前35bundles/105logicalfiles，新producer26＋ROOTreserve3＝29/87另准；實際producer26＋ROOT2，使FINAL63/189≤shared64/192，producer26 SPENT／ROOTreserve1未用；oldconsumer96不改，不reset quota，剩1bundle/3files非未來grant。
 
 ROOT1 UTC13:11:03.008032Z～13:11:03.052032Z及finalROOT2 UTC14:03:55.687262Z～14:03:55.721262Z（均2026-10-07）獨立核完整三檔bytes／SHA／decimal mtime、全12194×18與七股原18欄；body1788599B＋capture1461B＋storage1584B＝1791644B與original JSON／mtime均不變。Children actualprivate0，沒有第三次ROOT讀取。
 
@@ -1444,7 +1446,7 @@ ROOT1 UTC13:11:03.008032Z～13:11:03.052032Z及finalROOT2 UTC14:03:55.687262Z～
 
 ROOT接受source20及七股positive／verifiedzero／samecutoff七detail／八RAWback、新profile負值cards與actual502清兩來源；coreoperation+1／standalone coredependency0／reliability+1（scope7全7×2×3 aggregate int64 overflow guard）／stall0→0。Actual missing-private-file與post-stop recovery NOT RUN，synthetic不代actual；舊§36 negative card修正後native NOT RUN仍保持。Checks與退出見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-stock-scope-7-1006-1-七股八條件的零落盤驗證入口)；DOC review／freeze／qualified index／commit／另准master merge待。
 
-Private3files1791644B＋original3dirs ATCAP／preCreateProcess approval REJECTED／process0/delete0 STRICT NO-RETRY，禁alternate tool/path/owner/tree bypass與新disk/copy/export/publish/delete。DAY/TURNOVER/MAIN五cache＋holiday/older資源排除及禁sweep完整條件見[協作紀錄](TASK_COORDINATION.md)；清理與功能分報。
+Private3files1791644B＋original3dirs ATCAP／preCreateProcess approval REJECTED／process0/delete0 STRICT NO-RETRY，禁alternate tool/path/owner/tree bypass與新disk/copy/export/publish/delete。DAY/TURNOVER/MAIN五cache＋holiday/older資源排除及禁sweep完整條件見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)；清理與功能分報。
 
 下一未准入 `M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1-B1`以本次140原daily／42 totals支持七股每日net曲線／精確日期表／running cumulative新操作；條件及fresh finite source／new series policies/pins由[執行清單](ROADMAP_EXECUTION.md)管理。Current22非下一grant、next private actualIO0；ordinary20/21 closes／trend／strategy／time／PIT／execution仍缺。
 
@@ -1472,7 +1474,7 @@ ONE新API generation `7e5fb646-d205-4d77-b452-c459a0b10efd`，no seed／preloade
 
 Index1MiB／daily2MiB／aggregate42MiB、22 requests／ONE attempt／無redirect／retry；15s per request與180s batch為cooperative boundary checks，非OS強制中止。Received headers16KiB是收到後檢查，非socket硬cap；retained graph8748386B在64MiB estimate界線內，為deduplicated getsizeof estimate，非RSS／construction peak。GET診斷回應界線16MiB；process memory，new disk0。Publication／first availability／revision unknown，historical PIT unsupported；原成交統計未反映券商帳號更正。
 
-Current metadataGET0／ordinarypriceGET0／privateactualIO0／upstreamPOST0；Source22 SPENT。Inherited114＋22＝136 chips GET，known17444540B另有first old Sep body unknown，不稱所有歷史bytes已知。控制項、返回及held READ不能重取得來源；FIRST不能重複。Private FINAL63bundles／189logicalfiles、剩1bundle／3files不是新grant／reset／retry／thirdROOTread；完整ATCAP、STRICT NO-RETRY及DAY／MAIN／其他資源fences見[協作紀錄](TASK_COORDINATION.md)，本批不碰private。
+Current metadataGET0／ordinarypriceGET0／privateactualIO0／upstreamPOST0；Source22 SPENT。Inherited114＋22＝136 chips GET，known17444540B另有first old Sep body unknown，不稱所有歷史bytes已知。控制項、返回及held READ不能重取得來源；FIRST不能重複。Private FINAL63bundles／189logicalfiles、剩1bundle／3files不是新grant／reset／retry／thirdROOTread；完整ATCAP、STRICT NO-RETRY及DAY／MAIN／其他資源fences見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，本批不碰private。
 
 ### 38.4 有限接受與暫停
 
@@ -1598,7 +1600,7 @@ ROOT核完整schema／maps／dates／ordinals／dualSHA；新body SHA與§41相�
 
 ## 43. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與新來源准入
 
-2026-10-08。ROOT precise grant先於implementation／financialGET，source10及fresh原件／數值／具名操作已有限接受；financial22已SPENT。本節只管理本B1獨立政策與來源／數值契約；已接受§31／37／38、oldprofiles／defaultpins、failed producer及其未跑歷史不改。新操作及完成條件見[個股頁 §48](STOCK_RESEARCH_PAGE.md)／[執行清單](ROADMAP_EXECUTION.md)，進度與清理沿[協作紀錄](TASK_COORDINATION.md)。
+2026-10-08。ROOT precise grant先於implementation／financialGET，source10及fresh原件／數值／具名操作已有限接受；financial22已SPENT。本節只管理本B1獨立政策與來源／數值契約；已接受§31／37／38、oldprofiles／defaultpins、failed producer及其未跑歷史不改。新操作及完成條件見[個股頁 §48](STOCK_RESEARCH_PAGE.md)／[執行清單](ROADMAP_EXECUTION.md)。
 
 ### 43.1 新版本與外部pins
 
@@ -1646,7 +1648,7 @@ NEWgen `7a69c0e8-a019-41c6-9a24-d0b7e2833b3b` nativeFIRST_once完成22financialH
 Actual每日gross0共27cells，desktop3105／trust／9/18sell0與narrow5274／trust／9/30buy0均有ALL25trace；84窗口gross totals全非0。完整可信UI／API／mask／failureclear沿PAGE48。Metadata8direct＋2webreader及financial22已SPENT，reader403保留；原件隨API正常SIGINT／SHUTDOWNtrue raw1釋放、guards0／source_requests22 producer22，無restart／replay／hydrate。test／productartifacts0files0B、privateIO／DB／priceGET0；完整退出／錯誤／命令見[開發入口](development-baseline/README.md)。Source10＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge；不以索引或Git代功能驗收。
 ## 44. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段
 
-2026-10-08。ROOT已有限接受新來源／數值與具名操作，financial22及metadata已SPENT。本節只管理新namespace；oldnet／oldgross／defaultpins與四TWSE profiles不改。操作見[個股頁 §49](STOCK_RESEARCH_PAGE.md)，入口見[開發入口](development-baseline/README.md)，進度及封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+2026-10-08。ROOT已有限接受新來源／數值與具名操作，financial22及metadata已SPENT。本節只管理新namespace；oldnet／oldgross／defaultpins與四TWSE profiles不改。操作見[個股頁 §49](STOCK_RESEARCH_PAGE.md)，入口見[開發入口](development-baseline/README.md)。
 
 ### 44.1 獨立版本與外部pins
 
@@ -1700,7 +1702,7 @@ Fresh每日net零2格：8069trust9/23、3293trust9/29，各為獨立1day zero ru
 
 ## 45. M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰5日比較與新來源准入
 
-2026-10-08。ROOT有限接受SOURCE9、新來源／數值與具名比較操作；本節只管理新namespace，old series／gross／direction／defaultpins及四TWSE profiles immutable。操作見[個股頁 §50](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)，核心及封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+2026-10-08。ROOT有限接受SOURCE9、新來源／數值與具名比較操作；本節只管理新namespace，old series／gross／direction／defaultpins及四TWSE profiles immutable。操作見[個股頁 §50](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)。
 
 ### 45.1 獨立版本與外部pins
 
@@ -1754,7 +1756,7 @@ Financial12／metadata6direct＋2reader SPENT；ORIGINAL RAM已隨正常退出�
 
 ## 46. M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳
 
-2026-10-08。ROOT有限接受SOURCE9及具名actual對帳，操作見[個股頁 §51](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)，核心與封存見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。本節只管理新namespace，old series／gross／direction／adjacent／defaultpins與四TWSE profiles immutable。
+2026-10-08。ROOT有限接受SOURCE9及具名actual對帳，操作見[個股頁 §51](STOCK_RESEARCH_PAGE.md)，驗證入口見[開發入口](development-baseline/README.md)。本節只管理新namespace，old series／gross／direction／adjacent／defaultpins與四TWSE profiles immutable。
 
 ### 46.1 獨立版本與外部pins
 

@@ -1,13 +1,16 @@
 # 文件索引
 
-## 先讀這四份
+## 依角色先讀
 
-| 文件 | 負責的問題 |
+所有角色先讀 [AGENTS](../AGENTS.md) 與被派 Issue 的本文及最新交接，再按階段只讀下表；大檔用標題與搜尋定位，不整檔讀，見[讀取成本](GITHUB_WORKFLOW.md#讀取交接與證據成本)。
+
+| 角色 | 加讀 |
 | --- | --- |
-| [PRODUCT_SPEC](PRODUCT_SPEC.md) | 使用者、產品方向、主要流程與範圍。 |
-| [ROADMAP](ROADMAP.md) | 目前能力、優先順序與待決定事項。 |
-| [ROADMAP_EXECUTION](ROADMAP_EXECUTION.md) | 歷史工作 ID、拆解與驗收邊界；不管理即時任務狀態。 |
-| [OPERATIONS](OPERATIONS.md) | 啟動、資料路徑、CLI、收集／回補與診斷。 |
+| 全局／任務統籌 | [工作手冊](GITHUB_WORKFLOW.md)、[ROADMAP](ROADMAP.md)、[PRODUCT_SPEC](PRODUCT_SPEC.md)（盤點或範圍變更時） |
+| 工程師 | Issue 指定的主題契約、[開發入口](development-baseline/README.md)的[版本與資料](development-baseline/README.md#版本與資料)、[後端驗證](development-baseline/README.md#後端驗證)、[OPERATIONS](OPERATIONS.md) 相關節 |
+| QA | Issue 原 AC 與指定契約、手冊的[失敗分流](GITHUB_WORKFLOW.md#失敗分流與有界重驗)與[QA 模板](GITHUB_WORKFLOW.md#qa-與退修)、[測試資料庫分層](development-baseline/README.md#測試資料庫分層) |
+| 文件 | 本頁「文件維護」、受影響的主題契約 |
+| 索引／Git | 手冊的[程式索引](GITHUB_WORKFLOW.md#任務識別與程式索引)與[整合模板](GITHUB_WORKFLOW.md#整合與結案) |
 
 ## 按需要查契約
 
@@ -21,9 +24,9 @@
 
 即時任務、依賴、排序、狀態、接手及停滯紀錄只在 GitHub Issues／Projects；[遷移入口](TASK_COORDINATION.md)提供連結與歷史。
 
-現行 WIP、ACK、Ready 判定及退修續作查[權責規則](../AGENTS.md#建立任務與派工)與[平行派工／補位](GITHUB_WORKFLOW.md#平行派工與補位)，歷史 task 的逐輪限制不作全專案派工上限。
+現行 WIP、ACK、Ready 判定及退修續作查[權責規則](../AGENTS.md#建立任務與派工)與[平行派工／補位](GITHUB_WORKFLOW.md#平行派工與補位)。
 
-[Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)與[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md)只保留歷史定位，不作新派工依據。
+[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md)（歷史 R0–R3 拆解）、[Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)與[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md)只保留歷史定位，不作新派工依據。
 
 ## 文件維護
 
@@ -31,4 +34,4 @@
 
 ## 歷史查閱
 
-本次整理前的29份 Markdown 在 Git `5ae84d2`，例如 `git show 5ae84d2:docs/TASK_COORDINATION.md`。更早整理前版本為 `69f62cf`、`2acc3c5`。歷史命令、測試數、實際 roster 與逐輪收據查 Git／原 task；不作目前來源的新驗收。
+本次整理前的29份 Markdown 在 Git `5ae84d2`，例如 `git show 5ae84d2:docs/TASK_COORDINATION.md`。更早整理前版本為 `69f62cf`、`2acc3c5`。TASK_COORDINATION、ROADMAP、ROADMAP_EXECUTION 移出的改造前歷史段，以 `46eb244` 版本為準（例如 `git show 46eb244:docs/ROADMAP.md`）。歷史命令、測試數、實際 roster 與逐輪收據查 Git／原 task；不作目前來源的新驗收。

@@ -279,7 +279,7 @@ JavaScript 股數顯示 parser 支持完整 `0..9,223,372,036,854,775,807` 的 c
 | 桌面張單位 `9007199254741`／`9007199254740` | 超限拒收，該列完整 JSON 不變；最大合法張數保存後讀回，該 TWSE 測試持倉的刪除亦已核對。 |
 | TPEx `390×844` 窄版，`1001` 股保存後刪除 | 呈現 `1 張 1 股` 及原值 `1,001 股`；document 寬 375，12 張卡的 24 個數量子元素 client／scroll width 均為 273，editor 寬 305，未觀測橫向溢出。 |
 
-具名操作限 memory preview／fallback font，不改正式字型；console／network 只支持該擷取範圍。歷史程序／清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)，不作完整 session 穩定性證據。
+具名操作限 memory preview／fallback font，不改正式字型；console／network 只支持該擷取範圍。歷史程序／清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue，不作完整 session 穩定性證據。
 
 #### M3-P2 可信整數保存與磁碟重開契約
 
@@ -303,7 +303,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 | 窄版最大合法張數 `9223372036854775` | 保存 200，exact 股數 `9223372036854775000`／零股 0；14 張卡的 28 個數量元素 client／scroll width 均 273，editor 305，未觀測橫向溢出。 |
 | 窄版原生刪除兩列 NEW，再讀回 | 兩次 DELETE 200；GET 200／items 空、cards 0。 |
 
-具名操作只接受實際生效的 viewport／focus／保存／拒收／刪除，不以工具 ack 作成功。曾有未生效操作及 runtime 失敗，原收據留 task；capture stop 的額外 HAR 審核拒絕殘留由[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)及[協作紀錄](TASK_COORDINATION.md)負責。
+具名操作只接受實際生效的 viewport／focus／保存／拒收／刪除，不以工具 ack 作成功。曾有未生效操作及 runtime 失敗，原收據留 task；capture stop 的額外 HAR 審核拒絕殘留由[開發入口](development-baseline/README.md#m3-p2-可信整數保存與磁碟重開驗證入口)及[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)負責。
 
 <a id="m3-p3-庫存成本停損風險輸入可信檢核與拒收保留"></a>
 
@@ -323,7 +323,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 
 這是 Float／JavaScript Number 的可信輸入 gate，不是十進位精確保存。合法小數仍可有二進位近似；server 不從已解碼的數字還原原始 JSON token，UI 的原字串 underflow 檢核與 server 的已解碼值 gate 分開。沒有修改 schema、legacy Float 或既有污染列、held／worker／risk 行動、新 Plan、價格級距、來源或 PIT。
 
-本次採 `2026-10-03` synthetic TWSE／TPEx 使用者庫存與 memory server，不當正式持倉、官方行情或 live coverage。主契約支持範圍如下；可重建入口見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)；歷史命令、版本、失敗與清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
+本次採 `2026-10-03` synthetic TWSE／TPEx 使用者庫存與 memory server，不當正式持倉、官方行情或 live coverage。主契約支持範圍如下；可重建入口見[開發入口](development-baseline/README.md#m3-p3-庫存價值輸入的零落盤驗證入口)；歷史命令、版本、失敗與清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 | 具名操作 | 已接受的有限結果 |
 | --- | --- |
@@ -333,7 +333,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 | 一次 transport fault 將原合法 POST 的成本改為 `false` | actual router 回 422；UI 保留 draft、busy 恢復、完整 JSON 不變，使用真拒收回應，不是 mock response。 |
 | 新表單只填 TPEx NEW `2` 張，獨立核成本／停損原字串為 `""` | POST 200、GET 的成本／停損／risk_budget 均為 null，原非零值已清。首次 CLI 空字串操作失敗及誤按保存原值不算本次空白清欄通過。 |
 
-兩次原生刪除沒有 DELETE，**本批刪除未驗**；兩 NEW 列只在記憶體，shutdown 後釋放，原十二列完整 JSON 不變。Console／network 為有限擷取，不證完整 session；歷史程序清理留原 task／Git，現有 HAR／blocked 殘留見[協作紀錄](TASK_COORDINATION.md)。
+兩次原生刪除沒有 DELETE，**本批刪除未驗**；兩 NEW 列只在記憶體，shutdown 後釋放，原十二列完整 JSON 不變。Console／network 為有限擷取，不證完整 session；歷史程序清理留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 正式 DB、磁碟保存／重開、production deployment、真官方／live、完整 backend／production Vite build、既有污染的可信讀回、風險行動與所有估值、risk sizing、新 Plan、完整 M3、歷史／availability／PIT 仍未由本批驗收。後續 M3-P4 已有限接受的可信讀回及非法停損隔離見下節；兩批各依具名範圍驗收，不以輸入 gate 推定所有估值／風險行動已完成。
 
@@ -365,7 +365,7 @@ UI 檢核原始 ASCII 數字字串，可刪前導零形成 canonical 字串；�
 
 Actual HTTP 的十四列與十四個完整 decisions 已核三態、0 優先、missing-only fallback 與 invalid 隔離；讀取前後全十四列 SQL（全部欄位、note、updated_at 與三欄 typeof）雜湊一致，無 mutation。必要邊界及舊 API metadata 缺席／raw null、明示壞 metadata 的相容結果另由可重建 formatter／SSR 驗證，不冒充 live API 情境。
 
-Runtime／offscreen 操作曾失敗，恢復後的具名操作才接受，原收據留 task。HTTP／console／network 只支持有限查閱；歷史程序／頁籤收據留原 task／Git，現有 HAR／blocked 殘留依[協作紀錄](TASK_COORDINATION.md)。
+Runtime／offscreen 操作曾失敗，恢復後的具名操作才接受，原收據留 task。HTTP／console／network 只支持有限查閱；歷史程序／頁籤收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本節保留 P4 信任讀回與非法庫存停損隔離的原有限驗收，不修污染或遺失 intent，不外推所有估值／風險行動。後續 [M3-P5](#m3-p5-可信庫存股數與既有估值持倉判定一致) 已有限接受股數／既有估值／held 一致接線；兩批各依具名範圍驗收，不從可信股數推定金融估值 exact 或行情信任已驗。
 
@@ -409,7 +409,7 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 | TPEx GATEFAIL 的實際研究詳情及首頁 | 兩個 gate 未滿 unknown 仍 data_insufficient；原 heading／strong 說明保留並有 badge、levels 空。首頁保留不完整 unknown 並去重。 |
 | 詳情 badge 退修後的桌面／390px | 真正 ActionDetailPanel 的完整／不完整兩 profile 均通過；第一版 ProductActionCard SSR 不當詳情證據。 |
 
-詳情 badge 原先缺失，修正後才按兩個 profile 接受。其他工具／runtime 原失敗留 task，不稱初版即通過；console／network 為有限查閱，歷史程序清理留原 task／Git，現有 blocked 殘留依[協作紀錄](TASK_COORDINATION.md)。
+詳情 badge 原先缺失，修正後才按兩個 profile 接受。其他工具／runtime 原失敗留 task，不稱初版即通過；console／network 為有限查閱，歷史程序清理留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本批未驗真正磁碟保存／重開、正式 DB／migration、真官方／live、production deployment／Vite build、完整 backend、行情來源／日期／價格可信性、所有估值／風險行動、risk sizing、新 Plan、完整 M3／PIT；不新增個人風險額度輸入。必要磁碟驗收不能以 memory 取代。重建入口與精確證據範圍見[開發入口](development-baseline/README.md#m3-p5-可信股數與估值持倉判定的零落盤驗證入口)，後續庫存本地數值隔離／試算的有限範圍見 [M3-P6a](#m3-p6a-庫存收盤數值隔離與本地試算可檢視)。
 
@@ -456,9 +456,9 @@ known 只表示本批有限算式可計算，不等於行情來源、日期、�
 | 真正 full App 的 `/actions` 上 Portfolio，桌面 `1298×924` | 二十張卡預設收合；document client／scroll width 均 1283、card 589。TWSE NORMAL／BADPRICE／MISSINGBAR／DIRTYDATE／METABAD／POISON／BADQ／HUGEQ／ZEROQ 經 focus 後實際 Enter 展開及收回；10.5／10,500／+500 與合法零試算正確，缺席／非法／股數未知／unsupported 不造 0。 |
 | `390×844`（mobile=false）的同一 Portfolio | TPEx NORMAL／POISON／BADQ／HUGEQ／OVERFLOW 以實際 Enter 展開及收回；document 寬均 375、card 303、detail 273。120 字來源、64 字時間及 309 位 Float 本地 close 可核對，未觀測橫向溢出；不稱硬體手機／觸控驗收。 |
 
-Runtime／引用工具失敗留 task；具名操作及有限 console／network 查閱不證完整 session。歷史程式／fixture 清理收據留原 task／Git，現有未清資源依[協作紀錄](TASK_COORDINATION.md)，P6a 的 Actions 500 失敗見下段。
+Runtime／引用工具失敗留 task；具名操作及有限 console／network 查閱不證完整 session。歷史程式／fixture 清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue，P6a 的 Actions 500 失敗見下段。
 
-P6a 驗收時 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。P6a 有限接受不包含完整 ActionsPage 或行動端點回歸通過；原失敗保留，後續清單隔離的現行有限範圍見下列 P6b，不倒改 P6a 驗收。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，歷史 freeze／索引／commit／merge 收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
+P6a 驗收時 `decision._prepare_decision_context` 仍載入完整 MarketBar；synthetic `not-a-date` 被 Date processor 拒絕，`/api/actions?limit=20` 兩次 500、頁面原資料載入 error，Portfolio 仍可用。P6a 有限接受不包含完整 ActionsPage 或行動端點回歸通過；原失敗保留，後續清單隔離的現行有限範圍見下列 P6b，不倒改 P6a 驗收。行情來源／日期／availability 證據、真官方／live、M1 正向 file gate、正式 DB／真正磁碟重開、production／完整 backend／Vite build、Decimal exact、PIT、新 Plan、保存／刪除 UI 及完整 M3 未驗；沒有授權 tiny 唯讀行情 artifact，不以 memory patch 降低 file gate。下一步見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)，歷史 freeze／索引／commit／merge 收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 <a id="m3-p6b-actions-清單逐列行情讀回污染隔離"></a>
 
@@ -497,7 +497,7 @@ decision 以未定型 SQL 讀八欄 `id`、`instrument_id`、`trading_date`、`c
 | 必要巨大值補驗的兩尺寸預設清單 | L-FUTURE 截止日 close／adj_close 為 `1e308`，翌日 5000 仍排除；TPEx 卡片完整 411 字元與原 Intl price 相符。桌面／390px card 寬 294／337、price box 195／238，card／price box scroll width 均等於自身寬，document 寬仍均 1283／375，漲跌待核實。補驗不另宣稱搜尋／Enter 通過。 |
 | 正常卡片原導航 | 真正 Enter `A-NORMAL` 經原 `/actions/TWSE/A-NORMAL` 進 StockPage，`/api/stocks/TWSE/A-NORMAL` 為 200；M1 總覽仍拒 fixture、0／60 合格與研究資料待補，原 file／source gate 未降。污染卡片的整個詳情路徑未點、未驗。 |
 
-兩 instances 各自在自己的 HTTP／UI／pre-shutdown 核對二十四持倉／1,382 行情全欄、typeof、note／updated_at 同 digest、read mutation 0，不跨 instance 比 hash。Console 有既有 warnings，network 只作有限查閱；工具原失敗與 owned 程序／頁籤清理收據留原 task／Git，現有未清資源依[協作紀錄](TASK_COORDINATION.md)。
+兩 instances 各自在自己的 HTTP／UI／pre-shutdown 核對二十四持倉／1,382 行情全欄、typeof、note／updated_at 同 digest、read mutation 0，不跨 instance 比 hash。Console 有既有 warnings，network 只作有限查閱；工具原失敗與 owned 程序／頁籤清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 P6b 本身未驗污染卡片完整 StockPage 路徑，SSR action detail panel 不能代替操作；後續個股行情／研究讀回的有限支持由[個股頁 §15–17](STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)負責。完整 ActionsPage、可信來源／availability、官方／live、M1 正向 filesystem、正式 DB／磁碟重開、完整 backend／production build、Decimal exact、Plan／完整 M3／PIT 未由 P6b 驗收；必要原件／磁碟條件不以 memory 取代。入口見[開發文件](development-baseline/README.md#m3-p6b-actions-清單行情讀回的零落盤驗證入口)，優先順序依[ROADMAP](ROADMAP.md)。
 

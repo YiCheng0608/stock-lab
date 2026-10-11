@@ -8,7 +8,23 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
+測試失敗先依[失敗分流與有界重驗](../GITHUB_WORKFLOW.md#失敗分流與有界重驗)分類；工具／環境失敗修正後重跑同一案例，不判產品結果，也不重取外部資料。
+
 使用 API／preview 前，依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核實載入版本與資源隔離；commit 不更新舊程序，補版本證據仍須遵守原件生命週期、quota 與 NO-RETRY。
+
+## 測試資料庫分層
+
+| 層 | 用途 | 寫權與共享 | owner |
+| --- | --- | --- | --- |
+| 日常 DB | 使用者研究與收集（[OPERATIONS](../OPERATIONS.md#1-工作目錄環境與啟停)預設 `.local/data/stock.db`） | 不作測試寫入、不放測試資料 | 使用者 |
+| 固定版本唯讀樣本庫 | 核准的小型真實樣本；工程與 QA 讀同一版本 | 只讀開啟（SQLite `mode=ro`＋`PRAGMA query_only=ON`）；更新即產生新版本 | 全局核准、資料線 owner 維護 |
+| 可重設隔離測試庫 | 寫入、migration、保存／跨程序測試 | 每次執行獨立路徑，由樣本庫或 fixture 建立；不共享可變狀態，不逐角色複製整份 DB | 該任務工程／QA |
+
+- 三層都用產品 schema（`init-db` 建立），不另設假資料表或另一套查詢路徑。三個 `STOCK_*` 指向該層的絕對路徑並於執行前讀回；樣本庫與隔離測試庫放專案外、不入 Git、不複製私人 DB。產品 app 以讀寫方式開啟 `STOCK_DB_PATH`，不得把 app 或寫入測試直接指向樣本庫，須先複製到隔離測試庫。
+- 樣本中繼資料隨樣本庫保存：來源用途權利（依 [SOURCE_REGISTRY](../SOURCE_REGISTRY.md#1-registry-與-policy-契約)）、資料日期、取得時間、schema 版本、抽樣規則、樣本版本、檔案 hash。真實樣本與人工邊界案例分開標示；必要原始回應與正規化欄位可追溯；未知發布時間／PIT 標未知，不補造。
+- 按最小完整案例取樣：價格顯示少量日、MA60 至少 60 個交易日、公司行動含事件前後、七股驗收覆蓋七股。日常回歸、整合驗收、容量／效能案例分開，樣本庫不隨日常 DB 成長。
+- 樣本庫的位置與大小限額在核准時登記，各單引用該登記，變更才重核；隔離測試庫在執行結束重設或清理，失敗回報路徑／大小／原因，不每輪重造 manifest。
+- 本地重驗讀樣本庫不觸發外部 GET；人工 fixture 另驗錯誤邊界。沒有適用真實樣本時，該 AC 標未驗。
 
 ## 後端驗證
 
@@ -160,7 +176,7 @@ Checks涵蓋all／up／down／flat、Decimal／前端原字串O/C比較、缺失
 
 Actual另由root唯一fresh GET後以**同一程序held Store**供真router／UI，沿[來源 §20.5](../SOURCE_REGISTRY.md#205-m2-focus-day-move-1-同來源的新觀測與方向-consumer)；全結構／兩股金融與用途gate先核，不用check fixture、base64或disk replay。根獨立HTTP核12次invalid422、合法方向／精確邊界、focus POST2／stock POST2同cache及default隔離；native／窄版範圍見[個股頁 §27](../STOCK_RESEARCH_PAGE.md#27-m2-focus-day-move-1單日方向關注與完整條件往返有限接受)。Source累計1／runner新增0、ordinaryGET外網0，Python四項／root四項／UI三項guard均0、DB preserved=true；額外DB／raw／Temp／HAR／screenshot／bundle／buildinfo／log／artifact0。
 
-清理另已核：唯一owned browser page close exit0，exact五個API／UI／compiler／parent PID後驗absent、8799／8800 listeners0、worktree新增untracked／ignored0。UI／Python PTY Ctrl+C rawexit1保留，結構化後驗exit0；root附加診斷／stdout解碼原錯及後UTF-8正面結果留原task，不把原工具exit改0。Raw／receipt／memory已隨owned程序結束釋放，沒有磁碟保存／跨程序驗收。舊資源清理與NO-RETRY另由協作紀錄管理；本入口不證全市場、PIT、歷史close／日曆、MA／trend、研究／Signal／Plan或下一成交額條件。
+清理另已核：唯一owned browser page close exit0，exact五個API／UI／compiler／parent PID後驗absent、8799／8800 listeners0、worktree新增untracked／ignored0。UI／Python PTY Ctrl+C rawexit1保留，結構化後驗exit0；root附加診斷／stdout解碼原錯及後UTF-8正面結果留原task，不把原工具exit改0。Raw／receipt／memory已隨owned程序結束釋放，沒有磁碟保存／跨程序驗收。舊資源清理與NO-RETRY另由[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理；本入口不證全市場、PIT、歷史close／日曆、MA／trend、研究／Signal／Plan或下一成交額條件。
 
 ### M2-FOCUS-TURNOVER-1 精確成交金額與四條件返回的記憶體驗證入口
 
@@ -170,7 +186,7 @@ Checks驗canonical int64元／省略0／explicit invalid／duplicates、兩股am
 
 Root沿[來源 §20.6](../SOURCE_REGISTRY.md#206-m2-focus-turnover-1-同來源的新觀測與成交額-consumer)唯一fresh GET後，在同一程序held Store供真router／UI，source1／runner0、DB preserved=true、API四guard／UI三guard皆0。Actual原件先核metadata／用途／instrument／execution、固定pins及12金融值，不用fixture／base64／disk replay。HTTP 16 invalid422／合法門檻與兩股等額＋1元／POST cache／default隔離，以及具名desktop／390px、四條件返回與拒外域見[個股頁 §28](../STOCK_RESEARCH_PAGE.md#28-m2-focus-turnover-1精確成交金額與四條件往返有限接受)；UI proxy GET26／POST0／rejected0只屬本次擷取範圍。
 
-Owned清理另已核：唯一browser page exact close accepted、tabs0；owned API／Node／esbuild皆停止、8799／8800 listeners0，raw／receipt／memory已釋放，額外DB／raw／Temp／HAR／screenshot／bundle／buildinfo／log／artifact0。SIGINT兩PTY rawexit1保留，shutdown receipt與獨立PID／listener後驗0另報。前輪outside-owner及歷史NO-RETRY由協作紀錄管理；本輪worktree不自刪。未跑磁碟保存／跨程序、full suite／production build；不證全市場、PIT、歷史close／日曆、MA／trend／研究／Signal／Plan或下一振幅條件。
+Owned清理另已核：唯一browser page exact close accepted、tabs0；owned API／Node／esbuild皆停止、8799／8800 listeners0，raw／receipt／memory已釋放，額外DB／raw／Temp／HAR／screenshot／bundle／buildinfo／log／artifact0。SIGINT兩PTY rawexit1保留，shutdown receipt與獨立PID／listener後驗0另報。前輪outside-owner及歷史NO-RETRY由[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理；本輪worktree不自刪。未跑磁碟保存／跨程序、full suite／production build；不證全市場、PIT、歷史close／日曆、MA／trend／研究／Signal／Plan或下一振幅條件。
 
 ### M2-FOCUS-DAY-RANGE-1 新日期與五條件返回的記憶體驗證入口
 
@@ -192,7 +208,7 @@ Root判定B1有限核心驗收已接受：core+1／dep+1／reliability0／stall0
 
 原task曾核定兩owned RAM服務保留同body續驗：Python PID25192／session42499／127.0.0.1:8799，同已准入raw1,788,599B／receipt1408B及Store；Node PID1412／session84779／127.0.0.1:8800與compiler16392。驗收完成後第四owned page `8a6e95c0-6ebf-4cc5-9597-a2771b732da0` exact close=true，worktree tabs[]後驗0，四lifetime owned pages皆closed；未新profile／screenshot／HAR／附件。Preview Ctrl+C rawexit1、structured shutdown=true／guards0／disk_artifacts0，proxy API GET32／POST0不是32次quote GET，esbuild exit3221225786；API structured stopped=true／entry guards0／DB preserved／sourcecount1／runner0，之後exit() rawexit1。Exact25192／1412／16392 absent及8799／8800 listeners none後驗exit0；Python process absence才釋放held原件memory，未落盤／raw export。有效驗收、interruption rawexit1、清理後驗0分報，非所有歷史資源已清。不得新增落盤profile／tests，profile自動審查拒絕的exact scope仍NO-RETRY，外部policy／owner另處理。
 
-Python／Node入口guards0／artifact0只屬各入口；browser profile metadata是額外artifact，不稱本輪全域artifact0。沒有正式DB、行情raw／fixture／HAR／screenshot複本；未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／歷史close／日曆／MA／trend／研究／Signal／Plan。舊turnover及本輪outside-owner由協作紀錄管理，不自刪cwd。
+Python／Node入口guards0／artifact0只屬各入口；browser profile metadata是額外artifact，不稱本輪全域artifact0。沒有正式DB、行情raw／fixture／HAR／screenshot複本；未驗磁碟保存／跨程序、full suite／production build、全市場／PIT／歷史close／日曆／MA／trend／研究／Signal／Plan。舊turnover及本輪outside-owner由[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理，不自刪cwd。
 
 ### M2-FOCUS-STOCK-SCOPE-1 三股範圍的記憶體驗證入口
 
@@ -206,7 +222,7 @@ Actual由第二root程序held原件，程式更新後同程序pure builder准入
 
 本輪owned清理完成：唯一Orca page `46b2bf07-29d1-4ae5-bfb8-3259a8e94f1b` exact closed／tabs0；API PID60400、preview30672及compiler8280 absent，8801／8802 listeners none後驗raw0，raw memory釋放。Compiler8280是新的esbuild lifetime，不能與先前已結束的Python同PID混作同程序。Node SIGINT structured shutdown保存proxy API GET15／POST0／rejected0、guards0／disk0，terminal rawexit1；API serve finally stopped／DB preserved／Store1／runner0／guards0返回0，後REPL sys.exit(0)的terminal rawexit1保留，與清理後驗0分報。沒有建立isolated Edge profile或disk fixture。
 
-舊day-range exact四session closure／history archive已另驗，worktree／branch及2,555,430B／232files／94dirs profile NO-RETRY仍保留、不重掃／刪除；舊turnover與其他歷史不納入，責任與接手由[協作紀錄](../TASK_COORDINATION.md)管理。當前功能接受不等於全域artifact0或所有歷史資源已清；仍只跑本變更必要驗證。
+舊day-range exact四session closure／history archive已另驗，worktree／branch及2,555,430B／232files／94dirs profile NO-RETRY仍保留、不重掃／刪除；舊turnover與其他歷史不納入，責任與接手由[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理。當前功能接受不等於全域artifact0或所有歷史資源已清；仍只跑本變更必要驗證。
 
 ### M2-FOCUS-STOCK-SCOPE-2 四股範圍的記憶體驗證入口
 
@@ -232,7 +248,7 @@ Owned唯一page `5028fdbb-3c34-42dd-a406-537ee5559f2a` exact closed／tabs0；AP
 
 清理另已root獨立接受：唯一lifetime owned page `ad99ff9a-1f83-4c09-98f6-5d8716ff0804` exact closed／tabs0；API36908／preview55908／compiler34308／old observer30296均absent，8871／8801／8802 listeners none，獨立verify exit0、held raw隨process exit釋放。中斷API／preview terminal rawexit1與清理verify0分報；停止前structured diagnostic guards0／disk0／DB preserved／sourcecount1／runner1／preloadedfalse。不改原exit、不否定有效驗收；未建立screenshot／HAR／Edge profile／DB copy／env install／KeepArtifacts或新artifact。
 
-Coreoperation+1／selected scope dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git不算implementation batch。歷史前任session封存與NO-RETRY由[協作紀錄](../TASK_COORDINATION.md)管理；本worktree／branch不自刪，不掃Temp／cache／logs。未驗保存／跨程序、PIT／全市場、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
+Coreoperation+1／selected scope dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git不算implementation batch。歷史前任session封存與NO-RETRY由[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理；本worktree／branch不自刪，不掃Temp／cache／logs。未驗保存／跨程序、PIT／全市場、20／21歷史close／完整calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
 
 ### M2-FOCUS-STOCK-SCOPE-4 六股範圍的記憶體驗證入口
 
@@ -246,7 +262,7 @@ Coreoperation+1／selected scope dependency+1／reliability0／stall0，BOOT／M
 
 清理另經root獨立接受：唯一lifetime owned page `f4b2101d-4728-447c-8405-ba9d4c431100` exact closed／tabs0；preview15520／compiler26492／API38684 absent，8801／8802／8871 listeners none，held raw全釋放。Normal Ctrl+C API／preview rawexit1與independent cleanup verify exit0分報；stopped receipts guards0／DB preserved，不改原exit或否定有效驗收。無source copies／profiles／screenshots／HAR／env install／KeepArtifacts。
 
-Coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git非implementation batch。前任exact四session closure／archive與baseline仍需保留的舊worktree見[協作紀錄](../TASK_COORDINATION.md)，不重做歷史清理。未驗保存／跨程序、PIT／全市場、20／21歷史close／complete calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
+Coreoperation+1／selected ordinary identity-source-date-policy dependency+1／reliability0／stall0，BOOT／M1 metadata／DOC／index／Git非implementation batch。前任exact四session closure／archive與baseline仍需保留的舊worktree見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，不重做歷史清理。未驗保存／跨程序、PIT／全市場、20／21歷史close／complete calendar／strategy time execution、MA／trend／ATR／研究／Signal／Plan或完整M1／M2／M3。
 
 ### M2-FOCUS-STOCK-SCOPE-5 七股範圍的記憶體驗證入口
 
@@ -308,7 +324,7 @@ Storage runner 的磁碟模式只接受固定根 `C:/Users/YiCheng/AppData/Local
 
 Node preview 的 `--check`、`--http-check`、`--serve` 使用共用 `--deps`；自有 **8780** 接 **8779**，bundle `write:false`。Synthetic `2026-10-03` 的兩市場使用者數量不作官方行情／正式持倉證據。四個磁碟案例與具名保存／第二程序重開已有限接受；前兩次 cleanup／marker fixture 失敗留原 task，不稱首跑通過。
 
-**Capture stop 副作用仍未解除：**瀏覽器 capture 停止自動建立 `C:/Users/YiCheng/.agent-browser/tmp/har/har-1791044803009.har`，**1 file／64,885 bytes**，超過當時附件配額 0。exact 單檔刪除在 CreateProcess 前遭 automatic review `blocked by policy`，未執行；不重試或換工具，不掃 shared HAR／parent。隔離 DB 已清，HAR 仍有殘留；待外部變化／使用者處置，見[協作紀錄](../TASK_COORDINATION.md)。未來使用 capture 先核 stop 落盤副作用和配額；記憶體 bundle 不保證瀏覽器工具零落盤。
+**Capture stop 副作用仍未解除：**瀏覽器 capture 停止自動建立 `C:/Users/YiCheng/.agent-browser/tmp/har/har-1791044803009.har`，**1 file／64,885 bytes**，超過當時附件配額 0。exact 單檔刪除在 CreateProcess 前遭 automatic review `blocked by policy`，未執行；不重試或換工具，不掃 shared HAR／parent。隔離 DB 已清，HAR 仍有殘留；待外部變化／使用者處置，見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)。未來使用 capture 先核 stop 落盤副作用和配額；記憶體 bundle 不保證瀏覽器工具零落盤。
 
 本節只證 owned fixture 的有限 startup、股數保存／重開，不證正式 migration／restore、production、官方／live、完整 backend／Vite build、大數金融估值、Plan、完整 M3 或 PIT。
 
@@ -362,7 +378,7 @@ Synthetic `2026-10-04` source 建構十四 instruments（十三研究標的＋�
 
 投影／JSON／窗口／canonical latest／observation 由[個股頁 §16](../STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)負責。十個 HTTP-derived malformed SSR 不替代後來的 status pure case；含 `toString` function／undefined 的 helper 形狀不當 HTTP JSON。B 最終原生 click，其餘四案 DOM.click 後核 actual browser DOM，不稱五案全原生。短暫 helper compiler 未即時觀測，不宣稱 child cap 全程已證。
 
-P6d 指定外部 owned 清理與五 DB 刪前檢查缺口、blocked／NO-RETRY 資源依[協作紀錄](../TASK_COORDINATION.md)，不在此重試。當批 direct／GET／setup／SSR／process 配額與原失敗留 task；新增落盤仍為 0。其他 typed paths、M1 正向 file gate、磁碟／正式 DB／production、官方／PIT，以及 P6c canvas／有效歷史窄版／真正截止表單不因本批通過。
+P6d 指定外部 owned 清理與五 DB 刪前檢查缺口、blocked／NO-RETRY 資源依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，不在此重試。當批 direct／GET／setup／SSR／process 配額與原失敗留 task；新增落盤仍為 0。其他 typed paths、M1 正向 file gate、磁碟／正式 DB／production、官方／PIT，以及 P6c canvas／有效歷史窄版／真正截止表單不因本批通過。
 
 ### M3-P6e 個股獨立特徵／籌碼讀回的零落盤驗證入口
 
@@ -372,7 +388,7 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 資料契約與 native／DOM.click 支持範圍見[個股頁 §17](../STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。兩個 QA pages 順序使用、最大同時一個；最後 owned pages／serve／captured children／listeners 已清，新落盤／附件／暫存／殘留 0。Compiler exit code 未觀測，不由 ceased 推 exit 0；console／network 只作具名範圍查閱，不稱全域零 warning。原工具／selector／runtime 失敗留 task。
 
-原件／磁碟重開、正式 DB、source／availability／PIT 等 gate 保留；M1／M3 核心完成條件由 [ROADMAP](../ROADMAP.md) 負責。當批方法／GET／setup／SSR／程序配額留原 task／Git；現有未清資源見協作紀錄，不重置歷史已耗額度，不預設啟動下一個隔離輪。
+原件／磁碟重開、正式 DB、source／availability／PIT 等 gate 保留；M1／M3 核心完成條件由 [ROADMAP](../ROADMAP.md) 負責。當批方法／GET／setup／SSR／程序配額留原 task／Git；現有未清資源見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，不重置歷史已耗額度，不預設啟動下一個隔離輪。
 
 ### M1-W2 法人窗口的零落盤驗證入口
 
@@ -540,7 +556,7 @@ Memory fixture caps80KiB serialized／512KiB graph：Py max81050B／213428B、No
 
 ONE native page、183 ALLtrusted events、actual API九案、desktop／窄版detail＋五RAWback、真零／恢復及same page post-stop HTTP502清值由[個股頁 §40](../STOCK_RESEARCH_PAGE.md#40-m2-focus-stock-scope-6八股四條件與同截止往返)管理。Final preview20 localAPI GET／1POST／14rejected不是finance GET。停止後detail error actual NOT RUN（SSR不代actual）；沒有restart或重抓。
 
-Cleanup分報：API normalstop session13309 rawexit1、preview15835 rawexit1；ROOT2920ca raw0獨立核54084／14816／50816／13292／23404／esbuild43744 absent、8799＋8800無listener。ONE pageclose `8c35344b-edac-4d7a-8078-4c6b09112f3c` raw0，fresh tabs[] receipt `1e80df05-2273-4180-9efd-e79229f5b8b4`；只此owned scope，沒有刪私人或其他worktree。Inherited private／DAY-RANGE／MAIN5／holiday及failed chips NO-RETRY依[協作紀錄](../TASK_COORDINATION.md)保持。
+Cleanup分報：API normalstop session13309 rawexit1、preview15835 rawexit1；ROOT2920ca raw0獨立核54084／14816／50816／13292／23404／esbuild43744 absent、8799＋8800無listener。ONE pageclose `8c35344b-edac-4d7a-8078-4c6b09112f3c` raw0，fresh tabs[] receipt `1e80df05-2273-4180-9efd-e79229f5b8b4`；只此owned scope，沒有刪私人或其他worktree。Inherited private／DAY-RANGE／MAIN5／holiday及failed chips NO-RETRY依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)保持。
 
 Coreoperation+1／standalone dependency0／reliability+1／stall1→0；未跑old/full suite／production build／install／diskcases／actual post-stop detail error。完整M1／M2／M3、PIT／ordinary20或21close history／strategy／time／execution未完成。DOC／freeze／qualified index／Git尚待ROOT original-task接受。
 
@@ -592,13 +608,13 @@ Necessary checks：Python15、41src noEmit＋25validators＋84SSR、targeted41�
 
 ONE API保持empty新generation；首次preview BEFORELISTEN因literal local DNS／font CSS失敗raw1，financial/private/proxy/disk0。SAME程式角色只修preview一檔，後一次成功；不是one preview attempt total，API未restart，FIRST前source0。Scoped42窗口／525prefix／dated point-row／ALL25calendar、477 trusted events與unsupported／502 actual見[個股頁 §43](../STOCK_RESEARCH_PAGE.md#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作)。Local receipt cap8193首raw1後修正cachedPOST409，未financial retry；original harness／鍵盤／RT失敗及未跑actual whole-window zero／post-stop recovery保留，不報通過。
 
-退出分報：API normal Ctrl+C rawexit1（source22／guards0），成功preview SAMEhandle normal Ctrl+C rawexit1；final localproxy8GET／3POST／34reject非financial。ROOT核五owned PIDs absent、8801／8802無listener；ONE page normalclose／fresh tabs[]，不重啟服務／browser。Current privateactualIO0／metadataGET0／ordinarypriceGET0／正式DB0／newdisk0；私人三檔與FINAL63/189、remaining1非grant／STRICTNO-RETRY、DAY／MAIN／older資源fences見[協作紀錄](../TASK_COORDINATION.md)，不稱globaldisk0或MAINignored0。
+退出分報：API normal Ctrl+C rawexit1（source22／guards0），成功preview SAMEhandle normal Ctrl+C rawexit1；final localproxy8GET／3POST／34reject非financial。ROOT核五owned PIDs absent、8801／8802無listener；ONE page normalclose／fresh tabs[]，不重啟服務／browser。Current privateactualIO0／metadataGET0／ordinarypriceGET0／正式DB0／newdisk0；私人三檔與FINAL63/189、remaining1非grant／STRICTNO-RETRY、DAY／MAIN／older資源fences見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)，不稱globaldisk0或MAINignored0。
 
 Coreoperation+1／standalone dep0／reliability+1／stall0→0。使用者要求本批DOC／freeze／qualified索引／commit／另准local master merge後暫停；文件截止以上版本工作待ROOT，不回寫hash或重做成功驗證。Current四角色／worktree保留，沒有outside owner接手own4清理；前任四角色normalclose/archive已接受，exact前任worktree/branch removal仍須另滿足qualified indexes／mergedmaster／freshclean／baselineunneeded。
 
 ## 歷史驗證
 
-完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依協作紀錄處理。
+完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)處理。
 
 ### M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 官方事件區間的零落盤驗證入口
 
@@ -608,7 +624,7 @@ Checks使用可重建記憶體fixture與既有依賴，不install／建helper、
 
 Actual ONE金融GET／62列及[來源 §39.1](../SOURCE_REGISTRY.md#391-m2-official-event-date-range-20261008-1實際來源結果)已接受；可信desktop／390px／同截止往返／真零／API停止後502清值見[個股頁 §44](../STOCK_RESEARCH_PAGE.md#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返)。Preview共16GET／1POST均loopback，不另算金融GET；RAM原件隨API終了釋放，不replay／restart。
 
-退出分報：API／Node preview normal SIGINT各raw1，不改報exit0；ROOT核owned49216／8484／62180 absent、8797／8798無listener，唯一tab `f9a30d71-ea8a-4190-b875-3cf6c977602f` 正常close、本根tabs=[]。本批filesystem／privateIO／磁碟DB／cache／build／raw／附件產物0；功能驗收與退出分報，非全專案清理。Coreoperation+1／dependency0／reliability+1／stall0→0；DOC review／freeze／索引／commit／merge與下輪交接、關閉封存清理待ROOT，見[協作紀錄](../TASK_COORDINATION.md)。
+退出分報：API／Node preview normal SIGINT各raw1，不改報exit0；ROOT核owned49216／8484／62180 absent、8797／8798無listener，唯一tab `f9a30d71-ea8a-4190-b875-3cf6c977602f` 正常close、本根tabs=[]。本批filesystem／privateIO／磁碟DB／cache／build／raw／附件產物0；功能驗收與退出分報，非全專案清理。Coreoperation+1／dependency0／reliability+1／stall0→0；
 
 ### M2-OFFICIAL-EVENT-KIND-20261008-1/B1 官方事件類型的零落盤驗證入口
 
@@ -622,7 +638,7 @@ Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../
 
 41src noEmit＋116checks（helper58／response24／SSR13／API5／proxy16）raw0；RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。原collection縮排raw1、125passed＋1fixturefail raw1、ROOT AST／quoting及browser ACK未delivery收據均保留，不改exit或擴為通過。
 
-真来源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0，版本待辦見[協作紀錄](../TASK_COORDINATION.md)。
+真來源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0。
 
 ## M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1：公司與事件的零落盤驗證入口
 
@@ -646,7 +662,7 @@ ROOT actual20 TestClient calls含8invalid issuerPOST先422／sourceGET0／DB0、
 
 API26328 normalSTOP raw0，shutdown實際印server_stoppedtrue／兩sourcegets各1／四audit0，完整原件RAM釋放不restart／replay／clone／hydrate／preload。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 rejected0；修字後preview34000／compiler61744 RAM rebuild／normalSIGINT raw1／shutdown GET3 POST1 rejected0，API從未重啟／無新金融GET，兩preview guards／artifacts0。ROOT核5PID absent、8805／8806無listener、唯一ownedpage closed／tabs[]；全部test／product／artifactfiles0B／privateIO0，shared indexcache另報。metadata5／金融2已SPENT，無新quota／diskcase／private／正式DBgrant。
 
-coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成；capital／payout numeric未驗、raw industry不代分類，ordinary20／21closes仍缺rights／calendar。版本及outside-cleanup接受見[協作紀錄](../TASK_COORDINATION.md)，DOCreview／freeze19／qualified7／commit／另准merge仍待；不建附件／來源副本／manifest報表。
+coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完成；capital／payout numeric未驗、raw industry不代分類，ordinary20／21closes仍缺rights／calendar。不建附件／來源副本／manifest報表。
 
 ## M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼追溯的零落盤驗證入口
 
@@ -670,7 +686,7 @@ ROOT可信desktop1365×900／narrow390×844三股六原欄＋04／04／20完整�
 
 API52996／session88784正常STOP raw0，實際SHUTDOWN／server_stopped=true／artifact0B，兩完整ORIGINAL RAM隨process終止釋放；preview55124／compiler31816／session47349正常SIGINT raw1，SHUTDOWN GET46／POST7／rejected0／FS、network、subprocess guards0／diskartifact0。三PID absent、8807／8808無listen、唯一ownedpage正常close receipt `a01ac02e-171e-4de1-acfa-54cb2c026833`／tabs[]核raw0；new test／productartifactfiles0B／privateIO0／DBfiles0。服務清理與正常SIGINT raw1分報，不restart／replay／clone／hydrate、不改退出值。
 
-本批coreoperation+1／standalone coredependency0／reliability0／stall0→0、完整M1／M2／M3未完成；未跑production build／full suite／DB／diskcase／privateIO，shared indexcache另報。詳細命令／版本與一次性驗收留原task，不新增來源副本／manifest附件或保留整套成功產物。版本與有限outside cleanup見[協作紀錄](../TASK_COORDINATION.md)，DOC review／freeze／索引／commit／另准merge仍待。
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0、完整M1／M2／M3未完成；未跑production build／full suite／DB／diskcase／privateIO，shared indexcache另報。詳細命令／版本與一次性驗收留原task，不新增來源副本／manifest附件或保留整套成功產物。
 
 ## M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：gross零落盤驗證入口
 
@@ -688,7 +704,7 @@ API52996／session88784正常STOP raw0，實際SHUTDOWN／server_stopped=true／
 
 API18464正常SIGINT raw1／SHUTDOWNtrue，source_requests22／producer22及disk_writes／mutations／private_reads／databases／subprocesses／network_rejections0。Preview42276／compiler35212正常SIGINT raw1／SHUTDOWNtrue，GET8／POST1／rejected_requests233，不記0或推原因；disk／private／network／subprocessrejection0。18464／42276／35212／7768absent、8809／8810nolisten、ownpage正常close／tabs[]；test／productartifacts0files0B／privateIO0／DB0／priceGET0，ORIGINAL RAM已釋放、不restart／replay／hydrate。
 
-原raw1（missingimport／quote／PATHNode20guard／fixturemutation／JSONDecodeError／hiddenbrowser-board-RT-card assertions）保留；Ctrl+A ACK未選造成draftappend、execstoreundefined suppressedinner outcomeunknown亦留ROOTtask。更正後UTF8stdin／同READ actualCDP502分報，不改exit／重送金融；ignorednetworklimit／stdouttruncation不作取得證據，無helper／附件。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完成；版本封存及outsidecleanup見[協作紀錄](../TASK_COORDINATION.md)。
+原raw1（missingimport／quote／PATHNode20guard／fixturemutation／JSONDecodeError／hiddenbrowser-board-RT-card assertions）保留；Ctrl+A ACK未選造成draftappend、execstoreundefined suppressedinner outcomeunknown亦留ROOTtask。更正後UTF8stdin／同READ actualCDP502分報，不改exit／重送金融；ignorednetworklimit／stdouttruncation不作取得證據，無helper／附件。Core+1／standalone dep0／reliability0／stall0→0，完整M1／M2／M3未完成；
 ## M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：方向區段零落盤入口
 
 2026-10-08。ROOT有限接受actual，本DOC不重跑；來源及操作見[來源 §44](../SOURCE_REGISTRY.md)／[個股頁 §49](../STOCK_RESEARCH_PAGE.md)。Python3.12.14／Node24.19.0／TS5.9.3／esbuild0.25.12；新opt-in使用獨立ROOT外部pins，不升olddefaults。
@@ -705,7 +721,7 @@ API18464正常SIGINT raw1／SHUTDOWNtrue，source_requests22／producer22及disk
 
 API36576／preview15748 normalSIGINT raw1且SHUTDOWNtrue，各guard0／source22；compiler9288隨preview停，auditor52704 /stop釋放22原件後最後raw0。四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]；previewproxy GET8／POST1／rejected_requests211保原數、不推原因。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，indexcache另報。
 
-原quote／AXACK-noeffect／PSsyntax／Ctrl+A未選先assert／punctuation／offscreen／queryless POST422wrongassert／tablist--page等raw1保留ROOTtask；/stop已有效不重送，只修harness、不改exit或重送GET。Metadata截斷／receipts及reader403限制見SOURCE44；outsidecleanup與freeze/index/Git待辦見[協作紀錄](../TASK_COORDINATION.md)，不掃其他old／private／Temp／cache。
+原quote／AXACK-noeffect／PSsyntax／Ctrl+A未選先assert／punctuation／offscreen／queryless POST422wrongassert／tablist--page等raw1保留ROOTtask；/stop已有效不重送，只修harness、不改exit或重送GET。Metadata截斷／receipts及reader403限制見SOURCE44；不掃其他old／private／Temp／cache。
 
 ## M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：相鄰窗口零落盤驗證入口
 
@@ -728,7 +744,7 @@ API20584 normalSIGINT raw1／SHUTDOWNtrue、source12／guards0；舊preview29600
 
 FIRST input ACK無效與focus修正、unsupported Nonecalendar錯assert／correctedblank200、viewport／selector／expectedmask等原raw1保留，不改exit或當成功。CachedPOST含asof409／missing422已核；correctedunsupported及sameheld再驗source仍12。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0，原件RAM全釋放，不restart／replay／clone／hydrate／preload；shared indexcache另報。文件命令首SyntaxError／CreateProcess長度等原失敗留task，無helper／附件或sourcecopy；不掃old／private／Temp／cache。
 
-Core+1／standalone dep0／reliability+1／stall0→0，完整M1／M2／M3未完成；outsidecleanup已有限完成、版本freeze／索引／commit／另准merge待ROOT，詳[協作紀錄](../TASK_COORDINATION.md)。
+Core+1／standalone dep0／reliability+1／stall0→0，完整M1／M2／M3未完成。
 
 ## M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：三組對帳零落盤驗證入口
 
@@ -753,4 +769,4 @@ Canonical換列保留open，auditor直接toggle變closed的原assert raw1，改�
 
 停前samekey5274／dealer／5／10/06兩viewportlive完整原列／54metrics／calendar先核；API normalSIGINT後narrow native READ actual502 fromlive清ALL、desktop同keyrepeat502由masked保持ALL清，RAW3back仍mask；非兩獨立producer。API32860 SHUTDOWNtrue／requests7／guards0 normalSIGINT toolraw1；preview15564／compiler25940 SHUTDOWNtrue、proxyGET23／POST1／rejected44，其餘guards0、normalSIGINT raw1，不推reject原因或改0。Auditor54880 normalSIGINT raw1／RAMreleasedtrue／guards0；停前RAMreaudit61996 raw0，metadataholder54396先前退出。六exactPIDs32860／15564／25940／54880／61996／54396 absent、8812–14無listener ROOTraw0；ownedpage正常close收據 `2298c5f3-9762-450b-9740-71291aff4a5e`／tabs[]已核。
 
-ROOT ORIGINAL及derivedlist RAM全release，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0；source／indexcache另報，無附件／helper／manifest／Temp，未掃older／private／cache。Core+1／standalone dep0／reliability0／stall0→0；outsidecleanup已接受、freeze／索引／commit／另准merge仍待ROOT，見[協作紀錄](../TASK_COORDINATION.md)。
+ROOT ORIGINAL及derivedlist RAM全release，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO0／DB0／ordinarypriceGET0；source／indexcache另報，無附件／helper／manifest／Temp，未掃older／private／cache。Core+1／standalone dep0／reliability0／stall0→0；

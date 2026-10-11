@@ -206,7 +206,7 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 
 桌面已核 3105、目錄進 6488、來源／授權與 details；10 月 1 日截止排除，10 月 3 日保留但明示未證截至日前最新資料。無其他 dated rows 的 memory fixture 點「最新資料」仍無共用截止，不由法人設定補日。**390×844** details 的雙 hash 可換行，body 無橫向溢出，表格自行捲動。只接受上述兩檔單日及具名操作，不外推全市場／持久化。
 
-5／20 日 institutional values 仍 null；單日可用時原因為 `multi_session_institutional_evidence_missing`、`trading_session_source_not_admitted`，不能把已准入 TPEx 單日來源說成未准入。單日 session_windows 仍 unavailable；未接 TWSE T86、DB／legacy、多日、完整事件／研究條件或 PIT。入口見開發文件；歷史版本、失敗及清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
+5／20 日 institutional values 仍 null；單日可用時原因為 `multi_session_institutional_evidence_missing`、`trading_session_source_not_admitted`，不能把已准入 TPEx 單日來源說成未准入。單日 session_windows 仍 unavailable；未接 TWSE T86、DB／legacy、多日、完整事件／研究條件或 PIT。入口見開發文件；歷史版本、失敗及清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 ## 11. M1-P3b：selected 官方事件總覽接線
 
@@ -255,7 +255,7 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 
 桌面 **1365×900** 核 0056 首次取得、ETF 名稱／生效日、details 原日期／分類／列序／雙 hash、TWSE 顯名／OGL1.0／license href；截止排除、無 dated rows 的「最新資料」保持 as_of=null，套回 10 月 3 日恢復同原件。目錄進 1449／1463 的名稱／日期已核。**390×844** 1463 details 無 body 橫向溢出，事件表自行捲動。
 
-必要後端記憶體回歸、前端型別／價格／法人／事件 SSR 與 App 記憶體 bundle 已有限接受；完整 backend／production Vite build 未跑。Live body／receipt 未保存，**不能離線重播**；失敗、複驗、exit、hash 與清理收據留 task，既有殘留依[協作紀錄](TASK_COORDINATION.md)。
+必要後端記憶體回歸、前端型別／價格／法人／事件 SSR 與 App 記憶體 bundle 已有限接受；完整 backend／production Vite build 未跑。Live body／receipt 未保存，**不能離線重播**；失敗、複驗、exit、hash 與清理收據留 task，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 完整 M1 仍缺可驗 5／20 日窗口及成立／未成立條件；不接 DB／legacy、事件群組／更正／撤回史、排程或交易，不放寬來源／PIT gate。
 
@@ -298,7 +298,7 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 
 桌面核首次 58 卡、10 月 2 日排除、10 月 3 日恢復同 cache、來源／授權、0056 原件 details 及同 cutoff 進 M1。新聞區原矛盾空文案退修後同 cache 複驗通過。**390×844** 核日期控制／讀 cache／hash 換行、1463 進 M1 保留 cutoff，document 寬 **375**，表格自行捲動；截止／往返後取得次數仍 1。
 
-必要記憶體 consumer／API、非 available 無頂層 rows、型別／SSR／App bundle 已有限接受；空 feed、多事件、截斷、未知 catalogue、receipt／pins／分類拒收與鎖只證 fixture 邊界。**完整 backend／production Vite build 未跑**；原件未保存，**不能離線重播**。歷史操作失敗、複驗與清理收據留原 task／Git；現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
+必要記憶體 consumer／API、非 available 無頂層 rows、型別／SSR／App bundle 已有限接受；空 feed、多事件、截斷、未知 catalogue、receipt／pins／分類拒收與鎖只證 fixture 邊界。**完整 backend／production Vite build 未跑**；原件未保存，**不能離線重播**。歷史操作失敗、複驗與清理收據留原 task／Git；現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本批只交事件關注入口，不增加准入、DB／legacy、跨源群組／更正／撤回、可信排名、研究條件、完整 M1／M2、排程、交易或 PIT。
 
@@ -347,7 +347,7 @@ M1-P2a 另 explicit TPEx 日法人 capture／selected 摘要 library／CLI 已�
 
 桌面 **1365×900** 核名稱搜尋／trim、0056 進 M1 改至 10 月 2 日排除、返回仍恢復 **10 月 3 日／元大 2 股**，無符合／截止不可用／新條件不混舊卡。**390×844** 核 1463 搜尋→M1→同條件返回、清除回 58 股、0056 來源／授權／同 hash；document 寬 **375**，表格自行捲動。
 
-必要後端記憶體回歸、型別／SSR／App 記憶體 bundle 及 Unicode 空白／0000 年補驗已有限接受。空原件、101 股以上搜尋後截斷、匹配外壞列、同股多名稱／完整事件及 query 邊界只證 fixture。**完整 backend／production Vite build 未跑**，Live 原件未保存、**不能離線重播**。原失敗與成功收據留 task，清理／舊 Temp 限制依[協作紀錄](TASK_COORDINATION.md)；不新增排名、金融推論、研究條件、持久化或完整 M1／M2。
+必要後端記憶體回歸、型別／SSR／App 記憶體 bundle 及 Unicode 空白／0000 年補驗已有限接受。空原件、101 股以上搜尋後截斷、匹配外壞列、同股多名稱／完整事件及 query 邊界只證 fixture。**完整 backend／production Vite build 未跑**，Live 原件未保存、**不能離線重播**。原失敗與成功收據留 task，清理／舊 Temp 限制查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue；不新增排名、金融推論、研究條件、持久化或完整 M1／M2。
 
 ## 14. M1／R1-A2：成交量 HTTP→JavaScript→個股精確呈現
 
@@ -408,7 +408,7 @@ TWSE 桌面 `MAX` 的 headline 與總覽 quote 均為 **9,223,372,036,854,775.80
 
 TPEx `MAX`／`ODD`／`ZERO0` 的 chart 資料表分別保持 **9,223,372,036,854,775.807／9,007,199,254,740.993／0 張**，`MAX` 的「資料說明」日行情表同樣精確；headline／總覽仍為未提供，來源 gate 為 0 passed，不冒稱兩市場總覽能力。「資料說明」以 DOM `button.click()` 觸發正式 handler 後，核實選中頁籤、展開及表格值；先前 native click 沒有切換，不當作通過。
 
-上述操作使用 memory-only 全 App esbuild preview／fallback font，外網觀測為 0。兩 serve 的 exit **1** 與 direct test／Node check exit 0 分報，Python serve 沒有最後完整 audit receipt；歷史清理收據留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。完整 backend、production build／startup、正式 DB、真官方／live、完整 5／20 日與 PIT 未驗。
+上述操作使用 memory-only 全 App esbuild preview／fallback font，外網觀測為 0。兩 serve 的 exit **1** 與 direct test／Node check exit 0 分報，Python serve 沒有最後完整 audit receipt；歷史清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。完整 backend、production build／startup、正式 DB、真官方／live、完整 5／20 日與 PIT 未驗。
 
 ## 15. M3-P6c：個股詳情行情讀回污染隔離
 
@@ -462,7 +462,7 @@ stored syntax known 但 M1 `overview.price.status=unavailable` 只表示未准�
 
 原 native date fill／ref click／Enter 曾多次 ack，但沒有對應 URL／API／DOM 事件，不算截止表單成功。隱藏表格 `innerText` 空白不能證明 MA 全空或第一個日期；只接受 `textContent` 日期、Node 算術邊界及 UI 的 MA reason。既有 renderer 與截止 form 本輪未改，physical canvas、有效歷史窄版 layout 及真正截止表單提交保持未驗；early runtime／timeout／ref、viewport 時機與 StopIteration 原失敗不倒改通過。
 
-同一 fixture 的讀回前後及 UI 後，十二持倉／784 行情的全部欄位／typeof／note／updated_at 同 digest，read mutation 0。Console 只作 limit 50 查閱，仍有 DevTools info／Router warnings；短暫 compiler 未即時觀測並發。歷史程序／清理結果留原 task／Git，現有未清資源見[協作紀錄](TASK_COORDINATION.md)。
+同一 fixture 的讀回前後及 UI 後，十二持倉／784 行情的全部欄位／typeof／note／updated_at 同 digest，read mutation 0。Console 只作 limit 50 查閱，仍有 DevTools info／Router warnings；短暫 compiler 未即時觀測並發。歷史程序／清理結果留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本批不證官方／live、正向 M1 filesystem gate、正式 DB／磁碟重開、Decimal exact、availability／PIT、完整 backend／production Vite build、完整 ActionsPage、M1／M3 或交易計畫。無合格來源仍拒用，不以 partial／unknown 文案降低原件／磁碟完成條件；其他研究候選讀回仍待有界審查，下一步及必要依賴由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責。
 
@@ -524,7 +524,7 @@ StockPage 核 candidate 身份、次序、欄位狀態、canonical slot 與 deci
 
 其餘四案以 DOM.click 核真正 browser DOM；工具 ack／focus／Enter 未 selected 不算成功，原失敗留 task，不稱五案全原生或推測未切換原因。
 
-同一 fixture 的 HTTP／UI 前後，Signals／StrategyVersions／positions／bars 全欄與 typeof 同 digest、read mutation 0。Console 有既有 warnings，短暫 compiler 未即時觀測並發；歷史清理收據留原 task／Git，現有 blocked logs 依[協作紀錄](TASK_COORDINATION.md)。
+同一 fixture 的 HTTP／UI 前後，Signals／StrategyVersions／positions／bars 全欄與 typeof 同 digest、read mutation 0。Console 有既有 warnings，短暫 compiler 未即時觀測並發；歷史清理收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本批未驗正向 M1 raw filesystem／磁碟重開、正式 DB／migration、完整 backend／production build、官方／live／availability／PIT、Decimal exact、新 Plan、全部行動或完整 M1／M3。P6c physical canvas、有效歷史窄版 layout、真正截止表單與其他 inherited 未驗界線保留；FeatureSnapshot／Chip、legacy tracking／Actions 等其他 typed models 尚未支持此隔離。下一具名候選／audit 與完成條件由 [ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)負責，有界審查本身不當能力交付。
 
@@ -554,7 +554,7 @@ chip 八數值為 foreign_buy／trust_buy／dealer_buy／margin_balance／margin
 
 StockPage／StockResearchPanel 共用純 guard 核 shape、builtin-string state、field metadata、身份、數量與順序一致性。malformed feature 只拒用 feature／MA，malformed chip envelope 只拒用 chips；結構合法的 chip 列保留各欄有限數值與 missing／invalid null，並顯示自己區塊的 gap，健康 bars／研究不被整體抹除。前端 normalized／projected JSON 採 **512 KiB** 呈現限額，另核 **depth 32／nodes 16,384** 的有限樹與合法 Unicode；原 JSON 解析後的合法數字可能展開成較長拼法，這項上限與後端原 raw **65,536 bytes** 分開，不證原件或來源。合法數字展開與 giant string／key／object／array、null metadata／非字串 state 等 pure 邊界已由必要 helper 核對，必要 actual HTTP／App 支持已有限接受，不外推其他路徑。全部新讀值欄位 undefined 的舊 API 僅有有限數值相容；null／矛盾的新 envelope 不當舊回應。shared `ChipSnapshot` type 保持原樣。
 
-actual getStock／Response.json、完整 App／Panel、具名兩分頁操作與同 instance 六表全欄／SQLite typeof 在讀回前後及 UI 後不變、read mutation 0 已在以下有限範圍接受。當批方法／資料／HTTP／SSR／程序配額及原始 exit 留原 task／Git；可重建入口及零落盤限制見[開發入口](development-baseline/README.md#m3-p6e-個股獨立特徵籌碼讀回的零落盤驗證入口)，現有未清資源見[協作紀錄](TASK_COORDINATION.md)；文案見 [UI 規格](UI_COPY_SPEC.md#m3-p6e-獨立特徵籌碼區塊文案有限接受)。
+actual getStock／Response.json、完整 App／Panel、具名兩分頁操作與同 instance 六表全欄／SQLite typeof 在讀回前後及 UI 後不變、read mutation 0 已在以下有限範圍接受。當批方法／資料／HTTP／SSR／程序配額及原始 exit 留原 task／Git；可重建入口及零落盤限制見[開發入口](development-baseline/README.md#m3-p6e-個股獨立特徵籌碼讀回的零落盤驗證入口)，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue；文案見 [UI 規格](UI_COPY_SPEC.md#m3-p6e-獨立特徵籌碼區塊文案有限接受)。
 
 ### 17.5 具名有限接受與未包含
 
@@ -575,7 +575,7 @@ SQL None 的 features_json 只核 pure projection，不聲稱存進 NOT NULL 欄
 
 只有 B 最終為原生分頁操作，其餘是 DOM.click 後核實真正 App DOM。Runtime／selector／原生 ack 未切換等原失敗留 task，不稱六案全原生；兩 QA pages 順序使用、最大同時一個，沒有重啟／reseed fixture 或 replay B。
 
-同一 fixture 六表全欄／typeof 在 start、HTTP 前後及 UI 後同 digest、read mutation 0。Console／network 只支持具名查閱範圍，compiler exit code 未觀測；歷史程序／順序 QA pages 收據留原 task／Git，現有 blocked 殘留依[協作紀錄](TASK_COORDINATION.md)。
+同一 fixture 六表全欄／typeof 在 start、HTTP 前後及 UI 後同 digest、read mutation 0。Console／network 只支持具名查閱範圍，compiler exit code 未觀測；歷史程序／順序 QA pages 收據留原 task／Git，現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。
 
 本批不改 P6d／P6c 的已接受操作或原失敗，不宣稱其他 typed models／legacy Actions／tracking、M1 正向原件、官方／live／availability／PIT、正式 DB／migration／磁碟重開、完整 backend／production build、新 Plan、完整 M1／M3。P6c canvas／有效歷史窄版／真正截止提交等 inherited 未驗保持待驗；memory fixture 不降低原件或磁碟條件。
 
@@ -1554,7 +1554,7 @@ API停止後same-key READ與cross-kind ex_right apply是真實trusted操作，�
 
 API48848／preview10296／compiler46848 absent、8803／8804無listener；ownedpage close／tabs[]。API與preview正常SIGINT均raw1；API無shutdownprint，preview有shutdown／loopback31GET＋1POST／rejected0／guard0／disk_artifact0。原件RAM隨API退出釋放，無restart／replay／hydrate；privateIO／新增test及product檔案0B，indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
-Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。接手及前任精確清理見[協作紀錄](TASK_COORDINATION.md)，收據留原task，不回寫hash。
+Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。收據留原task，不回寫hash。
 
 ## 46. M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真公司原欄位與同截止事件研究
 
@@ -1578,7 +1578,7 @@ API正常STOP後，same-key1449可信native公司READ POST實際502，headline�
 
 API26328正常STOP raw0／server_stoppedtrue／兩source_gets各1／四audit0，RAM原件已釋放。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 reject0；修字後只RAM rebuild preview34000／compiler61744 normalSIGINT raw1／shutdown GET3 POST1 reject0，API未restart／無新金融GET，兩preview guard／artifacts0。ROOT核5PID absent、8805／8806無listen、唯一ownedpage `9b4d13a6…` 正常closed／tabs[]，所有test／product／artifactfiles0B／privateIO0；shared indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
-本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。SOURCE13＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge，下一產業trace尚未准入，見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。
 
 ## 47. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：公司原碼與產業名稱追溯
 
@@ -1602,7 +1602,7 @@ API停止後，same-key1449 native公司READ實際讀取失敗，headline改「�
 
 停止前完整same held ORIGINAL identity／dualSHA／全schema再核，sourceGET各1／guards0。API52996正常STOP raw0／server_stopped=true、兩原件RAM釋放；preview55124／compiler31816正常SIGINT raw1／SHUTDOWN GET46 POST7 rejected0／guards與artifacts0。三PID absent、8807／8808無listen、唯一ownedpage `d6ad81a9-215b-433c-b9a7-da164326a12b` 正常close／tabs[]、新test／productartifactfiles0B／privateIO0／DBfiles0已核，不restart／replay／clone／hydrate。原工具失敗／viewport重設及實際效果門檻見[開發入口](development-baseline/README.md)。
 
-本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；下一 gross 買／賣拆解候選 UNADMITTED，詳 ROADMAP／[協作紀錄](TASK_COORDINATION.md)，完成條件見[執行清單](ROADMAP_EXECUTION.md)。
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；
 
 ## 48. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與net對照有限操作
 
@@ -1630,7 +1630,7 @@ ROOT已核NEW empty／nativeFIRST_once22及FULL22 ORIGINAL／完整calendar／AL
 
 兩viewport實際10/07及empty mask，apply無APIcall；10/06restore仍mask、explicitheldREAD才恢復samegen。9999→nativeback valid仍mask→explicitREAD已受驗；back不暗讀或unmask。APIstop後same-key5274 nativeREAD actual502（CDP20640.26）及另3105READ502（CDP20640.32），desktop／narrow清ALLvalues／graphs／tables／raw／calendar，nativeback仍mask且保三RAW；以actual同READ CDP核，不把stale ResourceTiming200或failed assertion改成pass。
 
-Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，source10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。
+Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。
 ## 49. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作
 
 2026-10-08。ROOT有限接受source10、fresh來源／數值與下列actual操作，非完整M1。新來源／OGL署名／pins／分類與計算由[來源 §44](SOURCE_REGISTRY.md)管理；oldnet／gross／defaultpins與四TWSE profiles不改。入口與synthetic邊界見[開發入口](development-baseline/README.md)。
@@ -1657,7 +1657,7 @@ Actual每日net零只8069trust9/23、3293trust9/29，各1day zero run；44個統
 
 唯一trustedFIRST22與完整原件／API graph受驗；15backend RAM、51src noEmit＋37validator＋42groupSSR raw0，後UI局部51src＋42SSR raw0／validator37沿用，SSRwarnings保留且不代actualUI。API／preview normalSIGINT raw1且SHUTDOWNtrue；compiler隨preview正常停、auditor /stop釋放22原件後最後raw0；四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]已ROOT核。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，不restart／replay／clone／hydrate／preload，保存／跨程序未授；原errors與exit見開發入口，不冒全passed。
 
-Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。SOURCE10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
 
 ## 50. M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰5日比較與雙原列操作
 
@@ -1693,7 +1693,7 @@ Desktop1365×900及narrow390×844各ALL7×3investor=21detailconfigs，共42detai
 
 API normalSIGINT raw1／SHUTDOWNtrue source12／guards0，兩代preview及compiler正常停、auditor release12 ORIGINAL exitraw0；六ownedPIDs absent、8812–8814無listener、ownedpage正常close／tabs[]已ROOT獨立核。API poststop暫仍在的raw1保留，後自然退出、無forcekill，後assert0；詳盡退出／rejected counts及原錯誤見開發入口。Product／testartifacts0files0B、privateIO／DB／ordinaryprice GET0，全部raw RAM釋放，不restart／replay／clone／hydrate／preload、保存／跨程序未授。
 
-Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
 
 ## 51. M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳
 
@@ -1731,4 +1731,4 @@ Backend15RAM raw0／front57src noEmit＋52validator/lifecycle＋42SSR raw0及war
 
 API32860 requests7／guards0／SHUTDOWNtrue正常SIGINT raw1；preview15564／compiler25940正常SIGINT raw1、SHUTDOWNtrue，auditor54880正常SIGINT raw1／RAMreleasedtrue；停前RAMreaudit61996 raw0及metadataholder54396先前正常退出，六exactPIDs absent／8812–14無listener、ownedpage normalclose／tabs[]已ROOT獨立核。原件及derived RAM釋放，不restart／replay／clone／hydrate／preload；0product-testartifacts／privateIO／DB／ordinarypriceGET、save／crossprocess未授。
 
-Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
