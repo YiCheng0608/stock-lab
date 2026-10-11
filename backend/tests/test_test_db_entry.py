@@ -686,6 +686,33 @@ def test_real_sample_without_stated_rights_is_refused_end_to_end(entry):
     assert not entry.runs_dir.exists()  # refused before any run (and its init-db) was started
 
 
+@pytest.mark.parametrize(
+    "key, placeholder",
+    [
+        ("source_rights", "Unknown"), ("source_rights", "  "), ("acquired_at", "N/A"), ("acquired_at", "tbd"),
+        ("sampling_rule", "None"), ("sampling_rule", "null"), ("data_dates", {}), ("data_dates", {"first": "2026-01-02", "last": "unknown"}),
+        ("data_dates", []), ("source_rights", ["n/a"]),
+    ],
+    ids=repr,
+)
+def test_real_sample_placeholder_statements_are_refused_end_to_end_and_publish_nothing(entry, key, placeholder):
+    stated = {
+        "source_rights": "invented rights statement for this test", "data_dates": {"first": "2001-01-02", "last": "2001-01-04"},
+        "acquired_at": "2001-01-05T00:00:00Z", "sampling_rule": "all hand-written rows",
+    }
+    with pytest.raises(DbEntryError) as error:
+        entry.build_sample("real2", FIXTURE, kind="real_sample", meta={**stated, key: placeholder})
+    assert error.value.code == "metadata_invalid" and key in error.value.reason
+    assert sorted(item.name for item in entry.samples_dir.iterdir()) == ["v1"]
+    assert not entry.runs_dir.exists()
+    meta_file = entry.root / "meta.json"
+    meta_file.write_text(json.dumps({**stated, key: placeholder}), encoding="utf-8")
+    code, payload, _ = cli(entry, "build-sample", "--version", "real3", "--fixture", str(FIXTURE), "--kind", "real_sample", "--meta", str(meta_file))
+    assert code == 1 and payload["ok"] is False and payload["error"]["code"] == "metadata_invalid"
+    assert key in payload["error"]["reason"]
+    assert sorted(item.name for item in entry.samples_dir.iterdir()) == ["v1"] and not entry.runs_dir.exists()
+
+
 def test_tool_root_inside_another_checkout_is_refused(module_root):
     fake = module_root / f"checkout-{uuid.uuid4().hex[:6]}"
     (fake / "backend" / "app").mkdir(parents=True)
