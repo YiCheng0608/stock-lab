@@ -18,6 +18,18 @@ class RoutingTests(unittest.TestCase):
         for name in ["tools/ci/checks.py", ".github/workflows/ci.yml", "tools/deleted-runner.py"]:
             self.assertTrue(all(change_flags([name]).values()))
 
+    def test_product_markdown_skips_product_jobs(self):
+        for name in ["frontend/README.md", "backend/README.md", "tools/README.md", "frontend/NOTES.MD"]:
+            self.assertEqual(change_flags([name]), {"python": False, "frontend": False}, name)
+
+    def test_markdown_does_not_hide_product_code(self):
+        self.assertEqual(change_flags(["frontend/README.md", "frontend/src/App.tsx"]), {"python": False, "frontend": True})
+        self.assertEqual(change_flags(["backend/README.md", "backend/app/example.py"]), {"python": True, "frontend": True})
+
+    def test_shared_markdown_still_requires_both(self):
+        for name in ["tools/ci/README.md", ".github/workflows/README.md"]:
+            self.assertEqual(change_flags([name]), {"python": True, "frontend": True}, name)
+
     def test_dependency_constraints_require_python(self):
         self.assertTrue(change_flags(["docs/development-baseline/validation-requirements.lock.txt"])["python"])
 
