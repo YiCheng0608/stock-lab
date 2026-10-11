@@ -88,7 +88,7 @@ Paused 保留工作區，不代表完成／取消。全局核所有角色停寫�
 4. **預設授權**：獨立 QA 逐 AC 通過、文件／證據齊全並轉待整合的任務，由持入口的任務統籌依 QA 通過 SHA 核准，指派索引／Git push 該任務 branch、開 PR，CI 通過後以 merge commit 合併，不逐單請示；squash／rebase 不在預設授權內。PR 回原單並附 QA／文件／索引證據。禁提前自動關單，見[automation](docs/GITHUB_WORKFLOW.md#projects-與關單自動化)；送 PR 後按[CI 接手規則](docs/GITHUB_WORKFLOW.md#pr-ci-失敗與接手)處置至完成或下一 owner ACK，失敗同單／branch／PR 退修。
 5. 合併前再核 base 未變、候選／工作樹一致、檢查及授權有效。預設 merge commit 保留已驗歷史；squash／rebase 須另核版本映射。只經持入口任務統籌核准的 PR 整合，不直接 push master 或本地 ff-only 繞過。
 6. 合併後在明確 master SHA 跑必要檢查。失敗保持待整合、記「合併後檢查失敗」、停其他整合；須修程式依第 3 項退修，原單交修正 PR 或獲授權 revert，QA 重驗後解除，不先 Done 另開單。
-7. 原單回報合併版本、提交範圍、QA／檢查、索引限制、剩餘差異、清理，再關單／釋放入口。中斷由全局核舊 owner 停寫後接管，不憑逾時搶占。
+7. 原單回報合併版本、提交範圍、QA／檢查、索引限制、剩餘差異，再關單／釋放入口；關單後依[結案清理](#驗證資料與暫存)執行並在原單補記。中斷由全局核舊 owner 停寫後接管，不憑逾時搶占。
 
 已派工本地 checkpoint／最終提交只 stage freeze 白名單，不混無關修改、秘密或忽略產物。GitHub 登入、Issue／Project 寫入、push、PR、merge、部署、清理各記授權對象／範圍；既有明示授權沿用，角色名不授權。
 
@@ -101,7 +101,7 @@ Paused 保留工作區，不代表完成／取消。全局核所有角色停寫�
 - 落盤前原單核數量、大小、建立／清理及授權。禁 `-KeepArtifacts`、整套成功產物保留；未解問題只留必要復現，列目的、位置、範圍、期限／清理條件。模板不代表逐輪附件。
 - 只清本次自有、已核絕對路徑的授權產物；不掃 Temp、改名轉存或處理其他 session 資源。成功／失敗均嘗試清理，中斷／占用／拒絕不稱已刪。
 - 測試、清理分報，保留原 exit、未跑項、失敗路徑／大小／原因。清理失敗不否定驗收或要求重跑；殘留達上限只停新增落盤案例。
-- **結案清理（預設授權）**：合併後檢查通過、原單已關閉的任務，由該單任務統籌在目標 worktree 之外執行：關閉該 worktree 的 terminal、以 Orca 移除 worktree、刪除已併入 master 的本地與遠端任務 branch，並在原單記錄結果。未合併、Paused／Blocked、有未保存成果，或 #1 登錄的 NO-RETRY／未清資源，仍須另核授權、範圍、owner 停寫。保留 Git 歷史，未清／失敗明列，不借新任務取得刪除權。
+- **結案清理（預設授權）**：合併後檢查通過、原單已關閉的任務，由該單任務統籌先核所有角色停寫、無未保存成果，再於目標 worktree 之外執行：關閉該 worktree 的 terminal、以 Orca 移除 worktree、刪除已併入 master 的本地與遠端任務 branch（本地用 `git branch -d`，遠端先核 `git merge-base --is-ancestor <branch> origin/master`），並在原單記錄結果。未合併、Paused／Blocked、有未保存成果，或 #1 登錄的 NO-RETRY／未清資源，仍須另核授權、範圍、owner 停寫。保留 Git 歷史，未清／失敗明列，不借新任務取得刪除權。
 - 只驗變更所需範圍，沿用適用證據。文件只查差異、連結、模板、一致性，不跑 backend 或建 DB；未跑不列通過。
 
 ## 文件與交接
