@@ -388,7 +388,11 @@ class DbEntry:
         info = self._load_run(run_id)
         size = tree_size(info.run_dir, strict=False)
         failures = []
-        for child in sorted(info.run_dir.iterdir()):
+        try:
+            children = sorted(info.run_dir.iterdir())
+        except FileNotFoundError as exc:  # another process finished removing it first
+            raise DbEntryError("run_not_found", f"run {run_id!r} was removed while cleaning up", path=info.run_dir) from exc
+        for child in children:
             if child.name != RUN_MARKER:
                 failures += remove_tree(child)
         if not failures:
@@ -453,7 +457,12 @@ class DbEntry:
                 if before_run:
                     before_run(readback)
                 env = build_child_env(info.stock_env, info.tmp_dir)
-                proc = subprocess.run(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL)
+                try:
+                    proc = subprocess.run(argv, env=env, cwd=cwd, stdin=subprocess.DEVNULL)
+                except OSError as exc:  # the operating system's message does not always name the program
+                    raise DbEntryError(
+                        "io_error", f"cannot start {argv[0]!r}: {type(exc).__name__}: {exc}", path=argv[0]
+                    ) from exc
                 outcome = {"exit_code": proc.returncode, "run_id": info.run_id, "stock_env_readback": readback}
         except CleanupError as exc:
             exc.details["command_exit_code"] = outcome.get("exit_code")

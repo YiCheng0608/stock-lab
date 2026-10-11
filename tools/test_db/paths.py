@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -14,6 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MAX_TOTAL_BYTES = 50 * 1000 * 1000
 STOCK_VARS = ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+_VANISHED = (FileNotFoundError, NotADirectoryError)
+# Windows reports an entry that another process is deleting as "access denied". Give it a short, bounded
+# moment to disappear or become readable before the denial is treated as real.
+_TRANSIENT_RETRIES = 20
+_TRANSIENT_DELAY = 0.01
 
 
 def is_within(child: Path | str, parent: Path | str) -> bool:
@@ -25,12 +31,43 @@ def is_within(child: Path | str, parent: Path | str) -> bool:
         return False
 
 
+def _is_link(info: os.stat_result) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
+
+
 def is_link_or_reparse(path: Path | str) -> bool:
     try:
-        info = os.lstat(path)
+        return _is_link(os.lstat(path))
     except OSError:
         return False
-    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & _REPARSE_POINT)
+
+
+def _list_dir(path: Path) -> list[Path]:
+    with os.scandir(path) as entries:
+        return [Path(entry.path) for entry in entries]
+
+
+def _observe(operation, path: Path):
+    """Run ``operation(path)`` on an entry that other processes may be deleting.
+
+    Returns ``(True, result)``, or ``(False, None)`` once the entry is gone. A
+    denial that outlasts the retry window is a real error, raised as io_error
+    with the path; every other error propagates unchanged.
+    """
+
+    for attempt in range(_TRANSIENT_RETRIES + 1):
+        try:
+            return True, operation(path)
+        except _VANISHED:
+            return False, None
+        except PermissionError as exc:
+            if attempt == _TRANSIENT_RETRIES:
+                raise DbEntryError(
+                    "io_error",
+                    f"{type(exc).__name__}: {exc} (still denied after {_TRANSIENT_RETRIES} retries of {_TRANSIENT_DELAY}s)",
+                    path=path,
+                ) from exc
+            time.sleep(_TRANSIENT_DELAY)
 
 
 def product_checkout_of(path: Path | str) -> Path | None:
@@ -87,24 +124,26 @@ def tree_size(path: Path | str, *, strict: bool = True) -> int:
     """Sum of file sizes under ``path``; links are never followed.
 
     ``strict`` refuses a link or reparse point (quota accounting cannot trust
-    what it cannot see); otherwise such entries count as 0 bytes.
+    what it cannot see); otherwise such entries count as 0 bytes. An entry that
+    another process removes while it is being measured counts as already gone,
+    so concurrent cleanup never interrupts accounting.
     """
 
     total = 0
     stack = [Path(path)]
     while stack:
         current = stack.pop()
-        try:
-            info = os.lstat(current)
-        except FileNotFoundError:
+        found, info = _observe(os.lstat, current)
+        if not found:
             continue
-        if is_link_or_reparse(current):
+        if _is_link(info):
             if strict:
                 raise DbEntryError("reparse_point", "link or reparse point found while sizing", path=current)
             continue
         if stat.S_ISDIR(info.st_mode):
-            with os.scandir(current) as entries:
-                stack.extend(Path(entry.path) for entry in entries)
+            found, children = _observe(_list_dir, current)
+            if found:
+                stack.extend(children)
         else:
             total += info.st_size
     return total
@@ -114,7 +153,8 @@ def remove_tree(path: Path | str) -> list[dict]:
     """Remove ``path`` bottom-up without following links; return every failure.
 
     Read-only files (the sample library) are made writable first. A reparse
-    point is never entered or removed. Nothing is retried.
+    point is never entered or removed. Nothing is retried, and an entry that
+    another process already removed counts as removed.
     """
 
     failures: list[dict] = []
@@ -122,7 +162,7 @@ def remove_tree(path: Path | str) -> list[dict]:
     def fail(item: Path, exc: BaseException | str) -> None:
         try:
             size = tree_size(item, strict=False)
-        except OSError:
+        except (OSError, DbEntryError):
             size = 0
         reason = exc if isinstance(exc, str) else f"{type(exc).__name__}: {exc}"
         failures.append({"path": str(item), "size_bytes": size, "reason": reason})
@@ -135,13 +175,20 @@ def remove_tree(path: Path | str) -> list[dict]:
             return
         if item.is_dir():
             before = len(failures)
-            with os.scandir(item) as entries:
-                children = [Path(entry.path) for entry in entries]
+            try:
+                children = _list_dir(item)
+            except _VANISHED:
+                return
+            except OSError as exc:
+                fail(item, exc)
+                return
             for child in children:
                 remove(child)
             if len(failures) == before:
                 try:
                     os.rmdir(item)
+                except FileNotFoundError:
+                    pass
                 except OSError as exc:
                     fail(item, exc)
             return
@@ -151,6 +198,8 @@ def remove_tree(path: Path | str) -> list[dict]:
             except PermissionError:
                 os.chmod(item, stat.S_IWRITE)
                 os.remove(item)
+        except FileNotFoundError:
+            pass
         except OSError as exc:
             fail(item, exc)
 

@@ -7,6 +7,7 @@ acceptance. Only hand-written fixtures are used: no daily database, no copied
 private data, no external source. The cases deliberately avoid ``tmp_path``.
 """
 
+import errno
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -26,9 +28,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))  # tools/ is a namespace package at the project root
 
-from tools.test_db import DbEntry, DbEntryError  # noqa: E402
+from tools.test_db import DbEntry, DbEntryError, cli as cli_module, paths as paths_module  # noqa: E402
 from tools.test_db.errors import CleanupError, QuotaExceededError  # noqa: E402
-from tools.test_db.paths import remove_tree_or_raise, tree_size  # noqa: E402
+from tools.test_db.paths import remove_tree, remove_tree_or_raise, tree_size  # noqa: E402
 from tools.test_db.product import stock_env_for  # noqa: E402
 from tools.test_db.sample import DB_NAME, META_NAME, load_fixture, open_readonly, read_fixture, sha256_file  # noqa: E402
 
@@ -711,3 +713,244 @@ def test_concurrent_isolation_requests_never_share_a_name(entry):
     assert len(set(names)) == 4
     for name in names:
         entry.cleanup(name)
+
+
+# ---- D-1: accounting and cleanup that race with another party's cleanup ------------
+#
+# Each case lets "another process" act between two system calls of the code under
+# test (the interception removes the real entries, so the OS raises its own
+# error); nothing here depends on timing.
+
+
+@pytest.fixture
+def patcher():
+    """Request this after the fixtures whose teardown it must precede (conftest's autouse monkeypatch outlives them)."""
+
+    patch = pytest.MonkeyPatch()
+    yield patch
+    patch.undo()
+
+
+@pytest.fixture
+def scratch(module_root):
+    directory = module_root / f"d-{uuid.uuid4().hex[:6]}"
+    directory.mkdir(parents=True)
+    yield directory
+    remove_tree_or_raise(directory)
+
+
+def write_files(base, spec):
+    for relative, size in spec.items():
+        target = base / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x" * size)
+
+
+def intercept(patch, name, trigger, action, *, nth=1):
+    """Run ``action`` just before the ``nth`` call of ``os.<name>(trigger)``; returns the call list."""
+
+    real = getattr(os, name)
+    calls = []
+
+    def wrapper(path, *args, **kwargs):
+        if os.path.normcase(str(path)) == os.path.normcase(str(trigger)):
+            calls.append(path)
+            if len(calls) == nth:
+                action()
+        return real(path, *args, **kwargs)
+
+    patch.setattr(os, name, wrapper)
+    return calls
+
+
+def deny(patch, name, trigger, *, times, then=None):
+    """Make ``os.<name>(trigger)`` raise the Windows "access denied" error ``times`` times, then run ``then`` and proceed."""
+
+    real = getattr(os, name)
+    calls = []
+
+    def wrapper(path, *args, **kwargs):
+        if os.path.normcase(str(path)) == os.path.normcase(str(trigger)):
+            calls.append(path)
+            if len(calls) <= times:
+                raise PermissionError(13, "Access is denied", str(path), 5)
+            if len(calls) == times + 1 and then:
+                then()
+        return real(path, *args, **kwargs)
+
+    patch.setattr(os, name, wrapper)
+    return calls
+
+
+@pytest.mark.parametrize("trigger, expected", [("gone", 100), ("gone/inner", 400), (".", 0)])
+def test_race_directory_removed_between_stat_and_listing_counts_as_gone(scratch, patcher, trigger, expected):
+    write_files(scratch, {"keep/a.bin": 100, "gone/c.bin": 300, "gone/inner/b.bin": 200})
+    victim = scratch if trigger == "." else scratch / trigger
+    calls = intercept(patcher, "scandir", victim, lambda: remove_tree_or_raise(victim))
+    assert tree_size(scratch) == expected  # only what is still there is counted; strict mode included
+    assert calls and not victim.exists()
+
+
+def test_race_file_removed_between_listing_and_stat_counts_as_gone(scratch, patcher):
+    write_files(scratch, {"keep/a.bin": 100, "keep/b.bin": 50})
+    victim = scratch / "keep" / "b.bin"
+    calls = intercept(patcher, "lstat", victim, lambda: os.remove(victim))
+    assert tree_size(scratch) == 100 and calls
+
+
+def test_race_a_denial_that_clears_is_counted_normally(scratch, patcher):
+    # Windows answers "access denied" for an entry another process is still deleting.
+    write_files(scratch, {"keep/a.bin": 100, "busy/b.bin": 200})
+    patcher.setattr(paths_module, "_TRANSIENT_DELAY", 0)
+    calls = deny(patcher, "scandir", scratch / "busy", times=3)
+    assert tree_size(scratch) == 300 and len(calls) == 4
+
+
+def test_race_a_denial_that_ends_in_removal_counts_as_gone(scratch, patcher):
+    write_files(scratch, {"keep/a.bin": 100, "busy/b.bin": 200})
+    patcher.setattr(paths_module, "_TRANSIENT_DELAY", 0)
+    calls = deny(patcher, "scandir", scratch / "busy", times=2, then=lambda: remove_tree_or_raise(scratch / "busy"))
+    assert tree_size(scratch) == 100 and len(calls) >= 3 and not (scratch / "busy").exists()
+
+
+def test_race_a_lasting_denial_is_a_real_error_with_path_and_bounded_retries(scratch, patcher):
+    write_files(scratch, {"keep/a.bin": 100, "locked/b.bin": 200})
+    patcher.setattr(paths_module, "_TRANSIENT_DELAY", 0)
+    calls = deny(patcher, "scandir", scratch / "locked", times=10**6)
+    with pytest.raises(DbEntryError) as error:
+        tree_size(scratch)
+    assert error.value.code == "io_error" and error.value.path == str(scratch / "locked")
+    assert "PermissionError" in error.value.reason and "still denied" in error.value.reason
+    assert isinstance(error.value.__cause__, PermissionError)
+    assert len(calls) == paths_module._TRANSIENT_RETRIES + 1  # bounded, not an endless wait
+
+
+def test_race_other_errors_are_not_swallowed_by_the_vanished_rule(scratch, patcher):
+    write_files(scratch, {"keep/a.bin": 100, "sick/b.bin": 200})
+    real = os.scandir
+
+    def scandir(path, *args, **kwargs):
+        if Path(path).name == "sick":
+            raise OSError(errno.EIO, "input/output error", str(path))
+        return real(path, *args, **kwargs)
+
+    patcher.setattr(os, "scandir", scandir)
+    with pytest.raises(OSError) as error:
+        tree_size(scratch)
+    assert error.value.errno == errno.EIO
+
+
+@pytest.mark.parametrize(
+    "name, target, action",
+    [
+        ("remove", "a/b.bin", lambda victim: os.unlink(victim)),  # file taken by the other party first
+        ("rmdir", "d", lambda victim: os.rmdir(victim)),  # empty directory taken first
+        ("scandir", "d", lambda victim: remove_tree_or_raise(victim)),  # whole directory taken before listing
+    ],
+)
+def test_race_remove_tree_counts_entries_removed_by_someone_else_as_removed(scratch, patcher, name, target, action):
+    write_files(scratch, {"a/b.bin": 10, "a/c.bin": 20, "d/e.bin": 30})
+    victim = scratch / target
+    if name == "rmdir":
+        os.remove(scratch / "d" / "e.bin")  # so that "d" is empty by the time it is removed
+    calls = intercept(patcher, name, victim, lambda: action(victim))
+    assert remove_tree(scratch) == [] and calls and not scratch.exists()
+
+
+def test_race_isolate_quota_accounting_survives_a_run_removed_by_someone_else(entry, patcher):
+    size = entry.verify("v1", check_product=False)["size_bytes"]
+    other = entry.isolate("v1", run_id="other")
+    other_total = tree_size(other.run_dir)
+    tight = DbEntry(entry.root, max_bytes=tree_size(entry.root) - other_total + size + 5_000)  # fits only without "other"
+    calls = intercept(patcher, "scandir", other.data_dir, lambda: remove_tree_or_raise(other.run_dir))
+    created = tight.isolate("v1", run_id="new")
+    assert calls and not other.run_dir.exists() and created.db_path.is_file()
+    tight.cleanup("new")
+
+
+def test_race_usage_and_freeze_survive_a_run_removed_by_someone_else(entry, patcher):
+    other = entry.isolate("v1", run_id="other")
+    calls = intercept(patcher, "scandir", other.data_dir, lambda: remove_tree_or_raise(other.run_dir))
+    report = entry.usage()  # the total and the per-entry sums both scan around the vanishing run
+    assert calls and report["by_entry"]["runs"] == 0 and report["total_bytes"] == tree_size(entry.root)
+    source = entry.isolate("v1", run_id="src")
+    second = entry.isolate("v1", run_id="other2")
+    again = intercept(patcher, "scandir", second.data_dir, lambda: remove_tree_or_raise(second.run_dir))
+    published = entry.freeze(source, "v2", check_product=False)  # both of its accounting checks scan the root
+    assert again and published["version"] == "v2" and not second.run_dir.exists()
+    entry.cleanup("src")
+
+
+def test_race_cleanup_finishing_after_another_party_already_removed_the_run(entry, patcher):
+    run = entry.isolate("v1", run_id="shared")
+    calls = intercept(  # the 2nd listing of data/ is the cleanup's own; the 1st was the size measurement
+        patcher, "scandir", run.data_dir, lambda: remove_tree_or_raise(run.run_dir), nth=2
+    )
+    result = entry.cleanup("shared")
+    assert len(calls) >= 2 and result["path"] == str(run.run_dir) and not run.run_dir.exists()
+
+    other = entry.isolate("v1", run_id="vanishing")
+    intercept(patcher, "listdir", other.run_dir, lambda: remove_tree_or_raise(other.run_dir))
+    with pytest.raises(DbEntryError) as error:  # removed between the marker check and the listing
+        entry.cleanup("vanishing")
+    assert error.value.code == "run_not_found" and error.value.path == str(other.run_dir)
+
+
+def test_race_cli_reports_one_json_object_whatever_happens(entry, patcher, capsys):
+    other = entry.isolate("v1", run_id="other")
+    calls = intercept(patcher, "scandir", other.data_dir, lambda: remove_tree_or_raise(other.run_dir))
+    assert cli_module.main(["--root", str(entry.root), "usage"]) == 0
+    assert calls and json.loads(capsys.readouterr().out)["ok"] is True
+
+    def denied(self):
+        raise PermissionError(13, "Access is denied", r"X:\protected\file")
+
+    patcher.undo()
+    patcher.setattr(DbEntry, "usage", denied)  # an OSError the entry does not classify itself
+    assert cli_module.main(["--root", str(entry.root), "usage"]) == 1
+    failure = json.loads(capsys.readouterr().out)
+    assert failure["ok"] is False and failure["error"]["code"] == "io_error"
+    assert failure["error"]["path"] == r"X:\protected\file" and "PermissionError" in failure["error"]["reason"]
+
+
+def test_race_cli_exec_of_a_missing_program_is_a_json_error_and_leaves_no_run(entry, capsys):
+    assert cli_module.main(["--root", str(entry.root), "exec", "--version", "v1", "--", "no-such-program-for-d1"]) == 1
+    failure = json.loads(capsys.readouterr().out)
+    assert failure["ok"] is False and failure["error"]["code"] == "io_error"
+    assert failure["error"]["path"] == "no-such-program-for-d1" and "FileNotFoundError" in failure["error"]["reason"]
+    assert list(entry.runs_dir.iterdir()) == []
+
+
+def test_race_bounded_stress_accounting_while_runs_come_and_go(entry):
+    """Supporting evidence only: the deterministic cases above are what pin the behavior."""
+
+    errors, churned, stop = [], [], threading.Event()
+
+    def churn():
+        count = 0
+        try:
+            while not stop.is_set():
+                run = entry.runs_dir / f"s{count}"
+                write_files(run, {"data/raw/a.bin": 10, "data/stock.db": 4096, "tmp/t.bin": 1, ".testdb-run.json": 2})
+                assert remove_tree(run) == []
+                count += 1
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+        churned.append(count)
+
+    worker = threading.Thread(target=churn)
+    worker.start()
+    calls = 0
+    deadline = time.monotonic() + 1.5
+    try:
+        while time.monotonic() < deadline:
+            try:
+                tree_size(entry.root)
+                entry.usage()
+                calls += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+    finally:
+        stop.set()
+        worker.join()
+    assert errors == [] and calls > 20 and churned and churned[0] > 20

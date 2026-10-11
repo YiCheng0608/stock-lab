@@ -4,7 +4,8 @@
 
 Every command prints one JSON object: ``{"ok": true, "result": ...}`` or
 ``{"ok": false, "error": {code, reason, path, size_bytes, details}}`` and exits
-0 or 1. ``exec`` passes the child's own exit code through.
+0 or 1 (an unclassified OSError becomes code ``io_error``). ``exec`` passes
+the child's own exit code through.
 """
 
 from __future__ import annotations
@@ -151,4 +152,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except DbEntryError as exc:
         _emit({"ok": False, "error": exc.to_dict()})
+        return 1
+    except OSError as exc:  # anything the entry did not classify still ends as one JSON object, not a traceback
+        failure = DbEntryError("io_error", f"{type(exc).__name__}: {exc}", path=exc.filename)
+        _emit({"ok": False, "error": failure.to_dict()})
         return 1
