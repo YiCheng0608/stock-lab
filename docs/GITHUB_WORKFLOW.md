@@ -230,6 +230,8 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 
 送達未知保留名額；確定未送達且無可執行 session，或撤權且 session 停寫才釋放。逾時／ACK 遺失不釋放或重派。
 
+角色（工程、QA、文件、索引／Git）在原單留交回收據後，以 Orca 對該單任務統籌的可見 terminal 送一則短通知（Issue、留言連結、下一動作）；這是事件通知，不是定時監看，統籌讀回前不算接手。
+
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
 建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
@@ -299,7 +301,7 @@ Issue／PR／整合執行者／授權依據（AGENTS 預設授權或使用者收
 新增能力／實際解除依賴／可靠性改善／剩餘缺口：
 全局停滯計數前後／下一步理由：
 Issue 關閉與 Project 狀態同步：
-清理另行授權／執行或未執行／殘留：
+結案清理（預設授權）或例外的授權依據／執行或未執行／殘留：
 整合權釋放／失敗時暫停及接管安排：
 ```
 
