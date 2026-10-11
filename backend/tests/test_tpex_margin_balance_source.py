@@ -3,15 +3,20 @@
 Run exactly: python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 No pytest/conftest, worker/application/config import, network, DB, filesystem
 artifacts, subprocess, or installed dependencies. Only the two source files are
-read for direct import and the seal's module hash. Native HTTPS is mocked at the
-connection boundary; the real transport reader/order/framing still executes.
+read for direct import and the seal's module hash. HTTPS is mocked at the
+connection boundary through the product's ``connection_factory`` seam (never by
+replacing the ``http.client.HTTPSConnection`` global); the real transport
+reader/order/framing still executes. Constructing the stdlib connection class
+never connects, so the regression tests may build it without any network I/O.
 """
 
 import csv
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
+import os
 import socket
 import sys
 import unittest
@@ -29,15 +34,26 @@ M = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = M
 spec.loader.exec_module(M)
 
-# Exact externally published codeblock from issuecomment-6084167671. This is a
-# policy fixture, not a financial expected-value projection of the product.
-POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa1","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
+# Exact externally published qa1 codeblock from issuecomment-6084167671 (SPENT / NO-RETRY). Kept only to
+# prove by program that the qa2 policy below differs from it in the namespace field alone.
+OLD_POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa1","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
+# qa2 canonical policy: the user-granted replacement quota (issuecomment-6110713412), bound to the namespace
+# approved in issuecomment-6110894588. A policy fixture, not a financial expected-value projection.
+POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa2","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
 
 S = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
 D = ("2026-09-24", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06")
 W = (("2026-10-05", D[:6]), ("2026-10-06", D[1:]))
 QA = "01a12222-2222-7222-8222-222222222222"
-SCRIPT = b"# Synthetic RAM test script, not a financial-start authorization.\n"
+GLOBAL_ID = "01a11111-1111-7111-8111-111111111111"
+OWNER = "01a13333-3333-7333-8333-333333333333"
+ENGINEER = "01a14444-4444-7444-8444-444444444444"
+RUNTIME_ID = "01a15555-5555-7555-8555-555555555555"
+TERMINAL = "term_01a16666-6666-7666-8666-666666666666"
+MODEL = "claude-sonnet-5-5"
+EFFORT = "xhigh"
+RUNTIME_ENV = {M.SESSION_ENV: QA, M.EFFORT_ENV: EFFORT}
+SCRIPT =b"# Synthetic RAM test script, not a financial-start authorization.\n"
 COMMAND = "python -B -X utf8 synthetic-ram-only"
 SHA = "a" * 40
 
@@ -251,19 +267,25 @@ class Checks(unittest.TestCase):
     def setUp(self):
         self.spent = patch.object(M, "_SPENT_NAMESPACES", set())
         self.spent.start()
+        # The live process must expose the sealed Claude session and effort.
+        self.environment = patch.dict(os.environ, RUNTIME_ENV)
+        self.environment.start()
+        # Belt and braces: a test that reached the real stdlib transport would
+        # fail here instead of opening a socket or resolving a name.
+        for name in ("create_connection", "getaddrinfo"):
+            patcher = patch.object(socket, name, side_effect=AssertionError("standalone tests must not use the network"))
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def tearDown(self):
+        self.environment.stop()
         self.spent.stop()
         self.assertIsNone(sys.gettrace())
 
-    def capture(self, **changes):
-        seal = M.FinancialStartSeal(M.GLOBAL,
-            "https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-9999999999", M.ISSUE, M.NAMESPACE,
-            QA, SHA, hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest(), hashlib.sha256(SCRIPT).hexdigest(),
-            hashlib.sha256(COMMAND.encode()).hexdigest(), M.POLICY_SHA256, M.CAPS,
-            (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
+    def capture(self, seal_changes=None, runtime_changes=None, **changes):
+        seal = replace(base_seal(), **(seal_changes or {}))
         arguments = dict(use=M.UseRequest(), external_policy_utf8=POLICY, seal=seal,
-            runtime=M.RuntimeIdentity(QA, QA, None, "gpt-6.1-sol", "xhigh", SHA), full_script_utf8=SCRIPT, full_command=COMMAND)
+            runtime=replace(capture_runtime(), **(runtime_changes or {})), full_script_utf8=SCRIPT, full_command=COMMAND)
         arguments.update(changes)
         return M.MarginCapture(**arguments)
 
@@ -274,9 +296,12 @@ class Checks(unittest.TestCase):
         documents = default_documents if documents is None else documents
         responses = responses or [Response(csv_body(rows), media="text/csv")] + [Response(json_body(d)) for d in documents]
         transport = Transport(responses)
-        capture = self.capture()
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection):
-            report = capture.run(oracle, consumer, independent_official_oracle=official_oracle)
+        original_class = http.client.HTTPSConnection
+        capture = self.capture(connection_factory=transport.connection)
+        report = capture.run(oracle, consumer, independent_official_oracle=official_oracle)
+        self.assertIs(http.client.HTTPSConnection, original_class)  # The seam never replaces the stdlib global.
+        self.assertEqual(report.transport, "caller_factory")
+        self.assertEqual([r.request_started for r in report.receipts], [True] * len(report.receipts))
         self.assertTrue(all(r.closed for r in responses[:len(transport.calls)]))
         self.assertTrue(all(c.closed for c in transport.connections))
         self.assertEqual(capture._originals, [])
@@ -303,7 +328,7 @@ class Checks(unittest.TestCase):
 
     def test_external_policy_exact_pin_and_positive_two_cutoffs(self):
         self.assertEqual(len(POLICY), 2399)
-        self.assertEqual(hashlib.sha256(POLICY).hexdigest(), "47ea789e4bac27cf736f9294f5c0563425b15cd5541748567f985ae262f224d7")
+        self.assertEqual(hashlib.sha256(POLICY).hexdigest(), "b95e8d9f6b7b2cff8b9984bc54ace823c5d8b36c322d5311136cebafeae0fed9")
         capture, report, transport = self.execute()
         self.assertTrue(report.success, report)
         self.assertEqual(report.state, "released")
@@ -353,7 +378,7 @@ class Checks(unittest.TestCase):
             with self.assertRaisesRegex(M.MarginSourceError, "unsupported_use"):
                 self.capture(use=use)
         for arguments, error in [({"external_policy_utf8": POLICY + b" "}, "external_policy_pin"),
-            ({"runtime": replace(capture_runtime(), parent_thread_id="engineer")}, "sole_qa_runtime"),
+            ({"runtime": replace(capture_runtime(), parent_session_id=ENGINEER)}, "sole_qa_runtime"),
             ({"runtime": replace(capture_runtime(), candidate_sha="b" * 40)}, "candidate_binding"),
             ({"full_script_utf8": b"changed"}, "script_binding"), ({"full_command": "changed"}, "command_binding")]:
             with self.assertRaisesRegex(M.MarginSourceError, error):
@@ -571,9 +596,9 @@ class Checks(unittest.TestCase):
         capture._raw_total = 8_388_608 - 7
         response = Response(b"abcdefgh", media="text/csv", length=None)
         transport = Transport([response])
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection):
-            with self.assertRaisesRegex(M.MarginSourceError, "bounded_prefix_no_eof"):
-                capture._fetch(0)
+        capture._connection_factory = transport.connection
+        with self.assertRaisesRegex(M.MarginSourceError, "bounded_prefix_no_eof"):
+            capture._fetch(0)
         self.assertEqual(response.requests, [7])
         self.assertIsNone(capture._originals[0].receipt.body_sha256)
         capture.release()
@@ -613,10 +638,10 @@ class Checks(unittest.TestCase):
         capture = self.capture()
         capture._deadline = M.time.monotonic() + 180
         transport = Transport([Response(b"a", media="text/csv")])
+        capture._connection_factory = transport.connection
         baseline = M.time.monotonic()
         # Creation succeeds, but elapsed request budget fails before any read.
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection), patch.object(
-                M.time, "monotonic", side_effect=[baseline, baseline, baseline, baseline + 21, baseline + 21]):
+        with patch.object(M.time, "monotonic", side_effect=[baseline, baseline, baseline, baseline + 21, baseline + 21]):
             with self.assertRaisesRegex(M.MarginSourceError, "request_timeout"):
                 capture._fetch(0)
         self.assertEqual(transport.responses[0].requests, [])
@@ -662,9 +687,9 @@ class Checks(unittest.TestCase):
             raise RuntimeError("must not expose raw")
         response.close = close
         # execute's close assertions don't fit an intentionally failed close.
-        capture, transport = self.capture(), Transport([response])
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection):
-            report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        transport = Transport([response])
+        capture = self.capture(connection_factory=transport.connection)
+        report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
         self.assertEqual(report.primary_error, "http_status")
         self.assertIn("response_close_failed", report.secondary_diagnostics)
         self.assertNotIn("must not expose raw", repr(report))
@@ -676,9 +701,9 @@ class Checks(unittest.TestCase):
         def close():
             raise RuntimeError("private close diagnostic")
         response.close = close
-        capture, transport = self.capture(), Transport([response])
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection):
-            report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        transport = Transport([response])
+        capture = self.capture(connection_factory=transport.connection)
+        report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
         self.assertFalse(report.success)
         self.assertEqual(report.primary_error, "transport_cleanup_failed")
         self.assertEqual(report.attempted_spent, (M.OFFICIAL_URL,))
@@ -725,13 +750,21 @@ class Checks(unittest.TestCase):
         with self.assertRaisesRegex(M.MarginSourceError, "unsupported_use"):
             self.capture(use=replace(M.UseRequest(), symbols=(Str("3105"),) + S[1:]))
         capture = self.capture()
-        for name in ("issuer_actual", "receipt_url", "issue", "namespace", "holder_actual", "candidate_sha",
+        for name in ("global_actual", "owner_actual", "engineer_actual", "holder_actual", "model", "effort",
+                     "runtime_id", "terminal_handle", "receipt_url", "issue", "namespace", "candidate_sha",
                      "module_sha256", "full_script_sha256", "full_command_sha256", "policy_sha256", "expires_at_utc"):
             with self.assertRaisesRegex(M.MarginSourceError, "seal_field_type"):
                 self.capture(seal=replace(capture._seal, **{name: Equal()}))
-        for name in ("thread_id", "session_id", "model", "reasoning", "candidate_sha"):
+            with self.assertRaisesRegex(M.MarginSourceError, "seal_field_type"):
+                self.capture(seal=replace(capture._seal, **{name: Str(getattr(capture._seal, name))}))
+        for name in ("session_id", "model", "effort", "candidate_sha"):
             with self.assertRaisesRegex(M.MarginSourceError, "runtime_field_type"):
                 self.capture(runtime=replace(capture_runtime(), **{name: Equal()}))
+        with self.assertRaisesRegex(M.MarginSourceError, "runtime_field_type"):
+            self.capture(runtime=replace(capture_runtime(), parent_session_id=Equal()))
+        for factory in (Equal(), "not callable", 7):
+            with self.assertRaisesRegex(M.MarginSourceError, "connection_factory_type"):
+                self.capture(connection_factory=factory)
         def oracle(c):
             return replace(independent_oracle(c), body_sha256=Equal())
         self.rejected(oracle=oracle, error="oracle_hashes", attempted=8)
@@ -769,10 +802,9 @@ class Checks(unittest.TestCase):
                     return result
                 conn.getresponse = getresponse
                 return conn
-            capture = self.capture()
+            capture = self.capture(connection_factory=detached)
             capture._deadline = M.time.monotonic() + 180
-            with patch.object(M.http.client, "HTTPSConnection", detached):
-                original = capture._fetch(0)
+            original = capture._fetch(0)
             self.assertTrue(original.receipt.full_eof)
             self.assertEqual(original.receipt.body_sha256, hashlib.sha256(csv_body(rows)).hexdigest())
             self.assertTrue(response.isclosed())
@@ -780,19 +812,19 @@ class Checks(unittest.TestCase):
         # At an exact cap, the real chunked decoder has not read the terminal
         # zero chunk; no extra byte/framing probe is allowed to prove EOF.
         response = native_response(b"x" * 1_048_576, framing="chunked")
-        transport, capture = Transport([response]), self.capture()
+        transport = Transport([response])
+        capture = self.capture(connection_factory=transport.connection)
         capture._deadline = M.time.monotonic() + 180
-        with patch.object(M.http.client, "HTTPSConnection", transport.connection):
-            with self.assertRaisesRegex(M.MarginSourceError, "bounded_prefix_no_eof"):
-                capture._fetch(0)
+        with self.assertRaisesRegex(M.MarginSourceError, "bounded_prefix_no_eof"):
+            capture._fetch(0)
         self.assertIsNone(capture._originals[0].receipt.body_sha256)
         capture.release()
 
     def test_remaining_request_budget_is_refreshed_between_phases(self):
         rows, _documents = fixture()
         response = Response(csv_body(rows), media="text/csv")
-        transport, capture = Transport([response]), self.capture()
-        now = [1000.0]
+        transport, now = Transport([response]), [1000.0]
+        capture = self.capture()
         capture._deadline = 1180.0
         create = transport.connection
         def phases(host, timeout):
@@ -807,8 +839,8 @@ class Checks(unittest.TestCase):
                 return get()
             conn.request, conn.getresponse = send, headers
             return conn
-        with patch.object(M.time, "monotonic", side_effect=lambda: now[0]), patch.object(
-                M.http.client, "HTTPSConnection", phases):
+        capture._connection_factory = phases
+        with patch.object(M.time, "monotonic", side_effect=lambda: now[0]):
             original = capture._fetch(0)
         self.assertTrue(original.receipt.full_eof)
         self.assertEqual(transport.connections[0].sock.timeouts[0], 1)
@@ -838,8 +870,8 @@ class Checks(unittest.TestCase):
                     now[0] += 21
                 return data
             response.read = body
-            with patch.object(M.time, "monotonic", side_effect=lambda: now[0]), patch.object(
-                    M.http.client, "HTTPSConnection", phases):
+            capture._connection_factory = phases
+            with patch.object(M.time, "monotonic", side_effect=lambda: now[0]):
                 with self.assertRaisesRegex(M.MarginSourceError, "request_timeout"):
                     capture._fetch(0)
             self.assertEqual(len(capture._attempted), 1)
@@ -914,9 +946,271 @@ class Checks(unittest.TestCase):
         _capture, report, _transport = self.execute(rows, documents, consumer=consumer)
         self.assertTrue(report.success, report)
 
+    # Identity guard: every actor, model and effort comes from the seal.
+
+    def test_claude_runtime_identity_comes_from_the_seal_not_the_module(self):
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        retired_global = "01a12102-9891-7293-8c66-a342094e0990"
+        for retired in ("gpt-6.1-sol", retired_global):
+            self.assertNotIn(retired, source)
+        self.assertFalse(hasattr(M, "GLOBAL"))
+        # The retired values are ordinary data now. Any consistent Claude model
+        # and effort pass; nothing about them is fixed in the module.
+        for model, effort in (("claude-sonnet-5-5", "xhigh"), ("claude-opus-5-5", "medium"), ("claude-haiku-5-5", "max")):
+            with patch.dict(os.environ, {M.SESSION_ENV: QA, M.EFFORT_ENV: effort}):
+                self.capture(seal_changes=dict(global_actual=retired_global, model=model, effort=effort),
+                             runtime_changes=dict(model=model, effort=effort))
+        _capture, report, _transport = self.execute()
+        self.assertTrue(report.success, report)
+
+    def test_identity_format_independence_and_runtime_binding_are_not_relaxed(self):
+        other = "01a17777-7777-7777-8777-777777777777"
+        for changes, code in (
+            (dict(seal_changes=dict(global_actual="not-a-uuid")), "runtime_identity_invalid"),
+            (dict(seal_changes=dict(owner_actual=QA.upper())), "runtime_identity_invalid"),
+            (dict(seal_changes=dict(runtime_id="x")), "runtime_identity_invalid"),
+            (dict(seal_changes=dict(model="gpt-6.1-sol")), "model_invalid"),
+            (dict(seal_changes=dict(model="Claude-sonnet")), "model_invalid"),
+            (dict(seal_changes=dict(effort="ultra")), "effort_invalid"),
+            (dict(seal_changes=dict(effort="")), "effort_invalid"),
+            (dict(seal_changes=dict(terminal_handle="terminal")), "runtime_binding_invalid"),
+            (dict(seal_changes=dict(terminal_handle="term_ bad")), "runtime_binding_invalid"),
+            (dict(seal_changes=dict(global_actual=QA)), "qa_not_independent"),
+            (dict(seal_changes=dict(owner_actual=QA)), "qa_not_independent"),
+            (dict(seal_changes=dict(engineer_actual=QA)), "qa_not_independent"),
+            (dict(seal_changes=dict(owner_actual=ENGINEER)), "role_actors_not_distinct"),
+            (dict(seal_changes=dict(global_actual=OWNER)), "role_actors_not_distinct"),
+            (dict(runtime_changes=dict(session_id=other)), "sole_qa_runtime"),
+            (dict(runtime_changes=dict(parent_session_id=OWNER)), "sole_qa_runtime"),
+            (dict(runtime_changes=dict(model="claude-opus-5-5")), "sole_qa_runtime"),
+            (dict(runtime_changes=dict(effort="high")), "sole_qa_runtime"),
+            (dict(seal_changes=dict(namespace=M.NAMESPACE + "x")), "seal_authority"),
+            (dict(seal_changes=dict(issue="YiCheng0608/stock-lab#32")), "seal_authority"),
+            (dict(seal_changes=dict(receipt_url="https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-1")),
+             "seal_receipt"),
+        ):
+            with self.assertRaisesRegex(M.MarginSourceError, "^" + code + "$"):
+                self.capture(**changes)
+
+    def test_live_claude_environment_must_match_the_seal(self):
+        base = {k: v for k, v in os.environ.items() if k not in (M.SESSION_ENV, M.EFFORT_ENV)}
+        for environment, code in (
+            ({}, "runtime_env_missing"),
+            ({M.SESSION_ENV: QA}, "runtime_env_missing"),
+            ({M.EFFORT_ENV: EFFORT}, "runtime_env_missing"),
+            ({M.SESSION_ENV: "", M.EFFORT_ENV: EFFORT}, "runtime_env_missing"),
+            ({M.SESSION_ENV: QA, M.EFFORT_ENV: ""}, "runtime_env_missing"),
+            # The legacy Codex variables are never a substitute.
+            ({"CODEX_THREAD_ID": QA, "CODEX_SESSION_ID": QA, M.EFFORT_ENV: EFFORT}, "runtime_env_missing"),
+            ({M.SESSION_ENV: ENGINEER, M.EFFORT_ENV: EFFORT}, "actual_binding_conflict"),
+            ({M.SESSION_ENV: QA, M.EFFORT_ENV: "high"}, "runtime_effort_conflict"),
+        ):
+            with patch.dict(os.environ, {**base, **environment}, clear=True):
+                with self.assertRaisesRegex(M.MarginSourceError, "^" + code + "$"):
+                    self.capture()
+
+    def test_live_environment_is_rechecked_before_anything_is_spent(self):
+        capture = self.capture(connection_factory=Transport([]).connection)
+        with patch.dict(os.environ, {M.SESSION_ENV: ENGINEER}):
+            with self.assertRaisesRegex(M.MarginSourceError, "^actual_binding_conflict$"):
+                capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        self.assertEqual(capture._attempted, [])
+        self.assertEqual(capture._originals, [])
+        self.assertEqual(M._SPENT_NAMESPACES, set())
+        self.assertIsNone(sys.gettrace())
+
+    def test_seal_expiry_and_one_time_namespace_are_not_relaxed(self):
+        past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        naive = (datetime.now() + timedelta(hours=1)).isoformat()
+        for value in (past, naive, "2099-01-01T00:00:00Z", "2099-01-01 00:00:00+00:00", "", "tomorrow"):
+            with self.assertRaisesRegex(M.MarginSourceError, "^seal_expiry$"):
+                self.capture(seal_changes=dict(expires_at_utc=value))
+        _capture, report, _transport = self.execute()  # A success consumes the one-time namespace too.
+        self.assertTrue(report.success, report)
+        self.assertEqual(M._SPENT_NAMESPACES, {M.NAMESPACE})
+        with self.assertRaisesRegex(M.MarginSourceError, "^namespace_already_spent$"):
+            self.capture(connection_factory=Transport([]).connection).run(
+                independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+
+    def test_qa2_policy_differs_from_published_qa1_policy_only_by_namespace(self):
+        def canonical(document):
+            return json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+        old, new = json.loads(OLD_POLICY), json.loads(POLICY)
+        qa1, qa2 = "issue31-margin-seven-cutoffs-1005-1006-v1/qa1", "issue31-margin-seven-cutoffs-1005-1006-v1/qa2"
+        self.assertEqual(set(old), set(new))
+        self.assertEqual([key for key in old if old[key] != new[key]], ["namespace"])
+        self.assertEqual((old["namespace"], new["namespace"]), (qa1, qa2))
+        self.assertEqual(M.NAMESPACE, qa2)
+        # Byte level: the qa1 text with its namespace suffix swapped is exactly the qa2 text.
+        self.assertEqual(OLD_POLICY.count(b"/qa1"), 1)
+        self.assertEqual(OLD_POLICY.replace(b"/qa1", b"/qa2"), POLICY)
+        # Both are canonical (sorted keys, compact), same length; the new SHA matches the canonical bytes.
+        self.assertEqual((canonical(old), canonical(new)), (OLD_POLICY, POLICY))
+        self.assertEqual((len(OLD_POLICY), len(POLICY)), (2399, 2399))
+        retired_pin = "47ea789e4bac27cf736f9294f5c0563425b15cd5541748567f985ae262f224d7"
+        self.assertEqual(hashlib.sha256(OLD_POLICY).hexdigest(), retired_pin)
+        self.assertEqual(hashlib.sha256(POLICY).hexdigest(), M.POLICY_SHA256)
+        self.assertNotEqual(M.POLICY_SHA256, retired_pin)
+        # qa1 stays SPENT / NO-RETRY: neither its policy text nor its namespace is accepted any more.
+        with self.assertRaisesRegex(M.MarginSourceError, "^external_policy_pin$"):
+            self.capture(external_policy_utf8=OLD_POLICY)
+        with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
+            self.capture(seal_changes=dict(namespace=qa1))
+        with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
+            self.capture(seal_changes=dict(policy_sha256=retired_pin))
+
+    # Transport seam: root cause of the sealed run's first failure (constructor).
+
+    def test_regression_replacing_the_stdlib_global_breaks_a_composed_native_connection(self):
+        native = http.client.HTTPSConnection
+
+        class Audit:  # The failing harness shape: global replaced, native class composed inside it.
+            def __init__(self, host, timeout):
+                self.native = native(host, timeout=timeout)
+
+        with patch.object(http.client, "HTTPSConnection", Audit):
+            with self.assertRaises(TypeError):
+                Audit("example.invalid", 20)
+        self.assertIs(http.client.HTTPSConnection, native)
+        connection = native("example.invalid", timeout=20)  # Restored: constructs without connecting.
+        try:
+            self.assertIsNone(connection.sock)
+        finally:
+            connection.close()
+
+    def test_native_connection_builds_the_unconnected_stdlib_class(self):
+        connection = M.native_connection("www.tpex.org.tw", 20)
+        try:
+            self.assertIs(type(connection), http.client.HTTPSConnection)
+            self.assertEqual((connection.host, connection.port, connection.timeout), ("www.tpex.org.tw", 443, 20))
+            self.assertIsNone(connection.sock)
+        finally:
+            connection.close()
+
+    def test_replaced_stdlib_class_is_refused_before_anything_is_spent(self):
+        class Replacement:
+            pass
+
+        with patch.object(http.client, "HTTPSConnection", Replacement):
+            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                M.native_connection("example.invalid", 20)
+            capture = self.capture()  # Default (native) transport.
+            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+            self.assertEqual(capture._attempted, [])
+            self.assertEqual(capture._originals, [])
+            self.assertEqual(M._SPENT_NAMESPACES, set())
+            self.assertIsNone(sys.gettrace())
+            # The explicit seam never consults the global, so the lifecycle still runs.
+            _capture, report, _transport = self.execute()
+            self.assertTrue(report.success, report)
+        # A replacement installed before the module was imported is captured as
+        # "native"; the class identity check still refuses it.
+        with patch.object(M, "_SPENT_NAMESPACES", set()), patch.object(
+                http.client, "HTTPSConnection", Replacement), patch.object(M, "_NATIVE_HTTPS_CONNECTION", Replacement):
+            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                M.native_connection("example.invalid", 20)
+            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                self.capture().run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+            self.assertEqual(M._SPENT_NAMESPACES, set())
+
+    def test_default_transport_goes_through_native_connection(self):
+        rows, documents = fixture()
+        transport = Transport([Response(csv_body(rows), media="text/csv")] + [Response(json_body(d)) for d in documents])
+        capture = self.capture()
+        with patch.object(M, "native_connection", transport.connection):
+            report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        self.assertTrue(report.success, report)
+        self.assertEqual(report.transport, "native_direct")
+        self.assertEqual(len(transport.connections), 8)
+        self.assertIsNone(capture._connection_factory)
+
+    def test_audit_wrapper_composes_native_connection_without_replacing_the_global(self):
+        rows, documents = fixture()
+        transport = Transport([Response(csv_body(rows), media="text/csv")] + [Response(json_body(d)) for d in documents])
+        audit = []
+
+        class AuditConnection:
+            def __init__(self, host, timeout):
+                self.native = M.native_connection(host, timeout)  # Real stdlib class, composed and never connected.
+                self.inner = transport.connection(host, timeout)
+                audit.append(self)
+
+            @property
+            def sock(self):
+                return self.inner.sock
+
+            def request(self, method, target, headers):
+                self.inner.request(method, target, headers)
+
+            def getresponse(self):
+                return self.inner.getresponse()
+
+            def close(self):
+                self.inner.close()
+                self.native.close()
+
+        original_class = http.client.HTTPSConnection
+        capture = self.capture(connection_factory=AuditConnection)
+        report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        self.assertTrue(report.success, report)
+        self.assertEqual(report.transport, "caller_factory")
+        self.assertIs(http.client.HTTPSConnection, original_class)
+        self.assertEqual(len(audit), 8)
+        for item in audit:
+            self.assertIs(type(item.native), original_class)
+            self.assertIsNone(item.native.sock)  # Nothing was sent through the real class.
+        self.assertIsNone(capture._connection_factory)
+
+    def test_constructor_failure_is_spent_but_never_reports_a_started_request(self):
+        def factory(host, timeout):
+            raise RuntimeError("private constructor diagnostic")
+
+        capture = self.capture(connection_factory=factory)
+        report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        self.assertFalse(report.success)
+        self.assertEqual(report.failure_stage, "official_capture")
+        self.assertEqual(report.primary_error, "unexpected_exception")
+        self.assertEqual(report.attempted_spent, (M.OFFICIAL_URL,))
+        self.assertEqual(report.unattempted_not_spent, M.FINMIND_URLS)
+        self.assertEqual(len(report.receipts), 1)
+        self.assertFalse(report.receipts[0].request_started)
+        self.assertEqual((report.receipts[0].body_bytes, report.receipts[0].body_sha256, report.receipts[0].status),
+                         (0, None, None))
+        self.assertTrue(any(event[:2] == ("official_capture", "_fetch") for event in report.trace_events))
+        self.assertNotIn("private constructor diagnostic", repr(report))
+        self.assertEqual(M._SPENT_NAMESPACES, {M.NAMESPACE})
+        self.assertEqual((report.consumer_count, report.getter_count), (0, 0))
+
+    def test_request_failure_after_construction_reports_a_started_request(self):
+        class Connection:
+            sock = FakeSocket()
+
+            def request(self, method, target, headers):
+                raise OSError("private request diagnostic")
+
+            def close(self):
+                pass
+
+        capture = self.capture(connection_factory=lambda host, timeout: Connection())
+        report = capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+        self.assertFalse(report.success)
+        self.assertEqual(report.attempted_spent, (M.OFFICIAL_URL,))
+        self.assertTrue(report.receipts[0].request_started)
+        self.assertNotIn("private request diagnostic", repr(report))
+
 
 def capture_runtime():
-    return M.RuntimeIdentity(QA, QA, None, "gpt-6.1-sol", "xhigh", SHA)
+    return M.RuntimeIdentity(QA, None, MODEL, EFFORT, SHA)
+
+
+def base_seal():
+    return M.FinancialStartSeal(GLOBAL_ID, OWNER, ENGINEER, QA, MODEL, EFFORT, RUNTIME_ID, TERMINAL,
+        "https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-9999999999", M.ISSUE, M.NAMESPACE,
+        SHA, hashlib.sha256(MODULE_PATH.read_bytes()).hexdigest(), hashlib.sha256(SCRIPT).hexdigest(),
+        hashlib.sha256(COMMAND.encode()).hexdigest(), M.POLICY_SHA256, M.CAPS,
+        (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
 
 
 if __name__ == "__main__":

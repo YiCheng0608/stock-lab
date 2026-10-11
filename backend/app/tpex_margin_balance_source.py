@@ -4,6 +4,19 @@ No application/worker/config imports, import-time I/O, automatic fetching, DB,
 disk persistence, or strategy integration. A reviewed external financial-start
 seal is a trust assertion, not something this module can issue or authenticate.
 Its caller must independently verify the actual runtime and GitHub authorization.
+The seal carries every role identity (global/owner/engineer/QA session IDs,
+Claude model and effort, Orca runtime and terminal); none is defaulted or fixed
+here, and the caller compares them with the Issue receipts. The QA must differ
+from the other three roles, which must differ from each other, and the live
+process must expose the same CLAUDE_CODE_SESSION_ID and CLAUDE_EFFORT (a missing
+or different value refuses). The model is not in the environment: it is only
+format-checked and compared with the QA-read RuntimeIdentity.
+Transport: the default path builds the stdlib connection through
+``native_connection``. The stdlib class rebinds itself by its module-global name
+in ``__init__``, so replacing ``http.client.HTTPSConnection`` (even to wrap it)
+breaks the original class with an opaque TypeError; that state is refused with
+``transport_class_replaced`` before anything is spent. An auditor wraps the
+connection by composition through ``connection_factory`` instead.
 Only ``run`` opens the source lifecycle; the independent oracle and positive
 consumer execute immediately in that same RAM process. The launcher must then
 exit, including on failure. Caller aliases must be registered in ``RamRoots``;
@@ -28,6 +41,7 @@ import hashlib
 import http.client
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -42,9 +56,21 @@ from urllib.parse import urlsplit
 
 
 ISSUE = "YiCheng0608/stock-lab#31"
-GLOBAL = "01a12102-9891-7293-8c66-a342094e0990"
-NAMESPACE = "issue31-margin-seven-cutoffs-1005-1006-v1/qa1"
-POLICY_SHA256 = "47ea789e4bac27cf736f9294f5c0563425b15cd5541748567f985ae262f224d7"
+# Runtime identity is never defaulted here: every actor, model and effort value
+# comes from the reviewed seal, and the live Claude Code process must match it.
+SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
+EFFORT_ENV = "CLAUDE_EFFORT"
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
+TERMINAL_PATTERN = r"term_[A-Za-z0-9_-]{1,80}"
+# qa2 is the new one-time source-use quota that the user granted in
+# https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412 in
+# place of qa1; the global approved binding it to this namespace in
+# https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110894588.
+# qa1 stays SPENT / NO-RETRY and is never re-armed. The canonical external policy
+# (2399 bytes) differs from the qa1 text only in its ``namespace`` field.
+NAMESPACE = "issue31-margin-seven-cutoffs-1005-1006-v1/qa2"
+POLICY_SHA256 = "b95e8d9f6b7b2cff8b9984bc54ace823c5d8b36c322d5311136cebafeae0fed9"
 VERSION = "ordinary-margin-cutoffs-1005-1006-v1"
 CONSUMER = "ordinary-margin-change-ratio-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
@@ -106,6 +132,43 @@ def _sha(value: str, size: int = 64) -> bool:
 
 def _uuid(value: str) -> bool:
     return type(value) is str and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", value) is not None
+
+
+def _matches(value: object, pattern: str) -> bool:
+    return type(value) is str and re.fullmatch(pattern, value) is not None
+
+
+# Captured at import: the stdlib class is only valid while http.client still
+# binds this very object under its own name (see native_connection).
+_NATIVE_HTTPS_CONNECTION = http.client.HTTPSConnection
+
+
+def _native_transport_intact() -> bool:
+    # Also check the class identity itself: a replacement installed before this
+    # module was imported would otherwise be captured and compare equal to itself.
+    current = http.client.HTTPSConnection
+    return (current is _NATIVE_HTTPS_CONNECTION and getattr(current, "__module__", None) == "http.client"
+            and getattr(current, "__qualname__", None) == "HTTPSConnection")
+
+
+def native_connection(host: str, timeout: float) -> http.client.HTTPSConnection:
+    """Direct stdlib HTTPS connection; construction never connects.
+
+    An auditor composes this inside a ``connection_factory`` wrapper. Replacing
+    ``http.client.HTTPSConnection`` with a wrapper makes the original class fail
+    in ``__init__`` (``super(HTTPSConnection, self)`` resolves the replaced name),
+    which in the sealed run surfaced only after the request slot was SPENT.
+    """
+    _require(_native_transport_intact(), "transport_class_replaced")
+    return _NATIVE_HTTPS_CONNECTION(host, timeout=timeout)
+
+
+def _check_live_runtime(holder_actual: str, effort: str) -> None:
+    """The live Claude Code process must be the sealed QA; nothing is defaulted."""
+    session, live_effort = os.environ.get(SESSION_ENV), os.environ.get(EFFORT_ENV)
+    _require(bool(session) and bool(live_effort), "runtime_env_missing")
+    _require(session == holder_actual, "actual_binding_conflict")
+    _require(live_effort == effort, "runtime_effort_conflict")
 
 
 def _day(value: str, *, official: bool = False) -> str:
@@ -175,23 +238,45 @@ class UseRequest:
 
 @dataclass(frozen=True)
 class RuntimeIdentity:
-    thread_id: str
+    """What the QA read back from its own Claude Code runtime (its Issue receipt).
+
+    session_id is CLAUDE_CODE_SESSION_ID and effort is CLAUDE_EFFORT; the model
+    is the ``claude-*`` id of the assistant entries in the QA transcript.
+    ``parent_session_id`` is the caller's assertion that this is a top-level
+    session (None); it cannot be proven from inside the process.
+    """
+
     session_id: str
-    parent_thread_id: str | None
+    parent_session_id: str | None
     model: str
-    reasoning: str
+    effort: str
     candidate_sha: str
 
 
 @dataclass(frozen=True)
 class FinancialStartSeal:
-    """Externally reviewed assertion; constructing it never establishes a grant."""
+    """Externally reviewed assertion; constructing it never establishes a grant.
 
-    issuer_actual: str
+    Every identity field is supplied by the seal and compared with the Issue
+    receipts by the owner/global, never fixed in this module. ``holder_actual``
+    is the sole QA's CLAUDE_CODE_SESSION_ID; ``global_actual`` issues the seal;
+    ``owner_actual`` and ``engineer_actual`` are the task coordinator and
+    engineer sessions. ``runtime_id`` is the Orca runtime (``_meta.runtimeId``
+    of ``orca terminal show --json``) and ``terminal_handle`` the QA's visible
+    terminal; both are format-checked only.
+    """
+
+    global_actual: str
+    owner_actual: str
+    engineer_actual: str
+    holder_actual: str
+    model: str
+    effort: str
+    runtime_id: str
+    terminal_handle: str
     receipt_url: str
     issue: str
     namespace: str
-    holder_actual: str
     candidate_sha: str
     module_sha256: str
     full_script_sha256: str
@@ -346,6 +431,9 @@ class Receipt:
     version: str = VERSION
     timezone: str = "Asia/Taipei"
     method: str = "GET"
+    # True once the product entered connection.request(); False means the slot
+    # was SPENT (attempted) but the connection was never asked to send anything.
+    request_started: bool = False
 
 
 @dataclass
@@ -407,6 +495,9 @@ class CaptureReport:
     consumer_count: int
     artifact_bytes: int = 0
     requires_process_exit: bool = True
+    # "native_direct" (stdlib via native_connection) or "caller_factory" (an
+    # auditor-supplied connection_factory, e.g. a composed audit wrapper).
+    transport: str = "native_direct"
 
 
 class OriginalView:
@@ -505,23 +596,38 @@ _SPENT_NAMESPACES: set[str] = set()
 
 class MarginCapture:
     def __init__(self, *, use: UseRequest, external_policy_utf8: bytes, seal: FinancialStartSeal,
-                 runtime: RuntimeIdentity, full_script_utf8: bytes, full_command: str):
+                 runtime: RuntimeIdentity, full_script_utf8: bytes, full_command: str,
+                 connection_factory: Callable[[str, float], object] | None = None):
         use.validate()  # Reject unsupported uses before even considering a source operation.
         _require(type(external_policy_utf8) is bytes and len(external_policy_utf8) == 2399
                  and hashlib.sha256(external_policy_utf8).hexdigest() == POLICY_SHA256, "external_policy_pin")
         _require(type(seal) is FinancialStartSeal and type(runtime) is RuntimeIdentity, "seal_type")
         _require(all(type(getattr(seal, name)) is str for name in (
-            "issuer_actual", "receipt_url", "issue", "namespace", "holder_actual", "candidate_sha", "module_sha256",
+            "global_actual", "owner_actual", "engineer_actual", "holder_actual", "model", "effort", "runtime_id",
+            "terminal_handle", "receipt_url", "issue", "namespace", "candidate_sha", "module_sha256",
             "full_script_sha256", "full_command_sha256", "policy_sha256", "expires_at_utc")), "seal_field_type")
         _require(all(type(getattr(runtime, name)) is str for name in (
-            "thread_id", "session_id", "model", "reasoning", "candidate_sha")), "runtime_field_type")
-        _require(seal.issuer_actual == GLOBAL and seal.issue == ISSUE and seal.namespace == NAMESPACE
-                 and seal.policy_sha256 == POLICY_SHA256, "seal_authority")
+            "session_id", "model", "effort", "candidate_sha"))
+            and (runtime.parent_session_id is None or type(runtime.parent_session_id) is str), "runtime_field_type")
+        _require(connection_factory is None or callable(connection_factory), "connection_factory_type")
+        _require(seal.issue == ISSUE and seal.namespace == NAMESPACE and seal.policy_sha256 == POLICY_SHA256,
+                 "seal_authority")
         _require(type(seal.receipt_url) is str and re.fullmatch(
             r"https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-[0-9]+", seal.receipt_url), "seal_receipt")
-        _require(_uuid(seal.holder_actual) and _uuid(runtime.thread_id) and _uuid(runtime.session_id)
-                 and runtime.parent_thread_id is None and runtime.thread_id == runtime.session_id == seal.holder_actual
-                 and runtime.model == "gpt-6.1-sol" and runtime.reasoning == "xhigh", "sole_qa_runtime")
+        # Identity comes from the seal. Formats first, then independence, then
+        # the QA-read runtime and the live process must both be that sole QA.
+        _require(all(_uuid(getattr(seal, name)) for name in (
+            "global_actual", "owner_actual", "engineer_actual", "holder_actual", "runtime_id")), "runtime_identity_invalid")
+        _require(_matches(seal.model, MODEL_PATTERN), "model_invalid")
+        _require(seal.effort in EFFORTS, "effort_invalid")
+        _require(_matches(seal.terminal_handle, TERMINAL_PATTERN), "runtime_binding_invalid")
+        _require(seal.holder_actual not in (seal.global_actual, seal.owner_actual, seal.engineer_actual),
+                 "qa_not_independent")
+        _require(len({seal.global_actual, seal.owner_actual, seal.engineer_actual}) == 3, "role_actors_not_distinct")
+        _require(_uuid(runtime.session_id) and runtime.parent_session_id is None
+                 and runtime.session_id == seal.holder_actual
+                 and runtime.model == seal.model and runtime.effort == seal.effort, "sole_qa_runtime")
+        _check_live_runtime(seal.holder_actual, seal.effort)
         _require(_sha(runtime.candidate_sha, 40) and _sha(seal.candidate_sha, 40)
                  and runtime.candidate_sha == seal.candidate_sha, "candidate_binding")
         _require(type(seal.caps) is Caps and seal.caps == CAPS
@@ -540,6 +646,7 @@ class MarginCapture:
             raise MarginSourceError("seal_expiry") from None
         _require(expiry.tzinfo == timezone.utc and expiry > datetime.now(timezone.utc), "seal_expiry")
         self._seal, self._expiry_utc = seal, expiry
+        self._connection_factory = connection_factory
         self.roots = RamRoots()
         self._originals: list[Original] = []
         self._balances: dict[tuple[str, str], int] = {}
@@ -586,6 +693,11 @@ class MarginCapture:
             self._events.append((self._stage, frame.f_code.co_name, frame.f_lineno))
         return self._trace
 
+    def _open_connection(self, host: str, seconds: float) -> object:
+        if self._connection_factory is None:
+            return native_connection(host, seconds)
+        return self._connection_factory(host, seconds)
+
     def _fetch(self, ordinal: int) -> Original:
         self._clock()
         url = URLS[ordinal]
@@ -595,15 +707,16 @@ class MarginCapture:
         self._originals.append(original)
         start = datetime.now(timezone.utc).isoformat()
         status, content_type, full_eof = None, "", False
-        completed, close_failed = False, False
+        completed, close_failed, request_started = False, False, False
         response = connection = None
         try:
             split = urlsplit(url)
             seconds = min(CAPS.request_seconds, self._deadline - time.monotonic())
             _require(seconds > 0, "expired")
             request_deadline = time.monotonic() + seconds
-            connection = http.client.HTTPSConnection(split.hostname, timeout=seconds)
+            connection = self._open_connection(split.hostname, seconds)
             # Native direct HTTPS: no proxy/cookie/token environment or redirect handler.
+            request_started = True  # Constructor failures above never reach this line.
             connection.request("GET", split.path + "?" + split.query, headers={"Accept-Encoding": "identity"})
             self._clock()
             remaining_seconds = min(request_deadline, self._deadline) - time.monotonic()
@@ -687,7 +800,7 @@ class MarginCapture:
                 "dataset11387-current-csv" if ordinal == 0 else "TaiwanStockMarginPurchaseShortSale", start,
                 datetime.now(timezone.utc).isoformat(), len(original.buffer),
                 hashlib.sha256(original.buffer).hexdigest() if full_eof else None, full_eof, status, content_type,
-                OFFICIAL_FIELDS if ordinal == 0 else FINMIND_FIELDS)
+                OFFICIAL_FIELDS if ordinal == 0 else FINMIND_FIELDS, request_started=request_started)
             if response is not None:
                 try:
                     response.close()
@@ -887,6 +1000,9 @@ class MarginCapture:
         _require(NAMESPACE not in _SPENT_NAMESPACES, "namespace_already_spent")
         _require(callable(independent_official_oracle) and callable(independent_oracle)
                  and callable(positive_consumer), "callbacks_required")
+        # Everything below is checked before the namespace or any URL is spent.
+        _check_live_runtime(self._seal.holder_actual, self._seal.effort)
+        _require(self._connection_factory is not None or _native_transport_intact(), "transport_class_replaced")
         self._clock()
         _SPENT_NAMESPACES.add(NAMESPACE)
         self._deadline = time.monotonic() + CAPS.batch_cooperative_seconds
@@ -940,6 +1056,8 @@ class MarginCapture:
                 _scrub_exception(cleanup_exc)
                 success = False
             independent_official_oracle = independent_oracle = positive_consumer = None
+            transport = "native_direct" if self._connection_factory is None else "caller_factory"
+            self._connection_factory = None  # Drop the auditor's closure with the other caller references.
         return CaptureReport(success, self._state, tuple(self._attempted), URLS[len(self._attempted):], receipts,
             failure_stage, primary, tuple(self._diagnostics[:32]), tuple(self._events), cleared,
-            self._high_water, self._getter_count, self._consumer_count)
+            self._high_water, self._getter_count, self._consumer_count, transport=transport)
