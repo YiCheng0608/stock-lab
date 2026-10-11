@@ -1,10 +1,10 @@
 # 操作手冊
 
-更新：2026-09-16。現行測試入口、依賴與環境重建以 [開發入口](development-baseline/README.md) 為準；能力狀態與後續順序見 [ROADMAP](ROADMAP.md)。本文件只保留可操作入口、安全邊界與診斷順序。
+現行測試入口、依賴與環境重建以 [開發入口](development-baseline/README.md) 為準；能力狀態與後續順序見 [ROADMAP](ROADMAP.md)。本文件只保留可操作入口、安全邊界與診斷順序。
 
 ## 1. 工作目錄、環境與啟停
 
-後端命令從專案根目錄執行。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑。
+後端命令從專案根目錄執行。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑，可用共用入口 `python -B -X utf8 -m tools.test_db` 建立並讀回；日常 DB、唯讀樣本庫與隔離測試庫的分工，以及該入口的命令、隔離保證與能力邊界見[測試資料庫分層](development-baseline/README.md#測試資料庫分層)。
 
 ```powershell
 python -m venv .venv
@@ -32,8 +32,8 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```powershell
 Push-Location frontend
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 Pop-Location
 ```
 
@@ -173,7 +173,7 @@ reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔�
 
 ```powershell
 Push-Location frontend
-npm run build
+pnpm run build
 Pop-Location
 
 & ./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests')
@@ -181,6 +181,6 @@ Pop-Location
 
 個股頁驗收見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md)，全站 UX 見 [UX_REVIEW](UX_REVIEW.md)。瀏覽器使用隔離 API；沿用其他任務服務須確認安全、owner 同意及版本適用，依[服務版本規則](GITHUB_WORKFLOW.md#執行資源與服務版本)核對實際載入與連線。不得啟動會寫正式／`.local` DB 的舊 lifespan 或干擾其他服務。fixture、screenshot、typecheck、build 與真 API 的證據不能互相取代。
 
-## 8. 排程與未完成工作
+## 8. 排程
 
-目前沒有 Windows Task Scheduler 或 Codex 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格，[執行清單](ROADMAP_EXECUTION.md)只供歷史參考；文件、fixture、外部 startup 或 readiness 不證任務完成。
+未經授權不建 Windows Task Scheduler 或 agent 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格，[執行清單](ROADMAP_EXECUTION.md)只供歷史參考；文件、fixture、外部 startup 或 readiness 不證任務完成。
