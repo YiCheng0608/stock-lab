@@ -26,7 +26,7 @@ QA 服務版本收據：PID／啟動時間／來源 worktree／載入 SHA 或來
 
 整合治理 Issue／當前持有者：
 最新 master 已在任務 branch 合入／衝突處理及重驗：
-推 branch／開 PR／合併的授權收據與核准 SHA：
+推 branch／開 PR／合併的授權依據（AGENTS 預設授權或使用者收據）與核准 SHA：
 <!-- branch 或 master 改變後重新核准，不直接全選衝突一方。 -->
 
 ## 合併後檢查
