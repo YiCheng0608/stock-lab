@@ -174,9 +174,9 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 
 治理 #1 本文是即時摘要：WIP 上限／實占／空位、進行中的單與 owner、整合入口持有者、待使用者決策、停滯計數、現任全局 session／handle。全局每次事件更新本文，收據留在留言；兩者不一致時以收據為準並修正本文。接手者先讀本文，再依連結查收據。
 
-全局例行換手：以下任一條件成立即換手——對話被自動壓縮一次、自任命起關閉 5 張單（含流程單）、連續運作 2 小時、跨日。全局更新 #1 本文並留交接後停寫。交接只放整理過的內容：#1 本文摘要的連結；未結事項（處理中的決策、已送出未回覆的通知、進行中的整合、已知風險），每項附原單連結；新全局的第一個動作。不轉貼歷史收據、對話或整串留言，細節由接手者依連結查。新的全局 session（provider 依任命收據，預設 Claude）讀本文接手，在 #1 留任命收據並更新本文的現任全局，依序：
+全局例行換手：以下任一條件成立即換手——對話被自動壓縮一次、自任命起關閉 5 張單（含流程單）、連續運作 2 小時、跨日。全局更新 #1 本文並留交接，之後停止派工與決策，只保留啟動新全局：在管理 checkout 開 Orca 可見 terminal（標題含「新全局」，不建 worktree），依 [provider 表](#角色-provider-與啟動參數)啟動並送交接 prompt，依[派工與接手](#派工與接手)核送達與首個完成的 turn，在 #1 留啟動收據（handle、送達證據）；新全局任命收據出現後才完全停寫。啟動或送達失敗時，先依同段對帳確認未建出新 session 才重試一次，仍失敗依 [AGENTS](../AGENTS.md#疑問阻塞與範圍變更)記阻塞；舊全局失效、無法自行啟動時，由使用者入口通知使用者啟動。等待期間不重新計算換手條件。從啟動到舊 terminal 關閉，舊全局不碰 repo 工作樹與 git 狀態，GitHub 只寫啟動收據與 #1 記錄。交接只放整理過的內容：#1 本文摘要的連結；未結事項（處理中的決策、已送出未回覆的通知、進行中的整合、已知風險），每項附原單連結；新全局的第一個動作。不轉貼歷史收據、對話或整串留言，細節由接手者依連結查。新的全局 session（provider 依任命收據，預設 Claude）讀本文接手，核管理 checkout 工作樹 clean，在 #1 留任命收據並更新本文的現任全局，依序：
 1. 以 `orca terminal list` 的實際 worktree／handle 核對交接名單與本文 WIP 表的任務統籌 session／handle；不一致以實際讀回為準，修正本文並在收據記差異。
-2. 核對舊全局已留交接、停寫且 terminal 閒置後，以 `orca terminal close --terminal <舊全局 handle>` 只關閉該 terminal（handle 取自更新本文前的值或舊任命收據；新舊全局同在管理 checkout，不用 `--tab`／`--worktree --all`），結果記在 #1，使送往舊 handle 的訊息直接失敗。
+2. 核對舊全局已留交接、停寫、未在重試啟動且 terminal 閒置後，以 `orca terminal close --terminal <舊全局 handle>` 只關閉該 terminal（handle 取自更新本文前的值、啟動收據或舊任命收據；新舊全局同在管理 checkout，不用 `--tab`／`--worktree --all`），結果記在 #1，使送往舊 handle 的訊息直接失敗。
 3. 通知進行中的任務統籌新的 session／handle。
 
 每次原單記 owner／session、觸發、版本／證據、處置、下次事件，治理單連回。勾選不免後續檢查，日期／補單／文件不解除暫停或授權排程。
@@ -244,11 +244,13 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 - 角色（工程、QA、文件、索引／Git）交回任務統籌；
 - 任務統籌向全局請求處置，全局處置後回送任務統籌。
 
+送出後讀回收件 terminal，核訊息已送出並開始新 turn；只有 accepted 依下方記送達未證。
+
 派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局現任 session／handle 以 #1 本文為準，與任命收據不一致時以收據為準；每次聯絡全局前都從 #1 本文讀取，不沿用記憶或舊收據的值，送出失敗先重查 #1，不改送其他 terminal（換手見[流程檢查](#流程檢查與滾動調整)）。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
 
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
-建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
+建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted（如訊息停在輸入框未送出）、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
 
 本機 mock 在 repo root 執行 `python -B -X utf8 tools/test_coordinator_startup.py --helper C:/Users/YiCheng/.local/bin/codex-session-control.py`。須選核定實際 helper；不可讀即失敗，無外部 helper 的自動探索不跑 suite。隔離外部呼叫，不建真 terminal／服務、不取源／DB／落盤；原單記 helper hash／命令／結果。Repo 只存測試，不部署共用 helper；雲端 CI 不證本機安裝／版本／真啟動，仍核可見派工收據。
 
