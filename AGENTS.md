@@ -62,7 +62,7 @@ Paused 保留工作區，不代表完成／取消。全局核所有角色停寫�
 | 測試中 → 開發中 | 任務統籌依 QA 退回 | 原單列失敗 AC、實際／預期、復現、版本；工程修正，獨立 QA 重驗受影響項。 |
 | 測試中 → 待整合 | 任務統籌 | QA 逐項通過、文件／證據齊全；final freeze、索引 coverage、最終候選與 QA 一致，申請整合。 |
 | 待整合 → 完成 | 任務統籌 | 正式 master 包含核准版本，合併後檢查通過；最終 SHA／PR／證據回原單，再關 Issue／更新 Project。 |
-| 測試中 → 完成（無 repo 變更） | 任務統籌 | 任務 branch 無新 commit、工作樹 clean，獨立 QA 逐 AC 通過；原單記「無 repo 變更」與證據，不經待整合，直接關 Issue。 |
+| 測試中 → 完成（無 repo 變更） | 任務統籌 | 任務 branch 無新 commit、工作樹 clean、暫存已清理，獨立 QA 逐 AC 通過；原單記「無 repo 變更」與證據，不經待整合，直接關 Issue，再依結案清理。 |
 
 候選 checkpoint 鎖 QA 版本，不證最終索引完成。QA 期間所有角色不得改被測樹，要寫先交接，並核[服務載入版本](docs/GITHUB_WORKFLOW.md#執行資源與服務版本)。QA 後純文件可核差異、適用範圍、最終 SHA 沿用程式證據；程式／設定／驗收語意改動須重驗受影響項。
 
@@ -102,7 +102,7 @@ Paused 保留工作區，不代表完成／取消。全局核所有角色停寫�
 - 落盤前原單核數量、大小、建立／清理及授權。禁 `-KeepArtifacts`、整套成功產物保留；未解問題只留必要復現，列目的、位置、範圍、期限／清理條件。模板不代表逐輪附件。
 - 只清本次自有、已核絕對路徑的授權產物；不掃 Temp、改名轉存或處理其他 session 資源。成功／失敗均嘗試清理，中斷／占用／拒絕不稱已刪。
 - 測試、清理分報，保留原 exit、未跑項、失敗路徑／大小／原因。清理失敗不否定驗收或要求重跑；殘留達上限只停新增落盤案例。
-- **結案清理（預設授權）**：合併後檢查通過、原單已關閉的任務，由該單任務統籌先核所有角色停寫、無未保存成果，再於目標 worktree 之外執行：關閉該 worktree 的 terminal、以 Orca 移除 worktree、刪除已併入 master 的本地與遠端任務 branch（本地用 `git branch -d`，遠端先核 `git merge-base --is-ancestor <branch> origin/master`），並在原單記錄結果。未合併、Paused／Blocked、有未保存成果，或 #1 登錄的 NO-RETRY／未清資源，仍須另核授權、範圍、owner 停寫。保留 Git 歷史，未清／失敗明列，不借新任務取得刪除權。
+- **結案清理（預設授權）**：合併後檢查通過（或依無 repo 變更路徑完成）、原單已關閉的任務，由該單任務統籌先核所有角色停寫、無未保存成果，再於目標 worktree 之外執行：關閉該 worktree 的 terminal、以 Orca 移除 worktree、刪除已併入 master 的本地與遠端任務 branch（本地用 `git branch -d`，遠端先核 `git merge-base --is-ancestor <branch> origin/master`），並在原單記錄結果。未合併、Paused／Blocked、有未保存成果，或 #1 登錄的 NO-RETRY／未清資源，仍須另核授權、範圍、owner 停寫。保留 Git 歷史，未清／失敗明列，不借新任務取得刪除權。
 - 只驗變更所需範圍，沿用適用證據。文件只查差異、連結、模板、一致性，不跑 backend 或建 DB；未跑不列通過。
 
 ## 文件與交接

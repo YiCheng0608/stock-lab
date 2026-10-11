@@ -90,7 +90,7 @@ QA／合併後檢查須核：
 - code／設定／重啟／bundle／upstream 改動須重核對應及受影響項。跨任務沿用須 owner 同意、用途授權、相關載入來源一致；clean／port／package version／長度不足。
 - 無法證版本列未驗，在授權內建正確服務或記阻塞。不得重啟重取 SPENT、恢復已釋原件或繞 NO-RETRY；不可重取資料先安排合法 QA 生命周期／保留範圍。
 
-QA 用核定埠並讀回；各工具預設埠與 `--port`／`--api-port` 見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。不要求逐測試新建環境，隔離入口沿原契約。
+QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`--api-port` 見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。不要求逐測試新建環境，隔離入口沿原契約。
 
 ## 角色 provider 與啟動參數
 
@@ -234,7 +234,7 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 - 角色（工程、QA、文件、索引／Git）交回任務統籌；
 - 任務統籌向全局請求處置，全局處置後回送任務統籌。
 
-派工收據與任務 prompt 附全局 session ID、terminal handle；任務統籌的 ACK 附自己的 session ID、handle。全局換 session 或 handle 時以 #1 最新任命收據為準，並通知進行中的任務統籌。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
+派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局換 session 或 handle 時以 #1 最新任命收據為準，並通知進行中的任務統籌。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
 
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
@@ -248,6 +248,8 @@ Issue／AC 修訂：
 活動名額：預留／啟動中／已接手／失敗保留或釋放（送達、授權與停寫證據）：
 目前核心缺口／新增操作／必要依賴與可用證據：
 交付者 → 接收者角色／session：
+全局 session ID／terminal handle／聯絡格式：
+接收者（任務統籌）session ID／terminal handle（ACK 填）：
 下一動作／完成條件：
 repo／worktree／branch／base SHA／candidate SHA：
 Orca terminal handle／provider／實際 session／模型／reasoning 或 effort 讀回／cwd 核對：
