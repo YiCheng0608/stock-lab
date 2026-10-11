@@ -99,10 +99,13 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 | provider | 啟動 | 恢復 |
 | --- | --- | --- |
 | Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色：Orca 可見 terminal、目標 worktree 啟動，模型與 reasoning 依角色表 | 原 session `--remote … resume <ID>` |
-| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID>`，讀回模型／effort，不同則記錄並由全局處置 |
+| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID> --effort <level>`，讀回模型／effort，不同則記錄並由全局處置 |
 
-- 只用完整模型 ID（如 `claude-opus-5-5`）；簡寫 `opus-5.5` 會被拒絕。
-- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不會讓啟動失敗，故收據須在 session 內讀回 effort，讀不到記未驗，不以命令列參數當證據。
+- 只用完整模型 ID（如 `claude-opus-5-5`）。無效 ID（如 `opus-5.5`）啟動不擋，首次請求才被拒，故收據須含已完成的 turn。
+- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不讓啟動失敗。
+- `--resume` 保留模型，effort 回預設，故恢復須帶原 `--effort`。
+- 讀回：session 內 `CLAUDE_CODE_SESSION_ID`／`CLAUDE_EFFORT`；模型只以 transcript `~/.claude/projects/<cwd-key>/<ID>.jsonl` 的 assistant `model` 欄位核對，effort 亦可核 `effort` 欄位。模型自述、banner、命令列不作證據；讀不到記未驗。
+- 從 Git Bash 用 `orca terminal send` 送 `/` 開頭指令須設 `MSYS_NO_PATHCONV=1`，否則被轉成路徑送出。
 
 ## Projects 與關單自動化
 
