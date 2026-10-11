@@ -26,6 +26,44 @@
 - 樣本庫的位置與大小限額在核准時登記，各單引用該登記，變更才重核；隔離測試庫在執行結束重設或清理，失敗回報路徑／大小／原因，不每輪重造 manifest。
 - 本地重驗讀樣本庫不觸發外部 GET；人工 fixture 另驗錯誤邊界。沒有適用真實樣本時，該 AC 標未驗。
 
+### 共用入口 `tools.test_db`
+
+[tools/test_db](../../tools/test_db/__init__.py) 實作樣本庫與隔離測試庫（工具程序只用標準函式庫）。契約測試見 [guards](../../backend/tests/test_test_db_guards.py)、[entry](../../backend/tests/test_test_db_entry.py)，人工 fixture 範例見 [sample_basic.json](../../backend/tests/fixtures/test_db/sample_basic.json)（虛構資料，非市場資料）。從專案根目錄執行：
+
+```powershell
+python -B -X utf8 -m tools.test_db --root <專案外絕對路徑> [--max-bytes N] [--deps <依賴路徑>] <命令> [參數]
+```
+
+| 命令 | 用途 |
+| --- | --- |
+| `build-sample --version V --fixture F` | 以產品 `worker.cli init-db` 建 schema、載入人工 fixture，發布為不可變樣本版本；`--kind`（`manual_fixture` 預設或 `real_sample`）、`--meta`（metadata JSON 檔）、`--skip-product-check` |
+| `freeze --run-id R --version V` | 把隔離測試庫發布為新樣本版本；選項同上 |
+| `list-samples` | 列各版本的 kind、schema、hash、大小；損壞的版本在其項目內列錯誤 |
+| `verify --version V` | 檢查檔案集合、版本、hash／大小、Alembic 標記，預設再做產品檢查 |
+| `select --version V` | 同 `verify` 但預設不做產品檢查（`--check-product` 開啟），回傳供只讀開啟的 URI；樣本位置不得作寫入目標 |
+| `isolate [--version V]` | 建獨立可寫 run（`--run-id` 可指定，不重用）：給版本則複製已驗樣本，省略則 `init-db` 空庫；回傳 run 路徑與三個 `STOCK_*` |
+| `reset --run-id R` | 還原 run 到初始狀態：樣本來源先重驗樣本再重複製，空庫重跑 `init-db`；路徑不變，`data/`（含 `raw/`）與 `tmp/` 重建 |
+| `cleanup --run-id R` | 移除 run；標記最後才刪，失敗可用同一 run id 重試 |
+| `usage` | `--root` 的已用／剩餘位元組與各子目錄用量 |
+| `load-fixture --run-id R --fixture F` | 把 fixture 列載入 run |
+| `read-table --table T` | 以獨立唯讀連線讀回前 `--limit`（預設 100）列；目標 `--run-id` 或 `--version` 擇一 |
+| `exec [--version V] -- 命令…` | 建 run、以隔離 `STOCK_*` 執行命令，結束必清理；`--check-product` 同 `select` |
+
+- 參數：`--root`（或 `STOCK_TESTDB_ROOT`）必填，須為專案外絕對路徑，不得在產品 checkout、`.local/data` 或繼承來的 `STOCK_*` 位置內，建目錄前即拒絕。`--max-bytes` 預設 50,000,000（十進位 50 MB）。`--python` 指定產品子程序的直譯器（預設本程序的），`--deps`（可重複）或 `STOCK_TEST_DEPS`（以路徑分隔字元串接）指定子程序可 import 的既有依賴路徑；`--timeout` 預設 180 秒，只限產品子程序。
+- 輸出：每個命令印一個 JSON，exit 0 或 1。成功 `{"ok":true,"result":…}`；失敗 `{"ok":false,"error":{code,reason,path,size_bytes,details}}`，`path` 為絕對路徑，涉及檔案或目錄樹時帶 `size_bytes`。argparse 參數錯誤 exit 2 且不建檔。`exec` 的 exit 為被執行命令的 exit，成功時工具 JSON（含執行前 `STOCK_*` 讀回）寫 stderr，stdout 留給該命令。
+- 錯誤碼：守門 `forbidden_target`／`stock_env_invalid`／`reparse_point`／`invalid_argument`；樣本 `version_missing`／`version_mismatch`／`version_exists`／`hash_mismatch`／`schema_mismatch`／`sample_corrupt`／`metadata_invalid`／`fixture_invalid`；run `run_exists`／`run_not_found`／`not_a_run_dir`／`not_found`；資源 `quota_exceeded`／`cleanup_failed`／`in_use`／`io_error`；產品子程序 `product_failed`／`product_timeout`。
+- 版面：`<root>/samples/<version>/{sample.db,metadata.json}`（OS 唯讀屬性；目錄恰此兩檔，否則 `sample_corrupt`）、`<root>/runs/<run-id>/{.testdb-run.json,data/stock.db,data/raw/,tmp/}`、`<root>/tmp/`（schema 檢查暫存）。版本名與 run id 須符合 `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`；已發布版本不可覆蓋（`version_exists`）。需 run id 的命令只接受含 `.testdb-run.json` 且與 run id 相符的目錄，否則 `not_a_run_dir`，不碰無標記目錄。
+- metadata：`metadata.json` 欄位為 `metadata_schema`、`sample_version`、`kind`、`source_rights`、`data_dates`、`acquired_at`、`publication_time`、`schema_version`、`sampling_rule`、`sha256`、`size_bytes`、`created_at`、`row_counts`、`provenance`，缺欄即 `metadata_invalid`。`publication_time` 未陳述時為 `unknown`，不推算。
+- fixture：UTF-8 JSON `{"tables":[{"table":名稱,"rows":[{欄:值}]}],"data_dates":…}`，`data_dates` 選填（缺則 `unknown`）。載入為單一交易並啟用外鍵：未知表／欄、`sqlite_*`、違反約束或外鍵即 `fixture_invalid` 並整份回滾；`provenance` 記 fixture 檔名與 sha256。
+- `real_sample`：須以 `--meta` 自行陳述 `source_rights`、`data_dates`、`acquired_at`、`sampling_rule`；缺漏、空字串、`unknown`、`not-applicable` 回 `metadata_invalid`。工具只擋缺漏，不判斷陳述是否屬實或符合上述來源權利規則。
+- 隔離：工具程序不 import 產品 `app`（`app.config` import 時即建目錄並綁定路徑）；產品程式（`init-db`、schema 檢查、`exec` 命令）只在子程序執行，環境重建為：丟棄所有繼承的 `STOCK_*`（含 live-source opt-in），只設該 run 的三個 `STOCK_*`，`TEMP`／`TMP`／`TMPDIR` 指向 run 的 `tmp/`。啟動前讀回並檢查三者皆設、為無 `..` 的絕對路徑、全在該 run 目錄內；拒絕（`forbidden_target`／`stock_env_invalid`，不啟動）產品 checkout（含 repo `data/`、`.local`）、`.local/data`、繼承來的 `STOCK_*` 位置與樣本庫內的目標。工具根為連結或 reparse point 即拒絕；根內含連結時 `usage` 與配額記帳 fail-closed（`reparse_point`，指出路徑）。
+- schema 檢查邊界：`verify`、`build-sample`、`freeze` 預設做產品檢查，`select`、`isolate`、`exec` 預設不做，需 `--check-product`；檔案集合、版本、hash／大小、Alembic 標記、metadata 一律檢查。產品檢查為產品啟動用的 `check_database_readiness`（必要表／欄、主鍵、唯一鍵、外鍵）加樣本 `schema_version` 等於 Alembic head，不比對完整 DDL（多出的欄位不失敗），也不稽核資料。樣本的 OS 唯讀屬性、hash 與 metadata 可被有權限者一併改寫，防竄改須以 `--expect-sha256`（`verify`／`select`／`isolate`）對核准 hash。
+- 配額邊界：`--max-bytes` 約束整個 `--root`（含非工具建立的檔案），只在工具管理的檢查點核算——`isolate`（有樣本時複製前先預估）、`reset`、`freeze`、`build-sample` 的複製、發布與建庫前後。超額回 `quota_exceeded`（`size_bytes` 為預計總量，`details` 含 current／incoming／limit），`isolate`、`freeze`、`build-sample` 不留該次新建的 run 或發布暫存。`load-fixture`、`init-db` 子程序與 `exec` 命令的寫入不受即時約束，事後核算才發現；因此是檢查點限額，不是即時硬上限。並行 `isolate` 的事後核算會看到彼此的複本，可能比序列多回 `quota_exceeded`，仍是單一 JSON。
+- 並行與占用：不同 run 互不影響；記帳對他人正在清理而消失的項目視為已不存在，拒絕存取在約 0.2 秒重試後仍在才回 `io_error`（指出該項目）。同 run id 並行 `isolate` 恰一個成功、其餘 `run_exists`；同版本並行 `build-sample` 的敗者可能回 `in_use` 而非 `version_exists`，勝者完好。同一 run 不要同時 `reset` 與 `cleanup`，否則可能留下無標記的 run 目錄（含重建的 DB），`cleanup --run-id` 回 `not_a_run_dir`、無法以 id 清除，且仍計入配額，須人工移除。
+- 清理失敗：其他程序持有 run 內檔案時，`cleanup`／`reset` 回 `cleanup_failed`（`path`／`size_bytes`／`reason` 指出首項，`details.failures` 列全部），可清項已清、標記保留，放手後以 run id 重試；`exec` 的 `cleanup_failed` 另帶 `details.command_exit_code`。唯讀屬性檔可清；連結與 reparse point 不進入、不刪除。run 內有無法列舉的目錄（如權限拒絕）時，`cleanup`／`reset`／`exec` 回 `io_error`（`path` 指向該目錄、`size_bytes` 為 null、無 `failures` 清單，`exec` 不帶 `command_exit_code`）而非 `cleanup_failed`，標記保留，排除後同樣可重試。
+- 子程序與網路：`product_timeout` 只終止直接子程序，不追殺其子孫；`exec` 的命令不設逾時，子孫仍占用 run 檔案時清理回 `cleanup_failed`。隔離只涉及檔案路徑與 `STOCK_*`：工具不取源、不封鎖也不稽核網路，`exec` 只移除繼承的 live-source opt-in，命令是否連網由命令自負。
+- 平台：檔案占用、junction／reparse point、ACL 拒絕與 `exec` 僅在 Windows 驗證，其他平台未驗。
+
 ## 後端驗證
 
 從專案根目錄依變更選必要範圍；文件只查差異、連結與一致性。
