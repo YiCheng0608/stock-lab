@@ -30,9 +30,11 @@ def changed_paths(base: str) -> list[str]:
 
 def change_flags(paths: list[str]) -> dict[str, bool]:
     shared = any(p.startswith((".github/workflows/", "tools/ci/")) for p in paths)
+    # Markdown never reaches the product jobs; the repository job checks it.
+    product = [p for p in paths if not p.lower().endswith(".md")]
     return {
-        "python": shared or any(p.startswith(("backend/", "tools/")) or p.endswith(".py") or p == "docs/development-baseline/validation-requirements.lock.txt" for p in paths),
-        "frontend": shared or any(p.startswith(("frontend/", "tools/", "backend/")) for p in paths),
+        "python": shared or any(p.startswith(("backend/", "tools/")) or p.endswith(".py") or p == "docs/development-baseline/validation-requirements.lock.txt" for p in product),
+        "frontend": shared or any(p.startswith(("frontend/", "tools/", "backend/")) for p in product),
     }
 
 
