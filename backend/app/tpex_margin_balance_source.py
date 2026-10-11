@@ -67,14 +67,20 @@ MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
 TERMINAL_PATTERN = r"term_[A-Za-z0-9_-]{1,80}"
 # Fixed, non-personal; the one TPEx batch that succeeded (Issue 36) also identified itself this way.
 REQUEST_USER_AGENT = "stock-lab-issue31-local-ram/1"
-# qa2 is the new one-time source-use quota that the user granted in
-# https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412 in
-# place of qa1; the global approved binding it to this namespace in
-# https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110894588.
-# qa1 stays SPENT / NO-RETRY and is never re-armed. The canonical external policy
-# (2399 bytes) differs from the qa1 text only in its ``namespace`` field.
-NAMESPACE = "issue31-margin-seven-cutoffs-1005-1006-v1/qa2"
-POLICY_SHA256 = "b95e8d9f6b7b2cff8b9984bc54ace823c5d8b36c322d5311136cebafeae0fed9"
+# Response media types. TPEx answered the official CSV with ``application/csv;charset=utf-8`` (qa2), the
+# type the Issue 36 batch also accepted; text/plain and octet-stream were already declared for this route.
+OFFICIAL_MEDIA = ("text/csv", "application/csv", "text/plain", "application/octet-stream")
+FINMIND_MEDIA = ("application/json",)
+CHARSETS = ("charset=utf-8", 'charset="utf-8"')
+# qa1 and qa2 are both SPENT / NO-RETRY and are never re-armed (qa1: constructor
+# failure, no request; qa2: the official CSV answered ``application/csv`` and was
+# refused before its body was read). qa3 is the new one-time source-use quota the
+# user granted in https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111567857
+# (same 8 GET plan and caps as https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412).
+# The canonical external policy (2399 bytes) differs from the qa1 and qa2 texts
+# only in its ``namespace`` field.
+NAMESPACE = "issue31-margin-seven-cutoffs-1005-1006-v1/qa3"
+POLICY_SHA256 = "92f9d86b020250ef594269813c7fc6600214dd18fab80083140ef708dd6a77f2"
 VERSION = "ordinary-margin-cutoffs-1005-1006-v1"
 CONSUMER = "ordinary-margin-change-ratio-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
@@ -754,14 +760,14 @@ class MarginCapture:
             else:
                 declared = None
             raw_content_type = normalized.get("content-type", "").lower()
-            _require(len(raw_content_type) <= 128 and re.fullmatch(
-                r"[a-z]+/[a-z0-9.+-]+(?:;[ ]*charset=(?:utf-8|\"utf-8\"))?", raw_content_type) is not None,
-                "http_content_type")
-            media = raw_content_type.split(";", 1)[0]
-            _require(media in (("text/csv", "text/plain", "application/octet-stream") if ordinal == 0
-                               else ("application/json",)), "http_content_type")
-            content_type = raw_content_type  # Only prevalidated, bounded metadata reaches a receipt.
-            raw_content_type = None
+            _require(len(raw_content_type) <= 128, "http_content_type")
+            # Same parameter rule as the Issue 36 batch that succeeded against TPEx: the media type, then only
+            # charset=utf-8 parameters (whitespace around ';' is ignored).
+            parts = [part.strip() for part in raw_content_type.split(";")]
+            _require(parts[0] in (OFFICIAL_MEDIA if ordinal == 0 else FINMIND_MEDIA)
+                     and all(part in CHARSETS for part in parts[1:]), "http_content_type")
+            content_type = ";".join(parts)  # Only prevalidated, bounded metadata reaches a receipt.
+            raw_content_type = parts = None
             while True:
                 self._clock()
                 _require(time.monotonic() < request_deadline, "request_timeout")
@@ -788,6 +794,8 @@ class MarginCapture:
                 _require(type(chunk) is bytes and len(chunk) <= requested, "transport_read_contract")
                 if not chunk:
                     _require(declared is None or len(original.buffer) == declared, "truncated_body")
+                    # An empty read is EOF only with the stdlib framing parser's own closed state (as in Issue 36).
+                    _require(response.isclosed(), "framing_eof_missing")
                     full_eof = True
                     break
                 original.buffer.extend(chunk)

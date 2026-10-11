@@ -35,11 +35,13 @@ sys.modules[spec.name] = M
 spec.loader.exec_module(M)
 
 # Exact externally published qa1 codeblock from issuecomment-6084167671 (SPENT / NO-RETRY). Kept only to
-# prove by program that the qa2 policy below differs from it in the namespace field alone.
+# prove by program that the retired and current policies differ from it in the namespace field alone.
 OLD_POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa1","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
-# qa2 canonical policy: the user-granted replacement quota (issuecomment-6110713412), bound to the namespace
-# approved in issuecomment-6110894588. A policy fixture, not a financial expected-value projection.
-POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa2","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
+# qa2 policy (SPENT / NO-RETRY: the official CSV answered application/csv and was refused before its body).
+QA2_POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa2","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
+# qa3 canonical policy: the user-granted replacement quota (issuecomment-6111567857). A policy fixture, not a
+# financial expected-value projection of the product.
+POLICY = b'{"canonicalCalendarSource":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md#31.2","caps":{"batchCooperativeSeconds":180,"bodyBytes":1048576,"maxRequests":8,"redirects":0,"requestSeconds":20,"retainedRootsEstimateBytes":33554432,"retries":0,"totalRawBytes":8388608},"consumer":"ordinary-margin-change-ratio-v1","financialProvider":"FinMind","firstFailure":"stop_attempted_spent_unattempted_not_spent","formula":"(B[T]-B[T-5])/abs(B[T-5])","instrument":"ordinary_stock","lifecycle":"capture_eof_hash_then_independent_oracle_then_positive_consumer_then_release_and_exit","market":"TPEx","namespace":"issue31-margin-seven-cutoffs-1005-1006-v1/qa3","officialAnchorDates":["2026-10-08","2026-10-09"],"officialAnchorUrl":"https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data","query":{"dataset":"TaiwanStockMarginPurchaseShortSale","end_date":"2026-10-09","start_date":"2026-09-24"},"queryKeyOrder":["dataset","data_id","start_date","end_date"],"ratioRepresentation":{"exactThresholdComparison":"20*numerator<=positiveDenominator","numerator":"B[T]-B[T-5]","positiveDenominator":"abs(B[T-5])","roundedDisplayNotUsedForGate":true,"zeroDenominator":"reject"},"requiredWindows":{"2026-10-05":["2026-09-24","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05"],"2026-10-06":["2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06"]},"schema":"ordinary-margin-source-policy/v1","sourceDataset":"TaiwanStockMarginPurchaseShortSale","supportedUse":["local_personal_noncommercial","process_ram_snapshot","margin5_balance_change_ratio","same_date_anchor_trace"],"symbols":["3105","3293","5274","5347","6488","6510","8069"],"threshold":"0.05","transport":{"acceptEncoding":"identity","cookies":false,"proxies":false,"tokens":false},"unitInference":{"canonical":"lots","historicalExtension":"explicit_limited_snapshot_inference","kind":"conditional_combination_inference","numericScale":1,"providerLiteral":false,"requireAllSevenSameDateBothAnchorsExact":true,"requireEachSymbolAtLeastOneNonzeroAnchor":true},"unsupportedUse":["historical_pit","publication_time","first_availability","revision_history","historical_eligibility","historical_membership","actionable_strategy","plan","trading","disk_raw_storage","raw_redistribution","mirror","deployment","other_cutoff"],"version":"ordinary-margin-cutoffs-1005-1006-v1"}'
 
 S = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
 D = ("2026-09-24", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06")
@@ -179,6 +181,42 @@ def native_response(body, *, framing="length", connection_close=False):
     if connection_close:
         header += b"Connection: close\r\n"
     wire = b"HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\n" + header + b"\r\n" + wire_body
+    sock = FakeSocket()
+
+    class WireFile(io.BytesIO):
+        raw = SimpleNamespace(_sock=sock)
+
+    sock.makefile = lambda _mode: WireFile(wire)
+    response = M.http.client.HTTPResponse(sock)
+    response.begin()
+    return response
+
+
+def shape36_headers(connection=None):
+    """Names and counts of the 19 response headers of the Issue 36 batch that succeeded against TPEx
+    (SOURCE_REGISTRY section 47.6): cache-control x2, vary x3, set-cookie x1, chunked, application/csv.
+    Values are synthetic; ``connection`` None leaves the Connection header out (keep-alive default)."""
+    headers = [
+        ("Cache-Control", "no-store, no-cache"), ("Cache-Control", "must-revalidate"),
+        ("Vary", "Accept-Encoding"), ("Vary", "Cookie"), ("Vary", "Origin"),
+        ("Content-Disposition", 'inline; filename="synthetic.csv"'), ("Content-Security-Policy", "default-src 'self'"),
+        ("Content-Type", "application/csv;charset=utf-8"), ("Date", "Mon, 12 Oct 2026 03:00:00 GMT"),
+        ("Permissions-Policy", "geolocation=()"), ("Referrer-Policy", "same-origin"), ("Server", "nginx"),
+        ("Set-Cookie", "SYNTHETIC_SESSION=private-cookie-marker; Path=/; HttpOnly"),
+        ("Strict-Transport-Security", "max-age=31536000"), ("Transfer-Encoding", "chunked"),
+        ("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "SAMEORIGIN"), ("X-XSS-Protection", "1; mode=block"),
+    ]
+    if connection is not None:
+        headers.append(("Connection", connection))
+    return headers
+
+
+def wire_response(body, headers, *, chunk=4000):
+    """Real stdlib HTTPResponse parsing of a chunked HTTP/1.1 200 wire image fed only by a RAM fake socket."""
+    pieces = [body[offset:offset + chunk] for offset in range(0, len(body), chunk)]
+    wire = b"HTTP/1.1 200 OK\r\n" + b"".join(
+        name.encode() + b": " + value.encode() + b"\r\n" for name, value in headers) + b"\r\n"
+    wire += b"".join(hex(len(piece))[2:].encode() + b"\r\n" + piece + b"\r\n" for piece in pieces) + b"0\r\n\r\n"
     sock = FakeSocket()
 
     class WireFile(io.BytesIO):
@@ -330,7 +368,7 @@ class Checks(unittest.TestCase):
 
     def test_external_policy_exact_pin_and_positive_two_cutoffs(self):
         self.assertEqual(len(POLICY), 2399)
-        self.assertEqual(hashlib.sha256(POLICY).hexdigest(), "b95e8d9f6b7b2cff8b9984bc54ace823c5d8b36c322d5311136cebafeae0fed9")
+        self.assertEqual(hashlib.sha256(POLICY).hexdigest(), "92f9d86b020250ef594269813c7fc6600214dd18fab80083140ef708dd6a77f2")
         capture, report, transport = self.execute()
         self.assertTrue(report.success, report)
         self.assertEqual(report.state, "released")
@@ -1034,33 +1072,145 @@ class Checks(unittest.TestCase):
             self.capture(connection_factory=Transport([]).connection).run(
                 independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
 
-    def test_qa2_policy_differs_from_published_qa1_policy_only_by_namespace(self):
+    def test_qa3_policy_differs_from_the_spent_qa1_and_qa2_policies_only_by_namespace(self):
         def canonical(document):
             return json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
-        old, new = json.loads(OLD_POLICY), json.loads(POLICY)
-        qa1, qa2 = "issue31-margin-seven-cutoffs-1005-1006-v1/qa1", "issue31-margin-seven-cutoffs-1005-1006-v1/qa2"
-        self.assertEqual(set(old), set(new))
-        self.assertEqual([key for key in old if old[key] != new[key]], ["namespace"])
-        self.assertEqual((old["namespace"], new["namespace"]), (qa1, qa2))
-        self.assertEqual(M.NAMESPACE, qa2)
-        # Byte level: the qa1 text with its namespace suffix swapped is exactly the qa2 text.
-        self.assertEqual(OLD_POLICY.count(b"/qa1"), 1)
-        self.assertEqual(OLD_POLICY.replace(b"/qa1", b"/qa2"), POLICY)
-        # Both are canonical (sorted keys, compact), same length; the new SHA matches the canonical bytes.
-        self.assertEqual((canonical(old), canonical(new)), (OLD_POLICY, POLICY))
-        self.assertEqual((len(OLD_POLICY), len(POLICY)), (2399, 2399))
-        retired_pin = "47ea789e4bac27cf736f9294f5c0563425b15cd5541748567f985ae262f224d7"
-        self.assertEqual(hashlib.sha256(OLD_POLICY).hexdigest(), retired_pin)
+        base = "issue31-margin-seven-cutoffs-1005-1006-v1/"
+        spent = ((OLD_POLICY, base + "qa1", b"/qa1", "47ea789e4bac27cf736f9294f5c0563425b15cd5541748567f985ae262f224d7"),
+                 (QA2_POLICY, base + "qa2", b"/qa2", "b95e8d9f6b7b2cff8b9984bc54ace823c5d8b36c322d5311136cebafeae0fed9"))
+        new = json.loads(POLICY)
+        self.assertEqual((new["namespace"], M.NAMESPACE), (base + "qa3", base + "qa3"))
+        self.assertEqual(len(POLICY), 2399)
+        self.assertEqual(canonical(new), POLICY)  # Canonical: sorted keys, compact.
         self.assertEqual(hashlib.sha256(POLICY).hexdigest(), M.POLICY_SHA256)
-        self.assertNotEqual(M.POLICY_SHA256, retired_pin)
-        # qa1 stays SPENT / NO-RETRY: neither its policy text nor its namespace is accepted any more.
-        with self.assertRaisesRegex(M.MarginSourceError, "^external_policy_pin$"):
-            self.capture(external_policy_utf8=OLD_POLICY)
-        with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
-            self.capture(seal_changes=dict(namespace=qa1))
-        with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
-            self.capture(seal_changes=dict(policy_sha256=retired_pin))
+        for old_bytes, namespace, suffix, pin in spent:
+            old = json.loads(old_bytes)
+            self.assertEqual(set(old), set(new))
+            self.assertEqual([key for key in old if old[key] != new[key]], ["namespace"])
+            self.assertEqual(old["namespace"], namespace)
+            # Byte level: the retired text with its namespace suffix swapped is exactly the qa3 text.
+            self.assertEqual(old_bytes.count(suffix), 1)
+            self.assertEqual(old_bytes.replace(suffix, b"/qa3"), POLICY)
+            self.assertEqual((canonical(old), len(old_bytes)), (old_bytes, 2399))
+            self.assertEqual(hashlib.sha256(old_bytes).hexdigest(), pin)
+            self.assertNotEqual(M.POLICY_SHA256, pin)
+            # SPENT / NO-RETRY: neither the retired policy text, namespace nor pin is accepted any more.
+            with self.assertRaisesRegex(M.MarginSourceError, "^external_policy_pin$"):
+                self.capture(external_policy_utf8=old_bytes)
+            with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
+                self.capture(seal_changes=dict(namespace=namespace))
+            with self.assertRaisesRegex(M.MarginSourceError, "^seal_authority$"):
+                self.capture(seal_changes=dict(policy_sha256=pin))
+
+    # Issue 36 success-shape parity: qa2 was refused because TPEx answered application/csv.
+
+    def test_content_type_rule_matches_issue36_and_whitelists_application_csv(self):
+        rows, documents = fixture()
+        official_ok = ("text/csv", "application/csv", "application/csv;charset=utf-8", "application/csv; charset=utf-8",
+                       'application/csv;charset="utf-8"', ' Application/CSV ; Charset="UTF-8" ', "text/csv;charset=UTF-8",
+                       "text/plain", "application/octet-stream")
+        for media in official_ok:
+            responses = [Response(csv_body(rows), media=media)] + [Response(json_body(d)) for d in documents]
+            with patch.object(M, "_SPENT_NAMESPACES", set()):
+                _capture, report, _transport = self.execute(responses=responses)
+            self.assertTrue(report.success, (media, report))
+            self.assertEqual(report.receipts[0].content_type, ";".join(p.strip() for p in media.lower().split(";")))
+        official_bad = ("application/csv;charset=latin-1", "application/csv;charset=utf-16", "application/csv;charset=utf-8;format=x",
+                        "application/csv;", "application/csv;;charset=utf-8", "application/csv;charset=utf-8;charset=big5",
+                        "application/json", "application/vnd.ms-excel", "text/html", "", "application/csv" + ";" * 200)
+        for media in official_bad:
+            with patch.object(M, "_SPENT_NAMESPACES", set()):
+                report, _transport = self.rejected(responses=[Response(b"x", media=media)], error="http_content_type", attempted=1)
+            self.assertEqual((report.receipts[0].content_type, report.receipts[0].body_bytes), ("", 0))
+        with patch.object(M, "_SPENT_NAMESPACES", set()):  # No Content-Type header at all.
+            self.rejected(responses=[Response(b"x", headers=[("Content-Length", "1")])], error="http_content_type", attempted=1)
+        # FinMind keeps its own whitelist: JSON only (application/csv belongs to the official CSV alone).
+        for media in ("application/json", "application/json; charset=utf-8", 'application/json;charset="utf-8"'):
+            responses = [Response(csv_body(rows), media="application/csv;charset=utf-8")] + [
+                Response(json_body(d), media=media) for d in documents]
+            with patch.object(M, "_SPENT_NAMESPACES", set()):
+                _capture, report, _transport = self.execute(responses=responses)
+            self.assertTrue(report.success, (media, report))
+        for media in ("application/csv", "text/csv", "text/html", "application/json;charset=big5", ""):
+            responses = [Response(csv_body(rows), media="application/csv;charset=utf-8"), Response(json_body(documents[0]), media=media)]
+            with patch.object(M, "_SPENT_NAMESPACES", set()):
+                self.rejected(rows, documents, responses=responses, error="http_content_type", attempted=2)
+
+    def test_issue36_actual_response_shape_replays_through_real_httpresponse_framing(self):
+        rows, _documents = fixture()
+        filler = [["2026-10-09", "9%03d" % number, "Filler %03d" % number] + ["1,234"] * 17 + [""] for number in range(900)]
+        for row in filler:
+            row[9], row[17] = "0.00", "0.00%"
+        body = csv_body(rows + filler)
+        self.assertGreater(len(body), 65_536)  # More than one 64 KiB read and many chunks, like the ~147 KB originals.
+        for connection_header in ("close", "keep-alive", None):
+            headers = shape36_headers(connection_header)
+            response = wire_response(body, headers)
+            transport = Transport([response])
+            create = transport.connection
+
+            def factory(host, timeout, create=create, detach=(connection_header == "close")):
+                connection = create(host, timeout)
+                get = connection.getresponse
+
+                def getresponse():
+                    result = get()
+                    if detach:
+                        connection.sock = None  # The stdlib detaches the socket of a will_close response.
+                    return result
+
+                connection.getresponse = getresponse
+                return connection
+
+            capture = self.capture(connection_factory=factory)
+            capture._deadline = M.time.monotonic() + 180
+            original = capture._fetch(0)
+            receipt = original.receipt
+            self.assertTrue(receipt.full_eof and receipt.request_started, connection_header)
+            self.assertEqual((receipt.status, receipt.content_type, receipt.body_bytes),
+                             (200, "application/csv;charset=utf-8", len(body)))
+            self.assertEqual(receipt.body_sha256, hashlib.sha256(body).hexdigest())
+            self.assertEqual(bytes(original.buffer), body)
+            self.assertTrue(response.isclosed())
+            # The replayed wire really carried the Issue 36 shape, parsed by the stdlib itself.
+            names = [name.lower() for name, _value in response.getheaders()]
+            self.assertEqual((names.count("cache-control"), names.count("vary"), names.count("set-cookie")), (2, 3, 1))
+            self.assertEqual(len(names), 18 if connection_header is None else 19)
+            self.assertTrue(response.chunked)
+            self.assertNotIn("private-cookie-marker", repr(receipt))
+            self.assertEqual(transport.calls[0][2], REQUEST_HEADERS)  # Nothing but the fixed headers; no cookie is sent back.
+            capture.release()
+
+    def test_issue36_shape_full_lifecycle_accepts_application_csv_official_original(self):
+        rows, documents = fixture()
+        body = csv_body(rows)
+        response = wire_response(body, shape36_headers("close"), chunk=64)
+        responses = [response] + [Response(json_body(d)) for d in documents]
+        _capture, report, transport = self.execute(responses=responses)
+        self.assertTrue(report.success, report)
+        self.assertEqual(report.receipts[0].content_type, "application/csv;charset=utf-8")
+        self.assertEqual(report.receipts[0].body_sha256, hashlib.sha256(body).hexdigest())
+        self.assertEqual((report.consumer_count, report.unattempted_not_spent), (14, ()))
+        self.assertNotIn("private-cookie-marker", repr(report))
+        self.assertTrue(all(call[2] == REQUEST_HEADERS for call in transport.calls))
+
+    def test_empty_read_is_eof_only_with_the_framing_parsers_closed_state(self):
+        class NeverClosed(Response):
+            def read(self, count):
+                self.requests.append(count)
+                chunk = self.body[self.position:self.position + count]
+                self.position += len(chunk)
+                return chunk  # Never marks the response closed, even after the last byte.
+
+            def isclosed(self):
+                return False
+
+        for response in (NeverClosed(b"x", media="text/csv", length=None), NeverClosed(b"x", media="text/csv")):
+            with patch.object(M, "_SPENT_NAMESPACES", set()):
+                report, _transport = self.rejected(responses=[response], error="framing_eof_missing", attempted=1)
+            self.assertFalse(report.receipts[0].full_eof)
+            self.assertIsNone(report.receipts[0].body_sha256)
 
     # Transport seam: root cause of the sealed run's first failure (constructor).
 
