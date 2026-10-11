@@ -1,6 +1,6 @@
 # GitHub 遷移入口與歷史協作紀錄
 
-自 2026-10-09 起，即時任務、owner、依賴、狀態與交接只在 GitHub Issues／Projects 管理，流程見 [AGENTS](../AGENTS.md)，設定及模板見 [GitHub 工作手冊](GITHUB_WORKFLOW.md)。本檔只保留穩定入口與一次性遷移缺口，不再增加逐輪 roster 或派工狀態。
+自 2026-10-09 起，即時任務、owner、依賴、狀態與交接只在 GitHub Issues／Projects 管理，流程見 [AGENTS](../AGENTS.md)，設定及模板見 [GitHub 工作手冊](GITHUB_WORKFLOW.md)。本檔只保留穩定入口與 GitHub 未設定的缺口，不再增加逐輪 roster 或派工狀態。
 
 ## 穩定入口
 
@@ -12,7 +12,7 @@
 
 ## 下一位接手者
 
-接手先讀治理 Issue、Project 與原任務最新收據，核正式 master、未合併成果、owner、暫停與授權。歷史 NEXT／UNADMITTED 及未合併 checkpoint 先去重，不產生派工權；舊已驗能力不重開，「已 review」不直接轉 Done。即時交接留原 Issue，GitHub 不可用不另建任務台帳。本檔只更新穩定入口。
+接手先讀治理 Issue、Project 與原任務最新收據，核正式 master、未合併成果、owner、暫停與授權。歷史 NEXT／UNADMITTED 及未合併 checkpoint 先去重，不產生派工權；舊已驗能力不重開，「已 review」不直接轉 Done。即時交接留原 Issue，GitHub 不可用不另建任務台帳。本檔只更新穩定入口與 GitHub 未設定的缺口。
 
 ## 歷史紀錄的使用界線
 
