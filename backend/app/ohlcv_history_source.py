@@ -9,7 +9,10 @@ or summary is available. Boundary transports do not demonstrate source truth.
 The default transport is direct stdlib HTTPS. It requires FinancialStart and a
 matching ExecutionBinding from a separately reviewed explicit Issue 32 seal.
 These declarations do not authenticate GitHub/runtime identity; the sole QA
-launcher/global review must independently establish them. The RAM quota survives
+launcher/global review must independently establish them: the seal carries the
+issuer/coordinator/implementer session ids and the QA caller reads its own
+holder/model/effort back from its runtime; none is pinned here. QA must differ
+from every seal role and the roles must be pairwise distinct. The RAM quota survives
 release/new source objects in this loaded module; it is not a durable or
 cross-process limiter. The external one-shot seal remains authoritative.
 
@@ -80,7 +83,8 @@ RAW_CAP = 8388608
 ROOTS_CAP = 33554432
 REQUEST_SECONDS = 20
 BATCH_SECONDS = 180
-GLOBAL_ISSUER = "01a1240a-495c-7b51-bc4a-cfb13897fcf3"
+SESSION_ID_PATTERN = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+MODEL_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 
 # A schema, not a bundled policy or a source of expected financial values.
 _POLICY_SHAPE = {
@@ -339,6 +343,8 @@ class ExecutionBinding:
 class FinancialStart:
     version: str
     issuer_thread_id: str
+    coordinator_session_ids: tuple
+    implementer_session_ids: tuple
     namespace: str
     policy_sha256: str
     seal_comment_url: str
@@ -364,24 +370,26 @@ def _financial_start(start, binding):
         if item.name in ("authorized", "whole_batch"):
             if type(value) is not bool or value is not True:
                 _fail("financial_start_not_authorized")
+        elif item.name in ("coordinator_session_ids", "implementer_session_ids"):
+            if type(value) is not tuple or not value or any(type(part) is not str for part in value):
+                _fail("financial_start_type")
         elif item.name != "binding" and type(value) is not str:
             _fail("financial_start_type")
     if start.binding != binding:
         _fail("financial_binding_mismatch")
-    if (start.version != "issue32-financial-start-v1" or start.issuer_thread_id != GLOBAL_ISSUER
+    if (start.version != "issue32-financial-start-v1"
             or start.namespace != NAMESPACE or start.policy_sha256 != POLICY_SHA256):
         _fail("financial_start_scope")
-    if binding.holder_thread_id != binding.holder_session_id or binding.model != "gpt-6.1-sol" or binding.reasoning_effort != "xhigh":
+    # Issuer/coordinator/implementer identities come from the seal and are
+    # checked by the QA caller against the Issue receipts; this module pins none.
+    roles = (start.issuer_thread_id,) + start.coordinator_session_ids + start.implementer_session_ids
+    if any(not re.fullmatch(SESSION_ID_PATTERN, part) for part in roles) or len(set(roles)) != len(roles):
+        _fail("financial_start_scope")
+    if binding.holder_thread_id != binding.holder_session_id or binding.reasoning_effort != "xhigh":
         _fail("financial_qa_identity")
-    if not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", binding.holder_thread_id):
+    if not re.fullmatch(SESSION_ID_PATTERN, binding.holder_thread_id) or not re.fullmatch(MODEL_PATTERN, binding.model):
         _fail("financial_qa_identity")
-    if binding.holder_thread_id in (
-            "01a12102-9891-7293-8c66-a342094e0990",
-            "01a12185-0e76-73c1-ad90-f47aded769b4",
-            "01a12191-e54b-7b11-a081-428c5deee49d",
-            GLOBAL_ISSUER,
-            "01a12410-51fb-7720-ad57-689143fb02cb",
-            "01a1242a-f4c9-78b3-ade5-ad1592d76489"):
+    if binding.holder_thread_id in roles:
         _fail("financial_qa_identity")
     if not re.fullmatch(r"[0-9a-f]{40}", binding.candidate_sha):
         _fail("financial_candidate")

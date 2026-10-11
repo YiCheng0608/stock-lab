@@ -62,18 +62,26 @@ SYMBOLS = tuple(ANCHORS)
 CUTOFFS = ("2026-10-05", "2026-10-06")
 NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1"
 
-# External role expectations: Issue 32 decisions 6093906581/6094008599 and
-# engineer self ACK 6093999818, never derived from product role constants.
-REVIEWED_GLOBAL_ISSUER = "01a1240a-495c-7b51-bc4a-cfb13897fcf3"
-REVIEWED_QA_HOLDER = "01a12416-7c0d-7143-87e3-5da9e0ab4394"
-REVIEWED_NON_QA_HOLDERS = (
-    "01a12102-9891-7293-8c66-a342094e0990",
-    "01a12185-0e76-73c1-ad90-f47aded769b4",
-    "01a12191-e54b-7b11-a081-428c5deee49d",
-    "01a1240a-495c-7b51-bc4a-cfb13897fcf3",
-    "01a12410-51fb-7720-ad57-689143fb02cb",
-    "01a1242a-f4c9-78b3-ade5-ad1592d76489",
-)
+# Issue 32 financial-start identity guard (user approval 6109493002, design
+# 6109319936): issuer/coordinator/implementer ids arrive in the seal and the QA
+# holder/model/effort are runtime read-backs. The ids below are synthetic; the
+# product pins no session or model, so none of these are product constants.
+SEAL_ISSUER = "f0000000-0000-0000-0000-0000000000a1"
+SEAL_COORDINATORS = ("f0000000-0000-0000-0000-0000000000b1", "f0000000-0000-0000-0000-0000000000b2")
+SEAL_IMPLEMENTERS = ("f0000000-0000-0000-0000-0000000000c1", "f0000000-0000-0000-0000-0000000000c2")
+CLAUDE_QA_HOLDER = "5d2f6c1e-7a40-4b8e-9c3d-1e2f3a4b5c6d"
+SEAL_URL = "https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-9999999999"
+SEAL_URL_THRESHOLD = 6085344604
+
+
+def declaration(holder=CLAUDE_QA_HOLDER, model="claude-sonnet-5-5", url=SEAL_URL):
+    # Pure configuration boundary only; these synthetic declarations are NEVER
+    # passed to a real transport/source constructor or used for acquisition.
+    binding = source.ExecutionBinding(holder, holder, None, model, "xhigh", "a" * 40, "b" * 64, "c" * 64,
+                                      "NOAUTH RAM pure guard; no financial execution")
+    start = source.FinancialStart("issue32-financial-start-v1", SEAL_ISSUER, SEAL_COORDINATORS,
+                                  SEAL_IMPLEMENTERS, NAMESPACE, EXTERNAL_PIN, url, binding, True, True)
+    return start, binding
 
 
 def days(start, stop):
@@ -282,15 +290,7 @@ class Boundaries(unittest.TestCase):
                            policy_canonical=EXTERNAL_POLICY, policy_sha256=EXTERNAL_PIN, formal_blob=FORMAL + b" ")
 
     def test_financial_start_requires_exact_typed_reviewed_binding(self):
-        binding = source.ExecutionBinding("f0000000-0000-0000-0000-00000000000b", "f0000000-0000-0000-0000-00000000000b", None,
-                                          "gpt-6.1-sol", "xhigh", "a" * 40, "b" * 64, "c" * 64,
-                                          "python -B -X utf8 independently-reviewed-script")
-        start = source.FinancialStart("issue32-financial-start-v1", REVIEWED_GLOBAL_ISSUER,
-                                      NAMESPACE, EXTERNAL_PIN,
-                                      "https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-9999999999",
-                                      binding, True, True)
-        # Pure configuration boundary only; this synthetic declaration is NEVER
-        # passed to a real transport/source constructor or used for acquisition.
+        start, binding = declaration(model="gpt-6.1-sol")
         source._financial_start(start, binding)
         cases = [
             (replace(start, authorized=1), binding, "financial_start_not_authorized"),
@@ -304,30 +304,51 @@ class Boundaries(unittest.TestCase):
             self.assertFailure(code, source._financial_start, seal, runtime)
         self.assertFailure("financial_start_with_boundary_transport", build, financial_start=start, execution_binding=binding)
 
-    def test_financial_start_current_issuer_pure_guards(self):
-        # NOAUTH: synthetic declarations validate only the pure guard. The URL
-        # identifies writer GO, not a financial seal; no constructor/acquire.
-        def declaration(holder):
-            binding = source.ExecutionBinding(holder, holder, None, "gpt-6.1-sol", "xhigh",
-                                              "a" * 40, "b" * 64, "c" * 64,
-                                              "NOAUTH RAM pure guard; no financial execution")
-            start = source.FinancialStart("issue32-financial-start-v1", REVIEWED_GLOBAL_ISSUER,
-                                          NAMESPACE, EXTERNAL_PIN,
-                                          "https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6094008599",
-                                          binding, True, True)
-            return start, binding
-
-        for holder in ("f0000000-0000-0000-0000-00000000000b", REVIEWED_QA_HOLDER):
-            with self.subTest(case="independent_qa", holder=holder):
-                self.assertIsNone(source._financial_start(*declaration(holder)))
-        start, binding = declaration(REVIEWED_QA_HOLDER)
-        for issuer in (REVIEWED_NON_QA_HOLDERS[0], "f0000000-0000-0000-0000-00000000000c"):
-            with self.subTest(case="wrong_issuer", issuer=issuer):
-                self.assertFailure("financial_start_scope", source._financial_start,
-                                   replace(start, issuer_thread_id=issuer), binding)
-        for holder in REVIEWED_NON_QA_HOLDERS:
-            with self.subTest(case="coordinator_or_implementer", holder=holder):
-                self.assertFailure("financial_qa_identity", source._financial_start, *declaration(holder))
+    def test_financial_start_seal_supplied_identity_pure_guards(self):
+        # NOAUTH: synthetic declarations validate only the pure guard; no
+        # constructor/acquire and no network. Identities come from the seal.
+        self.assertFalse(hasattr(source, "GLOBAL_ISSUER"))
+        for model in ("claude-sonnet-5-5", "claude-opus-5-5", "gpt-6.1-sol"):
+            with self.subTest(case="runtime_model_is_read_back", model=model):
+                self.assertIsNone(source._financial_start(*declaration(model=model)))
+        # Former hard-coded session ids carry no special status unless the seal lists them.
+        for holder in ("01a12416-7c0d-7143-87e3-5da9e0ab4394", "01a12102-9891-7293-8c66-a342094e0990"):
+            with self.subTest(case="unlisted_holder_not_pinned", holder=holder):
+                self.assertIsNone(source._financial_start(*declaration(holder=holder)))
+        start, binding = declaration()
+        for holder in (SEAL_ISSUER,) + SEAL_COORDINATORS + SEAL_IMPLEMENTERS:
+            with self.subTest(case="qa_not_independent_of_seal_role", holder=holder):
+                self.assertFailure("financial_qa_identity", source._financial_start, *declaration(holder=holder))
+        for label, role in (
+                ("issuer_is_coordinator", {"issuer_thread_id": SEAL_COORDINATORS[0]}),
+                ("issuer_is_implementer", {"issuer_thread_id": SEAL_IMPLEMENTERS[0]}),
+                ("coordinator_is_implementer", {"coordinator_session_ids": (SEAL_IMPLEMENTERS[0],)}),
+                ("duplicate_implementer", {"implementer_session_ids": (SEAL_IMPLEMENTERS[0], SEAL_IMPLEMENTERS[0])}),
+                ("issuer_malformed", {"issuer_thread_id": "not-a-session-id"}),
+                ("coordinator_uppercase", {"coordinator_session_ids": (SEAL_COORDINATORS[0].upper(),)}),
+                ("implementer_malformed", {"implementer_session_ids": ("x",)})):
+            with self.subTest(case=label):
+                self.assertFailure("financial_start_scope", source._financial_start, replace(start, **role), binding)
+        for label, role in (
+                ("coordinators_empty", {"coordinator_session_ids": ()}),
+                ("implementers_empty", {"implementer_session_ids": ()}),
+                ("coordinators_list", {"coordinator_session_ids": list(SEAL_COORDINATORS)}),
+                ("implementers_non_str", {"implementer_session_ids": (SEAL_IMPLEMENTERS[0], 1)}),
+                ("issuer_non_str", {"issuer_thread_id": None})):
+            with self.subTest(case=label):
+                self.assertFailure("financial_start_type", source._financial_start, replace(start, **role), binding)
+        for label, url, code in (
+                ("seal_at_threshold", f"https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-{SEAL_URL_THRESHOLD}",
+                 "financial_new_explicit_seal_required"),
+                ("seal_other_issue", "https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-9999999999",
+                 "financial_new_explicit_seal_required"),
+                ("seal_after_threshold", f"https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-{SEAL_URL_THRESHOLD + 1}",
+                 None)):
+            with self.subTest(case=label):
+                if code is None:
+                    self.assertIsNone(source._financial_start(*declaration(url=url)))
+                else:
+                    self.assertFailure(code, source._financial_start, *declaration(url=url))
 
         cases = (
             ("start_type", None, binding, "financial_start_required"),
@@ -347,9 +368,13 @@ class Boundaries(unittest.TestCase):
             with self.subTest(case=label):
                 self.assertFailure(code, source._financial_start, seal, runtime)
         for label, runtime, code in (
-                ("not_top_level", replace(binding, parent_thread_id=REVIEWED_GLOBAL_ISSUER), "financial_qa_not_top_level"),
-                ("session_mismatch", replace(binding, holder_session_id=REVIEWED_GLOBAL_ISSUER), "financial_qa_identity"),
-                ("model", replace(binding, model="other"), "financial_qa_identity"),
+                ("not_top_level", replace(binding, parent_thread_id=SEAL_ISSUER), "financial_qa_not_top_level"),
+                ("session_mismatch", replace(binding, holder_session_id=SEAL_ISSUER), "financial_qa_identity"),
+                ("holder_malformed", replace(binding, holder_thread_id="NOT-A-SESSION", holder_session_id="NOT-A-SESSION"), "financial_qa_identity"),
+                ("holder_uppercase", replace(binding, holder_thread_id=CLAUDE_QA_HOLDER.upper(), holder_session_id=CLAUDE_QA_HOLDER.upper()), "financial_qa_identity"),
+                ("model_shape", replace(binding, model="bad model"), "financial_qa_identity"),
+                ("model_too_long", replace(binding, model="m" * 65), "financial_qa_identity"),
+                ("model_empty", replace(binding, model=""), "financial_binding_type"),
                 ("effort", replace(binding, reasoning_effort="ultra"), "financial_qa_identity")):
             with self.subTest(case=label):
                 self.assertFailure(code, source._financial_start, replace(start, binding=runtime), runtime)
