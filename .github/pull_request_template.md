@@ -35,4 +35,4 @@ QA 服務版本收據：PID／啟動時間／來源 worktree／載入 SHA 或來
 被測服務對應合併版本的核對／正式 root 的受影響程式索引核對：
 失敗處理、暫停整合及復原決策者：
 合併後 master SHA／實際結果：待執行，回原 Issue 留收據
-worktree／branch／session 清理：另行授權，不隨合併自動刪除
+worktree／branch／session 清理：關單後依 AGENTS〈驗證資料與暫存〉的結案清理，由任務統籌執行；例外另行授權
