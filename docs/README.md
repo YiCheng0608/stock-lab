@@ -24,8 +24,6 @@
 
 即時任務、依賴、排序、狀態、接手及停滯紀錄只在 GitHub Issues／Projects；[遷移入口](TASK_COORDINATION.md)提供連結與歷史。
 
-現行 WIP、ACK、Ready 判定及退修續作查[權責規則](../AGENTS.md#建立任務與派工)與[平行派工／補位](GITHUB_WORKFLOW.md#平行派工與補位)。
-
 [ROADMAP_EXECUTION](ROADMAP_EXECUTION.md)（歷史 R0–R3 拆解）、[Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)與[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md)只保留歷史定位，不作新派工依據。
 
 ## 文件維護
@@ -34,4 +32,4 @@
 
 ## 歷史查閱
 
-本次整理前的29份 Markdown 在 Git `5ae84d2`，例如 `git show 5ae84d2:docs/TASK_COORDINATION.md`。更早整理前版本為 `69f62cf`、`2acc3c5`。TASK_COORDINATION、ROADMAP、ROADMAP_EXECUTION 移出的改造前歷史段，以 `46eb244` 版本為準（例如 `git show 46eb244:docs/ROADMAP.md`）。歷史命令、測試數、實際 roster 與逐輪收據查 Git／原 task；不作目前來源的新驗收。
+`5ae84d2` 保存整理前 29 份 Markdown，例如 `git show 5ae84d2:docs/TASK_COORDINATION.md`。更早整理前版本為 `69f62cf`、`2acc3c5`。TASK_COORDINATION、ROADMAP、ROADMAP_EXECUTION 移出的改造前歷史段，以 `46eb244` 版本為準（例如 `git show 46eb244:docs/ROADMAP.md`）。歷史收據查 Git／原 task，不作新驗收。

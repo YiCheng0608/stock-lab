@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-更新：2026-10-07。本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 資料庫政策
 
@@ -90,7 +90,7 @@ R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAI
 
 #### R1-A2 legacy 成交額 migration 磁碟驗收（有限接受）
 
-本輪已有限接受可重建 file-backed fixture 的關閉後讀回與失敗復原，支援 M1 資料可信與 R1 基線。兩條路徑分開驗收：Alembic 從明示 `0006_news_json_defaults` marker 升至 `0007_turnover_availability`，並拒絕偷偷改走 fallback；fallback-only 從已知完整 `schema_migrations` 0001→0006 升至 0007，沒有 `alembic_version` 表，不把它當 Alembic current 或 API readiness 證據。
+已有限接受可重建 file-backed fixture 的關閉後讀回與失敗復原，支援 M1 資料可信與 R1 基線。兩條路徑分開驗收：Alembic 從明示 `0006_news_json_defaults` marker 升至 `0007_turnover_availability`，並拒絕偷偷改走 fallback；fallback-only 從已知完整 `schema_migrations` 0001→0006 升至 0007，沒有 `alembic_version` 表，不把它當 Alembic current 或 API readiness 證據。
 
 fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的 `turnover_status`／`turnover_reason` 兩欄，再設定上述 marker；已有 status 的案例保留兩欄。每案例 seed 一個 instrument、一筆 raw metadata 與三筆 bar，NULL variant 為四筆。raw 的 `payload_path`／`sha256` 為 NULL，未保存或複製原件 body、既有 DB 或真實來源樣本；這是 synthetic shape，不證所有歷史 0006 DB 可升級。
 
@@ -109,7 +109,7 @@ fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的
 
 #### R1-A2 selected invalid／拒收磁碟整合（有限接受）
 
-本輪已有限接受一個 compound unittest，以可重建的離線 unsigned synthetic `STOCK_DAY_ALL` fixture 支援 M1 研究資料可信與 R1-A2 基線，解除以下指定 subset 的磁碟整合缺口。fixture 為 **2026-09-04、十一個 synthetic selected 標的**；走既有 `source_runtime.capture(MockTransport)`→load／select→`TwseAdapter.fetch`→`OfficialMarketDataAdapter.fetch` 按既有 key 正常去重→`pipeline.collect(force)`，再 dispose、以新 `NullPool` engine 讀回同一 SQLite 檔，經 production `api.router`／handler／serializer 核對十一個 HTTP 回應。原 body／receipt／hash／日期 gate 保留，未改產品來源、consumer 或 pins。
+已有限接受一個 compound unittest，以可重建的離線 unsigned synthetic `STOCK_DAY_ALL` fixture 支援 M1 研究資料可信與 R1-A2 基線，解除以下指定 subset 的磁碟整合缺口。fixture 為 **2026-09-04、十一個 synthetic selected 標的**；走既有 `source_runtime.capture(MockTransport)`→load／select→`TwseAdapter.fetch`→`OfficialMarketDataAdapter.fetch` 按既有 key 正常去重→`pipeline.collect(force)`，再 dispose、以新 `NullPool` engine 讀回同一 SQLite 檔，經 production `api.router`／handler／serializer 核對十一個 HTTP 回應。原 body／receipt／hash／日期 gate 保留，未改產品來源、consumer 或 pins。
 
 | 指定案例 | 已驗收的有限行為 |
 | --- | --- |
@@ -124,7 +124,7 @@ fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的
 
 ### R1-A2 legacy 日行情成交量精確整數 gate（有限接受）
 
-本輪已有限接受 [`parse_twse_daily_rows`／`parse_tpex_daily_rows`](../backend/worker/sources.py) 的專用成交量讀取及 TPEx 合法空結果條件，支援 M1 研究資料可信／R1-A2 基線。成交量以**股**為單位，直接從原值型別判讀，避免先轉浮點再取整；有效輸出為 Python `int`，範圍 **0–9,223,372,036,854,775,807**。缺失或無效成交量拒收該筆 bar，不補零或保留截整值；合法來源零仍保留。
+已有限接受 [`parse_twse_daily_rows`／`parse_tpex_daily_rows`](../backend/worker/sources.py) 的專用成交量讀取及 TPEx 合法空結果條件，支援 M1 研究資料可信／R1-A2 基線。成交量以**股**為單位，直接從原值型別判讀，避免先轉浮點再取整；有效輸出為 Python `int`，範圍 **0–9,223,372,036,854,775,807**。缺失或無效成交量拒收該筆 bar，不補零或保留截整值；合法來源零仍保留。
 
 | 原值或欄位條件 | 契約 |
 | --- | --- |

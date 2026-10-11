@@ -2,7 +2,7 @@
 
 本文管理可重建入口、副作用與驗收方式；資料、產物配額、保留及清理依 [AGENTS](../../AGENTS.md#驗證資料與暫存)。接手與未清資源記原 GitHub Issue；命令／版本／exit／計數／hash／退修／提交收據留原 Issue／Git，入口見[遷移說明](../TASK_COORDINATION.md)。下列 task／ROOT／freeze 收據只證歷史，不授權現行派工，也不證目前來源通過。
 
-任務名額、ACK 與角色排程依[平行派工／補位](../GITHUB_WORKFLOW.md#平行派工與補位)。下列單次測試與具名來源的 GET／RAM／落盤上限只約束其授權範圍，不是全專案只能開一張任務的限制；跨任務仍須核共用資源及各自授權，不因另開 worktree 擴大配額。
+下列單次測試與具名來源的 GET／RAM／落盤上限只約束其授權範圍，不是全專案只能開一張任務的限制；跨任務仍須核共用資源及各自授權，不因另開 worktree 擴大配額。
 
 ## 版本與資料
 
@@ -74,7 +74,7 @@ stdout／stderr 在記憶體捕獲。以子程序 exit、八份無 skip 的 metr
 `tools/Invoke-StockDaySelectedInvalidValidation.ps1` 直接跑 `backend/tests/test_stock_day_selected_invalid_file_integration.py` 的一個 compound unittest；缺專用環境的 `SkipTest` 不算通過。指定三種 invalid／四類拒收見[資料來源](../DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)。
 
 ```powershell
-$selectedInvalidDependencyRoots = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+$selectedInvalidDependencyRoots = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
 $selectedInvalidRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-si-<owner>-<32-hex>'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-StockDaySelectedInvalidValidation.ps1 -RunOwner '<owner>' -ValidationRoot $selectedInvalidRoot -DependencyRoots $selectedInvalidDependencyRoots
 ```
@@ -96,7 +96,7 @@ owner 為核定八個 ASCII 英數字元，32-hex 為核定小寫 hex；根須�
 ```powershell
 $volumePreviousDeps = $env:STOCK_TEST_DEPS
 try {
-    $env:STOCK_TEST_DEPS = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+    $env:STOCK_TEST_DEPS = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
     & 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 ./backend/tests/test_legacy_daily_volume.py
     $volumeTestExit = $LASTEXITCODE
 } finally {
@@ -115,7 +115,7 @@ Parser／adapter fixture 不包括 capture、collect、SQLite、API、live、UI 
 `tools/Invoke-LegacyDailyVolumeValidation.ps1` 直接跑 `backend/tests/test_legacy_daily_volume_file_integration.py` 的一個 compound unittest，不載一般 conftest。合法／拒收、兩次 force collect、重開與 API 範圍見[資料來源](../DATA_SOURCES.md#r1-a2-legacy-成交量磁碟整合)。
 
 ```powershell
-$legacyVolumeDependencyRoots = 'C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps;C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.validation-deps'
+$legacyVolumeDependencyRoots = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
 $legacyVolumeRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-lv-<owner>-<32-hex>'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-LegacyDailyVolumeValidation.ps1 -RunOwner '<owner>' -ValidationRoot $legacyVolumeRoot -DependencyRoots $legacyVolumeDependencyRoots
 ```
@@ -178,7 +178,7 @@ Actual 驗收以 `serve(preloaded_store=已驗Store)` 在取得原件的同一 P
 
 ### M2-FOCUS-DAY-MOVE-1 單日方向與完整返回的記憶體驗證入口
 
-沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>` 與[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --focus-check --deps <既有 frontend/node_modules>`，只跑本輪必要[test_price_focus.py](../../backend/tests/test_price_focus.py)10項、[priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)110helper／44 full-App SSR與現行28src noEmit。仍採memory config／SQLite `:memory:`、既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境；M1／UNIT／m2-v1仍適用證據沿用，不泛跑full suite或production build。
+沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>` 與[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --focus-check --deps <既有 frontend/node_modules>`，只跑必要[test_price_focus.py](../../backend/tests/test_price_focus.py)10項、[priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)110helper／44 full-App SSR與現行28src noEmit。仍採memory config／SQLite `:memory:`、既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境；M1／UNIT／m2-v1仍適用證據沿用，不泛跑full suite或production build。
 
 Checks涵蓋all／up／down／flat、Decimal／前端原字串O/C比較、缺失／invalid方向拒用、精確股門檻、兩股讀值／理由重算、三條件重複與safe返回、legacy omitted direction=all。Fixture只synthetic，不代actual來源。
 
@@ -306,9 +306,7 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 ### M1-W2～W7 法人窗口的零落盤驗證入口（歷史）
 
-現行入口為下節 W8；W2～W7 的入口、case、版本與收據不作現行入口，重現須查 Git 當時版本。
-
-歷史收據（W2～W7 入口、case、版本與收據）：[基線 L393–L477](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L393-L477)。
+現行入口為下節 W8；W2～W7 不作現行入口，其入口、case、版本與收據見[基線 L393–L477](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L393-L477)。
 
 ### M1-W8 八截止法人窗口的零落盤驗證入口
 
@@ -374,7 +372,7 @@ API／preview皆需 `--serve --saved-source-only --saved-price-chips-opt-in`；A
 
 ### M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1 七股每日淨超的零落盤驗證入口
 
-本次獨立chips-only入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用old saved/joint producer、private root或price fetch。沿pinned Python3.12.14 `-B -X utf8`、FastAPI0.141.1／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12，只讀既有backend/.deps與frontend/node_modules，不install、建helper／fixture檔、DB或整套來源副本。新policy version／外部digest由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理。
+chips-only 入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用old saved/joint producer、private root或price fetch。沿pinned Python3.12.14 `-B -X utf8`、FastAPI0.141.1／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12，只讀既有backend/.deps與frontend/node_modules，不install、建helper／fixture檔、DB或整套來源副本。新policy version／外部digest由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理。
 
 下列為已驗入口形狀，原exact commands／版本／raw exit留原task；文件不授權再FIRST／重啟或更新配額。API只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用；新preview flag與old flags獨立互斥，GET/capture僅as_of，三UI RAW不可當額外API keys。
 
@@ -384,10 +382,12 @@ $seriesNode = 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depe
 & $seriesNode tools/tpex-chips-series-preview.cjs --check
 & $seriesNode tools/tpex-chips-series-preview.cjs --check --check-ui-only
 & $seriesNode tools/tpex-chips-series-preview.cjs --check --check-startup-only
-# 本批受驗serve的有限local ports；必須沿ROOT原task准入與外部pins
+# serve 須沿原 task 准入與外部 pins
 & 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --serve --chips-series-stock-scope-7-opt-in --port 8801 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
 & $seriesNode tools/tpex-chips-series-preview.cjs --serve --chips-series-stock-scope-7-opt-in --api-port 8801 --port 8802 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
 ```
+
+API／preview 預設埠 8799／8800，preview `--api-port` 預設 8799；bundle 於啟動時建立，換 UI 埠不換 API，commit 不更新既有 bundle。
 
 Fixture／數值／零窗口仍synthetic，不代actual來源／操作。政策cap中的retained8748386B為estimate，非RSS／construction peak；headers／deadline的postcheck／cooperative限制由來源§38管理。
 
@@ -395,9 +395,7 @@ Fixture／數值／零窗口仍synthetic，不代actual來源／操作。政策c
 
 ## 歷史驗證
 
-完整原文可由 `git show 5ae84d2:docs/development-baseline/README.md` 取閱；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)處理。
-
-歸檔前全文：`git show f431b9885cd3332ddd328309d0041a15c55b8610:docs/development-baseline/README.md`。
+完整原文見 `git show 5ae84d2:docs/development-baseline/README.md`，歸檔前全文見 `git show f431b9885cd3332ddd328309d0041a15c55b8610:docs/development-baseline/README.md`；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)處理。
 
 ### M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 官方事件區間的零落盤驗證入口
 
@@ -414,7 +412,7 @@ Python3.12.14／pytest8.4.2：[test_official_events.py](../../backend/tests/test
 Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)独立零網路check：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --event-kind-check
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --event-kind-check
 ```
 
 RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。
@@ -434,7 +432,7 @@ scope／provenance／date／Code與Namejoin／duplicate與conflict拒收／pins�
 前端新mode沿[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的既有RAM編譯／guard入口；必要已接受命令：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --issuer-event-check
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --issuer-event-check
 ```
 
 42src noEmit／80targetchecks只synthetic tuple／SSR／response／routing／proxy邊界，非金融／browser／磁碟保存／production build／普通股history證據。
@@ -445,12 +443,12 @@ scope／provenance／date／Code與Namejoin／duplicate與conflict拒收／pins�
 
 新[Test module](../../backend/tests/test_twse_issuer_industry.py)覆蓋two-code exact lookup、其他市場／空白／numeric／special／unknown拒用、external pins／宣告hash／date precision／source URLs、duplicate／conflict、同cutoff與完整dualSHA／ordinal、名稱與raw mappings。RAM fixtures是邊界計算證據，不代真公司／官方文件／可信UI；authority分別見[來源 §42](../SOURCE_REGISTRY.md)、[產業 §10](../INDUSTRY_CLASSIFICATION.md)、[個股頁 §47](../STOCK_RESEARCH_PAGE.md)。
 
-沿[test_official_events.py](../../backend/tests/test_official_events.py)既有zero-disk guard，先安裝audit guard再import pytest／新module；用既有backend/.deps／本根路徑、Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1及pytest noconftest、no cacheprovider／logging。只RAM fixtures／SQLite，不import app.main／conftest、建DB或寫Temp；完整本輪實際命令／版本／exit與限制留ROOT原task，不另建helper／環境／附件。
+沿[test_official_events.py](../../backend/tests/test_official_events.py)既有zero-disk guard，先安裝audit guard再import pytest／新module；用既有backend/.deps／本根路徑、Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1及pytest noconftest、no cacheprovider／logging。只RAM fixtures／SQLite，不import app.main／conftest、建DB或寫Temp；實際命令／版本／exit與限制留ROOT原task，不另建helper／環境／附件。
 
 前端沿既有[RAM preview入口](../../tools/tpex-price-preview.cjs)的新bounded mode：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules' --issuer-industry-check
+& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --issuer-industry-check
 ```
 
 45src noEmit＋71target checks是synthetic tuple／validator／SSR／query error與routing／proxy guard證據，不是financial truth／native UI／production build／磁碟保存。Serve只proxy ROOT-owned API，`--issuer-industry` 必須另有exact industry registry／consumer四external pins及已准入issuer／event pins；舊defaults／其他opt-in不自動升格。
