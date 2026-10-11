@@ -18,8 +18,8 @@
 | 可開工 | Project Ready | 全局核真正前置、授權及驗證方案後設是；本單交付／QA 留後驗。候選、容器、阻塞、暫停為否。 |
 | 阻塞／暫停 | Project Blocked／Paused | 是／否；原單列原因、決策者、解除條件、原階段、重查事件／時間。 |
 | owner／下一角色 | Issue 最新交接 | session、版本、ACK；assignee 是通知帳號，不冒每 agent 獨立帳號。 |
-| 整合排隊／持有者 | 治理 Issue 最新整合收據 | 全局唯一更新，有序候選、最多一位持有者，不建本機鎖表。 |
-| WIP／停滯計數 | 同一治理 Issue | 上限／實占／空位／處置，規則依 [AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
+| 整合排隊／持有者 | 治理 Issue 本文摘要；收據在留言 | 全局唯一更新，有序候選、最多一位持有者，不建本機鎖表。 |
+| WIP／停滯計數 | 同一治理 Issue 本文摘要；收據在留言 | 上限／實占／空位／處置，規則依 [AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
 | Repo／Project／整合入口 URL | 遷移入口 | 只留穩定入口，不抄即時 roster／狀態。 |
 
 原生關係確定不支援時才用 Issue「母單／子單」及「Blocked by／Blocking」完整連結，全局核雙向一致；不維護兩套權威關係或以 label 複製 Ready／Status。
@@ -113,7 +113,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 - Status 五值，Blocked／Paused 獨立欄位。
 - 停用 PR merged／Issue closed → Done、Done → close Issue 的 automation；取消／重複不算成功。
 - PR／commit 用 `Refs #<number>`，不用 `Closes`／`Fixes`／`Resolves` 關單，人工不提前關。
-- 合併後檢查通過才由任務統籌關 Issue／更新 Status；任一步失敗記已做／待同步，重試前讀回。
+- 合併後檢查通過才由任務統籌關 Issue／更新 Status（無 repo 變更依 [AGENTS](../AGENTS.md#狀態與驗收責任)由測試中直接關單）；任一步失敗記已做／待同步，重試前讀回。
 - 依授權配置 master review／適用 checks、禁止直推／強推／刪除、整合寫入者；未驗設定記未設，不冒技術保護或不存在的 CI。
 
 配置參考：[PR 與 Issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)、[Projects automation](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-built-in-automations)。
@@ -171,6 +171,13 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 ## 流程檢查與滾動調整
 
 全局追蹤／排序／決策，任務統籌原單收版本化證據，[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)連待接手項、決策及原單證據。未任命全局時標待接手／ACK，流程維護角色不能代填 owner 或恢復產品；新任／恢復全局核實 session、接受項、下次事件才接手。
+
+治理 #1 本文是即時摘要：WIP 上限／實占／空位、進行中的單與 owner、整合入口持有者、待使用者決策、停滯計數、現任全局 session／handle。全局每次事件更新本文，收據留在留言；兩者不一致時以收據為準並修正本文。接手者先讀本文，再依連結查收據。
+
+全局例行換手：以下任一條件成立即換手——對話被自動壓縮一次、自任命起關閉 5 張單（含流程單）、連續運作 2 小時、跨日。全局更新 #1 本文並留交接後停寫。交接只放整理過的內容：#1 本文摘要的連結；未結事項（處理中的決策、已送出未回覆的通知、進行中的整合、已知風險），每項附原單連結；新全局的第一個動作。不轉貼歷史收據、對話或整串留言，細節由接手者依連結查。新的全局 session（provider 依任命收據，預設 Claude）讀本文接手，在 #1 留任命收據並更新本文的現任全局，依序：
+1. 以 `orca terminal list` 的實際 worktree／handle 核對交接名單與本文 WIP 表的任務統籌 session／handle；不一致以實際讀回為準，修正本文並在收據記差異。
+2. 核對舊全局已留交接、停寫且 terminal 閒置後，以 `orca terminal close --terminal <舊全局 handle>` 只關閉該 terminal（handle 取自更新本文前的值或舊任命收據；新舊全局同在管理 checkout，不用 `--tab`／`--worktree --all`），結果記在 #1，使送往舊 handle 的訊息直接失敗。
+3. 通知進行中的任務統籌新的 session／handle。
 
 每次原單記 owner／session、觸發、版本／證據、處置、下次事件，治理單連回。勾選不免後續檢查，日期／補單／文件不解除暫停或授權排程。
 
@@ -237,7 +244,7 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 - 角色（工程、QA、文件、索引／Git）交回任務統籌；
 - 任務統籌向全局請求處置，全局處置後回送任務統籌。
 
-派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局換 session 或 handle 時以 #1 最新任命收據為準，並通知進行中的任務統籌。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
+派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局現任 session／handle 以 #1 本文為準，與任命收據不一致時以收據為準；每次聯絡全局前都從 #1 本文讀取，不沿用記憶或舊收據的值，送出失敗先重查 #1，不改送其他 terminal（換手見[流程檢查](#流程檢查與滾動調整)）。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
 
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
@@ -304,7 +311,7 @@ Issue／PR／整合執行者／授權依據（AGENTS 預設授權或使用者收
 正式 remote／master base SHA／candidate SHA：
 最新 master 合入任務 branch／衝突處理者／差異與 QA：
 文件 freeze／索引 project、絕對 root／scope、branch、內容版本依據、generation／coverage 限制／刷新者：
-核准者（持入口任務統籌）／核准 SHA（QA 通過版本）／合併前 base 再核：
+核准者（持入口任務統籌；流程改造為全局）／核准 SHA（QA 通過版本）／合併前 base 再核：
 合併後 master SHA／必要檢查命令、原 exit、證據：
 合併後被測服務版本收據／正式 root 的受影響索引核對：
 新增能力／實際解除依賴／可靠性改善／剩餘缺口：
