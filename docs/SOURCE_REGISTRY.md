@@ -52,6 +52,7 @@
 | [§44](#44-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向計數與窗口區段) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段 | 現行 |
 | [§45](#45-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與新來源准入 | 現行 |
 | [§46](#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳 | 現行 |
+| [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1) | #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（`issue36-two-cutoffs-v1`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -1213,3 +1214,119 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 NEWgen `edb7ac56-f36f-4fab-bff8-85dc916a2fbb`，唯一trusted FIRST7 HTTP200／identity，body732030B／未增補original receipts7530B，UTC2026-10-08T11:15:02.253776～11:15:05.281361+00:00。ROOT全部7original／receipts、stdlib CSV／Decimal／dates、4557 full daily rows／ALL35×25／770int64／ALL22 components與sumsteps及fullAPI graph完整核，停前再核原bytesequal／math／API；不冒3次fullmath。26 returnedcalendar→≤10/06 exact24 adopted→last5：9/30、10/1、10/2、10/5、10/6；315daily／63window metrics精確對帳。Full API79080B，SHA `0c3ac2b80a65c3bb8bad9225195d18ba3e8d106763e51e4bd9c36bf316465a38`。
 
 Actual零只有5274 self sell 10/5及10/6，兩viewportdaily與原列trace皆核；windowzero／triplezero／netzero缺實件未驗，fixture不補actual。可信FIRST是1277×924，當時未beforeclickassert1365，不聲稱FIRST1365；之後兩viewportALL7及清值見PAGE51。金融7／metadata首6＋2reader＋新3全SPENT；原件與derived RAM已釋放，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO／DB／ordinarypriceGET0；無save／crossprocess／ranking／filter／price／Signal／Plan或完整M1外推。
+
+## 47. #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（issue36-two-cutoffs-v1）
+
+2026-10-11。#36 以政府 [dataset11856](https://data.gov.tw/dataset/11856) 的 TPEx dated CSV 取得七股六個日期的法人原件，供 2026-10-05、2026-10-06 兩個截止日各含截止日向前五個交易日的三法人淨股數與合計 consumer（產品 `backend/app/tpex_institutional_five_day_source.py`，測試 `backend/tests/test_tpex_institutional_five_day_source.py`）。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default；六個日期由外部 policy 固定、不由日曆推導，本單不取日曆與 metadata（requests 0）。取得過程與 QA 收據保存在 [#36](https://github.com/YiCheng0608/stock-lab/issues/36)，下列為摘要並附留言編號。
+
+### 47.1 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue36-tpex-institutional-six-days-two-cutoffs-2026-10-10.1`；canonical 7,500 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `93d8e746eccbed035d5a79ffbf178b5f89877017c2aea69e6b841d178c1b51a3`。由全局獨立生成並貼於 [#36 留言 6088588415](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088588415)，產品不能由被測 policy 自建 expected |
+| profile／source | profile `free_public_local_ram_institutional_two_cutoffs_v1`；source id `tpex_government_institutional_csv`，version `dataset-11856-dated-csv/issue36-two-cutoffs-v1`；provider 金融監督管理委員會證券期貨局（FSC SFB），owner 財團法人中華民國證券櫃檯買賣中心（TPEx） |
+| consumer | `institutional-five-day-net-summary-two-cutoffs-v1`：7 個 getter、14 個 summary（兩截止 × 七股）、42 個類別合計 |
+| 標的與日期 | TPEx 3105／3293／5274／5347／6488／6510／8069；2026-09-29、09-30、10-01、10-02、10-05、10-06 |
+| 請求 | 固定 6 個 GET：`https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php`，query 依序 `l=zh-tw`、`se=EW`、`t=D`、`o=data`、`d=<民國日期，如 115%2F09%2F29>`；不換 provider、日期或路由 |
+| 上限 | 每份 body 1 MiB、aggregate raw 6 MiB、deduplicated retained-roots estimate 32 MiB（estimate 不是 RSS 或 peak）；每 URL 20 s、整批 180 s（cooperative）；identity、credentials／token／cookie／proxy 0、redirect 0、retry 0、每 URL 最多 1 次；首敗即停且 attempted 即 SPENT；只在 RAM |
+
+### 47.2 用途、授權與署名
+
+用途只限免費公開、本地盤後研究與 RAM 取得／驗證／consumer。Policy `uses`：`local_fetch` 只對本單六個請求、須先有 fresh seal；`raw_store` 只在 RAM；`disk_store`、`raw_publish`、`commercial_use` 不准入；`historical_pit` 不支援。統計基準為原成交、未含券商帳戶更正，單位為股。權利依[政府資料開放授權條款第 1 版](https://data.gov.tw/license)與 [TPEx 條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)：§7 政府開放資料例外成立，§5 一般下載限制保留；完整署名見 [§47.7](#477-完整署名)。
+
+qa1、qa2 各是獨立的一次額度。qa2 是使用者的新授權，不是恢復 qa1，qa1 的 SPENT／NO-RETRY 照舊。授權本身不是 seal，每次 real run 另須全局核發 fresh financial-start seal，並由獨立 QA 執行一次。
+
+| 項目 | qa1 | qa2 |
+| --- | --- | --- |
+| namespace | `issue36-seven-institutional-five-day-two-cutoffs-v1/qa1` | `issue36-seven-institutional-five-day-two-cutoffs-v1/qa2` |
+| source-use 授權 | [留言 6088463678](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678)（使用者明示授權），本文 3,129 B／`56240c60afbd88e906efc493d3cc2597070226ea5e47656b86afc9948e0077b0` | [留言 6110215172](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110215172)（使用者決策收據），本文 1,859 B／`3c5b61b7f79b7e2c238350b51d5329e81b087ef36204141ff185cbb5626619f1` |
+| seal 授權收據 | [留言 6110115119](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110115119) | [留言 6110484185](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110484185) |
+| seal raw | [留言 6110116577](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110116577)，6,518 B | [留言 6110485908](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110485908)，6,518 B |
+| seal pin（seal raw 的 SHA-256） | `836c24ca695fced7826c7d3c88a69a138f15697a4fe90cdf8487512910b78c03` | `abe34083c542a08b943bf2fb5e63ed58ebb5ee13006772fdf6d1631fb3251890` |
+| seal 有效期（2026-10-11 UTC） | 14:35:16～15:20:16 | 15:16:05～16:01:05 |
+| candidate | `bc2ed20fdded519b80c8e99bac0799ea854e7eaf` | `a4d89664e2bf3ce4614169abee181db2ade68a1b` |
+| 產品檔 SHA-256 | `80f2340d0931c6a1a5ece879894fe52adb9793ebcb376bfc2f6af3aec0a90308` | `f66620358660cf4455a8535233f8af0cf9b2ca15037d799ddb2a04c0f0e10f06` |
+| 測試檔 SHA-256 | `a332dbb8b16070c08b2297f30d13aa77253cdc809a6382efa3627d839019a8f9` | `dd208c159cbe8f2e5b593e0c46f33bf13015757f22e648f717a2977ca66cd421` |
+| script SHA-256 | `3116d3f457c26103d27d1d5d369c5b0774efbfb20cee73fc7de2a8a39d14aff8` | `e89dce8564f16dfc5f1a7db0bb0011f96f7975c8840db094e63286bba2526d1e` |
+| typed input（core）SHA-256 | `42447b0bb60c708d983c8ae84b0c29d1da23df5acefd50a41927514bb0ff0deb` | `a63f5f1073d21e11fdd91640f1a6a91d04d7aa7b3a2baa5e352e24bdcf61d55c` |
+| loader SHA-256 | `74e54f14ce4a15ba99a754f898d74b801c693dd9e5c6105ea7f616e3569c455b`（兩次相同） | 同左 |
+
+### 47.3 原件驗證與五日分子計算
+
+- **取得**：HTTP 200、identity encoding（無 `content-encoding`），完整 EOF 與 raw hash 通過後才 parse；body 恰達上限時須由既有 framing 讀到 EOF 才接受，未知長度達上限則直接拒絕，不做 +1 或 read(0) probe。
+- **標頭**：`content-length`、`transfer-encoding`、`content-encoding`、`content-type` 任一重複即 fail-closed，失敗碼 `duplicate_response_header:<小寫標頭名稱>`；其他標頭重複（如 `cache-control`、`vary`、`set-cookie`）接受，結果與無重複相同。診斷與輸出只含標頭名稱與次數，不含值；不送出、不使用、不保存 cookie。
+- **CSV**：strict UTF-8、無 BOM、stdlib `csv` strict；25 欄 header 與 policy 逐欄相符；日期為 7 位民國日期且等於請求日；代號符合 `[0-9A-Z]{4,6}` 且唯一、名稱非空。全部回傳列都驗結構，未選列以有界暫存串流處理；七股各取一列，得 42 列、1,050 原字串、924 個金融整數（42 × 22）。
+- **整數**：canonical ASCII 整數字串，signed int64（絕對值至多 `9223372036854775807`）；買進與賣出非負，每組買 − 賣 ＝ 淨額；外資及陸資 ＝ 外資（不含外資自營商）＋ 外資自營商；自營商 ＝ 自行買賣 ＋ 避險；三大法人合計 ＝ 外資（不含外資自營商）＋ 投信 ＋ 自營商。
+- **窗口與合計**：類別淨額取 0-based 欄位 5（外資及陸資，不含外資自營商）、14（投信）、23（自營商，自行買賣 ＋ 避險），合計取欄位 24；外資自營商不重複計入。窗口含截止日向前五個固定日期：2026-10-05 為 09-29、09-30、10-01、10-02、10-05；2026-10-06 為 09-30、10-01、10-02、10-05、10-06，10-06 的列不進 10-05 窗口。六份原件須全部取得並合格才有結果，不補 0、不縮窗；每個加減步檢 signed int64 界限。結果單位為股，以 canonical 整數字串表示。
+
+### 47.4 qa1：首個 URL 失敗
+
+2026-10-11T14:36:49.996Z～14:36:51.542Z，candidate `bc2ed20f…`，exit 1。第 1 個 URL（2026-09-29）回 HTTP 200，隨後被當時規則 `duplicate_response_header`（任何同名標頭出現第二次即拒絕）拒絕，body 一個 byte 都未讀。2026-09-29 attempted 即 SPENT，其餘 5 個 URL 未嘗試；閘門 connect_ok 1、resolve_ok 1、blocked 0。沒有取得任何可用 body，真實資料證據為零；NO-RETRY，qa1 額度與 seal 已用盡。
+
+當時診斷只有失敗碼、不含標頭名稱。重複的標頭是 `cache-control` 與 `vary`，這是依 [§47.6](#476-qa2成功取得與驗證結果) 的標頭名稱與次數所作的推論，qa1 當時沒有記錄，無法直接驗證。QA 收據：[留言 6110144414](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110144414)。
+
+### 47.5 修正與重驗（candidate `a4d89664…`）
+
+只拒絕四個身分標頭的重複，失敗碼帶小寫名稱；其他標頭重複接受，診斷只記名稱與次數。相對 `bc2ed20f…`，產品檔 4 個 hunk：`QA_NAMESPACE`／`SOURCE_USE_RECEIPT(_SHA256)` 常數、`IDENTITY_HEADERS`、seal 固定欄位改用常數、`_fetch` 標頭迴圈；其餘約 1,000 行與 `bc2ed20f…` 逐行相同。
+
+[留言 6110457883](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110457883) 在合成資料、network 0 下重驗：128 個重複標頭案例（四個身分標頭逐一重複皆拒絕且只嘗試到該 URL、該 URL body 零次讀取；非身分標頭重複 × 三種 framing，結果與基線相同）；qa1 的 namespace 與 source-use 收據任一值都被 `seal_scope_conflict` 拒絕；整批 509 案例 0 失敗。
+
+### 47.6 qa2：成功取得與驗證結果
+
+[留言 6110524656](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110524656)。2026-10-11T15:17:24.251Z～15:17:39.328Z（15.1 s，其中 capture 與 oracle 驗證 14.48 s），exit 0。第一個請求 15:17:24.788455Z，最後一份 capture 15:17:28.308415Z。閘門 connect_ok 6、resolve_ok 6、blocked 0，只連 `www.tpex.org.tw:443`；六個 attempts 皆 spent 且 completed；aggregate raw 878,045 B（單日最大 147,573 B），retained estimate 1,786,051。
+
+| 日期 | 資料列數 | body bytes | body SHA-256 | receipt SHA-256 |
+| --- | ---: | ---: | --- | --- |
+| 2026-09-29 | 916 | 147,573 | `d23d020b03c9475dfc554a825d35312cceb6f6f833007804be7a209f6847f0d6` | `e9c9d9464e8b127d76a7df0dbd13fcfd2d182b82a33a86984913db734a2cd380` |
+| 2026-09-30 | 913 | 144,999 | `b96b163896a776dff217826a24227bab03cccbfe1a5f35d9e51ee66a4cdeea61` | `969ad780135907dc9139f05d5e558495950132b61363d66247e1d89d2b35cc91` |
+| 2026-10-01 | 914 | 146,947 | `15bf44c323e7b89adf4ea9a2eec2b611d60f64848fdbb179cba9c9c64f28abac` | `52cc0686c05114b1a8113262bcd6877fb247bd2f45c3d2acdae83771fe0202b9` |
+| 2026-10-02 | 910 | 146,377 | `b9d561b30245b394e68d3cba683f0374cecee2c79fab86f00593d5998938fc66` | `bbfb5f1d1c624b392dacce538f290023b5714ae845fdba37ea8aabd46f3c2d5c` |
+| 2026-10-05 | 916 | 147,136 | `62c9e80dfe3c6fd1c687baea35eccff95d102fbad0460513a22eb21d2640b1b0` | `9f2b8560f77f981530954844adf16ceec61b5b667ef80ec60e84b3704d3d3350` |
+| 2026-10-06 | 904 | 145,013 | `52ab8b1738dda30cda84b7b3e71d3006479e7cd5938b48762f84b928383a150e` | `2e37ea642d03259b55118cb7c6a311420c41b58b7fbf9623c3ad374000d1eb50` |
+
+六日皆 HTTP/1.1 200、chunked、無 `content-encoding`；receipt 為 `native_https`、namespace 為 qa2、`complete_eof` 為 true。六日回應標頭的名稱與次數完全相同，每次 19 個標頭：`cache-control` ×2、`vary` ×3；`connection`、`content-disposition`、`content-security-policy`、`content-type`、`date`、`permissions-policy`、`referrer-policy`、`server`、`set-cookie`、`strict-transport-security`、`transfer-encoding`、`x-content-type-options`、`x-frame-options`、`x-xss-protection` 各 ×1。身分標頭中 `content-type`、`transfer-encoding` 各出現 1 次，`content-length`、`content-encoding` 未出現；重複的只有 `cache-control` 與 `vary`，依新規則接受。回應含 1 個 `set-cookie`，未送出、未使用，值未輸出也未保存。
+
+驗證（獨立 stdlib oracle 以同一份原件在同一段 RAM 重算，不用產品解析函式產生期望值）：
+
+- 七股每日各恰一列，得 42 列、1,050 原字串、924 個金融整數，欄位與恆等式全部合格，沒有壞欄、壞日、缺列或重複。
+- 7 個 getter 的六日逐列逐欄（原字串、整數、列序、日期、header、receipt 與 body SHA）全部等於 oracle，`mismatches` 為空。
+- 14 個 consumer 的類別淨額、合計、窗口日期與 `source_rows` 全部等於 oracle（`oracle_match` 14 個皆 true）。
+- 日類別淨額有 59 個負值與 1 個真零，保留原值；42 個窗口類別和中有 14 個負值，沒有溢位。
+- 結束後 state 為 `released`，originals、selected、roots、results 全清，`cleanup_failures` 為空；22 個結果 handle（1 profile、7 getter、14 consumer）全部撤銷；落盤 0 B。pending、failed、expired、released 四種負向由獨立的合成 RAM 邊界另驗（[留言 6110457883](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110457883)）。
+
+兩個截止日的三類淨股數與合計（本地衍生結果，單位：股，由 [留言 6110524656](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110524656) 轉錄，每列三類之和等於合計）：
+
+| 2026-10-05 | 外資及陸資（不含外資自營商） | 投信 | 自營商（自行買賣＋避險） | 合計 |
+| --- | ---: | ---: | ---: | ---: |
+| 3105 | 28,396,840 | 2,812,800 | 2,350,894 | 33,560,534 |
+| 3293 | 6,386,218 | 414,000 | -12,792 | 6,787,426 |
+| 5274 | -28,586 | -40,427 | 10,254 | -58,759 |
+| 5347 | 323,290 | 3,600,607 | 339,261 | 4,263,158 |
+| 6488 | 354,337 | 1,179,529 | -62,262 | 1,471,604 |
+| 6510 | 186,887 | -594,227 | 32,887 | -374,453 |
+| 8069 | -4,247,384 | -13,040 | 64,380 | -4,196,044 |
+
+| 2026-10-06 | 外資及陸資（不含外資自營商） | 投信 | 自營商（自行買賣＋避險） | 合計 |
+| --- | ---: | ---: | ---: | ---: |
+| 3105 | 27,460,450 | 2,352,400 | 2,227,304 | 32,040,154 |
+| 3293 | 5,507,085 | 420,000 | -11,177 | 5,915,908 |
+| 5274 | -13,315 | -66,756 | 8,894 | -71,177 |
+| 5347 | 8,820,683 | 3,720,607 | 407,416 | 12,948,706 |
+| 6488 | 594,644 | 1,330,929 | -11,515 | 1,914,058 |
+| 6510 | 87,416 | -660,897 | 43,724 | -529,757 |
+| 8069 | -4,053,731 | -9,040 | 285,782 | -3,776,989 |
+
+### 47.7 完整署名
+
+609 UTF-8 bytes，與外部 policy 的 `rights.attribution` 及 QA 收據末段逐字相同：
+
+> 金融監督管理委員會證券期貨局提供、財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃股票三大法人買賣明細資訊（dataset11856；dataset-11856-dated-csv/issue36-two-cutoffs-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；2026-10-05與2026-10-06各五日三法人淨股數及合計為本地衍生結果。
+
+### 47.8 未驗與限制
+
+- qa2 額度已用盡：六個 URL 皆 SPENT、seal 已花用、原件已自 RAM 撤銷。任何再取需新的明示授權與新 seal，NO-RETRY 照舊；不 restart、replay、clone 或 hydrate 已釋放的原件。
+- 窗口和為零未出現，該情形只有合成證據；401、403、429 路徑未被真實觸發；真實來源上的首敗即停只由 qa1 的失敗驗到；真實資料的負向（壞欄、缺列）只有合成證據。
+- 閘門是進程內協作式防護，不是沙箱，僅 Windows；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
+- Policy 的 `admission_authority.source_use_receipt` 仍指向 [留言 6088463678](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678)（qa1 的授權），模組不交叉比對；qa2 由使用者收據、模組常數與 seal 三處綁定。
+- 官方查詢 SLA 未知；只對這六個日期、七股、這個來源與本地 RAM 用途有效。Policy 明列不支援：PIT、publication、first availability、revision lineage、adjustment、20 日成交值分母、`shares ÷ TWD` 的無因次策略門檻、完整歷史成員、hot group、strategy、Signal、Plan、API、UI、DB、cross-process，以及其他日期、路由與 provider；`denominator`、`amount`、`strategy`、`historical_pit` 在 consumer 皆為 `unsupported`。
+- 母單 #21 的整體 AC（分母、金額語意、PIT、策略等）不因本節而解除。

@@ -1,8 +1,11 @@
 """Standalone RAM self-tests; no pytest/conftest/app imports or disk cases.
 
 Run from repository root with Python -B -X utf8. An audit hook is installed
-before source loading. Actual filesystem persistence, failure injection,
-cross-process reads, path alias behavior and cleanup remain independent QA.
+before source loading. Actual filesystem persistence, cross-process reads,
+path alias behavior and real cleanup remain independent QA. The only failure
+injection here is SecondaryShapeTests: store.os and the path helpers are
+replaced by in-memory fakes inside ram_fault_injection(), the audit hook stays
+active, and the injected calls are counted apart from the forbidden ones.
 The sample records are controlled nonfinancial declarations, not valid Plans.
 """
 
@@ -10,7 +13,9 @@ import sys
 import os
 
 sys.dont_write_bytecode = True
-GUARD = {"disk_mutation_attempts": 0, "network_attempts": 0, "subprocess_attempts": 0, "open_reads": 0, "path_io_calls": 0, "storage_entry_calls": 0}
+GUARD = {"disk_mutation_attempts": 0, "network_attempts": 0, "subprocess_attempts": 0, "open_reads": 0, "path_io_calls": 0, "storage_entry_calls": 0, "injected_path_io_calls": 0, "injected_storage_entry_calls": 0}
+FORBIDDEN_GUARD_KEYS = ("disk_mutation_attempts", "network_attempts", "subprocess_attempts", "path_io_calls", "storage_entry_calls")
+INJECTION = [0]  # depth of active ram_fault_injection() contexts
 _MUTATIONS = frozenset({"os.mkdir", "os.rmdir", "os.remove", "os.rename", "os.link", "os.symlink", "os.chmod", "os.chown", "os.truncate", "os.utime", "shutil.copyfile", "shutil.copymode", "shutil.copystat"})
 
 
@@ -37,7 +42,7 @@ def audit(event, args):
 sys.addaudithook(audit)
 
 import ast
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import ExitStack, contextmanager, redirect_stdout, redirect_stderr
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, localcontext
 import hashlib
@@ -45,7 +50,10 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import stat
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "backend" / "app" / "conditional_plan_store.py"
@@ -76,10 +84,12 @@ assert store.validate_record.__code__.co_filename == str(SOURCE)
 def profile(frame, event, arg):
     if event == "call" and frame.f_code.co_filename == str(SOURCE):
         if frame.f_code.co_name in ("initialize_plan_store", "save_plan_record", "read_plan_record"):
-            GUARD["storage_entry_calls"] += 1
-            raise RuntimeError("RAM self-test: storage entry invocation forbidden")
+            if not INJECTION[0]:
+                GUARD["storage_entry_calls"] += 1
+                raise RuntimeError("RAM self-test: storage entry invocation forbidden")
+            GUARD["injected_storage_entry_calls"] += 1
         if frame.f_code.co_name in ("_path_guard", "_regular", "_read_file", "_create_new", "_verify_owner"):
-            GUARD["path_io_calls"] += 1
+            GUARD["injected_path_io_calls" if INJECTION[0] else "path_io_calls"] += 1
 
 
 sys.setprofile(profile)
@@ -460,11 +470,213 @@ class CliTests(unittest.TestCase):
         self.assertFalse(any(name == "app" or name.startswith("app.") for name in sys.modules))
 
 
+IO_PRIMITIVES = frozenset({"open", "close", "fstat", "read", "write", "fsync", "rename", "link", "mkdir", "rmdir", "remove", "unlink", "stat", "lstat"})
+
+
+class FakeOs:
+    """Stand-in for store.os: constants and pure helpers pass through to the
+    real os, but every I/O primitive must be faked explicitly or the test fails."""
+
+    def __init__(self, **fakes):
+        self._fakes = fakes
+
+    def __getattr__(self, name):
+        if name in self._fakes:
+            return self._fakes[name]
+        if name in IO_PRIMITIVES:
+            raise RuntimeError("RAM fault injection: unfaked os." + name)
+        return getattr(os, name)
+
+
+class FakePath:
+    """In-memory path. lstat() replays the scripted results; mkdir/rmdir/unlink
+    only raise what `fail` scripts. Children made with `/` share both scripts."""
+
+    def __init__(self, lstats=(), fail=None):
+        self.lstats = list(lstats)
+        self.fail = {} if fail is None else fail
+
+    def __truediv__(self, part):
+        child = FakePath()
+        child.lstats = self.lstats
+        child.fail = self.fail
+        return child
+
+    def _act(self, name):
+        if name in self.fail:
+            raise self.fail[name]
+
+    def lstat(self):
+        self._act("lstat")
+        return self.lstats.pop(0)
+
+    def mkdir(self, mode=0o777):
+        self._act("mkdir")
+
+    def rmdir(self):
+        self._act("rmdir")
+
+    def unlink(self):
+        self._act("unlink")
+
+
+def fake_stat(ino, kind=stat.S_IFREG, size=0):
+    return SimpleNamespace(st_dev=1, st_ino=ino, st_mode=kind | 0o600, st_nlink=1, st_size=size, st_mtime_ns=0)
+
+
+def raiser(exc):
+    def raise_it(*args, **kwargs):
+        raise exc
+    return raise_it
+
+
+@contextmanager
+def ram_fault_injection(os_fakes=None, **functions):
+    """Only in-memory fakes: store.os becomes a FakeOs and the named store
+    functions are replaced. Storage entries may run inside this context, and
+    their calls are counted as injected. The audit hook stays active, so any
+    real mutation that escapes the fakes still fails the run."""
+    INJECTION[0] += 1
+    try:
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(store, "os", FakeOs(**(os_fakes or {}))))
+            for name, replacement in functions.items():
+                stack.enter_context(mock.patch.object(store, name, replacement))
+            yield
+    finally:
+        INJECTION[0] -= 1
+
+
+class SecondaryShapeTests(unittest.TestCase):
+    """Every secondary item is exactly {code, stage} on every producing path.
+
+    Items derived from another error (close/cleanup failures folded in) and
+    the hand-declared cleanup_identity_unavailable item must have the same
+    shape. The first error, the stage values and the item order are pinned too.
+    """
+
+    def setUp(self):
+        before = {key: GUARD[key] for key in FORBIDDEN_GUARD_KEYS}
+        self.addCleanup(lambda: self.assertEqual({key: GUARD[key] for key in FORBIDDEN_GUARD_KEYS}, before))
+
+    def assertShape(self, error, expected_secondary):
+        receipt = error.receipt()
+        self.assertEqual(set(receipt), {"code", "stage", "secondary"})
+        self.assertIs(type(receipt["secondary"]), list)
+        for item in list(error.secondary) + receipt["secondary"]:
+            self.assertIs(type(item), dict)
+            self.assertEqual(set(item), {"code", "stage"})
+            for value in item.values():
+                self.assertIs(type(value), str)
+                self.assertTrue(value.isascii() and 0 < len(value) <= 64)
+        self.assertEqual(receipt["secondary"], expected_secondary)
+        self.assertEqual(list(error.secondary), expected_secondary)
+        self.assertEqual(json.loads(json.dumps(receipt)), receipt)
+
+    def run_failing(self, operation):
+        with self.assertRaises(store.PlanStoreError) as caught:
+            operation()
+        return caught.exception
+
+    def test_fact_is_code_and_stage_only_and_bounded(self):
+        inner = store.PlanStoreError("inner_code", "inner_stage", ({"code": "c", "stage": "s"},))
+        self.assertEqual(inner.fact(), {"code": "inner_code", "stage": "inner_stage"})
+        self.assertEqual(inner.receipt(), {"code": "inner_code", "stage": "inner_stage", "secondary": [{"code": "c", "stage": "s"}]})
+        long = store.PlanStoreError("c" * 100, "s" * 100)
+        self.assertEqual(long.fact(), {"code": "c" * 64, "stage": "s" * 64})
+        outer = store.PlanStoreError("outer_code", "outer_stage", (inner.fact(), long.fact()))
+        self.assertShape(outer, [inner.fact(), long.fact()])
+        self.assertEqual(store.PlanStoreError("x", "y").receipt(), {"code": "x", "stage": "y", "secondary": []})
+        self.assertEqual(store._fact("cleanup_identity_unavailable", "file_cleanup"), {"code": "cleanup_identity_unavailable", "stage": "file_cleanup"})
+
+    def test_receipt_path_read_file_close_after_first_error(self):
+        fd = 7
+        fakes = dict(open=lambda *a, **k: fd, fstat=raiser(OSError("injected fstat")), close=raiser(OSError("injected close")))
+        with ram_fault_injection(fakes, _path_guard=lambda *a, **k: None, _regular=lambda path: fake_stat(1)):
+            error = self.run_failing(lambda: store._read_file(Path(ABS_ROOT) / "f", 16, "revision_read"))
+        self.assertEqual((error.code, error.stage), ("storage_io_error", "revision_read"))
+        self.assertShape(error, [{"code": "storage_io_error", "stage": "revision_read_close"}])
+
+    def test_close_failure_alone_is_the_first_error_not_secondary(self):
+        chunks = iter([b"abc", b""])
+        fakes = dict(open=lambda *a, **k: 7, fstat=lambda fd: fake_stat(1, size=3), read=lambda fd, n: next(chunks), close=raiser(OSError("injected close")))
+        with ram_fault_injection(fakes, _path_guard=lambda *a, **k: None, _regular=lambda path: fake_stat(1, size=3)):
+            error = self.run_failing(lambda: store._read_file(Path(ABS_ROOT) / "f", 16, "revision_read"))
+        self.assertEqual((error.code, error.stage), ("storage_io_error", "revision_read_close"))
+        self.assertShape(error, [])
+
+    def test_receipt_path_create_new_close_after_write_error(self):
+        identity = fake_stat(3)
+        fakes = dict(open=lambda *a, **k: 7, fstat=lambda fd: identity, write=raiser(OSError("injected write")), close=raiser(OSError("injected close")))
+        with ram_fault_injection(fakes, _path_guard=lambda *a, **k: None, _regular=lambda path: identity):
+            error = self.run_failing(lambda: store._create_new(Path(ABS_ROOT) / "f", b"data", "stage_write"))
+        self.assertIsInstance(error, store._OwnedWriteError)
+        self.assertIs(error.identity, identity)
+        self.assertEqual((error.code, error.stage), ("storage_io_error", "stage_write"))
+        self.assertShape(error, [{"code": "storage_io_error", "stage": "stage_write_close"}])
+
+    def test_hand_declared_item_has_the_same_shape(self):
+        # fstat fails after the exclusive create, so no physical identity exists.
+        fakes = dict(open=lambda *a, **k: 7, fstat=raiser(OSError("injected fstat")), close=lambda fd: None)
+        with ram_fault_injection(fakes, _path_guard=lambda *a, **k: None):
+            error = self.run_failing(lambda: store._create_new(Path(ABS_ROOT) / "f", b"data", "ownership_write"))
+        self.assertIsInstance(error, store._OwnedWriteError)
+        self.assertIsNone(error.identity)
+        self.assertEqual((error.code, error.stage), ("storage_io_error", "ownership_write"))
+        self.assertShape(error, [{"code": "cleanup_identity_unavailable", "stage": "file_cleanup"}])
+
+    def test_hand_declared_and_receipt_derived_items_side_by_side(self):
+        fakes = dict(open=lambda *a, **k: 7, fstat=raiser(OSError("injected fstat")), close=raiser(OSError("injected close")))
+        with ram_fault_injection(fakes, _path_guard=lambda *a, **k: None):
+            error = self.run_failing(lambda: store._create_new(Path(ABS_ROOT) / "f", b"data", "ownership_write"))
+        derived, declared = error.secondary
+        self.assertEqual(set(derived), set(declared))
+        self.assertShape(error, [{"code": "storage_io_error", "stage": "ownership_write_close"}, {"code": "cleanup_identity_unavailable", "stage": "file_cleanup"}])
+
+    def test_receipt_path_initialize_cleanup_failures(self):
+        root = FakePath([fake_stat(10, stat.S_IFDIR), fake_stat(10, stat.S_IFDIR)], fail={"rmdir": OSError("injected rmdir")})
+        patches = dict(
+            _path_guard=lambda *a, **k: root,
+            _create_new=lambda path, raw, stage: fake_stat(11),
+            _read_file=lambda path, cap, stage: b"not the marker",
+            _regular=lambda path: fake_stat(99),
+        )
+        with ram_fault_injection(**patches):
+            error = self.run_failing(lambda: store.initialize_plan_store(root=ABS_ROOT, expected_ownership=OWNER, expected_ownership_sha256=digest(OWNER)))
+        self.assertEqual((error.code, error.stage), ("ownership_verify_mismatch", "ownership_verify"))
+        self.assertShape(error, [{"code": "cleanup_ownership_changed", "stage": "ownership_cleanup"}, {"code": "storage_io_error", "stage": "root_cleanup"}])
+
+    def test_receipt_path_save_stage_cleanup_failure(self):
+        record = controlled_record()
+        raw = wire(record)
+        stage = fake_stat(20)
+        root = FakePath([fake_stat(21)])
+
+        def read_file(path, cap, name):
+            if name == "revision_read":
+                raise store.PlanStoreError("missing_file", name)
+            return raw
+
+        publish = raiser(OSError("injected publish"))
+        fakes = dict(rename=publish, link=publish, supports_follow_symlinks={publish})
+        patches = dict(
+            _path_guard=lambda *a, **k: None,
+            _verify_owner=lambda root_arg, expected: root,
+            _read_file=read_file,
+            _create_new=lambda path, data, name: stage,
+            _regular=lambda path: stage,
+        )
+        with ram_fault_injection(fakes, **patches):
+            error = self.run_failing(lambda: store.save_plan_record(record_bytes=raw, **expectations(record)))
+        self.assertEqual((error.code, error.stage), ("storage_io_error", "save"))
+        self.assertShape(error, [{"code": "cleanup_stage_changed", "stage": "stage_cleanup"}])
+
+
 if __name__ == "__main__":
     suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     sys.setprofile(None)
-    print(json.dumps({"source": str(SOURCE), "source_sha256": SOURCE_SHA256, "cli_sha256": CLI_SHA256, "guard": GUARD, "artifact_bytes": 0, "disk_ac": "not_tested", "cases": result.testsRun}, sort_keys=True))
-    if any(GUARD[key] for key in ("disk_mutation_attempts", "network_attempts", "subprocess_attempts", "path_io_calls", "storage_entry_calls")):
+    print(json.dumps({"source": str(SOURCE), "source_sha256": SOURCE_SHA256, "cli_sha256": CLI_SHA256, "guard": GUARD, "artifact_bytes": 0, "disk_ac": "not_tested", "fault_injection": "memory_fakes_only", "cases": result.testsRun}, sort_keys=True))
+    if any(GUARD[key] for key in FORBIDDEN_GUARD_KEYS):
         raise SystemExit(3)
     raise SystemExit(0 if result.wasSuccessful() else 1)
