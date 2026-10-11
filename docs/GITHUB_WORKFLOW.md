@@ -99,10 +99,13 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 | provider | 啟動 | 恢復 |
 | --- | --- | --- |
 | Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色：Orca 可見 terminal、目標 worktree 啟動，模型與 reasoning 依角色表 | 原 session `--remote … resume <ID>` |
-| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID>`，讀回模型／effort，不同則記錄並由全局處置 |
+| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID> --effort <level>`，讀回模型／effort，不同則記錄並由全局處置 |
 
-- 只用完整模型 ID（如 `claude-opus-5-5`）；簡寫 `opus-5.5` 會被拒絕。
-- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不會讓啟動失敗，故收據須在 session 內讀回 effort，讀不到記未驗，不以命令列參數當證據。
+- 只用完整模型 ID（如 `claude-opus-5-5`）。無效 ID（如 `opus-5.5`）啟動不擋，首次請求才被拒，故收據須含已完成的 turn。
+- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不讓啟動失敗。
+- `--resume` 保留模型，effort 回預設，故恢復須帶原 `--effort`。
+- 讀回：session 內 `CLAUDE_CODE_SESSION_ID`／`CLAUDE_EFFORT`；模型只以 transcript `~/.claude/projects/<cwd-key>/<ID>.jsonl` 的 assistant `model` 欄位核對，effort 亦可核 `effort` 欄位。模型自述、banner、命令列不作證據；讀不到記未驗。
+- 從 Git Bash 用 `orca terminal send` 送 `/` 開頭指令須設 `MSYS_NO_PATHCONV=1`，否則被轉成路徑送出。
 
 ## Projects 與關單自動化
 
@@ -227,6 +230,8 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 
 送達未知保留名額；確定未送達且無可執行 session，或撤權且 session 停寫才釋放。逾時／ACK 遺失不釋放或重派。
 
+角色（工程、QA、文件、索引／Git）在原單留交回收據後，以 Orca 對該單任務統籌的可見 terminal 送一則短通知（Issue、留言連結、下一動作）；這是事件通知，不是定時監看，統籌讀回前不算接手。
+
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
 建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
@@ -286,17 +291,17 @@ AC 是否變更／核准者與修訂／需重驗項：
 
 ```text
 事件：排隊／取得整合權／合併／檢查／釋放整合權
-Issue／PR／整合執行者／使用者授權收據／開始時間：
+Issue／PR／整合執行者／授權依據（AGENTS 預設授權或使用者收據）／開始時間：
 正式 remote／master base SHA／candidate SHA：
 最新 master 合入任務 branch／衝突處理者／差異與 QA：
 文件 freeze／索引 project、絕對 root／scope、branch、內容版本依據、generation／coverage 限制／刷新者：
-核准者／核准 SHA／合併前 base 再核：
+核准者（持入口任務統籌）／核准 SHA（QA 通過版本）／合併前 base 再核：
 合併後 master SHA／必要檢查命令、原 exit、證據：
 合併後被測服務版本收據／正式 root 的受影響索引核對：
 新增能力／實際解除依賴／可靠性改善／剩餘缺口：
 全局停滯計數前後／下一步理由：
 Issue 關閉與 Project 狀態同步：
-清理另行授權／執行或未執行／殘留：
+結案清理（預設授權）或例外的授權依據／執行或未執行／殘留：
 整合權釋放／失敗時暫停及接管安排：
 ```
 
@@ -311,4 +316,4 @@ Issue 關閉與 Project 狀態同步：
 5. **單試跑**：選依賴可用、有真能力增量的近期單，按[完整契約](#流程檢查與滾動調整)驗階段，再核拆單／交接欄位。
 6. **並行**：按[空位補派](../AGENTS.md#建立任務與派工)、[資源准入](#流程檢查與滾動調整)留治理證據，實測交接／串行整合；與單試跑分報，不授部署／清理。
 
-既有明示授權沿指定 repo／branch／任務範圍使用；同意流程不授登入／push／PR／merge／部署／刪除。需核准時先備確切對象、版本、檔案、動作。
+既有明示授權沿指定 repo／branch／任務範圍使用；同意流程不授登入／部署／刪除；push／PR／merge 依 [AGENTS 預設授權](../AGENTS.md#合併與-git-結案)，結案清理依 [AGENTS 結案清理](../AGENTS.md#驗證資料與暫存)。需核准時先備確切對象、版本、檔案、動作。
