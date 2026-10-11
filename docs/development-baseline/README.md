@@ -28,7 +28,7 @@
 
 ### 共用入口 `tools.test_db`
 
-[tools/test_db](../../tools/test_db/__init__.py) 實作樣本庫與隔離測試庫（工具程序只用標準函式庫）。契約測試見 [guards](../../backend/tests/test_test_db_guards.py)、[entry](../../backend/tests/test_test_db_entry.py)，人工 fixture 範例見 [sample_basic.json](../../backend/tests/fixtures/test_db/sample_basic.json)（虛構資料，非市場資料）。從專案根目錄執行：
+[tools/test_db](../../tools/test_db/__init__.py) 實作樣本庫與隔離測試庫（工具程序只用標準函式庫）。契約測試見 [guards](../../backend/tests/test_test_db_guards.py)、[entry](../../backend/tests/test_test_db_entry.py)、[real_sample](../../backend/tests/test_test_db_real_sample.py)，人工 fixture 範例見 [sample_basic.json](../../backend/tests/fixtures/test_db/sample_basic.json)（虛構資料，非市場資料）。從專案根目錄執行：
 
 ```powershell
 python -B -X utf8 -m tools.test_db --root <專案外絕對路徑> [--max-bytes N] [--deps <依賴路徑>] <命令> [參數]
@@ -51,18 +51,31 @@ python -B -X utf8 -m tools.test_db --root <專案外絕對路徑> [--max-bytes N
 
 - 參數：`--root`（或 `STOCK_TESTDB_ROOT`）必填，須為專案外絕對路徑，不得在產品 checkout、`.local/data` 或繼承來的 `STOCK_*` 位置內，建目錄前即拒絕。`--max-bytes` 預設 50,000,000（十進位 50 MB）。`--python` 指定產品子程序的直譯器（預設本程序的），`--deps`（可重複）或 `STOCK_TEST_DEPS`（以路徑分隔字元串接）指定子程序可 import 的既有依賴路徑；`--timeout` 預設 180 秒，只限產品子程序。
 - 輸出：每個命令印一個 JSON，exit 0 或 1。成功 `{"ok":true,"result":…}`；失敗 `{"ok":false,"error":{code,reason,path,size_bytes,details}}`，`path` 為絕對路徑，涉及檔案或目錄樹時帶 `size_bytes`。argparse 參數錯誤 exit 2 且不建檔。`exec` 的 exit 為被執行命令的 exit，成功時工具 JSON（含執行前 `STOCK_*` 讀回）寫 stderr，stdout 留給該命令。
-- 錯誤碼：守門 `forbidden_target`／`stock_env_invalid`／`reparse_point`／`invalid_argument`；樣本 `version_missing`／`version_mismatch`／`version_exists`／`hash_mismatch`／`schema_mismatch`／`sample_corrupt`／`metadata_invalid`／`fixture_invalid`；run `run_exists`／`run_not_found`／`not_a_run_dir`／`not_found`；資源 `quota_exceeded`／`cleanup_failed`／`in_use`／`io_error`；產品子程序 `product_failed`／`product_timeout`。
+- 錯誤碼：守門 `forbidden_target`／`stock_env_invalid`／`reparse_point`／`invalid_argument`；樣本 `version_missing`／`version_mismatch`／`version_exists`／`hash_mismatch`／`schema_mismatch`／`sample_corrupt`／`metadata_invalid`／`fixture_invalid`；抽取 `source_mismatch`；run `run_exists`／`run_not_found`／`not_a_run_dir`／`not_found`；資源 `quota_exceeded`／`cleanup_failed`／`in_use`／`io_error`；產品子程序 `product_failed`／`product_timeout`。
 - 版面：`<root>/samples/<version>/{sample.db,metadata.json}`（OS 唯讀屬性；目錄恰此兩檔，否則 `sample_corrupt`）、`<root>/runs/<run-id>/{.testdb-run.json,data/stock.db,data/raw/,tmp/}`、`<root>/tmp/`（schema 檢查暫存）。版本名與 run id 須符合 `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`；已發布版本不可覆蓋（`version_exists`）。需 run id 的命令只接受含 `.testdb-run.json` 且與 run id 相符的目錄，否則 `not_a_run_dir`，不碰無標記目錄。
 - metadata：`metadata.json` 欄位為 `metadata_schema`、`sample_version`、`kind`、`source_rights`、`data_dates`、`acquired_at`、`publication_time`、`schema_version`、`sampling_rule`、`sha256`、`size_bytes`、`created_at`、`row_counts`、`provenance`，缺欄即 `metadata_invalid`。`publication_time` 未陳述時為 `unknown`，不推算。
 - fixture：UTF-8 JSON `{"tables":[{"table":名稱,"rows":[{欄:值}]}],"data_dates":…}`，`data_dates` 選填（缺則 `unknown`）。載入為單一交易並啟用外鍵：未知表／欄、`sqlite_*`、違反約束或外鍵即 `fixture_invalid` 並整份回滾；`provenance` 記 fixture 檔名與 sha256。
-- `real_sample`：須以 `--meta` 自行陳述 `source_rights`、`data_dates`、`acquired_at`、`sampling_rule`；缺漏、空字串、`unknown`、`not-applicable` 回 `metadata_invalid`。工具只擋缺漏，不判斷陳述是否屬實或符合上述來源權利規則。
+- `real_sample`：須以 `--meta` 自行陳述 `source_rights`、`data_dates`、`acquired_at`、`sampling_rule`，發布前檢查（`build-sample` 在建任何 run 之前，`freeze` 在移入版本之前）；缺漏或未陳述任何內容的值回 `metadata_invalid`，不留版本。字串先 NFKC 正規化、不分大小寫並忽略空白與標點，整個值等於 `unknown`、`not-applicable`／`n/a`／`na`／`not available`、`tbd`／`tba`／`todo`、`none`／`null`／`nil`／`undefined`／`nan`、`無`／`未知`／`不適用`／`待定`／`待補`／`未定`，或只含空白與標點，即視為未陳述；list／dict 為空，或任一層巢狀值未陳述（如 `data_dates` 的 `first`／`last` 任一端的值未陳述）亦同；缺少的 key 不擋，只有 `first`、沒有 `last` 會接受。刻意不擋：只認上列占位詞，不在清單內的近義詞或同形異體字不擋；只比對整個值，以占位詞開頭但帶說明的字串（如 `not-applicable: …`、`None of the rows …`）會接受；數字與布林不判斷；`publication_time` 與 `provenance` 不檢查（未陳述時為 `unknown`）；只在發布時檢查，`verify`／`select` 不重驗 metadata 陳述。工具只擋未陳述，不判斷陳述是否屬實或符合上述來源權利規則。`manual_fixture` 的預設 metadata（如 `not-applicable: …`）不受此閘門影響。
 - 隔離：工具程序不 import 產品 `app`（`app.config` import 時即建目錄並綁定路徑）；產品程式（`init-db`、schema 檢查、`exec` 命令）只在子程序執行，環境重建為：丟棄所有繼承的 `STOCK_*`（含 live-source opt-in），只設該 run 的三個 `STOCK_*`，`TEMP`／`TMP`／`TMPDIR` 指向 run 的 `tmp/`。啟動前讀回並檢查三者皆設、為無 `..` 的絕對路徑、全在該 run 目錄內；拒絕（`forbidden_target`／`stock_env_invalid`，不啟動）產品 checkout（含 repo `data/`、`.local`）、`.local/data`、繼承來的 `STOCK_*` 位置與樣本庫內的目標。工具根為連結或 reparse point 即拒絕；根內含連結時 `usage` 與配額記帳 fail-closed（`reparse_point`，指出路徑）。
 - schema 檢查邊界：`verify`、`build-sample`、`freeze` 預設做產品檢查，`select`、`isolate`、`exec` 預設不做，需 `--check-product`；檔案集合、版本、hash／大小、Alembic 標記、metadata 一律檢查。產品檢查為產品啟動用的 `check_database_readiness`（必要表／欄、主鍵、唯一鍵、外鍵）加樣本 `schema_version` 等於 Alembic head，不比對完整 DDL（多出的欄位不失敗），也不稽核資料。樣本的 OS 唯讀屬性、hash 與 metadata 可被有權限者一併改寫，防竄改須以 `--expect-sha256`（`verify`／`select`／`isolate`）對核准 hash。
 - 配額邊界：`--max-bytes` 約束整個 `--root`（含非工具建立的檔案），只在工具管理的檢查點核算——`isolate`（有樣本時複製前先預估）、`reset`、`freeze`、`build-sample` 的複製、發布與建庫前後。超額回 `quota_exceeded`（`size_bytes` 為預計總量，`details` 含 current／incoming／limit），`isolate`、`freeze`、`build-sample` 不留該次新建的 run 或發布暫存。`load-fixture`、`init-db` 子程序與 `exec` 命令的寫入不受即時約束，事後核算才發現；因此是檢查點限額，不是即時硬上限。並行 `isolate` 的事後核算會看到彼此的複本，可能比序列多回 `quota_exceeded`，仍是單一 JSON。
 - 並行與占用：不同 run 互不影響；記帳對他人正在清理而消失的項目視為已不存在，拒絕存取在約 0.2 秒重試後仍在才回 `io_error`（指出該項目）。同 run id 並行 `isolate` 恰一個成功、其餘 `run_exists`；同版本並行 `build-sample` 的敗者可能回 `in_use` 而非 `version_exists`，勝者完好。同一 run 不要同時 `reset` 與 `cleanup`，否則可能留下無標記的 run 目錄（含重建的 DB），`cleanup --run-id` 回 `not_a_run_dir`、無法以 id 清除，且仍計入配額，須人工移除。
 - 清理失敗：其他程序持有 run 內檔案時，`cleanup`／`reset` 回 `cleanup_failed`（`path`／`size_bytes`／`reason` 指出首項，`details.failures` 列全部），可清項已清、標記保留，放手後以 run id 重試；`exec` 的 `cleanup_failed` 另帶 `details.command_exit_code`。唯讀屬性檔可清；連結與 reparse point 不進入、不刪除。run 內有無法列舉的目錄（如權限拒絕）時，`cleanup`／`reset`／`exec` 回 `io_error`（`path` 指向該目錄、`size_bytes` 為 null、無 `failures` 清單，`exec` 不帶 `command_exit_code`）而非 `cleanup_failed`，標記保留，排除後同樣可重試。
-- 子程序與網路：`product_timeout` 只終止直接子程序，不追殺其子孫；`exec` 的命令不設逾時，子孫仍占用 run 檔案時清理回 `cleanup_failed`。隔離只涉及檔案路徑與 `STOCK_*`：工具不取源、不封鎖也不稽核網路，`exec` 只移除繼承的 live-source opt-in，命令是否連網由命令自負。
+- 子程序與網路：`product_timeout` 只終止直接子程序，不追殺其子孫；`exec` 的命令不設逾時，子孫仍占用 run 檔案時清理回 `cleanup_failed`。隔離只涉及檔案路徑與 `STOCK_*`：工具不取源、預設不封鎖也不稽核網路，`exec` 只移除繼承的 live-source opt-in，命令是否連網由命令自負；要取得「本地讀用無網路」的證據時用下節的 `netguard`。
 - 平台：檔案占用、junction／reparse point、ACL 拒絕與 `exec` 僅在 Windows 驗證，其他平台未驗。
+
+### 真實樣本的抽取與無網路讀用
+
+私人 TPEx 單日 bundle（`body.csv`、`capture-receipt.json`、`storage-receipt.json`，見 [SOURCE_REGISTRY §30.2](../SOURCE_REGISTRY.md#302-三檔原子出版與嚴格重驗)）只能以摘要入樣本庫。抽取與讀用各一個模組（標準函式庫，不 import 產品）：
+
+```powershell
+python -B -X utf8 -m tools.test_db.extract --source <bundle 目錄> --out <專案外絕對路徑>
+python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的參數>
+```
+
+- **`extract`**：三檔只以唯讀開啟，不寫入、搬移，也不在來源目錄建任何檔。`--out` 須是專案外絕對路徑、不在產品 checkout／`.local/data`／繼承的 `STOCK_*` 位置內、與來源互不包含，且不覆寫既有檔。讀任何一列前先核 body SHA-256，以及兩份 receipt 與 [§29.1](../SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表) `.5`、[§30.1](../SOURCE_REGISTRY.md#301-fresh用途與獨立storage版本) 固定的 policy 版本與 digest、selected symbols、資料日、兩份 receipt 之間的 hash 與時間；任一不符回 `source_mismatch`，不輸出任何檔。通過後只輸出 `<name>-fixture.json`（`instruments`、`market_bars`，格式同 fixture）與 `<name>-metadata.json`（`--meta` 用）。兩檔含市場數值，只放 scratch 或樣本庫 `tmp/`，不入 repo、Git 或 GitHub；命令輸出只有 hash、筆數與欄位名。再以 `build-sample --kind real_sample --fixture <fixture> --meta <metadata>` 發布。
+- **內建 profile 只有 A1**（`tpex_11370_daily_close_csv`、資料日 2026-10-06、3105／3293／5274／5347／6488／6510／8069 各一列，單日）。欄位對應：`代號`→`instruments.symbol`、`名稱`→`instruments.name`、`開盤／最高／最低／收盤`→`market_bars.open/high/low/close`、`成交股數`→`volume`、`成交金額`→`turnover`（`turnover_status=available`）。`adj_close` 取 `close`（沿用產品 worker 的保存方式，不是還原價）；`created_at`／`collected_at` 取 receipt `captured_at`，不是建檔時間；`raw_payload_id` 為 NULL，原始回應以 body／receipt hash 記在 `provenance` 追溯，不複製；其餘來源欄位不存。`publication_time` 取 receipt，未陳述為 `unknown`。不涵蓋多日歷史、MA60 或公司行動案例。
+- **`netguard`**：以 audit hook 在連線、名稱解析與 datagram 送出之前拋 `NetworkBlocked`，每個被武裝的程序在 `--log` 寫一行 `armed`，每次攔截寫一行 `blocked`。產品子程序與 `exec` 的命令經 `guard_site/sitecustomize.py` 一併武裝；更早在 `PYTHONPATH` 的 `sitecustomize` 會使子程序不被武裝，須以 log 的 `armed` 核對。hook 無法卸除，須在獨立程序執行，不放進測試程序。它是證據而非隔離：`tools/test_db` 本身不 import 網路函式庫，也不取源。
 
 ## 後端驗證
 

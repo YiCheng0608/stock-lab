@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,12 @@ METADATA_SCHEMA = 1
 KINDS = ("manual_fixture", "real_sample")
 VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-UNSET = ("", "unknown", "not-applicable")
+# Whole-value placeholders, compared after ``_placeholder_key`` (NFKC, casefold, letters and digits only):
+# "N/A", "n.a.", "Not Applicable", "not_applicable", "-", "？" and "　" all reduce to an entry here or to "".
+PLACEHOLDERS = frozenset({
+    "", "unknown", "notapplicable", "na", "notavailable", "nan", "none", "null", "nil", "undefined", "tbd", "tba", "todo",
+    "無", "未知", "不適用", "待定", "待補", "未定",
+})
 # Fields every metadata file carries (contract: docs/development-baseline/README.md).
 META_KEYS = (
     "metadata_schema", "sample_version", "kind", "source_rights", "data_dates", "acquired_at",
@@ -41,6 +47,29 @@ def check_name(value: str, what: str) -> str:
             f"{what} {value!r} must match {VERSION_RE.pattern} (no path separators or '..')",
         )
     return value
+
+
+def _placeholder_key(text: str) -> str:
+    return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
+
+
+def is_unset(value: Any) -> bool:
+    """True when a stated ``real_sample`` value says nothing.
+
+    Strings are judged as a whole after ``_placeholder_key``; a value that merely starts with a placeholder
+    ("not-applicable: …") or any other text is accepted, because the tool does not judge meaning. Containers
+    are unset when empty or when any nested value is unset. Numbers and booleans are not judged.
+    """
+
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return _placeholder_key(value) in PLACEHOLDERS
+    if isinstance(value, dict):
+        return not value or any(is_unset(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return not value or any(is_unset(item) for item in value)
+    return False
 
 
 def sha256_file(path: Path) -> tuple[str, int]:
@@ -97,7 +126,7 @@ def build_metadata(
         raise DbEntryError("invalid_argument", f"kind {kind!r} must be one of {KINDS}")
     supplied = dict(supplied or {})
     if kind == "real_sample":
-        missing = [key for key in REAL_SAMPLE_REQUIRED if supplied.get(key) in (None, *UNSET)]
+        missing = [key for key in REAL_SAMPLE_REQUIRED if is_unset(supplied.get(key))]
         if missing:
             raise DbEntryError(
                 "metadata_invalid",
