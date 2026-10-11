@@ -286,11 +286,11 @@ AC 是否變更／核准者與修訂／需重驗項：
 
 ```text
 事件：排隊／取得整合權／合併／檢查／釋放整合權
-Issue／PR／整合執行者／使用者授權收據／開始時間：
+Issue／PR／整合執行者／授權依據（AGENTS 預設授權或使用者收據）／開始時間：
 正式 remote／master base SHA／candidate SHA：
 最新 master 合入任務 branch／衝突處理者／差異與 QA：
 文件 freeze／索引 project、絕對 root／scope、branch、內容版本依據、generation／coverage 限制／刷新者：
-核准者／核准 SHA／合併前 base 再核：
+核准者（持入口任務統籌）／核准 SHA（QA 通過版本）／合併前 base 再核：
 合併後 master SHA／必要檢查命令、原 exit、證據：
 合併後被測服務版本收據／正式 root 的受影響索引核對：
 新增能力／實際解除依賴／可靠性改善／剩餘缺口：
