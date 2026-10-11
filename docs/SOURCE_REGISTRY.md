@@ -16,12 +16,12 @@
 | [§4](#4-standalone-source-capture) | Standalone source capture 執行入口 | 現行 |
 | [§5](#5-兩個-capture-consumers) | 兩個 capture consumers：`STOCK_DAY_ALL` selected bars（5.1）、`holidaySchedule` 正面排除（5.2） | 現行 |
 | [§6](#6-tpextwse-有限資料品質契約) | TPEx／TWSE 有限資料品質契約 | 現行 |
-| [§7](#7-review-receipt-與未完成範圍) | 原 snapshot Registry pin 與 review 範圍 | 現行；7.1～7.3 為 review 證據，本次未重整 |
+| [§7](#7-review-receipt-與未完成範圍) | 原 snapshot Registry pin 與 review 範圍 | 現行；7.1～7.3 為 review 證據 |
 | [§8](#8-m1-p2atpex-日法人來源與-selected-摘要) | M1-P2a：TPEx 日法人來源與 selected 摘要 | 現行 |
 | [§9](#9-m1-p3atwt48u-selected-官方事件原件摘要) | M1-P3a：TWT48U selected 官方事件原件摘要 | 現行 |
-| [§10](#10-m1-後續依賴審查來源候選與等待邊界) | M1 後續依賴審查：來源候選與等待邊界 | 現行；本次未重整 |
+| [§10](#10-m1-後續依賴審查來源候選與等待邊界) | M1 後續依賴審查：來源候選與等待邊界 | 現行 |
 | [§11](#11-m2-p1本次官方事件-feed-摘要) | M2-P1：本次官方事件 feed 摘要 | 現行 |
-| [§12](#12-m1-p4atwse-單日法人有界審查與准入缺口) | M1-P4a：TWSE 單日法人有界審查與准入缺口 | 現行；本次未重整 |
+| [§12](#12-m1-p4atwse-單日法人有界審查與准入缺口) | M1-P4a：TWSE 單日法人有界審查與准入缺口 | 現行 |
 | [§13](#13-m1-w1tpex-多日法人與完整有界交易日) | W 系列共同基礎：政府連結 CSV 來源與用途（13.1）、完整有界日曆規則（13.2）、原件／整數／缺日契約（13.3） | 現行（保留 §13.1～13.3）；移出內容見原節：[L351–L398](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L351-L398) |
 | §14～§18 | M1-W3～W7 三至七截止法人來源與窗口 | 歸檔：[L400–L716](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L400-L716)；現行見 [§19](#19-m1-w8八截止法人來源與完整有界日曆) |
 | [§19](#19-m1-w8八截止法人來源與完整有界日曆) | M1-W8：八截止（2026-09-21～10-02）法人來源、27 日曆與 96 net 參考；worker `tpex-institutional-window/w8-v1` | 現行；§19.4 只保留 96 net 參考表，移出內容見原節：[L718–L793](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L718-L793) |
@@ -40,18 +40,18 @@
 | [§32](#32-m1-saved-price-focus-1006-1保存來源的七股關注准入) | M1-SAVED-PRICE-FOCUS-1006-1：保存來源的七股關注用途與精確篩選、七股金融真值 | 現行（保留 §32.1、§32.2、§32.3 讀取上限）；移出內容見原節：[L1188–L1232](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L1188-L1232) |
 | [§33](#33-m1-saved-price-chips-integration-1006-1保存行情與法人窗口共同入口) | M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1：保存行情與法人窗口共同入口、五份 policy、私人三檔 hash | 現行（保留 §33.1、§33.2、§33.3 的 gate 與 mask 規則）；移出內容見原節：[L1234–L1279](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L1234-L1279) |
 | [§34](#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口) | M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：保存行情與法人條件關注的新用途與八條件精確篩選契約 | 現行（保留 §34.1 契約）；移出內容見原節：[L1281–L1311](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L1281-L1311) |
-| [§35](#35-m2-focus-stock-scope-6八股與新來源日准入) | M2-FOCUS-STOCK-SCOPE-6：八股與新來源日准入 | 現行；本次未重整 |
-| [§36](#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入) | M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：全月日曆與八條件來源准入 | 現行；本次未重整 |
-| [§37](#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入) | M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股共同來源准入 | 現行；本次未重整 |
-| [§38](#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計) | M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日法人淨超與窗口累計 | 現行；本次未重整 |
-| [§39](#39-2026-10-08歷史收盤新候選審查與官方事件重選) | 歷史收盤新候選審查與官方事件重選（39.1 M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 實際來源結果） | 現行；本次未重整 |
-| [§40](#40-m2-official-event-kind-20261008-1b1事件類型實際來源與有限接受) | M2-OFFICIAL-EVENT-KIND-20261008-1/B1：事件類型實際來源 | 現行；本次未重整 |
-| [§41](#41-m1-twse-issuer-event-profile-20261008-1b1真-issuer-與同截止事件有限接受) | M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真 issuer 與同截止事件 | 現行；本次未重整 |
-| [§42](#42-m1-twse-issuer-industry-trace-20261008-1b1兩碼引用與同截止原件) | M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼引用與同截止原件 | 現行；本次未重整 |
-| [§43](#43-m1-chips-stock-scope-7-gross-trade-20-1006-1b1七股gross買賣與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股 gross 買賣與新來源准入 | 現行；本次未重整 |
-| [§44](#44-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向計數與窗口區段) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段 | 現行；本次未重整 |
-| [§45](#45-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與新來源准入 | 現行；本次未重整 |
-| [§46](#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳 | 現行；本次未重整 |
+| [§35](#35-m2-focus-stock-scope-6八股與新來源日准入) | M2-FOCUS-STOCK-SCOPE-6：八股與新來源日准入 | 現行 |
+| [§36](#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入) | M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：全月日曆與八條件來源准入 | 現行 |
+| [§37](#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入) | M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股共同來源准入 | 現行 |
+| [§38](#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計) | M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日法人淨超與窗口累計 | 現行 |
+| [§39](#39-2026-10-08歷史收盤新候選審查與官方事件重選) | 歷史收盤新候選審查與官方事件重選（39.1 M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 實際來源結果） | 現行 |
+| [§40](#40-m2-official-event-kind-20261008-1b1事件類型實際來源與有限接受) | M2-OFFICIAL-EVENT-KIND-20261008-1/B1：事件類型實際來源 | 現行 |
+| [§41](#41-m1-twse-issuer-event-profile-20261008-1b1真-issuer-與同截止事件有限接受) | M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真 issuer 與同截止事件 | 現行 |
+| [§42](#42-m1-twse-issuer-industry-trace-20261008-1b1兩碼引用與同截止原件) | M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼引用與同截止原件 | 現行 |
+| [§43](#43-m1-chips-stock-scope-7-gross-trade-20-1006-1b1七股gross買賣與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股 gross 買賣與新來源准入 | 現行 |
+| [§44](#44-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向計數與窗口區段) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段 | 現行 |
+| [§45](#45-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與新來源准入 | 現行 |
+| [§46](#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳 | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -542,7 +542,7 @@ default 10/06 的七股 scope（普通TPEx，新增6510精測），code順3105�
 
 ### 29.1 10/06 價格 policy tuple 版本表
 
-10/06 價格 scope 依序擴張時，每個版本都是獨立 immutable tuple，以 policy 版本、canonical 內容與外部 digest 共同識別；原 §21／§23／§25／§27 已歸檔，版本資料集中於下表。兩股 tuple 見 §20.1（10/05）與 §20.7（10/06）。來源資源與有限用途沿 §20.1 的 exact 政府 CSV：只 process memory，不放行磁碟保存、歷史日期參數或其他自動下載。
+10/06 價格 scope 依序擴張時，每個版本都是獨立 immutable tuple，以 policy 版本、canonical 內容與外部 digest 共同識別；原 §21／§23／§25／§27 已歸檔，版本資料集中於下表。兩股 tuple 見 §20.1（10/05）與 §20.7（10/06）。來源資源與有限用途沿 §20.1 的 exact 政府 CSV：只 process memory，不放行磁碟保存、歷史日期參數或其他自動下載。`.1`～`.5` 共用 `expected_body_sha256`＝`ab34590df051d7ba08f35941811b69ee35f46c890212558b9f089119307b3200`（兩股 tuple 的 body SHA 見 §20.1、§20.7）。
 
 | `m2-stock-scope-tpex-11370-2026-10-06.N` | 股數與 scope（code 順） | canonical UTF-8 | `policy_digest` | worker／projection | focus consumer |
 | --- | --- | ---: | --- | --- | --- |

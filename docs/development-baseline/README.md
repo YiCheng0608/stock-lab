@@ -461,7 +461,7 @@ scope／provenance／date／Code與Namejoin／duplicate與conflict拒收／pins�
 
 來源與操作邊界見[來源 §43](../SOURCE_REGISTRY.md)／[個股頁 §48](../STOCK_RESEARCH_PAGE.md)。
 
-三命令在本worktree根實際通過raw0，未附`--deps`／policy-version／digest參數；runner預設共用main依賴，grossflag選獨立硬coded policy version／外部digest（SOURCE43），不提升oldpins：
+三命令不附`--deps`／policy-version／digest參數；runner預設共用main依賴，grossflag選獨立硬coded policy version／外部digest（SOURCE43），不提升oldpins：
 
 ```powershell
 & 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-gross-stock-scope-7-opt-in

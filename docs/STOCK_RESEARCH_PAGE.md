@@ -15,9 +15,9 @@
 | [§5](#5-驗收矩陣) | 驗收矩陣（5.1 為 2026-09-12 final review 證據） | 現行 |
 | [§6](#6-明確未包含) | 明確未包含 | 現行 |
 | [§7](#7-前端顯示契約) | 前端顯示契約（7.1 UNIT-LOTS-1 日常張數與原股稽核） | 現行 |
-| [§8](#8-籌碼三部分後續待做) | 籌碼三部分 | 現行；本次未重整 |
+| [§8](#8-籌碼三部分後續待做) | 籌碼三部分 | 現行 |
 | [§9](#9-m1-p1截止一致與來源可追溯總覽) | M1-P1：截止一致與來源可追溯總覽 | 現行 |
-| [§10](#10-m1-p2b單日法人原件總覽接線) | M1-P2b：單日法人原件總覽接線 | 現行；過時指標一處修正（原 [L153](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L153)：現行法人窗口版本改指 §24） |
+| [§10](#10-m1-p2b單日法人原件總覽接線) | M1-P2b：單日法人原件總覽接線 | 現行 |
 | [§11](#11-m1-p3bselected-官方事件總覽接線) | M1-P3b：selected 官方事件總覽接線 | 現行 |
 | [§12](#12-m2-p1官方事件關注清單接個股總覽) | M2-P1：官方事件關注清單接個股總覽 | 現行 |
 | [§13](#13-m2-p2官方事件清單搜尋與研究往返) | M2-P2：官方事件清單搜尋與研究往返 | 現行 |
@@ -36,22 +36,22 @@
 | §30～§33 | M2-FOCUS-STOCK-SCOPE-1～4：三～六股關注與同截止往返 | 歸檔：[L977–L1130](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L977-L1130)；現行 gate 見 [§34](#34-m2-focus-stock-scope-5七股關注與同截止往返)，policy 版本見[來源 §29.1](SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表) |
 | [§34](#34-m2-focus-stock-scope-5七股關注與同截止往返) | M2-FOCUS-STOCK-SCOPE-5：七股（default 2026-10-06）關注與同截止往返 | 現行（保留 34.1 gate）；移出內容見原節：[L1132–L1163](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L1132-L1163) |
 | [§35](#35-m1-price-save-1私人單日保存與跨程序操作) | M1-PRICE-SAVE-1：私人單日保存與跨程序操作（35.1 契約） | 現行（保留 35.1）；移出內容見原節：[L1165–L1189](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L1165-L1189) |
-| [§36](#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆) | M1-CHIPS-CUTOFF-1006-1：同截止法人窗口與完整日曆 | 現行；本次未重整 |
-| [§37](#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返) | M1-SAVED-PRICE-FOCUS-1006-1：保存來源關注與同截止往返 | 現行；本次未重整 |
-| [§38](#38-m1-saved-price-chips-integration-1006-1共同入口與同截止往返) | M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1：共同入口與同截止往返 | 現行；本次未重整 |
-| [§39](#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界) | M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：八條件入口與不可用驗收邊界 | 現行；本次未重整 |
-| [§40](#40-m2-focus-stock-scope-6八股四條件與同截止往返) | M2-FOCUS-STOCK-SCOPE-6：八股四條件與同截止往返 | 現行；本次未重整 |
-| [§41](#41-m1-saved-price-chips-focus-calendar-1006-2八條件正向關注與同截止往返) | M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：八條件正向關注與同截止往返 | 現行；本次未重整 |
-| [§42](#42-m1-saved-price-chips-focus-stock-scope-7-1006-1七股八條件與同截止往返) | M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股八條件與同截止往返 | 現行；本次未重整 |
-| [§43](#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作) | M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日淨超與累計操作 | 現行；本次未重整 |
-| [§44](#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返) | M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1：官方事件日期區間與研究往返 | 現行；本次未重整 |
-| [§45](#45-m2-official-event-kind-20261008-1b1官方事件精確類型與研究往返) | M2-OFFICIAL-EVENT-KIND-20261008-1/B1：官方事件精確類型與研究往返 | 現行；本次未重整 |
-| [§46](#46-m1-twse-issuer-event-profile-20261008-1b1真公司原欄位與同截止事件研究) | M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真公司原欄位與同截止事件研究 | 現行；本次未重整 |
-| [§47](#47-m1-twse-issuer-industry-trace-20261008-1b1公司原碼與產業名稱追溯) | M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：公司原碼與產業名稱追溯 | 現行；本次未重整 |
-| [§48](#48-m1-chips-stock-scope-7-gross-trade-20-1006-1b1七股gross買賣與net對照有限操作) | M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股 gross 買賣與 net 對照有限操作 | 現行；本次未重整 |
-| [§49](#49-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向與窗口區段有限操作) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作 | 現行；本次未重整 |
-| [§50](#50-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與雙原列操作) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與雙原列操作 | 現行；本次未重整 |
-| [§51](#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳 | 現行；本次未重整 |
+| [§36](#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆) | M1-CHIPS-CUTOFF-1006-1：同截止法人窗口與完整日曆 | 現行 |
+| [§37](#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返) | M1-SAVED-PRICE-FOCUS-1006-1：保存來源關注與同截止往返 | 現行 |
+| [§38](#38-m1-saved-price-chips-integration-1006-1共同入口與同截止往返) | M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1：共同入口與同截止往返 | 現行 |
+| [§39](#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界) | M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：八條件入口與不可用驗收邊界 | 現行 |
+| [§40](#40-m2-focus-stock-scope-6八股四條件與同截止往返) | M2-FOCUS-STOCK-SCOPE-6：八股四條件與同截止往返 | 現行 |
+| [§41](#41-m1-saved-price-chips-focus-calendar-1006-2八條件正向關注與同截止往返) | M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：八條件正向關注與同截止往返 | 現行 |
+| [§42](#42-m1-saved-price-chips-focus-stock-scope-7-1006-1七股八條件與同截止往返) | M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股八條件與同截止往返 | 現行 |
+| [§43](#43-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日淨超與累計操作) | M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日淨超與累計操作 | 現行 |
+| [§44](#44-m2-official-event-date-range-20261008-1官方事件日期區間與研究往返) | M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1：官方事件日期區間與研究往返 | 現行 |
+| [§45](#45-m2-official-event-kind-20261008-1b1官方事件精確類型與研究往返) | M2-OFFICIAL-EVENT-KIND-20261008-1/B1：官方事件精確類型與研究往返 | 現行 |
+| [§46](#46-m1-twse-issuer-event-profile-20261008-1b1真公司原欄位與同截止事件研究) | M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真公司原欄位與同截止事件研究 | 現行 |
+| [§47](#47-m1-twse-issuer-industry-trace-20261008-1b1公司原碼與產業名稱追溯) | M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：公司原碼與產業名稱追溯 | 現行 |
+| [§48](#48-m1-chips-stock-scope-7-gross-trade-20-1006-1b1七股gross買賣與net對照有限操作) | M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股 gross 買賣與 net 對照有限操作 | 現行 |
+| [§49](#49-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向與窗口區段有限操作) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作 | 現行 |
+| [§50](#50-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與雙原列操作) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與雙原列操作 | 現行 |
+| [§51](#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳 | 現行 |
 
 ## 1. 使用者工作與資訊順序
 
@@ -639,7 +639,7 @@ Server 必須 exact `STOCK_TPEX_INSTITUTIONAL_WINDOW_MEMORY_CAPTURE=1`。`POST /
 
 ### 24.3 仍未支持的界線
 
-缺／壞8/25按窗口失效只有必要synthetic API／SSR，不稱actual missing native。Catalog／price seed僅synthetic memory，19表保留不證真行情或正式DB。範圍外日期／標的／TWSE、修訂／PIT、trend／研究條件／Signal、raw保存／跨程序讀回及完整M1不在本版範圍。
+缺／壞8/25按窗口失效只有必要synthetic API／SSR，不稱actual missing native。Catalog／price seed僅synthetic memory，19表保留不證真行情或正式DB。Physical canvas、原生橫向手勢、Vite／production build、pending導航race、legacy／ZIP／old live／完整backend不在W8已證範圍。範圍外日期／標的／TWSE、修訂／PIT、trend／研究條件／Signal、raw保存／跨程序讀回及完整M1不在本版範圍。
 
 ## 25. M1-PRICE-1：上櫃兩股單日價量閉環（有限接受）
 
