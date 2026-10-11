@@ -6,6 +6,10 @@ files nor environment variables. ``acquire`` returns PENDING, not usable prices:
 an independent same-RAM oracle must admit ALL eight captures before any window
 or summary is available. Boundary transports do not demonstrate source truth.
 
+Every capture comes from api.finmindtrade.com: one TaiwanStockTradingDate document
+(the observed trading days), then one TaiwanStockPrice document per symbol whose
+date set must equal those trading days exactly.
+
 The default transport is direct stdlib HTTPS. It requires FinancialStart and a
 matching ExecutionBinding from a separately reviewed explicit Issue 32 seal.
 These declarations do not authenticate GitHub/runtime identity; the sole QA
@@ -21,7 +25,8 @@ Trace selectors (sys.settrace can observe the unmodified default path):
   _capture_ready: capture, full_body, receipt BEFORE any decoding/parsing.
   _parse_capture: full_body, receipt, decoded_text, document, parse_results,
                   diagnostics (including exceptional exits).
-  _calendar: rows, dates, numbers during strict CSV validation/failure.
+  _trading_dates / _check_trading_dates: document, dates during strict
+                  FinMind trading-date validation/failure.
   _prices: document, found, row during whole-document validation/failure.
   acquire: exception, diagnostics, pending, results on the failure path.
 ``inspection`` exposes immutable original bytes/receipts/parsed observations in
@@ -47,10 +52,8 @@ response/connection cleanup succeeded.
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import http.client
-import io
 import json
 import math
 import re
@@ -66,8 +69,8 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 
-POLICY_SHA256 = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
-POLICY_BYTES = 3497
+POLICY_SHA256 = "2f454a9aa51b70db331e867ffdb3cf3391a45e238e55cf885fe4396e34b86b91"
+POLICY_BYTES = 4766
 FORMAL_SHA256 = "b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde"
 FORMAL_BLOB = "d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md"
 NAMESPACE = "issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2"
@@ -75,9 +78,12 @@ PURPOSE = "local_personal_noncommercial_observed_nominal_ohlcv_snapshot"
 CONSUMER_VERSION = "ordinary-nominal-ohlcv-window-summary-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
 CUTOFFS = ("2026-10-05", "2026-10-06")
-CALENDAR_URL = "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01"
+TRADING_DATE_URL = "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-06"
 PRICE_URL = "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={}&start_date=2026-07-01&end_date=2026-10-06"
-CSV_HEADER = ("資料日期", "開市", "最高價", "最低價", "收市", "漲跌")
+WINDOW_START = "2026-07-01"
+WINDOW_END = "2026-10-06"
+USER_AGENT = "stock-lab-issue32-local-ram/1"
+ACCEPT = "application/json"
 BODY_CAP = 1048576
 RAW_CAP = 8388608
 ROOTS_CAP = 33554432
@@ -97,13 +103,16 @@ _POLICY_SHAPE = {
         "fields": {k: str for k in ("open", "high", "low", "close", "volume", "amount")},
         "basis": str, "rights": str,
     },
-    "calendar_source": {
-        "provider": str, "government_dataset": int, "url": str, "method": str,
-        "format": str, "header": (str, 6), "expected_scope": str, "rights": str,
-        "prior_calendar_formal_blob": str, "prior_calendar_formal_sha256": str,
+    "trading_date_source": {
+        "provider": str, "dataset": str, "endpoint": str, "url": str, "method": str,
+        "format": str, "fields": {"date": str}, "documentation": str, "expected_scope": str,
+        "rights": str, "prior_calendar_formal_blob": str, "prior_calendar_formal_sha256": str,
         "prior_verified_counts": {"August": int, "September": int, "October_through_6": int},
         "version": str,
     },
+    "response_shape": {k: str for k in (
+        "status", "content_type", "framing", "content_encoding", "duplicate_identity_headers",
+        "set_cookie", "encoding", "zero_price_rows")},
     "unit_policy": {
         "version": str, "unit_mapping_inference": bool,
         "provider_literal_unit_annotation": bool, "OHLC": str, "volume": str,
@@ -118,6 +127,7 @@ _POLICY_SHAPE = {
         "body_cap_bytes": int, "total_raw_cap_bytes": int,
         "retained_roots_estimate_cap_bytes": int, "request_seconds": int,
         "batch_seconds": int, "deadline": str, "accept_encoding": str,
+        "accept": str, "user_agent": str,
         "redirects": int, "retries": int, "stop_on_first_failure": bool,
     },
 }
@@ -277,9 +287,6 @@ def _weekdays(start, end):
             result.append(current.isoformat())
         current += timedelta(days=1)
     return tuple(result)
-
-
-JULY_DATES = _weekdays("2026-07-01", "2026-07-31")
 
 
 def _section(text, heading):
@@ -469,7 +476,7 @@ class _HTTPSTransport:
 
     def open(self, url, timeout):
         parsed = urlsplit(url)
-        if parsed.scheme != "https" or parsed.hostname not in ("www.tpex.org.tw", "api.finmindtrade.com") or parsed.port is not None or parsed.username is not None:
+        if parsed.scheme != "https" or parsed.hostname != "api.finmindtrade.com" or parsed.port is not None or parsed.username is not None:
             _fail("transport_url")
         connection = http.client.HTTPSConnection(parsed.hostname, timeout=timeout,
                                                 context=ssl.create_default_context())
@@ -488,8 +495,10 @@ class _HTTPSTransport:
             connection.connect()
             connection.sock.settimeout(remaining())
             stage = "https_request"
+            # Fixed, non-credential identification; no cookie, token or proxy headers.
             connection.request("GET", parsed.path + "?" + parsed.query,
-                               headers={"Accept-Encoding": "identity", "Connection": "close"})
+                               headers={"Accept-Encoding": "identity", "Connection": "close",
+                                        "User-Agent": USER_AGENT, "Accept": ACCEPT})
             connection.sock.settimeout(remaining())
             stage = "https_headers"
             response = connection.getresponse()
@@ -636,42 +645,54 @@ def _bounds(o, h, l, c):
         _fail("ohlc_bounds")
 
 
-def _iso_date(value):
+def _iso_date(value, code="price_date"):
     if type(value) is not str or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
-        _fail("price_date")
+        _fail(code)
     try:
         return date.fromisoformat(value).isoformat()
     except ValueError:
-        _fail("price_date")
+        _fail(code)
 
 
-def _calendar(text):
-    # Deliberately reject preambles, changed headers, JSON, HTML and partial CSV.
-    try:
-        rows = list(csv.reader(io.StringIO(text), strict=True))
-    except csv.Error:
-        _fail("calendar_csv_syntax")
-    # Observed trading days are whatever the official CSV returns: no fixed row
-    # count and no closure inference; at least one data row, each checked below.
-    if not rows or tuple(rows[0]) != CSV_HEADER or len(rows) < 2:
-        _fail("calendar_header_or_count")
+def _trading_dates(document):
+    """FinMind TaiwanStockTradingDate document -> its in-window dates (documented schema: {date: str});
+    no fixed count and no closure inference."""
+    if type(document) is not dict or set(document) != {"status", "msg", "data"}:
+        _fail("trading_dates_document")
+    if type(document["status"]) is not int or document["status"] != 200 or document["msg"] != "success" or type(document["msg"]) is not str:
+        _fail("trading_dates_status")
+    rows = document["data"]
+    if type(rows) is not list or not rows:
+        _fail("trading_dates_rows")
+    # The documentation does not say whether start_date/end_date filter this dataset, so EVERY returned
+    # row is structurally validated (keys, ISO date, unique, ascending) before rows outside the requested
+    # window are discarded.
     dates = []
-    for row in rows[1:]:
-        if len(row) != 6 or not re.fullmatch(r"[0-9]{8}", row[0]):
-            _fail("calendar_row")
-        try:
-            observed = datetime.strptime(row[0], "%Y%m%d").date().isoformat()
-            numbers = tuple(Decimal(item) for item in row[1:])
-        except (ValueError, ArithmeticError):
-            _fail("calendar_value")
-        if any(not item.is_finite() for item in numbers) or any(item <= 0 for item in numbers[:4]):
-            _fail("calendar_number")
-        _bounds(*numbers[:4])
-        dates.append(observed)
-    # JULY_DATES is the set of July weekdays: unique, in 2026-07, and a weekday.
-    if len(set(dates)) != len(dates) or not set(dates) <= set(JULY_DATES):
-        _fail("calendar_exact_dates")
-    return rows, tuple(sorted(dates))
+    for row in rows:
+        if type(row) is not dict or set(row) != {"date"}:
+            _fail("trading_dates_row")
+        dates.append(_iso_date(row["date"], "trading_dates_date"))
+    if any(earlier >= later for earlier, later in zip(dates, dates[1:])):
+        _fail("trading_dates_order")
+    return tuple(day for day in dates if WINDOW_START <= day <= WINDOW_END)
+
+
+def _check_trading_dates(dates, prior_dates):
+    """Whole-batch gate on the in-window observed trading days, before any price request."""
+    if any(date.fromisoformat(day).weekday() >= 5 for day in dates):
+        _fail("trading_dates_weekday")
+    if any(cutoff not in dates for cutoff in CUTOFFS):
+        _fail("trading_dates_cutoff")
+    # Each cutoff needs a full last60 window; never shrink it.
+    if any(sum(day <= cutoff for day in dates) < 60 for cutoff in CUTOFFS):
+        _fail("trading_dates_window_insufficient")
+    # Independent in-repo check: the verified Aug-Oct sessions must be exactly the formal 45 dates.
+    if tuple(day for day in dates if day >= "2026-08-01") != prior_dates:
+        _fail("trading_dates_formal_mismatch")
+
+
+def _trading_date_policy(policy):
+    return policy["trading_date_source"]
 
 
 def _prices(document, symbol, dates, source_index, check_roots):
@@ -884,6 +905,8 @@ class HistorySource:
             transfer = header_values.get("transfer-encoding", "").strip().lower()
             if transfer not in ("", "chunked") or (transfer and declared_length is not None):
                 _fail("ambiguous_framing")
+            if not re.fullmatch(r"application/json(?:\s*;\s*charset=utf-8)?", header_values.get("content-type", "").strip(), re.I):
+                _fail("content_type")
             stage = "capture_body"
             while True:
                 self._remaining()
@@ -910,8 +933,8 @@ class HistorySource:
                 _fail("empty_body")
             stage = "capture_finalize"
             full_body = bytes(capture_buffer)
-            source_id = "tpex_government_index_csv" if index == 0 else "finmind_nominal_ohlcv/" + SYMBOLS[index - 1]
-            source_version = self._policy["calendar_source"]["version"] if index == 0 else self._policy["version"]
+            source_id = "finmind_trading_dates" if index == 0 else "finmind_nominal_ohlcv/" + SYMBOLS[index - 1]
+            source_version = _trading_date_policy(self._policy)["version"] if index == 0 else self._policy["version"]
             receipt = Receipt(source_id, source_version, "GET", url, 200,
                               request_started_utc, datetime.now(timezone.utc).isoformat(),
                               len(full_body), hashlib.sha256(full_body).hexdigest(), True,
@@ -942,7 +965,10 @@ class HistorySource:
             self._check_roots(full_body, receipt, decoded_text, document, parse_results, diagnostics)
             self._remaining()
             if index == 0:
-                document, parse_results = _calendar(decoded_text)
+                document = _json(decoded_text)
+                self._check_roots(full_body, receipt, decoded_text, document, diagnostics)
+                self._remaining()
+                parse_results = _trading_dates(document)
             else:
                 document = _json(decoded_text, price=True)
                 self._check_roots(full_body, receipt, decoded_text, document, diagnostics)
@@ -980,13 +1006,8 @@ class HistorySource:
         pending = self
         results = self._results
         try:
-            july = self._parse_capture(self._capture(0, CALENDAR_URL), 0, None)
-            dates = july + self._prior_dates
-            if len(set(dates)) != len(dates) or tuple(sorted(dates)) != dates:
-                _fail("calendar_combination")
-            # Each cutoff needs a full last60 window; never shrink it.
-            if any(sum(day <= cutoff for day in dates) < 60 for cutoff in CUTOFFS):
-                _fail("calendar_window_insufficient")
+            dates = self._parse_capture(self._capture(0, TRADING_DATE_URL), 0, None)
+            _check_trading_dates(dates, self._prior_dates)  # before any price request
             self._dates = dates
             for index, symbol in enumerate(SYMBOLS, 1):
                 results[symbol] = self._parse_capture(self._capture(index, PRICE_URL.format(symbol)), index, dates)
@@ -1030,9 +1051,9 @@ class HistorySource:
             _fail("oracle_scope")
         if any(type(value) is not str or not re.fullmatch(r"[0-9a-f]{64}", value) for value in admission.receipt_sha256s):
             _fail("oracle_receipt_type")
-        days = len(self._dates)
+        days = len(self._dates)  # N observed trading days (calendar_rows = trading-date rows)
         if (admission.calendar_rows, admission.price_rows, admission.price_fields, admission.latest_anchor_fields) != (
-                days - len(self._prior_dates), 7 * days, 42 * days, 42):
+                days, 7 * days, 42 * days, 42):
             _fail("oracle_complete_scope")
         hashes = tuple(capture.receipt.canonical_sha256 for capture in self._captures)
         if len(hashes) != 8 or admission.receipt_sha256s != hashes:
@@ -1061,10 +1082,10 @@ class HistorySource:
             "identity_as_of": "2026-10-06", "instrument_type": "ordinary_stock",
             "basis": "provider_reported_nominal_ohlcv", "unit_policy": self._policy["unit_policy"],
             "price_rights": self._policy["price_source"]["rights"],
-            "calendar_rights": self._policy["calendar_source"]["rights"],
+            "trading_date_rights": _trading_date_policy(self._policy)["rights"],
             "formal_blob": FORMAL_BLOB, "formal_sha256": FORMAL_SHA256,
-            "calendar_version": self._policy["calendar_source"]["version"],
-            "calendar_dates": self._dates, "receipts": tuple(c.receipt for c in self._captures),
+            "trading_date_version": _trading_date_policy(self._policy)["version"],
+            "trading_dates": self._dates, "receipts": tuple(c.receipt for c in self._captures),
             "publication_time": "unknown", "first_availability": "unknown", "revision_time": "unknown",
             "unsupported": self._policy["unsupported"], "storage": "process_RAM",
             "lease_expires_monotonic": self._expiry,

@@ -2,19 +2,24 @@
 
 Run: python -B -X utf8 backend/tests/test_ohlcv_history_source.py
 Reads only this source/test and the public pinned repo SOURCE_REGISTRY reference.
-The policy v2 literal below was independently parsed from the single json fence
-of Issue 32 comment 6111290434 (global approval, AC revision 2) and matches its
-3,497 B pin; the v1 reference values come from original comment 6084911117. Neither
-was obtained from product policy/expected-value helpers. Synthetic prices exercise
-boundaries and arithmetic; they are not QA financial truth.
+The policy v3 literal below was independently parsed from the single json fence
+of Issue 32 comment 6111873522 (global publication, AC revision 3) and matches its
+4,766 B pin. Policy v2 (comment 6111290434, 3,497 B) and the v1 reference values
+(original comment 6084911117) are kept only to prove they are now rejected. None
+was obtained from product policy/expected-value helpers. Response-shape cases are
+canned wire bytes parsed by the real http.client; synthetic prices and trading dates
+exercise boundaries and arithmetic; they are not QA financial truth.
 """
 from __future__ import annotations
 
 import copy
 import hashlib
+import http.client
 import importlib.util
+import io
 import json
 import math
+import types
 from pathlib import Path
 from fractions import Fraction
 from dataclasses import replace
@@ -38,8 +43,11 @@ if not sys.dont_write_bytecode:
     raise RuntimeError("Use -B: the boundary runner does not permit bytecode artifacts")
 sys.addaudithook(_audit_boundary)
 
-EXTERNAL_POLICY = b'{"acquisition":{"accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2","order":"newJuly calendar then seven price ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"calendar_source":{"expected_scope":"2026-07 observed official trading dates; each unique, in July 2026, weekday, header exact; no fixed count; no closure inference; each of seven FinMind price date sets must equal observed July plus formal 45 dates exactly; any unexplained mismatch rejects whole batch; at least 60 sessions at or before each cutoff","format":"UTF8_CSV","government_dataset":11391,"header":["\xe8\xb3\x87\xe6\x96\x99\xe6\x97\xa5\xe6\x9c\x9f","\xe9\x96\x8b\xe5\xb8\x82","\xe6\x9c\x80\xe9\xab\x98\xe5\x83\xb9","\xe6\x9c\x80\xe4\xbd\x8e\xe5\x83\xb9","\xe6\x94\xb6\xe5\xb8\x82","\xe6\xbc\xb2\xe8\xb7\x8c"],"method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"TPEx","rights":"OGL-1.0 government dataset resource / TPEx terms section 7 exception; TPEx attribution","url":"https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01","version":"tpex-july-observed-plus-formal-aug21-sep20-oct4/issue32-v2"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v2"}'
-EXTERNAL_PIN = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
+EXTERNAL_POLICY = b'{"acquisition":{"accept":"application/json","accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2","order":"FinMind trading dates then seven prices ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608,"user_agent":"stock-lab-issue32-local-ram/1"},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure","zero_price_rows":"FinMind no-posted-price rows with zero OHLC reject the whole batch (accepted risk; suspension unsupported)"},"revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"trading_date_source":{"dataset":"TaiwanStockTradingDate","documentation":"https://finmind.github.io/tutor/TaiwanMarket/Technical/ (doc GET receipt issue32 comment 6111856880); free tokenless use is inferred, 401/402/403 is first failure","endpoint":"https://api.finmindtrade.com/api/v4/data","expected_scope":"observed FinMind trading dates; every returned row structurally valid, unique and ascending; rows outside 2026-07-01..2026-10-06 are discarded only after structural validation; in-range dates must be weekdays, include both cutoffs, give at least 60 sessions at or before each cutoff, equal formal Aug-Oct 45 dates exactly within that span, and equal each of seven price date sets exactly; no fixed count; no closure inference; any unexplained mismatch rejects whole batch","fields":{"date":"date"},"format":"JSON","method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"FinMind","rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-06","version":"finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue32-v3"},"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v3"}'
+EXTERNAL_PIN = "2f454a9aa51b70db331e867ffdb3cf3391a45e238e55cf885fe4396e34b86b91"
+# Policy v2 (3,497 B, Issue 32 comment 6111290434) is superseded by v3 and must now be rejected.
+V2_POLICY = b'{"acquisition":{"accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2","order":"newJuly calendar then seven price ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"calendar_source":{"expected_scope":"2026-07 observed official trading dates; each unique, in July 2026, weekday, header exact; no fixed count; no closure inference; each of seven FinMind price date sets must equal observed July plus formal 45 dates exactly; any unexplained mismatch rejects whole batch; at least 60 sessions at or before each cutoff","format":"UTF8_CSV","government_dataset":11391,"header":["\xe8\xb3\x87\xe6\x96\x99\xe6\x97\xa5\xe6\x9c\x9f","\xe9\x96\x8b\xe5\xb8\x82","\xe6\x9c\x80\xe9\xab\x98\xe5\x83\xb9","\xe6\x9c\x80\xe4\xbd\x8e\xe5\x83\xb9","\xe6\x94\xb6\xe5\xb8\x82","\xe6\xbc\xb2\xe8\xb7\x8c"],"method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"TPEx","rights":"OGL-1.0 government dataset resource / TPEx terms section 7 exception; TPEx attribution","url":"https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01","version":"tpex-july-observed-plus-formal-aug21-sep20-oct4/issue32-v2"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v2"}'
+V2_PIN = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "backend/app/ohlcv_history_source.py"
@@ -113,10 +121,15 @@ def july_without(*missing):
     return tuple(day for day in JULY if day not in missing)
 
 
+def trading_body(dates, extra_rows=()):
+    """Synthetic FinMind TaiwanStockTradingDate document: rows are exactly {date}."""
+    rows = [{"date": day} for day in dates] + list(extra_rows)
+    return json.dumps({"msg": "success", "status": 200, "data": rows}, separators=(",", ":")).encode("utf8")
+
+
 def corpus(july=JULY):
     """Small regenerable RAM corpus; no provider transport or fixture files."""
-    header = "資料日期,開市,最高價,最低價,收市,漲跌\n"
-    calendar = header + "".join(day.replace("-", "") + ",100,105,95,101,-1\n" for day in july)
+    trading = trading_body(july + PRIOR)
     documents = []
     for stock_index, symbol in enumerate(SYMBOLS):
         rows = []
@@ -134,7 +147,7 @@ def corpus(july=JULY):
                 row.update(open=o, max=h, min=l, close=c, Trading_Volume=v, Trading_money=a)
             rows.append(row)
         documents.append({"status": 200, "msg": "success", "data": rows})
-    return calendar.encode("utf8"), documents
+    return trading, documents
 
 
 def canonical(value):
@@ -143,9 +156,9 @@ def canonical(value):
                       separators=(",", ":"), allow_nan=False).encode("utf8")
 
 
-def body_docs(calendar=None, documents=None, july=JULY):
-    default_calendar, default_documents = corpus(july)
-    return [calendar if calendar is not None else default_calendar] + [
+def body_docs(trading=None, documents=None, july=JULY):
+    default_trading, default_documents = corpus(july)
+    return [trading if trading is not None else default_trading] + [
         json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode("utf8")
         for document in (documents if documents is not None else default_documents)]
 
@@ -158,12 +171,16 @@ class Clock:
         return self.now
 
 
+JSON_TYPE = (("Content-Type", "application/json"),)
+
+
 class Response:
     def __init__(self, body, *, declared=True, eof=True, clock=None, read_delay=0, status=200, headers=None, close_raises=False):
         self.body = body
         self.offset = 0
         self.status = status
-        self.headers = headers if headers is not None else (("Content-Length", str(len(body))),) if declared else ()
+        self.headers = headers if headers is not None else (
+            ((("Content-Length", str(len(body))),) if declared else ()) + JSON_TYPE)
         self.closed = False
         self.eof_enabled = eof
         self.clock = clock
@@ -223,13 +240,13 @@ def build(*, transport=None, clock=None, ledger=None, **kwargs):
 
 
 def admission(snapshot, july_days=len(JULY)):
-    # Independent arithmetic: N = observed July days + 45 formal days.
+    # Independent arithmetic: N = observed July days + 45 formal days = trading-date rows.
     captures = snapshot.inspection()["captures"]
     total = july_days + len(PRIOR)
     return source.OracleAdmission(NAMESPACE, EXTERNAL_PIN, "synthetic-boundary-oracle",
                                   "a" * 40, "b" * 64,
                                   tuple(c.receipt.canonical_sha256 for c in captures),
-                                  july_days, 7 * total, 42 * total, 42, True)
+                                  total, 7 * total, 42 * total, 42, True)
 
 
 def available():
@@ -237,6 +254,114 @@ def available():
     snapshot.acquire()
     snapshot.admit_independent_verification(admission(snapshot))
     return snapshot, transport, clock
+
+
+# --- Response-shape replay: canned wire bytes -> real http.client parsing -> the real
+# _HTTPSTransport.open / _HTTPSResponse / _capture path. Only the socket and TLS are
+# replaced (the audit guard bans real sockets); every value below is synthetic.
+class ReplayFile(io.BytesIO):
+    """Response file whose .raw._sock mirrors socket.SocketIO as in the stdlib path."""
+
+
+class ReplaySocket:
+    def __init__(self, wire):
+        self.wire = wire
+        self.timeouts = []
+
+    def makefile(self, mode="rb", *args, **kwargs):
+        stream = ReplayFile(self.wire)
+        stream.raw = types.SimpleNamespace(_sock=self)
+        return stream
+
+    def settimeout(self, value):
+        self.timeouts.append(value)
+
+
+class ReplayTransport:
+    def __init__(self, wires):
+        self.wires = list(wires)
+        self.opens = []
+        self.requests = []
+
+    def open(self, url, timeout):
+        wire = self.wires[len(self.opens)]
+        self.opens.append(url)
+        owner = self
+
+        class Connection:
+            def __init__(self, host, timeout, context):
+                self.host, self.sock = host, ReplaySocket(wire)
+
+            def connect(self):
+                pass
+
+            def request(self, method, target, headers):
+                owner.requests.append((self.host, method, target, dict(headers)))
+
+            def getresponse(self):
+                response = http.client.HTTPResponse(self.sock, method="GET")
+                response.begin()
+                if response.will_close:  # stdlib hands the socket to the response
+                    self.sock = None
+                return response
+
+            def close(self):
+                self.sock = None
+
+        with patch.object(source.http.client, "HTTPSConnection", Connection), \
+                patch.object(source.ssl, "create_default_context", lambda: object()):
+            return source._HTTPSTransport().open(url, timeout)
+
+
+def chunk_encode(body, size=61):
+    out = b""
+    for offset in range(0, len(body), size):
+        part = body[offset:offset + size]
+        out += b"%x\r\n" % len(part) + part + b"\r\n"
+    return out + b"0\r\n\r\n"
+
+
+def raw_http(headers, body=b"", *, status=200, reason="OK", version="1.1"):
+    head = f"HTTP/{version} {status} {reason}\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers) + "\r\n"
+    return head.encode("utf-8") + body
+
+
+FINMIND_REQUEST_HEADERS = {"Accept-Encoding": "identity", "Connection": "close",
+                           "User-Agent": "stock-lab-issue32-local-ram/1", "Accept": "application/json"}
+# Independent URL literals (policy v3 trading_date_source.url / price_source.endpoint), not product constants.
+TRADING_DATE_URL_LITERAL = ("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate"
+                            "&start_date=2026-07-01&end_date=2026-10-06")
+PRICE_URL_LITERAL = ("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={}"
+                     "&start_date=2026-07-01&end_date=2026-10-06")
+EXPECTED_URLS = (TRADING_DATE_URL_LITERAL,) + tuple(PRICE_URL_LITERAL.format(symbol) for symbol in SYMBOLS)
+
+
+def finmind_wire(body, *, framing="length", content_type="application/json", extra=(), status=200,
+                 reason="OK", version="1.1", content_encoding=None, te="chunked"):
+    headers = [("Date", "Mon, 12 Oct 2026 00:00:00 GMT"), ("Server", "synthetic"), ("CF-RAY", "synthetic-0000"),
+               ("Vary", "Accept-Encoding"), ("Alt-Svc", 'h3=":443"')]
+    if content_type is not None:
+        headers.append(("Content-Type", content_type))
+    wire = body
+    if framing == "length":
+        headers.append(("Content-Length", str(len(body))))
+    elif framing == "chunked":
+        headers.append(("Transfer-Encoding", te))
+        wire = chunk_encode(body)
+    elif framing == "both":
+        headers += [("Content-Length", str(len(body))), ("Transfer-Encoding", "chunked")]
+        wire = chunk_encode(body)
+    elif framing == "close":
+        pass  # EOF-delimited
+    if content_encoding is not None:
+        headers.append(("Content-Encoding", content_encoding))
+    return raw_http(headers + list(extra), wire, status=status, reason=reason, version=version)
+
+
+def replay(wires):
+    transport = ReplayTransport(wires)
+    snapshot, _, _ = build(transport=transport)
+    return snapshot, transport
 
 
 class Boundaries(unittest.TestCase):
@@ -247,12 +372,20 @@ class Boundaries(unittest.TestCase):
         return caught.exception
 
     def test_external_policy_all_recursive_keys_types_values_and_canonical(self):
-        self.assertEqual(len(EXTERNAL_POLICY), 3497)
+        self.assertEqual(len(EXTERNAL_POLICY), 4766)
         self.assertEqual(hashlib.sha256(EXTERNAL_POLICY).hexdigest(), EXTERNAL_PIN)
         source.validate_policy(EXTERNAL_POLICY, EXTERNAL_PIN)
         policy = json.loads(EXTERNAL_POLICY)
         self.assertEqual(policy["acquisition"]["namespace"], NAMESPACE)
-        self.assertNotIn("23", policy["calendar_source"]["expected_scope"])  # no fixed day count
+        self.assertNotIn("calendar_source", policy)
+        scope = policy["trading_date_source"]["expected_scope"]
+        self.assertIn("no fixed count", scope)
+        self.assertIn("discarded only after structural validation", scope)
+        self.assertEqual(policy["trading_date_source"]["url"], TRADING_DATE_URL_LITERAL)
+        self.assertEqual((policy["acquisition"]["user_agent"], policy["acquisition"]["accept"]),
+                         ("stock-lab-issue32-local-ram/1", "application/json"))
+        self.assertIn("close-delimited", policy["response_shape"]["framing"])
+        self.assertEqual(policy["acquisition"]["max_gets"], 8)
         nodes = []
         def visit(value):
             if isinstance(value, dict):
@@ -276,7 +409,7 @@ class Boundaries(unittest.TestCase):
                 else:
                     del target[next(iter(target))]
                 self.assertFailure("policy_keys", source.validate_policy, canonical(mutated), EXTERNAL_PIN)
-        paths = [("calendar_source", "government_dataset"), ("unit_policy", "scale"),
+        paths = [("acquisition", "redirects"), ("unit_policy", "scale"),
                  ("acquisition", "max_gets"), ("acquisition", "request_seconds")]
         for outer, key in paths:
             for replacement in (True, 1.0, "1", None):
@@ -296,27 +429,31 @@ class Boundaries(unittest.TestCase):
         self.assertFailure("policy_canonical_mismatch", source.validate_policy, EXTERNAL_POLICY + b" ", EXTERNAL_PIN)
         self.assertFailure("duplicate_json_key", source.validate_policy, EXTERNAL_POLICY.replace(b'{', b'{"version":"duplicate",', 1), EXTERNAL_PIN)
 
-    def test_v1_policy_and_qa1_namespace_are_rejected(self):
+    def test_old_policies_and_qa1_namespace_are_rejected(self):
         # Rebuild v1 from v2 by restoring its four leaves; the pin/length prove it is exactly v1.
-        v1 = json.loads(EXTERNAL_POLICY)
+        v1 = json.loads(V2_POLICY)
         v1["version"] = "issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v1"
         v1["calendar_source"]["expected_scope"] = "2026-07 full 23 weekdays; exact positive dates required; no missing-day closure inference"
         v1["calendar_source"]["version"] = "tpex-july23-plus-formal-aug21-sep20-oct4/issue32-v1"
         v1["acquisition"]["namespace"] = V1_NAMESPACE
         v1_policy = canonical(v1)
         self.assertEqual((len(v1_policy), hashlib.sha256(v1_policy).hexdigest()), (V1_BYTES, V1_PIN))
+        self.assertEqual((len(V2_POLICY), hashlib.sha256(V2_POLICY).hexdigest()), (3497, V2_PIN))
         self.assertNotEqual(V1_NAMESPACE, NAMESPACE)
-        self.assertFailure("policy_pin", source.validate_policy, v1_policy, V1_PIN)
-        self.assertFailure("policy_canonical_mismatch", source.validate_policy, v1_policy, EXTERNAL_PIN)
-        self.assertFailure("policy_pin", source.validate_policy, EXTERNAL_POLICY, V1_PIN)
-        self.assertFailure("policy_pin", source.HistorySource, policy_canonical=v1_policy, policy_sha256=V1_PIN,
-                           formal_blob=FORMAL, transport=Transport(), ledger=source.AttemptLedger(NAMESPACE))
+        for label, blob, pin in (("v1", v1_policy, V1_PIN), ("v2", V2_POLICY, V2_PIN)):
+            with self.subTest(old_policy=label):
+                self.assertFailure("policy_pin", source.validate_policy, blob, pin)
+                self.assertFailure("policy_keys", source.validate_policy, blob, EXTERNAL_PIN)  # old shape under the v3 pin
+                self.assertFailure("policy_pin", source.validate_policy, EXTERNAL_POLICY, pin)
+                self.assertFailure("policy_pin", source.HistorySource, policy_canonical=blob, policy_sha256=pin,
+                                   formal_blob=FORMAL, transport=Transport(), ledger=source.AttemptLedger(NAMESPACE))
         self.assertFailure("quota_namespace", source.AttemptLedger, V1_NAMESPACE)
         snapshot, transport, _ = build()
         snapshot.acquire()
         proof = admission(snapshot)
-        for label, mutation in (("namespace", replace(proof, namespace=V1_NAMESPACE)),
-                                ("policy", replace(proof, policy_sha256=V1_PIN))):
+        for label, mutation in (("namespace_qa1", replace(proof, namespace=V1_NAMESPACE)),
+                                ("policy_v1", replace(proof, policy_sha256=V1_PIN)),
+                                ("policy_v2", replace(proof, policy_sha256=V2_PIN))):
             with self.subTest(case=label):
                 self.assertFailure("oracle_scope", snapshot.admit_independent_verification, mutation)
         snapshot.release()
@@ -423,41 +560,83 @@ class Boundaries(unittest.TestCase):
             with self.subTest(case=label):
                 self.assertFailure(code, source._financial_start, replace(start, binding=runtime), runtime)
 
-    def test_calendar_csv_exact_all_rows_and_stop_unrun(self):
-        calendar, documents = corpus()
-        lines = calendar.decode("utf8").splitlines()
+    def test_trading_date_document_gate_stops_before_any_price_get(self):
+        all_dates = JULY + PRIOR
+        base = json.loads(trading_body(all_dates))
+
+        def mutate(change):
+            document = copy.deepcopy(base)
+            change(document)
+            return json.dumps(document, separators=(",", ":")).encode("utf8")
+
+        def dates_body(dates):
+            return trading_body(tuple(sorted(dates)))
+
         variants = [
-            (b'{"data":[]}', "calendar_header_or_count"),
-            (b"<html>failed</html>", "calendar_header_or_count"),
-            (calendar.replace("資料日期".encode(), "日期".encode()), "calendar_header_or_count"),
-            ((lines[0] + "\n").encode(), "calendar_header_or_count"),  # header only: zero observed days
-            ((calendar.decode() + lines[1] + "\n").encode(), "calendar_exact_dates"),  # duplicate date
-            ((calendar.decode() + "20260803,100,105,95,101,-1\n").encode(), "calendar_exact_dates"),  # extra non-July
-            (calendar.replace(b"20260701", b"20260702", 1), "calendar_exact_dates"),
-            (calendar.replace(b"20260701", b"20260803", 1), "calendar_exact_dates"),
-            (calendar.replace(b"20260701", b"20260630", 1), "calendar_exact_dates"),
-            (calendar.replace(b"20260701", b"20260704", 1), "calendar_exact_dates"),  # Saturday
-            (calendar.replace(b"20260701", b"20260705", 1), "calendar_exact_dates"),  # Sunday
-            (calendar.replace(b"20260731", b"2026073", 1), "calendar_row"),  # malformed last row
-            (calendar.replace(b"20260701", b"20260230", 1), "calendar_value"),
-            (calendar.replace(b"20260701", b"1150701", 1), "calendar_row"),
-            (calendar.replace(b",105,95,", b",99,95,", 1), "ohlc_bounds"),
-            (calendar.replace(b",100,105", b",0,105", 1), "calendar_number"),
-            (calendar.replace(b",-1\n", b",NaN\n", 1), "calendar_number"),
+            ("not_json", b"<html>blocked</html>", "transport_or_parse_failure"),
+            ("utf8_bom", b"\xef\xbb\xbf" + trading_body(all_dates), "transport_or_parse_failure"),
+            ("invalid_utf8", b"\xff" + trading_body(all_dates), "transport_or_parse_failure"),
+            ("extra_top_level_key", mutate(lambda d: d.update(extra=1)), "trading_dates_document"),
+            ("missing_top_level_key", mutate(lambda d: d.pop("msg")), "trading_dates_document"),
+            ("status_402_paid", mutate(lambda d: d.update(status=402)), "trading_dates_status"),
+            ("status_401_login", mutate(lambda d: d.update(status=401, msg="login required")), "trading_dates_status"),
+            ("msg_not_success", mutate(lambda d: d.update(msg="ok")), "trading_dates_status"),
+            ("status_is_bool", mutate(lambda d: d.update(status=True)), "trading_dates_status"),
+            ("data_is_object", mutate(lambda d: d.update(data={})), "trading_dates_rows"),
+            ("data_empty", mutate(lambda d: d.update(data=[])), "trading_dates_rows"),
+            ("row_is_string", mutate(lambda d: d["data"].__setitem__(3, "2026-07-06")), "trading_dates_row"),
+            ("row_extra_key", mutate(lambda d: d["data"][3].update(extra=1)), "trading_dates_row"),
+            ("row_missing_date", mutate(lambda d: d["data"][3].pop("date")), "trading_dates_row"),
+            ("date_compact", mutate(lambda d: d["data"][3].update(date="20260706")), "trading_dates_date"),
+            ("date_impossible", mutate(lambda d: d["data"][3].update(date="2026-02-30")), "trading_dates_date"),
+            ("date_is_number", mutate(lambda d: d["data"][3].update(date=20260706)), "trading_dates_date"),
+            ("duplicate_date", mutate(lambda d: d["data"].insert(4, copy.deepcopy(d["data"][3]))), "trading_dates_order"),
+            ("not_ascending", mutate(lambda d: d["data"].insert(3, d["data"].pop(4))), "trading_dates_order"),
+            # Rows OUTSIDE the window are still structurally validated before they are discarded.
+            ("bad_date_outside_window", trading_body(("2005-01-03",) + all_dates, extra_rows=[{"date": "2026-10-32"}]), "trading_dates_date"),
+            ("extra_key_outside_window", mutate(lambda d: d["data"].insert(0, {"date": "2005-01-03", "x": 1})), "trading_dates_row"),
+            ("unsorted_outside_window", trading_body(("2005-01-04", "2005-01-03") + all_dates), "trading_dates_order"),
+            ("duplicate_outside_window", trading_body(("2005-01-03", "2005-01-03") + all_dates), "trading_dates_order"),
+            # In-window semantics.
+            ("weekend_in_window", dates_body(set(all_dates) | {"2026-07-04"}), "trading_dates_weekday"),
+            ("cutoff_1005_missing", dates_body(set(all_dates) - {"2026-10-05"}), "trading_dates_cutoff"),
+            ("cutoff_1006_missing", dates_body(set(all_dates) - {"2026-10-06"}), "trading_dates_cutoff"),
+            ("window_insufficient_15_july_days", trading_body(JULY[:15] + PRIOR), "trading_dates_window_insufficient"),
+            ("formal_day_missing", dates_body(set(all_dates) - {"2026-09-01"}), "trading_dates_formal_mismatch"),
+            ("formal_closed_day_present", dates_body(set(all_dates) | {"2026-09-25"}), "trading_dates_formal_mismatch"),
         ]
-        for raw, code in variants:
-            with self.subTest(code=code):
-                snapshot, transport, _ = build(transport=Transport(body_docs(raw, documents)))
+        for label, raw, code in variants:
+            with self.subTest(case=label):
+                snapshot, transport, _ = build(transport=Transport(body_docs(raw)))
                 self.assertFailure(code, snapshot.acquire)
                 self.assertEqual(snapshot.state, "failed")
                 self.assertEqual(snapshot.ledger.attempted, (0,))
                 self.assertEqual(snapshot.ledger.unrun, tuple(range(1, 8)))
-                self.assertEqual(len(transport.opens), 1)
+                self.assertEqual(len(transport.opens), 1)  # no price GET after a bad trading-date document
                 self.assertTrue(transport.responses[0].closed)
                 self.assertEqual(snapshot._capture_buffer, b"")
                 self.assertEqual(len(snapshot.inspection()["captures"]), 1)
                 self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
                 snapshot.release()
+
+    def test_trading_dates_outside_window_are_validated_then_discarded(self):
+        # The dataset documentation shows history from 2005-01-03: if start_date/end_date were ignored the whole
+        # history (~5,500 rows) comes back and must still fit the body and retained-roots caps.
+        before = tuple(sorted(set(days("2005-01-03", "2026-06-30")) | {"2026-06-27", "2026-06-28"}))  # incl. weekend
+        after = ("2026-10-07", "2026-10-08", "2026-10-10")  # last one is a Saturday
+        dates = before + JULY + PRIOR + after
+        self.assertEqual(tuple(sorted(dates)), dates)
+        self.assertGreater(len(dates), 5000)
+        self.assertLess(len(trading_body(dates)), source.BODY_CAP)
+        snapshot, transport, _ = build(transport=Transport(body_docs(trading_body(dates))))
+        snapshot.acquire()
+        self.assertEqual(len(transport.opens), 8)
+        self.assertEqual(len(snapshot.inspection()["documents"][0]["data"]), len(dates))  # every returned row kept as received
+        snapshot.admit_independent_verification(admission(snapshot))  # N counts in-window days only
+        self.assertEqual(snapshot.provenance["trading_dates"], JULY + PRIOR)
+        for cutoff in CUTOFFS:
+            self.assertEqual(len(snapshot.get_nominal_ohlcv60("3105", cutoff).bars), 60)
+        snapshot.release()
 
     def test_observed_july_days_variable_count_accepted_with_exact_windows(self):
         # Window arithmetic is derived here, not from product helpers.
@@ -477,15 +656,14 @@ class Boundaries(unittest.TestCase):
                 self.assertEqual(len(results["3105"]), total)
                 proof = admission(snapshot, len(july))
                 self.assertEqual((proof.calendar_rows, proof.price_rows, proof.price_fields, proof.latest_anchor_fields),
-                                 (len(july), 7 * total, 42 * total, 42))
-                if len(july) != 23:  # the old fixed scope no longer describes this snapshot
-                    self.assertFailure("oracle_complete_scope", snapshot.admit_independent_verification,
-                                       replace(proof, calendar_rows=23, price_rows=476, price_fields=2856))
+                                 (total, 7 * total, 42 * total, 42))
+                self.assertFailure("oracle_complete_scope", snapshot.admit_independent_verification,
+                                   replace(proof, calendar_rows=23, price_rows=476, price_fields=2856))  # the old fixed scope
                 for field, delta in (("calendar_rows", 1), ("price_rows", -1), ("price_fields", 1), ("latest_anchor_fields", -1)):
                     self.assertFailure("oracle_complete_scope", snapshot.admit_independent_verification,
                                        replace(proof, **{field: getattr(proof, field) + delta}))
                 snapshot.admit_independent_verification(proof)
-                self.assertEqual(snapshot.provenance["calendar_dates"], july + PRIOR)
+                self.assertEqual(snapshot.provenance["trading_dates"], july + PRIOR)
                 _, documents = corpus(july)
                 for index, symbol in enumerate(SYMBOLS):
                     for cutoff in CUTOFFS:
@@ -510,7 +688,7 @@ class Boundaries(unittest.TestCase):
             with self.subTest(observed_july_days=count):
                 # 10/05 needs 44 + count >= 60 (count >= 16); 10/06 needs count >= 15.
                 snapshot, transport, _ = build(transport=Transport(body_docs(july=JULY[:count])))
-                self.assertFailure("calendar_window_insufficient", snapshot.acquire)
+                self.assertFailure("trading_dates_window_insufficient", snapshot.acquire)
                 self.assertEqual(len(transport.opens), 1)
                 self.assertEqual(snapshot.ledger.attempted, (0,))
                 self.assertEqual(snapshot.ledger.unrun, tuple(range(1, 8)))
@@ -518,26 +696,15 @@ class Boundaries(unittest.TestCase):
                 self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
                 snapshot.release()
 
-    def test_calendar_combination_must_be_unique_and_ascending(self):
-        for label, rewrite in (("duplicate_with_prior", lambda prior: ("2026-07-31",) + prior),
-                               ("descending_prior", lambda prior: tuple(reversed(prior)))):
-            with self.subTest(case=label):
-                snapshot, transport, _ = build()
-                snapshot._prior_dates = rewrite(snapshot._prior_dates)
-                self.assertFailure("calendar_combination", snapshot.acquire)
-                self.assertEqual(len(transport.opens), 1)
-                self.assertEqual(snapshot.ledger.attempted, (0,))
-                snapshot.release()
-
-    def test_price_dates_must_equal_observed_calendar_for_every_symbol(self):
+    def test_price_dates_must_equal_trading_dates_for_every_symbol(self):
         gap = "2026-07-15"
         july = july_without(gap)
-        calendar, original = corpus(july)
+        trading, original = corpus(july)
 
         def mutated(symbol_index, change):
             documents = copy.deepcopy(original)
             change(documents[symbol_index]["data"])
-            return body_docs(calendar, documents, july)
+            return body_docs(trading, documents, july)
 
         def add_gap_row(rows):
             rows.append({**rows[0], "date": gap})
@@ -546,7 +713,7 @@ class Boundaries(unittest.TestCase):
             rows[3]["date"] = gap
 
         cases = (
-            ("extra_day_not_in_calendar", 0, add_gap_row, "price_row_count", 2),
+            ("extra_day_not_in_trading_dates", 0, add_gap_row, "price_row_count", 2),
             ("missing_day", 0, lambda rows: rows.pop(5), "price_row_count", 2),
             ("same_count_wrong_date", 0, swap_in_gap, "price_duplicate_or_calendar", 2),
             ("duplicate_date_hides_missing", 0, lambda rows: rows.__setitem__(4, copy.deepcopy(rows[5])), "price_duplicate_or_calendar", 2),
@@ -564,10 +731,10 @@ class Boundaries(unittest.TestCase):
                 self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
                 snapshot.release()
         # Cross-source disagreement in either direction: provider has one more or one fewer
-        # trading day than the official observed calendar, for every symbol.
-        full_calendar, full_documents = corpus()
-        for label, bodies in (("provider_has_extra_day", body_docs(calendar, full_documents, july)),
-                              ("provider_lacks_day", body_docs(full_calendar, original, JULY))):
+        # trading day than the FinMind trading dates, for every symbol.
+        full_trading, full_documents = corpus()
+        for label, bodies in (("provider_has_extra_day", body_docs(trading, full_documents, july)),
+                              ("provider_lacks_day", body_docs(full_trading, original, JULY))):
             with self.subTest(case=label):
                 snapshot, transport, _ = build(transport=Transport(bodies))
                 self.assertFailure("price_row_count", snapshot.acquire)
@@ -623,6 +790,26 @@ class Boundaries(unittest.TestCase):
             self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
             snapshot.release()
 
+    def test_zero_price_rows_reject_whole_batch(self):
+        _, original = corpus()
+        changes = [(f"{key}_zero", lambda row, key=key: row.update({key: 0})) for key in ("open", "max", "min", "close")]
+        changes += [
+            ("no_posted_price_zero_volume", lambda row: row.update(open=0, max=0, min=0, close=0, Trading_Volume=0)),
+            ("no_posted_price_with_volume", lambda row: row.update(open=0, max=0, min=0, close=0, Trading_Volume=451)),
+            ("no_posted_price_decimal_zero", lambda row: row.update(open=0.0, max=0.0, min=0.0, close=0.0)),
+        ]
+        for label, change in changes:
+            for symbol_index, row_index in ((0, 0), (3, 30), (6, 66)):
+                with self.subTest(case=label, symbol=SYMBOLS[symbol_index], row=row_index):
+                    documents = copy.deepcopy(original)
+                    change(documents[symbol_index]["data"][row_index])
+                    snapshot, transport, _ = build(transport=Transport(body_docs(documents=documents)))
+                    self.assertFailure("nonpositive_price", snapshot.acquire)
+                    self.assertEqual(len(transport.opens), symbol_index + 2)  # first failure stops the batch
+                    self.assertEqual(snapshot.ledger.attempted, tuple(range(symbol_index + 2)))
+                    self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
+                    snapshot.release()
+
     def test_price_json_duplicate_nonfinite_full_document(self):
         for raw, expected in ((b'{"status":200,"status":200,"msg":"success","data":[]}', "duplicate_json_key"),
                               (b'{"status":200,"msg":"success","data":[],"extra":NaN}', "nonfinite_json_number"),
@@ -638,9 +825,7 @@ class Boundaries(unittest.TestCase):
         pending = snapshot.acquire()
         self.assertIs(pending, snapshot)
         self.assertEqual(snapshot.state, "pending")
-        self.assertEqual(tuple(url for url, _ in transport.opens), (
-            "https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01",
-            *(f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={s}&start_date=2026-07-01&end_date=2026-10-06" for s in SYMBOLS)))
+        self.assertEqual(tuple(url for url, _ in transport.opens), EXPECTED_URLS)
         self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-05")
         proof = admission(snapshot)
         for mutation in (replace(proof, price_rows=475), replace(proof, latest_anchor_fields=41)):
@@ -742,7 +927,7 @@ class Boundaries(unittest.TestCase):
         for known in (False, True):
             transport = Transport([body], response_options={0: {"declared": False, "eof": known}})
             snapshot, _, _ = build(transport=transport)
-            code = "calendar_csv_syntax" if known else "body_cap_without_known_eof"
+            code = "transport_or_parse_failure" if known else "body_cap_without_known_eof"
             self.assertFailure(code, snapshot.acquire)
             response = transport.responses[0]
             self.assertEqual(sum(count for count, _ in response.read_calls), source.BODY_CAP)
@@ -769,17 +954,17 @@ class Boundaries(unittest.TestCase):
             snapshot._batch_deadline = clock.now + 180
             snapshot._raw_bytes = source.RAW_CAP - 5
             if known:
-                capture = snapshot._capture(0, source.CALENDAR_URL)
+                capture = snapshot._capture(0, source.TRADING_DATE_URL)
                 self.assertEqual(capture.body, b"12345")
                 self.assertTrue(capture.receipt.full_eof)
             else:
-                self.assertFailure("body_cap_without_known_eof", snapshot._capture, 0, source.CALENDAR_URL)
+                self.assertFailure("body_cap_without_known_eof", snapshot._capture, 0, source.TRADING_DATE_URL)
                 self.assertEqual(snapshot._captures, [])
             self.assertEqual(transport.responses[0].read_calls[0][0], 5)
             self.assertEqual(len(transport.responses[0].read_calls), 1)
             self.assertEqual(snapshot._raw_bytes, source.RAW_CAP)
             snapshot.release()
-        transport = Transport([b"123"], response_options={0: {"headers": (("Content-Length", "4"),)}})
+        transport = Transport([b"123"], response_options={0: {"headers": (("Content-Length", "4"),) + JSON_TYPE}})
         snapshot, _, _ = build(transport=transport)
         self.assertFailure("incomplete_content_length", snapshot.acquire)
         self.assertEqual(snapshot._captures, [])
@@ -902,7 +1087,7 @@ class Boundaries(unittest.TestCase):
                     raise RuntimeError("DO_NOT_RETAIN_RAW_connection")
             expected = "https_connect_failure" if phase == "connect" else "cooperative_deadline"
             with patch.object(source.time, "monotonic", clock), patch.object(source.http.client, "HTTPSConnection", Connection), patch.object(source.ssl, "create_default_context", lambda: object()):
-                error = self.assertFailure(expected, source._HTTPSTransport().open, source.CALENDAR_URL, 20)
+                error = self.assertFailure(expected, source._HTTPSTransport().open, source.TRADING_DATE_URL, 20)
             self.assertEqual(error.diagnostics["primary_stage"], "https_" + phase)
             self.assertEqual(error.diagnostics["secondary_cleanup_count"], 1 if phase == "connect" else 2)
             self.assertEqual(calls, ["connect", "connection_close"] if phase == "connect" else ["connect", "request", "headers", "response_close", "connection_close"])
@@ -926,7 +1111,7 @@ class Boundaries(unittest.TestCase):
         snapshot, _, _ = build(transport=transport, clock=clock)
         snapshot._ledger.begin()
         snapshot._batch_deadline = clock.now + 3
-        self.assertFailure("cooperative_deadline", snapshot._capture, 0, source.CALENDAR_URL)
+        self.assertFailure("cooperative_deadline", snapshot._capture, 0, source.TRADING_DATE_URL)
         self.assertEqual(transport.opens[0][1], 3)
         self.assertEqual(transport.responses[0].read_calls[0][1], 3)
         self.assertTrue(transport.responses[0].closed)
@@ -992,9 +1177,9 @@ class Boundaries(unittest.TestCase):
             if external:
                 failure_checks.append(True)
             return external
-        calendar, documents = corpus()
+        trading, documents = corpus()
         documents[0]["data"][0]["close"] = 0
-        snapshot, transport, _ = build(transport=Transport(body_docs(calendar, documents)), observer_roots=observer)
+        snapshot, transport, _ = build(transport=Transport(body_docs(trading, documents)), observer_roots=observer)
         def trace(frame, event, arg):
             if (frame.f_globals.get("__name__") == spec.name and frame.f_code.co_name == "_prices"
                     and event == "exception" and isinstance(arg[1], source.SourceError)
@@ -1095,23 +1280,260 @@ class Boundaries(unittest.TestCase):
                 return value
             with patch.object(source.time, "monotonic", clock), patch.object(source.http.client, "HTTPSConnection", factory), patch.object(source.ssl, "create_default_context", lambda: object()):
                 if delay == 1:
-                    response = source._HTTPSTransport().open(source.CALENDAR_URL, 20)
+                    response = source._HTTPSTransport().open(source.TRADING_DATE_URL, 20)
                     response.close()
                 else:
-                    self.assertFailure("cooperative_deadline", source._HTTPSTransport().open, source.CALENDAR_URL, 20)
+                    self.assertFailure("cooperative_deadline", source._HTTPSTransport().open, source.TRADING_DATE_URL, 20)
             connection = connections[0]
             self.assertEqual(connection.timeout, 20)
             self.assertEqual(connection.sock.timeouts, [8, 5])
             self.assertTrue(connection.closed)
             self.assertTrue(connection.body.closed)
             self.assertEqual(connection.requests[0][0], "GET")
-            self.assertEqual(connection.requests[0][2], {"Accept-Encoding": "identity", "Connection": "close"})
+            self.assertEqual(connection.requests[0][2], FINMIND_REQUEST_HEADERS)
+
+    def test_default_https_request_headers_are_the_four_fixed_finmind_headers(self):
+        # In-memory HTTPSConnection boundary: the audit guard bans real sockets.
+        class Socket:
+            def settimeout(self, value):
+                pass
+
+        class HTTPBody:
+            status = 200
+            length = 0
+            fp = None
+            closed = False
+
+            def getheaders(self):
+                return (("Content-Length", "0"),)
+
+            def isclosed(self):
+                return self.closed
+
+            def close(self):
+                self.closed = True
+
+        class Connection:
+            def __init__(self, host, timeout, context):
+                self.host, self.timeout, self.context = host, timeout, context
+                self.sock, self.body, self.requests = Socket(), HTTPBody(), []
+                self.tunnel_used = False
+
+            def connect(self):
+                pass
+
+            def set_tunnel(self, *args, **kwargs):
+                self.tunnel_used = True
+
+            def request(self, method, target, headers):
+                self.requests.append((method, target, headers))
+
+            def getresponse(self):
+                return self.body
+
+            def close(self):
+                pass
+
+        self.assertEqual(source.TRADING_DATE_URL, TRADING_DATE_URL_LITERAL)
+        self.assertEqual([source.PRICE_URL.format(symbol) for symbol in SYMBOLS], list(EXPECTED_URLS[1:]))
+        forbidden = {"cookie", "set-cookie", "authorization", "proxy-authorization", "proxy-connection", "x-api-key", "token"}
+        connections = []
+
+        def factory(*args, **kwargs):
+            value = Connection(*args, **kwargs)
+            connections.append(value)
+            return value
+
+        for url in EXPECTED_URLS:
+            with self.subTest(url=url):
+                with patch.object(source.http.client, "HTTPSConnection", factory), patch.object(source.ssl, "create_default_context", lambda: object()):
+                    source._HTTPSTransport().open(url, 20).close()
+                connection = connections[-1]
+                self.assertEqual(connection.host, "api.finmindtrade.com")
+                self.assertFalse(connection.tunnel_used)
+                self.assertEqual(len(connection.requests), 1)
+                method, target, headers = connection.requests[0]
+                self.assertEqual(method, "GET")
+                self.assertEqual(target, url.split(connection.host, 1)[1])
+                self.assertEqual(headers, FINMIND_REQUEST_HEADERS)
+                self.assertTrue(forbidden.isdisjoint(key.lower() for key in headers))
+        # Every other host/scheme/port/userinfo (TPEx included) is refused before a connection is built.
+        built = len(connections)
+        for bad in ("https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01",
+                    "https://example.org/a?b=1", "http://api.finmindtrade.com/a?b=1",
+                    "https://api.finmindtrade.com:443/a?b=1", "https://user@api.finmindtrade.com/a?b=1"):
+            with self.subTest(refused=bad), patch.object(source.http.client, "HTTPSConnection", factory):
+                self.assertFailure("transport_url", source._HTTPSTransport().open, bad, 20)
+        self.assertEqual(len(connections), built)
+
+    def assertReplayAccepted(self, wires, july_days):
+        snapshot, transport = replay(wires)
+        snapshot.acquire()
+        self.assertEqual(snapshot.state, "pending")
+        self.assertEqual(tuple(transport.opens), EXPECTED_URLS)
+        self.assertEqual(snapshot.ledger.attempted, tuple(range(8)))
+        for host, method, target, headers in transport.requests:
+            self.assertEqual((host, method, headers), ("api.finmindtrade.com", "GET", FINMIND_REQUEST_HEADERS))
+        # Set-Cookie is observed but never stored or echoed: no request carries a credential.
+        self.assertFalse(any(key.lower() in ("cookie", "authorization", "proxy-authorization")
+                             for request in transport.requests for key in request[3]))
+        snapshot.admit_independent_verification(admission(snapshot, july_days))
+        for cutoff in CUTOFFS:
+            self.assertEqual(len(snapshot.get_nominal_ohlcv60("3105", cutoff).bars), 60)
+        snapshot.release()
+        return transport
+
+    def assertReplayPrefixAccepted(self, accepted_wires):
+        """Every wire in accepted_wires is captured, parsed and validated; a poison response then stops the batch."""
+        poison = finmind_wire(b"<html>poison</html>")
+        snapshot, transport = replay(list(accepted_wires) + [poison])
+        count = len(accepted_wires)
+        error = self.assertFailure("transport_or_parse_failure", snapshot.acquire)
+        self.assertEqual(error.diagnostics["source_index"], count)
+        self.assertEqual(snapshot.ledger.attempted, tuple(range(count + 1)))
+        self.assertEqual(len(snapshot.inspection()["documents"]), count)
+        captures = tuple(snapshot.inspection()["captures"])
+        for _, _, _, headers in transport.requests:
+            self.assertEqual(headers, FINMIND_REQUEST_HEADERS)
+        self.assertFalse(any(key.lower() in ("cookie", "authorization", "proxy-authorization")
+                             for request in transport.requests for key in request[3]))
+        snapshot.release()
+        return captures, transport
+
+    def assertReplayRejected(self, wires, code, opens):
+        snapshot, transport = replay(wires)
+        self.assertFailure(code, snapshot.acquire)
+        self.assertEqual(len(transport.opens), opens)  # first-failure stop: no redirect follow, no later GET
+        self.assertEqual(snapshot.ledger.attempted, tuple(range(opens)))
+        self.assertEqual(snapshot.state, "failed")
+        self.assertFailure("consumer_unavailable", snapshot.get_nominal_ohlcv60, "3105", "2026-10-06")
+        snapshot.release()
+
+    def test_replay_full_pipeline_for_each_accepted_framing(self):
+        july = july_without("2026-07-15")
+        trading, _ = corpus(july)
+        bodies = body_docs(july=july)[1:]
+        shapes = (("content_length_keep_alive", dict(extra=[("Connection", "keep-alive")])),
+                  ("chunked_with_set_cookie_and_duplicate_vary",
+                   dict(framing="chunked", extra=[("Set-Cookie", "__cf_bm=synthetic; Path=/; HttpOnly"), ("Vary", "Origin")])),
+                  ("close_delimited_http11", dict(framing="close")))
+        for label, options in shapes:
+            with self.subTest(framing=label):
+                self.assertReplayAccepted([finmind_wire(body, **options) for body in [trading] + bodies], len(july))
+
+    def test_response_shape_v3_every_row_accept_and_reject(self):
+        july = july_without("2026-07-15")
+        trading, _ = corpus(july)
+        price = body_docs(july=july)[1]
+        # Each accepted shape is applied to the trading-date response AND the first price response.
+        accepted = (
+            # content_type: application/json with or without charset=utf-8
+            ("ct_plain", {}),
+            ("ct_charset_utf8", dict(content_type="application/json; charset=utf-8")),
+            ("ct_charset_upper_no_space", dict(content_type="application/json;charset=UTF-8")),
+            ("ct_mixed_case", dict(content_type="Application/JSON; Charset=UTF-8")),
+            ("ct_space_before_semicolon", dict(content_type="application/json ;charset=utf-8")),
+            # framing: content-length, chunked, close-delimited (HTTP/1.1 and 1.0)
+            ("framing_content_length", dict(framing="length")),
+            ("framing_chunked", dict(framing="chunked")),
+            ("framing_chunked_mixed_case_token", dict(framing="chunked", te="Chunked")),
+            ("framing_close_delimited_http11", dict(framing="close")),
+            ("framing_close_delimited_http10", dict(framing="close", version="1.0")),
+            # content_encoding: identity or absent
+            ("encoding_identity", dict(content_encoding="identity")),
+            ("encoding_identity_mixed_case", dict(content_encoding="Identity")),
+            # set_cookie accepted; other duplicate headers accepted and ignored
+            ("set_cookie_once", dict(extra=[("Set-Cookie", "__cf_bm=synthetic; Path=/; HttpOnly")])),
+            ("set_cookie_twice", dict(extra=[("Set-Cookie", "__cf_bm=synthetic; Path=/; HttpOnly"), ("Set-Cookie", "other=1")])),
+            ("duplicate_non_identity_headers", dict(extra=[("Vary", "Origin"), ("Vary", "Accept"), ("Cache-Control", "no-store"),
+                                                          ("Cache-Control", "no-cache"), ("X-Ratelimit-Remaining", "299"),
+                                                          ("X-Ratelimit-Remaining", "298")])),
+            ("connection_header_values", dict(extra=[("Connection", "keep-alive")])),
+        )
+        for label, options in accepted:
+            with self.subTest(accepted=label):
+                captures, _ = self.assertReplayPrefixAccepted([finmind_wire(trading, **options), finmind_wire(price, **options)])
+                self.assertEqual(captures[0].receipt.status, 200)
+                self.assertEqual(captures[0].receipt.content_encoding, "identity")
+
+        header_rejects = []
+        for status, reason in ((201, "Created"), (204, "No Content"), (206, "Partial Content"), (304, "Not Modified"),
+                               (400, "Bad Request"), (401, "Unauthorized"), (402, "Payment Required"), (403, "Forbidden"),
+                               (404, "Not Found"), (429, "Too Many Requests"), (500, "Internal Server Error"),
+                               (503, "Service Unavailable")):
+            header_rejects.append((f"status_{status}", lambda body, s=status, r=reason: finmind_wire(body, status=s, reason=r), "http_status"))
+        for status, reason in ((301, "Moved Permanently"), (302, "Found"), (307, "Temporary Redirect"), (308, "Permanent Redirect")):
+            header_rejects.append((f"redirect_{status}", lambda body, s=status, r=reason: finmind_wire(
+                body, status=s, reason=r, extra=[("Location", "https://example.invalid/next")]), "http_status"))
+        for label, content_type in (("missing", None), ("empty", ""), ("text_html", "text/html; charset=utf-8"),
+                                    ("application_csv", "application/csv"), ("text_json", "text/json"),
+                                    ("x_json", "application/x-json"), ("jsonp", "application/jsonp"),
+                                    ("charset_big5", "application/json; charset=big5"),
+                                    ("charset_latin1", "application/json; charset=iso-8859-1"),
+                                    ("extra_parameter", "application/json; charset=utf-8; boundary=x")):
+            header_rejects.append((f"content_type_{label}", lambda body, c=content_type: finmind_wire(body, content_type=c), "content_type"))
+        for value in ("gzip", "br", "deflate", "zstd", "gzip, identity", ""):
+            header_rejects.append((f"content_encoding_{value or 'empty'}", lambda body, v=value: finmind_wire(body, content_encoding=v),
+                                   "content_encoding"))
+        header_rejects += [
+            ("content_length_and_chunked", lambda body: finmind_wire(body, framing="both"), "ambiguous_framing"),
+            ("transfer_encoding_gzip_chunked", lambda body: finmind_wire(body, framing="close", extra=[("Transfer-Encoding", "gzip, chunked")]),
+             "ambiguous_framing"),
+            ("transfer_encoding_identity", lambda body: finmind_wire(body, framing="close", extra=[("Transfer-Encoding", "identity")]),
+             "ambiguous_framing"),
+            ("content_length_leading_zero", lambda body: finmind_wire(body, framing="close", extra=[("Content-Length", "0" + str(len(body)))]),
+             "content_length"),
+            ("content_length_plus_sign", lambda body: finmind_wire(body, framing="close", extra=[("Content-Length", "+" + str(len(body)))]),
+             "content_length"),
+            ("content_length_over_body_cap", lambda body: finmind_wire(body, framing="close", extra=[("Content-Length", str(source.BODY_CAP + 1))]),
+             "declared_body_cap"),
+            ("duplicate_content_length", lambda body: finmind_wire(body, extra=[("Content-Length", str(len(body)))]), "duplicate_framing_header"),
+            ("duplicate_content_length_lower_case", lambda body: finmind_wire(body, extra=[("content-length", str(len(body)))]),
+             "duplicate_framing_header"),
+            ("duplicate_content_type", lambda body: finmind_wire(body, extra=[("Content-Type", "application/json")]), "duplicate_framing_header"),
+            ("duplicate_content_type_upper_case", lambda body: finmind_wire(body, extra=[("CONTENT-TYPE", "application/json")]),
+             "duplicate_framing_header"),
+            ("duplicate_content_encoding", lambda body: finmind_wire(body, content_encoding="identity", extra=[("content-encoding", "identity")]),
+             "duplicate_framing_header"),
+            ("duplicate_transfer_encoding", lambda body: finmind_wire(body, framing="chunked", extra=[("Transfer-Encoding", "chunked")]),
+             "duplicate_framing_header"),
+        ]
+        junk = b"x" * (source.BODY_CAP + 1024)
+        body_rejects = [
+            ("content_length_longer_than_body",
+             lambda body: raw_http([("Content-Type", "application/json"), ("Content-Length", "999")], b"x" * 10), "missing_known_eof"),
+            ("chunked_truncated",
+             lambda body: raw_http([("Content-Type", "application/json"), ("Transfer-Encoding", "chunked")], chunk_encode(body)[:-5]),
+             "transport_or_parse_failure"),
+            ("close_delimited_cap_reached_without_eof", lambda body: finmind_wire(junk, framing="close"), "body_cap_without_known_eof"),
+            ("close_delimited_exactly_cap_no_eof_seen", lambda body: finmind_wire(b"x" * source.BODY_CAP, framing="close"),
+             "body_cap_without_known_eof"),
+            ("chunked_cap_reached_without_eof", lambda body: finmind_wire(junk, framing="chunked"), "body_cap_without_known_eof"),
+            ("empty_body", lambda body: finmind_wire(b""), "empty_body"),
+            ("utf8_bom", lambda body: finmind_wire(b"\xef\xbb\xbf" + body), "transport_or_parse_failure"),
+            ("invalid_utf8", lambda body: finmind_wire(b"\xff" + body), "transport_or_parse_failure"),
+            ("utf16_body", lambda body: finmind_wire(body.decode("utf8").encode("utf-16")), "transport_or_parse_failure"),
+            ("html_error_page_with_200", lambda body: finmind_wire(b"<html>blocked</html>"), "transport_or_parse_failure"),
+        ]
+        for label, build_wire, code in header_rejects + body_rejects:
+            with self.subTest(rejected=label, at="trading_dates"):
+                self.assertReplayRejected([build_wire(trading)], code, 1)
+            with self.subTest(rejected=label, at="price"):
+                self.assertReplayRejected([finmind_wire(trading), build_wire(price)], code, 2)
+
+        # status inside a 200 body: paid / login / limit responses are first failures at either position.
+        paid = json.dumps({"msg": "Your level is register. Please update your user level.", "status": 402}).encode()
+        login = json.dumps({"msg": "login required", "status": 401, "data": []}).encode()
+        self.assertReplayRejected([finmind_wire(paid)], "trading_dates_document", 1)
+        self.assertReplayRejected([finmind_wire(login)], "trading_dates_status", 1)
+        self.assertReplayRejected([finmind_wire(trading), finmind_wire(paid)], "price_document", 2)
+        self.assertReplayRejected([finmind_wire(trading), finmind_wire(login)], "price_document_status", 2)
 
     def test_trace_same_body_receipt_before_parse_and_error_roots(self):
         events = {"during": [], "ready": [], "error": []}
-        calendar, documents = corpus()
+        trading, documents = corpus()
         documents[0]["data"][0]["close"] = 0
-        snapshot, transport, _ = build(transport=Transport(body_docs(calendar, documents)),
+        snapshot, transport, _ = build(transport=Transport(body_docs(trading, documents)),
                                       observer_roots=lambda: events)
         def trace(frame, event, arg):
             if frame.f_globals.get("__name__") != spec.name:
