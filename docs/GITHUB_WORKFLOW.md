@@ -19,7 +19,7 @@
 | 阻塞／暫停 | Project Blocked／Paused | 是／否；原單列原因、決策者、解除條件、原階段、重查事件／時間。 |
 | owner／下一角色 | Issue 最新交接 | session、版本、ACK；assignee 是通知帳號，不冒每 agent 獨立帳號。 |
 | 整合排隊／持有者 | 治理 Issue 最新整合收據 | 全局唯一更新，有序候選、最多一位持有者，不建本機鎖表。 |
-| WIP／停滯計數 | 同一治理 Issue | 上限／實占／空位／補派處置；暫限列證據、範圍、解除事件，計算及釋放依[AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
+| WIP／停滯計數 | 同一治理 Issue | 上限／實占／空位／處置，規則依 [AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
 | Repo／Project／整合入口 URL | 遷移入口 | 只留穩定入口，不抄即時 roster／狀態。 |
 
 原生關係確定不支援時才用 Issue「母單／子單」及「Blocked by／Blocking」完整連結，全局核雙向一致；不維護兩套權威關係或以 label 複製 Ready／Status。
@@ -34,9 +34,9 @@
 
 milestone 是唯一版本集合。跨版母單按 V1 必要 AC 拆子單，不整張納入；逐子核 milestone，不推定繼承。Project 可留後版／候選；取消／重複不算能力，必要 AC 須映射承接單或有效證據。
 
-既定 AC 的必要前置／缺陷由全局列受阻 AC、版本、依賴影響並決定納入 V1；新能力、市場、策略或降 AC 須使用者核定，pending 不接受。後版想法不延長 V1，建單不占 WIP／解除暫停。缺來源且無新路徑時保留階段、記阻塞／解除條件，不用 unknown 代交付。
+既定 AC 的必要前置／缺陷由全局列受阻 AC、版本、依賴影響並決定納入 V1；新能力或降 AC 依 [AGENTS](../AGENTS.md#疑問阻塞與範圍變更)由使用者核定。後版想法不延長 V1，建單不占 WIP／解除暫停。缺來源且無新路徑時保留階段、記阻塞／解除條件，不用 unknown 代交付。
 
-進度報已驗能力、剩餘 AC、未解除依賴、發布 gate，不重複計母子／PR／維護或按 closed 比例算完成。已整合 master 的全部 V1 必要 AC、執行單、獨立 QA 端到端（含磁碟／跨程序）、required CI、文件齊全且阻擋缺陷 0，才由全局寫發布驗收、關 milestone。後版／跨版母單可 open；部署另授權。
+進度報已驗能力、剩餘 AC、未解除依賴、發布 gate，不重複計母子／PR／維護或按 closed 比例算完成。發布條件見 [ROADMAP V1-G7](ROADMAP.md#v1-範圍基線2026-10-09-已核定邊界)；後版／跨版母單可 open。
 
 ## 待辦涵蓋與補單
 
@@ -53,7 +53,7 @@ milestone 是唯一版本集合。跨版母單按 V1 必要 AC 拆子單，不�
 
 ### 平行派工與補位
 
-WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限及補派規則適用；一張 Ready 不另核永久容量 1。等待只約束該單及真正依賴，共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
+WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限及補派規則適用。等待只約束該單及真正依賴，共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
 
 治理收據記「上限／實占／空位 → Ready／必要前置 → 隔離／角色安排 → 派工或阻擋／解除事件」。Project 連現行規則、治理單，舊限制明示歷史。規則未整合時全局交版本化決策／差異給受影響 owner 讀回，不改被測樹或把管理候選當產品 base。
 
@@ -90,7 +90,7 @@ QA／合併後檢查須核：
 - code／設定／重啟／bundle／upstream 改動須重核對應及受影響項。跨任務沿用須 owner 同意、用途授權、相關載入來源一致；clean／port／package version／長度不足。
 - 無法證版本列未驗，在授權內建正確服務或記阻塞。不得重啟重取 SPENT、恢復已釋原件或繞 NO-RETRY；不可重取資料先安排合法 QA 生命周期／保留範圍。
 
-chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bundle 啟動時建立；換 UI 埠不換 API，commit 不更新既有 bundle。用核定 `--port`／`--api-port` 並讀回，見[API](../tools/tpex-chips-series-api.py)／[preview](../tools/tpex-chips-series-preview.cjs)。不要求逐測試新建環境，隔離入口沿原契約。
+QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`--api-port` 見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。不要求逐測試新建環境，隔離入口沿原契約。
 
 ## 角色 provider 與啟動參數
 
@@ -99,10 +99,13 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 | provider | 啟動 | 恢復 |
 | --- | --- | --- |
 | Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色：Orca 可見 terminal、目標 worktree 啟動，模型與 reasoning 依角色表 | 原 session `--remote … resume <ID>` |
-| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID>`，讀回模型／effort，不同則記錄並由全局處置 |
+| Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID> --effort <level>`，讀回模型／effort，不同則記錄並由全局處置 |
 
-- 只用完整模型 ID（如 `claude-opus-5-5`）；簡寫 `opus-5.5` 會被拒絕。
-- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不會讓啟動失敗，故收據須在 session 內讀回 effort，讀不到記未驗，不以命令列參數當證據。
+- 只用完整模型 ID（如 `claude-opus-5-5`）。無效 ID（如 `opus-5.5`）啟動不擋，首次請求才被拒，故收據須含已完成的 turn。
+- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不讓啟動失敗。
+- `--resume` 保留模型，effort 回預設，故恢復須帶原 `--effort`。
+- 讀回：session 內 `CLAUDE_CODE_SESSION_ID`／`CLAUDE_EFFORT`；模型只以 transcript `~/.claude/projects/<cwd-key>/<ID>.jsonl` 的 assistant `model` 欄位核對，effort 亦可核 `effort` 欄位。模型自述、banner、命令列不作證據；讀不到記未驗。
+- 從 Git Bash 用 `orca terminal send` 送 `/` 開頭指令須設 `MSYS_NO_PATHCONV=1`，否則被轉成路徑送出。
 
 ## Projects 與關單自動化
 
@@ -126,7 +129,7 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 | `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 
-master ruleset 要求 GitHub Actions `required` 及最新 base；首次實際成功後配置／讀回，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
+master ruleset 要求 GitHub Actions `required` 及最新 base；設定以讀回為準，未讀回記未設，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
 
 CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA 按原 AC 驗版本／真操作；可用既有獨立 session，統籌處理意見，不啟付費雲端 AI reviewer。初始回歸涵蓋按[流程檢查](#流程檢查與滾動調整)擴充；真源／磁碟／跨程序／UI 沿本機 gate，不為 CI 縮 AC。CI／helper 變更跑兩產品工作；前端依賴／後端驗證清單各觸發所屬，backend 來源亦驗前端契約。
 
@@ -162,6 +165,9 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 - 角色：空閒角色停寫並結束不需要的 session；恢復讀最新交接，不載入完整歷史。
 - 量測：Claude `--output-format json` 提供 input／cache／output token；其他 provider 依其 usage，取不到標未知。字元數只是代理指標，不估造費用；換模型或流程的成本比較須有前後量測，記在原 Issue。
 
+<a id="導入順序與驗收"></a>
+<a id="導入項目與驗收"></a>
+
 ## 流程檢查與滾動調整
 
 全局追蹤／排序／決策，任務統籌原單收版本化證據，[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)連待接手項、決策及原單證據。未任命全局時標待接手／ACK，流程維護角色不能代填 owner 或恢復產品；新任／恢復全局核實 session、接受項、下次事件才接手。
@@ -175,7 +181,7 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 | 角色／槽位 | 統籌核階段及寫權、全局排資源 | 啟動／恢復／交接／容量變更 | actual session／模型／reasoning／cwd／branch／HEAD、白名單、停寫／ACK、QA 不同 session | 按[角色](../AGENTS.md#六種角色)分階段、空閒停寫；不足只順排受影響階段。 |
 | 交接欄位 | 統籌／文件核、全局調整 | 首完整試跑／重複缺漏／採用後 | 交接／ACK、版本責任缺漏／重複例證 | 刪重複，留 owner／AC 修訂／完整 SHA／停寫／ACK，治理連模板差異，不另附件。 |
 | 並行資源 | 全局及參與統籌 | 派工／補派／恢復／資源變更 | Ready／前置、階段角色、共用白名單／埠／資料輸出／服務版本、索引 root／scope／版本、整合 owner／隔離 | 治理准入收據；缺口只阻受影響任務／操作，暫限列解除事件，其他獨立照常派。master 一次一張，worktree 不證隔離。 |
-| 產物／歷史文件 | 統籌核量、QA 執行、文件核連結、全局排候選 | 落盤前／修改相關歷史 | 數量／大小／絕對路徑／授權／建立清理／殘留、連結失效證據 | 按[暫存規則](../AGENTS.md#驗證資料與暫存)，不足才提工具改善；觸及歷史連結時處理，既有 [#27](https://github.com/YiCheng0608/stock-lab/issues/27)不納 V1。 |
+| 產物／歷史文件 | 統籌核量、QA 執行、文件核連結、全局排候選 | 落盤前／修改相關歷史 | 數量／大小／絕對路徑／授權／建立清理／殘留、連結失效證據 | 按[暫存規則](../AGENTS.md#驗證資料與暫存)，不足才提工具改善；觸及歷史連結時處理。 |
 
 改善可延後；僅影響既定 AC、安全、啟動送達、並行隔離者阻對應動作。原 AC 失敗原單退修，獨立改善由全局去重／列候選／排序，不自納 V1 或授權派工。
 
@@ -227,6 +233,12 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 
 送達未知保留名額；確定未送達且無可執行 session，或撤權且 session 停寫才釋放。逾時／ACK 遺失不釋放或重派。
 
+角色之間以「原單留言＋Orca 短通知」聯繫：先在原單留收據或請求，再用 `orca terminal send` 對收件者的可見 terminal 送一則短通知，開頭標 `【#Issue 發送角色 → 收件角色】`，附發送者 session ID、terminal handle、留言連結與下一動作。適用於：
+- 角色（工程、QA、文件、索引／Git）交回任務統籌；
+- 任務統籌向全局請求處置，全局處置後回送任務統籌。
+
+派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局換 session 或 handle 時以 #1 最新任命收據為準，並通知進行中的任務統籌。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
+
 未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
 建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
@@ -239,6 +251,8 @@ Issue／AC 修訂：
 活動名額：預留／啟動中／已接手／失敗保留或釋放（送達、授權與停寫證據）：
 目前核心缺口／新增操作／必要依賴與可用證據：
 交付者 → 接收者角色／session：
+全局 session ID／terminal handle／聯絡格式：
+接收者（任務統籌）session ID／terminal handle（ACK 填）：
 下一動作／完成條件：
 repo／worktree／branch／base SHA／candidate SHA：
 Orca terminal handle／provider／實際 session／模型／reasoning 或 effort 讀回／cwd 核對：
@@ -286,29 +300,16 @@ AC 是否變更／核准者與修訂／需重驗項：
 
 ```text
 事件：排隊／取得整合權／合併／檢查／釋放整合權
-Issue／PR／整合執行者／使用者授權收據／開始時間：
+Issue／PR／整合執行者／授權依據（AGENTS 預設授權或使用者收據）／開始時間：
 正式 remote／master base SHA／candidate SHA：
 最新 master 合入任務 branch／衝突處理者／差異與 QA：
 文件 freeze／索引 project、絕對 root／scope、branch、內容版本依據、generation／coverage 限制／刷新者：
-核准者／核准 SHA／合併前 base 再核：
+核准者（持入口任務統籌）／核准 SHA（QA 通過版本）／合併前 base 再核：
 合併後 master SHA／必要檢查命令、原 exit、證據：
 合併後被測服務版本收據／正式 root 的受影響索引核對：
 新增能力／實際解除依賴／可靠性改善／剩餘缺口：
 全局停滯計數前後／下一步理由：
 Issue 關閉與 Project 狀態同步：
-清理另行授權／執行或未執行／殘留：
+結案清理（預設授權）或例外的授權依據／執行或未執行／殘留：
 整合權釋放／失敗時暫停及接管安排：
 ```
-
-<a id="導入順序與驗收"></a>
-
-## 導入項目與驗收
-
-1. **本機改造**：讀 AGENTS／ROADMAP／Git／模型配置，保留既有修改；規則、模板、歷史交接、一致性存本機 branch／commit，不算產品試跑。
-2. **GitHub 設定**：核 repo／Project 所屬、可見性、帳號／登入授權，先唯讀盤點。外部寫入／設定獲授權才配欄位／關係／治理／整合入口，讀回 automation／權限；歷史本機路徑／session 資訊未檢查不公開發布。
-3. **基線／遷移**：完成[核定範圍](#版本範圍與完成判定)、[去重補單](#待辦涵蓋與補單)、coverage／milestone 才試跑。已 review 須核主線／原證據／缺口，不直換 Done；暫停／NO-RETRY／私人保護保持。
-4. **停滯／owner**：核最近兩批、Git／原 task，計數不歸零。GitHub 明示新 owner，舊 session 無接續權、不因遷移刪／關；遷移入口留實際 URL，不更新 repo 即時狀態。
-5. **單試跑**：選依賴可用、有真能力增量的近期單，按[完整契約](#流程檢查與滾動調整)驗階段，再核拆單／交接欄位。
-6. **並行**：按[空位補派](../AGENTS.md#建立任務與派工)、[資源准入](#流程檢查與滾動調整)留治理證據，實測交接／串行整合；與單試跑分報，不授部署／清理。
-
-既有明示授權沿指定 repo／branch／任務範圍使用；同意流程不授登入／push／PR／merge／部署／刪除。需核准時先備確切對象、版本、檔案、動作。
