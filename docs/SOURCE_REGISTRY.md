@@ -32,6 +32,8 @@ Manifest 保存 `schema_version`、`registry_version`、`policy_version`；每�
 
 `source-policy/v1` validator 固定最小 evidence 與 condition 集：`local_fetch` 要求 `free_public=true`、`auth=false`、documented terms；`raw_store`／`summarize` 各要求自己的 retention evidence；所有用途要求 `enabled=true`。Manifest 不得刪減集合繞過 gate。
 
+測試樣本重用：真實資料進[唯讀樣本庫](development-baseline/README.md#測試資料庫分層)前，須依保存形式取得該 source 的 `raw_store` 或 `summarize` admitted，並記 `source_id`、`source_version`、`policy_version`。重用只限本機開發與 QA，不公開散布或上 GitHub；權利 unknown／denied 不收錄，取得當時的配額與 NO-RETRY 不因樣本重用而重置。
+
 ## 2. 官方共同證據與限制
 
 - [TWSE Swagger](https://openapi.twse.com.tw/v1/swagger.json) 是 Swagger 2.0，HTTPS、`host=openapi.twse.com.tw`、`basePath=/v1`、info version `1.0`。

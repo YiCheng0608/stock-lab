@@ -8,7 +8,24 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
+測試失敗先依[失敗分流與有界重驗](../GITHUB_WORKFLOW.md#失敗分流與有界重驗)分類；工具／環境失敗修正後重跑同一案例，不判產品結果，也不重取外部資料。
+
 使用 API／preview 前，依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核實載入版本與資源隔離；commit 不更新舊程序，補版本證據仍須遵守原件生命週期、quota 與 NO-RETRY。
+
+## 測試資料庫分層
+
+| 層 | 用途 | 寫權與共享 | owner |
+| --- | --- | --- | --- |
+| 日常 DB | 使用者研究與收集（[OPERATIONS](../OPERATIONS.md#1-工作目錄環境與啟停)預設 `.local/data/stock.db`） | 不作測試寫入、不放測試資料 | 使用者 |
+| 固定版本唯讀樣本庫 | 核准的小型真實樣本；工程與 QA 讀同一版本 | 只讀開啟（SQLite `mode=ro`＋`PRAGMA query_only=ON`）；更新即產生新版本 | 全局核准、資料線 owner 維護 |
+| 可重設隔離測試庫 | 寫入、migration、保存／跨程序測試 | 每次執行獨立路徑，由樣本庫或 fixture 建立；不共享可變狀態，不逐角色複製整份 DB | 該任務工程／QA |
+
+- 三層都用產品 schema（`init-db` 建立），不另設假資料表或另一套查詢路徑。三個 `STOCK_*` 指向該層的絕對路徑並於執行前讀回；樣本庫與隔離測試庫放專案外、不入 Git、不複製私人 DB。產品 app 以讀寫方式開啟 `STOCK_DB_PATH`，共用入口實作前不得把 app 或寫入測試直接指向樣本庫，須先複製到隔離測試庫。
+- 樣本中繼資料隨樣本庫保存：來源用途權利（依 [SOURCE_REGISTRY](../SOURCE_REGISTRY.md#1-registry-與-policy-契約)）、資料日期、取得時間、schema 版本、抽樣規則、樣本版本、檔案 hash。真實樣本與人工邊界案例分開標示；必要原始回應與正規化欄位可追溯；未知發布時間／PIT 標未知，不補造。
+- 按最小完整案例取樣：價格顯示少量日、MA60 至少 60 個交易日、公司行動含事件前後、七股驗收覆蓋七股。日常回歸、整合驗收、容量／效能案例分開，樣本庫不隨日常 DB 成長。
+- 樣本庫核准後持續可用，位置與大小限額登記一次、變更才重核；隔離測試庫在執行結束重設或清理，失敗回報路徑／大小／原因，不每輪重造 manifest。
+- 本地重驗讀樣本庫不觸發外部 GET；人工 fixture 另驗錯誤邊界。沒有適用真實樣本時，該 AC 標未驗。
+- 現況：建立／選取／驗版本／重設的共用入口與第一組真實樣本尚未實作（[#44](https://github.com/YiCheng0608/stock-lab/issues/44) AC-5／AC-6）；本節只定義契約，不證樣本庫可用。
 
 ## 後端驗證
 
@@ -622,7 +639,7 @@ Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../
 
 41src noEmit＋116checks（helper58／response24／SSR13／API5／proxy16）raw0；RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。原collection縮排raw1、125passed＋1fixturefail raw1、ROOT AST／quoting及browser ACK未delivery收據均保留，不改exit或擴為通過。
 
-真来源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0，版本待辦見[協作紀錄](../TASK_COORDINATION.md)。
+真來源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。API／preview normalSIGINT各raw1，preview31GET／1POST／0reject為loopback；ROOT核3PIDs absent、8803／8804無listener、ownedpage close／tabs[]。privateIO／新增test及product檔案0B，indexcache另報；原件RAM釋放不重啟。Coreoperation+1／standalone dep0／reliability0／stall0→0，版本待辦見[協作紀錄](../TASK_COORDINATION.md)。
 
 ## M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1：公司與事件的零落盤驗證入口
 

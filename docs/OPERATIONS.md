@@ -4,7 +4,7 @@
 
 ## 1. 工作目錄、環境與啟停
 
-後端命令從專案根目錄執行。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑。
+後端命令從專案根目錄執行。範例預設使用 workspace 內 `.local` 開發資料；做測試、migration 或可丟棄研究時，先把三個 `STOCK_*` 改成明確的隔離路徑；日常 DB、唯讀樣本庫與隔離測試庫的分工見[測試資料庫分層](development-baseline/README.md#測試資料庫分層)。
 
 ```powershell
 python -m venv .venv
@@ -32,8 +32,8 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```powershell
 Push-Location frontend
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run dev
 Pop-Location
 ```
 
@@ -173,7 +173,7 @@ reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔�
 
 ```powershell
 Push-Location frontend
-npm run build
+pnpm run build
 Pop-Location
 
 & ./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests')
