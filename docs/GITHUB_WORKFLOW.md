@@ -68,7 +68,7 @@ WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENT
 - 資料線與功能線互不為開工前置；整合線依兩者實際交付版本。依賴按用途、標的、日期、欄位核實，Done 不證可用，禁止循環。
 - 至少維持一條「真實取得 → 樣本交付 → 最小下游 → 獨立 QA」完整路徑，其他無依賴工作照常並行。
 - Ready 不足時依序查既有來源單、未合併成果、可獨立子能力，最後才補必要前置。同一資料契約已有只差真資料的功能單時，先推資料線與整合線，不再開同契約的新功能單。
-- 後版暫停項（如 #9）不當 V1 解鎖條件。進度只按可讀用資料、跨程序保存或具名操作計；流程文件、測試數不算核心增量。
+- 後版暫停項不當 V1 解鎖條件。進度只按可讀用資料、跨程序保存或具名操作計；流程文件、測試數不算核心增量。
 
 ## 任務識別與程式索引
 
@@ -98,20 +98,11 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 
 | provider | 啟動 | 恢復 |
 | --- | --- | --- |
-| Codex | 統籌：`codex-session-control.py start-coordinator …`（使用者全域指引）；其他角色沿 Codex 的 Orca 可見 terminal 啟動，命令待首次派工補錄 | 原 session `--remote … resume <ID>` |
+| Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色：Orca 可見 terminal、目標 worktree 啟動，模型與 reasoning 依角色表 | 原 session `--remote … resume <ID>` |
 | Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID>`，讀回模型／effort，不同則記錄並由全局處置 |
 
-支援證據（2026-10-11，Claude Code 2.1.296，`claude -p --no-session-persistence --output-format json` 最小呼叫，回報 `modelUsage`）：
-
-| 參數 | 結果 |
-| --- | --- |
-| `claude-opus-5-5`＋`medium`、`claude-sonnet-5-5`＋`xhigh`、`claude-haiku-5-5`＋`medium` | exit 0，`modelUsage` 為指定 ID |
-| `opus-5.5`（非完整 ID） | `unrecognized_model`，exit 1 |
-| `--effort ultra` | 警告後忽略、改用預設 effort，exit 0 |
-
-- 使用者原指定 `opus-5.5`／`sonnet-5.5`／`haiku-5.5`，表中為同一模型的 CLI 完整 ID；此名稱對應待使用者在 [#40](https://github.com/YiCheng0608/stock-lab/issues/40) 確認。
-- 只用完整模型 ID；effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效 effort 不會讓啟動失敗，故收據須在 session 內讀回 effort，讀不到記未驗，不以命令列參數當證據。
-- 上表只證 CLI 接受參數，不證 Orca 可見啟動、恢復或角色工作品質；首次以 Claude 擔任各角色時，由全局在派工收據補實測，未補前標未驗。
+- 只用完整模型 ID（如 `claude-opus-5-5`）；簡寫 `opus-5.5` 會被拒絕。
+- effort 只收 `low`／`medium`／`high`／`xhigh`／`max`。無效值只警告並改用預設，不會讓啟動失敗，故收據須在 session 內讀回 effort，讀不到記未驗，不以命令列參數當證據。
 
 ## Projects 與關單自動化
 
@@ -161,15 +152,15 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 
 - 未執行不等於來源不存在；保留原錯誤、exit、版本與 AC。可能已寫 DB 或送出請求的未知副作用先對帳，再分類。
 - 每次重跑須列變更（程式、工具、環境、資料版本）；同版本同輸入不重跑。同一失敗連續兩輪修正無效，回任務統籌重新分類或拆單。
-- 金融來源一次性配額只約束該來源操作，不概括套到本地可重建測試；原單已明示 STOP／NO-RETRY 的範圍以原文為準，重新分類由全局在原單記錄。已授權範圍內的例行修正不逐輪請使用者同意；擴範圍、外部操作、恢復暫停仍按原 gate。
+- 金融來源一次性配額只約束該來源操作，不概括套到本地可重建測試；原單已明示 STOP／NO-RETRY 的範圍以原文為準，重新分類由全局在原單記錄。
 
 ## 讀取、交接與證據成本
 
 - 讀：按階段讀[文件索引](README.md)指定的必要文件；大檔用標題、搜尋、行範圍，不整檔讀。長 Issue 讀本文、最新交接及被引用留言，`gh` 用 `--json`／`--jq` 篩欄位；索引結果分頁。
 - 傳：交接引用完整 SHA、檔案路徑、留言 URL，不重貼全文、source、Base64 或分段 manifest。大型證據留可重建腳本、hash 及授權位置的原件。
 - 驗：hash／diff 以程式核對，只回摘要；首次必要 review 與版本變更才重驗。
-- 角色：空閒角色停寫並結束不需要的 session；恢復讀最新交接，不載入完整歷史。切模型不預設省成本，以量測決定。
-- 量測：Claude `--output-format json` 提供 input／cache／output token；其他 provider 依其 usage，取不到標未知。字元數只是代理指標，不估造費用；基線與前後比較記 [#42](https://github.com/YiCheng0608/stock-lab/issues/42)。
+- 角色：空閒角色停寫並結束不需要的 session；恢復讀最新交接，不載入完整歷史。
+- 量測：Claude `--output-format json` 提供 input／cache／output token；其他 provider 依其 usage，取不到標未知。字元數只是代理指標，不估造費用；換模型或流程的成本比較須有前後量測，記在原 Issue。
 
 ## 流程檢查與滾動調整
 

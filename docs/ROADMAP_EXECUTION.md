@@ -12,7 +12,7 @@
 <details>
 <summary>展開改造前執行清單與驗收拆解（唯讀歷史）</summary>
 
-改造前各輪「目前」紀錄（原第 14–200 行，約 43KB）已移出，以 `git show 46eb24474d7fa0254eb12079cb8a06754ac3e69e:docs/ROADMAP_EXECUTION.md` 查閱；以下 R0–R3 拆解保留供去重與既有連結。
+改造前各輪「目前」紀錄已移出，以 `git show 46eb24474d7fa0254eb12079cb8a06754ac3e69e:docs/ROADMAP_EXECUTION.md` 查閱；以下 R0–R3 拆解保留供去重與既有連結。
 
 ## 1. 執行界線與狀態
 
@@ -106,11 +106,11 @@
 | M3-P6d | 已 review（有限）；stock-only Signal／StrategyVersion raw reader 與原 gates。 | 20列窗口與 canonical 全集分開、bad latest 不 fallback、unlocated 拒用、健康行情／alternate 保留。見[個股頁 §16](STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)。 |
 | M3-P6e | 已 review（有限）；FeatureSnapshot／Chip raw reader、共同截止及原研究／持倉 gates。 | 壞特徵／籌碼只隔離該區塊，不較早 fallback，健康行情／研究保留；API／App／六個具名有限操作及六表不變已驗。見[個股頁 §17](STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。 |
 
-本輪M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1-B1從已接受master `c24563df047b2ce1a7129a5fe880d46aab6a8681`起輪；SAME四角色／accepted5937B BOOT與可見gate保持。ROOT接受source20／有限actual／owned退出，core+1/standalone dep0/reliability+1/stall0→0；DOC7 review→freeze27→newqualified affectedindexes→核准exactcommit→另准master merge待。Next daily-net-trend20未准入，fresh source／series pins與privateIO0 gate不可由本次授權替代。以下舊「當前／尚待」為原歷史紀錄，版本以Git／原task接受為準；[協作紀錄](TASK_COORDINATION.md)管理接手／fences，未執行不得稱完成。
+本輪M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1-B1從已接受master `c24563df047b2ce1a7129a5fe880d46aab6a8681`起輪；SAME四角色／accepted5937B BOOT與可見gate保持。ROOT接受source20／有限actual／owned退出，core+1/standalone dep0/reliability+1/stall0→0；DOC7 review→freeze27→newqualified affectedindexes→核准exactcommit→另准master merge待。Next daily-net-trend20未准入，fresh source／series pins與privateIO0 gate不可由本次授權替代。以下舊「當前／尚待」為原歷史紀錄，版本以Git／原task接受為準；未執行不得稱完成。
 
-當前M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2-B1從master `2809424406aa04965ccf4706beacd946c70854b8`起輪；SAME四角色與accepted BOOT保持。ROOT已接受source20／有限核心操作、core+1／standalone dep0／reliability+1／stall0；DOC7 review→freeze→qualified affectedindexes→核准exactcommit→另准master merge待。舊具名工作的「本輪／尚待」保留為歷史收據，版本以Git／原task接受為準；當前[協作紀錄](TASK_COORDINATION.md)管理roster／handoff／fences，未執行項不得稱完成。
+當前M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2-B1從master `2809424406aa04965ccf4706beacd946c70854b8`起輪；SAME四角色與accepted BOOT保持。ROOT已接受source20／有限核心操作、core+1／standalone dep0／reliability+1／stall0；DOC7 review→freeze→qualified affectedindexes→核准exactcommit→另准master merge待。舊具名工作的「本輪／尚待」保留為歷史收據，版本以Git／原task接受為準；未執行項不得稱完成。
 
-本輪M1-SAVED-PRICE-CHIPS-FOCUS-1006-1-B1 starting/current/master `08d16922136f8d35819a8e67a8e6f1fc8e5cbf44`；SAME root／三child及visible SINGLE gate不變。Source11 net93272B、必要checks／actual unavailable／owned退出已接受；coreoperation0／dependency0／reliability0／stall1，不能把seam或拒用算正向核心。Exact7 DOC→ROOT review→freeze source11+DOC7→currentstem七qualified分區（含worker replacement、full一次/persistencefalse）→核准exactcommit→另准localmastermerge待；預定下一worktree／BOOT及outside-owner前任生命周期按[協作紀錄](TASK_COORDINATION.md)原條件，不提前宣稱close/archive/removal。Main trackedclean／stageempty另有5 untracked Windows cache files1884960B、owner/cause未知，retain／excludecommit及cleanup，不稱wholeclean。
+本輪M1-SAVED-PRICE-CHIPS-FOCUS-1006-1-B1 starting/current/master `08d16922136f8d35819a8e67a8e6f1fc8e5cbf44`；SAME root／三child及visible SINGLE gate不變。Source11 net93272B、必要checks／actual unavailable／owned退出已接受；coreoperation0／dependency0／reliability0／stall1，不能把seam或拒用算正向核心。Exact7 DOC→ROOT review→freeze source11+DOC7→currentstem七qualified分區（含worker replacement、full一次/persistencefalse）→核准exactcommit→另准localmastermerge待；Main trackedclean／stageempty另有5 untracked Windows cache files1884960B、owner/cause未知，retain／excludecommit及cleanup，不稱wholeclean。
 
 本批newfocus准入／原五pins、來源日曆extra拒用、private7/21及source2/1502B由[來源 §34](SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)管理；具名25trusted unavailable及未驗positive由[個股頁 §39](STOCK_RESEARCH_PAGE.md#39-m1-saved-price-chips-focus-1006-1八條件入口與不可用驗收邊界)管理。Private1791644B／3files／原3dirs ATCAP、ENTIRE historic DAY-RANGE worktree/branch＋.range-ui2555430B/232files/94dirs、TURNOVER及較舊資源的STRICT NO-RETRY fence保持，禁止替代path/tool/owner/逐檔/rename/containingtree、copy/export/publish/delete/newdiskcases或掃Temp/HAR/GPG/cache/log/history。Actualmissing-file NOT RUN；普通20／21stock closes／trend／strategy／PIT／time／execution及完整ROADMAP仍缺，24index calendar不代stockcloses。
 

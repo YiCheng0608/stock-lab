@@ -26,9 +26,9 @@
 
 ## 歷史紀錄的使用界線
 
-下方 Git 原文是改造前快照。「目前」「下一輪」「正式接手」「待 merge」只代表當時敘述，最終版本應查 Git／原 task，不據此恢復或重派。歷史來源授權、私人資料保護、已用 quota、拒絕重試與未驗限制不因換流程失效。既有 session ID 不作現行 roster。其他文件指向本檔「協作紀錄」的殘留、NO-RETRY、私人資源與清理說明，內容以下列 SHA 版本為準；現行殘留與處置記[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)及原 Issue。
+下方 Git 原文是改造前快照。「目前」「下一輪」「正式接手」「待 merge」只代表當時敘述，最終版本應查 Git／原 task，不據此恢復或重派。歷史來源授權、私人資料保護、已用 quota、拒絕重試與未驗限制不因換流程失效。既有 session ID 不作現行 roster。現行殘留、NO-RETRY、私人資源與清理處置記[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)及原 Issue。
 
-改造前完整協作紀錄（原第 31–1659 行，約 316KB）已移出現行檔：
+改造前完整協作紀錄已移出現行檔：
 
 ```powershell
 git show 46eb24474d7fa0254eb12079cb8a06754ac3e69e:docs/TASK_COORDINATION.md

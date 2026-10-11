@@ -1554,7 +1554,7 @@ API停止後same-key READ與cross-kind ex_right apply是真實trusted操作，�
 
 API48848／preview10296／compiler46848 absent、8803／8804無listener；ownedpage close／tabs[]。API與preview正常SIGINT均raw1；API無shutdownprint，preview有shutdown／loopback31GET＋1POST／rejected0／guard0／disk_artifact0。原件RAM隨API退出釋放，無restart／replay／hydrate；privateIO／新增test及product檔案0B，indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
-Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。接手及前任精確清理見[協作紀錄](TASK_COORDINATION.md)，收據留原task，不回寫hash。
+Coreoperation+1／standalone dependency0／reliability0／stall0→0；不驗ordinary／fullmarket／price、payout numeric／PIT／forecast／Plan／save，完整M1／M2／M3未完成。SOURCE9＋DOC6待ROOT review／freeze／索引／commit／merge；下一核心由ROOT另核，不機械延filter或重審無新path。收據留原task，不回寫hash。
 
 ## 46. M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1/B1：真公司原欄位與同截止事件研究
 
@@ -1578,7 +1578,7 @@ API正常STOP後，same-key1449可信native公司READ POST實際502，headline�
 
 API26328正常STOP raw0／server_stoppedtrue／兩source_gets各1／四audit0，RAM原件已釋放。修字前preview46188／compiler25556 normalSIGINT raw1／shutdown GET35 POST7 reject0；修字後只RAM rebuild preview34000／compiler61744 normalSIGINT raw1／shutdown GET3 POST1 reject0，API未restart／無新金融GET，兩preview guard／artifacts0。ROOT核5PID absent、8805／8806無listen、唯一ownedpage `9b4d13a6…` 正常closed／tabs[]，所有test／product／artifactfiles0B／privateIO0；shared indexcache另報。必要checks與原失敗見[開發入口](development-baseline/README.md)。
 
-本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。SOURCE13＋DOC6版本封存待ROOTreview／freeze／索引／commit／另准merge，下一產業trace尚未准入，見[協作紀錄](TASK_COORDINATION.md)／[執行清單](ROADMAP_EXECUTION.md)。
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。未驗ordinary／0056ETF／industry名稱／可信排名／groupmembership／fullmarket／price history／capital與payout數值／PIT／Plan／保存。
 
 ## 47. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：公司原碼與產業名稱追溯
 
@@ -1602,7 +1602,7 @@ API停止後，same-key1449 native公司READ實際讀取失敗，headline改「�
 
 停止前完整same held ORIGINAL identity／dualSHA／全schema再核，sourceGET各1／guards0。API52996正常STOP raw0／server_stopped=true、兩原件RAM釋放；preview55124／compiler31816正常SIGINT raw1／SHUTDOWN GET46 POST7 rejected0／guards與artifacts0。三PID absent、8807／8808無listen、唯一ownedpage `d6ad81a9-215b-433c-b9a7-da164326a12b` 正常close／tabs[]、新test／productartifactfiles0B／privateIO0／DBfiles0已核，不restart／replay／clone／hydrate。原工具失敗／viewport重設及實際效果門檻見[開發入口](development-baseline/README.md)。
 
-本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；下一 gross 買／賣拆解候選 UNADMITTED，詳 ROADMAP／[協作紀錄](TASK_COORDINATION.md)，完成條件見[執行清單](ROADMAP_EXECUTION.md)。
+本批coreoperation+1／standalone coredependency0／reliability0／stall0→0；只三公司兩碼引用及具名同cutoff研究往返，不外推ordinary／0056ETF／完整current分類／membership／排名／行情／PIT／資本或配息數值／策略／保存／Plan，完整M1／M2／M3未完成。SOURCE12＋DOC7版本封存待ROOT review／freeze／索引／commit／另准merge；
 
 ## 48. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與net對照有限操作
 
@@ -1630,7 +1630,7 @@ ROOT已核NEW empty／nativeFIRST_once22及FULL22 ORIGINAL／完整calendar／AL
 
 兩viewport實際10/07及empty mask，apply無APIcall；10/06restore仍mask、explicitheldREAD才恢復samegen。9999→nativeback valid仍mask→explicitREAD已受驗；back不暗讀或unmask。APIstop後same-key5274 nativeREAD actual502（CDP20640.26）及另3105READ502（CDP20640.32），desktop／narrow清ALLvalues／graphs／tables／raw／calendar，nativeback仍mask且保三RAW；以actual同READ CDP核，不把stale ResourceTiming200或failed assertion改成pass。
 
-Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，source10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。
+Source10 STOPWRITE，必要11backend／48src noEmit＋29validator＋84chartSSR及局部unknown-mask修正後48src noEmit與局部SSR raw0只證synthetic邊界。API／preview／compiler正常SIGINT raw1與SHUTDOWNtrue、四PIDs absent／8809–8810nolisten／ownedpage正常close tabs[]、原件RAM釋放已ROOT接受；不restart／replay／hydrate，0privateIO／priceGET／DB／test-productartifacts，保存／跨程序未授。原errors及入口見開發入口，不以工具ACK／fixture代actualUI。coreoperation+1／standalonecoredependency0／reliability0／stall0→0；完整M1／M2／M3未完成。
 ## 49. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作
 
 2026-10-08。ROOT有限接受source10、fresh來源／數值與下列actual操作，非完整M1。新來源／OGL署名／pins／分類與計算由[來源 §44](SOURCE_REGISTRY.md)管理；oldnet／gross／defaultpins與四TWSE profiles不改。入口與synthetic邊界見[開發入口](development-baseline/README.md)。
@@ -1657,7 +1657,7 @@ Actual每日net零只8069trust9/23、3293trust9/29，各1day zero run；44個統
 
 唯一trustedFIRST22與完整原件／API graph受驗；15backend RAM、51src noEmit＋37validator＋42groupSSR raw0，後UI局部51src＋42SSR raw0／validator37沿用，SSRwarnings保留且不代actualUI。API／preview normalSIGINT raw1且SHUTDOWNtrue；compiler隨preview正常停、auditor /stop釋放22原件後最後raw0；四PIDabsent／8809、8810、8811nolisten／onlyownedpage正常close／freshtabs[]已ROOT核。Test／productartifacts0files0B／privateIO0／DB0／ordinarypriceGET0，不restart／replay／clone／hydrate／preload，保存／跨程序未授；原errors與exit見開發入口，不冒全passed。
 
-Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。SOURCE10＋DOC6待review／freeze／索引／commit／另准merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0；完整M1／M2／M3未完成，不把已接受net／gross重計。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
 
 ## 50. M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰5日比較與雙原列操作
 
@@ -1693,7 +1693,7 @@ Desktop1365×900及narrow390×844各ALL7×3investor=21detailconfigs，共42detai
 
 API normalSIGINT raw1／SHUTDOWNtrue source12／guards0，兩代preview及compiler正常停、auditor release12 ORIGINAL exitraw0；六ownedPIDs absent、8812–8814無listener、ownedpage正常close／tabs[]已ROOT獨立核。API poststop暫仍在的raw1保留，後自然退出、無forcekill，後assert0；詳盡退出／rejected counts及原錯誤見開發入口。Product／testartifacts0files0B、privateIO／DB／ordinaryprice GET0，全部raw RAM釋放，不restart／replay／clone／hydrate／preload、保存／跨程序未授。
 
-Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
+Coreoperation+1／standalone coredependency0／reliability+1（native browser return mask）／stall0→0；完整M1／M2／M3未完成，舊net／gross／direction／adjacent接受不重計。Ordinary20／21closes、MA20／trend仍缺exactRights／calendar，本操作不證price／Signal／Plan／ranking。
 
 ## 51. M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳
 
@@ -1731,4 +1731,4 @@ Backend15RAM raw0／front57src noEmit＋52validator/lifecycle＋42SSR raw0及war
 
 API32860 requests7／guards0／SHUTDOWNtrue正常SIGINT raw1；preview15564／compiler25940正常SIGINT raw1、SHUTDOWNtrue，auditor54880正常SIGINT raw1／RAMreleasedtrue；停前RAMreaudit61996 raw0及metadataholder54396先前正常退出，六exactPIDs absent／8812–14無listener、ownedpage normalclose／tabs[]已ROOT獨立核。原件及derived RAM釋放，不restart／replay／clone／hydrate／preload；0product-testartifacts／privateIO／DB／ordinarypriceGET、save／crossprocess未授。
 
-Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；SOURCE9＋DOC6待ROOT review／freeze／qualified索引／核准commit／另准master merge，見[執行清單](ROADMAP_EXECUTION.md)／[協作紀錄](TASK_COORDINATION.md)。Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
+Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
