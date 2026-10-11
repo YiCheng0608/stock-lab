@@ -176,7 +176,7 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 
 全局例行換手：以下任一條件成立即換手——對話被自動壓縮一次、自任命起關閉 5 張單（含流程單）、連續運作 2 小時、跨日。全局更新 #1 本文並留交接後停寫。交接只放整理過的內容：#1 本文摘要的連結；未結事項（處理中的決策、已送出未回覆的通知、進行中的整合、已知風險），每項附原單連結；新全局的第一個動作。不轉貼歷史收據、對話或整串留言，細節由接手者依連結查。新的全局 session（provider 依任命收據，預設 Claude）讀本文接手，在 #1 留任命收據並更新本文的現任全局，依序：
 1. 以 `orca terminal list` 的實際 worktree／handle 核對交接名單與本文 WIP 表的任務統籌 session／handle；不一致以實際讀回為準，修正本文並在收據記差異。
-2. 核對舊全局已留交接、停寫且 terminal 閒置後，以 `orca terminal close` 關閉舊全局 terminal，結果記在 #1，使送往舊 handle 的訊息直接失敗。
+2. 核對舊全局已留交接、停寫且 terminal 閒置後，以 `orca terminal close --terminal <舊全局 handle>` 只關閉該 terminal（handle 取自更新本文前的值或舊任命收據；新舊全局同在管理 checkout，不用 `--tab`／`--worktree --all`），結果記在 #1，使送往舊 handle 的訊息直接失敗。
 3. 通知進行中的任務統籌新的 session／handle。
 
 每次原單記 owner／session、觸發、版本／證據、處置、下次事件，治理單連回。勾選不免後續檢查，日期／補單／文件不解除暫停或授權排程。
