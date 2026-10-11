@@ -4,18 +4,24 @@ Run only this file: python -B -Xutf8 backend/tests/test_tpex_institutional_five_
 All fixtures, transport stubs, independent engineering oracle and artifacts are RAM.
 The external literal below was copied from Issue comment6088588415; its fixed pin
 is independently specified, never computed from product policy to make expected.
+The seal/runtime-binding cases build synthetic validator-only seals in RAM with
+obviously fake UUID-shaped actors; they are never financial-start seals, and the only
+native-provider path they reach is a mocked HTTPSConnection (no socket is opened).
 """
 from __future__ import annotations
 
+import ast
 import builtins
 import csv
 import hashlib
 import http.client
+import inspect
 import io
 import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import types
 import unittest
@@ -293,6 +299,106 @@ def engineering_oracle(view):
     return selected
 
 
+# ---- Synthetic validator-only seal fixtures (RAM; never a financial-start seal) ----
+SEAL_URL = "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-1"
+# Obviously fake UUID-shaped values: these are not real session ids.
+ROLE_IDS = {
+    "qa_actual": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "global_actual": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "owner_actual": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "engineer_actual": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    "runtime_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+}
+QA_ID = ROLE_IDS["qa_actual"]
+REVIEW_KEYS = ("qa_actual", "model", "effort", "runtime_id", "terminal_handle", "global_actual", "owner_actual",
+               "engineer_actual", "candidate_sha", "source_sha256", "tests_sha256", "script_sha256",
+               "loader_sha256", "typed_input_sha256", "command")
+HASH_KEYS = ("source_sha256", "tests_sha256", "script_sha256", "loader_sha256", "typed_input_sha256")
+SWITCHES = " -I -B -X utf8 -c "
+# Independent oracle for the fixed seal scope: values come from the external policy
+# literal where it carries them, never from the product module.
+SEAL_FIXED = {
+    "schema": "stock-lab-financial-start-seal/v1", "issue": 36,
+    "base_sha": CONTRACT["formal_contract"]["master_sha"],
+    "namespace": "issue36-seven-institutional-five-day-two-cutoffs-v1/qa1",
+    "policy_sha256": FIXED_SHA,
+    "source_use_receipt": CONTRACT["admission_authority"]["source_use_receipt"],
+    "source_use_receipt_sha256": CONTRACT["admission_authority"]["source_use_receipt_sha256"],
+    "cwd": "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-36-institutional-five-day-source",
+    "parent_thread_id": None,
+    "urls": list(URLS), "dates": list(DAYS), "symbols": list(CODES),
+    "body_bytes": CONTRACT["limits"]["body_bytes"], "aggregate_raw_bytes": CONTRACT["limits"]["aggregate_raw_bytes"],
+    "retained_estimate_bytes": CONTRACT["limits"]["supported_retained_roots_estimate_bytes"],
+    "per_url_seconds": CONTRACT["limits"]["request_seconds_per_url_connect_request_header_read_cumulative"],
+    "batch_seconds": CONTRACT["limits"]["batch_seconds"],
+    "requests": 6, "per_url_attempts": 1, "redirects": 0, "retries": 0,
+    "metadata_requests": 0, "calendar_requests": 0, "artifacts_bytes": 0,
+    "accept_encoding": "identity", "credentials": False, "token": False, "cookie": False, "proxy": False,
+}
+
+
+def canonical_bytes(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def synthetic_fields(**overrides):
+    loader = "import sys\nsys.stdout.write('synthetic loader')\n"
+    argv = ["C:\\synthetic\\python.exe", "-I", "-B", "-X", "utf8", "-c", loader]
+    fields = dict(ROLE_IDS)
+    fields.update(
+        model="claude-sonnet-5-5", effort="xhigh", terminal_handle="term_synthetic", candidate_sha="1" * 40,
+        source_sha256=sha(b"synthetic source"), tests_sha256=sha(b"synthetic tests"),
+        script_sha256=sha(b"synthetic script"), loader_sha256=sha(loader.encode("utf-8")),
+        typed_input_sha256=sha(canonical_bytes({"candidate": "1" * 40})), command=subprocess.list2cmdline(argv))
+    fields.update(overrides)
+    return fields
+
+
+def synthetic_seal(fields=None, *, drop=(), extra=None, issued="2026-01-01T00:00:00.000000Z",
+                   expires="2099-12-31T00:00:00.000000Z", url=SEAL_URL, pretty=False):
+    """Return (binding, raw, pin, url). Facts = fixed scope + binding fields + times."""
+    fields = synthetic_fields() if fields is None else fields
+    facts = dict(SEAL_FIXED)
+    facts.update(fields)
+    facts.update(issued_at=issued, expires_at=expires, receipt_url=url)
+    for key in drop:
+        facts.pop(key)
+    facts.update(extra or {})
+    raw = (json.dumps(facts, ensure_ascii=False, sort_keys=True).encode("utf-8") if pretty else canonical_bytes(facts))
+    return m.ReviewBinding(**fields), raw, sha(raw), url
+
+
+def build_seal(fields=None, **options):
+    binding, raw, pin, url = synthetic_seal(fields, **options)
+    return m.FinancialStartSeal(raw, expected_sha256=pin, receipt_url=url, reviewed=binding)
+
+
+@contextmanager
+def claude_env(session=QA_ID, effort="xhigh", legacy=None):
+    """Set exactly the runtime variables given; None means the variable is absent."""
+    with mock.patch.dict(os.environ):
+        for name in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT", "CODEX_THREAD_ID"):
+            os.environ.pop(name, None)
+        for name, value in (("CLAUDE_CODE_SESSION_ID", session), ("CLAUDE_EFFORT", effort),
+                            ("CODEX_THREAD_ID", legacy)):
+            if value is not None:
+                os.environ[name] = value
+        yield
+
+
+@contextmanager
+def no_network():
+    def refuse(*args, **kwargs):
+        raise AssertionError("forbidden selftest network")
+    with mock.patch.object(socket, "create_connection", refuse), mock.patch.object(socket, "getaddrinfo", refuse), \
+         mock.patch.object(socket.socket, "connect", refuse):
+        yield
+
+
 class EngineeringRAMTests(unittest.TestCase):
     def assert_release_order(self, events, *, required):
         labels = [event[0] for event in events]
@@ -348,15 +454,15 @@ class EngineeringRAMTests(unittest.TestCase):
             capture.capture()
             self.assert_failed(capture, "authorization")
             native.assert_not_called()
+        # The policy's old admission actor is no authority and the product keeps no
+        # default global/owner/engineer actor of its own.
         self.assertEqual(CONTRACT["admission_authority"]["global_actual"], "01a12102-9891-7293-8c66-a342094e0990")
-        self.assertNotEqual(m.GLOBAL_ACTUAL, CONTRACT["admission_authority"]["global_actual"])
-        binding = m.ReviewBinding(m.ENGINEER_ACTUAL, "0" * 36, "term_synthetic", "0" * 40,
-                                  *("0" * 64 for _ in range(5)), command="synthetic invalid input")
+        for name in ("GLOBAL_ACTUAL", "OWNER_ACTUAL", "ENGINEER_ACTUAL"):
+            self.assertFalse(hasattr(m, name), name)
         # Only rejection inputs: no financial seal issued, no native positive.
-        with self.assertRaises(m.SourceError):
-            m.FinancialStartSeal(b"", expected_sha256="0" * 64,
-                                 receipt_url="https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-0",
-                                 reviewed=binding)
+        with self.assertRaisesRegex(m.SourceError, "^seal_length_invalid$"):
+            m.FinancialStartSeal(b"", expected_sha256="0" * 64, receipt_url=SEAL_URL,
+                                 reviewed=m.ReviewBinding(**synthetic_fields()))
 
     def test_42_original_rows_924_integers_seven_getters_and_fourteen_consumers(self):
         capture, raw, connections, clock = setup_capture()
@@ -1017,10 +1123,250 @@ class EngineeringRAMTests(unittest.TestCase):
         self.assert_failed(capture, "cooperative_batch_deadline")
         self.assertTrue(all(not b for b in raw))
 
+    def test_daily_total_is_foreign_excluding_foreign_dealer_plus_trust_plus_dealer(self):
+        # SOURCE_REGISTRY section 8 (TotalDifference = the three category nets, the foreign
+        # dealer is not added again) and section 13 (total adds foreign-excluding-foreign-dealer,
+        # trust and dealer only; the foreign dealer is already counted in the dealer category).
+        foreign, trust, dealer_self, dealer_hedge, foreign_dealer = 5, 2, 1, 1, 3
+        rows = fixture_rows()
+        rows[0][1][3:] = numeric_row(foreign, trust, dealer_self, dealer_hedge, foreign_dealer)
+        self.assertEqual(rows[0][1][24], str(foreign + trust + dealer_self + dealer_hedge))
+        capture, raw, connections, clock = setup_capture(bodies=bodies_for(rows))
+        with capture:
+            capture.capture()
+            self.assertEqual(capture.state, "available", capture.failure_code)
+        for label, total in (("foreign_dealer_double_counted", foreign + foreign_dealer + trust + dealer_self + dealer_hedge),
+                             ("foreign_dealer_added_to_three", foreign + trust + dealer_self + dealer_hedge + foreign_dealer),
+                             ("trust_omitted", foreign + dealer_self + dealer_hedge)):
+            with self.subTest(label=label):
+                rows = fixture_rows()
+                rows[0][1][3:] = numeric_row(foreign, trust, dealer_self, dealer_hedge, foreign_dealer)
+                rows[0][1][24] = str(total)
+                capture, raw, connections, clock = setup_capture(bodies=bodies_for(rows))
+                capture.capture()
+                self.assert_failed(capture, "daily_total_mismatch")
+
+
+class SealRuntimeBindingTests(unittest.TestCase):
+    """Claude runtime binding, caller-supplied actors and binding-hash definitions (RAM only)."""
+
+    def refused(self, code, build, *, env=None):
+        with claude_env(**(env or {})):
+            with self.assertRaisesRegex(m.SourceError, "^" + code + "$"):
+                build()
+
+    def test_review_binding_has_no_defaults_and_product_has_no_hardcoded_identity(self):
+        parameters = inspect.signature(m.ReviewBinding).parameters
+        self.assertEqual(tuple(parameters), REVIEW_KEYS)
+        self.assertTrue(all(p.default is inspect.Parameter.empty for p in parameters.values()))
+        with self.assertRaises(TypeError):
+            m.ReviewBinding()
+        for name in ("GLOBAL_ACTUAL", "OWNER_ACTUAL", "ENGINEER_ACTUAL"):
+            self.assertFalse(hasattr(m, name), name)
+        text = SOURCE_CODE.decode("utf-8")
+        for forbidden in ("01a1240a-495c-7b51-bc4a-cfb13897fcf3", "01a12410-9185-7832-a907-e5fd89f76bae",
+                          "01a1241f-43b2-7fe1-8320-26cda9e97274", "CODEX_THREAD_ID", "gpt-6.1-sol", "reasoning"):
+            self.assertNotIn(forbidden, text)
+        # The only environment access is os.environ.get(<name>) with no default, for the
+        # two Claude runtime variables.
+        tree = ast.parse(SOURCE_CODE)
+        os_attributes = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+                         and isinstance(n.value, ast.Name) and n.value.id == "os"}
+        self.assertEqual(os_attributes, {"environ"})
+        gets = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "get" and isinstance(n.func.value, ast.Attribute)
+                and n.func.value.attr == "environ"]
+        self.assertEqual(sorted(call.args[0].id for call in gets), ["EFFORT_ENV", "SESSION_ENV"])
+        self.assertTrue(all(len(call.args) == 1 and not call.keywords for call in gets))
+        self.assertEqual((m.SESSION_ENV, m.EFFORT_ENV), ("CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT"))
+
+    def test_claude_runtime_binding_accepts_reviewed_values_only(self):
+        seal = build_seal()
+        with claude_env():
+            seal.validate(FakeClock())
+        self.assertEqual(seal.kind, "native_https")
+        for key in ("qa_actual", "global_actual", "owner_actual", "engineer_actual", "model", "effort"):
+            self.assertEqual(seal.facts[key], synthetic_fields()[key])
+        self.assertNotIn("reasoning", seal.facts)
+        # Nothing about model or effort is fixed by the product.
+        for model in ("claude-opus-5-5", "claude-fable-5-1", "claude-haiku-5-5", "claude-sonnet-4-5-20250929"):
+            for effort in ("low", "medium", "high", "xhigh", "max"):
+                with self.subTest(model=model, effort=effort):
+                    fields = synthetic_fields(model=model, effort=effort)
+                    with claude_env(effort=effort):
+                        build_seal(fields).validate(FakeClock())
+
+    def test_runtime_environment_is_required_exact_and_never_defaulted(self):
+        seal = build_seal()
+        for label, env in (("no_session", dict(session=None)), ("empty_session", dict(session="")),
+                           ("no_effort", dict(effort=None)), ("empty_effort", dict(effort="")),
+                           ("neither", dict(session=None, effort=None)),
+                           ("legacy_codex_only", dict(session=None, effort=None, legacy=QA_ID))):
+            with self.subTest(label=label):
+                self.refused("runtime_env_missing", lambda: seal.validate(FakeClock()), env=env)
+        for label, env in (("other_session", dict(session=ROLE_IDS["engineer_actual"])),
+                           ("uppercase_session", dict(session=QA_ID.upper())),
+                           ("padded_session", dict(session=QA_ID + " ")),
+                           ("legacy_cannot_stand_in", dict(session=ROLE_IDS["owner_actual"], legacy=QA_ID))):
+            with self.subTest(label=label):
+                self.refused("actual_binding_conflict", lambda: seal.validate(FakeClock()), env=env)
+        for effort in ("high", "XHIGH", "xhigh ", "max"):
+            with self.subTest(effort=effort):
+                self.refused("runtime_effort_conflict", lambda: seal.validate(FakeClock()), env=dict(effort=effort))
+        seal.started = True
+        self.refused("seal_already_spent", lambda: seal.validate(FakeClock()))
+        # Validity window is still enforced.
+        for label, window in (("expired", ("2026-10-09T00:00:00.000000Z", "2026-10-10T05:00:00.000000Z")),
+                              ("pending", ("2026-10-10T07:00:00.000000Z", "2026-10-11T07:00:00.000000Z"))):
+            with self.subTest(label=label):
+                late = build_seal(issued=window[0], expires=window[1])
+                self.refused("seal_expired_or_pending", lambda: late.validate(FakeClock()))
+        self.refused("seal_interval_invalid", lambda: build_seal(issued="2026-10-10T07:00:00.000000Z",
+                                                                  expires="2026-10-10T07:00:00.000000Z"))
+
+    def test_actor_independence_and_format_are_validated_not_defaulted(self):
+        roles = ("global_actual", "owner_actual", "engineer_actual")
+        for role in roles:
+            with self.subTest(overlap="qa=" + role):
+                self.refused("qa_not_independent", lambda: build_seal(synthetic_fields(**{role: QA_ID})))
+        for first, second in (("owner_actual", "engineer_actual"), ("global_actual", "owner_actual"),
+                              ("global_actual", "engineer_actual")):
+            with self.subTest(overlap=first + "=" + second):
+                self.refused("role_actors_not_distinct",
+                             lambda: build_seal(synthetic_fields(**{second: ROLE_IDS[first]})))
+        self.refused("role_actors_not_distinct", lambda: build_seal(synthetic_fields(
+            owner_actual=ROLE_IDS["global_actual"], engineer_actual=ROLE_IDS["global_actual"])))
+        # The old Codex actors are ordinary, syntactically valid inputs now: nothing is bound to them.
+        build_seal(synthetic_fields(global_actual="01a1240a-495c-7b51-bc4a-cfb13897fcf3",
+                                    owner_actual="01a12410-9185-7832-a907-e5fd89f76bae",
+                                    engineer_actual="01a1241f-43b2-7fe1-8320-26cda9e97274"))
+        for name in ("qa_actual", "runtime_id", "global_actual", "owner_actual", "engineer_actual"):
+            for bad in ("", "not-a-uuid", "-" * 36, QA_ID.upper(), QA_ID[:-1], QA_ID + "0", " " + QA_ID, None, 7):
+                with self.subTest(name=name, bad=bad):
+                    self.refused("runtime_identity_invalid", lambda: build_seal(synthetic_fields(**{name: bad})))
+
+    def test_seal_must_equal_binding_scope_and_old_shape_is_refused(self):
+        fields = synthetic_fields()
+        for key in REVIEW_KEYS:
+            with self.subTest(drop=key):
+                self.refused("seal_fields_invalid", lambda: build_seal(fields, drop=(key,)))
+            with self.subTest(differs=key):
+                self.refused("seal_review_conflict", lambda: build_seal(fields, extra={key: str(fields[key]) + "x"}))
+        self.refused("seal_fields_invalid", lambda: build_seal(fields, extra={"reasoning": "xhigh"}))
+        self.refused("seal_fields_invalid", lambda: build_seal(fields, drop=("effort",), extra={"reasoning": "xhigh"}))
+        self.refused("seal_fields_invalid", lambda: build_seal(fields, extra={"unexpected": 1}))
+        for key, value in (("requests", 7), ("issue", 35), ("cwd", "C:/elsewhere"), ("urls", list(URLS[:5])),
+                           ("base_sha", "0" * 40), ("policy_sha256", "0" * 64), ("parent_thread_id", "x")):
+            with self.subTest(scope=key):
+                self.refused("seal_scope_conflict", lambda: build_seal(fields, extra={key: value}))
+        # Old Codex-shaped seal: hard-coded model/reasoning, old actors, no owner/engineer keys.
+        self.refused("seal_fields_invalid", lambda: build_seal(
+            fields, drop=("effort", "owner_actual", "engineer_actual"),
+            extra={"model": "gpt-6.1-sol", "reasoning": "xhigh", "global_actual": "01a1240a-495c-7b51-bc4a-cfb13897fcf3"}))
+        binding, raw, pin, url = synthetic_seal(fields)
+        self.refused("seal_digest_invalid", lambda: m.FinancialStartSeal(
+            raw, expected_sha256="0" * 64, receipt_url=url, reviewed=binding))
+        self.refused("seal_receipt_invalid", lambda: m.FinancialStartSeal(
+            raw, expected_sha256=pin, receipt_url=url + "x", reviewed=binding))
+        self.refused("seal_receipt_invalid", lambda: m.FinancialStartSeal(
+            raw, expected_sha256=pin, receipt_url="", reviewed=binding))
+        self.refused("review_binding_missing", lambda: m.FinancialStartSeal(
+            raw, expected_sha256=pin, receipt_url=url, reviewed=dict(fields)))
+        binding, raw, pin, url = synthetic_seal(fields, pretty=True)
+        self.refused("seal_not_canonical", lambda: m.FinancialStartSeal(
+            raw, expected_sha256=pin, receipt_url=url, reviewed=binding))
+
+    def test_model_effort_terminal_candidate_hash_and_command_formats(self):
+        cases = (
+            ("model_invalid", "model", ("gpt-6.1-sol", "", "Claude-sonnet-5-5", "claude-", "claude-x\n",
+                                       "claude-" + "a" * 64, None, 7)),
+            ("effort_invalid", "effort", ("", "ultra", "XHIGH", "xhigh ", None, 7)),
+            ("runtime_binding_invalid", "terminal_handle", ("", "terminal", "term_", None)),
+            ("candidate_invalid", "candidate_sha", ("", "1" * 39, "A" * 40, "g" * 40, None)),
+        )
+        for code, name, values in cases:
+            for bad in values:
+                with self.subTest(name=name, bad=bad):
+                    self.refused(code, lambda: build_seal(synthetic_fields(**{name: bad})))
+        for name in HASH_KEYS:
+            for bad in ("", "a" * 63, "A" * 64, "g" * 64, "a" * 65, None, 7):
+                with self.subTest(name=name, bad=bad):
+                    self.refused("candidate_hash_invalid", lambda: build_seal(synthetic_fields(**{name: bad})))
+        prefix = "python.exe -I -B -X utf8 -c "
+        limit = 32766
+        for label, command in (("empty", ""), ("none", None), ("no_switches", "python.exe -"), ("missing_I", "python.exe -B -X utf8 -c x"),
+                               ("switch_order", "python.exe -B -I -X utf8 -c x"), ("no_loader", prefix),
+                               ("blank_loader", prefix + "   "), ("one_unit_over", prefix + "x" * (limit - len(prefix) + 1)),
+                               ("astral_units_over", prefix + "\U0001F600" * 16384)):
+            with self.subTest(command=label):
+                self.refused("command_invalid", lambda: build_seal(synthetic_fields(command=command)))
+        for label, command in (("exact_limit", prefix + "x" * (limit - len(prefix))),
+                               ("astral_in_limit", prefix + "\U0001F600" * 16000)):
+            with self.subTest(command=label):
+                self.assertLessEqual(len(command) + sum(1 for c in command if ord(c) >= 0x10000), limit)
+                build_seal(synthetic_fields(command=command))
+
+    def test_binding_hash_definitions_worked_example(self):
+        # Exactly the bytes ReviewBinding documents; core carries nothing derived from the seal.
+        loader = "import sys\nprint(\"loader text with spaces\")\n"
+        script = "print('payload text')\n"
+        core = {"candidate": "2" * 40, "pins": {"policy_sha256": FIXED_SHA, "source": {"sha256": sha(b"source bytes")}}}
+        python = "C:\\synthetic\\python.exe"
+        argv = [python, "-I", "-B", "-X", "utf8", "-c", loader]
+        command = subprocess.list2cmdline(argv)
+        self.assertEqual(m._canonical(core), canonical_bytes(core))
+        self.assertEqual(canonical_bytes({"b": 1, "a": "\u4e2d"}), '{"a":"\u4e2d","b":1}'.encode("utf-8"))
+        fields = synthetic_fields(
+            candidate_sha="2" * 40, script_sha256=sha(script.encode("utf-8")), loader_sha256=sha(loader.encode("utf-8")),
+            typed_input_sha256=sha(canonical_bytes(core)), command=command)
+        binding, raw, pin, url = synthetic_seal(fields)
+        for covered in (canonical_bytes(core), script.encode("utf-8"), loader.encode("utf-8"), command.encode("utf-8")):
+            self.assertNotIn(pin.encode("ascii"), covered)
+            self.assertNotIn(url.encode("ascii"), covered)
+        seal = m.FinancialStartSeal(raw, expected_sha256=pin, receipt_url=url, reviewed=binding)
+        with claude_env():
+            seal.validate(FakeClock())
+        self.assertTrue(command.startswith(python + SWITCHES))
+        for name in ("source_sha256", "tests_sha256", "script_sha256", "loader_sha256", "typed_input_sha256",
+                     "command", "qa_actual", "model", "effort", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT"):
+            self.assertIn(name, m.ReviewBinding.__doc__ + m.FinancialStartSeal.__doc__)
+
+    def test_capture_gate_uses_live_claude_runtime_and_mocked_transport_only(self):
+        for label, env, code in (("no_session", dict(session=None), "runtime_env_missing"),
+                                 ("no_effort", dict(effort=None), "runtime_env_missing"),
+                                 ("wrong_session", dict(session=ROLE_IDS["owner_actual"]), "actual_binding_conflict"),
+                                 ("wrong_effort", dict(effort="high"), "runtime_effort_conflict")):
+            with self.subTest(label=label):
+                seal = build_seal()
+                capture = m.RAMCapture(m.ExternalPolicy(EXTERNAL_BYTES, expected_sha256=FIXED_SHA), seal)
+                with claude_env(**env), no_network(), mock.patch.object(http.client, "HTTPSConnection") as native:
+                    capture.capture()
+                    native.assert_not_called()
+                self.assert_gate_failed(capture, code)
+                self.assertFalse(capture.attempts)
+                self.assertFalse(seal.started)
+        # Correct runtime passes the gate, spends exactly one URL and fails closed on the mock
+        # response (a MagicMock status is not 200). No socket exists in this process.
+        seal = build_seal()
+        capture = m.RAMCapture(m.ExternalPolicy(EXTERNAL_BYTES, expected_sha256=FIXED_SHA), seal)
+        with claude_env(), no_network(), mock.patch.object(http.client, "HTTPSConnection") as native:
+            capture.capture()
+            self.assertEqual(native.call_count, 1)
+        self.assert_gate_failed(capture, "http_status_rejected")
+        self.assertEqual([a["url"] for a in capture.attempts], [URLS[0]])
+        self.assertEqual(seal.spent, {URLS[0]})
+        self.assertTrue(seal.started)
+
+    def assert_gate_failed(self, capture, code):
+        self.assertEqual(capture.state, "failed")
+        self.assertEqual(capture.failure_code, code)
+        self.assertFalse(capture.originals)
+        self.assertFalse(capture.supported_roots())
+
 
 if __name__ == "__main__":
     GUARD[0] = True
-    print("Engineering synthetic RAM only; financial/provider metadata/calendar requests=0; native seals issued=0; artifacts=0B", flush=True)
+    print("Engineering synthetic RAM only; financial/provider metadata/calendar requests=0; native seals issued=0 (validator-only synthetic seals in RAM); artifacts=0B", flush=True)
     try:
         unittest.main(verbosity=2)
     finally:

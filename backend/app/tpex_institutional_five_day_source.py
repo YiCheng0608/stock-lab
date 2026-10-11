@@ -3,7 +3,9 @@
 Import and construction perform no network, file, DB or service operations.
 Native acquisition requires the independently read external policy, a fresh
 external financial seal pin and separately reviewed runtime/candidate binding.
-This module does not authenticate GitHub or replace that external review.
+The runtime binding names the Claude Code session that runs the capture
+(CLAUDE_CODE_SESSION_ID, CLAUDE_EFFORT); see ReviewBinding. This module does
+not authenticate GitHub or replace that external review.
 
 Use ``with RAMCapture(...) as capture`` and call capture.capture() once. While
 available, inspect seven getter handles, fourteen consumer handles and original
@@ -40,9 +42,15 @@ POLICY_VERSION = "issue36-tpex-institutional-six-days-two-cutoffs-2026-10-10.1"
 POLICY_SHA256 = "93d8e746eccbed035d5a79ffbf178b5f89877017c2aea69e6b841d178c1b51a3"
 POLICY_BYTES = 7500
 BASE_SHA = "d8918bc6491ec8ef65874979cf88d1322df2da43"
-GLOBAL_ACTUAL = "01a1240a-495c-7b51-bc4a-cfb13897fcf3"
-OWNER_ACTUAL = "01a12410-9185-7832-a907-e5fd89f76bae"
-ENGINEER_ACTUAL = "01a1241f-43b2-7fe1-8320-26cda9e97274"
+# Runtime identity is never defaulted here: every actor, model and effort value
+# comes from the reviewed seal, and the live runtime must match it.
+SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
+EFFORT_ENV = "CLAUDE_EFFORT"
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+UUID_PATTERN = r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
+COMMAND_SWITCHES = " -I -B -X utf8 -c "
+COMMAND_MAX_UNITS = 32766  # CreateProcess: 32,767 UTF-16 units including the NUL.
 WORKTREE = "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-36-institutional-five-day-source"
 QA_NAMESPACE = "issue36-seven-institutional-five-day-two-cutoffs-v1/qa1"
 SOURCE_ID = "tpex_government_institutional_csv"
@@ -87,6 +95,11 @@ class SourceError(ValueError):
 def _require(condition, code):
     if not condition:
         raise SourceError(code)
+
+
+def _text(value, pattern, code):
+    _require(type(value) is str and re.fullmatch(pattern, value) is not None, code)
+    return value
 
 
 def _bounded(value):
@@ -186,14 +199,64 @@ class ExternalPolicy:
 class ReviewBinding:
     """Independent external review input; never inferred from the old policy actor.
 
-    The QA loader supplies hashes of the exact loaded candidate and its complete
-    script, loader, typed input and native command. The owner/global verify these
-    against the fresh Issue seal before this pure validator is invoked.
+    No field has a default, and no value is taken from this module, the policy or
+    the environment: the reviewers supply every field, and each must equal the
+    same-named key of the fresh Issue seal (FinancialStartSeal checks that). The
+    owner/global verify the values against the QA/engineer Issue receipts before
+    this pure validator is invoked.
+
+    Runtime identity (Claude Code, as read back by the QA and recorded in its receipt):
+      qa_actual    the QA process's CLAUDE_CODE_SESSION_ID (UUID). validate() compares
+                   it with the live environment variable; a missing, empty or
+                   different value is refused.
+      effort       the QA's CLAUDE_EFFORT (one of EFFORTS), compared the same way.
+      model        the ``claude-*`` model id of the assistant entries in the QA
+                   transcript. The environment does not carry it, so it is only
+                   format-checked here; the owner/global compare it with the receipt.
+      runtime_id   UUID of the Orca runtime (``_meta.runtimeId`` of ``orca terminal
+                   show --json``); format-checked only.
+      terminal_handle  the QA's visible Orca terminal handle (``term_...``).
+      global_actual / owner_actual / engineer_actual   session IDs (UUID) of the
+                   global coordinator, the task coordinator and the engineer.
+    qa_actual, global_actual, owner_actual and engineer_actual are four distinct IDs.
+
+    Binding hashes are lowercase SHA-256 hex over exactly these bytes:
+      source_sha256, tests_sha256   the two whitelist files (this module and its test
+                   file) as stored in the tree of ``candidate_sha`` (the bytes a clean
+                   checkout of that commit has on disk).
+      script_sha256   the UTF-8 bytes of the QA payload source text that the loader
+                   compiles and executes: the N bytes after the ``QA1 <N> <sha256>``
+                   stdin frame header, i.e. the bytes that frame digest covers (the
+                   loader hands the same digest to the payload as ``__qa_sha256__``).
+      loader_sha256   the UTF-8 bytes of the fixed loader source passed as the single
+                   argument after ``-c`` (not the frame, not the payload).
+      typed_input_sha256   SHA-256 of ``_canonical(core)``, i.e. ``json.dumps(core,
+                   ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                   allow_nan=False).encode("utf-8")``, where ``core`` is the run
+                   descriptor (candidate, file pins and other run parameters) that the
+                   QA caller types to the payload besides the script, fixed BEFORE the
+                   seal exists.
+    command is stored verbatim and not hashed: the QA process command line text,
+    ``subprocess.list2cmdline(argv)`` with ``argv = [python, "-I", "-B", "-X", "utf8",
+    "-c", loader]`` (what GetCommandLineW() returns in that process). It must fit the
+    CreateProcess limit and keep the fixed ``-I -B -X utf8 -c`` switches, so a payload
+    can never travel in argv.
+
+    The seal embeds all of these, so none of them may cover the seal raw bytes, the
+    seal pin or the receipt URL (that would be circular). Those three are runtime
+    inputs of FinancialStartSeal, authenticated by it (digest == pin, receipt URL ==
+    seal key and comment-URL form), and the QA caller must deliver them outside the
+    script and ``core``. This module never reads files or processes to recompute a hash.
     """
 
     qa_actual: str
+    model: str
+    effort: str
     runtime_id: str
     terminal_handle: str
+    global_actual: str
+    owner_actual: str
+    engineer_actual: str
     candidate_sha: str
     source_sha256: str
     tests_sha256: str
@@ -205,13 +268,41 @@ class ReviewBinding:
     def fields(self):
         return dict(vars(self))
 
+    def check(self):
+        """Format and independence rules for a reviewer-supplied binding."""
+        ids = ("qa_actual", "runtime_id", "global_actual", "owner_actual", "engineer_actual")
+        for name in ids:
+            _text(getattr(self, name), UUID_PATTERN, "runtime_identity_invalid")
+        _require(self.qa_actual not in (self.global_actual, self.owner_actual, self.engineer_actual),
+                 "qa_not_independent")
+        _require(len({self.global_actual, self.owner_actual, self.engineer_actual}) == 3,
+                 "role_actors_not_distinct")
+        _text(self.model, MODEL_PATTERN, "model_invalid")
+        _require(type(self.effort) is str and self.effort in EFFORTS, "effort_invalid")
+        _text(self.terminal_handle, r"term_.+", "runtime_binding_invalid")
+        # A non-blank loader must follow the fixed switches. UTF-16 units are counted
+        # arithmetically: a codec lookup would lazily import a module (file I/O).
+        _require(type(self.command) is str and bool(self.command.partition(COMMAND_SWITCHES)[2].strip())
+                 and len(self.command) + sum(ord(char) > 0xFFFF for char in self.command) <= COMMAND_MAX_UNITS,
+                 "command_invalid")
+        _text(self.candidate_sha, r"[a-f0-9]{40}", "candidate_invalid")
+        for name, value in self.fields().items():
+            if name.endswith("sha256"):
+                _text(value, r"[a-f0-9]{64}", "candidate_hash_invalid")
+
 
 class FinancialStartSeal:
     """Validate an already issued seal against a separately fixed external pin.
 
-    There is intentionally no seal producer, default seal or authority derived
-    from policy.admission_authority.global_actual. Passing a pin is an external
-    trust boundary, not cryptographic authentication of a GitHub actor.
+    There is intentionally no seal producer, default seal, default identity or
+    authority derived from policy.admission_authority.global_actual. Passing a pin
+    is an external trust boundary, not cryptographic authentication of a GitHub
+    actor. The seal carries the global/owner/engineer/QA actors, model and effort
+    of ``reviewed``; validate() additionally requires the live process to expose
+    the same CLAUDE_CODE_SESSION_ID and CLAUDE_EFFORT. A missing variable is
+    refused (never replaced by a default), and so is the legacy Codex thread variable.
+    The QA caller must forward the two variables it read from its own Claude
+    runtime and must not synthesize them.
     """
 
     kind = "native_https"
@@ -226,11 +317,11 @@ class FinancialStartSeal:
         facts = _json(raw)
         fixed = {
             "schema": "stock-lab-financial-start-seal/v1", "issue": 36,
-            "global_actual": GLOBAL_ACTUAL, "base_sha": BASE_SHA,
+            "base_sha": BASE_SHA,
             "namespace": QA_NAMESPACE, "policy_sha256": POLICY_SHA256,
             "source_use_receipt": "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678",
             "source_use_receipt_sha256": "56240c60afbd88e906efc493d3cc2597070226ea5e47656b86afc9948e0077b0",
-            "cwd": WORKTREE, "parent_thread_id": None, "model": "gpt-6.1-sol", "reasoning": "xhigh",
+            "cwd": WORKTREE, "parent_thread_id": None,
             "urls": list(URLS), "dates": list(DATES), "symbols": list(SYMBOLS),
             "body_bytes": BODY_CAP, "aggregate_raw_bytes": RAW_CAP, "retained_estimate_bytes": ROOT_CAP,
             "per_url_seconds": URL_SECONDS, "batch_seconds": BATCH_SECONDS,
@@ -243,14 +334,7 @@ class FinancialStartSeal:
         _require(all(facts[key] == value for key, value in fixed.items()), "seal_scope_conflict")
         _require(all(facts[key] == value for key, value in reviewed.fields().items()), "seal_review_conflict")
         _require(_canonical(facts) == raw, "seal_not_canonical")
-        _require(reviewed.qa_actual not in (GLOBAL_ACTUAL, OWNER_ACTUAL, ENGINEER_ACTUAL), "qa_not_independent")
-        for actor in (reviewed.qa_actual, reviewed.runtime_id):
-            _require(re.fullmatch(r"[a-f0-9-]{36}", actor) is not None, "runtime_identity_invalid")
-        _require(reviewed.terminal_handle.startswith("term_") and bool(reviewed.command), "runtime_binding_invalid")
-        _require(re.fullmatch(r"[a-f0-9]{40}", reviewed.candidate_sha) is not None, "candidate_invalid")
-        for key, value in reviewed.fields().items():
-            if key.endswith("sha256"):
-                _require(re.fullmatch(r"[a-f0-9]{64}", value) is not None, "candidate_hash_invalid")
+        reviewed.check()
         self.issued_at = _utc(facts["issued_at"])
         self.expires_at = _utc(facts["expires_at"])
         _require(self.issued_at < self.expires_at, "seal_interval_invalid")
@@ -265,7 +349,11 @@ class FinancialStartSeal:
         _require(self.raw and hashlib.sha256(self.raw).hexdigest() == self.sha256
                  and _canonical(self.facts) == self.raw, "seal_unavailable")
         _require(self.issued_at <= clock.utcnow() < self.expires_at, "seal_expired_or_pending")
-        _require(os.environ.get("CODEX_THREAD_ID") == self.reviewed.qa_actual, "actual_binding_conflict")
+        # The live Claude runtime must be the reviewed one. No default is ever used.
+        session, effort = os.environ.get(SESSION_ENV), os.environ.get(EFFORT_ENV)
+        _require(bool(session) and bool(effort), "runtime_env_missing")
+        _require(session == self.reviewed.qa_actual, "actual_binding_conflict")
+        _require(effort == self.reviewed.effort, "runtime_effort_conflict")
         _require(not self.started, "seal_already_spent")
 
 
