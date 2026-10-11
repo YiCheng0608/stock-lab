@@ -8,7 +8,7 @@
 | --- | --- |
 | GitHub repository | [YiCheng0608/stock-lab](https://github.com/YiCheng0608/stock-lab)，依使用者決定維持 public；origin 指向此 repository。 |
 | GitHub Project／治理 Issue | [產品開發看板](https://github.com/users/YiCheng0608/projects/1)；[治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1)管理 WIP、停滯計數、派工與整合收據。 |
-| 正式 master／整合入口 | 正式 branch 為 origin/master；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、禁止強推／刪除。唯一整合持有者、排隊、授權及精確版本以治理 Issue 最新收據為準；協作串行不冒稱自動鎖。 |
+| 正式 master／整合入口 | 正式 branch 為 origin/master；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、禁止強推／刪除。整合持有者與排隊見治理 Issue 本文摘要，授權及精確版本以留言收據為準；協作串行不冒稱自動鎖。 |
 
 ## 下一位接手者
 
