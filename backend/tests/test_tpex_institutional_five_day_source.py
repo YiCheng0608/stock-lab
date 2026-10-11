@@ -23,9 +23,10 @@ import re
 import socket
 import subprocess
 import sys
+import traceback
 import types
 import unittest
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -209,7 +210,37 @@ class FakeConnection:
             raise OSError("synthetic connection close failure")
 
 
-def setup_capture(*, bodies=None, options=None, connection_options=None, auth=True):
+class TrackedBytes(io.BytesIO):
+    """BytesIO that remembers how far http.client had read when it was closed."""
+    final_position = None
+
+    def close(self):
+        if not self.closed:
+            self.final_position = self.tell()
+        super().close()
+
+
+class MemorySocket:
+    """http.client.HTTPResponse only needs makefile() from its socket; no OS socket exists here."""
+
+    def __init__(self, data):
+        self.stream = TrackedBytes(data)
+
+    def makefile(self, *args, **kwargs):
+        return self.stream
+
+
+def real_http_response(body, header_lines):
+    """A genuine http.client.HTTPResponse parsed from in-memory wire bytes."""
+    head = b"HTTP/1.1 200 OK\r\n" + b"".join(line.encode("latin-1") + b"\r\n" for line in header_lines) + b"\r\n"
+    memory = MemorySocket(head + bytes(body))
+    response = http.client.HTTPResponse(memory)
+    response.begin()
+    response.synthetic_head_length, response.synthetic_stream = len(head), memory.stream
+    return response
+
+
+def setup_capture(*, bodies=None, options=None, connection_options=None, auth=True, make_response=None):
     raw = bodies_for() if bodies is None else bodies
     clock, connections = FakeClock(), []
     holders = {"fixture_originals": raw}
@@ -220,7 +251,8 @@ def setup_capture(*, bodies=None, options=None, connection_options=None, auth=Tr
         ordinal = len(connections)
         if ordinal >= 6:
             raise AssertionError("attempt beyond six")
-        response = FakeResponse(raw[ordinal], clock=clock, **opts.get(ordinal, {}))
+        response = (FakeResponse(raw[ordinal], clock=clock, **opts.get(ordinal, {})) if make_response is None
+                    else make_response(ordinal, raw[ordinal]))
         connection = FakeConnection(response, clock, **c_opts.get(ordinal, {}))
         connection.timeout = timeout
         connections.append(connection)
@@ -315,15 +347,25 @@ REVIEW_KEYS = ("qa_actual", "model", "effort", "runtime_id", "terminal_handle", 
                "loader_sha256", "typed_input_sha256", "command")
 HASH_KEYS = ("source_sha256", "tests_sha256", "script_sha256", "loader_sha256", "typed_input_sha256")
 SWITCHES = " -I -B -X utf8 -c "
+# One-shot quota. qa1 (old namespace and old source-use receipt) is SPENT / NO-RETRY; qa2 is the
+# user's new grant, issue comment 6110215172 (body 1,859 B). Literals, never read from the product.
+# The pinned external policy still names the OLD receipt as its admission authority and is unchanged,
+# so the seal's source-use values cannot be taken from it.
+OLD_NAMESPACE = "issue36-seven-institutional-five-day-two-cutoffs-v1/qa1"
+OLD_SOURCE_USE_RECEIPT = "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678"
+OLD_SOURCE_USE_RECEIPT_SHA256 = "56240c60afbd88e906efc493d3cc2597070226ea5e47656b86afc9948e0077b0"
+NAMESPACE = "issue36-seven-institutional-five-day-two-cutoffs-v1/qa2"
+SOURCE_USE_RECEIPT = "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110215172"
+SOURCE_USE_RECEIPT_SHA256 = "3c5b61b7f79b7e2c238350b51d5329e81b087ef36204141ff185cbb5626619f1"
 # Independent oracle for the fixed seal scope: values come from the external policy
 # literal where it carries them, never from the product module.
 SEAL_FIXED = {
     "schema": "stock-lab-financial-start-seal/v1", "issue": 36,
     "base_sha": CONTRACT["formal_contract"]["master_sha"],
-    "namespace": "issue36-seven-institutional-five-day-two-cutoffs-v1/qa1",
+    "namespace": NAMESPACE,
     "policy_sha256": FIXED_SHA,
-    "source_use_receipt": CONTRACT["admission_authority"]["source_use_receipt"],
-    "source_use_receipt_sha256": CONTRACT["admission_authority"]["source_use_receipt_sha256"],
+    "source_use_receipt": SOURCE_USE_RECEIPT,
+    "source_use_receipt_sha256": SOURCE_USE_RECEIPT_SHA256,
     "cwd": "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-36-institutional-five-day-source",
     "parent_thread_id": None,
     "urls": list(URLS), "dates": list(DAYS), "symbols": list(CODES),
@@ -701,6 +743,234 @@ class EngineeringRAMTests(unittest.TestCase):
         with capture:
             capture.capture()
             self.assertEqual(capture.state, "available", capture.failure_code)
+
+    # Only a repeat of these four response headers is refused; every other repeat is ignored.
+    IDENTITY_NAMES = ("content-length", "transfer-encoding", "content-encoding", "content-type")
+    SECRETS = ("SECRET-VALUE-ONE-7c1e", "SECRET-VALUE-TWO-7c1e")
+    CASE_STYLES = (str.title, str.upper, str.lower, lambda name: "".join(c.upper() if i % 2 else c for i, c in enumerate(name)))
+
+    @staticmethod
+    def framed(body, *, middle=(), extra=()):
+        return ([("Content-Type", "text/csv; charset=UTF-8")] + list(middle)
+                + [("Content-Length", str(len(body)))] + list(extra))
+
+    def per_ordinal(self, raw, build, **common):
+        return {index: dict(headers=build(raw[index]), **common) for index in range(6)}
+
+    def selected_bytes(self, capture):
+        # receipt_sha256 pins the receipt, which records the raw headers; it is compared separately.
+        return bytes(m._canonical({day: {symbol: {key: value for key, value in row.items() if key != "receipt_sha256"}
+                                         for symbol, row in rows.items()} for day, rows in capture.selected.items()}))
+
+    def observe(self, capture):
+        """Capture and release, snapshotting what the assertions need. Assert only afterwards:
+        leaving the scope scrubs any exception raised inside it (traceback, cause, context)."""
+        with capture:
+            capture.capture()
+            seen = {"state": capture.state, "failure": capture.failure_code,
+                    "connections": len(capture.attempts), "spent": set(capture.authorization.spent)}
+            if capture.state == "available":
+                seen.update(selected=self.selected_bytes(capture), bodies=[bytes(item["body"]) for item in capture.originals],
+                            receipts=[m._json(item["receipt"]) for item in capture.originals],
+                            receipt_pins=[({capture.selected[day][symbol]["receipt_sha256"] for symbol in CODES},
+                                           hashlib.sha256(capture.originals[ordinal]["receipt"]).hexdigest())
+                                          for ordinal, day in enumerate(DAYS)],
+                            completed=[attempt["completed"] for attempt in capture.attempts])
+        return seen
+
+    def test_duplicates_of_other_headers_are_ignored_and_parse_matches_baseline(self):
+        baseline = self.observe(setup_capture()[0])
+        self.assertEqual((baseline["state"], baseline["failure"]), ("available", None))
+        cookies = [("Set-Cookie", "session=" + self.SECRETS[0] + "; Path=/"), ("Set-Cookie", "tracker=" + self.SECRETS[1] + "; Secure")]
+        scenarios = {
+            "set-cookie twice": cookies,
+            "set-cookie thrice mixed case, latin-1 value": cookies + [("SET-COOKIE", "café=1"), ("set-cookie", "z=9")],
+            "vary and cache-control": [("Vary", "Accept-Encoding"), ("vary", "User-Agent"),
+                                       ("Cache-Control", "no-cache"), ("CACHE-CONTROL", "no-store")],
+            "unknown header with conflicting values": [("X-Trace", "a"), ("x-trace", "b"), ("X-TRACE", "c")],
+            "look-alike names are not identity headers": [
+                ("X-Content-Length", "1"), ("x-content-length", "2"), ("Content-Length-Extra", "x"), ("content-length-extra", "y"),
+                ("X-Content-Type-Options", "nosniff"), ("x-content-type-options", "nosniff"), ("Transfer-Encoding-Hint", "1"),
+                ("transfer-encoding-hint", "2"), ("Content-Encoding-Hint", "gzip"), ("content-encoding-hint", "br")],
+        }
+        scenarios["all of them"] = [header for group in scenarios.values() for header in group]
+        for label, extra in scenarios.items():
+            for placement in ("after", "between the identity headers"):
+                kwargs = {"middle": extra} if placement != "after" else {"extra": extra}
+                raw = bodies_for()
+                capture, raw, connections, clock = setup_capture(
+                    bodies=raw, options=self.per_ordinal(raw, lambda body: self.framed(body, **kwargs)))
+                seen = self.observe(capture)
+                self.assertEqual((seen["state"], seen["failure"]), ("available", None), (label, placement))
+                # Same parse result and same original bytes as the no-duplicate run.
+                self.assertEqual(seen["selected"], baseline["selected"], (label, placement))
+                self.assertEqual(seen["bodies"], baseline["bodies"])
+                self.assertTrue(all(pins == {digest} for pins, digest in seen["receipt_pins"]))
+                self.assertEqual((len(connections), seen["spent"], set(seen["completed"])), (6, set(URLS), {True}))
+                # The original receipt still records every received header unchanged, as before this change.
+                self.assertEqual([receipt["headers"] for receipt in seen["receipts"]],
+                                 [[list(item) for item in connection.response.getheaders()] for connection in connections])
+        # Framing modes keep their meaning when ignored duplicates are present.
+        chunked = {index: dict(headers=[("Content-Type", "text/csv"), ("Transfer-Encoding", "chunked")] + cookies, chunked=True)
+                   for index in range(6)}
+        unknown = {index: dict(headers=[("Content-Type", "text/csv")] + cookies, unknown=True) for index in range(6)}
+        for label, options in (("chunked", chunked), ("connection-eof", unknown)):
+            seen = self.observe(setup_capture(options=options)[0])
+            self.assertEqual((seen["state"], seen["failure"]), ("available", None), label)
+            self.assertEqual(seen["selected"], baseline["selected"], label)
+
+    def test_identity_header_repeat_is_refused_by_name_in_any_case_with_no_body_read(self):
+        for name in self.IDENTITY_NAMES:
+            for ordinal in range(6):
+                first, second = (self.CASE_STYLES[(ordinal + shift) % 4] for shift in (0, 1))
+                headers = [(first(name), self.SECRETS[0]), ("Set-Cookie", "a=" + self.SECRETS[1]),
+                           ("SET-COOKIE", "b=2"), (second(name), self.SECRETS[1])]
+                capture, raw, connections, clock = setup_capture(options={ordinal: {"headers": headers}})
+                spy, printed = self.capture_with_error_spy(capture)
+                code = "duplicate_response_header:" + name
+                self.assert_failed(capture)
+                self.assertEqual(capture.failure_code, code, (name, ordinal))
+                # Diagnostics and the error chain carry the fixed name only: no header value, no body.
+                self.assertEqual(len(spy), 1)
+                error = spy[0]
+                self.assertIs(error["type"], m.SourceError)
+                self.assertEqual((error["args"], error["text"]), ((code,), m.__name__ + ".SourceError: " + code + "\n"))
+                self.assertTrue(error["frame_locals_held_value_before_discard"])  # the check below is not vacuous
+                self.assertEqual((error["exc"].__traceback__, error["exc"].__cause__, error["exc"].__context__), (None, None, None))
+                self.assertEqual([frame.f_locals for frame in error["frames"] if frame.f_code.co_name == "_fetch"], [{}])
+                for text in (capture.failure_code, repr(capture.attempts), printed,
+                             repr([frame.f_locals for frame in error["frames"]])):
+                    self.assertFalse(any(secret in text for secret in self.SECRETS), text)
+                self.assertNotIn("text/csv", repr(capture.attempts))
+                # Zero body read, this URL attempted and SPENT, no later URL touched, no retry.
+                self.assertEqual(len(connections), ordinal + 1)
+                self.assertEqual(connections[ordinal].response.read_sizes, [])
+                self.assertEqual(capture.authorization.spent, set(URLS[:ordinal + 1]))
+                self.assertEqual([a["url"] for a in capture.attempts], list(URLS[:ordinal + 1]))
+                self.assertTrue(all(a["spent"] for a in capture.attempts))
+                self.assertFalse(capture.attempts[-1]["completed"])
+                self.assertTrue(all(c.close_calls == 1 and c.response.close_calls == 1 for c in connections))
+                with self.assertRaises(m.SourceError):
+                    capture.capture()
+                self.assertEqual(len(connections), ordinal + 1)
+        # Wire order decides which repeated identity header is named; both repeated headers are refused.
+        for first, second in (("content-type", "content-length"), ("content-length", "content-type")):
+            headers = [(first, "text/csv"), (first.title(), "text/csv"), (second.upper(), "1"), (second, "1")]
+            capture, raw, connections, clock = setup_capture(options={0: {"headers": headers}})
+            capture.capture()
+            self.assertEqual(capture.failure_code, "duplicate_response_header:" + first)
+        # run_in_ram surfaces the same name-only code to the caller and still releases everything.
+        capture, raw, connections, clock = setup_capture(
+            options={0: {"headers": [("Content-Type", self.SECRETS[0]), ("content-type", self.SECRETS[1])]}})
+        with self.assertRaises(m.SourceError) as raised:
+            m.run_in_ram(capture, lambda c: None)
+        self.assertEqual(capture.failure_code, "duplicate_response_header:content-type")
+        self.assertFalse(any(secret in str(raised.exception) + capture.failure_code for secret in self.SECRETS))
+        self.assertEqual(capture.state, "released")
+
+    def capture_with_error_spy(self, capture):
+        seen, original = [], m.RAMCapture._discard_error
+        secrets = self.SECRETS
+
+        def spy(instance, exc):
+            frames, tb = [], exc.__traceback__
+            while tb is not None:
+                frames.append(tb.tb_frame)
+                tb = tb.tb_next
+            seen.append({"type": type(exc), "args": exc.args, "exc": exc, "frames": frames,
+                         "text": "".join(traceback.format_exception_only(type(exc), exc)),  # no source-line lookup
+                         "frame_locals_held_value_before_discard": any(
+                             secret in repr(frame.f_locals) for frame in frames for secret in secrets)})
+            return original(instance, exc)
+        printed = io.StringIO()
+        with mock.patch.object(m.RAMCapture, "_discard_error", spy), redirect_stdout(printed), redirect_stderr(printed):
+            capture.capture()
+        return seen, printed.getvalue()
+
+    def test_identity_semantics_are_not_relaxed_by_ignored_duplicates_nearby(self):
+        cookies = [("Set-Cookie", "a=1"), ("set-cookie", "b=2")]
+        body_length = len(bodies_for()[0])
+        cases = (
+            ("encoding_rejected", [("Content-Type", "text/csv"), ("Content-Encoding", "gzip"), ("Content-Length", str(body_length))], {}),
+            ("content_type_rejected", [("Content-Type", "text/html"), ("Content-Length", str(body_length))], {}),
+            ("content_type_rejected", [("Content-Type", "text/csv; charset=big5"), ("Content-Length", str(body_length))], {}),
+            ("content_type_rejected", [("Content-Length", str(body_length))], {}),
+            ("ambiguous_framing", [("Content-Type", "text/csv"), ("Content-Length", str(body_length)), ("Transfer-Encoding", "chunked")], {}),
+            ("transfer_encoding_rejected", [("Content-Type", "text/csv"), ("Transfer-Encoding", "gzip")], {"unknown": True}),
+            ("content_length_invalid", [("Content-Type", "text/csv"), ("Content-Length", "0" + str(body_length))], {}),
+            ("declared_length_cap", [("Content-Type", "text/csv"), ("Content-Length", str(m.BODY_CAP + 1))], {}),
+            ("framing_identity_conflict", [("Content-Type", "text/csv"), ("Content-Length", str(body_length))],
+             {"wire_length": body_length + 1}),
+            ("framing_identity_conflict", [("Content-Type", "text/csv"), ("Transfer-Encoding", "chunked")], {"unknown": True}),
+            ("framing_identity_conflict", [("Content-Type", "text/csv")], {"chunked": True}),
+        )
+        for code, base, extra in cases:
+            for headers in (cookies + base, base[:1] + cookies + base[1:], base + cookies):
+                capture, raw, connections, clock = setup_capture(options={0: dict(headers=headers, **extra)})
+                capture.capture()
+                self.assert_failed(capture)
+                self.assertEqual(capture.failure_code, code, headers)
+                self.assertEqual(connections[0].response.read_sizes, [])
+
+    def test_real_http_client_keeps_every_duplicate_and_repeat_is_refused_before_the_body(self):
+        lines = ["Content-Type: text/csv", "Content-Length: 1", "Set-Cookie: a=1", "set-cookie: b=2",
+                 "Vary: Accept", "VARY: Origin", "content-LENGTH: 99"]
+        sample = real_http_response(b"x", lines)
+        # Recorded http.client behaviour (CPython 3.12): getheaders() keeps every repeat, case and order,
+        # unmerged; getheader() merges with ", "; its own framing follows the FIRST Content-Length.
+        self.assertEqual(sample.getheaders(), [tuple(line.split(": ", 1)) for line in lines])
+        self.assertEqual(sample.getheader("Set-Cookie"), "a=1, b=2")
+        self.assertEqual(sample.length, 1)
+        sample.close()
+
+        def build(extra):
+            def make(ordinal, body):
+                return real_http_response(body, ["Content-Type: text/csv; charset=UTF-8", "Content-Length: " + str(len(body))]
+                                          + (extra if ordinal == 2 else []))
+            return make
+        baseline = self.observe(setup_capture(make_response=build([]))[0])
+        self.assertEqual((baseline["state"], baseline["failure"]), ("available", None))
+        for extra in (["Set-Cookie: a=1", "set-cookie: b=2"], ["Vary: A", "VARY: B", "X-Trace: 1", "x-trace: 2", "SET-COOKIE: c"]):
+            capture, raw, connections, clock = setup_capture(make_response=build(extra))
+            seen = self.observe(capture)
+            self.assertEqual((seen["state"], seen["failure"]), ("available", None), extra)
+            self.assertEqual((seen["selected"], len(connections)), (baseline["selected"], 6))
+            self.assertEqual([item[1] for item in seen["receipts"][2]["headers"]][2:], [line.split(": ", 1)[1] for line in extra])
+        repeats = {"content-length": ["content-LENGTH: 99"], "content-type": ["CONTENT-TYPE: text/csv"],
+                   "content-encoding": ["Content-Encoding: identity", "content-encoding: identity"],
+                   "transfer-encoding": ["Transfer-Encoding: identity", "transfer-ENCODING: identity"]}
+        for name, extra in repeats.items():
+            capture, raw, connections, clock = setup_capture(make_response=build(["Set-Cookie: a=1"] + extra + ["Set-Cookie: b=2"]))
+            capture.capture()
+            self.assert_failed(capture)
+            self.assertEqual(capture.failure_code, "duplicate_response_header:" + name)
+            self.assertEqual(len(connections), 3)
+            self.assertEqual(capture.authorization.spent, set(URLS[:3]))
+            response = connections[2].response
+            self.assertEqual(response.synthetic_stream.final_position, response.synthetic_head_length)
+
+    def test_native_provider_with_mocked_transport_spends_qa2_seal_and_records_its_namespace(self):
+        # Only http.client.HTTPSConnection is replaced (real HTTPResponse parsing over in-memory wire
+        # bytes); no socket, no TPEx request. It also shows ignored duplicates on the native path.
+        seal = build_seal()
+        capture = m.RAMCapture(m.ExternalPolicy(EXTERNAL_BYTES, expected_sha256=FIXED_SHA), seal)
+        raw, hosts, clock = bodies_for(), [], FakeClock()
+
+        def native(host, timeout=None):
+            hosts.append(host)
+            body = raw[len(hosts) - 1]
+            return FakeConnection(real_http_response(body, [
+                "Content-Type: text/csv; charset=UTF-8", "Content-Length: " + str(len(body)),
+                "Set-Cookie: a=1", "set-cookie: b=2"]), clock)
+        with claude_env(), no_network(), mock.patch.object(http.client, "HTTPSConnection", side_effect=native):
+            seen = self.observe(capture)
+        self.assertEqual((seen["state"], seen["failure"]), ("available", None))
+        self.assertEqual(hosts, ["www.tpex.org.tw"] * 6)
+        self.assertEqual(seen["spent"], set(URLS))
+        self.assertTrue(seal.started)
+        self.assertEqual([(r["kind"], r["namespace"], r["url"]) for r in seen["receipts"]],
+                         [("native_https", NAMESPACE, url) for url in URLS])
+        self.assertTrue(all(NAMESPACE != OLD_NAMESPACE and r["namespace"] != OLD_NAMESPACE for r in seen["receipts"]))
 
     def test_exact_body_and_six_mib_aggregate_with_existing_framing_no_probe(self):
         raw = [bytearray(b"x" * 1048576) for _ in range(6)]
@@ -1275,6 +1545,45 @@ class SealRuntimeBindingTests(unittest.TestCase):
         binding, raw, pin, url = synthetic_seal(fields, pretty=True)
         self.refused("seal_not_canonical", lambda: m.FinancialStartSeal(
             raw, expected_sha256=pin, receipt_url=url, reviewed=binding))
+
+    def test_quota_is_qa2_and_every_old_qa1_scope_value_is_refused(self):
+        self.assertEqual((m.QA_NAMESPACE, m.SOURCE_USE_RECEIPT, m.SOURCE_USE_RECEIPT_SHA256),
+                         (NAMESPACE, SOURCE_USE_RECEIPT, SOURCE_USE_RECEIPT_SHA256))
+        # Premise: the old values are what the unchanged pinned policy and the spent qa1 seal carried.
+        self.assertEqual((CONTRACT["admission_authority"]["source_use_receipt"],
+                          CONTRACT["admission_authority"]["source_use_receipt_sha256"]),
+                         (OLD_SOURCE_USE_RECEIPT, OLD_SOURCE_USE_RECEIPT_SHA256))
+        fields = synthetic_fields()
+        build_seal(fields)  # the qa2 scope is accepted
+        old_values = {"namespace": OLD_NAMESPACE, "source_use_receipt": OLD_SOURCE_USE_RECEIPT,
+                      "source_use_receipt_sha256": OLD_SOURCE_USE_RECEIPT_SHA256}
+        cases = {"old qa1 namespace alone": {"namespace": OLD_NAMESPACE},
+                 "old receipt alone": {"source_use_receipt": OLD_SOURCE_USE_RECEIPT},
+                 "old receipt sha alone": {"source_use_receipt_sha256": OLD_SOURCE_USE_RECEIPT_SHA256},
+                 "new receipt with old sha": {"source_use_receipt_sha256": OLD_SOURCE_USE_RECEIPT_SHA256},
+                 "old receipt with new sha": {"source_use_receipt": OLD_SOURCE_USE_RECEIPT},
+                 "qa2 namespace with the whole old receipt pair": {key: old_values[key] for key in old_values if key != "namespace"},
+                 "the whole old qa1 scope": old_values,
+                 "neighbouring namespaces": {"namespace": NAMESPACE[:-1] + "3"},
+                 "namespace with a suffix": {"namespace": NAMESPACE + "0"},
+                 "namespace with a space": {"namespace": NAMESPACE + " "},
+                 "namespace without version": {"namespace": NAMESPACE.replace("-v1/", "-v2/")},
+                 "other comment id": {"source_use_receipt": SOURCE_USE_RECEIPT[:-1] + "3"},
+                 "receipt with a suffix": {"source_use_receipt": SOURCE_USE_RECEIPT + "0"},
+                 "upper-case sha": {"source_use_receipt_sha256": SOURCE_USE_RECEIPT_SHA256.upper()},
+                 "truncated sha": {"source_use_receipt_sha256": SOURCE_USE_RECEIPT_SHA256[:-1]},
+                 "null receipt": {"source_use_receipt": None}, "empty namespace": {"namespace": ""}}
+        for label, extra in cases.items():
+            with self.subTest(label=label):
+                self.refused("seal_scope_conflict", lambda: build_seal(fields, extra=extra))
+        for key in old_values:
+            with self.subTest(missing=key):
+                self.refused("seal_fields_invalid", lambda: build_seal(fields, drop=(key,)))
+        # A synthetic boundary can neither reuse the real quota nor the spent one.
+        for namespace in (NAMESPACE, OLD_NAMESPACE):
+            with self.subTest(synthetic=namespace):
+                self.refused("synthetic_namespace_invalid", lambda: m.SyntheticAuthorization(
+                    namespace, expires_at=NOW + timedelta(hours=1)))
 
     def test_model_effort_terminal_candidate_hash_and_command_formats(self):
         cases = (

@@ -52,7 +52,11 @@ MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
 COMMAND_SWITCHES = " -I -B -X utf8 -c "
 COMMAND_MAX_UNITS = 32766  # CreateProcess: 32,767 UTF-16 units including the NUL.
 WORKTREE = "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-36-institutional-five-day-source"
-QA_NAMESPACE = "issue36-seven-institutional-five-day-two-cutoffs-v1/qa1"
+# One-shot source-use quota "qa2", granted by the user in the receipt below (qa1 is SPENT / NO-RETRY and
+# is never re-armed). The SHA-256 covers that comment's body as returned by the GitHub API (UTF-8, 1,859 B).
+QA_NAMESPACE = "issue36-seven-institutional-five-day-two-cutoffs-v1/qa2"
+SOURCE_USE_RECEIPT = "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6110215172"
+SOURCE_USE_RECEIPT_SHA256 = "3c5b61b7f79b7e2c238350b51d5329e81b087ef36204141ff185cbb5626619f1"
 SOURCE_ID = "tpex_government_institutional_csv"
 SOURCE_VERSION = "dataset-11856-dated-csv/issue36-two-cutoffs-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
@@ -81,6 +85,9 @@ ROOT_CAP = 33554432
 URL_SECONDS = 20
 BATCH_SECONDS = 180
 CHUNK_BYTES = 16384
+# Response headers that carry framing/content identity. Only a repeat of one of
+# these is refused; any other repeated header (e.g. Set-Cookie) is ignored.
+IDENTITY_HEADERS = ("content-length", "transfer-encoding", "content-encoding", "content-type")
 # Explicit supported-estimate allowances for native TLS/HTTP and CSV buffers.
 # These are accounting estimates, not bounds on native allocations or peak RSS.
 NATIVE_ALLOWANCE = 65536
@@ -319,8 +326,7 @@ class FinancialStartSeal:
             "schema": "stock-lab-financial-start-seal/v1", "issue": 36,
             "base_sha": BASE_SHA,
             "namespace": QA_NAMESPACE, "policy_sha256": POLICY_SHA256,
-            "source_use_receipt": "https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678",
-            "source_use_receipt_sha256": "56240c60afbd88e906efc493d3cc2597070226ea5e47656b86afc9948e0077b0",
+            "source_use_receipt": SOURCE_USE_RECEIPT, "source_use_receipt_sha256": SOURCE_USE_RECEIPT_SHA256,
             "cwd": WORKTREE, "parent_thread_id": None,
             "urls": list(URLS), "dates": list(DATES), "symbols": list(SYMBOLS),
             "body_bytes": BODY_CAP, "aggregate_raw_bytes": RAW_CAP, "retained_estimate_bytes": ROOT_CAP,
@@ -704,8 +710,9 @@ class RAMCapture:
             normalized = {}
             for key, value in headers:
                 key = key.lower()
-                _require(key not in normalized, "duplicate_response_header")
-                normalized[key] = value
+                if key in IDENTITY_HEADERS:  # Failure code carries the fixed name only, never the value.
+                    _require(key not in normalized, "duplicate_response_header:" + key)
+                    normalized[key] = value
             _require(normalized.get("content-encoding", "identity").lower() == "identity", "encoding_rejected")
             content_type = normalized.get("content-type", "")
             mime = [part.strip().lower() for part in content_type.split(";")]
