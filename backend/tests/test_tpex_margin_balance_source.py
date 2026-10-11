@@ -53,6 +53,8 @@ TERMINAL = "term_01a16666-6666-7666-8666-666666666666"
 MODEL = "claude-sonnet-5-5"
 EFFORT = "xhigh"
 RUNTIME_ENV = {M.SESSION_ENV: QA, M.EFFORT_ENV: EFFORT}
+# The only request headers the product may pass: identity encoding and one fixed, non-personal User-Agent.
+REQUEST_HEADERS = {"Accept-Encoding": "identity", "User-Agent": "stock-lab-issue31-local-ram/1"}
 SCRIPT =b"# Synthetic RAM test script, not a financial-start authorization.\n"
 COMMAND = "python -B -X utf8 synthetic-ram-only"
 SHA = "a" * 40
@@ -335,7 +337,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(report.consumer_count, 14)
         self.assertEqual(report.getter_count, 28)
         self.assertEqual(tuple(c[0] for c in transport.calls), M.URLS)
-        self.assertTrue(all(c[1:] == ("GET", {"Accept-Encoding": "identity"}) for c in transport.calls))
+        self.assertTrue(all(c[1:] == ("GET", REQUEST_HEADERS) for c in transport.calls))
         self.assertTrue(all(r.body_sha256 and r.full_eof for r in report.receipts))
         self.assertEqual(report.unattempted_not_spent, ())
         self.assertLess(report.retained_estimate_high_water, 33_554_432)
@@ -1095,24 +1097,28 @@ class Checks(unittest.TestCase):
         with patch.object(http.client, "HTTPSConnection", Replacement):
             with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
                 M.native_connection("example.invalid", 20)
-            capture = self.capture()  # Default (native) transport.
-            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
-                capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
-            self.assertEqual(capture._attempted, [])
-            self.assertEqual(capture._originals, [])
-            self.assertEqual(M._SPENT_NAMESPACES, set())
-            self.assertIsNone(sys.gettrace())
-            # The explicit seam never consults the global, so the lifecycle still runs.
-            _capture, report, _transport = self.execute()
-            self.assertTrue(report.success, report)
+            # Default (native) transport and an auditor's connection_factory are refused alike.
+            unused = Transport([])
+            for capture in (self.capture(), self.capture(connection_factory=unused.connection)):
+                with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                    capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+                self.assertEqual(capture._attempted, [])
+                self.assertEqual(capture._originals, [])
+                self.assertEqual(M._SPENT_NAMESPACES, set())
+                self.assertIsNone(sys.gettrace())
+            self.assertEqual(unused.connections, [])  # The factory was never called.
         # A replacement installed before the module was imported is captured as
-        # "native"; the class identity check still refuses it.
+        # "native"; the class identity check still refuses it, factory or not.
         with patch.object(M, "_SPENT_NAMESPACES", set()), patch.object(
                 http.client, "HTTPSConnection", Replacement), patch.object(M, "_NATIVE_HTTPS_CONNECTION", Replacement):
             with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
                 M.native_connection("example.invalid", 20)
-            with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
-                self.capture().run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+            unused = Transport([])
+            for capture in (self.capture(), self.capture(connection_factory=unused.connection)):
+                with self.assertRaisesRegex(M.MarginSourceError, "^transport_class_replaced$"):
+                    capture.run(independent_oracle, positive_consumer, independent_official_oracle=independent_official_oracle)
+                self.assertEqual(capture._attempted, [])
+            self.assertEqual(unused.connections, [])
             self.assertEqual(M._SPENT_NAMESPACES, set())
 
     def test_default_transport_goes_through_native_connection(self):
@@ -1125,6 +1131,59 @@ class Checks(unittest.TestCase):
         self.assertEqual(report.transport, "native_direct")
         self.assertEqual(len(transport.connections), 8)
         self.assertIsNone(capture._connection_factory)
+
+    def test_request_headers_are_exactly_identity_and_the_fixed_user_agent(self):
+        self.assertEqual(M.REQUEST_USER_AGENT, "stock-lab-issue31-local-ram/1")
+        self.assertTrue(M.REQUEST_USER_AGENT.isascii())
+        _capture, report, transport = self.execute()
+        self.assertTrue(report.success, report)
+        self.assertEqual(len(transport.calls), 8)
+        for _url, method, headers in transport.calls:  # What the product passes, for each of the 8 requests.
+            self.assertEqual(method, "GET")
+            self.assertEqual(headers, REQUEST_HEADERS)
+            self.assertEqual(sorted(key.lower() for key in headers), ["accept-encoding", "user-agent"])
+
+    def test_wire_request_headers_through_the_real_stdlib_class_are_exact(self):
+        rows, _documents = fixture()
+        response = Response(csv_body(rows), media="text/csv")
+        sent = []
+
+        class Recorder(FakeSocket):
+            def sendall(self, data):
+                sent.append(bytes(data))
+
+            def close(self):
+                pass
+
+        class Wire:  # Real stdlib request serialization into RAM; nothing is connected or sent anywhere.
+            def __init__(self, host, timeout):
+                self.native = M.native_connection(host, timeout)
+                self.native.sock = Recorder()
+
+            @property
+            def sock(self):
+                return self.native.sock
+
+            def request(self, method, target, headers):
+                self.native.request(method, target, headers=headers)
+
+            def getresponse(self):
+                return response
+
+            def close(self):
+                self.native.close()
+
+        capture = self.capture(connection_factory=Wire)
+        capture._deadline = M.time.monotonic() + 180
+        original = capture._fetch(0)
+        self.assertTrue(original.receipt.full_eof)
+        head, separator, body = b"".join(sent).partition(b"\r\n\r\n")
+        self.assertEqual((separator, body), (b"\r\n\r\n", b""))
+        lines = head.decode("ascii").split("\r\n")
+        self.assertEqual(lines[0], "GET /web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data HTTP/1.1")
+        self.assertEqual(sorted(line.split(": ", 1) for line in lines[1:]), sorted([
+            ["Host", "www.tpex.org.tw"], ["Accept-Encoding", "identity"], ["User-Agent", "stock-lab-issue31-local-ram/1"]]))
+        capture.release()
 
     def test_audit_wrapper_composes_native_connection_without_replacing_the_global(self):
         rows, documents = fixture()

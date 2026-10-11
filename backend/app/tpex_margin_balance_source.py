@@ -15,8 +15,10 @@ Transport: the default path builds the stdlib connection through
 ``native_connection``. The stdlib class rebinds itself by its module-global name
 in ``__init__``, so replacing ``http.client.HTTPSConnection`` (even to wrap it)
 breaks the original class with an opaque TypeError; that state is refused with
-``transport_class_replaced`` before anything is spent. An auditor wraps the
-connection by composition through ``connection_factory`` instead.
+``transport_class_replaced`` before anything is spent, with or without a
+``connection_factory``. An auditor wraps the connection by composition through
+``connection_factory`` instead. Requests carry exactly Accept-Encoding: identity
+and one fixed User-Agent, never a cookie, token or credential.
 Only ``run`` opens the source lifecycle; the independent oracle and positive
 consumer execute immediately in that same RAM process. The launcher must then
 exit, including on failure. Caller aliases must be registered in ``RamRoots``;
@@ -63,6 +65,8 @@ EFFORT_ENV = "CLAUDE_EFFORT"
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
 TERMINAL_PATTERN = r"term_[A-Za-z0-9_-]{1,80}"
+# Fixed, non-personal; the one TPEx batch that succeeded (Issue 36) also identified itself this way.
+REQUEST_USER_AGENT = "stock-lab-issue31-local-ram/1"
 # qa2 is the new one-time source-use quota that the user granted in
 # https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412 in
 # place of qa1; the global approved binding it to this namespace in
@@ -717,7 +721,8 @@ class MarginCapture:
             connection = self._open_connection(split.hostname, seconds)
             # Native direct HTTPS: no proxy/cookie/token environment or redirect handler.
             request_started = True  # Constructor failures above never reach this line.
-            connection.request("GET", split.path + "?" + split.query, headers={"Accept-Encoding": "identity"})
+            connection.request("GET", split.path + "?" + split.query, headers={
+                "Accept-Encoding": "identity", "User-Agent": REQUEST_USER_AGENT})
             self._clock()
             remaining_seconds = min(request_deadline, self._deadline) - time.monotonic()
             _require(remaining_seconds > 0, "request_timeout")
@@ -1002,7 +1007,8 @@ class MarginCapture:
                  and callable(positive_consumer), "callbacks_required")
         # Everything below is checked before the namespace or any URL is spent.
         _check_live_runtime(self._seal.holder_actual, self._seal.effort)
-        _require(self._connection_factory is not None or _native_transport_intact(), "transport_class_replaced")
+        # An auditor's wrapper composes the native class and must not replace the global either.
+        _require(_native_transport_intact(), "transport_class_replaced")
         self._clock()
         _SPENT_NAMESPACES.add(NAMESPACE)
         self._deadline = time.monotonic() + CAPS.batch_cooperative_seconds
