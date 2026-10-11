@@ -62,12 +62,25 @@ _BIND_RECORD_KEYS = _RECORD_KEYS - {"plan_payload", "original_inputs", "config_s
 _BIND_KEYS = _BIND_RECORD_KEYS | {"schema", "store_version", "absolute_root"}
 
 
+def _fact(code: str, stage: str) -> dict:
+    """The only shape of a secondary item: exactly {code, stage}, nothing nested.
+
+    Every secondary item is produced here, whether from another error
+    (``PlanStoreError.fact()``) or declared by hand, so all items share the
+    same keys and the same 64-character bound as the first error.
+    """
+    return {"code": code[:64], "stage": stage[:64]}
+
+
 class PlanStoreError(ValueError):
     """A bounded first error with separately retained cleanup failures.
 
     ``code`` and ``stage`` are stable ASCII values, never OS exception text.
-    ``secondary`` consists of bounded {code, stage} facts. No error receipt
-    claims acceptance; even a cleanup error after publishing is a failure.
+    ``secondary`` consists of bounded {code, stage} facts: every item has
+    exactly those two keys (see ``_fact``) and never carries a nested
+    ``secondary``. Only the top-level ``receipt()`` is {code, stage,
+    secondary}. No error receipt claims acceptance; even a cleanup error
+    after publishing is a failure.
     """
 
     def __init__(self, code: str, stage: str, secondary: tuple[dict, ...] = ()) -> None:
@@ -76,8 +89,12 @@ class PlanStoreError(ValueError):
         self.secondary = secondary
         super().__init__(self.code + ":" + self.stage)
 
+    def fact(self) -> dict:
+        """This error as one secondary item: {code, stage} only."""
+        return _fact(self.code, self.stage)
+
     def receipt(self) -> dict:
-        return {"code": self.code, "stage": self.stage, "secondary": list(self.secondary)}
+        return {**self.fact(), "secondary": list(self.secondary)}
 
 
 def _fail(code: str, stage: str = "input") -> None:
@@ -665,7 +682,7 @@ def _read_file(path: Path, cap: int, stage: str) -> bytes:
                 if first is None:
                     first = close
                 else:
-                    secondary.append(close.receipt())
+                    secondary.append(close.fact())
     if first is not None:
         raise _with_secondary(first, secondary)
     return result
@@ -729,14 +746,14 @@ def initialize_plan_store(*, root: str, expected_ownership: bytes, expected_owne
                     _fail("cleanup_ownership_changed", "ownership_cleanup")
                 (path / OWNERSHIP_FILE).unlink()
             except Exception as exc:
-                secondary.append(_io_error(exc, "ownership_cleanup").receipt())
+                secondary.append(_io_error(exc, "ownership_cleanup").fact())
         try:
             _path_guard(root)
             if root_identity is None or not _same_file(root_identity, path.lstat()):
                 _fail("cleanup_root_changed", "root_cleanup")
             path.rmdir()
         except Exception as exc:
-            secondary.append(_io_error(exc, "root_cleanup").receipt())
+            secondary.append(_io_error(exc, "root_cleanup").fact())
     if first is not None:
         raise _with_secondary(first, secondary)
     return {"store_version": STORE_VERSION, "absolute_root": root, "ownership_sha256": expected_ownership_sha256, "storage_integrity": "ownership_initialized", "semantic_status": "not_asserted"}
@@ -815,7 +832,7 @@ def save_plan_record(*, root: str, record_bytes: bytes, expected_ownership: byte
                 if first is None:
                     first = cleanup
                 else:
-                    secondary.append(cleanup.receipt())
+                    secondary.append(cleanup.fact())
     if first is not None:
         raise _with_secondary(first, secondary)
     try:
@@ -862,13 +879,13 @@ def _create_new(path: Path, raw: bytes, stage: str) -> os.stat_result:
                 if first is None:
                     first = close
                 else:
-                    secondary.append(close.receipt())
+                    secondary.append(close.fact())
     if first is not None:
         if fd is not None and identity is None:
             # Exclusive creation succeeded, but without a physical identity
             # it is unsafe to unlink a potentially changed path. Report the
             # unresolved cleanup separately rather than deleting by name.
-            secondary.append({"code": "cleanup_identity_unavailable", "stage": "file_cleanup"})
+            secondary.append(_fact("cleanup_identity_unavailable", "file_cleanup"))
         raise _OwnedWriteError(_with_secondary(first, secondary), identity)
     return identity
 
