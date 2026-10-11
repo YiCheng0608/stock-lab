@@ -1,6 +1,6 @@
 # 個股研究頁契約
 
-更新：2026-10-11。本文定義 `/stocks/:exchange/:symbol` 的現行有限契約。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
+本文定義 `/stocks/:exchange/:symbol` 的現行有限契約。這不代表完整研究產品、R0 或 [ROADMAP](ROADMAP.md) 已完成。
 
 ## 現行節次索引
 
@@ -867,9 +867,7 @@ ONE lifetime page `ee33ac1b-e221-47d3-8331-2d73c0c40328` 40events全trusted。�
 
 ROOT接受source實作、fresh22／all原receipt／金融、actual API及上列trusted操作；API50788／parent55084 SINGLE empty stores、finance seed0／preloadedfalse、guards0／19DB full schema與values／typeof preserved。本批price金融GET0／外部來源metadataGET0／new product disk0／DBmut0；private12bundles／36files含ROOT，existing private三檔仍在。
 
-B1 coreoperation+1／necessary joint-source-use-guard dep+1／reliability0／stall0。必要Py6／Node42guard＋9recovery＋7AppSSR／33src noEmit及首次失敗、normal exit與cleanup分報由[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)管理，命令與逐輪receipt留原task。Memory invalid／recovery／provenance tests不當actual missing-file UI；因NO-RETRY後者NOT RUN。未跑full suite／old full SSR／install／production build／diskcases，不外推其他平台／全市場／PIT或完整M1／M2／M3。
-
-下一候選 `M1-SAVED-PRICE-CHIPS-FOCUS-1006-1` 缺institutional predicate consumer／API／form／result；現saved-focus只有四price predicates、API五query fields，API和preview guards皆拒institutional query。擬僅3105／6488按選定investor、5或20日、signed net threshold精確篩選，再joint detail／全RAW返回；verified zero與unavailable分開，非ranking／strategy／PIT。NEW root先核缺失操作、選定語義／新policy、兩finite uses／pins／caps／errors，才private read／implementation／金融GET；目前未准新用途或producer，memory已釋放，fresh22須新必要grant。普通20／21stock closes／trend／strategy／time／execution及完整ROADMAP仍缺。
+必要Py6／Node42guard＋9recovery＋7AppSSR／33src noEmit及首次失敗、normal exit與cleanup分報由[開發入口](development-baseline/README.md#m1-saved-price-chips-integration-1006-1-共同入口的零落盤驗證入口)管理，命令與逐輪receipt留原task。Memory invalid／recovery／provenance tests不當actual missing-file UI；因NO-RETRY後者NOT RUN。未跑full suite／old full SSR／install／production build／diskcases，不外推其他平台／全市場／PIT或完整M1／M2／M3。
 
 ## 39. M1-SAVED-PRICE-CHIPS-FOCUS-1006-1：八條件入口與不可用驗收邊界
 
@@ -895,12 +893,9 @@ ONE page的具名桌面／窄版操作已接受；25trusted events及首次未�
 
 Matchingcards／verifiedzero／jointdetail／八RAWback／負門檻actual均未驗，沒有本輪正向rawdrawer／chart驗收。ROOT價格／index原欄核對不代native逐欄驗收；actual missing-private-file UI NOT RUN。
 
-### 39.3 驗收、停滯與下一候選
+### 39.3 驗收邊界
 
-ROOT只接受以上unavailable及owned退出。Actual private7snapshots/21files、financial index2/daily0、metadata0／new productdisk0／DBmut0，原三檔post-stop不變；guards0／19DB全量保留。Coreoperation0／dependency0／reliability0／stall1（前0），正向source gap未解除。Py6／Node59/17/7／36src noEmit的必要checks與未跑項見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)；原失敗／runtime／關閉收據留ROOT task，memory測試不代產品正向驗收。
-
-下一conditional candidate `M2-FOCUS-STOCK-SCOPE-6-B1`：新增ordinary第八股的單日四理由→同截止個股→五RAWback，尚未准入。Current worker只fixed10/5／10/6、最新.5七股；fresh身份／實際date／scope用途及必要versioned date guard須在金融GET前另核，不能承諾目前wire仍10/6或擴private七股／joint兩股。Calendar替代也須另准parser/schema/policy；本failed producer禁retry／restart／newproducer。完整M1／M2／M3及20／21stock closes／trend／strategy／PIT／time／execution仍未完成。
-
+ROOT只接受以上unavailable及owned退出。Actual private7snapshots/21files、financial index2/daily0、metadata0／new productdisk0／DBmut0，原三檔post-stop不變；guards0／19DB全量保留。Py6／Node59/17/7／36src noEmit的必要checks與未跑項見[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-1006-1-八條件入口的零落盤驗證入口)；原失敗／runtime／關閉收據留ROOT task，memory測試不代產品正向驗收。
 
 ## 40. M2-FOCUS-STOCK-SCOPE-6：八股四條件與同截止往返
 
@@ -938,9 +933,9 @@ Ctrl+A曾造成append；在SAME page用native Home／exact Delete再native Type�
 
 ONE API normalstop後，SAME page ONE trusted Read `82f93e10-2446-414a-acdc-a43f0d06565f`的browser ResourceTiming核HTTP502；原positive cards/count清除，候選未知／無cards／無count，五RAW仍保留且FIRST disabled。沒有restart。**停止後detail錯誤actual NOT RUN**，只有synthetic SSR，不能升格該case或沿用舊502收據。
 
-ROOT接受source14、actual操作及owned退出；coreoperation+1／standalone dependency0／reliability+1（current failure清stale values）／stall1→0。Final preview20 local API GET／1POST／14rejected不是financialGET；19 memory tables的schema／indexes／triggers／全部values／每cell typeof保留，guards0／private0／newdisk0。必要checks、原失敗與退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。
+ROOT接受source14、actual操作及owned退出。Final preview20 local API GET／1POST／14rejected不是financialGET；19 memory tables的schema／indexes／triggers／全部values／每cell typeof保留，guards0／private0／newdisk0。必要checks、原失敗與退出見[開發入口](development-baseline/README.md#m2-focus-stock-scope-6-八股新來源日的零落盤驗證入口)。
 
-DOC review→freeze→qualified索引→exact commit→另准master merge尚待。完整M1／M2／M3、ordinary20／21close history／trend／strategy／PIT／time／Signal／Plan／execution仍未完成；下一未准入候選見[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。Private／chips／failed producer及既有cleanup fences保持。
+完整M1／M2／M3、ordinary20／21close history／trend／strategy／PIT／time／Signal／Plan／execution仍未完成。Private／chips／failed producer及既有cleanup fences保持。
 
 ## 41. M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：八條件正向關注與同截止往返
 
@@ -981,9 +976,9 @@ Desktop及narrow原條件返回前後private counter23相等，無implicit read�
 
 ONE API normalstop後，same3105 trusted Read的ResourceTiming實際502，原positive同時清price headline／volume／chart／raw與chips nets／calendar／dailyraw，canvas0/table0；再native back並trusted joint Read核focus實際502，cards0／count不顯示／候選未知，FIRST及joint disabled、全部八RAW保留。沒有restart／source retry；停止後actual recovery NOT RUN，只synthetic same-generation雙成功recovery。
 
-初次20日negative card文字空白保留為actual發現；只calendar-v2 signed formatter修正，old expression不改，final SSR驗negative5／20及zero。當前preview仍用修正前bundle，**POSTFIX NEGATIVE CARD ACTUAL NOT RUN**；negative精確API／detail受驗不代修正後card native驗收。Actual missing-private-file UI也未跑。
+初次20日negative card文字空白保留為actual發現；只calendar-v2 signed formatter修正，old expression不改，final SSR驗negative5／20及zero。preview 未以修正後 bundle 重驗，**POSTFIX NEGATIVE CARD ACTUAL NOT RUN**；negative精確API／detail受驗不代修正後card native驗收。Actual missing-private-file UI也未跑。
 
-ROOT接受source20／coreoperation+1／standalone dep0／reliability+1（current source失敗清兩來源）／stall0。19 memory SQLite全schema/index/trigger/value/every-cell typeof preserved、guards0／financeSeed0／preloadedfalse／newdisk0／formalDB0，children actual GET/private0。必要checks及owned退出由[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-calendar-1006-2-全月日曆八條件的零落盤驗證入口)管理；private與排除清理fences保持。Freeze／qualified索引／commit／另准master merge仍待；完整ROADMAP未完成。
+ROOT接受source20。19 memory SQLite全schema/index/trigger/value/every-cell typeof preserved、guards0／financeSeed0／preloadedfalse／newdisk0／formalDB0，children actual GET/private0。必要checks及owned退出由[開發入口](development-baseline/README.md#m1-saved-price-chips-focus-calendar-1006-2-全月日曆八條件的零落盤驗證入口)管理；private與排除清理fences保持；完整ROADMAP未完成。
 
 ## 42. M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股八條件與同截止往返
 

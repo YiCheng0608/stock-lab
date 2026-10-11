@@ -19,7 +19,7 @@
 | 阻塞／暫停 | Project Blocked／Paused | 是／否；原單列原因、決策者、解除條件、原階段、重查事件／時間。 |
 | owner／下一角色 | Issue 最新交接 | session、版本、ACK；assignee 是通知帳號，不冒每 agent 獨立帳號。 |
 | 整合排隊／持有者 | 治理 Issue 最新整合收據 | 全局唯一更新，有序候選、最多一位持有者，不建本機鎖表。 |
-| WIP／停滯計數 | 同一治理 Issue | 上限／實占／空位／補派處置；暫限列證據、範圍、解除事件，計算及釋放依[AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
+| WIP／停滯計數 | 同一治理 Issue | 上限／實占／空位／處置，規則依 [AGENTS](../AGENTS.md#建立任務與派工)。停滯按批次驗收順序，母單連收據。 |
 | Repo／Project／整合入口 URL | 遷移入口 | 只留穩定入口，不抄即時 roster／狀態。 |
 
 原生關係確定不支援時才用 Issue「母單／子單」及「Blocked by／Blocking」完整連結，全局核雙向一致；不維護兩套權威關係或以 label 複製 Ready／Status。
@@ -34,9 +34,9 @@
 
 milestone 是唯一版本集合。跨版母單按 V1 必要 AC 拆子單，不整張納入；逐子核 milestone，不推定繼承。Project 可留後版／候選；取消／重複不算能力，必要 AC 須映射承接單或有效證據。
 
-既定 AC 的必要前置／缺陷由全局列受阻 AC、版本、依賴影響並決定納入 V1；新能力、市場、策略或降 AC 須使用者核定，pending 不接受。後版想法不延長 V1，建單不占 WIP／解除暫停。缺來源且無新路徑時保留階段、記阻塞／解除條件，不用 unknown 代交付。
+既定 AC 的必要前置／缺陷由全局列受阻 AC、版本、依賴影響並決定納入 V1；新能力或降 AC 依 [AGENTS](../AGENTS.md#疑問阻塞與範圍變更)由使用者核定。後版想法不延長 V1，建單不占 WIP／解除暫停。缺來源且無新路徑時保留階段、記阻塞／解除條件，不用 unknown 代交付。
 
-進度報已驗能力、剩餘 AC、未解除依賴、發布 gate，不重複計母子／PR／維護或按 closed 比例算完成。已整合 master 的全部 V1 必要 AC、執行單、獨立 QA 端到端（含磁碟／跨程序）、required CI、文件齊全且阻擋缺陷 0，才由全局寫發布驗收、關 milestone。後版／跨版母單可 open；部署另授權。
+進度報已驗能力、剩餘 AC、未解除依賴、發布 gate，不重複計母子／PR／維護或按 closed 比例算完成。發布條件見 [ROADMAP V1-G7](ROADMAP.md#v1-範圍基線2026-10-09-已核定邊界)；後版／跨版母單可 open。
 
 ## 待辦涵蓋與補單
 
@@ -53,7 +53,7 @@ milestone 是唯一版本集合。跨版母單按 V1 必要 AC 拆子單，不�
 
 ### 平行派工與補位
 
-WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限及補派規則適用；一張 Ready 不另核永久容量 1。等待只約束該單及真正依賴，共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
+WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限及補派規則適用。等待只約束該單及真正依賴，共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
 
 治理收據記「上限／實占／空位 → Ready／必要前置 → 隔離／角色安排 → 派工或阻擋／解除事件」。Project 連現行規則、治理單，舊限制明示歷史。規則未整合時全局交版本化決策／差異給受影響 owner 讀回，不改被測樹或把管理候選當產品 base。
 
@@ -90,7 +90,7 @@ QA／合併後檢查須核：
 - code／設定／重啟／bundle／upstream 改動須重核對應及受影響項。跨任務沿用須 owner 同意、用途授權、相關載入來源一致；clean／port／package version／長度不足。
 - 無法證版本列未驗，在授權內建正確服務或記阻塞。不得重啟重取 SPENT、恢復已釋原件或繞 NO-RETRY；不可重取資料先安排合法 QA 生命周期／保留範圍。
 
-chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bundle 啟動時建立；換 UI 埠不換 API，commit 不更新既有 bundle。用核定 `--port`／`--api-port` 並讀回，見[API](../tools/tpex-chips-series-api.py)／[preview](../tools/tpex-chips-series-preview.cjs)。不要求逐測試新建環境，隔離入口沿原契約。
+QA 用核定埠並讀回；各工具預設埠與 `--port`／`--api-port` 見[開發入口](development-baseline/README.md#m1-chips-stock-scope-7-daily-net-trend-20-1006-1-七股每日淨超的零落盤驗證入口)。不要求逐測試新建環境，隔離入口沿原契約。
 
 ## 角色 provider 與啟動參數
 
@@ -129,7 +129,7 @@ chips API／preview 預設 8799／8800，preview `--api-port` 預設 8799，bund
 | `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 
-master ruleset 要求 GitHub Actions `required` 及最新 base；首次實際成功後配置／讀回，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
+master ruleset 要求 GitHub Actions `required` 及最新 base；設定以讀回為準，未讀回記未設，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
 
 CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA 按原 AC 驗版本／真操作；可用既有獨立 session，統籌處理意見，不啟付費雲端 AI reviewer。初始回歸涵蓋按[流程檢查](#流程檢查與滾動調整)擴充；真源／磁碟／跨程序／UI 沿本機 gate，不為 CI 縮 AC。CI／helper 變更跑兩產品工作；前端依賴／後端驗證清單各觸發所屬，backend 來源亦驗前端契約。
 
@@ -178,7 +178,7 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 | 角色／槽位 | 統籌核階段及寫權、全局排資源 | 啟動／恢復／交接／容量變更 | actual session／模型／reasoning／cwd／branch／HEAD、白名單、停寫／ACK、QA 不同 session | 按[角色](../AGENTS.md#六種角色)分階段、空閒停寫；不足只順排受影響階段。 |
 | 交接欄位 | 統籌／文件核、全局調整 | 首完整試跑／重複缺漏／採用後 | 交接／ACK、版本責任缺漏／重複例證 | 刪重複，留 owner／AC 修訂／完整 SHA／停寫／ACK，治理連模板差異，不另附件。 |
 | 並行資源 | 全局及參與統籌 | 派工／補派／恢復／資源變更 | Ready／前置、階段角色、共用白名單／埠／資料輸出／服務版本、索引 root／scope／版本、整合 owner／隔離 | 治理准入收據；缺口只阻受影響任務／操作，暫限列解除事件，其他獨立照常派。master 一次一張，worktree 不證隔離。 |
-| 產物／歷史文件 | 統籌核量、QA 執行、文件核連結、全局排候選 | 落盤前／修改相關歷史 | 數量／大小／絕對路徑／授權／建立清理／殘留、連結失效證據 | 按[暫存規則](../AGENTS.md#驗證資料與暫存)，不足才提工具改善；觸及歷史連結時處理，既有 [#27](https://github.com/YiCheng0608/stock-lab/issues/27)不納 V1。 |
+| 產物／歷史文件 | 統籌核量、QA 執行、文件核連結、全局排候選 | 落盤前／修改相關歷史 | 數量／大小／絕對路徑／授權／建立清理／殘留、連結失效證據 | 按[暫存規則](../AGENTS.md#驗證資料與暫存)，不足才提工具改善；觸及歷史連結時處理。 |
 
 改善可延後；僅影響既定 AC、安全、啟動送達、並行隔離者阻對應動作。原 AC 失敗原單退修，獨立改善由全局去重／列候選／排序，不自納 V1 或授權派工。
 

@@ -1,6 +1,6 @@
 # Source registry、用途 gate 與官方來源契約
 
-更新：2026-10-11。本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
+本文負責官方來源 identity、授權、用途 gate、capture 與 consumer 契約。各節有限 review 不代表其餘來源已重新查證、全市場 coverage 或 PIT。
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
@@ -387,7 +387,7 @@ Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍�
 
 完整 5／20 交易日基準及 PIT 不作本批單日前置；本批審查也不解除多日窗口、全市場／完整歷史 coverage、研究條件或 PIT 的原門檻。
 
-### 12.3 本輪驗收邊界與下一步
+### 12.3 驗收邊界
 
 本批只有 metadata／唯讀 source review，程式寫入範圍為空；未取法人 body，未跑 tests／backend／build／UI，不由前輪測試追認准入。入口副作用見[開發文件](development-baseline/README.md)，角色／清理限制見[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)。
 
