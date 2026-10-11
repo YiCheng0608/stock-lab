@@ -125,7 +125,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 | 檢查 | 範圍與限制 |
 | --- | --- |
 | `repository` | 每 PR／master push 驗 diff 空白、變更檔 UTF-8、Python／JSON／YAML 語法、Markdown 相對檔案連結；Python 另驗 Ruff E9／F63／F7／F82。外部 URL／anchor／語意由 review 核，不批量改既有風格。 |
-| `backend` | backend／工具／CI／驗證依賴變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。不證完整 suite、真源、磁碟。 |
+| `backend` | backend／工具／CI／驗證依賴變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 identity／news／product 三檔 pytest（tmp SQLite、測試設計不取源、無此 guard），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)不由 pytest 收集。不證完整 suite、真源、磁碟。 |
 | `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 

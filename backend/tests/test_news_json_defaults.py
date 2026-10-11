@@ -23,6 +23,12 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "alembic.ini"
 OLD_REVISION = "0005_news_temporal_contract"
 NEW_REVISION = "0006_news_json_defaults"
 CURRENT_HEAD = "0008_portfolio_share_integer"
+# Tables the revisions after 0006 read (0007 turnover, 0008 share integer). A
+# database stamped 0005 always has them because 0001 creates every model table.
+HEAD_PREREQUISITES = (
+    "CREATE TABLE market_bars (id INTEGER NOT NULL PRIMARY KEY, turnover FLOAT)",
+    "CREATE TABLE portfolio_positions (id INTEGER NOT NULL PRIMARY KEY, shares FLOAT)",
+)
 
 
 def _normalize_default(value: Any) -> str | None:
@@ -59,6 +65,8 @@ def _old_005_engine(
         )
         # Empty prerequisites for the fixture's existing 0005 identity claim.
         connection.exec_driver_sql("CREATE TABLE signals (id INTEGER NOT NULL PRIMARY KEY)")
+        for statement in HEAD_PREREQUISITES:
+            connection.exec_driver_sql(statement)
         connection.exec_driver_sql(
             """CREATE TABLE signal_settlements (
 id INTEGER NOT NULL PRIMARY KEY, signal_id INTEGER NOT NULL,
@@ -506,6 +514,13 @@ def test_actual_0004_fixture_reaches_new_head_without_changing_json_defaults(tmp
     for migration_path in ("alembic", "fallback"):
         database = tmp_path / f"fixture-{migration_path}.db"
         _load_fixed_fixture(database)
+        prerequisites = sqlite3.connect(database)
+        try:
+            with prerequisites:
+                for statement in HEAD_PREREQUISITES:
+                    prerequisites.execute(statement)
+        finally:
+            prerequisites.close()
         engine = create_engine(f"sqlite:///{database.as_posix()}")
         enable_sqlite_foreign_keys(engine)
         if migration_path == "fallback":
