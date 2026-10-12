@@ -315,6 +315,16 @@ def _fallback_upgrade(target_engine: Engine) -> None:
 
 
 
+def _escape_config_value(value: str) -> str:
+    """Escape ``%`` so ConfigParser interpolation reads the value back verbatim.
+
+    ``Config.set_main_option`` hands the value to ``ConfigParser.set``, which
+    rejects a bare ``%`` and would expand a ``%(name)s`` token inside a path.
+    """
+
+    return value.replace("%", "%%")
+
+
 def upgrade_database(target_engine: Engine) -> None:
     """Run the checked-in Alembic migration, with a local compatibility path."""
 
@@ -331,8 +341,11 @@ def upgrade_database(target_engine: Engine) -> None:
         return
 
     config = Config(str(config_path))
-    config.set_main_option("sqlalchemy.url", target_engine.url.render_as_string(hide_password=False))
-    config.set_main_option("script_location", str(config_path.parent / "alembic"))
+    config.set_main_option(
+        "sqlalchemy.url",
+        _escape_config_value(target_engine.url.render_as_string(hide_password=False)),
+    )
+    config.set_main_option("script_location", _escape_config_value(str(config_path.parent / "alembic")))
     # Reuse the configured engine so its SQLite foreign-key listener remains
     # active and tests can migrate an isolated database without touching the
     # production stock.db.

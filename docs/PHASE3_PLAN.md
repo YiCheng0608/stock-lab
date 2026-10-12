@@ -10,7 +10,7 @@ Phase 3 原本要在有限、可稽核的官方資料中，建立用途別 cover
 
 ## 現行文件
 
-功能與操作契約由[文件索引](README.md)分工；狀態和驗收只看 [ROADMAP](ROADMAP.md)／[執行清單](ROADMAP_EXECUTION.md)。
+功能與操作契約由[文件索引](README.md)分工；狀態查 GitHub Issues／Projects，能力查 [ROADMAP](ROADMAP.md)；[執行清單](ROADMAP_EXECUTION.md)只供歷史對照。
 
 ## 仍未決事項
 

@@ -10,7 +10,7 @@ Phase 4 原本要把資料列整理為「結論 → 關鍵數字 → 證據／�
 
 ## 現行文件
 
-功能與操作契約由[文件索引](README.md)分工；狀態和驗收只看 [ROADMAP](ROADMAP.md)／[執行清單](ROADMAP_EXECUTION.md)。
+功能與操作契約由[文件索引](README.md)分工；狀態查 GitHub Issues／Projects，能力查 [ROADMAP](ROADMAP.md)；[執行清單](ROADMAP_EXECUTION.md)只供歷史對照。
 
 ## 仍未決事項
 

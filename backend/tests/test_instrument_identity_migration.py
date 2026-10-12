@@ -268,10 +268,13 @@ def _matches(statement, parameters, phase, entry):
     if phase == 'drop': return s == 'drop table "instruments"'
     if phase == 'rename': return s.startswith('alter table "instruments__v1_rebuild" rename')
     if phase == 'index': return s.startswith('create index "ix_instruments_symbol"')
+    # head_marker is the final stamp, so it follows HEAD instead of a fixed revision:
+    # an older revision also appears in the WHERE clause of the next stamp.
+    markers = {'marker':'0002_', 'head_marker':HEAD[:5], 'later':'0003_'}
     if entry == 'fallback':
-        version = {'marker':'0002_', 'head_marker':'0006_', 'later':'0003_'}[phase]
+        version = markers[phase]
         return s.startswith('insert or replace into schema_migrations') and version in s
-    version = {'marker':'0002_', 'head_marker':'0006_', 'later':'0003_'}[phase]
+    version = markers[phase]
     return s.startswith('update alembic_version') and version in (s + repr(parameters))
 
 
