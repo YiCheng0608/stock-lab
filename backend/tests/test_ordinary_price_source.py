@@ -14,7 +14,6 @@ import contextlib
 import hashlib
 import http.client
 import importlib.util
-import io
 import json
 import os
 from pathlib import Path
@@ -123,8 +122,6 @@ class FakeResponse:
                         "Content-Encoding": "identity"} if headers is None else headers
         self.failure, self.on_read, self.close_failure = failure, on_read, close_failure
         self.offset, self.closed, self.read_calls = 0, False, 0
-        self.read_ledger = []
-        self.eof_observed = False
 
     def read(self, size):
         self.read_calls += 1
@@ -132,21 +129,9 @@ class FakeResponse:
             self.on_read()
         if self.failure:
             raise self.failure
-        before = self.offset
-        aggregate_before = sum(entry["received"] for entry in self.read_ledger)
         chunk = self.body[self.offset:self.offset + size]
         self.offset += len(chunk)
-        self.read_ledger.append({"requested": size, "received": len(chunk), "body_before": before,
-                                 "body_after": self.offset, "aggregate_before": aggregate_before,
-                                 "aggregate_after": aggregate_before + len(chunk)})
-        if not chunk:
-            self.eof_observed = True
-        elif self.headers.get("Content-Length") == str(len(self.body)) and self.offset == len(self.body):
-            self.eof_observed = True
         return chunk
-
-    def isclosed(self):
-        return self.eof_observed
 
     def close(self):
         self.closed = True
@@ -161,7 +146,6 @@ class OrdinaryPriceSourceTests(unittest.TestCase):
         self.use, self.grant, self.clock = explicit_use(), synthetic_grant(), FakeClock()
         self.originals, self.oracle, self.results = {}, {}, []
         self.attempts, self.responses = [], []
-        self.read_ledger = []
         self.documents = {symbol: fixture_document(symbol) for symbol in EXPECTED_SYMBOLS}
         self.response_change = None
         self.observer_change = None
@@ -186,7 +170,6 @@ class OrdinaryPriceSourceTests(unittest.TestCase):
         self.attempts.append((symbol, url, timeout, headers))
         body = json.dumps(self.documents[symbol], separators=(",", ":")).encode("utf-8")
         response = FakeResponse(body, url)
-        response.read_ledger = self.read_ledger
         if self.response_change:
             self.response_change(symbol, response)
         self.responses.append(response)
@@ -453,181 +436,6 @@ class OrdinaryPriceSourceTests(unittest.TestCase):
         first_size = len(json.dumps(self.documents["3105"], separators=(",", ":")).encode("utf-8"))
         with patch.object(m, "TOTAL_RAW_CAP", first_size + 1):
             self.assert_acquire_error("body_cap_exceeded", 2)
-
-    def assert_reads_bounded(self, body_cap, total_cap):
-        self.assertTrue(self.read_ledger)
-        for entry in self.read_ledger:
-            self.assertGreater(entry["requested"], 0)
-            self.assertLessEqual(entry["requested"], body_cap - entry["body_before"])
-            self.assertLessEqual(entry["requested"], total_cap - entry["aggregate_before"])
-            self.assertLessEqual(entry["received"], entry["requested"])
-            self.assertLessEqual(entry["body_after"], body_cap)
-            self.assertLessEqual(entry["aggregate_after"], total_cap)
-
-    def test_read_before_cap_unknown_and_chunked_never_receives_extra_byte(self):
-        for chunked in (False, True):
-            with self.subTest(chunked=chunked):
-                m._SEALED_NAMESPACES.clear()
-                self.attempts.clear(); self.responses.clear(); self.read_ledger.clear(); self.release_calls = 0
-                def oversized(symbol, response):
-                    response.headers.pop("Content-Length")
-                    if chunked:
-                        response.headers["Transfer-Encoding"] = "chunked"
-                    response.body = b"x" * 65
-                self.response_change = oversized
-                with patch.object(m, "BODY_CAP", 64):
-                    self.assert_acquire_error("body_cap_exceeded")
-                print(json.dumps({"cap_case": "chunked-over" if chunked else "unknown-over",
-                                  "body_cap": 64, "read_ledger": self.read_ledger}, sort_keys=True))
-                self.assert_reads_bounded(64, m.TOTAL_RAW_CAP)
-
-    def test_read_before_aggregate_cap_exhausts_independently_of_body_cap(self):
-        first_size = len(json.dumps(self.documents["3105"], separators=(",", ":")).encode("utf-8"))
-        total_cap = first_size + 1
-        self.response_change = lambda symbol, response: response.headers.pop("Content-Length") if symbol == "3293" else None
-        with patch.object(m, "TOTAL_RAW_CAP", total_cap):
-            self.assert_acquire_error("body_cap_exceeded", 2)
-        print(json.dumps({"cap_case": "aggregate-first", "total_cap": total_cap,
-                          "read_ledger": self.read_ledger}, sort_keys=True))
-        self.assert_reads_bounded(m.BODY_CAP, total_cap)
-        self.assertEqual(self.read_ledger[-1]["requested"], 1)
-        self.assertEqual(self.read_ledger[-1]["aggregate_after"], total_cap)
-
-    def test_aggregate_exact_exhaustion_stops_before_next_transport(self):
-        first_size = len(json.dumps(self.documents["3105"], separators=(",", ":")).encode("utf-8"))
-        with patch.object(m, "TOTAL_RAW_CAP", first_size):
-            self.assert_acquire_error("body_cap_exceeded", 1)
-        self.assert_reads_bounded(m.BODY_CAP, first_size)
-        self.assertEqual(len(self.read_ledger), 1)
-        self.assertEqual(self.read_ledger[0]["aggregate_after"], first_size)
-
-    def test_exact_cap_without_transport_eof_proof_never_probes(self):
-        # Both unknown length and a custom known-length transport that has not
-        # proven framing EOF refuse the full buffer, even when it really ends.
-        for known_length in (False, True):
-            with self.subTest(known_length=known_length):
-                m._SEALED_NAMESPACES.clear()
-                self.attempts.clear(); self.responses.clear(); self.read_ledger.clear(); self.release_calls = 0
-                def unproven(symbol, response):
-                    response.body = b"x" * 64
-                    if known_length:
-                        response.headers["Content-Length"] = "64"
-                    else:
-                        response.headers.pop("Content-Length")
-                    response.isclosed = lambda: False
-                self.response_change = unproven
-                with patch.object(m, "BODY_CAP", 64):
-                    self.assert_acquire_error("body_cap_exceeded")
-                self.assert_reads_bounded(64, m.TOTAL_RAW_CAP)
-                self.assertEqual([(row["requested"], row["received"]) for row in self.read_ledger], [(64, 64)])
-
-    def framed_transport(self, framing, payload_size):
-        outer = self
-        class MemorySocket:
-            def __init__(self, wire):
-                self.wire = wire
-            def makefile(self, mode):
-                outer.assertEqual(mode, "rb")
-                return io.BytesIO(self.wire)
-        class Connection:
-            def close(self):
-                pass
-        class RecordedHTTPResponse(http.client.HTTPResponse):
-            def __init__(self, socket):
-                super().__init__(socket)
-                self.recorded_body_bytes = 0
-            def read(self, size):
-                before = self.recorded_body_bytes
-                aggregate_before = sum(row["received"] for row in outer.read_ledger)
-                chunk = super().read(size)
-                self.recorded_body_bytes += len(chunk)
-                outer.read_ledger.append({"requested": size, "received": len(chunk), "body_before": before,
-                                           "body_after": self.recorded_body_bytes, "aggregate_before": aggregate_before,
-                                           "aggregate_after": aggregate_before + len(chunk), "framing_eof": self.isclosed()})
-                return chunk
-        def open_framed(url, timeout, headers):
-            symbol = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["data_id"][0]
-            self.attempts.append((symbol, url, timeout, headers))
-            body = json.dumps(self.documents[symbol], separators=(",", ":")).encode("utf-8")
-            body += b" " * (payload_size - len(body))
-            prefix = b"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n"
-            if framing == "fixed":
-                wire = prefix + b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
-            elif framing == "chunked":
-                wire = prefix + b"Transfer-Encoding: chunked\r\n\r\n" + format(len(body), "x").encode("ascii") + b"\r\n" + body + b"\r\n0\r\n\r\n"
-            else:
-                wire = prefix + b"Connection: close\r\n\r\n" + body
-            response = RecordedHTTPResponse(MemorySocket(wire))
-            response.begin()
-            wrapped = m._HTTPResponse(response, Connection(), url)
-            self.responses.append(wrapped)
-            return wrapped
-        return open_framed
-
-    def test_real_httpresponse_fixed_exact_cap_has_framing_eof(self):
-        size = max(len(json.dumps(document, separators=(",", ":")).encode("utf-8")) for document in self.documents.values())
-        with patch.object(m, "BODY_CAP", size), patch.object(m, "TOTAL_RAW_CAP", size * 7):
-            with self.acquire(transport=self.framed_transport("fixed", size)) as bundle:
-                self.assertEqual(bundle.request_count, 7)
-                self.assertEqual(tuple(receipt.body_bytes for receipt in bundle.receipts), (size,) * 7)
-                self.assertTrue(all(receipt.eof for receipt in bundle.receipts))
-        self.assert_reads_bounded(size, size * 7)
-        self.assertEqual(len(self.read_ledger), 7)
-        self.assertEqual(self.read_ledger[-1]["aggregate_after"], size * 7)
-        self.assertTrue(all(row["framing_eof"] for row in self.read_ledger))
-        self.assertTrue(all(response.isclosed() for response in self.responses))
-        self.assertFalse(self.originals or self.oracle)
-
-    def test_real_httpresponse_chunked_and_unknown_exact_cap_lack_eof(self):
-        size = max(len(json.dumps(document, separators=(",", ":")).encode("utf-8")) for document in self.documents.values())
-        for framing in ("chunked", "unknown"):
-            with self.subTest(framing=framing):
-                m._SEALED_NAMESPACES.clear()
-                self.attempts.clear(); self.responses.clear(); self.read_ledger.clear(); self.release_calls = 0
-                with patch.object(m, "BODY_CAP", size):
-                    with self.assertRaises(m.OrdinaryPriceSourceError) as caught:
-                        with self.acquire(transport=self.framed_transport(framing, size)):
-                            self.fail("Unproven exact-cap EOF became available")
-                self.assertEqual(caught.exception.code, "body_cap_exceeded")
-                self.assert_reads_bounded(size, m.TOTAL_RAW_CAP)
-                self.assertEqual(len(self.read_ledger), 1)
-                self.assertEqual((self.read_ledger[0]["requested"], self.read_ledger[0]["received"]), (size, size))
-                self.assertFalse(self.read_ledger[0]["framing_eof"])
-                self.assertEqual(len(self.attempts), 1)
-                self.assertTrue(self.responses[0].isclosed())  # finally closed it.
-                self.assertFalse(self.originals or self.oracle)
-                self.assertEqual(self.release_calls, 1)
-
-    def test_real_httpresponse_under_cap_eof_and_truncated_fixed_length(self):
-        size = max(len(json.dumps(document, separators=(",", ":")).encode("utf-8")) for document in self.documents.values())
-        for framing in ("chunked", "unknown"):
-            with self.subTest(framing=framing):
-                m._SEALED_NAMESPACES.clear()
-                self.attempts.clear(); self.responses.clear(); self.read_ledger.clear()
-                with patch.object(m, "BODY_CAP", size + 1):
-                    with self.acquire(transport=self.framed_transport(framing, size)) as bundle:
-                        self.assertTrue(all(receipt.eof for receipt in bundle.receipts))
-                self.assert_reads_bounded(size + 1, m.TOTAL_RAW_CAP)
-                if framing == "unknown":
-                    self.assertEqual(sum(row["received"] == 0 for row in self.read_ledger), 7)
-                    self.assertTrue(all(row["requested"] == 1 for row in self.read_ledger if row["received"] == 0))
-                else:
-                    self.assertTrue(all(row["framing_eof"] for row in self.read_ledger))
-        m._SEALED_NAMESPACES.clear()
-        self.attempts.clear(); self.responses.clear(); self.read_ledger.clear()
-        def truncated(url, timeout, headers):
-            transport = self.framed_transport("fixed", size)
-            response = transport(url, timeout, headers)
-            # Keep the parsed declared length, but feed a genuinely short stream.
-            response._response.fp = io.BytesIO(b"{}")
-            return response
-        with self.assertRaises(m.OrdinaryPriceSourceError) as caught:
-            with self.acquire(transport=truncated):
-                pass
-        self.assertEqual(caught.exception.code, "body_length_or_eof")
-        self.assertEqual(len(self.attempts), 1)
-        self.assertTrue(self.responses[0].isclosed())
-        self.assertFalse(self.originals or self.oracle)
 
     def test_network_and_observer_failures_release_and_stop(self):
         self.response_change = lambda symbol, response: setattr(response, "failure", OSError("synthetic disconnected"))

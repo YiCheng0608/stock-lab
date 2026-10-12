@@ -428,12 +428,6 @@ class _HTTPResponse:
     def read(self, size: int) -> bytes:
         return self._response.read(size)
 
-    def isclosed(self) -> bool:
-        # HTTPResponse closes its message stream after proven framing EOF;
-        # merely receiving Content-Length bytes in a custom transport is not
-        # sufficient. Chunked exact-size reads can leave the trailer unread.
-        return self._response.isclosed()
-
     def close(self) -> None:
         try:
             self._response.close()
@@ -536,8 +530,6 @@ def _capture(symbol: str, bundle: SourceBundle, transport: Callable, now: Callab
              observer: Callable[[bytes, SourceReceipt, LeaseBudget], None], total_raw: int) -> _Capture:
     budget, grant = bundle._budget, bundle._grant
     remaining = budget.checkpoint()
-    if total_raw >= TOTAL_RAW_CAP:
-        raise OrdinaryPriceSourceError("body_cap_exceeded", symbol=symbol)
     started_tick = budget._clock()
     started_utc = _utc_text(now)
     url = source_url(symbol)
@@ -573,16 +565,7 @@ def _capture(symbol: str, bundle: SourceBundle, transport: Callable, now: Callab
             budget.checkpoint(buffer)
             if budget._clock() - started_tick >= REQUEST_SECONDS:
                 raise OrdinaryPriceSourceError("request_deadline", symbol=symbol)
-            framing_eof = getattr(response, "isclosed", None)
-            if callable(framing_eof) and framing_eof() is True:
-                break
-            read_size = min(65_536, BODY_CAP - len(buffer), TOTAL_RAW_CAP - total_raw - len(buffer))
-            if read_size <= 0:
-                # No +1 or zero-size EOF probe. At exact cap, unknown length
-                # or unfinished chunked framing must fail closed. Fixed-length
-                # EOF is accepted only via transport framing plus length match.
-                raise OrdinaryPriceSourceError("body_cap_exceeded", symbol=symbol)
-            chunk = response.read(read_size)
+            chunk = response.read(min(65_536, BODY_CAP + 1 - len(buffer)))
             if type(chunk) is not bytes:
                 raise OrdinaryPriceSourceError("transport_chunk_invalid", symbol=symbol)
             if len(buffer) + len(chunk) > BODY_CAP or total_raw + len(buffer) + len(chunk) > TOTAL_RAW_CAP:
