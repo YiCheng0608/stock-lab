@@ -4,12 +4,19 @@
 
 本文件是免費公開官方來源的 identity、授權、用途 decision、runtime capture 與已接 consumer 的權威。第 3 節是原 snapshot 四來源，第 8 節是另需 explicit 單來源 manifest 的 TPEx 單日法人，第 13 節是獨立版本的政府連結 CSV policy；不能將新增來源當成 bundled default 或沿用舊 registry version。一次 HTTP 200、來源名稱或資料日期都不能補成完整 coverage、發布時間、first availability、revision lineage 或 historical PIT。
 
+## 來源選用原則（FinMind 為主）
+
+新的取得方案、恢復的暫停單與新來源准入，先以 FinMind（`https://api.finmindtrade.com/api/v4/data`）為主要來源；FinMind 沒有該資料集或無法滿足用途時，才另提其他來源，並在原 Issue 記理由。只用 FinMind 時，官方 anchor 改為 FinMind 內部一致性核對，單位與 scale 寫成明示推論並列入該節限制；需要其他來源（含官方核對）時另提方案。
+
+用途限免費、本地個人非商用研究；FinMind 是服務提供者，不是官方直接來源，署名、不 mirror、不再散布 raw 等權利界線見 [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。FinMind 要求付費、登入，或回 401／402／403 即停止，不改用憑證或換來源重試。本原則是來源方向，不是取源授權：每次真實取得仍依 [§1](#1-registry-與-policy-契約) 的版本化 policy、單一 namespace 與 seal；已 SPENT／NO-RETRY 的額度不因本原則恢復。
+
 ## 現行節次索引
 
 各版本 policy、pins 與 capture 彼此獨立；新 explicit 版本不提升舊 default、不沿用舊 capture bytes，也不作 implicit latest。已歸檔節次與子節不在本文，查 Git 指標；`git show f431b9885cd3332ddd328309d0041a15c55b8610:docs/SOURCE_REGISTRY.md` 取得歸檔前全文，下表連結為該版本的行範圍。
 
 | 節 | 範圍 | 現況與歸檔指標 |
 | --- | --- | --- |
+| [原則](#來源選用原則finmind-為主) | 全專案來源選用原則（FinMind 為主） | 現行 |
 | [§1](#1-registry-與-policy-契約) | Registry 與 policy 契約（顯式 manifest、registry_version 與 canonical digest 的 pin 判定） | 現行 |
 | [§2](#2-官方共同證據與限制) | 官方共同證據與限制 | 現行 |
 | [§3](#3-四個准入來源) | 原 snapshot 四個准入來源 | 現行 |
@@ -54,6 +61,7 @@
 | [§46](#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳 | 現行 |
 | [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1) | #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（`issue36-two-cutoffs-v1`） | 現行 |
 | [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2) | #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（`ordinary-margin-cutoffs-1005-1006-v2`） | 現行 |
+| [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) | #32 qa1／qa2：七股 FinMind nominal OHLCV 日線 last60 與兩截止 raw 算術（`issue32-seven-nominal-ohlcv-two-cutoffs-v1`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 
