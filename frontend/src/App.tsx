@@ -321,7 +321,7 @@ const fieldNames: Record<string, string> = {
   ma20: 'MA20',
   ma60: 'MA60',
   group_excess_return_20d: '族群相對 加權指數 的 20 日超額報酬',
-  institutional_flow_to_turnover_ratio_5d: '5 日法人流向／20 日日均成交額',
+  institutional_flow_to_turnover_ratio_5d: '5 日法人流向／20 日日均成交量',
   margin_balance_change_ratio_5d: '5 日融資餘額變化率',
   signal_data_quality: '訊號資料品質',
   signal: '策略訊號',
@@ -335,6 +335,7 @@ const fieldAliases: Record<string, string> = {
   'prior 20 volumes': '20 日前期成交量',
   'bar count 60d': '60 日有效行情日數',
   'average daily turnover 20d': '20 日日均成交額',
+  'average daily volume 20d': '20 日日均成交量',
 }
 
 function fieldLabel(field: string): string {

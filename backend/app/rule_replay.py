@@ -30,10 +30,10 @@ MAX_HISTORY_LENGTH = 10000
 MAX_INTEGER = 2**53 - 1
 
 _SOURCE_PATH = Path(__file__).with_name("domain.py")
-_SOURCE_SHA256 = "db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028"
+_SOURCE_SHA256 = "df4fb776417d09d9d3e24f2de7add01c758f204774e1d6b25915bb2b1f641a74"
 _CONFIG_DIGESTS = {
-    "breakout_v1": "sha256:a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd",
-    "pullback_v1": "sha256:03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff",
+    "breakout_v1": "sha256:8589e48e75122860037ae01e247601868bfc0275e2c71ddc96f140ab5135582b",
+    "pullback_v1": "sha256:301d1fdb2df91c9a084b662273526637b44e7d6bc885523a53058c3a629af483",
 }
 _COMMON_ARGUMENTS = frozenset({
     "close", "volume", "prior_volumes", "group_excess_return_20d",
