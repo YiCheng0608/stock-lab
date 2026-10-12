@@ -105,7 +105,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 8 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 9 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -113,6 +113,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) | 見[M1-W8](#m1-w8-八截止法人窗口的零落盤驗證入口) |
 | [`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) | 見[M1-CHIPS-CUTOFF-1006-1](#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口) |
 | [`test_conditional_plan_store.py`](../../backend/tests/test_conditional_plan_store.py) | `python -B -X utf8 backend/tests/test_conditional_plan_store.py`，僅標準函式庫，不需 `--deps` |
+| [`test_ohlcv_history_source.py`](../../backend/tests/test_ohlcv_history_source.py) | `python -B -X utf8 backend/tests/test_ohlcv_history_source.py`，僅標準函式庫，不需 `--deps`；缺 `-B` 即 `RuntimeError`，需含固定 blob 的完整 git 歷史（shallow clone 會失敗） |
 | [`test_saved_price_chips_entry.py`](../../backend/tests/test_saved_price_chips_entry.py) | `python -B -X utf8 tools/tpex-price-api.py --joint-check --deps <既有 backend/.deps>` |
 | [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
 | [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
