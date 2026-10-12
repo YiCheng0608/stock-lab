@@ -1,18 +1,29 @@
 """Issue33 standalone, bounded, nominal TAIEX observation adapter (stdlib only).
 
-No network or filesystem action occurs at import or construction. Real acquisition
-requires the externally fetched 4096-byte policy and a separately reviewed external
-financial-start seal. This module does not fetch that control-plane authorization.
+AC revision 2: FinMind only. One GET of TaiwanStockPrice data_id=TAIEX; the
+government TWSE index CSV path is gone. No network or filesystem action occurs
+at import or construction. Real acquisition requires the externally published
+canonical policy (pinned here by SHA-256 and byte length, like Issue 32), the exact
+public formal blob d8918bc...:docs/SOURCE_REGISTRY.md supplied by the caller (bytes
+and SHA-256 are checked before any request) and a separately reviewed external
+financial-start seal. This module does not fetch any control-plane authorization.
 
 Seal v1 has exact keys shown by SEAL_FIELDS. It binds candidate SHA, module/script/
 loader/command hashes, actual independent top-level QA identity, owner, canonical
-policy, use, URLs, cutoffs, consumer, caps, command argv and UTC validity. These are
+policy, use, URL, cutoffs, consumer, caps, command argv and UTC validity. These are
 the predeclared format, not an authorization or an actual financial-start seal.
 
-OracleHooks callbacks independently parse the ENTIRE original bytearray and return
-the entire normalized row list (all columns), not a boolean or sampled anchors.
-They must put all retained copies/aliases in hooks.owner, including declared native
-StringIO backing text. Original observer runs after EOF/hash and before parsing.
+OracleHooks.finmind independently parses the ENTIRE original bytearray and returns
+the entire normalized row list of every returned row (all columns, numbers as
+Decimal), not a boolean or sampled rows. Hooks must put all retained copies/aliases
+in hooks.owner, including declared native StringIO backing text. The observer runs
+after EOF/hash and before parsing.
+
+Unit limitation: with the second source removed the index scale (points, scale 1,
+no x1000) has no independent anchor. Oracle/consumer comparisons are internal
+consistency of one body only; they do not prove adjusted/index-divisor history or
+the complete TWSE calendar. The 22 provider dates equal the formal-blob derivation,
+which proves the provider observation set only.
 
 Exported price results are revocable handles. Inspect them only with visit(callback,
 RootOwner); that owner declares every retained alias/copy. Supported source roots
@@ -21,7 +32,7 @@ copies are dereferenced, not physically wiped; this is not an RSS/peak guarantee
 Every public result-operation failure, including pending use, terminally releases
 the source even if caught inside a with block. Pending-negative tests therefore
 need a distinct boundary source; the real positive source must use fresh external
-objects and default real clocks. Both attempted wire intervals share cumulative20s.
+objects and default real clocks. The single wire interval has a cumulative 20s cap.
 Arbitrary Python callbacks are trusted to declare their roots; this is a cooperative
 in-process lifecycle contract, not a sandbox against malicious Python introspection.
 The caller must clear its own exception graph and exit the RAM-only QA process.
@@ -29,8 +40,7 @@ The caller must clear its own exception graph and exit the RAM-only QA process.
 
 from __future__ import annotations
 
-import csv
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 import hashlib
@@ -44,26 +54,50 @@ import time
 from urllib.parse import urlsplit
 
 
-POLICY_PIN = "https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6085684135"
-POLICY_SHA256 = "4b1f44b0e77950bcd12896f5e54f99c6262365fcf4965b4938420edb58e54eca"
-NAMESPACE = "issue33-taiex-nominal-observation-cutoffs-1005-1006-v1/qa1"
+# Pins of the externally published canonical policy (sorted keys, compact JSON, no
+# trailing LF). The product never builds expected values from the policy under test.
+POLICY_SHA256 = "04be101a61b6eba5ae6ba5773c24314718765c37ae7c67eacfd8813efb64d9dc"
+POLICY_BYTES = 5038
+POLICY_VERSION = "issue33-taiex-nominal-observed-window-finmind-v2"
+FORMAL_BLOB = "d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md"
+FORMAL_BYTES = 268729
+FORMAL_SHA256 = "b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde"
+NAMESPACE = "issue33-taiex-nominal-observation-cutoffs-1005-1006-v1/qa2"
 CONSUMER = "taiex-nominal-price-index-window-summary-v1"
 SUPPORTED_USE = "local_personal_noncommercial_process_ram_nominal_observation_snapshot"
-URLS = (
-    "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=open_data",
-    "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=TAIEX&start_date=2026-09-03&end_date=2026-10-06",
-)
-CAP_FIELDS = {"max_requests", "body_bytes", "total_raw_bytes", "declared_roots_estimate_bytes", "request_seconds", "batch_seconds", "redirects", "retries", "artifact_bytes"}
-POLICY_FIELDS = {
-    "schema", "issue", "namespace", "version", "symbol", "cutoffs", "observed_dates",
-    "windows", "calendar_basis", "price_basis", "unit", "unit_kind", "provider_literal_unit",
-    "scale", "consumer", "formula", "ratio_representation", "observation_count",
-    "interval_count", "urls", "official_schema", "official_date_grammar",
-    "official_required_dates", "official_month", "official_gate_before_finmind",
-    "anchor_relation", "supported_use", "unsupported", "rights", "calendar_fact_reference",
-    "primary_route_evidence", "caps", "identity_encoding_only", "credentials_cookie_proxy",
-    "first_failure_stop_spent", "no_retry", "financial_start_required",
+HOST = "api.finmindtrade.com"
+URL = "https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=TAIEX&start_date=2026-09-03&end_date=2026-10-06"
+URLS = (URL,)
+CUTOFFS = ("2026-10-05", "2026-10-06")
+WINDOW_START = "2026-09-03"
+WINDOW_END = "2026-10-06"
+USER_AGENT = "stock-lab-issue33-local-ram/1"
+ACCEPT = "application/json"
+REQUEST_HEADERS = {"Accept-Encoding": "identity", "Connection": "close", "User-Agent": USER_AGENT, "Accept": ACCEPT}
+# The two fixed 21-observation windows of AC-3, literally. The 22 observed dates are
+# their union (AC-2) and must also equal the formal-blob derivation.
+WINDOWS = {
+    "2026-10-05": ("2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10",
+                   "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18",
+                   "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-29", "2026-09-30",
+                   "2026-10-01", "2026-10-02", "2026-10-05"),
+    "2026-10-06": ("2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11",
+                   "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21",
+                   "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-29", "2026-09-30", "2026-10-01",
+                   "2026-10-02", "2026-10-05", "2026-10-06"),
 }
+OBSERVED_DATES = tuple(sorted(set(WINDOWS["2026-10-05"]) | set(WINDOWS["2026-10-06"])))
+BODY_CAP = 1_048_576
+RAW_CAP = 1_048_576
+ROOTS_CAP = 33_554_432
+REQUEST_SECONDS = 20
+BATCH_SECONDS = 180
+CAPS = {"max_gets": 1, "body_cap_bytes": BODY_CAP, "total_raw_cap_bytes": RAW_CAP,
+        "retained_roots_estimate_cap_bytes": ROOTS_CAP, "request_seconds": REQUEST_SECONDS,
+        "batch_seconds": BATCH_SECONDS, "redirects": 0, "retries": 0, "artifact_bytes": 0}
+POLICY_PIN_PATTERN = r"https://github\.com/YiCheng0608/stock-lab/issues/[0-9]+#issuecomment-[0-9]+"
+SEAL_PIN_PATTERN = r"https://github\.com/YiCheng0608/stock-lab/issues/33#issuecomment-([0-9]+)"
+SEAL_COMMENT_FLOOR = 6123688628  # AC revision 2 comment; any older (qa1-era) seal location is refused
 SEAL_FIELDS = {
     "schema", "issue", "namespace", "policy_sha256", "policy_pin", "candidate_sha",
     "module_sha256", "script_sha256", "loader_sha256", "command_sha256", "command",
@@ -72,14 +106,44 @@ SEAL_FIELDS = {
     "urls", "cutoffs", "caps",
 }
 BINDING_FIELDS = {"candidate_sha", "module_sha256", "script_sha256", "loader_sha256", "command_sha256", "command", "qa_thread", "qa_session", "owner_thread"}
-FINMIND_FIELDS = {"date", "stock_id", "Trading_Volume", "Trading_money", "open", "max", "min", "close", "spread", "Trading_turnover"}
-INTEGER_FIELDS = {"Trading_Volume", "Trading_money", "Trading_turnover"}
-NUMBER_FIELDS = {"open", "max", "min", "close", "spread"}
+REQUIRED_ROW_KEYS = frozenset({"date", "stock_id", "open", "max", "min", "close"})
+UNADOPTED_ROW_KEYS = frozenset({"Trading_Volume", "Trading_money", "spread", "Trading_turnover"})
+OHLC_KEYS = ("open", "max", "min", "close")
+IDENTITY_HEADERS = frozenset({"content-length", "content-encoding", "transfer-encoding", "content-type"})
 NUMERIC_LEXICAL_LIMIT = 64
 NUMERIC_EXPONENT_LIMIT = 18
 ROOT_NODE_LIMIT = 200_000
 DIAGNOSTIC_LIMIT = 64
-MAX_OFFICIAL_ROWS = 31
+MAX_RETURNED_ROWS = 20_000
+
+# A schema, not a bundled policy or a source of expected financial values.
+_RESPONSE_SHAPE_KEYS = ("content_encoding", "content_type", "document", "duplicate_identity_headers",
+                        "encoding", "framing", "set_cookie", "status", "zero_price_rows")
+_POLICY_SHAPE = {
+    "acquisition": {
+        "accept": str, "accept_encoding": str, "artifact_bytes": int, "batch_seconds": int,
+        "body_cap_bytes": int, "deadline": str, "max_gets": int, "namespace": str, "order": str,
+        "redirects": int, "request_seconds": int, "retained_roots_estimate_cap_bytes": int,
+        "retries": int, "stop_on_first_failure": bool, "total_raw_cap_bytes": int, "user_agent": str,
+    },
+    "arithmetic": {"interval_count": int, "observation_count": int, "ratio": str, "windows": str},
+    "calendar_basis": str, "consumer_version": str, "cutoffs": (str, 2), "first_availability": str,
+    "formal_calendar": {"blob": str, "bytes": int, "expected_scope": str, "section": str, "sha256": str},
+    "identity_as_of": str, "instrument_type": str, "market": str, "price_basis": str,
+    "price_source": {
+        "basis": str, "data_id": str, "data_id_evidence": str, "dataset": str, "documentation": str,
+        "end_date": str, "endpoint": str, "fields": {"close": str, "high": str, "low": str, "open": str},
+        "known_unadopted_fields": (str, 4), "method": str, "ohlc_rule": str, "provider": str,
+        "query_order": (str, 4), "required_row_keys": (str, 6), "rights": str, "start_date": str, "url": str,
+    },
+    "profile": str, "publication_time": str,
+    "response_shape": {key: str for key in _RESPONSE_SHAPE_KEYS},
+    "revision_time": str, "schema": str, "source_use": str, "storage": str, "symbol": str,
+    "unit_policy": {"OHLC": str, "independent_anchor": str, "provider_literal_unit_annotation": bool,
+                    "scale": int, "unit_mapping_inference": bool, "version": str},
+    "unsupported": (str, 19),
+    "version": str,
+}
 
 
 class TaiexSourceError(Exception):
@@ -217,7 +281,7 @@ def _pairs(pairs):
     return result
 
 
-def strict_json(text, *, numeric=False):
+def strict_json(text):
     if type(text) is not str or len(text) > 1_048_576:
         fail("json_size", "json")
     # Bound nesting before the stdlib parser: strings/escapes do not affect depth.
@@ -240,7 +304,7 @@ def strict_json(text, *, numeric=False):
             depth -= 1
     try:
         return json.loads(text, object_pairs_hook=_pairs, parse_int=_integer_literal,
-                          parse_float=_decimal if numeric else _decimal,
+                          parse_float=_decimal,
                           parse_constant=lambda value: fail("json_nonfinite", "json"))
     except (ValueError, RecursionError):
         fail("json_invalid", "json")
@@ -253,6 +317,23 @@ def _string_list(value, *, length=None):
         fail("policy_list_member", "policy")
 
 
+def _shape(value, schema):
+    if isinstance(schema, dict):
+        if type(value) is not dict or value.keys() != schema.keys():
+            fail("policy_keys", "policy")
+        for key in schema:
+            _shape(value[key], schema[key])
+    elif isinstance(schema, tuple):
+        item_type, count = schema
+        if type(value) is not list or len(value) != count:
+            fail("policy_list", "policy")
+        for item in value:
+            if type(item) is not item_type:
+                fail("policy_type", "policy")
+    elif type(value) is not schema:
+        fail("policy_type", "policy")
+
+
 def _typed_equal(left, right):
     if type(left) is not type(right):
         return False
@@ -261,6 +342,35 @@ def _typed_equal(left, right):
     if type(left) in (list, tuple):
         return len(left) == len(right) and all(_typed_equal(a, b) for a, b in zip(left, right))
     return left == right
+
+
+def _bind_policy(policy):
+    """Tripwire only: the pinned policy must agree with every product constant."""
+    acquisition, source = policy["acquisition"], policy["price_source"]
+    if (policy["version"] != POLICY_VERSION or acquisition["namespace"] != NAMESPACE
+            or policy["source_use"] != SUPPORTED_USE or policy["consumer_version"] != CONSUMER
+            or policy["cutoffs"] != list(CUTOFFS) or policy["symbol"] != "TAIEX"):
+        fail("policy_binding", "policy")
+    if (source["url"] != URL or source["endpoint"] != URL.split("?", 1)[0] or source["dataset"] != "TaiwanStockPrice"
+            or source["data_id"] != "TAIEX" or source["method"] != "GET" or source["provider"] != "FinMind"
+            or source["start_date"] != WINDOW_START or source["end_date"] != WINDOW_END
+            or source["query_order"] != ["dataset", "data_id", "start_date", "end_date"]
+            or source["required_row_keys"] != sorted(REQUIRED_ROW_KEYS)
+            or source["known_unadopted_fields"] != sorted(UNADOPTED_ROW_KEYS)):
+        fail("policy_query_binding", "policy")
+    if (acquisition["accept"] != ACCEPT or acquisition["accept_encoding"] != "identity"
+            or acquisition["user_agent"] != USER_AGENT or acquisition["stop_on_first_failure"] is not True
+            or any(acquisition[key] != value for key, value in CAPS.items())):
+        fail("policy_caps_binding", "policy")
+    calendar = policy["formal_calendar"]
+    if (calendar["blob"], calendar["bytes"], calendar["sha256"], calendar["section"]) != (FORMAL_BLOB, FORMAL_BYTES, FORMAL_SHA256, "31.2"):
+        fail("policy_formal_binding", "policy")
+    unit = policy["unit_policy"]
+    if (unit["scale"] != 1 or unit["provider_literal_unit_annotation"] is not False
+            or policy["calendar_basis"] != "cross_market_candidate_inference"
+            or policy["price_basis"] != "nominal_index_level"
+            or policy["arithmetic"]["observation_count"] != 21 or policy["arithmetic"]["interval_count"] != 20):
+        fail("policy_unit_binding", "policy")
 
 
 def _utc(text):
@@ -273,52 +383,32 @@ def _utc(text):
 
 
 class ExternalPolicy:
-    def __init__(self, raw, document):
+    def __init__(self, raw, document, pin):
         self.raw = raw
         self.document = document
         self.sha256 = POLICY_SHA256
-        self.pin = POLICY_PIN
+        self.pin = pin
 
     @classmethod
     def from_external(cls, raw_utf8, external_sha256, external_pin):
-        if (type(raw_utf8) is not bytes or len(raw_utf8) != 4096
-                or external_sha256 != POLICY_SHA256 or external_pin != POLICY_PIN
+        if (type(raw_utf8) is not bytes or len(raw_utf8) != POLICY_BYTES
+                or type(external_sha256) is not str or external_sha256 != POLICY_SHA256
+                or type(external_pin) is not str or not re.fullmatch(POLICY_PIN_PATTERN, external_pin)
                 or hashlib.sha256(raw_utf8).hexdigest() != external_sha256):
             fail("external_policy_pin", "policy")
         try:
             document = strict_json(raw_utf8.decode("utf-8"))
         except UnicodeDecodeError:
             fail("external_policy_utf8", "policy")
-        if type(document) is not dict or document.keys() != POLICY_FIELDS:
-            fail("policy_full_keys", "policy")
-        bools = {"provider_literal_unit", "official_gate_before_finmind", "identity_encoding_only", "credentials_cookie_proxy", "first_failure_stop_spent", "no_retry", "financial_start_required"}
-        ints = {"scale", "observation_count", "interval_count"}
-        lists = {"cutoffs", "observed_dates", "urls", "official_schema", "official_date_grammar", "official_required_dates", "unsupported", "rights"}
-        for key, value in document.items():
-            if key in bools:
-                if type(value) is not bool:
-                    fail("policy_boolean_type", "policy")
-            elif key in ints:
-                if type(value) is not int:
-                    fail("policy_integer_type", "policy")
-            elif key in lists:
-                _string_list(value)
-            elif key == "caps":
-                if type(value) is not dict or value.keys() != CAP_FIELDS or any(type(item) is not int for item in value.values()):
-                    fail("policy_caps_type", "policy")
-            elif key == "windows":
-                if type(value) is not dict or set(value) != set(document["cutoffs"]):
-                    fail("policy_windows_type", "policy")
-                for window in value.values():
-                    _string_list(window, length=21)
-            elif type(value) is not str:
-                fail("policy_string_type", "policy")
-        _string_list(document["observed_dates"], length=22)
-        _string_list(document["cutoffs"], length=2)
-        if document["namespace"] != NAMESPACE or tuple(document["urls"]) != URLS:
-            fail("policy_query_binding", "policy")
-        # Hash authenticates ALL literal values; the full external document is retained.
-        return cls(raw_utf8, document)
+        _shape(document, _POLICY_SHAPE)
+        canonical = json.dumps(document, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if canonical != raw_utf8:
+            fail("policy_canonical_mismatch", "policy")
+        _string_list(document["unsupported"], length=19)
+        _bind_policy(document)
+        # The hash authenticates ALL literal values; the full external document is retained.
+        return cls(raw_utf8, document, external_pin)
 
 
 class FinancialStartSeal:
@@ -335,9 +425,13 @@ class FinancialStartSeal:
         if (type(raw_utf8) is not bytes or not 0 < len(raw_utf8) <= 32768
                 or type(external_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", external_sha256)
                 or hashlib.sha256(raw_utf8).hexdigest() != external_sha256
-                or type(external_pin) is not str
-                or not re.fullmatch(r"https://github\.com/YiCheng0608/stock-lab/issues/33#issuecomment-[0-9]+", external_pin)):
+                or type(external_pin) is not str):
             fail("external_seal_pin", "seal")
+        match = re.fullmatch(SEAL_PIN_PATTERN, external_pin)
+        if match is None:
+            fail("external_seal_pin", "seal")
+        if int(match[1]) <= SEAL_COMMENT_FLOOR:
+            fail("financial_new_explicit_seal_required", "seal")
         try:
             document = strict_json(raw_utf8.decode("utf-8"))
         except UnicodeDecodeError:
@@ -367,13 +461,66 @@ class FinancialStartSeal:
         expected = {"schema": "issue33-financial-start-seal/v1", "issue": "YiCheng0608/stock-lab#33",
                     "namespace": NAMESPACE, "policy_sha256": policy.sha256, "policy_pin": policy.pin,
                     "financial_start": True, "consumer": CONSUMER, "supported_use": SUPPORTED_USE,
-                    "urls": policy.document["urls"], "cutoffs": policy.document["cutoffs"], "caps": policy.document["caps"]}
+                    "urls": list(URLS), "cutoffs": list(CUTOFFS), "caps": dict(CAPS)}
         for key, value in expected.items():
             if not _typed_equal(document[key], value):
                 fail("seal_policy_binding", "seal")
         if _utc(document["issued_at_utc"]) >= _utc(document["expires_at_utc"]):
             fail("seal_validity_order", "seal")
         return cls(raw_utf8, document, external_pin, external_sha256)
+
+
+def _section(text, heading):
+    match = re.search(r"^" + re.escape(heading) + r"[^\n]*\n", text, re.M)
+    if match is None:
+        fail("formal_section", "formal")
+    level = len(heading) - len(heading.lstrip("#"))
+    tail = text[match.end():]
+    stop = re.search(r"^#{1," + str(level) + r"} ", tail, re.M)
+    return tail[:stop.start()] if stop else tail
+
+
+def formal_observed_dates(formal_blob):
+    """The 22 observed dates and both windows derived from the exact formal blob.
+
+    Section 31.2 lists Sep20 and Oct4 (24 sessions). The dates on or after
+    2026-09-03 are the 22 dates; each window is the last 21 at or before its
+    cutoff. The result must equal the literal AC-3 sets; nothing is inferred from
+    missing provider rows and no window is shrunk.
+    """
+    if type(formal_blob) is not bytes or len(formal_blob) != FORMAL_BYTES or hashlib.sha256(formal_blob).hexdigest() != FORMAL_SHA256:
+        fail("formal_blob_pin", "formal")
+    try:
+        text = formal_blob.decode("utf-8")
+    except UnicodeDecodeError:
+        fail("formal_blob_utf8", "formal")
+    calendar = _section(text, "### 31.2")
+
+    def public_days(label, month):
+        match = re.search(r"^- " + label + r"：[^/]+/([^。]+)。", calendar, re.M)
+        if match is None:
+            fail("formal_calendar_evidence", "formal")
+        days = []
+        for part in match.group(1).split("、"):
+            if not re.fullmatch(r"[0-9]{1,2}", part):
+                fail("formal_calendar_evidence", "formal")
+            try:
+                days.append(date(2026, month, int(part)).isoformat())
+            except ValueError:
+                fail("formal_calendar_evidence", "formal")
+        return tuple(days)
+
+    september, october = public_days("Sep20", 9), public_days("Oct4", 10)
+    sessions = september + october
+    if (len(september), len(october)) != (20, 4):
+        fail("formal_calendar_count", "formal")
+    if len(set(sessions)) != 24 or tuple(sorted(sessions)) != sessions or any(date.fromisoformat(day).weekday() >= 5 for day in sessions):
+        fail("formal_calendar_order", "formal")
+    observed = tuple(day for day in sessions if day >= WINDOW_START)
+    windows = {cutoff: tuple([day for day in observed if day <= cutoff][-21:]) for cutoff in CUTOFFS}
+    if observed != OBSERVED_DATES or len(observed) != 22 or windows != WINDOWS:
+        fail("formal_calendar_mismatch", "formal")
+    return observed, windows
 
 
 class NativeText:
@@ -404,7 +551,7 @@ class NativeParseReservation:
 
     Raw text remains separately tracked. Input is <=1MiB/depth16; row/schema and
     lexical bounds then constrain retained documents. This 8MiB allowance covers
-    transient decoder/csv cells prior to registration, and is not an RSS claim.
+    transient decoder cells prior to registration, and is not an RSS claim.
     """
 
     def __init__(self):
@@ -498,7 +645,7 @@ def estimate_roots(owners, *, notes=None):
             total += len(value.as_tuple().digits) * 8 + 64
         elif kind not in (str, bytes, bytearray, int, float, bool, type(None), date, datetime):
             fail("opaque_source_root", "roots")
-        if total > 33_554_432:
+        if total > ROOTS_CAP:
             fail("root_bytes_limit", "roots")
     if not native_stream_aliases <= native_stream_owners:
         fail("opaque_source_root", "roots")
@@ -574,10 +721,10 @@ def _release_roots(owners, *, notes=None):
 
 
 class OracleHooks:
-    def __init__(self, observer, official, finmind, owner):
-        if not all(callable(item) for item in (observer, official, finmind)) or type(owner) is not RootOwner:
+    def __init__(self, observer, finmind, owner):
+        if not all(callable(item) for item in (observer, finmind)) or type(owner) is not RootOwner:
             fail("oracle_hooks", "constructor")
-        self.observer, self.official, self.finmind, self.owner = observer, official, finmind, owner
+        self.observer, self.finmind, self.owner = observer, finmind, owner
 
 
 class AttemptLedger:
@@ -596,44 +743,76 @@ class _HTTPSResponse:
     def __init__(self, connection, response):
         self.connection, self.response = connection, response
         self.status = response.status
-        self.headers = response.getheaders()
+        self.headers = list(response.getheaders())
+        # http.client hands the socket to a will_close response; keep the first non-None.
+        self.socket = connection.sock
+        if self.socket is None and response.fp is not None:
+            self.socket = getattr(getattr(response.fp, "raw", None), "_sock", None)
 
     def read(self, count, timeout):
-        if count <= 0:
+        if type(count) is not int or count <= 0:
             fail("zero_read_forbidden", "transport")
-        sock = self.connection.sock
-        if sock is None and self.response.fp is not None:
-            sock = getattr(getattr(self.response.fp, "raw", None), "_sock", None)
-        if sock is None:
+        if self.socket is None:
             fail("transport_timeout_socket", "transport")
-        sock.settimeout(timeout)
+        self.socket.settimeout(timeout)
         return self.response.read(count)
 
     @property
     def framing_eof(self):
-        return self.response.isclosed() or self.response.length == 0
+        return self.response.isclosed() and self.response.length in (None, 0)
 
     def close(self):
-        try:
-            self.response.close()
-        finally:
-            self.connection.close()
+        failures = []
+        for closer in (self.response.close, self.connection.close):
+            try:
+                closer()
+            except BaseException as error:
+                failures.append(error)
+        self.socket = None
+        if failures:
+            for later in failures[1:]:
+                clear_error_graph(later)
+            raise failures[0]
 
 
 class HTTPSOneShot:
-    """Real stdlib HTTPS, identity, system CA, no redirect/retry/cookie/proxy/auth."""
+    """Real stdlib HTTPS, identity, system CA, no redirect/retry/cookie/proxy/auth.
+
+    Socket waits get the remaining cumulative open budget. Checks are cooperative;
+    DNS/SSL/library calls are not OS-hard preempted.
+    """
 
     def open(self, url, timeout):
         parts = urlsplit(url)
-        if url not in URLS or parts.scheme != "https" or parts.username or parts.password:
+        if (url != URL or parts.scheme != "https" or parts.hostname != HOST or parts.port is not None
+                or parts.username is not None or parts.password is not None):
             fail("transport_url", "transport")
         connection = http.client.HTTPSConnection(parts.hostname, timeout=timeout, context=ssl.create_default_context())
+        response = None
+        deadline = time.monotonic() + timeout
+
+        def remaining():
+            budget = deadline - time.monotonic()
+            if budget <= 0:
+                fail("cooperative_deadline", "transport")
+            return budget
+
         try:
-            connection.request("GET", parts.path + "?" + parts.query,
-                               headers={"Accept-Encoding": "identity", "Connection": "close"})
-            return _HTTPSResponse(connection, connection.getresponse())
+            connection.timeout = remaining()
+            connection.connect()
+            connection.sock.settimeout(remaining())
+            connection.request("GET", parts.path + "?" + parts.query, headers=dict(REQUEST_HEADERS))
+            connection.sock.settimeout(remaining())
+            response = connection.getresponse()
+            remaining()
+            return _HTTPSResponse(connection, response)
         except BaseException:
-            connection.close()
+            for closer in (() if response is None else (response.close,)) + (connection.close,):
+                try:
+                    closer()
+                except BaseException as cleanup_error:
+                    cleanup_error.__context__ = None  # keep the primary failure out of the cleanup graph
+                    clear_error_graph(cleanup_error)
             raise
 
 
@@ -666,13 +845,15 @@ class RevocableHandle:
 
 
 class TaiexNominalSource:
-    """Use as a context manager; acquisition is atomic after both full oracles."""
+    """Use as a context manager; acquisition is atomic after the full oracle."""
 
-    def __init__(self, policy, seal, hooks, *, binding, supported_use=SUPPORTED_USE,
+    def __init__(self, policy, seal, hooks, *, binding, formal_blob, supported_use=SUPPORTED_USE,
                  consumer=CONSUMER, transport=None, boundary_only=False, ledger=None,
                  monotonic=time.monotonic, utc_now=None):
         if type(policy) is not ExternalPolicy or type(seal) is not FinancialStartSeal or type(hooks) is not OracleHooks:
             fail("typed_source_inputs", "constructor")
+        if type(formal_blob) is not bytes:
+            fail("formal_blob_type", "constructor")
         if type(boundary_only) is not bool:
             fail("boundary_flag_type", "constructor")
         if (transport is not None or ledger is not None) and not boundary_only:
@@ -681,6 +862,7 @@ class TaiexNominalSource:
             fail("boundary_transport_required", "constructor")
         self.policy, self.seal, self.hooks = policy, seal, hooks
         self.binding, self.supported_use, self.consumer = binding, supported_use, consumer
+        self.formal_blob = formal_blob
         self.transport = transport if transport is not None else HTTPSOneShot()
         self.boundary_only = boundary_only
         self.ledger = ledger if ledger is not None else _REAL_LEDGER
@@ -693,6 +875,7 @@ class TaiexNominalSource:
         self.product.track("seal_raw", seal.raw)
         self.product.track("seal_document", seal.document)
         self.product.track("binding", binding)
+        self.product.track("formal_blob", formal_blob)
         self.state, self.batch_start = "pending", None
         self.raw_total, self.responses = 0, []
         self.request_seconds_used, self.active_request_started = 0.0, None
@@ -704,6 +887,7 @@ class TaiexNominalSource:
         self.product.track("secondary", self.secondary)
         self.product.track("cleanup_failures", self.cleanup_failures)
         self.product.track("cleanup_notes", self.cleanup_notes)
+        self.windows = None
         self._final_audit = None
         self.high_water, self.measure_seconds, self.measure_calls = 0, 0.0, 0
         self._acquired = False
@@ -726,7 +910,7 @@ class TaiexNominalSource:
         entry = {"code": code[:64], "phase": phase[:48], "location": location,
                  "elapsed_seconds": 0.0 if self.batch_start is None else max(0.0, self.monotonic() - self.batch_start),
                  "cumulative_request_elapsed_seconds": self.request_seconds_used + current_request,
-                 "request_deadline_seconds": 20, "batch_deadline_seconds": 180}
+                 "request_deadline_seconds": REQUEST_SECONDS, "batch_deadline_seconds": BATCH_SECONDS}
         if self.first_failure is None:
             self.first_failure = entry
             self.product.track("first_failure", entry)
@@ -743,7 +927,7 @@ class TaiexNominalSource:
             now = self.utc_now()
             if type(now) is not datetime or now.tzinfo is None:
                 fail("clock_utc_type", phase)
-            if elapsed < 0 or elapsed >= 180 or now >= _utc(self.seal.document["expires_at_utc"]):
+            if elapsed < 0 or elapsed >= BATCH_SECONDS or now >= _utc(self.seal.document["expires_at_utc"]):
                 self.state = "expired"
                 fail("lease_expired", phase)
             if now < _utc(self.seal.document["issued_at_utc"]):
@@ -801,6 +985,10 @@ class TaiexNominalSource:
         seal = FinancialStartSeal.from_external(self.seal.raw, self.seal.sha256, self.seal.pin, policy, self.binding)
         if not _typed_equal(seal.document, self.seal.document):
             fail("seal_mutated", "preflight")
+        # Exact formal blob and the derived 22 dates/windows are checked before any GET.
+        observed, windows = formal_observed_dates(self.formal_blob)
+        self.product.track("observed_dates", observed)
+        self.windows = self.product.track("windows", windows)
         if self.ledger.spent or self._acquired:
             fail("namespace_spent", "preflight")
         self._guard("preflight")
@@ -808,185 +996,131 @@ class TaiexNominalSource:
 
     def _request_remaining(self, started):
         self._guard("request")
-        remaining = 20.0 - self.request_seconds_used - (self.monotonic() - started)
+        remaining = REQUEST_SECONDS - self.request_seconds_used - (self.monotonic() - started)
         if remaining <= 0:
             self._failure("request_deadline", "request", "TaiexNominalSource._request_remaining")
             fail("request_deadline", "request")
-        return min(remaining, 180.0 - (self.monotonic() - self.batch_start))
+        return min(remaining, BATCH_SECONDS - (self.monotonic() - self.batch_start))
 
-    def _capture(self, ordinal):
+    def _capture(self):
         started = self.monotonic()
         self.active_request_started = started
         try:
-            raw, receipt = self._capture_wire(ordinal, started)
+            raw, receipt = self._capture_wire(started)
         finally:
-            # Count each attempted wire interval, including failures. Parsing,
-            # independent oracles and result use remain under the separate batch
-            # lease; they cannot reset or extend the cumulative20s request budget.
+            # Count the attempted wire interval, including failures. Parsing, the
+            # independent oracle and result use remain under the separate batch
+            # lease; they cannot reset or extend the cumulative 20s request budget.
             self.request_seconds_used += max(0.0, self.monotonic() - started)
             self.active_request_started = None
             self._event("request_interval_end", "capture", "TaiexNominalSource._capture")
-        if self.request_seconds_used >= 20:
+        if self.request_seconds_used >= REQUEST_SECONDS:
             self._failure("request_deadline", "request", "TaiexNominalSource._capture")
             fail("request_deadline", "request")
         self._measure("captured")
-        hook_receipt = self.hooks.owner.track("observer_receipt_" + str(ordinal), dict(receipt))
+        hook_receipt = self.hooks.owner.track("observer_receipt", dict(receipt))
         self._callback("original_observer", self.hooks.observer, raw, hook_receipt)
         if hashlib.sha256(raw).hexdigest() != receipt["sha256"]:
             fail("original_observer_mutated_raw", "observer")
         self._measure("observed")
         return raw, receipt
 
-    def _capture_wire(self, ordinal, started):
-        url = URLS[ordinal]
+    def _capture_wire(self, started):
         self._guard("capture")
-        if len(self.ledger.attempted_urls) != ordinal or len(self.ledger.attempted_urls) >= 2:
+        if self.ledger.attempted_urls:
             fail("attempt_order", "capture")
         # Attempt is SPENT before opening any transport; first failure never retries.
-        self.ledger.attempted_urls.append(url)
-        pending_transport = self.product.track("transport_" + str(ordinal), NativeTransport())
+        self.ledger.attempted_urls.append(URL)
+        pending_transport = self.product.track("transport", NativeTransport())
         self._measure("transport_pending")
-        response = self.transport.open(url, self._request_remaining(started))
+        request_started_utc = self.utc_now().astimezone(timezone.utc).isoformat()
+        response = self.transport.open(URL, self._request_remaining(started))
         self.responses.append(response)
         if type(response) is _HTTPSResponse:
             pending_transport.response = response
         self._request_remaining(started)
-        if type(response.status) is not int or response.status != 200:
-            fail("http_status_stop", "capture")
-        headers = {}
+        status = response.status
+        if type(status) is not int or status != 200:
+            # 401/402/403 (or any paid/login layout) is the documented first failure.
+            fail("http_auth_or_payment_stop" if status in (401, 402, 403) else "http_status_stop", "capture")
         if type(response.headers) is not list or len(response.headers) > 128:
             fail("http_headers", "capture")
+        header_values = {}
         for pair in response.headers:
             if type(pair) is not tuple or len(pair) != 2 or not all(type(item) is str for item in pair):
                 fail("http_header_type", "capture")
             key, value = pair[0].lower(), pair[1]
-            if key in headers:
-                fail("duplicate_http_header", "capture")
-            headers[key] = value
-        if headers.get("content-encoding", "identity").lower() != "identity":
-            fail("identity_encoding_required", "capture")
-        if "location" in headers or "set-cookie" in headers:
-            fail("redirect_cookie_stop", "capture")
-        length = None
-        if "content-length" in headers:
-            token = headers["content-length"]
-            if not re.fullmatch(r"[0-9]{1,8}", token):
-                fail("content_length_invalid", "capture")
-            length = int(token)
-        transfer = headers.get("transfer-encoding")
-        if transfer is not None and (transfer.lower() != "chunked" or length is not None):
-            fail("http_framing", "capture")
-        if length is not None and (length > 1_048_576 or length > 2_097_152 - self.raw_total):
-            fail("declared_body_limit", "capture")
-        raw = self.product.track("raw_" + str(ordinal), bytearray())
+            if key in header_values and key in IDENTITY_HEADERS:
+                fail("duplicate_identity_header", "capture")
+            header_values[key] = value
+        encoding = header_values.get("content-encoding", "identity").strip().lower()
+        if encoding != "identity":
+            fail("content_encoding", "capture")
+        declared_length = None
+        if "content-length" in header_values:
+            if not re.fullmatch(r"0|[1-9][0-9]{0,15}", header_values["content-length"]):
+                fail("content_length", "capture")
+            declared_length = int(header_values["content-length"])
+            if declared_length > BODY_CAP or declared_length > RAW_CAP - self.raw_total:
+                fail("declared_body_cap", "capture")
+        transfer = header_values.get("transfer-encoding", "").strip().lower()
+        if transfer not in ("", "chunked") or (transfer and declared_length is not None):
+            fail("ambiguous_framing", "capture")
+        content_type = header_values.get("content-type", "").strip()
+        if not re.fullmatch(r"application/json(?:\s*;\s*charset=utf-8)?", content_type, re.I):
+            fail("content_type", "capture")
+        raw = self.product.track("raw", bytearray())
         digest = hashlib.sha256()
-        self.product.track("read_allowance_" + str(ordinal), NativeReadReservation())
+        self.product.track("read_allowance", NativeReadReservation())
         self._measure("read_ready")
-        block_key = "active_read_block_" + str(ordinal)
         while True:
             self._request_remaining(started)
-            body_remaining = 1_048_576 - len(raw)
-            aggregate_remaining = 2_097_152 - self.raw_total
-            remaining = min(body_remaining, aggregate_remaining)
-            if remaining <= 0:
-                if length is None or not response.framing_eof:
-                    fail("exact_cap_without_framing_eof", "capture")
+            if response.framing_eof is True:
                 break
-            if response.framing_eof:
-                break
-            wanted = min(65_536, remaining)
-            if length is not None:
-                wanted = min(wanted, length - len(raw))
+            available = min(BODY_CAP - len(raw), RAW_CAP - self.raw_total)
+            if available <= 0:
+                fail("body_cap_without_known_eof", "capture")
+            wanted = min(65_536, available)
+            if declared_length is not None:
+                wanted = min(wanted, declared_length - len(raw))
                 if wanted <= 0:
-                    fail("content_length_framing_eof", "capture")
+                    # Everything declared is read. stdlib has closed the response by
+                    # now unless nothing was ever declared (length 0: empty_body below).
+                    if declared_length and response.framing_eof is not True:
+                        fail("missing_known_eof", "capture")
+                    break
             block = response.read(wanted, self._request_remaining(started))
-            self.product.track(block_key, block)
+            self.product.track("active_read_block", block)
             self._request_remaining(started)
             if type(block) is not bytes or len(block) > wanted:
-                fail("transport_read_contract", "capture")
+                fail("invalid_transport_read", "capture")
             if not block:
-                if length is not None and len(raw) != length:
-                    fail("truncated_body", "capture")
-                if not response.framing_eof:
-                    fail("eof_without_framing", "capture")
-                self.product.roots.pop(block_key, None)
+                if declared_length is not None and len(raw) != declared_length:
+                    fail("incomplete_content_length", "capture")
+                if response.framing_eof is not True:
+                    fail("missing_known_eof", "capture")
+                self.product.roots.pop("active_read_block", None)
                 break
             raw.extend(block)
             self.raw_total += len(block)
             digest.update(block)
-            self.product.roots.pop(block_key, None)
+            self.product.roots.pop("active_read_block", None)
             block = None
-        if not raw or (length is not None and len(raw) != length):
-            fail("body_empty_or_truncated", "capture")
-        now = self.utc_now()
-        capture_date = (now.astimezone(timezone.utc) + timedelta(hours=8)).date().isoformat()
-        receipt = {"ordinal": ordinal, "url": url, "body_bytes": len(raw), "sha256": digest.hexdigest(),
-                   "eof": True, "capture_utc": now.astimezone(timezone.utc).isoformat(),
-                   "capture_taipei_date": capture_date, "request_elapsed_seconds": self.monotonic() - started,
+        if declared_length is not None and declared_length != len(raw):
+            fail("incomplete_content_length", "capture")
+        if not raw:
+            fail("empty_body", "capture")
+        now = self.utc_now().astimezone(timezone.utc)
+        receipt = {"ordinal": 0, "source_id": "finmind_taiex_price_index", "source_version": POLICY_VERSION,
+                   "method": "GET", "url": URL, "status": 200, "request_started_utc": request_started_utc,
+                   "observed_utc": now.isoformat(), "body_bytes": len(raw), "sha256": digest.hexdigest(),
+                   "eof": True, "content_type": content_type, "content_encoding": encoding,
+                   "namespace": NAMESPACE, "policy_sha256": POLICY_SHA256,
+                   "request_elapsed_seconds": self.monotonic() - started,
                    "cumulative_request_elapsed_seconds": self.request_seconds_used + self.monotonic() - started,
                    "boundary_only": self.boundary_only}
         self.receipts.append(receipt)
         return raw, receipt
-
-    def _official(self, raw, receipt):
-        self.product.track("official_parser_reservation", NativeParseReservation())
-        self._measure("official_parse_reservation")
-        try:
-            text = raw.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            fail("official_utf8", "official_parse")
-        self.product.track("official_text", text)
-        stream = self.product.stringio("official_native_text", text)
-        rows = self.product.track("official_rows", [])
-        scratch = self.product.track("official_parser_scratch", {})
-        found_header = False
-        try:
-            for cells in csv.reader(stream, strict=True):
-                scratch["cells"] = cells
-                if not cells:
-                    continue
-                if not found_header:
-                    if cells != self.policy.document["official_schema"]:
-                        fail("official_schema", "official_parse")
-                    found_header = True
-                    continue
-                if len(cells) != 5 or len(rows) >= MAX_OFFICIAL_ROWS:
-                    fail("official_row_width_or_count", "official_parse")
-                token = cells[0]
-                match = re.fullmatch(r"([0-9]{3})/([0-9]{2})/([0-9]{2})", token) or re.fullmatch(r"([0-9]{3})([0-9]{2})([0-9]{2})", token)
-                if match is None:
-                    fail("official_roc_date", "official_parse")
-                try:
-                    actual = date(int(match[1]) + 1911, int(match[2]), int(match[3]))
-                except ValueError:
-                    fail("official_invalid_date", "official_parse")
-                iso = actual.isoformat()
-                if iso[:7] != "2026-10" or actual.weekday() >= 5 or iso > receipt["capture_taipei_date"]:
-                    fail("official_month_weekday_future", "official_parse")
-                if any(item["date"] == iso for item in rows):
-                    fail("official_duplicate_date", "official_parse")
-                values = []
-                scratch["values"] = values
-                for token in cells[1:]:
-                    if len(token) > NUMERIC_LEXICAL_LIMIT or not re.fullmatch(r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{1,18})?", token):
-                        fail("official_numeric_grammar", "official_parse")
-                    value = _decimal(token.replace(",", ""))
-                    if value <= 0:
-                        fail("official_positive_ohlc", "official_parse")
-                    values.append(value)
-                opening, high, low, close = values
-                if not low <= min(opening, close) <= max(opening, close) <= high:
-                    fail("official_ohlc_range", "official_parse")
-                rows.append({"date": iso, "open": opening, "high": high, "low": low, "close": close})
-        except csv.Error:
-            fail("official_csv_invalid", "official_parse")
-        finally:
-            stream.close()
-        if not found_header or not rows:
-            fail("official_empty", "official_parse")
-        if not all(sum(item["date"] == cutoff for item in rows) == 1 for cutoff in self.policy.document["cutoffs"]):
-            fail("official_missing_anchor", "official_parse")
-        return rows
 
     def _finmind(self, raw):
         self.product.track("finmind_parser_reservation", NativeParseReservation())
@@ -996,50 +1130,62 @@ class TaiexNominalSource:
         except UnicodeDecodeError:
             fail("finmind_utf8", "finmind_parse")
         self.product.track("finmind_text", text)
-        document = self.product.track("finmind_document", strict_json(text, numeric=True))
+        document = self.product.track("finmind_document", strict_json(text))
         if type(document) is not dict or document.keys() != {"status", "msg", "data"}:
             fail("finmind_document_schema", "finmind_parse")
         if type(document["status"]) is not int or document["status"] != 200 or type(document["msg"]) is not str or document["msg"] != "success":
             fail("finmind_status_msg", "finmind_parse")
         rows = document["data"]
-        if type(rows) is not list or len(rows) != 22:
-            fail("finmind_exact_22", "finmind_parse")
-        seen = set()
+        if type(rows) is not list or not rows or len(rows) > MAX_RETURNED_ROWS:
+            fail("finmind_rows", "finmind_parse")
+        # EVERY returned row is structurally validated and normalized first; only
+        # then are rows outside the requested range discarded.
         normalized = self.product.track("finmind_rows", [])
+        previous = None
         for row in rows:
-            if type(row) is not dict or row.keys() != FINMIND_FIELDS:
-                fail("finmind_full_row_schema", "finmind_parse")
+            if type(row) is not dict or not REQUIRED_ROW_KEYS <= row.keys() or not row.keys() <= REQUIRED_ROW_KEYS | UNADOPTED_ROW_KEYS:
+                fail("finmind_row_keys", "finmind_parse")
             token = row["date"]
-            if type(token) is not str or not re.fullmatch(r"2026-[0-9]{2}-[0-9]{2}", token):
+            if type(token) is not str or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", token):
                 fail("finmind_date_grammar", "finmind_parse")
             try:
-                actual = date.fromisoformat(token)
+                day = date.fromisoformat(token).isoformat()
             except ValueError:
                 fail("finmind_invalid_date", "finmind_parse")
-            if token not in self.policy.document["observed_dates"] or actual.weekday() >= 5 or token in seen:
-                fail("finmind_date_set_or_duplicate", "finmind_parse")
-            seen.add(token)
+            if previous is not None and day <= previous:
+                fail("finmind_date_order", "finmind_parse")
+            previous = day
             if type(row["stock_id"]) is not str or row["stock_id"] != "TAIEX":
                 fail("finmind_stock_id", "finmind_parse")
-            result = {"date": token, "stock_id": "TAIEX"}
-            for field in INTEGER_FIELDS:
-                value = row[field]
-                if type(value) is not int or not 0 <= value <= 10 ** NUMERIC_EXPONENT_LIMIT:
-                    fail("finmind_integer_range", "finmind_parse")
-                result[field] = value
-            for field in NUMBER_FIELDS:
-                value = row[field]
-                if type(value) not in (int, Decimal):
+            result = {"date": day, "stock_id": "TAIEX"}
+            for key in row.keys() - {"date", "stock_id"}:
+                value = row[key]
+                if key in UNADOPTED_ROW_KEYS:
+                    # Not adopted and never computed or exported: number, string or null
+                    # are kept as parsed (no range or sign check) so they cannot spend the
+                    # single GET; bool, list and object stay refused. Document-level
+                    # nonfinite/duplicate-key/numeric-lexical gates still apply.
+                    if type(value) in (int, Decimal):
+                        value = _decimal(value)
+                    elif type(value) is not str and value is not None:
+                        fail("finmind_unadopted_type", "finmind_parse")
+                elif type(value) not in (int, Decimal):
                     fail("finmind_numeric_type", "finmind_parse")
-                value = _decimal(value)
-                if field != "spread" and value <= 0:
-                    fail("finmind_positive_ohlc", "finmind_parse")
-                result[field] = value
-            if not result["min"] <= min(result["open"], result["close"]) <= max(result["open"], result["close"]) <= result["max"]:
-                fail("finmind_ohlc_range", "finmind_parse")
+                else:
+                    value = _decimal(value)
+                result[key] = value
             normalized.append(result)
-        if seen != set(self.policy.document["observed_dates"]):
-            fail("finmind_complete_dates", "finmind_parse")
+        in_range = [item for item in normalized if WINDOW_START <= item["date"] <= WINDOW_END]
+        if len(in_range) != len(OBSERVED_DATES):
+            fail("finmind_in_range_count", "finmind_parse")
+        if tuple(item["date"] for item in in_range) != self.product.roots["observed_dates"]:
+            fail("finmind_calendar_mismatch", "finmind_parse")
+        for item in in_range:
+            if any(item[key] <= 0 for key in OHLC_KEYS):
+                fail("finmind_positive_ohlc", "finmind_parse")
+            if not item["min"] <= min(item["open"], item["close"]) <= max(item["open"], item["close"]) <= item["max"]:
+                fail("finmind_ohlc_range", "finmind_parse")
+        self.product.track("closes", {item["date"]: item["close"] for item in in_range})
         return normalized
 
     def acquire(self):
@@ -1050,19 +1196,7 @@ class TaiexNominalSource:
         self._event("batch_begin", "preflight", "TaiexNominalSource.acquire")
         try:
             self._preflight()
-            official_raw, official_receipt = self._capture(0)
-            self._event("parse_begin", "official_parse", "TaiexNominalSource._official")
-            official = self._official(official_raw, official_receipt)
-            oracle_receipt = self.hooks.owner.track("official_oracle_receipt", dict(official_receipt))
-            oracle = self._callback("official_full_oracle", self.hooks.official, official_raw, oracle_receipt)
-            self.hooks.owner.track("official_oracle_return", oracle)
-            if hashlib.sha256(official_raw).hexdigest() != official_receipt["sha256"]:
-                fail("official_oracle_mutated_raw", "official_oracle")
-            self._measure("official_oracle")
-            if not _typed_equal(oracle, official):
-                fail("official_full_oracle_mismatch", "official_oracle")
-            # Official complete rows + independent oracle + both anchors precede GET2.
-            raw, receipt = self._capture(1)
+            raw, receipt = self._capture()
             self._event("parse_begin", "finmind_parse", "TaiexNominalSource._finmind")
             rows = self._finmind(raw)
             oracle_receipt = self.hooks.owner.track("finmind_oracle_receipt", dict(receipt))
@@ -1073,11 +1207,6 @@ class TaiexNominalSource:
             self._measure("finmind_oracle")
             if not _typed_equal(oracle, rows):
                 fail("finmind_full_oracle_mismatch", "finmind_oracle")
-            close_by_date = self.product.track("closes", {row["date"]: row["close"] for row in rows})
-            for cutoff in self.policy.document["cutoffs"]:
-                anchor = next(item["close"] for item in official if item["date"] == cutoff)
-                if anchor != close_by_date[cutoff]:
-                    fail("anchor_exact_scale1", "anchor")
             self._guard("atomic_available")
             self._measure("atomic_available")
             self.state, self._acquired = "available", True
@@ -1094,21 +1223,23 @@ class TaiexNominalSource:
     def _provenance(self):
         policy = self.policy.document
         return {"symbol": "TAIEX", "policy_pin": self.policy.pin, "policy_sha256": self.policy.sha256,
-                "seal_pin": self.seal.pin, "seal_sha256": self.seal.sha256, "namespace": NAMESPACE,
-                "sources": ["Taiwan Stock Exchange (TWSE), government data11755 OGL1.0", "FinMind (personal noncommercial attribution; no mirror/raw redistribution)"],
-                "rights": list(policy["rights"]), "calendar_fact_reference": policy["calendar_fact_reference"],
-                "primary_route_evidence": policy["primary_route_evidence"],
+                "policy_version": POLICY_VERSION, "seal_pin": self.seal.pin, "seal_sha256": self.seal.sha256,
+                "namespace": NAMESPACE,
+                "sources": ["FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)"],
+                "rights": policy["price_source"]["rights"], "data_id_evidence": policy["price_source"]["data_id_evidence"],
+                "formal_calendar": {"blob": FORMAL_BLOB, "bytes": FORMAL_BYTES, "sha256": FORMAL_SHA256, "section": "31.2"},
                 "external_calendar_basis": policy["calendar_basis"], "external_price_basis": policy["price_basis"],
                 "output_alias_mapping": {"calendar_basis": "cross_market_candidate_inference", "price_basis": "nominal_index_level"},
-                "unit": "index_points", "unit_kind": policy["unit_kind"], "provider_literal_unit": False,
-                "scale": 1, "supported_use": SUPPORTED_USE, "unsupported": list(policy["unsupported"]),
-                "publication_time": "unsupported", "first_availability": "unsupported", "revision_history": "unsupported",
+                "unit": "index_points", "provider_literal_unit_annotation": False, "scale": 1,
+                "independent_unit_anchor": False, "unit_limitation": policy["unit_policy"]["independent_anchor"],
+                "supported_use": SUPPORTED_USE, "unsupported": list(policy["unsupported"]),
+                "publication_time": "unknown", "first_availability": "unknown", "revision_time": "unknown",
                 "verified_twse_calendar": False, "adjusted_basis": False, "total_return": False,
                 "capture_receipts": [dict(item) for item in self.receipts], "boundary_only": self.boundary_only,
                 "execution_binding": dict(self.binding)}
 
     def _cutoff(self, cutoff):
-        if type(cutoff) is not str or cutoff not in self.policy.document["cutoffs"]:
+        if type(cutoff) is not str or cutoff not in CUTOFFS:
             fail("unsupported_cutoff", "consumer")
 
     def get_taiex_nominal21(self, cutoff, *, supported_use=SUPPORTED_USE):
@@ -1120,7 +1251,7 @@ class TaiexNominalSource:
         if supported_use != SUPPORTED_USE:
             fail("unsupported_getter_use", "consumer")
         self._cutoff(cutoff)
-        dates = self.policy.document["windows"][cutoff]
+        dates = self.windows[cutoff]
         payload = {"cutoff": cutoff, "observations": [{"date": day, "close": self.product.roots["closes"][day]} for day in dates],
                    "first_date": dates[0], "last_date": dates[-1], "observation_count": 21, "interval_count": 20,
                    "calendar_basis": "cross_market_candidate_inference", "price_basis": "nominal_index_level",
@@ -1139,7 +1270,7 @@ class TaiexNominalSource:
         if consumer != CONSUMER or supported_use != SUPPORTED_USE:
             fail("unsupported_consumer_use", "consumer")
         self._cutoff(cutoff)
-        dates = self.policy.document["windows"][cutoff]
+        dates = self.windows[cutoff]
         first = self.product.roots["closes"][dates[0]]
         last = self.product.roots["closes"][dates[-1]]
         # Numeric lexical/exponent bounds were checked before Fraction construction.
@@ -1220,8 +1351,10 @@ class TaiexNominalSource:
                     owner.roots.clear()
             self.cleanup_failures, self.cleanup_notes = cleanup[:16], notes[:16]
             self.policy.raw, self.seal.raw = b"", b""
+            self.formal_blob = b""
+            self.windows = None
             self.binding = {}
-            self.hooks.observer = self.hooks.official = self.hooks.finmind = None
+            self.hooks.observer = self.hooks.finmind = None
             self.transport = None
             self.state = "failed" if failed else "released"
             self._final_audit = audit
