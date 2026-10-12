@@ -1525,3 +1525,32 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 - **未在真實來源驗到**：租約 expiry 在真實 run 沒有觸發，只有合成 RAM 證據（測試的 `expired` 狀態與準備包的 expiry 變體演練）；qa1 的真實失敗路徑證明的是 failed 後拒用，不是 expiry；chunked、close-delimited、quoted charset、非身分標頭重複與 `set-cookie` 只有 RAM 重放證據，真實 8 份回應都是 Content-Length framing；401、402、403 與零價列的真實路徑未觸發。
 - **防護性質**：閘門與 audit hook 是進程內協作式防護，不是沙箱，僅 Windows；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
 - **版本與依賴**：本節描述 candidate `8c7b5ab` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。qa1 與 qa2 的 SPENT／NO-RETRY 登錄於 #1（qa2：[#1 留言 6115370965](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6115370965)）。本節不宣稱解除母單 #20 或 #7 的依賴，合併後由全局依整合版本判定。
+
+## （暫定節號）#7：七股普通收盤與交易日曆的日期／時區語意契約
+
+2026-10-12。#7 的七股普通股收盤與交易日曆沿用 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 已整合的 FinMind `TaiwanStockTradingDate`／`TaiwanStockPrice` 取得路徑（policy v3、產品 `backend/app/ohlcv_history_source.py`）。本節只登錄這兩個 dataset 的 `date` 與 receipt 時間的日期／時區語意；不改寫 §49 的 policy、pins、capture 或 default，不新增來源、授權或用途，也不含任何取回的價格列、原始 body 或衍生數值。缺口與裁定見 [#7 QA 留言 6123856560](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6123856560)（AC-1 缺口 1）與[全局裁定 6124105434](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6124105434)（D1、D5、D6）。
+
+### 日期欄位
+
+`TaiwanStockTradingDate` 與 `TaiwanStockPrice` 每列的 `date` 是臺灣市場（Asia/Taipei）交易日的曆日，格式為 ISO `YYYY-MM-DD`，不含時間與時區偏移。它只標示「哪一個交易日」，不是 UTC 日期，也不是資料的發布日、取得日或修訂日。消費端把它當曆日使用（判斷交易日、排序、取窗口），不得補時分、不得當成 UTC 零時，也不得依時區換算。
+
+### 時間欄位
+
+receipt 的請求時間與觀測時間是 aware UTC（`Z` 結尾，例如 [§49.6](#496-qa2成功取得與驗證結果) 的 2026-10-11T23:53:27Z）。它記錄這次取得何時發生，與交易日無關：UTC 與臺北的曆日可差一天（23:53Z 是臺北隔日 07:53），所以觀測時間不得用來推交易日，`date` 也不得補成時刻。兩者都不推 publication、first availability 或 revision；三者維持 `unknown`，`historical_pit` 不支援（[§49.3](#493-原件驗證與-last60summary-計算)、[§49.7](#497-未驗與限制)）。
+
+### 對齊證據
+
+- **交易日曆**：FinMind 8～10 月 45 日與 formal 45 日完全相同（產品 gate 與獨立 oracle 各自通過），所以這 45 日 FinMind 的曆日與 formal 交易日曆沒有位移（[§49.3](#493-原件驗證與-last60summary-計算)、[§49.6](#496-qa2成功取得與驗證結果)）。
+- **價格列**：FinMind `date` 為 2026-10-06 的列，七股 × 開高低收量額六欄共 42 個 anchor 與 TPEx 同日數值逐值 exact（同上）。
+- **收據**：以上是 #32 qa2 的收據（[留言 6115359522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115359522)，原始輸出 [留言 6115344851](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115344851)）；價格值已隨 release 清除，本節不重現。
+- **性質**：這是對齊證據，不是 provider 的逐字聲明；policy v3 沒有時區欄位。語意由上列證據支持，證據範圍之外不外推。
+
+### 範圍與限制
+
+- 逐日對齊只涵蓋 8～10 月的 formal 45 日。7 月沒有獨立於 FinMind 的第二來源，2026-07-10 缺日沒有原因證據（[§49.7](#497-未驗與限制)）。
+- 身分與單位只錨定 2026-10-06（全局裁定 D5）；其他日期沒有逐日核對，policy 的 `unsupported` 不因本節放寬。
+- 條款頁未固定版本或雜湊，接受 [§49.2](#492-用途授權與署名) 的免費使用推論風險（全局裁定 D6，與 FinMind 為主一致）。
+
+### 不含
+
+本節是契約登錄，不宣稱解除 #8 或 #20 的依賴；依賴是否解除由全局依整合版本判定。Adapter 介面、衍生值保存格式與版本識別不在本節，隨對應實作版本整合時另寫入本文。
