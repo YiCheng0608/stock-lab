@@ -53,6 +53,7 @@
 | [§45](#45-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與新來源准入) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與新來源准入 | 現行 |
 | [§46](#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險與合計來源及對帳 | 現行 |
 | [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1) | #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（`issue36-two-cutoffs-v1`） | 現行 |
+| [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2) | #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（`ordinary-margin-cutoffs-1005-1006-v2`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -1330,3 +1331,78 @@ qa1、qa2 各是獨立的一次額度。qa2 是使用者的新授權，不是恢
 - Policy 的 `admission_authority.source_use_receipt` 仍指向 [留言 6088463678](https://github.com/YiCheng0608/stock-lab/issues/36#issuecomment-6088463678)（qa1 的授權），模組不交叉比對；qa2 由使用者收據、模組常數與 seal 三處綁定。
 - 官方查詢 SLA 未知；只對這六個日期、七股、這個來源與本地 RAM 用途有效。Policy 明列不支援：PIT、publication、first availability、revision lineage、adjustment、20 日成交值分母、`shares ÷ TWD` 的無因次策略門檻、完整歷史成員、hot group、strategy、Signal、Plan、API、UI、DB、cross-process，以及其他日期、路由與 provider；`denominator`、`amount`、`strategy`、`historical_pit` 在 consumer 皆為 `unsupported`。
 - 母單 #21 的整體 AC（分母、金額語意、PIT、策略等）不因本節而解除。
+
+## 48. #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（ordinary-margin-cutoffs-1005-1006-v2）
+
+2026-10-12。#31 以 FinMind `TaiwanStockMarginPurchaseShortSale` 取得七股 2026-09-24～2026-10-09 的融資原件，供 2026-10-05、2026-10-06 兩個截止日各含截止日向前五個間隔（六個交易日）的 `MarginPurchaseTodayBalance` 變動比 consumer（產品 `backend/app/tpex_margin_balance_source.py`，測試 `backend/tests/test_tpex_margin_balance_source.py`）。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default；日曆用 [§31.2](#312-24日完整觀測日曆與20日金融集合)的已驗交易日，不由日曆推導。取得過程與 QA 收據保存在 [#31](https://github.com/YiCheng0608/stock-lab/issues/31)，下列為摘要並附留言編號。
+
+### 48.1 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | schema `ordinary-margin-source-policy/v2`；canonical 2,886 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `7d8cd5b1835b84138e2bc982d86a93d4b3b4a3bba809842341c279fe566a9ceb`。由全局發布於 [#31 留言 6112134098](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6112134098)，產品不能由被測 policy 自建 expected |
+| source／consumer | provider FinMind，dataset `TaiwanStockMarginPurchaseShortSale`；consumer `ordinary-margin-change-ratio-v1`，version `ordinary-margin-cutoffs-1005-1006-v2`：14 個 consumer（兩截止 × 七股），每個含 6 個 `MarginPurchaseTodayBalance` |
+| namespace | `issue31-margin-seven-cutoffs-1005-1006-v1/qa3`（字串中的 `v1` 是 namespace 名稱，不是 policy 版本） |
+| 標的與日期 | TPEx 3105／3293／5274／5347／6488／6510／8069；請求範圍 2026-09-24～2026-10-09；已驗交易日 2026-09-24、09-29、09-30、10-01、10-02、10-05、10-06（09-25、09-28 為閉日） |
+| 窗口 | 2026-10-05：09-24、09-29、09-30、10-01、10-02、10-05；2026-10-06：09-29、09-30、10-01、10-02、10-05、10-06 |
+| 請求 | 固定 7 個 GET，依上列標的次序：`https://api.finmindtrade.com/api/v4/data`，query 依序 `dataset=TaiwanStockMarginPurchaseShortSale`、`data_id=<代號>`、`start_date=2026-09-24`、`end_date=2026-10-09`；標頭只有 `Accept-Encoding: identity` 與 `User-Agent: stock-lab-issue31-local-ram/1`（stdlib 另加 `Host`）；不換 provider、日期或路由 |
+| 上限 | 每份 body 1 MiB、aggregate raw 8 MiB、retained-roots estimate 32 MiB（estimate 不是 RSS 或 peak）；每 URL 20 s、整批 180 s（cooperative）；redirect 0、retry 0、cookie／token／proxy 0；每 URL 最多 1 次；首敗即停且 attempted 即 SPENT；只在 RAM |
+
+### 48.2 用途、授權與署名
+
+用途只限免費公開、個人非商用、本地盤後研究與 RAM 取得／驗證／consumer。Policy `supportedUse`：`local_personal_noncommercial`、`process_ram_snapshot`、`margin5_balance_change_ratio`；`unsupportedUse`：`historical_pit`、`publication_time`、`first_availability`、`revision_history`、`historical_eligibility`、`historical_membership`、`actionable_strategy`、`plan`、`trading`、`disk_raw_storage`、`raw_redistribution`、`mirror`、`deployment`、`other_cutoff`、`official_unit_verification`。產品的 `UseRequest` 只接受預設值，其餘用途一律 `unsupported_use`。FinMind 是服務提供者，不是官方直接來源；完整署名見 [§48.6](#486-完整署名)。
+
+qa1、qa2、qa3 各是獨立的一次額度。qa2、qa3 是使用者的新授權，不是恢復前一個，qa1、qa2 的 SPENT／NO-RETRY 照舊。授權本身不是 seal，每次 real run 另須全局核發 fresh financial-start seal，並由獨立 QA 執行一次。
+
+| 項目 | qa1 | qa2 | qa3 |
+| --- | --- | --- | --- |
+| 來源方案 | AC 修訂 1：TPEx 官方 current CSV 1 件＋FinMind 7 件（最多 8 GET） | 同 qa1 | AC 修訂 2：FinMind 7 件（最多 7 GET），不取官方 CSV |
+| namespace | `issue31-margin-seven-cutoffs-1005-1006-v1/qa1` | `issue31-margin-seven-cutoffs-1005-1006-v1/qa2` | `issue31-margin-seven-cutoffs-1005-1006-v1/qa3` |
+| 授權／准入 | [留言 6084167671](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6084167671)（全局取得方案准入與 policy v1 pin） | 使用者 [留言 6110713412](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110713412)，全局 [留言 6110894588](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6110894588)（namespace） | 使用者 [留言 6111567857](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111567857)（qa3 額度）與 [留言 6111752011](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111752011)（改 FinMind-only，取代 URL 清單），全局 [留言 6111788122](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111788122)（AC 修訂 2 核定） |
+| seal | [留言 6087448056](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6087448056) | 授權收據 [留言 6111507978](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111507978)，raw [留言 6111513090](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111513090) | 授權收據 [留言 6113129628](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6113129628)，raw [留言 6113132856](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6113132856)，1,207 B |
+| seal pin（seal raw 的 SHA-256） | 見 [留言 6087463996](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6087463996) | `914fb9bdcb65eb840602a11b1f2fbaea234f8bd79f79222754b4dd74d82c03b9`（[留言 6111514728](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111514728)） | `27856f011aad791100019bc6d9d188ecb9f3c6ca8efa49de66ef5719196eb432`（[留言 6113135218](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6113135218)） |
+| seal 有效期（UTC） | 2026-10-09 19:05:33～19:35:33 | 2026-10-11 17:06:51～17:51:51 | 2026-10-11 20:00:29～20:45:29 |
+| candidate | `68e54a50fbf0c077e61b5b652d6bcfa8d564e998` | `9f4e55fb1abb47f87eb0f1b2f6f9ea474ecf6b99` | `0ea75e0b45ab0720e303293a1faeb0d159bbdf58` |
+| 產品檔 SHA-256 | `1e6c4537d35f3a78370492365eaf818286db26f87b2176e1a9e743b2a81b62e1` | `6476f538ec32384ac44a664d69eb4fe74a2c55abdb5e301cdd33a2ba60ca8517` | `e6f656997c90d7fc921278813f350064f607a3a64c559944c19ffa66e644969e` |
+
+qa3 之後產品檔只有模組 docstring 末句不同（改為記載 qa3 已觀測一次），程式內容不變，因此 qa3 的真實來源證據沿用；不是 qa3 當時執行的位元組，雜湊以提交後的 blob 為準。
+
+### 48.3 原件驗證與五日變動比計算
+
+- **取得**：只接受 HTTP 200（其他狀態含 redirect 一律拒用，出現 `location` 即 `http_redirect`）、identity encoding（無 `content-encoding`，或其值為 `identity`），媒體型別 `application/json`（可帶 `charset=utf-8` 或 `charset="utf-8"` 參數，其他參數與媒體型別拒用）；完整 EOF 與 raw hash 通過後才 parse。`content-length`、`transfer-encoding`、`content-encoding`、`content-type`、`location` 任一重複即 fail-closed，其他標頭重複（如 `cache-control`、`vary`、`set-cookie`）不影響結果；不送出、不使用、不保存 cookie。以 stdlib 直接建立連線；`http.client.HTTPSConnection` 被替換時以 `transport_class_replaced` 在花用額度前拒用，稽核須以 `connection_factory` 組合包裝。
+- **JSON 與 envelope**：strict UTF-8、無 BOM（BOM 以 `bom_rejected` 拒用）；envelope 恰為 `msg`、`status`、`data` 三鍵，`status` 為 200、`msg` 為 `"success"`，`data` 為 1～10,000 列。
+- **列結構**：FinMind 文件的 16 欄中，必要 15 欄（`date`、`stock_id` 為字串，其餘 13 欄為 0 至 int64 上限的非 bool 整數）；`Note` 可選（缺欄、`null` 或至多 256 字元的字串），不進任何計算；任何其他鍵拒用。`date` 只收 ISO `YYYY-MM-DD`、落在 2026-09-24～2026-10-09 且唯一；`stock_id` 等於請求代號。
+- **內部一致性**（取代官方 anchor）：每股依日期排序後，到 2026-10-06 的日期恰為七個已驗交易日；2026-10-06 之後至少有一列；相鄰列 `MarginPurchaseYesterdayBalance[i+1] == MarginPurchaseTodayBalance[i]`（含 10-06 之後的連結）；七股的日期集合相同。2026-10-06 之後的列只作鏈式核對，不進任何窗口。任一不符整批拒用，不補值、不縮窗。
+- **單位**：「張」（lots）、scale 1 是明示的 provider 推論（`providerLiteral=false`、`officialAnchorVerified=false`），沒有官方 anchor 驗證。
+- **計算**：每股每窗口取 6 個 `MarginPurchaseTodayBalance`，變動比 `(B[T]-B[T-5])/abs(B[T-5])`，以整數分子與正分母（`abs(B[T-5])`）表示；門檻 `<= 0.05` 以精確整數比較 `20*分子 <= 正分母`，四捨五入的顯示值不進閘門；分母為 0 則整批拒用。公式與門檻與正式 canonical（`backend/worker/pipeline.py` `_margin_change_ratio`、`backend/app/domain.py` `maximum_balance_change_ratio`）一致；差異只在產品用精確整數／`Fraction`，canonical 用浮點。
+
+### 48.4 SPENT 帳
+
+- **qa1**（2026-10-09，[收據 6087747180](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6087747180)）：第 1 個請求（TPEx 官方 current CSV）attempted 即 SPENT，在 connection constructor 失敗，傳輸 0 byte、無 status；七件 FinMind 未嘗試。原因為全局靜態推論（原 exception 類別與訊息未保存）：QA harness 把 `http.client.HTTPSConnection` 換成包裝類別，使 stdlib 原類別 `__init__` 內的 `super(HTTPSConnection, self)` 解析到被替換的名稱；上述 `transport_class_replaced` 閘門處理這個狀態。
+- **qa2**（2026-10-11 17:09 UTC，[收據 6111546400](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6111546400)）：官方 CSV `https://www.tpex.org.tw/web/stock/margin_trading/margin_balance/margin_bal_result.php?l=zh-tw&o=data` 回 HTTP 200，`Content-Type: application/csv;charset=utf-8`，產品在讀 body 前以 `http_content_type` 拒用；attempted 即 SPENT，body 0 byte；七件 FinMind 未嘗試。
+- **qa3**（2026-10-11 20:03 UTC，[收據 6113180452](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6113180452)）：七件 FinMind 依序各 1 次，全部成功，原 exit 0；沒有未嘗試的 URL。
+- qa1、qa2 的官方 CSV URL 維持 SPENT／NO-RETRY；AC 修訂 2 起產品不含該 URL 或任何 TPEx 官方件，policy v1（qa1、qa2 namespace）的文字與 pin 不再被接受。qa3 額度已用盡，任何再取需新的明示授權、新 namespace 與新 seal；不 restart、replay、clone 或 hydrate 已釋放的原件。
+
+### 48.5 qa3 觀測到的回應形狀
+
+[留言 6113180452](https://github.com/YiCheng0608/stock-lab/issues/31#issuecomment-6113180452) 的一次觀測（逐件 body SHA-256、起迄時間見該收據），不是 FinMind 對形狀的承諾：
+
+- 七件皆 `HTTP/1.1 200`、`Server: uvicorn`，媒體型別 `application/json`，有 `Content-Length` 且等於 body 實際長度，無 `Content-Encoding`、無 `Transfer-Encoding`、無 `Location`；回應標頭名稱恰為 `access-control-allow-origin`、`content-length`、`content-type`、`date`、`server`（5 個）。匿名（無 token、無 cookie）呼叫未被要求登入或付費。
+- body 3,545～3,732 B，七件合計 25,489 B。
+- 每股 9 列，七股日期集合相同：2026-09-24、09-29、09-30、10-01、10-02、10-05、10-06、10-07、10-08（10-06 之後兩列，沒有 10-09 列）。七股 × 9 列只有一種鍵集合，共 16 鍵（15 必要鍵＋`Note`），`Note` 63 列都是字串；相鄰日期對 `Yesterday[i+1] == Today[i]` 56 條全部成立。
+
+### 48.6 完整署名
+
+273 UTF-8 bytes，與產品常數 `ATTRIBUTION` 逐字相同：
+
+> FinMind: TaiwanStockMarginPurchaseShortSale; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the lot unit is an explicit provider inference, not an official verification.
+
+### 48.7 未驗與限制
+
+- **餘額與比值只在 RAM 驗證，沒有保存**：qa3 證明真實來源可被產品取得、嚴格解析並通過獨立 oracle；它不產生可供其他功能取用的資料，再取數值需新額度與新 seal。
+- **單位「張」是推論**：沒有官方 anchor；AC 修訂 2 移除官方同日對照後，數值與單位只有 FinMind 內部一致性（鏈式、日期集合）支持。
+- **`Note` 缺欄與 `null` 只有合成證據**：真實樣本 63 列都是字串；數值上限 256 字元是 policy 邊界，不是 FinMind 文件事實。
+- **最後一列是 2026-10-08**：沒有 10-09 列，原因未核；閘門只要求 10-06 之後至少一列且不晚於 10-09。
+- **非 PIT，不證穩定**：發布時間、首次可得、修訂歷史與歷史 eligibility 未知；匿名 7 次成功不證匿名額度、限流或 FinMind 的長期穩定。
+- 到期後拒用與 qa3 candidate 的失敗路徑清除只有合成證據（qa3 一次成功，未觸發）；閘門是進程內協作式防護，不是沙箱；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
+- 只對這七股、這兩個截止日、這個 dataset 與本地 RAM 用途有效；TWSE、其他市場、其他 cutoff、PIT、策略、Plan、API、UI、DB、cross-process 均不支援。母單 #21 的整體 AC 不因本節而解除。

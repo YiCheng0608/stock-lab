@@ -37,7 +37,8 @@ batch is checked internally: per symbol the sorted rows chain
 verified calendar days, at least one row follows 2026-10-06 (chain check only, never
 the formula), and all seven symbols have the same date set. Any failure rejects the
 whole batch. The unit (lots) is an explicit provider inference, not an official
-verification. The real response shape is unverified and an unknown shape STOPs.
+verification. The real response shape was observed once in the qa3 batch on
+2026-10-11 UTC; any other shape still STOPs.
 """
 
 from __future__ import annotations

@@ -461,6 +461,14 @@ Fixture／數值／零窗口仍synthetic，不代actual來源／操作。政策c
 
 歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L590–L613](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L590-L613)。
 
+### #31 七股融資餘額 FinMind 來源的零落盤驗證入口
+
+```powershell
+python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
+```
+
+從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，未驗證在 pytest 下的行為。
+
 ## 歷史驗證
 
 完整原文見 `git show 5ae84d2:docs/development-baseline/README.md`，歸檔前全文見 `git show f431b9885cd3332ddd328309d0041a15c55b8610:docs/development-baseline/README.md`；其他歷史入口見[文件索引](../README.md#歷史查閱)。已刪 Temp 附件不作接手依賴；未清、審核拒絕及占用資源仍依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)處理。
