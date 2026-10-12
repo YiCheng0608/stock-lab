@@ -62,6 +62,7 @@
 | [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1) | #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（`issue36-two-cutoffs-v1`） | 現行 |
 | [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2) | #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（`ordinary-margin-cutoffs-1005-1006-v2`） | 現行 |
 | [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) | #32 qa1／qa2：七股 FinMind nominal OHLCV 日線 last60 與兩截止 raw 算術（`issue32-seven-nominal-ohlcv-two-cutoffs-v1`） | 現行 |
+| [（暫定節號）#37](#暫定節號37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1) | #37：七股所涉群組兩截止推論 membership 與 RAM lookup（`issue37-industry-membership-inferred-cutoffs-1005-1006-v1`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -1693,3 +1694,56 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 - **未在真實來源驗到**：failed 與 expired 後拒用、launcher trace 的 first coded origin、租約 expiry 在真實 run 沒有觸發，只有網路 0 階段的邊界測試與演練；chunked、close-delimited、charset 變體、非身分標頭重複與 `set-cookie` 只有 RAM 重放證據；401、402、403 與零價列的真實路徑未觸發。
 - **防護性質**：閘門、audit hook 與 trace 是進程內協作式防護，不是沙箱；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
 - **版本與依賴**：本節描述 candidate `b5072b08…` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。本節不宣稱解除母單 #21 的整體 AC 或 V1 的依賴。
+
+## （暫定節號）#37：七股所涉群組兩截止推論 membership 與 RAM lookup（issue37-industry-membership-inferred-cutoffs-1005-1006-v1）
+
+#37 以四個固定 GET 在取得日 D 一次取得官方上市（櫃）公司基本資料與 FinMind 的證券資訊、下市表，於 RAM 推論 2026-10-05、2026-10-06 兩個截止日 `Semiconductor`、`Optoelectronics`、`Cultural Innovation` 三個必要 official_industry 群組的完整成員集合，供 `industry-membership-inferred-cutoffs-lookup-v1` lookup。結果是 non-PIT 的推論，不是歷史真值；分類語意與逐條推論規則見[產業 §6.4](INDUSTRY_CLASSIFICATION.md#64-37-推論集合-consumer-例外)，本節只管理來源、policy、傳輸、授權與限制。產品 `backend/app/industry_membership_inferred_source.py`，測試 `backend/tests/test_industry_membership_inferred_source.py`。本節不提升也不改寫其他節的 policy、pins、capture 或 default，也不含任何取回的列、原始 body 或成員清單。
+
+### #37 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue37-industry-membership-inferred-cutoffs-1005-1006-v1`，schema `issue37-industry-membership-source-policy/v1`；canonical UTF-8（sorted keys、compact JSON、無尾 LF）。位元組數 10,370 與 SHA-256 `8f6de996077b836a8a6d3129401d70bdf3a044b1cc126c709c5f5aa566fe2f06`（[全局發布 v1](https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-6134816304)）釘在產品常數 `POLICY_BYTES`／`POLICY_SHA256`；未設定、SHA-256 或位元組數不符一律拒用（`policy_pin_unset`、`policy_pin`、`policy_canonical_mismatch`）；產品不能由被測 policy 自建 expected。傳輸欄與 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 的 #32 v3 policy 相同處逐字相同，差異只有 3 個 host、4 個固定 URL、無 query 的官方請求、官方 content-type 與 BOM、body／raw／roots 上限、namespace 與 UA |
+| namespace／UA | `issue37-industry-membership-inferred-cutoffs-1005-1006-v1/qa1`；`stock-lab-issue37-local-ram/1` |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot`；consumer `industry-membership-inferred-cutoffs-lookup-v1`；market TW/TWSE+TPEx、instrument_type `ordinary_stock`；storage `process_RAM`，`artifact_bytes` 0 |
+| 截止與取得日 | cutoff 2026-10-05、2026-10-06；D 是第一個 GET 開始時的 Asia/Taipei 日期，須在 2026-10-06～2026-10-31，四個 capture 須在同一日完成，距台北午夜不足 210 秒不開始；日期不符在第一個 GET 之前拒用，不花用額度 |
+| 請求 | 固定 4 個 GET，順序固定，第一次失敗即停（未嘗試者不算 SPENT）：(0) `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo`（body ≤4 MiB）；(1) `https://openapi.twse.com.tw/v1/opendata/t187ap03_L`（≤4 MiB）；(2) `https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O`（≤4 MiB）；(3) `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDelisting`（≤2 MiB）。FinMind 只帶 `dataset`，官方不帶 query；Delisting 不送日期參數，在 RAM 篩 `[C, D]`；host 只有 `api.finmindtrade.com`、`openapi.twse.com.tw`、`www.tpex.org.tw`。不換 dataset、路由、日期或 host 再試 |
+| 上限 | `max_gets` 4、每來源 1；raw 合計 12 MiB；retained roots 估計 48 MiB（不是 RSS 或 peak）；單一請求 20 秒、整批 180 秒（皆 cooperative，非 OS hard deadline）；redirect 0、retry 0、token／cookie／proxy 0；401／402／403 為 `http_auth_or_payment_stop`，是第一次失敗 |
+| 真實執行閘門 | 預設 transport 須有 `FinancialStart`（version `issue37-financial-start-v1`、namespace、policy pin）與一致的 `ExecutionBinding`（獨立 top-level QA、`xhigh`、candidate 與程式 hash），seal 留言須在 #37 且編號大於 6128163640，並使用預設時鐘；一次性 ledger 在進程內不重置。授權本身不是 seal |
+
+### #37 用途、授權與署名
+
+用途只限免費公開、個人非商用、本地盤後研究與 RAM 取得／驗證／consumer。Policy `supported_use`：`local_personal_noncommercial`、`process_ram_snapshot`、`industry_membership_inferred_cutoff_lookup`；`unsupported` 19 項：`historical_pit`、`publication_time`、`first_availability`、`revision_history`、`classification_effective_date`、`off_cycle_reclassification_exclusion`、`other_cutoffs`、`theme_membership`、`hot_group_v1_score`、`group_return`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`、`raw_disk_storage`、`db_write`、`redistribution`、`mirror`、`deployment`。產品只接受預設 purpose，其餘一律 `unsupported_purpose`。FinMind 是服務提供者，不是官方直接來源；TWSE、TPEx 資料依[政府資料開放授權條款第 1 版](https://data.gov.tw/license)，用途限本地 RAM，不再散布原件。以下三段署名與 policy `rights` 逐字相同：
+
+> FinMind（266 UTF-8 bytes）：FinMind: TaiwanStockInfo, TaiwanStockDelisting; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the Chinese industry-name to code mapping is an explicit inference.
+
+> TWSE（603 UTF-8 bytes）：臺灣證券交易所（Taiwan Stock Exchange, TWSE）[2026] 上市公司基本資料（dataset18419；openapi.twse.com.tw/v1/opendata/t187ap03_L；issue37-industry-membership-inferred-cutoffs-1005-1006-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。
+
+> TPEx（627 UTF-8 bytes）：財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃公司基本資料（dataset25036；www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O；issue37-industry-membership-inferred-cutoffs-1005-1006-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。
+
+署名中的機關名稱與 dataset 編號取自本 repo 既有引用（[§42](#42-m1-twse-issuer-industry-trace-20261008-1b1兩碼引用與同截止原件)的 dataset18419、TPEx 公司基本資料的 data.gov.tw 編號 25036），未向 data.gov.tw 重新核對提供機關欄位。
+
+### #37 原件驗證與推論邊界
+
+- **傳輸**：沿用 [§49.3](#493-原件驗證與-last60summary-計算)的取得與標頭規則：只收 HTTP 200；`content-encoding` 須 identity 或無；framing 接受 content-length、chunked、close-delimited，content-length 與 chunked 並存拒，達上限仍無 EOF 拒；四個身分標頭（`content-length`、`content-encoding`、`transfer-encoding`、`content-type`）重複即拒，其他標頭重複忽略；`set-cookie` 不送出、不使用、不保存。兩個 FinMind GET 的 `content-type` 仍須是 `application/json`（可接 `; charset=utf-8`），body 為 strict UTF-8 且無 BOM。兩個官方 GET 的 `content-type` 只記錄原值、不 gate；body 一律須是 strict UTF-8（可去掉一個開頭 BOM，記 `bom_present`，body SHA-256 仍對原 bytes）的 JSON array 並通過逐欄 schema，任何解析失敗就是第一次失敗。這是以 body 的嚴格解析取代未驗的 header，避免類似 [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1)／#31 qa2 `application/csv` 的額度浪費。
+- **採用欄**（其餘欄位忽略；識別欄 `date`、`stock_id`、官方代號與出表日須為 JSON 字串，缺漏或型別不符即拒整批；產業、`type` 與官方上市日欄位可為 null 或缺漏，視為 unknown／缺失，只拒用受影響的群組，其他型別拒整批）：
+
+| 來源 | 採用欄 | 規則 |
+| --- | --- | --- |
+| FinMind `TaiwanStockInfo` | `date`、`industry_category`、`stock_id`、`stock_name`、`type` | 外層恰為 `status`（整數 200）、`msg`（`success`）、`data`；`date` 為 ISO 日期且不晚於 D；`stock_id` 非空且 ≤32 字元；`type` 只有 `twse`、`tpex` 參與比對 |
+| TWSE `t187ap03_L` | `出表日期`、`公司代號`、`產業別`、`上市日期` | 出表日期 7 位民國日期，全列同一值；代號 4～6 位大寫英數且唯一；產業別以 §3 mapper 精確對應 |
+| TPEx `mopsfin_t187ap03_O` | `Date`、`SecuritiesCompanyCode`、`SecuritiesIndustryCode`、`DateOfListing` | 同上 |
+| FinMind `TaiwanStockDelisting` | `date`、`stock_id`、`stock_name` | 外層同 `TaiwanStockInfo`；`date` 為 ISO 日期 |
+
+  上市日四種格式依字元長度與分隔符互斥判定，且都必須是真實日期：8 位數字是西元 `yyyyMMdd`（`gregorian8`）、7 位數字是民國 `yyyMMdd`（`roc7`）、6 位數字是民國 `yyMMdd`（`roc6`）、`Y/M/D` 限 4 位西元年且只用 `/`、月日 1～2 位（`ymd_slash`）。不 trim、補零或猜測；其餘（3 位民國年加分隔符、`-` 分隔、null、缺漏、非真實日期如非閏年的 2 月 29 日）一律 `unknown`，拒用該檔所屬群組，不是整批失敗。`inspection()` 的 `listing_date_formats` 依交易所各記這五種的列數（`unknown` 含 null 與缺漏），同一交易所五項總和等於該交易所列數，供 QA 核對實際出現的格式。
+- **整批拒用**：取得日或出表日超出範圍、四個 capture 跨台北日、schema 或型別不符、官方 feed 內代號重複、出表日全列不一致、七股任一檔在官方 snapshot 不屬三個必要群組（必要群組假設錯誤）。出表日與七股檢查在前三個 GET 解析後即做，失敗時後面的 GET 不執行。七股檢查先掃完七檔再拒用，診斷逐檔記錄未涵蓋的股票：`uncovered_count`（1～7），以及每檔的 `uncovered_<n>_symbol_index`（0～6，對應七股順序）、`_exchange`（`TWSE`、`TPEx` 或 `absent`；同一 symbol 兩個官方 feed 都有時以 TPEx 列為準）、`_code`（官方原始產業 code：1～4 位 ASCII 英數原樣記錄，null、缺漏或空字串記 `<null>`，其餘字串記 `<unrepresentable>`，原始字串不寫入）、`_group`（mapper 的 canonical 群組或 `unknown`）。必要群組綁在 policy 與 seal，執行時不改範圍；實值不符時本次拒用並回報實值，改群組須另訂 policy 並重發 seal。
+- **獨立 oracle**：`acquire` 後 snapshot 為 pending；獨立 QA 從 `inspection()` 的原 bytes 重建 2 截止日 × 3 群組各自的狀態（`members` 或 `rejected`）與成員，連同四份 receipt 雜湊、D、兩份出表日與四個來源列數交給 `admit_independent_verification`；任一不符即終止該 snapshot，不能再試另一份主張。pending、failed、expired、released 都不能 lookup。
+- **lookup 與拒用**：只接受兩個截止日、三個必要群組與 official_industry namespace；錯日、非必要群組、題材 namespace、被拒用的群組、digest 或 policy 不符、release 與 expiry 之後皆拒用。每個結果帶 `inferred_from_post_cutoff_snapshot`、`effective_from`／`effective_to`（`unknown`）、`pit`（false）、殘餘風險代碼、D、兩份官方出表日、四個來源 digest，以及 `finmind_only_delisted_member`、`board_transfer_old_tpex_identity` 等逐檔旗標。
+
+### #37 未驗與限制
+
+- **契約假設**：解析器依下列假設設計，不符一律拒用，不放寬：四個來源的實際回應 header 與欄位、TWSE／TPEx 實際回應的欄位與日期格式（TPEx 的 `Date`、`SecuritiesCompanyCode`、`SecuritiesIndustryCode`、`DateOfListing` 只有 Swagger 宣告為依據，宣告不證實際回應；`Date` 另見 [產業 §1](INDUSTRY_CLASSIFICATION.md#1-官方證據-snapshot)）、FinMind 對創新板與 KY 的 `industry_category` 命名是否與 §2 市場名稱相同、`TaiwanStockInfo` 是否保留已下市標的、`TaiwanStockDelisting` 是否含非上市櫃項目。這些假設若不成立，會使對應群組或整個截止日不能通過，結果照實回報。
+- **非 PIT**：群組成員是以取得日 D 的 snapshot 推論；分類生效、失效、發布與修訂時間皆 `unknown`。FinMind `TaiwanStockInfo.date` 是更新日期，不是生效日；`TaiwanStockDelisting.date` 的語意（最後交易日或下市生效日）未定，`date==C` 一律拒用該群組。
+- **年度外調整**：TWSE 要點第二點與第三點第四項允許年度以外調整，`[C, D]` 內的臨時調整無法排除，以 `off_cycle_reclassification_not_excluded` 隨每個結果回傳。
+- **範圍**：只對兩個截止日、三個必要群組、官方產業 namespace 與本地 RAM 有效；不證歷史分類、群組報酬、排名、題材歸屬、保存、時間接線或策略，不解除母單 #21 的整體 AC。
+- **防護性質**：閘門、audit hook 與 trace 是進程內協作式防護，不是沙箱；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除；一次性 ledger 只在進程內有效，外部 seal 才是權威。

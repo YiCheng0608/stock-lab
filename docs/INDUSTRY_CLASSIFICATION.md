@@ -108,7 +108,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 - 每筆 instrument 必須以 `payload_sha256` 唯一匹配同 batch authoritative universe capture，並核對 exchange、source、endpoint allowlist 與 digest。TWSE／TPEx ordinary industry 只能各自來自 listed-company endpoint。
 - `captured_at` 取 `FetchedPayload.collected_at`；現行 local capture 的 naive 值依既有契約按 UTC 解讀，其他 naive 時間不可類推。正規化後須確認不在未來，再轉 Asia/Taipei 日曆日 `D=observation_date`。
 - `D` 是本系統開始採用 current observation 的下限，不是來源 effective date或 PIT。`data_as_of`、listing／start／score date 都不能替代。
-- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。
+- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。#37 推論集合 consumer 對此的唯一例外見 [§6.4](#64-37-推論集合-consumer-例外)。
 - receipt 的 `industry_membership_observations` 保存 `version=industry-observation-v1`、`scope=ordinary_industry_only`、status、skipped／unresolved counts、warnings 與逐筆 source／endpoint／digest、capture／observed／score dates、raw refs、time relationship、raw classification 和 status。
 - force success 將前一成功 receipt append 到 history；force failure 保留最後成功 receipt，並另存 latest attempt／failed attempts。非 force reuse 不改寫既有成功 receipt。
 - raw 去重時間不能冒充當次 capture。新 raw 的 aware time 正規化成 UTC-naive 以符合現有 SQLite 欄位；missing／invalid timestamp 不以 DB default 或現在時間補造，run 必須成為 failed，並保留可得的原檔、digest與 persistence error。
@@ -133,6 +133,24 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 | receipt／retry | 成功、partial、reuse、force failure 與 raw time error可分辨且不覆蓋最後成功 evidence。 |
 
 有限 review 通過 §6.3，並涵蓋 parser→`collect`、timestamp、transaction、integrity／FK 與保護來源不變；不構成 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
+
+### 6.4 #37 推論集合 consumer 例外
+
+只適用 `backend/app/industry_membership_inferred_source.py` 的 RAM consumer；ordinary collector 與其他 consumer 的 §6.1 `D > score_date` skip 不變。該 consumer 不寫 membership 或 DB、不回填任何 period：它在取得日 `D`（取得當下的 Asia/Taipei 日期，2026-10-06 至 2026-10-31）晚於截止日 `C`（2026-10-05、2026-10-06）的前提下，以 D 日完整集合加 `[C, D]` 內可偵測的事件推論 C 當日的成員集合，結果一律標 `inferred_from_post_cutoff_snapshot`，`effective_from`／`effective_to` 為 `unknown`，`pit=false`。來源、policy、傳輸與署名見[來源 #37 節](SOURCE_REGISTRY.md#暫定節號37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1)。
+
+範圍只有 official_industry namespace 的三個必要群組：`Semiconductor`（TWSE 24 加 TPEx 24）、`Optoelectronics`（TWSE 26 加 TPEx 26）、`Cultural Innovation`（TPEx 32），創新板與 KY 納入；七股是 UI 支持池，每檔在官方 snapshot 都必須落在這三個群組，否則整批拒用，收據逐檔回報實際交易所、官方原始產業 code 與 mapper 結果；必要群組綁在 policy，要改群組須另訂 policy。題材 namespace 為空集合，未核實的題材群組一律拒用。群組識別沿用 §2、§3：官方 `(exchange, 兩位數 code)` 經 §3 mapper，FinMind 的中文產業名只做 §2 該市場名稱的精確比對，不 trim、補零或跨市場。
+
+| 規則 | 內容 |
+| --- | --- |
+| D 日完整集合 | 每個群組的官方 `(exchange, symbol)` 集合必須與 FinMind `TaiwanStockInfo`「同 `stock_id` 中 `date` 最新列、`type∈{twse,tpex}`」的集合逐檔相等；同一 `stock_id` 的最新列不唯一視為多筆有效紀錄。比對排除 `[C, D]` 內已由 `TaiwanStockDelisting` 解釋、官方已不列的 FinMind-only 列。任何差異拒用該群組。 |
+| 新掛牌 | 官方上市（櫃）日嚴格大於 C 者不屬於 C 的集合，等於 C 者是成員。上市日為 null、缺漏、不是來源 #37 節所列四種格式之一或不是真實日期時，拒用該檔所屬群組。 |
+| 下市 | 只看 `date∈[C, D]` 且 `stock_id` 為四位數字的列（非四位者屬非 ordinary，忽略）。仍在官方 feed 者維持成員；`date==C` 時語意不明，拒用其群組。官方已不列者，以 FinMind 最新的 `twse`／`tpex` 列的中文產業名定群組並納入 C 的集合（標 `finmind_only_delisted_member`）；`date==C` 拒用該群組；沒有 `twse`／`tpex` 列、紀錄不唯一或產業名不屬 §2 時，拒用該 C 的全部三個群組。 |
+| 轉板 | 官方 TWSE 上市日大於 C，且 FinMind 留有同 `stock_id` 的 `tpex` 舊列：舊列最新 `date` 須不早於 C、產業名唯一且與官方群組相同，才把該檔以 TPEx 身分納入 C 的集合（標 `board_transfer_old_tpex_identity`）。舊列產業名不屬 §2 時拒用該 C 的全部三個群組；其餘無法唯一判定（多名、舊列早於 C、產業衝突）與反向（TPEx→TWSE）轉板，拒用相關群組。 |
+| 身分 | `(exchange, symbol)` 在每份官方 feed 唯一，同一 symbol 不得在同一 C 同時屬兩個市場；排除 ETF、TDR 91、管理 80、停用 18／34、興櫃與非 ordinary（代號須為四位數字）。每份官方 feed 的出表日須全列一致，且在 `[2026-10-06, D]`，否則整批拒用。 |
+
+拒用分三層：整批（取得日、出表日、schema、重複 symbol、七股未被三群組涵蓋）、整個 C（下市產業無法判定、轉板舊列產業名未知）、單一群組（其餘）。lookup 只接受兩個截止日、三個必要群組與 official_industry namespace；錯日、非必要群組、題材 namespace、被拒用的群組，以及 release 或 expiry 之後，一律拒用。
+
+殘餘風險隨每個結果以代碼回傳：`non_pit`、`classification_effective_dates_unknown`、`finmind_service_provider_not_official`、`inferred_from_post_cutoff_snapshot`、`off_cycle_reclassification_not_excluded`（TWSE 要點允許年度以外調整，`[C, D]` 內的臨時調整無法排除）、`delisting_date_semantics_unknown`（`TaiwanStockDelisting` 的 `date` 是最後交易日或下市生效日未定）。本節不證歷史分類、群組報酬、排名、題材歸屬、保存或時間接線，也不解除前端 guard 與策略 gate。
 
 ## 7. Round17 ETF／new-listing candidate lifecycle（有限接線已 review）
 

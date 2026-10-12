@@ -59,6 +59,10 @@ STANDALONE_ONLY = {
         "tests/test_saved_price_chips_scope7_focus.py:30 uses __main__.ARGS; "
         "run by tools/tpex-price-api.py:504; no README filename mention"
     ),
+    "test_industry_membership_inferred_source.py": (
+        "docs/development-baseline/README.md (standalone, stdlib only, -B required); "
+        "tests/test_industry_membership_inferred_source.py:42 requires -B, :44 audit hook"
+    ),
 }
 
 # Assign rather than setdefault: a developer shell may have production
