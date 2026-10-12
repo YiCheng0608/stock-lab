@@ -711,6 +711,9 @@ def test_product_price_change_requires_adjacent_verified_same_basis(product_api)
         first = build_action_summaries(db, instrument_ids=[alpha.id])[0]
         current.adj_close = 90
         db.commit()
+        # The decision context is a per-Session snapshot of DecisionMarketRead
+        # values, so a fixture mutation needs a fresh context before re-reading.
+        db.info.clear()
         second = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
     assert first["previous_close"] == pytest.approx(100)

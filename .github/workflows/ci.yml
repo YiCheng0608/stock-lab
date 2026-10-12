@@ -72,6 +72,15 @@ jobs:
           for profile in series gross direction adjacent dealer-components; do
             python -B tools/tpex-chips-series-api.py --check --deps "$GITHUB_WORKSPACE/backend" "--chips-${profile}-stock-scope-7-opt-in"
           done
+      - name: Backend pytest regressions (temp SQLite only, no source GET)
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          python -B -m pytest -p no:cacheprovider -q \
+            tests/test_instrument_identity_migration.py \
+            tests/test_news_json_defaults.py \
+            tests/test_product.py
 
   frontend:
     name: frontend
