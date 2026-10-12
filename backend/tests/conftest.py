@@ -59,6 +59,11 @@ STANDALONE_ONLY = {
         "tests/test_saved_price_chips_scope7_focus.py:30 uses __main__.ARGS; "
         "run by tools/tpex-price-api.py:504; no README filename mention"
     ),
+    "test_finmind_dealer_direction_source.py": (
+        "tests/test_finmind_dealer_direction_source.py:56 installs a process-wide audit hook at import and "
+        ":42 requires -B (standalone, stdlib only, no conftest); "
+        "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; no README filename mention yet"
+    ),
 }
 
 # Assign rather than setdefault: a developer shell may have production
