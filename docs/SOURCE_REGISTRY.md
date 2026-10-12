@@ -6,9 +6,9 @@
 
 ## 來源選用原則（FinMind 為主）
 
-新的取得方案、恢復的暫停單與新來源准入，先以 FinMind（`https://api.finmindtrade.com/api/v4/data`）為主要來源；FinMind 沒有該資料集或無法滿足用途時，才另提其他來源，並在原 Issue 記理由。只用 FinMind 時，官方 anchor 改為 FinMind 內部一致性核對，單位與 scale 寫成明示推論並列入該節限制；需要其他來源（含官方核對）時另提方案。
+新的取得方案、恢復的暫停單與新來源准入，先以 FinMind（`https://api.finmindtrade.com/api/v4/data`）為主要來源；FinMind 沒有該資料集或無法滿足用途時，才另提其他來源，並在原 Issue 記理由。只用 FinMind 時，官方 anchor 改為 FinMind 內部一致性核對，單位與 scale 寫成明示推論並列入該來源節的限制；需要其他來源（含官方核對）時另提方案。
 
-用途限免費、本地個人非商用研究；FinMind 是服務提供者，不是官方直接來源，署名、不 mirror、不再散布 raw 等權利界線見 [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。FinMind 要求付費、登入，或回 401／402／403 即停止，不改用憑證或換來源重試。本原則是來源方向，不是取源授權：每次真實取得仍依 [§1](#1-registry-與-policy-契約) 的版本化 policy、單一 namespace 與 seal；已 SPENT／NO-RETRY 的額度不因本原則恢復。
+用途限免費、本地個人非商用研究；署名、不 mirror、不再散布 raw 等權利界線見 [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。FinMind 要求付費、登入，或回 401／402／403 即停止，不在同一額度內重試；改用其他來源須依上段另提方案。本原則是來源方向，不是取源授權：每次真實取得仍須具體範圍（URL、次數、caps），依 [§1](#1-registry-與-policy-契約) 的版本化 policy 與 pin，並有單一 namespace 與核發前經使用者確認的 seal（例見 §48.2、§49.1）；已 SPENT／NO-RETRY 的額度不因本原則恢復。
 
 ## 現行節次索引
 
