@@ -300,11 +300,18 @@ def create_app(source: DealerDirectionSource, *, port):
                     return _error("body_limit", 413 if method == "POST" else 422)
                 body.extend(chunk)
             if method == "POST":
-                parsed = json.loads(bytes(body))
-                if type(parsed) is not dict or (path == CAPTURE_PATH and parsed != {}):
-                    raise ValueError("object_required")
+                raw = bytes(body)
+                if path == CAPTURE_PATH:
+                    # The one-shot capture carries exactly the two bytes `{}`: no BOM, whitespace, `{ }` or UTF-16/32 spelling.
+                    if raw != b"{}":
+                        raise ValueError("empty_object_bytes_required")
+                    parsed = {}
+                else:
+                    parsed = json.loads(raw)
+                    if type(parsed) is not dict:
+                        raise ValueError("object_required")
                 request.state.json_body = parsed
-        except (ValueError, UnicodeError):
+        except (ValueError, UnicodeError, RecursionError):  # RecursionError is a RuntimeError: deep nesting must not become a 500
             return _error("json_object_required", 422)
         if not local_only and as_of != CUTOFF:
             return JSONResponse(blank("cutoff_not_supported", source.state, generation=generation, as_of=as_of), status_code=409)

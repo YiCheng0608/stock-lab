@@ -52,6 +52,20 @@ function admitRequest(method, rawHeaders) {
   }
   return null
 }
+// R4-1: the one-shot capture body is exactly the two bytes `{}` (same rule as the API): no BOM, whitespace, `{ }` or UTF-16/32 spelling.
+function captureBodyAdmitted(body) {
+  return Buffer.isBuffer(body) && body.length === 2 && body[0] === 0x7b && body[1] === 0x7d
+}
+function checkCaptureBody() {
+  const n = { positive: 0, negative: 0 }
+  assert(captureBodyAdmitted(Buffer.from('{}')), 'exact {} admitted'); n.positive++
+  const bad = ['', ' ', '\n', '{ }', '{\n}', ' {}', '{} ', '\n{}', '{}\n', '\t{}', '{}\r\n', '{}\0', '{}{}', '{}}', '{', '}', '{{}}', '[]', 'null', '0', '""', 'true', '{"a":1}', '{"a":{}}', '{"":null}']
+  for (const text of bad) { assert(!captureBodyAdmitted(Buffer.from(text)), 'capture body refused: ' + JSON.stringify(text)); n.negative++ }
+  const spellings = [Buffer.from('﻿{}', 'utf8'), Buffer.from('{}', 'utf16le'), Buffer.from('﻿{}', 'utf16le'), Buffer.from('{}', 'utf16le').swap16(), Buffer.from([0xff]), Buffer.from([0xff, 0xff, 0xff, 0xff]), Buffer.alloc(4000, 0x5b)]
+  for (const body of spellings) { assert(!captureBodyAdmitted(body), 'capture body spelling refused: ' + body.subarray(0, 8).toString('hex')); n.negative++ }
+  assert(!captureBodyAdmitted('{}') && !captureBodyAdmitted(undefined), 'only a Buffer is an HTTP body'); n.negative += 2
+  return n
+}
 function checkGate() {
   const good = ['Host', ownHost], n = { positive: 0, negative: 0 }
   const expectRule = (method, headers, expected, label) => {
@@ -216,7 +230,7 @@ async function buildSSR(extra) {
 }
 async function checkOnly() {
   typecheck()
-  const gate = checkGate()
+  const gate = checkGate(), captureBody = checkCaptureBody()
   const policy = checkPolicyFile()
   const clean = stripFontImports(fs.readFileSync(path.join(sourceRoot, 'styles.css'), 'utf8'))
   assert(!/@import/i.test(clean), 'actual style has no remaining import')
@@ -281,7 +295,7 @@ async function checkOnly() {
     assert.throws(() => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + query] }, React.createElement(exclusive.App))), /cannot be enabled together/)
     assert(forbiddenFetch === 0, 'SSR network zero')
   } finally { global.fetch = previousFetch }
-  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, combos_group_ssr: groups, stocks_ssr: 7, flag_exclusion_checked: true, browser_gate_checks: gate, policy_sha256: policySha, policy_bytes: policyBytes, ...policy, native_viewport_verification: false, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
+  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, combos_group_ssr: groups, stocks_ssr: 7, flag_exclusion_checked: true, browser_gate_checks: gate, capture_body_checks: captureBody, policy_sha256: policySha, policy_bytes: policyBytes, ...policy, native_viewport_verification: false, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
 }
 async function serveOnly() {
   const policy = checkPolicyFile()
@@ -310,7 +324,7 @@ async function serveOnly() {
       const parts = []; let size = 0
       for await (const part of req) { size += part.length; if (size > cap) { counts.rejected_requests++; return reply(res, req.method === 'POST' ? 413 : 422, '{"reason":"body_limit"}') }; parts.push(part) }
       const body = Buffer.concat(parts)
-      if (req.method === 'POST') { const parsed = JSON.parse(body.toString('utf8')); if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object' || Object.keys(parsed).length) { counts.rejected_requests++; return reply(res, 422, '{"reason":"empty_object_required"}') } }
+      if (req.method === 'POST' && !captureBodyAdmitted(body)) { counts.rejected_requests++; return reply(res, 422, '{"reason":"empty_object_required"}') }
       counts[req.method === 'POST' ? 'proxy_post' : 'proxy_get']++
       const upstream = http.request({ hostname: '127.0.0.1', port: apiPort, path: url.pathname + url.search, method: req.method, agent: false, headers: { Host: apiHost, 'Content-Type': 'application/json', 'Content-Length': body.length } }, (response) => {
         const chunks = []; let bytes = 0

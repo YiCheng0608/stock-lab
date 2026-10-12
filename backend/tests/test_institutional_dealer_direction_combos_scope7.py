@@ -597,6 +597,47 @@ class APITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.transport.opens, [])
         self.assertEqual(self.source.state, "new")
 
+    async def test_capture_body_is_exactly_two_bytes_and_anything_else_never_touches_state(self):
+        # R4-1: the one-shot call carries the two bytes `{}` and nothing else, so a BOM, whitespace, `{ }` or a UTF-16/32
+        # spelling of the same empty object is refused with 422 before the one batch is considered.
+        self.assertEqual(httpx.Request("POST", ORIGIN + API, json={}).read(), b"{}")  # what every `json={}` helper above really sends
+        spellings = tuple("{}".encode(codec) for codec in ("utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be", "utf-8-sig"))
+        bad = spellings + (b"", b" ", b"\n", b"{ }", b"{\n}", b" {}", b"{} ", b"\n{}", b"{}\n", b"\t{}", b"{}\r\n", b"{}\x00", b"{}{}", b"{}}", b"{", b"}", b"{{}}",
+                           b"[]", b"null", b"0", b'""', b"true", b'{"a":1}', b'{"a":{}}', b'{"":null}', b"\xff", b"\xff\xff\xff\xff", b"[" * 4000)
+        for body in bad:
+            response = await self.client.post(API + "/capture" + Q, content=body, headers=JSON)
+            self.assertEqual((response.status_code, response.json()), (422, {"reason": "json_object_required"}), body[:16])
+        self.assertEqual((await self.client.post(API + "/capture" + Q, content=b"[" * 8000, headers=JSON)).status_code, 413)  # over the 4096-byte cap
+        diagnostic = await self.diagnostic()
+        self.assertEqual((diagnostic["state"], diagnostic["attempted"], diagnostic["captures"], self.transport.opens), ("new", 0, [], []))
+        self.assertEqual((await self.client.get(API + Q)).json()["reason"], "not_acquired")  # still untouched, the batch is intact
+        spent = await self.client.post(API + "/capture" + Q, content=b"{}", headers=JSON)
+        self.assertEqual((spent.status_code, spent.json()["state"], len(self.transport.opens)), (200, "pending", 7))
+
+    async def test_admission_parser_exceptions_are_422_not_500_and_never_change_state(self):
+        # R4-2: RecursionError is not a ValueError, so deeply nested bodies used to escape the middleware as a 500.
+        await self.first()
+        before, opens = await self.diagnostic(), len(self.transport.opens)
+        fields = '"policy_sha256":"%s","holder_session_id":"x","candidate_sha":"%s","script_sha256":"%s","receipt_sha256s":[],"name_rows":210,"stock_days":42,"anchor_values":56,"record_only_matches":true,"independent":true' % (EXTERNAL_PIN, "a" * 40, "b" * 64)
+        refused = (b"[" * 4000, b"[" * 8000, b"[" * 8192, b"[" * 4000 + b"]" * 4000, b'{"a":' * 1600, b'{"a":[' * 1300,
+                   b"\xff", b"\xff\xff\xff\xff", b"\xe3\x81", b"", b"{", b"not json", b"[]", b"null")
+        for body in refused:  # never a dict, whichever way the parser fails (or succeeds) on the nesting
+            response = await self.client.post(combos.ADMIT_PATH, content=body, headers=JSON)
+            self.assertEqual((response.status_code, response.json()), (422, {"reason": "json_object_required"}), body[:16])
+        # A dict-rooted body is either too deep for this interpreter's parser (422) or parsed and then refused by the admission (409).
+        for body in (b'{"a":' * 1300 + b"0" + b"}" * 1300, b'{"namespace":' + b"[" * 3000 + b"]" * 3000 + b"," + fields.encode() + b"}"):
+            response = await self.client.post(combos.ADMIT_PATH, content=body, headers=JSON)
+            self.assertIn((response.status_code, response.json()["reason"]), ((422, "json_object_required"), (409, "oracle_type")), body[:16])
+        # Nesting the parser still accepts is a typed value, which the admission itself refuses: 409 oracle_type, never an unhandled error.
+        for depth in (1, 50, 200):
+            body = b'{"namespace":' + b"[" * depth + b"]" * depth + b"," + fields.encode() + b"}"
+            response = await self.client.post(combos.ADMIT_PATH, content=body, headers=JSON)
+            self.assertEqual((response.status_code, response.json()), (409, {"reason": "oracle_type", "state": "pending"}), depth)
+        self.assertEqual(await self.diagnostic(), before)
+        self.assertEqual((self.source.state, len(self.transport.opens)), ("pending", opens))
+        await self.client.post(combos.ADMIT_PATH, json=await self.admission_body())  # the one real admission is unaffected
+        self.assertEqual(self.source.state, "available")
+
     async def test_unsupported_cutoff_never_fetches_or_spends(self):
         for method, suffix in (("GET", ""), ("POST", "/capture")):
             response = await self.client.request(method, API + suffix + "?as_of=2026-10-07", json={} if method == "POST" else None)
