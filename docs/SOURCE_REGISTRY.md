@@ -1815,3 +1815,114 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 NEWgen `edb7ac56-f36f-4fab-bff8-85dc916a2fbb`，唯一trusted FIRST7 HTTP200／identity，body732030B／未增補original receipts7530B，UTC2026-10-08T11:15:02.253776～11:15:05.281361+00:00。ROOT全部7original／receipts、stdlib CSV／Decimal／dates、4557 full daily rows／ALL35×25／770int64／ALL22 components與sumsteps及fullAPI graph完整核，停前再核原bytesequal／math／API；不冒3次fullmath。26 returnedcalendar→≤10/06 exact24 adopted→last5：9/30、10/1、10/2、10/5、10/6；315daily／63window metrics精確對帳。Full API79080B，SHA `0c3ac2b80a65c3bb8bad9225195d18ba3e8d106763e51e4bd9c36bf316465a38`。
 
 Actual零只有5274 self sell 10/5及10/6，兩viewportdaily與原列trace皆核；windowzero／triplezero／netzero缺實件未驗，fixture不補actual。可信FIRST是1277×924，當時未beforeclickassert1365，不聲稱FIRST1365；之後兩viewportALL7及清值見PAGE51。金融7／metadata首6＋2reader＋新3全SPENT；原件與derived RAM已釋放，不restart／replay／clone／hydrate／preload。Product／testartifacts0files0B、privateIO／DB／ordinarypriceGET0；無save／crossprocess／ranking／filter／price／Signal／Plan或完整M1外推。
+
+## 49. #32 qa1／qa2：七股 FinMind nominal OHLCV 日線 last60 與兩截止 raw 算術（issue32-seven-nominal-ohlcv-two-cutoffs-v1）
+
+2026-10-12。#32 以 FinMind 公開 API v4 取得七股 2026-07-01～2026-10-06 的 provider-reported nominal OHLCV 日線與 FinMind 交易日，供 2026-10-05、2026-10-06 兩個截止日各取「截止日（含）向前 60 個交易日」的 last60 getter，以及 `ordinary-nominal-ohlcv-window-summary-v1` raw 算術 snapshot consumer（MA20／MA60 收盤、prior20 最高價、prior20 成交量與成交值平均）。產品 `backend/app/ohlcv_history_source.py`，測試 `backend/tests/test_ohlcv_history_source.py`。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default；「交易日以來源實際回傳為準、不限天數」只適用本 namespace，不回溯其他節已驗的日曆契約（例如 §13 的 9/25、9/28 公告）。取得過程與 QA 收據保存在 [#32](https://github.com/YiCheng0608/stock-lab/issues/32)，下列為摘要並附留言編號。本節不含任何取回的價格列、原始 body 或衍生數值；它們只在 RAM，已隨 qa2 的 release 清除。
+
+### 49.1 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v3`；canonical 4,766 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `2f454a9aa51b70db331e867ffdb3cf3391a45e238e55cf885fe4396e34b86b91`。由全局發布並貼於 [#32 留言 6111873522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111873522)，產品不能由被測 policy 自建 expected |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_observed_nominal_ohlcv_snapshot`；market TW/TPEx、ordinary stock、identity_as_of 2026-10-06；basis `provider_reported_nominal_ohlcv`；consumer `ordinary-nominal-ohlcv-window-summary-v1` |
+| 來源 | FinMind。交易日 dataset `TaiwanStockTradingDate`，version `finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue32-v3`，每列只有 `date`。價格 dataset `TaiwanStockPrice`，欄位 open→`open`、high→`max`、low→`min`、close→`close`、volume→`Trading_Volume`、amount→`Trading_money` |
+| 標的與日期 | 3105 穩懋／3293 鈊象／5274 信驊／5347 世界／6488 環球晶／6510 精測／8069 元太；區間 2026-07-01～2026-10-06；cutoff 2026-10-05、2026-10-06 |
+| 請求 | 固定 8 個 GET，host 只有 `api.finmindtrade.com`，endpoint `https://api.finmindtrade.com/api/v4/data`。#0 交易日：`?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-06`。#1～#7 價格：七股依 3105、3293、5274、5347、6488、6510、8069 升序，`?dataset=TaiwanStockPrice&data_id=<code>&start_date=2026-07-01&end_date=2026-10-06`（query 依序 dataset、data_id、start_date、end_date）。交易日先取，通過 gate 才取價格；不換 provider、日期或路由 |
+| 請求標頭 | 固定四個：`Accept-Encoding: identity`、`Connection: close`、`User-Agent: stock-lab-issue32-local-ram/1`、`Accept: application/json`；不帶 token、cookie、proxy |
+| 上限 | 每份 body 1 MiB（1,048,576 B）、aggregate raw 8 MiB（8,388,608 B）、retained-roots estimate 32 MiB（33,554,432 B；estimate 不是 RSS 或 peak）；每 URL 20 s、整批 180 s（cooperative）；redirect 0、retry 0、每 URL 最多 1 次；首敗即停且 attempted 即 SPENT；只在 RAM |
+| 固定 formal 參照 | formal 45 日與 §32.2 的 42 個 anchor 由產品從固定 blob `d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md`（268,729 B；SHA-256 `b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde`）的 §19.2、§31.2、§32.2 解析。呼叫者必須提供該 blob，位元組不符即 `formal_blob_pin` 拒絕。這個 pin 指向 commit 內容，不隨本檔後續編修而變，也不能改指目前工作樹的檔案 |
+
+### 49.2 用途、授權與署名
+
+用途只限免費公開、本地個人非商用研究與 RAM 取得／驗證／consumer。Policy 的 `unsupported` 含 `raw_disk_storage` 與 `redistribution`，storage 只有 process RAM；不落盤、不發布 raw、不鏡像。權利字串（policy `rights`，逐字）：`FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror`。Policy 沒有固定完整署名文字，也沒有引用 FinMind 條款全文或條款版本；權利是否充分是使用者決策（[留言 6111751834](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111751834)），QA 只核對它被 seal 綁定。
+
+免費使用是文件推論，不是明示陳述。FinMind 文件（只讀 `finmind.github.io` 3 個頁面，共 4 GET，`api.finmindtrade.com` 0 次，[留言 6111856880](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111856880)）把 `token` 列為選填，無 token 流量上限 300 次／小時（有 token 600）；受限資料集的標題都帶「只限 backer、sponsor 會員使用」等標記，`TaiwanStockTradingDate` 與 `TaiwanStockPrice` 沒有，但文件沒有寫「可免 token」。Policy 因此規定 401、402、403 或任何要求付費、登入的回應是首敗。
+
+使用者決策鏈：[留言 6111262866](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111262866)（交易日以實際開市紀錄驗證，不限定天數）、[留言 6111751834](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111751834)（資料以 FinMind 為主，不再取 TPEx CSV）、[留言 6111441501](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111441501)（qa2 取得授權；其 URL 清單已被 6111751834 取代）。qa1、qa2 各是獨立的一次額度，qa2 是新授權，不是恢復 qa1。授權本身不是 seal，每次 real run 另須全局核發 fresh financial-start seal，並由獨立 QA 執行一次；qa2 的 seal 發給前，全局已向使用者確認（[留言 6115291600](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115291600)）。
+
+| 項目 | qa1 | qa2 |
+| --- | --- | --- |
+| namespace | `issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa1` | `issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2` |
+| policy | v1，3,266 B，SHA-256 `0f8c95eca6f0dcd08ca9b874996c4f41f8f8cf356f3282fee1e1c3f23734292d`（[留言 6084911117](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6084911117)） | v3，4,766 B，SHA-256 `2f454a9a…6b91`（見 [§49.1](#491-版本外部-pins-與上限)） |
+| 來源 | TPEx 7 月日曆 CSV（政府 dataset11391）1 GET，加 FinMind 七股價格 7 GET | FinMind 交易日 1 GET，加七股價格 7 GET |
+| source-use 授權 | [留言 6110624020](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6110624020)，本文 SHA-256 `e834c4d4b0410c373f3d7a8b7d9df6590c8dad59261e637707c735cd55d154e2` | [留言 6111441501](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111441501) 與 [留言 6111751834](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111751834) |
+| seal 授權收據 | [留言 6111159812](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111159812) | [留言 6115291600](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115291600) |
+| seal raw | [留言 6111162865](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111162865)，7,766 B | [留言 6115293790](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115293790)，8,094 B |
+| seal pin（seal raw 的 SHA-256） | `e5fea054f0a66aadfbd92d8feab29e12c4fd0ce62e16be00489248a00a4ab908`（[留言 6111165857](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111165857)） | `b3f8b8fcd8796c5579656acec06df9ca47780864f663f2044a9d23ab01e46e52`（[留言 6115295947](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115295947)） |
+| seal 有效期（UTC） | 2026-10-11 16:29:12～17:14:12 | 2026-10-11 23:51:24～2026-10-12 00:36:24 |
+| AC 修訂 | 1 | 3 |
+| candidate | `0375ddbc265b20c185468cabf25ee245ef225dff` | `8c7b5ab52bc8150ae408fc9bc4d7a5bbe167e664` |
+| 產品檔 SHA-256 | `2a63ba047b8c9d1f2c3a05a2b8dedd01ae19fe731faf86326cc1658fef775b25` | `528875c3b14f5ce7a7f140e7385f32a209d45118219b8e1e63de7848cf3f9a7b` |
+| 測試檔 SHA-256 | `f70f55a3c8e7072e19f104e40ddb9749283e034f2d8d53752703c6aa73ef9b5a` | `de3071e9e002023a31c9ec622c2d7f37ff3382c989c4a0e2dd6b8f9261e5b450` |
+| script SHA-256 | `c8e2b2b04677968f20d2665392c70231545260aa354c05372b8afee64016afd3` | `54bdecfbc9e6ade7c1723f5c098d0cf08440e31ccdc0a146d18751129ac77a53` |
+| typed input（core）SHA-256 | `108afaf001ef2943595257a61e2806f21728ed65b238d249319601119cbf5af2` | `4b97c912e097d81353ecf69da1bb6493f68ccb13ba32315331da887f7d7e2c8c` |
+| loader SHA-256 | `f9bdee1596c9cf7f36014d7210727522824ef16ac347ada1f9994cec1b1c6ffe` | `c4ab6949ef5034618675403bd21285be47c420b7cdd154bebd324e499ace62e6` |
+| 準備包收據 | [留言 6111072849](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111072849) | [留言 6113452985](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6113452985) |
+| QA 結果 | [留言 6111213651](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111213651)：首敗 | [留言 6115359522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115359522)（原始輸出 [留言 6115344851](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115344851)）：成功 |
+
+### 49.3 原件驗證與 last60／summary 計算
+
+- **取得**：HTTP 200 才接受；401、402、403 或任何要求付費、登入的回應是首敗。body 須 identity 或無 `content-encoding`（gzip、br 拒）；`content-type` 為 `application/json`，大小寫不拘，可接 `; charset=utf-8`，其他值與缺少一律拒。Framing 接受 content-length、chunked、close-delimited（讀到 EOF，受 1 MiB 限制）；content-length 與 chunked 並存拒，達上限仍無 EOF 拒。完整 EOF 與 raw hash 通過後才 parse；strict UTF-8、無 BOM。
+- **標頭**：`content-length`、`content-encoding`、`transfer-encoding`、`content-type` 任一重複即拒；其他標頭重複接受並忽略；`set-cookie` 接受，不送出、不使用、不保存。
+- **交易日**：回應須為 `{status:200, msg:"success", data:[…]}`；**全部回傳列**先驗結構（每列鍵恰為 `date`、合法 ISO 日期、唯一且遞增），之後才捨棄 2026-07-01～2026-10-06 以外的列，所以來源是否依 `start_date`／`end_date` 過濾都不影響結果。區間內的日期須全為平日、包含兩個 cutoff、各 cutoff（含）以前至少 60 個交易日，且 8～10 月部分與 formal 45 日（8 月 21 個、9 月 20 個、10 月至 10/06 共 4 個交易日）**完全相同**；8 月見 [§19.2](#192-全月驗證27日曆與八截止)，9、10 月見 [§31.2](#312-24日完整觀測日曆與20日金融集合)。不限定天數、不從缺列推休市、不縮窗；任何無法解釋的不一致整批拒，且發生在任何價格 GET 之前。
+- **價格**：每檔回應須為 `{status, msg, data}`，`data` 列數等於交易日數 N；每列含 `date`、`stock_id`、`open`、`max`、`min`、`close`、`Trading_Volume`、`Trading_money`（可另含 `spread`、`Trading_turnover`，不採用）；`stock_id` 等於請求代號；日期唯一且屬交易日，**七股各自的日期集合都須與交易日集合完全相同**。OHLC 為有限正值且 high ≥ max(open, low, close)、low ≤ min(open, high, close)；成交量與成交值為正的 signed-int64 整數。OHLC、量或額為 0 的列一律拒收，整批停止，不補 0、不挑列。
+- **單位**：composite mapping inference，scale 1：OHLC 為 TWD／股、成交量為股、成交值為 TWD。FinMind 沒有逐欄標示單位（policy `provider_literal_unit_annotation` 為 false），推論以 §32.2 在 2026-10-06 的 42 個 anchor（七股 × 開高低收量額六欄）逐值 exact 相等交叉驗證，含成交量與成交值。
+- **admission**：獨立 oracle 的 admission 須等於 `(N, 7N, 42N, 42)`（交易日列數、價格列數、價格欄位數、anchor 欄位數），並綁定 8 份 receipt 的 SHA-256；real 路徑另綁定 QA holder、candidate 與 script SHA-256。取得完成後狀態為 pending，須通過 admission 才 available，getter 與 consumer 才可用；failed、expired（租約至多 180 s）與 released 都拒用。
+- **last60**：`get_nominal_ohlcv60(snapshot, symbol, cutoff)` 取日期 ≤ cutoff 的最後 60 根，須恰 60 根且最後一根日期等於 cutoff。
+- **summary**：`ordinary_nominal_ohlcv_window_summary_v1(snapshot, symbol, cutoff)` 的 `ma20_close` 為含 cutoff 的最後 20 根收盤平均，`ma60_close` 為 last60 收盤平均，`prior20_*` 取嚴格早於 cutoff 的 20 個交易日（須恰 20 根）：`prior20_high` 為最高價，`prior20_volume_mean`、`prior20_amount_mean` 為成交量與成交值平均。平均值為最簡整數有理數（分子／正分母），不用浮點、不做 context 捨入。
+- **拒用**：purpose 非固定值回 `unsupported_purpose`；cutoff 不在兩個截止日或代號不在七股回 `unsupported_window_scope`；未傳 snapshot 回 `snapshot_required`；provenance 固定 `publication_time`、`first_availability`、`revision_time` 為 `unknown`，並列出 policy `unsupported`。
+
+### 49.4 qa1：TPEx 日曆首敗
+
+[留言 6111213651](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111213651)。2026-10-11T16:32:30.953Z～16:32:32.148Z，candidate `0375ddbc…`，原 exit 1。第 1 個 GET（TPEx 7 月日曆 CSV）回 HTTP 200、HTTP/1.1 chunked、無 `content-encoding`，body 1,286 B（SHA-256 `59d30fdc6ada1016e9a6f10ef4c6a067fbef6926f7ee1dd7a396802fb84c1b3c`）。內容是合法 UTF-8 CSV，無 BOM，header 與 policy 六欄相同，但資料列只有 22 列，而當時 policy v1 要求 7 月完整 23 個平日，產品以 `calendar_header_or_count` 依設計拒絕。`cache-control` ×2 與 `vary` ×3 不是身分標頭，不是失敗原因。
+
+日曆 attempted 即 SPENT，七個價格 URL 都沒有發出，FinMind 沒有被連線；閘門 connect_ok 1、resolve_ok 1、blocked 0。清理全過。缺的是哪一天沒有記錄（body 只在 RAM，已釋放），也不得重取；NO-RETRY，qa1 額度與 seal 已用盡。
+
+### 49.5 修正與重驗（policy v1 → v3）
+
+| 版本 | bytes | SHA-256 | 變更 | 結果 |
+| --- | ---: | --- | --- | --- |
+| v1 | 3,266 | `0f8c95eca6f0dcd08ca9b874996c4f41f8f8cf356f3282fee1e1c3f23734292d` | TPEx 7 月日曆須完整 23 個平日，加 FinMind 七股價格 | qa1 首敗（[§49.4](#494-qa1tpex-日曆首敗)） |
+| v2 | 3,497 | `076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba` | 依使用者決策（6111262866）改以 TPEx 實際回傳的交易日，不限天數、不推論休市，與 formal 45 日、七股價格日期集合交叉核對 | candidate `29536e6`；未進入真實 run，其 qa2 授權的 URL 清單在 seal 前被 6111751834 取代 |
+| v3 | 4,766 | `2f454a9aa51b70db331e867ffdb3cf3391a45e238e55cf885fe4396e34b86b91` | 依使用者決策（6111751834）移除 TPEx 與 CSV，交易日改 FinMind `TaiwanStockTradingDate`；新增固定 `User-Agent`、`Accept` 與 `response_shape` 表；framing 另接受 close-delimited | candidate `8c7b5ab`；qa2 成功 |
+
+Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111873522)）：區間外的列先驗結構再捨棄；免費可用是推論、接受風險；OHLC 為 0 的列整批拒收，列為已接受風險。全局另將 framing 改為也接受 close-delimited，因為請求送 `Connection: close`，伺服器可能兩個長度標頭都不給。產品只接受 v3 與 qa2 namespace，v1、v2 與 qa1 的值都被拒絕。
+
+驗證：工程自測 33 項（[留言 6112349389](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6112349389)），含用真實 `http.client` 解析 canned 位元組逐項重放 `response_shape` 的接受與拒收；QA 獨立重驗 95／95 與 40 個 mutant（39 killed、1 等價）、準備包 harness 185／185，沿用於 [留言 6115359522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115359522)。這些是產品行為證據，不是來源真值證據。
+
+### 49.6 qa2：成功取得與驗證結果
+
+[留言 6115359522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115359522)。唯一一次 real run：2026-10-11T23:53:27Z 起、約 23:53:55Z 結束（elapsed 27.06 s，其中取得 21.59 s；租約餘裕 152.94 s），原 exit 0，`result_pass` 與 `cleanup_pass` 皆 true，沒有首敗。8／8 GET 皆 HTTP 200，閘門 connect_ok 8、resolve_ok 8、blocked 0，只連 `api.finmindtrade.com:443`；請求的方法、URL 與標頭位元組逐一等於預期。aggregate raw 87,972 B，retained estimate 1,379,702 B。
+
+| # | source_id | body bytes | body SHA-256 | receipt SHA-256 |
+| ---: | --- | ---: | --- | --- |
+| 0 | `finmind_trading_dates` | 1,513 | `6d4c6149c4dd6416fb7e2085ebe261453096f2e679636d42304deebb1c54a640` | `db5e291482fa0cdf6887ffae5e3a564019c645eea8e5eaa9a7210a7e70cc72ed` |
+| 1 | `finmind_nominal_ohlcv/3105` | 12,336 | `f852f37e3e319850c99c41042a32ab21ad2822369c424d6194f057305025275a` | `2c1e554091cfb3797a21591aed581ecb90263100361f4ec877812fe8387de8ee` |
+| 2 | `finmind_nominal_ohlcv/3293` | 12,144 | `9fbb68d37f3fd318675a1482bf79f3d179f812fc41dbc77696bda77495287b10` | `050149900da65f2a18a71da025edf351e9d632146349280f05d80b21fee8bc3c` |
+| 3 | `finmind_nominal_ohlcv/5274` | 12,742 | `eb4b3166ffb0d2e05a1c7e5fb6a0196a1fda9ae50ecb94e10738eb05d15713ca` | `10c27d2fa57cf88db62453254c3a3251985dad0fe7126c7e3bff698f777edba9` |
+| 4 | `finmind_nominal_ohlcv/5347` | 12,242 | `d0f2972f95ffbe89015c5ab14d19afdedb556c4a747429304f119bb9c0a66702` | `aecb8beb17ca32c5ad1e183ff03b5f7fbf20627a2104287064fbf4032a5a8bad` |
+| 5 | `finmind_nominal_ohlcv/6488` | 12,436 | `f7987aa5f4d7d2df183b7c3046842768c1631c573d6c7cefa786263a5ef0b6ee` | `ae1cdd39a44ff1265f2457265f3de2ba22dd4407439e05993af062de644d6407` |
+| 6 | `finmind_nominal_ohlcv/6510` | 12,425 | `4b65782b2340fe627b21eee3dfd7a6ad23e54d1466472c6ac12926daa5f5bb6b` | `6ebd5b108de7653cf47f98926cf9ea7f5aec3980ec7e6095a584bbbfe84b63a2` |
+| 7 | `finmind_nominal_ohlcv/8069` | 12,134 | `4f87b706a971dc32461487671b6f6f6b91acc2fac405eda31f598c06d1ce8c97` | `104bcea87f00620af00b79a681989211f74bcc2e0790efaee62798f567a03764` |
+
+八份回應皆 HTTP 200、`application/json`、Content-Length framing 且完整 EOF，標頭名稱各 1 次、完全相同：`access-control-allow-origin`、`connection`、`content-length`、`content-type`、`date`、`server`；無 `content-encoding`、無 `set-cookie`、無 `transfer-encoding`。第一個請求 23:53:28.594661Z，最後一份 observed 23:53:45.668518Z。
+
+驗證（獨立 oracle 以同一份原件在同一段 RAM 重算，不用產品解析函式產生期望值）：
+
+- **交易日**：N ＝ 67 列（區間內列數，這次 FinMind 有依 `start_date`／`end_date` 過濾），首日 2026-07-01、末日 2026-10-06；7 月 22 日、8 月 21 日、9 月 20 日、10 月 4 日；唯一、遞增、全為平日，兩個 cutoff 都在，各 cutoff 以前至少 60 日；8～10 月 45 日與 formal 45 日完全相同（產品 gate 與獨立 oracle 各自通過）。7 月缺的平日只有 2026-07-10，見 [§49.7](#497-未驗與限制)。
+- **價格**：七股各 67 列，合計 469 列、2,814 個六欄值（42 × 67）；每檔日期集合等於交易日集合，沒有缺日、重複或多日；OHLC 非零且上下界一致，量與額為正的 int64 整數；產品 parse 與獨立 oracle 逐值差異 0。2026-10-06 的 42 個 anchor 全部 exact，含成交量與成交值，所以該日的單位推論與 §32.2 的 TPEx 數值一致、不需換算。
+- **consumer**：14 個 getter／summary（七股 × 兩 cutoff）、840 個觀測（14 × 60）、5,040 次欄位讀取（840 × 6）；MA20、MA60、prior20 high、prior20 volume mean、prior20 amount mean 與獨立整數有理數算術 oracle 14／14 相符，`mismatches` 為空。六個錯誤 admission 都被拒（`oracle_complete_scope` ×3、`oracle_capture_binding`、`oracle_qa_binding`、`oracle_scope` 各 1），拒絕後仍 pending，正確 admission 後才 available。
+- **取後拒用**：用途 `strategy` 回 `unsupported_purpose`；cutoff 2026-10-07 與代號 2330 回 `unsupported_window_scope`；未傳 snapshot 回 `snapshot_required`。
+- **清理與 SPENT**：ledger attempted 為 0～7，等於預期，一次性批次已完整用掉；結束後 state 為 `released`，roots 清空，getter、inspection 與 admission 在 release 後皆拒用，trace 關閉，模組卸載，被測樹不變，落盤 0 B。
+
+### 49.7 未驗與限制
+
+- **2026-07-10（週五）缺日**：這天不在 FinMind 的交易日，也不在七股任何一檔的價格資料，而七股與交易日彼此一致。原因沒有證據：文件不宣稱它休市，也不把它補成交易日；產品依使用者決策（[留言 6111262866](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111262866)，以實際開市紀錄驗證）接受來源實際回傳。7 月沒有獨立於 FinMind 的第二來源（formal 45 日只涵蓋 8～10 月）。qa1 的 TPEx 7 月 CSV 也只有 22 個資料列，但當時缺哪一天沒有記錄，兩個來源缺同一天只是數量吻合，未證實。依交易日序列推得（不是 run 輸出）：2026-10-05 的 last60 從 2026-07-09 起、**跨過這個缺口**；2026-10-06 的 last60 從 2026-07-13 起，不含缺口。
+- **來源單一**：交易日與價格都只來自 FinMind；8～10 月另有 formal 45 日交叉核對，單位只在 2026-10-06 有 42 個 anchor 交叉核對。consumer 與 oracle 的算術比對是對同一份取回 bytes 的內部一致性，不是獨立來源值的驗證。
+- **不支援**：沒有 PIT、publication、first availability 或 revision 保障（三者為 `unknown`），`historical_pit` 不支援。Policy 明列不支援：adjusted prices、公司行動、停牌可比性、全段 historical membership／eligibility、策略、Plan、交易、歷史模擬、raw 落盤、再散布，以及其他 cutoff。
+- **範圍**：只驗了 2026-10-05、2026-10-06 兩個 cutoff 與七檔；其他日期、代號與用途在取數前拒用，不外推。價格列只在 RAM，已釋放；要再取需新的明示使用者授權、新 namespace 與新 seal，NO-RETRY 照舊，不 restart、replay、clone 或 hydrate 已釋放的資料。
+- **已接受風險**：FinMind 無公告成交價的日子 OHLC 為 0（FinMind 文件說明非資料錯誤），產品遇到會整批拒收，不補 0、不縮窗，停牌不支援，qa2 沒有觸發；gzip、br 回應被拒，qa2 沒有發生。免費使用是文件推論，qa2 的 8／8 皆 200 只代表當時，限流與條款日後可能改變。
+- **未在真實來源驗到**：租約 expiry 在真實 run 沒有觸發（證據來自 RAM 演練與 qa1 的失敗路徑）；chunked、close-delimited、quoted charset、非身分標頭重複與 `set-cookie` 只有 RAM 重放證據，真實 8 份回應都是 Content-Length framing；401、402、403 與零價列的真實路徑未觸發。
+- **防護性質**：閘門與 audit hook 是進程內協作式防護，不是沙箱，僅 Windows；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
+- **版本與依賴**：本節描述 candidate `8c7b5ab` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。qa1 與 qa2 的 SPENT／NO-RETRY 登錄於 #1（qa2：[#1 留言 6115370965](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6115370965)）。本節不宣稱解除母單 #20 或 #7 的依賴，合併後由全局依整合版本判定。

@@ -1,7 +1,8 @@
 """Standalone synthetic boundary runner; no source requests or test artifacts.
 
 Run: python -B -X utf8 backend/tests/test_ohlcv_history_source.py
-Reads only this source/test and the public pinned repo SOURCE_REGISTRY reference.
+Reads only this source/test and the pinned git blob d8918bc...:docs/SOURCE_REGISTRY.md
+(via git cat-file before the audit hook is installed; never the working-tree registry).
 The policy v3 literal below was independently parsed from the single json fence
 of Issue 32 comment 6111873522 (global publication, AC revision 3) and matches its
 4,766 B pin. Policy v2 (comment 6111290434, 3,497 B) and the v1 reference values
@@ -27,7 +28,37 @@ from datetime import date, timedelta
 import unittest
 from unittest.mock import patch
 import os
+import shutil
+import subprocess
 import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+FORMAL_OBJECT = "d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md"
+
+
+def _read_pinned_formal_blob():
+    """Read the pinned formal blob from git, once, before the audit hook forbids subprocess.
+
+    Never the working-tree file: it is edited by later sections and replaced by master merges.
+    An unavailable blob (no git, shallow clone, wrong checkout) fails loudly - no skip and no
+    working-tree fallback. The sha256 pin is asserted separately below."""
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("cannot read pinned formal blob %s: git executable not found" % FORMAL_OBJECT)
+    try:
+        done = subprocess.run([git, "cat-file", "blob", FORMAL_OBJECT], cwd=ROOT,
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("cannot read pinned formal blob %s: git cat-file failed to run (%r)" % (FORMAL_OBJECT, error)) from error
+    if done.returncode != 0:
+        raise RuntimeError(
+            "pinned formal blob %s is unavailable (git cat-file exit %d: %s); "
+            "run from a checkout whose history contains that commit (not a shallow clone)"
+            % (FORMAL_OBJECT, done.returncode, done.stderr.decode("utf-8", "replace").strip()))
+    return done.stdout
+
+
+FORMAL = _read_pinned_formal_blob()
 
 
 def _audit_boundary(event, args):
@@ -49,14 +80,12 @@ EXTERNAL_PIN = "2f454a9aa51b70db331e867ffdb3cf3391a45e238e55cf885fe4396e34b86b91
 V2_POLICY = b'{"acquisition":{"accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue32-seven-nominal-ohlcv-two-cutoffs-v1/qa2","order":"newJuly calendar then seven price ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608},"arithmetic":{"last60":"cutoff inclusive; no later rows","ma20":"last20 cutoff inclusive","ma60":"last60 cutoff inclusive","means":"exact reduced integer rational numerator/positive denominator; no floating/context rounding","prior20":"20 sessions strictly before cutoff","prior20_high":"exact maximum nominal high"},"calendar_source":{"expected_scope":"2026-07 observed official trading dates; each unique, in July 2026, weekday, header exact; no fixed count; no closure inference; each of seven FinMind price date sets must equal observed July plus formal 45 dates exactly; any unexplained mismatch rejects whole batch; at least 60 sessions at or before each cutoff","format":"UTF8_CSV","government_dataset":11391,"header":["\xe8\xb3\x87\xe6\x96\x99\xe6\x97\xa5\xe6\x9c\x9f","\xe9\x96\x8b\xe5\xb8\x82","\xe6\x9c\x80\xe9\xab\x98\xe5\x83\xb9","\xe6\x9c\x80\xe4\xbd\x8e\xe5\x83\xb9","\xe6\x94\xb6\xe5\xb8\x82","\xe6\xbc\xb2\xe8\xb7\x8c"],"method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"TPEx","rights":"OGL-1.0 government dataset resource / TPEx terms section 7 exception; TPEx attribution","url":"https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data&date=2026%2F07%2F01","version":"tpex-july-observed-plus-formal-aug21-sep20-oct4/issue32-v2"},"consumer_version":"ordinary-nominal-ohlcv-window-summary-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","revision_time":"unknown","source_use":"local_personal_noncommercial_observed_nominal_ohlcv_snapshot","storage":"process_RAM","symbols":["3105","3293","5274","5347","6488","6510","8069"],"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","redistribution","other_cutoffs"],"version":"issue32-ordinary-nominal-ohlcv-history-seven-cutoffs-v2"}'
 V2_PIN = "076e36f2c3bb3169866fc728e155e99886e084871480810f2cda6f54aff1eaba"
 
-ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "backend/app/ohlcv_history_source.py"
 spec = importlib.util.spec_from_file_location("issue32_ohlcv_boundary", SOURCE)
 source = importlib.util.module_from_spec(spec)
 import sys
 sys.modules[spec.name] = source
 spec.loader.exec_module(source)
-FORMAL = (ROOT / "docs/SOURCE_REGISTRY.md").read_bytes()
 
 # External formal table, independently read rather than projected from source.
 ANCHORS = {
@@ -457,6 +486,18 @@ class Boundaries(unittest.TestCase):
             with self.subTest(case=label):
                 self.assertFailure("oracle_scope", snapshot.admit_independent_verification, mutation)
         snapshot.release()
+
+    def test_formal_reference_is_the_pinned_git_object_not_the_working_tree(self):
+        # FORMAL was read once, before the audit hook, by git cat-file from the exact object the
+        # product and the external policy pin; the (edited) working-tree registry is never read.
+        policy = json.loads(EXTERNAL_POLICY)
+        self.assertEqual(FORMAL_OBJECT, source.FORMAL_BLOB)
+        self.assertEqual(FORMAL_OBJECT, policy["trading_date_source"]["prior_calendar_formal_blob"])
+        self.assertEqual(hashlib.sha256(FORMAL).hexdigest(), source.FORMAL_SHA256)
+        self.assertEqual(hashlib.sha256(FORMAL).hexdigest(), policy["trading_date_source"]["prior_calendar_formal_sha256"])
+        self.assertEqual(len(FORMAL), 268729)
+        prior_dates, anchors = source._formal_reference(FORMAL)
+        self.assertEqual((len(prior_dates), tuple(anchors)), (45, source.SYMBOLS))
 
     def test_unsupported_every_purpose_before_transport(self):
         for purpose in json.loads(EXTERNAL_POLICY)["unsupported"] + ["strategy", "storage", "random", None]:
