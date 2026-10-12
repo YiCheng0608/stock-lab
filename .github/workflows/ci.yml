@@ -80,7 +80,8 @@ jobs:
           python -B -m pytest -p no:cacheprovider -q \
             tests/test_instrument_identity_migration.py \
             tests/test_news_json_defaults.py \
-            tests/test_product.py
+            tests/test_product.py \
+            tests/test_tpex_execution_rules.py
 
   frontend:
     name: frontend
