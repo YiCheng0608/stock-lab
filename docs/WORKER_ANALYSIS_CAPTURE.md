@@ -157,7 +157,7 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 
 ## 7. Review pin 與未完成範圍
 
-有限 review 使用專案外、migration-ready synthetic source 與 owned copies；v3 接線的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。歷史驗證及清理數據留原 task／Git；現有未清資源見[協作紀錄](TASK_COORDINATION.md)。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
+有限 review 使用專案外、migration-ready synthetic source 與 owned copies；v3 接線的短歷史／`data_incomplete`、部分 producer／rollback 與 bridge caller-save／reopen 有小型 owned DB 證據。v1／v2 與 v3 reader／rollback／bridge 的廣泛回歸尚未完整執行；另有獨立純記憶體 AST 診斷，不等同 pytest、DB rollback 或磁碟 roundtrip。歷史驗證及清理數據留原 task／Git；現有殘留查[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)與原 Issue。沒有以正式 DB 驗收 raw bytes、來源真實性、歷史 PIT 或磁碟峰值。真正 replay runtime pins 以 [RULE_REPLAY](RULE_REPLAY.md) 為準。
 
 仍未完成／不在保證內：
 
