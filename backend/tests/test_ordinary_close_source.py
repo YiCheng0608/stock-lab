@@ -8,8 +8,9 @@ imported an audit hook forbids sockets and every write outside this process's si
 session directory; subprocesses are allowed only for the fixed ``python -I -B`` reader child.
 The pinned formal blob d8918bc... is read once with ``git cat-file`` before the hook exists
 (never the working-tree registry). Every calendar and price value below is synthetic boundary
-data, not source truth; the policy is a synthetic document with synthetic pins (the real pins
-are unset, which the tests assert).
+data, not source truth. The policy under test is the published policy v1 (issue 7 comment
+6125706492, kept below as an independent literal); other cutoffs and windows are that same text
+with only the window parameters replaced, and their pins are computed here, not taken from the module.
 """
 from __future__ import annotations
 
@@ -160,15 +161,16 @@ START, END, CUT = "2026-07-01", "2026-10-06", "2026-10-06"
 FORMAL_END = "2026-10-06"
 FORMAL_CLOSED = ("2026-09-25", "2026-09-28")
 BEYOND = ("2026-10-07", "2026-10-08", "2026-10-09")
-RIGHTS = "FinMind personal noncommercial local private derived closes; attribution; no raw redistribution or mirror"
-ATTRIBUTION = "FinMind (finmindtrade.com) provider-reported daily closes; private local derived values; not redistributed"
+RIGHTS = "FinMind personal noncommercial local private derived closes; attribution; no raw body storage, redistribution or mirror"
+ATTRIBUTION = ("Source: FinMind (finmindtrade.com) TaiwanStockPrice and TaiwanStockTradingDate; provider-reported daily closes "
+               "kept as private local derived values; raw bodies not stored or redistributed")
 
 # Synthetic financial-start identities (pure guard only; never passed to an acquiring constructor).
 SEAL_ISSUER = "f0000000-0000-0000-0000-0000000000a1"
 SEAL_COORDINATORS = ("f0000000-0000-0000-0000-0000000000b1", "f0000000-0000-0000-0000-0000000000b2")
 SEAL_IMPLEMENTERS = ("f0000000-0000-0000-0000-0000000000c1", "f0000000-0000-0000-0000-0000000000c2")
 QA_HOLDER = "5d2f6c1e-7a40-4b8e-9c3d-1e2f3a4b5c6d"
-SEAL_FLOOR = 6124203633
+SEAL_FLOOR = 6125706492  # the policy v1 publication comment: a seal must be newer
 SEAL_URL = "https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-9999999999"
 
 
@@ -254,48 +256,24 @@ def corpus(start=START, end=END, beyond=(), variant=0):
     return _CORPORA[key]
 
 
+# Policy v1 exactly as published in issue 7 comment 6125706492 (5,173 bytes; sorted keys, compact, no trailing LF).
+V1_POLICY = b'{"acquisition":{"accept":"application/json","accept_encoding":"identity","batch_seconds":180,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":8,"namespace":"issue7-ordinary-close-saved-seven-v1/qa1","order":"FinMind trading dates then seven prices ascending","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":8388608,"user_agent":"stock-lab-issue32-local-ram/1"},"attribution":"Source: FinMind (finmindtrade.com) TaiwanStockPrice and TaiwanStockTradingDate; provider-reported daily closes kept as private local derived values; raw bodies not stored or redistributed","consumer_version":"ordinary-close-saved-window-v1","cutoff":"2026-10-06","first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","price_source":{"basis":"provider_reported_nominal_ohlcv","dataset":"TaiwanStockPrice","end_date":"2026-10-06","endpoint":"https://api.finmindtrade.com/api/v4/data","fields":{"amount":"Trading_money","close":"close","high":"max","low":"min","open":"open","volume":"Trading_Volume"},"method":"GET","provider":"FinMind","query_order":["dataset","data_id","start_date","end_date"],"rights":"FinMind personal noncommercial local private derived closes; attribution; no raw body storage, redistribution or mirror","start_date":"2026-07-01"},"profile":"free_public_local","publication_time":"unknown","response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure","zero_price_rows":"FinMind no-posted-price rows with zero OHLC reject the whole batch (accepted risk; suspension unsupported)"},"revision_time":"unknown","source_use":"local_personal_noncommercial_private_derived_close_window","storage":{"kind":"private_local_derived_closes","layout":"<policy_version>/<cutoff>/{closes.json,receipt.json}","max_bundles":2,"max_closes_bytes":65536,"max_files":4,"max_receipt_bytes":32768,"max_total_bytes":196608,"raw_body":"not_stored","root_env":"STOCK_ORDINARY_CLOSE_PRIVATE_ROOT","schema":"ordinary-close-saved/v1","stored_fields":["date","close"]},"symbols":["3105","3293","5274","5347","6488","6510","8069"],"trading_date_source":{"dataset":"TaiwanStockTradingDate","documentation":"https://finmind.github.io/tutor/TaiwanMarket/Technical/ (doc GET receipt issue32 comment 6111856880); free tokenless use is inferred, 401/402/403 is first failure","endpoint":"https://api.finmindtrade.com/api/v4/data","expected_scope":"observed FinMind trading dates; every returned row structurally valid, unique and ascending; rows outside the window are discarded only after structural validation; in-window dates must be weekdays, include the cutoff, give at least 60 sessions at or before the cutoff, equal formal Aug-Oct 45 dates exactly within that span, contain no day after 2026-10-06 except the declared beyond_formal_trading_dates (empty here), and equal each of seven price date sets exactly; no fixed count; no closure inference; any unexplained mismatch rejects whole batch","fields":{"date":"date"},"format":"JSON","method":"GET","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"provider":"FinMind","rights":"FinMind personal noncommercial local private derived closes; attribution; no raw body storage, redistribution or mirror","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-06","version":"finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue7-v1"},"unit_policy":{"OHLC":"TWD/share","all_seven_must_match":true,"amount":"TWD","independent_latest_anchor":"stock-lab/master:d8918bc6491ec8ef65874979cf88d1322df2da43:SOURCE_REGISTRY/32.2:2026-10-06:42-fields","provider_literal_unit_annotation":false,"scale":1,"unit_mapping_inference":true,"version":"issue32-composite-six-field-scale1-v1","volume":"shares"},"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","adjusted_prices","company_actions","suspension_comparability","whole_window_historical_membership","historical_eligibility","actionable_strategy","plan","trading","historical_simulation","raw_body_storage","redistribution","other_cutoffs"],"version":"issue7-ordinary-close-saved-seven-v1","window":{"beyond_formal_trading_dates":[],"end_date":"2026-10-06","start_date":"2026-07-01"}}'
+V1_SHA = "f7659362cd3056413545d48a40a2e89bc97b810dc9c5535a4c8bdca41fcb9968"  # as quoted in that comment
+V1_BYTES = 5173
+
+
 def policy_dict(cutoff=CUT, start=START, end=END, beyond=()):
-    return {
-        "version": POLICY_VERSION, "profile": "free_public_local", "source_use": PURPOSE, "consumer_version": CONSUMER,
-        "market": "TW/TPEx", "instrument_type": "ordinary_stock", "symbols": list(SYMBOLS),
-        "identity_as_of": "2026-10-06", "cutoff": cutoff,
-        "window": {"start_date": start, "end_date": end, "beyond_formal_trading_dates": list(beyond)},
-        "price_source": {
-            "provider": "FinMind", "dataset": "TaiwanStockPrice", "endpoint": ENDPOINT, "method": "GET",
-            "query_order": ["dataset", "data_id", "start_date", "end_date"], "start_date": start, "end_date": end,
-            "fields": {"open": "open", "high": "max", "low": "min", "close": "close", "volume": "Trading_Volume",
-                       "amount": "Trading_money"},
-            "basis": "provider_reported_nominal_ohlcv", "rights": RIGHTS},
-        "trading_date_source": {
-            "provider": "FinMind", "dataset": "TaiwanStockTradingDate", "endpoint": ENDPOINT,
-            "url": f"{ENDPOINT}?dataset=TaiwanStockTradingDate&start_date={start}&end_date={end}", "method": "GET",
-            "format": "JSON", "fields": {"date": "date"},
-            "documentation": "https://finmind.github.io/tutor/TaiwanMarket/Technical/",
-            "expected_scope": "synthetic scope text", "rights": RIGHTS,
-            "prior_calendar_formal_blob": FORMAL_OBJECT, "prior_calendar_formal_sha256": FORMAL_SHA,
-            "prior_verified_counts": {"August": 21, "September": 20, "October_through_6": 4},
-            "version": TRADING_VERSION},
-        "response_shape": {"status": "200 only", "content_type": "application/json", "framing": "length or chunked or close",
-                           "content_encoding": "identity", "duplicate_identity_headers": "reject",
-                           "set_cookie": "ignored", "encoding": "strict UTF-8", "zero_price_rows": "reject"},
-        "unit_policy": {"version": "issue32-composite-six-field-scale1-v1", "unit_mapping_inference": True,
-                        "provider_literal_unit_annotation": False, "OHLC": "TWD/share", "volume": "shares",
-                        "amount": "TWD", "scale": 1, "independent_latest_anchor": "synthetic anchor text",
-                        "all_seven_must_match": True},
-        "storage": {"kind": "private_local_derived_closes", "schema": STORAGE_SCHEMA, "root_env": ROOT_ENV,
-                    "layout": "<policy_version>/<cutoff>/{closes.json,receipt.json}", "raw_body": "not_stored",
-                    "stored_fields": ["date", "close"], "max_closes_bytes": 65536, "max_receipt_bytes": 32768,
-                    "max_bundles": 2, "max_files": 4, "max_total_bytes": 196608},
-        "attribution": ATTRIBUTION, "publication_time": "unknown", "first_availability": "unknown",
-        "revision_time": "unknown", "unsupported": list(UNSUPPORTED),
-        "acquisition": {"namespace": NAMESPACE, "order": "FinMind trading dates then seven prices ascending",
-                        "max_gets": 8, "per_source_max_gets": 1, "body_cap_bytes": 1048576,
-                        "total_raw_cap_bytes": 8388608, "retained_roots_estimate_cap_bytes": 33554432,
-                        "request_seconds": 20, "batch_seconds": 180, "deadline": "cooperative",
-                        "accept_encoding": "identity", "accept": "application/json",
-                        "user_agent": "stock-lab-issue32-local-ram/1", "redirects": 0, "retries": 0,
-                        "stop_on_first_failure": True},
-    }
+    """The published policy with only the window parameters replaced (the identity for the default arguments)."""
+    policy = json.loads(V1_POLICY)
+    policy["cutoff"] = cutoff
+    policy["window"] = {"start_date": start, "end_date": end, "beyond_formal_trading_dates": list(beyond)}
+    policy["price_source"]["start_date"], policy["price_source"]["end_date"] = start, end
+    policy["trading_date_source"]["url"] = f"{ENDPOINT}?dataset=TaiwanStockTradingDate&start_date={start}&end_date={end}"
+    return policy
+
+
+assert len(V1_POLICY) == V1_BYTES and hashlib.sha256(V1_POLICY).hexdigest() == V1_SHA
+assert canonical(policy_dict()) == V1_POLICY
 
 
 def policy_pack(cutoff=CUT, start=START, end=END, beyond=()):
@@ -570,9 +548,8 @@ class Case(unittest.TestCase):
 
 
 class PolicyAndGates(Case):
-    def test_import_is_inert_and_real_pins_are_unset(self):
-        self.assertIsNone(occ.POLICY_SHA256)
-        self.assertIsNone(occ.POLICY_BYTES)
+    def test_import_is_inert_and_the_pins_are_the_published_policy_v1(self):
+        self.assertEqual((occ.POLICY_SHA256, occ.POLICY_BYTES), (V1_SHA, V1_BYTES))
         self.assertEqual((occ.NAMESPACE, occ.POLICY_VERSION, occ.PURPOSE, occ.CONSUMER_VERSION),
                          (NAMESPACE, POLICY_VERSION, PURPOSE, CONSUMER))
         self.assertEqual((occ.STORAGE_SCHEMA, occ.RECEIPT_SCHEMA, occ.ROOT_ENV), (STORAGE_SCHEMA, RECEIPT_SCHEMA, ROOT_ENV))
@@ -582,16 +559,62 @@ class PolicyAndGates(Case):
         self.assertEqual((occ.CLOSES_CAP, occ.RECEIPT_CAP, occ.MAX_BUNDLES, occ.MAX_FILES, occ.MAX_TOTAL_BYTES),
                          (65536, 32768, 2, 4, 196608))
         self.assertEqual(IMPORT_BLOCKED, ())  # the module was imported under the hook: no socket, write or process
-        self.assertFailure("real_pins_unset", occ.validate_policy, *policy_pack()[:1], policy_pack()[1].sha256)
-        self.assertFailure("real_pins_unset", occ.load_saved_closes, "C:\\none", POLICY_VERSION, CUT)
+        # The published policy text validates under the module's own default pins (no pins argument).
+        policy = occ.validate_policy(V1_POLICY, V1_SHA)
+        self.assertEqual(occ._policy_scope(policy), occ.Scope(CUT, START, END, ()))
+        self.assertEqual(len(occ._POLICY_EXPECTED), 61)
+        self.assertFailure("policy_pin", occ.validate_policy, V1_POLICY, "0" * 64)
+        self.assertFailure("policy_canonical_mismatch", occ.validate_policy, V1_POLICY + b" ", V1_SHA)
+        # If the pins were ever unset the module would still fail closed before anything else.
+        for unset in (dict(POLICY_SHA256=None), dict(POLICY_BYTES=None), dict(POLICY_SHA256=None, POLICY_BYTES=None)):
+            with patch.multiple(occ, **unset):
+                self.assertFailure("real_pins_unset", occ.validate_policy, V1_POLICY, V1_SHA)
+                self.assertFailure("real_pins_unset", occ.load_saved_closes, "C:\\none", POLICY_VERSION, CUT)
+                self.assertFailure("real_pins_unset", occ.CloseSource, policy_canonical=V1_POLICY, policy_sha256=V1_SHA,
+                                   formal_blob=FORMAL)
 
-    def test_default_path_fails_closed_without_published_pins_before_anything(self):
+    def test_default_path_is_bound_to_policy_v1_and_still_refuses_without_a_valid_seal(self):
         blob, pins = policy_pack()
-        self.assertFailure("real_pins_unset", occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
+        self.assertEqual((blob, pins), (V1_POLICY, occ.Pins(V1_SHA, V1_BYTES)))
+        # No seal at all: the real path stops at the financial-start gate, before any transport exists.
+        self.assertFailure("financial_start_required", occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
                            formal_blob=FORMAL)
+        self.assertFailure("financial_start_required", occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
+                           formal_blob=FORMAL, transport=base._HTTPSTransport())
         # Caller pins can never reach the default HTTPS path.
         self.assertFailure("pins_with_default_transport", occ.CloseSource, policy_canonical=blob,
                            policy_sha256=pins.sha256, formal_blob=FORMAL, pins=pins)
+        # Any other policy, even a well-formed one for another cutoff, is not the published one.
+        other_blob, other_pins = policy_pack(cutoff="2026-10-05")
+        self.assertFailure("policy_pin", occ.CloseSource, policy_canonical=other_blob, policy_sha256=other_pins.sha256,
+                           formal_blob=FORMAL)
+        self.assertFailure("policy_pin", occ.CloseSource, policy_canonical=blob, policy_sha256="0" * 64, formal_blob=FORMAL)
+        # Typed but invalid or unauthorized seals are refused by the real constructor, gate by gate.
+        start, binding = declaration()
+        in_roles = replace(binding, holder_thread_id=SEAL_ISSUER, holder_session_id=SEAL_ISSUER)
+        weak = replace(binding, reasoning_effort="ultra")
+        floor_url = f"https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-{SEAL_FLOOR}"
+        gates = [
+            ("not_authorized", replace(start, authorized=False), binding, "financial_start_not_authorized"),
+            ("not_whole_batch", replace(start, whole_batch=False), binding, "financial_start_not_authorized"),
+            ("seal_at_floor", replace(start, seal_comment_url=floor_url), binding, "financial_new_explicit_seal_required"),
+            ("seal_before_policy", replace(start, seal_comment_url=floor_url.replace(str(SEAL_FLOOR), "6124203633")), binding,
+             "financial_new_explicit_seal_required"),
+            ("seal_for_issue32", replace(start, seal_comment_url="https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-9999999999"),
+             binding, "financial_new_explicit_seal_required"),
+            ("namespace", replace(start, namespace=NAMESPACE + "x"), binding, "financial_start_scope"),
+            ("seal_policy_pin", replace(start, policy_sha256="0" * 64), binding, "financial_start_scope"),
+            ("issue32_seal_version", replace(start, version="issue32-financial-start-v1"), binding, "financial_start_scope"),
+            ("runtime_differs_from_seal", start, replace(binding, candidate_sha="d" * 40), "financial_binding_mismatch"),
+            ("qa_is_a_seal_role", replace(start, binding=in_roles), in_roles, "financial_qa_identity"),
+            ("qa_effort", replace(start, binding=weak), weak, "financial_qa_identity"),
+        ]
+        for label, seal, runtime, code in gates:
+            with self.subTest(gate=label):
+                self.assertFailure(code, occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
+                                   formal_blob=FORMAL, financial_start=seal, execution_binding=runtime)
+        # The synthetic declarations are never accepted together with a boundary transport.
+        self.assertFailure("financial_start_with_boundary_transport", build, financial_start=start, execution_binding=binding)
         self.assertFailure("boundary_pins_required", occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
                            formal_blob=FORMAL, transport=Transport([]), ledger=occ.AttemptLedger(NAMESPACE))
         for bad in (object(), (pins.sha256, pins.nbytes), "pins"):
@@ -600,18 +623,6 @@ class PolicyAndGates(Case):
         for bad in (occ.Pins("x", 1), occ.Pins("0" * 64, 0), occ.Pins("0" * 64, True), occ.Pins("A" * 64, 5)):
             self.assertFailure("pins_type", occ.CloseSource, policy_canonical=blob, policy_sha256=pins.sha256,
                                formal_blob=FORMAL, pins=bad, transport=Transport([]), ledger=occ.AttemptLedger(NAMESPACE))
-        # Once pins are published (simulated), the default path still demands a typed seal before any transport.
-        with patch.object(occ, "POLICY_SHA256", pins.sha256), patch.object(occ, "POLICY_BYTES", pins.nbytes):
-            self.assertFailure("financial_start_required", occ.CloseSource, policy_canonical=blob,
-                               policy_sha256=pins.sha256, formal_blob=FORMAL)
-            self.assertFailure("pins_with_default_transport", occ.CloseSource, policy_canonical=blob,
-                               policy_sha256=pins.sha256, formal_blob=FORMAL, pins=pins)
-            self.assertFailure("financial_start_required", occ.CloseSource, policy_canonical=blob,
-                               policy_sha256=pins.sha256, formal_blob=FORMAL, transport=base._HTTPSTransport())
-            self.assertFailure("policy_pin", occ.CloseSource, policy_canonical=blob, policy_sha256="0" * 64,
-                               formal_blob=FORMAL)
-        start, binding = declaration()
-        self.assertFailure("financial_start_with_boundary_transport", build, financial_start=start, execution_binding=binding)
 
     def test_policy_shape_every_recursive_key_and_type(self):
         blob, pins = policy_pack()
@@ -848,6 +859,51 @@ class PolicyAndGates(Case):
 
 
 
+class PublishedPolicy(Case):
+    """The published policy v1, its pins and a full synthetic run under the module's own default pins."""
+
+    def test_literal_is_the_published_policy_and_states_what_the_module_implements(self):
+        self.assertEqual((len(V1_POLICY), hashlib.sha256(V1_POLICY).hexdigest()), (5173, V1_SHA))
+        self.assertFalse(V1_POLICY.endswith(chr(10).encode()))
+        document = json.loads(V1_POLICY)
+        self.assertEqual(canonical(document), V1_POLICY)
+        self.assertEqual((document["version"], document["acquisition"]["namespace"], document["source_use"],
+                          document["consumer_version"]), (POLICY_VERSION, NAMESPACE, PURPOSE, CONSUMER))
+        self.assertEqual((document["cutoff"], document["window"]), (CUT, {"start_date": START, "end_date": END,
+                                                                         "beyond_formal_trading_dates": []}))
+        self.assertEqual(document["trading_date_source"]["url"], trading_url())
+        self.assertEqual(document["price_source"]["endpoint"], ENDPOINT)
+        self.assertEqual((document["acquisition"]["user_agent"], document["acquisition"]["accept"],
+                          document["acquisition"]["max_gets"], document["acquisition"]["redirects"],
+                          document["acquisition"]["retries"]), ("stock-lab-issue32-local-ram/1", "application/json", 8, 0, 0))
+        self.assertEqual((document["price_source"]["rights"], document["trading_date_source"]["rights"], document["attribution"]),
+                         (RIGHTS, RIGHTS, ATTRIBUTION))
+        self.assertEqual(document["unsupported"], UNSUPPORTED)
+        self.assertEqual(document["storage"]["stored_fields"], ["date", "close"])
+        self.assertEqual(document["storage"]["raw_body"], "not_stored")
+        self.assertEqual((occ.POLICY_SHA256, occ.POLICY_BYTES, occ.SEAL_COMMENT_FLOOR), (V1_SHA, V1_BYTES, SEAL_FLOOR))
+        self.assertGreater(SEAL_FLOOR, 6124203633)
+
+    def test_full_synthetic_run_under_the_published_policy_uses_only_the_modules_own_pins(self):
+        source, transport, _ = available()
+        self.addCleanup(source.release)
+        self.assertEqual(source._pins, occ.Pins(occ.POLICY_SHA256, occ.POLICY_BYTES))
+        root = self.new_root()
+        result = source.save(environment={ROOT_ENV: root})
+        loaded = occ.load_saved_closes(root, POLICY_VERSION, CUT)  # no pins argument
+        self.assertEqual(loaded.closes_sha256, result.closes_sha256)
+        self.assertEqual(dict(loaded.receipt["source_policy"]), {"version": POLICY_VERSION, "sha256": V1_SHA, "bytes": V1_BYTES})
+        self.assertEqual({entry["policy_sha256"] for entry in loaded.receipt["gets"]}, {V1_SHA})
+        self.assertEqual(loaded.receipt["namespace"], NAMESPACE)
+        self.assertEqual(len(transport.opens), 8)
+        # A bundle made under any other policy text is not readable with the module's pins.
+        other, _, _ = available(cutoff="2026-10-05")
+        self.addCleanup(other.release)
+        other_root = self.new_root()
+        other.save(environment={ROOT_ENV: other_root})
+        self.assertFailure("saved_pin_or_scope", occ.load_saved_closes, other_root, POLICY_VERSION, "2026-10-05")
+
+
 class Calendar(Case):
     def test_trading_date_document_gate_stops_before_any_price_get(self):
         all_dates = DATES
@@ -987,6 +1043,75 @@ class Calendar(Case):
         self.assertEqual(source.state, "pending")
         source.release()
         self.assertEqual(base_document["status"], 200)
+
+    def test_parameterized_calendar_gate_is_equivalent_to_issue32_on_its_original_window(self):
+        """E1: replay issue 32's own window (2026-07-01..2026-10-06, cutoffs 10/05 and 10/06) through both gates."""
+        rank = {"trading_dates_weekday": 1, "trading_dates_cutoff": 2, "trading_dates_window_insufficient": 3,
+                "trading_dates_formal_mismatch": 4}
+        prior = base._formal_reference(FORMAL)[0]
+        self.assertEqual(prior, PRIOR)
+
+        def original(document):
+            try:
+                dates = base._trading_dates(document)
+                base._check_trading_dates(dates, prior)
+            except base.SourceError as error:
+                return "fail", error.code
+            return "ok", dates
+
+        def parameterized(document):
+            try:
+                dates = occ._trading_dates(document, occ.Scope(CUT, START, END, ()))
+            except occ.SourceError as error:
+                return "fail", error.code
+            failures = []
+            for cutoff in ("2026-10-05", "2026-10-06"):
+                try:
+                    occ._check_calendar(dates, occ.Scope(cutoff, START, END, ()), prior)
+                except occ.SourceError as error:
+                    failures.append(error.code)
+            # Issue 32 judges both cutoffs in one pass, so its code is the earliest-stage failure of either cutoff.
+            return ("fail", min(failures, key=rank.__getitem__)) if failures else ("ok", dates)
+
+        def doc(dates, extra=()):
+            return {"msg": "success", "status": 200, "data": [{"date": day} for day in dates] + list(extra)}
+
+        documents = [("base", doc(DATES))]
+        for day in PRIOR:
+            documents.append(("missing_" + day, doc([d for d in DATES if d != day])))
+        for day in ("2026-09-25", "2026-09-28", "2026-07-04", "2026-07-11", "2026-08-01", "2026-10-03", "2026-09-26", "2026-07-10"):
+            documents.append(("added_" + day, doc(sorted(set(DATES) | {day}))))
+        for removed in (("2026-10-05",), ("2026-10-06",), ("2026-10-02",), ("2026-10-05", "2026-10-06"), ("2026-07-13",)):
+            documents.append(("removed_" + "_".join(removed), doc([d for d in DATES if d not in removed])))
+        for count in range(0, 24):
+            documents.append((f"july_head_{count}", doc(JULY[:count] + PRIOR)))
+            documents.append((f"july_tail_{count}", doc((JULY[-count:] if count else ()) + PRIOR)))
+        documents += [
+            ("outside_rows_discarded", doc(("2005-01-03",) + DATES + ("2026-10-07", "2026-10-08", "2027-01-04"))),
+            ("only_outside_rows", doc(("2005-01-03", "2005-01-04"))),
+            ("status_402", {**doc(DATES), "status": 402}), ("msg_ok", {**doc(DATES), "msg": "ok"}),
+            ("data_empty", {**doc(DATES), "data": []}), ("data_object", {**doc(DATES), "data": {}}),
+            ("extra_top_key", {**doc(DATES), "extra": 1}), ("missing_top_key", {"status": 200, "data": []}),
+            ("row_extra_key", doc(DATES[:3], extra=[{"date": "2026-07-06", "x": 1}])),
+            ("row_not_dict", {**doc(DATES), "data": ["2026-07-01"] + doc(DATES)["data"]}),
+            ("bad_date_outside", doc(("2005-01-03",) + DATES, extra=[{"date": "2026-10-32"}])),
+            ("unsorted", doc(("2026-07-02", "2026-07-01") + DATES[2:])),
+            ("duplicate", doc(DATES[:5] + DATES[4:])),
+            ("unsorted_outside", doc(("2005-01-04", "2005-01-03") + DATES)),
+        ]
+        outcomes = {}
+        for name, document in documents:
+            with self.subTest(document=name):
+                self.assertEqual(parameterized(copy.deepcopy(document)), original(copy.deepcopy(document)))
+            outcomes[name] = original(copy.deepcopy(document))
+        codes = {code for kind, code in outcomes.values() if kind == "fail"}
+        self.assertTrue({"trading_dates_weekday", "trading_dates_cutoff", "trading_dates_window_insufficient",
+                         "trading_dates_formal_mismatch", "trading_dates_order", "trading_dates_status",
+                         "trading_dates_document", "trading_dates_rows", "trading_dates_row", "trading_dates_date"} <= codes, codes)
+        passing = [name for name, (kind, _) in outcomes.items() if kind == "ok"]
+        self.assertIn("base", passing)
+        self.assertIn("outside_rows_discarded", passing)
+        self.assertGreaterEqual(len(documents), 120)
 
 
 class Prices(Case):
@@ -1973,7 +2098,12 @@ class Reader(Case):
         for label, pins in (("sha", wrong_sha), ("bytes", wrong_len)):
             with self.subTest(pins=label):
                 self.assertFailure("saved_pin_or_scope", self.load, root, pins=pins)
-        self.assertFailure("real_pins_unset", occ.load_saved_closes, root, POLICY_VERSION, CUT)
+        loaded = occ.load_saved_closes(root, POLICY_VERSION, CUT)  # no pins argument: the module's published pins
+        self.assertEqual(loaded.closes_sha256, hashlib.sha256(self.closes_bytes).hexdigest())
+        with patch.object(occ, "POLICY_SHA256", None):
+            self.assertFailure("real_pins_unset", occ.load_saved_closes, root, POLICY_VERSION, CUT)
+        with patch.object(occ, "POLICY_BYTES", V1_BYTES + 1):
+            self.assertFailure("saved_pin_or_scope", occ.load_saved_closes, root, POLICY_VERSION, CUT)
         self.assertFailure("pins_type", occ.load_saved_closes, root, POLICY_VERSION, CUT, pins=(self.pins.sha256, 1))
         for version, code in (("issue7-other", "saved_policy_version"), ("Bad_Version", "saved_scope"), ("../x", "saved_scope"),
                               ("", "saved_scope"), (None, "saved_scope"), (POLICY_VERSION + "/", "saved_scope"), ("a" * 65, "saved_scope")):
@@ -2091,9 +2221,10 @@ class CrossProcess(Case):
         self.assertEqual(reread["w21"], [[c.date, c.text] for c in parent.window("8069", 21)])
         self.assertEqual(reread["n"], {symbol: 60 for symbol in SYMBOLS})
         self.assertEqual(self.tree(root), before)  # the reader process wrote nothing
-        # Without published pins the reader refuses to trust anything.
-        code, out, _ = self.child(root, POLICY_VERSION, CUT, None)
-        self.assertEqual((code, json.loads(out)), (3, {"error": "real_pins_unset"}))
+        # No pins argument: a fresh process uses the module's own published pins and verifies the same bundle.
+        code, out, err = self.child(root, POLICY_VERSION, CUT, None)
+        self.assertEqual((code, err), (0, ""), err)
+        self.assertEqual(json.loads(out), reread)
         # A different cutoff is a different, absent bundle: never a fallback.
         code, out, _ = self.child(root, POLICY_VERSION, "2026-10-05", pins)
         self.assertEqual((code, json.loads(out)), (3, {"error": "saved_missing"}))

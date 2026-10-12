@@ -1528,7 +1528,7 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 
 ## （暫定節號）#7：七股普通收盤與交易日曆的日期／時區語意契約
 
-2026-10-12。#7 的七股普通股收盤與交易日曆沿用 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 已整合的 FinMind `TaiwanStockTradingDate`／`TaiwanStockPrice` 取得路徑（policy v3、產品 `backend/app/ohlcv_history_source.py`）。本節只登錄這兩個 dataset 的 `date` 與 receipt 時間的日期／時區語意；不改寫 §49 的 policy、pins、capture 或 default，不新增來源、授權或用途，也不含任何取回的價格列、原始 body 或衍生數值。缺口與裁定見 [#7 QA 留言 6123856560](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6123856560)（AC-1 缺口 1）與[全局裁定 6124105434](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6124105434)（D1、D5、D6）。
+2026-10-12。#7 以 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 已整合的 FinMind `TaiwanStockTradingDate`／`TaiwanStockPrice` 取得與驗證路徑為基礎，取得七股截至 2026-10-06 的普通股收盤，只把 60 個交易日的正規化收盤保存為私人本地衍生值，供讀回使用。產品 `backend/app/ordinary_close_source.py`（沿用但不改 `backend/app/ohlcv_history_source.py`），測試 `backend/tests/test_ordinary_close_source.py`。本節登錄日期／時區語意、取得與 policy pin、私人保存與讀回契約；不改寫 §49 的 policy、pins、capture 或 default，也不含任何取回的價格列、原始 body 或衍生數值。缺口與裁定見 [#7 QA 留言 6123856560](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6123856560)（AC-1 缺口 1）、[全局裁定 6124105434](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6124105434)（D1、D5、D6）與 [policy v1 裁定 6125706492](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6125706492)（E1～E5、P1～P3）。
 
 ### 日期欄位
 
@@ -1545,12 +1545,52 @@ receipt 的請求時間與觀測時間是 aware UTC（`Z` 結尾，例如 [§49.
 - **收據**：以上是 #32 qa2 的收據（[留言 6115359522](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115359522)，原始輸出 [留言 6115344851](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6115344851)）；價格值已隨 release 清除，本節不重現。
 - **性質**：這是對齊證據，不是 provider 的逐字聲明；policy v3 沒有時區欄位。語意由上列證據支持，證據範圍之外不外推。
 
+### 取得與 policy pin
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue7-ordinary-close-saved-seven-v1`；canonical 5,173 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `f7659362cd3056413545d48a40a2e89bc97b810dc9c5535a4c8bdca41fcb9968`。由全局發布並貼於 [#7 留言 6125706492](https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-6125706492)，policy 全文不在 repo；產品常數 `POLICY_SHA256`、`POLICY_BYTES` 只存 pin，產品不能由被測 policy 自建 expected |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_private_derived_close_window`；consumer `ordinary-close-saved-window-v1`；market TW/TPEx、ordinary stock、identity_as_of 2026-10-06 |
+| 標的與日期 | 七股同 [§49.1](#491-版本外部-pins-與上限)；**一份 policy 只對應一個 cutoff：2026-10-06**；窗口 2026-07-01～2026-10-06；`beyond_formal_trading_dates` 固定為空；其他 cutoff 列為 `other_cutoffs`，不支援 |
+| 請求與傳輸 | 固定 8 個 GET（交易日 1、七股價格依代號升序 7）；host、endpoint、query 順序、請求標頭（含 `User-Agent: stock-lab-issue32-local-ram/1`）、framing、上限與首敗即停都沿用 [§49.1](#491-版本外部-pins-與上限)、[§49.3](#493-原件驗證與-last60summary-計算)。與 policy v3 的 `acquisition.*`、`response_shape.*` 逐葉比對只差 `acquisition.namespace`（全局核對，見上列留言） |
+| 交易日曆 | 參數化版本的 [§49.3](#493-原件驗證與-last60summary-計算) gate：日期須為平日、含 cutoff、cutoff（含）以前至少 60 個交易日、8～10 月與 formal 45 日完全相同、七股日期集合各自等於交易日集合、cutoff 之後無日期；錯誤碼沿用 #32 |
+| 一次性額度 | namespace `issue7-ordinary-close-saved-seven-v1/qa1`；整批只一次，attempted 即 SPENT，程序內 ledger 無 reset 或 retry。成功後仍是 pending，須獨立 oracle admission 才 available（admission 綁 8 份 receipt SHA-256、`closes_sha256` 與 QA holder／candidate／script）；租約不超過批次期限，release 後拒用 |
+| seal | 真實路徑另須 `FinancialStart` 與 `ExecutionBinding`（holder effort `xhigh`，且不在 seal 角色內）；seal 須是 #7 的新明示留言，編號大於 policy 發布留言 6125706492（`SEAL_COMMENT_FLOOR`，是門檻不是授權）。pin 或 seal 任一不符，在任何 GET 之前拒絕 |
+
+### 私人保存
+
+保存的是衍生值，不是原件：每股 60 個交易日（含 cutoff）的正規化收盤與日期，加一份 receipt。不保存 raw body，也不保存開、高、低、量、額。只寫檔案、不寫資料庫；`save` 之外沒有寫入。
+
+| 項目 | 契約 |
+| --- | --- |
+| root | 環境變數 `STOCK_ORDINARY_CLOSE_PRIVATE_ROOT` 是唯一來源；未設、非絕對路徑或含 `..` 都不寫（`root_unset`、`root_invalid`）。root 由核定的私人本地路徑提供，不在 repo 內 |
+| 版面 | `<policy_version>/<cutoff>/{closes.json,receipt.json}`；storage schema `ordinary-close-saved/v1`、receipt schema `ordinary-close-receipt/v1`；兩檔皆 canonical UTF-8 JSON（sorted keys、compact） |
+| `closes.json` | `schema`、`cutoff`、`count`（60）、七股 `symbols`、60 個 `trading_dates`（唯一遞增平日、末日＝cutoff）、`counts`、每股 60 列 `[date, close]`。close 是正的十進位字串：無指數、無尾隨 0、≤ 6 位小數、整數 ≤ 13 位，超過整批拒（`close_representation`）。20／21 日窗口取這 60 列的尾端 |
+| `receipt.json` | 8 個 GET 各自的 URL、status、content-type／content-encoding、請求與觀測時間（UTC）、body SHA-256 與 bytes、receipt SHA-256；policy 版本／SHA-256／bytes；`ordinary_close_source.py` 與 `ohlcv_history_source.py` 的 SHA-256；`closes.json` 的 SHA-256 與 bytes；attribution、rights、limitations；`saved_at`（UTC）；`publication_time`、`first_availability`、`revision_time` 固定 `unknown` |
+| 上限 | `closes.json` ≤ 65,536 B（64 KiB）、`receipt.json` ≤ 32,768 B（32 KiB）；root 內 ≤ 2 個 bundle、≤ 4 個檔案、合計 ≤ 196,608 B（192 KiB）。超過即拒（`quota_bundles`、`quota_files`、`quota_bytes`）；root 內有任何外來或半成品項目也拒（`root_entries_invalid`） |
+| 出版 | 先寫 root 下的暫存目錄（`.staging-<隨機>`，每檔 `O_EXCL` 並 fsync），再以 rename 原子換成 `<policy_version>/<cutoff>`，不覆寫既有 bundle。已存在且 `closes.json` 位元組與去除 `saved_at` 的 receipt 都相同回 `idempotent`，不同則 `final_conflict`。出版後以讀取端的同一份程式回讀並逐位元組比對；失敗時回收暫存與本次建立的目錄 |
+
+### 讀回與驗證
+
+`load_saved_closes(root, policy_version, cutoff, *, pins=None)` 唯讀、不取源，也不 fallback 到其他版本或截止（缺 bundle 回 `saved_missing`）；`pins` 預設為產品常數。每次讀取都由讀取端完整重驗，不信任寫入端，新程序讀回亦同：
+
+- **路徑**：root、版本目錄、bundle 目錄須是真目錄，不得是 symlink 或 reparse point；bundle 內恰有兩個檔，各自不超過上限。
+- **內容**：schema 與固定欄位、policy 版本與 pin（SHA-256、bytes）、cutoff 一致；60 個交易日唯一遞增、平日、末日＝cutoff；七股日期集合相同；每個 close 都是正規化正值。
+- **receipt**：8 個 GET 的 URL、status 200、完整 EOF、content-type／content-encoding、時間順序與各自的 receipt SHA-256 重算相符；`closes.json` 的 SHA-256 與 bytes 和 receipt 引用一致。
+
+任一不符整體拒絕，不修補、不補值。回傳 `SavedCloses`（含兩檔 SHA-256）；`window(symbol, count)` 取尾端 `count`（1～60）列，20 與 21 日窗口由此取得。
+
 ### 範圍與限制
 
 - 逐日對齊只涵蓋 8～10 月的 formal 45 日。7 月沒有獨立於 FinMind 的第二來源，2026-07-10 缺日沒有原因證據（[§49.7](#497-未驗與限制)）。
 - 身分與單位只錨定 2026-10-06（全局裁定 D5）；其他日期沒有逐日核對，policy 的 `unsupported` 不因本節放寬。
 - 條款頁未固定版本或雜湊，接受 [§49.2](#492-用途授權與署名) 的免費使用推論風險（全局裁定 D6，與 FinMind 為主一致）。
+- 保存的是 FinMind provider-reported nominal 收盤；調整價、公司行動、停牌可比性、PIT 與 revision 保證不支援（policy `unsupported`），其他 cutoff 與 raw body 保存、再散布也不支援。
+- close 超過 6 位小數或整數 13 位的上限時整批拒（全局裁定 E4，列為已知風險）。
+- policy 的 `rights`、`attribution` 字串是否充分屬使用者決策，須在 seal 詢問時一併確認；使用者要求改字即重發 policy、重算 pin、重驗受影響項（全局裁定 P1）。
 
-### 不含
+### 版本邊界與狀態
 
-本節是契約登錄，不宣稱解除 #8 或 #20 的依賴；依賴是否解除由全局依整合版本判定。Adapter 介面、衍生值保存格式與版本識別不在本節，隨對應實作版本整合時另寫入本文。
+- 2026-10-12 時真實取得尚未執行、seal 未核發；本節不含任何取回的價格列、原始 body 或衍生數值，也沒有真實保存的 bundle。真實取得的收據與結果於執行後另寫入本節。
+- 本節是契約登錄，不宣稱解除 #8 或 #20 的依賴；依賴是否解除由全局依整合版本判定。
+- 本節描述 adapter 與保存契約；其後程式、policy 或驗收語意變動須重驗並更新本節。

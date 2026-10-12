@@ -15,12 +15,12 @@ canonical closes file) makes ``save`` possible. Disk access exists only in ``sav
 nothing is written) and in the read-only ``load_saved_closes`` (never fetches, never
 falls back to another version).
 
-The default HTTPS path stays closed until the externally issued policy pins
-(``POLICY_SHA256`` / ``POLICY_BYTES``) are published: with the pins unset it fails
-closed before any seal check, so only synthetic boundary transports run today. Once
-set it still requires a FinancialStart and a matching ExecutionBinding from a fresh
-explicit issue 7 seal exactly like issue 32, plus the one-shot in-process ledger,
-body/aggregate/roots caps, cooperative deadlines and the lease.
+The default HTTPS path is bound to the externally published canonical policy v1
+(``POLICY_SHA256`` / ``POLICY_BYTES``; with the pins unset it would fail closed with
+``real_pins_unset`` before any seal check). It still requires a FinancialStart and a
+matching ExecutionBinding from a fresh explicit issue 7 seal exactly like issue 32,
+plus the one-shot in-process ledger, body/aggregate/roots caps, cooperative deadlines
+and the lease; publishing the pins is not an authorization to fetch.
 
 Stored per bundle (``<policy_version>/<cutoff>/``): ``closes.json`` holds the
 normalized cutoff-inclusive 60-day closes (decimal strings), their dates and counts;
@@ -72,13 +72,13 @@ ENDPOINT = "https://api.finmindtrade.com/api/v4/data"
 TRADING_DATE_URL = ENDPOINT + "?dataset=TaiwanStockTradingDate&start_date={start}&end_date={end}"
 PRICE_URL = ENDPOINT + "?dataset=TaiwanStockPrice&data_id={symbol}&start_date={start}&end_date={end}"
 
-# Externally issued policy pin, not yet published: the default HTTPS path fails
-# closed (real_pins_unset) until the global publishes the canonical policy.
-POLICY_SHA256 = None
-POLICY_BYTES = None
-# A seal must be a fresh explicit issue 7 comment newer than this one (the stage 1
-# dispatch comment). It is a floor, not an authorization.
-SEAL_COMMENT_FLOOR = 6124203633
+# Externally published pin of the canonical policy v1 (5,173 bytes, sorted keys, compact,
+# no trailing LF): issue 7 comment 6125706492. The policy text itself is not bundled here.
+POLICY_SHA256 = "f7659362cd3056413545d48a40a2e89bc97b810dc9c5535a4c8bdca41fcb9968"
+POLICY_BYTES = 5173
+# A seal must be a fresh explicit issue 7 comment newer than the policy publication
+# comment above. It is a floor, not an authorization.
+SEAL_COMMENT_FLOOR = 6125706492
 SEAL_VERSION = "issue7-financial-start-v1"
 SEAL_URL_PATTERN = r"https://github.com/YiCheng0608/stock-lab/issues/7#issuecomment-([0-9]+)"
 
