@@ -43,6 +43,7 @@ verification. The real response shape was observed once in the qa3 batch on
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import http.client
 import json
@@ -316,7 +317,7 @@ def _scrub_exception(exc: BaseException) -> None:
         for linked in (current.__cause__, current.__context__):
             if linked is not None:
                 stack.append(linked)
-        if isinstance(current, BaseExceptionGroup):
+        if isinstance(current, builtins.BaseExceptionGroup):
             stack.extend(current.exceptions)
         if current.__traceback__ is not None:
             traceback.clear_frames(current.__traceback__)
