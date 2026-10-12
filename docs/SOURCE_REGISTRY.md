@@ -1525,3 +1525,114 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 - **未在真實來源驗到**：租約 expiry 在真實 run 沒有觸發，只有合成 RAM 證據（測試的 `expired` 狀態與準備包的 expiry 變體演練）；qa1 的真實失敗路徑證明的是 failed 後拒用，不是 expiry；chunked、close-delimited、quoted charset、非身分標頭重複與 `set-cookie` 只有 RAM 重放證據，真實 8 份回應都是 Content-Length framing；401、402、403 與零價列的真實路徑未觸發。
 - **防護性質**：閘門與 audit hook 是進程內協作式防護，不是沙箱，僅 Windows；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
 - **版本與依賴**：本節描述 candidate `8c7b5ab` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。qa1 與 qa2 的 SPENT／NO-RETRY 登錄於 #1（qa2：[#1 留言 6115370965](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6115370965)）。本節不宣稱解除母單 #20 或 #7 的依賴，合併後由全局依整合版本判定。
+
+## #33 qa2：TAIEX 名目指數兩截止 21 觀測 return（issue33-taiex-nominal-observation-cutoffs-1005-1006-v1）（節號整合時分配）
+
+2026-10-12。#33 以 FinMind 公開 API v4 `TaiwanStockPrice`（`data_id=TAIEX`）取得 2026-09-03～2026-10-06 的 provider-reported 名目指數日線，供 2026-10-05、2026-10-06 兩個截止日各取「截止日（含）向前 21 個觀測日」的 `get_taiex_nominal21` getter，以及 `taiex-nominal-price-index-window-summary-v1` snapshot consumer（20 個間隔的名目指數 return，精確有理數）。產品 `backend/app/taiex_price_index_source.py`，測試 `backend/tests/test_taiex_price_index_source.py`。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default；觀測日集合由 [§31.2](#312-24日完整觀測日曆與20日金融集合)的已驗交易日導出，不由 FinMind 回傳推導。取得過程與 QA 收據保存在 [#33](https://github.com/YiCheng0608/stock-lab/issues/33)，下列為摘要並附留言編號。
+
+本單有兩個來源方案：AC 修訂 1 為 TWSE `MI_5MINS_HIST` 政府 CSV 加 FinMind 的兩來源，其 namespace qa1 已 SPENT；AC 修訂 2 依使用者決策只用 FinMind，取代修訂 1 的對應項，使用新 namespace qa2。產品與本節契約只對應 AC 修訂 2。本節不含任何取回的價格列、原始 body 或 close 值（它們只在 RAM，已隨 qa2 的 release 清除），只記錄兩個 return 的最簡分數。
+
+### 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue33-taiex-nominal-observed-window-finmind-v2`，schema `issue33-taiex-nominal-observed-window-policy/v2`；canonical 5,038 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `04be101a61b6eba5ae6ba5773c24314718765c37ae7c67eacfd8813efb64d9dc`。由全局發布並貼於 [#33 留言 6124388789](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6124388789)（草案 [留言 6123915229](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6123915229)），產品不能由被測 policy 自建 expected。產品只接受 v2 與 qa2 namespace；qa1 時期的 policy（4,096 B，SHA-256 `4b1f44b0e77950bcd12896f5e54f99c6262365fcf4965b4938420edb58e54eca`）與 qa1 namespace 的值都被拒絕 |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_process_ram_nominal_observation_snapshot`；market TW/TWSE、instrument_type `price_index`、symbol `TAIEX`、identity_as_of 2026-10-06；storage `process_RAM`；consumer `taiex-nominal-price-index-window-summary-v1`；輸出 `price_basis` 為 `nominal_index_level`、`calendar_basis` 為 `cross_market_candidate_inference` |
+| 來源 | FinMind，dataset `TaiwanStockPrice`，`data_id=TAIEX`；欄位 open→`open`、high→`max`、low→`min`、close→`close`；已知不採用欄 `Trading_Volume`、`Trading_money`、`Trading_turnover`、`spread` |
+| 日期與截止 | 請求區間 2026-09-03～2026-10-06；cutoff 2026-10-05、2026-10-06 |
+| 請求 | 固定 1 個 GET，host 只有 `api.finmindtrade.com`：`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=TAIEX&start_date=2026-09-03&end_date=2026-10-06`（query 依序 dataset、data_id、start_date、end_date）。不換 dataset、`data_id`（如 `^TWII`）、日期、路由或 namespace 再試 |
+| 請求標頭 | 明設四個：`Accept-Encoding: identity`、`Connection: close`、`User-Agent: stock-lab-issue33-local-ram/1`、`Accept: application/json`；另有 `http.client` 依 URL 自動加的 `Host`；不帶 token、cookie、proxy |
+| 上限 | body 1 MiB（1,048,576 B）、aggregate raw 1 MiB、retained-roots estimate 32 MiB（33,554,432 B；estimate 不是 RSS 或 peak）；該 URL 20 s、整批 180 s（cooperative）；`max_gets` 1、redirect 0、retry 0、`artifact_bytes` 0；首敗即停且 attempted 即 SPENT；只在 RAM |
+| 固定 formal 參照 | 觀測日集合由固定 blob `d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md`（268,729 B；SHA-256 `b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde`）的 §31.2 解析。呼叫者必須提供該 blob，位元組、長度或 SHA-256 不符即 `formal_blob_pin` 拒絕，發生在 GET 之前，不花用額度。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
+
+### 用途、授權與署名
+
+用途只限免費公開、本地個人非商用研究與 RAM 取得／驗證／consumer。Policy 的 `unsupported` 共 19 項：`historical_pit`、`publication_time`、`first_availability`、`revision_history`、`verified_twse_calendar`、`canonical_20_trading_day_benchmark`、`adjusted_basis`、`total_return`、`independent_unit_anchor`、`hot_group_v1`、`canonical_regime`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`、`raw_disk_storage`、`redistribution`、`mirror`、`other_cutoffs`。不落盤、不發布 raw、不鏡像。權利字串（policy `rights`，逐字，與 [§49.2](#492-用途授權與署名)相同）：`FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror`，隨 policy SHA-256 被 seal 綁定。Policy 沒有固定完整署名文字，也沒有引用 FinMind 條款全文或條款版本；產品 provenance 的來源欄載明 `FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)`，並帶出 `rights` 與 `data_id_evidence`。
+
+免費使用與 `data_id=TAIEX` 都是推論，不是 FinMind 的明示陳述。免費使用的依據同 [§49.2](#492-用途授權與署名)（FinMind 文件把 `token` 列為選填，文件讀取收據 [#32 留言 6111856880](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111856880)；policy 引用 `https://finmind.github.io/tutor/TaiwanMarket/Technical/`），Policy 因此規定 401、402、403 或任何要求付費、登入的回應是首敗。`data_id=TAIEX` 的證據是 maintainer legacy 名稱與目前 daily v4 路由的推論（[#21 留言 6085505949](https://github.com/YiCheng0608/stock-lab/issues/21#issuecomment-6085505949)），實際是否被接受只由 qa2 的唯一 GET 證明。
+
+使用者決策鏈：[#1 留言 6123465763](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6123465763)（本單改「只用 FinMind」：拿掉 TWSE `MI_5MINS_HIST` CSV，跨來源互核改為 FinMind 內部一致性並列限制，新 namespace qa2、最多 1 GET）、派工收據 [#33 留言 6123630685](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6123630685)、AC 修訂 2 [#33 留言 6123688628](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6123688628)（原文保留修訂 1 作歷史）、[#1 留言 6124376043](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6124376043)（使用者同意 qa2 的 1 GET，並接受三項已知風險：`data_id=TAIEX` 推論、免 token 推論、點數尺度無第二來源；#53 不綁本單，維持 RAM-only）。qa1、qa2 各是獨立的一次額度，qa2 是新授權，不是恢復 qa1。授權本身不是 seal，每次 real run 另須全局核發 fresh financial-start seal，並由獨立 QA 執行一次；qa2 的 seal 發給前，全局已先審 QA 準備包（[留言 6125205033](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125205033)）與 policy。
+
+| 項目 | qa1 | qa2 |
+| --- | --- | --- |
+| namespace | `issue33-taiex-nominal-observation-cutoffs-1005-1006-v1/qa1` | `issue33-taiex-nominal-observation-cutoffs-1005-1006-v1/qa2` |
+| 來源方案 | AC 修訂 1：TWSE `MI_5MINS_HIST` CSV 與 FinMind，依序各 1 GET | AC 修訂 2：FinMind 1 GET |
+| AC 修訂 | 1 | 2 |
+| policy | 4,096 B，SHA-256 `4b1f44b0e77950bcd12896f5e54f99c6262365fcf4965b4938420edb58e54eca`（[留言 6085684135](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6085684135)） | v2，5,038 B，SHA-256 `04be101a…d9dc`（見上表） |
+| seal | [留言 6094234908](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094234908) | raw [留言 6125332330](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125332330)，2,386 B；pin（seal raw 的 SHA-256）`166be1aef905d8a67131df86b7da6d92ff99a1750aa8c746c6ee54598e18a853`（[留言 6125345804](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125345804)） |
+| seal 有效期（UTC） | 2026-10-10 05:30:50～05:50:50 | 2026-10-12 13:33:03～14:33:03 |
+| candidate | `71e92d75b7ecd11f6d93e4e05708cfe0a65575cf` | `b5072b08fd5678cfaa4800f6b2bbcd0c4c9a0fd1` |
+| 產品檔 SHA-256 | `75600a0c01005d840a5a33312c8d04ab7252091837a90f9352710c092a4b1ff5` | `a341833d28283d792107a7fb3b6c6b5a6193331d8107bdb09dc864a8663498be`（69,568 B） |
+| 測試檔 SHA-256 | `55893b423a26450104412996948ff77ac2ce7a95aceb2129a29faf61927c965d` | `7f69404be50e36691703c0b02d2e64b777958c9e5db7b8acb9581351cdc54696`（114,598 B） |
+| QA script SHA-256 | `fd82bd173ea6aa9c1f956dacb2bc430903c8294c18c400a76e71cac4d5a8e540` | `3bd12cb6171e12c984fb184cb0c32c3899a91332cc1dbe8d9b794128e169fe39`（50,522 B） |
+| loader SHA-256 | `0f78a1b721c3355a68238281bee90ec71702008556a876a81407264a6f474611` | `d646a812acfcada073f75381343cb2dd62520baacb40a2ae314dc348433bc717` |
+| command SHA-256 | `3cbb5e780b57227119c0cecb19515133e68a88f4b7d9ae65daeab9b41288b04a` | `019694e0627f7b63fffc6d700306584a35e4594cc5e79187a58e97d7b088cd7d` |
+| QA 結果 | [留言 6094400393](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094400393)：首敗 | [留言 6125391637](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125391637)：成功 |
+
+### 原件驗證與窗口／consumer 計算
+
+- **傳輸**：逐項沿用 [§49.3](#493-原件驗證與-last60summary-計算)的「取得」與「標頭」兩點：只收 HTTP 200；`content-encoding` 須 identity 或無；`content-type` 為 `application/json`（可接 `; charset=utf-8`）；framing 接受 content-length、chunked、close-delimited，content-length 與 chunked 並存拒，達上限仍無 EOF 拒；四個身分標頭（`content-length`、`content-encoding`、`transfer-encoding`、`content-type`）重複即拒，其他標頭重複忽略，`set-cookie` 不送出、不使用、不保存；完整 EOF 與 raw hash 通過後才 parse，strict UTF-8、無 BOM。與 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 的差異如下表（policy 層級的逐葉比對見 [#33 留言 6124388789](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6124388789)）。
+- **JSON 與 document**：重複鍵、nonfinite（`NaN`、`Infinity`）與 bool 當數值一律拒；回應須為 `{status:200, msg:"success", data:[…]}`，`data` 為 1～20,000 列。數值受有界工作限制：整數字面至多 64 字元且絕對值至多 10^18；小數字面至多 64 字元、有效位數至多 64、指數與 adjusted exponent 的絕對值至多 18。這些界線比 AC 嚴格，也適用於不採用欄與區間外列；真實指數點數不會觸及。
+- **列結構（全部回傳列）**：每列須有 `date`、`stock_id`、`open`、`max`、`min`、`close`；四個已知不採用欄（`Trading_Volume`、`Trading_money`、`spread`、`Trading_turnover`）可缺，有則接受 JSON number、string、null，bool、list、object 拒（`finmind_unadopted_type`），不驗範圍與正負，不進任何計算或輸出；其他未知鍵拒。`stock_id` 恰為 `TAIEX`；`date` 為合法 ISO 日期、唯一且遞增。採用欄 `open`、`max`、`min`、`close` 須為 JSON number，否則 `finmind_numeric_type`。全部回傳列先驗上述結構，之後才捨棄 2026-09-03～2026-10-06 以外的列，所以來源是否依 `start_date`／`end_date` 過濾都不影響結果；區間內須恰 22 列。
+- **內部一致性（取代官方 anchor）**：區間內 22 個日期須與固定 22 日集合完全相同：[§31.2](#312-24日完整觀測日曆與20日金融集合)的 Sep20 自 2026-09-03 起 18 日（9/3、4、7、8、9、10、11、14、15、16、17、18、21、22、23、24、29、30）加 Oct4 的 4 日（10/1、2、5、6）；9/25、9/28 為 §31.2 公告的閉日，不在集合內。不從缺列推休市、不縮窗、不採區間外日期。區間內每列 OHLC 須為有限正 Decimal，且 `min ≤ min(open, close) ≤ max(open, close) ≤ max`；違反任一列整批拒，不補值、不挑列。
+- **完整 oracle**：產品解析結果須與獨立 oracle 對**全部回傳列、全部欄位**逐值 typed-equal 才 available：日期與 `stock_id` 為字串，採用欄為 Decimal，不採用欄原樣（number 為 Decimal，string 與 null 不轉型）。oracle 缺欄、換型別、重排、少列、或事後改動 raw 皆拒。取得完成後狀態為 pending，通過 oracle 才原子轉 available；failed、expired（租約至多 180 s，且不晚於 seal 到期）與 released 都拒用。
+- **單位**：名目指數點數，scale 1，不乘除 1000；`provider_literal_unit_annotation` 為 false，`independent_unit_anchor` 為 false，policy `unit_mapping_inference` 為 true（version `issue33-finmind-only-scale1-v2`）。TWSE `MI_5MINS_HIST` 的獨立點數 anchor 已依使用者決策移除，consumer 與 oracle 的比對只是同一份 bytes 的內部一致性，不是獨立尺度驗證。
+- **窗口與 getter**：窗口含 cutoff，取截止日（含）以前最後 21 個觀測日，不縮窗：2026-10-05 為 2026-09-03～2026-10-05，2026-10-06 為 2026-09-04～2026-10-06。`get_taiex_nominal21(cutoff)` 回傳可撤銷 handle，內容為 cutoff、21 筆（date、close）、`first_date`、`last_date`、`observation_count` 21、`interval_count` 20、`calendar_basis` `cross_market_candidate_inference`、`price_basis` `nominal_index_level`、`benchmark20d_ready` false、provenance。
+- **summary**：`summarize(cutoff)` 的 consumer 為 `taiex-nominal-price-index-window-summary-v1`，`return` R 為 `(C_end − C_start) / C_start`，C_start 為窗口第一日 close、C_end 為最後一日 close，表示為最簡整數分子與正分母，不用浮點、不做 context 捨入；`observation_count` 21、`interval_count` 20。
+- **provenance**：只列 FinMind；帶出 policy pin／SHA-256／version、seal pin／SHA-256、namespace、formal 日曆 blob、`rights`、`data_id_evidence`、單位欄位與限制、policy `unsupported`、capture receipts 與 execution binding；`publication_time`、`first_availability`、`revision_time` 固定 `unknown`，`verified_twse_calendar`、`adjusted_basis`、`total_return` 固定 false。
+- **拒用**：cutoff 不是兩個截止日回 `unsupported_cutoff`；用途或 consumer 不是固定值回 `unsupported_getter_use`、`unsupported_consumer_use`；failed、expired 與 released 的 getter、summary 皆拒；release 後既有 handle 的 visit 與 declared roots 讀取回 `lease_released`。
+- **pre-GET 拒用**：external policy（SHA-256、bytes、canonical 序列化與型別）、financial-start seal（24 欄、獨立 QA 與 owner 身分、候選與程式 hash、namespace、唯一 URL、用途、consumer、cutoff、caps、有效期，且 pin 須為 #33 內留言編號大於 6123688628 者）、formal blob pin 與 execution binding 任一不符，皆在 GET 之前拒絕，不花用額度。Policy 內的 `policy_pin` 只驗 URL 形狀（任一 issue 留言皆可），權威是 policy 的 SHA-256 與 bytes。
+- **驗證證據的層次**：工程自測最終 47 項（首版 46 項見 [留言 6124241188](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6124241188)，review 1 後見 [留言 6124335147](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6124335147)），含用真實 `http.client` 解析 canned 位元組重放接受與拒收形狀；獨立 QA 網路 0 階段（[留言 6125193286](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125193286)）以自寫 oracle 跑 44 案、598 份 body 差異語料（接受 99、拒收 499，產品與 oracle 逐份一致，只有 2 份不同，差異是文件化的有界工作上限，產品較嚴）、78 個 mutant（72 抓、6 等價）與離線演練。這些是產品行為證據，不是來源真值證據。
+
+與 §49 的傳輸差異：
+
+| 項目 | #32（§49） | 本單 |
+| --- | --- | --- |
+| GET 數與來源 | 8（交易日 1、價格 7） | 1（價格 1），policy 沒有 per-source 上限 |
+| aggregate raw | 8 MiB | 1 MiB（body 上限同為 1 MiB） |
+| `User-Agent` | `stock-lab-issue32-local-ram/1` | `stock-lab-issue33-local-ram/1` |
+| `artifact_bytes` | 未列 | 0，明列 |
+| document 規則 | 交易日與價格各有列規則 | 單一 `data` 列規則：必要鍵、已知不採用欄的型別、`stock_id` 恰為 `TAIEX`、區間內恰 22 列 |
+| 零價列 | OHLC 為 0 的列整批拒 | 只針對區間內列整批拒；區間外列只驗結構（採用欄仍須為 JSON number）後捨棄 |
+| HTTP 狀態 | 非 200 皆 `http_status` | 401、402、403 為 `http_auth_or_payment_stop`，其他非 200 為 `http_status_stop`；兩者皆首敗 |
+| `Content-Length` 文法 | 十進位文字不限位數 | 十進位文字至多 16 位，其餘規則相同；數值仍受 body 與 aggregate raw 上限約束 |
+
+### qa2：成功取得與驗證結果
+
+[留言 6125391637](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125391637)，QA session `fc3d4f56-69ca-47e0-bf93-7e86fcd78f70`（不同於工程 `30140f72-a8f9-4bb9-8220-ca37cab12e09`）。先跑 prepare（2026-10-12T13:35:01Z～13:35:02Z，網路 0，原 exit 0），通過後唯一一次 real run：2026-10-12T13:35:02Z～13:35:03Z，原 exit 0，`result_pass` 與 `cleanup_pass` 皆 true，沒有首敗，stderr 0 B。單一 GET 的請求自 13:35:03.063Z 起、13:35:03.291Z observed（請求累計 0.235 s）；閘門 resolve_ok 1、connect_ok 1、send_ok 1、blocked 0；送出的 request 為 253 B，逐位元組等於預期（`request_bytes_exact`）。
+
+| URL | HTTP | content-type | content-encoding 欄 | body bytes | body SHA-256 | EOF |
+| --- | ---: | --- | --- | ---: | --- | --- |
+| 1 | 200 | `application/json` | `identity` | 4,542 | `298cd38018fc14a3405a1d8aa0f078d5c115babacabf55869d4c2012e8b0ace5` | 完整 |
+
+驗證（獨立 stdlib oracle 以同一份原件重算，不用產品解析函式產生期望值）：
+
+- **原件**：observer 核對 hash 等於 receipt、EOF 已知、在上限內，trace 於 parse 前已啟動；原件先經 oracle 對全部回傳列的結構、型別、`stock_id` 恰為 `TAIEX`、日期合法唯一遞增、區間內恰 22 列檢查，再與產品結果逐列逐欄 typed-equal，才轉 available。`data_id=TAIEX` 在這次 GET 被接受。
+- **日曆與價格**：區間內 22 個日期與固定 22 日集合（自 pinned blob 的 §31.2 以不同於產品的方式導出）完全相同，沒有缺列或多列；每列 OHLC 為有限正 Decimal 且上下界一致；值為 exact Decimal、scale 1，不乘除 1000；provenance 為 `provider_literal_unit_annotation` false、`independent_unit_anchor` false。
+- **consumer**：兩截止日各取 getter 與 summary（getter×2、summary×2，四項檢查全 true）：窗口日期等於上列、21 觀測、interval 20、first／last、`cross_market_candidate_inference`、`nominal_index_level`、`benchmark20d_ready` false、無 `adj_*`、provenance 只列 FinMind；每個 close 與 oracle 的 Decimal 相等。return 為最簡分數，且與獨立 `Fraction`、整數 gcd 兩套算法相等：
+
+| cutoff | 窗口（21 觀測日） | R |
+| --- | --- | --- |
+| 2026-10-05 | 2026-09-03～2026-10-05 | 192719/2292883 |
+| 2026-10-06 | 2026-09-04～2026-10-06 | 327142/4655113 |
+
+- **取後拒用與清理**：release 後 getter、summary、handle visit 與 declared roots 讀取皆回 `lease_released`；`cleanup_failures` 空、`declared_roots_empty` true、raw bytearray 長度 0、memoryview 已釋放、StringIO 已關閉、gc 殘留掃描（bytes-like、Decimal、str、exception traceback、open StringIO）皆 0、trace 與 profile 關閉、`artifact_bytes` 0。Declared roots 估計：consumer 階段 9,198,653 B、high-water 9,292,652 B（估計，不是 RSS）。QA 暫存檔 71 個（756 KB）已刪除並讀回為 0（[留言 6125398475](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125398475)）。
+- **SPENT**：attempted URL 只有 1 個，namespace qa2 已用盡，SPENT／NO-RETRY 登錄於 [#1 留言 6125417085](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6125417085)；seal 已用畢，不得再用。
+
+### qa1：SPENT
+
+2026-10-10，candidate `71e92d75…`（AC 修訂 1）。兩來源順序的第 1 個 GET（TWSE `MI_5MINS_HIST` CSV）被產品的 redirect／cookie guard 拒用（`redirect_cookie_stop`），原 exit 1，沒有完成的 capture（complete EOF raw 0 B），attempted 即 SPENT，FinMind 未嘗試；原診斷沒有保存 HTTP status、`Location` 與 `Set-Cookie` 值，具體原因未知，也不得再取以查因。收據：[host 原件 6094372883](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094372883)、QA [6094400393](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094400393)、全局裁決 [6094472774](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094472774)。qa1 為 NO-RETRY，不恢復、不重用；AC 修訂 2 起產品不含該 URL 或任何政府 CSV 路徑。
+
+### 未驗與限制
+
+- **點數尺度沒有獨立錨點**：單位與 scale 1 是推論；所有 consumer／oracle 比對都只是同一份 bytes 的內部一致性，不證 adjusted、index-divisor 歷史、total-return 或完整 TWSE calendar。
+- **日曆**：22 日相等只證 FinMind 在請求區間內的觀測集合等於 §31.2 的集合，不證完整 TWSE 交易日，也不證 9/25、9/28 休市；§31.2 的日曆來自 TPEx 來源，不是已驗的 TWSE 日曆，因此 `calendar_basis` 固定為 `cross_market_candidate_inference`，`verified_twse_calendar` 為 false。
+- **`data_id=TAIEX` 與指數口徑**：qa2 的單次成功只證那次 GET 回傳 `stock_id` 為 `TAIEX` 的 22 列；FinMind 對此 id 的長期可用性與指數口徑（provider-reported）沒有承諾。
+- **非 PIT**：publication、first availability、revision 皆 `unknown`；不證穩定、限流或條款日後不變。
+- **qa2 輸出沒有記錄**：回傳總列數（body 4,542 B 約合 22 列，是推論）、回應標頭名稱與 framing 形式、不採用欄的實際值型別；真實回應的這些細節未知，由產品的邊界測試涵蓋。
+- **有界工作與列界線嚴格於 AC**：整數、小數的字面與指數上限（見上）適用於區間外列與不採用欄；區間外列的採用欄也須為 JSON number，否則整批拒；回傳列過多時 retained estimate 逼近 32 MiB 會 fail-closed（約 5,000 列以上）；exact-cap 的 chunked 或 close-delimited 回應因 EOF 未知而拒。實際回應約 22 列，不受影響。
+- **不支援**：Policy 的 `unsupported` 19 項（見上）；其他 cutoff、dataset、`data_id`、日期與用途在取數前拒用，不外推。價格列只在 RAM，已釋放；要再取需新的明示使用者授權、新 namespace 與新 seal，NO-RETRY 照舊，不 restart、replay、clone 或 hydrate 已釋放的資料。
+- **已接受風險**：免費使用是文件推論，qa2 的 HTTP 200 只代表當時；gzip、br 回應被拒，區間內 OHLC 非正的列整批拒收（policy 列為已接受風險），qa2 皆未觸發。
+- **未在真實來源驗到**：failed 與 expired 後拒用、launcher trace 的 first coded origin、租約 expiry 在真實 run 沒有觸發，只有網路 0 階段的邊界測試與演練；chunked、close-delimited、charset 變體、非身分標頭重複與 `set-cookie` 只有 RAM 重放證據；401、402、403 與零價列的真實路徑未觸發。
+- **防護性質**：閘門、audit hook 與 trace 是進程內協作式防護，不是沙箱；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
+- **版本與依賴**：本節描述 candidate `b5072b08…` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。本節不宣稱解除母單 #21 的整體 AC 或 V1 的依賴。
