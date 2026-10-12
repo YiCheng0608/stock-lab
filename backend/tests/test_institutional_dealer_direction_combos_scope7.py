@@ -854,4 +854,3 @@ class APITests(unittest.IsolatedAsyncioTestCase):
             again = await client.post(API + "/capture" + Q, json={})
             self.assertEqual((again.status_code, again.json()["reason"]), (409, "already_attempted"))
         self.assertEqual(transport.opens, [])
-
