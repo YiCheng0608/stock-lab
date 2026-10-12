@@ -1526,13 +1526,70 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 - **防護性質**：閘門與 audit hook 是進程內協作式防護，不是沙箱，僅 Windows；retained estimate 不是 RSS 或 peak，生命週期驗收不代表實體抹除。
 - **版本與依賴**：本節描述 candidate `8c7b5ab` 的契約與 qa2 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。qa1 與 qa2 的 SPENT／NO-RETRY 登錄於 #1（qa2：[#1 留言 6115370965](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6115370965)）。本節不宣稱解除母單 #20 或 #7 的依賴，合併後由全局依整合版本判定。
 
-## #33 qa2：TAIEX 名目指數兩截止 21 觀測 return（issue33-taiex-nominal-observation-cutoffs-1005-1006-v1）（節號整合時分配）
+## #97：七股 TPEx 靜態規則表（tpex-static-rules/2026-10-12/v1）
+
+2026-10-12。#97 為七檔 TPEx 普通股、盤後 long、最早 T+1 的模擬執行建立 tick、交易時段、賣方證交稅與手續費門檻的靜態規則表與讀用介面（[`backend/app/tpex_execution_rules.py`](../backend/app/tpex_execution_rules.py)，純標準函式庫，import 不開檔、不連網、不碰 DB 與設定）。只讀公開規則文件，不是金融取源，不需 seal；不取行情、不讀寫 DB。原件不進 repo，來源以 URL、擷取 UTC、bytes 與 SHA-256 識別。
+
+### #97 版本與來源
+
+規則版本 `tpex-static-rules/2026-10-12/v1`。C1 的擷取方式為單次 GET，不帶 cookie 與 token、不跟隨轉址（其他來源的擷取收據未載此細節）；`selaw` 是證基會彙編的法令查詢系統，**不是發布機關原件**，對各條沒有逐條生效日，只有版本發佈日。
+
+| 代號 | 文件與發布機關 | URL | 擷取 UTC／bytes | SHA-256 | 版本日 |
+| --- | --- | --- | --- | --- | --- |
+| C1 | 證券商營業處所買賣有價證券業務規則（TPEx 訂定，現行法規）全文，selaw 彙編 | `https://www.selaw.com.tw/Chinese/RegulatoryInformationResult/Article?sysNumber=LW10812069&releaseDate=2026-10-05` | 2026-10-12T12:11:07Z／705,924 | `c1ddb12e0593a972ef4015b102e65e42ac37bdb186855772ea65ef51471e7d49` | 發佈日期民國 115-10-05 |
+| B2a | 同上，現行版沿革頁（僅第 47 條，116-04-01 實施） | `https://www.selaw.com.tw/Chinese/RegulatoryInformationResult?sysNumber=LW10812069` | 2026-10-12T11:57:56Z／24,847 | `2225a9aeec0a42b2fa56162835b8ef84e12a5bbffb2711f356a6dd120aeccf46` | 民國 115-10-05 |
+| B2b | 同上，第 55 條較早版本，selaw 彙編 | `https://www.selaw.com.tw/Chinese/LawDetail/LawArticleReference?lawDataid=13022101` | 2026-10-12T11:58:21Z／20,130 | `82f87349047a5173fdbf5a9e558a7956ce004d8130725b36b66e265d5a65642b` | 發佈日期民國 110-01-11 |
+| B1 | TPEx 官網「上櫃有價證券交易系統簡介」 | `https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html` | 2026-10-12T11:57:32Z／24,696 | `fd1217d8ef6e8e48769b1e4c3d2aea3b4878148b53879fd33423555d03cb291f` | 頁面無版本日 |
+| B5c | 證券商營業處所買賣有價證券管理辦法（金管會），全國法規資料庫 | `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0400071` | 2026-10-12T12:03:20Z／50,983 | `e15be76abf1cb5d6be5f56c5f171511ef00e43c88783042277b35e01a95082a9` | 修正日期民國 106-03-31 |
+| B4 | 證券交易稅條例（財政部），財政部主管法規共用系統 | `https://law-out.mof.gov.tw/LawContent.aspx?id=FL006079&kw=b&media=print` | 2026-10-12T11:57:48Z／37,019 | `e5f6388ea66efe64e295c0757d76d6a4c0b8dd4bbc5c6394065c9ff9d2793291` | 修正日期民國 114-01-02 |
+| B6 | 同上，全國法規資料庫 | `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0340078` | 2026-10-12T12:03:35Z／55,700 | `372ef60403bdfc4ff2108204562a209b7cf56975c99da40cf604802460bd0e48` | 修正日期民國 114-01-02 |
+| B7 | 財政部臺北國稅局新聞稿（稅額算例，不是法規；僅示範成交價格×股數×3‰，算例情境為已簽證發行股票之未上市公司股權出售，非上櫃普通股集中交易） | `https://www.mof.gov.tw/%20/singlehtml/384fb3077bb349ea973e7fc6f13b6974?cntId=c29280e284a54c44a893e45b84f6efa5` | 2026-10-12T11:57:52Z／72,653 | `6a70c06754ac5d05a9ea4638fdcabbaef747e2d19c6d3b0f8526a6c69076fc66` | 發布 2026-03-10 |
+
+模組內的 `source_id` 與代號對應：`tpex-rules-art35／art40／art55／art64-selaw-20261005`＝C1 的第 35、40、55、64 條（同一份原件、不同定位）、`tpex-rules-current-selaw-20261005`＝B2a、`tpex-rules-art55-selaw-20210111`＝B2b、`tpex-mainboard-system-intro`＝B1、`moj-securities-otc-trading-measures`＝B5c、`mof-securities-transaction-tax-act`＝B4、`moj-securities-transaction-tax-act`＝B6、`mof-tax-example-20260310`＝B7。
+
+### #97 規則值與原文定位
+
+| 元件 | 值 | 原文定位與必要短引文 |
+| --- | --- | --- |
+| tick | 股價 <10：0.01；10 ≤ 股價 <50：0.05；50 ≤ 股價 <100：0.1；100 ≤ 股價 <500：0.5；500 ≤ 股價 <1,000：1；≥1,000：5 | 業務規則第 55 條第 2 項：「…每股市價未滿十元者為一分，十元至未滿五十元者為五分，五十元至未滿一百元者為一角，一百元至未滿五百元者為五角，五百元至未滿一千元者為一元，一千元以上者為五元」。第 2 項在 B2b（110-01-11 版）與 C1（115-10-05 版）逐字相同；B1 官網表同值。每級下界含、上界不含，依「至未滿」措辭。 |
+| 交易時間 | 09:00～13:30 | 業務規則第 40 條第 1 項前段：「櫃檯買賣之交易時間，除另有規定外，其交易時間如下」，第 1 款：「股票採等價成交系統者為上午九時至下午一時三十分；…」。B1：「撮合成交時間為9:00至13:30」。 |
+| 申報輸入起點 | 08:30（開市前 30 分鐘） | 第 35 條第 1 項：「等價成交系統之買賣申報，得自市場交易時間開始前之三十分鐘起輸入」；B1：「委託時間8:30至13:30」。 |
+| 暫緩開市、收市 | 開市暫緩延緩 2 分鐘（09:02）；收市暫緩 13:31～13:33 續收申報、13:33 撮合 | 第 35 條第 4 項：「延緩二分鐘後依序撮合成交」「俟一時三十三分依序撮合成交」；僅適用符合暫緩標準者，例外：當日開始交易基準價低於一元之有價證券、認購(售)權證及分離後認股權憑證。 |
+| 收盤集合交易起點 | 13:25 | **只見於 B1**：「13:25至收巿（即13:30收盤）採集合交易」。第 35 條第 2、3、5 項只稱「收市前一段時間」，長度由本中心另訂標準公告，規則文字不含 13:25。 |
+| 交易日 | 星期一至星期五 | 只見於 B1：「櫃檯買賣巿場交易時間為星期一至星期五」。第 41 條：「櫃檯買賣之休假日與銀行休假日相同。但本中心認為有變更之必要時，得報請主管機關核定後實施」；日曆由 #13 (b) 承接，本模組不判定休市。 |
+| 賣方證交稅 | 0.003，非當沖普通股 | 證券交易稅條例第 2 條第 1 款：「公司發行之股票及表明股票權利之證書或憑證徵千分之三」，向出賣人按每次交易成交價格課徵；第 3 條由代徵人於交割當日代徵。第 2-2 條現股當日沖銷 1.5‰（106-04-28～116-12-31）不在本版，`day_trade=True` 拒絕。B7 算例 200,000 股×90 元×3‰＝54,000 元，僅示範成交價格×股數×3‰；算例情境為已簽證發行股票之未上市公司股東出售（代徵人為買受人），非上櫃普通股集中交易。 |
+| 稅額元以下處理 | 來源未定 | B4、B6 全文與 B7 算例皆無尾數規定，來源未定。 |
+| 手續費 | 無統一費率、上限或最低金額；千分之一點四二五是「逾者須事前通知客戶」的門檻 | 第 64 條第 3 項：經紀商「得按客戶成交金額自行訂定費率標準，另得訂定折讓及每筆委託最低費用，並於實施前…申報本中心備查」，「…所訂手續費率逾成交金額千分之一點四二五者，應於實施前以適當方式通知客戶，並留存紀錄。但客戶為境外華僑及外國人者，得於給付結算前通知」。第 2 項費率由本中心擬定報主管機關核定；管理辦法（B5c）第 14 條只定核定程序，第 7 條第 4、6 款為業務規則應訂營業時間與升降單位的授權依據。手續費捨入方式來源未載。 |
+
+### #97 讀用契約
+
+- 每個讀用函式都要明示 `market`（只收 `TPEx`）、`security_type`（只收 `ordinary_share`）、`rule_version`、`on_date`；其他值或未知版本拒絕，不推論 TWSE、興櫃或 latest。
+- 來源未載生效日的元件（tick、交易時段、證交稅、手續費門檻；證交稅條例與管理辦法的頁面只載修正日期，selaw 全文頁只載版本發佈日），預設擲 `PendingEvidenceError`（`<元件>:effective_date_unverified`）；caller 以 `accept_published_only=True` 明示 opt-in 才取得值，輸出標 `effective_date_unverified` 與 `published_on`。
+- 日期窗以各元件閘門來源的版本日為下界：tick 2021-01-11（第 55 條第 2 項在 2021-01-11 與 2026-10-05 兩版相同，中間版本未讀）；交易時段與手續費 2026-10-05；證交稅 2025-01-02（條例頁首修正日期，只作下界，不是生效日）。早於版本日、晚於擷取日 2026-10-12（`after_verified_date`）一律拒絕，opt-in 不放行。
+- 時間邊界：來源以「A 至 B」描述且未載端點是否含入，恰在 08:30、09:00、13:25、13:30 回報 `boundary`（`unspecified_by_source`），不指派所屬時段。
+- 證交稅回傳 `tax_exact`（未捨入）；`rounding`（floor／half_up／ceil）是 caller 宣告，輸出標 `caller_declared:*`，`official_rounding_status` 恆為 `pending_evidence`。
+- 手續費由 caller 以 `CallerFeeTerms`（rate、discount、整數元 minimum、rounding）具名提供，輸出標 `caller_declared`；費率逾 0.001425 只標 `above_notification_threshold`，不拒絕。
+
+### #97 授權與讀取額度
+
+方案與核准見 [#97 留言 6123697990](https://github.com/YiCheng0608/stock-lab/issues/97#issuecomment-6123697990)、[全局核准 6123711522](https://github.com/YiCheng0608/stock-lab/issues/97#issuecomment-6123711522)、[追加搜尋 6123935635](https://github.com/YiCheng0608/stock-lab/issues/97#issuecomment-6123935635)。公開規則文件，不登入、不付費。已讀未採用：證券商管理規則第 40 條（保管，與手續費無關）。`https://www.selaw.com.tw/Chinese/LawDetail/LawArticleReference?lawDataid=3477298` 回 HTTP 404，未取得。
+
+### #97 限制
+
+- selaw 為彙編來源；逐條生效日、發布機關公告原件與金管會核定函未讀。
+- 2021-01-11 與 2026-10-05 之間的業務規則版本未讀；第 55 條第 4 項（初次上櫃升降幅度）兩版不同，本節不採用該項。
+- 13:25 收盤集合交易起點與星期一至星期五只有官網說明；各時間邊界的端點語意、手續費捨入、證交稅尾數處理，來源未載。
+- 基本時刻表（`session_phase`）不涵蓋兩項例外，不判定個股是否適用：管理股票分盤交易（C1 第 35-3 條第 2 項：「櫃檯買賣管理股票應採分盤方式交易，每四十五分鐘撮合一次」）；盤中瞬間價格穩定機制（B1「一、交易時間」：「開盤後有價證券之任一試算成交價超過參考價格之3.5%（包含上漲及下跌），將延緩逐筆交易撮合2分鐘，並於2分鐘後以集合交易撮合」）。
+- 不處理：交易日曆與休市、停復牌、公司行動、漲跌幅、零股、盤後定價、鉅額、價格觸及與成交、TWSE 及興櫃；不證任何單一股票屬 TPEx 普通股。
+- 上表 SHA-256 識別擷取當時的 bytes；官網頁面會更新，重讀可能不同，差異須如實記錄，不冒同一 snapshot。
+
+## #33 qa2：TAIEX 名目指數兩截止 21 觀測 return（issue33-taiex-nominal-observation-cutoffs-1005-1006-v1）
 
 2026-10-12。#33 以 FinMind 公開 API v4 `TaiwanStockPrice`（`data_id=TAIEX`）取得 2026-09-03～2026-10-06 的 provider-reported 名目指數日線，供 2026-10-05、2026-10-06 兩個截止日各取「截止日（含）向前 21 個觀測日」的 `get_taiex_nominal21` getter，以及 `taiex-nominal-price-index-window-summary-v1` snapshot consumer（20 個間隔的名目指數 return，精確有理數）。產品 `backend/app/taiex_price_index_source.py`，測試 `backend/tests/test_taiex_price_index_source.py`。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default；觀測日集合由 [§31.2](#312-24日完整觀測日曆與20日金融集合)的已驗交易日導出，不由 FinMind 回傳推導。取得過程與 QA 收據保存在 [#33](https://github.com/YiCheng0608/stock-lab/issues/33)，下列為摘要並附留言編號。
 
 本單有兩個來源方案：AC 修訂 1 為 TWSE `MI_5MINS_HIST` 政府 CSV 加 FinMind 的兩來源，其 namespace qa1 已 SPENT；AC 修訂 2 依使用者決策只用 FinMind，取代修訂 1 的對應項，使用新 namespace qa2。產品與本節契約只對應 AC 修訂 2。本節不含任何取回的價格列、原始 body 或 close 值（它們只在 RAM，已隨 qa2 的 release 清除），只記錄兩個 return 的最簡分數。
 
-### 版本、外部 pins 與上限
+### #33 版本、外部 pins 與上限
 
 | 項目 | 內容 |
 | --- | --- |
@@ -1545,7 +1602,7 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 | 上限 | body 1 MiB（1,048,576 B）、aggregate raw 1 MiB、retained-roots estimate 32 MiB（33,554,432 B；estimate 不是 RSS 或 peak）；該 URL 20 s、整批 180 s（cooperative）；`max_gets` 1、redirect 0、retry 0、`artifact_bytes` 0；首敗即停且 attempted 即 SPENT；只在 RAM |
 | 固定 formal 參照 | 觀測日集合由固定 blob `d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md`（268,729 B；SHA-256 `b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde`）的 §31.2 解析。呼叫者必須提供該 blob，位元組、長度或 SHA-256 不符即 `formal_blob_pin` 拒絕，發生在 GET 之前，不花用額度。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
 
-### 用途、授權與署名
+### #33 用途、授權與署名
 
 用途只限免費公開、本地個人非商用研究與 RAM 取得／驗證／consumer。Policy 的 `unsupported` 共 19 項：`historical_pit`、`publication_time`、`first_availability`、`revision_history`、`verified_twse_calendar`、`canonical_20_trading_day_benchmark`、`adjusted_basis`、`total_return`、`independent_unit_anchor`、`hot_group_v1`、`canonical_regime`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`、`raw_disk_storage`、`redistribution`、`mirror`、`other_cutoffs`。不落盤、不發布 raw、不鏡像。權利字串（policy `rights`，逐字，與 [§49.2](#492-用途授權與署名)相同）：`FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror`，隨 policy SHA-256 被 seal 綁定。Policy 沒有固定完整署名文字，也沒有引用 FinMind 條款全文或條款版本；產品 provenance 的來源欄載明 `FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)`，並帶出 `rights` 與 `data_id_evidence`。
 
@@ -1569,7 +1626,7 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 | command SHA-256 | `3cbb5e780b57227119c0cecb19515133e68a88f4b7d9ae65daeab9b41288b04a` | `019694e0627f7b63fffc6d700306584a35e4594cc5e79187a58e97d7b088cd7d` |
 | QA 結果 | [留言 6094400393](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094400393)：首敗 | [留言 6125391637](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125391637)：成功 |
 
-### 原件驗證與窗口／consumer 計算
+### #33 原件驗證與窗口／consumer 計算
 
 - **傳輸**：逐項沿用 [§49.3](#493-原件驗證與-last60summary-計算)的「取得」與「標頭」兩點：只收 HTTP 200；`content-encoding` 須 identity 或無；`content-type` 為 `application/json`（可接 `; charset=utf-8`）；framing 接受 content-length、chunked、close-delimited，content-length 與 chunked 並存拒，達上限仍無 EOF 拒；四個身分標頭（`content-length`、`content-encoding`、`transfer-encoding`、`content-type`）重複即拒，其他標頭重複忽略，`set-cookie` 不送出、不使用、不保存；完整 EOF 與 raw hash 通過後才 parse，strict UTF-8、無 BOM。與 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 的差異如下表（policy 層級的逐葉比對見 [#33 留言 6124388789](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6124388789)）。
 - **JSON 與 document**：重複鍵、nonfinite（`NaN`、`Infinity`）與 bool 當數值一律拒；回應須為 `{status:200, msg:"success", data:[…]}`，`data` 為 1～20,000 列。數值受有界工作限制：整數字面至多 64 字元且絕對值至多 10^18；小數字面至多 64 字元、有效位數至多 64、指數與 adjusted exponent 的絕對值至多 18。這些界線比 AC 嚴格，也適用於不採用欄與區間外列；真實指數點數不會觸及。
@@ -1597,7 +1654,7 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 | HTTP 狀態 | 非 200 皆 `http_status` | 401、402、403 為 `http_auth_or_payment_stop`，其他非 200 為 `http_status_stop`；兩者皆首敗 |
 | `Content-Length` 文法 | 十進位文字不限位數 | 十進位文字至多 16 位，其餘規則相同；數值仍受 body 與 aggregate raw 上限約束 |
 
-### qa2：成功取得與驗證結果
+### #33 qa2：成功取得與驗證結果
 
 [留言 6125391637](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125391637)，QA session `fc3d4f56-69ca-47e0-bf93-7e86fcd78f70`（不同於工程 `30140f72-a8f9-4bb9-8220-ca37cab12e09`）。先跑 prepare（2026-10-12T13:35:01Z～13:35:02Z，網路 0，原 exit 0），通過後唯一一次 real run：2026-10-12T13:35:02Z～13:35:03Z，原 exit 0，`result_pass` 與 `cleanup_pass` 皆 true，沒有首敗，stderr 0 B。單一 GET 的請求自 13:35:03.063Z 起、13:35:03.291Z observed（請求累計 0.235 s）；閘門 resolve_ok 1、connect_ok 1、send_ok 1、blocked 0；送出的 request 為 253 B，逐位元組等於預期（`request_bytes_exact`）。
 
@@ -1619,11 +1676,11 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 - **取後拒用與清理**：release 後 getter、summary、handle visit 與 declared roots 讀取皆回 `lease_released`；`cleanup_failures` 空、`declared_roots_empty` true、raw bytearray 長度 0、memoryview 已釋放、StringIO 已關閉、gc 殘留掃描（bytes-like、Decimal、str、exception traceback、open StringIO）皆 0、trace 與 profile 關閉、`artifact_bytes` 0。Declared roots 估計：consumer 階段 9,198,653 B、high-water 9,292,652 B（估計，不是 RSS）。QA 暫存檔 71 個（756 KB）已刪除並讀回為 0（[留言 6125398475](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6125398475)）。
 - **SPENT**：attempted URL 只有 1 個，namespace qa2 已用盡，SPENT／NO-RETRY 登錄於 [#1 留言 6125417085](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6125417085)；seal 已用畢，不得再用。
 
-### qa1：SPENT
+### #33 qa1：SPENT
 
 2026-10-10，candidate `71e92d75…`（AC 修訂 1）。兩來源順序的第 1 個 GET（TWSE `MI_5MINS_HIST` CSV）被產品的 redirect／cookie guard 拒用（`redirect_cookie_stop`），原 exit 1，沒有完成的 capture（complete EOF raw 0 B），attempted 即 SPENT，FinMind 未嘗試；原診斷沒有保存 HTTP status、`Location` 與 `Set-Cookie` 值，具體原因未知，也不得再取以查因。收據：[host 原件 6094372883](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094372883)、QA [6094400393](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094400393)、全局裁決 [6094472774](https://github.com/YiCheng0608/stock-lab/issues/33#issuecomment-6094472774)。qa1 為 NO-RETRY，不恢復、不重用；AC 修訂 2 起產品不含該 URL 或任何政府 CSV 路徑。
 
-### 未驗與限制
+### #33 未驗與限制
 
 - **點數尺度沒有獨立錨點**：單位與 scale 1 是推論；所有 consumer／oracle 比對都只是同一份 bytes 的內部一致性，不證 adjusted、index-divisor 歷史、total-return 或完整 TWSE calendar。
 - **日曆**：22 日相等只證 FinMind 在請求區間內的觀測集合等於 §31.2 的集合，不證完整 TWSE 交易日，也不證 9/25、9/28 休市；§31.2 的日曆來自 TPEx 來源，不是已驗的 TWSE 日曆，因此 `calendar_basis` 固定為 `cross_market_candidate_inference`，`verified_twse_calendar` 為 false。
