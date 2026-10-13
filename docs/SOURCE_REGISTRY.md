@@ -62,7 +62,7 @@
 | [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1) | #36 qa1／qa2：七股 TPEx 法人六日 dated CSV 與兩截止五日分子（`issue36-two-cutoffs-v1`） | 現行 |
 | [§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2) | #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（`ordinary-margin-cutoffs-1005-1006-v2`） | 現行 |
 | [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) | #32 qa1／qa2：七股 FinMind nominal OHLCV 日線 last60 與兩截止 raw 算術（`issue32-seven-nominal-ohlcv-two-cutoffs-v1`） | 現行 |
-| [節號待整合分配](#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2) | #9 qa1：七股 FinMind 自行買賣與避險五日淨額原件（`issue9-dealer-direction-combos-finmind-v2`） | 現行 |
+| [#9](#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2) | #9 qa1：七股 FinMind 自行買賣與避險五日淨額原件（`issue9-dealer-direction-combos-finmind-v2`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 

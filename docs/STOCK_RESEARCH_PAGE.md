@@ -52,7 +52,7 @@
 | [§49](#49-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向與窗口區段有限操作) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作 | 現行 |
 | [§50](#50-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與雙原列操作) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與雙原列操作 | 現行 |
 | [§51](#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳 | 現行 |
-| [節號待整合分配](#9七股自行買賣與避險五日方向組合頁) | #9：七股自行買賣與避險五日方向組合頁（入口與 RAW 控制、取得流程、原列追溯、本機 API 防護、已知限制） | 現行 |
+| [#9](#9七股自行買賣與避險五日方向組合頁) | #9：七股自行買賣與避險五日方向組合頁（入口與 RAW 控制、取得流程、原列追溯、本機 API 防護、已知限制） | 現行 |
 
 ## 1. 使用者工作與資訊順序
 
