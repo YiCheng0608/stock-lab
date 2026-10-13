@@ -1536,7 +1536,7 @@ Policy v3 由全局核定三項裁定並發布（[留言 6111873522](https://git
 
 ### 時間欄位
 
-receipt 的請求時間與觀測時間是 aware UTC（`Z` 結尾，例如 [§49.6](#496-qa2成功取得與驗證結果) 的 2026-10-11T23:53:27Z）。它記錄這次取得何時發生，與交易日無關：UTC 與臺北的曆日可差一天（23:53Z 是臺北隔日 07:53），所以觀測時間不得用來推交易日，`date` 也不得補成時刻。兩者都不推 publication、first availability 或 revision；三者維持 `unknown`，`historical_pit` 不支援（[§49.3](#493-原件驗證與-last60summary-計算)、[§49.7](#497-未驗與限制)）。
+receipt 的 `request_started_utc`、`observed_utc` 與 `saved_at` 是以 `+00:00` 結尾的 aware UTC，字串須與 Python `datetime.isoformat()` 的輸出逐字相同，例如 `2026-01-02T03:04:05.678901+00:00`（微秒為 0 時不帶小數）。讀回端把解析結果重新序列化後逐字比對，所以 `Z` 結尾、非 UTC 偏移、無時區，或不是 `isoformat()` 形式的小數位，一律拒收（`saved_time`）。它們記錄這次取得何時發生，與交易日無關：UTC 16:00 起已是臺北的隔日，所以觀測時間不得用來推交易日，`date` 也不得補成時刻。兩者都不推 publication、first availability 或 revision；三者維持 `unknown`，`historical_pit` 不支援（[§49.3](#493-原件驗證與-last60summary-計算)、[§49.7](#497-未驗與限制)）。
 
 ### 對齊證據
 
@@ -1572,7 +1572,7 @@ receipt 的請求時間與觀測時間是 aware UTC（`Z` 結尾，例如 [§49.
 
 ### 讀回與驗證
 
-`load_saved_closes(root, policy_version, cutoff, *, pins=None)` 唯讀、不取源，也不 fallback 到其他版本或截止（缺 bundle 回 `saved_missing`）；`pins` 預設為產品常數。每次讀取都由讀取端完整重驗，不信任寫入端，新程序讀回亦同：
+`load_saved_closes(root, policy_version, cutoff, *, pins=None)` 唯讀、不取源，也不 fallback 到其他版本或截止（缺 bundle 回 `saved_missing`）；`pins` 預設為產品常數。下游讀用（如 #8）呼叫 `load_saved_closes` 時不得自帶 `pins`，自帶的 `pins` 只供邊界測試；`pins` 綁的是 policy 摘要，不是簽章，receipt 不能當成不可竄改的證據。每次讀取都由讀取端完整重驗，不信任寫入端，新程序讀回亦同：
 
 - **路徑**：root、版本目錄、bundle 目錄須是真目錄，不得是 symlink 或 reparse point；bundle 內恰有兩個檔，各自不超過上限。
 - **內容**：schema 與固定欄位、policy 版本與 pin（SHA-256、bytes）、cutoff 一致；60 個交易日唯一遞增、平日、末日＝cutoff；七股日期集合相同；每個 close 都是正規化正值。
@@ -1582,15 +1582,15 @@ receipt 的請求時間與觀測時間是 aware UTC（`Z` 結尾，例如 [§49.
 
 ### 範圍與限制
 
-- 逐日對齊只涵蓋 8～10 月的 formal 45 日。7 月沒有獨立於 FinMind 的第二來源，2026-07-10 缺日沒有原因證據（[§49.7](#497-未驗與限制)）。
+- 逐日對齊只涵蓋 8～10 月的 formal 45 日。7 月沒有獨立於 FinMind 的第二來源，2026-07-10 缺日沒有原因證據；cutoff 2026-10-06 的 60 日窗口自 2026-07-13 起、不含該缺日，其中 7/13～7/31 只有 FinMind 一個日曆來源（由交易日序列推得，見 [§49.7](#497-未驗與限制)）。
 - 身分與單位只錨定 2026-10-06（全局裁定 D5）；其他日期沒有逐日核對，policy 的 `unsupported` 不因本節放寬。
 - 條款頁未固定版本或雜湊，接受 [§49.2](#492-用途授權與署名) 的免費使用推論風險（全局裁定 D6，與 FinMind 為主一致）。
 - 保存的是 FinMind provider-reported nominal 收盤；調整價、公司行動、停牌可比性、PIT 與 revision 保證不支援（policy `unsupported`），其他 cutoff 與 raw body 保存、再散布也不支援。
 - close 超過 6 位小數或整數 13 位的上限時整批拒（全局裁定 E4，列為已知風險）。
-- policy 的 `rights`、`attribution` 字串是否充分屬使用者決策，須在 seal 詢問時一併確認；使用者要求改字即重發 policy、重算 pin、重驗受影響項（全局裁定 P1）。
+- policy 的 `rights`、`attribution` 字串是否充分屬使用者決策，核准後才用於真實取得；改字即重發 policy、重算 pin、重驗受影響項（全局裁定 P1）。
 
-### 版本邊界與狀態
+### 版本邊界
 
-- 2026-10-12 時真實取得尚未執行、seal 未核發；本節不含任何取回的價格列、原始 body 或衍生數值，也沒有真實保存的 bundle。真實取得的收據與結果於執行後另寫入本節。
+- 本節不含任何取回的價格列、原始 body 或衍生數值；取得與讀回的收據、數值與實測紀錄留在 [#7](https://github.com/YiCheng0608/stock-lab/issues/7) 的 QA 留言，不寫入本文。
 - 本節是契約登錄，不宣稱解除 #8 或 #20 的依賴；依賴是否解除由全局依整合版本判定。
 - 本節描述 adapter 與保存契約；其後程式、policy 或驗收語意變動須重驗並更新本節。
