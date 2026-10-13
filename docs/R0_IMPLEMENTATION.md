@@ -35,8 +35,6 @@
 | `signal_output_semantics_version` | rule-only confidence 與輸出 | gate 不變、只改欄位 nullability／解讀。 |
 | `presentation_contract_version` | 使用者可見標籤與 legacy 解讀 | 呈現語意改變；不反寫研究資料。 |
 
-<a id="3-小批交付順序"></a>
-
 ## 3. 有限能力導覽
 
 | 範圍 | 已 review 的能力 | 仍未完成／詳細契約 |

@@ -112,10 +112,6 @@ Child read 會重驗全部 ancestors 的 core／revision identity、payload／se
 
 Local foundation 的 canonical shape、ownership、WAL／journal guard、transaction、collision、lifecycle、concurrency、reader 與 nested detachment 已有限 review。這不構成 runtime binding，也不擴張下列相鄰能力。
 
-<a id="91-round32-c032-b有限-offline-exact-comparison"></a>
-<a id="92-round33-c033-b有限-caller-provided-current-pure-rule-replay"></a>
-<a id="93-round34-c034-b有限-opt-in-worker-evaluation-capture"></a>
-
 | 分離能力 | 與 artifact 的邊界 |
 | --- | --- |
 | [Offline comparison](SIGNAL_COMPARISON.md) | 對兩個 caller-provided stable snapshots 作 exact、唯讀描述；`comparable=false`，不證 shared input、PIT、execution、winner 或 replay。 |
