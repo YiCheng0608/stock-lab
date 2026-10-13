@@ -62,7 +62,8 @@ STANDALONE_ONLY = {
     "test_finmind_dealer_direction_source.py": (
         "tests/test_finmind_dealer_direction_source.py:56 installs a process-wide audit hook at import and "
         ":42 requires -B (standalone, stdlib only, no conftest); "
-        "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; no README filename mention yet"
+        "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; "
+        "listed in docs/development-baseline/README.md standalone-only table"
     ),
 }
 
