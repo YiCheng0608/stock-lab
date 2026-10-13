@@ -233,7 +233,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 ### M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口
 
-沿 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`。producer 用 `--serve --cutoff 2026-10-06 --live-source-opt-in` 加 source `--policy-version`／`--policy-digest` 與 storage `--private-store-root`／`--private-policy-version`／`--private-policy-digest`；reader 以 `--saved-source-only` 取代 live opt-in。私人保存以 `STOCK_TPEX_PRICE_PRIVATE_STORE=1`、`STOCK_TPEX_PRICE_PRIVATE_ROOT`、`STOCK_TPEX_PRICE_PRIVATE_POLICY_VERSION`／`DIGEST` 啟用；測試與產品 root 由 caller 自備專案外路徑，import／普通 startup 不 fetch／hydrate。pins 與三檔 schema 見[來源 §30](../SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)，file count cap 與 NO-RETRY 保護見[來源 §30.2](../SOURCE_REGISTRY.md#302-三檔原子出版與嚴格重驗)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口。
+沿 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`。producer 用 `--serve --cutoff 2026-10-06 --live-source-opt-in` 加 source `--policy-version`／`--policy-digest` 與 storage `--private-store-root`／`--private-policy-version`／`--private-policy-digest`；reader 以 `--saved-source-only` 取代 live opt-in。私人保存以 `STOCK_TPEX_PRICE_PRIVATE_STORE=1`、`STOCK_TPEX_PRICE_PRIVATE_ROOT`、`STOCK_TPEX_PRICE_PRIVATE_POLICY_VERSION`／`DIGEST` 啟用；測試與產品 root 固定為 `%LOCALAPPDATA%/taiwan-stock-research/price-save-tests-01a11367`／`price-save-01a11367`（`tools/tpex-price-api.py` 的 `TEST_ROOT`／`PRODUCT_ROOT` 常數），`--private-store-root` 不符即 `private root outside exact owned scope` 拒絕；import／普通 startup 不 fetch／hydrate。pins 與三檔 schema 見[來源 §30](../SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)，file count cap 與 NO-RETRY 保護見[來源 §30.2](../SOURCE_REGISTRY.md#302-三檔原子出版與嚴格重驗)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口。
 
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
@@ -241,7 +241,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 ### M3-P1 既有庫存股數的零落盤驗證入口
 
-`python -B -X utf8 backend/tests/test_share_quantity_exact_presentation.py` 與 `node tools/share-quantity-exact-preview.cjs --check --deps <既有 frontend/node_modules>` 為記憶體 standalone 入口；契約見[UI](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，現行 storage 模式見下節。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P1 既有庫存股數的零落盤驗證入口。
+`python -B -X utf8 backend/tests/test_share_quantity_exact_presentation.py` 與 `node tools/share-quantity-exact-preview.cjs --check --deps <既有 frontend/node_modules>` 為記憶體 standalone 入口；preview 的 `--serve` 只接受自有埠對 8777／8778 或 8779／8780，其他埠對拒絕。契約見[UI](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，現行 storage 模式見下節。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P1 既有庫存股數的零落盤驗證入口。
 
 ### M3-P2 可信整數保存與磁碟重開驗證入口
 
@@ -249,7 +249,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 `python -B -X utf8 backend/tests/test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases；standalone 使用共用唯讀依賴，不載 conftest。重複 audit probe 的 skip 不得改報全 pass／0 skip。
 
-磁碟模式只接受原 task 授權的固定根（caller 自備專案外路徑，root／ancestors non-reparse），不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
+磁碟模式只接受測試檔常數 `OWNED_ROOT`（`%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250`）這個原 task 授權的固定根，root／ancestors non-reparse，不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
 
 - `--disk`：四個 sequential synthetic normal／fault 案例，驗 migration、關閉／重開、readiness 唯讀 hash 與 API int64 保存；最後嘗試清理，test／cleanup 分列。
 - `--prepare`：exclusive 建 owned DB，不覆寫既有檔。
@@ -355,7 +355,7 @@ API／preview 預設埠 8799／8800，preview `--api-port` 預設 8799；bundle 
 python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 ```
 
-從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，整目錄 pytest 會一併收集其 `unittest.TestCase` 案例。
+從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，整目錄 pytest 依結構會一併收集其 `unittest.TestCase` 案例；該收集結果尚未實跑驗證。
 
 ## 歷史驗證
 

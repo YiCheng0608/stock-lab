@@ -277,7 +277,7 @@ TWSE `T86` 保持用途准入證據 `unknown`：本次 [TWSE Swagger](https://op
 
 Consumer 重驗 ZIP_STORED exact `body.bin`／`receipt.json` 成員、大小及 body hash、successful receipt、source／endpoint／GET／版本／pins、型別敏感的 policy／condition／attribution 內容及 aware、順序一致的 request／capture time；檔案讀取前後重驗 identity／bytes，拒絕 symlink、hardlink 或途中變更。摘要保存 body／receipt 雙 hash、原件 1-based row ordinal、capture time、來源與版本、attribution、summarize decision 及 condition receipts。`provenance.verification=local_evidence_consistent` 只證本地原件／receipt 一致，不是官方 origin authentication。
 
-`candidate_count` 是全 body 列數，`selected_count` 是本次合格選列數，`as_of` 是顯式 expected data date；`session_windows.status=unavailable`，保留 `trading_session_source_not_admitted` 與 `multi_session_institutional_evidence_missing`。Selected `status=available` 不代表 5／20 交易日窗口 available。
+`candidate_count` 是全 body 列數，`selected_count` 是本次合格選列數，`as_of` 是顯式 expected data date；`session_windows.status=unavailable`，保留 `trading_session_source_not_admitted` 與 `multi_session_institutional_evidence_missing`。Selected `status=available` 不代表 5／20 交易日窗口 available。拒收以 reason code 回報，主要有 `payload_date_mismatch`（列 `Date` 不等於 expected date）、`selected_row_missing`／`selected_row_duplicate`（requested selected 無列或多列），以及外部 pins 與 receipt／manifest digest 不符；清單不封閉，以程式為準。
 
 在 repo 的 `backend` 目錄、已可執行 worker 的 Python 環境中，改入**既有且核定** `capture.zip` 路徑後可執行下例；日期與 symbols 必須對應原件，結果只輸出 stdout。取得新原件仍用第 4 節 runtime `capture`，顯式指定本節 manifest、source、pins 與核定的新 output 目錄。
 
@@ -392,14 +392,14 @@ W1 範圍：TPEx 3105／6488、唯一資料截止2026-10-02，日曆限2026-09-0
 
 ### 13.1 獨立 policy 與四用途
 
-[`tpex_institutional_window.py`](../backend/worker/tpex_institutional_window.py) 的現行 policy、profile、外部 pins 與取得上限見 [§19.1](#191-新版policy用途與取得上限)；型別／來源集合、四用途、整份 policy 與外部 digest 必須一致。原 registry／policy JSON、P2a manifest、bundled default 與其 pins 未改。
+[`tpex_institutional_window.py`](../backend/worker/tpex_institutional_window.py) 的現行 policy、profile、外部 pins 與取得上限見 [§19.1](#191-新版policy用途與取得上限)；型別／來源集合、四用途、整份 policy 與外部 digest 必須一致。W1 當時的 policy `tpex-institutional-window/w1-v1`、外部 pin `m1-w1-tpex-window-2026-10-04.1` 已由 §19.1 版本取代，digest 與原文見 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §13.1。原 registry／policy JSON、P2a manifest、bundled default 與其 pins 未改。
 
 | Source ID／版本 | 准入的政府連結 exact GET 與觀測查詢 |
 | --- | --- |
 | `tpex_government_institutional_csv`；`dataset-11856-dated-csv-observed-2026-10-04/v1` | [dataset11856](https://data.gov.tw/dataset/11856) 的 [CSV](https://www.tpex.org.tw/web/stock/3insti/DAILY_TradE/3itrade_hedge_result.php?l=zh-tw&se=EW&t=D&o=data)，附 `d=115/MM/DD`，僅下述20個日期。 |
 | `tpex_government_index_csv`；`dataset-11391-month-csv-observed-2026-10-04/v1` | [dataset11391](https://data.gov.tw/dataset/11391) 的 [指數 CSV](https://www.tpex.org.tw/www/zh-tw/indexInfo/inx?response=data)，附 `date=2026/09/01` 或 `2026/10/01`。 |
 
-統籌核實這兩個政府連結資源免費、適用[政府資料開放授權條款第1版](https://data.gov.tw/license)，及[TPEx 網站條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點的開放資料例外。`local_fetch`、`raw_store`、`summarize` 各為 `admitted`，須署名 Taipei Exchange (TPEx)、保留授權／政府資料集／exact URL、原件完整性、hash、版本及取得時間，並履行有界請求。`historical_pit=unsupported`；這不放行 legacy POST、其他日期、TWSE 或任意自動下載。查詢日期參數是本次實測行為，不是官方參數 SLA；數字 rate limit、精確發布／first availability、revision lineage 及停用承諾仍未知。
+統籌核實這兩個政府連結資源免費、適用[政府資料開放授權條款第1版](https://data.gov.tw/license)，及[TPEx 網站條款](https://www.tpex.org.tw/zh-tw/gtsm_disclaimer.html?l=zh-tw)第7點的開放資料例外；條款第 5 點限定經同意方式自動下載的限制保留，不因 endpoint 可讀而消失，各節「條款核對同 §13.1」均含此限制。`local_fetch`、`raw_store`、`summarize` 各為 `admitted`，須署名 Taipei Exchange (TPEx)、保留授權／政府資料集／exact URL、原件完整性、hash、版本及取得時間，並履行有界請求。`historical_pit=unsupported`；這不放行 legacy POST、其他日期、TWSE 或任意自動下載。查詢日期參數是本次實測行為，不是官方參數 SLA；數字 rate limit、精確發布／first availability、revision lineage 及停用承諾仍未知。
 
 ### 13.2 完整有界日曆與窗口
 
