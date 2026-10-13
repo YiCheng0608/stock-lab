@@ -70,6 +70,11 @@ STANDALONE_ONLY = {
         "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; "
         "listed in docs/development-baseline/README.md standalone-only table"
     ),
+    "test_ordinary_close_source.py": (
+        "tests/test_ordinary_close_source.py raises unless run with -B, installs sys.addaudithook (no sockets, "
+        "no writes outside its own session directory) before importing the modules under test, reads a pinned "
+        "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
+    ),
 }
 
 # Assign rather than setdefault: a developer shell may have production

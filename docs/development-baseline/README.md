@@ -107,7 +107,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 10 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 11 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -121,8 +121,9 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
 | [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
 | [`test_saved_price_chips_scope7_focus.py`](../../backend/tests/test_saved_price_chips_scope7_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-stock-scope-7-check` |
+| [`test_ordinary_close_source.py`](../../backend/tests/test_ordinary_close_source.py) | 見[#7 七股普通收盤](#7-七股普通收盤取得保存與讀回的-standalone-驗證入口) |
 
-後四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
+`test_saved_price_chips_*` 四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
 
 ### R1-A2 legacy 成交額 migration 的磁碟驗證入口
 
@@ -379,6 +380,20 @@ API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 c
 ```
 
 API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準，未驗證在整目錄 pytest 下的行為。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。
+
+### #7 七股普通收盤取得、保存與讀回的 standalone 驗證入口
+
+```powershell
+python -I -B -X utf8 backend/tests/test_ordinary_close_source.py
+```
+
+從專案根目錄執行，僅標準函式庫、不需 `--deps`、不載 conftest。`-B` 必備，缺少即拒絕啟動。`TMPDIR`、`TEMP`、`TMP` 須同導向同一個短的隔離目錄（Git Bash 以 `TMPDIR` 優先，三者都要設）；程式在其下建立唯一的 session 目錄，路徑超過 190 字元即拒絕，避免 bundle 路徑逼近 Windows 260 字元上限。
+
+零 GET、不碰 DB、不起服務、無 seal。程式先以 `git cat-file` 讀一次固定 formal blob（`d8918bc…:docs/SOURCE_REGISTRY.md`，唯讀並核 SHA-256，不讀工作樹的 registry），再安裝 audit hook、之後才 import 被測模組。Hook 禁止 socket 連線與名稱解析，禁止 session 目錄以外的一切寫入（含 mkdir、rename、remove），子程序只放行固定的 `python -I -B` reader child。被測的保存與讀回只在 session 目錄內的合成私人 root 執行，結束時目錄須為空並移除。
+
+核程序 exit，以及結尾的 `RESIDUE session_dir_exists=… hook_blocked=… expected_probe_blocks=…`：`session_dir_exists` 須為 False，`hook_blocked` 須等於 `expected_probe_blocks`（hook 自身探針的預期阻擋數）。測試與清理分報，不以 exit 0 推定殘留為 0；專案樹與 session 目錄以外的新增產物上限 **0**。
+
+它驗產品 `backend/app/ordinary_close_source.py` 的 policy 驗證與產品常數 pin、參數化日曆 gate（含以 #32 原窗口逐份比對等價）、60 日收盤正規化、保存上限與原子出版、新程序讀回重驗，以及一次性、租約與 seal／binding gate（沒有有效 seal，真實路徑一律在 gate 被拒）。所有日曆與價格值是合成邊界資料，不證真來源回應或 seal 核發；契約、policy pin 與支援範圍見[來源 §52](../SOURCE_REGISTRY.md#52-7七股普通收盤與交易日曆的日期時區語意契約)。本檔列於 `backend/tests/conftest.py` 的 `STANDALONE_ONLY`，pytest 收集會略過它（略過不是通過）；驗收以上列 standalone 指令為準，未驗證在 pytest 下的行為。
 
 ## 歷史驗證
 
