@@ -48,6 +48,6 @@
 
 ## 6. 2026-09-15 獨立 UI 文案維護（已有限 review）
 
-獨立 UI 維護已有限接受繁中、ETF／族群名稱、空值、法人欄名與兩市場官方分點入口；個股案例另覆蓋張數換算、融資原單位、合法 0、MA60 不足、未知幣別、指數／收盤價與中文新聞。記憶體前端測試與 final `npm run build` 通過。
+獨立 UI 維護已有限接受繁中、ETF／族群名稱、空值、法人欄名與兩市場官方分點入口；個股案例另覆蓋張數換算、融資原單位、合法 0、MA60 不足、未知幣別、指數／收盤價與中文新聞。記憶體前端測試與 final `pnpm run build` 通過。
 
 這只代表既有資料的唯讀 UI 案例。正式分點資料集、歷史 coverage、主力身分／排名、完整無障礙、full backend、一般 API startup、正式 DB／部署與 ROADMAP round 均未驗；未執行 migration。既有大型 JavaScript chunk 警告未阻擋此有限 review。

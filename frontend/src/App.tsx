@@ -89,6 +89,8 @@ import ChipsDirectionPage, { ChipsDirectionProvider } from './ChipsDirectionPage
 import ChipsAdjacentPage, { ChipsAdjacentProvider } from './ChipsAdjacentPage'
 import ChipsDealerComponentsPage, { ChipsDealerComponentsProvider } from './ChipsDealerComponentsPage'
 import { DEALER_COMPONENTS_ROUTE } from './chipsDealerComponents'
+import ChipsDealerDirectionCombosPage, { ChipsDealerDirectionCombosProvider } from './ChipsDealerDirectionCombosPage'
+import { COMBOS_ROUTE, comboFlag } from './chipsDealerDirectionCombos'
 import { ADJACENT_ROUTE } from './chipsAdjacent'
 import { DIRECTION_ROUTE } from './chipsDirection'
 import { GROSS_ROUTE } from './chipsGross'
@@ -2004,8 +2006,15 @@ function NotFound() {
 }
 
 export default function App() {
-  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
+  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7, comboFlag()].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
   const location = useLocation()
+  if (comboFlag() === 'm1-v1' && location.pathname.startsWith(COMBOS_ROUTE)) {
+    return <ChipsDealerDirectionCombosProvider><Routes>
+      <Route path={COMBOS_ROUTE} element={<ChipsDealerDirectionCombosPage />} />
+      <Route path={COMBOS_ROUTE + '/:symbol'} element={<ChipsDealerDirectionCombosPage />} />
+      <Route path="*" element={<Navigate to={COMBOS_ROUTE} replace />} />
+    </Routes></ChipsDealerDirectionCombosProvider>
+  }
   if (import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DEALER_COMPONENTS_ROUTE)) {
     return <ChipsDealerComponentsProvider><Routes>
       <Route path={DEALER_COMPONENTS_ROUTE} element={<ChipsDealerComponentsPage />} />

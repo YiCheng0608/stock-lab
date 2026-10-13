@@ -133,7 +133,7 @@ python -m worker.source_runtime capture `
 
 `STOCK_RESEARCH_OUTPUT_PARENT` 只是操作端指向既有、已授權 parent 的變數，runtime 不會自行讀取。執行前依 [開發入口](development-baseline/README.md) 確認目的、產物上限與清理條件；預期只有一個 `capture.zip`，body 上限 5 MiB，另加小型 receipt／ZIP overhead。只清理本次擁有且已核對的路徑。
 
-`--source` 只接受 `twse_stock_day_all`、`twse_holiday_schedule`、`twse_twt48u_all`、`tpex_spendi_history`。preflight failure 是 zero request、stdout failure receipt、exit 2；成功 bundle 內含 `body.bin` 與 `receipt.json`。request、validation、timeout、publication 與 capture-time 邊界見 [SOURCE_REGISTRY §4](SOURCE_REGISTRY.md#4-standalone-source-capture)。
+`--source` 只接受 `twse_stock_day_all`、`twse_holiday_schedule`、`twse_twt48u_all`、`tpex_spendi_history`、`tpex_3insti_daily_trading`；後者仍須 [SOURCE_REGISTRY §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要) 的 explicit 單來源 manifest 與 pins，不沿用原 snapshot 四來源的 registry version。另有 memory-only 模式（`source-memory-capture/v1` receipt，不落盤），目前只對 `twse_twt48u_all` 開放，由 library caller 使用，CLI 範例不涵蓋。preflight failure 是 zero request、stdout failure receipt、exit 2；成功 bundle 內含 `body.bin` 與 `receipt.json`。request、validation、timeout、publication 與 capture-time 邊界見 [SOURCE_REGISTRY §4](SOURCE_REGISTRY.md#4-standalone-source-capture)。
 
 `STOCK_DAY_ALL` 與 holiday bundle consumer 都是 caller 明確 opt-in 的 Python library，沒有 CLI。三個 `STOCK_*` 必須在 import `worker.sources`／`worker.pipeline` 前設為隔離路徑；同 request key 已有 `status=success` 的 run、`records>0`、metadata 的 `taiex_records>0` 且 `force=False` 時直接 reuse；需要驗本次 consumer 接線時用 `force=True` 重新處理該 request。兩者的輸入範圍、fail-closed 與非 PIT 邊界見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars) 及 [§5.2](SOURCE_REGISTRY.md#52-holidayschedule-positive-exclusion)。
 

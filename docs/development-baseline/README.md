@@ -8,6 +8,8 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
+本文的 `python`／`node` 指實際安裝的直譯器。Python 須為 3.12.x，Windows 下若 PATH 的 `python` 是 Store stub，請改用實際安裝路徑。`--check`／preview 入口以 pinned Node 24.19.0（TypeScript 5.9.3／esbuild 0.25.12）驗收，CI frontend job 的 Node 版本以 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) 的 setup-node 為準；舊 20.19.4 只是歷史驗收當時版本。各入口的 `--deps` 指既有唯讀依賴（本機 `backend/.deps`／`frontend/node_modules`；CI 的 chips-series check 傳 `$GITHUB_WORKSPACE/backend`），省略時 runner 落到私人預設路徑，因此一律明示。
+
 測試失敗先依[失敗分流與有界重驗](../GITHUB_WORKFLOW.md#失敗分流與有界重驗)分類；工具／環境失敗修正後重跑同一案例，不判產品結果，也不重取外部資料。
 
 使用 API／preview 前，依[執行資源與服務版本](../GITHUB_WORKFLOW.md#執行資源與服務版本)核實載入版本與資源隔離；commit 不更新舊程序，補版本證據仍須遵守原件生命週期、quota 與 NO-RETRY。
@@ -105,7 +107,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 8 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 10 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -113,6 +115,8 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) | 見[M1-W8](#m1-w8-八截止法人窗口的零落盤驗證入口) |
 | [`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) | 見[M1-CHIPS-CUTOFF-1006-1](#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口) |
 | [`test_conditional_plan_store.py`](../../backend/tests/test_conditional_plan_store.py) | `python -B -X utf8 backend/tests/test_conditional_plan_store.py`，僅標準函式庫，不需 `--deps` |
+| [`test_ohlcv_history_source.py`](../../backend/tests/test_ohlcv_history_source.py) | `python -B -X utf8 backend/tests/test_ohlcv_history_source.py`，僅標準函式庫，不需 `--deps`；缺 `-B` 即 `RuntimeError`，需含固定 blob 的完整 git 歷史（shallow clone 會失敗） |
+| [`test_finmind_dealer_direction_source.py`](../../backend/tests/test_finmind_dealer_direction_source.py) | `python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必填，缺少時拒絕執行；見 [#9 驗證入口](#9-七股自行買賣與避險方向組合的零落盤驗證入口) |
 | [`test_saved_price_chips_entry.py`](../../backend/tests/test_saved_price_chips_entry.py) | `python -B -X utf8 tools/tpex-price-api.py --joint-check --deps <既有 backend/.deps>` |
 | [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
 | [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
@@ -135,15 +139,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-TurnoverM
 
 stdout／stderr 在記憶體捕獲。以子程序 exit、八份無 skip 的 metrics 與 `validation_complete` 核對完整執行；`R1A2_RESULT` 分列 `test_exit`、`cleanup_exit`、確切殘留／大小／原因。八個 file-backed 案例不外推正式 DB、API startup、backup restore、UI 或完整 backend。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L55–L68](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L55-L68)。
-
 ### R1-A2 selected invalid／拒收的磁碟驗證入口
 
 `tools/Invoke-StockDaySelectedInvalidValidation.ps1` 直接跑 `backend/tests/test_stock_day_selected_invalid_file_integration.py` 的一個 compound unittest；缺專用環境的 `SkipTest` 不算通過。指定三種 invalid／四類拒收見[資料來源](../DATA_SOURCES.md#r1-a2-selected-invalid拒收磁碟整合有限接受)。
 
 ```powershell
 $selectedInvalidDependencyRoots = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
-$selectedInvalidRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-si-<owner>-<32-hex>'
+$selectedInvalidRoot = '<LocalAppData>/Temp/taiwan-stock-r1a2-si-<owner>-<32-hex>'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-StockDaySelectedInvalidValidation.ps1 -RunOwner '<owner>' -ValidationRoot $selectedInvalidRoot -DependencyRoots $selectedInvalidDependencyRoots
 ```
 
@@ -155,8 +157,6 @@ owner 為核定八個 ASCII 英數字元，32-hex 為核定小寫 hex；根須�
 
 本入口不涵蓋完整 backend、production startup、UI、live、TPEx、正式 DB 或 migration 八案例。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L70–L86](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L70-L86)。
-
 ### R1-A2 legacy 成交量的零落盤驗證入口
 
 從根目錄直接執行 [test_legacy_daily_volume.py](../../backend/tests/test_legacy_daily_volume.py)，不使用一般 pytest 或通用落盤 runner。格式／別名／fixture 範圍見[資料來源](../DATA_SOURCES.md#r1-a2-legacy-日行情成交量精確整數-gate有限接受)。
@@ -165,7 +165,7 @@ owner 為核定八個 ASCII 英數字元，32-hex 為核定小寫 hex；根須�
 $volumePreviousDeps = $env:STOCK_TEST_DEPS
 try {
     $env:STOCK_TEST_DEPS = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
-    & 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 ./backend/tests/test_legacy_daily_volume.py
+    & python -B -X utf8 ./backend/tests/test_legacy_daily_volume.py
     $volumeTestExit = $LASTEXITCODE
 } finally {
     $env:STOCK_TEST_DEPS = $volumePreviousDeps
@@ -176,15 +176,13 @@ Standalone stub 提供 93 日常數與未使用的 `memory-unused/raw`，來源 
 
 Parser／adapter fixture 不包括 capture、collect、SQLite、API、live、UI 或 production startup，也不替代下節磁碟驗收。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L88–L105](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L88-L105)。
-
 ### R1-A2 legacy 成交量的磁碟整合驗證入口
 
 `tools/Invoke-LegacyDailyVolumeValidation.ps1` 直接跑 `backend/tests/test_legacy_daily_volume_file_integration.py` 的一個 compound unittest，不載一般 conftest。合法／拒收、兩次 force collect、重開與 API 範圍見[資料來源](../DATA_SOURCES.md#r1-a2-legacy-成交量磁碟整合)。
 
 ```powershell
 $legacyVolumeDependencyRoots = '<既有 backend/.deps>;<既有 backend/.validation-deps>'
-$legacyVolumeRoot = 'C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-r1a2-lv-<owner>-<32-hex>'
+$legacyVolumeRoot = '<LocalAppData>/Temp/taiwan-stock-r1a2-lv-<owner>-<32-hex>'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/Invoke-LegacyDailyVolumeValidation.ps1 -RunOwner '<owner>' -ValidationRoot $legacyVolumeRoot -DependencyRoots $legacyVolumeDependencyRoots
 ```
 
@@ -192,274 +190,165 @@ owner／root 規則與上述 selected runner 相同；可指定 `-PythonPath`，
 
 含暫態檔上限 **14 files／11 directories／3 MiB**；DB／journal 各 **1 MiB**、raw JSON **32 KiB**、metadata **8 KiB**。程序上限 **60 秒**；需一份 `R1A2_LEGACY_VOLUME_METRICS`、`tests_run=1`、`skipped=0`、`validation_complete=true`。`R1A2_LEGACY_VOLUME_RESULT` 分列 test／cleanup exit 和殘留；只清自有 exact 根，reparse／額外內容拒絕清理。無 `KeepArtifacts`。
 
-預期 audit-denial probes 沒有實際 I/O，TestClient／asyncio 的本地 socketpair 不算外網。其他未驗範圍由資料来源契約負責。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L107–L121](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L107-L121)。
+預期 audit-denial probes 沒有實際 I/O，TestClient／asyncio 的本地 socketpair 不算外網。其他未驗範圍由資料來源契約負責。
 
 ### M1-P3b 記憶體事件接線的驗收入口
 
-此路徑零額外落盤，不套通用 runner。server exact `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST；普通 GET／import 不抓外網，成功原件只留 process cache。契約與真原件／API／具名桌面及窄版範圍見[個股頁 §11](../STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)。Memory catalogue 不作真行情／DB 證據。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L123–L125](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L123-L125)。
+server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET／import 不抓外網；契約見[個股頁 §11](../STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-P3b 記憶體事件接線的驗收入口。
 
 ### M2-P1 官方事件關注清單的驗收入口
 
-GET／首次明示 POST 共用 P3b 的來源、啟用值、cache 與鎖。Consumer／API 記憶體邊界和單次真原件／API／具名操作分開接受；精確範圍見[個股頁 §12](../STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)。零額外落盤；原件未保存，不能離線重播。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L127–L129](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L127-L129)。
+沿 P3b 入口；精確範圍見[個股頁 §12](../STOCK_RESEARCH_PAGE.md#12-m2-p1官方事件關注清單接個股總覽)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-P1 官方事件關注清單的驗收入口。
 
 ### M2-P2 搜尋與研究往返的驗收入口
 
-沿 M2-P1 零額外落盤入口；GET／POST 可帶 `q`。全原件驗證、搜尋後截斷、matching 外壞列、同股多事件、query 邊界與 M1 返回依[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)。最小 fixture 不代替來源或持久化驗收。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L131–L133](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L131-L133)。
+沿 M2-P1 入口；精確範圍見[個股頁 §13](../STOCK_RESEARCH_PAGE.md#13-m2-p2官方事件清單搜尋與研究往返)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-P2 搜尋與研究往返的驗收入口。
 
 ### UNIT-LOTS-1 台股張數前置的記憶體驗證入口
 
-[`tools/unit-lots-preview.cjs`](../../tools/unit-lots-preview.cjs) 預設 `--check --deps <既有 frontend/node_modules>`；借用共用依賴唯讀，不另建環境。Check 核 src 的 `noEmit:true`、`incremental:false`、`composite:false` 並拒絕writeFile；App與preview bundle採 `write:false`。涵蓋精確張／原股、單位／日期窗口、預設lot輸入、零股相容與unsafe拒用；不外推W1–W7舊suite或完整backend。
-
-最小fixture只存memory，受8MiB上限；Git測試工具是可重建來源，不是附件。`--serve` 只供root另核具名Full App預覽／loopback fixture API，重啟即消失，非正式庫存或本次新來源；保存API／payload未改，不重跑舊storage回歸，memory不能替代未來必要磁碟重開。
-
-具名桌面／390px顯示與可信輸入／提交只按[UI §10.3](../UI_COPY_SPEC.md#103-張零股)及[個股頁 §7.1](../STOCK_RESEARCH_PAGE.md#71-unit-lots-1-日常張數與原股稽核有限接受)範圍接受。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L135–L145](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L135-L145)。
+`node tools/unit-lots-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/unit-lots-preview.cjs)）；`--serve` 只供具名 Full App 預覽，重啟即消失。文案契約見[UI §10.3](../UI_COPY_SPEC.md#103-張零股)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` UNIT-LOTS-1 台股張數前置的記憶體驗證入口。
 
 ### M1-PRICE-1 單日價量的記憶體驗證入口
 
-後端入口[tools/tpex-price-api.py](../../tools/tpex-price-api.py)為 `python -B -X utf8 ... --check --deps <既有 backend/.deps>`，前端[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)為 `node ... --check --deps <既有 frontend/node_modules>`，共用依賴唯讀。Python在import前隔離memory config／SQLite `:memory:` 並拒絕disk寫入；Node核現行26src `noEmit:true`、`incremental:false`、`composite:false`，writeFile拒用、bundle `write:false`，不落buildinfo／bundle。
-
-check fixture為重建selected值與synthetic邊界，非official capture。
-
-`--serve` 與API `--live-source-opt-in` 只供root核定的loopback／actual router驗收；API需 `--policy-version`／`--policy-digest` 沿[來源 §20](../SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)的外部pins。程式明示啟用須 `STOCK_TPEX_PRICE_MEMORY_CAPTURE=1`、`STOCK_TPEX_PRICE_POLICY_VERSION` 與 `STOCK_TPEX_PRICE_POLICY_DIGEST` 均符合固定pins；check不抓live source，import／ordinary GET零外網。首次合法POST最多1 bounded GET，同程序重複／切股與失敗cache不重取；原件／receipt只process memory，重啟釋放，不能離線重播或作磁碟保存證據。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L147–L157](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L147-L157)。
+後端 `python -B -X utf8 tools/tpex-price-api.py --check --deps <既有 backend/.deps>`（[來源檔](../../tools/tpex-price-api.py)），前端 `node tools/tpex-price-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/tpex-price-preview.cjs)）；check 不抓 live source。`--serve` 搭配 `--live-source-opt-in` 須帶 `--policy-version`／`--policy-digest`，程式明示啟用須 `STOCK_TPEX_PRICE_MEMORY_CAPTURE=1`、`STOCK_TPEX_PRICE_POLICY_VERSION`、`STOCK_TPEX_PRICE_POLICY_DIGEST` 符合[來源 §20](../SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)的 pins。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-1 單日價量的記憶體驗證入口。
 
 ### M2-FOCUS-LOTS-1 精確張數關注的記憶體驗證入口
 
-後端既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)增加 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>`，只跑[test_price_focus.py](../../backend/tests/test_price_focus.py)必要7項；前端既有[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)增加 `node ... --focus-check --deps <既有 frontend/node_modules>`，只跑[priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)55 helper與18 full-App SSR，現行28src noEmit。沿memory config／SQLite `:memory:`、唯讀共用依賴、Python不寫disk／pycache、Node writeFile拒用／bundle write:false／無buildinfo，不另建環境。
-
-Checks驗精確門檻、非法字串／日期、來源拒用、真零與unavailable、固定返回、回應篡改及既有事件返回相容；check不取actual來源，重建selected樣本不代真來源或磁碟保存。
-
-Actual 驗收以 `serve(preloaded_store=已驗Store)` 在取得原件的同一 Python 程序啟 loopback 真 router。入口須先核Store已attempted、request_count=1、無error、raw完整且validated；只patch同程序STORE，不從舊memory、disk、base64 replay或check fixture冒稱actual。Receipt明示 `preloaded_source=true`、來源count1與runner新增0；catalogue／10/02仍synthetic。普通GET／import、兩個stock POST與兩個focus POST均不增外網；首次live-source模式仍受既有external pins、明示opt-in及每程序1GET／redirect0／retry0／3MiB／30秒約束。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L159–L169](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L159-L169)。
+後端 `python -B -X utf8 tools/tpex-price-api.py --focus-check --deps <既有 backend/.deps>`（跑 [test_price_focus.py](../../backend/tests/test_price_focus.py)），前端 `node tools/tpex-price-preview.cjs --focus-check --deps <既有 frontend/node_modules>`（跑 [priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)）；check 不取 actual 來源。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-LOTS-1 精確張數關注的記憶體驗證入口。
 
 ### M2-FOCUS-DAY-MOVE-1 單日方向與完整返回的記憶體驗證入口
 
-沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>` 與[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --focus-check --deps <既有 frontend/node_modules>`，只跑必要[test_price_focus.py](../../backend/tests/test_price_focus.py)10項、[priceFocus.test.ts](../../frontend/src/priceFocus.test.ts)110helper／44 full-App SSR與現行28src noEmit。仍採memory config／SQLite `:memory:`、既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境；M1／UNIT／m2-v1仍適用證據沿用，不泛跑full suite或production build。
-
-Checks涵蓋all／up／down／flat、Decimal／前端原字串O/C比較、缺失／invalid方向拒用、精確股門檻、兩股讀值／理由重算、三條件重複與safe返回、legacy omitted direction=all。Fixture只synthetic，不代actual來源。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L171–L179](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L171-L179)。
+沿 M2-FOCUS-LOTS-1 的 `--focus-check` 入口。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-DAY-MOVE-1 單日方向與完整返回的記憶體驗證入口。
 
 ### M2-FOCUS-TURNOVER-1 精確成交金額與四條件返回的記憶體驗證入口
 
-沿[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --focus-check --deps <既有 backend/.deps>` 與[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --focus-check --deps <既有 frontend/node_modules>`，必要Python與Node checks；舊M1／UNIT／m2-v1／v2有效證據沿用，不泛跑full old suite／production build。Memory config／SQLite `:memory:`、既有依賴唯讀、noEmit／write:false／incremental:false／composite:false及guard拒寫不變，不另建環境。
-
-Checks驗canonical int64元／省略0／explicit invalid／duplicates、兩股amount/status/reason/raw完整gate、來源明確0與missing分清、等額／加1元、三理由重算、全部四條件samecutoff safe返回，以及legacy omitted amount／shared q／事件返回相容。Fixture僅synthetic，不代actual來源。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L181–L189](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L181-L189)。
+沿 M2-FOCUS-LOTS-1 的 `--focus-check` 入口。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-TURNOVER-1 精確成交金額與四條件返回的記憶體驗證入口。
 
 ### M2-FOCUS-DAY-RANGE-1 新日期與五條件返回的記憶體驗證入口
 
-沿既有[tools/tpex-price-api.py](../../tools/tpex-price-api.py)的 `python -B -X utf8 ... --check/--focus-check --deps <既有backend/.deps>`、[tools/tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的 `node ... --check/--focus-check --deps <既有frontend/node_modules>`。
-
-最小synthetic只memory config／SQLite `:memory:`，既有依賴唯讀、noEmit／write:false／incremental:false／composite:false與guard拒寫，不另建環境。Checks涵蓋百分比原字串／千分scaled int64、精確OHL交叉比較、H=L合法0與missing、四理由／完整reads、safe五條件／尾零／legacy省略，以及兩明確immutable source tuples／store與前端日期隔離、錯pins／body／receipt拒收。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L191–L211](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L191-L211)。
+沿 M1-PRICE-1／M2-FOCUS-LOTS-1 的 `--check`／`--focus-check` 入口。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-DAY-RANGE-1 新日期與五條件返回的記憶體驗證入口。
 
 ### M2-FOCUS-STOCK-SCOPE-1～5 三至七股範圍的記憶體驗證入口
 
-沿既有tools/tpex-price-api.py／tools/tpex-price-preview.cjs --check／--focus-check及唯讀共用依賴，Python -B／SQLite :memory:、Node write:false／noEmit／incremental:false／composite:false、拒寫guards保持；無新環境、helper或disk fixture。各版來源 policy tuple 見[來源 §29.1](../SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表)，actual API／可信操作契約見[個股頁 §34](../STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。
-
-Ordinary fixture max7 CSV rows／serialized80KiB／object512KiB；舊64KiB及五／六股cap與斷言保持。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L213–L279](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L213-L279)。
+沿 M1-PRICE-1／M2-FOCUS-LOTS-1 的 `--check`／`--focus-check` 入口；各版來源 policy tuple 見[來源 §29.1](../SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-STOCK-SCOPE-1～5 三至七股範圍的記憶體驗證入口。
 
 ### M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口
 
-沿既有`tools/tpex-price-api.py`及`tools/tpex-price-preview.cjs`／唯讀共用依賴，無新環境或helper。Python `-B -X utf8`、SQLite :memory:及AST config stub保留；只有已核定private scope例外寫檔，DB不變。Source／storage dual pins及三檔schema見[來源 §30](../SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)，actual操作見[個股頁 §35](../STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。Windows path保護目前僅Windows。
-
-Product runner producer用`--serve --cutoff 2026-10-06 --live-source-opt-in`及原`.5` source `--policy-version/--policy-digest`、新`--private-store-root/--private-policy-version/--private-policy-digest`；NEW reader以`--saved-source-only`取代live opt-in，同source/storage pins及root，empty Store／capture禁用。Private設定為`STOCK_TPEX_PRICE_PRIVATE_STORE=1`、`STOCK_TPEX_PRICE_PRIVATE_ROOT`、`STOCK_TPEX_PRICE_PRIVATE_POLICY_VERSION/DIGEST`；import／普通startup不fetch／hydrate。Exact pins見來源§30，product/private entry都需原task核範圍，本文不授權重跑。
-
-Testroot `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-tests-01a11367`；productroot同parent下`price-save-01a11367`。Parent起初不存在；combined≤9files／7dirs／3432448B（含parent），product≤3files／3dirs／3170304B，synthetic≤6files／256KiB、一case一份最小bundle；ordinary fixture≤7rows／serialized80KiB／object512KiB。只清本次created／owned exact scopes，parent限created且empty；不掃Temp、不留整套successful產物。
-
-既有私人三檔的 file count cap 與 NO-RETRY 保護規則見[來源 §30.2](../SOURCE_REGISTRY.md#302-三檔原子出版與嚴格重驗)；不新增磁碟案例，也不以替代工具／路徑繞過。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L281–L299](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L281-L299)。
+沿 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`。producer 用 `--serve --cutoff 2026-10-06 --live-source-opt-in` 加 source `--policy-version`／`--policy-digest` 與 storage `--private-store-root`／`--private-policy-version`／`--private-policy-digest`；reader 以 `--saved-source-only` 取代 live opt-in。私人保存以 `STOCK_TPEX_PRICE_PRIVATE_STORE=1`、`STOCK_TPEX_PRICE_PRIVATE_ROOT`、`STOCK_TPEX_PRICE_PRIVATE_POLICY_VERSION`／`DIGEST` 啟用；測試與產品 root 固定為 `%LOCALAPPDATA%/taiwan-stock-research/price-save-tests-01a11367`／`price-save-01a11367`（`tools/tpex-price-api.py` 的 `TEST_ROOT`／`PRODUCT_ROOT` 常數），`--private-store-root` 不符即 `private root outside exact owned scope` 拒絕；import／普通 startup 不 fetch／hydrate。pins 與三檔 schema 見[來源 §30](../SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)，file count cap 與 NO-RETRY 保護見[來源 §30.2](../SOURCE_REGISTRY.md#302-三檔原子出版與嚴格重驗)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-SAVE-1 私人磁碟保存與新程序驗證入口。
 
 ### M1／R1-A2 成交量精確呈現的零落盤驗證入口
 
-`backend/tests/test_volume_exact_presentation.py` 直接 standalone 執行；Node `tools/volume-exact-preview.cjs` 分別核 units／chart／overview、product fetch／Response.json 及 UI。Python 沿 AST stub／memory SQLite，不載 conftest 或 lifespan；`_capture_evidence` 的 patch 僅支援 synthetic fixture，不重驗檔案 gate。API／股張／圖形近似與兩市場範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。
-
-沒有磁碟重開、真官方／live、production startup／build 或完整 M1／PIT 證據。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L301–L305](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L301-L305)。
+`python -B -X utf8 backend/tests/test_volume_exact_presentation.py` standalone 執行，Node `tools/volume-exact-preview.cjs` 核 units／chart／overview 與 UI；範圍見[個股頁 §14](../STOCK_RESEARCH_PAGE.md#14-m1r1-a2成交量-httpjavascript個股精確呈現)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1／R1-A2 成交量精確呈現的零落盤驗證入口。
 
 ### M3-P1 既有庫存股數的零落盤驗證入口
 
-`backend/tests/test_share_quantity_exact_presentation.py` 與 `tools/share-quantity-exact-preview.cjs` 採上述 standalone／memory 方式；原股數／Float safe 範圍及具名操作見[UI 契約](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)。當時 router commit／refresh→GET、unsafe 拒收、formatter／SSR／實際操作已有限接受，不能當磁碟 reopen 或大數 Float 保存證據。同名入口的現行 storage 模式見下節。
+`python -B -X utf8 backend/tests/test_share_quantity_exact_presentation.py` 與 `node tools/share-quantity-exact-preview.cjs --check --deps <既有 frontend/node_modules>` 為記憶體 standalone 入口；preview 的 `--serve` 只接受自有埠對 8777／8778 或 8779／8780，其他埠對拒絕。契約見[UI](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，現行 storage 模式見下節。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P1 既有庫存股數的零落盤驗證入口。
 
 ### M3-P2 可信整數保存與磁碟重開驗證入口
 
 股數與輸入契約見[UI](../UI_COPY_SPEC.md#m3-p2-可信整數保存與磁碟重開契約)，migration／readiness 見[R0 §8.11](../R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
 
-`test_share_quantity_exact_presentation.py` 為記憶體 router／guard；`test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases。兩者 standalone 使用共用唯讀依賴，不載 conftest。必要記憶體驗證已有限接受；不能將重複 audit probe skip 改報全 pass／0 skip。
+`python -B -X utf8 backend/tests/test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases；standalone 使用共用唯讀依賴，不載 conftest。重複 audit probe 的 skip 不得改報全 pass／0 skip。
 
-Storage runner 的磁碟模式只接受固定根 `C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-m3-share-storage-01a10250`，須有原 task 授權且 root／ancestors non-reparse；不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
+磁碟模式只接受測試檔常數 `OWNED_ROOT`（`%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250`）這個原 task 授權的固定根，root／ancestors non-reparse，不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
 
 - `--disk`：四個 sequential synthetic normal／fault 案例，驗 migration、關閉／重開、readiness 唯讀 hash 與 API int64 保存；最後嘗試清理，test／cleanup 分列。
 - `--prepare`：exclusive 建 owned DB，不覆寫既有檔。
-- `--serve`：只用該 DB 在 loopback **8779** 跑 actual `app.main`／readonly readiness，不做 init-db 或 migration。
+- `--serve`：只用該 DB 在 loopback 跑 actual `app.main`／readonly readiness，不做 init-db 或 migration。
 - `--inspect`：SQLite `mode=ro` 查 storage type、已知列與 closed-file SHA。
 - `--cleanup`：清理這次核定的自有根。
 
-Node preview 的 `--check`、`--http-check`、`--serve` 使用共用 `--deps`；自有 **8780** 接 **8779**，bundle `write:false`。Synthetic `2026-10-03` 的兩市場使用者數量不作官方行情／正式持倉證據。
-
-瀏覽器 capture 停止會自動建立 HAR 檔（落盤副作用）。未來使用 capture 先核 stop 落盤副作用和配額；記憶體 bundle 不保證瀏覽器工具零落盤。
-
-本節只證 owned fixture 的有限 startup、股數保存／重開，不證正式 migration／restore、production、官方／live、完整 backend／Vite build、大數金融估值、Plan、完整 M3 或 PIT。
+Node `tools/share-quantity-exact-preview.cjs` 的 `--check`、`--http-check`、`--serve` 使用共用 `--deps`，bundle `write:false`。瀏覽器 capture 停止會自動建立 HAR 檔（落盤副作用），使用前先核配額；記憶體 bundle 不保證瀏覽器工具零落盤。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P2 可信整數保存與磁碟重開驗證入口。
 
 ### M3-P3 庫存價值輸入的零落盤驗證入口
 
-Python `test_share_quantity_exact_presentation.py --finance-only`；Node preview `--finance-check`、`--finance-http-check`，serve pair **8777／8778**。沿共同 standalone／audit／write:false；只在 memory fixture 保存 synthetic 持倉，不承襲 P2 disk fixture，不使用會落 HAR 的 capture。
-
-UI 原字串、helper 序列化前、raw HTTP 三層各自驗收，見[UI](../UI_COPY_SPEC.md#m3-p3-庫存成本停損風險輸入可信檢核與拒收保留)。不證污染讀回、Decimal exact、磁碟保存、production、完整估值／風險或 Plan。
+Python `test_share_quantity_exact_presentation.py --finance-only`；Node `--finance-check`、`--finance-http-check`。契約見[UI](../UI_COPY_SPEC.md#m3-p3-庫存成本停損風險輸入可信檢核與拒收保留)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P3 庫存價值輸入的零落盤驗證入口。
 
 ### M3-P4 庫存價值可信讀回的零落盤驗證入口
 
-Python `--finance-read-only`；Node `--finance-read-check`、`--finance-read-http-check`；serve 兩端皆帶 `--finance-read-fixture`，pair **8777／8778**。固定 synthetic `2026-10-04` 十四持倉與六十個明示 fixture 日期；mutation 封鎖，不作保存／刪除驗收。
-
-三態、missing-only 停損 fallback、metadata 相容與具名範圍見[UI](../UI_COPY_SPEC.md#m3-p4-既有庫存價值可信讀回與非法停損隔離)。不修污染或 affinity 遺失的意圖，不證磁碟、官方行情、Decimal exact 或完整風險行動。
+Python `--finance-read-only`；Node `--finance-read-check`、`--finance-read-http-check`；serve 兩端皆帶 `--finance-read-fixture`。契約見[UI](../UI_COPY_SPEC.md#m3-p4-既有庫存價值可信讀回與非法停損隔離)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P4 庫存價值可信讀回的零落盤驗證入口。
 
 ### M3-P5 可信股數與估值／持倉判定的零落盤驗證入口
 
-Python `--quantity-trust-only`；Node `--quantity-trust-check`、`--quantity-trust-http-check`；serve 皆帶 `--quantity-trust-fixture`，pair **8777／8778**。固定 synthetic `2026-10-04` 十六持倉、兩個 absent metadata，不作官方行情／持倉證據。
-
-股數／held／估值三態、原 gate 優先及 scope 見[UI](../UI_COPY_SPEC.md#m3-p5-可信庫存股數與既有估值持倉判定一致)。不證行情信任、金融估值 exact、磁碟重開、所有風險／Plan 或完整 M3。
+Python `--quantity-trust-only`；Node `--quantity-trust-check`、`--quantity-trust-http-check`；serve 皆帶 `--quantity-trust-fixture`。契約見[UI](../UI_COPY_SPEC.md#m3-p5-可信庫存股數與既有估值持倉判定一致)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P5 可信股數與估值／持倉判定的零落盤驗證入口。
 
 ### M3-P6a 庫存本地行情與試算的零落盤驗證入口
 
-Python `--quote-read-only`；Node `--quote-read-check`、`--quote-read-http-check`；serve 皆帶 `--quote-read-fixture`，pair **8777／8778**。固定 synthetic `2026-10-04` **20 持倉／18 行情**，兩整表全欄／typeof／note／updated_at 在 HTTP／UI 前後同 hash、read mutation 0。
-
-本地數值隔離及試算只由[UI](../UI_COPY_SPEC.md#m3-p6a-庫存收盤數值隔離與本地試算可檢視)負責。記憶體 patch 不證 M1 正向 file gate、磁碟重開、官方／availability／PIT 或完整交易能力。
+Python `--quote-read-only`；Node `--quote-read-check`、`--quote-read-http-check`；serve 皆帶 `--quote-read-fixture`。契約見[UI](../UI_COPY_SPEC.md#m3-p6a-庫存收盤數值隔離與本地試算可檢視)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P6a 庫存本地行情與試算的零落盤驗證入口。
 
 <a id="m3-p6b-actions-清單行情讀回的零落盤驗證入口"></a>
 
 ### M3-P6b Actions 清單行情讀回的零落盤驗證入口
 
-Python `--action-read-only`；Node `--action-read-check`、`--action-read-http-check`；serve 皆帶 `--action-read-fixture`，pair **8777／8778**。固定 synthetic `2026-10-04` **24 持倉／1,382 行情**、每市場十二 symbols／六十個明示 fixture 日期；巨大值補驗的 L-FUTURE cutoff close／adj_close 為 `1e308`，翌日 5000 仍排除。兩 instances 各核自身 before／after／pre-shutdown 全欄／typeof，不能跨 instance 比 hash。
-
-逐列 raw／unlocated／latest／scope 與具名兩尺寸清單、搜尋／state／分頁及正常導航見[UI](../UI_COPY_SPEC.md#m3-p6b-actions-清單逐列行情讀回污染隔離)。污染卡片完整詳情未由 P6b 點驗，detail SSR 不證 StockPage。未驗完整 ActionsPage、來源／日期真實性、PIT、磁碟／production 或新 Plan。
+Python `--action-read-only`；Node `--action-read-check`、`--action-read-http-check`；serve 皆帶 `--action-read-fixture`。契約見[UI](../UI_COPY_SPEC.md#m3-p6b-actions-清單逐列行情讀回污染隔離)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P6b Actions 清單行情讀回的零落盤驗證入口。
 
 ### M3-P6c 個股詳情行情讀回的零落盤驗證入口
 
-Python `--stock-read-only`，必要局部矩陣為 `--stock-read-case router-matrix`；Node `--stock-read-check --deps <既有依賴目錄>`、`--stock-read-http-check`、`--stock-read-followup`；serve 皆帶 `--stock-read-fixture`，pair **8777／8778**。固定 synthetic `2026-10-04` **十二標的／十二持倉／784 行情**，沒有准入 M1 原件。
-
-Raw 十七欄、nullable／候選窗口／MA／M1 latest 由[個股頁 §15](../STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)負責。Hidden table `innerText` 空白不證 MA 全空，SSR／工具 ack 不代替操作。
+Python `--stock-read-only`，局部矩陣 `--stock-read-case router-matrix`；Node `--stock-read-check --deps <既有 frontend/node_modules>`、`--stock-read-http-check`、`--stock-read-followup`；serve 皆帶 `--stock-read-fixture`。契約見[個股頁 §15](../STOCK_RESEARCH_PAGE.md#15-m3-p6c個股詳情行情讀回污染隔離)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P6c 個股詳情行情讀回的零落盤驗證入口。
 
 ### M3-P6d 個股研究候選讀回的零落盤驗證入口
 
-Python `--signal-read-only`，局部補驗 `--signal-read-case evidence-shape`；Node `--signal-read-check` 只做 noEmit，`--signal-read-http-check` 核 actual getStock／Response.json／StockPage／Panel，`--signal-read-status-check` 核 actual export guard／Panel 的非字串 status 邊界；serve 皆帶 `--signal-read-fixture`，pair **8777／8778**。
-
-投影／JSON／窗口／canonical latest／observation 由[個股頁 §16](../STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)負責。
+Python `--signal-read-only`，局部補驗 `--signal-read-case evidence-shape`；Node `--signal-read-check`（noEmit）、`--signal-read-http-check`、`--signal-read-status-check`；serve 皆帶 `--signal-read-fixture`。契約見[個股頁 §16](../STOCK_RESEARCH_PAGE.md#16-m3-p6d個股詳情研究候選讀回污染隔離)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P6d 個股研究候選讀回的零落盤驗證入口。
 
 ### M3-P6e 個股獨立特徵／籌碼讀回的零落盤驗證入口
 
-Python `--independent-read-only`；Node `--independent-read-check --deps <既有依賴目錄>`、`--independent-read-http-check --api http://127.0.0.1:8777 --deps <既有依賴目錄>`；serve 皆帶 `--independent-read-fixture`，owned pair **8777／8778**。Serve／compiler 順序啟動，bundle `write:false`。
-
-資料契約與 native／DOM.click 支持範圍見[個股頁 §17](../STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。
-
-歷史收據（M3 各批 fixture 計數、acceptance、配額、清理與實測失敗）：[基線 L311–L391](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L311-L391)。
+Python `--independent-read-only`；Node `--independent-read-check --deps <既有 frontend/node_modules>`、`--independent-read-http-check --api <API URL> --deps <既有 frontend/node_modules>`；serve 皆帶 `--independent-read-fixture`。契約見[個股頁 §17](../STOCK_RESEARCH_PAGE.md#17-m3-p6e個股特徵籌碼獨立區塊讀回隔離)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P6e 個股獨立特徵／籌碼讀回的零落盤驗證入口。
 
 ### M1-W2～W7 法人窗口的零落盤驗證入口（歷史）
 
-現行入口為下節 W8；W2～W7 不作現行入口，其入口、case、版本與收據見[基線 L393–L477](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L393-L477)。
+現行入口為下節 W8。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-W2～W7 法人窗口的零落盤驗證入口（歷史）。
 
 ### M1-W8 八截止法人窗口的零落盤驗證入口
 
-現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 的 `--w8-only`為8個worker synthetic memory cases，`--w8-api-only`為5個real-router／MockTransport cases。Python3.12.14／httpx0.28.1；沿 `-B -X utf8`、AST config stub／guarded memory SQLite，不載conftest／正式startup，不建DB／fixture檔；`--serve`預設mock，另用 `--serve --live-source-opt-in`才取W8當次原件，普通GET／import零外網，共用既有環境。
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows.py --w8-only` 跑 worker synthetic memory cases，`--w8-api-only` 跑 real-router／MockTransport cases；沿 AST config stub／guarded memory SQLite，不載 conftest／正式 startup，不建 DB／fixture 檔。`--serve` 預設 mock，`--serve --live-source-opt-in` 才取當次原件，普通 GET／import 零外網。
 
-[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs)沿共用唯讀 `--deps <既有 frontend/node_modules>`，explicit Node24.19.0／TS5.9.3／esbuild0.25.12；`--w8-only --typecheck-only` full-src noEmit／SSR。Full App `--w8-only --serve`以esbuild `write:false` memory bundle／fallback字型接actual API，非Vite／production build。不稱mock96 HTTP通過，不重跑old／full／legacy／ZIP／old live／build。舊selectors僅保留歷史class byte，不稱現版可pass，重現須查Git當時版本。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L479–L491](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L479-L491)。
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 以 `node tools/institutional-window-preview.cjs --w8-only --typecheck-only --deps <既有 frontend/node_modules>` 做 full-src noEmit／SSR；`--w8-only --serve` 以 esbuild `write:false` memory bundle 接 actual API，非 Vite／production build。舊 selectors 只保留歷史 class byte，重現須查 Git 當時版本。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-W8 八截止法人窗口的零落盤驗證入口。
 
 ### M1-CHIPS-CUTOFF-1006-1 同截止法人窗口的零落盤驗證入口
 
-沿共用Python3.12.14／httpx0.28.1、`-B -X utf8`、既有唯讀dependencies及guarded SQLite `:memory:`；不載conftest／正式config mkdir／startup，不建DB／raw／fixture檔／pycache／helper或附件。Exact來源／pins及執行上限由[來源 §31](../SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)管理，具名操作與未驗由[個股頁 §36](../STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)管理；本文不另授權金融重跑。
+[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows_1006.py --worker-only`（或 `--worker-case <具名 case>`）及 `--api-only` 跑最小 synthetic memory cases，不載 conftest，不建 DB／raw／fixture 檔。`--serve` 預設 mock；`--serve --live-source-opt-in --policy-version <version> --policy-digest <digest>` 才開新 Store，啟用變數為 `STOCK_TPEX_INSTITUTIONAL_1006_MEMORY_CAPTURE=1` 及 `STOCK_TPEX_INSTITUTIONAL_1006_POLICY_VERSION`／`DIGEST`，import／普通 startup／GET 不 fetch。來源 pins 與執行上限見[來源 §31](../SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)，具名操作見[個股頁 §36](../STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。
 
-新[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py)的`--worker-only`／`--worker-case <具名case>`及`--api-only`只使用最小synthetic memory，`--serve`預設mock。Root另核`--serve --live-source-opt-in --policy-version <新version> --policy-digest <新digest>`才開NEW empty新／W8 Store，finance seed0，不preload／samecapture replay；API／preview owned pair8799／8800。新啟用變數為`STOCK_TPEX_INSTITUTIONAL_1006_MEMORY_CAPTURE=1`及`STOCK_TPEX_INSTITUTIONAL_1006_POLICY_VERSION/DIGEST`，import／普通startup／GET不fetch。
-
-沿[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs)及共用唯讀`--deps <既有frontend/node_modules>`；explicit Node24.19.0／TypeScript5.9.3／esbuild0.25.12，`--chips-1006-only --typecheck-only`核new SSR／full-src noEmit；`--serve`完整App esbuild `write:false` memory bundle，非production build。原W8 StockOverview受影響SSR另局部核對，不把old selector歷史整套升格為現版pass。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L493–L507](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L493-L507)。
+[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 以 `node tools/institutional-window-preview.cjs --chips-1006-only --typecheck-only --deps <既有 frontend/node_modules>` 核 SSR／full-src noEmit；`--serve` 為完整 App 的 esbuild `write:false` memory bundle，非 production build。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-CUTOFF-1006-1 同截止法人窗口的零落盤驗證入口。
 
 ### M1-SAVED-PRICE-FOCUS-1006-1 保存來源關注的零落盤驗證入口
 
-沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`及唯讀共用dependencies；Python `-B -X utf8`、guarded SQLite `:memory:`，Node `write:false`／full-src noEmit／incremental:false／composite:false。不載正式DB、一般startup mkdir或conftest，不建新環境／helper／backup／fixture檔。來源用途與精確pins由[來源 §32](../SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)管理，actual操作見[個股頁 §37](../STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)；本節不另授權重跑。
-
-NEW product reader用 `--serve --cutoff 2026-10-06 --saved-source-only`、原capture `--policy-version/--policy-digest`、原storage `--private-store-root/--private-policy-version/--private-policy-digest`，另需新 `--saved-focus-policy-version/--saved-focus-policy-digest`。只有原task核定existing private root／finite讀取quota後可啟用；consumer opt-in不允live-source opt-in、preloaded Store、POST、old saved入口繞過或memory／DB hydration。來源§32的10s cooperative／32MiB graph estimate、檔案bounds與兩reader共用96 quota不作OS deadline／RSS保證。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L509–L523](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L509-L523)。
+來源 pins 見[來源 §32](../SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)，actual 操作見[個股頁 §37](../STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-SAVED-PRICE-FOCUS-1006-1 保存來源關注的零落盤驗證入口。
 
 ### M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1 共同入口的零落盤驗證入口
 
-只沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`、共用dependencies及guarded SQLite `:memory:`；Python3.12.14 `-B -X utf8`、pinned Node24.19.0、TypeScript5.9.3／esbuild0.25.12。Shell node20.19.4另列，不代pinned runtime；不install、建helper／fixture檔、startup mkdir、正式DB或複製環境。來源／quota由[§33](../SOURCE_REGISTRY.md#33-m1-saved-price-chips-integration-1006-1保存行情與法人窗口共同入口)管理，本節不另授權重跑。
-
-API／preview皆需 `--serve --saved-source-only --saved-price-chips-opt-in`；API另需 `--cutoff 2026-10-06 --private-root` 原task literal root，preview `--api-port 8799`／memory bundle。外部五組pins：capture `--policy-version/--policy-digest`、storage `--private-policy-version/--private-policy-digest`、saved consumer `--saved-focus-policy-version/--saved-focus-policy-digest`、chips `--chips-policy-version/--chips-policy-digest`、joint `--joint-policy-version/--joint-policy-digest`。Joint不允 `--live-source-opt-in`；僅此preview compile `VITE_SAVED_PRICE_CHIPS_INTEGRATION='m1-v1'`，write:false／noEmit／incremental:false／composite:false。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L525–L536](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L525-L536)。
+來源與 quota 見[來源 §33](../SOURCE_REGISTRY.md#33-m1-saved-price-chips-integration-1006-1保存行情與法人窗口共同入口)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-SAVED-PRICE-CHIPS-INTEGRATION-1006-1 共同入口的零落盤驗證入口。
 
 ### M1-SAVED-PRICE-CHIPS-FOCUS-1006-1 八條件入口的零落盤驗證入口
 
-沿前節共用pinned dependencies、API/preview及guarded SQLite `:memory:`，不install／建helper或fixture檔／startup mkdir／正式DB／另建環境。新 `--saved-price-chips-focus-opt-in` 與 `VITE_SAVED_PRICE_CHIPS_FOCUS='m1-v1'` 獨立；本preview old integration flag OFF。New pair為 `--joint-focus-policy-version m1-saved-price-chips-focus-tpex-2026-10-06.1 --joint-focus-policy-digest sha256:1b48fc6bb23b021f3d289c797b8d077af4576f492cbc08953d0515ef0da89416`；另核原capture/storage/saved-focus/chips/joint五組pins、原task literal private root及finite quota，原flags/公式不改。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L538–L548](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L538-L548)。
+來源 pins 見[來源 §34](../SOURCE_REGISTRY.md#34-m1-saved-price-chips-focus-1006-1保存行情與法人條件關注准入及日曆缺口)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-SAVED-PRICE-CHIPS-FOCUS-1006-1 八條件入口的零落盤驗證入口。
 
 ### M2-FOCUS-STOCK-SCOPE-6 八股新來源日的零落盤驗證入口
 
-沿既有 `tools/tpex-price-api.py`／`tools/tpex-price-preview.cjs`、共用pinned dependencies、Python `-B -X utf8`／guarded SQLite `:memory:`、Node `write:false/noEmit/incremental:false/composite:false`；未install／建helper／disk fixture／新環境／正式DB。新policy／worker／projection／consumer pins及有限FIRST範圍由[來源 §35](../SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)管理，exact啟動命令及所有raw exits留ROOT原task，不另授權重跑。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L549–L561](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L549-L561)。
+沿 M1-PRICE-1／M2-FOCUS-LOTS-1 的 `--check`／`--focus-check` 入口；來源 pins 見[來源 §35](../SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-FOCUS-STOCK-SCOPE-6 八股新來源日的零落盤驗證入口。
 
 ### M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2 全月日曆八條件的零落盤驗證入口
 
-沿共用pinned Python3.12.14 `-B -X utf8`、Node24.19／TypeScript5.9.3／esbuild0.25.12、既有API/preview及guarded SQLite `:memory:`；不install/helper/fixture檔/DB複製/正式DB。新API／preview `--serve --saved-source-only --saved-price-chips-focus-calendar-opt-in`，與old joint/focus flags互斥；API另需 `--cutoff 2026-10-06 --private-root` 原task literal root，preview `--api-port 8799`／memory bundle。新compile `VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR='m1-v2'`，old flags OFF。
-
-外部六組pairs仍為capture `--policy-version/--policy-digest`、storage `--private-policy-version/--private-policy-digest`、saved-focus `--saved-focus-policy-version/--saved-focus-policy-digest`、new chips `--chips-policy-version/--chips-policy-digest`、new entry `--joint-policy-version/--joint-policy-digest`、new focus `--joint-focus-policy-version/--joint-focus-policy-digest`；前三不改、新三version／canonical bytes／digest由[來源 §36](../SOURCE_REGISTRY.md#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入)單一管理。Exact啟動／check命令與原exit留ROOT task，本節不另授權重跑。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L563–L573](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L563-L573)。
+來源 pins 見[來源 §36](../SOURCE_REGISTRY.md#36-m1-saved-price-chips-focus-calendar-1006-2全月日曆與八條件來源准入)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2 全月日曆八條件的零落盤驗證入口。
 
 ### M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1 七股八條件的零落盤驗證入口
 
-沿共用pinned Python3.12.14 `-B -X utf8`／FastAPI0.141.1／SQLAlchemy2.0.52／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12；guarded SQLite `:memory:`，不install/helper/fixture檔/DB複製/正式DB。New API/preview `--serve --saved-source-only --saved-price-chips-focus-stock-scope-7-opt-in`，與old/calendar flags互斥；API另需 `--cutoff 2026-10-06 --private-store-root` 原task exactroot，preview `--api-port 8799`／memory bundle，compile `VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7='m1-v1'`、old flags OFF。
-
-外部capture/storage/saved-focus/chips/joint/joint-focus六組version/digest args沿前節；前三price pins不變，新三canonical version/bytes/SHA由[來源 §37](../SOURCE_REGISTRY.md#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入)管理。ROOT先核用途與pins才implementation/GET/privateIO；原啟動/check commands／版本／exit及各failed invocation留原task，本節不授權重跑或來源配額。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L576–L588](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L576-L588)。
+來源 pins 見[來源 §37](../SOURCE_REGISTRY.md#37-m1-saved-price-chips-focus-stock-scope-7-1006-1七股共同來源准入)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1 七股八條件的零落盤驗證入口。
 
 ### M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1 七股每日淨超的零落盤驗證入口
 
-chips-only 入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用old saved/joint producer、private root或price fetch。沿pinned Python3.12.14 `-B -X utf8`、FastAPI0.141.1／httpx0.28.1及Node24.19／TypeScript5.9.3／esbuild0.25.12，只讀既有backend/.deps與frontend/node_modules，不install、建helper／fixture檔、DB或整套來源副本。新policy version／外部digest由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理。
-
-下列為已驗入口形狀，原exact commands／版本／raw exit留原task；文件不授權再FIRST／重啟或更新配額。API只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用；新preview flag與old flags獨立互斥，GET/capture僅as_of，三UI RAW不可當額外API keys。
+chips-only 入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用舊 saved／joint producer、private root 或 price fetch，只讀既有 `backend/.deps` 與 `frontend/node_modules`。policy version／外部 digest 由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理；文件不授權再 FIRST／重啟或更新配額。API 只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用，GET／capture 僅 `as_of`，三個 UI RAW 不可當額外 API keys。
 
 ```powershell
-$seriesNode = 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe'
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check
-& $seriesNode tools/tpex-chips-series-preview.cjs --check
-& $seriesNode tools/tpex-chips-series-preview.cjs --check --check-ui-only
-& $seriesNode tools/tpex-chips-series-preview.cjs --check --check-startup-only
+python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑>
+node tools/tpex-chips-series-preview.cjs --check --deps <既有 frontend/node_modules>
+node tools/tpex-chips-series-preview.cjs --check --check-ui-only --deps <既有 frontend/node_modules>
+node tools/tpex-chips-series-preview.cjs --check --check-startup-only --deps <既有 frontend/node_modules>
 # serve 須沿原 task 准入與外部 pins
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --serve --chips-series-stock-scope-7-opt-in --port 8801 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
-& $seriesNode tools/tpex-chips-series-preview.cjs --serve --chips-series-stock-scope-7-opt-in --api-port 8801 --port 8802 --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
+python -B -X utf8 tools/tpex-chips-series-api.py --serve --chips-series-stock-scope-7-opt-in --deps <backend 路徑> --port <API 埠> --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
+node tools/tpex-chips-series-preview.cjs --serve --chips-series-stock-scope-7-opt-in --deps <既有 frontend/node_modules> --api-port <API 埠> --port <UI 埠> --policy-version m1-chips-daily-net-series-stock-scope-7-tpex-2026-10-06.1 --policy-digest sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31
 ```
 
-API／preview 預設埠 8799／8800，preview `--api-port` 預設 8799；bundle 於啟動時建立，換 UI 埠不換 API，commit 不更新既有 bundle。
-
-Fixture／數值／零窗口仍synthetic，不代actual來源／操作。政策cap中的retained8748386B為estimate，非RSS／construction peak；headers／deadline的postcheck／cooperative限制由來源§38管理。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L590–L613](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L590-L613)。
+API／preview 預設埠 8799／8800，preview `--api-port` 預設 8799；bundle 於啟動時建立，換 UI 埠不換 API，commit 不更新既有 bundle。Fixture／數值／零窗口仍 synthetic，不代 actual 來源／操作；headers／deadline 的 postcheck／cooperative 限制由來源 §38 管理。
 
 ### #31 七股融資餘額 FinMind 來源的零落盤驗證入口
 
@@ -467,7 +356,29 @@ Fixture／數值／零窗口仍synthetic，不代actual來源／操作。政策c
 python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 ```
 
-從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，未驗證在 pytest 下的行為。
+從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，整目錄 pytest 依結構會一併收集其 `unittest.TestCase` 案例；該收集結果尚未實跑驗證。
+
+### #9 七股自行買賣與避險方向組合的零落盤驗證入口
+
+來源契約、policy pin 與 SPENT 帳見[來源 #9 一節](../SOURCE_REGISTRY.md#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2)，頁面與本機 API 契約見[個股頁 #9 一節](../STOCK_RESEARCH_PAGE.md#9七股自行買賣與避險五日方向組合頁)。下列入口都不連網、不開服務埠、不建檔案或 DB：測試只用 RAM fixture、假 transport 與合成語料，audit hook 拒絕外連、名稱解析、磁碟寫入與 subprocess；它們不證真來源、可信瀏覽器操作或 BFCache，也不授權取得資料。`--serve` 需要審查過的 seal 與新的額度，不是例行驗證入口。
+
+來源模組（上表的 standalone-only 檔），從專案根目錄執行：
+
+```powershell
+python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py
+```
+
+它驗 `backend/app/finmind_dealer_direction_source.py` 的 policy 與外部 pin 閘門、傳輸與 schema 規則、anchor、生命週期與一次性額度；語料是合成的（建構成滿足 56 個 anchor），不是來源真值。
+
+API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境，`--deps` 預設指向主 checkout 既有的 `backend/.deps` 與 `frontend/node_modules`，唯讀、不 install：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/finmind-dealer-direction-api.py --check --chips-dealer-direction-combos-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --check-ui-only --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+```
+
+API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準，未驗證在整目錄 pytest 下的行為。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。
 
 ## 歷史驗證
 
@@ -475,120 +386,82 @@ python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 
 ### M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 官方事件區間的零落盤驗證入口
 
-Backend入口為[test_official_events.py](../../backend/tests/test_official_events.py)／[test_official_event_focus.py](../../backend/tests/test_official_event_focus.py)。Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs) `--event-range-check` 為獨立零網路模式。既有price query四條件共享URL相容與事件不滲價量API屬必要檢查，不擴舊price來源驗收。
-
-Checks使用可重建記憶體fixture與既有依賴，不install／建helper、DB、cache、build／raw／附件；noEmit與memory-only consumer保持。範圍包含日期grammar／inclusive／單側／invalid先於source與catalogue、完整feed先驗後range／q、計數／cap／返回、首次失敗跨focus／selected shared seal及retry0。Synthetic邊界不代真原件、原三instrument catalogue只routing。原exact命令／版本／所有raw exit與工具參數、quoting、offscreen／未送達操作收據留task；本段不授權重跑金融來源或producer。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L619–L627](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L619-L627)。
+Backend 入口為 [test_official_events.py](../../backend/tests/test_official_events.py)／[test_official_event_focus.py](../../backend/tests/test_official_event_focus.py)（執行方式見下節 EVENT-KIND）；前端 `node tools/tpex-price-preview.cjs --deps <既有 frontend/node_modules> --event-range-check` 為獨立零網路模式。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-OFFICIAL-EVENT-DATE-RANGE-20261008-1 官方事件區間的零落盤驗證入口。
 
 ### M2-OFFICIAL-EVENT-KIND-20261008-1/B1 官方事件類型的零落盤驗證入口
 
-Python3.12.14／pytest8.4.2：[test_official_events.py](../../backend/tests/test_official_events.py)及[test_official_event_focus.py](../../backend/tests/test_official_event_focus.py)。原task UTF8 stdin以Python `-B -X utf8`、PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1，sys.path先放本根backend／backend/tests及main backend/.deps；AST僅抽install_zero_disk_guard，以os／sys／Path globals編譯並先執行，再import pytest。pytest參數 `--noconftest -q -s -p no:cacheprovider -p no:logging` 加上述兩檔；只memory SQLite，禁止写入／mutation／subprocess／外網，完整inline命令留原task，不建helper或環境。
-
-Node20.19.4／TypeScript5.9.3／esbuild0.25.12，[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)独立零網路check：
+[test_official_events.py](../../backend/tests/test_official_events.py) 及 [test_official_event_focus.py](../../backend/tests/test_official_event_focus.py) 以 `python -B -X utf8`、`PYTHONDONTWRITEBYTECODE=1`／`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` 執行：sys.path 先放 `backend`／`backend/tests` 及既有 `backend/.deps`，先執行 `test_official_events.py` 的 `install_zero_disk_guard`，再 import pytest 並以 `--noconftest -q -s -p no:cacheprovider -p no:logging` 跑兩檔；只 memory SQLite，禁止寫入／mutation／subprocess／外網。前端獨立零網路 check：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --event-kind-check
+node tools/tpex-price-preview.cjs --deps <既有 frontend/node_modules> --event-kind-check
 ```
 
-RAM esbuild／既有Git fixture，不寫DB／cache／build／raw／Temp。
+真來源及 actual 操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M2-OFFICIAL-EVENT-KIND-20261008-1/B1 官方事件類型的零落盤驗證入口。
 
-真來源及actual操作見[來源](../SOURCE_REGISTRY.md) §40／[個股頁](../STOCK_RESEARCH_PAGE.md) §45；synthetic4不代ordinary／fullmarket／price／PIT。
+### M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1：公司與事件的零落盤驗證入口
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L629–L641](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L629-L641)。
+來源與映射由[來源](../SOURCE_REGISTRY.md) §41 管理，可信操作由[個股頁](../STOCK_RESEARCH_PAGE.md) §46 管理。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1。
 
-## M1-TWSE-ISSUER-EVENT-PROFILE-20261008-1：公司與事件的零落盤驗證入口
+#### 記憶體測試與既有入口
 
-scope／provenance／date／Code與Namejoin／duplicate與conflict拒收／pins／single attempt FIRST failure SPENT／unavailable／failure clear用RAM fixtures驗，不代真來源或可信UI。實際1095×33 issuer及58×12event原件／全部映射由[來源](../SOURCE_REGISTRY.md) §41管理；可信desktop1365×900／390×844三股與五條件往返／502清值由[個股頁](../STOCK_RESEARCH_PAGE.md) §46管理。
-
-### 記憶體測試與既有入口
-
-後端[Test module](../../backend/tests/test_twse_issuer_profile.py)要求先安裝[test_official_events.py](../../backend/tests/test_official_events.py)的 `install_zero_disk_guard`，再import pytest／新module；原task以Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1、main repo既有backend/.deps及本根import paths、AST抽取guard方式執行。pytest用 `--noconftest -q -s -p no:cacheprovider -p no:logging`，只RAM fixture／SQLite，不import app.main／conftest或寫DB；完整inline命令、版本、原exit與範圍留原task，不另建helper／環境。
-
-前端新mode沿[tpex-price-preview.cjs](../../tools/tpex-price-preview.cjs)的既有RAM編譯／guard入口；必要已接受命令：
+後端 [test_twse_issuer_profile.py](../../backend/tests/test_twse_issuer_profile.py) 沿 EVENT-KIND 的執行方式（先安裝 `install_zero_disk_guard`，再 import pytest 以 `--noconftest` 跑）。前端：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --issuer-event-check
+node tools/tpex-price-preview.cjs --deps <既有 frontend/node_modules> --issuer-event-check
 ```
 
-42src noEmit／80targetchecks只synthetic tuple／SSR／response／routing／proxy邊界，非金融／browser／磁碟保存／production build／普通股history證據。
+### M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼追溯的零落盤驗證入口
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L643–L665](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L643-L665)。
-
-## M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼追溯的零落盤驗證入口
-
-新[Test module](../../backend/tests/test_twse_issuer_industry.py)覆蓋two-code exact lookup、其他市場／空白／numeric／special／unknown拒用、external pins／宣告hash／date precision／source URLs、duplicate／conflict、同cutoff與完整dualSHA／ordinal、名稱與raw mappings。RAM fixtures是邊界計算證據，不代真公司／官方文件／可信UI；authority分別見[來源 §42](../SOURCE_REGISTRY.md)、[產業 §10](../INDUSTRY_CLASSIFICATION.md)、[個股頁 §47](../STOCK_RESEARCH_PAGE.md)。
-
-沿[test_official_events.py](../../backend/tests/test_official_events.py)既有zero-disk guard，先安裝audit guard再import pytest／新module；用既有backend/.deps／本根路徑、Python `-B -X utf8`／PYTHONDONTWRITEBYTECODE=1／PYTEST_DISABLE_PLUGIN_AUTOLOAD=1及pytest noconftest、no cacheprovider／logging。只RAM fixtures／SQLite，不import app.main／conftest、建DB或寫Temp；實際命令／版本／exit與限制留ROOT原task，不另建helper／環境／附件。
-
-前端沿既有[RAM preview入口](../../tools/tpex-price-preview.cjs)的新bounded mode：
+後端 [test_twse_issuer_industry.py](../../backend/tests/test_twse_issuer_industry.py) 沿 EVENT-KIND 的執行方式；authority 見[來源 §42](../SOURCE_REGISTRY.md)、[產業 §10](../INDUSTRY_CLASSIFICATION.md)、[個股頁 §47](../STOCK_RESEARCH_PAGE.md)。前端：
 
 ```powershell
-& 'C:/Program Files/nodejs/node.exe' 'tools/tpex-price-preview.cjs' --deps '<既有 frontend/node_modules>' --issuer-industry-check
+node tools/tpex-price-preview.cjs --deps <既有 frontend/node_modules> --issuer-industry-check
 ```
 
-45src noEmit＋71target checks是synthetic tuple／validator／SSR／query error與routing／proxy guard證據，不是financial truth／native UI／production build／磁碟保存。Serve只proxy ROOT-owned API，`--issuer-industry` 必須另有exact industry registry／consumer四external pins及已准入issuer／event pins；舊defaults／其他opt-in不自動升格。
+Serve 的 `--issuer-industry` 須另帶 industry registry／consumer 的四組外部 pins 及已准入 issuer／event pins，舊 defaults 不自動升格。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L667–L689](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L667-L689)。
+### M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：gross零落盤驗證入口
 
-## M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：gross零落盤驗證入口
-
-來源與操作邊界見[來源 §43](../SOURCE_REGISTRY.md)／[個股頁 §48](../STOCK_RESEARCH_PAGE.md)。
-
-三命令不附`--deps`／policy-version／digest參數；runner預設共用main依賴，grossflag選獨立硬coded policy version／外部digest（SOURCE43），不提升oldpins：
+來源與操作邊界見[來源 §43](../SOURCE_REGISTRY.md)／[個股頁 §48](../STOCK_RESEARCH_PAGE.md)。check 命令帶 `--deps`（與 CI 一致），不帶 policy-version／digest；gross opt-in 選獨立硬編 policy version／外部 digest，不提升舊 pins：
 
 ```powershell
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-gross-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-gross-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --check-ui-only --chips-gross-stock-scope-7-opt-in
+python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑> --chips-gross-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --deps <既有 frontend/node_modules> --chips-gross-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --check-ui-only --deps <既有 frontend/node_modules> --chips-gross-stock-scope-7-opt-in
 ```
 
-Fixtures／syntheticzero與SSR不代金融truth／nativeUI；checks sourceGET／network／disk-private-DB寫入0、各rejectionguard0，未跑productionbuild／fullsuite／磁碟保存。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L691–L707](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L691-L707)。
+### M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：方向區段零落盤入口
 
-## M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：方向區段零落盤入口
-
-來源及操作見[來源 §44](../SOURCE_REGISTRY.md)／[個股頁 §49](../STOCK_RESEARCH_PAGE.md)。新opt-in使用獨立ROOT外部pins，不升olddefaults。
-
-本worktree根的三個check入口：
+來源及操作見[來源 §44](../SOURCE_REGISTRY.md)／[個股頁 §49](../STOCK_RESEARCH_PAGE.md)。opt-in 使用獨立外部 pins，不升舊 defaults：
 
 ```powershell
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-direction-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-direction-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --check-ui-only --chips-direction-stock-scope-7-opt-in
+python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑> --chips-direction-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --deps <既有 frontend/node_modules> --chips-direction-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --check-ui-only --deps <既有 frontend/node_modules> --chips-direction-stock-scope-7-opt-in
 ```
 
-SSRwarnings、fixture／27signcases邊界與actualUI分報，不代金融truth；未跑productionbuild／fullsuite／磁碟保存。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L708–L724](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L708-L724)。
+### M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：相鄰窗口零落盤驗證入口
 
-## M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：相鄰窗口零落盤驗證入口
-
-來源／pins與操作見[來源 §45](../SOURCE_REGISTRY.md)／[個股頁 §50](../STOCK_RESEARCH_PAGE.md)。本根opt-in使用獨立ROOT外部canonical9284B及digest，不提升olddefaults；共用main依賴／pinned Node24.19.0，不另建環境。
-
-本worktree根的必要check入口：
+來源／pins 與操作見[來源 §45](../SOURCE_REGISTRY.md)／[個股頁 §50](../STOCK_RESEARCH_PAGE.md)。opt-in 使用獨立外部 canonical／digest，不提升舊 defaults：
 
 ```powershell
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-adjacent-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-adjacent-stock-scope-7-opt-in
+python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑> --chips-adjacent-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --deps <既有 frontend/node_modules> --chips-adjacent-stock-scope-7-opt-in
 ```
 
-純fixture／overflow／zero／lifecycle及SSR不證financial truth／trusted nativeUI；未跑productionbuild／fullsuite／DB／磁碟保存。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1。
 
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L726–L747](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L726-L747)。
+### M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：三組對帳零落盤驗證入口
 
-## M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：三組對帳零落盤驗證入口
-
-新source／canonical9245B與外部digest／774B署名見[來源 §46](../SOURCE_REGISTRY.md)，actual操作見[個股頁 §51](../STOCK_RESEARCH_PAGE.md)。共用main現成backend/.deps及frontend/node_modules，不另建環境；pinned Node24.19.0／TypeScript5.9.3／esbuild0.25.12。
-
-本worktree根的必要check入口（memory-only、不得藉此重新啟動已釋放financial producer）：
+來源 canonical／digest／署名見[來源 §46](../SOURCE_REGISTRY.md)，actual 操作見[個股頁 §51](../STOCK_RESEARCH_PAGE.md)。check 為 memory-only，不得藉此重新啟動已釋放的 financial producer：
 
 ```powershell
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/tpex-chips-series-api.py --check --chips-dealer-components-stock-scope-7-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/tpex-chips-series-preview.cjs --check --chips-dealer-components-stock-scope-7-opt-in
+python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑> --chips-dealer-components-stock-scope-7-opt-in
+node tools/tpex-chips-series-preview.cjs --check --deps <既有 frontend/node_modules> --chips-dealer-components-stock-scope-7-opt-in
 ```
 
-Overflow／zero／missing／components／lifecycle fixture及SSR不代financial truth或trusted nativeUI；未跑productionbuild／fullsuite／DB／磁碟保存。
-
-歷史收據（測試計數、fixture 尺寸、exit、PID、清理與實測失敗）：[基線 L749–L772](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/development-baseline/README.md#L749-L772)。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1。
