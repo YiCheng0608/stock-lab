@@ -30,7 +30,7 @@ const REASON_LABELS: Record<string, string> = {
   pullback_volume_ratio_outside_range: '回踩量比不在規則範圍',
   group_relative_strength_not_positive: '族群相對 加權指數 的 20 日超額報酬未轉正',
   group_excess_return_20d_missing_or_non_finite: '缺少族群相對 加權指數 的 20 日超額報酬',
-  institutional_flow_to_turnover_ratio_5d_missing_or_non_finite: '缺少 5 日法人流向與 20 日日均成交額',
+  institutional_flow_to_turnover_ratio_5d_missing_or_non_finite: '缺少 5 日法人流向與 20 日日均成交量',
   institutional_flow_5d_missing_or_incomplete: '5 日法人籌碼資料尚未齊備',
   margin_balance_change_ratio_5d_missing_or_non_finite: '缺少 5 日融資餘額變化率',
   margin_change_5d_missing_or_incomplete: '5 日融資變化資料尚未齊備',
@@ -263,9 +263,10 @@ export function researchRequirementLabel(field: string): string {
     'prior 20 volumes': '前 20 個交易日成交量', prior_20_volumes: '前 20 個交易日成交量',
     'bar count 60d': '60 日有效行情日數', bar_count_60d: '60 日有效行情日數',
     'taiex excess return 20d': '20 日相對加權指數報酬', group_excess_return_20d: '20 日相對加權指數報酬',
-    'institutional flow 5d': '5 日法人籌碼', institutional_flow_to_turnover_ratio_5d: '5 日法人流向與成交額比率',
+    'institutional flow 5d': '5 日法人籌碼', institutional_flow_to_turnover_ratio_5d: '5 日法人流向與成交量比率',
     'margin change 5d': '5 日融資變化', margin_balance_change_ratio_5d: '5 日融資餘額變化率',
     'average daily turnover 20d': '20 日日均成交額',
+    'average daily volume 20d': '20 日日均成交量',
     close: '收盤價', volume: '成交量', ma20: '20 日均線', ma60: '60 日均線',
   }
   const value = field.trim()

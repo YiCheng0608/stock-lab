@@ -25,6 +25,7 @@ from app.domain import (
     ETF_CATEGORIES,
     GROUP_SCORE_WEIGHTS,
     HOT_GROUP_CONFIG,
+    INSTITUTIONAL_FLOW_FORMULA_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
     STRATEGY_CONFIGS,
     calculate_group_score,
@@ -438,18 +439,19 @@ def _effective_trading_dates(db: Session, instrument_id: int, score_date: date, 
     return list(reversed(rows))
 
 
-def _validated_flow_and_turnover_inputs(
+def _validated_flow_and_volume_inputs(
     db: Session,
     instrument_id: int,
     score_date: date,
 ) -> tuple[float, list[float]] | None:
-    """Return validated five-session flow and twenty-session turnover inputs.
+    """Return validated five-session flow and twenty-session volume inputs.
 
-    The two canonical consumers intentionally use different turnover
-    denominators, but both must consume the same complete, finite source
-    observations.  A missing chip component, chip session, bar, or invalid
-    turnover therefore makes the result unavailable instead of silently
-    turning absent data into a neutral zero.
+    Both the hot_group and strategy consumers must read the same complete,
+    finite source observations: five-day net flow in shares and the
+    inclusive-of-signal-day twenty-session volume in shares (the
+    institutional-flow/v2 formula).  A missing chip component, chip session,
+    bar, or a non-finite or non-positive volume makes the result unavailable
+    instead of silently turning absent data into a neutral zero.
     """
 
     dates = _effective_trading_dates(db, instrument_id, score_date, 20)
@@ -464,15 +466,12 @@ def _validated_flow_and_turnover_inputs(
     bars_by_date = {bar.trading_date: bar for bar in bars}
     if len(bars_by_date) != len(dates):
         return None
-    turnovers: list[float] = []
+    volumes: list[float] = []
     for trading_date in dates:
-        bar = bars_by_date[trading_date]
-        if bar.turnover_status != "available":
+        volume = _safe_float(bars_by_date[trading_date].volume)
+        if volume is None or volume <= 0:
             return None
-        turnover = _safe_float(bar.turnover)
-        if turnover is None or turnover <= 0:
-            return None
-        turnovers.append(turnover)
+        volumes.append(volume)
 
     chip_dates = dates[-5:]
     chips = db.scalars(
@@ -495,7 +494,7 @@ def _validated_flow_and_turnover_inputs(
         if any(component is None for component in components):
             return None
         flow += sum(component for component in components if component is not None)
-    return flow, turnovers
+    return flow, volumes
 
 
 def _hot_group_institutional_flow_ratio(
@@ -503,29 +502,29 @@ def _hot_group_institutional_flow_ratio(
     instrument_id: int,
     score_date: date,
 ) -> float | None:
-    """Compute hot_group_v1 flow: five-day flow / twenty-day turnover sum."""
+    """Compute hot_group_v1 flow: five-day flow / twenty-day volume sum (shares)."""
 
-    inputs = _validated_flow_and_turnover_inputs(db, instrument_id, score_date)
+    inputs = _validated_flow_and_volume_inputs(db, instrument_id, score_date)
     if inputs is None:
         return None
-    flow, turnovers = inputs
-    denominator = sum(turnovers)
+    flow, volumes = inputs
+    denominator = sum(volumes)
     return flow / denominator if denominator > 0 else None
 
 
-def _strategy_institutional_flow_to_average_turnover_ratio(
+def _strategy_institutional_flow_to_average_volume_ratio(
     db: Session,
     instrument_id: int,
     score_date: date,
 ) -> float | None:
-    """Compute strategy-v1 flow: five-day flow / average twenty-day turnover."""
+    """Compute strategy-v1 flow: five-day flow / average twenty-day volume (shares)."""
 
-    inputs = _validated_flow_and_turnover_inputs(db, instrument_id, score_date)
+    inputs = _validated_flow_and_volume_inputs(db, instrument_id, score_date)
     if inputs is None:
         return None
-    flow, turnovers = inputs
-    average_turnover = sum(turnovers) / len(turnovers)
-    return flow / average_turnover if average_turnover > 0 else None
+    flow, volumes = inputs
+    average_volume = sum(volumes) / len(volumes)
+    return flow / average_volume if average_volume > 0 else None
 
 
 def _margin_change_ratio(db: Session, instrument_id: int, score_date: date) -> float | None:
@@ -814,11 +813,12 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                     "volume_strength_raw": member["volume_raw"],
                     # Keep the legacy field for consumers of the group detail
                     # payload, while explicitly recording the hot-group
-                    # denominator so it cannot be confused with a strategy
-                    # evaluator's average-daily-turnover ratio.
+                    # denominator and formula version so it cannot be confused
+                    # with a strategy evaluator's average-daily-volume ratio.
                     "institutional_flow_to_turnover_ratio_5d": member["hot_group_flow_ratio"],
-                    "hot_group_institutional_flow_to_sum_turnover_ratio_5d": member["hot_group_flow_ratio"],
-                    "institutional_flow_ratio_denominator": "sum_turnover_20d",
+                    "hot_group_institutional_flow_to_sum_volume_ratio_5d": member["hot_group_flow_ratio"],
+                    "institutional_flow_ratio_denominator": "sum_volume_20d",
+                    "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
                     "margin_balance_change_ratio_5d": member["margin_change_ratio"],
                 }
                 for member in item["member_metrics"]
@@ -1092,7 +1092,7 @@ def _upsert_signal_for_strategy(
     )
     group_score = _best_group_for_signal(db, instrument.id, signal_date)
     group_excess, group_member_return_lookup = _resolve_group_member_return(db, group_score, instrument, signal_date)
-    strategy_flow_ratio = _strategy_institutional_flow_to_average_turnover_ratio(
+    strategy_flow_ratio = _strategy_institutional_flow_to_average_volume_ratio(
         db,
         instrument.id,
         signal_date,
@@ -1304,13 +1304,15 @@ def _upsert_signal_for_strategy(
             "prior_20_highs": prior_highs,
             "prior_20_volumes": prior_volumes,
             "group_excess_return_20d": group_excess,
-            # The strategy contract normalizes five-day institutional flow by
-            # average daily turnover across the prior twenty sessions.  This
-            # is intentionally different from hot_group_v1's sum-turnover
-            # denominator, and the denominator is persisted with the evidence.
+            # The strategy contract normalizes five-day institutional flow
+            # (shares) by average daily volume (shares) across the twenty
+            # sessions ending on the signal day.  This is intentionally
+            # different from hot_group_v1's sum-volume denominator, and the
+            # denominator and formula version are persisted with the evidence.
             "institutional_flow_to_turnover_ratio_5d": strategy_flow_ratio,
-            "strategy_institutional_flow_to_average_turnover_ratio_5d": strategy_flow_ratio,
-            "institutional_flow_ratio_denominator": "average_daily_turnover_20d",
+            "strategy_institutional_flow_to_average_volume_ratio_5d": strategy_flow_ratio,
+            "institutional_flow_ratio_denominator": "average_daily_volume_20d",
+            "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
             "margin_balance_change_ratio_5d": margin_ratio,
             "bar_count_60d": bar_count,
             "ma20": ma20,
