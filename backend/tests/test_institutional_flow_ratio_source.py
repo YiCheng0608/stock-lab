@@ -16,7 +16,6 @@ Network and subprocess are blocked per test by an autouse monkeypatch guard (not
 process-wide audit hook), so importing this file has no effect on other tests.
 """
 
-import copy
 import hashlib
 import http.client
 import io
@@ -1636,4 +1635,3 @@ def test_qa_guard_allows_only_the_finmind_https_host_and_blocks_processes_and_wr
         with pytest.raises(AssertionError):
             audit(event, args)
     assert stats["blocked"] == 9 and stats["connect_ok"] == 2
-
