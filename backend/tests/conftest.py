@@ -28,15 +28,15 @@ _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
 # documented standalone command instead (docs/development-baseline/README.md).
 STANDALONE_ONLY = {
     "test_share_quantity_storage.py": (
-        "docs/development-baseline/README.md:250 (standalone, no conftest, disk cases only "
+        "docs/development-baseline/README.md:251 (standalone, no conftest, disk cases only "
         "through the fixed root); tests/test_share_quantity_storage.py:24,148"
     ),
     "test_institutional_windows.py": (
-        "docs/development-baseline/README.md:302 (--w8-only / --w8-api-only); "
+        "docs/development-baseline/README.md:303 (--w8-only / --w8-api-only); "
         "tests/test_institutional_windows.py:30-32 read argv at import"
     ),
     "test_institutional_windows_1006.py": (
-        "docs/development-baseline/README.md:308 (--worker-only / --api-only); "
+        "docs/development-baseline/README.md:309 (--worker-only / --api-only); "
         "tests/test_institutional_windows_1006.py:35 parse_args() at import, :77 audit hook"
     ),
     "test_conditional_plan_store.py": (
@@ -63,6 +63,12 @@ STANDALONE_ONLY = {
     "test_saved_price_chips_scope7_focus.py": (
         "tests/test_saved_price_chips_scope7_focus.py:30 uses __main__.ARGS; "
         "run by tools/tpex-price-api.py:504; no README filename mention"
+    ),
+    "test_finmind_dealer_direction_source.py": (
+        "tests/test_finmind_dealer_direction_source.py:56 installs a process-wide audit hook at import and "
+        ":42 requires -B (standalone, stdlib only, no conftest); "
+        "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; "
+        "listed in docs/development-baseline/README.md standalone-only table"
     ),
 }
 
