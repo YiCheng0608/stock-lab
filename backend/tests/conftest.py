@@ -43,6 +43,11 @@ STANDALONE_ONLY = {
         "tests/test_conditional_plan_store.py:1 (standalone RAM self-tests), :42 audit hook, "
         ":80 asserts app was never imported; no README mention"
     ),
+    "test_ohlcv_history_source.py": (
+        "docs/development-baseline/README.md (standalone-only table, python -B -X utf8); "
+        "tests/test_ohlcv_history_source.py:3 (Run: standalone), :73 raises without -B, "
+        ":75 process-wide audit hook forbids disk writes/network/subprocess"
+    ),
     "test_saved_price_chips_entry.py": (
         "tests/test_saved_price_chips_entry.py:39 uses __main__.ARGS; "
         "run by tools/tpex-price-api.py:504; no README filename mention"
