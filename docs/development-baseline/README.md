@@ -114,11 +114,11 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) | 見[M1-CHIPS-CUTOFF-1006-1](#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口) |
 | [`test_conditional_plan_store.py`](../../backend/tests/test_conditional_plan_store.py) | `python -B -X utf8 backend/tests/test_conditional_plan_store.py`，僅標準函式庫，不需 `--deps` |
 | [`test_ohlcv_history_source.py`](../../backend/tests/test_ohlcv_history_source.py) | `python -B -X utf8 backend/tests/test_ohlcv_history_source.py`，僅標準函式庫，不需 `--deps`；缺 `-B` 即 `RuntimeError`，需含固定 blob 的完整 git 歷史（shallow clone 會失敗） |
+| [`test_finmind_dealer_direction_source.py`](../../backend/tests/test_finmind_dealer_direction_source.py) | `python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必填，缺少時拒絕執行；見 [#9 驗證入口](#9-七股自行買賣與避險方向組合的零落盤驗證入口) |
 | [`test_saved_price_chips_entry.py`](../../backend/tests/test_saved_price_chips_entry.py) | `python -B -X utf8 tools/tpex-price-api.py --joint-check --deps <既有 backend/.deps>` |
 | [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
 | [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
 | [`test_saved_price_chips_scope7_focus.py`](../../backend/tests/test_saved_price_chips_scope7_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-stock-scope-7-check` |
-| [`test_finmind_dealer_direction_source.py`](../../backend/tests/test_finmind_dealer_direction_source.py) | `python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必填，缺少時拒絕執行；見 [#9 驗證入口](#9-七股自行買賣與避險方向組合的零落盤驗證入口) |
 
 後四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
 
