@@ -79,6 +79,8 @@ export function comboControls(p: URLSearchParams): ComboControls { return { as_o
 export function validComboParams(p: URLSearchParams): boolean { const keys = [...p.keys()]; return !keys.length || keys.length === 3 && ['as_of', 'investor', 'horizon'].every((key) => p.getAll(key).length === 1) }
 export function validComboControls(c: ComboControls): boolean { return c.as_of === '2026-10-06' && c.investor === 'dealer' && c.horizon === '5' }
 export function comboPath(c: ComboControls, symbol?: string): string { return COMBOS_ROUTE + (symbol ? '/' + symbol : '') + '?' + new URLSearchParams(c).toString() }
+/** The way back from a symbol: the list route plus the page's literal `location.search`, never re-encoded or normalised (a missing, extra, duplicate or wrong RAW control stays exactly as it was, so READ/FIRST return in the same state). */
+export function comboReturnPath(search: string): string { return COMBOS_ROUTE + search }
 export function comboURL(symbol: string): string { return COMBOS_ENDPOINT + '?dataset=' + COMBOS_DATASET + '&data_id=' + symbol + '&start_date=2026-09-29&end_date=2026-10-06' }
 /** The opt-in flag. A guarded read so an application built without this define (the other chips previews) still renders. */
 export function comboFlag(): string {

@@ -1,5 +1,5 @@
 import { canonicalJson } from './chipsGross'
-import { COMBOS_CALCULATION, COMBOS_CONSUMER_VERSION, COMBOS_DATASET, COMBOS_KEYS, COMBOS_NAMESPACE, COMBOS_POLICY_VERSION, COMBOS_ROW_NAMES, COMBOS_SCHEMA, COMBOS_SYMBOLS, COMBOS_WINDOW_DATES, comboActionAllowed, comboBound, comboControls, comboInt, comboExpectedPin, comboLots, comboPath, comboPinValid, comboRequestInit, comboSHA, comboSegments, comboURL, deriveComboWindow, resolveComboResponse, validComboControls, validComboParams, validateCombos } from './chipsDealerDirectionCombos'
+import { COMBOS_CALCULATION, COMBOS_CONSUMER_VERSION, COMBOS_DATASET, COMBOS_KEYS, COMBOS_NAMESPACE, COMBOS_POLICY_VERSION, COMBOS_ROUTE, COMBOS_ROW_NAMES, COMBOS_SCHEMA, COMBOS_SYMBOLS, COMBOS_WINDOW_DATES, comboActionAllowed, comboBound, comboControls, comboInt, comboExpectedPin, comboLots, comboPath, comboPinValid, comboRequestInit, comboReturnPath, comboSHA, comboSegments, comboURL, deriveComboWindow, resolveComboResponse, validComboControls, validComboParams, validateCombos } from './chipsDealerDirectionCombos'
 import type { ComboPoint, ComboRead, ComboRow } from './chipsDealerDirectionCombos'
 import { installComboPageLifecycle, isComboTrustedAction } from './ChipsDealerDirectionCombosPage'
 type Assert = (ok: unknown, label: string) => void
@@ -90,6 +90,16 @@ export async function runComboChecks(read: ComboRead, assert: Assert): Promise<n
   check(comboPath(controls, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5') && comboPath(controls) === '/chips-stock-scope-7-dealer-direction-combos?as_of=2026-10-06&investor=dealer&horizon=5', 'RAW3 exact preserved')
   check(!validComboControls({ ...controls, horizon: '20' }) && !validComboControls({ ...controls, investor: 'trust' }) && !validComboControls({ ...controls, as_of: '' }) && !validComboControls({ ...controls, as_of: '2026-10-07' }) && validComboControls(controls), 'dealer / 5 / 2026-10-06 only')
   for (const query of ['as_of=2026-10-06&investor=dealer', 'as_of=2026-10-06&investor=dealer&horizon=5&x=1', 'as_of=2026-10-06&investor=dealer&horizon=5&horizon=5']) check(!validComboParams(new URLSearchParams(query)), 'missing/duplicate/unknown RAW query')
+  // R5-1: the way back from a symbol carries the literal location.search, so a non-canonical RAW query returns with READ/FIRST in the same state.
+  const keptAsIs = ['', '?', '?as_of=2026-10-06&investor=dealer&horizon=5', '?as_of=2026-10-06&investor=dealer', '?as_of=2026-10-06&investor=dealer&horizon=5&x=1', '?as_of=2026-10-06&investor=dealer&horizon=5&horizon=5',
+    '?as_of=2026-10-07&investor=dealer&horizon=5', '?as_of=2026-10-06&investor=foreign&horizon=20', '?horizon=5&investor=dealer&as_of=2026-10-06', '?as_of=2026%2D10%2D06&investor=dealer&horizon=5',
+    '?as_of=&investor=&horizon=', '?x=%zz&y=%E4%B8%AD&z=a+b&z=', '?investor=dealer', '?horizon=5&horizon=5&horizon=5']
+  for (const search of keptAsIs) check(comboReturnPath(search) === COMBOS_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search))
+  for (const search of ['', '?', '?as_of=2026-10-06&investor=dealer', '?as_of=2026-10-06&investor=dealer&horizon=5&x=1', '?as_of=2026-10-06&investor=dealer&horizon=5&horizon=5', '?horizon=5&investor=dealer&as_of=2026-10-06',
+    '?as_of=2026%2D10%2D06&investor=dealer&horizon=5', '?x=%zz&y=%E4%B8%AD&z=a+b&z=', '?investor=dealer', '?horizon=5&horizon=5&horizon=5']) {
+    check(comboPath(comboControls(new URLSearchParams(search.slice(1)))) !== comboReturnPath(search), 'the former normalised return changed ' + JSON.stringify(search))
+  }
+  check(comboReturnPath('?as_of=2026-10-06&investor=dealer&horizon=5') === comboPath(comboControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))), 'a canonical triple returns the same address as before')
   check(comboURL('3105') === 'https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id=3105&start_date=2026-09-29&end_date=2026-10-06', 'exact policy URL')
   await rejected((v) => { v.schema = 'old' }, 'schema'); await rejected((v) => { v.calculation_version = 'old' }, 'calculation version')
   await rejected((v) => { v.consumer_version = 'old' }, 'consumer version'); await rejected((v) => { v.namespace = 'issue9-dealer-direction-combos-finmind-v1/qa2' }, 'namespace')

@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { COMBOS_API, COMBOS_COMPONENTS, COMBOS_DATASET, COMBOS_KEYS, COMBOS_NAMES, COMBOS_PROVIDER, COMBOS_SYMBOLS, COMBOS_WINDOW_DATES, comboActionAllowed, comboControls, comboLots, comboPath, comboRequestInit, resolveComboResponse, validComboControls, validComboParams } from './chipsDealerDirectionCombos'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { COMBOS_API, COMBOS_COMPONENTS, COMBOS_DATASET, COMBOS_KEYS, COMBOS_NAMES, COMBOS_PROVIDER, COMBOS_SYMBOLS, COMBOS_WINDOW_DATES, comboActionAllowed, comboControls, comboLots, comboPath, comboRequestInit, comboReturnPath, resolveComboResponse, validComboControls, validComboParams } from './chipsDealerDirectionCombos'
 import type { ComboAmounts, ComboComponent, ComboControls, ComboKey, ComboPhase, ComboRead, ComboSegment, ComboStock } from './chipsDealerDirectionCombos'
 import './ChipsSeriesPage.css'
 
@@ -116,7 +116,7 @@ export function ComboCalendar({ read }: { read: ComboRead }) {
 export default function ChipsDealerDirectionCombosPage() {
   const state = useContext(ComboContext)
   if (!state) throw new Error('dealer direction combos provider required')
-  const [params, setParams] = useSearchParams(), controls = comboControls(params), rawKey = params.toString()
+  const [params, setParams] = useSearchParams(), controls = comboControls(params), rawKey = params.toString(), { search } = useLocation()
   const [draft, setDraft] = useState<ComboControls>(controls), [selected, setSelected] = useState<number | null>(null)
   const { symbol } = useParams()
   useEffect(() => installComboPageLifecycle(window, () => { state.mask(); setSelected(null) }), [])
@@ -134,7 +134,7 @@ export default function ChipsDealerDirectionCombosPage() {
     <header><p className="series-eyebrow">TPEx · 七股 · 2026/10/06</p><h1>自營商自行買賣與避險：五日方向組合</h1><p>同一截止最近5個交易日，自行買賣與避險的每日淨額方向、九種每日組合、相反方向日數、最大連續區段與窗口內最新區段始終並列，並可追溯到該股該日 FinMind 的全部原列。</p></header>
     <form className="series-controls" onSubmit={apply} key={rawKey}><label>截止日期<input type="text" aria-label="截止日期" value={draft.as_of} onChange={(e) => setDraft({ ...draft, as_of: e.target.value })} /></label><label>法人<select aria-label="法人" value={draft.investor} onChange={(e) => setDraft({ ...draft, investor: e.target.value })}><option value="dealer">自營商（自行買賣＋避險）</option></select></label><label>窗口<select aria-label="窗口" value={draft.horizon} onChange={(e) => setDraft({ ...draft, horizon: e.target.value })}><option value="5">最近5個交易日</option></select></label><button type="submit" disabled={state.busy}>套用條件</button></form>
     <p className="series-current">目前原始條件：as_of={controls.as_of} · investor={controls.investor} · horizon={controls.horizon}</p>
-    <div className="series-actions"><button type="button" data-combos-first disabled={state.busy || state.firstUsed || !valid} onClick={(e) => void state.action(true, controls, e.nativeEvent)}>首次取得來源（僅一次）</button><button type="button" data-combos-read disabled={state.busy || !valid} onClick={(e) => void state.action(false, controls, e.nativeEvent)}>明確讀取已持有來源</button>{symbol && <Link to={comboPath(controls)} onClick={() => { state.mask(); setSelected(null) }}>返回七股（保留原始條件）</Link>}</div>
+    <div className="series-actions"><button type="button" data-combos-first disabled={state.busy || state.firstUsed || !valid} onClick={(e) => void state.action(true, controls, e.nativeEvent)}>首次取得來源（僅一次）</button><button type="button" data-combos-read disabled={state.busy || !valid} onClick={(e) => void state.action(false, controls, e.nativeEvent)}>明確讀取已持有來源</button>{symbol && <Link to={comboReturnPath(search)} data-combos-return onClick={() => { state.mask(); setSelected(null) }}>返回七股（保留原始條件）</Link>}</div>
     <p role="status" className="series-status" data-combos-phase={state.busy ? 'busy' : state.phase}>{state.busy ? '正在驗證完整來源，全部數值、方向、組合、區段、原列及日曆暫不顯示。' : state.status}</p>
     {!valid && <p className="series-unavailable">原始條件未准入，或有缺少／重複／未知參數；所有每日淨額、方向、組合、區段與追溯不可用。</p>}
     {!symbol ? <section className="series-cards" aria-label="七股"><p className="series-count">已驗證股數：{read ? '7' : '未知'}</p>{COMBOS_SYMBOLS.map((s) => { const item = read?.stocks.find((x) => x.symbol === s); return <article key={s}><h2>{s} {COMBOS_NAMES[s]}</h2>{item ? <><ComboSummary stock={item} /><Link to={comboPath(controls, s)}>查看五日每日方向、組合、區段及原列</Link></> : <><p>自行買賣與避險的方向、組合、區段與原列不可用</p><button type="button" disabled>完整七股來源驗證後開啟</button></>}</article> })}</section> : !stock || !read ? <section className="series-unavailable"><h2>{symbol} {COMBOS_NAMES[symbol] ?? ''}</h2><p>{!COMBOS_NAMES[symbol] ? '此標的不在核定七股範圍。' : '來源不可用。'}全部每日淨額、方向、組合、區段、原列及日曆不顯示。</p></section> : <section className="series-detail" aria-label="自行買賣與避險五日明細"><h2>{stock.symbol} {stock.name}</h2><ComboSummary stock={stock} /><ComboDaily stock={stock} onPoint={setSelected} /><ComboSegments stock={stock} onPoint={setSelected} /><ComboCombinations stock={stock} onPoint={setSelected} />{selected !== null && <ComboEvidence stock={stock} index={selected} read={read} />}<ComboCalendar read={read} /></section>}

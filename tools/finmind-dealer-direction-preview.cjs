@@ -253,7 +253,7 @@ async function checkOnly() {
   assert(retainedEstimate <= 1024 * 1024, 'shared derived graph estimate cap')
   const React = requireDeps('react'), { renderToStaticMarkup } = requireDeps('react-dom/server'), { MemoryRouter } = requireDeps('react-router-dom')
   const previousFetch = global.fetch
-  let forbiddenFetch = 0, groups = 0
+  let forbiddenFetch = 0, groups = 0, returnLinks = 0
   global.fetch = () => { forbiddenFetch++; throw new Error('SSR automatic fetch') }
   const count = (html, attribute) => (html.match(new RegExp(attribute + '=', 'g')) ?? []).length
   try {
@@ -268,6 +268,27 @@ async function checkOnly() {
     for (const bad of ['as_of=&investor=dealer&horizon=5', 'as_of=2026-10-07&investor=dealer&horizon=5', 'as_of=2026-10-06&investor=foreign&horizon=5', 'as_of=2026-10-06&investor=dealer&horizon=20', 'as_of=2026-10-06&investor=dealer&horizon=5&horizon=5']) {
       const masked = render(route + '/3105?' + bad)
       assert(!masked.includes('data-combos-summary') && /disabled=""[^>]*>明確讀取已持有來源/.test(masked), 'invalid RAW controls mask all and disable READ')
+    }
+    // R5-1: the real App's way back from a symbol carries the literal location.search, and the list it returns to has the same READ/FIRST state as the page it left.
+    const unescapeHtml = (text) => text.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    const state = (html, name) => { const tag = new RegExp('<button[^>]*' + name + '[^>]*>').exec(html); assert(tag, name + ' button rendered'); return !tag[0].includes('disabled=""') }
+    const returnCases = [
+      ['', true], ['?as_of=2026-10-06&investor=dealer&horizon=5', true], ['?horizon=5&investor=dealer&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=dealer&horizon=5', true],
+      ['?as_of=2026-10-06&investor=dealer', false], ['?as_of=2026-10-06&investor=dealer&horizon=5&x=1', false], ['?as_of=2026-10-06&investor=dealer&horizon=5&horizon=5', false],
+      ['?as_of=2026-10-07&investor=dealer&horizon=5', false], ['?as_of=2026-10-06&investor=foreign&horizon=5', false], ['?as_of=2026-10-06&investor=dealer&horizon=20', false],
+      ['?as_of=&investor=dealer&horizon=5', false], ['?investor=dealer', false], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', false], ['?horizon=5&horizon=5&horizon=5', false],
+    ]
+    for (const [search, enabled] of returnCases) {
+      const detail = render(route + '/3105' + search)
+      const anchor = /<a [^>]*data-combos-return=[^>]*>/.exec(detail)
+      assert(anchor, 'return link rendered on a symbol page: ' + JSON.stringify(search))
+      const href = unescapeHtml(/href="([^"]*)"/.exec(anchor[0])[1])
+      assert.equal(href, route + search, 'return href is the literal original query')
+      const back = render(href)
+      assert(state(detail, 'data-combos-read') === enabled && state(detail, 'data-combos-first') === enabled, 'symbol page READ/FIRST state as expected: ' + JSON.stringify(search))
+      assert(state(back, 'data-combos-read') === state(detail, 'data-combos-read') && state(back, 'data-combos-first') === state(detail, 'data-combos-first'), 'the way back keeps READ/FIRST in the same state: ' + JSON.stringify(search))
+      assert(!/data-combos-return=/.test(back) && !back.includes('data-combos-summary'), 'the list has no return link and shows no value')
+      returnLinks++
     }
     for (const stock of fixture.read.stocks) {
       const summary = renderToStaticMarkup(React.createElement(ComboSummary, { stock }))
@@ -295,7 +316,7 @@ async function checkOnly() {
     assert.throws(() => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [route + query] }, React.createElement(exclusive.App))), /cannot be enabled together/)
     assert(forbiddenFetch === 0, 'SSR network zero')
   } finally { global.fetch = previousFetch }
-  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, combos_group_ssr: groups, stocks_ssr: 7, flag_exclusion_checked: true, browser_gate_checks: gate, capture_body_checks: captureBody, policy_sha256: policySha, policy_bytes: policyBytes, ...policy, native_viewport_verification: false, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
+  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, combos_group_ssr: groups, return_link_ssr: returnLinks, stocks_ssr: 7, flag_exclusion_checked: true, browser_gate_checks: gate, capture_body_checks: captureBody, policy_sha256: policySha, policy_bytes: policyBytes, ...policy, native_viewport_verification: false, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
 }
 async function serveOnly() {
   const policy = checkPolicyFile()
