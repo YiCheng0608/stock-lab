@@ -64,6 +64,11 @@ STANDALONE_ONLY = {
         "tests/test_saved_price_chips_scope7_focus.py:30 uses __main__.ARGS; "
         "run by tools/tpex-price-api.py:504; no README filename mention"
     ),
+    "test_tpex_calendar_actions_source.py": (
+        "tests/test_tpex_calendar_actions_source.py raises unless run with -B, installs sys.addaudithook (no sockets, "
+        "no writes outside its own session directory) before importing the modules under test, reads a pinned "
+        "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
+    ),
 }
 
 # Assign rather than setdefault: a developer shell may have production
