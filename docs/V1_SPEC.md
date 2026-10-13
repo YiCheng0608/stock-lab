@@ -79,5 +79,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 3. `_risk_levels` 使用固定風險倍數產生 1.6R／3R；合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
 4. T 日 13:30 cutoff 可能早於法人等盤後資料；新的 PIT 版本須補 availability／revision／decision time。
 5. 30 bps 成本與單邊 5 bps 滑價是固定假設；新版本需區分商品與情境並保持舊結果可重現。
+6. `_ensure_strategies` 對既存同名同版本的 `StrategyVersion` 列只在 `canonical_config_snapshot` 為空時補寫，不更新 `config_json` 與快照，既存列不隨公式更新。建立於 v2 之前的 `breakout_v1`／`pullback_v1` `1.0.0` 列，快照仍是舊公式（`institutional-flow/v1-shares-per-twd-turnover`）：`analysis_capture` 的 `persist` 以 `worker_strategy_binding_mismatch` 拒絕，`_upsert_signal` 則用 v2 公式寫訊號卻引用舊快照。因此任何 DB 以新公式跑訊號之前，須先遷移或升版這些既存快照。
+7. DB 路徑的法人比率（`backend/worker/pipeline.py` 的 `_validated_flow_and_volume_inputs`）以該標的非停牌 bar 取截止日 T（含）以前最後 20 根，最後 5 根的日期須有籌碼列；它不核對交易所日曆，也不要求最後一根就是 T：停牌日被跳過；T 本身沒有非停牌 bar 時（strategy 路徑在 T 沒有 bar 列時另不產生訊號），窗口結束於更早一日；缺某個交易日的 bar 時，20 根橫跨 21 個平日。這些情形只要窗口仍滿 20 根且量、籌碼完整就照算，不拒用。取得模組路徑另有 24 日日曆全等檢查（見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)），DB 路徑沒有。
 
 以上未全部修正或接入正式流程；狀態以 ROADMAP 為準。
