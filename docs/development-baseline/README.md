@@ -105,7 +105,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 9 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 10 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -114,6 +114,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) | 見[M1-CHIPS-CUTOFF-1006-1](#m1-chips-cutoff-1006-1-同截止法人窗口的零落盤驗證入口) |
 | [`test_conditional_plan_store.py`](../../backend/tests/test_conditional_plan_store.py) | `python -B -X utf8 backend/tests/test_conditional_plan_store.py`，僅標準函式庫，不需 `--deps` |
 | [`test_ohlcv_history_source.py`](../../backend/tests/test_ohlcv_history_source.py) | `python -B -X utf8 backend/tests/test_ohlcv_history_source.py`，僅標準函式庫，不需 `--deps`；缺 `-B` 即 `RuntimeError`，需含固定 blob 的完整 git 歷史（shallow clone 會失敗） |
+| [`test_finmind_dealer_direction_source.py`](../../backend/tests/test_finmind_dealer_direction_source.py) | `python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必填，缺少時拒絕執行；見 [#9 驗證入口](#9-七股自行買賣與避險方向組合的零落盤驗證入口) |
 | [`test_saved_price_chips_entry.py`](../../backend/tests/test_saved_price_chips_entry.py) | `python -B -X utf8 tools/tpex-price-api.py --joint-check --deps <既有 backend/.deps>` |
 | [`test_saved_price_chips_focus.py`](../../backend/tests/test_saved_price_chips_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-check` |
 | [`test_saved_price_chips_calendar_focus.py`](../../backend/tests/test_saved_price_chips_calendar_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-calendar-check` |
@@ -469,6 +470,28 @@ python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 ```
 
 從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，未驗證在 pytest 下的行為。
+
+### #9 七股自行買賣與避險方向組合的零落盤驗證入口
+
+來源契約、policy pin 與 SPENT 帳見[來源 #9 一節](../SOURCE_REGISTRY.md#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2)，頁面與本機 API 契約見[個股頁 #9 一節](../STOCK_RESEARCH_PAGE.md#9七股自行買賣與避險五日方向組合頁)。下列入口都不連網、不開服務埠、不建檔案或 DB：測試只用 RAM fixture、假 transport 與合成語料，audit hook 拒絕外連、名稱解析、磁碟寫入與 subprocess；它們不證真來源、可信瀏覽器操作或 BFCache，也不授權取得資料。`--serve` 需要審查過的 seal 與新的額度，不是例行驗證入口。
+
+來源模組（上表的 standalone-only 檔），從專案根目錄執行：
+
+```powershell
+python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py
+```
+
+它驗 `backend/app/finmind_dealer_direction_source.py` 的 policy 與外部 pin 閘門、傳輸與 schema 規則、anchor、生命週期與一次性額度；語料是合成的（建構成滿足 56 個 anchor），不是來源真值。
+
+API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境，`--deps` 預設指向主 checkout 既有的 `backend/.deps` 與 `frontend/node_modules`，唯讀、不 install：
+
+```powershell
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/finmind-dealer-direction-api.py --check --chips-dealer-direction-combos-opt-in
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --check-ui-only --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+```
+
+API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準，未驗證在整目錄 pytest 下的行為。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。
 
 ## 歷史驗證
 

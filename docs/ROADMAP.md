@@ -6,7 +6,7 @@
 
 已有官方資料收集／回補、v1 規則、行動摘要、持倉、技術回測及研究介面；指定市場／標的／日期的有限 API、UI、保存及來源追溯已接受。完整 R0–R3、M1／M2／M3 均未完成；有限子能力不換算完整產品完成率。
 
-已接受七股 explicit 2026-10-06 法人每日淨超、gross 買賣、方向區段、相鄰 5 日窗口，以及自行買賣／避險／合計 5 日對帳。對帳的來源與用途邊界見[來源 §46](SOURCE_REGISTRY.md#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳)，操作與未驗範圍見[個股頁 §51](STOCK_RESEARCH_PAGE.md#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳)。既有庫存／指定私人保存的有限磁碟驗收不代表新 Plan 或正式 DB 已完成。
+已接受七股 explicit 2026-10-06 法人每日淨超、gross 買賣、方向區段、相鄰 5 日窗口，以及自行買賣／避險／合計 5 日對帳。對帳的來源與用途邊界見[來源 §46](SOURCE_REGISTRY.md#46-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險與合計來源及對帳)，操作與未驗範圍見[個股頁 §51](STOCK_RESEARCH_PAGE.md#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳)。另已接受七股 explicit 2026-10-06 自行買賣（`Dealer_self`）與避險（`Dealer_Hedging`）最近 5 日的每日方向、九種組合、相反方向日數與最大連續區段，可追溯到該股該日 FinMind 原列，並可從詳情返回七股列表且逐字保留當下網址的查詢；值為 FinMind API 當下值（非 PIT），只在 RAM 單次取得，不含磁碟保存，BFCache 還原未證、不宣稱支持。來源邊界見[來源 #9 節](SOURCE_REGISTRY.md#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2)，操作與未驗範圍見[個股頁 #9 節](STOCK_RESEARCH_PAGE.md#9七股自行買賣與避險五日方向組合頁)。既有庫存／指定私人保存的有限磁碟驗收不代表新 Plan 或正式 DB 已完成。
 
 ## 接下來的順序：近期產品里程碑
 

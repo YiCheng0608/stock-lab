@@ -52,6 +52,7 @@
 | [§49](#49-m1-chips-stock-scope-7-direction-segments-20-1006-20261008-1b1七股方向與窗口區段有限操作) | M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向與窗口區段有限操作 | 現行 |
 | [§50](#50-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與雙原列操作) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與雙原列操作 | 現行 |
 | [§51](#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳 | 現行 |
+| [#9](#9七股自行買賣與避險五日方向組合頁) | #9：七股自行買賣與避險五日方向組合頁（入口與 RAW 控制、取得流程、原列追溯、本機 API 防護、已知限制） | 現行 |
 
 ## 1. 使用者工作與資訊順序
 
@@ -1306,3 +1307,69 @@ Backend15RAM raw0／front57src noEmit＋52validator/lifecycle＋42SSR raw0及war
 API32860 requests7／guards0／SHUTDOWNtrue正常SIGINT raw1；preview15564／compiler25940正常SIGINT raw1、SHUTDOWNtrue，auditor54880正常SIGINT raw1／RAMreleasedtrue；停前RAMreaudit61996 raw0及metadataholder54396先前正常退出，六exactPIDs absent／8812–14無listener、ownedpage normalclose／tabs[]已ROOT獨立核。原件及derived RAM釋放，不restart／replay／clone／hydrate／preload；0product-testartifacts／privateIO／DB／ordinarypriceGET、save／crossprocess未授。
 
 Coreoperation+1／standalone coredependency0／reliability0／stall0→0，完整M1／M2／M3未完；Ordinarycloses／MA20仍缺rights／calendar新path，本操作不證price／ranking／Signal／Plan。
+
+## #9：七股自行買賣與避險五日方向組合頁
+
+本節定義 #9 的獨立 chips 頁與其本機 API：截止日 2026-10-06、TPEx 3105／3293／5274／5347／6488／6510／8069，自行買賣（`Dealer_self`）與避險（`Dealer_Hedging`）最近五個交易日的每日方向、九種組合、相反方向日數、各方向日數、最大連續區段與窗口內最新區段，並可從區段追溯到該股該日 FinMind 的全部原列。來源、policy pin、gate、計算規則與 SPENT 帳只由[來源 #9 一節](SOURCE_REGISTRY.md#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2)管理，本節不重述；驗證入口見[開發入口](development-baseline/README.md#9-七股自行買賣與避險方向組合的零落盤驗證入口)。
+
+### #9 入口、RAW 控制與返回
+
+- **入口**：路由 `/chips-stock-scope-7-dealer-direction-combos`（七張卡）與 `/chips-stock-scope-7-dealer-direction-combos/:symbol`（詳情）。以 build flag `VITE_CHIPS_DEALER_DIRECTION_COMBOS_STOCK_SCOPE_7=m1-v1` 啟用，不得與其他 chips profile 的 flag 同時啟用（否則 `App` 丟出 `chips profiles cannot be enabled together`）；runner 旗標為 `--chips-dealer-direction-combos-opt-in`。Preview build 須另行注入外部 policy 的 SHA-256（`VITE_CHIPS_DEALER_DIRECTION_COMBOS_POLICY_SHA256`）；空值或格式錯誤時 fail-closed，不顯示任何值。
+- **三個 RAW 控制**：`as_of`、`investor`、`horizon`，唯一准入組合是 `2026-10-06`／`dealer`／`5`（兩個下拉各只有一個選項；截止日期是文字輸入，改了只是草稿）。合法的 RAW 查詢是空查詢，或恰好這三個鍵各出現一次且值為准入值；鍵序與百分號編碼不拘，解碼後相同即合法。缺少、多餘、重複、值錯誤的參數，或不在七檔內的 symbol，都遮罩全部值並停用 READ 與 FIRST。空查詢載入後，頁面把網址 `replace` 成標準三元組。
+- **套用條件**只改網址：先遮罩、不發任何請求；改回准入值也不恢復舊值，必須明確 READ。
+- **返回連結**：卡片連到詳情時帶標準三元組。詳情的「返回七股（保留原始條件）」連結＝列表路由加上當下的 `location.search`，逐字保留，不經 `URLSearchParams` 重新編碼或正規化（含缺少、多餘、重複、值錯誤的 RAW 查詢），所以返回後 READ 與 FIRST 的可用狀態和離開的頁面相同。點擊時先遮罩；返回、套用、切股與瀏覽器上一頁都不暗中 fetch 或 READ。
+
+### #9 取得流程、遮罩與失敗清值
+
+頁面的 phase 為 `unacquired`、`acquiring`、`pending`、`available`、`failed`、`expired`、`released`、`masked`、`unsupported`、`error`；只有 `available` 顯示值。
+
+1. **載入**：phase `unacquired`，不顯示任何值。
+2. **FIRST（首次取得來源，僅一次）**：只接受可信（`isTrusted`）的原生點擊，且 RAW 控制合法、沒有進行中的請求、此次頁面載入尚未鎖定 FIRST（用過 FIRST，或 READ 讀到已持有的來源後，都會鎖定；重新載入頁面會解除前端鎖定，但 API 仍回 409 `already_attempted`，不會再取得）；送出 `POST /api/chips/dealer-direction-combos-stock-scope-7/capture?as_of=2026-10-06`，body 恰為 `{}`。取得成功後狀態是 `pending`（reason `pending_independent_admission`）：原件已在 RAM，但尚未通過獨立驗證准入，**不顯示任何值**。
+3. **准入**：由獨立 oracle 經 root-local 的 admit 端點把 `pending` 轉成 `available`（規則見來源節）；頁面本身不執行准入。
+4. **READ（明確讀取已持有來源）**：只接受可信點擊，送出 `GET /api/chips/dealer-direction-combos-stock-scope-7?as_of=2026-10-06`。只有 API 狀態為 `available`，且前端驗證器通過才顯示：外部 pin 相符、七份 receipt、五日原列、日期、name、dealer 兩列的淨額與全部衍生值重算後逐項相等、generation 與已持有的來源相同。任一不符整批不顯示。
+5. **非 `available` 的回應**：`new` 顯示未取得；`acquiring`、`pending` 顯示等待；`failed`（額度已用盡、不重試）、`expired`、`released`、`calculation_conflict`、`cutoff_not_supported` 與網路錯誤、非 200 都清空全部值並顯示對應標籤。FIRST 用過之後再送 capture，API 回 409 `already_attempted`、不發任何 GET。
+
+**遮罩**：套用條件、返回連結、`pagehide`、`popstate`、`pageshow` 且 `persisted`、RAW 查詢不合法或 symbol 未知，都會遮罩全部值。遮罩不可被套用或返回解除，只有明確 READ 成功（且 generation 相同）才恢復。
+
+**失敗清值**：READ 失敗（502、網路中斷、schema 或驗證失敗）會清空全部值（卡片摘要、每日表、區段、組合、原列、日曆），不留舊值，也不把上一次的成功值當作現值。
+
+### #9 顯示與原列追溯
+
+- **列表**：七張卡，顯示「已驗證股數：7」（未取得時為「未知」）；每張卡的摘要表並列自行買賣與避險的正／負／零日數、窗口內最新區段（方向、起訖、日數，首段標「窗口前延續未知」）與相反方向日數。
+- **詳情**：每日淨額表（股與張、方向、當日組合、是否相反方向）、兩個 component 的全部最大區段、九種組合的日數與日期、相反方向日期。股與張來自精確字串（張＝股 ÷ 1000，不用浮點）；計算規則見來源節。
+- **原列追溯**：每日列的按鈕、區段內的日期、組合日期與相反方向日期都展開同一份「該股該日原列」面板：全部五個 `name` 列（回應列序、name、buy 與 sell 的股與張、原鍵序）、body SHA-256、canonical receipt SHA-256、URL、§31.2 日曆參照（固定交易日，不取日曆），以及未增補的 canonical receipt 文字。
+- **零值標籤**：每日淨額為 0 時標「已驗證淨額為零」，原列 buy 或 sell 為 0 時標「已驗證原值為零」；零自成一段。標籤只在 READ 通過驗證後由原列值產生，缺值或未知不當作零。
+- **來源說明**（頁尾與日曆區塊）：提供者 FinMind（服務提供者，非官方直接來源）、dataset 名、policy 的權利字串與「API 當下值」（非 PIT）標示、淨額為本地衍生；日曆區塊顯示固定日曆參照、09-29 只作 anchor、56 個 anchor 全數相等，以及零值形狀比對結果（只記錄，不拒用）。
+
+### #9 本機 API 防護與埠
+
+| 端點 | 方法 | 說明 |
+| --- | --- | --- |
+| `/api/chips/dealer-direction-combos-stock-scope-7` | GET | READ；query 恰為一個 `as_of`（ISO 日期），body 為空。可用時 200，否則 409 並帶 `reason` 的空白 payload（無任何值） |
+| `/api/chips/dealer-direction-combos-stock-scope-7/capture` | POST | FIRST；query 同上，body 恰為 `{}`。成功 200（`pending`）；已嘗試過 409 `already_attempted`；取得失敗 502（`failed`） |
+| `/__dealer_direction_root_receipt`、`/__dealer_direction_admit` | GET、POST | 供獨立 oracle 的 root-local 端點：只回應 loopback 用戶端、不接受 query；不經 preview 代理，不屬頁面操作 |
+
+READ payload 的 schema 為 `dealer-direction-combos-read/finmind-stock-scope-7-v1`，calculation 為 `dealer-self-hedging-sign-combos-counts-maximal-segments/five-session-int64-v1`。`as_of` 不是 2026-10-06 回 409 `cutoff_not_supported`；query 鍵不是恰好一個 `as_of` 或日期不合法回 422；未登記路徑 404、方法不符 405。
+
+本機服務只綁 `127.0.0.1`，不發 CORS 標頭。API 與 preview 對每個請求先過跨站防護，再碰任何狀態或額度：
+
+- **Host**：必須恰有一個值，且為 `127.0.0.1:<該服務的埠>`，否則 403 `host_not_admitted`（防 DNS rebinding）。
+- **Sec-Fetch-Site**：有送時須恰一個值，且為 `same-origin` 或 `none`，否則 403 `cross_site_rejected`。
+- **Origin**：有送時須恰一個值，且為 `http://127.0.0.1:<該服務的埠>`，否則 403 `origin_not_admitted`。
+- **POST 的 Content-Type**：須恰一個值，為 `application/json`（可接 `; charset=utf-8`，不分大小寫），否則 415 `content_type_json_required`。
+- **capture 的 body**：恰為兩個位元組 `{}`；BOM、空白、換行、`{ }`、UTF-16／32 寫法一律 422；capture 上限 4,096 B，admit 上限 8,192 B（超過 413 `body_limit`）；深層巢狀回 422，不是 500。
+- **Preview 代理**：以 Node 的原始標頭清單套用同一組規則（Node 會丟掉重複的 Host 與 Content-Type，不能看 `req.headers`）；只代理 `GET` 與 `POST …/capture` 兩個產品呼叫，query 恰為合法日期的 `as_of`，其餘 422 `preview_path_method_query_not_admitted`；轉發時固定上游 `Host` 與 `Content-Type: application/json`。root-local 的兩個端點只能直接連 API 埠。
+
+埠：API 預設 8799、preview 預設 8800（`--port`；preview 的 `--api-port` 預設 8799），兩者須不同且介於 1024～65535。#9 的驗證埠為 API 18799、preview 18800，冒煙用 18801／18802（登記見 [#9 留言 6128262506](https://github.com/YiCheng0608/stock-lab/issues/9#issuecomment-6128262506)）。
+
+### #9 已知限制與能力邊界
+
+- **範圍**：只有截止 2026-10-06、七檔、`dealer`（自行買賣加避險）、`horizon=5`。不做排名、篩選、價格、Signal、Plan、磁碟保存、跨程序或 DB；值是「API 當下值」，非 PIT。取得是 RAM-only 單次，生命週期與重取條件見來源節。
+- **BFCache 未證，不宣稱支持。**頁面以 `pagehide`、`pageshow`（`persisted`）與 `popstate` 遮罩；用 `location.href` 離開再上一頁時，頁面被重新載入，沒有觀察到 BFCache 還原。
+- **FIRST 重按的 phase 標示**：來源已持有時再按 FIRST，API 回 `already_attempted`，頁面把 phase 標成 `pending`（除非是 `failed`），而 API 的實際狀態是 `available`；訊息文字正確、不顯示值。
+- **desktop 版面**：1365 寬時七張卡各自的摘要表在卡內橫向捲動才看得到全部欄位（只做 DOM 量測，未做視覺檢查）。
+- **Preview 的 `rejected_requests`** 只計次數，不記被拒內容，無法逐筆歸因。
+- **前端驗證器的盲區**：非 dealer 三種列（`Foreign_Investor`、`Foreign_Dealer_Self`、`Investment_Trust`）的 buy 與 sell、`row_index`、`key_order` 的實際排列、`generation`、`calendar.meaning` 與 `provenance` 的說明欄位，前端沒有原 body 無法驗；dealer 兩種列的任何改動都會被拒。後端以 56 個 anchor 核 `Foreign_Investor`、`Investment_Trust`、`Dealer_self`、`Dealer_Hedging` 的五日淨額和，`Foreign_Dealer_Self` 不在 anchor 內。
+- **空查詢**載入後被 `replace` 成標準三元組，返回連結帶的是點擊當下的網址。
+- **零值形狀**：真實原件只涵蓋原列 buy 或 sell 為零的標籤；淨額為零（方向 `zero`）、整窗為零與兩個 component 同為零的形狀，沒有真實原件的紀錄，只有合成資料驗過。
+- **來源層限制**（JSON 字面值 `-0` 被當成 0 接受、charge 與 open 之間逾時會保守多記一次 attempted）見[來源節的未驗與限制](SOURCE_REGISTRY.md#9-未驗與限制)。
