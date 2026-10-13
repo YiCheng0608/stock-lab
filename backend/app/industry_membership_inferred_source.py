@@ -949,7 +949,13 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
 
     Fail-closed: any difference or ambiguity rejects the group (or, where the AC says
     so, all three groups of that cutoff). See the policy ``inference`` section.
+
+    Non-ordinary identities (a symbol or ``stock_id`` that is not exactly four ASCII digits) are excluded
+    from both sources before any set, delisting or board-transfer decision: they are never members and
+    never raise a rejection. The row grammars that reject the whole batch run earlier, in the parsers.
     """
+    official = tuple(row for row in official if _ORDINARY_SYMBOL.fullmatch(row.symbol))
+    info = tuple(row for row in info if _ORDINARY_SYMBOL.fullmatch(row.stock_id))
     by_id = {}
     for row in info:
         by_id.setdefault(row.stock_id, []).append(row)
@@ -1038,9 +1044,7 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
             group = row.group
             if group not in members:
                 continue
-            if not _ORDINARY_SYMBOL.fullmatch(row.symbol):
-                reasons[group].add("official_symbol_not_ordinary")
-            elif row.listing is None:
+            if row.listing is None:
                 reasons[group].add("listing_date_missing_or_invalid")
             elif row.listing <= cutoff:
                 add(group, Member(row.exchange, row.symbol), None)
@@ -1433,6 +1437,23 @@ class MembershipSource:
             counts[row.exchange][row.listing_format] += 1
         return MappingProxyType({exchange: MappingProxyType(per_format) for exchange, per_format in counts.items()})
 
+    def _excluded_counts(self):
+        """Rows left out of every set as non-ordinary (identity not exactly four ASCII digits): counts only.
+
+        Official rows are counted per exchange; ``TaiwanStockInfo`` rows per ``type`` (``twse``/``tpex``, any other
+        type is ``other``). ``TaiwanStockDelisting`` has no exchange and its non-ordinary ids were always ignored,
+        so it is not counted. No raw symbol or ``stock_id`` string is recorded.
+        """
+        official = {"TWSE": 0, "TPEx": 0}
+        for row in self._twse + self._tpex:
+            if not _ORDINARY_SYMBOL.fullmatch(row.symbol):
+                official[row.exchange] += 1
+        finmind = {"TWSE": 0, "TPEx": 0, "other": 0}
+        for row in self._info:
+            if not _ORDINARY_SYMBOL.fullmatch(row.stock_id):
+                finmind[_EXCHANGE_OF_TYPE.get(row.type, "other")] += 1
+        return MappingProxyType({"official": MappingProxyType(official), "finmind": MappingProxyType(finmind)})
+
     def inspection(self):
         if self.state not in ("pending", "available", "failed"):
             _fail("inspection_unavailable")
@@ -1442,6 +1463,7 @@ class MembershipSource:
             "report_dates": MappingProxyType(dict(self._report_dates)),
             "row_counts": (len(self._info), len(self._twse), len(self._tpex), len(self._delisting)),
             "listing_date_formats": self._listing_format_counts(),
+            "excluded_non_ordinary": self._excluded_counts(),
             "outcomes": MappingProxyType(dict(self._outcomes)),
             "diagnostics": self._diagnostics,
             "retained_roots_estimate_bytes": self._roots_estimate})

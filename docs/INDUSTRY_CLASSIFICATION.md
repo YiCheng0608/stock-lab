@@ -146,7 +146,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 | 新掛牌 | 官方上市（櫃）日嚴格大於 C 者不屬於 C 的集合，等於 C 者是成員。上市日為 null、缺漏、不是來源 #37 節所列四種格式之一或不是真實日期時，拒用該檔所屬群組。 |
 | 下市 | 只看 `date∈[C, D]` 且 `stock_id` 為四位數字的列（非四位者屬非 ordinary，忽略）。仍在官方 feed 者維持成員；`date==C` 時語意不明，拒用其群組。官方已不列者，以 FinMind 最新的 `twse`／`tpex` 列的中文產業名定群組並納入 C 的集合（標 `finmind_only_delisted_member`）；`date==C` 拒用該群組；沒有 `twse`／`tpex` 列、紀錄不唯一或產業名不屬 §2 時，拒用該 C 的全部三個群組。 |
 | 轉板 | 官方 TWSE 上市日大於 C，且 FinMind 留有同 `stock_id` 的 `tpex` 舊列：舊列最新 `date` 須不早於 C、產業名唯一且與官方群組相同，才把該檔以 TPEx 身分納入 C 的集合（標 `board_transfer_old_tpex_identity`）。舊列產業名不屬 §2 時拒用該 C 的全部三個群組；其餘無法唯一判定（多名、舊列早於 C、產業衝突）與反向（TPEx→TWSE）轉板，拒用相關群組。 |
-| 身分 | `(exchange, symbol)` 在每份官方 feed 唯一，同一 symbol 不得在同一 C 同時屬兩個市場；排除 ETF、TDR 91、管理 80、停用 18／34、興櫃與非 ordinary（代號須為四位數字）。每份官方 feed 的出表日須全列一致，且在 `[2026-10-06, D]`，否則整批拒用。 |
+| 身分 | `(exchange, symbol)` 在每份官方 feed 唯一，同一 symbol 不得在同一 C 同時屬兩個市場；排除 ETF、TDR 91、管理 80、停用 18／34、興櫃與非 ordinary：代號不是剛好四位數字的列，官方與 FinMind 兩端一律排除於集合之外，不產生拒用理由。每份官方 feed 的出表日須全列一致，且在 `[2026-10-06, D]`，否則整批拒用。 |
 
 拒用分三層：整批（取得日、出表日、schema、重複 symbol、七股未被三群組涵蓋）、整個 C（下市產業無法判定、轉板舊列產業名未知）、單一群組（其餘）。lookup 只接受兩個截止日、三個必要群組與 official_industry namespace；錯日、非必要群組、題材 namespace、被拒用的群組，以及 release 或 expiry 之後，一律拒用。
 

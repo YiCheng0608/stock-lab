@@ -1092,11 +1092,6 @@ class PipelineTests(Base):
         for cutoff in (C1, C2):
             self.assertRejected(snapshot, cutoff, SEMI, "symbol_on_two_exchanges")
         w = world()
-        w.twse.append(twse("23301", "24", "19940905"))
-        w.info.append(info("23301", "twse", "半導體業"))
-        snapshot, _, _ = pending(w)
-        self.assertRejected(snapshot, C1, SEMI, "official_symbol_not_ordinary")
-        w = world()
         w.twse[6] = twse("9103", "24", "20030101")  # a TDR-looking code with an ordinary industry is not special-cased by code
         w.info[6] = info("9103", "twse", "半導體業")
         snapshot, _, _ = pending(w)
@@ -1106,6 +1101,113 @@ class PipelineTests(Base):
         everything = {m for o in self.outcomes(snapshot).values() for m in o.members}
         for member in (("TWSE", "9103"), ("TPEx", "8888"), ("TPEx", "7000"), ("TPEx", "7777"), ("TWSE", "0050"), ("TWSE", "TAIEX"), ("TWSE", "1101")):
             self.assertNotIn(member, everything)
+
+    @staticmethod
+    def excluded(snapshot):
+        return {source_name: dict(per_exchange) for source_name, per_exchange in snapshot.inspection()["excluded_non_ordinary"].items()}
+
+    def assertAllSix(self, snapshot):
+        """Every cutoff x group is a member set equal to the baseline, with no rejection reason at all."""
+        self.assertSets(snapshot)
+        for key, outcome in self.outcomes(snapshot).items():
+            self.assertEqual((outcome.rejected, outcome.reasons), (False, ()), key)
+
+    def test_non_ordinary_identities_are_excluded_never_rejected(self):
+        # Official non-ordinary codes (QA's four examples) in a required group, with FinMind rows for two of them.
+        w = world()
+        for code in ("2330A", "00631L", "9103X", "23301", "23A0", "A230"):  # the last two have four characters but not four digits
+            w.twse.append(twse(code, "24", "19940905"))
+        w.info += [info("2330A", "twse", "半導體業"), info("00631L", "twse", "半導體業")]
+        snapshot, _, _ = pending(w)
+        self.assertAllSix(snapshot)
+        # Baseline FinMind TAIEX is a non-ordinary twse row; the two matching rows add two more.
+        self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 6, "TPEx": 0}, "finmind": {"TWSE": 3, "TPEx": 0, "other": 0}})
+        # FinMind side: a five-digit id with a required-group industry, conflicting newest rows for it, and other types.
+        w = world()
+        w.info += [info("00878", "twse", "半導體業"), info("00878", "twse", "光電業"), info("00878B", "tpex", "文化創意業"),
+                   info("A230", "tpex", "文化創意業"), info("7777X", "emerging", "半導體業")]
+        snapshot, _, _ = pending(w)
+        self.assertAllSix(snapshot)
+        self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 0, "TPEx": 0}, "finmind": {"TWSE": 3, "TPEx": 2, "other": 1}})
+        # They add no identity, two-exchange, listing-date or board-transfer reason either.
+        w = world()
+        w.twse += [twse("2330A", "24", "19940905"), twse("2412B", "24", "not a date")]
+        w.tpex += [tpex("2330A", "24", "19940905"), tpex("3105B", "32", "20261008")]  # a new listing with an older twse row
+        w.info.append(info("3105B", "twse", "半導體業"))
+        snapshot, _, _ = pending(w)
+        self.assertAllSix(snapshot)
+        self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 2, "TPEx": 2}, "finmind": {"TWSE": 2, "TPEx": 0, "other": 0}})
+        # Non-ordinary neighbours do not hide a real difference of the ordinary stock beside them.
+        w = world()
+        w.twse += [twse("2999", "24", "19940905"), twse("2999A", "24", "19940905")]
+        w.info.append(info("2999A", "twse", "半導體業"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "cross_source_mismatch")
+            self.assertNotIn("2999A", repr(self.outcomes(snapshot)[(cutoff, SEMI)].reasons))
+        self.assertUsable(snapshot, (C1, OPTO), (C2, OPTO), (C1, CULT), (C2, CULT))
+        # An ordinary code with a letter-free shape next to its lettered sibling is still a member.
+        w = world()
+        w.twse.append(twse("2330A", "24", "19940905"))
+        snapshot, _, _ = pending(w)
+        self.assertIn(("TWSE", "2330"), self.outcomes(snapshot)[(C1, SEMI)].members)
+        self.assertNotIn(("TWSE", "2330A"), {m for o in self.outcomes(snapshot).values() for m in o.members})
+
+    def test_excluded_non_ordinary_counts_are_counts_only(self):
+        w = world()
+        w.twse.append(twse("SECRET", "24", "19940905"))
+        w.info.append(info("DO_NOT_RETAIN_THIS_ID", "twse", "半導體業"))
+        snapshot, _, _ = pending(w)
+        excluded = snapshot.inspection()["excluded_non_ordinary"]
+        self.assertEqual(set(excluded), {"official", "finmind"})
+        self.assertEqual(set(excluded["official"]), {"TWSE", "TPEx"})
+        self.assertEqual(set(excluded["finmind"]), {"TWSE", "TPEx", "other"})
+        for per_exchange in excluded.values():
+            for count in per_exchange.values():
+                self.assertIs(type(count), int)
+        self.assertNotIn("SECRET", repr(dict(excluded)))
+        self.assertNotIn("DO_NOT_RETAIN", repr(dict(excluded)))
+        with self.assertRaises(TypeError):
+            excluded["official"]["TWSE"] = 9
+        with self.assertRaises(TypeError):
+            excluded["extra"] = {}
+        # Counts survive a failed batch for the feeds it parsed, and are zero when nothing was parsed.
+        w = world()
+        w.twse.append(twse("2330A", "24", "19940905"))
+        w.tpex[5] = tpex("8069", "27", "20110101")
+        snapshot, _, _ = build(w)
+        self.assertFailure("seven_stock_group_not_required", snapshot.acquire)
+        self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 1, "TPEx": 0}, "finmind": {"TWSE": 1, "TPEx": 0, "other": 0}})
+        snapshot, _, _ = build(transport=Transport(fail_at=0))
+        self.assertFailure("transport_or_parse_failure", snapshot.acquire)
+        self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 0, "TPEx": 0}, "finmind": {"TWSE": 0, "TPEx": 0, "other": 0}})
+
+    def test_identity_grammar_still_rejects_the_whole_batch(self):
+        # Official code: a string of 4 to 6 uppercase ASCII letters or digits, unique within its feed.
+        for label, code in (("3 chars", "233"), ("trailing space", "2330 "), ("leading space", " 2330"), ("fullwidth", "２３３０"),
+                            ("hyphen", "23-30"), ("lowercase", "23a0"), ("seven chars", "1234567"), ("empty", ""), ("dot", "2330.")):
+            with self.subTest(label):
+                self.assertFailure("official_symbol", source._parse_official, [twse(code, "24", "19940905")], "TWSE", "2026-10-12")
+                self.assertFailure("official_symbol", source._parse_official, [tpex(code, "24", "19940905")], "TPEx", "2026-10-12")
+        self.assertFailure("official_row_schema", source._parse_official, [{**twse("2330", "24", "19940905"), "公司代號": 2330}], "TWSE", "2026-10-12")
+        self.assertFailure("official_duplicate_symbol", source._parse_official,
+                           [twse("2330A", "24", "19940905"), twse("2330A", "24", "19940905")], "TWSE", "2026-10-12")
+        for code in ("2330A", "00631L", "9103X", "23301", "ABCD", "ABCDEF"):
+            rows, _ = source._parse_official([twse(code, "24", "19940905")], "TWSE", "2026-10-12")  # parsed here, excluded later
+            self.assertEqual([row.symbol for row in rows], [code])
+        # Through the whole batch: the third feed is never reached after a malformed official code in the second.
+        w = world()
+        w.twse.append(twse("233", "24", "19940905"))
+        snapshot, transport, _ = build(w)
+        error = self.assertFailure("official_symbol", snapshot.acquire)
+        self.assertEqual((error.diagnostics["source_index"], snapshot.ledger.attempted, len(transport.opens)), (1, (0, 1), 2))
+        # FinMind stock_id: a non-empty string of at most 32 characters; anything longer or empty is a schema failure.
+        good = {"status": 200, "msg": "success", "data": [info("2330", "twse", "半導體業")]}
+        for label, stock_id, code in (("empty", "", "info_stock_id"), ("33 chars", "9" * 33, "info_stock_id")):
+            with self.subTest(label):
+                self.assertFailure(code, source._parse_info, {**good, "data": [info(stock_id, "twse", "半導體業")]}, "2026-10-12")
+        self.assertEqual(len(source._parse_info({**good, "data": [info("X" * 32, "twse", "半導體業")]}, "2026-10-12")), 1)
+        self.assertEqual(source._parse_info({**good, "data": [info("00878", "twse", "半導體業")]}, "2026-10-12")[0].stock_id, "00878")
 
     def test_innovation_board_and_ky_are_ordinary_members(self):
         w = world()
