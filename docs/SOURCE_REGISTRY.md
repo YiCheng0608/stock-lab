@@ -12,7 +12,7 @@
 
 ### FinMind 來源共同規則
 
-本節是 [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1)、[§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)、[§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1)、[§51](#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1) 這類「外部 policy＋namespace＋seal」RAM 取得 namespace 的共同規則（§47 的來源是 TPEx dated CSV，署名依 OGL，其餘流程相同）；各節只保留版本字串、pins、本節特有上限與差異。
+本節是 [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1)、[§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)、[§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1)、[§51](#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1)、[#39 節](#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1) 這類「外部 policy＋namespace＋seal」RAM 取得 namespace 的共同規則（§47 的來源是 TPEx dated CSV，署名依 OGL，其餘流程相同）；各節只保留版本字串、pins、本節特有上限與差異。
 
 - **用途**：只限免費公開、本地個人非商用、盤後研究與 process RAM 取得／驗證／consumer；不落盤、不發布 raw、不鏡像、不再散布、不部署、不交易。`historical_pit` 不支援，publication／first availability／revision 固定 `unknown`；其他 cutoff、代號、dataset 與用途在取數前拒用，不外推。FinMind 是服務提供者，不是官方直接來源；只用 FinMind 時沒有官方 anchor，單位與 scale 是明示的 provider 推論，比對只是同一份 bytes 的內部一致性。免費使用是文件推論（`token` 選填），FinMind 回 401、402、403 或任何要求付費、登入的回應即首敗。
 - **額度與 seal**：每個 namespace（`…/qaN`）是獨立的一次額度；新授權不是恢復前一個，前一個的 SPENT／NO-RETRY 照舊並登錄於[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)。使用者授權本身不是 seal：每次 real run 另須全局核發 fresh financial-start seal（綁定 policy SHA-256、namespace、唯一 URL 清單、candidate、產品／測試／script hash、用途、caps 與有效期），由獨立 QA 執行一次；產品不能由被測 policy 自建 expected pin，policy、seal 或 execution binding 不符在 GET 之前拒絕、不花額度。每 URL 最多 1 次、首敗即停且 attempted 即 SPENT；redirect 0、retry 0、token／cookie／proxy 0、identity encoding；原件只在 RAM，結束後 release 並撤銷 handle。再取需新的明示授權、新 namespace 與新 seal；不 restart、replay、clone 或 hydrate 已釋放的原件。
@@ -74,6 +74,7 @@
 | [§50](#50-97七股-tpex-靜態規則表tpex-static-rules2026-10-12v1) | #97：七股 TPEx 靜態規則表（`tpex-static-rules/2026-10-12/v1`）；tick、交易時段、賣方證交稅與手續費門檻的讀用契約 | 現行 |
 | [§51](#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1) | #33：TAIEX 名目指數兩截止 21 觀測 return（`issue33-taiex-nominal-observation-cutoffs-1005-1006-v1`，FinMind-only） | 現行 |
 | [#9](#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2) | #9 qa1：七股 FinMind 自行買賣與避險五日淨額原件（`issue9-dealer-direction-combos-finmind-v2`） | 現行 |
+| [#39](#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1) | #39 qa1：七股 FinMind 法人買賣與成交量及兩截止流向÷量比率（`issue39-seven-flow-to-volume-ratio-two-cutoffs-v1`） | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -1479,3 +1480,61 @@ qa1 是一次額度，授權本身不是 seal；real run 另須全局核發 fres
 - **零值形狀**：真實窗口的零值比對只記錄、不拒用；淨額為零、整窗為零等形狀沒有真實原件的紀錄，只有合成資料驗過。
 - **範圍**：只對這七檔、截止 2026-10-06、這個 dataset 與本地 RAM 用途有效；其他日期、代號、市場、PIT、排名、篩選、價格、Signal、Plan、交易、DB、跨程序與落盤均不支援。
 - **版本**：本節描述 candidate `9726546eb6a8a13ed09b1ee7b5843d816894fd05` 取得時的契約；其後程式、policy 或驗收語意變動須重驗並更新本節。
+
+## #39 qa1：七股 FinMind 法人買賣與成交量及兩截止流向÷量比率（issue39-seven-flow-to-volume-ratio-two-cutoffs-v1）
+
+2026-10-13。#39 以 FinMind 公開 API v4 取得七股 2026-09-01～2026-10-06 的法人買賣、日線成交量與交易日，供 2026-10-05、2026-10-06 兩個截止日的法人流向÷成交量 consumer（5 日三法人淨股數 ÷ 含截止日的 20 日均量；公式與門檻見 [V1_SPEC](V1_SPEC.md) 法人列）。產品 `backend/app/institutional_flow_ratio_source.py`（取得與准入）與 `backend/app/institutional_flow_ratio.py`（純計算 consumer），測試 `backend/tests/test_institutional_flow_ratio_source.py`、`backend/tests/test_institutional_flow_ratio.py`，QA 腳本 `tools/issue39_flow_volume_ratio_qa.py`。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default。取得過程與 QA 收據保存在 [#39](https://github.com/YiCheng0608/stock-lab/issues/39)，下列為本節特有的規則與邊界摘要並附留言編號，共同規則見 [FinMind 來源共同規則](#finmind-來源共同規則)；取回的列與原始 body 只在 RAM，已隨 release 清除；逐檔數值與 receipt 雜湊只記在 [#39 QA 收據](https://github.com/YiCheng0608/stock-lab/issues/39#issuecomment-6139247844)，不寫入本節。
+
+### 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue39-institutional-flow-to-volume-two-cutoffs-v1`；canonical 5,541 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `00ab692d13bfb7ea242eb5d02dc361def40f51a0b4a583a173df265bd2fd910d`。由全局發布於 [#39 留言 6126200268](https://github.com/YiCheng0608/stock-lab/issues/39#issuecomment-6126200268)；產品常數 `POLICY_SHA256`／`POLICY_BYTES` 固定它 |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_institutional_flow_to_volume_ratio`；market TW/TPEx、ordinary stock、identity_as_of 2026-10-06；consumer `institutional-flow-volume-ratio-two-cutoffs-v1`，公式 `institutional-flow/v2-shares-per-share-volume` |
+| 來源資料集 | FinMind `TaiwanStockInstitutionalInvestorsBuySell`（法人買賣，欄位 `date`、`stock_id`、`buy`、`sell`、`name`）與 `TaiwanStockPrice`（日線，成交量 `Trading_Volume`，股）供比率的分子與分母；`TaiwanStockTradingDate` 只供交易日曆 |
+| 標的與日期 | TPEx 3105／3293／5274／5347／6488／6510／8069；區間 2026-09-01～2026-10-06（formal 24 個交易日）；截止日 2026-10-05、2026-10-06 |
+| 請求 | 固定 15 個 GET，host 只有 `api.finmindtrade.com`，endpoint `https://api.finmindtrade.com/api/v4/data`。順序：#0 `TaiwanStockTradingDate`，#1～#7 `TaiwanStockPrice`，#8～#14 `TaiwanStockInstitutionalInvestorsBuySell`；個股依 3105、3293、5274、5347、6488、6510、8069；query 依序 `dataset`、`data_id`（日曆無）、`start_date`、`end_date`。日曆通過才取價格，七檔價格全過才取第一筆法人；不換 provider、日期或路由 |
+| 請求標頭 | `Accept: application/json`、`Accept-Encoding: identity`、`Connection: close`、`User-Agent: stock-lab-issue39-local-ram/1` |
+| 上限 | 每份 body 1 MiB、aggregate raw 8 MiB、retained-roots estimate 32 MiB；每 URL 20 s、整批 180 s；其餘同共同規則 |
+| formal 參照 | formal 日曆、2026-10-06 七檔成交量與兩截止淨額 anchor 由產品從固定 blob `116bfab818fc5f72a650573c611d62b662372026:docs/SOURCE_REGISTRY.md`（SHA-256 `f27024ba1f4d5874610e3446cae34401dbeab4ea485706704e78cd4ef3844240`）的 [§31.2](#312-24日完整觀測日曆與20日金融集合)、[§32.2](#322-完整重驗與有限衍生)、[§47.6](#476-qa2成功取得與驗證結果) 解析；呼叫者必須提供該 blob，位元組不符即 `formal_blob_pin` 拒絕。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
+
+### 用途、授權與署名
+
+用途與權利界線見 [FinMind 來源共同規則](#finmind-來源共同規則)。Policy `unsupported`：`raw_disk_storage`、`redistribution`、`historical_pit`、`adjusted_prices`、`company_actions`、`trading_halt_comparability`、`twd_denominator`、`strategy_full_chain`、`api_ui_db`、`other_cutoffs`、`other_symbols`、`gross_flow_shape_anchor`。署名方式依共同規則：本節 policy 沒有固定完整署名文字，也沒有引用 FinMind 條款全文或條款版本，以 policy 的 `rights` 字串承擔（三個來源逐字相同，字串同共同規則所載）。
+
+免費免 token 是文件推論（見共同規則），本節的文件依據：法人資料集依 FinMind Chip 頁（`https://finmind.github.io/tutor/TaiwanMarket/Chip/`，文件 GET 收據 [#9 留言 6124059360](https://github.com/YiCheng0608/stock-lab/issues/9#issuecomment-6124059360)），逐股 `data_id` 查詢沒有 backer／sponsor 標記，但文件沒有寫「可免 token」；日曆依 Technical 頁（收據 [#32 留言 6111856880](https://github.com/YiCheng0608/stock-lab/issues/32#issuecomment-6111856880)）。
+
+| 項目 | qa1 |
+| --- | --- |
+| namespace | `issue39-seven-flow-to-volume-ratio-two-cutoffs-v1/qa1`（不與 #9 共用取得） |
+| 使用者核准 | [#1 留言 6139204697](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6139204697)（15 GET、一次性 NO-RETRY） |
+| seal | [#39 留言 6139202306](https://github.com/YiCheng0608/stock-lab/issues/39#issuecomment-6139202306)；raw 579 B，SHA-256 `2e257d085a19b14c176d7f477adc79c512252be50156b5be7f715f8a67d5542c`；有效期 UTC 2026-10-13 05:52:00～06:30:00 |
+| candidate | `78cd1f243d117b1f2b9245e82794d48a75e5876b` |
+| QA 結果 | [#39 留言 6139247844](https://github.com/YiCheng0608/stock-lab/issues/39#issuecomment-6139247844)：成功 |
+
+### 欄位對應、原件驗證與比率輸入
+
+- **取得與傳輸**：與 [§49.3](#493-原件驗證與-last60summary-計算) 的取得與標頭條同一組規則（HTTP 200 才接受、identity 編碼、`application/json`、framing、重複身分標頭拒絕、strict UTF-8 無 BOM、`set-cookie` 不送出也不保存）；完整 EOF 與 raw hash 通過後才 parse。
+- **交易日**：區間內回傳的日期須全為平日、含兩個截止日，且與 formal 24 個交易日（9 月 20 個、10 月至 10/06 共 4 個）完全相同；缺、多、由缺列推休市一律整批拒，發生在任何價格 GET 之前。
+- **價格**：每檔 `{status, msg, data}`，`data` 恰 24 列，每列含 `date`、`stock_id`、`open`、`max`、`min`、`close`、`Trading_Volume`、`Trading_money`（可另含 `spread`、`Trading_turnover`，不採用）；`stock_id` 等於請求代號，日期集合等於 24 日；OHLC 為有限正值且上下界一致，成交量與成交額為正整數。OHLC、成交量或成交額為 0 的列整批拒收，不補 0、不縮窗（已接受風險，停牌不支援）。2026-10-06 七檔成交量須與 §32.2 anchor 逐值 exact。
+- **法人**：每檔 `{status, msg, data}`，每列鍵恰為 `date`、`stock_id`、`buy`、`sell`、`name`；`stock_id` 等於請求代號；`buy`、`sell` 為非負 canonical int64，0 是正常值並保留；`name` 只接受 `Foreign_Investor`、`Foreign_Dealer_Self`、`Investment_Trust`、`Dealer_self`、`Dealer_Hedging`，每股每個正式日各恰 1 列（每檔 120 列），出現 `Dealer` 等其他名稱、缺列、重複或日期集合不等於 24 日即整批拒，不補 0。
+- **欄位對應**：外資＝`Foreign_Investor`（外陸資，不含外資自營商）；投信＝`Investment_Trust`；自營商＝`Dealer_self`＋`Dealer_Hedging`；`Foreign_Dealer_Self` 驗結構但不計入。淨股數＝`buy`－`sell`（signed int64）。
+- **單位**：股、scale 1，是 composite mapping 推論（policy `provider_literal_unit_annotation` 為 false），不是 FinMind 宣告；以七股 × 兩截止 × 四個淨股數（外資、投信、自營商、合計）共 56 個 §47.6 官方 TPEx 值，加 7 個 §32.2 的 2026-10-06 成交量，全部 exact 相等驗證，任一不符整批拒。不設 gross 形狀 anchor。
+- **admission**：取得完成後狀態為 pending；須由獨立 oracle 在同一段 RAM 對 15 份 capture 全數 admit（綁定 15 份 receipt 的 SHA-256，real 路徑另綁定 QA holder、candidate 與 script SHA-256），才為 available，getter 與 consumer 才可用。failed、expired（租約至多 180 s）與 released 都拒用。
+- **consumer**：`get_ratio_inputs(snapshot, symbol, cutoff)` 取截止日（含）向前 5 個交易日的淨股數與 20 個交易日的成交量（股），窗口不滿、對不齊即拒；`institutional_flow_volume_ratio_v1(snapshot, symbol, cutoff)` 以整數有理數計算比率，門檻 `ratio >= -3/1000` 以精確比較判定，不用浮點。
+- **拒用**：建構 `FlowVolumeSource` 時 purpose 不等於固定 source_use 即回 `unsupported_purpose`，早於任何 GET。取得後：cutoff 不在兩個截止日或代號不在七股回 `unsupported_window_scope`；未傳 snapshot 回 `snapshot_required`；狀態不是 available（pending、failed、expired、released）回 `consumer_unavailable`。
+
+### qa1 結果與 SPENT／NO-RETRY
+
+- qa1 只執行一次，原 exit 0：15／15 個 GET 皆 HTTP 200、0 轉址；日曆與 24 日 formal 全等，56 個淨股數與 7 個成交量 anchor 全部 exact，14 個比率（兩截止 × 七股）與獨立精確 oracle 一致，錯誤 admission 皆被拒，release 後 consumer 全部撤銷，guard `blocked 0`。
+- 真實回應與 gate 假設一致（一次觀測，不是 FinMind 對形狀的承諾）：三個資料集（日曆、價格、法人）的 15 筆匿名請求都是 HTTP 200，沒有 401／402／403；每檔法人 body 恰 120 列、每列欄位恰為上列五鍵。
+- 額度已用盡，seal 作廢。SPENT／NO-RETRY 登錄於 [#1 留言 6139264250](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6139264250)；同 namespace 不得再取，再取規則見共同規則。
+
+### 未驗與限制
+
+- **範圍**：只涵蓋 7 檔上櫃股、2026-10-05 與 2026-10-06 兩個截止日、FinMind 免 token 公開 API；不證其他標的、日期或上市股票。只涵蓋 strategy 法人 gate（5 日淨股數 ÷ 20 日均量）；hot_group 的 20 日成交量合計變體不在 policy 範圍。
+- **只在本地 RAM**：沒有落盤，也沒有接 DB、`backend/worker/pipeline.py` 的 DB 路徑、API 或 UI；那些層的 AC 不因本節而通過。DB 路徑的選窗與本模組的 24 日日曆全等檢查不同，見 [V1_SPEC](V1_SPEC.md) 的已知實作偏差。
+- **anchor 覆蓋有限**：24 日中，只有 2026-10-06 的成交量與兩個截止五日窗口的淨股數有獨立 anchor，其餘各日只做結構驗證；單位是推論。
+- **補計與穩定性**：FinMind 文件註明數值可能於初次公布後微幅更新，本節只採淨股數，補計若使淨額改變，anchor 會整批拒（fail-closed，已接受風險）。日後更正不涵蓋；匿名請求一次成功不證限流、條款或長期穩定。
+- **未在真實來源驗到**：租約 expiry、gzip／br、401／402／403 與零價列的真實路徑未觸發，只有合成證據；防護性質見共同規則。
+- **版本與依賴**：本節描述 candidate `78cd1f243d117b1f2b9245e82794d48a75e5876b` 的契約與 qa1 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。本節不宣稱解除母單 #21 的整體 AC。

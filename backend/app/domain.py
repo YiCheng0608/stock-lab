@@ -13,6 +13,33 @@ from typing import Any
 # worker is wired to the v1 evaluator.
 MINIMUM_FIRST_TARGET_RISK_REWARD = 1.5
 
+# Institutional-flow ratio formula identities.  v1 is the original canonical
+# formula (net shares / TWD turnover); its numerator and denominator have
+# different units, so it is retained here only as a traceable identity and is
+# never evaluated.  v2 divides net shares by share volume, which makes the
+# ratio dimensionless; the -0.003 ``gte`` threshold carries over unchanged.
+INSTITUTIONAL_FLOW_FORMULA_V1 = "institutional-flow/v1-shares-per-twd-turnover"
+INSTITUTIONAL_FLOW_FORMULA_V2 = "institutional-flow/v2-shares-per-share-volume"
+INSTITUTIONAL_FLOW_FORMULA_VERSION = INSTITUTIONAL_FLOW_FORMULA_V2
+INSTITUTIONAL_FLOW_FORMULAS: dict[str, dict[str, Any]] = {
+    INSTITUTIONAL_FLOW_FORMULA_V1: {
+        "status": "original_canonical_retained",
+        "strategy_normalizer": "average_daily_turnover_20d",
+        "hot_group_normalizer": "sum_turnover_20d",
+        "numerator_unit": "shares",
+        "denominator_unit": "twd",
+        "dimensionless": False,
+    },
+    INSTITUTIONAL_FLOW_FORMULA_V2: {
+        "status": "current",
+        "strategy_normalizer": "average_daily_volume_20d",
+        "hot_group_normalizer": "sum_volume_20d",
+        "numerator_unit": "shares",
+        "denominator_unit": "shares",
+        "dimensionless": True,
+    },
+}
+
 # ``Signal.confidence`` is a legacy compatibility field.  It is nullable and
 # the v1 worker's fixed 0.75 was never a calibrated probability.  Keep the
 # semantic marker in the existing JSON evidence so a new signal can be
@@ -214,9 +241,13 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
             "value_range": [0.0, 1.0],
             "formula": {
                 "operation": "cross_sectional_percentile",
-                "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(turnover, 20d)",
+                "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+                "formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
                 "flow_window_trading_days": 5,
-                "turnover_window_trading_days": 20,
+                "flow_unit": "shares",
+                "denominator_window_trading_days": 20,
+                "denominator_window_basis": "inclusive_signal_day",
+                "denominator_unit": "shares",
             },
         },
         "catalyst": {
@@ -283,8 +314,15 @@ _COMMON_CONFIRMATIONS = {
         "operator": "gt",
     },
     "institutional_flow": {
+        "formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
         "flow_window_trading_days": 5,
-        "normalizer": "average_daily_turnover_20d",
+        "flow_unit": "shares",
+        "normalizer": "average_daily_volume_20d",
+        "normalizer_window_trading_days": 20,
+        "normalizer_window_basis": "inclusive_signal_day",
+        "normalizer_unit": "shares",
+        # The key name predates the v2 formula and is kept for stored-contract
+        # compatibility; the ratio is now net shares / average share volume.
         "minimum_net_flow_to_turnover_ratio": -0.003,
         "operator": "gte",
     },
