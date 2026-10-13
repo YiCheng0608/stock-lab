@@ -1,6 +1,6 @@
 # Backend
 
-FastAPI、SQLAlchemy／SQLite，以及官方資料收集、回補、固定規則分析、追蹤與回測。啟動和 CLI 參數以[操作手冊](../docs/OPERATIONS.md)為準，能力與待辦查[開發路線](../docs/ROADMAP.md)。
+FastAPI、SQLAlchemy／SQLite，以及官方資料收集、回補、固定規則分析、追蹤與回測。啟動和 CLI 參數以[操作手冊](../docs/OPERATIONS.md)為準，能力邊界查[開發路線](../docs/ROADMAP.md)，任務狀態只在 GitHub Issues／Projects。
 
 ## 模組入口
 

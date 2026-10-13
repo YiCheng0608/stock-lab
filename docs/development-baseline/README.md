@@ -371,12 +371,12 @@ python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py
 
 它驗 `backend/app/finmind_dealer_direction_source.py` 的 policy 與外部 pin 閘門、傳輸與 schema 規則、anchor、生命週期與一次性額度；語料是合成的（建構成滿足 56 個 anchor），不是來源真值。
 
-API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境，`--deps` 預設指向主 checkout 既有的 `backend/.deps` 與 `frontend/node_modules`，唯讀、不 install：
+API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境。兩個 runner 的 `--deps` 預設是私人路徑，依本文開頭規則一律明示既有唯讀 `backend/.deps`／`frontend/node_modules`，不 install：
 
 ```powershell
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -B -X utf8 tools/finmind-dealer-direction-api.py --check --chips-dealer-direction-combos-opt-in
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
-& 'C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe' tools/finmind-dealer-direction-preview.cjs --check --check-ui-only --chips-dealer-direction-combos-opt-in --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+python -B -X utf8 tools/finmind-dealer-direction-api.py --check --chips-dealer-direction-combos-opt-in --deps <既有 backend/.deps>
+node tools/finmind-dealer-direction-preview.cjs --check --chips-dealer-direction-combos-opt-in --deps <既有 frontend/node_modules> --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
+node tools/finmind-dealer-direction-preview.cjs --check --check-ui-only --chips-dealer-direction-combos-opt-in --deps <既有 frontend/node_modules> --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
 ```
 
 API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準，未驗證在整目錄 pytest 下的行為。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。

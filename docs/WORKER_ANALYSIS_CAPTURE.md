@@ -168,4 +168,4 @@ Create 在 target 尚未出現時保留原 exception；target 一旦出現，外
 - 新 producer／worker 的 member-return identity 與 candidate typed lookup 見[產業分類 §8–9](INDUSTRY_CLASSIFICATION.md#8-群組衍生成員報酬的身分契約有限-review)；該能力沒有另行驗收 capture runtime，也不替舊輸入補造 identity。API／UI／backfill 與歷史批次回算仍不在保證內。
 - Trusted-local、inactive snapshot、非敵對 filesystem/runtime 是前提；active-writer race、hostile rewrite、實體 crash/disk-full與長期保管不在有限 review。
 
-整體邊界見 [Signal artifact 持久化契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md)與[執行清單](ROADMAP_EXECUTION.md)。
+整體邊界見 [Signal artifact 持久化契約](SIGNAL_ARTIFACTS.md)、[R0 實作契約](R0_IMPLEMENTATION.md)、[ROADMAP](ROADMAP.md)；[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md) 只供歷史對照。
