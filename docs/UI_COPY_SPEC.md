@@ -118,7 +118,7 @@
 
 #### M2-FOCUS-LOTS-1 成交張數關注（有限接受）
 
-本段為 price-lot-focus 現行欄位文案，合併 LOTS／DAY-MOVE／TURNOVER／DAY-RANGE 四批的契約；當時「上櫃兩股 · 2026-10-05」的 scope 與支援數已由七股／八股版本取代，現行 scope 文案見 [M2-FOCUS-STOCK-SCOPE-6](#m2-focus-stock-scope-6-上櫃八股與新指定來源日有限接受)。
+本段為 price-lot-focus 現行欄位文案，合併 LOTS／DAY-MOVE／TURNOVER／DAY-RANGE 四批的契約；當時「上櫃兩股 · 2026-10-05」的 scope 與支援數已由七股／八股版本取代。V1 現行 scope 依 [ROADMAP V1 範圍基線](ROADMAP.md#v1-範圍基線2026-10-09-已核定邊界) 為七股（3105／3293／5274／5347／6488／6510／8069），文案見 §10.11；八股版本文案見 [M2-FOCUS-STOCK-SCOPE-6](#m2-focus-stock-scope-6-上櫃八股與新指定來源日有限接受)，為已接受的歷史版本，不是 V1 現行 scope。
 
 - 入口與控制：今日頁稱「成交張數關注」，明示「指定來源日 · 上櫃普通股」與「依代碼排序」；控制為「來源日期」「最小成交張數」「最小成交金額（元）」「單日方向（收盤相對開盤）」「最小本日振幅（%）」「套用條件」「讀取已取得原件」「首次載入官方單日行情」。未明選日期／門檻時寫「尚未查詢候選」，不預設今天已有真來源；支援日期明列，不是今日即時資料。
 - 門檻文法（門檻含等號）：
@@ -166,7 +166,7 @@
 
 #### M2-FOCUS-STOCK-SCOPE-6 上櫃八股與新指定來源日（有限接受）
 
-現行 scope 文案：explicit 2026-10-07 範圍使用「指定來源日 · 上櫃普通股」／「依代碼排序」及「已核8股，符合N檔」；code 順為 3105 穩懋／3293 鈊象／5274 信驊／5347 世界／6223 旺矽／6488 環球晶／6510 精測／8069 元太。10/07 是來源日，capture 時間另外顯示；不以 implicit latest 更新舊 defaults。舊 `.5` 七股、private 10/06 及兩股 chips 文案依自身契約保持；更早的三至七股 scope 見上列各節的歷史收據指標。
+本節為 explicit 2026-10-07 八股版本（含 6223）的已接受文案，保留契約但不是 V1 現行 scope；V1 現行 scope 依 [ROADMAP V1 範圍基線](ROADMAP.md#v1-範圍基線2026-10-09-已核定邊界) 為七股，不含 6223。八股版本使用「指定來源日 · 上櫃普通股」／「依代碼排序」及「已核8股，符合N檔」；code 順為 3105 穩懋／3293 鈊象／5274 信驊／5347 世界／6223 旺矽／6488 環球晶／6510 精測／8069 元太。10/07 是來源日，capture 時間另外顯示；不以 implicit latest 更新舊 defaults。舊 `.5` 七股、private 10/06 及兩股 chips 文案依自身契約保持；更早的三至七股 scope 見上列各節的歷史收據指標。
 
 完整八股先 gate 後 filter；真零稱「此範圍的零候選」，unavailable 仍「候選數未知」。四理由固定為張／TWD 整數元／O-C 方向／本日振幅；價格元／股、振幅「約」供閱讀，filter 沿 exact 值，不以約 4.383 代替 4.382 與 4.383 的邊界。五個 RAW 參數含日期／方向／尾零完整返回。API 讀取失敗（HTTP 502）時清 cards／count、保留五個 RAW 並停用首次取得按鈕。具名數值由[來源 §35](SOURCE_REGISTRY.md#35-m2-focus-stock-scope-6八股與新來源日准入)管理，actual 操作邊界由[個股頁 §40](STOCK_RESEARCH_PAGE.md#40-m2-focus-stock-scope-6八股四條件與同截止往返)管理。
 
@@ -465,7 +465,7 @@ Full-month 追溯分清 ALL 25 原觀測列與採用 24 日曆、所需 20 daily
 
 新stock-scope-7入口與actual範圍見[個股頁 §42](STOCK_RESEARCH_PAGE.md#42-m1-saved-price-chips-focus-stock-scope-7-1006-1七股八條件與同截止往返)；沿§10.3精確股／張、§10.8八欄與含等號、不稱code順為排名。三個明示來源按鈕與全部八RAW／尾零返回保持；available摘要改為七股行情＋七股法人，列3105/3293/5274/5347/6488/6510/8069，真零以完整七股共同來源且沒有同時符合條件解釋，不延用「其餘五股排除」。
 
-Initial saved unread只mask價量，獨立驗證的held chips可呈現，joint仍不ready；price-only／unknown不顯count0。Actual source failure同時清兩來源數值／原列／chart、保留八RAW與原因。New profile 正值買超／負值賣超／合法零使用精確 signed 張。Full-month 分清 ALL 25 原列、採 24、20 daily，10/07 不進 10/06 窗口；provenance 欄位不等於整份原 receipt JSON 展示。每日net圖／running cumulative尚未交付，不擴PIT／trend／strategy／Plan。
+Initial saved unread只mask價量，獨立驗證的held chips可呈現，joint仍不ready；price-only／unknown不顯count0。Actual source failure同時清兩來源數值／原列／chart、保留八RAW與原因。New profile 正值買超／負值賣超／合法零使用精確 signed 張。Full-month 分清 ALL 25 原列、採 24、20 daily，10/07 不進 10/06 窗口；provenance 欄位不等於整份原 receipt JSON 展示。每日net圖／running cumulative由 §10.11（個股頁 §43）交付；本節不擴PIT／trend／strategy／Plan。
 
 ### 10.11 七股每日法人淨超與窗口累計
 
