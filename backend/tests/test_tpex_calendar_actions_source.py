@@ -2140,9 +2140,31 @@ class Reader(Case):
         corpus.rows["5274"][30]["spread"] += 0.5
         rows_of(corpus, "capital_reduction", "5347").append(
             {"date": DATES[44], "stock_id": "5347", "ClosingPriceonTheLastTradingDay": 10, "PostReductionReferencePrice": 0})
+        corpus.rows["6488"][-4]["close"] += 1  # the 2026-10-06 anchor row no longer equals SOURCE_REGISTRY 32.2
+        next(row for row in info if row["stock_id"] == "6488")["type"] = "twse"  # two reasons: the first (sorted) one is reported
+        corpus.rows["6510"].insert(2, {**corpus.rows["6510"][0], "date": "2026-07-04"})  # a priced row on a non-calendar day
+        info[:] = [row for row in info if row["stock_id"] != "8069"]
         root, source = saved_bundle(self, corpus)
         saved = tca.load_saved(root, pins=source._pins)
         kw = dict(KW, data_version=saved.data_version)
+        # QA F-1: one gate for every symbol-scoped read, so events() refuses a refused symbol exactly like read_day
+        refused = {"3293": "market_type_not_accepted", "6488": "identity_anchor_mismatch", "6510": "price_row_off_calendar",
+                   "8069": "info_missing"}
+        for symbol, reason in refused.items():
+            calls = {"events": lambda: saved.events(symbol=symbol, **kw),
+                     "raw": lambda: saved.read_day(symbol=symbol, on_date=DATES[3], basis="raw", **kw),
+                     "adjusted": lambda: saved.read_day(symbol=symbol, on_date=DATES[3], basis="adjusted", **kw),
+                     "bad arguments": lambda: saved.read_day(symbol=symbol, on_date="bad", basis="nope", **kw)}
+            for name, call in calls.items():
+                with self.subTest(refused=symbol, call=name):
+                    self.assertEqual(self.assertFailure("symbol_refused", call).diagnostics["reason"], reason)
+        for symbol in ("3105", "5274", "5347"):  # usable symbols still return their event tables, supported or not
+            self.assertGreaterEqual(len(saved.events(symbol=symbol, **kw)), 1)
+        self.assertFailure("unsupported_symbol", saved.events, symbol="2330", **kw)
+        self.assertFailure("unsupported_market", saved.events, symbol="3293", **dict(kw, market="TWSE"))  # scope is checked before the gate
+        self.assertFailure("data_version_mismatch", saved.events, symbol="3293", **dict(kw, data_version=DATA_PREFIX + "0" * 64))
+        self.assertFalse(hasattr(saved, "symbols"))  # no public mapping that bypasses the gate
+        self.assertEqual(len(saved.trading_days(**kw)), 71)  # not symbol-scoped: no gate
         self.assertFailure("symbol_refused", saved.read_day, symbol="3293", on_date=DATES[3], basis="raw", **kw)
         self.assertEqual(self.assertFailure("symbol_refused", saved.read_day, symbol="3293", on_date=DATES[3], basis="adjusted", **kw)
                          .diagnostics["reason"], "market_type_not_accepted")

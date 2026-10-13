@@ -2030,7 +2030,7 @@ class SavedCalendarActions:
     policy_version: str
     calendar: tuple
     calendar_after_formal: tuple
-    symbols: object
+    _symbols: object  # private on purpose: every symbol-scoped read goes through the _symbol() gate
     spread_semantics: object
     data_sha256: str
     data_version: str
@@ -2048,9 +2048,13 @@ class SavedCalendarActions:
             _fail("unsupported_purpose")
 
     def _symbol(self, symbol):
-        if type(symbol) is not str or symbol not in self.symbols:
+        """The one gate for every symbol-scoped read: a refused symbol yields nothing, not even its events."""
+        if type(symbol) is not str or symbol not in self._symbols:
             _fail("unsupported_symbol")
-        return self.symbols[symbol]
+        entry = self._symbols[symbol]
+        if entry["status"] != "usable":
+            _fail("symbol_refused", reason=entry["refusal_reasons"][0])
+        return entry
 
     @property
     def provenance(self):
@@ -2069,6 +2073,7 @@ class SavedCalendarActions:
         return self.calendar
 
     def events(self, *, market, security_type, symbol, data_version, purpose):
+        """The symbol's normalized events (supported or not, each with its reasons); refused symbols raise."""
         self._check(market, security_type, data_version, purpose)
         return self._symbol(symbol)["events"]
 
@@ -2083,8 +2088,6 @@ class SavedCalendarActions:
             _fail("date_outside_window")
         if on_date not in self.calendar:
             _fail("date_not_in_observed_calendar")
-        if entry["status"] != "usable":
-            _fail("symbol_refused", reason=entry["refusal_reasons"][0])
         for day, reason in entry["incomparable_days"]:
             if day == on_date:
                 _fail("day_incomparable", reason=reason)
