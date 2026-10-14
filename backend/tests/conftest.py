@@ -75,6 +75,11 @@ STANDALONE_ONLY = {
         "no writes outside its own session directory) before importing the modules under test, reads a pinned "
         "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
     ),
+    "test_tpex_calendar_actions_source.py": (
+        "tests/test_tpex_calendar_actions_source.py raises unless run with -B, installs sys.addaudithook (no sockets, "
+        "no writes outside its own session directory) before importing the modules under test, reads a pinned "
+        "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
+    ),
 }
 
 # Assign rather than setdefault: a developer shell may have production
