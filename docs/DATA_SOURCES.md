@@ -1,6 +1,10 @@
 # 資料來源、coverage 與限制
 
-本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
+本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態；各輪驗收收據已移出本文，查 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/DATA_SOURCES.md`。
+
+## 來源選用原則
+
+專案只用免費公開資料。新的取得方案以 FinMind 免費方案為主要來源，官方 OpenAPI／網站是既有 collector 的來源與核對依據；FinMind 沒有該資料集或無法滿足用途時才另提其他來源。這是來源方向，不是取源授權；每次真實取得仍依 [SOURCE_REGISTRY 的選用原則與共同規則](SOURCE_REGISTRY.md#來源選用原則finmind-為主)版本化 policy、pin 與 seal。
 
 ## 資料庫政策
 
@@ -34,13 +38,13 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 | TPEx universe | [issuer master](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) 加 [ETF allowlist](https://info.tpex.org.tw/api/etfFilter) POST；混合 quote 的權證、CB、ETN、興櫃不 fallback 成 stock。 |
 | TWSE OHLCV | 當日 [STOCK_DAY_ALL](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；bounded history 為 [MI_INDEX](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)，依 allowlist 過濾。 |
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
-| TPEx selected價格（M1／M2精確張、方向、成交額、振幅與七股scope） | 現行dataset11370`.5`／m2-v9支援3105／3293／5274／5347／6488／6510精測／8069、TPEx ordinary stock／TWD／quote-date2026-10-06。全七股gate／四理由／五條件actual API與可信往返有限接受，coreoperation+1／selected identity-source-date-policy dep+1／reliability0／stall0；explicit舊tuples保持。scope5當輪financial GET2，final post-edit NEW worker1／Store1／runner1／preloadedfalse，raw已釋放，DB IDs null／process memory only。來源／金融由[§29](SOURCE_REGISTRY.md#29-m2-focus-stock-scope-5七股來源准入)、操作由[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)管理。本`.5`不具磁碟grant；獨立`.1`私人保存見下列新row，PIT／20／21close／calendar／strategy time execution仍缺。 |
-| TPEx selected私人單日保存（M1-PRICE-SAVE-1） | 獨立`.1`storage policy／`stock-price-saved/m1-v1`支持同七股10/06；三檔完整raw＋兩canonical receipt、NEW empty Store reader／all126欄42金融／actual API及可信操作已有限接受。原capture process_memory、null DB IDs及source日期保持，storage origin private_local另列；不auto-fetch／hydrate／改default。Source-use／schema由[來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)、操作由[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)負責；三檔清理審核拒絕、NO-RETRY保留，缺檔UI未跑，不外推PIT／歷史或正式DB。 |
-| TPEx saved-source關注（M1-SAVED-PRICE-FOCUS-1006-1） | 新consumer `.1`／`price-saved-focus/m1-v1`只讀既有七股10/06 private三檔；完整gate後精確張／O-C／TWD成交額／振幅、actual API與可信五原條件往返已有限接受，core+1／necessary readonly-use dep+1／reliability0／stall0。Current metadata／financial GET0、新diskwrites0／DBmut0；原capture process_memory與目前private_local分列，不hydrate／升default／擴大歷史。權威見[來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)／[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)；既有1791644B三檔仍在且NO-RETRY，at-cap不增diskcases、actual missing-file UI未跑。 |
-| TPEx歷史close候選（M1有界metadata review） | NEW REST11371只連exact daily CSV；suggest136936 SSR未見reply不覆蓋完整REST reply history。REST有歷史販售／平台latest-only及每日自行累積OGL回覆，署名／masked作者未證獨立帳號；沒有exact月alias／歷史自動用途准入。§26 wire仍script推論，original guide nativeGET exit1與另行rendered官方REST指南分報；historical financial GET／POST0、core0／dep0／非implementation batch／stall0。權威見[來源 §28](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L1048-L1074)；20／21close／calendar／strategy time execution未解除，無NEW可執行path時保持待驗，不作全域不可能主張。 |
+| TPEx selected 單日價格（七股，default 2026-10-06） | 政府資料開放平臺 dataset 11370 的 explicit policy `.5`，支援 3105／3293／5274／5347／6488／6510／8069 的 TPEx 普通股單日 TWD 價量，供精確張數、方向、成交額、振幅與七股 scope 關注；只在 process memory，無磁碟 grant。policy 版本表見[來源 §29.1](SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表)，操作見[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。非 PIT，不含多日收盤、日曆或策略時間。 |
+| TPEx selected 私人單日保存 | 獨立 storage policy `.1`／`stock-price-saved/m1-v1`，同七股 10/06 原件與 canonical receipt 保存於私人路徑，由 empty-store reader 讀回；不 auto-fetch、不 hydrate、不改 default。契約見[來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)／[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。 |
+| TPEx saved-source 關注 | consumer `price-saved-focus/m1-v1` 只讀上列私人三檔，完整 gate 後提供精確張／O-C／成交額／振幅條件；不擴大歷史。契約見[來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)／[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。 |
+| 普通股日線歷史（20／60 根收盤） | 已改以 FinMind `TaiwanStockPrice` 取得七股 nominal OHLCV last60，見[來源 §49](SOURCE_REGISTRY.md#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1)。官方 REST 11371／月查詢線索只是歷史候選審查，無自動用途准入；歸檔見 SOURCE_REGISTRY 索引的 §24／§26／§28 指標。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
 | TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。 |
-| TPEx 多日法人／交易日 | 現行獨立chips-1006 policy有限接受3105／6488、explicit10/06真5／20日窗口、12 net／actual API／可信desktop及窄版；Sep20＋Oct4完整24日曆、20daily／40selected880金融與未知metadata／非PIT、process memory only由[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)管理，操作見[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。W8八截止96net／8/25～10/2完整27日曆及pins immutable，仍按[§19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)範圍有效；不改DB／legacy／default。 |
+| TPEx 多日法人／交易日 | 政府資料開放平臺 TPEx 法人 dated CSV 的獨立 policy：W8 版本為兩股（3105／6488）八截止 2026-09-21～10-02 與 27 日完整有界日曆，見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)；chips-1006 版本為同兩股 explicit 10/06 的 5／20 日窗口與 24 日曆，見[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)／[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。七股版本見來源 §37／§38／§43～§46。均為 process memory、非 PIT，不改 DB／legacy／default。 |
 | TWSE 券商／分點名冊 | [券商基本資料](https://openapi.twse.com.tw/v1/brokerService/brokerList)與[券商分公司基本資料](https://openapi.twse.com.tw/v1/opendata/OpenData_BRK02)為免費官方名冊；實際 GET 已確認可讀。名冊只提供通道身分，不是交易明細。 |
 | 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
 | TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
@@ -54,17 +58,7 @@ Phase 3 的 P1 曾只規劃分析 2026-09-08；這是歷史作業範圍，不是
 
 M1-P2a 的 TPEx selected 摘要以**股**為單位，外資及陸資採**不含外資自營商**欄位，投信、自營商分別計算，詳細欄位、合計 gate 與具名驗收見[來源契約 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。真實驗收只支持 **3105／6488、2026-10-02** 的單日 selected 數值與具名負向拒收；P2a 本身不代表 chips 表、總覽或 5／20 日窗口已接入。後續 M1-P2b 已有限 review 同兩檔原件→API 二十個數值及具名 UI 操作，提供明示設定的獨立單日區塊；精確契約見[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)。不能將缺值補零，來源 `Date` 與單日列數也不證交易日曆；本批不改 DB／legacy 或 PIT 邊界。
 
-後續 M1-W1 接受的 coverage 是**兩股、單一 cutoff、完整有界日曆及當次版本**，以原始成交為統計基礎，三類為外資（不含外資自營商）、投信、自營商合計，仍以股／canonical 整數字串呈現。缺日按各窗口 fail closed，不補零或縮窗；這不等於其他標的金融欄位、全市場／全年或歷史當時可得已驗證。published／first available／revision time unknown，`historical_pit=unsupported`，沒有磁碟原件／跨程序重開或研究條件接線。來源詳述與參考集中於[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，W2 操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)；不把舊候選或單日驗收升格。
-
-W3歷史 coverage為兩股三 cutoff／22日曆，見[來源 §14](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L400-L450)。W4歷史擴為**同兩股、四個明列 cutoff、有界23日曆與新 policy**，新增8/31 daily／8月 index；23 daily全列結構與兩股46 selected rows／1012金融欄檢核分開，不外推其他標的數值。三月43 index列全 OHLC先驗，8月21列中只採8/31、界線前20列已驗未採。窗口只採≤cutoff，缺／錯／壞日或競爭 revision按需該日的窗口拒用，不補零、縮窗或較早／未來替代。原始成交、股／canonical整數字串、未知發布／first availability／revision及非 PIT界線不變。W4歷史版本與48 net見[來源 §15](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L452-L511)，具名操作／未驗邊界見[個股頁 §20](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L641-L672)；未保存 raw／跨程序讀回或接研究條件。W4當時未取得／准入8/28 daily，當時8月OHLC已驗不代法人daily。
-
-W5歷史已有限接受同兩股五個明列cutoff／24日曆，新8/28真daily及三月全43 index列驗證後採8/28／8/31、界線前19列未採。當次24daily全列結構與兩股48selected／1056金融欄檢核分開，不外推其他標的；60獨立net、actual API與具名原生操作見[來源 §16](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L513-L575)／[個股頁 §21](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L674-L704)。原始成交、股／精確字串、按窗口缺日拒用、metadata未知及non-PIT／未保存界線不變；W5當時未取得8/27 daily，本版pins不代新版本准入。
-
-W6歷史新8/27 dated CSV905全列／兩股44金融欄與完整25日曆已核；production25daily共22585全列結構與兩股50selected／1100金融欄分開驗，不外推其他標的。三月43全月列先驗，8月21／3／18；六cutoff72 net及actual API見[來源 §17](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L577-L642)，具名可信native／服務清理見[個股頁 §22](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L706-L732)。Probe與production觀測分開；精確字串、缺日按窗拒用、未知metadata及非PIT／未保存界線不變。
-
-W7歷史新8/26 dated CSV900全列／兩股44金融欄及完整26日曆已核；production26daily共23485全列結構、52selected／1144金融欄與全部關係分開驗，不外推其他標的。三月43全月列先驗，8月21／4／17；七cutoff84 net／actual API及ALL29 receipt SHA獨算見[來源 §18](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/SOURCE_REGISTRY.md#L644-L716)，14具名可信native／服務清理見[個股頁 §23](https://github.com/YiCheng0608/stock-lab/blob/f431b9885cd3332ddd328309d0041a15c55b8610/docs/STOCK_RESEARCH_PAGE.md#L734-L760)。失敗probe1、成功probe4與production29分三觀測，不稱一批34或全部body bytes已知；股／canonical精確字串、按窗口缺日拒用、未知metadata及非PIT／未保存界線不變。
-
-W8原有限範圍真8/25 dated CSV898全列／兩股44金融欄及完整27日曆已核；production27daily共24383全列結構、54selected／1188金融原字串及全部關係分開驗，不外推其他標的。三月43全月列先驗，8月21／5／16；八cutoff96 net／actual API及ALL30 body／canonical receipt SHA獨算見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)，16具名可信native／owned服務清理見[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。Probe4與production30為獨立觀測，不稱單批34；股／canonical精確字串、按窗口缺日拒用、未知metadata及非PIT／未保存界線不變。
+M1-W 系列（政府資料開放平臺 TPEx 法人 dated CSV）的 coverage 口徑是**兩股、明列 cutoff、完整有界日曆及當次版本**：以原始成交為統計基礎，三類為外資（不含外資自營商）、投信、自營商合計，以股／canonical 整數字串呈現；窗口只採不晚於 cutoff 的日，缺／錯／壞日或競爭 revision 時該窗口拒用，不補零、縮窗或以較早／未來日替代。published／first available／revision time unknown，`historical_pit=unsupported`。W1 的共同基礎見[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，W2 操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)；現行有效版本是 W8（八截止 2026-09-21～10-02、27 日曆、96 net），見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)／[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。W3～W7 是被取代的歷史版本，逐輪數值與收據見 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/DATA_SOURCES.md` 與 SOURCE_REGISTRY 索引的 §14～§18 歸檔指標；每個版本的 pins 彼此獨立，不互相升格。
 
 News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信。worker 尚未接完整媒體、國際新聞或分點資料；`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有主要寫入路徑不能據此聲稱已收集。詳見 [NEWS_SPEC](NEWS_SPEC.md)。
 
@@ -72,7 +66,7 @@ News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位
 
 R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAIEX／TWII bar 與 backfill 日期報表 `taiex_rows` 的 index bar 計數，均新增 `exchange=TWSE` 條件；TPEx 同名 index 不得增加已核實 TAIEX session 分母、`taiex_rows` 或普通股票有效 bar 日。session 校驗原有的 active／index、日期範圍、provenance gate 與符合來源／日期條件的 raw MI_INDEX fallback 維持；`taiex_rows` 是報表列數或既有 raw fallback 指示，不能單獨視為已核實 session。合法 TWSE benchmark 仍是 TWSE／TPEx 普通股票共用的日期基準，並未建立兩市場各自的交易日曆。
 
-這只修正 benchmark 的 exchange identity，未驗全市場或逐欄 coverage、真實官方 session、歷史完整性或 PIT。列數／日期數不能代表欄位用途可用；現行逐欄路徑與限制見下節。工作狀態見 [R1-A2](ROADMAP_EXECUTION.md)。
+這只修正 benchmark 的 exchange identity，未驗全市場或逐欄 coverage、真實官方 session、歷史完整性或 PIT。列數／日期數不能代表欄位用途可用；現行逐欄路徑與限制見下節。歷史拆解對照見 [R1-A2](ROADMAP_EXECUTION.md)；現行任務狀態只在 GitHub Issues／Projects。
 
 ### R1-A2-P2+ 成交金額可得狀態（有限接受）
 
@@ -84,7 +78,7 @@ R1-A2-P1-identity 的有限 review 僅確認：`verified_taiex_sessions` 的 TAI
 | opt-in selected `STOCK_DAY_ALL` capture | [`StockDayCapture.select`](../backend/worker/stock_day_capture.py) 保留既有 body／receipt／hash／日期 gate；選中列的 OHLC／volume 有效而 `TradeValue` 缺失或無效時，保留 bar 並給相同 `0 + unavailable + missing/invalid`。合法來源零為 `available`。adapter 可留成交額 unavailable warning。 | 純列 helper 與單一離線落盤 fixture 各有有限驗收，範圍見下段。指定三種 invalid／四類選列拒收的磁碟整合已有限接受，詳見下方專節；其他未覆蓋 invalid／拒收仍待驗。`TradeVolume` 仍要求精確非負整數；選中 symbol／OHLC／volume 缺失、無效或範圍不一致仍依原契約拒收。見 [SOURCE_REGISTRY §5.1](SOURCE_REGISTRY.md#51-stock_day_all-selected-security-bars)。 |
 | TAIEX close-only | 指數 parser 合成的 `turnover=0` 標 `unavailable/synthetic_index`。close 補 O／H／L、volume 補 0 的既有路徑未在本批改成真實欄位。 | [`verified_taiex_sessions`](../backend/app/coverage.py) 的身分／日期／provenance gate 不證合成欄位可用；指數量額或 OHLC 不得由 session 列數升格。 |
 | 保存、舊資料與重跑 | [`BarRecord`／`MarketBar`](../backend/app/models.py) 無來源證據時預設 `unknown`。[`_upsert_official_bar`](../backend/worker/pipeline.py) 保存數值、status 與 reason。`0007_turnover_availability` 和 fallback 升級對舊資料一次性分類：正值為 `available`；舊 `0` 為 `unknown/legacy_zero_ambiguous`；負值或 NULL 為 `unknown/legacy_invalid`。已有 status 的重跑不重分類或覆寫。 | 舊零無法還原為真零或缺值；legacy 磁碟 migration 的八案例已有限接受，精確 fixture／路徑及 NULL 限度見下節，正式 DB 升級未執行。既有資料不因新 parser 自動修復；migration 分類不證來源真相。 |
-| API／TS／計算 | [`bar_dict`](../backend/app/api.py) 輸出 `turnover_status`（`available`／`unavailable`／`unknown`）及 nullable `turnover_reason`；[`Bar` 型別](../frontend/src/types.ts) 對齊。hot-group 與 strategy 兩種法人 flow ratio 只在所需各日 status 為 `available` 且成交額有效、為正時使用，否則回 unavailable。 | API 仍有數值 `turnover=0`；consumer 必須讀 status。未新增成交額 UI；其他特徵、TAIEX 合成 OHLC、逐欄 coverage 與 PIT 不因本批通過。 |
+| API／TS／計算 | [`bar_dict`](../backend/app/api.py) 輸出 `turnover_status`（`available`／`unavailable`／`unknown`）及 nullable `turnover_reason`；[`Bar` 型別](../frontend/src/types.ts) 對齊。hot-group 與 strategy 兩種法人 flow ratio 讀 `MarketBar.volume`（股），只在所需各日成交量皆有限且為正時使用，否則回 unavailable；不依 `turnover_status` 判斷。 | API 仍有數值 `turnover=0`；consumer 必須讀 status。未新增成交額 UI；其他特徵、TAIEX 合成 OHLC、逐欄 coverage 與 PIT 不因本批通過。 |
 
 先前有限驗收使用可重建的離線 fixture，經 selected capture、collect force、實際落盤 SQLite 與新 session 讀回，再由 in-process API handler／serializer 回傳：TWSE selected 1101 缺額為 `0/unavailable/missing`，0050 明確零為 `0/available/null`，有效 OHLC／volume 保留。API startup readiness 在該測試被 bypass，故不證正式啟動或 deployment。指定三種 selected invalid／四類拒收另有下方有限磁碟驗收，本輪不重跑此缺額／明確零案例；其他未覆蓋 invalid／拒收、正式 DB 升級、官方真實逐欄 coverage 與 PIT 保持待驗。UI 空白與合法零的顯示契約見 [UI 文案 §10.4](UI_COPY_SPEC.md#104-數值表格單位與空白)。
 
@@ -116,7 +110,7 @@ fixture 先複製目前 canonical metadata 建立空 schema，只移除 0007 的
 | `TradeValue=-1`、`12xyz`、`12,34` | 三種無效成交額各保留有效 OHLC／volume，成交額為 `0/unavailable/invalid`，關閉後讀回及 API 一致。 |
 | `missing_symbol`、`OpeningPrice` 空、`TradeVolume=1.5`、OHLC 範圍不一致 | 四類拒收各覆蓋 existing／empty 兩種情境，共八個 selected 標的；四筆既存 bar 的 typed 欄值、id、raw 關聯及 status／reason 保留，四個原無 bar 標的仍無 bar、API 為空，不被另有有效列的 MI_INDEX history fallback 補值。 |
 
-重開另核三筆 accepted bar 的 target raw source／endpoint／body path／hash、UTC capture、data_as_of、run FK 與 partial 狀態；原 raw typed 值及 ZIP／body／receipt hash 不變，integrity／FK 正常，再次 select 仍拒相同列。第三次 compound unittest 已有限接受；早期實測／policy 失敗與成功收據留 task，不稱首跑通過。
+重開另核三筆 accepted bar 的 target raw source／endpoint／body path／hash、UTC capture、data_as_of、run FK 與 partial 狀態；原 raw typed 值及 ZIP／body／receipt hash 不變，integrity／FK 正常，再次 select 仍拒相同列。
 
 這是一個組合測試內的指定三種 invalid 與四類拒收斷言，不是十一個獨立 unittest，也不涵蓋其他 invalid 或全域拒收。其他端點的 payload／capture metadata 以記憶體 fixture 提供，包含 collector 所需 synthetic MI_INDEX／session；TPEx 只給明示空 `OfficialBatch` 邊界，不作真實官方資料、TPEx 或全域 coverage 證據。API 核對也不證完整啟動、UI、正式 DB 或 deployment；未取得真官方樣本，不放行歷史／availability／PIT、完整 5／20 日窗口或其餘逐欄 gate。selected 整數 gate 的證據不外推 legacy；legacy 日行情成交量另有下方[精確整數 gate](#r1-a2-legacy-日行情成交量精確整數-gate有限接受)的本地有限修復及驗收。
 
@@ -152,7 +146,7 @@ fixture 為固定 **2026-09-04** 的兩市場共 **30 個 synthetic symbols**；
 | 同一單日兩次 `collect(force)` | 首次為 `partial`、`records=7`（六筆股票及一筆 TAIEX）；第二次兩市場股票全部 invalid、仍有有效 TAIEX，但 run 為 `failed`、`records=0`、`no_data_dates=[]`。全部 19 筆 bar（六筆合法、十二筆 existing 與 TAIEX）及原 raw 的完整 typed 值保留，十二個 empty 仍無 bar；failed attempt 可回指第二次 raw。 |
 | dispose 後新 `NullPool` engine／current DB 讀回及 HTTP API | 由空的 current DB 正常初始化 0001→0007，再真正重開同一 SQLite 檔，核對上述合法整數與拒收保留；30 個標的兩輪各一個 HTTP 回應，共 60 個，raw HTTP int token 精確。兩次重開均 `integrity_check=ok`、`foreign_key_check` 無列。 |
 
-六個 target captures 的 encoded bytes／hash／metadata 與 DB 關聯已核，第一批原 bytes 不變。測試與清理均 exit 0，核定根不存在；載入前 execution-policy 拒絕未啟動 runner，不算成功命令，原證據留 task。
+六個 target captures 的 encoded bytes／hash／metadata 與 DB 關聯已核，第一批原 bytes 不變。
 
 fixture JSON 不含 Decimal；這只解除上述指定整數、拒收與保存路徑的磁碟證據缺口，不把 capture fixture 升格官方原件，也不證 JavaScript／browser 能精確保留大整數。真官方／live、UI、production startup、完整 backend、正式 DB、Decimal capture、PIT 或完整 5／20 日窗口均未驗；其他 invalid／拒收及逐市場／逐欄 coverage 保持待驗，不升格完整 R1-A2。落盤根、配額、入口副作用與清理由[開發入口](development-baseline/README.md#r1-a2-legacy-成交量的磁碟整合驗證入口)詳述；版本、實測命令、原始收據與下一步評估留 task／[ROADMAP](ROADMAP.md#接下來的順序近期產品里程碑)。
 
@@ -194,7 +188,7 @@ fixture JSON 不含 Decimal；這只解除上述指定整數、拒收與保存�
 ### 券商分點與主力統計的來源邊界（後續待做）
 
 - 官方券商／分點名冊提供券商／分點代號與名稱，但不含買賣交易；歷史更名與券商隸屬仍待驗證。官方逐檔交易查詢需要人工驗證；可評估在使用條件允許下匯入合法取得的 CSV，但尚未實作，也不能先承諾完整免費自動歷史。
-- [FinMind TaiwanStockTradingDailyReport 文件](https://finmind.github.io/tutor/TaiwanMarket/Chip/)列為 Sponsor 方案，說明歷史自 2021-06-30 起且有已知缺日。它目前只是候選，未採購、未接入，也沒有取得授權的結論。
+- FinMind 免費方案已是本專案的主要新來源（融資餘額、普通股日線、TAIEX 名目指數分別見來源 §48、§49、§51）；但分點資料集 [TaiwanStockTradingDailyReport](https://finmind.github.io/tutor/TaiwanMarket/Chip/) 屬 Sponsor 付費方案，歷史自 2021-06-30 起且有已知缺日，未採購、未接入，不在免費方案的用途內。
 - CMoney 的[主力進出參考](https://www.cmoney.tw/forum/stock/8039?s=main-force)與[市場表格](https://www.cmoney.com.tw/M_Table.aspx?CMenuID=M668)可用來理解「Top 15 買超合計減 Top 15 賣超合計」的觀念；不承諾本產品數值相同。精確期間、選樣、家數差與 5／20 日集中度口徑須在實作前版本化核定。
 
 以上來源盤點不等於交易資料已接入。後續功能以[個股頁籌碼三部分](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)為準；缺資料仍留空，「主力」是可重現分點統計而非身分判定。

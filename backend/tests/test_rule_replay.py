@@ -438,7 +438,7 @@ def test_hash_verified_bytes_are_the_same_bytes_compiled(monkeypatch):
     observed = []
     def checked(source, filename, mode, **kwargs):
         assert type(source) is bytes
-        assert hashlib.sha256(source).hexdigest() == "db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028"
+        assert hashlib.sha256(source).hexdigest() == "df4fb776417d09d9d3e24f2de7add01c758f204774e1d6b25915bb2b1f641a74"
         assert kwargs["dont_inherit"] is True
         observed.append(source)
         return original_compile(source, filename, mode, **kwargs)

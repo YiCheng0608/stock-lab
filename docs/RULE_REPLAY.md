@@ -51,7 +51,7 @@ Bundle 只有十個頂層 key：
   "strategy_version": "1.0.0",
   "implementation": {
     "id": "domain-rules/v1",
-    "source_sha256": "sha256:db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028",
+    "source_sha256": "sha256:df4fb776417d09d9d3e24f2de7add01c758f204774e1d6b25915bb2b1f641a74",
     "runtime": {"implementation": "cpython", "version": "3.12.14"}
   },
   "config_snapshot": {},
@@ -82,14 +82,14 @@ Digest 格式為 `sha256:` 加 64 lowercase hex。arguments digest 不含 subjec
 | 項目 | Frozen value |
 | --- | --- |
 | Source path | library sibling `backend/app/domain.py`；caller 不可選 |
-| Source SHA-256 | `db626fa71311ce5e88c1644f0c3d2ce1d16a4541110fe15813ca9568330ef028` |
-| breakout config digest | `sha256:a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd` |
-| pullback config digest | `sha256:03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff` |
+| Source SHA-256 | `df4fb776417d09d9d3e24f2de7add01c758f204774e1d6b25915bb2b1f641a74` |
+| breakout config digest | `sha256:8589e48e75122860037ae01e247601868bfc0275e2c71ddc96f140ab5135582b` |
+| pullback config digest | `sha256:301d1fdb2df91c9a084b662273526637b44e7d6bc885523a53058c3a629af483` |
 | Runtime | CPython `3.12.14`；binary64 radix 2、mantissa 53、max_exp 1024 |
 
 每次 capture／serialize／replay 先驗 caller shape 與 identity，再驗 runtime；fixed source 最多讀 1 MiB＋overflow sentinel，核 hash 後把同一批 bytes compile／exec 到 UUID-named fresh private module，再核兩個完整 config digests。不使用 shared `app.domain` callable/config 或 cached pyc。
 
-Private module 正常與 exception path 都以 identity guard 移除自己註冊的 object。Host 替換 registry object、interpreter 或 filesystem 的惡意操控不在保證內。Whole-file binding 涵蓋 domain.py 全檔；任何區域的 bytes 改變而不符合固定 hash 時，即拒絕 bundle，不只檢查 evaluator 區域。
+Private module 正常與 exception path 都以 identity guard 移除自己註冊的 object。Host 替換 registry object、interpreter 或 filesystem 的惡意操控不在保證內。Whole-file binding 涵蓋 domain.py 全檔；任何區域的 bytes 改變而不符合固定 hash 時，即拒絕 bundle，不只檢查 evaluator 區域。`domain.py` 改版並更新上列 pin 後，帶舊 `source_sha256` 的既存 bundle 不能以新實作重放（`unsupported_implementation_binding`）；舊 run、輸入、設定與結果仍保留。
 
 ## 7. `rule-replay-report/v1`
 
