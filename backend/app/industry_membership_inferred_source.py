@@ -69,19 +69,19 @@ from typing import NamedTuple
 from urllib.parse import urlsplit
 
 
-# Pins of the externally published canonical policy v2 (sorted keys, compact JSON, UTF-8, no trailing
+# Pins of the externally published canonical policy v2.1 (sorted keys, compact JSON, UTF-8, no trailing
 # LF). An unset or mismatching pin rejects every policy before use
 # (policy_pin_unset, policy_pin, policy_canonical_mismatch).
-POLICY_SHA256 = "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6"
-POLICY_BYTES = 14045
-POLICY_VERSION = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2"
+POLICY_SHA256 = "f6df04241f97fd50948b54d463cf829526b6f12c3b259c642e2c0d20d6b51676"
+POLICY_BYTES = 15152
+POLICY_VERSION = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1"
 POLICY_SCHEMA = "issue37-industry-membership-source-policy/v1"
-NAMESPACE = POLICY_VERSION + "/qa2"
+NAMESPACE = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2"
 PURPOSE = "local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot"
 CONSUMER_VERSION = "industry-membership-inferred-cutoffs-lookup-v1"
 FINANCIAL_START_VERSION = "issue37-financial-start-v1"
 SEAL_URL_PATTERN = r"https://github\.com/YiCheng0608/stock-lab/issues/37#issuecomment-([0-9]+)"
-SEAL_COMMENT_FLOOR = 6171178641  # policy v2 publication comment; it and any older location (including the spent qa1 seal) are refused
+SEAL_COMMENT_FLOOR = 6174861923  # policy v2.1 publication comment; it and any older location (including the spent qa1 seal) are refused
 USER_AGENT = "stock-lab-issue37-local-ram/1"
 ACCEPT = "application/json"
 HOSTS = ("api.finmindtrade.com", "openapi.twse.com.tw", "www.tpex.org.tw")
@@ -1143,16 +1143,25 @@ def check_seven_symbols_covered(official):
     ``symbol_index``, the observed exchange (``TWSE``/``TPEx``/``absent``), the official raw industry code
     (``<null>`` when null, missing or empty, ``<unrepresentable>`` unless 1-4 ASCII letters or digits) and
     the mapper result (a canonical group or ``unknown``); see ``_uncovered_entries`` for the whitelist.
+
+    The TPEx feed rows of a symbol win over its TWSE feed rows. A code repeated within one feed is covered only
+    when EVERY one of its rows sits in a required group, so the outcome never depends on the order of the rows;
+    the receipt then describes the uncovered row with the smallest (industry, group).
     """
-    by_identity = {(row.exchange, row.symbol): row for row in official if row.symbol is not None}
+    by_feed = {}
+    for row in official:
+        if row.symbol is not None:
+            by_feed.setdefault((row.exchange, row.symbol), []).append(row)
     uncovered = []
     for index, symbol in enumerate(SEVEN_SYMBOLS):
-        row = by_identity.get(("TPEx", symbol)) or by_identity.get(("TWSE", symbol))
-        if row is not None and row.group in REQUIRED_GROUPS:
-            continue
-        if row is None:
+        rows = by_feed.get(("TPEx", symbol)) or by_feed.get(("TWSE", symbol))
+        if rows is None:
             uncovered.append((index, "absent", UNCOVERED_CODE_NULL, UNCOVERED_GROUP_UNKNOWN))
             continue
+        outside = [item for item in rows if item.group not in REQUIRED_GROUPS]
+        if not outside:
+            continue
+        row = min(outside, key=lambda item: (item.industry, item.group or ""))
         if row.industry == "":
             code = UNCOVERED_CODE_NULL
         elif _UNCOVERED_CODE.fullmatch(row.industry):
@@ -1364,12 +1373,7 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
                 all_reasons.add("delisted_record_ambiguous")
                 continue
             if state == "unresolved":
-                possible = {_group_of_name(_EXCHANGE_OF_TYPE[item.type], item.industry) for item in candidates}
-                if None in possible:
-                    all_reasons.add("delisted_industry_undeterminable")
-                else:
-                    for group in possible & set(REQUIRED_GROUPS):
-                        reasons[group].add("finmind_latest_date_unresolved")
+                all_reasons.add("delisted_industry_undeterminable")  # the newest row is unknown, so the industry is
                 continue
             exchange = _EXCHANGE_OF_TYPE[newest[0].type]
             group = _group_of_name(exchange, newest[0].industry)
@@ -1392,41 +1396,66 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
             if difference is not None:
                 difference[(cutoff, group)] = (len(official_only), len(finmind_explained),
                                                len(finmind_only) - len(finmind_explained))
-        for row in usable_official:
+        def reject_reached(reason, names, tables, official_group):
+            """The transfer rule can only reject: the official group (when required) and every required group the names
+            reach under the section 2 table(s) ``tables`` (one exchange name, or a tuple of both when the exchange of the
+            old row is unknown) get ``reason``; a name outside section 2 could belong to any group, so all three of this
+            cutoff are rejected."""
+            reached = {official_group} if official_group in members else set()
+            for name in names:
+                named = {_group_of_name(table, name) for table in ((tables,) if isinstance(tables, str) else tables)} - {None}
+                if not named:
+                    all_reasons.add("board_transfer_old_industry_unknown")
+                reached |= named & set(members)
+            for reached_group in reached:
+                reasons[reached_group].add(reason)
+        for row in ordinary_official:
             group = row.group
-            if group not in members:
-                continue
+            # Rows with a repeated code or an unusable report date are never members and their group is already
+            # rejected, but the transfer rule still runs for them (as for rows of non-required groups): its outcome
+            # can only reject, never add a member.
+            usable = row.report_ok and occurrences[(row.exchange, row.symbol)] == 1
+            other = "tpex" if row.exchange == "TWSE" else "twse"
+            older = [item for item in by_id.get(row.symbol, ()) if item.type == other]
+            if row.listing is None or row.listing > cutoff:
+                # A FinMind row whose type is unusable may be an old row of either exchange: it counts as evidence in both
+                # directions, whatever its date, and its name is read under both section 2 tables.
+                typeless = [item for item in by_id.get(row.symbol, ()) if not item.type_usable]
+                if typeless:
+                    reject_reached("board_transfer_type_unknown", {item.industry for item in typeless}, ("TPEx", "TWSE"), group)
             if row.listing is None:
-                reasons[group].add("listing_date_missing_or_invalid")
-            elif row.listing <= cutoff:
-                add(group, Member(row.exchange, row.symbol), None)
+                if usable and group in members:
+                    reasons[group].add("listing_date_missing_or_invalid")
+                if older:  # without a listing date the stock may have moved after the cutoff: treat it like an undated old row
+                    reject_reached("board_transfer_listing_date_unknown", {item.industry for item in older},
+                                   "TPEx" if row.exchange == "TWSE" else "TWSE", group)
+                continue
+            if row.listing <= cutoff:
+                if usable and group in members:
+                    add(group, Member(row.exchange, row.symbol), None)
+                continue
+            if not older:
+                continue  # a new listing after the cutoff
+            if row.exchange != "TWSE":
+                reject_reached("board_transfer_reverse_direction", {item.industry for item in older}, "TWSE", group)
+                continue
+            if any(item.date is None for item in older):  # the row without a date may be the newest
+                reject_reached("board_transfer_evidence_date_unknown", {item.industry for item in older}, "TPEx", group)
+                continue
+            top = max(item.date for item in older)
+            names = {item.industry for item in older if item.date == top}
+            if len(names) != 1:
+                reject_reached("board_transfer_ambiguous", names, "TPEx", group)
+            elif top < cutoff:
+                reject_reached("board_transfer_evidence_before_cutoff", names, "TPEx", group)
             else:
-                other = "tpex" if row.exchange == "TWSE" else "twse"
-                older = [item for item in by_id.get(row.symbol, ()) if item.type == other]
-                if not older:
-                    continue  # a new listing after the cutoff
-                if row.exchange != "TWSE":
-                    reasons[group].add("board_transfer_reverse_direction")
-                    continue
-                if any(item.date is None for item in older):
-                    reasons[group].add("board_transfer_evidence_date_unknown")
-                    continue
-                top = max(item.date for item in older)
-                names = {item.industry for item in older if item.date == top}
-                if len(names) != 1:
-                    reasons[group].add("board_transfer_ambiguous")
-                elif top < cutoff:
-                    reasons[group].add("board_transfer_evidence_before_cutoff")
-                else:
-                    old_group = _group_of_name("TPEx", next(iter(names)))
-                    if old_group is None:
-                        all_reasons.add("board_transfer_old_industry_unknown")
-                    elif old_group != group:
-                        reasons[group].add("board_transfer_industry_conflict")
-                        if old_group in reasons:
-                            reasons[old_group].add("board_transfer_industry_conflict")
-                    else:
-                        add(group, Member("TPEx", row.symbol), "board_transfer_old_tpex_identity")
+                old_group = _group_of_name("TPEx", next(iter(names)))
+                if old_group is None:
+                    all_reasons.add("board_transfer_old_industry_unknown")
+                elif old_group != group:
+                    reject_reached("board_transfer_industry_conflict", names, "TPEx", group)
+                elif usable and group in members:
+                    add(group, Member("TPEx", row.symbol), "board_transfer_old_tpex_identity")
         owners, symbol_owners = {}, {}
         for group in REQUIRED_GROUPS:
             for member in members[group]:

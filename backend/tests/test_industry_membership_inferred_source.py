@@ -2,9 +2,9 @@
 
 Run: python -B -X utf8 backend/tests/test_industry_membership_inferred_source.py
 Standard library only; no pytest/conftest, provider GET, DB or test artifacts. The audit
-hook installed below forbids sockets, DNS, subprocesses and file writes. The policy v2
+hook installed below forbids sockets, DNS, subprocesses and file writes. The policy v2.1
 literal below is the published canonical text (global role publication, built by an
-independent stdlib script from the published v1 bytes, not by product helpers); the tests
+independent stdlib script from the published v2 bytes, not by product helpers); the tests
 run against the product's shipped pins and never override them.
 Every corpus below is synthetic: it exercises inference/guard boundaries and proves no
 real source, classification truth, FinMind category naming or QA acceptance criterion.
@@ -45,15 +45,16 @@ if not sys.dont_write_bytecode:
     raise RuntimeError("Use -B: the boundary runner does not permit bytecode artifacts")
 sys.addaudithook(_audit_boundary)
 
-# Published policy v2 (canonical: sorted keys, compact, UTF-8, no trailing LF); 14,045 bytes.
-EXTERNAL_POLICY = '{"acquisition":{"accept":"application/json","accept_encoding":"identity","artifact_bytes":0,"batch_seconds":180,"body_cap_bytes":[4194304,4194304,4194304,2097152],"deadline":"cooperative","hosts":["api.finmindtrade.com","openapi.twse.com.tw","www.tpex.org.tw"],"max_gets":4,"namespace":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2","order":"FinMind TaiwanStockInfo, TWSE t187ap03_L, TPEx mopsfin_t187ap03_O, FinMind TaiwanStockDelisting","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":50331648,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":12582912,"user_agent":"stock-lab-issue37-local-ram/1"},"acquisition_date":{"earliest":"2026-10-06","latest":"2026-10-31","rule":"D is the Asia/Taipei calendar date when the first GET starts; all four captures must finish on D; each official feed must carry exactly one usable report date (seven digits of a real ROC date) shared by every row that has a usable one, and it must lie in [2026-10-06, D]; a feed without one, with several, or with one outside that range rejects the whole batch; a row without a usable report date is unknown and never a member"},"consumer_version":"industry-membership-inferred-cutoffs-lookup-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","groups":{"code_basis":"Semiconductor=TWSE 24 and TPEx 24; Optoelectronics=TWSE 26 and TPEx 26; Cultural Innovation=TPEx 32; exchange+exact two-digit code mapped by the INDUSTRY_CLASSIFICATION section 3 mapper (no trim, padding or case folding); FinMind Chinese names compared by exact section 2 market names; the UI support pool 3105, 3293, 5274, 5347, 6488, 6510 and 8069 must each sit in a required group in the official snapshot (a row whose report date is unusable still counts), otherwise the whole batch is rejected before the last GET after all seven are scanned, and the rejection receipt lists every uncovered stock with symbol_index, observed exchange (TWSE, TPEx or absent), raw official industry code (1 to 4 ASCII letters or digits, otherwise the marker <null> or <unrepresentable>) and mapper result (canonical group or unknown)","namespace":"official_industry","required":["Semiconductor","Optoelectronics","Cultural Innovation"],"theme_namespace":"empty set; consumers reject unverified theme groups"},"inference":{"board_transfer":"official listing date after C on one exchange and a retained FinMind row of the other exchange for the same stock_id: TWSE with an older tpex row joins the C set as TPEx identity only when that row\'s date is on or after C and its name maps to the same group; a non-unique, conflicting or reverse-direction transfer rejects the group, and an old name that is not a section 2 name rejects all three groups of that C; an older tpex row whose date is unknown rejects the group","d_set_agreement":"per group the official (exchange, symbol) set must equal the FinMind newest-date type twse/tpex set after exact section 2 name mapping, excluding FinMind-only rows explained by TaiwanStockDelisting inside [C, D]; any difference rejects the group; a stock whose FinMind rows all carry the same type and industry has a decided value whatever their dates; a stock with differing values and any unknown date has no decided newest row: it is left out of the FinMind set and, at both cutoffs, rejects every required group of its official rows or reached by any of its rows (an unusable type tries both exchanges), while a stock that reaches no required group is ignored; a decided newest row with an unusable type rejects the required groups its industry name reaches under either exchange; an official row with a repeated code or an unusable report date is never a member","delisting":"TaiwanStockDelisting rows with date in [C, D] and a four-digit stock_id: a stock still in an official feed stays a member unless date equals C; a FinMind-only stock takes its group from its newest twse/tpex row (flag finmind_only_delisted_member); undeterminable industry rejects all three groups for that C; date equal to C rejects the group; a row whose date is unknown may equal C and may lie after it, so at both cutoffs an official stock rejects its required group, a FinMind-only stock with a decided group rejects that group when it is required, an undeterminable or tied industry rejects all three groups, and a FinMind-only stock whose newest row is undecided because of unknown dates rejects the required groups its rows reach or all three groups when any of its industry names is not a section 2 name; a date after D is a known date outside every window","identity":"ordinary stock identified by (exchange, four-digit symbol), unique per feed, and never on both exchanges at one cutoff; excludes ETF, TDR 91, managed 80, disabled 18/34, emerging and non-ordinary; a usable code or stock_id that is not exactly four ASCII digits is non-ordinary and is excluded from every set and decision without a reason; an official code outside [0-9A-Z]{4,6}, a null marker or a non-string, and a stock_id that is a non-string, empty, blank, a null marker or over 32 characters, are unusable: the row cannot be attributed to a stock and rejects only the required groups its industry can reach (and, for a FinMind row, its type, trying both exchanges when the type is unusable), all three groups when an official row\'s industry is also unusable or unrecognized, and for a delisting row all three groups of every cutoff whose window may contain its date; a four-digit official code repeated within one feed rejects the required groups of all its rows; innovation board and KY included","new_listing":"official listing date after C is not a member of the C set, equal to C is; a missing, null or invalid listing date rejects the group of that stock; accepted formats are exclusive by character count and separator (8 digits Gregorian yyyyMMdd, 7 digits ROC yyyMMdd, 6 digits ROC yyMMdd, and Y/M/D with a 4-digit Gregorian year and slash only), each must be a real calendar date, and any other shape is unknown without trimming, padding or guessing","outputs":"each lookup carries inferred_from_post_cutoff_snapshot, effective_from=unknown, effective_to=unknown, pit=false, residual risk codes, D, both official report dates and the four source digests"},"instrument_type":"ordinary_stock","limitations":["non-PIT; classification effective and expiry times are unknown","FinMind is the service provider, not an official direct source","snapshot obtained after the cutoffs, so membership is an inference (inferred_from_post_cutoff_snapshot)","TWSE guideline clause 2 and clause 3 item 4 allow off-cycle adjustments; changes between C and D cannot be excluded (off_cycle_reclassification_not_excluded)","TaiwanStockDelisting date semantics (last trading day versus effective date) are undefined"],"market":"TW/TWSE+TPEx","profile":"free_public_local","publication_time":"unknown","residual_risks":["non_pit","classification_effective_dates_unknown","finmind_service_provider_not_official","inferred_from_post_cutoff_snapshot","off_cycle_reclassification_not_excluded","delisting_date_semantics_unknown"],"response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","content_type_official":"TWSE/TPEx sources: recorded verbatim in the receipt, not gated; the body is strictly parsed as a UTF-8 JSON array with per-field schema instead","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","encoding_official":"TWSE/TPEx sources: strict UTF-8; at most one leading UTF-8 BOM is removed and recorded as bom_present; a second BOM or any parse failure is the first failure","extra_fields":"unlisted extra columns are ignored; only structural failures reject the whole batch (a row that is not an object, an outer shape or row-count failure, an official feed without exactly one usable report date in range), while every value-level anomaly is unknown: an unusable identity (non-string, null, absent, empty, blank, a null marker none/null/nan/nat/na/n/a/undefined compared case-insensitively without trimming, a stock_id over 32 characters, or an official code outside [0-9A-Z]{4,6}) cannot be attributed to a stock, a FinMind date that is not a real YYYY-MM-DD date not after D, or an official report date that is not seven-digit ROC, has no date, and an unusable type, industry or listing date is unknown; bare NaN and Infinity literals are non-string values; before any validation every row of each source is counted per value form of its identity and date columns (inspection census: integers only, per source rows and rows_not_object and, per field, the counts of one mutually exclusive class vocabulary that sum to the object rows), the census of every source parsed so far is copied into failure diagnostics as enumerated census_<source>_<field>_<class> integer keys, and the acquisition receipt counts official rows per exchange for each listing-date format (gregorian8, roc7, roc6, ymd_slash, unknown including null or missing), and the counts of one exchange sum to its row count; inspection also reports the resolution counts of the ordinary FinMind stocks (single_row, same_value, newest_unique, newest_tied, date_unresolved_related, date_unresolved_unrelated) and, once inference has completed, for every cutoff and group the D-set difference counts official_only, finmind_only_explained and finmind_only_unexplained","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure"},"revision_time":"unknown","rights":{"finmind":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","finmind_attribution":"FinMind: TaiwanStockInfo, TaiwanStockDelisting; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the Chinese industry-name to code mapping is an explicit inference.","official":"Open Government Data License v1 (https://data.gov.tw/license); local RAM use only; originals are not redistributed","tpex_attribution":"財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃公司基本資料（dataset25036；www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O；issue37-industry-membership-inferred-cutoffs-1005-1006-v2）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。","twse_attribution":"臺灣證券交易所（Taiwan Stock Exchange, TWSE）[2026] 上市公司基本資料（dataset18419；openapi.twse.com.tw/v1/opendata/t187ap03_L；issue37-industry-membership-inferred-cutoffs-1005-1006-v2）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。"},"schema":"issue37-industry-membership-source-policy/v1","source_use":"local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot","sources":[{"dataset":"TaiwanStockInfo","fields":"date,industry_category,stock_id,stock_name,type","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_info","method":"GET","provider":"FinMind","role":"D-day identity, market and Chinese industry name; the newest-date row per stock_id decides unless all rows of that stock agree; a row whose date is not a real YYYY-MM-DD date not after D has no date","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},{"dataset":"t187ap03_L","fields":"出表日期,公司代號,產業別,上市日期","format":"JSON array of objects","id":"twse_t187ap03_l","method":"GET","provider":"TWSE","role":"official exchange+two-digit industry code and listing date for TWSE listed companies","url":"https://openapi.twse.com.tw/v1/opendata/t187ap03_L"},{"dataset":"mopsfin_t187ap03_O","fields":"Date,SecuritiesCompanyCode,SecuritiesIndustryCode,DateOfListing","format":"JSON array of objects","id":"tpex_mopsfin_t187ap03_o","method":"GET","provider":"TPEx","role":"official exchange+two-digit industry code and listing date for TPEx listed companies","url":"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"},{"dataset":"TaiwanStockDelisting","fields":"date,stock_id,stock_name","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_delisting","method":"GET","provider":"FinMind","role":"delisted stocks filtered to [C, D] in RAM; no date parameters are sent; a row whose date is not a real YYYY-MM-DD date is unknown","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDelisting"}],"storage":"process_RAM","supported_use":["local_personal_noncommercial","process_ram_snapshot","industry_membership_inferred_cutoff_lookup"],"unsupported":["historical_pit","publication_time","first_availability","revision_history","classification_effective_date","off_cycle_reclassification_exclusion","other_cutoffs","theme_membership","hot_group_v1_score","group_return","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","db_write","redistribution","mirror","deployment"],"version":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2"}'.encode("utf-8")
-EXTERNAL_PIN = "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6"
+# Published policy v2.1 (canonical: sorted keys, compact, UTF-8, no trailing LF); 15,152 bytes.
+EXTERNAL_POLICY = '{"acquisition":{"accept":"application/json","accept_encoding":"identity","artifact_bytes":0,"batch_seconds":180,"body_cap_bytes":[4194304,4194304,4194304,2097152],"deadline":"cooperative","hosts":["api.finmindtrade.com","openapi.twse.com.tw","www.tpex.org.tw"],"max_gets":4,"namespace":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2","order":"FinMind TaiwanStockInfo, TWSE t187ap03_L, TPEx mopsfin_t187ap03_O, FinMind TaiwanStockDelisting","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":50331648,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":12582912,"user_agent":"stock-lab-issue37-local-ram/1"},"acquisition_date":{"earliest":"2026-10-06","latest":"2026-10-31","rule":"D is the Asia/Taipei calendar date when the first GET starts; all four captures must finish on D; each official feed must carry exactly one usable report date (seven digits of a real ROC date) shared by every row that has a usable one, and it must lie in [2026-10-06, D]; a feed without one, with several, or with one outside that range rejects the whole batch; a row without a usable report date is unknown and never a member"},"consumer_version":"industry-membership-inferred-cutoffs-lookup-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","groups":{"code_basis":"Semiconductor=TWSE 24 and TPEx 24; Optoelectronics=TWSE 26 and TPEx 26; Cultural Innovation=TPEx 32; exchange+exact two-digit code mapped by the INDUSTRY_CLASSIFICATION section 3 mapper (no trim, padding or case folding); FinMind Chinese names compared by exact section 2 market names; the UI support pool 3105, 3293, 5274, 5347, 6488, 6510 and 8069 must each sit in a required group in the official snapshot (a row whose report date is unusable still counts; a code repeated within one feed counts only when every one of its rows does, whatever their order, and the rows of the TPEx feed win over those of the TWSE feed), otherwise the whole batch is rejected before the last GET after all seven are scanned, and the rejection receipt lists every uncovered stock with symbol_index, observed exchange (TWSE, TPEx or absent), raw official industry code (1 to 4 ASCII letters or digits, otherwise the marker <null> or <unrepresentable>) and mapper result (canonical group or unknown)","namespace":"official_industry","required":["Semiconductor","Optoelectronics","Cultural Innovation"],"theme_namespace":"empty set; consumers reject unverified theme groups"},"inference":{"board_transfer":"official listing date after C, or missing or invalid, on one exchange and a retained FinMind row of the other exchange (or a row whose type is unusable) for the same stock_id, evaluated for every ordinary official row whatever its group (including a group outside the required ones, a repeated code and an unusable report date), and the outcome can only reject, never add a member: TWSE with an older tpex row joins the C set as TPEx identity only when it is a member row of a required group, the newest older row\'s date is on or after C and its name maps to the same group; every other outcome rejects, at both cutoffs, the official group when it is required together with every required group reached by the names of the relevant older rows (a conflicting name, tied newest names, a newest date before C, any older row with an unknown date, the reverse direction of a TPEx row with an older twse row, an official listing date that is missing or invalid, or a FinMind row of the stock whose type is unusable), and rejects all three groups of that C when any relevant older name is not a section 2 name of the old row\'s exchange; the relevant older rows are all older rows when a date is unknown, the direction is reverse or the official listing date is unknown, and the rows of the newest date otherwise; a row whose type is unusable may belong to either exchange, so it is relevant in both directions whatever its date and its name is read under both section 2 tables","d_set_agreement":"per group the official (exchange, symbol) set must equal the FinMind newest-date type twse/tpex set after exact section 2 name mapping, excluding FinMind-only rows explained by TaiwanStockDelisting inside [C, D]; any difference rejects the group; a stock whose FinMind rows all carry the same type and industry has a decided value whatever their dates; a stock with differing values and any unknown date has no decided newest row: it is left out of the FinMind set and, at both cutoffs, rejects every required group of its official rows or reached by any of its rows (an unusable type tries both exchanges), while a stock that reaches no required group is ignored; a decided newest row with an unusable type rejects the required groups its industry name reaches under either exchange; an official row with a repeated code or an unusable report date is never a member","delisting":"TaiwanStockDelisting rows with date in [C, D] and a four-digit stock_id: a stock still in an official feed stays a member unless date equals C; a FinMind-only stock takes its group from its newest twse/tpex row (flag finmind_only_delisted_member); undeterminable industry rejects all three groups for that C; date equal to C rejects the group; a row whose date is unknown may equal C and may lie after it, so at both cutoffs an official stock rejects its required group, a FinMind-only stock with a decided group rejects that group when it is required, an undeterminable or tied industry rejects all three groups, and a FinMind-only stock whose newest row is undecided because of unknown dates has an undeterminable industry and rejects all three groups; a date after D is a known date outside every window","identity":"ordinary stock identified by (exchange, four-digit symbol), unique per feed, and never on both exchanges at one cutoff; excludes ETF, TDR 91, managed 80, disabled 18/34, emerging and non-ordinary; a usable code or stock_id that is not exactly four ASCII digits is non-ordinary and is excluded from every set and decision without a reason; an official code outside [0-9A-Z]{4,6}, a null marker or a non-string, and a stock_id that is a non-string, empty, blank, a null marker or over 32 characters, are unusable: the row cannot be attributed to a stock and rejects only the required groups its industry can reach (and, for a FinMind row, its type, trying both exchanges when the type is unusable), all three groups when an official row\'s industry is also unusable or unrecognized, and for a delisting row all three groups of every cutoff whose window may contain its date; a four-digit official code repeated within one feed rejects the required groups of all its rows; innovation board and KY included","new_listing":"official listing date after C is not a member of the C set, equal to C is; a missing, null or invalid listing date rejects the group of that stock; accepted formats are exclusive by character count and separator (8 digits Gregorian yyyyMMdd, 7 digits ROC yyyMMdd, 6 digits ROC yyMMdd, and Y/M/D with a 4-digit Gregorian year and slash only), each must be a real calendar date, and any other shape is unknown without trimming, padding or guessing","outputs":"each lookup carries inferred_from_post_cutoff_snapshot, effective_from=unknown, effective_to=unknown, pit=false, residual risk codes, D, both official report dates and the four source digests"},"instrument_type":"ordinary_stock","limitations":["non-PIT; classification effective and expiry times are unknown","FinMind is the service provider, not an official direct source","snapshot obtained after the cutoffs, so membership is an inference (inferred_from_post_cutoff_snapshot)","TWSE guideline clause 2 and clause 3 item 4 allow off-cycle adjustments; changes between C and D cannot be excluded (off_cycle_reclassification_not_excluded)","TaiwanStockDelisting date semantics (last trading day versus effective date) are undefined"],"market":"TW/TWSE+TPEx","profile":"free_public_local","publication_time":"unknown","residual_risks":["non_pit","classification_effective_dates_unknown","finmind_service_provider_not_official","inferred_from_post_cutoff_snapshot","off_cycle_reclassification_not_excluded","delisting_date_semantics_unknown"],"response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","content_type_official":"TWSE/TPEx sources: recorded verbatim in the receipt, not gated; the body is strictly parsed as a UTF-8 JSON array with per-field schema instead","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","encoding_official":"TWSE/TPEx sources: strict UTF-8; at most one leading UTF-8 BOM is removed and recorded as bom_present; a second BOM or any parse failure is the first failure","extra_fields":"unlisted extra columns are ignored; only structural failures reject the whole batch (a row that is not an object, an outer shape or row-count failure, an official feed without exactly one usable report date in range), while every value-level anomaly is unknown: an unusable identity (non-string, null, absent, empty, blank, a null marker none/null/nan/nat/na/n/a/undefined compared case-insensitively without trimming, a stock_id over 32 characters, or an official code outside [0-9A-Z]{4,6}) cannot be attributed to a stock, a FinMind date that is not a real YYYY-MM-DD date not after D, or an official report date that is not seven-digit ROC, has no date, and an unusable type, industry or listing date is unknown; bare NaN and Infinity literals are non-string values; before any validation every row of each source is counted per value form of its identity and date columns (inspection census: integers only, per source rows and rows_not_object and, per field, the counts of one mutually exclusive class vocabulary that sum to the object rows), the census of every source parsed so far is copied into failure diagnostics as enumerated census_<source>_<field>_<class> integer keys, and the acquisition receipt counts official rows per exchange for each listing-date format (gregorian8, roc7, roc6, ymd_slash, unknown including null or missing), and the counts of one exchange sum to its row count; inspection also reports the resolution counts of the ordinary FinMind stocks (single_row, same_value, newest_unique, newest_tied, date_unresolved_related, date_unresolved_unrelated) and, once inference has completed, for every cutoff and group the D-set difference counts official_only, finmind_only_explained and finmind_only_unexplained","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure"},"revision_time":"unknown","rights":{"finmind":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","finmind_attribution":"FinMind: TaiwanStockInfo, TaiwanStockDelisting; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the Chinese industry-name to code mapping is an explicit inference.","official":"Open Government Data License v1 (https://data.gov.tw/license); local RAM use only; originals are not redistributed","tpex_attribution":"財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃公司基本資料（dataset25036；www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O；issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。","twse_attribution":"臺灣證券交易所（Taiwan Stock Exchange, TWSE）[2026] 上市公司基本資料（dataset18419；openapi.twse.com.tw/v1/opendata/t187ap03_L；issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。"},"schema":"issue37-industry-membership-source-policy/v1","source_use":"local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot","sources":[{"dataset":"TaiwanStockInfo","fields":"date,industry_category,stock_id,stock_name,type","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_info","method":"GET","provider":"FinMind","role":"D-day identity, market and Chinese industry name; the newest-date row per stock_id decides unless all rows of that stock agree; a row whose date is not a real YYYY-MM-DD date not after D has no date","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},{"dataset":"t187ap03_L","fields":"出表日期,公司代號,產業別,上市日期","format":"JSON array of objects","id":"twse_t187ap03_l","method":"GET","provider":"TWSE","role":"official exchange+two-digit industry code and listing date for TWSE listed companies","url":"https://openapi.twse.com.tw/v1/opendata/t187ap03_L"},{"dataset":"mopsfin_t187ap03_O","fields":"Date,SecuritiesCompanyCode,SecuritiesIndustryCode,DateOfListing","format":"JSON array of objects","id":"tpex_mopsfin_t187ap03_o","method":"GET","provider":"TPEx","role":"official exchange+two-digit industry code and listing date for TPEx listed companies","url":"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"},{"dataset":"TaiwanStockDelisting","fields":"date,stock_id,stock_name","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_delisting","method":"GET","provider":"FinMind","role":"delisted stocks filtered to [C, D] in RAM; no date parameters are sent; a row whose date is not a real YYYY-MM-DD date is unknown","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDelisting"}],"storage":"process_RAM","supported_use":["local_personal_noncommercial","process_ram_snapshot","industry_membership_inferred_cutoff_lookup"],"unsupported":["historical_pit","publication_time","first_availability","revision_history","classification_effective_date","off_cycle_reclassification_exclusion","other_cutoffs","theme_membership","hot_group_v1_score","group_return","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","db_write","redistribution","mirror","deployment"],"version":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1"}'.encode("utf-8")
+EXTERNAL_PIN = "f6df04241f97fd50948b54d463cf829526b6f12c3b259c642e2c0d20d6b51676"
 
 SOURCE = ROOT / "backend/app/industry_membership_inferred_source.py"
 spec = importlib.util.spec_from_file_location("issue37_membership_boundary", SOURCE)
 source = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = source
 spec.loader.exec_module(source)
+
 
 NAMESPACE = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2"
 C1, C2 = "2026-10-05", "2026-10-06"
@@ -421,10 +422,10 @@ class Base(unittest.TestCase):
 class PolicyTests(Base):
     def test_shipped_pins_equal_the_published_policy_and_nothing_overrides_them(self):
         # The runner never assigns the product constants; these are the values the module ships with.
-        self.assertEqual(source.POLICY_SHA256, "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6")
-        self.assertEqual(source.POLICY_BYTES, 14045)
-        self.assertEqual(source.POLICY_VERSION, "issue37-industry-membership-inferred-cutoffs-1005-1006-v2")
-        self.assertEqual(source.NAMESPACE, source.POLICY_VERSION + "/qa2")
+        self.assertEqual(source.POLICY_SHA256, "f6df04241f97fd50948b54d463cf829526b6f12c3b259c642e2c0d20d6b51676")
+        self.assertEqual(source.POLICY_BYTES, 15152)
+        self.assertEqual(source.POLICY_VERSION, "issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1")
+        self.assertEqual(source.NAMESPACE, "issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2")  # v2.1 keeps the qa2 namespace
         self.assertEqual(source.POLICY_SHA256, EXTERNAL_PIN)
         self.assertEqual(source.POLICY_BYTES, len(EXTERNAL_POLICY))
         self.assertEqual(hashlib.sha256(EXTERNAL_POLICY).hexdigest(), source.POLICY_SHA256)
@@ -446,7 +447,7 @@ class PolicyTests(Base):
 
     def test_published_policy_validates_with_shipped_pins_and_is_frozen(self):
         policy = source.validate_policy(EXTERNAL_POLICY, EXTERNAL_PIN)
-        self.assertEqual(policy["version"], "issue37-industry-membership-inferred-cutoffs-1005-1006-v2")
+        self.assertEqual(policy["version"], "issue37-industry-membership-inferred-cutoffs-1005-1006-v2.1")
         self.assertEqual(policy["acquisition"]["namespace"], NAMESPACE)
         self.assertFalse(EXTERNAL_POLICY.endswith(b"\n"))
         with self.assertRaises(TypeError):
@@ -653,15 +654,16 @@ class FinancialStartTests(Base):
                 self.assertFailure("financial_new_explicit_seal_required", source._financial_start, bad, bad_binding)
         accepted, accepted_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{source.SEAL_COMMENT_FLOOR + 1}")
         source._financial_start(accepted, accepted_binding)
-        # The floor is the policy v2 publication comment: the spent qa1 seal, the publication itself and everything older are
-        # refused; the first later comment is accepted. Literal ids, independent of the product constant.
-        self.assertEqual(source.SEAL_COMMENT_FLOOR, 6171178641)
+        # The floor is the policy v2.1 publication comment: the spent qa1 seal, both earlier publications, the v2.1 publication
+        # itself and everything older are refused; the first later comment is accepted. Literal ids, independent of the product constant.
+        self.assertEqual(source.SEAL_COMMENT_FLOOR, 6174861923)
         for label, comment in (("spent qa1 seal", 6149274670), ("qa1 schedule", 6149286656), ("v2 publication", 6171178641),
-                               ("v1 publication", 6134816304), ("earlier approval", 6128163640), ("just below", 6171178640)):
+                               ("v2 publication plus one", 6171178642), ("v1 publication", 6134816304), ("earlier approval", 6128163640),
+                               ("v2.1 publication", 6174861923), ("just below", 6174861922)):
             with self.subTest(label):
                 bad, bad_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{comment}")
                 self.assertFailure("financial_new_explicit_seal_required", source._financial_start, bad, bad_binding)
-        for comment in (6171178642, 6180000000):
+        for comment in (6174861924, 6180000000):
             with self.subTest(accepted=comment):
                 good, good_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{comment}")
                 source._financial_start(good, good_binding)
@@ -1155,14 +1157,14 @@ class PipelineTests(Base):
     def test_board_transfer_conflicts_and_ambiguity_reject(self):
         def old_rows(*rows):
             def apply(w):
-                kept = [row for row in w.info if not (row["stock_id"] == "6200" and row["type"] == "tpex")]
+                kept = [row for row in w.info if not (row["stock_id"] == "6200" and row.get("type") == "tpex")]
                 return kept + list(rows)
             return apply
         for label, rows, groups, reason in (
                 ("other required group", [info("6200", "tpex", "光電業", day="2026-10-08")], (SEMI, OPTO), "board_transfer_industry_conflict"),
                 ("non required group", [info("6200", "tpex", "食品工業", day="2026-10-08")], (SEMI,), "board_transfer_industry_conflict"),
                 ("same date two names", [info("6200", "tpex", "半導體業", day="2026-10-08"), info("6200", "tpex", "光電業", day="2026-10-08")],
-                 (SEMI,), "board_transfer_ambiguous"),
+                 (SEMI, OPTO), "board_transfer_ambiguous"),
                 ("evidence before cutoff", [info("6200", "tpex", "半導體業", day="2026-10-01")], (SEMI,), "board_transfer_evidence_before_cutoff")):
             with self.subTest(label):
                 snapshot, _, _ = pending(self.transfer(info=old_rows(*rows)))
@@ -1409,6 +1411,7 @@ class PipelineTests(Base):
             self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
             self.assertNotIn(("TWSE", "2330"), self.outcomes(snapshot)[(cutoff, SEMI)].members)
             self.assertNotIn("duplicate_identity", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)  # the repeated rows are never members
+            self.assertIn("cross_source_mismatch", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)  # so FinMind's 2330 has no official counterpart
         snapshot = appended("twse", twse("2330", "26", "19940905"))  # one of the two rows sits in another required group
         for cutoff in (C1, C2):
             self.assertRejected(snapshot, cutoff, SEMI, "official_duplicate_symbol")
@@ -1637,22 +1640,39 @@ class PipelineTests(Base):
             self.assertNotIn("delisting_date_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
             self.assertNotIn("delisted_industry_undeterminable", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
             self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
-        # A FinMind-only stock whose newest row is undecided by unknown dates: required candidates reject their group,
-        # non-required ones are ignored, and an unrecognised name could be anything.
-        for rows, rejected, everything in (
-                ((info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "光電業"), "x")), (SEMI, OPTO), False),
-                ((info("5555", "twse", "水泥工業", day="2026-10-01"), dated(info("5555", "twse", "鋼鐵工業"), "x")), (), False),
-                ((info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "存託憑證"), "x")), (SEMI, OPTO, CULT), True)):
-            w = world()
-            w.info += list(rows)
-            w.delist.append(delist("5555", "2026-10-08"))
-            snapshot, _, _ = pending(w)
-            for cutoff in (C1, C2):
-                for group in (SEMI, OPTO, CULT):
-                    outcome = self.outcomes(snapshot)[(cutoff, group)]
-                    self.assertEqual(outcome.rejected, group in rejected, (rows[1]["industry_category"], cutoff, group))
-                    if everything:
-                        self.assertIn("delisted_industry_undeterminable", outcome.reasons)
+        # F-3: a FinMind-only stock whose newest row is undecided by unknown dates has an undeterminable industry, exactly like a
+        # tie of known dates: all three groups of every cutoff whose window holds (or may hold) its delisting date are rejected,
+        # whatever industries its rows name.
+        undecided = (
+            (info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "光電業"), "x")),
+            (info("5555", "twse", "水泥工業", day="2026-10-01"), dated(info("5555", "twse", "鋼鐵工業"), "x")),
+            (info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "存託憑證"), "x")),
+            (info("5555", "tpex", "文化創意業", day="2026-10-01"), dated(info("5555", "twse", "食品工業"), None)))
+        for rows in undecided:
+            for delisting_date, cutoffs in (("2026-10-08", (C1, C2)), ("2026-10-05", (C1,)), ("2026-10-06", (C1, C2)), (None, (C1, C2)), ("bad", (C1, C2))):
+                with self.subTest(rows=rows[1]["industry_category"], delisting=delisting_date):
+                    w = world()
+                    w.info += list(rows)
+                    w.delist.append({**delist("5555", "2026-10-08"), "date": delisting_date})
+                    snapshot, _, _ = pending(w)
+                    for cutoff in cutoffs:
+                        for group in (SEMI, OPTO, CULT):
+                            self.assertRejected(snapshot, cutoff, group, "delisted_industry_undeterminable")
+        # Outside every window the undecided stock only follows the D-set rule (groups it can reach, both cutoffs).
+        w = world()
+        w.info += list(undecided[0])
+        w.delist.append(delist("5555", "2026-10-04"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "finmind_latest_date_unresolved")
+            self.assertRejected(snapshot, cutoff, OPTO, "finmind_latest_date_unresolved")
+            self.assertUsable(snapshot, (cutoff, CULT))
+            self.assertNotIn("delisted_industry_undeterminable", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+        # The same two rows with known dates are resolved by the newest date: no rejection beyond the ordinary rules.
+        w = world()
+        w.info += [info("5555", "twse", "水泥工業", day="2026-10-01"), info("5555", "twse", "鋼鐵工業", day="2026-10-02")]
+        w.delist.append(delist("5555", "2026-10-08"))
+        self.assertAllSix(pending(w)[0])
 
     def test_delisting_rows_without_a_usable_identity_reject_the_cutoffs_whose_window_may_hold_them(self):
         for label, stock_id in (("null", None), ("empty", ""), ("blank", "  "), ("number", 1234), ("marker", "null"), ("33 chars", "9" * 33)):
@@ -1677,7 +1697,7 @@ class PipelineTests(Base):
     def test_board_transfer_needs_a_known_date_on_every_older_tpex_row(self):
         for label, raw in UNKNOWN_DATES:
             with self.subTest(date=label):
-                snapshot, _, _ = pending(self.transfer(info=lambda w: [dated(row, raw) if row["stock_id"] == "6200" and row["type"] == "tpex" else row for row in w.info]))
+                snapshot, _, _ = pending(self.transfer(info=lambda w: [dated(row, raw) if row["stock_id"] == "6200" and row.get("type") == "tpex" else row for row in w.info]))
                 for cutoff in (C1, C2):
                     self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_evidence_date_unknown")
                     self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
@@ -1685,6 +1705,478 @@ class PipelineTests(Base):
                 snapshot, _, _ = pending(self.transfer(info=lambda w: w.info + [dated(info("6200", "tpex", "半導體業", day="2026-10-09"), raw)]))
                 for cutoff in (C1, C2):
                     self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_evidence_date_unknown")
+
+    def old_tpex_rows(self, *rows):
+        """A transfer world whose old tpex evidence for stock 6200 is replaced by the given rows."""
+        def apply(w):
+            return [row for row in w.info if not (row["stock_id"] == "6200" and row.get("type") == "tpex")] + list(rows)
+        return apply
+
+    def test_f2_unknown_dated_old_tpex_row_with_a_name_outside_section_two_rejects_all_three_groups(self):
+        # QA F-2: the row without a date may be the newest, and its name is outside section 2, so the old TPEx identity
+        # could belong to any group. With a known date this was already three groups; the unknown date must not loosen it.
+        for name in ("", "存託憑證", "未知產業", None):
+            for label, raw in (("known", "2026-10-10"),) + UNKNOWN_DATES:
+                with self.subTest(name=name, date=label):
+                    row = dated({**info("6200", "tpex", "x"), "industry_category": name}, raw)
+                    snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(row)))
+                    for cutoff in (C1, C2):
+                        for group in (SEMI, OPTO, CULT):
+                            self.assertRejected(snapshot, cutoff, group, "board_transfer_old_industry_unknown")
+                        if label != "known":
+                            self.assertIn("board_transfer_evidence_date_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+        # The same shape with the official stock in Optoelectronics (the QA reproduction).
+        w = self.transfer(twse=lambda w: w.twse[:-1] + [twse("6200", "26", "20261008")],
+                          info=self.old_tpex_rows(dated(info("6200", "tpex", ""), "garbage")))
+        w.info = [{**row, "industry_category": "光電業"} if row["stock_id"] == "6200" and row.get("type") == "twse" else row for row in w.info]
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            for group in (SEMI, OPTO, CULT):
+                self.assertRejected(snapshot, cutoff, group, "board_transfer_old_industry_unknown")
+        # One bad name among several old rows is enough, whichever row carries the missing date.
+        for rows in ((dated(info("6200", "tpex", "半導體業"), None), info("6200", "tpex", "存託憑證", day="2026-10-09")),
+                     (info("6200", "tpex", "半導體業", day="2026-10-09"), dated(info("6200", "tpex", "存託憑證"), None)),
+                     (dated(info("6200", "tpex", "存託憑證"), "x"), dated(info("6200", "tpex", "半導體業"), "y"))):
+            snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(*rows)))
+            for cutoff in (C1, C2):
+                for group in (SEMI, OPTO, CULT):
+                    self.assertRejected(snapshot, cutoff, group, "board_transfer_old_industry_unknown")
+
+    def test_f2_unknown_dated_old_tpex_rows_with_section_two_names_still_reject_only_the_official_group(self):
+        for name in ("半導體業", "光電業", "食品工業"):
+            for label, raw in UNKNOWN_DATES:
+                with self.subTest(name=name, date=label):
+                    snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(dated(info("6200", "tpex", name), raw))))
+                    for cutoff in (C1, C2):
+                        self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_evidence_date_unknown")
+                        self.assertNotIn("board_transfer_old_industry_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+                        self.assertUsable(snapshot, (cutoff, CULT))
+                        if name == "光電業":  # the row without a date could be the newest of the stock, so Optoelectronics is reached too
+                            self.assertRejected(snapshot, cutoff, OPTO, "finmind_latest_date_unresolved")
+                        else:
+                            self.assertUsable(snapshot, (cutoff, OPTO))
+        # A non-section-2 name on an OLDER row whose newest row is known is history: the transfer still joins.
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "存託憑證", day="2026-10-06"),
+                                                                       info("6200", "tpex", "半導體業", day="2026-10-08"))))
+        self.assertIn(("TPEx", "6200"), self.outcomes(snapshot)[(C1, SEMI)].members)
+
+    def test_f4_the_transfer_rule_still_runs_for_official_rows_that_cannot_become_members(self):
+        for label, raw in (("gregorian", "20261012"), ("invalid", "1151032"), ("null", None), ("empty", ""), ("number", 1151012),
+                           ("iso", "2026-10-12"), ("marker", "NaT"), ("garbage", "x")):
+            # A name outside section 2: all three groups are rejected although the official row is no member.
+            with self.subTest(report=label, old="outside section 2"):
+                w = self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "", day="2026-10-10")))
+                w.twse[-1] = twse("6200", "24", "20261008", report=raw)
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    for group in (SEMI, OPTO, CULT):
+                        self.assertRejected(snapshot, cutoff, group, "board_transfer_old_industry_unknown")
+                    self.assertIn("official_row_report_date_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+            # A conflicting section 2 name rejects both groups involved, the third stays usable.
+            with self.subTest(report=label, old="conflicting name"):
+                w = self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "光電業", day="2026-10-10")))
+                w.twse[-1] = twse("6200", "24", "20261008", report=raw)
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_industry_conflict")
+                    self.assertRejected(snapshot, cutoff, OPTO, "board_transfer_industry_conflict")
+                    self.assertUsable(snapshot, (cutoff, CULT))
+            # A matching name must not add the TPEx identity: the row is not a member, its group stays rejected.
+            with self.subTest(report=label, old="matching name"):
+                w = self.transfer()
+                w.twse[-1] = twse("6200", "24", "20261008", report=raw)
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+                    self.assertNotIn(("TPEx", "6200"), self.outcomes(snapshot)[(cutoff, SEMI)].members)
+        # A repeated code is no member either, and the rule still runs for every repeated row.
+        for old_name, rejected in (("", (SEMI, OPTO, CULT)), ("光電業", (SEMI, OPTO)), ("半導體業", (SEMI,))):
+            with self.subTest(duplicate=True, old=old_name):
+                w = self.transfer(info=self.old_tpex_rows(info("6200", "tpex", old_name, day="2026-10-10")))
+                w.twse.append(twse("6200", "24", "20261008"))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    for group in (SEMI, OPTO, CULT):
+                        if group in rejected:
+                            self.assertRejected(snapshot, cutoff, group)
+                        else:
+                            self.assertUsable(snapshot, (cutoff, group))
+                    self.assertIn("official_duplicate_symbol", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+        # Rows that cannot become members add neither a listing-date reason nor a second TPEx identity.
+        w = self.transfer()
+        w.twse[-1] = twse("6200", "24", None, report="x")
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+            self.assertNotIn("listing_date_missing_or_invalid", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+        w = self.transfer()
+        w.twse[-1] = twse("6200", "24", "20261008", report="x")
+        w.tpex.append(tpex("6200", "24", "20261001"))  # TPEx itself still lists the stock as a member
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+            self.assertNotIn("duplicate_identity", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+        # The rule is only for rows listed after the cutoff: a row listed before it is not a transfer.
+        w = self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "", day="2026-10-10")))
+        w.twse[-1] = twse("6200", "24", "20260105", report="x")
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+            self.assertNotIn("board_transfer_old_industry_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+            self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+
+    def test_obs_a_seven_stock_coverage_does_not_depend_on_the_order_of_repeated_codes(self):
+        base = world()
+        official = source._parse_official(base.twse, "TWSE", "2026-10-12")[0] + source._parse_official(base.tpex, "TPEx", "2026-10-12")[0]
+        source.check_seven_symbols_covered(official)
+        required = next(r for r in official if r.symbol == "8069")
+        self.assertEqual(required.group, OPTO)
+        for industry, group in (("27", "Communications"), ("28", "Electronic Parts"), ("91", None), ("", None), ("zz", None)):
+            repeated = source.OfficialRow("TPEx", "8069", industry, group, "2011-01-01", "gregorian8", "other_group")
+            for rows in ((required, repeated), (repeated, required)):
+                with self.subTest(industry=industry, order=rows[0] is required):
+                    mixed = tuple(r for r in official if r.symbol != "8069") + rows
+                    error = self.assertFailure("seven_stock_group_not_required", source.check_seven_symbols_covered, mixed)
+                    self.assertEqual(ParseTests.uncovered(error), [(6, "TPEx", industry or "<null>", group or "unknown")])
+        # Two uncovered rows: the receipt describes the same one whatever the order.
+        first = source.OfficialRow("TPEx", "8069", "28", "Electronic Parts", "2011-01-01")
+        second = source.OfficialRow("TPEx", "8069", "27", "Communications", "2011-01-01")
+        for rows in ((first, second), (second, first), (first, required, second), (second, required, first)):
+            error = self.assertFailure("seven_stock_group_not_required", source.check_seven_symbols_covered,
+                                       tuple(r for r in official if r.symbol != "8069") + rows)
+            self.assertEqual(ParseTests.uncovered(error), [(6, "TPEx", "27", "Communications")])
+        # Every repeated row in a required group: covered in either order.
+        other_required = source.OfficialRow("TPEx", "8069", "24", SEMI, "2011-01-01")
+        for rows in ((required, other_required), (other_required, required)):
+            source.check_seven_symbols_covered(tuple(r for r in official if r.symbol != "8069") + rows)
+        # The TPEx feed rows win over TWSE rows: a TWSE row outside the groups does not matter next to covered TPEx rows.
+        twse_outside = source.OfficialRow("TWSE", "8069", "28", "Electronic Parts", "2011-01-01")
+        source.check_seven_symbols_covered(official + (twse_outside,))
+        # Through the whole batch, both orders reject after the third GET with the same receipt.
+        receipts = []
+        for rows in ((tpex("8069", "26", "20110101"), tpex("8069", "27", "20110101")), (tpex("8069", "27", "20110101"), tpex("8069", "26", "20110101"))):
+            w = world()
+            w.tpex = [row for row in w.tpex if row["SecuritiesCompanyCode"] != "8069"] + list(rows)
+            snapshot, _, _ = build(w)
+            error = self.assertFailure("seven_stock_group_not_required", snapshot.acquire)
+            self.assertEqual(snapshot.ledger.attempted, (0, 1, 2))
+            receipts.append(ParseTests.uncovered(error))
+        self.assertEqual(receipts[0], receipts[1])
+        self.assertEqual(receipts[0], [(6, "TPEx", "27", "Communications")])
+        # Repeated and all covered: the batch goes on and the repeated code rejects its group.
+        w = world()
+        w.tpex.append(tpex("8069", "26", "20110101"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, OPTO, "official_duplicate_symbol")
+
+    @staticmethod
+    def tightens(before, after):
+        """I-1 for one (cutoff, group): the outcome is unchanged, or the group is rejected."""
+        return after.rejected or (not before.rejected and (after.members, after.flags) == (before.members, before.flags))
+
+    def test_board_transfer_unknowns_only_tighten_never_add_members_or_lift_rejections(self):
+        odd_dates = [raw for label, raw in UNKNOWN_DATES if label in ("json_null", "empty", "other_string", "iso_invalid_calendar", "missing")]
+        odd_reports = (None, "x", "20261012", "1151032")
+        checked = tightened = 0
+        for official_industry, group_name in (("24", "Semiconductor"), ("26", "Optoelectronics"), ("01", "Cement")):
+            for old_name in ("半導體業", "光電業", "食品工業", "存託憑證", "", None):
+                for known in ("2026-10-10", "2026-10-01"):
+                    def build_world(old_date, report="1151012", duplicate=False, official_listing="20261008", old_type="tpex"):
+                        old_row = {**info("6200", "tpex", "x"), "industry_category": old_name, "type": old_type}
+                        if old_type is MISSING:
+                            old_row.pop("type")
+                        w = self.transfer(info=self.old_tpex_rows(dated(old_row, old_date)),
+                                          twse=lambda w: w.twse[:-1] + [twse("6200", official_industry, official_listing, report=report)])
+                        newest = {"24": "半導體業", "26": "光電業", "01": "水泥工業"}[official_industry]  # FinMind agrees with the official group
+                        w.info = [{**row, "industry_category": newest} if row["stock_id"] == "6200" and row.get("type") == "twse" else row for row in w.info]
+                        if duplicate:
+                            w.twse.append(twse("6200", official_industry, official_listing))
+                        return pending(w)[0].inspection()["outcomes"]
+                    base = build_world(known)
+                    variants = [build_world(raw) for raw in odd_dates] + [build_world(known, report=raw) for raw in odd_reports]
+                    variants += [build_world(known, duplicate=True), build_world(odd_dates[0], report="x", duplicate=True)]
+                    variants += [build_world(known, official_listing=raw) for raw in (None, "x", "20261340", "1130431", 20261005)]
+                    variants += [build_world(known, official_listing=None, report="x", duplicate=True), build_world(odd_dates[1], official_listing=None)]
+                    variants += [build_world(known, old_type=raw) for raw in (None, "", 5, MISSING)]  # the old row's type becomes unusable
+                    variants += [build_world(odd_dates[0], old_type=None), build_world(known, old_type=None, official_listing=None, report="x")]
+                    for variant in variants:
+                        for key, before in base.items():
+                            checked += 1
+                            tightened += variant[key].rejected and not before.rejected
+                            self.assertTrue(self.tightens(before, variant[key]), (group_name, old_name, known, key, before, variant[key]))
+        self.assertGreater(checked, 3500)
+        self.assertGreater(tightened, 90)
+
+    def test_finmind_only_delisting_unknowns_only_tighten_never_add_members_or_lift_rejections(self):
+        odd_dates = [raw for label, raw in UNKNOWN_DATES if label in ("json_null", "other_string", "iso_invalid_calendar", "missing")]
+        checked = tightened = 0
+        for names in (("半導體業", "光電業"), ("食品工業", "水泥工業"), ("半導體業", "存託憑證"), ("文化創意業", "文化創意業"), ("半導體業", "半導體業")):
+            for delisting_date in ("2026-10-08", "2026-10-05", "2026-10-06", "2026-10-04", "2099-01-01"):
+                def outcomes(old_date="2026-10-01", new_date="2026-10-10", delisting=delisting_date):
+                    w = world()
+                    w.info += [dated(info("5555", "tpex", names[0]), old_date), dated(info("5555", "tpex", names[1]), new_date)]
+                    w.delist.append(dated(delist("5555", "2026-10-08"), delisting))
+                    return pending(w)[0].inspection()["outcomes"]
+                base = outcomes()
+                variants = [outcomes(old_date=raw) for raw in odd_dates] + [outcomes(new_date=raw) for raw in odd_dates]
+                variants += [outcomes(delisting=raw) for raw in odd_dates] + [outcomes(old_date=odd_dates[0], delisting=odd_dates[1])]
+                for variant in variants:
+                    for key, before in base.items():
+                        checked += 1
+                        tightened += variant[key].rejected and not before.rejected
+                        self.assertTrue(self.tightens(before, variant[key]), (names, delisting_date, key, before, variant[key]))
+        self.assertGreater(checked, 1000)
+        self.assertGreater(tightened, 50)
+
+    def outside_transfer(self, old_rows, *, official_industry="01", official_name="水泥工業", listing="20261008", report="1151012", duplicate=False):
+        """Official TWSE 6200 in a group that is NOT required (cement by default), listed after both cutoffs, with the given old tpex rows."""
+        w = self.transfer(info=self.old_tpex_rows(*old_rows),
+                          twse=lambda w: w.twse[:-1] + [twse("6200", official_industry, listing, report=report)])
+        w.info = [{**row, "industry_category": official_name} if row["stock_id"] == "6200" and row.get("type") == "twse" else row for row in w.info]
+        if duplicate:
+            w.twse.append(twse("6200", official_industry, listing))
+        return w
+
+    def assertOnly(self, snapshot, rejected, reason=None):
+        """Exactly the given groups are rejected at both cutoffs (all with ``reason`` when given); the others keep the baseline members."""
+        for cutoff in (C1, C2):
+            for group in (SEMI, OPTO, CULT):
+                if group in rejected:
+                    self.assertRejected(snapshot, cutoff, group, *([reason] if reason else []))
+                else:
+                    self.assertUsable(snapshot, (cutoff, group))
+                    self.assertEqual(self.outcomes(snapshot)[(cutoff, group)].members, EXPECTED[(cutoff, group)], (cutoff, group))
+
+    def test_o1_transfer_rule_runs_for_official_rows_outside_the_required_groups(self):
+        everything = (SEMI, OPTO, CULT)
+        # An old name that reaches a required group rejects it (a conflict with the official group), and nothing else.
+        for name, group in (("半導體業", SEMI), ("光電業", OPTO), ("文化創意業", CULT)):
+            with self.subTest(old=name):
+                snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", name, day="2026-10-10")]))
+                self.assertOnly(snapshot, (group,), "board_transfer_industry_conflict")
+        # A name outside section 2 could belong to any group, with a known or an unknown date.
+        for name in ("", "存託憑證", "未知產業", None):
+            with self.subTest(old=name, date="known"):
+                row = {**info("6200", "tpex", "x", day="2026-10-10"), "industry_category": name}
+                snapshot, _, _ = pending(self.outside_transfer([row]))
+                self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+            for label, raw in UNKNOWN_DATES:
+                with self.subTest(old=name, date=label):
+                    row = dated({**info("6200", "tpex", "x"), "industry_category": name}, raw)
+                    snapshot, _, _ = pending(self.outside_transfer([row]))
+                    self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+        # An unknown date with a name of a required group rejects that group.
+        for label, raw in UNKNOWN_DATES:
+            with self.subTest(date=label):
+                snapshot, _, _ = pending(self.outside_transfer([dated(info("6200", "tpex", "半導體業"), raw)]))
+                self.assertOnly(snapshot, (SEMI,), "board_transfer_evidence_date_unknown")
+        # Evidence older than both cutoffs and tied newest rows reject the groups the names reach.
+        snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", "半導體業", day="2026-10-01")]))
+        self.assertOnly(snapshot, (SEMI,), "board_transfer_evidence_before_cutoff")
+        snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", "存託憑證", day="2026-10-01")]))
+        self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+        snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", "半導體業", day="2026-10-10"), info("6200", "tpex", "光電業", day="2026-10-10")]))
+        self.assertOnly(snapshot, (SEMI, OPTO), "board_transfer_ambiguous")
+        snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", "半導體業", day="2026-10-10"), info("6200", "tpex", "存託憑證", day="2026-10-10")]))
+        self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+        # Names of groups that are not required reach nothing; a history row older than the newest is ignored.
+        for rows in ([info("6200", "tpex", "食品工業", day="2026-10-10")], [info("6200", "tpex", "鋼鐵工業", day="2026-10-10")],
+                     [dated(info("6200", "tpex", "食品工業"), "x")], [info("6200", "tpex", "食品工業", day="2026-10-01")],
+                     [info("6200", "tpex", "食品工業", day="2026-10-10"), info("6200", "tpex", "鋼鐵工業", day="2026-10-10")],
+                     [info("6200", "tpex", "存託憑證", day="2026-10-06"), info("6200", "tpex", "食品工業", day="2026-10-10")]):
+            with self.subTest(rows=[row["industry_category"] for row in rows]):
+                self.assertAllSix(pending(self.outside_transfer(rows))[0])
+        # Not a transfer: listed on or before the cutoff, no listing date, or no old tpex row at all.
+        evidence = [info("6200", "tpex", "半導體業", day="2026-10-10")]
+        self.assertAllSix(pending(self.outside_transfer(evidence, listing="20260105"))[0])
+        snapshot, _, _ = pending(self.outside_transfer(evidence, listing=None))  # O-3: an unknown listing date is not "not a transfer"
+        self.assertOnly(snapshot, (SEMI,), "board_transfer_listing_date_unknown")
+        self.assertAllSix(pending(self.outside_transfer([]))[0])
+        # Rows that cannot be members are evaluated too, and the evaluation never adds a member.
+        for report in ("x", None, "20261012"):
+            snapshot, _, _ = pending(self.outside_transfer(evidence, report=report))
+            self.assertOnly(snapshot, (SEMI,), "board_transfer_industry_conflict")
+        snapshot, _, _ = pending(self.outside_transfer(evidence, duplicate=True))
+        self.assertOnly(snapshot, (SEMI,), "board_transfer_industry_conflict")
+        snapshot, _, _ = pending(self.outside_transfer([info("6200", "tpex", "", day="2026-10-10")], duplicate=True))
+        self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+
+    def test_o1_reverse_direction_reaches_the_groups_of_the_old_twse_rows(self):
+        def reverse(official_industry, *old_rows):
+            w = world()
+            w.tpex.append(tpex("6300", official_industry, "20261008"))
+            w.info += [info("6300", "tpex", "金融業" if official_industry == "17" else "半導體業")] + list(old_rows)
+            return pending(w)[0]
+        # Official TPEx row outside the required groups (financial, 17): the old TWSE identity may have been a member of a required group.
+        self.assertOnly(reverse("17", info("6300", "twse", "半導體業", day="2026-10-08")), (SEMI,), "board_transfer_reverse_direction")
+        self.assertOnly(reverse("17", info("6300", "twse", "光電業", day="2026-10-08")), (OPTO,), "board_transfer_reverse_direction")
+        self.assertOnly(reverse("17", info("6300", "twse", "存託憑證", day="2026-10-08")), (SEMI, OPTO, CULT), "board_transfer_old_industry_unknown")
+        self.assertOnly(reverse("17", dated(info("6300", "twse", "半導體業"), "x")), (SEMI,), "board_transfer_reverse_direction")
+        self.assertAllSix(reverse("17", info("6300", "twse", "食品工業", day="2026-10-08")))
+        # A required official group is rejected as before, together with the groups of the old names; a name outside section 2 rejects all.
+        self.assertOnly(reverse("24", info("6300", "twse", "光電業", day="2026-10-08")), (SEMI, OPTO), "board_transfer_reverse_direction")
+        self.assertOnly(reverse("24", info("6300", "twse", "存託憑證", day="2026-10-08")), (SEMI, OPTO, CULT), "board_transfer_old_industry_unknown")
+        # A TWSE section 2 name is not a TPEx one: the culture board does not exist on TWSE, so its name is outside section 2 there.
+        self.assertOnly(reverse("17", info("6300", "twse", "文化創意業", day="2026-10-08")), (SEMI, OPTO, CULT), "board_transfer_old_industry_unknown")
+
+    def test_o2_tied_newest_old_rows_with_a_name_outside_section_two_reject_all_three_groups(self):
+        everything = (SEMI, OPTO, CULT)
+        for other in ("存託憑證", "", "未知產業", None):
+            with self.subTest(other=other):
+                rows = [info("6200", "tpex", "半導體業", day="2026-10-08"), {**info("6200", "tpex", "x", day="2026-10-08"), "industry_category": other}]
+                snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(*rows)))
+                self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+                self.assertIn("board_transfer_ambiguous", self.outcomes(snapshot)[(C1, SEMI)].reasons)
+        # Names that all belong to section 2 keep the ambiguity rejection, now for every required group they reach.
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "半導體業", day="2026-10-08"), info("6200", "tpex", "光電業", day="2026-10-08"))))
+        self.assertOnly(snapshot, (SEMI, OPTO), "board_transfer_ambiguous")
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "光電業", day="2026-10-08"), info("6200", "tpex", "文化創意業", day="2026-10-08"))))
+        self.assertOnly(snapshot, everything, "board_transfer_ambiguous")
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "半導體業", day="2026-10-08"), info("6200", "tpex", "食品工業", day="2026-10-08"))))
+        self.assertOnly(snapshot, (SEMI,), "board_transfer_ambiguous")
+        # An older, non-tied row with a bad name is history.
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "存託憑證", day="2026-10-03"), info("6200", "tpex", "半導體業", day="2026-10-08"))))
+        self.assertIn(("TPEx", "6200"), self.outcomes(snapshot)[(C1, SEMI)].members)
+        # Evidence older than the cutoffs and unique but outside section 2: all three; section 2: the groups reached.
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "存託憑證", day="2026-10-01"))))
+        self.assertOnly(snapshot, everything, "board_transfer_old_industry_unknown")
+        snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(info("6200", "tpex", "光電業", day="2026-10-01"))))
+        self.assertOnly(snapshot, (SEMI, OPTO), "board_transfer_evidence_before_cutoff")
+
+    def test_o3_an_official_listing_date_that_is_unknown_is_treated_like_an_undated_old_row(self):
+        forms = (MISSING, None, "x", "20261340", 20261005, "", "2026-10-08", "1130431")
+        everything = (SEMI, OPTO, CULT)
+
+        def with_listing(w, raw):
+            if raw is MISSING:
+                w.twse[-1].pop("上市日期")
+            else:
+                w.twse[-1]["上市日期"] = raw
+            return w
+        for raw in forms:
+            # Official TWSE 6200 in a required group (semiconductor): its own group is rejected for the missing listing date, and the
+            # old tpex rows (all of them) decide what else: groups their names reach, or all three for a name outside section 2.
+            for label, old_rows, rejected, reason in (
+                    ("same group", [info("6200", "tpex", "半導體業", day="2026-10-08")], (SEMI,), "board_transfer_listing_date_unknown"),
+                    ("other group", [info("6200", "tpex", "光電業", day="2026-10-08")], (SEMI, OPTO), "board_transfer_listing_date_unknown"),
+                    ("old row undated", [dated(info("6200", "tpex", "光電業"), None)], (SEMI, OPTO), "board_transfer_listing_date_unknown"),
+                    ("outside section 2", [info("6200", "tpex", "存託憑證", day="2026-10-08")], everything, "board_transfer_old_industry_unknown"),
+                    ("history row outside section 2", [info("6200", "tpex", "存託憑證", day="2026-10-01"), info("6200", "tpex", "半導體業", day="2026-10-08")],
+                     everything, "board_transfer_old_industry_unknown"),
+                    ("section 2 but not required", [info("6200", "tpex", "食品工業", day="2026-10-08")], (SEMI,), "listing_date_missing_or_invalid")):
+                with self.subTest(listing=raw, case=label):
+                    snapshot, _, _ = pending(with_listing(self.transfer(info=self.old_tpex_rows(*old_rows)), raw))
+                    self.assertOnly(snapshot, rejected, reason)
+                    self.assertIn("listing_date_missing_or_invalid", self.outcomes(snapshot)[(C1, SEMI)].reasons)  # the existing rule stays
+            with self.subTest(listing=raw, case="no old row"):  # nothing to be a transfer of: only the existing reason
+                snapshot, _, _ = pending(with_listing(self.transfer(info=self.old_tpex_rows()), raw))
+                self.assertOnly(snapshot, (SEMI,), "listing_date_missing_or_invalid")
+                self.assertNotIn("board_transfer_listing_date_unknown", self.outcomes(snapshot)[(C1, SEMI)].reasons)
+            # Official TWSE 6200 in a group that is not required: no listing rule of its own, but the same transfer evaluation.
+            for label, old_rows, rejected, reason in (
+                    ("required name", [info("6200", "tpex", "半導體業", day="2026-10-08")], (SEMI,), "board_transfer_listing_date_unknown"),
+                    ("two required names", [info("6200", "tpex", "半導體業", day="2026-10-06"), info("6200", "tpex", "光電業", day="2026-10-08")],
+                     (SEMI, OPTO), "board_transfer_listing_date_unknown"),
+                    ("outside section 2", [info("6200", "tpex", "", day="2026-10-08")], everything, "board_transfer_old_industry_unknown"),
+                    ("old row undated", [dated(info("6200", "tpex", "文化創意業"), "x")], (CULT,), "board_transfer_listing_date_unknown")):
+                with self.subTest(listing=raw, case="outside: " + label):
+                    w = self.outside_transfer(old_rows, listing=None if raw is MISSING else raw)
+                    if raw is MISSING:
+                        w.twse[-1].pop("上市日期")
+                    snapshot, _, _ = pending(w)
+                    self.assertOnly(snapshot, rejected, reason)
+            with self.subTest(listing=raw, case="outside: names reach nothing"):
+                for old_rows in ([info("6200", "tpex", "食品工業", day="2026-10-08")], [dated(info("6200", "tpex", "鋼鐵工業"), None)], []):
+                    w = self.outside_transfer(old_rows, listing=None if raw is MISSING else raw)
+                    if raw is MISSING:
+                        w.twse[-1].pop("上市日期")
+                    self.assertAllSix(pending(w)[0])
+        # Rows that cannot be members are evaluated too, and a valid listing date on or before the cutoff is not a transfer at all.
+        evidence = [info("6200", "tpex", "半導體業", day="2026-10-08")]
+        for report in ("x", None):
+            snapshot, _, _ = pending(self.outside_transfer(evidence, listing=None, report=report))
+            self.assertOnly(snapshot, (SEMI,), "board_transfer_listing_date_unknown")
+        snapshot, _, _ = pending(self.outside_transfer(evidence, listing=None, duplicate=True))
+        self.assertOnly(snapshot, (SEMI,), "board_transfer_listing_date_unknown")
+        self.assertAllSix(pending(self.outside_transfer(evidence, listing="20260105"))[0])
+        # Reverse direction: an official TPEx row without a listing date and an older twse row.
+        def reverse(official_industry, *old_rows, listing=None):
+            w = world()
+            w.tpex.append(tpex("6300", official_industry, listing))
+            w.info += [info("6300", "tpex", "金融業" if official_industry == "17" else "半導體業")] + list(old_rows)
+            return pending(w)[0]
+        self.assertOnly(reverse("17", info("6300", "twse", "半導體業", day="2026-10-08")), (SEMI,), "board_transfer_listing_date_unknown")
+        self.assertOnly(reverse("17", info("6300", "twse", "存託憑證", day="2026-10-08")), everything, "board_transfer_old_industry_unknown")
+        self.assertOnly(reverse("17", info("6300", "twse", "文化創意業", day="2026-10-08")), everything, "board_transfer_old_industry_unknown")  # TWSE has no culture board
+        self.assertOnly(reverse("24", info("6300", "twse", "光電業", day="2026-10-08")), (SEMI, OPTO), "board_transfer_listing_date_unknown")
+        self.assertAllSix(reverse("17", info("6300", "twse", "食品工業", day="2026-10-08")))
+        self.assertAllSix(reverse("17"))
+
+    def test_o4_a_finmind_row_with_an_unusable_type_is_old_evidence_of_either_exchange(self):
+        everything = (SEMI, OPTO, CULT)
+        unusable_types = (None, "", " ", 5, "None", MISSING)
+
+        def typeless(raw, name, day="2026-10-08"):
+            row = {**info("6200", "tpex", "x", day=day), "industry_category": name, "type": raw}
+            if raw is MISSING:
+                row.pop("type")
+            return row
+        for raw in unusable_types:
+            # Official TWSE 6200 in a required group: its group is rejected, with every required group the name reaches under
+            # either exchange's section 2 table (the culture board exists only on TPEx); outside both tables: all three.
+            for name, rejected, reason in (("半導體業", (SEMI,), "board_transfer_type_unknown"), ("光電業", (SEMI, OPTO), "board_transfer_type_unknown"),
+                                           ("文化創意業", (SEMI, CULT), "board_transfer_type_unknown"), ("食品工業", (SEMI,), "board_transfer_type_unknown"),
+                                           ("生技醫療業", (SEMI,), "board_transfer_type_unknown"),
+                                           ("存託憑證", everything, "board_transfer_old_industry_unknown"), ("", everything, "board_transfer_old_industry_unknown"),
+                                           (None, everything, "board_transfer_old_industry_unknown")):
+                with self.subTest(type=raw, name=name):
+                    snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(typeless(raw, name))))
+                    self.assertOnly(snapshot, rejected, reason)
+            # Whatever its date: unknown or older than both cutoffs.
+            for day in ("2026-10-01", None, "x"):
+                with self.subTest(type=raw, day=day):
+                    snapshot, _, _ = pending(self.transfer(info=self.old_tpex_rows(dated(typeless(raw, "光電業"), day))))
+                    self.assertOnly(snapshot, (SEMI, OPTO), "board_transfer_type_unknown")
+            # Official row outside the required groups (cement), listed after the cutoffs, with a missing listing date, or a row that cannot be a member.
+            for name, rejected, reason in (("半導體業", (SEMI,), "board_transfer_type_unknown"), ("光電業", (OPTO,), "board_transfer_type_unknown"),
+                                           ("文化創意業", (CULT,), "board_transfer_type_unknown"),
+                                           ("存託憑證", everything, "board_transfer_old_industry_unknown")):
+                for kwargs in ({}, {"listing": None}, {"report": "x"}, {"duplicate": True}):
+                    with self.subTest(type=raw, outside=name, **{k: str(v) for k, v in kwargs.items()}):
+                        snapshot, _, _ = pending(self.outside_transfer([typeless(raw, name)], **kwargs))
+                        self.assertOnly(snapshot, rejected, reason)
+            self.assertAllSix(pending(self.outside_transfer([typeless(raw, "食品工業")]))[0])  # a name that reaches nothing
+        # A valid listing date on or before the cutoff is not a transfer: nothing to evaluate, the stock stays a member.
+        for raw in unusable_types:
+            w = self.transfer(info=self.old_tpex_rows(typeless(raw, "光電業")))
+            w.twse[-1] = twse("6200", "24", "20260105")
+            snapshot, _, _ = pending(w)
+            for cutoff in (C1, C2):
+                self.assertUsable(snapshot, (cutoff, SEMI), (cutoff, OPTO), (cutoff, CULT))
+                self.assertIn(("TWSE", "6200"), self.outcomes(snapshot)[(cutoff, SEMI)].members)
+        # A type that is usable but unlisted (emerging) is a real other board, not an unknown type.
+        self.assertAllSix(pending(self.outside_transfer([typeless("emerging", "半導體業")]))[0])
+        # Reverse direction and the only FinMind row of the stock.
+        def reverse(official_industry, row):
+            w = world()
+            w.tpex.append(tpex("6300", official_industry, "20261008"))
+            w.info += [info("6300", "tpex", "金融業" if official_industry == "17" else "半導體業"), row]
+            return pending(w)[0]
+        for raw in unusable_types:
+            row = {**info("6300", "twse", "光電業", day="2026-10-08"), "type": raw}
+            if raw is MISSING:
+                row.pop("type")
+            self.assertOnly(reverse("17", row), (OPTO,), "board_transfer_type_unknown")
+            self.assertOnly(reverse("24", row), (SEMI, OPTO), "board_transfer_type_unknown")
+        w = world()
+        w.twse.append(twse("6201", "24", "20261008"))
+        w.info.append({**info("6201", "twse", "半導體業"), "type": None})  # the stock's only row: both the type rule and the latest-row rule apply
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_type_unknown", "info_type_unusable")
+            self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
 
     @staticmethod
     def nonzero(counts):
@@ -2652,13 +3144,15 @@ class ResponseShapeTests(Base):
 def rich_world():
     """The baseline plus a board transfer, FinMind-only delisted stocks, multi-row stocks and in-window delistings."""
     w = world()
-    w.twse.append(twse("6200", "24", "20261008"))
+    w.twse += [twse("6200", "24", "20261008"), twse("6201", "24", "20261009")]
     w.info += [info("6200", "twse", "半導體業"), info("6200", "tpex", "半導體業", day="2026-10-08"),
                info("5555", "twse", "半導體業"), info("5556", "tpex", "光電業"), info("5558", "tpex", "文化創意業"),
                info("2330", "twse", "光電業", day="2026-09-01"), info("3008", "twse", "水泥工業", day="2026-09-01"),
-               info("1101", "twse", "食品工業", day="2026-09-01")]
+               info("1101", "twse", "食品工業", day="2026-09-01"),
+               info("6201", "twse", "半導體業"), info("6201", "tpex", "半導體業", day="2026-10-09"),
+               info("5559", "tpex", "半導體業", day="2026-10-01"), info("5559", "tpex", "文化創意業", day="2026-10-10")]
     w.delist += [delist("6200", "2026-10-08"), delist("5555", "2026-10-08"), delist("5556", "2026-10-05"), delist("5558", "2026-10-09"),
-                 delist("2409", "2026-10-09"), delist("9998", "2026-10-04"), delist("2002", "2026-10-06")]
+                 delist("2409", "2026-10-09"), delist("9998", "2026-10-04"), delist("2002", "2026-10-06"), delist("5559", "2026-10-08")]
     return w
 
 
