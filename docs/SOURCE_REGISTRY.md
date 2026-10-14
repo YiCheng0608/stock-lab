@@ -76,6 +76,7 @@
 | [#9](#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2) | #9 qa1：七股 FinMind 自行買賣與避險五日淨額原件（`issue9-dealer-direction-combos-finmind-v2`） | 現行 |
 | [#39](#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1) | #39 qa1：七股 FinMind 法人買賣與成交量及兩截止流向÷量比率（`issue39-seven-flow-to-volume-ratio-two-cutoffs-v1`） | 現行 |
 | [§52](#52-7七股普通收盤與交易日曆的日期時區語意契約) | #7：七股普通收盤取得、私人衍生值保存與讀回（`issue7-ordinary-close-saved-seven-v1`）；日期／時區語意契約 | 現行 |
+| [#98](#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2) | #98：七股 FinMind 交易日曆、停復牌間接證據與公司行動因子（`issue98-tpex-seven-calendar-actions-v2`）；日狀態、除權息／減資／分割因子、私人保存與讀用 | 現行 |
 
 ## 1. Registry 與 policy 契約
 
@@ -1608,3 +1609,132 @@ receipt 的 `request_started_utc`、`observed_utc` 與 `saved_at` 是以 `+00:00
 - 本節不含任何取回的價格列、原始 body 或衍生數值；取得與讀回的收據、數值與實測紀錄留在 [#7](https://github.com/YiCheng0608/stock-lab/issues/7) 的 QA 留言，不寫入本文。
 - 本節是契約登錄，不宣稱解除 #8 或 #20 的依賴；依賴是否解除由全局依整合版本判定。
 - 本節描述 adapter 與保存契約；其後程式、policy 或驗收語意變動須重驗並更新本節。
+
+## #98：七股 FinMind 交易日曆、停復牌間接證據與公司行動因子（issue98-tpex-seven-calendar-actions-v2）
+
+2026-10-14。#98 以 FinMind 公開 API v4 取得七股（TPEx 普通股）2026-07-01～2026-10-12 的交易日、日價格與除權息、減資、分割資料，在本地導出交易日曆、個股日狀態與公司行動價格因子，只把衍生值保存到私人 root，供下游（如 #38）明示資料版本後讀用 raw／adjusted basis。產品 `backend/app/tpex_calendar_actions_source.py`（沿用 [§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1) 的 #32 取得合約，不改 `backend/app/ohlcv_history_source.py`），測試 `backend/tests/test_tpex_calendar_actions_source.py`。本節只管理這個新 namespace，不提升也不改寫其他節的 policy、pins、capture 或 default。取得過程與 QA 收據保存在 [#98](https://github.com/YiCheng0608/stock-lab/issues/98)，下列為契約與結果摘要並附留言編號，共同規則見 [FinMind 來源共同規則](#finmind-來源共同規則)。本節不含任何取回的價格、因子或原始 body；原件只在 RAM，已隨 release 清除。
+
+### #98 版本、外部 pins 與上限
+
+| 項目 | 內容 |
+| --- | --- |
+| 外部 policy | version `issue98-tpex-seven-calendar-actions-v2`；canonical 10,136 UTF-8 bytes（sorted keys、compact JSON、無尾 LF）；SHA-256 `ef10c3c71b4c643365bafc164d7324a88399b9ec27773c0438ef061b95feb794`。由全局發布於 [#98 留言 6170250977](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6170250977)，位元組取自工程收據 [6170207842](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6170207842) 的單行 JSON，不改任何位元組；產品常數 `POLICY_SHA256`／`POLICY_BYTES` 固定它，產品不能由被測 policy 自建 expected pin。相對 v1，v2 移除面額變更資料集（GET 44 → 37）並改為偵測式拒用（新增 `checks.par_value_change` 與 `unsupported` 的 `par_value_change_factor`），傳輸、response_shape、calendar、storage、symbols、window 逐值不變，逐鍵 diff 見發布留言 |
+| 已被取代的 v1 | policy v1（10,257 B，SHA-256 `fcdc77c4dd0c752da9a75bc3f5fe334d9ab61edfe8c903849af6466db55d2724`，[發布留言 6139122796](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6139122796)，44 GET）已被 [AC 修訂 1](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6169958046) 取代；v1 的 policy 與 namespace `issue98-tpex-seven-calendar-actions-v1/qa1` 都被產品拒絕，不再接受 |
+| namespace | `issue98-tpex-seven-calendar-actions-v2/qa1`（一次性額度；v1 的額度已 SPENT，見下） |
+| seal floor | 產品常數 `SEAL_COMMENT_FLOOR` ＝ 6170250977：seal 須是 #98 的新明示留言且編號大於它（門檻，不是授權）。issuer、coordinator、implementer、QA holder 的 session 身分由 seal 帶入，產品只驗形狀與互異（holder effort `xhigh` 且不在 seal 角色內），不認證 GitHub 或 runtime 身分，須由獨立 QA 與任務統籌另行讀回 |
+| profile／用途 | profile `free_public_local`；source_use `local_personal_noncommercial_private_derived_calendar_actions`；consumer `tpex-calendar-actions-read-v1`；market TW/TPEx、ordinary stock、identity_as_of 2026-10-06；讀用端 market 只收 `TPEx`、security_type 只收 `ordinary_share` |
+| 標的與期間 | TPEx 3105 穩懋／3293 鈊象／5274 信驊／5347 世界／6488 環球晶／6510 精測／8069 元太；2026-07-01～2026-10-12；`TaiwanStockDividend` 查到 2026-12-31（其 `date` 是基準日，晚於除權息日） |
+| 請求 | 固定 37 個 GET，host 只有 `api.finmindtrade.com`，endpoint `https://api.finmindtrade.com/api/v4/data`，query 依序 `dataset`、`data_id`（日曆與股票資訊無）、`start_date`、`end_date`（股票資訊兩者皆無）。順序：日曆 1 → 價格 7 → 除權息結果 7 → 除權息公告 7 → 減資 7 → 分割 7 → 股票資訊 1；每組七檔依 3105、3293、5274、5347、6488、6510、8069 升序；日曆先取，通過 gate 才取其餘；不換 provider、日期或路由。37 個 URL 全文以 policy `sources` 為準 |
+| 標頭、framing 與上限 | 標頭（含 `User-Agent: stock-lab-issue32-local-ram/1`）、framing、單份 body 1 MiB、retained-roots estimate 32 MiB、每 URL 20 s 同 [§49.1](#491-版本外部-pins-與上限)；本節差異：aggregate raw 16 MiB（16,777,216 B）、整批 600 s（cooperative）、租約至多 180 s。redirect 0、retry 0、每 URL 最多 1 次、首敗即停且 attempted 即 SPENT；只在 RAM |
+| 固定 formal 參照 | 日曆 gate 的 formal 45 日與 2026-10-06 的 42 個 anchor（[§32.2](#322-完整重驗與有限衍生)）由產品從固定 blob `d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md`（SHA-256 `b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde`，同 [§49.1](#491-版本外部-pins-與上限)）解析；呼叫者必須提供該 blob，位元組不符即拒絕 |
+| candidate | v2/qa1 真實取得所用 candidate `33db5803f320ac465b21b2f6f0eed55d4e43cebf`（v1/qa1 為 `7af4c30d6373329c8e12cfc356b747b95112119d`） |
+
+### #98 資料集、欄位型別與原件驗證
+
+七個資料集（編號沿用 #98 的來源盤點收據 [6135101980](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6135101980)，F6b 面額變更已移除）。必要欄位指鍵須存在（`N`、`T` 型別的值可為 null）；未列的額外鍵容許，只記錄欄名（F1 例外：每列鍵恰為 `date`）。
+
+| 編號 | 資料集 | GET | 期間 | 必要欄位：型別 | 選填欄位：型別 |
+| --- | --- | --- | --- | --- | --- |
+| F1 | `TaiwanStockTradingDate` | 1 | 全期間 | `date`:D | — |
+| F2 | `TaiwanStockPrice` | 7 | 全期間 | `date`:D、`stock_id`:S、`open`／`max`／`min`／`close`:P、`Trading_Volume`／`Trading_money`:I | `spread`:N、`Trading_turnover`:i |
+| F3 | `TaiwanStockDividendResult` | 7 | 全期間 | `date`:D、`stock_id`:S、`before_price`／`after_price`／`reference_price`:N | `stock_and_cache_dividend`:N、`stock_or_cache_dividend`:A、`max_price`／`min_price`／`open_price`:N |
+| F4 | `TaiwanStockDividend` | 7 | 2026-07-01～2026-12-31 | `date`:D、`stock_id`:S | `StockExDividendTradingDate`／`CashExDividendTradingDate`／`AnnouncementDate`:d；`StockEarningsDistribution`／`StockStatutorySurplus`／`CashEarningsDistribution`／`CashStatutorySurplus`／`TotalNumberOfCashCapitalIncrease`／`CashIncreaseSubscriptionRate`／`CashIncreaseSubscriptionpRrice`:N；`AnnouncementTime`:A |
+| F5 | `TaiwanStockCapitalReductionReferencePrice` | 7 | 全期間 | `date`:D、`stock_id`:S、`ClosingPriceonTheLastTradingDay`／`PostReductionReferencePrice`:N | `LimitUp`／`LimitDown`／`OpeningReferencePrice`／`ExrightReferencePrice`:N、`ReasonforCapitalReduction`:A |
+| F6a | `TaiwanStockSplitPrice` | 7 | 全期間 | `date`:D、`stock_id`:S、`before_price`／`after_price`:N | `type`:A、`max_price`／`min_price`／`open_price`:N |
+| F9 | `TaiwanStockInfo` | 1 | 不帶 `data_id` 與日期 | `stock_id`:S、`type`:T、`date`:d | `industry_category`／`stock_name`:A |
+
+- **型別代號**：D 嚴格 ISO 日期；d 寬鬆日期（空值或無法解析時記為未解析，不拒整批）；S 非空字串；T 可為 null 的字串；A 可為 null 的純量，以文字保存；P 非負數；N 可為 null 的數；I 非負 int64；i 可為 null 的非負 int64。
+- **取得與傳輸**：與 [§49.3](#493-原件驗證與-last60summary-計算) 的取得與標頭條同一組規則（HTTP 200 才接受、identity 編碼、`application/json`、framing、重複身分標頭拒絕、strict UTF-8 無 BOM、`set-cookie` 不送出也不保存）；完整 EOF 與 raw hash 通過後才 parse。回應 envelope 恰為 `status`（整數 200）、`msg`（`"success"`）、`data`（列表）三鍵。`data: []` 不是首敗，只表示該資料集沒有列；結構、型別、必要欄位或傳輸不符才整批首敗。
+- **先驗全部、再取範圍**：所有回傳列先驗結構，之後才捨棄期間外的列，所以來源是否依 `start_date`／`end_date` 過濾都不影響結果。價格列的 `stock_id` 須等於請求代號；事件資料集中其他代號的列只計入 `foreign_rows`，不採用。
+- **免費使用是文件推論**：依據文件核對收據（[6135101980](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6135101980)，DataList、Fundamental、Technical 三頁；policy `documentation` 固定後兩頁的 SHA-256）。`TaiwanStockSuspended`（停牌）與 `TaiwanStockPriceAdj`（還原價）標「只限 backer、sponsor 會員使用」，免費方案不能用，本節不使用；F5 不帶 `data_id` 的全市場查詢限 backer、sponsor 會員，所以 F2～F6a 一律逐檔帶 `data_id`。上列資料集沒有會員標記，但文件沒有寫「可免 token」，401、402、403 或任何要求付費、登入的回應是首敗。`TaiwanStockParValueChange` 不取得：v1 的第 37 個 GET 即此資料集，回應非 200，依 AC 修訂 1 移除。F4 的四個金額欄名是 Fundamental 頁的 schema 名稱；F9 的 `type` 值 `tpex` 依 Technical 頁「資料表同時保留興櫃與 twse／tpex 列」的說明，字面值要等真實回應才能確認（結果見下）。
+
+### #98 用途、授權與署名
+
+用途只限免費公開、本地個人非商用研究。與共同規則不同的是：依使用者決策（[#1 留言 6135194709](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6135194709) D6）小量衍生值（日曆、日狀態、事件、因子與核對結果）可保存到私人 root，原始回應不落盤、不發布、不鏡像、不再散布。同一決策也定下：只用 FinMind 免費資料（D1、D3）、期間終點固定 2026-10-12（D2）、遇到不支援的事件照實拒用而七檔承諾不縮（D4）。
+
+Policy `unsupported`（逐字）：`historical_pit`、`publication_time`、`first_availability`、`revision_guarantee`、`positive_suspension_fact`、`paid_subscription`、`par_value_change_factor`、`provider_adjusted_prices`、`other_symbols`、`other_markets`、`other_dates`、`raw_body_storage`、`redistribution`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`。`publication_time`、`first_availability`、`revision_time` 固定 `unknown`。
+
+權利字串（policy `rights`，逐字）：`FinMind personal noncommercial local private derived calendar and corporate actions; attribution; no raw body storage, redistribution or mirror`。署名字串（policy `attribution`，逐字）：`Source: FinMind (finmindtrade.com) trading dates, daily prices, dividend results, dividends, capital reductions, split reference prices and stock info; provider-reported values kept as private local derived facts; raw bodies not stored or redistributed`。兩者固定在被 pin 的 policy 內，隨 policy SHA-256 被 seal 綁定並寫入保存的 receipt；FinMind 是服務提供者，不是官方直接來源，條款頁未固定版本。權利是否充分屬使用者決策，QA 只核對它被 seal 綁定。
+
+### #98 日狀態、核對規則與因子
+
+- **日曆 gate**（早於任何其他 GET）：F1 所有回傳列先驗結構（唯一、遞增的 ISO 日期），再取 2026-07-01～2026-10-12 的列。期間內日期須全為平日、含 2026-10-06，且 8～10 月至 2026-10-06 的部分與 formal 45 日（8 月 21、9 月 20、10 月 4）完全相同（見 [§49.3](#493-原件驗證與-last60summary-計算)）；7 月與 2026-10-06 之後的日期照來源回傳接受，不限天數，不從缺平日推休市。2026-10-06 之後的日期另存為 `calendar_after_formal`。日期是臺灣市場（Asia/Taipei）交易日的曆日，不是 UTC（[§52](#52-7七股普通收盤與交易日曆的日期時區語意契約)）。
+- **日狀態（停復牌只有間接證據）**：日曆上的交易日，若該檔沒有價格列、或 OHLC 全 0、部分為 0、上下界不一致，該檔該日為 `incomparable`（理由 `missing_row`、`ohlc_zero`、`ohlc_partial_zero`、`ohlc_bounds`）；不讓批次失敗，也不宣稱為停牌（`positive_suspension_fact` 不支援）。價格列落在日曆之外，或整檔沒有價格列，該檔 `refused`。
+- **身分**：2026-10-06 的六欄 anchor（開高低收量額，[§32.2](#322-完整重驗與有限衍生)）須與價格列逐值相等，否則該檔 `refused`（`identity_anchor_mismatch`）。F9 取該檔 `date` 最新的列，`type` 須為 `tpex`；沒有列、最新列不唯一或 `type` 不符，該檔 `refused`（`info_missing`、`info_ambiguous`、`market_type_not_accepted`）。
+- **spread 參考價核對與語意示範**：FinMind 把 `spread` 寫成「漲跌幅」而未說明是價差或比例，所以語意要由資料證明。隱含參考價 ＝ `close − spread`，須等於前一個可比日的收盤；不等的日子若有事件（任何種類，含已拒用者）記為被事件解釋，否則記為未解釋。示範成立的條件：七檔合計至少一個事件日的隱含參考價不同於前一可比收盤，且該檔吻合日數至少 20；否則該檔 spread 狀態為 `semantics_unverified`。有未解釋差異為 `unexplained_change`，其餘為 `consistent`。狀態不是 `consistent` 的檔，adjusted 整檔拒用（raw 不受影響，批次不首敗）。
+- **面額變更 fail-closed**：面額變更資料集不取得、不計算因子。面額變更日的參考價跳動沒有事件可解釋，成為未解釋差異，該檔 adjusted 拒用（AC 修訂 1）。
+- **除權息因子**：因子 ＝ `(P−C)/P × 1/(1+Rf)`（公式來源見 [§6.3](#63-tpex-corporate-action-mapping)）。P 取 F3 `before_price`；C（現金）與 Rf（股票股利 ÷ 面額 10 元）取 F4 中除息日或除權日等於該日的列：現金部分只在除息日等於該日時計入，C ＝ 現金盈餘配息＋現金公積配息；股票部分只在除權日等於該日時計入，Rf ＝（股票盈餘配股＋股票公積配股）÷ 10。面額 10 元是推論。F3 與 F4 對不上或有歧義時事件拒用。
+- **減資與分割因子**：因子 ＝ `after_reference / before_close`，減資取 F5 `PostReductionReferencePrice / ClosingPriceonTheLastTradingDay`，分割取 F6a `after_price / before_price`。
+- **參考價互核**：除息因子隱含的參考價 R ＝ `(P−C)/(1+Rf)`，須與 F3 `reference_price` 的差嚴格小於一個 tick，且當日有可比價格列與 `spread` 時，須與 `close − spread` 的差也嚴格小於一個 tick；減資與分割的 `after_reference` 須與 `close − spread` 的差嚴格小於一個 tick，當日沒有可比列則 `factor_reference_unverified`。tick 取被觀察到的參考價（F3 `reference_price` 或 `close − spread`）所在級距，級距表（`0=1/100`、`10=1/20`、`50=1/10`、`100=1/2`、`500=1`、`1000=5`，下界含）出處是 [§50.2](#502-規則值與原文定位)（#97）。官方未說明參考價的捨入方式，所以容差是「嚴格小於一個 tick」而不是相等。未過即事件拒用（`factor_reference_mismatch`），不讓批次失敗。
+- **其他拒用**：現金增資欄位為正（paid subscription）→ 事件拒用，不估參數；同一日多個事件 → 全部拒用（`same_day_multiple_events`）；事件日不在日曆（`event_date_not_trading_day`）；F4 有除權息日但 F3 無結果（`announced_without_result`，理由 `dividend_result_missing`）。其餘事件層理由：`event_duplicate_conflict`、`event_price_invalid`、`dividend_terms_unmatched`、`dividend_terms_ambiguous`、`dividend_terms_missing`、`dividend_terms_invalid`、`paid_subscription_unsupported`、`paid_subscription_fields_missing`、`cash_exceeds_price`、`factor_unavailable`。F4 日期無法解析、有金額而無除權息日，或窗口內除權息的資本增資欄位缺漏，該檔 adjusted 整檔拒用（`f4_date_unparsed`、`f4_ex_date_unknown`、`paid_subscription_fields_missing`）。
+- **adjusted 可讀範圍**：`supported_from` ＝ 該檔最晚一件已拒用事件的日期，沒有則為日曆首日；adjusted 整檔拒用時為空。日期早於 `supported_from` 的 adjusted 讀取被拒，事件日當天與之後不受該事件影響。因子是該日之後所有事件因子之積。
+
+### #98 私人保存與讀用
+
+保存的是衍生值，不是原件：不保存原始 body 與逐日價格列；事件的前價、參考價與因子以最簡有理數字串保存（私人本地）。只寫檔案、不寫資料庫。
+
+| 項目 | 契約 |
+| --- | --- |
+| root | 產品常數 `PRIVATE_ROOT` ＝ `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98`（本單專用，不與 #7 共用）。預設 transport 只能寫此 root；邊界 transport 須自帶 root 且不得等於它 |
+| 版面 | `<policy_version>/<window_end>/{data.json,receipt.json}`，即 `issue98-tpex-seven-calendar-actions-v2/2026-10-12/`；storage schema `tpex-calendar-actions-saved/v1`、receipt schema `tpex-calendar-actions-receipt/v1`；兩檔皆 canonical UTF-8 JSON（sorted keys、compact） |
+| `data.json` | `schema`、`window`、`calendar`、`calendar_after_formal`、`spread_semantics`（`demonstrated`、`evidence`）、`observed_fields`（各資料集實際出現的欄名）、七檔 `symbols`（`status`、`refusal_reasons`、`info`、`incomparable_days`、`spread_check`、`events`、`adjusted`、`foreign_rows`）。事件含種類（`ex_dividend`、`capital_reduction`、`split`、`paid_subscription`、`announced_without_result`）、日期、公告日期與時間、前價、參考價、因子、公式、trace、`supported` 與 `reasons` |
+| `receipt.json` | 37 個 GET 各自的 URL、status、content-type／content-encoding、請求與觀測時間（UTC，`isoformat()` 形式）、body SHA-256 與 bytes、receipt SHA-256；policy 版本／SHA-256／bytes；產品檔與 `ohlcv_history_source.py` 的 SHA-256；`data.json` 的 SHA-256 與 bytes；`data_version`；`attribution`、`rights`、`limitations`；`saved_at`；`publication_time`、`first_availability`、`revision_time` 固定 `unknown` |
+| 上限 | `data.json` ≤ 131,072 B、`receipt.json` ≤ 65,536 B；root 內 ≤ 1 個 bundle、≤ 2 個檔案、合計 ≤ 196,608 B，超過即拒（`quota_bundles`、`quota_files`、`quota_bytes`）；root 內有外來或半成品項目也拒（`root_entries_invalid`） |
+| 准入與出版 | 取得完成為 pending；須獨立 oracle admission 才 available，才能 `save`。admission 綁 37 份 receipt 的 SHA-256（依請求序）、`data.json` 的 SHA-256 與日曆／價格／事件三個列數，real 路徑另綁 QA holder、candidate 與 script SHA-256。先寫 root 下的暫存目錄（每檔 `O_EXCL` 並 fsync），再以 rename 原子換成最終目錄，不覆寫；已存在且 `data.json` 與去除 `saved_at` 的 receipt 都相同回 `idempotent`，不同則 `final_conflict`。出版後以讀取端的同一份程式回讀並逐位元組比對 |
+| `data_version` | `tpex-calendar-actions-data/v1:` ＋ `data.json` 位元組的 SHA-256（小寫十六進位）；`receipt.json` 記同一值，讀取時須相符。資料變動即版本變動 |
+
+讀用只經 `load_saved(root=None, *, pins=None)`：唯讀、不取源、不 fallback 到其他版本；`pins` 預設為產品常數，自帶只供邊界測試，且綁的是 policy 摘要，不是簽章，receipt 不能當成不可竄改的證據。每次讀取都由讀取端完整重驗，新程序讀回亦同：路徑（root、版本目錄、bundle 目錄須是真目錄，不得是 symlink 或 reparse point，恰有兩個檔且各自不超過上限）、兩檔皆為 canonical bytes、schema 與固定欄位、policy 版本與 pin、37 個 GET 的 URL 與順序／status 200／完整 EOF／identity 編碼／時間順序／receipt SHA-256 重算、`data.json` 的 SHA-256 與 bytes 和 `data_version`，以及保存狀態的內部一致性（日曆為遞增平日且含 2026-10-06、`supported` 與因子／理由一致、`supported_from` 與 spread 狀態可由保存的事件與核對結果重算）。任一不符整體拒絕，不修補、不補值。
+
+回傳的 `SavedCalendarActions` 提供 `trading_days`、`events`、`read_day`；每個讀取都要明示 market、security_type、data_version、purpose（`read_day` 另有 symbol、`on_date`、`basis`）。`read_day` 只回因子與事件，不回價格：`raw` 的因子為空，`adjusted` 的因子是該日之後事件因子之積。拒用碼：
+
+- 範圍：`unsupported_market`、`unsupported_security_type`、`unsupported_purpose`、`data_version_mismatch`、`unsupported_symbol`、`unsupported_basis`。
+- 檔：`symbol_refused`（該檔 `refused`，連事件也不外露，附第一個理由）。
+- 日期：`date_invalid`、`date_outside_window`、`date_not_in_observed_calendar`、`day_incomparable`（附理由）。
+- 因子：`adjusted_unsupported`（日期早於 `supported_from` 或該檔 adjusted 整檔拒用，附第一個理由，沒有理由時為 `event_unsupported`）。
+
+載入失敗碼如 `saved_missing`、`saved_reparse_point`、`saved_entries`、`saved_size_cap`、`saved_not_canonical`、`saved_value`、`saved_pin_or_scope`、`saved_get`、`saved_get_receipt_sha`，同樣整體拒絕。
+
+### #98 取得結果與 SPENT 帳
+
+| 項目 | qa1（v1） | v2/qa1 |
+| --- | --- | --- |
+| namespace／policy | `issue98-tpex-seven-calendar-actions-v1/qa1`／v1（44 GET） | `issue98-tpex-seven-calendar-actions-v2/qa1`／v2（37 GET） |
+| seal | 全局 [6149304499](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6149304499) | 全局 [6171379303](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171379303)；使用者預先同意一次取得 [#1 留言 6171027510](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6171027510) |
+| 結果 | 第 37 個 GET（`TaiwanStockParValueChange`、`data_id=3105`，v1 的第一個面額變更查詢）收到非 200 回應，狀態碼未記錄；批次依設計停止，沒有保存任何資料 | exit 0，37 個 GET 全部 HTTP 200（無 token、0 轉址、0 重試）；獨立 oracle 與產品逐項相等；保存 1 個 bundle，另一個程序讀回 `ok` |
+| 收據 | [6159336980](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6159336980) | [6171662145](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171662145) |
+| 額度 | **SPENT／NO-RETRY** | **SPENT 1/1／NO-RETRY** |
+
+額度已用盡，不 restart、replay、clone、hydrate 或另開來源；再取需新的明示使用者授權、新 namespace 與新 seal（見 [FinMind 來源共同規則](#finmind-來源共同規則)）。
+
+v2/qa1 的真實回應觀察（只列計數、日期、類別、狀態；一次觀測，不是 FinMind 對形狀的承諾）：
+
+- **保存的資料版本**：`data.json` 的 SHA-256 `3f0341bedf9082f47caaccb99367e2800488e2c32692133138e85301bcbc3f1d`，即 `data_version` ＝ `tpex-calendar-actions-data/v1:3f0341bedf9082f47caaccb99367e2800488e2c32692133138e85301bcbc3f1d`。讀回時錯市場、錯用途、錯版本各被拒（`unsupported_market`、`unsupported_purpose`、`data_version_mismatch`）。
+- **日曆與日狀態**：70 個交易日（2026-07-01～2026-10-12）；七檔價格皆 70 列，`incomparable` 日皆為 0；七檔 `status` 皆為 `usable`，raw 皆可讀。七檔的 spread 檢查皆 `consistent`（每檔 69 個可檢日），語意示範成立（證據為下列 6 個除息日）。
+- **F9**：七檔的 `type` 皆為 `tpex`，`date` 為 ISO 格式。
+- **事件**：F3 共 6 件除息（3293、5274、5347、6488、6510、8069 各 1，3105 無）；F5、F6a 七檔皆回空陣列；面額變更偵測路徑沒有被真實資料觸發（七檔未解釋日皆為 0）。
+- **F3 內部互核**：6 件除息全部通過（差距遠小於一個 tick）；其中 5274 的除息含股票股利（[6171662145](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171662145) 的標示）。
+- **adjusted 可讀範圍**：
+
+| 標的 | 事件（除息日） | 因子狀態 | adjusted 可讀起日 |
+| --- | --- | --- | --- |
+| 3105 | 無 | — | 2026-07-01 |
+| 8069 | 2026-07-20 | supported | 2026-07-01 |
+| 3293 | 2026-07-08 | unsupported（`factor_reference_mismatch`） | 2026-07-08 |
+| 5274 | 2026-07-07 | unsupported（`factor_reference_mismatch`） | 2026-07-07 |
+| 5347 | 2026-07-06 | unsupported（`factor_reference_mismatch`） | 2026-07-06 |
+| 6488 | 2026-07-16 | unsupported（`factor_reference_mismatch`） | 2026-07-16 |
+| 6510 | 2026-07-09 | unsupported（`factor_reference_mismatch`） | 2026-07-09 |
+
+五件被拒用的除息都是 spread 互核未過：以 `close − spread` 推回的參考價與 F3 參考價相差約 6～75 個 tick（門檻為嚴格小於 1 個 tick）；只有 8069 通過。拒用是 fail-closed 的預期行為，與規格一致，不會錯放行；全局裁定採現狀（[6171697768](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171697768)），任務統籌的分析見 [6171686376](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171686376)。對 #38 兩個截止日（last60 窗口起點見 [§49.3](#493-原件驗證與-last60summary-計算) 的已觀測邊界）的影響是任務統籌依上表推算，不是 run 的輸出：adjusted 可用 6 檔，6488 不可用（其 `supported_from` 晚於兩個窗口的起點）。
+
+### #98 未驗與限制
+
+- **spread 除息互核在真實資料上只有 1/6 成立**：原因未知（可能是 `spread` 在 TPEx 除息日的定義與假設不同，也可能是其他原因）。原始 body 依設計不保存，要查原因只能重新取得 `TaiwanStockPrice`，這需要新 seal 與使用者新授權。放寬這條規則（例如 F3 互核通過時 spread 只作參考、不作 gate）屬規格變更，需新 candidate、重驗與新取得；候選記錄見全局裁定 [6171697768](https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-6171697768)。
+- **七檔中 adjusted 全區間可用的只有 3105、8069**：其餘五檔只自上表的可讀起日起可用；七檔承諾不縮（D4），但可用範圍以保存資料為準。
+- **期間內沒有真實樣本，只有合成邊界案例**：減資、分割（F5、F6a 回空陣列，其欄位形態仍未驗）、停復牌（`incomparable` 日為 0）、面額變更（偵測路徑未觸發）、paid subscription 與同日多事件。這是資料限制，記為「未驗（期間內不存在）」，不證這些路徑在真實資料上的行為。
+- **單一來源、非 PIT**：只用 FinMind，沒有第二來源的對照；7 月與 2026-10-06 之後的日曆日期沒有獨立來源，8～10 月至 2026-10-06 才有 formal 45 日對照。發布時間、首次可得、修訂歷史都是 `unknown`，取得值是「API 當下值」，之後可能被更正；一次成功不證匿名額度、限流、條款或長期穩定。
+- **推論**：停牌只有間接證據；`spread` 語意、股票股利面額 10 元、參考價捨入（容差嚴格小於一個 tick）都是明示推論，不是 FinMind 宣告；`TaiwanStockPriceAdj` 不使用，adjusted 是本地由事件因子導出，不是 provider 還原價。
+- **面額變更**：不取得、不計因子，只能被偵測為未解釋差異後拒用 adjusted。
+- **防護性質**：閘門、audit hook 與 deadline 是進程內協作式防護，不是沙箱；租約 expiry、gzip／br、401／402／403 的真實路徑未觸發，只有合成證據。
+- **範圍**：只對這七檔、期間 2026-07-01～2026-10-12 與本地私人衍生用途有效；其他標的、市場、日期、raw body 保存、再散布、Signal、Plan、交易與歷史模擬均不支援。
+- **版本**：本節描述 candidate `33db5803f320ac465b21b2f6f0eed55d4e43cebf` 取得時的契約與 v2/qa1 結果；其後程式、policy 或驗收語意變動須重驗並更新本節。本節不宣稱解除 #38 或 #13 的整體 AC；依賴是否解除由全局依整合版本判定。
