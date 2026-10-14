@@ -9,8 +9,8 @@ process's single temporary session directory; subprocesses are allowed only for 
 ``python -I -B`` reader child. The pinned formal blob d8918bc... is read once with ``git cat-file``
 before the hook exists (never the working-tree registry). Every calendar, price and event value
 below is synthetic boundary data, not source truth. The policy under test is built here as an
-independent literal; the module's real pins are still unset (policy v1 is not yet published), so
-every acquiring test names its own pins computed here, never taken from the module.
+independent literal and compared byte for byte with the published policy v2 (issue 98 comment 6170250977, also kept
+below as an independent literal); every acquiring boundary test names its own pins computed here.
 """
 from __future__ import annotations
 
@@ -122,8 +122,8 @@ IMPORT_BLOCKED = tuple(BLOCKED)
 TCA_FILE = ROOT / "backend/app/tpex_calendar_actions_source.py"
 BASE_FILE = ROOT / "backend/app/ohlcv_history_source.py"
 
-NAMESPACE = "issue98-tpex-seven-calendar-actions-v1/qa1"
-POLICY_VERSION = "issue98-tpex-seven-calendar-actions-v1"
+NAMESPACE = "issue98-tpex-seven-calendar-actions-v2/qa1"
+POLICY_VERSION = "issue98-tpex-seven-calendar-actions-v2"
 PURPOSE = "local_personal_noncommercial_private_derived_calendar_actions"
 CONSUMER = "tpex-calendar-actions-read-v1"
 STORAGE_SCHEMA = "tpex-calendar-actions-saved/v1"
@@ -145,15 +145,15 @@ ANCHORS = {
     "6510": (3125, 3140, 3050, 3055, 560518, 1729347985),
     "8069": (147, 151.5, 145, 149, 10796741, 1607943663),
 }
-KINDS = ("price", "dividend_result", "dividend", "capital_reduction", "split", "par_value")
+KINDS = ("price", "dividend_result", "dividend", "capital_reduction", "split")
 EVENT_KINDS = KINDS[1:]
 DATASETS = {"calendar": "TaiwanStockTradingDate", "price": "TaiwanStockPrice",
             "dividend_result": "TaiwanStockDividendResult", "dividend": "TaiwanStockDividend",
             "capital_reduction": "TaiwanStockCapitalReductionReferencePrice", "split": "TaiwanStockSplitPrice",
-            "par_value": "TaiwanStockParValueChange", "info": "TaiwanStockInfo"}
+            "info": "TaiwanStockInfo"}
 SOURCE_IDS = {"calendar": "finmind_trading_dates", "price": "finmind_price", "dividend_result": "finmind_dividend_result",
               "dividend": "finmind_dividend", "capital_reduction": "finmind_capital_reduction",
-              "split": "finmind_split_price", "par_value": "finmind_par_value_change", "info": "finmind_stock_info"}
+              "split": "finmind_split_price", "info": "finmind_stock_info"}
 LIMITATIONS = [
     "date_is_asia_taipei_trading_calendar_date_not_utc",
     "july_and_after_2026-10-06_calendar_days_not_independently_verified",
@@ -163,19 +163,20 @@ LIMITATIONS = [
     "stock_dividend_par_value_10_twd_is_an_inference",
     "reference_price_rounding_unspecified_cross_check_tolerance_is_strictly_less_than_one_tick",
     "stock_info_type_value_form_unverified_until_a_real_response",
+    "par_value_change_not_fetched_detected_only_as_an_unexplained_spread_change",
     "publication_time_first_availability_revision_time_unknown",
     "raw_body_and_raw_prices_not_stored_derived_values_only",
     "personal_noncommercial_local_use_no_redistribution",
 ]
 UNSUPPORTED = [
     "historical_pit", "publication_time", "first_availability", "revision_guarantee", "positive_suspension_fact",
-    "paid_subscription", "provider_adjusted_prices", "other_symbols", "other_markets", "other_dates",
-    "raw_body_storage", "redistribution", "actionable_strategy", "plan", "trading", "historical_simulation",
+    "paid_subscription", "par_value_change_factor", "provider_adjusted_prices", "other_symbols", "other_markets",
+    "other_dates", "raw_body_storage", "redistribution", "actionable_strategy", "plan", "trading", "historical_simulation",
 ]
 RIGHTS = ("FinMind personal noncommercial local private derived calendar and corporate actions; attribution; "
           "no raw body storage, redistribution or mirror")
 ATTRIBUTION = ("Source: FinMind (finmindtrade.com) trading dates, daily prices, dividend results, dividends, capital reductions, "
-               "split and par-value reference prices and stock info; provider-reported values kept as private local derived "
+               "split reference prices and stock info; provider-reported values kept as private local derived "
                "facts; raw bodies not stored or redistributed")
 
 # Synthetic financial-start identities (pure guard only; never passed to an acquiring constructor).
@@ -183,7 +184,7 @@ SEAL_ISSUER = "f0000000-0000-0000-0000-0000000000a1"
 SEAL_COORDINATORS = ("f0000000-0000-0000-0000-0000000000b1", "f0000000-0000-0000-0000-0000000000b2")
 SEAL_IMPLEMENTERS = ("f0000000-0000-0000-0000-0000000000c1", "f0000000-0000-0000-0000-0000000000c2")
 QA_HOLDER = "5d2f6c1e-7a40-4b8e-9c3d-1e2f3a4b5c6d"
-SEAL_FLOOR = 6139122796  # the policy v1 publication comment (issue 98): a seal must be newer
+SEAL_FLOOR = 6170250977  # the policy v2 publication comment (issue 98): a seal must be newer
 SEAL_URL = "https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-9999999999"
 
 
@@ -272,9 +273,6 @@ def policy_dict():
                                           "ReasonforCapitalReduction"]),
             "split": _source("TaiwanStockSplitPrice", True, START, END, 7, ["date", "stock_id", "before_price", "after_price"],
                              ["type", "max_price", "min_price", "open_price"]),
-            "par_value": _source("TaiwanStockParValueChange", True, START, END, 7,
-                                 ["date", "stock_id", "before_close", "after_ref_close"],
-                                 ["stock_name", "after_ref_max", "after_ref_min", "after_ref_open"]),
             "info": _source("TaiwanStockInfo", False, "", "", 1, ["stock_id", "type", "date"],
                             ["industry_category", "stock_name"]),
         },
@@ -298,15 +296,18 @@ def policy_dict():
                                "is refused",
             "dividend_factor": "(P-C)/P*1/(1+Rf) with P=before_price, C and Rf from the matching TaiwanStockDividend row; exact "
                                "rationals; Rf = stock dividend per share / 10 TWD par",
-            "reference_ratio_factor": "after_reference/before_close for capital reduction, split and par-value change",
+            "reference_ratio_factor": "after_reference/before_close for capital reduction and split",
             "paid_subscription": "a positive capital-increase field makes the event unsupported; no parameter is estimated",
             "same_day_events": "more than one event on one date makes all of them unsupported",
+            "par_value_change": "par-value changes are neither fetched nor computed; a par-value reference jump has no event to "
+                                "explain it, so that day is an unexplained spread change and the symbol's adjusted basis is "
+                                "refused (fail-closed) while raw is unaffected",
             "reference_tick_ladder": ["0=1/100", "10=1/20", "50=1/10", "100=1/2", "500=1", "1000=5"],
             "reference_tick_source": "tick ladder of SOURCE_REGISTRY #97 (tpex-static-rules/2026-10-12/v1, business rules article 55 "
                                      "paragraph 2, lower bound inclusive); the tolerance is the tick at the observed reference price",
             "reference_cross_check": "an ex-dividend factor implies R=(P-C)/(1+Rf); R must be strictly less than one tick from the "
                                      "TaiwanStockDividendResult reference_price and, when the event day has a comparable price row with "
-                                     "spread, from close-spread; capital reduction, split and par-value after_reference must be strictly "
+                                     "spread, from close-spread; capital reduction and split after_reference must be strictly "
                                      "less than one tick from close-spread (no such row: factor_reference_unverified); a miss makes the "
                                      "event unsupported with factor_reference_mismatch and never fails the batch; official rounding of "
                                      "reference prices is not stated by the sources, hence strictly less than one tick, not equality",
@@ -320,8 +321,8 @@ def policy_dict():
         "acquisition": {
             "namespace": NAMESPACE,
             "order": "calendar, then per dataset the seven symbols ascending (price, dividend_result, dividend, "
-                     "capital_reduction, split, par_value), then stock info",
-            "max_gets": 44, "per_source_max_gets": 1, "body_cap_bytes": 1048576, "total_raw_cap_bytes": 16777216,
+                     "capital_reduction, split), then stock info",
+            "max_gets": 37, "per_source_max_gets": 1, "body_cap_bytes": 1048576, "total_raw_cap_bytes": 16777216,
             "retained_roots_estimate_cap_bytes": 33554432, "request_seconds": 20, "batch_seconds": 600,
             "deadline": "cooperative", "accept_encoding": "identity", "accept": "application/json",
             "user_agent": "stock-lab-issue32-local-ram/1", "redirects": 0, "retries": 0, "stop_on_first_failure": True,
@@ -342,7 +343,8 @@ def policy_dict():
         "attribution": ATTRIBUTION, "rights": RIGHTS,
         "documentation": "https://finmind.github.io/tutor/TaiwanMarket/ (doc GET receipt issue98 comment 6135101980); free tokenless "
                          "use is inferred, 401/402/403 is first failure; TaiwanStockSuspended and TaiwanStockPriceAdj are "
-                         "member-only and not used; TaiwanStockDividend amount field names (StockEarningsDistribution, "
+                         "member-only and not used; TaiwanStockParValueChange is no longer requested (issue 98 AC revision 1); "
+                         "TaiwanStockDividend amount field names (StockEarningsDistribution, "
                          "StockStatutorySurplus, CashEarningsDistribution, CashStatutorySurplus) are schema names on the Fundamental "
                          "page (SHA-256 801b4f41573ac3388c4c684fd6fe4939bb15427b332234a741a79e0e6d9977c7); the TaiwanStockInfo type "
                          "tpex follows the Technical page note that the table keeps both emerging and twse / tpex rows (SHA-256 "
@@ -357,11 +359,11 @@ def policy_pack(document=None):
     return blob, tca.Pins(hashlib.sha256(blob).hexdigest(), len(blob))
 
 
-# Policy v1 exactly as published in issue 98 comment 6139122796 (10,257 bytes; sorted keys, compact, no trailing LF).
-PUBLISHED_POLICY = b'{"acquisition":{"accept":"application/json","accept_encoding":"identity","batch_seconds":600,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":44,"namespace":"issue98-tpex-seven-calendar-actions-v1/qa1","order":"calendar, then per dataset the seven symbols ascending (price, dividend_result, dividend, capital_reduction, split, par_value), then stock info","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":16777216,"user_agent":"stock-lab-issue32-local-ram/1"},"attribution":"Source: FinMind (finmindtrade.com) trading dates, daily prices, dividend results, dividends, capital reductions, split and par-value reference prices and stock info; provider-reported values kept as private local derived facts; raw bodies not stored or redistributed","calendar":{"expected_scope":"observed FinMind trading dates; every returned row structurally valid, unique and ascending; rows outside the window are discarded only after structural validation; in-window dates must be weekdays, include 2026-10-06 and equal the formal Aug-Oct 45 dates exactly within that span; July and days after 2026-10-06 are accepted as returned; no fixed count; no closure inference","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"version":"finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue98-v1"},"checks":{"dividend_factor":"(P-C)/P*1/(1+Rf) with P=before_price, C and Rf from the matching TaiwanStockDividend row; exact rationals; Rf = stock dividend per share / 10 TWD par","identity_anchor":"2026-10-06 six-field anchors of SOURCE_REGISTRY 32.2 must equal the price row, else the symbol is refused","info_accepted_types":["tpex"],"paid_subscription":"a positive capital-increase field makes the event unsupported; no parameter is estimated","reference_cross_check":"an ex-dividend factor implies R=(P-C)/(1+Rf); R must be strictly less than one tick from the TaiwanStockDividendResult reference_price and, when the event day has a comparable price row with spread, from close-spread; capital reduction, split and par-value after_reference must be strictly less than one tick from close-spread (no such row: factor_reference_unverified); a miss makes the event unsupported with factor_reference_mismatch and never fails the batch; official rounding of reference prices is not stated by the sources, hence strictly less than one tick, not equality","reference_ratio_factor":"after_reference/before_close for capital reduction, split and par-value change","reference_tick_ladder":["0=1/100","10=1/20","50=1/10","100=1/2","500=1","1000=5"],"reference_tick_source":"tick ladder of SOURCE_REGISTRY #97 (tpex-static-rules/2026-10-12/v1, business rules article 55 paragraph 2, lower bound inclusive); the tolerance is the tick at the observed reference price","same_day_events":"more than one event on one date makes all of them unsupported","spread_min_matched_days":20,"spread_reference":"implied reference = close - spread must equal the previous comparable close unless an event dated that day explains the difference; unexplained difference refuses the adjusted basis","spread_semantics_demonstration":"at least one event day across the seven symbols whose implied reference differs from the previous comparable close; otherwise every symbol is semantics_unverified","stock_dividend_par_twd":10,"zero_price_rows":"a missing row or zero OHLC makes the day incomparable; it never fails the batch and is never asserted to be a suspension"},"consumer_version":"tpex-calendar-actions-read-v1","documentation":"https://finmind.github.io/tutor/TaiwanMarket/ (doc GET receipt issue98 comment 6135101980); free tokenless use is inferred, 401/402/403 is first failure; TaiwanStockSuspended and TaiwanStockPriceAdj are member-only and not used; TaiwanStockDividend amount field names (StockEarningsDistribution, StockStatutorySurplus, CashEarningsDistribution, CashStatutorySurplus) are schema names on the Fundamental page (SHA-256 801b4f41573ac3388c4c684fd6fe4939bb15427b332234a741a79e0e6d9977c7); the TaiwanStockInfo type tpex follows the Technical page note that the table keeps both emerging and twse / tpex rows (SHA-256 6f8747b5fbaa9ba13708bf1a546f7368e460fc59ccd86bd5c78690c10aa52ea5), the real value form is unverified","first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","profile":"free_public_local","publication_time":"unknown","response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","empty_data":"data [] is not a failure; the dataset simply has no rows","encoding":"strict UTF-8 without BOM","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure","structure":"status/msg/data document; required fields present with the stated types; unknown extra fields tolerated and only their names recorded"},"revision_time":"unknown","rights":"FinMind personal noncommercial local private derived calendar and corporate actions; attribution; no raw body storage, redistribution or mirror","source_use":"local_personal_noncommercial_private_derived_calendar_actions","sources":{"calendar":{"data_id":false,"dataset":"TaiwanStockTradingDate","end_date":"2026-10-12","gets":1,"optional_fields":[],"required_fields":["date"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-12"},"capital_reduction":{"data_id":true,"dataset":"TaiwanStockCapitalReductionReferencePrice","end_date":"2026-10-12","gets":7,"optional_fields":["LimitUp","LimitDown","OpeningReferencePrice","ExrightReferencePrice","ReasonforCapitalReduction"],"required_fields":["date","stock_id","ClosingPriceonTheLastTradingDay","PostReductionReferencePrice"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockCapitalReductionReferencePrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"dividend":{"data_id":true,"dataset":"TaiwanStockDividend","end_date":"2026-12-31","gets":7,"optional_fields":["StockExDividendTradingDate","CashExDividendTradingDate","StockEarningsDistribution","StockStatutorySurplus","CashEarningsDistribution","CashStatutorySurplus","TotalNumberOfCashCapitalIncrease","CashIncreaseSubscriptionRate","CashIncreaseSubscriptionpRrice","AnnouncementDate","AnnouncementTime"],"required_fields":["date","stock_id"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDividend&data_id={symbol}&start_date=2026-07-01&end_date=2026-12-31"},"dividend_result":{"data_id":true,"dataset":"TaiwanStockDividendResult","end_date":"2026-10-12","gets":7,"optional_fields":["stock_and_cache_dividend","stock_or_cache_dividend","max_price","min_price","open_price"],"required_fields":["date","stock_id","before_price","after_price","reference_price"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDividendResult&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"info":{"data_id":false,"dataset":"TaiwanStockInfo","end_date":"","gets":1,"optional_fields":["industry_category","stock_name"],"required_fields":["stock_id","type","date"],"start_date":"","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},"par_value":{"data_id":true,"dataset":"TaiwanStockParValueChange","end_date":"2026-10-12","gets":7,"optional_fields":["stock_name","after_ref_max","after_ref_min","after_ref_open"],"required_fields":["date","stock_id","before_close","after_ref_close"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockParValueChange&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"price":{"data_id":true,"dataset":"TaiwanStockPrice","end_date":"2026-10-12","gets":7,"optional_fields":["spread","Trading_turnover"],"required_fields":["date","stock_id","open","max","min","close","Trading_Volume","Trading_money"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"split":{"data_id":true,"dataset":"TaiwanStockSplitPrice","end_date":"2026-10-12","gets":7,"optional_fields":["type","max_price","min_price","open_price"],"required_fields":["date","stock_id","before_price","after_price"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockSplitPrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"}},"storage":{"kind":"private_local_derived_calendar_actions","layout":"<policy_version>/<window_end>/{data.json,receipt.json}","max_bundles":1,"max_data_bytes":131072,"max_files":2,"max_receipt_bytes":65536,"max_total_bytes":196608,"raw_body":"not_stored","root":"C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98","schema":"tpex-calendar-actions-saved/v1","stored":"calendar, per-symbol day states, events, factors, traces and check results; no raw prices"},"symbols":["3105","3293","5274","5347","6488","6510","8069"],"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","positive_suspension_fact","paid_subscription","provider_adjusted_prices","other_symbols","other_markets","other_dates","raw_body_storage","redistribution","actionable_strategy","plan","trading","historical_simulation"],"version":"issue98-tpex-seven-calendar-actions-v1","window":{"dividend_end_date":"2026-12-31","end_date":"2026-10-12","start_date":"2026-07-01"}}'
-PUBLISHED_SHA = "fcdc77c4dd0c752da9a75bc3f5fe334d9ab61edfe8c903849af6466db55d2724"  # as quoted in that comment
-PUBLISHED_BYTES = 10257
-PUBLISHED_COMMENT = 6139122796
+# Policy v2 exactly as published in issue 98 comment 6170250977 (10,136 bytes; sorted keys, compact, no trailing LF).
+PUBLISHED_POLICY = b'{"acquisition":{"accept":"application/json","accept_encoding":"identity","batch_seconds":600,"body_cap_bytes":1048576,"deadline":"cooperative","max_gets":37,"namespace":"issue98-tpex-seven-calendar-actions-v2/qa1","order":"calendar, then per dataset the seven symbols ascending (price, dividend_result, dividend, capital_reduction, split), then stock info","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":33554432,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":16777216,"user_agent":"stock-lab-issue32-local-ram/1"},"attribution":"Source: FinMind (finmindtrade.com) trading dates, daily prices, dividend results, dividends, capital reductions, split reference prices and stock info; provider-reported values kept as private local derived facts; raw bodies not stored or redistributed","calendar":{"expected_scope":"observed FinMind trading dates; every returned row structurally valid, unique and ascending; rows outside the window are discarded only after structural validation; in-window dates must be weekdays, include 2026-10-06 and equal the formal Aug-Oct 45 dates exactly within that span; July and days after 2026-10-06 are accepted as returned; no fixed count; no closure inference","prior_calendar_formal_blob":"d8918bc6491ec8ef65874979cf88d1322df2da43:docs/SOURCE_REGISTRY.md","prior_calendar_formal_sha256":"b5ea9605c75add4bfa5581672d3778ac2851a29ac599e3e0b9e938880f42abde","prior_verified_counts":{"August":21,"October_through_6":4,"September":20},"version":"finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue98-v1"},"checks":{"dividend_factor":"(P-C)/P*1/(1+Rf) with P=before_price, C and Rf from the matching TaiwanStockDividend row; exact rationals; Rf = stock dividend per share / 10 TWD par","identity_anchor":"2026-10-06 six-field anchors of SOURCE_REGISTRY 32.2 must equal the price row, else the symbol is refused","info_accepted_types":["tpex"],"paid_subscription":"a positive capital-increase field makes the event unsupported; no parameter is estimated","par_value_change":"par-value changes are neither fetched nor computed; a par-value reference jump has no event to explain it, so that day is an unexplained spread change and the symbol\'s adjusted basis is refused (fail-closed) while raw is unaffected","reference_cross_check":"an ex-dividend factor implies R=(P-C)/(1+Rf); R must be strictly less than one tick from the TaiwanStockDividendResult reference_price and, when the event day has a comparable price row with spread, from close-spread; capital reduction and split after_reference must be strictly less than one tick from close-spread (no such row: factor_reference_unverified); a miss makes the event unsupported with factor_reference_mismatch and never fails the batch; official rounding of reference prices is not stated by the sources, hence strictly less than one tick, not equality","reference_ratio_factor":"after_reference/before_close for capital reduction and split","reference_tick_ladder":["0=1/100","10=1/20","50=1/10","100=1/2","500=1","1000=5"],"reference_tick_source":"tick ladder of SOURCE_REGISTRY #97 (tpex-static-rules/2026-10-12/v1, business rules article 55 paragraph 2, lower bound inclusive); the tolerance is the tick at the observed reference price","same_day_events":"more than one event on one date makes all of them unsupported","spread_min_matched_days":20,"spread_reference":"implied reference = close - spread must equal the previous comparable close unless an event dated that day explains the difference; unexplained difference refuses the adjusted basis","spread_semantics_demonstration":"at least one event day across the seven symbols whose implied reference differs from the previous comparable close; otherwise every symbol is semantics_unverified","stock_dividend_par_twd":10,"zero_price_rows":"a missing row or zero OHLC makes the day incomparable; it never fails the batch and is never asserted to be a suspension"},"consumer_version":"tpex-calendar-actions-read-v1","documentation":"https://finmind.github.io/tutor/TaiwanMarket/ (doc GET receipt issue98 comment 6135101980); free tokenless use is inferred, 401/402/403 is first failure; TaiwanStockSuspended and TaiwanStockPriceAdj are member-only and not used; TaiwanStockParValueChange is no longer requested (issue 98 AC revision 1); TaiwanStockDividend amount field names (StockEarningsDistribution, StockStatutorySurplus, CashEarningsDistribution, CashStatutorySurplus) are schema names on the Fundamental page (SHA-256 801b4f41573ac3388c4c684fd6fe4939bb15427b332234a741a79e0e6d9977c7); the TaiwanStockInfo type tpex follows the Technical page note that the table keeps both emerging and twse / tpex rows (SHA-256 6f8747b5fbaa9ba13708bf1a546f7368e460fc59ccd86bd5c78690c10aa52ea5), the real value form is unverified","first_availability":"unknown","identity_as_of":"2026-10-06","instrument_type":"ordinary_stock","market":"TW/TPEx","profile":"free_public_local","publication_time":"unknown","response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","empty_data":"data [] is not a failure; the dataset simply has no rows","encoding":"strict UTF-8 without BOM","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure","structure":"status/msg/data document; required fields present with the stated types; unknown extra fields tolerated and only their names recorded"},"revision_time":"unknown","rights":"FinMind personal noncommercial local private derived calendar and corporate actions; attribution; no raw body storage, redistribution or mirror","source_use":"local_personal_noncommercial_private_derived_calendar_actions","sources":{"calendar":{"data_id":false,"dataset":"TaiwanStockTradingDate","end_date":"2026-10-12","gets":1,"optional_fields":[],"required_fields":["date"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockTradingDate&start_date=2026-07-01&end_date=2026-10-12"},"capital_reduction":{"data_id":true,"dataset":"TaiwanStockCapitalReductionReferencePrice","end_date":"2026-10-12","gets":7,"optional_fields":["LimitUp","LimitDown","OpeningReferencePrice","ExrightReferencePrice","ReasonforCapitalReduction"],"required_fields":["date","stock_id","ClosingPriceonTheLastTradingDay","PostReductionReferencePrice"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockCapitalReductionReferencePrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"dividend":{"data_id":true,"dataset":"TaiwanStockDividend","end_date":"2026-12-31","gets":7,"optional_fields":["StockExDividendTradingDate","CashExDividendTradingDate","StockEarningsDistribution","StockStatutorySurplus","CashEarningsDistribution","CashStatutorySurplus","TotalNumberOfCashCapitalIncrease","CashIncreaseSubscriptionRate","CashIncreaseSubscriptionpRrice","AnnouncementDate","AnnouncementTime"],"required_fields":["date","stock_id"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDividend&data_id={symbol}&start_date=2026-07-01&end_date=2026-12-31"},"dividend_result":{"data_id":true,"dataset":"TaiwanStockDividendResult","end_date":"2026-10-12","gets":7,"optional_fields":["stock_and_cache_dividend","stock_or_cache_dividend","max_price","min_price","open_price"],"required_fields":["date","stock_id","before_price","after_price","reference_price"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDividendResult&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"info":{"data_id":false,"dataset":"TaiwanStockInfo","end_date":"","gets":1,"optional_fields":["industry_category","stock_name"],"required_fields":["stock_id","type","date"],"start_date":"","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},"price":{"data_id":true,"dataset":"TaiwanStockPrice","end_date":"2026-10-12","gets":7,"optional_fields":["spread","Trading_turnover"],"required_fields":["date","stock_id","open","max","min","close","Trading_Volume","Trading_money"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"},"split":{"data_id":true,"dataset":"TaiwanStockSplitPrice","end_date":"2026-10-12","gets":7,"optional_fields":["type","max_price","min_price","open_price"],"required_fields":["date","stock_id","before_price","after_price"],"start_date":"2026-07-01","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockSplitPrice&data_id={symbol}&start_date=2026-07-01&end_date=2026-10-12"}},"storage":{"kind":"private_local_derived_calendar_actions","layout":"<policy_version>/<window_end>/{data.json,receipt.json}","max_bundles":1,"max_data_bytes":131072,"max_files":2,"max_receipt_bytes":65536,"max_total_bytes":196608,"raw_body":"not_stored","root":"C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98","schema":"tpex-calendar-actions-saved/v1","stored":"calendar, per-symbol day states, events, factors, traces and check results; no raw prices"},"symbols":["3105","3293","5274","5347","6488","6510","8069"],"unsupported":["historical_pit","publication_time","first_availability","revision_guarantee","positive_suspension_fact","paid_subscription","par_value_change_factor","provider_adjusted_prices","other_symbols","other_markets","other_dates","raw_body_storage","redistribution","actionable_strategy","plan","trading","historical_simulation"],"version":"issue98-tpex-seven-calendar-actions-v2","window":{"dividend_end_date":"2026-12-31","end_date":"2026-10-12","start_date":"2026-07-01"}}'
+PUBLISHED_SHA = "ef10c3c71b4c643365bafc164d7324a88399b9ec27773c0438ef061b95feb794"  # as quoted in that comment
+PUBLISHED_BYTES = 10136
+PUBLISHED_COMMENT = 6170250977
 assert len(PUBLISHED_POLICY) == PUBLISHED_BYTES and hashlib.sha256(PUBLISHED_POLICY).hexdigest() == PUBLISHED_SHA
 assert canonical(policy_dict()) == PUBLISHED_POLICY
 
@@ -372,7 +374,7 @@ def step_index(kind, symbol=None):
     if kind == "calendar":
         return 0
     if kind == "info":
-        return 43
+        return 36
     return 1 + KINDS.index(kind) * 7 + SYMBOLS.index(symbol)
 
 
@@ -421,7 +423,7 @@ class Corpus:
                 rows.append({"date": day, "stock_id": symbol, **values, "spread": close - reference, "Trading_turnover": 2})
                 prior = close
             self.rows[symbol] = rows
-        self.docs = [None] * 44
+        self.docs = [None] * 37
         self.docs[0] = ok([{"date": day} for day in self.dates])
         for symbol in SYMBOLS:
             self.docs[step_index("price", symbol)] = ok(self.rows[symbol])
@@ -436,13 +438,13 @@ class Corpus:
                 "StockEarningsDistribution": 0, "StockStatutorySurplus": 0, "CashEarningsDistribution": cash,
                 "CashStatutorySurplus": 0, "TotalNumberOfCashCapitalIncrease": 0, "CashIncreaseSubscriptionRate": 0,
                 "CashIncreaseSubscriptionpRrice": 0, "AnnouncementDate": "2026-07-20", "AnnouncementTime": "15:30:00"}])
-            for kind in ("capital_reduction", "split", "par_value"):
+            for kind in ("capital_reduction", "split"):
                 self.docs[step_index(kind, symbol)] = ok([])
         info = [{"industry_category": "電子", "stock_id": symbol, "stock_name": "N" + symbol, "type": "tpex",
                  "date": "2026-09-30"} for symbol in SYMBOLS]
         info += [{"industry_category": "金融", "stock_id": "2330", "stock_name": "X", "type": "twse", "date": "2026-09-30"},
                  {"industry_category": "電子", "stock_id": "3105", "stock_name": "N3105", "type": "emerging", "date": "2020-01-01"}]
-        self.docs[43] = ok(info)
+        self.docs[step_index("info")] = ok(info)
 
     @property
     def bodies(self):
@@ -761,7 +763,7 @@ TEXT_LEAVES = {
     ("checks", "spread_reference"), ("checks", "spread_semantics_demonstration"), ("checks", "zero_price_rows"),
     ("checks", "identity_anchor"), ("checks", "dividend_factor"), ("checks", "reference_ratio_factor"),
     ("checks", "paid_subscription"), ("checks", "same_day_events"), ("checks", "reference_tick_source"),
-    ("checks", "reference_cross_check"),
+    ("checks", "reference_cross_check"), ("checks", "par_value_change"),
 } | {("response_shape", key) for key in policy_dict()["response_shape"]}
 
 
@@ -797,7 +799,7 @@ class PolicyAndGates(Case):
         self.assertEqual(tca.PRIVATE_ROOT, REAL_ROOT)
         self.assertEqual((tca.WINDOW_START, tca.WINDOW_END, tca.DIVIDEND_END, tca.IDENTITY_AS_OF), (START, END, DIV_END, IDENTITY))
         self.assertEqual((tca.BODY_CAP, tca.RAW_CAP, tca.ROOTS_CAP, tca.REQUEST_SECONDS, tca.BATCH_SECONDS, tca.MAX_GETS),
-                         (1048576, 16777216, 33554432, 20, 600, 44))
+                         (1048576, 16777216, 33554432, 20, 600, 37))
         self.assertEqual((tca.DATA_CAP, tca.RECEIPT_CAP, tca.MAX_BUNDLES, tca.MAX_FILES, tca.MAX_TOTAL_BYTES),
                          (131072, 65536, 1, 2, 196608))
         self.assertEqual((tca.SPREAD_MIN_MATCHED_DAYS, tca.STOCK_DIVIDEND_PAR_TWD, tca.INFO_ACCEPTED_TYPES), (20, 10, ("tpex",)))
@@ -805,11 +807,11 @@ class PolicyAndGates(Case):
         self.assertEqual(list(tca.UNSUPPORTED), UNSUPPORTED)
         self.assertEqual(tca.SYMBOLS, SYMBOLS)
 
-    def test_the_44_steps_are_the_independent_ordered_url_list(self):
+    def test_the_37_steps_are_the_independent_ordered_url_list(self):
         expected = [step_url("calendar")] + [step_url(kind, symbol) for kind in KINDS for symbol in SYMBOLS] + [step_url("info")]
         self.assertEqual([step.url for step in tca.STEPS], expected)
-        self.assertEqual(len(set(expected)), 44)
-        self.assertEqual([step.index for step in tca.STEPS], list(range(44)))
+        self.assertEqual(len(set(expected)), 37)
+        self.assertEqual([step.index for step in tca.STEPS], list(range(37)))
         ids = [SOURCE_IDS["calendar"]] + [f"{SOURCE_IDS[kind]}/{symbol}" for kind in KINDS for symbol in SYMBOLS] + [SOURCE_IDS["info"]]
         self.assertEqual([step.source_id for step in tca.STEPS], ids)
         self.assertEqual([step.dataset for step in tca.STEPS],
@@ -819,17 +821,19 @@ class PolicyAndGates(Case):
             self.assertIn(names, (["dataset", "start_date", "end_date"], ["dataset", "data_id", "start_date", "end_date"], ["dataset"]))
             self.assertNotIn("token", step.url)
         self.assertEqual(sum(url.endswith("end_date=" + DIV_END) for url in expected), 7)
-        self.assertEqual(sum(url.endswith("end_date=" + END) for url in expected), 1 + 5 * 7)
+        self.assertEqual(sum(url.endswith("end_date=" + END) for url in expected), 1 + 4 * 7)
         with self.assertRaises(dataclasses.FrozenInstanceError):
             tca.STEPS[0].url = "x"
 
     def test_the_published_policy_literal_is_what_the_module_implements(self):
-        self.assertEqual((len(PUBLISHED_POLICY), hashlib.sha256(PUBLISHED_POLICY).hexdigest()), (10257, PUBLISHED_SHA))
+        self.assertEqual((len(PUBLISHED_POLICY), hashlib.sha256(PUBLISHED_POLICY).hexdigest()), (10136, PUBLISHED_SHA))
         self.assertEqual(canonical(policy_dict()), PUBLISHED_POLICY)
         self.assertEqual(canonical(json.loads(PUBLISHED_POLICY)), PUBLISHED_POLICY)
         self.assertFalse(PUBLISHED_POLICY.endswith(b"\n"))
         frozen = tca.validate_policy(PUBLISHED_POLICY, PUBLISHED_SHA)  # no pins argument: the module's own pins
-        self.assertEqual((frozen["version"], frozen["acquisition"]["max_gets"], frozen["acquisition"]["namespace"]), (POLICY_VERSION, 44, NAMESPACE))
+        self.assertEqual((frozen["version"], frozen["acquisition"]["max_gets"], frozen["acquisition"]["namespace"]), (POLICY_VERSION, 37, NAMESPACE))
+        self.assertEqual(sum(source["gets"] for source in frozen["sources"].values()), 37)
+        self.assertNotIn("par_value", frozen["sources"])
         self.assertFailure("policy_pin", tca.validate_policy, PUBLISHED_POLICY, "0" * 64)
         changed = PUBLISHED_POLICY.replace(b"issue98", b"issue99", 1)
         self.assertFailure("policy_pin", tca.validate_policy, changed, hashlib.sha256(changed).hexdigest())  # self-consistent but not published
@@ -867,9 +871,9 @@ class PolicyAndGates(Case):
     def test_full_synthetic_run_under_the_published_policy_uses_only_the_modules_own_pins(self):
         pins = tca.Pins(tca.POLICY_SHA256, tca.POLICY_BYTES)
         corpus = Corpus()
-        source, _, _ = build(corpus=corpus, blob_pins=(PUBLISHED_POLICY, pins))
+        source, transport, _ = build(corpus=corpus, blob_pins=(PUBLISHED_POLICY, pins))
         source.acquire()
-        self.assertEqual(source._pins, pins)
+        self.assertEqual((source._pins, len(transport.opens)), (pins, 37))
         source.admit_independent_verification(admission(source, corpus))
         self.assertEqual({capture.receipt.policy_sha256 for capture in source.inspection()["captures"]}, {PUBLISHED_SHA})
         root = self.new_root()
@@ -877,6 +881,21 @@ class PolicyAndGates(Case):
         saved = tca.load_saved(root)  # no pins argument: the module's own pins
         self.assertEqual(saved.receipt["source_policy"], {"version": POLICY_VERSION, "sha256": PUBLISHED_SHA, "bytes": PUBLISHED_BYTES})
         self.assertEqual(saved.data_version, DATA_PREFIX + corpus.data_sha())
+
+    def test_policy_v1_is_no_longer_accepted(self):
+        """AC revision 1: the 44-GET policy with the par-value source is a different policy and is refused."""
+        def refused(edit, code):
+            document = policy_dict()
+            edit(document)
+            blob, pins = policy_pack(document)
+            self.assertFailure(code, tca.validate_policy, blob, pins.sha256, pins)
+        refused(lambda d: d.update(version="issue98-tpex-seven-calendar-actions-v1"), "policy_value")
+        refused(lambda d: d["acquisition"].update(namespace="issue98-tpex-seven-calendar-actions-v1/qa1"), "policy_value")
+        refused(lambda d: d["acquisition"].update(max_gets=44), "policy_value")
+        refused(lambda d: d["sources"].update(par_value=_source("TaiwanStockParValueChange", True, START, END, 7,
+                                                                 ["date", "stock_id", "before_close", "after_ref_close"], [])), "policy_keys")
+        refused(lambda d: d["unsupported"].remove("par_value_change_factor") or d["unsupported"].append("other_dates_again"), "policy_value")
+        refused(lambda d: d["checks"].pop("par_value_change"), "policy_keys")
 
     def test_policy_accepts_the_literal_and_every_non_text_leaf_is_pinned(self):
         blob, pins = policy_pack()
@@ -1070,7 +1089,7 @@ class Calendar(Case):
         corpus = Corpus()
         source, transport, _ = acquired(corpus=corpus)
         self.assertEqual([url for url, _ in transport.opens], [step.url for step in tca.STEPS])
-        self.assertEqual(source.ledger.attempted, tuple(range(44)))
+        self.assertEqual(source.ledger.attempted, tuple(range(37)))
         self.assertEqual(source.ledger.unrun, ())
         self.assertEqual(source.state, "pending")
 
@@ -1089,7 +1108,7 @@ class Acquisition(Case):
         return error
 
     def test_http_framing_and_body_boundaries_fail_the_whole_batch(self):
-        for index in (0, 9, 43):
+        for index in (0, 9, 36):
             cases = [
                 ("http_status", dict(status=500)), ("http_status", dict(status=401)), ("http_status", dict(status=402)),
                 ("http_status", dict(status=403)), ("http_status", dict(status=302)), ("http_status", dict(status=200.0)),
@@ -1167,13 +1186,13 @@ class Acquisition(Case):
         self.assertEqual(source.ledger.attempted, (0,))  # an open failure is still SPENT
 
     def test_get_failures_stop_after_the_failing_get_and_spend_only_what_was_attempted(self):
-        for index in (1, 8, 22, 43):
+        for index in (1, 8, 22, 36):
             source, transport, _ = build(transport=Transport(Corpus().bodies, fail_at=index))
             with self.subTest(index=index):
                 error = self.assertFailure("transport_or_parse_failure", source.acquire)
                 self.assertEqual(len(transport.opens), index + 1)
                 self.assertEqual(source.ledger.attempted, tuple(range(index + 1)))
-                self.assertEqual(source.ledger.unrun, tuple(range(index + 1, 44)))
+                self.assertEqual(source.ledger.unrun, tuple(range(index + 1, 37)))
                 self.assertEqual(error.diagnostics["attempts"], index + 1)
 
     def test_cooperative_request_batch_and_lease_deadlines(self):
@@ -1223,14 +1242,14 @@ class Acquisition(Case):
         self.assertFailure("quota_spent", second.acquire)
         self.assertEqual(transport.opens, [])
         fresh = tca.AttemptLedger(NAMESPACE)
-        self.assertEqual((fresh.attempted, fresh.unrun), ((), tuple(range(44))))
+        self.assertEqual((fresh.attempted, fresh.unrun), ((), tuple(range(37))))
         self.assertFailure("quota_order", fresh.charge, 0)
         fresh.begin()
         self.assertFailure("quota_spent", fresh.begin)
         self.assertFailure("quota_order", fresh.charge, 1)
-        for index in range(44):
+        for index in range(37):
             fresh.charge(index)
-        self.assertFailure("quota_order", fresh.charge, 44)
+        self.assertFailure("quota_order", fresh.charge, 37)
         self.assertFailure("quota_order", fresh.charge, "0")
         self.assertEqual(fresh.unrun, ())
         self.assertTrue(issubclass(tca.AttemptLedger, base.AttemptLedger))
@@ -1262,7 +1281,7 @@ class Acquisition(Case):
         source.release()
         self.assertEqual(source.state, "released")
         self.assertFailure("consumer_unavailable", source._usable)
-        self.assertEqual((source._data_bytes, source._captures, source.ledger.attempted), (b"", [], tuple(range(44))))
+        self.assertEqual((source._data_bytes, source._captures, source.ledger.attempted), (b"", [], tuple(range(37))))
         self.assertFailure("snapshot_already_attempted", source.acquire)
 
     def test_failed_acquisition_exposes_no_derived_state_and_cannot_be_saved(self):
@@ -1366,7 +1385,7 @@ class Derivation(Case):
         self.assertEqual(view["data_bytes"], canonical(corpus.expected_data()))
         self.assertEqual(dict(view["metrics"]), {"calendar_rows": 71, "price_rows": 497, "event_rows": 7})
         self.assertEqual(view["dates"], DATES)
-        self.assertEqual(len(view["captures"]), 44)
+        self.assertEqual(len(view["captures"]), 37)
         self.assertEqual([c.receipt.url for c in view["captures"]], [step.url for step in tca.STEPS])
         self.assertTrue(all(c.receipt.namespace == NAMESPACE for c in view["captures"]))
         self.assertEqual(view["captures"][0].receipt.source_version, CALENDAR_VERSION)
@@ -1450,7 +1469,7 @@ class Derivation(Case):
         anchor["close"] += 1
         self.assertEqual(corpus.rows["6510"].pop(-4)["date"], IDENTITY)
         corpus.docs[step_index("price", "8069")]["data"] = []
-        info = corpus.docs[43]["data"]
+        info = corpus.docs[step_index("info")]["data"]
         info[:] = [row for row in info if row["stock_id"] != "5274"]
         next(row for row in info if row["stock_id"] == "3293")["type"] = "twse"
         info.append({"stock_id": "5347", "type": "twse", "date": "2026-09-30"})                    # same newest date, other type
@@ -1470,19 +1489,19 @@ class Derivation(Case):
 
     def test_stock_info_structure_and_null_type(self):
         corpus = Corpus()
-        corpus.docs[43]["data"].append({"stock_id": "", "type": "twse", "date": "2026-09-30"})
+        corpus.docs[step_index("info")]["data"].append({"stock_id": "", "type": "twse", "date": "2026-09-30"})
         source, transport, _ = build(corpus=corpus)
         self.assertFailure("info_string", source.acquire)
-        self.assertEqual(len(transport.opens), 44)
+        self.assertEqual(len(transport.opens), 37)
         corpus = Corpus()
-        corpus.docs[43]["data"].append({"stock_id": "2317", "type": 5, "date": "2026-09-30"})
+        corpus.docs[step_index("info")]["data"].append({"stock_id": "2317", "type": 5, "date": "2026-09-30"})
         self.assertFailure("info_string", build(corpus=corpus)[0].acquire)
         corpus = Corpus()
-        corpus.docs[43]["data"].append({"stock_id": "2317", "date": "2026-09-30"})
+        corpus.docs[step_index("info")]["data"].append({"stock_id": "2317", "date": "2026-09-30"})
         self.assertFailure("info_row_fields", build(corpus=corpus)[0].acquire)
         corpus = Corpus()
-        next(r for r in corpus.docs[43]["data"] if r["stock_id"] == "8069")["type"] = None
-        corpus.docs[43]["data"].append({"stock_id": "9999", "type": None, "date": "garbage"})  # unrelated stock: unparsable date tolerated
+        next(r for r in corpus.docs[step_index("info")]["data"] if r["stock_id"] == "8069")["type"] = None
+        corpus.docs[step_index("info")]["data"].append({"stock_id": "9999", "type": None, "date": "garbage"})  # unrelated stock: unparsable date tolerated
         data = run(corpus)["symbols"]
         self.assertEqual(data["8069"]["refusal_reasons"], ["market_type_not_accepted"])
         self.assertEqual(data["8069"]["info"]["type"], None)
@@ -1578,24 +1597,20 @@ class Derivation(Case):
         _, entry = self.dividend_symbol(edit_f3=lambda rows, c: rows.append(dict(rows[0])))  # identical duplicate result rows
         self.assertEqual(only_event(entry)["supported"], True)
 
-    def test_capital_reduction_split_and_par_value_events_use_the_exact_reference_ratio(self):
+    def test_capital_reduction_and_split_events_use_the_exact_reference_ratio(self):
         corpus = Corpus()
         rows_of(corpus, "capital_reduction", "3293").append(
             {"date": DATES[5], "stock_id": "3293", "ClosingPriceonTheLastTradingDay": 10, "PostReductionReferencePrice": 25,
              "ReasonforCapitalReduction": "彌補虧損", "LimitUp": 27.5})
         rows_of(corpus, "split", "5274").append({"date": DATES[10], "stock_id": "5274", "type": "分割", "before_price": 100, "after_price": 50})
-        rows_of(corpus, "par_value", "5347").append(
-            {"date": DATES[15], "stock_id": "5347", "stock_name": "N", "before_close": 30, "after_ref_close": 10.5})
         rows_of(corpus, "split", "6488").append({"date": DATES[11], "stock_id": "6488", "before_price": 100, "after_price": 0})
-        rows_of(corpus, "par_value", "6510").append({"date": DATES[12], "stock_id": "6510", "before_close": None, "after_ref_close": 3})
         rows_of(corpus, "capital_reduction", "8069").append(
             {"date": DATES[13], "stock_id": "8069", "ClosingPriceonTheLastTradingDay": 8, "PostReductionReferencePrice": 8})
-        for symbol, day, reference in (("3293", DATES[5], 25), ("5274", DATES[10], 50), ("5347", DATES[15], 10.5),
-                                       ("8069", DATES[13], 8)):
+        for symbol, day, reference in (("3293", DATES[5], 25), ("5274", DATES[10], 50), ("8069", DATES[13], 8)):
             set_implied(corpus, symbol, day, reference)
         source, _, _ = acquired(corpus=corpus)
         data = data_of(source)["symbols"]
-        self.assertEqual(source.inspection()["metrics"]["event_rows"], 7 + 6)
+        self.assertEqual(source.inspection()["metrics"]["event_rows"], 7 + 4)
         by_kind = lambda symbol, kind: next(e for e in data[symbol]["events"] if e["kind"] == kind)  # noqa: E731
         event = by_kind("3293", "capital_reduction")
         self.assertEqual((event["date"], event["dataset"], event["before"], event["reference"], event["factor"], event["formula"], event["supported"]),
@@ -1604,13 +1619,10 @@ class Derivation(Case):
                                           "spread_reference": "25/1", "spread_diff": "0/1", "spread_tick": "1/20"})
         self.assertEqual((event["announced_date"], event["announced_time"]), (None, None))
         self.assertEqual(by_kind("5274", "split")["factor"], "1/2")
-        self.assertEqual((by_kind("5347", "par_value_change")["factor"], by_kind("5347", "par_value_change")["dataset"]), ("7/20", "par_value"))
         self.assertEqual(by_kind("8069", "capital_reduction")["factor"], "1/1")
-        for symbol, kind in (("6488", "split"), ("6510", "par_value_change")):
-            event = by_kind(symbol, kind)
-            self.assertEqual((event["reasons"], event["factor"], event["supported"]), (["event_price_invalid"], None, False))
+        event = by_kind("6488", "split")
+        self.assertEqual((event["reasons"], event["factor"], event["supported"]), (["event_price_invalid"], None, False))
         self.assertEqual(data["6488"]["adjusted"]["supported_from"], DATES[11])  # the latest unsupported event date; its cash event is supported
-        self.assertEqual(data["6510"]["adjusted"]["supported_from"], DATES[12])
         self.assertEqual(data["3293"]["events"][0]["kind"], "capital_reduction")  # events are ordered by date then kind
 
     def test_unsupported_event_dates_and_foreign_or_out_of_window_rows(self):
@@ -1618,8 +1630,8 @@ class Derivation(Case):
         day = corpus.event_day["3105"]
         rows_of(corpus, "capital_reduction", "3105").append(
             {"date": day, "stock_id": "3105", "ClosingPriceonTheLastTradingDay": 110, "PostReductionReferencePrice": 101})
-        rows_of(corpus, "par_value", "3293").append({"date": "2026-07-04", "stock_id": "3293", "before_close": 10, "after_ref_close": 5})
-        rows_of(corpus, "split", "3293").append({"date": DATES[30], "stock_id": "3293", "before_price": 10, "after_price": 0})
+        rows_of(corpus, "split", "3293").extend([{"date": "2026-07-04", "stock_id": "3293", "before_price": 10, "after_price": 5},
+                                                 {"date": DATES[30], "stock_id": "3293", "before_price": 10, "after_price": 0}])
         rows_of(corpus, "split", "5274").extend([
             {"date": "2026-06-30", "stock_id": "5274", "before_price": 10, "after_price": 5},
             {"date": "2026-10-13", "stock_id": "5274", "before_price": 10, "after_price": 5},
@@ -1629,7 +1641,7 @@ class Derivation(Case):
         self.assertEqual(kinds, [("capital_reduction", False, ["same_day_multiple_events"]),
                                  ("ex_dividend", False, ["same_day_multiple_events"])])
         self.assertEqual(data["3105"]["adjusted"]["supported_from"], day)
-        event = next(e for e in data["3293"]["events"] if e["kind"] == "par_value_change")
+        event = next(e for e in data["3293"]["events"] if e["date"] == "2026-07-04")
         self.assertEqual((event["reasons"], event["supported"], event["factor"]),
                          (["event_date_not_trading_day", "factor_reference_unverified"], False, "1/2"))
         self.assertEqual([(e["date"], e["supported"]) for e in data["3293"]["events"]],
@@ -1648,9 +1660,9 @@ class Derivation(Case):
         self.assertFailure("split_number", build(corpus=bad)[0].acquire)  # a foreign row is still structure-checked
         full = {"dividend_result": {"before_price": 1, "after_price": 1, "reference_price": 1},
                 "capital_reduction": {"ClosingPriceonTheLastTradingDay": 1, "PostReductionReferencePrice": 1},
-                "par_value": {"before_close": 1, "after_ref_close": 1}, "dividend": {}}
+                "dividend": {}}
         for kind, field in (("dividend_result", "reference_price"), ("capital_reduction", "PostReductionReferencePrice"),
-                            ("par_value", "after_ref_close"), ("dividend", "date")):
+                            ("dividend", "date")):
             bad = Corpus()
             rows_of(bad, kind, "5347").append({"date": DATES[3], "stock_id": "5347", **full[kind], field: "bad"})
             with self.subTest(kind=kind):
@@ -1686,6 +1698,52 @@ class Derivation(Case):
         self.assertEqual(only_event(data["6510"])["reasons"], ["paid_subscription_fields_missing"])
         for symbol in data:
             self.assertEqual(data[symbol]["status"], "usable")  # the adjusted basis never changes the raw status
+
+    def test_a_par_value_change_day_has_no_event_so_adjusted_is_refused_and_raw_is_not(self):
+        """AC revision 1: par-value changes are not fetched; the reference jump is caught by the spread check."""
+        day = DATES[12]
+        corpus = Corpus()
+        set_implied(corpus, "3293", day, 55)  # 3293's reference price halves on `day`; no dataset states any event for it
+        source, _, _ = acquired(corpus=corpus)
+        data = data_of(source)
+        entry = data["symbols"]["3293"]
+        self.assertEqual((entry["spread_check"]["status"], entry["spread_check"]["unexplained_dates"]), ("unexplained_change", [day]))
+        self.assertIn(day, entry["spread_check"]["mismatch_dates"])
+        self.assertEqual(entry["adjusted"], {"supported_from": None, "reasons": ["unexplained_change"]})
+        self.assertEqual((entry["status"], entry["refusal_reasons"], entry["incomparable_days"]), ("usable", [], []))
+        self.assertEqual([event["kind"] for event in entry["events"]], ["ex_dividend"])  # there is no par-value event at all
+        for symbol in SYMBOLS:
+            if symbol != "3293":
+                self.assertEqual(data["symbols"][symbol], corpus.expected_symbol(symbol))
+        self.assertTrue(data["spread_semantics"]["demonstrated"])
+        # the same jump WITH a stated event on that day is explained (and the event's own cross-check applies)
+        explained = Corpus()
+        rows_of(explained, "split", "3293").append({"date": day, "stock_id": "3293", "before_price": 110, "after_price": 55})
+        set_implied(explained, "3293", day, 55)
+        entry = run(explained)["symbols"]["3293"]
+        self.assertEqual((entry["spread_check"]["status"], entry["spread_check"]["unexplained_dates"]), ("consistent", []))
+        self.assertEqual(entry["adjusted"], {"supported_from": DATES[0], "reasons": []})
+        # an event on ANOTHER day explains nothing about `day`
+        other = Corpus()
+        set_implied(other, "3293", day, 55)
+        rows_of(other, "split", "3293").append({"date": DATES[14], "stock_id": "3293", "before_price": 110, "after_price": 55})
+        set_implied(other, "3293", DATES[14], 55)
+        entry = run(other)["symbols"]["3293"]
+        self.assertEqual((entry["spread_check"]["status"], entry["spread_check"]["unexplained_dates"]), ("unexplained_change", [day]))
+        # read side: raw stays readable on the jump day, the adjusted basis is refused with the spread reason
+        root, saved_source = saved_bundle(self, corpus)
+        saved = tca.load_saved(root, pins=saved_source._pins)
+        kw = dict(KW, data_version=saved.data_version)
+        self.assertEqual(saved.read_day(symbol="3293", on_date=day, basis="raw", **kw).factor, None)
+        error = self.assertFailure("adjusted_unsupported", saved.read_day, symbol="3293", on_date=day, basis="adjusted", **kw)
+        self.assertEqual(error.diagnostics["reason"], "unexplained_change")
+        self.assertEqual(saved.read_day(symbol="3105", on_date=day, basis="adjusted", **kw).basis, "adjusted")
+        # nothing about par-value changes is requested or kept
+        self.assertFalse(any("ParValue" in step.url or step.kind == "par_value" for step in tca.STEPS))
+        self.assertNotIn("par_value", data["observed_fields"])
+        self.assertTrue(all("par_value" not in symbol_entry["foreign_rows"] for symbol_entry in data["symbols"].values()))
+        self.assertEqual(sorted(entry["foreign_rows"]), sorted(EVENT_KINDS))
+        self.assertNotIn("par_value_change", tca.EVENT_KINDS)
 
     def test_unexplained_reference_change_refuses_only_the_adjusted_basis(self):
         corpus = Corpus()
@@ -1800,10 +1858,9 @@ class ReferenceCrossCheck(Case):
             with self.subTest(value=value):
                 self.assertEqual((event["reasons"], event["supported"], event["factor"]), (["event_price_invalid"], False, None))
 
-    def test_reduction_split_and_par_value_factors_need_a_matching_spread_reference(self):
+    def test_reduction_and_split_factors_need_a_matching_spread_reference(self):
         kinds = (("capital_reduction", "3293", {"ClosingPriceonTheLastTradingDay": 10, "PostReductionReferencePrice": 25}, 25, "capital_reduction"),
-                 ("split", "5274", {"before_price": 100, "after_price": 50}, 50, "split"),
-                 ("par_value", "5347", {"before_close": 30, "after_ref_close": 10.5}, 10.5, "par_value_change"))
+                 ("split", "5274", {"before_price": 100, "after_price": 50}, 50, "split"))
         for kind, symbol, values, after, event_kind in kinds:
             def run_case(implied=None, remove_row=False, zero_row=False, spread_none=False):
                 corpus = Corpus()
@@ -1820,8 +1877,8 @@ class ReferenceCrossCheck(Case):
                 entry = run(corpus)["symbols"][symbol]
                 return entry, next(e for e in entry["events"] if e["kind"] == event_kind)
             target = Fraction(str(after))
-            offsets = {"25": ("25", "25.04", "24.96", "25.05", "24.95", "75"), "50": ("50", "50.08", "49.92", "50.1", "49.9", "150"),
-                       "10.5": ("10.5", "10.54", "10.46", "10.55", "10.45", "31.5")}[str(after)]
+            offsets = {"25": ("25", "25.04", "24.96", "25.05", "24.95", "75"),
+                       "50": ("50", "50.08", "49.92", "50.1", "49.9", "150")}[str(after)]
             cases = [(float(Fraction(text)), abs(Fraction(text) - target) < tick_of(Fraction(text))) for text in offsets]
             self.assertEqual({supported for _, supported in cases}, {True, False})
             for implied, supported in cases:
@@ -1921,8 +1978,8 @@ class Saving(Case):
                 self.assertNotIn(str(number).encode(), blob)
         for body in corpus.bodies[:3]:
             self.assertNotIn(body[:60], blob)
-        self.assertEqual(len(transport.opens), 44)  # saving never fetched anything
-        self.assertEqual(source.ledger.attempted, tuple(range(44)))
+        self.assertEqual(len(transport.opens), 37)  # saving never fetched anything
+        self.assertEqual(source.ledger.attempted, tuple(range(37)))
         if os.name != "nt":
             self.assertEqual(stat_mode(os.path.join(final, "data.json")) & 0o077, 0)
 
@@ -2133,7 +2190,7 @@ class Reader(Case):
 
     def test_refused_symbols_incomparable_days_and_unsupported_adjusted_basis_are_refused_not_estimated(self):
         corpus = Corpus()
-        info = corpus.docs[43]["data"]
+        info = corpus.docs[step_index("info")]["data"]
         next(row for row in info if row["stock_id"] == "3293")["type"] = "twse"
         del corpus.rows["3105"][5]
         corpus.rows["3105"][5]["spread"] = corpus.rows["3105"][5]["close"] - corpus.rows["3105"][4]["close"]
@@ -2237,6 +2294,9 @@ class Reader(Case):
             ("saved_event", sym(lambda e: e.update(events="x"))),
             ("saved_event", ev(lambda x: x.update(extra=1))), ("saved_event", ev(lambda x: x.update(kind="unknown"))),
             ("saved_event", ev(lambda x: x.update(dataset="price"))), ("saved_event", ev(lambda x: x.update(date="2026-06-30"))),
+            ("saved_event", ev(lambda x: x.update(kind="par_value_change", dataset="par_value"))),
+            ("saved_symbol", sym(lambda e: e["foreign_rows"].update(par_value=0))),
+            ("saved_shape", lambda d: d["observed_fields"].update(par_value=["a"])),
             ("saved_event", ev(lambda x: x.update(announced_date="2026-7-20"))),
             ("saved_event", ev(lambda x: x.update(announced_time=""))), ("saved_event", ev(lambda x: x.update(factor="2/4"))),
             ("saved_event", ev(lambda x: x.update(factor="0/1"))), ("saved_event", ev(lambda x: x.update(before="-1/2"))),
@@ -2573,7 +2633,7 @@ class HelperLocks(Case):
                     "https://api.finmindtrade.com.evil.invalid/api/v4/data?x=1", "ftp://api.finmindtrade.com/x"):
             with self.subTest(url=url):
                 self.assertFailure("transport_url", transport.open, url, 5)
-        replay = ReplayTransport([finmind_wire(Corpus().bodies[43])])
+        replay = ReplayTransport([finmind_wire(Corpus().bodies[36])])
         response = replay.open(step_url("info"), 5)
         try:
             self.assertEqual((replay.requests[0][1], replay.requests[0][2]), ("GET", "/api/v4/data?dataset=TaiwanStockInfo"))

@@ -2,10 +2,12 @@
 indirect suspension evidence and corporate actions, plus its private derived bundle.
 
 This is the third consumer of the issue 32 acquisition contract (after issue 7). It fetches
-44 FinMind documents in a fixed order (``STEPS``): one ``TaiwanStockTradingDate``, then per symbol
+37 FinMind documents in a fixed order (``STEPS``): one ``TaiwanStockTradingDate``, then per symbol
 ``TaiwanStockPrice``, ``TaiwanStockDividendResult``, ``TaiwanStockDividend``,
-``TaiwanStockCapitalReductionReferencePrice``, ``TaiwanStockSplitPrice`` and
-``TaiwanStockParValueChange``, then one ``TaiwanStockInfo``. The issue 32 helpers are imported from
+``TaiwanStockCapitalReductionReferencePrice`` and ``TaiwanStockSplitPrice``, then one ``TaiwanStockInfo``.
+Par-value changes are deliberately not requested (issue 98 AC revision 1): a day on which one moves the reference
+price has no event to explain it, so the spread check reports an unexplained change and that symbol's adjusted
+basis is refused (raw is unaffected). The issue 32 helpers are imported from
 ``ohlcv_history_source`` (never copied back into or edited in that file; ``IMPORTED_HELPERS``
 lists every reference). Only a structural failure stops the batch; a dataset that returns no rows,
 a day without a usable price, an event whose terms are missing and a failed consistency check are
@@ -18,7 +20,7 @@ data) makes ``save`` possible. Disk access exists only in ``save`` (below the fi
 never use the real one) and in the read-only ``load_saved`` (never fetches, never falls back).
 
 The default HTTPS path is bound to the externally published canonical policy v1
-(``POLICY_SHA256`` / ``POLICY_BYTES``, issue 98 comment 6139122796; were the pins unset it would fail
+(``POLICY_SHA256`` / ``POLICY_BYTES``, issue 98 comment 6170250977; were the pins unset it would fail
 closed with ``real_pins_unset`` before any seal check) and still needs a FinancialStart plus a
 matching ExecutionBinding from a fresh explicit issue 98 seal newer than ``SEAL_COMMENT_FLOOR``, the
 one-shot in-process ledger, body/aggregate/roots caps, cooperative deadlines and the lease.
@@ -54,8 +56,8 @@ FinancialStart = _base.FinancialStart
 ExecutionBinding = _base.ExecutionBinding
 _fail = _base._fail
 
-NAMESPACE = "issue98-tpex-seven-calendar-actions-v1/qa1"
-POLICY_VERSION = "issue98-tpex-seven-calendar-actions-v1"
+NAMESPACE = "issue98-tpex-seven-calendar-actions-v2/qa1"
+POLICY_VERSION = "issue98-tpex-seven-calendar-actions-v2"
 PROFILE = "free_public_local"
 PURPOSE = "local_personal_noncommercial_private_derived_calendar_actions"
 CONSUMER_VERSION = "tpex-calendar-actions-read-v1"
@@ -73,15 +75,16 @@ WINDOW_START = "2026-07-01"
 WINDOW_END = "2026-10-12"
 DIVIDEND_END = "2026-12-31"
 ENDPOINT = "https://api.finmindtrade.com/api/v4/data"
-MAX_GETS = 44
+MAX_GETS = 37
 
-# Externally published pin of the canonical policy v1 (10,257 bytes, sorted keys, compact, no trailing LF):
-# issue 98 comment 6139122796. The policy text itself is not bundled here.
-POLICY_SHA256 = "fcdc77c4dd0c752da9a75bc3f5fe334d9ab61edfe8c903849af6466db55d2724"
-POLICY_BYTES = 10257
-# A seal must be a fresh explicit issue 98 comment newer than the policy publication comment above. It is
-# a floor, not an authorization.
-SEAL_COMMENT_FLOOR = 6139122796
+# Externally published pin of the canonical policy v2 (10,136 bytes, sorted keys, compact, no trailing LF):
+# issue 98 comment 6170250977. Policy v1 (comment 6139122796) is superseded by AC revision 1 and is no longer
+# accepted. The policy text itself is not bundled here.
+POLICY_SHA256 = "ef10c3c71b4c643365bafc164d7324a88399b9ec27773c0438ef061b95feb794"
+POLICY_BYTES = 10136
+# A seal must be a fresh explicit issue 98 comment newer than the policy v2 publication comment above. It is a
+# floor, not an authorization.
+SEAL_COMMENT_FLOOR = 6170250977
 SEAL_VERSION = "issue98-financial-start-v1"
 SEAL_URL_PATTERN = r"https://github.com/YiCheng0608/stock-lab/issues/98#issuecomment-([0-9]+)"
 
@@ -118,13 +121,15 @@ LIMITATIONS = (
     "stock_dividend_par_value_10_twd_is_an_inference",
     "reference_price_rounding_unspecified_cross_check_tolerance_is_strictly_less_than_one_tick",
     "stock_info_type_value_form_unverified_until_a_real_response",
+    "par_value_change_not_fetched_detected_only_as_an_unexplained_spread_change",
     "publication_time_first_availability_revision_time_unknown",
     "raw_body_and_raw_prices_not_stored_derived_values_only",
     "personal_noncommercial_local_use_no_redistribution",
 )
 UNSUPPORTED = (
     "historical_pit", "publication_time", "first_availability", "revision_guarantee",
-    "positive_suspension_fact", "paid_subscription", "provider_adjusted_prices", "other_symbols",
+    "positive_suspension_fact", "paid_subscription", "par_value_change_factor", "provider_adjusted_prices",
+    "other_symbols",
     "other_markets", "other_dates", "raw_body_storage", "redistribution", "actionable_strategy",
     "plan", "trading", "historical_simulation",
 )
@@ -191,10 +196,6 @@ _SOURCES = (
      (("date", "stock_id", "before_price", "after_price"),
       {"date": "D", "stock_id": "S", "type": "A", "before_price": "N", "after_price": "N",
        "max_price": "N", "min_price": "N", "open_price": "N"})),
-    ("par_value", "TaiwanStockParValueChange", True, True, WINDOW_END,
-     (("date", "stock_id", "before_close", "after_ref_close"),
-      {"date": "D", "stock_id": "S", "stock_name": "A", "before_close": "N", "after_ref_close": "N",
-       "after_ref_max": "N", "after_ref_min": "N", "after_ref_open": "N"})),
     ("info", "TaiwanStockInfo", False, False, None,
      (("stock_id", "type", "date"),
       {"stock_id": "S", "type": "T", "date": "d", "industry_category": "A", "stock_name": "A"})),
@@ -203,9 +204,9 @@ _FIELDS = {kind: spec for kind, _, _, _, _, spec in _SOURCES}
 SOURCE_IDS = {
     "calendar": "finmind_trading_dates", "price": "finmind_price", "dividend_result": "finmind_dividend_result",
     "dividend": "finmind_dividend", "capital_reduction": "finmind_capital_reduction",
-    "split": "finmind_split_price", "par_value": "finmind_par_value_change", "info": "finmind_stock_info",
+    "split": "finmind_split_price", "info": "finmind_stock_info",
 }
-EVENT_SOURCE_KINDS = ("dividend_result", "dividend", "capital_reduction", "split", "par_value")
+EVENT_SOURCE_KINDS = ("dividend_result", "dividend", "capital_reduction", "split")
 
 
 def _url(dataset, symbol, start, end):
@@ -268,7 +269,7 @@ _POLICY_SHAPE = {
         "info_accepted_types": (str, len(INFO_ACCEPTED_TYPES)),
         "spread_reference": str, "spread_semantics_demonstration": str, "zero_price_rows": str,
         "identity_anchor": str, "dividend_factor": str, "reference_ratio_factor": str,
-        "paid_subscription": str, "same_day_events": str,
+        "paid_subscription": str, "same_day_events": str, "par_value_change": str,
         "reference_tick_ladder": (str, len(TICK_LADDER_TEXT)), "reference_tick_source": str,
         "reference_cross_check": str,
     },
@@ -295,7 +296,7 @@ _TEXT_LEAVES = (
     ("checks", "spread_reference"), ("checks", "spread_semantics_demonstration"), ("checks", "zero_price_rows"),
     ("checks", "identity_anchor"), ("checks", "dividend_factor"), ("checks", "reference_ratio_factor"),
     ("checks", "paid_subscription"), ("checks", "same_day_events"), ("checks", "reference_tick_source"),
-    ("checks", "reference_cross_check"),
+    ("checks", "reference_cross_check"), ("checks", "par_value_change"),
 ) + tuple(("response_shape", key) for key in _POLICY_SHAPE["response_shape"])
 
 
@@ -337,7 +338,7 @@ def _expected_policy(policy):
         **{key: texts[("checks", key)] for key in (
             "spread_reference", "spread_semantics_demonstration", "zero_price_rows", "identity_anchor",
             "dividend_factor", "reference_ratio_factor", "paid_subscription", "same_day_events",
-            "reference_tick_source", "reference_cross_check")},
+            "reference_tick_source", "reference_cross_check", "par_value_change")},
     }
     expected["storage"] = {
         "kind": "private_local_derived_calendar_actions", "schema": STORAGE_SCHEMA, "root": PRIVATE_ROOT,
@@ -349,7 +350,7 @@ def _expected_policy(policy):
     expected["acquisition"] = {
         "namespace": NAMESPACE,
         "order": "calendar, then per dataset the seven symbols ascending (price, dividend_result, dividend, "
-                 "capital_reduction, split, par_value), then stock info",
+                 "capital_reduction, split), then stock info",
         "max_gets": MAX_GETS, "per_source_max_gets": 1, "body_cap_bytes": BODY_CAP, "total_raw_cap_bytes": RAW_CAP,
         "retained_roots_estimate_cap_bytes": ROOTS_CAP, "request_seconds": REQUEST_SECONDS,
         "batch_seconds": BATCH_SECONDS, "deadline": "cooperative", "accept_encoding": "identity",
@@ -615,8 +616,7 @@ def _info_rows(document):
 
 # --- derivation ----------------------------------------------------------------------------------
 
-EVENT_KINDS = ("announced_without_result", "capital_reduction", "ex_dividend", "paid_subscription",
-               "par_value_change", "split")
+EVENT_KINDS = ("announced_without_result", "capital_reduction", "ex_dividend", "paid_subscription", "split")
 _CAPITAL_FIELDS = ("TotalNumberOfCashCapitalIncrease", "CashIncreaseSubscriptionRate",
                    "CashIncreaseSubscriptionpRrice")
 _AMOUNT_FIELDS = ("StockEarningsDistribution", "StockStatutorySurplus", "CashEarningsDistribution",
@@ -625,7 +625,6 @@ _EX_DATE_FIELDS = ("StockExDividendTradingDate", "CashExDividendTradingDate")
 _RATIO_EVENTS = (
     ("capital_reduction", "capital_reduction", "ClosingPriceonTheLastTradingDay", "PostReductionReferencePrice"),
     ("split", "split", "before_price", "after_price"),
-    ("par_value", "par_value_change", "before_close", "after_ref_close"),
 )
 _FORMULA_DIVIDEND = "(P-C)/P*1/(1+Rf)"
 _FORMULA_RATIO = "after_reference/before_close"
@@ -838,7 +837,7 @@ def _ratio_events(rows, event_kind, dataset, before_field, after_field, implied)
 
 
 def _dividend_only_events(dividend_rows, covered):
-    """In-window ex-dates that no result / reduction / split / par-value row explains."""
+    """In-window ex-dates that no result / reduction / split row explains."""
     days = sorted({day for term in dividend_rows for day in (term.get(name) for name in _EX_DATE_FIELDS)
                    if day is not None and _in_window(day)})
     events = []
@@ -1008,7 +1007,7 @@ class SavedBundle:
 
 
 class AttemptLedger(_base.AttemptLedger):
-    """One whole batch per ledger; no reset/release/retry API (issue 32 semantics, 44 GETs, issue 98 namespace)."""
+    """One whole batch per ledger; no reset/release/retry API (issue 32 semantics, 37 GETs, issue 98 namespace)."""
 
     def __init__(self, namespace):
         if namespace != NAMESPACE:
