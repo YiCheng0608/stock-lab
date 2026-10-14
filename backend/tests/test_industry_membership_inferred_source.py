@@ -2,10 +2,10 @@
 
 Run: python -B -X utf8 backend/tests/test_industry_membership_inferred_source.py
 Standard library only; no pytest/conftest, provider GET, DB or test artifacts. The audit
-hook installed below forbids sockets, DNS, subprocesses and file writes. The policy v1
+hook installed below forbids sockets, DNS, subprocesses and file writes. The policy v2
 literal below is the published canonical text (global role publication, built by an
-independent stdlib script, not by product helpers); the tests run against the product's
-shipped pins and never override them.
+independent stdlib script from the published v1 bytes, not by product helpers); the tests
+run against the product's shipped pins and never override them.
 Every corpus below is synthetic: it exercises inference/guard boundaries and proves no
 real source, classification truth, FinMind category naming or QA acceptance criterion.
 """
@@ -17,6 +17,7 @@ import http.client
 import importlib.util
 import io
 import json
+import random
 import re
 import sys
 import types
@@ -44,9 +45,9 @@ if not sys.dont_write_bytecode:
     raise RuntimeError("Use -B: the boundary runner does not permit bytecode artifacts")
 sys.addaudithook(_audit_boundary)
 
-# Published policy v1 (canonical: sorted keys, compact, UTF-8, no trailing LF); 10,370 bytes.
-EXTERNAL_POLICY = '{"acquisition":{"accept":"application/json","accept_encoding":"identity","artifact_bytes":0,"batch_seconds":180,"body_cap_bytes":[4194304,4194304,4194304,2097152],"deadline":"cooperative","hosts":["api.finmindtrade.com","openapi.twse.com.tw","www.tpex.org.tw"],"max_gets":4,"namespace":"issue37-industry-membership-inferred-cutoffs-1005-1006-v1/qa1","order":"FinMind TaiwanStockInfo, TWSE t187ap03_L, TPEx mopsfin_t187ap03_O, FinMind TaiwanStockDelisting","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":50331648,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":12582912,"user_agent":"stock-lab-issue37-local-ram/1"},"acquisition_date":{"earliest":"2026-10-06","latest":"2026-10-31","rule":"D is the Asia/Taipei calendar date when the first GET starts; all four captures must finish on D; each official feed must carry one report date shared by all rows and both must lie in [2026-10-06, D]; otherwise the whole batch is rejected"},"consumer_version":"industry-membership-inferred-cutoffs-lookup-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","groups":{"code_basis":"Semiconductor=TWSE 24 and TPEx 24; Optoelectronics=TWSE 26 and TPEx 26; Cultural Innovation=TPEx 32; exchange+exact two-digit code mapped by the INDUSTRY_CLASSIFICATION section 3 mapper (no trim, padding or case folding); FinMind Chinese names compared by exact section 2 market names; the UI support pool 3105, 3293, 5274, 5347, 6488, 6510 and 8069 must each sit in a required group in the official snapshot, otherwise the whole batch is rejected before the last GET after all seven are scanned, and the rejection receipt lists every uncovered stock with symbol_index, observed exchange (TWSE, TPEx or absent), raw official industry code (1 to 4 ASCII letters or digits, otherwise the marker <null> or <unrepresentable>) and mapper result (canonical group or unknown)","namespace":"official_industry","required":["Semiconductor","Optoelectronics","Cultural Innovation"],"theme_namespace":"empty set; consumers reject unverified theme groups"},"inference":{"board_transfer":"official listing date after C on one exchange and a retained FinMind row of the other exchange for the same stock_id: TWSE with an older tpex row joins the C set as TPEx identity only when that row\'s date is on or after C and its name maps to the same group; a non-unique, conflicting or reverse-direction transfer rejects the group, and an old name that is not a section 2 name rejects all three groups of that C","d_set_agreement":"per group the official (exchange, symbol) set must equal the FinMind newest-date type twse/tpex set after exact section 2 name mapping, excluding FinMind-only rows explained by TaiwanStockDelisting inside [C, D]; any difference rejects the group","delisting":"TaiwanStockDelisting rows with date in [C, D] and a four-digit stock_id: a stock still in an official feed stays a member unless date equals C; a FinMind-only stock takes its group from its newest twse/tpex row (flag finmind_only_delisted_member); undeterminable industry rejects all three groups for that C; date equal to C rejects the group","identity":"ordinary stock identified by (exchange, four-digit symbol), unique per feed, and never on both exchanges at one cutoff; excludes ETF, TDR 91, managed 80, disabled 18/34, emerging and non-ordinary; innovation board and KY included","new_listing":"official listing date after C is not a member of the C set, equal to C is; a missing, null or invalid listing date rejects the group of that stock; accepted formats are exclusive by character count and separator (8 digits Gregorian yyyyMMdd, 7 digits ROC yyyMMdd, 6 digits ROC yyMMdd, and Y/M/D with a 4-digit Gregorian year and slash only), each must be a real calendar date, and any other shape is unknown without trimming, padding or guessing","outputs":"each lookup carries inferred_from_post_cutoff_snapshot, effective_from=unknown, effective_to=unknown, pit=false, residual risk codes, D, both official report dates and the four source digests"},"instrument_type":"ordinary_stock","limitations":["non-PIT; classification effective and expiry times are unknown","FinMind is the service provider, not an official direct source","snapshot obtained after the cutoffs, so membership is an inference (inferred_from_post_cutoff_snapshot)","TWSE guideline clause 2 and clause 3 item 4 allow off-cycle adjustments; changes between C and D cannot be excluded (off_cycle_reclassification_not_excluded)","TaiwanStockDelisting date semantics (last trading day versus effective date) are undefined"],"market":"TW/TWSE+TPEx","profile":"free_public_local","publication_time":"unknown","residual_risks":["non_pit","classification_effective_dates_unknown","finmind_service_provider_not_official","inferred_from_post_cutoff_snapshot","off_cycle_reclassification_not_excluded","delisting_date_semantics_unknown"],"response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","content_type_official":"TWSE/TPEx sources: recorded verbatim in the receipt, not gated; the body is strictly parsed as a UTF-8 JSON array with per-field schema instead","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","encoding_official":"TWSE/TPEx sources: strict UTF-8; at most one leading UTF-8 BOM is removed and recorded as bom_present; a second BOM or any parse failure is the first failure","extra_fields":"unlisted extra columns are ignored; identity columns (date, stock_id, official code and report date) must be strings, while industry, type and official listing-date columns may be null or absent and then count as unknown or missing; the acquisition receipt counts official rows per exchange for each listing-date format (gregorian8, roc7, roc6, ymd_slash, unknown including null or missing), and the counts of one exchange sum to its row count","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure"},"revision_time":"unknown","rights":{"finmind":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","finmind_attribution":"FinMind: TaiwanStockInfo, TaiwanStockDelisting; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the Chinese industry-name to code mapping is an explicit inference.","official":"Open Government Data License v1 (https://data.gov.tw/license); local RAM use only; originals are not redistributed","tpex_attribution":"財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃公司基本資料（dataset25036；www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O；issue37-industry-membership-inferred-cutoffs-1005-1006-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。","twse_attribution":"臺灣證券交易所（Taiwan Stock Exchange, TWSE）[2026] 上市公司基本資料（dataset18419；openapi.twse.com.tw/v1/opendata/t187ap03_L；issue37-industry-membership-inferred-cutoffs-1005-1006-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。"},"schema":"issue37-industry-membership-source-policy/v1","source_use":"local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot","sources":[{"dataset":"TaiwanStockInfo","fields":"date,industry_category,stock_id,stock_name,type","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_info","method":"GET","provider":"FinMind","role":"D-day identity, market and Chinese industry name; the newest-date row per stock_id decides","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},{"dataset":"t187ap03_L","fields":"出表日期,公司代號,產業別,上市日期","format":"JSON array of objects","id":"twse_t187ap03_l","method":"GET","provider":"TWSE","role":"official exchange+two-digit industry code and listing date for TWSE listed companies","url":"https://openapi.twse.com.tw/v1/opendata/t187ap03_L"},{"dataset":"mopsfin_t187ap03_O","fields":"Date,SecuritiesCompanyCode,SecuritiesIndustryCode,DateOfListing","format":"JSON array of objects","id":"tpex_mopsfin_t187ap03_o","method":"GET","provider":"TPEx","role":"official exchange+two-digit industry code and listing date for TPEx listed companies","url":"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"},{"dataset":"TaiwanStockDelisting","fields":"date,stock_id,stock_name","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_delisting","method":"GET","provider":"FinMind","role":"delisted stocks filtered to [C, D] in RAM; no date parameters are sent","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDelisting"}],"storage":"process_RAM","supported_use":["local_personal_noncommercial","process_ram_snapshot","industry_membership_inferred_cutoff_lookup"],"unsupported":["historical_pit","publication_time","first_availability","revision_history","classification_effective_date","off_cycle_reclassification_exclusion","other_cutoffs","theme_membership","hot_group_v1_score","group_return","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","db_write","redistribution","mirror","deployment"],"version":"issue37-industry-membership-inferred-cutoffs-1005-1006-v1"}'.encode("utf-8")
-EXTERNAL_PIN = "8f6de996077b836a8a6d3129401d70bdf3a044b1cc126c709c5f5aa566fe2f06"
+# Published policy v2 (canonical: sorted keys, compact, UTF-8, no trailing LF); 14,045 bytes.
+EXTERNAL_POLICY = '{"acquisition":{"accept":"application/json","accept_encoding":"identity","artifact_bytes":0,"batch_seconds":180,"body_cap_bytes":[4194304,4194304,4194304,2097152],"deadline":"cooperative","hosts":["api.finmindtrade.com","openapi.twse.com.tw","www.tpex.org.tw"],"max_gets":4,"namespace":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2","order":"FinMind TaiwanStockInfo, TWSE t187ap03_L, TPEx mopsfin_t187ap03_O, FinMind TaiwanStockDelisting","per_source_max_gets":1,"redirects":0,"request_seconds":20,"retained_roots_estimate_cap_bytes":50331648,"retries":0,"stop_on_first_failure":true,"total_raw_cap_bytes":12582912,"user_agent":"stock-lab-issue37-local-ram/1"},"acquisition_date":{"earliest":"2026-10-06","latest":"2026-10-31","rule":"D is the Asia/Taipei calendar date when the first GET starts; all four captures must finish on D; each official feed must carry exactly one usable report date (seven digits of a real ROC date) shared by every row that has a usable one, and it must lie in [2026-10-06, D]; a feed without one, with several, or with one outside that range rejects the whole batch; a row without a usable report date is unknown and never a member"},"consumer_version":"industry-membership-inferred-cutoffs-lookup-v1","cutoffs":["2026-10-05","2026-10-06"],"first_availability":"unknown","groups":{"code_basis":"Semiconductor=TWSE 24 and TPEx 24; Optoelectronics=TWSE 26 and TPEx 26; Cultural Innovation=TPEx 32; exchange+exact two-digit code mapped by the INDUSTRY_CLASSIFICATION section 3 mapper (no trim, padding or case folding); FinMind Chinese names compared by exact section 2 market names; the UI support pool 3105, 3293, 5274, 5347, 6488, 6510 and 8069 must each sit in a required group in the official snapshot (a row whose report date is unusable still counts), otherwise the whole batch is rejected before the last GET after all seven are scanned, and the rejection receipt lists every uncovered stock with symbol_index, observed exchange (TWSE, TPEx or absent), raw official industry code (1 to 4 ASCII letters or digits, otherwise the marker <null> or <unrepresentable>) and mapper result (canonical group or unknown)","namespace":"official_industry","required":["Semiconductor","Optoelectronics","Cultural Innovation"],"theme_namespace":"empty set; consumers reject unverified theme groups"},"inference":{"board_transfer":"official listing date after C on one exchange and a retained FinMind row of the other exchange for the same stock_id: TWSE with an older tpex row joins the C set as TPEx identity only when that row\'s date is on or after C and its name maps to the same group; a non-unique, conflicting or reverse-direction transfer rejects the group, and an old name that is not a section 2 name rejects all three groups of that C; an older tpex row whose date is unknown rejects the group","d_set_agreement":"per group the official (exchange, symbol) set must equal the FinMind newest-date type twse/tpex set after exact section 2 name mapping, excluding FinMind-only rows explained by TaiwanStockDelisting inside [C, D]; any difference rejects the group; a stock whose FinMind rows all carry the same type and industry has a decided value whatever their dates; a stock with differing values and any unknown date has no decided newest row: it is left out of the FinMind set and, at both cutoffs, rejects every required group of its official rows or reached by any of its rows (an unusable type tries both exchanges), while a stock that reaches no required group is ignored; a decided newest row with an unusable type rejects the required groups its industry name reaches under either exchange; an official row with a repeated code or an unusable report date is never a member","delisting":"TaiwanStockDelisting rows with date in [C, D] and a four-digit stock_id: a stock still in an official feed stays a member unless date equals C; a FinMind-only stock takes its group from its newest twse/tpex row (flag finmind_only_delisted_member); undeterminable industry rejects all three groups for that C; date equal to C rejects the group; a row whose date is unknown may equal C and may lie after it, so at both cutoffs an official stock rejects its required group, a FinMind-only stock with a decided group rejects that group when it is required, an undeterminable or tied industry rejects all three groups, and a FinMind-only stock whose newest row is undecided because of unknown dates rejects the required groups its rows reach or all three groups when any of its industry names is not a section 2 name; a date after D is a known date outside every window","identity":"ordinary stock identified by (exchange, four-digit symbol), unique per feed, and never on both exchanges at one cutoff; excludes ETF, TDR 91, managed 80, disabled 18/34, emerging and non-ordinary; a usable code or stock_id that is not exactly four ASCII digits is non-ordinary and is excluded from every set and decision without a reason; an official code outside [0-9A-Z]{4,6}, a null marker or a non-string, and a stock_id that is a non-string, empty, blank, a null marker or over 32 characters, are unusable: the row cannot be attributed to a stock and rejects only the required groups its industry can reach (and, for a FinMind row, its type, trying both exchanges when the type is unusable), all three groups when an official row\'s industry is also unusable or unrecognized, and for a delisting row all three groups of every cutoff whose window may contain its date; a four-digit official code repeated within one feed rejects the required groups of all its rows; innovation board and KY included","new_listing":"official listing date after C is not a member of the C set, equal to C is; a missing, null or invalid listing date rejects the group of that stock; accepted formats are exclusive by character count and separator (8 digits Gregorian yyyyMMdd, 7 digits ROC yyyMMdd, 6 digits ROC yyMMdd, and Y/M/D with a 4-digit Gregorian year and slash only), each must be a real calendar date, and any other shape is unknown without trimming, padding or guessing","outputs":"each lookup carries inferred_from_post_cutoff_snapshot, effective_from=unknown, effective_to=unknown, pit=false, residual risk codes, D, both official report dates and the four source digests"},"instrument_type":"ordinary_stock","limitations":["non-PIT; classification effective and expiry times are unknown","FinMind is the service provider, not an official direct source","snapshot obtained after the cutoffs, so membership is an inference (inferred_from_post_cutoff_snapshot)","TWSE guideline clause 2 and clause 3 item 4 allow off-cycle adjustments; changes between C and D cannot be excluded (off_cycle_reclassification_not_excluded)","TaiwanStockDelisting date semantics (last trading day versus effective date) are undefined"],"market":"TW/TWSE+TPEx","profile":"free_public_local","publication_time":"unknown","residual_risks":["non_pit","classification_effective_dates_unknown","finmind_service_provider_not_official","inferred_from_post_cutoff_snapshot","off_cycle_reclassification_not_excluded","delisting_date_semantics_unknown"],"response_shape":{"content_encoding":"identity or absent; gzip/br rejects (accepted risk)","content_type":"application/json with or without charset=utf-8; anything else rejects","content_type_official":"TWSE/TPEx sources: recorded verbatim in the receipt, not gated; the body is strictly parsed as a UTF-8 JSON array with per-field schema instead","duplicate_identity_headers":"content-length, content-encoding, transfer-encoding, content-type duplicates reject; other duplicate headers accepted and ignored","encoding":"strict UTF-8 without BOM","encoding_official":"TWSE/TPEx sources: strict UTF-8; at most one leading UTF-8 BOM is removed and recorded as bom_present; a second BOM or any parse failure is the first failure","extra_fields":"unlisted extra columns are ignored; only structural failures reject the whole batch (a row that is not an object, an outer shape or row-count failure, an official feed without exactly one usable report date in range), while every value-level anomaly is unknown: an unusable identity (non-string, null, absent, empty, blank, a null marker none/null/nan/nat/na/n/a/undefined compared case-insensitively without trimming, a stock_id over 32 characters, or an official code outside [0-9A-Z]{4,6}) cannot be attributed to a stock, a FinMind date that is not a real YYYY-MM-DD date not after D, or an official report date that is not seven-digit ROC, has no date, and an unusable type, industry or listing date is unknown; bare NaN and Infinity literals are non-string values; before any validation every row of each source is counted per value form of its identity and date columns (inspection census: integers only, per source rows and rows_not_object and, per field, the counts of one mutually exclusive class vocabulary that sum to the object rows), the census of every source parsed so far is copied into failure diagnostics as enumerated census_<source>_<field>_<class> integer keys, and the acquisition receipt counts official rows per exchange for each listing-date format (gregorian8, roc7, roc6, ymd_slash, unknown including null or missing), and the counts of one exchange sum to its row count; inspection also reports the resolution counts of the ordinary FinMind stocks (single_row, same_value, newest_unique, newest_tied, date_unresolved_related, date_unresolved_unrelated) and, once inference has completed, for every cutoff and group the D-set difference counts official_only, finmind_only_explained and finmind_only_unexplained","framing":"content-length, chunked, or close-delimited (read to EOF within body cap); content-length and chunked together rejects; cap reached without EOF rejects","set_cookie":"accepted, never stored or sent","status":"200 only; 401/402/403 or any paid/login response is first failure"},"revision_time":"unknown","rights":{"finmind":"FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror","finmind_attribution":"FinMind: TaiwanStockInfo, TaiwanStockDelisting; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the Chinese industry-name to code mapping is an explicit inference.","official":"Open Government Data License v1 (https://data.gov.tw/license); local RAM use only; originals are not redistributed","tpex_attribution":"財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃公司基本資料（dataset25036；www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O；issue37-industry-membership-inferred-cutoffs-1005-1006-v2）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。","twse_attribution":"臺灣證券交易所（Taiwan Stock Exchange, TWSE）[2026] 上市公司基本資料（dataset18419；openapi.twse.com.tw/v1/opendata/t187ap03_L；issue37-industry-membership-inferred-cutoffs-1005-1006-v2）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；用途限本地 RAM，不再散布原件；2026-10-05與2026-10-06各群組成員為本地推論衍生結果。"},"schema":"issue37-industry-membership-source-policy/v1","source_use":"local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot","sources":[{"dataset":"TaiwanStockInfo","fields":"date,industry_category,stock_id,stock_name,type","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_info","method":"GET","provider":"FinMind","role":"D-day identity, market and Chinese industry name; the newest-date row per stock_id decides unless all rows of that stock agree; a row whose date is not a real YYYY-MM-DD date not after D has no date","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo"},{"dataset":"t187ap03_L","fields":"出表日期,公司代號,產業別,上市日期","format":"JSON array of objects","id":"twse_t187ap03_l","method":"GET","provider":"TWSE","role":"official exchange+two-digit industry code and listing date for TWSE listed companies","url":"https://openapi.twse.com.tw/v1/opendata/t187ap03_L"},{"dataset":"mopsfin_t187ap03_O","fields":"Date,SecuritiesCompanyCode,SecuritiesIndustryCode,DateOfListing","format":"JSON array of objects","id":"tpex_mopsfin_t187ap03_o","method":"GET","provider":"TPEx","role":"official exchange+two-digit industry code and listing date for TPEx listed companies","url":"https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O"},{"dataset":"TaiwanStockDelisting","fields":"date,stock_id,stock_name","format":"JSON object {msg,status,data}","id":"finmind_taiwan_stock_delisting","method":"GET","provider":"FinMind","role":"delisted stocks filtered to [C, D] in RAM; no date parameters are sent; a row whose date is not a real YYYY-MM-DD date is unknown","url":"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockDelisting"}],"storage":"process_RAM","supported_use":["local_personal_noncommercial","process_ram_snapshot","industry_membership_inferred_cutoff_lookup"],"unsupported":["historical_pit","publication_time","first_availability","revision_history","classification_effective_date","off_cycle_reclassification_exclusion","other_cutoffs","theme_membership","hot_group_v1_score","group_return","actionable_strategy","plan","trading","historical_simulation","raw_disk_storage","db_write","redistribution","mirror","deployment"],"version":"issue37-industry-membership-inferred-cutoffs-1005-1006-v2"}'.encode("utf-8")
+EXTERNAL_PIN = "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6"
 
 SOURCE = ROOT / "backend/app/industry_membership_inferred_source.py"
 spec = importlib.util.spec_from_file_location("issue37_membership_boundary", SOURCE)
@@ -54,7 +55,7 @@ source = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = source
 spec.loader.exec_module(source)
 
-NAMESPACE = "issue37-industry-membership-inferred-cutoffs-1005-1006-v1/qa1"
+NAMESPACE = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2/qa2"
 C1, C2 = "2026-10-05", "2026-10-06"
 SEMI, OPTO, CULT = "Semiconductor", "Optoelectronics", "Cultural Innovation"
 BOM = b"\xef\xbb\xbf"
@@ -126,6 +127,23 @@ def official_body(rows, bom=False):
 
 def bodies(w):
     return [finmind_body(w.info), official_body(w.twse), official_body(w.tpex), finmind_body(w.delist)]
+
+
+MISSING = object()  # the key is absent from the row
+# One representative per odd date form: the census class name and a raw JSON value that falls into it (all unknown for FinMind dates).
+UNKNOWN_DATES = (("missing", MISSING), ("json_null", None), ("non_string", 20261011), ("empty", ""), ("blank", "   "), ("null_text", "None"),
+                 ("iso_future", "2026-10-13"), ("iso_invalid_calendar", "2026-02-30"), ("iso_with_time", "2026-10-11T00:00:00Z"),
+                 ("digits8", "20261011"), ("slash_date", "2026/10/11"), ("other_string", "yesterday"))
+
+
+def dated(row, raw):
+    """A copy of a FinMind row whose date is the given raw value (MISSING removes the key)."""
+    row = dict(row)
+    if raw is MISSING:
+        row.pop("date", None)
+    else:
+        row["date"] = raw
+    return row
 
 
 # --- fake transport / clocks ----------------------------------------------------------
@@ -368,12 +386,45 @@ class Base(unittest.TestCase):
         for key in keys:
             self.assertFalse(self.outcomes(snapshot)[key].rejected, (key, self.outcomes(snapshot)[key].reasons))
 
+    def assertCensusIdentities(self, snapshot):
+        """Every field's classes sum to the object rows; official/FinMind exclusions and listing formats agree with the census."""
+        inspected = snapshot.inspection()
+        census = inspected["census"]
+        for name, record in census.items():
+            self.assertEqual(set(record), {"rows", "rows_not_object", *source.CENSUS_VOCABULARY[name]}, name)
+            for field, classes in source.CENSUS_VOCABULARY[name].items():
+                self.assertEqual(tuple(record[field]), classes, (name, field))
+                self.assertEqual(sum(record[field].values()), record["rows"] - record["rows_not_object"], (name, field))
+        if len(census) == 4:  # a finished parse of every source
+            self.assertEqual(tuple(census[name]["rows"] for name in source.CENSUS_SOURCES), inspected["row_counts"])
+            excluded = inspected["excluded_non_ordinary"]
+            info_ids = census["info"]["stock_id"]
+            self.assertEqual(sum(excluded["finmind"].values()),
+                             sum(info_ids[key] for key in ("digits_other_length", "alnum_mixed", "other_ascii", "non_ascii")))
+            for exchange in ("TWSE", "TPEx"):
+                self.assertEqual(excluded["official"][exchange], census[exchange.lower()]["code"]["grammar_non_ordinary"])
+                formats = inspected["listing_date_formats"][exchange]
+                listing = census[exchange.lower()]["listing_date"]
+                self.assertEqual(formats["unknown"], sum(listing[key] for key in (
+                    "invalid_calendar", "missing", "json_null", "non_string", "empty", "blank", "null_text", "other_string")))
+                for label in ("gregorian8", "roc7", "roc6", "ymd_slash"):
+                    self.assertEqual(formats[label], listing[label])
+
+    def admitAsInferred(self, snapshot):
+        """Oracle stand-in for tests that only need an available snapshot: assert exactly the inferred outcomes."""
+        outcomes = snapshot.inspection()["outcomes"]
+        expected = {key: tuple(tuple(member) for member in outcome.members) for key, outcome in outcomes.items()}
+        snapshot.admit_independent_verification(admission(snapshot, expected=entries(
+            expected, {key for key, outcome in outcomes.items() if outcome.rejected})))
+
 
 class PolicyTests(Base):
     def test_shipped_pins_equal_the_published_policy_and_nothing_overrides_them(self):
         # The runner never assigns the product constants; these are the values the module ships with.
-        self.assertEqual(source.POLICY_SHA256, "8f6de996077b836a8a6d3129401d70bdf3a044b1cc126c709c5f5aa566fe2f06")
-        self.assertEqual(source.POLICY_BYTES, 10370)
+        self.assertEqual(source.POLICY_SHA256, "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6")
+        self.assertEqual(source.POLICY_BYTES, 14045)
+        self.assertEqual(source.POLICY_VERSION, "issue37-industry-membership-inferred-cutoffs-1005-1006-v2")
+        self.assertEqual(source.NAMESPACE, source.POLICY_VERSION + "/qa2")
         self.assertEqual(source.POLICY_SHA256, EXTERNAL_PIN)
         self.assertEqual(source.POLICY_BYTES, len(EXTERNAL_POLICY))
         self.assertEqual(hashlib.sha256(EXTERNAL_POLICY).hexdigest(), source.POLICY_SHA256)
@@ -395,7 +446,7 @@ class PolicyTests(Base):
 
     def test_published_policy_validates_with_shipped_pins_and_is_frozen(self):
         policy = source.validate_policy(EXTERNAL_POLICY, EXTERNAL_PIN)
-        self.assertEqual(policy["version"], "issue37-industry-membership-inferred-cutoffs-1005-1006-v1")
+        self.assertEqual(policy["version"], "issue37-industry-membership-inferred-cutoffs-1005-1006-v2")
         self.assertEqual(policy["acquisition"]["namespace"], NAMESPACE)
         self.assertFalse(EXTERNAL_POLICY.endswith(b"\n"))
         with self.assertRaises(TypeError):
@@ -476,7 +527,7 @@ class PolicyTests(Base):
 
     def test_bound_policy_fields_reject_when_repinned(self):
         cases = (("version", ("version",), "v2"), ("schema", ("schema",), "other/v1"),
-                 ("namespace", ("acquisition", "namespace"), NAMESPACE.replace("qa1", "qa2")),
+                 ("namespace", ("acquisition", "namespace"), NAMESPACE.replace("qa2", "qa1")),
                  ("source_use", ("source_use",), "other"), ("consumer", ("consumer_version",), "other"),
                  ("storage", ("storage",), "disk"), ("profile", ("profile",), "paid"),
                  ("max_gets", ("acquisition", "max_gets"), 5), ("redirects", ("acquisition", "redirects"), 1),
@@ -602,6 +653,20 @@ class FinancialStartTests(Base):
                 self.assertFailure("financial_new_explicit_seal_required", source._financial_start, bad, bad_binding)
         accepted, accepted_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{source.SEAL_COMMENT_FLOOR + 1}")
         source._financial_start(accepted, accepted_binding)
+        # The floor is the policy v2 publication comment: the spent qa1 seal, the publication itself and everything older are
+        # refused; the first later comment is accepted. Literal ids, independent of the product constant.
+        self.assertEqual(source.SEAL_COMMENT_FLOOR, 6171178641)
+        for label, comment in (("spent qa1 seal", 6149274670), ("qa1 schedule", 6149286656), ("v2 publication", 6171178641),
+                               ("v1 publication", 6134816304), ("earlier approval", 6128163640), ("just below", 6171178640)):
+            with self.subTest(label):
+                bad, bad_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{comment}")
+                self.assertFailure("financial_new_explicit_seal_required", source._financial_start, bad, bad_binding)
+        for comment in (6171178642, 6180000000):
+            with self.subTest(accepted=comment):
+                good, good_binding = declaration(url=f"https://github.com/YiCheng0608/stock-lab/issues/37#issuecomment-{comment}")
+                source._financial_start(good, good_binding)
+        # The declaration version names the FinancialStart schema, which this round does not change.
+        self.assertEqual(source.FINANCIAL_START_VERSION, "issue37-financial-start-v1")
         for label, kwargs, code in (
                 ("not top level", dict(parent_thread_id="x"), "financial_qa_not_top_level"),
                 ("low effort", dict(reasoning_effort="medium"), "financial_qa_identity"),
@@ -612,7 +677,7 @@ class FinancialStartTests(Base):
                 broken = replace(binding, **kwargs)
                 self.assertFailure(code, source._financial_start, replace(start, binding=broken), broken)
         for label, kwargs, code in (
-                ("namespace", dict(namespace=NAMESPACE.replace("qa1", "qa2")), "financial_start_scope"),
+                ("namespace", dict(namespace=NAMESPACE.replace("qa2", "qa1")), "financial_start_scope"),
                 ("pin", dict(policy_sha256="0" * 64), "financial_start_scope"),
                 ("version", dict(version="issue32-financial-start-v1"), "financial_start_scope"),
                 ("authorized", dict(authorized=False), "financial_start_not_authorized"),
@@ -637,7 +702,7 @@ class FinancialStartTests(Base):
         self.assertFailure("unsupported_purpose", source.MembershipSource, policy_canonical=EXTERNAL_POLICY,
                            policy_sha256=EXTERNAL_PIN, purpose="historical_pit", transport=Transport(),
                            ledger=source.AttemptLedger(NAMESPACE))
-        self.assertFailure("quota_namespace", source.AttemptLedger, NAMESPACE.replace("qa1", "qa2"))
+        self.assertFailure("quota_namespace", source.AttemptLedger, NAMESPACE.replace("qa2", "qa1"))
         self.assertFailure("lease_seconds", source.MembershipSource, policy_canonical=EXTERNAL_POLICY, policy_sha256=EXTERNAL_PIN,
                            transport=Transport(), ledger=source.AttemptLedger(NAMESPACE), lease_seconds=181)
 
@@ -663,37 +728,109 @@ class ParseTests(Base):
                 self.assertIsNone(source._listing_date(raw), raw)
         self.assertEqual(source.LISTING_FORMATS, ("gregorian8", "roc7", "roc6", "ymd_slash", "unknown"))
 
-    def test_official_rows_schema_duplicates_report_date_and_range(self):
+    def test_value_form_classifiers_return_the_first_matching_class_and_only_real_dates(self):
+        day = "2026-10-12"
+        for raw, expected in ((source._MISSING, ("missing", None)), (None, ("json_null", None)), (20261011, ("non_string", None)), (True, ("non_string", None)),
+                              ("", ("empty", None)), ("  \t", ("blank", None)), ("NaT", ("null_text", None)), ("n/A", ("null_text", None)),
+                              ("2026-10-11", ("iso_valid", "2026-10-11")), ("2026-10-12", ("iso_valid", "2026-10-12")),
+                              ("2026-10-13", ("iso_future", "2026-10-13")), ("2026-02-30", ("iso_invalid_calendar", None)),
+                              ("0000-00-00", ("iso_invalid_calendar", None)), ("2026-10-11T00:00:00Z", ("iso_with_time", None)),
+                              ("2026-10-11 00:00", ("iso_with_time", None)), ("2026-10-11T00:00:00.123+08:00", ("iso_with_time", None)),
+                              ("20261011", ("digits8", None)), ("2026/10/11", ("slash_date", None)), ("yesterday", ("other_string", None)),
+                              (" 2026-10-11", ("other_string", None)), ("2026-10-11T", ("other_string", None)), ("2026-10-11\n", ("other_string", None))):
+            with self.subTest(date=raw):
+                self.assertEqual(source._iso_date_class(raw, day), expected)
+        self.assertEqual(source._iso_date_class("2099-01-01"), ("iso_valid", "2099-01-01"))  # without D nothing is in the future
+        for raw, expected in ((source._MISSING, ("missing", None)), (None, ("json_null", None)), (1151012, ("non_string", None)), ("", ("empty", None)),
+                              (" ", ("blank", None)), ("None", ("null_text", None)), ("1151012", ("roc7_valid", "2026-10-12")),
+                              ("1151032", ("roc7_invalid_calendar", None)), ("0000000", ("roc7_invalid_calendar", None)),
+                              ("20261012", ("digits8", None)), ("2026-10-12", ("iso_shape", None)), ("2026-13-45", ("iso_shape", None)),
+                              ("115101", ("other_string", None)), ("1151012 ", ("other_string", None))):
+            with self.subTest(report=raw):
+                self.assertEqual(source._report_date_class(raw), expected)
+        for raw, expected in ((source._MISSING, "missing"), (None, "json_null"), (7, "non_string"), ("", "empty"), (" ", "blank"), ("Null", "null_text"),
+                              ("9" * 33, "oversize"), ("2330", "ordinary"), ("0050", "ordinary"), ("00878", "digits_other_length"), ("1", "digits_other_length"),
+                              ("2330A", "alnum_mixed"), ("TAIEX", "alnum_mixed"), (" 2330", "other_ascii"), ("23-30", "other_ascii"), ("２３３０", "non_ascii"),
+                              ("9" * 32, "digits_other_length")):
+            with self.subTest(stock_id=raw):
+                self.assertEqual(source._finmind_id_class(raw), expected)
+        for raw, expected in ((source._MISSING, "missing"), (None, "json_null"), (7, "non_string"), ("", "empty"), (" ", "blank"), ("NONE", "null_text"),
+                              ("2330", "ordinary"), ("2330A", "grammar_non_ordinary"), ("00631L", "grammar_non_ordinary"), ("ABCDEF", "grammar_non_ordinary"),
+                              ("233", "bad_grammar"), ("1234567", "bad_grammar"), ("23a0", "bad_grammar"), (" 2330", "bad_grammar"), ("２３３０", "bad_grammar")):
+            with self.subTest(code=raw):
+                self.assertEqual(source._official_code_class(raw), expected)
+        for raw, expected in ((source._MISSING, "missing"), (None, "json_null"), (1, "non_string"), ("", "empty"), (" ", "blank"), ("nan", "null_text"),
+                              ("twse", "twse"), ("tpex", "tpex"), ("TWSE", "other_string"), ("emerging", "other_string")):
+            with self.subTest(type=raw):
+                self.assertEqual(source._type_class(raw), expected)
+        for raw, expected in ((source._MISSING, "missing"), (None, "json_null"), ([], "non_string"), ("", "empty"), (" ", "blank"), ("na", "null_text"),
+                              ("半導體業", "required_name"), ("光電業", "required_name"), ("文化創意業", "required_name"), ("水泥工業", "other_name"),
+                              ("金融業", "other_name"), ("ETF", "unknown_name"), ("半導體業 ", "unknown_name")):
+            with self.subTest(industry_name=raw):
+                self.assertEqual(source._industry_name_class(raw), expected)
+        for exchange, raw, expected in (("TWSE", source._MISSING, "missing"), ("TWSE", None, "json_null"), ("TWSE", 24, "non_string"), ("TWSE", "", "empty"),
+                                        ("TWSE", " ", "blank"), ("TWSE", "none", "null_text"), ("TWSE", "24", "required_group"), ("TWSE", "26", "required_group"),
+                                        ("TPEx", "32", "required_group"), ("TWSE", "32", "unmapped_two_digit"), ("TWSE", "01", "other_group"),
+                                        ("TWSE", "91", "unmapped_two_digit"), ("TPEx", "80", "unmapped_two_digit"), ("TWSE", "024", "other_string"),
+                                        ("TWSE", "24 ", "other_string"), ("TWSE", "zz", "other_string")):
+            with self.subTest(exchange=exchange, industry_code=raw):
+                self.assertEqual(source._official_industry_class(exchange, raw), expected)
+        for raw, expected in (("19940905", "gregorian8"), ("1100304", "roc7"), ("990101", "roc6"), ("2010/05/04", "ymd_slash"), (source._MISSING, "missing"),
+                              (None, "json_null"), (20010723, "non_string"), ("", "empty"), (" ", "blank"), ("null", "null_text"), ("20230229", "invalid_calendar"),
+                              ("1120229", "invalid_calendar"), ("2024/2/30", "invalid_calendar"), ("x", "other_string"), ("2010-05-04", "other_string")):
+            with self.subTest(listing=raw):
+                self.assertEqual(source._listing_class(raw), expected)
+
+    def test_official_structure_failures_and_value_level_unknowns(self):
         ok = source._parse_official([twse("2330", "24", "19940905"), twse("1101", "01", "19620209", 公司簡稱="x")], "TWSE", "2026-10-12")
         rows, report = ok
         self.assertEqual(report, "2026-10-12")
-        self.assertEqual([(r.exchange, r.symbol, r.group, r.listing) for r in rows],
-                         [("TWSE", "2330", SEMI, "1994-09-05"), ("TWSE", "1101", "Cement", "1962-02-09")])
+        self.assertEqual([(r.exchange, r.symbol, r.group, r.listing, r.report_ok) for r in rows],
+                         [("TWSE", "2330", SEMI, "1994-09-05", True), ("TWSE", "1101", "Cement", "1962-02-09", True)])
         for label, document, code in (
-                ("not list", {"a": 1}, "official_rows"), ("empty", [], "official_rows"), ("row not dict", [1], "official_row_schema"),
-                ("missing code", [{"出表日期": "1151012", "產業別": "24", "上市日期": "19940905"}], "official_row_schema"),
-                ("missing report", [{"公司代號": "2330", "產業別": "24", "上市日期": "19940905"}], "official_row_schema"),
-                ("industry number", [twse("2330", 24, "19940905")], "row_schema_type"),
-                ("number code", [{**twse("2330", "24", "19940905"), "公司代號": 2330}], "official_row_schema"),
-                ("bad symbol", [twse("23", "24", "19940905")], "official_symbol"),
-                ("lowercase symbol", [twse("23a0", "24", "19940905")], "official_symbol"),
-                ("duplicate", [twse("2330", "24", "19940905"), twse("2330", "26", "19940905")], "official_duplicate_symbol"),
+                ("not list", {"a": 1}, "official_rows"), ("empty", [], "official_rows"), ("row not dict", [1], "row_not_object"),
+                ("one row not dict", [twse("2330", "24", "19940905"), "x"], "row_not_object"),
                 ("not uniform", [twse("2330", "24", "19940905"), twse("2454", "24", "20010723", report="1151011")], "official_report_date_not_uniform"),
+                ("missing report", [{"公司代號": "2330", "產業別": "24", "上市日期": "19940905"}], "official_report_date"),
                 ("report gregorian", [twse("2330", "24", "19940905", report="20261012")], "official_report_date"),
                 ("report invalid", [twse("2330", "24", "19940905", report="1151032")], "official_report_date"),
+                ("report null", [{**twse("2330", "24", "19940905"), "出表日期": None}], "official_report_date"),
                 ("report before", [twse("2330", "24", "19940905", report="1151005")], "official_report_date_out_of_range"),
                 ("report after D", [twse("2330", "24", "19940905", report="1151013")], "official_report_date_out_of_range")):
             with self.subTest(label):
                 self.assertFailure(code, source._parse_official, document, "TWSE", "2026-10-12")
+        # Official TWSE keys parsed as TPEx: no row carries a usable report date.
+        self.assertFailure("official_report_date", source._parse_official, [twse("2330", "24", "19940905")], "TPEx", "2026-10-12")
         rows, report = source._parse_official([tpex("3105", "24", "x")], "TPEx", "2026-10-12")
         self.assertIsNone(rows[0].listing)  # invalid listing date is not a parse failure: it rejects the group later
-        # Null/absent industry or listing columns are unknown/missing, never a whole-batch failure; a wrong-typed listing is invalid.
+        # Null/absent/wrong-typed industry or listing columns are unknown/missing, never a whole-batch failure.
         rows, _ = source._parse_official([{**twse("2330", None, None)}, {k: v for k, v in twse("2454", "24", "x").items() if k != "上市日期"},
-                                          {**twse("3008", "", 20010723)}, {k: v for k, v in twse("2409", "26", "x").items() if k != "產業別"}],
+                                          {**twse("3008", "", 20010723)}, {k: v for k, v in twse("2409", "26", "x").items() if k != "產業別"},
+                                          twse("1101", 1, "20000101")], "TWSE", "2026-10-12")
+        self.assertEqual([(r.symbol, r.industry, r.group, r.listing, r.industry_class) for r in rows],
+                         [("2330", "", None, None, "json_null"), ("2454", "24", SEMI, None, "required_group"),
+                          ("3008", "", None, None, "empty"), ("2409", "", None, None, "missing"), ("1101", "", None, "2000-01-01", "non_string")])
+        # An unusable code (never a batch failure) leaves the row without a symbol; the group, industry and report flag survive.
+        for label, raw in (("number", 2330), ("null", None), ("empty", ""), ("blank", "  "), ("null marker", "NONE"), ("3 chars", "233"),
+                           ("lowercase", "23a0"), ("7 chars", "2330000"), ("full-width", "２３３０"), ("padded", " 2330"),
+                           ("hyphen", "23-30"), ("dot", "2330."), ("list", ["2330"])):
+            with self.subTest(code=label):
+                rows, _ = source._parse_official([twse("2330", "24", "19940905"), {**twse("1101", "01", "19620209"), "公司代號": raw}], "TWSE", "2026-10-12")
+                self.assertEqual([(r.symbol, r.group, r.report_ok) for r in rows], [("2330", SEMI, True), (None, "Cement", True)])
+        rows, _ = source._parse_official([twse("2330", "24", "19940905"), {k: v for k, v in twse("1101", "01", "19620209").items() if k != "公司代號"}],
                                          "TWSE", "2026-10-12")
-        self.assertEqual([(r.symbol, r.industry, r.group, r.listing) for r in rows],
-                         [("2330", "", None, None), ("2454", "24", SEMI, None), ("3008", "", None, None), ("2409", "", None, None)])
-        self.assertFailure("official_row_schema", source._parse_official, [twse("2330", "24", "19940905")], "TPEx", "2026-10-12")
+        self.assertIsNone(rows[1].symbol)
+        # A grammar-conforming non-ordinary code keeps its symbol (excluded later, not unknown).
+        rows, _ = source._parse_official([twse(code, "24", "19940905") for code in ("2330A", "00631L", "23301", "ABCD", "ABCDEF")], "TWSE", "2026-10-12")
+        self.assertEqual([r.symbol for r in rows], ["2330A", "00631L", "23301", "ABCD", "ABCDEF"])
+        # A duplicated code is kept twice (the inference rejects the groups its rows reach, not the batch).
+        rows, _ = source._parse_official([twse("2330", "24", "19940905"), twse("2330", "26", "19940905")], "TWSE", "2026-10-12")
+        self.assertEqual([(r.symbol, r.group) for r in rows], [("2330", SEMI), ("2330", "Optoelectronics")])
+        # A row without a usable report date is kept and flagged; the feed date is the one value shared by the usable rows.
+        rows, report = source._parse_official([twse("2330", "24", "19940905"), twse("2454", "24", "20010723", report="1151032"),
+                                               twse("3008", "26", "20020101", report="x"), {**twse("2409", "26", "19961105"), "出表日期": 1151012}],
+                                              "TWSE", "2026-10-12")
+        self.assertEqual((report, [r.report_ok for r in rows]), ("2026-10-12", [True, False, False, False]))
 
     def test_finmind_documents_status_rows_and_extra_columns(self):
         rows = source._parse_info({"status": 200, "msg": "success", "data": [
@@ -701,7 +838,7 @@ class ParseTests(Base):
         self.assertEqual(rows, (source.InfoRow("2026-10-11", "2330", "twse", "半導體業"),))
         nulls = source._parse_info({"status": 200, "msg": "success", "data": [
             {"date": "2026-10-11", "stock_id": "2330", "type": None, "industry_category": None}]}, "2026-10-12")
-        self.assertEqual(nulls, (source.InfoRow("2026-10-11", "2330", "", ""),))  # unknown: never a member of any group
+        self.assertEqual(nulls, (source.InfoRow("2026-10-11", "2330", "", "", False),))  # unknown: never a member of any group
         good = {"status": 200, "msg": "success", "data": [info("2330", "twse", "半導體業")]}
         for label, document, code in (
                 ("not dict", [], "finmind_document"), ("extra key", {**good, "x": 1}, "finmind_document"),
@@ -710,27 +847,43 @@ class ParseTests(Base):
                 ("status bool", {**good, "status": True}, "finmind_document_status"),
                 ("status str", {**good, "status": "200"}, "finmind_document_status"),
                 ("msg", {**good, "msg": "ok"}, "finmind_document_status"),
-                ("empty data", {**good, "data": []}, "finmind_rows"), ("data not list", {**good, "data": {}}, "finmind_rows")):
+                ("empty data", {**good, "data": []}, "finmind_rows"), ("data not list", {**good, "data": {}}, "finmind_rows"),
+                ("row not object", {**good, "data": [info("2330", "twse", "x"), "2330"]}, "row_not_object"),
+                ("null row", {**good, "data": [None]}, "row_not_object")):
             with self.subTest(label):
                 self.assertFailure(code, source._parse_info, document, "2026-10-12")
-        for label, row, code in (
-                ("number id", {**info("2330", "twse", "x"), "stock_id": 2330}, "info_row_schema"),
-                ("type number", {**info("2330", "twse", "x"), "type": 1}, "row_schema_type"),
-                ("industry list", {**info("2330", "twse", "x"), "industry_category": []}, "row_schema_type"),
-                ("missing date", {k: v for k, v in info("2330", "twse", "x").items() if k != "date"}, "info_row_schema"),
-                ("bad date", info("2330", "twse", "x", day="2026/10/11"), "info_date"),
-                ("future date", info("2330", "twse", "x", day="2026-10-13"), "info_date_after_acquisition"),
-                ("empty id", info("", "twse", "x"), "info_stock_id"), ("long id", info("1" * 33, "twse", "x"), "info_stock_id")):
+        # Every value-level anomaly is unknown (None date/identity, unusable type or industry), never a batch failure.
+        for label, row, expected in (
+                ("number id", {**info("2330", "twse", "x"), "stock_id": 2330}, source.InfoRow("2026-10-11", None, "twse", "x")),
+                ("type number", {**info("2330", "twse", "x"), "type": 1}, source.InfoRow("2026-10-11", "2330", "", "x", False)),
+                ("industry list", {**info("2330", "twse", "x"), "industry_category": []}, source.InfoRow("2026-10-11", "2330", "twse", "")),
+                ("missing date", {k: v for k, v in info("2330", "twse", "x").items() if k != "date"}, source.InfoRow(None, "2330", "twse", "x")),
+                ("bad date", info("2330", "twse", "x", day="2026/10/11"), source.InfoRow(None, "2330", "twse", "x")),
+                ("future date", info("2330", "twse", "x", day="2026-10-13"), source.InfoRow(None, "2330", "twse", "x")),
+                ("date with time", info("2330", "twse", "x", day="2026-10-11T00:00:00"), source.InfoRow(None, "2330", "twse", "x")),
+                ("empty id", info("", "twse", "x"), source.InfoRow("2026-10-11", None, "twse", "x")),
+                ("long id", info("1" * 33, "twse", "x"), source.InfoRow("2026-10-11", None, "twse", "x")),
+                ("other type", info("2330", "emerging", "x"), source.InfoRow("2026-10-11", "2330", "emerging", "x")),
+                ("padded id is not ordinary", info(" 2330", "twse", "x"), source.InfoRow("2026-10-11", " 2330", "twse", "x")),
+                ("etf id", info("00878", "twse", "x"), source.InfoRow("2026-10-11", "00878", "twse", "x")),
+                ("null marker id", info("None", "twse", "x"), source.InfoRow("2026-10-11", None, "twse", "x"))):
             with self.subTest(label):
-                self.assertFailure(code, source._parse_info, {**good, "data": [row]}, "2026-10-12")
+                self.assertEqual(source._parse_info({**good, "data": [row]}, "2026-10-12"), (expected,))
         self.assertEqual(source._parse_delisting({**good, "data": [delist("1234", "2024-03-01")]}), (source.DelistRow("2024-03-01", "1234"),))
-        for label, row, code in (("bad date", delist("1234", "20240301"), "delisting_date"),
-                                 ("number", {**delist("1234", "2024-03-01"), "stock_id": 1234}, "delisting_row_schema"),
-                                 ("id missing", {"date": "2024-03-01", "stock_name": "x"}, "delisting_row_schema"),
-                                 ("empty id", delist("", "2024-03-01"), "delisting_stock_id")):
+        for label, row, expected in (("bad date", delist("1234", "20240301"), source.DelistRow(None, "1234")),
+                                     ("date null", {**delist("1234", "2024-03-01"), "date": None}, source.DelistRow(None, "1234")),
+                                     ("number id", {**delist("1234", "2024-03-01"), "stock_id": 1234}, source.DelistRow("2024-03-01", None)),
+                                     ("id missing", {"date": "2024-03-01", "stock_name": "x"}, source.DelistRow("2024-03-01", None)),
+                                     ("empty id", delist("", "2024-03-01"), source.DelistRow("2024-03-01", None)),
+                                     ("blank id", delist("   ", "2024-03-01"), source.DelistRow("2024-03-01", None)),
+                                     ("long id", delist("1" * 33, "2024-03-01"), source.DelistRow("2024-03-01", None)),
+                                     ("etf id", delist("006208", "2026-10-08"), source.DelistRow("2026-10-08", "006208"))):
             with self.subTest(label):
-                self.assertFailure(code, source._parse_delisting, {**good, "data": [row]})
+                self.assertEqual(source._parse_delisting({**good, "data": [row]}), (expected,))
+        self.assertFailure("row_not_object", source._parse_delisting, {**good, "data": [delist("1234", "2024-03-01"), []]})
+        # A delisting date after D is a known date (it lies outside every window); only malformed dates are unknown.
         self.assertEqual(source._parse_delisting({**good, "data": [delist("1234", "2099-01-01")]})[0].date, "2099-01-01")
+        self.assertEqual(source._parse_delisting({**good, "data": [delist("1234", "2099-01-01")]}, "2026-10-12")[0].date, "2099-01-01")
         self.assertEqual(len(source._parse_delisting({**good, "data": [{"date": "2024-03-01", "stock_id": "1234"}]})), 1)  # stock_name is unused
 
     @staticmethod
@@ -1081,11 +1234,21 @@ class PipelineTests(Base):
         w.info.append(info("1101", "twse", "食品工業"))  # ambiguity outside the required groups does not matter
         snapshot, _, _ = pending(w)
         self.assertSets(snapshot)
+        # The official group of a tied stock is rejected for the tie itself, not only through the missing FinMind member.
+        w = world()
+        w.info[0] = info("2330", "twse", "食品工業")  # 2330 is official Semiconductor; its two newest FinMind rows name non-required groups
+        w.info.append(info("2330", "twse", "水泥工業"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "finmind_multiple_valid_records", "cross_source_mismatch")
+            self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
 
     def test_identity_rules(self):
         w = world()
-        w.twse.append(twse("2330", "24", "19940905"))
-        self.assertFailure("official_duplicate_symbol", pending, w)
+        w.twse.append(twse("2330", "24", "19940905"))  # repeated within one feed: the groups its rows reach are rejected, not the batch
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_duplicate_symbol")
         w = world()
         w.tpex.append(tpex("2330", "24", "19940905"))  # the same symbol on both exchanges
         snapshot, _, _ = pending(w)
@@ -1182,32 +1345,698 @@ class PipelineTests(Base):
         self.assertFailure("transport_or_parse_failure", snapshot.acquire)
         self.assertEqual(self.excluded(snapshot), {"official": {"TWSE": 0, "TPEx": 0}, "finmind": {"TWSE": 0, "TPEx": 0, "other": 0}})
 
-    def test_identity_grammar_still_rejects_the_whole_batch(self):
-        # Official code: a string of 4 to 6 uppercase ASCII letters or digits, unique within its feed.
-        for label, code in (("3 chars", "233"), ("trailing space", "2330 "), ("leading space", " 2330"), ("fullwidth", "２３３０"),
-                            ("hyphen", "23-30"), ("lowercase", "23a0"), ("seven chars", "1234567"), ("empty", ""), ("dot", "2330.")):
-            with self.subTest(label):
-                self.assertFailure("official_symbol", source._parse_official, [twse(code, "24", "19940905")], "TWSE", "2026-10-12")
-                self.assertFailure("official_symbol", source._parse_official, [tpex(code, "24", "19940905")], "TPEx", "2026-10-12")
-        self.assertFailure("official_row_schema", source._parse_official, [{**twse("2330", "24", "19940905"), "公司代號": 2330}], "TWSE", "2026-10-12")
-        self.assertFailure("official_duplicate_symbol", source._parse_official,
-                           [twse("2330A", "24", "19940905"), twse("2330A", "24", "19940905")], "TWSE", "2026-10-12")
-        for code in ("2330A", "00631L", "9103X", "23301", "ABCD", "ABCDEF"):
-            rows, _ = source._parse_official([twse(code, "24", "19940905")], "TWSE", "2026-10-12")  # parsed here, excluded later
-            self.assertEqual([row.symbol for row in rows], [code])
-        # Through the whole batch: the third feed is never reached after a malformed official code in the second.
+    def test_unusable_identities_reject_only_the_groups_they_reach_never_the_batch(self):
+        def rows_with(**changes):
+            w = world()
+            for key, value in changes.items():
+                setattr(w, key, value(w))
+            return w
+        # Official side: an unusable code leaves a row nobody can attribute; it rejects the required group its industry reaches.
+        for label, code in (("3 chars", "233"), ("trailing space", "2330 "), ("fullwidth", "２３３０"), ("lowercase", "23a0"),
+                            ("seven chars", "1234567"), ("empty", ""), ("dot", "2330."), ("number", 2330), ("null", None),
+                            ("null marker", "NONE"), ("blank", "   ")):
+            for feed, industry, rejected in (("twse", "24", (SEMI,)), ("twse", "26", (OPTO,)), ("tpex", "24", (SEMI,)),
+                                             ("tpex", "26", (OPTO,)), ("tpex", "32", (CULT,))):
+                with self.subTest(code=label, feed=feed, industry=industry):
+                    make = twse if feed == "twse" else tpex
+                    key = "公司代號" if feed == "twse" else "SecuritiesCompanyCode"
+                    w = world()
+                    getattr(w, feed).append({**make("9999", industry, "20000101"), key: code})
+                    snapshot, transport, _ = pending(w)
+                    self.assertEqual(snapshot.ledger.attempted, (0, 1, 2, 3))
+                    for cutoff in (C1, C2):
+                        for group in (SEMI, OPTO, CULT):
+                            if group in rejected:
+                                self.assertRejected(snapshot, cutoff, group, "official_identity_unusable")
+                            else:
+                                self.assertUsable(snapshot, (cutoff, group))
+                                self.assertEqual(self.outcomes(snapshot)[(cutoff, group)].members, EXPECTED[(cutoff, group)])
+        # Industries that provably sit outside every required group (other group, or a two-digit code the mapper lacks) are ignored.
+        for industry in ("01", "17", "91", "80", "18"):
+            with self.subTest(industry=industry):
+                w = world()
+                w.twse.append({**twse("9999", industry, "20000101"), "公司代號": "233"})
+                snapshot, _, _ = pending(w)
+                self.assertAllSix(snapshot)
+        # An industry that cannot be shown to be outside the required groups could be any of them: all three are rejected.
+        for label, industry in (("null", None), ("empty", ""), ("blank", " "), ("number", 26), ("garbage", "zz"), ("padded", "24 "), ("marker", "null")):
+            with self.subTest(industry=label):
+                w = world()
+                w.twse.append({**twse("9999", industry, "20000101"), "公司代號": None})
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    for group in (SEMI, OPTO, CULT):
+                        self.assertRejected(snapshot, cutoff, group, "official_identity_unusable")
+        # A missing code key is the same as an unusable code.
         w = world()
-        w.twse.append(twse("233", "24", "19940905"))
-        snapshot, transport, _ = build(w)
-        error = self.assertFailure("official_symbol", snapshot.acquire)
-        self.assertEqual((error.diagnostics["source_index"], snapshot.ledger.attempted, len(transport.opens)), (1, (0, 1), 2))
-        # FinMind stock_id: a non-empty string of at most 32 characters; anything longer or empty is a schema failure.
-        good = {"status": 200, "msg": "success", "data": [info("2330", "twse", "半導體業")]}
-        for label, stock_id, code in (("empty", "", "info_stock_id"), ("33 chars", "9" * 33, "info_stock_id")):
-            with self.subTest(label):
-                self.assertFailure(code, source._parse_info, {**good, "data": [info(stock_id, "twse", "半導體業")]}, "2026-10-12")
-        self.assertEqual(len(source._parse_info({**good, "data": [info("X" * 32, "twse", "半導體業")]}, "2026-10-12")), 1)
-        self.assertEqual(source._parse_info({**good, "data": [info("00878", "twse", "半導體業")]}, "2026-10-12")[0].stock_id, "00878")
+        w.tpex.append({k: v for k, v in tpex("9999", "32", "20000101").items() if k != "SecuritiesCompanyCode"})
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, CULT, "official_identity_unusable")
+            self.assertUsable(snapshot, (cutoff, SEMI), (cutoff, OPTO))
+        # Through the whole batch every GET is spent and the census still counts what was seen.
+        self.assertEqual(snapshot.ledger.attempted, (0, 1, 2, 3))
+        self.assertEqual(snapshot.inspection()["census"]["tpex"]["code"]["missing"], 1)
+
+    def test_official_duplicate_codes_reject_the_groups_their_rows_reach(self):
+        def appended(feed, *rows):
+            w = world()
+            getattr(w, feed).extend(rows)
+            return pending(w)[0]
+        snapshot = appended("twse", twse("2330", "24", "19940905"))  # the same stock twice, same group
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_duplicate_symbol")
+            self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+            self.assertNotIn(("TWSE", "2330"), self.outcomes(snapshot)[(cutoff, SEMI)].members)
+            self.assertNotIn("duplicate_identity", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)  # the repeated rows are never members
+        snapshot = appended("twse", twse("2330", "26", "19940905"))  # one of the two rows sits in another required group
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_duplicate_symbol")
+            self.assertRejected(snapshot, cutoff, OPTO, "official_duplicate_symbol")
+            self.assertUsable(snapshot, (cutoff, CULT))
+        snapshot = appended("tpex", tpex("3293", "32", "20150101"))
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, CULT, "official_duplicate_symbol")
+        snapshot = appended("twse", twse("1101", "01", "19620209"))  # duplicates outside the required groups do not matter
+        self.assertAllSix(snapshot)
+        snapshot = appended("twse", twse("2330A", "24", "19940905"), twse("2330A", "24", "19940905"))  # non-ordinary duplicates are excluded
+        self.assertAllSix(snapshot)
+        # Duplicates are tolerated by the parser, so the batch is never spent early.
+        w = world()
+        w.twse.append(twse("2330", "24", "19940905"))
+        snapshot, _, _ = pending(w)
+        self.assertEqual(snapshot.ledger.attempted, (0, 1, 2, 3))
+
+    def test_official_rows_without_a_usable_report_date_reject_their_group_not_the_batch(self):
+        for label, raw in (("gregorian", "20261012"), ("invalid", "1151032"), ("null", None), ("empty", ""), ("number", 1151012), ("iso", "2026-10-12"),
+                           ("marker", "NaT"), ("garbage", "x")):
+            with self.subTest(report=label):
+                w = world()
+                w.twse[0] = twse("2330", "24", "19940905", report=raw)  # a semiconductor stock
+                snapshot, _, _ = pending(w)
+                self.assertEqual(snapshot.inspection()["report_dates"]["TWSE"], "2026-10-12")
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+        # Outside the required groups the same anomaly changes nothing.
+        w = world()
+        w.twse[4] = twse("1101", "01", "19620209", report="x")
+        snapshot, _, _ = pending(w)
+        self.assertAllSix(snapshot)
+        # The seven-stock pool check does not look at report dates: a pool stock with an unusable date still counts as covered.
+        w = world()
+        w.tpex[0] = tpex("3105", "24", "1100304", report=None)
+        snapshot, _, _ = pending(w)
+        self.assertEqual(snapshot.state, "pending")
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "official_row_report_date_unknown")
+        # The row stays in the identity index: a delisting inside the window is not read as a FinMind-only stock, so the
+        # stock is not "explained" and the FinMind side still shows the difference.
+        w = world()
+        w.twse[3] = twse("2409", "26", "19961105", report="x")
+        w.delist.append(delist("2409", "2026-10-08"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, OPTO, "official_row_report_date_unknown", "cross_source_mismatch")
+
+    def test_unusable_info_identity_and_type_reject_only_what_they_could_reach(self):
+        def extra(*rows):
+            w = world()
+            w.info.extend(rows)
+            return pending(w)[0]
+        for label, stock_id in (("null", None), ("empty", ""), ("blank", "  "), ("number", 2330), ("null marker", "NaN"), ("33 chars", "9" * 33)):
+            with self.subTest(stock_id=label):
+                snapshot = extra({**info("0", "twse", "半導體業"), "stock_id": stock_id})
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "info_identity_unusable")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+        snapshot = extra({**info("0", "tpex", "文化創意業"), "stock_id": None})
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, CULT, "info_identity_unusable")
+            self.assertUsable(snapshot, (cutoff, SEMI), (cutoff, OPTO))
+        # An unusable type tries both exchanges; an unlisted type or an unknown or non-required name reaches nothing.
+        snapshot = extra({**info("0", "twse", "文化創意業"), "stock_id": None, "type": None})
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, CULT, "info_identity_unusable")
+        snapshot = extra({**info("0", "twse", "文化創意業"), "stock_id": None})  # twse has no such name
+        self.assertAllSix(snapshot)
+        self.assertAllSix(extra({**info("0", "emerging", "半導體業"), "stock_id": None}))
+        self.assertAllSix(extra({**info("0", "twse", "存託憑證"), "stock_id": None, "type": None}))
+        self.assertAllSix(extra({**info("0", "twse", "水泥工業"), "stock_id": None}))
+        self.assertAllSix(extra({**info("0", "twse", None), "stock_id": None}))
+        # T-1: a decided newest row with an unusable type could be a member under either exchange.
+        for label, raw in (("null", None), ("number", 3), ("empty", ""), ("blank", " "), ("marker", "None")):
+            with self.subTest(type=label):
+                w = world()
+                w.info.append({**info("5555", "twse", "半導體業"), "type": raw})  # a FinMind-only stock that official does not list
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "info_type_unusable")
+                    self.assertNotIn("cross_source_mismatch", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+        w = world()
+        w.info.append({**info("5555", "twse", "半導體業"), "type": "emerging"})  # a real other type is not unknown
+        self.assertAllSix(pending(w)[0])
+        w = world()
+        w.info[0] = {**info("2330", "twse", "半導體業"), "type": None}  # the official member loses its type: both reasons
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "info_type_unusable", "cross_source_mismatch")
+        # Unknown names never reach a group.
+        w = world()
+        w.info.append({**info("5555", "twse", "半導體業"), "industry_category": None})
+        self.assertAllSix(pending(w)[0])
+
+    def test_unknown_info_dates_never_reject_the_batch_and_single_row_stocks_need_no_date(self):
+        # Every FinMind row carries the odd date form: each stock has one row, so its newest row is decided without any date.
+        for label, raw in UNKNOWN_DATES:
+            with self.subTest(date=label):
+                w = world()
+                w.info = [dated(row, raw) for row in w.info]
+                snapshot, _, _ = pending(w)
+                self.assertEqual(snapshot.ledger.attempted, (0, 1, 2, 3))
+                self.assertAllSix(snapshot)
+                inspected = snapshot.inspection()
+                self.assertEqual(inspected["census"]["info"]["date"][label], len(w.info))
+                self.assertEqual(inspected["stock_resolution"]["single_row"], sum(1 for row in w.info if re.fullmatch(r"[0-9]{4}", row["stock_id"])))
+        # A non-ordinary or unrelated stock with an odd date changes nothing, whatever else its rows say.
+        for label, raw in UNKNOWN_DATES:
+            with self.subTest(non_ordinary=label):
+                w = world()
+                w.info += [dated(info("TAIEX", "twse", "Index"), raw), dated(info("00878", "twse", "半導體業"), raw),
+                           dated(info("00878", "twse", "光電業"), raw), dated(info("1101", "twse", "食品工業"), raw)]
+                self.assertAllSix(pending(w)[0])
+
+    def test_unknown_info_date_with_differing_values_rejects_the_groups_it_reaches(self):
+        for label, raw in UNKNOWN_DATES:
+            with self.subTest(date=label):
+                # An older-looking row of another group whose date is unknown: the newest row of 2330 is undecided.
+                w = world()
+                w.info.append(dated(info("2330", "twse", "光電業", day="2026-10-01"), raw))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "finmind_latest_date_unresolved")
+                    self.assertRejected(snapshot, cutoff, OPTO, "finmind_latest_date_unresolved")
+                    self.assertUsable(snapshot, (cutoff, CULT))
+                    self.assertEqual(self.outcomes(snapshot)[(cutoff, CULT)].members, EXPECTED[(cutoff, CULT)])
+                self.assertEqual(snapshot.inspection()["stock_resolution"]["date_unresolved_related"], 1)
+                # The same unknown date next to an identical value cannot change what the newest row says.
+                w = world()
+                w.info.append(dated(info("2330", "twse", "半導體業"), raw))
+                snapshot, _, _ = pending(w)
+                self.assertAllSix(snapshot)
+                self.assertEqual(snapshot.inspection()["stock_resolution"]["same_value"], 1)
+                # A stock that reaches no required group is ignored.
+                w = world()
+                w.info += [dated(info("1101", "twse", "食品工業"), raw), dated(info("2002", "twse", "水泥工業"), raw)]
+                snapshot, _, _ = pending(w)
+                self.assertAllSix(snapshot)
+                self.assertEqual(snapshot.inspection()["stock_resolution"]["date_unresolved_unrelated"], 2)
+        # All dates known: an older row of another group is history (unchanged v1 behaviour).
+        w = world()
+        w.info.append(info("2330", "twse", "光電業", day="2026-09-01"))
+        snapshot, _, _ = pending(w)
+        self.assertAllSix(snapshot)
+        self.assertEqual(snapshot.inspection()["stock_resolution"]["newest_unique"], 1)
+        # Making that older row's date unknown makes the newest row undecided.
+        w = world()
+        w.info.append(dated(info("2330", "twse", "光電業"), None))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "finmind_latest_date_unresolved")
+        # The official group alone is enough to reach a group: the FinMind rows of 3008 name no required group.
+        w = world()
+        w.info[2] = dated(info("3008", "twse", "食品工業"), None)
+        w.info.append(info("3008", "twse", "水泥工業", day="2026-10-10"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, OPTO, "finmind_latest_date_unresolved")
+            self.assertUsable(snapshot, (cutoff, SEMI), (cutoff, CULT))
+        # An unusable type reaches both exchanges: a culture-board name on a "twse" row with an unusable type and an unknown date.
+        w = world()
+        w.info.append(dated({**info("3293", "twse", "半導體業"), "type": None}, "x"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, CULT, "finmind_latest_date_unresolved")  # official group of 3293
+            self.assertRejected(snapshot, cutoff, SEMI, "finmind_latest_date_unresolved")  # the extra row's name reaches it
+            self.assertUsable(snapshot, (cutoff, OPTO))
+
+    def test_unknown_delisting_dates_reject_what_the_date_could_decide(self):
+        for label, raw in UNKNOWN_DATES:
+            if label == "iso_future":
+                continue  # a real date after D is a known date, covered below
+            with self.subTest(date=label):
+                # An official stock that might be delisted on a cutoff: its required group is rejected at both cutoffs.
+                w = world()
+                w.delist.append(dated(delist("2330", "2026-10-08"), raw))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "delisting_date_unknown")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+                # An official stock outside the required groups changes nothing.
+                w = world()
+                w.delist.append(dated(delist("1101", "2026-10-08"), raw))
+                self.assertAllSix(pending(w)[0])
+                # A FinMind-only stock with a decided required group rejects that group; a non-required one is ignored.
+                w = world()
+                w.info.append(info("5555", "twse", "半導體業"))
+                w.delist.append(dated(delist("5555", "2026-10-08"), raw))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "delisting_date_unknown", "cross_source_mismatch")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+                w = world()
+                w.info.append(info("5555", "twse", "食品工業"))
+                w.delist.append(dated(delist("5555", "2026-10-08"), raw))
+                self.assertAllSix(pending(w)[0])
+                # Nothing is known about the stock: it may have been a member of any group, so every group is rejected.
+                w = world()
+                w.delist.append(dated(delist("9999", "2026-10-08"), raw))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    for group in (SEMI, OPTO, CULT):
+                        self.assertRejected(snapshot, cutoff, group, "delisted_industry_undeterminable")
+                # A tie of the newest rows (same known date, two values) is as undeterminable as with a known delisting date.
+                w = world()
+                w.info += [info("5555", "twse", "半導體業"), info("5555", "twse", "食品工業")]
+                w.delist.append(dated(delist("5555", "2026-10-08"), raw))
+                snapshot, _, _ = pending(w)
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "delisted_record_ambiguous")
+                # Non-ordinary ids are ignored whatever the date.
+                w = world()
+                w.delist += [dated(delist("006208", "2026-10-08"), raw), dated(delist("TAIEX", "2026-10-08"), raw)]
+                self.assertAllSix(pending(w)[0])
+        # A real date after D, or before every cutoff, is a known date outside every window.
+        w = world()
+        w.info.append(info("5555", "twse", "半導體業"))
+        w.delist += [delist("9999", "2099-01-01"), delist("2330", "2099-01-01"), delist("9998", "2026-10-04")]
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertRejected(snapshot, cutoff, SEMI, "cross_source_mismatch")  # 5555 is simply a FinMind-only stock
+            self.assertNotIn("delisting_date_unknown", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+            self.assertNotIn("delisted_industry_undeterminable", self.outcomes(snapshot)[(cutoff, SEMI)].reasons)
+            self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+        # A FinMind-only stock whose newest row is undecided by unknown dates: required candidates reject their group,
+        # non-required ones are ignored, and an unrecognised name could be anything.
+        for rows, rejected, everything in (
+                ((info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "光電業"), "x")), (SEMI, OPTO), False),
+                ((info("5555", "twse", "水泥工業", day="2026-10-01"), dated(info("5555", "twse", "鋼鐵工業"), "x")), (), False),
+                ((info("5555", "twse", "半導體業", day="2026-10-01"), dated(info("5555", "twse", "存託憑證"), "x")), (SEMI, OPTO, CULT), True)):
+            w = world()
+            w.info += list(rows)
+            w.delist.append(delist("5555", "2026-10-08"))
+            snapshot, _, _ = pending(w)
+            for cutoff in (C1, C2):
+                for group in (SEMI, OPTO, CULT):
+                    outcome = self.outcomes(snapshot)[(cutoff, group)]
+                    self.assertEqual(outcome.rejected, group in rejected, (rows[1]["industry_category"], cutoff, group))
+                    if everything:
+                        self.assertIn("delisted_industry_undeterminable", outcome.reasons)
+
+    def test_delisting_rows_without_a_usable_identity_reject_the_cutoffs_whose_window_may_hold_them(self):
+        for label, stock_id in (("null", None), ("empty", ""), ("blank", "  "), ("number", 1234), ("marker", "null"), ("33 chars", "9" * 33)):
+            with self.subTest(stock_id=label):
+                for day, rejected_cutoffs in (("2026-10-08", (C1, C2)), ("2026-10-05", (C1,)), ("2026-10-06", (C1, C2)),
+                                              ("2026-10-04", ()), ("2099-01-01", ()), ("bad", (C1, C2)), (None, (C1, C2))):
+                    w = world()
+                    w.delist.append({**delist("1234", "2026-10-08"), "stock_id": stock_id, "date": day})
+                    snapshot, _, _ = pending(w)
+                    for cutoff in (C1, C2):
+                        for group in (SEMI, OPTO, CULT):
+                            if cutoff in rejected_cutoffs:
+                                self.assertRejected(snapshot, cutoff, group, "delisted_identity_unusable")
+                            else:
+                                self.assertUsable(snapshot, (cutoff, group))
+                                self.assertEqual(self.outcomes(snapshot)[(cutoff, group)].members, EXPECTED[(cutoff, group)])
+        w = world()
+        w.delist.append({"date": "2026-10-08"})  # no stock_id key at all
+        snapshot, _, _ = pending(w)
+        self.assertRejected(snapshot, C1, SEMI, "delisted_identity_unusable")
+
+    def test_board_transfer_needs_a_known_date_on_every_older_tpex_row(self):
+        for label, raw in UNKNOWN_DATES:
+            with self.subTest(date=label):
+                snapshot, _, _ = pending(self.transfer(info=lambda w: [dated(row, raw) if row["stock_id"] == "6200" and row["type"] == "tpex" else row for row in w.info]))
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_evidence_date_unknown")
+                    self.assertUsable(snapshot, (cutoff, OPTO), (cutoff, CULT))
+                # One known older row is not enough while another is unknown.
+                snapshot, _, _ = pending(self.transfer(info=lambda w: w.info + [dated(info("6200", "tpex", "半導體業", day="2026-10-09"), raw)]))
+                for cutoff in (C1, C2):
+                    self.assertRejected(snapshot, cutoff, SEMI, "board_transfer_evidence_date_unknown")
+
+    @staticmethod
+    def nonzero(counts):
+        return {key: value for key, value in counts.items() if value}
+
+    def test_census_vocabulary_is_enumerated_and_bounded(self):
+        sizes = {name: {field: len(classes) for field, classes in fields.items()} for name, fields in source.CENSUS_VOCABULARY.items()}
+        self.assertEqual(sizes, {"info": {"date": 13, "stock_id": 12, "type": 9, "industry_category": 9},
+                                 "delisting": {"date": 13, "stock_id": 12},
+                                 "twse": {"report_date": 11, "code": 9, "industry_code": 10, "listing_date": 12},
+                                 "tpex": {"report_date": 11, "code": 9, "industry_code": 10, "listing_date": 12}})
+        self.assertEqual(source.CENSUS_SOURCES, ("info", "twse", "tpex", "delisting"))
+        self.assertEqual(len(source._CENSUS_KEYS), 160)  # 152 class counters + rows and rows_not_object for each of four sources
+        for name, fields in source.CENSUS_VOCABULARY.items():
+            for field, classes in fields.items():
+                self.assertEqual(len(set(classes)), len(classes), (name, field))
+                for klass in classes:
+                    self.assertIn(f"census_{name}_{field}_{klass}", source._CENSUS_KEYS)
+        for key in source._CENSUS_KEYS:
+            self.assertTrue(re.fullmatch(r"census_[a-z]+_[a-z0-9_]+", key) and len(key) <= 64, key)
+        self.assertEqual(source.DATE_CLASSES, ("missing", "json_null", "non_string", "empty", "blank", "null_text", "iso_valid", "iso_future",
+                                               "iso_invalid_calendar", "iso_with_time", "digits8", "slash_date", "other_string"))
+
+    def test_baseline_census_counts_every_row_by_form(self):
+        snapshot, _, _ = pending()
+        inspected = snapshot.inspection()
+        census = inspected["census"]
+        self.assertEqual(set(census), {"info", "twse", "tpex", "delisting"})
+        self.assertEqual((census["info"]["rows"], census["twse"]["rows"], census["tpex"]["rows"], census["delisting"]["rows"]), (22, 7, 13, 2))
+        self.assertEqual(tuple(record["rows_not_object"] for record in census.values()), (0, 0, 0, 0))
+        info_census = census["info"]
+        self.assertEqual(self.nonzero(info_census["date"]), {"iso_valid": 22})
+        self.assertEqual(self.nonzero(info_census["stock_id"]), {"ordinary": 21, "alnum_mixed": 1})
+        self.assertEqual(self.nonzero(info_census["type"]), {"twse": 9, "tpex": 12, "other_string": 1})
+        self.assertEqual(self.nonzero(info_census["industry_category"]), {"required_name": 15, "other_name": 3, "unknown_name": 4})
+        self.assertEqual(self.nonzero(census["twse"]["report_date"]), {"roc7_valid": 7})
+        self.assertEqual(self.nonzero(census["twse"]["code"]), {"ordinary": 7})
+        self.assertEqual(self.nonzero(census["twse"]["industry_code"]), {"required_group": 4, "other_group": 2, "unmapped_two_digit": 1})
+        self.assertEqual(self.nonzero(census["twse"]["listing_date"]), {"gregorian8": 7})
+        self.assertEqual(self.nonzero(census["tpex"]["report_date"]), {"roc7_valid": 13})
+        self.assertEqual(self.nonzero(census["tpex"]["industry_code"]), {"required_group": 10, "other_group": 1, "unmapped_two_digit": 1, "empty": 1})
+        self.assertEqual(self.nonzero(census["tpex"]["listing_date"]), {"gregorian8": 10, "roc7": 2, "ymd_slash": 1})
+        self.assertEqual(self.nonzero(census["delisting"]["date"]), {"iso_valid": 2})
+        self.assertEqual(self.nonzero(census["delisting"]["stock_id"]), {"ordinary": 1, "digits_other_length": 1})
+        self.assertCensusIdentities(snapshot)
+        # Immutable counts only.
+        with self.assertRaises(TypeError):
+            census["info"] = {}
+        with self.assertRaises(TypeError):
+            census["info"]["date"]["iso_valid"] = 0
+        for record in census.values():
+            for value in record.values():
+                for count in (value.values() if isinstance(value, types.MappingProxyType) else (value,)):
+                    self.assertIs(type(count), int)
+
+    def test_census_counts_odd_forms_in_every_source_and_sums_to_the_object_rows(self):
+        w = world()
+        w.info += [dated(info("2330", "twse", "半導體業"), raw) for _, raw in UNKNOWN_DATES]  # 12 rows, one per odd date form
+        w.info += [{**info("0", "twse", "x"), "stock_id": raw} for raw in (None, "", "  ", 7, "none", "9" * 33, "00878", "AB12", "a-b", "２３３０")]
+        w.info += [{**info("1", "twse", "x"), "type": raw, "industry_category": raw} for raw in (None, "", " ", 5, "NA", "emerging", "tpex")]
+        w.twse += [{**twse(raw if isinstance(raw, str) else "7000", "zz", "x", report="20261012"), "公司代號": raw} for raw in
+                   ("2330A", "233", " 2330", None, "", "N/A", 5)]
+        w.tpex += [tpex("9999", raw, raw, report=raw) for raw in (None, "", "  ", 9, "nat", "99", "x")]
+        w.delist += [{**delist("1", "2026-10-08"), "stock_id": raw, "date": raw} for raw in (None, "", "  ", 3, "NaN", "2026-02-30", "20261001", "2026/10/01")]
+        snapshot, _, _ = build(w)
+        snapshot.acquire()
+        inspected = snapshot.inspection()
+        census = inspected["census"]
+        self.assertCensusIdentities(snapshot)
+        self.assertEqual(self.nonzero(census["info"]["date"]), {
+            "iso_valid": 22 + 10 + 7, "missing": 1, "json_null": 1, "non_string": 1, "empty": 1, "blank": 1, "null_text": 1, "iso_future": 1,
+            "iso_invalid_calendar": 1, "iso_with_time": 1, "digits8": 1, "slash_date": 1, "other_string": 1})
+        self.assertEqual(self.nonzero(census["info"]["stock_id"]), {
+            "ordinary": 21 + 12, "alnum_mixed": 1 + 1, "json_null": 1, "empty": 1, "blank": 1, "non_string": 1, "null_text": 1, "oversize": 1,
+            "digits_other_length": 1 + 7, "other_ascii": 1, "non_ascii": 1})  # "00878" and the seven rows of stock "1"
+        self.assertEqual(self.nonzero(census["info"]["type"]), {
+            "twse": 9 + 12 + 10, "tpex": 12 + 1, "other_string": 1 + 1, "json_null": 1, "empty": 1, "blank": 1, "non_string": 1, "null_text": 1})
+        self.assertEqual(self.nonzero(census["twse"]["code"]), {
+            "ordinary": 7, "grammar_non_ordinary": 1, "bad_grammar": 2, "json_null": 1, "empty": 1, "null_text": 1, "non_string": 1})
+        self.assertEqual(self.nonzero(census["twse"]["report_date"]), {"roc7_valid": 7, "digits8": 7})
+        self.assertEqual(self.nonzero(census["twse"]["industry_code"]), {
+            "required_group": 4, "other_group": 2, "unmapped_two_digit": 1, "other_string": 7})
+        self.assertEqual(self.nonzero(census["tpex"]["report_date"]), {"roc7_valid": 13, "json_null": 1, "empty": 1, "blank": 1, "non_string": 1,
+                                                                        "null_text": 1, "other_string": 2})
+        self.assertEqual(self.nonzero(census["delisting"]["date"]), {
+            "iso_valid": 2, "json_null": 1, "empty": 1, "blank": 1, "non_string": 1, "null_text": 1, "iso_invalid_calendar": 1, "digits8": 1, "slash_date": 1})
+        self.assertEqual(self.nonzero(census["delisting"]["stock_id"]), {
+            "ordinary": 1, "digits_other_length": 2, "json_null": 1, "empty": 1, "blank": 1, "non_string": 1, "null_text": 1, "other_ascii": 2})
+        # No rows are lost: the odd rows are rows of the parse, so the oracle counts equal the census rows.
+        self.assertEqual(inspected["row_counts"], tuple(census[name]["rows"] for name in source.CENSUS_SOURCES))
+
+    def test_census_survives_structural_failures_in_the_diagnostics(self):
+        w = world()
+        w.info[5] = "2330"
+        snapshot, _, _ = build(w)
+        error = self.assertFailure("row_not_object", snapshot.acquire)
+        flat = {key: value for key, value in error.diagnostics.items() if key.startswith("census_")}
+        self.assertEqual(flat["census_info_rows"], 22)
+        self.assertEqual(flat["census_info_rows_not_object"], 1)
+        self.assertEqual(flat["census_info_date_iso_valid"], 21)  # only object rows are classified
+        self.assertEqual(sum(value for key, value in flat.items() if key.startswith("census_info_date_")), 21)
+        self.assertFalse([key for key in flat if not key.startswith("census_info_")])  # only the sources parsed so far
+        self.assertEqual(len(flat), 2 + 13 + 12 + 9 + 9)
+        self.assertEqual(snapshot.ledger.attempted, (0,))
+        self.assertEqual(set(snapshot.inspection()["census"]), {"info"})
+        self.assertEqual({key: value for key, value in snapshot.diagnostics.items() if key.startswith("census_")}, flat)
+        # A later source fails: the census of every source parsed so far is in the failure, not the unreached ones.
+        w = world()
+        w.tpex[0] = tpex("3105", "24", "1100304", report="1151011")
+        snapshot, _, _ = build(w)
+        error = self.assertFailure("official_report_date_not_uniform", snapshot.acquire)
+        self.assertEqual(error.diagnostics["source_index"], 2)
+        names = {key.split("_")[1] for key in error.diagnostics if key.startswith("census_")}
+        self.assertEqual(names, {"info", "twse", "tpex"})
+        self.assertEqual(error.diagnostics["census_tpex_report_date_roc7_valid"], 13)
+        self.assertEqual(error.diagnostics["census_tpex_rows"], 13)
+        self.assertEqual(set(snapshot.inspection()["census"]), {"info", "twse", "tpex"})
+        # A failure after the parse (the seven-stock pool) carries the census as well.
+        w = world()
+        w.tpex[5] = tpex("8069", "27", "20110101")
+        snapshot, _, _ = build(w)
+        error = self.assertFailure("seven_stock_group_not_required", snapshot.acquire)
+        self.assertEqual(error.diagnostics["census_tpex_industry_code_required_group"], 9)
+        self.assertEqual(error.diagnostics["census_info_rows"], 22)
+        self.assertNotIn("census_delisting_rows", error.diagnostics)
+        # A transport failure before any parse has no census at all.
+        snapshot, _, _ = build(transport=Transport(fail_at=0))
+        error = self.assertFailure("transport_or_parse_failure", snapshot.acquire)
+        self.assertFalse([key for key in error.diagnostics if key.startswith("census_")])
+        self.assertEqual(dict(snapshot.inspection()["census"]), {})
+        # The failing body's own structural rejection (an outer shape error) happens before any row is counted.
+        payload = bodies(world())
+        payload[0] = b'{"status":200,"msg":"success","data":[]}'
+        snapshot, _, _ = build(transport=Transport(payload))
+        error = self.assertFailure("finmind_rows", snapshot.acquire)
+        self.assertFalse([key for key in error.diagnostics if key.startswith("census_")])
+
+    def test_failure_values_whitelists_census_keys_values_and_names(self):
+        def values(**diagnostics):
+            return source._failure_values(source.SourceError("row_not_object", **diagnostics), "batch")
+        good = {"census_info_rows": 5, "census_info_rows_not_object": 0, "census_info_date_iso_valid": 3, "census_delisting_stock_id_empty": 200000,
+                "census_twse_listing_date_invalid_calendar": 0, "census_tpex_industry_code_unmapped_two_digit": 1}
+        kept = values(**good)
+        self.assertEqual({key: value for key, value in kept.items() if key.startswith("census_")}, good)
+        self.assertEqual(values(**{key: value for key, value in kept.items() if key != "code"}), kept)  # idempotent
+        for name in ("census_info_date_secret", "census_evil_rows", "census_info_rows_extra", "census_info_date", "census", "census_",
+                     "census_twse_listing_date_unknown", "census_info_stock_id_DIGITS_OTHER_LENGTH", "census_info_date_iso_valid ",
+                     "census_info_type_iso_valid", "census_delisting_type_twse", "uncovered_census_info_rows"):
+            with self.subTest(name=name):
+                self.assertFalse([key for key in values(**{name: 3}) if key.startswith("census")], name)
+        for raw in (True, False, -1, 200001, 1.0, "3", None, 10 ** 30, [3], b"3", float("nan")):
+            with self.subTest(value=raw):
+                self.assertNotIn("census_info_rows", values(census_info_rows=raw))
+        self.assertEqual(values(census_info_rows=0)["census_info_rows"], 0)
+        self.assertEqual(values(census_info_rows=source.MAX_ROWS)["census_info_rows"], source.MAX_ROWS)
+        # The explicit bag is validated the same way and merged with what the exception already carries.
+        merged = source._failure_values(source.SourceError("x", census_info_rows=4), "batch",
+                                        census={"census_twse_rows": 7, "census_twse_date": 1, "bogus": 2, "census_tpex_rows": True})
+        self.assertEqual({key: value for key, value in merged.items() if key.startswith("census")}, {"census_info_rows": 4, "census_twse_rows": 7})
+        self.assertEqual(sum(1 for key in source._failure_values(source.SourceError("x", **{key: 1 for key in source._CENSUS_KEYS}), "batch")
+                             if key.startswith("census_")), 160)
+        # Plain failures carry no census keys.
+        self.assertFalse([key for key in source._failure_values(source.SourceError("http_status", source_index=1), "x") if key.startswith("census")])
+        self.assertFalse([key for key in source._failure_values(OSError("x"), "x") if key.startswith("census")])
+
+    def test_census_and_diagnostics_never_retain_raw_strings(self):
+        w = world()
+        secret = "SECRET-VALUE-DO-NOT-RETAIN"
+        w.info += [{**info(secret[:32], "twse", secret), "date": secret, "type": secret},
+                   {**info("1111", secret, secret), "date": secret + "2", "stock_id": secret * 3}]
+        w.twse += [{**twse("SECRET", secret, secret, report=secret), "公司代號": secret[:6]}, {**twse("1", secret, secret, report=secret), "公司代號": secret}]
+        w.tpex += [tpex(secret, secret, secret, report=secret)]
+        w.delist += [delist(secret, secret), delist(secret * 2, "2026-10-08")]
+        snapshot, _, _ = build(w)
+        snapshot.acquire()
+        self.assertNotIn("SECRET", repr(dict(snapshot.inspection()["census"])))
+        self.assertNotIn("SECRET", repr(dict(snapshot.inspection()["d_set_difference"])))
+        self.assertNotIn("SECRET", repr(dict(snapshot.inspection()["stock_resolution"])))
+        self.assertNotIn("SECRET", repr(dict(snapshot.inspection()["excluded_non_ordinary"])))
+        for outcome in self.outcomes(snapshot).values():
+            self.assertNotIn("SECRET", repr(outcome.reasons))
+        # The same rows with a structural failure behind them: the diagnostics carry only enumerated counters.
+        w.info.append(7)
+        snapshot, _, _ = build(w)
+        error = self.assertFailure("row_not_object", snapshot.acquire)
+        self.assertNotIn("SECRET", repr(dict(error.diagnostics)))
+        self.assertNotIn("SECRET", repr(dict(snapshot.diagnostics)))
+        self.assertNotIn("SECRET", repr(dict(snapshot.inspection()["census"])))
+
+    def test_stock_resolution_counts_partition_the_ordinary_stocks(self):
+        w = world()
+        w.info += [info("2330", "twse", "半導體業", day="2026-10-10"),  # same value again: order cannot matter
+                   info("2454", "twse", "光電業", day="2026-09-01"),  # older different value: the newest date decides
+                   info("3008", "twse", "半導體業"),  # same newest date, another value: tied
+                   dated(info("2409", "twse", "半導體業"), "x"),  # different value, unknown date: undecided and reaches the groups
+                   dated(info("1101", "twse", "食品工業"), "x")]  # undecided but reaches no required group
+        snapshot, _, _ = pending(w)
+        counts = snapshot.inspection()["stock_resolution"]
+        self.assertEqual(tuple(counts), source.RESOLUTION_STATES)
+        self.assertEqual(dict(counts), {"single_row": 16, "same_value": 1, "newest_unique": 1, "newest_tied": 1,
+                                        "date_unresolved_related": 1, "date_unresolved_unrelated": 1})
+        self.assertEqual(sum(counts.values()), len({row["stock_id"] for row in w.info if re.fullmatch(r"[0-9]{4}", row["stock_id"])}))
+        self.assertAllCountsAreInts(counts)
+        # The state is the same before and after oracle admission, and after a failed parse of a later source it still reads what was parsed.
+        self.admitAsInferred(snapshot)
+        self.assertEqual(dict(snapshot.inspection()["stock_resolution"]), dict(counts))
+        failing = world()
+        failing.tpex[0] = tpex("3105", "24", "1100304", report="1151011")
+        snapshot, _, _ = build(failing)
+        self.assertFailure("official_report_date_not_uniform", snapshot.acquire)
+        self.assertEqual(sum(snapshot.inspection()["stock_resolution"].values()), 21)  # the parsed Info rows stay readable after a failed batch
+
+    def assertAllCountsAreInts(self, mapping):
+        for value in mapping.values():
+            self.assertIs(type(value), int)
+
+    def difference(self, snapshot):
+        return {cutoff: {group: dict(counts) for group, counts in groups.items()}
+                for cutoff, groups in snapshot.inspection()["d_set_difference"].items()}
+
+    def test_d_set_difference_counts_the_gap_between_the_two_sources(self):
+        zero = {"official_only": 0, "finmind_only_explained": 0, "finmind_only_unexplained": 0}
+        snapshot, _, _ = pending()
+        self.assertEqual(self.difference(snapshot), {cutoff: {group: dict(zero) for group in (SEMI, OPTO, CULT)} for cutoff in (C1, C2)})
+        self.assertEqual(source.DIFFERENCE_KEYS, ("official_only", "finmind_only_explained", "finmind_only_unexplained"))
+        # Official lists a stock FinMind lacks.
+        w = world()
+        w.info.__delitem__(11)  # 5347 (TPEx, Semiconductor)
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertEqual(self.difference(snapshot)[cutoff][SEMI], {**zero, "official_only": 1})
+            self.assertRejected(snapshot, cutoff, SEMI, "cross_source_mismatch")
+            self.assertEqual(self.difference(snapshot)[cutoff][OPTO], zero)
+        # FinMind lists stocks the official feed lacks (kept, never named: counts only).
+        w = world()
+        w.info += [info("2999", "twse", "半導體業"), info("2998", "twse", "半導體業"), info("2997", "tpex", "文化創意業")]
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertEqual(self.difference(snapshot)[cutoff][SEMI], {**zero, "finmind_only_unexplained": 2})
+            self.assertEqual(self.difference(snapshot)[cutoff][CULT], {**zero, "finmind_only_unexplained": 1})
+        # A FinMind-only stock delisted inside [C, D] is explained; one delisted exactly on C1 is explained at C1 and not at C2.
+        w = world()
+        w.info += [info("5555", "twse", "半導體業"), info("5556", "tpex", "光電業"), info("5557", "tpex", "半導體業")]
+        w.delist += [delist("5555", "2026-10-08"), delist("5556", "2026-10-05"), delist("5557", "2026-10-04")]
+        snapshot, _, _ = pending(w)
+        diff = self.difference(snapshot)
+        self.assertEqual(diff[C1][SEMI], {**zero, "finmind_only_explained": 1, "finmind_only_unexplained": 1})  # 5557 left before C1
+        self.assertEqual(diff[C2][SEMI], {**zero, "finmind_only_explained": 1, "finmind_only_unexplained": 1})
+        self.assertEqual(diff[C1][OPTO], {**zero, "finmind_only_explained": 1})
+        self.assertEqual(diff[C2][OPTO], {**zero, "finmind_only_unexplained": 1})
+        self.assertRejected(snapshot, C1, SEMI, "cross_source_mismatch")
+        self.assertRejected(snapshot, C1, OPTO, "delisting_date_equals_cutoff")
+        self.assertRejected(snapshot, C2, OPTO, "cross_source_mismatch")
+        # Stocks without a decided FinMind newest row are not in the FinMind set, so official lists them as official-only.
+        w = world()
+        w.info.append(dated(info("2330", "twse", "光電業"), "x"))
+        snapshot, _, _ = pending(w)
+        for cutoff in (C1, C2):
+            self.assertEqual(self.difference(snapshot)[cutoff][SEMI], {**zero, "official_only": 1})
+
+    def test_d_set_difference_agrees_with_the_mismatch_reason_and_is_counts_only(self):
+        worlds = []
+        for index in range(6):
+            w = world()
+            if index == 1:
+                w.info.append(info("2999", "twse", "半導體業"))
+            elif index == 2:
+                w.info.__delitem__(0)
+            elif index == 3:
+                w.info += [info("5555", "twse", "光電業")]
+                w.delist.append(delist("5555", "2026-10-08"))
+            elif index == 4:
+                w.twse.append(twse("2999", "26", "19940905"))
+            elif index == 5:
+                w.tpex[7] = tpex("6999", "24", "20261005", report="x")
+            worlds.append(w)
+        for w in worlds:
+            snapshot, _, _ = pending(w)
+            for (cutoff, group), outcome in self.outcomes(snapshot).items():
+                counts = self.difference(snapshot)[cutoff][group]
+                self.assertEqual(counts["official_only"] + counts["finmind_only_unexplained"] > 0, "cross_source_mismatch" in outcome.reasons,
+                                 (cutoff, group, counts))
+                self.assertEqual(set(counts), set(source.DIFFERENCE_KEYS))
+                for count in counts.values():
+                    self.assertIs(type(count), int)
+        diff = snapshot.inspection()["d_set_difference"]
+        self.assertEqual(set(diff), {C1, C2})
+        self.assertEqual(set(diff[C1]), {SEMI, OPTO, CULT})
+        with self.assertRaises(TypeError):
+            diff[C1] = {}
+        with self.assertRaises(TypeError):
+            diff[C1][SEMI]["official_only"] = 9
+        self.assertNotIn("2999", repr(dict(diff)))
+
+    def test_d_set_difference_exists_only_once_inference_has_completed(self):
+        snapshot, _, _ = build()
+        with self.assertRaises(source.SourceError):
+            snapshot.inspection()  # new: nothing to inspect
+        snapshot.acquire()
+        self.assertEqual(snapshot.state, "pending")
+        self.assertEqual(len(self.difference(snapshot)), 2)  # readable before the oracle admission
+        snapshot.admit_independent_verification(admission(snapshot))
+        self.assertEqual(snapshot.state, "available")
+        self.assertEqual(len(self.difference(snapshot)), 2)
+        # A batch that fails before inference has none; a wrong oracle assertion ends the snapshot and clears it.
+        failing = world()
+        failing.tpex[5] = tpex("8069", "27", "20110101")
+        snapshot, _, _ = build(failing)
+        self.assertFailure("seven_stock_group_not_required", snapshot.acquire)
+        self.assertEqual(dict(snapshot.inspection()["d_set_difference"]), {})
+        snapshot, _, _ = pending()
+        wrong = entries(rejected=((C1, SEMI),))
+        self.assertFailure("oracle_set_mismatch", snapshot.admit_independent_verification, admission(snapshot, expected=wrong))
+        self.assertEqual(dict(snapshot.inspection()["d_set_difference"]), {})
+        snapshot, _, _ = pending()
+        snapshot.release()
+        self.assertFailure("inspection_unavailable", snapshot.inspection)
+
+    def test_bare_nan_and_infinity_literals_are_non_string_values_not_parse_failures(self):
+        base = world()
+        for literal in (b"NaN", b"Infinity", b"-Infinity"):
+            with self.subTest(literal=literal):
+                rows = [{**info("2330", "twse", "半導體業"), "date": "LITERAL"}, {**info("2454", "twse", "半導體業"), "type": "LITERAL"},
+                        {**info("0", "twse", "半導體業"), "stock_id": "LITERAL"}, {**info("0", "twse", "半導體業"), "industry_category": "LITERAL"}]
+                rest = [row for row in base.info if row["stock_id"] not in ("2330", "2454")]
+                payload = bodies(base)
+                payload[0] = finmind_body(rest + rows).replace(b'"LITERAL"', literal)
+                payload[1] = official_body(base.twse[:6] + [{**twse("9999", "24", "20000101"), "產業別": "LITERAL"}]).replace(b'"LITERAL"', literal)
+                payload[3] = finmind_body(base.delist + [{**delist("1234", "2026-10-08"), "date": "LITERAL"}]).replace(b'"LITERAL"', literal)
+                snapshot, _, _ = pending(transport=Transport(payload))
+                census = snapshot.inspection()["census"]
+                self.assertEqual(census["info"]["date"]["non_string"], 1)
+                self.assertEqual(census["info"]["type"]["non_string"], 1)
+                self.assertEqual(census["info"]["stock_id"]["non_string"], 1)
+                self.assertEqual(census["info"]["industry_category"]["non_string"], 1)
+                self.assertEqual(census["twse"]["industry_code"]["non_string"], 1)
+                self.assertEqual(census["delisting"]["date"]["non_string"], 1)
+        # In a structural position the literal still fails the document check.
+        for body in (b'{"status":NaN,"msg":"success","data":[]}', b'{"status":200,"msg":NaN,"data":[]}'):
+            payload = bodies(base)
+            payload[0] = body
+            snapshot, _, _ = build(transport=Transport(payload))
+            self.assertFailure("finmind_document_status", snapshot.acquire)
+        payload = bodies(base)
+        payload[0] = b'{"status":200,"msg":"success","data":NaN}'
+        snapshot, _, _ = build(transport=Transport(payload))
+        self.assertFailure("finmind_rows", snapshot.acquire)
+        # Duplicate keys remain structural.
+        payload = bodies(base)
+        payload[1] = b'[{"a":1,"a":NaN}]'
+        snapshot, _, _ = build(transport=Transport(payload))
+        self.assertFailure("duplicate_json_key", snapshot.acquire)
 
     def test_innovation_board_and_ky_are_ordinary_members(self):
         w = world()
@@ -1337,7 +2166,12 @@ class AcquisitionDateTests(Base):
                  ("twse before window", lambda w: setattr(w, "twse", [{**r, "出表日期": "1151005"} for r in w.twse]), "official_report_date_out_of_range", (0, 1)),
                  ("tpex before window", lambda w: setattr(w, "tpex", [{**r, "Date": "1150930"} for r in w.tpex]), "official_report_date_out_of_range", (0, 1, 2)),
                  ("tpex not uniform", lambda w: w.tpex.__setitem__(0, tpex("3105", "24", "1100304", report="1151011")), "official_report_date_not_uniform", (0, 1, 2)),
-                 ("info after D", lambda w: w.info.__setitem__(0, info("2330", "twse", "半導體業", day="2026-10-13")), "info_date_after_acquisition", (0,)))
+                 ("twse no usable report date", lambda w: setattr(w, "twse", [{**r, "出表日期": "20261012"} for r in w.twse]), "official_report_date", (0, 1)),
+                 ("tpex no usable report date", lambda w: setattr(w, "tpex", [{**r, "Date": None} for r in w.tpex]), "official_report_date", (0, 1, 2)),
+                 ("info row not an object", lambda w: w.info.__setitem__(0, "2330"), "row_not_object", (0,)),
+                 ("twse row not an object", lambda w: w.twse.__setitem__(0, [1]), "row_not_object", (0, 1)),
+                 ("tpex row not an object", lambda w: w.tpex.__setitem__(0, None), "row_not_object", (0, 1, 2)),
+                 ("delisting row not an object", lambda w: w.delist.__setitem__(0, 7), "row_not_object", (0, 1, 2, 3)))
         for label, mutate, code, attempted in cases:
             with self.subTest(label):
                 w = world()
@@ -1368,7 +2202,7 @@ class LifecycleTests(Base):
         base = admission(fresh())
         cases = (("receipts", dict(receipt_sha256s=base.receipt_sha256s[:3]), "oracle_capture_binding"),
                  ("receipt order", dict(receipt_sha256s=base.receipt_sha256s[::-1]), "oracle_capture_binding"),
-                 ("namespace", dict(namespace=NAMESPACE.replace("qa1", "qa2")), "oracle_scope"),
+                 ("namespace", dict(namespace=NAMESPACE.replace("qa2", "qa1")), "oracle_scope"),
                  ("pin", dict(policy_sha256="0" * 64), "oracle_scope"),
                  ("not independent", dict(independent=False), "oracle_scope"),
                  ("receipt type", dict(receipt_sha256s=("x",) * 4), "oracle_receipt_type"),
@@ -1610,7 +2444,7 @@ class ResponseShapeTests(Base):
         cases = (
             (1, b"<html>poison</html>", "json_invalid"), (1, b"", "empty_body"), (1, b"\xff\xfe[]", "utf8_decode"),
             (1, official_body(w.twse)[:-1], "json_invalid"), (1, b'{"a":1}', "official_rows"), (1, b"[]", "official_rows"),
-            (1, b'[{"a":1},]', "json_invalid"), (1, b"[NaN]", "nonfinite_json_number"),
+            (1, b'[{"a":1},]', "json_invalid"), (1, b"[NaN]", "row_not_object"),
             (1, b'[{"x":1,"x":2}]', "duplicate_json_key"),
             (2, b'{"data":[]}', "official_rows"), (2, finmind_body(w.tpex), "official_rows"),
             (0, official_body(w.info), "finmind_document"), (0, b'{"status":200,"msg":"success","data":[]}', "finmind_rows"),
@@ -1813,6 +2647,111 @@ class ResponseShapeTests(Base):
                 self.assertEqual(snapshot.ledger.attempted, tuple(range(index + 1)))
                 self.assertEqual(snapshot.ledger.unrun, tuple(range(index + 1, 4)))
                 self.assertEqual(len(transport.opens), index + 1)
+
+
+def rich_world():
+    """The baseline plus a board transfer, FinMind-only delisted stocks, multi-row stocks and in-window delistings."""
+    w = world()
+    w.twse.append(twse("6200", "24", "20261008"))
+    w.info += [info("6200", "twse", "半導體業"), info("6200", "tpex", "半導體業", day="2026-10-08"),
+               info("5555", "twse", "半導體業"), info("5556", "tpex", "光電業"), info("5558", "tpex", "文化創意業"),
+               info("2330", "twse", "光電業", day="2026-09-01"), info("3008", "twse", "水泥工業", day="2026-09-01"),
+               info("1101", "twse", "食品工業", day="2026-09-01")]
+    w.delist += [delist("6200", "2026-10-08"), delist("5555", "2026-10-08"), delist("5556", "2026-10-05"), delist("5558", "2026-10-09"),
+                 delist("2409", "2026-10-09"), delist("9998", "2026-10-04"), delist("2002", "2026-10-06")]
+    return w
+
+
+class FuzzTests(Base):
+    @staticmethod
+    def set_field(row, key, raw):
+        if raw is MISSING:
+            row.pop(key, None)
+        else:
+            row[key] = raw
+
+    def date_mutations(self, w):
+        """Every place a date can turn unknown, with the pool of unknown forms valid there."""
+        unknown = tuple(raw for _, raw in UNKNOWN_DATES)
+        delisting_unknown = tuple(raw for label, raw in UNKNOWN_DATES if label != "iso_future")
+        listing_unknown = (None, 20261011, "", "   ", "None", "2026-02-30", "yesterday", "2026-10-11T00:00:00Z", MISSING)
+        places = [(row, "date", unknown) for row in w.info] + [(row, "date", delisting_unknown) for row in w.delist]
+        for feed, report_key, listing_key in ((w.twse, "出表日期", "上市日期"), (w.tpex, "Date", "DateOfListing")):
+            places += [(row, report_key, unknown) for row in feed[1:]]  # the first row keeps the feed's report date usable
+            places += [(row, listing_key, listing_unknown) for row in feed]
+        return places
+
+    def test_unknown_dates_only_tighten_never_add_members_or_lift_rejections(self):
+        rng = random.Random(37)
+        baseline, _, _ = pending(rich_world())
+        before = baseline.inspection()["outcomes"]
+        self.assertTrue(any(outcome.rejected for outcome in before.values()))
+        self.assertTrue(any(not outcome.rejected for outcome in before.values()))
+        tightened = unchanged = 0
+        for iteration in range(300):
+            w = rich_world()
+            places = self.date_mutations(w)
+            for row, key, pool in rng.sample(places, rng.randint(1, 5)):
+                self.set_field(row, key, rng.choice(pool))
+            snapshot, _, _ = pending(w)
+            after = snapshot.inspection()["outcomes"]
+            for key, old in before.items():
+                new = after[key]
+                if old.rejected:
+                    self.assertTrue(new.rejected, (iteration, key))
+                elif new.rejected:
+                    tightened += 1
+                else:
+                    unchanged += 1
+                    self.assertEqual((new.members, new.flags), (old.members, old.flags), (iteration, key))
+        self.assertGreater(tightened, 20)
+        self.assertGreater(unchanged, 20)
+
+    def test_garbage_values_never_fail_the_batch_and_the_counters_stay_consistent(self):
+        rng = random.Random(3737)
+        garbage = (None, "", " ", "None", "NaN", 0, 1, True, False, 1.5, [], {}, "x", "x" * 40, "２３３０", "2330 ", "00878", "TAIEX", "2026-02-30",
+                   "2026-10-11T00:00:00", "20261011", "2026/10/11", "1151012", "24", "26", "32", "半導體業", "光電業", "文化創意業", "twse", "tpex", MISSING)
+        outcomes_seen = {"pending": 0, "seven": 0}
+        for iteration in range(300):
+            w = rich_world()
+            places = []
+            for row in w.info:
+                places += [(row, key) for key in ("date", "stock_id", "type", "industry_category")]
+            for row in w.delist:
+                places += [(row, key) for key in ("date", "stock_id")]
+            for feed, keys in ((w.twse, ("出表日期", "公司代號", "產業別", "上市日期")), (w.tpex, ("Date", "SecuritiesCompanyCode", "SecuritiesIndustryCode", "DateOfListing"))):
+                for position, row in enumerate(feed):
+                    places += [(row, key) for index, key in enumerate(keys) if not (position == 0 and index == 0)]
+            for row, key in rng.sample(places, rng.randint(1, 8)):
+                self.set_field(row, key, rng.choice(garbage))
+            snapshot, _, _ = build(w)
+            try:
+                snapshot.acquire()
+            except source.SourceError as error:
+                # The seven-stock pool is the only value-dependent whole-batch check; everything else is a group-level unknown.
+                self.assertEqual(error.code, "seven_stock_group_not_required", (iteration, error.code, dict(error.diagnostics)))
+                self.assertEqual(snapshot.ledger.attempted, (0, 1, 2))
+                self.assertTrue([key for key in error.diagnostics if key.startswith("census_tpex_")])
+                self.assertCensusIdentities(snapshot)
+                outcomes_seen["seven"] += 1
+                continue
+            outcomes_seen["pending"] += 1
+            self.assertEqual((snapshot.state, snapshot.ledger.attempted), ("pending", (0, 1, 2, 3)), iteration)
+            self.assertCensusIdentities(snapshot)
+            inspected = snapshot.inspection()
+            distinct = {row.stock_id for row in snapshot._info if row.stock_id is not None and re.fullmatch(r"[0-9]{4}", row.stock_id)}
+            self.assertEqual(sum(inspected["stock_resolution"].values()), len(distinct), iteration)
+            self.assertEqual(len(inspected["outcomes"]), 6)
+            for (cutoff, group), outcome in inspected["outcomes"].items():
+                counts = inspected["d_set_difference"][cutoff][group]
+                if not outcome.rejected:
+                    self.assertEqual((outcome.reasons, counts["official_only"], counts["finmind_only_unexplained"]), ((), 0, 0), (iteration, cutoff, group))
+                self.assertEqual(bool(outcome.reasons), outcome.rejected)
+                if "cross_source_mismatch" in outcome.reasons:
+                    self.assertGreater(counts["official_only"] + counts["finmind_only_unexplained"], 0)
+            # The independent oracle path still works: admit exactly what the inference says.
+            self.admitAsInferred(snapshot)
+        self.assertGreater(outcomes_seen["pending"], 100)
 
 
 if __name__ == "__main__":

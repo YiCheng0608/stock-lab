@@ -15,6 +15,12 @@ state the expected status and members of all 2 cutoffs x 3 groups and they must 
 the inferred outcomes before ``lookup`` is available. Boundary transports do not
 demonstrate source truth.
 
+Strictness is layered. Structural failures (transport, JSON, outer shape, a row that is not an object, an
+official feed without one usable and uniform report date) reject the whole batch. Every value-level anomaly
+is unknown instead: it can only turn the affected groups or cutoffs into rejections, never add a member or
+lift a rejection (policy ``inference`` and ``response_shape``). Before any validation each source's rows are
+counted per identity/date form (``inspection()["census"]``, counts only, also copied into failure diagnostics).
+
 The default transport is direct stdlib HTTPS. It requires FinancialStart and a
 matching ExecutionBinding from a separately reviewed explicit Issue 37 seal. These
 declarations do not authenticate GitHub/runtime identity; the sole QA launcher/global
@@ -63,19 +69,19 @@ from typing import NamedTuple
 from urllib.parse import urlsplit
 
 
-# Pins of the externally published canonical policy v1 (sorted keys, compact JSON, UTF-8,
-# no trailing LF). An unset or mismatching pin rejects every policy before use
+# Pins of the externally published canonical policy v2 (sorted keys, compact JSON, UTF-8, no trailing
+# LF). An unset or mismatching pin rejects every policy before use
 # (policy_pin_unset, policy_pin, policy_canonical_mismatch).
-POLICY_SHA256 = "8f6de996077b836a8a6d3129401d70bdf3a044b1cc126c709c5f5aa566fe2f06"
-POLICY_BYTES = 10370
-POLICY_VERSION = "issue37-industry-membership-inferred-cutoffs-1005-1006-v1"
+POLICY_SHA256 = "6da55917dd8268e4b915046691f23a62ad6bd59739a45065275c8e8639bd1ef6"
+POLICY_BYTES = 14045
+POLICY_VERSION = "issue37-industry-membership-inferred-cutoffs-1005-1006-v2"
 POLICY_SCHEMA = "issue37-industry-membership-source-policy/v1"
-NAMESPACE = POLICY_VERSION + "/qa1"
+NAMESPACE = POLICY_VERSION + "/qa2"
 PURPOSE = "local_personal_noncommercial_process_ram_inferred_cutoff_membership_snapshot"
 CONSUMER_VERSION = "industry-membership-inferred-cutoffs-lookup-v1"
 FINANCIAL_START_VERSION = "issue37-financial-start-v1"
 SEAL_URL_PATTERN = r"https://github\.com/YiCheng0608/stock-lab/issues/37#issuecomment-([0-9]+)"
-SEAL_COMMENT_FLOOR = 6128163640  # AC revision 2 approval comment; any older location is refused
+SEAL_COMMENT_FLOOR = 6171178641  # policy v2 publication comment; it and any older location (including the spent qa1 seal) are refused
 USER_AGENT = "stock-lab-issue37-local-ram/1"
 ACCEPT = "application/json"
 HOSTS = ("api.finmindtrade.com", "openapi.twse.com.tw", "www.tpex.org.tw")
@@ -125,6 +131,53 @@ UNCOVERED_CODE_UNREPRESENTABLE = "<unrepresentable>"
 UNCOVERED_GROUP_UNKNOWN = "unknown"
 _UNCOVERED_CODE = re.compile(r"[0-9A-Za-z]{1,4}")
 _EXCHANGE_OF_TYPE = MappingProxyType({"twse": "TWSE", "tpex": "TPEx"})
+
+# Census classes: the value forms of the identity/date columns. Each vocabulary is mutually exclusive and
+# every value is assigned to the first class that fits, in the order listed (type/absence checks first).
+_MISSING = object()  # key absent from the row (JSON null is a different class)
+_NULL_TEXTS = frozenset({"none", "null", "nan", "nat", "na", "n/a", "undefined"})  # compared with str.casefold(), never trimmed
+_UNUSABLE = ("missing", "json_null", "non_string", "empty", "blank", "null_text")
+_ISO_SHAPE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_ISO_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:?[0-9]{2})?")
+_SLASH_SHAPE = re.compile(r"[0-9]{1,4}/[0-9]{1,2}/[0-9]{1,2}")
+DATE_CLASSES = _UNUSABLE + ("iso_valid", "iso_future", "iso_invalid_calendar", "iso_with_time", "digits8", "slash_date",
+                            "other_string")
+REPORT_DATE_CLASSES = _UNUSABLE + ("roc7_valid", "roc7_invalid_calendar", "digits8", "iso_shape", "other_string")
+LISTING_DATE_CLASSES = LISTING_FORMATS[:4] + ("invalid_calendar", "missing", "json_null", "non_string", "empty", "blank",
+                                              "null_text", "other_string")
+FINMIND_ID_UNUSABLE = _UNUSABLE + ("oversize",)
+FINMIND_ID_CLASSES = FINMIND_ID_UNUSABLE + ("ordinary", "digits_other_length", "alnum_mixed", "other_ascii", "non_ascii")
+OFFICIAL_CODE_CLASSES = _UNUSABLE + ("ordinary", "grammar_non_ordinary", "bad_grammar")
+TYPE_CLASSES = ("twse", "tpex", "other_string") + _UNUSABLE
+INDUSTRY_NAME_CLASSES = ("required_name", "other_name", "unknown_name") + _UNUSABLE
+OFFICIAL_INDUSTRY_CLASSES = ("required_group", "other_group", "unmapped_two_digit", "other_string") + _UNUSABLE
+# An unattributable official row whose industry is one of these cannot be shown to sit outside every required group.
+_INDUSTRY_UNPROVABLE = frozenset(_UNUSABLE + ("other_string",))
+_OFFICIAL_CENSUS = MappingProxyType({
+    "report_date": REPORT_DATE_CLASSES, "code": OFFICIAL_CODE_CLASSES,
+    "industry_code": OFFICIAL_INDUSTRY_CLASSES, "listing_date": LISTING_DATE_CLASSES})
+CENSUS_SOURCES = ("info", "twse", "tpex", "delisting")  # fetch order
+CENSUS_VOCABULARY = MappingProxyType({
+    "info": MappingProxyType({"date": DATE_CLASSES, "stock_id": FINMIND_ID_CLASSES, "type": TYPE_CLASSES,
+                              "industry_category": INDUSTRY_NAME_CLASSES}),
+    "twse": _OFFICIAL_CENSUS, "tpex": _OFFICIAL_CENSUS,
+    "delisting": MappingProxyType({"date": DATE_CLASSES, "stock_id": FINMIND_ID_CLASSES}),
+})
+RESOLUTION_STATES = ("single_row", "same_value", "newest_unique", "newest_tied", "date_unresolved_related",
+                     "date_unresolved_unrelated")
+DIFFERENCE_KEYS = ("official_only", "finmind_only_explained", "finmind_only_unexplained")
+
+
+def _census_key_names():
+    names = set()
+    for name, fields in CENSUS_VOCABULARY.items():
+        names.update((f"census_{name}_rows", f"census_{name}_rows_not_object"))
+        for field, classes in fields.items():
+            names.update(f"census_{name}_{field}_{klass}" for klass in classes)
+    return frozenset(names)
+
+
+_CENSUS_KEYS = _census_key_names()  # the only census_* diagnostics keys that may leave this module
 
 # INDUSTRY_CLASSIFICATION section 3 mapper: exchange + exact two-digit code, current ordinary codes only.
 # Embedded copy of backend/app/taxonomy.py (a test pins the equality); 91/80/18(TPEx)/34/blank map to None.
@@ -261,8 +314,12 @@ def _uncovered_entries(original):
     return tuple(entries), count - len(entries)
 
 
-def _failure_values(exception, stage, fallback="transport_or_parse_failure"):
-    """Copy only bounded plain metadata; never message/args/object chains."""
+def _failure_values(exception, stage, fallback="transport_or_parse_failure", census=None):
+    """Copy only bounded plain metadata; never message/args/object chains.
+
+    ``census`` is the flat ``census_<source>_<field>_<class>`` bag of ``_census_flat``; census keys already on the
+    exception are accepted too. Only enumerated key names with integer values in 0..MAX_ROWS survive.
+    """
     def label(value, default):
         return value if type(value) is str and re.fullmatch(r"[a-z0-9_]{1,64}", value) else default
     original = exception.diagnostics if isinstance(exception, SourceError) else {}
@@ -285,6 +342,12 @@ def _failure_values(exception, stage, fallback="transport_or_parse_failure"):
             values[f"uncovered_{item}_group"] = group
         if omitted:
             values["uncovered_omitted"] = omitted
+    bag = {key: value for key, value in original.items() if type(key) is str and key.startswith("census_")}
+    if census:
+        bag.update(census)
+    for key in sorted(bag):
+        if key in _CENSUS_KEYS and type(bag[key]) is int and 0 <= bag[key] <= MAX_ROWS:
+            values[key] = bag[key]
     for kind in ("cleanup", "validation"):
         prefix = "secondary_" + kind
         count = original.get(prefix + "_count", 0)
@@ -348,10 +411,16 @@ def _nonfinite(_):
     _fail("nonfinite_json_number")
 
 
-def _json(text):
+def _nonfinite_value(_):
+    """A bare NaN/Infinity literal in a source body is a non-string value (census ``non_string``), not a parse failure."""
+    return math.nan
+
+
+def _json(text, tolerate_nonfinite=False):
     invalid = False
     try:
-        return json.loads(text, object_pairs_hook=_unique_pairs, parse_float=float, parse_constant=_nonfinite)
+        return json.loads(text, object_pairs_hook=_unique_pairs, parse_float=float,
+                          parse_constant=_nonfinite_value if tolerate_nonfinite else _nonfinite)
     except SourceError:
         raise
     except (ValueError, RecursionError):
@@ -668,26 +737,34 @@ class Member(NamedTuple):
 
 @dataclass(frozen=True, slots=True)
 class OfficialRow:
+    """One official row. ``symbol`` is None when the code is unusable (the row cannot be attributed to a stock);
+    ``industry`` is "" when the raw value is unusable; ``report_ok`` is False when its report date is unknown."""
     exchange: str
-    symbol: str
+    symbol: object
     industry: str
     group: object
     listing: object
     listing_format: str = "unknown"
+    industry_class: str = ""
+    report_ok: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class InfoRow:
-    date: str
-    stock_id: str
+    """One ``TaiwanStockInfo`` row. ``date`` is the ISO date, or None when unknown (unusable, malformed or after D);
+    ``stock_id`` is None when unusable; ``type`` is "" and ``type_usable`` False when the raw type is unusable."""
+    date: object
+    stock_id: object
     type: str
     industry: str
+    type_usable: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class DelistRow:
-    date: str
-    stock_id: str
+    """One ``TaiwanStockDelisting`` row; ``date`` is None when unknown, ``stock_id`` None when unusable."""
+    date: object
+    stock_id: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -761,23 +838,129 @@ def retained_roots_estimate(*roots):
     return total
 
 
-def _iso_date(value, code):
-    if type(value) is not str or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
-        _fail(code)
-    try:
-        return date.fromisoformat(value).isoformat()
-    except ValueError:
-        _fail(code)
+def _text_kind(value):
+    """Absence/emptiness class of a raw JSON value, or None for a non-blank string that is not a null marker."""
+    if value is _MISSING:
+        return "missing"
+    if value is None:
+        return "json_null"
+    if type(value) is not str:
+        return "non_string"
+    if value == "":
+        return "empty"
+    if value.isspace():
+        return "blank"
+    if value.casefold() in _NULL_TEXTS:
+        return "null_text"
+    return None
 
 
-def _roc7_date(value, code):
-    """Official report date: exactly seven digits ROC yyyMMdd."""
-    if type(value) is not str or not re.fullmatch(r"[0-9]{7}", value):
-        _fail(code)
-    try:
-        return date(int(value[:3]) + 1911, int(value[3:5]), int(value[5:])).isoformat()
-    except ValueError:
-        _fail(code)
+def _iso_date_class(value, acquisition_date=None):
+    """``date`` column of the FinMind feeds -> (census class, ISO date or None).
+
+    Only ``YYYY-MM-DD`` real calendar dates carry a date (``iso_valid`` up to D, ``iso_future`` after it);
+    nothing is trimmed, padded or guessed, so a date with a time part is ``iso_with_time`` and has no date.
+    """
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind, None
+    if _ISO_SHAPE.fullmatch(value):
+        try:
+            day = date.fromisoformat(value).isoformat()
+        except ValueError:
+            return "iso_invalid_calendar", None
+        return ("iso_future" if acquisition_date is not None and day > acquisition_date else "iso_valid"), day
+    if _ISO_TIME.fullmatch(value):
+        return "iso_with_time", None
+    if re.fullmatch(r"[0-9]{8}", value):
+        return "digits8", None
+    if _SLASH_SHAPE.fullmatch(value):
+        return "slash_date", None
+    return "other_string", None
+
+
+def _report_date_class(value):
+    """Official report date -> (census class, ISO date or None); only exactly seven digits ROC yyyMMdd are usable."""
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind, None
+    if re.fullmatch(r"[0-9]{7}", value):
+        try:
+            return "roc7_valid", date(int(value[:3]) + 1911, int(value[3:5]), int(value[5:])).isoformat()
+        except ValueError:
+            return "roc7_invalid_calendar", None
+    if re.fullmatch(r"[0-9]{8}", value):
+        return "digits8", None
+    if _ISO_SHAPE.fullmatch(value):
+        return "iso_shape", None
+    return "other_string", None
+
+
+def _finmind_id_class(value):
+    """FinMind ``stock_id`` form. Unusable forms cannot be attributed to a stock; the four ``*_other``/``non_ascii``
+    forms are usable non-ordinary identities (excluded); only exactly four ASCII digits are ordinary."""
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    if len(value) > 32:
+        return "oversize"
+    if _ORDINARY_SYMBOL.fullmatch(value):
+        return "ordinary"
+    if value.isascii():
+        if value.isdigit():
+            return "digits_other_length"
+        return "alnum_mixed" if value.isalnum() else "other_ascii"
+    return "non_ascii"
+
+
+def _official_code_class(value):
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    if _ORDINARY_SYMBOL.fullmatch(value):
+        return "ordinary"
+    return "grammar_non_ordinary" if _OFFICIAL_CODE.fullmatch(value) else "bad_grammar"
+
+
+def _type_class(value):
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    return value if value in _EXCHANGE_OF_TYPE else "other_string"
+
+
+def _industry_name_class(value):
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    groups = {_group_of_name(exchange, value) for exchange in ("TWSE", "TPEx")} - {None}
+    if groups & set(REQUIRED_GROUPS):
+        return "required_name"
+    return "other_name" if groups else "unknown_name"
+
+
+def _official_industry_class(exchange, value):
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    group = _group_of_code(exchange, value)
+    if group in REQUIRED_GROUPS:
+        return "required_group"
+    if group is not None:
+        return "other_group"
+    return "unmapped_two_digit" if re.fullmatch(r"[0-9]{2}", value) else "other_string"
+
+
+def _listing_class(value):
+    _, label = _listing_date_format(value)
+    if label != "unknown":
+        return label
+    kind = _text_kind(value)
+    if kind is not None:
+        return kind
+    if re.fullmatch(r"[0-9]{6,8}", value) or _YMD_SLASH.fullmatch(value):
+        return "invalid_calendar"
+    return "other_string"
 
 
 def _listing_date_format(value):
@@ -835,39 +1018,69 @@ def _finmind_rows(document):
     return rows
 
 
-def _nullable_text(value):
-    """Non-identity text columns: a string, or null/absent meaning unknown (fails closed per group); anything else is a schema error."""
-    if value is None:
-        return ""
-    if type(value) is not str:
-        _fail("row_schema_type")
-    return value
+def _census_counts(name):
+    return {field: dict.fromkeys(classes, 0) for field, classes in CENSUS_VOCABULARY[name].items()}
 
 
-def _parse_info(document, acquisition_date):
-    """TaiwanStockInfo rows; extra columns are ignored. ``date`` and ``stock_id`` must be strings; the type and
-    industry columns may be null (unknown), so an unexpected null cannot spend the whole batch."""
-    result = []
-    for row in _finmind_rows(document):
-        if type(row) is not dict or any(type(row.get(key)) is not str for key in ("date", "stock_id")):
-            _fail("info_row_schema")
-        day = _iso_date(row["date"], "info_date")
-        if day > acquisition_date:
-            _fail("info_date_after_acquisition")
-        if not row["stock_id"] or len(row["stock_id"]) > 32:
-            _fail("info_stock_id")
-        result.append(InfoRow(day, row["stock_id"], _nullable_text(row.get("type")), _nullable_text(row.get("industry_category"))))
+def _publish_census(sink, total, objects, counts):
+    """Hand the finished form counts to the caller before any structural failure of the same body is raised."""
+    if sink is not None:
+        sink.clear()
+        sink.update(rows=total, rows_not_object=total - objects, **counts)
+
+
+def _parse_info(document, acquisition_date, census=None):
+    """TaiwanStockInfo rows; extra columns are ignored.
+
+    Only a row that is not an object rejects the batch. Every value-level anomaly is unknown: ``date`` is None unless
+    it is a real ``YYYY-MM-DD`` date not after D, ``stock_id`` is None when unusable (non-string, empty, blank, null
+    marker, over 32 characters), and an unusable ``type``/``industry_category`` is "" (``type_usable`` False for the
+    type). All rows are counted per value form into ``census`` first.
+    """
+    rows = _finmind_rows(document)
+    counts, objects, result = _census_counts("info"), 0, []
+    for row in rows:
+        if type(row) is not dict:
+            continue
+        objects += 1
+        day_class, day = _iso_date_class(row.get("date", _MISSING), acquisition_date)
+        id_class = _finmind_id_class(row.get("stock_id", _MISSING))
+        type_class = _type_class(row.get("type", _MISSING))
+        name_class = _industry_name_class(row.get("industry_category", _MISSING))
+        counts["date"][day_class] += 1
+        counts["stock_id"][id_class] += 1
+        counts["type"][type_class] += 1
+        counts["industry_category"][name_class] += 1
+        usable_type = type_class not in _UNUSABLE
+        result.append(InfoRow(day if day_class == "iso_valid" else None,
+                              None if id_class in FINMIND_ID_UNUSABLE else row["stock_id"],
+                              row["type"] if usable_type else "",
+                              "" if name_class in _UNUSABLE else row["industry_category"],
+                              usable_type))
+    _publish_census(census, len(rows), objects, counts)
+    if objects != len(rows):
+        _fail("row_not_object")
     return tuple(result)
 
 
-def _parse_delisting(document):
-    result = []
-    for row in _finmind_rows(document):
-        if type(row) is not dict or any(type(row.get(key)) is not str for key in ("date", "stock_id")):
-            _fail("delisting_row_schema")
-        if not row["stock_id"] or len(row["stock_id"]) > 32:
-            _fail("delisting_stock_id")
-        result.append(DelistRow(_iso_date(row["date"], "delisting_date"), row["stock_id"]))
+def _parse_delisting(document, acquisition_date=None, census=None):
+    """TaiwanStockDelisting rows with the same value-level rules; a real date after D is a known date (it simply lies
+    outside every ``[C, D]`` window), any other unusable date is None."""
+    rows = _finmind_rows(document)
+    counts, objects, result = _census_counts("delisting"), 0, []
+    for row in rows:
+        if type(row) is not dict:
+            continue
+        objects += 1
+        day_class, day = _iso_date_class(row.get("date", _MISSING), acquisition_date)
+        id_class = _finmind_id_class(row.get("stock_id", _MISSING))
+        counts["date"][day_class] += 1
+        counts["stock_id"][id_class] += 1
+        result.append(DelistRow(day if day_class in ("iso_valid", "iso_future") else None,
+                                None if id_class in FINMIND_ID_UNUSABLE else row["stock_id"]))
+    _publish_census(census, len(rows), objects, counts)
+    if objects != len(rows):
+        _fail("row_not_object")
     return tuple(result)
 
 
@@ -877,35 +1090,47 @@ _OFFICIAL_FIELDS = {
 }
 
 
-def _parse_official(document, exchange, acquisition_date):
-    """Official listed-company master -> (rows, report_date). Report date must be one value in [earliest, D].
+def _parse_official(document, exchange, acquisition_date, census=None):
+    """Official listed-company master -> (rows, report_date).
 
-    Code and report date must be strings. The industry and listing-date columns may be null/absent (unknown/missing,
-    which rejects only the affected group); a listing-date value of any other type is invalid and counts as missing.
+    Only a row that is not an object, or a feed without exactly one usable report date inside ``[earliest, D]``,
+    rejects the batch. A row's report date is usable when it is seven digits of a real ROC date; the feed report
+    date is the one value shared by all usable rows. Every other anomaly is a property of that row: its ``symbol``
+    is None when the code is unusable (not ``[0-9A-Z]{4,6}``, null marker, non-string), its ``report_ok`` is False
+    when its report date is unusable, an unusable industry is "", and an unusable listing date is None. All rows are
+    counted per value form into ``census`` first.
     """
     if type(document) is not list or not document or len(document) > MAX_ROWS:
         _fail("official_rows")
     report_key, code_key, industry_key, listing_key = _OFFICIAL_FIELDS[exchange]
-    seen = set()
-    report = None
-    rows = []
+    counts, objects, reports, rows = _census_counts(exchange.lower()), 0, set(), []
     for row in document:
-        if type(row) is not dict or any(type(row.get(key)) is not str for key in (report_key, code_key)):
-            _fail("official_row_schema")
-        code = row[code_key]
-        if not _OFFICIAL_CODE.fullmatch(code):
-            _fail("official_symbol")
-        if code in seen:
-            _fail("official_duplicate_symbol")
-        seen.add(code)
-        row_report = _roc7_date(row[report_key], "official_report_date")
-        if report is None:
-            report = row_report
-        elif row_report != report:
-            _fail("official_report_date_not_uniform")
-        industry = _nullable_text(row.get(industry_key))
-        listing, listing_format = _listing_date_format(row.get(listing_key))
-        rows.append(OfficialRow(exchange, code, industry, _group_of_code(exchange, industry), listing, listing_format))
+        if type(row) is not dict:
+            continue
+        objects += 1
+        report_class, report = _report_date_class(row.get(report_key, _MISSING))
+        code_class = _official_code_class(row.get(code_key, _MISSING))
+        industry_class = _official_industry_class(exchange, row.get(industry_key, _MISSING))
+        listing_raw = row.get(listing_key, _MISSING)
+        listing, listing_format = _listing_date_format(listing_raw)
+        counts["report_date"][report_class] += 1
+        counts["code"][code_class] += 1
+        counts["industry_code"][industry_class] += 1
+        counts["listing_date"][_listing_class(listing_raw)] += 1
+        if report is not None:
+            reports.add(report)
+        industry = "" if industry_class in _UNUSABLE else row[industry_key]
+        symbol = row[code_key] if code_class in ("ordinary", "grammar_non_ordinary") else None
+        rows.append(OfficialRow(exchange, symbol, industry, _group_of_code(exchange, industry), listing, listing_format,
+                                industry_class, report_class == "roc7_valid"))
+    _publish_census(census, len(document), objects, counts)
+    if objects != len(document):
+        _fail("row_not_object")
+    if not reports:
+        _fail("official_report_date")
+    if len(reports) > 1:
+        _fail("official_report_date_not_uniform")
+    (report,) = reports
     if not ACQUISITION_EARLIEST <= report <= acquisition_date:
         _fail("official_report_date_out_of_range")
     return tuple(rows), report
@@ -919,7 +1144,7 @@ def check_seven_symbols_covered(official):
     (``<null>`` when null, missing or empty, ``<unrepresentable>`` unless 1-4 ASCII letters or digits) and
     the mapper result (a canonical group or ``unknown``); see ``_uncovered_entries`` for the whitelist.
     """
-    by_identity = {(row.exchange, row.symbol): row for row in official}
+    by_identity = {(row.exchange, row.symbol): row for row in official if row.symbol is not None}
     uncovered = []
     for index, symbol in enumerate(SEVEN_SYMBOLS):
         row = by_identity.get(("TPEx", symbol)) or by_identity.get(("TWSE", symbol))
@@ -944,7 +1169,92 @@ def check_seven_symbols_covered(official):
         _fail("seven_stock_group_not_required", **diagnostics)
 
 
-def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOFFS):
+def _value(row):
+    return (row.type, row.industry, row.type_usable)
+
+
+def _newest_state(rows):
+    """Newest-row resolution among one stock's Info rows -> (state, newest rows).
+
+    ``single``: one row. ``same``: every row carries the same (type, industry) value, so the order of the rows
+    cannot matter even when dates are unknown. ``unresolved``: the values differ and at least one date is unknown,
+    so the newest row cannot be determined. Otherwise the newest date decides: ``unique`` when the rows on that
+    date agree, ``tied`` when they do not.
+    """
+    if len(rows) == 1:
+        return "single", rows
+    if len({_value(row) for row in rows}) == 1:
+        return "same", rows[:1]
+    if any(row.date is None for row in rows):
+        return "unresolved", rows
+    top = max(row.date for row in rows)
+    newest = [row for row in rows if row.date == top]
+    return ("unique" if len({_value(row) for row in newest}) == 1 else "tied"), newest
+
+
+def _row_groups(row):
+    """Required groups the (type, industry) of one Info row can reach; an unusable type tries both exchanges."""
+    if row.type in _EXCHANGE_OF_TYPE:
+        exchanges = (_EXCHANGE_OF_TYPE[row.type],)
+    else:
+        exchanges = () if row.type_usable else ("TWSE", "TPEx")
+    return {group for group in (_group_of_name(exchange, row.industry) for exchange in exchanges) if group in REQUIRED_GROUPS}
+
+
+def _official_reach(row, attributable):
+    """Required groups an official row can belong to. An unattributable row whose industry cannot be shown to be
+    outside every required group could belong to any of them."""
+    if row.group in REQUIRED_GROUPS:
+        return {row.group}
+    if not attributable and row.industry_class in _INDUSTRY_UNPROVABLE:
+        return set(REQUIRED_GROUPS)
+    return set()
+
+
+def _ordinary_official(official):
+    return tuple(row for row in official if row.symbol is not None and _ORDINARY_SYMBOL.fullmatch(row.symbol))
+
+
+def _official_index(official):
+    by_symbol = {}
+    for row in _ordinary_official(official):
+        by_symbol.setdefault(row.symbol, []).append(row)
+    return by_symbol
+
+
+def _resolve_stocks(info, official_by_symbol):
+    """Ordinary Info rows per stock -> (by_id, resolution, reach); ``reach`` holds the required groups an
+    unresolved stock can touch (its official groups plus every group any of its rows can reach)."""
+    by_id = {}
+    for row in info:
+        if row.stock_id is not None and _ORDINARY_SYMBOL.fullmatch(row.stock_id):
+            by_id.setdefault(row.stock_id, []).append(row)
+    resolution, reach = {}, {}
+    for stock_id, rows in by_id.items():
+        state, newest = _newest_state(rows)
+        resolution[stock_id] = (state, newest)
+        if state == "unresolved":
+            groups = {row.group for row in official_by_symbol.get(stock_id, ()) if row.group in REQUIRED_GROUPS}
+            for row in rows:
+                groups |= _row_groups(row)
+            reach[stock_id] = groups
+    return by_id, resolution, reach
+
+
+def stock_resolution_counts(official, info):
+    """How the ordinary Info stocks resolved their newest row (counts only; they sum to the distinct ordinary stocks)."""
+    _, resolution, reach = _resolve_stocks(info, _official_index(official))
+    counts = dict.fromkeys(RESOLUTION_STATES, 0)
+    names = {"single": "single_row", "same": "same_value", "unique": "newest_unique", "tied": "newest_tied"}
+    for stock_id, (state, _) in resolution.items():
+        if state == "unresolved":
+            counts["date_unresolved_related" if reach[stock_id] else "date_unresolved_unrelated"] += 1
+        else:
+            counts[names[state]] += 1
+    return counts
+
+
+def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOFFS, difference=None):
     """Pure inference over validated rows -> {(cutoff, group): GroupOutcome}; no I/O.
 
     Fail-closed: any difference or ambiguity rejects the group (or, where the AC says
@@ -952,26 +1262,52 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
 
     Non-ordinary identities (a symbol or ``stock_id`` that is not exactly four ASCII digits) are excluded
     from both sources before any set, delisting or board-transfer decision: they are never members and
-    never raise a rejection. The row grammars that reject the whole batch run earlier, in the parsers.
+    never raise a rejection. An unusable identity or date is unknown instead: it can only reject the groups
+    (or cutoffs) it could affect and never adds a member or lifts a rejection. ``difference``, when given, receives
+    per (cutoff, group) the counts (official only, FinMind only explained, FinMind only unexplained).
     """
-    official = tuple(row for row in official if _ORDINARY_SYMBOL.fullmatch(row.symbol))
-    info = tuple(row for row in info if _ORDINARY_SYMBOL.fullmatch(row.stock_id))
-    by_id = {}
+    ordinary_official = _ordinary_official(official)
+    official_by_symbol = _official_index(official)
+    occurrences = {}
+    for row in ordinary_official:
+        occurrences[(row.exchange, row.symbol)] = occurrences.get((row.exchange, row.symbol), 0) + 1
+    # Duplicated codes and rows without a usable report date stay in the identity index (delisting, board transfer)
+    # but never become members.
+    usable_official = tuple(row for row in ordinary_official
+                            if row.report_ok and occurrences[(row.exchange, row.symbol)] == 1)
+    static = {group: set() for group in REQUIRED_GROUPS}
+    for row in official:
+        if row.symbol is None:
+            for group in _official_reach(row, False):
+                static[group].add("official_identity_unusable")
+    for row in ordinary_official:
+        if occurrences[(row.exchange, row.symbol)] > 1:
+            for group in _official_reach(row, True):
+                static[group].add("official_duplicate_symbol")
+        if not row.report_ok:
+            for group in _official_reach(row, True):
+                static[group].add("official_row_report_date_unknown")
     for row in info:
-        by_id.setdefault(row.stock_id, []).append(row)
-    latest, ambiguous = {}, {}
-    for stock_id, rows in by_id.items():
-        top = max(row.date for row in rows)
-        newest = [row for row in rows if row.date == top]
-        if len({(row.type, row.industry) for row in newest}) == 1:
-            latest[stock_id] = newest[0]
+        if row.stock_id is None:
+            for group in _row_groups(row):
+                static[group].add("info_identity_unusable")
+    by_id, resolution, reach = _resolve_stocks(info, official_by_symbol)
+    latest = {}
+    for stock_id, (state, newest) in resolution.items():
+        if state == "tied":
+            for row in newest:
+                for group in _row_groups(row):
+                    static[group].add("finmind_multiple_valid_records")
+            for row in official_by_symbol.get(stock_id, ()):
+                if row.group in static:
+                    static[row.group].add("finmind_multiple_valid_records")
+        elif state == "unresolved":
+            for group in reach[stock_id]:
+                static[group].add("finmind_latest_date_unresolved")
         else:
-            ambiguous[stock_id] = tuple(newest)
-    official_by_symbol = {}
-    for row in official:
-        official_by_symbol.setdefault(row.symbol, []).append(row)
+            latest[stock_id] = newest[0]
     official_set = {group: set() for group in REQUIRED_GROUPS}
-    for row in official:
+    for row in usable_official:
         if row.group in official_set:
             official_set[row.group].add(Member(row.exchange, row.symbol))
     finmind_set = {group: set() for group in REQUIRED_GROUPS}
@@ -981,19 +1317,12 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
             group = _group_of_name(exchange, row.industry)
             if group in finmind_set:
                 finmind_set[group].add(Member(exchange, stock_id))
-    ambiguous_groups = set()
-    for stock_id, rows in ambiguous.items():
-        for row in rows:
-            exchange = _EXCHANGE_OF_TYPE.get(row.type)
-            group = _group_of_name(exchange, row.industry) if exchange else None
-            if group in official_set:
-                ambiguous_groups.add(group)
-        for row in official_by_symbol.get(stock_id, ()):
-            if row.group in official_set:
-                ambiguous_groups.add(row.group)
+        elif not row.type_usable:
+            for group in _row_groups(row):
+                static[group].add("info_type_unusable")
     outcomes = {}
     for cutoff in cutoffs:
-        reasons = {group: set() for group in REQUIRED_GROUPS}
+        reasons = {group: set(static[group]) for group in REQUIRED_GROUPS}
         all_reasons = set()
         members = {group: {} for group in REQUIRED_GROUPS}
         explained = set()
@@ -1005,42 +1334,65 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
                 members[group][member] = flag
         seen_delisting = set()
         for row in delisting:
-            if not cutoff <= row.date <= acquisition_date or (row.date, row.stock_id) in seen_delisting:
+            if row.stock_id is None:
+                # No stock to attribute it to: any cutoff whose window may contain the date cannot be certified.
+                if row.date is None or cutoff <= row.date <= acquisition_date:
+                    all_reasons.add("delisted_identity_unusable")
                 continue
-            seen_delisting.add((row.date, row.stock_id))
             if not _ORDINARY_SYMBOL.fullmatch(row.stock_id):
                 continue  # non-ordinary identity (ETF, warrant, ...) never belongs to a required group
+            unknown = row.date is None  # may equal the cutoff and may lie after it: the union of both consequences applies
+            if not unknown and not cutoff <= row.date <= acquisition_date:
+                continue
+            if (row.date, row.stock_id) in seen_delisting:
+                continue
+            seen_delisting.add((row.date, row.stock_id))
+            equals_cutoff = unknown or row.date == cutoff
+            equal_reason = "delisting_date_unknown" if unknown else "delisting_date_equals_cutoff"
             official_rows = official_by_symbol.get(row.stock_id)
             if official_rows:
                 for official_row in official_rows:
-                    if official_row.group in reasons and row.date == cutoff:
-                        reasons[official_row.group].add("delisting_date_equals_cutoff")
+                    if official_row.group in reasons and equals_cutoff:
+                        reasons[official_row.group].add(equal_reason)
                 continue
             candidates = [item for item in by_id.get(row.stock_id, ()) if item.type in _EXCHANGE_OF_TYPE]
             if not candidates:
                 all_reasons.add("delisted_industry_undeterminable")
                 continue
-            top = max(item.date for item in candidates)
-            newest = {(item.type, item.industry) for item in candidates if item.date == top}
-            if len(newest) != 1:
+            state, newest = _newest_state(candidates)
+            if state == "tied":
                 all_reasons.add("delisted_record_ambiguous")
                 continue
-            kind, industry = next(iter(newest))
-            exchange = _EXCHANGE_OF_TYPE[kind]
-            group = _group_of_name(exchange, industry)
+            if state == "unresolved":
+                possible = {_group_of_name(_EXCHANGE_OF_TYPE[item.type], item.industry) for item in candidates}
+                if None in possible:
+                    all_reasons.add("delisted_industry_undeterminable")
+                else:
+                    for group in possible & set(REQUIRED_GROUPS):
+                        reasons[group].add("finmind_latest_date_unresolved")
+                continue
+            exchange = _EXCHANGE_OF_TYPE[newest[0].type]
+            group = _group_of_name(exchange, newest[0].industry)
             if group is None:
                 all_reasons.add("delisted_industry_undeterminable")
                 continue
-            explained.add(row.stock_id)
+            if not unknown:
+                explained.add(row.stock_id)
             if group in reasons:
-                if row.date == cutoff:
-                    reasons[group].add("delisting_date_equals_cutoff")
+                if equals_cutoff:
+                    reasons[group].add(equal_reason)
                 else:
                     add(group, Member(exchange, row.stock_id), "finmind_only_delisted_member")
         for group in REQUIRED_GROUPS:
-            if official_set[group] != {m for m in finmind_set[group] if m.symbol not in explained}:
+            finmind_only = finmind_set[group] - official_set[group]
+            finmind_explained = {m for m in finmind_only if m.symbol in explained}
+            official_only = official_set[group] - finmind_set[group]
+            if official_only or len(finmind_only) != len(finmind_explained):
                 reasons[group].add("cross_source_mismatch")
-        for row in official:
+            if difference is not None:
+                difference[(cutoff, group)] = (len(official_only), len(finmind_explained),
+                                               len(finmind_only) - len(finmind_explained))
+        for row in usable_official:
             group = row.group
             if group not in members:
                 continue
@@ -1055,6 +1407,9 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
                     continue  # a new listing after the cutoff
                 if row.exchange != "TWSE":
                     reasons[group].add("board_transfer_reverse_direction")
+                    continue
+                if any(item.date is None for item in older):
+                    reasons[group].add("board_transfer_evidence_date_unknown")
                     continue
                 top = max(item.date for item in older)
                 names = {item.industry for item in older if item.date == top}
@@ -1072,8 +1427,6 @@ def infer_memberships(official, info, delisting, acquisition_date, cutoffs=CUTOF
                             reasons[old_group].add("board_transfer_industry_conflict")
                     else:
                         add(group, Member("TPEx", row.symbol), "board_transfer_old_tpex_identity")
-        for group in ambiguous_groups:
-            reasons[group].add("finmind_multiple_valid_records")
         owners, symbol_owners = {}, {}
         for group in REQUIRED_GROUPS:
             for member in members[group]:
@@ -1165,6 +1518,8 @@ class MembershipSource:
         self._report_dates = {}
         self._acquisition_date = None
         self._outcomes = {}
+        self._difference = {}
+        self._census = {}
         self._capture_buffer = bytearray()
         self._diagnostics = MappingProxyType({})
         self._roots_estimate = 0
@@ -1333,10 +1688,28 @@ class MembershipSource:
             if failure is not None:
                 _raise_failure(failure)
 
+    def _store_census(self, index, census):
+        """Keep one source's finished form counts (immutable, counts only); an empty sink means nothing was counted."""
+        if census:
+            self._census[CENSUS_SOURCES[index]] = MappingProxyType({
+                key: value if type(value) is int else MappingProxyType(dict(value)) for key, value in census.items()})
+
+    def _census_flat(self):
+        """The stored census as the flat ``census_<source>_<field>_<class>`` keys that failure diagnostics carry."""
+        flat = {}
+        for name, record in self._census.items():
+            for key, value in record.items():
+                if type(value) is int:
+                    flat[f"census_{name}_{key}"] = value
+                else:
+                    flat.update({f"census_{name}_{key}_{klass}": count for klass, count in value.items()})
+        return flat
+
     def _parse_capture(self, capture, index):
         full_body, receipt = capture.body, capture.receipt
         decoded_text = document = parse_results = None
         diagnostics = {"source_index": index, "stage": "decode_parse"}
+        census = {}  # filled by the parser before any structural failure of this body is raised
         try:
             self._remaining()
             body = full_body
@@ -1352,24 +1725,26 @@ class MembershipSource:
                 _fail("utf8_decode")
             self._check_roots(full_body, receipt, decoded_text, document, parse_results, diagnostics)
             self._remaining()
-            document = _json(decoded_text)
+            document = _json(decoded_text, tolerate_nonfinite=True)
             self._check_roots(full_body, receipt, decoded_text, document, diagnostics)
             self._remaining()
             if index == 0:
-                parse_results = _parse_info(document, self._acquisition_date)
+                parse_results = _parse_info(document, self._acquisition_date, census)
             elif index == 3:
-                parse_results = _parse_delisting(document)
+                parse_results = _parse_delisting(document, self._acquisition_date, census)
             else:
                 exchange = "TWSE" if index == 1 else "TPEx"
-                parse_results = _parse_official(document, exchange, self._acquisition_date)
+                parse_results = _parse_official(document, exchange, self._acquisition_date, census)
+            self._store_census(index, census)
             self._check_roots(full_body, receipt, decoded_text, document, parse_results, diagnostics)
             self._remaining()
             return parse_results
         except BaseException as exception:
-            primary_failure = _failure_values(exception, "decode_parse")
+            self._store_census(index, census)
+            primary_failure = _failure_values(exception, "decode_parse", census=self._census_flat())
             primary_failure["source_index"] = index
             self._check_failure_roots(primary_failure, "parse_failure_roots", full_body, receipt,
-                                      decoded_text, document, parse_results, diagnostics, exception)
+                                      decoded_text, document, parse_results, diagnostics, exception, census)
             _raise_failure(primary_failure)
         finally:
             self._request_deadline = None
@@ -1411,14 +1786,17 @@ class MembershipSource:
             self._delisting = self._parse_capture(self._capture(3), 3)
             self._check_roots(pending)
             self._remaining()
-            self._outcomes.update(infer_memberships(self._twse + self._tpex, self._info, self._delisting, today))
+            difference = {}
+            self._outcomes.update(infer_memberships(self._twse + self._tpex, self._info, self._delisting, today,
+                                                    difference=difference))
+            self._difference.update(difference)
             self._check_roots(pending, self._outcomes)
             self._remaining()
             self._expiry = min(self._now() + self._lease_seconds, self._batch_deadline)
             self._state = "pending"
             return pending
         except BaseException as exception:
-            primary_failure = _failure_values(exception, "batch")
+            primary_failure = _failure_values(exception, "batch", census=self._census_flat())
             self._state = "failed"
             primary_failure.update(attempts=len(self._ledger.attempted), raw_bytes=self._raw_bytes)
             diagnostics = {"stage": "batch", **primary_failure}
@@ -1438,21 +1816,30 @@ class MembershipSource:
         return MappingProxyType({exchange: MappingProxyType(per_format) for exchange, per_format in counts.items()})
 
     def _excluded_counts(self):
-        """Rows left out of every set as non-ordinary (identity not exactly four ASCII digits): counts only.
+        """Rows left out of every set as non-ordinary (a usable identity that is not exactly four ASCII digits): counts only.
 
+        A row whose identity is unusable is not counted here (the census counts it; it is unknown, not excluded).
         Official rows are counted per exchange; ``TaiwanStockInfo`` rows per ``type`` (``twse``/``tpex``, any other
         type is ``other``). ``TaiwanStockDelisting`` has no exchange and its non-ordinary ids were always ignored,
         so it is not counted. No raw symbol or ``stock_id`` string is recorded.
         """
         official = {"TWSE": 0, "TPEx": 0}
         for row in self._twse + self._tpex:
-            if not _ORDINARY_SYMBOL.fullmatch(row.symbol):
+            if row.symbol is not None and not _ORDINARY_SYMBOL.fullmatch(row.symbol):
                 official[row.exchange] += 1
         finmind = {"TWSE": 0, "TPEx": 0, "other": 0}
         for row in self._info:
-            if not _ORDINARY_SYMBOL.fullmatch(row.stock_id):
+            if row.stock_id is not None and not _ORDINARY_SYMBOL.fullmatch(row.stock_id):
                 finmind[_EXCHANGE_OF_TYPE.get(row.type, "other")] += 1
         return MappingProxyType({"official": MappingProxyType(official), "finmind": MappingProxyType(finmind)})
+
+    def _difference_counts(self):
+        """D-set difference sizes per cutoff and group once inference has completed (empty before and after failure):
+        official only, FinMind only explained by a delisting inside ``[C, D]``, FinMind only unexplained. Counts only."""
+        result = {}
+        for (cutoff, group), counts in self._difference.items():
+            result.setdefault(cutoff, {})[group] = MappingProxyType(dict(zip(DIFFERENCE_KEYS, counts)))
+        return MappingProxyType({cutoff: MappingProxyType(groups) for cutoff, groups in result.items()})
 
     def inspection(self):
         if self.state not in ("pending", "available", "failed"):
@@ -1464,6 +1851,9 @@ class MembershipSource:
             "row_counts": (len(self._info), len(self._twse), len(self._tpex), len(self._delisting)),
             "listing_date_formats": self._listing_format_counts(),
             "excluded_non_ordinary": self._excluded_counts(),
+            "census": MappingProxyType(dict(self._census)),
+            "stock_resolution": MappingProxyType(stock_resolution_counts(self._twse + self._tpex, self._info)),
+            "d_set_difference": self._difference_counts(),
             "outcomes": MappingProxyType(dict(self._outcomes)),
             "diagnostics": self._diagnostics,
             "retained_roots_estimate_bytes": self._roots_estimate})
@@ -1514,6 +1904,7 @@ class MembershipSource:
                 # No oracle shopping: a mismatching assertion ends the snapshot.
                 self._state = "failed"
                 self._outcomes.clear()
+                self._difference.clear()
                 self._diagnostics = MappingProxyType({"code": "oracle_set_mismatch", "stage": "oracle"})
                 _fail("oracle_set_mismatch")
         self._check_roots(admission)
@@ -1568,6 +1959,8 @@ class MembershipSource:
         self._capture_buffer.clear()
         self._captures.clear()
         self._outcomes.clear()
+        self._difference.clear()
+        self._census.clear()
         self._report_dates.clear()
         self._info = self._twse = self._tpex = self._delisting = ()
         self._transport = None
