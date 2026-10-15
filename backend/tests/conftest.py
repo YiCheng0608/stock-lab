@@ -82,7 +82,7 @@ STANDALONE_ONLY = {
     ),
     "test_industry_membership_inferred_source.py": (
         "docs/development-baseline/README.md (standalone, stdlib only, -B required); "
-        "tests/test_industry_membership_inferred_source.py:42 requires -B, :44 audit hook"
+        "tests/test_industry_membership_inferred_source.py:44 requires -B, :46 audit hook"
     ),
 }
 
