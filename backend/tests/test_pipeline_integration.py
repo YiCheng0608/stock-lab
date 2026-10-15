@@ -56,7 +56,7 @@ def _fixture_payload() -> sources.FetchedPayload:
     )
 
 
-def test_turnover_status_survives_upsert_and_gates_both_ratios_in_memory():
+def test_turnover_status_survives_upsert_and_only_volume_gates_both_ratios_in_memory():
     from app.api import bar_dict
 
     engine = create_engine("sqlite:///:memory:")
@@ -85,24 +85,36 @@ def test_turnover_status_survives_upsert_and_gates_both_ratios_in_memory():
                 ))
             db.flush()
             assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
-            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
 
             positive_bar = db.scalar(select(MarketBar).where(
                 MarketBar.instrument_id == instrument.id,
                 MarketBar.trading_date == score_date,
             ))
             assert positive_bar is not None and positive_bar.turnover == 100
+            # The v2 denominator is share volume, so TWD turnover availability
+            # no longer gates either ratio.
             for status, reason in (("unavailable", "invalid"), ("unknown", "legacy_zero_ambiguous")):
                 positive_bar.turnover_status = status
                 positive_bar.turnover_reason = reason
                 db.flush()
-                assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
-                assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+                assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+                assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
             positive_bar.turnover_status = "available"
             positive_bar.turnover_reason = None
             db.flush()
             assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
-            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
+
+            # A zero or negative volume in the window makes both ratios unavailable.
+            for bad_volume in (0, -1):
+                positive_bar.volume = bad_volume
+                db.flush()
+                assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
+                assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is None
+            positive_bar.volume = 1000
+            db.flush()
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
 
             row = {
                 "Code": "STATUS", "Date": score_date.isoformat(),
@@ -121,8 +133,8 @@ def test_turnover_status_survives_upsert_and_gates_both_ratios_in_memory():
             assert (bar_dict(bar)["turnover_status"], bar_dict(bar)["turnover_reason"]) == (
                 "unavailable", "missing"
             )
-            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
-            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
 
             explicit_zero = sources.parse_twse_daily_rows([{**row, "TradeValue": "0"}])[0]
             pipeline._upsert_official_bar(db, instrument, explicit_zero, None)
@@ -134,14 +146,14 @@ def test_turnover_status_survives_upsert_and_gates_both_ratios_in_memory():
             assert (bar_dict(bar)["turnover_status"], bar_dict(bar)["turnover_reason"]) == (
                 "available", None
             )
-            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
-            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
 
             bar.turnover_status = "unknown"
             bar.turnover_reason = "legacy_zero_ambiguous"
             db.flush()
-            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
-            assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+            assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is not None
+            assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is not None
     finally:
         engine.dispose()
 
@@ -463,9 +475,17 @@ def test_official_groups_merge_exchanges_but_preserve_membership_provenance(pipe
         assert {item.instrument_id for item in etf_members} == {twse_etf.id, tpex_etf.id}
 
 
-def test_institutional_flow_ratios_use_canonical_hot_group_and_strategy_denominators(pipeline_env):
+def test_institutional_flow_ratios_use_inclusive_20d_share_volume_denominators(pipeline_env):
+    from app.institutional_flow_ratio import (
+        PURPOSE_HOT_GROUP_RATIO,
+        PURPOSE_STRATEGY_GATE,
+        compute_institutional_flow_ratio,
+    )
+
     score_date = date(2026, 9, 4)
-    dates = pipeline.business_days(score_date, 20)
+    all_dates = pipeline.business_days(score_date, 21)
+    older_date, dates = all_dates[0], all_dates[1:]
+    volumes = [1000] * 19 + [21000]
     with pipeline_env() as db:
         instrument = Instrument(
             market="TW",
@@ -477,7 +497,24 @@ def test_institutional_flow_ratios_use_canonical_hot_group_and_strategy_denomina
         )
         db.add(instrument)
         db.flush()
-        for trading_date in dates:
+        # The oldest bar is outside the inclusive 20-session window and must not
+        # contribute; TWD turnover is deliberately unrelated to volume.
+        db.add(
+            MarketBar(
+                instrument_id=instrument.id,
+                trading_date=older_date,
+                open=100,
+                high=101,
+                low=99,
+                close=100,
+                adj_close=100,
+                volume=10**9,
+                turnover=7,
+                turnover_status="available",
+                source="fixture",
+            )
+        )
+        for trading_date, volume in zip(dates, volumes):
             db.add(
                 MarketBar(
                     instrument_id=instrument.id,
@@ -487,20 +524,32 @@ def test_institutional_flow_ratios_use_canonical_hot_group_and_strategy_denomina
                     low=99,
                     close=100,
                     adj_close=100,
-                    volume=1000,
-                    turnover=100,
+                    volume=volume,
+                    turnover=7,
                     turnover_status="available",
                     source="fixture",
                 )
             )
-        for trading_date in dates[-5:]:
+        # Per-day net flow is 93 * index over the last five sessions; the chip
+        # row just before them is outside the 5-session window.
+        db.add(
+            ChipSnapshot(
+                instrument_id=instrument.id,
+                trading_date=dates[-6],
+                foreign_buy=10**6,
+                trust_buy=0,
+                dealer_buy=0,
+                source="fixture",
+            )
+        )
+        for index, trading_date in enumerate(dates[-5:], start=1):
             db.add(
                 ChipSnapshot(
                     instrument_id=instrument.id,
                     trading_date=trading_date,
-                    foreign_buy=10,
-                    trust_buy=10,
-                    dealer_buy=10,
+                    foreign_buy=100 * index,
+                    trust_buy=-10 * index,
+                    dealer_buy=3 * index,
                     source="fixture",
                 )
             )
@@ -511,18 +560,46 @@ def test_institutional_flow_ratios_use_canonical_hot_group_and_strategy_denomina
             instrument.id,
             score_date,
         )
-        strategy_ratio = pipeline._strategy_institutional_flow_to_average_turnover_ratio(
+        strategy_ratio = pipeline._strategy_institutional_flow_to_average_volume_ratio(
             db,
             instrument.id,
             score_date,
         )
 
-        # Five-day flow is 150; sum(turnover, 20d) is 2,000 while
-        # average_daily_turnover_20d is 100, making the denominator error
+        # Five-day flow is 1,395 shares; sum(volume, 20d incl. T) is 40,000 while
+        # average_daily_volume_20d is 2,000, making the denominator error
         # observable as exactly a 20x difference.
-        assert hot_group_ratio == pytest.approx(0.075)
-        assert strategy_ratio == pytest.approx(1.5)
+        assert hot_group_ratio == pytest.approx(1395 / 40000)
+        assert strategy_ratio == pytest.approx(1395 / 2000)
         assert strategy_ratio == pytest.approx(hot_group_ratio * 20)
+
+        payload = {
+            "formula_version": "institutional-flow/v2-shares-per-share-volume",
+            "purpose": PURPOSE_STRATEGY_GATE,
+            "cutoff_date": score_date.isoformat(),
+            "flow": {
+                "unit": "shares",
+                "window_trading_days": 5,
+                "basis": "inclusive_cutoff",
+                "window_start": dates[-5].isoformat(),
+                "window_end": score_date.isoformat(),
+                "foreign_net_shares": 1500,
+                "investment_trust_net_shares": -150,
+                "dealer_net_shares": 45,
+                "total_net_shares": 1395,
+            },
+            "volume": {
+                "unit": "shares",
+                "window_trading_days": 20,
+                "basis": "inclusive_cutoff",
+                "daily": [{"date": d.isoformat(), "shares": v} for d, v in zip(dates, volumes)],
+            },
+        }
+        strategy_exact = compute_institutional_flow_ratio(payload)
+        hot_group_exact = compute_institutional_flow_ratio({**payload, "purpose": PURPOSE_HOT_GROUP_RATIO})
+        assert float(strategy_exact.ratio) == pytest.approx(strategy_ratio)
+        assert float(hot_group_exact.ratio) == pytest.approx(hot_group_ratio)
+        assert strategy_exact.gate_passed is True
 
 
 def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pipeline_env):
@@ -585,7 +662,7 @@ def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pi
         db.flush()
 
         assert pipeline._hot_group_institutional_flow_ratio(db, instrument.id, score_date) is None
-        assert pipeline._strategy_institutional_flow_to_average_turnover_ratio(db, instrument.id, score_date) is None
+        assert pipeline._strategy_institutional_flow_to_average_volume_ratio(db, instrument.id, score_date) is None
 
         strategies = pipeline._ensure_strategies(db)
         pipeline._upsert_signal(
@@ -598,6 +675,10 @@ def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pi
         signal = db.scalar(select(Signal).where(Signal.instrument_id == instrument.id))
         assert signal and signal.status == "data_incomplete"
         assert signal.rule_evidence_json["inputs"]["institutional_flow_to_turnover_ratio_5d"] is None
+        inputs = signal.rule_evidence_json["inputs"]
+        assert inputs["institutional_flow_ratio_denominator"] == "average_daily_volume_20d"
+        assert inputs["institutional_flow_formula_version"] == "institutional-flow/v2-shares-per-share-volume"
+        assert "strategy_institutional_flow_to_average_turnover_ratio_5d" not in inputs
         assert "institutional_flow_to_turnover_ratio_5d_missing_or_non_finite" in signal.rationale
 
 
@@ -686,7 +767,7 @@ def test_strategy_group_return_does_not_require_complete_hot_group_score(pipelin
             )
         )
         db.flush()
-        monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_turnover_ratio", lambda *_args, **_kwargs: 0.0)
+        monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_volume_ratio", lambda *_args, **_kwargs: 0.0)
         monkeypatch.setattr(pipeline, "_margin_change_ratio", lambda *_args, **_kwargs: 0.0)
 
         strategies = pipeline._ensure_strategies(db)
@@ -740,7 +821,7 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
         db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [99] * 20, "prior_20_volumes": [1000] * 20, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
         db.flush()
         monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_return_identity_version": "instrument-id-v1", "member_returns": [{"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": "COND", "excess_return_20d": 0.1}]}))
-        monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_turnover_ratio", lambda *_args, **_kwargs: 0.0)
+        monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_volume_ratio", lambda *_args, **_kwargs: 0.0)
         monkeypatch.setattr(pipeline, "_margin_change_ratio", lambda *_args, **_kwargs: 0.0)
 
         strategies = pipeline._ensure_strategies(db)

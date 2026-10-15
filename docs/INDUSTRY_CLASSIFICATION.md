@@ -136,7 +136,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 
 ### 6.4 #37 推論集合 consumer 例外
 
-只適用 `backend/app/industry_membership_inferred_source.py` 的 RAM consumer；ordinary collector 與其他 consumer 的 §6.1 `D > score_date` skip 不變。該 consumer 不寫 membership 或 DB、不回填任何 period：它在取得日 `D`（取得當下的 Asia/Taipei 日期，2026-10-06 至 2026-10-31）晚於截止日 `C`（2026-10-05、2026-10-06）的前提下，以 D 日完整集合加 `[C, D]` 內可偵測的事件推論 C 當日的成員集合，結果一律標 `inferred_from_post_cutoff_snapshot`，`effective_from`／`effective_to` 為 `unknown`，`pit=false`。來源、policy、傳輸與署名見[來源 #37 節](SOURCE_REGISTRY.md#暫定節號37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1)。
+只適用 `backend/app/industry_membership_inferred_source.py` 的 RAM consumer；ordinary collector 與其他 consumer 的 §6.1 `D > score_date` skip 不變。該 consumer 不寫 membership 或 DB、不回填任何 period：它在取得日 `D`（取得當下的 Asia/Taipei 日期，2026-10-06 至 2026-10-31）晚於截止日 `C`（2026-10-05、2026-10-06）的前提下，以 D 日完整集合加 `[C, D]` 內可偵測的事件推論 C 當日的成員集合，結果一律標 `inferred_from_post_cutoff_snapshot`，`effective_from`／`effective_to` 為 `unknown`，`pit=false`。來源、policy、傳輸與署名見[來源 #37 節](SOURCE_REGISTRY.md#53-37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1)。
 
 範圍只有 official_industry namespace 的三個必要群組：`Semiconductor`（TWSE 24 加 TPEx 24）、`Optoelectronics`（TWSE 26 加 TPEx 26）、`Cultural Innovation`（TPEx 32），創新板與 KY 納入；七股是 UI 支持池，每檔在官方 snapshot 都必須落在這三個群組，否則整批拒用（同一官方 feed 內重複的代號須每一列都在這三個群組才算涵蓋，與列的順序無關；同一 symbol 兩個官方 feed 都有時以 TPEx feed 的列為準），收據逐檔回報實際交易所、官方原始產業 code 與 mapper 結果；必要群組綁在 policy，要改群組須另訂 policy。題材 namespace 為空集合，未核實的題材群組一律拒用。群組識別沿用 §2、§3：官方 `(exchange, 兩位數 code)` 經 §3 mapper，FinMind 的中文產業名只做 §2 該市場名稱的精確比對，不 trim、補零或跨市場。
 

@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-核對日：2026-09-14。本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準。下一版方向與驗證見 [STRATEGIES](STRATEGIES.md)，實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。
+核對日：2026-09-14。本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準。下一版方向與驗證見 [STRATEGIES](STRATEGIES.md)，實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果；公式變更可由 config 的 `formula_version` 子版本升版（如法人 `institutional-flow/v2-shares-per-share-volume`），此時 `StrategyVersion.version` 維持 `1.0.0`，舊公式識別保留於 `domain.INSTITUTIONAL_FLOW_FORMULAS`。
 
 設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
@@ -19,7 +19,7 @@
 | 突破 | `close[T] > max(high[T-20:T-1])`；前 20 個交易日不含 T。 |
 | 量能 | `volume[T] / mean(volume[T-20:T-1]) >= 1.20`。 |
 | 族群 | 群組等權 20 日報酬 − TAIEX 20 日報酬 `> 0`。 |
-| 法人 | `sum(foreign + trust + dealer, 5d) / average_daily_turnover_20d >= -0.003`。 |
+| 法人 | `sum(foreign + trust + dealer, 5d) / average_daily_volume_20d >= -0.003`；分子為 5 日淨股數，分母為含 T 的 20 日均量（股），比率無單位，語意為 5 日淨賣超達 20 日均量的 0.3%。公式識別 `institutional-flow/v2-shares-per-share-volume`；原股÷TWD 成交額的 `institutional-flow/v1-shares-per-twd-turnover` 單位不一致，已不計算。 |
 | 融資 | 5 日融資餘額變動比 `<= 0.05`。 |
 
 任何一項不足即 `data_incomplete`，不產生 actionable signal。這只判定單一策略列；同標的同 as-of 的另一條完整策略不得被連帶降級，聚合見 [PRODUCT_SPEC](PRODUCT_SPEC.md#action-merge)。
@@ -51,7 +51,7 @@
 | 相對報酬 | 群組等權超額報酬；1／5／20 日按 20%／30%／50% 加權後取同榜 percentile。 |
 | 廣度 | 成員跑贏 TAIEX 的比例；1／5／20 日採相同 20%／30%／50% 權重。 |
 | 量能 | `volume_1d / prior_20d_avg` 與 `mean(volume_5d) / prior_20d_avg` 各 50%，取同榜 percentile。 |
-| 法人 | 5 日三大法人淨額／20 日週轉額，取同榜 percentile。 |
+| 法人 | 5 日三大法人淨股數／含 T 的 20 日成交量合計（股），取同榜 percentile。 |
 | 催化劑 | MOPS／TWSE-TPEx 公告／申報事件；1／5／20 日按 50%／30%／20% 加權，3 件封頂。 |
 
 membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至少 3 檔合格成員。事件 missing policy：
@@ -79,5 +79,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 3. `_risk_levels` 使用固定風險倍數產生 1.6R／3R；合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
 4. T 日 13:30 cutoff 可能早於法人等盤後資料；新的 PIT 版本須補 availability／revision／decision time。
 5. 30 bps 成本與單邊 5 bps 滑價是固定假設；新版本需區分商品與情境並保持舊結果可重現。
+6. `_ensure_strategies` 對既存同名同版本的 `StrategyVersion` 列只在 `canonical_config_snapshot` 為空時補寫，不更新 `config_json` 與快照，既存列不隨公式更新。建立於 v2 之前的 `breakout_v1`／`pullback_v1` `1.0.0` 列，快照仍是舊公式（`institutional-flow/v1-shares-per-twd-turnover`）：`analysis_capture` 的 `persist` 以 `worker_strategy_binding_mismatch` 拒絕，`_upsert_signal` 則用 v2 公式寫訊號卻引用舊快照。因此任何 DB 以新公式跑訊號之前，須先遷移或升版這些既存快照。
+7. DB 路徑的法人比率（`backend/worker/pipeline.py` 的 `_validated_flow_and_volume_inputs`）以該標的非停牌 bar 取截止日 T（含）以前最後 20 根，最後 5 根的日期須有籌碼列；它不核對交易所日曆，也不要求最後一根就是 T：停牌日被跳過；T 本身沒有非停牌 bar 時（strategy 路徑在 T 沒有 bar 列時另不產生訊號），窗口結束於更早一日；缺某個交易日的 bar 時，20 根橫跨 21 個平日。這些情形只要窗口仍滿 20 根且量、籌碼完整就照算，不拒用。取得模組路徑另有 24 日日曆全等檢查（見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)），DB 路徑沒有。
 
 以上未全部修正或接入正式流程；狀態以 ROADMAP 為準。
