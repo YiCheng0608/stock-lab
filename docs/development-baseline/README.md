@@ -107,7 +107,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 12 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 13 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -123,6 +123,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_saved_price_chips_scope7_focus.py`](../../backend/tests/test_saved_price_chips_scope7_focus.py) | 同上入口，旗標 `--saved-price-chips-focus-stock-scope-7-check` |
 | [`test_ordinary_close_source.py`](../../backend/tests/test_ordinary_close_source.py) | 見[#7 七股普通收盤](#7-七股普通收盤取得保存與讀回的-standalone-驗證入口) |
 | [`test_tpex_calendar_actions_source.py`](../../backend/tests/test_tpex_calendar_actions_source.py) | `python -I -B -X utf8 backend/tests/test_tpex_calendar_actions_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必備，缺少即 `RuntimeError`；需 `git` 與含固定 blob `d8918bc…:docs/SOURCE_REGISTRY.md` 的完整歷史（shallow clone 會失敗）；`TMPDIR`、`TEMP`、`TMP` 導向短隔離目錄（session 路徑超過 190 字元即拒絕）與結尾 `RESIDUE` 行的核對同[#7 入口](#7-七股普通收盤取得保存與讀回的-standalone-驗證入口)。零 GET、不碰 DB 與私人 root、不起服務、無 seal，日曆、價格與事件值皆為合成邊界資料，不證真來源；契約見[來源 #98 節](../SOURCE_REGISTRY.md#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2) |
+| [`test_industry_membership_inferred_source.py`](../../backend/tests/test_industry_membership_inferred_source.py) | `python -B -X utf8 backend/tests/test_industry_membership_inferred_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；audit hook 禁 socket、DNS、subprocess 與寫檔，fixture 全為合成資料，來源契約見[來源 #37 節](../SOURCE_REGISTRY.md#53-37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1) |
 
 `test_saved_price_chips_*` 四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
 
