@@ -160,7 +160,7 @@ async function apiModule() {
 async function appModule() {
   const stockMode = args.includes('--stock-read-check') || args.includes('--stock-read-http-check') || args.includes('--signal-read-check') || args.includes('--signal-read-http-check') || independentMode
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
-    nodePaths: [dependencies], platform: 'node', format: 'cjs', packages: stockMode ? undefined : 'external',
+    nodePaths: [dependencies], platform: 'node', format: 'cjs', loader: { '.css': 'empty' }, packages: stockMode ? undefined : 'external',
     external: stockMode ? ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'] : [], target: 'es2020', jsx: 'automatic',
     plugins: [{ name: 'actual-chart-cjs', setup(build) {
       if (!stockMode) return
@@ -172,7 +172,7 @@ async function appModule() {
         loader: 'js', resolveDir: path.dirname(requireDependency.resolve('echarts-for-react')),
       }))
     } }],
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify(apiOrigin.origin + '/api') } })
+    define: { 'import.meta.env': '{}', 'import.meta.env.VITE_API_BASE': JSON.stringify(apiOrigin.origin + '/api') } })
   const module = new Module(path.join(sourceRoot, '__memory_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_app__.cjs')
   module._compile(result.outputFiles[0].text, module.filename)
@@ -1219,30 +1219,30 @@ async function check() {
   require(path.join(sourceRoot, 'units.test.ts'))
   const render = await portfolioRenderer()
   const cases = [
-    ['0', '0 股（零股）', '0 股'], ['1', '1 股（零股）', '1 股'],
-    ['999', '999 股（零股）', '999 股'], ['1000', '1 張', '1,000 股'],
-    ['1001', '1 張 1 股', '1,001 股'],
-    ['9007199254740991', '9,007,199,254,740 張 991 股', '9,007,199,254,740,991 股'],
-    ['9007199254740993', '9,007,199,254,740 張 993 股', '9,007,199,254,740,993 股'],
-    ['9223372036854775807', '9,223,372,036,854,775 張 807 股', '9,223,372,036,854,775,807 股'],
+    ['0', '0 張', '0 股'], ['1', '0.001 張', '1 股'],
+    ['999', '0.999 張', '999 股'], ['1000', '1 張', '1,000 股'],
+    ['1001', '1.001 張', '1,001 股'],
+    ['9007199254740991', '9,007,199,254,740.991 張', '9,007,199,254,740,991 股'],
+    ['9007199254740993', '9,007,199,254,740.993 張', '9,007,199,254,740,993 股'],
+    ['9223372036854775807', '9,223,372,036,854,775.807 張', '9,223,372,036,854,775,807 股'],
   ]
-  for (const [exact, mixed, original] of cases) {
+  for (const [exact, lots, original] of cases) {
     const html = render([syntheticPosition(Number(exact), exact)])
-    assert.ok(html.includes('持有 ' + mixed), 'actual portfolio component lost mixed quantity: ' + exact)
+    assert.ok(html.includes('持有 ' + lots), 'actual portfolio component lost exact lot quantity: ' + exact)
     assert.ok(html.includes('原股數 ' + original), 'actual portfolio component lost original quantity: ' + exact)
     assert.ok(html.includes('type="text" inputMode="numeric"'))
     assert.ok(html.includes('1 至 9,223,372,036,854,775,807 股'))
   }
   for (const exact of [null, '1\n', '9223372036854775808', '01']) {
     const html = render([syntheticPosition(1000, exact)])
-    assert.ok(html.includes('持有 股數待核實'))
+    assert.ok(html.includes('持有 庫存數量待核實'))
     assert.ok(html.includes('原股數 股數待核實'))
     assert.ok(!html.includes('持有 1 張'))
   }
   const old = syntheticPosition(9007199254740991, undefined)
   delete old.shares_exact
-  assert.ok(render([old]).includes('持有 9,007,199,254,740 張 991 股'))
-  assert.ok(render([syntheticPosition(Number('9007199254740993'), undefined)]).includes('持有 股數待核實'))
+  assert.ok(render([old]).includes('持有 9,007,199,254,740.991 張'))
+  assert.ok(render([syntheticPosition(Number('9007199254740993'), undefined)]).includes('持有 庫存數量待核實'))
   const bundle = await browserBuild()
   console.log(JSON.stringify({ passed: true, typescript: ts.version, node: process.version, portfolio_ssr_cases: 14,
     full_main_memory_bundle: bundle.outputFiles.map((file) => ({ extension: path.extname(file.path), bytes: file.contents.length })),

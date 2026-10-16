@@ -298,6 +298,12 @@ def database_snapshot(fixture):
         return result
 
 
+def record_validation_baseline(fixture):
+    """The two start-of-run facts receipt() reads back; serve() and the joint-entry test share this."""
+    fixture.validation_baseline = database_snapshot(fixture)
+    fixture.source_initial_empty_store = not fixture.store._attempted and fixture.store.raw_capture is None and fixture.store._request_count == 0
+
+
 def saved_consumer_fixture():
     """Seven verified identities only; zero seeded finance, no private read at startup."""
     from fastapi import FastAPI
@@ -596,8 +602,7 @@ def serve(preloaded_store=None):
     if (ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only) and (ARGS.policy_version, ARGS.policy_digest) != tpex_price.policy_pins(cutoff, policy_version=ARGS.policy_version):
         raise ValueError("external accepted policy pins required for live preview")
     fixture = saved_consumer_fixture() if SAVED_FOCUS_ACTIVE else MemoryAPIFixture(live=ARGS.live_source_opt_in or preloaded_store is not None or ARGS.saved_source_only, cutoff=cutoff, policy_version=ARGS.policy_version)
-    fixture.validation_baseline = database_snapshot(fixture)
-    fixture.source_initial_empty_store = not fixture.store._attempted and fixture.store.raw_capture is None and fixture.store._request_count == 0
+    record_validation_baseline(fixture)
     if JOINT_ACTIVE:
         configure_joint(fixture)
     if PRIVATE_ROOT:
