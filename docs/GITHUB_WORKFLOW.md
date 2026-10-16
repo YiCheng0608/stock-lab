@@ -24,11 +24,11 @@
 
 原生關係確定不支援時才用 Issue「母單／子單」及「Blocked by／Blocking」完整連結，全局核雙向一致；不維護兩套權威關係或以 label 複製 Ready／Status。
 
-建議視圖：產品母單、Ready 待辦、進行中、待整合、已暫停、候選。進行中含 Paused=否的阻塞單，已暫停為 Paused=是；卡片／回報顯示 Status／Blocked／Paused。卡片用 Issue、PR 回原單；未設自動化不稱技術強制 WIP。
+建議視圖：產品母單、Ready 待辦、進行中、待整合、已暫停、候選。進行中含 Paused=否的阻塞單，已暫停為 Paused=是；卡片／回報顯示 Status／Blocked／Paused。卡片用 Issue、PR 回原單。
 
 ## 版本範圍與完成判定
 
-正式派工（含試跑）前，全局盤點 V1 流程、能力、編號 AC、必要依賴、後版候選及未決範圍，交使用者核定後去重補單。近期拆至可獨立驗收，遠期保留功能概述，不逐段造單或重開已驗能力。
+正式派工前，全局盤點 V1 流程、能力、編號 AC、必要依賴、後版候選及未決範圍，交使用者核定後去重補單。近期拆至可獨立驗收，遠期保留功能概述，不逐段造單或重開已驗能力。
 
 [治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)留版本化 AC／coverage，由 milestone 引用「來源章節／完整版本 → 能力／AC → 已整合證據、既有 Issue、缺口或核定後版／不做決策」。來源規格仍是契約，不複製 repo 即時矩陣。盤點缺口 0 只代表每項 AC 有具名單、適用已驗證據或使用者核定排除；不證功能／依賴／發布通過。排除須列原 AC，待核／unknown／缺證據仍算缺口；未逐項完成不稱清單完整。
 
@@ -53,7 +53,7 @@ milestone 是唯一版本集合。跨版母單按 V1 必要 AC 拆子單，不�
 
 ### 平行派工與補位
 
-WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限及補派規則適用。等待只約束該單及真正依賴，共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
+WIP、ACK、session 分別是已派 Issue、接手確認、角色資源。[AGENTS](../AGENTS.md#建立任務與派工)的上限、補派與 ACK 規則適用；共用檔案／服務／整合排程只約束相關操作；補單本身不授權開工。
 
 治理收據記「上限／實占／空位 → Ready／必要前置 → 隔離／角色安排 → 派工或阻擋／解除事件」。Project 連現行規則、治理單，舊限制明示歷史。規則未整合時全局交版本化決策／差異給受影響 owner 讀回，不改被測樹或把管理候選當產品 base。
 
@@ -98,7 +98,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 
 | provider | 啟動 | 恢復 |
 | --- | --- | --- |
-| Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色：Orca 可見 terminal、目標 worktree 啟動，模型與 reasoning 依角色表 | 原 session `--remote … resume <ID>` |
+| Codex | 統籌：`codex-session-control.py start-coordinator`；其他角色的啟動命令未實測、未登錄 | 原 session `--remote … resume <ID>` |
 | Claude | Orca 可見 terminal、目標 worktree：`claude --model <完整 ID> --effort <level>` | `claude --resume <ID> --effort <level>`，讀回模型／effort，不同則記錄並由全局處置 |
 
 - 只用完整模型 ID（如 `claude-opus-5-5`）。無效 ID（如 `opus-5.5`）啟動不擋，首次請求才被拒，故收據須含已完成的 turn。
@@ -125,7 +125,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 | 檢查 | 範圍與限制 |
 | --- | --- |
 | `repository` | 每 PR／master push 驗 diff 空白、變更檔 UTF-8、Python／JSON／YAML 語法、Markdown 相對檔案連結；Python 另驗 Ruff E9／F63／F7／F82。外部 URL／anchor／語意由 review 核，不批量改既有風格。 |
-| `backend` | backend／工具／CI／驗證依賴變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 identity／news／product 三檔 pytest（tmp SQLite、測試設計不取源、無此 guard），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)不由 pytest 收集。不證完整 suite、真源、磁碟。 |
+| `backend` | backend／工具／CI／驗證依賴變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 ci.yml backend job 明列的 pytest 檔（tmp SQLite、測試設計不取源、無此 guard），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)不由 pytest 收集。不證完整 suite、真源、磁碟。 |
 | `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 
@@ -192,7 +192,6 @@ CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA �
 
 改善可延後；僅影響既定 AC、安全、啟動送達、並行隔離者阻對應動作。原 AC 失敗原單退修，獨立改善由全局去重／列候選／排序，不自納 V1 或授權派工。
 
-
 ## 模板入口
 
 - [產品功能母單](../.github/ISSUE_TEMPLATE/feature.md)：功能及整體 AC，不自動派工。
@@ -245,7 +244,7 @@ master 是否寫入／整合入口釋放與重排或停止其他整合／WIP 處
 
 派工收據與任務 prompt 附全局 session ID、terminal handle 及上段聯絡格式；任務統籌的 ACK 附自己的 session ID、handle。全局現任 session／handle 以 #1 本文為準，與任命收據不一致時以收據為準；每次聯絡全局前都從 #1 本文讀取，不沿用記憶或舊收據的值，送出失敗先重查 #1，不改送其他 terminal（換手見[流程檢查](#流程檢查與滾動調整)）。通知是事件，不是定時監看；收件者讀回前不算接手；送進 terminal 的訊息不算使用者授權。
 
-未證 ACK 只保留該單名額，其他已准入單可補位。退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
+退修依 [AGENTS](../AGENTS.md#狀態與驗收責任)原單交工程 ACK、獨立 QA，拖卡片／自動喚醒不證接手。
 
 建立前核精確 worktree 的 terminal／session 唯讀基線，不完整就不建立。create 逾時／非 JSON／錯誤不證未建立，只在原 worktree 對帳 handle／session／可見／可執行；無法唯一確認列 unknown、候選、限制。不重複 create（全局換手依[流程檢查](#流程檢查與滾動調整)的一次重建例外）、殺其他 session 或據候選取得 ownership。未送記 `not sent`；結果不明或只有 accepted（如訊息停在輸入框未送出）、沒有 actual userMessage／turn 全文核對，記送達未證。兩者依上段算 WIP，not sent 不自動釋放。失敗留原錯誤、對帳、handle／session（含未知）、送出與否、殘留、下一 owner／動作。
 

@@ -1,6 +1,6 @@
 # Caller-provided pure-rule replay 契約
 
-更新：2026-09-16。`backend/app/rule_replay.py` 的有限 current pure-rule library 已 review；本文是 API、格式、binding、錯誤與限制的權威。
+`backend/app/rule_replay.py` 的有限 current pure-rule library 已 review；本文是 API、格式、binding、錯誤與限制的權威。
 
 Library 只在 strict native JSON 輸入域內保存兩個 evaluator 的 caller arguments，並以固定 source／config／runtime 重算 `passed`、`state` 與 ordered `reasons`。它不讀歷史資料、SignalArtifact、worker 或正式 DB，也不證明來源、subject、market time、availability 或 PIT。
 

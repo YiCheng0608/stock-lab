@@ -1,6 +1,6 @@
 # Signal comparison 離線唯讀契約
 
-更新：2026-09-16。`signal-comparison/v1` 的有限 library 已 review。Caller 明示兩個專案外、stable、rollback-mode SQLite snapshots，再以 exact legacy key 與 exact artifact selector 取得 detached、deterministic 描述報告；`comparable=false` 固定不變。它沒有 CLI、API、UI、worker 或預設 DB 接線，也不建檔、backup、checkpoint、repair 或 migrate。
+`signal-comparison/v1` 的有限 library 已 review。Caller 明示兩個專案外、stable、rollback-mode SQLite snapshots，再以 exact legacy key 與 exact artifact selector 取得 detached、deterministic 描述報告；`comparable=false` 固定不變。它沒有 CLI、API、UI、worker 或預設 DB 接線，也不建檔、backup、checkpoint、repair 或 migrate。
 
 Artifact identity、revision、lifecycle、attempt/run 與 writer 契約見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md)。
 

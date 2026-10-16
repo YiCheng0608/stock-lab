@@ -12,12 +12,12 @@
 
 ### FinMind 來源共同規則
 
-本節是 [§47](#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1)、[§48](#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)、[§49](#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1)、[§51](#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1)、[#39 節](#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)、[§52](#52-7七股普通收盤與交易日曆的日期時區語意契約) 這類「外部 policy＋namespace＋seal」RAM 取得 namespace 的共同規則（§47 的來源是 TPEx dated CSV，署名依 OGL，其餘流程相同）；各節只保留版本字串、pins、本節特有上限與差異。
+本節是 §47 以後各節（§47～§53 及 #9、#39、#98 節） 這類「外部 policy＋namespace＋seal」RAM 取得 namespace 的共同規則（§47 的來源是 TPEx dated CSV，署名依 OGL，其餘流程相同）；各節只保留版本字串、pins、本節特有上限與差異。
 
 - **用途**：只限免費公開、本地個人非商用、盤後研究與 process RAM 取得／驗證／consumer；不落盤（[§52](#52-7七股普通收盤與交易日曆的日期時區語意契約) 例外：依使用者決策 D2(b)，衍生收盤落盤到私人 root，raw 不落盤）、不發布 raw、不鏡像、不再散布、不部署、不交易。`historical_pit` 不支援，publication／first availability／revision 固定 `unknown`；其他 cutoff、代號、dataset 與用途在取數前拒用，不外推。FinMind 是服務提供者，不是官方直接來源；只用 FinMind 時沒有官方 anchor，單位與 scale 是明示的 provider 推論，比對只是同一份 bytes 的內部一致性。免費使用是文件推論（`token` 選填），FinMind 回 401、402、403 或任何要求付費、登入的回應即首敗。
 - **額度與 seal**：每個 namespace（`…/qaN`）是獨立的一次額度；新授權不是恢復前一個，前一個的 SPENT／NO-RETRY 照舊並登錄於[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)。使用者授權本身不是 seal：每次 real run 另須全局核發 fresh financial-start seal（綁定 policy SHA-256、namespace、唯一 URL 清單、candidate、產品／測試／script hash、用途、caps 與有效期），由獨立 QA 執行一次；產品不能由被測 policy 自建 expected pin，policy、seal 或 execution binding 不符在 GET 之前拒絕、不花額度。每 URL 最多 1 次、首敗即停且 attempted 即 SPENT；redirect 0、retry 0、token／cookie／proxy 0、identity encoding；原件只在 RAM，結束後 release 並撤銷 handle。再取需新的明示授權、新 namespace 與新 seal；不 restart、replay、clone 或 hydrate 已釋放的原件。
 - **防護性質**：閘門、audit hook 與 trace 是進程內協作式防護，不是沙箱，僅 Windows；每 URL／整批 timeout 為 cooperative 檢查，不是 OS 硬 deadline；retained-roots estimate 是 deduplicated `getsizeof` 估算，不是 RSS 或 peak；生命週期驗收不代表實體抹除。
-- **署名**：署名方式依各版本 policy 宣告。§47（TPEx，[§47.7](#477-完整署名)）與 §48（FinMind，[§48.6](#486-完整署名)）的 policy 有固定完整署名文字，產品常數須逐字相同；§52 的 policy 有固定 `attribution` 字串（固定在被 pin 的 policy 內，隨 policy SHA-256 被 seal 綁定，並寫入保存的 receipt）；§49 與 §51 的 policy 沒有固定完整署名文字，也不引用 FinMind 條款全文或版本，以 `rights` 字串 `FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror` 與 provenance 的結構化來源欄（如 `FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)`）承擔署名，並隨 policy SHA-256 被 seal 綁定。權利是否充分是使用者決策，QA 只核對它被 seal 綁定。
+- **署名**：署名方式依各版本 policy 宣告。§47（TPEx，[§47.7](#477-完整署名)）與 §48（FinMind，[§48.6](#486-完整署名)）的 policy 有固定完整署名文字，產品常數須逐字相同；§52 與 #98 節的 policy 有固定 `attribution` 字串（固定在被 pin 的 policy 內，隨 policy SHA-256 被 seal 綁定，並寫入保存的 receipt），§53 的 policy 有 FinMind、TWSE、TPEx 三段固定署名文字；§49、§51、#9 節與 #39 節的 policy 沒有固定完整署名文字，也不引用 FinMind 條款全文或版本，以 `rights` 字串 `FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror` 與 provenance 的結構化來源欄（如 `FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)`）承擔署名，並隨 policy SHA-256 被 seal 綁定。權利是否充分是使用者決策，QA 只核對它被 seal 綁定。
 
 ## 現行節次索引
 
@@ -78,6 +78,8 @@
 | [§52](#52-7七股普通收盤與交易日曆的日期時區語意契約) | #7：七股普通收盤取得、私人衍生值保存與讀回（`issue7-ordinary-close-saved-seven-v1`）；日期／時區語意契約 | 現行 |
 | [#98](#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2) | #98：七股 FinMind 交易日曆、停復牌間接證據與公司行動因子（`issue98-tpex-seven-calendar-actions-v2`）；日狀態、除權息／減資／分割因子、私人保存與讀用 | 現行 |
 | [§53](#53-37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1) | #37：七股所涉群組兩截止推論 membership 與 RAM lookup（`issue37-industry-membership-inferred-cutoffs-1005-1006-v1`） | 現行 |
+
+#9、#39、#98 三節以 Issue 編號命名，不另編節號。
 
 ## 1. Registry 與 policy 契約
 
@@ -242,17 +244,7 @@ Classification不證 raw membership/hash/FK、authenticity、official event ID�
 - `tpex_spendi_today` 不在四來源 manifest；完整 halt/action/session/TAIEX truth、C007 store linkage、B5b/PIT與正式資料分類仍未完成。
 - Paid subscription、TWSE/TPEx action identity/duplicate修正、generic numeric hardening、舊資料 repair與既有 evaluation replay仍需獨立設計及授權。
 
-### 7.1 Round18 C018 standalone source capture final review 證據
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §7.1。
-
-### 7.2 Round19 C019-B `STOCK_DAY_ALL` content／consumer final review 證據
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §7.2。
-
-### 7.3 Round20 C020-B `holidaySchedule` content／consumer final review 證據
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §7.3。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §7.1、§7.2、§7.3。
 
 ## 8. M1-P2a：TPEx 日法人來源與 selected 摘要
 
@@ -300,8 +292,6 @@ python -m worker.tpex_institutional_capture summarize `
   --symbol 3105 --symbol 6488
 ~~~
 
-### 8.3 有限核對與尚缺項
-
 歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §8.3。
 
 ## 9. M1-P3a：TWT48U selected 官方事件原件摘要
@@ -342,8 +332,6 @@ python -B -m worker.twse_action_capture live-summarize `
 
 此 memory consumer 不支持既有 ZIP 讀入；P3a 本身不接 API／UI／DB，`durable_capture=false`、`historical_pit=unsupported`。Live body／receipt 不保存，不能離線重播；再取得的內容／版本可能不同，Git fixture 只重建邊界測試。後續 M1-P3b 的 selected 總覽接線見[個股頁 §11](STOCK_RESEARCH_PAGE.md#11-m1-p3bselected-官方事件總覽接線)，不由產品接線擴張本節來源與時間邊界。
 
-### 9.3 驗收與保留邊界
-
 歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §9.3。
 
 ## 10. M1 後續依賴審查：來源候選與等待邊界
@@ -381,13 +369,7 @@ Exact TWSE 候選的 `local_fetch`、`raw_store`、`summarize` 權利證據仍�
 
 恢復條件依序為：取得 exact 官方 TWSE 資源／方式對免費 `local_fetch`、`raw_store`、`summarize` 的正面權利證據（政府開放資料的 exact 對應或其他官方明示授權，不跨資源移轉）；統籌核定一次有界、純記憶體的完整單日 body，核實實際欄位、資料日、單位、完整回應與具名 selected（成功讀取本身不算 gate 通過）；gate 滿足後才另准 explicit 最小來源准入、consumer 白名單與單日總覽子能力。完整 5／20 交易日基準及 PIT 不作本批單日前置。
 
-### 12.2 缺證與恢復條件
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §12.2。
-
-### 12.3 驗收邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §12.3。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §12.2、§12.3。
 
 ## 13. M1-W1：TPEx 多日法人與完整有界交易日
 
@@ -566,7 +548,7 @@ Storage policy `m1-price-save-tpex-11370-2026-10-06.1` canonical UTF-8 2437B、d
 
 先驗完整raw、canonical／schema／receipt／pins／來源日期與七股，再在exclusive staging建三檔並atomic rename至唯一final目錄。既有final須完整驗證；idempotent回傳既有bytes／saved_at，不覆寫或挑其他版。NEW process重開再驗完整body、兩份canonical receipt exact bytes及所有上述關係，不以selected projection替代fullbody hash；缺檔、部分bundle、污染／schema／pin／日期衝突均拒用，不較早fallback。API不以saved檔自動hydrate memory Store，原DB IDs仍null。
 
-Windows private path保護目前只驗Windows；未提供其他平台保證。核定product root為`C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367`，final子目錄`tpex-11370-2026-10-06-m1-v1`；max one bundle／3files、raw≤3MiB、capture receipt≤8KiB、storage receipt≤16KiB、合計≤3170304B。測試quota、精確殘留及清理拒絕由[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)詳述；本准入不是其他scope的磁碟grant。
+Windows private path保護目前只驗Windows；未提供其他平台保證。核定product root為`%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367`，final子目錄`tpex-11370-2026-10-06-m1-v1`；max one bundle／3files、raw≤3MiB、capture receipt≤8KiB、storage receipt≤16KiB、合計≤3170304B。測試quota、精確殘留及清理拒絕由[開發入口](development-baseline/README.md#m1-price-save-1-私人磁碟保存與新程序驗證入口)詳述；本准入不是其他scope的磁碟grant。
 
 既有私人三檔（1791644B／3files）已達 file count cap：不新增磁碟案例，也不 copy／export／publish；其清理依[治理 #1](https://github.com/YiCheng0608/stock-lab/issues/1)登錄的授權與 NO-RETRY 條件處理，不以本節授權。
 
@@ -622,7 +604,7 @@ Daily沿[§13.3](#133-原件整數及缺日契約)的25欄、日期／欄數／�
 
 新consumer policy `m1-saved-price-focus-tpex-11370-2026-10-06.1` canonical UTF-8 **2677B**，外部digest `sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b`；projection `price-saved-focus/m1-v1`。須另核原capture `m2-stock-scope-tpex-11370-2026-10-06.5`／digest `sha256:5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040`，及storage `m1-price-save-tpex-11370-2026-10-06.1`／digest `sha256:0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e`。三種policy角色獨立；不把新consumer pins寫入原receipt或擴大七股scope。
 
-唯一existing bundle為 `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`。Literal三檔、原canonical schema／bytes／SHA及Windows path保護仍由[§30.2](#302-三檔原子出版與嚴格重驗)與[§33.2](#332-existing-private有限只讀)管理。原capture `storage=process_memory`／`request_count=1`是歷史capture事實；當前來源另標 `origin=private_local`、storage receipt仍 `private_local`。Augmented provenance不當作原canonical receipt重算hash。
+唯一existing bundle為 `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`。Literal三檔、原canonical schema／bytes／SHA及Windows path保護仍由[§30.2](#302-三檔原子出版與嚴格重驗)與[§33.2](#332-existing-private有限只讀)管理。原capture `storage=process_memory`／`request_count=1`是歷史capture事實；當前來源另標 `origin=private_local`、storage receipt仍 `private_local`。Augmented provenance不當作原canonical receipt重算hash。
 
 ### 32.2 完整重驗與有限衍生
 
@@ -669,7 +651,7 @@ TW／TPEx ordinary stock／TWD price七identities：3105／3293／5274／5347／
 
 ### 33.2 Existing private有限只讀
 
-唯一root `C:/Users/YiCheng/AppData/Local/taiwan-stock-research/price-save-01a11367`、bundle `tpex-11370-2026-10-06-m1-v1`；原1791644B／3files／3dirs全raw／canonical／mtimeNS重驗：
+唯一root `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367`、bundle `tpex-11370-2026-10-06-m1-v1`；原1791644B／3files／3dirs全raw／canonical／mtimeNS重驗：
 
 | literal file／bytes | SHA-256 | mtime_ns |
 | --- | --- | --- |
@@ -719,13 +701,7 @@ TPEx basic 原件（Date1151006／893列）核 6223旺矽：掛牌20030106、ind
 
 10/07 body：1793305B、SHA256 `eaa1eaf37ff3e2305629dced8b0f6945a063b05841c69d75f826960e6bd819c8`，12245 data rows／width18／Date1151007／date-code unique。6223 真值：O/H/L/C＝5590／5725／5480／5530元／股、canonical896441股＝896.441張、TWD成交額4984488555元，O/C為down；振幅沿既有exact公式，門檻4.382含6223、4.383排除6223，不按顯示約值filter。完整八股required reads及身份／金融／cutoff／pins／provenance先gate後filter，任一缺失或衝突仍unavailable／count=null／items=[]，只有完整八股available才可判真零。Source-date10/07與capture UTC分開；publication／first availability／revision unknown、historical_pit unsupported。
 
-### 35.2 原件與金融核對
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §35.2。
-
-### 35.3 接受與邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §35.3。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §35.2、§35.3。
 
 ## 36. M1-SAVED-PRICE-CHIPS-FOCUS-CALENDAR-1006-2：全月日曆與八條件來源准入
 
@@ -749,13 +725,7 @@ ROOT在implementation／GET／private read前於原task核定三份新canonical 
 
 兩股 12 nets 的數值同 [§31.4](#314-12-net-金融真值)（本批以新來源獨立重算，結果相同）；外資不含外資自營商，canonical shares、精確張及口徑保持。Publication／first availability／revision unknown，historical PIT unsupported。上限同 [§31.3](#313-一次取得與可證執行上限)；private32MiB／joint96MiB與10s snapshot為estimate／cooperative。
 
-### 36.3 Existing private與完整joint gate
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §36.3。
-
-### 36.4 接受與邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §36.4。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §36.3、§36.4。
 
 ## 37. M1-SAVED-PRICE-CHIPS-FOCUS-STOCK-SCOPE-7-1006-1：七股共同來源准入
 
@@ -798,13 +768,7 @@ Calendar version `tpex-2026-09-01_2026-10-06-full-month-observed-2026-10-07-1150
 
 外資不含外資自營商；5／20／三類所有aggregate須在signed int64內，scope7專屬overflow guard拒越界，不影響old calendar版本。原精確價格／O-C方向／振幅式及signed張grammar／inclusive AND見§32.2／34.1，不改公式或用顯示約值filter。Publication／firstavailability／revision unknown，historical PIT unsupported。上限同 [§31.3](#313-一次取得與可證執行上限)；private32MiB／joint96MiB及10s snapshot為estimate／cooperative。
 
-### 37.3 ALL7共同gate與private範圍
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §37.3。
-
-### 37.4 有限接受與下一缺口
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §37.4。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §37.3、§37.4。
 
 ## 38. M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1：七股每日法人淨超與窗口累計
 
@@ -824,13 +788,7 @@ Canonical為signed int64股，以canonical integer string傳遞；張精確除10
 
 ALL7×兩窗口×三法人須完整驗daily、aggregate及每個running prefix，才可顯示任何available series或合法零。任一daily／aggregate／prefix超過−9223372036854775808～9223372036854775807，整個七股profile unavailable，不只拒目前所選股。ALL42期末累計必須等於獨立窗口淨超和；source relations與component檢查沿完整25欄口徑。Unknown／missing／conflict不能變0，亦不能以先得到零省略ALL7 gate。
 
-### 38.3 本次actual來源與資源界線
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §38.3。
-
-### 38.4 有限接受與暫停
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §38.4。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §38.3、§38.4。
 
 ## 39. 2026-10-08：歷史收盤新候選審查與官方事件重選
 
@@ -858,9 +816,7 @@ Consumer `official-event-focus/p4-v1`：精確息／權／權息配effective ran
 
 OGL 1.0／TWSE使用條款第6 approved method／第8政府資料例外依 [§2](#2-官方共同證據與限制)。上限：各producer ONE exact HTTPS GET／NEW empty獨立generation／single attempt，FIRST失敗亦SPENT；5MiB／identity／per-operation上限20秒（實際timeout15）／30秒cooperative、redirect／retry／warmup0；完整原body與ORIGINAL receipt只同RAM物件。capital／payout numeric **NOT VALIDATED**。新獨立[issuer code manifest](../backend/worker/twse_issuer_registry.json)：sourceversion `twse-t187ap03-l-d18419-2026-10-08`、registry `twse-issuer-r1-2026-10-08.1`／external digest `sha256:7488da20a3bdf94aaa548c896d19077628bf93529208226d49b2a02896972f89`、source profile `twse_issuer_free_public_local`；consumer `twse-issuer-event-profile/m1-v1`／external policy digest `sha256:02bf2422129c46490516557bccd188f7d550d2516c4b5e49e9acc2faf5338244` 已ROOT review。DOC不另建manifest附件；原四source／defaults／pins及§40完整不變。
 
-### 41.1 本批兩份 FIRST 原件
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §41.1。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §41.1、§41.3。
 
 ### 41.2 同代號原欄位與時間
 
@@ -871,10 +827,6 @@ OGL 1.0／TWSE使用條款第6 approved method／第8政府資料例外依 [§2]
 | 2614 | 東森國際股份有限公司／東森 | 19950923／1995-09-23 | 20 | 440／51 |
 
 Taipei觀測10/08、研究cutoff2026-10-08；公司原出表1151007／ISO2026-10-07，不當發布／first availability。公司Code exact join eventCode；issuer全名／簡稱與eventName分列，三股eventName各exact等於原簡稱；事件Name若不等任一公司原名即unavailable，duplicate／conflict拒用、不silent overwrite／fallback。出表ROC7、上市Gregorian8或ROC7 strict有效，raw與ISO保留；report／listing／Taipei observed／cutoff／effective event日分離，published／first availability／revision仍unknown、nonPIT。行業只原04／20，不證產業名稱／分類品質／ordinary／0056ETF／fullmarket／price／capital數值；0056issuer不支持，不由此判斷security類型。
-
-### 41.3 已接受與釋放邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §41.3。
 
 ## 42. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩碼引用與同截止原件
 
@@ -894,13 +846,7 @@ Taipei觀測10/08、研究cutoff2026-10-08；公司原出表1151007／ISO2026-10
 
 Issuer／event 原件沿§41的 exact GET、RAM-only 與上限；industry 是同資料的 pure-read 投影，不新增 producer／外網／DB 寫入。selected 1449／1463／2614 的原 industry 碼 04／04／20 分別引用紡織纖維／紡織纖維／其他；公司六原欄、原Code／Name exact join 與 report1151007／listing 日期沿§41.2，capital／issuedshares／payout numeric NOT VALIDATED。publication／firstavailability／revision 與公司分類生效仍 unknown／nonPIT。
 
-### 42.2 兩份本輪fresh ORIGINAL
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §42.2。
-
-### 42.3 已接受與釋放邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §42.3。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §42.2、§42.3。
 
 ## 43. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與新來源准入
 
@@ -929,9 +875,7 @@ ROOT獨立RAM canonical policy **10654 UTF-8 bytes**，version `m1-chips-gross-t
 
 OGL 1.0 與 TPEx 條款核對同 [§13.1](#131-獨立-policy-與四用途)，另核[交易規則](https://www.tpex.org.tw/zh-tw/mainboard/trading/rules/system.html)及[11503027221公告](https://www.tpex.org.tw/storage/eb_data/11509/11503027221.html)；僅准本B1 `local_fetch/raw_store/summarize`，raw_store限processRAM，summarize限gross買／賣／net本地研究。完整署名保留owner／year2026／上述兩完整dataset名／observedversions／OGL1.0 URL，保留原件完整性。Metadata發布／修改時間不代金融row發布；published／firstavailability／revisionunknown，nonPIT／historical PIT unsupported，不授權磁碟保存／正式DB／採購／帳戶／交易或任意自動抓取。
 
-### 43.3 Finite FIRST與完整originals
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §43.3。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §43.3、§43.5。
 
 ### 43.4 全日曆、ALL25原欄與gross計算
 
@@ -942,10 +886,6 @@ Daily全部來源列先驗25string、日期／code唯一及非空name；ALL7×20
 Canonical單位股，integer string傳遞；gross買／賣為非負int64，net為signed int64，張精確÷1000、既有單位公式不改。每日、buy／sell／net三種running prefix與ALL84gross＋42net window totals均須exact計算且在int64範圍：0～9223372036854775807（gross）／−9223372036854775808～9223372036854775807（net）；期末prefix與獨立window sum對帳，buy−sell＝net。每一5／20窗口buy／sell／net均從第一日前0起算，5不延用20prefix。任一daily／prefix／total、完整性／pins／來源關係不合使whole7profile failclosed，unknown／missing不補0或縮窗。
 
 每point-date-row保ALL25原string／原ordinal／bodySHA／ORIGINALreceiptSHA及全部calendar原列。fresh有gross0cell且ALL7完整gate成立才可驗actualzero，fixture不代真值；ALL84窗口gross totals均非0，不稱actual零窗口。old daily net不重計。
-
-### 43.5 本次完整actual與釋放邊界
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §43.5。
 
 ## 44. M1-CHIPS-STOCK-SCOPE-7-DIRECTION-SEGMENTS-20-1006-20261008-1/B1：七股方向、計數與窗口區段
 
@@ -988,8 +928,6 @@ ONE NEW empty distinct producer，無seed／preload；trustedFIRST_once先2index
 三net符號五類互斥且涵蓋27signcases：`all_positive`三正、`all_negative`三負、`opposite`至少一正一負且可含零、`single_direction_with_zero`單一非零方向且含零、`all_zero`三個精確零。每investor×5／20窗口正負零counts總和＝窗口長度；segments按窗口交易日期順序為maximal同sign連續區段，完整覆蓋一次、無重疊／缺口／相鄰同sign，zero獨立且終止正負run。Latest run僅最後一段，首段earlier_unknown=true，不以較長窗口或完整歷史外推更早日數。任一來源／pins／結構／數值／分類／區段不合，whole7profile failclosed，不縮窗或跳壞股。
 
 Segment-date展開三原net、ALL25原strings／header／ordinal／bodySHA／ORIGINALreceiptSHA及完整calendar。Actualzero只由fresh原net精確0證明；derived count=0須逐原列predicate核，fixture不補實件。actual all-zero triple／整窗zero run／latest zero無實件，驗收缺口保留，不以fixture聲稱通過。
-
-### 44.5 本次actual與已知缺口
 
 歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §44.5。
 
@@ -1034,8 +972,6 @@ ONE NEW empty distinct generation，seed0／preload=false，trusted FIRST_once�
 每investor各5窗positive／negative／zero predicates互斥，counts總和=5；兩窗net各為五原net之和，count delta及net delta均為近5減前5。Maximal同sign連續segments完整覆蓋各窗一次、無gap／overlap／相鄰同sign；zero獨立且終止正負run。Latest僅各窗末段，首段earlier_unknown=true，不外推完整歷史。
 
 每股5 positional pairs依前窗第1～5日配近窗第1～5日，兩個不同日期而非同日比較。Each pair delta=recent原net−previous原net，五pair delta之和=window net delta；每股三investor共21net deltas／63count deltas，35pairs×3=105pair deltas精確核。每pair保兩列ALL25原strings／header／ordinal／bodySHA＋ORIGINALreceiptSHA／三net及全returnedcalendar。Daily net0、統計count0、窗口sum0、delta0各有不同predicate，不把missing或unknown當0；任一來源／pins／calendar／結構／數值／pair conflict，whole7 failclosed，不跳壞股或縮窗。actual all-zero triple／整窗全零／net sum0／total delta0／pair delta0均無實件，缺口保留，fixture不充真值。
-
-### 45.5 本次actual及未驗邊界
 
 歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §45.5。
 
@@ -1135,27 +1071,17 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 
 窗口和為零未出現，該情形只有合成證據；真實資料的負向（壞欄、缺列）與 401、403、429 路徑只有合成證據。
 
-### 47.4 qa1：首個 URL 失敗
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.4。
-
-### 47.5 修正與重驗（candidate `a4d89664…`）
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.5。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.4、§47.5、§47.8。
 
 ### 47.6 qa2：成功取得與驗證結果
 
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.6。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.6。兩截止日五日淨額表現行見 [§47.3](#473-原件驗證與五日分子計算)。
 
 ### 47.7 完整署名
 
 609 UTF-8 bytes，與外部 policy 的 `rights.attribution` 及 QA 收據末段逐字相同：
 
 > 金融監督管理委員會證券期貨局提供、財團法人中華民國證券櫃檯買賣中心（Taipei Exchange, TPEx）[2026] 上櫃股票三大法人買賣明細資訊（dataset11856；dataset-11856-dated-csv/issue36-two-cutoffs-v1）。此開放資料依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款－第1版：https://data.gov.tw/license。原欄、來源及完整性保留；2026-10-05與2026-10-06各五日三法人淨股數及合計為本地衍生結果。
-
-### 47.8 未驗與限制
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §47.8。
 
 ## 48. #31 qa1／qa2／qa3：七股 FinMind 融資餘額與兩截止五日變動比（ordinary-margin-cutoffs-1005-1006-v2）
 
@@ -1188,23 +1114,13 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 - **單位**：「張」（lots）、scale 1 是明示的 provider 推論（`providerLiteral=false`、`officialAnchorVerified=false`），沒有官方 anchor 驗證。
 - **計算**：每股每窗口取 6 個 `MarginPurchaseTodayBalance`，變動比 `(B[T]-B[T-5])/abs(B[T-5])`，以整數分子與正分母（`abs(B[T-5])`）表示；門檻 `<= 0.05` 以精確整數比較 `20*分子 <= 正分母`，四捨五入的顯示值不進閘門；分母為 0 則整批拒用。公式與門檻與正式 canonical（`backend/worker/pipeline.py` `_margin_change_ratio`、`backend/app/domain.py` `maximum_balance_change_ratio`）一致；差異只在產品用精確整數／`Fraction`，canonical 用浮點。
 
-### 48.4 SPENT 帳
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §48.4。
-
-### 48.5 qa3 觀測到的回應形狀
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §48.5。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §48.4、§48.5、§48.7。
 
 ### 48.6 完整署名
 
 273 UTF-8 bytes，與產品常數 `ATTRIBUTION` 逐字相同：
 
 > FinMind: TaiwanStockMarginPurchaseShortSale; local personal noncommercial RAM snapshot only; no raw redistribution/mirror. FinMind is the service provider; this is not an official direct feed and the lot unit is an explicit provider inference, not an official verification.
-
-### 48.7 未驗與限制
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §48.7。
 
 ## 49. #32 qa1／qa2：七股 FinMind nominal OHLCV 日線 last60 與兩截止 raw 算術（issue32-seven-nominal-ohlcv-two-cutoffs-v1）
 
@@ -1243,13 +1159,7 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 - **已觀測邊界**：qa2 取得的交易日區間內 N＝67（7 月 22、8 月 21、9 月 20、10 月 4），8～10 月 45 日與 formal 45 日完全相同；2026-07-10（週五）不在 FinMind 交易日，也不在七股任何一檔的價格資料，原因沒有證據，7 月沒有獨立於 FinMind 的第二來源。依交易日序列推得：2026-10-05 的 last60 從 2026-07-09 起、跨過這個缺口；2026-10-06 的 last60 從 2026-07-13 起，不含缺口。
 - **不支援與已接受風險**：Policy 明列不支援 adjusted prices、公司行動、停牌可比性、全段 historical membership／eligibility、策略、Plan、交易、歷史模擬、raw 落盤、再散布及其他 cutoff；FinMind 無公告成交價的日子 OHLC 為 0 時整批拒收、不補 0、不縮窗（停牌不支援）；gzip、br 回應被拒；免費使用是文件推論，限流與條款日後可能改變。租約 expiry、chunked／close-delimited／quoted charset／非身分標頭重複／`set-cookie`、401／402／403 與零價列的真實路徑未觸發，只有 RAM 重放證據。
 
-### 49.4 qa1：TPEx 日曆首敗
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §49.4。
-
-### 49.5 修正與重驗（policy v1 → v3）
-
-歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §49.5。
+歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/SOURCE_REGISTRY.md` §49.4、§49.5。
 
 ### 49.6 qa2：成功取得與驗證結果
 
@@ -1339,7 +1249,7 @@ Each day及window，每metric self＋hedge=total、buy−sell=net；三組buy／
 
 用途只限免費公開、本地個人非商用研究與 RAM 取得／驗證／consumer。Policy 的 `unsupported` 共 19 項：`historical_pit`、`publication_time`、`first_availability`、`revision_history`、`verified_twse_calendar`、`canonical_20_trading_day_benchmark`、`adjusted_basis`、`total_return`、`independent_unit_anchor`、`hot_group_v1`、`canonical_regime`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`、`raw_disk_storage`、`redistribution`、`mirror`、`other_cutoffs`。不落盤、不發布 raw、不鏡像。權利字串（policy `rights`，逐字，與 [§49.2](#492-用途授權與署名)相同）：`FinMind personal noncommercial local RAM; attribution; no raw redistribution or mirror`，隨 policy SHA-256 被 seal 綁定。Policy 沒有固定完整署名文字；產品 provenance 的來源欄載明 `FinMind TaiwanStockPrice data_id=TAIEX (personal noncommercial; attribution; no mirror/raw redistribution)`，並帶出 `rights` 與 `data_id_evidence`（署名方式見 [FinMind 來源共同規則](#finmind-來源共同規則)）。
 
-免費使用與 `data_id=TAIEX` 都是推論，不是 FinMind 的明示陳述。免費使用的依據同 [§49.2](#492-用途授權與署名)（policy 引用 `https://finmind.github.io/tutor/TaiwanMarket/Technical/`），Policy 因此規定 401、402、403 或任何要求付費、登入的回應是首敗。`data_id=TAIEX` 的證據是 maintainer legacy 名稱與目前 daily v4 路由的推論，實際是否被接受只由唯一一次 GET 證明。使用者已接受三項已知風險：`data_id=TAIEX` 推論、免 token 推論、點數尺度無第二來源；跨來源互核改為 FinMind 內部一致性並列限制，#53 不綁本單，維持 RAM-only。
+免費使用與 `data_id=TAIEX` 都是推論，不是 FinMind 的明示陳述。免費使用的依據同 [§49.2](#492-用途授權與署名)（policy 引用 `https://finmind.github.io/tutor/TaiwanMarket/Technical/`），Policy 因此規定 401、402、403 或任何要求付費、登入的回應是首敗。`data_id=TAIEX` 的證據是 maintainer legacy 名稱與目前 daily v4 路由的推論，實際是否被接受只由唯一一次 GET 證明。使用者已接受三項已知風險：`data_id=TAIEX` 推論、免 token 推論、點數尺度無第二來源；跨來源互核改為 FinMind 內部一致性並列限制，Issue #53 不綁本單，維持 RAM-only。
 
 ### 51.3 原件驗證與窗口／consumer 計算
 
@@ -1412,7 +1322,7 @@ qa2 唯一一次取得的兩個 return（最簡分數，與獨立 `Fraction`、�
 | 請求 | 固定 7 個 GET，不取日曆：`https://api.finmindtrade.com/api/v4/data`，query 依序 `dataset=TaiwanStockInstitutionalInvestorsBuySell`、`data_id=<代號>`、`start_date=2026-09-29`、`end_date=2026-10-06`，依 3105、3293、5274、5347、6488、6510、8069 升序；不換 provider、日期或路由 |
 | 請求標頭 | 明設四個：`Accept-Encoding: identity`、`Connection: close`、`User-Agent: stock-lab-issue9-local-ram/1`、`Accept: application/json`；另有 `http.client` 依 URL 自動加的 `Host`；不帶 token、cookie、proxy |
 | 上限 | 每份 body 1 MiB（1,048,576 B）、aggregate raw 8 MiB（8,388,608 B）、retained-roots estimate 32 MiB（33,554,432 B；estimate 不是 RSS 或 peak）；每 URL 20 s、整批 180 s（cooperative）；redirect 0、retry 0、每 URL 最多 1 次；首敗即停且 attempted 即 SPENT；只在 RAM |
-| 固定 formal 參照 | policy `anchors` 指向固定 blob `116bfab818fc5f72a650573c611d62b662372026:docs/SOURCE_REGISTRY.md`（234,262 B；SHA-256 `f27024ba1f4d5874610e3446cae34401dbeab4ea485706704e78cd4ef3844240`）的 [§47.6](#476-qa2成功取得與驗證結果) 兩個截止日五日淨額表。產品只核 policy 內的 anchor 值；blob 位元組與 §47.6 的表由獨立 oracle 核對。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
+| 固定 formal 參照 | policy `anchors` 指向固定 blob `116bfab818fc5f72a650573c611d62b662372026:docs/SOURCE_REGISTRY.md`（234,262 B；SHA-256 `f27024ba1f4d5874610e3446cae34401dbeab4ea485706704e78cd4ef3844240`）的 §47.6 兩個截止日五日淨額表（現行文見 [§47.3](#473-原件驗證與五日分子計算)）。產品只核 policy 內的 anchor 值；blob 位元組與該表由獨立 oracle 核對。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
 
 ### #9 用途、授權與署名
 
@@ -1460,7 +1370,7 @@ qa1 是一次額度，授權本身不是 seal；real run 另須全局核發 fres
 - **列結構**：每列恰為 `buy`、`date`、`name`、`sell`、`stock_id` 五鍵（缺鍵、多鍵都拒）；`date` 為存在的 ISO `YYYY-MM-DD`；`stock_id` 等於請求代號；`name` 為字串；`buy`、`sell` 為 0 至 int64 上限的非 bool 整數。
 - **先驗全部、再取範圍**：所有回傳列先驗結構，之後才捨棄 `start_date`..`end_date` 以外的列（範圍外列只驗結構，其 `name` 不必是上表五個之一），所以 FinMind 是否依範圍過濾都不影響結果。範圍內的列：`name` 只收上表五個，`Dealer` 或其他值整批拒用；同一 symbol-date-name 不得重複；日期集合須恰等於六個固定交易日，不從缺列推休市；每個日期須五個 name 各一列，缺列不當零。任一不符整批拒用，不跳過壞股、不補 0、不縮窗。
 - **淨額與單位**：淨額＝`buy − sell`，在本地衍生（FinMind 沒有淨額欄），每一步以 signed int64 為界（溢位回 `arithmetic_int64_overflow`）。單位「股」是明示推論（policy `provider_literal_unit_annotation` 為 `false`）：文件沒有單位字樣，單位只靠下列 56 個官方 exact anchor 驗成股；張＝股 ÷ 1000，精確換算、至多三位小數，不用浮點。
-- **anchor gate**：[§47.6](#476-qa2成功取得與驗證結果) 的五日淨額共 56 個值整批 exact 核對，通過後才進 `pending`。截止 2026-10-05 用 09-29～10-05，截止 2026-10-06 用 09-30～10-06；每檔每截止日 4 個值：`foreign_investor`（`Foreign_Investor` 淨額和）、`investment_trust`、`dealer_self_plus_hedging`（`Dealer_self` 與 `Dealer_Hedging` 淨額和）、`three_total`（前三者之和，不含 `Foreign_Dealer_Self`）。任一不符整批拒用（`anchor_mismatch`），診斷只含日期、代號與鍵，不含數值。
+- **anchor gate**：固定 blob §47.6（現行文 [§47.3](#473-原件驗證與五日分子計算)）的五日淨額共 56 個值整批 exact 核對，通過後才進 `pending`。截止 2026-10-05 用 09-29～10-05，截止 2026-10-06 用 09-30～10-06；每檔每截止日 4 個值：`foreign_investor`（`Foreign_Investor` 淨額和）、`investment_trust`、`dealer_self_plus_hedging`（`Dealer_self` 與 `Dealer_Hedging` 淨額和）、`three_total`（前三者之和，不含 `Foreign_Dealer_Self`）。任一不符整批拒用（`anchor_mismatch`），診斷只含日期、代號與鍵，不含數值。
 - **零值形狀（只記錄，不拒用）**：窗口五日、七檔、`Dealer_self` 與 `Dealer_Hedging` 的 buy、sell、net 共 210 個值，期望的零值集合是 [§46.5](#465-本次actual與未驗) 記載的 5274 `Dealer_self` sell 於 2026-10-05、10-06（官方 TPEx CSV 的 gross）。比對結果只列入收據與 `record_only_comparison`；不一致不判為來源錯誤、不拒用（AC 修訂 2a），因為 FinMind 文件說明 buy／sell 可能事後等額補計。
 - **admission**：取得完成的狀態是 `pending`，不是可用。獨立 oracle（只用標準函式庫，不呼叫產品的解析或計算函式）以同一份 RAM 原件重算後送 `OracleAdmission`，須綁定 7 份 canonical receipt 的 SHA-256（依請求序）、`name_rows` 210（7 檔 × 6 日 × 5 name）、`stock_days` 42、`anchor_values` 56，以及與產品相同的 `record_only_matches`；real 路徑另綁定 QA holder、candidate 與 script SHA-256。通過才 `available`，consumer 與頁面才可讀；`window_records` 只回五個窗口日，anchor-only 日不外露。
 - **receipt**：每個 GET 一份，欄位 `source_id`（`finmind_institutional_investors/<代號>`）、`source_version`（policy version）、`method`、`url`、`status`、`request_started_utc`、`observed_utc`、`body_bytes`、`body_sha256`、`full_eof`、`content_type`、`content_encoding`、`namespace`、`policy_sha256`。Canonical receipt 為 sorted keys、compact JSON，其 SHA-256 即 canonical receipt SHA-256。
@@ -1499,7 +1409,7 @@ qa1 是一次額度，授權本身不是 seal；real run 另須全局核發 fres
 | 請求 | 固定 15 個 GET，host 只有 `api.finmindtrade.com`，endpoint `https://api.finmindtrade.com/api/v4/data`。順序：#0 `TaiwanStockTradingDate`，#1～#7 `TaiwanStockPrice`，#8～#14 `TaiwanStockInstitutionalInvestorsBuySell`；個股依 3105、3293、5274、5347、6488、6510、8069；query 依序 `dataset`、`data_id`（日曆無）、`start_date`、`end_date`。日曆通過才取價格，七檔價格全過才取第一筆法人；不換 provider、日期或路由 |
 | 請求標頭 | `Accept: application/json`、`Accept-Encoding: identity`、`Connection: close`、`User-Agent: stock-lab-issue39-local-ram/1` |
 | 上限 | 每份 body 1 MiB、aggregate raw 8 MiB、retained-roots estimate 32 MiB；每 URL 20 s、整批 180 s；其餘同共同規則 |
-| formal 參照 | formal 日曆、2026-10-06 七檔成交量與兩截止淨額 anchor 由產品從固定 blob `116bfab818fc5f72a650573c611d62b662372026:docs/SOURCE_REGISTRY.md`（SHA-256 `f27024ba1f4d5874610e3446cae34401dbeab4ea485706704e78cd4ef3844240`）的 [§31.2](#312-24日完整觀測日曆與20日金融集合)、[§32.2](#322-完整重驗與有限衍生)、[§47.6](#476-qa2成功取得與驗證結果) 解析；呼叫者必須提供該 blob，位元組不符即 `formal_blob_pin` 拒絕。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
+| formal 參照 | formal 日曆、2026-10-06 七檔成交量與兩截止淨額 anchor 由產品從固定 blob `116bfab818fc5f72a650573c611d62b662372026:docs/SOURCE_REGISTRY.md`（SHA-256 `f27024ba1f4d5874610e3446cae34401dbeab4ea485706704e78cd4ef3844240`）的 [§31.2](#312-24日完整觀測日曆與20日金融集合)、[§32.2](#322-完整重驗與有限衍生)、§47.6（現行文 [§47.3](#473-原件驗證與五日分子計算)）解析；呼叫者必須提供該 blob，位元組不符即 `formal_blob_pin` 拒絕。這個 pin 指向 commit 內容，不隨本檔後續編修而變 |
 
 ### 用途、授權與署名
 

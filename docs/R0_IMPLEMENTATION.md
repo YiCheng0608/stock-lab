@@ -1,6 +1,6 @@
 # R0 實作與驗收契約
 
-更新：2026-09-27。本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為準。「已 review」只代表明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。整理前的逐輪命令、測試數與檔案雜湊可由 Git 基準 `2acc3c5deff6fbf33ee104e2e28e3f16e8904a73` 追溯。
+本文件定義 [ROADMAP](ROADMAP.md) R0-1～R0-5 的實作與驗收邊界；優先順序與能力狀態仍以 ROADMAP 為準。「已 review」只代表明列的有限範圍，不代表 R0、B2、B3、B5 或 B7 整體完成。整理前的逐輪命令、測試數與檔案雜湊可由 Git 基準 `2acc3c5deff6fbf33ee104e2e28e3f16e8904a73` 追溯。
 
 ## 1. 狀態語意與使用規則
 
@@ -41,7 +41,7 @@
 | --- | --- | --- |
 | R0-1 | Wilder ATR 純核心、獨立 local store 與 strict caller-provided provenance／comparison | worker、official truth、PIT 與 paired replay；見 §4。 |
 | R0-2 | confidence 安全語意、local SignalArtifact、分離的 comparison／pure replay／worker capture | bridge、legacy-v2 paired output、產品接線與 B7；見 §5 及各保存／重播文件。 |
-| R0-3 | legacy 規則參考價的 read-time API／UI 語意；新 trade plan 的 caller-input 事後假設純核心有限 review | 完整 B4b 的官方 tick／成本／日曆、來源／PIT、持久化與產品接線、paired replay；見 §6。 |
+| R0-3 | legacy 規則參考價的 read-time API／UI 語意；新 trade plan 的 caller-input 事後假設純核心有限 review | 完整 B4b 的官方 tick／成本／日曆、來源／PIT、持久化與產品接線、paired replay；見 §6。條件計畫紀錄的保存與讀回見 §6.3。 |
 | R0-4 | local time-evidence store、產品 read-time projection，以及 caller-declared time-cutoff 純核心有限 review | store-product linkage、source truth、完整 B5b gate／worker 整合與 PIT；見 §7。 |
 | R0-5 | 有限 SQLite migration／recovery、canonical rebuild 與 startup readiness gates | 任意歷史／custom schema、正式 migration／restore／deployment；見 §8。 |
 | B4b／B5b／B7 | B4b、B5b 各僅 caller-input 純核心有限 review；B7 未開始 | B4b／B5b 其餘整合與驗收、B7 實作及獨立 review。 |
@@ -198,6 +198,10 @@ B4b必須使用新trade-plan／execution version，至少保存trigger/confirm�
 本輪有限 review 只接受 `calculate_trade_plan(plan, observation)` 的無 I/O、記憶體純核心，版本為 `caller-trade-plan/v1`／`caller-execution/v1`。入口要求 plan 與 observation 的欄位集合精確、型別嚴格；僅支援 caller 明示的 long、單一 `constant_tick`、觸發／確認、進場區間與不追價上限、失效價與事件、兩個目標、費稅／滑價、最低成交量／金額、停牌、有效期限與 aware 時間。caller 提供 tick 與已結束 session 的觀察值；核心以保守方向捨入，檢查價位順序、開盤參考價加滑價的 gap／追價上限、目標一扣成本後空間及流動性。未知／缺少或不支援的必要輸入拒絕；session 內到期／失效事件，以及同一 session 的 stop 與 target 先後無法由日線判定時回 `incomparable`。
 
 每個結果固定標 `evaluation_scope=post_session_hypothetical`、`point_in_time_status=not_asserted`、`fill_status=not_asserted`，帶完整 session 起訖與 `assessed_at`；`post_session_touches` 的 stop／target 觸及只屬事後觀察，不是成交、退出或已實現報酬。Decimal 計算使用固定 context（precision 50、`ROUND_HALF_EVEN`、Emin -100／Emax 100，對 InvalidOperation／DivisionByZero／Overflow／Underflow／FloatOperation 設 traps）；非負 Decimal 輸入的指數範圍為 -8..12、值不超過 10^12，整數 count 不超過 10^12、slippage ticks 不超過 10^6。這只驗 caller 輸入及假設下的純計算；官方 tick／費稅／交易日曆、來源真實性與 availability、合法最早交易時段、PIT、實際成交、個人部位、持久化及 worker／API／UI 均未驗。既有 legacy 1.6R／3R 路徑不變，完整 legacy replay 與新舊逐欄 paired comparison 仍待 B7；不得據此標 B4b 或 R0 完成。
+
+### 6.3 條件計畫紀錄的保存與讀回（#35）
+
+`backend/app/conditional_plan_store.py`（僅標準函式庫，可直接載入檔案）提供 `initialize_plan_store`／`save_plan_record`／`read_plan_record`，`tools/conditional-plan-store.py` 提供 `init`／`save`／`read` 子命令（`--root` 與 `--request-stdin` 必填）。root 須為明示的絕對路徑，初始化時不得存在；外部 expected ownership 全文與 SHA-256、expected record SHA-256 與 exact binding（record／store／schema 版本、plan_id／revision／parent、identity、as_of、宣告版本、三個 subtree SHA、source_refs／semantic_status）全部必填，被保存的 record 不能充當自己的外部權威。紀錄為 `conditional-plan-record/v1` canonical JSON，上限 65,536 B；Decimal 帶 tag、instant 為 aware UTC，重複鍵、非有限數、float／bool 冒數在 I/O 前拒絕。檔名 `revision-NNNNNN.json`；rN 須讀回同 owner 下 r(N-1) 的全部原位元組並核 hash 與相同 identity／schema。寫入經唯一 `record-staging.tmp` exclusive create、flush／fsync、讀回核 hash 後 no-replace 發布；已發布版本不改、不覆寫，相同位元組重複 save 只回冪等收據，同 id／revision 不同位元組拒絕，無 latest fallback；讀取模式寫入為 0。root／parent 不接受 symlink、junction、reparse point。結果只證 storage integrity 與 caller 宣告，不證 Plan 合法、可成交或 PIT。standalone 測試見[開發入口](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)。
 
 ## 7. R0-4：時間欄位角色與 point-in-time gate
 

@@ -1,6 +1,6 @@
 # 新聞與市場事件規格
 
-更新：2026-10-03。本文定義新聞來源、事件、時間與呈現；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。未具名驗收的欄位與流程仍是目標契約。
+本文定義新聞來源、事件、時間與呈現；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。未具名驗收的欄位與流程仍是目標契約。
 
 ## 1. 目標與來源政策
 

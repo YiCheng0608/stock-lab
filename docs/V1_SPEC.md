@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-核對日：2026-09-14。本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準。下一版方向與驗證見 [STRATEGIES](STRATEGIES.md)，實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果；公式變更可由 config 的 `formula_version` 子版本升版（如法人 `institutional-flow/v2-shares-per-share-volume`），此時 `StrategyVersion.version` 維持 `1.0.0`，舊公式識別保留於 `domain.INSTITUTIONAL_FLOW_FORMULAS`。
+本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準。下一版方向與驗證見 [STRATEGIES](STRATEGIES.md)，實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果；公式變更可由 config 的 `formula_version` 子版本升版（如法人 `institutional-flow/v2-shares-per-share-volume`），此時 `StrategyVersion.version` 維持 `1.0.0`，舊公式識別保留於 `domain.INSTITUTIONAL_FLOW_FORMULAS`。
 
 設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
@@ -72,7 +72,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 5. audit 保存 observation、data_incomplete 等所有規則列；technical summary 只納入 actionable evidence，按策略／標的類型／T+5、T+20 分組。
 6. 三個月或更短一律標 `insufficient_sample`；更長也不等於參數最佳化、walk-forward、獨立 OOS 或策略有效。勝率不能單獨決定採用。
 
-## 2026-09-11 已知實作偏差與版本修正要求
+## 已知實作偏差與版本修正要求
 
 1. worker 的 atr14 是最多 14 根 high-low 平均，缺少 prev close 的 True Range；Wilder ATR 純核心尚未接線。
 2. 舊 conditional `confidence=0.75` 沒有校準證據；只可標示舊版固定值，不得稱 75% 勝率。新 rule-only 數值為 null。

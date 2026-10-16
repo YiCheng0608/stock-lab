@@ -1,6 +1,6 @@
 # Signal artifact 持久化契約
 
-更新：2026-09-27。本文件負責 `signal-artifact/v1` local store、Bridge A 已證邊界、Bridge B capture→candidate adapter，以及獨立 `STOCK_DAY_ALL` selected-bar evidence verifier 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。Verifier 只回傳指定本地證據的一致性結果，未接入 bridge／consumer，亦未以實際 body／receipt／research snapshot 做整合驗收。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
+本文件負責 `signal-artifact/v1` local store、Bridge A 已證邊界、Bridge B capture→candidate adapter，以及獨立 `STOCK_DAY_ALL` selected-bar evidence verifier 的有限 review；Bridge B 現可讀 opt-in selected bar metadata capture v2 及 prior volumes 本地列 capture v3。Verifier 只回傳指定本地證據的一致性結果，未接入 bridge／consumer，亦未以實際 body／receipt／research snapshot 做整合驗收。離線 comparison、pure-rule replay 與 worker capture 是分離能力；R0-B2 整體仍未完成，狀態以 [ROADMAP](ROADMAP.md) 為準。
 
 ## 1. 範圍與不變條件
 
@@ -180,7 +180,7 @@ Receipt 原始 bytes 須符合 caller 外部提供的 digest；這只 pin 本次
 | 外部 pin／receipt | `expected_receipt_sha256_required`、`receipt_hash_mismatch`、`registry_pins_required`、`registry_pin_mismatch`、`registry_source_mismatch`、`registry_policy_rejected`、`receipt_invalid`、`receipt_pin_mismatch`、`receipt_http_status_invalid`、`receipt_attribution_mismatch`、`receipt_conditions_mismatch`、`receipt_timestamp_invalid`。 |
 | Body／selected row | `evidence_size_limit`、`body_invalid`、`market_date_mismatch`、`selected_symbol_missing`、`selected_row_invalid`、`selected_bar_value_mismatch`、`evaluator_projection_mismatch`。 |
 
-本輪驗收僅有統籌接受的程式靜態 review 與使用者在統籌 task 回報的 12 項直接執行 unittest；案例以純記憶體 payload／helper 和 mock 檔案控制邏輯為主，歷史收據留原 task／Git。尚無真實檔案、SQLite、公開入口端到端、sidecar／實際零寫入或競態整合證據。大整數 volume 只在 helper 案例成立，不能外推既有 sealed reader 的 canonical integer 範圍。`local_evidence_consistent` 也不證官方真實性、上游修訂版本、availability、歷史 decision／PIT；既有 `bytes_unverified` 不變，缺 FK 仍按 v2／v3 契約維持 unknown，prior volumes 不升格。下一步尋找已授權可唯讀的現存 research snapshot／body／receipt／registry pins tuple 做獨立 verifier 整合；缺 specimen 或 pins 時保持待驗，不建附件或 fixture。Consumer、paired replay 與預設切換另依其 gate。
+本輪驗收僅有統籌接受的程式靜態 review 與使用者在統籌 task 回報的 12 項直接執行 unittest；案例以純記憶體 payload／helper 和 mock 檔案控制邏輯為主，歷史收據留原 task／Git。尚無真實檔案、SQLite、公開入口端到端、sidecar／實際零寫入或競態整合證據。大整數 volume 只在 helper 案例成立，不能外推既有 sealed reader 的 canonical integer 範圍。`local_evidence_consistent` 也不證官方真實性、上游修訂版本、availability、歷史 decision／PIT；既有 `bytes_unverified` 不變，缺 FK 仍按 v2／v3 契約維持 unknown，prior volumes 不升格。獨立 verifier 的整合驗收須用已授權可唯讀的現存 research snapshot／body／receipt／registry pins tuple；缺 specimen 或 pins 時保持待驗，不建附件或 fixture。Consumer、paired replay 與預設切換另依其 gate。
 
 ## 11. 完成邊界
 
