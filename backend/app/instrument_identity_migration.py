@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+from .migration_revisions import INSTRUMENT_IDENTITY_REVISIONS
+
 SCRATCH = "instruments__v1_rebuild"
 _COLUMNS = {
     "id": "integer not null",
@@ -195,14 +197,7 @@ def _legacy_objects(connection) -> None:
 def _check_existing_identity_claim(connection, objects, state: str) -> None:
     if state == 'current':
         return
-    known_revisions = {
-        '0002_instrument_exchange_key', '0003_backtest_run_metadata',
-        '0004_product_news_themes', '0005_news_temporal_contract',
-        '0006_news_json_defaults',
-        '0007_turnover_availability',
-        '0008_portfolio_share_integer',
-        '0009_strategy_formula_version',
-    }
+    known_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)
     marker_columns = {'alembic_version': 'version_num', 'schema_migrations': 'version'}
     for kind, name, sql in objects:
         column = marker_columns.get(name.lower())
