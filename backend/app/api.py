@@ -76,6 +76,7 @@ from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_qu
 from .stock_overview import build_stock_overview, resolve_stock_cutoff
 from .tpex_price import capture_tpex_price, supported_symbols
 from .tpex_price_saved import private_price
+from .ordinary_close_trend import read_ordinary_close_trend
 from .price_saved_focus import build_saved_focus, focus_policy, read_saved_focus_stock
 from .saved_price_chips_focus import build_focus as build_saved_chips_focus, conditions as saved_chips_conditions
 from .price_focus import build_price_focus, parse_day_move, parse_min_lots, parse_min_turnover, parse_min_range_pct
@@ -1742,6 +1743,18 @@ def stock_price_saved_focus_read(request: Request, exchange: str, symbol: str,
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     return read_saved_focus_stock(instrument, as_of)
+
+
+@router.get("/stocks/{exchange}/{symbol}/ordinary-close-trend")
+def stock_ordinary_close_trend_read(request: Request, exchange: str, symbol: str,
+                                    db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+    if any(key != "as_of" for key in request.query_params) or len(request.query_params.getlist("as_of")) > 1:
+        raise HTTPException(status_code=422, detail="invalid ordinary close trend conditions")
+    with db.no_autoflush:
+        instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return read_ordinary_close_trend(instrument, as_of)
 
 
 @router.get("/focus/price-saved-chips")
