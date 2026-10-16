@@ -447,7 +447,7 @@ python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow
 
 - 沒有 Fetch Metadata 的舊瀏覽器不送 `Sec-Fetch-Site`，跨站 no-cors GET 也不帶 `Origin`，仍帶正確 Host 而被放行，回應是 opaque。取源與寫入、關閉服務的呼叫都是 POST，被 Content-Type 規則擋下（DELETE、PUT 見下條）；唯一殘留是 `tpex-price-api.py` 會消耗讀取預算的 saved GET（`…/prices/saved`、`…/prices/saved-focus`、`/api/focus/price-saved*`）。
 - 不加防護的服務：`volume-exact-preview.cjs`（只有 GET，上游是記憶體 fixture）；`test_share_quantity_exact_presentation.py --serve`（8777）與 `test_volume_exact_presentation.py --serve` 的埠可被外站直接呼叫，但只影響記憶體 fixture，不取源、不落盤。其中 8777 有 `POST /__review__/shutdown`，外站可以直接把它關掉。
-- 產品 API `uvicorn app.main:app`（[OPERATIONS](../OPERATIONS.md)）不在本節防護範圍：它掛的是與 runner 相同的 router，卻沒有這層防護，所以以 `STOCK_*_MEMORY_CAPTURE` 等 env 明示啟用的取源／寫入 POST（如 `prices/capture`、`prices/save`、`institutional-windows/capture`），對外站 simple request 的暴露與修補前的 runner 相同；未設這些 env 時端點停用。處理見 [#125](https://github.com/YiCheng0608/stock-lab/issues/125)。
+- 產品 API `uvicorn app.main:app` 不用本節的 helper，由 [`backend/app/browser_gate.py`](../../backend/app/browser_gate.py) 對 POST、PUT、PATCH、DELETE 常開防護，GET 不檢查；規則、允許清單、限制與殘留見 [OPERATIONS §1.1](../OPERATIONS.md#11-產品-api-的跨站請求防護)。
 - DELETE、PUT 不加 Content-Type 規則：跨站送這兩種 method 需要 preflight，而 preflight 同樣先過防護，`Origin` 不符即 403，不會得到 CORS 許可；它們仍受 Host、`Sec-Fetch-Site`、`Origin` 規則。
 - 防的是瀏覽器跨站與 DNS rebinding，不是身分驗證：同機其他程式送出正確 Host 與標頭的請求一樣放行。
 - 規則依 Fetch Metadata 與 `Origin` 的規格行為制定；可重建的驗證只用手造標頭，未用真瀏覽器的外站頁面實測。
