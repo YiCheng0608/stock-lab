@@ -27,6 +27,7 @@ REVISIONS = (
     "0006_news_json_defaults",
     "0007_turnover_availability",
     "0008_portfolio_share_integer",
+    "0009_strategy_formula_version",
 )
 READ_TIMEOUT_SECONDS = 1.0
 _LEGACY_REQUEST_KEY_DDL = re.compile(
@@ -75,7 +76,7 @@ def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
         ):
             _fail("fallback revisions must be a distinct, nonempty known prefix")
         if not has_alembic and len(values) != len(REVISIONS):
-            _fail("fallback-only database requires all eight revisions")
+            _fail("fallback-only database requires all nine revisions")
     elif not has_alembic:
         _fail("database has no recognized migration markers")
 

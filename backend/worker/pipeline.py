@@ -858,32 +858,85 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             row.rank = rank
 
 
+class StrategyVersionError(RuntimeError):
+    """A named refusal to reuse or overwrite stored strategy history.
+
+    ``code`` is what an analysis attempt surfaces as its failure detail.
+    """
+
+    def __init__(self, code: str, message: str = "") -> None:
+        super().__init__(f"{code}: {message}" if message else code)
+        self.code = code
+
+
+def _exact_json(left: Any, right: Any) -> bool:
+    """JSON identity that keeps bool, int and float apart (``False != 0.0``)."""
+
+    return json.dumps(left, sort_keys=True, separators=(",", ":")) == json.dumps(
+        right, sort_keys=True, separators=(",", ":")
+    )
+
+
 def _ensure_strategies(db: Session) -> dict[str, StrategyVersion]:
+    """Return the canonical row for each strategy under the current formula.
+
+    A row is identified by (name, version, formula_version); rows stored under
+    another formula, or unclassified by the 0009 migration, are never reused or
+    modified, so signals written under them keep their original configuration.
+    """
+
     snapshots = canonical_config_snapshot()
     versions: dict[str, StrategyVersion] = {}
     for key, config in CANONICAL_CONFIGS.items():
+        snapshot = snapshots[key]
         strategy = db.scalar(
             select(StrategyVersion).where(
                 StrategyVersion.name == config["name"],
                 StrategyVersion.version == config["version"],
+                StrategyVersion.formula_version == INSTITUTIONAL_FLOW_FORMULA_VERSION,
             )
         )
         if not strategy:
             strategy = StrategyVersion(
                 name=config["name"],
                 version=config["version"],
+                formula_version=INSTITUTIONAL_FLOW_FORMULA_VERSION,
                 kind=config["kind"],
-                config_json=snapshots[key],
-                canonical_config_snapshot=snapshots[key],
+                config_json=snapshot,
+                canonical_config_snapshot=snapshot,
             )
             db.add(strategy)
-        elif not strategy.canonical_config_snapshot:
-            # Populate the audit snapshot only; never mutate a legacy 1.0
-            # config in place.  The canonical 1.0.0 row is a new version.
-            strategy.canonical_config_snapshot = snapshots[key]
+        elif not (
+            strategy.kind == config["kind"]
+            and _exact_json(strategy.config_json, snapshot)
+            and _exact_json(strategy.canonical_config_snapshot, snapshot)
+        ):
+            raise StrategyVersionError(
+                "strategy_snapshot_mismatch",
+                f"{config['name']} {config['version']} {INSTITUTIONAL_FLOW_FORMULA_VERSION} "
+                f"(id {strategy.id}) differs from the canonical configuration",
+            )
         versions[key] = strategy
     db.flush()
     return versions
+
+
+def _require_same_formula(db: Session, signal: Signal, strategy: StrategyVersion) -> None:
+    """Refuse to rewrite a stored signal that belongs to another formula.
+
+    The analysis ``signal_key`` carries name and version but not the formula, so
+    a rerun of a date stored under an older formula would otherwise overwrite
+    that result and repoint it at the current row.
+    """
+
+    if signal.strategy_version_id == strategy.id:
+        return
+    stored = db.get(StrategyVersion, signal.strategy_version_id) if signal.strategy_version_id else None
+    raise StrategyVersionError(
+        "signal_formula_conflict",
+        f"signal {signal.signal_key} (id {signal.id}) is stored under formula "
+        f"{stored.formula_version if stored else 'unattributed'}, not {strategy.formula_version}",
+    )
 
 
 def _next_execution_date(
@@ -1228,6 +1281,8 @@ def _upsert_signal_for_strategy(
         f"{signal_date.isoformat()}-{strategy.name}-{strategy.version}"
     )
     signal = db.scalar(select(Signal).where(Signal.signal_key == signal_key))
+    if signal:
+        _require_same_formula(db, signal, strategy)
     existing_confidence = signal.confidence if signal else None
     existing_evidence = (
         dict(signal.rule_evidence_json)

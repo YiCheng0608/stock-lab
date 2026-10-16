@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 from sqlalchemy import Engine, inspect, text
 
 from .config import ALEMBIC_CONFIG_PATH
+from .domain import INSTITUTIONAL_FLOW_FORMULA_V1, INSTITUTIONAL_FLOW_FORMULA_V2, INSTITUTIONAL_FLOW_FORMULAS
 from .news_json_defaults import ensure_news_json_server_defaults
 from .portfolio_share_migration import ensure_portfolio_share_integer
 from .settlement_identity_migration import preflight_settlement_identity, rebuild_settlement_identity
@@ -125,6 +128,201 @@ def _rebuild_signal_settlements_if_needed(connection) -> None:
     rebuild_settlement_identity(connection)
 
 
+STRATEGY_FORMULA_REVISION = "0009_strategy_formula_version"
+UNCLASSIFIED_FORMULA_PREFIX = "unclassified/"
+_STRATEGY_TABLE = "strategy_versions"
+_STRATEGY_SCRATCH = "strategy_versions__formula_rebuild"
+# Canonical snapshots shipped before the v2 institutional-flow formula
+# (backend/app/domain.py at 7d9fa0e^, identical to the reviewed baseline).  The
+# key is the SHA-256 of json.dumps(snapshot, sort_keys=True, separators=(",", ":")).
+# The list is closed: undeclared content that is not one of these stays
+# unclassified instead of being guessed as v1.
+_PRE_V2_CANONICAL_DIGESTS = {
+    "a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd": ("breakout_v1", "1.0.0"),
+    "03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff": ("pullback_v1", "1.0.0"),
+    "36cd82a287b2b8878c2b6efa165493ccf86b861e59dc35ffd858871c8f5c694e": ("hot_group_v1", "1.0.0"),
+}
+_STRATEGY_LEGACY_COLUMNS = {
+    "id", "name", "version", "kind", "config_json", "active", "created_at",
+}
+_STRATEGY_REBUILD_DDL = (
+    f'CREATE TABLE "{_STRATEGY_SCRATCH}" ('
+    "id INTEGER NOT NULL, "
+    "name VARCHAR(60) NOT NULL, "
+    "version VARCHAR(30) NOT NULL, "
+    "formula_version VARCHAR(80) DEFAULT 'unclassified/unspecified' NOT NULL, "
+    "kind VARCHAR(30) NOT NULL, "
+    "config_json JSON NOT NULL, "
+    "canonical_config_snapshot JSON DEFAULT '{}' NOT NULL, "
+    "active BOOLEAN NOT NULL, "
+    "created_at DATETIME NOT NULL, "
+    "PRIMARY KEY (id), "
+    "CONSTRAINT uq_strategy_version UNIQUE (name, version, formula_version))"
+)
+
+
+def _strategy_error(reason: str) -> RuntimeError:
+    return RuntimeError(f"cannot migrate strategy_versions: {reason}")
+
+
+def _canonical_json(value) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _stored_json(value):
+    """Parse a stored JSON column; ``(False, None)`` when it is not valid JSON."""
+
+    if value is None:
+        return False, None
+    try:
+        return True, json.loads(value)
+    except (TypeError, ValueError):
+        return False, None
+
+
+def _declared_formulas(snapshot: dict) -> list:
+    """Formula identities a snapshot declares, from the two known locations."""
+
+    declared = []
+    confirmations = snapshot.get("confirmations")
+    flow = confirmations.get("institutional_flow") if isinstance(confirmations, dict) else None
+    if isinstance(flow, dict) and "formula_version" in flow:
+        declared.append(flow["formula_version"])
+    components = snapshot.get("components")
+    flow = components.get("institutional_flow") if isinstance(components, dict) else None
+    formula = flow.get("formula") if isinstance(flow, dict) else None
+    if isinstance(formula, dict) and "formula_version" in formula:
+        declared.append(formula["formula_version"])
+    return declared
+
+
+def classify_strategy_formula(name, version, config_json, canonical_config_snapshot) -> str:
+    """Return a stored row's formula identity, or a named ``unclassified/<reason>``.
+
+    Known formula values are taken from the snapshot itself; a snapshot without
+    one is v1 only when it is byte-for-byte (canonical JSON) a pre-v2 canonical
+    snapshot under its own name and version.  Nothing else is guessed.
+    """
+
+    config_ok, config = _stored_json(config_json)
+    snapshot_ok, snapshot = _stored_json(canonical_config_snapshot)
+    if not config_ok or not snapshot_ok:
+        return UNCLASSIFIED_FORMULA_PREFIX + "invalid_json"
+    if not snapshot:
+        return UNCLASSIFIED_FORMULA_PREFIX + "empty_snapshot"
+    if not isinstance(snapshot, dict) or not isinstance(config, dict):
+        return UNCLASSIFIED_FORMULA_PREFIX + "invalid_json"
+    if _canonical_json(config) != _canonical_json(snapshot):
+        return UNCLASSIFIED_FORMULA_PREFIX + "config_snapshot_mismatch"
+    declared = _declared_formulas(snapshot)
+    if declared:
+        first = declared[0]
+        if isinstance(first, str) and first in INSTITUTIONAL_FLOW_FORMULAS and all(
+            isinstance(value, str) and value == first for value in declared
+        ):
+            return first
+        return UNCLASSIFIED_FORMULA_PREFIX + "unknown_formula_version"
+    digest = hashlib.sha256(_canonical_json(snapshot).encode("utf-8")).hexdigest()
+    if _PRE_V2_CANONICAL_DIGESTS.get(digest) == (name, version):
+        return INSTITUTIONAL_FLOW_FORMULA_V1
+    return UNCLASSIFIED_FORMULA_PREFIX + "unrecognized_snapshot"
+
+
+def _strategy_formula_state(connection) -> str:
+    """Read-only gate: ``absent``, ``legacy`` (unique name+version) or ``current``."""
+
+    if any(
+        name.lower() == _STRATEGY_TABLE or name.lower().startswith(_STRATEGY_SCRATCH)
+        for (name,) in connection.exec_driver_sql("SELECT name FROM temp.sqlite_schema")
+    ):
+        raise _strategy_error("unsupported TEMP shadow object")
+    objects = connection.exec_driver_sql("SELECT type, name FROM main.sqlite_schema").all()
+    if any(name.lower().startswith(_STRATEGY_SCRATCH) for _, name in objects):
+        raise _strategy_error("occupied scratch object; manual recovery required")
+    table = next((kind for kind, name in objects if name.lower() == _STRATEGY_TABLE), None)
+    if table is None:
+        return "absent"
+    if table != "table":
+        raise _strategy_error(f"strategy_versions is a {table}, not a table")
+    columns = {row[1] for row in connection.exec_driver_sql(f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")')}
+    keys = set()
+    for index in connection.exec_driver_sql(f'PRAGMA main.index_list("{_STRATEGY_TABLE}")'):
+        if not index[2]:
+            continue
+        parts = [
+            row for row in connection.exec_driver_sql(f'PRAGMA main.index_xinfo("{index[1]}")') if row[5]
+        ]
+        if index[4] or any(row[2] is None for row in parts):
+            raise _strategy_error("partial or expression unique index")
+        keys.add(tuple(row[2] for row in parts))
+    identity = {key for key in keys if {"name", "version", "formula_version"}.intersection(key)}
+    if "formula_version" in columns:
+        if identity != {("name", "version", "formula_version")}:
+            raise _strategy_error("formula_version exists but the unique identity is not (name, version, formula_version)")
+        return "current"
+    if identity != {("name", "version")}:
+        raise _strategy_error("legacy table lacks the unique identity (name, version)")
+    if not _STRATEGY_LEGACY_COLUMNS.issubset(columns) or columns - _STRATEGY_LEGACY_COLUMNS - {"canonical_config_snapshot"}:
+        raise _strategy_error("unsupported legacy columns")
+    for kind, name, owner, body in connection.exec_driver_sql(
+        "SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE type IN ('trigger', 'view')"
+    ):
+        if owner.lower() == _STRATEGY_TABLE or _STRATEGY_TABLE in (body or "").lower():
+            raise _strategy_error(f"unsupported dependent {kind} {name}")
+    return "legacy"
+
+
+def ensure_strategy_formula_version(connection) -> bool:
+    """Add ``strategy_versions.formula_version`` and widen the unique identity.
+
+    Every legacy row is kept with its id, version, config and snapshot untouched;
+    only the new column is filled (a known formula, or ``unclassified/<reason>``)
+    and rows that are not the current v2 formula are deactivated.  Returns False
+    when there is nothing to do, so a repeat run changes nothing.  SQLite only
+    (the application database); the caller owns the transaction, the marker row
+    and turning ``PRAGMA foreign_keys`` off, as for the other table rebuilds.
+    """
+
+    if connection.dialect.name != "sqlite":
+        return False
+    if _strategy_formula_state(connection) != "legacy":
+        return False
+    if int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar() or 0):
+        raise _strategy_error("requires PRAGMA foreign_keys=OFF, owned by the migration runner")
+    columns = {row[1] for row in connection.exec_driver_sql(f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")')}
+    snapshot_column = '"canonical_config_snapshot"' if "canonical_config_snapshot" in columns else "'{}'"
+    legacy = connection.exec_driver_sql(
+        'SELECT "id", "name", "version", "kind", "config_json", ' + snapshot_column + ', "active", "created_at" '
+        f'FROM "{_STRATEGY_TABLE}" ORDER BY "id"'
+    ).all()
+    connection.exec_driver_sql(_STRATEGY_REBUILD_DDL)
+    migrated = []
+    for row_id, name, version, kind, config, snapshot, active, created_at in legacy:
+        formula = classify_strategy_formula(name, version, config, snapshot)
+        migrated.append((
+            row_id, name, version, formula, kind, config, snapshot,
+            active if formula == INSTITUTIONAL_FLOW_FORMULA_V2 else 0, created_at,
+        ))
+    if migrated:
+        connection.exec_driver_sql(
+            f'INSERT INTO "{_STRATEGY_SCRATCH}" '
+            "(id, name, version, formula_version, kind, config_json, canonical_config_snapshot, active, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            migrated,
+        )
+    connection.exec_driver_sql(f'DROP TABLE "{_STRATEGY_TABLE}"')
+    connection.exec_driver_sql(f'ALTER TABLE "{_STRATEGY_SCRATCH}" RENAME TO "{_STRATEGY_TABLE}"')
+    connection.exec_driver_sql(f'CREATE INDEX "ix_strategy_versions_name" ON "{_STRATEGY_TABLE}" ("name")')
+    kept = [row[0] for row in connection.exec_driver_sql(f'SELECT "id" FROM "{_STRATEGY_TABLE}" ORDER BY "id"')]
+    if kept != [row[0] for row in legacy] or _strategy_formula_state(connection) != "current":
+        raise _strategy_error("post-rebuild identity mismatch")
+    if inspect(connection).has_table("signals") and connection.exec_driver_sql(
+        'PRAGMA foreign_key_check("signals")'
+    ).fetchmany(1):
+        raise _strategy_error("post-rebuild foreign-key violation from signals")
+    return True
+
+
 
 def _fallback_upgrade_on_connection(connection) -> None:
     from . import models  # noqa: F401
@@ -166,6 +364,7 @@ def _fallback_upgrade_on_connection(connection) -> None:
     _ensure_request_key_index(connection)
     _rebuild_signal_settlements_if_needed(connection)
     ensure_portfolio_share_integer(connection)
+    ensure_strategy_formula_version(connection)
     if inspect(connection).has_table("news_items"):
         connection.execute(
             text(
@@ -238,6 +437,12 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0008_portfolio_share_integer', CURRENT_TIMESTAMP)"
+        )
+    )
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            f"VALUES ('{STRATEGY_FORMULA_REVISION}', CURRENT_TIMESTAMP)"
         )
     )
 
