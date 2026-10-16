@@ -424,7 +424,7 @@ python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow
 
 ### #102 本機 runner 的跨站請求防護
 
-本機 API／preview 只綁 `127.0.0.1`、不發 CORS 標頭，所以跨站頁面的 preflight 會自己失敗；但不需 preflight 的 simple request（`text/plain` 或表單 POST、no-cors GET）仍能送到埠上，足以觸發一次性取源、寫入或關閉服務。下列 runner 因此在 app／handler 之前先過跨站防護：拒絕的請求不讀 body、不轉發給上游，也不碰 producer、額度、來源或私人檔案。
+本機 API／preview 只綁 `127.0.0.1`，跨站頁面的 preflight 不會被放行（套用防護的服務除 `test_share_quantity_storage.py --serve` 外都不發 CORS 標頭，該例外見「runner 的差異」）；但不需 preflight 的 simple request（`text/plain` 或表單 POST、no-cors GET）仍能送到埠上，足以觸發一次性取源、寫入或關閉服務。下列 runner 因此在 app／handler 之前先過跨站防護：拒絕的請求不讀 body、不轉發給上游，也不碰 producer、額度、來源或私人檔案。
 
 規則與 #9 combos 相同：`Host` 須恰為 `127.0.0.1:<該服務自己的埠>`，`Sec-Fetch-Site`、`Origin` 有送就必須同源，每個 POST 的 `Content-Type` 須是 `application/json`。四項的細節、檢查順序與 403／415 的 reason 以[個股頁 #9 一節](../STOCK_RESEARCH_PAGE.md#9-本機-api-防護與埠)為準，本節只記套用範圍、runner 的差異、限制與驗證指令。
 
@@ -441,12 +441,14 @@ python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow
 - 拒絕回 JSON `{"reason":"<reason>"}` 與 `Cache-Control: no-store`；API runner 一律關閉 WebSocket。
 - 只認 `127.0.0.1`：用 `http://localhost:<埠>/` 或 `[::1]` 開 preview 或 API 會得到 403 `host_not_admitted`，一律用 `http://127.0.0.1:<埠>/`。
 - preview 判斷的是瀏覽器送來的原始標頭，不是轉發前改寫的 Content-Type；轉給 API 的請求，Host 是 API 自己的 `127.0.0.1:<API 埠>`，不帶瀏覽器的 `Origin`、`Sec-Fetch-Site`。
+- `test_share_quantity_storage.py --serve` 的 `main.app` 掛有 `CORSMiddleware`，允許 Vite 的 `http://localhost:5173`、`http://127.0.0.1:5173`。防護包在它外面：這兩個 origin 的 preflight 與 POST 都先被站別或 `Origin` 規則拒絕，所以 5173 的頁面不能直連 8779，UI 要經 8780 的 preview。
 
 **限制**：
 
 - 沒有 Fetch Metadata 的舊瀏覽器不送 `Sec-Fetch-Site`，跨站 no-cors GET 也不帶 `Origin`，仍帶正確 Host 而被放行，回應是 opaque。取源與寫入、關閉服務的呼叫都是 POST，被 Content-Type 規則擋下（DELETE、PUT 見下條）；唯一殘留是 `tpex-price-api.py` 會消耗讀取預算的 saved GET（`…/prices/saved`、`…/prices/saved-focus`、`/api/focus/price-saved*`）。
-- 不加防護的服務：`volume-exact-preview.cjs`（只有 GET，上游是記憶體 fixture）；`test_share_quantity_exact_presentation.py --serve`（8777）與 `test_volume_exact_presentation.py --serve` 的埠可被外站直接呼叫，但只影響記憶體 fixture，不取源、不落盤。
-- DELETE、PUT 不加 Content-Type 規則：跨站送這兩種 method 需要 preflight，runner 不發 CORS 標頭，preflight 必失敗；它們仍受 Host、`Sec-Fetch-Site`、`Origin` 規則。
+- 不加防護的服務：`volume-exact-preview.cjs`（只有 GET，上游是記憶體 fixture）；`test_share_quantity_exact_presentation.py --serve`（8777）與 `test_volume_exact_presentation.py --serve` 的埠可被外站直接呼叫，但只影響記憶體 fixture，不取源、不落盤。其中 8777 有 `POST /__review__/shutdown`，外站可以直接把它關掉。
+- 產品 API `uvicorn app.main:app`（[OPERATIONS](../OPERATIONS.md)）不在本節防護範圍：它掛的是與 runner 相同的 router，卻沒有這層防護，所以以 `STOCK_*_MEMORY_CAPTURE` 等 env 明示啟用的取源／寫入 POST（如 `prices/capture`、`prices/save`、`institutional-windows/capture`），對外站 simple request 的暴露與修補前的 runner 相同；未設這些 env 時端點停用。處理見 [#125](https://github.com/YiCheng0608/stock-lab/issues/125)。
+- DELETE、PUT 不加 Content-Type 規則：跨站送這兩種 method 需要 preflight，而 preflight 同樣先過防護，`Origin` 不符即 403，不會得到 CORS 許可；它們仍受 Host、`Sec-Fetch-Site`、`Origin` 規則。
 - 防的是瀏覽器跨站與 DNS rebinding，不是身分驗證：同機其他程式送出正確 Host 與標頭的請求一樣放行。
 - 規則依 Fetch Metadata 與 `Origin` 的規格行為制定；可重建的驗證只用手造標頭，未用真瀏覽器的外站頁面實測。
 - 拒絕次數記在結束收據：API runner 的 `browser_gate_refusals`（依 reason 分列），preview 則在各自的 rejected 計數或 `browser_gate_refusals`。Windows 以 Ctrl+Break 停止 API runner 時，結束收據不一定印出，不能單靠它證明拒絕發生。
