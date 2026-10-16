@@ -13,10 +13,12 @@ lists every reference). Only a structural failure stops the batch; a dataset tha
 a day without a usable price, an event whose terms are missing and a failed consistency check are
 recorded as per-day / per-event / per-symbol states and refused at read time instead.
 
-There is no import-time I/O and no environment read. ``acquire`` returns PENDING; only an
+There is no import-time I/O and no environment read at import. The one environment read is
+``LOCALAPPDATA``, taken at call time by ``private_root``; unset, empty, relative or ``..`` fails closed
+(``root_unset`` / ``root_invalid``) and never falls back. ``acquire`` returns PENDING; only an
 independent same-RAM oracle admission (which also binds the SHA-256 of the canonical derived
-data) makes ``save`` possible. Disk access exists only in ``save`` (below the fixed private root
-``PRIVATE_ROOT`` for the default transport; a boundary transport must name its own root and may
+data) makes ``save`` possible. Disk access exists only in ``save`` (below the private root
+``private_root()`` for the default transport; a boundary transport must name its own root and may
 never use the real one) and in the read-only ``load_saved`` (never fetches, never falls back).
 
 The default HTTPS path is bound to the externally published canonical policy v1
@@ -64,7 +66,12 @@ CONSUMER_VERSION = "tpex-calendar-actions-read-v1"
 STORAGE_SCHEMA = "tpex-calendar-actions-saved/v1"
 RECEIPT_SCHEMA = "tpex-calendar-actions-receipt/v1"
 DATA_VERSION_PREFIX = "tpex-calendar-actions-data/v1:"
-PRIVATE_ROOT = "C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98"
+ROOT_ENV = "LOCALAPPDATA"
+ROOT_SUBDIRS = ("taiwan-stock-research", "tpex-calendar-actions-issue98")
+# Historical record only. The externally published policy v2 below carries this literal as its ``storage.root`` and
+# its bytes are pinned, so ``_expected_policy`` must still compare against it. It is never a write or read target:
+# the execution root comes from ``private_root`` and is deliberately not tied to this value.
+POLICY_STORAGE_ROOT = "C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98"
 MARKET = "TW/TPEx"
 INSTRUMENT_TYPE = "ordinary_stock"
 READ_MARKET = "TPEx"
@@ -341,7 +348,7 @@ def _expected_policy(policy):
             "reference_tick_source", "reference_cross_check", "par_value_change")},
     }
     expected["storage"] = {
-        "kind": "private_local_derived_calendar_actions", "schema": STORAGE_SCHEMA, "root": PRIVATE_ROOT,
+        "kind": "private_local_derived_calendar_actions", "schema": STORAGE_SCHEMA, "root": POLICY_STORAGE_ROOT,
         "layout": "<policy_version>/<window_end>/{data.json,receipt.json}", "raw_body": "not_stored",
         "stored": "calendar, per-symbol day states, events, factors, traces and check results; no raw prices",
         "max_data_bytes": DATA_CAP, "max_receipt_bytes": RECEIPT_CAP, "max_bundles": MAX_BUNDLES,
@@ -1465,19 +1472,20 @@ class CalendarActionsSource:
     def save(self, *, root=None):
         """Publish the admitted derived data below the private root (idempotent, never overwrites).
 
-        The default transport writes only to ``PRIVATE_ROOT``; a boundary transport must name its own
-        root and can never name the real one.
+        The default transport writes only to ``private_root()``; a boundary transport must name its own
+        root and can never name the real one. An unresolvable private root fails closed before any write.
         """
         self._usable()
         if self._real:
-            if root is not None and not _same_path(_absolute(root, "root_invalid"), PRIVATE_ROOT):
+            private = private_root()
+            if root is not None and not _same_path(_absolute(root, "root_invalid"), private):
                 _fail("root_not_private_root")
-            root = PRIVATE_ROOT
+            root = private
         else:
             if root is None:
                 _fail("root_required_for_boundary")
             root = _absolute(root, "root_invalid")
-            if _same_path(root, PRIVATE_ROOT):
+            if _same_path(root, private_root()):
                 _fail("boundary_root_is_private_root")
         root = _absolute(root, "root_invalid")
         receipt_bytes = _base._canonical(self._receipt_document(_utc_now()))
@@ -1566,6 +1574,30 @@ def _absolute(value, code):
     if ".." in re.split(r"[\\/]", text):
         _fail(code)
     return text
+
+
+# Windows root prefixes (``os.path.splitdrive``, separators normalised to ``\``) that name a fixed location: a drive letter or a
+# complete UNC share (server and share both non-empty). ``\\?\`` and ``\\.\`` must carry one of those two themselves.
+_WINDOWS_FIXED_PREFIX = re.compile(r"[A-Za-z]:|\\\\(?![?.]\\)[^\\]+\\[^\\]+|\\\\[?.]\\(?:[A-Za-z]:|UNC\\[^\\]+\\[^\\]+)")
+
+
+def private_root(environment=None):
+    """The private root: ``%LOCALAPPDATA%/taiwan-stock-research/tpex-calendar-actions-issue98``.
+
+    Read at call time, never at import. ``LOCALAPPDATA`` is the only source: unset, empty or non-string is
+    ``root_unset``; relative, containing ``..`` or a NUL byte is ``root_invalid``. On Windows the drive part must be a
+    drive letter or a complete UNC share: a rooted path without one (``\\foo``, ``/foo``) is relative to the current drive,
+    and an incomplete UNC (``\\\\``, ``\\\\srv``, ``\\\\srv\\``, ``//srv``) would turn our own directory name into a share on
+    another host, so both are ``root_invalid`` too. There is no fallback to another variable or path, and nothing is
+    created or checked on disk here.
+    """
+    value = (os.environ if environment is None else environment).get(ROOT_ENV)
+    if type(value) is not str or not value:
+        _fail("root_unset")
+    text = _absolute(value, "root_invalid")
+    if os.name == "nt" and not _WINDOWS_FIXED_PREFIX.fullmatch(os.path.splitdrive(text)[0].replace("/", "\\")):
+        _fail("root_invalid")
+    return os.path.join(text, *ROOT_SUBDIRS)
 
 
 def _lstat(path, kind, expected):
@@ -2108,7 +2140,7 @@ class SavedCalendarActions:
 def load_saved(root=None, *, pins=None):
     """Read-only, fully re-verified view of the saved bundle; never fetches and never falls back."""
     pins = _real_pins() if pins is None else _pins(pins)
-    data_bytes, receipt_bytes, data, receipt, _ = _load_verified(PRIVATE_ROOT if root is None else root, pins)
+    data_bytes, receipt_bytes, data, receipt, _ = _load_verified(private_root() if root is None else root, pins)
     digest = hashlib.sha256(data_bytes).hexdigest()
     return SavedCalendarActions(
         POLICY_VERSION, tuple(data["calendar"]), tuple(data["calendar_after_formal"]),
