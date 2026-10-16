@@ -258,7 +258,7 @@ def legacy(engine, *, parent=False, marker=True, marker_mode="alembic"):
                 connection.exec_driver_sql("INSERT INTO alembic_version VALUES (?)", ("0001_schema_v1" if parent else PREVIOUS,))
             else:
                 connection.exec_driver_sql("CREATE TABLE schema_migrations (version VARCHAR(64) PRIMARY KEY, applied_at DATETIME NOT NULL)")
-                revisions = readiness.REVISIONS[:1] if parent else readiness.REVISIONS[:-1]
+                revisions = readiness.REVISIONS[:1] if parent else readiness.REVISIONS[:-2]
                 for revision in revisions:
                     connection.exec_driver_sql("INSERT INTO schema_migrations VALUES (?, '2026-10-03 00:00:00')", (revision,))
         connection.commit()

@@ -81,8 +81,10 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 5. 30 bps 成本與單邊 5 bps 滑價是固定假設；新版本需區分商品與情境並保持舊結果可重現。
 6. `StrategyVersion` 的唯一鍵是（`name`、`version`、`formula_version`），由 alembic `0009_strategy_formula_version` 與 fallback 建立。遷移對每個既存列標一個 `formula_version`：快照宣告的已知公式值；沒有宣告但與 v2 之前三個 canonical 快照（固定的 SHA-256 清單，名稱與版本須相符）的 canonical JSON 完全相同者標 `institutional-flow/v1-shares-per-twd-turnover`；其餘（空快照、無法解析、`config_json` 與快照不一致、未知公式值、不在清單內的內容）標具名 `unclassified/<reason>`，不猜測。非 v2 公式的列設 `active=false`，id、`version`、`config_json`、快照不改，舊訊號仍指向原列。`_ensure_strategies` 只取（名稱、版本、目前公式）的列或新建，不重用 v1 或 `unclassified` 列、不補寫空快照；取到的列與 canonical 不符時以 `strategy_snapshot_mismatch` 拒用。`analysis` 的 `signal_key` 不含公式，`_upsert_signal_for_strategy` 遇同鍵訊號所屬列的公式與目前不同（含無法歸屬的列）時，以 `signal_formula_conflict` 拒絕覆寫，舊訊號整列保留。殘餘限制：
    - v2 之前已有 `analysis` 訊號的（標的、日期、策略）不能以 v2 在 `analysis` 命名空間重算；新日期與 backtest 不受影響。要以 v2 重算這些歷史日期，須另行調整 `signal_key` 格式。
+   - `signal_formula_conflict` 讓整次分析中止，不是只略過該檔：`analyze` 以 `StrategyVersionError` 結束且不提交該次結果，`daily` 不進入 evaluate，`analysis_capture` 以 `analysis_failed`（detail=`signal_formula_conflict`）失敗。
    - 舊列 `active=false`，所以舊訊號讀取結果的 `strategy.active` 由 true 變 false，其餘欄位不變。
    - 只認得固定清單內的 v2 前快照；更早或被改動的快照標為 `unclassified`。
+   - 遷移只支援 SQLite；其他方言不執行這項遷移，也不分類既存列。
    - 本條只處理既存快照的保存；在正式 DB 執行遷移、以新公式跑訊號另需授權。
 7. DB 路徑的法人比率（`backend/worker/pipeline.py` 的 `_validated_flow_and_volume_inputs`）以該標的非停牌 bar 取截止日 T（含）以前最後 20 根，最後 5 根的日期須有籌碼列；它不核對交易所日曆，也不要求最後一根就是 T：停牌日被跳過；T 本身沒有非停牌 bar 時（strategy 路徑在 T 沒有 bar 列時另不產生訊號），窗口結束於更早一日；缺某個交易日的 bar 時，20 根橫跨 21 個平日。這些情形只要窗口仍滿 20 根且量、籌碼完整就照算，不拒用。取得模組路徑另有 24 日日曆全等檢查（見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)），DB 路徑沒有。
 
