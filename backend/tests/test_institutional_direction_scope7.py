@@ -8,6 +8,7 @@ from unittest.mock import patch
 import httpx
 from app.institutional_direction_scope7 import API_PATH, DIAGNOSTIC_PATH, create_app
 from worker import tpex_institutional_direction_scope7 as w
+from test_tpex_institutional_series_scope7 import GateMatrixMixin
 
 
 def fixtures(transform=None, extra_dates=("2026-10-07", "2026-10-08")):
@@ -272,6 +273,17 @@ class APITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read["stocks"], []); self.assertIsNone(read["calendar"]); self.assertEqual(read["receipts"], [])
         self.assertEqual((await self.client.post(API_PATH + "/capture?as_of=" + w.CUTOFF, json={})).status_code, 409)
         self.assertEqual(self.p.request_count, 1)
+
+
+class GateTests(GateMatrixMixin, unittest.IsolatedAsyncioTestCase):
+    create_app = staticmethod(create_app)
+    API_PATH, DIAGNOSTIC_PATH, FETCHES = API_PATH, DIAGNOSTIC_PATH, 22
+
+    def new_producer(self):
+        return producer(fixtures())
+
+    def observed(self):
+        return patch.object(w, "utcnow", return_value=datetime(2026, 10, 8, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":

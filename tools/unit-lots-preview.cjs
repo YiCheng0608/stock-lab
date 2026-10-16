@@ -12,6 +12,7 @@ const Module = require('node:module')
 const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const args = process.argv.slice(2)
+if (args.includes('--gate-check')) require('./local-runner-gate.cjs').gateCheck({ file: __filename, defaultPort: 8782, endpoints: [['GET', '/actions'], ['GET', '/app.js'], ['GET', '/__unit_lots/receipt'], ['GET', '/api/portfolio'], ['GET', '/api/stocks/TPEx/3105?as_of=2026-10-02'], ['POST', '/api/portfolio'], ['DELETE', '/api/portfolio/1']] })
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 assert(args.every((arg, index) => ['--deps', '--check', '--serve', '--port'].includes(arg) || ['--deps', '--port'].includes(args[index - 1])), 'unknown argument')
 assert(!(args.includes('--serve') && args.includes('--check')), 'choose check or serve')
@@ -20,6 +21,7 @@ const dependencies = path.resolve(option('--deps', ''))
 assert(args.includes('--deps') && fs.existsSync(path.join(dependencies, 'typescript/package.json')), '--deps needs existing frontend/node_modules')
 const port = Number(option('--port', '8782'))
 assert(Number.isInteger(port) && port >= 1024 && port <= 65535, 'invalid own preview port')
+const gate = require('./local-runner-gate.cjs').create(port)
 const counts = { filesystem_mutations: 0, unapproved_network: 0, unapproved_subprocess: 0 }
 const ownedChildren = []
 const requireDependency = Module.createRequire(path.join(dependencies, '../package.json'))
@@ -257,7 +259,7 @@ async function serve() {
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
     .replace('<div id="root">', '<div style="padding:8px;background:#573e18;color:#fff">數量顯示驗證樣本：記憶體 fixture，非本次真來源或正式庫存；重新啟動即消失。</div><div id="root">')
-  const server = http.createServer(async (request, response) => {
+  const server = gate.createServer(http, { onRefuse: () => { requests.rejected++ } }, async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     const url = new URL(request.url, `http://127.0.0.1:${port}`)

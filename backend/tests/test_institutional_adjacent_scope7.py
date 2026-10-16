@@ -9,6 +9,7 @@ from unittest.mock import patch
 import httpx
 from app.institutional_adjacent_scope7 import API_PATH, DIAGNOSTIC_PATH, create_app
 from worker import tpex_institutional_adjacent_scope7 as w
+from test_tpex_institutional_series_scope7 import GateMatrixMixin
 
 NOW = datetime(2026, 10, 8, tzinfo=timezone.utc)
 
@@ -292,6 +293,17 @@ class APITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read.status_code, 200); self.assertFalse(read.json()["available"])
         self.assertEqual((await self.client.post(API_PATH + "/capture" + query, json={})).status_code, 409)
         self.assertEqual(self.p.request_count, 1)
+
+
+class GateTests(GateMatrixMixin, unittest.IsolatedAsyncioTestCase):
+    create_app = staticmethod(create_app)
+    API_PATH, DIAGNOSTIC_PATH, FETCHES = API_PATH, DIAGNOSTIC_PATH, 12
+
+    def new_producer(self):
+        return producer(fixtures())
+
+    def observed(self):
+        return patch.object(w, "utcnow", return_value=NOW)
 
 
 if __name__ == "__main__":

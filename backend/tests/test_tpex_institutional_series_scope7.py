@@ -6,13 +6,19 @@ import io
 import json
 import os
 from pathlib import Path
+import sys
 import threading
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 import unittest
 from unittest.mock import patch
 
+import httpx
+
 from worker import tpex_institutional_series_scope7 as w
+
+sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
+import local_runner_gate as gate  # noqa: E402  (the runner's cross-site / DNS-rebinding gate)
 
 
 def csv_bytes(header, rows):
@@ -212,6 +218,118 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(budgets, [15.0, 9.0, 5.0, 3.0])
         self.assertEqual(closed, [True])
         self.assertFalse(context.active); self.assertEqual(context.addresses, set())
+
+    def test_runner_serves_the_app_through_the_browser_gate(self):
+        path = Path(__file__).resolve().parents[2] / "tools/tpex-chips-series-api.py"
+        main = next(n for n in ast.parse(path.read_text(encoding="utf-8")).body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        front = [ast.unparse(n.value) for n in ast.walk(main) if isinstance(n, ast.Assign) and [ast.unparse(t) for t in n.targets] == ["front"]]
+        served = [ast.unparse(n.args[0]) for n in ast.walk(main) if isinstance(n, ast.Call) and ast.unparse(n.func) == "uvicorn.run"]
+        self.assertEqual(front, ["gate.wrap(create_app(producer), port=ARGS.port)"])
+        self.assertEqual(served, ["front"])
+
+
+class GateRuleTests(unittest.IsolatedAsyncioTestCase):
+    """Explicit expectations for the shared gate (the same rules the Issue 9 combos service enforces)."""
+    PORT = 8799
+
+    def raw(self, *pairs):
+        return [(name.lower().encode("latin-1"), value.encode("latin-1")) for name, value in pairs]
+
+    def test_rules_admit_only_the_own_origin_and_json_posts(self):
+        host, origin = ("Host", "127.0.0.1:8799"), "http://127.0.0.1:8799"
+        own = "127.0.0.1:8799"
+        for method, pairs in (("GET", [host]), ("GET", [host, ("Sec-Fetch-Site", "same-origin"), ("Origin", origin)]), ("GET", [host, ("Sec-Fetch-Site", "none")]),
+                              ("GET", [host, ("Sec-Fetch-Site", "SAME-ORIGIN")]), ("POST", [host, ("Content-Type", "application/json")]),
+                              ("POST", [host, ("Content-Type", "Application/JSON; charset=UTF-8")]), ("DELETE", [host]), ("PUT", [host])):
+            self.assertIsNone(gate.refusal(method, self.raw(*pairs), own), (method, pairs))
+        for method, pairs, expected in (
+                ("GET", [], (403, "host_not_admitted")), ("GET", [host, host], (403, "host_not_admitted")), ("GET", [("Host", "localhost:8799")], (403, "host_not_admitted")),
+                ("GET", [("Host", "127.0.0.1:8798")], (403, "host_not_admitted")), ("GET", [host, ("Sec-Fetch-Site", "cross-site")], (403, "cross_site_rejected")),
+                ("GET", [host, ("Sec-Fetch-Site", "same-site")], (403, "cross_site_rejected")), ("GET", [host, ("Origin", "http://evil.example")], (403, "origin_not_admitted")),
+                ("GET", [host, ("Origin", "null")], (403, "origin_not_admitted")), ("DELETE", [host, ("Origin", "http://evil.example")], (403, "origin_not_admitted")),
+                ("POST", [host], (415, "content_type_json_required")), ("POST", [host, ("Content-Type", "text/plain")], (415, "content_type_json_required")),
+                ("POST", [host, ("Content-Type", "application/x-www-form-urlencoded")], (415, "content_type_json_required")),
+                ("POST", [host, ("Content-Type", "multipart/form-data; boundary=x")], (415, "content_type_json_required")),
+                ("POST", [host, ("Content-Type", "application/json"), ("Content-Type", "text/plain")], (415, "content_type_json_required")),
+                # A foreign page's no-cors POST is refused on site and origin before its Content-Type is even considered.
+                ("POST", [host, ("Content-Type", "text/plain"), ("Origin", "http://evil.example"), ("Sec-Fetch-Site", "cross-site")], (403, "cross_site_rejected"))):
+            self.assertEqual(gate.refusal(method, self.raw(*pairs), own), expected, (method, pairs))
+
+    async def test_front_door_refuses_before_the_app_and_never_admits_websockets(self):
+        seen, sent = [], []
+
+        async def inner(scope, receive, send):
+            seen.append(scope["type"])
+
+        async def receive():
+            return {"type": "websocket.connect"}
+
+        async def send(message):
+            sent.append(message)
+
+        front = gate.wrap(inner, port=self.PORT)
+        await front({"type": "http", "method": "GET", "path": "/", "headers": []}, receive, send)  # no Host at all (HTTP/1.0 style)
+        self.assertEqual((sent[0]["status"], sent[1]["body"]), (403, b'{"reason":"host_not_admitted"}'))
+        await front({"type": "websocket", "path": "/", "headers": self.raw(("Host", "127.0.0.1:8799"))}, receive, send)
+        self.assertEqual(sent[2], {"type": "websocket.close", "code": 1008})
+        self.assertEqual(seen, [])
+        await front({"type": "lifespan"}, receive, send)
+        await front({"type": "http", "method": "GET", "path": "/", "headers": self.raw(("Host", "127.0.0.1:8799"))}, receive, send)
+        self.assertEqual(seen, ["lifespan", "http"])
+        self.assertEqual(front.refusals, {"host_not_admitted": 1})
+        for port in (80, 1023, 65536, "8799", None):
+            with self.assertRaises(ValueError):
+                gate.wrap(inner, port=port)
+
+
+class GateMatrixMixin:
+    """One chips profile's served app behind the runner's gate: every endpoint refuses a foreign page before any state, quota or fetch."""
+    PORT = 8799
+    CUTOFF = "2026-10-06"
+
+    def new_producer(self):
+        raise NotImplementedError
+
+    def observed(self):
+        raise NotImplementedError
+
+    async def asyncSetUp(self):
+        self.p, self.seen = self.new_producer()
+        self.app = gate.wrap(self.create_app(self.p), port=self.PORT)
+        self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app, client=("127.0.0.1", 12345)), base_url="http://127.0.0.1:%d" % self.PORT)
+
+    async def asyncTearDown(self):
+        await self.client.aclose()
+
+    def endpoints(self):
+        return (("GET", self.API_PATH + "?as_of=" + self.CUTOFF), ("POST", self.API_PATH + "/capture?as_of=" + self.CUTOFF), ("GET", self.DIAGNOSTIC_PATH))
+
+    async def test_gate_refuses_every_endpoint_before_state_quota_or_fetch(self):
+        refused = 0
+        for method, target in self.endpoints():
+            for label, headers, status, reason in gate.refusal_variants(method, self.PORT):
+                response = await self.client.request(method, target, headers=headers, content=b"{}" if method == "POST" else None)
+                self.assertEqual((response.status_code, response.json()), (status, {"reason": reason}), (method, target, label))
+                refused += 1
+        self.assertFalse(self.p.attempted); self.assertEqual((self.p.request_count, self.seen), (0, []))
+        self.assertEqual(sum(self.app.refusals.values()), refused)
+
+    async def test_same_origin_operation_is_unchanged(self):
+        read, capture, diagnostic = self.endpoints()
+        for _, headers in gate.admitted_variants("GET", self.PORT):
+            self.assertEqual((await self.client.request("GET", read[1], headers=headers)).status_code, 409)  # nothing captured yet
+            self.assertEqual((await self.client.request("GET", diagnostic[1], headers=headers)).status_code, 200)
+        self.assertEqual(self.seen, [])
+        posts = gate.admitted_variants("POST", self.PORT)
+        with self.observed():
+            first = await self.client.request("POST", capture[1], headers=posts[0][1], content=b"{}")
+        self.assertEqual(first.status_code, 200); self.assertEqual(len(self.seen), self.FETCHES)
+        for _, headers in posts[1:]:  # every other admitted shape reaches the app and meets the spent one-shot
+            self.assertEqual((await self.client.request("POST", capture[1], headers=headers, content=b"{}")).status_code, 409)
+        for _, headers in gate.admitted_variants("GET", self.PORT):
+            self.assertTrue((await self.client.request("GET", read[1], headers=headers)).json()["available"])
+        self.assertEqual(len(self.seen), self.FETCHES)
+        self.assertEqual(self.app.refusals, {})
 
 
 if __name__ == "__main__":

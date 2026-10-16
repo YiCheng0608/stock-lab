@@ -10,6 +10,7 @@ const Module = require('node:module')
 const assert = require('node:assert/strict')
 
 const args = process.argv.slice(2)
+if (args.includes('--gate-check')) require('./local-runner-gate.cjs').gateCheck({ file: __filename, defaultPort: 8780, endpoints: [['GET', '/actions'], ['GET', '/app.js'], ['GET', '/api/portfolio?q=NEW'], ['POST', '/api/portfolio'], ['DELETE', '/api/portfolio/1'], ['PUT', '/api/portfolio/1'], ['POST', '/__review__/shutdown']] })
 let ssrLayoutWarnings = 0
 if (args.includes('--quantity-trust-check') || args.includes('--quantity-trust-http-check')
   || args.includes('--quote-read-check') || args.includes('--quote-read-http-check')
@@ -1549,6 +1550,8 @@ async function serve() {
   const pairs = new Map([['http://127.0.0.1:8777', 8778], ['http://127.0.0.1:8779', 8780]])
   const port = Number(option('--port', String(pairs.get(apiOrigin.origin) ?? 8780)))
   if (port !== pairs.get(apiOrigin.origin)) throw new Error('only owned pairs 8777/8778 or 8779/8780 are authorized')
+  const gate = require('./local-runner-gate.cjs').create(port)
+  let gateRefused = 0
   const build = await browserBuild()
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text
@@ -1561,14 +1564,14 @@ async function serve() {
     throw new Error('independent browser bundle budget exceeded')
   }
   let independentProduct = 0, independentStatic = 0
-  const server = http.createServer(async (request, response) => {
+  const server = gate.createServer(http, { onRefuse: () => { gateRefused++ } }, async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     if (request.url === '/__review__/shutdown' && request.method === 'POST') {
       response.writeHead(200, { 'Content-Type': 'application/json' })
       response.end(JSON.stringify({ owned_memory_preview: 'stopping' }))
       if (independentMode) console.log(JSON.stringify({ preview_stopping: true, pid: process.pid,
-        product_requests: independentProduct, static_requests: independentStatic, compiler_children: compilerChildren, disk_artifacts: 0 }))
+        product_requests: independentProduct, static_requests: independentStatic, compiler_children: compilerChildren, browser_gate_refusals: gateRefused, disk_artifacts: 0 }))
       server.close(() => { esbuild.stop(); process.exit(0) })
       return
     }
