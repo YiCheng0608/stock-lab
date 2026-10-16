@@ -163,11 +163,16 @@ class GroupDailyScore(Base):
 
 class StrategyVersion(Base):
     __tablename__ = "strategy_versions"
-    __table_args__ = (UniqueConstraint("name", "version", name="uq_strategy_version"),)
+    # A formula sub-version keeps ``version`` unchanged (V1_SPEC), so it is part
+    # of the identity: signals written before a formula change keep pointing at
+    # their untouched row and snapshot.  ``unclassified/<reason>`` rows are never
+    # reused by the worker; the default marks a row nobody classified.
+    __table_args__ = (UniqueConstraint("name", "version", "formula_version", name="uq_strategy_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(60), index=True)
     version: Mapped[str] = mapped_column(String(30))
+    formula_version: Mapped[str] = mapped_column(String(80), server_default="unclassified/unspecified")
     kind: Mapped[str] = mapped_column(String(30))
     config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     canonical_config_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

@@ -6,9 +6,11 @@ Creation never adopts an existing file. Research writes use one SQLite transacti
 from __future__ import annotations
 
 import argparse
+import ast
 from contextlib import nullcontext
 from datetime import date, datetime, timezone
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -307,6 +309,37 @@ def _owner(connection):
         raise AnalysisCaptureError("ownership_invalid", detail=type(exc).__name__) from exc
 
 
+MIGRATION_FLOOR = "0006_news_json_defaults"
+
+
+def _revision_chain():
+    """Ordered revision ids from app/database_readiness.py REVISIONS, read as source text.
+
+    Importing the module would import app.config, whose import-time mkdir creates the
+    configured data/raw directories before the isolated STOCK_* environment is checked.
+    """
+    try:
+        origin = importlib.util.find_spec("app.database_readiness").origin
+        for node in ast.parse(Path(origin).read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if any(isinstance(t, ast.Name) and t.id == "REVISIONS" for t in targets):
+                chain = ast.literal_eval(node.value)
+                break
+        else:
+            raise ValueError("REVISIONS not found")
+        if (type(chain) is not tuple or not all(type(r) is str for r in chain)
+                or len(set(chain)) != len(chain) or MIGRATION_FLOOR not in chain):
+            raise ValueError("REVISIONS malformed")
+    except (ImportError, AttributeError, OSError, SyntaxError, TypeError, ValueError) as exc:
+        raise AnalysisCaptureError("source_migration_not_ready", detail="revision_chain_unavailable") from exc
+    return chain
+
+
 def _source_schema(connection, names):
     """Finite migration marker/analysis column check without config imports."""
     markers = set()
@@ -314,7 +347,11 @@ def _source_schema(connection, names):
         markers.update(r[0] for r in connection.execute("SELECT version_num FROM alembic_version"))
     if "schema_migrations" in names:
         markers.update(r[0] for r in connection.execute("SELECT version FROM schema_migrations"))
-    if "0006_news_json_defaults" not in markers:
+    chain = _revision_chain()
+    # alembic_version holds only the current head, so any known revision at or after the
+    # floor is ready; a revision this checkout does not know cannot be ordered and fails
+    # closed, as check_database_readiness would require the exact known head anyway.
+    if markers.isdisjoint(chain[chain.index(MIGRATION_FLOOR):]):
         raise AnalysisCaptureError("source_migration_not_ready")
     required = {
         "instruments": {"id", "market", "exchange", "symbol", "instrument_type", "etf_category", "status"},

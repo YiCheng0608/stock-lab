@@ -27,7 +27,7 @@ OWNED_DB = OWNED_ROOT / "data" / "quantity.db"
 OWNED_FILES = {OWNED_DB, Path(str(OWNED_DB) + "-journal")}
 OWNED_DIRS = {OWNED_ROOT, OWNED_ROOT / "data", OWNED_ROOT / "raw"}
 SAFE, ODD, MAXIMUM = 9007199254740991, 9007199254740993, 9223372036854775807
-HEAD, PREVIOUS = "0008_portfolio_share_integer", "0007_turnover_availability"
+HEAD, PREVIOUS = "0009_strategy_formula_version", "0007_turnover_availability"
 DAY = date(2026, 10, 3)
 PEAK = {"files": 0, "directories": 0, "bytes": 0, "db_bytes": 0}
 UNEXPECTED_DENIALS = []
@@ -258,7 +258,7 @@ def legacy(engine, *, parent=False, marker=True, marker_mode="alembic"):
                 connection.exec_driver_sql("INSERT INTO alembic_version VALUES (?)", ("0001_schema_v1" if parent else PREVIOUS,))
             else:
                 connection.exec_driver_sql("CREATE TABLE schema_migrations (version VARCHAR(64) PRIMARY KEY, applied_at DATETIME NOT NULL)")
-                revisions = readiness.REVISIONS[:1] if parent else readiness.REVISIONS[:-1]
+                revisions = readiness.REVISIONS[:1] if parent else readiness.REVISIONS[:-2]
                 for revision in revisions:
                     connection.exec_driver_sql("INSERT INTO schema_migrations VALUES (?, '2026-10-03 00:00:00')", (revision,))
         connection.commit()
