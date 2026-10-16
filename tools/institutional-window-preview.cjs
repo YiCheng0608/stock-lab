@@ -11,6 +11,7 @@ const Module = require('node:module')
 const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const args = process.argv.slice(2)
+if (args.includes('--gate-check')) require('./local-runner-gate.cjs').gateCheck({ file: __filename, defaultPort: 8782, endpoints: [['GET', '/'], ['GET', '/app.js'], ['GET', '/api/stocks/TPEx/3105?as_of=2026-10-02'], ['GET', '/api/stocks/TPEx/6488/overview?as_of=2026-10-02'], ['POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-02'], ['POST', '/api/stocks/TPEx/6488/institutional-windows/capture?as_of=2026-09-21']] })
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const root = path.resolve(__dirname, '..')
 const dependencies = path.resolve(option('--deps', ''))
@@ -19,6 +20,8 @@ const apiPort = Number(option('--api-port', '8781'))
 const previewPort = Number(option('--port', '8782'))
 if (![apiPort, previewPort].every((port) => Number.isInteger(port) && port >= 1024 && port <= 65535)) throw new Error('invalid loopback port')
 const apiOrigin = `http://127.0.0.1:${apiPort}`
+const gate = require('./local-runner-gate.cjs').create(previewPort)
+let gateRefused = 0
 const counts = { filesystem_mutations: 0, unapproved_network: 0, unapproved_subprocess: 0 }
 const ownedChildren = []
 const requireDependency = Module.createRequire(path.join(dependencies, '../package.json'))
@@ -208,7 +211,7 @@ async function serve() {
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
-  const server = http.createServer(async (request, response) => {
+  const server = gate.createServer(http, { onRefuse: () => { gateRefused++ } }, async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     const url = new URL(request.url, apiOrigin)
@@ -233,7 +236,7 @@ async function serve() {
     url: `http://127.0.0.1:${previewPort}/stocks/TPEx/3105?as_of=${args.includes('--chips-1006-only') ? '2026-10-06' : '2026-10-02'}`, api: apiOrigin,
     font: 'local fallback; remote font import omitted in memory', guard: counts, disk_artifacts: 0 })))
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => {
-    console.log(JSON.stringify({ shutdown: true, signal, pid: process.pid, child_pids: ownedChildren, guard: counts, disk_artifacts: 0 }))
+    console.log(JSON.stringify({ shutdown: true, signal, pid: process.pid, child_pids: ownedChildren, guard: counts, browser_gate_refusals: gateRefused, disk_artifacts: 0 }))
     esbuild.stop()
     process.exit(0)
   }))

@@ -3,7 +3,8 @@
 ``--w8-only`` checks the new worker contract without importing the app.
 ``--w8-api-only`` checks eight cutoffs through the real router with an AST
 config stub and SQLite :memory:; the original suites remain selectable;
-``--serve`` starts an empty MockTransport cache on owned loopback 8781.
+``--serve`` starts an empty MockTransport cache on owned loopback 8781 behind the
+cross-site / DNS-rebinding gate (``--serve-gate-only`` checks that gate in memory).
 Coordinator-only ``--serve --live-source-opt-in`` admits the exact 30 source
 GETs once for W8. All modes guard disk writes before imports and use no conftest,
 pytest cache, capture file or app.main. Synthetic CSVs are contract checks,
@@ -27,7 +28,7 @@ import unittest
 from unittest.mock import patch
 
 GUARD_COUNTS = {"disk_write_attempts": 0, "network_connect_attempts": 0, "mutation_attempts": 0}
-API_MODE = any(mode in sys.argv for mode in ("--api-only", "--w3-api-only", "--w4-api-only", "--w5-api-only", "--w6-api-only", "--w7-api-only", "--w8-api-only", "--serve"))
+API_MODE = any(mode in sys.argv for mode in ("--api-only", "--w3-api-only", "--w4-api-only", "--w5-api-only", "--w6-api-only", "--w7-api-only", "--w8-api-only", "--serve", "--serve-gate-only"))
 PRODUCT_HTTP_COUNTS = {"GET": 0, "POST": 0}
 LIVE_OPT_IN = "--serve" in sys.argv and "--live-source-opt-in" in sys.argv
 LISTEN_PORT = 8781 if "--serve" in sys.argv else None
@@ -82,6 +83,8 @@ if __name__ == "__main__":
     install_zero_disk_guard()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
+import local_runner_gate as gate  # noqa: E402  (cross-site / DNS-rebinding gate in front of the served app)
 from worker import tpex_institutional_window as window
 import httpx
 
@@ -2585,22 +2588,80 @@ class WindowEighthCutoffAPITests(unittest.TestCase):
             self.assertEqual(item["windows"], overview["institutional"]["windows"])
 
 
+class ServeGateTests(unittest.TestCase):
+    """``--serve`` (live opt-in admits the 30 source GETs) hands the actual router to uvicorn behind the gate: a foreign page cannot spend them."""
+    PORT = 8781
+    ENDPOINTS = (
+        ("POST", "/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-02"), ("POST", "/api/stocks/TPEx/6488/institutional-windows/capture?as_of=2026-09-21"),
+        ("POST", "/api/stocks/TPEx/3105/institutional-windows/capture"), ("GET", "/api/stocks/TPEx/3105/overview?as_of=2026-10-02"),
+        ("GET", "/api/stocks/TPEx/6488?as_of=2026-10-02"), ("GET", "/__window_validation/receipt?include_raw=true"))
+
+    def test_main_serves_the_router_through_the_gate(self):
+        main_function = next(n for n in ast.parse(Path(__file__).read_text(encoding="utf-8")).body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        served = [ast.unparse(n.args[0]) for n in ast.walk(main_function) if isinstance(n, ast.Call) and ast.unparse(n.func) == "uvicorn.run"]
+        fronts = [ast.unparse(n.value) for n in ast.walk(main_function) if isinstance(n, ast.Assign) and [ast.unparse(t) for t in n.targets] == ["front"]]
+        self.assertEqual((served, fronts), (["front"], ["gate.wrap(fixture.app, port=LISTEN_PORT)"]))
+
+    def test_every_endpoint_refuses_cross_site_requests_before_the_source(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture()
+        front = gate.wrap(fixture.app, port=self.PORT)
+        refused = 0
+        try:
+            with TestClient(front) as client:
+                for method, target in self.ENDPOINTS:
+                    for label, headers, status, reason in gate.refusal_variants(method, self.PORT):
+                        response = client.request(method, target, headers=headers, content=b"{}" if method == "POST" else None)
+                        self.assertEqual((response.status_code, response.json()), (status, {"reason": reason}), (method, target, label))
+                        refused += 1
+            self.assertEqual(fixture.requests, [])
+            self.assertFalse(fixture.store._attempted)
+            self.assertEqual(sum(front.refusals.values()), refused)
+            self.assertEqual(fixture.before, fixture.database_snapshot())
+        finally:
+            fixture.close()
+
+    def test_same_origin_operation_is_unchanged(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture()
+        front = gate.wrap(fixture.app, port=self.PORT)
+        capture = "/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-02"
+        try:
+            with TestClient(front) as client:
+                for _, headers in gate.admitted_variants("GET", self.PORT):
+                    self.assertEqual(client.get("/api/stocks/TPEx/3105/overview?as_of=2026-10-02", headers=headers).status_code, 200)
+                self.assertEqual(fixture.requests, [])
+                posts = gate.admitted_variants("POST", self.PORT)
+                first = client.post(capture, headers=posts[0][1], content=b"{}").json()
+                self.assertEqual((first["status"], first["capture_state"]["action"]), ("available", "acquired"))
+                self.assertEqual(len(fixture.requests), window.MAX_REQUESTS)
+                for _, headers in posts[1:]:
+                    self.assertEqual(client.post(capture, headers=headers, content=b"{}").json()["capture_state"]["request_count"], window.MAX_REQUESTS)
+            self.assertEqual(len(fixture.requests), window.MAX_REQUESTS)
+            self.assertEqual(fixture.before, fixture.database_snapshot()); self.assertEqual(front.refusals, {})
+        finally:
+            fixture.close()
+
+
 def main():
     if "--live-source-opt-in" in sys.argv and not LIVE_OPT_IN:
         raise ValueError("live_requires_serve")
     if "--serve" in sys.argv:
         import uvicorn
         fixture = MemoryAPIFixture(live=LIVE_OPT_IN, varying=any(mode in sys.argv for mode in ("--w3-only", "--w4-only", "--w5-only", "--w6-only", "--w7-only", "--w8-only")))
+        front = gate.wrap(fixture.app, port=LISTEN_PORT)
         try:
             print(json.dumps({"mode": "live-opt-in-empty-cache" if LIVE_OPT_IN else "mock-empty-cache", "pid": os.getpid(),
                               "parent_pid": os.getppid(), "port": LISTEN_PORT, "api": "http://127.0.0.1:8781",
                               "catalog": "synthetic-memory", "capture_env": "1", "capture_attempts": 0, "disk_artifacts": 0}), flush=True)
-            uvicorn.run(fixture.app, host="127.0.0.1", port=LISTEN_PORT, lifespan="off", access_log=False)
+            uvicorn.run(front, host="127.0.0.1", port=LISTEN_PORT, lifespan="off", access_log=False)
         finally:
-            print(json.dumps({"shutdown": True, "db_preserved": fixture.before == fixture.database_snapshot(), "guard": GUARD_COUNTS}), flush=True)
+            print(json.dumps({"shutdown": True, "db_preserved": fixture.before == fixture.database_snapshot(), "browser_gate_refusals": front.refusals, "guard": GUARD_COUNTS}), flush=True)
             fixture.close()
         return 0
-    if "--w8-api-only" in sys.argv:
+    if "--serve-gate-only" in sys.argv:
+        suite, suite_name = unittest.defaultTestLoader.loadTestsFromTestCase(ServeGateTests), "serve-gate-only"
+    elif "--w8-api-only" in sys.argv:
         suite, suite_name = unittest.defaultTestLoader.loadTestsFromTestCase(WindowEighthCutoffAPITests), "w8-api-only"
         if "--w8-api-case" in sys.argv:
             selected = sys.argv[sys.argv.index("--w8-api-case") + 1]

@@ -95,6 +95,8 @@ if ARGS.cutoff == "2026-10-07" and ARGS.live_source_opt_in and (PRIVATE_ROOT or 
     parser.error("new eight-stock live entry requires an empty memory Store without private or chips modes")
 sys.dont_write_bytecode = True
 sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "backend/tests"), str(Path(ARGS.deps).resolve())]
+sys.path.append(str(Path(__file__).resolve().parent))
+import local_runner_gate as gate  # noqa: E402  (cross-site / DNS-rebinding gate in front of the served app)
 COUNTS = {"disk_writes": 0, "mutations": 0, "unapproved_network": 0, "subprocesses": 0}
 ALLOWED_DISK = {"writes": 0, "mutations": 0}
 PRIVATE_DIRECTORY = "tpex-11370-2026-10-06-m1-v1"
@@ -677,12 +679,13 @@ def serve(preloaded_store=None):
             except (ValueError, TypeError, KeyError):
                 return JSONResponse({"detail": "held chips diagnostic invalid"}, status_code=422)
             return result if result is not None else JSONResponse({"detail": "held chips capture absent"}, status_code=404)
+    front = gate.wrap(fixture.app, port=ARGS.port)
     print(json.dumps({"mode": "owned actual router, memory catalogue", "live_source_opt_in": ARGS.live_source_opt_in,
                       "pid": os.getpid(), "host": "127.0.0.1", "port": ARGS.port, "initial_receipt": receipt(fixture)}, ensure_ascii=False), flush=True)
     try:
-        uvicorn.run(fixture.app, host="127.0.0.1", port=ARGS.port, log_level="warning", access_log=False)
+        uvicorn.run(front, host="127.0.0.1", port=ARGS.port, log_level="warning", access_log=False)
     finally:
-        print(json.dumps({"stopped": True, "receipt": receipt(fixture)}, ensure_ascii=False), flush=True)
+        print(json.dumps({"stopped": True, "browser_gate_refusals": front.refusals, "receipt": receipt(fixture)}, ensure_ascii=False), flush=True)
         fixture.close()
     return 0
 

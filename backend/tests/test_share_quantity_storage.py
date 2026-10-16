@@ -457,6 +457,44 @@ class StorageMemoryTest(unittest.TestCase):
         finally:
             engine.dispose()
 
+    def test_serve_hands_main_app_to_uvicorn_through_the_gate(self):
+        serve_function = next(n for n in ast.parse(Path(__file__).read_text(encoding="utf-8")).body if isinstance(n, ast.FunctionDef) and n.name == "serve")
+        fronts = [ast.unparse(n.value) for n in ast.walk(serve_function) if isinstance(n, ast.Assign) and [ast.unparse(t) for t in n.targets] == ["front"]]
+        configs = [ast.unparse(n.args[0]) for n in ast.walk(serve_function) if isinstance(n, ast.Call) and ast.unparse(n.func) == "uvicorn.Config"]
+        self.assertEqual((fronts, configs), (["gate.wrap(main.app, port=8779)"], ["front"]))
+
+    def test_gate_refuses_cross_site_portfolio_writes_and_shutdown_before_any_row_changes(self):
+        gate, port = _load_gate(), 8779
+        fixture = MemoryFixture()
+        fixture.server = types.SimpleNamespace(should_exit=False)
+        front, refused = gate.wrap(fixture.app, port=port), 0
+        try:
+            before = (snapshot(fixture.engine), fixture.raw_position_rows())
+            body = {"symbol": "NEW", "exchange": "TWSE", "shares": "1500", "average_cost": 10}
+            with TestClient(front) as client:
+                for method, target in (("POST", "/api/portfolio"), ("DELETE", "/api/portfolio/1"), ("POST", "/__review__/shutdown"), ("GET", "/api/portfolio")):
+                    for label, headers, status, reason in gate.refusal_variants(method, port):
+                        response = client.request(method, target, headers=headers, content=json.dumps(body) if method == "POST" else None)
+                        self.assertEqual((response.status_code, response.json()), (status, {"reason": reason}), (method, target, label))
+                        refused += 1
+                self.assertFalse(fixture.server.should_exit)
+                self.assertEqual((snapshot(fixture.engine), fixture.raw_position_rows()), before)
+                self.assertEqual(sum(front.refusals.values()), refused)
+                # Same-origin operation is unchanged: the UI's JSON POST, its header-less DELETE and the JSON shutdown POST.
+                posts = gate.admitted_variants("POST", port)
+                saved = client.post("/api/portfolio", headers=posts[0][1], content=json.dumps(body))
+                self.assertEqual((saved.status_code, saved.json()["shares_exact"]), (200, "1500"))
+                for _, headers in posts[1:]:
+                    self.assertEqual(client.post("/api/portfolio", headers=headers, content=json.dumps(body)).status_code, 200)
+                for _, headers in gate.admitted_variants("GET", port):
+                    self.assertEqual(client.get("/api/portfolio?q=NEW", headers=headers).status_code, 200)
+                self.assertEqual(client.delete("/api/portfolio/%d" % saved.json()["id"], headers=dict(gate.admitted_variants("DELETE", port)[0][1])).json()["status"], "deleted")
+                self.assertEqual(client.post("/__review__/shutdown", headers=posts[1][1], content="{}").status_code, 200)
+                self.assertTrue(fixture.server.should_exit)
+                self.assertEqual(sum(front.refusals.values()), refused)
+        finally:
+            fixture.close()
+
 
 class StorageDiskTest(unittest.TestCase):
     def run_case(self, mode, fault=False):
@@ -543,12 +581,20 @@ def prepare():
     print(json.dumps({"prepared": str(OWNED_DB), "fixture_date": str(DAY), "source": "synthetic user quantities; no official/live claim", "inventory": inventory()}), flush=True)
 
 
+def _load_gate():
+    sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
+    import local_runner_gate
+    return local_runner_gate
+
+
 def serve():
     from app import main
     import uvicorn
-    # Use the actual main lifespan, router, and configured file engine. Restrict
-    # all mutations to owned portfolio routes and this process's shutdown.
-    server = uvicorn.Server(uvicorn.Config(main.app, host="127.0.0.1", port=8779, access_log=False))
+    gate = _load_gate()
+    # Use the actual main lifespan, router, and configured file engine behind the cross-site / DNS-rebinding gate.
+    # Restrict all mutations to owned portfolio routes and this process's shutdown.
+    front = gate.wrap(main.app, port=8779)
+    server = uvicorn.Server(uvicorn.Config(front, host="127.0.0.1", port=8779, access_log=False))
     @main.app.middleware("http")
     async def owned_only(request, call_next):
         from starlette.responses import JSONResponse
@@ -572,7 +618,7 @@ def serve():
     finally:
         from app.db import engine
         engine.dispose()
-        print(json.dumps({"owned_storage_server": "closed", "retained_for_reviewed_reopen": str(OWNED_DB), "inventory": inventory()}), flush=True)
+        print(json.dumps({"owned_storage_server": "closed", "retained_for_reviewed_reopen": str(OWNED_DB), "browser_gate_refusals": front.refusals, "inventory": inventory()}), flush=True)
 
 
 def main():

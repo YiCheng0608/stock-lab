@@ -52,6 +52,8 @@ if (ARGS.policy_version, ARGS.policy_digest) != (EXPECTED_VERSION, EXPECTED_DIGE
     parser.error("independent external policy pins mismatch")
 sys.dont_write_bytecode = True
 sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "backend/tests"), ARGS.deps]
+sys.path.append(str(Path(__file__).resolve().parent))
+import local_runner_gate as gate  # noqa: E402  (cross-site / DNS-rebinding gate in front of the served app)
 COUNTS = {"disk_writes": 0, "mutations": 0, "private_reads": 0, "databases": 0, "subprocesses": 0, "network_rejections": 0}
 CONTEXT = threading.local()
 original_resolver = socket.getaddrinfo
@@ -211,11 +213,12 @@ def main():
     producer = series.Producer(fetch, version=ARGS.policy_version, pin=ARGS.policy_digest)
     if ARGS.chips_adjacent_stock_scope_7_opt_in or ARGS.chips_dealer_components_stock_scope_7_opt_in:
         ACTIVE_PRODUCER = producer
+    front = gate.wrap(create_app(producer), port=ARGS.port)
     print(json.dumps({"fastapi": fastapi.__version__, "uvicorn": uvicorn.__version__, "pid": os.getpid(), "owned_host": "127.0.0.1", "port": ARGS.port, "source_requests": 0}), flush=True)
     try:
-        uvicorn.run(create_app(producer), host="127.0.0.1", port=ARGS.port, access_log=False, log_config=None, lifespan="off", loop="asyncio")
+        uvicorn.run(front, host="127.0.0.1", port=ARGS.port, access_log=False, log_config=None, lifespan="off", loop="asyncio")
     finally:
-        print(json.dumps({"shutdown": True, "pid": os.getpid(), "generation": producer.generation, "attempted": producer.attempted, "source_requests": REQUESTS, "producer_requests": producer.request_count, "guards": COUNTS}), flush=True)
+        print(json.dumps({"shutdown": True, "pid": os.getpid(), "generation": producer.generation, "attempted": producer.attempted, "source_requests": REQUESTS, "producer_requests": producer.request_count, "browser_gate_refusals": front.refusals, "guards": COUNTS}), flush=True)
     return 0
 
 

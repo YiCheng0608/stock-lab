@@ -210,11 +210,11 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 ### UNIT-LOTS-1 台股張數前置的記憶體驗證入口
 
-`node tools/unit-lots-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/unit-lots-preview.cjs)）；`--serve` 只供具名 Full App 預覽，重啟即消失。文案契約見[UI §10.3](../UI_COPY_SPEC.md#103-張零股)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` UNIT-LOTS-1 台股張數前置的記憶體驗證入口。
+`node tools/unit-lots-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/unit-lots-preview.cjs)）；`--serve` 只供具名 Full App 預覽，重啟即消失，且先過跨站防護（`--gate-check` 與限制見[#102 一節](#102-本機-runner-的跨站請求防護)）。文案契約見[UI §10.3](../UI_COPY_SPEC.md#103-張零股)。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` UNIT-LOTS-1 台股張數前置的記憶體驗證入口。
 
 ### M1-PRICE-1 單日價量的記憶體驗證入口
 
-後端 `python -B -X utf8 tools/tpex-price-api.py --check --deps <既有 backend/.deps>`（[來源檔](../../tools/tpex-price-api.py)），前端 `node tools/tpex-price-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/tpex-price-preview.cjs)）；check 不抓 live source。`--serve` 搭配 `--live-source-opt-in` 須帶 `--policy-version`／`--policy-digest`，程式明示啟用須 `STOCK_TPEX_PRICE_MEMORY_CAPTURE=1`、`STOCK_TPEX_PRICE_POLICY_VERSION`、`STOCK_TPEX_PRICE_POLICY_DIGEST` 符合[來源 §20](../SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)的 pins。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-1 單日價量的記憶體驗證入口。
+後端 `python -B -X utf8 tools/tpex-price-api.py --check --deps <既有 backend/.deps>`（[來源檔](../../tools/tpex-price-api.py)），前端 `node tools/tpex-price-preview.cjs --check --deps <既有 frontend/node_modules>`（[來源檔](../../tools/tpex-price-preview.cjs)）；check 不抓 live source。兩支 runner 的 `--serve` 先過跨站防護（見[#102 一節](#102-本機-runner-的跨站請求防護)）。`--serve` 搭配 `--live-source-opt-in` 須帶 `--policy-version`／`--policy-digest`，程式明示啟用須 `STOCK_TPEX_PRICE_MEMORY_CAPTURE=1`、`STOCK_TPEX_PRICE_POLICY_VERSION`、`STOCK_TPEX_PRICE_POLICY_DIGEST` 符合[來源 §20](../SOURCE_REGISTRY.md#20-m1-price-1tpex-兩股單日價格來源與准入)的 pins。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-PRICE-1 單日價量的記憶體驗證入口。
 
 ### M2-FOCUS-LOTS-1 精確張數關注的記憶體驗證入口
 
@@ -246,7 +246,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 ### M3-P1 既有庫存股數的零落盤驗證入口
 
-`python -B -X utf8 backend/tests/test_share_quantity_exact_presentation.py` 與 `node tools/share-quantity-exact-preview.cjs --check --deps <既有 frontend/node_modules>` 為記憶體 standalone 入口；preview 的 `--serve` 只接受自有埠對 8777／8778 或 8779／8780，其他埠對拒絕。契約見[UI](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，現行 storage 模式見下節。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P1 既有庫存股數的零落盤驗證入口。
+`python -B -X utf8 backend/tests/test_share_quantity_exact_presentation.py` 與 `node tools/share-quantity-exact-preview.cjs --check --deps <既有 frontend/node_modules>` 為記憶體 standalone 入口；preview 的 `--serve` 只接受自有埠對 8777／8778 或 8779／8780，其他埠對拒絕；preview 先過跨站防護，上游 8777 不在防護範圍（見[#102 一節](#102-本機-runner-的跨站請求防護)）。契約見[UI](../UI_COPY_SPEC.md#m3-p1-既有庫存股數的有限呈現契約)，現行 storage 模式見下節。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M3-P1 既有庫存股數的零落盤驗證入口。
 
 ### M3-P2 可信整數保存與磁碟重開驗證入口
 
@@ -258,7 +258,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 - `--disk`：四個 sequential synthetic normal／fault 案例，驗 migration、關閉／重開、readiness 唯讀 hash 與 API int64 保存；最後嘗試清理，test／cleanup 分列。
 - `--prepare`：exclusive 建 owned DB，不覆寫既有檔。
-- `--serve`：只用該 DB 在 loopback 跑 actual `app.main`／readonly readiness，不做 init-db 或 migration。
+- `--serve`：只用該 DB 在 loopback 跑 actual `app.main`／readonly readiness，不做 init-db 或 migration；先過跨站防護，見[#102 一節](#102-本機-runner-的跨站請求防護)。
 - `--inspect`：SQLite `mode=ro` 查 storage type、已知列與 closed-file SHA。
 - `--cleanup`：清理這次核定的自有根。
 
@@ -304,13 +304,13 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 ### M1-W8 八截止法人窗口的零落盤驗證入口
 
-現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows.py --w8-only` 跑 worker synthetic memory cases，`--w8-api-only` 跑 real-router／MockTransport cases；沿 AST config stub／guarded memory SQLite，不載 conftest／正式 startup，不建 DB／fixture 檔。`--serve` 預設 mock，`--serve --live-source-opt-in` 才取當次原件，普通 GET／import 零外網。
+現行 [`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows.py --w8-only` 跑 worker synthetic memory cases，`--w8-api-only` 跑 real-router／MockTransport cases；沿 AST config stub／guarded memory SQLite，不載 conftest／正式 startup，不建 DB／fixture 檔。`--serve` 預設 mock，`--serve --live-source-opt-in` 才取當次原件，普通 GET／import 零外網。`--serve` 與 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 先過跨站防護，`--serve-gate-only` 在記憶體核該防護（見[#102 一節](#102-本機-runner-的跨站請求防護)）。
 
 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 以 `node tools/institutional-window-preview.cjs --w8-only --typecheck-only --deps <既有 frontend/node_modules>` 做 full-src noEmit／SSR；`--w8-only --serve` 以 esbuild `write:false` memory bundle 接 actual API，非 Vite／production build。舊 selectors 只保留歷史 class byte，重現須查 Git 當時版本。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-W8 八截止法人窗口的零落盤驗證入口。
 
 ### M1-CHIPS-CUTOFF-1006-1 同截止法人窗口的零落盤驗證入口
 
-[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows_1006.py --worker-only`（或 `--worker-case <具名 case>`）及 `--api-only` 跑最小 synthetic memory cases，不載 conftest，不建 DB／raw／fixture 檔。`--serve` 預設 mock；`--serve --live-source-opt-in --policy-version <version> --policy-digest <digest>` 才開新 Store，啟用變數為 `STOCK_TPEX_INSTITUTIONAL_1006_MEMORY_CAPTURE=1` 及 `STOCK_TPEX_INSTITUTIONAL_1006_POLICY_VERSION`／`DIGEST`，import／普通 startup／GET 不 fetch。來源 pins 與執行上限見[來源 §31](../SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)，具名操作見[個股頁 §36](../STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。
+[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py) 以 `python -B -X utf8 backend/tests/test_institutional_windows_1006.py --worker-only`（或 `--worker-case <具名 case>`）及 `--api-only` 跑最小 synthetic memory cases，不載 conftest，不建 DB／raw／fixture 檔。`--serve` 預設 mock；`--serve --live-source-opt-in --policy-version <version> --policy-digest <digest>` 才開新 Store，啟用變數為 `STOCK_TPEX_INSTITUTIONAL_1006_MEMORY_CAPTURE=1` 及 `STOCK_TPEX_INSTITUTIONAL_1006_POLICY_VERSION`／`DIGEST`，import／普通 startup／GET 不 fetch。`--serve` 與 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 先過跨站防護（見[#102 一節](#102-本機-runner-的跨站請求防護)）。來源 pins 與執行上限見[來源 §31](../SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)，具名操作見[個股頁 §36](../STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。
 
 [`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs) 以 `node tools/institutional-window-preview.cjs --chips-1006-only --typecheck-only --deps <既有 frontend/node_modules>` 核 SSR／full-src noEmit；`--serve` 為完整 App 的 esbuild `write:false` memory bundle，非 production build。歷史收據：`git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/development-baseline/README.md` M1-CHIPS-CUTOFF-1006-1 同截止法人窗口的零落盤驗證入口。
 
@@ -340,7 +340,7 @@ Python `--independent-read-only`；Node `--independent-read-check --deps <既有
 
 ### M1-CHIPS-STOCK-SCOPE-7-DAILY-NET-TREND-20-1006-1 七股每日淨超的零落盤驗證入口
 
-chips-only 入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用舊 saved／joint producer、private root 或 price fetch，只讀既有 `backend/.deps` 與 `frontend/node_modules`。policy version／外部 digest 由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理；文件不授權再 FIRST／重啟或更新配額。API 只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用，GET／capture 僅 `as_of`，三個 UI RAW 不可當額外 API keys。
+chips-only 入口為 `tools/tpex-chips-series-api.py`、`tools/tpex-chips-series-preview.cjs`；不使用舊 saved／joint producer、private root 或 price fetch，只讀既有 `backend/.deps` 與 `frontend/node_modules`。policy version／外部 digest 由[來源 §38](../SOURCE_REGISTRY.md#38-m1-chips-stock-scope-7-daily-net-trend-20-1006-1七股每日法人淨超與窗口累計)單一管理；文件不授權再 FIRST／重啟或更新配額。API 只在 `--serve --chips-series-stock-scope-7-opt-in` 明示啟用，GET／capture 僅 `as_of`，三個 UI RAW 不可當額外 API keys。API 與 preview 的 `--serve` 先過跨站防護，各 profile 共用同一組（見[#102 一節](#102-本機-runner-的跨站請求防護)）。
 
 ```powershell
 python -B -X utf8 tools/tpex-chips-series-api.py --check --deps <backend 路徑>
@@ -421,6 +421,50 @@ python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow
 ```
 
 需既有 pytest 與 backend 依賴；兩檔只用 RAM fixture 與 canned bytes，不連網、不碰 DB 與磁碟。它們驗 `backend/app/institutional_flow_ratio.py` 與 `institutional_flow_ratio_source.py` 的驗證、gate 與算術，不證真來源；契約見[來源 #39 節](../SOURCE_REGISTRY.md#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)。CI 的 backend job 不收集這兩檔。
+
+### #102 本機 runner 的跨站請求防護
+
+本機 API／preview 只綁 `127.0.0.1`、不發 CORS 標頭，所以跨站頁面的 preflight 會自己失敗；但不需 preflight 的 simple request（`text/plain` 或表單 POST、no-cors GET）仍能送到埠上，足以觸發一次性取源、寫入或關閉服務。下列 runner 因此在 app／handler 之前先過跨站防護：拒絕的請求不讀 body、不轉發給上游，也不碰 producer、額度、來源或私人檔案。
+
+規則與 #9 combos 相同：`Host` 須恰為 `127.0.0.1:<該服務自己的埠>`，`Sec-Fetch-Site`、`Origin` 有送就必須同源，每個 POST 的 `Content-Type` 須是 `application/json`。四項的細節、檢查順序與 403／415 的 reason 以[個股頁 #9 一節](../STOCK_RESEARCH_PAGE.md#9-本機-api-防護與埠)為準，本節只記套用範圍、runner 的差異、限制與驗證指令。
+
+**套用範圍**：共用 helper 有兩個，Python 為 [`tools/local_runner_gate.py`](../../tools/local_runner_gate.py)（純 ASGI），Node 為 [`tools/local-runner-gate.cjs`](../../tools/local-runner-gate.cjs)。防護套用到下列服務的每個路徑與 method，含 `POST /__review__/shutdown`、`POST /api/portfolio`、`GET /__*` 診斷端點與未登記路徑。
+
+| 層 | 入口 | 防護位置 |
+| --- | --- | --- |
+| API runner | [`tpex-chips-series-api.py`](../../tools/tpex-chips-series-api.py)（五個 profile 共用）、[`tpex-price-api.py`](../../tools/tpex-price-api.py)；[`test_institutional_windows.py`](../../backend/tests/test_institutional_windows.py)（固定埠 8781）、[`test_institutional_windows_1006.py`](../../backend/tests/test_institutional_windows_1006.py)、[`test_share_quantity_storage.py`](../../backend/tests/test_share_quantity_storage.py)（固定埠 8779）的 `--serve` | `uvicorn` 收到的是 `local_runner_gate.wrap(app, port=<自己的埠>)` 的結果 |
+| preview | [`tpex-chips-series-preview.cjs`](../../tools/tpex-chips-series-preview.cjs)、[`institutional-window-preview.cjs`](../../tools/institutional-window-preview.cjs)、[`tpex-price-preview.cjs`](../../tools/tpex-price-preview.cjs)、[`share-quantity-exact-preview.cjs`](../../tools/share-quantity-exact-preview.cjs)、[`unit-lots-preview.cjs`](../../tools/unit-lots-preview.cjs) | 伺服器只經 helper 的 `createServer(http, …)` 建立，檔內不得再有裸 `http.createServer(` |
+| 原本就有 | dealer-direction combos（`backend/app` 與 `finmind-dealer-direction-api.py`／`-preview.cjs`） | 沿用 #9 自己的實作，行為不變 |
+
+**runner 的差異**：
+
+- 拒絕回 JSON `{"reason":"<reason>"}` 與 `Cache-Control: no-store`；API runner 一律關閉 WebSocket。
+- 只認 `127.0.0.1`：用 `http://localhost:<埠>/` 或 `[::1]` 開 preview 或 API 會得到 403 `host_not_admitted`，一律用 `http://127.0.0.1:<埠>/`。
+- preview 判斷的是瀏覽器送來的原始標頭，不是轉發前改寫的 Content-Type；轉給 API 的請求，Host 是 API 自己的 `127.0.0.1:<API 埠>`，不帶瀏覽器的 `Origin`、`Sec-Fetch-Site`。
+
+**限制**：
+
+- 沒有 Fetch Metadata 的舊瀏覽器不送 `Sec-Fetch-Site`，跨站 no-cors GET 也不帶 `Origin`，仍帶正確 Host 而被放行，回應是 opaque。取源與寫入、關閉服務的呼叫都是 POST，被 Content-Type 規則擋下（DELETE、PUT 見下條）；唯一殘留是 `tpex-price-api.py` 會消耗讀取預算的 saved GET（`…/prices/saved`、`…/prices/saved-focus`、`/api/focus/price-saved*`）。
+- 不加防護的服務：`volume-exact-preview.cjs`（只有 GET，上游是記憶體 fixture）；`test_share_quantity_exact_presentation.py --serve`（8777）與 `test_volume_exact_presentation.py --serve` 的埠可被外站直接呼叫，但只影響記憶體 fixture，不取源、不落盤。
+- DELETE、PUT 不加 Content-Type 規則：跨站送這兩種 method 需要 preflight，runner 不發 CORS 標頭，preflight 必失敗；它們仍受 Host、`Sec-Fetch-Site`、`Origin` 規則。
+- 防的是瀏覽器跨站與 DNS rebinding，不是身分驗證：同機其他程式送出正確 Host 與標頭的請求一樣放行。
+- 規則依 Fetch Metadata 與 `Origin` 的規格行為制定；可重建的驗證只用手造標頭，未用真瀏覽器的外站頁面實測。
+- 拒絕次數記在結束收據：API runner 的 `browser_gate_refusals`（依 reason 分列），preview 則在各自的 rejected 計數或 `browser_gate_refusals`。Windows 以 Ctrl+Break 停止 API runner 時，結束收據不一定印出，不能單靠它證明拒絕發生。
+
+**驗證**都在記憶體，不連網、不開服務埠、不建檔案或 DB：
+
+```powershell
+# 5 支 preview：不載 --deps、不開 socket、不寫檔；對每個端點跑拒絕／放行表，並核檔內只經 helper 建 server
+node tools/tpex-chips-series-preview.cjs --gate-check
+node tools/institutional-window-preview.cjs --gate-check
+node tools/tpex-price-preview.cjs --gate-check
+node tools/share-quantity-exact-preview.cjs --gate-check
+node tools/unit-lots-preview.cjs --gate-check
+# test_institutional_windows.py --serve 的防護（環境同 --w8-api-only）
+python -B -X utf8 backend/tests/test_institutional_windows.py --serve-gate-only
+```
+
+`--gate-check` 通過時 exit 0 並印一行 JSON（`gate_check: true`、拒絕與放行次數、`network: 0`、`disk_artifacts: 0`），預設埠以外用 `--port <埠>`。其餘服務的防護案例在既有入口內執行，不另設旗標：chips API 各 profile 與 `tpex-price-api.py` 在它們的 `--check`（chips 命令見本檔各 chips 節），`test_institutional_windows_1006.py` 在 `--api-only`，`test_share_quantity_storage.py` 在 `--memory-storage`。
 
 ## 歷史驗證
 
