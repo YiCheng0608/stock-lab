@@ -1,4 +1,4 @@
-import { canonicalJson, GROSS_CALCULATION, GROSS_NAMES, GROSS_PIN, GROSS_PROFILE, GROSS_SCHEMA, GROSS_SYMBOLS, GROSS_VERSION, grossControls, grossGeometry, grossInteger, grossLots, grossPath, validateGross } from './chipsGross'
+import { canonicalJson, GROSS_CALCULATION, GROSS_NAMES, GROSS_PIN, GROSS_PROFILE, GROSS_ROUTE, GROSS_SCHEMA, GROSS_SYMBOLS, GROSS_VERSION, grossControls, grossGeometry, grossInteger, grossLots, grossPath, grossReturnPath, validateGross } from './chipsGross'
 import type { GrossRead, GrossPoint, GrossStock } from './chipsGross'
 
 type Assert = (value: unknown, message: string) => void
@@ -75,6 +75,18 @@ export async function runGrossChecks(read: GrossRead, assert: Assert): Promise<n
   assert(grossLots('-1') === '-0.001' && grossLots('1200') === '1.2', 'exact signed lots'); checks++
   const controls = grossControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))
   assert(grossPath(controls, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5'), 'three RAW controls roundtrip'); checks++
+  // #117: the way back from a symbol carries the literal location.search, so a missing, extra, duplicate, reordered or percent-encoded RAW query returns exactly as it was and READ/FIRST come back in the same state.
+  // The flag says whether the former normalised return (grossPath of the defaulted controls) rewrote that query.
+  const returnCases: [string, boolean][] = [
+    ['', true], ['?', true], ['?as_of=2026-10-06&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=foreign', true], ['?investor=foreign', true],
+    ['?as_of=2026-10-06&investor=foreign&horizon=20&x=1', true], ['?as_of=2026-10-06&investor=foreign&horizon=20&horizon=20', true], ['?horizon=20&horizon=20&horizon=20', true],
+    ['?as_of=2026-10-07&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=bogus&horizon=7', false], ['?as_of=&investor=&horizon=', false],
+    ['?horizon=20&investor=foreign&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=foreign&horizon=20', true], ['?as_of=2026-10-06&investor=%66oreign&horizon=20', true], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true],
+  ]
+  for (const [search, rewritten] of returnCases) {
+    assert(grossReturnPath(search) === GROSS_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search)); checks++
+    assert((grossPath(grossControls(new URLSearchParams(search.slice(1)))) !== grossReturnPath(search)) === rewritten, 'the former normalised return ' + (rewritten ? 'rewrote ' : 'kept ') + JSON.stringify(search)); checks++
+  }
   await rejected((v) => { v.policy.scope.daily_dates[0] = '2026-09-08' }, 'independent policy pin')
   await rejected((v) => { v.policy_digest = 'sha256:143aabb4cd2d86110d5564793ce77b0fb6c60b3e603f23c1e188875934a48a31' }, 'old profile pin isolation')
   await rejected((v) => { v.stocks.pop() }, 'missing seventh stock masks whole profile')

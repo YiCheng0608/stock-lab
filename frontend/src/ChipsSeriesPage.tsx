@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { SERIES_API, SERIES_INVESTORS, SERIES_NAMES, SERIES_SYMBOLS, seriesControls, seriesGeometry, seriesPath, validSeriesControls, validateSeries } from './chipsSeries'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { SERIES_API, SERIES_INVESTORS, SERIES_NAMES, SERIES_SYMBOLS, seriesControls, seriesGeometry, seriesPath, seriesReturnPath, validSeriesControls, validateSeries } from './chipsSeries'
 import type { SeriesControls, SeriesInvestor, SeriesPoint, SeriesRead, SeriesWindow } from './chipsSeries'
 import './ChipsSeriesPage.css'
 
@@ -79,6 +79,7 @@ export default function ChipsSeriesPage() {
   const state = useContext(SeriesContext)
   if (!state) throw new Error('series provider required')
   const [params, setParams] = useSearchParams()
+  const { search } = useLocation()
   const controls = seriesControls(params)
   const [draft, setDraft] = useState<SeriesControls>(controls)
   const [selected, setSelected] = useState<SeriesPoint | null>(null)
@@ -109,7 +110,7 @@ export default function ChipsSeriesPage() {
       <button type="submit" disabled={state.busy}>套用條件</button>
     </form>
     <p className="series-current">目前原始條件：as_of={controls.as_of} · investor={controls.investor} · horizon={controls.horizon}</p>
-    <div className="series-actions"><button type="button" disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={seriesPath(controls)}>返回七股（保留原始條件）</Link>}</div>
+    <div className="series-actions"><button type="button" disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={seriesReturnPath(search)} data-series-return>返回七股（保留原始條件）</Link>}</div>
     <p role="status" className="series-status">{state.busy ? '正在驗證完整來源，所有數值暫不顯示。' : state.status}</p>
     {!valid && <p className="series-unavailable">此原始條件不在已准入日期／法人／窗口範圍，數值不可用。</p>}
     {!symbol ? <section className="series-cards" aria-label="七股"><p className="series-count">已驗證股數：{read ? '7' : '未知'}</p>{SERIES_SYMBOLS.map((s) => {

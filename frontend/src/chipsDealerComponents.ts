@@ -43,6 +43,8 @@ export function dealerControls(p: URLSearchParams): DealerControls { return { as
 export function validDealerParams(p: URLSearchParams): boolean { const keys = [...p.keys()]; return !keys.length || keys.length === 3 && ['as_of', 'investor', 'horizon'].every((key) => p.getAll(key).length === 1) }
 export function validDealerControls(c: DealerControls): boolean { return c.as_of === '2026-10-06' && c.investor === 'dealer' && c.horizon === '5' }
 export function dealerPath(c: DealerControls, symbol?: string): string { return DEALER_COMPONENTS_ROUTE + (symbol ? '/' + symbol : '') + '?' + new URLSearchParams(c).toString() }
+/** The way back from a symbol: the list route plus the page's literal `location.search`, never re-encoded or normalised (a missing, extra, duplicate or wrong RAW control stays exactly as it was, so READ/FIRST return in the same state). */
+export function dealerReturnPath(search: string): string { return DEALER_COMPONENTS_ROUTE + search }
 export function dealerDailyURL(p: DealerPolicy, day: string): string { return p.sources.daily.base_url + '&d=' + encodeURIComponent(String(Number(day.slice(0, 4)) - 1911) + '/' + day.slice(5, 7) + '/' + day.slice(8)) }
 export function dealerDates(p: DealerPolicy): string[] {
   const result = []

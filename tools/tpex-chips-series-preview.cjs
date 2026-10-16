@@ -203,7 +203,7 @@ async function checkOnly() {
   const previousFetch = global.fetch
   let forbiddenFetch = 0
   global.fetch = () => { forbiddenFetch++; throw new Error('SSR automatic fetch') }
-  let chartChecks = 0
+  let chartChecks = 0, returnLinks = 0
   try {
     const route = dealerComponents ? '/chips-stock-scope-7-dealer-components' : adjacent ? '/chips-stock-scope-7-adjacent-windows' : direction ? '/chips-stock-scope-7-direction-segments' : gross ? '/chips-stock-scope-7-gross-trade' : '/chips-stock-scope-7-daily-net-trend'
     const horizon = dealerComponents || adjacent ? '5' : '20', selectedInvestor = dealerComponents ? 'dealer' : 'foreign'
@@ -275,9 +275,40 @@ async function checkOnly() {
     assert(negativeHTML.includes(negative.net_lots) && negativeHTML.includes(negative.receipt_sha256) && negativeHTML.includes(negative.body_sha256), 'exact negative lots and original receipts')
     assert(renderToStaticMarkup(React.createElement(SeriesEvidence, { point: zero, read: fixture.read })).includes(gross ? '已驗證當日買進及賣出為零' : '已驗證當日淨超為零'), 'verified synthetic daily zero SSR')
     }
+    // #117: the real App's way back from a symbol carries the literal location.search, and the list it returns to has the same READ/FIRST state as the page it left.
+    {
+      const render = (entry) => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [entry] }, React.createElement(App)))
+      const unescapeHtml = (text) => text.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+      const state = (page, label) => { const tag = new RegExp('<button([^>]*)>' + label + '</button>').exec(page); assert(tag, label + ' button rendered'); return !tag[1].includes('disabled=""') }
+      const returnAttribute = dealerComponents ? 'data-dealer-return' : adjacent ? 'data-adjacent-return' : direction ? 'data-direction-return' : gross ? 'data-gross-return' : 'data-series-return'
+      const exactParams = adjacent || dealerComponents, first = '首次取得來源（僅一次）', read = '明確讀取已持有來源'
+      const canonical = 'as_of=2026-10-06&investor=' + selectedInvestor + '&horizon=' + horizon
+      const encodedInvestor = '%' + selectedInvestor.charCodeAt(0).toString(16) + selectedInvestor.slice(1)
+      // [search, READ/FIRST enabled when only the defaulted controls are judged (Series/Gross/Direction), enabled when the RAW query must also be exactly three single controls (Adjacent/Dealer)]
+      const returnCases = [
+        ['', true, true], ['?' + canonical, true, true], ['?as_of=2026-10-06&investor=' + selectedInvestor, true, false], ['?investor=' + selectedInvestor, true, false],
+        ['?' + canonical + '&x=1', true, false], ['?' + canonical + '&horizon=' + horizon, true, false], ['?horizon=' + horizon + '&horizon=' + horizon + '&horizon=' + horizon, true, false],
+        ['?as_of=2026-10-07&investor=' + selectedInvestor + '&horizon=' + horizon, false, false], ['?as_of=2026-10-06&investor=bogus&horizon=7', false, false], ['?as_of=&investor=&horizon=', false, false],
+        ['?horizon=' + horizon + '&investor=' + selectedInvestor + '&as_of=2026-10-06', true, true], ['?as_of=2026%2D10%2D06&investor=' + selectedInvestor + '&horizon=' + horizon, true, true], ['?as_of=2026-10-06&investor=' + encodedInvestor + '&horizon=' + horizon, true, true],
+        ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true, false],
+      ]
+      for (const [search, loose, exact] of returnCases) {
+        const enabled = exactParams ? exact : loose
+        const detail = render(route + '/3105' + search)
+        const anchor = new RegExp('<a [^>]*' + returnAttribute + '=[^>]*>').exec(detail)
+        assert(anchor, 'return link rendered on a symbol page: ' + JSON.stringify(search))
+        const href = unescapeHtml(/href="([^"]*)"/.exec(anchor[0])[1])
+        assert.equal(href, route + search, 'return href is the literal original query')
+        const back = render(href)
+        assert(state(detail, read) === enabled && state(detail, first) === enabled, 'symbol page READ/FIRST state as expected: ' + JSON.stringify(search))
+        assert(state(back, read) === state(detail, read) && state(back, first) === state(detail, first), 'the way back keeps READ/FIRST in the same state: ' + JSON.stringify(search))
+        assert(!new RegExp(returnAttribute + '=').test(back) && !back.includes('<svg'), 'the list has no return link and shows no value')
+        returnLinks++
+      }
+    }
     assert(forbiddenFetch === 0, 'SSR network zero')
   } finally { global.fetch = previousFetch }
-  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, ...(dealerComponents ? { dealer_window_daily_groups_ssr: 7, dealer_original_rows_ssr: 35, dealer_group_ssr: chartChecks, full_calendar_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : adjacent ? { adjacent_group_ssr: chartChecks, paired_original_trace_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : { chart_ssr: direction ? 0 : chartChecks, direction_group_ssr: direction ? chartChecks : 0, evidence_negative_and_zero_ssr: true }), initial_full_app_ssr: true, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, derived_expanded_serialization_bytes: Buffer.byteLength(JSON.stringify(fixture.read)), estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
+  console.log(JSON.stringify({ synthetic_only: true, focused_ui_only: seen.has('--check-ui-only'), versions: { node: process.version, typescript: ts.version, esbuild: esbuild.version }, validator_checks: checked, ...(dealerComponents ? { dealer_window_daily_groups_ssr: 7, dealer_original_rows_ssr: 35, dealer_group_ssr: chartChecks, full_calendar_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : adjacent ? { adjacent_group_ssr: chartChecks, paired_original_trace_ssr: true, intended_viewports: [1365, 390], native_viewport_verification: false } : { chart_ssr: direction ? 0 : chartChecks, direction_group_ssr: direction ? chartChecks : 0, evidence_negative_and_zero_ssr: true }), initial_full_app_ssr: true, return_links_ssr: returnLinks, source_input_bytes: fixture.sourceInputBytes, shared_derived_graph_estimate_bytes: retainedEstimate, derived_expanded_serialization_bytes: Buffer.byteLength(JSON.stringify(fixture.read)), estimate: 'deduplicated object/string estimate, not RSS or construction peak', network: 0, guards: counts }))
 }
 async function serveOnly() {
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false, outfile: path.join(sourceRoot, '__series_memory__.js'), platform: 'browser', format: 'iife', target: 'es2020', jsx: 'automatic', nodePaths: [deps], define: definitions, plugins: [{ name: 'system-fonts-memory', setup(build) { build.onLoad({ filter: /\.css$/ }, (args) => ({ contents: stripFontImports(fs.readFileSync(args.path, 'utf8')), loader: 'css' })) } }] })
