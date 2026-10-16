@@ -1506,6 +1506,8 @@ receipt 的 `request_started_utc`、`observed_utc` 與 `saved_at` 是以 `+00:00
 
 任一不符整體拒絕，不修補、不補值。回傳 `SavedCloses`（含兩檔 SHA-256）；`window(symbol, count)` 取尾端 `count`（1～60）列，20 與 21 日窗口由此取得。
 
+下游 consumer：[個股頁 #8 節](STOCK_RESEARCH_PAGE.md#8七股普通收盤-ma20-與-20-日報酬唯讀區塊)的唯讀 API 以 `load_saved_closes` 讀同一份 bundle（不帶 `pins`，只支援 cutoff 2026-10-06 的七股），不新增取得、保存或用途，`unsupported` 逐字沿用 policy。
+
 ### 範圍與限制
 
 - 逐日對齊只涵蓋 8～10 月的 formal 45 日。7 月沒有獨立於 FinMind 的第二來源，2026-07-10 缺日沒有原因證據；cutoff 2026-10-06 的 60 日窗口自 2026-07-13 起、不含該缺日，其中 7/13～7/31 只有 FinMind 一個日曆來源（由交易日序列推得，見 [§49.7](#497-未驗與限制)）。

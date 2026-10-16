@@ -53,6 +53,7 @@
 | [§50](#50-m1-chips-stock-scope-7-adjacent-windows-5-1006-20261008-1b1兩相鄰5日比較與雙原列操作) | M1-CHIPS-STOCK-SCOPE-7-ADJACENT-WINDOWS-5-1006-20261008-1/B1：兩相鄰 5 日比較與雙原列操作 | 現行 |
 | [§51](#51-m1-chips-stock-scope-7-dealer-components-5-1006-20261008-1b1自行買賣避險及合計並列對帳) | M1-CHIPS-STOCK-SCOPE-7-DEALER-COMPONENTS-5-1006-20261008-1/B1：自行買賣、避險及合計並列對帳 | 現行 |
 | [#9](#9七股自行買賣與避險五日方向組合頁) | #9：七股自行買賣與避險五日方向組合頁（入口與 RAW 控制、取得流程、原列追溯、本機 API 防護、已知限制） | 現行 |
+| [#8](#8七股普通收盤-ma20-與-20-日報酬唯讀區塊) | #8：七股普通收盤 MA20 與 20 日報酬唯讀區塊（範圍與讀取閘門、數值與捨入、來源版本與不支援項、原因碼、畫面與操作、能力邊界） | 現行 |
 
 ## 1. 使用者工作與資訊順序
 
@@ -1137,3 +1138,71 @@ READ payload 的 schema 為 `dealer-direction-combos-read/finmind-stock-scope-7-
 - **空查詢**載入後被 `replace` 成標準三元組，返回連結帶的是點擊當下的網址。
 - **零值形狀**：真實原件只涵蓋原列 buy 或 sell 為零的標籤；淨額為零（方向 `zero`）、整窗為零與兩個 component 同為零的形狀，沒有真實原件的紀錄，只有合成資料驗過。
 - **來源層限制**（JSON 字面值 `-0` 被當成 0 接受、charge 與 open 之間逾時會保守多記一次 attempted）見[來源節的未驗與限制](SOURCE_REGISTRY.md#9-未驗與限制)。
+
+## #8：七股普通收盤 MA20 與 20 日報酬唯讀區塊
+
+本節定義個股頁技術分頁的「收盤、MA20 與 20 日報酬」區塊及其本機 API：只讀[來源 §52](SOURCE_REGISTRY.md#52-7七股普通收盤與交易日曆的日期時區語意契約)保存的七股名目收盤，在截止 2026-10-06 顯示最近收盤、MA20、20 日報酬與收盤÷MA20。來源、policy pin、保存格式與讀回驗證只由來源 §52 管理，本節不重述。圖表的 MA20／MA60（§3.2）由 response bars 計算，是另一條路徑，兩者互不替代，也不互相補值。文案見 [UI 文案 §10.12](UI_COPY_SPEC.md#1012-七股普通收盤-ma20-與-20-日報酬)。
+
+### #8 範圍與讀取閘門
+
+- **API**：`GET /api/stocks/{exchange}/{symbol}/ordinary-close-trend?as_of=2026-10-06`，payload `version` 為 `ordinary-close-trend/m1-v1`。只有 GET，沒有寫入路由（其他方法 405）。query 只能有一個 `as_of`；未知鍵、重複的 `as_of` 或無效日期回 422；目錄 DB 找不到標的回 404（與 `prices/saved` 一致，七股須在 instruments 內）。
+- **支援範圍**：交易所 TPEx、代號 3105／3293／5274／5347／6488／6510／8069；目錄身分須為 market `TW`、`instrument_type=stock`、無 `etf_category`，不比對名稱。截止只有 2026-10-06。
+- **不讀檔閘門**：先判截止、再判標的，不符就回 200 的 `unavailable`（`ordinary_close_cutoff_not_supported`，含省略 `as_of`、10-05、10-07；或 `ordinary_close_instrument_not_supported`）。此時不讀環境變數、不開任何檔，也不改用較早或較晚的資料。
+- **讀取**：通過閘門後，請求時才讀 `STOCK_ORDINARY_CLOSE_PRIVATE_ROOT`（不在 import 時），呼叫 `load_saved_closes(root, policy_version, "2026-10-06")`，**不帶 `pins`**，使產品 pin 生效（§52 規定）。每個請求完整重驗；不快取、不取源、不保存、不連網。
+- **窗口核對**：取保存 60 日的尾端 21 筆。其日期須逐筆等於 bundle 交易日序列的末 21 日、最後一日＝截止，且 policy 版本相符，否則 `ordinary_close_window_mismatch`；缺日不補算、不跨越。
+- **失敗形狀**：`status=unavailable`、`values=null`、`closes=[]`、`provenance=null`、`reasons` 非空、`read_state.verified=false`；沒有部分值。
+
+### #8 數值、捨入與追溯
+
+| 值 | 定義 | 使用的收盤 |
+| --- | --- | --- |
+| MA20 | 最近 20 個交易日收盤的簡單平均 | 21 筆中的後 20 筆 |
+| 20 日報酬 | `close[T] / close[T-20] − 1`，T＝截止日 | 21 筆 |
+| 收盤÷MA20 | `close[T] / MA20[T]` | 同上 |
+
+MA20 沿用 §3.2；20 日報酬是 [V1_SPEC](V1_SPEC.md) 族群 20 日報酬的單股形式，**不是**相對 TAIEX 的 `group_excess_return_20d`。三者都不是新公式，不用較短窗口、不前填，計算前不逐筆四捨五入。
+
+- **精確值**：以有理數計算（後端 `Fraction`，前端 BigInt）；每個值的 `exact` 是約分後的分數字串。
+- **捨入**：只在 `display` 捨入一次，四捨五入、0.5 遠離零進位（half away from zero，非銀行家捨入），結果為零時不帶負號。MA20 取 2 位（元／股）；20 日報酬以百分比取 2 位（`display_unit=percent`、`display_scale=100`）；收盤÷MA20 取 4 位。收盤以保存的原字串顯示，不捨入。每個值帶 `display_unit`、`display_scale`、`display_places` 與 `rounding=half_up_away_from_zero`。
+- **逐值追溯**：`closes` 為 21 筆 `{date, close}`（原字串）。MA20 帶 `window_start`、`window_end`、`count`；20 日報酬帶 `base_date`、`base_close`、`latest_date`、`latest_close`；收盤÷MA20 帶 `latest_date`、`latest_close`、`ma20_window_start`、`ma20_window_end`。
+- **資料不足**：單值在收盤不足時為 `data_insufficient`（`ordinary_close_window_insufficient`），不補算。
+- **趨勢**：`values.trend` 固定 `status=formula_not_defined`、`reasons=["trend_formula_not_defined"]`，`exact`、`display` 為 null，畫面稱「趨勢判定規格未定義，不推論」。原量化契約沒有獨立的個股趨勢公式；pullback 的 MA20／MA60 過濾需要 60 根收盤並跨越公司行動，來源 policy 不支援，不屬本區塊。不以 MA20、報酬或比值的正負推論方向。
+
+### #8 來源版本、不支援項與限制
+
+- **`provenance`**：`storage`、`storage_schema`、`consumer_version`、`source_policy`（version、sha256、bytes）、`cutoff`、`closes_file`／`closes_bytes`／`closes_sha256`、`receipt_sha256`、`saved_at`（UTC）、`calendar`（來源版本、筆數、窗口、時區語意）、`adapter` 雜湊、`attribution`、`rights`；`publication_time`、`first_availability`、`revision_time` 皆 `unknown`，`historical_pit=unsupported`。
+- **`unsupported`**（policy v1 逐字 16 項）：`historical_pit`、`publication_time`、`first_availability`、`revision_guarantee`、`adjusted_prices`、`company_actions`、`suspension_comparability`、`whole_window_historical_membership`、`historical_eligibility`、`actionable_strategy`、`plan`、`trading`、`historical_simulation`、`raw_body_storage`、`redistribution`、`other_cutoffs`。後端回應與前端核對都要求與此清單**集合完全相等**（不多、不少、無重複；順序不屬契約），available 與 unavailable 兩種回應皆然，不符整份不採。
+- **`limitations`**：來源模組的固定限制碼（內容對應 §52「範圍與限制」），加上 `provider_reported_nominal_closes_not_adjusted_for_company_actions`、`suspension_comparability_not_established`、`trend_judgement_formula_not_defined_not_inferred`、`not_historical_pit_not_a_plan_signal_or_trade`。
+- **`read_state`**：`verified`、`read_only=true`、`network_requests=0`、`writes=0`。
+- **用途**：只顯示名目收盤（未還原）與它導出的研究值；不含公司行動與停牌可比性，非 PIT；不進條件計畫、Signal、策略成立判定或可執行建議，兩策略的判定仍由各自契約負責。
+
+### #8 原因碼與失敗清值
+
+`reasons` 是穩定代碼，中文文案由 [UI 文案 §10.12](UI_COPY_SPEC.md#1012-七股普通收盤-ma20-與-20-日報酬)管理。
+
+- **後端**：
+  - `ordinary_close_cutoff_not_supported`、`ordinary_close_instrument_not_supported`：不讀檔閘門。
+  - `ordinary_close_` 加來源讀回的錯誤碼：`root_unset`（環境變數未設或空字串）、`root_invalid`（非絕對路徑或含 `..`）、`saved_*`（§52 讀回驗證失敗，例如 `saved_missing`）等；碼不符 `[a-z0-9_]{1,64}` 時為 `ordinary_close_read_failed`。
+  - `ordinary_close_window_mismatch`：窗口核對失敗。
+  - `ordinary_close_storage_io_failed`：讀檔發生 `OSError`。
+  - `ordinary_close_window_insufficient`：單值資料不足。
+- **前端另有**：`ordinary_close_request_failed`（請求失敗）與 `ordinary_close_contract_invalid`（回應未通過前端核對）。
+- **前端核對**：版本、標的、截止、頂層與 `provenance` 的欄位集合、policy pin（版本、SHA-256、bytes）、`unsupported` 集合、`read_state`，並以 21 個收盤原字串獨立重算三個值（`exact`、`display` 與追溯欄位）。任一不符整份不採，不顯示任何數值。
+- **失敗清值**：任何失敗都不留數值、收盤與來源明細，不以舊值或零代替。
+
+### #8 畫面與操作
+
+- **位置**：只在 TPEx 七股個股頁的「技術」分頁、圖表之後出現；其他標的不渲染此區塊。
+- **明示讀取**：載入時不發請求，初始為「尚未讀取」。截止等於 2026-10-06 才有讀取按鈕，按一次發一次 GET。截止不是 2026-10-06（含最新資料、未指定日期）時，說明不符、無按鈕、前端不發請求；API 對同一情形仍獨立擋下。
+- **清值**：切換股票或截止日期（含 A→B→A）後，值全部清除並回到「尚未讀取」，須重新按按鈕；舊 context 的晚到回應丟棄，不填入目前 context。
+- **返回原條件**：區塊不改網址，個股頁的 `as_of` 與從關注頁帶來的返回條件原樣保留；返回關注頁的行為依[§37](#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)，本區塊不改動。
+- **展開明細**：收合區列 21 筆日期、收盤原字串與用途，三個精確分數，政策版本與 SHA-256，收盤檔與收據的 SHA-256，保存時間，交易日曆，發布／首次可得／修訂皆 `unknown`、PIT 不支援，署名與 16 項不支援項。
+
+### #8 能力邊界與未驗
+
+- **範圍**：只有截止 2026-10-06、七檔；不做排名、篩選、保存、DB、其他截止、較短窗口或趨勢判定。值是已保存名目收盤的導出值，非 PIT。趨勢公式未定義前，本區塊不宣稱趨勢完成。
+- **未驗：從 `/focus/price-saved` 列表卡片點入。** 該列表讀另一個私人 root，不在本區塊的授權範圍；實機只驗了卡片產生的同形詳情網址與五個條件的返回。
+- **前端「資料不足」分支不可達。** 來源恆為 60 日，API 不輸出 `data_insufficient`；前端若收到，會因三個值須皆為 `available` 而整份當作 `ordinary_close_contract_invalid` 拒用，仍不顯示任何數值。API 層資料不足的語意只由 `derive_values` 的單元測試證明。
+- **窗口內兩筆收盤互換偵測不到。** 互換不改變 MA20、報酬與比值，前端重算無從察覺；追溯靠 `closes_sha256`。
+- **新增測試不在 CI 清單。** 後端 `tests/test_ordinary_close_trend.py` 與前端 `OrdinaryCloseTrend.test.tsx` 不在 CI 的固定子集內，由工程自測與 QA 執行。
+- **瀏覽器**：原生操作只在 Edge；Chrome、Safari 與其他時區環境未驗。
