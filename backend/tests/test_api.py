@@ -26,6 +26,10 @@ from app.models import (
 )
 
 
+# The product API admits only a local Host on the port it listens on (browser_gate); writes need it, reads do not.
+LOCAL_API = "http://127.0.0.1:8000"
+
+
 @pytest.fixture(autouse=True)
 def avoid_formal_database_initialization(monkeypatch):
     # HTTP behavior tests bypass readiness; dedicated startup tests exercise
@@ -190,7 +194,7 @@ def test_primary_api_routes_use_isolated_source_of_truth(isolated_api):
         db.add(DataQuality(entity_type="instrument", entity_key="TWSE:AAA", as_of_date=date(2026, 9, 4), status="partial", missing_fields_json=["chips"], checks_json={"bars": 1}, source="fixture"))
         db.commit()
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url=LOCAL_API) as client:
         dashboard = client.get("/api/dashboard")
         groups = client.get("/api/groups")
         group = client.get("/api/groups/fixture-group")
@@ -236,7 +240,7 @@ def test_portfolio_accepts_explicit_lots_and_odd_lot_shares(isolated_api):
         db.add(Instrument(market="TW", exchange="TWSE", symbol="LOT", name="Lot ETF", instrument_type="etf", etf_category="bond", status="active"))
         db.commit()
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url=LOCAL_API) as client:
         lot = client.post("/api/portfolio", json={"symbol": "LOT", "unit": "lot", "quantity": 1})
         odd = client.post("/api/portfolio", json={"symbol": "LOT", "unit": "odd_lot", "quantity": 1500})
         zero = client.post("/api/portfolio", json={"symbol": "LOT", "unit": "lot", "quantity": 0})
@@ -402,7 +406,7 @@ def test_portfolio_delete_is_idempotently_reported(isolated_api):
         db.commit()
         position_id = position.id
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url=LOCAL_API) as client:
         deleted = client.delete(f"/api/portfolio/{position_id}")
         repeated = client.delete(f"/api/portfolio/{position_id}")
         missing = client.delete("/api/portfolio/999999")
