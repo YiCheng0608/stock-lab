@@ -9,6 +9,7 @@ import {
   captureInstitutionalWindows,
   captureStockPriceMemory,
   getSavedStockPrice,
+  getOrdinaryCloseTrend,
   getSavedFocusStockPrice,
   getSavedPriceFocus,
   saveStockPrice,
@@ -81,6 +82,7 @@ import { stockIndependentView } from './stockIndependentReads'
 import { StockOverview, validChips1006Identity, validChips1006Read } from './components/StockOverview'
 import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
 import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
+import { OrdinaryCloseTrend } from './OrdinaryCloseTrend'
 import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
 import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
 import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
@@ -1728,7 +1730,7 @@ function StockPage() {
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-07' ? officialBar!.date : officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : privateSavedOnly || memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-07' ? officialBar!.date : officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : privateSavedOnly || memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /><OrdinaryCloseTrend exchange={data.instrument.exchange} symbol={data.instrument.symbol} asOf={asOf} fetcher={getOrdinaryCloseTrend} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
