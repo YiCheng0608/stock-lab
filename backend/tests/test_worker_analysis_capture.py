@@ -224,6 +224,137 @@ def test_create_never_adopts_existing_and_hash_required(research,tmp_path):
     assert not new.exists()
 
 
+from app.database_readiness import REVISIONS
+
+FLOOR=REVISIONS.index('0006_news_json_defaults')
+
+
+def _source_with_markers(tmp_path,source,alembic=(),fallback=()):
+    """Copy the migrated source and replace its migration markers."""
+    path=tmp_path/'markers.db'
+    path.write_bytes(source.read_bytes())
+    with sqlite3.connect(path) as db:
+        db.execute('DELETE FROM alembic_version')
+        db.executemany('INSERT INTO alembic_version VALUES (?)',[(v,) for v in alembic])
+        if fallback:
+            db.execute('CREATE TABLE schema_migrations (version TEXT PRIMARY KEY)')
+            db.executemany('INSERT INTO schema_migrations VALUES (?)',[(v,) for v in fallback])
+    return path
+
+
+def _revision_markers(shape,revision):
+    if shape=='alembic': return (revision,),()
+    return (),REVISIONS[:REVISIONS.index(revision)+1]
+
+
+def _readiness_source(monkeypatch,path):
+    """Point capture at a stand-in for app/database_readiness.py (None: not found)."""
+    import types
+    spec=None if path is None else types.SimpleNamespace(origin=str(path))
+    monkeypatch.setattr(capture,'importlib',types.SimpleNamespace(util=types.SimpleNamespace(find_spec=lambda name: spec)))
+
+
+def test_source_revision_chain_is_the_readiness_single_source():
+    assert capture._revision_chain()==tuple(REVISIONS)
+
+
+@pytest.mark.parametrize('shape',['alembic','fallback'])
+@pytest.mark.parametrize('revision',REVISIONS[FLOOR:])
+def test_source_at_or_after_floor_revision_is_ready(research,tmp_path,revision,shape):
+    source,_,_=research
+    markers=_source_with_markers(tmp_path,source,*_revision_markers(shape,revision))
+    new=tmp_path/'ready.db'
+    owner=capture.create_research_database(source_snapshot_path=markers,expected_source_sha256=sha(markers),research_database_path=new)
+    assert owner['kind']==capture.KIND
+    with sqlite3.connect(new) as db:
+        assert db.execute('SELECT count(*) FROM worker_capture_owner').fetchone()[0]==1
+
+
+@pytest.mark.parametrize('shape',['alembic','fallback'])
+@pytest.mark.parametrize('revision',REVISIONS[:FLOOR])
+def test_source_before_floor_revision_is_not_ready(research,tmp_path,revision,shape):
+    source,_,_=research
+    markers=_source_with_markers(tmp_path,source,*_revision_markers(shape,revision))
+    before=sha(markers)
+    new=tmp_path/'unready.db'
+    with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready'):
+        capture.create_research_database(source_snapshot_path=markers,expected_source_sha256=before,research_database_path=new)
+    assert not new.exists() and sha(markers)==before
+
+
+@pytest.mark.parametrize('alembic,fallback',[
+    ((),()),
+    (('9999_unknown_future',),()),
+    ((),('9999_unknown_future',)),
+    ((REVISIONS[0],'9999_unknown_future'),()),
+],ids=['no-marker','unknown-alembic','unknown-fallback','pre-floor-plus-unknown'])
+def test_source_without_known_floor_or_later_revision_fails_closed(research,tmp_path,alembic,fallback):
+    source,_,_=research
+    markers=_source_with_markers(tmp_path,source,alembic,fallback)
+    new=tmp_path/'unknown.db'
+    with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready'):
+        capture.create_research_database(source_snapshot_path=markers,expected_source_sha256=sha(markers),research_database_path=new)
+    assert not new.exists()
+
+
+@pytest.mark.parametrize('text,expected',[
+    ('REVISIONS = ("0005_x", "0006_news_json_defaults", "0007_next")\n',("0005_x","0006_news_json_defaults","0007_next")),
+    ('REVISIONS: tuple[str, ...] = ("0006_news_json_defaults",)\n',("0006_news_json_defaults",)),
+    ('X = 1\nREVISIONS = ("0001_a", "0006_news_json_defaults")\nREVISIONS_EXTRA = ()\n',("0001_a","0006_news_json_defaults")),
+    ('REVISIONS = ("0001_a",)\n',None),
+    ('REVISIONS = ["0006_news_json_defaults"]\n',None),
+    ('REVISIONS = ("0006_news_json_defaults", "0006_news_json_defaults")\n',None),
+    ('REVISIONS = tuple(range(3))\n',None),
+    ('OTHER = ("0006_news_json_defaults",)\n',None),
+    ('REVISIONS = (\n',None),
+],ids=['assign','annotated','neighbours','no-floor','list','duplicate','computed','missing','syntax'])
+def test_revision_chain_reads_literal_or_fails_closed(tmp_path,monkeypatch,text,expected):
+    path=tmp_path/'database_readiness.py'
+    path.write_text(text,encoding='utf-8')
+    _readiness_source(monkeypatch,path)
+    if expected is not None:
+        assert capture._revision_chain()==expected
+        return
+    with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready') as error:
+        capture._revision_chain()
+    assert error.value.detail=='revision_chain_unavailable'
+
+
+def test_head_advance_in_readiness_source_makes_new_head_ready(research,tmp_path,monkeypatch):
+    source,_,_=research
+    head='9999_future_head'
+    path=tmp_path/'database_readiness.py'
+    path.write_text('REVISIONS = '+repr(tuple(REVISIONS)+(head,))+'\n',encoding='utf-8')
+    markers=_source_with_markers(tmp_path,source,(head,))
+    kwargs=dict(source_snapshot_path=markers,expected_source_sha256=sha(markers))
+    with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready'):
+        capture.create_research_database(research_database_path=tmp_path/'before.db',**kwargs)
+    _readiness_source(monkeypatch,path)
+    owner=capture.create_research_database(research_database_path=tmp_path/'after.db',**kwargs)
+    assert owner['kind']==capture.KIND
+
+
+def test_revision_chain_unavailable_blocks_create_before_target(research,tmp_path,monkeypatch):
+    source,_,_=research
+    _readiness_source(monkeypatch,None)
+    new=tmp_path/'nochain.db'
+    with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready') as error:
+        capture.create_research_database(source_snapshot_path=source,expected_source_sha256=sha(source),research_database_path=new)
+    assert error.value.detail=='revision_chain_unavailable' and not new.exists()
+
+
+def test_create_has_no_config_import_or_stock_environment(research,tmp_path):
+    source,_,_=research
+    code=("from worker.analysis_capture import create_research_database; import sys; "
+          "create_research_database(source_snapshot_path=sys.argv[1],expected_source_sha256=sys.argv[2],research_database_path=sys.argv[3]); "
+          "assert 'app.config' not in sys.modules; assert 'app.database_readiness' not in sys.modules")
+    env={k:v for k,v in os.environ.items() if not k.startswith('STOCK_')}
+    new=tmp_path/'subprocess.db'
+    result=subprocess.run([sys.executable,'-B','-c',code,str(source),sha(source),str(new)],env=env,text=True,encoding="utf-8",capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert new.exists()
+
+
 def test_run_environment_preflight(research,monkeypatch):
     _,target,_=research
     monkeypatch.delenv('STOCK_DATA_DIR')
