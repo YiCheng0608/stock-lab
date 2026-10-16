@@ -2,10 +2,15 @@
 from contextlib import ExitStack
 from datetime import date
 import os
+from pathlib import Path
+import sys
 import unittest
 from unittest.mock import patch
 from test_tpex_price_capture import SyntheticPolicyScope
 from worker import tpex_price_capture as worker
+
+sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
+import local_runner_gate as gate  # noqa: E402  (the runner's cross-site / DNS-rebinding gate)
 
 
 class MemoryAPIFixture:
@@ -293,4 +298,62 @@ class PriceAPITests(unittest.TestCase):
                 self.assertIsNone(default["overview"]["price_memory"]["latest"])
             self.assertEqual(len(fixture.fixture.opener.calls), 1)
             self.assertEqual(fixture.before, fixture.snapshot())
+        finally: fixture.close()
+
+
+class PriceGateTests(unittest.TestCase):
+    """The runner serves the actual router behind the gate: every source, private-read and diagnostic endpoint refuses a foreign page first."""
+    PORT = 8795
+    ENDPOINTS = (
+        ("POST", "/api/stocks/TPEx/3105/prices/capture?as_of=2026-10-05"), ("POST", "/api/stocks/TPEx/3105/prices/save?as_of=2026-10-05"),
+        ("POST", "/api/focus/price-lots/capture?as_of=2026-10-05&min_lots=0"), ("POST", "/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06"),
+        ("GET", "/api/stocks/TPEx/3105/prices/saved?as_of=2026-10-05"), ("GET", "/api/stocks/TPEx/3105/prices/saved-focus?as_of=2026-10-05"),
+        ("GET", "/api/focus/price-saved?as_of=2026-10-05&min_lots=0"), ("GET", "/api/focus/price-saved-chips?as_of=2026-10-06"),
+        ("GET", "/api/focus/price-saved-chips-calendar?as_of=2026-10-06"), ("GET", "/api/focus/price-saved-chips-stock-scope-7?as_of=2026-10-06"),
+        ("GET", "/api/stocks/TPEx/3105?as_of=2026-10-05"), ("GET", "/__price_validation/receipt?include_raw=true"), ("GET", "/__price_validation/chips/raw?index=0"))
+
+    def test_runner_serves_the_app_through_the_browser_gate(self):
+        import ast
+        tree = ast.parse((Path(__file__).resolve().parents[2] / "tools/tpex-price-api.py").read_text(encoding="utf-8"))
+        serve = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "serve")
+        front = [ast.unparse(n.value) for n in ast.walk(serve) if isinstance(n, ast.Assign) and [ast.unparse(t) for t in n.targets] == ["front"]]
+        served = [ast.unparse(n.args[0]) for n in ast.walk(serve) if isinstance(n, ast.Call) and ast.unparse(n.func) == "uvicorn.run"]
+        self.assertEqual(front, ["gate.wrap(fixture.app, port=ARGS.port)"])
+        self.assertEqual(served, ["front"])
+
+    def test_every_endpoint_refuses_cross_site_requests_before_source_private_read_or_state(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture()
+        front = gate.wrap(fixture.app, port=self.PORT)
+        refused = 0
+        try:
+            with TestClient(front) as client:
+                for method, target in self.ENDPOINTS:
+                    for label, headers, status, reason in gate.refusal_variants(method, self.PORT):
+                        response = client.request(method, target, headers=headers, content=b"{}" if method == "POST" else None)
+                        self.assertEqual((response.status_code, response.json()), (status, {"reason": reason}), (method, target, label))
+                        refused += 1
+            self.assertEqual(fixture.fixture.opener.calls, [])
+            self.assertFalse(fixture.store._attempted); self.assertIsNone(fixture.store.raw_capture)
+            self.assertEqual(fixture.before, fixture.snapshot())
+            self.assertEqual(sum(front.refusals.values()), refused)
+        finally: fixture.close()
+
+    def test_same_origin_operation_is_unchanged(self):
+        from fastapi.testclient import TestClient
+        fixture = MemoryAPIFixture()
+        front = gate.wrap(fixture.app, port=self.PORT)
+        capture = "/api/stocks/TPEx/3105/prices/capture?as_of=2026-10-05"
+        try:
+            with TestClient(front) as client:
+                for _, headers in gate.admitted_variants("GET", self.PORT):
+                    self.assertEqual(client.get("/api/stocks/TPEx/3105?as_of=2026-10-05", headers=headers).status_code, 200)
+                self.assertEqual(fixture.fixture.opener.calls, [])
+                posts = gate.admitted_variants("POST", self.PORT)
+                first = client.post(capture, headers=posts[0][1], content=b"{}")
+                self.assertEqual((first.status_code, first.json()["status"]), (200, "available"))
+                for _, headers in posts[1:]:
+                    self.assertEqual(client.post(capture, headers=headers, content=b"{}").json()["capture_state"]["action"], "cached")
+            self.assertEqual(len(fixture.fixture.opener.calls), 1)
+            self.assertEqual(fixture.before, fixture.snapshot()); self.assertEqual(front.refusals, {})
         finally: fixture.close()

@@ -14,6 +14,7 @@ const assert = require('node:assert/strict')
 const childProcess = require('node:child_process')
 const crypto = require('node:crypto')
 const args = process.argv.slice(2)
+if (args.includes('--gate-check')) require('./local-runner-gate.cjs').gateCheck({ file: __filename, defaultPort: 8796, endpoints: [['GET', '/'], ['GET', '/app.js'], ['GET', '/__price_ui/receipt'], ['GET', '/api/stocks/TPEx/3105?as_of=2026-10-05'], ['GET', '/api/stocks/TPEx/3105/prices/saved?as_of=2026-10-05'], ['GET', '/api/focus/price-saved?as_of=2026-10-05&min_lots=0'], ['GET', '/__price_validation/receipt'], ['POST', '/api/stocks/TPEx/3105/prices/capture?as_of=2026-10-05'], ['POST', '/api/stocks/TPEx/3105/prices/save?as_of=2026-10-05'], ['POST', '/api/focus/price-lots/capture?as_of=2026-10-05&min_lots=0'], ['POST', '/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06']] })
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback
 const pinOptions = ['--policy-version', '--policy-digest', '--private-policy-version', '--private-policy-digest', '--saved-focus-policy-version', '--saved-focus-policy-digest', '--chips-policy-version', '--chips-policy-digest', '--joint-policy-version', '--joint-policy-digest', '--joint-focus-policy-version', '--joint-focus-policy-digest']
 const issuerPinOptions = ['--issuer-registry-version', '--issuer-registry-digest', '--issuer-profile-version', '--issuer-profile-digest']
@@ -98,6 +99,7 @@ const port = Number(option('--port', '8796'))
 assert(Number.isInteger(port) && port >= 1024 && port <= 65535, 'invalid own preview port')
 const apiPort = Number(option('--api-port', '8795'))
 assert(Number.isInteger(apiPort) && apiPort >= 1024 && apiPort <= 65535 && apiPort !== port, 'invalid owned API port')
+const gate = require('./local-runner-gate.cjs').create(port)
 const counts = { filesystem_mutations: 0, unapproved_network: 0, unapproved_subprocess: 0 }
 const ownedChildren = []
 const requireDependency = Module.createRequire(path.join(dependencies, '../package.json'))
@@ -1570,7 +1572,7 @@ async function proxy(request, response) {
   if (focusActive && url.pathname === focusAPIPath) invalidateFocusProxy()
   const focusTicket = focusProxyGeneration
   const upstream = approvedRequest({ hostname: '127.0.0.1', port: apiPort, path: request.url, method: request.method,
-    headers: { 'Content-Type': 'application/json' }, agent: false }, (incoming) => {
+    headers: { Host: '127.0.0.1:' + apiPort, 'Content-Type': 'application/json' }, agent: false }, (incoming) => {
     if (focusActive && url.pathname === focusAPIPath) {
       const chunks = []; let total = 0
       incoming.on('data', (part) => { total += part.length; if (total > 8 * 1024 * 1024) { incoming.destroy(); response.destroy() } else chunks.push(part) })
@@ -1623,7 +1625,7 @@ async function serve() {
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
     .replace('</head>', '<link rel="stylesheet" href="/app.css"></head>')
     .replace('<div id="root">', previewBanner())
-  const server = http.createServer(async (request, response) => {
+  const server = gate.createServer(http, { onRefuse: () => { requests.rejected++ } }, async (request, response) => {
     response.setHeader('Cache-Control', 'no-store')
     response.setHeader('Content-Security-Policy', "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:")
     const url = new URL(request.url, `http://127.0.0.1:${port}`)

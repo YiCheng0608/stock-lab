@@ -1116,7 +1116,7 @@ API 停止後 READ 502 清除全部數值，三 RAW back 保同 cutoff 且 mask�
 
 READ payload 的 schema 為 `dealer-direction-combos-read/finmind-stock-scope-7-v1`，calculation 為 `dealer-self-hedging-sign-combos-counts-maximal-segments/five-session-int64-v1`。`as_of` 不是 2026-10-06 回 409 `cutoff_not_supported`；query 鍵不是恰好一個 `as_of` 或日期不合法回 422；未登記路徑 404、方法不符 405。
 
-本機服務只綁 `127.0.0.1`，不發 CORS 標頭。API 與 preview 對每個請求先過跨站防護，再碰任何狀態或額度：
+本機服務只綁 `127.0.0.1`，不發 CORS 標頭。API 與 preview 對每個請求先過跨站防護，再碰任何狀態或額度；Host、Sec-Fetch-Site、Origin、POST 的 Content-Type 四項依此順序檢查，第一個不符即回應。其他本機 API／preview runner 套用同一組規則，範圍與限制見[開發入口](development-baseline/README.md#102-本機-runner-的跨站請求防護)：
 
 - **Host**：必須恰有一個值，且為 `127.0.0.1:<該服務的埠>`，否則 403 `host_not_admitted`（防 DNS rebinding）。
 - **Sec-Fetch-Site**：有送時須恰一個值，且為 `same-origin` 或 `none`，否則 403 `cross_site_rejected`。

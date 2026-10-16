@@ -143,8 +143,27 @@ def test_strategy_binding_rejects(research,field):
         setattr(strategy,field,{'bad':True})
         db.commit()
     engine.dispose()
+    before=sha(target)
+    with pytest.raises(capture.AnalysisCaptureError) as error: run(target)
+    # A stored current-formula row that differs from canonical is refused when it is
+    # looked up, before any signal is written.
+    assert error.value.detail=='strategy_snapshot_mismatch'
+    assert sha(target)==before
+
+
+@pytest.mark.parametrize('field',['config_json','canonical_config_snapshot'])
+def test_persist_rejects_a_strategy_row_that_drifts_in_memory(research,monkeypatch,field):
+    _,target,_=research
+    before=sha(target)
+    original=pipeline._ensure_strategies
+    def drifted(db):
+        strategies=original(db)
+        setattr(strategies['breakout_v1'],field,{'bad':True})
+        return strategies
+    monkeypatch.setattr(pipeline,'_ensure_strategies',drifted)
     with pytest.raises(capture.AnalysisCaptureError) as error: run(target)
     assert error.value.detail=='worker_strategy_binding_mismatch'
+    assert sha(target)==before
 
 
 @pytest.mark.parametrize('commit_mode',['before','after'])
@@ -609,6 +628,25 @@ def test_worker_config_number_cannot_be_bool(research,field):
         db.commit()
     engine.dispose()
     before=sha(target)
+    with pytest.raises(capture.AnalysisCaptureError) as error: run(target)
+    # The stored boolean is not the canonical 0.0, so the lookup refuses it.
+    assert error.value.detail=='strategy_snapshot_mismatch'
+    assert sha(target)==before
+
+
+@pytest.mark.parametrize('field',['config_json','canonical_config_snapshot'])
+def test_persist_rejects_a_bool_in_place_of_a_number_in_memory(research,monkeypatch,field):
+    _,target,_=research
+    before=sha(target)
+    original=pipeline._ensure_strategies
+    def drifted(db):
+        strategies=original(db)
+        strategy=strategies['breakout_v1']
+        config=copy.deepcopy(getattr(strategy,field))
+        config['confirmations']['group_relative_strength']['minimum_excess_return']=False
+        setattr(strategy,field,config)
+        return strategies
+    monkeypatch.setattr(pipeline,'_ensure_strategies',drifted)
     with pytest.raises(capture.AnalysisCaptureError) as error: run(target)
     assert error.value.detail=='worker_strategy_binding_mismatch'
     assert sha(target)==before

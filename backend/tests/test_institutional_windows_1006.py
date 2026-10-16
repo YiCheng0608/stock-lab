@@ -39,6 +39,8 @@ sys.dont_write_bytecode = True
 if ARGS.deps:
     sys.path.insert(0, str(Path(ARGS.deps).resolve()))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[2] / 'tools'))
+import local_runner_gate as gate  # noqa: E402  (cross-site / DNS-rebinding gate in front of the served app)
 GUARDS = {'disk_writes': 0, 'mutations': 0, 'unapproved_network': 0}
 ACTIVE_LIVE = False
 APPROVED_ADDRESSES: set = set()
@@ -423,12 +425,53 @@ class APITests(unittest.TestCase):
                     self.assertEqual(len(fixture.requests),count);self.assertEqual(fixture.database_snapshot(),fixture.before)
             finally:fixture.close()
 
+    ENDPOINTS=(('POST','/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06'),('POST','/api/stocks/TPEx/6488/institutional-windows/capture?as_of=2026-10-06'),
+        ('POST','/api/stocks/TPEx/3105/institutional-windows/capture'),('GET','/api/stocks/TPEx/3105/overview?as_of=2026-10-06'),
+        ('GET','/api/stocks/TPEx/6488?as_of=2026-10-06'),('GET','/__chips1006_validation/receipt'))
+
+    def test_serve_hands_the_router_to_uvicorn_through_the_gate(self):
+        import ast
+        main_function=next(n for n in ast.parse(Path(__file__).read_text(encoding='utf-8')).body if isinstance(n,ast.FunctionDef) and n.name=='main')
+        served=[ast.unparse(n.args[0]) for n in ast.walk(main_function) if isinstance(n,ast.Call) and ast.unparse(n.func)=='uvicorn.run']
+        fronts=[ast.unparse(n.value) for n in ast.walk(main_function) if isinstance(n,ast.Assign) and [ast.unparse(t) for t in n.targets]==['front']]
+        self.assertEqual((served,fronts),(['front'],['gate.wrap(fixture.app, port=ARGS.port)']))
+
+    def test_serve_gate_refuses_cross_site_requests_before_the_22_source_gets(self):
+        from fastapi.testclient import TestClient
+        fixture=MemoryAPIFixture1006();front=gate.wrap(fixture.app,port=8799);refused=0
+        try:
+            with TestClient(front) as client:
+                for method,target in self.ENDPOINTS:
+                    for label,headers,status,reason in gate.refusal_variants(method,8799):
+                        response=client.request(method,target,headers=headers,content=b'{}' if method=='POST' else None)
+                        self.assertEqual((response.status_code,response.json()),(status,{'reason':reason}),(method,target,label));refused+=1
+            self.assertEqual(fixture.requests,[]);self.assertEqual(fixture.store.raw_captures,());self.assertEqual(fixture.old_store.raw_captures,())
+            self.assertEqual(sum(front.refusals.values()),refused);self.assertEqual(fixture.database_snapshot(),fixture.before)
+        finally:fixture.close()
+
+    def test_serve_gate_leaves_same_origin_operation_unchanged(self):
+        from fastapi.testclient import TestClient
+        fixture=MemoryAPIFixture1006();front=gate.wrap(fixture.app,port=8799)
+        capture='/api/stocks/TPEx/3105/institutional-windows/capture?as_of=2026-10-06'
+        try:
+            with TestClient(front) as client:
+                for _,headers in gate.admitted_variants('GET',8799):
+                    self.assertEqual(client.get('/api/stocks/TPEx/3105/overview?as_of=2026-10-06',headers=headers).status_code,200)
+                self.assertEqual(fixture.requests,[])
+                posts=gate.admitted_variants('POST',8799)
+                first=client.post(capture,headers=posts[0][1],content=b'{}').json()
+                self.assertEqual((first['status'],first['capture_state']['request_count']),('available',22));self.assertEqual(len(fixture.requests),22)
+                for _,headers in posts[1:]:self.assertEqual(client.post(capture,headers=headers,content=b'{}').json()['capture_state']['request_count'],22)
+            self.assertEqual(len(fixture.requests),22);self.assertEqual(front.refusals,{});self.assertEqual(fixture.database_snapshot(),fixture.before)
+        finally:fixture.close()
+
 
 def main():
     if ARGS.serve:
         if ARGS.live_source_opt_in and (ARGS.policy_version!=chips.POLICY_VERSION or ARGS.policy_digest!=chips.POLICY_DIGEST):raise ValueError('root_external_pins_required')
         import uvicorn
         fixture=MemoryAPIFixture1006(live=ARGS.live_source_opt_in)
+        front=gate.wrap(fixture.app, port=ARGS.port)
         try:
             print(json.dumps({'ready':True,'pid':os.getpid(),'parent_pid':os.getppid(),'port':ARGS.port,'empty_new_store':not fixture.store.raw_captures,
                 'empty_w8_store':not fixture.old_store.raw_captures,'source_requests':0,'preloaded':False,'db_tables':len(fixture.before),
@@ -436,9 +479,9 @@ def main():
                 'financial_seed':'none' if ARGS.live_source_opt_in else 'synthetic test bars',
                 'db_proof':'all19table schema/columns/values/SQLite typeof',
                 'policy_version':chips.POLICY_VERSION,'policy_digest':chips.POLICY_DIGEST,'guard':GUARDS,'disk_artifacts':0}),flush=True)
-            uvicorn.run(fixture.app,host='127.0.0.1',port=ARGS.port,lifespan='off',access_log=False)
+            uvicorn.run(front,host='127.0.0.1',port=ARGS.port,lifespan='off',access_log=False)
         finally:
-            print(json.dumps({'shutdown':True,'db_preserved':fixture.database_snapshot()==fixture.before,'source_requests':len(fixture.transport.requests if ARGS.live_source_opt_in else fixture.requests),'guard':GUARDS,'disk_artifacts':0}),flush=True)
+            print(json.dumps({'shutdown':True,'db_preserved':fixture.database_snapshot()==fixture.before,'source_requests':len(fixture.transport.requests if ARGS.live_source_opt_in else fixture.requests),'browser_gate_refusals':front.refusals,'guard':GUARDS,'disk_artifacts':0}),flush=True)
             fixture.close()
         return 0
     suite=unittest.TestSuite()

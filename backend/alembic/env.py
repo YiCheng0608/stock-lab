@@ -67,6 +67,7 @@ def _run_sqlite_migrations(connection) -> None:
             "0006_news_json_defaults",
             "0007_turnover_availability",
             "0008_portfolio_share_integer",
+            "0009_strategy_formula_version",
         }
         if identity_revisions.intersection(context.get_context().get_current_heads()) and identity_state != "current":
             raise RuntimeError("cannot migrate instruments: revision requires current identity")

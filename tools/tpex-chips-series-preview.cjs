@@ -1,5 +1,6 @@
 'use strict'
 // Independent memory preview: no financial transport, disk output or private I/O.
+if (process.argv.includes('--gate-check')) require('./local-runner-gate.cjs').gateCheck({ file: __filename, defaultPort: 8800, endpoints: [['GET', '/chips-stock-scope-7-daily-net-trend'], ['GET', '/__series_preview_receipt'], ...['series', 'gross', 'direction', 'adjacent', 'dealer-components'].flatMap((name) => [['GET', '/api/chips/' + name + '-stock-scope-7?as_of=2026-10-06'], ['POST', '/api/chips/' + name + '-stock-scope-7/capture?as_of=2026-10-06']])] })
 const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
@@ -36,6 +37,7 @@ const pin = dealerComponents ? 'sha256:54347a73a5d725e702599eb582e9c75550f2c24c6
 assert((options.get('--policy-version') ?? version) === version && (options.get('--policy-digest') ?? pin) === pin, 'independent external pins mismatch')
 const port = Number(options.get('--port') ?? 8800), apiPort = Number(options.get('--api-port') ?? 8799)
 assert([port, apiPort].every((p) => Number.isInteger(p) && p >= 1024 && p <= 65535) && port !== apiPort, 'finite distinct local ports')
+const gate = require('./local-runner-gate.cjs').create(port)
 const deps = path.resolve(options.get('--deps') ?? 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules')
 const requireDeps = Module.createRequire(path.join(deps, '../package.json'))
 const esbuildPackage = path.join(deps, '.pnpm/node_modules/esbuild')
@@ -283,7 +285,7 @@ async function serveOnly() {
   const css = result.outputFiles.find((f) => f.path.endsWith('.css'))?.contents ?? Buffer.alloc(0)
   const html = Buffer.from('<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (dealerComponents ? '七股自營商自行買賣與避險對帳' : adjacent ? '七股前5與近5法人比較' : direction ? '七股三法人方向與連續區段' : gross ? '七股法人買進與賣出' : '七股每日法人淨超') + '</title><link rel="stylesheet" href="/series-memory.css"></head><body><div id="root"></div><script src="/series-memory.js"></script></body></html>')
   function reply(res, status, body, type = 'application/json; charset=utf-8') { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data:" }); res.end(body) }
-  const server = http.createServer(async (req, res) => {
+  const server = gate.createServer(http, { onRefuse: () => { counts.rejected_requests++ } }, async (req, res) => {
     try {
       const url = new URL(req.url, 'http://127.0.0.1:' + port)
       if (req.method === 'GET' && ['/series-memory.js', '/series-memory.css'].includes(url.pathname)) return reply(res, 200, url.pathname.endsWith('.js') ? js : css, url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8')
@@ -303,7 +305,7 @@ async function serveOnly() {
       const body = Buffer.concat(parts)
       if (req.method === 'POST') { const parsed = JSON.parse(body.toString('utf8')); if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object' || Object.keys(parsed).length) { counts.rejected_requests++; return reply(res, 422, '{"reason":"empty_object_required"}') } }
       counts[req.method === 'POST' ? 'proxy_post' : 'proxy_get']++
-      const upstream = http.request({ hostname: '127.0.0.1', port: apiPort, path: url.pathname + url.search, method: req.method, agent: false, headers: { 'Content-Type': 'application/json', 'Content-Length': body.length } }, (response) => {
+      const upstream = http.request({ hostname: '127.0.0.1', port: apiPort, path: url.pathname + url.search, method: req.method, agent: false, headers: { Host: '127.0.0.1:' + apiPort, 'Content-Type': 'application/json', 'Content-Length': body.length } }, (response) => {
         const chunks = []; let bytes = 0
         response.on('data', (chunk) => { bytes += chunk.length; if (bytes > 16777216) { upstream.destroy(new Error('local API response cap')); return }; chunks.push(chunk) })
         response.on('end', () => { if (!res.writableEnded) reply(res, response.statusCode ?? 502, Buffer.concat(chunks)) })
