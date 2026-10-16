@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類與隔離修復契約
 
-更新：2026-09-16。Mapping／隔離診斷、ordinary-industry collector、ETF／new-listing lifecycle 與 §8–9 身分契約均只在各節表列範圍通過有限 review。正式與 `.local` DB、歷史分類、舊族群分數及研究輸出尚未修復，「既有族群關聯待重新核實」guard 不得撤除。
+Mapping／隔離診斷、ordinary-industry collector、ETF／new-listing lifecycle 與 §8–9 身分契約均只在各節表列範圍通過有限 review。正式與 `.local` DB、歷史分類、舊族群分數及研究輸出尚未修復，「既有族群關聯待重新核實」guard 不得撤除。
 
 ## 1. 官方證據 snapshot
 

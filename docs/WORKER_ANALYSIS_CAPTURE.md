@@ -1,6 +1,6 @@
 # Worker analysis capture 契約
 
-更新：2026-09-27。狀態：有限範圍已 review。這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。`selected-bar/v1` 封存選中 bar 的 close／volume 本地列關係；新增 `selected-bar-prior-volumes/v1` 也封存本次實際使用的 prior volumes 本地列關係。兩者只保存 raw metadata，沒有驗證原始 bytes。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
+這條 opt-in 通路把 caller 明示的專案外 stable SQLite snapshot 複製成新的 owned research DB，在同一 transaction 保存現行 analysis、actual evaluator arguments／result、private replay bundle 與 legacy `Signal` snapshot。`selected-bar/v1` 封存選中 bar 的 close／volume 本地列關係；新增 `selected-bar-prior-volumes/v1` 也封存本次實際使用的 prior volumes 本地列關係。兩者只保存 raw metadata，沒有驗證原始 bytes。一般 `analyze`、`run_daily`、backtest、API 與 UI 不會自動啟用。
 
 本文件負責 `backend/worker/analysis_capture.py` 的 API、CLI、環境、local schema、結果與限制。Capture 不是 `SignalArtifactStore`、完整 B2／B7、歷史 PIT／availability 證明或正式資料處理入口。
 

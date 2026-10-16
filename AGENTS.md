@@ -1,6 +1,6 @@
 # 專案協作規則
 
-本文管理權責與驗收；[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)管理操作、欄位與模板。自 2026-10-09 起改用 GitHub 任務流程；舊 task、BOOT、roster、quota 及清理紀錄只供追溯，不授權新工作。
+本文管理權責與驗收；[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)管理操作、欄位與模板。
 
 ## 工具與執行範圍
 
@@ -37,7 +37,7 @@ QA 與該版本實作者須不同 session，取得原 AC、規格、自測及原
 
 ## 建立任務與派工
 
-正式派工（含試跑）前先盤點核定版本的能力／AC，補齊必要 Issues 與適用證據。ROADMAP 管承諾、milestone 管必要任務集合、Project 管狀態；見[版本範圍](docs/GITHUB_WORKFLOW.md#版本範圍與完成判定)。
+正式派工前先盤點核定版本的能力／AC，補齊必要 Issues 與適用證據。ROADMAP 管承諾、milestone 管必要任務集合、Project 管狀態；見[版本範圍](docs/GITHUB_WORKFLOW.md#版本範圍與完成判定)。
 
 1. 全局依[補單規則](docs/GITHUB_WORKFLOW.md#待辦涵蓋與補單)查契約、open／closed Issues、PR、未合併成果並去重。近期拆至可獨立驗收，遠期保留功能概述；每日開始／恢復、Ready 不足、驗收、需求變更時補查。建單不等於派工。
 2. 母單代表功能，子單代表可派工工作；小功能可獨立成單。母子與依賴分開，依賴可跨母單但不得循環；純管理母單不建工作區。
@@ -83,7 +83,7 @@ Paused 保留工作區，不代表完成／取消。全局核所有角色停寫�
 
 ## 合併與 Git 結案
 
-1. 正式 master 全走全局指定的**單一整合入口**。GitHub 記入口、正式 remote／branch、持有者、Issue、base／candidate 完整 SHA、授權、開始時間；Git 只操作獲准項，人工同樣遵守。未配權限／branch protection 不稱技術鎖。
+1. 正式 master 全走全局指定的**單一整合入口**。GitHub 記入口、正式 remote／branch、持有者、Issue、base／candidate 完整 SHA、授權、開始時間；Git 只操作獲准項，人工同樣遵守。
 2. 輪到任務，由 Git 在該 worktree 把最新正式 master 合入 branch，工程師處理衝突；跨任務共同確認。不在 master 修、不全選一方、不混他人修改。
 3. branch／master 改動須分析差異：需修正退開發、需 QA 轉測試，通過才回待整合。驗整合行為及受影響 AC、補文件、freeze／相關索引／coverage／提交；base 或 candidate 變即舊核准失效，重核必要證據，不盲重跑全套。
 4. **預設授權**：獨立 QA 逐 AC 通過、文件／證據齊全並轉待整合的任務，由持入口的任務統籌依 QA 通過 SHA 核准，指派索引／Git push 該任務 branch、開 PR，CI 通過後以 merge commit 合併，不逐單請示；squash／rebase 不在預設授權內。PR 回原單並附 QA／文件／索引證據。禁提前自動關單，見[automation](docs/GITHUB_WORKFLOW.md#projects-與關單自動化)；送 PR 後按[CI 接手規則](docs/GITHUB_WORKFLOW.md#pr-ci-失敗與接手)處置至完成或下一 owner ACK，失敗同單／branch／PR 退修。

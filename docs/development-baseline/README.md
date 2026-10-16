@@ -107,7 +107,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 
 ### 不由 pytest 收集的 standalone-only 測試檔
 
-[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 13 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+[`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 14 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -124,6 +124,7 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 | [`test_ordinary_close_source.py`](../../backend/tests/test_ordinary_close_source.py) | 見[#7 七股普通收盤](#7-七股普通收盤取得保存與讀回的-standalone-驗證入口) |
 | [`test_tpex_calendar_actions_source.py`](../../backend/tests/test_tpex_calendar_actions_source.py) | `python -I -B -X utf8 backend/tests/test_tpex_calendar_actions_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必備，缺少即 `RuntimeError`；需 `git` 與含固定 blob `d8918bc…:docs/SOURCE_REGISTRY.md` 的完整歷史（shallow clone 會失敗）；`TMPDIR`、`TEMP`、`TMP` 導向短隔離目錄（session 路徑超過 190 字元即拒絕）與結尾 `RESIDUE` 行的核對同[#7 入口](#7-七股普通收盤取得保存與讀回的-standalone-驗證入口)。零 GET、不碰 DB 與私人 root、不起服務、無 seal，日曆、價格與事件值皆為合成邊界資料，不證真來源；契約見[來源 #98 節](../SOURCE_REGISTRY.md#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2) |
 | [`test_industry_membership_inferred_source.py`](../../backend/tests/test_industry_membership_inferred_source.py) | `python -B -X utf8 backend/tests/test_industry_membership_inferred_source.py`，僅標準函式庫，不需 `--deps`、不載 conftest；audit hook 禁 socket、DNS、subprocess 與寫檔，fixture 全為合成資料，來源契約見[來源 #37 節](../SOURCE_REGISTRY.md#53-37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1) |
+| [`test_taiex_price_index_source.py`](../../backend/tests/test_taiex_price_index_source.py) | 見[#33 TAIEX](#33-taiex-名目指數兩截止-21-觀測-return-的-standalone-驗證入口) |
 
 `test_saved_price_chips_*` 四檔由 [`tools/tpex-price-api.py`](../../tools/tpex-price-api.py) 的 runner 以 `__main__.ARGS` 載入，只能經該 runner 執行；`--deps` 必填。
 
@@ -359,7 +360,7 @@ API／preview 預設埠 8799／8800，preview `--api-port` 預設 8799；bundle 
 python -B -X utf8 backend/tests/test_tpex_margin_balance_source.py
 ```
 
-從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，整目錄 pytest 依結構會一併收集其 `unittest.TestCase` 案例；該收集結果尚未實跑驗證。
+從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest。測試只用 RAM fixture 與 fake transport（含真實 stdlib 回應解析），連線與名稱解析以 stub 拒絕，不建檔案或 DB、不碰日常 DB；`-B` 不寫 bytecode。它驗產品 `backend/app/tpex_margin_balance_source.py` 的閘門、身分／一次性／到期與 transport 規則，不證真來源回應、匿名額度或穩定性；來源契約、policy pin 與支援範圍見[來源 §48](../SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)。驗收以上列 standalone 指令為準；本檔不在 `STANDALONE_ONLY` 名單，pytest 會收集其 `unittest.TestCase` 案例。
 
 ### #9 七股自行買賣與避險方向組合的零落盤驗證入口
 
@@ -381,7 +382,7 @@ node tools/finmind-dealer-direction-preview.cjs --check --chips-dealer-direction
 node tools/finmind-dealer-direction-preview.cjs --check --check-ui-only --chips-dealer-direction-combos-opt-in --deps <既有 frontend/node_modules> --policy-sha256 7db5e7a7e17f883e7e4e81de297ce2e4ad8c6c4fcde409b7cbeae0eaa56696b1 --policy-bytes 9319
 ```
 
-API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準，未驗證在整目錄 pytest 下的行為。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。
+API check 以 unittest 載入 `backend/tests/test_institutional_dealer_direction_combos_scope7.py`（計算邊界與 chips-only API，經行程內 ASGI transport），結尾的 JSON 行須顯示 `source_requests` 0 與全部 guard 計數 0；該測試模組不在 `STANDALONE_ONLY` 名單，驗收以此 check 為準。Preview check 做全 `src` 型別檢查（noEmit）、跨站閘門與 capture body 案例、前端驗證器案例，以及七股與返回連結的 SSR；`--check-ui-only` 略過驗證器案例。Preview 的 `--policy-sha256` 與 `--policy-bytes` 在 check 也必填（外部 pin 不得由程式內建），值與來源節的 pin 相同。SSR 與合成語料不代表真來源或可信 UI（SSR 輸出的 React 警告另行分報）；未跑 production build、整套 pytest、DB 或磁碟保存。
 
 ### #7 七股普通收盤取得、保存與讀回的 standalone 驗證入口
 
@@ -395,7 +396,31 @@ python -I -B -X utf8 backend/tests/test_ordinary_close_source.py
 
 核程序 exit，以及結尾的 `RESIDUE session_dir_exists=… hook_blocked=… expected_probe_blocks=…`：`session_dir_exists` 須為 False，`hook_blocked` 須等於 `expected_probe_blocks`（hook 自身探針的預期阻擋數）。測試與清理分報，不以 exit 0 推定殘留為 0；專案樹與 session 目錄以外的新增產物上限 **0**。
 
-它驗產品 `backend/app/ordinary_close_source.py` 的 policy 驗證與產品常數 pin、參數化日曆 gate（含以 #32 原窗口逐份比對等價）、60 日收盤正規化、保存上限與原子出版、新程序讀回重驗，以及一次性、租約與 seal／binding gate（沒有有效 seal，真實路徑一律在 gate 被拒）。所有日曆與價格值是合成邊界資料，不證真來源回應或 seal 核發；契約、policy pin 與支援範圍見[來源 §52](../SOURCE_REGISTRY.md#52-7七股普通收盤與交易日曆的日期時區語意契約)。本檔列於 `backend/tests/conftest.py` 的 `STANDALONE_ONLY`，pytest 收集會略過它（略過不是通過）；驗收以上列 standalone 指令為準，未驗證在 pytest 下的行為。
+它驗產品 `backend/app/ordinary_close_source.py` 的 policy 驗證與產品常數 pin、參數化日曆 gate（含以 #32 原窗口逐份比對等價）、60 日收盤正規化、保存上限與原子出版、新程序讀回重驗，以及一次性、租約與 seal／binding gate（沒有有效 seal，真實路徑一律在 gate 被拒）。所有日曆與價格值是合成邊界資料，不證真來源回應或 seal 核發；契約、policy pin 與支援範圍見[來源 §52](../SOURCE_REGISTRY.md#52-7七股普通收盤與交易日曆的日期時區語意契約)。本檔列於 `backend/tests/conftest.py` 的 `STANDALONE_ONLY`，pytest 收集會略過它（略過不是通過）；驗收以上列 standalone 指令為準。
+
+### #33 TAIEX 名目指數兩截止 21 觀測 return 的 standalone 驗證入口
+
+```powershell
+python -B -X utf8 backend/tests/test_taiex_price_index_source.py
+```
+
+從專案根目錄執行，僅標準函式庫，不需 `--deps`、不載 conftest；`-B` 必備，缺少即 `RuntimeError`。Import 時安裝 audit hook，禁 socket 連線、名稱解析、subprocess 與一切寫檔；需 `git` 與含固定 blob `d8918bc…:docs/SOURCE_REGISTRY.md` 的完整歷史（shallow clone 會失敗）。零 GET、不碰 DB、不起服務、無 seal；回應與日曆值皆為合成資料，不證真來源。它驗 `backend/app/taiex_price_index_source.py` 的 policy pin、傳輸與 schema 規則、22 日日曆 gate 與兩截止 21 觀測 return 算術；契約見[來源 §51](../SOURCE_REGISTRY.md#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1)。本檔列於 `STANDALONE_ONLY`，pytest 略過它（略過不是通過）。
+
+### #36 七股 TPEx 法人六日來源的 standalone 驗證入口
+
+```powershell
+python -B -X utf8 backend/tests/test_tpex_institutional_five_day_source.py
+```
+
+從專案根目錄執行，僅標準函式庫，不需 `--deps`。Fixture、transport stub 與 oracle 全在 RAM，seal 案例只用 RAM 合成 validator seal，唯一到達原生 provider 的路徑是 mock 的 `HTTPSConnection`，不開 socket、不建檔案。它驗 `backend/app/tpex_institutional_five_day_source.py` 的 dated CSV 驗證、兩截止五日分子與 gate；契約見[來源 §47](../SOURCE_REGISTRY.md#47-36-qa1qa2七股-tpex-法人六日-dated-csv-與兩截止五日分子issue36-two-cutoffs-v1)。本檔的 audit hook 只在自測期間啟用，pytest 收集其 `unittest.TestCase` 案例。
+
+### #39 法人流向÷20 日均量比率的 pytest 驗證入口
+
+```powershell
+python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow_ratio.py backend/tests/test_institutional_flow_ratio_source.py
+```
+
+需既有 pytest 與 backend 依賴；兩檔只用 RAM fixture 與 canned bytes，不連網、不碰 DB 與磁碟。它們驗 `backend/app/institutional_flow_ratio.py` 與 `institutional_flow_ratio_source.py` 的驗證、gate 與算術，不證真來源；契約見[來源 #39 節](../SOURCE_REGISTRY.md#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)。CI 的 backend job 不收集這兩檔。
 
 ## 歷史驗證
 

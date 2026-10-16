@@ -1,6 +1,6 @@
 # 股票研究詞彙表
 
-更新：2026-09-16。本文只提供日常研究所需的簡明詞義與誤讀界線；規則公式見 [V1_SPEC](V1_SPEC.md)，文案、單位與 reason code 見 [UI_COPY_SPEC](UI_COPY_SPEC.md)，能力狀態見 [ROADMAP](ROADMAP.md)。詞彙出現在 UI 或本文，不代表對應資料或模型已上線。
+本文只提供日常研究所需的簡明詞義與誤讀界線；規則公式見 [V1_SPEC](V1_SPEC.md)，文案、單位與 reason code 見 [UI_COPY_SPEC](UI_COPY_SPEC.md)，能力狀態見 [ROADMAP](ROADMAP.md)。詞彙出現在 UI 或本文，不代表對應資料或模型已上線。
 
 ## 使用方式與資料結構
 

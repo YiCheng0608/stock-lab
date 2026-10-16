@@ -1,6 +1,6 @@
 # 全站前端 UX 契約與有限 review
 
-更新：2026-09-16。本文只記錄前端資訊架構、文案、單位與互動的有限 review 範圍；現行文案與單位契約見 [UI_COPY_SPEC](UI_COPY_SPEC.md)。這不是整站資料、後端、DB 或 [ROADMAP](ROADMAP.md) 完成聲明。
+本文只記錄前端資訊架構、文案、單位與互動的有限 review 範圍；現行文案與單位契約見 [UI_COPY_SPEC](UI_COPY_SPEC.md)。這不是整站資料、後端、DB 或 [ROADMAP](ROADMAP.md) 完成聲明。
 
 ## 1. 逐頁問題、改法與待驗
 
@@ -40,14 +40,6 @@
 | endpoint 本來沒有 action 欄位 | 不顯示 action；必要時「此列表未評估」。 | 「尚無研究動作」或「策略判斷資料待補」。 |
 | 日期／metric 讀錯路徑 | 讀 `meta.data_as_of`；顯示「1 日／5 日相對 TAIEX」。 | 把既有日期顯示成破折號或露出匿名 key。 |
 
-## 5. Round14 final review 證據與限制
+## 5. 歷史 review 收據
 
-前端 self-test、獨立資料檢查、TypeScript typecheck、production build，以及桌面與 320／390／768px browser 流程已在穩定 source snapshot 通過有限 review。範圍包含新聞分頁、研究 tab、個股 K 線／張數／籌碼 raw、分類警示、空行情與中文錯誤。
-
-正式 membership／migration、持倉實寫與整站資料正確性仍未驗。coverage API 曾有一次未確定原因的程序異常；後續未重現不證明瀏覽器、併發或長時穩定。
-
-## 6. 2026-09-15 獨立 UI 文案維護（已有限 review）
-
-獨立 UI 維護已有限接受繁中、ETF／族群名稱、空值、法人欄名與兩市場官方分點入口；個股案例另覆蓋張數換算、融資原單位、合法 0、MA60 不足、未知幣別、指數／收盤價與中文新聞。記憶體前端測試與 final `pnpm run build` 通過。
-
-這只代表既有資料的唯讀 UI 案例。正式分點資料集、歷史 coverage、主力身分／排名、完整無障礙、full backend、一般 API startup、正式 DB／部署與 ROADMAP round 均未驗；未執行 migration。既有大型 JavaScript chunk 警告未阻擋此有限 review。
+Round14 final review 與 2026-09-15 獨立 UI 文案維護的有限 review 收據見 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/UX_REVIEW.md` §5–§6；它們只代表當時 source snapshot 的唯讀 UI 案例，正式 membership／migration、持倉實寫、整站資料正確性、完整無障礙、正式 DB／部署均未驗。

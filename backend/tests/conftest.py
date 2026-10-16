@@ -28,15 +28,15 @@ _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
 # documented standalone command instead (docs/development-baseline/README.md).
 STANDALONE_ONLY = {
     "test_share_quantity_storage.py": (
-        "docs/development-baseline/README.md:252 (standalone, no conftest, disk cases only "
+        "docs/development-baseline/README.md:255 (standalone, no conftest, disk cases only "
         "through the fixed root); tests/test_share_quantity_storage.py:24,148"
     ),
     "test_institutional_windows.py": (
-        "docs/development-baseline/README.md:304 (--w8-only / --w8-api-only); "
+        "docs/development-baseline/README.md:305 (--w8-only / --w8-api-only); "
         "tests/test_institutional_windows.py:30-32 read argv at import"
     ),
     "test_institutional_windows_1006.py": (
-        "docs/development-baseline/README.md:310 (--worker-only / --api-only); "
+        "docs/development-baseline/README.md:311 (--worker-only / --api-only); "
         "tests/test_institutional_windows_1006.py:35 parse_args() at import, :77 audit hook"
     ),
     "test_conditional_plan_store.py": (
@@ -83,6 +83,11 @@ STANDALONE_ONLY = {
     "test_industry_membership_inferred_source.py": (
         "docs/development-baseline/README.md (standalone, stdlib only, -B required); "
         "tests/test_industry_membership_inferred_source.py:44 requires -B, :46 audit hook"
+    ),
+    "test_taiex_price_index_source.py": (
+        "docs/development-baseline/README.md (standalone-only table, python -B -X utf8); "
+        "tests/test_taiex_price_index_source.py:71 raises without -B, "
+        ":73 process-wide audit hook forbids disk writes/network/subprocess"
     ),
 }
 

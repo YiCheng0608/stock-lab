@@ -1,6 +1,6 @@
 # 台股事件、族群與交易研究產品規格
 
-更新：2026-10-03。本文只定義現行產品方向與目標契約；能力狀態、優先順序與已驗收範圍見 [ROADMAP](ROADMAP.md)。個股頁與前端 UX 的有限已驗收範圍分別見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md) 與 [UX_REVIEW](UX_REVIEW.md)。未被具名驗收的欄位或流程仍是目標，不得由文件推論已上線。
+本文只定義現行產品方向與目標契約；能力狀態、優先順序與已驗收範圍見 [ROADMAP](ROADMAP.md)。個股頁與前端 UX 的有限已驗收範圍分別見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md) 與 [UX_REVIEW](UX_REVIEW.md)。未被具名驗收的欄位或流程仍是目標，不得由文件推論已上線。
 
 正式資料仍有市場別產業代碼與舊 membership 不一致。資料重建通過前，官方產業排行及其衍生研究條件必須標示「既有族群關聯待重新核實」；中文 `display_name` 只能以「（既有分類）」加待核實 badge 呈現。此缺陷不改寫 OHLCV、數量換算或新聞內容。
 
