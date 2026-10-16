@@ -352,3 +352,24 @@ export function productQualityLabel(dataQuality?: string, kind: ProductQualityKi
   if (status === 'unknown') return '資料品質待核實'
   return '資料品質待補'
 }
+
+const ORDINARY_CLOSE_TREND_REASONS: Record<string, string> = {
+  ordinary_close_cutoff_not_supported: '本區塊只支援 2026-10-06 截止；其他日期不讀檔，也不用較早或較晚資料代替。',
+  ordinary_close_instrument_not_supported: '本區塊只支援七檔已保存的上櫃普通股。',
+  ordinary_close_root_unset: '尚未設定本機私人保存位置，無法讀取。',
+  ordinary_close_root_invalid: '本機私人保存位置設定無效，無法讀取。',
+  ordinary_close_saved_missing: '找不到已保存的收盤資料。',
+  ordinary_close_window_mismatch: '已保存資料的日期窗口與截止不一致，未採用。',
+  ordinary_close_window_insufficient: '收盤筆數不足，不用較短窗口補算。',
+  ordinary_close_storage_io_failed: '讀取本機保存檔失敗。',
+  ordinary_close_request_failed: '讀取請求失敗，已清除先前數值。',
+  ordinary_close_contract_invalid: '回應未通過前端核對（版本、截止、來源或重算不一致），不採用任何數值。',
+  trend_formula_not_defined: '趨勢判定規格未定義，不推論',
+}
+
+export function ordinaryCloseTrendReasonLabel(code: string): string {
+  const known = ORDINARY_CLOSE_TREND_REASONS[code]
+  if (known) return known
+  if (/^ordinary_close_saved_[a-z0-9_]+$/.test(code)) return '已保存資料未通過完整性核對，不採用任何數值。'
+  return '原因待核實，不採用任何數值。'
+}
