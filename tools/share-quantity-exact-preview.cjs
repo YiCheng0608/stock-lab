@@ -183,7 +183,7 @@ async function browserBuild() {
   return esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
     absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__',
     platform: 'browser', format: 'esm', target: 'es2020', jsx: 'automatic',
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
+    define: { 'import.meta.env': '{}', 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
 }
 
 async function portfolioRenderer() {
@@ -868,7 +868,7 @@ function localQuote(close = 10.5, closeStatus = 'known') {
 }
 
 function quoteCardAssertions(html, row, values) {
-  assert.ok(html.includes('<summary>核對本地行情與試算</summary>'))
+  assert.ok(html.includes('<summary>核對庫存原股數、本地行情與試算</summary>'))
   assert.ok(html.includes('本地記錄；來源／日期待核實'))
   assert.ok(html.includes('本地試算，行情來源／日期尚未核實'))
   assert.ok(!/<details[^>]*\bopen(?:\s|=|>)/.test(html))
@@ -1061,9 +1061,9 @@ async function quantityTrustCheck() {
   const completeUnknown = syntheticAction('COMPLETE', null, 'unknown', 'manual_review')
   const before = structuredClone([unknown, zero, absent, completeUnknown])
   for (const action of [unknown, completeUnknown]) {
-    assert.ok(render('CompactActionCard', { action }).includes('股數待核實'))
+    assert.ok(render('CompactActionCard', { action }).includes('庫存數量待核實'))
     const html = render('ActionDetailPanel', { action })
-    assert.ok(html.includes('class="pill ambiguous">股數待核實</span>'))
+    assert.ok(html.includes('class="pill ambiguous">庫存數量待核實</span>'))
     assert.ok(html.includes('<strong>' + action.display_instruction + '</strong>'))
     if (action.action_state === 'data_insufficient') assert.ok(html.includes('<h2>策略判斷資料待補</h2>'))
     assert.ok(!html.includes('class="level-grid'))
@@ -1074,12 +1074,12 @@ async function quantityTrustCheck() {
     [['actions', { search: '', cursor: undefined, state: '' }], actionResult],
     [['portfolio-subsection'], { items: [] }],
   ])
-  assert.ok(actionHtml.includes('本次篩選股數待核實 2 筆'))
+  assert.ok(actionHtml.includes('本次篩選庫存數量待核實 2 筆'))
   assert.equal((actionHtml.match(/href="\/actions\/TWSE\/BADINT"/g) || []).length, 1)
-  assert.ok(actionHtml.includes('股數待核實'))
+  assert.ok(actionHtml.includes('庫存數量待核實'))
   const homeHtml = render('TodayPage', {}, [[['dashboard'], syntheticDashboard([unknown])]])
   assert.equal((homeHtml.match(/href="\/actions\/TWSE\/BADINT"/g) || []).length, 1)
-  assert.ok(homeHtml.includes('股數待核實'))
+  assert.ok(homeHtml.includes('庫存數量待核實'))
   assert.deepEqual([unknown, zero, absent, completeUnknown], before)
   const bundle = await browserBuild()
   console.log(JSON.stringify({ passed: true, typescript: ts.version, node: process.version,

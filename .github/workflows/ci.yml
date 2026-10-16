@@ -78,6 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           python -B -m pytest -p no:cacheprovider -q \
+            tests/test_app_main_browser_gate.py \
             tests/test_instrument_identity_migration.py \
             tests/test_news_json_defaults.py \
             tests/test_product.py \

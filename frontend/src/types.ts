@@ -1010,8 +1010,10 @@ export type BacktestSummary = {
 }
 
 export type StrategyRow = {
+  id: number
   name: string
   version: string
+  formula_version: string
   kind: string
   active: boolean
   config: Record<string, unknown>
