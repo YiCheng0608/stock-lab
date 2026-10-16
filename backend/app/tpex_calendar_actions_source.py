@@ -1576,17 +1576,28 @@ def _absolute(value, code):
     return text
 
 
+# Windows root prefixes (``os.path.splitdrive``, separators normalised to ``\``) that name a fixed location: a drive letter or a
+# complete UNC share (server and share both non-empty). ``\\?\`` and ``\\.\`` must carry one of those two themselves.
+_WINDOWS_FIXED_PREFIX = re.compile(r"[A-Za-z]:|\\\\(?![?.]\\)[^\\]+\\[^\\]+|\\\\[?.]\\(?:[A-Za-z]:|UNC\\[^\\]+\\[^\\]+)")
+
+
 def private_root(environment=None):
     """The private root: ``%LOCALAPPDATA%/taiwan-stock-research/tpex-calendar-actions-issue98``.
 
     Read at call time, never at import. ``LOCALAPPDATA`` is the only source: unset, empty or non-string is
-    ``root_unset``; relative, containing ``..`` or a NUL byte is ``root_invalid``. There is no fallback to another
-    variable or path, and nothing is created or checked on disk here.
+    ``root_unset``; relative, containing ``..`` or a NUL byte is ``root_invalid``. On Windows the drive part must be a
+    drive letter or a complete UNC share: a rooted path without one (``\\foo``, ``/foo``) is relative to the current drive,
+    and an incomplete UNC (``\\\\``, ``\\\\srv``, ``\\\\srv\\``, ``//srv``) would turn our own directory name into a share on
+    another host, so both are ``root_invalid`` too. There is no fallback to another variable or path, and nothing is
+    created or checked on disk here.
     """
     value = (os.environ if environment is None else environment).get(ROOT_ENV)
     if type(value) is not str or not value:
         _fail("root_unset")
-    return os.path.join(_absolute(value, "root_invalid"), *ROOT_SUBDIRS)
+    text = _absolute(value, "root_invalid")
+    if os.name == "nt" and not _WINDOWS_FIXED_PREFIX.fullmatch(os.path.splitdrive(text)[0].replace("/", "\\")):
+        _fail("root_invalid")
+    return os.path.join(text, *ROOT_SUBDIRS)
 
 
 def _lstat(path, kind, expected):

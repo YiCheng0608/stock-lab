@@ -2110,6 +2110,18 @@ class Saving(Case):
             tca._SAVE_LOCK.release()
 
 
+# Windows: neither of these names a fixed location. A rooted path without a drive letter or UNC share resolves against the
+# current drive (cwd); an incomplete UNC would turn our own directory name into a share on another host.
+WINDOWS_ROOTED_NO_DRIVE = (("backslash", "\\foo\\bar"), ("slash", "/foo/bar"), ("mixed", "\\foo/bar"),
+                           ("backslash_only", "\\"), ("slash_only", "/"))
+WINDOWS_INCOMPLETE_UNC = (("two_backslashes", "\\\\"), ("server", "\\\\srv"), ("server_backslash", "\\\\srv\\"),
+                          ("server_mixed", "\\\\srv/"), ("slash_server", "//srv"), ("slash_server_slash", "//srv/"),
+                          ("two_slashes", "//"), ("three_backslashes", "\\\\\\"), ("extended_no_target", "\\\\?\\y"),
+                          ("extended_empty", "\\\\?\\"), ("device_empty", "\\\\.\\"), ("extended_unc_server_only", "\\\\?\\UNC\\srv"),
+                          ("extended_unc_empty_share", "\\\\?\\UNC\\srv\\"))
+WINDOWS_REFUSED = WINDOWS_ROOTED_NO_DRIVE + WINDOWS_INCOMPLETE_UNC
+
+
 class PrivateRootResolution(Case):
     """Issue 114: the private root comes from %LOCALAPPDATA% at call time and fails closed; the policy's
     ``storage.root`` is a pinned historical literal that is never used as a read or write target."""
@@ -2147,6 +2159,21 @@ class PrivateRootResolution(Case):
                 self.assertTrue(tca._same_path(tca.private_root({"LOCALAPPDATA": spelling}), history))
         self.assertFalse(tca._same_path(tca.private_root(), history))  # another account or machine: the root follows the environment
 
+    @unittest.skipUnless(os.name == "nt", "drive letters and UNC shares exist only on Windows")
+    def test_only_a_drive_letter_or_a_complete_unc_share_is_a_root_on_windows(self):
+        for label, value in WINDOWS_REFUSED:
+            with self.subTest(refused=label):
+                for spelling in (value, value + "\\", value + "/"):
+                    self.assertFailure("root_invalid", tca.private_root, {"LOCALAPPDATA": spelling})
+        for value in (FAKE_LOCALAPPDATA, FAKE_LOCALAPPDATA.replace("\\", "/"), "C:\\Fake\\Local", "C:/Fake/Local", "c:\\Fake\\Local\\",
+                      "\\\\server\\share", "\\\\server\\share\\", "\\\\server\\share\\Local", "//server/share/Local", "//server/share",
+                      "\\\\?\\C:\\Fake\\Local", "\\\\.\\C:\\Fake\\Local", "\\\\?\\UNC\\server\\share\\Local"):
+            with self.subTest(resolved=value):
+                resolved = tca.private_root({"LOCALAPPDATA": value})
+                self.assertTrue(os.path.splitdrive(resolved)[0], resolved)  # never decided by the current drive
+                self.assertEqual(os.path.normcase(os.path.normpath(resolved)),
+                                 os.path.normcase(os.path.normpath(os.path.join(value, "taiwan-stock-research", "tpex-calendar-actions-issue98"))))
+
     def test_unset_empty_relative_or_dotdot_localappdata_fails_closed_with_named_codes(self):
         cases = [("absent", {}, "root_unset"), ("none", {"LOCALAPPDATA": None}, "root_unset"),
                  ("empty", {"LOCALAPPDATA": ""}, "root_unset"), ("int", {"LOCALAPPDATA": 5}, "root_unset"),
@@ -2158,7 +2185,8 @@ class PrivateRootResolution(Case):
                  ("dotdot_backslash", {"LOCALAPPDATA": FAKE_LOCALAPPDATA + "\\..\\x"}, "root_invalid"),
                  ("nul", {"LOCALAPPDATA": FAKE_LOCALAPPDATA + "\x00x"}, "root_invalid")]
         if os.name == "nt":
-            cases.append(("drive_relative", {"LOCALAPPDATA": "C:relative"}, "root_invalid"))
+            cases += [("drive_relative", {"LOCALAPPDATA": "C:relative"}, "root_invalid")] + [
+                ("windows_refused_" + label, {"LOCALAPPDATA": value}, "root_invalid") for label, value in WINDOWS_REFUSED]
         for label, environment, code in cases:
             with self.subTest(case=label):
                 self.assertFailure(code, tca.private_root, environment)
@@ -2178,8 +2206,11 @@ class PrivateRootResolution(Case):
                 touched.append(name)
                 raise AssertionError("disk access with an unresolved private root: " + name)
             return refuse
-        for label, value, code in (("unset", None, "root_unset"), ("empty", "", "root_unset"), ("relative", "relative\\dir", "root_invalid"),
-                                   ("dotdot", FAKE_LOCALAPPDATA + "/../x", "root_invalid")):
+        bad = [("unset", None, "root_unset"), ("empty", "", "root_unset"), ("relative", "relative\\dir", "root_invalid"),
+               ("dotdot", FAKE_LOCALAPPDATA + "/../x", "root_invalid")]
+        if os.name == "nt":
+            bad += [("windows_refused_" + label, value, "root_invalid") for label, value in WINDOWS_REFUSED]
+        for label, value, code in bad:
             with self.subTest(case=label), patch.dict(os.environ), patch.object(tca, "_publish", trap("_publish")), \
                     patch.object(tca, "_load_verified", trap("_load_verified")):
                 if value is None:
