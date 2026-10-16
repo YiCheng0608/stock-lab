@@ -129,7 +129,11 @@ CONSUMER = "tpex-calendar-actions-read-v1"
 STORAGE_SCHEMA = "tpex-calendar-actions-saved/v1"
 RECEIPT_SCHEMA = "tpex-calendar-actions-receipt/v1"
 DATA_PREFIX = "tpex-calendar-actions-data/v1:"
-REAL_ROOT = "C:/Users/YiCheng/AppData/Local/taiwan-stock-research/tpex-calendar-actions-issue98"
+# Synthetic stand-in for %LOCALAPPDATA%, never created: every test runs with LOCALAPPDATA pointing here (Case.setUp),
+# so REAL_ROOT is the default private root without any personal path. The module's historical policy literal is
+# tca.POLICY_STORAGE_ROOT and is only ever compared with the published policy bytes.
+FAKE_LOCALAPPDATA = os.path.join(SESSION, "localappdata")
+REAL_ROOT = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "tpex-calendar-actions-issue98")
 ENDPOINT = "https://api.finmindtrade.com/api/v4/data"
 CALENDAR_VERSION = "finmind-trading-dates-checked-against-formal-aug21-sep20-oct4/issue98-v1"
 SYMBOLS = ("3105", "3293", "5274", "5347", "6488", "6510", "8069")
@@ -313,7 +317,7 @@ def policy_dict():
                                      "reference prices is not stated by the sources, hence strictly less than one tick, not equality",
         },
         "storage": {
-            "kind": "private_local_derived_calendar_actions", "schema": STORAGE_SCHEMA, "root": REAL_ROOT,
+            "kind": "private_local_derived_calendar_actions", "schema": STORAGE_SCHEMA, "root": tca.POLICY_STORAGE_ROOT,
             "layout": "<policy_version>/<window_end>/{data.json,receipt.json}", "raw_body": "not_stored",
             "stored": "calendar, per-symbol day states, events, factors, traces and check results; no raw prices",
             "max_data_bytes": 131072, "max_receipt_bytes": 65536, "max_bundles": 1, "max_files": 2, "max_total_bytes": 196608,
@@ -713,6 +717,9 @@ class Case(unittest.TestCase):
 
     def setUp(self):
         self.addCleanup(self._assert_no_residue)  # registered first, so it runs last
+        environment = patch.dict(os.environ, {"LOCALAPPDATA": FAKE_LOCALAPPDATA})  # the default private root is synthetic
+        environment.start()
+        self.addCleanup(environment.stop)
         if self._testMethodName not in self.real_roots_tests:
             patcher = patch.object(tca.CalendarActionsSource, "_check_roots", _cheap_roots)
             patcher.start()
@@ -796,7 +803,9 @@ class PolicyAndGates(Case):
         self.assertEqual((tca.NAMESPACE, tca.POLICY_VERSION, tca.PURPOSE, tca.CONSUMER_VERSION),
                          (NAMESPACE, POLICY_VERSION, PURPOSE, CONSUMER))
         self.assertEqual((tca.STORAGE_SCHEMA, tca.RECEIPT_SCHEMA, tca.DATA_VERSION_PREFIX), (STORAGE_SCHEMA, RECEIPT_SCHEMA, DATA_PREFIX))
-        self.assertEqual(tca.PRIVATE_ROOT, REAL_ROOT)
+        self.assertFalse(hasattr(tca, "PRIVATE_ROOT"))  # no import-time root: it is resolved by private_root() at call time
+        self.assertEqual((tca.ROOT_ENV, tca.ROOT_SUBDIRS), ("LOCALAPPDATA", ("taiwan-stock-research", "tpex-calendar-actions-issue98")))
+        self.assertEqual(tca.private_root(), REAL_ROOT)
         self.assertEqual((tca.WINDOW_START, tca.WINDOW_END, tca.DIVIDEND_END, tca.IDENTITY_AS_OF), (START, END, DIV_END, IDENTITY))
         self.assertEqual((tca.BODY_CAP, tca.RAW_CAP, tca.ROOTS_CAP, tca.REQUEST_SECONDS, tca.BATCH_SECONDS, tca.MAX_GETS),
                          (1048576, 16777216, 33554432, 20, 600, 37))
@@ -1986,10 +1995,10 @@ class Saving(Case):
     def test_the_save_root_can_never_be_the_real_private_root_and_the_default_is_it(self):
         source, _, _ = available()
         self.assertFailure("root_required_for_boundary", source.save)
-        for spelling in (REAL_ROOT, REAL_ROOT.replace("/", "\\"), REAL_ROOT + "/", REAL_ROOT.upper()):
+        for spelling in (REAL_ROOT, REAL_ROOT.replace("/", "\\"), REAL_ROOT.replace("\\", "/"), REAL_ROOT + "/", REAL_ROOT.upper()):
             with self.subTest(spelling=spelling):
                 self.assertFailure("boundary_root_is_private_root", source.save, root=spelling)
-        dotted = REAL_ROOT.replace("taiwan-stock-research/", "taiwan-stock-research/../taiwan-stock-research/")
+        dotted = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "..", "taiwan-stock-research", "tpex-calendar-actions-issue98")
         for bad in ("r", "..", "rel/path", "", "x\x00y", 5, b"bytes", dotted):
             with self.subTest(bad=bad):
                 self.assertFailure("root_invalid", source.save, root=bad)
@@ -2002,7 +2011,7 @@ class Saving(Case):
             self.assertEqual(tca.save_calendar_actions(source), "published")
             self.assertEqual(source.save(root=REAL_ROOT.replace("/", "\\")), "published")
             self.assertEqual(source.save(root=REAL_ROOT), "published")
-        self.assertEqual(seen, [REAL_ROOT, REAL_ROOT, REAL_ROOT])  # whatever spelling was accepted, the target is the fixed path
+        self.assertEqual(seen, [REAL_ROOT, REAL_ROOT, REAL_ROOT])  # whatever spelling was accepted, the target is the resolved private root
 
     def test_resaving_is_idempotent_and_different_content_is_refused(self):
         source, _, _ = available()
@@ -2099,6 +2108,156 @@ class Saving(Case):
             self.assertFailure("storage_busy", source.save, root=self.new_root())
         finally:
             tca._SAVE_LOCK.release()
+
+
+class PrivateRootResolution(Case):
+    """Issue 114: the private root comes from %LOCALAPPDATA% at call time and fails closed; the policy's
+    ``storage.root`` is a pinned historical literal that is never used as a read or write target."""
+
+    def with_localappdata(self, value):
+        """A ``patch.dict`` context in which LOCALAPPDATA is ``value`` (removed when None) and nothing else changes."""
+        patcher = patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        if value is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = value
+
+    def test_the_root_is_derived_from_localappdata_and_spelling_does_not_matter(self):
+        expected = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "tpex-calendar-actions-issue98")
+        spellings = [FAKE_LOCALAPPDATA, FAKE_LOCALAPPDATA + os.sep]
+        if os.name == "nt":
+            spellings += [FAKE_LOCALAPPDATA.replace("\\", "/"), FAKE_LOCALAPPDATA.upper()]
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                self.assertTrue(tca._same_path(tca.private_root({"LOCALAPPDATA": spelling}), expected))
+        self.assertEqual(tca.private_root(), expected)  # default source: os.environ
+        self.assertEqual(tca.private_root({"LOCALAPPDATA": FAKE_LOCALAPPDATA, "APPDATA": "ignored", "USERPROFILE": "ignored"}), expected)
+        self.assertEqual(tca.private_root(os.environ), expected)
+
+    @unittest.skipUnless(os.name == "nt", "drive-letter paths are absolute only on Windows")
+    def test_a_profile_whose_localappdata_matches_the_historical_literal_resolves_to_the_same_directory(self):
+        history = tca.POLICY_STORAGE_ROOT
+        suffix = "/" + "/".join(tca.ROOT_SUBDIRS)
+        self.assertTrue(history.endswith(suffix))
+        profile = history[:-len(suffix)]  # the LOCALAPPDATA that produced the historical literal
+        for spelling in (profile, profile.replace("/", "\\"), profile.replace("/", "\\") + "\\"):
+            with self.subTest(spelling=spelling):
+                self.assertTrue(tca._same_path(tca.private_root({"LOCALAPPDATA": spelling}), history))
+        self.assertFalse(tca._same_path(tca.private_root(), history))  # another account or machine: the root follows the environment
+
+    def test_unset_empty_relative_or_dotdot_localappdata_fails_closed_with_named_codes(self):
+        cases = [("absent", {}, "root_unset"), ("none", {"LOCALAPPDATA": None}, "root_unset"),
+                 ("empty", {"LOCALAPPDATA": ""}, "root_unset"), ("int", {"LOCALAPPDATA": 5}, "root_unset"),
+                 ("bytes", {"LOCALAPPDATA": os.fsencode(FAKE_LOCALAPPDATA)}, "root_unset"),
+                 ("relative", {"LOCALAPPDATA": "relative\\dir"}, "root_invalid"), ("dot", {"LOCALAPPDATA": "."}, "root_invalid"),
+                 ("unexpanded", {"LOCALAPPDATA": "%LOCALAPPDATA%"}, "root_invalid"),
+                 ("dotdot", {"LOCALAPPDATA": os.path.join(FAKE_LOCALAPPDATA, "..", "x")}, "root_invalid"),
+                 ("dotdot_slash", {"LOCALAPPDATA": FAKE_LOCALAPPDATA + "/../x"}, "root_invalid"),
+                 ("dotdot_backslash", {"LOCALAPPDATA": FAKE_LOCALAPPDATA + "\\..\\x"}, "root_invalid"),
+                 ("nul", {"LOCALAPPDATA": FAKE_LOCALAPPDATA + "\x00x"}, "root_invalid")]
+        if os.name == "nt":
+            cases.append(("drive_relative", {"LOCALAPPDATA": "C:relative"}, "root_invalid"))
+        for label, environment, code in cases:
+            with self.subTest(case=label):
+                self.assertFailure(code, tca.private_root, environment)
+        for variable in ("APPDATA", "USERPROFILE", "HOME", "TEMP", "TMP", "TMPDIR", "XDG_DATA_HOME"):  # never a fallback source
+            self.assertFailure("root_unset", tca.private_root, {variable: FAKE_LOCALAPPDATA})
+        self.with_localappdata(None)
+        with patch.dict(os.environ, {"APPDATA": FAKE_LOCALAPPDATA, "USERPROFILE": FAKE_LOCALAPPDATA, "HOME": FAKE_LOCALAPPDATA}):
+            self.assertFailure("root_unset", tca.private_root)
+
+    def test_default_save_and_load_fail_closed_before_any_disk_access_when_the_environment_is_bad(self):
+        source, _, _ = available()
+        boundary_root = self.new_root()
+        touched = []
+
+        def trap(name):
+            def refuse(*args, **kwargs):
+                touched.append(name)
+                raise AssertionError("disk access with an unresolved private root: " + name)
+            return refuse
+        for label, value, code in (("unset", None, "root_unset"), ("empty", "", "root_unset"), ("relative", "relative\\dir", "root_invalid"),
+                                   ("dotdot", FAKE_LOCALAPPDATA + "/../x", "root_invalid")):
+            with self.subTest(case=label), patch.dict(os.environ), patch.object(tca, "_publish", trap("_publish")), \
+                    patch.object(tca, "_load_verified", trap("_load_verified")):
+                if value is None:
+                    os.environ.pop("LOCALAPPDATA", None)
+                else:
+                    os.environ["LOCALAPPDATA"] = value
+                self.assertFailure(code, tca.load_saved)
+                self.assertFailure(code, tca.load_saved, None)
+                self.assertFailure(code, source.save, root=boundary_root)  # a boundary save still compares against the private root
+                source._real = True  # test-only: the default transport's save target
+                try:
+                    self.assertFailure(code, source.save)
+                    self.assertFailure(code, source.save, root=boundary_root)
+                    self.assertFailure(code, tca.save_calendar_actions, source)
+                finally:
+                    source._real = False
+                self.assertFalse(os.path.lexists(boundary_root))
+        self.assertEqual(touched, [])
+        self.assertEqual(os.listdir(os.path.dirname(boundary_root)), [])  # nothing was created next to the boundary root either
+
+    def test_a_load_with_an_explicit_root_never_consults_the_environment(self):
+        for value in (None, "", "relative"):
+            with self.subTest(localappdata=value):
+                self.with_localappdata(value)
+                self.assertFailure("saved_missing", tca.load_saved, self.new_root())  # not root_unset / root_invalid
+        self.assertFailure("root_invalid", tca.load_saved, "relative")  # the explicit root's own validation is unchanged
+
+    def test_the_default_load_reads_the_directory_the_environment_names_and_writes_nothing(self):
+        source, _, _ = available()
+        local = self.new_dir()
+        os.mkdir(os.path.join(local, "taiwan-stock-research"))
+        root = os.path.join(local, "taiwan-stock-research", "tpex-calendar-actions-issue98")
+        first = source.save(root=root)  # an explicit boundary root; the environment still names the synthetic one
+        self.assertFailure("saved_missing", tca.load_saved)  # default root = FAKE_LOCALAPPDATA/..., which does not exist
+        self.assertFalse(os.path.lexists(FAKE_LOCALAPPDATA))
+        self.with_localappdata(local)
+        before = self.tree(local)
+        stamps = {name: os.stat(os.path.join(root, POLICY_VERSION, END, name)).st_mtime_ns for name in ("data.json", "receipt.json")}
+        saved = tca.load_saved(pins=source._pins)  # default root, resolved from LOCALAPPDATA at call time
+        self.assertEqual((saved.data_sha256, saved.data_version), (first.data_sha256, DATA_PREFIX + first.data_sha256))
+        self.assertEqual(self.tree(local), before)
+        self.assertEqual(stamps, {name: os.stat(os.path.join(root, POLICY_VERSION, END, name)).st_mtime_ns
+                                  for name in ("data.json", "receipt.json")})
+
+    def test_the_policy_storage_root_is_a_pinned_historical_literal_apart_from_the_environment(self):
+        published = json.loads(PUBLISHED_POLICY)["storage"]["root"]
+        self.assertEqual(tca.POLICY_STORAGE_ROOT, published)
+        for label, value in (("unset", None), ("empty", ""), ("relative", "relative"), ("synthetic", FAKE_LOCALAPPDATA)):
+            with self.subTest(environment=label):
+                self.with_localappdata(value)
+                self.assertEqual(tca.validate_policy(PUBLISHED_POLICY, PUBLISHED_SHA)["storage"]["root"], published)
+        # Nothing is loosened: storage.root is still compared exactly, so neither the resolved root nor any other value passes.
+        for other in (REAL_ROOT, FAKE_LOCALAPPDATA, published + "/", published.upper(), ""):
+            document = policy_dict()
+            document["storage"]["root"] = other
+            blob, pins = policy_pack(document)
+            with self.subTest(other=other):
+                self.assertEqual(self.assertFailure("policy_value", tca.validate_policy, blob, pins.sha256, pins).diagnostics["field"],
+                                 "storage.root")
+        tree = ast.parse(TCA_FILE.read_text(encoding="utf-8"))
+        expected_policy = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "_expected_policy"]
+        self.assertEqual(len(expected_policy), 1)
+        is_use = lambda node: isinstance(node, ast.Name) and node.id == "POLICY_STORAGE_ROOT" and isinstance(node.ctx, ast.Load)  # noqa: E731
+        self.assertEqual((sum(map(is_use, ast.walk(tree))), sum(map(is_use, ast.walk(expected_policy[0])))), (1, 1))
+
+    def test_importing_the_module_reads_no_environment(self):
+        import importlib.util
+
+        class Spy:
+            def __getattr__(self, name):
+                raise AssertionError("environment touched at import: " + name)
+        name = "app._tca_import_probe"
+        spec = importlib.util.spec_from_file_location(name, TCA_FILE)
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {name: module}), patch.object(os, "environ", Spy()):
+            spec.loader.exec_module(module)
+        self.assertEqual((module.ROOT_ENV, module.ROOT_SUBDIRS), (tca.ROOT_ENV, tca.ROOT_SUBDIRS))
+        self.assertFalse(hasattr(module, "PRIVATE_ROOT"))
 
 
 def stat_mode(path):
@@ -2646,11 +2805,18 @@ class RunnerGuards(Case):
     def test_module_has_no_environment_network_or_foreign_write_surface(self):
         source = TCA_FILE.read_text(encoding="utf-8")
         tree = ast.parse(source)
-        for banned in ("os.environ", "getenv", "urlopen", "requests.", "import socket", "import subprocess", "import shutil",
-                       "import tempfile", "import http", "import ssl", "import urllib"):
+        for banned in ("getenv", "environb", "expandvars", "putenv", "unsetenv", "urlopen", "requests.", "import socket", "import subprocess",
+                       "import shutil", "import tempfile", "import http", "import ssl", "import urllib"):
             self.assertNotIn(banned, source, banned)
         imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
         self.assertEqual(imported, {"hashlib", "math", "os", "re", "secrets", "stat", "threading", "time"})
+        self.assertEqual([node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == "os"], [])
+        # Issue 114: the single environment read is private_root's ``os.environ`` (LOCALAPPDATA), at call time, never at import.
+        environ = [node for node in ast.walk(tree) if isinstance(node, ast.Attribute) and node.attr == "environ"]
+        resolver = [node for function in ast.walk(tree) if isinstance(function, ast.FunctionDef) and function.name == "private_root"
+                    for node in ast.walk(function) if isinstance(node, ast.Attribute) and node.attr == "environ"]
+        self.assertEqual((len(environ), len(resolver)), (1, 1))
+        self.assertEqual(tca.ROOT_ENV, "LOCALAPPDATA")
 
     def test_import_time_calls_are_pure_and_the_hook_blocks_network_foreign_writes_and_processes(self):
         tree = ast.parse(TCA_FILE.read_text(encoding="utf-8"))
