@@ -79,7 +79,7 @@ def _path(value):
         raise AnalysisCaptureError("protected_path")
     if _is_path_alias(path) or any(p.is_symlink() or p.is_junction() for p in (path, *path.parents)):
         raise AnalysisCaptureError("path_alias")
-    if path.exists() and path.stat().st_nlink != 1:
+    if path.exists() and not path.is_dir() and path.stat().st_nlink != 1:
         raise AnalysisCaptureError("path_alias")
     return path
 
