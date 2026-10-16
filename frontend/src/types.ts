@@ -1010,8 +1010,10 @@ export type BacktestSummary = {
 }
 
 export type StrategyRow = {
+  id: number
   name: string
   version: string
+  formula_version: string
   kind: string
   active: boolean
   config: Record<string, unknown>
@@ -1249,4 +1251,73 @@ export type GlossaryTerm = {
   limitations: string
   related: string[]
   version: string
+}
+
+export type OrdinaryCloseTrendClose = { date: string; close: string }
+
+export type OrdinaryCloseTrendValue = {
+  status: 'available' | 'data_insufficient'
+  reasons: string[]
+  exact: string | null
+  display: string | null
+  display_unit: 'TWD_per_share' | 'percent' | 'ratio'
+  display_scale: number
+  display_places: number | null
+  rounding: 'half_up_away_from_zero'
+  window_start?: string
+  window_end?: string
+  count?: number
+  base_date?: string
+  base_close?: string
+  latest_date?: string
+  latest_close?: string
+  ma20_window_start?: string
+  ma20_window_end?: string
+}
+
+export type OrdinaryCloseTrendProvenance = {
+  storage: 'private_local'
+  storage_schema: string
+  consumer_version: string
+  source_policy: { version: string; sha256: string; bytes: number }
+  cutoff: string
+  closes_file: string
+  closes_bytes: number
+  closes_sha256: string
+  receipt_sha256: string
+  saved_at: string
+  calendar: { source_version: string; rows: number; window: { start_date: string; end_date: string }; timezone: string }
+  adapter: Record<string, string>
+  attribution: string
+  rights: Record<string, string>
+  publication_time: string
+  first_availability: string
+  revision_time: string
+  historical_pit: string
+}
+
+export type OrdinaryCloseTrendData = {
+  version: 'ordinary-close-trend/m1-v1'
+  status: 'available' | 'unavailable'
+  origin: 'private_local'
+  exchange: string
+  symbol: string
+  as_of: string | null
+  supported_scope: { cutoff: string; symbols: string[]; market: string; instrument_type: string }
+  price_basis: string
+  unit: string
+  windows: { ma_days: number; return_days: number; return_closes: number }
+  closes: OrdinaryCloseTrendClose[]
+  values: {
+    latest: OrdinaryCloseTrendClose | null
+    ma20: OrdinaryCloseTrendValue
+    return_20d: OrdinaryCloseTrendValue
+    close_over_ma20: OrdinaryCloseTrendValue
+    trend: { status: 'formula_not_defined'; reasons: string[]; exact: null; display: null }
+  } | null
+  provenance: OrdinaryCloseTrendProvenance | null
+  unsupported: string[]
+  limitations: string[]
+  reasons: string[]
+  read_state: { verified: boolean; read_only: boolean; network_requests: number; writes: number }
 }

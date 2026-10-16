@@ -21,6 +21,7 @@ import type {
   PriceLotFocusData,
   PriceSavedFocusData,
   StockPriceSavedFocusData,
+  OrdinaryCloseTrendData,
   PriceFocusDayMove,
   OfficialEventFocusData,
   OfficialEventKind,
@@ -226,6 +227,9 @@ export const getSavedStockPrice = (exchange: string, symbol: string, asOf: strin
 
 export const getSavedFocusStockPrice = (exchange: string, symbol: string, asOf: string) =>
   get<StockPriceSavedFocusData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/saved-focus${queryString({ as_of: asOf })}`)
+
+export const getOrdinaryCloseTrend = (exchange: string, symbol: string, asOf: string) =>
+  get<OrdinaryCloseTrendData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/ordinary-close-trend${queryString({ as_of: asOf })}`)
 
 export const getSavedPriceFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove, minTurnover: string, minRangePct: string) =>
   get<PriceSavedFocusData>(`/focus/price-saved${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)

@@ -93,7 +93,7 @@ class JointEntryTests(unittest.TestCase):
             def close(self):
                 pass
         with fixture() as current:
-            current.validation_baseline = runner.database_snapshot(current)
+            runner.record_validation_baseline(current)
             changes = {"cutoff": "2026-10-06", "saved_source_only": True, "joint_policy_version": entry.POLICY_VERSION, "joint_policy_digest": entry.POLICY_DIGEST}
             for name, prefix in (("price_capture", "policy"), ("price_storage", "private_policy"), ("saved_focus", "saved_focus_policy"), ("institutional", "chips_policy")):
                 changes[prefix + "_version"] = policy["independent_pins"][name]["policy_version"]

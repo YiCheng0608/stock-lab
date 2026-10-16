@@ -143,9 +143,9 @@ function typecheck() {
 
 async function appSSRModule() {
   const result = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'App.tsx')], bundle: true, write: false,
-    platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies],
+    platform: 'node', format: 'cjs', target: 'es2020', jsx: 'automatic', nodePaths: [dependencies], loader: { '.css': 'empty' },
     external: ['react', 'react/*', 'react-dom', 'react-dom/*', '@tanstack/react-query', 'react-router-dom', 'echarts', 'echarts-for-react'],
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api') } })
+    define: { 'import.meta.env': '{}', 'import.meta.env.VITE_API_BASE': JSON.stringify('/api') } })
   const module = new Module(path.join(sourceRoot, '__memory_unit_lots_app__.cjs'))
   module.filename = path.join(sourceRoot, '__memory_unit_lots_app__.cjs')
   module.paths = Module._nodeModulePaths(sourceRoot)
@@ -253,7 +253,7 @@ async function serve() {
   const build = await esbuild.build({ entryPoints: [path.join(sourceRoot, 'main.tsx')], bundle: true, write: false,
     absWorkingDir: path.join(root, 'frontend'), nodePaths: [dependencies], outdir: '__memory_only__',
     platform: 'browser', format: 'esm', target: 'es2020', jsx: 'automatic',
-    define: { 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
+    define: { 'import.meta.env': '{}', 'import.meta.env.VITE_API_BASE': JSON.stringify('/api'), 'process.env.NODE_ENV': JSON.stringify('development') } })
   const script = build.outputFiles.find((file) => file.path.endsWith('.js')).contents
   const css = build.outputFiles.find((file) => file.path.endsWith('.css')).text.replace(/@import\s+(?:url\([^)]*\)|["'][^"']*["'])\s*;/g, '')
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8').replace('src="/src/main.tsx"', 'src="/app.js"')
