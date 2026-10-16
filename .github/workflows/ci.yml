@@ -81,7 +81,9 @@ jobs:
             tests/test_instrument_identity_migration.py \
             tests/test_news_json_defaults.py \
             tests/test_product.py \
-            tests/test_tpex_execution_rules.py
+            tests/test_tpex_execution_rules.py \
+            tests/test_worker_analysis_capture.py \
+            tests/test_signal_artifact_bridge.py
 
   frontend:
     name: frontend
