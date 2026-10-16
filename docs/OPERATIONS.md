@@ -79,7 +79,7 @@ curl.exe -X DELETE "http://127.0.0.1:8000/api/portfolio/<id>"
 
 **殘留**（GET 不檢查）：
 
-- `GET /api/stocks/{exchange}/{symbol}/prices/saved` 與 `…/prices/saved-focus` 讀已保存價格，會消耗讀取預算。
+- 下列 GET 在各自的 env 與 pins 全部通過時，每次讀取都會遞增 `price_saved_focus` 的行程內讀取預算（同一個計數，各端點共用），用盡後回應的 `reasons` 帶 `price_saved_focus_read_budget_exceeded`：`GET /api/stocks/{exchange}/{symbol}/prices/saved-focus`、`GET /api/focus/price-saved`、`GET /api/focus/price-saved-chips`、`GET /api/focus/price-saved-chips-calendar`、`GET /api/focus/price-saved-chips-stock-scope-7`。`GET …/prices/saved` 只重開私人存放區，不耗這個預算。
 - `GET /api/dashboard`、`GET /api/news`、`GET /api/news/{id}` 會呼叫 `sync_news_from_events`，有變更列時 commit，把本機既有的官方 Events 冪等投影成 NewsItem；內容全來自本機既有資料，不由請求決定，外站 no-cors GET 也讀不到回應。
 
 ## 2. 資料庫、migration 與 readiness
