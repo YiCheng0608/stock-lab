@@ -2118,7 +2118,13 @@ WINDOWS_INCOMPLETE_UNC = (("two_backslashes", "\\\\"), ("server", "\\\\srv"), ("
                           ("server_mixed", "\\\\srv/"), ("slash_server", "//srv"), ("slash_server_slash", "//srv/"),
                           ("two_slashes", "//"), ("three_backslashes", "\\\\\\"), ("extended_no_target", "\\\\?\\y"),
                           ("extended_empty", "\\\\?\\"), ("device_empty", "\\\\.\\"), ("extended_unc_server_only", "\\\\?\\UNC\\srv"),
-                          ("extended_unc_empty_share", "\\\\?\\UNC\\srv\\"))
+                          ("extended_unc_empty_share", "\\\\?\\UNC\\srv\\"),
+                          # UNC server empty, share non-empty (\\\share, ///srv/shr): a share name with no host (Obs-4)
+                          ("empty_server_share", "\\\\\\share"), ("empty_server_share_subdir", "\\\\\\share\\Local"),
+                          ("empty_server_srv_shr", "\\\\\\srv\\shr"), ("empty_server_mixed", "\\\\/share"),
+                          ("slash_empty_server_share", "///share"), ("slash_empty_server_share_subdir", "///share/Local"),
+                          ("slash_empty_server_srv_shr", "///srv/shr"), ("slash_empty_server_mixed", "//\\share"),
+                          ("extended_unc_empty_server", "\\\\?\\UNC\\\\share"))
 WINDOWS_REFUSED = WINDOWS_ROOTED_NO_DRIVE + WINDOWS_INCOMPLETE_UNC
 
 
