@@ -224,9 +224,11 @@ def test_create_never_adopts_existing_and_hash_required(research,tmp_path):
     assert not new.exists()
 
 
+from app import migration_revisions
 from app.database_readiness import REVISIONS
 
 FLOOR=REVISIONS.index('0006_news_json_defaults')
+ABSENT=object()
 
 
 def _source_with_markers(tmp_path,source,alembic=(),fallback=()):
@@ -247,15 +249,18 @@ def _revision_markers(shape,revision):
     return (),REVISIONS[:REVISIONS.index(revision)+1]
 
 
-def _readiness_source(monkeypatch,path):
-    """Point capture at a stand-in for app/database_readiness.py (None: not found)."""
-    import types
-    spec=None if path is None else types.SimpleNamespace(origin=str(path))
-    monkeypatch.setattr(capture,'importlib',types.SimpleNamespace(util=types.SimpleNamespace(find_spec=lambda name: spec)))
+def _chain_constant(monkeypatch,value):
+    """Replace app.migration_revisions.REVISIONS for the worker only (ABSENT: delete it)."""
+    if value is ABSENT:
+        monkeypatch.delattr(migration_revisions,'REVISIONS')
+    else:
+        monkeypatch.setattr(migration_revisions,'REVISIONS',value)
 
 
 def test_source_revision_chain_is_the_readiness_single_source():
     assert capture._revision_chain()==tuple(REVISIONS)
+    assert capture._revision_chain() is migration_revisions.REVISIONS is REVISIONS
+    assert not hasattr(capture,'ast') and not hasattr(capture,'importlib')
 
 
 @pytest.mark.parametrize('shape',['alembic','fallback'])
@@ -297,21 +302,24 @@ def test_source_without_known_floor_or_later_revision_fails_closed(research,tmp_
     assert not new.exists()
 
 
-@pytest.mark.parametrize('text,expected',[
-    ('REVISIONS = ("0005_x", "0006_news_json_defaults", "0007_next")\n',("0005_x","0006_news_json_defaults","0007_next")),
-    ('REVISIONS: tuple[str, ...] = ("0006_news_json_defaults",)\n',("0006_news_json_defaults",)),
-    ('X = 1\nREVISIONS = ("0001_a", "0006_news_json_defaults")\nREVISIONS_EXTRA = ()\n',("0001_a","0006_news_json_defaults")),
-    ('REVISIONS = ("0001_a",)\n',None),
-    ('REVISIONS = ["0006_news_json_defaults"]\n',None),
-    ('REVISIONS = ("0006_news_json_defaults", "0006_news_json_defaults")\n',None),
-    ('REVISIONS = tuple(range(3))\n',None),
-    ('OTHER = ("0006_news_json_defaults",)\n',None),
-    ('REVISIONS = (\n',None),
-],ids=['assign','annotated','neighbours','no-floor','list','duplicate','computed','missing','syntax'])
-def test_revision_chain_reads_literal_or_fails_closed(tmp_path,monkeypatch,text,expected):
-    path=tmp_path/'database_readiness.py'
-    path.write_text(text,encoding='utf-8')
-    _readiness_source(monkeypatch,path)
+@pytest.mark.parametrize('value,expected,neighbours',[
+    (("0005_x","0006_news_json_defaults","0007_next"),("0005_x","0006_news_json_defaults","0007_next"),{}),
+    (("0006_news_json_defaults",),("0006_news_json_defaults",),{}),
+    (("0001_a","0006_news_json_defaults"),("0001_a","0006_news_json_defaults"),{'X':1,'REVISIONS_EXTRA':()}),
+    (("0001_a",),None,{}),
+    (["0006_news_json_defaults"],None,{}),
+    (("0006_news_json_defaults","0006_news_json_defaults"),None,{}),
+    (tuple(range(3)),None,{}),
+    (ABSENT,None,{'OTHER':("0006_news_json_defaults",)}),
+    ("0006_news_json_defaults",None,{}),
+    (None,None,{}),
+    ((),None,{}),
+    (("0006_news_json_defaults",b"0007_bytes"),None,{}),
+],ids=['assign','single-floor','neighbours','no-floor','list','duplicate','computed','missing','wrong-type-str','wrong-type-none','empty','bytes-member'])
+def test_revision_chain_reads_constant_or_fails_closed(monkeypatch,value,expected,neighbours):
+    _chain_constant(monkeypatch,value)
+    for name,extra in neighbours.items():
+        monkeypatch.setattr(migration_revisions,name,extra,raising=False)
     if expected is not None:
         assert capture._revision_chain()==expected
         return
@@ -320,23 +328,25 @@ def test_revision_chain_reads_literal_or_fails_closed(tmp_path,monkeypatch,text,
     assert error.value.detail=='revision_chain_unavailable'
 
 
-def test_head_advance_in_readiness_source_makes_new_head_ready(research,tmp_path,monkeypatch):
+def test_head_advance_in_revision_module_makes_new_head_ready(research,tmp_path,monkeypatch):
     source,_,_=research
     head='9999_future_head'
-    path=tmp_path/'database_readiness.py'
-    path.write_text('REVISIONS = '+repr(tuple(REVISIONS)+(head,))+'\n',encoding='utf-8')
     markers=_source_with_markers(tmp_path,source,(head,))
     kwargs=dict(source_snapshot_path=markers,expected_source_sha256=sha(markers))
     with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready'):
         capture.create_research_database(research_database_path=tmp_path/'before.db',**kwargs)
-    _readiness_source(monkeypatch,path)
+    _chain_constant(monkeypatch,tuple(REVISIONS)+(head,))
     owner=capture.create_research_database(research_database_path=tmp_path/'after.db',**kwargs)
     assert owner['kind']==capture.KIND
 
 
-def test_revision_chain_unavailable_blocks_create_before_target(research,tmp_path,monkeypatch):
+@pytest.mark.parametrize('unavailable',['module-absent','constant-missing','wrong-type'])
+def test_revision_chain_unavailable_blocks_create_before_target(research,tmp_path,monkeypatch,unavailable):
     source,_,_=research
-    _readiness_source(monkeypatch,None)
+    if unavailable=='module-absent':
+        monkeypatch.setitem(sys.modules,'app.migration_revisions',None)
+    else:
+        _chain_constant(monkeypatch,ABSENT if unavailable=='constant-missing' else list(REVISIONS))
     new=tmp_path/'nochain.db'
     with pytest.raises(capture.AnalysisCaptureError,match='source_migration_not_ready') as error:
         capture.create_research_database(source_snapshot_path=source,expected_source_sha256=sha(source),research_database_path=new)
@@ -347,7 +357,8 @@ def test_create_has_no_config_import_or_stock_environment(research,tmp_path):
     source,_,_=research
     code=("from worker.analysis_capture import create_research_database; import sys; "
           "create_research_database(source_snapshot_path=sys.argv[1],expected_source_sha256=sys.argv[2],research_database_path=sys.argv[3]); "
-          "assert 'app.config' not in sys.modules; assert 'app.database_readiness' not in sys.modules")
+          "assert 'app.config' not in sys.modules; assert 'app.database_readiness' not in sys.modules; "
+          "assert 'app.migration_revisions' in sys.modules")
     env={k:v for k,v in os.environ.items() if not k.startswith('STOCK_')}
     new=tmp_path/'subprocess.db'
     result=subprocess.run([sys.executable,'-B','-c',code,str(source),sha(source),str(new)],env=env,text=True,encoding="utf-8",capture_output=True)

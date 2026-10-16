@@ -16,19 +16,9 @@ from sqlalchemy import UniqueConstraint
 from . import models  # noqa: F401: populate the mapped metadata without DDL
 from .config import DB_PATH
 from .db import Base
+from .migration_revisions import REVISIONS
 
 
-REVISIONS = (
-    "0001_schema_v1",
-    "0002_instrument_exchange_key",
-    "0003_backtest_run_metadata",
-    "0004_product_news_themes",
-    "0005_news_temporal_contract",
-    "0006_news_json_defaults",
-    "0007_turnover_availability",
-    "0008_portfolio_share_integer",
-    "0009_strategy_formula_version",
-)
 READ_TIMEOUT_SECONDS = 1.0
 _LEGACY_REQUEST_KEY_DDL = re.compile(
     r'\s*CREATE\s+UNIQUE\s+INDEX\s+(?:ix_ingestion_runs_request_key|"ix_ingestion_runs_request_key")'

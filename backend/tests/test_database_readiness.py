@@ -333,6 +333,59 @@ def test_readiness_revision_constants_match_checked_in_single_chain():
     assert tuple(revision.down_revision for revision in chain) == (None, *readiness.REVISIONS[:-1])
 
 
+def test_revision_module_import_loads_no_config_or_database_and_creates_nothing(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    data = tmp_path / "absent-data"
+    env = dict(os.environ, STOCK_DATA_DIR=str(data), STOCK_DB_PATH=str(data / "stock.db"), STOCK_RAW_DIR=str(data / "raw"), PYTHONDONTWRITEBYTECODE="1")
+    env["PYTHONPATH"] = os.pathsep.join([str(root / "backend"), *sys.path])
+    code = (
+        "import sys, app.migration_revisions as revisions\n"
+        "loaded = {'app.config', 'app.database_readiness', 'app.db', 'app.models', 'sqlalchemy'} & set(sys.modules)\n"
+        "assert not loaded, loaded\n"
+        "print(len(revisions.REVISIONS), revisions.REVISIONS[-1])"
+    )
+    result = subprocess.run([sys.executable, "-c", code], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.split() == [str(len(readiness.REVISIONS)), readiness.REVISIONS[-1]]
+    assert not data.exists()
+
+
+def test_revision_module_is_the_single_source_of_every_consumer():
+    from app import migration_revisions, settlement_identity_migration
+
+    backend = Path(__file__).resolve().parents[1]
+    assert readiness.REVISIONS is migration_revisions.REVISIONS
+    assert settlement_identity_migration.REVISIONS == set(migration_revisions.REVISIONS)
+    assert migration_revisions.INSTRUMENT_IDENTITY_REVISIONS == migration_revisions.REVISIONS[1:]
+    assert set(migration_revisions.INSTRUMENT_IDENTITY_REVISIONS) == set(migration_revisions.REVISIONS) - {"0001_schema_v1"}
+    assert "identity_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)" in (backend / "alembic/env.py").read_text(encoding="utf-8")
+    head = migration_revisions.REVISIONS[-1]
+    holders = {
+        path.relative_to(backend).as_posix()
+        for path in [*backend.glob("app/**/*.py"), *backend.glob("worker/**/*.py"), backend / "alembic/env.py"]
+        if head in path.read_text(encoding="utf-8")
+    }
+    assert "app/migration_revisions.py" in holders
+    assert holders <= {"app/migration_revisions.py", "app/migrations.py"}
+
+
+@pytest.mark.parametrize("family, column", [("alembic_version", "version_num"), ("schema_migrations", "version")])
+@pytest.mark.parametrize("revision", readiness.REVISIONS)
+def test_instrument_identity_claim_gate_covers_every_revision_but_0001(revision, family, column):
+    from app import instrument_identity_migration
+
+    engine = create_engine("sqlite://")
+    with engine.connect() as connection:
+        connection.exec_driver_sql(f"CREATE TABLE {family}({column} TEXT PRIMARY KEY)")
+        connection.exec_driver_sql(f"INSERT INTO {family} VALUES (?)", (revision,))
+        if revision == "0001_schema_v1":
+            assert instrument_identity_migration.preflight_instrument_identity(connection) == "absent"
+        else:
+            with pytest.raises(RuntimeError, match="revision requires current identity"):
+                instrument_identity_migration.preflight_instrument_identity(connection)
+    engine.dispose()
+
+
 @pytest.mark.parametrize("ddl", [
     'CREATE UNIQUE INDEX "ix_ingestion_runs_request_key" ON "ingestion_runs" ("request_key") WHERE "request_key" IS NOT NULL',
     'create unique index ix_ingestion_runs_request_key on ingestion_runs(request_key) where request_key is not null',
