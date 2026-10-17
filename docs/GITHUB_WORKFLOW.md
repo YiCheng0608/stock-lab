@@ -132,7 +132,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 
 master ruleset 要求 GitHub Actions `required` 及最新 base；設定以讀回為準，未讀回記未設，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
 
-CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA 按原 AC 驗版本／真操作；可用既有獨立 session，統籌處理意見，不啟付費雲端 AI reviewer。初始回歸涵蓋按[流程檢查](#流程檢查與滾動調整)擴充；真源／磁碟／跨程序／UI 沿本機 gate，不為 CI 縮 AC。CI／helper 變更跑兩產品工作；前端依賴／後端驗證清單各觸發所屬，backend 來源亦驗前端契約。
+CI 不替代本機獨立 review／QA：review 查邏輯／差異／規格，QA 按原 AC 驗版本／真操作；可用既有獨立 session，統籌處理意見，不啟付費雲端 AI reviewer。初始回歸涵蓋按[流程檢查](#流程檢查與滾動調整)擴充；真源／磁碟／跨程序／UI 沿本機 gate，不為 CI 縮 AC。CI／helper 變更跑 backend、standalone、frontend 三項產品工作；前端依賴／後端驗證清單各觸發所屬，backend 來源亦驗前端契約。
 
 ### PR CI 失敗與接手
 
