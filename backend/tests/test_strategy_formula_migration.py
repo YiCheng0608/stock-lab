@@ -20,7 +20,7 @@ from worker import pipeline
 
 FIXTURE = Path(__file__).parent / "fixtures" / "strategy_snapshots_pre_v2.json"
 V1, V2 = domain.INSTITUTIONAL_FLOW_FORMULA_V1, domain.INSTITUTIONAL_FLOW_FORMULA_V2
-HEAD = "0011_schedule_runs"
+HEAD = "0012_news_llm"
 PREVIOUS = "0008_portfolio_share_integer"
 # Alembic is optional in the bundled runtime; without it the upgrade is the SQLAlchemy fallback.
 try:

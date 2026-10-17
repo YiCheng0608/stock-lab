@@ -4,7 +4,7 @@ Each source gets its own ingestion run (run_type ``news``).  A failing feed
 (HTTP error, rate limit, malformed XML) is recorded on that run and the other
 feeds still write.  Existing items are never rewritten, so a rerun keeps the
 first stored ``published_at``.  ``impact_direction`` is always ``unknown``;
-LLM summaries and direction calls are a separate task.
+LLM summaries and direction calls are stored apart by worker.news_llm.
 """
 
 from __future__ import annotations

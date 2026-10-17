@@ -4,7 +4,7 @@ import base64
 import binascii
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
@@ -31,6 +31,7 @@ from .models import (
     Instrument,
     MarketBar,
     NewsItem,
+    NewsLlmResult,
     PortfolioPosition,
     RawPayload,
     Signal,
@@ -862,7 +863,76 @@ def _news_theme_ids(db: Session, item: NewsItem, event: Event | None = None) -> 
     ]
 
 
-def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
+def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
+    """Latest done LLM result per news item (worker.news_llm), in two queries.
+
+    The result is inference, kept apart from source facts; symbol candidates are
+    unverified and rule relations stay in ``symbols``.
+    """
+
+    ids = [item.id for item in items]
+    if not ids:
+        return {}
+    rows = db.scalars(
+        select(NewsLlmResult)
+        .where(NewsLlmResult.news_item_id.in_(ids), NewsLlmResult.llm_status == "done")
+        .order_by(NewsLlmResult.llm_run_at.desc(), NewsLlmResult.id.desc())
+    ).all()
+    latest: dict[int, NewsLlmResult] = {}
+    for row in rows:
+        latest.setdefault(row.news_item_id, row)
+    codes = {
+        str(candidate.get("symbol", "")).partition(":")[2]
+        for row in latest.values()
+        for candidate in row.ai_symbol_candidates_json or []
+    } - {""}
+    names = {
+        (exchange, symbol): name
+        for exchange, symbol, name in db.execute(
+            select(Instrument.exchange, Instrument.symbol, Instrument.name).where(
+                Instrument.symbol.in_(codes)
+            )
+        ).all()
+    } if codes else {}
+    result: dict[int, dict[str, Any]] = {}
+    for news_id, row in latest.items():
+        symbol_candidates = []
+        for candidate in row.ai_symbol_candidates_json or []:
+            exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
+            symbol_candidates.append(
+                {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "name": names.get((exchange, symbol)),
+                    "reason": candidate.get("reason"),
+                    "confidence": candidate.get("confidence"),
+                    "verified": False,
+                }
+            )
+        result[news_id] = {
+            "inference": True,
+            "status": row.llm_status,
+            "summary": row.ai_summary,
+            "symbol_candidates": symbol_candidates,
+            "theme_candidates": row.ai_theme_candidates_json or [],
+            "impact_direction": row.ai_impact_direction,
+            "impact_scope": row.ai_impact_scope,
+            "impact_rationale": row.ai_impact_rationale,
+            "unsupported": row.ai_unsupported,
+            "model": row.llm_model,
+            "prompt_version": row.prompt_version,
+            "input_hash": row.llm_input_hash,
+            "generated_at": as_datetime(row.llm_run_at),
+        }
+    return result
+
+
+def news_dict(
+    db: Session, item: NewsItem, ai: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    # Pass ``ai`` from news_ai_map for a page of items; alone it costs two queries.
+    if ai is None:
+        ai = news_ai_map(db, [item])
     event = db.get(Event, item.event_id) if item.event_id else None
     display_time, time_basis, time_precision = _news_time_view(db, item)
     time_consistency = getattr(item, "time_consistency", None) or "unverified"
@@ -941,6 +1011,7 @@ def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
         "status": item.status,
         "content_hash": item.content_hash,
         "detail_url": f"/news/{item.id}",
+        "ai": ai.get(item.id),
         "provenance": {
             "event_id": item.event_id,
             "raw_payload_id": item.raw_payload_id,
@@ -1104,7 +1175,8 @@ def compact_news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
     linked instruments.
     """
 
-    payload = news_dict(db, item)
+    # The compact projection has no ``ai`` block; skip its queries.
+    payload = news_dict(db, item, ai={})
     return {
         key: payload[key]
         for key in (
@@ -1389,8 +1461,9 @@ def news(
     page = after_cursor[:limit]
     has_more = len(after_cursor) > len(page)
     run, _as_of = latest_official_as_of(db)
+    ai_by_id = news_ai_map(db, page)
     return {
-        "items": [news_dict(db, item) for item in page],
+        "items": [news_dict(db, item, ai_by_id) for item in page],
         "meta": {
             "limit": limit,
             "next_cursor": _encode_news_cursor(db, page[-1]) if has_more and page else None,
@@ -1835,7 +1908,8 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
             .order_by(*_news_order_by())
             .limit(20)
         ).all()
-        payload["news"] = [news_dict(db, item) for item in news_rows]
+        news_ai = news_ai_map(db, news_rows)
+        payload["news"] = [news_dict(db, item, news_ai) for item in news_rows]
         payload["news_cutoff"] = {"as_of": cutoff.isoformat() if cutoff else None,
                                   "filter": "verified_publication_or_event", "limit": 20}
     else:

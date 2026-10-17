@@ -334,7 +334,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
     if connection.dialect.name == "sqlite":
         preflight_instrument_identity(connection)
         preflight_settlement_identity(connection)
-    Base.metadata.create_all(bind=connection)
+    # news_llm_results references news_items, and the 0006 repair below refuses
+    # to rebuild a referenced news_items; create it after that repair (0012).
+    news_llm = Base.metadata.tables["news_llm_results"]
+    Base.metadata.create_all(
+        bind=connection,
+        tables=[table for table in Base.metadata.sorted_tables if table is not news_llm],
+    )
     inspector = inspect(connection)
     # A pre-existing status is authoritative. Only rows from a schema that
     # lacked it receive the one-time legacy classification below.
@@ -388,6 +394,7 @@ def _fallback_upgrade_on_connection(connection) -> None:
             )
         )
         ensure_news_json_server_defaults(connection)
+    news_llm.create(bind=connection, checkfirst=True)
     connection.execute(
         text(
             "CREATE TABLE IF NOT EXISTS schema_migrations "
@@ -460,6 +467,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             f"VALUES ('{SCHEDULE_RUNS_REVISION}', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0012 only adds news_llm_results, created above after the news repair.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0012_news_llm', CURRENT_TIMESTAMP)"
         )
     )
 

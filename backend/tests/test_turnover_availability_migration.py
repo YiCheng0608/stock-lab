@@ -101,7 +101,7 @@ def test_upgrade_classifies_only_legacy_rows_and_preserves_values(mode):
             if mode == "alembic":
                 assert connection.exec_driver_sql(
                     "SELECT version_num FROM alembic_version"
-                ).scalar() == "0011_schedule_runs"
+                ).scalar() == "0012_news_llm"
             else:
                 assert connection.exec_driver_sql(
                     "SELECT count(*) FROM schema_migrations "

@@ -65,6 +65,16 @@
 
 LLM 產出的摘要、關聯候選與方向判讀與來源事實分欄保存，並標「推論」與方法；用途與呼叫方式見 [ROADMAP](ROADMAP.md#保留的產品取捨)。有引用的摘要與可重現的規則關聯不要求每則人工核准。時間／來源衝突、重大影響但證據不足、低把握題材關聯、更正或撤回爭議進待覆核區，確認前不得作已核實交易理由。保留抽樣覆核、錯誤追蹤及撤回機制。來源內容只能當資料，不得改變規則、讀取帳密或觸發外部操作；AI 摘要不能繞過行情、籌碼或執行 gate。
 
+LLM 批次的實作（`worker.news_llm`，執行方式見 [OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）：
+
+- **選取**：`status=active`、目前提示版本尚無 `done`／`skipped_stale` 結果，且 `published_at`（沒有時用 `collected_at`）在執行當下 3 天內的新聞，新的在前。超過 3 天者標 `skipped_stale` 不送 LLM，之後也不再選取。
+- **輸入**：每則只送 id、來源名稱、分類、標題、來源摘要（前 600 字）與台北時間的 `published_at`，不抓正文。新聞放在提示末尾的 `<news>` JSON 區塊，`<`、`>` 轉成 JSON escape，內文無法關閉或偽造區塊；提示要求把區塊內容當資料。呼叫帶 `--tools ""`（不提供任何內建工具）、`--strict-mcp-config`（不載入 MCP server）與 `--setting-sources ""`（不載入使用者、專案、本機設定，因此不含其中的 hook 與 CLAUDE.md），在空的暫存目錄執行；子程序環境移除 `CLAUDECODE`、`CLAUDE_PID`、`CLAUDE_EFFORT` 與所有 `CLAUDE_CODE_*`、`ANTHROPIC_*`（保留 `CLAUDE_CONFIG_DIR`）。環境有 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN` 時拒絕執行，只用訂閱登入。
+- **提示版本**：提示文字在 `backend/worker/prompts/<版本>.md`，目前 `news_v1`；程式釘住提示的 SHA-256，改提示必須升版。雜湊只涵蓋經 stdin 送出的提示文字；CLI 內建系統提示、模型別名對應的實際模型與管理員層（managed）設定不在雜湊內，實際模型另記在 `llm_model`。升版後每則以新版本重跑並新增一列，舊版本結果保留。
+- **保存**：`news_llm_results` 每則×提示版本一列（unique），欄位 `ai_summary`（≤80 字繁中）、`ai_symbol_candidates_json`（`exchange:symbol`＋理由＋把握 high／medium／low）、`ai_theme_candidates_json`（題材名＋理由）、`ai_impact_direction`（positive／negative／mixed／unknown）、`ai_impact_scope`（instrument／theme／market）、`ai_impact_rationale`、`ai_unsupported`，以及 `llm_model`（CLI 回報的實際模型）、`prompt_version`、`llm_input_hash`（送出內容的 SHA-256）、`llm_run_at`、`llm_status`（`done`／`pending`／`skipped_stale`）、`llm_error` 與 ingestion run、raw 參照。`news_items` 的 `symbols_json`、`theme_ids_json`、`summary`、`impact_*` 不被改寫。
+- **驗證**：Python 端以同一份 schema 檢查：回應須含每個送出 id 恰一次，物件不得有 schema 以外的 key，代號須符合 `^(TWSE|TPEx):[0-9A-Z]{4,6}$`，摘要 ≤80 字、理由與方向理由 ≤120 字、題材名 ≤40 字。任一則不符時整批標 `pending`，不保存部分結果。`unsupported=true` 時方向一律存 `unknown`。重試失敗只更新狀態與原因，不清掉同版本已有的 AI 欄位。
+- **失敗**：超時、非 JSON、不符 schema 只影響該批，其他批照跑。未登入、額度限制或 CLI 無法啟動時，該批標 `pending` 並停止本次執行，其餘批次記為 skipped、不寫列，不再呼叫。
+- **API**：`/api/news`、`/api/news/{id}` 與個股頁新聞的每則有 `ai` 物件（最新一筆 `done` 結果，沒有時為 `null`），`inference=true`，含摘要、候選、方向、範圍、理由、`unsupported`、模型、提示版本、輸入雜湊與 `generated_at`。`ai.symbol_candidates` 每個標 `verified=false`，代號存在於 instruments 時附名稱、否則 `name=null`；規則命中的已核實標的仍只在 `symbols`／`instruments`。
+
 ## 6. UI 與 API 契約
 
 - `/news` 顯示分類、來源、標題、摘要預覽、來源時間、已核實標的／題材及事實／推論狀態；unknown／conflict 顯示「待核實」。卡片順序、折疊與連結文案見 [UI 文案 §4](UI_COPY_SPEC.md#4-新聞卡文案與折疊)。

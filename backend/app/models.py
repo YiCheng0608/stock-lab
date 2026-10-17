@@ -536,3 +536,35 @@ class ScheduleRunStep(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     ingestion_run_id: Mapped[int | None] = mapped_column(ForeignKey("ingestion_runs.id"), nullable=True)
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class NewsLlmResult(Base):
+    """LLM inference for one news item under one prompt version (worker.news_llm).
+
+    Kept apart from NewsItem so rule relations (``symbols_json``) and the
+    source summary are never overwritten; a new prompt version adds rows and
+    older rows stay.  ``llm_status`` is ``done`` or ``pending`` (retried later).
+    """
+
+    __tablename__ = "news_llm_results"
+    __table_args__ = (
+        UniqueConstraint("news_item_id", "prompt_version", name="uq_news_llm_item_prompt"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    news_item_id: Mapped[int] = mapped_column(ForeignKey("news_items.id"), index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    llm_input_hash: Mapped[str] = mapped_column(String(64))
+    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    llm_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    llm_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_symbol_candidates_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    ai_theme_candidates_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    ai_impact_direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_impact_scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_impact_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_unsupported: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ingestion_run_id: Mapped[int | None] = mapped_column(ForeignKey("ingestion_runs.id"), nullable=True)
+    raw_payload_id: Mapped[int | None] = mapped_column(ForeignKey("raw_payloads.id"), nullable=True)
