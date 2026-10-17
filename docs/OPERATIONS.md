@@ -167,7 +167,7 @@ python -m worker.cli backtest --start-date 2026-06-10 --end-date 2026-09-08
 | `success` | collect、analyze、evaluate、indicators 都成功（或該步驟回 `no_data`）。 |
 | `partial` | collect 有缺（例如籌碼尚未公布）；後續步驟記 `skipped`，錯誤欄列 collect 警告。 |
 | `non_trading_day` | 官方來源明確回報該週間日無交易。 |
-| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 依賴 analyze；indicators 只依賴 collect）。超過 6 小時仍為 `running` 的列，下一次執行改記 `failed`（abandoned）。 |
+| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 依賴 analyze；indicators 只依賴 collect）。超過 3 小時（與排程單次上限相同）仍為 `running` 的列，下一次執行改記 `failed`（abandoned）；在那之前同日的新執行記 `skipped`（`already_running`）。 |
 | `skipped` | 同目標日已有 `success`／`non_trading_day`（`already_complete`），或另一次執行仍在進行（`already_running`）；不碰資料。 |
 
 indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`；只要 collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 indicators 訊息。

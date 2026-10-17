@@ -173,7 +173,7 @@ def test_running_rows_block_until_stale_then_are_marked_abandoned(database, monk
     assert blocked["status"] == "skipped" and blocked["reason"] == "already_running"
     assert steps.calls == []
     with database() as db:
-        db.execute(update(ScheduleRun).where(ScheduleRun.status == "running").values(started_at=now - timedelta(hours=7)))
+        db.execute(update(ScheduleRun).where(ScheduleRun.status == "running").values(started_at=now - timedelta(hours=4)))
         db.commit()
     assert pipeline.run_daily(DAY)["status"] == "success"
     rows, _ = runs(database)

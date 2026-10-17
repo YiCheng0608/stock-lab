@@ -32,7 +32,8 @@ DAILY_JOB = "daily"
 DAILY_STEPS = ("collect", "analyze", "evaluate", "indicators")
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
-STALE_RUNNING_AFTER = timedelta(hours=6)
+# Matches the scheduled task's 3-hour execution limit.
+STALE_RUNNING_AFTER = timedelta(hours=3)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
 # The indicator batch (V1-G2).  A checkout without the module records the
 # step as not_configured instead of failing the run.
