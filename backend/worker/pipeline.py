@@ -1545,8 +1545,8 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
 # Stored official observations are not rewritten by a routine re-run.  A
 # new row takes every value; an existing row only gains values for fields that
 # are still empty, and a differing non-empty value is kept and reported as a
-# conflict.  ``overwrite`` (collect force=True) restores the replace semantics
-# for an explicit, deliberate refetch.
+# conflict.  ``overwrite`` (collect force=True) replaces stored values for an
+# explicit, deliberate refetch, but an empty incoming value never clears one.
 MAX_RECORDED_VALUE_CONFLICTS = 50
 
 
@@ -1562,13 +1562,46 @@ def _apply_official_values(
     changed = False
     for field_name, value in values.items():
         current = getattr(row, field_name)
-        if is_new or overwrite or current is None:
-            if is_new or current != value:
-                setattr(row, field_name, value)
-                changed = True
-        elif value is not None and current != value and conflicts is not None:
+        if is_new:
+            setattr(row, field_name, value)
+            changed = True
+        elif value is None or current == value:
+            continue
+        elif overwrite or current is None:
+            setattr(row, field_name, value)
+            changed = True
+        elif conflicts is not None:
             conflicts.append({"row": label, "field": field_name, "stored": current, "incoming": value})
     return changed
+
+
+def _apply_official_turnover(
+    bar: MarketBar,
+    record: BarRecord,
+    *,
+    is_new: bool,
+    overwrite: bool,
+    conflicts: list[dict[str, Any]] | None,
+    label: str,
+) -> bool:
+    """Treat turnover, its status and its reason as one observation.
+
+    A stored amount is "empty" when its status is not ``available``; only an
+    incoming ``available`` amount can fill it, and all three fields change
+    together so the status never contradicts the amount.
+    """
+
+    incoming = (record.turnover, record.turnover_status, record.turnover_reason)
+    stored = (bar.turnover, bar.turnover_status, bar.turnover_reason)
+    if not is_new:
+        if record.turnover_status != "available" or stored == incoming:
+            return False
+        if bar.turnover_status == "available" and not overwrite:
+            if conflicts is not None:
+                conflicts.append({"row": label, "field": "turnover", "stored": list(stored), "incoming": list(incoming)})
+            return False
+    bar.turnover, bar.turnover_status, bar.turnover_reason = incoming
+    return True
 
 
 def _upsert_official_bar(
@@ -1590,6 +1623,7 @@ def _upsert_official_bar(
     if is_new:
         bar = MarketBar(instrument_id=instrument.id, trading_date=record.trading_date)
         db.add(bar)
+    label = f"market_bars:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
     changed = _apply_official_values(
         bar,
         {
@@ -1599,16 +1633,16 @@ def _upsert_official_bar(
             "close": record.close,
             "adj_close": record.adj_close or record.close,
             "volume": record.volume,
-            "turnover": record.turnover,
-            "turnover_status": record.turnover_status,
-            "turnover_reason": record.turnover_reason,
             "is_suspended": record.is_suspended,
         },
         is_new=is_new,
         overwrite=overwrite,
         conflicts=conflicts,
-        label=f"market_bars:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}",
+        label=label,
     )
+    changed = _apply_official_turnover(
+        bar, record, is_new=is_new, overwrite=overwrite, conflicts=conflicts, label=label
+    ) or changed
     if changed:
         bar.source = record.source
         bar.data_as_of = _as_datetime(record.data_as_of, record.trading_date)

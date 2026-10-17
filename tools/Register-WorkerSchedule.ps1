@@ -46,6 +46,12 @@ param(
     [string[]]$TaipeiTimes = @('18:30', '21:30'),
     [ValidateRange(1, 12)]
     [int]$IntervalHours = 2,
+    # Passed to Invoke-WorkerJob.ps1 -MinFreeMemoryGB; a full-market analyze
+    # peaks around 5-5.5 GB, while news is light.
+    [ValidateRange(0, 1024)]
+    [double]$DailyMinFreeMemoryGB = 6,
+    [ValidateRange(0, 1024)]
+    [double]$NewsMinFreeMemoryGB = 1,
     [switch]$Unregister
 )
 $ErrorActionPreference = 'Stop'
@@ -77,7 +83,7 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath -PathType Leaf
 }
 $PythonPath = (Resolve-Path -LiteralPath $PythonPath).Path
 if (-not $DataDir) { $DataDir = if ($env:STOCK_DATA_DIR) { $env:STOCK_DATA_DIR } else { Join-Path $env:USERPROFILE 'stock-lab-data' } }
-$DataDir = [IO.Path]::GetFullPath($DataDir)
+$DataDir = [IO.Path]::GetFullPath($DataDir.TrimEnd([char[]]@([char]92, [char]47)))
 if (-not $LogDir) { $LogDir = Join-Path $DataDir 'logs' }
 $LogDir = [IO.Path]::GetFullPath($LogDir)
 if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'stock.db') -PathType Leaf)) {
@@ -103,7 +109,10 @@ if ($Job -eq 'daily') {
         $triggers += New-ScheduledTaskTrigger -Weekly -DaysOfWeek $weekdays -At $local
     }
     $when = "Mon-Fri Taipei {0} (local {1})" -f ($TaipeiTimes -join ', '), ($localTimes -join ', ')
-    $timeLimit = New-TimeSpan -Hours 3
+    # Same as the abandoned-run limit in worker.schedule_runs and clearly
+    # shorter than the 3 hours between the default triggers.
+    $timeLimit = New-TimeSpan -Hours 2 -Minutes 30
+    $minFreeMemoryGB = $DailyMinFreeMemoryGB
 } else {
     $nowTaipei = [TimeZoneInfo]::ConvertTime([DateTime]::Now, $taipei)
     $startTaipei = $nowTaipei.Date.AddHours(([Math]::Floor($nowTaipei.Hour / $IntervalHours) + 1) * $IntervalHours)
@@ -112,6 +121,7 @@ if ($Job -eq 'daily') {
         -RepetitionDuration (New-TimeSpan -Days 3650)
     $when = "every $IntervalHours h from Taipei $($startTaipei.ToString('yyyy-MM-dd HH:mm')) (local $($startLocal.ToString('yyyy-MM-dd HH:mm')))"
     $timeLimit = New-TimeSpan -Minutes 90
+    $minFreeMemoryGB = $NewsMinFreeMemoryGB
 }
 
 $arguments = @(
@@ -122,6 +132,7 @@ $arguments = @(
     '-DataDir', ('"' + $DataDir + '"'),
     '-LogDir', ('"' + $LogDir + '"'),
     '-Trigger', 'scheduler',
+    '-MinFreeMemoryGB', ([string]$minFreeMemoryGB),
     '-GitPull'
 ) -join ' '
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $projectRoot
@@ -137,6 +148,7 @@ Write-Output "Python:   $PythonPath"
 Write-Output "Data:     $DataDir"
 Write-Output "Logs:     $LogDir\$Job-YYYYMMDD.log"
 Write-Output "Trigger:  $when"
+Write-Output "Limits:   run at most $timeLimit; skip below $minFreeMemoryGB GB free memory"
 if ($PSCmdlet.ShouldProcess("$taskPath$taskName", 'Register scheduled task')) {
     Register-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Action $action -Trigger $triggers `
         -Settings $settings -Principal $principal -Description $description -Force | Out-Null

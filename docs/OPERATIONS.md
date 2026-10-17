@@ -146,14 +146,14 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 | 工作 | 觸發 | 動作 |
 | --- | --- | --- |
-| `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `tools/Invoke-WorkerJob.ps1 -Job daily -GitPull`，單次上限 3 小時 |
-| `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | `tools/Invoke-WorkerJob.ps1 -Job news -GitPull`，單次上限 90 分鐘 |
+| `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `tools/Invoke-WorkerJob.ps1 -Job daily -GitPull -MinFreeMemoryGB 6`（註冊參數 `-DailyMinFreeMemoryGB`），單次上限 2.5 小時 |
+| `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | `tools/Invoke-WorkerJob.ps1 -Job news -GitPull -MinFreeMemoryGB 1`（註冊參數 `-NewsMinFreeMemoryGB`），單次上限 90 分鐘 |
 
 兩個工作都以目前使用者、互動式登入、一般權限、隱藏視窗執行，不存密碼，使用者登入時才跑；錯過的時段在登入後補跑（StartWhenAvailable）；前一次未結束不另起新執行個體。主機不在台灣時區時腳本自動換算本機時間。
 
 休市日不寫進觸發：週間無交易日時官方來源回 no-data，run 記為 `non_trading_day`。三大法人與融資公布時間晚於收盤且不固定，18:30 若因缺這些資料而 collect 為 `partial`，analyze 不會執行，由 21:30 補齊；當日已完成後的 21:30 只記一列 `skipped`（`already_complete`）。
 
-**起跑前檢查**（`Invoke-WorkerJob.ps1`）：可用實體記憶體低於 `-MinFreeMemoryGB`（預設 8）記 `low_memory`；發佈 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`；`git pull --ff-only` 失敗記 `git_pull_failed`。三者都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze 單次峰值約 5～5.5 GB（2026-10-17 本機實測），記憶體門檻不宜低於此值。
+**起跑前檢查**（`Invoke-WorkerJob.ps1`）：可用實體記憶體低於 `-MinFreeMemoryGB`（直接執行時預設 8；註冊時 daily 6、news 1）記 `low_memory`；發佈 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`；`git pull --ff-only` 失敗記 `git_pull_failed`。三者都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze 單次峰值約 5～5.5 GB（2026-10-17 本機實測），daily 的門檻不宜低於此值。
 
 ### 6.3 日誌與 run 記錄
 
@@ -166,7 +166,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | `success` | collect、analyze、evaluate、indicators 都成功（或該步驟回 `no_data`）。 |
 | `partial` | collect 有缺（例如籌碼尚未公布）；後續步驟記 `skipped`，錯誤欄列 collect 警告。 |
 | `non_trading_day` | 官方來源明確回報該週間日無交易。 |
-| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 依賴 analyze；indicators 只依賴 collect）。超過 3 小時（與排程單次上限相同）仍為 `running` 的列，下一次執行改記 `failed`（abandoned）；在那之前同日的新執行記 `skipped`（`already_running`）。 |
+| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 依賴 analyze；indicators 只依賴 collect）。run 列記錄執行的主機與 PID；同主機的新執行發現該 PID 已不存在（例如被系統終止）時，立即把舊列改記 `failed`（abandoned）並照常執行；其他情況要超過 2.5 小時（與排程單次上限相同，小於 18:30 與 21:30 的間隔）仍為 `running` 才記 abandoned，在那之前同日的新執行記 `skipped`（`already_running`）。 |
 | `skipped` | 同目標日已有 `success`／`non_trading_day`（`already_complete`）、另一次執行仍在進行（`already_running`），或起跑前檢查未通過（`low_memory`／`git_busy`／`git_pull_failed`）；不碰資料。 |
 
 indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`；只要 collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 indicators 訊息。

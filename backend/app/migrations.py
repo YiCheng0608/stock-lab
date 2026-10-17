@@ -275,15 +275,6 @@ def _strategy_formula_state(connection) -> str:
 SCHEDULE_RUNS_REVISION = "0011_schedule_runs"
 
 
-def ensure_schedule_run_tables(connection) -> None:
-    """Create the scheduled-job run log tables when they are absent."""
-
-    from .models import ScheduleRun, ScheduleRunStep
-
-    ScheduleRun.__table__.create(bind=connection, checkfirst=True)
-    ScheduleRunStep.__table__.create(bind=connection, checkfirst=True)
-
-
 def ensure_strategy_formula_version(connection) -> bool:
     """Add ``strategy_versions.formula_version`` and widen the unique identity.
 
@@ -464,7 +455,7 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0010_technical_indicators', CURRENT_TIMESTAMP)"
         )
     )
-    ensure_schedule_run_tables(connection)
+    # 0011 only adds schedule_runs/schedule_run_steps, also made by create_all.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "

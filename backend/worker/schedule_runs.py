@@ -18,6 +18,9 @@ stored value.
 from __future__ import annotations
 
 import importlib
+import os
+import socket
+import sys
 import traceback
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
@@ -32,8 +35,10 @@ DAILY_JOB = "daily"
 DAILY_STEPS = ("collect", "analyze", "evaluate", "indicators")
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
-# Matches the scheduled task's 3-hour execution limit.
-STALE_RUNNING_AFTER = timedelta(hours=3)
+# Equal to the scheduled task's execution limit and clearly shorter than the
+# 3 hours between the 18:30 and 21:30 triggers.  On the same host a dead PID
+# is detected immediately, without waiting for this limit.
+STALE_RUNNING_AFTER = timedelta(hours=2, minutes=30)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
 # Reasons the scheduler wrapper may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
@@ -192,10 +197,49 @@ def _finish(run_id: int, status: str, *, records: int, error: str | None, summar
         db.commit()
 
 
+def _pid_alive(pid: int) -> bool:
+    """Whether a process with this id exists on this host."""
+
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _abandoned_reason(row: ScheduleRun, now: datetime, host: str) -> str | None:
+    if row.host == host and row.pid is not None and not _pid_alive(row.pid):
+        return f"abandoned: process {row.pid} on {host} is no longer running"
+    if row.started_at and now - row.started_at > STALE_RUNNING_AFTER:
+        return "abandoned: no finish was recorded within " + str(STALE_RUNNING_AFTER)
+    return None
+
+
 def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, Any] | None]:
     """Create the run row; return a finished result when nothing should run."""
 
     now = _utcnow()
+    host = socket.gethostname()
     with pipeline.SessionLocal() as db:
         previous = db.scalars(
             select(ScheduleRun)
@@ -206,14 +250,23 @@ def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, 
         for row in previous:
             if row.status != "running":
                 continue
-            if row.started_at and now - row.started_at > STALE_RUNNING_AFTER:
+            abandoned = _abandoned_reason(row, now, host)
+            if abandoned:
                 row.status = "failed"
-                row.error = "abandoned: no finish was recorded within " + str(STALE_RUNNING_AFTER)
+                row.error = abandoned
                 row.finished_at = now
             elif active is None:
                 active = row
         complete = next((row for row in previous if row.status in COMPLETE_STATUSES), None)
-        run = ScheduleRun(job=DAILY_JOB, target_date=target, trigger=trigger, status="running", started_at=now)
+        run = ScheduleRun(
+            job=DAILY_JOB,
+            target_date=target,
+            trigger=trigger,
+            status="running",
+            started_at=now,
+            host=host,
+            pid=os.getpid(),
+        )
         db.add(run)
         db.flush()
         skip_reason = None

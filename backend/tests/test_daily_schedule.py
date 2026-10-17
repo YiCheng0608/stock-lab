@@ -1,6 +1,9 @@
 """Daily schedule run log, re-run idempotency and historical backfill fetch plan."""
 
+import os
 import socket
+import subprocess
+import sys
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -419,3 +422,150 @@ def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_th
     assert [(row.status, row.summary_json.get("reason")) for row in rows] == [("skipped", "low_memory"), ("success", None)]
     with pytest.raises(ValueError):
         schedule_runs.record_preflight_skip(DAY, reason="unknown")
+
+
+def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkeypatch):
+    steps = Steps(monkeypatch)
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    now = datetime.utcnow()
+    with database() as db:
+        db.add(ScheduleRun(job="daily", target_date=DAY, trigger="scheduler", status="running",
+                           started_at=now, host=socket.gethostname(), pid=os.getpid()))
+        db.commit()
+    # A live owner on this host still blocks a second trigger.
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+    with database() as db:
+        db.execute(update(ScheduleRun).where(ScheduleRun.status == "running").values(pid=dead.pid))
+        db.commit()
+    # The 18:30 process was killed: the 21:30 trigger reruns well before the time limit.
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    assert steps.calls == ["collect", "analyze", "evaluate", "indicators"]
+    rows, _ = runs(database)
+    assert rows[0].status == "failed" and f"process {dead.pid}" in rows[0].error
+    assert rows[-1].host == socket.gethostname() and rows[-1].pid == os.getpid()
+
+
+def test_running_row_from_another_host_waits_for_the_time_limit(database, monkeypatch):
+    Steps(monkeypatch)
+    with database() as db:
+        db.add(ScheduleRun(job="daily", target_date=DAY, trigger="scheduler", status="running",
+                           started_at=datetime.utcnow() - timedelta(hours=2), host="other-host", pid=1))
+        db.commit()
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+
+
+def test_cli_schedule_runs_and_daily_exit_codes(monkeypatch, capsys):
+    import json as json_module
+
+    import worker.cli as cli
+
+    monkeypatch.setattr(cli, "list_schedule_runs", lambda limit, target: [])
+    monkeypatch.setattr(sys, "argv", ["worker.cli", "schedule-runs"])
+    cli.main()  # must not raise on a list result
+    assert json_module.loads(capsys.readouterr().out) == []
+    for status, code in (("success", 0), ("partial", 2), ("failed", 1), ("non_trading_day", 0)):
+        monkeypatch.setattr(cli, "run_daily", lambda *args, _status=status, **kwargs: {"status": _status})
+        monkeypatch.setattr(sys, "argv", ["worker.cli", "daily", "--date", DAY.isoformat()])
+        with pytest.raises(SystemExit) as exited:
+            cli.main()
+        assert exited.value.code == code
+
+
+
+def _bar_record(**overrides):
+    values = dict(symbol="1101", trading_date=DAY, open=10.0, high=11.0, low=9.5, close=10.5, volume=1000,
+                  turnover=0.0, turnover_status="unavailable", turnover_reason="missing")
+    values.update(overrides)
+    return sources.BarRecord(**values)
+
+
+def test_turnover_amount_status_and_reason_change_together(database):
+    with database() as db:
+        instrument = Instrument(symbol="1101", name="fixture", exchange="TWSE", instrument_type="stock")
+        db.add(instrument)
+        db.flush()
+
+        def upsert(record, *, overwrite=False):
+            conflicts = []
+            bar = pipeline._upsert_official_bar(db, instrument, record, None, overwrite=overwrite, conflicts=conflicts)
+            db.flush()
+            return (bar.turnover, bar.turnover_status, bar.turnover_reason), conflicts
+
+        assert upsert(_bar_record())[0] == (0.0, "unavailable", "missing")
+        # An available amount fills the empty group as a whole.
+        available = _bar_record(turnover=10500.0, turnover_status="available", turnover_reason=None)
+        assert upsert(available)[0] == (10500.0, "available", None)
+        # An unavailable re-fetch never downgrades it, with or without force.
+        assert upsert(_bar_record())[0] == (10500.0, "available", None)
+        assert upsert(_bar_record(), overwrite=True)[0] == (10500.0, "available", None)
+        # A different available amount is a conflict unless forced.
+        revised = _bar_record(turnover=11000.0, turnover_status="available", turnover_reason=None)
+        state, conflicts = upsert(revised)
+        assert state == (10500.0, "available", None) and [item["field"] for item in conflicts] == ["turnover"]
+        assert upsert(revised, overwrite=True)[0] == (11000.0, "available", None)
+
+
+def test_forced_refetch_keeps_values_the_source_left_empty(database):
+    with database() as db:
+        instrument = Instrument(symbol="1101", name="fixture", exchange="TWSE", instrument_type="stock")
+        db.add(instrument)
+        db.flush()
+        instruments = {("TWSE", "1101"): instrument}
+        full = sources.ChipRecord(symbol="1101", trading_date=DAY, foreign_buy=10, trust_buy=2, dealer_buy=1,
+                                  margin_balance=500, margin_change=5)
+        pipeline._upsert_official_chip(db, full, instruments, None, overwrite=True)
+        db.flush()
+        partial = sources.ChipRecord(symbol="1101", trading_date=DAY, foreign_buy=12, trust_buy=2, dealer_buy=1)
+        pipeline._upsert_official_chip(db, partial, instruments, None, overwrite=True)
+        db.flush()
+        chip = db.scalar(select(ChipSnapshot).where(ChipSnapshot.instrument_id == instrument.id))
+        assert (chip.foreign_buy, chip.margin_balance, chip.margin_change) == (12, 500, 5)
+
+
+def test_chunked_backfill_is_not_success_when_a_window_failed(monkeypatch):
+    results = iter([
+        {"id": 1, "status": "partial", "error": None,
+         "metadata": {"completed_dates": ["2024-10-14"], "skipped_non_trading_dates": ["2024-10-31"]}},
+        {"id": 2, "status": "failed", "error": "scope resolved to no active instruments", "metadata": {}},
+    ])
+    monkeypatch.setattr(backfill, "targeted_backfill", lambda *args, **kwargs: next(results))
+    result = backfill.chunked_backfill(date(2024, 10, 14), date(2025, 3, 1), adapter=object())
+    assert result["partial_dates"] == [] and result["failed_dates"] == []
+    assert result["status"] == "partial"
+    # A window that is partial only because of non-trading dates counts as complete.
+    results = iter([
+        {"id": 3, "status": "partial", "error": None,
+         "metadata": {"completed_dates": ["2024-10-14"], "skipped_non_trading_dates": ["2024-10-31"]}},
+    ])
+    assert backfill.chunked_backfill(date(2024, 10, 14), date(2024, 11, 1), adapter=object())["status"] == "success"
+
+
+def test_0011_migration_matches_the_mapped_schedule_tables(database):
+    from sqlalchemy import text as sql_text
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import Base
+
+    def shape(connection):
+        result = {}
+        for table in ("schedule_runs", "schedule_run_steps"):
+            columns = [tuple(row[1:6]) for row in connection.execute(sql_text(f"PRAGMA table_info({table})"))]
+            indexes = {}
+            for row in connection.execute(sql_text(f"PRAGMA index_list({table})")):
+                cols = [info[2] for info in connection.execute(sql_text(f"PRAGMA index_info('{row[1]}')"))]
+                indexes[tuple(cols)] = bool(row[2])
+            fks = sorted(tuple(row[2:5]) for row in connection.execute(sql_text(f"PRAGMA foreign_key_list({table})")))
+            result[table] = (columns, indexes, fks)
+        return result
+
+    with database() as db:
+        migrated = shape(db.connection())
+    mapped_engine = create_engine("sqlite://", poolclass=StaticPool)
+    try:
+        Base.metadata.create_all(mapped_engine)
+        with mapped_engine.connect() as connection:
+            mapped = shape(connection)
+    finally:
+        mapped_engine.dispose()
+    assert migrated == mapped

@@ -1798,9 +1798,19 @@ def chunked_backfill(
     # A date retried successfully in a later window is no longer missing.
     partial -= completed
     failed -= completed
-    # Verified non-trading dates are not gaps; only failed or partial
-    # sessions make the multi-window result incomplete.
-    if not (partial or failed):
+
+    def window_complete(run: dict[str, Any]) -> bool:
+        # targeted_backfill reports "partial" when a window merely contains
+        # verified non-trading dates; that window is still complete.  Any
+        # other status, an error or a missing date is not.
+        return (
+            run["status"] in {"success", "partial"}
+            and not run["error"]
+            and not run["partial_dates"]
+            and not run["failed_dates"]
+        )
+
+    if not (partial or failed) and all(window_complete(run) for run in runs):
         status = "success"
     elif completed:
         status = "partial"

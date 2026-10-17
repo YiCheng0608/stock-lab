@@ -515,6 +515,10 @@ class ScheduleRun(Base):
     records: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The process that owns a running row, so a later trigger on the same
+    # host can tell a live run from one whose process was killed.
+    host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ScheduleRunStep(Base):

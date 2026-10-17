@@ -111,7 +111,7 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
-    if result.get("status") == "failed" and args.command == "themes":
+    if args.command == "themes" and isinstance(result, dict) and result.get("status") == "failed":
         raise SystemExit(1)
 
 

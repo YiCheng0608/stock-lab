@@ -63,7 +63,7 @@ $PythonPath = (Resolve-Path -LiteralPath $PythonPath).Path
 
 if (-not $DataDir) { $DataDir = $env:STOCK_DATA_DIR }
 if (-not $DataDir) { $DataDir = Join-Path $env:USERPROFILE 'stock-lab-data' }
-$DataDir = [IO.Path]::GetFullPath($DataDir)
+$DataDir = [IO.Path]::GetFullPath($DataDir.TrimEnd([char[]]@([char]92, [char]47)))
 if (-not $LogDir) { $LogDir = Join-Path $DataDir 'logs' }
 $LogDir = [IO.Path]::GetFullPath($LogDir)
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
