@@ -119,14 +119,14 @@
 | `feature-card` | 同 card，可點擊；hover 邊線轉主色、上移 4px、陰影 `--shadow-hover`。左上 48px 圓角 12px 圖示底（主色 20% 透明），圖示用主色線條。 |
 | `market-widget` | 小型數據方塊：底 card 色、圓角 12px、padding 16px；上方 muted 標籤，中間 mono 主數字，下方漲跌。 |
 | `stat-value` | 統計數字：mono、24px、600。 |
-| `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
+| `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error；`accent` 變體（只用於「AI 推論」）邊線與圓點用 `--color-accent`、文字維持主文字色以保對比。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
 | `btn-primary` | 漸層 `135deg, --color-primary → --color-primary-dark`，白字 600，圓角 10px，padding 14px 28px；hover 上移 2px 加 `--shadow-btn`。每個畫面最多一個主按鈕。 |
 | `btn-secondary` | 透明底、1px `--color-border`、主文字色，圓角 10px；hover 底轉 card 色、邊線轉主文字色。 |
 | `btn-ghost` | 無邊無底 muted 文字，hover 轉主文字色；用於導航與表格內動作。 |
 | 表格 | 容器用 card；表頭 14px muted、底邊 1px；列高 56px、底邊 1px `--color-border`、最後一列無邊；hover 列底 `--color-bg-elevated`；數字欄靠右 mono；每列右側可放一個小的 `btn-primary`（text-sm、padding 8px 16px）或 ghost 連結。 |
 | 列表項（個股列） | 左：40px 圓角方塊顯示代號前綴或產業縮寫（`--color-bg-elevated`）＋代號（600）與名稱（muted 14px）；右：價格（mono）與漲跌（色＋正負號）。 |
 | 輸入框 | 底 `--color-bg-alt`、1px 邊、圓角 8px、padding 12px 16px；focus 邊線轉主色，無外框光暈。 |
-| 分頁籤（tabs） | 文字 tabs，選中者主文字色加 2px 主色底線；用於指標面板（MACD／RSI／KD／布林）、新聞國內／國際、族群產業／題材。 |
+| 分頁籤（tabs） | 文字 tabs，選中者主文字色加 2px 主色底線；用於指標面板（MACD／RSI／KD／布林）、新聞國內／國際／官方公告、族群產業／題材。 |
 | 空狀態 | 卡片內置中 muted 文字「無資料」加一行原因（如「日線不足 60 根」），不用插圖。 |
 | 載入 | 卡片骨架（`--color-bg-elevated` 條塊，淡入淡出），不用旋轉圖示。 |
 | Toast／錯誤 | 右上角 card 樣式，左側 4px 色條（success／warning／error）。 |

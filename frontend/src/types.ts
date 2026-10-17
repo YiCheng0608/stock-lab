@@ -696,6 +696,32 @@ export type NewsItem = {
     data_as_of: string | null
   }
   detail_url?: string
+  // Latest done LLM result (worker.news_llm, NEWS_SPEC §5); null until one exists. Absent on older servers.
+  ai?: NewsAi | null
+}
+
+// LLM inference kept apart from source facts: candidates are never verified relations.
+export type NewsAi = {
+  inference: true
+  status: 'done' | string
+  summary: string | null
+  symbol_candidates: Array<{
+    exchange: string
+    symbol: string
+    name: string | null
+    reason: string | null
+    confidence: 'high' | 'medium' | 'low' | string | null
+    verified: false
+  }>
+  theme_candidates: Array<{ theme: string; reason: string | null }>
+  impact_direction: 'positive' | 'negative' | 'mixed' | 'unknown' | string | null
+  impact_scope: 'instrument' | 'theme' | 'market' | string | null
+  impact_rationale: string | null
+  unsupported: boolean | null
+  model: string | null
+  prompt_version: string | null
+  input_hash: string | null
+  generated_at: string | null
 }
 
 // Group boards (docs/V1_SPEC.md hot_group_v1): GET /api/themes?board=industry|theme&limit=N.
