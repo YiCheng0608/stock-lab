@@ -127,7 +127,7 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 | `repository` | 每 PR／master push 驗 diff 空白、變更檔 UTF-8、Python／JSON／YAML 語法、Markdown 相對檔案連結；Python 另驗 Ruff E9／F63／F7／F82。外部 URL／anchor／語意由 review 核，不批量改既有風格。 |
 | `backend` | backend／工具／CI／驗證依賴及後端測試讀取的前端與文件路徑（`tools/ci/checks.py` `BACKEND_READ_*`）變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 `backend/tests` 全目錄 pytest（tmp SQLite、測試設計不取源、無此 guard；含 Node 22 與 pnpm 前置），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)由 conftest 排除，改由 `standalone` 執行。不證真源、磁碟。 |
 | `standalone` | 與 `backend` 同觸發、並行：conftest `STANDALONE_ONLY` 各檔依 README 表的契約指令執行（RAM fixture／fake transport，audit hook 禁寫檔／外網）。需固定根或私人根、`--serve`、seal、真實 GET 的模式，以及已被 W8 取代而在現行產品必然失敗的歷史模式（`test_institutional_windows.py` 無參數、`--api-only`、`--w3`～`--w7`）不進 CI，逐項註解於 ci.yml。不證真源、磁碟、完整 UI。 |
-| `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
+| `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、`frontend/src` 全部 `*.test.ts(x)`（含 `.test.tsx`）以 esbuild 在記憶體逐檔執行（jsx 與 tsconfig 一致）、TypeScript／Vite build。每檔須列於 [`ci-test.cjs`](../frontend/scripts/ci-test.cjs)（執行或具名排除並寫理由），未列、清單過期或未驅動的 `run*` 匯出即失敗。不證可信瀏覽器、真源，也不取代 preview 的 pinned Node／policy 摘要與 serve／HTTP 檢查。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 
 master ruleset 要求 GitHub Actions `required` 及最新 base；設定以讀回為準，未讀回記未設，不以 YAML 存在冒設定。workflow 無 paths-ignore；文件-only 跑 repository／required，省產品測試。master CI 失敗按 AGENTS 停整合／原單退修。
