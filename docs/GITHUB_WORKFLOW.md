@@ -42,7 +42,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)，`Closes #<issue>`，附驗證結果與截圖（前端）。看板設 Review。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；統籌關工程師 terminal、刪遠端與本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；統籌關工程師 terminal、刪遠端與本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。
 
 ## 本機檢查
 
@@ -64,30 +64,41 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 
 ## 統籌 session
 
-同時只有一個統籌。使用者手動開啟與統籌自行換手都用同一組指令，在 `master` 管理 checkout 開可見 terminal：
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時由看門狗（[OPERATIONS §6.1](OPERATIONS.md#61-統籌看門狗)）開；兩者都沒有時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（資料目錄見 [OPERATIONS §6](OPERATIONS.md#6-排程)）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請寫心跳檔並依手冊巡檢」；否則在 `master` 管理 checkout 開可見 terminal：
 
 ```text
 orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort medium --autocompact 400k" --json
 orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 orca terminal send --terminal <handle> --text "<接手文>" --enter --json
+orca terminal rename --terminal <handle> --title "統籌" --json
 ```
 
-`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。接手文固定如下，直接貼上：
+`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，心跳記的舊 terminal 已不存在時刪掉最後一句；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 的最新決策、所有 open Issues 與 PR。接著：掛 GitHub 背景監看與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」；然後依手冊推進進行中與待辦任務。回覆使用者一律繁體中文。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；回覆所有最後一則是工程師提問且無統籌回覆的 Issue；兌現前任在 Issue 標「統籌承諾」的事；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
 ```
+
+**自動換手機制**（統籌 session 自己執行，不需要人在場）：
+
+1. 偵測：壓縮次數由 repo 的 PreCompact hook（`.claude/settings.json` → `tools/ops/compact_hook.sh`）自動寫進 `<資料目錄>/logs/compactions/<session id>.count`，不靠模型記得。巡檢第一步寫心跳檔（`session_id`、`terminal_handle`、`written_at`），第二步讀自己的計數檔；達 2 次、或自覺對不上 Issue 與文件，就換手。
+2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），停掉自己的巡檢 cron 與監看，之後不再合併、派工、留言；再照上面四行開新 session 並送接手文（含自己的 handle）。
+3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、重掛監看與巡檢，在 #1 記「換手失敗：<新 handle>」，下次巡檢再試。
+4. 收尾：新統籌在 #1 留言並寫心跳檔後，確認舊 terminal 閒置再關掉它。
+5. 不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並重掛監看，換手前後的留言都由它接續。
+6. 看門狗以心跳檔判定：60 分鐘無心跳且 terminal 仍在就送喚醒文；120 分鐘無心跳或 terminal 消失就照本節開新統籌。腳本 `tools/ops/ensure_coordinator.sh`、排程 `tools/ops/Register-Watchdog.ps1`，註冊、查詢、停用與日誌見 [OPERATIONS §6.1](OPERATIONS.md#61-統籌看門狗)。
 
 ## 無人值守運作
 
-使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 與看板。
+使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 本文與看板。
 
-- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢：監看是否存活、open PR 的 CI 與合併、進行中 Issue 的提問、名額空缺就派工、背景工作是否卡住。兩者到期或 session 更換時重掛。
-- **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。
-- **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。
-- **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 或對應文件，不留在對話。
-- **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。做法與[開啟統籌 session](#統籌-session)相同，由現任統籌執行；新 session 在 #1 留言後，舊 session 停止對 repo 的所有操作。不寫交接文件、不設任期。
-- **前提與限制**：本機與 Orca 保持開機登入；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
+- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢，固定順序：寫心跳檔 → 讀計數檔與換手標記 → 監看是否存活 → open PR 的 CI 與合併 → 進行中 Issue 的提問 → 名額空缺就派工 → 背景工作是否卡住。監看到期重掛時 `since` 取上次監看啟動時間，不取現在。
+- **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。台北 18:30～21:30 是排程 `daily` 時段：不派新工、不跑全套 pytest、不跑全市場 analyze。
+- **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更、正式資料位置）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。
+- **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 留言並同步更新 #1 本文的決策索引（只列仍有效的決策、待使用者事項與現任統籌，每條附留言連結）。
+- **統籌承諾**：統籌對工程師做出偏離手冊的承諾（例如合併後先不清 worktree）時，在該 Issue 的留言開頭標「統籌承諾」；換手後由新統籌兌現。
+- **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。
+- **前提與限制**：本機與 Orca 保持開機登入；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗，由看門狗喚醒；合併把關為 CI＋統籌 review＋高風險項獨立 review。
 
 ## 失敗處理
 
@@ -104,4 +115,4 @@ orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 
 ## 排程
 
-V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §8](OPERATIONS.md#8-排程)。排程失敗以 Issue 追蹤。
+V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。

@@ -10,7 +10,7 @@
 
 - **GitHub Issues** 是任務來源：目標、範圍、驗收條件（AC）、決策與結果都記在 Issue。Project 看板只顯示狀態，不另建表。
 - **Repo** 保存程式、文件、可重建測試。一次性命令、實測紀錄、待辦留 Issue。
-- **Orca** 管 worktree 與 terminal；每個任務在自己的 worktree 工作，不在管理 checkout（`master`）改檔。
+- **Orca** 管 worktree 與 terminal；每個任務在自己的 worktree 工作，不在管理 checkout（`master`）改檔。排程只從獨立的發佈 checkout 執行，正式資料目錄在 repo 外（[OPERATIONS §6](docs/OPERATIONS.md#6-排程)）；agent 不得在任何 checkout 跑 `git clean -x`，不得刪資料目錄。
 - **codebase-memory** 先查索引再讀原檔；MCP 斷線改用同引擎 CLI，不重建整份索引。
 - 回覆使用者一律繁體中文、台灣用語；程式、指令、路徑維持原樣。
 
@@ -18,8 +18,8 @@
 
 | 角色 | 預設模型／effort | 做什麼 |
 | --- | --- | --- |
-| 統籌 | `claude-opus-5-5`／`medium`，`--autocompact 400k` | 同時只有一個：由使用者依[工作手冊](docs/GITHUB_WORKFLOW.md#統籌-session)開啟，之後依手冊自行換手。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/GITHUB_WORKFLOW.md#無人值守運作)持續推進。 |
-| 工程師 | `claude-sonnet-5-5`／`xhigh`（複雜任務可用 `claude-opus-5-5`） | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
+| 統籌 | `claude-opus-5-5`／`medium`，`--autocompact 400k` | 同時只有一個，一律由 agent 依[工作手冊](docs/GITHUB_WORKFLOW.md#統籌-session)以 Orca 開啟：現任統籌自行換手；沒有統籌時使用者對任一 Claude session 說「開統籌」，由它開。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/GITHUB_WORKFLOW.md#無人值守運作)持續推進。 |
+| 工程師 | `claude-opus-5-5`／`high`（簡單任務可用 `claude-sonnet-5-5`／`xhigh`） | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/GITHUB_WORKFLOW.md#review-與合併)。
 - 統籌可以自己當工程師做小任務；大任務或可並行的任務派給工程師 session。
@@ -57,7 +57,7 @@
 
 ## 上下文壓縮時保留
 
-任何 session 被壓縮時，摘要必須保留：手上任務的 Issue／PR 編號與目前步驟；使用者最近的決策與其 #1 留言 id；等待中的事件（CI、回報、回補）與對應 terminal／worktree；已承諾未做完的事；使用者給過的參考資料（連結、檔案）與它們代表什麼。不保留已結案任務的細節，那些在 GitHub。
+任何 session 被壓縮時，摘要必須保留：手上任務的 Issue／PR 編號與目前步驟；使用者最近的決策與其 #1 留言 id；等待中的事件（CI、回報、回補）與對應 terminal／worktree；已承諾未做完的事；使用者給過的參考資料（連結、檔案）與它們代表什麼；自己的 session id 與 terminal handle；背景監看與巡檢 cron 是否仍在；心跳檔與壓縮計數檔的位置。不保留已結案任務的細節，那些在 GitHub。
 
 ## 流程變更
 
