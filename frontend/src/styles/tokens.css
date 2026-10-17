@@ -1,0 +1,68 @@
+/* Design tokens: docs/DESIGN_SYSTEM.md §2. The only file in src that may contain color literals. */
+:root {
+  /* 色彩 */
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-accent: #8b5cf6;
+  --color-secondary: #10b981;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --color-up: #ef4444;
+  --color-down: #22c55e;
+  --color-flat: #9ca3af;
+
+  --color-bg: #0b0f1a;
+  --color-bg-alt: #111827;
+  --color-bg-card: #1f2937;
+  --color-bg-elevated: #374151;
+  --color-border: rgba(255, 255, 255, 0.10);
+  --color-border-hover: rgba(255, 255, 255, 0.20);
+
+  --color-text: #f9fafb;
+  --color-text-muted: #9ca3af;
+  --color-text-subtle: #6b7280;
+  --color-on-primary: #ffffff;
+  --color-primary-soft: rgba(59, 130, 246, 0.20);
+  --color-nav-bg: rgba(11, 15, 26, 0.95);
+  --color-overlay: rgba(0, 0, 0, 0.68);
+
+  /* 圖表 */
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-ma5: #f59e0b;
+  --chart-ma10: #8b5cf6;
+  --chart-ma20: #3b82f6;
+  --chart-ma60: #10b981;
+  --chart-ma120: #9ca3af;
+
+  /* 字體 */
+  --font-heading: "Inter", "Noto Sans TC", system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans TC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  /* 圓角 */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 50px;
+
+  /* 間距（4px 基準） */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --space-12: 48px; --space-16: 64px; --space-24: 96px;
+
+  /* 版面 */
+  --content-max: 1280px;
+  --nav-height: 64px;
+
+  /* 動效 */
+  --transition: all 0.3s ease;
+  --shadow-hover: 0 20px 40px rgba(59, 130, 246, 0.15);
+  --shadow-btn: 0 8px 24px rgba(59, 130, 246, 0.40);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --transition: none; }
+}

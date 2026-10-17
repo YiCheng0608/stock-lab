@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   deletePortfolio,
@@ -20,6 +20,7 @@ import {
   getNewsDetail,
   getRawPayloads,
   getStock,
+  getStockBars,
   getStocks,
   getStrategies,
   getTheme,
@@ -47,6 +48,8 @@ import type {
   SignalEvaluation,
   SignalSettlement,
   StockDirectoryRow,
+  StockBarsInterval,
+  StockBarsResponse,
   ThemeDirectoryRow,
   TrackingResponse,
   ProductTime,
@@ -56,8 +59,10 @@ import { GLOSSARY } from './glossary'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
 import { groupDisplayName, categoryLabel, formatProductTimeRole, isTemporaryIndustryGroupName, isTemporaryIndustryTheme, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
-import { StockPriceChart } from './StockPriceChart'
-import { isValidBar } from './stockChart'
+import { Shell } from './components/Shell'
+import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
+import { StockBarsChart } from './stock/StockBarsChart'
+import { StockHeader } from './stock/StockHeader'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 
 function formatNumber(value: unknown, digits = 2): string {
@@ -319,7 +324,7 @@ function QualityBadge({ status, kind = 'technical' }: { status: string | null | 
 }
 
 function Loading() {
-  return <div className="loading">資料載入中…</div>
+  return <div className="page"><Skeleton lines={4} /></div>
 }
 
 function ErrorBox({ error }: { error: unknown }) {
@@ -331,38 +336,6 @@ function QueryState({ loading, error, children }: { loading: boolean; error: unk
   if (loading) return <Loading />
   if (error) return <ErrorBox error={error} />
   return <>{children}</>
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <div className="eyebrow">台股研究專案</div>
-          <Link to="/" className="brand">市場研究台</Link>
-        </div>
-        <nav aria-label="主要導覽">
-          <NavLink to="/" end>今日</NavLink>
-          <NavLink to="/news">新聞</NavLink>
-          <NavLink to="/themes">族群</NavLink>
-          <NavLink to="/stocks">個股</NavLink>
-          <NavLink to="/actions">行動</NavLink>
-        </nav>
-      </header>
-      <main>{children}</main>
-      <footer>
-        <span>T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤</span>
-        <span>僅使用官方資料 · 詳細來源見各頁資料說明</span>
-        <nav className="secondary-nav" aria-label="次要工具">
-          <Link to="/research/backtest">技術回測</Link>
-          <Link to="/research/coverage">資料覆蓋度</Link>
-          <Link to="/research/strategies">策略版本</Link>
-          <Link to="/system/data-quality">資料品質</Link>
-          <Link to="/glossary">用語表</Link>
-        </nav>
-      </footer>
-    </div>
-  )
 }
 
 function PageTitle({ eyebrow, title, description, children }: { eyebrow: string; title: string; description?: string; children?: ReactNode }) {
@@ -888,9 +861,13 @@ function ThemeMemberTable({ rows }: { rows: StockDirectoryRow[] }) {
 }
 
 function StocksPage() {
-  const [draft, setDraft] = useState('')
-  const [search, setSearch] = useState('')
+  // The navbar search lands here as /stocks?q=...
+  const [searchParams] = useSearchParams()
+  const navQuery = searchParams.get('q') ?? ''
+  const [draft, setDraft] = useState(navQuery)
+  const [search, setSearch] = useState(navQuery)
   const [page, setPage] = useState(1)
+  useEffect(() => { setDraft(navQuery); setSearch(navQuery); setPage(1) }, [navQuery])
   const [type, setType] = useState('')
   const [watchlist, setWatchlist] = useState(false)
   const query = useQuery({ queryKey: ['stocks', { search, page, type, watchlist }], queryFn: () => getStocks({ q: search || undefined, page, page_size: 30, instrument_type: type || undefined, watchlist_only: watchlist || undefined }) })
@@ -910,28 +887,20 @@ function StockPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
+  const enabled = Boolean(exchange && symbol)
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled })
+  const [barsInterval, setBarsInterval] = useState<StockBarsInterval>('day')
+  // The header always reads the daily series; the chart reads the selected interval (same cache entry for 'day').
+  const dayBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, 'day'], queryFn: () => getStockBars(exchange, symbol, 'day'), enabled })
+  const chartBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, barsInterval], queryFn: () => getStockBars(exchange, symbol, barsInterval), enabled })
   useEffect(() => setCutoffDraft(asOf), [asOf])
-  const [tab, setTab] = useState<StockTab>('technical')
+  const [tab, setTab] = useState<StockTab>('chart')
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
-  const finiteValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
   const candidate = data.bars[data.bars.length - 1]
-  const latestBar = candidate && isValidBar(candidate) && finitePrice(candidate.close) ? candidate : undefined
-  const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
-  const previousKnown = Boolean(latestBar && previousBar && isValidBar(previousBar) && previousBar.date < latestBar.date)
-  const legacyPrice = data.decision_summary?.current_price
-  const currentPrice = finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
-  const legacyChange = data.decision_summary?.price_change
-  const calculatedChange = previousKnown && latestBar && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
-  const priceChange = finiteValue(legacyChange) ? legacyChange : calculatedChange
-  const legacyPercent = data.decision_summary?.price_change_pct
-  const calculatedPercent = priceChange != null && previousKnown && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
-  const percent = finiteValue(legacyPercent) ? legacyPercent : calculatedPercent
-  const priceChangePct = finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const latestBar = candidate && typeof candidate.close === 'number' && Number.isFinite(candidate.close) && candidate.close > 0 && typeof candidate.date === 'string' ? candidate : undefined
   const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
@@ -954,33 +923,39 @@ function StockPage() {
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
   const tabs: Array<{ id: StockTab; label: string }> = [
-    { id: 'technical', label: '技術走勢' },
+    { id: 'chart', label: '圖表與指標' },
     { id: 'chips', label: '法人籌碼' },
     { id: 'news', label: '新聞與公告' },
     { id: 'research', label: '研究條件' },
     { id: 'data', label: '資料說明' },
   ]
-  return <div className="page">
+  return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
-    <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
-      <div className="stock-quote-grid">
-        <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>
-        <div><span>漲跌（元／%）</span><strong className={priceChangeTone(priceChange)}>{priceChange == null ? '待核實' : formatSignedNumber(priceChange) + (priceChangePct == null ? '' : '（' + formatSignedPercent(priceChangePct) + '）')}</strong></div>
-        <div><span>成交量（張）</span><strong>{formatTableVolume(latestBar?.volume, latestBar?.source, latestBar?.volume_exact) || (latestBar?.volume == null ? '未提供' : '數值或單位待核實')}</strong></div>
-      </div>
-      <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
-      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
-    </PageTitle>
-    {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
-    <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
-    <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
-      {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
-      {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
-      {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><section className="panel"><div className="section-head"><div><div className="eyebrow">研究條件 · 只讀快照</div><h2>族群與策略條件</h2></div></div><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></section></section>}
-      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features?.ma20)} ／ {formatNumber(data.features?.ma60)}</b></div>{data.feature_snapshot && <div className="small-note">快照資料日 {formatTaiwanDateTime(data.feature_snapshot.trading_date, true)} · 來源 {sourceLabel(data.feature_snapshot.source)} · 建立 {formatTaiwanDateTime(data.feature_snapshot.created_at)}</div>}<details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
+    <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} loading={dayBars.isLoading}>
+      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" className="input" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="btn btn-secondary btn-sm">套用截止</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期；截止日期不影響頁首收盤與 K 線。</span></form>
+    </StockHeader>
+    <Tabs items={tabs} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
+    <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
+      {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
+      {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
+      {tab === 'news' && <StockEventList news={data.news} events={data.events} />}
+      {tab === 'research' && <>{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><Card eyebrow="研究條件 · 只讀快照" title="族群與策略條件"><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></Card></>}
+      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></Card></>}
     </div>
+    <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
+}
+
+// Indicator provenance from the daily bars API (docs/V1_SPEC.md 技術指標): version, price basis and batch time.
+function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
+  if (!bars) return <div className="metric-row"><span>技術指標</span><b>待核實</b></div>
+  const meta = bars.indicators
+  return <>
+    <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
+    <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
+    <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
+    <div className="metric-row"><span>K 線資料日期</span><b>{bars.data_as_of ?? '待核實'}</b></div>
+  </>
 }
 
 function GroupList({ groups }: { groups: InstrumentDetail['groups'] }) {
@@ -993,7 +968,7 @@ function GroupList({ groups }: { groups: InstrumentDetail['groups'] }) {
 
 function BrokerBranchEntry({ exchange }: { exchange: string }) {
   const url = exchange === 'TWSE' ? 'https://bsr.twse.com.tw/bshtm/bsMenu.aspx' : exchange === 'TPEx' ? 'https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php' : null
-  return <section className="panel broker-branch-entry" aria-labelledby="broker-branch-title">
+  return <section className="broker-branch-entry" aria-labelledby="broker-branch-title">
     <h3 id="broker-branch-title">券商／分點</h3>
     <p>尚未提供整合的券商分點買賣資料。</p>
     <p className="small-note">券商分點是交易通道，不能據此認定特定主力；與外資、投信、自營商的三大法人分類不同。</p>
@@ -1062,7 +1037,7 @@ function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] })
   return <section className="panel coverage-panel"><div className="section-head"><div><div className="eyebrow">研究資料覆蓋</div><h2>距離策略判斷還缺幾個有效交易日</h2></div><span className="small-note">基準 {baselineLabel}</span></div><div className="metric-row"><span>有效行情交易日</span><b>{barCountLabel}</b></div><div className="metric-row"><span>距離 20 日條件</span><b>{missing20Label}</b></div><div className="metric-row"><span>距離 60 日條件</span><b>{missing60Label}</b></div><div className="metric-row"><span>籌碼資料</span><b>{missingChipLabel}</b></div>{labels.length ? <div className="data-gap">目前原因：{labels.join('、')}</div> : <div className="small-note">目前沒有已知資料覆蓋缺口。</div>}<details className="technical-details"><summary>查看缺口日期與資料明細</summary><div className="small-note">20 日行情缺口：{coverage.missing_bar_dates_to_20.length ? coverage.missing_bar_dates_to_20.join('、') : '無'}</div><div className="small-note">60 日行情缺口：{coverage.missing_bar_dates_to_60.length ? coverage.missing_bar_dates_to_60.join('、') : '無'}</div><div className="small-note">20 日籌碼缺口：{coverage.missing_chip_dates_to_20.length ? coverage.missing_chip_dates_to_20.join('、') : '無'}</div></details></section>
 }
 
-type StockTab = 'technical' | 'chips' | 'news' | 'research' | 'data'
+type StockTab = 'chart' | 'chips' | 'news' | 'research' | 'data'
 
 export function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
   if (!action) return <section className="panel stock-action-detail"><h2>研究條件</h2><div className="empty">尚無行動摘要。</div></section>
@@ -1093,7 +1068,7 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
 }
 
 function StockEventList({ news, events }: { news: NewsItem[]; events: InstrumentDetail['events'] }) {
-  if (!news.length && !events.length) return <div className="empty panel">尚無個股新聞或官方事件。</div>
+  if (!news.length && !events.length) return <Card><EmptyState reason="尚無個股新聞或官方事件。" /></Card>
   return <>
     {news.length > 0 && <div className="news-list">{news.map((item) => <ProductNewsCard key={item.id} item={item} />)}</div>}
     {events.length > 0 && <section className="panel stock-event-list"><h2>官方事件紀錄</h2><div className="event-list">{events.map((item, index) => { const displayTitle = officialEventDisplayTitle(item.title, item.type); return <article className="event-item" key={`${item.date}-${item.type}-${index}`}><div className="small-note">事件日 {formatTaiwanDateTime(item.date, true)} · 來源 {sourceLabel(item.source)}</div><strong>{displayTitle}</strong>{item.description && <p>{item.description}</p>}{displayTitle !== (item.title || item.type || '官方事件') && <details className="technical-details"><summary>資料來源</summary><div>原始標題：{item.title || '—'} · 原始類型：{item.type || '—'}</div><div>資料截至：{formatTaiwanDateTime(item.data_as_of, true)}</div></details>}</article> })}</div></section>}
