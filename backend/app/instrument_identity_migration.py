@@ -33,7 +33,7 @@ _INDEXES = {
 _CHILDREN = {
     "group_memberships", "market_bars", "chip_snapshots", "technical_features", "technical_indicators",
     "signals", "portfolio_positions", "corporate_actions",
-    "fundamental_snapshots", "events",
+    "fundamental_snapshots", "events", "daily_candidates",
 }
 _TOKEN = re.compile(r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]")
 

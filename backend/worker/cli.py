@@ -8,6 +8,7 @@ from datetime import date
 from app.db import init_db
 
 from .backfill import BACKFILL_SCOPES, chunked_backfill
+from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
@@ -66,6 +67,8 @@ def main() -> None:
     indicators_parser = subparsers.add_parser("indicators", help="以保存日線計算技術指標（預設只寫最新未算日）")
     indicators_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用 DB 最新日線日")
     indicators_parser.add_argument("--rebuild", action="store_true", help="重算並改寫全部歷史")
+    candidates_parser = subparsers.add_parser("candidates", help="以 candidate_score_v1 產生每日候選清單（同日同版本重跑冪等）")
+    candidates_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用最新訊號日")
     themes_parser = subparsers.add_parser("themes", help="題材表")
     themes_subparsers = themes_parser.add_subparsers(dest="themes_command", required=True)
     themes_sync_parser = themes_subparsers.add_parser("sync", help="驗證題材表並寫入族群與成員期間（重跑冪等）")
@@ -99,6 +102,8 @@ def main() -> None:
         result = backtest(date.fromisoformat(args.start_date), date.fromisoformat(args.end_date))
     elif args.command == "indicators":
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
+    elif args.command == "candidates":
+        result = run_candidates(parse_date(args.run_date))
     elif args.command == "themes":
         result = sync_themes(args.file)
     elif args.command == "news":
@@ -120,6 +125,8 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
+    if args.command == "candidates" and result.get("status") not in {"success", "no_data"}:
+        raise SystemExit(1)
     if args.command == "themes" and isinstance(result, dict) and result.get("status") == "failed":
         raise SystemExit(1)
 
