@@ -139,6 +139,45 @@ class TechnicalFeature(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class TechnicalIndicator(Base):
+    """One row of scalar daily indicators per instrument, date and formula version.
+
+    Formulas live in app.indicators; a null field has its reason in null_reasons.
+    """
+
+    __tablename__ = "technical_indicators"
+    __table_args__ = (
+        UniqueConstraint("instrument_id", "trading_date", "formula_version", name="uq_technical_indicator_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    formula_version: Mapped[str] = mapped_column(String(40))
+    price_basis: Mapped[str] = mapped_column(String(40))
+    bar_count: Mapped[int] = mapped_column(Integer)
+    ma5: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ma10: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ma60: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ma120: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_dif: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_signal: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macd_hist: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rsi6: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rsi12: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kd_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kd_d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_mid: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_upper: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_lower: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vol_ma5: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vol_ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    null_reasons: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    source: Mapped[str] = mapped_column(String(120), default="derived:market_bars")
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class GroupDailyScore(Base):
     __tablename__ = "group_daily_scores"
     __table_args__ = (UniqueConstraint("group_id", "trading_date", name="uq_group_score_day"),)

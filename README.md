@@ -16,7 +16,7 @@
 
 - [後端](backend/README.md)：FastAPI、SQLAlchemy／SQLite、資料 worker。
 - [前端](frontend/README.md)：React、TypeScript、Vite、React Query、ECharts。
-- [驗證方式](docs/development-baseline/README.md)：入口、副作用、落盤限制。
+- [本機檢查](docs/GITHUB_WORKFLOW.md#本機檢查)：後端、前端與 repo 檢查命令。
 - [協作規則](AGENTS.md)與[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)：統籌＋工程師兩角色、Issue → worktree → PR → CI → merge。
 - [任務看板](https://github.com/users/YiCheng0608/projects/1)與[治理 Issue](https://github.com/YiCheng0608/stock-lab/issues/1)。
 

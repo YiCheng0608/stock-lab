@@ -74,9 +74,7 @@ class GroupMemberIdentityTest(unittest.TestCase):
                                             foreign_buy=100, trust_buy=20, dealer_buy=10,
                                             margin_balance=10000, margin_change=0, source="memory-fixture"))
                     db.add(TechnicalFeature(instrument_id=stock.id, trading_date=score_date,
-                                            features_json={"prior_20_volumes": [1000] * 20,
-                                                           "prior_20_highs": [99] * 20,
-                                                           "volume": 1000, "bar_count_60d": 60,
+                                            features_json={"volume": 1000, "bar_count_60d": 60,
                                                            "ma20": 95, "ma60": 90, "atr14": 2}, source="memory-fixture"))
                 for day in dates:
                     db.add(MarketBar(instrument_id=benchmark.id, trading_date=day, open=100,
@@ -202,9 +200,10 @@ class GroupMemberIdentityTest(unittest.TestCase):
         for legacy in (False, True):
             with self.subTest(legacy=legacy):
                 def exclude_target(db, stocks, group, day):
-                    feature = db.scalar(select(TechnicalFeature).where(
-                        TechnicalFeature.instrument_id == stocks[0].id))
-                    feature.features_json = {}
+                    # Zero prior volumes leave no 20-day volume baseline for hot_group_v1.
+                    for bar in db.scalars(select(MarketBar).where(
+                            MarketBar.instrument_id == stocks[0].id, MarketBar.trading_date < day)):
+                        bar.volume = 0
                 self.run_case(["TWSE", "TPEX"], legacy=legacy, rejected=True,
                               before_calculation=exclude_target, extra_member=True)
 

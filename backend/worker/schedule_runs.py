@@ -2,8 +2,10 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (collect -> analyze -> evaluate ->
-indicators).  A step only runs when the previous one succeeded; a failure
-keeps its error text and the later steps are recorded as skipped.
+indicators).  analyze and evaluate run only after a successful collect, and
+evaluate only after a successful analyze; indicators depend on stored bars
+alone, so they run after every successful collect.  A failure keeps its
+error text and the dependent steps are recorded as skipped.
 
 Re-running the same target date is safe: when a run for that date already
 finished as ``success`` or ``non_trading_day``, the new invocation records a
@@ -31,8 +33,8 @@ DAILY_STEPS = ("collect", "analyze", "evaluate", "indicators")
 # rebooted); the next invocation records it as abandoned instead of waiting.
 STALE_RUNNING_AFTER = timedelta(hours=6)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
-# The indicator batch is delivered separately (V1-G2); until that module
-# exists the step is recorded as not_configured and does not fail the run.
+# The indicator batch (V1-G2).  A checkout without the module records the
+# step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
 INDICATOR_FUNCTION = "run_indicator_batch"
 
@@ -41,10 +43,20 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
-def _compact(result: dict[str, Any]) -> dict[str, Any]:
-    """Keep a step result small enough to store with every run."""
+def _json_value(value: Any) -> Any:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
 
-    details = dict(result)
+
+def _compact(result: dict[str, Any]) -> dict[str, Any]:
+    """Keep a step result small and JSON-safe enough to store with every run."""
+
+    details = _json_value(dict(result))
     observations = details.pop("industry_membership_observations", None)
     if isinstance(observations, dict):
         details["industry_membership_observations"] = {
@@ -249,10 +261,13 @@ def run_daily_job(
         return output
 
     statuses = {"collect": collect_status}
-    status, error, failed_step = "success", None, ""
+    errors: list[str] = []
+    blocked_by = ""
     for step, sequence, action in later:
-        if status != "success":
-            reason = f"{failed_step}_not_successful"
+        # evaluate needs a successful analyze; indicators only need the bars
+        # collect just stored, so an analyze failure does not block them.
+        if blocked_by and step != "indicators":
+            reason = f"{blocked_by}_not_successful"
             _record_step(run_id, step, sequence, status="skipped", error=reason)
             output[step] = {"status": "skipped", "reason": reason}
             statuses[step] = "skipped"
@@ -262,9 +277,10 @@ def run_daily_job(
         statuses[step] = str(result.get("status"))
         acceptable = {"success", "no_data"} | ({"not_configured"} if step == "indicators" else set())
         if statuses[step] not in acceptable:
-            status = "failed"
-            failed_step = step
-            error = f"{step}: {result.get('error') or result.get('reason') or statuses[step]}"
+            blocked_by = blocked_by or step
+            errors.append(f"{step}: {result.get('error') or result.get('reason') or statuses[step]}")
+    status = "failed" if errors else "success"
+    error = "; ".join(errors) or None
     _finish(run_id, status, records=int(collected.get("records", 0) or 0), error=error,
             summary={"steps": statuses})
     output["status"] = status

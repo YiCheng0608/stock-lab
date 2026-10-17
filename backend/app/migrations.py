@@ -272,7 +272,7 @@ def _strategy_formula_state(connection) -> str:
     return "legacy"
 
 
-SCHEDULE_RUNS_REVISION = "0010_schedule_runs"
+SCHEDULE_RUNS_REVISION = "0011_schedule_runs"
 
 
 def ensure_schedule_run_tables(connection) -> None:
@@ -455,6 +455,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             f"VALUES ('{STRATEGY_FORMULA_REVISION}', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0010 only adds technical_indicators, which create_all above already made.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0010_technical_indicators', CURRENT_TIMESTAMP)"
         )
     )
     ensure_schedule_run_tables(connection)

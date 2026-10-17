@@ -6,10 +6,9 @@ import json
 import math
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
-from typing import Any
-from urllib.parse import urlencode
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator, model_validator
 from sqlalchemy import and_, desc, func, or_, select
@@ -58,8 +57,6 @@ from .decision import (
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
-from .official_events import build_official_event_focus, capture_official_event_focus, capture_official_events, canonical_event_date, canonical_event_kind, effective_range, build_official_events
-from .twse_issuer_profile import capture_issuer_profile
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -73,10 +70,7 @@ from .product_time import (
 from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
-from .stock_overview import build_stock_overview, resolve_stock_cutoff
-from .stock_market_reads import StockMarketRead, load_stock_market_reads
-from .stock_signal_reads import load_stock_signal_reads
-from .stock_independent_reads import load_stock_chip_reads, load_stock_feature_reads
+from .stock_bars import DEFAULT_LIMIT as BARS_DEFAULT_LIMIT, MAX_LIMIT as BARS_MAX_LIMIT, build_stock_bars
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -1604,19 +1598,42 @@ def stocks(
     )
 
 
+def _stock_cutoff(db: Session, instrument: Instrument, requested: date | None) -> date | None:
+    """Default to the latest stored market date; an explicit date is never advanced.
+
+    A stock with no prices falls back to the latest date of its other stored records.
+    """
+    if requested is not None:
+        return requested
+    latest_bar = db.scalar(select(func.max(MarketBar.trading_date)).where(MarketBar.instrument_id == instrument.id))
+    if latest_bar is not None:
+        return latest_bar
+    observed = [
+        db.scalar(select(func.max(field)).where(model.instrument_id == instrument.id))
+        for model, field in (
+            (Signal, Signal.signal_date),
+            (TechnicalFeature, TechnicalFeature.trading_date),
+            (ChipSnapshot, ChipSnapshot.trading_date),
+            (Event, Event.event_date),
+            (CorporateAction, CorporateAction.action_date),
+            (FundamentalSnapshot, func.coalesce(FundamentalSnapshot.announcement_date, FundamentalSnapshot.period_end)),
+        )
+    ]
+    return max((day for day in observed if day is not None), default=None)
+
+
 @router.get("/stocks/{exchange}/{symbol}")
 def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
     instrument_row = _find_instrument(db, symbol, exchange)
     if not instrument_row:
         raise HTTPException(status_code=404, detail="instrument not found")
-    cutoff = resolve_stock_cutoff(db, instrument_row, as_of)
+    cutoff = _stock_cutoff(db, instrument_row, as_of)
     # No dated records means no shared cutoff can be established. Keep this
     # explicit; date.min prevents current feature/decision fallback from leaking in.
     payload = instrument_detail(symbol, exchange, db, cutoff or date.min)
     instrument = payload["instrument"]
     instrument_row = db.get(Instrument, instrument["id"])
-    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff, stock_research_reads=True) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
-    payload["overview"] = build_stock_overview(db, instrument_row, cutoff)
+    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
     if payload["decision_summary"]:
         payload["product_time"] = payload["decision_summary"].get("product_time")
         payload["response_generated_at"] = payload["decision_summary"].get("response_generated_at")
@@ -1673,97 +1690,18 @@ def _stock_news_cutoff_filter(cutoff: date | None):
     ))
 
 
-@router.get("/stocks/{exchange}/{symbol}/overview")
-def stock_overview(exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+@router.get("/stocks/{exchange}/{symbol}/bars")
+def stock_bars(
+    exchange: str,
+    symbol: str,
+    interval: Literal["day", "week"] = "day",
+    limit: int = Query(BARS_DEFAULT_LIMIT, ge=1, le=BARS_MAX_LIMIT),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
-    return build_stock_overview(db, instrument, as_of)
-
-
-def _focus_catalogue(db: Session, result: dict[str, Any]) -> dict[str, Any]:
-    """Attach existing stock-page links with catalogue reads only."""
-    symbols = [item["symbol"] for item in result["items"]]
-    if not symbols:
-        return result
-    with db.no_autoflush:
-        known = set(db.scalars(select(Instrument.symbol).where(
-            Instrument.exchange == "TWSE", Instrument.symbol.in_(symbols))).all())
-    for item in result["items"]:
-        if item["symbol"] in known:
-            query = urlencode({"as_of": result["as_of"], "from": "official-events",
-                               "focus_q": result.get("search_query", ""), "focus_as_of": result["as_of"],
-                               "focus_event_kind": result["event_kind"]})
-            for field, key in (("effective_from", "focus_from"), ("effective_to", "focus_to")):
-                if result.get(field) is not None:
-                    query += "&" + urlencode({key: result[field]})
-            item.update(stock_page_available=True,
-                        detail_url=f"/stocks/TWSE/{item['symbol']}?{query}")
-    return result
-
-
-def _official_event_focus_query(request: Request) -> dict[str, Any]:
-    """Validate exact query spelling and multiplicity before any DB dependency."""
-    pairs = list(request.query_params.multi_items())
-    keys = [key for key, _ in pairs]
-    if len(keys) != len(set(keys)) or set(keys) - {"as_of", "q", "from", "to", "event_kind"} or "as_of" not in keys:
-        raise HTTPException(status_code=422, detail="invalid official event query keys")
-    values = dict(pairs)
-    try:
-        as_of = canonical_event_date(values["as_of"])
-        from_date, to_date = effective_range(values.get("from"), values.get("to"))
-        event_kind = canonical_event_kind(values.get("event_kind", "all"))
-        q = values.get("q", "")
-        if len(q) > 100:
-            raise ValueError("event_search_query_invalid")
-    except (ValueError, TypeError) as error:
-        raise HTTPException(status_code=422, detail="invalid official event dates, kind or search") from error
-    return {"as_of": as_of, "q": q, "from_date": from_date, "to_date": to_date, "event_kind": event_kind}
-
-
-@router.get("/focus/official-events")
-def official_event_focus(values: dict[str, Any] = Depends(_official_event_focus_query),
-                         db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _focus_catalogue(db, build_official_event_focus(**values))
-
-
-@router.post("/focus/official-events/capture")
-def official_event_focus_capture(values: dict[str, Any] = Depends(_official_event_focus_query),
-                                 db: Session = Depends(get_db)) -> dict[str, Any]:
-    return _focus_catalogue(db, capture_official_event_focus(**values))
-
-
-async def _issuer_profile_query(request: Request) -> date:
-    keys = [key for key, _ in request.query_params.multi_items()]
-    try:
-        if keys != ["as_of"] or request.path_params.get("exchange") != "TWSE" or request.path_params.get("symbol") not in {"1449", "1463", "2614"}:
-            raise ValueError("issuer_query_invalid")
-        cutoff = canonical_event_date(request.query_params["as_of"])
-        raw = await request.body()
-        if len(raw) > 4096 or not raw or json.loads(raw) != {}:
-            raise ValueError("issuer_empty_object_required")
-        return cutoff
-    except (ValueError, TypeError, UnicodeError) as exc:
-        raise HTTPException(status_code=422, detail="invalid issuer identity, cutoff or body") from exc
-
-
-@router.post("/stocks/{exchange}/{symbol}/issuer-profile/capture")
-def stock_issuer_profile_capture(exchange: str, symbol: str, as_of: date = Depends(_issuer_profile_query),
-                                 db: Session = Depends(get_db)) -> dict[str, Any]:
-    instrument = _find_instrument(db, symbol, exchange)
-    if not instrument:
-        raise HTTPException(status_code=404, detail="instrument not found")
-    return capture_issuer_profile(exchange, symbol, as_of, events=build_official_events(exchange, symbol, as_of))
-
-
-@router.post("/stocks/{exchange}/{symbol}/official-events/capture")
-def stock_official_events_capture(exchange: str, symbol: str, db: Session = Depends(get_db),
-                                  as_of: date | None = None) -> dict[str, Any]:
-    instrument = _find_instrument(db, symbol, exchange)
-    if not instrument:
-        raise HTTPException(status_code=404, detail="instrument not found")
-    return capture_official_events(instrument.exchange, instrument.symbol,
-                                  resolve_stock_cutoff(db, instrument, as_of))
+    return build_stock_bars(db, instrument, interval=interval, limit=limit)
 
 
 @router.get("/actions")
@@ -2008,17 +1946,14 @@ def _find_instrument(db: Session, symbol: str, exchange: str | None = None) -> I
 def _instrument_quality_summary(
     db: Session,
     instrument: Instrument,
-    bars: list[StockMarketRead],
+    bars: list[MarketBar],
     decision: dict[str, Any],
-    market_read: dict[str, Any],
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
     latest_bar = bars[0] if bars else None
     market_missing: list[str] = []
     if not run or run.status != "success" or not as_of:
         market_missing.append("official_run")
-    if market_read["status"] != "known":
-        market_missing.append("market_bar_read_" + market_read["status"])
     if not latest_bar:
         market_missing.append("market_bar")
     elif as_of and latest_bar.trading_date != as_of:
@@ -2107,9 +2042,18 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
-    bars, market_read = load_stock_market_reads(db, instrument.id, as_of)
-    feature_reads = load_stock_feature_reads(db, instrument.id, as_of)
-    feature = feature_reads.candidates[0] if feature_reads.candidates else None
+    bars = db.scalars(
+        select(MarketBar)
+        .where(MarketBar.instrument_id == instrument.id, MarketBar.trading_date <= (as_of or date.max))
+        .order_by(desc(MarketBar.trading_date), desc(MarketBar.id))
+        .limit(120)
+    ).all()
+    feature = db.scalar(
+        select(TechnicalFeature)
+        .where(TechnicalFeature.instrument_id == instrument.id, TechnicalFeature.trading_date <= (as_of or date.max))
+        .order_by(desc(TechnicalFeature.trading_date), desc(TechnicalFeature.id))
+        .limit(1)
+    )
     memberships = db.scalars(
         select(GroupMembership)
         .where(GroupMembership.instrument_id == instrument.id,
@@ -2117,9 +2061,18 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
                or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of) if as_of else True)
         .order_by(GroupMembership.valid_from)
     ).all()
-    research_reads = load_stock_signal_reads(db, [instrument.id], as_of)[instrument.id]
-    chip_reads = load_stock_chip_reads(db, [instrument.id], as_of)[instrument.id]
-    chips = chip_reads.candidates
+    signals = db.scalars(
+        select(Signal)
+        .where(Signal.instrument_id == instrument.id, Signal.signal_date <= (as_of or date.max))
+        .order_by(desc(Signal.signal_date), desc(Signal.id))
+        .limit(20)
+    ).all()
+    chips = db.scalars(
+        select(ChipSnapshot)
+        .where(ChipSnapshot.instrument_id == instrument.id, ChipSnapshot.trading_date <= (as_of or date.max))
+        .order_by(desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id))
+        .limit(120)
+    ).all()
     actions = db.scalars(
         select(CorporateAction)
         .where(CorporateAction.instrument_id == instrument.id, CorporateAction.action_date <= (as_of or date.max))
@@ -2149,14 +2102,16 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
         .limit(10)
     ).all()
-    decision = build_decision_summary(db, instrument, as_of, stock_research_reads=True) if as_of is None or as_of >= date(1, 1, 8) else {}
+    decision = build_decision_summary(db, instrument, as_of) if as_of is None or as_of >= date(1, 1, 8) else {}
     return {
         "instrument": instrument_dict(instrument),
-        "bars": [item.to_dict() for item in reversed(bars)],
-        "market_read": market_read,
+        "bars": [bar_dict(item) for item in reversed(bars)],
         "features": feature.features_json if feature and feature.features_json is not None else {},
-        "feature_snapshot": feature.to_dict() if feature else None,
-        "feature_read": feature_reads.to_state(),
+        "feature_snapshot": {
+            "trading_date": as_date(feature.trading_date),
+            "source": feature.source,
+            "created_at": as_datetime(feature.created_at),
+        } if feature else None,
         "groups": [
             {
                 "id": membership.group_id,
@@ -2166,8 +2121,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
             }
             for membership in memberships
         ],
-        "chips": [item.to_dict() for item in reversed(chips)],
-        "chip_read": chip_reads.to_state(),
+        "chips": [chip_dict(item) for item in reversed(chips)],
         "corporate_actions": [
             {
                 "date": as_date(item.action_date),
@@ -2209,7 +2163,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         "data_quality": [quality_dict(item) for item in quality],
         "product_time": decision.get("product_time"),
         "response_generated_at": decision.get("response_generated_at"),
-        "quality_summary": _instrument_quality_summary(db, instrument, bars, decision, market_read),
+        "quality_summary": _instrument_quality_summary(db, instrument, bars, decision),
         "strategy_conditions": {
             "breakout": {
                 "label": "突破條件",
@@ -2224,8 +2178,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
                 "technical": {"rule_label": "回踩條件固定版本", "basis_label": "只使用資料日以前的已驗證資料"},
             },
         },
-        "signals": [item.to_dict(instrument_dict(instrument)) for item in research_reads.candidates],
-        "research_read": research_reads.to_state(),
+        "signals": [signal_dict(db, item) for item in signals],
     }
 
 

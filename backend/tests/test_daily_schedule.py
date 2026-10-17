@@ -142,17 +142,18 @@ def test_verified_non_trading_day_is_complete(database, monkeypatch):
     assert rows[0].error is None
 
 
-def test_step_exception_is_recorded_and_later_steps_are_skipped(database, monkeypatch):
+def test_step_exception_is_recorded_and_dependent_steps_are_skipped(database, monkeypatch):
     steps = Steps(monkeypatch, analyze=RuntimeError("fixture analyze crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls == ["collect", "analyze"]
+    # Indicators depend only on the collected bars, so they still run.
+    assert steps.calls == ["collect", "analyze", "indicators"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert rows[0].status == "failed" and "fixture analyze crash" in rows[0].error
     assert logged["analyze"].status == "failed" and "RuntimeError: fixture analyze crash" in logged["analyze"].error
-    assert logged["evaluate"].status == logged["indicators"].status == "skipped"
-    assert logged["evaluate"].error == "analyze_not_successful"
+    assert logged["evaluate"].status == "skipped" and logged["evaluate"].error == "analyze_not_successful"
+    assert logged["indicators"].status == "not_configured"
 
 
 def test_failed_indicator_batch_fails_the_run(database, monkeypatch):

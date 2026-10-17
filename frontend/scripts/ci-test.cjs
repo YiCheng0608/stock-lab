@@ -19,16 +19,11 @@ const { renderToStaticMarkup } = require('react-dom/server')
 const SUITES = [
   { file: 'units.test.ts' },
   { file: 'search.test.ts' },
-  { file: 'routes.test.ts' },
   { file: 'presentation.test.ts' },
-  { file: 'stockChart.test.ts' },
-  { file: 'stockResearch.test.ts' },
+  { file: 'noHardcodedColors.test.ts' },
+  { file: 'stock/stockBars.test.tsx' },
   { file: 'components/StrategyVersionCard.test.tsx' },
-  {
-    file: 'components/StockOverview.test.tsx',
-    runners: ['runOfficialEventsSSRTests', 'runTwseIssuerProfileSSRTests', 'runUnitLotsSSRTests'],
-  },
-  { file: 'twseIssuerIndustry.test.ts', runners: ['runTwseIssuerIndustryTests'] },
+  { file: 'components/ui/ui.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

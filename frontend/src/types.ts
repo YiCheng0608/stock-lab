@@ -217,19 +217,7 @@ export type Bar = {
   is_suspended: boolean
 }
 
-export type StockMarketReadState = {
-  status: 'known' | 'missing' | 'invalid'
-  invalid_fields: string[]
-  missing_fields: string[]
-  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
-  candidate_count?: number
-  window_limit?: number
-  unlocated_count?: number
-  unlocated_market_bar_id?: number | null
-  verification?: 'stored_value_syntax_only'
-}
-
-/** A nullable read projection retains candidate slots without admitting prices. */
+/** Stored bar columns are nullable; a null core value never becomes a chart point. */
 export type StockDetailBar = Omit<Bar, 'date' | 'open' | 'high' | 'low' | 'close' | 'adj_close' | 'volume' | 'turnover' | 'turnover_status' | 'source' | 'is_suspended'> & {
   id?: number
   date: string | null
@@ -243,7 +231,6 @@ export type StockDetailBar = Omit<Bar, 'date' | 'open' | 'high' | 'low' | 'close
   turnover_status: Bar['turnover_status'] | null
   source: string | null
   is_suspended: boolean | null
-  market_read?: StockMarketReadState
 }
 
 export type ChipSnapshot = {
@@ -261,43 +248,16 @@ export type ChipSnapshot = {
   collected_at: string | null
 }
 
-export type StockIndependentRowRead = {
-  status: 'known' | 'missing' | 'invalid'
-  invalid_fields: string[]
-  missing_fields: string[]
-  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
-}
-
-export type StockIndependentRead = {
-  version: 'stock-independent-read/v1'
-  status: 'known' | 'missing' | 'invalid'
-  window_limit: 1 | 120
-  candidate_count: number
-  candidate_order: Array<number | null>
-  scanned_count: number
-  future_count: number
-  unlocated_count: number
-  unlocated_id: number | null
-  verification: 'stored_value_syntax_only'
-}
-
 export type StockDetailChip = Omit<ChipSnapshot, 'date' | 'source'> & {
   date: string | null
   source: string | null
   id?: number | null
-  instrument_id?: number | null
-  raw_payload_id?: number | null
-  row_read?: StockIndependentRowRead
 }
 
 export type StockFeatureSnapshot = {
-  id: number | null
-  instrument_id: number | null
   trading_date: string | null
-  features_json: Record<string, unknown> | null
   source: string | null
   created_at: string | null
-  row_read: StockIndependentRowRead
 }
 
 export type CorporateAction = {
@@ -360,52 +320,11 @@ export type RawPayload = {
   collected_at: string | null
 }
 
-export type StockSignalReadState = {
-  status: 'known' | 'missing' | 'invalid'
-  invalid_fields: string[]
-  missing_fields: string[]
-  metadata_fields: Record<string, 'known' | 'missing' | 'invalid'>
-}
-
-export type StockDetailSignal = Omit<Signal, 'signal_key' | 'signal_date' | 'status' | 'data_quality' | 'entry_type' | 'rule_evidence' | 'strategy'> & {
-  instrument_id: number
-  strategy_version_id: number | null
-  signal_key: string | null
-  signal_date: string | null
-  status: string | null
-  data_quality: string | null
-  entry_type: string | null
-  rule_evidence: Record<string, unknown> | null
-  strategy: { name: string | null; version: string | null; kind: string | null; canonical_config_snapshot: Record<string, unknown> | null }
-  signal_read: StockSignalReadState
-}
-
-export type StockResearchReadState = {
-  version: 'stock-research-read/v1'
-  status: 'known' | 'missing' | 'invalid'
-  candidate_count: number
-  candidate_order: number[]
-  window_limit: 20
-  scanned_count: number
-  future_count: number
-  unlocated_count: number
-  unlocated_signal_id: number | null
-  identity_unlocated_count: number
-  identity_unlocated_signal_id: number | null
-  latest: Record<'breakout_v1' | 'pullback_v1', { signal_id: number | null; signal_date: string | null; strategy_version_id: number | null; read: StockSignalReadState }>
-  blocked_strategies: string[]
-  decision_block_scope: 'instrument' | 'slots' | 'none'
-  verification: 'stored_value_syntax_only'
-}
-
 export type InstrumentDetail = {
   instrument: Instrument
   bars: StockDetailBar[]
-  market_read?: StockMarketReadState
   features: Record<string, unknown>
   feature_snapshot?: StockFeatureSnapshot | null
-  feature_read?: StockIndependentRead
-  chip_read?: StockIndependentRead
   groups: Array<{ id: string; name: string; valid_from: string; valid_to: string | null }>
   chips: StockDetailChip[]
   corporate_actions: CorporateAction[]
@@ -420,186 +339,9 @@ export type InstrumentDetail = {
   }
   product_time?: ProductTime
   response_generated_at?: string
-  overview?: StockOverviewData
   news_cutoff?: { as_of: string | null; filter: string; limit: number }
   strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
-  signals: StockDetailSignal[]
-  research_read?: StockResearchReadState
-}
-
-export type OverviewPriceBar = {
-  date: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-  volume_exact?: string | null
-  turnover: number | null
-  turnover_status: 'available' | 'unavailable' | 'unknown'
-  turnover_reason: string | null
-  source: string
-  data_as_of: string
-  collected_at: string | null
-  provenance: {
-    raw_payload_id: number
-    ingestion_run_id: number
-    source_id: string
-    source_version: string
-    endpoint: string
-    body_sha256: string
-    receipt_sha256: string
-    registry_version: string
-    manifest_digest: string
-    captured_at: string
-    raw_collected_at: string
-    verification: string
-    license: unknown
-    summarize_decision: unknown
-  }
-}
-
-export type InstitutionalDailyData = {
-  version: string
-  status: 'available' | 'unavailable'
-  as_of: string | null
-  date: string | null
-  selection_basis: string
-  unit: 'shares'
-  quantity_encoding: 'canonical_integer_string'
-  historical_pit: 'unsupported'
-  reasons: string[]
-  limitations: string[]
-  session_windows: { status: 'unavailable'; horizons: number[]; reasons: string[] }
-  row: null | {
-    symbol: string; company_name: string; date: string; source_date: string; exchange: 'TPEx'; unit: 'shares'; row_ordinal: number
-    investors: Record<'foreign' | 'trust' | 'dealer', {
-      label: string; buy: string; sell: string; net: string; source_fields: { buy: string; sell: string; net: string }
-    }>
-    total_net: string
-  }
-  provenance: null | {
-    source_id: string; source_version: string; endpoint: string; registry_version: string; manifest_digest: string
-    body_sha256: string; receipt_sha256: string; captured_at: string; verification: string
-  }
-  attribution: null | {
-    owner: { name: string; data_provider: string; dataset_name: string; license_url: string; attribution_year: number }
-    dataset_id: string; source_id: string; source_url: string; terms: unknown; evidence: unknown; purpose_evidence: unknown
-  }
-}
-
-export type OfficialEventsData = {
-  version: string; status: 'available' | 'unavailable'; reasons: string[]
-  as_of: string | null; observed_date: string | null; cutoff_basis: 'observed_taipei_date_inclusive'
-  capture_enabled: boolean; can_capture: boolean; cache_present: boolean
-  capture_action: 'not_attempted' | 'acquired' | 'cached' | 'failed'
-  storage: 'memory_only'; durable_capture: false; historical_pit: 'unsupported'; source_url_kind: 'feed'
-  published_time: 'unknown'; first_availability: 'unknown'; revision_history: 'unknown'
-  rows: Array<{
-    exchange: 'TWSE'; symbol: string; company_name: string; event_date: string; source_date: string; source_classification: '息' | '權' | '權息'
-    event_date_role: 'effective_date'; event_date_precision: 'date'; kind: string; label: string; row_ordinal: number
-    published_at: null; first_available_at: null; revision_available_at: null; availability: 'unknown'
-  }>
-  provenance: null | {
-    source_id: string; source_version: string; endpoint: string; registry_version: string; manifest_digest: string
-    body_sha256: string; receipt_sha256: string; captured_at: string; request_started_at: string
-    storage: 'memory_only'; verification: 'local_evidence_consistent'
-  }
-  attribution: null | {
-    owner: { name: string; type: 'official_exchange' }
-    dataset_id: string; source_id: string; source_url: string
-    terms: { status: 'known'; value: string; reason: string }
-    evidence: Array<{ url: string; checked_at: string; claim: string }>; purpose_evidence: unknown
-  }
-  limitations: string[]
-}
-
-export const officialEventKinds = ['all', 'ex_dividend', 'ex_right', 'ex_right_and_dividend'] as const
-export type OfficialEventKind = typeof officialEventKinds[number]
-
-export type OfficialEventFocusData = Omit<OfficialEventsData, 'rows'> & {
-  coverage: 'observed_feed_only'; research_conditions: 'unknown'
-  effective_from: string | null; effective_to: string | null; range_event_count: number; range_matched: number
-  event_kind: OfficialEventKind; kind_event_count: number; kind_matched: number
-  total: number; matched: number; search_query: string; displayed: number; truncated: boolean; limit: number; order: 'symbol_lexicographic'
-  candidate_count?: number; selected_count?: number; validation_scope?: string
-  summarize_decision?: unknown; runtime_condition_receipts?: unknown; summary_condition_receipts?: unknown
-  items: Array<{
-    exchange: 'TWSE'; symbol: string; company_name: string; events: OfficialEventsData['rows']
-    stock_page_available: boolean; detail_url: string | null; research_conditions: 'unknown'
-  }>
-}
-
-export type TwseIssuerProfileData = {
-  version: string; status: 'available' | 'unavailable'; reasons: string[]; exchange: string; symbol: string
-  as_of: string | null; cutoff_basis: 'observed_taipei_date_inclusive'; observed_date: string | null
-  capture_enabled: boolean; can_capture: boolean; capture_action: 'not_attempted' | 'acquired' | 'cached' | 'failed'
-  attempted: boolean; busy: boolean; cache_present: boolean; storage: 'memory_only'; durable_capture: false
-  historical_pit: 'unsupported'; published_time: 'unknown'; first_availability: 'unknown'; revision_history: 'unknown'
-  classification: 'unsupported'; feed_status: 'available' | 'unavailable'; profile_present: boolean | null; candidate_count: number | null
-  row: null | {
-    exchange: 'TWSE'; symbol: string; full_name: string; short_name: string; report_date_raw: string; report_date: string
-    report_date_role: 'issuer_report_date'; listing_date_raw: string; listing_date: string; listing_date_role: 'listing_date'
-    industry_code_raw: string; row_ordinal: number; source_row: Record<string, string>; event_names: string[]
-    body_sha256: string; receipt_sha256: string
-  }
-  provenance: null | {
-    source_id: string; source_version: string; endpoint: string; profile: string; registry_version: string; manifest_digest: string
-    generation_id: string; request_started_at: string; captured_at: string; body_sha256: string; body_bytes: number; receipt_sha256: string
-    storage: 'memory_only'; verification: 'local_evidence_consistent'; validation_scope: 'all_33_string_fields_unique_company_codes'
-  }
-  attribution: null | NonNullable<OfficialEventsData['attribution']>
-  policy: { version: string; digest: string; profile: string }; limitations: string[]
-}
-
-export type TwseIndustryCitation = {
-  schema_version: 'twse-industry-citation-registry/v1'; registry_version: string; content_digest: string; profile: string
-  declaration: {
-    version: string; exchange: 'TWSE'; metadata_observed_date: string; evidence_kind: 'parsed_official_document'
-    entries: Array<{ code_raw: string; name_zh: string }>; sources: Array<Record<string, unknown>>
-    source_use: Record<string, unknown>
-  }
-  canonical_root_attested_excerpt_sha256: string
-  evidence_delivery: {
-    kind: 'parsed_official_document'; attestation: 'root_reviewed_bounded_citation'
-    original_body_sha256: null; original_receipt_sha256: null
-  }
-}
-
-export type TwseIssuerIndustryData = {
-  version: string; status: 'available' | 'unavailable'; reasons: string[]; exchange: string; symbol: string; as_of: string | null
-  cutoff_basis: 'observed_taipei_date_inclusive'; metadata_observed_date: string | null
-  row: null | { industry_code_raw: string; name_zh: string; issuer_row_ordinal: number; event_row_ordinals: number[]; company_classification_effective_date: 'unknown' }
-  provenance: null | { issuer: NonNullable<TwseIssuerProfileData['provenance']>; event: NonNullable<OfficialEventsData['provenance']>; taxonomy_citation: TwseIndustryCitation }
-  policy: { version: string; digest: string; profile: string }; limitations: string[]
-}
-
-export type StockOverviewData = {
-  version: string
-  as_of: string | null
-  cutoff_basis: string
-  historical_pit: string
-  scope: string
-  price: {
-    status: 'available' | 'unavailable'
-    basis: string
-    window_limit: number
-    candidate_count: number
-    valid_count: number
-    from: string | null
-    to: string | null
-    latest: OverviewPriceBar | null
-    bars: OverviewPriceBar[]
-    rejected: Array<{ id?: number; date: string | null; reason: string }>
-    market_read?: StockMarketReadState
-    reasons: string[]
-  }
-  institutional_daily?: InstitutionalDailyData
-  conditions: Array<{ strategy: string; label: string; version: string | null; signal_date: string | null; status: 'met' | 'not_met' | 'data_insufficient'; reasons: string[] }>
-  events: OfficialEventsData
-  issuer_profile?: TwseIssuerProfileData
-  issuer_industry_trace?: TwseIssuerIndustryData
-  limitations: string[]
+  signals: Signal[]
 }
 
 export type InstrumentCoverage = {
@@ -1048,7 +790,6 @@ export type StrategyDecision = {
   missing: string[]
   wait_missing?: string[]
   evidence: Record<string, unknown> | null
-  signal_read?: StockSignalReadState
 }
 
 export type ActionSummary = {
@@ -1084,7 +825,6 @@ export type ActionSummary = {
   watchlisted: boolean
   current_price: number | null
   market_read?: { status: 'known' | 'missing' | 'invalid'; invalid_fields: string[] }
-  research_read?: StockResearchReadState
   price_as_of: string | null
   previous_close?: number | null
   price_change?: number | null
@@ -1124,4 +864,53 @@ export type GlossaryTerm = {
   limitations: string
   related: string[]
   version: string
+}
+
+// GET /api/stocks/{exchange}/{symbol}/bars (docs/V1_SPEC.md 技術指標, indicators/v1).
+export type StockBarsInterval = 'day' | 'week'
+
+export type IndicatorField =
+  | 'ma5' | 'ma10' | 'ma20' | 'ma60' | 'ma120'
+  | 'macd_dif' | 'macd_signal' | 'macd_hist'
+  | 'rsi6' | 'rsi12'
+  | 'kd_k' | 'kd_d'
+  | 'boll_mid' | 'boll_upper' | 'boll_lower'
+  | 'vol_ma5' | 'vol_ma20'
+
+export type StockBarRow = {
+  date: string
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  volume: number | null
+  // Daily rows carry `source` and `is_suspended`; weekly rows carry `sources`, `week_start`, `week_end`, `trading_days`.
+  source?: string | null
+  sources?: string[]
+  is_suspended?: boolean
+  week_start?: string
+  week_end?: string
+  trading_days?: number
+  bar_count: number | null
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change or not_computed.
+  reasons: Partial<Record<IndicatorField, string>>
+} & Partial<Record<IndicatorField, number | null>>
+
+export type StockBarsResponse = {
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  interval: StockBarsInterval
+  limit: number
+  count: number
+  data_as_of: string | null
+  sources: string[]
+  indicators: {
+    formula_version: string
+    price_basis: string
+    parameters: Record<string, unknown>
+    required_bars: Partial<Record<IndicatorField, number>>
+    fields: string[]
+    source: string
+    computed_at: string | null
+  }
+  bars: StockBarRow[]
 }
