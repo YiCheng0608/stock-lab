@@ -19,6 +19,7 @@
 | 領域 | 欄位／規則 |
 | --- | --- |
 | 來源 | source_kind、source_name、source_item_id、canonical URL、source_url_kind=item/feed/none、raw 參照。 |
+| 分類 | `category`：官方事件投影為 `company`（有標的）／`taiwan`；新聞 feed 為 `domestic`（國內）／`international`（國際）。`/api/news?category=` 依值精確篩選。 |
 | 內容 | 原始標題、可保存的內文／摘要、語言、content_hash；原文與 AI 摘要分欄。 |
 | 事件 | event_type、群組 ID、新增資訊、修訂／撤回狀態、supersedes_id；舊版本不可覆寫。 |
 | 時間 | published_at、event_at、event_date、collected_at、first_available_at、revision_available_at、generated_at，以及時區、精度與可信度。 |
@@ -37,6 +38,17 @@
 5. AI 可提出關聯候選；只有來源或規則已驗證者進入已核實標籤，低把握項留在待核實區。
 6. 缺內文或必要證據時不生成摘要、精確期間或正負結論。有合法可用原文時，AI 摘要也必須獨立標示並附引用。
 7. 價格反應只呈現具名窗口的相對報酬、量能、跳空／延伸與可能解釋，不宣稱已完全反映。負面事件或多篇轉載不得增加正向機會分數。
+
+新聞 feed 的實作（`worker.news_batch`）：
+
+- 同來源以 guid 為 `canonical_key`，沒有 guid 時用 canonical URL（去掉 `utm_*`、`mod` 等追蹤參數與 fragment）；guid 或 canonical URL 任一已存在就視為同一則。既有列重跑時不改寫，`published_at` 保持第一次寫入的值。
+- 跨來源：標題經 NFKC、小寫並去掉空白、標點與符號後相同，且台北時間同一天者，給同一個 `dedupe_cluster_id`，各來源各保留一列；沒有來源時間的不併群。
+- 規則關聯（`impact_method=rule:exact-name-code/v1`），只比對標題與描述，對象為上市／上櫃普通股：
+  - 代號只在有脈絡時算命中：同一檔的名稱也出現、代號後接 `-TW`／`.TW`／`-TWO`，或前面是「代號」；純數字不算。
+  - 同一代號在兩個交易所都有時，只由名稱決定，代號本身不消歧。
+  - 名稱單獨出現時，只有三字以上、含中文、不在常用詞排除表內，且不屬於更長的已命中名稱者才算；兩字名稱必須同時出現其代號。
+  - `symbols_json` 寫 `exchange:symbol`。官方產業顯示名稱（已核實且不是「其他」，且不落在公司名稱內）出現時，寫入 `theme_ids_json`。
+- `impact_scope`：有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。`impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
 
 ## 4. 時間與排序
 

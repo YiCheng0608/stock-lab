@@ -883,6 +883,18 @@ def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
                     "name": instrument.name,
                 }
             )
+    elif event is None and time_consistency != "conflict":
+        # Media items store rule relations as ``exchange:symbol``.
+        for value in item.symbols_json or []:
+            exchange, _, symbol = str(value).partition(":")
+            instrument = db.scalar(
+                select(Instrument).where(Instrument.exchange == exchange, Instrument.symbol == symbol)
+            ) if symbol else None
+            if instrument:
+                related_instruments.append(
+                    {"exchange": instrument.exchange, "symbol": instrument.symbol, "name": instrument.name}
+                )
+    raw_payload = db.get(RawPayload, item.raw_payload_id) if event is None and item.raw_payload_id else None
     return {
         "id": str(item.id),
         "canonical_key": item.canonical_key,
@@ -931,8 +943,8 @@ def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
         "provenance": {
             "event_id": item.event_id,
             "raw_payload_id": item.raw_payload_id,
-            "endpoint": event.endpoint if event else None,
-            "data_as_of": event.data_as_of if event else None,
+            "endpoint": event.endpoint if event else (raw_payload.endpoint if raw_payload else None),
+            "data_as_of": event.data_as_of if event else (raw_payload.data_as_of if raw_payload else None),
         },
     }
 

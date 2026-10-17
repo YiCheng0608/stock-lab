@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>中央社即時新聞 財經新聞</title>
+    <link>https://www.cna.com.tw/list/aie.aspx</link>
+    <language>zh-tw</language>
+    <item>
+      <title>台積電在熊本建3奈米廠　日本批准補助資格</title>
+      <link>https://www.cna.com.tw/news/afe/202610170001.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170001</guid>
+      <pubDate>Sat, 17 Oct 2026 16:48:10 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）日本政府批准台積電熊本新廠補助資格，半導體供應鏈可望受惠。]]></description>
+    </item>
+    <item>
+      <title>台股終場大漲2330點　成交量放大</title>
+      <link>https://www.cna.com.tw/news/afe/202610170002.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170002</guid>
+      <pubDate>Sat, 17 Oct 2026 14:05:00 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）加權指數今天收盤上漲，外資買超。]]></description>
+    </item>
+    <item>
+      <title>台積電在熊本建3奈米廠　日本批准補助資格（更新）</title>
+      <link>https://www.cna.com.tw/news/afe/202610170001.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170001</guid>
+      <pubDate>Sat, 17 Oct 2026 17:10:00 +0800</pubDate>
+      <description><![CDATA[同一 guid 的重複項。]]></description>
+    </item>
+  </channel>
+</rss>

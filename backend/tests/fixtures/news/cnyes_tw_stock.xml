@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Anue鉅亨</title>
+    <link>https://news.cnyes.com/</link>
+    <language>zh</language>
+    <item>
+      <title><![CDATA[〈友達運動會〉董事長：集團朝控股架構轉型]]></title>
+      <category>台股新聞</category>
+      <link>https://news.cnyes.com/news/id/1000001</link>
+      <guid isPermaLink="true">https://news.cnyes.com/news/id/1000001</guid>
+      <description><![CDATA[面板大廠友達(2409-TW)今(17)日舉辦運動會，董事長說明轉型方向。]]></description>
+      <content:encoded><![CDATA[ARTICLE-BODY-EXCERPT 這段是正文節錄，不可保存。]]></content:encoded>
+      <pubDate>Sat, 17 Oct 2026 18:49:40 +0800</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[乙電子(7777-TWO)接獲新訂單 周漲一成]]></title>
+      <category>台股新聞</category>
+      <link>https://news.cnyes.com/news/id/1000002</link>
+      <guid isPermaLink="true">https://news.cnyes.com/news/id/1000002</guid>
+      <description><![CDATA[上櫃電子廠乙電子(7777-TWO)本周股價上漲。]]></description>
+      <content:encoded><![CDATA[ARTICLE-BODY-EXCERPT 第二則正文節錄。]]></content:encoded>
+      <pubDate>Sat, 17 Oct 2026 10:30:10 +0800</pubDate>
+    </item>
+  </channel>
+</rss>
