@@ -4,7 +4,7 @@
 
 ## 來源選用原則
 
-專案只用免費公開資料。新的取得方案以 FinMind 免費方案為主要來源，官方 OpenAPI／網站是既有 collector 的來源與核對依據；FinMind 沒有該資料集或無法滿足用途時才另提其他來源。這是來源方向，不是取源授權；每次真實取得仍依 [SOURCE_REGISTRY 的選用原則與共同規則](SOURCE_REGISTRY.md#來源選用原則finmind-為主)版本化 policy、pin 與 seal。
+專案只用免費公開資料。依 [ROADMAP V1 基線](ROADMAP.md#v1-範圍基線2026-10-17-核定)，每日全市場行情、法人、融資與官方事件以官方 TWSE／TPEx 整批下載（既有 collector）為主要來源；FinMind 免費方案補歷史回補與缺口，官方沒有的資料集才另提來源；新聞用免費公開的國內外媒體與官方來源，依 [NEWS_SPEC](NEWS_SPEC.md) 分開保存來源、時間與推論。這是來源方向，不是取源授權；新來源的准入、版本與限制仍記在 [SOURCE_REGISTRY](SOURCE_REGISTRY.md#來源選用原則finmind-為主)。
 
 ## 資料庫政策
 
