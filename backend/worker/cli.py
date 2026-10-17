@@ -18,6 +18,9 @@ from .themes import sync_themes
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
 DAILY_EXIT_CODES = {"success": 0, "skipped": 0, "non_trading_day": 0, "partial": 2}
+# news-llm: the schedule wrapper logs this next to news's own exit code; any status
+# other than these (failed, or one it does not know) is 1.
+NEWS_LLM_EXIT_CODES = {"success": 0, "skipped": 0, "dry_run": 0, "partial": 2}
 
 
 def parse_date(value: str | None) -> date | None:
@@ -120,6 +123,8 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
+    if args.command == "news-llm":
+        sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "themes" and isinstance(result, dict) and result.get("status") == "failed":
         raise SystemExit(1)
 
