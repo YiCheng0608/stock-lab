@@ -13,9 +13,9 @@ from sqlalchemy.orm import sessionmaker
 from app.api import _product_group_taxonomy_verified
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
-from app.models import GroupMembership, IngestionRun, Instrument, RawPayload, ThemeGroup
+from app.models import GroupDailyScore, GroupMembership, IngestionRun, Instrument, MarketBar, RawPayload, ThemeGroup
 from app.taxonomy import canonical_group_id
-from worker.industry_repair import IndustryRepairError, plan_repair, repair_industry_memberships
+from worker.industry_repair import IndustryRepairError, plan_repair, repair_industry_memberships, rescore_recent
 from worker.pipeline import OFFICIAL_INDUSTRY_SOURCE, ensure_official_industry_group
 from worker.sources import TPEX_LISTED_ENDPOINT, TWSE_LISTED_ENDPOINT
 
@@ -236,3 +236,26 @@ def test_collector_helper_syncs_display_name_of_existing_group(factory):
         assert db.get(ThemeGroup, group_id).display_name_zh == "觀光餐旅"
         created = ensure_official_industry_group(db, "Electrical Cable")
         assert created.display_name_zh == "電器電纜" and created.source == OFFICIAL_INDUSTRY_SOURCE
+
+
+def test_rescore_clears_rank_left_on_deactivated_groups(factory, tmp_path):
+    _seed(factory, tmp_path)
+    day = date(2026, 10, 16)
+    with factory() as db:
+        taiex = Instrument(exchange="TWSE", symbol="TAIEX", name="TAIEX", instrument_type="index", status="active")
+        db.add(taiex)
+        db.flush()
+        db.add(MarketBar(instrument_id=taiex.id, trading_date=day, open=1, high=1, low=1, close=1, adj_close=1))
+        agriculture = canonical_group_id("industry", "Agriculture")
+        db.add(GroupDailyScore(group_id=agriculture, trading_date=day, score=80.0, rank=2,
+                               data_quality="complete", eligible_members=7))
+        db.add(GroupDailyScore(group_id=agriculture, trading_date=date(2026, 9, 1), score=70.0, rank=1,
+                               data_quality="complete", eligible_members=7))
+        db.commit()
+        repair_industry_memberships(db, apply=True)
+        assert rescore_recent(db, 20) == [day.isoformat()]
+        db.commit()
+        ranks = dict(db.execute(select(GroupDailyScore.trading_date, GroupDailyScore.rank)
+                                .where(GroupDailyScore.group_id == agriculture)).all())
+    # Only the rescored date is touched; the row itself is kept.
+    assert ranks == {day: None, date(2026, 9, 1): 1}

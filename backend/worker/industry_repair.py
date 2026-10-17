@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import GroupMembership, IngestionRun, Instrument, MarketBar, RawPayload, ThemeGroup
+from app.models import GroupDailyScore, GroupMembership, IngestionRun, Instrument, MarketBar, RawPayload, ThemeGroup
 from app.taxonomy import (
     INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE,
     INDUSTRY_DISPLAY_ZH,
@@ -284,6 +284,14 @@ def rescore_recent(db: Session, days: int) -> list[str]:
     dates = _effective_trading_dates(db, benchmark.id, latest, days) if latest else []
     for day in dates:
         _calculate_group_scores(db, day)
+        # Inactive groups are not rescored; their old rank would collide with
+        # the recomputed ranks of the same board.
+        for score in db.scalars(
+            select(GroupDailyScore).join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id).where(
+                GroupDailyScore.trading_date == day, ThemeGroup.active.is_(False), GroupDailyScore.rank.is_not(None),
+            )
+        ):
+            score.rank = None
         db.flush()
     return [day.isoformat() for day in dates]
 

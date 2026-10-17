@@ -96,7 +96,7 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 - **證據**：`raw_payloads` 已保存的 `t187ap03_L`／`mopsfin_t187ap03_O` 擷取；每份都要核對檔案 sha256。同一檔在各份擷取的代碼不同，或和 `instruments.industry` 不一致，整批拒絕。
 - **D0**：每檔第一次出現在擷取中的 Asia/Taipei 日期（正式 DB 多數是 2026-09-08），等同補做 collector 當天略過的觀測（§4 的 `membership_effective_date`），不是分類生效日。
 - **membership**：錯誤群組的 row 關在 `D0-1`，canonical 群組從 D0 開新 row，source 與 collector 相同；collector 已在 Ds 轉換的標的補 `[D0, Ds-1]`。特殊碼（TDR 91）只關不開。不刪 row、不改 `valid_from`。
-- **群組**：沿用 canonical id，不改名也不新建同義群組。label 不屬於現行對照的群組（`Agriculture`、`Digital Content`、`Electronics`、`Industry · 31` 等佔位群組）設 `active=0`；canonical 群組的 `display_name_zh` 同步成 `INDUSTRY_DISPLAY_ZH`。collector 之後每次觀測也會同步顯示名。
+- **群組**：沿用 canonical id，不改名也不新建同義群組；canonical id 在 DB 不存在時才新建（正式 DB 有 11 個 label 原本沒有群組，例如 `Cement`、`Information Service`）。佔位群組的 id 是佔位 label 的雜湊，不能改名沿用。label 不屬於現行對照的群組（`Agriculture`、`Digital Content`、`Electronics`、`Industry · 31` 等佔位群組）設 `active=0`；canonical 群組的 `display_name_zh` 同步成 `INDUSTRY_DISPLAY_ZH`。collector 之後每次觀測也會同步顯示名。
 - **收據與冪等**：預設 dry-run 不寫入；`--apply` 先驗證全部再寫，`ingestion_runs`（`run_type=industry_repair`）的 `metadata_json` 記證據 raw、每檔關閉與新開的期間。第二次執行回 `no_change`，不寫任何列。
 - **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。
 
