@@ -16,7 +16,9 @@ pnpm run dev
 
 ## 頁面與契約
 
-- 主導航：今日、新聞、族群、個股、行動；新聞詳情 `/news/:id`，個股 `/stocks/:exchange/:symbol`。
+- 主導航：今日、新聞、族群、個股、行動；新聞詳情 `/news/:id`，個股 `/stocks/:exchange/:symbol`。所有頁面共用 `components/Shell.tsx`（固定頂部 Navbar：五個主導航、代號／名稱搜尋導向 `/stocks?q=`、`/dashboard` 的資料日期 badge、窄版漢堡選單）。
+- 個股頁：頁首收盤與漲跌、預設分頁「圖表與指標」（日／週 K 線、成交量、MA5～120、MACD／RSI／KD／布林面板）都讀 `GET /api/stocks/{exchange}/{symbol}/bars?interval=day|week&limit=250`；其餘分頁讀 `GET /api/stocks/{exchange}/{symbol}`。顯示與無資料文案見 [UI 文案 §10.2](../docs/UI_COPY_SPEC.md#102-個股詳情的第一屏)。
+- 樣式：`src/styles/tokens.css` 是唯一放色碼的檔案，`src/styles.css` 與元件只用變數；共用元件在 `src/components/ui/`（Card、Badge、Button、Table、Tabs、Stat／MarketWidget、EmptyState、Skeleton）。`src/noHardcodedColors.test.ts` 在 `test:ci` 檢查其他檔案沒有色碼。
 - 研究／診斷：`/research/backtest`、`/research/coverage`、`/research/strategies`、`/system/data-quality`、`/glossary`。
 - [UI 文案](../docs/UI_COPY_SPEC.md)：中文狀態、單位、未知與卡片；[設計規範](../docs/DESIGN_SYSTEM.md)：視覺與元件。
 - [新聞契約](../docs/NEWS_SPEC.md)：來源、去重、時間；[詞彙表](../docs/GLOSSARY.md)：術語。
