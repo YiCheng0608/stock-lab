@@ -17,8 +17,10 @@ import type {
   StockBarsInterval,
   StockBarsResponse,
   StockDirectoryRow,
-  ThemeDirectoryRow,
+  ThemeBoard,
+  ThemeBoardResponse,
   ThemeDetail,
+  ThemeMembersResponse,
   Paginated,
   Position,
   PositionInput,
@@ -30,6 +32,7 @@ import type {
 
 import { assertPortfolioValue } from './portfolioValues'
 import { STOCK_BARS_LIMIT, stockBarsPath } from './stock/stockBars'
+import { THEME_BOARD_LIMIT, themeBoardPath } from './themes/themeBoards'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
@@ -180,16 +183,12 @@ export const getNews = (params: CursorParams = {}) =>
 export const getNewsDetail = (newsId: string) =>
   get<NewsItem>(`/news/${encodeURIComponent(newsId)}`)
 
-export const getThemes = (params: PageParams & { leaderboard?: string; only_qualified?: boolean } = {}) =>
-  get<{ items: ThemeDirectoryRow[]; meta: Record<string, unknown> }>(
-    `/themes${queryString(params)}`,
-  )
+export const getThemeBoard = (board: ThemeBoard, limit = THEME_BOARD_LIMIT) =>
+  get<ThemeBoardResponse>(themeBoardPath(board, limit))
 
 export const getTheme = (id: string) => get<ThemeDetail>(`/themes/${encodeURIComponent(id)}`)
 export const getThemeMembers = (id: string, params: PageParams & { sort?: string } = {}) =>
-  get<ThemeDetail & { items: StockDirectoryRow[] }>(
-    `/themes/${encodeURIComponent(id)}/members${queryString(params)}`,
-  )
+  get<ThemeMembersResponse>(`/themes/${encodeURIComponent(id)}/members${queryString(params)}`)
 
 export const getStocks = (params: PageParams & { exchange?: string; instrument_type?: string; theme_id?: string; watchlist_only?: boolean } = {}) =>
   get<{ items: StockDirectoryRow[]; meta: Record<string, unknown> }>(`/stocks${queryString(params)}`)
