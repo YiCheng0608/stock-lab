@@ -58,6 +58,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | --- | --- |
 | `python -m worker.cli init-db` | 建立／升級指定 DB；先確認路徑、backup 與授權。 |
 | `python -m worker.cli collect --date YYYY-MM-DD --months-back 0` | 官方來源收集；`months-back` 只接受 0、1、2、3。 |
+| `python -m worker.cli themes sync [--file PATH]` | 驗證[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)（預設 `backend/data/themes/themes_v1.json`）並寫入 `theme_groups`／`group_memberships`；不發網路，重跑冪等。任何錯誤都整批不寫入、印出位置並 exit 1。題材榜在下一次 analyze／daily 計分。 |
 | `python -m worker.cli daily --date YYYY-MM-DD --months-back 0` | collect 成功才 analyze；analyze 成功才 evaluate。collect 成功後最後跑指標批次（`--date` 傳給批次；analyze 失敗也跑），批次失敗只在結果的 `indicators` 記 `failed` 與錯誤，不影響前面步驟；collect 失敗時記 `skipped`。 |
 | `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。 |
 | `python -m worker.cli analyze` | 要求最新官方 collect run success 與有效 as-of；沒有 `--date`，也不是任意局部分析器。 |

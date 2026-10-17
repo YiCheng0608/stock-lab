@@ -10,6 +10,7 @@ from .backfill import BACKFILL_SCOPES, targeted_backfill
 from .indicator_batch import run_indicator_batch
 from .news_batch import run_news_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
+from .themes import sync_themes
 
 
 def parse_date(value: str | None) -> date | None:
@@ -40,6 +41,10 @@ def main() -> None:
     indicators_parser = subparsers.add_parser("indicators", help="以保存日線計算技術指標（預設只寫最新未算日）")
     indicators_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用 DB 最新日線日")
     indicators_parser.add_argument("--rebuild", action="store_true", help="重算並改寫全部歷史")
+    themes_parser = subparsers.add_parser("themes", help="題材表")
+    themes_subparsers = themes_parser.add_subparsers(dest="themes_command", required=True)
+    themes_sync_parser = themes_subparsers.add_parser("sync", help="驗證題材表並寫入族群與成員期間（重跑冪等）")
+    themes_sync_parser.add_argument("--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json")
     news_parser = subparsers.add_parser("news", help="抓取國內／國際財經新聞 feed 並寫入 news_items")
     news_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；只標記 run 日期，未指定使用台北今日")
     args = parser.parse_args()
@@ -63,11 +68,15 @@ def main() -> None:
         result = backtest(date.fromisoformat(args.start_date), date.fromisoformat(args.end_date))
     elif args.command == "indicators":
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
+    elif args.command == "themes":
+        result = sync_themes(args.file)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     else:
         result = run_daily(parse_date(args.run_date), months_back=args.months_back)
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result.get("status") == "failed" and args.command == "themes":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
