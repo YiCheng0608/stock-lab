@@ -865,3 +865,52 @@ export type GlossaryTerm = {
   related: string[]
   version: string
 }
+
+// GET /api/stocks/{exchange}/{symbol}/bars (docs/V1_SPEC.md 技術指標, indicators/v1).
+export type StockBarsInterval = 'day' | 'week'
+
+export type IndicatorField =
+  | 'ma5' | 'ma10' | 'ma20' | 'ma60' | 'ma120'
+  | 'macd_dif' | 'macd_signal' | 'macd_hist'
+  | 'rsi6' | 'rsi12'
+  | 'kd_k' | 'kd_d'
+  | 'boll_mid' | 'boll_upper' | 'boll_lower'
+  | 'vol_ma5' | 'vol_ma20'
+
+export type StockBarRow = {
+  date: string
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  volume: number | null
+  // Daily rows carry `source` and `is_suspended`; weekly rows carry `sources`, `week_start`, `week_end`, `trading_days`.
+  source?: string | null
+  sources?: string[]
+  is_suspended?: boolean
+  week_start?: string
+  week_end?: string
+  trading_days?: number
+  bar_count: number | null
+  // Only null fields are listed: insufficient_bars, suspended, invalid_bar, no_price_change or not_computed.
+  reasons: Partial<Record<IndicatorField, string>>
+} & Partial<Record<IndicatorField, number | null>>
+
+export type StockBarsResponse = {
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  interval: StockBarsInterval
+  limit: number
+  count: number
+  data_as_of: string | null
+  sources: string[]
+  indicators: {
+    formula_version: string
+    price_basis: string
+    parameters: Record<string, unknown>
+    required_bars: Partial<Record<IndicatorField, number>>
+    fields: string[]
+    source: string
+    computed_at: string | null
+  }
+  bars: StockBarRow[]
+}

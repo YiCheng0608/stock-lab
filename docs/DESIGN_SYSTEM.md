@@ -41,6 +41,18 @@
   --color-text: #f9fafb;           /* 主文字 */
   --color-text-muted: #9ca3af;     /* 說明、標籤、表頭 */
   --color-text-subtle: #6b7280;    /* 註腳、停用 */
+  --color-on-primary: #ffffff;     /* 主按鈕文字、logo 圖示 */
+  --color-primary-soft: rgba(59, 130, 246, 0.20); /* feature-card 圖示底、選取底 */
+  --color-nav-bg: rgba(11, 15, 26, 0.95);         /* Navbar 底 */
+  --color-overlay: rgba(0, 0, 0, 0.68);           /* modal 遮罩 */
+
+  /* 圖表（§6；ECharts 於執行時讀取這些變數） */
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-ma5: #f59e0b;
+  --chart-ma10: #8b5cf6;
+  --chart-ma20: #3b82f6;
+  --chart-ma60: #10b981;
+  --chart-ma120: #9ca3af;
 
   /* 字體 */
   --font-heading: "Inter", "Noto Sans TC", system-ui, sans-serif;
@@ -74,7 +86,7 @@
 }
 ```
 
-字體載入：Google Fonts `Inter:wght@400;500;600;700` 與 `JetBrains+Mono:wght@400;500`；中文 fallback 用 `Noto Sans TC`（可選載入）。只允許 Inter 當標題與內文、JetBrains Mono 當數字。
+字體載入：`frontend/index.html` 以 Google Fonts 載入 `Inter:wght@400;500;600;700` 與 `JetBrains+Mono:wght@400;500;600;700`（§3 的數字用到 600／700）；中文 fallback 用 `Noto Sans TC`（`400;500;700`）。只允許 Inter 當標題與內文、JetBrains Mono 當數字。
 
 ## 3. 字級與數字
 
@@ -93,7 +105,7 @@
 
 ## 4. 版面與導航
 
-- **Navbar**：固定頂部，高 64px，`backdrop-filter: blur(20px)`，底色 `rgba(11,15,26,0.95)`，下緣 1px `--color-border`。左側 40px 圓角 logo（主色→強調色漸層方塊＋白色折線圖示）加產品名；中間五個主導航連結（今日、新聞、族群、個股、行動），顏色 muted、hover 轉主文字色、當前頁主文字色加 2px 主色底線；右側放搜尋（代號／名稱）與資料日期 badge。手機收成漢堡選單。
+- **Navbar**：固定頂部，高 64px，`backdrop-filter: blur(20px)`，底色 `--color-nav-bg`，下緣 1px `--color-border`。左側 40px 圓角 logo（主色→強調色漸層方塊＋白色折線圖示）加產品名；中間五個主導航連結（今日、新聞、族群、個股、行動），顏色 muted、hover 轉主文字色、當前頁主文字色加 2px 主色底線；右側放搜尋（代號／名稱）與資料日期 badge。手機收成漢堡選單。
 - **內容容器**：`max-width: var(--content-max)`，左右 padding 16／24／32px（手機／平板／桌面）。
 - **區塊**：垂直 padding 64px，桌面 96px；相鄰區塊以 `--color-bg` 與 `--color-bg-alt` 交錯。
 - **網格**：卡片列用 CSS grid，桌面 2–4 欄、平板 2 欄、手機 1 欄，gap 16–24px。
@@ -121,9 +133,10 @@
 
 ## 6. 圖表（ECharts）
 
-- 背景透明，格線 `rgba(255,255,255,0.06)`，軸文字 `--color-text-muted` 12px mono。
+- 圖表顏色同樣只來自 tokens：ECharts 畫在 canvas 上不能解析 `var()`，元件在執行時以 `getComputedStyle(document.documentElement)` 讀取 §2 的變數再傳給 option。
+- 背景透明，格線 `--chart-grid`，軸文字 `--color-text-muted` 12px mono。
 - K 線：漲 `--color-up`、跌 `--color-down`，實體與影線同色；成交量柱同漲跌色、60% 透明。
-- 均線固定色：MA5 `#f59e0b`、MA10 `#8b5cf6`、MA20 `#3b82f6`、MA60 `#10b981`、MA120 `#9ca3af`。
+- 均線固定色：MA5 `--chart-ma5`（`#f59e0b`）、MA10 `--chart-ma10`（`#8b5cf6`）、MA20 `--chart-ma20`（`#3b82f6`）、MA60 `--chart-ma60`（`#10b981`）、MA120 `--chart-ma120`（`#9ca3af`）。布林面板：中軌主色、上下軌強調色、收盤線 muted。
 - 指標面板（MACD／RSI／KD／布林）置於主圖下方，高度為主圖 35%，共用 x 軸與 dataZoom；MACD 柱用漲跌色，DIF／DEA 用主色與強調色；RSI／KD 參考線（20／80、30／70）用 `--color-text-subtle` 虛線。
 - 單線圖（熱度走勢、淨值）：主色線寬 2px，下方用主色漸層填充（頂部 25% 透明到底部 0）。
 - Tooltip：底 `--color-bg-card`、1px 邊、圓角 8px、mono 數字；滑鼠十字線 `--color-text-subtle`。
@@ -146,7 +159,7 @@
 
 ## 9. 實作規則
 
-- 樣式以 Tailwind utility 搭配上述 CSS 變數（`text-[var(--color-text-muted)]` 形式）或等價的 CSS class；禁止元件內 inline 色碼。
+- 樣式以 Tailwind utility 搭配上述 CSS 變數（`text-[var(--color-text-muted)]` 形式）或等價的 CSS class；禁止元件內 inline 色碼。色碼字面值（`#rgb`、`rgb()`、`rgba()`、`hsl()`）只出現在 `frontend/src/styles/tokens.css`，由 `frontend/src/noHardcodedColors.test.ts` 檢查。
 - 共用元件放 `frontend/src/components/ui/`（Card、Badge、Button、Table、Tabs、Stat、EmptyState、Skeleton），頁面只組裝不重畫。
 - 新元件先查本文是否已有對應規則；沒有就先補本文再實作。
 - PR 附桌面（1280px）與手機（390px）截圖各一張，確認符合本文。

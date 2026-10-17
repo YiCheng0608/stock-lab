@@ -18,7 +18,7 @@
 
 | 角色 | 預設模型／effort | 做什麼 |
 | --- | --- | --- |
-| 統籌 | `claude-opus-5-5`／`medium` | 使用者入口 session 兼任，或使用者指定的一個 session。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度。 |
+| 統籌 | `claude-opus-5-5`／`medium`，`--autocompact 400k` | 同時只有一個：由使用者依[工作手冊](docs/GITHUB_WORKFLOW.md#統籌-session)開啟，之後依手冊自行換手。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/GITHUB_WORKFLOW.md#無人值守運作)持續推進。 |
 | 工程師 | `claude-sonnet-5-5`／`xhigh`（複雜任務可用 `claude-opus-5-5`） | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/GITHUB_WORKFLOW.md#review-與合併)。
@@ -54,6 +54,10 @@
 - ROADMAP 寫方向、版本範圍與已完成能力；規格文件（PRODUCT_SPEC、V1_SPEC、NEWS_SPEC 等）只寫確定的契約；過程與待辦留 Issue。
 - 功能完成的同一個 PR 更新受影響文件；內容失效時同批刪除指向它的連結。
 - 同一規則只寫一次，其他處放連結。
+
+## 上下文壓縮時保留
+
+任何 session 被壓縮時，摘要必須保留：手上任務的 Issue／PR 編號與目前步驟；使用者最近的決策與其 #1 留言 id；等待中的事件（CI、回報、回補）與對應 terminal／worktree；已承諾未做完的事；使用者給過的參考資料（連結、檔案）與它們代表什麼。不保留已結案任務的細節，那些在 GitHub。
 
 ## 流程變更
 

@@ -14,6 +14,8 @@ import type {
   InstrumentDetail,
   NewsItem,
   GlossaryTerm,
+  StockBarsInterval,
+  StockBarsResponse,
   StockDirectoryRow,
   ThemeDirectoryRow,
   ThemeDetail,
@@ -27,6 +29,7 @@ import type {
 } from './types'
 
 import { assertPortfolioValue } from './portfolioValues'
+import { STOCK_BARS_LIMIT, stockBarsPath } from './stock/stockBars'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
@@ -195,6 +198,9 @@ export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
+
+export const getStockBars = (exchange: string, symbol: string, interval: StockBarsInterval, limit = STOCK_BARS_LIMIT) =>
+  get<StockBarsResponse>(stockBarsPath(exchange, symbol, interval, limit))
 
 export const getActions = (params: CursorParams = {}) =>
   get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string } }>(`/actions${queryString(params)}`)
