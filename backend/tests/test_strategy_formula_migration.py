@@ -620,7 +620,8 @@ def test_worker_runs_on_v2_rows_and_keeps_older_dates_on_their_v1_rows(tmp_path,
 
     result = run()
 
-    assert result["status"] == "success" and result["signals_upserted"] == 4
+    # signals_upserted counts instruments; the four signal rows are checked below.
+    assert result["status"] == "success" and result["signals_upserted"] == 2
     assert query(target, "SELECT * FROM signals WHERE id <= 2 ORDER BY id") == old_signals
     assert query(target, "SELECT * FROM strategy_versions WHERE id <= 3 ORDER BY id") == legacy_rows_before
     new = query(target, "SELECT s.signal_key, v.id, v.formula_version, v.active, v.canonical_config_snapshot "
