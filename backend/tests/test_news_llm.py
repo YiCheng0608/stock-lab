@@ -33,6 +33,7 @@ FAKE_CLI = Path(__file__).parent / "fixtures" / "news_llm" / "fake_claude.py"
 RUN_DATE = date(2026, 10, 17)
 # 2026-10-17 10:00 Taipei
 BASE_TIME = datetime(2026, 10, 17, 2, 0)
+NOW = BASE_TIME + timedelta(hours=1)
 
 
 @pytest.fixture
@@ -70,8 +71,18 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(log))
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "ok")
     # As when the batch is started from inside a Claude Code session.
-    monkeypatch.setenv("CLAUDECODE", "1")
-    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+    for key, value in {
+        "CLAUDECODE": "1",
+        "CLAUDE_CODE_ENTRYPOINT": "cli",
+        "CLAUDE_CODE_SESSION_ID": "parent",
+        "CLAUDE_PID": "1",
+        "CLAUDE_EFFORT": "high",
+        "ANTHROPIC_BASE_URL": "https://proxy.example",
+        "CLAUDE_CONFIG_DIR": "C:/claude-config",
+    }.items():
+        monkeypatch.setenv(key, value)
+    for key in news_llm.API_KEY_ENV:
+        monkeypatch.delenv(key, raising=False)
 
     def calls():
         if not log.exists():
@@ -125,6 +136,7 @@ def _results(db, **filters):
 
 def _run(db, **kwargs):
     kwargs.setdefault("run_date", RUN_DATE)
+    kwargs.setdefault("now", NOW)
     return run_news_llm(db, **kwargs)
 
 
@@ -154,9 +166,11 @@ def test_batches_are_split_and_results_saved(db, fake):
         assert (
             json.loads(argv[argv.index("--json-schema") + 1]) == news_llm.OUTPUT_SCHEMA
         )
-        assert argv[argv.index("--disallowedTools") + 1] == news_llm.DISALLOWED_TOOLS
+        assert argv[argv.index("--tools") + 1] == ""
+        assert argv[argv.index("--setting-sources") + 1] == ""
         assert "--strict-mcp-config" in argv and "--bare" not in argv
-        assert call["nested_env"] == [] and call["cwd_entries"] == []
+        assert call["leaked_env"] == [] and call["cwd_entries"] == []
+        assert call["config_dir"] == "C:/claude-config"
 
     rows = _results(db)
     assert len(rows) == 30
@@ -225,8 +239,9 @@ def test_new_prompt_version_reruns_and_keeps_old_results(db, fake, monkeypatch):
 
 def test_prompt_file_is_versioned_and_pinned():
     assert news_llm.PROMPT_PATH.name == f"{PROMPT_VERSION}.md"
-    # Changing the prompt text requires a new PROMPT_VERSION (and a new pin).
-    assert prompt_sha256() == PROMPT_SHA256
+    assert prompt_sha256() == PROMPT_SHA256, (
+        "改提示須升版 PROMPT_VERSION 並更新 PROMPT_SHA256"
+    )
 
 
 def test_news_text_cannot_close_the_data_block():
@@ -296,7 +311,8 @@ def test_cli_prefix_accepts_a_path_or_a_json_list(monkeypatch):
 @pytest.mark.parametrize(
     "mode,reason",
     [
-        ("not_logged_in", "not_logged_in"),
+        ("extra_key", "schema_mismatch"),
+        ("long_reason", "schema_mismatch"),
         ("invalid_json", "invalid_json"),
         ("sleep", "timeout"),
         ("missing_field", "schema_mismatch"),
@@ -415,6 +431,36 @@ def test_validation_rejects_missing_extra_and_bad_fields():
         {"items": [dict(good, unsupported="no")]},
         {"items": "none"},
         None,
+        {"items": [good], "note": "extra"},
+        {"items": [dict(good, buy_signal=True)]},
+        {"items": [dict(good, impact_rationale="理" * 121)]},
+        {"items": [dict(good, theme_candidates=[{"theme": "題" * 41, "reason": "x"}])]},
+        {"items": [dict(good, theme_candidates=[{"theme": "半導體"}])]},
+        {
+            "items": [
+                dict(
+                    good,
+                    symbol_candidates=[
+                        {"symbol": "TWSE:abcd", "reason": "x", "confidence": "low"}
+                    ],
+                )
+            ]
+        },
+        {
+            "items": [
+                dict(
+                    good,
+                    symbol_candidates=[
+                        {
+                            "symbol": "TWSE:2330",
+                            "reason": "x",
+                            "confidence": "low",
+                            "target_price": 1000,
+                        }
+                    ],
+                )
+            ]
+        },
     ]
     for index, case in enumerate(bad_cases):
         expected = [1, 2] if index == 0 else [1]
@@ -514,3 +560,115 @@ def test_api_shows_no_ai_block_for_pending_items(db, fake, client, monkeypatch):
     _run(db)
     assert _results(db)[0].llm_status == "pending"
     assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
+
+
+# Review fixes -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["not_logged_in", "rate_limited"])
+def test_a_failure_every_call_would_repeat_stops_the_run(db, fake, monkeypatch, mode):
+    items = _add_news(db, BATCH_SIZE * 2 + 1)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", mode)
+    result = _run(db, limit=60)
+    assert len(fake()) == 1 and result["calls"] == 1
+    assert result["status"] == "failed" and result["batches"][0]["reason"] == mode
+    assert [batch["reason"] for batch in result["skipped_batches"]] == [
+        f"stopped_after_{mode}"
+    ] * 2
+    # Only the attempted batch is pending; skipped items have no row.
+    assert {row.news_item_id for row in _results(db)} == {
+        item.id for item in items[:BATCH_SIZE]
+    }
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.metadata_json["calls"] == 1
+
+
+def test_api_key_in_environment_refuses_to_run(db, fake, monkeypatch):
+    _add_news(db, 2)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    result = _run(db)
+    assert result["status"] == "failed" and result["reason"] == "api_key_env_refused"
+    assert fake() == [] and _results(db) == []
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == "failed" and run.metadata_json["calls"] == 0
+
+
+@pytest.mark.parametrize(
+    "value,reason",
+    [("C:/missing/claude.exe", "cli_not_found"), ("[]", "cli_config_invalid")],
+)
+def test_cli_configuration_errors_fail_before_any_row(
+    db, fake, monkeypatch, value, reason
+):
+    _add_news(db, 2)
+    monkeypatch.setenv(news_llm.CLI_ENV, value)
+    result = _run(db)
+    assert result["status"] == "failed" and result["reason"].startswith(reason)
+    assert fake() == [] and _results(db) == []
+    assert _run(db, dry_run=True)["reason"].startswith(reason)
+
+
+def test_calls_are_counted_on_the_run_after_each_batch(db, fake):
+    _add_news(db, BATCH_SIZE + 1)
+    seen = []
+
+    def runner(prompt, argv):
+        run = db.scalars(select(IngestionRun).order_by(IngestionRun.id.desc())).first()
+        db.refresh(run)
+        seen.append(run.metadata_json.get("calls", 0))
+        return news_llm.run_claude_cli(prompt, argv)
+
+    _run(db, runner=runner)
+    assert seen == [0, 1]
+
+
+def test_items_older_than_three_days_are_marked_stale_and_not_sent(db, fake):
+    fresh = _add_news(db, 1)
+    old = _add_news(
+        db,
+        1,
+        start=50,
+        published_at=NOW - timedelta(days=3, minutes=1),
+        display_time=NOW - timedelta(days=3, minutes=1),
+        collected_at=NOW,
+    )
+    # No source time: collected_at decides.
+    undated = _add_news(
+        db,
+        1,
+        start=60,
+        published_at=None,
+        display_time=None,
+        collected_at=NOW - timedelta(days=4),
+    )
+    result = _run(db)
+    assert fake()[0]["ids"] == [fresh[0].id]
+    assert result["stale"] == 2
+    stale = _results(db, llm_status="skipped_stale")
+    assert {row.news_item_id for row in stale} == {old[0].id, undated[0].id}
+    assert all(row.ai_summary is None for row in stale)
+    again = _run(db)
+    assert again["stale"] == 0 and again["selected"] == 0
+
+
+def test_news_list_reads_llm_results_in_one_query(db, fake, client):
+    from sqlalchemy import event
+
+    _add_news(db, 5)
+    _run(db)
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        items = client.get(f"{router.prefix}/news", params={"limit": 50}).json()[
+            "items"
+        ]
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert len(items) == 5 and all(item["ai"] for item in items)
+    assert items[0]["ai"]["symbol_candidates"][0]["name"] == "台積電"
+    assert sum("news_llm_results" in statement for statement in statements) == 1

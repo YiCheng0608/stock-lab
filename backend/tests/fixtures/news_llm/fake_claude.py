@@ -81,11 +81,13 @@ def main() -> int:
                     "argv": sys.argv[1:],
                     "ids": ids,
                     "mode": mode,
-                    "nested_env": [
+                    "leaked_env": sorted(
                         key
-                        for key in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")
-                        if key in os.environ
-                    ],
+                        for key in os.environ
+                        if key in ("CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT")
+                        or key.startswith(("CLAUDE_CODE_", "ANTHROPIC_"))
+                    ),
+                    "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
                     "cwd_entries": os.listdir(os.getcwd()),
                 },
                 ensure_ascii=False,
@@ -104,12 +106,23 @@ def main() -> int:
             )
         )
         return 1
+    if mode == "rate_limited":
+        _out(
+            json.dumps(
+                _envelope(None, is_error=True, result="Claude AI usage limit reached")
+            )
+        )
+        return 1
     if mode == "invalid_json":
         _out("this is not json")
         return 0
     items = [_item(news_id) for news_id in ids]
     if mode == "missing_field":
         del items[0]["impact_direction"]
+    if mode == "extra_key":
+        items[0]["buy_signal"] = True
+    if mode == "long_reason":
+        items[0]["symbol_candidates"][0]["reason"] = "理" * 121
     _out(json.dumps(_envelope({"items": items}), ensure_ascii=False))
     return 0
 
