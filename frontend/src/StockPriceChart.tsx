@@ -18,10 +18,10 @@ function sourceLabel(sources: string[]): string {
   return sources.map((source) => source === 'twse' ? '臺灣證券交易所' : source === 'tpex' ? '證券櫃檯買賣中心' : '來源待核實').join('、')
 }
 
-export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES, unlocatedDateRows = 0 }: { bars: readonly StockDetailBar[]; knownGapDates?: readonly string[]; unlocatedDateRows?: number }) {
+export function StockPriceChart({ bars, knownGapDates = EMPTY_GAP_DATES }: { bars: readonly StockDetailBar[]; knownGapDates?: readonly string[] }) {
   const stableGapDates = knownGapDates.length === 0 ? EMPTY_GAP_DATES : knownGapDates
   const gapDateKey = stableGapDates.join('\u0000')
-  const prepared = useMemo(() => prepareStockChartData(bars, { knownGapDates: stableGapDates, unlocatedDateRows }), [bars, gapDateKey, unlocatedDateRows])
+  const prepared = useMemo(() => prepareStockChartData(bars, { knownGapDates: stableGapDates }), [bars, gapDateKey])
   const [preset, setPreset] = useState<StockChartRange | null>('all')
   const [window, setWindow] = useState<StockChartWindow>(() => windowForRange(0, 'all'))
 

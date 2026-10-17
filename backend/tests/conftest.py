@@ -17,55 +17,15 @@ from pathlib import Path
 
 import pytest
 
-_TESTS_DIR = Path(__file__).resolve().parent
 _TEST_ROOT = Path(tempfile.mkdtemp(prefix="taiwan-stock-research-tests-"))
 _TEST_DATA_DIR = _TEST_ROOT / "data"
 _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
-
-# Modules written as standalone runners.  They install process-wide audit hooks,
-# read argv or ``__main__`` while importing, or assert that conftest and ``app``
-# were never imported, so pytest must not import them.  Run each one with its
-# documented standalone command instead (docs/development-baseline/README.md).
-STANDALONE_ONLY = {
-    "test_share_quantity_storage.py": (
-        "docs/development-baseline/README.md:198 (standalone, no conftest, disk cases only "
-        "through the fixed root); tests/test_share_quantity_storage.py:24,148"
-    ),
-    "test_conditional_plan_store.py": (
-        "tests/test_conditional_plan_store.py:1 (standalone RAM self-tests), :42 audit hook, "
-        ":80 asserts app was never imported; no README mention"
-    ),
-}
 
 # Assign rather than setdefault: a developer shell may have production
 # values inherited from a previous CLI/probe, and tests must override them.
 os.environ["STOCK_DATA_DIR"] = str(_TEST_DATA_DIR)
 os.environ["STOCK_DB_PATH"] = str(_TEST_DATA_DIR / "stock.db")
 os.environ["STOCK_RAW_DIR"] = str(_TEST_RAW_DIR)
-
-
-class _StandaloneOnly(pytest.File):
-    """A module pytest can name but never imports or runs."""
-
-    def collect(self):
-        return []
-
-
-def pytest_pycollect_makemodule(module_path, parent):
-    """Keep standalone runners out of pytest, including when named explicitly.
-
-    ``collect_ignore`` and ``pytest_ignore_collect`` are bypassed for files
-    given on the command line, which would import the module and let its
-    import-time ``parse_args()``/assertions abort the whole collection.
-    """
-
-    if module_path.name in STANDALONE_ONLY and module_path.parent.resolve() == _TESTS_DIR:
-        return _StandaloneOnly.from_parent(parent, path=module_path)
-    return None
-
-
-def pytest_report_header(config):
-    return "standalone-only, not collected by pytest: " + ", ".join(sorted(STANDALONE_ONLY))
 
 
 def pytest_configure(config):

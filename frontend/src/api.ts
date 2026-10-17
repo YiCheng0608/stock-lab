@@ -12,10 +12,6 @@ import type {
   IngestionRun,
   Instrument,
   InstrumentDetail,
-  OfficialEventsData,
-  TwseIssuerProfileData,
-  OfficialEventFocusData,
-  OfficialEventKind,
   NewsItem,
   GlossaryTerm,
   StockDirectoryRow,
@@ -74,10 +70,6 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
-export const getOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string, eventKind: OfficialEventKind = 'all') =>
-  get<OfficialEventFocusData>(`/focus/official-events${queryString({ as_of: asOf, q, from, to, event_kind: eventKind })}`)
-export const captureOfficialEventFocus = (asOf: string, q = '', from?: string, to?: string, eventKind: OfficialEventKind = 'all') =>
-  post<OfficialEventFocusData>(`/focus/official-events/capture${queryString({ as_of: asOf, q, from, to, event_kind: eventKind })}`, {})
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)
@@ -203,15 +195,6 @@ export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
-
-export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
-  post<OfficialEventsData>(
-    `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/official-events/capture${queryString({ as_of: asOf })}`,
-    {},
-  )
-
-export const captureTwseIssuerProfile = (exchange: string, symbol: string, asOf: string) =>
-  post<TwseIssuerProfileData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/issuer-profile/capture${queryString({ as_of: asOf })}`, {})
 
 export const getActions = (params: CursorParams = {}) =>
   get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string } }>(`/actions${queryString(params)}`)

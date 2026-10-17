@@ -278,6 +278,23 @@ export function categoryLabel(value: string | null | undefined): string {
   return labels[value?.toLowerCase() ?? ''] ?? (value && /[\u3400-\u9fff]/.test(value) ? value : '分類待核實')
 }
 
+// Temporary UI guard for the currently known official-industry membership
+// migration issue. Remove this flag after the repaired source data is verified.
+export const TEMPORARY_INDUSTRY_GROUP_GUARD = true
+export const TEMPORARY_INDUSTRY_GROUP_NOTICE = '既有族群關聯待重新核實；排行與相關研究條件僅供查閱。'
+
+export function isTemporaryIndustryTheme(theme: { category?: string | null; name_status?: string | null }): boolean {
+  if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
+  const category = theme.category?.trim().toLowerCase() ?? ''
+  return category === '股票族群' || category === 'industry' || category.startsWith('industry ·') || category.startsWith('產業')
+}
+
+export function isTemporaryIndustryGroupName(name: string | null | undefined): boolean {
+  if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
+  const value = name?.trim() ?? ''
+  return /^industry\s*·/i.test(value) || /^產業(?:分類|代碼)/.test(value)
+}
+
 export function groupDisplayName(value: string | null | undefined): string {
   const name = value?.trim() ?? ''
   const etf = /^ETF\s*[·:：-]\s*(\w+)$/i.exec(name)

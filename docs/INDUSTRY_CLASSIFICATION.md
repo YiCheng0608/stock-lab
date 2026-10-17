@@ -1,23 +1,23 @@
-# TWSE／TPEx 產業分類與隔離修復契約
+# TWSE／TPEx 產業分類契約
 
-Mapping／隔離診斷、ordinary-industry collector、ETF／new-listing lifecycle 與 §8–9 身分契約均只在各節表列範圍通過有限 review。正式與 `.local` DB、歷史分類、舊族群分數及研究輸出尚未修復，「既有族群關聯待重新核實」guard 不得撤除。
+本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，以及群組成員與候選的身分契約。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。DB 內既有的族群關聯尚未全面重新核實，前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts`），資料修復完成前不得移除。
 
-## 1. 官方證據 snapshot
+## 1. 官方代碼來源
 
-`classification_evidence_at=2026-09-13`（Asia/Taipei）。TWSE current 表由 B.12.00 基表加 2023-07-03 官方變更組成，再與當次 OpenAPI code 交叉檢查；不能把舊基表單獨稱為 2026 最新版。TPEx 以 2025 v5.41 完整表為主、V12.14 為交叉驗證。API 出表日只識別公司基本資料 snapshot，不是每檔分類生效日。
+TWSE current 表由 B.12.00 基表加官方格式公告的變更組成，並與 OpenAPI 公司基本資料的 code 交叉檢查；TPEx 以 v5.41 完整表為主、V12.14 為交叉驗證。API 出表日只識別公司基本資料 snapshot，不是每檔分類的生效日。
 
-| 來源 | 本次使用的日期／範圍 |
+| 來源 | 內容 |
 | --- | --- |
-| [TWSE IP 行情網路 B.12.00](https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf) | 107/10 修改、109/03 實施；附錄三 01–31 基表。 |
-| [TWSE 產業格式公告](https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024) | 2023-05-30 公告；2023-07-03 起 code 16 更名並新增 35–38。 |
-| [TWSE 公司基本資料](https://openapi.twse.com.tw/v1/opendata/t187ap03_L) | `出表日期=1150911`，1,094 rows；另見 10 筆 TDR code 91。 |
-| [TPEx IP 行情網路 v5.41](https://dsp.tpex.org.tw/storage/eb_data/11405/1140500476-1.pdf) | 2025-05-13 文件；current 完整表，並記 2023-07-03 新增 35–38、停用 18／34。 |
-| [TPEx 上櫃股票 IP V12.14](https://dsp.tpex.org.tw/storage/eb_data/11309/1130500936-1.pdf) | 2024-09-23 文件；分類表與 v5.41 一致。 |
-| [TPEx 公司基本資料](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) | `Date=1150912`，891 rows；當次未見 18、34、80。 |
+| [TWSE IP 行情網路 B.12.00](https://www.twse.com.tw/staticFiles/product/broker/ff80808166388ea1016676ac941001e0.pdf) | 附錄三 01–31 基表。 |
+| [TWSE 產業格式公告](https://eshop.twse.com.tw/zh/news/detail/0000000087e9b84901886b8d96940024) | 2023-07-03 起 code 16 更名並新增 35–38。 |
+| [TWSE 公司基本資料](https://openapi.twse.com.tw/v1/opendata/t187ap03_L) | 上市公司產業別 code；另含 TDR code 91。 |
+| [TPEx IP 行情網路 v5.41](https://dsp.tpex.org.tw/storage/eb_data/11405/1140500476-1.pdf) | current 完整表；2023-07-03 新增 35–38、停用 18／34。 |
+| [TPEx 上櫃股票 IP V12.14](https://dsp.tpex.org.tw/storage/eb_data/11309/1130500936-1.pdf) | 分類表與 v5.41 一致。 |
+| [TPEx 公司基本資料](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) | 上櫃公司產業別 code。 |
 
-## 2. 完整市場別代碼期待表
+## 2. 市場別代碼對照表
 
-`—` 表示 current 一般產業表不支援。internal canonical 是穩定 group identity；官方市場別名稱仍以本表為準。`Tourism`、`Financial` 保留既有 key，觀光共用中文顯示為「觀光餐旅」。
+`—` 表示 current 一般產業表不支援。internal canonical 是穩定的 group identity；官方市場別名稱以本表為準。`Tourism`、`Financial` 保留既有 key，觀光共用中文顯示為「觀光餐旅」。
 
 | code | TWSE current 官方名稱 | TPEx current 官方名稱 | internal canonical／處理 |
 | --- | --- | --- | --- |
@@ -54,241 +54,140 @@ Mapping／隔離診斷、ordinary-industry collector、ETF／new-listing lifecyc
 | 31 | 其他電子業 | 其他電子業 | `Other Electronics` |
 | 32 | — | 文化創意業 | `Cultural Innovation`（TPEx only） |
 | 33 | — | 農業科技業 | `Agriculture Technology`（TPEx only） |
-| 34 | — | — | TPEx 歷史電子商務碼；current unsupported |
+| 34 | — | — | TPEx 已停用的電子商務碼；unsupported |
 | 35 | 綠能環保 | 綠能環保 | `Green Energy` |
 | 36 | 數位雲端 | 數位雲端 | `Digital Cloud` |
 | 37 | 運動休閒 | 運動休閒 | `Sports and Leisure` |
 | 38 | 居家生活 | 居家生活 | `Household` |
 | 80 | — | 管理股票 | 特殊狀態；不建一般產業排行 membership |
-| 91 | 一般表未列；當次 TWSE API 僅見 TDR | — | 特殊證券碼；不建一般產業排行 membership |
+| 91 | 一般表未列；TWSE API 僅見於 TDR | — | 特殊證券碼；不建一般產業排行 membership |
 
-shared current codes 沒有異義 collision；兩市場 22 都是生技醫療。查表仍必須使用 `(exchange, code)`，因市場專屬、停用與特殊碼不同。歷史錯誤是 TWSE 18、20–31 錯移、缺 19、31 誤接文化創意；TWSE 32、TPEx 18／34 應 unsupported，TPEx 80 是特殊狀態。
+兩市場共有的 current code 沒有異義；兩市場 22 都是生技醫療。查表仍必須使用 `(exchange, code)`，因為市場專屬、停用與特殊碼不同。
 
-## 3. Mapper 與 fail-closed 契約
+## 3. Mapper 與 fail-closed 規則
 
-- 官方 numeric input 必須同時有可辨識 `exchange` 與兩位數 `code`；只對該市場 current ordinary code 回 canonical，其餘為 `None`。不得先跨市場查全域 code。
+- 官方 numeric input 必須同時有可辨識的 `exchange` 與兩位數 `code`；只對該市場 current ordinary code 回 canonical，其餘為 `None`。不得先跨市場查全域 code。
 - blank、`00`、TWSE 91、TPEx 80／18／34、未列碼、缺 exchange 或格式錯誤，都不建立 verified `official_industry`；`Other` 不能作 unknown fallback。
-- current 官方 feed 必須保留 exchange＋numeric code 證據；legacy 英文 alias 只供相容讀取，不能升格為官方 truth。
+- current 官方 feed 必須保留 exchange＋numeric code 證據；legacy 英文 alias 只供相容讀取，不能升格為官方事實。
 - `backend/tests/fixtures/official_industry_codes.json` 只驗 current ordinary code 集合，其中 `official_names` 是測試樣本，不是完整市場別名稱 oracle。
-- manifest 保存 source URL、API 出表日、capture time、mapping version 與每筆 raw exchange／code。legacy 缺少的逐列時間保持 unknown。
 - 只有 ordinary industry 可合併成跨市場 canonical group；membership source 至少保留 exchange。
 
-## 4. 三種日期與修復邊界
+## 4. 日期語意
 
-| 欄位 | 本輪值 | 語意 |
-| --- | --- | --- |
-| `classification_evidence_at` | 2026-09-13 | current 官方碼表擷取／核對日，不是公司分類生效日。 |
-| `membership_effective_date` | 2026-09-13 | current-table diagnostic 副本的 forward transition 日，不是 fresh truth。 |
-| `market_data_as_of` | 2026-09-08 | 價格、籌碼、features、group scores 與 signals 的市場截點。 |
+| 欄位 | 語意 |
+| --- | --- |
+| `classification_evidence_at` | 官方碼表擷取／核對日，不是公司分類生效日。 |
+| `membership_effective_date` | membership period 的起日，即本系統開始採用該觀測的日期，不是來源生效日。 |
+| `market_data_as_of` | 價格、籌碼、features、group scores 與 signals 的市場截點。 |
 
 `instruments.industry` 沒有 revision history，三種日期不得互換；上市日、raw 收錄日與 market as-of 都不能補造分類生效日。
 
-- current diagnostic 只在 2026-09-13 forward transition：舊錯 open membership 關在 2026-09-12，expected ordinary membership 自 2026-09-13 起；歷史列保留，unknown／unsupported／special 不建 ordinary membership。
-- current 副本保留 2026-09-08 scores、signals、evaluations、settlements，不重算或覆寫。
-- counterfactual `baseline`／`corrected` 從同一唯讀 backup 建立，價格、籌碼與 features 相同；corrected 只以 current mapping 作情境輸入並用獨立 signal namespace。這是影響量測，不是 2026-09-08 PIT／歷史真值。
+## 6. 一般產業 membership
 
-## 5. 隔離驗收矩陣（有限範圍已 review）
-
-| Gate | 有限接受範圍 |
-| --- | --- |
-| mapping | current ordinary codes 精確命中；market-only、停用、特殊、blank／00／unknown 與 numeric-without-exchange fail-closed。 |
-| current transition | 每個 supported active stock／IPO 在 2026-09-13 恰有一個 expected membership；unknown／special 為 0；舊列保留且期間無 overlap。 |
-| derived preservation | current 副本的 2026-09-08 scores、signals、evaluations、settlements 不變。 |
-| counterfactual | baseline／corrected 使用相同 market inputs，只允許 membership、重算 scores 與隔離 signals 有預期差異。 |
-| isolation／rerun | 隔離副本 integrity／FK 正常；第二次執行不再漂移；正式與 `.local` DB 不變。 |
-
-2026-09-13 的隔離 review 通過上表，但只證當次副本的 current transition、preservation、counterfactual 與 rerun。正式 DB 未修復、歷史 effective date 未證、舊 derived outputs 未重算；文件、fixture、mapping test 或 counterfactual 成功都不能解除前端 guard，也不證策略有效性。
-
-## 6. Round16 normal collector 觀測期間（有限接線已 review）
-
-Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信 capture 觀測日作 forward transition；不回填歷史。ETF／new-listing lifecycle 由第 7 節另行定界。
+Collector 只對 stock／IPO 的 ordinary `official_industry`，以可信 capture 觀測日作 forward transition，不回填歷史。ETF 與新上市見第 7 節。
 
 ### 6.1 觀測時間與來源綁定
 
-- 每筆 instrument 必須以 `payload_sha256` 唯一匹配同 batch authoritative universe capture，並核對 exchange、source、endpoint allowlist 與 digest。TWSE／TPEx ordinary industry 只能各自來自 listed-company endpoint。
-- `captured_at` 取 `FetchedPayload.collected_at`；現行 local capture 的 naive 值依既有契約按 UTC 解讀，其他 naive 時間不可類推。正規化後須確認不在未來，再轉 Asia/Taipei 日曆日 `D=observation_date`。
-- `D` 是本系統開始採用 current observation 的下限，不是來源 effective date或 PIT。`data_as_of`、listing／start／score date 都不能替代。
-- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。
-- receipt 的 `industry_membership_observations` 保存 `version=industry-observation-v1`、`scope=ordinary_industry_only`、status、skipped／unresolved counts、warnings 與逐筆 source／endpoint／digest、capture／observed／score dates、raw refs、time relationship、raw classification 和 status。
-- force success 將前一成功 receipt append 到 history；force failure 保留最後成功 receipt，並另存 latest attempt／failed attempts。非 force reuse 不改寫既有成功 receipt。
-- raw 去重時間不能冒充當次 capture。新 raw 的 aware time 正規化成 UTC-naive 以符合現有 SQLite 欄位；missing／invalid timestamp 不以 DB default 或現在時間補造，run 必須成為 failed，並保留可得的原檔、digest與 persistence error。
-- 只出現在 TWSE new-listing endpoint 的 IPO 沒有 ordinary-industry authority，限縮為 skip＋warning；其他 identity／digest／source conflict 仍 fail-closed。
+- 每筆 instrument 必須以 `payload_sha256` 唯一匹配同 batch 的 authoritative universe capture，並核對 exchange、source、endpoint allowlist 與 digest。TWSE／TPEx ordinary industry 只能各自來自上市／上櫃公司基本資料 endpoint。
+- `captured_at` 取 `FetchedPayload.collected_at`；collector 寫入的 naive 值按 UTC 解讀，其他 naive 時間不可類推。正規化後須確認不在未來，再轉 Asia/Taipei 日曆日 `D=observation_date`。
+- `D` 是本系統開始採用該觀測的下限，不是來源生效日或 PIT。`data_as_of`、listing／start／score date 都不能替代。
+- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩個日期，行情 backfill 可繼續。
+- run receipt 的 `industry_membership_observations` 保存 `version=industry-observation-v1`、`scope=ordinary_industry_only`、status、skipped／unresolved counts、warnings 與逐筆 source／endpoint／digest、capture／observed／score dates、raw refs、時間關係、raw classification 與 status。
+- force 成功時把前一個成功 receipt 附加到 history；force 失敗保留最後成功 receipt，另存最近一次與失敗的 attempts。非 force 重用不改寫既有成功 receipt。
+- raw 去重時間不能冒充當次 capture。新 raw 的 aware time 正規化成 UTC-naive 以符合 SQLite 欄位；缺少或無效的 timestamp 不以 DB default 或現在時間補造，run 標為 failed，並保留可得的原檔、digest 與 persistence error。
+- 只出現在 TWSE 新上市 endpoint 的 IPO 沒有 ordinary-industry 來源，skip 並記 warning；其他 identity／digest／source 衝突仍 fail-closed。
 
-### 6.2 Ordinary-industry 狀態與期間轉換
+### 6.2 狀態與期間轉換
 
-- numeric current ordinary code 形成單一 desired canonical group。可信的 non-empty numeric unknown／special／unsupported 形成空集合，只關閉先前 ordinary membership；blank、non-numeric 或 ambiguous evidence fail-closed，不能當成「確認無產業」。
-- reconciliation 只操作 collector-owned `official_industry`；manual、ETF、`daily_hot_group` 與 universe 缺席標的不動。
-- exact 同日同 canonical open membership 是零 mutation。舊 open row 的 `valid_from < D` 時，change 先關於 `D-1` 再自 `D` 開新 row；可信空集合只關閉。
-- same-day wrong、future open、overlap／multiple-open、inactive 或 metadata 衝突須在 mutation 前拒絕；不得刪歷史、改日期或任選一列。raw 可先保存，但 membership／group mutation 整筆 rollback。
+- numeric current ordinary code 形成單一 desired canonical group。可信的 non-empty numeric unknown／special／unsupported 形成空集合，只關閉先前的 ordinary membership；blank、non-numeric 或有歧義的證據 fail-closed，不能當成「確認無產業」。
+- reconciliation 只操作 collector 擁有的 `official_industry`；manual、ETF、`daily_hot_group` 與 universe 中缺席的標的不動。
+- 同日同 canonical 的 open membership 不做任何變更。舊 open row 的 `valid_from < D` 時，改分類先關於 `D-1` 再自 `D` 開新 row；可信空集合只關閉。
+- same-day 錯誤、future open、overlap／multiple-open、inactive 或 metadata 衝突在變更前拒絕；不得刪歷史、改日期或任選一列。raw 可先保存，但 membership／group 變更整筆 rollback。
 
-### 6.3 最小驗收矩陣
+## 7. ETF 與新上市 lifecycle
 
-| Gate | 必須成立 |
-| --- | --- |
-| evidence／time | authoritative identity 唯一；D 只來自可信 capture；future time 拒絕。 |
-| score boundary | `D<=score_date` 只 forward transition；`D>score_date` skip，不污染舊 score。 |
-| transition | unchanged／change、可信空集合、ambiguous failure 與 exact rerun符合 §6.2。 |
-| conflict／atomicity | same-day、future、overlap、inactive 與 evidence conflict 在 mutation 前拒絕。 |
-| isolation | other domains、缺席 instrument、manual 與既有 score不因 industry reconciliation 漂移。 |
-| receipt／retry | 成功、partial、reuse、force failure 與 raw time error可分辨且不覆蓋最後成功 evidence。 |
+### 7.1 來源語意與日期
 
-有限 review 通過 §6.3，並涵蓋 parser→`collect`、timestamp、transaction、integrity／FK 與保護來源不變；不構成 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
-
-## 7. Round17 ETF／new-listing candidate lifecycle（有限接線已 review）
-
-已完成的有限範圍只有 current capture 驅動的 ETF 與 `new-listings` candidate lifecycle；不改第 6 節 ordinary counts／scope，也不授權正式資料修復。
-
-### 7.1 來源語意與五種日期
-
-- TWSE ETF raw 類型來自 `FundType`，TPEx 來自 `indexName`，再交現行 `normalize_etf_category(value, symbol, name)`。`broad_market`、`dividend`、`sector`、`thematic`、`commodity`、`bond`、`leveraged`、`inverse` 是 local heuristic，不是共同官方 taxonomy；未知文字或只有 symbol／name 可 fallback `thematic`，receipt 必須標 method/version。
-- candidate record 仍須唯一綁定相符市場與 endpoint 的 authoritative capture。ETF presence/category 只由 ETF endpoint 證明；stock／IPO presence、上市日與退出只由相符 listed-company／new-listing record 證明。
+- TWSE ETF raw 類型來自 `FundType`，TPEx 來自 `indexName`，再交 `normalize_etf_category(value, symbol, name)`（`backend/worker/sources.py`）。`broad_market`、`dividend`、`sector`、`thematic`、`commodity`、`bond`、`leveraged`、`inverse` 是本地 heuristic，不是共同官方 taxonomy；未知文字或只有 symbol／name 時 fallback `thematic`，receipt 必須標 method／version。
+- candidate record 必須唯一綁定相符市場與 endpoint 的 authoritative capture。ETF 存在與類別只由 ETF endpoint 證明；stock／IPO 存在、上市日與退出只由相符的上市公司／新上市 record 證明。
 - capture time、未來拒絕與 `D>score_date` skip 沿用 §6.1。
 
 | 名稱 | 意義 | lifecycle 用途 |
 | --- | --- | --- |
 | `D`／`observation_date` | capture 的台北觀測日 | transition 不得早於 D。 |
-| `L`／`listing_date` | authoritative 掛牌／核准上市日 | 只界定 new-listing 事件與 60 個曆日窗口。 |
+| `L`／`listing_date` | 官方掛牌／核准上市日 | 只界定新上市事件與 60 個曆日窗口。 |
 | `start_date` | 行情 backfill 起日 | 不建立 candidate period。 |
 | `score_date` | collect／analysis 截點 | 只作截點與 skip 判斷。 |
 | `E=L+60 days` | 0..60 inclusive 的最後曆日 | bounded `valid_to`；不是 60 根 bars。 |
 
-### 7.2 ETF category lifecycle
+### 7.2 ETF 類別
 
-- valid local category 形成 `group_type=etf` 的單一 desired membership；group identity 跨市場共用，membership source 保留 exchange，receipt 保存 endpoint、digest 與 heuristic version。
-- 新 period `valid_from=D`；category change 於 `D-1` 關舊、自 D 開新。exact same-day same-category rerun 零 mutation；same-day wrong、future、overlap／multiple-open、closed conflict 或 inactive／metadata conflict fail-closed。
-- category 缺失／非法或 capture 無法唯一綁定時整批 rollback，不關既有 ETF membership。heuristic fallback 不能稱來源驗證。
-- ETF→stock／IPO 退出只接受相符 authoritative current record；`L>D` prospective row、缺席、synthetic index或其他 domain membership 都不能證明退出。
+- 有效的本地類別形成 `group_type=etf` 的單一 desired membership；group identity 跨市場共用，membership source 保留 exchange，receipt 保存 endpoint、digest 與 heuristic version。
+- 新 period `valid_from=D`；類別改變時於 `D-1` 關舊、自 D 開新。同日同類別重跑不做變更；same-day 錯誤、future、overlap／multiple-open、closed conflict 或 inactive／metadata 衝突 fail-closed。
+- 類別缺失或非法、capture 無法唯一綁定時整批 rollback，不關既有 ETF membership。heuristic fallback 不能稱為來源驗證。
+- ETF 轉為 stock／IPO 只接受相符的官方 current record；`L>D` 的預告列、缺席、合成指數或其他 domain 的 membership 都不能證明退出。
 
-### 7.3 New-listing window 與到期
+### 7.3 新上市窗口與到期
 
-- new-listing 是 stock／IPO 的事件型 `daily_hot_group`；窗口為 `0 <= D-L <= 60` 個曆日 inclusive，與 20／60 根有效 bars 的 actionable guard 分離。
-- 只有 `L<=D<=E` 才新建 `[max(D,L), E]`。`L>D` 不預建 future period；`D>E` 不回填過期歷史。missing L 為 unresolved 並保留舊 membership；invalid L fail-closed。
-- 新 period 一開始即 bounded，exact rerun 零 mutation。legacy open row 在窗口內只補 `valid_to=E`；本次才觀察到已過期時，只可 forward-close 於 `D-1` 並標示 D 前的期間未獲本次驗證。既有 bounded row 的 `valid_to` 與本次 E 不符時拒絕，不覆寫。
-- listed／new-listing record 依 L/window 決定 desired state；ETF record才可證明轉入 ETF。每個 domain 分別計算，不能用單一 group id 廣泛關閉其他 rows。
+- 新上市是 stock／IPO 的事件型 `daily_hot_group`（group `new-listings`）；窗口為 `0 <= D-L <= 60` 個曆日 inclusive，與 20／60 根有效 bars 的可行動門檻分離。
+- 只有 `L<=D<=E` 才新建 `[max(D,L), E]`。`L>D` 不預建未來期間；`D>E` 不回填過期歷史。缺 L 為 unresolved 並保留舊 membership；無效 L fail-closed。
+- 新 period 一開始即 bounded，同條件重跑不做變更。舊的 open row 在窗口內只補 `valid_to=E`；觀察時已過期，只可 forward-close 於 `D-1`，並標示 D 以前的期間未經本次驗證。既有 bounded row 的 `valid_to` 與本次 E 不符時拒絕，不覆寫。
+- 上市公司／新上市 record 依 L 與窗口決定 desired state；只有 ETF record 可證明轉入 ETF。每個 domain 分別計算，不得用單一 group id 廣泛關閉其他 rows。
 
-### 7.4 Domain isolation、atomicity 與 receipt
+### 7.4 Domain 隔離、交易與 receipt
 
-- reconciliation 只操作 collector-owned canonical `etf` 與 `new-listings`；ordinary industry、manual、其他 hot groups、缺席 instrument、synthetic index 不在 closure。
-- helper 不 commit／rollback caller transaction。SQLite 在 `begin_nested()` 前確保 physical outer transaction 已開始；成功仍受 caller commit／rollback，helper failure 只撤 savepoint。collect 後段失敗時 normalized instrument／bar／group／membership 全 rollback，先前安全 commit 的 raw 可保留。
-- ordinary receipt 的 version/scope/counts 不改。`etf` 與 `newlisting` 各有 version、scope、status、counts、observations；ETF 另帶 `classification_method_version=normalize_etf_category-v1`。synthetic index 可令 candidate scope partial，而行情 run與 ordinary scope仍 success／observed，三者分開解讀。
-- force history、failed attempt、raw 去重與 exact reuse 規則沿用 §6.1。
+- reconciliation 只操作 collector 擁有的 canonical `etf` 與 `new-listings`；ordinary industry、manual、其他熱門族群、缺席標的與合成指數不在範圍內。
+- helper 不 commit／rollback caller 的 transaction。SQLite 在 `begin_nested()` 前確保外層 transaction 已開始；成功仍由 caller commit／rollback，helper 失敗只撤 savepoint。collect 後段失敗時 instrument／bar／group／membership 全部 rollback，先前已安全 commit 的 raw 可保留。
+- ordinary receipt 的 version／scope／counts 不受影響。`etf` 與 `newlisting` 各有 version、scope、status、counts、observations；ETF 另帶 `classification_method_version=normalize_etf_category-v1`。合成指數可使 candidate scope 為 partial，而行情 run 與 ordinary scope 仍為 success／observed，三者分開解讀。
+- force history、失敗 attempt、raw 去重與重用規則沿用 §6.1。
 
-### 7.5 C017-C 最小驗收矩陣（有限範圍已 review）
+## 8. 群組成員報酬的身分
 
-| Gate | 必須成立 |
-| --- | --- |
-| ETF source／normalization | raw 與 local normalized category 分開；null／illegal category fail＋rollback。 |
-| time | D 只作 forward observation；`D>score_date` skip；future capture拒絕。 |
-| ETF transition | initial／unchanged／change／可信退出／缺席／rerun符合 §7.2。 |
-| new-listing | future、day 0、day 60、day 61、expired、missing L 符合 §7.3。 |
-| legacy／conflict | cap、forward-close、wrong expiry、same-day、overlap與 identity conflict均保守處理。 |
-| transaction／receipt | caller rollback有效、helper failure只撤 savepoint、後段 failure不留 normalized partial write；scope receipts不互相覆蓋。 |
+群組分數依當日有效 membership 計算；本節只規範 `GroupDailyScore.details_json.member_returns` 到個股策略輸入的身分連結，不影響 `hot_group_v1` 分數、最低成員數、`breakout_v1`／`pullback_v1` 公式或策略版本。
 
-有限 review 通過 §7.5，並涵蓋 parser→`collect`、caller rollback／savepoint、integrity／FK 與保護來源不變。官方 capture metadata／availability truth、ETF heuristic 品質、legacy 錯誤期間、source-effective／PIT、正式 DB 修復、synthetic index lifecycle、ordinary-industry↔ETF 歷史轉換、舊 derived outputs 重算、metadata history 治理、guard 解除與策略有效性仍未完成。
+- producer 寫入 `member_return_identity_version="instrument-id-v1"`。每個 `member_returns[]` 同時保存正整數且非布林的 `instrument_id`、非空的 `exchange` 與 `symbol`；整份清單的 ID 與 `(exchange, symbol)` 各自不得重複。`instrument_id` 是同一 DB 的本地鍵，仍須以 exchange＋symbol 交叉核對。
+- worker 只用 `instrument_id` 找目標列，並要求該列的 exchange／symbol 與目標 Instrument 完全相同；`excess_return_20d` 只接受有限的原生整數或浮點數，布林、字串、null、NaN 與 infinity 都視為不可用。
+- marker 未知或空值、列結構或 identity 非法、ID／pair 重複、目標缺席或 identity 衝突時 fail-closed；有 marker 的 payload 不得降級用 symbol 猜測。
+- 沒有 marker 的舊 payload，只有在所有列都沒有 `instrument_id`／`exchange` 時才進入 legacy 核對：以該 score 的 `group_id` 與 `signal_date` 重查有效 membership，套用與 producer 相同的股票／ETF 類型與類別 gate；同 symbol 的有效 canonical identity 必須恰好是目標 `instrument_id`，payload 也必須恰有一筆同 symbol 且 20 日超額報酬為有限數值，才採用 `legacy_symbol_unique`。另一市場的同 symbol 成員只要當日仍有效，就必須拒絕。
+- Signal 的 `rule_evidence_json.group_member_return_lookup` 保存 `version="group-member-return-lookup/v1"`、來源 marker、group／score date、requested 與 matched identity、`instrument_id`／`legacy_symbol_unique`／`rejected` mode 及 reason。拒絕時 matched 為 null，策略走既有的缺資料語意。
+- `group_daily_scores` 以 `(group_id, trading_date)` 原位重算；只有重新產出的 score 帶新版 identity，舊列只受上述 legacy 規則保護。
 
-## 8. 群組衍生成員報酬的身分契約（有限 review）
+## 9. 群組候選的身分
 
-群組分數仍依當日有效 membership 計算；本節只規範 `GroupDailyScore.details_json.member_returns` 到個股策略輸入的身分連結，不改 `hot_group_v1` 分數、最低成員數、`breakout_v1`／`pullback_v1` 公式或策略版本。
+外層 score 必須通過 active group、`data_quality="complete"`、至少 3 個 eligible members、非空 rank 與 `benchmark="TAIEX"`；`hot_group_v1` 公式、候選排序與 top 4 上限不受本節影響。
 
-### 8.1 新產出與精確讀取
+### 9.1 產出與文字投影
 
-- 新產出的 `details_json` 必須有 `member_return_identity_version="instrument-id-v1"`。每個 `member_returns[]` 同時保存正整數且非布林的 `instrument_id`、非空 `exchange` 與 `symbol`；整份清單的 ID 及 `(exchange, symbol)` 各自不得重複。`instrument_id` 是該 DB 內的本地鍵，仍須用 exchange＋symbol 交叉核對；這不證明跨 DB 可攜性或來源 truth。
-- worker 只用 `instrument_id` 找目標列，並要求該列的 exchange／symbol 與目標 Instrument 完全相同；目標的 `excess_return_20d` 只接受有限的原生整數或浮點數，布林、字串、null、NaN 與 infinity 都視為不可用。
-- member-return helper 只處理已由既有 group selection 選中的 score，不取代其有效 membership、active group、score date、TAIEX benchmark、最低成員數與有限 group return gates。
-- marker 未知／空值、列結構或 identity 非法、`instrument_id`／`(exchange, symbol)` 重複、目標缺席或 identity 衝突時一律 fail closed；有 marker 的 payload 不得降級用 symbol 猜測。這個拒絕只約束 member-return 輸入，不改 `candidate_symbols` 的既有字串相容輸出。
+- score 使用 `candidate_identity_version="instrument-id-v1"`，把同一批已排序 member metrics 的 top 4 寫入 `candidate_instruments[]`。每列必須有正整數且非布林的 `instrument_id`，以及非空字串 `exchange`、`symbol`；ID 與 `(exchange, symbol)` 各自不得重複，最多 4 列。
+- `candidate_symbols` 是相容 API／UI 的字串投影，必須與 `candidate_instruments` 等長、同序且逐列等於 `symbol`。兩市場可有同 symbol，consumer 不得用投影反推身分。
 
-### 8.2 舊 payload 的有限相容
+### 9.2 Decision 候選選取
 
-沒有 marker 的舊 payload 只有在所有列都沒有 `instrument_id`／`exchange` 時才允許進入下述 legacy 身分核對。worker 必須以該 score 的 `group_id` 與 `signal_date` 重查有效 membership，再套用與 producer 相同的股票／ETF 類型及 category gate；相同 symbol 的有效 canonical identity 必須恰好是目標 `instrument_id`，而 payload 也必須恰有一筆同 symbol 且其 20 日超額報酬為有限數值，才可採用 `legacy_symbol_unique`。
-
-只看 payload 中同 symbol 的筆數不足以證明身分：另一市場的同 symbol 成員即使因技術資料不足而沒有寫入 `member_returns`，只要在當日仍是有效成員，就必須拒絕。期間邊界、群組、類型或 identity 無法唯一核對時，輸入保持 null，不任選第一筆。
-
-### 8.3 證據、相容邊界與後續缺口
-
-- Signal 的 `rule_evidence_json.group_member_return_lookup` 保存 `version="group-member-return-lookup/v1"`、來源 marker、group／score date、requested 與 matched identity、`instrument_id`／`legacy_symbol_unique`／`rejected` mode 及 reason。拒絕時 matched 為 null，策略仍走既有缺資料語意。
-- `group_daily_scores` 仍以 `(group_id, trading_date)` 原位重算；本輪不改 schema 或既有 upsert 行為，也不做歷史批次 migration 或回算。新 producer 重算後才有新版 identity，舊列只受 §8.2 的保守相容保護，因此不能宣稱歷史群組資料已全面 canonical。
-- `candidate_symbols` 與 decision lookup 的獨立身分缺口及 R36 核定契約見 §9；本節的 member-return 完成狀態不代表候選身分也已完成。
-
-本節的有限 review 只接受新 producer 的 member identity、worker 精確／legacy lookup、拒絕語意及 Signal evidence；未改 domain 公式、策略 pin、群組分數、candidate selection 或歷史資料。
-
-## 9. 群組候選的身分契約
-
-狀態：有限 review 通過。本節規範 `GroupDailyScore.details_json` 的候選產出到 decision candidate selection。外層 score 仍須通過 active group、`data_quality="complete"`、至少 3 個 eligible members、非空 rank 與 `benchmark="TAIEX"` gate；`hot_group_v1` 公式、候選排序、top 4 上限、策略 pins 與其他 action buckets 不變。
-
-### 9.1 新產出與顯示投影
-
-- 新 score 使用 `candidate_identity_version="instrument-id-v1"`，並把同一批已排序 member metrics 的 top 4 寫入 `candidate_instruments[]`。每列必須有正整數且非布林的 `instrument_id`，以及非空字串 `exchange`、`symbol`；整份清單的 ID 與 `(exchange, symbol)` 各自不得重複，最多 4 列。
-- `candidate_symbols` 保留為相容 API／UI 的字串投影，必須與 `candidate_instruments` 等長、同順序且逐列等於 `symbol`。兩個不同 exchange 的合法 identity 可以同 symbol，因此投影可有重複 symbol；consumer 不得再用投影反推身分。
-- producer 的 eligible member、股票／ETF 類型與 ETF category gate、20／5 日排序及「score 不成立則候選為空」語意不變。`instrument_id` 是該 DB 的本地鍵，exchange＋symbol 只供交叉核對，不宣稱跨 DB 可攜或官方來源 truth。
-
-### 9.2 Typed decision lookup
-
-- marker 只接受精確的 `instrument-id-v1`。marker unknown、null、空值，無 marker 卻混入 typed 欄位，candidate list／projection 結構錯誤、超過 4 列、ID／pair 重複或逐列投影不一致時，整個 score 的 candidate source fail closed；不得降級用 symbol 猜測。這不移除 held、watchlist、Signal、event 等其他 action bucket。
-- 每列先以 `score.trading_date` 驗證 exact `instrument_id` 對應的 Instrument exchange＋symbol、該 group 當日有效 membership，以及 producer 相同的 instrument type／ETF category gate。來源日驗證不得用 Instrument 的目前 active 狀態排除 membership 身分；任何來源日不合資格或 identity conflict 都拒絕整個 score 的候選來源。
-- 再以 requested as-of 驗證同一 `instrument_id` 仍為 active、仍有該 group 有效 membership，且仍通過相同 type／category gate。正常的 as-of 退出只逐 ID 排除，不拖垮同 score 的其他合法候選，也不得改綁另一個同 symbol Instrument。
+- marker 只接受精確的 `instrument-id-v1`。marker 未知或空值、無 marker 卻混入 typed 欄位、結構錯誤、超過 4 列、ID／pair 重複或逐列投影不一致時，整個 score 的候選來源 fail-closed，不降級用 symbol 猜測；held、watchlist、Signal、event 等其他 action bucket 不受影響。
+- 每列先以 `score.trading_date` 驗證 exact `instrument_id` 對應的 exchange＋symbol、該 group 當日有效 membership，以及與 producer 相同的類型／ETF 類別 gate；此步不以 Instrument 目前 active 狀態排除。任一列來源日不合資格或 identity 衝突，即拒絕整個 score 的候選來源。
+- 再以 requested as-of 驗證同一 `instrument_id` 仍 active、仍有該 group 有效 membership且通過同 gate。正常退出只逐 ID 排除，不影響同 score 其他合法候選，也不改綁另一個同 symbol Instrument。
 
 ### 9.3 Legacy 相容與時間邊界
 
-- Legacy 只限沒有 marker、沒有 `candidate_instruments`，且 `candidate_symbols` 是最多 4 個非空字串的清單。其他 malformed shape 拒絕整個 score 的候選來源；重複 symbol 則保守排除該 symbol，不影響其餘可證明者。
-- 每個 legacy symbol 必須先在 `score.trading_date` 以該 group 的所有有效 membership 與 producer type／category gate 證明恰好一個 canonical `instrument_id`；此步不得用目前 active 狀態把現在 inactive 的同 symbol 成員濾掉，否則會把來源日歧義洗成唯一。其後才要求該 exact ID 在 requested as-of 仍 active、有效且通過同 gate。來源日歧義不能因後日只剩一個同 symbol 成員而解鎖；來源日唯一的舊身分退出後，也不能轉綁後加入的同 symbol 身分。
-- `Instrument.status`、instrument type 與 ETF category 目前沒有可供此 lookup 重建的完整歷史版本；上述核對只能保守使用現有 metadata 與 membership period，不構成 source-effective 歷史 truth 或 PIT 證明。
-
-### 9.4 相容邊界與驗收
-
-- 原 API／UI 只輸出 `candidate_symbols`／`candidates` 字串；public typed source-day 投影見 §9.6。Schema 與 `group_daily_scores` 的 `(group_id, trading_date)` upsert 行為不變，既有 rows 不做批次回算；同日正常重算仍可更新該 row，重新產出的 score 才帶新 marker。
-- 最小驗收須走 actual producer→persisted score→decision：至少 5 個有效成員，top 4 只選中其中一個市場的同 symbol identity，另一個市場成員不得被額外展開；另涵蓋來源日歧義、後日退出／加入、正反插入順序、typed malformed／重複／identity conflict、legacy unique／ambiguous 與其他 action bucket 保留。
-- Decision helper 目前對每個 qualifying group 各做一次 identity／日期 projection，再合併候選；本批未驗大規模群組效能、actions cursor 遍歷或分頁，新 candidate unit suite 不能當成 pagination 驗收。
-- 有限 review 通過 producer、decision helper 與既有相關回歸；不涵蓋 full backend、正式 DB、服務、效能／cursor、PIT 或歷史驗收。
-- Backfill／coverage 的納入語意見 §9.5；public source-day 展示見 §9.6。兩者不改寫 decision 驗收範圍，也不代表歷史資料、正式分類修復或策略有效性完成。
+- Legacy 只限沒有 marker、沒有 `candidate_instruments`，且 `candidate_symbols` 是最多 4 個非空字串的清單；其他形狀拒絕整個 score。重複 symbol 只排除該 symbol。每個 legacy symbol 必須先在 `score.trading_date` 以全部有效 membership 與 producer gate 證明恰好一個 canonical `instrument_id`（不以目前 active 狀態過濾），再要求該 ID 在 requested as-of 仍 active、有效且通過同 gate；來源日的歧義不能因後日只剩一個同 symbol 成員而解除，來源日唯一的身分退出後也不能改綁後加入的同 symbol 身分。
+- `Instrument.status`、類型與 ETF 類別沒有完整歷史版本，上述核對只能使用現有 metadata 與 membership period，不構成 PIT 證明。
 
 ### 9.5 Backfill／coverage 的候選納入契約
 
-狀態：有限 review 通過。本節只規範 `resolve_backfill_scope` 的 `candidates`／`priority` 候選來源，以及重用該 resolver 的 `/api/coverage?scope=candidates|priority`；它們建立資料回補／coverage 的 `(exchange, symbol)` **納入集合**，不是 decision candidate selection。不得套用 §9.2／9.3 的 group qualification、rank、membership、instrument type 或 ETF category 縮選，也不改 `hot_group_v1`、score 產出、Signal 或其他 priority bucket。
+`resolve_backfill_scope` 的 `candidates`／`priority` 來源與重用它的 `/api/coverage?scope=candidates|priority` 建立回補／coverage 的 `(exchange, symbol)` 納入集合，不是 decision 候選選取，不套用 §9.2／9.3 的 qualification、rank、membership、類型或 ETF 類別縮選。
 
-- 只讀 `trading_date` 落在 caller 起訖日內的 `GroupDailyScore`；score date 只作範圍邊界，不表示 source availability／PIT。非 object 的 `details_json` 略過，不由其他欄位猜測。
-- 只要 `candidate_identity_version` 或 `candidate_instruments` 任一 typed 欄位存在，就進 strict typed envelope：marker 必須精確為 `instrument-id-v1`；typed／projection 都須為最多 4 列的 list；每列 `instrument_id` 必須是非 bool 且落在 SQLite signed 64-bit 可查詢範圍 `1..2^63-1` 的整數，exchange／symbol 必須是非空字串；ID 與 pair 各自唯一，`candidate_symbols` 必須等長、同序且逐列等於 typed symbol。任何 shape、marker、超界、重複或 projection 錯誤都拒絕該 score 的整份候選貢獻，不得 fallback 到 symbol。
-- 合法 typed envelope 要先把**全部 ID（包括目前 inactive）**對照同一 DB 的 Instrument，逐列證明 exact ID 對應 payload 的 exchange＋symbol；缺 ID 或 pair conflict 拒絕整個 score。完成整份核對後才逐 ID 套目前 active filter，保留仍 active 的 exact pair；inactive 不得改綁同 symbol 的另一列。這是 local DB identity 與目前可回補範圍，不是 score-date membership、歷史 instrument metadata 或 PIT 證明。
-- Legacy 僅限 marker 與 typed 欄位都不存在。`candidate_symbols` 保留既有 list＋`str(...).strip()` 相容，空字串略過、重複值去重；每個 symbol 納入所有目前 active 的同 symbol exchange 列。這種安全擴大只避免回補漏抓，不證明哪一列可供決策，也不得反向放寬 §9.3 的 legacy selection。
-- Signal 候選與 `priority` 的 portfolio／watchlist／event 等來源各自保留；某個 malformed typed group score 只移除該 score 的候選貢獻。既有 backfill run 已保存的 `metadata.target_instruments` 是 run snapshot，resume／force 不重新解析；修正只影響新建或實際重新 resolve 的範圍。
-- `/api/coverage` 在具名 scope 時直接使用同一 internal resolver。Public typed source-day 展示是另一條讀取契約，不能改變本節的 collection inclusion 語意，見 §9.6。
-- 有限 review 涵蓋 resolver→metadata plan→scoped adapter 與 coverage report，包括 typed identity／signed 64-bit 邊界／整包拒絕、legacy 跨市場擴大、日期／跨 score union 及其他 priority 來源隔離；不涵蓋 HTTP、完整 targeted backfill、磁碟持久化、全 backend、效能、正式 DB、非 SQLite、availability 或 PIT。
+- 只讀 `trading_date` 落在起訖日內的 `GroupDailyScore`；非 object 的 `details_json` 略過。
+- 只要 `candidate_identity_version` 或 `candidate_instruments` 任一存在，就進 strict typed 驗證：marker 精確為 `instrument-id-v1`；typed／投影都是最多 4 列的 list；`instrument_id` 為非 bool 且在 `1..2^63-1` 的整數，exchange／symbol 為非空字串；ID 與 pair 各自唯一，`candidate_symbols` 等長、同序且逐列相等。任何錯誤都拒絕該 score 的整份候選，不 fallback 到 symbol。
+- 合法 typed 資料先把全部 ID（含目前 inactive）對照同一 DB 的 Instrument，逐列證明 exchange＋symbol；缺 ID 或 pair 衝突拒絕整個 score。核對完成後才逐 ID 套目前 active filter；inactive 不改綁同 symbol 的另一列。
+- Legacy 僅限 marker 與 typed 欄位都不存在：`candidate_symbols` 以 `str(...).strip()` 讀取，空字串略過、重複去重，每個 symbol 納入所有目前 active 的同 symbol 列。這只避免回補漏抓，不放寬 §9.3 的 legacy 選取。
+- Signal 候選與 `priority` 的 portfolio／watchlist／event 來源各自保留；malformed typed score 只移除該 score 的候選。已保存的 `metadata.target_instruments` 是 run snapshot，resume／force 不重新解析。
 
 ### 9.6 Public candidate 的 source-day 身分展示契約
 
-狀態：有限 review 通過。本節只規範既有 group score 在 public API 與族群詳情 UI 的來源日身分展示；它不是 §9.2 的 requested-as-of decision selection，也不是 §9.5 的 backfill／coverage inclusion。
+既有 group score 在 public API 與族群詳情 UI 的來源日身分展示；不同於 §9.2 的 requested-as-of 選取，也不同於 §9.5 的回補納入。
 
-#### 9.6.1 Public representation 與 fail-closed
-
-- Public payload 保留原有 `candidate_symbols`（theme）或 `candidates`（group）文字陣列，並新增固定 `public_candidate_identity_version="instrument-id-string-v1"` 與 `candidate_instruments[]`。Public `instrument_id` 必須是 `1..2^63-1` 的十進位字串，避免超過 JavaScript safe integer 後失真；它仍是同一 DB 的本地鍵，不宣稱跨 DB 可攜，也不改其他 API 既有的 numeric `instrument.id`。
-- `public_candidate_identity_version` 只標示 public representation，不單獨證明來源身分有效。Typed consumer 必須同時取得完整 `candidate_instruments[]`，並驗證每列非空 `exchange`／`symbol`、十進位字串 ID、最多 4 列、ID 與 pair 各自唯一，以及與文字陣列等長、同序且逐列 symbol 相同；兩個市場可有相同 symbol。
-- Server 先嚴格驗 internal `candidate_identity_version="instrument-id-v1"`、typed／文字 list、長度與上限、正整數非布林且在 SQLite signed 64-bit 範圍的 ID、非空 pair、ID／pair 唯一及 ordered projection。任一列或 envelope 不合法，整份 public `candidate_instruments` 為空，不洩漏部分成功，也不以 symbol 反推 identity。
-- 原文字陣列是相容顯示，不是身分證據：只保留原生非空字串，維持原順序與重複值；malformed 的非字串／空白項目略過，不做 `str(...)` coercion。Legacy、缺 DB／score 或 malformed typed source 都只能留下這種安全文字，不能產生 typed link。
-
-#### 9.6.2 Source-day 核對與 endpoint gate
-
-- 合法 internal envelope 的**所有** ID 必須先在同一 DB 找到 exact Instrument exchange＋symbol，並證明該 group membership 在 `score.trading_date` 有效，且通過 producer 相同的股票／IPO 或 ETF group type／category gate；任一 ID 缺失、pair conflict 或來源日不合資格即整份 typed identity 為空。
-- 這是 score-source snapshot 的展示，所以不套 Instrument 目前 active、official/requested as-of membership 或 backfill 的 active-symbol 擴大。來源日後退出或目前 inactive 的 exact identity 仍保留，且可用其 exchange＋symbol 連到個股頁；它不表示目前仍可決策、可交易或具官方 PIT。
-- Theme product 投影（dashboard themes、themes list／detail／members）保留既有 qualified gate：不 qualified 時文字與 typed 候選都為空。Legacy group 相容投影（dashboard groups、groups list／detail）不新增 theme qualification gate；即使能展示合法來源 payload，也不等於 qualified 或 actionable。Full、compact 與 route projection 共用同一驗證，compact 仍只保留原有 top 4 顯示上限。
-
-#### 9.6.3 UI、驗收與限制
-
-- 族群詳情只在 public marker、整份 typed shape、ID／pair 唯一及 ordered symbol 對齊都合法時建立 `/stocks/{exchange}/{symbol}`；文字顯示 exchange＋symbol，同 symbol 跨市場仍可分辨，React key 使用 identity 加序位。Legacy 或 malformed 只顯示文字，不查目前 member page，也不因 pagination 是否載完而改變連結。
-- 候選的「評分日期」讀 score `trading_date`；成員表的「成員資料截至」獨立讀 members response `meta.data_as_of`。不得用目前 members、不同日期或已載入的單一 member page 反推 score candidate identity。
-- 有限 review 涵蓋 ORM readback、API route 投影、inactive／後日退出、跨市場同 symbol、大整數 ID、malformed／legacy、source membership／type-category、pagination 與 React SSR；不涵蓋 socket、lifespan、真瀏覽器、full backend、正式 DB、效能、PIT 或歷史回算。Instrument status／type／category 缺完整歷史版本，因此來源日核對仍不是 source-effective metadata truth。
-
-## 10. M1-TWSE-ISSUER-INDUSTRY-TRACE-20261008-1/B1：兩完整碼名本地引用
-
-2026-10-08。本節只規範三公司原碼到兩條TWSE完整名稱的引用展示；新來源／canonical declaration pins及本次fresh原件由[來源 §42](SOURCE_REGISTRY.md)管理，ROOT已有限接受資料／API及[個股頁 §47](STOCK_RESEARCH_PAGE.md)的可信desktop／narrow具名操作與真失敗清值。§1–9既有完整期待表、canonical group、collector／membership／DB修復與前端guard保持原文，不因本展示升格或解除。
-
-| exact exchange／raw code | 完整官方名稱 | 本次selected |
-| --- | --- | --- |
-| TWSE／`04` | 紡織纖維 | 1449、1463 |
-| TWSE／`20` | 其他 | 2614 |
-
-引用profile `twse_two_code_complete_name_local_citation`／consumer `twse-issuer-industry-trace/m1-v1` 不使用全域code或ordinary mapper替代證據。raw碼保留原string，只有精確TWSE／04或20可命中；不trim、補零、轉數字、跨市場或用Other作unknown fallback。特殊／停用／unknown／missing／格式錯誤／其他碼或市場皆unavailable；名稱／來源URL／日期精度／宣告結構／external pin任一矛盾亦拒用。只兩碼引用、不代表其他碼已重新驗證或整張2026 current表通過。
-
-來源分工：B.12.00附錄三直接支持兩完整code-name pairs；2023-05-30公告的2023-07-03變更支持16及35–38版本脈絡；FL007104第2條2025-06-09修正的33名稱清單支持兩完整名稱仍在列。官方文件是parsed evidence，sourceUse限TWSE條款§8下ROOT核定的有來源、保完整名稱本地研究；沒有PDF／公告raw body或receipt SHA，canonical ROOT-attested excerpt hash只識別引用宣告，不是原件hash。引用不自動准整碼表OGL／重發布／原文件下載或保存。
-
-B.12.00修訂2018-10、實施2020-03維持month precision，不補造月首日；公告published2023-05-30／patch effective2023-07-03及規則revision2025-06-09各自保留，不能替代公司分類effective。本輪metadata observed2026-10-08、公司出表2026-10-07、listing、Taipei觀測、研究cutoff及事件effective再分列；`company_classification_effective_date=unknown`，publication／firstavailability／revision未知／nonPIT。
-
-展示同時要求精確公司Code／名稱join、同cutoff issuer及event originals／版本／dualSHA、兩碼引用registry／consumer外部pins與原row ordinal；metadata或任一原件observed晚於cutoff拒用。原issuer v1 classification仍unsupported；此名稱不證ordinarysecurity／0056 ETF、完整market universe、group membership／排名、分類歷史、price／MA20／策略／Plan。不得更新正式／.local DB、membership periods或重算舊scores／signals，也不撤除既有族群關聯guard。
+- Public payload 保留原有 `candidate_symbols`（theme）或 `candidates`（group）文字陣列，另加固定的 `public_candidate_identity_version="instrument-id-string-v1"` 與 `candidate_instruments[]`。Public `instrument_id` 是 `1..2^63-1` 的十進位字串，避免超過 JavaScript safe integer 後失真。
+- Server 先嚴格驗證 internal envelope（同 §9.1 與 §9.5 的 typed 規則）；任一列或 envelope 不合法，整份 public `candidate_instruments` 為空，不洩漏部分結果，也不以 symbol 反推。文字陣列只保留原生非空字串並維持順序與重複值，不做 `str(...)` 轉型；legacy 或 malformed 只留文字，不產生連結。
+- 合法 envelope 的所有 ID 必須在同一 DB 找到 exact exchange＋symbol，並證明該 group membership 在 `score.trading_date` 有效且通過 producer 的類型／ETF 類別 gate；任一不符即整份 typed identity 為空。這是來源日 snapshot，不套目前 active 或 requested as-of；來源日後退出或目前 inactive 的 identity 仍保留並可連到個股頁，不代表目前可決策。
+- Theme 投影（dashboard themes、themes list／detail／members）保留既有 qualified gate：不 qualified 時文字與 typed 候選都為空。Group 相容投影（dashboard groups、groups list／detail）不加 qualification gate。Full、compact 與 route 投影共用同一驗證，compact 仍只顯示 top 4。
+- 族群詳情只在 public marker、整份 typed 結構、ID／pair 唯一與 symbol 對齊都合法時建立 `/stocks/{exchange}/{symbol}` 連結，文字顯示 exchange＋symbol，React key 使用 identity 加序位。候選的「評分日期」讀 score `trading_date`；成員表的「成員資料截至」讀 members response `meta.data_as_of`，兩者不互相推導。

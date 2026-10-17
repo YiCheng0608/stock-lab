@@ -3,7 +3,7 @@
 No server, no fixed port, no source GET, no database file: the gate is driven as a raw ASGI app with a stub behind it, and the
 real ``app.main`` app is driven through ``TestClient`` with a fake ``get_db`` and a socket guard. A refusal is proved to happen
 before the wrapped app runs: it never calls ``receive`` (no body read), never starts a handler or dependency (``get_db`` is not
-opened) and never reaches for the network, even with the capture env switches on. The same probes are positive on an admitted
+opened) and never reaches for the network. The same probes are positive on an admitted
 request, so a silent probe cannot pass for a refusal.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 import app.api as api_module
-from app import config, official_events, twse_issuer_profile
+from app import config
 from app.browser_gate import BrowserGate, refusal
 from app.main import app as product_app
 
@@ -182,13 +182,10 @@ def test_lifespan_and_websocket_scopes_pass_through():
 # ---- the real product app -------------------------------------------------------------------------------------------------
 
 ENDPOINTS = [
-    ("POST", "/api/focus/official-events/capture?as_of=2026-09-04", b"{}", False),
-    ("POST", "/api/stocks/TWSE/1449/issuer-profile/capture?as_of=2026-09-04", b"{}", True),
-    ("POST", "/api/stocks/TWSE/2330/official-events/capture?as_of=2026-09-04", b"{}", True),
     ("POST", "/api/portfolio", POSITION, True),
     ("DELETE", "/api/portfolio/1", b"", True),
 ]
-# The last column marks endpoints whose handler answers 404 from a fake db before any capture code, so an admitted request is safe to run.
+# The last column marks endpoints whose handler answers 404 from a fake db, so an admitted request is safe to run.
 ENDPOINT_PARAMS = [pytest.param(m, path, body, handler_404, id="%s %s" % (m, path.split("?")[0])) for m, path, body, handler_404 in ENDPOINTS]
 # (label, base_url, headers, status, also refused for DELETE): DELETE carries no Content-Type rule.
 FOREIGN = [
@@ -246,8 +243,6 @@ def probe(monkeypatch):
             raise AssertionError("name lookup: %r" % (host,))
         return real_getaddrinfo(host, *args, **kwargs)
 
-    for env in (official_events.CAPTURE_ENV, twse_issuer_profile.CAPTURE_ENV):
-        monkeypatch.setenv(env, "1")
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
     product_app.dependency_overrides[api_module.get_db] = fake_db
@@ -286,7 +281,7 @@ def test_every_write_endpoint_refuses_before_handler_body_db_and_source(probe, m
         response = client.request(method, path, headers=headers, content=body)
         assert response.status_code == 404, response.text
         assert (probe.db_opened, probe.network) == (1, [])
-        if path.startswith("/api/portfolio") and method == "POST" or "issuer-profile" in path:
+        if path.startswith("/api/portfolio") and method == "POST":
             assert wrapped.receives >= 1
 
 
