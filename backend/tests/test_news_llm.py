@@ -672,3 +672,57 @@ def test_news_list_reads_llm_results_in_one_query(db, fake, client):
     assert len(items) == 5 and all(item["ai"] for item in items)
     assert items[0]["ai"]["symbol_candidates"][0]["name"] == "台積電"
     assert sum("news_llm_results" in statement for statement in statements) == 1
+
+
+# Schedule wrapper: exit codes ------------------------------------------------------
+
+
+def _cli_exit_code(monkeypatch, capsys, argv=("news-llm",)):
+    import worker.cli as cli
+
+    monkeypatch.setattr(sys, "argv", ["worker.cli", *argv])
+    with pytest.raises(SystemExit) as exited:
+        cli.main()
+    return exited.value.code, json.loads(capsys.readouterr().out)
+
+
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        ("success", 0),
+        ("skipped", 0),
+        ("dry_run", 0),
+        ("partial", 2),
+        ("failed", 1),
+    ],
+)
+def test_cli_exit_code_follows_the_run_status(monkeypatch, capsys, status, code):
+    import worker.cli as cli
+
+    monkeypatch.setattr(
+        cli, "run_news_llm_batch", lambda *args, **kwargs: {"status": status}
+    )
+    assert _cli_exit_code(monkeypatch, capsys)[0] == code
+
+
+def test_cli_exits_1_and_names_the_reason_when_claude_is_missing(
+    db, fake, monkeypatch, capsys
+):
+    import worker.cli as cli
+
+    _add_news(db, 2)
+    monkeypatch.setenv(news_llm.CLI_ENV, "C:/missing/claude.exe")
+    monkeypatch.setattr(
+        cli,
+        "run_news_llm_batch",
+        lambda on_date, *, limit, dry_run: run_news_llm(
+            db, on_date=on_date, limit=limit, dry_run=dry_run, run_date=RUN_DATE
+        ),
+    )
+    code, result = _cli_exit_code(monkeypatch, capsys)
+    assert code == 1
+    assert result["status"] == "failed" and result["reason"].startswith("cli_not_found")
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.run_type == "news_llm" and run.status == "failed"
+    assert run.error.startswith("cli_not_found: C:/missing/claude.exe")
+    assert fake() == [] and _results(db) == []

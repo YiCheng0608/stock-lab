@@ -67,7 +67,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | `python -m worker.cli backtest --start-date YYYY-MM-DD --end-date YYYY-MM-DD` | 回放既有資料並保存 audit；不下載歷史資料。 |
 | `python -m worker.cli indicators [--date YYYY-MM-DD] [--rebuild]` | 以保存日線算 [技術指標](V1_SPEC.md#技術指標) 寫入 `technical_indicators`；不發網路、不改日線。預設（每日）對每檔寫上次已算日之後到 `--date`（預設 DB 最新日線日）的列，通常就是最新一日；最後一筆已算值與重算不符時整檔重寫，但只偵測得到影響最後一列的變動。補登除權息事件、回補或更正舊日線、升版後要跑 `--rebuild` 重寫全部歷史。不會跑 `init-db`，表不存在時回 `technical_indicators_table_missing_run_init_db`。 |
 | `python -m worker.cli news [--date YYYY-MM-DD]` | 抓 [新聞來源](DATA_SOURCES.md#新聞來源) 的 RSS，寫 raw 與 `news_items`（去重與關聯規則見 [NEWS_SPEC §3](NEWS_SPEC.md#3-去重新資訊與事件影響)）。每個來源一筆 `run_type=news` 的 ingestion run，status 為 `success`／`partial`／`failed`，失敗的 feed 記在 `error` 與 `metadata_json.feeds`，其他來源照常寫入。可重跑，既有新聞不改寫。`--date` 只標記 run 日期（預設台北今日），不篩選來源內容。不會跑 `init-db`，表不存在時回 `news_items_table_missing_run_init_db`。 |
-| `python -m worker.cli news-llm [--date YYYY-MM-DD] [--limit N] [--dry-run]` | 以本機 Claude Code 無介面模式（`claude -p --model haiku`，使用者的訂閱登入，不用 API 金鑰）判讀新聞，結果寫 `news_llm_results`（選取、旗標與欄位規則見 [NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）。挑 3 天內未判讀的新聞，新的在前，最多 `--limit` 則（預設 50），每 25 則一次呼叫；`--date` 只挑該台北日收錄（`collected_at`）的新聞。同一台北日所有 run 合計最多 20 次呼叫，每批呼叫後立即計入，超過的批次跳過並記在 `error`。超時、非 JSON、不符 schema 時該批各則標 `pending`，其他批照跑，下次重試；未登入、額度限制或 CLI 無法啟動時停止本次執行，其餘批次跳過。環境有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`、`STOCK_CLAUDE_CLI` 格式錯誤或找不到可執行檔時，記一筆 `failed` run 後結束，不呼叫也不寫判讀列。每次執行一筆 `run_type=news_llm` 的 ingestion run，`metadata_json` 記每批則數、耗時、模型與 token 用量；每批的 prompt 與 CLI 回應存 raw（`news_llm`）。`--dry-run` 只列出批次，不呼叫、不寫 DB。CLI 預設為 PATH 上的 `claude`，可用 `STOCK_CLAUDE_CLI` 指定路徑或 JSON 字串陣列；只支援原生 `claude` 可執行檔，npm 的 `.cmd` shim 在超時時無法終止底下的 node 程序。不會跑 `init-db`，表不存在時回 `news_llm_results_table_missing_run_init_db`。 |
+| `python -m worker.cli news-llm [--date YYYY-MM-DD] [--limit N] [--dry-run]` | 以本機 Claude Code 無介面模式（`claude -p --model haiku`，使用者的訂閱登入，不用 API 金鑰）判讀新聞，結果寫 `news_llm_results`（選取、旗標與欄位規則見 [NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）。挑 3 天內未判讀的新聞，新的在前，最多 `--limit` 則（預設 50），每 25 則一次呼叫；`--date` 只挑該台北日收錄（`collected_at`）的新聞。同一台北日所有 run 合計最多 20 次呼叫，每批呼叫後立即計入，超過的批次跳過並記在 `error`。超時、非 JSON、不符 schema 時該批各則標 `pending`，其他批照跑，下次重試；未登入、額度限制或 CLI 無法啟動時停止本次執行，其餘批次跳過。環境有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`、`STOCK_CLAUDE_CLI` 格式錯誤或找不到可執行檔時，記一筆 `failed` run 後結束，不呼叫也不寫判讀列。每次執行一筆 `run_type=news_llm` 的 ingestion run，`metadata_json` 記每批則數、耗時、模型與 token 用量；每批的 prompt 與 CLI 回應存 raw（`news_llm`）。`--dry-run` 只列出批次，不呼叫、不寫 DB。CLI 預設為 PATH 上的 `claude`，可用 `STOCK_CLAUDE_CLI` 指定路徑或 JSON 字串陣列；只支援原生 `claude` 可執行檔，npm 的 `.cmd` shim 在超時時無法終止底下的 node 程序。結束碼同 daily：`success`／`skipped`／`dry_run` 為 0，`partial` 為 2，`failed` 為 1（找不到 claude、未登入、額度限制、全部批次失敗，原因在 JSON 的 `reason`、run 的 `error`）。排程由 `\stock-lab\news` 在 `news` 之後呼叫，見 [§6](#6-排程)。不會跑 `init-db`，表不存在時回 `news_llm_results_table_missing_run_init_db`。 |
 
 `backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日；CLI 把較長範圍由舊到新切成每段不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93` 日的連續段，每段各有 request key、manifest 與重試（API 的單次回補仍限 93 日）。CLI 回補不抓只代表「今天」的快照來源（STOCK_DAY_ALL、OpenAPI 指數、除權息、MOPS 清單、TPEx 停復牌），universe 每次執行只抓一次，也不記錄當日產業觀測；目標有效交易日不足時，候選查詢可早於輸入起日，但不得超過迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 
@@ -89,7 +89,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ## 6. 排程
 
-每日排程以 Windows 工作排程器執行 `worker.cli daily` 與 `worker.cli news`（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；註冊、查詢、停用與移除見 [§6.2](#62-dailynews-工作的註冊與管理)，日誌與 run 記錄見 [§6.3](#63-日誌與-run-記錄)。自動下單不在第一版範圍。
+每日排程以 Windows 工作排程器執行 `worker.cli daily` 與 `worker.cli news`（news 之後接著 `worker.cli news-llm`）（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；註冊、查詢、停用與移除見 [§6.2](#62-dailynews-工作的註冊與管理)，日誌與 run 記錄見 [§6.3](#63-日誌與-run-記錄)。自動下單不在第一版範圍。
 
 位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `origin/master`，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
 
@@ -99,7 +99,11 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 - **rate limit**：每次 9 個請求、間隔 2 秒，一天約 108 個請求；不重試，限流或失敗的 feed 等下一輪。
 - **冪等**：重跑或兩輪重疊抓到同一則時，不新增列、不改寫既有列。
 - **錯誤**：每個來源的結果寫入 `run_type=news` 的 ingestion run，可用 `/api/ingestion-runs?q=news` 查；CLI 也把同一份結果以 JSON 印到 stdout，排程把 stdout／stderr 導到日誌檔保存（[§6.3](#63-日誌與-run-記錄)）。
-- **LLM 判讀**：`python -m worker.cli news-llm` 尚未掛進 `\stock-lab\news` 工作，目前手動在 `news` 之後執行（環境變數相同）。執行機器須已登入 Claude Code；額度用盡或未登入時本次停止、下一次重試；每日最多 20 次呼叫（[§3](#3-現有-worker-cli)）。
+- **LLM 判讀**：`\stock-lab\news` 每輪在 `worker.cli news` 結束後，於同一次執行接著跑 `python -m worker.cli news-llm`（環境變數相同、不帶 `--date`），把新收的新聞做 AI 摘要與判讀。每輪最多 50 則（2 次呼叫），同一台北日所有 run 合計最多 20 次呼叫，超過的批次等下一個台北日（[§3](#3-現有-worker-cli)）。
+  - news 失敗時仍會跑（news-llm 只讀已入庫的新聞）；news-llm 失敗不改變 news 的結果，也不改變工作的結束碼。失敗只留在日誌的 news-llm 段落與 `run_type=news_llm` 的 ingestion run（`status=failed`、`error` 寫原因），可用 `/api/ingestion-runs?q=news_llm` 查；日誌格式見 [§6.3](#63-日誌與-run-記錄)。
+  - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。排程環境的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。找不到 claude、未登入或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
+  - 看門狗在最近 3 批判讀都是 `pending` 時留言（[§6.1](#61-統籌看門狗)）；找不到 claude、API 金鑰這類設定錯誤是沒有批次的 `failed` run，不計入該判定，要看日誌的 `news_llm_exit`。
+  - **停用／恢復**：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。額度吃緊時先停 news-llm，news 照常收稿。
 
 ### 6.1 統籌看門狗
 
@@ -107,7 +111,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
-- `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`。
+- `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`（沒有批次的 `failed` run 不算，見 [§6](#6-排程)）。
 
 `daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有 `orca` 與已登入的 `gh`；Python 只用來解析 JSON 與唯讀查 DB，預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
 
@@ -138,18 +142,19 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 | 動作 | 命令 |
 | --- | --- |
-| 預覽（不改系統） | `powershell -ExecutionPolicy Bypass -File tools/Register-WorkerSchedule.ps1 -Job daily -Python <py> -DataDir <data> -WhatIf`（news 把 `-Job` 換成 `news`） |
+| 預覽（不改系統） | `powershell -ExecutionPolicy Bypass -File tools/Register-WorkerSchedule.ps1 -Job daily -Python <py> -DataDir <data> -WhatIf`（news 把 `-Job` 換成 `news`；輸出的 `Command:` 列就是工作排程器會執行的完整命令） |
 | 註冊或更新 | 同上去掉 `-WhatIf`；同名覆寫 |
 | 查詢 | `schtasks /query /tn "\stock-lab\daily" /v /fo list`；`Get-ScheduledTaskInfo -TaskPath \stock-lab\ -TaskName daily`（上次執行時間與結果、下次執行時間） |
 | 手動觸發 | `Start-ScheduledTask -TaskPath \stock-lab\ -TaskName daily`（與排程完全相同的環境） |
 | 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName daily`／`Enable-ScheduledTask ...` |
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/Register-WorkerSchedule.ps1 -Job daily -Unregister` |
-| 不經排程執行一次 | `powershell -ExecutionPolicy Bypass -File tools/Invoke-WorkerJob.ps1 -Job daily -Python <py> -DataDir <data> -Trigger manual [-Date YYYY-MM-DD] [-Force]` |
+| 不經排程執行一次 | `powershell -ExecutionPolicy Bypass -File tools/Invoke-WorkerJob.ps1 -Job daily -Python <py> -DataDir <data> -Trigger manual [-Date YYYY-MM-DD] [-Force]`；news 另可加 `-ClaudeCli <claude.exe>`、`-SkipNewsLlm`，`-Date` 只給 news（news-llm 的 `--date` 是篩選，不帶） |
+| news 的 news-llm | 註冊 news 時指定 `-ClaudeCli <原生 claude.exe>`；未給時依序取 `STOCK_CLAUDE_CLI`、PATH 上第一個 `claude.exe`，都沒有或是 `.cmd` shim 就拒絕註冊。停用：同一條註冊命令改加 `-NoNewsLlm`（工作內為 `-SkipNewsLlm`）；恢復：去掉 `-NoNewsLlm` 再註冊一次。 |
 
 | 工作 | 觸發 | 動作 |
 | --- | --- | --- |
 | `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `tools/Invoke-WorkerJob.ps1 -Job daily -GitPull -MinFreeMemoryGB 6`（註冊參數 `-DailyMinFreeMemoryGB`），單次上限 2.5 小時 |
-| `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | `tools/Invoke-WorkerJob.ps1 -Job news -GitPull -MinFreeMemoryGB 1`（註冊參數 `-NewsMinFreeMemoryGB`），單次上限 90 分鐘 |
+| `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | `tools/Invoke-WorkerJob.ps1 -Job news -GitPull -MinFreeMemoryGB 1 -ClaudeCli <claude.exe>`（註冊參數 `-NewsMinFreeMemoryGB`；`-NoNewsLlm` 時改為 `-SkipNewsLlm`）：先 `news`、再 `news-llm`，單次上限 90 分鐘 |
 
 兩個工作都以目前使用者、互動式登入、一般權限、隱藏視窗執行，不存密碼，使用者登入時才跑；錯過的時段在登入後補跑（StartWhenAvailable）；前一次未結束不另起新執行個體。主機不在台灣時區時腳本自動換算本機時間。
 
@@ -160,8 +165,9 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 ### 6.3 日誌與 run 記錄
 
 - **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、`git pull` 輸出、跳過原因、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-統籌看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`-LogRetentionDays`），只清同名前綴的檔案。包裝腳本本身出錯時記 `wrapper error`，工作排程器「上次執行結果」為非 0。
-- **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。
-- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run。
+  - **news 日誌的分段**：`--- news stdout`／`--- news stderr`／`--- news end exit=<碼> seconds=<秒>`，接著 `--- news-llm start claude_cli=<路徑>`、`--- news-llm stdout`／`stderr`、`--- news-llm end exit=<碼> seconds=<秒>`；結束列為 `===== <時間> end exit=<news 的碼> seconds=<秒> news_llm_exit=<碼>`，`news_llm_exit` 另有 `disabled`（`-SkipNewsLlm`）、`not_run`（起跑前檢查未通過）、`wrapper_error`（包裝腳本啟動 news-llm 失敗）。daily 日誌格式不變。
+- **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。news 工作的碼是 `worker.cli news` 的碼；`worker.cli news-llm` 的碼（0＝`success`／`skipped`，2＝`partial`，1＝`failed`）只記在日誌的 `news-llm end` 與 `news_llm_exit`，不影響工作的碼。
+- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run，news-llm 的在 `run_type=news_llm`（`metadata_json` 記每批則數、耗時、模型與 token 用量）。
 
 | run 狀態 | 意義 |
 | --- | --- |
