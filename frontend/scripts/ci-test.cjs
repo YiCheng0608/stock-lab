@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const Module = require('node:module')
 const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const root = path.resolve(__dirname, '..')
 const srcRoot = path.join(root, 'src')
 const workerRoot = path.resolve(root, '..', 'backend', 'worker')
@@ -86,16 +87,29 @@ function readPolicy(workerFile) {
   return JSON.parse(match[1])
 }
 
-// A module may start async checks at load (OrdinaryCloseTrend.test.tsx); they settle within one event-loop turn
-// (no I/O), and their rejections are attributed to the suite being loaded instead of crashing the process.
-const stray = []
-process.on('unhandledRejection', (reason) => stray.push(reason))
+const failed = []
+const fail = (file, error) => {
+  failed.push(file)
+  console.error(`FAIL ${file}: ${error && error.stack ? error.stack.split('\n').slice(0, 6).join('\n') : error}`)
+}
+const summarize = () => console.error(`Failed ${failed.length}: ${[...new Set(failed)].join(', ')}`)
+
+// A module may start async checks at load (OrdinaryCloseTrend.test.tsx). A rejection nobody handles can surface at any
+// time, even after the last PASS line (a timer in a test), so it is reported when it happens and always fails the run.
+// The suite whose load started the async chain owns it; without an owner it is reported as unowned.
+const owner = new AsyncLocalStorage()
+let concluded = false
+process.on('unhandledRejection', (reason) => {
+  fail(owner.getStore() ?? '(unhandled rejection outside any suite)', reason)
+  process.exitCode = 1
+  if (concluded) summarize() // the Passed line is already out; end with the failure, not the success
+})
 const settle = () => new Promise((resolve) => setImmediate(resolve))
 
 async function runSuite(suite) {
   const exported = loadModule(path.join(srcRoot, suite.file))
-  await settle()
-  if (stray.length) throw stray.shift()
+  await settle() // microtask-only async checks finish here, before the PASS line
+  if (failed.includes(suite.file)) return null
   const driven = [...(suite.runners ?? []), ...(suite.chips ? [suite.chips.run] : [])]
   const absent = driven.filter((name) => typeof exported[name] !== 'function')
   assert(!absent.length, `listed runner not exported: ${absent.join(', ')}`)
@@ -116,11 +130,6 @@ async function main() {
   // The tests are compiled with jsx 'automatic': tsconfig.app.json "react-jsx" (checked by tsc) and @vitejs/plugin-react.
   assert(/"jsx"\s*:\s*"react-jsx"/.test(fs.readFileSync(path.join(root, 'tsconfig.app.json'), 'utf8')),
     'tsconfig.app.json jsx is no longer "react-jsx"; update the esbuild jsx option in scripts/ci-test.cjs')
-  const failed = []
-  const fail = (file, error) => {
-    failed.push(file)
-    console.error(`FAIL ${file}: ${error && error.stack ? error.stack.split('\n').slice(0, 6).join('\n') : error}`)
-  }
   const found = discover(srcRoot)
   const listed = [...SUITES.map((suite) => suite.file), ...Object.keys(EXCLUDED)]
   for (const file of found) if (!listed.includes(file)) fail(file, 'test file is in neither SUITES nor EXCLUDED of scripts/ci-test.cjs')
@@ -136,15 +145,15 @@ async function main() {
   for (const suite of SUITES) {
     if (!found.includes(suite.file) || failed.includes(suite.file)) continue
     try {
-      const counts = await runSuite(suite)
+      const counts = await owner.run(suite.file, () => runSuite(suite))
+      if (!counts) continue // its unhandled rejection is already reported
       passed++
       console.log(`PASS ${suite.file}${counts.length ? ` (${counts.map(([name, count]) => `${name} ${count}`).join(', ')})` : ''}`)
     } catch (error) { fail(suite.file, error) }
   }
-  await settle()
-  for (const reason of stray.splice(0)) fail('(unhandled rejection after the suites ran)', reason)
+  concluded = true
   if (failed.length) {
-    console.error(`Failed ${failed.length}: ${[...new Set(failed)].join(', ')}`)
+    summarize()
     process.exitCode = 1
     return
   }
