@@ -151,4 +151,3 @@ const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onInte
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
 check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期待核實'), 'no bars → empty state and pending date badge')
-
