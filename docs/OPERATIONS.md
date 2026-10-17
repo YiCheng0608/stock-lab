@@ -59,8 +59,9 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | `python -m worker.cli init-db` | 建立／升級指定 DB；先確認路徑、backup 與授權。 |
 | `python -m worker.cli collect --date YYYY-MM-DD --months-back 0` | 官方來源收集；`months-back` 只接受 0、1、2、3。 |
 | `python -m worker.cli themes sync [--file PATH]` | 驗證[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)（預設 `backend/data/themes/themes_v1.json`）並寫入 `theme_groups`／`group_memberships`；不發網路，重跑冪等。任何錯誤都整批不寫入、印出位置並 exit 1。題材榜在下一次 analyze／daily 計分。 |
-| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0 [--trigger manual\|scheduler\|simulation] [--force]` | collect 成功才 analyze；analyze 成功才 evaluate。collect 成功後跑指標批次（目標日傳給批次；analyze 失敗也跑）；collect 失敗時後續步驟記 `skipped`。每次執行寫一列 `schedule_runs`，任一步驟失敗則該 run 為 `failed`；exit code 與狀態見 [§6.3](#63-日誌與-run-記錄)。 |
+| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0 [--trigger manual\|scheduler\|simulation] [--force]` | 順序 collect → analyze → evaluate → candidates → indicators。collect 成功才 analyze；analyze 成功才 evaluate 與 candidates（evaluate 失敗不擋 candidates）。collect 成功後跑指標批次（目標日傳給批次；analyze 失敗也跑）；collect 失敗時後續步驟記 `skipped`。每次執行寫一列 `schedule_runs`，任一步驟失敗則該 run 為 `failed`；exit code 與狀態見 [§6.3](#63-日誌與-run-記錄)。 |
 | `python -m worker.cli schedule-runs [--date YYYY-MM-DD] [--limit N]` | 列出 daily run 記錄與各步驟；唯讀。 |
+| `python -m worker.cli candidates [--date YYYY-MM-DD]` | 以 [`candidate_score_v1`](V1_SPEC.md#candidate_score_v1) 對該日（預設 DB 最新訊號日）的訊號評分排序，寫 `candidate_runs`／`daily_candidates`；不發網路、不改訊號。同日同版本已有 run 時回 `already_complete`，不新增、不改寫。該日沒有 analyze 訊號回 `no_data`（`no_signals_for_date`）且不寫列；`success`／`no_data` 以外或例外時 exit 1。全市場約 4 秒（2026-10-16 唯讀副本實測）。 |
 | `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。超過 93 日的範圍依序切成多段。 |
 | `python -m worker.cli analyze` | 要求最新官方 collect run success 與有效 as-of；沒有 `--date`，也不是任意局部分析器。 |
 | `python -m worker.cli evaluate` | 更新 execution／tracking 與 T+5／T+20 settlement；會寫 DB。 |
@@ -161,17 +162,19 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 - **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、`git pull` 輸出、跳過原因、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-統籌看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`-LogRetentionDays`），只清同名前綴的檔案。包裝腳本本身出錯時記 `wrapper error`，工作排程器「上次執行結果」為非 0。
 - **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。
-- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run。
+- **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／candidates／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run。
 
 | run 狀態 | 意義 |
 | --- | --- |
-| `success` | collect、analyze、evaluate、indicators 都成功（或該步驟回 `no_data`）。 |
+| `success` | collect、analyze、evaluate、candidates、indicators 都成功（或該步驟回 `no_data`）。 |
 | `partial` | collect 有缺（例如籌碼尚未公布）；後續步驟記 `skipped`，錯誤欄列 collect 警告。 |
 | `non_trading_day` | 官方來源明確回報該週間日無交易。 |
-| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 依賴 analyze；indicators 只依賴 collect）。run 列記錄執行的主機與 PID；同主機的新執行發現該 PID 已不存在（例如被系統終止）時，立即把舊列改記 `failed`（abandoned）並照常執行；其他情況要超過 2.5 小時（與排程單次上限相同，小於 18:30 與 21:30 的間隔）仍為 `running` 才記 abandoned，在那之前同日的新執行記 `skipped`（`already_running`）。 |
+| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，依賴它的步驟記 `skipped`（evaluate 與 candidates 依賴 analyze；indicators 只依賴 collect）。run 列記錄執行的主機與 PID；同主機的新執行發現該 PID 已不存在（例如被系統終止）時，立即把舊列改記 `failed`（abandoned）並照常執行；其他情況要超過 2.5 小時（與排程單次上限相同，小於 18:30 與 21:30 的間隔）仍為 `running` 才記 abandoned，在那之前同日的新執行記 `skipped`（`already_running`）。 |
 | `skipped` | 同目標日已有 `success`／`non_trading_day`（`already_complete`）、另一次執行仍在進行（`already_running`），或起跑前檢查未通過（`low_memory`／`git_busy`／`git_pull_failed`）；不碰資料。 |
 
 indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`；只要 collect 成功就執行（analyze 失敗也跑），失敗時 run 記 `failed`、錯誤欄記 indicators 訊息。
+
+candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀當日訊號、籌碼、族群榜與新聞，不改行情、訊號與追蹤；失敗時 run 記 `failed`（exit code 1，看門狗與排程異常處理照 `failed` 處置）、錯誤欄記 candidates 訊息，indicators 照跑。行情與訊號已寫入，只需重跑候選：`python -m worker.cli candidates --date YYYY-MM-DD`（不需 `daily --force`）。
 
 ### 6.4 重跑與回補
 

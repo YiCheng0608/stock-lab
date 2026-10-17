@@ -432,6 +432,121 @@ CANONICAL_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 
+# Daily candidate ranking (V1_SPEC candidate_score_v1).  The score only orders
+# signals the strategies already judged conditional; it never changes a
+# strategy decision and is not a win rate or expected return.  Any change to
+# this dictionary requires a new version: stored candidates keep the version
+# and a snapshot of the configuration they were scored with.  It is kept out
+# of CANONICAL_CONFIGS, whose snapshot identifies strategy rows.
+CANDIDATE_SCORE_VERSION = "candidate_score_v1"
+CANDIDATE_SCORE_V1: dict[str, Any] = {
+    "name": CANDIDATE_SCORE_VERSION,
+    "schema_version": "candidate-score-config/v1",
+    "purpose": "ranking_only_not_win_rate_or_expected_return",
+    "percentile": "mid_rank_same_day:(less+(equal-1)/2)/(n-1);single_value=0.5",
+    "pool": {
+        "strategies": ["breakout_v1", "pullback_v1"],
+        "signal_namespace": "analysis",
+        "signal_status": ["conditional"],
+        "instrument_types": ["stock", "ipo"],
+        "require_valid_levels": True,
+        "one_row_per_instrument": "highest_total_then_breakout",
+    },
+    "weights": {
+        "technical": 0.35,
+        "chips": 0.30,
+        "group": 0.20,
+        "news_sentiment": 0.15,
+    },
+    "components": {
+        "technical": {
+            "population": "same_day_same_strategy_pool",
+            "items": {
+                "volume_ratio": {
+                    "weight": 0.5,
+                    "formula": "volume[T]/mean(volume[T-20:T-1])",
+                    "better": {"breakout_v1": "higher", "pullback_v1": "lower"},
+                },
+                "distance": {
+                    "weight": 0.5,
+                    "formula": {
+                        "breakout_v1": "close[T]/max(high[T-20:T-1])-1",
+                        "pullback_v1": "abs(close[T]/MA20[T]-1)",
+                    },
+                    "better": "lower",
+                },
+                # _risk_levels sets every target at 1.6R, so RR has no ranking
+                # power today; it is reported but carries no weight.
+                "risk_reward": {
+                    "weight": 0.0,
+                    "formula": "(target_1-entry)/(entry-invalid)",
+                    "better": "higher",
+                },
+            },
+        },
+        "chips": {
+            "population": "same_day_market_stock_and_ipo",
+            "items": {
+                "institutional_flow_5d": {
+                    "weight": 0.4,
+                    "formula": "sum(foreign+trust+dealer,5d)/mean(volume,20d)",
+                    "better": "higher",
+                },
+                "institutional_flow_20d": {
+                    "weight": 0.3,
+                    "formula": "sum(foreign+trust+dealer,20d)/mean(volume,20d)",
+                    "better": "higher",
+                },
+                "margin_change_5d": {
+                    "weight": 0.3,
+                    "formula": "(margin_balance[T]-margin_balance[T-5])/abs(margin_balance[T-5])",
+                    "better": "lower",
+                },
+            },
+        },
+        "news_sentiment": {
+            "population": "same_day_market_stock_and_ipo",
+            "inference": True,
+            "window_calendar_days": 3,
+            "llm_prompt_version": "news_v1",
+            "direction_values": {"positive": 1, "negative": -1, "mixed": 0},
+            "ignored_directions": ["unknown"],
+            "no_linked_news": "valid_zero_when_news_collection_succeeded_in_window",
+            "better": "higher",
+        },
+        "group": {
+            "population": "board_percentile_not_cross_stock",
+            "boards": ["industry", "theme"],
+            "formula": "max(1-(rank-1)/(ranked_groups_on_board-1));single_group=0.5",
+            "qualification": "complete_quality_eligible_members_gte_3_ranked_on_T",
+        },
+    },
+    "minimum_weight_coverage": 0.65,
+    "required_components": ["technical"],
+    "list_size": {"maximum": 20, "minimum_target": 10},
+    "max_reasons": 4,
+    "tie_break": ["total_desc", "technical_desc", "chips_desc", "exchange_asc", "symbol_asc"],
+}
+
+
+def weighted_available_mean(
+    values: Mapping[str, float | None],
+    weights: Mapping[str, float],
+) -> tuple[float | None, float]:
+    """Weighted mean over the finite values only, and the weight they cover.
+
+    Missing inputs are neither zero nor imputed: the remaining weights are
+    renormalized and the covered weight is returned so callers can apply a
+    floor.  Zero-weight items never contribute.
+    """
+
+    usable = {key: float(values[key]) for key in weights if weights[key] > 0 and _finite(values.get(key))}
+    coverage = sum(weights[key] for key in usable)
+    if coverage <= 0:
+        return None, 0.0
+    return sum(usable[key] * weights[key] for key in usable) / coverage, coverage
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     valid: bool
