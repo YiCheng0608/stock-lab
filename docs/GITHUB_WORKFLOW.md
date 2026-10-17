@@ -84,7 +84,8 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 1. 偵測：每次收到壓縮摘要就把次數寫進 scratchpad 的計數檔；巡檢 prompt 固定含一步「讀計數檔，達 2 次或自覺對不上 Issue 與文件就換手」。
 2. 執行：照上面四行指令開新 session 並送接手文（含自己的 handle）。
 3. 收尾：舊 session 停掉自己的監看與巡檢，之後不再對 repo 操作；新 session 在 #1 留言後關掉舊 terminal。
-4. 統籌 session 不存在時（Orca 重啟、電腦重開、session 當掉）由看門狗排程開新統籌，見 [#171](https://github.com/YiCheng0608/stock-lab/issues/171) 與 [OPERATIONS §6](OPERATIONS.md#6-排程)。
+4. 不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並重掛監看，換手前後的留言都由它接續。
+5. 統籌 session 不存在時（Orca 重啟、電腦重開、session 當掉）由看門狗排程開新統籌，見 [#171](https://github.com/YiCheng0608/stock-lab/issues/171) 與 [OPERATIONS §6](OPERATIONS.md#6-排程)。
 
 ## 無人值守運作
 
