@@ -35,6 +35,8 @@ DAILY_STEPS = ("collect", "analyze", "evaluate", "indicators")
 # Matches the scheduled task's 3-hour execution limit.
 STALE_RUNNING_AFTER = timedelta(hours=3)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
+# Reasons the scheduler wrapper may pass to record a run it declined to start.
+PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
 # The indicator batch (V1-G2).  A checkout without the module records the
 # step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
@@ -234,6 +236,29 @@ def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, 
                 "date": target.isoformat(),
             }
         return run.id, None
+
+
+def record_preflight_skip(end_date: date | None, *, reason: str, trigger: str = "scheduler") -> dict[str, Any]:
+    """Log a run the scheduler wrapper declined to start; no step runs."""
+
+    if reason not in PREFLIGHT_SKIP_REASONS:
+        raise ValueError(f"unknown preflight skip reason: {reason}")
+    _ensure_schema()
+    target = pipeline.latest_weekday(end_date)
+    now = _utcnow()
+    with pipeline.SessionLocal() as db:
+        run = ScheduleRun(
+            job=DAILY_JOB,
+            target_date=target,
+            trigger=trigger,
+            status="skipped",
+            started_at=now,
+            finished_at=now,
+            summary_json={"reason": reason},
+        )
+        db.add(run)
+        db.commit()
+        return {"status": "skipped", "reason": reason, "schedule_run_id": run.id, "date": target.isoformat()}
 
 
 def run_daily_job(

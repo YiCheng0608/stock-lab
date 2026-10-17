@@ -406,3 +406,16 @@ def test_schema_check_skips_init_db_only_at_the_code_head(database, monkeypatch)
         db.execute(text("UPDATE alembic_version SET version_num = :value"), {"value": REVISIONS[-2]})
         db.commit()
     assert schedule_runs._ensure_schema() == "upgraded" and calls == ["init_db"]
+
+
+def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_the_day(database, monkeypatch):
+    steps = Steps(monkeypatch)
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+    assert skipped["status"] == "skipped" and skipped["reason"] == "low_memory"
+    assert steps.calls == []
+    # A declined start is not completion: the next trigger still runs the day.
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, _ = runs(database)
+    assert [(row.status, row.summary_json.get("reason")) for row in rows] == [("skipped", "low_memory"), ("success", None)]
+    with pytest.raises(ValueError):
+        schedule_runs.record_preflight_skip(DAY, reason="unknown")

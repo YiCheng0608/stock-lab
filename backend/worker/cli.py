@@ -10,7 +10,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .indicator_batch import run_indicator_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
-from .schedule_runs import list_schedule_runs
+from .schedule_runs import PREFLIGHT_SKIP_REASONS, list_schedule_runs, record_preflight_skip
 
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
@@ -38,6 +38,11 @@ def main() -> None:
         help="記錄在 schedule_runs 的觸發來源",
     )
     daily_parser.add_argument("--force", action="store_true", help="目標日已完成仍重跑各步驟（資料仍不改寫）")
+    daily_parser.add_argument(
+        "--skip-reason",
+        choices=sorted(PREFLIGHT_SKIP_REASONS),
+        help="排程包裝腳本起跑前檢查未通過：只記一列 skipped，不執行任何步驟",
+    )
     runs_parser = subparsers.add_parser("schedule-runs", help="列出 daily 排程 run 記錄與各步驟")
     runs_parser.add_argument("--date", dest="run_date", help="只列此目標日 YYYY-MM-DD")
     runs_parser.add_argument("--limit", type=int, default=20)
@@ -82,12 +87,15 @@ def main() -> None:
     elif args.command == "indicators":
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     else:
-        result = run_daily(
-            parse_date(args.run_date),
-            months_back=args.months_back,
-            trigger=args.trigger,
-            force=args.force,
-        )
+        if args.skip_reason:
+            result = record_preflight_skip(parse_date(args.run_date), reason=args.skip_reason, trigger=args.trigger)
+        else:
+            result = run_daily(
+                parse_date(args.run_date),
+                months_back=args.months_back,
+                trigger=args.trigger,
+                force=args.force,
+            )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
