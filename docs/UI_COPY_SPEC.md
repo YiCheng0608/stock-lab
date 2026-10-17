@@ -156,3 +156,23 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 | `invalid_levels` 與各價位關係碼（如 `invalid_price_must_be_below_entry`） | 「研究價位無法驗證」；隱藏不合法價位、目標與 RR。 |
 | `target_1_risk_reward_below_minimum` | 第一目標 RR 未達門檻，不形成 conditional；不是績效結論。 |
 | `unsupported_current_status`／`illegal_signal_status_transition` | 追蹤狀態無法驗證；日常顯示「需人工判讀」。 |
+
+## 10. 每日候選
+
+[`candidate_score_v1`](V1_SPEC.md#candidate_score_v1) 的理由由後端依規則產生（`worker.candidates.REASON_TEMPLATES`），API 的 `reasons[].text` 已是日常文案，前端直接顯示、不自組；`inference=true` 的理由與「推論」標籤同列。
+
+| 理由碼 | 條件 | 文案 |
+| --- | --- | --- |
+| `breakout_20d_high` | breakout 策略 | 突破 20 日高點，量比 {量比，一位小數} |
+| `pullback_ma20_support` | pullback 策略 | 回測 20 日均線，距均線 {距離，%，一位小數}，量比 {量比} |
+| `foreign_trust_net_buy_5d` | 外資、投信 5 日皆淨買超 | 外資＋投信 5 日淨買超 |
+| `institutional_net_buy_5d` | 三大法人 5 日合計淨買超（上條不成立時） | 三大法人 5 日淨買超，約 20 日均量的 {倍數，兩位小數} 倍 |
+| `institutional_net_buy_20d` | 三大法人 20 日合計淨買超 | 三大法人 20 日淨買超 |
+| `margin_decrease_5d` | 融資 5 日減少 | 融資 5 日減少 {%，一位小數} |
+| `news_positive_3d` | 新聞分項原值 > 0（推論） | 近 3 日 {則數} 則偏多新聞（推論） |
+| `hot_group_rank` | 有當日合格群組 | 所屬{產業／題材}「{名稱}」熱度第 {排名} |
+
+- **分項名**：technical「技術」、chips「籌碼」、group「族群」、news_sentiment「新聞情緒」；新聞情緒另標「推論」。
+- **分數**：總分與分項為 0–1，日常以 0–100 整數呈現；分項為 null 顯示「—」並附 API 的 `null_explanation`，不寫 0。`partial_components=true` 時在總分旁註明「部分分項無資料，以有資料的分項計分」。
+- **聲明**：清單頂端固定一句「評分只用於排序，不代表勝率或預期報酬」。
+- **零候選**：顯示 API 的 `zero_reason_text`；`no_actionable_signals`「當日沒有成立（條件成立）的策略訊號」、`all_excluded`「成立的訊號都因 ETF、價位不合法或評分資料不足被排除」。`status=not_computed` 寫「此交易日尚未產生候選清單」。

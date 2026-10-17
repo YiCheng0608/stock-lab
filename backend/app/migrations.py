@@ -476,6 +476,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0012_news_llm', CURRENT_TIMESTAMP)"
         )
     )
+    # 0013 only adds candidate_runs/daily_candidates, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0013_candidates', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
