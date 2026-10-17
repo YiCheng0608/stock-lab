@@ -1,0 +1,1181 @@
+{
+  "schema_version": "theme-table/v1",
+  "table": "themes_v1",
+  "version": "2026.10.17",
+  "themes": [
+    {
+      "id": "ai-server",
+      "name": "AI 伺服器",
+      "description": "設計、組裝與出貨 AI 伺服器、GPU 機櫃與資料中心伺服器系統的代工廠與品牌廠。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2382",
+          "name": "廣達",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://ec.ltn.com.tw/article/breakingnews/5141121",
+              "title": "廣達全年AI貢獻上看7成 GB300第三季底出貨放量（自由時報）",
+              "quote": "AI 伺服器需求持續強勁，全年AI 伺服器營收目標占總伺服器比重約70%，上半年已達60%以上。"
+            },
+            {
+              "url": "https://www.quantatw.com/Quanta/english/about/company.aspx",
+              "title": "Company Profile - Quanta",
+              "quote": "the development and quality improvement of advanced and high-performance sever related technologies"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3231",
+          "name": "緯創",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20251219700296-439901",
+              "title": "緯創 AI伺服器火熱（工商時報）",
+              "quote": "調升第四季出貨2,300到2,400個機櫃的GB200和GB300，季增92％。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2356",
+          "name": "英業達",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.inventec.com/",
+              "title": "英業達",
+              "quote": "我們提供尖端的伺服器、儲存設備和網路解決方案"
+            },
+            {
+              "url": "https://news.cnyes.com/news/id/5425175",
+              "title": "英業達最新年度展望 今年伺服器出貨將年增雙位數（鉅亨網）",
+              "quote": "受惠 AI 伺服器出貨動能強勁，預期 2024 年全年伺服器出貨量將有雙位數的成長。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2317",
+          "name": "鴻海",
+          "relation": "product_line",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.inside.com.tw/article/42074-foxconn-q2-2026-ai-server-revenue-passes-half",
+              "title": "鴻海 Q2 財報：AI 伺服器營收佔比首度過半（INSIDE）",
+              "quote": "雲端網路產品（以 AI 伺服器為主力）佔合併營收 51%"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6669",
+          "name": "緯穎",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.wiwynn.com/about-wiwynn",
+              "title": "About Wiwynn",
+              "quote": "Wiwynn is a leading cloud IT infrastructure provider for hyperscale data centers."
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2376",
+          "name": "技嘉",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://ec.ltn.com.tw/article/breakingnews/5595723",
+              "title": "焦點股》技嘉：下半年AI備受看好 帶量大漲（自由時報）",
+              "quote": "技嘉目前伺服器營收占比已升至約整體8成"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3706",
+          "name": "神達",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://udn.com/news/story/7240/9577001",
+              "title": "神達旗下神雲瞄準代理AI商機 前進ISC 2026（聯合新聞網）",
+              "quote": "神達（3706）旗下子公司神雲科技宣布，將於ISC 2026重點展示其最新Agentic AI就緒基礎架構及液冷創新技術。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2357",
+          "name": "華碩",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://servers.asus.com/",
+              "title": "ASUS Servers",
+              "quote": "AI Server and Infrastructure Solutions"
+            },
+            {
+              "url": "https://news.cnyes.com/news/id/6424541",
+              "title": "PC品牌Q2迎補貨旺季 華碩、宏碁全年獲利展望維持正向（鉅亨網）",
+              "quote": "法人看好華碩 2026 年伺服器業務將維持 105％的高成長，營收占比預計突破三成"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thermal",
+      "name": "散熱",
+      "description": "供應 AI 伺服器與資料中心用水冷板、液冷系統、均熱片、風扇與熱交換器等散熱元件與模組的廠商。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:3017",
+          "name": "奇鋐",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260428700782-430201",
+              "title": "奇鋐獲利暴增、多項重量級專案放量在即（工商時報）",
+              "quote": "奇鋐本波成長核心動能仍來自AI伺服器散熱升級，尤其液冷解決方案需求快速擴大"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3324",
+          "name": "雙鴻",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/amp/story/5607/9314194",
+              "title": "散熱模組廠雙雄受惠 AI 題材 雙鴻、健策元月營收靚 同步寫新猷（經濟日報）",
+              "quote": "雙鴻表示，元月成長動能來自AI伺服器液冷散熱系統市占率持續攀升。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3653",
+          "name": "健策",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.jentech.com.tw/",
+              "title": "健策精密工業",
+              "quote": "Heat Spreader, Vapor Chambers Lids, Micro Channel Lids and Stiffeners for your compute component needs."
+            },
+            {
+              "url": "https://money.udn.com/money/amp/story/5607/9314194",
+              "title": "散熱模組廠雙雄受惠 AI 題材 雙鴻、健策元月營收靚 同步寫新猷（經濟日報）",
+              "quote": "健策為均熱片龍頭，2025全年營收202.75億元，年增42%，創新高。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2421",
+          "name": "建準",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.sunon.com/",
+              "title": "SUNON 建準電機",
+              "quote": "SUNON 展現將涵蓋晶片、伺服器至機櫃的完整液冷技術，因應 AI 與高效能運算持續攀升的功耗與散熱需求。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6230",
+          "name": "尼得科超眾",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.ccic.com.tw/",
+              "title": "尼得科超眾科技",
+              "quote": "公司主要提供客戶包含散熱片、熱管、熱板、散熱模組、與整合物聯網的散傳熱系統。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8996",
+          "name": "高力",
+          "relation": "supply_chain",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://www.kaori.com.tw/en/",
+              "title": "KAORI HEAT TREATMENT",
+              "quote": "Brazed Plate Heat Exchanger Applications in In-Rack CDU"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "abf-substrate",
+      "name": "ABF 載板",
+      "description": "生產 ABF（FC-BGA）等高階 IC 載板，供 CPU、GPU 與 AI 加速晶片封裝使用的載板廠。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:3037",
+          "name": "欣興",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260729700220-439901",
+              "title": "欣興Q2每股賺8.45元 寫新高（工商時報）",
+              "quote": "受惠AI伺服器帶動ABF載板需求持續升溫"
+            },
+            {
+              "url": "https://ec.ltn.com.tw/article/breakingnews/5499015",
+              "title": "焦點股》欣興：6月營收飆新高 下半年ABF載板再調漲（自由時報）",
+              "quote": "ABF載板下半年報價有望續漲。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:8046",
+          "name": "南電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://finance.technews.tw/2026/05/08/high-end-network-switches/",
+              "title": "ABF 載板進入定價上升週期！外資喊買南電（TechNews 財經）",
+              "quote": "南電的 ABF 載板現貨價格在第二季有望調升 30% 至 40% 以上"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3189",
+          "name": "景碩",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.kinsus.com.tw/",
+              "title": "Kinsus Interconnect Technology",
+              "quote": "Kinsus strives to lead the global high-end IC substrate market."
+            },
+            {
+              "url": "https://finance.technews.tw/2020/11/27/ic-substrate-keep-popular-next-year/",
+              "title": "IC 載板明年供需續吃緊，台 3 廠受惠續擴 ABF 產能（TechNews 財經）",
+              "quote": "景碩今年資本支出規模約新台幣 60 億元，新豐廠轉為 ABF 載板產線"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "heavy-electrical",
+      "name": "重電",
+      "description": "生產電力變壓器、氣體絕緣開關（GIS）與配電設備，受惠電網強化與資料中心用電需求的重電廠。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:1519",
+          "name": "華城",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.fortune.com.tw/",
+              "title": "華城電機",
+              "quote": "華城電機是台灣生產電力變壓器的領導企業"
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260309700216-439901",
+              "title": "士電、華城 台電大單到手（工商時報）",
+              "quote": "台電強韌電網計畫再釋出訂單，士電（1503）、中興電（1513）、亞力（1514）、華城（1519）等機電四雄皆有斬獲"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1503",
+          "name": "士電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.seec.com.tw/",
+              "title": "士林電機",
+              "quote": "士林電機專注於研發及製造電力相關產品"
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260309700216-439901",
+              "title": "士電、華城 台電大單到手（工商時報）",
+              "quote": "台電強韌電網計畫再釋出訂單，士電（1503）、中興電（1513）、亞力（1514）、華城（1519）等機電四雄皆有斬獲"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1513",
+          "name": "中興電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.chem.com.tw/",
+              "title": "中興電工",
+              "quote": "中興電工將聚焦於發展全球六氟化硫氣體絕緣開關(GIS)重電設備"
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260309700216-439901",
+              "title": "士電、華城 台電大單到手（工商時報）",
+              "quote": "台電強韌電網計畫再釋出訂單，士電（1503）、中興電（1513）、亞力（1514）、華城（1519）等機電四雄皆有斬獲"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1514",
+          "name": "亞力",
+          "relation": "core_business",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.allis.com.tw/",
+              "title": "Allis Electric",
+              "quote": "Its steady operations led to the development of independent departments which produce transformers"
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260309700216-439901",
+              "title": "士電、華城 台電大單到手（工商時報）",
+              "quote": "台電強韌電網計畫再釋出訂單，士電（1503）、中興電（1513）、亞力（1514）、華城（1519）等機電四雄皆有斬獲"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1504",
+          "name": "東元",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://udn.com/news/story/7240/9503341",
+              "title": "東元3大事業群成長可期 電力能源逐季看增（聯合新聞網）",
+              "quote": "透過在台灣中壢和觀音以及海外等地新建變壓器新廠，持續擴充產能，積極爭取變壓器訂單"
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260309700216-439901",
+              "title": "士電、華城 台電大單到手（工商時報）",
+              "quote": "台電這波釋單，士電、中興電、亞力、華城、樂事綠能（1529）、東元（1504）等機電廠全受益。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "semiconductor-equipment",
+      "name": "半導體設備",
+      "description": "供應晶圓廠與封測廠製程設備、設備次系統，以及無塵室與廠務工程的廠商。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TPEx:3131",
+          "name": "弘塑",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.gptc.com.tw/",
+              "title": "弘塑科技",
+              "quote": "台灣半導體濕製程設備領導品牌"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3583",
+          "name": "辛耘",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.scientech.com.tw/zh-hant/AboutUs/Overview/Profile",
+              "title": "認識我們 | 辛耘企業",
+              "quote": "設立湖口工廠，跨足半導體與光電製程設備研發、生產、銷售"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6187",
+          "name": "萬潤",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.allring-tech.com.tw/about1.htm",
+              "title": "萬潤科技",
+              "quote": "萬潤科技成立於1996年，專注於半導體與電子產業自動化製程設備"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6640",
+          "name": "均華",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/story/5612/9725095",
+              "title": "均華高精度黏晶機出貨 今年營收貢獻拚超越晶粒挑揀機（經濟日報）",
+              "quote": "均華已從晶片挑揀機（Chip Sorter）延伸至高精度黏晶機(Die Bonder)"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3413",
+          "name": "京鼎",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.foxsemicon.com/zh-tw",
+              "title": "京鼎集團",
+              "quote": "以半導體設備製造能力為基石"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6196",
+          "name": "帆宣",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.micb2b.com/about/introduction/",
+              "title": "公司簡介－帆宣系統科技",
+              "quote": "透過專業技術引進半導體、平面顯示器、光電產業相關製程設備、材料；提供無塵室機電設計、採購、監管、施工"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2404",
+          "name": "漢唐",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "http://www.uisco.com.tw/aboutus.html",
+              "title": "關於漢唐－漢唐集成",
+              "quote": "高科技廠房無塵室的整體施工、空調系統、電力系統、中央監控系統、二次配工程等等所有相關工程的整合服務。"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:5536",
+          "name": "聖暉*",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.acter.com.tw/about/introduction",
+              "title": "公司簡介－聖暉工程科技",
+              "quote": "服務範疇涵蓋高端無塵室整合、回收再生系統、機電工程、空調工程"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cowos",
+      "name": "CoWoS 先進封裝",
+      "description": "以 CoWoS 為核心的 2.5D／3D 先進封裝，含晶圓代工與封測產能，以及濕製程、點膠、挑揀與黏晶等設備和測試供應鏈。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2330",
+          "name": "台積電",
+          "relation": "product_line",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.tsmc.com/english/dedicatedFoundry/technology/cowos",
+              "title": "CoWoS - TSMC",
+              "quote": "This wafer level system integration platform offers wide range of interposer sizes, number of HBM cubes, and package sizes."
+            },
+            {
+              "url": "https://www.ctee.com.tw/news/20260111700310-430501",
+              "title": "AI大廠搶CoWoS先進封裝 台積電與封測台廠加速擴產（工商時報）",
+              "quote": "法人推測，台積電CoWoS先進封裝月產能，將從2025年底的每月7萬片晶圓，到今年底將擴充至月產能11.5萬片"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3711",
+          "name": "日月光投控",
+          "relation": "product_line",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260111700310-430501",
+              "title": "AI大廠搶CoWoS先進封裝 台積電與封測台廠加速擴產（工商時報）",
+              "quote": "日月光投控今年持續受惠CoWoS需求外溢效應，除了今年持續擴充CoWoS後段oS封裝產能外"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3131",
+          "name": "弘塑",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260512700066-439901",
+              "title": "台積電、英特爾全都要！聯發科EMIB、CoWoS封裝並進 辛耘、均華等台廠拚卡位（工商時報）",
+              "quote": "其中，弘塑、辛耘主攻濕製程設備；均華在重組晶圓分選機市占率高；萬潤則在Underfill點膠設備具優勢"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3583",
+          "name": "辛耘",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://technews.tw/?p=1254677",
+              "title": "台積電擴 CoWoS 先進封裝，台廠拚一條龍供應鏈（TechNews 科技新報）",
+              "quote": "弘塑和辛耘提供先進封裝製程濕式設備"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6187",
+          "name": "萬潤",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://technews.tw/?p=1254677",
+              "title": "台積電擴 CoWoS 先進封裝，台廠拚一條龍供應鏈（TechNews 科技新報）",
+              "quote": "萬潤提供 CoWoS 製程所需點膠機和運輸設備"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6640",
+          "name": "均華",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/story/5612/9725095",
+              "title": "均華高精度黏晶機出貨 今年營收貢獻拚超越晶粒挑揀機（經濟日報）",
+              "quote": "Die Bonder則因應Chiplet、HBM及CoWoS、SolC等異質整合應用"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2449",
+          "name": "京元電子",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260111700310-430501",
+              "title": "AI大廠搶CoWoS先進封裝 台積電與封測台廠加速擴產（工商時報）",
+              "quote": "封測台廠包括日月光投控和京元電等積極搶攻先進測試"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "silicon-photonics",
+      "name": "矽光子／光通訊",
+      "description": "資料中心與電信用光通訊元件，涵蓋雷射與磊晶片、光收發模組、光纖連接與被動元件，以及矽光子／CPO 供應鏈。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TPEx:3363",
+          "name": "上詮",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.foci.com.tw/",
+              "title": "FOCI 上詮光纖通信",
+              "quote": "Coherent Communication and Silicon Photonic Passive Component Application"
+            },
+            {
+              "url": "https://news.cnyes.com/news/id/5780001",
+              "title": "上詮：明年CPO光纖陣列產品出貨（鉅亨網）",
+              "quote": "光纖陣列元件 FAU（Fiber Array Unit）精準對位與封裝技術"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3450",
+          "name": "聯鈞",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260512700963-430205",
+              "title": "受惠矽光子與擴產效應 聯鈞AI光通訊需求營運爆發（工商時報）",
+              "quote": "成功串起「矽光子晶片、封裝到模組」的一條龍服務，成功卡位CPO（共同封裝光學元件）趨勢。"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3163",
+          "name": "波若威",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.browave.com/Pages/5",
+              "title": "公司簡介｜波若威科技",
+              "quote": "研發、生產及銷售光纖通訊零組件的領導廠商"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:4979",
+          "name": "華星光",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/story/5612/9720459",
+              "title": "華星光衝刺 CW、EML 雷射商機 全力擴增新產能（經濟日報）",
+              "quote": "華星光全力衝刺AI基礎建設光通訊新商機"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4977",
+          "name": "眾達-KY",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20241227700964-430201",
+              "title": "《通網股》矽光+庫藏股助攻 眾達-KY差一步漲停（工商時報）",
+              "quote": "其產品涵蓋光收發模組、光纖通道模組、光接收器及光學次模組零件等"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6442",
+          "name": "光聖",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ezconn.com/en/about",
+              "title": "About EZconn",
+              "quote": "EZconn's optical communication products are developed by integrating optical, electronic, mechanical"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3081",
+          "name": "聯亞",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.lmoc.com.tw/index.php?temp=intro&lang=cht",
+              "title": "公司簡介－聯亞光電工業",
+              "quote": "為全球EPON/GPON應用產品及商業化矽光(Si-Photonics)產品的主要供應商。"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:6187",
+          "name": "萬潤",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.allring-tech.com.tw/about1.htm",
+              "title": "萬潤科技",
+              "quote": "萬潤積極投入矽光子與CPO（Co-Packaged Optics）製程設備"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "name": "記憶體",
+      "description": "DRAM、NOR／NAND Flash 記憶體晶片製造商，以及快閃記憶體控制晶片、記憶體模組與儲存品牌廠。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2408",
+          "name": "南亞科",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.nanya.com/",
+              "title": "Nanya Technology",
+              "quote": "Comprehensive DRAM Products and Custom Solutions"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2344",
+          "name": "華邦電",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/story/5612/9078545",
+              "title": "DRAM 及 NOR Flash 雙引擎驅動 華邦電明年營收躋身千億元俱樂部（經濟日報）",
+              "quote": "尤其DDR4與NOR Flash兩大產品線需求強勁"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2337",
+          "name": "旺宏",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.macronix.com/en-us/about/Pages/company-overview.aspx",
+              "title": "Macronix - Company Overview",
+              "quote": "provides a full range of NOR Flash, NAND Flash, and ROM products"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:8299",
+          "name": "群聯",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.phison.com/",
+              "title": "PHISON Electronics",
+              "quote": "A World Leader in NAND Controllers & Flash Storage Solutions"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:3260",
+          "name": "威剛",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://money.udn.com/money/story/11074/9739692",
+              "title": "威剛營收／8月189億元 月增3%、年增279%（經濟日報）",
+              "quote": "威剛8月DRAM營收占比達69.3%，SSD比重為26.6%"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:4967",
+          "name": "十銓",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.teamgroupinc.com/en/about/vision/",
+              "title": "TEAMGROUP Corporate Vision",
+              "quote": "Team Group Inc. offers a wide range of memory, memory cards, USB flash drives, solid state drives,"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "electric-vehicle",
+      "name": "電動車",
+      "description": "電動車動力系統、減速齒輪、高壓線束、車載充電與充電樁等零組件，以及電動車銷售相關業者。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2308",
+          "name": "台達電",
+          "relation": "product_line",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.deltaww.com/zh-TW/products/EV-Charging/ALL/",
+              "title": "電動車充電設備 - 台達",
+              "quote": "台達直流充電樁的功率輸出範圍為50至350 kW。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1536",
+          "name": "和大",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20230702700432-431203",
+              "title": "和大工業蔡耀毅 談電動車減速機精密齒輪設計與製造（工商時報）",
+              "quote": "要達成電動車行駛的肅靜性，齒輪設計與製造上最大的挑戰是在馬達高速運轉且維持肅靜性的要求"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1533",
+          "name": "車王電",
+          "relation": "product_line",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20251220700162-439901",
+              "title": "車王電小金雞 華德動能在台市占稱冠（工商時報）",
+              "quote": "車王電集團為國內首家取得經濟部標檢局VPC認證的充電樁廠商"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3665",
+          "name": "貿聯-KY",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.bizlinktech.com/products/ev-high-voltage-harnesses",
+              "title": "EV High Voltage Harnesses - BizLink",
+              "quote": "Provide high-quality HV harnesses for EV and PHEV"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6282",
+          "name": "康舒",
+          "relation": "product_line",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://uanalyze.com.tw/articles/9401650557",
+              "title": "〈車用電子展〉康舒聚焦電力系統與充電應用（優分析）",
+              "quote": "整合具 V2L 功能的 11kW 車載充電器 (OBC) 與 3kW DC/DC"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2231",
+          "name": "為升",
+          "relation": "supply_chain",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://www.cna.com.tw/news/afe/202412170223.aspx",
+              "title": "為升：明年營運看增 毫米波雷達打入北美電動車市場（中央社）",
+              "quote": "艙內雷達切入北美電動車、北美電動皮卡、中國大陸和東南亞等OEM供應鏈"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2207",
+          "name": "和泰車",
+          "relation": "product_line",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20251028700109-430503",
+              "title": "和泰車強攻電車 掀戰火（工商時報）",
+              "quote": "發表全新改款TOYOTA bZ4X純電車"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leo-satellite",
+      "name": "低軌衛星",
+      "description": "低軌衛星本體與酬載元件、衛星用印刷電路板、射頻模組，以及地面站與用戶終端設備等通訊供應鏈。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TPEx:3491",
+          "name": "昇達科",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://udn.com/news/story/7252/9630051",
+              "title": "昇達科併購巨頻 深化低軌衛星、毫米波通訊布局（聯合新聞網）",
+              "quote": "目前昇達科來自低軌衛星貢獻營收約九成"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6285",
+          "name": "啟碁",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://uanalyze.com.tw/articles/1297250423",
+              "title": "啓碁單周強漲25%創波段新高 低軌衛星與高階交換器雙動能齊發（優分析）",
+              "quote": "啟碁作為全球最大營運商的主要終端設備供應商"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2313",
+          "name": "華通",
+          "relation": "supply_chain",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://news.cnyes.com/news/id/6233209",
+              "title": "全球低軌衛星需求爆發 華通本季LEO板接單量升（鉅亨網）",
+              "quote": "華通的低軌衛星板出貨結構，除地面用戶的應用板之外，在低軌衛星本體使用大增"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2314",
+          "name": "台揚",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20250408701553-430201",
+              "title": "《通網股》台揚首度量產LEO衛星收發器 順利交貨加拿大Telesat（工商時報）",
+              "quote": "台揚的戶外收發器是Telesat地面用戶終端（User Terminal, UT）解決方案中的關鍵模組"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6271",
+          "name": "同欣電",
+          "relation": "supply_chain",
+          "relevance": "medium",
+          "evidence": [
+            {
+              "url": "https://news.cnyes.com/news/id/6287050",
+              "title": "太空算力已成AI新亮點（鉅亨網）",
+              "quote": "同欣電負責供應衛星通訊用的高頻無線通訊（RF）模組。"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:3138",
+          "name": "耀登",
+          "relation": "product_line",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://www.ctee.com.tw/news/20260408701582-430201",
+              "title": "《通網股》耀登低軌衛星Q3出貨 越南廠產能擴5倍（工商時報）",
+              "quote": "其中低軌衛星產品預計第3季開始出貨"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2312",
+          "name": "金寶",
+          "relation": "product_line",
+          "relevance": "low",
+          "evidence": [
+            {
+              "url": "https://uanalyze.com.tw/articles/2341955366",
+              "title": "〈金寶法說〉金寶新產品多點開花 同步重啟低軌衛星業務（優分析）",
+              "quote": "金寶將參與台亞衛星及韓國企業的專案"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "biotech-pharma",
+      "name": "生技製藥",
+      "description": "新藥研發、學名藥與特色藥製造，以及藥品與生物藥委託開發製造（CDMO）業者。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:6446",
+          "name": "藥華藥",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.pharmaessentia.com/",
+              "title": "PharmaEssentia",
+              "quote": "PharmaEssentia is an independent global biopharmaceutical company founded in Taiwan in 2003."
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6472",
+          "name": "保瑞",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.bora-corp.com/",
+              "title": "Bora Pharmaceuticals",
+              "quote": "We're setting new standards in pharma and CDMO, driven by our commitment: quality and efficiency."
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:1795",
+          "name": "美時",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.lotuspharm.com/",
+              "title": "Lotus Pharmaceutical",
+              "quote": "Lotus Pharmaceutical (stock code: 1795 TT) is a fast-growing specialty pharmaceutical company headquartered in Taiwan."
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:6589",
+          "name": "台康生技",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.eirgenix.com/",
+              "title": "EirGenix",
+              "quote": "EirGenix Inc. specializes in the development of biopharmaceuticals and provides CDMO services."
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:4162",
+          "name": "智擎",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.pharmaengine.com/",
+              "title": "智擎生技製藥",
+              "quote": "智擎公司研發專案聚焦於精準癌症療法"
+            }
+          ]
+        },
+        {
+          "instrument": "TPEx:4743",
+          "name": "合一",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.onenessbio.com/",
+              "title": "合一生技",
+              "quote": "合一生技創立於2008年，為政府核定的「生技新藥」公司"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "financial-holding",
+      "name": "金控",
+      "description": "旗下整合銀行、壽險、產險、證券與投信等子公司的金融控股公司。",
+      "valid_from": "2026-01-01",
+      "valid_to": null,
+      "members": [
+        {
+          "instrument": "TWSE:2881",
+          "name": "富邦金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.fubon.com/financialholdings/about/info.html",
+              "title": "富邦金控簡介",
+              "quote": "旗下主要子公司包括富邦人壽、台北富邦銀行、富邦華一銀行、富邦證券、富邦產險、富邦銀行（香港）及富邦投信等"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2882",
+          "name": "國泰金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.cathayholdings.com/holdings/",
+              "title": "國泰金控",
+              "quote": "國泰金控集團：國泰人壽、國泰世華銀行、國泰產險、國泰綜合證券、國泰投信、國泰投顧"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2891",
+          "name": "中信金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.ctbcholding.com/",
+              "title": "中信金控",
+              "quote": "子公司成員：中國信託銀行、台灣人壽、中國信託證券、中國信託投信"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2886",
+          "name": "兆豐金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.megaholdings.com.tw/en/",
+              "title": "Mega Holdings",
+              "quote": "Subsidiary: Mega Bank, Mega Securities, Mega Bills, Chung Kuo Insurance, Mega Funds"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2884",
+          "name": "玉山金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.esunfhc.com/",
+              "title": "玉山金控",
+              "quote": "玉山事業群：玉山銀行、玉山證券、玉山投信、三商美邦人壽"
+            }
+          ]
+        },
+        {
+          "instrument": "TWSE:2885",
+          "name": "元大金",
+          "relation": "core_business",
+          "relevance": "high",
+          "evidence": [
+            {
+              "url": "https://www.yuanta.com/",
+              "title": "元大金控",
+              "quote": "元大金控集團致力將永續發展理念融入企業經營核心"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
