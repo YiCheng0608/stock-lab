@@ -226,4 +226,4 @@ Pop-Location
 
 ## 8. 排程
 
-未經授權不建 Windows Task Scheduler 或 agent 排程。資料收集／重試排程須先定義來源延遲、rate limit、冪等、錯誤可見性、備份與操作設定；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格，[執行清單](ROADMAP_EXECUTION.md)只供歷史參考；文件、fixture、外部 startup 或 readiness 不證任務完成。
+每日排程以 Windows 工作排程器執行 worker 與新聞任務（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；排程須定義來源延遲、rate limit、冪等、錯誤可見性與日誌位置；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格；文件、fixture、外部 startup 或 readiness 不證任務完成。
