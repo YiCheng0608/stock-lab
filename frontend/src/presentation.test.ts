@@ -1,4 +1,4 @@
-import { categoryLabel, groupDisplayName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { categoryLabel, groupDisplayName, isTemporaryIndustryGroupName, isTemporaryIndustryTheme, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -57,3 +57,8 @@ expect(stockDirectoryActionLabel('new_state', 'new_state') === '研究動作待�
 
 expect(stockDirectoryActionLabel('wait_pullback') === '等待回踩條件', 'known state survives an absent translated label')
 expect(researchRequirementLabel('族群相對 TAIEX 的20日超額報酬') === '族群相對 加權指數 的20日超額報酬', 'mixed Chinese requirement translates benchmark name')
+
+expect(isTemporaryIndustryTheme({ category: '股票族群', name_status: 'official' }), 'official industry themes use the temporary verification guard')
+expect(!isTemporaryIndustryTheme({ category: 'ETF', name_status: 'official' }), 'ETF themes stay outside the industry verification guard')
+expect(isTemporaryIndustryGroupName('Industry · Shipping'), 'legacy industry membership names use the temporary verification guard')
+expect(TEMPORARY_INDUSTRY_GROUP_NOTICE.includes('既有族群關聯待重新核實'), 'temporary industry notice keeps the fixed warning copy')

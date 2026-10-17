@@ -6,11 +6,12 @@
 
 | 資訊 | 位置 |
 | --- | --- |
+| 程式與文件 | [YiCheng0608/stock-lab](https://github.com/YiCheng0608/stock-lab)，正式 branch `master`；[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)要求 PR、只允許 merge commit、禁止強推，required check 為 CI 的 `required` |
 | 產品方向、版本範圍、已完成能力 | [ROADMAP](ROADMAP.md) |
 | 前端視覺與互動 | [DESIGN_SYSTEM](DESIGN_SYSTEM.md) |
 | 任務目標、範圍、AC、決策、結果 | Issue 本文與留言 |
-| 版本任務集合 | GitHub milestone（V1） |
-| 狀態 | Project 看板 Status：待辦／進行中／Review／完成 |
+| 版本任務集合 | [V1 milestone](https://github.com/YiCheng0608/stock-lab/milestone/1) |
+| 狀態 | [產品開發看板](https://github.com/users/YiCheng0608/projects/1) Status：待辦／進行中／Review／完成 |
 | 使用者層級決策 | [治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言 |
 
 Issue 標題前綴：`[任務]` 可直接開工的工作、`[功能]` 多任務的母單、`[候選]` 想法或 bug 尚未排程。母子關係用 GitHub 原生 sub-issue，依賴寫在 Issue 本文。
@@ -47,10 +48,10 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 | 範圍 | 命令 |
 | --- | --- |
 | 後端 | `python -m pytest backend/tests -q`；`ruff check backend`；`ruff format --check backend` |
-| 前端 | `pnpm --dir frontend test`；`pnpm --dir frontend build`；`pnpm --dir frontend lint`（若有） |
+| 前端 | `pnpm --dir frontend test:ci`；`pnpm --dir frontend build` |
 | 文件／repo | `python tools/ci/checks.py repository --base <完整 master SHA>` |
 
-Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`（PATH 上的 python 是 Store stub）。依賴與資料路徑見 [development-baseline](development-baseline/README.md) 與 [OPERATIONS](OPERATIONS.md)。
+Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`（PATH 上的 python 是 Store stub）。後端依賴依 `backend/requirements.txt` 安裝，並以 `backend/validation-requirements.lock.txt` 為 constraints（與 CI 相同）；資料路徑見 [OPERATIONS](OPERATIONS.md)。
 
 ## Review 與合併
 

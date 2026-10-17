@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { Link, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
-  captureOfficialEvents,
-  captureTwseIssuerProfile,
-  captureOfficialEventFocus,
   deletePortfolio,
   getAction,
   getActions,
@@ -14,7 +11,6 @@ import {
   getBacktestSummary,
   getCoverage,
   getDashboard,
-  getOfficialEventFocus,
   getDataQuality,
   getGlossary,
   getGroup,
@@ -43,8 +39,6 @@ import type {
   GroupDetail,
   GroupMember,
   InstrumentDetail,
-  OfficialEventFocusData,
-  OfficialEventKind,
   NewsItem,
   Pagination,
   Position,
@@ -57,22 +51,14 @@ import type {
   TrackingResponse,
   ProductTime,
 } from './types'
-import { officialEventKinds } from './types'
 import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
-import { legacyRouteTarget } from './routes'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { groupDisplayName, categoryLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
+import { groupDisplayName, categoryLabel, formatProductTimeRole, isTemporaryIndustryGroupName, isTemporaryIndustryTheme, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
 import { StockPriceChart } from './StockPriceChart'
 import { isValidBar } from './stockChart'
-import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
-import { stockIndependentView } from './stockIndependentReads'
-import { StockOverview } from './components/StockOverview'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
-import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
-import { issuerSupported, unavailableIssuer, validTwseIssuerProfile } from './twseIssuerProfile'
-import { unavailableIndustry, validTwseIssuerIndustry } from './twseIssuerIndustry'
 
 function formatNumber(value: unknown, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value)
@@ -740,251 +726,6 @@ function NewsDetailPage() {
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><Link to="/news" className="back-link">← 回到新聞</Link><PageTitle eyebrow="官方公告詳情" title={officialEventDisplayTitle(query.data.title)} description="此頁顯示官方事件的完整摘要與可稽核來源；國際與媒體新聞尚未接入。" /><ProductNewsCard item={query.data} detail /></div>}</QueryState>
 }
 
-function taipeiObservationDate(): string {
-  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
-  const part = (type: string) => parts.find((value) => value.type === type)?.value ?? ''
-  return `${part('year')}-${part('month')}-${part('day')}`
-}
-
-function focusUnavailableMessage(data: OfficialEventFocusData): string {
-  if (data.reasons.includes('event_memory_capture_missing')) return data.can_capture ? '尚未取得本次官方原件。可按「首次取得官方原件」進行一次觀測。' : '此截止日期尚無可用原件；過往日期不能以今日取得的資料補成歷史觀測。'
-  if (data.reasons.includes('event_observation_after_cutoff')) return '已取得原件的觀測日晚於截止日期，本清單排除該次觀測。'
-  if (data.reasons.includes('event_cutoff_before_current_observation')) return '過往截止日期且無可用原件，未執行取得。'
-  if (data.reasons.some((reason) => reason === 'event_capture_not_enabled' || reason === 'event_capture_configuration_invalid')) return '官方事件原件取得尚未啟用。'
-  if (data.reasons.includes('event_capture_in_progress')) return '官方原件正在取得，完成後可讀取已取得原件。'
-  if (data.capture_action === 'failed' && !data.can_capture) return '本次首次取得未通過驗證，額度已耗用；不再取得，關注清單不可用。'
-  return '本次官方原件未通過來源或內容驗證，關注清單暫不可用。'
-}
-
-export function trimOfficialEventSearch(value: string): string {
-  // Fixed Python str.strip whitespace set, shared with the API's q contract.
-  return value.replace(/^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/gu, '')
-}
-
-export function validOfficialEventDate(value: string): boolean {
-  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000-')) return false
-  const parsed = new Date(`${value}T00:00:00Z`)
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
-}
-
-export const officialEventKindLabels: Record<OfficialEventKind, string> = {
-  all: '全部', ex_dividend: '除息', ex_right: '除權', ex_right_and_dividend: '除權息',
-}
-
-export function validOfficialEventKind(value: unknown): value is OfficialEventKind {
-  return typeof value === 'string' && officialEventKinds.some((kind) => kind === value)
-}
-
-export type OfficialEventConditions = { asOf: string; q: string; from: string | null; to: string | null; eventKind: OfficialEventKind }
-
-export function officialEventConditions(params: URLSearchParams, defaultAsOf?: string): OfficialEventConditions | null {
-  const allowed = ['as_of', 'q', 'from', 'to', 'event_kind']
-  if ([...params.keys()].some((key) => !allowed.includes(key) || params.getAll(key).length !== 1)) return null
-  const asOf = params.get('as_of') ?? defaultAsOf ?? ''
-  const q = params.get('q') ?? '', from = params.get('from'), to = params.get('to')
-  const eventKind = params.get('event_kind') ?? 'all'
-  if (!validOfficialEventDate(asOf) || !validOfficialEventKind(eventKind) || Array.from(q).length > 100
-    || from !== null && !validOfficialEventDate(from) || to !== null && !validOfficialEventDate(to)
-    || from !== null && to !== null && from > to) return null
-  return { asOf, q: trimOfficialEventSearch(q), from, to, eventKind }
-}
-
-export function officialEventFocusReturnPath(params: URLSearchParams): string | null {
-  const allowed = ['as_of', 'from', 'focus_as_of', 'focus_q', 'focus_from', 'focus_to', 'focus_event_kind']
-  if ([...params.keys()].some((key) => !allowed.includes(key) || params.getAll(key).length !== 1)) return null
-  if (params.get('from') !== 'official-events') return null
-  const asOf = params.get('focus_as_of') ?? ''
-  const q = params.get('focus_q') ?? ''
-  if (Array.from(q).length > 100) return null
-  if (params.has('as_of') && !validOfficialEventDate(params.get('as_of')!)) return null
-  const query = new URLSearchParams({ as_of: asOf, q: trimOfficialEventSearch(q) })
-  for (const [field, key] of [['focus_from', 'from'], ['focus_to', 'to']]) {
-    if (params.has(field)) query.set(key, params.get(field)!)
-  }
-  if (params.has('focus_event_kind')) query.set('event_kind', params.get('focus_event_kind')!)
-  if (!officialEventConditions(query)) return null
-  return `/?${query.toString()}#official-event-focus-title`
-}
-
-export function officialEventSubmissionParams(current: URLSearchParams, asOf: string, q: string, from: string, to: string, eventKind: string = current.get('event_kind') ?? 'all'): URLSearchParams | null {
-  const next = new URLSearchParams(current)
-  next.set('as_of', asOf); next.set('q', q)
-  if (from) next.set('from', from); else next.delete('from')
-  if (to) next.set('to', to); else next.delete('to')
-  next.set('event_kind', eventKind)
-  if (!officialEventConditions(next)) return null
-  if (eventKind === 'all') next.delete('event_kind')
-  const normalized = trimOfficialEventSearch(q)
-  if (normalized) next.set('q', normalized); else next.delete('q')
-  return next
-}
-
-export function validOfficialEventFocus(value: unknown, conditions: OfficialEventConditions): value is OfficialEventFocusData {
-  try {
-    if (!value || typeof value !== 'object' || new TextEncoder().encode(JSON.stringify(value)).length > 8 * 1024 * 1024) return false
-    const data = value as OfficialEventFocusData
-    const natural = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
-    if (data.version !== 'official-event-focus/p4-v1' || data.as_of !== conditions.asOf || data.search_query !== conditions.q
-      || data.effective_from !== conditions.from || data.effective_to !== conditions.to
-      || !validOfficialEventKind(data.event_kind) || data.event_kind !== conditions.eventKind
-      || data.coverage !== 'observed_feed_only' || data.research_conditions !== 'unknown'
-      || data.cutoff_basis !== 'observed_taipei_date_inclusive' || data.storage !== 'memory_only'
-      || data.durable_capture !== false || data.historical_pit !== 'unsupported' || data.source_url_kind !== 'feed'
-      || data.published_time !== 'unknown' || data.first_availability !== 'unknown' || data.revision_history !== 'unknown'
-      || ![data.total, data.matched, data.displayed, data.range_event_count, data.range_matched, data.kind_event_count, data.kind_matched, data.candidate_count, data.selected_count].every(natural)
-      || data.limit !== 100 || data.order !== 'symbol_lexicographic' || !Array.isArray(data.items)
-      || !Array.isArray(data.reasons) || !data.reasons.every((reason) => typeof reason === 'string')
-      || typeof data.can_capture !== 'boolean' || typeof data.capture_enabled !== 'boolean' || typeof data.cache_present !== 'boolean'
-      || !['not_attempted', 'acquired', 'cached', 'failed'].includes(data.capture_action)) return false
-    if (data.status === 'unavailable') return data.items.length === 0 && data.provenance === null && data.attribution === null
-      && [data.total, data.matched, data.displayed, data.range_event_count, data.range_matched, data.kind_event_count, data.kind_matched, data.candidate_count, data.selected_count].every((n) => n === 0)
-      && data.truncated === false && data.reasons.length > 0
-    const provenance = data.provenance
-    if (data.status !== 'available' || !provenance || !data.attribution || !validOfficialEventDate(data.observed_date ?? '')
-      || data.observed_date! > conditions.asOf || data.reasons.length !== 0 || !data.cache_present || !data.capture_enabled
-      || data.validation_scope !== 'all_observed_identity_dates_classification'
-      || data.attribution.source_id !== 'twse_twt48u_all' || data.attribution.source_url !== 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
-      || data.attribution.dataset_id !== 'data-gov-89748' || data.attribution.terms?.status !== 'known' || !Array.isArray(data.attribution.evidence)
-      || provenance.source_id !== 'twse_twt48u_all' || provenance.endpoint !== 'https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL'
-      || provenance.source_version !== 'twse-twt48u-all-d011-2026-09-12'
-      || provenance.registry_version !== 'r1-a1-c009-2026-09-12.1'
-      || provenance.manifest_digest !== 'sha256:eb6c290d7716300c4117bb2cdc61a66cbf8d62e344870928933b44b77461f87b'
-      || provenance.storage !== 'memory_only' || provenance.verification !== 'local_evidence_consistent'
-      || !/^[a-f0-9]{64}$/.test(provenance.body_sha256) || !/^[a-f0-9]{64}$/.test(provenance.receipt_sha256)
-      || !/(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(provenance.captured_at) || !/(?:Z|[+-][0-9]{2}:[0-9]{2})$/.test(provenance.request_started_at)) return false
-    const captured = Date.parse(provenance.captured_at), started = Date.parse(provenance.request_started_at)
-    if (!Number.isFinite(captured) || !Number.isFinite(started) || started > captured
-      || new Date(captured + 8 * 3600000).toISOString().slice(0, 10) !== data.observed_date
-      || data.candidate_count !== data.selected_count || data.total > data.candidate_count!
-      || data.range_event_count > data.candidate_count! || data.range_matched > data.total || data.range_matched > data.range_event_count
-      || data.kind_event_count > data.range_event_count || data.kind_matched > data.range_matched || data.kind_matched > data.kind_event_count
-      || conditions.eventKind === 'all' && (data.kind_event_count !== data.range_event_count || data.kind_matched !== data.range_matched)
-      || data.matched > data.kind_matched || !conditions.q && data.matched !== data.kind_matched || data.displayed !== Math.min(data.matched, 100)
-      || data.items.length !== data.displayed || data.truncated !== (data.matched > 100)) return false
-    const ordinals = new Set<number>()
-    let previous = '', visibleEvents = 0
-    for (const item of data.items) {
-      if (item.exchange !== 'TWSE' || !/^[0-9A-Z]{4,6}$/.test(item.symbol) || item.symbol <= previous
-        || typeof item.company_name !== 'string' || !item.company_name.trim() || item.research_conditions !== 'unknown'
-        || !Array.isArray(item.events) || item.events.length === 0 || typeof item.stock_page_available !== 'boolean') return false
-      previous = item.symbol
-      const detail = new URLSearchParams({ as_of: conditions.asOf, from: 'official-events', focus_q: conditions.q, focus_as_of: conditions.asOf, focus_event_kind: conditions.eventKind })
-      if (conditions.from !== null) detail.set('focus_from', conditions.from)
-      if (conditions.to !== null) detail.set('focus_to', conditions.to)
-      if (item.stock_page_available) {
-        if (typeof item.detail_url !== 'string' || !item.detail_url.startsWith(`/stocks/TWSE/${item.symbol}?`)) return false
-        const link = new URL(item.detail_url, 'https://local.invalid')
-        if (link.origin !== 'https://local.invalid' || link.pathname !== `/stocks/TWSE/${item.symbol}` || link.hash
-          || [...link.searchParams.keys()].length !== [...detail.keys()].length
-          || [...link.searchParams].some(([key, value]) => link.searchParams.getAll(key).length !== 1 || detail.get(key) !== value)) return false
-      } else if (item.detail_url !== null) return false
-      for (const row of item.events) {
-        if (row.exchange !== 'TWSE' || row.symbol !== item.symbol || !validOfficialEventDate(row.event_date)
-          || conditions.from !== null && row.event_date < conditions.from || conditions.to !== null && row.event_date > conditions.to
-          || typeof row.company_name !== 'string' || !row.company_name.trim() || !/^[0-9]{7}$/.test(row.source_date)
-          || String(Number(row.source_date.slice(0, 3)) + 1911).padStart(4, '0') + '-' + row.source_date.slice(3, 5) + '-' + row.source_date.slice(5) !== row.event_date
-          || row.event_date_role !== 'effective_date' || row.event_date_precision !== 'date'
-          || row.published_at !== null || row.first_available_at !== null || row.revision_available_at !== null || row.availability !== 'unknown'
-          || !natural(row.row_ordinal) || row.row_ordinal < 1 || row.row_ordinal > data.selected_count! || ordinals.has(row.row_ordinal)
-          || !['息', '權', '權息'].includes(row.source_classification)
-          || ({ '息': 'ex_dividend', '權': 'ex_right', '權息': 'ex_right_and_dividend' }[row.source_classification] !== row.kind)
-          || conditions.eventKind !== 'all' && row.kind !== conditions.eventKind
-          || ({ '息': '除息', '權': '除權', '權息': '除權息' }[row.source_classification] !== row.label)) return false
-        ordinals.add(row.row_ordinal); visibleEvents++
-      }
-    }
-    return visibleEvents <= data.kind_event_count && (data.matched !== data.kind_matched || data.truncated || visibleEvents === data.kind_event_count)
-  } catch { return false }
-}
-
-export function OfficialEventFocusPanel() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const asOf = searchParams.get('as_of') || taipeiObservationDate()
-  const q = searchParams.get('q') ?? ''
-  const from = searchParams.get('from'), to = searchParams.get('to')
-  const eventKind = searchParams.get('event_kind') ?? 'all'
-  const conditions = officialEventConditions(searchParams, asOf)
-  const [draft, setDraft] = useState(asOf)
-  const [searchDraft, setSearchDraft] = useState(q)
-  const [fromDraft, setFromDraft] = useState(from ?? ''), [toDraft, setToDraft] = useState(to ?? '')
-  const [kindDraft, setKindDraft] = useState(eventKind)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [capturing, setCapturing] = useState(false)
-  const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
-  const queryClient = useQueryClient()
-  const queryKey = ['official-event-focus', asOf, q, from, to, eventKind]
-  const requestKey = JSON.stringify(queryKey)
-  const activeRequest = useRef(requestKey); activeRequest.current = requestKey
-  const pendingCapture = useRef(false)
-  const query = useQuery({ queryKey, queryFn: () => getOfficialEventFocus(asOf, q, from ?? undefined, to ?? undefined, conditions!.eventKind), enabled: conditions !== null, retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false, placeholderData: undefined })
-  useEffect(() => { setDraft(asOf); setSearchDraft(q); setFromDraft(from ?? ''); setToDraft(to ?? ''); setKindDraft(eventKind); setSearchError(null); setCaptureError(null) }, [asOf, q, from, to, eventKind])
-  const applySearch = (value: string, start = from ?? '', end = to ?? '', kind = eventKind) => {
-    const next = officialEventSubmissionParams(searchParams, asOf, value, start, end, kind)
-    if (!next) { setSearchError('請選有效事件類型與日期；生效日起日不得晚於迄日，搜尋最多 100 個字元。'); return }
-    setSearchError(null)
-    const normalized = trimOfficialEventSearch(value)
-    setSearchDraft(normalized)
-    setKindDraft(kind)
-    setSearchParams(next)
-  }
-  const capture = async () => {
-    if (pendingCapture.current || !conditions) return
-    pendingCapture.current = true
-    setCapturing(true); setCaptureError(null)
-    try {
-      const result = await captureOfficialEventFocus(asOf, q, from ?? undefined, to ?? undefined, conditions.eventKind)
-      if (activeRequest.current === requestKey) queryClient.setQueryData(queryKey, result)
-    }
-    catch (error) { if (activeRequest.current === requestKey) setCaptureError({ key: requestKey, message: error instanceof Error ? error.message : '取得失敗' }) }
-    finally { pendingCapture.current = false; setCapturing(false) }
-  }
-  const captureMessage = captureError?.key === requestKey ? captureError.message : null
-  const responseValid = conditions !== null && query.data !== undefined && validOfficialEventFocus(query.data, conditions)
-  const data = !query.error && !captureMessage && responseValid ? query.data : undefined
-  const responseFailure = conditions === null ? '日期、類型或網址條件無效，未讀取來源。' : query.data !== undefined && !responseValid ? '回應的條件、來源或事件內容未通過驗證。' : null
-  const licenseEvidence = data?.attribution?.evidence.find((item) => item.url === 'https://data.gov.tw/license')
-  return <section className="panel official-event-focus" aria-labelledby="official-event-focus-title">
-    <div className="section-head overview-head"><div><div className="eyebrow">本次觀測 · 臺灣證券交易所</div><h2 id="official-event-focus-title">官方事件關注</h2></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">本次已觀測的除權息事件供查閱；未來生效日期保留。研究條件待補，事件不表示價格影響或買賣建議。</p>
-    <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); if (!validOfficialEventDate(draft)) { setSearchError('請輸入有效觀測截止日期。'); return }; const next = new URLSearchParams(searchParams); next.set('as_of', draft); setSearchParams(next) }}>
-      <label htmlFor="focus-observation-cutoff">觀測截止日期</label><input id="focus-observation-cutoff" type="date" required value={draft} onInput={(event) => setDraft(event.currentTarget.value)} onChange={(event) => setDraft(event.currentTarget.value)} />
-      <button type="submit" className="secondary-button" disabled={capturing}>套用截止</button>
-      <button type="button" className="secondary-button" disabled={!conditions || capturing || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
-      <button type="button" className="secondary-button" disabled={capturing || query.isFetching || !data?.can_capture || data.cache_present} onClick={() => void capture()}>{capturing ? '取得中…' : '首次取得官方原件'}</button>
-    </form>
-    <form className="overview-cutoff-control focus-search-control" onSubmit={(event) => { event.preventDefault(); applySearch(searchDraft, fromDraft, toDraft, kindDraft) }}>
-      <label htmlFor="focus-event-kind">官方事件類型</label><select id="focus-event-kind" value={kindDraft} onChange={(event) => setKindDraft(event.currentTarget.value)}>{officialEventKinds.map((kind) => <option key={kind} value={kind}>{officialEventKindLabels[kind]}</option>)}</select>
-      <label htmlFor="focus-effective-from">生效日起日（含當日）</label><input id="focus-effective-from" type="date" value={fromDraft} onChange={(event) => setFromDraft(event.currentTarget.value)} />
-      <label htmlFor="focus-effective-to">生效日迄日（含當日）</label><input id="focus-effective-to" type="date" value={toDraft} onChange={(event) => setToDraft(event.currentTarget.value)} />
-      <label htmlFor="focus-search">搜尋原件代碼或名稱</label><input id="focus-search" type="search" value={searchDraft} placeholder="輸入代碼或名稱片段" aria-describedby="focus-search-help" aria-invalid={Boolean(searchError)} onChange={(event) => setSearchDraft(event.currentTarget.value)} />
-      <button type="submit" className="secondary-button">套用搜尋與日期、類型</button><button type="button" className="secondary-button" onClick={() => applySearch('')}>清除搜尋</button><button type="button" className="secondary-button" onClick={() => applySearch(q, '', '')}>清除日期</button><button type="button" className="secondary-button" onClick={() => applySearch(q, from ?? '', to ?? '', 'all')}>清除類型</button>
-    </form>
-    <p id="focus-search-help" className="small-note">搜尋本次官方原件的代碼與名稱，不分大小寫；最多 100 個字元，僅比對連續文字。</p>
-    {searchError && <div className="warning-box" role="status">{searchError}</div>}
-    {responseFailure && <div className="warning-box" role="status">{responseFailure}</div>}
-    <div className="small-note focus-observation-note">截止 {asOf}（台北觀測日含當日）{data?.observed_date ? ` · 原件觀測日 ${data.observed_date}` : ''} · 原件只在本次服務執行期間保留；服務重啟後須重新取得，不自動更新。</div>
-    {query.isLoading && <div className="empty">讀取關注清單…</div>}
-    {(query.error || captureMessage) && <div className="warning-box" role="status">讀取或取得失敗：{captureMessage || (query.error instanceof Error ? query.error.message : '請稍後再試')}</div>}
-    {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{focusUnavailableMessage(data)}</div>}
-    {data?.status === 'available' && <>
-      <div className="small-note focus-count">本次原件 {data.candidate_count ?? 0} 筆事件 · {data.total} 檔標的；生效日 {data.effective_from ?? '不限起日'} 至 {data.effective_to ?? '不限迄日'}，{data.range_event_count} 筆事件 · {data.range_matched} 檔標的；類型「{officialEventKindLabels[data.event_kind]}」{data.kind_event_count} 筆事件 · {data.kind_matched} 檔標的；{data.search_query ? `搜尋「${data.search_query}」` : '日期與類型內標的'}符合 {data.matched} 檔，顯示 {data.displayed} 檔{data.truncated ? `（已截斷，最多 ${data.limit} 檔）` : ''}。此順序僅供閱讀。</div>
-      {data.items.length === 0 ? <div className="empty focus-empty" role="status">{data.total === 0 ? '本次官方原件為零筆。這不表示市場沒有事件，也不代表完整市場範圍。' : '本次原件沒有符合日期、類型與搜尋條件的標的；可清除條件查看本次清單。這不表示市場沒有事件。'}</div> : <div className="focus-grid">{data.items.map((item) => <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
-        <div className="position-head"><strong>{item.symbol} {item.company_name}</strong><span>{item.exchange}</span></div>
-        <div className="table-wrap focus-event-table"><table><caption>本次觀測事件</caption><thead><tr><th>生效日期</th><th>官方事件類型</th></tr></thead><tbody>{item.events.map((event) => <tr key={`${event.event_date}:${event.kind}:${event.row_ordinal}`}><td>{event.event_date}</td><td>{event.label}</td></tr>)}</tbody></table></div>
-        <div className="small-note">研究條件：待補</div>
-        {item.stock_page_available && item.detail_url ? <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link> : <div className="small-note focus-catalogue-missing">個股頁尚無此標的</div>}
-        <details className="technical-details"><summary>事件原件值</summary>{item.events.map((event) => <div key={event.row_ordinal}>原件列 {event.row_ordinal}：Date {event.source_date} · Exdividend {event.source_classification} · Name {event.company_name}</div>)}</details>
-      </article>)}</div>}
-    </>}
-    {data && <details className="technical-details overview-provenance focus-source-details"><summary>來源、授權與驗證範圍</summary>
-      <div>來源資料集：TWSE TWT48U。發布時間、首次可得時間、修訂歷史：未知；歷史時點資料與完整市場範圍尚未驗證。</div>
-      {data.provenance && <><div>來源：{data.provenance.source_id} · 版本 {data.provenance.source_version}</div><div>觀測時間：{formatTaiwanDateTime(data.provenance.captured_at)} · 請求開始 {formatTaiwanDateTime(data.provenance.request_started_at)}</div><div>原件來源：<a href={data.provenance.endpoint} target="_blank" rel="noreferrer">臺灣證券交易所原始資料</a></div><div>Body SHA-256：{data.provenance.body_sha256}</div><div>Receipt SHA-256：{data.provenance.receipt_sha256}</div><div>Registry：{data.provenance.registry_version} · {data.provenance.manifest_digest}</div></>}
-      {data.attribution && <><div>資料提供者：{data.attribution.owner.name}</div><div>使用條款：{licenseEvidence ? <a href={licenseEvidence.url} target="_blank" rel="noreferrer">{data.attribution.terms.value}</a> : data.attribution.terms.value}</div><details><summary>來源與用途證據</summary><pre>{JSON.stringify({ evidence: data.attribution.evidence, purpose_evidence: data.attribution.purpose_evidence, summarize_decision: data.summarize_decision, runtime_conditions: data.runtime_condition_receipts, summary_conditions: data.summary_condition_receipts }, null, 2)}</pre></details></>}
-      {data.reasons.length > 0 && <div>驗證狀態：{data.reasons.join('、')}</div>}
-    </details>}
-  </section>
-}
-
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const homeActions = Array.from(new Map(
@@ -1002,7 +743,6 @@ export function TodayPage() {
             </div>
             <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data?.as_of, true)}</strong><small>{query.data?.market.source_label ?? sourceLabel(query.data?.market.source)}</small></div>
           </section>
-          <OfficialEventFocusPanel />
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
         <>
@@ -1011,7 +751,7 @@ export function TodayPage() {
             <QualityBadge kind="market" status={query.data.data_quality.latest_run} /><details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {(query.data.themes ?? []).filter((theme) => theme.qualified).length.toLocaleString()} 個族群摘要 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
           </div>
           <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
-          {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容；官方除權息事件請見上方「官方事件關注」。</div>}
+          {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
           <section className="section-head"><div><div className="eyebrow">族群發現</div><h2><Term id="hot_group">熱門族群</Term></h2></div><Link to="/themes" className="text-link">查看完整排行</Link></section>
           {query.data.themes?.some((theme) => theme.qualified) ? <div className="group-grid">{query.data.themes.filter((theme) => theme.qualified).slice(0, 5).map((theme) => <ThemeCard key={theme.theme_id} theme={theme} />)}</div> : <div className="empty panel">{query.data.empty_states?.themes ?? '目前沒有足以成立的熱門族群。'}</div>}
           <section className="section-head"><div><div className="eyebrow">熱門候選／使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
@@ -1169,127 +909,34 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
-  const issuerScope = issuerSupported(exchange, symbol)
-  const issuerQueryClient = useQueryClient()
-  const focusReturnPath = officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol), ...(issuerScope ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
-  useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) })
+  useEffect(() => setCutoffDraft(asOf), [asOf])
   const [tab, setTab] = useState<StockTab>('technical')
-  const [capturingEvents, setCapturingEvents] = useState(false)
-  const [eventRequestFailure, setEventRequestFailure] = useState<{ key: string; reason: string } | null>(null)
-  const eventRequestKey = `${exchange}:${symbol}:${asOf}`
-  const issuerRoute = useRef({ key: eventRequestKey, generation: 0 })
-  if (issuerRoute.current.key !== eventRequestKey) issuerRoute.current = { key: eventRequestKey, generation: issuerRoute.current.generation + 1 }
-  const issuerToken = `${issuerRoute.current.generation}:${eventRequestKey}`
-  const issuerPending = useRef(new Set<string>())
-  const [issuerBusyToken, setIssuerBusyToken] = useState<string | null>(null)
-  const [issuerFailure, setIssuerFailure] = useState<{ token: string; reason: string } | null>(null)
-  const acquireIssuer = async () => {
-    if (!issuerScope || !validOfficialEventDate(asOf) || issuerPending.current.has(issuerToken)) return
-    const token = issuerToken, key = eventRequestKey, generation = issuerRoute.current.generation
-    issuerPending.current.add(token); setIssuerBusyToken(token); setIssuerFailure(null)
-    try {
-      const result = await captureTwseIssuerProfile(exchange, symbol, asOf)
-      if (issuerRoute.current.key !== key || issuerRoute.current.generation !== generation) return
-      if (!validTwseIssuerProfile(result, exchange, symbol, asOf, query.data?.overview?.events)) {
-        setIssuerFailure({ token, reason: 'issuer_response_invalid' }); return
-      }
-      issuerQueryClient.setQueryData<InstrumentDetail>(['stock', exchange, symbol, asOf], current => current?.overview
-        ? { ...current, overview: { ...current.overview, issuer_profile: result } } : current)
-      if (result.status !== 'available') setIssuerFailure({ token, reason: result.reasons[0] ?? 'issuer_response_invalid' })
-      await query.refetch({ throwOnError: true })
-    } catch {
-      if (issuerRoute.current.key === key && issuerRoute.current.generation === generation) setIssuerFailure({ token, reason: 'issuer_read_request_failed' })
-    } finally {
-      issuerPending.current.delete(token); setIssuerBusyToken(current => current === token ? null : current)
-    }
-  }
-  const acquireEvents = async () => {
-    if (capturingEvents) return
-    setCapturingEvents(true)
-    setEventRequestFailure(null)
-    try {
-      const result = await captureOfficialEvents(exchange, symbol, asOf || undefined)
-      if (result.status === 'unavailable') {
-        setEventRequestFailure({ key: eventRequestKey, reason: result.reasons[0] ?? 'event_capture_failed' })
-      }
-      await query.refetch()
-    } catch {
-      setEventRequestFailure({ key: eventRequestKey, reason: 'event_capture_request_failed' })
-    } finally {
-      setCapturingEvents(false)
-    }
-  }
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const issuerRead = data.overview?.issuer_profile
-  const issuerInvalid = issuerRead != null && !validTwseIssuerProfile(issuerRead, exchange, symbol, asOf || null, data.overview?.events)
-  const industryRead = data.overview?.issuer_industry_trace
-  const industryInvalid = industryRead != null && !validTwseIssuerIndustry(industryRead, exchange, symbol, asOf || null, issuerRead, data.overview?.events)
-  const issuerRequestFailure = issuerFailure?.token === issuerToken ? issuerFailure.reason
-    : issuerScope && eventRequestFailure?.key === eventRequestKey ? 'issuer_read_request_failed'
-      : issuerInvalid ? 'issuer_response_invalid' : undefined
-  const displayOverview = issuerScope && issuerRequestFailure && data.overview ? {
-    ...data.overview,
-    issuer_profile: issuerRead ? unavailableIssuer(issuerRead, issuerRequestFailure) : undefined,
-    issuer_industry_trace: industryRead ? unavailableIndustry(industryRead, issuerRequestFailure) : undefined,
-    events: { ...data.overview.events, status: 'unavailable' as const, rows: [], provenance: null, attribution: null,
-      observed_date: null, cache_present: false, candidate_count: 0, selected_count: 0, capture_action: 'failed' as const,
-      reasons: ['issuer_read_request_failed'], can_capture: false },
-  } : industryInvalid && data.overview && industryRead ? {
-    ...data.overview, issuer_industry_trace: unavailableIndustry(industryRead, 'industry_response_invalid'),
-  } : data.overview
-  const issuerName = issuerScope && !issuerRequestFailure && displayOverview?.issuer_profile?.status === 'available'
-    && validTwseIssuerProfile(displayOverview.issuer_profile, exchange, symbol, asOf || null, displayOverview.events)
-      ? displayOverview.issuer_profile.row?.short_name : null
-  const independent = stockIndependentView(data)
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
-  const researchShapeValid = validStockResearchRead(data)
-  const researchAction = stockResearchAction(data)
   const finiteValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
-  const read = data.market_read
-  const readShapeValid = read != null && ['known', 'missing', 'invalid'].includes(read.status)
-    && Array.isArray(read.invalid_fields) && read.invalid_fields.every((field) => typeof field === 'string')
-    && Array.isArray(read.missing_fields) && read.missing_fields.every((field) => typeof field === 'string')
-    && read.metadata_fields != null && typeof read.metadata_fields === 'object' && !Array.isArray(read.metadata_fields)
-    && Object.values(read.metadata_fields).every((state) => ['known', 'missing', 'invalid'].includes(state))
-    && ((read.status === 'missing' && read.candidate_count === 0) || ['adj_close', 'turnover', 'turnover_status', 'turnover_reason', 'data_as_of', 'collected_at', 'raw_payload_id'].every((key) => ['known', 'missing', 'invalid'].includes(read.metadata_fields[key])))
-    && Number.isInteger(read.candidate_count) && read.candidate_count! >= 0 && read.candidate_count! <= 120
-    && read.window_limit === 120 && Number.isInteger(read.unlocated_count) && read.unlocated_count! >= 0
-    && read.verification === 'stored_value_syntax_only'
-  const readKnown = read === undefined || (readShapeValid && read.status === 'known'
-    && read.candidate_count! >= 1 && read.invalid_fields.length === 0 && read.missing_fields.length === 0 && read.unlocated_count === 0)
-  const candidate = data.overview ? data.overview.price.status === 'available' ? data.overview.price.latest : null : data.bars[data.bars.length - 1]
-  const candidateRow = data.bars[data.bars.length - 1]
-  const candidateRead = candidateRow?.market_read
-  const candidateCoreKnown = read === undefined || (candidateRead?.status === 'known' && isValidBar(candidateRow))
-  const candidateConflict = read !== undefined && data.overview?.price.status === 'available'
-    && (!candidate || candidateRow?.date !== candidate.date || candidateRow?.close !== candidate.close)
-  const candidateKnown = candidateCoreKnown && !candidateConflict
-  const latestBar = readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
+  const candidate = data.bars[data.bars.length - 1]
+  const latestBar = candidate && isValidBar(candidate) && finitePrice(candidate.close) ? candidate : undefined
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
+  const previousKnown = Boolean(latestBar && previousBar && isValidBar(previousBar) && previousBar.date < latestBar.date)
   const legacyPrice = data.decision_summary?.current_price
-  const priceConflict = read !== undefined && !data.overview && legacyPrice != null && (!finitePrice(legacyPrice) || legacyPrice !== latestBar?.close)
-  const currentPrice = !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
+  const currentPrice = finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
   const legacyChange = data.decision_summary?.price_change
-  const previousKnown = read === undefined || (previousBar?.market_read?.status === 'known' && isValidBar(previousBar) && previousBar.date < candidateRow.date!)
-  const calculatedChange = previousKnown && latestBar && finitePrice(latestBar.close) && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
-  const changeConflict = read !== undefined && legacyChange != null && (!finiteValue(legacyChange) || legacyChange !== calculatedChange)
-  const change = read === undefined ? finiteValue(legacyChange) ? legacyChange : calculatedChange : !changeConflict ? calculatedChange : null
-  const priceChange = data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
+  const calculatedChange = previousKnown && latestBar && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
+  const priceChange = finiteValue(legacyChange) ? legacyChange : calculatedChange
   const legacyPercent = data.decision_summary?.price_change_pct
-  const calculatedPercent = priceChange != null && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
-  const percentConflict = read !== undefined && legacyPercent != null && (!finiteValue(legacyPercent) || legacyPercent !== calculatedPercent)
-  const percent = read === undefined ? finiteValue(legacyPercent) ? legacyPercent : calculatedPercent : !percentConflict ? calculatedPercent : null
-  const priceChangePct = !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const calculatedPercent = priceChange != null && previousKnown && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
+  const percent = finiteValue(legacyPercent) ? legacyPercent : calculatedPercent
+  const priceChangePct = finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
   const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
   const hasTemporaryIndustryGroup = data.groups.some((group) => isTemporaryIndustryGroupName(group.name))
-  const storedQualitySummary = data.quality_summary ?? {
+  const qualitySummary = data.quality_summary ?? {
     market: {
       status: fallbackMarketComplete ? 'complete' : latestBar ? 'partial' : 'missing',
       label: fallbackMarketComplete ? '當日行情來源完整' : '當日行情來源尚未完整',
@@ -1306,7 +953,6 @@ function StockPage() {
     },
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
-  const qualitySummary = storedQualitySummary
   const tabs: Array<{ id: StockTab; label: string }> = [
     { id: 'technical', label: '技術走勢' },
     { id: 'chips', label: '法人籌碼' },
@@ -1315,29 +961,34 @@ function StockPage() {
     { id: 'data', label: '資料說明' },
   ]
   return <div className="page">
-    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
-    <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + (issuerScope ? '公司基本資料' : instrumentTypeLabel(data.instrument.instrument_type))} title={data.instrument.symbol + ' ' + (issuerScope ? issuerName ?? '公司名稱待核對' : data.instrument.name)}>
+    <Link to="/stocks" className="back-link">← 回到個股</Link>
+    <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + instrumentTypeLabel(data.instrument.instrument_type)} title={data.instrument.symbol + ' ' + data.instrument.name}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>
-        <div><span>漲跌（元／%）</span><strong className={priceChangeTone(priceChange)}>{priceChange == null ? '待核實' : `${formatSignedNumber(priceChange)}${priceChangePct == null ? '' : `（${formatSignedPercent(priceChangePct)}）`}`}</strong></div>
+        <div><span>漲跌（元／%）</span><strong className={priceChangeTone(priceChange)}>{priceChange == null ? '待核實' : formatSignedNumber(priceChange) + (priceChangePct == null ? '' : '（' + formatSignedPercent(priceChangePct) + '）')}</strong></div>
         <div><span>成交量（張）</span><strong>{formatTableVolume(latestBar?.volume, latestBar?.source, latestBar?.volume_exact) || (latestBar?.volume == null ? '未提供' : '數值或單位待核實')}</strong></div>
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
     </PageTitle>
-    {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {displayOverview && <StockOverview data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} onNews={() => setTab('news')} onCaptureIssuer={acquireIssuer} capturingIssuer={issuerBusyToken === issuerToken} issuerRequestFailure={issuerRequestFailure} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
-    {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
-      {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
+      {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
-      {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
-      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div>{independent.featureStatus !== 'known' && <div className="data-gap stock-feature-read-gap" role="status">後端特徵讀值缺失或無效，先核對原記錄；不以較早快照替代，行情與研究條件仍可查看。</div>}<div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(independent.features.ma20)} ／ {formatNumber(independent.features.ma60)}</b></div>{independent.featureValid && data.feature_snapshot && <div className="small-note">快照資料日 {formatTaiwanDateTime(data.feature_snapshot.trading_date, true)} · 來源 {sourceLabel(data.feature_snapshot.source)} · 建立 {formatTaiwanDateTime(data.feature_snapshot.created_at)}；讀值語法不證明來源或當時可用性。</div>}<details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
+      {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><section className="panel"><div className="section-head"><div><div className="eyebrow">研究條件 · 只讀快照</div><h2>族群與策略條件</h2></div></div><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></section></section>}
+      {tab === 'data' && <section className="stock-tab-panel"><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><section className="panel stock-source-panel"><div className="section-head"><div><div className="eyebrow">資料說明</div><h2>原始時間、來源與技術欄位</h2></div></div><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><div className="metric-row"><span><Term id="ma20">MA20</Term>／<Term id="ma60">MA60</Term>（後端特徵快照）</span><b>{formatNumber(data.features?.ma20)} ／ {formatNumber(data.features?.ma60)}</b></div>{data.feature_snapshot && <div className="small-note">快照資料日 {formatTaiwanDateTime(data.feature_snapshot.trading_date, true)} · 來源 {sourceLabel(data.feature_snapshot.source)} · 建立 {formatTaiwanDateTime(data.feature_snapshot.created_at)}</div>}<details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></section></section>}
     </div>
   </div>
+}
+
+function GroupList({ groups }: { groups: InstrumentDetail['groups'] }) {
+  if (!groups.length) return <div className="empty">尚無可顯示的族群歸屬。</div>
+  return <div className="research-list">{groups.map((group) => <div className="research-list-item" key={group.id + '-' + group.valid_from}>
+    <strong>{isTemporaryIndustryGroupName(group.name) ? '既有產業族群關聯（待核實）' : groupDisplayName(group.name)}</strong>
+    <span className="small-note">有效期間：{formatTaiwanDateTime(group.valid_from, true)}～{group.valid_to ? formatTaiwanDateTime(group.valid_to, true) : '截止日未提供'}</span>
+  </div>)}</div>
 }
 
 function BrokerBranchEntry({ exchange }: { exchange: string }) {
@@ -1525,19 +1176,6 @@ export function PortfolioSubsection() {
         </details></div>)}</div> : <div className="empty">尚未建立庫存。</div>}</section>
 }
 
-function LegacyInstrumentRedirect() {
-  const { symbol = '' } = useParams()
-  const [searchParams] = useSearchParams()
-  const exchange = searchParams.get('exchange')
-  const target = legacyRouteTarget('/instruments/' + symbol, exchange ? '?exchange=' + encodeURIComponent(exchange) : '') ?? '/stocks'
-  return <Navigate replace to={target} />
-}
-
-function LegacyGroupRedirect() {
-  const { groupId = '' } = useParams()
-  return <Navigate replace to={'/themes/' + encodeURIComponent(groupId)} />
-}
-
 function ResearchBacktestPage() {
   const query = useQuery<BacktestSummary>({ queryKey: ['backtest-summary'], queryFn: () => getBacktestSummary() })
   return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span></div><div className="table-wrap"><p className="small-note">期限為訊號日之後的交易日數；樣本、可比與不可比的單位為筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>策略</th><th>類型</th><th>期限</th><th>樣本</th><th>可比</th><th>不可比</th><th>評估</th></tr></thead><tbody>{query.data.groups.map((row) => <tr key={backtestGroupKey(row)}><td>{strategyLabel(row.strategy)} · 規則版本 {row.version}</td><td>{instrumentTypeLabel(row.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.horizon, 0)}</td><td className="numeric-cell">{formatTableNumber(row.sample, 0)}</td><td className="numeric-cell">{formatTableNumber(row.comparable, 0)}</td><td className="numeric-cell">{formatTableNumber(row.incomparable, 0)}</td><td><QualityBadge status={row.assessment} /></td></tr>)}</tbody></table></div></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
@@ -1619,15 +1257,6 @@ export default function App() {
     <Route path="/stocks/:exchange/:symbol" element={<StockPage />} />
     <Route path="/actions" element={<ActionsPage />} />
     <Route path="/actions/:exchange/:symbol" element={<StockPage />} />
-    <Route path="/groups" element={<Navigate replace to="/themes" />} />
-    <Route path="/groups/:groupId" element={<LegacyGroupRedirect />} />
-    <Route path="/instruments" element={<Navigate replace to="/stocks" />} />
-    <Route path="/instruments/:symbol" element={<LegacyInstrumentRedirect />} />
-    <Route path="/signals" element={<Navigate replace to="/actions" />} />
-    <Route path="/tracking" element={<Navigate replace to="/actions" />} />
-    <Route path="/portfolio" element={<Navigate replace to="/actions" />} />
-    <Route path="/data-quality" element={<Navigate replace to="/system/data-quality" />} />
-    <Route path="/backtest" element={<Navigate replace to="/research/backtest" />} />
     <Route path="/system/data-quality" element={<SystemDataPage />} />
     <Route path="/research/backtest" element={<ResearchBacktestPage />} />
     <Route path="/research/coverage" element={<BackfillCoveragePage />} />

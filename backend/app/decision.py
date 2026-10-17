@@ -25,8 +25,6 @@ from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
 from .units import position_held
-from .stock_signal_reads import StockSignalRead, load_stock_signal_reads
-from .stock_independent_reads import StockChipRead, load_stock_chip_reads
 from .models import (
     ChipSnapshot,
     DataQuality,
@@ -183,7 +181,6 @@ def _prepare_decision_context(
     db: Session,
     as_of: date | None,
     instrument_ids: Iterable[int],
-    *, stock_research_reads: bool = False,
 ) -> dict[str, Any]:
     """Batch-load the read-only context shared by a page of action cards."""
 
@@ -191,18 +188,15 @@ def _prepare_decision_context(
     key = as_of.isoformat() if as_of else "none"
     contexts = db.info.setdefault("_decision_contexts", {})
     existing = contexts.get(key)
-    if existing is not None and ids.issubset(existing["instrument_ids"]) and existing.get("stock_research_reads", False) == stock_research_reads:
+    if existing is not None and ids.issubset(existing["instrument_ids"]):
         return existing
     # A larger later request replaces the context for this as-of date.  This
     # keeps direct single-instrument calls and paged API calls compatible.
     instrument_rows = db.scalars(select(Instrument).where(Instrument.id.in_(ids))).all() if ids else []
     bars_by_instrument, unlocated_bars_by_instrument = load_decision_market_reads(db, ids, as_of)
 
-    chips_by_instrument: dict[int, list[ChipSnapshot | StockChipRead]] = defaultdict(list)
-    chip_reads = load_stock_chip_reads(db, ids, as_of) if stock_research_reads else {}
-    if stock_research_reads:
-        chips_by_instrument.update((item_id, reads.candidates) for item_id, reads in chip_reads.items())
-    elif ids:
+    chips_by_instrument: dict[int, list[ChipSnapshot]] = defaultdict(list)
+    if ids:
         chip_query = select(ChipSnapshot).where(ChipSnapshot.instrument_id.in_(ids))
         if as_of:
             chip_query = chip_query.where(ChipSnapshot.trading_date <= as_of)
@@ -214,13 +208,7 @@ def _prepare_decision_context(
 
     signals_by_instrument: dict[int, dict[str, Signal]] = defaultdict(dict)
     strategy_versions_by_instrument: dict[int, dict[str, StrategyVersion]] = defaultdict(dict)
-    research_reads = load_stock_signal_reads(db, ids, as_of) if stock_research_reads else {}
-    if stock_research_reads:
-        for instrument_id, reads in research_reads.items():
-            for name, signal in reads.latest.items():
-                signals_by_instrument[instrument_id][name] = signal
-                strategy_versions_by_instrument[instrument_id][name] = signal.strategy
-    elif ids:
+    if ids:
         signal_query = (
             select(Signal, StrategyVersion)
             .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
@@ -291,9 +279,6 @@ def _prepare_decision_context(
 
     context = {
         "instrument_ids": ids,
-        "stock_research_reads": stock_research_reads,
-        "research_reads_by_instrument": research_reads,
-        "chip_reads_by_instrument": chip_reads,
         "bars_by_instrument": bars_by_instrument,
         "unlocated_bars_by_instrument": unlocated_bars_by_instrument,
         "chips_by_instrument": chips_by_instrument,
@@ -387,8 +372,7 @@ def _instrument_coverage(
     }
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
-        chip_dates = {row.trading_date for row in context["chips_by_instrument"].get(instrument.id, [])
-                      if not context.get("stock_research_reads") or row.core_valid}
+        chip_dates = {row.trading_date for row in context["chips_by_instrument"].get(instrument.id, [])}
     else:
         chip_dates = set(
             db.scalars(
@@ -510,7 +494,7 @@ def _latest_strategy_signals(db: Session, instrument_id: int, as_of: date | None
     return result
 
 
-def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tuple[bool, list[str], list[ChipSnapshot | StockChipRead]]:
+def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tuple[bool, list[str], list[ChipSnapshot]]:
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
     if context and instrument_id in context["instrument_ids"]:
         rows = list(reversed(context["chips_by_instrument"].get(instrument_id, [])[:5]))
@@ -526,9 +510,6 @@ def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tupl
             )
         )
     missing: list[str] = []
-    raw_scope = context.get("chip_reads_by_instrument", {}).get(instrument_id) if context else None
-    if raw_scope and (raw_scope.unlocated_count or any(not row.core_valid for row in rows)):
-        missing.append("institutional_flow_5d")
     if len({row.trading_date for row in rows}) < 5:
         missing.append("institutional_flow_5d")
     for field in ("foreign_buy", "trust_buy", "dealer_buy", "margin_balance", "margin_change"):
@@ -600,8 +581,8 @@ def _signal_levels(signal: Signal, strategy_name: str) -> dict[str, float | None
 
 
 def _risk_reward(signal: Signal, levels: dict[str, float | None]) -> float | None:
-    evidence = signal.rule_evidence_json if isinstance(signal, StockSignalRead) else signal.rule_evidence_json or {}
-    candidates = [] if isinstance(signal, StockSignalRead) and evidence is None else [
+    evidence = signal.rule_evidence_json or {}
+    candidates = [
         evidence.get("risk_reward"),
         evidence.get("risk_reward_ratio"),
         (evidence.get("levels") or {}).get("risk_reward") if isinstance(evidence.get("levels"), dict) else None,
@@ -616,7 +597,7 @@ def _risk_reward(signal: Signal, levels: dict[str, float | None]) -> float | Non
     if entry is None or stop is None or target is None or entry <= stop or target <= entry:
         return None
     ratio = (target - entry) / (entry - stop)
-    return _finite(ratio) if isinstance(signal, StockSignalRead) else ratio
+    return ratio
 
 
 def _strategy_result(
@@ -631,9 +612,6 @@ def _strategy_result(
         return None
     levels = _signal_levels(signal, name)
     missing: list[str] = []
-    signal_read = signal.read_state() if isinstance(signal, StockSignalRead) else None
-    if signal_read and signal_read["status"] != "known":
-        missing.append("signal_read_" + signal_read["status"])
     if signal.data_quality != "complete":
         missing.append("signal_data_quality")
     if signal.status in {"data_incomplete", "invalid_levels"}:
@@ -661,10 +639,8 @@ def _strategy_result(
         missing.extend(level_missing)
     if as_of and signal.data_cutoff and str(signal.data_cutoff)[:10] > as_of.isoformat():
         missing.append("data_cutoff")
-    evidence = signal.rule_evidence_json if isinstance(signal, StockSignalRead) else signal.rule_evidence_json or {}
-    evidence_strategy_version = None if isinstance(signal, StockSignalRead) and evidence is None else (
-        evidence.get("strategy_version") if isinstance(evidence.get("strategy_version"), str) else None
-    )
+    evidence = signal.rule_evidence_json or {}
+    evidence_strategy_version = evidence.get("strategy_version") if isinstance(evidence.get("strategy_version"), str) else None
     confidence_semantics = signal_confidence_semantics(
         signal.confidence,
         evidence,
@@ -709,7 +685,7 @@ def _strategy_result(
         "strategy": name,
         "signal_id": signal.id,
         "signal_key": signal.signal_key,
-        "signal_date": None if isinstance(signal, StockSignalRead) and signal.signal_date is None else signal.signal_date.isoformat(),
+        "signal_date": signal.signal_date.isoformat(),
         "status": signal.status,
         "data_quality": signal.data_quality,
         "rationale": signal.rationale,
@@ -723,7 +699,6 @@ def _strategy_result(
         "missing": list(dict.fromkeys(missing)),
         "wait_missing": wait_missing,
         "evidence": evidence,
-        **({"signal_read": signal_read} if signal_read is not None else {}),
     }
 
 
@@ -834,11 +809,11 @@ def _priority_missing(fields: Iterable[str], *, held: bool) -> list[dict[str, st
     return result
 
 
-def build_decision_summary(db: Session, instrument: Instrument, as_of: date | None = None, *, stock_research_reads: bool = False) -> dict[str, Any]:
+def build_decision_summary(db: Session, instrument: Instrument, as_of: date | None = None) -> dict[str, Any]:
     run, official_as_of = latest_official_as_of(db)
     if as_of is None:
         as_of = official_as_of
-    _prepare_decision_context(db, as_of, [instrument.id], stock_research_reads=stock_research_reads)
+    _prepare_decision_context(db, as_of, [instrument.id])
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
     if context and instrument.id in context["instrument_ids"]:
         held_position = context["positions_by_instrument"].get(instrument.id)
@@ -888,11 +863,6 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     ]
     actionable_conditionals = [result for result in conditional if _strategy_is_actionable(result)]
     missing: list[str] = []
-    research_reads = context.get("research_reads_by_instrument", {}).get(instrument.id) if stock_research_reads and context else None
-    if research_reads and research_reads.unlocated_count:
-        missing.append("signal_date_unlocated")
-    if research_reads and research_reads.identity_unlocated_count:
-        missing.append("strategy_identity_unlocated")
     if run is None or run.status != "success" or not official_as_of:
         missing.append("data_as_of")
     if bar is None:
@@ -1289,7 +1259,6 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         "data_cutoff": as_of.isoformat() if as_of else None,
         "coverage": coverage,
         "stop_price_semantics": stop_price_semantics,
-        **({"research_read": research_reads.to_state()} if research_reads is not None else {}),
     }
 
 

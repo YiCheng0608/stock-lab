@@ -192,7 +192,7 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .inline-form input { min-width: 0; border: 1px solid #405060; border-radius: 3px; padding: 9px; color: #eff2f5; background: #121a22; }
 .inline-form input:focus { border-color: #f5b85b; outline: none; }
 .hash-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-.stock-chart-panel, .stock-research-panel { margin-top: 24px; }
+.stock-chart-panel { margin-top: 24px; }
 .stock-chart-head { align-items: center; margin-top: 0; }
 .chart-range-controls { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
 .chart-range-controls .secondary-button.selected { border-color: #f5b85b; color: #f5b85b; background: #202c35; }
@@ -211,19 +211,12 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .chart-empty { border: 1px dashed #405060; margin-top: 12px; }
 .research-action-reference { margin-bottom: 14px; padding: 14px 16px; }
 .research-action-reference .position-head { margin-bottom: 4px; }
-.research-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
-.research-block { min-width: 0; }
-.research-block h3 { margin-top: 0; font-size: 17px; }
 .research-block-wide { grid-column: 1 / -1; }
 .research-list { display: grid; gap: 0; }
-.research-list-item, .research-news-item { border-top: 1px solid #2a3540; padding: 13px 0; }
-.research-list-item:first-child, .research-news-item:first-child { border-top: 0; padding-top: 0; }
-.research-list-item strong, .research-news-item strong { display: block; color: #d8dde2; font-size: 13px; }
-.research-list-item p, .research-news-item p { margin: 7px 0 0; font-size: 12px; }
-.research-links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
-.research-condition .position-head { align-items: flex-start; }
-.research-table table { min-width: 720px; }
-.research-time-warning { margin-bottom: 2px; }
+.research-list-item { border-top: 1px solid #2a3540; padding: 13px 0; }
+.research-list-item:first-child { border-top: 0; padding-top: 0; }
+.research-list-item strong { display: block; color: #d8dde2; font-size: 13px; }
+.research-list-item p { margin: 7px 0 0; font-size: 12px; }
 .data-explanation { margin-left: auto; color: #9ba5b1; font-size: 12px; }
 .data-explanation summary { color: #f5b85b; cursor: pointer; }
 .data-explanation span { display: inline-block; max-width: 720px; margin-left: 8px; }
@@ -258,46 +251,12 @@ footer { display: flex; justify-content: space-between; align-items: center; gap
 .portfolio-editor .filter-select { margin-top: 0; max-width: none; }
 @media (max-width: 1180px) { .topbar { align-items: flex-start; padding: 14px 0; } nav a { padding: 12px 0 8px; } }
 @media (max-width: 980px) { .news-grid, .action-grid { grid-template-columns: repeat(2, 1fr); } .inline-form { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 820px) { .app-shell { padding: 0 18px 22px; } .hero, .detail-grid, .instrument-grid, .two-panels, .three-panels, .portfolio-grid, .research-evidence-grid { grid-template-columns: 1fr; } .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: 38px; } .position-list, .strategy-grid, .news-grid, .action-grid, .glossary-grid { grid-template-columns: 1fr; } .inline-form { grid-template-columns: 1fr; } .news-list-item { grid-template-columns: 1fr; gap: 8px; } .news-list-related { justify-content: flex-start; } .news-list-main h3 { white-space: normal; } footer { flex-direction: column; margin-top: 42px; } .stock-chart-head { align-items: flex-start; flex-direction: column; } .chart-range-controls { justify-content: flex-start; } .research-block-wide { grid-column: auto; } .data-explanation { margin-left: 0; } }
+@media (max-width: 820px) { .app-shell { padding: 0 18px 22px; } .hero, .detail-grid, .instrument-grid, .two-panels, .three-panels, .portfolio-grid { grid-template-columns: 1fr; } .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: 38px; } .position-list, .strategy-grid, .news-grid, .action-grid, .glossary-grid { grid-template-columns: 1fr; } .inline-form { grid-template-columns: 1fr; } .news-list-item { grid-template-columns: 1fr; gap: 8px; } .news-list-related { justify-content: flex-start; } .news-list-main h3 { white-space: normal; } footer { flex-direction: column; margin-top: 42px; } .stock-chart-head { align-items: flex-start; flex-direction: column; } .chart-range-controls { justify-content: flex-start; } .research-block-wide { grid-column: auto; } .data-explanation { margin-left: 0; } }
 @media (max-width: 560px) { .topbar { display: block; } nav { justify-content: flex-start; gap: 15px; margin-top: 16px; } .group-grid, .stat-grid, .three-stats { grid-template-columns: 1fr; } h1, .page-title h1 { font-size: 29px; } .stock-quote-grid { grid-template-columns: 1fr 1fr; } .stock-quote-grid > div:last-child { grid-column: 1 / -1; } .stock-tab { padding: 9px 8px; font-size: 13px; } .filter-row { gap: 10px; } .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; } .filter-row .filter-select { margin-top: 0; } footer { align-items: flex-start; } .secondary-nav { justify-content: flex-start; gap: 9px 12px; flex-wrap: wrap; } }
 
 .numeric-cell { text-align: right; font-variant-numeric: tabular-nums; }
 .stock-quote-grid strong, .metric-row b, .level-grid b { font-variant-numeric: tabular-nums; }
 .broker-branch-entry { margin-top: 24px; }
-.stock-overview { margin: 0 0 26px; }
-.overview-head { margin-bottom: 8px; }
-.overview-cutoff-note { max-width: none; margin: 0 0 16px; font-size: 13px; }
 .overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 16px; }
 .overview-cutoff-control label { font-size: 13px; color: #aab4be; }
 .overview-cutoff-control input { color-scheme: dark; border: 1px solid #405060; border-radius: 3px; padding: 8px; color: #eff2f5; background: #121a22; }
-.overview-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.overview-grid .panel { min-width: 0; }
-.overview-grid h3 { margin: 0 0 10px; font-size: 17px; }
-.overview-grid p { max-width: none; font-size: 12px; line-height: 1.7; }
-.overview-range { color: #d8dde2; font-size: 13px; margin-top: 13px; }
-.overview-price .stock-quote-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
-.overview-price .stock-quote-grid > div:last-child { grid-column: 1 / -1; }
-.overview-price .stock-quote-grid strong { font-size: 18px; }
-.overview-ohlc { display: flex; gap: 15px; flex-wrap: wrap; margin: 13px 0; color: #cbd3dc; font-size: 12px; }
-.overview-reasons { padding-left: 18px; margin: 10px 0; color: #d9a45b; font-size: 12px; line-height: 1.8; }
-.overview-condition { padding: 12px 0; border-top: 1px solid #2a3540; }
-.overview-condition:first-of-type { border-top: 0; padding-top: 0; }
-.overview-provenance { overflow-wrap: anywhere; margin-top: 10px; }
-.overview-price caption { text-align: left; white-space: normal; margin: 8px 0; }
-@media (max-width: 820px) { .overview-grid { grid-template-columns: 1fr; } }
-.official-event-focus { margin: 0 0 28px; min-width: 0; }
-.official-event-focus p { max-width: none; }
-.focus-observation-note, .focus-count { margin: 13px 0; }
-.focus-search-control input { flex: 1 1 220px; min-width: 0; }
-.focus-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-.focus-card { min-width: 0; border: 1px solid #2a3540; border-radius: 3px; padding: 14px; }
-.focus-card .position-head { flex-wrap: wrap; gap: 6px; }
-.focus-card .position-head strong { overflow-wrap: anywhere; }
-.focus-event-table { max-width: 100%; overflow-x: auto; margin: 9px 0; }
-.focus-event-table table { min-width: 300px; }
-.focus-event-table caption { text-align: left; color: #87909d; font-size: 11px; padding-bottom: 7px; }
-.focus-stock-link { display: inline-block; margin-top: 10px; }
-.focus-catalogue-missing { margin-top: 10px; }
-.focus-source-details pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 1180px) { .focus-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 820px) { .focus-grid { grid-template-columns: 1fr; } }

@@ -13,7 +13,6 @@ venv/
 env/
 ENV/
 backend/.deps/
-backend/.validation-deps/
 .pytest_cache/
 **/.pytest_cache/
 .mypy_cache/
@@ -23,12 +22,8 @@ backend/.validation-deps/
 .coverage.*
 htmlcov/
 
-# Generated test/runtime artifacts
+# Local runtime data
 .local/
-artifacts/
-evidence/
-**/.decision-*/
-**/.p1-*/
 
 # Node/Vite
 frontend/node_modules/

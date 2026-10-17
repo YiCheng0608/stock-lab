@@ -28,7 +28,7 @@ def changed_paths(base: str) -> list[str]:
     return [name.decode("utf-8") for name in result.split(b"\0") if name]
 
 
-# Working-tree paths outside backend/ and tools/ that the backend and standalone jobs read; a change must run them.
+# Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
 # Keep in step with backend/tests:
 #   test_public_candidate_identity.py:237-247 renders frontend/src/App.tsx with Node and the frontend/node_modules
 #   that frontend/package.json and frontend/pnpm-lock.yaml install.
@@ -44,7 +44,7 @@ def change_flags(paths: list[str]) -> dict[str, bool]:
     # Markdown never reaches the product jobs unless a backend test reads it; the repository job checks it.
     product = [p for p in paths if not p.lower().endswith(".md")]
     return {
-        "python": shared or any(p in BACKEND_READ_FILES for p in paths) or any(p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS) or p.endswith(".py") or p == "docs/development-baseline/validation-requirements.lock.txt" for p in product),
+        "python": shared or any(p in BACKEND_READ_FILES for p in paths) or any(p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS) or p.endswith(".py") for p in product),
         "frontend": shared or any(p.startswith(("frontend/", "tools/", "backend/")) for p in product),
     }
 
