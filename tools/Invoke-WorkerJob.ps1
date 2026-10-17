@@ -11,6 +11,20 @@ date of the invocation. The exit code is the CLI exit code; for daily: 0 for
 success, skipped or non_trading_day, 1 for failed, 2 for partial. Logs older
 than LogRetentionDays are removed from LogDir (only files named <Job>-*.log).
 
+The news job runs two steps in one invocation: `worker.cli news`, then
+`worker.cli news-llm` (AI summaries of the stored news). Each step has its own
+log sections (`--- news stdout`, `--- news-llm stderr`, ...) and its own
+`--- <step> end exit=<code>` line; the end line of the run carries
+`news_llm_exit=<code>`. The job's exit code is news's alone: news-llm failing
+(claude not found, not signed in, quota used up) shows in its log section and
+in its `run_type=news_llm` ingestion run, but does not change the news result.
+news-llm runs even when news failed, because it only reads news already stored.
+-Date applies to news only (for news-llm it would filter, not label).
+-SkipNewsLlm turns the second step off. -ClaudeCli is the native claude
+executable for news-llm, passed to the child as STOCK_CLAUDE_CLI (a scheduled
+task's PATH differs from an interactive shell's, so the registered task names
+the path); without it the worker uses STOCK_CLAUDE_CLI or `claude` on PATH.
+
 Before starting, the job is skipped (exit 0, logged; daily also records a
 skipped schedule_runs row) when free physical memory is below
 MinFreeMemoryGB (reason low_memory) or the checkout has a git operation in
@@ -30,6 +44,9 @@ PythonPath defaults to STOCK_PYTHON, then this checkout's .venv.
 
 .EXAMPLE
 ./tools/Invoke-WorkerJob.ps1 -Job news
+
+.EXAMPLE
+./tools/Invoke-WorkerJob.ps1 -Job news -ClaudeCli C:\Users\me\.local\bin\claude.exe
 #>
 param(
     [ValidateSet('daily', 'news')]
@@ -43,6 +60,8 @@ param(
     [string]$Trigger = 'scheduler',
     [switch]$Force,
     [switch]$GitPull,
+    [string]$ClaudeCli,
+    [switch]$SkipNewsLlm,
     [ValidateRange(1, 3650)]
     [int]$LogRetentionDays = 90,
     [ValidateRange(0, 1024)]
@@ -51,6 +70,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 
+if ($Job -ne 'news') {
+    if ($SkipNewsLlm) { throw '-SkipNewsLlm applies only to the news job' }
+    if ($ClaudeCli) { throw '-ClaudeCli applies only to the news job' }
+}
 if (-not $PythonPath) { $PythonPath = $env:STOCK_PYTHON }
 if (-not $PythonPath) {
     $venvPython = Join-Path $projectRoot '.venv/Scripts/python.exe'
@@ -108,6 +131,10 @@ if ($Job -eq 'daily') {
     throw '-Force applies only to the daily job'
 }
 if ($Date) { $cliArgs += @('--date', $Date) }
+$runNewsLlm = ($Job -eq 'news' -and -not $SkipNewsLlm)
+# No --date: for news-llm it would select that day's items, not label the run.
+$newsLlmArgs = @('-X', 'utf8', '-m', 'worker.cli', 'news-llm')
+$claudeCliShown = if ($ClaudeCli) { $ClaudeCli } elseif ($env:STOCK_CLAUDE_CLI) { $env:STOCK_CLAUDE_CLI } else { 'claude (PATH)' }
 
 $childEnvironment = @{
     STOCK_DATA_DIR = $DataDir
@@ -117,42 +144,82 @@ $childEnvironment = @{
     PYTHONDONTWRITEBYTECODE = '1'
     PYTHONIOENCODING = 'utf-8'
 }
+if ($ClaudeCli) { $childEnvironment.STOCK_CLAUDE_CLI = $ClaudeCli }
 $saved = @{}
 foreach ($name in $childEnvironment.Keys) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
-$stdoutPath = Join-Path $LogDir ('.' + $Job + '-' + [guid]::NewGuid().ToString('N') + '.out')
-$stderrPath = Join-Path $LogDir ('.' + $Job + '-' + [guid]::NewGuid().ToString('N') + '.err')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
+
+function Add-Log([string]$Text) {
+    [IO.File]::AppendAllText($logPath, $Text + [Environment]::NewLine, $utf8)
+}
+
+# Run the worker CLI once; append its stdout and stderr to the log and return
+# the exit code. The news job names its sections after the step (news, news-llm).
+function Invoke-WorkerStep([string]$Step, [string[]]$StepArgs) {
+    $prefix = if ($Job -eq 'news') { "$Step " } else { '' }
+    $stdoutPath = Join-Path $LogDir ('.' + $Step + '-' + [guid]::NewGuid().ToString('N') + '.out')
+    $stderrPath = Join-Path $LogDir ('.' + $Step + '-' + [guid]::NewGuid().ToString('N') + '.err')
+    try {
+        $argumentLine = ($StepArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+        $process = Start-Process -FilePath $PythonPath -ArgumentList $argumentLine -WorkingDirectory $projectRoot `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        foreach ($part in @(@('stdout', $stdoutPath), @('stderr', $stderrPath))) {
+            if (Test-Path -LiteralPath $part[1]) {
+                $text = [IO.File]::ReadAllText($part[1], $utf8)
+                if ($text) { Add-Log ("--- $prefix$($part[0])" + [Environment]::NewLine + $text) }
+            }
+        }
+        return [int]$process.ExitCode
+    } finally {
+        foreach ($path in @($stdoutPath, $stderrPath)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+        }
+    }
+}
+
 $exitCode = 1
+$newsLlmExit = if ($Job -ne 'news') { $null } elseif ($SkipNewsLlm) { 'disabled' } else { 'not_run' }
 try {
     foreach ($name in $childEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $childEnvironment[$name], 'Process') }
     $header = "===== {0} start job={1} trigger={2} date={3} force={4} db={5} free_mb={6}" -f $now.ToString('o'), $Job, $Trigger, ($(if ($Date) { $Date } else { 'default' })), [bool]$Force, $childEnvironment.STOCK_DB_PATH, $freeMB
-    [IO.File]::AppendAllText($logPath, $header + [Environment]::NewLine, $utf8)
+    if ($Job -eq 'news') { $header += " news_llm=$(if ($runNewsLlm) { 'on' } else { 'off' })" }
+    Add-Log $header
     if ($pullOutput) {
-        [IO.File]::AppendAllText($logPath, "--- git pull --ff-only" + [Environment]::NewLine + $pullOutput + [Environment]::NewLine, $utf8)
+        Add-Log ("--- git pull --ff-only" + [Environment]::NewLine + $pullOutput)
     }
     if ($skipReason) {
-        [IO.File]::AppendAllText($logPath, "===== skipped reason=$skipReason (min_free_mb=$([int]($MinFreeMemoryGB * 1024)), git_dir=$gitDir)" + [Environment]::NewLine, $utf8)
+        Add-Log "===== skipped reason=$skipReason (min_free_mb=$([int]($MinFreeMemoryGB * 1024)), git_dir=$gitDir)"
     }
     if ($skipReason -and $Job -ne 'daily') {
         # Only daily records a skipped run in the database; other jobs just log it.
         $exitCode = 0
     } else {
-        $argumentLine = ($cliArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-        $process = Start-Process -FilePath $PythonPath -ArgumentList $argumentLine -WorkingDirectory $projectRoot `
-            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-        $exitCode = $process.ExitCode
-        foreach ($part in @(@('stdout', $stdoutPath), @('stderr', $stderrPath))) {
-            if (Test-Path -LiteralPath $part[1]) {
-                $text = [IO.File]::ReadAllText($part[1], $utf8)
-                if ($text) { [IO.File]::AppendAllText($logPath, "--- $($part[0])" + [Environment]::NewLine + $text + [Environment]::NewLine, $utf8) }
+        $stepStart = [DateTimeOffset]::Now
+        $exitCode = Invoke-WorkerStep $Job $cliArgs
+        if ($Job -eq 'news') {
+            Add-Log ("--- news end exit={0} seconds={1}" -f $exitCode, [int]([DateTimeOffset]::Now - $stepStart).TotalSeconds)
+        }
+        if ($runNewsLlm) {
+            # Runs whatever news's result was, and never changes it: any failure
+            # here is logged and reported in news_llm_exit only.
+            $stepStart = [DateTimeOffset]::Now
+            Add-Log "--- news-llm start claude_cli=$claudeCliShown"
+            try {
+                $newsLlmExit = Invoke-WorkerStep 'news-llm' $newsLlmArgs
+            } catch {
+                $newsLlmExit = 'wrapper_error'
+                Add-Log ("--- news-llm wrapper error: {0}" -f $_.Exception.Message)
             }
+            Add-Log ("--- news-llm end exit={0} seconds={1}" -f $newsLlmExit, [int]([DateTimeOffset]::Now - $stepStart).TotalSeconds)
         }
     }
     $finished = [TimeZoneInfo]::ConvertTime([DateTimeOffset]::Now, $taipei)
     $seconds = [int]($finished - $now).TotalSeconds
-    [IO.File]::AppendAllText($logPath, ("===== {0} end exit={1} seconds={2}" -f $finished.ToString('o'), $exitCode, $seconds) + [Environment]::NewLine, $utf8)
+    $endLine = "===== {0} end exit={1} seconds={2}" -f $finished.ToString('o'), $exitCode, $seconds
+    if ($Job -eq 'news') { $endLine += " news_llm_exit=$newsLlmExit" }
+    Add-Log $endLine
 } catch {
-    [IO.File]::AppendAllText($logPath, ("===== wrapper error: {0}" -f $_.Exception.Message) + [Environment]::NewLine, $utf8)
+    Add-Log ("===== wrapper error: {0}" -f $_.Exception.Message)
     throw
 } finally {
     foreach ($name in $saved.Keys) {
@@ -162,9 +229,6 @@ try {
             [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process')
         }
     }
-    foreach ($path in @($stdoutPath, $stderrPath)) {
-        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
-    }
 }
 
 $cutoff = (Get-Date).AddDays(-$LogRetentionDays)
@@ -172,5 +236,7 @@ Get-ChildItem -LiteralPath $LogDir -Filter ($Job + '-*.log') -File |
     Where-Object { $_.LastWriteTime -lt $cutoff } |
     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 
-Write-Output "$Job exit=$exitCode log=$logPath"
+$summary = "$Job exit=$exitCode"
+if ($Job -eq 'news') { $summary += " news_llm_exit=$newsLlmExit" }
+Write-Output "$summary log=$logPath"
 exit $exitCode

@@ -16,7 +16,15 @@ first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
          successful run only records an already_complete row and does not
          touch data; after a partial run it completes the day.
   news   Every IntervalHours hours (default 2), every day, starting at the
-         next whole interval in Taipei time.
+         next whole interval in Taipei time. After `worker.cli news` the
+         same run executes `worker.cli news-llm` (AI summaries of the stored
+         news; see Invoke-WorkerJob.ps1 for the log layout and exit codes).
+         news-llm needs the native claude executable of a signed-in Claude
+         Code; the scheduler's PATH differs from an interactive shell's, so
+         the task is registered with the explicit path: -ClaudeCli, else
+         STOCK_CLAUDE_CLI, else the first claude.exe on PATH. An npm .cmd
+         shim is refused. -NoNewsLlm registers the task without the
+         news-llm step (run the command again without it to turn it back on).
 
 The task runs as the current user with an interactive logon (no stored
 password), so it only runs while that user is signed in; StartWhenAvailable
@@ -29,7 +37,10 @@ Add -WhatIf to print what would be registered without changing anything.
 ./tools/Register-WorkerSchedule.ps1 -Job daily -PythonPath C:\path\to\.venv\Scripts\python.exe -WhatIf
 
 .EXAMPLE
-./tools/Register-WorkerSchedule.ps1 -Job news -PythonPath C:\path\to\.venv\Scripts\python.exe
+./tools/Register-WorkerSchedule.ps1 -Job news -PythonPath C:\path\to\.venv\Scripts\python.exe -ClaudeCli C:\Users\me\.local\bin\claude.exe
+
+.EXAMPLE
+./tools/Register-WorkerSchedule.ps1 -Job news -PythonPath C:\path\to\.venv\Scripts\python.exe -NoNewsLlm
 
 .EXAMPLE
 ./tools/Register-WorkerSchedule.ps1 -Job daily -Unregister
@@ -52,6 +63,9 @@ param(
     [double]$DailyMinFreeMemoryGB = 6,
     [ValidateRange(0, 1024)]
     [double]$NewsMinFreeMemoryGB = 1,
+    # news only: native claude.exe for the news-llm step, and its off switch.
+    [string]$ClaudeCli,
+    [switch]$NoNewsLlm,
     [switch]$Unregister
 )
 $ErrorActionPreference = 'Stop'
@@ -90,6 +104,28 @@ if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'stock.db') -PathType Leaf)
     throw "No initialized database at $(Join-Path $DataDir 'stock.db'); run worker.cli init-db against the intended database first"
 }
 
+if ($Job -ne 'news' -and ($ClaudeCli -or $NoNewsLlm)) { throw '-ClaudeCli and -NoNewsLlm apply only to the news job' }
+if ($NoNewsLlm -and $ClaudeCli) { throw '-ClaudeCli has no effect together with -NoNewsLlm' }
+if ($Job -eq 'news' -and -not $NoNewsLlm) {
+    if (-not $ClaudeCli) { $ClaudeCli = $env:STOCK_CLAUDE_CLI }
+    if ($ClaudeCli -and $ClaudeCli.TrimStart().StartsWith('[')) {
+        throw 'STOCK_CLAUDE_CLI is a JSON list; pass -ClaudeCli with the path of the native claude.exe'
+    }
+    if (-not $ClaudeCli) {
+        $onPath = Get-Command claude -CommandType Application -All -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -match '\.exe$' } | Select-Object -First 1
+        if ($onPath) { $ClaudeCli = $onPath.Source }
+    }
+    if (-not $ClaudeCli) {
+        throw 'No native claude.exe found for news-llm; pass -ClaudeCli <path>, set STOCK_CLAUDE_CLI, or use -NoNewsLlm to register news without it'
+    }
+    if (-not (Test-Path -LiteralPath $ClaudeCli -PathType Leaf)) { throw "claude executable not found: '$ClaudeCli'" }
+    if ([IO.Path]::GetExtension($ClaudeCli) -ne '.exe') {
+        throw "claude must be the native .exe, not a script or npm shim (got: '$ClaudeCli')"
+    }
+    $ClaudeCli = (Resolve-Path -LiteralPath $ClaudeCli).Path
+}
+
 # Task Scheduler triggers use the machine's local time; convert Taipei
 # wall-clock times so the task fires at the same Taipei time on any machine.
 $taipei = [TimeZoneInfo]::FindSystemTimeZoneById('Taipei Standard Time')
@@ -124,7 +160,7 @@ if ($Job -eq 'daily') {
     $minFreeMemoryGB = $NewsMinFreeMemoryGB
 }
 
-$arguments = @(
+$argumentList = @(
     '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass',
     '-File', ('"' + $invokeScript + '"'),
     '-Job', $Job,
@@ -134,19 +170,26 @@ $arguments = @(
     '-Trigger', 'scheduler',
     '-MinFreeMemoryGB', ([string]$minFreeMemoryGB),
     '-GitPull'
-) -join ' '
+)
+if ($Job -eq 'news') {
+    if ($NoNewsLlm) { $argumentList += '-SkipNewsLlm' } else { $argumentList += @('-ClaudeCli', ('"' + $ClaudeCli + '"')) }
+}
+$arguments = $argumentList -join ' '
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $projectRoot
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit $timeLimit -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
     -LogonType Interactive -RunLevel Limited
-$description = "stock-lab $Job ($when). Checkout: $projectRoot. Logs: $LogDir\$Job-YYYYMMDD.log"
+$newsLlmNote = if ($Job -ne 'news') { '' } elseif ($NoNewsLlm) { ' news-llm: off.' } else { " news-llm: on (claude: $ClaudeCli)." }
+$description = "stock-lab $Job ($when). Checkout: $projectRoot. Logs: $LogDir\$Job-YYYYMMDD.log.$newsLlmNote"
 
 Write-Output "Task:     $taskPath$taskName"
 Write-Output "Checkout: $projectRoot"
 Write-Output "Python:   $PythonPath"
+if ($Job -eq 'news') { Write-Output ("Claude:   " + $(if ($NoNewsLlm) { '(news-llm off)' } else { $ClaudeCli })) }
 Write-Output "Data:     $DataDir"
 Write-Output "Logs:     $LogDir\$Job-YYYYMMDD.log"
+Write-Output "Command:  powershell.exe $arguments"
 Write-Output "Trigger:  $when"
 Write-Output "Limits:   run at most $timeLimit; skip below $minFreeMemoryGB GB free memory"
 if ($PSCmdlet.ShouldProcess("$taskPath$taskName", 'Register scheduled task')) {
