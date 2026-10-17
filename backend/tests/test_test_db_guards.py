@@ -4,6 +4,9 @@ Targets, STOCK_* values, names and metadata are judged from paths alone, so
 nothing here may create, open or copy a database.
 """
 
+import configparser
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -13,11 +16,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))  # tools/ is a namespace package at the project root
 
-from tools.test_db import DbEntry, DbEntryError  # noqa: E402
-from tools.test_db.errors import CleanupError, QuotaExceededError  # noqa: E402
-from tools.test_db.paths import DEFAULT_MAX_TOTAL_BYTES, forbidden_reason  # noqa: E402
+from tools.test_db import DbEntry, DbEntryError, _child as child_module, cli as cli_module, paths as paths_module  # noqa: E402
+from tools.test_db.entry import CHILD_TEMP_RESERVE, ROOT_PATH_RESERVE, ROOT_PATH_SUFFIXES  # noqa: E402
+from tools.test_db.errors import CleanupError, PathTooLongError, QuotaExceededError  # noqa: E402
+from tools.test_db.paths import DEFAULT_MAX_TOTAL_BYTES, WINDOWS_PATH_LIMIT, forbidden_reason, path_length  # noqa: E402
 from tools.test_db.product import stock_env_for, validate_stock_env  # noqa: E402
-from tools.test_db.sample import build_metadata, check_name, is_unset  # noqa: E402
+from tools.test_db.sample import NAME_MAX, build_metadata, check_name, is_unset  # noqa: E402
 
 OUTSIDE = Path(Path.cwd().anchor) / "stock-lab-testdb-guard-demo"  # never created
 RUN = OUTSIDE / "runs" / "r1"
@@ -273,3 +277,181 @@ def test_failures_name_code_path_size_and_reason():
 
 def test_default_limit_is_the_smaller_decimal_reading_of_50_mb():
     assert DEFAULT_MAX_TOTAL_BYTES == 50_000_000
+
+
+# ---- #79 AC-2: supplied metadata that is not a JSON object -------------------------------
+
+COMMON = dict(version="v1", schema_version="rev", sha256="0" * 64, size_bytes=1, counts={}, fixture=None)
+# Falsy values (0, "", [], False) are included on purpose: they must not be read as "no metadata".
+NOT_AN_OBJECT = ["text", "", 7, 0, 3.5, True, False, [1], ["a"], [], (1,), {1, 2}]
+
+
+@pytest.mark.parametrize("kind", ["manual_fixture", "real_sample"])
+@pytest.mark.parametrize("value", NOT_AN_OBJECT, ids=repr)
+def test_supplied_metadata_that_is_not_an_object_is_refused_whatever_its_truthiness(kind, value):
+    with pytest.raises(DbEntryError) as error:
+        build_metadata(kind=kind, supplied=value, **COMMON)
+    assert code_of(error) == "metadata_invalid" and "JSON object" in error.value.reason
+    assert type(value).__name__ in error.value.reason
+
+
+def test_absent_or_empty_object_metadata_behaves_as_before():
+    for supplied in (None, {}):
+        metadata = build_metadata(kind="manual_fixture", supplied=supplied, **COMMON)
+        assert metadata["kind"] == "manual_fixture" and metadata["source_rights"].startswith("not-applicable")
+    with pytest.raises(DbEntryError) as error:  # an empty object still lacks what a real_sample must state
+        build_metadata(kind="real_sample", supplied={}, **COMMON)
+    assert code_of(error) == "metadata_invalid" and "source_rights" in error.value.reason
+
+
+# ---- #79 AC-3: a root too deep for Windows MAX_PATH ------------------------------------------
+#
+# The platform judgement is monkeypatched, so every case runs on any OS. Roots are paths that are never created;
+# ``Path.mkdir`` is replaced by a recorder so "nothing was created" is an observation, not an assumption.
+
+MAX_ROOT_LENGTH = WINDOWS_PATH_LIMIT - ROOT_PATH_RESERVE
+
+
+def root_of_length(length):
+    """An absolute path of exactly ``length`` characters, in components short enough for any file system."""
+
+    text = Path.cwd().anchor
+    while len(text) < length:
+        need = length - len(text)
+        text += "r" * (need if need <= 100 else min(100, need - 2))
+        if len(text) < length:
+            text += os.sep
+    assert len(str(Path(text))) == length
+    return Path(text)
+
+
+@pytest.fixture
+def windows(monkeypatch):
+    monkeypatch.setattr(paths_module, "_is_windows", lambda: True)
+
+
+@pytest.fixture
+def made_dirs(monkeypatch):
+    calls = []
+    monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: calls.append(self))
+    return calls
+
+
+def test_path_budget_constants_are_pinned():
+    assert WINDOWS_PATH_LIMIT == 259  # MAX_PATH 260 counts the terminating NUL
+    assert NAME_MAX == 64 and check_name("A" * NAME_MAX, "x") and CHILD_TEMP_RESERVE == 48
+    lengths = {name: sum(len(part) + 1 for part in parts) for name, parts in ROOT_PATH_SUFFIXES.items()}
+    assert lengths == {
+        "run marker": 87,  # \runs\<64>\.testdb-run.json
+        "run database journal": 92,  # \runs\<64>\data\stock.db-journal
+        "run child temp file": 123,  # \runs\<64>\tmp\<48>
+        "sample database journal": 91,  # \samples\<64>\sample.db-journal
+        "sample metadata": 87,  # \samples\<64>\metadata.json
+        "publish staging": 40,  # \samples\.partial-<8>\metadata.json
+        "schema check journal": 43,  # \tmp\scratch-<8>\data\stock.db-journal
+        "schema check temp file": 74,  # \tmp\scratch-<8>\tmp\<48>
+    }
+    assert ROOT_PATH_RESERVE == max(lengths.values()) == 123 and MAX_ROOT_LENGTH == 136
+
+
+@pytest.mark.parametrize("value", ["100%", "%(here)s", "a%%b", "x%(missing)s", "C:/plain/path", ""], ids=repr)
+def test_child_escapes_script_location_so_configparser_reads_it_back_verbatim(value):
+    # AC-5: Alembic's set_main_option goes through ConfigParser, which rejects a bare % and expands %(name)s.
+    parser = configparser.ConfigParser()
+    parser.add_section("alembic")
+    parser.set("alembic", "script_location", child_module._escape_config_value(value))
+    assert parser.get("alembic", "script_location") == value
+
+
+def test_an_unescaped_percent_is_what_configparser_rejects_or_expands():
+    parser = configparser.ConfigParser({"here": "elsewhere"})
+    parser.add_section("alembic")
+    with pytest.raises(ValueError):
+        parser.set("alembic", "script_location", "100%")
+    parser.set("alembic", "script_location", "/checkout/%(here)s/alembic")
+    assert parser.get("alembic", "script_location") == "/checkout/elsewhere/alembic"  # silently a different path
+
+
+def test_the_platform_judgement_is_the_operating_system_name():
+    assert paths_module._is_windows() == (os.name == "nt")
+
+
+def test_a_root_that_just_fits_is_accepted_and_one_character_more_is_refused_before_anything_is_created(windows, made_dirs):
+    fits = DbEntry(root_of_length(MAX_ROOT_LENGTH))
+    assert made_dirs == [fits.root]  # the root itself, as before; the check ran first
+    made_dirs.clear()
+    too_long = root_of_length(MAX_ROOT_LENGTH + 1)
+    with pytest.raises(PathTooLongError) as error:
+        DbEntry(too_long)
+    failure = error.value
+    assert failure.code == "path_too_long" and failure.path == str(too_long)
+    assert failure.details == {
+        "root_length": MAX_ROOT_LENGTH + 1, "reserved_length": ROOT_PATH_RESERVE, "limit": WINDOWS_PATH_LIMIT,
+        "max_root_length": MAX_ROOT_LENGTH,
+    }
+    assert str(MAX_ROOT_LENGTH) in failure.reason and str(MAX_ROOT_LENGTH + 1) in failure.reason
+    assert made_dirs == []
+
+
+def test_roots_below_the_boundary_fit_and_everything_above_it_is_refused(windows, made_dirs):
+    for length in (MAX_ROOT_LENGTH - 30, MAX_ROOT_LENGTH):
+        DbEntry(root_of_length(length))
+    for length in (MAX_ROOT_LENGTH + 1, MAX_ROOT_LENGTH + 40, 3 * WINDOWS_PATH_LIMIT):
+        with pytest.raises(DbEntryError) as error:
+            DbEntry(root_of_length(length))
+        assert error.value.code == "path_too_long" and error.value.details["root_length"] == length
+    assert len(made_dirs) == 2  # only the two accepted roots
+
+
+def test_length_is_counted_in_utf16_units_like_max_path(windows, made_dirs):
+    astral = chr(0x1F600)
+    assert path_length(astral) == 2 and path_length("é") == 1
+    plain = str(root_of_length(MAX_ROOT_LENGTH - 1))
+    DbEntry(plain + "r")  # MAX_ROOT_LENGTH characters, as many units: fits
+    with pytest.raises(DbEntryError) as error:
+        DbEntry(plain + astral)  # the same number of characters, one unit more
+    assert error.value.code == "path_too_long" and error.value.details["root_length"] == MAX_ROOT_LENGTH + 1
+
+
+def test_other_platforms_are_not_limited_because_they_are_unverified(monkeypatch, made_dirs):
+    monkeypatch.setattr(paths_module, "_is_windows", lambda: False)
+    deep = DbEntry(root_of_length(3 * WINDOWS_PATH_LIMIT))
+    assert made_dirs == [deep.root]
+
+
+@pytest.fixture
+def aliased(monkeypatch):
+    """Map a path as given to the one ``Path.resolve`` reports for it, the way a junction or a ``subst`` drive does."""
+
+    mapping = {}
+    real = Path.resolve
+    monkeypatch.setattr(Path, "resolve", lambda self, *args, **kwargs: mapping.get(self) or real(self, *args, **kwargs))
+    return mapping
+
+
+def test_the_length_counted_is_that_of_the_resolved_root_not_of_the_path_as_given(windows, made_dirs, aliased):
+    short_to_type, deep_in_reality = root_of_length(60), root_of_length(MAX_ROOT_LENGTH + 20)
+    aliased[short_to_type] = deep_in_reality
+    with pytest.raises(PathTooLongError) as error:
+        DbEntry(short_to_type)  # 60 characters as typed, but the file system works with the deep path behind it
+    assert error.value.details["root_length"] == MAX_ROOT_LENGTH + 20 and error.value.path == str(deep_in_reality)
+    assert made_dirs == []
+    long_to_type, shallow_in_reality = root_of_length(MAX_ROOT_LENGTH + 40), root_of_length(60)
+    aliased[long_to_type] = shallow_in_reality
+    assert DbEntry(long_to_type).root == shallow_in_reality  # the other way round fits, however long it is typed
+
+
+def test_a_forbidden_root_is_reported_as_forbidden_even_when_it_is_also_too_long(windows, made_dirs):
+    inside_checkout = REPO_ROOT / ("x" * 100) / ("y" * 100) / ("z" * 100)
+    with pytest.raises(DbEntryError) as error:
+        DbEntry(inside_checkout)
+    assert error.value.code == "forbidden_target" and made_dirs == []
+
+
+def test_cli_reports_a_too_long_root_as_one_json_object_and_creates_nothing(windows, made_dirs, capsys):
+    too_long = root_of_length(MAX_ROOT_LENGTH + 1)
+    assert cli_module.main(["--root", str(too_long), "usage"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False and payload["error"]["code"] == "path_too_long" and payload["error"]["path"] == str(too_long)
+    assert payload["error"]["details"]["max_root_length"] == MAX_ROOT_LENGTH
+    assert made_dirs == []

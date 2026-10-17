@@ -29,9 +29,12 @@ def _meta(path: str | None) -> dict | None:
     if not path:
         return None
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise DbEntryError("metadata_invalid", f"cannot read --meta file: {exc}", path=path) from exc
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError) as exc:  # RecursionError: a file of thousands of "["
+        raise DbEntryError("metadata_invalid", f"cannot read --meta file: {type(exc).__name__}: {exc}", path=path) from exc
+    if not isinstance(value, dict):  # null, 0, "", [] and false are not "no metadata": the file was given, so it must say something
+        raise DbEntryError("metadata_invalid", f"--meta file must hold a JSON object, found {type(value).__name__}", path=path)
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:

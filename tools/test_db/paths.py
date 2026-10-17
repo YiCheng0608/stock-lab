@@ -8,12 +8,14 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-from .errors import CleanupError, DbEntryError
+from .errors import CleanupError, DbEntryError, PathTooLongError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # "50 MB" is authorized per task; the decimal reading is the smaller one.
 DEFAULT_MAX_TOTAL_BYTES = 50 * 1000 * 1000
 STOCK_VARS = ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR")
+# Windows MAX_PATH is 260 counting the terminating NUL, so a path string may hold 259 UTF-16 units.
+WINDOWS_PATH_LIMIT = 259
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 _VANISHED = (FileNotFoundError, NotADirectoryError)
 # Windows reports an entry that another process is deleting as "access denied". Give it a short, bounded
@@ -118,6 +120,33 @@ def assert_allowed_target(path: Path | str, *, role: str, protected: Iterable[Pa
     if reason:
         raise DbEntryError("forbidden_target", f"{role}: {reason}", path=path)
     return Path(path).resolve()
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def path_length(path: Path | str) -> int:
+    """Length as MAX_PATH counts it: UTF-16 code units, so a character outside the BMP is two."""
+
+    return len(str(path).encode("utf-16-le", "surrogatepass")) // 2
+
+
+def assert_path_budget(root: Path | str, *, reserved: int) -> None:
+    """Refuse a ``root`` so deep that the paths built below it (``reserved`` longer) pass Windows MAX_PATH.
+
+    Only checked on Windows; no other platform has been verified, so none is limited.
+    """
+
+    if not _is_windows():
+        return
+    length = path_length(root)
+    if length + reserved > WINDOWS_PATH_LIMIT:
+        raise PathTooLongError(
+            f"tool root is {length} characters; the entry builds paths up to {reserved} characters longer below it, which "
+            f"must stay within {WINDOWS_PATH_LIMIT} on Windows, so the root may be at most {WINDOWS_PATH_LIMIT - reserved} characters",
+            path=root, root_length=length, reserved_length=reserved, limit=WINDOWS_PATH_LIMIT,
+        )
 
 
 def tree_size(path: Path | str, *, strict: bool = True) -> int:

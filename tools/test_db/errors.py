@@ -44,6 +44,16 @@ class QuotaExceededError(DbEntryError):
         super().__init__("quota_exceeded", reason, path=path, size_bytes=size_bytes, **details)
 
 
+class PathTooLongError(DbEntryError):
+    """The tool root is too deep for the longest path the entry builds below it (Windows only)."""
+
+    def __init__(self, reason: str, *, path: Any, root_length: int, reserved_length: int, limit: int) -> None:
+        super().__init__(
+            "path_too_long", reason, path=path,
+            root_length=root_length, reserved_length=reserved_length, limit=limit, max_root_length=limit - reserved_length,
+        )
+
+
 class CleanupError(DbEntryError):
     """Removal left something behind; ``failures`` lists every item with path, size and reason."""
 

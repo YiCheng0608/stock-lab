@@ -8,6 +8,7 @@ private data, no external source. The cases deliberately avoid ``tmp_path``.
 """
 
 import errno
+import itertools
 import json
 import os
 import shutil
@@ -28,11 +29,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))  # tools/ is a namespace package at the project root
 
-from tools.test_db import DbEntry, DbEntryError, cli as cli_module, paths as paths_module  # noqa: E402
+from tools.test_db import DbEntry, DbEntryError, cli as cli_module, entry as entry_module, paths as paths_module  # noqa: E402
+from tools.test_db import product as product_module  # noqa: E402
+from tools.test_db.entry import (  # noqa: E402
+    CHILD_TEMP_RESERVE, ROOT_PATH_RESERVE, ROOT_PATH_SUFFIXES, RUN_DB_NAME, RUN_MARKER, RUN_MARKER_SCHEMA,
+)
 from tools.test_db.errors import CleanupError, QuotaExceededError  # noqa: E402
 from tools.test_db.paths import remove_tree, remove_tree_or_raise, tree_size  # noqa: E402
-from tools.test_db.product import stock_env_for  # noqa: E402
-from tools.test_db.sample import DB_NAME, META_NAME, load_fixture, open_readonly, read_fixture, sha256_file  # noqa: E402
+from tools.test_db.product import ProductRunner, stock_env_for  # noqa: E402
+from tools.test_db.sample import DB_NAME, META_NAME, NAME_MAX, load_fixture, open_readonly, read_fixture, sha256_file  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "test_db" / "sample_basic.json"
 HEAD = "0009_strategy_formula_version"
@@ -75,13 +80,17 @@ def entry(module_root, library):
     remove_tree_or_raise(root)
 
 
-def cli(entry, *args, check=None):
+def cli(entry, *args, check=None, own_tmp=True):
+    """Run the CLI on ``entry.root``; ``own_tmp=False`` keeps the root free of the ``tmp/`` this helper would otherwise make."""
+
     env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
     env.update(
-        PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1", TEMP=str(entry.root / "tmp"), TMP=str(entry.root / "tmp"),
+        PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1",
         PYTHONPATH=os.pathsep.join(filter(None, [str(REPO_ROOT), os.environ.get("PYTHONPATH")])),  # keep the dependency path
     )
-    (entry.root / "tmp").mkdir(exist_ok=True)
+    if own_tmp:
+        env.update(TEMP=str(entry.root / "tmp"), TMP=str(entry.root / "tmp"))
+        (entry.root / "tmp").mkdir(exist_ok=True)
     proc = subprocess.run(
         [sys.executable, "-B", "-X", "utf8", "-m", "tools.test_db", "--root", str(entry.root), "--python", sys.executable, *args],
         cwd=REPO_ROOT, env=env, capture_output=True, text=True, encoding="utf-8", timeout=300, stdin=subprocess.DEVNULL,
@@ -981,3 +990,495 @@ def test_race_bounded_stress_accounting_while_runs_come_and_go(entry):
         stop.set()
         worker.join()
     assert errors == [] and calls > 20 and churned and churned[0] > 20
+
+
+# ---- #79: bounded errors and no leftovers ----------------------------------------------------------------------------
+#
+# Fresh roots only: the leftovers these cases look for (an empty samples/, a .partial-*) are visible only where the tool
+# itself made the directory. Runs are hand-made copies of v1's database, so no case needs ``init-db`` unless it says so.
+
+
+@pytest.fixture
+def make_bare(module_root, library):
+    """Builds tool roots of their own with no ``samples/``, each holding one hand-made run ``src`` (a copy of v1's database)."""
+
+    source, _ = library
+    made = []
+
+    def factory():
+        root = module_root / f"n-{uuid.uuid4().hex[:6]}"
+        instance = DbEntry(root)
+        run_dir = instance.runs_dir / "src"
+        (run_dir / "data" / "raw").mkdir(parents=True)
+        (run_dir / "tmp").mkdir()
+        shutil.copyfile(source.samples_dir / "v1" / DB_NAME, run_dir / "data" / RUN_DB_NAME)
+        marker = {"marker_schema": RUN_MARKER_SCHEMA, "run_id": "src", "origin": {"kind": "empty"}, "root": str(root)}
+        (run_dir / RUN_MARKER).write_text(json.dumps(marker), encoding="utf-8")
+        made.append(root)
+        return instance
+
+    yield factory
+    for root in made:
+        remove_tree_or_raise(root)
+
+
+@pytest.fixture
+def bare(make_bare):
+    return make_bare()
+
+
+@pytest.fixture
+def blank(module_root):
+    """A tool root of its own with nothing in it, not even a run."""
+
+    root = module_root / f"e-{uuid.uuid4().hex[:6]}"
+    yield DbEntry(root)
+    remove_tree_or_raise(root)
+
+
+def tree_listing(instance):
+    """Every path below the root, relative to it: a refusal that created anything shows up as a difference."""
+
+    return sorted(str(item.relative_to(instance.root)) for item in instance.root.rglob("*"))
+
+
+def tight(instance):
+    """The same root with a limit that the freeze estimate (database size + 64 KiB) cannot fit in."""
+
+    size = (instance.runs_dir / "src" / "data" / RUN_DB_NAME).stat().st_size
+    return DbEntry(instance.root, max_bytes=tree_size(instance.root) + size)
+
+
+def top_level(instance):
+    return sorted(item.name for item in instance.root.iterdir())
+
+
+def sample_names(instance):
+    return sorted(item.name for item in instance.samples_dir.iterdir())
+
+
+@pytest.mark.parametrize(
+    "freeze_kwargs, limit, code",
+    [
+        ({"kind": "real_sample"}, False, "metadata_invalid"),  # a real_sample that states nothing
+        ({"meta": ["not", "an", "object"]}, False, "metadata_invalid"),
+        ({}, True, "quota_exceeded"),
+        ({"kind": "real_sample"}, True, "metadata_invalid"),  # both apply: the metadata is what gets reported
+        ({"meta": 0}, True, "metadata_invalid"),  # 0 is not "no metadata" either
+    ],
+    ids=["unstated-real-sample", "meta-not-object", "quota", "metadata-before-quota", "falsy-meta-before-quota"],
+)
+def test_freeze_refused_before_any_disk_work_creates_no_samples_dir(bare, freeze_kwargs, limit, code):
+    assert top_level(bare) == ["runs"]
+    with pytest.raises(DbEntryError) as error:
+        (tight(bare) if limit else bare).freeze("src", "v9", check_product=False, **freeze_kwargs)
+    assert error.value.code == code
+    assert top_level(bare) == ["runs"]  # no samples/ and so no .partial-* either
+    assert (bare.runs_dir / "src" / "data" / RUN_DB_NAME).is_file()  # the run is untouched
+
+
+def test_freeze_into_a_new_root_creates_samples_only_when_it_publishes(bare):
+    report = bare.freeze("src", "ok", check_product=False)
+    assert report["version"] == "ok" and top_level(bare) == ["runs", "samples"] and sample_names(bare) == ["ok"]
+
+
+def break_copy(monkeypatch, seen):
+    def copyfile(src, dst, *args, **kwargs):
+        seen.append(sorted(item.name for item in Path(dst).parent.parent.iterdir()))  # samples/ as the failure strikes
+        raise OSError(errno.EIO, "injected copy failure", str(src))
+
+    monkeypatch.setattr(entry_module.shutil, "copyfile", copyfile)
+
+
+def break_publish(monkeypatch, seen):
+    real = os.replace
+
+    def replace(src, dst, *args, **kwargs):
+        if Path(dst).parent.name == "samples":
+            seen.append(sorted(item.name for item in Path(dst).parent.iterdir()))
+            raise OSError(errno.EIO, "injected publish failure", str(dst))
+        return real(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "replace", replace)
+
+
+def make_schema_stale(instance):
+    with closing(sqlite3.connect(instance.runs_dir / "src" / "data" / RUN_DB_NAME)) as connection:
+        connection.execute("UPDATE alembic_version SET version_num = '0007_turnover_availability'")
+        connection.commit()
+
+
+@pytest.mark.parametrize(
+    "failure, code", [("copy", "io_error"), ("publish", "io_error"), ("product-check", "schema_mismatch")]
+)
+def test_freeze_failing_after_it_made_samples_removes_that_empty_dir_and_its_partial(bare, monkeypatch, failure, code):
+    seen = []
+    if failure == "copy":
+        break_copy(monkeypatch, seen)
+    elif failure == "publish":
+        break_publish(monkeypatch, seen)
+    else:
+        make_schema_stale(bare)  # refused only by the product check, after the sample was copied and described
+    with pytest.raises(DbEntryError) as error:
+        bare.freeze("src", "v9", check_product=failure == "product-check")
+    assert error.value.code == code
+    if failure != "product-check":
+        assert len(seen) == 1 and seen[0] and all(name.startswith(".partial-") for name in seen[0])  # it did get that far
+    assert top_level(bare) == ["runs"]  # no .partial-*, no samples/ and no tmp/ (the product check's scratch root) it made
+    assert list(bare.root.rglob(".partial-*")) == []
+
+
+def make_table_missing(instance):
+    with closing(sqlite3.connect(instance.runs_dir / "src" / "data" / RUN_DB_NAME)) as connection:
+        connection.execute("DROP TABLE news_items")
+        connection.commit()
+
+
+@pytest.mark.parametrize(
+    "refusal, scratch_state",
+    [
+        ("stale-schema", "absent"), ("missing-table", "absent"), ("timeout", "absent"),
+        ("stale-schema", "empty"), ("stale-schema", "occupied"),
+    ],
+    ids=["stale-schema", "missing-table", "timeout", "stale-schema-empty-tmp-already-there", "stale-schema-occupied-tmp"],
+)
+def test_freeze_refused_by_the_product_check_leaves_no_scratch_root_it_made(bare, refusal, scratch_state):
+    options = {}
+    if refusal == "stale-schema":
+        make_schema_stale(bare)
+        code = "schema_mismatch"
+    elif refusal == "missing-table":
+        make_table_missing(bare)
+        code = "schema_mismatch"
+    else:
+        options["timeout"] = 0.01  # the product child cannot finish in time
+        code = "product_timeout"
+    scratch = bare.root / "tmp"  # ProductRunner.check_schema makes <root>/tmp when it is not there
+    if scratch_state != "absent":
+        scratch.mkdir()
+    if scratch_state == "occupied":
+        (scratch / "kept.txt").write_text("not made by freeze", encoding="utf-8")
+    before = tree_listing(bare)
+    with pytest.raises(DbEntryError) as error:
+        DbEntry(bare.root, **options).freeze("src", "v9")  # product check on, the default
+    assert error.value.code == code
+    assert tree_listing(bare) == before  # the refusal leaves the root as it was: no samples/, .partial-* or new tmp/
+    assert (scratch / "kept.txt").is_file() == (scratch_state == "occupied")
+
+
+def test_freeze_publish_failing_after_the_product_check_removes_that_scratch_root_too(bare, monkeypatch):
+    break_publish(monkeypatch, [])
+    before = tree_listing(bare)
+    with pytest.raises(DbEntryError) as error:
+        bare.freeze("src", "v9")  # the product check passes and made <root>/tmp; publishing then fails
+    assert error.value.code == "io_error" and tree_listing(bare) == before
+
+
+def test_cli_freeze_refused_by_the_product_check_leaves_the_new_root_as_it_was(bare):
+    make_schema_stale(bare)
+    before = tree_listing(bare)
+    code, payload, proc = cli(bare, "freeze", "--run-id", "src", "--version", "v9", own_tmp=False)
+    assert code == 1 and payload["error"]["code"] == "schema_mismatch" and "Traceback" not in proc.stderr
+    assert tree_listing(bare) == before
+
+
+@pytest.mark.parametrize("fails_later", [False, True], ids=["publishes", "then-fails"])
+def test_freeze_recreates_a_samples_dir_that_another_freeze_took_away_between_its_steps(bare, monkeypatch, fails_later):
+    bare.samples_dir.mkdir()  # found there, so this call did not make it ...
+    real_mkdir = Path.mkdir
+    taken = []
+
+    def mkdir(self, *args, **kwargs):
+        if self.name.startswith(".partial-") and not taken:
+            taken.append(self.parent)
+            self.parent.rmdir()  # ... and the other freeze removes the empty directory just before the staging one is made
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    if fails_later:
+        break_copy(monkeypatch, [])
+        with pytest.raises(DbEntryError) as error:
+            bare.freeze("src", "v9", check_product=False)
+        assert error.value.code == "io_error"  # not FileNotFoundError from the vanished parent
+        assert top_level(bare) == ["runs"]  # it made samples/ again, so it takes it away again
+    else:
+        report = bare.freeze("src", "v9", check_product=False)
+        assert report["version"] == "v9" and sample_names(bare) == ["v9"]
+    assert taken == [bare.samples_dir]
+
+
+def test_freeze_failure_leaves_a_samples_dir_that_was_already_there(bare, monkeypatch):
+    bare.samples_dir.mkdir()
+    break_copy(monkeypatch, [])
+    with pytest.raises(DbEntryError) as error:
+        bare.freeze("src", "v9", check_product=False)
+    assert error.value.code == "io_error" and bare.samples_dir.is_dir() and sample_names(bare) == []
+
+
+def test_freeze_failure_keeps_a_samples_dir_that_gained_an_entry_meanwhile(bare, monkeypatch):
+    def copyfile(src, dst, *args, **kwargs):
+        (bare.samples_dir / "published-by-someone-else").mkdir()
+        raise OSError(errno.EIO, "injected copy failure", str(src))
+
+    monkeypatch.setattr(entry_module.shutil, "copyfile", copyfile)
+    with pytest.raises(DbEntryError) as error:
+        bare.freeze("src", "v9", check_product=False)
+    assert error.value.code == "io_error" and sample_names(bare) == ["published-by-someone-else"]  # only .partial-* went
+
+
+def test_cli_freeze_refused_in_a_new_root_prints_one_json_object_and_leaves_no_samples(bare):
+    code, payload, proc = cli(bare, "freeze", "--run-id", "src", "--version", "x", "--kind", "real_sample")
+    assert code == 1 and payload["error"]["code"] == "metadata_invalid" and "source_rights" in payload["error"]["reason"]
+    assert json.loads(proc.stdout) == payload and "Traceback" not in proc.stderr
+    assert "samples" not in top_level(bare)
+    size = (bare.runs_dir / "src" / "data" / RUN_DB_NAME).stat().st_size
+    limit = str(tree_size(bare.root) + size)
+    code, payload, _ = cli(bare, "--max-bytes", limit, "freeze", "--run-id", "src", "--version", "x", "--skip-product-check")
+    assert code == 1 and payload["error"]["code"] == "quota_exceeded"
+    code, payload, _ = cli(bare, "--max-bytes", limit, "freeze", "--run-id", "src", "--version", "x", "--kind", "real_sample")
+    assert code == 1 and payload["error"]["code"] == "metadata_invalid"  # the documented order, through the CLI as well
+    assert "samples" not in top_level(bare)
+
+
+# ---- #79 AC-1: the documented refusal order of freeze, pinned ----------------------------------------------------------
+#
+# README lists nine refusals in the order freeze reports them. Every single condition, every pair and all nine together are
+# arranged on a root of their own: the reported refusal must be the earliest one that holds, and none of them may create a
+# directory. Swapping any two neighbours in freeze (or moving the quota or the metadata check) fails some pair.
+
+REFUSAL_ORDER = [  # (what holds, bounded code, a fragment of the reason), in README's order
+    ("version name", "invalid_argument", "sample version"),
+    ("kind", "invalid_argument", "kind 'bogus'"),
+    ("version exists", "version_exists", "immutable"),
+    ("run", "not_a_run_dir", ".testdb-run.json"),
+    ("no database", "not_found", "no database"),
+    ("journal", "sample_corrupt", "journal/wal"),
+    ("marker count", "schema_mismatch", "exactly one Alembic revision marker"),
+    ("metadata", "metadata_invalid", "JSON object"),
+    ("quota", "quota_exceeded", "exceeds"),
+]
+HOLDING = (
+    [(index,) for index in range(len(REFUSAL_ORDER))]
+    + list(itertools.combinations(range(len(REFUSAL_ORDER)), 2))
+    + [tuple(range(len(REFUSAL_ORDER)))]
+)
+
+
+def arrange_refusals(instance, held):
+    """Make exactly the conditions numbered in ``held`` (0-based, README's ①～⑨) true; returns (entry, run id, version, kwargs).
+
+    A run without a database cannot also carry a second Alembic marker, so ⑦ is moot wherever ⑤ holds.
+    """
+
+    run_id, version, kwargs = "src", "fresh", {}
+    if 0 in held:
+        version = "bad name"  # a space is outside the name pattern
+    if 1 in held:
+        kwargs["kind"] = "bogus"
+    if 2 in held:
+        (instance.samples_dir / version).mkdir(parents=True)  # even a directory whose name the pattern rejects
+    if 3 in held:
+        run_id = "unmarked"
+        shutil.copytree(instance.runs_dir / "src", instance.runs_dir / run_id)
+        (instance.runs_dir / run_id / RUN_MARKER).unlink()
+    data_dir = instance.runs_dir / run_id / "data"
+    if 6 in held:
+        with closing(sqlite3.connect(data_dir / RUN_DB_NAME)) as connection:
+            connection.execute("INSERT INTO alembic_version VALUES ('0001_second_marker')")
+            connection.commit()
+    if 5 in held:
+        (data_dir / (RUN_DB_NAME + "-journal")).write_bytes(b"")
+    if 4 in held:
+        (data_dir / RUN_DB_NAME).unlink()
+    if 7 in held:
+        kwargs["meta"] = 0  # not "no metadata" and not an object
+    subject = DbEntry(instance.root, max_bytes=tree_size(instance.root) + 1) if 8 in held else instance
+    return subject, run_id, version, kwargs
+
+
+@pytest.mark.parametrize("held", HOLDING, ids=lambda held: "+".join(str(index + 1) for index in held))
+def test_freeze_reports_the_earliest_refusal_and_creates_nothing(make_bare, held):
+    instance = make_bare()
+    subject, run_id, version, kwargs = arrange_refusals(instance, held)
+    before = tree_listing(instance)
+    _, code, fragment = REFUSAL_ORDER[min(held)]
+    with pytest.raises(DbEntryError) as error:
+        subject.freeze(run_id, version, **kwargs)  # the product check is on, but never reached
+    assert error.value.code == code and fragment in error.value.reason, (held, error.value.to_dict())
+    assert tree_listing(instance) == before
+
+
+@pytest.mark.parametrize(
+    "kwargs, code",
+    [
+        ({"kind": "real_sample"}, "metadata_invalid"),  # a real_sample that states nothing
+        ({"meta": 0}, "metadata_invalid"),
+        ({"meta": []}, "metadata_invalid"),
+        ({"kind": "bogus"}, "invalid_argument"),
+        ({"version": "bad name"}, "invalid_argument"),
+        ({"version": "taken"}, "version_exists"),
+        ({"fixture": "missing.json"}, "fixture_invalid"),
+    ],
+    ids=["unstated-real-sample", "meta-0", "meta-list", "kind", "version-name", "version-exists", "fixture"],
+)
+def test_build_sample_refused_before_its_run_never_makes_runs(blank, kwargs, code):
+    (blank.samples_dir / "taken").mkdir(parents=True)  # the only thing in the root, as a published version would be
+    before = tree_listing(blank)
+    arguments = {"version": "fresh", "fixture": FIXTURE, "kind": "manual_fixture", "meta": None, **kwargs}
+    with pytest.raises(DbEntryError) as error:
+        blank.build_sample(arguments["version"], arguments["fixture"], kind=arguments["kind"], meta=arguments["meta"])
+    assert error.value.code == code
+    assert tree_listing(blank) == before  # no runs/, not even the empty one a failed run would leave
+
+
+# ---- #79 AC-2: --meta is a JSON object or a bounded error ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, kind", [
+        ('"text"', "str"), ("7", "int"), ("3.5", "float"), ("[1]", "list"), ("null", "NoneType"), ("0", "int"),
+        ('""', "str"), ("[]", "list"), ("false", "bool"), ("true", "bool"),
+    ],
+    ids=repr,
+)
+def test_cli_meta_that_is_not_a_json_object_is_a_bounded_error(bare, text, kind):
+    meta = bare.root / "meta.json"
+    meta.write_text(text, encoding="utf-8")
+    for args in (
+        ("build-sample", "--version", "m", "--fixture", str(FIXTURE)),
+        ("freeze", "--run-id", "src", "--version", "m", "--skip-product-check"),
+    ):
+        code, payload, proc = cli(bare, *args, "--meta", str(meta))
+        assert code == 1 and "Traceback" not in proc.stderr, proc.stderr
+        assert json.loads(proc.stdout) == payload and payload["ok"] is False  # stdout is that one object, nothing else
+        failure = payload["error"]
+        assert failure["code"] == "metadata_invalid" and failure["path"] == str(meta)
+        assert "must hold a JSON object" in failure["reason"] and kind in failure["reason"]
+    assert "samples" not in top_level(bare) and sorted(item.name for item in bare.runs_dir.iterdir()) == ["src"]
+
+
+@pytest.mark.parametrize(
+    "content", [b"{not json", b"", bytes([255, 254, 0]), b"[" * 200_000], ids=["syntax", "empty", "not-utf8", "deeply-nested"]
+)
+def test_cli_unreadable_meta_file_is_the_same_bounded_error(bare, content):
+    meta = bare.root / "meta.json"
+    meta.write_bytes(content)
+    code, payload, proc = cli(bare, "freeze", "--run-id", "src", "--version", "m", "--meta", str(meta))
+    assert code == 1 and "Traceback" not in proc.stderr, proc.stderr
+    assert payload["error"]["code"] == "metadata_invalid" and payload["error"]["path"] == str(meta)
+    assert "cannot read --meta file" in payload["error"]["reason"]
+    assert json.loads(proc.stdout) == payload and "samples" not in top_level(bare)
+
+
+def test_cli_without_meta_or_with_an_object_behaves_as_before(bare):
+    code, payload, _ = cli(bare, "freeze", "--run-id", "src", "--version", "plain", "--skip-product-check")
+    assert code == 0 and payload["result"]["metadata"]["kind"] == "manual_fixture"
+    empty = bare.root / "empty.json"
+    empty.write_text("{}", encoding="utf-8")
+    code, payload, _ = cli(bare, "freeze", "--run-id", "src", "--version", "empty", "--meta", str(empty), "--skip-product-check")
+    assert code == 0 and payload["result"]["metadata"]["publication_time"] == "unknown"
+    stated = bare.root / "stated.json"
+    stated.write_text(json.dumps({
+        "source_rights": "invented rights statement for this test", "data_dates": {"first": "2001-01-02", "last": "2001-01-04"},
+        "acquired_at": "2001-01-05T00:00:00Z", "sampling_rule": "all hand-written rows", "publication_time": "2001-01-05T01:00:00Z",
+    }), encoding="utf-8")
+    code, payload, _ = cli(
+        bare, "freeze", "--run-id", "src", "--version", "stated", "--kind", "real_sample", "--meta", str(stated),
+        "--skip-product-check",
+    )
+    assert code == 0 and payload["result"]["metadata"]["publication_time"] == "2001-01-05T01:00:00Z"
+    assert sample_names(bare) == ["empty", "plain", "stated"]
+
+
+# ---- #79 AC-3: the path reserve is the longest path the entry really builds ---------------------------------------
+
+
+def test_path_reserve_equals_the_longest_paths_the_entry_builds(entry, monkeypatch):
+    base = len(str(entry.root))
+    longest = "n" * NAME_MAX
+    run = entry._paths(longest, {"kind": "empty"})
+    assert run.db_path == run.data_dir / RUN_DB_NAME and stock_env_for(run.data_dir)["STOCK_DB_PATH"] == str(run.db_path)
+    assert entry.sample_dir(longest).parent == entry.samples_dir
+    built = {
+        "run marker": run.run_dir / RUN_MARKER,
+        "run database journal": run.data_dir / (RUN_DB_NAME + "-journal"),
+        "run child temp file": run.tmp_dir / ("t" * CHILD_TEMP_RESERVE),
+        "sample database journal": entry.sample_dir(longest) / (DB_NAME + "-journal"),
+        "sample metadata": entry.sample_dir(longest) / META_NAME,
+    }
+    scratch = []  # what check_schema really hands the child (it names the scratch directory itself)
+    monkeypatch.setattr(ProductRunner, "probe", lambda self, action, args, *, data_dir, tmp_dir, allowed_root: scratch.append((data_dir, tmp_dir)) or {})
+    entry.runner.check_schema(entry.samples_dir / "v1" / DB_NAME)
+    [(scratch_data, scratch_tmp)] = scratch
+    built["schema check journal"] = scratch_data / (RUN_DB_NAME + "-journal")
+    built["schema check temp file"] = scratch_tmp / ("t" * CHILD_TEMP_RESERVE)
+    staged = []  # and the staging directory freeze really uses
+    source = entry.isolate("v1", run_id="stage")
+
+    def copyfile(src, dst, *args, **kwargs):
+        staged.append(Path(dst))
+        raise OSError(errno.EIO, "stop after the staging directory is known", str(src))
+
+    monkeypatch.setattr(entry_module.shutil, "copyfile", copyfile)
+    with pytest.raises(DbEntryError):
+        entry.freeze(source, "stage-v", check_product=False)
+    entry.cleanup("stage")
+    built["publish staging"] = staged[0].parent / META_NAME
+    assert {name: len(str(path)) - base for name, path in built.items()} == {
+        name: sum(len(part) + 1 for part in parts) for name, parts in ROOT_PATH_SUFFIXES.items()
+    }
+    assert max(len(str(path)) - base for path in built.values()) == ROOT_PATH_RESERVE
+
+
+# ---- #79 AC-5: ConfigParser special characters in a path ------------------------------------------------------------
+
+PERCENT_NAMES = ["100%", "%(here)s", "a%%b", "x%(missing)s"]
+
+
+@pytest.mark.parametrize("name", ["100%", "%(here)s"], ids=repr)
+def test_percent_in_the_tool_root_does_not_break_build_sample_or_verify(module_root, name):
+    root = module_root / f"{name}-{uuid.uuid4().hex[:6]}"
+    instance = DbEntry(root)
+    try:
+        report = instance.build_sample("pct", FIXTURE)
+        assert report["checks"]["product_schema"] == "ok" and report["product"]["alembic_head"] == HEAD
+        verified = instance.verify("pct")
+        assert verified["product"]["readiness"] == "ok" and verified["product"]["alembic_head"] == HEAD
+        code, payload, _ = cli(instance, "verify", "--version", "pct")
+        assert code == 0 and payload["result"]["checks"]["product_schema"] == "ok"
+    finally:
+        remove_tree_or_raise(root)
+
+
+def percent_checkout(module_root, name):
+    """A copy of ``backend`` (no tests) under a directory whose name carries ``name``: the path ``alembic.ini`` is found at."""
+
+    checkout = module_root / f"{name}-{uuid.uuid4().hex[:6]}"
+    shutil.copytree(
+        REPO_ROOT / "backend", checkout / "backend",
+        ignore=shutil.ignore_patterns("tests", "__pycache__", "*.pyc", ".deps", ".pytest_cache"),
+    )
+    return checkout
+
+
+@pytest.mark.parametrize("name", PERCENT_NAMES, ids=repr)
+def test_percent_in_the_product_checkout_path_does_not_break_the_schema_check(entry, module_root, monkeypatch, name):
+    checkout = percent_checkout(module_root, name)
+    try:
+        monkeypatch.setattr(product_module, "BACKEND_DIR", checkout / "backend")
+        verified = entry.verify("v1")  # the child reads Alembic's script_location from the copy, whose path has the %
+        assert verified["product"]["readiness"] == "ok" and verified["product"]["alembic_head"] == HEAD
+        assert verified["checks"]["product_schema"] == "ok"
+    finally:
+        remove_tree_or_raise(checkout)
+
+
+def test_percent_in_the_product_checkout_path_does_not_break_build_sample(entry, module_root, monkeypatch):
+    checkout = percent_checkout(module_root, "%(here)s")
+    try:
+        monkeypatch.setattr(product_module, "BACKEND_DIR", checkout / "backend")
+        report = entry.build_sample("pct", FIXTURE)  # init-db and the schema check both run from the copy
+        assert report["checks"]["product_schema"] == "ok" and report["product"]["alembic_head"] == HEAD
+        assert report["product"]["config"]["STOCK_DB_PATH"].endswith("stock.db")
+    finally:
+        remove_tree_or_raise(checkout)
