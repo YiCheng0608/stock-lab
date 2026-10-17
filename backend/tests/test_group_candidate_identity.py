@@ -59,7 +59,7 @@ class GroupCandidateIdentityTest(unittest.TestCase):
                                             foreign_buy=100, trust_buy=20, dealer_buy=10,
                                             margin_balance=10000, margin_change=0, source="memory-fixture"))
                     db.add(TechnicalFeature(instrument_id=stock.id, trading_date=day,
-                                            features_json={"prior_20_volumes": [1000] * 20, "volume": 1000},
+                                            features_json={"volume": 1000},
                                             source="memory-fixture"))
                 instruments = {stock.exchange + ":" + stock.symbol: stock for stock, _ in stocks}
                 # Inside the catalyst window but outside decision's event bucket.

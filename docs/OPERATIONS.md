@@ -83,7 +83,7 @@ curl.exe -X DELETE "http://127.0.0.1:8000/api/portfolio/<id>"
 
 ## 2. 資料庫、migration 與 readiness
 
-程式 Alembic head 是 `0009_strategy_formula_version`，revision chain 為 0001→0009，另有相容 fallback markers；這不證明任何 DB 已升級。0009 的遷移與分類契約見 [V1_SPEC](V1_SPEC.md#已知實作偏差與版本修正要求) 已知偏差第 6 條。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)，新持倉欄的有限 migration／readiness 與九枚 markers 規則見 [§8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
+程式 Alembic head 是 `0010_technical_indicators`（只新增 `technical_indicators` 表），revision chain 為 0001→0010，另有相容 fallback markers；這不證明任何 DB 已升級。0009 的遷移與分類契約見 [V1_SPEC](V1_SPEC.md#已知實作偏差與版本修正要求) 已知偏差第 6 條。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)，新持倉欄的有限 migration／readiness 與九枚 markers 規則見 [§8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
 
 readiness 只在唯讀 transaction 檢查有限 descriptor：revision marker 必須是唯一 current head 或受控的完整 fallback 形狀；mapped objects、必要欄名、ordered PK／FK／UNIQUE 與 News JSON defaults 必須符合契約；`signal_settlements` 與 `instruments` 的精確 identity gate 分見 [R0 §8.9](R0_IMPLEMENTATION.md#89-round30-c030api-startup-signal_settlements-unique-metadata-gate有限-review) 及 [§8.10](R0_IMPLEMENTATION.md#810-round31-c031api-startup-instruments-unique-metadata-gate有限-review)。它不執行 `quick_check`、`integrity_check`、資料 FK scan 或完整 type／CHECK／trigger／custom-schema audit，也不涵蓋 live WAL／SHM、concurrent writer、non-SQLite 與 attached schema；通過不保證任意寫入成功。
 
@@ -106,11 +106,12 @@ Migration helpers 只接受有限 canonical SQLite legacy shapes，並在 destru
 | --- | --- |
 | `python -m worker.cli init-db` | 建立／升級指定 DB；先確認路徑、backup 與授權。 |
 | `python -m worker.cli collect --date YYYY-MM-DD --months-back 0` | 官方來源收集；`months-back` 只接受 0、1、2、3。 |
-| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0` | collect 成功才 analyze；analyze 成功才 evaluate。 |
+| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0` | collect 成功才 analyze；analyze 之後跑指標批次（不論 analyze 結果）；analyze 成功才 evaluate。 |
 | `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。 |
 | `python -m worker.cli analyze` | 要求最新官方 collect run success 與有效 as-of；沒有 `--date`，也不是任意局部分析器。 |
 | `python -m worker.cli evaluate` | 更新 execution／tracking 與 T+5／T+20 settlement；會寫 DB。 |
 | `python -m worker.cli backtest --start-date YYYY-MM-DD --end-date YYYY-MM-DD` | 回放既有資料並保存 audit；不下載歷史資料。 |
+| `python -m worker.cli indicators [--date YYYY-MM-DD] [--rebuild]` | 以保存日線算 [技術指標](V1_SPEC.md#技術指標) 寫入 `technical_indicators`；不發網路、不改日線。預設（每日）對每檔寫上次已算日之後到 `--date`（預設 DB 最新日線日）的列，通常就是最新一日；若最後一筆已算值與重算不符（日線回補／更正或除權息晚到）就整檔重寫。`--rebuild` 重寫全部歷史，回補日線或升版後用。不會跑 `init-db`，表不存在時回 `technical_indicators_table_missing_run_init_db`。 |
 
 `backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；目標有效交易日不足時，候選查詢可早於輸入起日，但不得超過迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 

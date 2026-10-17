@@ -38,7 +38,8 @@ PREVIOUS_REVISIONS = (
 )
 CURRENT_REVISION = "0007_turnover_availability"
 PORTFOLIO_REVISION = "0008_portfolio_share_integer"
-HEAD_REVISION = "0009_strategy_formula_version"
+FORMULA_REVISION = "0009_strategy_formula_version"
+HEAD_REVISION = "0010_technical_indicators"
 AVAILABILITY_COLUMNS = {"turnover_status", "turnover_reason"}
 PRESERVED_TABLES = ("instruments", "raw_payloads", "market_bars")
 PEAKS = {"files": 0, "directories": 0, "bytes": 0, "db_bytes": 0}
@@ -259,7 +260,7 @@ class FileMigrationCases:
                                  [(HEAD_REVISION if upgraded else PREVIOUS_REVISIONS[-1],)])
             else:
                 self.assertFalse(inspector.has_table("alembic_version"))
-                expected = PREVIOUS_REVISIONS + ((CURRENT_REVISION, PORTFOLIO_REVISION, HEAD_REVISION) if upgraded else ())
+                expected = PREVIOUS_REVISIONS + ((CURRENT_REVISION, PORTFOLIO_REVISION, FORMULA_REVISION, HEAD_REVISION) if upgraded else ())
                 self.assertEqual(connection.exec_driver_sql(
                     "SELECT version, count(*) FROM schema_migrations GROUP BY version ORDER BY version"
                 ).all(), [(revision, 1) for revision in expected])

@@ -29,7 +29,7 @@ OWNED_SUBDIRS = ("Temp", "taiwan-stock-m3-share-storage-01a10250")
 OWNED_ROOT = OWNED_DB = None
 OWNED_FILES = OWNED_DIRS = frozenset()
 SAFE, ODD, MAXIMUM = 9007199254740991, 9007199254740993, 9223372036854775807
-HEAD, PREVIOUS = "0009_strategy_formula_version", "0007_turnover_availability"
+HEAD, PREVIOUS = "0010_technical_indicators", "0007_turnover_availability"
 DAY = date(2026, 10, 3)
 PEAK = {"files": 0, "directories": 0, "bytes": 0, "db_bytes": 0}
 UNEXPECTED_DENIALS = []

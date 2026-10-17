@@ -7,6 +7,7 @@ from datetime import date
 from app.db import init_db
 
 from .backfill import BACKFILL_SCOPES, targeted_backfill
+from .indicator_batch import run_indicator_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 
 
@@ -35,6 +36,9 @@ def main() -> None:
     backtest_parser = subparsers.add_parser("backtest", help="replay canonical rules on an as-of date range")
     backtest_parser.add_argument("--start-date", required=True)
     backtest_parser.add_argument("--end-date", required=True)
+    indicators_parser = subparsers.add_parser("indicators", help="以保存日線計算技術指標（預設只寫最新未算日）")
+    indicators_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用 DB 最新日線日")
+    indicators_parser.add_argument("--rebuild", action="store_true", help="重算並改寫全部歷史")
     args = parser.parse_args()
     if args.command == "init-db":
         init_db()
@@ -54,6 +58,8 @@ def main() -> None:
         )
     elif args.command == "backtest":
         result = backtest(date.fromisoformat(args.start_date), date.fromisoformat(args.end_date))
+    elif args.command == "indicators":
+        result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     else:
         result = run_daily(parse_date(args.run_date), months_back=args.months_back)
     print(json.dumps(result, ensure_ascii=False, indent=2))

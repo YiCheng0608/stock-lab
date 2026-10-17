@@ -104,9 +104,9 @@ call rows     = signal_count * 2 = analysis.signals_upserted * 4
 
 ### 3.2 `selected-bar-prior-volumes/v1` 實際歷史列
 
-此 opt-in 模式沿用 §3.1 的 selected bar 證據，並在本次 feature 計算時把同 instrument、target date 前、日期升冪的實際最近最多 20 筆 `MarketBar` slice 凍結為 detached in-memory lineage；它與 `technical_features` 的 `prior_20_volumes`、選中 call 的實際 `prior_volumes` kwargs 逐一核對。v3 `input_provenance.prior_volumes` 使用 exact `worker-prior-volumes-provenance/v1`：subject、target date、window=20、`transform=int(volume)`、feature id／instrument／date／source、row_count、ordered rows、projected_values、`raw_bytes_verification=bytes_unverified`。每列保存 ordinal、bar id／instrument／date／volume／source／raw FK，以及 nullable raw metadata（id／source／endpoint／宣告 SHA／ingestion run id）、status／reason。`0`、`1`、`19` 筆短窗口及 volume `0` 原樣保留，沒有補足 20 筆或補零；evaluator 原有 `data_incomplete` 語意不變。v1／v2 的內容與一般入口維持原契約。
+此 opt-in 模式沿用 §3.1 的 selected bar 證據，並在本次 feature 計算時把同 instrument、target date 前、日期升冪的實際最近最多 20 筆 `MarketBar` slice 凍結為 detached in-memory lineage，並與選中 call 的實際 `prior_volumes` kwargs 逐一核對；`technical_features` 自 #151 起不再保存 `prior_20_*` 陣列，call 的 prior volumes 由 `market_bars` 即時切同一窗口，feature 列只作存在與身分核對。v3 `input_provenance.prior_volumes` 使用 exact `worker-prior-volumes-provenance/v1`：subject、target date、window=20、`transform=int(volume)`、feature id／instrument／date／source、row_count、ordered rows、projected_values、`raw_bytes_verification=bytes_unverified`。每列保存 ordinal、bar id／instrument／date／volume／source／raw FK，以及 nullable raw metadata（id／source／endpoint／宣告 SHA／ingestion run id）、status／reason。`0`、`1`、`19` 筆短窗口及 volume `0` 原樣保留，沒有補足 20 筆或補零；evaluator 原有 `data_incomplete` 語意不變。v1／v2 的內容與一般入口維持原契約。
 
-Producer 在同一 transaction 以本地列讀取核對 ORM／raw 關係；呼叫前再核對 slice 未變、feature 身分與儲存值、row metadata 及 evaluator 投影。不符合就拒絕本次 attempt。缺 raw FK 保存 `unknown/raw_payload_id_missing`；有 FK 但 raw row／source／ingestion run 斷鏈則拒絕。宣告 SHA 可為 null；非 null 只驗形狀。這些都是本地 metadata 關係，沒有讀 raw bytes、確認 source version 或證官方真實性；短窗口也不能冒稱完整歷史輸入。
+Producer 在同一 transaction 以本地列讀取核對 ORM／raw 關係；呼叫前再核對 feature 身分、slice 未變、row metadata，最後才核對 evaluator 投影（來源列被改時回 `prior_volumes_source_relation_changed`，而非參數不符）。不符合就拒絕本次 attempt。缺 raw FK 保存 `unknown/raw_payload_id_missing`；有 FK 但 raw row／source／ingestion run 斷鏈則拒絕。宣告 SHA 可為 null；非 null 只驗形狀。這些都是本地 metadata 關係，沒有讀 raw bytes、確認 source version 或證官方真實性；短窗口也不能冒稱完整歷史輸入。
 
 ## 4. Local schema、transaction 與 ownership
 

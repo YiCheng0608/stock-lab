@@ -339,9 +339,6 @@ def _calculate_features(
             "ma5": round(ma5, 6) if ma5 is not None else None,
             "ma20": round(ma20, 6) if ma20 is not None else None,
             "ma60": round(ma60, 6) if ma60 is not None else None,
-            "prior_20_highs": [round(value, 6) for value in prior_highs[-20:]],
-            "prior_20_lows": [round(value, 6) for value in prior_lows[-20:]],
-            "prior_20_volumes": [int(value) for value in prior_volumes[-20:]],
             "high_20d": round(max(highs[-20:]), 6) if highs else None,
             "low_20d": round(min(lows[-20:]), 6) if lows else None,
             "prior_high_20d": round(max(prior_highs[-20:]), 6) if len(prior_highs) >= 20 else None,
@@ -382,8 +379,30 @@ def _calculate_features(
             capture.freeze_prior_volumes(
                 db, instrument=instrument, feature=feature, bars=bars, index=index,
                 target_date=bar.trading_date,
-                projected_values=feature_values["prior_20_volumes"],
+                projected_values=[int(value) for value in prior_volumes[-20:]],
             )
+
+
+def _prior_20_window(db: Session, instrument_id: int, trading_date: date) -> dict[str, list]:
+    """The up-to-20 bars before ``trading_date``, derived from market_bars.
+
+    Same values technical_features used to store as prior_20_highs/volumes:
+    highs in the trading date's raw basis rounded to 6 places, raw int volumes.
+    """
+    bars = db.scalars(
+        select(MarketBar)
+        .where(MarketBar.instrument_id == instrument_id, MarketBar.trading_date <= trading_date)
+        .order_by(MarketBar.trading_date)
+    ).all()
+    factors = _action_factor_by_bar(db, instrument_id, bars)
+    score_factor = factors[-1] if factors else 1.0
+    prior = [
+        (bar, factor) for bar, factor in zip(bars, factors) if bar.trading_date < trading_date
+    ][-20:]
+    return {
+        "highs": [round(bar.high * score_factor / (factor or 1.0), 6) for bar, factor in prior],
+        "volumes": [int(bar.volume) for bar, _factor in prior],
+    }
 
 
 def _benchmark_instrument(db: Session) -> Instrument | None:
@@ -622,7 +641,7 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 )
             )
             values = features.features_json if features else {}
-            prior_volumes = values.get("prior_20_volumes") or []
+            prior_volumes = _prior_20_window(db, instrument.id, score_date)["volumes"] if features else []
             current_volume = _safe_float(values.get("volume", None))
             if current_volume is None:
                 bar = db.scalar(
@@ -1151,8 +1170,9 @@ def _upsert_signal_for_strategy(
         signal_date,
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
-    prior_highs = values.get("prior_20_highs")
-    prior_volumes = values.get("prior_20_volumes")
+    prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
+    prior_highs = prior_window.get("highs")
+    prior_volumes = prior_window.get("volumes")
     close = _safe_float(bar.close)
     volume = _safe_float(bar.volume)
     ma20 = _safe_float(values.get("ma20"))
@@ -3407,11 +3427,15 @@ def run_daily(end_date: date | None = None, *, months_back: int = 0) -> dict[str
             "evaluate": {"status": "skipped", "reason": "official_collection_failed"},
         }
     analyzed = analyze()
+    from .indicator_batch import run_indicator_batch  # local: indicator_batch imports this module
+
+    indicators = run_indicator_batch()
     if analyzed.get("status") != "success":
         return {
             "collect": collected,
             "analyze": analyzed,
             "evaluate": {"status": "skipped", "reason": "analysis_failed"},
+            "indicators": indicators,
         }
     evaluated = evaluate()
-    return {"collect": collected, "analyze": analyzed, "evaluate": evaluated}
+    return {"collect": collected, "analyze": analyzed, "evaluate": evaluated, "indicators": indicators}

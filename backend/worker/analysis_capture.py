@@ -634,9 +634,6 @@ class _Collector:
         })
         _validate_prior_volumes_provenance(evidence, {"prior_volumes": projected_values},
                                            subject=subject, market_date=day)
-        if (type(feature.features_json) is not dict
-                or not _exact(feature.features_json.get("prior_20_volumes"), projected_values)):
-            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
         self.prior_volumes_by_subject[key] = evidence
 
     def prior_volumes_provenance(self, db, *, instrument, feature, signal_date, arguments):
@@ -653,27 +650,19 @@ class _Collector:
         if (feature is None or feature.id != expected_feature["id"]
                 or feature.instrument_id != expected_feature["instrument_id"]
                 or feature.trading_date.isoformat() != expected_feature["trading_date"]
-                or feature.source != expected_feature["source"]
-                or type(feature.features_json) is not dict
-                or not _exact(feature.features_json.get("prior_20_volumes"), frozen["projected_values"])):
+                or feature.source != expected_feature["source"]):
             raise AnalysisCaptureError("prior_volumes_feature_mismatch")
+        # The prior volumes are read from market_bars (checked below); the
+        # feature row only gates whether the selected call had inputs.
         stored_feature = db.execute(text(
-            "SELECT instrument_id,trading_date,source,features_json "
+            "SELECT instrument_id,trading_date,source "
             "FROM technical_features WHERE id=:id"
         ), {"id": feature.id}).mappings().one_or_none()
-        if stored_feature is None:
-            raise AnalysisCaptureError("prior_volumes_feature_mismatch")
-        try:
-            stored_values = json.loads(stored_feature["features_json"])["prior_20_volumes"]
-        except (TypeError, ValueError, KeyError) as exc:
-            raise AnalysisCaptureError("prior_volumes_feature_mismatch") from exc
-        if (stored_feature["instrument_id"] != instrument.id
+        if (stored_feature is None
+                or stored_feature["instrument_id"] != instrument.id
                 or stored_feature["trading_date"] != signal_date.isoformat()
-                or stored_feature["source"] != expected_feature["source"]
-                or not _exact(stored_values, frozen["projected_values"])):
+                or stored_feature["source"] != expected_feature["source"]):
             raise AnalysisCaptureError("prior_volumes_feature_mismatch")
-        _validate_prior_volumes_provenance(frozen, arguments, subject=subject,
-                                           market_date=signal_date.isoformat())
         current_ids = [row[0] for row in db.execute(text(
             "SELECT id FROM market_bars WHERE instrument_id=:instrument_id "
             "AND trading_date<:target_date ORDER BY trading_date DESC LIMIT 20"
@@ -692,6 +681,10 @@ class _Collector:
                     "source": orm_bar.source, "raw_payload_id": orm_bar.raw_payload_id,
             }, item["bar"])):
                 raise AnalysisCaptureError("prior_volumes_source_relation_changed")
+        # Last, so a changed source row is reported as such rather than as the
+        # call's (market_bars-derived) arguments no longer matching.
+        _validate_prior_volumes_provenance(frozen, arguments, subject=subject,
+                                           market_date=signal_date.isoformat())
         return _detached(frozen)
 
     def selected_bar_provenance(self, db, *, bar, instrument, signal_date, close, volume):

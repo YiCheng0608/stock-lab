@@ -977,7 +977,7 @@ def test_v3_change_between_producer_and_call_rolls_back(research, monkeypatch, c
                             'SELECT id FROM market_bars WHERE trading_date<:day '
                             'ORDER BY trading_date DESC LIMIT 1)'), {'day': score_date.isoformat()})
         else:
-            db.execute(text("UPDATE technical_features SET features_json='{}' "
+            db.execute(text("UPDATE technical_features SET source='changed' "
                             'WHERE trading_date=:day'), {'day': score_date.isoformat()})
 
     monkeypatch.setattr(pipeline, '_calculate_group_scores', mutate_after_features)
