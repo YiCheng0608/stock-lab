@@ -191,7 +191,6 @@ export type Dashboard = {
   signals: Signal[]
   signal_status_counts: Record<string, number>
   news?: NewsItem[]
-  themes?: ThemeDirectoryRow[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
   action_counts?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string }
@@ -699,7 +698,53 @@ export type NewsItem = {
   detail_url?: string
 }
 
-export type ThemeDirectoryRow = PublicCandidateIdentity & {
+// Group boards (docs/V1_SPEC.md hot_group_v1): GET /api/themes?board=industry|theme&limit=N.
+export type ThemeBoard = 'industry' | 'theme'
+export type ThemeBoardComponent = 'relative_return' | 'breadth' | 'volume_strength' | 'institutional_flow' | 'catalyst'
+
+export type ThemeBoardItem = {
+  theme_id: string
+  display_name: string
+  description: string
+  board: string | null
+  rank: number
+  score: number
+  quality: 'complete' | 'partial' | string
+  // Same-board percentile 0–1; null when the component has no data.
+  components: Record<ThemeBoardComponent, number | null>
+  relative_returns: { '1d': number | null; '5d': number | null; '20d': number | null }
+  eligible_members: number | null
+  member_count: number | null
+  trading_date: string | null
+}
+
+export type ThemeBoardEmptyReason = 'no_official_run' | 'no_board_scores' | 'no_scores_for_date' | 'no_ranked_groups'
+
+export type ThemeBoardMeta = {
+  board: ThemeBoard
+  requested_date: string | null
+  trading_date: string | null
+  data_as_of: string | null
+  limit: number
+  total: number
+  sort: string
+  empty_reason: ThemeBoardEmptyReason | null
+  empty_message: string | null
+}
+
+export type ThemeBoardResponse = { items: ThemeBoardItem[]; meta: ThemeBoardMeta }
+
+// Membership source of a theme-table member (docs/INDUSTRY_CLASSIFICATION.md §7); null for other groups.
+export type ThemeEvidence = {
+  kind?: string | null
+  url: string | null
+  relation: 'core_business' | 'product_line' | 'supply_chain' | string | null
+  relevance: 'high' | 'medium' | 'low' | string | null
+  theme_version: string | null
+}
+
+// GET /api/themes/{id} `theme`: the group with its latest score (rank is null unless the group is fully qualified).
+export type ThemeSummary = {
   theme_id: string
   display_name: string
   description: string
@@ -711,23 +756,49 @@ export type ThemeDirectoryRow = PublicCandidateIdentity & {
   trading_date: string | null
   data_quality: string
   eligible_members: number
-  minimum_members: number
   metrics: Record<string, number | null>
-  why_hot: string[]
-  missing_reasons: string[]
-  candidate_symbols: string[]
-  benchmark: string | null
-  benchmark_returns: Record<string, number | null>
-  leaderboard: string | null
-  methodology: Record<string, unknown>
+  definition_version?: string | null
+}
+
+export type ThemeTrendPoint = {
+  trading_date: string
+  score: number | null
+  rank: number | null
+  quality: string | null
+  eligible_members: number | null
+}
+
+export type ThemeInlineMember = {
+  exchange: string
+  symbol: string
+  name: string
+  instrument_type: string
+  role: string
+  valid_from: string | null
+  valid_to: string | null
+  theme_evidence: ThemeEvidence | null
 }
 
 export type ThemeDetail = {
-  theme: ThemeDirectoryRow
+  theme: ThemeSummary
+  board: string | null
   methodology?: Record<string, unknown>
-  data_as_of?: string | null
-  members?: StockDirectoryRow[]
-  meta?: Record<string, unknown>
+  data_as_of: string | null
+  trend: ThemeTrendPoint[]
+  members_total: number
+  members_truncated: boolean
+  members_endpoint: string
+  members_as_of: string | null
+  // At most one page; the full list is members_endpoint.
+  members: ThemeInlineMember[]
+}
+
+export type ThemeMemberRow = StockDirectoryRow & { theme_evidence?: ThemeEvidence | null }
+
+export type ThemeMembersResponse = {
+  theme: ThemeSummary
+  items: ThemeMemberRow[]
+  meta: Record<string, unknown>
 }
 
 export type StockDirectoryRow = {

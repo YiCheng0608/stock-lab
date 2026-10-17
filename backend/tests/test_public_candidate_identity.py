@@ -1,17 +1,13 @@
-"""Public score identities through real memory ORM, HTTP and React rendering.
+"""Public score identities through real memory ORM and HTTP.
 
 Run via unittest/runpy with -B, STOCK_DB_PATH=:memory: and data/raw paths set
 to an existing directory before imports. Do not load filesystem pytest fixtures.
-Node uses the installed frontend dependencies and transpiles App.tsx in memory:
-the renderer test needs `node` on PATH and an installed frontend/node_modules.
 """
 
 import asyncio
 from copy import deepcopy
 from datetime import date
 import json
-from pathlib import Path
-import subprocess
 import unittest
 
 from fastapi import FastAPI
@@ -26,7 +22,6 @@ from app.db import Base, enable_sqlite_foreign_keys
 from app.models import GroupDailyScore, GroupMembership, IngestionRun, Instrument, ThemeGroup
 
 
-ROOT = Path(__file__).resolve().parents[2]
 BIG_ID = 9007199254740993
 
 
@@ -230,61 +225,6 @@ class PublicCandidateIdentityTest(unittest.TestCase):
         for result in self.route_projections():
             self.assertEqual(result["candidate_instruments"], [])
             self.assertEqual(result.get("candidate_symbols", result.get("candidates")), [])
-
-    def test_actual_theme_page_renderer(self):
-        payload = {"theme": api.theme_detail("g", self.db),
-                   "members": api.theme_members("g", q=None, sort="symbol", page=1, page_size=1, db=self.db)}
-        result = subprocess.run(["node", "-e", RENDERER], input=json.dumps(payload), text=True,
-                                capture_output=True, cwd=ROOT, check=False)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("PASS actual ThemePage", result.stdout)
-
-
-RENDERER = r"""
-const fs=require('fs'),vm=require('vm'),assert=require('assert'),ts=require('./frontend/node_modules/typescript');
-const React=require('./frontend/node_modules/react'),{renderToStaticMarkup}=require('./frontend/node_modules/react-dom/server');
-const evidence=JSON.parse(fs.readFileSync(0,'utf8'));
-const source=fs.readFileSync('frontend/src/App.tsx','utf8');
-const actual=source.slice(source.indexOf('function ThemeCandidateTags('),source.indexOf('\nfunction StockTable'));
-assert(actual.includes('function ThemePage()'));
-let entries=[], data=evidence;
-const h=(type,props,...children)=>{if(props?.className==='tag symbol-tag'||props?.className==='tag') entries.push({key:props.key,to:props.to??null,text:children.join('')});return React.createElement(type,props,...children)};
-const box=({children})=>React.createElement('div',null,children);
-const context={React:{...React,createElement:h},useState:React.useState,useParams:()=>({themeId:'g'}),
- useQuery:({queryKey})=>({data:queryKey[0]==='theme'?data.theme:data.members}),getTheme:()=>{},getThemeMembers:()=>{},
- isTemporaryIndustryTheme:()=>false,themeMetricLabel:()=>null,formatTaiwanDateTime:x=>x,
- categoryLabel:x=>String(x),groupDisplayName:x=>x,
- Link:({to,children,...props})=>React.createElement('a',{href:to,...props},children),PageTitle:box,Term:box,
- ThemeMemberTable:()=>null,DirectoryPagination:()=>null,QualityBadge:()=>null};
-vm.createContext(context);
-vm.runInContext(ts.transpileModule(actual,{compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}}).outputText,context);
-function render(theme=evidence.theme.theme,items=evidence.members.items,total=1){
- data={theme:{...evidence.theme,theme},members:{...evidence.members,items,meta:{...evidence.members.meta,total}}};
- entries=[];const html=renderToStaticMarkup(React.createElement(context.ThemePage));return {html,entries};
-}
-const initial=render();
-assert.deepStrictEqual(initial.entries.map(x=>x.to),['/stocks/TWSE/SAME','/stocks/TPEx/SAME']);
-assert.deepStrictEqual(initial.entries.map(x=>x.key),['9007199254740993:0','2:1']);
-assert.deepStrictEqual(initial.entries.map(x=>x.text),['TWSE SAME','TPEx SAME']);
-assert(initial.html.includes('2026-09-01')); assert(initial.html.includes('2026-09-15'));
-assert(initial.html.indexOf('2026-09-01')<initial.html.indexOf('2026-09-15'));
-assert.deepStrictEqual(render(undefined,[],99).entries,initial.entries);
-const typed=evidence.theme.theme;
-for(const bad of [null,{},[],{instrument_id:'2',exchange:'TWSE',symbol:'OTHER'},
- {instrument_id:9007199254740993,exchange:'TPEx',symbol:'SAME'},
- {instrument_id:'9223372036854775808',exchange:'TPEx',symbol:'SAME'}]){
- const theme={...typed,candidate_instruments:[typed.candidate_instruments[0],bad]};
- assert(render(theme).entries.every(x=>x.to===null));
-}
-for(const theme of [{...typed,public_candidate_identity_version:'future'},
- {...typed,candidate_instruments:undefined,public_candidate_identity_version:undefined},
- {...typed,candidate_symbols:['SAME',{},null]}]){
- const result=render(theme); assert(result.entries.every(x=>x.to===null));
- assert.equal(new Set(result.entries.map(x=>x.key)).size,result.entries.length);
-}
-for(const symbols of [null,{},'SAME']) assert.equal(render({...typed,candidate_symbols:symbols}).entries.length,0);
-console.log('PASS actual ThemePage: exact string IDs, distinct markets/keys, source date, pagination-independent links, malformed/legacy no links');
-"""
 
 
 if __name__ == "__main__":

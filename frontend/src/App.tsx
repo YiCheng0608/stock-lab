@@ -25,7 +25,7 @@ import {
   getStrategies,
   getTheme,
   getThemeMembers,
-  getThemes,
+  getThemeBoard,
   getTracking,
   getPortfolio,
   upsertPortfolio,
@@ -50,7 +50,7 @@ import type {
   StockDirectoryRow,
   StockBarsInterval,
   StockBarsResponse,
-  ThemeDirectoryRow,
+  ThemeBoard,
   TrackingResponse,
   ProductTime,
 } from './types'
@@ -58,12 +58,14 @@ import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { groupDisplayName, categoryLabel, formatProductTimeRole, isTemporaryIndustryGroupName, isTemporaryIndustryTheme, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
+import { groupDisplayName, newsSourceLabel, officialEventDisplayTitle, formatProductTimeRole, isTemporaryIndustryGroupName, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
+import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
+import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
 
 function formatNumber(value: unknown, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value)
@@ -182,16 +184,6 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
   return names[normalized] ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
 }
 
-function newsSourceLabel(source: string | null | undefined): string {
-  if (!source) return '官方公告資料'
-  const value = source.trim()
-  const normalized = value.toLowerCase()
-  if (normalized === 'mops' || normalized.startsWith('mops_')) return '公開資訊觀測站公告'
-  if (normalized.startsWith('tpex')) return '櫃買中心官方資料'
-  if (normalized.startsWith('twse')) return '證交所官方資料'
-  return value.includes('官方') ? value : '官方公告資料'
-}
-
 function userFacingNewsThemes(item: NewsItem): NewsItem['themes'] {
   return item.themes.filter((theme) => {
     const name = theme.display_name.trim()
@@ -213,12 +205,6 @@ function marketDisplayLabel(value: string | null | undefined): string {
   return '市場待核實'
 }
 
-function officialEventDisplayTitle(title: string | null | undefined, type: string | null | undefined = null): string {
-  if (title === 'TPEx resumption' || type === 'TPEx resumption') return '上櫃股票恢復交易'
-  if (title === 'TPEx suspension interval' || type === 'TPEx suspension interval') return '上櫃股票暫停交易期間'
-  return title || type || '官方事件'
-}
-
 function strategyLabel(strategy: string | null | undefined): string {
   return ({
     breakout_v1: '突破條件',
@@ -226,19 +212,6 @@ function strategyLabel(strategy: string | null | undefined): string {
     breakout: '突破條件',
     pullback: '回踩條件',
   }[strategy ?? ''] ?? '策略條件')
-}
-
-const themeMetricLabels: Record<string, string> = {
-  relative_return_1d: '1 日相對大盤',
-  relative_return_5d: '5 日相對大盤',
-  relative_return_20d: '20 日相對 加權指數',
-  breadth: '成員廣度',
-  volume_strength: '量能強度',
-  institutional_flow: '法人籌碼',
-}
-
-function themeMetricLabel(key: string): string | null {
-  return themeMetricLabels[key] ?? null
 }
 
 function priceChangeTone(value: number | null | undefined): 'positive' | 'negative' | '' {
@@ -617,26 +590,6 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
   )
 }
 
-function ThemeCard({ theme }: { theme: ThemeDirectoryRow }) {
-  const metrics = Object.entries(theme.metrics)
-    .filter(([key, value]) => themeMetricLabel(key) && value != null)
-    .slice(0, 2)
-  const needsTemporaryVerification = isTemporaryIndustryTheme(theme)
-  return (
-    <article className="group-card">
-      <Link to={'/themes/' + encodeURIComponent(theme.theme_id)} className="group-card-link">
-        <div className="group-card-head">{theme.rank != null && <span className="rank">#{theme.rank}</span>}{needsTemporaryVerification ? <span className="pill ambiguous">關聯待核實</span> : theme.qualified ? <span className="pill complete">族群評分資料完整</span> : <QualityBadge kind="theme" status={theme.data_quality} />}</div>
-        <h3>{needsTemporaryVerification ? '產業名稱待核實（既有分類）' : groupDisplayName(theme.display_name)}</h3>
-        <div className="small-note">{categoryLabel(theme.category)} · {theme.eligible_members} 檔既有成員</div>
-        {metrics.length ? <div className="theme-metric-list">{metrics.map(([key, value]) => <div className="metric-row" key={key}><span>{themeMetricLabel(key)}（%）</span><b>{key.startsWith('relative_return_') ? formatSignedPercent(value) : key === 'breadth' ? formatPercent(value, 0) : formatPercent(value)}</b></div>)}</div> : <div className="small-note">資料待核實。</div>}
-        <span className="compact-detail-link">查看族群詳情 →</span>
-      </Link>
-      {needsTemporaryVerification && <div className="data-gap theme-verification-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}
-      {needsTemporaryVerification && <details className="technical-details"><summary>既有資料</summary><div>既有名稱：{theme.display_name}</div><div>既有識別碼：{theme.theme_id}</div><div>既有成員數：{theme.eligible_members}</div></details>}
-    </article>
-  )
-}
-
 function newsCategoryLabel(item: NewsItem): string {
   return item.category === 'company' ? '公司公告' : '交易所公告'
 }
@@ -701,32 +654,40 @@ function NewsDetailPage() {
 
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
+  const [board, setBoard] = useState<ThemeBoard>('industry')
+  const hotGroups = useQuery({ queryKey: ['theme-board', board, TODAY_BOARD_LIMIT], queryFn: () => getThemeBoard(board, TODAY_BOARD_LIMIT) })
   const homeActions = Array.from(new Map(
     [...(query.data?.actions ?? []), ...(query.data?.candidates ?? [])]
       .filter((action) => action.action_state !== 'data_insufficient' || action.held === true || action.position_quantity_status === 'unknown')
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
   return (
-    <div className="page">
-          <section className="hero home-header">
-            <div>
-              <div className="eyebrow">今日市場</div>
-              <h1>今日市場總覽</h1>
-              <p>掌握公告、熱門族群與關注標的。</p>
+    <div className="page home-page">
+      <section className="hero home-hero">
+        <span className="hero-glow hero-glow-primary" aria-hidden="true" />
+        <span className="hero-glow hero-glow-accent" aria-hidden="true" />
+        <div className="hero-text">
+          <div className="eyebrow">今日市場</div>
+          <h1>今日<span className="gradient-text">市場</span>總覽</h1>
+          <p>掌握公告、熱門族群與關注標的。</p>
+        </div>
+        <Card as="div" className="hero-card" eyebrow="資料截至" title={<span className="hero-card-date">{query.data ? formatTaiwanDateTime(query.data.as_of, true) : '載入中…'}</span>}>
+          {query.data && <>
+            <div className="hero-card-source">{query.data.market.source_label ?? sourceLabel(query.data.market.source)}</div>
+            <div className={'hero-card-mode ' + query.data.mode}>
+              <strong>{query.data.mode === 'official' ? '官方單日快照' : query.data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'}</strong>
+              <QualityBadge kind="market" status={query.data.data_quality.latest_run} />
             </div>
-            <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data?.as_of, true)}</strong><small>{query.data?.market.source_label ?? sourceLabel(query.data?.market.source)}</small></div>
-          </section>
+            <details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
+          </>}
+        </Card>
+      </section>
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
         <>
-          <div className={'source-banner ' + query.data.mode}>
-            <strong>{query.data.mode === 'official' ? '官方單日快照' : query.data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'}</strong>
-            <QualityBadge kind="market" status={query.data.data_quality.latest_run} /><details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {(query.data.themes ?? []).filter((theme) => theme.qualified).length.toLocaleString()} 個族群摘要 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
-          </div>
           <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
           {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
-          <section className="section-head"><div><div className="eyebrow">族群發現</div><h2><Term id="hot_group">熱門族群</Term></h2></div><Link to="/themes" className="text-link">查看完整排行</Link></section>
-          {query.data.themes?.some((theme) => theme.qualified) ? <div className="group-grid">{query.data.themes.filter((theme) => theme.qualified).slice(0, 5).map((theme) => <ThemeCard key={theme.theme_id} theme={theme} />)}</div> : <div className="empty panel">{query.data.empty_states?.themes ?? '目前沒有足以成立的熱門族群。'}</div>}
+          <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           <section className="section-head"><div><div className="eyebrow">熱門候選／使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
           {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{query.data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
           {query.data.data_quality.error && <div className="warning-box">官方擷取警告：{query.data.data_quality.error}</div>}
@@ -770,77 +731,35 @@ function NewsPage() {
 }
 
 function ThemesPage() {
-  const [draft, setDraft] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const board = parseBoard(searchParams.get('board'))
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const query = useQuery({ queryKey: ['themes', { search, page }], queryFn: () => getThemes({ q: search || undefined, page, page_size: 20, only_qualified: true }) })
-  const submit = (value = draft.trim()) => { setSearch(value); setPage(1) }
-  const clear = () => { setDraft(''); setSearch(''); setPage(1) }
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page">
-    <PageTitle eyebrow="族群發現" title="熱門族群" description="只有資料完整、有效成員至少 3 檔且使用 加權指數 基準的族群會進入排行；ETF 獨立分榜。"><SearchBox draft={draft} query={search} placeholder="搜尋族群名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></PageTitle>
-    {query.data.items.length ? <div className="group-grid">{query.data.items.map((theme) => <ThemeCard key={theme.theme_id} theme={theme} />)}</div> : <div className="empty panel">目前沒有成立的熱門族群。研究資料尚未齊備、成員少於 3 檔或缺少 加權指數 基準的族群不會排名。</div>}
-    <DirectoryPagination meta={query.data.meta} onPageChange={setPage} />
-  </div>}</QueryState>
-}
-
-function ThemeCandidateTags({ theme }: { theme: ThemeDirectoryRow }) {
-  const rawSymbols = theme.candidate_symbols
-  const symbols = Array.isArray(rawSymbols) ? rawSymbols.filter((symbol) => typeof symbol === 'string' && symbol.trim()) : []
-  const candidates = theme.candidate_instruments
-  const ids = new Set<string>()
-  const pairs = new Set<string>()
-  const verified = theme.public_candidate_identity_version === 'instrument-id-string-v1'
-    && Array.isArray(rawSymbols) && symbols.length === rawSymbols.length
-    && Array.isArray(candidates) && candidates.length <= 4 && candidates.length === symbols.length
-    && candidates.every((candidate, index) => {
-      if (!candidate || typeof candidate !== 'object') return false
-      const { instrument_id: id, exchange, symbol } = candidate
-      if (typeof id !== 'string' || !/^[1-9][0-9]*$/.test(id)
-        || id.length > 19 || (id.length === 19 && id > '9223372036854775807')
-        || typeof exchange !== 'string' || !exchange.trim()
-        || typeof symbol !== 'string' || symbol !== symbols[index]) return false
-      const pair = JSON.stringify([exchange, symbol])
-      if (ids.has(id) || pairs.has(pair)) return false
-      ids.add(id)
-      pairs.add(pair)
-      return true
-    })
-  if (!symbols.length) return <div className="empty">沒有足以顯示的候選股票。</div>
-  return <div className="tag-list">{symbols.map((symbol, index) => {
-    const candidate = verified ? candidates[index] : null
-    return candidate
-      ? <Link className="tag symbol-tag" key={`${candidate.instrument_id}:${index}`} to={'/stocks/' + encodeURIComponent(candidate.exchange) + '/' + encodeURIComponent(candidate.symbol)}>{candidate.exchange} {symbol}</Link>
-      : <span className="tag" key={`legacy:${index}`}>{symbol}</span>
-  })}</div>
+  const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board) })
+  const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
+  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} />
 }
 
 function ThemePage() {
   const { themeId = '' } = useParams()
   const [memberPage, setMemberPage] = useState(1)
-  const theme = useQuery({ queryKey: ['theme', themeId], queryFn: () => getTheme(themeId), enabled: Boolean(themeId) })
-  const members = useQuery({ queryKey: ['theme-members', themeId, memberPage], queryFn: () => getThemeMembers(themeId, { page: memberPage, page_size: 30, sort: 'price' }), enabled: Boolean(themeId) })
-  if (theme.isLoading || members.isLoading) return <Loading />
-  if (theme.error) return <ErrorBox error={theme.error} />
-  if (members.error) return <ErrorBox error={members.error} />
-  if (!theme.data || !members.data) return null
-  const item = theme.data.theme
-  const metricEntries = Object.entries(item.metrics).filter(([key, value]) => themeMetricLabel(key) && value != null)
-  const memberDataAsOf = typeof members.data.meta?.data_as_of === 'string' ? members.data.meta.data_as_of : theme.data.data_as_of
-  const needsTemporaryVerification = isTemporaryIndustryTheme(item)
-  return <div className="page">
-    <Link to="/themes" className="back-link">← 回到族群</Link>
-    <PageTitle eyebrow={categoryLabel(item.category)} title={needsTemporaryVerification ? '產業名稱待核實（既有分類）' : groupDisplayName(item.display_name)} description={needsTemporaryVerification ? TEMPORARY_INDUSTRY_GROUP_NOTICE : item.description} />
-     <div className="source-banner"><strong>{needsTemporaryVerification ? '關聯待核實' : item.qualified ? '可排名' : '不排名'}</strong><span>{needsTemporaryVerification ? TEMPORARY_INDUSTRY_GROUP_NOTICE : item.qualified ? item.why_hot.join(' · ') : item.missing_reasons.join('；')}</span>{needsTemporaryVerification ? <span className="pill ambiguous">僅供查閱</span> : item.qualified ? <span className="pill complete">族群評分資料完整</span> : <QualityBadge kind="theme" status={item.data_quality} />}</div>
-     {needsTemporaryVerification && <details className="technical-details"><summary>既有資料</summary><div>既有名稱：{item.display_name}</div><div>既有識別碼：{item.theme_id}</div><div>既有成員數：{item.eligible_members}</div></details>}
-     <div className="detail-grid two-panels">
-       <div className="panel"><h2>市場指標</h2>{item.qualified && metricEntries.length ? <div className="metric-list">{metricEntries.map(([key, value]) => <div className="metric-row" key={key}><span>{themeMetricLabel(key)}（%）</span><b>{key.startsWith('relative_return_') ? formatSignedPercent(value) : key === 'breadth' ? formatPercent(value, 0) : formatPercent(value)}</b></div>)}</div> : <div className="empty">{item.qualified ? '尚無已命名且可核實的市場指標。' : item.data_quality === 'insufficient_data' ? '資料不足，尚未完成評估。' : '尚未評估；不代表條件不成立。'}</div>}</div>
-       <div className="panel"><h2>候選股票</h2><ThemeCandidateTags theme={item} /><div className="small-note">評分日期 {formatTaiwanDateTime(item.trading_date, true)} · 基準：<Term id="taiex">加權指數</Term></div></div>
-    </div>
-    <section className="section-head"><div><div className="eyebrow">{needsTemporaryVerification ? '既有成員 · 待重新核實' : '有效成員'}</div><h2>{needsTemporaryVerification ? '既有族群成員' : '族群成員'}</h2></div></section>
-     <div className="small-note">成員資料截至 {formatTaiwanDateTime(memberDataAsOf, true)}</div>
-     {members.data.items.length ? <ThemeMemberTable rows={members.data.items} /> : <div className="empty panel">此日期沒有有效成員。</div>}
-     {members.data.meta && <DirectoryPagination meta={members.data.meta} onPageChange={setMemberPage} />}
-  </div>
+  useEffect(() => setMemberPage(1), [themeId])
+  const detail = useQuery({ queryKey: ['theme', themeId], queryFn: () => getTheme(themeId), enabled: Boolean(themeId) })
+  const detailBoard = detail.data?.board
+  const board: ThemeBoard | null = detailBoard === 'industry' || detailBoard === 'theme' ? detailBoard : null
+  // Rank, quality and the same-board percentiles come from the board itself (shared cache with /themes).
+  const boardQuery = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board as ThemeBoard), enabled: board !== null })
+  const members = useQuery({ queryKey: ['theme-members', themeId, memberPage], queryFn: () => getThemeMembers(themeId, { page: memberPage, page_size: MEMBER_PAGE_SIZE, sort: 'price' }), enabled: Boolean(themeId) })
+  const news = useQuery({ queryKey: ['theme-news', themeId], queryFn: () => getNews({ theme_id: themeId, limit: THEME_NEWS_LIMIT }), enabled: Boolean(themeId) })
+  if (detail.isLoading) return <Loading />
+  if (detail.error) return <ErrorBox error={detail.error} />
+  if (!detail.data) return null
+  return <ThemeDetailView
+    detail={detail.data}
+    board={{ data: boardQuery.data, loading: boardQuery.isLoading && board !== null, error: boardQuery.error }}
+    members={{ data: members.data, loading: members.isLoading, error: members.error }}
+    onMemberPageChange={setMemberPage}
+    news={{ data: news.data, loading: news.isLoading, error: news.error }}
+  />
 }
 
 function StockTable({ rows }: { rows: StockDirectoryRow[] }) {
@@ -848,15 +767,6 @@ function StockTable({ rows }: { rows: StockDirectoryRow[] }) {
   return <div className="table-wrap"><p className="small-note">單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>代號</th><th>名稱</th><th>交易所</th><th>類型</th><th>最近收盤</th><th>目前研究動作</th><th>策略判斷資料</th></tr></thead><tbody>{rows.map((row) => {
     const instrument = row.instrument ?? row
     return <tr key={instrument.exchange + instrument.symbol}><td><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link></td><td>{instrument.name}</td><td>{marketDisplayLabel(instrument.exchange)}</td><td>{instrumentTypeLabel(instrument.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}</td><td>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</td><td><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></td></tr>
-  })}</tbody></table></div>
-}
-
-function ThemeMemberTable({ rows }: { rows: StockDirectoryRow[] }) {
-  if (!rows.length) return <div className="empty panel">沒有符合條件的族群成員。</div>
-  return <div className="table-wrap"><p className="small-note">單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>角色</th><th>收盤</th><th>資料日期</th></tr></thead><tbody>{rows.map((row) => {
-    const instrument = row.instrument ?? row
-    const stockPath = '/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)
-    return <tr key={instrument.exchange + instrument.symbol}><td><Link className="symbol-link" to={stockPath}>{instrument.symbol}</Link></td><td><Link className="symbol-link" to={stockPath}>{instrument.name}</Link></td><td>{marketDisplayLabel(instrument.exchange)}</td><td>{row.role === 'leader' ? '領先成員' : row.role === 'member' ? '成員' : '角色待核實'}</td><td className="numeric-cell">{formatTableNumber(row.latest_bar?.close ?? row.latest_price, 2)}</td><td>{formatTaiwanDateTime(row.latest_bar?.date ?? row.price_as_of, true)}</td></tr>
   })}</tbody></table></div>
 }
 

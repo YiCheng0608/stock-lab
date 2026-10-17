@@ -4,7 +4,7 @@
 
 ## 目前產品能力
 
-已有官方資料收集／回補（TWSE／TPEx 整批日行情、法人、融資、官方事件）、v1 規則（`breakout_v1`／`pullback_v1`／`hot_group_v1`）、行動摘要、持倉、技術回測及研究介面；個股頁已有日／週 K 線、成交量、MA5～120 與 MACD／RSI／KD／布林面板（讀 bars API）；國內／國際財經新聞每 2 小時收集進 DB 並以規則關聯個股（[新聞來源](DATA_SOURCES.md#新聞來源)、[NEWS_SPEC](NEWS_SPEC.md)），LLM 判讀尚未接上；族群已分官方產業與版本化題材表兩層，`hot_group_v1` 對兩者各算一榜並有排名 API（[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)、[hot_group_v1](V1_SPEC.md#hot_group_v1)），族群頁與今日頁尚未改版；[五個主導航](PRODUCT_SPEC.md#2-主導航與資訊順序)已存在。[2026-10-17 基線](#v1-範圍基線2026-10-17-核定)的 M1～M3 均未完成。
+已有官方資料收集／回補（TWSE／TPEx 整批日行情、法人、融資、官方事件）、v1 規則（`breakout_v1`／`pullback_v1`／`hot_group_v1`）、行動摘要、持倉、技術回測及研究介面；個股頁已有日／週 K 線、成交量、MA5～120 與 MACD／RSI／KD／布林面板（讀 bars API）；國內／國際財經新聞每 2 小時收集進 DB 並以規則關聯個股（[新聞來源](DATA_SOURCES.md#新聞來源)、[NEWS_SPEC](NEWS_SPEC.md)），LLM 判讀尚未接上；族群已分官方產業與版本化題材表兩層，`hot_group_v1` 對兩者各算一榜並有排名 API（[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)、[hot_group_v1](V1_SPEC.md#hot_group_v1)）；族群頁可切換產業／題材兩榜看排名、五分項、品質與成員數，族群詳情有近 20 日熱度走勢、成員（題材附證據）與相關新聞，今日頁顯示兩榜 Top 10；[五個主導航](PRODUCT_SPEC.md#2-主導航與資訊順序)已存在。[2026-10-17 基線](#v1-範圍基線2026-10-17-核定)的 M1～M3 均未完成。
 
 ## 接下來的順序：近期產品里程碑
 

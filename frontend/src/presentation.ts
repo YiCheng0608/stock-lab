@@ -273,21 +273,10 @@ export function researchRequirementLabel(field: string): string {
   return labels[value.toLowerCase()] ?? (/[\u3400-\u9fff]/.test(value) ? value.replace(/\bTAIEX\b/g, '加權指數') : '條件名稱待核實')
 }
 
-export function categoryLabel(value: string | null | undefined): string {
-  const labels: Record<string, string> = { industry: '產業族群', theme: '題材族群', concept: '概念族群', etf: 'ETF 族群', ipo: '新上市族群', 'new listings': '新上市族群', stock: '股票族群' }
-  return labels[value?.toLowerCase() ?? ''] ?? (value && /[\u3400-\u9fff]/.test(value) ? value : '分類待核實')
-}
-
 // Temporary UI guard for the currently known official-industry membership
 // migration issue. Remove this flag after the repaired source data is verified.
 export const TEMPORARY_INDUSTRY_GROUP_GUARD = true
 export const TEMPORARY_INDUSTRY_GROUP_NOTICE = '既有族群關聯待重新核實；排行與相關研究條件僅供查閱。'
-
-export function isTemporaryIndustryTheme(theme: { category?: string | null; name_status?: string | null }): boolean {
-  if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
-  const category = theme.category?.trim().toLowerCase() ?? ''
-  return category === '股票族群' || category === 'industry' || category.startsWith('industry ·') || category.startsWith('產業')
-}
 
 export function isTemporaryIndustryGroupName(name: string | null | undefined): boolean {
   if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
@@ -368,4 +357,20 @@ export function productQualityLabel(dataQuality?: string, kind: ProductQualityKi
   if (status === 'complete') return '資料品質完整'
   if (status === 'unknown') return '資料品質待核實'
   return '資料品質待補'
+}
+
+export function newsSourceLabel(source: string | null | undefined): string {
+  if (!source) return '官方公告資料'
+  const value = source.trim()
+  const normalized = value.toLowerCase()
+  if (normalized === 'mops' || normalized.startsWith('mops_')) return '公開資訊觀測站公告'
+  if (normalized.startsWith('tpex')) return '櫃買中心官方資料'
+  if (normalized.startsWith('twse')) return '證交所官方資料'
+  return value.includes('官方') ? value : '官方公告資料'
+}
+
+export function officialEventDisplayTitle(title: string | null | undefined, type: string | null | undefined = null): string {
+  if (title === 'TPEx resumption' || type === 'TPEx resumption') return '上櫃股票恢復交易'
+  if (title === 'TPEx suspension interval' || type === 'TPEx suspension interval') return '上櫃股票暫停交易期間'
+  return title || type || '官方事件'
 }

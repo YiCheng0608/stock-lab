@@ -29,14 +29,10 @@ def changed_paths(base: str) -> list[str]:
 
 
 # Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
-# Keep in step with backend/tests:
-#   test_public_candidate_identity.py:237-247 renders frontend/src/App.tsx with Node and the frontend/node_modules
-#   that frontend/package.json and frontend/pnpm-lock.yaml install.
-BACKEND_READ_DIRS = ("frontend/src/",)
-BACKEND_READ_FILES = frozenset({
-    "frontend/package.json",
-    "frontend/pnpm-lock.yaml",
-})
+# Keep in step with backend/tests. None today: no backend test reads frontend/ since #179 removed the
+# App.tsx renderer check (the frontend no longer renders candidate identities).
+BACKEND_READ_DIRS: tuple[str, ...] = ()
+BACKEND_READ_FILES: frozenset[str] = frozenset()
 
 
 def change_flags(paths: list[str]) -> dict[str, bool]:

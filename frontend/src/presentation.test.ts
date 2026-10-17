@@ -1,4 +1,4 @@
-import { categoryLabel, groupDisplayName, isTemporaryIndustryGroupName, isTemporaryIndustryTheme, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './presentation'
+import { groupDisplayName, isTemporaryIndustryGroupName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -50,7 +50,6 @@ expect(groupDisplayName('ETF · broad_market') === 'ETF · 大盤型', 'ETF grou
 expect(groupDisplayName('ETF · bond') === 'ETF · 債券型', 'bond ETF category is distinct')
 expect(groupDisplayName('ETF · unknown_new') === 'ETF · 分類待核實', 'unknown ETF enum is not leaked')
 expect(groupDisplayName('Industry 24') === '產業名稱待核實', 'unverified industry code is not promoted')
-expect(categoryLabel('unknown_new') === '分類待核實', 'unknown category remains unknown')
 expect(researchRequirementLabel('prior_20_highs') === '前 20 個交易日高點', 'requirement codes are translated')
 expect(researchRequirementLabel('unknown_new') === '條件名稱待核實', 'unknown requirements are not fabricated')
 expect(stockDirectoryActionLabel('new_state', 'new_state') === '研究動作待核實', 'unknown action label is not leaked')
@@ -58,7 +57,5 @@ expect(stockDirectoryActionLabel('new_state', 'new_state') === '研究動作待�
 expect(stockDirectoryActionLabel('wait_pullback') === '等待回踩條件', 'known state survives an absent translated label')
 expect(researchRequirementLabel('族群相對 TAIEX 的20日超額報酬') === '族群相對 加權指數 的20日超額報酬', 'mixed Chinese requirement translates benchmark name')
 
-expect(isTemporaryIndustryTheme({ category: '股票族群', name_status: 'official' }), 'official industry themes use the temporary verification guard')
-expect(!isTemporaryIndustryTheme({ category: 'ETF', name_status: 'official' }), 'ETF themes stay outside the industry verification guard')
 expect(isTemporaryIndustryGroupName('Industry · Shipping'), 'legacy industry membership names use the temporary verification guard')
 expect(TEMPORARY_INDUSTRY_GROUP_NOTICE.includes('既有族群關聯待重新核實'), 'temporary industry notice keeps the fixed warning copy')
