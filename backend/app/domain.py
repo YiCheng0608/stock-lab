@@ -447,7 +447,19 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
     "pool": {
         "strategies": ["breakout_v1", "pullback_v1"],
         "signal_namespace": "analysis",
-        "signal_status": ["conditional"],
+        # Judged actionable (conditional) by analyze on T.  evaluate later
+        # moves the status (active, target_1_hit, ...) but never this flag, so
+        # recomputing an old date sees the same pool.  Rows without the flag
+        # fall back to the statuses only a conditional signal can reach.
+        "actionable_on_signal_date": "rule_evidence_json.actionable_is_true",
+        "legacy_actionable_statuses": [
+            "conditional",
+            "active",
+            "target_1_hit",
+            "target_2_hit",
+            "invalidated",
+            "incomparable",
+        ],
         "instrument_types": ["stock", "ipo"],
         "require_valid_levels": True,
         "one_row_per_instrument": "highest_total_then_breakout",

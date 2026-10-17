@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -143,6 +143,7 @@ def signal(
     target_1=103.2,
     day=T,
     evidence=True,
+    actionable_flag=True,
 ):
     breakout = strategy == "breakout_v1"
     prior_volume = 1000 / volume_ratio
@@ -171,7 +172,10 @@ def signal(
         target_1=target_1,
         target_2=106.0,
         source_report="fixture-bars",
-        rule_evidence_json={"inputs": inputs},
+        # analyze sets the flag on T; evaluate later moves only the status.
+        rule_evidence_json={"inputs": inputs, "actionable": status == "conditional"}
+        if actionable_flag
+        else {"inputs": inputs},
     )
     db.add(row)
     db.flush()
@@ -265,7 +269,7 @@ def test_config_snapshot_is_pinned_and_weights_sum_to_one():
 
     snapshot = json.dumps(CANDIDATE_SCORE_V1, sort_keys=True, ensure_ascii=False)
     assert hashlib.sha256(snapshot.encode("utf-8")).hexdigest() == (
-        "d81303aa8bf8213902fa12d88bd6b2b261bf53f7e638f96f0fed3986d3a43e65"
+        "bf477ab5a61bb4aa8c1d6962ebe19d21b4c608083fe3593b718dbbc429a262c8"
     )
     assert CANDIDATE_SCORE_V1["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v1"
     assert sum(CANDIDATE_SCORE_V1["weights"].values()) == pytest.approx(1.0)
@@ -719,3 +723,86 @@ def test_api_reports_the_zero_reason(db, client):
     assert body["candidate_count"] == 0 and body["items"] == []
     assert body["zero_reason"] == "no_actionable_signals"
     assert body["zero_reason_text"] == "當日沒有成立（條件成立）的策略訊號"
+
+
+def _snapshot(db):
+    db.expire_all()
+    return [
+        (
+            row.instrument_id,
+            row.signal_id,
+            row.rank,
+            row.total_score,
+            row.weight_coverage,
+            row.components_json,
+            row.reasons_json,
+            row.groups_json,
+        )
+        for row in rows(db)
+    ]
+
+
+def test_recomputing_a_tracked_date_sees_the_same_pool(db):
+    """evaluate moves T's conditional signals on; a recompute of T must not lose them."""
+
+    a = stock(db, "1101", flow=(30.0, 20.0, 0.0))
+    b = stock(db, "1102")
+    c = stock(db, "1103")
+    first = signal(db, a, volume_ratio=2.0)
+    second = signal(db, b, "pullback_v1", volume_ratio=0.8)
+    third = signal(db, c)
+    db.commit()
+    on_the_day = compute_daily_candidates(db, T)
+    expected = _snapshot(db)
+    assert on_the_day["candidate_count"] == 3
+
+    first.status, second.status, third.status = "active", "target_1_hit", "invalidated"
+    db.execute(delete(DailyCandidate))
+    db.execute(delete(CandidateRun))
+    db.commit()
+    again = compute_daily_candidates(db, T)
+    assert again["already_complete"] is False and again["candidate_count"] == 3
+    assert _snapshot(db) == expected
+    run = db.scalar(select(CandidateRun))
+    assert run.summary_json["actionable_signals"] == 3
+    assert run.summary_json["signal_status_counts"] == {
+        "active": 1,
+        "invalidated": 1,
+        "target_1_hit": 1,
+    }
+
+
+def test_rows_without_the_flag_fall_back_to_post_conditional_statuses(db):
+    legacy = stock(db, "1101")
+    expired = stock(db, "1102")
+    unflagged_observation = stock(db, "1103")
+    signal(db, legacy, status="active", actionable_flag=False)
+    signal(
+        db, expired, status="expired", actionable_flag=False
+    )  # reachable from observation too
+    signal(db, unflagged_observation, status="observation", actionable_flag=False)
+    flagged_off = signal(db, stock(db, "1104"), status="active")
+    assert (
+        flagged_off.rule_evidence_json["actionable"] is False
+    )  # the flag wins over the status
+    db.commit()
+    compute_daily_candidates(db, T)
+    assert [row.instrument_id for row in rows(db)] == [legacy.id]
+
+
+def test_equal_totals_for_both_strategies_keep_breakout(db):
+    a = stock(db, "1101")
+    breakout = signal(db, a, "breakout_v1")
+    pullback = signal(db, a, "pullback_v1")
+    db.commit()
+    result = compute_daily_candidates(db, T)
+    (row,) = rows(db)
+    alternative = row.components_json["alternatives"][0]
+    # Each strategy pool has one signal, so every percentile is 0.5 and the totals tie.
+    assert alternative["total_score"] == row.total_score
+    assert row.strategy == "breakout_v1" and row.signal_id == breakout.id
+    assert (
+        alternative["strategy"] == "pullback_v1"
+        and alternative["signal_id"] == pullback.id
+    )
+    assert result["exclusions"] == {"same_instrument_lower_scored_strategy": 1}

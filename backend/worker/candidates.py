@@ -1,7 +1,9 @@
 """Daily candidate list scored with ``candidate_score_v1`` (V1_SPEC).
 
 Runs after ``analyze``: it reads the trading date's ``breakout_v1`` /
-``pullback_v1`` signals, keeps the conditional ones with legal price levels
+``pullback_v1`` signals, keeps the ones analyze judged actionable
+(conditional) on that date, whatever tracking status they reached since, with
+legal price levels
 on common stocks, scores them on four components (technical, chips, news
 sentiment, group) and stores the top of the list with rule-based reasons.
 
@@ -89,6 +91,15 @@ class _PoolEntry:
     total: float | None = None
     coverage: float = 0.0
     groups: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _actionable_on_signal_date(signal: Signal, pool_config: dict[str, Any]) -> bool:
+    evidence = (
+        signal.rule_evidence_json if isinstance(signal.rule_evidence_json, dict) else {}
+    )
+    if "actionable" in evidence:
+        return evidence["actionable"] is True
+    return signal.status in pool_config["legacy_actionable_statuses"]
 
 
 def _finite(value: Any) -> float | None:
@@ -640,10 +651,12 @@ def compute_daily_candidates(
     status_counts: dict[str, int] = defaultdict(int)
     exclusions: dict[str, int] = defaultdict(int)
     pool: list[_PoolEntry] = []
+    actionable = 0
     for signal, strategy, instrument in rows:
         status_counts[signal.status] += 1
-        if signal.status not in pool_config["signal_status"]:
+        if not _actionable_on_signal_date(signal, pool_config):
             continue
+        actionable += 1
         if not strategy.active:
             exclusions["inactive_strategy_formula"] += 1
             continue
@@ -686,13 +699,14 @@ def compute_daily_candidates(
         )
 
     summary: dict[str, Any] = {
-        "signal_status_counts": dict(sorted(status_counts.items()))
+        # Current statuses; the pool uses the actionable flag set on T.
+        "signal_status_counts": dict(sorted(status_counts.items())),
+        "actionable_signals": actionable,
     }
-    conditional = sum(status_counts[status] for status in pool_config["signal_status"])
     zero_reason = None
     selected: list[_PoolEntry] = []
     if not pool:
-        zero_reason = "no_actionable_signals" if conditional == 0 else "all_excluded"
+        zero_reason = "no_actionable_signals" if actionable == 0 else "all_excluded"
     else:
         selected = _score_pool(db, trading_date, pool, config, summary, exclusions)
         if not selected:
