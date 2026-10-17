@@ -97,3 +97,24 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 - **rate limit**：每次 9 個請求、間隔 2 秒，一天約 108 個請求；不重試，限流或失敗的 feed 等下一輪。
 - **冪等**：重跑或兩輪重疊抓到同一則時，不新增列、不改寫既有列。
 - **錯誤**：每個來源的結果寫入 `run_type=news` 的 ingestion run，可用 `/api/ingestion-runs?q=news` 查；CLI 也把同一份結果以 JSON 印到 stdout，排程把 stdout／stderr 導到日誌檔保存。
+
+### 6.1 統籌看門狗
+
+`tools/ops/ensure_coordinator.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行：讀心跳檔判定統籌是否在線，停擺就送喚醒文、不在就開新統籌，判定規則見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)；另以檔案與唯讀 DB 檢查排程異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則：
+
+- `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
+- `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
+- `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`。
+
+`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有 `orca` 與已登入的 `gh`；Python 只用來解析 JSON 與唯讀查 DB，預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
+
+| 動作 | 命令 |
+| --- | --- |
+| 預覽 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -WhatIf` |
+| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1`（`-DataDir`、`-PythonPath` 預設 `STOCK_DATA_DIR`、`.venv`；`-DryRun` 註冊只判定不動作的版本，用來以 `Start-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog` 驗證排程環境） |
+| 查詢 | `schtasks /query /tn "\stock-lab\watchdog" /v /fo list` |
+| 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
+| 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
+| 手動判定 | `bash tools/ops/ensure_coordinator.sh --dry-run`（只輸出將做的動作與接手文） |
+
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/ensure_coordinator.log`，每列為 UTC 時間、事件、`key=value` 與說明；喚醒文（每 60 分鐘最多一次）、開統籌（每 120 分鐘最多一次）與異常留言（每日一則）的頻率限制都以此日誌判斷。執行中持有 `logs/ensure_coordinator.lock/`，殘留超過 30 分鐘自動移除。
