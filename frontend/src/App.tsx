@@ -40,7 +40,6 @@ import type {
   GroupDetail,
   GroupMember,
   InstrumentDetail,
-  NewsItem,
   Pagination,
   Position,
   PositionInput,
@@ -58,7 +57,7 @@ import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { groupDisplayName, newsSourceLabel, officialEventDisplayTitle, formatProductTimeRole, isTemporaryIndustryGroupName, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
+import { groupDisplayName, officialEventDisplayTitle, formatProductTimeRole, isTemporaryIndustryGroupName, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
@@ -66,6 +65,8 @@ import { StockHeader } from './stock/StockHeader'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
 import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
+import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
 
 function formatNumber(value: unknown, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value)
@@ -182,17 +183,6 @@ function sourceLabel(source: string | null | undefined | readonly string[]): str
     'official-fixture': '官方資料',
   }
   return names[normalized] ?? (/^[\x00-\x7F]*$/.test(source) ? '來源待核實' : source)
-}
-
-function userFacingNewsThemes(item: NewsItem): NewsItem['themes'] {
-  return item.themes.filter((theme) => {
-    const name = theme.display_name.trim()
-    if (!name || name === '族群待確認') return false
-    // The API only emits verified active memberships.  Keep this small
-    // compatibility guard for an older server response that may still carry
-    // a legacy English group label until the backend is restarted.
-    return !/^(industry|etf|new listings)\b/i.test(name)
-  })
 }
 
 function instrumentTypeLabel(type: string): string {
@@ -475,33 +465,26 @@ function importantActionLevel(action: ActionSummary): string | null {
 
 function ProductTimeSummary({
   time,
-  news = false,
   compact = false,
   fallbackDate,
   fallbackEarliestDate,
 }: {
   time?: ProductTime
-  news?: boolean
   compact?: boolean
   fallbackDate?: string | null
   fallbackEarliestDate?: string | null
 }) {
-  const eventAt = news ? productTimeRoleDateTime(time, 'event_at') : undefined
-  const dateRole = news && eventAt ? 'event_at' : news ? 'event_date' : 'market_date'
-  const dateLabel = news ? (eventAt ? '事件時間' : '事件日期') : '資料日期'
+  const dateRole = 'market_date'
   const dateTime = productTimeRoleDateTime(time, dateRole)
-  const published = formatProductTimeRole(time, 'published_at')
-  const publishedLabel = time?.roles?.published_at?.precision === 'date' ? '發布日期' : '發布時間'
   const decision = formatProductTimeRole(time, 'decision_at')
   const earliest = formatProductTimeRole(time, 'earliest_execution_date', fallbackEarliestDate ?? null)
   const dateValue = formatProductTimeRole(time, dateRole, fallbackDate ?? null)
   return (
     <div className="small-note product-time-summary" data-testid="product-time-summary">
       <div>
-        <span>{dateLabel}：{dateValue}</span>
-        {news && <span> · {publishedLabel}：{published}</span>}
-        {!news && <span> · 決策時間：{decision}</span>}
-        {!news && <span> · 規則最早執行日：{earliest}</span>}
+        <span>資料日期：{dateValue}</span>
+        <span> · 決策時間：{decision}</span>
+        <span> · 規則最早執行日：{earliest}</span>
       </div>
       {dateTime && <time dateTime={dateTime} hidden />}
       {!compact && <div>時間以台灣時間顯示；未確認的時間保留待核實。</div>}
@@ -590,66 +573,10 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
   )
 }
 
-function newsCategoryLabel(item: NewsItem): string {
-  return item.category === 'company' ? '公司公告' : '交易所公告'
-}
-
-function newsEventDate(item: NewsItem): string | null {
-  return item.event_date ?? (item.event_at ? item.event_at.slice(0, 10) : null)
-}
-
-function ProductNewsCard({ item, detail = false }: { item: NewsItem; detail?: boolean }) {
-  const relatedInstruments = item.instruments ?? []
-  const visibleThemes = userFacingNewsThemes(item)
-  const impactLabel = item.impact_direction === 'positive' ? '可能正向' : item.impact_direction === 'negative' ? '可能負向' : '影響尚未判定'
-  const confidenceLabel = item.confidence === 'high' ? '高可信度' : '可信度待確認'
-  const eventDate = newsEventDate(item)
-  const displayTitle = officialEventDisplayTitle(item.title)
-
-  if (!detail) {
-    return (
-      <article className="news-list-item" data-testid="news-list-item">
-        <div className="news-list-time">{eventDate ? `事件日 ${formatTaiwanDateTime(eventDate, true)}` : item.published_at ? `發布日 ${formatTaiwanDateTime(item.published_at, true)}` : '日期待核實'}</div>
-        <div className="news-list-main">
-          <div className="news-list-meta"><span>{newsCategoryLabel(item)}</span><span>{newsSourceLabel(item.source_name)}</span></div>
-          <h3><Link to={'/news/' + encodeURIComponent(item.id)}>{displayTitle}</Link></h3>
-        </div>
-        <div className="news-list-related">
-          {relatedInstruments.length > 0
-            ? relatedInstruments.map((instrument) => <Link className="symbol-link" key={instrument.exchange + instrument.symbol} to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol} {instrument.name}</Link>)
-            : item.symbols.length > 0
-              ? item.symbols.map((symbol) => <span className="symbol-link" key={symbol}>{symbol}</span>)
-              : <span className="small-note">未指定標的</span>}
-        </div>
-      </article>
-    )
-  }
-
-  return (
-    <article className="panel news-card news-detail-card" data-testid="news-detail-card">
-      <div className="news-meta"><span>{newsCategoryLabel(item)}</span><span>{newsSourceLabel(item.source_name)}</span><span>{confidenceLabel}</span></div>
-      <ProductTimeSummary time={item.product_time} news fallbackDate={eventDate} />
-      <div className="news-detail-meta"><span>影響：{impactLabel}</span></div>
-      <div className="news-detail-body"><p>{item.summary ?? '官方資料未提供公告內容。'}</p></div>
-      {item.time_consistency === 'conflict' && <div className="warning-box">資料集事件日期與公告內容提及日期不一致，時間待人工核實。</div>}
-      {relatedInstruments.length > 0 ? (
-        <div className="tag-list">{relatedInstruments.map((instrument) => <Link className="tag symbol-tag" key={instrument.exchange + instrument.symbol} to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol} {instrument.name}</Link>)}</div>
-      ) : item.symbols.length > 0 ? <div className="tag-list">{item.symbols.map((symbol) => <span className="tag" key={symbol}>{symbol}</span>)}</div> : null}
-      {visibleThemes.length > 0 && <div className="tag-list">{visibleThemes.map((theme) => <span className="tag" key={theme.theme_id}>{groupDisplayName(theme.display_name)}</span>)}</div>}
-      <div className="news-source">
-        {item.source.url && item.source.url_kind === 'feed'
-          ? <a href={item.source.url} target="_blank" rel="noreferrer">查看官方公告資料集</a>
-          : '官方公告資料集連結未提供'}
-      </div>
-       <details className="technical-details"><summary>技術資訊</summary><div>來源類型：官方公告／資料集</div><div>收錄時間：{formatProductTimeRole(item.product_time, 'collected_at')}</div><div>資料日：{formatTaiwanDateTime(item.provenance.data_as_of, true)}</div>{displayTitle !== item.title && <div>原始標題：{item.title}</div>}<div>原始資料識別碼：{item.provenance.raw_payload_id ?? '—'} · 事件識別碼：{item.provenance.event_id ?? '—'}</div><div>來源位置：{item.provenance.endpoint ?? '—'}</div></details>
-    </article>
-  )
-}
-
 function NewsDetailPage() {
   const { newsId = '' } = useParams()
   const query = useQuery({ queryKey: ['news-detail', newsId], queryFn: () => getNewsDetail(newsId), enabled: Boolean(newsId) })
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><Link to="/news" className="back-link">← 回到新聞</Link><PageTitle eyebrow="官方公告詳情" title={officialEventDisplayTitle(query.data.title)} description="此頁顯示官方事件的完整摘要與可稽核來源；國際與媒體新聞尚未接入。" /><ProductNewsCard item={query.data} detail /></div>}</QueryState>
+  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <NewsDetailView item={query.data} />}</QueryState>
 }
 
 export function TodayPage() {
@@ -686,7 +613,7 @@ export function TodayPage() {
       {query.data && (
         <>
           <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
-          {query.data.news?.length ? <div className="news-list">{query.data.news.slice(0, 3).map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
+          {query.data.news?.length ? <div className="news-cards">{query.data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
           <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
           <section className="section-head"><div><div className="eyebrow">熱門候選／使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
           {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{query.data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
@@ -703,31 +630,18 @@ function StatCard({ label, value, detail }: { label: string; value: string; deta
 }
 
 function NewsPage() {
-  const [draft, setDraft] = useState('')
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filters: NewsFilters = { tab: parseNewsTab(searchParams.get('tab')), q: searchParams.get('q') ?? '', symbol: searchParams.get('symbol') ?? '' }
   const [page, setPage] = useState(1)
   const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined])
-  const [category, setCategory] = useState('')
-  const [sourceKind, setSourceKind] = useState('')
-  const [timeConsistency, setTimeConsistency] = useState('')
   const cursor = pageCursors[page - 1]
-  const query = useQuery({
-    queryKey: ['news', { search, cursor, category, sourceKind, timeConsistency }],
-    queryFn: () => getNews({ q: search || undefined, cursor, limit: 20, category: category || undefined, source_kind: sourceKind || undefined, time_consistency: timeConsistency || undefined }),
-  })
+  const params = newsListParams(filters, cursor)
+  const query = useQuery({ queryKey: ['news', params], queryFn: () => getNews(params) })
   const resetPage = () => { setPage(1); setPageCursors([undefined]) }
-  const submit = (value = draft.trim()) => { setSearch(value); resetPage() }
-  const clear = () => { setDraft(''); setSearch(''); resetPage() }
-  const changeFilter = (setter: (value: string) => void, value: string) => { setter(value); resetPage() }
+  const changeFilters = (next: NewsFilters) => { setSearchParams(newsPageSearch(next), { replace: true }); resetPage() }
   const nextPage = (nextCursor: string) => { setPageCursors((current) => [...current.slice(0, page), nextCursor]); setPage(page + 1) }
   const previousPage = () => { if (page > 1) setPage(page - 1) }
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page">
-     <PageTitle eyebrow="最新官方公告" title="新聞" description="目前為官方公告列表；列表只顯示事件日或發布日，完整時間與衝突說明請進入詳情。">
-      <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋標題、摘要、來源或代號" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><select className="filter-select" value={category} onChange={(event) => changeFilter(setCategory, event.target.value)}><option value="">全部類別</option><option value="company">公司事件</option><option value="taiwan">台灣官方事件</option></select><select className="filter-select" value={sourceKind} onChange={(event) => changeFilter(setSourceKind, event.target.value)}><option value="">一般公告</option><option value="official_disclosure">官方公告／資料</option></select><select className="filter-select" value={timeConsistency} onChange={(event) => changeFilter(setTimeConsistency, event.target.value)}><option value="">全部日期狀態</option><option value="conflict">日期待確認</option></select></div>
-    </PageTitle>
-     {query.data.items.length ? <div className="news-list">{query.data.items.map((item) => <ProductNewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">沒有符合條件的官方事件。</div>}
-     <CursorControls meta={query.data.meta} page={page} itemCount={query.data.items.length} onNext={nextPage} onPrevious={previousPage} onReset={resetPage} />
-  </div>}</QueryState>
+  return <NewsListView filters={filters} onFiltersChange={changeFilters} query={{ data: query.data, loading: query.isLoading, error: query.error }} page={page} onNext={nextPage} onPrevious={previousPage} onReset={resetPage} />
 }
 
 function ThemesPage() {
@@ -805,6 +719,7 @@ function StockPage() {
   const chartBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, barsInterval], queryFn: () => getStockBars(exchange, symbol, barsInterval), enabled })
   useEffect(() => setCutoffDraft(asOf), [asOf])
   const [tab, setTab] = useState<StockTab>('chart')
+  const stockNews = useQuery({ queryKey: ['stock-news', exchange, symbol], queryFn: () => getNews(stockNewsParams(symbol)), enabled: enabled && tab === 'news' })
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
@@ -842,13 +757,13 @@ function StockPage() {
   return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} loading={dayBars.isLoading}>
-      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" className="input" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="btn btn-secondary btn-sm">套用截止</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期；截止日期不影響頁首收盤與 K 線。</span></form>
+      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" className="input" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="btn btn-secondary btn-sm">套用截止</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期；截止日期不影響頁首收盤、K 線與新聞時間線。</span></form>
     </StockHeader>
     <Tabs items={tabs} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
       {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
-      {tab === 'news' && <StockEventList news={data.news} events={data.events} />}
+      {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
       {tab === 'research' && <>{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><Card eyebrow="研究條件 · 只讀快照" title="族群與策略條件"><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></Card></>}
       {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></Card></>}
     </div>
@@ -917,10 +832,6 @@ function ConditionList({ conditions }: { conditions: InstrumentDetail['strategy_
   return <div className="condition-list">{Object.entries(conditions).map(([name, condition]) => <div className="condition" key={name}><div className="condition-head"><strong><Term id={name === 'breakout' ? 'breakout' : 'pullback'}>{condition.label ?? strategyLabel(name)}</Term></strong><span className="muted">{researchSourceLabel(condition.source)}</span></div><div className="tag-list">{condition.requires.map((field) => <span className="tag" key={field}>{fieldLabel(field)}</span>)}</div>{condition.technical && <details className="technical-details"><summary>技術資訊</summary>{Object.values(condition.technical).map((value) => <div key={value}>{value}</div>)}</details>}</div>)}</div>
 }
 
-function EventPanel({ rows }: { rows: NewsItem[] }) {
-  return <div className="panel"><h2>官方事件</h2>{rows.length ? rows.map((item) => <ProductNewsCard key={item.id} item={item} />) : <div className="empty">尚無個股官方事件。</div>}</div>
-}
-
 function QualityPanel({ summary, rows }: { summary: InstrumentDetail['quality_summary']; rows: DataQualityRow[] }) {
   if (!summary) return <div className="panel"><h2>資料品質</h2><div className="empty">尚無依用途分開的資料品質摘要。</div></div>
   const researchDescription = productResearchDescription(summary.research.status, summary.research.missing_fields.map(fieldLabel))
@@ -977,10 +888,8 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
   </section>
 }
 
-function StockEventList({ news, events }: { news: NewsItem[]; events: InstrumentDetail['events'] }) {
-  if (!news.length && !events.length) return <Card><EmptyState reason="尚無個股新聞或官方事件。" /></Card>
+function StockEventList({ events }: { events: InstrumentDetail['events'] }) {
   return <>
-    {news.length > 0 && <div className="news-list">{news.map((item) => <ProductNewsCard key={item.id} item={item} />)}</div>}
     {events.length > 0 && <section className="panel stock-event-list"><h2>官方事件紀錄</h2><div className="event-list">{events.map((item, index) => { const displayTitle = officialEventDisplayTitle(item.title, item.type); return <article className="event-item" key={`${item.date}-${item.type}-${index}`}><div className="small-note">事件日 {formatTaiwanDateTime(item.date, true)} · 來源 {sourceLabel(item.source)}</div><strong>{displayTitle}</strong>{item.description && <p>{item.description}</p>}{displayTitle !== (item.title || item.type || '官方事件') && <details className="technical-details"><summary>資料來源</summary><div>原始標題：{item.title || '—'} · 原始類型：{item.type || '—'}</div><div>資料截至：{formatTaiwanDateTime(item.data_as_of, true)}</div></details>}</article> })}</div></section>}
   </>
 }

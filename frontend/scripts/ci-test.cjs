@@ -25,6 +25,7 @@ const SUITES = [
   { file: 'components/StrategyVersionCard.test.tsx' },
   { file: 'components/ui/ui.test.tsx' },
   { file: 'themes/themeBoards.test.tsx' },
+  { file: 'news/news.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

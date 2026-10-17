@@ -19,11 +19,11 @@
 | data_insufficient／data_incomplete | 策略判斷資料待補 |
 | canonical／canonical config snapshot | 固定研究規則／規則版本與稽核設定；只在研究詳情 |
 | prior_20_highs／bars_20d／bars_60d／institutional_flow_5d | 前 20 個交易日高點／近 20 日行情／近 60 日行情／近 5 日法人籌碼 |
-| company／taiwan／international | 個股公告／台灣官方事件／國際事件；尚未接入的來源不顯示空卡 |
+| company／taiwan／domestic／international | 個股公告／台灣官方事件／國內／國際；尚未接入的來源不顯示空卡 |
 | foreign_investor | 外資（口徑見[資料來源](DATA_SOURCES.md#法人口徑)） |
 | high／medium／low・unknown confidence | 「標的關聯已驗證」／「關聯由規則核實」（可展開方法與規則）／「關聯尚未判定」；不得解讀成勝率，low／unknown 不驅動進場、出場或其他交易動作 |
 | impact_direction unknown | 影響尚未判定 |
-| official_disclosure | 官方公告資料 |
+| official_disclosure／macro_official／media | 官方公告資料／官方機構／媒體報導 |
 | 未核實 Industry 名稱、代碼或 ID | 日常頁不顯示；系統頁寫「官方產業名稱待對照」 |
 
 ## 3. 三種資料完整度
@@ -42,10 +42,12 @@
 
 ## 4. 新聞卡文案與折疊
 
+- **分頁**：`/news` 以「國內」（`category=domestic`）、「國際」（`category=international`）、「官方公告」（`source_kind=official_disclosure`）三個分頁瀏覽，可再以關鍵字與股票代號篩選；個股頁「新聞與公告」顯示該股最近 50 則（交易所＋代號完全相符，官方公告為純代號相符）。
 - **卡片正面**：固定順序為分類與來源 → 兩行內原始標題 → 120 個全形字元或三行內摘要 → 來源時間 → 影響／關聯 → 相關標的 → 來源連結。標題只正規化連續空白與換行，列表截在兩行，詳情保留完整標題。`/news` 不展開全文；`/news/:id` 用「展開公告內容／收合公告內容」，只顯示可用的來源 description，不顯示 raw JSON 或內部 ID。
-- **摘要**：沒有摘要時寫「官方來源未提供摘要」。只有存在合法可用原文時，才可另顯示附引用與方法的「AI 摘要」；不得由標題或模型記憶補造。
-- **日期**：`published_at`／`event_at`／`event_date` 依序寫「發布於 日期時間」／「事件於 日期時間」／「事件日 日期」；三者皆無寫「來源時間未提供」，collected_at 只在詳情稽核層顯示「系統收錄時間」；`time_consistency=conflict` 寫「資料集事件日期與公告內容提及日期不一致，時間待人工核實」。排序依 [NEWS_SPEC §4](NEWS_SPEC.md#4-時間與排序)，依 collected_at 排序的項目不可顯示成發布時間。
-- **來源連結**：`source_url_kind=item` 寫「查看原文／原始公告」；`feed` 寫「查看官方公告資料集」並提示未必定位本則公告；`none` 寫「來源連結未提供」，不畫無效按鈕。raw payload、hash 與 event ID 只在稽核層。
+- **摘要**：沒有摘要時寫「來源未提供摘要」。只有存在合法可用原文時，才可另顯示附引用與方法的「AI 摘要」；不得由標題或模型記憶補造。
+- **影響與 AI 推論**：方向寫「可能正向」「可能負向」「正負互見」「影響尚未判定」，前置色點（正向 `--color-up`、負向 `--color-down`、互見 `--color-flat`）；unknown 與 `unsupported` 不加色點。卡片上的方向若來自 AI，後接「AI 推論」badge。`/news/:id` 的「AI 摘要與判讀」區與來源事實分開，列 AI 摘要、方向與範圍、理由、候選標的與候選題材（標「待核實」並寫「模型把握高／中／低」；代號查無標的寫「代號未對應到已知標的」且不連結），以及模型、提示版本與產生時間；沒有結果寫「此則尚未產生 AI 摘要與判讀」。
+- **日期**：`published_at`／`event_at`／`event_date` 依序寫「發布於 日期時間」／「事件於 日期時間」／「事件日 日期」；三者皆無寫「來源時間未提供」，有值但 `product_time` 角色為 unknown 或 `time_consistency=conflict` 寫「來源時間待核實」，collected_at 只在詳情稽核層顯示「系統收錄時間」；`time_consistency=conflict` 寫「資料集事件日期與公告內容提及日期不一致，時間待人工核實」。排序依 [NEWS_SPEC §4](NEWS_SPEC.md#4-時間與排序)，依 collected_at 排序的項目不可顯示成發布時間。
+- **來源連結**：`source_url_kind=item` 寫「查看原文／原始公告」；`feed` 寫「查看官方公告資料集」並提示「資料集連結未必定位到本則公告」；`none` 寫「來源連結未提供」，不畫無效按鈕。raw payload、hash 與 event ID 只在稽核層。
 - **族群關聯**：只顯示來源直接指向且已驗證的族群，或已核實的 Event—Instrument—Theme 關聯；由現有 membership 自動推得、英文名稱／代碼、名稱狀態未核實的關聯只留系統層。關聯可信度文案見 §2。
 
 ## 5. 行動中心的預設資訊層級
