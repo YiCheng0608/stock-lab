@@ -93,7 +93,7 @@ INDUSTRY_DISPLAY_ZH: Mapping[str, str] = {
     "Plastic": "塑膠",
     "Textile": "紡織纖維",
     "Electrical Machinery": "電機機械",
-    "Electrical Cable": "電線電纜",
+    "Electrical Cable": "電器電纜",
     "Glass": "玻璃陶瓷",
     "Paper": "造紙",
     "Iron and Steel": "鋼鐵",

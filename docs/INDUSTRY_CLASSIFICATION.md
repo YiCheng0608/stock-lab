@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類契約
 
-本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts` 的 `TEMPORARY_INDUSTRY_GROUP_NOTICE`）。
+本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts` 的 `TEMPORARY_INDUSTRY_GROUP_NOTICE`）；正式 DB 執行 [§5.1](#51-既有錯配-membership-修復) 的修復後，族群頁的提示可移除，但個股頁列出的是未經驗證的完整 membership 歷史（含 D0 前的舊 row），要另行過濾後才能移除。
 
 ## 1. 官方代碼來源
 
@@ -88,6 +88,17 @@ Collector 對三個 domain 各自計算 desired state，只操作自己擁有的
 - **ETF**：`normalize_etf_category`（`backend/worker/sources.py`）把 TWSE `FundType`／TPEx `indexName` 對到本地 heuristic 類別，無法辨識的文字歸 `thematic`，不是官方 taxonomy；類別缺失或非法時整批 rollback，不關既有 ETF membership。ETF 轉為 stock／IPO 只接受相符的官方 current record。
 - **期間**：同日同 group 不變更；改分類時舊 open row 關於 `D-1`、自 D 開新 row；可信空集合只關閉；不回填歷史。same-day 錯誤、future open、overlap／multiple-open、inactive 或 metadata 衝突在變更前拒絕，不刪歷史、不改日期、不任選一列；raw 可保留，membership／group 變更整筆 rollback。
 - **新上市**：窗口為 `0 <= D-L <= 60` 個曆日（`L` 為官方掛牌日，`E=L+60`），與 20／60 根 bars 的可行動門檻分離。只有 `L<=D<=E` 才新建 bounded `[max(D,L), E]`；`L>D` 不預建，`D>E` 不回填；舊 open row 在窗口內補 `valid_to=E`，已過期只 forward-close 於 `D-1`；既有 bounded row 的 `valid_to` 與 E 不符時拒絕。缺 L 為 unresolved 並保留舊 membership。
+
+### 5.1 既有錯配 membership 修復
+
+Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了錯誤的代碼→label 對照（例如 17 掛在 `Communications`、25 掛在 `Financial`），`valid_from` 填的是上市日。群組本身的 id、`name` 與 `display_name_zh` 和 label 一致，錯的是成員所在的群組。`python -m worker.cli industry repair`（`backend/worker/industry_repair.py`，[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）依下列規則修正：
+
+- **證據**：`raw_payloads` 已保存的 `t187ap03_L`／`mopsfin_t187ap03_O` 擷取；每份都要核對檔案 sha256。同一檔在各份擷取的代碼不同，或和 `instruments.industry` 不一致，整批拒絕。
+- **D0**：每檔第一次出現在擷取中的 Asia/Taipei 日期（正式 DB 多數是 2026-09-08），等同補做 collector 當天略過的觀測（§4 的 `membership_effective_date`），不是分類生效日。
+- **membership**：錯誤群組的 row 關在 `D0-1`，canonical 群組從 D0 開新 row，source 與 collector 相同；collector 已在 Ds 轉換的標的補 `[D0, Ds-1]`。特殊碼（TDR 91）只關不開。不刪 row、不改 `valid_from`。
+- **群組**：沿用 canonical id，不改名也不新建同義群組；canonical id 在 DB 不存在時才新建（正式 DB 有 11 個 label 原本沒有群組，例如 `Cement`、`Information Service`）。佔位群組的 id 是佔位 label 的雜湊，不能改名沿用。label 不屬於現行對照的群組（`Agriculture`、`Digital Content`、`Electronics`、`Industry · 31` 等佔位群組）設 `active=0`；canonical 群組的 `display_name_zh` 同步成 `INDUSTRY_DISPLAY_ZH`。collector 之後每次觀測也會同步顯示名。
+- **收據與冪等**：預設 dry-run 不寫入；`--apply` 先驗證全部再寫，`ingestion_runs`（`run_type=industry_repair`）的 `metadata_json` 記證據 raw、每檔關閉與新開的期間。第二次執行回 `no_change`，不寫任何列。
+- **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。
 
 ## 6. 群組成員與候選身分
 

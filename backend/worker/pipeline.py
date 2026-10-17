@@ -1826,6 +1826,32 @@ def _official_group_id(exchange: str, kind: str, label: str) -> str:
     return canonical_group_id(kind, label)
 
 
+OFFICIAL_INDUSTRY_SOURCE = "TWSE/TPEx official OpenAPI"
+
+
+def ensure_official_industry_group(db: Session, label: str) -> ThemeGroup:
+    """Get or create the canonical industry group and keep its display name current.
+
+    Callers validate the group's identity first; only ``display_name_zh`` is
+    synchronised so a renamed ``INDUSTRY_DISPLAY_ZH`` entry reaches existing rows.
+    """
+    group_id = canonical_group_id("industry", label)
+    group = db.get(ThemeGroup, group_id)
+    if group is None:
+        group = ThemeGroup(
+            id=group_id, name=f"Industry · {label}", group_type="official_industry",
+            definition_version="official-v1", source=OFFICIAL_INDUSTRY_SOURCE, active=True,
+            display_name_zh=INDUSTRY_DISPLAY_ZH[label],
+            display_description_zh="依官方共同產業分類建立的市場族群。",
+            display_category="股票族群", name_source="TWSE/TPEx official classification", name_status="official",
+        )
+        db.add(group)
+        db.flush()
+    elif group.display_name_zh != INDUSTRY_DISPLAY_ZH[label]:
+        group.display_name_zh = INDUSTRY_DISPLAY_ZH[label]
+    return group
+
+
 def _industry_observations(
     db: Session,
     records: Iterable[InstrumentRecord],
@@ -1938,22 +1964,13 @@ def _industry_observations(
 
     # No membership or group mutation until every ordinary record passes.
     for instrument, day, label, target_id, group, current, source in plans:
+        if target_id:
+            ensure_official_industry_group(db, label)
         if current and current.group_id == target_id:
             continue
         if current:
             current.valid_to = day - timedelta(days=1)
         if target_id:
-            if group is None:
-                group = db.get(ThemeGroup, target_id)
-            if group is None:
-                db.add(ThemeGroup(
-                    id=target_id, name=f"Industry · {label}", group_type="official_industry",
-                    definition_version="official-v1", source=official, active=True,
-                    display_name_zh=INDUSTRY_DISPLAY_ZH[label],
-                    display_description_zh="依官方共同產業分類建立的市場族群。",
-                    display_category="股票族群", name_source="TWSE/TPEx official classification", name_status="official",
-                ))
-                db.flush()
             _ensure_membership(db, target_id, instrument.id, day, source=source)
             db.flush()
     skipped = sum(r["status"] == "skipped_after_score_date" for r in receipts)

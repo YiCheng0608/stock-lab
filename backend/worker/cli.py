@@ -10,6 +10,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, chunked_backfill
 from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
+from .industry_repair import run_industry_repair
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
@@ -76,6 +77,15 @@ def main() -> None:
     themes_subparsers = themes_parser.add_subparsers(dest="themes_command", required=True)
     themes_sync_parser = themes_subparsers.add_parser("sync", help="驗證題材表並寫入族群與成員期間（重跑冪等）")
     themes_sync_parser.add_argument("--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json")
+    industry_parser = subparsers.add_parser("industry", help="官方產業群組")
+    industry_subparsers = industry_parser.add_subparsers(dest="industry_command", required=True)
+    industry_repair_parser = industry_subparsers.add_parser(
+        "repair", help="依已保存的公司基本資料 raw 把產業成員搬到正確群組（預設 dry-run，重跑冪等）"
+    )
+    industry_repair_parser.add_argument("--apply", action="store_true", help="寫入 DB；未指定只列出預計變更")
+    industry_repair_parser.add_argument(
+        "--rescore-days", type=int, default=0, help="--apply 後重算最近 N 個交易日的族群分數"
+    )
     news_parser = subparsers.add_parser("news", help="抓取國內／國際財經新聞 feed 並寫入 news_items")
     news_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；只標記 run 日期，未指定使用台北今日")
     news_llm_parser = subparsers.add_parser("news-llm", help="以 claude -p 批次產生新聞摘要、關聯候選與方向判讀")
@@ -109,6 +119,10 @@ def main() -> None:
         result = run_candidates(parse_date(args.run_date))
     elif args.command == "themes":
         result = sync_themes(args.file)
+    elif args.command == "industry":
+        if args.rescore_days < 0 or (args.rescore_days and not args.apply):
+            parser.error("--rescore-days needs --apply and must not be negative")
+        result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     elif args.command == "news-llm":
@@ -132,7 +146,7 @@ def main() -> None:
         sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "candidates" and result.get("status") not in {"success", "no_data"}:
         raise SystemExit(1)
-    if args.command == "themes" and isinstance(result, dict) and result.get("status") == "failed":
+    if args.command in {"themes", "industry"} and isinstance(result, dict) and result.get("status") == "failed":
         raise SystemExit(1)
 
 
