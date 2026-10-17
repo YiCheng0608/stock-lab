@@ -64,7 +64,7 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 
 ## 統籌 session
 
-同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時由看門狗（[#171](https://github.com/YiCheng0608/stock-lab/issues/171)）開；兩者都沒有時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（資料目錄見 [OPERATIONS §6](OPERATIONS.md#6-排程)）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請寫心跳檔並依手冊巡檢」；否則在 `master` 管理 checkout 開可見 terminal：
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；統籌不在時由看門狗（[OPERATIONS §6.1](OPERATIONS.md#61-統籌看門狗)）開；兩者都沒有時使用者對任一 Claude session 說「開統籌」。開啟者先讀心跳檔 `<資料目錄>/logs/coordinator-heartbeat.json`（資料目錄見 [OPERATIONS §6](OPERATIONS.md#6-排程)）：心跳在 60 分鐘內就不開，改對心跳記的 handle 送一句「請寫心跳檔並依手冊巡檢」；否則在 `master` 管理 checkout 開可見 terminal：
 
 ```text
 orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort medium --autocompact 400k" --json
@@ -86,7 +86,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、重掛監看與巡檢，在 #1 記「換手失敗：<新 handle>」，下次巡檢再試。
 4. 收尾：新統籌在 #1 留言並寫心跳檔後，確認舊 terminal 閒置再關掉它。
 5. 不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並重掛監看，換手前後的留言都由它接續。
-6. 看門狗以心跳檔判定：60 分鐘無心跳且 terminal 仍在就送喚醒文；120 分鐘無心跳或 terminal 消失就照本節開新統籌。腳本與排程見 [#171](https://github.com/YiCheng0608/stock-lab/issues/171) 與 [OPERATIONS §6](OPERATIONS.md#6-排程)。
+6. 看門狗以心跳檔判定：60 分鐘無心跳且 terminal 仍在就送喚醒文；120 分鐘無心跳或 terminal 消失就照本節開新統籌。腳本 `tools/ops/ensure_coordinator.sh`、排程 `tools/ops/Register-Watchdog.ps1`，註冊、查詢、停用與日誌見 [OPERATIONS §6.1](OPERATIONS.md#61-統籌看門狗)。
 
 ## 無人值守運作
 
