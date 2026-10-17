@@ -75,6 +75,17 @@ export function sourcesLabel(sources: readonly string[]): string {
   return names.length ? names.join('、') : '來源未提供'
 }
 
+// `indicators.computed_at` is naive UTC (the batch stores datetime.now(timezone.utc) without tzinfo); show Taiwan time.
+export function formatTaipeiDateTime(value: string | null | undefined): string | null {
+  if (!value) return null
+  const parsed = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z')
+  if (Number.isNaN(parsed.getTime())) return null
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(parsed).map((part) => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+}
+
 // ---- null reasons -------------------------------------------------------------------------------
 
 function intervalUnit(interval: StockBarsInterval): string {

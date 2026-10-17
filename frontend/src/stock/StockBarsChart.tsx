@@ -13,6 +13,7 @@ import {
   defaultZoom,
   formatBarVolume,
   formatPrice,
+  formatTaipeiDateTime,
   indicatorPanelState,
   isDrawableBar,
   maNotes,
@@ -56,7 +57,8 @@ function priceBasisLabel(basis: string): string {
 
 function indicatorSourceLabel(response: StockBarsResponse): string {
   if (response.interval === 'week') return '週線依日線聚合後即時計算'
-  return response.indicators.computed_at ? `日線批次計算於 ${response.indicators.computed_at.replace('T', ' ').slice(0, 16)}` : '日線批次尚未計算'
+  const computedAt = formatTaipeiDateTime(response.indicators.computed_at)
+  return computedAt ? `日線批次計算於 ${computedAt}（台灣時間）` : '日線批次尚未計算'
 }
 
 export function StockBarsChart({

@@ -14,6 +14,7 @@ import {
   formatBarsTooltip,
   formatSignedPercent,
   formatSignedPrice,
+  formatTaipeiDateTime,
   indicatorPanelState,
   maNotes,
   nullReasonText,
@@ -142,6 +143,9 @@ const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => re
 const insufficientMarkup = render(insufficient)
 check(insufficientMarkup.includes('無資料') && insufficientMarkup.includes('日線不足 34 根，現有 20 根'), 'rendered MACD panel shows 無資料 with the reason')
 check(insufficientMarkup.includes('資料 2026-09-20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
+check(insufficientMarkup.includes('日線批次計算於 2026-10-16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
+check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026-10-17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026-10-17 23:30', 'computed_at time zone handling')
+check(formatTaipeiDateTime(null) === null && formatTaipeiDateTime('not a date') === null, 'missing or invalid computed_at')
 check(['MACD', 'RSI', 'KD', '布林'].every((label) => insufficientMarkup.includes(`>${label}</button>`)), 'four indicator tabs are rendered')
 check(MA_LINES.every((line) => insufficientMarkup.includes(`ma-swatch-${line.color}`)), 'five MA toggles are rendered')
 check(render(notComputed).includes('指標尚未計算'), 'rendered not_computed state')
