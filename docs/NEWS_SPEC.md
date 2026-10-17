@@ -12,7 +12,7 @@
 | `macro_official` | 政府、央行、官方統計與海外市場事件。 |
 | `media` | 使用條件已確認的媒體、公司採訪與產業消息。 |
 
-新增來源不得覆寫官方行情或把推論寫成官方事實。每個來源至少記錄所有者、類型、endpoint、單篇 URL 規則、授權／使用條件、可保存與摘要的內容、保留期限、頻率、延遲、停用方式及政策版本。無法取得的內文不可由搜尋摘要或模型記憶補寫。feed URL 不是單篇原文。
+新增來源不得覆寫官方行情或把推論寫成官方事實，新增前的記錄要求見[資料來源](DATA_SOURCES.md#來源選用原則)。無法取得的內文不可由搜尋摘要或模型記憶補寫。feed URL 不是單篇原文。
 
 ## 2. 資料契約
 
@@ -21,11 +21,11 @@
 | 來源 | source_kind、source_name、source_item_id、canonical URL、source_url_kind=item/feed/none、raw 參照。 |
 | 分類 | `category`：官方事件投影為 `company`（有標的）／`taiwan`；新聞 feed 為 `domestic`（國內）／`international`（國際）。`/api/news?category=` 依值精確篩選。 |
 | 內容 | 原始標題、可保存的內文／摘要、語言、content_hash；原文與 AI 摘要分欄。 |
-| 事件 | event_type、群組 ID、新增資訊、修訂／撤回狀態、supersedes_id；舊版本不可覆寫。 |
+| 事件 | event_type、群組 ID、新增資訊、修訂／撤回狀態、supersedes_id；既有版本不可覆寫。 |
 | 時間 | published_at、event_at、event_date、collected_at、first_available_at、revision_available_at、generated_at，以及時區、精度與可信度。 |
 | 關聯 | exchange+symbol、題材、方法、原始證據、程度與生效／失效時間；不能只靠 symbol 消除跨市場歧義。 |
 | 影響 | scope、positive/negative/mixed/unknown、傳導理由、期間、反證與方法。 |
-| 稽核 | 事實引用、抽取／模型／提示版本、輸入雜湊、政策版本、驗證結果；必要時含 reviewer／reviewed_at。 |
+| 稽核 | 事實引用、抽取／模型／提示版本、輸入雜湊、驗證結果；必要時含 reviewer／reviewed_at。 |
 
 來源可信度、關聯證據、影響推論與預測機率必須分欄；confidence 不能一欄包辦或解讀為報酬把握。
 
@@ -53,37 +53,22 @@
 
 ## 4. 時間與排序
 
-事件發生、來源發布、第一次可取得、系統收錄、模型產生與版本修訂是不同時間。決策不得使用當時尚不可得的資料。
-
-日常顯示依序選擇已核實的 `published_at`、`event_at`、`event_date`。純日期不得補時分秒；皆未知時顯示「來源時間未提供」。無衝突時 `collected_at` 只作內部排序 fallback，不因此成為已驗證新消息，並歸入時間待核實區。
-
-`product-time/v1` 只投影既有值：`time_consistency` 不為 conflict、basis 在 allowlist 且 precision 為 date／datetime 時，對應時間角色才可標為已知。aware datetime 依 offset 正規化 UTC；date-only 仍只顯示日期。unverified／none、非法 basis/precision、naive、missing 與 conflict 均保留 unknown＋reason。`collected_at` 不等於 `first_available_at`，response 組裝時間也不是歷史 `generated_at`。
+事件發生、來源發布、第一次可取得、系統收錄、模型產生與版本修訂是不同時間。決策不得使用當時尚不可得的資料；盤後新聞的 decision time 必須晚於其 availability，不可一律寫成 T 日 13:30 已知。日常顯示依序選擇已核實的 `published_at`、`event_at`、`event_date`。純日期不得補時分秒；皆未知時顯示「來源時間未提供」。無衝突時 `collected_at` 只作內部排序依據，不因此成為已驗證新消息，並歸入時間待核實區。`product-time/v1` 只投影既有值：`time_consistency` 不為 conflict、basis 在 allowlist 且 precision 為 date／datetime 時，對應時間角色才可標為已知。aware datetime 依 offset 正規化 UTC；date-only 仍只顯示日期。unverified／none、非法 basis/precision、naive、missing 與 conflict 均保留 unknown＋reason。`collected_at` 不等於 `first_available_at`，response 組裝時間也不是歷史 `generated_at`。
 
 - 同一快照依 `display_time desc`，再依 time_basis（published、event、event_date、collected）、time_precision、canonical_key desc、id desc 穩定排序。
 - cursor 綁定相同排序鍵、搜尋／篩選及快照或版本；更正排序時間須建立版本或讓舊 cursor 明確失效。
 - MOPS 內文日期只可作衝突核對，不自動寫入 published／event time。衝突項不進預設最新串流或交易理由。
 - 官方除權息日期是生效日（`event_date`，精度 date），不是公告發布日或第一次可得日；未來生效預告保留，不當作本次發布時間。
 - 回測只讀決策時可取得版本。無法證明歷史 availability 的回補資料不能作精確 PIT 新聞特徵。
-- 盤後新聞可支援隔日計畫，但 decision time 必須晚於其 availability，不可一律寫成 T 日 13:30 已知。
 
-## 5. AI 摘要與人工覆核
+## 5. AI 摘要與推論
 
-來源先通過准入與隔離驗證。來源事實抽取、有引用的摘要、可重現且已驗證的規則關聯，可在自動檢查通過後顯示並標示方法；不要求每則一律人工核准。
-
-時間／來源衝突、重大影響但證據不足、低把握題材關聯、更正或撤回爭議進待覆核區，確認前不得作已核實交易理由。保留抽樣覆核、錯誤追蹤及撤回機制。來源內容只能當資料，不得改變規則、讀取帳密或觸發外部操作；AI 摘要不能繞過行情、籌碼或執行 gate。
+LLM 產出的摘要、關聯候選與方向判讀與來源事實分欄保存，並標「推論」與方法；用途與呼叫方式見 [ROADMAP](ROADMAP.md#保留的產品取捨)。有引用的摘要與可重現的規則關聯不要求每則人工核准。時間／來源衝突、重大影響但證據不足、低把握題材關聯、更正或撤回爭議進待覆核區，確認前不得作已核實交易理由。保留抽樣覆核、錯誤追蹤及撤回機制。來源內容只能當資料，不得改變規則、讀取帳密或觸發外部操作；AI 摘要不能繞過行情、籌碼或執行 gate。
 
 ## 6. UI 與 API 契約
 
-- `/news` 顯示分類、來源、標題、摘要預覽、來源時間、已核實標的／題材及事實／推論狀態；unknown／conflict 顯示「待核實」。
+- `/news` 顯示分類、來源、標題、摘要預覽、來源時間、已核實標的／題材及事實／推論狀態；unknown／conflict 顯示「待核實」。卡片順序、折疊與連結文案見 [UI 文案 §4](UI_COPY_SPEC.md#4-新聞卡文案與折疊)。
 - `/news/:id` 顯示新資訊、來源／引用、影響、反證及可展開內文；時間品質、版本與 raw 稽核預設收合。date-only 不顯示午夜。
-- item 連結寫「查看原文」；feed 寫「查看官方公告資料集」並說明未必定位本則；none 不畫按鈕。
-- 列表不展開全文、不把 collected_at 標成發布時間，unknown 影響不使用買賣或紅綠暗示。
+- unknown 影響不使用買賣或紅綠暗示。
 - 篩選包含 category、source_kind、q、symbol、theme_id、impact_direction、cursor、limit；實際支援的 query 以 API 為準。
-- items/meta 明示 cursor、has_more 與 sort。有 `product_time` 但角色 unknown 時，前端不得退回 legacy 日期；只有完全沒有 contract 的 response 才可安全格式化合法 date fallback。
-- 搜尋採提交式。
-
-## 7. 驗收
-
-可重跑案例須涵蓋同事件轉載、三種 URL、來源有／無內文或摘要、未知時間、歷史回補、MOPS 日期衝突、更正／撤回、跨市場同 symbol、低把握關聯、來源失敗及模型不受支持陳述。
-
-驗收須證明事實未被推論覆寫、摘要可回指原文、unknown 未被補值、排序／cursor 的版本行為明確，且回測看不到尚未可得的資料。
+- items/meta 明示 cursor、has_more 與 sort。response 有 `product_time` 時前端只用它，角色 unknown 就顯示待核實；完全沒有 `product_time` 的 response 才可格式化其中合法的日期欄。

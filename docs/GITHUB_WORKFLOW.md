@@ -64,29 +64,37 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 
 ## 統籌 session
 
-同時只有一個統籌。使用者手動開啟與統籌自行換手都用同一組指令，在 `master` 管理 checkout 開可見 terminal：
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；沒有統籌時使用者對任一 Claude session 說「開統籌」，該 session 執行同一組指令。都在 `master` 管理 checkout 開可見 terminal：
 
 ```text
 orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort medium --autocompact 400k" --json
 orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 orca terminal send --terminal <handle> --text "<接手文>" --enter --json
+orca terminal rename --terminal <handle> --title "統籌" --json
 ```
 
-`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。接手文固定如下，直接貼上：
+`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題「統籌」是看門狗（[#171](https://github.com/YiCheng0608/stock-lab/issues/171)）判定統籌存在的依據，換手後舊 terminal 不得保留這個標題。接手文固定如下，開啟者原文送出，沒有舊 session 時刪掉最後一句：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 的最新決策、所有 open Issues 與 PR。接著：掛 GitHub 背景監看與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」；然後依手冊推進進行中與待辦任務。回覆使用者一律繁體中文。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 的最新決策、所有 open Issues 與 PR。接著：掛 GitHub 背景監看與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」；然後依手冊推進進行中與待辦任務。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，你留言後用 orca terminal close 關掉它。
 ```
+
+**自動換手機制**（統籌 session 自己執行，不需要人在場）：
+
+1. 偵測：每次收到壓縮摘要就把次數寫進 scratchpad 的計數檔；巡檢 prompt 固定含一步「讀計數檔，達 2 次或自覺對不上 Issue 與文件就換手」。
+2. 執行：照上面四行指令開新 session 並送接手文（含自己的 handle）。
+3. 收尾：舊 session 停掉自己的監看與巡檢，之後不再對 repo 操作；新 session 在 #1 留言後關掉舊 terminal。
+4. 統籌 session 不存在時（Orca 重啟、電腦重開、session 當掉）由看門狗排程開新統籌，見 [#171](https://github.com/YiCheng0608/stock-lab/issues/171) 與 [OPERATIONS §6](OPERATIONS.md#6-排程)。
 
 ## 無人值守運作
 
 使用者不在時統籌照本節持續推進；使用者回來只看 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 與看板。
 
-- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢：監看是否存活、open PR 的 CI 與合併、進行中 Issue 的提問、名額空缺就派工、背景工作是否卡住。兩者到期或 session 更換時重掛。
+- **事件與巡檢**：派工後的 GitHub 監看（見[開工](#任務流程)）之外，統籌在自己的 session 掛每 20～30 分鐘一次的巡檢：監看是否存活、open PR 的 CI 與合併、進行中 Issue 的提問、名額空缺就派工、背景工作是否卡住、換手條件是否成立。兩者到期或 session 更換時重掛。
 - **待辦隊列**：下一輪任務先建成 Issue（看板待辦），依 ROADMAP gate 順序排；並行名額（3）一空就從最新 `origin/master` 派下一張。沒有已建 Issue 就先建，不停擺。
 - **需要使用者的事**（來源與付費、刪資料、部署、對外操作、範圍變更）：在 #1 留言寫清楚問題與統籌建議，標「待使用者」，轉做不受影響的工作；不猜答案、不停工。
 - **決策落地**：會影響後續判斷的使用者決定，當下寫進 #1 或對應文件，不留在對話。
-- **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。做法與[開啟統籌 session](#統籌-session)相同，由現任統籌執行；新 session 在 #1 留言後，舊 session 停止對 repo 的所有操作。不寫交接文件、不設任期。
+- **統籌換手**：觸發條件任一成立就換：同一 session 已自動壓縮兩次以上；統籌自覺回答對不上 Issue 與文件；使用者要求。偵測與執行步驟見[統籌 session](#統籌-session)的自動換手機制。不寫交接文件、不設任期。
 - **前提與限制**：本機與 Orca 保持開機登入；訂閱額度由統籌、工程師與 LLM 批次共用，額度用盡時全部暫停到重置，不視為失敗；合併把關為 CI＋統籌 review＋高風險項獨立 review。
 
 ## 失敗處理
@@ -104,4 +112,4 @@ orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 
 ## 排程
 
-V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §8](OPERATIONS.md#8-排程)。排程失敗以 Issue 追蹤。
+V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。

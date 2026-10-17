@@ -1,6 +1,6 @@
 # Frontend
 
-React、TypeScript、Vite、React Query 與 ECharts 的台股研究介面。方向見[產品規格](../docs/PRODUCT_SPEC.md)，完成狀態見[開發路線](../docs/ROADMAP.md)。
+React、TypeScript、Vite、React Query 與 ECharts 的台股研究介面。頁面與路由見[產品規格 §2](../docs/PRODUCT_SPEC.md#2-主導航與資訊順序)，視覺與元件見[設計規範](../docs/DESIGN_SYSTEM.md)，文案與單位見[UI 文案](../docs/UI_COPY_SPEC.md)。
 
 ## 啟動
 
@@ -12,15 +12,6 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `$env:VITE_API_BASE`。`pnpm run test:ci` 執行 `src` 下全部測試，`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[操作手冊](../docs/OPERATIONS.md)。
+需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `$env:VITE_API_BASE`，位址須符合[跨站請求防護](../docs/OPERATIONS.md#11-產品-api-的跨站請求防護)的 Host 規則。`pnpm run test:ci` 執行 `src` 下全部測試，`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[操作手冊](../docs/OPERATIONS.md)。
 
-## 頁面與契約
-
-- 主導航：今日、新聞、族群、個股、行動；新聞詳情 `/news/:id`，個股 `/stocks/:exchange/:symbol`。所有頁面共用 `components/Shell.tsx`（固定頂部 Navbar：五個主導航、代號／名稱搜尋導向 `/stocks?q=`、`/dashboard` 的資料日期 badge、窄版漢堡選單）。
-- 個股頁：頁首收盤與漲跌、預設分頁「圖表與指標」（日／週 K 線、成交量、MA5～120、MACD／RSI／KD／布林面板）都讀 `GET /api/stocks/{exchange}/{symbol}/bars?interval=day|week&limit=250`；其餘分頁讀 `GET /api/stocks/{exchange}/{symbol}`。顯示與無資料文案見 [UI 文案 §10.2](../docs/UI_COPY_SPEC.md#102-個股詳情的第一屏)。
-- 樣式：`src/styles/tokens.css` 是唯一放色碼的檔案，`src/styles.css` 與元件只用變數；共用元件在 `src/components/ui/`（Card、Badge、Button、Table、Tabs、Stat／MarketWidget、EmptyState、Skeleton）。`src/noHardcodedColors.test.ts` 在 `test:ci` 檢查其他檔案沒有色碼。
-- 研究／診斷：`/research/backtest`、`/research/coverage`、`/research/strategies`、`/system/data-quality`、`/glossary`。
-- [UI 文案](../docs/UI_COPY_SPEC.md)：中文狀態、單位、未知與卡片；[設計規範](../docs/DESIGN_SYSTEM.md)：視覺與元件。
-- [新聞契約](../docs/NEWS_SPEC.md)：來源、去重、時間；[詞彙表](../docs/GLOSSARY.md)：術語。
-
-股數以精確 shares 保存，成本為每股；張／股只作輸入與呈現。最近收盤不稱即時價，固定 confidence 不稱勝率。現行能力與驗收邊界以 ROADMAP 及上述契約為準。
+所有頁面共用 `components/Shell.tsx`（固定頂部 Navbar、搜尋導向 `/stocks?q=`、資料日期 badge、窄版漢堡選單）；個股頁「圖表與指標」讀 bars API（[V1_SPEC 技術指標](../docs/V1_SPEC.md#技術指標)），其餘分頁讀 `GET /api/stocks/{exchange}/{symbol}`。
