@@ -433,3 +433,14 @@ def test_since_limits_output_but_not_history():
         assert [(p.trading_date, p.bar_count, p.values, p.reasons) for p in tail] == [
             (p.trading_date, p.bar_count, p.values, p.reasons) for p in expected
         ]
+
+
+def test_rsi_no_price_change_only_when_series_never_moved():
+    moved_once = compute_indicators(_bars([10, 11] + [11] * 20))
+    assert moved_once[-1].values["rsi6"] == pytest.approx(100.0)
+    assert "rsi6" not in moved_once[-1].reasons
+    never = compute_indicators(_bars([11] * 22))
+    assert (
+        never[-1].values["rsi6"] is None
+        and never[-1].reasons["rsi6"] == ind.NO_PRICE_CHANGE
+    )

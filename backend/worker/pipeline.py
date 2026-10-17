@@ -3418,6 +3418,16 @@ def backtest(
             }
 
 
+def _daily_indicators(run_date: date | None) -> dict[str, Any]:
+    """Indicator step of run_daily; a failure is reported, never raised."""
+    from .indicator_batch import run_indicator_batch  # local: indicator_batch imports this module
+
+    try:
+        return run_indicator_batch(run_date)
+    except Exception as exc:  # noqa: BLE001 - the daily result must still report collect/analyze/evaluate
+        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_daily(end_date: date | None = None, *, months_back: int = 0) -> dict[str, Any]:
     collected = collect(end_date, months_back=months_back)
     if collected.get("status") != "success":
@@ -3425,17 +3435,15 @@ def run_daily(end_date: date | None = None, *, months_back: int = 0) -> dict[str
             "collect": collected,
             "analyze": {"status": "skipped", "reason": "official_collection_failed"},
             "evaluate": {"status": "skipped", "reason": "official_collection_failed"},
+            "indicators": {"status": "skipped", "reason": "official_collection_failed"},
         }
     analyzed = analyze()
-    from .indicator_batch import run_indicator_batch  # local: indicator_batch imports this module
-
-    indicators = run_indicator_batch()
     if analyzed.get("status") != "success":
         return {
             "collect": collected,
             "analyze": analyzed,
             "evaluate": {"status": "skipped", "reason": "analysis_failed"},
-            "indicators": indicators,
+            "indicators": _daily_indicators(end_date),
         }
     evaluated = evaluate()
-    return {"collect": collected, "analyze": analyzed, "evaluate": evaluated, "indicators": indicators}
+    return {"collect": collected, "analyze": analyzed, "evaluate": evaluated, "indicators": _daily_indicators(end_date)}

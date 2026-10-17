@@ -389,3 +389,68 @@ def test_run_commits_through_session_factory(db, monkeypatch):
     result = indicator_batch.run_indicator_batch()
     assert result["status"] == "success" and result["rows_written"] == 80
     assert db.scalar(select(func.count(TechnicalIndicator.id))) == 80
+
+
+def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicators=None):
+    from worker import indicator_batch, pipeline
+
+    calls = []
+    monkeypatch.setattr(
+        pipeline,
+        "collect",
+        lambda end, months_back=0: calls.append(("collect", end))
+        or {"status": collect},
+    )
+    monkeypatch.setattr(
+        pipeline, "analyze", lambda: calls.append(("analyze",)) or {"status": analyze}
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "evaluate",
+        lambda: calls.append(("evaluate",)) or {"status": "success"},
+    )
+
+    def batch(run_date=None, *, rebuild=False):
+        calls.append(("indicators", run_date))
+        if indicators is not None:
+            raise indicators
+        return {"status": "success"}
+
+    monkeypatch.setattr(indicator_batch, "run_indicator_batch", batch)
+    return pipeline, calls
+
+
+def test_run_daily_runs_indicators_after_evaluate_with_run_date(monkeypatch):
+    pipeline, calls = _daily_stubs(monkeypatch)
+    result = pipeline.run_daily(END)
+    assert calls == [("collect", END), ("analyze",), ("evaluate",), ("indicators", END)]
+    assert result["indicators"] == {"status": "success"}
+
+
+def test_run_daily_indicator_failure_does_not_stop_evaluate(monkeypatch):
+    pipeline, calls = _daily_stubs(monkeypatch, indicators=RuntimeError("disk full"))
+    result = pipeline.run_daily()
+    assert ("evaluate",) in calls and calls[-1] == ("indicators", None)
+    assert result["evaluate"] == {"status": "success"}
+    assert result["indicators"] == {
+        "status": "failed",
+        "error": "RuntimeError: disk full",
+    }
+
+
+def test_run_daily_skips_indicators_when_collect_fails_and_runs_them_when_analyze_fails(
+    monkeypatch,
+):
+    pipeline, calls = _daily_stubs(monkeypatch, collect="failed")
+    result = pipeline.run_daily(END)
+    assert calls == [("collect", END)]
+    assert result["indicators"] == {
+        "status": "skipped",
+        "reason": "official_collection_failed",
+    }
+    pipeline, calls = _daily_stubs(monkeypatch, analyze="skipped")
+    result = pipeline.run_daily(END)
+    assert calls == [("collect", END), ("analyze",), ("indicators", END)]
+    assert result["evaluate"]["reason"] == "analysis_failed" and result[
+        "indicators"
+    ] == {"status": "success"}
