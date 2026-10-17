@@ -2,22 +2,21 @@
 
 以免費公開資料做台股盤後研究輔助 app：每日排程更新上市／上櫃全市場行情、籌碼、國內外新聞與熱門族群，提供個股 K 線與技術指標、規則式進出點建議、明日候選清單與追蹤回看。版本範圍與進度見[開發路線](docs/ROADMAP.md)。
 
-## 從這裡開始
+## 文件
 
-| 想了解 | 入口 |
+| 主題 | 文件 |
 | --- | --- |
-| 產品要解決什麼問題 | [產品規格](docs/PRODUCT_SPEC.md) |
-| 現在做到哪裡、接下來做什麼 | [開發路線](docs/ROADMAP.md) |
-| 前端長什麼樣子 | [設計規範](docs/DESIGN_SYSTEM.md) |
-| 如何啟動、收集、回補與診斷 | [操作手冊](docs/OPERATIONS.md) |
-| 查完整契約與術語 | [文件索引](docs/README.md) |
+| 產品方向與版本範圍 | [開發路線](docs/ROADMAP.md)、[產品規格](docs/PRODUCT_SPEC.md) |
+| 前端設計 | [設計規範](docs/DESIGN_SYSTEM.md)、[文案、單位與詞彙](docs/UI_COPY_SPEC.md) |
+| 資料與來源 | [資料來源](docs/DATA_SOURCES.md)、[產業分類](docs/INDUSTRY_CLASSIFICATION.md)、[新聞](docs/NEWS_SPEC.md) |
+| 策略與指標 | [v1 公式與口徑](docs/V1_SPEC.md) |
+| 啟動、收集、回補與排程 | [操作手冊](docs/OPERATIONS.md) |
+| 協作與流程 | [協作規則](AGENTS.md)、[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)（含[本機檢查](docs/GITHUB_WORKFLOW.md#本機檢查)） |
 
 ## 開發入口
 
 - [後端](backend/README.md)：FastAPI、SQLAlchemy／SQLite、資料 worker。
 - [前端](frontend/README.md)：React、TypeScript、Vite、React Query、ECharts。
-- [本機檢查](docs/GITHUB_WORKFLOW.md#本機檢查)：後端、前端與 repo 檢查命令。
-- [協作規則](AGENTS.md)與[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)：統籌＋工程師兩角色、Issue → worktree → PR → CI → merge。
 - [任務看板](https://github.com/users/YiCheng0608/projects/1)與[治理 Issue](https://github.com/YiCheng0608/stock-lab/issues/1)。
 
-Git 只保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。API 啟動只做唯讀 schema readiness，不自動 migration。
+Git 只保存程式與文件，不備份本機資料庫、raw、依賴或測試產物。

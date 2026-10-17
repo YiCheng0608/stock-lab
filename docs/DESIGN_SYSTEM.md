@@ -1,6 +1,6 @@
 # 前端設計規範
 
-本文是前端唯一的視覺與互動規範，所有前端工作（新頁面、改版、元件）都必須遵守；偏離要先在 Issue 說明並經統籌同意。參考範本為 UI/UX Pro Max 的 investment-platform demo（`https://uupm.cc/demo/investment-platform`，2026-10-17 取樣），本文已把它的 token 與元件規則轉寫為本專案可直接使用的版本，開發時以本文為準、不必再回去看範本。
+本文是前端唯一的視覺與互動規範，所有前端工作（新頁面、改版、元件）都必須遵守；偏離要先在 Issue 說明並經統籌同意。token 與元件規則源自 UI/UX Pro Max 的 investment-platform demo，以本文為準。
 
 頁面資訊架構與各頁內容見 [PRODUCT_SPEC §2](PRODUCT_SPEC.md#2-主導航與資訊順序)、文案與單位見 [UI_COPY_SPEC](UI_COPY_SPEC.md)。
 
@@ -86,7 +86,7 @@
 }
 ```
 
-字體載入：`frontend/index.html` 以 Google Fonts 載入 `Inter:wght@400;500;600;700` 與 `JetBrains+Mono:wght@400;500;600;700`（§3 的數字用到 600／700）；中文 fallback 用 `Noto Sans TC`（`400;500;700`）。只允許 Inter 當標題與內文、JetBrains Mono 當數字。
+字體載入：`frontend/index.html` 以 Google Fonts 載入 `Inter:wght@400;500;600;700` 與 `JetBrains+Mono:wght@400;500;600;700`（§3 的數字用到 600／700）；中文備用字體用 `Noto Sans TC`（`400;500;700`）。只允許 Inter 當標題與內文、JetBrains Mono 當數字。
 
 ## 3. 字級與數字
 

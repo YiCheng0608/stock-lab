@@ -9,7 +9,7 @@
 - Asia/Taipei 日期顯示 `YYYY/MM/DD`，日期時間顯示 `YYYY/MM/DD HH:mm`。
 - 「現價」只用於可信即時報價；日資料一律寫「最近收盤（日期）」。缺少可驗證行情時不顯示價格結論。
 - 台股紅漲綠跌須同時有正負號或文字，不能只靠顏色。
-- 數值表格、缺值與合法 0 的顯示依 [§10.4](#104-數值表格單位與空白)。
+- 數值表格、缺值與合法 0 的顯示依 [§8.4](#84-數值表格單位與空白)。
 
 ## 2. 禁止露出的內部詞與繁中對照
 
@@ -20,10 +20,8 @@
 | canonical／canonical config snapshot | 固定研究規則／規則版本與稽核設定；只在研究詳情 |
 | prior_20_highs／bars_20d／bars_60d／institutional_flow_5d | 前 20 個交易日高點／近 20 日行情／近 60 日行情／近 5 日法人籌碼 |
 | company／taiwan／international | 個股公告／台灣官方事件／國際事件；尚未接入的來源不顯示空卡 |
-| foreign_investor | 外資；日常頁使用簡稱，來源／稽核層保留官方「外資及陸資」合計欄位的口徑 |
-| high confidence | 標的關聯已驗證；不得解讀成勝率 |
-| medium confidence | 關聯由規則核實；可展開查看使用的方法與規則 |
-| low／unknown confidence | 關聯尚未判定；不驅動進場、出場或其他交易動作 |
+| foreign_investor | 外資（口徑見[資料來源](DATA_SOURCES.md#法人口徑)） |
+| high／medium／low・unknown confidence | 「標的關聯已驗證」／「關聯由規則核實」（可展開方法與規則）／「關聯尚未判定」；不得解讀成勝率，low／unknown 不驅動進場、出場或其他交易動作 |
 | impact_direction unknown | 影響尚未判定 |
 | official_disclosure | 官方公告資料 |
 | 未核實 Industry 名稱、代碼或 ID | 日常頁不顯示；系統頁寫「官方產業名稱待對照」 |
@@ -40,35 +38,15 @@
 
 同卡有兩條策略時使用「主研究條件資料完整 · 另一研究條件資料待補：<缺項>」。只有所有呈現條件都完整時才可省略範圍。完整 observation 沒有 entry／target／RR 仍是完整，不使用資料待補 badge。
 
+族群熱度：完整與四分項條件以 [V1_SPEC](V1_SPEC.md#hot_group_v1) 為準。UI 對合格 partial 顯示「技術與籌碼觀察（事件資料待補）」，不得稱完整熱門或產生完整熱門候選。
+
 ## 4. 新聞卡文案與折疊
 
-### 4.1 卡片正面
-
-固定順序：分類與來源 → 兩行內原始標題 → 120 個全形字元或三行內摘要 → 來源時間 → 影響／關聯 → 相關標的 → 來源連結。標題只正規化連續空白與換行，列表截在兩行，詳情仍保留完整標題。`/news` 不展開全文；`/news/:id` 用「展開公告內容／收合公告內容」，只顯示可用的來源 description，不顯示 raw JSON 或內部 ID。
-
-沒有摘要時寫「官方來源未提供摘要」。只有存在合法可用原文時，才可另顯示附引用與方法的「AI 摘要」；不得由標題或模型記憶補造。
-
-### 4.2 日期與可信度
-
-| 狀態 | 文案／處置 |
-| --- | --- |
-| published_at／event_at／event_date | 「發布於 日期時間」／「事件於 日期時間」／「事件日 日期」 |
-| 三者皆無 | 「來源時間未提供」；collected_at 只在詳情稽核層顯示「系統收錄時間」 |
-| time_consistency=conflict | 「資料集事件日期與公告內容提及日期不一致，時間待人工核實」 |
-| 直接關聯／核實規則關聯／無證據 | 「標的關聯已驗證」／「關聯由規則核實」／「關聯尚未判定」 |
-
-列表按 [NEWS_SPEC](NEWS_SPEC.md) 的已核實來源時間與 cursor 契約排序。未知時間的項目可依 collected_at 排序，但不可顯示成發布時間。confidence 只描述關聯證據，不表示事件真假、方向或報酬。
-
-### 4.3 來源連結
-
-- `source_url_kind=item`：「查看原文／原始公告」。
-- `source_url_kind=feed`：「查看官方公告資料集」，並提示未必定位本則公告。
-- `source_url_kind=none`：「來源連結未提供」，不畫無效按鈕。
-- raw payload、hash 與 event ID 只在稽核層。
-
-### 4.4 族群關聯
-
-新聞卡只顯示來源直接指向且已驗證的族群，或已核實的 Event—Instrument—Theme 關聯。由現有 membership 自動推得、英文名稱／代碼、名稱狀態未核實的關聯只留系統層。
+- **卡片正面**：固定順序為分類與來源 → 兩行內原始標題 → 120 個全形字元或三行內摘要 → 來源時間 → 影響／關聯 → 相關標的 → 來源連結。標題只正規化連續空白與換行，列表截在兩行，詳情保留完整標題。`/news` 不展開全文；`/news/:id` 用「展開公告內容／收合公告內容」，只顯示可用的來源 description，不顯示 raw JSON 或內部 ID。
+- **摘要**：沒有摘要時寫「官方來源未提供摘要」。只有存在合法可用原文時，才可另顯示附引用與方法的「AI 摘要」；不得由標題或模型記憶補造。
+- **日期**：`published_at`／`event_at`／`event_date` 依序寫「發布於 日期時間」／「事件於 日期時間」／「事件日 日期」；三者皆無寫「來源時間未提供」，collected_at 只在詳情稽核層顯示「系統收錄時間」；`time_consistency=conflict` 寫「資料集事件日期與公告內容提及日期不一致，時間待人工核實」。排序依 [NEWS_SPEC §4](NEWS_SPEC.md#4-時間與排序)，依 collected_at 排序的項目不可顯示成發布時間。
+- **來源連結**：`source_url_kind=item` 寫「查看原文／原始公告」；`feed` 寫「查看官方公告資料集」並提示未必定位本則公告；`none` 寫「來源連結未提供」，不畫無效按鈕。raw payload、hash 與 event ID 只在稽核層。
+- **族群關聯**：只顯示來源直接指向且已驗證的族群，或已核實的 Event—Instrument—Theme 關聯；由現有 membership 自動推得、英文名稱／代碼、名稱狀態未核實的關聯只留系統層。關聯可信度文案見 §2。
 
 ## 5. 行動中心的預設資訊層級
 
@@ -92,31 +70,26 @@
 | no_condition | 暫無研究條件 | 資料完整但條件未成立且沒有合法等待價位；顯示未通過理由。 |
 | manual_review | 需人工判讀 | cutoff、basis、標的、價位或執行證據無法調和；不合成動作與價位。 |
 
-日常頁說「突破／回踩研究條件」，完整版本名只在研究詳情。
+日常頁說「突破／回踩研究條件」，完整版本名只在研究詳情。兩個研究條件的合併判定見 [PRODUCT_SPEC §6](PRODUCT_SPEC.md#action-merge)：UI 維持同標的一張卡與各策略自己的價位，持倉風險優先，其他條件置於「其他研究條件」。
 
-### 6.1 兩個研究條件的合併呈現
+## 7. 詞彙原則
 
-判定以 [產品行動合併契約](PRODUCT_SPEC.md#action-merge) 為準。UI 維持同標的一張卡與各策略自己的價位；持倉風險優先，其他條件置於「其他研究條件」。沒有合法等待價位時顯示「暫無研究條件」，不得因另一策略缺資料而降級已完整條件。
+詞條內容（term_id、名稱、別名、分類、白話說明、用途、解讀、限制、相關詞、版本）以 `backend/app/glossary.py`（`GET /api/glossary`）為準，`frontend/src/glossary.ts` 是 API 不可用時的本地副本；本節只寫原則。
 
-## 7. Glossary 覆蓋與呈現
+- **中文對照**：日常頁用中文術語，英文、enum 與欄位名依 §2 對照，只在研究／系統層露出；別名用於搜尋。詞彙出現在 UI 不代表對應資料或模型已上線。
+- **白話與限制並列**：每個詞同時寫用途與誤讀界線，例如突破、目標價、T+1 都不等於成交或必達；資料不足時明說無法用該指標下結論。
+- **事實／推論分欄**：來源事實、規則判定與推論（AI 摘要、影響推論）分開命名；推論詞須標方法與引用，unknown 不是負面訊號。
+- **口徑**：「外資」「三大法人」依[資料來源的法人口徑](DATA_SOURCES.md#法人口徑)；「熱門族群」只用於五分項完整的群組（[V1_SPEC](V1_SPEC.md#hot_group_v1)）。
+- **不用的詞**：日資料不稱「現價」，固定 confidence 或模型自評不稱「勝率」或「校準機率」；不以「主力」「隔日沖」或分點名稱推定投資人身分；不寫「保證」「必漲」等報酬承諾。
+- **呈現**：Modal 依白話定義、用途、解讀與限制排列，不以 term_id 或欄位名作標題。詞彙按鈕須支援滑鼠、觸控、Enter／Space，Esc 關閉後焦點回觸發點；定義不得只靠 hover 或顏色。
 
-前後端 glossary 至少覆蓋 `stock_chips`、`foreign_investor`、`trust_investor`、`dealer`、`margin_change`、`breakout`、`pullback`、`rr`、`data_completeness`、`taiex`、`lot`、`average_cost`。Modal 依白話定義、用途、解讀與限制排列，不以 term_id 或欄位名作標題；完整詞義見 [GLOSSARY](GLOSSARY.md)。詞彙按鈕須支援滑鼠、觸控、Enter／Space，Esc 關閉後焦點回觸發點；定義不得只靠 hover 或顏色。
+## 8. 壓縮卡、詳情與單位文案
 
-## 8. 程式驗收條件
-
-驗收至少涵蓋：日常路由不露內部字串；三層完整度與雙策略範圍不衝突；新聞全文折疊、URL 類型、unknown 影響與未核實族群正確；行動中心不被資料待補卡淹沒；詞彙可鍵盤操作；雙 observation 無合法價位時不造 levels；同標的一日一張卡；250／1,000／1,250 股格式及每股成本正確；法人欄顯示「外資／投信／自營商」；數值表格的單位、正負號、合法 0 與空白原因符合本規格。未知、空值、載入失敗與窄版也須 fail closed。
-
-## 9. v1 族群空狀態與發布規則
-
-完整與四分項條件以 [V1_SPEC](V1_SPEC.md#hot_group_v1) 為準。UI 對合格 partial 顯示「技術與籌碼觀察（事件資料待補）」，不得稱完整熱門或產生完整熱門候選；歷史零結果不形成永久文案。
-
-## 10. 壓縮卡、詳情與單位文案
-
-### 10.1 今日／個股清單壓縮卡
+### 8.1 今日／個股清單壓縮卡
 
 順序為：代號／名稱 → 最近收盤與可信漲跌幅 → 一個行動結論 → 一個主要原因 → 一組關鍵價位（如合法）→ 資料日期與詳情入口。缺相鄰、同 basis 的可信前收盤時寫「漲跌幅待核實」；no condition、資料待補或人工判讀不顯示關鍵價位。行動摘要附 `market_read` 時，只有 `status=known`、`invalid_fields` 為空且最近收盤為正有限數值才顯示價格；否則價格與漲跌顯示「待核實」「漲跌待核實」，標題改為「策略判斷資料待補」。
 
-### 10.2 個股詳情的第一屏
+### 8.2 個股詳情的第一屏
 
 第一屏是頁首加「圖表與指標」。頁首依序為代號、名稱、市場（上市／上櫃）與類型、最近收盤（報價幣別元）、漲跌與漲跌幅（漲紅跌綠、正數帶 `+`）、資料日期 badge 與來源。頁尾固定附註：「此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。」
 
@@ -131,24 +104,17 @@
 | 最新一根沒有值、前面有值 | 照畫，圖下註明該根無資料與原因 |
 | 均線最新一根沒有值 | 圖下列出「MA120 無資料：日線不足 120 根，現有 80 根」 |
 
-原因文案：`insufficient_bars` 為「日線不足 N 根，現有 M 根」（週線寫「週線」；N 取缺值欄位 `indicators.required_bars` 的最大值，M 為該根 `bar_count`，缺 `bar_count` 時只寫「日線不足 N 根」）；`suspended` 為「停牌，當日不計算」；`invalid_bar` 為「當日行情無效，不計算」；`no_price_change` 為「期間內收盤沒有漲跌，無法計算」；未知原因為「原因待核實」。
+原因文案：`insufficient_bars` 為「日線不足 N 根，現有 M 根」（週線寫「週線」；N 取缺值欄位 `indicators.required_bars` 的最大值，M 為該根 `bar_count`，缺 `bar_count` 時只寫「日線不足 N 根」）；`suspended` 為「停牌，當日不計算」；`invalid_bar` 為「當日行情無效，不計算」；`no_price_change` 為「期間內收盤沒有漲跌，無法計算」；未知原因為「原因待核實」。籌碼沒有資料列時顯示「尚無可核實的籌碼資料。」。資料說明分頁列出 bars API `indicators` 的指標版本、價格基準、日線指標計算時間與 K 線資料日期。
 
-籌碼沒有資料列時顯示「尚無可核實的籌碼資料。」。資料說明分頁列出 bars API `indicators` 的指標版本、價格基準、日線指標計算時間與 K 線資料日期。
-
-### 10.3 張／零股
+### 8.3 張／零股
 
 - DB／API／來源數量保存精確整數股與 unit；`LOT_SIZE=1000`。
 - 日常主值為張：已知股數以精確字串拆末三位，保留至多 3 位小數的零股，不先轉 `Number`、不以除法捨入或補值。1／999／1,500 股分別為 `0.001`／`0.999`／`1.5` 張；int64 上限為 `9,223,372,036,854,775.807` 張；合法零顯示 `0`，方向保留。
-- 原股數只放預設收合的來源／庫存稽核 details；表格單位依 §10.4 放表外。
+- 原股數只放預設收合的來源／庫存稽核 details；表格單位依 §8.4 放表外。
 - 價格與平均成本為元／股，不乘 1,000；API 未提供 currency 時寫「各標的報價幣別的元」，不猜 `NT$`。TAIEX 等指數用點數。
 - 來源單位 unknown／mixed 不換算，表外說明「單位待核實」、數值格留空；來源已為張的融資不重複換算。可信 `quantity.unit="mixed"` 是同一已知股數的張／零股拆分，仍有效。
-- Canonical 股字串只接受 ASCII `0` 或無前導零的非零整數；方向欄可有單一負號，不接受 `-0`、正號、分數、科學記號、空白或尾端換行。單日絕對值上限 `9223372036854775807`，買進／賣出與成交量須非負；5／20 日淨超的絕對值上限分別為 `46116860184273879035`／`184467440737095516140`。
-- 明示的精確欄為 null、非法或壞字串時不回退；只有精確欄缺失的舊回應可用安全整數 number。
-
-行動頁「我的庫存」：
-
-- 表單預設 `unit=lot`，張數或股數輸入正整數 ASCII 字串；送出 `unit + quantity` 整數字串，例如 1 張送 `unit=lot, quantity="1"`、1 股送 `unit=odd_lot, quantity="1"`，讀回主值為 `1 張`／`0.001 張`。可保存總股數為 `1..9,223,372,036,854,775,807`，超限不送出，超大字串不經 Number。
-- 平均成本與停損為元／股；空字串送 `null`，非空須為非負 ASCII 十進位數。前端拒收或 API 回 422 時保留 draft 並顯示錯誤。
+- Canonical 股字串只接受 ASCII `0` 或無前導零的非零整數；方向欄可有單一負號，不接受 `-0`、正號、分數、科學記號、空白或尾端換行。單日絕對值上限 `9223372036854775807`，買進／賣出與成交量須非負；5／20 日淨超的絕對值上限分別為 `46116860184273879035`／`184467440737095516140`。精確欄為 null、非法或壞字串時顯示待核實；response 完全沒有精確欄時才讀安全整數 number（`units.ts` 的 `exactVolumeText`）。
+- **我的庫存**：表單預設 `unit=lot`，張數或股數輸入正整數 ASCII 字串；送出 `unit + quantity` 整數字串，例如 1 張送 `unit=lot, quantity="1"`、1 股送 `unit=odd_lot, quantity="1"`，讀回主值為 `1 張`／`0.001 張`。可保存總股數為 `1..9,223,372,036,854,775,807`，超限不送出，超大字串不經 Number。平均成本與停損為元／股；空字串送 `null`，非空須為非負 ASCII 十進位數。前端拒收或 API 回 422 時保留 draft 並顯示錯誤。
 
 | 庫存讀值 | 日常文案 |
 | --- | --- |
@@ -159,47 +125,23 @@
 
 本地收盤與市值／損益試算只在預設收合的「核對庫存原股數、本地行情與試算」內顯示，並標「本地記錄；來源／日期待核實」與「本地試算，行情來源／日期尚未核實」。
 
-### 10.4 數值表格、單位與空白
+### 8.4 數值表格、單位與空白
 
-同一張表的單位只在表題、副標、caption 或緊鄰說明出現一次，例如「單位：張」；欄名與數值格不逐格重複「張」「股」「元」或百分號。價格在 API 沒有 currency 時統一說「各標的報價幣別的元」，指數說「點」，不得猜成新臺幣。數值格只顯示數字，方向值明示 `+`／`-`。缺值不寫 0、`N/A`、`--`、「無資料」或英文 placeholder，改為空白，並在表格外寫「空白表示來源未提供」；若原因是來源或單位未核實，須另行具體說明。
+同一張表的單位只在表題、副標、caption 或緊鄰說明出現一次，例如「單位：張」；欄名與數值格不逐格重複「張」「股」「元」或百分號。價格與指數單位依 §8.3。數值格只顯示數字，方向值明示 `+`／`-`。缺值不寫 0、`N/A`、`--`、「無資料」或英文 placeholder，改為空白，並在表格外寫「空白表示來源未提供」；若原因是來源或單位未核實，須另行具體說明。
 
-畫面呈現成交金額時，須依 API 的 `turnover_status` 決定數值格：`available` 且值為來源明確的 `0` 才顯示 `0`；`unavailable` 或 `unknown` 即使底層 `turnover=0` 也留空。缺失／無效可在表格外說「成交金額未取得」，舊零未核實則說「成交金額待核實」，不把兩者合稱來源真的零；原因碼與數值狀態須一致。底層保存與計算規則見 [DATA_SOURCES](DATA_SOURCES.md)。tooltip、等效資料表與表外說明須同步使用相同口徑。
+畫面呈現成交金額時，須依 API 的 `turnover_status` 決定數值格：`available` 且值為來源明確的 `0` 才顯示 `0`；`unavailable` 或 `unknown` 即使底層 `turnover=0` 也留空。`unavailable` 可在表格外說「成交金額未取得」，`unknown` 則說「成交金額待核實」，不把兩者合稱來源真的零；原因碼與數值狀態須一致。底層保存與計算規則見 [DATA_SOURCES](DATA_SOURCES.md)。tooltip、等效資料表與表外說明須同步使用相同口徑。
 
-## 11. 中文原因碼對照
+## 9. 中文原因碼對照
 
-未知 code 一律顯示「研究條件需要人工核對」，原值只留稽核層。不同策略的 code 保留各自範圍。
+reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`、`display_reason`）與 `frontend/src/presentation.ts` 提供，下表只列原則與代表列。未知 code 一律顯示「研究條件需要人工核對」，原值只留稽核層；不同策略的 code 保留各自範圍。
 
 | 原始值 | 日常文案／處置 |
 | --- | --- |
-| `passed`／`rejected`／`data_incomplete`／`observation`／`conditional` | 依序為「此研究條件已符合」「尚未成立」「資料待補」「條件尚未成立，持續觀察」「符合條件後可研究進場」；observation 不是缺資料，conditional 須附 T+1。 |
-| `active`、`target_1_hit`、`target_2_hit`、`invalidated`、`expired`、`incomparable`、`settled` | 只在 tracking／歷史顯示中文狀態，不替代今日結論。 |
-| `invalid_levels` | 「研究價位無法驗證」；隱藏所有不合法價位。 |
-| `required inputs complete` | 稽核敘述；日常改成「突破／回踩條件資料完整」。 |
-| `prior_20_highs_missing_or_invalid` | 前 20 個交易日高點資料待補。 |
-| `prior_20_volumes_missing_or_invalid` | 前 20 個交易日成交量資料待補。 |
-| `close_missing_or_non_finite`／`volume_missing_or_non_finite` | 最近收盤／當日成交量資料待補；不補 0。 |
-| `ma20_missing_or_non_finite`／`ma60_missing_or_non_finite` | 20／60 日均線資料待補。 |
-| `group_excess_return_20d_missing_or_non_finite` | 近 20 日相對大盤資料待補，不把 unknown 當中性。 |
-| `institutional_flow_to_turnover_ratio_5d_missing_or_non_finite` | 近 5 日法人籌碼資料待補。 |
-| `margin_balance_change_ratio_5d_missing_or_non_finite` | 近 5 日融資變化資料待補。 |
-| `close_or_volume_must_be_positive`／`price_and_volume_inputs_must_be_positive` | 價格、均線或成交量異常，列資料待補，不解讀方向。 |
-| `bar_count_missing_or_invalid`／`bar_count_must_be_a_non_negative_integer` | 歷史交易日數資料／格式待核實。 |
-| `history_under_60_bars` | 近 60 個交易日行情不足，pullback 不可判定。 |
-| `close_not_above_prior_20_day_high`／`volume_ratio_below_1_20` | 收盤尚未突破／量能未達 1.20；是規則未通過，不是看空。 |
-| `group_relative_strength_not_positive` | 已核實群組未呈相對大盤正向；不顯示 raw group ID。 |
-| `institutional_flow_materially_adverse`／`margin_financing_increase_abnormal` | 法人／融資未達規則要求；中性描述，不作預測。 |
-| `ma20_not_above_ma60`／`close_below_ma60` | MA20 尚未高於 MA60／收盤低於 MA60。 |
-| `close_outside_ma20_support_zone`／`pullback_volume_ratio_outside_range` | 收盤不在支撐區／回踩量比不在規則區間。 |
+| `passed`／`rejected`／`data_incomplete`／`observation`／`conditional` | 「此研究條件已符合」「尚未成立」「資料待補」「條件尚未成立，持續觀察」「符合條件後可研究進場」；observation 不是缺資料，conditional 須附 T+1。tracking 狀態（`active`、`target_1_hit` 等）只在追蹤／歷史顯示，不替代今日結論。 |
+| `*_missing_or_non_finite`／`*_missing_or_invalid`（如 `prior_20_highs_missing_or_invalid`） | 「<資料項>資料待補」；不補 0，不把 unknown 當中性。 |
+| `close_not_above_prior_20_day_high`／`volume_ratio_below_1_20` | 規則未通過，不是看空。 |
 | `effective_group_score_missing_or_under_minimum_members` | 群組成員或相對大盤資料不足；不能顯示為 0 分。 |
-| `signal_day_suspended` | 訊號日交易狀態不適合計算；隱藏動作與價位。 |
-| `unsupported_instrument_type` | 商品類型暫不適用一般研究規則。 |
-| `unsupported_or_missing_etf_category`／`etf_category_is_only_valid_for_etf` | ETF／商品分類待核實，不產生一般動作。 |
-| `etf_category_excluded_from_actionable_signals:bond`／`etf_category_excluded_from_actionable_signals:leveraged`／`etf_category_excluded_from_actionable_signals:inverse` | 債券／槓桿／反向 ETF 可收集與分榜，暫不產生一般 v1 動作。 |
-| `ipo_history_under_20_bars`／`ipo_observation_only_under_60_bars` | IPO 未滿 20 日不動作；20–59 日只觀察。 |
-| `unsupported_entry_type` | 進場類型無法驗證；隱藏價位。 |
-| `entry_price_must_be_finite_and_positive`／`invalid_price_must_be_finite_and_positive`／`invalid_price_must_be_below_entry` | 進場或失效價無法驗證；隱藏相關價位、目標與 RR。 |
-| `target_1_must_be_finite_and_positive`／`target_1_must_exceed_entry` | 第一目標無法驗證；隱藏 target 與 RR。 |
-| `target_2_must_be_finite_and_positive_when_present`／`target_2_must_exceed_target_1` | 第二目標無法驗證；只隱藏第二目標，第一目標仍獨立檢查。 |
-| `minimum_first_target_risk_reward_must_be_finite_and_positive` | RR 門檻設定待核實；隱藏 RR 與條件價位包。 |
+| `etf_category_excluded_from_actionable_signals:<category>` | 債券／槓桿／反向 ETF 可收集與分榜，暫不產生一般 v1 動作。 |
+| `invalid_levels` 與各價位關係碼（如 `invalid_price_must_be_below_entry`） | 「研究價位無法驗證」；隱藏不合法價位、目標與 RR。 |
 | `target_1_risk_reward_below_minimum` | 第一目標 RR 未達門檻，不形成 conditional；不是績效結論。 |
-| `unsupported_current_status`／`unsupported_next_status`／`illegal_signal_status_transition` | 追蹤狀態無法驗證；日常顯示「需人工判讀」。 |
+| `unsupported_current_status`／`illegal_signal_status_transition` | 追蹤狀態無法驗證；日常顯示「需人工判讀」。 |

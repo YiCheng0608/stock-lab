@@ -104,4 +104,4 @@ orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 
 ## 排程
 
-V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §8](OPERATIONS.md#8-排程)。排程失敗以 Issue 追蹤。
+V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。
