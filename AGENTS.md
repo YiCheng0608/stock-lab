@@ -18,7 +18,7 @@
 
 | 角色 | 預設模型／effort | 做什麼 |
 | --- | --- | --- |
-| 統籌 | `claude-opus-5-5`／`medium` | 使用者入口 session 兼任，或使用者指定的一個 session。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度。 |
+| 統籌 | `claude-opus-5-5`／`medium`，`--autocompact 400k` | 同時只有一個：由使用者依[工作手冊](docs/GITHUB_WORKFLOW.md#統籌-session)開啟，之後依手冊自行換手。拆任務、建 Issue、派工、review、合併、更新 ROADMAP 與文件、回報進度；使用者不在時依[無人值守運作](docs/GITHUB_WORKFLOW.md#無人值守運作)持續推進。 |
 | 工程師 | `claude-sonnet-5-5`／`xhigh`（複雜任務可用 `claude-opus-5-5`） | 每個任務一個 session，在自己的 worktree 實作、自測、寫文件、開 PR、處理 review 與 CI。 |
 
 - 不設常駐 QA、文件、索引／Git 角色。需要獨立驗證時由統籌在 PR 上跑 `/code-review` 或另開一個 review session，見[工作手冊](docs/GITHUB_WORKFLOW.md#review-與合併)。
