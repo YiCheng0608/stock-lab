@@ -7,7 +7,6 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -39,7 +38,7 @@ ROW = {"Date": "1151001", "Code": "1101", "Name": "台泥", "OpeningPrice": "26.
 
 class StockOverviewTest(unittest.TestCase):
     def setUp(self):
-        self.files = tempfile.TemporaryDirectory(prefix="overview-", dir=os.environ["TEMP"])
+        self.files = tempfile.TemporaryDirectory(prefix="overview-")
         self.addCleanup(self.files.cleanup)
         self.root = Path(self.files.name)
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)

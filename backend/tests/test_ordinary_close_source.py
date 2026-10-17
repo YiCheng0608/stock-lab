@@ -90,6 +90,16 @@ def _inside(path):
     return full == _APPROVED or full.startswith(_APPROVED + os.sep)
 
 
+def _anchored(item, dir_fd):
+    """POSIX shutil.rmtree names each entry relative to an open directory fd; judge the path that name really denotes."""
+    if isinstance(dir_fd, int) and dir_fd >= 0 and isinstance(item, (str, bytes, os.PathLike)) and not os.path.isabs(item):
+        try:
+            return os.path.join(os.readlink("/proc/self/fd/%d" % dir_fd), os.fsdecode(item))
+        except OSError:
+            pass  # unresolvable: keep the relative name, which the cwd-based check then refuses
+    return item
+
+
 def _audit(event, args):
     if event in ("socket.connect", "socket.connect_ex", "socket.getaddrinfo", "socket.gethostbyname"):
         BLOCKED.append(event)
@@ -110,8 +120,9 @@ def _audit(event, args):
             BLOCKED.append(event)
             raise AssertionError("runner forbids writes outside its session directory")
     elif event in _PATH_EVENTS:
+        anchor = args[1] if event in ("os.remove", "os.rmdir") and len(args) > 1 else None  # their dir_fd
         for item in args[:2]:
-            if isinstance(item, (str, bytes, os.PathLike)) and not _inside(item):
+            if isinstance(item, (str, bytes, os.PathLike)) and not _inside(_anchored(item, anchor)):
                 BLOCKED.append(event)
                 raise AssertionError("runner forbids writes outside its session directory")
 

@@ -28,7 +28,7 @@ _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
 # documented standalone command instead (docs/development-baseline/README.md).
 STANDALONE_ONLY = {
     "test_share_quantity_storage.py": (
-        "docs/development-baseline/README.md:255 (standalone, no conftest, disk cases only "
+        "docs/development-baseline/README.md:257 (standalone, no conftest, disk cases only "
         "through the fixed root); tests/test_share_quantity_storage.py:24,148"
     ),
     "test_institutional_windows.py": (

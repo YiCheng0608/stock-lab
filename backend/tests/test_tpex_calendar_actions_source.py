@@ -87,6 +87,16 @@ def _inside(path):
     return full == _APPROVED or full.startswith(_APPROVED + os.sep)
 
 
+def _anchored(item, dir_fd):
+    """POSIX shutil.rmtree names each entry relative to an open directory fd; judge the path that name really denotes."""
+    if isinstance(dir_fd, int) and dir_fd >= 0 and isinstance(item, (str, bytes, os.PathLike)) and not os.path.isabs(item):
+        try:
+            return os.path.join(os.readlink("/proc/self/fd/%d" % dir_fd), os.fsdecode(item))
+        except OSError:
+            pass  # unresolvable: keep the relative name, which the cwd-based check then refuses
+    return item
+
+
 def _audit(event, args):
     if event in ("socket.connect", "socket.connect_ex", "socket.getaddrinfo", "socket.gethostbyname"):
         BLOCKED.append(event)
@@ -107,8 +117,9 @@ def _audit(event, args):
             BLOCKED.append(event)
             raise AssertionError("runner forbids writes outside its session directory")
     elif event in _PATH_EVENTS:
+        anchor = args[1] if event in ("os.remove", "os.rmdir") and len(args) > 1 else None  # their dir_fd
         for item in args[:2]:
-            if isinstance(item, (str, bytes, os.PathLike)) and not _inside(item):
+            if isinstance(item, (str, bytes, os.PathLike)) and not _inside(_anchored(item, anchor)):
                 BLOCKED.append(event)
                 raise AssertionError("runner forbids writes outside its session directory")
 
@@ -1995,7 +2006,9 @@ class Saving(Case):
     def test_the_save_root_can_never_be_the_real_private_root_and_the_default_is_it(self):
         source, _, _ = available()
         self.assertFailure("root_required_for_boundary", source.save)
-        for spelling in (REAL_ROOT, REAL_ROOT.replace("/", "\\"), REAL_ROOT.replace("\\", "/"), REAL_ROOT + "/", REAL_ROOT.upper()):
+        # A backslash or upper-case spelling names the same root only where backslash separates and paths are case-insensitive.
+        windows_spellings = (REAL_ROOT.replace("/", "\\"), REAL_ROOT.upper()) if os.name == "nt" else ()
+        for spelling in (REAL_ROOT, REAL_ROOT.replace("\\", "/"), REAL_ROOT + "/") + windows_spellings:
             with self.subTest(spelling=spelling):
                 self.assertFailure("boundary_root_is_private_root", source.save, root=spelling)
         dotted = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "..", "taiwan-stock-research", "tpex-calendar-actions-issue98")
@@ -2009,9 +2022,10 @@ class Saving(Case):
             self.assertFailure("root_not_private_root", source.save, root=self.new_root())
             self.assertFailure("root_invalid", source.save, root=5)
             self.assertEqual(tca.save_calendar_actions(source), "published")
-            self.assertEqual(source.save(root=REAL_ROOT.replace("/", "\\")), "published")
+            if os.name == "nt":
+                self.assertEqual(source.save(root=REAL_ROOT.replace("/", "\\")), "published")
             self.assertEqual(source.save(root=REAL_ROOT), "published")
-        self.assertEqual(seen, [REAL_ROOT, REAL_ROOT, REAL_ROOT])  # whatever spelling was accepted, the target is the resolved private root
+        self.assertEqual(seen, [REAL_ROOT] * (3 if os.name == "nt" else 2))  # whatever spelling was accepted, the target is the resolved private root
 
     def test_resaving_is_idempotent_and_different_content_is_refused(self):
         source, _, _ = available()
