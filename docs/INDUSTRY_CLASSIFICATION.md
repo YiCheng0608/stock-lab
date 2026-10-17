@@ -108,7 +108,7 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 - 每筆 instrument 必須以 `payload_sha256` 唯一匹配同 batch authoritative universe capture，並核對 exchange、source、endpoint allowlist 與 digest。TWSE／TPEx ordinary industry 只能各自來自 listed-company endpoint。
 - `captured_at` 取 `FetchedPayload.collected_at`；現行 local capture 的 naive 值依既有契約按 UTC 解讀，其他 naive 時間不可類推。正規化後須確認不在未來，再轉 Asia/Taipei 日曆日 `D=observation_date`。
 - `D` 是本系統開始採用 current observation 的下限，不是來源 effective date或 PIT。`data_as_of`、listing／start／score date 都不能替代。
-- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。#37 推論集合 consumer 對此的唯一例外見 [§6.4](#64-37-推論集合-consumer-例外)。
+- 若 `D > score_date`，該 instrument 的 ordinary membership 全部 skip，不關舊、不新增；run receipt 記 warning、counts 與兩日期，行情 backfill 可繼續。
 - receipt 的 `industry_membership_observations` 保存 `version=industry-observation-v1`、`scope=ordinary_industry_only`、status、skipped／unresolved counts、warnings 與逐筆 source／endpoint／digest、capture／observed／score dates、raw refs、time relationship、raw classification 和 status。
 - force success 將前一成功 receipt append 到 history；force failure 保留最後成功 receipt，並另存 latest attempt／failed attempts。非 force reuse 不改寫既有成功 receipt。
 - raw 去重時間不能冒充當次 capture。新 raw 的 aware time 正規化成 UTC-naive 以符合現有 SQLite 欄位；missing／invalid timestamp 不以 DB default 或現在時間補造，run 必須成為 failed，並保留可得的原檔、digest與 persistence error。
@@ -133,26 +133,6 @@ Normal collector 只對 stock／IPO 的 ordinary `official_industry`，以可信
 | receipt／retry | 成功、partial、reuse、force failure 與 raw time error可分辨且不覆蓋最後成功 evidence。 |
 
 有限 review 通過 §6.3，並涵蓋 parser→`collect`、timestamp、transaction、integrity／FK 與保護來源不變；不構成 live 官方來源、source-time truth、legacy raw time repair、歷史 PIT 或正式 DB 修復。
-
-### 6.4 #37 推論集合 consumer 例外
-
-只適用 `backend/app/industry_membership_inferred_source.py` 的 RAM consumer；ordinary collector 與其他 consumer 的 §6.1 `D > score_date` skip 不變。該 consumer 不寫 membership 或 DB、不回填任何 period：它在取得日 `D`（取得當下的 Asia/Taipei 日期，2026-10-06 至 2026-10-31）晚於截止日 `C`（2026-10-05、2026-10-06）的前提下，以 D 日完整集合加 `[C, D]` 內可偵測的事件推論 C 當日的成員集合，結果一律標 `inferred_from_post_cutoff_snapshot`，`effective_from`／`effective_to` 為 `unknown`，`pit=false`。來源、policy、傳輸與署名見[來源 #37 節](SOURCE_REGISTRY.md#53-37七股所涉群組兩截止推論-membership-與-ram-lookupissue37-industry-membership-inferred-cutoffs-1005-1006-v1)。
-
-範圍只有 official_industry namespace 的三個必要群組：`Semiconductor`（TWSE 24 加 TPEx 24）、`Optoelectronics`（TWSE 26 加 TPEx 26）、`Cultural Innovation`（TPEx 32），創新板與 KY 納入；七股是 UI 支持池，每檔在官方 snapshot 都必須落在這三個群組，否則整批拒用（同一官方 feed 內重複的代號須每一列都在這三個群組才算涵蓋，與列的順序無關；同一 symbol 兩個官方 feed 都有時以 TPEx feed 的列為準），收據逐檔回報實際交易所、官方原始產業 code 與 mapper 結果；必要群組綁在 policy，要改群組須另訂 policy。題材 namespace 為空集合，未核實的題材群組一律拒用。群組識別沿用 §2、§3：官方 `(exchange, 兩位數 code)` 經 §3 mapper，FinMind 的中文產業名只做 §2 該市場名稱的精確比對，不 trim、補零或跨市場。
-
-| 規則 | 內容 |
-| --- | --- |
-| D 日完整集合 | 每個群組的官方 `(exchange, symbol)` 集合必須與 FinMind `TaiwanStockInfo`「同 `stock_id` 中 `date` 最新列、`type∈{twse,tpex}`」的集合逐檔相等；比對排除 `[C, D]` 內已由 `TaiwanStockDelisting` 解釋、官方已不列的 FinMind-only 列。任何差異拒用該群組。最新列的判定：同 `stock_id` 各列的 `(type, industry_category)` 都相同時值已確定，與日期無關（單列也屬此類）；否則以 `date` 最新者為準，最新日期有多列且值不同視為多筆有效紀錄（`finmind_multiple_valid_records`）：該檔不進 FinMind 集合，並拒用各列產業名所到達的必要群組與官方列所在的必要群組；只要有一列日期 unknown（不是真實 `YYYY-MM-DD`、晚於 D 或型別不符）且列值不一致，該檔最新列無法判定（`finmind_latest_date_unresolved`）：它不進 FinMind 集合，兩個截止日都拒用它能到達的必要群組（官方列所在的必要群組，以及它任一列 `(type, industry)` 可對到的必要群組；`type` 不可用時兩個交易所都試），到達不了任何必要群組的檔忽略。已判定的最新列 `type` 不可用（非字串、null、缺漏、空、全空白、null 類字串）時，拒用它的產業名在任一交易所可對到的必要群組（`info_type_unusable`）。 |
-| 新掛牌 | 官方上市（櫃）日嚴格大於 C 者不屬於 C 的集合，等於 C 者是成員。上市日為 null、缺漏、不是來源 #37 節所列四種格式之一或不是真實日期時，拒用該檔所屬群組。 |
-| 下市 | 只看 `date∈[C, D]` 且 `stock_id` 為四位數字的列（非四位者屬非 ordinary，忽略；晚於 D 的真實日期是已知日期，落在所有窗口之外）。仍在官方 feed 者維持成員；`date==C` 時語意不明，拒用其群組。官方已不列者，以 FinMind 最新的 `twse`／`tpex` 列的中文產業名定群組並納入 C 的集合（標 `finmind_only_delisted_member`）；`date==C` 拒用該群組；沒有 `twse`／`tpex` 列、紀錄不唯一或產業名不屬 §2 時，拒用該 C 的全部三個群組。日期 unknown 的列視為可能等於 C 且可能晚於 C，兩個截止日都取兩種後果的聯集：官方仍列者拒用其必要群組；FinMind-only 且群組已判定者，該群組是必要群組時拒用（兩者皆 `delisting_date_unknown`）；產業無法判定或紀錄不唯一者拒用三群組；最新列因 Info 日期 unknown 而無法判定者（見 D 日集合列）視同無法判斷產業，與紀錄不唯一相同，拒用該 C 的全部三個群組（`delisted_industry_undeterminable`）。`stock_id` 不可用（見身分列）的列無法歸屬，拒用日期可能落在其窗口的截止日的三群組（`delisted_identity_unusable`；已知日期 d 為所有 `C ≤ d ≤ D` 的 C，日期 unknown 為兩個 C）。 |
-| 轉板 | 官方 TWSE 上市日大於 C，且 FinMind 留有同 `stock_id` 的 `tpex` 舊列：舊列最新 `date` 須不早於 C、產業名唯一且與官方群組相同，才把該檔以 TPEx 身分納入 C 的集合（標 `board_transfer_old_tpex_identity`）。其餘情形只會拒用、不會新增成員，範圍是官方群組（為必要群組時）加上相關舊列名稱所到達的每一個必要群組：產業衝突（`board_transfer_industry_conflict`）、最新日期並列（`board_transfer_ambiguous`）、最新舊列早於 C（`board_transfer_evidence_before_cutoff`）、舊列中有任一列日期 unknown（`board_transfer_evidence_date_unknown`；沒有日期的那列可能正是最新的一列，所以此時相關舊列是全部舊列）、官方列的上市日缺漏或無效（`board_transfer_listing_date_unknown`；無法判斷是否在 C 之後才轉板，比照舊列日期 unknown，相關舊列是全部對向舊列，官方群組不論是否必要都評估，官方 TWSE 列看 `tpex` 舊列，官方 TPEx 列看 `twse` 舊列；必要群組列原有的 `listing_date_missing_or_invalid` 照舊）、同 `stock_id` 有 FinMind 列的 `type` 不可用（`board_transfer_type_unknown`；它可能是任一交易所的舊列，所以兩個方向都算證據、不看日期，名稱同時用 TPEx 與 TWSE 兩張 §2 名稱表判定，兩張表都對不到才算不屬 §2；只在上述規則需要評估該官方列時才適用，上市日有效且不晚於 C 時不評估）。相關舊列名稱中只要有一個不屬 §2（它可能屬於任何群組），不論日期是否已知、是否並列，拒用該 C 的全部三個群組（`board_transfer_old_industry_unknown`）。反向（官方 TPEx 上市日大於 C 且有 `twse` 舊列）同樣處理，理由碼為 `board_transfer_reverse_direction`，名稱以 TWSE 的 §2 名稱判定。本規則對每一個官方上市日大於 C（或缺漏、無效）的 ordinary 列都評估，不論其群組是否為必要群組，也包含出表日不可用與代號重複的列；這些列與非必要群組的列不計成員，評估結果只會拒用、不會新增成員。 |
-| 身分 | `(exchange, symbol)` 在每份官方 feed 唯一，同一 symbol 不得在同一 C 同時屬兩個市場；排除 ETF、TDR 91、管理 80、停用 18／34、興櫃與非 ordinary：可用但不是剛好四位數字的代號（FinMind `stock_id` 為 1～32 字元的字串，官方代號符合 `[0-9A-Z]{4,6}`），官方與 FinMind 兩端一律排除於集合之外，不產生拒用理由。不可用的代號（非字串、null、缺漏、空、全空白、`none`／`null`／`nan`／`nat`／`na`／`n/a`／`undefined`〔不分大小寫、不 trim〕，FinMind `stock_id` 超過 32 字元，官方代號不符 `[0-9A-Z]{4,6}`）使該列無法歸屬某檔，只拒用它能到達的必要群組：官方列依產業碼對到的必要群組（`official_identity_unusable`），產業碼對到非必要群組或兩位數但不在 mapper 時忽略，產業碼也不可用或無法辨識時拒用三群組；FinMind `TaiwanStockInfo` 列依自己的 `(type, industry)`（`info_identity_unusable`，`type` 不可用時兩個交易所都試）。同一官方 feed 內重複的四位數字代號，各列都不計入成員，並拒用各列到達的必要群組（`official_duplicate_symbol`）。官方列的出表日不是 7 位真實民國日期時，該列不計入成員，拒用它所屬的必要群組（`official_row_report_date_unknown`），但仍留在身分索引供下市與轉板判定。每份官方 feed 須恰有一個可用出表日（所有可用列同值），且在 `[2026-10-06, D]`，否則整批拒用。 |
-
-拒用分三層：整批（取得日、官方 feed 沒有恰一個可用出表日、列不是物件、外層形狀、七股未被三群組涵蓋）、整個 C（下市產業無法判定、轉板舊列產業名未知、下市列 `stock_id` 不可用）、單一群組（其餘，包含所有值層級的 unknown）。值層級異常只會讓受影響的群組或截止日被拒用，不會新增成員或解除任何拒用。lookup 只接受兩個截止日、三個必要群組與 official_industry namespace；錯日、非必要群組、題材 namespace、被拒用的群組，以及 release 或 expiry 之後，一律拒用。被拒用的群組，lookup 只回 `group_rejected` 與理由碼，不回成員，也不回 `inferred_from_post_cutoff_snapshot`、`effective_from`／`effective_to`、`pit`、殘餘風險代碼、出表日與來源 digest 等接受欄位；這些欄位只隨接受的結果回傳。
-
-取得成功不代表有可用成員集合：群組只在 D 日兩來源逐檔相等且沒有上列拒用時才有成員集合，兩個截止日的三個群組都可能被拒用。下游須處理 `group_rejected`，不得假設任何群組有可用成員集合。
-
-殘餘風險隨每個結果以代碼回傳：`non_pit`、`classification_effective_dates_unknown`、`finmind_service_provider_not_official`、`inferred_from_post_cutoff_snapshot`、`off_cycle_reclassification_not_excluded`（TWSE 要點允許年度以外調整，`[C, D]` 內的臨時調整無法排除）、`delisting_date_semantics_unknown`（`TaiwanStockDelisting` 的 `date` 是最後交易日或下市生效日未定）。本節不證歷史分類、群組報酬、排名、題材歸屬、保存或時間接線，也不解除前端 guard 與策略 gate。
 
 ## 7. Round17 ETF／new-listing candidate lifecycle（有限接線已 review）
 

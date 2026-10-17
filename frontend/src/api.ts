@@ -1,4 +1,3 @@
-import type { JointConditions, JointFocusData } from './savedPriceChipsFocus'
 import type {
   BacktestSummary,
   BackfillRun,
@@ -15,14 +14,6 @@ import type {
   InstrumentDetail,
   OfficialEventsData,
   TwseIssuerProfileData,
-  InstitutionalWindowsData,
-  StockPriceMemoryData,
-  StockPriceSavedData,
-  PriceLotFocusData,
-  PriceSavedFocusData,
-  StockPriceSavedFocusData,
-  OrdinaryCloseTrendData,
-  PriceFocusDayMove,
   OfficialEventFocusData,
   OfficialEventKind,
   NewsItem,
@@ -212,36 +203,6 @@ export const getStock = (exchange: string, symbol: string, asOf?: string) =>
   get<InstrumentDetail & { decision_summary: ActionSummary | null; news: NewsItem[] }>(
     `/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}${queryString({ as_of: asOf })}`,
   )
-
-export const captureInstitutionalWindows = (exchange: string, symbol: string, asOf?: string) =>
-  post<InstitutionalWindowsData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/institutional-windows/capture${queryString({ as_of: asOf })}`, {})
-
-export const captureStockPriceMemory = (exchange: string, symbol: string, asOf: string) =>
-  post<StockPriceMemoryData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/capture${queryString({ as_of: asOf })}`, {})
-
-export const saveStockPrice = (exchange: string, symbol: string, asOf: string) =>
-  post<StockPriceSavedData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/save${queryString({ as_of: asOf })}`, {})
-
-export const getSavedStockPrice = (exchange: string, symbol: string, asOf: string) =>
-  get<StockPriceSavedData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/saved${queryString({ as_of: asOf })}`)
-
-export const getSavedFocusStockPrice = (exchange: string, symbol: string, asOf: string) =>
-  get<StockPriceSavedFocusData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/prices/saved-focus${queryString({ as_of: asOf })}`)
-
-export const getOrdinaryCloseTrend = (exchange: string, symbol: string, asOf: string) =>
-  get<OrdinaryCloseTrendData>(`/stocks/${encodeURIComponent(exchange)}/${encodeURIComponent(symbol)}/ordinary-close-trend${queryString({ as_of: asOf })}`)
-
-export const getSavedPriceFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove, minTurnover: string, minRangePct: string) =>
-  get<PriceSavedFocusData>(`/focus/price-saved${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)
-
-export const getSavedPriceChipsFocus = (values: JointConditions, calendar = false, scope7 = false) =>
-  get<JointFocusData>(`/focus/price-saved-chips${scope7 ? '-stock-scope-7' : calendar ? '-calendar' : ''}${queryString(values)}`)
-
-export const getPriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
-  get<PriceLotFocusData>(`/focus/price-lots${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`)
-
-export const capturePriceLotFocus = (asOf: string, minLots: string, dayMove: PriceFocusDayMove = 'all', minTurnover = '0', minRangePct = '0') =>
-  post<PriceLotFocusData>(`/focus/price-lots/capture${queryString({ as_of: asOf, min_lots: minLots, day_move: dayMove, min_turnover: minTurnover, min_range_pct: minRangePct })}`, {})
 
 export const captureOfficialEvents = (exchange: string, symbol: string, asOf?: string) =>
   post<OfficialEventsData>(

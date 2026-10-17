@@ -101,7 +101,7 @@ class StockOverviewTest(unittest.TestCase):
         self.assertEqual(latest["provenance"]["source_id"], SOURCE_ID)
         self.assertEqual(latest["provenance"]["summarize_decision"]["decision"], "allow")
         self.assertEqual(value["historical_pit"], "unsupported")
-        self.assertIsNone(value["institutional"]["values"])
+        self.assertNotIn("institutional", value)
         self.assertEqual({item["status"] for item in value["conditions"]}, {"data_insufficient"})
 
     def test_explicit_zero_and_missing_amount_are_distinct(self):

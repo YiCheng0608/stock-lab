@@ -41,7 +41,7 @@ CLI `run` 沒有新模式旗標，仍產生或同模式重用 v1 attempt；若�
 
 Source 必須是 caller 預先建立的專案外、inactive、stable、rollback-mode SQLite consistent snapshot，且沒有 `-wal`、`-shm`、`-journal` sidecar。Caller 依 snapshot bytes 計算 expected SHA-256；library 不尋找或選擇目前正式庫。
 
-Target 必須是 caller 指定且已授權的具名專案外 research output；它必須是 absolute external path，主檔與三種 sidecar 都不存在。實作拒絕 workspace／受保護路徑、URI、`:memory:`、symlink／junction／hard-link alias 與未知既有目標，不會認領、清空或覆寫既有檔案。真正磁碟 capture 所需的 source snapshot、new research DB 與 unused config DB path 都由 caller 管理；落盤必要性、產物／殘留 budget、保留與清理依 [AGENTS](../AGENTS.md#驗證資料與暫存)，本文件不另設示範 Temp 流程。
+Target 必須是 caller 指定且已授權的具名專案外 research output；它必須是 absolute external path，主檔與三種 sidecar 都不存在。實作拒絕 workspace／受保護路徑、URI、`:memory:`、symlink／junction／hard-link alias 與未知既有目標，不會認領、清空或覆寫既有檔案。真正磁碟 capture 所需的 source snapshot、new research DB 與 unused config DB path 都由 caller 管理；落盤必要性、產物／殘留 budget、保留與清理依 [AGENTS](../AGENTS.md#工程原則)，本文件不另設示範 Temp 流程。
 
 Owner 保存的 source fingerprint 對應建立 owned DB 前的原 snapshot bytes。後續 attempt 會在 research DB 寫入 analysis／legacy Signal／capture rows，所以 owner SHA 不是目前 research DB、selected call 或 exact evaluator inputs 的 hash。已有限 review 的 opt-in Bridge B 要 caller 明示 current research snapshot path／expected SHA，於同一受保護的唯讀 snapshot 驗完整 attempt 後選 exact ordinal；它另外建立 input-only manifest hash，只回 candidate，不由 capture 自動保存。三種 hash、候選映射與 fail-closed 邊界由 [Signal artifact §10](SIGNAL_ARTIFACTS.md#10-bridge-a-可證映射與下一候選) 統一負責。
 

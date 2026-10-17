@@ -39,11 +39,10 @@ class RoutingTests(unittest.TestCase):
     def test_paths_read_by_backend_suite_require_python(self):
         for name in ["frontend/src/App.tsx", "frontend/src/api.ts", "frontend/package.json", "frontend/pnpm-lock.yaml"]:
             self.assertEqual(change_flags([name]), {"python": True, "frontend": True}, name)
-        for name in ["docs/SOURCE_REGISTRY.md", "docs/INDUSTRY_CLASSIFICATION.md"]:
-            self.assertEqual(change_flags([name]), {"python": True, "frontend": False}, name)
 
     def test_unread_frontend_and_docs_paths_stay_out_of_python(self):
-        for name in ["frontend/vite.config.ts", "frontend/scripts/ci-test.cjs", "frontend/src/NOTES.md", "docs/ROADMAP.md"]:
+        for name in ["frontend/vite.config.ts", "frontend/scripts/ci-test.cjs", "frontend/src/NOTES.md", "docs/ROADMAP.md",
+                     "docs/SOURCE_REGISTRY.md", "docs/INDUSTRY_CLASSIFICATION.md"]:
             self.assertFalse(change_flags([name])["python"], name)
 
     def test_frontend_files_literally_read_by_backend_tests_require_python(self):

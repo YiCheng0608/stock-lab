@@ -191,9 +191,7 @@ def test_api_defaults_are_unavailable_without_legacy_fallback():
         assert response.status_code == 200
         result = response.json()
         assert result["institutional_daily"]["reasons"] == ["daily_capture_not_configured"]
-        assert result["institutional"]["values"] is None
-        assert result["institutional"]["reasons"] == ["window_capture_not_enabled"]
-        assert result["institutional"]["windows"] == {} and result["institutional"]["capture_state"]["request_count"] == 0
+        assert "institutional" not in result
 
 
 def test_real_capture_through_actual_api_router(live_capture):
@@ -206,16 +204,13 @@ def test_real_capture_through_actual_api_router(live_capture):
             row = result["institutional_daily"]["row"]
             assert row["row_ordinal"] == ordinal and row["total_net"] == total
             assert [row["investors"][key]["net"] for key in ("foreign", "trust", "dealer")] == nets
-            assert result["institutional"]["status"] == "unavailable" and result["institutional"]["values"] is None
-            assert result["institutional"]["reasons"] == ["window_capture_not_enabled"]
-            assert result["institutional"]["windows"] == {} and result["institutional"]["capture_state"]["request_count"] == 0
+            assert "institutional" not in result
             detail = client.get(f"/api/stocks/TPEx/{symbol}?as_of=2026-10-02")
             assert detail.status_code == 200
             assert detail.json()["overview"]["institutional_daily"] == result["institutional_daily"]
             assert detail.json()["news_cutoff"]["as_of"] == result["as_of"]
             print(json.dumps({"api_symbol": symbol, "overview_version": result["version"], "row": row,
-                              "provenance": result["institutional_daily"]["provenance"],
-                              "windows": result["institutional"]}, ensure_ascii=True))
+                              "provenance": result["institutional_daily"]["provenance"]}, ensure_ascii=True))
         assert client.get("/api/stocks/TPEx/3105/overview?as_of=2026-10-01").json()["institutional_daily"]["reasons"] == ["daily_after_cutoff"]
         assert client.get("/api/stocks/TWSE/3105/overview?as_of=2026-10-02").json()["institutional_daily"]["reasons"] == ["daily_exchange_not_supported"]
         assert client.get("/api/stocks/TPEx/3105/overview").json()["institutional_daily"]["reasons"] == ["daily_shared_cutoff_missing"]

@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 import app.api as api_module
-from app import config, institutional_windows_1006, official_events, tpex_price, twse_issuer_profile
+from app import config, official_events, twse_issuer_profile
 from app.browser_gate import BrowserGate, refusal
 from app.main import app as product_app
 
@@ -182,10 +182,6 @@ def test_lifespan_and_websocket_scopes_pass_through():
 # ---- the real product app -------------------------------------------------------------------------------------------------
 
 ENDPOINTS = [
-    ("POST", "/api/stocks/TWSE/2330/institutional-windows/capture?as_of=2026-09-04", b"{}", True),
-    ("POST", "/api/stocks/TWSE/2330/prices/capture?as_of=2026-09-04", b"{}", True),
-    ("POST", "/api/stocks/TWSE/2330/prices/save?as_of=2026-09-04", b"{}", True),
-    ("POST", "/api/focus/price-lots/capture?as_of=2026-09-04&min_lots=1000", b"{}", False),
     ("POST", "/api/focus/official-events/capture?as_of=2026-09-04", b"{}", False),
     ("POST", "/api/stocks/TWSE/1449/issuer-profile/capture?as_of=2026-09-04", b"{}", True),
     ("POST", "/api/stocks/TWSE/2330/official-events/capture?as_of=2026-09-04", b"{}", True),
@@ -250,7 +246,7 @@ def probe(monkeypatch):
             raise AssertionError("name lookup: %r" % (host,))
         return real_getaddrinfo(host, *args, **kwargs)
 
-    for env in (tpex_price.ENABLE_ENV, official_events.CAPTURE_ENV, twse_issuer_profile.CAPTURE_ENV, institutional_windows_1006.ENABLE_ENV):
+    for env in (official_events.CAPTURE_ENV, twse_issuer_profile.CAPTURE_ENV):
         monkeypatch.setenv(env, "1")
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
