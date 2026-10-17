@@ -1,6 +1,5 @@
 """0009: strategy rows are identified by formula sub-version (real SQLite files, no network)."""
 import copy
-import dataclasses
 import hashlib
 import json
 import sqlite3
@@ -11,14 +10,13 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
 from app import api as api_module, database_readiness as readiness, domain, migrations
 from app.db import enable_sqlite_foreign_keys
 from app.models import IngestionRun, Instrument, MarketBar, Signal
-from app.stock_signal_reads import load_stock_signal_reads
-from worker import analysis_capture as capture, pipeline
+from worker import pipeline
 
 FIXTURE = Path(__file__).parent / "fixtures" / "strategy_snapshots_pre_v2.json"
 V1, V2 = domain.INSTITUTIONAL_FLOW_FORMULA_V1, domain.INSTITUTIONAL_FLOW_FORMULA_V2
@@ -313,9 +311,16 @@ def test_old_signals_read_the_same_except_strategy_active(tmp_path, monkeypatch,
         engine = create_engine(f"sqlite:///{path.as_posix()}")
         try:
             with Session(engine) as db:
-                ids = [r.id for r in db.scalars(select(Instrument))]
-                reads = load_stock_signal_reads(db, ids, date(2026, 12, 31))
-                candidates = [dataclasses.asdict(c) for i in ids for c in reads[i].candidates]
+                version_columns = ("id", "name", "version", "kind", "config_json", "canonical_config_snapshot", "active", "created_at")
+                rows = db.execute(text(
+                    "SELECT s.*, " + ", ".join(f"v.{c} AS version_{c}" for c in version_columns)
+                    + " FROM signals s LEFT JOIN strategy_versions v ON v.id = s.strategy_version_id ORDER BY s.id"
+                )).mappings()
+                candidates = [
+                    {**{k: v for k, v in row.items() if not k.startswith("version_")},
+                     "strategy": {c: row["version_" + c] for c in version_columns}}
+                    for row in rows
+                ]
                 payloads = []
                 for signal in db.scalars(select(Signal).order_by(Signal.id)):
                     payloads.append(without_clock(api_module.signal_dict(db, signal)))
@@ -486,7 +491,7 @@ def test_ensure_strategies_creates_current_rows_and_never_touches_older_ones(mig
         assert {key: row.id for key, row in pipeline._ensure_strategies(db).items()} == ids
     assert query(path, "SELECT * FROM strategy_versions WHERE id <= 9 ORDER BY id") == legacy
     assert len(query(path, "SELECT * FROM strategy_versions")) == 12
-    # The new rows carry the current canonical snapshot (what analysis_capture.persist pins).
+    # The new rows carry the current canonical snapshot.
     for key, row_id in ids.items():
         stored = query(path, f"SELECT canonical_config_snapshot, config_json FROM strategy_versions WHERE id = {row_id}")[0]
         assert json.loads(stored[0]) == json.loads(stored[1]) == domain.canonical_config_snapshot()[key]
@@ -587,12 +592,23 @@ def e2e_source(tmp_path, old_signal_day):
     return source, day
 
 
-def run_worker(source, tmp_path, attempt="one"):
-    target = tmp_path / "research.db"
-    owner = capture.create_research_database(source_snapshot_path=source, expected_source_sha256=sha(source),
-                                             research_database_path=target)
-    assert owner
-    return target, lambda: capture.execute_analysis_attempt(research_database_path=target, attempt_id=attempt)
+def run_worker(source):
+    """Run the analysis step in one transaction; commit only a successful run."""
+    def run():
+        engine = raw_engine(source)
+        enable_sqlite_foreign_keys(engine)
+        try:
+            with Session(engine) as db:
+                try:
+                    result = pipeline._analyze_session(db)
+                except Exception:
+                    db.rollback()
+                    raise
+                db.commit()
+                return result
+        finally:
+            engine.dispose()
+    return source, run
 
 
 def test_worker_runs_on_v2_rows_and_keeps_older_dates_on_their_v1_rows(tmp_path, monkeypatch):
@@ -600,11 +616,11 @@ def test_worker_runs_on_v2_rows_and_keeps_older_dates_on_their_v1_rows(tmp_path,
     upgrade(source, "fallback", monkeypatch)
     old_signals = query(source, "SELECT * FROM signals ORDER BY id")
     legacy_rows_before = query(source, "SELECT * FROM strategy_versions ORDER BY id")
-    target, run = run_worker(source, tmp_path)
+    target, run = run_worker(source)
 
     result = run()
 
-    assert result["outcome"] == "committed_verified" and result["receipt"]["signal_count"] == 4
+    assert result["status"] == "success" and result["signals_upserted"] == 4
     assert query(target, "SELECT * FROM signals WHERE id <= 2 ORDER BY id") == old_signals
     assert query(target, "SELECT * FROM strategy_versions WHERE id <= 3 ORDER BY id") == legacy_rows_before
     new = query(target, "SELECT s.signal_key, v.id, v.formula_version, v.active, v.canonical_config_snapshot "
@@ -624,14 +640,13 @@ def test_worker_refuses_to_overwrite_a_v1_signal_of_the_same_day(tmp_path, monke
     source, latest = e2e_source(tmp_path, date(2026, 5, 1) + timedelta(days=64))
     upgrade(source, "fallback", monkeypatch)
     old_signals = query(source, "SELECT * FROM signals ORDER BY id")
-    target, run = run_worker(source, tmp_path)
+    target, run = run_worker(source)
     before = sha(target)
 
-    with pytest.raises(capture.AnalysisCaptureError) as error:
+    with pytest.raises(pipeline.StrategyVersionError) as error:
         run()
 
-    assert error.value.code == "analysis_failed" and error.value.outcome == "rollback_confirmed"
-    assert error.value.detail == "signal_formula_conflict"
+    assert error.value.code == "signal_formula_conflict"
     assert sha(target) == before
     assert query(target, "SELECT * FROM signals ORDER BY id") == old_signals
     assert len(query(target, "SELECT * FROM strategy_versions")) == 3

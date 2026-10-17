@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準。下一版方向與驗證見 [STRATEGIES](STRATEGIES.md)，實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果；公式變更可由 config 的 `formula_version` 子版本升版（如法人 `institutional-flow/v2-shares-per-share-volume`），此時 `StrategyVersion.version` 維持 `1.0.0`，舊公式識別保留於 `domain.INSTITUTIONAL_FLOW_FORMULAS`。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別：子版本升版時舊公式的列整列保留（id、`version`、`config_json`、快照不改），新公式另建一列，既存訊號仍指向其原列。
+本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果；公式變更可由 config 的 `formula_version` 子版本升版（如法人 `institutional-flow/v2-shares-per-share-volume`），此時 `StrategyVersion.version` 維持 `1.0.0`，舊公式識別保留於 `domain.INSTITUTIONAL_FLOW_FORMULAS`。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別：子版本升版時舊公式的列整列保留（id、`version`、`config_json`、快照不改），新公式另建一列，既存訊號仍指向其原列。
 
 設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
@@ -74,18 +74,17 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 
 ## 已知實作偏差與版本修正要求
 
-1. worker 的 atr14 是最多 14 根 high-low 平均，缺少 prev close 的 True Range；Wilder ATR 純核心尚未接線。
-2. 舊 conditional `confidence=0.75` 沒有校準證據；只可標示舊版固定值，不得稱 75% 勝率。新 rule-only 數值為 null。
-3. `_risk_levels` 使用固定風險倍數產生 1.6R／3R；合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
-4. T 日 13:30 cutoff 可能早於法人等盤後資料；新的 PIT 版本須補 availability／revision／decision time。
-5. 30 bps 成本與單邊 5 bps 滑價是固定假設；新版本需區分商品與情境並保持舊結果可重現。
-6. `StrategyVersion` 的唯一鍵是（`name`、`version`、`formula_version`），由 alembic `0009_strategy_formula_version` 與 fallback 建立。遷移對每個既存列標一個 `formula_version`：快照宣告的已知公式值；沒有宣告但與 v2 之前三個 canonical 快照（固定的 SHA-256 清單，名稱與版本須相符）的 canonical JSON 完全相同者標 `institutional-flow/v1-shares-per-twd-turnover`；其餘（空快照、無法解析、`config_json` 與快照不一致、未知公式值、不在清單內的內容）標具名 `unclassified/<reason>`，不猜測。非 v2 公式的列設 `active=false`，id、`version`、`config_json`、快照不改，舊訊號仍指向原列。`_ensure_strategies` 只取（名稱、版本、目前公式）的列或新建，不重用 v1 或 `unclassified` 列、不補寫空快照；取到的列與 canonical 不符時以 `strategy_snapshot_mismatch` 拒用。`analysis` 的 `signal_key` 不含公式，`_upsert_signal_for_strategy` 遇同鍵訊號所屬列的公式與目前不同（含無法歸屬的列）時，以 `signal_formula_conflict` 拒絕覆寫，舊訊號整列保留。`GET /api/strategies` 每列含 `id`（`StrategyVersion` 整數主鍵）與 `formula_version`（庫內原值，含 `unclassified/<reason>`）。殘餘限制：
-   - v2 之前已有 `analysis` 訊號的（標的、日期、策略）不能以 v2 在 `analysis` 命名空間重算；新日期與 backtest 不受影響。要以 v2 重算這些歷史日期，須另行調整 `signal_key` 格式。
-   - `signal_formula_conflict` 讓整次分析中止，不是只略過該檔：`analyze` 以 `StrategyVersionError` 結束且不提交該次結果，`daily` 不進入 evaluate，`analysis_capture` 以 `analysis_failed`（detail=`signal_formula_conflict`）失敗。
-   - 舊列 `active=false`，所以舊訊號讀取結果的 `strategy.active` 由 true 變 false，其餘欄位不變。
-   - 只認得固定清單內的 v2 前快照；更早或被改動的快照標為 `unclassified`。
-   - 遷移只支援 SQLite；其他方言不執行這項遷移，也不分類既存列。
-   - 本條只處理既存快照的保存；在正式 DB 執行遷移、以新公式跑訊號另需授權。
-7. DB 路徑的法人比率（`backend/worker/pipeline.py` 的 `_validated_flow_and_volume_inputs`）以該標的非停牌 bar 取截止日 T（含）以前最後 20 根，最後 5 根的日期須有籌碼列；它不核對交易所日曆，也不要求最後一根就是 T：停牌日被跳過；T 本身沒有非停牌 bar 時（strategy 路徑在 T 沒有 bar 列時另不產生訊號），窗口結束於更早一日；缺某個交易日的 bar 時，20 根橫跨 21 個平日。這些情形只要窗口仍滿 20 根且量、籌碼完整就照算，不拒用。取得模組路徑另有 24 日日曆全等檢查（見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)），DB 路徑沒有。
-
-以上未全部修正或接入正式流程；狀態以 ROADMAP 為準。
+1. worker 的 `atr14` 是最多 14 根 high-low 的平均，不含前收盤的 True Range，不是 Wilder ATR。
+2. 舊 conditional 的 `confidence=0.75` 沒有校準證據，只可標示為舊版固定值，不得稱 75% 勝率；rule-only 的數值為 null。
+3. `_risk_levels` 以固定風險倍數產生 1.6R／3R，合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
+4. T 日 13:30 cutoff 可能早於法人等盤後資料，PIT 版本須另存 availability／revision／decision time。
+5. 30 bps 成本與單邊 5 bps 滑價是固定假設，不區分商品與情境。
+6. `StrategyVersion` 的唯一鍵是（`name`、`version`、`formula_version`），由 alembic `0009_strategy_formula_version` 與 fallback 建立。
+7. 0009 遷移把既存列標為快照宣告的已知公式、與 v2 之前三個 canonical 快照（固定 SHA-256 清單）完全相同者標 `institutional-flow/v1-shares-per-twd-turnover`，其餘標 `unclassified/<reason>`，不猜測。
+8. 非 v2 公式的列設 `active=false`，id、`version`、`config_json`、快照不改，舊訊號仍指向原列，讀取時 `strategy.active` 由 true 變 false。
+9. `_ensure_strategies` 只取（名稱、版本、目前公式）的列或新建，不重用 v1 或 `unclassified` 列，取到的列與 canonical 不符時以 `strategy_snapshot_mismatch` 拒用。
+10. `analysis` 的 `signal_key` 不含公式，同鍵訊號屬於其他公式時以 `signal_formula_conflict` 拒絕覆寫，`analyze` 以 `StrategyVersionError` 結束且不提交該次結果，`daily` 不進入 evaluate。
+11. v2 之前已有 `analysis` 訊號的（標的、日期、策略）不能以 v2 在 `analysis` 命名空間重算；新日期與 backtest 不受影響。
+12. 0009 遷移只支援 SQLite，其他方言不分類既存列。
+13. `GET /api/strategies` 每列含 `id`（`StrategyVersion` 整數主鍵）與 `formula_version`（庫內原值，含 `unclassified/<reason>`）。
+14. DB 路徑的法人比率（`backend/worker/pipeline.py` 的 `_validated_flow_and_volume_inputs`）以 T（含）以前最後 20 根非停牌 bar 計算、最後 5 根須有籌碼列，不核對交易所日曆，也不要求最後一根就是 T。

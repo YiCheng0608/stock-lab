@@ -12,13 +12,13 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `$env:VITE_API_BASE`。`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[操作手冊](../docs/OPERATIONS.md)。
+需略過 lifecycle scripts 時用 `pnpm install --frozen-lockfile --ignore-scripts`；依 `pnpm-lock.yaml`，不要混用 npm。API 預設為 `http://127.0.0.1:8000/api`；需要覆寫時在啟動前設定 `$env:VITE_API_BASE`。`pnpm run test:ci` 執行 `src` 下全部測試，`pnpm run build` 執行 TypeScript 檢查與 production build。後端啟動及資料路徑查[操作手冊](../docs/OPERATIONS.md)。
 
 ## 頁面與契約
 
 - 主導航：今日、新聞、族群、個股、行動；新聞詳情 `/news/:id`，個股 `/stocks/:exchange/:symbol`。
 - 研究／診斷：`/research/backtest`、`/research/coverage`、`/research/strategies`、`/system/data-quality`、`/glossary`。
-- [UI 文案](../docs/UI_COPY_SPEC.md)：中文狀態、單位、未知與卡片；[個股研究頁](../docs/STOCK_RESEARCH_PAGE.md)：圖表與研究流程。
+- [UI 文案](../docs/UI_COPY_SPEC.md)：中文狀態、單位、未知與卡片；[設計規範](../docs/DESIGN_SYSTEM.md)：視覺與元件。
 - [新聞契約](../docs/NEWS_SPEC.md)：來源、去重、時間；[詞彙表](../docs/GLOSSARY.md)：術語。
 
 股數以精確 shares 保存，成本為每股；張／股只作輸入與呈現。最近收盤不稱即時價，固定 confidence 不稱勝率。現行能力與驗收邊界以 ROADMAP 及上述契約為準。
