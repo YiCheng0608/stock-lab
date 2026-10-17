@@ -22,8 +22,9 @@ import traceback
 from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, inspect, select, text
 
+from app.migration_revisions import REVISIONS
 from app.models import ScheduleRun, ScheduleRunStep
 from worker import pipeline
 
@@ -92,6 +93,25 @@ def _indicator_step(target: date) -> dict[str, Any]:
     if runner is None:
         return {"status": "not_configured", "reason": f"{INDICATOR_MODULE}.{INDICATOR_FUNCTION} is missing"}
     return runner(target)
+
+
+def _ensure_schema() -> str:
+    """Migrate only when the DB is not already at the code head.
+
+    ``init_db`` always runs the whole-database migration integrity check,
+    which takes minutes on a multi-year market DB even when no revision is
+    pending, so an up-to-date DB skips it.
+    """
+
+    with pipeline.SessionLocal() as db:
+        bind = db.get_bind()
+        current = None
+        if inspect(bind).has_table("alembic_version"):
+            current = db.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+    if current == [REVISIONS[-1]]:
+        return "current"
+    pipeline.init_db()
+    return "upgraded"
 
 
 def _record_step(
@@ -222,7 +242,7 @@ def run_daily_job(
     trigger: str = "manual",
     force: bool = False,
 ) -> dict[str, Any]:
-    pipeline.init_db()
+    _ensure_schema()
     target = pipeline.latest_weekday(end_date)
     run_id, finished = _start_run(target, trigger, force)
     if finished is not None:

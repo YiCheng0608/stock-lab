@@ -391,6 +391,26 @@ def test_run_commits_through_session_factory(db, monkeypatch):
     assert db.scalar(select(func.count(TechnicalIndicator.id))) == 80
 
 
+@pytest.fixture
+def daily_db(monkeypatch):
+    """run_daily writes schedule_runs, so it needs a migrated (in-memory) DB."""
+    from sqlalchemy.orm import sessionmaker
+
+    from worker import pipeline
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    enable_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(
+        pipeline, "SessionLocal", sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    )
+    monkeypatch.setattr(pipeline, "init_db", lambda: None)
+    yield engine
+    engine.dispose()
+
+
 def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicators=None):
     from worker import indicator_batch, pipeline
 
@@ -398,16 +418,16 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
     monkeypatch.setattr(
         pipeline,
         "collect",
-        lambda end, months_back=0: calls.append(("collect", end))
-        or {"status": collect},
+        lambda end, months_back=0, **_kwargs: calls.append(("collect", end))
+        or {"status": collect, "records": 1},
     )
     monkeypatch.setattr(
-        pipeline, "analyze", lambda: calls.append(("analyze",)) or {"status": analyze}
+        pipeline, "analyze", lambda **_kwargs: calls.append(("analyze",)) or {"status": analyze}
     )
     monkeypatch.setattr(
         pipeline,
         "evaluate",
-        lambda: calls.append(("evaluate",)) or {"status": "success"},
+        lambda **_kwargs: calls.append(("evaluate",)) or {"status": "success"},
     )
 
     def batch(run_date=None, *, rebuild=False):
@@ -420,37 +440,38 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
     return pipeline, calls
 
 
-def test_run_daily_runs_indicators_after_evaluate_with_run_date(monkeypatch):
+def test_run_daily_runs_indicators_after_evaluate_with_run_date(daily_db, monkeypatch):
     pipeline, calls = _daily_stubs(monkeypatch)
     result = pipeline.run_daily(END)
     assert calls == [("collect", END), ("analyze",), ("evaluate",), ("indicators", END)]
     assert result["indicators"] == {"status": "success"}
+    assert result["status"] == "success"
 
 
-def test_run_daily_indicator_failure_does_not_stop_evaluate(monkeypatch):
+def test_run_daily_indicator_failure_does_not_stop_evaluate(daily_db, monkeypatch):
     pipeline, calls = _daily_stubs(monkeypatch, indicators=RuntimeError("disk full"))
-    result = pipeline.run_daily()
-    assert ("evaluate",) in calls and calls[-1] == ("indicators", None)
+    result = pipeline.run_daily(END)
+    assert ("evaluate",) in calls and calls[-1] == ("indicators", END)
     assert result["evaluate"] == {"status": "success"}
-    assert result["indicators"] == {
-        "status": "failed",
-        "error": "RuntimeError: disk full",
-    }
+    assert result["indicators"]["status"] == "failed"
+    assert result["indicators"]["error"] == "RuntimeError: disk full"
+    # The failure is visible on the run itself, not only in the step result.
+    assert result["status"] == "failed"
 
 
 def test_run_daily_skips_indicators_when_collect_fails_and_runs_them_when_analyze_fails(
-    monkeypatch,
+    daily_db, monkeypatch,
 ):
     pipeline, calls = _daily_stubs(monkeypatch, collect="failed")
     result = pipeline.run_daily(END)
     assert calls == [("collect", END)]
     assert result["indicators"] == {
         "status": "skipped",
-        "reason": "official_collection_failed",
+        "reason": "official_collection_incomplete",
     }
     pipeline, calls = _daily_stubs(monkeypatch, analyze="skipped")
     result = pipeline.run_daily(END)
     assert calls == [("collect", END), ("analyze",), ("indicators", END)]
-    assert result["evaluate"]["reason"] == "analysis_failed" and result[
+    assert result["evaluate"]["reason"] == "analyze_not_successful" and result[
         "indicators"
     ] == {"status": "success"}

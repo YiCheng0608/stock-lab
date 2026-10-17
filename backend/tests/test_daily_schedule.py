@@ -392,3 +392,17 @@ def test_analyze_uses_the_pinned_collect_run_even_when_another_is_newer(database
     assert pipeline.analyze(collect_run_id=ids[0])["date"] == "2026-09-03"
     assert pipeline.analyze(collect_run_id=ids[1])["status"] == "skipped"
     assert pipeline.analyze()["date"] == DAY.isoformat()
+
+
+def test_schema_check_skips_init_db_only_at_the_code_head(database, monkeypatch):
+    from sqlalchemy import text
+
+    from app.migration_revisions import REVISIONS
+
+    calls = []
+    monkeypatch.setattr(pipeline, "init_db", lambda: calls.append("init_db"))
+    assert schedule_runs._ensure_schema() == "current" and calls == []
+    with database() as db:
+        db.execute(text("UPDATE alembic_version SET version_num = :value"), {"value": REVISIONS[-2]})
+        db.commit()
+    assert schedule_runs._ensure_schema() == "upgraded" and calls == ["init_db"]

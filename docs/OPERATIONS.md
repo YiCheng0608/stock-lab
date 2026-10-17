@@ -135,7 +135,7 @@ python -m worker.cli backtest --start-date 2026-06-10 --end-date 2026-09-08
 
 ### 8.1 設定
 
-前置條件：一個裝好 `backend/requirements.txt` 的 Python（例如專案 `.venv`），以及已用 `init-db` 初始化的目標 DB（見 [§2.1](#21-安全升級與復原順序)）。從**長期保留的 checkout**（例如管理 checkout）註冊；任務 worktree 合併後會刪除，不要從那裡註冊。
+前置條件：一個裝好 `backend/requirements.txt` 的 Python（例如專案 `.venv`），以及已用 `init-db` 初始化的目標 DB（見 [§2.1](#21-安全升級與復原順序)）。從**長期保留的 checkout**（例如管理 checkout）註冊；任務 worktree 合併後會刪除，不要從那裡註冊。daily 開頭只在 DB 的 Alembic revision 不是程式 head 時才跑 `init_db`（含整庫 migration 完整性檢查，多年 DB 上要數分鐘）；已在 head 時直接開始。
 
 ```powershell
 # 先預覽，不改系統
