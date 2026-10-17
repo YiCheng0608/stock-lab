@@ -6,6 +6,7 @@ from datetime import date
 import hashlib
 import json
 import os
+import re
 import time
 from typing import Any, Mapping
 from urllib.parse import urlencode
@@ -24,6 +25,8 @@ POLICY_DIGEST = "sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241
 ENABLE_ENV = "STOCK_TPEX_PRICE_SAVED_FOCUS"
 VERSION_ENV = "STOCK_TPEX_PRICE_SAVED_FOCUS_POLICY_VERSION"
 DIGEST_ENV = "STOCK_TPEX_PRICE_SAVED_FOCUS_POLICY_DIGEST"
+LOCALAPPDATA_ENV = "LOCALAPPDATA"
+ROOT_SUBDIRS = ("taiwan-stock-research", "price-save-01a11367")
 CUTOFF = date(2026, 10, 6)
 MAX_READS = 96
 _READ_COUNT = 0
@@ -32,6 +35,43 @@ _POLICY = json.loads(r'''{"version":"m1-saved-price-focus-tpex-11370-2026-10-06.
 
 def focus_policy() -> dict:
     return deepcopy(_POLICY)
+
+
+# Windows root prefixes (``os.path.splitdrive``, separators normalised to ``\``) that name a fixed location: a drive letter or a
+# complete UNC share (server and share both non-empty). ``\\?\`` and ``\\.\`` must carry one of those two themselves.
+_WINDOWS_FIXED_PREFIX = re.compile(r"[A-Za-z]:|\\\\(?![?.]\\)[^\\]+\\[^\\]+|\\\\[?.]\\(?:[A-Za-z]:|UNC\\[^\\]+\\[^\\]+)")
+
+
+def private_root(environment: Mapping[str, Any] | None = None) -> str:
+    """The admitted private root: ``%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367``.
+
+    Read at call time, never at import. ``LOCALAPPDATA`` is the only source: unset, empty or non-string is
+    ``price_saved_focus_root_unset``; relative, containing ``..`` or a NUL byte is ``price_saved_focus_root_invalid``. On
+    Windows the drive part must be a drive letter or a complete UNC share, because a rooted path without one is relative to
+    the current drive and an incomplete UNC would turn our own directory name into a share on another host. There is no
+    fallback to another variable or path, and nothing is created or checked on disk here. The policy's ``private_root`` is
+    a pinned historical literal and never the target.
+    """
+    value = (os.environ if environment is None else environment).get(LOCALAPPDATA_ENV)
+    if type(value) is not str or not value:
+        raise PriceStorageError("price_saved_focus_root_unset")
+    if "\x00" in value or not os.path.isabs(value) or ".." in re.split(r"[\\/]", value):
+        raise PriceStorageError("price_saved_focus_root_invalid")
+    if os.name == "nt" and not _WINDOWS_FIXED_PREFIX.fullmatch(os.path.splitdrive(value)[0].replace("/", "\\")):
+        raise PriceStorageError("price_saved_focus_root_invalid")
+    return os.path.join(value, *ROOT_SUBDIRS)
+
+
+def same_private_root(value: Any, environment: Mapping[str, Any] | None = None) -> bool:
+    """Whether ``value`` names the directory ``private_root`` derives; spelling (case, separators, trailing one) is ignored.
+
+    A relative, ``..`` or non-string value never matches, so the current directory cannot make it equal. Raises the
+    ``private_root`` errors when the environment cannot derive a root.
+    """
+    root = private_root(environment)
+    if type(value) is not str or not value or "\x00" in value or not os.path.isabs(value) or ".." in re.split(r"[\\/]", value):
+        return False
+    return os.path.normcase(os.path.normpath(value)) == os.path.normcase(os.path.normpath(root))
 
 
 def validate_focus_policy(policy: dict, version: str, pin: str) -> None:
@@ -123,8 +163,13 @@ def _gate(as_of: date | None, env: Mapping[str, str]) -> str | None:
         validate_focus_policy(focus_policy(), env.get(VERSION_ENV, ""), env.get(DIGEST_ENV, ""))
     except PriceStorageError as error:
         return str(error)
-    # Literal path admission is separate from the existing Windows path-safety checks.
-    if env.get(saved.ROOT_ENV, "").replace("\\", "/") != _POLICY["private_root"]:
+    # Root admission is separate from the existing Windows path-safety checks. The target is derived from the same
+    # environment at call time; the private_root literal inside the pinned policy is historical only and is not compared.
+    try:
+        admitted = same_private_root(env.get(saved.ROOT_ENV, ""), env)
+    except PriceStorageError as error:
+        return str(error)
+    if not admitted:
         return "price_saved_focus_root_not_admitted"
     if env.get(tpex_price.ENABLE_ENV, "") != "0":
         return "price_saved_focus_memory_capture_not_disabled"

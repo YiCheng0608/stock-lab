@@ -373,7 +373,11 @@ def configure_joint(fixture):
         fixture.stack.enter_context(patch.dict(os.environ, {joint_focus.ENABLE_ENV: "1",
             joint_focus.VERSION_ENV: ARGS.joint_focus_policy_version, joint_focus.DIGEST_ENV: ARGS.joint_focus_policy_digest,
             joint_focus.JOINT_VERSION_ENV: ARGS.joint_policy_version, joint_focus.JOINT_DIGEST_ENV: ARGS.joint_policy_digest}))
-    if str(PRIVATE_ROOT).replace("\\", "/") != entry.entry_policy()["private_use"]["root"]:
+    try:
+        admitted = focus.same_private_root(str(PRIVATE_ROOT))
+    except focus.PriceStorageError as error:
+        raise ValueError("joint_literal_private_root_not_admitted") from error
+    if not admitted:
         raise ValueError("joint_literal_private_root_not_admitted")
     class ChipsTransport(httpx.BaseTransport):
         def __init__(self):

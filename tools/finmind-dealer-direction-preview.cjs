@@ -92,7 +92,8 @@ function checkGate() {
   assert.equal(apiHost, '127.0.0.1:' + apiPort, 'forwarded Host is fixed')
   return n
 }
-const deps = path.resolve(options.get('--deps') ?? 'C:/Users/YiCheng/Desktop/taiwan-stock-research/frontend/node_modules')
+const deps = path.resolve(options.get('--deps') ?? path.join(root, 'frontend/node_modules'))
+assert(fs.existsSync(deps) && fs.statSync(deps).isDirectory(), 'dependency directory not found: ' + deps + ' (pass --deps <existing frontend/node_modules>)')
 const requireDeps = Module.createRequire(path.join(deps, '../package.json'))
 const esbuildPackage = path.join(deps, '.pnpm/node_modules/esbuild')
 const compiler = fs.realpathSync(require.resolve('@esbuild/' + process.platform + '-' + process.arch + '/esbuild.exe', { paths: [esbuildPackage] }))

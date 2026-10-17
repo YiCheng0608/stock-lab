@@ -51,6 +51,7 @@ UUID_PATTERN = r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
 MODEL_PATTERN = r"claude-[a-z0-9][a-z0-9.-]{0,62}"
 COMMAND_SWITCHES = " -I -B -X utf8 -c "
 COMMAND_MAX_UNITS = 32766  # CreateProcess: 32,767 UTF-16 units including the NUL.
+# Historical fixed field of the spent issue #36 qa2 seal ("cwd" must equal it); never a read or write target.
 WORKTREE = "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-36-institutional-five-day-source"
 # One-shot source-use quota "qa2", granted by the user in the receipt below (qa1 is SPENT / NO-RETRY and
 # is never re-armed). The SHA-256 covers that comment's body as returned by the GitHub API (UTF-8, 1,859 B).

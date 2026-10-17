@@ -26,8 +26,10 @@ parser.add_argument("--chips-dealer-components-stock-scope-7-opt-in", action="st
 parser.add_argument("--policy-version")
 parser.add_argument("--policy-digest")
 parser.add_argument("--port", type=int, default=8799)
-parser.add_argument("--deps", default="C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps")
+parser.add_argument("--deps", default=str(ROOT / "backend/.deps"), help="existing backend/.deps, read-only (default: <repo>/backend/.deps)")
 ARGS = parser.parse_args()
+if not Path(ARGS.deps).is_dir():
+    parser.error("dependency directory not found: " + ARGS.deps + " (pass --deps <existing backend/.deps>)")
 if ARGS.check == ARGS.serve or not 1024 <= ARGS.port <= 65535:
     parser.error("select exactly --check or --serve and a finite local port")
 if sum((ARGS.chips_series_stock_scope_7_opt_in, ARGS.chips_gross_stock_scope_7_opt_in, ARGS.chips_direction_stock_scope_7_opt_in, ARGS.chips_adjacent_stock_scope_7_opt_in, ARGS.chips_dealer_components_stock_scope_7_opt_in)) > 1:

@@ -8,7 +8,11 @@ from copy import deepcopy
 import csv
 from datetime import date
 import hashlib
+import importlib.util
 import io
+import os
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -16,11 +20,16 @@ from unittest.mock import patch
 from app import price_saved_focus as focus, tpex_price, tpex_price_saved as saved
 from worker import tpex_price_capture as worker, tpex_price_storage as storage
 
+# Synthetic stand-in for %LOCALAPPDATA%: a string only, never created or opened. accepted_environment() names it, so the
+# admitted private root is derived from it (not from the pinned historical policy["private_root"]) and no personal path is needed.
+FAKE_LOCALAPPDATA = "C:\\Fake\\LocalAppData" if os.name == "nt" else "/fake/localappdata"
+FAKE_ROOT = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "price-save-01a11367")
+
 
 def accepted_environment():
     p = focus.focus_policy()
-    return {focus.ENABLE_ENV: "1", focus.VERSION_ENV: p["version"], focus.DIGEST_ENV: focus.POLICY_DIGEST,
-        saved.ENABLE_ENV: "1", saved.ROOT_ENV: p["private_root"], saved.VERSION_ENV: p["storage_policy_version"],
+    return {focus.LOCALAPPDATA_ENV: FAKE_LOCALAPPDATA, focus.ENABLE_ENV: "1", focus.VERSION_ENV: p["version"], focus.DIGEST_ENV: focus.POLICY_DIGEST,
+        saved.ENABLE_ENV: "1", saved.ROOT_ENV: FAKE_ROOT, saved.VERSION_ENV: p["storage_policy_version"],
         saved.DIGEST_ENV: p["storage_policy_digest"], tpex_price.ENABLE_ENV: "0",
         tpex_price.POLICY_VERSION_ENV: p["capture_policy_version"], tpex_price.POLICY_DIGEST_ENV: p["capture_policy_digest"]}
 
@@ -87,7 +96,7 @@ class SavedFocusMemoryTests(unittest.TestCase):
             ({focus.ENABLE_ENV: "x"}, "price_saved_focus_configuration_invalid"),
             ({focus.VERSION_ENV: "wrong"}, "price_saved_focus_policy_pins_mismatch"),
             ({focus.DIGEST_ENV: "wrong"}, "price_saved_focus_policy_pins_mismatch"),
-            ({saved.ROOT_ENV: policy["private_root"] + "-other"}, "price_saved_focus_root_not_admitted"),
+            ({saved.ROOT_ENV: FAKE_ROOT + "-other"}, "price_saved_focus_root_not_admitted"),
             ({tpex_price.ENABLE_ENV: "1"}, "price_saved_focus_memory_capture_not_disabled"),
             ({saved.ENABLE_ENV: "0"}, "price_private_store_not_enabled"),
             ({saved.DIGEST_ENV: "bad"}, "price_storage_policy_pins_mismatch"),
@@ -237,3 +246,166 @@ class SavedFocusMemoryTests(unittest.TestCase):
             self.assertFalse(fixture.store._attempted)
         finally:
             fixture.close()
+
+
+# Windows: neither of these names a fixed location. A rooted path without a drive letter or UNC share resolves against the
+# current drive (cwd); an incomplete UNC would turn our own directory name into a share on another host.
+WINDOWS_ROOTED_NO_DRIVE = ("\\foo\\bar", "/foo/bar", "\\foo/bar", "\\", "/")
+WINDOWS_INCOMPLETE_UNC = ("\\\\", "\\\\srv", "\\\\srv\\", "\\\\srv/", "//srv", "//srv/", "//", "\\\\\\", "\\\\?\\y", "\\\\?\\", "\\\\.\\",
+                          "\\\\?\\UNC\\srv", "\\\\?\\UNC\\srv\\", "\\\\\\share", "\\\\\\share\\Local", "\\\\\\srv\\shr", "\\\\/share",
+                          "///share", "///share/Local", "///srv/shr", "//\\share", "\\\\?\\UNC\\\\share")
+ROOT_UNSET = "price_saved_focus_root_unset"
+ROOT_INVALID = "price_saved_focus_root_invalid"
+NOT_ADMITTED = "price_saved_focus_root_not_admitted"
+NUL = chr(0)
+
+
+class PrivateRootTests(unittest.TestCase):
+    """Issue 118: the admitted private root is derived from %LOCALAPPDATA% at call time and fails closed; the policy's
+    ``private_root`` is a pinned historical literal that is never a read or write target."""
+
+    @staticmethod
+    def gate(changes=None):
+        return focus._gate(focus.CUTOFF, {**accepted_environment(), **(changes or {})})
+
+    def test_the_root_is_derived_from_localappdata_at_call_time_and_spelling_does_not_matter(self):
+        expected = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research", "price-save-01a11367")
+        spellings = [FAKE_LOCALAPPDATA, FAKE_LOCALAPPDATA + os.sep]
+        if os.name == "nt":
+            spellings += [FAKE_LOCALAPPDATA.replace("\\", "/"), FAKE_LOCALAPPDATA.upper()]
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                resolved = focus.private_root({"LOCALAPPDATA": spelling})
+                self.assertEqual(os.path.normcase(os.path.normpath(resolved)), os.path.normcase(os.path.normpath(expected)))
+        self.assertEqual((focus.LOCALAPPDATA_ENV, focus.ROOT_SUBDIRS), ("LOCALAPPDATA", ("taiwan-stock-research", "price-save-01a11367")))
+        self.assertEqual(focus.private_root({"LOCALAPPDATA": FAKE_LOCALAPPDATA, "APPDATA": "ignored", "USERPROFILE": "ignored"}), expected)
+        with patch.dict(os.environ, {"LOCALAPPDATA": FAKE_LOCALAPPDATA}):
+            self.assertEqual(focus.private_root(), expected)  # default source: os.environ
+            self.assertEqual(focus.private_root(os.environ), expected)
+        self.assertFalse(hasattr(focus, "PRIVATE_ROOT"))  # no import-time root
+
+    def test_the_admitted_root_follows_the_environment_and_never_the_policy_literal(self):
+        other = os.path.join(FAKE_LOCALAPPDATA, "other-account")
+        other_root = os.path.join(other, "taiwan-stock-research", "price-save-01a11367")
+        self.assertIsNone(self.gate())
+        self.assertIsNone(self.gate({focus.LOCALAPPDATA_ENV: other, saved.ROOT_ENV: other_root}))
+        self.assertEqual(self.gate({focus.LOCALAPPDATA_ENV: other}), NOT_ADMITTED)  # the root still names the first account
+        self.assertEqual(self.gate({saved.ROOT_ENV: other_root}), NOT_ADMITTED)
+        literal = focus.focus_policy()["private_root"]
+        self.assertEqual(self.gate({saved.ROOT_ENV: literal}), NOT_ADMITTED)  # the literal is not a gate value by itself
+        self.assertEqual(self.gate({saved.ROOT_ENV: literal.replace("/", "\\")}), NOT_ADMITTED)
+
+    @unittest.skipUnless(os.name == "nt", "drive-letter paths are absolute only on Windows")
+    def test_a_profile_whose_localappdata_matches_the_historical_literal_is_admitted_for_the_same_directory(self):
+        history = focus.focus_policy()["private_root"]
+        suffix = "/" + "/".join(focus.ROOT_SUBDIRS)
+        self.assertTrue(history.endswith(suffix))
+        profile = history[:-len(suffix)]  # the LOCALAPPDATA that produced the historical literal
+        for spelling in (profile, profile.replace("/", "\\"), profile.replace("/", "\\") + "\\"):
+            for root in (history, history.replace("/", "\\"), history.upper(), history.lower()):
+                with self.subTest(localappdata=spelling, root=root):
+                    self.assertIsNone(self.gate({focus.LOCALAPPDATA_ENV: spelling, saved.ROOT_ENV: root}))
+        self.assertEqual(self.gate({focus.LOCALAPPDATA_ENV: FAKE_LOCALAPPDATA, saved.ROOT_ENV: history}), NOT_ADMITTED)  # another account
+
+    def test_the_same_directory_in_other_spellings_is_admitted_and_any_other_directory_is_not(self):
+        base = os.path.join(FAKE_LOCALAPPDATA, "taiwan-stock-research")
+        same = [FAKE_ROOT, FAKE_ROOT + os.sep, FAKE_ROOT + "/", os.path.join(base, ".", "price-save-01a11367"),
+                base + os.sep + os.sep + "price-save-01a11367"]
+        if os.name == "nt":  # case-insensitive, both separators
+            same += [FAKE_ROOT.replace("\\", "/"), FAKE_ROOT.upper(), FAKE_ROOT.lower(), FAKE_ROOT.replace("\\", "/", 2),
+                     FAKE_ROOT.replace("\\", "/").upper(), FAKE_ROOT.upper() + "\\"]
+        different = [FAKE_ROOT + "-other", FAKE_ROOT + "x", os.path.join(base, "price-save-tests-01a11367"), base,
+                     os.path.join(FAKE_ROOT, "tpex-11370-2026-10-06-m1-v1"), os.path.join(FAKE_LOCALAPPDATA, "price-save-01a11367"),
+                     os.path.join(FAKE_LOCALAPPDATA, "elsewhere", "taiwan-stock-research", "price-save-01a11367"),
+                     os.path.join(base, "..", "taiwan-stock-research", "price-save-01a11367"),  # ``..`` is refused, not resolved
+                     "", ".", "..", "taiwan-stock-research/price-save-01a11367", "price-save-01a11367", FAKE_ROOT + NUL,
+                     focus.focus_policy()["private_root"]]
+        if os.name == "nt":
+            different += ["D:" + FAKE_ROOT[2:], "\\\\server\\share" + FAKE_ROOT[2:], "\\\\?\\" + FAKE_ROOT, FAKE_ROOT[2:], FAKE_ROOT[2:].replace("\\", "/")]
+        else:
+            different += [FAKE_ROOT.upper()]  # case-sensitive file systems: a different directory
+        for root in same:
+            with self.subTest(same=root):
+                self.assertIsNone(self.gate({saved.ROOT_ENV: root}))
+        instruments, views, _, _ = synthetic_snapshot()
+        with patch.object(saved, "read_private_snapshot", side_effect=AssertionError("no private read admitted")), \
+                patch.object(focus, "_read", side_effect=AssertionError("no private read admitted")):
+            for root in different:
+                env = {**accepted_environment(), saved.ROOT_ENV: root}
+                with self.subTest(different=root):
+                    self.assertEqual(focus._gate(focus.CUTOFF, env), NOT_ADMITTED)
+                    result = focus.build_saved_focus(instruments, focus.CUTOFF, "0", environment=env)
+                    self.assertEqual((result["reasons"], result["status"], result["count"], result["reads"]), ([NOT_ADMITTED], "unavailable", None, []))
+                    self.assertEqual(focus.read_saved_focus_stock(instruments[0], focus.CUTOFF, environment=env)["reasons"], [NOT_ADMITTED])
+            missing = {k: v for k, v in accepted_environment().items() if k != saved.ROOT_ENV}
+            self.assertEqual(focus._gate(focus.CUTOFF, missing), NOT_ADMITTED)
+        with patch.object(focus, "_read", return_value=(views, synthetic_guard())) as reader:
+            for root in same:
+                with self.subTest(read=root):
+                    result = focus.build_saved_focus(instruments, focus.CUTOFF, "0", environment={**accepted_environment(), saved.ROOT_ENV: root})
+                    self.assertEqual((result["status"], result["reasons"], result["count"]), ("available", [], 7))
+            self.assertEqual(reader.call_count, len(same))
+
+    def test_unset_empty_relative_or_dotdot_localappdata_fails_closed_with_named_codes_and_reads_nothing(self):
+        cases = [("absent", None, ROOT_UNSET), ("empty", "", ROOT_UNSET), ("int", 5, ROOT_UNSET), ("bytes", os.fsencode(FAKE_LOCALAPPDATA), ROOT_UNSET),
+                 ("relative", "relative\\dir", ROOT_INVALID), ("dot", ".", ROOT_INVALID), ("unexpanded", "%LOCALAPPDATA%", ROOT_INVALID),
+                 ("dotdot", os.path.join(FAKE_LOCALAPPDATA, "..", "x"), ROOT_INVALID), ("dotdot_slash", FAKE_LOCALAPPDATA + "/../x", ROOT_INVALID),
+                 ("dotdot_backslash", FAKE_LOCALAPPDATA + "\\..\\x", ROOT_INVALID), ("nul", FAKE_LOCALAPPDATA + NUL + "x", ROOT_INVALID)]
+        if os.name == "nt":
+            cases += [("drive_relative", "C:relative", ROOT_INVALID)]
+            for value in WINDOWS_ROOTED_NO_DRIVE + WINDOWS_INCOMPLETE_UNC:
+                cases += [("windows_refused " + spelling, spelling, ROOT_INVALID) for spelling in (value, value + "\\", value + "/")]
+        instruments, _, _, _ = synthetic_snapshot()
+        with patch.object(saved, "read_private_snapshot", side_effect=AssertionError("no private read admitted")), \
+                patch.object(focus, "_read", side_effect=AssertionError("no private read admitted")):
+            for label, value, code in cases:
+                env = accepted_environment()
+                if value is None:
+                    del env[focus.LOCALAPPDATA_ENV]
+                else:
+                    env[focus.LOCALAPPDATA_ENV] = value
+                with self.subTest(case=label):
+                    with self.assertRaises(storage.PriceStorageError) as caught:
+                        focus.private_root(env)
+                    self.assertEqual(str(caught.exception), code)
+                    self.assertEqual(focus._gate(focus.CUTOFF, env), code)
+                    result = focus.build_saved_focus(instruments, focus.CUTOFF, "0", environment=env)
+                    self.assertEqual((result["reasons"], result["status"], result["count"], result["reads"]), ([code], "unavailable", None, []))
+                    self.assertEqual(focus.read_saved_focus_stock(instruments[0], focus.CUTOFF, environment=env)["reasons"], [code])
+            for variable in ("APPDATA", "USERPROFILE", "HOME", "TEMP", "TMP", "TMPDIR", "XDG_DATA_HOME"):  # never a fallback source
+                with self.subTest(fallback=variable):
+                    with self.assertRaises(storage.PriceStorageError) as caught:
+                        focus.private_root({variable: FAKE_LOCALAPPDATA})
+                    self.assertEqual(str(caught.exception), ROOT_UNSET)
+            with patch.dict(os.environ, {"APPDATA": FAKE_LOCALAPPDATA, "USERPROFILE": FAKE_LOCALAPPDATA, "HOME": FAKE_LOCALAPPDATA}):
+                os.environ.pop("LOCALAPPDATA", None)
+                with self.assertRaises(storage.PriceStorageError):
+                    focus.private_root()
+        # Gate order is unchanged: the pins come first, the root next, the later switches after it.
+        self.assertEqual(self.gate({focus.VERSION_ENV: "wrong", focus.LOCALAPPDATA_ENV: ""}), "price_saved_focus_policy_pins_mismatch")
+        self.assertEqual(self.gate({tpex_price.ENABLE_ENV: "1", focus.LOCALAPPDATA_ENV: ""}), ROOT_UNSET)
+        self.assertEqual(self.gate({tpex_price.ENABLE_ENV: "1"}), "price_saved_focus_memory_capture_not_disabled")
+        self.assertFalse(os.path.lexists(FAKE_LOCALAPPDATA))  # nothing was created
+
+    def test_importing_the_module_reads_no_environment_and_opens_nothing(self):
+        class Spy:
+            def __getattr__(self, name):
+                raise AssertionError("environment touched at import: " + name)
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("I/O at import")
+
+        name = "app._price_saved_focus_import_probe"
+        spec = importlib.util.spec_from_file_location(name, Path(focus.__file__))
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {name: module}), patch.object(os, "environ", Spy()), patch("builtins.open", refuse):
+            spec.loader.exec_module(module)
+        self.assertEqual((module.LOCALAPPDATA_ENV, module.ROOT_SUBDIRS), (focus.LOCALAPPDATA_ENV, focus.ROOT_SUBDIRS))
+        self.assertFalse(hasattr(module, "PRIVATE_ROOT"))
+
+    def test_the_policy_private_root_stays_a_pinned_literal_apart_from_the_derived_root(self):
+        policy = focus.focus_policy()
+        self.assertTrue(policy["private_root"].endswith("/taiwan-stock-research/price-save-01a11367"))
+        self.assertEqual((len(worker.canonical_bytes(policy)), worker.digest(policy)), (2677, focus.POLICY_DIGEST))
+        focus.validate_focus_policy(policy, focus.POLICY_VERSION, focus.POLICY_DIGEST)  # the pins are neither changed nor loosened
+        self.assertFalse('["private_root"]' in Path(focus.__file__).read_text(encoding="utf-8"))  # never read back as a target
