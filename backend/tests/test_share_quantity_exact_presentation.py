@@ -97,6 +97,7 @@ from app.db import Base
 from app.models import IngestionRun, Instrument, MarketBar, PortfolioPosition, Signal, StrategyVersion
 from app.portfolio_values import read_portfolio_value
 from app.portfolio_quotes import read_close, read_record
+from app.stock_overview import OVERVIEW_VERSION
 from app.units import share_quantity_dict, shares_from_position_quantity, split_shares
 from app.units import position_held, trusted_position_shares
 
@@ -1341,7 +1342,7 @@ class StockMarketReadTest(unittest.TestCase):
         for symbol, payload in zip(STOCK_READS, results):
             self.assertEqual(payload["instrument"]["symbol"], symbol)
             self.assertIsNone(payload["overview"]["price"]["latest"])
-            self.assertEqual(payload["overview"]["version"], "stock-overview/p6c-v1")
+            self.assertEqual(payload["overview"]["version"], OVERVIEW_VERSION)
             if symbol in {"B-CLOSE", "C-DATE", "E-SOURCE", "F-SUSPEND", "G-VOLUME", "H-OHLC", "L-WINDOW"}:
                 self.assertEqual(payload["market_read"]["status"], "invalid")
                 self.assertNotEqual(payload["quality_summary"]["market"]["status"], "complete")

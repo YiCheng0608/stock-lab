@@ -344,6 +344,7 @@ def test_version_only_pin_is_not_reported_as_content_pinned():
 def test_import_has_no_app_or_http_side_effects(tmp_path):
     env = dict(os.environ)
     env["PYTHONPATH"] = str(Path(__file__).parents[1])
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(
         [sys.executable, "-c", "import sys; import worker.source_registry; print('app.config' in sys.modules)"],
         cwd=tmp_path,
@@ -359,6 +360,7 @@ def test_readonly_cli_requires_explicit_profile_and_reports_unverified_without_e
     backend = Path(__file__).parents[1]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(backend)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(
         [
             sys.executable,
@@ -388,6 +390,7 @@ def test_validate_cli_external_pin_is_required_for_pinned_claim():
     manifest = registry.load_manifest()
     env = dict(os.environ)
     env["PYTHONPATH"] = str(backend)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(
         [
             sys.executable,
@@ -416,6 +419,7 @@ def test_cli_requires_an_explicit_manifest_path():
     backend = Path(__file__).parents[1]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(backend)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     result = subprocess.run(
         [sys.executable, "-m", "worker.source_registry", "validate"],
         cwd=backend,
