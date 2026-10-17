@@ -47,6 +47,9 @@ class ThemeGroup(Base):
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
+    # official_industry | etf | instrument_theme (legacy ETF theme) |
+    # daily_hot_group (new listings) | theme (theme table) |
+    # theme_candidate (inactive suggestion awaiting review; never scored).
     group_type: Mapped[str] = mapped_column(String(30), default="official_industry")
     definition_version: Mapped[str] = mapped_column(String(30), default="v1")
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -58,6 +61,8 @@ class ThemeGroup(Base):
     display_description_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     name_source: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # pending (name not mapped) | official / verified / approved (displayable,
+    # see app.news.is_verified_theme) | pending_verification (theme candidate).
     name_status: Mapped[str] = mapped_column(String(30), default="pending", server_default="pending")
 
 
@@ -70,6 +75,7 @@ class GroupMembership(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     group_id: Mapped[str] = mapped_column(ForeignKey("theme_groups.id"), index=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    # member | candidate (member of a theme_candidate group, unverified).
     role: Mapped[str] = mapped_column(String(20), default="member")
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     valid_from: Mapped[date] = mapped_column(Date)

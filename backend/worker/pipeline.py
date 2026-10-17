@@ -61,6 +61,7 @@ from app.models import (
 )
 from app.news import sync_news_from_events
 from app.taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id, canonical_industry_label
+from app.theme_table import THEME_CANDIDATE_GROUP_TYPE, THEME_GROUP_TYPE
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -576,6 +577,23 @@ def _allowed_group_members(group: ThemeGroup, members: list[tuple[GroupMembershi
     ]
 
 
+def _group_board(group: ThemeGroup) -> str | None:
+    """Ranking board: official industries and themes are ranked separately.
+
+    Other stock groups (e.g. new listings) form their own board; ETF groups
+    stay partitioned by category.  Unreviewed theme candidates are never scored.
+    """
+    if group.group_type == THEME_CANDIDATE_GROUP_TYPE:
+        return None
+    if group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower():
+        return "etf"
+    if group.group_type == "official_industry":
+        return "industry"
+    if group.group_type == THEME_GROUP_TYPE:
+        return "theme"
+    return "other"
+
+
 def _percentile(value: float | None, peers: list[float | None]) -> float | None:
     if value is None:
         return None
@@ -628,6 +646,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     computed: list[dict[str, Any]] = []
 
     for group in groups:
+        board = _group_board(group)
+        if board is None:
+            continue
         members = _allowed_group_members(group, _effective_memberships(db, group.id, score_date))
         member_metrics: list[dict[str, Any]] = []
         for _membership, instrument in members:
@@ -765,6 +786,7 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 "eligible": eligible,
                 "member_count": len(members),
                 "leaderboard": leaderboard,
+                "board": board,
                 "raw_values": values,
                 "relative_1d": relative_1d,
                 "relative_5d": relative_5d,
@@ -776,10 +798,14 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         )
 
     # Percentiles are cross-sectional within the canonical equity/ETF
-    # leaderboard, never across a mixed set of companies and ETFs.
+    # leaderboard and board, never across companies and ETFs or across
+    # official industries and themes.
     for item in computed:
         raw = item["raw_values"]
-        peers = [other for other in computed if other["leaderboard"] == item["leaderboard"]]
+        peers = [
+            other for other in computed
+            if (other["leaderboard"], other["board"]) == (item["leaderboard"], item["board"])
+        ]
         normalized = {
             "relative_return": _percentile(raw["relative_return"], [other["raw_values"]["relative_return"] for other in peers]),
             "breadth": raw["breadth"],
@@ -858,6 +884,8 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             "normalized_values": normalized,
             "institutional_flow_coverage": item["flow_coverage"],
             "leaderboard": item["leaderboard"],
+            "board": item["board"],
+            "member_count": item["member_count"],
             "weights": GROUP_SCORE_WEIGHTS,
             "methodology": HOT_GROUP_CONFIG["components"],
         }
@@ -869,7 +897,7 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         peers = [
             other["score_row"]
             for other in computed
-            if other["leaderboard"] == item["leaderboard"]
+            if (other["leaderboard"], other["board"]) == (item["leaderboard"], item["board"])
             and other.get("score_row") is not None
             and other["score_row"].score is not None
         ]
@@ -997,6 +1025,9 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
             GroupMembership.valid_from <= signal_date,
             (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= signal_date)),
             ThemeGroup.active.is_(True),
+            # Strategy group confirmation keeps its pre-theme input; themes
+            # are ranked research context only.
+            ThemeGroup.group_type != THEME_GROUP_TYPE,
             GroupDailyScore.trading_date == signal_date,
             GroupDailyScore.relative_return_20d.is_not(None),
             GroupDailyScore.eligible_members >= MIN_GROUP_MEMBERS,
