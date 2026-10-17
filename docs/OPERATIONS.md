@@ -88,6 +88,8 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 每日排程以 Windows 工作排程器執行 worker 與新聞任務（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；排程註冊方式與日誌位置尚未提供，未排程前依 [§3](#3-現有-worker-cli) 手動執行。
 
+位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `origin/master`，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
 - **頻率**：每 2 小時執行一次 `python -m worker.cli news`，環境變數（`STOCK_*`、`PYTHONPATH`）與 `daily` 相同。feed 只保留最近 10～65 則，間隔拉長會漏稿（見[新聞來源限制](DATA_SOURCES.md#新聞來源)）。
