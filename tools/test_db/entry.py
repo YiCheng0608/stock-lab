@@ -243,6 +243,16 @@ class DbEntry:
         report["read_only_uri"] = Path(report["db_path"]).as_uri() + "?mode=ro"
         return report
 
+    @staticmethod
+    def _make_dir(directory: Path) -> bool:
+        """Create ``directory`` and its parents; True only when this call made the directory itself."""
+
+        try:
+            directory.mkdir(parents=True)
+        except FileExistsError:
+            return False
+        return True
+
     def freeze(
         self, run: RunInfo | str, version: str, *, kind: str = "manual_fixture", meta: dict[str, Any] | None = None,
         fixture: dict[str, Any] | None = None, check_product: bool = True,
@@ -269,13 +279,15 @@ class DbEntry:
         sha256, size = sha256_file(info.db_path)
         partial = self.samples_dir / f".partial-{uuid.uuid4().hex[:8]}"
         self._enforce(partial, incoming=size + 64 * 1024, action="freeze")  # the copy plus metadata; nothing is created yet
+        created_samples = self._make_dir(self.samples_dir)
+        scratch_root = self.root / "tmp"  # ProductRunner.check_schema creates it; a refusal must not leave it behind
+        had_scratch_root = os.path.lexists(scratch_root)
         try:
-            self.samples_dir.mkdir(parents=True)
-            created_samples = True
-        except FileExistsError:
-            created_samples = False
-        try:
-            partial.mkdir()
+            try:
+                partial.mkdir()
+            except FileNotFoundError:  # a concurrent freeze took away the empty samples/ it had made
+                created_samples = self._make_dir(self.samples_dir) or created_samples
+                partial.mkdir()
             try:
                 shutil.copyfile(info.db_path, partial / DB_NAME)
             except OSError as exc:
@@ -297,11 +309,12 @@ class DbEntry:
                 raise _io_error("publish sample directory", partial, exc) from exc
         except BaseException as exc:
             failures = remove_tree(partial)
-            if created_samples:
-                try:
-                    self.samples_dir.rmdir()  # only the directory this call made, and only while it is still empty
-                except OSError:
-                    pass
+            for made, directory in ((created_samples, self.samples_dir), (not had_scratch_root, scratch_root)):
+                if made:
+                    try:
+                        directory.rmdir()  # only a directory this call made, and only while it is still empty
+                    except OSError:
+                        pass
             if failures and isinstance(exc, DbEntryError):
                 exc.details["cleanup_failures"] = failures
             raise

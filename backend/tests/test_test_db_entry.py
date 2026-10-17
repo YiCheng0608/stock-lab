@@ -8,6 +8,7 @@ private data, no external source. The cases deliberately avoid ``tmp_path``.
 """
 
 import errno
+import itertools
 import json
 import os
 import shutil
@@ -79,13 +80,17 @@ def entry(module_root, library):
     remove_tree_or_raise(root)
 
 
-def cli(entry, *args, check=None):
+def cli(entry, *args, check=None, own_tmp=True):
+    """Run the CLI on ``entry.root``; ``own_tmp=False`` keeps the root free of the ``tmp/`` this helper would otherwise make."""
+
     env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
     env.update(
-        PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1", TEMP=str(entry.root / "tmp"), TMP=str(entry.root / "tmp"),
+        PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1",
         PYTHONPATH=os.pathsep.join(filter(None, [str(REPO_ROOT), os.environ.get("PYTHONPATH")])),  # keep the dependency path
     )
-    (entry.root / "tmp").mkdir(exist_ok=True)
+    if own_tmp:
+        env.update(TEMP=str(entry.root / "tmp"), TMP=str(entry.root / "tmp"))
+        (entry.root / "tmp").mkdir(exist_ok=True)
     proc = subprocess.run(
         [sys.executable, "-B", "-X", "utf8", "-m", "tools.test_db", "--root", str(entry.root), "--python", sys.executable, *args],
         cwd=REPO_ROOT, env=env, capture_output=True, text=True, encoding="utf-8", timeout=300, stdin=subprocess.DEVNULL,
@@ -994,20 +999,47 @@ def test_race_bounded_stress_accounting_while_runs_come_and_go(entry):
 
 
 @pytest.fixture
-def bare(module_root, library):
-    """A tool root of its own with no ``samples/``, holding one hand-made run ``src`` (a copy of v1's database)."""
+def make_bare(module_root, library):
+    """Builds tool roots of their own with no ``samples/``, each holding one hand-made run ``src`` (a copy of v1's database)."""
 
     source, _ = library
-    root = module_root / f"n-{uuid.uuid4().hex[:6]}"
-    instance = DbEntry(root)
-    run_dir = instance.runs_dir / "src"
-    (run_dir / "data" / "raw").mkdir(parents=True)
-    (run_dir / "tmp").mkdir()
-    shutil.copyfile(source.samples_dir / "v1" / DB_NAME, run_dir / "data" / RUN_DB_NAME)
-    marker = {"marker_schema": RUN_MARKER_SCHEMA, "run_id": "src", "origin": {"kind": "empty"}, "root": str(root)}
-    (run_dir / RUN_MARKER).write_text(json.dumps(marker), encoding="utf-8")
-    yield instance
+    made = []
+
+    def factory():
+        root = module_root / f"n-{uuid.uuid4().hex[:6]}"
+        instance = DbEntry(root)
+        run_dir = instance.runs_dir / "src"
+        (run_dir / "data" / "raw").mkdir(parents=True)
+        (run_dir / "tmp").mkdir()
+        shutil.copyfile(source.samples_dir / "v1" / DB_NAME, run_dir / "data" / RUN_DB_NAME)
+        marker = {"marker_schema": RUN_MARKER_SCHEMA, "run_id": "src", "origin": {"kind": "empty"}, "root": str(root)}
+        (run_dir / RUN_MARKER).write_text(json.dumps(marker), encoding="utf-8")
+        made.append(root)
+        return instance
+
+    yield factory
+    for root in made:
+        remove_tree_or_raise(root)
+
+
+@pytest.fixture
+def bare(make_bare):
+    return make_bare()
+
+
+@pytest.fixture
+def blank(module_root):
+    """A tool root of its own with nothing in it, not even a run."""
+
+    root = module_root / f"e-{uuid.uuid4().hex[:6]}"
+    yield DbEntry(root)
     remove_tree_or_raise(root)
+
+
+def tree_listing(instance):
+    """Every path below the root, relative to it: a refusal that created anything shows up as a difference."""
+
+    return sorted(str(item.relative_to(instance.root)) for item in instance.root.rglob("*"))
 
 
 def tight(instance):
@@ -1092,9 +1124,87 @@ def test_freeze_failing_after_it_made_samples_removes_that_empty_dir_and_its_par
     assert error.value.code == code
     if failure != "product-check":
         assert len(seen) == 1 and seen[0] and all(name.startswith(".partial-") for name in seen[0])  # it did get that far
-    names = top_level(bare)  # neither .partial-* nor the samples/ this call made; the product check's tmp/ is documented scratch
-    assert "samples" not in names and set(names) <= {"runs", "tmp"} and list(bare.root.rglob(".partial-*")) == []
-    assert not (bare.root / "tmp").exists() or list((bare.root / "tmp").iterdir()) == []
+    assert top_level(bare) == ["runs"]  # no .partial-*, no samples/ and no tmp/ (the product check's scratch root) it made
+    assert list(bare.root.rglob(".partial-*")) == []
+
+
+def make_table_missing(instance):
+    with closing(sqlite3.connect(instance.runs_dir / "src" / "data" / RUN_DB_NAME)) as connection:
+        connection.execute("DROP TABLE news_items")
+        connection.commit()
+
+
+@pytest.mark.parametrize(
+    "refusal, scratch_state",
+    [
+        ("stale-schema", "absent"), ("missing-table", "absent"), ("timeout", "absent"),
+        ("stale-schema", "empty"), ("stale-schema", "occupied"),
+    ],
+    ids=["stale-schema", "missing-table", "timeout", "stale-schema-empty-tmp-already-there", "stale-schema-occupied-tmp"],
+)
+def test_freeze_refused_by_the_product_check_leaves_no_scratch_root_it_made(bare, refusal, scratch_state):
+    options = {}
+    if refusal == "stale-schema":
+        make_schema_stale(bare)
+        code = "schema_mismatch"
+    elif refusal == "missing-table":
+        make_table_missing(bare)
+        code = "schema_mismatch"
+    else:
+        options["timeout"] = 0.01  # the product child cannot finish in time
+        code = "product_timeout"
+    scratch = bare.root / "tmp"  # ProductRunner.check_schema makes <root>/tmp when it is not there
+    if scratch_state != "absent":
+        scratch.mkdir()
+    if scratch_state == "occupied":
+        (scratch / "kept.txt").write_text("not made by freeze", encoding="utf-8")
+    before = tree_listing(bare)
+    with pytest.raises(DbEntryError) as error:
+        DbEntry(bare.root, **options).freeze("src", "v9")  # product check on, the default
+    assert error.value.code == code
+    assert tree_listing(bare) == before  # the refusal leaves the root as it was: no samples/, .partial-* or new tmp/
+    assert (scratch / "kept.txt").is_file() == (scratch_state == "occupied")
+
+
+def test_freeze_publish_failing_after_the_product_check_removes_that_scratch_root_too(bare, monkeypatch):
+    break_publish(monkeypatch, [])
+    before = tree_listing(bare)
+    with pytest.raises(DbEntryError) as error:
+        bare.freeze("src", "v9")  # the product check passes and made <root>/tmp; publishing then fails
+    assert error.value.code == "io_error" and tree_listing(bare) == before
+
+
+def test_cli_freeze_refused_by_the_product_check_leaves_the_new_root_as_it_was(bare):
+    make_schema_stale(bare)
+    before = tree_listing(bare)
+    code, payload, proc = cli(bare, "freeze", "--run-id", "src", "--version", "v9", own_tmp=False)
+    assert code == 1 and payload["error"]["code"] == "schema_mismatch" and "Traceback" not in proc.stderr
+    assert tree_listing(bare) == before
+
+
+@pytest.mark.parametrize("fails_later", [False, True], ids=["publishes", "then-fails"])
+def test_freeze_recreates_a_samples_dir_that_another_freeze_took_away_between_its_steps(bare, monkeypatch, fails_later):
+    bare.samples_dir.mkdir()  # found there, so this call did not make it ...
+    real_mkdir = Path.mkdir
+    taken = []
+
+    def mkdir(self, *args, **kwargs):
+        if self.name.startswith(".partial-") and not taken:
+            taken.append(self.parent)
+            self.parent.rmdir()  # ... and the other freeze removes the empty directory just before the staging one is made
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    if fails_later:
+        break_copy(monkeypatch, [])
+        with pytest.raises(DbEntryError) as error:
+            bare.freeze("src", "v9", check_product=False)
+        assert error.value.code == "io_error"  # not FileNotFoundError from the vanished parent
+        assert top_level(bare) == ["runs"]  # it made samples/ again, so it takes it away again
+    else:
+        report = bare.freeze("src", "v9", check_product=False)
+        assert report["version"] == "v9" and sample_names(bare) == ["v9"]
+    assert taken == [bare.samples_dir]
 
 
 def test_freeze_failure_leaves_a_samples_dir_that_was_already_there(bare, monkeypatch):
@@ -1128,6 +1238,97 @@ def test_cli_freeze_refused_in_a_new_root_prints_one_json_object_and_leaves_no_s
     code, payload, _ = cli(bare, "--max-bytes", limit, "freeze", "--run-id", "src", "--version", "x", "--kind", "real_sample")
     assert code == 1 and payload["error"]["code"] == "metadata_invalid"  # the documented order, through the CLI as well
     assert "samples" not in top_level(bare)
+
+
+# ---- #79 AC-1: the documented refusal order of freeze, pinned ----------------------------------------------------------
+#
+# README lists nine refusals in the order freeze reports them. Every single condition, every pair and all nine together are
+# arranged on a root of their own: the reported refusal must be the earliest one that holds, and none of them may create a
+# directory. Swapping any two neighbours in freeze (or moving the quota or the metadata check) fails some pair.
+
+REFUSAL_ORDER = [  # (what holds, bounded code, a fragment of the reason), in README's order
+    ("version name", "invalid_argument", "sample version"),
+    ("kind", "invalid_argument", "kind 'bogus'"),
+    ("version exists", "version_exists", "immutable"),
+    ("run", "not_a_run_dir", ".testdb-run.json"),
+    ("no database", "not_found", "no database"),
+    ("journal", "sample_corrupt", "journal/wal"),
+    ("marker count", "schema_mismatch", "exactly one Alembic revision marker"),
+    ("metadata", "metadata_invalid", "JSON object"),
+    ("quota", "quota_exceeded", "exceeds"),
+]
+HOLDING = (
+    [(index,) for index in range(len(REFUSAL_ORDER))]
+    + list(itertools.combinations(range(len(REFUSAL_ORDER)), 2))
+    + [tuple(range(len(REFUSAL_ORDER)))]
+)
+
+
+def arrange_refusals(instance, held):
+    """Make exactly the conditions numbered in ``held`` (0-based, README's ①～⑨) true; returns (entry, run id, version, kwargs).
+
+    A run without a database cannot also carry a second Alembic marker, so ⑦ is moot wherever ⑤ holds.
+    """
+
+    run_id, version, kwargs = "src", "fresh", {}
+    if 0 in held:
+        version = "bad name"  # a space is outside the name pattern
+    if 1 in held:
+        kwargs["kind"] = "bogus"
+    if 2 in held:
+        (instance.samples_dir / version).mkdir(parents=True)  # even a directory whose name the pattern rejects
+    if 3 in held:
+        run_id = "unmarked"
+        shutil.copytree(instance.runs_dir / "src", instance.runs_dir / run_id)
+        (instance.runs_dir / run_id / RUN_MARKER).unlink()
+    data_dir = instance.runs_dir / run_id / "data"
+    if 6 in held:
+        with closing(sqlite3.connect(data_dir / RUN_DB_NAME)) as connection:
+            connection.execute("INSERT INTO alembic_version VALUES ('0001_second_marker')")
+            connection.commit()
+    if 5 in held:
+        (data_dir / (RUN_DB_NAME + "-journal")).write_bytes(b"")
+    if 4 in held:
+        (data_dir / RUN_DB_NAME).unlink()
+    if 7 in held:
+        kwargs["meta"] = 0  # not "no metadata" and not an object
+    subject = DbEntry(instance.root, max_bytes=tree_size(instance.root) + 1) if 8 in held else instance
+    return subject, run_id, version, kwargs
+
+
+@pytest.mark.parametrize("held", HOLDING, ids=lambda held: "+".join(str(index + 1) for index in held))
+def test_freeze_reports_the_earliest_refusal_and_creates_nothing(make_bare, held):
+    instance = make_bare()
+    subject, run_id, version, kwargs = arrange_refusals(instance, held)
+    before = tree_listing(instance)
+    _, code, fragment = REFUSAL_ORDER[min(held)]
+    with pytest.raises(DbEntryError) as error:
+        subject.freeze(run_id, version, **kwargs)  # the product check is on, but never reached
+    assert error.value.code == code and fragment in error.value.reason, (held, error.value.to_dict())
+    assert tree_listing(instance) == before
+
+
+@pytest.mark.parametrize(
+    "kwargs, code",
+    [
+        ({"kind": "real_sample"}, "metadata_invalid"),  # a real_sample that states nothing
+        ({"meta": 0}, "metadata_invalid"),
+        ({"meta": []}, "metadata_invalid"),
+        ({"kind": "bogus"}, "invalid_argument"),
+        ({"version": "bad name"}, "invalid_argument"),
+        ({"version": "taken"}, "version_exists"),
+        ({"fixture": "missing.json"}, "fixture_invalid"),
+    ],
+    ids=["unstated-real-sample", "meta-0", "meta-list", "kind", "version-name", "version-exists", "fixture"],
+)
+def test_build_sample_refused_before_its_run_never_makes_runs(blank, kwargs, code):
+    (blank.samples_dir / "taken").mkdir(parents=True)  # the only thing in the root, as a published version would be
+    before = tree_listing(blank)
+    arguments = {"version": "fresh", "fixture": FIXTURE, "kind": "manual_fixture", "meta": None, **kwargs}
+    with pytest.raises(DbEntryError) as error:
+        blank.build_sample(arguments["version"], arguments["fixture"], kind=arguments["kind"], meta=arguments["meta"])
+    assert error.value.code == code
+    assert tree_listing(blank) == before  # no runs/, not even the empty one a failed run would leave
 
 
 # ---- #79 AC-2: --meta is a JSON object or a bounded error ----------------------------------------------------------

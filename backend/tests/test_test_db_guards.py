@@ -419,6 +419,28 @@ def test_other_platforms_are_not_limited_because_they_are_unverified(monkeypatch
     assert made_dirs == [deep.root]
 
 
+@pytest.fixture
+def aliased(monkeypatch):
+    """Map a path as given to the one ``Path.resolve`` reports for it, the way a junction or a ``subst`` drive does."""
+
+    mapping = {}
+    real = Path.resolve
+    monkeypatch.setattr(Path, "resolve", lambda self, *args, **kwargs: mapping.get(self) or real(self, *args, **kwargs))
+    return mapping
+
+
+def test_the_length_counted_is_that_of_the_resolved_root_not_of_the_path_as_given(windows, made_dirs, aliased):
+    short_to_type, deep_in_reality = root_of_length(60), root_of_length(MAX_ROOT_LENGTH + 20)
+    aliased[short_to_type] = deep_in_reality
+    with pytest.raises(PathTooLongError) as error:
+        DbEntry(short_to_type)  # 60 characters as typed, but the file system works with the deep path behind it
+    assert error.value.details["root_length"] == MAX_ROOT_LENGTH + 20 and error.value.path == str(deep_in_reality)
+    assert made_dirs == []
+    long_to_type, shallow_in_reality = root_of_length(MAX_ROOT_LENGTH + 40), root_of_length(60)
+    aliased[long_to_type] = shallow_in_reality
+    assert DbEntry(long_to_type).root == shallow_in_reality  # the other way round fits, however long it is typed
+
+
 def test_a_forbidden_root_is_reported_as_forbidden_even_when_it_is_also_too_long(windows, made_dirs):
     inside_checkout = REPO_ROOT / ("x" * 100) / ("y" * 100) / ("z" * 100)
     with pytest.raises(DbEntryError) as error:
