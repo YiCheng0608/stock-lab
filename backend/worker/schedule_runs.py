@@ -2,10 +2,12 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (collect -> analyze -> evaluate ->
-indicators).  analyze and evaluate run only after a successful collect, and
-evaluate only after a successful analyze; indicators depend on stored bars
-alone, so they run after every successful collect.  A failure keeps its
-error text and the dependent steps are recorded as skipped.
+candidates -> indicators).  analyze, evaluate and candidates run only after a
+successful collect; evaluate and candidates only after a successful analyze
+(candidates read the trading date's signals, not the tracking that evaluate
+updates); indicators depend on stored bars alone, so they run after every
+successful collect.  A failure keeps its error text and the dependent steps
+are recorded as skipped.
 
 Re-running the same target date is safe: when a run for that date already
 finished as ``success`` or ``non_trading_day``, the new invocation records a
@@ -32,7 +34,9 @@ from app.models import ScheduleRun, ScheduleRunStep
 from worker import pipeline
 
 DAILY_JOB = "daily"
-DAILY_STEPS = ("collect", "analyze", "evaluate", "indicators")
+DAILY_STEPS = ("collect", "analyze", "evaluate", "candidates", "indicators")
+# Steps after collect and the earlier steps each needs to have succeeded.
+STEP_REQUIRES = {"analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": ()}
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -46,6 +50,8 @@ PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"}
 # step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
 INDICATOR_FUNCTION = "run_indicator_batch"
+CANDIDATE_MODULE = "worker.candidates"
+CANDIDATE_FUNCTION = "run_candidates"
 
 
 def _utcnow() -> datetime:
@@ -101,6 +107,11 @@ def _indicator_step(target: date) -> dict[str, Any]:
     if runner is None:
         return {"status": "not_configured", "reason": f"{INDICATOR_MODULE}.{INDICATOR_FUNCTION} is missing"}
     return runner(target)
+
+
+def _candidate_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(CANDIDATE_MODULE)
+    return getattr(module, CANDIDATE_FUNCTION)(target)
 
 
 def _ensure_schema() -> str:
@@ -339,7 +350,8 @@ def run_daily_job(
     later: list[tuple[str, int, Callable[[], dict[str, Any]]]] = [
         ("analyze", 2, lambda: pipeline.analyze(init_schema=False, collect_run_id=collected.get("run_id"))),
         ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
-        ("indicators", 4, lambda: _indicator_step(target)),
+        ("candidates", 4, lambda: _candidate_step(target)),
+        ("indicators", 5, lambda: _indicator_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped":
@@ -361,22 +373,25 @@ def run_daily_job(
 
     statuses = {"collect": collect_status}
     errors: list[str] = []
-    blocked_by = ""
+    failed: list[str] = []
     for step, sequence, action in later:
-        # evaluate needs a successful analyze; indicators only need the bars
-        # collect just stored, so an analyze failure does not block them.
-        if blocked_by and step != "indicators":
+        # evaluate and candidates need a successful analyze; indicators only
+        # need the bars collect just stored, so an analyze failure does not
+        # block them.  A candidates failure blocks nothing.
+        blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
+        if blocked_by:
             reason = f"{blocked_by}_not_successful"
             _record_step(run_id, step, sequence, status="skipped", error=reason)
             output[step] = {"status": "skipped", "reason": reason}
             statuses[step] = "skipped"
+            failed.append(step)
             continue
         result = _run_step(run_id, step, sequence, action)
         output[step] = result
         statuses[step] = str(result.get("status"))
         acceptable = {"success", "no_data"} | ({"not_configured"} if step == "indicators" else set())
         if statuses[step] not in acceptable:
-            blocked_by = blocked_by or step
+            failed.append(step)
             errors.append(f"{step}: {result.get('error') or result.get('reason') or statuses[step]}")
     status = "failed" if errors else "success"
     error = "; ".join(errors) or None

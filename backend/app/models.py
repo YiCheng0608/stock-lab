@@ -568,3 +568,52 @@ class NewsLlmResult(Base):
     ai_unsupported: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ingestion_run_id: Mapped[int | None] = mapped_column(ForeignKey("ingestion_runs.id"), nullable=True)
     raw_payload_id: Mapped[int | None] = mapped_column(ForeignKey("raw_payloads.id"), nullable=True)
+
+
+class CandidateRun(Base):
+    """One computed daily candidate list per trading date and score version.
+
+    A day with zero candidates still has a row so the reason is queryable.
+    Rows are written once; a rerun of the same date and version reuses them.
+    """
+
+    __tablename__ = "candidate_runs"
+    __table_args__ = (UniqueConstraint("trading_date", "score_version", name="uq_candidate_run_day_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    score_version: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="success")
+    evaluated_signals: Mapped[int] = mapped_column(Integer, default=0)
+    pool_count: Mapped[int] = mapped_column(Integer, default=0)
+    candidate_count: Mapped[int] = mapped_column(Integer, default=0)
+    zero_reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    exclusions_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DailyCandidate(Base):
+    """A ranked candidate of one candidate run (V1_SPEC candidate_score_v1)."""
+
+    __tablename__ = "daily_candidates"
+    __table_args__ = (
+        UniqueConstraint("trading_date", "instrument_id", "score_version", name="uq_daily_candidate_day_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    candidate_run_id: Mapped[int] = mapped_column(ForeignKey("candidate_runs.id"), index=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    signal_id: Mapped[int] = mapped_column(ForeignKey("signals.id"))
+    strategy: Mapped[str] = mapped_column(String(60))
+    score_version: Mapped[str] = mapped_column(String(40))
+    total_score: Mapped[float] = mapped_column(Float)
+    weight_coverage: Mapped[float] = mapped_column(Float)
+    rank: Mapped[int] = mapped_column(Integer)
+    components_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    reasons_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    groups_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    data_as_of: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

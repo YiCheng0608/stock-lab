@@ -15,6 +15,8 @@ from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
+from .candidate_view import DEFAULT_LIMIT as CANDIDATES_DEFAULT_LIMIT, MAX_LIMIT as CANDIDATES_MAX_LIMIT
+from .candidate_view import candidate_for_instrument, candidate_list
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
 from .domain import ETF_CATEGORIES, signal_confidence_semantics
@@ -1914,7 +1916,19 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
                                   "filter": "verified_publication_or_event", "limit": 20}
     else:
         payload["news"] = []
+    # The stock's row in the latest daily candidate list on or before the cutoff.
+    payload["candidate"] = candidate_for_instrument(db, instrument_row.id, cutoff) if instrument_row else None
     return payload
+
+
+@router.get("/candidates")
+def candidates(
+    date_: date | None = Query(default=None, alias="date"),
+    limit: int = Query(CANDIDATES_DEFAULT_LIMIT, ge=1, le=CANDIDATES_MAX_LIMIT),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Stored daily candidates (candidate_score_v1); default is the latest list."""
+    return candidate_list(db, date_, limit)
 
 
 def _news_symbol_filter(instrument: Instrument):

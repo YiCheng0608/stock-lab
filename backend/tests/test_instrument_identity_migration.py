@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ENTRIES = ['engine', 'external', 'fallback']
 CHILDREN = ['group_memberships', 'market_bars', 'chip_snapshots', 'technical_features',
             'signals', 'portfolio_positions', 'corporate_actions', 'fundamental_snapshots', 'events',
-            'technical_indicators']
-HEAD = '0012_news_llm'
+            'technical_indicators', 'daily_candidates']
+HEAD = '0013_candidates'
 DDL = '''CREATE TABLE instruments (
  id INTEGER NOT NULL PRIMARY KEY, market VARCHAR(20) NOT NULL,
  exchange VARCHAR(20) NOT NULL DEFAULT 'TWSE', symbol VARCHAR(30) NOT NULL,
@@ -154,7 +154,7 @@ def _fixture(tmp_path, fk, variant='plain', *, children=True):
         if children and variant != 'absent_scratch':
             # Real application tables, with all ten inbound FK descriptors.
             # Populate all ten and their required parents using typed values.
-            wanted = set(CHILDREN) | {'theme_groups'}
+            wanted = set(CHILDREN) | {'theme_groups', 'candidate_runs'}
             for table in Base.metadata.sorted_tables:
                 if table.name not in wanted:
                     continue
@@ -173,6 +173,9 @@ def _fixture(tmp_path, fk, variant='plain', *, children=True):
                         values[column.name] = {int: 11, float: 1.25, bool: False, str: 'fixture', date: date(2020,1,2), datetime: datetime(2020,1,2), dict: {}, list: []}[typ]
                 if table.name == 'events':
                     values['instrument_id'] = 7
+                if table.name == 'daily_candidates':
+                    # Integer parents seeded above with id 11.
+                    values.update(signal_id=11, candidate_run_id=11)
                 c.execute(table.insert().values(**values))
     with engine.connect() as c:
         c.exec_driver_sql(f'PRAGMA foreign_keys={fk}')
@@ -191,7 +194,7 @@ def _assert_head(engine, entry):
         assert c.exec_driver_sql('PRAGMA foreign_key_check').all() == []
         assert identity.preflight_instrument_identity(c) == 'current'
         if entry == 'fallback':
-            assert len(c.exec_driver_sql('SELECT version FROM schema_migrations').all()) == 12
+            assert len(c.exec_driver_sql('SELECT version FROM schema_migrations').all()) == 13
             assert c.exec_driver_sql('SELECT version FROM schema_migrations WHERE version=?', (HEAD,)).scalar() == HEAD
         else:
             assert c.exec_driver_sql('SELECT version_num FROM alembic_version').all() == [(HEAD,)]
