@@ -22,7 +22,8 @@ DB_NAME = "sample.db"
 META_NAME = "metadata.json"
 METADATA_SCHEMA = 1
 KINDS = ("manual_fixture", "real_sample")
-VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+NAME_MAX = 64  # longest sample version or run id; also the name length the path budget (entry.ROOT_PATH_RESERVE) assumes
+VERSION_RE = re.compile(rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{NAME_MAX - 1}}}$")
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # Whole-value placeholders, compared after ``_placeholder_key`` (NFKC, casefold, letters and digits only):
 # "N/A", "n.a.", "Not Applicable", "not_applicable", "-", "？" and "　" all reduce to an entry here or to "".
@@ -124,6 +125,8 @@ def build_metadata(
 ) -> dict[str, Any]:
     if kind not in KINDS:
         raise DbEntryError("invalid_argument", f"kind {kind!r} must be one of {KINDS}")
+    if supplied is not None and not isinstance(supplied, dict):  # 0, "", [] and False are not "no metadata" either
+        raise DbEntryError("metadata_invalid", f"supplied metadata must be a JSON object, got {type(supplied).__name__}")
     supplied = dict(supplied or {})
     if kind == "real_sample":
         missing = [key for key in REAL_SAMPLE_REQUIRED if is_unset(supplied.get(key))]

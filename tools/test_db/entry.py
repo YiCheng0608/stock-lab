@@ -25,17 +25,36 @@ from typing import Any, Callable, Iterator
 
 from .errors import CleanupError, DbEntryError, QuotaExceededError
 from .paths import (
-    DEFAULT_MAX_TOTAL_BYTES, assert_allowed_target, inherited_protected_paths, is_link_or_reparse,
+    DEFAULT_MAX_TOTAL_BYTES, assert_allowed_target, assert_path_budget, inherited_protected_paths, is_link_or_reparse,
     remove_tree, remove_tree_or_raise, tree_size,
 )
 from .product import ProductRunner, build_child_env, default_deps, stock_env_for, validate_stock_env
 from .sample import (
-    DB_NAME, IDENTIFIER_RE, KINDS, META_NAME, build_metadata, check_name, load_fixture, open_readonly,
+    DB_NAME, IDENTIFIER_RE, KINDS, META_NAME, NAME_MAX, build_metadata, check_name, load_fixture, open_readonly,
     read_alembic_markers, read_fixture, read_metadata, row_counts, sha256_file, write_metadata,
 )
 
 RUN_MARKER = ".testdb-run.json"
 RUN_MARKER_SCHEMA = 1
+RUN_DB_NAME = "stock.db"
+# A child's TEMP is the run's tmp/. One tempfile directory (``tmp`` + 8 characters = 11) holding one SQLite temporary
+# file (``etilqs_`` + 16 = 23) is 35 characters with its separator; this rounds up.
+CHILD_TEMP_RESERVE = 48
+_LONGEST_NAME = "n" * NAME_MAX  # a run id or sample version at its longest
+_SCRATCH_NAME = "scratch-" + "x" * 8  # product.ProductRunner.check_schema: <root>/tmp/scratch-<8 hex>
+# The longest paths the entry builds below a root, as the components after it; ROOT_PATH_RESERVE is the longest of them
+# counting one separator per component. ``DbEntry`` refuses a root that leaves less than this room under Windows MAX_PATH.
+ROOT_PATH_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "run marker": ("runs", _LONGEST_NAME, RUN_MARKER),
+    "run database journal": ("runs", _LONGEST_NAME, "data", RUN_DB_NAME + "-journal"),
+    "run child temp file": ("runs", _LONGEST_NAME, "tmp", "t" * CHILD_TEMP_RESERVE),
+    "sample database journal": ("samples", _LONGEST_NAME, DB_NAME + "-journal"),
+    "sample metadata": ("samples", _LONGEST_NAME, META_NAME),
+    "publish staging": ("samples", ".partial-" + "x" * 8, META_NAME),
+    "schema check journal": ("tmp", _SCRATCH_NAME, "data", RUN_DB_NAME + "-journal"),
+    "schema check temp file": ("tmp", _SCRATCH_NAME, "tmp", "t" * CHILD_TEMP_RESERVE),
+}
+ROOT_PATH_RESERVE = max(sum(len(part) + 1 for part in parts) for parts in ROOT_PATH_SUFFIXES.values())
 
 
 @dataclass(frozen=True)
@@ -55,6 +74,12 @@ class RunInfo:
             "raw_dir": str(self.raw_dir), "tmp_dir": str(self.tmp_dir), "origin": self.origin,
             "stock_env": self.stock_env,
         }
+
+
+def _check_metadata(version: str, kind: str, meta: Any, fixture: dict[str, Any] | None) -> None:
+    """Judge the supplied metadata with placeholder measurements, so unusable metadata fails before any disk work."""
+
+    build_metadata(version=version, kind=kind, schema_version="-", sha256="-", size_bytes=0, counts={}, supplied=meta, fixture=fixture)
 
 
 def _io_error(action: str, path: Path, exc: OSError) -> DbEntryError:
@@ -80,6 +105,7 @@ class DbEntry:
             raise DbEntryError("invalid_argument", f"max_bytes must be a positive integer, got {max_bytes!r}")
         self.protected = inherited_protected_paths()
         resolved = assert_allowed_target(root, role="tool root", protected=self.protected)
+        assert_path_budget(resolved, reserved=ROOT_PATH_RESERVE)
         if os.path.lexists(resolved) and is_link_or_reparse(Path(root)):
             raise DbEntryError("reparse_point", "tool root must not be a link or reparse point", path=root)
         resolved.mkdir(parents=True, exist_ok=True)
@@ -239,12 +265,17 @@ class DbEntry:
             raise DbEntryError(
                 "schema_mismatch", f"database must carry exactly one Alembic revision marker, found {markers}", path=info.db_path
             )
+        _check_metadata(version, kind, meta, fixture)  # before the quota: unusable metadata is the cause to report
         sha256, size = sha256_file(info.db_path)
-        self.samples_dir.mkdir(parents=True, exist_ok=True)
         partial = self.samples_dir / f".partial-{uuid.uuid4().hex[:8]}"
-        self._enforce(partial, incoming=size + 64 * 1024, action="freeze")  # the copy plus metadata
-        partial.mkdir()
+        self._enforce(partial, incoming=size + 64 * 1024, action="freeze")  # the copy plus metadata; nothing is created yet
         try:
+            self.samples_dir.mkdir(parents=True)
+            created_samples = True
+        except FileExistsError:
+            created_samples = False
+        try:
+            partial.mkdir()
             try:
                 shutil.copyfile(info.db_path, partial / DB_NAME)
             except OSError as exc:
@@ -266,6 +297,11 @@ class DbEntry:
                 raise _io_error("publish sample directory", partial, exc) from exc
         except BaseException as exc:
             failures = remove_tree(partial)
+            if created_samples:
+                try:
+                    self.samples_dir.rmdir()  # only the directory this call made, and only while it is still empty
+                except OSError:
+                    pass
             if failures and isinstance(exc, DbEntryError):
                 exc.details["cleanup_failures"] = failures
             raise
@@ -283,8 +319,7 @@ class DbEntry:
         if self.sample_dir(version).exists():
             raise DbEntryError("version_exists", "a sample version is immutable; publish a new version name", path=self.sample_dir(version))
         fixture = read_fixture(Path(fixture_path))
-        # Dry run: unusable metadata fails here, before any disk work.
-        build_metadata(version=version, kind=kind, schema_version="-", sha256="-", size_bytes=0, counts={}, supplied=meta, fixture=fixture)
+        _check_metadata(version, kind, meta, fixture)
         with self.isolated(None) as info:
             counts = load_fixture(info.db_path, fixture)
             report = self.freeze(info, version, kind=kind, meta=meta, fixture=fixture, check_product=check_product)

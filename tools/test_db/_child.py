@@ -13,6 +13,15 @@ import sys
 from pathlib import Path
 
 
+def _escape_config_value(value: str) -> str:
+    """Escape ``%`` so ConfigParser reads the value back verbatim (a bare ``%`` is rejected, ``%(here)s`` expanded).
+
+    The same one-liner as ``app.migrations._escape_config_value`` (#61), repeated because that name is private to the product.
+    """
+
+    return value.replace("%", "%%")
+
+
 def _config() -> dict:
     from app import config
 
@@ -39,7 +48,9 @@ def action_check(args) -> dict:
         from alembic.script import ScriptDirectory
 
         alembic_config = Config(str(config.ALEMBIC_CONFIG_PATH))
-        alembic_config.set_main_option("script_location", str(Path(config.ALEMBIC_CONFIG_PATH).parent / "alembic"))
+        alembic_config.set_main_option(
+            "script_location", _escape_config_value(str(Path(config.ALEMBIC_CONFIG_PATH).parent / "alembic"))
+        )
         heads = ScriptDirectory.from_config(alembic_config).get_heads()
         result["alembic_head"] = heads[0] if len(heads) == 1 else None
     except ImportError:
