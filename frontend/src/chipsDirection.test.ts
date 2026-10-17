@@ -1,5 +1,5 @@
 import { canonicalJson, grossInteger, grossLots } from './chipsGross'
-import { DIRECTION_CALCULATION, DIRECTION_CALENDAR_SCHEMA, DIRECTION_CALENDAR_VERSION, DIRECTION_CAPTURE_SCHEMA, DIRECTION_CATEGORIES, DIRECTION_NAMES, DIRECTION_PIN, DIRECTION_PROFILE, DIRECTION_SCHEMA, DIRECTION_SYMBOLS, DIRECTION_VERSION, DIRECTION_WORKER_SCHEMA, directionCategory, directionControls, directionPath, directionStats, validateDirection } from './chipsDirection'
+import { DIRECTION_CALCULATION, DIRECTION_CALENDAR_SCHEMA, DIRECTION_CALENDAR_VERSION, DIRECTION_CAPTURE_SCHEMA, DIRECTION_CATEGORIES, DIRECTION_NAMES, DIRECTION_PIN, DIRECTION_PROFILE, DIRECTION_ROUTE, DIRECTION_SCHEMA, DIRECTION_SYMBOLS, DIRECTION_VERSION, DIRECTION_WORKER_SCHEMA, directionCategory, directionControls, directionPath, directionReturnPath, directionStats, validateDirection } from './chipsDirection'
 import type { DirectionCategory, DirectionPoint, DirectionPolicy, DirectionRead, DirectionSegment, DirectionStock, DirectionWindow } from './chipsDirection'
 
 type Assert = (value: unknown, message: string) => void
@@ -82,6 +82,18 @@ export async function runDirectionChecks(read: DirectionRead, assert: Assert): P
   check(grossLots('-1') === '-0.001' && grossLots('1200') === '1.2', 'exact signed lots')
   const controls = directionControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))
   check(directionPath(controls, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5'), 'three RAW controls')
+  // #117: the way back from a symbol carries the literal location.search, so a missing, extra, duplicate, reordered or percent-encoded RAW query returns exactly as it was and READ/FIRST come back in the same state.
+  // The flag says whether the former normalised return (directionPath of the defaulted controls) rewrote that query.
+  const returnCases: [string, boolean][] = [
+    ['', true], ['?', true], ['?as_of=2026-10-06&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=foreign', true], ['?investor=foreign', true],
+    ['?as_of=2026-10-06&investor=foreign&horizon=20&x=1', true], ['?as_of=2026-10-06&investor=foreign&horizon=20&horizon=20', true], ['?horizon=20&horizon=20&horizon=20', true],
+    ['?as_of=2026-10-07&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=bogus&horizon=7', false], ['?as_of=&investor=&horizon=', false],
+    ['?horizon=20&investor=foreign&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=foreign&horizon=20', true], ['?as_of=2026-10-06&investor=%66oreign&horizon=20', true], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true],
+  ]
+  for (const [search, rewritten] of returnCases) {
+    check(directionReturnPath(search) === DIRECTION_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search))
+    check((directionPath(directionControls(new URLSearchParams(search.slice(1)))) !== directionReturnPath(search)) === rewritten, 'the former normalised return ' + (rewritten ? 'rewrote ' : 'kept ') + JSON.stringify(search))
+  }
   await rejected((v) => { v.policy.scope.daily_dates[0] = '2026-09-08' }, 'independent canonical root pin')
   await rejected((v) => { v.policy_digest = 'sha256:ea02b5f32ff2bd0c415e14192c6daa276dc2781e8a6c2d4e5b90bcad776d1144' }, 'old profile pin')
   await rejected((v) => { v.worker_schema = 'old' }, 'worker schema')

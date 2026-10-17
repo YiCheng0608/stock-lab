@@ -50,6 +50,8 @@ export function grossPath(c: GrossControls, symbol?: string): string {
   const params = new URLSearchParams(c)
   return GROSS_ROUTE + (symbol ? '/' + symbol : '') + '?' + params.toString()
 }
+/** The way back from a symbol: the list route plus the page's literal `location.search`, never re-encoded or normalised (a missing, extra, duplicate or wrong RAW control stays exactly as it was, so READ/FIRST return in the same state). */
+export function grossReturnPath(search: string): string { return GROSS_ROUTE + search }
 function equals(a: unknown, b: unknown): boolean { return canonicalJson(a) === canonicalJson(b) }
 function assert(ok: unknown): asserts ok { if (!ok) throw new Error('series_evidence_invalid') }
 function utcMicroseconds(value: unknown): bigint {

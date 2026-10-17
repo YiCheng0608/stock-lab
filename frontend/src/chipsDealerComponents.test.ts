@@ -1,5 +1,5 @@
 import { canonicalJson, grossInteger, grossLots } from './chipsGross'
-import { DEALER_COMPONENTS, DEALER_COMPONENTS_CALCULATION, DEALER_COMPONENTS_CALENDAR_SCHEMA, DEALER_COMPONENTS_CALENDAR_VERSION, DEALER_COMPONENTS_CAPTURE_SCHEMA, DEALER_COMPONENTS_PIN, DEALER_COMPONENTS_PROFILE, DEALER_COMPONENTS_SCHEMA, DEALER_COMPONENTS_SYMBOLS, DEALER_COMPONENTS_VERSION, DEALER_COMPONENTS_WORKER_SCHEMA, dealerAmounts, dealerBound, dealerControls, dealerDailyURL, dealerDates, dealerPath, dealerSHA, validDealerControls, validDealerParams, validateDealerComponents } from './chipsDealerComponents'
+import { DEALER_COMPONENTS, DEALER_COMPONENTS_CALCULATION, DEALER_COMPONENTS_CALENDAR_SCHEMA, DEALER_COMPONENTS_CALENDAR_VERSION, DEALER_COMPONENTS_CAPTURE_SCHEMA, DEALER_COMPONENTS_PIN, DEALER_COMPONENTS_PROFILE, DEALER_COMPONENTS_ROUTE, DEALER_COMPONENTS_SCHEMA, DEALER_COMPONENTS_SYMBOLS, DEALER_COMPONENTS_VERSION, DEALER_COMPONENTS_WORKER_SCHEMA, dealerAmounts, dealerBound, dealerControls, dealerDailyURL, dealerDates, dealerPath, dealerReturnPath, dealerSHA, validDealerControls, validDealerParams, validateDealerComponents } from './chipsDealerComponents'
 import type { DealerComponent, DealerPoint, DealerPolicy, DealerRead, DealerTrace } from './chipsDealerComponents'
 import { installDealerPageLifecycle, isDealerTrustedAction } from './ChipsDealerComponentsPage'
 type Assert = (ok: unknown, label: string) => void
@@ -64,6 +64,18 @@ export async function runDealerChecks(read: DealerRead, assert: Assert): Promise
   check(caught, 'partial sum overflow even when final in range')
   const controls = dealerControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))
   check(dealerPath(controls, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5'), 'RAW3 exact preserved')
+  // #117: the way back from a symbol carries the literal location.search, so a missing, extra, duplicate, reordered or percent-encoded RAW query returns exactly as it was and READ/FIRST come back in the same state.
+  // The flag says whether the former normalised return (dealerPath of the defaulted controls) rewrote that query.
+  const returnCases: [string, boolean][] = [
+    ['', true], ['?', true], ['?as_of=2026-10-06&investor=dealer&horizon=5', false], ['?as_of=2026-10-06&investor=dealer', true], ['?investor=dealer', true],
+    ['?as_of=2026-10-06&investor=dealer&horizon=5&x=1', true], ['?as_of=2026-10-06&investor=dealer&horizon=5&horizon=5', true], ['?horizon=5&horizon=5&horizon=5', true],
+    ['?as_of=2026-10-07&investor=dealer&horizon=5', false], ['?as_of=2026-10-06&investor=foreign&horizon=20', false], ['?as_of=&investor=&horizon=', false],
+    ['?horizon=5&investor=dealer&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=dealer&horizon=5', true], ['?as_of=2026-10-06&investor=%64ealer&horizon=5', true], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true],
+  ]
+  for (const [search, rewritten] of returnCases) {
+    check(dealerReturnPath(search) === DEALER_COMPONENTS_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search))
+    check((dealerPath(dealerControls(new URLSearchParams(search.slice(1)))) !== dealerReturnPath(search)) === rewritten, 'the former normalised return ' + (rewritten ? 'rewrote ' : 'kept ') + JSON.stringify(search))
+  }
   check(!validDealerControls({ ...controls, horizon: '20' }) && !validDealerControls({ ...controls, investor: 'trust' }) && !validDealerControls({ ...controls, as_of: '' }), 'dealer5 only')
   for (const query of ['as_of=2026-10-06&investor=dealer', 'as_of=2026-10-06&investor=dealer&horizon=5&x=1', 'as_of=2026-10-06&investor=dealer&horizon=5&horizon=5']) check(!validDealerParams(new URLSearchParams(query)), 'missing/duplicate/unknown RAW query')
   await rejected((v) => { v.policy.calendar.from = '2026-09-02' }, 'independent canonical policy')
