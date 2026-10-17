@@ -1,4 +1,4 @@
-import { canonicalJson, SERIES_CALCULATION, SERIES_NAMES, SERIES_PIN, SERIES_PROFILE, SERIES_SCHEMA, SERIES_SYMBOLS, SERIES_VERSION, seriesControls, seriesGeometry, seriesInteger, seriesLots, seriesPath, validateSeries } from './chipsSeries'
+import { canonicalJson, SERIES_CALCULATION, SERIES_NAMES, SERIES_PIN, SERIES_PROFILE, SERIES_ROUTE, SERIES_SCHEMA, SERIES_SYMBOLS, SERIES_VERSION, seriesControls, seriesGeometry, seriesInteger, seriesLots, seriesPath, seriesReturnPath, validateSeries } from './chipsSeries'
 import type { SeriesRead, SeriesPoint, SeriesStock } from './chipsSeries'
 
 type Assert = (value: unknown, message: string) => void
@@ -76,6 +76,18 @@ export async function runSeriesChecks(read: SeriesRead, assert: Assert): Promise
   assert(seriesLots('-1') === '-0.001' && seriesLots('1200') === '1.2', 'exact signed lots'); checks++
   const c = seriesControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))
   assert(seriesPath(c, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5') && seriesPath(c).includes('investor=dealer&horizon=5'), 'raw control detail/back URLs'); checks++
+  // #117: the way back from a symbol carries the literal location.search, so a missing, extra, duplicate, reordered or percent-encoded RAW query returns exactly as it was and READ/FIRST come back in the same state.
+  // The flag says whether the former normalised return (seriesPath of the defaulted controls) rewrote that query.
+  const returnCases: [string, boolean][] = [
+    ['', true], ['?', true], ['?as_of=2026-10-06&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=foreign', true], ['?investor=foreign', true],
+    ['?as_of=2026-10-06&investor=foreign&horizon=20&x=1', true], ['?as_of=2026-10-06&investor=foreign&horizon=20&horizon=20', true], ['?horizon=20&horizon=20&horizon=20', true],
+    ['?as_of=2026-10-07&investor=foreign&horizon=20', false], ['?as_of=2026-10-06&investor=bogus&horizon=7', false], ['?as_of=&investor=&horizon=', false],
+    ['?horizon=20&investor=foreign&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=foreign&horizon=20', true], ['?as_of=2026-10-06&investor=%66oreign&horizon=20', true], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true],
+  ]
+  for (const [search, rewritten] of returnCases) {
+    assert(seriesReturnPath(search) === SERIES_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search)); checks++
+    assert((seriesPath(seriesControls(new URLSearchParams(search.slice(1)))) !== seriesReturnPath(search)) === rewritten, 'the former normalised return ' + (rewritten ? 'rewrote ' : 'kept ') + JSON.stringify(search)); checks++
+  }
   await rejected((v) => { v.policy.scope.daily_dates[0] = '2026-09-08' }, 'canonical policy tamper')
   await rejected((v) => { v.stocks.pop() }, 'missing stock')
   await rejected((v) => { v.receipts[2].canonical = '{}' }, 'original receipt tamper')

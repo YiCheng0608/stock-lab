@@ -50,6 +50,8 @@ export function validDirectionControls(c: DirectionControls): boolean {
 export function directionPath(c: DirectionControls, symbol?: string): string {
   return DIRECTION_ROUTE + (symbol ? '/' + symbol : '') + '?' + new URLSearchParams(c).toString()
 }
+/** The way back from a symbol: the list route plus the page's literal `location.search`, never re-encoded or normalised (a missing, extra, duplicate or wrong RAW control stays exactly as it was, so READ/FIRST return in the same state). */
+export function directionReturnPath(search: string): string { return DIRECTION_ROUTE + search }
 export function directionSign(n: bigint): DirectionSign { return n > 0n ? 'positive' : n < 0n ? 'negative' : 'zero' }
 export function directionCategory(nets: bigint[]): DirectionCategory {
   assert(nets.length === 3)

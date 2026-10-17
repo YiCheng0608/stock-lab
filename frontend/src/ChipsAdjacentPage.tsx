@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ADJACENT_API, ADJACENT_INVESTORS, ADJACENT_NAMES, ADJACENT_SIGNS, ADJACENT_SYMBOLS, ADJACENT_WINDOWS, adjacentControls, adjacentPath, validAdjacentControls, validAdjacentParams, validateAdjacent } from './chipsAdjacent'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { ADJACENT_API, ADJACENT_INVESTORS, ADJACENT_NAMES, ADJACENT_SIGNS, ADJACENT_SYMBOLS, ADJACENT_WINDOWS, adjacentControls, adjacentPath, adjacentReturnPath, validAdjacentControls, validAdjacentParams, validateAdjacent } from './chipsAdjacent'
 import type { AdjacentControls, AdjacentInvestor, AdjacentPoint, AdjacentRead, AdjacentSign, AdjacentStock, AdjacentWindowName } from './chipsAdjacent'
 import './ChipsSeriesPage.css'
 
@@ -92,7 +92,7 @@ export function AdjacentEvidence({ stock, position, read }: { stock: AdjacentSto
 export default function ChipsAdjacentPage() {
   const state = useContext(AdjacentContext)
   if (!state) throw new Error('adjacent provider required')
-  const [params, setParams] = useSearchParams(), controls = adjacentControls(params), rawKey = params.toString()
+  const [params, setParams] = useSearchParams(), controls = adjacentControls(params), rawKey = params.toString(), { search } = useLocation()
   const [draft, setDraft] = useState<AdjacentControls>(controls), [selected, setSelected] = useState<number | null>(null)
   const { symbol } = useParams()
   useEffect(() => installAdjacentPageLifecycle(window, () => { state.mask(); setSelected(null) }), [])
@@ -110,7 +110,7 @@ export default function ChipsAdjacentPage() {
     <header><p className="series-eyebrow">TPEx · 七股 · 2026/10/06</p><h1>前5與近5法人淨超比較</h1><p>比較相鄰兩個5交易日窗口的三法人淨超、正負零日數、差異與原始列。外資不含外資自營商，不推論行情、報酬或交易訊號。</p></header>
     <form className="series-controls" onSubmit={apply} key={rawKey}><label>截止日期<input type="text" aria-label="截止日期" value={draft.as_of} onChange={(e) => setDraft({ ...draft, as_of: e.target.value })} /></label><label>法人<select aria-label="法人" value={draft.investor} onChange={(e) => setDraft({ ...draft, investor: e.target.value })}>{ADJACENT_INVESTORS.map((i) => <option key={i} value={i}>{adjacentInvestorLabels[i]}</option>)}</select></label><label>窗口<select aria-label="窗口" value={draft.horizon} onChange={(e) => setDraft({ ...draft, horizon: e.target.value })}><option value="5">相鄰兩個5交易日窗口</option></select></label><button type="submit" disabled={state.busy}>套用條件</button></form>
     <p className="series-current">目前原始條件：as_of={controls.as_of} · investor={controls.investor} · horizon={controls.horizon}</p>
-    <div className="series-actions"><button type="button" data-adjacent-first disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" data-adjacent-read disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={adjacentPath(controls)}>返回七股（保留原始條件）</Link>}</div>
+    <div className="series-actions"><button type="button" data-adjacent-first disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" data-adjacent-read disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={adjacentReturnPath(search)} data-adjacent-return>返回七股（保留原始條件）</Link>}</div>
     <p role="status" className="series-status">{state.busy ? '正在驗證完整來源，所有比較、原件與日曆暫不顯示。' : state.status}</p>
     {!valid && <p className="series-unavailable">此原始條件不在已准入日期／法人／5日窗口範圍，或有重複／未知參數，所有數值不可用。</p>}
     {!symbol ? <section className="series-cards" aria-label="七股"><p className="series-count">已驗證股數：{read ? '7' : '未知'}</p>{ADJACENT_SYMBOLS.map((s) => { const item = read?.stocks.find((x) => x.symbol === s); return <article key={s}><h2>{s} {ADJACENT_NAMES[s]}</h2>{item ? <><AdjacentSummary stock={item} investor={investor} /><Link to={adjacentPath(controls, s)}>查看兩窗口逐日配對與原列</Link></> : <><p>前5／近5計數、淨超、差異與原件不可用</p><button type="button" disabled>完整七股來源驗證後開啟</button></>}</article> })}</section> : !stock || !read ? <section className="series-unavailable"><h2>{symbol} {ADJACENT_NAMES[symbol] ?? ''}</h2><p>{!ADJACENT_NAMES[symbol] ? '此標的不在核定七股範圍。' : '來源不可用。'}計數、淨超、差異、配對、區段、原件與日曆均不顯示。</p></section> : <section className="series-detail" aria-label="相鄰兩窗口比較明細"><h2>{stock.symbol} {stock.name} · {adjacentInvestorLabels[investor]}</h2>

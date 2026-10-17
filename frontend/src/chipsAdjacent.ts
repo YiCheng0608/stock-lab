@@ -56,6 +56,8 @@ export function adjacentControls(params: URLSearchParams): AdjacentControls { re
 export function validAdjacentParams(params: URLSearchParams): boolean { const keys = [...params.keys()]; return !keys.length || keys.length === 3 && ['as_of', 'investor', 'horizon'].every((key) => params.getAll(key).length === 1) }
 export function validAdjacentControls(c: AdjacentControls): boolean { return c.as_of === '2026-10-06' && ADJACENT_INVESTORS.includes(c.investor as AdjacentInvestor) && c.horizon === '5' }
 export function adjacentPath(c: AdjacentControls, symbol?: string): string { return ADJACENT_ROUTE + (symbol ? '/' + symbol : '') + '?' + new URLSearchParams(c).toString() }
+/** The way back from a symbol: the list route plus the page's literal `location.search`, never re-encoded or normalised (a missing, extra, duplicate or wrong RAW control stays exactly as it was, so READ/FIRST return in the same state). */
+export function adjacentReturnPath(search: string): string { return ADJACENT_ROUTE + search }
 export function adjacentDailyURL(policy: AdjacentPolicy, day: string): string { return policy.sources.daily.base_url + '&d=' + encodeURIComponent(String(Number(day.slice(0, 4)) - 1911) + '/' + day.slice(5, 7) + '/' + day.slice(8)) }
 export function adjacentDates(policy: AdjacentPolicy): string[] {
   const result = []

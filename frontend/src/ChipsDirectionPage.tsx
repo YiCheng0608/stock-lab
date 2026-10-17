@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { DIRECTION_API, DIRECTION_CATEGORIES, DIRECTION_INVESTORS, DIRECTION_NAMES, DIRECTION_SYMBOLS, directionControls, directionPath, validDirectionControls, validateDirection } from './chipsDirection'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { DIRECTION_API, DIRECTION_CATEGORIES, DIRECTION_INVESTORS, DIRECTION_NAMES, DIRECTION_SYMBOLS, directionControls, directionPath, directionReturnPath, validDirectionControls, validateDirection } from './chipsDirection'
 import type { DirectionCategory, DirectionControls, DirectionInvestor, DirectionPoint, DirectionRead, DirectionSign, DirectionStats, DirectionWindow } from './chipsDirection'
 import './ChipsSeriesPage.css'
 
@@ -75,7 +75,7 @@ export function DirectionEvidence({ point, read }: { point: DirectionPoint; read
 export default function ChipsDirectionPage() {
   const state = useContext(DirectionContext)
   if (!state) throw new Error('direction provider required')
-  const [params, setParams] = useSearchParams(), controls = directionControls(params), rawKey = params.toString()
+  const [params, setParams] = useSearchParams(), controls = directionControls(params), rawKey = params.toString(), { search } = useLocation()
   const [draft, setDraft] = useState<DirectionControls>(controls), [selected, setSelected] = useState<DirectionPoint | null>(null)
   const { symbol } = useParams()
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function ChipsDirectionPage() {
       <button type="submit" disabled={state.busy}>套用條件</button>
     </form>
     <p className="series-current">目前原始條件：as_of={controls.as_of} · investor={controls.investor} · horizon={controls.horizon}</p>
-    <div className="series-actions"><button type="button" data-direction-first disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" data-direction-read disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={directionPath(controls)}>返回七股（保留原始條件）</Link>}</div>
+    <div className="series-actions"><button type="button" data-direction-first disabled={state.busy || state.firstUsed || !valid} onClick={() => void state.action(true, controls)}>首次取得來源（僅一次）</button><button type="button" data-direction-read disabled={state.busy || !valid} onClick={() => void state.action(false, controls)}>明確讀取已持有來源</button>{symbol && <Link to={directionReturnPath(search)} data-direction-return>返回七股（保留原始條件）</Link>}</div>
     <p role="status" className="series-status">{state.busy ? '正在驗證完整來源，所有方向、計數與區段暫不顯示。' : state.status}</p>
     {!valid && <p className="series-unavailable">此原始條件不在已准入日期／法人／窗口範圍，所有數值不可用。</p>}
     {!symbol ? <section className="series-cards" aria-label="七股"><p className="series-count">已驗證股數：{read ? '7' : '未知'}</p>{DIRECTION_SYMBOLS.map((s) => {
