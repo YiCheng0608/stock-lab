@@ -476,12 +476,6 @@ def test_official_groups_merge_exchanges_but_preserve_membership_provenance(pipe
 
 
 def test_institutional_flow_ratios_use_inclusive_20d_share_volume_denominators(pipeline_env):
-    from app.institutional_flow_ratio import (
-        PURPOSE_HOT_GROUP_RATIO,
-        PURPOSE_STRATEGY_GATE,
-        compute_institutional_flow_ratio,
-    )
-
     score_date = date(2026, 9, 4)
     all_dates = pipeline.business_days(score_date, 21)
     older_date, dates = all_dates[0], all_dates[1:]
@@ -572,34 +566,6 @@ def test_institutional_flow_ratios_use_inclusive_20d_share_volume_denominators(p
         assert hot_group_ratio == pytest.approx(1395 / 40000)
         assert strategy_ratio == pytest.approx(1395 / 2000)
         assert strategy_ratio == pytest.approx(hot_group_ratio * 20)
-
-        payload = {
-            "formula_version": "institutional-flow/v2-shares-per-share-volume",
-            "purpose": PURPOSE_STRATEGY_GATE,
-            "cutoff_date": score_date.isoformat(),
-            "flow": {
-                "unit": "shares",
-                "window_trading_days": 5,
-                "basis": "inclusive_cutoff",
-                "window_start": dates[-5].isoformat(),
-                "window_end": score_date.isoformat(),
-                "foreign_net_shares": 1500,
-                "investment_trust_net_shares": -150,
-                "dealer_net_shares": 45,
-                "total_net_shares": 1395,
-            },
-            "volume": {
-                "unit": "shares",
-                "window_trading_days": 20,
-                "basis": "inclusive_cutoff",
-                "daily": [{"date": d.isoformat(), "shares": v} for d, v in zip(dates, volumes)],
-            },
-        }
-        strategy_exact = compute_institutional_flow_ratio(payload)
-        hot_group_exact = compute_institutional_flow_ratio({**payload, "purpose": PURPOSE_HOT_GROUP_RATIO})
-        assert float(strategy_exact.ratio) == pytest.approx(strategy_ratio)
-        assert float(hot_group_exact.ratio) == pytest.approx(hot_group_ratio)
-        assert strategy_exact.gate_passed is True
 
 
 def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pipeline_env):

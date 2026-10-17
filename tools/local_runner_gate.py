@@ -1,7 +1,6 @@
 """Cross-site and DNS-rebinding gate in front of a loopback-only local runner (pure ASGI, no framework import).
 
-Same rules as the Issue 9 combos service (``browser_gate`` / ``json_content_type_gate`` in
-``backend/app/institutional_dealer_direction_combos_scope7.py``), applied by the runner so ``backend/app`` stays untouched:
+Applied by the runner so ``backend/app`` stays untouched (the product API has its own ``backend/app/browser_gate.py``):
 the runner never emits CORS headers, so a cross-origin preflight fails by itself; this additionally refuses the simple
 requests a foreign page can still send, before the wrapped app touches any state, quota, source or private file.
 

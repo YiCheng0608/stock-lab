@@ -79,7 +79,6 @@ curl.exe -X DELETE "http://127.0.0.1:8000/api/portfolio/<id>"
 
 **殘留**（GET 不檢查）：
 
-- 下列 GET 在各自的 env 與 pins 全部通過時，每次讀取都會遞增 `price_saved_focus` 的行程內讀取預算（同一個計數，各端點共用），用盡後回應的 `reasons` 帶 `price_saved_focus_read_budget_exceeded`：`GET /api/stocks/{exchange}/{symbol}/prices/saved-focus`、`GET /api/focus/price-saved`、`GET /api/focus/price-saved-chips`、`GET /api/focus/price-saved-chips-calendar`、`GET /api/focus/price-saved-chips-stock-scope-7`。`GET …/prices/saved` 只重開私人存放區，不耗這個預算。
 - `GET /api/dashboard`、`GET /api/news`、`GET /api/news/{id}` 會呼叫 `sync_news_from_events`，有變更列時 commit，把本機既有的官方 Events 冪等投影成 NewsItem；內容全來自本機既有資料，不由請求決定，外站 no-cors GET 也讀不到回應。
 
 ## 2. 資料庫、migration 與 readiness
@@ -182,20 +181,17 @@ python -m worker.source_runtime capture `
 
 TPEx suspension／action 與 TWSE action 修正只有有限 normalization／read-time 行為，沒有 retroactive repair；`force=True` 不會刪舊錯 Event，也不保證修復所有舊 bar 或重算既存 evaluation。精確來源契約見 [SOURCE_REGISTRY §6](SOURCE_REGISTRY.md#6-tpextwse-有限資料品質契約)，不得把 refetch 當成 cleanup／replay。
 
-## 5. 獨立 artifact 與時間 store
+## 5. 獨立 artifact 與時間投影
 
-下列能力都是明確 opt-in 的 local Python API，沒有 CLI、預設 DB 路徑或 legacy migration；caller 必須提供專案外專用 SQLite 路徑，不能使用 `STOCK_DB_PATH`、正式 `data/stock.db`、`.local` 或其他 workspace 路徑。
+下列能力是明確 opt-in 的 local Python API，沒有 CLI、預設 DB 路徑或 legacy migration；caller 必須提供專案外專用 SQLite 路徑，不能使用 `STOCK_DB_PATH`、正式 `data/stock.db`、`.local` 或其他 workspace 路徑。
 
 | 能力 | 現行入口 | 邊界 |
 | --- | --- | --- |
-| ATR artifact | `ArtifactStore(path)`；`save_atr_artifact`／`save`、strict `save_atr_artifact_strict`、exact readers | schema 1；caller-provided provenance；無 latest fallback；不接 worker/API。詳見 [R0 §4.7–4.9](R0_IMPLEMENTATION.md#47-b3-持久化最小契約)。 |
-| ATR comparison | `ArtifactComparisonReader(legacy_path, artifact_path).compare(...)` | 兩個 stable read-only SQLite、exact selectors；不寫回、不等於 B7。 |
-| time evidence | `TimeEvidence.from_mapping(...)`、`TimeEvidenceStore(path)`、exact readers／history／`export_json` | `time-evidence/v1`；七個 roles＋anchor、aware UTC、append-only lineage；只證 caller structure。詳見 [R0 §7.1](R0_IMPLEMENTATION.md#71-round07-c007b5a-final-review有限本地-foundation)。 |
 | signal artifact | `SignalArtifactStore(path)`、`save_artifact`、exact／filtered readers | `signal-artifact/v1`；immutable local research store；不接 API/UI/worker/default。詳見 [SIGNAL_ARTIFACTS](SIGNAL_ARTIFACTS.md)。 |
 
-reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔、live WAL／SHM／journal、ownership/schema 不符或讀取中 fingerprint 改變均應拒絕；跨 DB identity 不可假裝由 FK 保證。`generated_at`、attempt、run relation、idempotent replay、collision 與 null/reason 的精確契約以各專文為準。
+reader 使用前先取得 stable SQLite backup/checkpoint。缺檔、live WAL／SHM／journal、ownership/schema 不符或讀取中 fingerprint 改變均應拒絕；跨 DB identity 不可假裝由 FK 保證。`generated_at`、attempt、run relation、idempotent replay、collision 與 null/reason 的精確契約以各專文為準。
 
-`product-time/v1` 是既有 API/UI 的 read-time projection，不讀 `TimeEvidenceStore`、不寫 DB，也不會把 unknown 升格為來源 truth。known instant 必須含 offset；date-only 不補午夜；legacy `data_cutoff`、naive `created_at` 與 date fields 不能推導 decision／availability。詳見 [R0 §7.2](R0_IMPLEMENTATION.md#72-round08-c008b5a-產品-read-time-projection有限-review)。
+`product-time/v1` 是既有 API/UI 的 read-time projection，不寫 DB，也不會把 unknown 升格為來源 truth。known instant 必須含 offset；date-only 不補午夜；legacy `data_cutoff`、naive `created_at` 與 date fields 不能推導 decision／availability。詳見 [R0 §7.2](R0_IMPLEMENTATION.md#72-round08-c008b5a-產品-read-time-projection有限-review)。
 
 ## 6. 資料品質與研究結果
 
@@ -212,7 +208,7 @@ reader／comparison 使用前先取得 stable SQLite backup/checkpoint。缺檔�
 
 ## 7. 程式與前端驗證
 
-歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，記錄命令、exit、pass／fail／skip 與限制；文件修改只檢查 diff、連結與內容一致性。測試資料與落盤原則見 [開發入口](development-baseline/README.md) 及 [AGENTS](../AGENTS.md#驗證資料與暫存)；後端測試不得指向正式 DB。
+歷史 pass counts 不代表目前 checkout。依實際變更選擇測試，記錄命令、exit、pass／fail／skip 與限制；文件修改只檢查 diff、連結與內容一致性。測試資料與落盤原則見 [開發入口](development-baseline/README.md) 及 [AGENTS](../AGENTS.md#工程原則)；後端測試不得指向正式 DB。
 
 ```powershell
 Push-Location frontend
@@ -222,7 +218,7 @@ Pop-Location
 & ./tools/Invoke-Validation.ps1 -TestPaths @('backend/tests')
 ```
 
-個股頁驗收見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md)，全站 UX 見 [UX_REVIEW](UX_REVIEW.md)。瀏覽器使用隔離 API；沿用其他任務服務須確認安全、owner 同意及版本適用，依[服務版本規則](GITHUB_WORKFLOW.md#執行資源與服務版本)核對實際載入與連線。不得啟動會寫正式／`.local` DB 的舊 lifespan 或干擾其他服務。fixture、screenshot、typecheck、build 與真 API 的證據不能互相取代。
+個股頁驗收見 [STOCK_RESEARCH_PAGE](STOCK_RESEARCH_PAGE.md)，全站 UX 見 [UX_REVIEW](UX_REVIEW.md)。瀏覽器使用隔離 API；沿用其他任務服務須確認安全、owner 同意及版本適用，並核對實際載入的版本與連線。不得啟動會寫正式／`.local` DB 的舊 lifespan 或干擾其他服務。fixture、screenshot、typecheck、build 與真 API 的證據不能互相取代。
 
 ## 8. 排程
 

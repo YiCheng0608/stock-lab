@@ -31,14 +31,11 @@ def changed_paths(base: str) -> list[str]:
 # Working-tree paths outside backend/ and tools/ that the backend and standalone jobs read; a change must run them.
 # Keep in step with backend/tests:
 #   test_public_candidate_identity.py:237-247 renders frontend/src/App.tsx with Node and the frontend/node_modules
-#   that frontend/package.json and frontend/pnpm-lock.yaml install;
-#   test_test_db_real_sample.py:109 and test_industry_membership_inferred_source.py:600 assert against docs text.
+#   that frontend/package.json and frontend/pnpm-lock.yaml install.
 BACKEND_READ_DIRS = ("frontend/src/",)
 BACKEND_READ_FILES = frozenset({
     "frontend/package.json",
     "frontend/pnpm-lock.yaml",
-    "docs/SOURCE_REGISTRY.md",
-    "docs/INDUSTRY_CLASSIFICATION.md",
 })
 
 

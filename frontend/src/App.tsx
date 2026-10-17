@@ -1,19 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   captureOfficialEvents,
   captureTwseIssuerProfile,
-  captureInstitutionalWindows,
-  captureStockPriceMemory,
-  getSavedStockPrice,
-  getOrdinaryCloseTrend,
-  getSavedFocusStockPrice,
-  getSavedPriceFocus,
-  saveStockPrice,
-  capturePriceLotFocus,
   captureOfficialEventFocus,
   deletePortfolio,
   getAction,
@@ -23,7 +15,6 @@ import {
   getCoverage,
   getDashboard,
   getOfficialEventFocus,
-  getPriceLotFocus,
   getDataQuality,
   getGlossary,
   getGroup,
@@ -62,8 +53,6 @@ import type {
   SignalEvaluation,
   SignalSettlement,
   StockDirectoryRow,
-  StockPriceSavedData,
-  PriceSavedFocusData,
   ThemeDirectoryRow,
   TrackingResponse,
   ProductTime,
@@ -79,28 +68,8 @@ import { StockPriceChart } from './StockPriceChart'
 import { isValidBar } from './stockChart'
 import { StockResearchPanel, stockResearchAction, validStockResearchRead } from './StockResearchPanel'
 import { stockIndependentView } from './stockIndependentReads'
-import { StockOverview, validChips1006Identity, validChips1006Read } from './components/StockOverview'
+import { StockOverview } from './components/StockOverview'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
-import { memoryPriceChartBars, PRICE_SYMBOL_NAMES, priceSourcePins, validStockPriceMemoryRead } from './stockPriceMemoryRead'
-import { privatePriceSupported, savedPriceChartBars, validStockPriceSavedRead } from './stockPriceSavedRead'
-import { OrdinaryCloseTrend } from './OrdinaryCloseTrend'
-import { SAVED_FOCUS_SYMBOLS, savedFocusDetailPath, savedFocusReturnPath, validSavedFocusParams, validSavedFocusStock, validSavedPriceFocus } from './savedPriceFocus'
-import { SavedPriceChipsFocusPage } from './SavedPriceChipsFocusPage'
-import ChipsSeriesPage, { ChipsSeriesProvider } from './ChipsSeriesPage'
-import ChipsGrossPage, { ChipsGrossProvider } from './ChipsGrossPage'
-import ChipsDirectionPage, { ChipsDirectionProvider } from './ChipsDirectionPage'
-import ChipsAdjacentPage, { ChipsAdjacentProvider } from './ChipsAdjacentPage'
-import ChipsDealerComponentsPage, { ChipsDealerComponentsProvider } from './ChipsDealerComponentsPage'
-import { DEALER_COMPONENTS_ROUTE } from './chipsDealerComponents'
-import ChipsDealerDirectionCombosPage, { ChipsDealerDirectionCombosProvider } from './ChipsDealerDirectionCombosPage'
-import { COMBOS_ROUTE, comboFlag } from './chipsDealerDirectionCombos'
-import { ADJACENT_ROUTE } from './chipsAdjacent'
-import { DIRECTION_ROUTE } from './chipsDirection'
-import { GROSS_ROUTE } from './chipsGross'
-import { SERIES_ROUTE } from './chipsSeries'
-import { JOINT_SYMBOLS, SCOPE7_SYMBOLS, jointDetailContext, jointDetailEvidenceInvalid, jointDetailPath, jointParams, jointReturnPath } from './savedPriceChipsFocus'
-import { approximateRangePct, exactTurnoverText, minLotsShares, minRangeMilliPct, minTurnoverValue, priceFocusDayMoveLabels, priceFocusReturnPath, validFocusDate, validPriceFocusDayMove, validPriceFocusParams, validPriceLotFocus } from './priceFocus'
-import { formatCanonicalShareLots, formatCanonicalShares } from './units'
 import { isTemporaryIndustryGroupName, isTemporaryIndustryTheme, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './stockResearch'
 import { issuerSupported, unavailableIssuer, validTwseIssuerProfile } from './twseIssuerProfile'
 import { unavailableIndustry, validTwseIssuerIndustry } from './twseIssuerIndustry'
@@ -809,7 +778,7 @@ export function validOfficialEventKind(value: unknown): value is OfficialEventKi
 export type OfficialEventConditions = { asOf: string; q: string; from: string | null; to: string | null; eventKind: OfficialEventKind }
 
 export function officialEventConditions(params: URLSearchParams, defaultAsOf?: string): OfficialEventConditions | null {
-  const allowed = ['as_of', 'q', 'from', 'to', 'event_kind', 'min_lots', 'day_move', 'min_turnover', 'min_range_pct']
+  const allowed = ['as_of', 'q', 'from', 'to', 'event_kind']
   if ([...params.keys()].some((key) => !allowed.includes(key) || params.getAll(key).length !== 1)) return null
   const asOf = params.get('as_of') ?? defaultAsOf ?? ''
   const q = params.get('q') ?? '', from = params.get('from'), to = params.get('to')
@@ -1016,181 +985,6 @@ export function OfficialEventFocusPanel() {
   </section>
 }
 
-export function PriceLotFocusPanel() {
-  const [params, setParams] = useSearchParams()
-  const asOf = params.get('as_of') ?? '', minLots = params.get('min_lots') ?? ''
-  const direction = params.get('day_move') ?? 'all', dayMove = validPriceFocusDayMove(direction) ? direction : 'all'
-  const minTurnover = params.get('min_turnover') ?? '0'
-  const minRangePct = params.get('min_range_pct') ?? '0'
-  const [dateDraft, setDateDraft] = useState(asOf), [lotsDraft, setLotsDraft] = useState(minLots)
-  const [moveDraft, setMoveDraft] = useState(direction)
-  const [turnoverDraft, setTurnoverDraft] = useState(minTurnover)
-  const [rangeDraft, setRangeDraft] = useState(minRangePct)
-  const [formError, setFormError] = useState<string | null>(null), [busy, setBusy] = useState(false)
-  const [captureError, setCaptureError] = useState<{ key: string; message: string } | null>(null)
-  const pending = useRef(false), currentKey = useRef('')
-  const key = JSON.stringify([asOf, minLots, direction, minTurnover, minRangePct]); currentKey.current = key
-  const draftsValid = validFocusDate(dateDraft) && minLotsShares(lotsDraft) !== null && validPriceFocusDayMove(moveDraft) && minTurnoverValue(turnoverDraft) !== null && minRangeMilliPct(rangeDraft) !== null
-  const enabled = validPriceFocusParams(params) && draftsValid
-  const queryKey = ['price-lot-focus', asOf, minLots, direction, minTurnover, minRangePct]
-  const client = useQueryClient()
-  const query = useQuery({ queryKey, queryFn: () => getPriceLotFocus(asOf, minLots, dayMove, minTurnover, minRangePct), enabled, retry: false, refetchOnWindowFocus: false, placeholderData: undefined })
-  useEffect(() => { setDateDraft(asOf); setLotsDraft(minLots); setMoveDraft(direction); setTurnoverDraft(minTurnover); setRangeDraft(minRangePct); setFormError(null); setCaptureError(null) }, [asOf, minLots, direction, minTurnover, minRangePct])
-  const apply = (event: FormEvent) => {
-    event.preventDefault()
-    if (!validFocusDate(dateDraft) || minLotsShares(lotsDraft) === null || !validPriceFocusDayMove(moveDraft)) { setFormError('請選擇有效日期與單日方向，並輸入非負成交張數；最多三位小數，上限 9,223,372,036,854,775.807 張。'); return }
-    if (minTurnoverValue(turnoverDraft) === null) { setFormError('最小成交金額須為非負整數元，上限 9,223,372,036,854,775,807 元；請勿使用逗號、小數或前導零。'); return }
-    if (minRangeMilliPct(rangeDraft) === null) { setFormError('最小本日振幅須為非負百分比，最多三位小數，上限 9,223,372,036,854,775.807%；請勿使用前導零、符號或逗號。'); return }
-    const next = new URLSearchParams(params); next.set('as_of', dateDraft); next.set('min_lots', lotsDraft); next.set('day_move', moveDraft); next.set('min_turnover', turnoverDraft); next.set('min_range_pct', rangeDraft)
-    setFormError(null); setParams(next)
-  }
-  const capture = async () => {
-    if (pending.current || !enabled) return
-    pending.current = true; setBusy(true); setCaptureError(null)
-    try {
-      const data = await capturePriceLotFocus(asOf, minLots, dayMove, minTurnover, minRangePct)
-      client.setQueryData(queryKey, data)
-    } catch (error) {
-      if (currentKey.current === key) setCaptureError({ key, message: error instanceof Error ? error.message : '取得失敗' })
-    } finally { pending.current = false; setBusy(false) }
-  }
-  const currentScopeFailure = asOf === '2026-10-07' && Boolean(query.error || captureError?.key === key)
-  const accepted = enabled && !currentScopeFailure && validPriceLotFocus(query.data, asOf, minLots, dayMove, minTurnover, minRangePct)
-  const data = accepted ? query.data : undefined
-  return <section className="panel official-event-focus" aria-labelledby="price-lot-focus-title">
-    <div className="section-head overview-head"><div><div className="eyebrow">指定來源日 · 上櫃普通股</div><h2 id="price-lot-focus-title">成交張數關注</h2></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">明選來源日、最小成交張數、成交金額、單日方向與本日振幅，查看同時符合條件的標的。2026-10-07 政策支持 3105 穩懋、3293 鈊象、5274 信驊、5347 世界、6223 旺矽、6488 環球晶、6510 精測、8069 元太八股。10/5 原兩股與10/6 原七股及較早政策保留；不同日期與政策的原件分開核對。每次服務只取得一份指定日期原件，依本次已核範圍篩選。此順序供閱讀，不是排名或買賣建議。單日方向以當日開盤比較，不表示相對前一日的漲跌。本日振幅（%）＝100×(最高−最低)/開盤，以原件十進位值精確比較門檻。</p>
-    <form className="overview-cutoff-control" onSubmit={apply}>
-      <label htmlFor="price-focus-date">來源日期</label><input id="price-focus-date" type="date" required value={dateDraft} onChange={(event) => setDateDraft(event.currentTarget.value)} />
-      <label htmlFor="price-focus-min-lots">最小成交張數</label><input id="price-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} placeholder="例如 20000，最多三位小數" onChange={(event) => setLotsDraft(event.currentTarget.value)} />
-      <label htmlFor="price-focus-min-turnover">最小成交金額（元）</label><input id="price-focus-min-turnover" type="text" inputMode="numeric" required value={turnoverDraft} placeholder="例如 25000000000，整數元" onChange={(event) => setTurnoverDraft(event.currentTarget.value)} />
-      <label htmlFor="price-focus-day-move">單日方向（收盤相對開盤）</label><select id="price-focus-day-move" value={moveDraft} onChange={(event) => setMoveDraft(event.currentTarget.value)}>{Object.entries(priceFocusDayMoveLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-      <label htmlFor="price-focus-min-range">最小本日振幅（%）</label><input id="price-focus-min-range" type="text" inputMode="decimal" required value={rangeDraft} placeholder="例如 6.000，最多三位小數" onChange={(event) => setRangeDraft(event.currentTarget.value)} />
-      <button type="submit" className="secondary-button" disabled={busy || !draftsValid}>套用條件</button>
-      <button type="button" className="secondary-button" disabled={!enabled || busy || query.isFetching} onClick={() => void query.refetch()}>讀取已取得原件</button>
-      <button type="button" className="secondary-button" disabled={!data?.can_capture || busy || query.isFetching} onClick={() => void capture()}>{busy ? '取得中…' : '首次載入官方單日行情'}</button>
-    </form>
-    {formError && <div className="warning-box" role="status">{formError}</div>}
-    {!enabled && <div className="empty" role="status">請設定有效且不重複的來源日期、成交張數、成交金額、單日方向與本日振幅條件；尚未查詢候選。</div>}
-    {enabled && query.isLoading && <div className="empty">讀取成交張數關注…</div>}
-    {(query.error || captureError?.key === key) && <div className="warning-box" role="status">{captureError?.key === key ? captureError.message : '關注清單讀取失敗。'}</div>}
-    {currentScopeFailure && <div className="empty focus-unavailable" role="status">本次讀取失敗，候選數未知；請明示讀取已取得原件後再核對。</div>}
-    {enabled && query.data && !accepted && !currentScopeFailure && <div className="warning-box" role="status">來源、日期或條件回應未通過核對，關注清單暫不可用。</div>}
-    {data?.status === 'unavailable' && <div className="empty focus-unavailable" role="status">{data.reasons.includes('price_memory_capture_missing') ? '尚未取得指定日期原件，候選數未知；可首次載入官方單日行情。' : '此日期或來源資料不足，候選數未知。'}這與符合條件的零候選不同。</div>}
-    {data?.status === 'available' && <>
-      <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {minLots} 張 · 金額 ≥ {exactTurnoverText(minTurnover)} 元 · 方向 {priceFocusDayMoveLabels[dayMove]} · 振幅 ≥ {minRangePct}% · 已核 {data.reads.length} 股，符合 {data.count} 檔。</div>
-      {data.count === 0 ? <div className="empty focus-empty" role="status">已核 {data.reads.length} 股原件，沒有同時符合最小 {minLots} 張、成交金額 {exactTurnoverText(minTurnover)} 元、方向「{priceFocusDayMoveLabels[dayMove]}」與本日振幅 {minRangePct}% 的標的；這是此範圍的零候選。</div> : <div className="focus-grid">{data.items.map((item) => {
-        const memory = data.reads.find((read) => read.instrument.symbol === item.symbol)!.price_memory!
-        return <article className="focus-card" key={`${item.exchange}:${item.symbol}`}>
-          <div className="position-head"><strong>{item.symbol} {item.name}</strong><span>{item.exchange}</span></div>
-          <p>成交 {formatCanonicalShareLots(item.volume_exact, 1, true)} 張 ≥ 門檻 {minLots} 張</p>
-          <p>成交金額 {exactTurnoverText(item.turnover_exact)} 元 ≥ 門檻 {exactTurnoverText(minTurnover)} 元</p>
-          <p>{priceFocusDayMoveLabels[item.day_move]}：開盤 {item.open_exact} 元／股 · 收盤 {item.close_exact} 元／股</p>
-          <p>本日振幅 約 {approximateRangePct(item.open_exact, item.high_exact, item.low_exact)}% ≥ 門檻 {item.min_range_pct}%：100×(最高 {item.high_exact} − 最低 {item.low_exact})/開盤 {item.open_exact}；價格單位元／股，門檻以精確值核對。</p>
-          <div className="small-note">來源日 {item.source_date} · 版本 {item.source_version}</div>
-          <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link>
-          <details className="technical-details" style={{ overflowWrap: 'anywhere' }}><summary>原股、來源與驗證範圍</summary>
-            <div>原件成交股數：{formatCanonicalShares(item.volume_exact, 1, true)} 股 · 原件列 {memory.latest!.row_ordinal}</div>
-            <div>門檻：{data.min_shares} 股 · 取得時間：{formatTaiwanDateTime(memory.provenance!.captured_at)}</div>
-            <a href={memory.provenance!.endpoint} target="_blank" rel="noreferrer">櫃買中心原始資料</a>
-            <div>Body SHA-256：{memory.provenance!.body_sha256}</div><div>Receipt SHA-256：{memory.provenance!.receipt_sha256}</div>
-            <div>{memory.attribution!.owners.join('、')} · {memory.attribution!.dataset_name} · <a href={memory.attribution!.license_url} target="_blank" rel="noreferrer">{memory.attribution!.license}</a></div>
-            <div>發布、首次可得及修訂時間未知；取得時間不代表發布時間。僅單日、非歷史時點資料；原件只保留在本次服務記憶體，重啟後需重新取得。</div>
-          </details>
-        </article>
-      })}</div>}
-    </>}
-    <p className="small-note">所選日期是原件的來源日期，不表示今日即時資料；未驗全市場、研究條件、Signal、Plan 或保存。</p>
-  </section>
-}
-
-export function SavedPriceFocusResults({ data }: { data: PriceSavedFocusData }) {
-  if (!validSavedPriceFocus(data, data.as_of ?? '', data.min_lots, data.day_move, data.min_turnover, data.min_range_pct)) return <div className="warning-box" role="status">保存來源、日期或條件回應未通過核對，候選數未知。</div>
-  if (data.status === 'unavailable') return <div className="empty focus-unavailable" role="status">保存原件或此日期未能通過核對，候選數未知。這與符合條件的零候選不同。<details className="technical-details"><summary>查看讀取原因</summary>{data.reasons.join('、')}</details></div>
-  return <>
-    <div className="small-note focus-count">來源日期 {data.as_of} · 最小 {data.min_lots} 張 · 金額 ≥ {exactTurnoverText(data.min_turnover)} 元 · 方向 {priceFocusDayMoveLabels[data.day_move]} · 振幅 ≥ {data.min_range_pct}% · 已核 7 股，符合 {data.count} 檔。</div>
-    {data.count === 0 ? <div className="empty focus-empty" role="status">已核七股保存原件，沒有同時符合四項條件的標的；這是此範圍的零候選。</div> : <div className="focus-grid">{data.items.map((item) => {
-      const source = data.reads.find((read) => read.instrument.symbol === item.symbol)!.price_saved
-      return <article className="focus-card" key={item.symbol}>
-        <div className="position-head"><strong>{item.symbol} {item.name}</strong><span>{item.exchange}</span></div>
-        <p>成交 {formatCanonicalShareLots(item.volume_exact, 1, true)} 張 ≥ 門檻 {item.min_lots} 張</p>
-        <p>成交金額 {exactTurnoverText(item.turnover_exact)} 元 ≥ 門檻 {exactTurnoverText(item.min_turnover)} 元</p>
-        <p>{priceFocusDayMoveLabels[item.day_move]}：開盤 {item.open_exact} 元／股 · 收盤 {item.close_exact} 元／股</p>
-        <p>本日振幅 約 {approximateRangePct(item.open_exact, item.high_exact, item.low_exact)}% ≥ 門檻 {item.min_range_pct}%：100×(最高 {item.high_exact} − 最低 {item.low_exact})/開盤 {item.open_exact}；門檻以精確值核對。</p>
-        <div className="small-note">來源日 {item.source_date} · 本機保存的單日行情</div>
-        <Link className="text-link focus-stock-link" to={item.detail_url}>查看個股總覽（相同截止日期）</Link>
-        <details className="technical-details" style={{ overflowWrap: 'anywhere' }}><summary>保存原件、來源與驗證範圍</summary>
-          <div>原件成交股數 {item.volume_exact} 股 · CSV 資料列序 {source.latest!.row_ordinal} · {item.source_version}</div>
-          <div>擷取 UTC {source.provenance!.captured_at} · 保存 UTC {source.storage_provenance!.saved_at}</div>
-          <div>原件 SHA-256 {source.provenance!.body_sha256}</div><div>原始擷取紀錄 SHA-256 {source.provenance!.receipt_sha256}</div><div>保存紀錄 SHA-256 {source.storage_provenance!.storage_receipt_sha256}</div>
-          <div>原始擷取 storage process_memory；目前來源 private_local。此次只讀取保存原件。</div>
-          <div>{source.attribution!.owners.join('、')} · {source.attribution!.dataset_name} · <a href={source.attribution!.license_url} target="_blank" rel="noreferrer">{source.attribution!.license}</a> · <a href={source.provenance!.endpoint} target="_blank" rel="noreferrer">櫃買中心原始資料</a></div>
-          <div>全 {source.provenance!.row_count} 列核結構；金融數值只核七股。發布、首次可得及修訂時間未知，擷取與保存時間不代表發布時間。</div>
-        </details>
-      </article>
-    })}</div>}
-  </>
-}
-
-export function SavedPriceFocusPage() {
-  const [params, setParams] = useSearchParams()
-  const asOf = params.get('as_of') ?? '', lots = params.get('min_lots') ?? ''
-  const direction = params.get('day_move') ?? 'all', turnover = params.get('min_turnover') ?? '0', range = params.get('min_range_pct') ?? '0'
-  const [dateDraft, setDateDraft] = useState(asOf), [lotsDraft, setLotsDraft] = useState(lots)
-  const [moveDraft, setMoveDraft] = useState(direction), [amountDraft, setAmountDraft] = useState(turnover), [rangeDraft, setRangeDraft] = useState(range)
-  const key = params.toString(), route = useRef({ key, generation: 0 })
-  if (route.current.key !== key) route.current = { key, generation: route.current.generation + 1 }
-  const token = `${route.current.generation}:${key}`
-  const [read, setRead] = useState<{ token: string; data: PriceSavedFocusData } | null>(null)
-  const [failure, setFailure] = useState<{ token: string; reason: string } | null>(null)
-  const [busy, setBusy] = useState<string | null>(null), pending = useRef(new Set<string>())
-  useEffect(() => { setDateDraft(asOf); setLotsDraft(lots); setMoveDraft(direction); setAmountDraft(turnover); setRangeDraft(range) }, [asOf, lots, direction, turnover, range])
-  const draftsValid = validFocusDate(dateDraft) && minLotsShares(lotsDraft) !== null && validPriceFocusDayMove(moveDraft)
-    && minTurnoverValue(amountDraft) !== null && minRangeMilliPct(rangeDraft) !== null
-  const cleanDrafts = dateDraft === asOf && lotsDraft === lots && moveDraft === direction && amountDraft === turnover && rangeDraft === range
-  const enabled = validSavedFocusParams(params) && cleanDrafts
-  const apply = (event: FormEvent) => {
-    event.preventDefault()
-    if (!draftsValid) return
-    setRead(null); setFailure(null)
-    // Applying conditions never opens private files; a separate user read is required.
-    setParams(new URLSearchParams({ as_of: dateDraft, min_lots: lotsDraft, day_move: moveDraft, min_turnover: amountDraft, min_range_pct: rangeDraft }))
-  }
-  const reopen = async () => {
-    if (!enabled || pending.current.has(token) || !validPriceFocusDayMove(direction)) return
-    const generation = route.current.generation
-    pending.current.add(token); setBusy(token); setRead(null); setFailure(null)
-    try {
-      const data = await getSavedPriceFocus(asOf, lots, direction, turnover, range)
-      if (route.current.key !== key || route.current.generation !== generation) return
-      if (validSavedPriceFocus(data, asOf, lots, direction, turnover, range)) setRead({ token, data })
-      else setFailure({ token, reason: '保存來源、日期或條件回應未通過核對，候選數未知。' })
-    } catch {
-      if (route.current.key === key && route.current.generation === generation) setFailure({ token, reason: '保存行情讀取失敗，候選數未知。請重新明示讀取。' })
-    } finally { pending.current.delete(token); setBusy((value) => value === token ? null : value) }
-  }
-  const data = enabled && busy !== token && failure?.token !== token && read?.token === token ? read.data : undefined
-  return <div className="page"><Link to="/" className="back-link">← 回到市場總覽</Link><section className="panel official-event-focus" aria-labelledby="price-saved-focus-title">
-    <div className="section-head overview-head"><div><div className="eyebrow">本機保存 · 上櫃普通股</div><h1 id="price-saved-focus-title">已保存行情關注</h1></div><span className="small-note">依代碼排序</span></div>
-    <p className="small-note">只讀取已保存的 2026-10-06 七股：3105 穩懋、3293 鈊象、5274 信驊、5347 世界、6488 環球晶、6510 精測、8069 元太。四項條件同時成立才列入，門檻含等號。單日方向以收盤比較開盤；本日振幅（%）＝100×(最高−最低)/開盤。依代碼供閱讀，不是排名或買賣建議。</p>
-    <form className="overview-cutoff-control" onSubmit={apply}>
-      <label htmlFor="saved-focus-date">來源日期</label><input id="saved-focus-date" type="date" required value={dateDraft} onChange={(e) => setDateDraft(e.currentTarget.value)} />
-      <label htmlFor="saved-focus-min-lots">最小成交張數</label><input id="saved-focus-min-lots" type="text" inputMode="decimal" required value={lotsDraft} onChange={(e) => setLotsDraft(e.currentTarget.value)} />
-      <label htmlFor="saved-focus-min-turnover">最小成交金額（元）</label><input id="saved-focus-min-turnover" type="text" inputMode="numeric" required value={amountDraft} onChange={(e) => setAmountDraft(e.currentTarget.value)} />
-      <label htmlFor="saved-focus-day-move">單日方向（收盤相對開盤）</label><select id="saved-focus-day-move" value={moveDraft} onChange={(e) => setMoveDraft(e.currentTarget.value)}>{Object.entries(priceFocusDayMoveLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-      <label htmlFor="saved-focus-min-range">最小本日振幅（%）</label><input id="saved-focus-min-range" type="text" inputMode="decimal" required value={rangeDraft} onChange={(e) => setRangeDraft(e.currentTarget.value)} />
-      <button type="submit" className="secondary-button" disabled={!draftsValid || busy === token}>套用條件</button>
-      <button type="button" className="secondary-button" disabled={!enabled || busy === token} onClick={() => void reopen()}>{busy === token ? '核對保存資料中…' : '讀取已保存行情'}</button>
-    </form>
-    {!draftsValid && <p className="warning-box" role="status">請輸入有效日期與非負門檻；成交張數及百分比最多三位小數，成交額須為整數元，不接受符號、逗號或前導零。</p>}
-    {!data && busy !== token && failure?.token !== token && <div className="empty" role="status">尚未讀取目前條件的保存行情，候選數未知。套用、切換及返回後須明示讀取。</div>}
-    {busy === token && <div className="empty" role="status">核對保存原件…</div>}
-    {failure?.token === token && <div className="warning-box" role="status">{failure.reason}</div>}
-    {data && <SavedPriceFocusResults data={data} />}
-    <p className="small-note">僅含這一天；發布、首次可得及修訂時間未知。沒有歷史窗口、MA20、Signal 或 Plan。</p>
-  </section></div>
-}
-
 export function TodayPage() {
   const query = useQuery<Dashboard>({ queryKey: ['dashboard'], queryFn: getDashboard })
   const homeActions = Array.from(new Map(
@@ -1208,9 +1002,6 @@ export function TodayPage() {
             </div>
             <div className="hero-note"><span>資料截至</span><strong>{formatTaiwanDateTime(query.data?.as_of, true)}</strong><small>{query.data?.market.source_label ?? sourceLabel(query.data?.market.source)}</small></div>
           </section>
-          <PriceLotFocusPanel />
-          <p><Link className="text-link" to="/focus/price-saved?as_of=2026-10-06&min_lots=0&day_move=all&min_turnover=0&min_range_pct=0">已保存行情關注：讀取本機七股並套用條件</Link></p>
-          {JOINT_FOCUS && <p><Link className="text-link" to={`/saved-price-chips-focus${JOINT_SCOPE7 ? '-stock-scope-7' : JOINT_CALENDAR ? '-calendar' : ''}?as_of=2026-10-06&min_lots=10000.000&day_move=all&min_turnover=0&min_range_pct=0.000&investor=foreign&horizon=5&min_net_lots=0.000`}>保存行情與法人條件關注：設定八條件</Link></p>}
           <OfficialEventFocusPanel />
     <QueryState loading={query.isLoading} error={query.error}>
       {query.data && (
@@ -1374,100 +1165,15 @@ function StocksPage() {
   </div>}</QueryState>
 }
 
-type JointValidation = { token: string; epoch: number; failure: string | null; price: boolean; chips: boolean }
-export function jointValidationTransition(state: JointValidation, token: string, epoch: number, source: 'price' | 'chips' | 'failure', reason = 'joint_source_read_failed'): JointValidation {
-  if (state.token !== token || source !== 'failure' && state.epoch !== epoch) return state
-  if (source === 'failure') return { token, epoch: state.epoch + 1, failure: reason, price: false, chips: false }
-  const next = { ...state, [source]: true }
-  return { ...next, failure: next.price && next.chips ? null : next.failure }
-}
-export function jointSavedContext(exchange: string, symbol: string, params: URLSearchParams): boolean {
-  return exchange === 'TPEx' && SAVED_FOCUS_SYMBOLS.includes(symbol) && params.get('as_of') === '2026-10-06' && savedFocusReturnPath(params) !== null
-}
-const JOINT_PRICE_CHIPS = import.meta.env.VITE_SAVED_PRICE_CHIPS_INTEGRATION === 'm1-v1'
-const JOINT_CALENDAR = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_CALENDAR === 'm1-v2'
-const JOINT_SCOPE7 = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS_STOCK_SCOPE_7 === 'm1-v1'
-const JOINT_FOCUS = import.meta.env.VITE_SAVED_PRICE_CHIPS_FOCUS === 'm1-v1' || JOINT_CALENDAR || JOINT_SCOPE7
-const JOINT_MODE = JOINT_PRICE_CHIPS || JOINT_FOCUS
-
 function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
   const issuerScope = issuerSupported(exchange, symbol)
   const issuerQueryClient = useQueryClient()
-  const lotFocusReturnPath = priceFocusReturnPath(searchParams)
-  const jointFocusBack = JOINT_FOCUS ? jointReturnPath(searchParams, JOINT_CALENDAR, JOINT_SCOPE7) : null
-  const jointFocusConditions = jointFocusBack ? jointParams(new URLSearchParams(jointFocusBack.split('?')[1])) : null
-  const savedFocusBack = JOINT_FOCUS ? jointFocusBack : savedFocusReturnPath(searchParams)
-  const privateSavedOnly = searchParams.has('source_mode') || searchParams.get('from') === 'price-saved-focus'
-  const jointContextValid = JOINT_FOCUS ? jointDetailContext(exchange, symbol, searchParams, JOINT_CALENDAR, JOINT_SCOPE7) : jointSavedContext(exchange, symbol, searchParams)
-  const jointScope = JOINT_MODE && jointContextValid && (JOINT_SCOPE7 ? SCOPE7_SYMBOLS : ['3105', '6488']).includes(symbol)
-  const focusReturnPath = savedFocusBack ?? lotFocusReturnPath ?? officialEventFocusReturnPath(searchParams)
+  const focusReturnPath = officialEventFocusReturnPath(searchParams)
   const [cutoffDraft, setCutoffDraft] = useState(asOf)
-  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol) && !(JOINT_MODE && privateSavedOnly && !jointContextValid), ...(JOINT_MODE || issuerScope ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
-  const privateKey = `${exchange}:${symbol}:${asOf}${privateSavedOnly ? `:private_saved:${searchParams.toString()}` : ''}`
-  const privateRoute = useRef({ key: privateKey, generation: 0 })
-  if (privateRoute.current.key !== privateKey) privateRoute.current = { key: privateKey, generation: privateRoute.current.generation + 1 }
-  const privateGeneration = privateRoute.current.generation
-  const privatePending = useRef(new Set<string>())
-  const [privateBusy, setPrivateBusy] = useState<string | null>(null)
-  const [privateFailure, setPrivateFailure] = useState<{ token: string; reason: string } | null>(null)
-  const [privateRead, setPrivateRead] = useState<{ token: string; data: StockPriceSavedData } | null>(null)
-  const privateToken = `${privateGeneration}:${privateKey}`
-  const jointValidation = useRef<JointValidation>({ token: privateToken, epoch: 0, failure: null, price: false, chips: false })
-  if (jointValidation.current.token !== privateToken) jointValidation.current = { token: privateToken, epoch: 0, failure: null, price: false, chips: false }
-  const [, setJointRevision] = useState(0)
-  const failJoint = (reason: string) => {
-    if (!jointScope) return
-    jointValidation.current = jointValidationTransition(jointValidation.current, privateToken, jointValidation.current.epoch, 'failure', reason)
-    setPrivateRead((value) => value?.token === privateToken ? null : value)
-    setJointRevision((value) => value + 1)
-  }
-  const validateJoint = (token: string, epoch: number, source: 'price' | 'chips') => {
-    if (!jointScope) return
-    jointValidation.current = jointValidationTransition(jointValidation.current, token, epoch, source)
-    setJointRevision((value) => value + 1)
-  }
-  useEffect(() => { if (jointScope && query.error) failJoint('window_read_request_failed') }, [query.error, privateToken, jointScope])
-  const currentChips = query.data?.overview?.institutional
-  const hasJointEvidence = Boolean(currentChips?.calendar?.status === 'available' || Object.values(currentChips?.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0))
-  const jointEvidenceInvalid = jointScope && currentChips != null && (JOINT_FOCUS ? jointDetailEvidenceInvalid(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7) : !validChips1006Identity(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7) || hasJointEvidence && !validChips1006Read(currentChips, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7))
-  useEffect(() => { if (jointEvidenceInvalid) failJoint('chips_memory_evidence_invalid') }, [jointEvidenceInvalid, privateToken])
-  const privateAction = async (save: boolean) => {
-    const instrument = query.data?.instrument
-    if (!instrument || !privatePriceSupported(instrument, asOf) || privatePending.current.has(privateToken)) return
-    if (privateSavedOnly && (save || !savedFocusBack)) {
-      setPrivateRead(null); setPrivateFailure({ token: privateToken, reason: 'price_saved_focus_context_invalid' }); return
-    }
-    const token = privateToken, generation = privateGeneration, key = privateKey, jointEpoch = jointValidation.current.epoch
-    privatePending.current.add(token)
-    setPrivateBusy(token)
-    setPrivateFailure(null)
-    setPrivateRead((value) => value?.token === token ? null : value)
-    try {
-      const result = await (privateSavedOnly ? getSavedFocusStockPrice : save ? saveStockPrice : getSavedStockPrice)(exchange, symbol, asOf)
-      if (privateRoute.current.key !== key || privateRoute.current.generation !== generation || jointScope && jointValidation.current.epoch !== jointEpoch) return
-      if (privateSavedOnly ? validSavedFocusStock(result, instrument, asOf) : validStockPriceSavedRead(result, instrument, asOf)) {
-        setPrivateRead({ token, data: result }); validateJoint(token, jointEpoch, 'price')
-      }
-      else {
-        setPrivateRead((value) => value?.token === token ? null : value)
-        setPrivateFailure({ token, reason: result.status === 'unavailable' && Array.isArray(result.reasons)
-          ? result.reasons[0] ?? 'price_saved_contract_invalid' : 'price_saved_contract_invalid' })
-        failJoint('price_saved_contract_invalid')
-      }
-    } catch {
-      if (privateRoute.current.key === key && privateRoute.current.generation === generation) {
-        setPrivateRead((value) => value?.token === token ? null : value)
-        setPrivateFailure({ token, reason: 'price_private_request_failed' })
-        failJoint('price_private_request_failed')
-      }
-    } finally {
-      privatePending.current.delete(token)
-      setPrivateBusy((value) => value === token ? null : value)
-    }
-  }
+  const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled: Boolean(exchange && symbol), ...(issuerScope ? { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } : {}) })
   useEffect(() => setCutoffDraft(asOf || query.data?.overview?.as_of || ''), [asOf, query.data?.overview?.as_of])
   const [tab, setTab] = useState<StockTab>('technical')
   const [capturingEvents, setCapturingEvents] = useState(false)
@@ -1479,92 +1185,6 @@ function StockPage() {
   const issuerPending = useRef(new Set<string>())
   const [issuerBusyToken, setIssuerBusyToken] = useState<string | null>(null)
   const [issuerFailure, setIssuerFailure] = useState<{ token: string; reason: string } | null>(null)
-  const windowRequestKey = `${exchange}:${symbol}:${asOf}${jointScope ? `:joint:${searchParams.toString()}` : ''}`
-  const currentWindowKey = useRef(windowRequestKey)
-  currentWindowKey.current = windowRequestKey
-  const windowRoute = useRef({ key: windowRequestKey, generation: 0 })
-  if (windowRoute.current.key !== windowRequestKey) windowRoute.current = { key: windowRequestKey, generation: windowRoute.current.generation + 1 }
-  const windowToken = `${windowRoute.current.generation}:${windowRequestKey}`
-  const windowPending = useRef(false)
-  const [windowBusyKey, setWindowBusyKey] = useState<string | null>(null)
-  const [windowRequestFailure, setWindowRequestFailure] = useState<{ key: string; reason: string } | null>(null)
-  const acquireWindows = async () => {
-    if (windowPending.current || JOINT_MODE && !jointScope) return
-    if (jointScope && !jointValidation.current.failure && (privateRead?.token !== privateToken || !query.data?.instrument || !validSavedFocusStock(privateRead.data, query.data.instrument, asOf))) return
-    const requestKey = windowRequestKey
-    const generation = windowRoute.current.generation
-    const jointToken = privateToken, jointEpoch = jointValidation.current.epoch
-    windowPending.current = true
-    setWindowBusyKey(windowToken)
-    if (asOf !== '2026-10-06') setWindowRequestFailure(null)
-    try {
-      if (jointScope && (jointValidation.current.failure || JOINT_SCOPE7 && currentChips?.capture_state?.attempted)) {
-        const refreshed = await query.refetch()
-        if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation || jointValidation.current.epoch !== jointEpoch) return
-        const held = refreshed.data?.overview?.institutional
-        if (refreshed.isError || !held?.capture_state?.cache_present || !validChips1006Read(held, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)) {
-          failJoint('window_read_request_failed'); return
-        }
-        setWindowRequestFailure(null)
-        validateJoint(jointToken, jointEpoch, 'chips')
-        return
-      }
-      const result = await captureInstitutionalWindows(exchange, symbol, asOf || undefined)
-      if (currentWindowKey.current !== requestKey || windowRoute.current.generation !== generation) return
-      const hasNewEvidence = result.calendar?.status === 'available' || Object.values(result.windows ?? {}).some((window) => window?.values != null || (window?.daily_evidence?.length ?? 0) > 0)
-      if (asOf === '2026-10-06' && (!validChips1006Identity(result, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)
-        || (hasNewEvidence && !validChips1006Read(result, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7)))) {
-        setWindowRequestFailure({ key: windowToken, reason: 'chips_memory_evidence_invalid' })
-        failJoint('chips_memory_evidence_invalid')
-        return
-      }
-      if (result.status === 'unavailable' && !(asOf === '2026-10-06' && hasNewEvidence)) {
-        setWindowRequestFailure({ key: windowToken, reason: result.reasons[0] ?? 'window_capture_failed' })
-        failJoint(result.reasons[0] ?? 'window_capture_failed')
-        if (jointScope) return
-      }
-      const refreshed = await query.refetch()
-      if (asOf === '2026-10-06' && currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
-        const currentRead = refreshed.data?.overview?.institutional
-        if (refreshed.isError || jointScope && (!currentRead || !validChips1006Read(currentRead, exchange, symbol, asOf, JOINT_CALENDAR, JOINT_SCOPE7))) {
-          setWindowRequestFailure({ key: windowToken, reason: 'window_read_request_failed' }); failJoint('window_read_request_failed')
-        } else if (hasNewEvidence) {
-          setWindowRequestFailure(null); validateJoint(jointToken, jointEpoch, 'chips')
-        }
-      }
-    } catch {
-      if (currentWindowKey.current === requestKey && windowRoute.current.generation === generation) {
-        setWindowRequestFailure({ key: windowToken, reason: 'window_capture_request_failed' }); failJoint('window_capture_request_failed')
-      }
-    } finally {
-      windowPending.current = false
-      setWindowBusyKey((key) => key === windowToken ? null : key)
-    }
-  }
-  const priceRequestKey = `${exchange}:${symbol}:${asOf}`
-  const currentPriceKey = useRef(priceRequestKey)
-  currentPriceKey.current = priceRequestKey
-  const pricePending = useRef(false)
-  const [priceBusyKey, setPriceBusyKey] = useState<string | null>(null)
-  const [priceRequestFailure, setPriceRequestFailure] = useState<{ key: string; reason: string } | null>(null)
-  const acquirePrice = async () => {
-    if (pricePending.current || !priceSourcePins(asOf)) return
-    const requestKey = priceRequestKey
-    pricePending.current = true
-    setPriceBusyKey(requestKey)
-    setPriceRequestFailure(null)
-    try {
-      const result = await captureStockPriceMemory(exchange, symbol, asOf)
-      if (currentPriceKey.current !== requestKey) return
-      if (result.status !== 'available') setPriceRequestFailure({ key: requestKey, reason: result.reasons[0] ?? 'price_capture_failed' })
-      await query.refetch()
-    } catch {
-      if (currentPriceKey.current === requestKey) setPriceRequestFailure({ key: requestKey, reason: 'price_capture_request_failed' })
-    } finally {
-      pricePending.current = false
-      setPriceBusyKey((key) => key === requestKey ? null : key)
-    }
-  }
   const acquireIssuer = async () => {
     if (!issuerScope || !validOfficialEventDate(asOf) || issuerPending.current.has(issuerToken)) return
     const token = issuerToken, key = eventRequestKey, generation = issuerRoute.current.generation
@@ -1602,44 +1222,29 @@ function StockPage() {
     }
   }
   if (query.isLoading) return <Loading />
-  if (JOINT_MODE && privateSavedOnly && !jointContextValid) return <div className="data-gap" role="alert">保存來源模式、日期或返回條件未通過核對，未讀取來源。</div>
-  if (query.error && !(asOf === '2026-10-06' && query.data)) return <ErrorBox error={query.error} />
+  if (query.error) return <ErrorBox error={query.error} />
   if (!query.data) return null
   const data = query.data
-  const currentScopePriceFailure = asOf === '2026-10-07' && priceRequestFailure?.key === priceRequestKey
-  const priceDisplayOverview = currentScopePriceFailure && data.overview?.price_memory ? { ...data.overview, price_memory: {
-    ...data.overview.price_memory, status: 'unavailable' as const, latest: null, bars: [], provenance: null, attribution: null,
-    reasons: ['price_read_request_failed'], capture_state: { ...data.overview.price_memory.capture_state, can_capture: false },
-  } } : data.overview
-  const issuerRead = priceDisplayOverview?.issuer_profile
-  const issuerInvalid = issuerRead != null && !validTwseIssuerProfile(issuerRead, exchange, symbol, asOf || null, priceDisplayOverview?.events)
-  const industryRead = priceDisplayOverview?.issuer_industry_trace
-  const industryInvalid = industryRead != null && !validTwseIssuerIndustry(industryRead, exchange, symbol, asOf || null, issuerRead, priceDisplayOverview?.events)
+  const issuerRead = data.overview?.issuer_profile
+  const issuerInvalid = issuerRead != null && !validTwseIssuerProfile(issuerRead, exchange, symbol, asOf || null, data.overview?.events)
+  const industryRead = data.overview?.issuer_industry_trace
+  const industryInvalid = industryRead != null && !validTwseIssuerIndustry(industryRead, exchange, symbol, asOf || null, issuerRead, data.overview?.events)
   const issuerRequestFailure = issuerFailure?.token === issuerToken ? issuerFailure.reason
     : issuerScope && eventRequestFailure?.key === eventRequestKey ? 'issuer_read_request_failed'
       : issuerInvalid ? 'issuer_response_invalid' : undefined
-  const displayOverview = issuerScope && issuerRequestFailure && priceDisplayOverview ? {
-    ...priceDisplayOverview,
+  const displayOverview = issuerScope && issuerRequestFailure && data.overview ? {
+    ...data.overview,
     issuer_profile: issuerRead ? unavailableIssuer(issuerRead, issuerRequestFailure) : undefined,
     issuer_industry_trace: industryRead ? unavailableIndustry(industryRead, issuerRequestFailure) : undefined,
-    events: { ...priceDisplayOverview.events, status: 'unavailable' as const, rows: [], provenance: null, attribution: null,
+    events: { ...data.overview.events, status: 'unavailable' as const, rows: [], provenance: null, attribution: null,
       observed_date: null, cache_present: false, candidate_count: 0, selected_count: 0, capture_action: 'failed' as const,
       reasons: ['issuer_read_request_failed'], can_capture: false },
-  } : industryInvalid && priceDisplayOverview && industryRead ? {
-    ...priceDisplayOverview, issuer_industry_trace: unavailableIndustry(industryRead, 'industry_response_invalid'),
-  } : priceDisplayOverview
+  } : industryInvalid && data.overview && industryRead ? {
+    ...data.overview, issuer_industry_trace: unavailableIndustry(industryRead, 'industry_response_invalid'),
+  } : data.overview
   const issuerName = issuerScope && !issuerRequestFailure && displayOverview?.issuer_profile?.status === 'available'
     && validTwseIssuerProfile(displayOverview.issuer_profile, exchange, symbol, asOf || null, displayOverview.events)
       ? displayOverview.issuer_profile.row?.short_name : null
-  const priceMemory = displayOverview?.price_memory
-  const priceCutoff = asOf || data.overview?.as_of || null
-  const memoryKnown = !privateSavedOnly && (!asOf || asOf === data.overview?.as_of) && validStockPriceMemoryRead(priceMemory, data.instrument, priceCutoff)
-  const memoryRejected = currentScopePriceFailure || priceMemory?.status === 'available' && !memoryKnown
-  const priceSaved = privateRead?.token === privateToken ? privateRead.data : undefined
-  const jointFailure = jointScope ? jointValidation.current.failure ?? (query.error ? 'window_read_request_failed' : jointEvidenceInvalid ? 'chips_memory_evidence_invalid' : null) : null
-  const savedKnown = !jointFailure && privateFailure?.token !== privateToken && asOf === data.overview?.as_of && validStockPriceSavedRead(priceSaved, data.instrument, asOf) && (!privateSavedOnly || Boolean(savedFocusBack) && validSavedFocusStock(priceSaved, data.instrument, asOf))
-  const officialKnown = memoryKnown || savedKnown
-  const officialBar = memoryKnown ? priceMemory.latest : savedKnown ? priceSaved.latest : null
   const independent = stockIndependentView(data)
   const finitePrice = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
   const researchShapeValid = validStockResearchRead(data)
@@ -1664,22 +1269,22 @@ function StockPage() {
   const candidateConflict = read !== undefined && data.overview?.price.status === 'available'
     && (!candidate || candidateRow?.date !== candidate.date || candidateRow?.close !== candidate.close)
   const candidateKnown = candidateCoreKnown && !candidateConflict
-  const latestBar = officialKnown ? officialBar! : !privateSavedOnly && !memoryRejected && readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
+  const latestBar = readKnown && candidateKnown && candidate && finitePrice(candidate.close) ? candidate : undefined
   const previousBar = data.bars.length > 1 ? data.bars[data.bars.length - 2] : undefined
   const legacyPrice = data.decision_summary?.current_price
   const priceConflict = read !== undefined && !data.overview && legacyPrice != null && (!finitePrice(legacyPrice) || legacyPrice !== latestBar?.close)
-  const currentPrice = officialKnown ? officialBar!.close : privateSavedOnly || memoryRejected || !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
+  const currentPrice = !readKnown || priceConflict ? null : data.overview || read !== undefined ? latestBar?.close ?? null : finitePrice(legacyPrice) ? legacyPrice : latestBar?.close ?? null
   const legacyChange = data.decision_summary?.price_change
   const previousKnown = read === undefined || (previousBar?.market_read?.status === 'known' && isValidBar(previousBar) && previousBar.date < candidateRow.date!)
   const calculatedChange = previousKnown && latestBar && finitePrice(latestBar.close) && finitePrice(previousBar?.close) ? latestBar.close - previousBar.close : null
   const changeConflict = read !== undefined && legacyChange != null && (!finiteValue(legacyChange) || legacyChange !== calculatedChange)
   const change = read === undefined ? finiteValue(legacyChange) ? legacyChange : calculatedChange : !changeConflict ? calculatedChange : null
-  const priceChange = privateSavedOnly || officialKnown || data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
+  const priceChange = data.overview || !readKnown || !candidateKnown || priceConflict ? null : finiteValue(change) ? change : null
   const legacyPercent = data.decision_summary?.price_change_pct
   const calculatedPercent = priceChange != null && finitePrice(previousBar?.close) ? priceChange / previousBar.close : null
   const percentConflict = read !== undefined && legacyPercent != null && (!finiteValue(legacyPercent) || legacyPercent !== calculatedPercent)
   const percent = read === undefined ? finiteValue(legacyPercent) ? legacyPercent : calculatedPercent : !percentConflict ? calculatedPercent : null
-  const priceChangePct = !officialKnown && !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
+  const priceChangePct = !data.overview && readKnown && candidateKnown && !priceConflict && finiteValue(percent) && Number.isFinite(percent * 100) ? percent : null
   const fallbackMarketComplete = Boolean(latestBar && typeof latestBar.source === 'string' && !latestBar.source.toLowerCase().includes('fixture'))
   const fallbackResearchStatus = data.decision_summary?.data_quality ?? 'missing'
   const fallbackResearchIncomplete = data.decision_summary?.action_state === 'data_insufficient' || fallbackResearchStatus !== 'complete'
@@ -1701,10 +1306,7 @@ function StockPage() {
     },
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
-  const qualitySummary = officialKnown ? { ...storedQualitySummary, market: {
-    status: 'complete', label: `${officialBar!.date} 單日官方行情已核對`, as_of: officialBar!.date,
-    missing_fields: [], source: 'tpex',
-  } } : storedQualitySummary
+  const qualitySummary = storedQualitySummary
   const tabs: Array<{ id: StockTab; label: string }> = [
     { id: 'technical', label: '技術走勢' },
     { id: 'chips', label: '法人籌碼' },
@@ -1713,7 +1315,7 @@ function StockPage() {
     { id: 'data', label: '資料說明' },
   ]
   return <div className="page">
-    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{jointFocusBack ? '← 回到保存行情與法人關注（原八條件）' : savedFocusBack ? '← 回到已保存行情關注（原條件）' : lotFocusReturnPath ? '← 回到成交張數關注（原條件）' : focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
+    <Link to={focusReturnPath ?? '/stocks'} className="back-link">{focusReturnPath ? '← 回到官方事件關注（原搜尋與截止日期）' : '← 回到個股'}</Link>
     <PageTitle eyebrow={marketDisplayLabel(data.instrument.exchange) + ' · ' + (issuerScope ? '公司基本資料' : instrumentTypeLabel(data.instrument.instrument_type))} title={data.instrument.symbol + ' ' + (issuerScope ? issuerName ?? '公司名稱待核對' : data.instrument.name)}>
       <div className="stock-quote-grid">
         <div><span>最近收盤（報價幣別元）</span><strong>{currentPrice == null ? '待核實' : formatNumber(currentPrice)}</strong></div>
@@ -1722,16 +1324,14 @@ function StockPage() {
       </div>
       <div className="small-note stock-header-meta">價格資料日期 {formatTaiwanDateTime(latestBar?.date, true)} · 來源 {latestBar ? sourceLabel(latestBar.source) : '尚無已核對的價格來源'}</div>
       <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="secondary-button">套用截止</button><button type="button" className="secondary-button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期。</span></form>
-      {priceSourcePins(asOf) && exchange === 'TPEx' && <div className="small-note">同截止切換：{(jointFocusConditions ? (JOINT_SCOPE7 ? SCOPE7_SYMBOLS : JOINT_SYMBOLS) : (memoryKnown ? priceSourcePins(asOf, data.overview!.price_memory!.provenance!.policy_version)! : priceSourcePins(asOf)!).symbols).map((symbol, index) => <span key={symbol}>{index > 0 && ' · '}<Link to={jointFocusConditions ? jointDetailPath(symbol, jointFocusConditions, JOINT_CALENDAR, JOINT_SCOPE7) : privateSavedOnly && savedFocusBack ? savedFocusDetailPath(symbol, asOf, searchParams.get('focus_min_lots')!, searchParams.get('focus_day_move') as 'all' | 'up' | 'down' | 'flat', searchParams.get('focus_min_turnover')!, searchParams.get('focus_min_range_pct')!) : `/stocks/TPEx/${symbol}?as_of=${asOf}${privateSavedOnly ? '&source_mode=private_saved' : ''}`}>{symbol} {PRICE_SYMBOL_NAMES[symbol]}</Link></span>)}</div>}
     </PageTitle>
-    {!officialKnown && (!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
-    {privateSavedOnly && <p className="small-note" role="status">目前只採已保存行情；切換或套用日期後須按「讀取已保存行情」。{!savedFocusBack && '來源模式或返回條件尚未通過核對，價格待核實。'}</p>}
-    {displayOverview && <StockOverview institutionalCalendar={JOINT_CALENDAR} institutionalScope7={JOINT_SCOPE7} data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} privateSavedOnly={privateSavedOnly} savedPrice={savedKnown ? priceSaved : undefined} onSavePrice={privateSavedOnly ? undefined : () => privateAction(true)} onReadSavedPrice={privateSavedOnly && !savedFocusBack ? undefined : () => privateAction(false)} privatePriceBusy={privateBusy === privateToken} privatePriceFailure={jointScope ? undefined : privateFailure?.token === privateToken ? privateFailure.reason : undefined} onCapturePrice={privateSavedOnly ? undefined : acquirePrice} capturingPrice={priceBusyKey === priceRequestKey} priceRequestFailure={priceRequestFailure?.key === priceRequestKey ? priceRequestFailure.reason : undefined} onNews={() => setTab('news')} onCaptureIssuer={acquireIssuer} capturingIssuer={issuerBusyToken === issuerToken} issuerRequestFailure={issuerRequestFailure} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} onCaptureWindows={JOINT_MODE ? jointScope && (jointFailure || savedKnown) ? acquireWindows : undefined : acquireWindows} capturingWindows={windowBusyKey === windowToken} windowRequestFailure={jointFailure ?? (windowRequestFailure?.key === windowToken ? windowRequestFailure.reason : asOf === '2026-10-06' && query.error ? 'window_read_request_failed' : undefined)} />}
+    {(!readKnown || !candidateKnown || priceConflict) && <div className="data-gap stock-market-read-gap" role="status">{readShapeValid && read?.status === 'missing' ? '尚無行情記錄。' : '行情讀值無效，先核對原記錄。'} 最近收盤與漲跌待核實；已知日期的合法歷史行情仍可查看。</div>}
+    {displayOverview && <StockOverview data={displayOverview} instrument={data.instrument} explicitCutoff={asOf} onNews={() => setTab('news')} onCaptureIssuer={acquireIssuer} capturingIssuer={issuerBusyToken === issuerToken} issuerRequestFailure={issuerRequestFailure} onCaptureEvents={acquireEvents} capturingEvents={capturingEvents} eventRequestFailure={eventRequestFailure?.key === eventRequestKey ? eventRequestFailure.reason : undefined} />}
     {(!researchShapeValid || data.research_read?.status === 'invalid') && <div className="data-gap stock-research-read-gap" role="status">研究候選讀值無效或格式待核實，先核對原記錄；行情與其他獨立區塊仍可查看。{researchShapeValid && data.research_read?.decision_block_scope === 'slots' ? '各策略分別核對，不以較早候選代替。' : ''}</div>}
     {fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。可在「研究條件」查看限制。</div>}
     <div className="stock-tabs" role="tablist" aria-label="個股詳情分頁">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? 'stock-tab active' : 'stock-tab'} key={item.id} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
     <div className="stock-tab-content">
-      {tab === 'technical' && <section className="stock-tab-panel">{officialKnown && <p className="small-note">{officialBar!.date === '2026-10-07' ? officialBar!.date : officialBar!.date === '2026-10-05' ? '10/5' : '10/6'} 官方單日行情；此原件沒有歷史價格視窗，MA20／MA60 待補。既有資料的日期與原列可在資料說明查看。</p>}<StockPriceChart bars={memoryKnown ? memoryPriceChartBars(priceMemory, data.instrument, priceCutoff) : savedKnown ? savedPriceChartBars(priceSaved, data.instrument, asOf) : privateSavedOnly || memoryRejected ? [] : data.bars} unlocatedDateRows={officialKnown ? 0 : read?.unlocated_count ?? 0} knownGapDates={officialKnown ? [] : [...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /><OrdinaryCloseTrend exchange={data.instrument.exchange} symbol={data.instrument.symbol} asOf={asOf} fetcher={getOrdinaryCloseTrend} /></section>}
+      {tab === 'technical' && <section className="stock-tab-panel"><StockPriceChart bars={data.bars} unlocatedDateRows={read?.unlocated_count ?? 0} knownGapDates={[...new Set([...(data.coverage?.missing_bar_dates_to_20 ?? []), ...(data.coverage?.missing_bar_dates_to_60 ?? [])])]} /></section>}
       {tab === 'chips' && <section className="stock-tab-panel panel"><div className="section-head"><div><div className="eyebrow">籌碼資料</div><h2>法人與融資</h2></div></div>{independent.chipStatus !== 'known' && <div className="data-gap stock-chip-read-gap" role="status">籌碼讀值缺失或無效，先核對原記錄；未提供與無效數值保留空白，其他獨立區塊仍可查看。</div>}{independent.chips.length ? <ChipTable rows={independent.chips.slice(-30).reverse()} /> : <div className="empty">尚無可核實的籌碼資料。</div>}<BrokerBranchEntry exchange={data.instrument.exchange} /></section>}
       {tab === 'news' && <section className="stock-tab-panel"><StockEventList news={data.news} events={data.events} /></section>}
       {tab === 'research' && <section className="stock-tab-panel">{hasTemporaryIndustryGroup && <div className="data-gap research-group-warning">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}<ActionDetailPanel action={researchAction} /><StockResearchPanel data={data} /></section>}
@@ -2009,56 +1609,8 @@ function NotFound() {
 }
 
 export default function App() {
-  if ([import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7, import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7, comboFlag()].filter((flag) => flag === 'm1-v1').length > 1) throw new Error('chips profiles cannot be enabled together')
-  const location = useLocation()
-  if (comboFlag() === 'm1-v1' && location.pathname.startsWith(COMBOS_ROUTE)) {
-    return <ChipsDealerDirectionCombosProvider><Routes>
-      <Route path={COMBOS_ROUTE} element={<ChipsDealerDirectionCombosPage />} />
-      <Route path={COMBOS_ROUTE + '/:symbol'} element={<ChipsDealerDirectionCombosPage />} />
-      <Route path="*" element={<Navigate to={COMBOS_ROUTE} replace />} />
-    </Routes></ChipsDealerDirectionCombosProvider>
-  }
-  if (import.meta.env.VITE_CHIPS_DEALER_COMPONENTS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DEALER_COMPONENTS_ROUTE)) {
-    return <ChipsDealerComponentsProvider><Routes>
-      <Route path={DEALER_COMPONENTS_ROUTE} element={<ChipsDealerComponentsPage />} />
-      <Route path={DEALER_COMPONENTS_ROUTE + '/:symbol'} element={<ChipsDealerComponentsPage />} />
-      <Route path="*" element={<Navigate to={DEALER_COMPONENTS_ROUTE} replace />} />
-    </Routes></ChipsDealerComponentsProvider>
-  }
-  if (import.meta.env.VITE_CHIPS_ADJACENT_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(ADJACENT_ROUTE)) {
-    return <ChipsAdjacentProvider><Routes>
-      <Route path={ADJACENT_ROUTE} element={<ChipsAdjacentPage />} />
-      <Route path={ADJACENT_ROUTE + '/:symbol'} element={<ChipsAdjacentPage />} />
-      <Route path="*" element={<Navigate to={ADJACENT_ROUTE} replace />} />
-    </Routes></ChipsAdjacentProvider>
-  }
-  if (import.meta.env.VITE_CHIPS_DIRECTION_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(DIRECTION_ROUTE)) {
-    return <ChipsDirectionProvider><Routes>
-      <Route path={DIRECTION_ROUTE} element={<ChipsDirectionPage />} />
-      <Route path={DIRECTION_ROUTE + '/:symbol'} element={<ChipsDirectionPage />} />
-      <Route path="*" element={<Navigate to={DIRECTION_ROUTE} replace />} />
-    </Routes></ChipsDirectionProvider>
-  }
-  if (import.meta.env.VITE_CHIPS_GROSS_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(GROSS_ROUTE)) {
-    return <ChipsGrossProvider><Routes>
-      <Route path={GROSS_ROUTE} element={<ChipsGrossPage />} />
-      <Route path={GROSS_ROUTE + '/:symbol'} element={<ChipsGrossPage />} />
-      <Route path="*" element={<Navigate to={GROSS_ROUTE} replace />} />
-    </Routes></ChipsGrossProvider>
-  }
-  if (import.meta.env.VITE_CHIPS_SERIES_STOCK_SCOPE_7 === 'm1-v1' && location.pathname.startsWith(SERIES_ROUTE)) {
-    return <ChipsSeriesProvider><Routes>
-      <Route path={SERIES_ROUTE} element={<ChipsSeriesPage />} />
-      <Route path={SERIES_ROUTE + '/:symbol'} element={<ChipsSeriesPage />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes></ChipsSeriesProvider>
-  }
   return <Shell><Routes>
     <Route path="/" element={<TodayPage />} />
-    <Route path="/focus/price-saved" element={<SavedPriceFocusPage />} />
-    {JOINT_FOCUS && !JOINT_CALENDAR && !JOINT_SCOPE7 && <Route path="/saved-price-chips-focus" element={<SavedPriceChipsFocusPage />} />}
-    {JOINT_CALENDAR && <Route path="/saved-price-chips-focus-calendar" element={<SavedPriceChipsFocusPage calendar />} />}
-    {JOINT_SCOPE7 && <Route path="/saved-price-chips-focus-stock-scope-7" element={<SavedPriceChipsFocusPage scope7 />} />}
     <Route path="/news/:newsId" element={<NewsDetailPage />} />
     <Route path="/news" element={<NewsPage />} />
     <Route path="/themes" element={<ThemesPage />} />

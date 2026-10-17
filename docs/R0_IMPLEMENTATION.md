@@ -12,7 +12,7 @@
 
 實作者只能標「已實作」；reviewer 才能標「已 review」。ROADMAP 狀態由統籌核定、文件角色更新，不能由本文件的批次名稱推論。
 
-目前邊界：B1、B3 純核心、B3-persist、B4a、B5a 的 local foundation／read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b 與 B5b 各有 caller-input 純核心的有限 review，兩者完整整合及 B7 仍未完成。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
+目前邊界：B1、B3 純核心、B4a、B5a 的產品 read-time projection，以及 R0-5 的若干 finite migration／startup slices 已 review；B4b 有 caller-input 純核心的有限 review，其完整整合、B3 持久化、B5b 及 B7 仍未完成。B2 已有四個互相分離的 slices，但 SignalArtifact bridge、official source／availability／decision time、legacy-v2 paired output、API／UI/default、PIT 與 B7 未完成，所以 B2 整體未完成。正式 worker 仍使用 legacy ATR；正式資料修復、正式 artifact、預設版本切換與策略有效性均未完成。
 
 ## 2. 靜態基線與共同不變條件
 
@@ -39,12 +39,12 @@
 
 | 範圍 | 已 review 的能力 | 仍未完成／詳細契約 |
 | --- | --- | --- |
-| R0-1 | Wilder ATR 純核心、獨立 local store 與 strict caller-provided provenance／comparison | worker、official truth、PIT 與 paired replay；見 §4。 |
+| R0-1 | Wilder ATR 純核心 | 持久化、worker、official truth、PIT 與 paired replay；見 §4。 |
 | R0-2 | confidence 安全語意、local SignalArtifact、分離的 comparison／pure replay／worker capture | bridge、legacy-v2 paired output、產品接線與 B7；見 §5 及各保存／重播文件。 |
 | R0-3 | legacy 規則參考價的 read-time API／UI 語意；新 trade plan 的 caller-input 事後假設純核心有限 review | 完整 B4b 的官方 tick／成本／日曆、來源／PIT、持久化與產品接線、paired replay；見 §6。條件計畫紀錄的保存與讀回見 §6.3。 |
-| R0-4 | local time-evidence store、產品 read-time projection，以及 caller-declared time-cutoff 純核心有限 review | store-product linkage、source truth、完整 B5b gate／worker 整合與 PIT；見 §7。 |
+| R0-4 | 產品 read-time projection 有限 review | 時間證據保存、source truth、B5b gate／worker 整合與 PIT；見 §7。 |
 | R0-5 | 有限 SQLite migration／recovery、canonical rebuild 與 startup readiness gates | 任意歷史／custom schema、正式 migration／restore／deployment；見 §8。 |
-| B4b／B5b／B7 | B4b、B5b 各僅 caller-input 純核心有限 review；B7 未開始 | B4b／B5b 其餘整合與驗收、B7 實作及獨立 review。 |
+| B4b／B5b／B7 | B4b 僅 caller-input 純核心有限 review；B5b、B7 未開始 | B4b 其餘整合與驗收、B5b 與 B7 實作及獨立 review。 |
 
 ## 4. R0-1：ATR 定義、公司行動與 warm-up
 
@@ -101,26 +101,6 @@ feature evidence 至少保存 price basis、完整 manifest/digest、factor sour
 artifact 必須與 mutable legacy `technical_features` 分離，至少保存 stable key、instrument、market date、feature/version、value/null＋reason、aware decision time、首次 immutable generated time、snapshot/hash、ordered refs、algorithm/config/implementation、basis、calendar/halt/previous-close及完整 action manifest。identity 要區分 instrument/date/version/snapshot/decision/basis/dependency/config/implementation；相同 identity＋相同 canonical payload為 idempotent replay並保留首次 generated time，payload不同為 collision。attempt與run relation另存，不進 canonical payload。
 
 reader 使用 exact selectors，沒有 implicit latest／`<=as_of`。若 artifact與legacy位於不同 SQLite，不能宣稱跨庫 FK；須依自足 instrument identity與 provenance稽核。
-
-#### 4.7.1 C-004 獨立 store 第一段契約（已 review：有限儲存段落）
-
-`ArtifactStore(explicit_path)` 是 opt-in schema 1 SQLite store，沒有預設 path、不加入 legacy Base／Alembic／startup。既存 empty、foreign或 unknown-version DB在 mutation前拒絕。canonical instrument 是 normalized exchange＋symbol；nullable legacy reference不是 FK。parent、observations、dependencies、attempt relation單次 transaction保存；immutable triggers阻擋 UPDATE／DELETE／REPLACE。ordinary store只驗 caller-supplied最低結構與 digest，不證 official truth。
-
-### 4.8 C-004 final review 證據與未完成邊界
-
-有限 review 接受 schema/version ownership、aware UTC canonicalization、single-artifact atomic save、immutable rows、retry/collision、two-connection 同 identity、exact reader 與 legacy DB 隔離。Strict provenance 及 legacy＋兩 as-of 比較由 C-006 補齊；worker／API、來源 truth、PIT 與 B7 仍未完成。
-
-### 4.9 C-006 provenance／compatibility final review 與完成邊界
-
-C-006 使 C-004＋C-006 的有限 B3-persist 可標已 review；store schema仍為1。strict profile固定 name=`atr-provenance`、version=2、id=`atr-provenance/v2`、mode=`caller_provided_only`，instrument validation仍為 `caller_supplied_only`。
-
-strict provenance 的固定頂層為 `contract`、`feature`、`instrument`、`source`、`algorithm`、`basis`、`calendar`、`sessions`、`halts`、`previous_close`、`company_actions`。writer／reader必須驗完整 snapshot＋ordered rows、instrument mapping、method/config/implementation、共同 basis、calendar/sessions/halts、每個實際 selected previous close，以及 action manifest/digest/coverage/source/aware availability。必要結構缺失在寫入前拒絕；`unknown`／`unavailable` 必須有 machine reason，且受影響 result只能為 null。`not_applicable`／`not_used` 要與計算路徑一致。manifest、basis與config digest由 canonical structure重算；外部 snapshot／implementation hash沒有原 bytes時只驗 algorithm與shape，不冒稱核真。
-
-普通 schema 1 writer／reader保持舊 minimal行為；strict-like marker不能升格舊 artifact。`save_atr_artifact_strict`在 commit前重新讀驗，失敗令 parent/children/dependencies/attempts 全 rollback；`get_strict_by_key`／`read_strict`／`get_strict_atr`每次重驗。舊 key、seal、payload、generated time與rows不回填、不重算、不重分類。
-
-`ArtifactComparisonReader`要求明確 legacy SQLite與artifact store paths。兩側均以 `mode=ro`／`query_only`讀 stable file；缺檔、live WAL/SHM/journal、ownership/schema mismatch或讀取中 fingerprint變化拒絕。legacy selector明示 instrument/date/row/snapshot/version；artifact以 key，或完整 version＋snapshot id/hash＋exact aware decision time選取。禁止 latest、最大時間或 first-row fallback。
-
-report列 legacy、Wilder v2 A/B各自 value/null、reason、version、snapshot、basis、decision與exact ref，並對三個 pair分別給 comparability/reasons/delta。只有完整 signature相容且兩值非 null才有delta；legacy缺 persisted algorithm/as-of/basis provenance，所以 legacy-vs-new 固定 incomparable，但不阻塞相容的A-vs-B。comparison不寫DB，也不是B7。
 
 ## 5. R0-2：legacy confidence 與未校準預測邊界
 
@@ -207,29 +187,13 @@ B4b必須使用新trade-plan／execution version，至少保存trigger/confirm�
 
 所有instant使用含offset ISO 8601；date不能假裝timestamp。market/event date、published、first available、collected、revision available、decision、generated、earliest execution是不同角色；legacy `data_cutoff`只供稽核，不能證明T日13:30所有輸入已可得。
 
-### 7.1 Round07 C007／B5a final review（有限本地 foundation）
-
-`time-evidence/v1`要求 subject/source/snapshot/revision identity、七個roles（published、first_available、collected、revision_available、decision、generated、earliest_execution）及至少一個 market_date/event_date/instant/event_at anchor。每個role明示status/precision/value/source/evidence/ref；unknown/unavailable有reason。known instant須含offset並canonicalize UTC，known date保持date，不補午夜。
-
-`TimeEvidenceStore(explicit_path)`是opt-in schema1 store，拒絕正式／`.local`、既存empty/foreign DB。每lineage只一root；revision append＋same-lineage supersedes，舊row immutable。相同identity/payload冪等，不同snapshot/payload collision。exact readers/history無latest fallback；`export_json` atomic no-clobber並拒絕既存、active store或protected target。`legacy_safe`只安全投影合法signal_date，不升格 data_cutoff/created_at/earliest_execution_date。
-
-有限 review 只接受 caller-provided local contract／store／export；不接 News／API／worker／UI，不證 official availability 或 B5b PIT。產品 read-time projection 由 C008 提供，store linkage 仍未完成。
-
 ### 7.2 Round08 C008／B5a 產品 read-time projection（有限 review）
 
-`product-time/v1`是News/signal/action/stock/dashboard/tracking的pure read-time projection；不讀C007 store、不寫DB、不採信任意JSON marker。頂層固定包含 `version`、`scope`、`availability_truth=not_asserted`、`timezone_policy`、`roles`、`response_generated_at`、`legacy`、`limitations`；每role明示role/status/precision/value/UTC/date/source/evidence/ref/reason/timezone policy。含offset instant才可known並轉UTC／Asia-Taipei顯示；date-only保持date；missing/naive/conflict/untrusted basis保持unknown＋reason。
+`product-time/v1`是News/signal/action/stock/dashboard/tracking的pure read-time projection；不讀時間證據 store、不寫DB、不採信任意JSON marker。頂層固定包含 `version`、`scope`、`availability_truth=not_asserted`、`timezone_policy`、`roles`、`response_generated_at`、`legacy`、`limitations`；每role明示role/status/precision/value/UTC/date/source/evidence/ref/reason/timezone policy。含offset instant才可known並轉UTC／Asia-Taipei顯示；date-only保持date；missing/naive/conflict/untrusted basis保持unknown＋reason。
 
 legacy signal_date/data_cutoff/earliest_execution_date/naive created_at保留但不升格decision、availability、generated或execution instant。response time獨立；News collected不等於first available；action ingestion-run finished不等於data collected；已有product contract而role unknown時，frontend不得fallback舊日期。
 
-有限 review 接受 API／UI 相容 projection、跨入口一致性與 legacy 欄位不變；C008 本身不接 C007 store 或 worker、不保存新 time、不證 source truth，也不執行 B5b gate。
-
-### 7.3 R0-C4／B5b caller-declared time-cutoff 純核心（有限 review）
-
-`evaluate_availability(request)`／`caller-availability-cutoff/v1` 是無 I/O 的截止時間檢查。caller 明示 `live`、`historical` 或 `backfill`、含 offset 的 `decision_at`、非空 `required_inputs` 與 `evidence`；每個必要輸入以 `input_id` 及 subject／source／snapshot／revision 四種 identity 與一筆 `time-evidence/v1` 精確配對。缺項、額外項、重複 ID／identity／evidence、identity 不符或 evidence 自帶不支援的 type 均拒絕，不推測或替換版本。evidence 的 `decision_at` 必須與 request 同一 UTC instant。
-
-對每個配對輸入，`first_available_at` 必須是已知、精確 instant，且 UTC 時間 `<=decision_at`；revision 另要求 `revision_available_at<=decision_at`，`live` 另要求 `collected_at<=decision_at`。相等可通過。只有 collected time 的歷史／回補資料不能代替首次可得時間；T+2 revision 不能回填到 T+1 的判斷，也不能偷換為 root。unknown／unavailable、date-only、粗精度、無 offset 時間或 UTC 正規化失敗一律 fail closed。結果保留 request-level 與逐輸入 reasons、額外 evidence 原因，全部必要輸入通過才有 `cutoff_satisfied=true`。
-
-此結果固定 `required_inputs_completeness=caller_declared_only`、`availability_truth=not_asserted`、`point_in_time_status=not_asserted`：核心只檢查 caller 宣告的集合與時間，不能核實來源真實性或找出所有實際依賴，也不構成 PIT、成交或正式交易核准。本輪只接受純核心有限 review；尚無 C007 store／worker／產品接線、實際來源與歷史決策驗證。完整 B5b gate 仍須驗所有實際必要版本、修訂／回補與 legacy 相容；unknown availability 預設排除，或依預先版本化的保守延遲處理，本輪純核心不實作延遲推定。`earliest_execution_at` 不得早於 `decision_at` 與所有 availability，且須落下一合法交易時段；再以同 snapshot 接 B7 比較。不得由純核心通過推定 B5b 或 R0 完成。
+有限 review 接受 API／UI 相容 projection、跨入口一致性與 legacy 欄位不變；C008 本身不接時間證據 store 或 worker、不保存新 time、不證 source truth，也不執行 B5b gate。
 
 ## 8. R0-5：migration head 與實際 DB revision
 

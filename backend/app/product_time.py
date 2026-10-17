@@ -1,6 +1,5 @@
 """Read-time product time semantics.
 
-This module is deliberately separate from ``time_evidence`` and its store.
 It describes what the existing product rows can safely show without
 inventing a timezone, availability fact, historical decision time, or
 generation time.  It never reads arbitrary JSON evidence markers and never

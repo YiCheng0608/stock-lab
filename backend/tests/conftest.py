@@ -28,66 +28,12 @@ _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
 # documented standalone command instead (docs/development-baseline/README.md).
 STANDALONE_ONLY = {
     "test_share_quantity_storage.py": (
-        "docs/development-baseline/README.md:257 (standalone, no conftest, disk cases only "
+        "docs/development-baseline/README.md:198 (standalone, no conftest, disk cases only "
         "through the fixed root); tests/test_share_quantity_storage.py:24,148"
-    ),
-    "test_institutional_windows.py": (
-        "docs/development-baseline/README.md:305 (--w8-only / --w8-api-only); "
-        "tests/test_institutional_windows.py:30-32 read argv at import"
-    ),
-    "test_institutional_windows_1006.py": (
-        "docs/development-baseline/README.md:311 (--worker-only / --api-only); "
-        "tests/test_institutional_windows_1006.py:35 parse_args() at import, :77 audit hook"
     ),
     "test_conditional_plan_store.py": (
         "tests/test_conditional_plan_store.py:1 (standalone RAM self-tests), :42 audit hook, "
         ":80 asserts app was never imported; no README mention"
-    ),
-    "test_ohlcv_history_source.py": (
-        "docs/development-baseline/README.md (standalone-only table, python -B -X utf8); "
-        "tests/test_ohlcv_history_source.py:3 (Run: standalone), :73 raises without -B, "
-        ":75 process-wide audit hook forbids disk writes/network/subprocess"
-    ),
-    "test_saved_price_chips_entry.py": (
-        "tests/test_saved_price_chips_entry.py:39 uses __main__.ARGS; "
-        "run by tools/tpex-price-api.py:504; no README filename mention"
-    ),
-    "test_saved_price_chips_focus.py": (
-        "tests/test_saved_price_chips_focus.py:34 uses __main__.ARGS; "
-        "run by tools/tpex-price-api.py:504; no README filename mention"
-    ),
-    "test_saved_price_chips_calendar_focus.py": (
-        "tests/test_saved_price_chips_calendar_focus.py:30 uses __main__.ARGS; "
-        "run by tools/tpex-price-api.py:504; no README filename mention"
-    ),
-    "test_saved_price_chips_scope7_focus.py": (
-        "tests/test_saved_price_chips_scope7_focus.py:30 uses __main__.ARGS; "
-        "run by tools/tpex-price-api.py:504; no README filename mention"
-    ),
-    "test_finmind_dealer_direction_source.py": (
-        "tests/test_finmind_dealer_direction_source.py:56 installs a process-wide audit hook at import and "
-        ":42 requires -B (standalone, stdlib only, no conftest); "
-        "run: python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py; "
-        "listed in docs/development-baseline/README.md standalone-only table"
-    ),
-    "test_ordinary_close_source.py": (
-        "tests/test_ordinary_close_source.py raises unless run with -B, installs sys.addaudithook (no sockets, "
-        "no writes outside its own session directory) before importing the modules under test, reads a pinned "
-        "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
-    ),
-    "test_tpex_calendar_actions_source.py": (
-        "tests/test_tpex_calendar_actions_source.py raises unless run with -B, installs sys.addaudithook (no sockets, "
-        "no writes outside its own session directory) before importing the modules under test, reads a pinned "
-        "git blob at import; run with python -I -B -X utf8 (docs/development-baseline/README.md)"
-    ),
-    "test_industry_membership_inferred_source.py": (
-        "docs/development-baseline/README.md (standalone, stdlib only, -B required); "
-        "tests/test_industry_membership_inferred_source.py:44 requires -B, :46 audit hook"
-    ),
-    "test_taiex_price_index_source.py": (
-        "docs/development-baseline/README.md (standalone-only table, python -B -X utf8); "
-        "tests/test_taiex_price_index_source.py:71 raises without -B, "
-        ":73 process-wide audit hook forbids disk writes/network/subprocess"
     ),
 }
 

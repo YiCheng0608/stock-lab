@@ -1,6 +1,6 @@
 # 資料來源、coverage 與限制
 
-本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態；各輪驗收收據已移出本文，查 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/DATA_SOURCES.md`。
+本文件記錄來源、coverage 口徑與長期資料限制；能力狀態以 [ROADMAP](ROADMAP.md) 為準，逐來源授權、identity、用途與 probe 證據以 [SOURCE_REGISTRY](SOURCE_REGISTRY.md) 為準。歷史計數只描述表列日期的驗收結果，不能當成目前資料庫狀態。
 
 ## 來源選用原則
 
@@ -38,18 +38,13 @@
 | TPEx universe | [issuer master](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O) 加 [ETF allowlist](https://info.tpex.org.tw/api/etfFilter) POST；混合 quote 的權證、CB、ETN、興櫃不 fallback 成 stock。 |
 | TWSE OHLCV | 當日 [STOCK_DAY_ALL](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；bounded history 為 [MI_INDEX](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)，依 allowlist 過濾。 |
 | TPEx OHLCV | [dailyQuotes](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes) POST，0–3 個月逐日擷取並依 stock／ETF allowlist 過濾。 |
-| TPEx selected 單日價格（七股，default 2026-10-06） | 政府資料開放平臺 dataset 11370 的 explicit policy `.5`，支援 3105／3293／5274／5347／6488／6510／8069 的 TPEx 普通股單日 TWD 價量，供精確張數、方向、成交額、振幅與七股 scope 關注；只在 process memory，無磁碟 grant。policy 版本表見[來源 §29.1](SOURCE_REGISTRY.md#291-1006-價格-policy-tuple-版本表)，操作見[個股頁 §34](STOCK_RESEARCH_PAGE.md#34-m2-focus-stock-scope-5七股關注與同截止往返)。非 PIT，不含多日收盤、日曆或策略時間。 |
-| TPEx selected 私人單日保存 | 獨立 storage policy `.1`／`stock-price-saved/m1-v1`，同七股 10/06 原件與 canonical receipt 保存於私人路徑，由 empty-store reader 讀回；不 auto-fetch、不 hydrate、不改 default。契約見[來源 §30](SOURCE_REGISTRY.md#30-m1-price-save-1私人單日保存與跨程序讀回)／[個股頁 §35](STOCK_RESEARCH_PAGE.md#35-m1-price-save-1私人單日保存與跨程序操作)。 |
-| TPEx saved-source 關注 | consumer `price-saved-focus/m1-v1` 只讀上列私人三檔，完整 gate 後提供精確張／O-C／成交額／振幅條件；不擴大歷史。契約見[來源 §32](SOURCE_REGISTRY.md#32-m1-saved-price-focus-1006-1保存來源的七股關注准入)／[個股頁 §37](STOCK_RESEARCH_PAGE.md#37-m1-saved-price-focus-1006-1保存來源關注與同截止往返)。 |
-| 普通股日線歷史（20／60 根收盤） | 已改以 FinMind `TaiwanStockPrice` 取得七股 nominal OHLCV last60，見[來源 §49](SOURCE_REGISTRY.md#49-32-qa1qa2七股-finmind-nominal-ohlcv-日線-last60-與兩截止-raw-算術issue32-seven-nominal-ohlcv-two-cutoffs-v1)。七股 20／21 根收盤的取得、私人保存與讀回見[來源 §52](SOURCE_REGISTRY.md#52-7七股普通收盤與交易日曆的日期時區語意契約)。官方 REST 11371／月查詢線索只是歷史候選審查，無自動用途准入；歸檔見 SOURCE_REGISTRY 索引的 §24／§26／§28 指標。 |
 | TWSE chips | 法人 [T86](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [MI_MARGN](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN)。法人來源依外資及陸資、投信、自營商分類。 |
-| TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。七股 FinMind 融資餘額見[來源 §48](SOURCE_REGISTRY.md#48-31-qa1qa2qa3七股-finmind-融資餘額與兩截止五日變動比ordinary-margin-cutoffs-1005-1006-v2)，自行買賣與避險五日淨額見[來源 #9 節](SOURCE_REGISTRY.md#9-qa1七股-finmind-自行買賣與避險五日淨額原件issue9-dealer-direction-combos-finmind-v2)，法人 5 日淨股數÷20 日均量見[來源 #39 節](SOURCE_REGISTRY.md#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)。 |
-| TPEx 多日法人／交易日 | 政府資料開放平臺 TPEx 法人 dated CSV 的獨立 policy：W8 版本為兩股（3105／6488）八截止 2026-09-21～10-02 與 27 日完整有界日曆，見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)；chips-1006 版本為同兩股 explicit 10/06 的 5／20 日窗口與 24 日曆，見[來源 §31](SOURCE_REGISTRY.md#31-m1-chips-cutoff-1006-1同1006法人窗口與完整有界日曆)／[個股頁 §36](STOCK_RESEARCH_PAGE.md#36-m1-chips-cutoff-1006-1同截止法人窗口與完整日曆)。七股版本見來源 §37／§38／§43～§47。均為 process memory、非 PIT，不改 DB／legacy／default。 |
+| TPEx chips | 既有 collector 法人 [dailyTrade](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [balance](https://www.tpex.org.tw/www/zh-tw/margin/balance)。[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。M1-P2a 的 exact [tpex_3insti_daily_trading](https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading) 單來源 manifest、用途准入與 capture／selected 摘要已有限 review；不自動放行 legacy collector。 |
 | TWSE 券商／分點名冊 | [券商基本資料](https://openapi.twse.com.tw/v1/brokerService/brokerList)與[券商分公司基本資料](https://openapi.twse.com.tw/v1/opendata/OpenData_BRK02)為免費官方名冊；實際 GET 已確認可讀。名冊只提供通道身分，不是交易明細。 |
 | 券商／分點人工查詢 | TWSE [券商買賣日報](https://bsr.twse.com.tw/bshtm/bsWelcome.aspx)涵蓋自營與受託交易並要求逐檔驗證碼；TPEx [券商買賣證券日報表查詢](https://www.tpex.org.tw/web/stock/aftertrading/broker_trading/brokerBS.php)只提供當日逐檔人工驗證。現行產品只導向官方入口，未整合資料。 |
-| TAIEX | 官方指數資料，作 hot-group 超額報酬基準。七股研究的 FinMind 名目指數 21 觀測 return 見[來源 §51](SOURCE_REGISTRY.md#51-33taiex-名目指數兩截止-21-觀測-returnissue33-taiex-nominal-observation-cutoffs-1005-1006-v1)。 |
-| MOPS／公司行動 | 重大訊息、基本面 snapshot 與 corporate actions；完整來源與 PIT 仍有限制。七股 FinMind 除權息／減資／分割因子見[來源 #98 節](SOURCE_REGISTRY.md#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2)。 |
-| 停復牌 | TPEx [tpex_spendi_history](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) 已接可稽核 event；TWSE 完整歷史 coverage 尚不完整。七股 FinMind 停復牌只有間接證據，見[來源 #98 節](SOURCE_REGISTRY.md#98七股-finmind-交易日曆停復牌間接證據與公司行動因子issue98-tpex-seven-calendar-actions-v2)。 |
+| TAIEX | 官方指數資料，作 hot-group 超額報酬基準。 |
+| MOPS／公司行動 | 重大訊息、基本面 snapshot 與 corporate actions；完整來源與 PIT 仍有限制。 |
+| 停復牌 | TPEx [tpex_spendi_history](https://www.tpex.org.tw/openapi/v1/tpex_spendi_history) 已接可稽核 event；TWSE 完整歷史 coverage 尚不完整。 |
 | raw provenance | 保存 endpoint、SHA-256、擷取時間與 data-as-of；正規化資料可回指 raw payload。 |
 
 `STOCK_DAY_ALL`、`holidaySchedule`、`TWT48U_ALL`、`tpex_spendi_history` 是原 snapshot 四個已有限准入的 exact GET endpoint；M1-P2a 的 TPEx 日法人來源另需 explicit 單來源 manifest，不能沿用舊 default／version／pins。授權、用途 decision、capture 與 consumer 契約見 [SOURCE_REGISTRY](SOURCE_REGISTRY.md)，新增准入與待驗邊界見[第 8 節](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。這些來源的數字 rate limit、精確發布時鐘、逐筆 first availability、完整 revision／withdrawal lineage 與 endpoint-specific deprecation 仍未知，`historical_pit` 均 unsupported；HTTP 200、今日 shape 或名稱含 `history` 都不能補足 PIT。
@@ -57,8 +52,6 @@
 日常 UI 將官方「外資及陸資」合計欄位簡稱為「外資」，但 raw、來源與稽核層保留正式統計口徑；「三大法人」只指外資、投信與自營商，不能把廣義券商或分點另併為法人類別。
 
 M1-P2a 的 TPEx selected 摘要以**股**為單位，外資及陸資採**不含外資自營商**欄位，投信、自營商分別計算，詳細欄位、合計 gate 與具名驗收見[來源契約 §8](SOURCE_REGISTRY.md#8-m1-p2atpex-日法人來源與-selected-摘要)。真實驗收只支持 **3105／6488、2026-10-02** 的單日 selected 數值與具名負向拒收；P2a 本身不代表 chips 表、總覽或 5／20 日窗口已接入。後續 M1-P2b 已有限 review 同兩檔原件→API 二十個數值及具名 UI 操作，提供明示設定的獨立單日區塊；精確契約見[個股頁 §10](STOCK_RESEARCH_PAGE.md#10-m1-p2b單日法人原件總覽接線)。不能將缺值補零，來源 `Date` 與單日列數也不證交易日曆；本批不改 DB／legacy 或 PIT 邊界。
-
-M1-W 系列（政府資料開放平臺 TPEx 法人 dated CSV）的 coverage 口徑是**兩股、明列 cutoff、完整有界日曆及當次版本**：以原始成交為統計基礎，三類為外資（不含外資自營商）、投信、自營商合計，以股／canonical 整數字串呈現；窗口只採不晚於 cutoff 的日，缺／錯／壞日或競爭 revision 時該窗口拒用，不補零、縮窗或以較早／未來日替代。published／first available／revision time unknown，`historical_pit=unsupported`。W1 的共同基礎見[來源 §13](SOURCE_REGISTRY.md#13-m1-w1tpex-多日法人與完整有界交易日)，W2 操作見[個股頁 §18](STOCK_RESEARCH_PAGE.md#18-m1-w2同截止法人窗口與原件追溯)；現行有效版本是 W8（八截止 2026-09-21～10-02、27 日曆、96 net），見[來源 §19](SOURCE_REGISTRY.md#19-m1-w8八截止法人來源與完整有界日曆)／[個股頁 §24](STOCK_RESEARCH_PAGE.md#24-m1-w8八截止法人窗口與原件追溯)。W3～W7 是被取代的歷史版本，逐輪數值與收據見 `git show 767b57733074627cde15c858a5aa7a2a6f68f927:docs/DATA_SOURCES.md` 與 SOURCE_REGISTRY 索引的 §14～§18 歸檔指標；每個版本的 pins 彼此獨立，不互相升格。
 
 News／Event 已有官方事件投影、來源連結、raw 稽核與時間欄位，但欄位存在不代表每筆來源時間可信。worker 尚未接完整媒體、國際新聞或分點資料；`ChipSnapshot` 雖定義當沖、融券與借券欄位，現有主要寫入路徑不能據此聲稱已收集。詳見 [NEWS_SPEC](NEWS_SPEC.md)。
 
@@ -188,7 +181,7 @@ fixture JSON 不含 Decimal；這只解除上述指定整數、拒收與保存�
 ### 券商分點與主力統計的來源邊界（後續待做）
 
 - 官方券商／分點名冊提供券商／分點代號與名稱，但不含買賣交易；歷史更名與券商隸屬仍待驗證。官方逐檔交易查詢需要人工驗證；可評估在使用條件允許下匯入合法取得的 CSV，但尚未實作，也不能先承諾完整免費自動歷史。
-- FinMind 免費方案已是本專案的主要新來源（融資餘額、普通股日線、TAIEX 名目指數分別見來源 §48、§49、§51）；但分點資料集 [TaiwanStockTradingDailyReport](https://finmind.github.io/tutor/TaiwanMarket/Chip/) 屬 Sponsor 付費方案，歷史自 2021-06-30 起且有已知缺日，未採購、未接入，不在免費方案的用途內。
+- FinMind 免費方案用於補歷史回補與缺口（見[來源選用原則](#來源選用原則)）；但分點資料集 [TaiwanStockTradingDailyReport](https://finmind.github.io/tutor/TaiwanMarket/Chip/) 屬 Sponsor 付費方案，歷史自 2021-06-30 起且有已知缺日，未採購、未接入，不在免費方案的用途內。
 - CMoney 的[主力進出參考](https://www.cmoney.tw/forum/stock/8039?s=main-force)與[市場表格](https://www.cmoney.com.tw/M_Table.aspx?CMenuID=M668)可用來理解「Top 15 買超合計減 Top 15 賣超合計」的觀念；不承諾本產品數值相同。精確期間、選樣、家數差與 5／20 日集中度口徑須在實作前版本化核定。
 
 以上來源盤點不等於交易資料已接入。後續功能以[個股頁籌碼三部分](STOCK_RESEARCH_PAGE.md#8-籌碼三部分後續待做)為準；缺資料仍留空，「主力」是可重現分點統計而非身分判定。
