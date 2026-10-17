@@ -447,6 +447,8 @@ class _ScopedOfficialAdapter:
             data_as_of=batch.data_as_of,
             no_data_dates=list(batch.no_data_dates),
             event_coverage=dict(batch.event_coverage or {}),
+            notices=list(getattr(batch, "notices", []) or []),
+            snapshot_feeds=getattr(batch, "snapshot_feeds", True),
         )
 
 
@@ -1527,6 +1529,9 @@ def targeted_backfill(
                 result = pipeline.collect(
                     trading_date,
                     adapter=scoped_adapter,
+                    # The schema was prepared once above; re-running the
+                    # migration integrity check per date dominates runtime.
+                    init_schema=False,
                     # A resumed force run intentionally starts a new verified
                     # attempt.  Normal retries reuse the same request row but
                     # do not bypass its idempotency guard after success.
@@ -1723,3 +1728,92 @@ def get_backfill_run(db: Session, run_id: int) -> dict[str, Any] | None:
         )
     )
     return backfill_run_dict(run) if run else None
+
+
+def backfill_windows(start_date: date, end_date: date) -> list[tuple[date, date]]:
+    """Split a long range into consecutive windows within the official cap."""
+
+    if start_date > end_date:
+        raise ValueError("backfill start_date must be on or before end_date")
+    windows: list[tuple[date, date]] = []
+    cursor = start_date
+    while cursor <= end_date:
+        window_end = min(end_date, cursor + timedelta(days=OFFICIAL_MAX_BACKFILL_DAYS - 1))
+        windows.append((cursor, window_end))
+        cursor = window_end + timedelta(days=1)
+    return windows
+
+
+def chunked_backfill(
+    start_date: date,
+    end_date: date,
+    *,
+    scope: str = "market",
+    adapter: Any | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Run ``targeted_backfill`` over consecutive windows, oldest first.
+
+    Each window keeps its own request key, manifest and bounded retries, so an
+    interrupted multi-year backfill resumes window by window.  The summary
+    lists missing (failed or partial) dates separately from verified
+    non-trading dates; nothing is filled in for a missing date.
+    """
+
+    windows = backfill_windows(start_date, end_date)
+    # One historical adapter for all windows: the current universe is
+    # fetched once and current-only snapshot feeds are not requested.
+    shared_adapter = adapter or OfficialMarketDataAdapter(snapshot_feeds=False)
+    runs: list[dict[str, Any]] = []
+    completed: set[str] = set()
+    partial: set[str] = set()
+    failed: set[str] = set()
+    skipped: set[str] = set()
+    for window_start, window_end in windows:
+        result = targeted_backfill(
+            window_start,
+            window_end,
+            scope=scope,
+            adapter=shared_adapter,
+            force=force,
+        )
+        metadata = result.get("metadata") or {}
+        completed.update(metadata.get("completed_dates", []) or [])
+        partial.update(metadata.get("partial_dates", []) or [])
+        failed.update(metadata.get("failed_dates", []) or [])
+        skipped.update(metadata.get("skipped_non_trading_dates", []) or [])
+        runs.append(
+            {
+                "run_id": result.get("id"),
+                "start_date": window_start.isoformat(),
+                "end_date": window_end.isoformat(),
+                "status": result.get("status"),
+                "error": result.get("error"),
+                "completed_dates": len(metadata.get("completed_dates", []) or []),
+                "partial_dates": sorted(metadata.get("partial_dates", []) or []),
+                "failed_dates": sorted(metadata.get("failed_dates", []) or []),
+                "skipped_non_trading_dates": len(metadata.get("skipped_non_trading_dates", []) or []),
+            }
+        )
+    # A date retried successfully in a later window is no longer missing.
+    partial -= completed
+    failed -= completed
+    # Verified non-trading dates are not gaps; only failed or partial
+    # sessions make the multi-window result incomplete.
+    if not (partial or failed):
+        status = "success"
+    elif completed:
+        status = "partial"
+    else:
+        status = "failed"
+    return {
+        "status": status,
+        "scope": scope,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "windows": runs,
+        "completed_dates": len(completed),
+        "partial_dates": sorted(partial),
+        "failed_dates": sorted(failed),
+        "skipped_non_trading_dates": sorted(skipped),
+    }

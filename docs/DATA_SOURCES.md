@@ -195,4 +195,4 @@ fixture JSON 不含 Decimal；這只解除上述指定整數、拒收與保存�
 - `decision_at`／`generated_at` 分開；最早執行不得早於必要資料可得時間與策略允許的下一交易時段。
 - as-of 查詢只讀當時可得的資料與 membership，正式可用版本與事後修訂分開保存。
 
-legacy `signal.data_cutoff` 的 13:30 字串不證明所有盤後資料當時已知。新長期研究須先定義 universe、下市／停牌、版本、coverage 與費用；現行 collect 0–3 個月與 backfill 93 日上限不因文件更新而放寬。
+legacy `signal.data_cutoff` 的 13:30 字串不證明所有盤後資料當時已知。新長期研究須先定義 universe、下市／停牌、版本、coverage 與費用；現行 collect 0–3 個月與單段 backfill 93 日上限不變；CLI 回補較長範圍時依序切段，見 [OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)。

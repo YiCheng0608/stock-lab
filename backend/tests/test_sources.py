@@ -127,7 +127,9 @@ def test_official_adapters_normalize_universe_bars_actions_and_mops(tmp_path, mo
     assert all(not (item.exchange == "TPEx" and item.symbol in {"7002", "700019"}) for item in batch.bars)
     assert any(item.exchange == "TWSE" for item in batch.bars)
     assert all(not item.is_suspended for item in batch.bars if item.exchange == "TPEx")
-    assert any("announcements do not establish bar suspension status" in warning for warning in batch.warnings)
+    # Informational only: kept as a notice so it never downgrades the run.
+    assert any("announcements do not establish bar suspension status" in notice for notice in batch.notices)
+    assert not any("announcements do not establish bar suspension status" in warning for warning in batch.warnings)
     assert batch.actions and batch.events and batch.fundamentals
     assert {item.event_type for item in batch.events if item.exchange == "TPEx"} >= {"suspension", "resumption", "material_information"}
     assert batch.chips and all(item.exchange in {"TWSE", "TPEx"} for item in batch.chips)

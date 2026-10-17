@@ -15,6 +15,7 @@ REVISIONS = (
     "0007_turnover_availability",
     "0008_portfolio_share_integer",
     "0009_strategy_formula_version",
+    "0010_schedule_runs",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

@@ -272,6 +272,18 @@ def _strategy_formula_state(connection) -> str:
     return "legacy"
 
 
+SCHEDULE_RUNS_REVISION = "0010_schedule_runs"
+
+
+def ensure_schedule_run_tables(connection) -> None:
+    """Create the scheduled-job run log tables when they are absent."""
+
+    from .models import ScheduleRun, ScheduleRunStep
+
+    ScheduleRun.__table__.create(bind=connection, checkfirst=True)
+    ScheduleRunStep.__table__.create(bind=connection, checkfirst=True)
+
+
 def ensure_strategy_formula_version(connection) -> bool:
     """Add ``strategy_versions.formula_version`` and widen the unique identity.
 
@@ -443,6 +455,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             f"VALUES ('{STRATEGY_FORMULA_REVISION}', CURRENT_TIMESTAMP)"
+        )
+    )
+    ensure_schedule_run_tables(connection)
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            f"VALUES ('{SCHEDULE_RUNS_REVISION}', CURRENT_TIMESTAMP)"
         )
     )
 

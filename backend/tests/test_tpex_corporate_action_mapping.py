@@ -213,7 +213,7 @@ def database(tmp_path, monkeypatch):
     with engine.connect() as connection:
         assert connection.execute(text("PRAGMA integrity_check")).scalar_one() == "ok"
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
-        assert connection.execute(text("select version_num from alembic_version")).scalar_one() == "0009_strategy_formula_version"
+        assert connection.execute(text("select version_num from alembic_version")).scalar_one() == "0010_schedule_runs"
     engine.dispose()
 
 

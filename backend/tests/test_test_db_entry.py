@@ -40,7 +40,7 @@ from tools.test_db.product import ProductRunner, stock_env_for  # noqa: E402
 from tools.test_db.sample import DB_NAME, META_NAME, NAME_MAX, load_fixture, open_readonly, read_fixture, sha256_file  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "test_db" / "sample_basic.json"
-HEAD = "0009_strategy_formula_version"
+HEAD = "0010_schedule_runs"
 EXPECTED_COUNTS = {"group_memberships": 2, "instruments": 2, "market_bars": 4, "theme_groups": 1}
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows file locks and junctions")
 

@@ -83,7 +83,7 @@ curl.exe -X DELETE "http://127.0.0.1:8000/api/portfolio/<id>"
 
 ## 2. 資料庫、migration 與 readiness
 
-程式 Alembic head 是 `0009_strategy_formula_version`，revision chain 為 0001→0009，另有相容 fallback markers；這不證明任何 DB 已升級。0009 的遷移與分類契約見 [V1_SPEC](V1_SPEC.md#已知實作偏差與版本修正要求) 已知偏差第 6 條。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)，新持倉欄的有限 migration／readiness 與九枚 markers 規則見 [§8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
+程式 Alembic head 是 `0010_schedule_runs`（只新增排程 run 記錄表，見 [§8.2](#82-日誌與-run-記錄)），revision chain 為 0001→0010，另有相容 fallback markers；這不證明任何 DB 已升級。0009 的遷移與分類契約見 [V1_SPEC](V1_SPEC.md#已知實作偏差與版本修正要求) 已知偏差第 6 條。實際 DB 歷史、revision 與 preservation 證據見 [R0 §8](R0_IMPLEMENTATION.md#8-r0-5migration-head-與實際-db-revision)，新持倉欄的有限 migration／readiness 與九枚 markers 規則見 [§8.11](R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
 
 readiness 只在唯讀 transaction 檢查有限 descriptor：revision marker 必須是唯一 current head 或受控的完整 fallback 形狀；mapped objects、必要欄名、ordered PK／FK／UNIQUE 與 News JSON defaults 必須符合契約；`signal_settlements` 與 `instruments` 的精確 identity gate 分見 [R0 §8.9](R0_IMPLEMENTATION.md#89-round30-c030api-startup-signal_settlements-unique-metadata-gate有限-review) 及 [§8.10](R0_IMPLEMENTATION.md#810-round31-c031api-startup-instruments-unique-metadata-gate有限-review)。它不執行 `quick_check`、`integrity_check`、資料 FK scan 或完整 type／CHECK／trigger／custom-schema audit，也不涵蓋 live WAL／SHM、concurrent writer、non-SQLite 與 attached schema；通過不保證任意寫入成功。
 
@@ -106,13 +106,14 @@ Migration helpers 只接受有限 canonical SQLite legacy shapes，並在 destru
 | --- | --- |
 | `python -m worker.cli init-db` | 建立／升級指定 DB；先確認路徑、backup 與授權。 |
 | `python -m worker.cli collect --date YYYY-MM-DD --months-back 0` | 官方來源收集；`months-back` 只接受 0、1、2、3。 |
-| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0` | collect 成功才 analyze；analyze 成功才 evaluate。 |
-| `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。 |
+| `python -m worker.cli daily --date YYYY-MM-DD --months-back 0 [--trigger manual\|scheduler\|simulation] [--force]` | collect 成功才 analyze → evaluate → indicators；每次執行寫一列 `schedule_runs`，規則見 [§8](#8-排程)。 |
+| `python -m worker.cli schedule-runs [--date YYYY-MM-DD] [--limit N]` | 列出 daily run 記錄與各步驟；唯讀。 |
+| `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。超過 93 日的範圍依序切成多段。 |
 | `python -m worker.cli analyze` | 要求最新官方 collect run success 與有效 as-of；沒有 `--date`，也不是任意局部分析器。 |
 | `python -m worker.cli evaluate` | 更新 execution／tracking 與 T+5／T+20 settlement；會寫 DB。 |
 | `python -m worker.cli backtest --start-date YYYY-MM-DD --end-date YYYY-MM-DD` | 回放既有資料並保存 audit；不下載歷史資料。 |
 
-`backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日，輸入差不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93`；目標有效交易日不足時，候選查詢可早於輸入起日，但不得超過迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
+`backfill --scope` 支援 `market`、`portfolio`、`watchlist`、`events`、`candidates`、`priority`、`all`；名稱存在不代表資料來源或管理 UI 完整。起日不得晚於迄日；CLI 把較長範圍由舊到新切成每段不超過 `OFFICIAL_MAX_BACKFILL_DAYS=93` 日的連續段，每段各有 request key、manifest 與重試（API 的單次回補仍限 93 日）。CLI 回補不抓只代表「今天」的快照來源（STOCK_DAY_ALL、OpenAPI 指數、除權息、MOPS 清單、TPEx 停復牌），universe 每次執行只抓一次，也不記錄當日產業觀測；目標有效交易日不足時，候選查詢可早於輸入起日，但不得超過迄日前 93 日界線。批次最多 5 個交易日，adapter 逐日呼叫；重試規則是立即 3 次、後續 2 次。`--force` 會重新擷取已完成日期，並非一般重試預設。
 
 `candidates`／`priority` 的 group-score 納入範圍已有限 review：typed 依 DB-local ID＋pair 精確收斂，legacy symbol 為避免漏抓可納入所有 active exchange；這不是 decision selection。`/api/coverage` 同名 scope 重用此 resolver。完整規則與 public source-day 展示分見 [產業分類 §9.5](INDUSTRY_CLASSIFICATION.md#95-backfillcoverage-的候選納入契約) 與 [§9.6](INDUSTRY_CLASSIFICATION.md#96-public-candidate-的-source-day-身分展示契約)。
 
@@ -222,4 +223,57 @@ Pop-Location
 
 ## 8. 排程
 
-每日排程以 Windows 工作排程器執行 worker 與新聞任務（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；排程須定義來源延遲、rate limit、冪等、錯誤可見性與日誌位置；自動下單不在第一版範圍。現行任務／AC 查原 GitHub Issue 及規格；文件、fixture、外部 startup 或 readiness 不證任務完成。
+每日排程以 Windows 工作排程器執行 `worker.cli daily`（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；新聞排程另行加入。自動下單不在第一版範圍。
+
+### 8.1 設定
+
+前置條件：一個裝好 `backend/requirements.txt` 的 Python（例如專案 `.venv`），以及已用 `init-db` 初始化的目標 DB（見 [§2.1](#21-安全升級與復原順序)）。從**長期保留的 checkout**（例如管理 checkout）註冊；任務 worktree 合併後會刪除，不要從那裡註冊。
+
+```powershell
+# 先預覽，不改系統
+./tools/Register-DailySchedule.ps1 -PythonPath <python.exe> -DataDir <data 目錄> -WhatIf
+# 建立或更新（同名覆寫）
+./tools/Register-DailySchedule.ps1 -PythonPath <python.exe> -DataDir <data 目錄>
+# 移除
+./tools/Register-DailySchedule.ps1 -Unregister
+```
+
+| 項目 | 設定 |
+| --- | --- |
+| 工作 | `\stock-lab\stock-lab-daily`（`-TaskName` 可改） |
+| 觸發 | 週一至週五台灣時間 15:30，另於 18:30、21:30 重試；`-TaipeiTimes` 可改。主機不在台灣時區時腳本自動換算本機時間。 |
+| 動作 | `powershell.exe -File tools/Invoke-DailyJob.ps1 -Trigger scheduler`，固定帶入 Python、data 與日誌路徑；`STOCK_*` 只設給子行程。 |
+| 帳戶 | 目前使用者、互動式登入、一般權限，不存密碼；使用者登入時才會執行，錯過的時段在登入後補跑（StartWhenAvailable）。 |
+| 其他 | 前一次未結束不另起新執行個體；單次上限 3 小時。 |
+
+休市日不寫進觸發：週間無交易日時官方來源回 no-data，run 記為 `non_trading_day`。三大法人與融資等盤後資料公布時間晚於收盤且不固定，15:30 若因缺這些資料而 collect 為 `partial`，analyze 不會執行，由 18:30／21:30 的重試補齊；當日已完成後的重試只記一列 `skipped`。
+
+### 8.2 日誌與 run 記錄
+
+- **日誌**：`<data>/logs/daily-YYYYMMDD.log`（台灣日期），每次執行追加開始列、CLI 的 JSON 結果（stdout）、stderr 與結束列（含 exit code）。保留 90 天（`-LogRetentionDays`），只清 `daily-*.log`。
+- **exit code**：0＝`success`／`skipped`／`non_trading_day`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。
+- **run 記錄**：`schedule_runs` 每次執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。
+
+| run 狀態 | 意義 |
+| --- | --- |
+| `success` | collect、analyze、evaluate 成功；indicators 成功或尚未安裝（`not_configured`）。 |
+| `partial` | collect 有缺（例如籌碼尚未公布）；後續步驟記 `skipped`，錯誤欄列 collect 警告。 |
+| `non_trading_day` | 官方來源明確回報該週間日無交易。 |
+| `failed` | 某步驟失敗或拋例外；錯誤欄記步驟與訊息，後續步驟記 `skipped`。超過 6 小時仍為 `running` 的列，下一次執行改記 `failed`（abandoned）。 |
+| `skipped` | 同目標日已有 `success`／`non_trading_day`（`already_complete`），或另一次執行仍在進行（`already_running`）；不碰資料。 |
+
+indicators 步驟呼叫 `worker.indicator_batch.run_indicator_batch(目標日)`（V1-G2 交付）；模組不存在時記 `not_configured`，不使 run 失敗。
+
+### 8.3 重跑與回補
+
+- **手動重跑**：`./tools/Invoke-DailyJob.ps1 -Trigger manual [-Date YYYY-MM-DD]`，或直接 `python -m worker.cli daily --date YYYY-MM-DD`。已完成的日期加 `-Force`／`--force` 才會再跑各步驟。
+- **冪等**：collect 對同一 request 已有 `success` 時直接重用、不發請求；重新擷取時，既有日線與籌碼只補空欄，不覆寫已存的非空值，不一致的值保留原值並記在該 collect run metadata 的 `value_conflicts`。只有 `collect(force=True)` 會覆寫。
+- **回補**：`python -m worker.cli backfill --start-date <起> --end-date <迄> --scope market`。中斷後以相同起訖重跑即從各段 manifest 續做；輸出列出每段 run id、`partial_dates`／`failed_dates`（缺日，不補值）與 `skipped_non_trading_dates`（官方無交易）。
+- **限流**：`fetch_json` 對同一官方主機保持最小間隔（`www.twse.com.tw` 2.5 秒，其餘官方主機 1 秒），另有 429／5xx／暫時性 307 的有界重試。
+- **不要並行**：回補與 daily 共用同一個 SQLite 寫入者，analyze 也以最新一筆 collect run 決定分析日，兩者不要同時跑。
+
+### 8.4 限制
+
+- universe 取自今日的官方清單：回補期間已下市的股票沒有歷史列。
+- 歷史回補不保存當日產業觀測與 MOPS／除權息快照；這些只由 daily 記錄當天。
+- 休市判定依官方 no-data 回應；來源暫時失敗的日期記為缺日，不推定休市。
