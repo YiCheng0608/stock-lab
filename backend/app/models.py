@@ -414,12 +414,13 @@ class Event(Base):
 
 
 class NewsItem(Base):
-    """Auditable product projection of official events.
+    """Auditable product news: official-event projections and feed items.
 
-    The project intentionally does not ingest unapproved media or fabricate
-    article metadata.  ``symbols_json`` and ``theme_ids_json`` are compact
-    read-side relations; the originating Event and raw payload remain linked
-    for auditability.
+    Official events are projected by app.news; registered media and overseas
+    official feeds are written by worker.news_batch (title, summary, time and
+    item link only, never article bodies).  ``symbols_json`` and
+    ``theme_ids_json`` are compact read-side relations; the originating Event
+    or raw payload remains linked for auditability.
     """
 
     __tablename__ = "news_items"
