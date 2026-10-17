@@ -9,6 +9,7 @@ from app.db import init_db
 from .backfill import BACKFILL_SCOPES, targeted_backfill
 from .indicator_batch import run_indicator_batch
 from .news_batch import run_news_batch
+from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 
 
@@ -42,6 +43,10 @@ def main() -> None:
     indicators_parser.add_argument("--rebuild", action="store_true", help="重算並改寫全部歷史")
     news_parser = subparsers.add_parser("news", help="抓取國內／國際財經新聞 feed 並寫入 news_items")
     news_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；只標記 run 日期，未指定使用台北今日")
+    news_llm_parser = subparsers.add_parser("news-llm", help="以 claude -p 批次產生新聞摘要、關聯候選與方向判讀")
+    news_llm_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；只判讀該台北日收錄的新聞，未指定不限日期")
+    news_llm_parser.add_argument("--limit", type=int, default=NEWS_LLM_DEFAULT_LIMIT, help="本次最多判讀則數")
+    news_llm_parser.add_argument("--dry-run", action="store_true", help="只列出會送出的批次，不呼叫、不寫 DB")
     args = parser.parse_args()
     if args.command == "init-db":
         init_db()
@@ -65,6 +70,10 @@ def main() -> None:
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
+    elif args.command == "news-llm":
+        if args.limit < 1:
+            parser.error("--limit must be at least 1")
+        result = run_news_llm_batch(parse_date(args.run_date), limit=args.limit, dry_run=args.dry_run)
     else:
         result = run_daily(parse_date(args.run_date), months_back=args.months_back)
     print(json.dumps(result, ensure_ascii=False, indent=2))

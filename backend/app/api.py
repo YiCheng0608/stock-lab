@@ -31,6 +31,7 @@ from .models import (
     Instrument,
     MarketBar,
     NewsItem,
+    NewsLlmResult,
     PortfolioPosition,
     RawPayload,
     Signal,
@@ -861,6 +862,53 @@ def _news_theme_ids(db: Session, item: NewsItem, event: Event | None = None) -> 
     ]
 
 
+def _news_ai(db: Session, item: NewsItem) -> dict[str, Any] | None:
+    """Latest done LLM result (worker.news_llm); inference, kept apart from source facts.
+
+    Symbol candidates are unverified; rule relations stay in ``symbols``.
+    """
+
+    row = db.scalar(
+        select(NewsLlmResult)
+        .where(NewsLlmResult.news_item_id == item.id, NewsLlmResult.llm_status == "done")
+        .order_by(NewsLlmResult.llm_run_at.desc(), NewsLlmResult.id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    symbol_candidates = []
+    for candidate in row.ai_symbol_candidates_json or []:
+        exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
+        instrument = db.scalar(
+            select(Instrument).where(Instrument.exchange == exchange, Instrument.symbol == symbol)
+        ) if symbol else None
+        symbol_candidates.append(
+            {
+                "exchange": exchange,
+                "symbol": symbol,
+                "name": instrument.name if instrument else None,
+                "reason": candidate.get("reason"),
+                "confidence": candidate.get("confidence"),
+                "verified": False,
+            }
+        )
+    return {
+        "inference": True,
+        "status": row.llm_status,
+        "summary": row.ai_summary,
+        "symbol_candidates": symbol_candidates,
+        "theme_candidates": row.ai_theme_candidates_json or [],
+        "impact_direction": row.ai_impact_direction,
+        "impact_scope": row.ai_impact_scope,
+        "impact_rationale": row.ai_impact_rationale,
+        "unsupported": row.ai_unsupported,
+        "model": row.llm_model,
+        "prompt_version": row.prompt_version,
+        "input_hash": row.llm_input_hash,
+        "generated_at": as_datetime(row.llm_run_at),
+    }
+
+
 def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
     event = db.get(Event, item.event_id) if item.event_id else None
     display_time, time_basis, time_precision = _news_time_view(db, item)
@@ -940,6 +988,7 @@ def news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
         "status": item.status,
         "content_hash": item.content_hash,
         "detail_url": f"/news/{item.id}",
+        "ai": _news_ai(db, item),
         "provenance": {
             "event_id": item.event_id,
             "raw_payload_id": item.raw_payload_id,
