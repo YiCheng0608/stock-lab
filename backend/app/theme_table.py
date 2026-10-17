@@ -184,6 +184,7 @@ def _validate_member(
             else:
                 urls.add(url)
             _text(item.get("title"), f"{item_location}.title", errors)
+            _text(item.get("quote"), f"{item_location}.quote", errors)
     member_from = _date(
         member.get("valid_from"), f"{location}.valid_from", errors, required=False
     )

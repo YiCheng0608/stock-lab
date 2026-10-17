@@ -43,23 +43,59 @@ def _table_source(path: Path) -> str:
     return f"theme_table:{relative.as_posix()}"
 
 
+def _version_key(value: str | None) -> tuple[int, ...] | None:
+    """``themes_v1:2026.10.17.2`` -> (2026, 10, 17, 2); None when not comparable."""
+
+    version = (value or "").rpartition(":")[2]
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError:
+        return None
+
+
+def _group_fields(theme: dict[str, Any], version: str) -> dict[str, Any]:
+    """ThemeGroup content written by a sync, excluding the file path fields."""
+
+    return {
+        "name": theme["name"],
+        "group_type": THEME_GROUP_TYPE,
+        "definition_version": version,
+        "active": True,
+        "display_name_zh": theme["name"],
+        "display_description_zh": theme["description"],
+        "display_category": THEME_DISPLAY_CATEGORY,
+        "name_status": "verified",
+    }
+
+
 def _plan(db: Session, table: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     errors: list[str] = []
+    changes: list[str] = []
     plans: list[dict[str, Any]] = []
-    instruments = {
-        (item.exchange, item.symbol): item
-        for item in db.scalars(
-            select(Instrument).where(Instrument.exchange.in_(("TWSE", "TPEx")))
-        ).all()
-    }
+    version = definition_version(table)
+    instrument_rows = db.scalars(
+        select(Instrument).where(Instrument.exchange.in_(("TWSE", "TPEx")))
+    ).all()
+    instruments = {(item.exchange, item.symbol): item for item in instrument_rows}
+    labels = {item.id: f"{item.exchange}:{item.symbol}" for item in instrument_rows}
     table_group_ids = {theme_group_id(theme["id"]) for theme in table["themes"]}
+    db_versions: set[str] = set()
     for group in db.scalars(
         select(ThemeGroup).where(ThemeGroup.group_type == THEME_GROUP_TYPE)
     ).all():
+        db_versions.add(group.definition_version)
         if group.id not in table_group_ids:
             errors.append(
                 f"theme_groups({group.id}): theme missing from table; keep it with valid_to instead of deleting"
             )
+    current_version = max(
+        db_versions, key=lambda value: _version_key(value) or (), default=None
+    )
+    new_key, current_key = _version_key(version), _version_key(current_version)
+    if current_key is not None and new_key is not None and new_key < current_key:
+        errors.append(
+            f"$.version: {version} is lower than DB definition_version {current_version}"
+        )
 
     for theme_index, theme in enumerate(table["themes"]):
         location = f"themes[{theme_index}]({theme['id']})"
@@ -77,6 +113,12 @@ def _plan(db: Session, table: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
             if group
             else []
         )
+        if group is not None and any(
+            getattr(group, key) != value
+            for key, value in _group_fields(theme, version).items()
+            if key != "definition_version"
+        ):
+            changes.append(location)
         by_instrument: dict[int, list[GroupMembership]] = {}
         for row in existing:
             by_instrument.setdefault(row.instrument_id, []).append(row)
@@ -95,9 +137,20 @@ def _plan(db: Session, table: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
                 )
                 continue
             start, end = member_period(theme, member)
-            for row in by_instrument.get(instrument.id, []):
+            source = membership_source(table, member)
+            rows = by_instrument.get(instrument.id, [])
+            current = [row for row in rows if row.valid_from == start]
+            if not current or (
+                current[0].valid_to,
+                current[0].source,
+                current[0].role,
+            ) != (end, source, "member"):
+                changes.append(member_location)
+            for row in rows:
                 if row.valid_from == start:
                     continue
+                if row.valid_to is None:
+                    changes.append(member_location)
                 if row.valid_from > start:
                     errors.append(
                         f"{member_location}: existing period from {row.valid_from.isoformat()} starts after table valid_from"
@@ -111,17 +164,23 @@ def _plan(db: Session, table: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
                     "instrument": instrument,
                     "valid_from": start,
                     "valid_to": end,
-                    "source": membership_source(table, member),
+                    "source": source,
                     "rows": by_instrument.pop(instrument.id, []),
                 }
             )
         for instrument_id, rows in by_instrument.items():
             if any(row.valid_to is None for row in rows):
                 errors.append(
-                    f"{location}: instrument_id={instrument_id} has an open membership but is missing from the table; set valid_to"
+                    f"{location}: {labels.get(instrument_id, f'instrument_id={instrument_id}')} has an open membership but is missing from the table; set valid_to"
                 )
         plans.append(
             {"theme": theme, "group_id": group_id, "group": group, "members": members}
+        )
+    if current_version == version and changes:
+        # Content edits must ship as a new table version.
+        errors.extend(
+            f"{location}: content differs from DB but $.version equals DB definition_version {version}; bump $.version"
+            for location in dict.fromkeys(changes)
         )
     return plans, errors
 
@@ -147,16 +206,9 @@ def apply_theme_table(
         theme = plan["theme"]
         group = plan["group"]
         fields = {
-            "name": theme["name"],
-            "group_type": THEME_GROUP_TYPE,
-            "definition_version": version,
+            **_group_fields(theme, version),
             "source": source,
-            "active": True,
-            "display_name_zh": theme["name"],
-            "display_description_zh": theme["description"],
-            "display_category": THEME_DISPLAY_CATEGORY,
             "name_source": source,
-            "name_status": "verified",
         }
         if group is None:
             db.add(ThemeGroup(id=plan["group_id"], **fields))

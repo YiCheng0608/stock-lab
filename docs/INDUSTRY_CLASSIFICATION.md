@@ -109,18 +109,18 @@ Collector 對三個 domain 各自計算 desired state，只操作自己擁有的
 | 層級 | 欄位 |
 | --- | --- |
 | 題材 | `id`（小寫 kebab-case）、`name`（顯示名，不得含 ETF）、`description`、`valid_from`（必填）、`valid_to`（可空）、`members[]` |
-| 成員 | `instrument`（`TWSE:XXXX` 或 `TPEx:XXXX`）、`name`（只供人工對照，不參與比對）、`relation`、`relevance`、`valid_from`／`valid_to`（可省略，預設沿用題材日期，且必須落在題材期間內）、`evidence[]`（每筆含 `url`、`title`、`quote`；至少一筆） |
+| 成員 | `instrument`（`TWSE:XXXX` 或 `TPEx:XXXX`）、`name`（只供人工對照，不參與比對）、`relation`、`relevance`、`valid_from`／`valid_to`（可省略，預設沿用題材日期，且必須落在題材期間內）、`evidence[]`（至少一筆；每筆的 `url`、`title`、`quote` 皆必填，`quote` 是頁面原文摘錄） |
 
 `relation` 的值：`core_business` 表示主要業務就是該題材；`product_line` 表示有該題材的產品線；`supply_chain` 表示供應該題材的零組件、設備或材料。`relevance` 的值為 `high`、`medium`、`low`。證據只收公開、可開啟的頁面，例如公司官網、官方公告或財經媒體報導；找不到證據的成員不收。
 
-**驗證**：缺證據、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置：`themes[序號]` 後接括號內的題材 id，`members[序號]` 後接括號內的代號，再接欄位名（如 `.evidence`）。
+**驗證**：缺證據或證據缺 `title`／`quote`、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置：`themes[序號]` 後接括號內的題材 id，`members[序號]` 後接括號內的代號，再接欄位名（如 `.evidence`）。
 
 **DB 對照**
 
 - `theme_groups`：`id="theme-<id>"`、`group_type="theme"`、`definition_version="<table>:<version>"`（如 `themes_v1:2026.10.17`）、`source` 與 `name_source` 為 `theme_table:backend/data/themes/themes_v1.json`、`display_category="題材"`、`name_status="verified"`。
 - `group_memberships`：`valid_from`／`valid_to` 取上述成員期間，`role="member"`、`confidence=1.0`。`source` 是精簡 JSON，欄位固定為 `kind`（`theme_table`）、`url`（第一筆證據）、`relation`、`relevance`、`theme_version`（同 `definition_version`）。其餘證據、標題與引文只保存在 JSON 檔。
 
-**版本與生效／失效**：每次修改表都要更新 `version`，sync 時把新版本寫入 `definition_version`。題材與成員不從表中刪除，失效一律填 `valid_to`；sync 只關閉期間，不刪列。DB 有開放中的題材 membership、表內卻沒有該題材或成員時，整批拒絕。同一成員改用較晚的 `valid_from` 重新納入時，舊的開放期間關在新起日前一天。重跑同一版本不改任何列。
+**版本與生效／失效**：每次修改表都要更新 `version`，sync 時把新版本寫入 `definition_version`。sync 比對 DB 現有題材的 `definition_version`：表版本較舊時整批拒絕；版本相同但題材欄位或成員期間、證據 JSON 有任何不同時也整批拒絕，並列出每個異動的題材／成員位置（檔案路徑不算內容）。題材與成員不從表中刪除，失效一律填 `valid_to`；sync 只關閉期間，不刪列。DB 有開放中的題材 membership、表內卻沒有該題材或成員時，整批拒絕。同一成員改用較晚的 `valid_from` 重新納入時，舊的開放期間關在新起日前一天。重跑同一版本不改任何列。
 
 **初版**：`2026.10.17` 收 12 個題材、77 筆成員。生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類。
 

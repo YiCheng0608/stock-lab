@@ -1417,6 +1417,7 @@ def news_detail(news_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
 BOARD_COMPONENTS = ("relative_return", "breadth", "volume_strength", "institutional_flow", "catalyst")
 BOARD_QUALITIES = ("complete", "partial")
 BOARD_TREND_SESSIONS = 20
+LEGACY_BOARD_ORDER = {"industry": 0, "theme": 1}
 BOARD_EMPTY_MESSAGES = {
     "no_official_run": "尚無成功的官方資料擷取，無法提供族群榜。",
     "no_board_scores": "此榜尚未計算；需先以 analyze 或 daily 產生族群分數。",
@@ -1533,11 +1534,14 @@ def themes(
     run, as_of = latest_official_as_of(db)
     score_rows = scores_as_of(db, as_of) if run and run.status == "success" else {}
     rows: list[dict[str, Any]] = []
+    board_order: dict[str, int] = {}
     for group in db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all():
         if not _product_group_taxonomy_verified(db, group, as_of):
             continue
         score = score_rows.get(group.id)
         item = theme_product_dict(group, score, db)
+        # Industry and theme ranks are separate boards: list industries first.
+        board_order[group.id] = LEGACY_BOARD_ORDER.get(_score_details(score).get("board") or _group_board(group), 2)
         if only_qualified and not item["qualified"]:
             continue
         if leaderboard and item.get("leaderboard") != leaderboard:
@@ -1554,6 +1558,7 @@ def themes(
     rows.sort(
         key=lambda item: (
             not item["qualified"],
+            board_order[item["theme_id"]],
             item["rank"] is None,
             item["rank"] or 999,
             item["display_name"],
@@ -1568,7 +1573,7 @@ def themes(
         total=total,
         q=q,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
-        sort="qualified desc, rank asc, display_name asc",
+        sort="qualified desc, board (industry, theme, other) asc, rank asc, display_name asc",
     )
 
 
@@ -1604,6 +1609,9 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
     ).all()
     return {
         "theme": theme_product_dict(group, score, db),
+        "members_total": len(member_rows),
+        "members_truncated": len(member_rows) > MAX_PAGE_SIZE,
+        "members_endpoint": f"/api/themes/{theme_id}/members",
         "board": _score_details(score).get("board") or _group_board(group),
         "methodology": _score_details(score).get("methodology", {}),
         "data_as_of": run.data_as_of if run else (as_of.isoformat() if as_of else None),
@@ -1629,7 +1637,8 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
                 "valid_to": as_date(membership.valid_to),
                 **_theme_evidence(membership),
             }
-            for membership, instrument in member_rows
+            # At most one page inline; the full list is members_endpoint.
+            for membership, instrument in member_rows[:MAX_PAGE_SIZE]
         ],
     }
 

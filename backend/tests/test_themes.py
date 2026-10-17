@@ -61,6 +61,7 @@ def _member(instrument: str, **overrides):
             {
                 "url": f"https://example.com/{instrument.replace(':', '-')}",
                 "title": "fixture evidence",
+                "quote": "fixture quote",
             }
         ],
     }
@@ -143,6 +144,10 @@ def test_repo_theme_table_is_valid_and_every_member_has_evidence():
         (
             lambda t: t["themes"][0]["members"][1].update(evidence=[]),
             "themes[0](alpha).members[1](TWSE:1002).evidence: at least one",
+        ),
+        (
+            lambda t: t["themes"][0]["members"][1]["evidence"][0].pop("quote"),
+            "themes[0](alpha).members[1](TWSE:1002).evidence[0].quote: non-empty text required",
         ),
         (
             lambda t: t["themes"][0]["members"][1].pop("evidence"),
@@ -303,9 +308,9 @@ def test_sync_rejects_removed_member_or_theme_without_valid_to(factory):
         removed["themes"][0]["members"].pop(1)
         with pytest.raises(ThemeTableError) as error:
             themes_module.apply_theme_table(db, removed)
-        assert any(
-            "open membership but is missing from the table" in item
-            for item in error.value.errors
+        assert (
+            "themes[0](alpha): TWSE:1002 has an open membership but is missing from the table; set valid_to"
+            in error.value.errors
         )
 
         renamed = _table()
@@ -316,6 +321,40 @@ def test_sync_rejects_removed_member_or_theme_without_valid_to(factory):
             "theme_groups(theme-alpha): theme missing from table; keep it with valid_to instead of deleting"
             in error.value.errors
         )
+
+
+def test_sync_rejects_older_version_and_same_version_content_change(factory):
+    with factory() as db:
+        _add_instruments(db, [("TWSE", "1001"), ("TWSE", "1002"), ("TPEx", "2001")])
+        themes_module.apply_theme_table(db, _table(version="2026.09.10"))
+        snapshot = _memberships(db)
+
+        with pytest.raises(ThemeTableError) as error:
+            themes_module.apply_theme_table(db, _table(version="2026.09.01"))
+        assert error.value.errors == [
+            "$.version: themes_v1:2026.09.01 is lower than DB definition_version themes_v1:2026.09.10"
+        ]
+
+        edited = _table(version="2026.09.10")
+        edited["themes"][0]["members"][1]["relevance"] = "low"
+        edited["themes"][0]["description"] = "改過的說明"
+        with pytest.raises(ThemeTableError) as error:
+            themes_module.apply_theme_table(db, edited)
+        assert error.value.errors == [
+            "themes[0](alpha): content differs from DB but $.version equals DB definition_version themes_v1:2026.09.10; bump $.version",
+            "themes[0](alpha).members[1](TWSE:1002): content differs from DB but $.version equals DB definition_version themes_v1:2026.09.10; bump $.version",
+        ]
+        assert _memberships(db) == snapshot
+        assert (
+            db.get(ThemeGroup, "theme-alpha").definition_version
+            == "themes_v1:2026.09.10"
+        )
+
+        # A sub-version bump with the same edit is accepted.
+        result = themes_module.apply_theme_table(
+            db, {**edited, "version": "2026.09.10.1"}
+        )
+        assert (result["groups_updated"], result["memberships_updated"]) == (1, 3)
 
 
 def test_cli_sync_reports_located_errors_and_commits_valid_table(
@@ -579,6 +618,51 @@ def test_industry_and_theme_boards_rank_and_percentile_independently(factory):
         assert {after["ind-high"].rank, after["ind-new"].rank} == {1, 2}
 
 
+def test_member_count_counts_effective_members_and_eligible_needs_full_history(
+    factory,
+):
+    with factory() as db:
+        stocks, dates = _board_fixture(db)
+        # S9 is a member with only 5 bars: counted, but not eligible.
+        short = _add_instruments(db, [("TWSE", "S9")])[0]
+        for trading_date in dates[-5:]:
+            db.add(
+                MarketBar(
+                    instrument_id=short.id,
+                    trading_date=trading_date,
+                    open=10,
+                    high=10,
+                    low=10,
+                    close=10,
+                    adj_close=10,
+                    volume=1000,
+                    turnover=10000,
+                    turnover_status="available",
+                    source="fixture",
+                )
+            )
+        # An inactive instrument and an expired membership are not counted.
+        gone = _add_instruments(db, [("TWSE", "S10")])[0]
+        gone.status = "delisted"
+        _group(db, "theme-four", "theme", [*stocks[0:3], short, gone], dates[0])
+        db.add(
+            GroupMembership(
+                group_id="theme-four",
+                instrument_id=stocks[4].id,
+                valid_from=dates[0],
+                valid_to=dates[-2],
+                source="fixture",
+            )
+        )
+        pipeline._calculate_group_scores(db, SCORE_DATE)
+        db.flush()
+        row = _scores(db)["theme-four"]
+        assert row.details_json["member_count"] == 4
+        assert row.eligible_members == 3
+        # Flow coverage is measured against member_count (existing policy).
+        assert row.details_json["institutional_flow_coverage"]["eligible"] == 4
+
+
 def test_theme_candidates_are_never_scored_or_ranked(factory):
     with factory() as db:
         _board_fixture(db)
@@ -725,6 +809,10 @@ def test_api_board_switch_top_n_quality_and_dates(factory, api_client):
     )
     # Without board the existing product listing is unchanged.
     legacy = api_client.get("/api/themes", params={"only_qualified": "false"}).json()
+    # Legacy listing: same fields, industries before themes, then the rest.
+    prefixes = [item["theme_id"].split("-")[0] for item in legacy["items"]]
+    assert prefixes == ["ind", "ind", "theme", "theme", "theme", "new"]
+    assert legacy["meta"]["sort"].startswith("qualified desc, board")
     assert "page" in legacy["meta"] and "board" not in legacy["meta"]
 
 
@@ -822,5 +910,19 @@ def test_api_theme_detail_trend_and_members_with_evidence(factory, api_client):
     assert {
         item["symbol"]: item["theme_evidence"] is not None for item in paged["items"]
     } == {"S5": True, "S7": False, "S8": False}
+    assert (body["members_total"], body["members_truncated"]) == (3, False)
+    assert body["members_endpoint"] == "/api/themes/theme-top/members"
     industry = api_client.get("/api/themes/ind-high").json()
     assert industry["board"] == "industry" and len(industry["trend"]) == 3
+
+
+def test_api_theme_detail_inlines_at_most_one_page_of_members(
+    factory, api_client, monkeypatch
+):
+    _scored_api_fixture(factory)
+    monkeypatch.setattr(api_module, "MAX_PAGE_SIZE", 2)
+    body = api_client.get("/api/themes/theme-top").json()
+    assert len(body["members"]) == 2
+    assert (body["members_total"], body["members_truncated"]) == (3, True)
+    full = api_client.get("/api/themes/theme-top/members", params={"page_size": 3})
+    assert full.json()["meta"]["total"] == 3
