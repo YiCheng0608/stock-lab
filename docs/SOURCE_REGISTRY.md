@@ -604,7 +604,7 @@ Daily沿[§13.3](#133-原件整數及缺日契約)的25欄、日期／欄數／�
 
 新consumer policy `m1-saved-price-focus-tpex-11370-2026-10-06.1` canonical UTF-8 **2677B**，外部digest `sha256:93059779e66d7826818db4a9eb9ea0a6856d631234b0efaa93c98241d6e5de3b`；projection `price-saved-focus/m1-v1`。須另核原capture `m2-stock-scope-tpex-11370-2026-10-06.5`／digest `sha256:5e397d1e560860208e11c8877fe539f38701757f8ba48dc6e7fea8ef8c0c4040`，及storage `m1-price-save-tpex-11370-2026-10-06.1`／digest `sha256:0e0d9f77fdfa97f2fe9864b9f1cfe2e73429899f1e0aea6c006c7630f0d7201e`。三種policy角色獨立；不把新consumer pins寫入原receipt或擴大七股scope。
 
-唯一existing bundle為 `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`。Literal三檔、原canonical schema／bytes／SHA及Windows path保護仍由[§30.2](#302-三檔原子出版與嚴格重驗)與[§33.2](#332-existing-private有限只讀)管理。原capture `storage=process_memory`／`request_count=1`是歷史capture事實；當前來源另標 `origin=private_local`、storage receipt仍 `private_local`。Augmented provenance不當作原canonical receipt重算hash。
+唯一existing bundle為 `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367/tpex-11370-2026-10-06-m1-v1/`。Root准入比對呼叫時由`%LOCALAPPDATA%`衍生的`<LOCALAPPDATA>/taiwan-stock-research/price-save-01a11367`：`STOCK_TPEX_PRICE_PRIVATE_ROOT`正規化後（Windows不分大小寫、斜線方向與尾端分隔符）須與之相等，否則`price_saved_focus_root_not_admitted`；`LOCALAPPDATA`未設、空或非字串為`price_saved_focus_root_unset`，相對、含`..`或NUL（Windows上磁碟機部分非`X:`或完整UNC亦同）為`price_saved_focus_root_invalid`，皆fail-closed，不fallback到其他變數或路徑；import時不讀環境、不做I/O。consumer policy內的`private_root`字面只作歷史記載，不再比對，policy canonical bytes與digest pin不變。Literal三檔、原canonical schema／bytes／SHA及Windows path保護仍由[§30.2](#302-三檔原子出版與嚴格重驗)與[§33.2](#332-existing-private有限只讀)管理。原capture `storage=process_memory`／`request_count=1`是歷史capture事實；當前來源另標 `origin=private_local`、storage receipt仍 `private_local`。Augmented provenance不當作原canonical receipt重算hash。
 
 ### 32.2 完整重驗與有限衍生
 
@@ -651,7 +651,7 @@ TW／TPEx ordinary stock／TWD price七identities：3105／3293／5274／5347／
 
 ### 33.2 Existing private有限只讀
 
-唯一root `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367`、bundle `tpex-11370-2026-10-06-m1-v1`；原1791644B／3files／3dirs全raw／canonical／mtimeNS重驗：
+唯一root `%LOCALAPPDATA%/taiwan-stock-research/price-save-01a11367`（衍生與准入依[§32.1](#321-先准入只讀用途再讀既有原件)；本節各policy內的`private_use.root`字面同為歷史記載，joint的root准入改比對同一衍生值，不再比對該字面，pin不變）、bundle `tpex-11370-2026-10-06-m1-v1`；原1791644B／3files／3dirs全raw／canonical／mtimeNS重驗：
 
 | literal file／bytes | SHA-256 | mtime_ns |
 | --- | --- | --- |

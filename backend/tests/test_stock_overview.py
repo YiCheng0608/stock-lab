@@ -4,13 +4,14 @@ Run with --noconftest: the legacy global conftest allocates unrelated disk roots
 Temporary files are needed only to exercise the production read-only file gate.
 """
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -23,6 +24,7 @@ from app.api import _stock_news_cutoff_filter, get_db, router, stock_detail
 from app.db import Base
 from app.models import (ChipSnapshot, Event, GroupMembership, IngestionRun, Instrument,
                         MarketBar, NewsItem, Signal, StrategyVersion, TechnicalFeature, ThemeGroup)
+from app.stock_market_reads import load_stock_market_reads
 from app.stock_overview import (MANIFEST_PATH, PROFILE, REGISTRY_DIGEST, REGISTRY_VERSION,
                                 build_stock_overview, _capture_evidence)
 from worker.pipeline import _upsert_official_bar, _upsert_raw_payload
@@ -72,7 +74,16 @@ class StockOverviewTest(unittest.TestCase):
     def overview(self, cutoff=DAY):
         return build_stock_overview(self.db, self.instrument, cutoff)
 
+    def injected_read(self, **fields):
+        """Override fields of the newest row after the real loader, for values the table cannot store."""
+        def load(*args, **kwargs):
+            rows, state = load_stock_market_reads(*args, **kwargs)
+            return [replace(rows[0], **fields), *rows[1:]], state
+        return patch("app.stock_overview.load_stock_market_reads", side_effect=load)
+
     def assert_rejected(self, reason):
+        # The overview reads persisted rows by SQL and autoflush is off: persist the mutation first.
+        self.db.flush()
         price = self.overview()["price"]
         self.assertEqual(price["status"], "unavailable")
         self.assertIsNone(price["latest"])
@@ -154,11 +165,14 @@ class StockOverviewTest(unittest.TestCase):
         self.assert_rejected("price_capture_time_mismatch")
 
     def test_ohlc_and_volume_boundaries(self):
-        for value in (float("inf"), float("nan"), 0, -1):
+        for value in (float("inf"), 0, -1):
             with self.subTest(close=value):
                 self.bar.close = value
                 self.assert_rejected("price_invalid_ohlc")
         self.bar.close = 25.55
+        # NaN cannot be persisted (SQLite stores NULL, market_bars.close is NOT NULL): inject it into the read.
+        with self.subTest(close=float("nan")), self.injected_read(close=float("nan")):
+            self.assert_rejected("price_invalid_ohlc")
         self.bar.low = 27
         self.assert_rejected("price_invalid_ohlc")
         self.bar.low = 25.45
@@ -176,13 +190,13 @@ class StockOverviewTest(unittest.TestCase):
         self.assert_rejected("price_selected_row_invalid")
 
     def test_duplicate_dates_fail_closed(self):
-        db = MagicMock()
-        db.scalars.return_value.all.return_value = [self.bar, self.bar]
-        db.execute.return_value.all.return_value = []
-        price = build_stock_overview(db, self.instrument, DAY)["price"]
+        rows, state = load_stock_market_reads(self.db, self.instrument.id, DAY)
+        with patch("app.stock_overview.load_stock_market_reads",
+                   return_value=([rows[0], rows[0]], {**state, "candidate_count": 2})):
+            price = build_stock_overview(self.db, self.instrument, DAY)["price"]
         self.assertEqual(price["valid_count"], 0)
         self.assertEqual(len(price["rejected"]), 2)
-        self.assertEqual(price["reasons"], ["price_duplicate_date"])
+        self.assertEqual(price["reasons"], ["price_duplicate_date", "price_latest_candidate_unqualified"])
 
     def test_changed_evidence_is_rejected(self):
         from app.stock_overview import _stable_read

@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { DEALER_COMPONENTS, DEALER_COMPONENTS_API, DEALER_COMPONENTS_ATTRIBUTION, DEALER_COMPONENTS_NAMES, DEALER_COMPONENTS_SYMBOLS, DEALER_METRICS, dealerControls, dealerPath, validDealerControls, validDealerParams, validateDealerComponents } from './chipsDealerComponents'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { DEALER_COMPONENTS, DEALER_COMPONENTS_API, DEALER_COMPONENTS_ATTRIBUTION, DEALER_COMPONENTS_NAMES, DEALER_COMPONENTS_SYMBOLS, DEALER_METRICS, dealerControls, dealerPath, dealerReturnPath, validDealerControls, validDealerParams, validateDealerComponents } from './chipsDealerComponents'
 import type { DealerComponent, DealerControls, DealerRead, DealerStock } from './chipsDealerComponents'
 import './ChipsSeriesPage.css'
 
@@ -83,7 +83,7 @@ export function DealerCalendar({ read }: { read: DealerRead }) {
 export default function ChipsDealerComponentsPage() {
   const state = useContext(DealerContext)
   if (!state) throw new Error('dealer components provider required')
-  const [params, setParams] = useSearchParams(), controls = dealerControls(params), rawKey = params.toString()
+  const [params, setParams] = useSearchParams(), controls = dealerControls(params), rawKey = params.toString(), { search } = useLocation()
   const [draft, setDraft] = useState<DealerControls>(controls), [selected, setSelected] = useState<number | null>(null)
   const { symbol } = useParams()
   useEffect(() => installDealerPageLifecycle(window, () => { state.mask(); setSelected(null) }), [])
@@ -101,7 +101,7 @@ export default function ChipsDealerComponentsPage() {
     <header><p className="series-eyebrow">TPEx · 七股 · 2026/10/06</p><h1>自營商自行買賣與避險對帳</h1><p>同一截止最近5個交易日，自行買賣、避險及自營商總額的買進／賣出／淨超始終並列，保留完整原欄追溯。</p></header>
     <form className="series-controls" onSubmit={apply} key={rawKey}><label>截止日期<input type="text" aria-label="截止日期" value={draft.as_of} onChange={(e) => setDraft({ ...draft, as_of: e.target.value })} /></label><label>法人<select aria-label="法人" value={draft.investor} onChange={(e) => setDraft({ ...draft, investor: e.target.value })}><option value="dealer">自營商（自行買賣＋避險）</option></select></label><label>窗口<select aria-label="窗口" value={draft.horizon} onChange={(e) => setDraft({ ...draft, horizon: e.target.value })}><option value="5">最近5個交易日</option></select></label><button type="submit" disabled={state.busy}>套用條件</button></form>
     <p className="series-current">目前原始條件：as_of={controls.as_of} · investor={controls.investor} · horizon={controls.horizon}</p>
-    <div className="series-actions"><button type="button" data-dealer-first disabled={state.busy || state.firstUsed || !valid} onClick={(e) => void state.action(true, controls, e.nativeEvent)}>首次取得來源（僅一次）</button><button type="button" data-dealer-read disabled={state.busy || !valid} onClick={(e) => void state.action(false, controls, e.nativeEvent)}>明確讀取已持有來源</button>{symbol && <Link to={dealerPath(controls)} onClick={() => { state.mask(); setSelected(null) }}>返回七股（保留原始條件）</Link>}</div>
+    <div className="series-actions"><button type="button" data-dealer-first disabled={state.busy || state.firstUsed || !valid} onClick={(e) => void state.action(true, controls, e.nativeEvent)}>首次取得來源（僅一次）</button><button type="button" data-dealer-read disabled={state.busy || !valid} onClick={(e) => void state.action(false, controls, e.nativeEvent)}>明確讀取已持有來源</button>{symbol && <Link to={dealerReturnPath(search)} data-dealer-return onClick={() => { state.mask(); setSelected(null) }}>返回七股（保留原始條件）</Link>}</div>
     <p role="status" className="series-status">{state.busy ? '正在驗證完整來源，全部數值、對帳、原件及日曆暫不顯示。' : state.status}</p>
     {!valid && <p className="series-unavailable">原始條件未准入，或有缺少／重複／未知參數；所有每日、五日總額、對帳與追溯不可用。</p>}
     {!symbol ? <section className="series-cards" aria-label="七股"><p className="series-count">已驗證股數：{read ? '7' : '未知'}</p>{DEALER_COMPONENTS_SYMBOLS.map((s) => { const item = read?.stocks.find((x) => x.symbol === s); return <article key={s}><h2>{s} {DEALER_COMPONENTS_NAMES[s]}</h2>{item ? <><DealerSummary stock={item} /><Link to={dealerPath(controls, s)}>查看五日三組每日對帳及原列</Link></> : <><p>三組每日、五日總額、對帳與原件不可用</p><button type="button" disabled>完整七股來源驗證後開啟</button></>}</article> })}</section> : !stock || !read ? <section className="series-unavailable"><h2>{symbol} {DEALER_COMPONENTS_NAMES[symbol] ?? ''}</h2><p>{!DEALER_COMPONENTS_NAMES[symbol] ? '此標的不在核定七股範圍。' : '來源不可用。'}全部每日、五日總額、對帳、原件及日曆不顯示。</p></section> : <section className="series-detail" aria-label="自營商三組五日明細"><h2>{stock.symbol} {stock.name}</h2><DealerSummary stock={stock} /><DealerDaily stock={stock} onPoint={setSelected} />{selected !== null && <DealerEvidence stock={stock} index={selected} read={read} />}<DealerCalendar read={read} /></section>}

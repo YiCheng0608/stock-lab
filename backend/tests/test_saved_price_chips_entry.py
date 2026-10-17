@@ -74,7 +74,7 @@ class JointEntryTests(unittest.TestCase):
     def test_runner_configuration_transport_thread_scope_and_zero_startup_private_io(self):
         import __main__ as runner
         from threading import Thread
-        from test_price_saved_focus import memory_database_snapshot
+        from test_price_saved_focus import FAKE_ROOT, memory_database_snapshot
         policy = entry.entry_policy()
         items, _, _ = synthetic_captures()
         bodies = {item.url: item.body for item in items}
@@ -99,7 +99,7 @@ class JointEntryTests(unittest.TestCase):
                 changes[prefix + "_version"] = policy["independent_pins"][name]["policy_version"]
                 changes[prefix + "_digest"] = "sha256:" + policy["independent_pins"][name]["sha256"]
             with patch.multiple(runner.ARGS, **changes), patch.object(runner, "JOINT_ACTIVE", True), patch.object(
-                    runner, "SAVED_FOCUS_ACTIVE", True), patch.object(runner, "PRIVATE_ROOT", Path(policy["private_use"]["root"])), patch.object(
+                    runner, "SAVED_FOCUS_ACTIVE", True), patch.object(runner, "PRIVATE_ROOT", Path(FAKE_ROOT)), patch.object(
                     httpx, "HTTPTransport", MemoryHTTPTransport), patch.object(runner, "private_disk_metrics", side_effect=AssertionError("startup metadata I/O forbidden")) as metrics:
                 runner.configure_joint(current)
                 result = runner.receipt(current)
@@ -115,6 +115,32 @@ class JointEntryTests(unittest.TestCase):
                         current.chips_transport.handle_request(httpx.Request(method, target))
                 self.assertEqual(seen, [url])
                 self.assertEqual(memory_database_snapshot(current), current.before_full)
+
+    def test_runner_admits_only_the_private_root_derived_from_localappdata(self):
+        import __main__ as runner
+        import os
+        from test_price_saved_focus import FAKE_LOCALAPPDATA, FAKE_ROOT
+        policy = entry.entry_policy()
+        changes = {"cutoff": "2026-10-06", "saved_source_only": True, "joint_policy_version": entry.POLICY_VERSION, "joint_policy_digest": entry.POLICY_DIGEST}
+        for name, prefix in (("price_capture", "policy"), ("price_storage", "private_policy"), ("saved_focus", "saved_focus_policy"), ("institutional", "chips_policy")):
+            changes[prefix + "_version"] = policy["independent_pins"][name]["policy_version"]
+            changes[prefix + "_digest"] = "sha256:" + policy["independent_pins"][name]["sha256"]
+        refused = (("historical literal", Path(policy["private_use"]["root"]), FAKE_LOCALAPPDATA), ("sibling", Path(FAKE_ROOT + "-other"), FAKE_LOCALAPPDATA),
+                   ("parent", Path(FAKE_ROOT).parent, FAKE_LOCALAPPDATA), ("no root", None, FAKE_LOCALAPPDATA), ("LOCALAPPDATA unset", Path(FAKE_ROOT), None),
+                   ("LOCALAPPDATA empty", Path(FAKE_ROOT), ""), ("LOCALAPPDATA relative", Path(FAKE_ROOT), "relative"),
+                   ("LOCALAPPDATA dotdot", Path(FAKE_ROOT), FAKE_LOCALAPPDATA + "/../x"))
+        with fixture() as current:
+            runner.record_validation_baseline(current)
+            with patch.multiple(runner.ARGS, **changes), patch.object(runner, "JOINT_ACTIVE", True), patch.object(runner, "SAVED_FOCUS_ACTIVE", True):
+                for label, root, localappdata in refused:
+                    with self.subTest(label), patch.object(runner, "PRIVATE_ROOT", root), patch.dict("os.environ"):
+                        if localappdata is None:
+                            os.environ.pop("LOCALAPPDATA", None)
+                        else:
+                            os.environ["LOCALAPPDATA"] = localappdata
+                        with self.assertRaisesRegex(ValueError, "^joint_literal_private_root_not_admitted$"):
+                            runner.configure_joint(current)
+            self.assertEqual(current.source_requests, [])
 
     def test_canonical_independent_pins_and_producer_reserve(self):
         policy = entry.entry_policy()

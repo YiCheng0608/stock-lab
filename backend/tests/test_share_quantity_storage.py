@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import sys
 import types
@@ -22,10 +23,11 @@ import unittest
 from unittest.mock import patch
 
 STANDALONE = __name__ == "__main__"
-OWNED_ROOT = Path("C:/Users/YiCheng/AppData/Local/Temp/taiwan-stock-m3-share-storage-01a10250")
-OWNED_DB = OWNED_ROOT / "data" / "quantity.db"
-OWNED_FILES = {OWNED_DB, Path(str(OWNED_DB) + "-journal")}
-OWNED_DIRS = {OWNED_ROOT, OWNED_ROOT / "data", OWNED_ROOT / "raw"}
+OWNED_ROOT_ENV = "LOCALAPPDATA"
+OWNED_SUBDIRS = ("Temp", "taiwan-stock-m3-share-storage-01a10250")
+# Bound by use_owned_root() when a disk mode starts; importing reads no environment and touches no path.
+OWNED_ROOT = OWNED_DB = None
+OWNED_FILES = OWNED_DIRS = frozenset()
 SAFE, ODD, MAXIMUM = 9007199254740991, 9007199254740993, 9223372036854775807
 HEAD, PREVIOUS = "0009_strategy_formula_version", "0007_turnover_availability"
 DAY = date(2026, 10, 3)
@@ -34,6 +36,31 @@ UNEXPECTED_DENIALS = []
 DISK = False
 SERVING = False
 ARGS = None
+
+
+def derive_owned_root(environment=None):
+    """``%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250``, read at call time with no fallback.
+
+    Unset, empty, non-string, NUL, relative or ``..`` is refused, and on Windows so is anything but a drive-letter root
+    (a rooted path without a drive depends on the current drive; a UNC share is not an owned local temp directory).
+    """
+    value = (os.environ if environment is None else environment).get(OWNED_ROOT_ENV)
+    if type(value) is not str or not value:
+        raise RuntimeError(OWNED_ROOT_ENV + " is unset or empty")
+    if "\x00" in value or not os.path.isabs(value) or ".." in re.split(r"[\\/]", value):
+        raise RuntimeError(OWNED_ROOT_ENV + " must name an absolute directory without '..'")
+    if os.name == "nt" and not re.fullmatch(r"[A-Za-z]:", os.path.splitdrive(value)[0]):
+        raise RuntimeError(OWNED_ROOT_ENV + " must start with a drive letter")
+    return Path(value).joinpath(*OWNED_SUBDIRS)
+
+
+def use_owned_root(root):
+    """Bind the owned-root names that the disk modes check, hook and clean."""
+    global OWNED_ROOT, OWNED_DB, OWNED_FILES, OWNED_DIRS
+    OWNED_ROOT = Path(root)
+    OWNED_DB = OWNED_ROOT / "data" / "quantity.db"
+    OWNED_FILES = {OWNED_DB, Path(str(OWNED_DB) + "-journal")}
+    OWNED_DIRS = {OWNED_ROOT, OWNED_ROOT / "data", OWNED_ROOT / "raw"}
 
 
 def _nonreparse(path):
@@ -155,6 +182,11 @@ if STANDALONE:
     ARGS = parser.parse_args()
     DISK = any(getattr(ARGS, mode) for mode in ("disk", "prepare", "serve", "inspect", "cleanup"))
     SERVING = ARGS.serve
+    if DISK:
+        try:
+            use_owned_root(derive_owned_root())
+        except RuntimeError as error:
+            parser.error(str(error))
     if DISK and (ARGS.root is None or Path(ARGS.root).absolute() != OWNED_ROOT):
         parser.error("disk mode requires the exact reviewed --root " + str(OWNED_ROOT))
     if not DISK and ARGS.root is not None:
@@ -287,6 +319,31 @@ def assert_migrated(test, engine, mode, before):
 
 
 class StorageMemoryTest(unittest.TestCase):
+    def test_owned_root_comes_from_localappdata_at_call_time_and_fails_closed(self):
+        fake = "C:\\Fake\\LocalAppData" if os.name == "nt" else "/fake/localappdata"
+        expected = Path(fake) / "Temp" / "taiwan-stock-m3-share-storage-01a10250"
+        self.assertEqual((OWNED_ROOT_ENV, OWNED_SUBDIRS), ("LOCALAPPDATA", ("Temp", "taiwan-stock-m3-share-storage-01a10250")))
+        self.assertEqual(derive_owned_root({OWNED_ROOT_ENV: fake}), expected)
+        self.assertEqual(derive_owned_root({OWNED_ROOT_ENV: fake + os.sep, "TEMP": "ignored", "APPDATA": "ignored"}), expected)
+        with patch.dict(os.environ, {OWNED_ROOT_ENV: fake}):
+            self.assertEqual(derive_owned_root(), expected)  # default source: os.environ, read when called
+        refused = [None, "", 5, b"bytes", "relative", ".", "%LOCALAPPDATA%", fake + "/../x", fake + "\\..\\x", fake + chr(0)]
+        if os.name == "nt":
+            refused += ["C:relative", "\\foo", "/foo", "\\\\srv\\share", "//srv/share", "\\\\?\\C:\\Fake", "\\\\"]
+        for value in refused:
+            with self.subTest(value=value), self.assertRaises(RuntimeError):
+                derive_owned_root({} if value is None else {OWNED_ROOT_ENV: value})
+        for variable in ("TEMP", "TMP", "TMPDIR", "APPDATA", "USERPROFILE", "HOME"):  # never a fallback source
+            with self.subTest(fallback=variable), self.assertRaises(RuntimeError):
+                derive_owned_root({variable: fake})
+        module = sys.modules[__name__]
+        with patch.multiple(module, OWNED_ROOT=None, OWNED_DB=None, OWNED_FILES=frozenset(), OWNED_DIRS=frozenset()):
+            use_owned_root(expected)
+            self.assertEqual((module.OWNED_ROOT, module.OWNED_DB), (expected, expected / "data" / "quantity.db"))
+            self.assertEqual(module.OWNED_FILES, {module.OWNED_DB, Path(str(module.OWNED_DB) + "-journal")})
+            self.assertEqual(module.OWNED_DIRS, {expected, expected / "data", expected / "raw"})
+        self.assertFalse(os.path.lexists(fake))  # nothing was created
+
     def test_existing_turnover_memory_boundaries_and_revision_chain(self):
         import test_turnover_availability_migration as turnover
         import test_database_readiness as startup

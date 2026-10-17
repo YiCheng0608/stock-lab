@@ -1,5 +1,5 @@
 import { canonicalJson, grossInteger, grossLots } from './chipsGross'
-import { ADJACENT_CALCULATION, ADJACENT_CALENDAR_SCHEMA, ADJACENT_CALENDAR_VERSION, ADJACENT_CAPTURE_SCHEMA, ADJACENT_INVESTORS, ADJACENT_NAMES, ADJACENT_PIN, ADJACENT_PROFILE, ADJACENT_SCHEMA, ADJACENT_SIGNS, ADJACENT_SYMBOLS, ADJACENT_VERSION, ADJACENT_WINDOWS, ADJACENT_WORKER_SCHEMA, adjacentBound, adjacentControls, adjacentDailyURL, adjacentPath, adjacentStats, validAdjacentControls, validAdjacentParams, validateAdjacent } from './chipsAdjacent'
+import { ADJACENT_CALCULATION, ADJACENT_CALENDAR_SCHEMA, ADJACENT_CALENDAR_VERSION, ADJACENT_CAPTURE_SCHEMA, ADJACENT_INVESTORS, ADJACENT_NAMES, ADJACENT_PIN, ADJACENT_PROFILE, ADJACENT_ROUTE, ADJACENT_SCHEMA, ADJACENT_SIGNS, ADJACENT_SYMBOLS, ADJACENT_VERSION, ADJACENT_WINDOWS, ADJACENT_WORKER_SCHEMA, adjacentBound, adjacentControls, adjacentDailyURL, adjacentPath, adjacentReturnPath, adjacentStats, validAdjacentControls, validAdjacentParams, validateAdjacent } from './chipsAdjacent'
 import type { AdjacentPoint, AdjacentPolicy, AdjacentRead, AdjacentSegment, AdjacentSign, AdjacentStats, AdjacentStock, AdjacentWindow } from './chipsAdjacent'
 import { installAdjacentPageLifecycle } from './ChipsAdjacentPage'
 
@@ -124,6 +124,18 @@ export async function runAdjacentChecks(read: AdjacentRead, assert: Assert): Pro
   check(caught, 'window partial sum overflow even when final in range')
   const controls = adjacentControls(new URLSearchParams('as_of=2026-10-06&investor=dealer&horizon=5'))
   check(adjacentPath(controls, '6510').endsWith('/6510?as_of=2026-10-06&investor=dealer&horizon=5'), 'all three RAW controls preserved')
+  // #117: the way back from a symbol carries the literal location.search, so a missing, extra, duplicate, reordered or percent-encoded RAW query returns exactly as it was and READ/FIRST come back in the same state.
+  // The flag says whether the former normalised return (adjacentPath of the defaulted controls) rewrote that query.
+  const returnCases: [string, boolean][] = [
+    ['', true], ['?', true], ['?as_of=2026-10-06&investor=foreign&horizon=5', false], ['?as_of=2026-10-06&investor=foreign', true], ['?investor=foreign', true],
+    ['?as_of=2026-10-06&investor=foreign&horizon=5&x=1', true], ['?as_of=2026-10-06&investor=foreign&horizon=5&horizon=5', true], ['?horizon=5&horizon=5&horizon=5', true],
+    ['?as_of=2026-10-07&investor=foreign&horizon=5', false], ['?as_of=2026-10-06&investor=bogus&horizon=20', false], ['?as_of=&investor=&horizon=', false],
+    ['?horizon=5&investor=foreign&as_of=2026-10-06', true], ['?as_of=2026%2D10%2D06&investor=foreign&horizon=5', true], ['?as_of=2026-10-06&investor=%66oreign&horizon=5', true], ['?x=%zz&y=%E4%B8%AD&z=a+b&z=', true],
+  ]
+  for (const [search, rewritten] of returnCases) {
+    check(adjacentReturnPath(search) === ADJACENT_ROUTE + search, 'return link keeps the literal query ' + JSON.stringify(search))
+    check((adjacentPath(adjacentControls(new URLSearchParams(search.slice(1)))) !== adjacentReturnPath(search)) === rewritten, 'the former normalised return ' + (rewritten ? 'rewrote ' : 'kept ') + JSON.stringify(search))
+  }
   check(!validAdjacentControls({ ...controls, horizon: '20' }) && !validAdjacentControls({ ...controls, as_of: '' }), 'only adjacent5 valid')
   for (const raw of ['as_of=2026-10-06&investor=trust', 'as_of=2026-10-06&investor=trust&horizon=5&x=1', 'as_of=2026-10-06&investor=trust&horizon=5&horizon=5']) check(!validAdjacentParams(new URLSearchParams(raw)), 'missing duplicate unknown RAW query')
   await rejected((v) => { v.policy.calendar.from = '2026-09-02' }, 'independent canonical root policy')

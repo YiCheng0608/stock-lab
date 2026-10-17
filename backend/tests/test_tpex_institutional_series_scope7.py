@@ -186,7 +186,7 @@ class SeriesTests(unittest.TestCase):
         scope = {"os": os, "CONTEXT": threading.local(), "COUNTS": dict.fromkeys(("disk_writes", "mutations", "private_reads", "databases", "subprocesses", "network_rejections"), 0),
                  "ARGS": type("Args", (), {"serve": False, "port": 8799})()}
         exec(compile(ast.Module(body=funcs, type_ignores=[]), str(path), "exec"), scope)
-        for event, args in (("open", ("C:/Users/YiCheng/AppData/Local/taiwan-stock-research/forbidden.csv", "r", 0)), ("open", ("unused", "w", os.O_WRONLY)), ("sqlite3.connect", (":memory:",)), ("subprocess.Popen", ("unused",)), ("socket.getaddrinfo", ("example.org", 443)), ("socket.connect", (None, ("127.0.0.1", 8799)))):
+        for event, args in (("open", ("C:/Fake/AppData/Local/taiwan-stock-research/forbidden.csv", "r", 0)), ("open", ("unused", "w", os.O_WRONLY)), ("sqlite3.connect", (":memory:",)), ("subprocess.Popen", ("unused",)), ("socket.getaddrinfo", ("example.org", 443)), ("socket.connect", (None, ("127.0.0.1", 8799)))):
             with self.assertRaises(PermissionError): scope["audit"](event, args)
 
     def test_runner_whole_request_deadline_and_finally_clear_without_network(self):
