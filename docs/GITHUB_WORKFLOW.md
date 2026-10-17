@@ -38,7 +38,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    ```
 
    看板設進行中。工程師接手後在 Issue 留一則「開工」留言（session、branch、HEAD）。
-   派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報只寫在 Issue 留言，不依賴口頭通知。
+   派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報只寫在 Issue 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（review 意見、回覆提問、決定）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)，`Closes #<issue>`，附驗證結果與截圖（前端）。看板設 Review。
@@ -85,7 +85,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 2. 執行：先寫換手標記 `<資料目錄>/logs/handoff-<session id>.json`（舊 handle、時間），停掉自己的巡檢 cron 與監看，之後不再合併、派工、留言；再照上面四行開新 session 並送接手文（含自己的 handle）。
 3. 接回：新 session 15 分鐘內未在 #1 留言，舊統籌刪標記檔、重掛監看與巡檢，在 #1 記「換手失敗：<新 handle>」，下次巡檢再試。
 4. 收尾：新統籌在 #1 留言並寫心跳檔後，確認舊 terminal 閒置再關掉它。
-5. 不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並重掛監看，換手前後的留言都由它接續。
+5. 換手不通知工程師：工程師的回報與提問一律在 Issue／PR 留言，不送到統籌 terminal；新統籌啟動時讀所有 open Issue 與 PR 並重掛監看，換手前後的留言都由它接續。新統籌之後給工程師的留言仍照[開工](#任務流程)的反方向規則通知 terminal。
 6. 看門狗以心跳檔判定：60 分鐘無心跳且 terminal 仍在就送喚醒文；120 分鐘無心跳或 terminal 消失就照本節開新統籌。腳本 `tools/ops/ensure_coordinator.sh`、排程 `tools/ops/Register-Watchdog.ps1`，註冊、查詢、停用與日誌見 [OPERATIONS §6.1](OPERATIONS.md#61-統籌看門狗)。
 
 ## 無人值守運作
