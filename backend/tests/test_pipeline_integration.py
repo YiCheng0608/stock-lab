@@ -408,7 +408,7 @@ def test_hot_groups_require_three_members_and_keep_etfs_separate(pipeline_env):
                 db.add(MarketBar(instrument_id=instrument.id, trading_date=trading_date, open=close, high=close + 1, low=close - 1, close=close, adj_close=close, volume=1000, turnover=close * 1000, turnover_status="available", source="fixture"))
                 db.add(ChipSnapshot(instrument_id=instrument.id, trading_date=trading_date, foreign_buy=100, trust_buy=20, dealer_buy=10, margin_balance=10000 + index, margin_change=1, source="fixture"))
         for instrument in [*stocks, *etfs]:
-            db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"prior_20_volumes": [1000] * 20, "volume": 1300}, source="fixture"))
+            db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"volume": 1300}, source="fixture"))
         db.flush()
 
         pipeline._calculate_group_scores(db, score_date)
@@ -615,8 +615,6 @@ def test_institutional_flow_ratios_fail_closed_for_one_missing_chip_component(pi
                 trading_date=score_date,
                 features_json={
                     "bar_count_60d": 60,
-                    "prior_20_highs": [99] * 20,
-                    "prior_20_volumes": [1000] * 20,
                     "volume": 2000,
                     "ma20": 100,
                     "ma60": 90,
@@ -657,7 +655,7 @@ def test_signal_gate_uses_domain_inputs_and_missing_etf_category_fails_closed(pi
         db.flush()
         for instrument in (stock, etf):
             db.add(MarketBar(instrument_id=instrument.id, trading_date=score_date, open=100, high=101, low=99, close=100, adj_close=100, volume=2000, turnover=200000, source="fixture"))
-            db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [99] * 20, "prior_20_volumes": [1000] * 20, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
+            db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
         db.flush()
         strategies = pipeline._ensure_strategies(db)
         pipeline._upsert_signal(db, instrument=stock, signal_date=score_date, strategies=strategies)
@@ -670,6 +668,14 @@ def test_signal_gate_uses_domain_inputs_and_missing_etf_category_fails_closed(pi
         assert "group_excess_return_20d" in stock_signal.rule_evidence_json["inputs"]
         assert etf_signal and etf_signal.status == "data_incomplete"
         assert "unsupported_or_missing_etf_category" in (etf_signal.rationale or "")
+
+
+def _add_prior_bars(db, instrument, score_date, *, high, volume=1000):
+    """The 20 sessions before score_date; strategies read prior highs/volumes from market_bars."""
+    for trading_date in pipeline.business_days(score_date, 21)[:-1]:
+        db.add(MarketBar(instrument_id=instrument.id, trading_date=trading_date, open=high - 1, high=high,
+                         low=high - 2, close=high - 1, adj_close=high - 1, volume=volume,
+                         turnover=(high - 1) * volume, source="fixture"))
 
 
 def test_strategy_group_return_does_not_require_complete_hot_group_score(pipeline_env, monkeypatch):
@@ -687,6 +693,7 @@ def test_strategy_group_return_does_not_require_complete_hot_group_score(pipelin
         db.add_all([instrument, group])
         db.flush()
         db.add(GroupMembership(group_id=group.id, instrument_id=instrument.id, valid_from=score_date, source="fixture"))
+        _add_prior_bars(db, instrument, score_date, high=99)
         db.add(
             GroupDailyScore(
                 group_id=group.id,
@@ -722,8 +729,6 @@ def test_strategy_group_return_does_not_require_complete_hot_group_score(pipelin
                 trading_date=score_date,
                 features_json={
                     "bar_count_60d": 60,
-                    "prior_20_highs": [99] * 20,
-                    "prior_20_volumes": [1000] * 20,
                     "volume": 2000,
                     "ma20": 100,
                     "ma60": 90,
@@ -755,7 +760,7 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         db.add(instrument)
         db.flush()
         db.add(MarketBar(instrument_id=instrument.id, trading_date=score_date, open=100, high=101, low=99, close=100, adj_close=100, volume=1000, turnover=100000, source="fixture"))
-        db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [110] * 20, "prior_20_volumes": [1000] * 20, "volume": 1000, "ma20": 100, "ma60": 100, "atr14": 2}, source="fixture"))
+        db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "volume": 1000, "ma20": 100, "ma60": 100, "atr14": 2}, source="fixture"))
         db.flush()
         monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_return_identity_version": "instrument-id-v1", "member_returns": [{"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": "OBS", "excess_return_20d": 0.1}]}))
         rejected = SimpleNamespace(passed=False, state="rejected", reasons=("rule_not_met",))
@@ -783,8 +788,9 @@ def test_conditional_signal_has_no_uncalibrated_probability_and_legacy_value_sur
         instrument = Instrument(market="TW", exchange="TWSE", symbol="COND", name="Conditional", instrument_type="stock", status="active")
         db.add(instrument)
         db.flush()
+        _add_prior_bars(db, instrument, score_date, high=99)
         db.add(MarketBar(instrument_id=instrument.id, trading_date=score_date, open=100, high=101, low=99, close=100, adj_close=100, volume=2000, turnover=200000, source="fixture"))
-        db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "prior_20_highs": [99] * 20, "prior_20_volumes": [1000] * 20, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
+        db.add(TechnicalFeature(instrument_id=instrument.id, trading_date=score_date, features_json={"bar_count_60d": 60, "volume": 2000, "ma20": 100, "ma60": 90, "atr14": 2}, source="fixture"))
         db.flush()
         monkeypatch.setattr(pipeline, "_best_group_for_signal", lambda *_args, **_kwargs: GroupDailyScore(group_id="fixture-group", trading_date=score_date, score=50, eligible_members=3, details_json={"member_return_identity_version": "instrument-id-v1", "member_returns": [{"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": "COND", "excess_return_20d": 0.1}]}))
         monkeypatch.setattr(pipeline, "_strategy_institutional_flow_to_average_volume_ratio", lambda *_args, **_kwargs: 0.0)
@@ -988,8 +994,9 @@ def test_derived_features_use_score_date_corporate_action_basis_without_future_l
         assert pre_split.features_json["ma20"] == pytest.approx(100.0)
         assert split.features_json["return_1d"] == pytest.approx(0.0)
         assert post_split.features_json["return_1d"] == pytest.approx(0.02)
-        assert max(split.features_json["prior_20_highs"]) == pytest.approx(50.5)
-        assert max(post_split.features_json["prior_20_highs"]) == pytest.approx(50.5)
+        assert "prior_20_highs" not in split.features_json and "prior_20_volumes" not in split.features_json
+        assert max(pipeline._prior_20_window(db, instrument.id, split_date)["highs"]) == pytest.approx(50.5)
+        assert max(pipeline._prior_20_window(db, instrument.id, post_split_date)["highs"]) == pytest.approx(50.5)
         assert pipeline._returns_by_window(db, instrument.id, split_date)[1] == pytest.approx(0.0)
         assert pipeline._returns_by_window(db, instrument.id, post_split_date)[1] == pytest.approx(0.02)
 

@@ -66,7 +66,7 @@ def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
         ):
             _fail("fallback revisions must be a distinct, nonempty known prefix")
         if not has_alembic and len(values) != len(REVISIONS):
-            _fail("fallback-only database requires all nine revisions")
+            _fail("fallback-only database requires all known revisions")
     elif not has_alembic:
         _fail("database has no recognized migration markers")
 
