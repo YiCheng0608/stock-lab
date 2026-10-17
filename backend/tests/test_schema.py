@@ -150,6 +150,7 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                 "0008_portfolio_share_integer",
                 "0009_strategy_formula_version",
                 "0010_technical_indicators",
+                "0011_schedule_runs",
                 "0012_news_llm",
             }
             assert not inspector.has_table("alembic_version")

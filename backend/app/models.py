@@ -47,6 +47,9 @@ class ThemeGroup(Base):
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
+    # official_industry | etf | instrument_theme (legacy ETF theme) |
+    # daily_hot_group (new listings) | theme (theme table) |
+    # theme_candidate (inactive suggestion awaiting review; never scored).
     group_type: Mapped[str] = mapped_column(String(30), default="official_industry")
     definition_version: Mapped[str] = mapped_column(String(30), default="v1")
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -58,6 +61,8 @@ class ThemeGroup(Base):
     display_description_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     name_source: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # pending (name not mapped) | official / verified / approved (displayable,
+    # see app.news.is_verified_theme) | pending_verification (theme candidate).
     name_status: Mapped[str] = mapped_column(String(30), default="pending", server_default="pending")
 
 
@@ -70,6 +75,7 @@ class GroupMembership(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     group_id: Mapped[str] = mapped_column(ForeignKey("theme_groups.id"), index=True)
     instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    # member | candidate (member of a theme_candidate group, unverified).
     role: Mapped[str] = mapped_column(String(20), default="member")
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     valid_from: Mapped[date] = mapped_column(Date)
@@ -487,6 +493,49 @@ class DataQuality(Base):
     checks_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     source: Mapped[str | None] = mapped_column(String(120), nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ScheduleRun(Base):
+    """One invocation of a scheduled job such as ``worker.cli daily``.
+
+    Every invocation writes a row, including reruns that find the target date
+    already complete; data idempotency is owned by the steps themselves.
+    """
+
+    __tablename__ = "schedule_runs"
+    __table_args__ = (Index("ix_schedule_run_job_date", "job", "target_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job: Mapped[str] = mapped_column(String(40), default="daily")
+    target_date: Mapped[date] = mapped_column(Date, index=True)
+    trigger: Mapped[str] = mapped_column(String(30), default="manual")
+    status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    records: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The process that owns a running row, so a later trigger on the same
+    # host can tell a live run from one whose process was killed.
+    host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ScheduleRunStep(Base):
+    __tablename__ = "schedule_run_steps"
+    __table_args__ = (UniqueConstraint("schedule_run_id", "step", name="uq_schedule_run_step"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schedule_run_id: Mapped[int] = mapped_column(ForeignKey("schedule_runs.id"), index=True)
+    step: Mapped[str] = mapped_column(String(40))
+    sequence: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="running")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    records: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingestion_run_id: Mapped[int | None] = mapped_column(ForeignKey("ingestion_runs.id"), nullable=True)
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
 class NewsLlmResult(Base):

@@ -1,6 +1,6 @@
 # TWSE／TPEx 產業分類契約
 
-本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，以及群組成員與候選的身分契約。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts` 的 `TEMPORARY_INDUSTRY_GROUP_NOTICE`）。
+本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts` 的 `TEMPORARY_INDUSTRY_GROUP_NOTICE`）。
 
 ## 1. 官方代碼來源
 
@@ -99,3 +99,39 @@ Collector 對三個 domain 各自計算 desired state，只操作自己擁有的
 - **回補與 coverage**（`worker.backfill._candidate_instrument_keys`）：合法 typed 候選逐列對照 Instrument 後，納入目前 active 的 ID；不套 decision 的 membership 縮選，malformed score 只移除該 score。
 - **Public API**（`api._public_candidate_identity`）：另回 `public_candidate_identity_version="instrument-id-string-v1"` 與十進位字串 `instrument_id`；以來源日 `score.trading_date` 驗證 membership 與 gate，任一不合即整份 `candidate_instruments` 為空。族群詳情只在 typed 身分合法時連到 `/stocks/{exchange}/{symbol}`；候選「評分日期」讀 score `trading_date`，成員表讀 members response `meta.data_as_of`。
 - **沒有 marker 的 score**：只有 symbol 文字時，策略輸入與 decision 候選要求來源日恰好一個有效同 symbol 成員（`legacy_symbol_unique`），另一市場同 symbol 成員有效即拒絕；回補納入所有 active 的同 symbol 標的；public API 只顯示文字、不產生連結。
+
+## 7. 題材表
+
+題材是人工維護、可跨產業、一家公司可屬多個題材的族群，與官方產業分開排行（[V1_SPEC hot_group_v1](V1_SPEC.md#hot_group_v1)）。驗證在 `backend/app/theme_table.py`，寫入在 `backend/worker/themes.py`。
+
+**檔案格式**：`backend/data/themes/themes_v1.json`，`schema_version="theme-table/v1"`，頂層有 `table`（`themes_v1`）、`version`（`YYYY.MM.DD` 或 `YYYY.MM.DD.N`）與 `themes[]`。
+
+| 層級 | 欄位 |
+| --- | --- |
+| 題材 | `id`（小寫 kebab-case）、`name`（顯示名，不得含 ETF）、`description`、`valid_from`（必填）、`valid_to`（可空）、`members[]` |
+| 成員 | `instrument`（`TWSE:XXXX` 或 `TPEx:XXXX`）、`name`（只供人工對照，不參與比對）、`relation`、`relevance`、`valid_from`／`valid_to`（可省略，預設沿用題材日期，且必須落在題材期間內）、`evidence[]`（至少一筆；每筆的 `url`、`title`、`quote` 皆必填，`quote` 是頁面原文摘錄） |
+
+`relation` 的值：`core_business` 表示主要業務就是該題材；`product_line` 表示有該題材的產品線；`supply_chain` 表示供應該題材的零組件、設備或材料。`relevance` 的值為 `high`、`medium`、`low`。證據只收公開、可開啟的頁面，例如公司官網、官方公告或財經媒體報導；找不到證據的成員不收。
+
+**驗證**：缺證據或證據缺 `title`／`quote`、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置：`themes[序號]` 後接括號內的題材 id，`members[序號]` 後接括號內的代號，再接欄位名（如 `.evidence`）。
+
+**DB 對照**
+
+- `theme_groups`：`id="theme-<id>"`、`group_type="theme"`、`definition_version="<table>:<version>"`（如 `themes_v1:2026.10.17`）、`source` 與 `name_source` 為 `theme_table:backend/data/themes/themes_v1.json`、`display_category="題材"`、`name_status="verified"`。
+- `group_memberships`：`valid_from`／`valid_to` 取上述成員期間，`role="member"`、`confidence=1.0`。`source` 是精簡 JSON，欄位固定為 `kind`（`theme_table`）、`url`（第一筆證據）、`relation`、`relevance`、`theme_version`（同 `definition_version`）。其餘證據、標題與引文只保存在 JSON 檔。
+
+**版本與生效／失效**：每次修改表都要更新 `version`，sync 時把新版本寫入 `definition_version`。sync 比對 DB 現有題材的 `definition_version`：表版本較舊時整批拒絕；版本相同但題材欄位或成員期間、證據 JSON 有任何不同時也整批拒絕，並列出每個異動的題材／成員位置（檔案路徑不算內容）。題材與成員不從表中刪除，失效一律填 `valid_to`；sync 只關閉期間，不刪列。DB 有開放中的題材 membership、表內卻沒有該題材或成員時，整批拒絕。同一成員改用較晚的 `valid_from` 重新納入時，舊的開放期間關在新起日前一天。重跑同一版本不改任何列。
+
+**初版**：`2026.10.17` 收 12 個題材、77 筆成員。生效日統一為 2026-01-01，是人工回溯判定的起日；表版本日（2026-10-17）之前算出的題材榜含後見之明，不代表當時就能取得這份分類。
+
+**維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
+
+**候選題材（預留）**：新聞聚合提出的新題材在人工核實前以 `group_type="theme_candidate"`、`active=false`、`name_status="pending_verification"` 表示；成員 `role="candidate"`，證據同樣寫在 `source`。候選題材永遠不計分、不進榜，產生邏輯屬 LLM 任務。
+
+**欄位值域（現行）**
+
+| 欄位 | 值與意義 |
+| --- | --- |
+| `theme_groups.group_type` | `official_industry` 官方產業；`etf` ETF 類別；`instrument_theme` 舊 ETF 主題；`daily_hot_group` 新上市觀察；`theme` 題材表題材；`theme_candidate` 待核實候選題材 |
+| `theme_groups.name_status` | `pending` 名稱未對照；`official`／`verified`／`approved` 可顯示（`app.news.is_verified_theme`）；`pending_verification` 候選題材待核實 |
+| `group_memberships.role` | `member` 一般成員；`candidate` 候選題材的待核實成員 |

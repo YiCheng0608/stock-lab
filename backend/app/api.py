@@ -41,7 +41,7 @@ from .models import (
     TechnicalFeature,
     ThemeGroup,
 )
-from worker.pipeline import summarize_backtest
+from worker.pipeline import _group_board, summarize_backtest
 from worker.backfill import (
     BACKFILL_SCOPES,
     backfill_run_dict,
@@ -58,6 +58,7 @@ from .decision import (
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
+from .theme_table import parse_membership_source
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1486,6 +1487,108 @@ def news_detail(news_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     return news_dict(db, item)
 
 
+BOARD_COMPONENTS = ("relative_return", "breadth", "volume_strength", "institutional_flow", "catalyst")
+BOARD_QUALITIES = ("complete", "partial")
+BOARD_TREND_SESSIONS = 20
+LEGACY_BOARD_ORDER = {"industry": 0, "theme": 1}
+BOARD_EMPTY_MESSAGES = {
+    "no_official_run": "尚無成功的官方資料擷取，無法提供族群榜。",
+    "no_board_scores": "此榜尚未計算；需先以 analyze 或 daily 產生族群分數。",
+    "no_scores_for_date": "該日沒有此榜的族群分數（非交易日或尚未計算）。",
+    "no_ranked_groups": "該日沒有達到至少 3 檔有效成員且資料足以計分的族群。",
+}
+
+
+def _finite_or_none(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def _theme_evidence(membership: GroupMembership) -> dict[str, Any]:
+    return {"theme_evidence": parse_membership_source(membership.source)}
+
+
+def _board_item(db: Session, group: ThemeGroup, score: GroupDailyScore) -> dict[str, Any]:
+    details = _score_details(score)
+    normalized = details.get("normalized_values")
+    normalized = normalized if isinstance(normalized, dict) else {}
+    member_count = details.get("member_count")
+    return {
+        "theme_id": group.id,
+        "display_name": _group_display_name(group),
+        "description": _safe_group_description(group, score),
+        "board": details.get("board"),
+        "rank": score.rank,
+        "score": score.score,
+        "quality": score.data_quality,
+        "components": {key: _finite_or_none(normalized.get(key)) for key in BOARD_COMPONENTS},
+        "relative_returns": {
+            "1d": score.relative_return_1d,
+            "5d": score.relative_return_5d,
+            "20d": score.relative_return_20d,
+        },
+        "eligible_members": score.eligible_members,
+        "member_count": member_count if type(member_count) is int else None,
+        "trading_date": as_date(score.trading_date),
+        "candidate_symbols": _candidate_symbols(score),
+        **_public_candidate_identity(db, group, score),
+    }
+
+
+def _board_ranking(db: Session, board: str, requested_date: date | None, limit: int) -> dict[str, Any]:
+    """One board's ranked groups for one score date (latest official date by default)."""
+
+    run, as_of = latest_official_as_of(db)
+    meta: dict[str, Any] = {
+        "board": board,
+        "requested_date": as_date(requested_date),
+        "trading_date": None,
+        "data_as_of": run.data_as_of if run else None,
+        "limit": limit,
+        "total": 0,
+        "sort": "rank asc",
+        "empty_reason": None,
+        "empty_message": None,
+    }
+
+    def empty(reason: str) -> dict[str, Any]:
+        return {"items": [], "meta": {**meta, "empty_reason": reason, "empty_message": BOARD_EMPTY_MESSAGES[reason]}}
+
+    board_filter = GroupDailyScore.details_json["board"].as_string() == board
+    if run is None or run.status != "success" or as_of is None:
+        return empty("no_official_run")
+    if requested_date is not None:
+        score_date = requested_date
+    else:
+        score_date = db.scalar(
+            select(func.max(GroupDailyScore.trading_date)).where(GroupDailyScore.trading_date <= as_of, board_filter)
+        )
+        if score_date is None:
+            return empty("no_board_scores")
+    meta["trading_date"] = as_date(score_date)
+    rows = db.execute(
+        select(ThemeGroup, GroupDailyScore)
+        .join(GroupDailyScore, GroupDailyScore.group_id == ThemeGroup.id)
+        .where(ThemeGroup.active.is_(True), GroupDailyScore.trading_date == score_date, board_filter)
+    ).all()
+    if not rows:
+        return empty("no_scores_for_date")
+    ranked = [
+        (group, score)
+        for group, score in rows
+        if score.rank is not None
+        and score.score is not None
+        and score.data_quality in BOARD_QUALITIES
+        and _product_group_taxonomy_verified(db, group, score_date)
+    ]
+    if not ranked:
+        return empty("no_ranked_groups")
+    ranked.sort(key=lambda pair: (pair[1].rank, pair[0].id))
+    meta["total"] = len(ranked)
+    return {"items": [_board_item(db, group, score) for group, score in ranked[:limit]], "meta": meta}
+
+
 @router.get("/themes")
 def themes(
     q: str | None = Query(default=None),
@@ -1493,16 +1596,25 @@ def themes(
     only_qualified: bool = True,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    board: Literal["industry", "theme"] | None = None,
+    score_date: date | None = Query(default=None, alias="date"),
+    limit: int = Query(default=10, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    if board is not None:
+        # Board mode: ranked industries or themes for one date, Top N.
+        return _board_ranking(db, board, score_date, limit)
     run, as_of = latest_official_as_of(db)
     score_rows = scores_as_of(db, as_of) if run and run.status == "success" else {}
     rows: list[dict[str, Any]] = []
+    board_order: dict[str, int] = {}
     for group in db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all():
         if not _product_group_taxonomy_verified(db, group, as_of):
             continue
         score = score_rows.get(group.id)
         item = theme_product_dict(group, score, db)
+        # Industry and theme ranks are separate boards: list industries first.
+        board_order[group.id] = LEGACY_BOARD_ORDER.get(_score_details(score).get("board") or _group_board(group), 2)
         if only_qualified and not item["qualified"]:
             continue
         if leaderboard and item.get("leaderboard") != leaderboard:
@@ -1519,6 +1631,7 @@ def themes(
     rows.sort(
         key=lambda item: (
             not item["qualified"],
+            board_order[item["theme_id"]],
             item["rank"] is None,
             item["rank"] or 999,
             item["display_name"],
@@ -1533,7 +1646,7 @@ def themes(
         total=total,
         q=q,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
-        sort="qualified desc, rank asc, display_name asc",
+        sort="qualified desc, board (industry, theme, other) asc, rank asc, display_name asc",
     )
 
 
@@ -1543,11 +1656,63 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
     if not group:
         raise HTTPException(status_code=404, detail="theme not found")
     run, as_of = latest_official_as_of(db)
-    score = scores_as_of(db, as_of).get(theme_id) if run and run.status == "success" else None
+    official = bool(run and run.status == "success" and as_of)
+    score = scores_as_of(db, as_of).get(theme_id) if official else None
+    trend_rows = (
+        db.scalars(
+            select(GroupDailyScore)
+            .where(GroupDailyScore.group_id == theme_id, GroupDailyScore.trading_date <= as_of)
+            .order_by(desc(GroupDailyScore.trading_date))
+            .limit(BOARD_TREND_SESSIONS)
+        ).all()
+        if official
+        else []
+    )
+    effective_date = as_of or date.today()
+    member_rows = db.execute(
+        select(GroupMembership, Instrument)
+        .join(Instrument, Instrument.id == GroupMembership.instrument_id)
+        .where(
+            GroupMembership.group_id == theme_id,
+            GroupMembership.valid_from <= effective_date,
+            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
+            Instrument.status == "active",
+        )
+        .order_by(Instrument.exchange, Instrument.symbol)
+    ).all()
     return {
         "theme": theme_product_dict(group, score, db),
+        "members_total": len(member_rows),
+        "members_truncated": len(member_rows) > MAX_PAGE_SIZE,
+        "members_endpoint": f"/api/themes/{theme_id}/members",
+        "board": _score_details(score).get("board") or _group_board(group),
         "methodology": _score_details(score).get("methodology", {}),
         "data_as_of": run.data_as_of if run else (as_of.isoformat() if as_of else None),
+        "trend": [
+            {
+                "trading_date": as_date(row.trading_date),
+                "score": row.score,
+                "rank": row.rank,
+                "quality": row.data_quality,
+                "eligible_members": row.eligible_members,
+            }
+            for row in reversed(trend_rows)
+        ],
+        "members_as_of": as_date(effective_date),
+        "members": [
+            {
+                "exchange": instrument.exchange,
+                "symbol": instrument.symbol,
+                "name": instrument.name,
+                "instrument_type": instrument.instrument_type,
+                "role": membership.role,
+                "valid_from": as_date(membership.valid_from),
+                "valid_to": as_date(membership.valid_to),
+                **_theme_evidence(membership),
+            }
+            # At most one page inline; the full list is members_endpoint.
+            for membership, instrument in member_rows[:MAX_PAGE_SIZE]
+        ],
     }
 
 
@@ -1595,6 +1760,7 @@ def theme_members(
                 "confidence": membership.confidence,
                 "valid_from": as_date(membership.valid_from),
                 "valid_to": as_date(membership.valid_to),
+                **_theme_evidence(membership),
                 "latest_bar": bar_dict(latest_bar),
             }
         )

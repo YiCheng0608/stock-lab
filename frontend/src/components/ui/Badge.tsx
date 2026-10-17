@@ -2,7 +2,7 @@ import type { HTMLAttributes } from 'react'
 
 import { cx } from './cx'
 
-export type BadgeTone = 'default' | 'primary' | 'success' | 'warning' | 'error'
+export type BadgeTone = 'default' | 'primary' | 'success' | 'warning' | 'error' | 'accent'
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   tone?: BadgeTone

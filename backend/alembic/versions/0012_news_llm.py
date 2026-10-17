@@ -1,7 +1,7 @@
 """Add the LLM news inference table.
 
 Revision ID: 0012_news_llm
-Revises: 0010_technical_indicators
+Revises: 0011_schedule_runs
 
 Additive and forward-only.  Rows are written by the news LLM batch
 (worker.news_llm), one per news item and prompt version; news_items is not
@@ -25,7 +25,7 @@ from sqlalchemy import (
 )
 
 revision = "0012_news_llm"
-down_revision = "0010_technical_indicators"
+down_revision = "0011_schedule_runs"
 branch_labels = None
 depends_on = None
 

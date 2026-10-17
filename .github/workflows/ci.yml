@@ -66,13 +66,6 @@ jobs:
         with:
           python-version: '3.12.14'
       - run: python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
-      # test_public_candidate_identity.py renders the real frontend/src/App.tsx with Node.
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '22'
-          package-manager-cache: false
-      - run: npm install --global pnpm@10.18.3
-      - run: pnpm --dir frontend install --frozen-lockfile
       # The whole backend/tests directory.
       - name: Backend pytest regressions (temp SQLite only, no source GET)
         shell: bash
