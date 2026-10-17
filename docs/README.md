@@ -15,12 +15,6 @@
 | 保存與重播 | [Signal artifact](SIGNAL_ARTIFACTS.md)、[離線比較](SIGNAL_COMPARISON.md)、[Pure-rule replay](RULE_REPLAY.md)、[Worker capture](WORKER_ANALYSIS_CAPTURE.md) |
 | 開發與操作 | [AGENTS](../AGENTS.md)、[工作手冊](GITHUB_WORKFLOW.md)、[驗證入口](development-baseline/README.md)、[操作手冊](OPERATIONS.md)、[後端](../backend/README.md)、[前端](../frontend/README.md)、[GitHub 入口](TASK_COORDINATION.md) |
 
-[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md)、[Phase 3](PHASE3_PLAN.md)、[Phase 4](PHASE4_PLAN.md)、[舊統籌交接](COORDINATOR_HANDOFF_2026-09-12.md) 只保留歷史，不作新派工依據。
-
 ## 文件維護
 
 方向與版本範圍寫 ROADMAP，視覺寫 DESIGN_SYSTEM，角色與原則寫 AGENTS，操作與模板寫 GITHUB_WORKFLOW，精確行為寫主題契約；其他處只放連結。功能完成的同一個 PR 更新文件。
-
-## 歷史查閱
-
-舊流程與七股時期文件以 `git show 85668f6:<path>` 查閱；更早整理前版本為 `46eb244`、`5ae84d2`、`69f62cf`、`2acc3c5`。

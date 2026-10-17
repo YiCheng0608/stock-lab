@@ -1,6 +1,6 @@
 # GitHub 工作手冊
 
-[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。舊版手冊見 `git show 85668f6:docs/GITHUB_WORKFLOW.md`。
+[AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。
 
 ## 欄位與唯一來源
 

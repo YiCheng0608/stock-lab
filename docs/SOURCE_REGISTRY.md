@@ -850,7 +850,7 @@ Issuer／event 原件沿§41的 exact GET、RAM-only 與上限；industry 是同
 
 ## 43. M1-CHIPS-STOCK-SCOPE-7-GROSS-TRADE-20-1006-1/B1：七股gross買賣與新來源准入
 
-2026-10-08。ROOT precise grant先於implementation／financialGET；fresh原件／數值／具名操作已有限接受。本節只管理本B1獨立政策與來源／數值契約；已接受§31／37／38、oldprofiles／defaultpins、failed producer及其未跑歷史不改。新操作及完成條件見[個股頁 §48](STOCK_RESEARCH_PAGE.md)；[ROADMAP_EXECUTION](ROADMAP_EXECUTION.md) 只供歷史對照，現行任務狀態只在 GitHub Issues／Projects。
+2026-10-08。ROOT precise grant先於implementation／financialGET；fresh原件／數值／具名操作已有限接受。本節只管理本B1獨立政策與來源／數值契約；已接受§31／37／38、oldprofiles／defaultpins、failed producer及其未跑歷史不改。新操作及完成條件見[個股頁 §48](STOCK_RESEARCH_PAGE.md)
 
 ### 43.1 新版本與外部pins
 

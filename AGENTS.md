@@ -1,6 +1,6 @@
 # 專案協作規則
 
-輕量流程，2026-10-17 起生效（使用者決策見[治理 Issue #1](https://github.com/YiCheng0608/stock-lab/issues/1)）。本文管角色與原則；操作、欄位與模板見[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)；產品方向與版本範圍見[ROADMAP](docs/ROADMAP.md)。舊版六角色流程保留於 Git 歷史：`git show 85668f6:AGENTS.md`。
+本文管角色與原則；操作、欄位與模板見[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)；產品方向與版本範圍見[ROADMAP](docs/ROADMAP.md)；前端視覺見[設計規範](docs/DESIGN_SYSTEM.md)。
 
 ## 目標
 

@@ -8,5 +8,3 @@
 | 看板 | [產品開發看板](https://github.com/users/YiCheng0608/projects/1) |
 | 治理 Issue | [#1](https://github.com/YiCheng0608/stock-lab/issues/1)：使用者層級決策與版本基線收據。 |
 | V1 milestone | [milestone/1](https://github.com/YiCheng0608/stock-lab/milestone/1) |
-
-2026-10-09～2026-10-17 的六角色流程與其收據保留在 #1 留言與 Git 歷史（`git show 85668f6:docs/TASK_COORDINATION.md`）。
