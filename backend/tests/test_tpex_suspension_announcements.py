@@ -75,7 +75,8 @@ def test_notice_does_not_override_date_scoped_bars(today, captured_day, monkeypa
     batch = sources.TpexAdapter(fetcher).fetch(DAY, DAY)
     assert {(bar.symbol, bar.trading_date) for bar in batch.bars} == {("7001", DAY), ("00679B", DAY)}
     assert all(not bar.is_suspended and bar.volume > 0 for bar in batch.bars)
-    assert any(WARNING in warning for warning in batch.warnings)
+    assert any(WARNING in notice for notice in batch.notices)
+    assert not any(WARNING in warning for warning in batch.warnings)
     raw = next(item for item in batch.payloads if item.endpoint == sources.TPEX_SUSPEND_ENDPOINT)
     assert raw.collected_at.date() == captured_day
     assert json.loads(raw.payload_path.read_text(encoding="utf-8")) == today
@@ -86,6 +87,7 @@ def test_notice_does_not_override_date_scoped_bars(today, captured_day, monkeypa
 def test_empty_notice_is_not_open_session_evidence():
     batch = sources.TpexAdapter(NoticeFetcher([])).fetch(DAY, DAY)
     assert not any(WARNING in warning for warning in batch.warnings)
+    assert not any(WARNING in notice for notice in batch.notices)
     assert batch.no_data_dates == []
     assert batch.event_coverage["status"] == "unsupported"
     assert batch.event_coverage["empty_dates"] == []
@@ -188,7 +190,9 @@ def test_collect_partial_raw_reuse_and_existing_rows_require_refetch(database):
 
     assert evaluate("legacy-notice") == ("suspended", False, True, False)
     fixed = pipeline.collect(DAY, adapter=adapter, force=True)
-    assert fixed["status"] == "partial" and any(WARNING in warning for warning in fixed["warnings"])
+    # The non-empty notice is retained but does not make the session partial.
+    assert fixed["status"] == "success" and any(WARNING in notice for notice in fixed["notices"])
+    assert not any(WARNING in warning for warning in fixed["warnings"])
     assert fixed["records"] == first["records"] and fixed["no_data_dates"] == []
     assert evaluate("corrected-notice") == ("active", True, False, True)
     with database() as db:
@@ -197,7 +201,7 @@ def test_collect_partial_raw_reuse_and_existing_rows_require_refetch(database):
         old_id = db.scalar(select(Signal.id).where(Signal.signal_key == "legacy-notice"))
         assert db.scalar(select(SignalEvaluation.status).where(SignalEvaluation.signal_id == old_id)) == "suspended"
         run = db.get(IngestionRun, fixed["run_id"])
-        assert any(WARNING in warning for warning in run.metadata_json["warnings"])
+        assert any(WARNING in notice for notice in run.metadata_json["notices"])
         raws = db.scalars(select(RawPayload).where(RawPayload.ingestion_run_id == run.id, RawPayload.endpoint == sources.TPEX_SUSPEND_ENDPOINT)).all()
         assert len(raws) == 2  # Empty and nonempty responses are both auditable.
         assert any(json.loads(Path(raw.payload_path).read_text(encoding="utf-8")) == fetcher.today for raw in raws)
@@ -209,8 +213,8 @@ def test_collect_partial_raw_reuse_and_existing_rows_require_refetch(database):
         assert db.execute(text("PRAGMA foreign_key_check")).all() == []
     calls = len(fetcher.calls)
     retried = pipeline.collect(DAY, adapter=adapter)
-    assert retried["status"] == "partial" and not retried.get("idempotent_reuse")
-    assert len(fetcher.calls) > calls  # Partial runs are not successful-run reuse.
+    assert retried["idempotent_reuse"] is True and len(fetcher.calls) == calls
+    assert any(WARNING in notice for notice in retried["notices"])
 
 
 def test_later_collection_failure_retains_today_raw(database):

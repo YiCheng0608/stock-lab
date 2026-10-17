@@ -6,12 +6,13 @@ import math
 import re
 import time
 from calendar import monthrange
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -161,6 +162,15 @@ class OfficialBatch:
     # ``status`` may be complete, verified_empty, partial, unsupported, or
     # missing; verified/empty dates are the only dates counted as queried.
     event_coverage: dict[str, Any] = field(default_factory=dict)
+    # Informational source observations that do not reduce coverage of the
+    # requested session (for example a non-empty TPEx notice feed whose raw
+    # payload is retained without changing bar flags).  Unlike ``warnings``
+    # they never downgrade a collect run to partial.
+    notices: list[str] = field(default_factory=list)
+    # False for a historical batch fetched without the current-only snapshot
+    # feeds; the collector then records no current industry observation for
+    # the historical session.
+    snapshot_feeds: bool = True
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -305,6 +315,31 @@ TPEX_EVENT_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap04_O"
 TPEX_FUNDAMENTAL_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap14_O"
 
 
+# Minimum spacing between requests to one official host.  TWSE's web
+# reports (www.twse.com.tw) temporarily block clients that exceed roughly
+# three requests per five seconds; a long backfill must stay below that rate
+# instead of relying on retries after the block has started.
+OFFICIAL_HOST_MIN_INTERVAL_SECONDS = {
+    "www.twse.com.tw": 2.5,
+    "openapi.twse.com.tw": 1.0,
+    "www.tpex.org.tw": 1.0,
+    "info.tpex.org.tw": 1.0,
+}
+_host_last_request: dict[str, float] = {}
+
+
+def _throttle_official_host(url: str) -> None:
+    host = urlsplit(url).hostname or ""
+    interval = OFFICIAL_HOST_MIN_INTERVAL_SECONDS.get(host)
+    if not interval:
+        return
+    previous = _host_last_request.get(host)
+    now = time.monotonic()
+    if previous is not None and now - previous < interval:
+        time.sleep(interval - (now - previous))
+    _host_last_request[host] = time.monotonic()
+
+
 def fetch_json(
     url: str,
     *,
@@ -316,6 +351,7 @@ def fetch_json(
     retry_limit = 3
     redirect_retry_limit = 6
     for attempt in range(redirect_retry_limit):
+        _throttle_official_host(url)
         try:
             if method.upper() == "POST":
                 response = httpx.post(url, data=data, timeout=timeout_seconds, headers=headers)
@@ -1645,6 +1681,48 @@ def parse_mops_event_rows(
                 payload_sha256=payload_sha256,
             )
         )
+    return _disambiguate_event_titles(result)
+
+
+def _announcement_time(record: EventRecord) -> str:
+    raw = _text(record.details, "SpeechTime", "AnnouncementTime", "發言時間")
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) in {5, 6}:
+        digits = digits.zfill(6)
+        return f"{digits[:2]}:{digits[2:4]}:{digits[4:]}"
+    return raw
+
+
+def _disambiguate_event_titles(records: list[EventRecord]) -> list[EventRecord]:
+    """Keep distinct same-day announcements that share one subject line.
+
+    MOPS can publish several different announcements with an identical
+    subject for one issuer and day, while ``events`` is unique on
+    (instrument, date, type, title).  Exact duplicates collapse to one row; the
+    earliest announcement keeps its title and later ones get their
+    announcement time appended, so a later re-fetch of the same feed never
+    renames a row stored by an earlier run.
+    """
+
+    groups: dict[tuple[str, str, date, str, str], list[EventRecord]] = defaultdict(list)
+    for record in records:
+        groups[(record.exchange, record.symbol, record.event_date, record.event_type, record.title)].append(record)
+    result: list[EventRecord] = []
+    for group in groups.values():
+        unique: dict[tuple[str, str], EventRecord] = {}
+        for record in group:
+            unique.setdefault((_announcement_time(record), record.description or ""), record)
+        ordered = sorted(unique.values(), key=lambda item: (_announcement_time(item), item.description or ""))
+        used_titles: set[str] = set()
+        for index, record in enumerate(ordered):
+            title = record.title
+            if index:
+                time_text = _announcement_time(record)
+                title = f"{record.title}（發言時間 {time_text}）" if time_text else f"{record.title}（#{index + 1}）"
+                if title in used_titles:
+                    title = f"{title}（#{index + 1}）"
+            used_titles.add(title)
+            result.append(replace(record, title=title) if title != record.title else record)
     return result
 
 
@@ -1704,11 +1782,38 @@ def parse_mops_fundamental_rows(
     return result
 
 
+def _historical_event_coverage(end: date, source: str) -> dict[str, Any]:
+    return {
+        "status": "unsupported",
+        "denominator": "date_scoped_event_queries",
+        "verified_dates": [],
+        "empty_dates": [],
+        "unsupported_dates": [end.isoformat()],
+        "observed_event_dates": [],
+        "source": source,
+        "reason": "historical backfill does not request current-only event feeds",
+    }
+
+
 class TwseAdapter:
     source = "twse"
 
-    def __init__(self, fetcher: Callable[..., Any] = fetch_json, *, stock_day_capture=None, holiday_capture=None) -> None:
+    def __init__(
+        self,
+        fetcher: Callable[..., Any] = fetch_json,
+        *,
+        stock_day_capture=None,
+        holiday_capture=None,
+        snapshot_feeds: bool = True,
+    ) -> None:
         self.fetcher = fetcher
+        # Historical backfill sets snapshot_feeds=False: the current-only
+        # feeds (STOCK_DAY_ALL, OpenAPI index, TWT48U, MOPS lists) describe
+        # today, not the requested session, so they are not re-fetched for
+        # every historical date.  The authoritative universe is then fetched
+        # once per adapter instance; it is today's list either way.
+        self.snapshot_feeds = snapshot_feeds
+        self._universe_cache: tuple[list[InstrumentRecord], list[FetchedPayload]] | None = None
         # Local library opt-in only. collect callers must use force=True to
         # bypass reuse of an existing successful run. Other feeds stay legacy.
         self.stock_day_capture = stock_day_capture
@@ -1881,7 +1986,10 @@ class TwseAdapter:
         # request.  For historical dates, the official MI_INDEX report also
         # contains one all-security table; use one request per weekday rather
         # than one STOCK_DAY request per symbol and month.
-        if self.stock_day_capture is None:
+        daily_payload: FetchedPayload | None = None
+        if not self.snapshot_feeds and self.stock_day_capture is None:
+            daily_bars = []
+        elif self.stock_day_capture is None:
             daily_payload = self._fetch(TWSE_DAILY_ENDPOINT, end.isoformat())
             daily_bars = [
                 bar
@@ -1899,7 +2007,8 @@ class TwseAdapter:
                         "stock_day_capture_turnover_unavailable:"
                         + json.dumps({"symbol": bar.symbol, "reason": bar.turnover_reason}, sort_keys=True)
                     )
-        payloads.append(daily_payload)
+        if daily_payload is not None:
+            payloads.append(daily_payload)
         bars.extend(daily_bars)
         closed_dates: set[date] = set()
         if start != end:
@@ -1928,8 +2037,9 @@ class TwseAdapter:
                 # Check all observed daily rows, including securities outside
                 # the selected universe. The calendar cannot erase an already
                 # visible valid trading observation for a supposedly closed day.
-                observed = parse_twse_daily_rows(daily_payload.payload)
-                self._check_holiday_conflicts(observed)
+                if daily_payload is not None:
+                    observed = parse_twse_daily_rows(daily_payload.payload)
+                    self._check_holiday_conflicts(observed)
         # Do not return early for a one-day current snapshot.  The current
         # all-security feed can provide usable OHLCV while its separate index
         # feed is stale or date-less.  A backfill session is only verified
@@ -2155,29 +2265,55 @@ class TwseAdapter:
             warnings,
         )
 
+    def _universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+        if self.snapshot_feeds:
+            return self.fetch_universe(as_of)
+        if self._universe_cache is None:
+            self._universe_cache = self.fetch_universe(as_of)
+        else:
+            self.captured_payloads.extend(self._universe_cache[1])
+        return self._universe_cache
+
     def fetch(self, start: date, end: date) -> OfficialBatch:
         self.captured_payloads = []
         self.fetch_warnings = []
         self.no_data_dates = []
-        instruments, universe_payloads = self.fetch_universe(end)
+        instruments, universe_payloads = self._universe(end)
         bars, bar_payloads = self.fetch_bars((item.symbol for item in instruments), start, end)
         chip_dates = {bar.trading_date for bar in bars if bar.symbol != "TAIEX"}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
             chip_dates,
             {item.symbol for item in instruments},
         )
+        index_record = InstrumentRecord("TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index")
+        warnings: list[str] = list(self.fetch_warnings) + list(chip_warnings)
+        if not self.snapshot_feeds:
+            return OfficialBatch(
+                instruments=instruments + [index_record],
+                bars=bars,
+                chips=chips,
+                payloads=universe_payloads + bar_payloads + chip_payloads,
+                warnings=warnings,
+                data_as_of=end.isoformat(),
+                no_data_dates=sorted(set(self.no_data_dates)),
+                event_coverage=_historical_event_coverage(end, "TWSE MOPS material-information feed"),
+                snapshot_feeds=False,
+            )
         actions, action_payloads = self.fetch_actions(end)
-        # For backfills, TAIEX is parsed from each date-validated MI_INDEX
-        # payload in fetch_bars.  Keep the current OpenAPI index request for
-        # the single-day path, where the all-security feed may be empty while
-        # the official index feed still has a row.
-        index_bars, index_payloads = self.fetch_index(end)
-        index_bars = [bar for bar in index_bars if start <= bar.trading_date <= end]
-        self._check_holiday_conflicts(index_bars)
+        # TAIEX is parsed from each date-validated MI_INDEX payload in
+        # fetch_bars.  The current OpenAPI index is only a fallback when that
+        # report had no TAIEX row for the end date; it is not requested for a
+        # verified no-data date, where it would describe another session.
+        index_bars: list[BarRecord] = []
+        index_payloads: list[FetchedPayload] = []
+        has_end_taiex = any(bar.symbol == "TAIEX" and bar.trading_date == end for bar in bars)
+        if not has_end_taiex and end not in self.no_data_dates:
+            index_bars, index_payloads = self.fetch_index(end)
+            index_bars = [bar for bar in index_bars if start <= bar.trading_date <= end]
+            self._check_holiday_conflicts(index_bars)
         events: list[EventRecord] = []
         fundamentals: list[FundamentalRecord] = []
         mops_payloads: list[FetchedPayload] = []
-        warnings: list[str] = list(self.fetch_warnings) + list(chip_warnings)
         try:
             event_payload = self._fetch(TWSE_EVENT_ENDPOINT, end.isoformat())
             mops_payloads.append(event_payload)
@@ -2207,7 +2343,6 @@ class TwseAdapter:
             ]
         except OfficialDataError as exc:
             warnings.append(f"TWSE MOPS fundamentals unavailable: {exc}")
-        index_record = InstrumentRecord("TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index")
         event_coverage = {
             "status": "unsupported",
             "denominator": "date_scoped_event_queries",
@@ -2236,10 +2371,14 @@ class TwseAdapter:
 class TpexAdapter:
     source = "tpex"
 
-    def __init__(self, fetcher: Callable[..., Any] = fetch_json) -> None:
+    def __init__(self, fetcher: Callable[..., Any] = fetch_json, *, snapshot_feeds: bool = True) -> None:
         self.fetcher = fetcher
         self.captured_payloads: list[FetchedPayload] = []
         self.no_data_dates: list[date] = []
+        # See TwseAdapter: historical backfill skips current-only feeds and
+        # reuses one universe fetch per adapter instance.
+        self.snapshot_feeds = snapshot_feeds
+        self._universe_cache: tuple[list[InstrumentRecord], list[FetchedPayload]] | None = None
 
     def _fetch(
         self,
@@ -2312,6 +2451,15 @@ class TpexAdapter:
 
     def fetch_universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         return self._fetch_authoritative_universe(as_of)
+
+    def _universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+        if self.snapshot_feeds:
+            return self.fetch_universe(as_of)
+        if self._universe_cache is None:
+            self._universe_cache = self.fetch_universe(as_of)
+        else:
+            self.captured_payloads.extend(self._universe_cache[1])
+        return self._universe_cache
 
     def fetch_bars(self, symbols: Iterable[str], start: date, end: date) -> tuple[list[BarRecord], list[FetchedPayload]]:
         _ensure_backfill_window(start, end)
@@ -2456,24 +2604,37 @@ class TpexAdapter:
     def fetch(self, start: date, end: date) -> OfficialBatch:
         self.captured_payloads = []
         self.no_data_dates = []
-        instruments, universe_payloads = self.fetch_universe(end)
+        instruments, universe_payloads = self._universe(end)
         bars, bar_payloads = self.fetch_bars((item.symbol for item in instruments), start, end)
         chip_dates = {bar.trading_date for bar in bars}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
             chip_dates,
             {item.symbol for item in instruments},
         )
+        if not self.snapshot_feeds:
+            return OfficialBatch(
+                instruments=instruments,
+                bars=bars,
+                chips=chips,
+                payloads=universe_payloads + bar_payloads + chip_payloads,
+                warnings=list(chip_warnings),
+                data_as_of=end.isoformat(),
+                no_data_dates=sorted(set(self.no_data_dates)),
+                event_coverage=_historical_event_coverage(end, "TPEx suspension-history/MOPS event feeds"),
+                snapshot_feeds=False,
+            )
         actions, action_payloads = self.fetch_actions(end)
         events: list[EventRecord] = []
         fundamentals: list[FundamentalRecord] = []
         mops_payloads: list[FetchedPayload] = []
         suspension_payloads: list[FetchedPayload] = []
         warnings: list[str] = list(chip_warnings)
+        notices: list[str] = []
         try:
             suspension_payload = self._fetch(TPEX_SUSPEND_ENDPOINT, end.isoformat())
             suspension_payloads.append(suspension_payload)
             if suspension_payload.payload:
-                warnings.append(
+                notices.append(
                     "TPEx suspension/resumption announcements do not establish bar suspension status; "
                     "raw payload retained without changing bar flags"
                 )
@@ -2549,15 +2710,22 @@ class TpexAdapter:
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
             event_coverage=event_coverage,
+            notices=notices,
         )
 
 
 class OfficialMarketDataAdapter:
     """Combine TWSE and TPEx official feeds into one normalized batch."""
 
-    def __init__(self, twse: TwseAdapter | None = None, tpex: TpexAdapter | None = None) -> None:
-        self.twse = twse or TwseAdapter()
-        self.tpex = tpex or TpexAdapter()
+    def __init__(
+        self,
+        twse: TwseAdapter | None = None,
+        tpex: TpexAdapter | None = None,
+        *,
+        snapshot_feeds: bool = True,
+    ) -> None:
+        self.twse = twse or TwseAdapter(snapshot_feeds=snapshot_feeds)
+        self.tpex = tpex or TpexAdapter(snapshot_feeds=snapshot_feeds)
         self.captured_payloads: list[FetchedPayload] = []
 
     def fetch(self, start: date, end: date) -> OfficialBatch:
@@ -2600,4 +2768,6 @@ class OfficialMarketDataAdapter:
             event_coverage=_merge_event_coverage(
                 [twse_batch.event_coverage, tpex_batch.event_coverage]
             ),
+            notices=twse_batch.notices + tpex_batch.notices,
+            snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
         )

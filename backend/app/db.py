@@ -31,7 +31,29 @@ def enable_sqlite_foreign_keys(target_engine: Engine) -> None:
             cursor.close()
 
 
+# The scheduled daily and news jobs write the same database file; a writer
+# waits for the other's lock instead of failing with "database is locked".
+SQLITE_BUSY_TIMEOUT_MS = 30000
+
+
+def enable_sqlite_concurrent_writes(target_engine: Engine) -> None:
+    """Use WAL and a busy timeout on every new SQLite file connection."""
+
+    @event.listens_for(target_engine, "connect")
+    def _set_concurrency(dbapi_connection, _connection_record) -> None:
+        if target_engine.url.get_backend_name() != "sqlite":
+            return
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            # In-memory databases report "memory" and keep working unchanged.
+            cursor.execute("PRAGMA journal_mode=WAL")
+        finally:
+            cursor.close()
+
+
 enable_sqlite_foreign_keys(engine)
+enable_sqlite_concurrent_writes(engine)
 
 
 def init_db() -> None:

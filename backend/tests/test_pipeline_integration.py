@@ -121,6 +121,10 @@ def test_turnover_status_survives_upsert_and_only_volume_gates_both_ratios_in_me
                 "OpeningPrice": "100", "HighestPrice": "105", "LowestPrice": "98", "ClosingPrice": "103",
                 "TradeVolume": "1000",
             }
+            # A re-fetch never replaces a stored available amount with a missing
+            # one (even forced), so persist the parsed status on a new row.
+            db.delete(positive_bar)
+            db.flush()
             missing = sources.parse_twse_daily_rows([row])[0]
             bar = pipeline._upsert_official_bar(db, instrument, missing, None)
             db.flush()

@@ -22,7 +22,7 @@ ENTRIES = ['engine', 'external', 'fallback']
 CHILDREN = ['group_memberships', 'market_bars', 'chip_snapshots', 'technical_features',
             'signals', 'portfolio_positions', 'corporate_actions', 'fundamental_snapshots', 'events',
             'technical_indicators']
-HEAD = '0010_technical_indicators'
+HEAD = '0011_schedule_runs'
 DDL = '''CREATE TABLE instruments (
  id INTEGER NOT NULL PRIMARY KEY, market VARCHAR(20) NOT NULL,
  exchange VARCHAR(20) NOT NULL DEFAULT 'TWSE', symbol VARCHAR(30) NOT NULL,
@@ -191,7 +191,7 @@ def _assert_head(engine, entry):
         assert c.exec_driver_sql('PRAGMA foreign_key_check').all() == []
         assert identity.preflight_instrument_identity(c) == 'current'
         if entry == 'fallback':
-            assert len(c.exec_driver_sql('SELECT version FROM schema_migrations').all()) == 10
+            assert len(c.exec_driver_sql('SELECT version FROM schema_migrations').all()) == 11
             assert c.exec_driver_sql('SELECT version FROM schema_migrations WHERE version=?', (HEAD,)).scalar() == HEAD
         else:
             assert c.exec_driver_sql('SELECT version_num FROM alembic_version').all() == [(HEAD,)]

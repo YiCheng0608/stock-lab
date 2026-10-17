@@ -1542,30 +1542,112 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
     )
 
 
-def _upsert_official_bar(db: Session, instrument: Instrument, record: BarRecord, raw_payload_id: int | None) -> MarketBar:
+# Stored official observations are not rewritten by a routine re-run.  A
+# new row takes every value; an existing row only gains values for fields that
+# are still empty, and a differing non-empty value is kept and reported as a
+# conflict.  ``overwrite`` (collect force=True) replaces stored values for an
+# explicit, deliberate refetch, but an empty incoming value never clears one.
+MAX_RECORDED_VALUE_CONFLICTS = 50
+
+
+def _apply_official_values(
+    row: Any,
+    values: dict[str, Any],
+    *,
+    is_new: bool,
+    overwrite: bool,
+    conflicts: list[dict[str, Any]] | None,
+    label: str,
+) -> bool:
+    changed = False
+    for field_name, value in values.items():
+        current = getattr(row, field_name)
+        if is_new:
+            setattr(row, field_name, value)
+            changed = True
+        elif value is None or current == value:
+            continue
+        elif overwrite or current is None:
+            setattr(row, field_name, value)
+            changed = True
+        elif conflicts is not None:
+            conflicts.append({"row": label, "field": field_name, "stored": current, "incoming": value})
+    return changed
+
+
+def _apply_official_turnover(
+    bar: MarketBar,
+    record: BarRecord,
+    *,
+    is_new: bool,
+    overwrite: bool,
+    conflicts: list[dict[str, Any]] | None,
+    label: str,
+) -> bool:
+    """Treat turnover, its status and its reason as one observation.
+
+    A stored amount is "empty" when its status is not ``available``; only an
+    incoming ``available`` amount can fill it, and all three fields change
+    together so the status never contradicts the amount.
+    """
+
+    incoming = (record.turnover, record.turnover_status, record.turnover_reason)
+    stored = (bar.turnover, bar.turnover_status, bar.turnover_reason)
+    if not is_new:
+        if record.turnover_status != "available" or stored == incoming:
+            return False
+        if bar.turnover_status == "available" and not overwrite:
+            if conflicts is not None:
+                conflicts.append({"row": label, "field": "turnover", "stored": list(stored), "incoming": list(incoming)})
+            return False
+    bar.turnover, bar.turnover_status, bar.turnover_reason = incoming
+    return True
+
+
+def _upsert_official_bar(
+    db: Session,
+    instrument: Instrument,
+    record: BarRecord,
+    raw_payload_id: int | None,
+    *,
+    overwrite: bool = True,
+    conflicts: list[dict[str, Any]] | None = None,
+) -> MarketBar:
     bar = db.scalar(
         select(MarketBar).where(
             MarketBar.instrument_id == instrument.id,
             MarketBar.trading_date == record.trading_date,
         )
     )
-    if not bar:
+    is_new = bar is None
+    if is_new:
         bar = MarketBar(instrument_id=instrument.id, trading_date=record.trading_date)
         db.add(bar)
-    bar.open = record.open
-    bar.high = record.high
-    bar.low = record.low
-    bar.close = record.close
-    bar.adj_close = record.adj_close or record.close
-    bar.volume = record.volume
-    bar.turnover = record.turnover
-    bar.turnover_status = record.turnover_status
-    bar.turnover_reason = record.turnover_reason
-    bar.source = record.source
-    bar.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
-    bar.collected_at = datetime.utcnow()
-    bar.raw_payload_id = raw_payload_id
-    bar.is_suspended = record.is_suspended
+    label = f"market_bars:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}"
+    changed = _apply_official_values(
+        bar,
+        {
+            "open": record.open,
+            "high": record.high,
+            "low": record.low,
+            "close": record.close,
+            "adj_close": record.adj_close or record.close,
+            "volume": record.volume,
+            "is_suspended": record.is_suspended,
+        },
+        is_new=is_new,
+        overwrite=overwrite,
+        conflicts=conflicts,
+        label=label,
+    )
+    changed = _apply_official_turnover(
+        bar, record, is_new=is_new, overwrite=overwrite, conflicts=conflicts, label=label
+    ) or changed
+    if changed:
+        bar.source = record.source
+        bar.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
+        bar.collected_at = datetime.utcnow()
+        bar.raw_payload_id = raw_payload_id
     return bar
 
 
@@ -1574,6 +1656,9 @@ def _upsert_official_chip(
     record: Any,
     instruments: dict[tuple[str, str], Instrument],
     raw_payload_id: int | None,
+    *,
+    overwrite: bool = True,
+    conflicts: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Persist one official chip snapshot without manufacturing missing values."""
 
@@ -1586,21 +1671,32 @@ def _upsert_official_chip(
             ChipSnapshot.trading_date == record.trading_date,
         )
     )
-    if not row:
+    is_new = row is None
+    if is_new:
         row = ChipSnapshot(
             instrument_id=instrument.id,
             trading_date=record.trading_date,
         )
         db.add(row)
-    row.foreign_buy = _safe_float(record.foreign_buy)
-    row.trust_buy = _safe_float(record.trust_buy)
-    row.dealer_buy = _safe_float(record.dealer_buy)
-    row.margin_balance = _safe_float(record.margin_balance)
-    row.margin_change = _safe_float(record.margin_change)
-    row.source = record.source
-    row.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
-    row.collected_at = datetime.utcnow()
-    row.raw_payload_id = raw_payload_id
+    changed = _apply_official_values(
+        row,
+        {
+            "foreign_buy": _safe_float(record.foreign_buy),
+            "trust_buy": _safe_float(record.trust_buy),
+            "dealer_buy": _safe_float(record.dealer_buy),
+            "margin_balance": _safe_float(record.margin_balance),
+            "margin_change": _safe_float(record.margin_change),
+        },
+        is_new=is_new,
+        overwrite=overwrite,
+        conflicts=conflicts,
+        label=f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}",
+    )
+    if changed:
+        row.source = record.source
+        row.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
+        row.collected_at = datetime.utcnow()
+        row.raw_payload_id = raw_payload_id
     return True
 
 
@@ -2136,6 +2232,13 @@ def _official_start_date(end_date: date, months_back: int) -> date:
     return start
 
 
+def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {key: (value.isoformat() if isinstance(value, (date, datetime)) else value) for key, value in item.items()}
+        for item in values
+    ]
+
+
 def _raw_id_for_digest(raw_ids: dict[tuple[str, str], int], digest: str | None) -> int | None:
     if not digest:
         return None
@@ -2151,10 +2254,12 @@ def collect(
     months_back: int = 0,
     adapter: OfficialMarketDataAdapter | None = None,
     force: bool = False,
+    init_schema: bool = True,
 ) -> dict[str, Any]:
     """Run official TWSE/TPEx ingestion."""
 
-    init_db()
+    if init_schema:
+        init_db()
     score_date = latest_weekday(end_date)
     start_date = _official_start_date(score_date, months_back)
     request_key = f"official-ohlcv:{start_date.isoformat()}:{score_date.isoformat()}"
@@ -2192,6 +2297,7 @@ def collect(
                 "idempotent_reuse": True,
                 "industry_membership_observations": stored_metadata.get("industry_membership_observations", {"status": "not_recorded"}),
                 "warnings": list(stored_metadata.get("warnings", []) or []),
+                "notices": list(stored_metadata.get("notices", []) or []),
                 "no_data_dates": list(stored_metadata.get("no_data_dates", []) or []),
             }
         if not run:
@@ -2252,6 +2358,7 @@ def collect(
             normalized_chips = 0
             normalized_dates: list[date] = []
             normalized_instruments: set[tuple[str, str]] = set()
+            value_conflicts: list[dict[str, Any]] = []
             for record in batch.bars:
                 if not start_date <= record.trading_date <= score_date:
                     continue
@@ -2263,6 +2370,8 @@ def collect(
                     instrument,
                     record,
                     _raw_id_for_digest(raw_ids, record.payload_sha256),
+                    overwrite=force,
+                    conflicts=value_conflicts,
                 )
                 normalized_bars += 1
                 normalized_dates.append(record.trading_date)
@@ -2287,6 +2396,8 @@ def collect(
                         chip,
                         instruments,
                         _raw_id_for_digest(raw_ids, chip.payload_sha256),
+                        overwrite=force,
+                        conflicts=value_conflicts,
                     )
                 )
             for action in batch.actions:
@@ -2319,20 +2430,28 @@ def collect(
                     }),
                     "reason": "event feed did not provide date-scoped coverage evidence",
                 }
-            industry_result = _ensure_official_groups(
-                db,
-                batch.instruments,
-                instruments,
-                start_date,
-                score_date,
-                payloads=batch.payloads,
-                observed_now=datetime.utcnow(),
-                run_id=run.id,
-            )
-            # Project official Events only after memberships are in place so
-            # the NewsItem relation carries the effective theme IDs.  The
-            # projection is idempotent and retains Event/raw provenance.
-            sync_news_from_events(db)
+            if getattr(batch, "snapshot_feeds", True):
+                industry_result = _ensure_official_groups(
+                    db,
+                    batch.instruments,
+                    instruments,
+                    start_date,
+                    score_date,
+                    payloads=batch.payloads,
+                    observed_now=datetime.utcnow(),
+                    run_id=run.id,
+                )
+                # Project official Events only after memberships are in place so
+                # the NewsItem relation carries the effective theme IDs.  The
+                # projection is idempotent and retains Event/raw provenance.
+                sync_news_from_events(db)
+            else:
+                # A historical batch carries today's universe, which is not an
+                # observation of the requested session's classification.
+                industry_result = {
+                    "status": "not_requested",
+                    "reason": "historical batch without current snapshot feeds",
+                }
             expected_chip_dates = {
                 record.trading_date
                 for record in batch.bars
@@ -2463,6 +2582,9 @@ def collect(
                 "fundamentals": len(batch.fundamentals),
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
+                "notices": list(getattr(batch, "notices", []) or []),
+                "value_conflicts": len(value_conflicts),
+                "value_conflict_samples": _json_safe(value_conflicts[:MAX_RECORDED_VALUE_CONFLICTS]),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
                 "industry_membership_observations": industry_result,
@@ -2518,6 +2640,8 @@ def collect(
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
                 "warnings": batch.warnings,
+                "notices": list(getattr(batch, "notices", []) or []),
+                "value_conflicts": len(value_conflicts),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
             }
         except Exception as exc:
@@ -2593,24 +2717,31 @@ def collect(
             }
 
 
-def analyze() -> dict[str, Any]:
-    init_db()
+def analyze(*, init_schema: bool = True, collect_run_id: int | None = None) -> dict[str, Any]:
+    if init_schema:
+        init_db()
     with SessionLocal() as db:
-        result = _analyze_session(db)
+        result = _analyze_session(db, collect_run_id=collect_run_id)
         if result.get("status") == "success":
             db.commit()
         return result
 
 
-def _analyze_session(db: Session, *, capture: Any = None) -> dict[str, Any]:
-    """Run analysis in the caller's transaction; only explicit callers capture."""
+def _analyze_session(db: Session, *, capture: Any = None, collect_run_id: int | None = None) -> dict[str, Any]:
+    """Run analysis in the caller's transaction; only explicit callers capture.
+
+    ``collect_run_id`` pins the official collect run to analyze (the daily
+    job passes its own, which may be an idempotently reused older row);
+    otherwise the most recently updated official collect run is used.
+    """
+    query = select(IngestionRun).where(
+        IngestionRun.run_type == "collect",
+        IngestionRun.source == "official",
+    )
+    if collect_run_id is not None:
+        query = query.where(IngestionRun.id == collect_run_id)
     latest_run = db.scalar(
-        select(IngestionRun).where(
-            IngestionRun.run_type == "collect",
-            IngestionRun.source == "official",
-        )
-        .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
-        .limit(1)
+        query.order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id)).limit(1)
     )
     if latest_run:
         if latest_run.status != "success" or not latest_run.data_as_of:
@@ -3143,8 +3274,9 @@ def _evaluate_signal_tracking(
     return len(evaluations), settlement_count
 
 
-def evaluate() -> dict[str, Any]:
-    init_db()
+def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
+    if init_schema:
+        init_db()
     with SessionLocal() as db:
         signals = db.scalars(
             select(Signal).where(
@@ -3449,32 +3581,15 @@ def backtest(
             }
 
 
-def _daily_indicators(run_date: date | None) -> dict[str, Any]:
-    """Indicator step of run_daily; a failure is reported, never raised."""
-    from .indicator_batch import run_indicator_batch  # local: indicator_batch imports this module
+def run_daily(
+    end_date: date | None = None,
+    *,
+    months_back: int = 0,
+    trigger: str = "manual",
+    force: bool = False,
+) -> dict[str, Any]:
+    """collect -> analyze -> evaluate -> indicators, logged in schedule_runs."""
 
-    try:
-        return run_indicator_batch(run_date)
-    except Exception as exc:  # noqa: BLE001 - the daily result must still report collect/analyze/evaluate
-        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+    from worker.schedule_runs import run_daily_job  # imports this module
 
-
-def run_daily(end_date: date | None = None, *, months_back: int = 0) -> dict[str, Any]:
-    collected = collect(end_date, months_back=months_back)
-    if collected.get("status") != "success":
-        return {
-            "collect": collected,
-            "analyze": {"status": "skipped", "reason": "official_collection_failed"},
-            "evaluate": {"status": "skipped", "reason": "official_collection_failed"},
-            "indicators": {"status": "skipped", "reason": "official_collection_failed"},
-        }
-    analyzed = analyze()
-    if analyzed.get("status") != "success":
-        return {
-            "collect": collected,
-            "analyze": analyzed,
-            "evaluate": {"status": "skipped", "reason": "analysis_failed"},
-            "indicators": _daily_indicators(end_date),
-        }
-    evaluated = evaluate()
-    return {"collect": collected, "analyze": analyzed, "evaluate": evaluated, "indicators": _daily_indicators(end_date)}
+    return run_daily_job(end_date, months_back=months_back, trigger=trigger, force=force)

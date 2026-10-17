@@ -59,8 +59,8 @@ def markers(path, alembic, fallback):
 
 
 def test_current_head_and_fallback_count_in_memory():
-    assert len(readiness.REVISIONS) == 10
-    assert readiness.REVISIONS[-1] == "0010_technical_indicators"
+    assert len(readiness.REVISIONS) == 11
+    assert readiness.REVISIONS[-1] == "0011_schedule_runs"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (readiness.REVISIONS[-1],))
@@ -114,8 +114,8 @@ def test_actual_forced_fallback_nine_revisions(tmp_path, monkeypatch):
     check_unchanged(path)
 
 
-def test_head_0010_is_ready_but_a_0009_database_is_not(ready_db):
-    assert readiness.REVISIONS[-2:] == ("0009_strategy_formula_version", "0010_technical_indicators")
+def test_head_0011_is_ready_but_a_0010_database_is_not(ready_db):
+    assert readiness.REVISIONS[-2:] == ("0010_technical_indicators", "0011_schedule_runs")
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     check_unchanged(ready_db)
     markers(ready_db, [readiness.REVISIONS[-2]], None)
@@ -156,7 +156,7 @@ def test_strategy_identity_before_0009_is_not_ready_even_with_the_head_marker(re
     check_unchanged(ready_db, reason)
 
 
-@pytest.mark.parametrize("prefix", range(1, 10))
+@pytest.mark.parametrize("prefix", range(1, 12))
 def test_head_with_known_fallback_prefix(ready_db, prefix):
     markers(ready_db, [readiness.REVISIONS[-1]], readiness.REVISIONS[:prefix])
     check_unchanged(ready_db)
@@ -175,7 +175,7 @@ def test_bad_fallback_markers(ready_db, alembic, fallback):
     check_unchanged(ready_db, "fallback")
 
 
-@pytest.mark.parametrize("prefix", range(1, 9))
+@pytest.mark.parametrize("prefix", range(1, 11))
 def test_fallback_only_stale_prefix(ready_db, prefix):
     markers(ready_db, None, readiness.REVISIONS[:prefix])
     check_unchanged(ready_db, "all known")

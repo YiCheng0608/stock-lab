@@ -272,6 +272,9 @@ def _strategy_formula_state(connection) -> str:
     return "legacy"
 
 
+SCHEDULE_RUNS_REVISION = "0011_schedule_runs"
+
+
 def ensure_strategy_formula_version(connection) -> bool:
     """Add ``strategy_versions.formula_version`` and widen the unique identity.
 
@@ -450,6 +453,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
             "VALUES ('0010_technical_indicators', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0011 only adds schedule_runs/schedule_run_steps, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            f"VALUES ('{SCHEDULE_RUNS_REVISION}', CURRENT_TIMESTAMP)"
         )
     )
 
