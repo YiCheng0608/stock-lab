@@ -64,7 +64,7 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 
 ## 統籌 session
 
-同時只有一個統籌。使用者手動開啟與統籌自行換手都用同一組指令，在 `master` 管理 checkout 開可見 terminal：
+同時只有一個統籌，開啟一律由 agent 執行，使用者不手動開：現任統籌觸發換手時自己開；沒有統籌時使用者對任一 Claude session 說「開統籌」，該 session 執行同一組指令。都在 `master` 管理 checkout 開可見 terminal：
 
 ```text
 orca terminal create --worktree id:<repoId>::<master 路徑> --title "統籌" --command "claude --model claude-opus-5-5 --effort medium --autocompact 400k" --json
@@ -72,7 +72,7 @@ orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 orca terminal send --terminal <handle> --text "<接手文>" --enter --json
 ```
 
-`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。接手文固定如下，直接貼上：
+`--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。接手文固定如下，開啟者原文送出：
 
 ```text
 你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 的最新決策、所有 open Issues 與 PR。接著：掛 GitHub 背景監看與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」；然後依手冊推進進行中與待辦任務。回覆使用者一律繁體中文。
