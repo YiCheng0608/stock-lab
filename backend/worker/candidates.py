@@ -29,7 +29,6 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.config import MIN_GROUP_MEMBERS
-from app.db import SessionLocal
 from app.domain import (
     CANDIDATE_SCORE_V1,
     CANDIDATE_SCORE_VERSION,
@@ -52,6 +51,7 @@ from app.models import (
     ThemeGroup,
 )
 
+from . import pipeline
 from .pipeline import _group_board, _percentile, _safe_float
 
 STRATEGY_ENTRY_TYPES = {"breakout_v1": "breakout", "pullback_v1": "pullback"}
@@ -956,7 +956,8 @@ def latest_signal_date(db: Session) -> date | None:
 def run_candidates(target: date | None = None) -> dict[str, Any]:
     """Compute one trading date's list with the current score version."""
 
-    with SessionLocal() as db:
+    # pipeline.SessionLocal, like the other daily steps (and their test patches).
+    with pipeline.SessionLocal() as db:
         trading_date = target or latest_signal_date(db)
         if trading_date is None:
             return {
