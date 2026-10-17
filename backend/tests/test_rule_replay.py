@@ -483,6 +483,7 @@ print('isolated import/replay passed')
 '''
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
     result = subprocess.run([sys.executable, "-Xutf8", "-c", script, json.dumps(arguments())],
                             cwd=Path(__file__).resolve().parents[2], env=env,
                             capture_output=True, text=True, timeout=30)

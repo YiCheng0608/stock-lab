@@ -2,7 +2,8 @@
 
 Run via unittest/runpy with -B, STOCK_DB_PATH=:memory: and data/raw paths set
 to an existing directory before imports. Do not load filesystem pytest fixtures.
-Node uses the installed frontend dependencies and transpiles App.tsx in memory.
+Node uses the installed frontend dependencies and transpiles App.tsx in memory:
+the renderer test needs `node` on PATH and an installed frontend/node_modules.
 """
 
 import asyncio
@@ -252,6 +253,7 @@ const box=({children})=>React.createElement('div',null,children);
 const context={React:{...React,createElement:h},useState:React.useState,useParams:()=>({themeId:'g'}),
  useQuery:({queryKey})=>({data:queryKey[0]==='theme'?data.theme:data.members}),getTheme:()=>{},getThemeMembers:()=>{},
  isTemporaryIndustryTheme:()=>false,themeMetricLabel:()=>null,formatTaiwanDateTime:x=>x,
+ categoryLabel:x=>String(x),groupDisplayName:x=>x,
  Link:({to,children,...props})=>React.createElement('a',{href:to,...props},children),PageTitle:box,Term:box,
  ThemeMemberTable:()=>null,DirectoryPagination:()=>null,QualityBadge:()=>null};
 vm.createContext(context);
