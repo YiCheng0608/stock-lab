@@ -28,12 +28,26 @@ def changed_paths(base: str) -> list[str]:
     return [name.decode("utf-8") for name in result.split(b"\0") if name]
 
 
+# Working-tree paths outside backend/ and tools/ that the backend and standalone jobs read; a change must run them.
+# Keep in step with backend/tests:
+#   test_public_candidate_identity.py:237-247 renders frontend/src/App.tsx with Node and the frontend/node_modules
+#   that frontend/package.json and frontend/pnpm-lock.yaml install;
+#   test_test_db_real_sample.py:109 and test_industry_membership_inferred_source.py:600 assert against docs text.
+BACKEND_READ_DIRS = ("frontend/src/",)
+BACKEND_READ_FILES = frozenset({
+    "frontend/package.json",
+    "frontend/pnpm-lock.yaml",
+    "docs/SOURCE_REGISTRY.md",
+    "docs/INDUSTRY_CLASSIFICATION.md",
+})
+
+
 def change_flags(paths: list[str]) -> dict[str, bool]:
     shared = any(p.startswith((".github/workflows/", "tools/ci/")) for p in paths)
-    # Markdown never reaches the product jobs; the repository job checks it.
+    # Markdown never reaches the product jobs unless a backend test reads it; the repository job checks it.
     product = [p for p in paths if not p.lower().endswith(".md")]
     return {
-        "python": shared or any(p.startswith(("backend/", "tools/")) or p.endswith(".py") or p == "docs/development-baseline/validation-requirements.lock.txt" for p in product),
+        "python": shared or any(p in BACKEND_READ_FILES for p in paths) or any(p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS) or p.endswith(".py") or p == "docs/development-baseline/validation-requirements.lock.txt" for p in product),
         "frontend": shared or any(p.startswith(("frontend/", "tools/", "backend/")) for p in product),
     }
 

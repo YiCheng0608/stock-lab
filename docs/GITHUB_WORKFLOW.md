@@ -125,7 +125,8 @@ QA 用核定埠並讀回；chips-series API／preview 預設埠與 `--port`／`-
 | 檢查 | 範圍與限制 |
 | --- | --- |
 | `repository` | 每 PR／master push 驗 diff 空白、變更檔 UTF-8、Python／JSON／YAML 語法、Markdown 相對檔案連結；Python 另驗 Ruff E9／F63／F7／F82。外部 URL／anchor／語意由 review 核，不批量改既有風格。 |
-| `backend` | backend／工具／CI／驗證依賴變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 ci.yml backend job 明列的 pytest 檔（tmp SQLite、測試設計不取源、無此 guard），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)不由 pytest 收集。不證完整 suite、真源、磁碟。 |
+| `backend` | backend／工具／CI／驗證依賴及後端測試讀取的前端與文件路徑（`tools/ci/checks.py` `BACKEND_READ_*`）變更：chips API 五個 `--check` profiles，RAM fixture／計算／API 邊界；guard 禁 GET／DB／寫檔。另跑 `backend/tests` 全目錄 pytest（tmp SQLite、測試設計不取源、無此 guard；含 Node 22 與 pnpm 前置），[standalone-only 檔](development-baseline/README.md#不由-pytest-收集的-standalone-only-測試檔)由 conftest 排除，改由 `standalone` 執行。不證真源、磁碟。 |
+| `standalone` | 與 `backend` 同觸發、並行：conftest `STANDALONE_ONLY` 各檔依 README 表的契約指令執行（RAM fixture／fake transport，audit hook 禁寫檔／外網）。需固定根或私人根、`--serve`、seal、真實 GET 的模式不進 CI，逐項註解於 ci.yml。不證真源、磁碟、完整 UI。 |
 | `frontend` | frontend／backend／工具／CI 變更：pnpm frozen lock、units／search／routes／presentation／stockChart 五個 standalone 回歸、TypeScript／Vite build。不證可信瀏覽器或全部 guarded 測試。 |
 | `required` | 固定彙整，永遠核分類及適用工作；僅不適用可 skipped，失敗／取消／未跑／分類失敗不放行。 |
 
