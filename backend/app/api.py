@@ -3001,8 +3001,10 @@ def strategies(
     )
     items = [
         {
+            "id": row.id,
             "name": row.name,
             "version": row.version,
+            "formula_version": row.formula_version,
             "kind": row.kind,
             "active": row.active,
             "config": row.config_json or {},

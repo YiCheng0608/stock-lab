@@ -6,11 +6,9 @@ Creation never adopts an existing file. Research writes use one SQLite transacti
 from __future__ import annotations
 
 import argparse
-import ast
 from contextlib import nullcontext
 from datetime import date, datetime, timezone
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -79,7 +77,7 @@ def _path(value):
         raise AnalysisCaptureError("protected_path")
     if _is_path_alias(path) or any(p.is_symlink() or p.is_junction() for p in (path, *path.parents)):
         raise AnalysisCaptureError("path_alias")
-    if path.exists() and path.stat().st_nlink != 1:
+    if path.exists() and not path.is_dir() and path.stat().st_nlink != 1:
         raise AnalysisCaptureError("path_alias")
     return path
 
@@ -313,29 +311,18 @@ MIGRATION_FLOOR = "0006_news_json_defaults"
 
 
 def _revision_chain():
-    """Ordered revision ids from app/database_readiness.py REVISIONS, read as source text.
+    """Ordered revision ids from app/migration_revisions.py REVISIONS.
 
-    Importing the module would import app.config, whose import-time mkdir creates the
-    configured data/raw directories before the isolated STOCK_* environment is checked.
+    That module imports nothing; app.database_readiness would import app.config, whose
+    import-time mkdir creates the configured data/raw directories before the isolated
+    STOCK_* environment is checked.
     """
     try:
-        origin = importlib.util.find_spec("app.database_readiness").origin
-        for node in ast.parse(Path(origin).read_text(encoding="utf-8")).body:
-            if isinstance(node, ast.Assign):
-                targets = node.targets
-            elif isinstance(node, ast.AnnAssign):
-                targets = [node.target]
-            else:
-                continue
-            if any(isinstance(t, ast.Name) and t.id == "REVISIONS" for t in targets):
-                chain = ast.literal_eval(node.value)
-                break
-        else:
-            raise ValueError("REVISIONS not found")
+        from app.migration_revisions import REVISIONS as chain
         if (type(chain) is not tuple or not all(type(r) is str for r in chain)
                 or len(set(chain)) != len(chain) or MIGRATION_FLOOR not in chain):
             raise ValueError("REVISIONS malformed")
-    except (ImportError, AttributeError, OSError, SyntaxError, TypeError, ValueError) as exc:
+    except (ImportError, ValueError) as exc:
         raise AnalysisCaptureError("source_migration_not_ready", detail="revision_chain_unavailable") from exc
     return chain
 

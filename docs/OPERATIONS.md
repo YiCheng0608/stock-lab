@@ -37,7 +37,50 @@ pnpm run dev
 Pop-Location
 ```
 
-預設 API base 是 `http://127.0.0.1:8000/api`；需要不同位址時，在啟動前設定 `VITE_API_BASE`。
+預設 API base 是 `http://127.0.0.1:8000/api`；需要不同位址時，在啟動前設定 `VITE_API_BASE`，該位址須符合[§1.1](#11-產品-api-的跨站請求防護)的 Host 規則，否則寫入會被拒。
+
+### 1.1 產品 API 的跨站請求防護
+
+`app.main:app` 對每個 POST、PUT、PATCH、DELETE，先經 [`BrowserGate`](../backend/app/browser_gate.py)（純 ASGI，常開，不依任何 env 或設定；取源端點是否啟用仍由各自的 env 決定）才進 router 與 handler。拒絕的請求不讀 body、不開 DB、不取源，也不碰額度與私人檔案；GET、HEAD、OPTIONS 不檢查。需要這層是因為 CORS 只決定瀏覽器讀不讀得到回應，不阻止表單或 `text/plain` 的 simple request 送達本機埠。
+
+四項依序檢查，第一個不符即回應：
+
+| 順序 | 檢查 | 放行條件 | 拒絕 |
+| --- | --- | --- | --- |
+| 1 | Host | 恰一個值，為 `127.0.0.1:<port>` 或 `localhost:<port>`；`<port>` 是 API 實際監聽的埠（ASGI `scope["server"]`）。須小寫、須帶 port | 403 `host_not_admitted` |
+| 2 | Sec-Fetch-Site（有送時） | 恰一個值；`same-origin`、`none` 放行；`same-site`、`cross-site` 僅在 Origin 已被接受時放行；其他值不放行 | 403 `cross_site_rejected` |
+| 3 | Origin（有送時） | 恰一個值，且在允許清單內，或等於自身 `http://<Host>` | 403 `origin_not_admitted` |
+| 4 | Content-Type（只查 POST、PUT、PATCH） | 恰一個值，為 `application/json`，可接 `; charset=utf-8`，不分大小寫 | 415 `content_type_json_required` |
+
+DELETE 不查 Content-Type（前端的 DELETE 不帶 body）。沒有 Origin 與 Sec-Fetch-Site 的請求（curl、腳本）視為非瀏覽器呼叫，只受 Host 與 Content-Type 規則約束。
+
+允許清單是 `config.DEFAULT_CORS_ORIGINS`（`http://localhost:5173`、`http://127.0.0.1:5173`），與 `configure_cors` 交給 `CORSMiddleware` 的是同一個物件，沒有 env 或設定可覆寫。
+
+拒絕回應是 JSON `{"reason":"<reason>"}` 加 `Cache-Control: no-store`。防護在 `CORSMiddleware` 內側：preflight 由 CORS 直接回應、不經檢查（Host 不符的 preflight 也得到 CORS 回應，但其後的實際請求仍被 Host 規則拒絕）；允許清單內的 origin 被拒時，回應仍帶 `Access-Control-Allow-Origin`，前端讀得到狀態碼與 reason；其他 origin 被拒時回應只有 `Access-Control-Allow-Credentials: true`、沒有 `Access-Control-Allow-Origin`，頁面讀不到回應。
+
+**使用方式**：
+
+- 前端：Vite 在 `http://localhost:5173` 或 `http://127.0.0.1:5173`、API base 為預設值時不需調整。
+- curl 與腳本：URL 用小寫的 `http://127.0.0.1:<port>` 或 `http://localhost:<port>`；POST、PUT、PATCH 須明確加 JSON Content-Type（curl 的 `-d` 預設送 `application/x-www-form-urlencoded`，會得 415）。
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/api/<路徑>" -H "Content-Type: application/json" --data-binary "@body.json"
+curl.exe -X DELETE "http://127.0.0.1:8000/api/portfolio/<id>"
+```
+
+**限制**（寫入會被拒的情況）：
+
+- Host 不是 `127.0.0.1` 或 `localhost`：`--host 0.0.0.0` 後以 LAN IP 或機器名稱連線、IPv6 `[::1]`、Host 被反向代理或埠轉發改寫的請求。`LocalHost` 等大小寫變體，以及 Host 的 port 與實際監聽埠不同或省略（例如 `--port 80`，瀏覽器不送 port）也被拒。
+- Unix socket 沒有 `scope["server"]` 的 port，一律被拒。
+- `VITE_API_BASE` 的 host 不是 `127.0.0.1` 或 `localhost`，或 port 不是 API 實際監聽埠。
+- 前端 origin 不在允許清單，例如 Vite 在 5173 被占用而改用其他埠。
+- 不是身分驗證：同機其他程式送出符合上述規則的請求一樣放行。
+- 可重建的驗證是以手造標頭執行的 RAM 測試 [`test_app_main_browser_gate.py`](../backend/tests/test_app_main_browser_gate.py)；未用真瀏覽器的外站頁面或真 uvicorn 實測。
+
+**殘留**（GET 不檢查）：
+
+- 下列 GET 在各自的 env 與 pins 全部通過時，每次讀取都會遞增 `price_saved_focus` 的行程內讀取預算（同一個計數，各端點共用），用盡後回應的 `reasons` 帶 `price_saved_focus_read_budget_exceeded`：`GET /api/stocks/{exchange}/{symbol}/prices/saved-focus`、`GET /api/focus/price-saved`、`GET /api/focus/price-saved-chips`、`GET /api/focus/price-saved-chips-calendar`、`GET /api/focus/price-saved-chips-stock-scope-7`。`GET …/prices/saved` 只重開私人存放區，不耗這個預算。
+- `GET /api/dashboard`、`GET /api/news`、`GET /api/news/{id}` 會呼叫 `sync_news_from_events`，有變更列時 commit，把本機既有的官方 Events 冪等投影成 NewsItem；內容全來自本機既有資料，不由請求決定，外站 no-cors GET 也讀不到回應。
 
 ## 2. 資料庫、migration 與 readiness
 

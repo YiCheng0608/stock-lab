@@ -13,6 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.db import Base  # noqa: E402
 from app import models  # noqa: E402,F401
+from app.migration_revisions import INSTRUMENT_IDENTITY_REVISIONS  # noqa: E402
 from app.settlement_identity_migration import preflight_settlement_identity  # noqa: E402
 from app.instrument_identity_migration import (  # noqa: E402
     check_sqlite_migration_integrity,
@@ -61,14 +62,7 @@ def _run_sqlite_migrations(connection) -> None:
         check_sqlite_migration_integrity(connection)
         preflight_settlement_identity(connection)
         identity_state = preflight_instrument_identity(connection)
-        identity_revisions = {
-            "0002_instrument_exchange_key", "0003_backtest_run_metadata",
-            "0004_product_news_themes", "0005_news_temporal_contract",
-            "0006_news_json_defaults",
-            "0007_turnover_availability",
-            "0008_portfolio_share_integer",
-            "0009_strategy_formula_version",
-        }
+        identity_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)
         if identity_revisions.intersection(context.get_context().get_current_heads()) and identity_state != "current":
             raise RuntimeError("cannot migrate instruments: revision requires current identity")
         connection.commit()

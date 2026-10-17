@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from .migration_revisions import REVISIONS as _REVISION_CHAIN
+
 TABLE = 'signal_settlements'
 SCRATCH = TABLE + '__v1_rebuild'
 ORIGINAL = {
@@ -30,11 +32,7 @@ COLUMNS = {name: (ORIGINAL | ADDED)[name] for name in (
 )}
 INDEXES = {'ix_signal_settlements_signal_id': 'signal_id',
            'ix_signal_settlements_settlement_date': 'settlement_date'}
-REVISIONS = {'0001_schema_v1', '0002_instrument_exchange_key',
-             '0003_backtest_run_metadata', '0004_product_news_themes',
-             '0005_news_temporal_contract', '0006_news_json_defaults',
-             '0007_turnover_availability', '0008_portfolio_share_integer',
-             '0009_strategy_formula_version'}
+REVISIONS = set(_REVISION_CHAIN)
 _TOKEN = re.compile(r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]")
 
 
