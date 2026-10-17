@@ -25,6 +25,7 @@ from app.news import is_verified_theme
 
 from . import sources
 from .news_sources import (
+    MAX_ITEM_ID_LENGTH,
     NEWS_SOURCES,
     TAIPEI,
     FeedEntry,
@@ -34,6 +35,7 @@ from .news_sources import (
     NewsSource,
     NewsSourceError,
     check_response,
+    naive_offset_text,
     normalized_title,
     parse_rss,
     raw_feed_payload,
@@ -51,10 +53,19 @@ FUTURE_TOLERANCE = timedelta(minutes=15)
 NAME_ONLY_STOPWORDS = frozenset(
     {"台灣大", "大台北", "新天地", "創業家", "雲嘉南", "新零售", "太空梭", "宅配通"}
 )
-# A theme name too generic to count as an industry mention.
-THEME_STOPWORDS = frozenset({"其他"})
+# Longer phrases that contain a company name but mean something else; they
+# take the span, so 中華電視 is not read as 中華電.
+NAME_BLOCKERS = frozenset({"中華電視"})
+# Theme names too generic to count as an industry mention (綜合 is also part of
+# 綜合外電報導).
+THEME_STOPWORDS = frozenset({"其他", "綜合"})
+# An industry name counts only as an industry word: 半導體股, 金融類股,
+# 光電族群, 航運產業, 電子業.  Bare 金融 in 國際金融市場 does not.
+THEME_SUFFIXES = ("類股", "族群", "產業", "股", "業")
 
-_NAME_SUFFIX = re.compile(r"(\*?-?(KY|DR)?-?創?\*?)$")
+# Listing markers: -KY, -DR, -創, -KY創, with or without a trailing or leading
+# ``*``.  The dash is required, so 群創 and 鈺創 keep their whole name.
+_NAME_SUFFIX = re.compile(r"\*?(?:-(?:KY創|KY|DR|創))?\*?$")
 _CJK = re.compile(r"[一-鿿]")
 _CODE = re.compile(r"(?<![0-9A-Za-z])(\d{4,6})(?![0-9])")
 _TICKER_SUFFIX = re.compile(r"[-.](TWO|TW)\b", re.I)
@@ -63,7 +74,7 @@ _CODE_PREFIX = re.compile(r"代號[\s:：（(]*$")
 
 def _name_aliases(name: str) -> set[str]:
     base = _NAME_SUFFIX.sub("", name.strip()).strip()
-    return {alias for alias in {name.strip().rstrip("*"), base} if alias}
+    return {alias for alias in {name.strip().rstrip("*"), base} if len(alias) >= 2}
 
 
 @dataclass(frozen=True)
@@ -87,7 +98,8 @@ class RelationMatcher:
     - A name counts on its own when it has three or more characters, contains
       a CJK character, is not a stopword, and is not inside a longer matched
       name.  Two-character names (often ordinary words) need their code.
-    - An official industry display name in the text adds its theme id.
+    - An official industry display name adds its theme id when it is followed
+      by 股／類股／族群／產業／業 and is not inside a company name.
     """
 
     def __init__(
@@ -170,28 +182,34 @@ class RelationMatcher:
             )
             if context and len(candidates) == 1:
                 found.add(candidates[0].key)
-        for name in self._longest_spans(
-            text, (name for name in self._name_only if name in text)
-        ):
-            stocks = self._name_only[name]
+        present = [name for name in self._name_only if name in text]
+        present += [phrase for phrase in NAME_BLOCKERS if phrase in text]
+        for name in self._longest_spans(text, present):
+            stocks = self._name_only.get(name, [])
             if len(stocks) == 1:
                 found.add(stocks[0].key)
         return sorted(found)
 
     def theme_ids(self, text: str) -> list[str]:
-        # Company names compete for the same spans, so 光電 inside 台光電 is
-        # read as the company, not as the industry.
-        present = [name for name in self._themes if name in text]
-        present += [alias for alias in self._all_aliases if alias in text]
-        names = self._longest_spans(text, present)
-        return sorted(
-            {
-                theme_id
-                for name in names
-                if name in self._themes
-                for theme_id in self._themes[name]
-            }
-        )
+        # An industry name inside a company name (光電 in 台光電股) or inside a
+        # longer industry name (電子 in 其他電子業) does not count.
+        names = [name for name in self._themes if name in text]
+        covering = [
+            (match.start(), match.end())
+            for phrase in [*names, *(a for a in self._all_aliases if a in text)]
+            for match in re.finditer(re.escape(phrase), text)
+        ]
+        found: set[str] = set()
+        for name in names:
+            for suffix in THEME_SUFFIXES:
+                for match in re.finditer(re.escape(name + suffix), text):
+                    start, end = match.start(), match.start() + len(name)
+                    if not any(
+                        s <= start and end <= e and e - s > end - start
+                        for s, e in covering
+                    ):
+                        found.update(self._themes[name])
+        return sorted(found)
 
 
 def _canonical_key(source: NewsSource, item_id: str) -> str:
@@ -313,7 +331,8 @@ def _store_entries(
                 source_name=source.source_name,
                 source_url=entry.url,
                 source_url_kind="item",
-                source_item_id=entry.source_item_id,
+                source_item_id=(entry.source_item_id or "")[:MAX_ITEM_ID_LENGTH]
+                or None,
                 title=entry.title,
                 summary=entry.summary,
                 language=source.language,
@@ -368,7 +387,7 @@ def _collect_source(
             raw = sources.capture_payload(
                 f"news_{source.source_id}",
                 feed.url,
-                raw_feed_payload(feed, response),
+                raw_feed_payload(source, feed, response),
                 collected_at.isoformat(),
                 collected_at=collected_at,
             )
@@ -403,6 +422,7 @@ def _collect_source(
         "source_name": source.source_name,
         "category": source.category,
         "source_kind": source.source_kind,
+        "naive_time_offset": naive_offset_text(source.naive_offset),
         "feeds": feeds,
     }
     run.finished_at = datetime.utcnow()

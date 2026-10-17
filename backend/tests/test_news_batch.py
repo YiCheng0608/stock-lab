@@ -20,15 +20,18 @@ from app.models import IngestionRun, Instrument, NewsItem, RawPayload, ThemeGrou
 from worker import news_batch
 from worker.news_batch import RelationMatcher, collect_news
 from worker.news_sources import (
+    MAX_RESPONSE_BYTES,
     NEWS_SOURCES,
     REQUEST_INTERVAL_SECONDS,
     SOURCES_BY_ID,
+    TAIPEI,
     USER_AGENT,
     FeedResponse,
     HttpFeedFetcher,
     NewsFeed,
     NewsSource,
     NewsSourceError,
+    _parse_time,
     canonical_url,
     parse_rss,
 )
@@ -103,6 +106,35 @@ def db():
                     symbol="0050",
                     name="元大台灣50",
                     instrument_type="etf",
+                ),
+                # Names that end in a listing-marker character but have no dash,
+                # a marker suffix, and names that are parts of other words.
+                Instrument(
+                    exchange="TWSE", symbol="3481", name="群創", instrument_type="stock"
+                ),
+                Instrument(
+                    exchange="TPEx",
+                    symbol="5314",
+                    name="世紀*",
+                    instrument_type="stock",
+                ),
+                Instrument(
+                    exchange="TWSE",
+                    symbol="4966",
+                    name="譜瑞-KY",
+                    instrument_type="stock",
+                ),
+                Instrument(
+                    exchange="TWSE",
+                    symbol="2412",
+                    name="中華電",
+                    instrument_type="stock",
+                ),
+                Instrument(
+                    exchange="TWSE",
+                    symbol="2383",
+                    name="台光電",
+                    instrument_type="stock",
                 ),
                 ThemeGroup(
                     id=SEMICONDUCTOR,
@@ -301,6 +333,10 @@ def test_same_source_url_with_different_tracking_parameters_is_stored_once(db):
         canonical_url("https://a.example/x?utm_source=1&id=7&mod=rss#top")
         == "https://a.example/x?id=7"
     )
+    assert (
+        canonical_url("http://A.Example/x/?ref=home") == "https://a.example/x?ref=home"
+    )
+    assert canonical_url("https://a.example/") == "https://a.example/"
 
 
 def test_cross_source_same_day_same_title_share_cluster_and_both_are_kept(db):
@@ -397,6 +433,81 @@ def test_source_time_in_the_future_is_quarantined_without_relations(db):
     )
 
 
+@pytest.mark.parametrize(
+    ("raw", "offset", "expected"),
+    [
+        ("2026-02-30", None, (None, None)),
+        ("20261017", TAIPEI, (None, date(2026, 10, 17))),
+        ("2026-10-17", TAIPEI, (None, date(2026, 10, 17))),
+        ("Sat, 17 Oct 2026", TAIPEI, (None, None)),
+        ("Sat, 17 Oct 2026 10:00:00 -0000", TAIPEI, (None, None)),
+        ("Sat, 17 Oct 2026 10:00:00 +0000", None, (datetime(2026, 10, 17, 10), None)),
+        ("2026-10-17T16:33:41", TAIPEI, (datetime(2026, 10, 17, 8, 33, 41), None)),
+        ("2026-10-17T16:33:41", None, (None, None)),
+        ("2026-10-17T16:33:41+09:00", None, (datetime(2026, 10, 17, 7, 33, 41), None)),
+        ("not a time", TAIPEI, (None, None)),
+    ],
+)
+def test_time_parsing(raw, offset, expected):
+    assert _parse_time(raw, offset) == expected
+
+
+def test_invalid_date_does_not_fail_the_feed(db):
+    source = _single_feed_source(naive_offset=TAIPEI)
+    content = _rss(
+        "<title>壞日期</title><link>https://feed.example/bad</link><pubDate>2026-02-30</pubDate>",
+        "<title>基本格式日期</title><link>https://feed.example/basic</link><pubDate>20261017</pubDate>",
+    )
+    result = collect_news(db, fetch=lambda url: _ok(content), news_sources=[source])
+    assert result["status"] == "success"
+    bad, basic = _items(db)
+    assert (bad.time_basis, bad.published_at, bad.event_date) == (
+        "unverified",
+        None,
+        None,
+    )
+    assert (basic.time_basis, basic.time_precision, basic.published_at) == (
+        "event_date",
+        "date",
+        None,
+    )
+
+
+def test_text_is_unescaped_before_tags_are_removed_and_cut_to_column_length(db):
+    source = _single_feed_source()
+    long_title = "長" * 402
+    long_guid = "g" * 250
+    content = _rss(
+        "<title><![CDATA[&amp;lt;b&amp;gt;粗體&amp;lt;/b&amp;gt; S&amp;P]]></title>"
+        "<link>https://feed.example/t</link>"
+        "<description>&lt;p&gt;第一段&lt;/p&gt;&lt;br/&gt;第二段</description>",
+        f"<title>{long_title}</title><link>https://feed.example/long</link><guid>{long_guid}</guid>",
+        f"<title>超長連結</title><link>https://feed.example/{'x' * 800}</link>",
+    )
+    result = collect_news(db, fetch=lambda url: _ok(content), news_sources=[source])
+    assert result["sources"][0]["feeds"][0]["skipped"] == 1
+    markup, long_item = _items(db)
+    assert markup.title == "粗體 S&P" and markup.summary == "第一段 第二段"
+    assert len(long_item.title) == 300 and long_item.source_item_id == "g" * 180
+
+
+def test_raw_and_run_record_the_assumed_offset_of_zone_less_times(db):
+    collect_news(db, run_date=RUN_DATE, fetch=FixtureFetcher())
+    for source_name, source_id, offset in (
+        ("工商時報", "ctee", "+08:00"),
+        ("中央社", "cna", None),
+    ):
+        item = _items(db, source_name=source_name)[0]
+        raw = json.loads(
+            Path(db.get(RawPayload, item.raw_payload_id).payload_path).read_text(
+                encoding="utf-8"
+            )
+        )
+        run = db.scalar(select(IngestionRun).where(IngestionRun.source == source_id))
+        assert raw["naive_time_offset"] == offset
+        assert run.metadata_json["naive_time_offset"] == offset
+
+
 # AC-3 ------------------------------------------------------------------------
 
 
@@ -433,9 +544,63 @@ def test_two_character_name_needs_its_code_and_three_character_name_matches_alon
     assert matcher.symbols("台積電熊本廠獲補助") == ["TWSE:2330"]
 
 
-def test_industry_name_matches_official_verified_theme_only(matcher):
-    assert matcher.theme_ids("半導體與光電族群走強") == [OPTO, SEMICONDUCTOR]
+def test_listing_markers_need_a_dash_and_aliases_have_two_characters():
+    aliases = news_batch._name_aliases
+    assert aliases("群創") == {"群創"}
+    assert aliases("世紀*") == {"世紀"}
+    assert aliases("譜瑞-KY") == {"譜瑞-KY", "譜瑞"}
+    assert aliases("奧義賽博-KY創") == {"奧義賽博-KY創", "奧義賽博"}
+    assert aliases("太景*-KY") == {"太景*-KY", "太景"}
+
+
+def test_number_next_to_a_single_character_of_a_name_does_not_match(matcher):
+    assert matcher.symbols("面板族群成交量3481張") == []
+    assert matcher.symbols("群創(3481)今日法說") == ["TWSE:3481"]
+    assert matcher.symbols("世紀(5314)得標") == ["TPEx:5314"]
+    assert matcher.symbols("譜瑞-KY(4966-TW)目標價調升") == ["TWSE:4966"]
+
+
+def test_longer_phrase_containing_a_name_does_not_match(matcher):
+    assert matcher.symbols("中華電視今晚播出財經節目") == []
+    assert matcher.symbols("中華電宣布調降資費") == ["TWSE:2412"]
+
+
+def test_industry_name_needs_an_industry_word_and_verified_theme(matcher):
+    assert matcher.theme_ids("半導體與光電族群走強") == [OPTO]
+    assert matcher.theme_ids("半導體類股領漲、光電股走弱") == [OPTO, SEMICONDUCTOR]
+    assert matcher.theme_ids("半導體產業與半導體業") == [SEMICONDUCTOR]
+    assert matcher.theme_ids("國際金融市場震盪") == []
     assert matcher.theme_ids("其他產業代碼 37 個股") == []
+
+
+def test_generic_theme_names_and_names_inside_company_names_do_not_match(db):
+    db.add_all(
+        [
+            ThemeGroup(
+                id="official-industry-composite",
+                name="Industry · Composite",
+                display_name_zh="綜合",
+                group_type="official_industry",
+                name_status="official",
+                active=True,
+            ),
+            ThemeGroup(
+                id="official-industry-finance",
+                name="Industry · Financial",
+                display_name_zh="金融",
+                group_type="official_industry",
+                name_status="official",
+                active=True,
+            ),
+        ]
+    )
+    db.commit()
+    matcher = RelationMatcher.from_db(db)
+    assert matcher.theme_ids("（中央社台北17日綜合外電報導）綜合類股") == []
+    assert matcher.theme_ids("國際金融市場震盪，金融股走低") == [
+        "official-industry-finance"
+    ]
+    assert matcher.theme_ids("台光電股價創高") == []
 
 
 def test_relations_in_batch_and_unmatched_items_are_kept_with_unknown_direction(db):
@@ -553,6 +718,50 @@ def test_doctype_and_non_rss_documents_are_format_errors():
         parse_rss(b"<html><body/></html>", SOURCES_BY_ID["cna"])
 
 
+def test_doctype_after_a_long_prefix_is_still_refused():
+    padding = b"<!--" + b"x" * 5000 + b"-->"
+    laughs = b'<!DOCTYPE rss [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;">]>'
+    document = (
+        b'<?xml version="1.0"?>' + padding + laughs + b"<rss><channel><item>"
+        b"<title>&b;</title><link>https://feed.example/x</link></item></channel></rss>"
+    )
+    with pytest.raises(NewsSourceError, match="DTD"):
+        parse_rss(document, SOURCES_BY_ID["cna"])
+
+
+def _fetcher(handler):
+    return HttpFeedFetcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=lambda _: None,
+    )
+
+
+def test_http_fetcher_follows_redirects_only_within_the_feed_host():
+    def handler(request):
+        if request.url.path == "/old":
+            return httpx.Response(301, headers={"location": "/new"})
+        if request.url.path == "/new":
+            return httpx.Response(200, content=b"<rss/>")
+        return httpx.Response(
+            302, headers={"location": "https://elsewhere.example/rss"}
+        )
+
+    fetcher = _fetcher(handler)
+    assert fetcher("https://feed.example/old").content == b"<rss/>"
+    with pytest.raises(NewsSourceError, match="another host"):
+        fetcher("https://feed.example/away")
+    fetcher.close()
+
+
+def test_http_fetcher_refuses_bodies_over_the_size_limit():
+    fetcher = _fetcher(
+        lambda request: httpx.Response(200, content=b"x" * (MAX_RESPONSE_BYTES + 1))
+    )
+    with pytest.raises(NewsSourceError, match="exceeds"):
+        fetcher("https://feed.example/big")
+    fetcher.close()
+
+
 def test_http_fetcher_sends_fixed_user_agent_and_waits_between_requests():
     seen, sleeps = [], []
 
@@ -634,3 +843,34 @@ def test_api_filters_domestic_and_international_news(db, client):
         and item["provenance"]["event_id"] is None
     )
     assert item["impact"]["direction"] == "unknown"
+
+
+def test_stock_page_lists_feed_news_by_exchange_and_symbol(db, client):
+    collect_news(db, run_date=RUN_DATE, fetch=FixtureFetcher())
+    joint = _rss(
+        "<title>台積電與乙電子(7777)合作</title><link>https://feed.example/joint</link>"
+        "<pubDate>Sat, 17 Oct 2026 12:00:00 +0800</pubDate>"
+    )
+    collect_news(db, fetch=lambda url: _ok(joint), news_sources=[_single_feed_source()])
+    assert _by_title(db, "台積電與乙電子(7777)合作").symbols_json == [
+        "TPEx:7777",
+        "TWSE:2330",
+    ]
+
+    def titles(exchange, symbol):
+        body = client.get(
+            f"{router.prefix}/stocks/{exchange}/{symbol}",
+            params={"as_of": "2026-10-18"},
+        ).json()
+        return {item["title"] for item in body["news"]}
+
+    assert titles("TPEx", "7777") == {
+        "乙電子(7777-TWO)接獲新訂單 周漲一成",
+        "台積電與乙電子(7777)合作",
+    }
+    assert titles("TWSE", "7777") == set()
+    assert titles("TWSE", "2330") == {
+        "台積電在熊本建3奈米廠　日本批准補助資格",
+        "台積電在熊本建3奈米廠 日本批准補助資格！",
+        "台積電與乙電子(7777)合作",
+    }

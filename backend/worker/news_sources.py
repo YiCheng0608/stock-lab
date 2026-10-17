@@ -18,13 +18,20 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from xml.parsers import expat
 
 import httpx
 
 USER_AGENT = "stock-lab-news/0.1 (+https://github.com/YiCheng0608/stock-lab)"
 REQUEST_INTERVAL_SECONDS = 2.0
 REQUEST_TIMEOUT_SECONDS = 20.0
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_REDIRECTS = 5
+# Column lengths of news_items (SQLite does not enforce them; other engines do).
+MAX_TITLE_LENGTH = 300
+MAX_ITEM_ID_LENGTH = 180
+MAX_URL_LENGTH = 800
 TAIPEI = timezone(timedelta(hours=8))
 
 CONTENT_NS = "http://purl.org/rss/1.0/modules/content/"
@@ -194,7 +201,11 @@ Fetcher = Callable[[str], FeedResponse]
 
 
 class HttpFeedFetcher:
-    """One shared client with a fixed User-Agent and a fixed request interval."""
+    """One shared client with a fixed User-Agent and a fixed request interval.
+
+    Bodies are streamed and capped at MAX_RESPONSE_BYTES, and a redirect is
+    followed only within the host of the registered feed URL.
+    """
 
     def __init__(
         self,
@@ -208,7 +219,7 @@ class HttpFeedFetcher:
         self._client = client or httpx.Client(
             headers={"User-Agent": USER_AGENT},
             timeout=REQUEST_TIMEOUT_SECONDS,
-            follow_redirects=True,
+            follow_redirects=False,
         )
         self._requested = False
 
@@ -216,18 +227,44 @@ class HttpFeedFetcher:
         if self._requested:
             self._sleep(self._interval)
         self._requested = True
+        host = urlsplit(url).hostname
+        target = url
         try:
-            response = self._client.get(url, headers={"User-Agent": USER_AGENT})
+            for _ in range(MAX_REDIRECTS + 1):
+                with self._client.stream(
+                    "GET",
+                    target,
+                    headers={"User-Agent": USER_AGENT},
+                    follow_redirects=False,
+                ) as response:
+                    if response.is_redirect:
+                        target = urljoin(target, response.headers.get("location", ""))
+                        if urlsplit(target).hostname != host:
+                            raise NewsSourceError(
+                                f"redirect to another host refused: {target}"
+                            )
+                        continue
+                    content = bytearray()
+                    for chunk in response.iter_bytes():
+                        content.extend(chunk)
+                        if len(content) > MAX_RESPONSE_BYTES:
+                            raise NewsSourceError(
+                                f"response exceeds {MAX_RESPONSE_BYTES} bytes"
+                            )
+                    body = bytes(content)
+                    return FeedResponse(
+                        response.status_code,
+                        response.headers.get("content-type"),
+                        body,
+                        body.decode(
+                            response.charset_encoding or "utf-8", errors="replace"
+                        ),
+                    )
         except httpx.HTTPError as exc:
             raise NewsSourceError(
                 f"request failed: {type(exc).__name__}: {exc}"
             ) from exc
-        return FeedResponse(
-            response.status_code,
-            response.headers.get("content-type"),
-            response.content,
-            response.text,
-        )
+        raise NewsSourceError(f"more than {MAX_REDIRECTS} redirects")
 
     def close(self) -> None:
         self._client.close()
@@ -245,8 +282,23 @@ _CONTENT_ENCODED = re.compile(
 )
 
 
-def raw_feed_payload(feed: NewsFeed, response: FeedResponse) -> dict[str, object]:
-    """JSON payload for persist_raw_payload, without embedded article bodies."""
+def naive_offset_text(offset: timezone | None) -> str | None:
+    if offset is None:
+        return None
+    minutes = int(offset.utcoffset(None).total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "-"
+    return f"{sign}{abs(minutes) // 60:02d}:{abs(minutes) % 60:02d}"
+
+
+def raw_feed_payload(
+    source: NewsSource, feed: NewsFeed, response: FeedResponse
+) -> dict[str, object]:
+    """JSON payload for persist_raw_payload, without embedded article bodies.
+
+    ``naive_time_offset`` records the offset assumed for zone-less feed times
+    (null when such times are left unknown), so stored instants can be traced
+    back to that assumption.
+    """
 
     body, removed = _CONTENT_ENCODED.subn("", response.text)
     return {
@@ -254,6 +306,7 @@ def raw_feed_payload(feed: NewsFeed, response: FeedResponse) -> dict[str, object
         "feed": feed.key,
         "http_status": response.status_code,
         "content_type": response.content_type,
+        "naive_time_offset": naive_offset_text(source.naive_offset),
         "removed_elements": {"content:encoded": removed} if removed else {},
         "body": body,
     }
@@ -276,7 +329,6 @@ _TRACKING_KEYS = {
     "mod",
     "tsrc",
     ".tsrc",
-    "ref",
     "cmpid",
     "fbclid",
     "gclid",
@@ -291,6 +343,8 @@ _TRACKING_KEYS = {
 
 
 def canonical_url(url: str) -> str:
+    """https, lower-case host, no tracking query, fragment or trailing slash."""
+
     parts = urlsplit(url.strip())
     query = sorted(
         (key, value)
@@ -298,9 +352,11 @@ def canonical_url(url: str) -> str:
         if key.casefold() not in _TRACKING_KEYS
         and not key.casefold().startswith("utm_")
     )
-    return urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower(), parts.path, urlencode(query), "")
-    )
+    scheme = parts.scheme.lower()
+    if scheme == "http":
+        scheme = "https"
+    path = parts.path.rstrip("/") if len(parts.path) > 1 else parts.path
+    return urlunsplit((scheme, parts.netloc.lower(), path, urlencode(query), ""))
 
 
 def normalized_title(title: str) -> str:
@@ -319,35 +375,60 @@ def title_hash(text: str) -> str:
 
 
 _TAG = re.compile(r"<[^>]+>")
+_DATE_ONLY = re.compile(r"\d{4}-?\d{2}-?\d{2}")
+_ISO_WITH_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _ASCII_SPACE = re.compile(r"[ \t\r\n]+")
 
 
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
+    # Unescape before removing tags so escaped markup (``&lt;b&gt;``, or a
+    # double-escaped ``&amp;lt;b&amp;gt;`` inside CDATA) is removed, not stored.
+    text = value
+    for _ in range(3):
+        cleaned = _TAG.sub(" ", html.unescape(text))
+        if cleaned == text:
+            break
+        text = cleaned
     # Collapse ASCII whitespace only; a full-width space is part of the source title.
-    text = _ASCII_SPACE.sub(" ", html.unescape(_TAG.sub(" ", value))).strip()
+    text = _ASCII_SPACE.sub(" ", text).strip()
     return text or None
 
 
 def _parse_time(
     value: str | None, naive_offset: timezone | None
 ) -> tuple[datetime | None, date | None]:
-    """Return (naive UTC instant, date) — only one of them is set, or neither."""
+    """Return (naive UTC instant, date) — only one of them is set, or neither.
+
+    A value without a time of day is a date and never gets a clock time.  An
+    RFC 2822 time with ``-0000`` (zone explicitly unknown) stays unknown;
+    ``naive_offset`` applies only to ISO times that carry no zone at all.
+    Invalid values are unknown, never an error.
+    """
 
     text = (value or "").strip()
     if not text:
         return None, None
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
-        return None, date.fromisoformat(text)
-    parsed: datetime | None = None
+    if _DATE_ONLY.fullmatch(text):
+        try:
+            return None, date.fromisoformat(text)
+        except ValueError:
+            return None, None
     try:
         parsed = parsedate_to_datetime(text)
     except (TypeError, ValueError, IndexError):
-        try:
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        except ValueError:
+        parsed = None
+    if parsed is not None:
+        if parsed.tzinfo is None:  # -0000
             return None, None
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None), None
+    if not _ISO_WITH_TIME.match(text):
+        return None, None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None, None
     if parsed.tzinfo is None:
         if naive_offset is None:
             return None, None
@@ -362,16 +443,40 @@ def _text(element: ET.Element, tag: str) -> str | None:
     return child.text.strip() or None
 
 
+class _DoctypeFound(Exception):
+    pass
+
+
+def _refuse(*_args: object) -> None:
+    raise _DoctypeFound
+
+
+def _reject_doctype(content: bytes) -> None:
+    """Refuse any DOCTYPE or entity declaration, wherever it is in the document."""
+
+    checker = expat.ParserCreate()
+    checker.StartDoctypeDeclHandler = _refuse
+    checker.EntityDeclHandler = _refuse
+    try:
+        checker.Parse(content, True)
+    except _DoctypeFound:
+        raise NewsSourceError(
+            "format error: DTD/entity declarations are not accepted"
+        ) from None
+    except expat.ExpatError as exc:
+        raise NewsSourceError(f"format error: {exc}") from exc
+
+
 def parse_rss(content: bytes, source: NewsSource) -> tuple[list[FeedEntry], int]:
     """Parse an RSS 2.0 document into entries; return (entries, skipped item count).
 
     Raises NewsSourceError when the document is not RSS.  Items without a title
-    or an absolute link, and sponsored CNBC items, are skipped and counted.
+    or an absolute link, links longer than the URL column, and sponsored CNBC
+    items are skipped and counted.  Titles and guids are cut to their column
+    lengths.
     """
 
-    head = content[:4096].lower()
-    if b"<!doctype" in head or b"<!entity" in head:
-        raise NewsSourceError("format error: DTD/entity declarations are not accepted")
+    _reject_doctype(content)
     try:
         root = ET.fromstring(content)
     except ET.ParseError as exc:
@@ -402,6 +507,9 @@ def parse_rss(content: bytes, source: NewsSource) -> tuple[list[FeedEntry], int]
             skipped += 1
             continue
         url = canonical_url(link)
+        if len(url) > MAX_URL_LENGTH:
+            skipped += 1
+            continue
         guid = _text(item, "guid")
         raw_time = _text(item, "pubDate")
         published_at, event_date = _parse_time(raw_time, source.naive_offset)
@@ -409,7 +517,7 @@ def parse_rss(content: bytes, source: NewsSource) -> tuple[list[FeedEntry], int]
             FeedEntry(
                 source_item_id=guid,
                 url=url,
-                title=title,
+                title=title[:MAX_TITLE_LENGTH],
                 summary=_clean_text(_text(item, "description")),
                 published_at=published_at,
                 event_date=event_date,

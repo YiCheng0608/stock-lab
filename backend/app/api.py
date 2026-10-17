@@ -11,7 +11,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator, model_validator
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
@@ -1662,7 +1662,7 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
             .where(
                 NewsItem.status == "active",
                 or_(NewsItem.time_consistency.is_(None), NewsItem.time_consistency != "conflict"),
-                NewsItem.symbols_json.contains([instrument_row.symbol]),
+                _news_symbol_filter(instrument_row),
                 _stock_news_cutoff_filter(cutoff),
             )
             .outerjoin(Event, NewsItem.event_id == Event.id)
@@ -1675,6 +1675,19 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
     else:
         payload["news"] = []
     return payload
+
+
+def _news_symbol_filter(instrument: Instrument):
+    """Match a JSON element of symbols_json, not a substring of another code.
+
+    Official-event projections store the bare symbol; feed news stores
+    ``exchange:symbol`` so a code listed on both exchanges stays distinct.
+    """
+    symbols = cast(NewsItem.symbols_json, String)
+    return or_(
+        symbols.contains(json.dumps(instrument.symbol), autoescape=True),
+        symbols.contains(json.dumps(f"{instrument.exchange}:{instrument.symbol}"), autoescape=True),
+    )
 
 
 def _stock_news_cutoff_filter(cutoff: date | None):

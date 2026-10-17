@@ -44,23 +44,26 @@
 
 ## 新聞來源
 
-`python -m worker.cli news` 讀取下表的 RSS feed（登錄在 [`backend/worker/news_sources.py`](../backend/worker/news_sources.py)）。每則只保存標題、來源提供的描述（`summary`）、發布時間、guid 與單篇連結，不抓正文，也不收付費或需登入的來源。用途限本機個人非商業研究，顯示時標示來源名稱。
+`python -m worker.cli news` 讀取下表的 RSS feed（登錄在 [`backend/worker/news_sources.py`](../backend/worker/news_sources.py)），不抓正文，也不收付費或需登入的來源。用途限本機個人非商業研究，顯示時標示來源名稱。
 
-| 來源 | `source_kind`／`category` | endpoint | 使用條件 | feed 更新 |
-| --- | --- | --- | --- | --- |
-| 中央社 產經證券 | `media`／`domestic` | [`feeds.feedburner.com/rsscna/finance`](https://feeds.feedburner.com/rsscna/finance) | [RSS 規範](https://www.cna.com.tw/about/rss.aspx)：個人、非營利之非商業用途，標示「中央通訊社」，不得引用全文 | ttl 15 分，約 20 則 |
-| 鉅亨網 台股新聞 | `media`／`domestic` | [`news.cnyes.com/rss/v1/news/category/tw_stock`](https://news.cnyes.com/rss/v1/news/category/tw_stock) | 無 RSS 專屬條款；robots.txt 未禁止此路徑。feed 內的 `content:encoded`（正文節錄）不保存 | 約 65 則 |
-| 工商時報 證券 | `media`／`domestic` | [`www.ctee.com.tw/rss_web/livenews/stock`](https://www.ctee.com.tw/rss_web/livenews/stock) | 無 RSS 專屬條款；robots.txt 對一般 user-agent 無限制 | ttl 60 分，約 15 則 |
-| Yahoo奇摩股市 台股盤勢 | `media`／`domestic` | [`tw.stock.yahoo.com/rss?category=tw-market`](https://tw.stock.yahoo.com/rss?category=tw-market) | [RSS 說明](https://tw.stock.yahoo.com/rss-help)：個人與非營利、非商業用途，標示「Yahoo股市」，標題中的來源不得修改 | ttl 5 分，約 50 則 |
-| CNBC Top News、Market Insider、Technology | `media`／`international` | `www.cnbc.com/id/{100003114,20409666,19854910}/device/rss/rss.html` | 列於 [CNBC RSS 頁](https://www.cnbc.com/rss-feeds/) 供公開訂閱；sponsored 項不收 | ttl 60 分，各約 30 則 |
-| MarketWatch Top Stories | `media`／`international` | [`feeds.content.dowjones.io/public/rss/mw_topstories`](https://feeds.content.dowjones.io/public/rss/mw_topstories) | Dow Jones 服務條款：個人、非商業用途 | ttl 60 分，約 10 則 |
-| Federal Reserve 新聞稿 | `macro_official`／`international` | [`www.federalreserve.gov/feeds/press_all.xml`](https://www.federalreserve.gov/feeds/press_all.xml) | [公有領域](https://www.federalreserve.gov/disclaimer.htm)，需標示來源 | 約 20 則 |
+| 來源 | `source_kind`／`category` | endpoint | 使用條件 | 保存欄位 | 頻率 | 延遲 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 中央社 產經證券 | `media`／`domestic` | [`feeds.feedburner.com/rsscna/finance`](https://feeds.feedburner.com/rsscna/finance) | [RSS 規範](https://www.cna.com.tw/about/rss.aspx)：個人、非營利之非商業用途，標示「中央通訊社」，不得引用全文 | 標題、前言（`summary`）、pubDate、guid、單篇連結 | 每 2 小時；feed 約 20 則 | ttl 15 分＋排程間隔，最多約 2 小時 15 分 |
+| 鉅亨網 台股新聞 | `media`／`domestic` | [`news.cnyes.com/rss/v1/news/category/tw_stock`](https://news.cnyes.com/rss/v1/news/category/tw_stock) | 無 RSS 專屬條款；robots.txt 未禁止此路徑 | 標題、description、pubDate、guid（單篇 URL）、單篇連結；`content:encoded` 正文節錄不保存 | 每 2 小時；feed 約 65 則 | 未宣告 ttl；最多約排程間隔 2 小時 |
+| 工商時報 證券 | `media`／`domestic` | [`www.ctee.com.tw/rss_web/livenews/stock`](https://www.ctee.com.tw/rss_web/livenews/stock) | 無 RSS 專屬條款；robots.txt 對一般 user-agent 無限制 | 標題、description、pubDate（無時區，依 +08:00）、guid、單篇連結 | 每 2 小時；feed 約 15 則 | ttl 60 分＋排程間隔，最多約 3 小時 |
+| Yahoo奇摩股市 台股盤勢 | `media`／`domestic` | [`tw.stock.yahoo.com/rss?category=tw-market`](https://tw.stock.yahoo.com/rss?category=tw-market) | [RSS 說明](https://tw.stock.yahoo.com/rss-help)：個人與非營利、非商業用途，標示「Yahoo股市」，標題中的來源不得修改 | 標題、description、pubDate、單篇連結（guid 為空，以 canonical URL 識別） | 每 2 小時；feed 約 50 則 | ttl 5 分＋排程間隔，最多約 2 小時 5 分 |
+| CNBC Top News、Market Insider、Technology | `media`／`international` | `www.cnbc.com/id/{100003114,20409666,19854910}/device/rss/rss.html` | 列於 [CNBC RSS 頁](https://www.cnbc.com/rss-feeds/) 供公開訂閱 | 標題、description、pubDate、guid（數字 ID，三個 feed 共用）、單篇連結；sponsored 項不收 | 每 2 小時；各約 30 則 | ttl 60 分＋排程間隔，最多約 3 小時 |
+| MarketWatch Top Stories | `media`／`international` | [`feeds.content.dowjones.io/public/rss/mw_topstories`](https://feeds.content.dowjones.io/public/rss/mw_topstories) | Dow Jones 服務條款：個人、非商業用途 | 標題、description、pubDate、guid、單篇連結（去除 `mod` 參數） | 每 2 小時；feed 約 10 則 | ttl 60 分＋排程間隔，最多約 3 小時 |
+| Federal Reserve 新聞稿 | `macro_official`／`international` | [`www.federalreserve.gov/feeds/press_all.xml`](https://www.federalreserve.gov/feeds/press_all.xml) | [公有領域](https://www.federalreserve.gov/disclaimer.htm)，需標示來源 | 標題、description、pubDate、guid（單篇 URL）、單篇連結 | 每 2 小時；feed 約 20 則 | 未宣告 ttl；最多約排程間隔 2 小時 |
+
+延遲指來源發布到本系統可收錄的上限：feed 宣告的 ttl 加上排程間隔，不含來源自身發布到 feed 的時間。
 
 未啟用：經濟日報 RSS（[robots.txt](https://money.udn.com/robots.txt) 禁止用於 LLM／AI 與商業用途，和新聞的 LLM 摘要衝突）；Yahoo Finance（沒有總表 feed，個股 headline feed 主機 robots.txt 全站禁止）；MarketWatch Market Pulse（2025 年後停更）；Reuters（無公開 RSS）。
 
-- **請求**：固定 User-Agent `stock-lab-news/0.1 (+https://github.com/YiCheng0608/stock-lab)`，請求間隔 2 秒，逾時 20 秒，不重試；每次執行共 9 個請求。
-- **raw**：每個 feed 回應以 `persist_raw_payload` 存成 `news_<來源>`，內容為 HTTP 狀態、content type 與 feed 本文；寫入前移除 `content:encoded`，移除筆數記在 `removed_elements`。
-- **時間**：`pubDate` 依其時區轉 UTC，寫 `published_at`（精度 datetime）；只有日期時寫 `event_date`（精度 date），不補時分。工商時報的時間沒有時區，依台北時間（+08:00）解讀；其他來源的無時區時間當作未知。來源時間晚於收錄時間 15 分鐘以上時，該則標 `time_consistency=conflict` 並隔離。
+- **請求**：固定 User-Agent `stock-lab-news/0.1 (+https://github.com/YiCheng0608/stock-lab)`，請求間隔 2 秒，逾時 20 秒，不重試；每次執行共 9 個請求。回應以串流讀取，超過 2 MB 即視為失敗；轉址只跟隨同一登錄主機，最多 5 次。
+- **raw**：每個 feed 回應以 `persist_raw_payload` 存成 `news_<來源>`，內容為 HTTP 狀態、content type 與 feed 本文；寫入前移除 `content:encoded`，移除筆數記在 `removed_elements`。`naive_time_offset` 記錄無時區時間採用的時差（工商時報為 `+08:00`，其他為 null），同一值也寫在該來源 run 的 `metadata_json`。含 DOCTYPE 或實體宣告的文件一律視為格式錯誤。
+- **文字**：標題與描述先解 HTML 實體再移除標籤，只合併半形空白；標題截到 300 字、guid 截到 180 字，超過 800 字的連結不收。
+- **時間**：`pubDate` 依其時區轉 UTC，寫 `published_at`（精度 datetime）；沒有時間部分的值（`2026-10-17`、`20261017`）寫 `event_date`（精度 date），不補時分。工商時報的無時區 ISO 時間依 +08:00 解讀；其他來源的無時區時間、RFC 2822 的 `-0000`、不存在的日期都當作未知。來源時間晚於收錄時間 15 分鐘以上時，該則標 `time_consistency=conflict` 並隔離。
 - **限制**：feed 只保留最近 10～65 則，抓取間隔內若超過這個數量會漏稿，漏掉的舊稿不回補。feed 的 `pubDate` 是來源宣稱的發布時間，不是本系統可證明的第一次可得時間。
 
 ## 欄位規則

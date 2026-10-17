@@ -41,13 +41,14 @@
 
 新聞 feed 的實作（`worker.news_batch`）：
 
-- 同來源以 guid 為 `canonical_key`，沒有 guid 時用 canonical URL（去掉 `utm_*`、`mod` 等追蹤參數與 fragment）；guid 或 canonical URL 任一已存在就視為同一則。既有列重跑時不改寫，`published_at` 保持第一次寫入的值。
+- 同來源以 guid 為 `canonical_key`，沒有 guid 時用 canonical URL（統一 https、主機小寫，去掉 `utm_*`、`mod` 等追蹤參數、fragment 與結尾斜線）；guid 或 canonical URL 任一已存在就視為同一則。既有列重跑時不改寫，`published_at` 保持第一次寫入的值。
 - 跨來源：標題經 NFKC、小寫並去掉空白、標點與符號後相同，且台北時間同一天者，給同一個 `dedupe_cluster_id`，各來源各保留一列；沒有來源時間的不併群。
 - 規則關聯（`impact_method=rule:exact-name-code/v1`），只比對標題與描述，對象為上市／上櫃普通股：
   - 代號只在有脈絡時算命中：同一檔的名稱也出現、代號後接 `-TW`／`.TW`／`-TWO`，或前面是「代號」；純數字不算。
   - 同一代號在兩個交易所都有時，只由名稱決定，代號本身不消歧。
-  - 名稱單獨出現時，只有三字以上、含中文、不在常用詞排除表內，且不屬於更長的已命中名稱者才算；兩字名稱必須同時出現其代號。
-  - `symbols_json` 寫 `exchange:symbol`。官方產業顯示名稱（已核實且不是「其他」，且不落在公司名稱內）出現時，寫入 `theme_ids_json`。
+  - 名稱比對用正式名稱與去掉上市標記（帶 dash 的 `-KY`、`-DR`、`-創`，以及 `*`）後的名稱，至少兩字。名稱單獨出現時，只有三字以上、含中文、不在常用詞排除表內，且不在更長的已命中名稱或排除詞組（如「中華電視」）內者才算；兩字名稱必須同時出現其代號。
+  - `symbols_json` 寫 `exchange:symbol`；個股頁依 `exchange:symbol` 或官方投影的純代號比對。
+  - 產業：已核實的官方產業顯示名稱後接「股」「類股」「族群」「產業」「業」時，寫入 `theme_ids_json`；名稱落在公司名稱或更長的產業名稱內（「台光電股」的光電、「其他電子業」的電子）不算，「其他」「綜合」不比對。
 - `impact_scope`：有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。`impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
 
 ## 4. 時間與排序
