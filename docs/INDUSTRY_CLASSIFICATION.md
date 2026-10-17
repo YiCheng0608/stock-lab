@@ -113,7 +113,7 @@ Collector 對三個 domain 各自計算 desired state，只操作自己擁有的
 
 `relation` 的值：`core_business` 表示主要業務就是該題材；`product_line` 表示有該題材的產品線；`supply_chain` 表示供應該題材的零組件、設備或材料。`relevance` 的值為 `high`、`medium`、`low`。證據只收公開、可開啟的頁面，例如公司官網、官方公告或財經媒體報導；找不到證據的成員不收。
 
-**驗證**：缺證據、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置，例如 `themes[0](ai-server).members[2](TWSE:2356).evidence`。
+**驗證**：缺證據、URL 不是 http(s)、日期倒置、成員日期超出題材期間、同題材重複成員、重複題材 id、代號格式錯誤、DB 查無代號、代號不是股票，或寫入 `source` 的 JSON 超過 500 字，都會讓整批拒絕。錯誤訊息會指出位置：`themes[序號]` 後接括號內的題材 id，`members[序號]` 後接括號內的代號，再接欄位名（如 `.evidence`）。
 
 **DB 對照**
 
