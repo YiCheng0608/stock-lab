@@ -59,6 +59,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | `python -m worker.cli init-db` | 建立／升級指定 DB；先確認路徑、backup 與授權。 |
 | `python -m worker.cli collect --date YYYY-MM-DD --months-back 0` | 官方來源收集；`months-back` 只接受 0、1、2、3。 |
 | `python -m worker.cli themes sync [--file PATH]` | 驗證[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)（預設 `backend/data/themes/themes_v1.json`）並寫入 `theme_groups`／`group_memberships`；不發網路，重跑冪等。任何錯誤都整批不寫入、印出位置並 exit 1。題材榜在下一次 analyze／daily 計分。 |
+| `python -m worker.cli industry repair [--apply] [--rescore-days N]` | 依已保存的公司基本資料 raw，把錯配的一般產業 membership 搬到 canonical 群組（規則見 [INDUSTRY_CLASSIFICATION §5.1](INDUSTRY_CLASSIFICATION.md#51-既有錯配-membership-修復)）；不發網路。預設 dry-run 只印預計變更；`--apply` 寫入並記一筆 `run_type=industry_repair` 的 ingestion run，重跑回 `no_change`。`--rescore-days N` 需搭配 `--apply`，寫入後重算最近 N 個 TAIEX 交易日的族群分數（同 analyze 的 `hot_group_v1`，不重算訊號）。證據不一致時整批不寫入並 exit 1。 |
 | `python -m worker.cli daily --date YYYY-MM-DD --months-back 0 [--trigger manual\|scheduler\|simulation] [--force]` | collect 成功才 analyze；analyze 成功才 evaluate。collect 成功後跑指標批次（目標日傳給批次；analyze 失敗也跑）；collect 失敗時後續步驟記 `skipped`。每次執行寫一列 `schedule_runs`，任一步驟失敗則該 run 為 `failed`；exit code 與狀態見 [§6.3](#63-日誌與-run-記錄)。 |
 | `python -m worker.cli schedule-runs [--date YYYY-MM-DD] [--limit N]` | 列出 daily run 記錄與各步驟；唯讀。 |
 | `python -m worker.cli backfill --start-date YYYY-MM-DD --end-date YYYY-MM-DD --scope market` | 有界官方回補、重試與稽核；不是 backtest。超過 93 日的範圍依序切成多段。 |

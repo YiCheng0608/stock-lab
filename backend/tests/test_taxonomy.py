@@ -145,3 +145,50 @@ def test_news_theme_validation_rejects_known_tpex_code_collisions(
     assert not _is_verified_theme_for_instrument(_group(wrong_label), membership, instrument)
     membership.group_id = canonical_group_id("industry", correct_label)
     assert _is_verified_theme_for_instrument(_group(correct_label), membership, instrument)
+
+
+def _official_names():
+    fixture = json.loads((Path(__file__).parent/'fixtures'/'official_industry_codes.json').read_text(encoding='utf-8'))
+    return fixture['official_names']
+
+
+# Issue #193: pre-baseline memberships put e.g. TWSE 17 into 通信網路 and 25
+# into 金融.  Pin code -> canonical label -> display name per exchange.
+@pytest.mark.parametrize(('exchange', 'code', 'label', 'display'), [
+    ('TWSE','01','Cement','水泥'), ('TWSE','08','Glass','玻璃陶瓷'), ('TWSE','12','Automobile','汽車'),
+    ('TWSE','15','Shipping','航運'), ('TWSE','17','Financial','金融'), ('TWSE','22','Biotechnology','生技醫療'),
+    ('TWSE','24','Semiconductor','半導體'), ('TWSE','25','Computer and Peripherals','電腦及週邊'),
+    ('TWSE','26','Optoelectronics','光電'), ('TWSE','27','Communications','通信網路'),
+    ('TWSE','28','Electronic Parts','電子零組件'), ('TWSE','29','Electronic Distribution','電子通路'),
+    ('TWSE','06','Electrical Cable','電器電纜'),
+    ('TPEx','06','Electrical Cable','電器電纜'), ('TPEx','16','Tourism','觀光餐旅'), ('TPEx','17','Financial','金融'),
+    ('TPEx','22','Biotechnology','生技醫療'), ('TPEx','24','Semiconductor','半導體'),
+    ('TPEx','25','Computer and Peripherals','電腦及週邊'), ('TPEx','26','Optoelectronics','光電'),
+    ('TPEx','27','Communications','通信網路'), ('TPEx','28','Electronic Parts','電子零組件'),
+    ('TPEx','29','Electronic Distribution','電子通路'), ('TPEx','30','Information Service','資訊服務'),
+    ('TPEx','32','Cultural Innovation','文化創意'), ('TPEx','33','Agriculture Technology','農業科技'),
+])
+def test_code_to_display_name_is_pinned_per_exchange(exchange, code, label, display):
+    from app.taxonomy import INDUSTRY_DISPLAY_ZH
+    assert canonical_industry_label(exchange, code) == label
+    assert INDUSTRY_DISPLAY_ZH[label] == display
+
+
+def test_display_names_abbreviate_the_official_market_name():
+    from app.taxonomy import INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE, INDUSTRY_DISPLAY_ZH
+    names = _official_names()
+    for exchange, codes in INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE.items():
+        assert set(codes) == set(names[exchange])
+        for code, label in codes.items():
+            assert names[exchange][code].startswith(INDUSTRY_DISPLAY_ZH[label]), (exchange, code)
+
+
+def test_each_industry_group_has_exactly_one_member_code():
+    from app.taxonomy import INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE
+    codes_by_label: dict[str, set[str]] = {}
+    for codes in INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE.values():
+        for code, label in codes.items():
+            codes_by_label.setdefault(label, set()).add(code)
+    assert all(len(codes) == 1 for codes in codes_by_label.values()), codes_by_label
+    group_ids = [canonical_group_id('industry', label) for label in codes_by_label]
+    assert len(set(group_ids)) == len(group_ids)
