@@ -8,7 +8,7 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
-本文的 `python`／`node` 指實際安裝的直譯器。Python 須為 3.12.x，Windows 下若 PATH 的 `python` 是 Store stub，請改用實際安裝路徑。`--check`／preview 入口以 pinned Node 24.19.0（TypeScript 5.9.3／esbuild 0.25.12）驗收，CI frontend job 的 Node 版本以 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) 的 setup-node 為準；舊 20.19.4 只是歷史驗收當時版本。各入口的 `--deps` 指既有唯讀依賴（本機 `backend/.deps`／`frontend/node_modules`；CI 的 chips-series check 傳 `$GITHUB_WORKSPACE/backend`），省略時 runner 取 repo 內 `backend/.deps`／`frontend/node_modules`（任務 worktree 通常沒有）、找不到即明確失敗，或直接要求 `--deps`，因此一律明示。
+本文的 `python`／`node` 指實際安裝的直譯器。Python 須為 3.12.x，Windows 下若 PATH 的 `python` 是 Store stub，請改用實際安裝路徑。`--check`／preview 入口以 pinned Node 24.19.0（TypeScript 5.9.3／esbuild 0.25.12）驗收，CI frontend／backend job 的 Node 版本以 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) 的 setup-node 為準；舊 20.19.4 只是歷史驗收當時版本。各入口的 `--deps` 指既有唯讀依賴（本機 `backend/.deps`／`frontend/node_modules`；CI 的 chips-series check 與 standalone job 的 `tpex-price-api.py` check 傳 `$GITHUB_WORKSPACE/backend`），省略時 runner 取 repo 內 `backend/.deps`／`frontend/node_modules`（任務 worktree 通常沒有）、找不到即明確失敗，或直接要求 `--deps`，因此一律明示。
 
 測試失敗先依[失敗分流與有界重驗](../GITHUB_WORKFLOW.md#失敗分流與有界重驗)分類；工具／環境失敗修正後重跑同一案例，不判產品結果，也不重取外部資料。
 
@@ -108,6 +108,8 @@ python -B -X utf8 -m tools.test_db.netguard --log <檔案> -- <tools.test_db 的
 ### 不由 pytest 收集的 standalone-only 測試檔
 
 [`backend/tests/conftest.py`](../../backend/tests/conftest.py) 的 `STANDALONE_ONLY` 列出 14 個以 standalone 為契約執行方式的檔案，由 `pytest_pycollect_makemodule` 排除：整目錄收集或逐檔明列都不 import、不收集（只明列這些檔時 pytest 以 exit 5 結束），pytest 標頭印出清單。略過不是通過也不是 skip，不證該檔已驗，須用下表的指令執行；名單以 conftest 為準，增減時同步本表。
+
+PR CI 的 `standalone` job（[ci.yml](../../.github/workflows/ci.yml)，`fetch-depth: 0`）執行下表 14 檔，指令同下表；`test_institutional_windows.py` 另跑 `--serve-gate-only`，`test_share_quantity_storage.py` 以 `PYTHONPATH=backend` 前綴。不進 CI 的模式與理由逐項註解於 ci.yml，CI 範圍見[工作手冊](../GITHUB_WORKFLOW.md#github-ci-與本機-reviewqa)。
 
 | 檔 | 執行方式（專案根目錄） |
 | --- | --- |
@@ -252,7 +254,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 股數與輸入契約見[UI](../UI_COPY_SPEC.md#m3-p2-可信整數保存與磁碟重開契約)，migration／readiness 見[R0 §8.11](../R0_IMPLEMENTATION.md#811-m3-p2持倉精確整數-migrationreadiness有限接受)。
 
-`python -B -X utf8 backend/tests/test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases；standalone 使用共用唯讀依賴，不載 conftest。重複 audit probe 的 skip 不得改報全 pass／0 skip。
+`python -B -X utf8 backend/tests/test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases；standalone 使用共用唯讀依賴，不載 conftest。它 import `app` 時不自行加入 `backend/`，依賴環境沒有 `backend` 時須讓它在 `sys.path`（POSIX shell 前綴 `PYTHONPATH=backend`，CI 即如此；PowerShell 先設 `$env:PYTHONPATH='backend'`），否則 `ModuleNotFoundError: No module named 'app'`。重複 audit probe 的 skip 不得改報全 pass／0 skip。
 
 磁碟模式只接受 `OWNED_ROOT`（`%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250`）這個原 task 授權的固定根。它在磁碟模式啟動時由 `derive_owned_root()` 從 `%LOCALAPPDATA%` 衍生，import 時不讀環境；`LOCALAPPDATA` 無法衍生（未設、空、相對、含 `..` 或 NUL，Windows 上非磁碟機代號起頭）就拒絕，不 fallback 到 `TEMP`／`APPDATA` 等其他變數或路徑。root／ancestors non-reparse，不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
 
@@ -420,7 +422,7 @@ python -B -X utf8 backend/tests/test_tpex_institutional_five_day_source.py
 python -B -m pytest -p no:cacheprovider -q backend/tests/test_institutional_flow_ratio.py backend/tests/test_institutional_flow_ratio_source.py
 ```
 
-需既有 pytest 與 backend 依賴；兩檔只用 RAM fixture 與 canned bytes，不連網、不碰 DB 與磁碟。它們驗 `backend/app/institutional_flow_ratio.py` 與 `institutional_flow_ratio_source.py` 的驗證、gate 與算術，不證真來源；契約見[來源 #39 節](../SOURCE_REGISTRY.md#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)。CI 的 backend job 不收集這兩檔。
+需既有 pytest 與 backend 依賴；兩檔只用 RAM fixture 與 canned bytes，不連網、不碰 DB 與磁碟。它們驗 `backend/app/institutional_flow_ratio.py` 與 `institutional_flow_ratio_source.py` 的驗證、gate 與算術，不證真來源；契約見[來源 #39 節](../SOURCE_REGISTRY.md#39-qa1七股-finmind-法人買賣與成交量及兩截止流向量比率issue39-seven-flow-to-volume-ratio-two-cutoffs-v1)。CI 的 backend job 以 `backend/tests` 全目錄 pytest 收集這兩檔。
 
 ### #102 本機 runner 的跨站請求防護
 

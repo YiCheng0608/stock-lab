@@ -1,7 +1,8 @@
 """Test routing without running product services or writing fixtures."""
+import re
 import unittest
 
-from checks import change_flags, markdown_errors
+from checks import ROOT, change_flags, markdown_errors
 
 
 class RoutingTests(unittest.TestCase):
@@ -9,7 +10,8 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(change_flags(["docs/ROADMAP.md", "README.md"]), {"python": False, "frontend": False})
 
     def test_frontend_change(self):
-        self.assertEqual(change_flags(["frontend/src/App.tsx"]), {"python": False, "frontend": True})
+        self.assertEqual(change_flags(["frontend/scripts/ci-test.cjs"]), {"python": False, "frontend": True})
+        self.assertEqual(change_flags(["frontend/src/App.tsx"]), {"python": True, "frontend": True})
 
     def test_backend_also_checks_frontend_contracts(self):
         self.assertEqual(change_flags(["backend/app/example.py"]), {"python": True, "frontend": True})
@@ -23,7 +25,8 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(change_flags([name]), {"python": False, "frontend": False}, name)
 
     def test_markdown_does_not_hide_product_code(self):
-        self.assertEqual(change_flags(["frontend/README.md", "frontend/src/App.tsx"]), {"python": False, "frontend": True})
+        self.assertEqual(change_flags(["frontend/README.md", "frontend/scripts/ci-test.cjs"]), {"python": False, "frontend": True})
+        self.assertEqual(change_flags(["frontend/README.md", "frontend/src/App.tsx"]), {"python": True, "frontend": True})
         self.assertEqual(change_flags(["backend/README.md", "backend/app/example.py"]), {"python": True, "frontend": True})
 
     def test_shared_markdown_still_requires_both(self):
@@ -32,6 +35,26 @@ class RoutingTests(unittest.TestCase):
 
     def test_dependency_constraints_require_python(self):
         self.assertTrue(change_flags(["docs/development-baseline/validation-requirements.lock.txt"])["python"])
+
+    def test_paths_read_by_backend_suite_require_python(self):
+        for name in ["frontend/src/App.tsx", "frontend/src/api.ts", "frontend/package.json", "frontend/pnpm-lock.yaml"]:
+            self.assertEqual(change_flags([name]), {"python": True, "frontend": True}, name)
+        for name in ["docs/SOURCE_REGISTRY.md", "docs/INDUSTRY_CLASSIFICATION.md"]:
+            self.assertEqual(change_flags([name]), {"python": True, "frontend": False}, name)
+
+    def test_unread_frontend_and_docs_paths_stay_out_of_python(self):
+        for name in ["frontend/vite.config.ts", "frontend/scripts/ci-test.cjs", "frontend/src/NOTES.md", "docs/ROADMAP.md"]:
+            self.assertFalse(change_flags([name])["python"], name)
+
+    def test_frontend_files_literally_read_by_backend_tests_require_python(self):
+        # Principle: whatever backend/tests reads from the working tree must run the backend job.
+        # node_modules is installed from package.json and pnpm-lock.yaml, which are routed above.
+        read = set()
+        for path in sorted((ROOT / "backend/tests").glob("*.py")):
+            read.update(re.findall(r"frontend/(?!node_modules)[\w./-]+", path.read_text(encoding="utf-8")))
+        self.assertIn("frontend/src/App.tsx", read)
+        for name in sorted(read):
+            self.assertTrue(change_flags([name])["python"], name)
 
     def test_links(self):
         self.assertEqual(markdown_errors("README.md", "[ok](docs/ROADMAP.md) [web](https://example.com) [anchor](#x)"), [])

@@ -56,15 +56,24 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
+      # Full history: tests read pinned blobs with `git cat-file` (e.g. test_institutional_flow_ratio_source.py).
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12.14'
       - run: python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c docs/development-baseline/validation-requirements.lock.txt
+      # test_public_candidate_identity.py renders the real frontend/src/App.tsx with Node.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm install --global pnpm@10.18.3
+      - run: pnpm --dir frontend install --frozen-lockfile
       - name: Guarded fixture and API regressions (no source GET, DB or files)
         shell: bash
         run: |
@@ -72,19 +81,83 @@ jobs:
           for profile in series gross direction adjacent dealer-components; do
             python -B tools/tpex-chips-series-api.py --check --deps "$GITHUB_WORKSPACE/backend" "--chips-${profile}-stock-scope-7-opt-in"
           done
+      # The whole backend/tests directory; the standalone-only files that conftest excludes run in the standalone job.
       - name: Backend pytest regressions (temp SQLite only, no source GET)
         shell: bash
         working-directory: backend
+        env:
+          LOCALAPPDATA: ${{ runner.temp }}
         run: |
           set -euo pipefail
-          python -B -m pytest -p no:cacheprovider -q \
-            tests/test_app_main_browser_gate.py \
-            tests/test_instrument_identity_migration.py \
-            tests/test_news_json_defaults.py \
-            tests/test_product.py \
-            tests/test_tpex_execution_rules.py \
-            tests/test_worker_analysis_capture.py \
-            tests/test_signal_artifact_bridge.py
+          python -B -m pytest -p no:cacheprovider -q -rA tests
+
+  # Every file in backend/tests/conftest.py STANDALONE_ONLY runs by its documented command
+  # (docs/development-baseline/README.md standalone-only table). Modes that need a fixed or private root,
+  # a listening server, a seal or a real GET are not run; each is noted next to its command.
+  standalone:
+    name: standalone
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Full history: ohlcv, ordinary-close, calendar-actions and TAIEX read pinned blobs with `git cat-file`.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.14'
+      - run: python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c docs/development-baseline/validation-requirements.lock.txt
+      - name: Standalone-only tests (RAM fixtures and fake transports, no source GET, DB or files)
+        shell: bash
+        env:
+          LOCALAPPDATA: ${{ runner.temp }}
+        run: |
+          # GitHub starts bash with -e; keep going after a failure so one run reports every failing file.
+          set +e -uo pipefail
+          status=0
+          run() {
+            echo "::group::$*"
+            "$@" || { echo "::error::standalone command failed: $*"; status=1; }
+            echo "::endgroup::"
+          }
+          # These five have a single mode (no argv branch).
+          run python -B -X utf8 backend/tests/test_conditional_plan_store.py
+          run python -B -X utf8 backend/tests/test_ohlcv_history_source.py
+          run python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py
+          run python -B -X utf8 backend/tests/test_industry_membership_inferred_source.py
+          run python -B -X utf8 backend/tests/test_taiex_price_index_source.py
+          # Default mode runs the whole memory suite; --memory-storage is a subset of it. Not run: --disk, --prepare,
+          # --inspect, --cleanup (the fixed LOCALAPPDATA/Temp owned root and its cross-process steps) and --serve (listening server).
+          # It imports `app` without adding backend/ to sys.path, so this one command carries PYTHONPATH=backend.
+          PYTHONPATH=backend run python -B -X utf8 backend/tests/test_share_quantity_storage.py
+          # Current W8 contract: --w8-only, --w8-api-only and the in-memory --serve-gate-only (browser gate in front of the router).
+          # --w8-*-case selectors are subsets of those. Not run: --serve (listening server, mock or live source).
+          # The no-argument run, --api-only and --w3..--w7 (-api)-only assert earlier-cutoff contracts that W8 superseded
+          # (e.g. stock-overview/w7-v1 against the current w8-v1) and fail on the current product; README keeps them as history.
+          run python -B -X utf8 backend/tests/test_institutional_windows.py --w8-only
+          run python -B -X utf8 backend/tests/test_institutional_windows.py --w8-api-only
+          run python -B -X utf8 backend/tests/test_institutional_windows.py --serve-gate-only
+          # The no-argument run is the union of these two; --worker-case is a subset. Not run: --serve (listening server, mock or live source).
+          run python -B -X utf8 backend/tests/test_institutional_windows_1006.py --worker-only
+          run python -B -X utf8 backend/tests/test_institutional_windows_1006.py --api-only
+          # test_saved_price_chips_* load through the tools/tpex-price-api.py runner (__main__.ARGS) and take no private root.
+          # One runner flag per file. The runner's other flags are not run here: --check, --focus-check, --saved-focus-check
+          # and --scope-check load only modules that pytest collects (the backend job runs them); --private-save-check and --serve
+          # need the private root or a listening server.
+          for flag in --joint-check --saved-price-chips-focus-check --saved-price-chips-focus-calendar-check --saved-price-chips-focus-stock-scope-7-check; do
+            run python -B -X utf8 tools/tpex-price-api.py "$flag" --deps "$GITHUB_WORKSPACE/backend"
+          done
+          # These two have a single mode. They need TMPDIR, TEMP and TMP on one short isolated directory (session path <= 190 chars) and leave it empty.
+          for test in test_ordinary_close_source test_tpex_calendar_actions_source; do
+            isolated="$(mktemp -d "$RUNNER_TEMP/s.XXXXXX")"
+            TMPDIR="$isolated" TEMP="$isolated" TMP="$isolated" run python -I -B -X utf8 "backend/tests/$test.py"
+            if [ -n "$(ls -A "$isolated")" ]; then echo "::error::$test left residue in its isolated directory"; ls -la "$isolated"; status=1; fi
+            rmdir "$isolated" || status=1
+          done
+          exit "$status"
 
   frontend:
     name: frontend
@@ -108,7 +181,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, backend, frontend]
+    needs: [changes, repository, backend, standalone, frontend]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -121,7 +194,7 @@ jobs:
           jobs = json.loads(os.environ['RESULTS'])
           assert jobs['changes']['result'] == 'success', jobs
           assert jobs['repository']['result'] == 'success', jobs
-          for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
+          for job, flag in [('backend', 'python'), ('standalone', 'python'), ('frontend', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'
