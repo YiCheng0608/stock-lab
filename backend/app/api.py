@@ -6,7 +6,7 @@ import json
 import math
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +70,7 @@ from .product_time import (
 from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
 from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
+from .stock_bars import DEFAULT_LIMIT as BARS_DEFAULT_LIMIT, MAX_LIMIT as BARS_MAX_LIMIT, build_stock_bars
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -1687,6 +1688,20 @@ def _stock_news_cutoff_filter(cutoff: date | None):
         and_(persisted, NewsItem.time_basis == "event_date", NewsItem.time_precision == "date", event_day <= cutoff),
         and_(~func.coalesce(persisted, False), original_fallback),
     ))
+
+
+@router.get("/stocks/{exchange}/{symbol}/bars")
+def stock_bars(
+    exchange: str,
+    symbol: str,
+    interval: Literal["day", "week"] = "day",
+    limit: int = Query(BARS_DEFAULT_LIMIT, ge=1, le=BARS_MAX_LIMIT),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    instrument = _find_instrument(db, symbol, exchange)
+    if not instrument:
+        raise HTTPException(status_code=404, detail="instrument not found")
+    return build_stock_bars(db, instrument, interval=interval, limit=limit)
 
 
 @router.get("/actions")

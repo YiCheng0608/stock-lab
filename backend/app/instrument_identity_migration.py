@@ -31,7 +31,7 @@ _INDEXES = {
     "ix_instruments_instrument_type": "instrument_type",
 }
 _CHILDREN = {
-    "group_memberships", "market_bars", "chip_snapshots", "technical_features",
+    "group_memberships", "market_bars", "chip_snapshots", "technical_features", "technical_indicators",
     "signals", "portfolio_positions", "corporate_actions",
     "fundamental_snapshots", "events",
 }

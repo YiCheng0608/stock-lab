@@ -445,6 +445,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             f"VALUES ('{STRATEGY_FORMULA_REVISION}', CURRENT_TIMESTAMP)"
         )
     )
+    # 0010 only adds technical_indicators, which create_all above already made.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0010_technical_indicators', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
