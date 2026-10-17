@@ -25,8 +25,10 @@ parser.add_argument("--policy-sha256")
 parser.add_argument("--policy-bytes", type=int)
 parser.add_argument("--seal-file")
 parser.add_argument("--port", type=int, default=8799)
-parser.add_argument("--deps", default="C:/Users/YiCheng/Desktop/taiwan-stock-research/backend/.deps")
+parser.add_argument("--deps", default=str(ROOT / "backend/.deps"), help="existing backend/.deps, read-only (default: <repo>/backend/.deps)")
 ARGS = parser.parse_args()
+if not Path(ARGS.deps).is_dir():
+    parser.error("dependency directory not found: " + ARGS.deps + " (pass --deps <existing backend/.deps>)")
 if ARGS.check == ARGS.serve or not 1024 <= ARGS.port <= 65535:
     parser.error("select exactly --check or --serve and a finite local port")
 if not ARGS.chips_dealer_direction_combos_opt_in:

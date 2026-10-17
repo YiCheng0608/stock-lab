@@ -8,7 +8,7 @@
 
 先以 `git status --short`、`git diff`、`git log -1` 核對來源。`.gitattributes` 固定 LF，replay 綁定的 source bytes 不可因換行改變。Git 保存測試與 fixture 建構方式，不保存本機 DB、raw、依賴或生成產物。磁碟驗收用專案外最小隔離檔案，仍須滿足各入口的 snapshot 契約。
 
-本文的 `python`／`node` 指實際安裝的直譯器。Python 須為 3.12.x，Windows 下若 PATH 的 `python` 是 Store stub，請改用實際安裝路徑。`--check`／preview 入口以 pinned Node 24.19.0（TypeScript 5.9.3／esbuild 0.25.12）驗收，CI frontend job 的 Node 版本以 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) 的 setup-node 為準；舊 20.19.4 只是歷史驗收當時版本。各入口的 `--deps` 指既有唯讀依賴（本機 `backend/.deps`／`frontend/node_modules`；CI 的 chips-series check 傳 `$GITHUB_WORKSPACE/backend`），省略時 runner 落到私人預設路徑，因此一律明示。
+本文的 `python`／`node` 指實際安裝的直譯器。Python 須為 3.12.x，Windows 下若 PATH 的 `python` 是 Store stub，請改用實際安裝路徑。`--check`／preview 入口以 pinned Node 24.19.0（TypeScript 5.9.3／esbuild 0.25.12）驗收，CI frontend job 的 Node 版本以 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) 的 setup-node 為準；舊 20.19.4 只是歷史驗收當時版本。各入口的 `--deps` 指既有唯讀依賴（本機 `backend/.deps`／`frontend/node_modules`；CI 的 chips-series check 傳 `$GITHUB_WORKSPACE/backend`），省略時 runner 取 repo 內 `backend/.deps`／`frontend/node_modules`（任務 worktree 通常沒有）、找不到即明確失敗，或直接要求 `--deps`，因此一律明示。
 
 測試失敗先依[失敗分流與有界重驗](../GITHUB_WORKFLOW.md#失敗分流與有界重驗)分類；工具／環境失敗修正後重跑同一案例，不判產品結果，也不重取外部資料。
 
@@ -254,7 +254,7 @@ server 以 `STOCK_TWSE_EVENTS_MEMORY_CAPTURE=1` 啟用明示 POST，普通 GET�
 
 `python -B -X utf8 backend/tests/test_share_quantity_storage.py` 預設不建檔，`--memory-storage` 只跑 storage memory cases；standalone 使用共用唯讀依賴，不載 conftest。重複 audit probe 的 skip 不得改報全 pass／0 skip。
 
-磁碟模式只接受測試檔常數 `OWNED_ROOT`（`%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250`）這個原 task 授權的固定根，root／ancestors non-reparse，不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
+磁碟模式只接受 `OWNED_ROOT`（`%LOCALAPPDATA%/Temp/taiwan-stock-m3-share-storage-01a10250`）這個原 task 授權的固定根。它在磁碟模式啟動時由 `derive_owned_root()` 從 `%LOCALAPPDATA%` 衍生，import 時不讀環境；`LOCALAPPDATA` 無法衍生（未設、空、相對、含 `..` 或 NUL，Windows 上非磁碟機代號起頭）就拒絕，不 fallback 到 `TEMP`／`APPDATA` 等其他變數或路徑。root／ancestors non-reparse，不得換根繞過限制。最多 **2 files**（DB／journal）、**3 directories**（root／data／raw）、總 **2 MiB**、單 DB **1 MiB**；殘留同上限，無 WAL／pycache／附件／KeepArtifacts。
 
 - `--disk`：四個 sequential synthetic normal／fault 案例，驗 migration、關閉／重開、readiness 唯讀 hash 與 API int64 保存；最後嘗試清理，test／cleanup 分列。
 - `--prepare`：exclusive 建 owned DB，不覆寫既有檔。
@@ -374,7 +374,7 @@ python -B -X utf8 backend/tests/test_finmind_dealer_direction_source.py
 
 它驗 `backend/app/finmind_dealer_direction_source.py` 的 policy 與外部 pin 閘門、傳輸與 schema 規則、anchor、生命週期與一次性額度；語料是合成的（建構成滿足 56 個 anchor），不是來源真值。
 
-API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境。兩個 runner 的 `--deps` 預設是私人路徑，依本文開頭規則一律明示既有唯讀 `backend/.deps`／`frontend/node_modules`，不 install：
+API 與 UI 的 check，從專案根目錄執行；Python 與 Node 沿用上列 chips 入口的既有環境。兩個 runner 的 `--deps` 預設不是私人路徑，而是 `<repo>/backend/.deps`（Python）、`<repo>/frontend/node_modules`（Node），找不到時明確失敗；仍依本文開頭規則明示既有唯讀 `backend/.deps`／`frontend/node_modules`，不 install：
 
 ```powershell
 python -B -X utf8 tools/finmind-dealer-direction-api.py --check --chips-dealer-direction-combos-opt-in --deps <既有 backend/.deps>
