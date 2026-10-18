@@ -54,7 +54,7 @@ export function Navbar({ dataDate, dataDateLoading = false }: { dataDate: string
   return (
     <header className="navbar">
       <div className="navbar-inner">
-        <Link to="/" className="navbar-brand"><Logo /><span>市場研究台</span></Link>
+        <Link to="/" className="navbar-brand"><Logo /><span>台股研究台</span></Link>
         <button type="button" className="btn btn-ghost navbar-toggle" aria-expanded={open} aria-controls="navbar-menu" aria-label={open ? '關閉選單' : '開啟選單'} onClick={() => setOpen((value) => !value)}>
           <MenuIcon open={open} />
         </button>
