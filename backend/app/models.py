@@ -619,6 +619,36 @@ class DailyCandidate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CandidateLlmNote(Base):
+    """LLM explanation of one daily candidate under one prompt version (worker.candidate_notes).
+
+    Inference kept apart from the rule-based row: it never changes the score,
+    rank or selection.  ``llm_status`` is ``done`` or ``pending`` (retried by
+    a later run); a done row is never rewritten for the same prompt version.
+    """
+
+    __tablename__ = "candidate_llm_notes"
+    __table_args__ = (
+        UniqueConstraint("daily_candidate_id", "prompt_version", name="uq_candidate_llm_note_prompt"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    daily_candidate_id: Mapped[int] = mapped_column(ForeignKey("daily_candidates.id"), index=True)
+    candidate_run_id: Mapped[int] = mapped_column(ForeignKey("candidate_runs.id"), index=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    llm_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    llm_input_hash: Mapped[str] = mapped_column(String(64))
+    llm_run_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    llm_status: Mapped[str] = mapped_column(String(20), default="pending")
+    llm_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_selection: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_levels: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_risks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingestion_run_id: Mapped[int | None] = mapped_column(ForeignKey("ingestion_runs.id"), nullable=True)
+    raw_payload_id: Mapped[int | None] = mapped_column(ForeignKey("raw_payloads.id"), nullable=True)
+
+
 class ThemeSuggestion(Base):
     """A news theme suggestion awaiting human review (worker.theme_suggestions).
 

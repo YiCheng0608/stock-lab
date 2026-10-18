@@ -8,6 +8,7 @@ from datetime import date
 from app.db import init_db
 
 from .backfill import BACKFILL_SCOPES, chunked_backfill
+from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
@@ -21,9 +22,9 @@ from .themes import sync_themes
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
 DAILY_EXIT_CODES = {"success": 0, "skipped": 0, "non_trading_day": 0, "non_trading_unconfirmed": 0, "partial": 2}
-# news-llm: the schedule wrapper logs this next to news's own exit code; any status
-# other than these (failed, or one it does not know) is 1.
-NEWS_LLM_EXIT_CODES = {"success": 0, "skipped": 0, "dry_run": 0, "partial": 2}
+# news-llm (and candidate-notes): the schedule wrapper logs this next to news's own
+# exit code; any status other than these (failed, or one it does not know) is 1.
+NEWS_LLM_EXIT_CODES = {"success": 0, "skipped": 0, "dry_run": 0, "no_data": 0, "partial": 2}
 
 
 def parse_date(value: str | None) -> date | None:
@@ -80,6 +81,12 @@ def main() -> None:
     indicators_parser.add_argument("--rebuild", action="store_true", help="重算並改寫全部歷史")
     candidates_parser = subparsers.add_parser("candidates", help="以 candidate_score_v1 產生每日候選清單（同日同版本重跑冪等）")
     candidates_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用最新訊號日")
+    notes_parser = subparsers.add_parser(
+        "candidate-notes", help="以 claude -p 為每日候選產生 AI 進出點說明（同日同提示版本已完成者不重算）"
+    )
+    notes_parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD 候選交易日；未指定使用最新一次候選")
+    notes_parser.add_argument("--limit", type=int, help="本次最多說明幾檔（名次在前、尚未完成者優先）；未指定為全部")
+    notes_parser.add_argument("--dry-run", action="store_true", help="只列出會送出的批次，不呼叫、不寫 DB")
     themes_parser = subparsers.add_parser("themes", help="題材表")
     themes_subparsers = themes_parser.add_subparsers(dest="themes_command", required=True)
     themes_sync_parser = themes_subparsers.add_parser("sync", help="驗證題材表並寫入族群與成員期間（重跑冪等）")
@@ -129,6 +136,10 @@ def main() -> None:
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     elif args.command == "candidates":
         result = run_candidates(parse_date(args.run_date))
+    elif args.command == "candidate-notes":
+        if args.limit is not None and args.limit < 1:
+            parser.error("--limit must be at least 1")
+        result = run_candidate_notes_batch(parse_date(args.run_date), dry_run=args.dry_run, limit=args.limit)
     elif args.command == "themes":
         result = sync_themes(args.file)
     elif args.command == "theme-suggestions":
@@ -157,7 +168,7 @@ def main() -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
-    if args.command == "news-llm":
+    if args.command in {"news-llm", "candidate-notes"}:
         sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "candidates" and result.get("status") not in {"success", "no_data"}:
         raise SystemExit(1)

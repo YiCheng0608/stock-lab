@@ -449,6 +449,14 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-details { margin-top: var(--space-3); }
 .candidate-details .table-wrap { margin-bottom: var(--space-2); }
 .stock-candidate { margin-bottom: var(--space-6); }
+.candidate-note { margin-top: var(--space-3); padding: var(--space-4); }
+.candidate-note .ai-inference-head { margin-bottom: var(--space-2); }
+.candidate-note h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.candidate-note-parts { display: grid; gap: var(--space-2); margin: 0 0 var(--space-2); }
+.candidate-note-parts dt { color: var(--color-text-muted); font-size: 12px; }
+.candidate-note-parts dd { margin: 2px 0 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.candidate-note-empty { margin: 0 0 var(--space-2); color: var(--color-text-muted); font-size: 14px; }
+.candidate-note .small-note { margin: 0; }
 
 /* ---- news theme suggestions (#216, DESIGN_SYSTEM §7: LLM output with the accent bar) ------------- */
 .theme-suggestions { margin-top: var(--space-10); }

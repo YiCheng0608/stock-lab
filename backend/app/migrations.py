@@ -496,6 +496,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0014_theme_suggestions', CURRENT_TIMESTAMP)"
         )
     )
+    # 0015 only adds candidate_llm_notes, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0015_candidate_llm_notes', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

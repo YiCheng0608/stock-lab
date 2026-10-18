@@ -1,4 +1,4 @@
-import type { CandidateComponent, CandidateItem, CandidatesResponse, CandidateSubItem } from '../types'
+import type { CandidateComponent, CandidateItem, CandidateLlmNote, CandidatesResponse, CandidateSubItem } from '../types'
 
 // Shapes copied from GET /api/candidates on a read-only copy of the production DB (2026-10-16 run, #215),
 // trimmed to two rows: a complete row and a partial row whose group and news components are null.
@@ -92,7 +92,23 @@ export function completeItem(): CandidateItem {
       { group_id: 'official-industry-d60be8febbae1cd6', name: '電腦及週邊', board: 'industry', qualified: false, rank: null, board_size: null, board_percentile: null, score: null, data_quality: 'insufficient_data', score_date: '2026-10-16' },
     ],
     data_as_of: '2026-10-16',
+    llm_note: doneNote(),
     sources,
+  }
+}
+
+// A done candidate LLM note (#220); the partial row below has none (responses from before #220 omit the field).
+export function doneNote(): CandidateLlmNote {
+  return {
+    status: 'done',
+    inference: true,
+    selection: '三大法人 5 日淨買超約 20 日均量 2.59 倍、籌碼分項 92 分居前，並突破 20 日高點，所屬題材 AI 伺服器熱度第 2。',
+    levels: '規則的進場區為 161.50，條件失效的停損 157.82；第一目標 167.39、第二目標 172.54，RR 1.60。',
+    risks: '新聞情緒分項來自 AI 方向判讀，屬推論；所屬產業「電腦及週邊」當日未排名。',
+    model: 'claude-sonnet-5-5',
+    prompt_version: 'candidate_notes_v1',
+    generated_at: '2026-10-16T11:05:00+00:00',
+    input_hash: 'a'.repeat(64),
   }
 }
 

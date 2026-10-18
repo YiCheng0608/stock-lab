@@ -190,4 +190,5 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
 - **分項名**：technical「技術」、chips「籌碼」、group「族群」、news_sentiment「新聞情緒」；新聞情緒另標「推論」。
 - **分數**：總分與分項為 0–1，日常以 0–100 整數呈現；分項為 null 顯示「—」並附 API 的 `null_explanation`，不寫 0。`partial_components=true` 時在總分旁註明「部分分項無資料，以有資料的分項計分」。
 - **聲明**：清單頂端固定一句「評分只用於排序，不代表勝率或預期報酬」。
+- **AI 進出點說明**（`llm_note`，[V1_SPEC](V1_SPEC.md#候選-ai-進出點說明)）：每張候選卡在族群列之後、「評分細節」之前放 AI 推論樣式的區塊（左側強調色豎線，[DESIGN_SYSTEM §7](DESIGN_SYSTEM.md#7-資料與狀態的視覺語言)），標題「AI 進出點說明」，右側「AI 推論」（accent badge）。`status=done` 且三段都有字時依序列「為何入選」「進場區、停損與目標」「需留意的風險」與 API 文字；沒有說明（`llm_note` 為 null 或欄位不存在）寫「此檔尚未產生 AI 說明」，`pending` 寫「AI 說明這次未能產生，下次執行時會重試」。區塊內固定一句「由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。」；有 `llm_note` 時底部「模型 {model，沒有寫未記錄} · 提示版本 {prompt_version} · 產生於 YYYY/MM/DD HH:mm」（`generated_at` 換算台北時間，沒有時區時省略「產生於」）。今日頁與個股頁相同。
 - **零候選**：顯示 API 的 `zero_reason_text`；`no_actionable_signals`「當日沒有成立（條件成立）的策略訊號」、`all_excluded`「成立的訊號都因 ETF、價位不合法或評分資料不足被排除」。`status=not_computed` 寫「此交易日尚未產生候選清單」。空狀態標題分別為「當日零候選」與「尚無候選清單」，零候選保留資料日期 badge、not_computed 不顯示日期。

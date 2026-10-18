@@ -1,12 +1,16 @@
 import { Link } from 'react-router-dom'
 
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Table } from '../components/ui'
+import { AiBadge } from '../news/NewsViews'
 import type { CandidateComponentKey, CandidateItem, CandidatesResponse } from '../types'
 import {
   CANDIDATE_COMPONENTS,
   CANDIDATE_DISCLAIMER,
+  NOTE_DISCLAIMER,
+  NOTE_TITLE,
   PARTIAL_NOTE,
   candidateGroupText,
+  candidateNoteView,
   candidateSourceText,
   candidateStrategyLabel,
   candidatesState,
@@ -87,6 +91,25 @@ function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
   )
 }
 
+// LLM note (#220): DESIGN_SYSTEM §7 inference block, apart from the rule values; never part of the score.
+function CandidateNote({ item }: { item: CandidateItem }) {
+  const view = candidateNoteView(item.llm_note)
+  return (
+    <section className="ai-inference candidate-note" aria-label={NOTE_TITLE} data-note-state={view.kind}>
+      <div className="ai-inference-head"><h3>{NOTE_TITLE}</h3><AiBadge /></div>
+      {view.kind === 'done'
+        ? (
+          <dl className="candidate-note-parts">
+            {view.parts.map((part) => <div key={part.key} data-note-part={part.key}><dt>{part.label}</dt><dd>{part.text}</dd></div>)}
+          </dl>
+        )
+        : <p className="candidate-note-empty">{view.text}</p>}
+      <p className="small-note">{NOTE_DISCLAIMER}</p>
+      {view.meta && <p className="small-note ai-meta">{view.meta}</p>}
+    </section>
+  )
+}
+
 const REASON_COMPONENTS: ReadonlySet<string> = new Set<CandidateComponentKey>(['technical', 'chips', 'news_sentiment', 'group'])
 
 export function CandidateCard({ item, linkToStock = true, detailsOpen = false }: { item: CandidateItem; linkToStock?: boolean; detailsOpen?: boolean }) {
@@ -122,6 +145,7 @@ export function CandidateCard({ item, linkToStock = true, detailsOpen = false }:
         </ul>
       )}
       <div className="small-note candidate-groups">族群：{item.groups.length ? item.groups.map(candidateGroupText).join('、') : '無所屬產業或題材'}</div>
+      <CandidateNote item={item} />
       <ScoreDetails item={item} open={detailsOpen} />
     </article>
   )
