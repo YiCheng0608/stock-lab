@@ -417,7 +417,9 @@ def _exclude_existing(db: Session, source: NewsSource) -> list[dict[str, str]]:
 
 
 def _is_locked(exc: BaseException) -> bool:
-    return isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+    return (
+        isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+    )
 
 
 def _sleep(seconds: float) -> None:
@@ -503,7 +505,10 @@ def _collect_source(
         db.rollback()
         existing_excluded = []
         metadata["filter_error"] = f"{type(exc).__name__}: {exc}"
-    metadata["filter"] = {"version": FILTER_VERSION, "existing_excluded": existing_excluded}
+    metadata["filter"] = {
+        "version": FILTER_VERSION,
+        "existing_excluded": existing_excluded,
+    }
     index = _SourceIndex(db, source)
 
     def reset_index() -> None:
@@ -556,12 +561,16 @@ def _collect_source(
             result.update(status="failed", error=f"{type(exc).__name__}: {exc}")
         feeds.append(result)
     failed = [item for item in feeds if item["status"] == "failed"]
-    status = "failed" if len(failed) == len(feeds) else ("partial" if failed else "success")
+    status = (
+        "failed" if len(failed) == len(feeds) else ("partial" if failed else "success")
+    )
 
     def close_run() -> None:
         run.status = status
         run.records = sum(int(item.get("inserted", 0)) for item in feeds)
-        run.error = "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
+        run.error = (
+            "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
+        )
         run.data_as_of = datetime.utcnow().isoformat()
         run.metadata_json = {**metadata, "feeds": feeds}
         run.finished_at = datetime.utcnow()

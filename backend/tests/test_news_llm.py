@@ -731,12 +731,28 @@ def test_cli_exits_1_and_names_the_reason_when_claude_is_missing(
 # Issue #185 -------------------------------------------------------------------
 
 
-def test_run_left_running_by_a_killed_task_is_closed_by_the_next_run(db, fake, monkeypatch):
+def test_run_left_running_by_a_killed_task_is_closed_by_the_next_run(
+    db, fake, monkeypatch
+):
     now = datetime.utcnow()
-    killed = IngestionRun(run_type="news_llm", source="claude-cli", run_date=RUN_DATE, status="running",
-                          records=0, started_at=now - timedelta(minutes=95), metadata_json={})
-    active = IngestionRun(run_type="news_llm", source="claude-cli", run_date=RUN_DATE, status="running",
-                          records=0, started_at=now - timedelta(minutes=10), metadata_json={})
+    killed = IngestionRun(
+        run_type="news_llm",
+        source="claude-cli",
+        run_date=RUN_DATE,
+        status="running",
+        records=0,
+        started_at=now - timedelta(minutes=95),
+        metadata_json={},
+    )
+    active = IngestionRun(
+        run_type="news_llm",
+        source="claude-cli",
+        run_date=RUN_DATE,
+        status="running",
+        records=0,
+        started_at=now - timedelta(minutes=10),
+        metadata_json={},
+    )
     db.add_all([killed, active])
     db.commit()
     # A dry run writes nothing, not even this repair.

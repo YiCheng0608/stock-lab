@@ -104,7 +104,11 @@ def news_llm_failed(db: str, limit: int, now: str) -> str:
     streak = 0
     for status, started in rows:
         started_at = _started(started)
-        abandoned = status == "running" and started_at is not None and current - started_at > NEWS_LLM_RUNNING_LIMIT
+        abandoned = (
+            status == "running"
+            and started_at is not None
+            and current - started_at > NEWS_LLM_RUNNING_LIMIT
+        )
         if status != "failed" and not abandoned:
             break
         streak += 1

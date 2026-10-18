@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -11,11 +14,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api import get_db, router
-from app.db import Base, enable_sqlite_foreign_keys
+import app.db as app_db
+from app.db import Base, enable_sqlite_concurrent_writes, enable_sqlite_foreign_keys
 from app.models import IngestionRun, Instrument, NewsItem, RawPayload, ThemeGroup
 from worker import news_batch, news_llm
 from worker.news_batch import RelationMatcher, collect_news
@@ -1075,9 +1080,9 @@ def test_exclusion_reason(source_id, title, url, expected):
 
 
 def _file_session(path: Path) -> Session:
-    from app.db import enable_sqlite_concurrent_writes
-
-    engine = create_engine(f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False}
+    )
     enable_sqlite_foreign_keys(engine)
     enable_sqlite_concurrent_writes(engine)
     Base.metadata.create_all(engine)
@@ -1085,12 +1090,11 @@ def _file_session(path: Path) -> Session:
 
 
 def _hold_write_lock(path: Path, seconds: float, holding, errors) -> None:
-    import sqlite3
-    import time
-
     try:
         conn = sqlite3.connect(path, isolation_level=None)
-        conn.execute("BEGIN IMMEDIATE")  # the write lock, as a long daily transaction holds it
+        conn.execute(
+            "BEGIN IMMEDIATE"
+        )  # the write lock, as a long daily transaction holds it
         holding.set()
         time.sleep(seconds)
         conn.execute("COMMIT")
@@ -1099,27 +1103,32 @@ def _hold_write_lock(path: Path, seconds: float, holding, errors) -> None:
         errors.append(exc)
 
 
-def test_news_waits_out_a_write_lock_longer_than_the_busy_timeout(tmp_path, monkeypatch):
+def test_news_waits_out_a_write_lock_longer_than_the_busy_timeout(
+    tmp_path, monkeypatch
+):
     """Two connections: the other one holds the write lock past busy_timeout.
 
     Scaled 1:30 (busy timeout 1 s instead of 30 s, retry delay 1 s instead of
     60 s, lock held 2.5 s) so the test stays fast; the code path is the same.
     """
 
-    import threading
-    import time
-
-    import app.db
-
-    monkeypatch.setattr(app.db, "SQLITE_BUSY_TIMEOUT_MS", 1000)
+    monkeypatch.setattr(app_db, "SQLITE_BUSY_TIMEOUT_MS", 1000)
     monkeypatch.setattr(news_batch, "LOCK_RETRY_DELAY_SECONDS", 1.0)
     sleeps: list[float] = []
-    monkeypatch.setattr(news_batch, "_sleep", lambda seconds: sleeps.append(seconds) or time.sleep(seconds))
+    monkeypatch.setattr(
+        news_batch,
+        "_sleep",
+        lambda seconds: sleeps.append(seconds) or time.sleep(seconds),
+    )
     path = tmp_path / "locked.db"
     session = _file_session(path)
     holding, errors = threading.Event(), []
-    holder = threading.Thread(target=_hold_write_lock, args=(path, 2.5, holding, errors))
-    content = _rss("<title>鎖測試</title><link>https://feed.example/1</link><pubDate>Sat, 17 Oct 2026 10:00:00 +0800</pubDate>")
+    holder = threading.Thread(
+        target=_hold_write_lock, args=(path, 2.5, holding, errors)
+    )
+    content = _rss(
+        "<title>鎖測試</title><link>https://feed.example/1</link><pubDate>Sat, 17 Oct 2026 10:00:00 +0800</pubDate>"
+    )
 
     def fetch(url):
         # The other job takes the write lock while this feed is downloading.
@@ -1129,14 +1138,21 @@ def test_news_waits_out_a_write_lock_longer_than_the_busy_timeout(tmp_path, monk
 
     started = time.monotonic()
     try:
-        result = collect_news(session, run_date=RUN_DATE, fetch=fetch, news_sources=[_single_feed_source()])
+        result = collect_news(
+            session,
+            run_date=RUN_DATE,
+            fetch=fetch,
+            news_sources=[_single_feed_source()],
+        )
         holder.join(10)
         assert errors == []
         assert result["status"] == "success", result
         assert sleeps and all(seconds == 1.0 for seconds in sleeps)
         assert time.monotonic() - started >= 2.5  # it really waited for the holder
         assert [item.title for item in _items(session)] == ["鎖測試"]
-        run = session.scalar(select(IngestionRun).where(IngestionRun.run_type == "news"))
+        run = session.scalar(
+            select(IngestionRun).where(IngestionRun.run_type == "news")
+        )
         assert (run.status, run.records) == ("success", 1)
         assert session.scalar(select(func.count(RawPayload.id))) == 1
     finally:
@@ -1145,24 +1161,25 @@ def test_news_waits_out_a_write_lock_longer_than_the_busy_timeout(tmp_path, monk
 
 
 def test_news_records_failure_when_the_lock_outlasts_every_retry(tmp_path, monkeypatch):
-    import threading
-    import time
-
-    import app.db
-
-    monkeypatch.setattr(app.db, "SQLITE_BUSY_TIMEOUT_MS", 200)
+    monkeypatch.setattr(app_db, "SQLITE_BUSY_TIMEOUT_MS", 200)
     monkeypatch.setattr(news_batch, "LOCK_RETRIES", 2)
     monkeypatch.setattr(news_batch, "LOCK_RETRY_DELAY_SECONDS", 0.2)
     path = tmp_path / "locked.db"
     session = _file_session(path)
     holding, errors = threading.Event(), []
-    holder = threading.Thread(target=_hold_write_lock, args=(path, 4.0, holding, errors))
+    holder = threading.Thread(
+        target=_hold_write_lock, args=(path, 4.0, holding, errors)
+    )
     holder.start()
     assert holding.wait(5)
     try:
         content = _rss("<title>t</title><link>https://feed.example/1</link>")
-        result = collect_news(session, run_date=RUN_DATE, fetch=lambda url: _ok(content),
-                              news_sources=[_single_feed_source()])
+        result = collect_news(
+            session,
+            run_date=RUN_DATE,
+            fetch=lambda url: _ok(content),
+            news_sources=[_single_feed_source()],
+        )
         # Nothing could be written: the source is failed, the job did not crash.
         assert result["status"] == "failed"
         assert "database is locked" in result["sources"][0]["error"]
@@ -1175,9 +1192,7 @@ def test_news_records_failure_when_the_lock_outlasts_every_retry(tmp_path, monke
         session.get_bind().dispose()
 
 
-def test_other_operational_errors_are_not_retried(db, monkeypatch):
-    from sqlalchemy.exc import OperationalError
-
+def test_other_operational_errors_are_not_retried(db):
     calls = []
 
     def unit():

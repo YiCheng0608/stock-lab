@@ -113,7 +113,11 @@ def _ingestion_runs(conn: sqlite3.Connection) -> None:
 
 def _utc_text(epoch: int) -> str:
     # The jobs store naive UTC timestamps.
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
+    return (
+        datetime.fromtimestamp(epoch, tz=timezone.utc)
+        .replace(tzinfo=None)
+        .isoformat(sep=" ")
+    )
 
 
 def _news_llm_db(path: Path, batches: list[list[str]]) -> None:
@@ -150,7 +154,9 @@ def _news_llm_runs(path: Path, runs: list[tuple[str, int]]) -> None:
     conn.close()
 
 
-def _daily_db(path: Path, runs: list[tuple[str, dict]], day: str = "2026-10-19") -> None:
+def _daily_db(
+    path: Path, runs: list[tuple[str, dict]], day: str = "2026-10-19"
+) -> None:
     """schedule_runs rows for one target date: (status, summary)."""
 
     with sqlite3.connect(path) as conn:
@@ -274,12 +280,17 @@ def test_unreadable_database_is_logged_and_not_reported_ok(wd):
     [
         ([("skipped", {"reason": "low_memory"})], "`skipped:low_memory`"),
         ([("partial", {"reason": "official_collection_incomplete"})], "`partial`"),
-        ([("failed", {"steps": {"collect": "success", "analyze": "failed"}})], "`failed`"),
+        (
+            [("failed", {"steps": {"collect": "success", "analyze": "failed"}})],
+            "`failed`",
+        ),
         ([("success", {"steps": {"catchup": "success", "collect": "success"}})], None),
     ],
     ids=["skipped", "partial", "failed", "success"],
 )
-def test_daily_result_comments_only_when_not_complete_and_once_a_day(wd, runs, commented):
+def test_daily_result_comments_only_when_not_complete_and_once_a_day(
+    wd, runs, commented
+):
     _daily_log_done(wd)
     _daily_db(wd.data / "stock.db", runs)
     wd.run()
@@ -322,11 +333,17 @@ def test_daily_result_reads_the_complete_run_of_the_day(wd):
 
 def test_daily_result_reports_unconfirmed_no_session_and_incomplete_catchup(wd):
     _daily_log_done(wd)
-    _daily_db(wd.data / "stock.db", [("non_trading_unconfirmed", {"reason": "official_no_session_unconfirmed"})])
+    _daily_db(
+        wd.data / "stock.db",
+        [("non_trading_unconfirmed", {"reason": "official_no_session_unconfirmed"})],
+    )
     result = wd.run("--dry-run")
     assert "daily 結果是 `non_trading_unconfirmed`" in result.stdout
     (wd.data / "stock.db").unlink()
-    _daily_db(wd.data / "stock.db", [("success", {"steps": {"catchup": "partial", "collect": "success"}})])
+    _daily_db(
+        wd.data / "stock.db",
+        [("success", {"steps": {"catchup": "partial", "collect": "success"}})],
+    )
     result = wd.run("--dry-run")
     assert "補抓前幾個交易日沒有補齊（catchup）" in result.stdout
 
@@ -344,13 +361,18 @@ def test_daily_result_is_not_judged_on_weekends(wd):
 def test_three_failed_news_llm_runs_are_reported(wd):
     # cli_not_found / api_key_env_refused write a failed run without batches;
     # a run killed by the task limit stays running.
-    _news_llm_runs(wd.data / "stock.db", [("success", 9000), ("failed", 7200), ("failed", 3600), ("running", 5800)])
+    _news_llm_runs(
+        wd.data / "stock.db",
+        [("success", 9000), ("failed", 7200), ("failed", 3600), ("running", 5800)],
+    )
     result = wd.run("--dry-run")
     assert "news_llm：最近 3 筆 `run_type=news_llm` 的 run 都是 failed" in result.stdout
 
 
 def test_recent_running_news_llm_run_is_not_counted_as_failed(wd):
-    _news_llm_runs(wd.data / "stock.db", [("failed", 9000), ("failed", 7200), ("running", 600)])
+    _news_llm_runs(
+        wd.data / "stock.db", [("failed", 9000), ("failed", 7200), ("running", 600)]
+    )
     wd.run()
     assert wd.text("gh_calls.log") == ""
 
@@ -369,7 +391,9 @@ def test_news_llm_exit_codes_in_news_logs_are_reported(wd):
     os.utime(news, (NIGHT - 600, NIGHT - 600))
     result = wd.run("--dry-run")
     assert "news 日誌最後 3 次的 `news_llm_exit` 是 1 wrapper_error 1" in result.stdout
-    news.write_text("===== c end exit=0 seconds=5 news_llm_exit=1\n===== d end exit=0 seconds=5 news_llm_exit=2\n",
-                    encoding="utf-8")
+    news.write_text(
+        "===== c end exit=0 seconds=5 news_llm_exit=1\n===== d end exit=0 seconds=5 news_llm_exit=2\n",
+        encoding="utf-8",
+    )
     os.utime(news, (NIGHT - 600, NIGHT - 600))
     assert "news_llm_exit" not in wd.run("--dry-run").stdout
