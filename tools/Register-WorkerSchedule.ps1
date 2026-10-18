@@ -57,10 +57,10 @@ param(
     [string[]]$TaipeiTimes = @('18:30', '21:30'),
     [ValidateRange(1, 12)]
     [int]$IntervalHours = 2,
-    # Passed to Invoke-WorkerJob.ps1 -MinFreeMemoryGB; a full-market analyze
-    # peaks around 5-5.5 GB, while news is light.
+    # Passed to Invoke-WorkerJob.ps1 -MinFreeMemoryGB; a full-market daily
+    # (analyze through indicators) peaks around 0.3 GB, while news is light.
     [ValidateRange(0, 1024)]
-    [double]$DailyMinFreeMemoryGB = 6,
+    [double]$DailyMinFreeMemoryGB = 2,
     [ValidateRange(0, 1024)]
     [double]$NewsMinFreeMemoryGB = 1,
     # news only: native claude.exe for the news-llm step, and its off switch.

@@ -1,7 +1,6 @@
 # TWSE／TPEx 產業分類契約
 
-本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。前端對產業族群顯示「既有族群關聯待重新核實」提示（`frontend/src/presentation.ts` 的 `TEMPORARY_INDUSTRY_GROUP_NOTICE`）；正式 DB 執行 [§5.1](#51-既有錯配-membership-修復) 的修復後，族群頁的提示可移除，但個股頁列出的是未經驗證的完整 membership 歷史（含 D0 前的舊 row），要另行過濾後才能移除。
-
+本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。
 ## 1. 官方代碼來源
 
 TWSE current 表由 B.12.00 基表加官方格式公告的變更組成，並與 OpenAPI 公司基本資料的 code 交叉檢查；TPEx 以 v5.41 完整表為主、V12.14 為交叉驗證。API 出表日只識別公司基本資料 snapshot，不是每檔分類的生效日。
@@ -98,7 +97,7 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 - **membership**：錯誤群組的 row 關在 `D0-1`，canonical 群組從 D0 開新 row，source 與 collector 相同；collector 已在 Ds 轉換的標的補 `[D0, Ds-1]`。特殊碼（TDR 91）只關不開。不刪 row、不改 `valid_from`。
 - **群組**：沿用 canonical id，不改名也不新建同義群組；canonical id 在 DB 不存在時才新建（正式 DB 有 11 個 label 原本沒有群組，例如 `Cement`、`Information Service`）。佔位群組的 id 是佔位 label 的雜湊，不能改名沿用。label 不屬於現行對照的群組（`Agriculture`、`Digital Content`、`Electronics`、`Industry · 31` 等佔位群組）設 `active=0`；canonical 群組的 `display_name_zh` 同步成 `INDUSTRY_DISPLAY_ZH`。collector 之後每次觀測也會同步顯示名。
 - **收據與冪等**：預設 dry-run 不寫入；`--apply` 先驗證全部再寫，`ingestion_runs`（`run_type=industry_repair`）的 `metadata_json` 記證據 raw、每檔關閉與新開的期間。第二次執行回 `no_change`，不寫任何列。
-- **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。
+- **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。個股頁的 `groups` 只回截止日當天有效的列，截止日早於 D0 時會帶出舊錯配列，前端以 `isTemporaryIndustryGroupName` 遮成「既有產業族群關聯（待核實）」，不顯示產業名稱。
 
 ## 6. 群組成員與候選身分
 
