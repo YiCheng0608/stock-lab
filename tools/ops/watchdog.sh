@@ -67,6 +67,7 @@ trap 'rm -rf "$lock_dir"' EXIT
 work="$lock_dir"
 
 # --- python helper (read-only database check) ----------------------------------
+found=0  # 1 once an anomaly is reported or a check could not run
 if [ -z "$python" ]; then
   for candidate in "$repo_root/.venv/Scripts/python.exe" "$repo_root/.venv/bin/python" python3 python; do
     if "$candidate" -c 'import sys' >/dev/null 2>&1; then python="$candidate"; break; fi
@@ -75,6 +76,7 @@ fi
 if [ -z "$python" ] || ! "$python" -c 'import sys' >/dev/null 2>&1; then
   log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 news_llm 檢查；日誌檢查照做"
   python=""
+  found=1
 fi
 helper() { "$python" -X utf8 "$script_dir/watchdog_helper.py" "$@"; }
 
@@ -83,7 +85,6 @@ taipei=$((now + 28800))
 taipei_date="$(date -u -d "@$taipei" +%Y%m%d)"
 taipei_hm="$(date -u -d "@$taipei" +%H%M)"
 taipei_dow="$(date -u -d "@$taipei" +%u)"
-found=0
 
 anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
   local key="$1" body
@@ -134,7 +135,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
   pending="$(helper news-llm-pending "$data_dir/stock.db" 3 2>>"$work/helper.err")" || pending=error
   case "$pending" in
     3) anomaly news_llm_pending "news_llm：最近連續 3 批判讀都是 pending（可能未登入 Claude Code 或額度用盡），請查 \`/api/ingestion-runs?q=news_llm\`。" ;;
-    error) log news_llm_check_failed "" "讀取 stock.db 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
+    error) found=1; log news_llm_check_failed "" "讀取 stock.db 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
 fi
 [ "$found" = 0 ] && log schedules_ok "" "排程無異常"

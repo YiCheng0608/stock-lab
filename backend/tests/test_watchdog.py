@@ -209,3 +209,10 @@ def test_lock_prevents_reentry_and_stale_lock_is_removed(wd):
     wd.run()
     assert wd.events()[1:] == ["lock_stale_removed", "schedules_ok"]
     assert not lock.exists()
+
+
+def test_unreadable_database_is_logged_and_not_reported_ok(wd):
+    (wd.data / "stock.db").write_bytes(b"not a database")
+    wd.run()
+    assert wd.events() == ["news_llm_check_failed"]
+    assert wd.text("gh_calls.log") == ""

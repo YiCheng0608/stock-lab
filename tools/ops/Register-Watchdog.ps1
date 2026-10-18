@@ -13,8 +13,8 @@ Both are written into the task's arguments.
 
 The task runs as the current user with an interactive logon (no stored
 password), so it only runs while that user is signed in. It is hidden, starts
-a missed run after sign-in, never runs two instances at once and is stopped after 10 minutes. The watchdog writes
-<DataDir>\logs\watchdog.log.
+a missed run after sign-in, never runs two instances at once and is stopped
+after 10 minutes. The watchdog writes <DataDir>\logs\watchdog.log.
 
 -DryRun registers the task with --dry-run (decide and log only); use it to
 check the scheduled environment with Start-ScheduledTask before the real

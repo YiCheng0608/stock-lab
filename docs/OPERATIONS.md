@@ -126,7 +126,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
 | 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言） |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。執行中持有 `logs/watchdog.lock/`，殘留超過 30 分鐘自動移除。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。執行中持有 `logs/watchdog.lock/`，殘留超過 30 分鐘自動移除；`news_llm` 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`news_llm_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
