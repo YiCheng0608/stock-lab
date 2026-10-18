@@ -453,7 +453,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* ---- news theme suggestions (#216, DESIGN_SYSTEM §7: LLM output with the accent bar) ------------- */
 .theme-suggestions { margin-top: var(--space-10); }
 .theme-suggestions .section-head { flex-wrap: wrap; }
-.theme-suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: var(--space-3); }
+.theme-suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-4); margin-top: var(--space-3); }
 .theme-suggestion { min-width: 0; padding: var(--space-5); }
 .theme-suggestion .ai-inference-head { flex-wrap: wrap; margin-bottom: var(--space-2); }
 .theme-suggestion h3 { margin: 0; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
