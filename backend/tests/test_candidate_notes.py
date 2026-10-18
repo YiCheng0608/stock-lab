@@ -277,6 +277,33 @@ def test_missing_cli_fails_without_note_rows(db, fake, monkeypatch, tmp_path):
     assert run.run_type == "candidate_notes" and run.status == "failed"
 
 
+@pytest.mark.parametrize("name", ["claude.cmd", "claude.bat", "claude"])
+def test_a_non_exe_cli_on_windows_fails_closed_without_a_call(
+    db, fake, monkeypatch, tmp_path, name
+):
+    shim = tmp_path / name
+    shim.write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.setenv(news_llm.CLI_ENV, str(shim))
+    monkeypatch.setattr(candidate_notes, "IS_WINDOWS", True)
+    _candidates(db, 2)
+    result = _run(db)
+    assert result["status"] == "failed"
+    assert result["reason"] == f"cli_not_found: {shim} is not a native .exe"
+    assert fake() == [] and _notes(db) == []
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == "failed" and run.metadata_json["calls"] == 0
+
+
+def test_a_native_exe_cli_passes_the_windows_check(monkeypatch, tmp_path):
+    exe = tmp_path / "Claude.EXE"
+    exe.write_bytes(b"")
+    monkeypatch.setenv(news_llm.CLI_ENV, str(exe))
+    for key in news_llm.API_KEY_ENV:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(candidate_notes, "IS_WINDOWS", True)
+    assert candidate_notes.cli_problem() == ([str(exe)], None)
+
+
 def test_api_key_in_environment_refuses_to_run(db, fake, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     _candidates(db, 1)

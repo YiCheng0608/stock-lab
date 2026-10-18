@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -86,6 +87,20 @@ RAW_SOURCE = "candidate_notes"
 RAW_ENDPOINT = f"claude -p --model {MODEL}"
 STRATEGY_LABELS = {"breakout_v1": "突破條件", "pullback_v1": "回踩條件"}
 BOARD_LABELS = {"industry": "產業", "theme": "題材"}
+# On Windows only the native claude.exe is run: on a timeout subprocess kills
+# an npm .cmd shim's cmd.exe but not its node child, which keeps the pipes
+# open and would hang the daily step until the task limit.
+IS_WINDOWS = sys.platform == "win32"
+
+
+def cli_problem() -> tuple[list[str] | None, str | None]:
+    """news_llm.preflight, failing closed on a non-.exe CLI on Windows."""
+
+    command, problem = preflight()
+    if problem is None and IS_WINDOWS and Path(command[0]).suffix.lower() != ".exe":
+        return None, f"cli_not_found: {command[0]} is not a native .exe"
+    return command, problem
+
 
 _NOTE_FIELDS = ("id", "selection", "levels", "risks")
 _NOTE_LIMITS = {
@@ -547,7 +562,7 @@ def run_candidate_notes(
     if not todo:
         # Same date and prompt version: nothing is sent or rewritten.
         return {**base, "status": "success", "already_complete": True}
-    command, problem = preflight()
+    command, problem = cli_problem()
     if problem is not None:
         # A configuration error writes no note rows.
         if dry_run:
