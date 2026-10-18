@@ -1179,7 +1179,7 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
     """Return a usable as-of group return for an individual strategy.
 
     ``hot_group_v1`` may be unranked when one of its discovery components
-    (for example full-membership institutional coverage or catalyst events)
+    (for example eligible-member institutional coverage or catalyst events)
     is incomplete.  Breakout/pullback only require the verified group excess
     return, so the product ranking gate must not turn those unrelated
     components into strategy input failures.  Keep the membership, active
