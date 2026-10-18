@@ -68,6 +68,7 @@ class Steps:
             "candidates": {"status": "success", "records": 2},
             "indicators": {"status": "not_configured", "reason": "fixture"},
             "theme_suggestions": {"status": "success", "records": 4},
+            "candidate_notes": {"status": "success", "records": 3},
         }
         self.results.update(results)
 
@@ -86,6 +87,7 @@ class Steps:
         monkeypatch.setattr(schedule_runs, "_candidate_step", make("candidates"))
         monkeypatch.setattr(schedule_runs, "_indicator_step", make("indicators"))
         monkeypatch.setattr(schedule_runs, "_theme_suggestion_step", make("theme_suggestions"))
+        monkeypatch.setattr(schedule_runs, "_candidate_note_step", make("candidate_notes"))
         # Catch-up has its own tests; here no earlier session is missing.
         monkeypatch.setattr(schedule_runs, "_catchup_step", lambda *_args: {"status": "success", "records": 0})
 
@@ -107,7 +109,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(dat
     steps = Steps(monkeypatch)
     first = pipeline.run_daily(DAY, trigger="scheduler")
     assert first["status"] == "success"
-    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     rows, by_run = runs(database)
     assert [(row.status, row.trigger, row.target_date, row.records) for row in rows] == [("success", "scheduler", DAY, 12)]
     logged = by_run[rows[0].id]
@@ -119,6 +121,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(dat
         "candidates": ("success", 2),
         "indicators": ("not_configured", None),
         "theme_suggestions": ("success", 4),
+        "candidate_notes": ("success", 3),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
     assert rows[0].finished_at >= rows[0].started_at
@@ -126,7 +129,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(dat
     again = pipeline.run_daily(DAY, trigger="scheduler")
     assert again["status"] == "skipped" and again["reason"] == "already_complete"
     assert again["related_run_id"] == rows[0].id
-    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     rows, by_run = runs(database)
     assert [row.status for row in rows] == ["success", "skipped"]
     assert by_run[rows[1].id] == {}
@@ -151,11 +154,12 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "candidates": "skipped",
         "indicators": "skipped",
         "theme_suggestions": "skipped",
+        "candidate_notes": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
     steps.results["collect"] = {"status": "success", "records": 10}
     assert pipeline.run_daily(DAY)["status"] == "success"
-    assert steps.calls == ["collect", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
 
 
 def test_verified_non_trading_day_is_complete(database, monkeypatch):
@@ -183,6 +187,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(database, mo
     assert logged["candidates"].status == "skipped" and logged["candidates"].error == "analyze_not_successful"
     assert logged["indicators"].status == "not_configured"
     assert logged["theme_suggestions"].status == "success"
+    assert logged["candidate_notes"].status == "skipped" and logged["candidate_notes"].error == "candidates_not_successful"
 
 
 def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypatch):
@@ -190,7 +195,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
     # candidates read the trading date's signals, which analyze already stored.
-    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     rows, by_run = runs(database)
     assert rows[0].error == "evaluate: fixture evaluate failure"
     assert by_run[rows[0].id]["candidates"].status == "success"
@@ -206,11 +211,41 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(database, mo
     assert "fixture candidate crash" in rows[0].error
     assert logged["candidates"].status == "failed"
     assert logged["evaluate"].status == "success" and logged["indicators"].status == "not_configured"
+    assert logged["candidate_notes"].status == "skipped" and logged["candidate_notes"].error == "candidates_not_successful"
 
 
 def test_candidate_step_without_signals_is_an_acceptable_no_data_step(database, monkeypatch):
     Steps(monkeypatch, candidates={"status": "no_data", "reason": "no_signals_for_date", "records": 0})
     assert pipeline.run_daily(DAY)["status"] == "success"
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "failed", "reason": "cli_not_found: claude"},
+        {"status": "partial", "error": "batch 1: timeout: no result within 300s", "records": 5},
+        RuntimeError("fixture note crash"),
+    ],
+)
+def test_candidate_note_failures_stay_on_the_step_and_the_run_succeeds(database, monkeypatch, outcome):
+    steps = Steps(monkeypatch, candidate_notes=outcome)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert steps.calls[-1] == "candidate_notes"
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]["candidate_notes"]
+    assert rows[0].status == "success" and rows[0].error is None
+    assert logged.status in {"failed", "partial"} and logged.error
+    assert rows[0].summary_json["steps"]["candidate_notes"] == logged.status
+
+
+def test_candidate_note_step_runs_the_target_date(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        "worker.candidate_notes.run_candidate_notes_batch", lambda day: seen.append(day) or {"status": "success"}
+    )
+    assert schedule_runs._candidate_note_step(DAY)["status"] == "success"
+    assert seen == [DAY]
 
 
 def test_failed_indicator_batch_fails_the_run(database, monkeypatch):
@@ -224,7 +259,7 @@ def test_failed_theme_suggestions_fail_the_run_after_every_other_step(database, 
     steps = Steps(monkeypatch, theme_suggestions=RuntimeError("fixture suggestion crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert "fixture suggestion crash" in rows[0].error
@@ -271,7 +306,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
     listed = schedule_runs.list_schedule_runs(5, DAY)
     assert listed[0]["status"] == "success"
     assert [step["step"] for step in listed[0]["steps"]] == [
-        "catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"
+        "catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"
     ]
 
 
@@ -519,7 +554,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         db.commit()
     # The 18:30 process was killed: the 21:30 trigger reruns well before the time limit.
     assert pipeline.run_daily(DAY)["status"] == "success"
-    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     rows, _ = runs(database)
     assert rows[0].status == "failed" and f"process {dead.pid}" in rows[0].error
     assert rows[-1].host == socket.gethostname() and rows[-1].pid == os.getpid()
@@ -700,7 +735,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(database, m
     assert result["status"] == "success"
     assert log.calls == [(date(2026, 10, 15), "historical"), (date(2026, 10, 16), "historical"),
                          (MONDAY, "snapshot")]
-    assert steps.calls == ["analyze", "evaluate", "candidates", "indicators", "theme_suggestions"]
+    assert steps.calls == ["analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes"]
     caught = result["catchup"]
     # The holiday does not count toward the five sessions.
     assert caught["checked_dates"] == ["2026-10-09", "2026-10-12", "2026-10-14", "2026-10-15", "2026-10-16"]

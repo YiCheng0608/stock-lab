@@ -305,13 +305,18 @@ def test_daily_log_layout_is_unchanged(harness):
     assert re.search(r"^===== \S+ end exit=0 seconds=\d+$", result.log, re.MULTILINE)
 
 
-@pytest.mark.parametrize(
-    "option", [["-SkipNewsLlm"], ["-ClaudeCli", r"C:\x\claude.exe"]]
-)
-def test_news_only_options_are_refused_for_daily(harness, option):
-    result = harness.invoke("daily", *option)
+def test_news_only_options_are_refused_for_daily(harness):
+    result = harness.invoke("daily", "-SkipNewsLlm")
     assert result.code != 0 and result.steps == []
     assert "applies only to the news job" in result.stdout + result.stderr
+
+
+def test_daily_passes_the_claude_path_to_its_candidate_notes_step(harness):
+    result = harness.invoke("daily", "-ClaudeCli", r"C:\tools\claude.exe")
+    assert result.code == 0 and result.steps == ["daily"]
+    assert result.calls[0].endswith(r"claude_cli=C:\tools\claude.exe")
+    # The daily log layout stays the same.
+    assert "news-llm" not in result.log and "claude_cli" not in result.log
 
 
 # Registration (-WhatIf only) ---------------------------------------------------
@@ -365,7 +370,33 @@ def test_news_registration_takes_the_path_from_stock_claude_cli(harness, monkeyp
 def test_daily_registration_has_no_news_llm_options(harness):
     result = harness.register("daily")
     assert result.code == 0, result.stderr
-    assert "Claude:" not in result.stdout and "-SkipNewsLlm" not in result.stdout
+    assert (
+        "Claude:   (not set; candidate_notes uses STOCK_CLAUDE_CLI or claude on the task PATH)"
+        in result.stdout
+    )
+    assert "-SkipNewsLlm" not in result.stdout and "-ClaudeCli" not in result.stdout
     refused = harness.register("daily", "-NoNewsLlm")
     assert refused.code != 0
-    assert "apply only to the news job" in refused.stdout + refused.stderr
+    assert "applies only to the news job" in refused.stdout + refused.stderr
+
+
+def test_daily_registration_names_the_claude_executable_for_candidate_notes(harness):
+    claude = harness.root / "claude.exe"
+    claude.touch()
+    result = harness.register("daily", "-ClaudeCli", str(claude))
+    assert result.code == 0, result.stderr
+    assert f"Claude:   {claude} (candidate_notes)".lower() in result.stdout.lower()
+    command = next(
+        line for line in result.stdout.splitlines() if line.startswith("Command:")
+    )
+    assert f'-ClaudeCli "{claude}"'.lower() in command.lower()
+    assert "-Job daily" in command and "-SkipNewsLlm" not in command
+    shim = harness.root / "claude.cmd"
+    shim.touch()
+    for path, message in (
+        (harness.root / "missing.exe", "not found"),
+        (shim, "native .exe"),
+    ):
+        refused = harness.register("daily", "-ClaudeCli", str(path))
+        assert refused.code != 0
+        assert message in refused.stdout + refused.stderr

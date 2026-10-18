@@ -14,7 +14,12 @@ first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
          holidays are not encoded in the trigger: on a weekday without a
          session the job records non_trading_day. The retry after a
          successful run only records an already_complete row and does not
-         touch data; after a partial run it completes the day.
+         touch data; after a partial run it completes the day. Its last
+         step, candidate_notes, calls claude -p: pass -ClaudeCli with the
+         native claude.exe (no PATH or STOCK_CLAUDE_CLI lookup for daily).
+         Without it the step uses STOCK_CLAUDE_CLI, then claude on the
+         task's PATH, and records cli_not_found when neither is found; the
+         daily result is unaffected.
   news   Every IntervalHours hours (default 2), every day, starting at the
          next whole interval in Taipei time. After `worker.cli news` the
          same run executes `worker.cli news-llm` (AI summaries of the stored
@@ -35,6 +40,9 @@ Add -WhatIf to print what would be registered without changing anything.
 
 .EXAMPLE
 ./tools/Register-WorkerSchedule.ps1 -Job daily -PythonPath C:\path\to\.venv\Scripts\python.exe -WhatIf
+
+.EXAMPLE
+./tools/Register-WorkerSchedule.ps1 -Job daily -PythonPath C:\path\to\.venv\Scripts\python.exe -ClaudeCli C:\Users\me\.local\bin\claude.exe -WhatIf
 
 .EXAMPLE
 ./tools/Register-WorkerSchedule.ps1 -Job news -PythonPath C:\path\to\.venv\Scripts\python.exe -ClaudeCli C:\Users\me\.local\bin\claude.exe
@@ -63,7 +71,8 @@ param(
     [double]$DailyMinFreeMemoryGB = 2,
     [ValidateRange(0, 1024)]
     [double]$NewsMinFreeMemoryGB = 1,
-    # news only: native claude.exe for the news-llm step, and its off switch.
+    # Native claude.exe: news-llm in news (required unless -NoNewsLlm),
+    # candidate_notes in daily (optional). -NoNewsLlm is news only.
     [string]$ClaudeCli,
     [switch]$NoNewsLlm,
     [switch]$Unregister
@@ -104,8 +113,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $DataDir 'stock.db') -PathType Leaf)
     throw "No initialized database at $(Join-Path $DataDir 'stock.db'); run worker.cli init-db against the intended database first"
 }
 
-if ($Job -ne 'news' -and ($ClaudeCli -or $NoNewsLlm)) { throw '-ClaudeCli and -NoNewsLlm apply only to the news job' }
+if ($Job -ne 'news' -and $NoNewsLlm) { throw '-NoNewsLlm applies only to the news job' }
 if ($NoNewsLlm -and $ClaudeCli) { throw '-ClaudeCli has no effect together with -NoNewsLlm' }
+if ($Job -eq 'daily' -and $ClaudeCli) {
+    if (-not (Test-Path -LiteralPath $ClaudeCli -PathType Leaf)) { throw "claude executable not found: '$ClaudeCli'" }
+    if ([IO.Path]::GetExtension($ClaudeCli) -ne '.exe') {
+        throw "claude must be the native .exe, not a script or npm shim (got: '$ClaudeCli')"
+    }
+    $ClaudeCli = (Resolve-Path -LiteralPath $ClaudeCli).Path
+}
 if ($Job -eq 'news' -and -not $NoNewsLlm) {
     if (-not $ClaudeCli) { $ClaudeCli = $env:STOCK_CLAUDE_CLI }
     if ($ClaudeCli -and $ClaudeCli.TrimStart().StartsWith('[')) {
@@ -173,6 +189,8 @@ $argumentList = @(
 )
 if ($Job -eq 'news') {
     if ($NoNewsLlm) { $argumentList += '-SkipNewsLlm' } else { $argumentList += @('-ClaudeCli', ('"' + $ClaudeCli + '"')) }
+} elseif ($ClaudeCli) {
+    $argumentList += @('-ClaudeCli', ('"' + $ClaudeCli + '"'))
 }
 $arguments = $argumentList -join ' '
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $projectRoot
@@ -180,13 +198,16 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances 
     -ExecutionTimeLimit $timeLimit -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
     -LogonType Interactive -RunLevel Limited
-$newsLlmNote = if ($Job -ne 'news') { '' } elseif ($NoNewsLlm) { ' news-llm: off.' } else { " news-llm: on (claude: $ClaudeCli)." }
+$newsLlmNote = if ($Job -ne 'news') {
+    if ($ClaudeCli) { " candidate_notes claude: $ClaudeCli." } else { ' candidate_notes claude: task PATH.' }
+} elseif ($NoNewsLlm) { ' news-llm: off.' } else { " news-llm: on (claude: $ClaudeCli)." }
 $description = "stock-lab $Job ($when). Checkout: $projectRoot. Logs: $LogDir\$Job-YYYYMMDD.log.$newsLlmNote"
 
 Write-Output "Task:     $taskPath$taskName"
 Write-Output "Checkout: $projectRoot"
 Write-Output "Python:   $PythonPath"
 if ($Job -eq 'news') { Write-Output ("Claude:   " + $(if ($NoNewsLlm) { '(news-llm off)' } else { $ClaudeCli })) }
+if ($Job -eq 'daily') { Write-Output ("Claude:   " + $(if ($ClaudeCli) { "$ClaudeCli (candidate_notes)" } else { '(not set; candidate_notes uses STOCK_CLAUDE_CLI or claude on the task PATH)' })) }
 Write-Output "Data:     $DataDir"
 Write-Output "Logs:     $LogDir\$Job-YYYYMMDD.log"
 Write-Output "Command:  powershell.exe $arguments"

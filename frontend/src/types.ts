@@ -1116,6 +1116,19 @@ export type CandidateLevels = {
   earliest_execution_date: string | null
 }
 
+// LLM explanation of a candidate (inference, #220); text only when status is done.
+export type CandidateLlmNote = {
+  status: 'done' | 'pending' | string
+  inference: boolean
+  selection: string | null
+  levels: string | null
+  risks: string | null
+  model: string | null
+  prompt_version: string
+  generated_at: string | null
+  input_hash: string
+}
+
 export type CandidateItem = {
   rank: number
   trading_date: string
@@ -1133,6 +1146,8 @@ export type CandidateItem = {
   reasons: CandidateReason[]
   groups: CandidateGroup[]
   data_as_of: string
+  // Missing on responses from before #220; null when no note was attempted.
+  llm_note?: CandidateLlmNote | null
   sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
 }
 

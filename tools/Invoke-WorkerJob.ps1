@@ -24,6 +24,8 @@ news-llm runs even when news failed, because it only reads news already stored.
 executable for news-llm, passed to the child as STOCK_CLAUDE_CLI (a scheduled
 task's PATH differs from an interactive shell's, so the registered task names
 the path); without it the worker uses STOCK_CLAUDE_CLI or `claude` on PATH.
+For daily, -ClaudeCli is passed the same way to its candidate_notes step
+(claude -p explanations of the day's candidates); the daily log is unchanged.
 
 Before starting, the job is skipped (exit 0, logged; daily also records a
 skipped schedule_runs row) when free physical memory is below
@@ -47,6 +49,9 @@ PythonPath defaults to STOCK_PYTHON, then this checkout's .venv.
 
 .EXAMPLE
 ./tools/Invoke-WorkerJob.ps1 -Job news -ClaudeCli C:\Users\me\.local\bin\claude.exe
+
+.EXAMPLE
+./tools/Invoke-WorkerJob.ps1 -Job daily -ClaudeCli C:\Users\me\.local\bin\claude.exe
 #>
 param(
     [ValidateSet('daily', 'news')]
@@ -72,7 +77,6 @@ $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 
 if ($Job -ne 'news') {
     if ($SkipNewsLlm) { throw '-SkipNewsLlm applies only to the news job' }
-    if ($ClaudeCli) { throw '-ClaudeCli applies only to the news job' }
 }
 if (-not $PythonPath) { $PythonPath = $env:STOCK_PYTHON }
 if (-not $PythonPath) {

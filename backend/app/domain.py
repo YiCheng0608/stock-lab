@@ -439,6 +439,9 @@ CANONICAL_CONFIGS: dict[str, dict[str, Any]] = {
 # and a snapshot of the configuration they were scored with.  It is kept out
 # of CANONICAL_CONFIGS, whose snapshot identifies strategy rows.
 CANDIDATE_SCORE_VERSION = "candidate_score_v1"
+# Prompt version of the candidate LLM notes (worker.candidate_notes); the
+# API shows this version first.
+CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
 CANDIDATE_SCORE_V1: dict[str, Any] = {
     "name": CANDIDATE_SCORE_VERSION,
     "schema_version": "candidate-score-config/v1",

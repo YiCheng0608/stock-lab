@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "backend" / "alembic.ini"
 OLD_REVISION = "0005_news_temporal_contract"
 NEW_REVISION = "0006_news_json_defaults"
-CURRENT_HEAD = "0014_theme_suggestions"
+CURRENT_HEAD = "0015_candidate_llm_notes"
 # Tables the revisions after 0006 read (0007 turnover, 0008 share integer). A
 # database stamped 0005 always has them because 0001 creates every model table.
 HEAD_PREREQUISITES = (

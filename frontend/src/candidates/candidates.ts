@@ -1,4 +1,5 @@
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidatesResponse } from '../types'
+import { formatTaipeiInstant } from '../news/newsView'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidatesResponse } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -130,6 +131,42 @@ export function candidateSourceText(item: CandidateItem): string {
     `新聞方向 LLM 判讀 ${promptVersion || '版本未提供'}（推論）`,
   ]
   return parts.join(' · ')
+}
+
+// LLM note (#220): inference shown apart from the rule values above it.
+export const NOTE_TITLE = 'AI 進出點說明'
+export const NOTE_DISCLAIMER = '由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。'
+export const NOTE_MISSING_TEXT = '此檔尚未產生 AI 說明'
+export const NOTE_PENDING_TEXT = 'AI 說明這次未能產生'
+export const NOTE_PARTS: ReadonlyArray<{ key: 'selection' | 'levels' | 'risks'; label: string }> = [
+  { key: 'selection', label: '為何入選' },
+  { key: 'levels', label: '進場區、停損與目標' },
+  { key: 'risks', label: '需留意的風險' },
+]
+
+export type CandidateNoteView =
+  | { kind: 'done'; parts: Array<{ key: string; label: string; text: string }>; meta: string }
+  | { kind: 'empty'; text: string; meta: string | null }
+
+// A pending note was only attempted: no model, and its time is the attempt.
+export function candidateNoteMeta(note: CandidateLlmNote): string {
+  const time = formatTaipeiInstant(note.generated_at)
+  const done = note.status === 'done'
+  return [
+    ...(done ? [`模型 ${note.model || '未記錄'}`] : []),
+    `提示版本 ${note.prompt_version}`,
+    ...(time ? [`${done ? '產生於' : '嘗試於'} ${time}`] : []),
+  ].join(' · ')
+}
+
+// A done note with every part shows its text; anything else is one fixed sentence.
+export function candidateNoteView(note: CandidateLlmNote | null | undefined): CandidateNoteView {
+  if (!note) return { kind: 'empty', text: NOTE_MISSING_TEXT, meta: null }
+  const parts = NOTE_PARTS.map(({ key, label }) => ({ key, label, text: note[key] ?? '' }))
+  if (note.status !== 'done' || parts.some((part) => !part.text)) {
+    return { kind: 'empty', text: note.status === 'pending' ? NOTE_PENDING_TEXT : NOTE_MISSING_TEXT, meta: candidateNoteMeta(note) }
+  }
+  return { kind: 'done', parts, meta: candidateNoteMeta(note) }
 }
 
 export type CandidatesState =
