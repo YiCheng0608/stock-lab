@@ -652,3 +652,49 @@ class DailyCandidate(Base):
     groups_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     data_as_of: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ThemeSuggestion(Base):
+    """A news theme suggestion awaiting human review (worker.theme_suggestions).
+
+    Aggregated from the ``theme_candidates`` of done news_llm_results, one row
+    per prompt version and normalized theme name.  Never scored or ranked and
+    never written to theme_groups; ``status`` stays ``pending_verification``.
+    ``matched_group_id`` names an existing theme or official industry with the
+    same normalized name (then it is not a new theme).
+    """
+
+    __tablename__ = "theme_suggestions"
+    __table_args__ = (
+        UniqueConstraint("prompt_version", "theme_key", name="uq_theme_suggestion_prompt_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    theme_key: Mapped[str] = mapped_column(String(80))
+    display_name: Mapped[str] = mapped_column(String(80))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    aggregation_version: Mapped[str] = mapped_column(String(40))
+    llm_models_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    news_count: Mapped[int] = mapped_column(Integer)
+    first_news_date: Mapped[date] = mapped_column(Date)
+    last_news_date: Mapped[date] = mapped_column(Date, index=True)
+    matched_group_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending_verification")
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ThemeSuggestionNews(Base):
+    """One news item behind a theme suggestion, with the LLM's own wording."""
+
+    __tablename__ = "theme_suggestion_news"
+    __table_args__ = (
+        UniqueConstraint("suggestion_id", "news_item_id", name="uq_theme_suggestion_news_item"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    suggestion_id: Mapped[int] = mapped_column(ForeignKey("theme_suggestions.id"), index=True)
+    news_item_id: Mapped[int] = mapped_column(ForeignKey("news_items.id"), index=True)
+    news_llm_result_id: Mapped[int] = mapped_column(ForeignKey("news_llm_results.id"))
+    theme_text: Mapped[str] = mapped_column(String(80))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    news_date: Mapped[date] = mapped_column(Date)

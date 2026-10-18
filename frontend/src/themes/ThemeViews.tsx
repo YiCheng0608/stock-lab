@@ -160,6 +160,7 @@ export function ThemesBoardView({
   data,
   loading,
   error,
+  suggestions,
 }: {
   board: ThemeBoard
   onBoardChange: (board: ThemeBoard) => void
@@ -168,6 +169,8 @@ export function ThemesBoardView({
   data: ThemeBoardResponse | undefined
   loading: boolean
   error: unknown
+  // News theme suggestions (#216), kept outside the ranked boards.
+  suggestions?: ReactNode
 }) {
   return (
     <div className="page">
@@ -194,6 +197,7 @@ export function ThemesBoardView({
             ? <Card><EmptyState title="資料暫時無法載入" reason={errorReason(error)} /></Card>
             : data && <ThemeBoardPanel board={board} data={data} search={search} />}
       </div>
+      {suggestions}
     </div>
   )
 }

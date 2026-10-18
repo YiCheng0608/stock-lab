@@ -51,7 +51,7 @@
 | 法人 | 5 日三大法人淨股數／含 T 的 20 日成交量合計（股），群組取成員平均後取同榜 percentile；覆蓋規則見下。 |
 | 催化劑 | MOPS／TWSE-TPEx 公告／申報事件；1／5／20 日按 50%／30%／20% 加權，3 件封頂。 |
 
-membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至少 3 檔合格成員。產業與題材各算一榜，「同榜」依群組類型劃分：官方產業（`official_industry`）、[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)題材（`theme`）、其他股票群組（目前只有新上市觀察 `daily_hot_group`）各自成榜，ETF 依類別分區；percentile 與排名只在同榜內計算，榜別寫在 `details_json.board`，未達成員門檻的群組仍是同榜 percentile 的比較對象，`theme_candidate` 不計分。breakout_v1／pullback_v1 的族群確認只取非題材群組，`worker.pipeline._best_group_for_signal` 會排除 `theme`；decision／行動摘要的 qualified 族群（`app.decision._qualified_groups_for_instrument`）與今日候選則含題材。`details_json.member_count` 是 score date 有效、標的 active 且類型合格（股票榜為 stock／ipo，ETF 分區為合格類別 ETF）的成員數；`eligible_members` 是其中 1／5／20 日報酬、TAIEX 基準與量能輸入皆齊全的成員數，3 檔門檻看的是 `eligible_members`。事件 missing policy：
+membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至少 3 檔合格成員。產業與題材各算一榜，「同榜」依群組類型劃分：官方產業（`official_industry`）、[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)題材（`theme`）、其他股票群組（目前只有新上市觀察 `daily_hot_group`）各自成榜，ETF 依類別分區；percentile 與排名只在同榜內計算，榜別寫在 `details_json.board`，未達成員門檻的群組仍是同榜 percentile 的比較對象，`theme_candidate` 不計分；[新聞題材建議](#新聞題材建議)不是群組，不進任何榜。breakout_v1／pullback_v1 的族群確認只取非題材群組，`worker.pipeline._best_group_for_signal` 會排除 `theme`；decision／行動摘要的 qualified 族群（`app.decision._qualified_groups_for_instrument`）與今日候選則含題材。`details_json.member_count` 是 score date 有效、標的 active 且類型合格（股票榜為 stock／ipo，ETF 分區為合格類別 ETF）的成員數；`eligible_members` 是其中 1／5／20 日報酬、TAIEX 基準與量能輸入皆齊全的成員數，3 檔門檻看的是 `eligible_members`。事件 missing policy：
 
 - 官方事件完整覆蓋 1／5／20 日窗口且沒有已核實事件時，催化劑才是有效 0。
 - unsupported、partial、錯日、缺日或事件—族群關聯未核實時，催化劑為 null，不能改成 0 或推測方向。
@@ -98,6 +98,18 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 **時點一致性**：只保證 `daily` 當日計算的時點一致。重算舊日期時（`worker.cli candidates --date <舊日>`，或在沒有 run 的日期跑 `daily --force`），入池與評分輸入都以 T 為資料日期，但標的與群組的 active 狀態、LLM 判讀，以及 T 之後才收錄的 T 日新聞，可能用到 T 之後才有的資訊。
 
 **API**：`GET /api/candidates?date=&limit=`（`limit` 1～20，預設 20；不帶 `date` 取最新一次 run）回傳 run 摘要、`zero_reason`／`zero_reason_text`、方法說明（權重、各分項 `inference`、null 說明）與每列的排名、標的、策略、進場區／停損／目標／RR、總分、`weight_coverage`、`partial_components`、四分項（子項值、percentile、`null_reason`／`null_explanation`）、理由、族群、資料日期與來源；該日未計算時 `status=not_computed`。`GET /api/stocks/{exchange}/{symbol}` 的 `candidate` 為該股在 cutoff 當日或之前最新一次 run 中的列，沒有則為 null。
+
+## 新聞題材建議
+
+新聞 AI 判讀（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）的 `theme_candidates` 彙整成待核實的題材建議。建議是 LLM 推論：不計分、不排名、不寫 `theme_groups`／`group_memberships`／題材表，也不作為候選或行動的理由；人工核實與納入流程見[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)。實作在 `backend/worker/theme_suggestions.py`，彙整規則版本 `theme_suggestions_v1`（`app.theme_suggestions.AGGREGATION_VERSION`），規則改變要升版。
+
+- **來源**：`news_llm_results` 中 `llm_status=done` 且 `ai_unsupported` 不為 true 的列，對應的 `news_items.status=active`；`pending`、`skipped_stale` 與資訊不足（unsupported）的判讀不取。
+- **合併**：同一提示版本內，以題材名的 NFKC 正規化、去除所有空白、casefold 後的字串為鍵（`theme_key`），例如「AI 伺服器」「AI伺服器」「ＡＩ 伺服器」同一鍵；不做同義詞或模糊比對。不同提示版本各自成列，不跨版本合併。同一則新聞重複提同一鍵只算一次，保留第一個寫法與理由。
+- **欄位**（`theme_suggestions`，每個提示版本 × 鍵一列）：`display_name` 取該鍵出現最多的原始寫法（同票取新聞日最早者）；`news_count` 為不重複新聞則數；`first_news_date`／`last_news_date` 為新聞台北日期（`published_at`，缺則 `collected_at`）；`llm_models_json` 為參與判讀的模型去重清單；`prompt_version`、`aggregation_version`；`matched_group_id`：鍵與 active 的題材表題材或官方產業的 `display_name_zh`／`name` 鍵完全相同時記該群組（題材優先），代表不是新題材；`status` 固定 `pending_verification`；`computed_at` 為內容最後變動時間（UTC）。`theme_suggestion_news` 每個建議 × 新聞一列，記 `news_llm_result_id`、模型的題材寫法 `theme_text`、理由 `reason` 與新聞日期。
+- **模型把握**：`news_v1` 的題材候選沒有把握欄位，建議不帶把握值，API 回 `confidence=not_provided`；不挪用個股候選的把握。
+- **冪等**：每次由全部來源列重算，只寫有差異的列；內容不變不改 `computed_at`。來源不再出現的鍵與連結刪除（例如判讀改為 unsupported 或新聞失效）。
+- **執行**：`daily` 最後一步 `theme_suggestions`（collect 成功即跑，不依賴 analyze），或 `python -m worker.cli theme-suggestions`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。
+- **API**：`GET /api/theme-suggestions?limit=&include_matched=`（`limit` 1～50，預設 20）依 `news_count` 由多到少、`last_news_date` 由新到舊排序；預設只列 `matched_group_id` 為空者，`include_matched=true` 才含與既有族群同名者（附 `matched_group`）。每項有 `status`、`inference=true`、則數、首末日期、`confidence`、版本欄位與最近 5 則關聯新聞（標題、來源、日期、題材寫法、理由）；`meta` 有 `total`、`matched_total` 與 `updated_at`。`GET /api/theme-suggestions/{id}` 回傳單一建議與全部關聯新聞。文案見 [UI_COPY_SPEC §8.6](UI_COPY_SPEC.md#86-新聞題材建議)。
 
 ## 技術指標
 

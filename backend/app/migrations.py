@@ -334,12 +334,16 @@ def _fallback_upgrade_on_connection(connection) -> None:
     if connection.dialect.name == "sqlite":
         preflight_instrument_identity(connection)
         preflight_settlement_identity(connection)
-    # news_llm_results references news_items, and the 0006 repair below refuses
-    # to rebuild a referenced news_items; create it after that repair (0012).
-    news_llm = Base.metadata.tables["news_llm_results"]
+    # news_llm_results (0012) and the theme suggestion tables (0014) reference
+    # news_items, and the 0006 repair below refuses to rebuild a referenced
+    # news_items; create them after that repair.
+    after_news_repair = [
+        Base.metadata.tables[name]
+        for name in ("news_llm_results", "theme_suggestions", "theme_suggestion_news")
+    ]
     Base.metadata.create_all(
         bind=connection,
-        tables=[table for table in Base.metadata.sorted_tables if table is not news_llm],
+        tables=[table for table in Base.metadata.sorted_tables if table not in after_news_repair],
     )
     inspector = inspect(connection)
     # A pre-existing status is authoritative. Only rows from a schema that
@@ -394,7 +398,8 @@ def _fallback_upgrade_on_connection(connection) -> None:
             )
         )
         ensure_news_json_server_defaults(connection)
-    news_llm.create(bind=connection, checkfirst=True)
+    for table in after_news_repair:
+        table.create(bind=connection, checkfirst=True)
     connection.execute(
         text(
             "CREATE TABLE IF NOT EXISTS schema_migrations "
@@ -483,11 +488,19 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0013_candidates', CURRENT_TIMESTAMP)"
         )
     )
-    # 0014 only adds group_daily_score_archive, also made by create_all.
+    # 0014 only adds theme_suggestions/theme_suggestion_news, created above
+    # after the news repair.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0014_group_score_archive', CURRENT_TIMESTAMP)"
+            "VALUES ('0014_theme_suggestions', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0015 only adds group_daily_score_archive, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0015_group_score_archive', CURRENT_TIMESTAMP)"
         )
     )
 
