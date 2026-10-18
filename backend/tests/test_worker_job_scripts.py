@@ -4,6 +4,14 @@ The wrapper runs against a fake interpreter (a .cmd that logs its arguments and
 exits with a chosen code), so no worker, DB, network or Claude call is involved.
 The registration script is only ever run with -WhatIf: nothing is registered.
 Windows PowerShell 5.1 is required, so these tests are skipped on other systems.
+
+The wrapper inspects the git dir of the checkout it lives in (index.lock or
+MERGE_HEAD means a git operation is in progress and the job is skipped). Run from
+the real checkout, that made the tests depend on whoever else was using it: an
+uncommitted merge failed six of them every time, and a git command holding
+index.lock for a moment failed a few at random. So the harness copies the scripts
+into a project tree of its own under tmp_path, with a clean .git, and only the
+tests that mean to exercise git_busy put a marker there.
 """
 
 from __future__ import annotations
@@ -24,8 +32,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
-INVOKE = TOOLS / "Invoke-WorkerJob.ps1"
-REGISTER = TOOLS / "Register-WorkerSchedule.ps1"
+SCRIPTS = ("Invoke-WorkerJob.ps1", "Register-WorkerSchedule.ps1")
 
 # %5 is the worker subcommand: python.exe -X utf8 -m worker.cli <step>.
 # Batch files need CRLF line endings for goto labels to work.
@@ -48,12 +55,39 @@ exit /b %FAKE_NEWS_LLM_EXIT%
 
 @pytest.fixture
 def harness(tmp_path):
+    # The project tree the scripts run in: their own copies (the wrapper finds its
+    # checkout through its own location) and a clean .git. Never the real checkout.
+    project = tmp_path / "project"
+    tools = project / "tools"
+    tools.mkdir(parents=True)
+    for name in SCRIPTS:
+        shutil.copyfile(TOOLS / name, tools / name)
+    git_dir = project / ".git"
+    git_dir.mkdir()
+    invoke_script = tools / "Invoke-WorkerJob.ps1"
+    register_script = tools / "Register-WorkerSchedule.ps1"
+
     fake = tmp_path / "fake_python.cmd"
     fake.write_text(FAKE_PYTHON, newline="\r\n")
     data = tmp_path / "job-data"
     data.mkdir()
     (data / "stock.db").touch()
     calls = tmp_path / "calls.log"
+
+    def git_state(marker, *, linked=False):
+        """Leave `marker` (index.lock, MERGE_HEAD) in the project's git dir.
+
+        `linked` makes `.git` a file pointing at a git dir elsewhere, the layout of
+        a linked worktree (and of every Orca task worktree). Returns the git dir.
+        """
+        target = git_dir
+        if linked:
+            target = tmp_path / "linked-git-dir"
+            target.mkdir()
+            shutil.rmtree(git_dir)
+            git_dir.write_text(f"gitdir: {target.as_posix()}\n", encoding="utf-8")
+        (target / marker).touch()
+        return target
 
     def invoke(job, *args, news_exit=0, llm_exit=0, min_free_gb="0", env=None):
         environment = {
@@ -72,7 +106,7 @@ def harness(tmp_path):
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                str(INVOKE),
+                str(invoke_script),
                 "-Job",
                 job,
                 "-PythonPath",
@@ -110,7 +144,7 @@ def harness(tmp_path):
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                str(REGISTER),
+                str(register_script),
                 "-Job",
                 job,
                 "-PythonPath",
@@ -130,14 +164,25 @@ def harness(tmp_path):
             code=completed.returncode, stdout=completed.stdout, stderr=completed.stderr
         )
 
-    return SimpleNamespace(invoke=invoke, register=register, root=tmp_path, fake=fake)
+    return SimpleNamespace(
+        invoke=invoke,
+        register=register,
+        git_state=git_state,
+        root=tmp_path,
+        fake=fake,
+    )
 
 
 END_LINE = r"^===== \S+ end exit=(\d+) seconds=\d+ news_llm_exit=(\S+)$"
+SKIPPED_LINE = r"^===== skipped reason=(\w+) \(min_free_mb=\d+, git_dir=(.+)\)$"
 
 
 def end_line(log):
     return re.search(END_LINE, log, re.MULTILINE)
+
+
+def skipped_line(log):
+    return re.search(SKIPPED_LINE, log, re.MULTILINE)
 
 
 # AC-1: news-llm follows news, with separate exit codes and log sections -------
@@ -218,6 +263,38 @@ def test_a_skipped_news_run_runs_neither_step(harness):
     assert result.code == 0
     assert "===== skipped reason=low_memory" in result.log
     assert end_line(result.log).groups() == ("0", "not_run")
+
+
+# A git operation in progress in the checkout skips the job ---------------------
+
+
+@pytest.mark.parametrize("linked", [False, True], ids=["git-dir", "linked-worktree"])
+@pytest.mark.parametrize("marker", ["MERGE_HEAD", "index.lock"])
+def test_a_git_operation_in_progress_skips_the_news_job(harness, marker, linked):
+    git_dir = harness.git_state(marker, linked=linked)
+    result = harness.invoke("news")
+    assert result.steps == []
+    assert result.code == 0
+    skipped = skipped_line(result.log)
+    assert skipped.group(1) == "git_busy"
+    # The marker that counted is the harness's own, not the real checkout's.
+    assert Path(skipped.group(2)) == git_dir
+    assert end_line(result.log).groups() == ("0", "not_run")
+
+
+def test_a_daily_run_blocked_by_git_still_runs_the_cli_to_record_the_skip(harness):
+    harness.git_state("MERGE_HEAD")
+    result = harness.invoke("daily")
+    assert result.code == 0
+    assert result.steps == ["daily"]
+    assert "--skip-reason git_busy" in result.calls[0]
+    assert skipped_line(result.log).group(1) == "git_busy"
+
+
+def test_a_clean_git_dir_does_not_block_the_job(harness):
+    result = harness.invoke("news")
+    assert result.steps == ["news", "news-llm"]
+    assert skipped_line(result.log) is None
 
 
 def test_daily_log_layout_is_unchanged(harness):
