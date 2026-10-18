@@ -155,14 +155,14 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 | 工作 | 觸發 | 動作 |
 | --- | --- | --- |
-| `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `tools/Invoke-WorkerJob.ps1 -Job daily -GitPull -MinFreeMemoryGB 6`（註冊參數 `-DailyMinFreeMemoryGB`），單次上限 2.5 小時 |
+| `\stock-lab\daily` | 週一至週五台北 18:30，21:30 再跑一次（`-TaipeiTimes` 可改） | `tools/Invoke-WorkerJob.ps1 -Job daily -GitPull -MinFreeMemoryGB 2`（註冊參數 `-DailyMinFreeMemoryGB`），單次上限 2.5 小時 |
 | `\stock-lab\news` | 每天每 2 小時（`-IntervalHours`），從下一個整點區間開始 | `tools/Invoke-WorkerJob.ps1 -Job news -GitPull -MinFreeMemoryGB 1 -ClaudeCli <claude.exe>`（註冊參數 `-NewsMinFreeMemoryGB`；`-NoNewsLlm` 時改為 `-SkipNewsLlm`）：先 `news`、再 `news-llm`，單次上限 90 分鐘 |
 
 兩個工作都以目前使用者、互動式登入、一般權限、隱藏視窗執行，不存密碼，使用者登入時才跑；錯過的時段在登入後補跑（StartWhenAvailable）；前一次未結束不另起新執行個體。主機不在台灣時區時腳本自動換算本機時間。
 
 休市日不寫進觸發：週間無交易日時官方來源回 no-data，run 記為 `non_trading_day`。三大法人與融資公布時間晚於收盤且不固定，18:30 若因缺這些資料而 collect 為 `partial`，analyze 不會執行，由 21:30 補齊；當日已完成後的 21:30 只記一列 `skipped`（`already_complete`）。
 
-**起跑前檢查**（`Invoke-WorkerJob.ps1`）：可用實體記憶體低於 `-MinFreeMemoryGB`（直接執行時預設 8；註冊時 daily 6、news 1）記 `low_memory`；發佈 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`；`git pull --ff-only` 失敗記 `git_pull_failed`。三者都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze 單次峰值約 5～5.5 GB（2026-10-17 本機實測），daily 的門檻不宜低於此值。
+**起跑前檢查**（`Invoke-WorkerJob.ps1`）：可用實體記憶體低於 `-MinFreeMemoryGB`（直接執行時預設 8；註冊時 daily 2、news 1）記 `low_memory`；發佈 checkout 有 `index.lock` 或 `MERGE_HEAD` 記 `git_busy`；`git pull --ff-only` 失敗記 `git_pull_failed`。三者都不執行 worker，等下一次觸發；daily 另在 `schedule_runs` 留一列 `skipped` 與原因，news 只寫日誌。全市場 analyze＋evaluate＋candidates＋indicators 峰值約 0.3 GB（[§6.5](#65-限制)），daily 門檻 2 GB 保留 collect 與其他程式的餘裕；2026-10-18 前註冊的工作仍是 6，要在發佈 checkout 重跑「註冊或更新」才生效。
 
 ### 6.3 日誌與 run 記錄
 
@@ -196,4 +196,4 @@ candidates 步驟呼叫 `worker.candidates.run_candidates(目標日)`，只讀�
 - universe 取自今日的官方清單：回補期間已下市的股票沒有歷史列。
 - 歷史回補不保存當日產業觀測與 MOPS／除權息快照；這些只由 daily 記錄當天。
 - 休市判定依官方 no-data 回應；來源暫時失敗的日期記為缺日，不推定休市。
-- 全市場 analyze 單次約 27～30 分鐘、峰值約 5～5.5 GB（2026-10-17，2 年資料）。
+- 全市場 analyze＋evaluate 單次約 4～6 分鐘、峰值約 0.2 GB，連同 candidates／indicators 約 6 分鐘、0.3 GB（2026-10-18，正式 DB 副本：2,409 檔、2024-09-30～2026-10-16 共 496 個交易日；[#184](https://github.com/YiCheng0608/stock-lab/issues/184)）。analyze 每 200 檔 commit 一次 features、group scores 寫完再 commit，每次持有寫入鎖約 2 秒內，與 news 同時執行不會等到 30 秒 busy timeout；analyze 中途失敗時已 commit 的 features／group scores 都是由日線重算的值，重跑會寫出相同結果。group scores 先於 signals commit，所以 analyze 進行中（約 1～2 分鐘）或中途失敗時，API 可能看到新日期族群分數與舊日期訊號並存，重跑 analyze 即一致。
