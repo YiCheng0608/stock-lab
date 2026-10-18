@@ -57,7 +57,7 @@ import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { groupDisplayName, officialEventDisplayTitle, formatProductTimeRole, isTemporaryIndustryGroupName, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
+import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
@@ -785,7 +785,7 @@ function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
 function GroupList({ groups }: { groups: InstrumentDetail['groups'] }) {
   if (!groups.length) return <div className="empty">尚無可顯示的族群歸屬。</div>
   return <div className="research-list">{groups.map((group) => <div className="research-list-item" key={group.id + '-' + group.valid_from}>
-    <strong>{isTemporaryIndustryGroupName(group.name) ? '既有產業族群關聯（待核實）' : groupDisplayName(group.name)}</strong>
+    <strong>{stockGroupLabel(group)}</strong>
     <span className="small-note">有效期間：{formatTaiwanDateTime(group.valid_from, true)}～{group.valid_to ? formatTaiwanDateTime(group.valid_to, true) : '截止日未提供'}</span>
   </div>)}</div>
 }

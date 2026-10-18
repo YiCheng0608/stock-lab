@@ -97,7 +97,7 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 - **membership**：錯誤群組的 row 關在 `D0-1`，canonical 群組從 D0 開新 row，source 與 collector 相同；collector 已在 Ds 轉換的標的補 `[D0, Ds-1]`。特殊碼（TDR 91）只關不開。不刪 row、不改 `valid_from`。
 - **群組**：沿用 canonical id，不改名也不新建同義群組；canonical id 在 DB 不存在時才新建（正式 DB 有 11 個 label 原本沒有群組，例如 `Cement`、`Information Service`）。佔位群組的 id 是佔位 label 的雜湊，不能改名沿用。label 不屬於現行對照的群組（`Agriculture`、`Digital Content`、`Electronics`、`Industry · 31` 等佔位群組）設 `active=0`；canonical 群組的 `display_name_zh` 同步成 `INDUSTRY_DISPLAY_ZH`。collector 之後每次觀測也會同步顯示名。
 - **收據與冪等**：預設 dry-run 不寫入；`--apply` 先驗證全部再寫，`ingestion_runs`（`run_type=industry_repair`）的 `metadata_json` 記證據 raw、每檔關閉與新開的期間。第二次執行回 `no_change`，不寫任何列。
-- **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。個股頁的 `groups` 只回截止日當天有效的列，截止日早於 D0 時會帶出舊錯配列，前端以 `isTemporaryIndustryGroupName` 遮成「既有產業族群關聯（待核實）」，不顯示產業名稱。
+- **D0 之前**：沒有觀測證據，舊 row 原樣保留。產品驗證（`news._is_verified_theme_for_instrument`）以現行代碼核對，含錯配成員的群組在這些日期 fail-closed，不對外顯示；成員本來就全對的群組（例如半導體）不受影響。個股頁（`GET /api/stocks/{exchange}/{symbol}`）的 `groups` 只回截止日當天有效的列，每列以同一截止日跑族群頁的 `api._product_group_taxonomy_verified`，官方群組再以 `_is_verified_theme_for_instrument` 核對該列本身：通過才回 `verified=true`、`display_name`（`display_name_zh`）與 `name`；未通過（例如截止日早於 D0 的舊錯配列）回 `verified=false`，`name` 與 `display_name` 為 null，前端顯示「族群關聯待核實」，不顯示產業名稱。
 
 ## 6. 群組成員與候選身分
 
