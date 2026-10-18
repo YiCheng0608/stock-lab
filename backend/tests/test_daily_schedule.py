@@ -12,7 +12,16 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
-from app.models import ChipSnapshot, IngestionRun, Instrument, MarketBar, RawPayload, ScheduleRun, ScheduleRunStep
+from app.models import (
+    ChipSnapshot,
+    DataQuality,
+    IngestionRun,
+    Instrument,
+    MarketBar,
+    RawPayload,
+    ScheduleRun,
+    ScheduleRunStep,
+)
 import worker.backfill as backfill
 import worker.pipeline as pipeline
 import worker.schedule_runs as schedule_runs
@@ -618,11 +627,13 @@ def test_0011_migration_matches_the_mapped_schedule_tables(database):
 MONDAY = date(2026, 10, 19)
 
 
-def _collect_run(factory, day, status="success", taiex=1):
+def _collect_run(factory, day, status="success", taiex=1, finished_at=None):
+    # By default the answer was obtained the day after, like a backfill.
+    finished = finished_at or datetime(day.year, day.month, day.day) + timedelta(days=1, hours=2)
     with factory() as db:
         db.add(IngestionRun(run_type="collect", source="official", run_date=day, status=status, records=10,
-                            request_key=f"official-ohlcv:{day}:{day}", started_at=datetime.utcnow(),
-                            metadata_json={"taiex_records": taiex}))
+                            request_key=f"official-ohlcv:{day}:{day}", started_at=finished - timedelta(minutes=5),
+                            finished_at=finished, metadata_json={"taiex_records": taiex}))
         db.commit()
 
 
@@ -866,3 +877,65 @@ def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
     pipeline.collect(DAY, adapter=combined(fetcher), force=True)
     with database() as db:
         assert _bar(db, "1101").raw_payload_id == bar_raw
+
+
+# --- PR #218 review: unconfirmed closures and snapshot coverage -------------
+
+
+def test_unconfirmed_no_session_is_fetched_again_by_catchup(database):
+    for day in (date(2026, 10, 15), date(2026, 10, 14), date(2026, 10, 13), date(2026, 10, 12)):
+        _collect_run(database, day)
+    friday = date(2026, 10, 16)
+    # 18:30 Taipei on Friday: both markets said no session, 21:30 never asked again.
+    _collect_run(database, friday, status="skipped", taiex=0, finished_at=datetime(2026, 10, 16, 10, 35))
+    with database() as db:
+        db.add(ScheduleRun(job="daily", target_date=friday, trigger="scheduler", status="non_trading_unconfirmed",
+                           started_at=datetime(2026, 10, 16, 10, 30)))
+        db.commit()
+    assert schedule_runs.catchup_dates(MONDAY)[1] == [friday]
+    # A no-data answer obtained after Friday ended (a later catch-up) is final.
+    with database() as db:
+        db.execute(update(IngestionRun).where(IngestionRun.run_date == friday)
+                   .values(finished_at=datetime(2026, 10, 18, 10, 35)))
+        db.commit()
+    assert friday not in schedule_runs.catchup_dates(MONDAY)[0]
+    # So is a daily run that confirmed it at 21:30.
+    with database() as db:
+        db.execute(update(IngestionRun).where(IngestionRun.run_date == friday)
+                   .values(finished_at=datetime(2026, 10, 16, 10, 35)))
+        db.add(ScheduleRun(job="daily", target_date=friday, trigger="scheduler", status="non_trading_day",
+                           started_at=datetime(2026, 10, 16, 13, 30)))
+        db.commit()
+    checked, missing = schedule_runs.catchup_dates(MONDAY)
+    assert friday not in checked and missing == [date(2026, 10, 9)]
+
+
+def test_historical_refetch_keeps_the_snapshot_event_coverage(database):
+    fetcher = CodedFetcher()
+    snapshot = pipeline.collect(DAY, adapter=combined(fetcher))
+    assert snapshot["status"] == "success"
+    with database() as db:
+        run = db.get(IngestionRun, snapshot["run_id"])
+        coverage = dict(run.metadata_json["event_coverage"])
+        quality = {
+            (row.entity_type, row.entity_key): (row.status, row.checks_json)
+            for row in db.scalars(select(DataQuality).where(
+                DataQuality.entity_type.in_(("mops_events", "mops_fundamentals")), DataQuality.as_of_date == DAY))
+        }
+        db.execute(update(IngestionRun).values(status="partial"))
+        db.commit()
+    # The historical default would be an empty observed_event_dates list.
+    assert DAY.isoformat() in coverage["observed_event_dates"] and len(quality) == 4
+
+    historical = sources.OfficialMarketDataAdapter(
+        sources.TwseAdapter(fetcher, snapshot_feeds=False), sources.TpexAdapter(fetcher, snapshot_feeds=False))
+    refetched = pipeline.collect(DAY, adapter=historical)
+    assert refetched["status"] == "success" and refetched["run_id"] == snapshot["run_id"]
+    assert refetched["event_coverage"] == coverage
+    with database() as db:
+        assert db.get(IngestionRun, snapshot["run_id"]).metadata_json["event_coverage"] == coverage
+        assert {
+            (row.entity_type, row.entity_key): (row.status, row.checks_json)
+            for row in db.scalars(select(DataQuality).where(
+                DataQuality.entity_type.in_(("mops_events", "mops_fundamentals")), DataQuality.as_of_date == DAY))
+        } == quality

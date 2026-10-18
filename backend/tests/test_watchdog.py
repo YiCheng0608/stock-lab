@@ -366,7 +366,10 @@ def test_three_failed_news_llm_runs_are_reported(wd):
         [("success", 9000), ("failed", 7200), ("failed", 3600), ("running", 5800)],
     )
     result = wd.run("--dry-run")
-    assert "news_llm：最近 3 筆 `run_type=news_llm` 的 run 都是 failed" in result.stdout
+    assert (
+        "news_llm：24 小時內最近 3 筆 `run_type=news_llm` 的 run 都是 failed"
+        in result.stdout
+    )
 
 
 def test_recent_running_news_llm_run_is_not_counted_as_failed(wd):
@@ -377,23 +380,58 @@ def test_recent_running_news_llm_run_is_not_counted_as_failed(wd):
     assert wd.text("gh_calls.log") == ""
 
 
+def _news_end(taipei: str, news_llm_exit: str) -> str:
+    return f"===== 2026-{taipei}.1234567+08:00 end exit=0 seconds=5 news_llm_exit={news_llm_exit}"
+
+
 def test_news_llm_exit_codes_in_news_logs_are_reported(wd):
     # news_llm_results missing: news-llm exits 1 without writing a run.
     (wd.logs / "news-20261018.log").write_text(
-        "===== a end exit=0 seconds=5 news_llm_exit=0\n===== b end exit=0 seconds=5 news_llm_exit=1\n",
+        _news_end("10-18T20:00:30", "0")
+        + "\n"
+        + _news_end("10-18T22:00:30", "1")
+        + "\n",
         encoding="utf-8",
     )
     news = wd.logs / "news-20261019.log"
     news.write_text(
-        "===== c end exit=0 seconds=5 news_llm_exit=wrapper_error\r\n===== d end exit=0 seconds=5 news_llm_exit=1\r\n",
+        _news_end("10-19T18:00:30", "wrapper_error")
+        + "\r\n"
+        + _news_end("10-19T20:00:30", "1")
+        + "\r\n",
         encoding="utf-8",
     )
     os.utime(news, (NIGHT - 600, NIGHT - 600))
     result = wd.run("--dry-run")
-    assert "news 日誌最後 3 次的 `news_llm_exit` 是 1 wrapper_error 1" in result.stdout
+    assert (
+        "news 日誌 24 小時內最後 3 次的 `news_llm_exit` 是 1 wrapper_error 1"
+        in result.stdout
+    )
     news.write_text(
-        "===== c end exit=0 seconds=5 news_llm_exit=1\n===== d end exit=0 seconds=5 news_llm_exit=2\n",
+        _news_end("10-19T18:00:30", "1")
+        + "\n"
+        + _news_end("10-19T20:00:30", "2")
+        + "\n",
         encoding="utf-8",
     )
     os.utime(news, (NIGHT - 600, NIGHT - 600))
     assert "news_llm_exit" not in wd.run("--dry-run").stdout
+
+
+def test_news_llm_failures_older_than_a_day_are_not_reported_again(wd):
+    # Three failures in yesterday's log, all more than 24 hours ago.
+    (wd.logs / "news-20261018.log").write_text(
+        "\n".join(_news_end(f"10-18T{hour}:00:30", "1") for hour in (16, 18, 20))
+        + "\n",
+        encoding="utf-8",
+    )
+    stale = NIGHT - 2 * 86400
+    os.utime(wd.logs / "news-20261018.log", (stale, stale))
+    _news_llm_runs(
+        wd.data / "stock.db",
+        [("failed", 3 * 86400), ("failed", 2 * 86400 + 600), ("failed", 2 * 86400)],
+    )
+    result = wd.run("--dry-run")
+    assert "news_llm：" not in result.stdout
+    # The stopped job itself is reported by the news log check.
+    assert "news 排程：最新日誌寫於" in result.stdout

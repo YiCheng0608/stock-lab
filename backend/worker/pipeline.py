@@ -2546,6 +2546,19 @@ def collect(
                     }),
                     "reason": "event feed did not provide date-scoped coverage evidence",
                 }
+            # A historical batch (backfill, daily catch-up) does not query the
+            # MOPS feeds, so it has no event evidence of its own.  When an
+            # earlier collect of this request stored coverage (a snapshot
+            # collect's observed events), keep it and leave the MOPS quality
+            # rows alone instead of degrading them to the historical default.
+            stored_coverage = stored_metadata.get("event_coverage")
+            keep_snapshot_evidence = (
+                not getattr(batch, "snapshot_feeds", True)
+                and isinstance(stored_coverage, dict)
+                and bool(stored_coverage)
+            )
+            if keep_snapshot_evidence:
+                event_coverage = dict(stored_coverage)
             if getattr(batch, "snapshot_feeds", True):
                 industry_result = _ensure_official_groups(
                     db,
@@ -2628,7 +2641,7 @@ def collect(
                     },
                     source=exchange.lower(),
                 )
-            for exchange in ("TWSE", "TPEx"):
+            for exchange in () if keep_snapshot_evidence else ("TWSE", "TPEx"):
                 event_count = sum(item.exchange == exchange for item in batch.events)
                 fundamental_count = sum(item.exchange == exchange for item in batch.fundamentals)
                 event_status = event_coverage.get("status")

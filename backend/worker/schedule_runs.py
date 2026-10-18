@@ -60,6 +60,7 @@ NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
 # at most CATCHUP_MAX_WEEKDAYS weekdays.
 CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
+TAIPEI_UTC_OFFSET = timedelta(hours=8)
 # Reasons the scheduler wrapper may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
 # The indicator batch (V1-G2).  A checkout without the module records the
@@ -142,7 +143,14 @@ def _catchup_adapter() -> OfficialMarketDataAdapter:
 
 
 def _collect_state(db: Any, day: date) -> str:
-    """complete, non_trading (official no-data) or missing, from collect runs."""
+    """complete, non_trading (confirmed official no-data) or missing.
+
+    A no-data answer counts as closed only when it is confirmed: a daily run
+    recorded ``non_trading_day`` for that date, or the answer was obtained
+    after that Taipei day ended (a later catch-up or backfill).  A single
+    same-day answer (``non_trading_unconfirmed`` whose 21:30 check never ran)
+    stays missing, so a wrong "no session" is fetched again.
+    """
 
     rows = db.scalars(
         select(IngestionRun).where(IngestionRun.run_type == "collect", IngestionRun.run_date == day)
@@ -151,9 +159,21 @@ def _collect_state(db: Any, day: date) -> str:
     if any(row.status == "success" and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
            for row in rows):
         return "complete"
-    if any(row.status == "skipped" for row in rows):
+    skipped = [row for row in rows if row.status == "skipped"]
+    if not skipped:
+        return "missing"
+    # The end of the Taipei day in naive UTC, like the stored timestamps.
+    day_end = datetime(day.year, day.month, day.day) + timedelta(days=1) - TAIPEI_UTC_OFFSET
+    if any((row.finished_at or row.started_at or datetime.min) >= day_end for row in skipped):
         return "non_trading"
-    return "missing"
+    confirmed = db.scalar(
+        select(ScheduleRun.id).where(
+            ScheduleRun.job == DAILY_JOB,
+            ScheduleRun.target_date == day,
+            ScheduleRun.status == "non_trading_day",
+        ).limit(1)
+    )
+    return "non_trading" if confirmed is not None else "missing"
 
 
 def catchup_dates(target: date, sessions: int = CATCHUP_SESSIONS) -> tuple[list[date], list[date]]:

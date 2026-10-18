@@ -165,12 +165,19 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
     error) found=1; log news_llm_check_failed "" "讀取 stock.db 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
   [ "$pending" != error ] && [ "$failed_runs" = 3 ] \
-    && llm_failed="最近 3 筆 \`run_type=news_llm\` 的 run 都是 failed（執行逾 90 分鐘仍為 running 的也算）"
+    && llm_failed="24 小時內最近 3 筆 \`run_type=news_llm\` 的 run 都是 failed（執行逾 90 分鐘仍為 running 的也算）"
 fi
-llm_exits="$(for file in "$logs"/news-*.log; do [ -f "$file" ] && grep -o 'news_llm_exit=[^ ]*' "$file"; done \
-  | tail -n 3 | sed 's/news_llm_exit=//' | tr -d '\r' | tr '\n' ' ')"
+# Only end lines of the last 24 hours, so stale logs (news stopped) are not
+# reported again every day; the news_no_log check covers a stopped job.
+yesterday="$(date -u -d "@$((taipei - 86400))" +%Y%m%d)"
+llm_exits="$(for file in "$logs/news-$yesterday.log" "$logs/news-$taipei_date.log"; do
+    [ -f "$file" ] && grep -E '^===== [^ ]+ end .*news_llm_exit=' "$file"
+  done | tr -d '\r' | while read -r _ stamp rest; do
+    at="$(date -d "$stamp" +%s 2>/dev/null)" || continue
+    [ "$at" -ge $((now - 86400)) ] && [ "$at" -le "$now" ] && printf '%s\n' "${rest##*news_llm_exit=}"
+  done | tail -n 3 | tr '\n' ' ')"
 if [ "$(printf '%s' "$llm_exits" | wc -w)" -eq 3 ] && ! printf '%s' "$llm_exits" | grep -qvE '^((1|wrapper_error) )+$'; then
-  llm_failed="${llm_failed:+$llm_failed；}news 日誌最後 3 次的 \`news_llm_exit\` 是 ${llm_exits% }"
+  llm_failed="${llm_failed:+$llm_failed；}news 日誌 24 小時內最後 3 次的 \`news_llm_exit\` 是 ${llm_exits% }"
 fi
 [ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
 [ "$found" = 0 ] && log schedules_ok "" "排程無異常"

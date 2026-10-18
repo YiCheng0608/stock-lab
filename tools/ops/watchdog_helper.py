@@ -6,9 +6,10 @@ The result goes to stdout without a trailing newline.
 
   news-llm-pending <db> <n>        how many of the last <n> news_llm batches are
                                    pending in a row, or "skip" without the table
-  news-llm-failed <db> <n> <now>   how many of the last <n> news_llm runs failed
-                                   in a row (a run still running after 90
-                                   minutes counts as failed), or "skip"
+  news-llm-failed <db> <n> <now>   how many of the last <n> news_llm runs started
+                                   in the last 24 hours failed in a row (a run
+                                   still running after 90 minutes counts as
+                                   failed), or "skip"
   daily-result <db> <date> <now>   the outcome of the daily runs for target
                                    <date> (YYYY-MM-DD): success,
                                    non_trading_day, running, none, skip, a
@@ -31,6 +32,8 @@ from pathlib import Path
 # task's 90 minutes (worker.news_llm.ABANDONED_AFTER) has lost its process.
 DAILY_RUNNING_LIMIT = timedelta(hours=2, minutes=30)
 NEWS_LLM_RUNNING_LIMIT = timedelta(minutes=90)
+# news-llm-failed counts only runs started within this window.
+RECENT_WINDOW = timedelta(hours=24)
 COMPLETE = ("success", "non_trading_day")
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
@@ -109,7 +112,9 @@ def news_llm_failed(db: str, limit: int, now: str) -> str:
             and started_at is not None
             and current - started_at > NEWS_LLM_RUNNING_LIMIT
         )
-        if status != "failed" and not abandoned:
+        # Old failures are not reported again every day once the job stopped.
+        recent = started_at is not None and current - started_at <= RECENT_WINDOW
+        if (status != "failed" and not abandoned) or not recent:
             break
         streak += 1
     return str(streak)
