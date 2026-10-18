@@ -42,8 +42,13 @@ def client(tmp_path, monkeypatch):
 
 def _industry(db, label):
     group = ThemeGroup(
-        id=canonical_group_id("industry", label), name=f"Industry · {label}", group_type="official_industry",
-        source=OFFICIAL, display_name_zh=INDUSTRY_DISPLAY_ZH[label], name_status="official", active=True,
+        id=canonical_group_id("industry", label),
+        name=f"Industry · {label}",
+        group_type="official_industry",
+        source=OFFICIAL,
+        display_name_zh=INDUSTRY_DISPLAY_ZH[label],
+        name_status="official",
+        active=True,
     )
     db.add(group)
     return group
@@ -55,24 +60,76 @@ def _seed(db):
     financial = _industry(db, "Financial")
     communications = _industry(db, "Communications")
     semiconductor = _industry(db, "Semiconductor")
-    fubon = Instrument(market="TW", exchange="TWSE", symbol="2881", name="富邦金", instrument_type="stock",
-                        industry="17", status="active")
-    tsmc = Instrument(market="TW", exchange="TWSE", symbol="2330", name="台積電", instrument_type="stock",
-                      industry="24", status="active")
-    cht = Instrument(market="TW", exchange="TWSE", symbol="2412", name="中華電", instrument_type="stock",
-                     industry="27", status="active")
+    fubon = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="2881",
+        name="富邦金",
+        instrument_type="stock",
+        industry="17",
+        status="active",
+    )
+    tsmc = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="2330",
+        name="台積電",
+        instrument_type="stock",
+        industry="24",
+        status="active",
+    )
+    cht = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="2412",
+        name="中華電",
+        instrument_type="stock",
+        industry="27",
+        status="active",
+    )
     db.add_all([fubon, tsmc, cht])
     db.flush()
     source = f"{OFFICIAL}; exchange=TWSE"
-    db.add_all([
-        GroupMembership(group_id=communications.id, instrument_id=cht.id, valid_from=date(2000, 10, 27), source=source),
-        GroupMembership(group_id=communications.id, instrument_id=fubon.id, valid_from=date(2001, 12, 19),
-                        valid_to=date(2026, 9, 7), source=source),
-        GroupMembership(group_id=financial.id, instrument_id=fubon.id, valid_from=D0, source=source),
-        GroupMembership(group_id=semiconductor.id, instrument_id=tsmc.id, valid_from=date(1994, 9, 5), source=source),
-        MarketBar(instrument_id=fubon.id, trading_date=date(2026, 10, 16), open=1, high=1, low=1, close=1, adj_close=1,
-                  volume=1, source="official"),
-    ])
+    db.add_all(
+        [
+            GroupMembership(
+                group_id=communications.id,
+                instrument_id=cht.id,
+                valid_from=date(2000, 10, 27),
+                source=source,
+            ),
+            GroupMembership(
+                group_id=communications.id,
+                instrument_id=fubon.id,
+                valid_from=date(2001, 12, 19),
+                valid_to=date(2026, 9, 7),
+                source=source,
+            ),
+            GroupMembership(
+                group_id=financial.id,
+                instrument_id=fubon.id,
+                valid_from=D0,
+                source=source,
+            ),
+            GroupMembership(
+                group_id=semiconductor.id,
+                instrument_id=tsmc.id,
+                valid_from=date(1994, 9, 5),
+                source=source,
+            ),
+            MarketBar(
+                instrument_id=fubon.id,
+                trading_date=date(2026, 10, 16),
+                open=1,
+                high=1,
+                low=1,
+                close=1,
+                adj_close=1,
+                volume=1,
+                source="official",
+            ),
+        ]
+    )
     db.commit()
 
 
@@ -84,36 +141,44 @@ def _groups(client, path):
 
 def test_cutoff_after_d0_returns_verified_display_name(client):
     for path in ("/api/stocks/TWSE/2881", "/api/stocks/TWSE/2881?as_of=2026-09-10"):
-        assert _groups(client, path) == [{
-            "id": canonical_group_id("industry", "Financial"),
-            "name": "Industry · Financial",
-            "display_name": "金融",
-            "verified": True,
-            "valid_from": "2026-09-08",
-            "valid_to": None,
-        }]
+        assert _groups(client, path) == [
+            {
+                "id": canonical_group_id("industry", "Financial"),
+                "name": "Industry · Financial",
+                "display_name": "金融",
+                "verified": True,
+                "valid_from": "2026-09-08",
+                "valid_to": None,
+            }
+        ]
 
 
 def test_cutoff_before_d0_keeps_mismatched_row_fail_closed(client):
     rows = _groups(client, "/api/stocks/TWSE/2881?as_of=2026-09-01")
-    assert rows == [{
-        "id": canonical_group_id("industry", "Communications"),
-        "name": None,
-        "display_name": None,
-        "verified": False,
-        "valid_from": "2001-12-19",
-        "valid_to": "2026-09-07",
-    }]
+    assert rows == [
+        {
+            "id": canonical_group_id("industry", "Communications"),
+            "name": None,
+            "display_name": None,
+            "verified": False,
+            "valid_from": "2001-12-19",
+            "valid_to": "2026-09-07",
+        }
+    ]
     # A group whose members were already correct before D0 stays visible.
     tsmc = _groups(client, "/api/stocks/TWSE/2330?as_of=2026-09-01")
-    assert [(row["display_name"], row["verified"]) for row in tsmc] == [("半導體", True)]
+    assert [(row["display_name"], row["verified"]) for row in tsmc] == [
+        ("半導體", True)
+    ]
 
 
 def test_row_is_checked_against_the_instrument_code_without_cutoff(client):
     # No cutoff returns every historical row. Communications passes the group gate
     # today (only 2412 remains), but this old row's code (17) does not match it.
     rows = _groups(client, "/api/instruments/2881?exchange=TWSE")
-    assert [(row["valid_from"], row["display_name"], row["verified"]) for row in rows] == [
+    assert [
+        (row["valid_from"], row["display_name"], row["verified"]) for row in rows
+    ] == [
         ("2001-12-19", None, False),
         ("2026-09-08", "金融", True),
     ]
