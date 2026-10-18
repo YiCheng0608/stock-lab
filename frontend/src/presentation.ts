@@ -273,10 +273,10 @@ export function researchRequirementLabel(field: string): string {
   return labels[value.toLowerCase()] ?? (/[\u3400-\u9fff]/.test(value) ? value.replace(/\bTAIEX\b/g, '加權指數') : '條件名稱待核實')
 }
 
-// Temporary UI guard for the currently known official-industry membership
-// migration issue. Remove this flag after the repaired source data is verified.
+// Stock-detail groups only carry the internal `Industry · X` name, with no
+// display name or verification flag, so those rows stay masked as unverified.
+// Remove this flag once the stock detail payload returns verified display names.
 export const TEMPORARY_INDUSTRY_GROUP_GUARD = true
-export const TEMPORARY_INDUSTRY_GROUP_NOTICE = '既有族群關聯待重新核實；排行與相關研究條件僅供查閱。'
 
 export function isTemporaryIndustryGroupName(name: string | null | undefined): boolean {
   if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false

@@ -1,4 +1,4 @@
-import { groupDisplayName, isTemporaryIndustryGroupName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './presentation'
+import { groupDisplayName, isTemporaryIndustryGroupName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -58,4 +58,3 @@ expect(stockDirectoryActionLabel('wait_pullback') === '等待回踩條件', 'kno
 expect(researchRequirementLabel('族群相對 TAIEX 的20日超額報酬') === '族群相對 加權指數 的20日超額報酬', 'mixed Chinese requirement translates benchmark name')
 
 expect(isTemporaryIndustryGroupName('Industry · Shipping'), 'legacy industry membership names use the temporary verification guard')
-expect(TEMPORARY_INDUSTRY_GROUP_NOTICE.includes('既有族群關聯待重新核實'), 'temporary industry notice keeps the fixed warning copy')
