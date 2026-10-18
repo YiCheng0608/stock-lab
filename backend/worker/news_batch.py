@@ -62,6 +62,7 @@ LOCK_RETRIES = 3
 LOCK_RETRY_DELAY_SECONDS = 60.0
 
 T = TypeVar("T")
+
 # A source time later than collection by more than this is a clock or time
 # zone error; the item is kept but quarantined as a time conflict.
 FUTURE_TOLERANCE = timedelta(minutes=15)

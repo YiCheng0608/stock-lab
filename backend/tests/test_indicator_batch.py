@@ -437,6 +437,10 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
         return {"status": "success"}
 
     monkeypatch.setattr(indicator_batch, "run_indicator_batch", batch)
+    # Catch-up of earlier sessions has its own tests (test_daily_schedule).
+    from worker import schedule_runs
+
+    monkeypatch.setattr(schedule_runs, "_catchup_step", lambda *_args: {"status": "success", "records": 0})
     return pipeline, calls
 
 
