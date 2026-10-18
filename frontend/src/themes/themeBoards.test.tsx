@@ -24,7 +24,7 @@ import {
   trendHasEnoughPoints,
 } from './themeBoards'
 import { EMPTY_MESSAGES, boardItem, emptyBoard, industryBoard, membersPage, newsItems, themeBoard, themeDetail, trend } from './themeBoards.fixtures'
-import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './ThemeViews'
+import { HotGroupsSection, ThemeDetailView, ThemeNewsList, ThemesBoardView } from './ThemeViews'
 
 // Standalone regression module (no browser, no server, no network) for the group boards (#179): /themes with the
 // industry and theme boards, /themes/:id with trend, components, members and news, and the today Top 10 section.
@@ -111,6 +111,14 @@ check(!detailMarkup.includes('javascript:') && detailMarkup.includes('來源連�
 check(detailMarkup.includes('第 2／2 頁') && detailMarkup.includes('共 32 檔'), 'member pagination')
 check(!detailMarkup.includes('弘塑'), 'inline members are not shown once a page arrived')
 check(count(detailMarkup, 'href="/news/') === 3 && detailMarkup.includes('事件日 2026/09/08') && detailMarkup.includes('發布日 2026/09/07') && detailMarkup.includes('公開資訊觀測站公告'), 'related news list')
+// #186 AC-5: the related news list names the real source; a media item is never shown as 「官方公告資料」.
+const relatedNews = detailMarkup.slice(detailMarkup.indexOf('theme-news-list'))
+const mediaRow = relatedNews.slice(relatedNews.indexOf('CoWoS 擴產公告 3'))
+check(count(relatedNews, '公開資訊觀測站公告') === 2, 'official rows keep the official source label')
+check(mediaRow.includes('<span class="small-note">中央社</span>'), `media row shows its own source name: ${mediaRow}`)
+check(!relatedNews.includes('官方公告資料'), 'no related news row falls back to 「官方公告資料」')
+const mediaOnly = render(<ThemeNewsList items={[{ ...newsItems(3)[2], source_name: '  ' }]} />)
+check(mediaOnly.includes('來源未提供') && !mediaOnly.includes('官方公告資料'), 'a media row without a name says 來源未提供')
 check(!detailMarkup.includes('既有族群關聯待重新核實'), 'theme detail has no industry notice')
 
 const oneDay = render(<ThemeDetailView detail={themeDetail({ trendDays: 1 })} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)

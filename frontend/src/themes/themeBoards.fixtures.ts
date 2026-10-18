@@ -178,7 +178,9 @@ export function newsItems(count: number): NewsItem[] {
   return Array.from({ length: count }, (_, index) => ({
     id: String(100 + index),
     title: `CoWoS 擴產公告 ${index + 1}`,
-    source_name: 'mops',
+    // The last row is a media feed item; the others are MOPS official disclosures.
+    source_kind: index === count - 1 ? 'media' : 'official_disclosure',
+    source_name: index === count - 1 ? '中央社' : 'mops',
     event_date: index === 0 ? '2026-09-08' : null,
     event_at: null,
     published_at: '2026-09-07T08:00:00',
