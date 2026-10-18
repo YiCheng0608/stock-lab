@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>中央社即時新聞 財經新聞</title>
+    <link>https://www.cna.com.tw/list/aie.aspx</link>
+    <language>zh-tw</language>
+    <!-- Shapes from the 2026-10-17/18 feed: lottery draws filed under 生活 (ahel). -->
+    <item>
+      <title>今彩539第115252期開獎</title>
+      <link>https://www.cna.com.tw/news/ahel/202610170173.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170173</guid>
+      <pubDate>Sat, 17 Oct 2026 20:45:00 +0800</pubDate>
+      <description><![CDATA[（中央社台北17日電）今彩539第115252期開獎，中獎號碼依大小順序排列。]]></description>
+    </item>
+    <item>
+      <title>今彩539第115252期　頭獎3注中獎</title>
+      <link>https://www.cna.com.tw/news/ahel/202610170186.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170186</guid>
+      <pubDate>Sat, 17 Oct 2026 21:40:00 +0800</pubDate>
+      <description><![CDATA[（中央社台北17日電）台灣彩券公司表示，今彩539第115252期頭獎開出3注。]]></description>
+    </item>
+    <!-- A social item filed under 社會 (asoc) without any listed keyword. -->
+    <item>
+      <title>男子持刀闖超商搶劫　警方1小時內逮人</title>
+      <link>https://www.cna.com.tw/news/asoc/202610170201.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170201</guid>
+      <pubDate>Sat, 17 Oct 2026 22:05:00 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）警方今晚逮捕一名持刀搶劫超商的男子。]]></description>
+    </item>
+    <!-- Keyword rules apply even when the section looks like finance (afe). -->
+    <item>
+      <title>大樂透第115097期　頭獎槓龜</title>
+      <link>https://www.cna.com.tw/news/afe/202610170210.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170210</guid>
+      <pubDate>Sat, 17 Oct 2026 22:10:00 +0800</pubDate>
+      <description><![CDATA[（中央社台北17日電）大樂透第115097期頭獎槓龜。]]></description>
+    </item>
+    <item>
+      <title>國道連環車禍　3車追撞2人輕傷</title>
+      <link>https://www.cna.com.tw/news/afe/202610170211.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170211</guid>
+      <pubDate>Sat, 17 Oct 2026 22:20:00 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）國道今晚發生連環追撞。]]></description>
+    </item>
+    <!-- Market news stays, including 國際 (aopl) and items that only mention
+         lottery or accident words in the summary. -->
+    <item>
+      <title>台積電在熊本建3奈米廠　日本批准補助資格</title>
+      <link>https://www.cna.com.tw/news/afe/202610170082.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170082</guid>
+      <pubDate>Sat, 17 Oct 2026 16:48:10 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）日本政府批准台積電熊本新廠補助資格。]]></description>
+    </item>
+    <item>
+      <title>穆迪調升埃及信評　維持正面展望</title>
+      <link>https://www.cna.com.tw/news/aopl/202610170091.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170091</guid>
+      <pubDate>Sat, 17 Oct 2026 12:30:00 +0800</pubDate>
+      <description><![CDATA[（中央社倫敦16日綜合外電報導）信評機構穆迪調升埃及主權信評。]]></description>
+    </item>
+    <item>
+      <title>中信金前3季獲利創高　台彩子公司貢獻穩定</title>
+      <link>https://www.cna.com.tw/news/afe/202610170095.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170095</guid>
+      <pubDate>Sat, 17 Oct 2026 13:00:00 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）中信金表示，旗下台灣彩券今彩539與大樂透銷售穩定。]]></description>
+    </item>
+    <item>
+      <title>產險業第3季車險理賠升溫　汽機車保費調整</title>
+      <link>https://www.cna.com.tw/news/afe/202610170096.aspx</link>
+      <guid isPermaLink="false">CNA/2026-10-17/202610170096</guid>
+      <pubDate>Sat, 17 Oct 2026 13:10:00 +0800</pubDate>
+      <description><![CDATA[（中央社記者台北17日電）產險公會指出，車禍件數增加帶動車險理賠。]]></description>
+    </item>
+  </channel>
+</rss>

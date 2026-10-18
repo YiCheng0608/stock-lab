@@ -3,8 +3,11 @@
 Each source gets its own ingestion run (run_type ``news``).  A failing feed
 (HTTP error, rate limit, malformed XML) is recorded on that run and the other
 feeds still write.  Existing items are never rewritten, so a rerun keeps the
-first stored ``published_at``.  ``impact_direction`` is always ``unknown``;
-LLM summaries and direction calls are stored apart by worker.news_llm.
+first stored ``published_at``; the one exception is the non-market filter
+(news_sources.exclusion_reason), which also moves matching ``active`` rows to
+``excluded``.  Excluded items are stored, never deleted, and the reason is in
+the run metadata.  ``impact_direction`` is always ``unknown``; LLM summaries
+and direction calls are stored apart by worker.news_llm.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from app.news import is_verified_theme
 
 from . import sources
 from .news_sources import (
+    FILTER_VERSION,
     MAX_ITEM_ID_LENGTH,
     NEWS_SOURCES,
     TAIPEI,
@@ -35,6 +39,7 @@ from .news_sources import (
     NewsSource,
     NewsSourceError,
     check_response,
+    exclusion_reason,
     naive_offset_text,
     normalized_title,
     parse_rss,
@@ -303,8 +308,9 @@ def _store_entries(
     matcher: RelationMatcher,
     raw_payload_id: int,
     collected_at: datetime,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     inserted = existing = 0
+    excluded: list[dict[str, str]] = []
     for entry in entries:
         key = _canonical_key(source, entry.source_item_id or entry.url)
         if index.seen(key, entry.url):
@@ -314,6 +320,12 @@ def _store_entries(
         text = f"{entry.title}\n{entry.summary or ''}"
         temporal = _temporal(entry, collected_at)
         conflict = temporal["time_consistency"] == "conflict"
+        reason = exclusion_reason(source, entry.title, entry.url)
+        if reason:
+            status = "excluded"
+            excluded.append(_excluded_record(key, entry.title, entry.url, reason))
+        else:
+            status = "quarantined" if conflict else "active"
         symbols = [] if conflict else matcher.symbols(text)
         theme_ids = [] if conflict else matcher.theme_ids(text)
         if symbols:
@@ -350,13 +362,42 @@ def _store_entries(
                 raw_payload_id=raw_payload_id,
                 event_id=None,
                 content_hash=_content_hash(source, entry),
-                status="quarantined" if conflict else "active",
+                status=status,
                 **temporal,
             )
         )
         inserted += 1
     db.flush()
-    return {"inserted": inserted, "existing": existing}
+    return {
+        "inserted": inserted,
+        "existing": existing,
+        "excluded": len(excluded),
+        "excluded_items": excluded,
+    }
+
+
+def _excluded_record(key: str, title: str, url: str, reason: str) -> dict[str, str]:
+    return {"canonical_key": key, "title": title, "url": url, "reason": reason}
+
+
+def _exclude_existing(db: Session, source: NewsSource) -> list[dict[str, str]]:
+    """Move stored ``active`` items of the source that the filter now excludes."""
+
+    rows = db.scalars(
+        select(NewsItem).where(
+            NewsItem.canonical_key.like(f"news:{source.source_id}:%"),
+            NewsItem.status == "active",
+        )
+    ).all()
+    moved: list[dict[str, str]] = []
+    for item in rows:
+        url = item.source_url or ""
+        reason = exclusion_reason(source, item.title, url)
+        if reason:
+            item.status = "excluded"
+            moved.append(_excluded_record(item.canonical_key, item.title, url, reason))
+    db.commit()
+    return moved
 
 
 def _collect_source(
@@ -376,6 +417,7 @@ def _collect_source(
     )
     db.add(run)
     db.commit()
+    existing_excluded = _exclude_existing(db, source)
     index = _SourceIndex(db, source)
     feeds: list[dict[str, Any]] = []
     for feed in source.feeds:
@@ -423,6 +465,10 @@ def _collect_source(
         "category": source.category,
         "source_kind": source.source_kind,
         "naive_time_offset": naive_offset_text(source.naive_offset),
+        "filter": {
+            "version": FILTER_VERSION,
+            "existing_excluded": existing_excluded,
+        },
         "feeds": feeds,
     }
     run.finished_at = datetime.utcnow()
@@ -431,6 +477,7 @@ def _collect_source(
         "source": source.source_id,
         "run_id": run.id,
         "status": run.status,
+        "existing_excluded": existing_excluded,
         "feeds": feeds,
     }
 
@@ -468,6 +515,8 @@ def collect_news(
         "run_date": label_date.isoformat(),
         "inserted": sum(int(feed.get("inserted", 0)) for feed in feeds),
         "existing": sum(int(feed.get("existing", 0)) for feed in feeds),
+        "excluded": sum(int(feed.get("excluded", 0)) for feed in feeds),
+        "existing_excluded": sum(len(item["existing_excluded"]) for item in results),
         "failed_feeds": [
             f"{item['source']}/{feed['feed']}"
             for item in results

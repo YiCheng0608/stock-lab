@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.api import get_db, router
 from app.db import Base, enable_sqlite_foreign_keys
 from app.models import IngestionRun, Instrument, NewsItem, RawPayload, ThemeGroup
-from worker import news_batch
+from worker import news_batch, news_llm
 from worker.news_batch import RelationMatcher, collect_news
 from worker.news_sources import (
     MAX_RESPONSE_BYTES,
@@ -33,6 +33,7 @@ from worker.news_sources import (
     NewsSourceError,
     _parse_time,
     canonical_url,
+    exclusion_reason,
     parse_rss,
 )
 
@@ -874,3 +875,168 @@ def test_stock_page_lists_feed_news_by_exchange_and_symbol(db, client):
         "台積電在熊本建3奈米廠 日本批准補助資格！",
         "台積電與乙電子(7777)合作",
     }
+
+
+# Non-market filter (#189) ---------------------------------------------------------
+
+NON_MARKET_REASONS = {
+    "今彩539第115252期開獎": "section:ahel",
+    "今彩539第115252期　頭獎3注中獎": "section:ahel",
+    "男子持刀闖超商搶劫　警方1小時內逮人": "section:asoc",
+    "大樂透第115097期　頭獎槓龜": "title:lottery",
+    "國道連環車禍　3車追撞2人輕傷": "title:society",
+}
+MARKET_TITLES = {
+    "台積電在熊本建3奈米廠　日本批准補助資格",
+    "穆迪調升埃及信評　維持正面展望",
+    "中信金前3季獲利創高　台彩子公司貢獻穩定",
+    "產險業第3季車險理賠升溫　汽機車保費調整",
+}
+
+
+def _collect_cna_mixed(db):
+    content = (FIXTURES / "cna_finance_non_market.xml").read_bytes()
+    return collect_news(
+        db,
+        run_date=RUN_DATE,
+        fetch=lambda url: _ok(content),
+        news_sources=[SOURCES_BY_ID["cna"]],
+    )
+
+
+def _cna_run(db):
+    return db.scalars(
+        select(IngestionRun)
+        .where(IngestionRun.run_type == "news", IngestionRun.source == "cna")
+        .order_by(IngestionRun.id.desc())
+    ).first()
+
+
+def test_lottery_and_society_items_are_excluded_with_reasons_and_market_news_kept(db):
+    result = _collect_cna_mixed(db)
+
+    assert (result["inserted"], result["excluded"]) == (9, 5)
+    assert {item.title: item.status for item in _items(db)} == {
+        **{title: "excluded" for title in NON_MARKET_REASONS},
+        **{title: "active" for title in MARKET_TITLES},
+    }
+    run = _cna_run(db)
+    assert run.status == "success" and run.records == 9
+    assert run.metadata_json["filter"] == {
+        "version": "news-filter/v1",
+        "existing_excluded": [],
+    }
+    feed = run.metadata_json["feeds"][0]
+    assert feed["excluded"] == 5
+    assert {item["title"]: item["reason"] for item in feed["excluded_items"]} == (
+        NON_MARKET_REASONS
+    )
+    lottery = _by_title(db, "今彩539第115252期開獎")
+    assert {
+        "canonical_key": lottery.canonical_key,
+        "title": lottery.title,
+        "url": "https://www.cna.com.tw/news/ahel/202610170173.aspx",
+        "reason": "section:ahel",
+    } in feed["excluded_items"]
+    # The raw feed is kept whole, excluded items included.
+    raw = db.get(RawPayload, lottery.raw_payload_id)
+    assert "今彩539第115252期開獎" in Path(raw.payload_path).read_text(encoding="utf-8")
+
+
+def test_rerun_counts_excluded_items_as_existing(db):
+    _collect_cna_mixed(db)
+    result = _collect_cna_mixed(db)
+
+    assert (result["inserted"], result["existing"], result["excluded"]) == (0, 9, 0)
+    assert result["existing_excluded"] == 0
+    assert len(_items(db, status="excluded")) == 5
+
+
+def test_stored_active_non_market_items_are_marked_excluded_not_deleted(
+    db, monkeypatch
+):
+    # Rows written before the filter existed.
+    monkeypatch.setattr(news_batch, "exclusion_reason", lambda *args: None)
+    _collect_cna_mixed(db)
+    monkeypatch.undo()
+    assert len(_items(db, status="active")) == 9
+    before = {item.id: (item.title, item.impact_method) for item in _items(db)}
+
+    empty = _rss()
+    result = collect_news(
+        db,
+        run_date=RUN_DATE,
+        fetch=lambda url: _ok(empty),
+        news_sources=[SOURCES_BY_ID["cna"]],
+    )
+
+    assert result["existing_excluded"] == 5
+    assert {item.id: (item.title, item.impact_method) for item in _items(db)} == before
+    assert {item.title for item in _items(db, status="excluded")} == set(
+        NON_MARKET_REASONS
+    )
+    moved = _cna_run(db).metadata_json["filter"]["existing_excluded"]
+    assert {item["title"]: item["reason"] for item in moved} == NON_MARKET_REASONS
+    # A second pass finds nothing left to move.
+    collect_news(
+        db,
+        run_date=RUN_DATE,
+        fetch=lambda url: _ok(empty),
+        news_sources=[SOURCES_BY_ID["cna"]],
+    )
+    assert _cna_run(db).metadata_json["filter"]["existing_excluded"] == []
+
+
+def test_excluded_items_are_hidden_from_api_and_llm_selection(db, client):
+    _collect_cna_mixed(db)
+    listed = client.get(f"{router.prefix}/news", params={"limit": 50}).json()
+    assert {item["title"] for item in listed["items"]} == MARKET_TITLES
+    lottery = _by_title(db, "今彩539第115252期開獎")
+    assert client.get(f"{router.prefix}/news/{lottery.id}").status_code == 404
+
+    selected = news_llm.select_items(db, now=datetime(2026, 10, 17, 15, 0))
+    assert {item.title for item in selected} == MARKET_TITLES
+
+
+@pytest.mark.parametrize(
+    ("source_id", "title", "url", "expected"),
+    [
+        # Sections count only as a directory of the item URL, per source.
+        (
+            "cnbc",
+            "Pumpkin farm brings in $2 million",
+            "https://www.cnbc.com/make-it/2026/10/17/farm.html",
+            "section:make-it",
+        ),
+        (
+            "cnbc",
+            "Best credit cards",
+            "https://www.cnbc.com/select/best-cards/",
+            "section:select",
+        ),
+        ("cnbc", "Stocks fall", "https://www.cnbc.com/2026/10/17/make-it.html", None),
+        ("yahoo_tw", "台股收黑", "https://tw.stock.yahoo.com/asoc/news/x.html", None),
+        # Titles are NFKC-normalised and case-folded.
+        (
+            "cnbc",
+            "POWERBALL jackpot climbs",
+            "https://www.cnbc.com/2026/10/17/p.html",
+            "title:lottery",
+        ),
+        (
+            "yahoo_tw",
+            "今彩５３９頭獎開出",
+            "https://tw.stock.yahoo.com/news/a.html",
+            "title:lottery",
+        ),
+        (
+            "ctee",
+            "工廠命案震驚地方",
+            "https://www.ctee.com.tw/news/1-x",
+            "title:society",
+        ),
+        ("cnyes", "台股量縮整理", "https://news.cnyes.com/news/id/1", None),
+    ],
+)
+def test_exclusion_reason(source_id, title, url, expected):
+    assert exclusion_reason(SOURCES_BY_ID[source_id], title, url) == expected
