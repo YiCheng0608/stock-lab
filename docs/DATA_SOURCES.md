@@ -60,6 +60,7 @@
 - **raw**：每個 feed 回應以 `persist_raw_payload` 存成 `news_<來源>`，內容為 HTTP 狀態、content type 與 feed 本文；寫入前移除 `content:encoded`，移除筆數記在 `removed_elements`。`naive_time_offset` 記錄無時區時間採用的時差（工商時報為 `+08:00`，其他為 null），同一值也寫在該來源 run 的 `metadata_json`。含 DOCTYPE 或實體宣告的文件一律視為格式錯誤。
 - **文字**：標題與描述先解 HTML 實體再移除標籤，只合併半形空白；標題截到 300 字、guid 截到 180 字，超過 800 字的連結不收。
 - **時間**：`pubDate` 依其時區轉 UTC，寫 `published_at`（精度 datetime）；沒有時間部分的值（`2026-10-17`、`20261017`）寫 `event_date`（精度 date），不補時分。工商時報的無時區 ISO 時間依 +08:00 解讀；其他來源的無時區時間、RFC 2822 的 `-0000`、不存在的日期都當作未知。來源時間晚於收錄時間 15 分鐘以上時，該則標 `time_consistency=conflict` 並隔離。
+- **非股市內容**：中央社產經證券 feed 會混入生活（含彩券開獎）、社會等分類的稿件，CNBC Top News 會混入 CNBC Make It 專欄；這些稿件與標題含彩券、社會案件關鍵字者存為 `status=excluded`，不顯示、不送 LLM，raw 照存。各來源的排除分類與關鍵字見 [NEWS_SPEC §3](NEWS_SPEC.md#3-去重新資訊與事件影響)。
 - **限制**：feed 只保留最近 10～65 則，抓取間隔內若超過這個數量會漏稿，漏掉的舊稿不回補。feed 的 `pubDate` 是來源宣稱的發布時間，不是本系統可證明的第一次可得時間。
 
 ## 欄位規則

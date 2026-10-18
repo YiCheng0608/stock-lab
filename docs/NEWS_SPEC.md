@@ -50,6 +50,11 @@
   - `symbols_json` 寫 `exchange:symbol`；個股頁依 `exchange:symbol` 或官方投影的純代號比對。
   - 產業：已核實的官方產業顯示名稱後接「股」「類股」「族群」「產業」「業」時，寫入 `theme_ids_json`；名稱落在公司名稱或更長的產業名稱內（「台光電股」的光電、「其他電子業」的電子）不算，「其他」「綜合」不比對。
 - `impact_scope`：有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。`impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
+- 非股市內容排除（`news-filter/v1`，`worker.news_sources.exclusion_reason`），只用下列規則，不用 LLM；分類或關鍵字有變動就升版：
+  - 分類：單篇 URL 路徑的目錄段落屬於該來源的排除分類，原因記 `section:<段落>`。中央社排除 `ahel`（生活，含彩券開獎）、`asoc`（社會）、`amov`（娛樂）、`aspt`（運動）、`aloc`（地方）、`acul`（文化）；CNBC 排除 `make-it`（CNBC Make It）、`select`（CNBC Select）。其他來源的 URL 沒有分類段落，不套這條。
+  - 標題關鍵字：標題經 NFKC 與小寫後含下列詞即排除，原因記 `title:<類別>`；只看標題，摘要提到不算。`lottery`：今彩539、大樂透、威力彩、雙贏彩、三星彩、四星彩、樂合彩、賓果賓果、刮刮樂、Powerball、Mega Millions。`society`：車禍、命案、兇殺、凶殺、墜樓、溺斃、性侵、酒駕。
+  - 被排除的新聞照常寫入，`status=excluded`，不刪除，raw 照存。`/api/news`、個股頁新聞、候選新聞分項與 LLM 批次只讀 `status=active`，所以不顯示、不送判讀；同時是時間衝突的列仍會出現在 `time_consistency=conflict` 的稽核查詢。每個 feed 的 run `metadata_json.feeds[]` 記 `excluded`（筆數）與 `excluded_items`（`canonical_key`、標題、URL、原因）。
+  - 既有列：每次收集先用目前規則檢查該來源 `status=active` 的列，符合者只把 `status` 改為 `excluded`，其他欄位不動，清單記在 run 的 `metadata_json.filter.existing_excluded`，`filter.version` 記規則版本。
 
 ## 4. 時間與排序
 
