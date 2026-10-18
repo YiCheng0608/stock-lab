@@ -206,6 +206,41 @@ class GroupDailyScore(Base):
     details_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class GroupDailyScoreArchive(Base):
+    """A ``group_daily_scores`` row as it was before a newer hot_group version overwrote it.
+
+    The score table keeps one row per (group, date), so the old version's
+    result is copied here verbatim in the same transaction; it is never read
+    by the API.  ``hot_group_version`` is the version that wrote the copy.
+    """
+
+    __tablename__ = "group_daily_score_archive"
+    __table_args__ = (
+        UniqueConstraint("group_id", "trading_date", "hot_group_version", name="uq_group_score_archive_day_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    score_id: Mapped[int] = mapped_column(Integer, index=True)
+    group_id: Mapped[str] = mapped_column(ForeignKey("theme_groups.id"), index=True)
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    relative_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relative_return_1d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relative_return_5d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relative_return_20d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    breadth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_strength: Mapped[float | None] = mapped_column(Float, nullable=True)
+    institutional_flow: Mapped[float | None] = mapped_column(Float, nullable=True)
+    catalyst: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    eligible_members: Mapped[int] = mapped_column(Integer)
+    data_quality: Mapped[str] = mapped_column(String(30))
+    details_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    hot_group_version: Mapped[str] = mapped_column(String(30))
+    archive_reason: Mapped[str] = mapped_column(String(80))
+    archived_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class StrategyVersion(Base):
     __tablename__ = "strategy_versions"
     # A formula sub-version keeps ``version`` unchanged (V1_SPEC), so it is part
