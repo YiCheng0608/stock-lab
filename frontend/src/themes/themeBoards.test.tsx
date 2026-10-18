@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
+import { productTime, unknownRole } from '../news/news.fixtures'
 import { readChartTheme } from '../stock/stockBars'
 import type { ThemeBoardEmptyReason } from '../types'
 import {
@@ -24,7 +25,7 @@ import {
   trendHasEnoughPoints,
 } from './themeBoards'
 import { EMPTY_MESSAGES, boardItem, emptyBoard, industryBoard, membersPage, newsItems, themeBoard, themeDetail, trend } from './themeBoards.fixtures'
-import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './ThemeViews'
+import { HotGroupsSection, ThemeDetailView, ThemeNewsList, ThemesBoardView } from './ThemeViews'
 
 // Standalone regression module (no browser, no server, no network) for the group boards (#179): /themes with the
 // industry and theme boards, /themes/:id with trend, components, members and news, and the today Top 10 section.
@@ -110,7 +111,29 @@ check(detailMarkup.includes('href="https://example.test/cowos" target="_blank" r
 check(!detailMarkup.includes('javascript:') && detailMarkup.includes('來源連結未提供'), 'non-http evidence is not linked')
 check(detailMarkup.includes('第 2／2 頁') && detailMarkup.includes('共 32 檔'), 'member pagination')
 check(!detailMarkup.includes('弘塑'), 'inline members are not shown once a page arrived')
-check(count(detailMarkup, 'href="/news/') === 3 && detailMarkup.includes('事件日 2026/09/08') && detailMarkup.includes('發布日 2026/09/07') && detailMarkup.includes('公開資訊觀測站公告'), 'related news list')
+check(count(detailMarkup, 'href="/news/') === 3 && detailMarkup.includes('公開資訊觀測站公告'), 'related news list')
+// #203 AC-1: related news time reads product_time like the news page — Taipei time for a known instant, the event day for date-only.
+const timeCell = (markup: string, title: string) => {
+  const row = markup.slice(markup.lastIndexOf('<li', markup.indexOf(title)), markup.indexOf('</li>', markup.indexOf(title)))
+  return row.slice(row.indexOf('news-list-time'), row.indexOf('</span>', row.indexOf('news-list-time')))
+}
+const relatedItems = newsItems(3)
+check(timeCell(detailMarkup, 'CoWoS 擴產公告 1').includes('事件日 2026/09/08') && !timeCell(detailMarkup, 'CoWoS 擴產公告 1').includes('00:00'), 'date-only official event shows the event day without hours')
+check(relatedItems[1].product_time?.roles.published_at.utc === '2026-10-17T13:30:00+00:00' && timeCell(detailMarkup, 'CoWoS 擴產公告 2').includes('發布於 2026/10/17 21:30'), 'published_at 13:30 UTC shows 21:30 Taipei')
+check(timeCell(detailMarkup, 'CoWoS 擴產公告 3').includes('發布於 2026/10/18 00:05') && timeCell(detailMarkup, 'CoWoS 擴產公告 3').includes('dateTime="2026-10-17T16:05:00+00:00"'), 'a UTC evening instant is already the next day in Taipei')
+check(!detailMarkup.includes('發布日'), 'no UTC-date 「發布日」 wording is left')
+const naiveRelated = render(<ThemeNewsList items={[{ ...relatedItems[1], published_at: '2026-10-17T13:30:00', product_time: productTime({ published_at: unknownRole('published_at', 'published_at_naive_timezone_missing') }) }]} />)
+check(naiveRelated.includes('來源時間待核實') && !naiveRelated.includes('2026/10/17'), 'a naive source time stays 待核實 and is never cut to a date')
+const noTimeRelated = render(<ThemeNewsList items={[{ ...relatedItems[1], published_at: null, product_time: productTime() }]} />)
+check(noTimeRelated.includes('來源時間未提供'), 'no source time at all')
+// #186 AC-5: the related news list names the real source; a media item is never shown as 「官方公告資料」.
+const relatedNews = detailMarkup.slice(detailMarkup.indexOf('theme-news-list'))
+const mediaRow = relatedNews.slice(relatedNews.indexOf('CoWoS 擴產公告 3'))
+check(count(relatedNews, '公開資訊觀測站公告') === 2, 'official rows keep the official source label')
+check(mediaRow.includes('<span class="small-note">中央社</span>'), `media row shows its own source name: ${mediaRow}`)
+check(!relatedNews.includes('官方公告資料'), 'no related news row falls back to 「官方公告資料」')
+const mediaOnly = render(<ThemeNewsList items={[{ ...newsItems(3)[2], source_name: '  ' }]} />)
+check(mediaOnly.includes('來源未提供') && !mediaOnly.includes('官方公告資料'), 'a media row without a name says 來源未提供')
 check(!detailMarkup.includes('既有族群關聯待重新核實'), 'theme detail has no industry notice')
 
 const oneDay = render(<ThemeDetailView detail={themeDetail({ trendDays: 1 })} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)

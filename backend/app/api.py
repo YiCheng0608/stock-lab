@@ -5,7 +5,7 @@ import binascii
 import json
 import math
 from collections.abc import Iterable, Mapping
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -929,6 +929,37 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     return result
 
 
+def _utc_aware(value: datetime | None) -> datetime | None:
+    """Expose a stored news instant as aware UTC (docs/NEWS_SPEC.md §6).
+
+    ``news_items`` DateTime columns hold naive UTC; the API states the zone so
+    ``product_time`` can mark the instant known instead of guessing a zone.
+    """
+
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+class _UtcNewsItem:
+    """Read-only NewsItem view whose stored instants are aware UTC.
+
+    Only the instant columns are converted.  ``event_date`` and the date-precision
+    ``display_time`` are calendar dates and stay as stored.
+    """
+
+    _INSTANTS = frozenset({"published_at", "event_at", "collected_at"})
+
+    def __init__(self, item: NewsItem) -> None:
+        self._item = item
+
+    def __getattr__(self, name: str) -> Any:
+        value = getattr(self._item, name)
+        return _utc_aware(value) if name in self._INSTANTS else value
+
+
 def news_dict(
     db: Session, item: NewsItem, ai: dict[int, dict[str, Any]] | None = None
 ) -> dict[str, Any]:
@@ -938,7 +969,7 @@ def news_dict(
     event = db.get(Event, item.event_id) if item.event_id else None
     display_time, time_basis, time_precision = _news_time_view(db, item)
     time_consistency = getattr(item, "time_consistency", None) or "unverified"
-    product_time = build_news_product_time(item, event=event)
+    product_time = build_news_product_time(_UtcNewsItem(item), event=event)
     themes = []
     verified_theme_ids = _news_theme_ids(db, item, event)
     for theme_id in verified_theme_ids:
@@ -986,16 +1017,17 @@ def news_dict(
         "description": event.description if event else item.summary,
         "summary_preview": _summary_preview(item.summary),
         "language": item.language,
-        "published_at": as_datetime(item.published_at),
-        "event_at": as_datetime(item.event_at),
+        "published_at": as_datetime(_utc_aware(item.published_at)),
+        "event_at": as_datetime(_utc_aware(item.event_at)),
         "event_date": as_date(getattr(item, "event_date", None) or (event.event_date if event else None)),
-        "display_time": as_datetime(display_time),
+        # A date-precision display_time is a midnight placeholder, not an instant.
+        "display_time": as_datetime(_utc_aware(display_time) if time_precision == "datetime" else display_time),
         "time_basis": time_basis,
         "time_precision": time_precision,
         "time_consistency": time_consistency,
         "product_time": product_time,
         "response_generated_at": product_time["response_generated_at"],
-        "collected_at": as_datetime(item.collected_at),
+        "collected_at": as_datetime(_utc_aware(item.collected_at)),
         "symbols": item.symbols_json or [],
         "instruments": related_instruments,
         "themes": themes,

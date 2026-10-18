@@ -9,6 +9,7 @@ import type {
   ThemeMembersResponse,
   ThemeTrendPoint,
 } from '../types'
+import { knownDate, knownInstant, newsItem, productTime } from '../news/news.fixtures'
 
 // Small fixtures shaped like the #162 board API (backend/app/api.py _board_item, _board_ranking, theme_detail,
 // theme_members): two boards, an empty board per empty_reason, 20-day and 1-day trends, members with evidence.
@@ -174,13 +175,26 @@ export function membersPage(): ThemeMembersResponse {
   }
 }
 
+// Related news as GET /api/news emits it (product_time, NEWS_SPEC §6): row 1 is a date-only MOPS event, the middle rows
+// are MOPS items published at 21:30 Taipei, and the last row is a media item published after 16:00 UTC, i.e. already
+// on the next Taipei day.
+export const THEME_NEWS_PUBLISHED_UTC = '2026-10-17T13:30:00+00:00'
+export const THEME_NEWS_NEXT_DAY_UTC = '2026-10-17T16:05:00+00:00'
+
 export function newsItems(count: number): NewsItem[] {
-  return Array.from({ length: count }, (_, index) => ({
-    id: String(100 + index),
-    title: `CoWoS 擴產公告 ${index + 1}`,
-    source_name: 'mops',
-    event_date: index === 0 ? '2026-09-08' : null,
-    event_at: null,
-    published_at: '2026-09-07T08:00:00',
-  }) as unknown as NewsItem)
+  return Array.from({ length: count }, (_, index) => {
+    const media = index === count - 1
+    const dateOnly = index === 0
+    const publishedAt = media ? THEME_NEWS_NEXT_DAY_UTC : THEME_NEWS_PUBLISHED_UTC
+    return newsItem({
+      id: String(100 + index),
+      title: `CoWoS 擴產公告 ${index + 1}`,
+      source_kind: media ? 'media' : 'official_disclosure',
+      source_name: media ? '中央社' : 'mops',
+      event_date: dateOnly ? '2026-09-08' : null,
+      event_at: null,
+      published_at: dateOnly ? null : publishedAt,
+      product_time: productTime(dateOnly ? { event_date: knownDate('event_date', '2026-09-08') } : { published_at: knownInstant('published_at', publishedAt) }),
+    })
+  })
 }

@@ -25,7 +25,7 @@ from app.models import (
     StrategyVersion,
     ThemeGroup,
 )
-from app.news import sync_news_from_events
+from app.news import _parse_datetime, sync_news_from_events
 from app.decision import build_action_summaries
 from app.main import app
 from app.taxonomy import canonical_group_id
@@ -616,6 +616,342 @@ def test_news_temporal_contract_and_mops_conflict_quarantine(product_api):
         detail = client.get(f"/api/news/{conflict['id']}")
     assert detail.status_code == 200
     assert detail.json()["time_consistency"] == "conflict"
+
+
+def _feed_news(canonical_key, **overrides):
+    """A media feed row as worker.news_batch writes it: naive UTC DateTime columns."""
+
+    values = {
+        "canonical_key": canonical_key,
+        "dedupe_cluster_id": canonical_key,
+        "category": "domestic",
+        "source_kind": "media",
+        "source_name": "中央社",
+        "title": f"feed {canonical_key}",
+        "published_at": None,
+        "event_at": None,
+        "event_date": None,
+        "display_time": None,
+        "time_basis": "unverified",
+        "time_precision": "none",
+        "time_consistency": "verified",
+        "collected_at": datetime(2026, 10, 17, 9, 0, 5),
+        "status": "active",
+    }
+    values.update(overrides)
+    return NewsItem(**values)
+
+
+def _news_by_title(client, titles):
+    """Return {title: (list item, detail)} so one assertion covers both endpoints."""
+
+    listing = client.get("/api/news?limit=20")
+    assert listing.status_code == 200
+    items = {item["title"]: item for item in listing.json()["items"]}
+    result = {}
+    for title in titles:
+        detail = client.get(f"/api/news/{items[title]['id']}")
+        assert detail.status_code == 200
+        result[title] = (items[title], detail.json())
+    return result
+
+
+def test_feed_news_api_exposes_aware_utc_and_known_published_at(product_api):
+    published = datetime(2026, 10, 17, 8, 48, 10)
+    with product_api() as db:
+        db.add_all(
+            [
+                _feed_news(
+                    "published",
+                    title="feed published",
+                    published_at=published,
+                    display_time=published,
+                    time_basis="published",
+                    time_precision="datetime",
+                ),
+                _feed_news(
+                    "date-only",
+                    title="feed date only",
+                    event_date=date(2026, 10, 16),
+                    display_time=datetime(2026, 10, 16),
+                    time_basis="event_date",
+                    time_precision="date",
+                ),
+                _feed_news("no-time", title="feed no time"),
+            ]
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(client, ["feed published", "feed date only", "feed no time"])
+
+    for payload in rows["feed published"]:
+        roles = payload["product_time"]["roles"]
+        assert roles["published_at"]["status"] == "known"
+        assert roles["published_at"]["precision"] == "instant"
+        assert roles["published_at"]["value"] == "2026-10-17T08:48:10+00:00"
+        assert roles["published_at"]["value"].endswith("+00:00")
+        assert roles["collected_at"]["status"] == "known"
+        assert roles["collected_at"]["value"] == "2026-10-17T09:00:05+00:00"
+        # The top-level fields state the same instant as product_time.
+        assert payload["published_at"] == roles["published_at"]["value"]
+        assert payload["display_time"] == roles["published_at"]["value"]
+        assert payload["collected_at"] == roles["collected_at"]["value"]
+        assert payload["event_at"] is None
+        assert payload["time_basis"] == "published" and payload["time_precision"] == "datetime"
+
+    # Without published_at the item keeps the event／date rules: no instant is invented.
+    for payload in rows["feed date only"]:
+        roles = payload["product_time"]["roles"]
+        assert roles["published_at"]["status"] == "unknown"
+        assert roles["event_at"]["status"] == "unknown"
+        assert roles["event_date"]["status"] == "known"
+        assert roles["event_date"]["precision"] == "date"
+        assert roles["event_date"]["value"] == "2026-10-16"
+        assert payload["published_at"] is None
+        assert payload["event_date"] == "2026-10-16"
+        assert payload["display_time"] == "2026-10-16T00:00:00"
+
+    for payload in rows["feed no time"]:
+        roles = payload["product_time"]["roles"]
+        assert roles["published_at"]["status"] == "unknown"
+        assert roles["event_date"]["status"] == "unknown"
+        assert payload["published_at"] is None and payload["event_at"] is None
+        # The row has no source time, so the sort view falls back to the collection instant.
+        assert payload["time_basis"] == "collected" and payload["time_precision"] == "datetime"
+        assert payload["display_time"] == "2026-10-17T09:00:05+00:00"
+        assert payload["collected_at"] == "2026-10-17T09:00:05+00:00"
+
+
+def test_official_news_date_only_stays_naive_and_event_time_becomes_aware(product_api):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        db.add_all(
+            [
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Official date only",
+                    source="mops_material_information",
+                    collected_at=datetime(2026, 9, 8, 8, 0),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of - timedelta(days=1),
+                    event_type="announcement",
+                    title="Official with published time",
+                    source="mops_material_information",
+                    details_json={"published_at": "2026-09-07T09:30:00"},
+                    collected_at=datetime(2026, 9, 8, 8, 1),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of - timedelta(days=2),
+                    event_type="announcement",
+                    title="Official with event time",
+                    source="tpex_suspension_history",
+                    details_json={"event_at": "2026-09-06T08:00:00"},
+                    collected_at=datetime(2026, 9, 8, 8, 2),
+                ),
+            ]
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(
+            client, ["Official date only", "Official with published time", "Official with event time"]
+        )
+
+    for payload in rows["Official date only"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["time_basis"] == "event_date" and payload["time_precision"] == "date"
+        assert payload["display_time"] == "2026-09-08T00:00:00"
+        assert payload["published_at"] is None and payload["event_at"] is None
+        assert payload["event_date"] == "2026-09-08"
+        assert roles["event_date"]["status"] == "known" and roles["event_date"]["precision"] == "date"
+        assert roles["event_date"]["value"] == "2026-09-08"
+        assert roles["published_at"]["status"] == "unknown"
+        assert roles["event_at"]["status"] == "unknown"
+
+    for payload in rows["Official with published time"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] == "2026-09-07T09:30:00+00:00"
+        assert payload["display_time"] == "2026-09-07T09:30:00+00:00"
+        assert roles["published_at"]["status"] == "known"
+        assert roles["published_at"]["value"] == "2026-09-07T09:30:00+00:00"
+        assert roles["event_date"]["value"] == "2026-09-07"
+
+    for payload in rows["Official with event time"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["event_at"] == "2026-09-06T08:00:00+00:00"
+        assert payload["display_time"] == "2026-09-06T08:00:00+00:00"
+        assert roles["event_at"]["status"] == "known"
+        assert roles["event_at"]["value"] == "2026-09-06T08:00:00+00:00"
+        assert roles["published_at"]["status"] == "unknown"
+
+
+def test_official_news_offset_times_are_converted_to_utc(product_api):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        db.add_all(
+            [
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Published +08:00",
+                    source="mops_material_information",
+                    details_json={
+                        "published_at": "2026-09-07T09:30:00+08:00",
+                        "event_at": "2026-09-07T09:00:00+08:00",
+                    },
+                    collected_at=datetime(2026, 9, 8, 8, 0),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Event only -05:00",
+                    source="tpex_suspension_history",
+                    details_json={"event_at": "2026-09-07T20:00:00-05:00"},
+                    collected_at=datetime(2026, 9, 8, 8, 1),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Published Z",
+                    source="mops_material_information",
+                    details_json={"published_at": "2026-09-07T09:30:00Z"},
+                    collected_at=datetime(2026, 9, 8, 8, 2),
+                ),
+            ]
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(client, ["Published +08:00", "Event only -05:00", "Published Z"])
+
+    # 09:30 in Taipei is 01:30 UTC; the same instant, not the same clock reading.
+    for payload in rows["Published +08:00"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] == "2026-09-07T01:30:00+00:00"
+        assert payload["event_at"] == "2026-09-07T01:00:00+00:00"
+        assert payload["display_time"] == "2026-09-07T01:30:00+00:00"
+        assert payload["time_basis"] == "published" and payload["time_precision"] == "datetime"
+        assert roles["published_at"]["status"] == "known"
+        assert roles["published_at"]["value"] == "2026-09-07T01:30:00+00:00"
+
+    # A negative offset moves the instant forward, across the UTC day boundary.
+    for payload in rows["Event only -05:00"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] is None
+        assert payload["event_at"] == "2026-09-08T01:00:00+00:00"
+        assert payload["display_time"] == "2026-09-08T01:00:00+00:00"
+        assert payload["time_basis"] == "event" and payload["time_precision"] == "datetime"
+        assert roles["event_at"]["value"] == "2026-09-08T01:00:00+00:00"
+
+    for payload in rows["Published Z"]:
+        assert payload["published_at"] == "2026-09-07T09:30:00+00:00"
+
+    with product_api() as db:
+        stored = {item.title: item for item in db.scalars(select(NewsItem))}
+    # The database keeps naive UTC, the same convention as the media feed rows.
+    assert stored["Published +08:00"].published_at == datetime(2026, 9, 7, 1, 30)
+    assert stored["Published +08:00"].event_at == datetime(2026, 9, 7, 1, 0)
+    assert stored["Published +08:00"].published_at.tzinfo is None
+    assert stored["Event only -05:00"].event_at == datetime(2026, 9, 8, 1, 0)
+    # The official calendar date is not shifted by the time conversion.
+    assert stored["Published +08:00"].event_date == date(2026, 9, 8)
+
+
+def test_official_news_date_only_marker_is_not_promoted_to_an_instant(product_api):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        db.add(
+            Event(
+                instrument_id=alpha.id,
+                event_date=as_of,
+                event_type="announcement",
+                title="Date only marker",
+                source="mops_material_information",
+                details_json={"published_at": "2026-09-07", "event_at": "20260907"},
+                collected_at=datetime(2026, 9, 8, 8, 0),
+            )
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(client, ["Date only marker"])
+
+    for payload in rows["Date only marker"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] is None and payload["event_at"] is None
+        assert payload["time_basis"] == "event_date" and payload["time_precision"] == "date"
+        assert payload["display_time"] == "2026-09-08T00:00:00"
+        assert roles["published_at"]["status"] == "unknown"
+        assert roles["event_at"]["status"] == "unknown"
+        assert roles["event_date"]["value"] == "2026-09-08"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Offset-aware: converted to UTC, then stored as naive UTC.
+        ("2026-09-07T09:30:00+08:00", datetime(2026, 9, 7, 1, 30)),
+        ("2026-09-07 09:30:00+08:00", datetime(2026, 9, 7, 1, 30)),
+        ("2026-09-07T00:30:00+08:00", datetime(2026, 9, 6, 16, 30)),
+        ("2026-09-07T20:00:00-05:00", datetime(2026, 9, 8, 1, 0)),
+        ("2026-09-07T09:30:00.123456+08:00", datetime(2026, 9, 7, 1, 30, 0, 123456)),
+        ("2026-09-07T09:30:00Z", datetime(2026, 9, 7, 9, 30)),
+        ("2026-09-07T09:30:00+00:00", datetime(2026, 9, 7, 9, 30)),
+        # Naive: already the database convention (naive UTC), kept as is.
+        ("2026-09-07T09:30:00", datetime(2026, 9, 7, 9, 30)),
+        ("  2026-09-07T09:30:00  ", datetime(2026, 9, 7, 9, 30)),
+        # Not an instant: no value, no time of day, or not a time.
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("2026-09-07", None),
+        ("20260907", None),
+        ("not a time", None),
+        ("0001-01-01T00:00:00+08:00", None),
+    ],
+)
+def test_parse_datetime_normalizes_offset_to_naive_utc(value, expected):
+    assert _parse_datetime(value) == expected
+    if expected is not None:
+        assert _parse_datetime(value).tzinfo is None
+
+
+def test_news_cursor_and_sort_keep_working_with_aware_display_time(product_api):
+    with product_api() as db:
+        db.add_all(
+            [
+                _feed_news(
+                    f"n{index}",
+                    title=f"feed {index}",
+                    published_at=datetime(2026, 10, 17, 8, index),
+                    display_time=datetime(2026, 10, 17, 8, index),
+                    time_basis="published",
+                    time_precision="datetime",
+                )
+                for index in range(3)
+            ]
+        )
+        db.commit()
+
+    titles = []
+    with TestClient(app) as client:
+        cursor = None
+        for _ in range(5):
+            page = client.get("/api/news?limit=1" + (f"&cursor={cursor}" if cursor else "")).json()
+            titles.extend(item["title"] for item in page["items"])
+            cursor = page["meta"]["next_cursor"]
+            if not cursor:
+                break
+    assert titles == ["feed 2", "feed 1", "feed 0"]
 
 
 def test_stock_quality_explains_market_and_research_as_separate_purposes(product_api):
