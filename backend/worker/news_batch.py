@@ -381,7 +381,11 @@ def _excluded_record(key: str, title: str, url: str, reason: str) -> dict[str, s
 
 
 def _exclude_existing(db: Session, source: NewsSource) -> list[dict[str, str]]:
-    """Move stored ``active`` items of the source that the filter now excludes."""
+    """Move stored ``active`` items of the source that the filter now excludes.
+
+    Not committed here: the caller commits the status change together with the
+    list in the run metadata, so a crash cannot leave moved rows unrecorded.
+    """
 
     rows = db.scalars(
         select(NewsItem).where(
@@ -396,7 +400,6 @@ def _exclude_existing(db: Session, source: NewsSource) -> list[dict[str, str]]:
         if reason:
             item.status = "excluded"
             moved.append(_excluded_record(item.canonical_key, item.title, url, reason))
-    db.commit()
     return moved
 
 
@@ -418,6 +421,16 @@ def _collect_source(
     db.add(run)
     db.commit()
     existing_excluded = _exclude_existing(db, source)
+    metadata: dict[str, Any] = {
+        "source_name": source.source_name,
+        "category": source.category,
+        "source_kind": source.source_kind,
+        "naive_time_offset": naive_offset_text(source.naive_offset),
+        "filter": {"version": FILTER_VERSION, "existing_excluded": existing_excluded},
+    }
+    # The moved rows and their list land in one commit.
+    run.metadata_json = metadata
+    db.commit()
     index = _SourceIndex(db, source)
     feeds: list[dict[str, Any]] = []
     for feed in source.feeds:
@@ -460,17 +473,7 @@ def _collect_source(
     run.records = sum(int(item.get("inserted", 0)) for item in feeds)
     run.error = "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
     run.data_as_of = datetime.utcnow().isoformat()
-    run.metadata_json = {
-        "source_name": source.source_name,
-        "category": source.category,
-        "source_kind": source.source_kind,
-        "naive_time_offset": naive_offset_text(source.naive_offset),
-        "filter": {
-            "version": FILTER_VERSION,
-            "existing_excluded": existing_excluded,
-        },
-        "feeds": feeds,
-    }
+    run.metadata_json = {**metadata, "feeds": feeds}
     run.finished_at = datetime.utcnow()
     db.commit()
     return {

@@ -987,6 +987,35 @@ def test_stored_active_non_market_items_are_marked_excluded_not_deleted(
     assert _cna_run(db).metadata_json["filter"]["existing_excluded"] == []
 
 
+class _Killed(BaseException):
+    """Stands in for a crash or kill that no feed-level handler catches."""
+
+
+def test_moved_rows_are_recorded_in_run_metadata_before_feeds_are_fetched(
+    db, monkeypatch
+):
+    monkeypatch.setattr(news_batch, "exclusion_reason", lambda *args: None)
+    _collect_cna_mixed(db)
+    monkeypatch.undo()
+
+    def killed(url):
+        raise _Killed
+
+    with pytest.raises(_Killed):
+        collect_news(
+            db, run_date=RUN_DATE, fetch=killed, news_sources=[SOURCES_BY_ID["cna"]]
+        )
+    db.rollback()
+
+    run = _cna_run(db)
+    assert run.status == "running"
+    moved = run.metadata_json["filter"]["existing_excluded"]
+    assert {item["title"]: item["reason"] for item in moved} == NON_MARKET_REASONS
+    assert {item.title for item in _items(db, status="excluded")} == set(
+        NON_MARKET_REASONS
+    )
+
+
 def test_excluded_items_are_hidden_from_api_and_llm_selection(db, client):
     _collect_cna_mixed(db)
     listed = client.get(f"{router.prefix}/news", params={"limit": 50}).json()
