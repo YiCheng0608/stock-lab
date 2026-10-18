@@ -104,29 +104,29 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 - **LLM 判讀**：`\stock-lab\news` 每輪在 `worker.cli news` 結束後，於同一次執行接著跑 `python -m worker.cli news-llm`（環境變數相同、不帶 `--date`），把新收的新聞做 AI 摘要與判讀。每輪最多 50 則（2 次呼叫），同一台北日所有 run 合計最多 20 次呼叫，超過的批次等下一個台北日（[§3](#3-現有-worker-cli)）。
   - news 失敗時仍會跑（news-llm 只讀已入庫的新聞）；news-llm 失敗不改變 news 的結果，也不改變工作的結束碼。失敗只留在日誌的 news-llm 段落與 `run_type=news_llm` 的 ingestion run（`status=failed`、`error` 寫原因），可用 `/api/ingestion-runs?q=news_llm` 查；日誌格式見 [§6.3](#63-日誌與-run-記錄)。
   - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。排程環境的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。找不到 claude、未登入或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
-  - 看門狗在最近 3 批判讀都是 `pending` 時留言（[§6.1](#61-統籌看門狗)）；找不到 claude、API 金鑰這類設定錯誤是沒有批次的 `failed` run，不計入該判定，要看日誌的 `news_llm_exit`。
+  - 看門狗在最近 3 批判讀都是 `pending` 時留言（[§6.1](#61-排程看門狗)）；找不到 claude、API 金鑰這類設定錯誤是沒有批次的 `failed` run，不計入該判定，要看日誌的 `news_llm_exit`。
   - **停用／恢復**：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。額度吃緊時先停 news-llm，news 照常收稿。
 
-### 6.1 統籌看門狗
+### 6.1 排程看門狗
 
-`tools/ops/ensure_coordinator.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行：讀心跳檔判定統籌是否在線，停擺就送喚醒文、不在就開新統籌，判定規則見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)；另以檔案與唯讀 DB 檢查排程異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則：
+`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`（沒有批次的 `failed` run 不算，見 [§6](#6-排程)）。
 
-`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有 `orca` 與已登入的 `gh`；Python 只用來解析 JSON 與唯讀查 DB，預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
+`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有已登入的 `gh`；Python 只用來唯讀查 DB（找不到時跳過 `news_llm`，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
 | 預覽 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -WhatIf` |
-| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1`（`-DataDir`、`-PythonPath` 預設 `STOCK_DATA_DIR`、`.venv`；`-DryRun` 註冊只判定不動作的版本，用來以 `Start-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog` 驗證排程環境） |
+| 註冊或更新 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1`（`-DataDir`、`-PythonPath` 預設 `STOCK_DATA_DIR`、`.venv`；`-DryRun` 註冊只判定不留言的版本，用來以 `Start-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog` 驗證排程環境） |
 | 查詢 | `schtasks /query /tn "\stock-lab\watchdog" /v /fo list` |
 | 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
-| 手動判定 | `bash tools/ops/ensure_coordinator.sh --dry-run`（只輸出將做的動作與接手文） |
+| 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言） |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/ensure_coordinator.log`，每列為 UTC 時間、事件、`key=value` 與說明；喚醒文（每 60 分鐘最多一次）、開統籌（每 120 分鐘最多一次）與異常留言（每日一則）的頻率限制都以此日誌判斷。執行中持有 `logs/ensure_coordinator.lock/`，殘留超過 30 分鐘自動移除。
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。執行中持有 `logs/watchdog.lock/`，殘留超過 30 分鐘自動移除。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
@@ -166,7 +166,7 @@ readiness 只在唯讀 transaction 檢查有限 descriptor：`alembic_version` �
 
 ### 6.3 日誌與 run 記錄
 
-- **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、`git pull` 輸出、跳過原因、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-統籌看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`-LogRetentionDays`），只清同名前綴的檔案。包裝腳本本身出錯時記 `wrapper error`，工作排程器「上次執行結果」為非 0。
+- **日誌**：`<data>/logs/daily-YYYYMMDD.log`、`<data>/logs/news-YYYYMMDD.log`（台北日期），排程失敗時先看這裡。每次執行追加開始列（含可用記憶體）、`git pull` 輸出、跳過原因、CLI 的 JSON 結果（stdout）、stderr 與結束列 `===== <時間> end exit=<code> seconds=<秒>`（[§6.1](#61-排程看門狗) 的看門狗以此判定 daily 是否完成）。保留 90 天（`-LogRetentionDays`），只清同名前綴的檔案。包裝腳本本身出錯時記 `wrapper error`，工作排程器「上次執行結果」為非 0。
   - **news 日誌的分段**：`--- news stdout`／`--- news stderr`／`--- news end exit=<碼> seconds=<秒>`，接著 `--- news-llm start claude_cli=<路徑>`、`--- news-llm stdout`／`stderr`、`--- news-llm end exit=<碼> seconds=<秒>`；結束列為 `===== <時間> end exit=<news 的碼> seconds=<秒> news_llm_exit=<碼>`，`news_llm_exit` 另有 `disabled`（`-SkipNewsLlm`）、`not_run`（起跑前檢查未通過）、`wrapper_error`（包裝腳本啟動 news-llm 失敗）。daily 日誌格式不變。
 - **exit code**：daily 0＝`success`／`skipped`／`non_trading_day`，2＝`partial`，1＝`failed`；工作排程器的「上次執行結果」即此值。news 工作的碼是 `worker.cli news` 的碼；`worker.cli news-llm` 的碼（0＝`success`／`skipped`，2＝`partial`，1＝`failed`）只記在日誌的 `news-llm end` 與 `news_llm_exit`，不影響工作的碼。
 - **run 記錄**：`schedule_runs` 每次 daily 執行一列（目標日、觸發來源、開始／結束、狀態、錯誤、collect 筆數、摘要），`schedule_run_steps` 每步一列（collect／analyze／evaluate／candidates／indicators 的開始／結束、狀態、錯誤、處理筆數，collect 另連 `ingestion_runs.id`）。查詢：`python -m worker.cli schedule-runs --date YYYY-MM-DD`。news 的結果在 `run_type=news` 的 ingestion run，news-llm 的在 `run_type=news_llm`（`metadata_json` 記每批則數、耗時、模型與 token 用量）。

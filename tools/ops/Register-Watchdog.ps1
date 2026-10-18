@@ -1,22 +1,20 @@
 <#
 .SYNOPSIS
-Create, update or remove the Windows Task Scheduler task for the coordinator watchdog.
+Create, update or remove the Windows Task Scheduler task for the schedule watchdog.
 
 .DESCRIPTION
-Registers \stock-lab\watchdog, which runs tools/ops/ensure_coordinator.sh with
-Git Bash every 15 minutes from this checkout. Register only from the release
-checkout (C:/Users/YiCheng/stock-lab-release, a clone that stays on
-origin/master); the watchdog reads the handoff text from this checkout's
-docs/GITHUB_WORKFLOW.md. DataDir defaults to STOCK_DATA_DIR, then
-%USERPROFILE%\stock-lab-data; PythonPath (used only for parsing JSON and the
-read-only database check) defaults to STOCK_PYTHON, then this checkout's .venv.
+Registers \stock-lab\watchdog, which runs tools/ops/watchdog.sh with Git Bash
+every 15 minutes from this checkout to check the daily, news and news-llm jobs.
+Register only from the release checkout (C:/Users/YiCheng/stock-lab-release, a
+clone that stays on origin/master). DataDir defaults to STOCK_DATA_DIR, then
+%USERPROFILE%\stock-lab-data; PythonPath (used only for the read-only database
+check) defaults to STOCK_PYTHON, then this checkout's .venv.
 Both are written into the task's arguments.
 
 The task runs as the current user with an interactive logon (no stored
-password), so it only runs while that user is signed in, which Orca needs
-anyway. It is hidden, starts a missed run after sign-in, never runs two
-instances at once and is stopped after 10 minutes. The watchdog writes
-<DataDir>\logs\ensure_coordinator.log.
+password), so it only runs while that user is signed in. It is hidden, starts
+a missed run after sign-in, never runs two instances at once and is stopped after 10 minutes. The watchdog writes
+<DataDir>\logs\watchdog.log.
 
 -DryRun registers the task with --dry-run (decide and log only); use it to
 check the scheduled environment with Start-ScheduledTask before the real
@@ -47,7 +45,7 @@ $ErrorActionPreference = 'Stop'
 $taskPath = '\stock-lab\'
 $taskName = 'watchdog'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$watchdogScript = Join-Path $PSScriptRoot 'ensure_coordinator.sh'
+$watchdogScript = Join-Path $PSScriptRoot 'watchdog.sh'
 
 if ($Unregister) {
     $existing = Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue
@@ -77,7 +75,7 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath -PathType Leaf
 $PythonPath = (Resolve-Path -LiteralPath $PythonPath).Path
 if (-not $DataDir) { $DataDir = if ($env:STOCK_DATA_DIR) { $env:STOCK_DATA_DIR } else { Join-Path $env:USERPROFILE 'stock-lab-data' } }
 $DataDir = [IO.Path]::GetFullPath($DataDir)
-$logPath = Join-Path $DataDir 'logs\ensure_coordinator.log'
+$logPath = Join-Path $DataDir 'logs\watchdog.log'
 
 # Bash gets forward-slash paths; a hidden PowerShell hosts it so no console
 # window flashes every run.
@@ -101,7 +99,7 @@ $settings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -MultipleIn
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
     -LogonType Interactive -RunLevel Limited
 $mode = if ($DryRun) { ' (dry-run)' } else { '' }
-$description = "stock-lab coordinator watchdog$mode every $IntervalMinutes min. Checkout: $projectRoot. Log: $logPath"
+$description = "stock-lab schedule watchdog$mode every $IntervalMinutes min. Checkout: $projectRoot. Log: $logPath"
 
 Write-Output "Task:     $taskPath$taskName$mode"
 Write-Output "Checkout: $projectRoot"
