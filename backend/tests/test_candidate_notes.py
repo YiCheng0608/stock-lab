@@ -452,7 +452,7 @@ def test_cli_exit_code_follows_the_run_status(monkeypatch, capsys, status, code)
     assert json.loads(capsys.readouterr().out)["status"] == status
 
 
-def test_a_batch_whose_input_cannot_be_built_is_pending_and_the_rest_runs(
+def test_a_candidate_whose_input_cannot_be_built_is_pending_alone(
     db, fake, monkeypatch
 ):
     candidates = _candidates(db, 7)
@@ -465,13 +465,67 @@ def test_a_batch_whose_input_cannot_be_built_is_pending_and_the_rest_runs(
 
     monkeypatch.setattr(candidate_notes, "candidate_input", broken)
     result = _run(db)
-    assert (
-        result["status"] == "partial"
-        and result["batches"][0]["reason"] == "batch_error"
-    )
-    assert [len(call["ids"]) for call in fake()] == [2]
+    assert result["status"] == "partial" and result["records"] == 6
+    assert result["calls"] == 2 and result["pending"] == 1
+    # The rest of the first batch is still sent.
+    assert fake()[0]["ids"] == [row.id for row in candidates[1:BATCH_SIZE]]
     notes = {note.daily_candidate_id: note for note in _notes(db)}
     assert notes[candidates[0].id].llm_status == "pending"
     assert "fixture input failure" in notes[candidates[0].id].llm_error
-    assert notes[candidates[6].id].llm_status == "done"
-    assert db.get(IngestionRun, result["run_id"]).status == "partial"
+    assert notes[candidates[0].id].llm_model is None
+    assert all(notes[row.id].llm_status == "done" for row in candidates[1:])
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == "partial" and run.metadata_json["calls"] == 2
+    assert run.metadata_json["input_errors"][0]["candidate_id"] == candidates[0].id
+
+
+def test_a_failing_batch_does_not_undo_a_note_another_run_finished(
+    db, fake, monkeypatch
+):
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "invalid_json")
+    candidates = _candidates(db, 1)
+    note = CandidateLlmNote(
+        daily_candidate_id=candidates[0].id,
+        candidate_run_id=candidates[0].candidate_run_id,
+        trading_date=T,
+        prompt_version=PROMPT_VERSION,
+        llm_model="claude-sonnet-fake",
+        llm_input_hash="z" * 64,
+        llm_status="done",
+        ai_selection="另一個 run 寫的",
+        ai_levels="L",
+        ai_risks="R",
+    )
+    real = candidate_notes._run_batch
+
+    def concurrent(session, run, number, batch, *args):
+        # Another run commits the same candidate's note during this call.
+        session.add(note)
+        session.commit()
+        return real(session, run, number, batch, *args)
+
+    monkeypatch.setattr(candidate_notes, "_run_batch", concurrent)
+    result = _run(db)
+    assert result["batches"][0]["reason"] == "invalid_json"
+    kept = _notes(db)
+    assert len(kept) == 1 and kept[0].llm_status == "done"
+    assert kept[0].ai_selection == "另一個 run 寫的"
+
+
+def test_a_failed_write_closes_the_run_as_failed_with_its_calls(db, fake, monkeypatch):
+    _candidates(db, 2)
+    real = candidate_notes._metadata
+
+    def locked(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(candidate_notes, "_metadata", locked)
+    result = _run(db)
+    monkeypatch.setattr(candidate_notes, "_metadata", real)
+    assert result["status"] == "failed" and result["reason"] == "run_error"
+    assert result["calls"] == 1 and len(fake()) == 1
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.status == "failed" and "database is locked" in run.error
+    assert run.metadata_json["calls"] == 1 and run.finished_at is not None
+    # The call still counts toward the day's limit.
+    assert candidate_notes._calls_today(db, RUN_DATE) == 1

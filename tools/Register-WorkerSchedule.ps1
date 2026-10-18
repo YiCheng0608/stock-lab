@@ -17,8 +17,9 @@ first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
          touch data; after a partial run it completes the day. Its last
          step, candidate_notes, calls claude -p: pass -ClaudeCli with the
          native claude.exe (no PATH or STOCK_CLAUDE_CLI lookup for daily).
-         Without it the step uses claude on the task's PATH and, when that
-         is missing, records cli_not_found; the daily result is unaffected.
+         Without it the step uses STOCK_CLAUDE_CLI, then claude on the
+         task's PATH, and records cli_not_found when neither is found; the
+         daily result is unaffected.
   news   Every IntervalHours hours (default 2), every day, starting at the
          next whole interval in Taipei time. After `worker.cli news` the
          same run executes `worker.cli news-llm` (AI summaries of the stored
@@ -206,7 +207,7 @@ Write-Output "Task:     $taskPath$taskName"
 Write-Output "Checkout: $projectRoot"
 Write-Output "Python:   $PythonPath"
 if ($Job -eq 'news') { Write-Output ("Claude:   " + $(if ($NoNewsLlm) { '(news-llm off)' } else { $ClaudeCli })) }
-if ($Job -eq 'daily') { Write-Output ("Claude:   " + $(if ($ClaudeCli) { "$ClaudeCli (candidate_notes)" } else { '(not set; candidate_notes uses claude on the task PATH)' })) }
+if ($Job -eq 'daily') { Write-Output ("Claude:   " + $(if ($ClaudeCli) { "$ClaudeCli (candidate_notes)" } else { '(not set; candidate_notes uses STOCK_CLAUDE_CLI or claude on the task PATH)' })) }
 Write-Output "Data:     $DataDir"
 Write-Output "Logs:     $LogDir\$Job-YYYYMMDD.log"
 Write-Output "Command:  powershell.exe $arguments"

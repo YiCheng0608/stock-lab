@@ -137,7 +137,7 @@ export function candidateSourceText(item: CandidateItem): string {
 export const NOTE_TITLE = 'AI 進出點說明'
 export const NOTE_DISCLAIMER = '由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。'
 export const NOTE_MISSING_TEXT = '此檔尚未產生 AI 說明'
-export const NOTE_PENDING_TEXT = 'AI 說明這次未能產生，下次執行時會重試'
+export const NOTE_PENDING_TEXT = 'AI 說明這次未能產生'
 export const NOTE_PARTS: ReadonlyArray<{ key: 'selection' | 'levels' | 'risks'; label: string }> = [
   { key: 'selection', label: '為何入選' },
   { key: 'levels', label: '進場區、停損與目標' },
@@ -148,9 +148,15 @@ export type CandidateNoteView =
   | { kind: 'done'; parts: Array<{ key: string; label: string; text: string }>; meta: string }
   | { kind: 'empty'; text: string; meta: string | null }
 
+// A pending note was only attempted: no model, and its time is the attempt.
 export function candidateNoteMeta(note: CandidateLlmNote): string {
-  const generated = formatTaipeiInstant(note.generated_at)
-  return [`模型 ${note.model || '未記錄'}`, `提示版本 ${note.prompt_version}`, ...(generated ? [`產生於 ${generated}`] : [])].join(' · ')
+  const time = formatTaipeiInstant(note.generated_at)
+  const done = note.status === 'done'
+  return [
+    ...(done ? [`模型 ${note.model || '未記錄'}`] : []),
+    `提示版本 ${note.prompt_version}`,
+    ...(time ? [`${done ? '產生於' : '嘗試於'} ${time}`] : []),
+  ].join(' · ')
 }
 
 // A done note with every part shows its text; anything else is one fixed sentence.

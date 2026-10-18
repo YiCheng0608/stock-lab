@@ -303,13 +303,16 @@ def _store(
     error: str | None = None,
 ) -> None:
     stored = _note_row(db, row)
+    if stored.llm_status == "done":
+        # Written meanwhile by another run for this prompt version: kept as is.
+        return
     stored.llm_input_hash = input_hash(payload)
     stored.llm_run_at = run_at
     stored.ingestion_run_id = run.id
     stored.raw_payload_id = raw_payload_id
     if note is None:
-        # Only status, reason and audit links change; no ai_* field is written.
-        stored.llm_model = stored.llm_model or MODEL
+        # Only status, reason and audit links change; no model or ai_* field
+        # is written, since nothing was generated.
         stored.llm_status = "pending"
         stored.llm_error = (error or "")[:500]
     else:
@@ -411,6 +414,7 @@ def _metadata(
     candidate_run_id: int,
     results: list[dict[str, Any]],
     skipped: list[dict[str, Any]],
+    calls: int,
 ) -> dict[str, Any]:
     return {
         "prompt_version": PROMPT_VERSION,
@@ -419,7 +423,7 @@ def _metadata(
         "batch_size": BATCH_SIZE,
         "trading_date": trading_date.isoformat(),
         "candidate_run_id": candidate_run_id,
-        "calls": len(results),
+        "calls": calls,
         "daily_call_limit": DAILY_CALL_LIMIT,
         "skipped_batches": skipped,
         "usage_total": _usage_total(results),
@@ -577,95 +581,181 @@ def run_candidate_notes(
     db.add(run)
     db.commit()
     active = runner or run_claude_cli
+    calls = 0
+
+    def counted(prompt: str, argv: Sequence[str]):
+        # Only real CLI invocations count toward the daily limit.
+        nonlocal calls
+        calls += 1
+        return active(prompt, argv)
+
     results: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    unbuilt: list[dict[str, Any]] = []
     stop_reason: str | None = None
-    for number, batch in enumerate(batches, start=1):
-        ids = [row.id for row in batch]
-        if stop_reason is not None:
-            skipped.append(
-                {"batch": number, "candidate_ids": ids, "reason": stop_reason}
-            )
-            continue
-        if len(results) >= allowed:
-            skipped.append(
-                {"batch": number, "candidate_ids": ids, "reason": "daily_call_limit"}
-            )
-            continue
-        payloads: list[tuple[DailyCandidate, dict[str, Any]]] = []
-        try:
-            payloads = [(row, candidate_input(db, row, candidate_run)) for row in batch]
-            outcome = _run_batch(db, run, number, payloads, template, command, active)
-        except Exception as exc:  # noqa: BLE001 - one batch must not stop the others
-            db.rollback()
-            error = f"batch_error: {type(exc).__name__}: {exc}"[:500]
-            # An input that could not be built is hashed by its id alone.
-            built = {row.id: payload for row, payload in payloads}
+    try:
+        for number, batch in enumerate(batches, start=1):
+            ids = [row.id for row in batch]
+            if stop_reason is not None:
+                skipped.append(
+                    {"batch": number, "candidate_ids": ids, "reason": stop_reason}
+                )
+                continue
+            if calls >= allowed:
+                skipped.append(
+                    {
+                        "batch": number,
+                        "candidate_ids": ids,
+                        "reason": "daily_call_limit",
+                    }
+                )
+                continue
+            # A candidate whose input cannot be built stays pending on its own;
+            # the rest of its batch is still sent.
+            payloads: list[tuple[DailyCandidate, dict[str, Any]]] = []
+            failed_inputs: list[tuple[DailyCandidate, str]] = []
             for row in batch:
+                try:
+                    payloads.append((row, candidate_input(db, row, candidate_run)))
+                except Exception as exc:  # noqa: BLE001 - one row must not stop its batch
+                    failed_inputs.append(
+                        (row, f"input_error: {type(exc).__name__}: {exc}"[:500])
+                    )
+            outcome = None
+            if payloads:
+                try:
+                    outcome = _run_batch(
+                        db, run, number, payloads, template, command, counted
+                    )
+                except Exception as exc:  # noqa: BLE001 - one batch must not stop the others
+                    db.rollback()
+                    error = f"batch_error: {type(exc).__name__}: {exc}"[:500]
+                    for row, payload in payloads:
+                        _store(
+                            db,
+                            row,
+                            payload,
+                            run=run,
+                            raw_payload_id=None,
+                            run_at=datetime.utcnow(),
+                            error=error,
+                        )
+                    outcome = {
+                        "batch": number,
+                        "candidate_ids": [row.id for row, _payload in payloads],
+                        "status": "pending",
+                        "reason": "batch_error",
+                        "error": error,
+                    }
+                results.append(outcome)
+            for row, error in failed_inputs:
+                # Hashed by the id alone: there is no input to hash.
                 _store(
                     db,
                     row,
-                    built.get(row.id, {"id": row.id}),
+                    {"id": row.id},
                     run=run,
                     raw_payload_id=None,
                     run_at=datetime.utcnow(),
                     error=error,
                 )
-            outcome = {
-                "batch": number,
-                "candidate_ids": ids,
-                "status": "pending",
-                "reason": "batch_error",
-                "error": error,
+                unbuilt.append(
+                    {"batch": number, "candidate_id": row.id, "error": error}
+                )
+            if outcome is not None and outcome.get("reason") in FATAL_REASONS:
+                stop_reason = f"stopped_after_{outcome['reason']}"
+            # Count the call as soon as it is made, so a crash later in this run
+            # still counts toward the daily limit.
+            run.metadata_json = {
+                **_metadata(
+                    template,
+                    candidate_run.trading_date,
+                    candidate_run.id,
+                    results,
+                    skipped,
+                    calls,
+                ),
+                "input_errors": unbuilt,
             }
-        results.append(outcome)
-        if outcome.get("reason") in FATAL_REASONS:
-            stop_reason = f"stopped_after_{outcome['reason']}"
-        # Count the call as soon as it is made, so a crash later in this run
-        # still counts toward the daily limit.
-        run.metadata_json = _metadata(
-            template, candidate_run.trading_date, candidate_run.id, results, skipped
+            db.commit()
+        finished = [item for item in results if item["status"] == "done"]
+        failed = [item for item in results if item["status"] != "done"]
+        done_count = sum(len(item["candidate_ids"]) for item in finished)
+        pending_count = sum(len(item["candidate_ids"]) for item in failed) + len(
+            unbuilt
         )
+        if not done_count and not pending_count:
+            status = "skipped"
+        elif not pending_count and not skipped:
+            status = "success"
+        elif done_count:
+            status = "partial"
+        else:
+            status = "failed"
+        errors = [
+            f"batch {item['batch']}: {item.get('error', item.get('reason'))}"
+            for item in failed
+        ]
+        errors += [
+            f"candidate {item['candidate_id']}: {item['error']}" for item in unbuilt
+        ]
+        for reason in sorted({item["reason"] for item in skipped}):
+            count = sum(1 for item in skipped if item["reason"] == reason)
+            errors.append(f"{reason}: {count} batch(es) skipped")
+        run.status = status
+        run.records = done_count
+        run.error = "; ".join(errors) or None
+        run.data_as_of = datetime.utcnow().isoformat()
+        run.metadata_json = {
+            **_metadata(
+                template,
+                candidate_run.trading_date,
+                candidate_run.id,
+                results,
+                skipped,
+                calls,
+            ),
+            "input_errors": unbuilt,
+        }
+        run.finished_at = datetime.utcnow()
         db.commit()
-    finished = [item for item in results if item["status"] == "done"]
-    if not results:
-        status = "skipped"
-    elif len(finished) == len(batches):
-        status = "success"
-    elif finished:
-        status = "partial"
-    else:
-        status = "failed"
-    failed = [item for item in results if item["status"] != "done"]
-    errors = [
-        f"batch {item['batch']}: {item.get('error', item.get('reason'))}"
-        for item in failed
-    ]
-    for reason in sorted({item["reason"] for item in skipped}):
-        count = sum(1 for item in skipped if item["reason"] == reason)
-        errors.append(f"{reason}: {count} batch(es) skipped")
-    run.status = status
-    run.records = sum(len(item["candidate_ids"]) for item in finished)
-    run.error = "; ".join(errors) or None
-    run.data_as_of = datetime.utcnow().isoformat()
-    run.metadata_json = _metadata(
-        template, candidate_run.trading_date, candidate_run.id, results, skipped
-    )
-    run.finished_at = datetime.utcnow()
-    db.commit()
+    except Exception as exc:
+        # A write failed (database locked, constraint): close the run as failed
+        # with the calls already made, instead of leaving it running.
+        db.rollback()
+        error = f"run_error: {type(exc).__name__}: {exc}"[:500]
+        failed_run = db.get(IngestionRun, run.id)
+        failed_run.status = "failed"
+        failed_run.error = error
+        failed_run.finished_at = datetime.utcnow()
+        failed_run.metadata_json = {
+            **(failed_run.metadata_json or {}),
+            "calls": calls,
+            "reason": "run_error",
+        }
+        db.commit()
+        return {
+            **base,
+            "status": "failed",
+            "reason": "run_error",
+            "error": error,
+            "run_id": run.id,
+            "calls": calls,
+        }
     return {
         **base,
         "status": status,
         "run_id": run.id,
         "records": run.records,
         "error": run.error,
-        "pending": sum(len(item["candidate_ids"]) for item in failed),
+        "pending": pending_count,
         "skipped": sum(len(item["candidate_ids"]) for item in skipped),
-        "calls": len(results),
+        "calls": calls,
         "usage_total": _usage_total(results),
         "duration_ms_total": sum(int(item.get("duration_ms", 0)) for item in results),
         "batches": results,
         "skipped_batches": skipped,
+        "input_errors": unbuilt,
     }
 
 

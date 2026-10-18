@@ -371,7 +371,7 @@ def test_daily_registration_has_no_news_llm_options(harness):
     result = harness.register("daily")
     assert result.code == 0, result.stderr
     assert (
-        "Claude:   (not set; candidate_notes uses claude on the task PATH)"
+        "Claude:   (not set; candidate_notes uses STOCK_CLAUDE_CLI or claude on the task PATH)"
         in result.stdout
     )
     assert "-SkipNewsLlm" not in result.stdout and "-ClaudeCli" not in result.stdout

@@ -95,10 +95,10 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 
 每檔候選附一段 LLM 推論的說明：為何入選、進場區／停損／目標的解讀、需留意的風險。說明只讀已保存的資料，不影響分數、排序、入選或任何策略判定，也不是勝率或操作建議。實作在 `backend/worker/candidate_notes.py`，提示 `backend/worker/prompts/candidate_notes_v1.md`（提示版本 `candidate_notes_v1`，`app.domain.CANDIDATE_NOTE_PROMPT_VERSION`；文字雜湊由測試釘住，改提示必須升版），模型 `sonnet`，呼叫方式同新聞 LLM（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）。
 
-- **輸入**（每檔，送出內容的 SHA-256 存為 `llm_input_hash`）：`daily_candidates` 的名次、代號名稱、策略、資料日期、總分與 `weight_coverage`（0–100）、四分項分數與 null 說明、規則理由文字與 `inference`、族群（名稱、榜別、當日排名／同榜數）；訊號的進場區、停損、目標 1／2、RR、規則最早執行日；分項 JSON 記錄的關聯新聞最多 5 則（新的在前：台北日期、標題、`llm_status=done` 時的 AI 摘要與方向，否則來源摘要前 200 字）。不送行情序列或其他候選。
-- **輸出**：每檔 `selection`（≤120 字）、`levels`（≤160 字）、`risks`（≤120 字），繁中；`id` 須與輸入一一對應，缺欄、多欄、空字串、超長或 id 不符時整批失敗。提示要求只引用輸入中的價位、不寫買賣建議與勝率。
-- **保存**：`candidate_llm_notes` 每檔候選（`daily_candidate_id`）× 提示版本一列（unique），記 `candidate_run_id`、交易日、`llm_status`（`done`／`pending`）、`llm_model`（CLI 回報的實際模型）、`prompt_version`、`llm_input_hash`、`llm_run_at`（產生時間，UTC）、`llm_error`、三段說明與 ingestion run、raw 參照。失敗只寫狀態與原因，不改既有說明文字。
-- **冪等**：同一候選同提示版本已 `done` 就不再送、不改寫（之後關聯新聞的判讀補齊也不重算）；`pending` 下次執行重送。新提示版本另寫新列，舊列保留。
+- **輸入**（每檔；該檔輸入物件以 `sort_keys` JSON 序列化後的 SHA-256 存為 `llm_input_hash`）：`daily_candidates` 的名次、代號名稱、策略、資料日期、總分與 `weight_coverage`（0–100）、四分項分數與 null 說明、規則理由文字與 `inference`、族群（名稱、榜別、當日排名／同榜數）；訊號的進場區、停損、目標 1／2、RR、規則最早執行日；分項 JSON 記錄的關聯新聞最多 5 則（新的在前：台北日期、標題、`llm_status=done` 時的 AI 摘要與方向，否則來源摘要前 200 字）。不送行情序列或其他候選。
+- **輸出**：每檔 `selection`（≤120 字）、`levels`（≤160 字）、`risks`（≤120 字），繁中；`id` 須與輸入一一對應，缺欄、多欄、空字串、超長或 id 不符時整批失敗。某檔的輸入無法組出時只有該檔記 `pending`（`input_error`），同批其他檔照送。提示要求只引用輸入中的價位、不寫買賣建議與勝率。
+- **保存**：`candidate_llm_notes` 每檔候選（`daily_candidate_id`）× 提示版本一列（unique），記 `candidate_run_id`、交易日、`llm_status`（`done`／`pending`）、`llm_model`（CLI 回報的實際模型；`pending` 列為空）、`prompt_version`、`llm_input_hash`、`llm_run_at`（產生時間，UTC）、`llm_error`、三段說明與 ingestion run、raw 參照。失敗只寫狀態與原因，不改既有說明文字；已 `done` 的列不會被之後失敗的批次（含並行的另一次執行）改回 `pending`。
+- **冪等**：同一候選同提示版本已 `done` 就不再送、不改寫（之後關聯新聞的判讀補齊也不重算）；`pending` 由同日的下一次執行重送（daily 只處理自己的目標日，前一日的 `pending` 要手動 `candidate-notes --date` 補）。新提示版本另寫新列，舊列保留。
 - **執行**：`daily` 最後一步 `candidate_notes`（candidates 成功後），失敗不影響 daily；手動 `python -m worker.cli candidate-notes`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。
 - **API**：`llm_note` 為 null（未嘗試）或 `{status, inference: true, selection, levels, risks, model, prompt_version, generated_at（帶 +00:00）, input_hash}`；優先取現行提示版本的 `done`，其次其他版本最新的 `done`，都沒有時為 `pending` 且三段文字為 null。文案見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-每日候選)。
 

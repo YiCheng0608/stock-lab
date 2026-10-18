@@ -55,7 +55,8 @@ STEP_REQUIRES = {
     "candidate_notes": ("candidates",),
 }
 # LLM steps whose failure (timeout, claude missing, quota) is kept on the step
-# row only: the run stays success and the next run retries what is pending.
+# row only: the run stays success.  Pending notes are not retried by a later
+# daily (it targets its own date); worker.cli candidate-notes --date fills them.
 NON_BLOCKING_STEPS = frozenset({"candidate_notes"})
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
