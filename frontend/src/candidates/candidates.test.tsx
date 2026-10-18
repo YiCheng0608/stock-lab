@@ -4,9 +4,14 @@ import { StaticRouter } from 'react-router-dom/server'
 
 import {
   CANDIDATE_DISCLAIMER,
+  NOTE_DISCLAIMER,
+  NOTE_MISSING_TEXT,
+  NOTE_PENDING_TEXT,
   NOT_COMPUTED_TEXT,
   PARTIAL_NOTE,
   candidateGroupText,
+  candidateNoteMeta,
+  candidateNoteView,
   candidateSourceText,
   candidatesPath,
   candidatesState,
@@ -15,7 +20,7 @@ import {
   formatSubItemValue,
   marketSourceLabel,
 } from './candidates'
-import { completeItem, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
+import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
 import { CandidateCard, CandidatesSection, StockCandidatePanel } from './CandidateViews'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
@@ -80,6 +85,30 @@ check(second.includes('13.05～13.35') && second.includes('上櫃') && second.in
 check(!second.includes('level-target-2'), 'missing target 2 is not rendered')
 check(second.includes('權重涵蓋 65%'), 'weight coverage in details')
 check(count(second, 'data-reason=') === 2, 'fewer reasons are not padded')
+
+// ---- LLM note (#220): inference block apart from the rule values ----
+const note = slice(first, 'class="ai-inference candidate-note"', '</section>')
+check(note.includes('data-note-state="done"') && note.includes('AI 進出點說明') && note.includes('AI 推論'), 'done note has its title and the AI 推論 badge')
+for (const [part, label, text] of [
+  ['selection', '為何入選', '三大法人 5 日淨買超約 20 日均量 2.59 倍'],
+  ['levels', '進場區、停損與目標', '條件失效的停損 157.82'],
+  ['risks', '需留意的風險', '屬推論'],
+] as const) {
+  check(slice(note, `data-note-part="${part}"`, '</div>').includes(label) && slice(note, `data-note-part="${part}"`, '</div>').includes(text), `note part ${part}`)
+}
+check(note.includes(NOTE_DISCLAIMER), 'note says it is inference, not advice')
+check(note.includes('模型 claude-sonnet-5-5 · 提示版本 candidate_notes_v1 · 產生於 2026/10/16 19:05'), 'model, prompt version and Taipei time')
+check(first.indexOf('candidate-groups') < first.indexOf('candidate-note') && first.indexOf('candidate-note') < first.indexOf('candidate-details'), 'note sits after the rule reasons and groups, before the score details')
+check(!slice(first, 'class="candidate-levels"', '</dl>').includes('ai-inference'), 'rule levels stay outside the AI block')
+const missing = slice(second, 'class="ai-inference candidate-note"', '</section>')
+check(missing.includes('data-note-state="empty"') && missing.includes(NOTE_MISSING_TEXT) && !missing.includes('data-note-part') && !missing.includes('ai-meta'), 'a row without a note shows the fixed copy')
+const pending = candidateNoteView({ ...doneNote(), status: 'pending', model: null, selection: null, levels: null, risks: null })
+check(pending.kind === 'empty' && pending.text === NOTE_PENDING_TEXT, 'a pending note shows the fixed copy')
+check(pending.meta === '提示版本 candidate_notes_v1 · 嘗試於 2026/10/16 19:05', 'a pending note shows its version and attempt time, no model')
+check(candidateNoteView({ ...doneNote(), risks: '' }).kind === 'empty', 'a done note missing a part is not shown half-filled')
+check(candidateNoteView(null).kind === 'empty' && candidateNoteView(undefined).kind === 'empty', 'null and missing notes use the fixed copy')
+check(candidateNoteMeta({ ...doneNote(), model: null, generated_at: '2026-10-16T11:05:00' }) === '模型 未記錄 · 提示版本 candidate_notes_v1', 'unknown model and a time without offset')
+check(render(<StockCandidatePanel candidate={completeItem()} />).includes('data-note-state="done"'), 'stock panel shows the note too')
 
 // ---- zero candidates and not computed ----
 for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {

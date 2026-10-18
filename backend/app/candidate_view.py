@@ -1,19 +1,21 @@
 """Read model of stored daily candidates (``/api/candidates`` and stock detail).
 
 Only reads ``candidate_runs`` / ``daily_candidates`` written by
-``worker.candidates``; nothing is scored at request time.
+``worker.candidates`` and the ``candidate_llm_notes`` written by
+``worker.candidate_notes``; nothing is scored or generated at request time.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timezone
 from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from .domain import CANDIDATE_SCORE_VERSION
+from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
 from .models import (
+    CandidateLlmNote,
     CandidateRun,
     ChipSnapshot,
     DailyCandidate,
@@ -99,6 +101,43 @@ def _levels(signal: Signal) -> dict[str, Any]:
     }
 
 
+def _note(db: Session, row: DailyCandidate) -> dict[str, Any] | None:
+    """The candidate's LLM note (inference), or None when none was attempted.
+
+    A done note of the current prompt version comes first, then the latest
+    done note of another version; a pending one has no text.
+    """
+
+    notes = db.scalars(
+        select(CandidateLlmNote).where(CandidateLlmNote.daily_candidate_id == row.id)
+    ).all()
+    if not notes:
+        return None
+    note = max(
+        notes,
+        key=lambda item: (
+            item.llm_status == "done",
+            item.prompt_version == CANDIDATE_NOTE_PROMPT_VERSION,
+            item.llm_run_at,
+        ),
+    )
+    done = note.llm_status == "done"
+    return {
+        "status": "done" if done else "pending",
+        "inference": True,
+        "selection": note.ai_selection if done else None,
+        "levels": note.ai_levels if done else None,
+        "risks": note.ai_risks if done else None,
+        "model": note.llm_model,
+        "prompt_version": note.prompt_version,
+        # llm_run_at is UTC-naive; the instant carries its offset.
+        "generated_at": note.llm_run_at.replace(tzinfo=timezone.utc).isoformat()
+        if note.llm_run_at
+        else None,
+        "input_hash": note.llm_input_hash,
+    }
+
+
 def candidate_item(
     db: Session, row: DailyCandidate, run: CandidateRun
 ) -> dict[str, Any]:
@@ -142,6 +181,7 @@ def candidate_item(
         "reasons": row.reasons_json or [],
         "groups": row.groups_json or [],
         "data_as_of": row.data_as_of.isoformat(),
+        "llm_note": _note(db, row),
         "sources": {
             "signal": f"analysis:{row.strategy}",
             "market_bar": bar.source if bar else None,

@@ -2,7 +2,8 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
--> candidates -> indicators -> theme_suggestions).  catchup first collects recent official
+-> candidates -> indicators -> theme_suggestions -> candidate_notes).  catchup
+first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
 analyze, evaluate and candidates run only after a
@@ -11,7 +12,9 @@ successful collect; evaluate and candidates only after a successful analyze
 updates); indicators depend on stored bars alone, so they run after every
 successful collect, and so does theme_suggestions, which only regroups stored
 news LLM results.  A failure keeps its error text and the dependent steps
-are recorded as skipped.
+are recorded as skipped.  candidate_notes (LLM explanations of the day's
+candidates) runs last after a successful candidates step; whatever its
+status, it only stays on its step row and never changes the run status.
 
 A first "no session" answer for today's target is recorded as
 ``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
@@ -43,11 +46,18 @@ from worker import pipeline, theme_suggestions
 from worker.sources import OfficialMarketDataAdapter
 
 DAILY_JOB = "daily"
-DAILY_STEPS = ("catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions")
+DAILY_STEPS = (
+    "catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes",
+)
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
     "analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": (), "theme_suggestions": (),
+    "candidate_notes": ("candidates",),
 }
+# LLM steps whose failure (timeout, claude missing, quota) is kept on the step
+# row only: the run stays success.  Pending notes are not retried by a later
+# daily (it targets its own date); worker.cli candidate-notes --date fills them.
+NON_BLOCKING_STEPS = frozenset({"candidate_notes"})
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -72,6 +82,8 @@ INDICATOR_MODULE = "worker.indicator_batch"
 INDICATOR_FUNCTION = "run_indicator_batch"
 CANDIDATE_MODULE = "worker.candidates"
 CANDIDATE_FUNCTION = "run_candidates"
+CANDIDATE_NOTE_MODULE = "worker.candidate_notes"
+CANDIDATE_NOTE_FUNCTION = "run_candidate_notes_batch"
 
 
 def _utcnow() -> datetime:
@@ -137,6 +149,11 @@ def _indicator_step(target: date) -> dict[str, Any]:
 def _candidate_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(CANDIDATE_MODULE)
     return getattr(module, CANDIDATE_FUNCTION)(target)
+
+
+def _candidate_note_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(CANDIDATE_NOTE_MODULE)
+    return getattr(module, CANDIDATE_NOTE_FUNCTION)(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -504,6 +521,7 @@ def run_daily_job(
         ("candidates", 4, lambda: _candidate_step(target)),
         ("indicators", 5, lambda: _indicator_step(target)),
         ("theme_suggestions", 6, _theme_suggestion_step),
+        ("candidate_notes", 7, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -534,7 +552,7 @@ def run_daily_job(
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
         # block them; theme_suggestions needs neither.  A candidates failure
-        # blocks nothing.
+        # blocks only candidate_notes, whose own result never fails the run.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
         if blocked_by:
             reason = f"{blocked_by}_not_successful"
@@ -547,7 +565,7 @@ def run_daily_job(
         output[step] = result
         statuses[step] = str(result.get("status"))
         acceptable = {"success", "no_data"} | ({"not_configured"} if step == "indicators" else set())
-        if statuses[step] not in acceptable:
+        if statuses[step] not in acceptable and step not in NON_BLOCKING_STEPS:
             failed.append(step)
             errors.append(f"{step}: {result.get('error') or result.get('reason') or statuses[step]}")
     status = "failed" if errors else "success"

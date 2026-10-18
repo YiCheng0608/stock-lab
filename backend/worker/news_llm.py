@@ -210,16 +210,18 @@ def preflight() -> tuple[list[str] | None, str | None]:
     return [found, *prefix[1:]], None
 
 
-def cli_arguments() -> list[str]:
+def cli_arguments(
+    model: str = MODEL, schema: dict[str, Any] = OUTPUT_SCHEMA
+) -> list[str]:
     return [
         "-p",
         "--no-session-persistence",
         "--model",
-        MODEL,
+        model,
         "--output-format",
         "json",
         "--json-schema",
-        json.dumps(OUTPUT_SCHEMA, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(schema, ensure_ascii=False, separators=(",", ":")),
         # No built-in tools, no MCP servers and no user/project/local
         # settings (hooks, CLAUDE.md): news text is data only.
         "--tools",

@@ -1,7 +1,7 @@
 """Add the hot-group score archive table.
 
-Revision ID: 0015_group_score_archive
-Revises: 0014_theme_suggestions
+Revision ID: 0016_group_score_archive
+Revises: 0015_candidate_llm_notes
 
 ``group_daily_score_archive`` keeps a verbatim copy of a ``group_daily_scores``
 row before a newer ``hot_group_v1`` version overwrites it (V1_SPEC
@@ -24,8 +24,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0015_group_score_archive"
-down_revision = "0014_theme_suggestions"
+revision = "0016_group_score_archive"
+down_revision = "0015_candidate_llm_notes"
 branch_labels = None
 depends_on = None
 
