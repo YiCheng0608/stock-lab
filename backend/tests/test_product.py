@@ -25,7 +25,7 @@ from app.models import (
     StrategyVersion,
     ThemeGroup,
 )
-from app.news import sync_news_from_events
+from app.news import _parse_datetime, sync_news_from_events
 from app.decision import build_action_summaries
 from app.main import app
 from app.taxonomy import canonical_group_id
@@ -789,6 +789,140 @@ def test_official_news_date_only_stays_naive_and_event_time_becomes_aware(produc
         assert roles["event_at"]["status"] == "known"
         assert roles["event_at"]["value"] == "2026-09-06T08:00:00+00:00"
         assert roles["published_at"]["status"] == "unknown"
+
+
+def test_official_news_offset_times_are_converted_to_utc(product_api):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        db.add_all(
+            [
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Published +08:00",
+                    source="mops_material_information",
+                    details_json={
+                        "published_at": "2026-09-07T09:30:00+08:00",
+                        "event_at": "2026-09-07T09:00:00+08:00",
+                    },
+                    collected_at=datetime(2026, 9, 8, 8, 0),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Event only -05:00",
+                    source="tpex_suspension_history",
+                    details_json={"event_at": "2026-09-07T20:00:00-05:00"},
+                    collected_at=datetime(2026, 9, 8, 8, 1),
+                ),
+                Event(
+                    instrument_id=alpha.id,
+                    event_date=as_of,
+                    event_type="announcement",
+                    title="Published Z",
+                    source="mops_material_information",
+                    details_json={"published_at": "2026-09-07T09:30:00Z"},
+                    collected_at=datetime(2026, 9, 8, 8, 2),
+                ),
+            ]
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(client, ["Published +08:00", "Event only -05:00", "Published Z"])
+
+    # 09:30 in Taipei is 01:30 UTC; the same instant, not the same clock reading.
+    for payload in rows["Published +08:00"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] == "2026-09-07T01:30:00+00:00"
+        assert payload["event_at"] == "2026-09-07T01:00:00+00:00"
+        assert payload["display_time"] == "2026-09-07T01:30:00+00:00"
+        assert payload["time_basis"] == "published" and payload["time_precision"] == "datetime"
+        assert roles["published_at"]["status"] == "known"
+        assert roles["published_at"]["value"] == "2026-09-07T01:30:00+00:00"
+
+    # A negative offset moves the instant forward, across the UTC day boundary.
+    for payload in rows["Event only -05:00"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] is None
+        assert payload["event_at"] == "2026-09-08T01:00:00+00:00"
+        assert payload["display_time"] == "2026-09-08T01:00:00+00:00"
+        assert payload["time_basis"] == "event" and payload["time_precision"] == "datetime"
+        assert roles["event_at"]["value"] == "2026-09-08T01:00:00+00:00"
+
+    for payload in rows["Published Z"]:
+        assert payload["published_at"] == "2026-09-07T09:30:00+00:00"
+
+    with product_api() as db:
+        stored = {item.title: item for item in db.scalars(select(NewsItem))}
+    # The database keeps naive UTC, the same convention as the media feed rows.
+    assert stored["Published +08:00"].published_at == datetime(2026, 9, 7, 1, 30)
+    assert stored["Published +08:00"].event_at == datetime(2026, 9, 7, 1, 0)
+    assert stored["Published +08:00"].published_at.tzinfo is None
+    assert stored["Event only -05:00"].event_at == datetime(2026, 9, 8, 1, 0)
+    # The official calendar date is not shifted by the time conversion.
+    assert stored["Published +08:00"].event_date == date(2026, 9, 8)
+
+
+def test_official_news_date_only_marker_is_not_promoted_to_an_instant(product_api):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        db.add(
+            Event(
+                instrument_id=alpha.id,
+                event_date=as_of,
+                event_type="announcement",
+                title="Date only marker",
+                source="mops_material_information",
+                details_json={"published_at": "2026-09-07", "event_at": "20260907"},
+                collected_at=datetime(2026, 9, 8, 8, 0),
+            )
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        rows = _news_by_title(client, ["Date only marker"])
+
+    for payload in rows["Date only marker"]:
+        roles = payload["product_time"]["roles"]
+        assert payload["published_at"] is None and payload["event_at"] is None
+        assert payload["time_basis"] == "event_date" and payload["time_precision"] == "date"
+        assert payload["display_time"] == "2026-09-08T00:00:00"
+        assert roles["published_at"]["status"] == "unknown"
+        assert roles["event_at"]["status"] == "unknown"
+        assert roles["event_date"]["value"] == "2026-09-08"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Offset-aware: converted to UTC, then stored as naive UTC.
+        ("2026-09-07T09:30:00+08:00", datetime(2026, 9, 7, 1, 30)),
+        ("2026-09-07 09:30:00+08:00", datetime(2026, 9, 7, 1, 30)),
+        ("2026-09-07T00:30:00+08:00", datetime(2026, 9, 6, 16, 30)),
+        ("2026-09-07T20:00:00-05:00", datetime(2026, 9, 8, 1, 0)),
+        ("2026-09-07T09:30:00.123456+08:00", datetime(2026, 9, 7, 1, 30, 0, 123456)),
+        ("2026-09-07T09:30:00Z", datetime(2026, 9, 7, 9, 30)),
+        ("2026-09-07T09:30:00+00:00", datetime(2026, 9, 7, 9, 30)),
+        # Naive: already the database convention (naive UTC), kept as is.
+        ("2026-09-07T09:30:00", datetime(2026, 9, 7, 9, 30)),
+        ("  2026-09-07T09:30:00  ", datetime(2026, 9, 7, 9, 30)),
+        # Not an instant: no value, no time of day, or not a time.
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("2026-09-07", None),
+        ("20260907", None),
+        ("not a time", None),
+        ("0001-01-01T00:00:00+08:00", None),
+    ],
+)
+def test_parse_datetime_normalizes_offset_to_naive_utc(value, expected):
+    assert _parse_datetime(value) == expected
+    if expected is not None:
+        assert _parse_datetime(value).tzinfo is None
 
 
 def test_news_cursor_and_sort_keep_working_with_aware_display_time(product_api):
