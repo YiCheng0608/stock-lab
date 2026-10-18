@@ -61,6 +61,8 @@ from .decision import (
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
 from .theme_table import parse_membership_source
+from .theme_suggestions import DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT, MAX_LIMIT as THEME_SUGGESTIONS_MAX_LIMIT
+from .theme_suggestions import suggestion_detail, suggestion_list
 from .news import (
     _is_verified_theme_for_instrument,
     _theme_ids_for_event,
@@ -1994,6 +1996,24 @@ def candidates(
 ) -> dict[str, Any]:
     """Stored daily candidates (candidate_score_v1); default is the latest list."""
     return candidate_list(db, date_, limit)
+
+
+@router.get("/theme-suggestions")
+def theme_suggestions(
+    include_matched: bool = False,
+    limit: int = Query(THEME_SUGGESTIONS_DEFAULT_LIMIT, ge=1, le=THEME_SUGGESTIONS_MAX_LIMIT),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """News theme suggestions awaiting review (LLM inference, never ranked)."""
+    return suggestion_list(db, include_matched=include_matched, limit=limit)
+
+
+@router.get("/theme-suggestions/{suggestion_id}")
+def theme_suggestion(suggestion_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    item = suggestion_detail(db, suggestion_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="theme suggestion not found")
+    return item
 
 
 def _news_symbol_filter(instrument: Instrument):
