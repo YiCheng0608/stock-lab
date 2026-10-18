@@ -148,7 +148,7 @@
 - 無資料：欄位留空顯示「—」加 muted 原因，不顯示 0。
 - LLM 推論內容：左側 2px 強調色（`--color-accent`）豎線加「AI 推論」小 badge，與事實分區。
 - 進出點卡：進場區主文字色 mono；停損 `--color-error`；目標 `--color-success`；RR 用 badge。
-- 候選清單理由：最多三條，每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent）。
+- 候選清單理由：照 API 順序全部顯示（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。
 
 ## 8. 無障礙與動效
 
