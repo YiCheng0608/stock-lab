@@ -1,6 +1,7 @@
 import type {
   BacktestSummary,
   BackfillRun,
+  CandidatesResponse,
   CoverageReport,
   Dashboard,
   ActionSummary,
@@ -30,6 +31,7 @@ import type {
   TrackingResponse,
 } from './types'
 
+import { candidatesPath } from './candidates/candidates'
 import { assertPortfolioValue } from './portfolioValues'
 import { STOCK_BARS_LIMIT, stockBarsPath } from './stock/stockBars'
 import { THEME_BOARD_LIMIT, themeBoardPath } from './themes/themeBoards'
@@ -76,6 +78,8 @@ function queryString(params: Record<string, string | number | boolean | undefine
 }
 
 export const getDashboard = () => get<Dashboard>('/dashboard')
+// Without a date the API returns the latest candidate run; limit is 1–20 (default 20).
+export const getCandidates = (date?: string, limit?: number) => get<CandidatesResponse>(candidatesPath(date, limit))
 export const getGroups = (params: PageParams = {}) =>
   get<Paginated<GroupRow>>(`/groups${queryString(params)}`)
 export const getGroup = (id: string) => get<GroupDetail>(`/groups/${encodeURIComponent(id)}`)

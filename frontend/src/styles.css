@@ -415,6 +415,40 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-news-title { overflow: hidden; color: var(--color-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .theme-news-title:hover { color: var(--color-primary); }
 
+/* ---- daily candidates (DESIGN_SYSTEM §7) -------------------------------------------------------- */
+.candidate-disclaimer { margin: 0 0 var(--space-3); }
+.candidate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.candidate-card { min-width: 0; padding: var(--space-5); }
+.candidate-head { display: flex; align-items: flex-start; gap: var(--space-3); }
+.candidate-rank { flex: none; min-width: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-bg-elevated); font: 700 16px var(--font-mono); text-align: center; }
+.candidate-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.candidate-name strong { font-weight: 600; }
+.candidate-total { flex: none; text-align: right; }
+.candidate-total span { display: block; color: var(--color-text-muted); font-size: 12px; }
+.candidate-total b { font: 700 28px var(--font-mono); font-variant-numeric: tabular-nums; }
+.candidate-partial { margin-top: var(--space-2); color: var(--color-warning); }
+.candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }
+.candidate-levels > div, .candidate-components > div { min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
+.candidate-levels dt, .candidate-components dt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: 12px; }
+.candidate-levels dd, .candidate-components dd { margin: var(--space-1) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.candidate-components dd { font-size: 18px; font-weight: 600; }
+.level-entry { color: var(--color-text); }
+.level-stop { color: var(--color-error); }
+.level-target { color: var(--color-success); }
+.level-target-2 { color: var(--color-text-muted); }
+.candidate-null-notes { margin: var(--space-2) 0 0; padding-left: var(--space-5); }
+.candidate-reasons { margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.6; }
+.candidate-reasons li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.reason-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-muted); }
+.reason-dot-technical { background: var(--color-primary); }
+.reason-dot-chips { background: var(--color-secondary); }
+.reason-dot-news_sentiment { background: var(--color-accent); }
+.reason-dot-group, .reason-dot-other { background: var(--color-text-muted); }
+.candidate-groups { margin-top: var(--space-2); }
+.candidate-details { margin-top: var(--space-3); }
+.candidate-details .table-wrap { margin-bottom: var(--space-2); }
+.stock-candidate { margin-bottom: var(--space-6); }
+
 /* ---- responsive --------------------------------------------------------------------------------- */
 @media (max-width: 1024px) {
   .container, .navbar-inner { padding: 0 var(--space-6); }
@@ -437,6 +471,7 @@ a.symbol-link:hover { color: var(--color-primary); }
   .theme-news-title { white-space: normal; }
   .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: var(--space-10); }
   .position-list, .news-grid, .action-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
+  .candidate-grid { grid-template-columns: 1fr; }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
   .data-explanation { margin-left: 0; }
 }
@@ -447,6 +482,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   h1, .stock-header-name { font-size: 26px; }
   .stock-header-close { font-size: 30px; }
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
+  .candidate-card { padding: var(--space-4); }
+  .candidate-levels, .candidate-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .board-table-wrap { display: none; }
   .board-cards { display: grid; }
   .board-controls .board-search { flex: 1 1 100%; max-width: none; }
