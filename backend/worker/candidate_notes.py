@@ -551,7 +551,9 @@ def run_candidate_notes(
         run = _failed_run(db, label_date, problem)
         return {**base, "status": "failed", "reason": problem, "run_id": run.id}
     assert command is not None
-    batches = [todo[start : start + BATCH_SIZE] for start in range(0, len(todo), BATCH_SIZE)]
+    batches = [
+        todo[start : start + BATCH_SIZE] for start in range(0, len(todo), BATCH_SIZE)
+    ]
     used = _calls_today(db, label_date)
     allowed = max(DAILY_CALL_LIMIT - used, 0)
     if dry_run:
@@ -581,24 +583,29 @@ def run_candidate_notes(
     for number, batch in enumerate(batches, start=1):
         ids = [row.id for row in batch]
         if stop_reason is not None:
-            skipped.append({"batch": number, "candidate_ids": ids, "reason": stop_reason})
+            skipped.append(
+                {"batch": number, "candidate_ids": ids, "reason": stop_reason}
+            )
             continue
         if len(results) >= allowed:
             skipped.append(
                 {"batch": number, "candidate_ids": ids, "reason": "daily_call_limit"}
             )
             continue
-        payloads = [(row, candidate_input(db, row, candidate_run)) for row in batch]
+        payloads: list[tuple[DailyCandidate, dict[str, Any]]] = []
         try:
+            payloads = [(row, candidate_input(db, row, candidate_run)) for row in batch]
             outcome = _run_batch(db, run, number, payloads, template, command, active)
         except Exception as exc:  # noqa: BLE001 - one batch must not stop the others
             db.rollback()
             error = f"batch_error: {type(exc).__name__}: {exc}"[:500]
-            for row, payload in payloads:
+            # An input that could not be built is hashed by its id alone.
+            built = {row.id: payload for row, payload in payloads}
+            for row in batch:
                 _store(
                     db,
                     row,
-                    payload,
+                    built.get(row.id, {"id": row.id}),
                     run=run,
                     raw_payload_id=None,
                     run_at=datetime.utcnow(),

@@ -129,7 +129,9 @@ def test_batches_are_split_and_notes_saved_with_versions(db, fake):
     assert result["status"] == "success" and result["records"] == 7
     calls = fake()
     assert [len(call["ids"]) for call in calls] == [BATCH_SIZE, 2]
-    assert [cid for call in calls for cid in call["ids"]] == [row.id for row in candidates]
+    assert [cid for call in calls for cid in call["ids"]] == [
+        row.id for row in candidates
+    ]
     argv = calls[0]["argv"]
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert argv[argv.index("--tools") + 1] == "" and "--strict-mcp-config" in argv
@@ -157,8 +159,19 @@ def test_input_uses_only_stored_rows_levels_reasons_groups_and_news(db, fake):
     _run(db)
     sent = fake()[0]["inputs"][0]
     assert set(sent) == {
-        "id", "rank", "symbol", "name", "strategy", "trading_date", "levels",
-        "total_score", "weight_coverage", "components", "reasons", "groups", "news",
+        "id",
+        "rank",
+        "symbol",
+        "name",
+        "strategy",
+        "trading_date",
+        "levels",
+        "total_score",
+        "weight_coverage",
+        "components",
+        "reasons",
+        "groups",
+        "news",
     }
     assert sent["id"] == candidates[0].id and sent["symbol"] == "TWSE:1101"
     assert sent["strategy"] == "突破條件"
@@ -175,7 +188,12 @@ def test_input_uses_only_stored_rows_levels_reasons_groups_and_news(db, fake):
     assert [reason["text"] for reason in sent["reasons"]] == [
         reason["text"] for reason in candidates[0].reasons_json
     ]
-    assert sent["groups"][0] == {"name": "群ind-1", "board": "產業", "rank": 1, "board_size": 1}
+    assert sent["groups"][0] == {
+        "name": "群ind-1",
+        "board": "產業",
+        "rank": 1,
+        "board_size": 1,
+    }
     assert sent["news"] == [
         {
             "date": T.isoformat(),
@@ -195,8 +213,17 @@ def test_rerun_of_the_same_date_and_version_calls_nothing(db, fake):
     assert again["status"] == "success" and again["already_complete"] is True
     assert again["records"] == 0 and "run_id" not in again
     assert len(fake()) == 1
-    assert [(note.id, note.llm_run_at, note.ai_selection) for note in _notes(db)] == before
-    assert len(db.scalars(select(IngestionRun).where(IngestionRun.run_type == "candidate_notes")).all()) == 1
+    assert [
+        (note.id, note.llm_run_at, note.ai_selection) for note in _notes(db)
+    ] == before
+    assert (
+        len(
+            db.scalars(
+                select(IngestionRun).where(IngestionRun.run_type == "candidate_notes")
+            ).all()
+        )
+        == 1
+    )
 
 
 def test_notes_do_not_change_the_candidate_rows(db, fake):
@@ -351,7 +378,9 @@ def test_api_shows_the_note_with_versions_and_inference(db, fake, client):
     assert detail["candidate"]["llm_note"] == note
 
 
-def test_api_pending_note_has_no_text_and_a_missing_note_is_null(db, fake, client, monkeypatch):
+def test_api_pending_note_has_no_text_and_a_missing_note_is_null(
+    db, fake, client, monkeypatch
+):
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "invalid_json,ok")
     _candidates(db, 6)
     _run(db)
@@ -392,7 +421,14 @@ def test_api_prefers_a_done_note_of_the_current_version(db, fake, client):
 
 @pytest.mark.parametrize(
     ("status", "code"),
-    [("success", 0), ("no_data", 0), ("dry_run", 0), ("skipped", 0), ("partial", 2), ("failed", 1)],
+    [
+        ("success", 0),
+        ("no_data", 0),
+        ("dry_run", 0),
+        ("skipped", 0),
+        ("partial", 2),
+        ("failed", 1),
+    ],
 )
 def test_cli_exit_code_follows_the_run_status(monkeypatch, capsys, status, code):
     from worker import cli
@@ -401,11 +437,41 @@ def test_cli_exit_code_follows_the_run_status(monkeypatch, capsys, status, code)
     monkeypatch.setattr(
         cli,
         "run_candidate_notes_batch",
-        lambda day, dry_run=False, limit=None: seen.append((day, dry_run, limit)) or {"status": status},
+        lambda day, dry_run=False, limit=None: seen.append((day, dry_run, limit))
+        or {"status": status},
     )
-    monkeypatch.setattr(sys, "argv", ["worker.cli", "candidate-notes", "--date", "2026-09-04", "--limit", "3"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["worker.cli", "candidate-notes", "--date", "2026-09-04", "--limit", "3"],
+    )
     with pytest.raises(SystemExit) as exit_info:
         cli.main()
     assert exit_info.value.code == code
     assert seen == [(T, False, 3)]
     assert json.loads(capsys.readouterr().out)["status"] == status
+
+
+def test_a_batch_whose_input_cannot_be_built_is_pending_and_the_rest_runs(
+    db, fake, monkeypatch
+):
+    candidates = _candidates(db, 7)
+    real = candidate_notes.candidate_input
+
+    def broken(session, row, run):
+        if row.id == candidates[0].id:
+            raise RuntimeError("fixture input failure")
+        return real(session, row, run)
+
+    monkeypatch.setattr(candidate_notes, "candidate_input", broken)
+    result = _run(db)
+    assert (
+        result["status"] == "partial"
+        and result["batches"][0]["reason"] == "batch_error"
+    )
+    assert [len(call["ids"]) for call in fake()] == [2]
+    notes = {note.daily_candidate_id: note for note in _notes(db)}
+    assert notes[candidates[0].id].llm_status == "pending"
+    assert "fixture input failure" in notes[candidates[0].id].llm_error
+    assert notes[candidates[6].id].llm_status == "done"
+    assert db.get(IngestionRun, result["run_id"]).status == "partial"

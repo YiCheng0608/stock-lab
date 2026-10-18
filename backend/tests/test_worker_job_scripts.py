@@ -370,7 +370,10 @@ def test_news_registration_takes_the_path_from_stock_claude_cli(harness, monkeyp
 def test_daily_registration_has_no_news_llm_options(harness):
     result = harness.register("daily")
     assert result.code == 0, result.stderr
-    assert "Claude:   (not set; candidate_notes uses claude on the task PATH)" in result.stdout
+    assert (
+        "Claude:   (not set; candidate_notes uses claude on the task PATH)"
+        in result.stdout
+    )
     assert "-SkipNewsLlm" not in result.stdout and "-ClaudeCli" not in result.stdout
     refused = harness.register("daily", "-NoNewsLlm")
     assert refused.code != 0
