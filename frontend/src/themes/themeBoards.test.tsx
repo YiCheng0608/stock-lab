@@ -64,14 +64,13 @@ const partialRow = industryMarkup.slice(industryMarkup.indexOf('data-theme-id="i
 check(partialRow.includes('技術與籌碼觀察（事件資料待補）') && !partialRow.includes('熱門族群'), 'partial row is not called a hot group')
 check(count(partialRow, '>—<') === 3, `null breadth, catalyst and 20d return show 「—」: ${partialRow}`)
 check(industryMarkup.includes('資料 2026/09/08') && !industryMarkup.includes('官方資料 '), 'board date badge')
-check(industryMarkup.includes('既有族群關聯待重新核實'), 'industry board keeps the temporary verification notice')
+check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('class="data-gap"'), 'industry board shows no temporary verification notice')
 check(industryMarkup.includes('class="board-cards"') && count(industryMarkup, 'class="board-card"') === 2, 'phone cards render every row')
 
 const themeMarkup = render(<ThemesBoardView board="theme" onBoardChange={noop} search="" onSearchChange={noop} data={themeBoard()} loading={false} error={null} />)
 check(themeMarkup.includes('id="board-tab-theme" aria-selected="true"') && themeMarkup.includes('id="board-tab-industry" aria-selected="false"') && themeMarkup.includes('id="board-panel-theme"'), 'theme tab selected')
 check(themeMarkup.includes('CoWoS 先進封裝') && !themeMarkup.includes('半導體業'), 'theme board shows only theme rows')
 check(themeMarkup.includes('資料 2026/09/08') && themeMarkup.includes('官方資料 2026/09/09'), 'score date and differing data date badges')
-check(!themeMarkup.includes('既有族群關聯待重新核實'), 'theme board has no industry notice')
 const searched = render(<ThemesBoardView board="industry" onBoardChange={noop} search="不存在" onSearchChange={noop} data={industryBoard()} loading={false} error={null} />)
 check(searched.includes('沒有符合的族群') && !searched.includes('data-theme-id'), 'a search with no match says so')
 
@@ -134,7 +133,6 @@ check(mediaRow.includes('<span class="small-note">中央社</span>'), `media row
 check(!relatedNews.includes('官方公告資料'), 'no related news row falls back to 「官方公告資料」')
 const mediaOnly = render(<ThemeNewsList items={[{ ...newsItems(3)[2], source_name: '  ' }]} />)
 check(mediaOnly.includes('來源未提供') && !mediaOnly.includes('官方公告資料'), 'a media row without a name says 來源未提供')
-check(!detailMarkup.includes('既有族群關聯待重新核實'), 'theme detail has no industry notice')
 
 const oneDay = render(<ThemeDetailView detail={themeDetail({ trendDays: 1 })} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(oneDay.includes('走勢資料不足') && !oneDay.includes('查看走勢資料表'), '1-day trend shows the empty state')
@@ -151,7 +149,7 @@ check(MEMBER_PAGE_SIZE === 30, 'member page size')
 const industryDetail = { ...themeDetail(), board: 'industry', theme: { ...themeDetail().theme, theme_id: 'industry-99', display_name: '玻璃陶瓷' }, members: [] }
 const offBoard = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded({ ...membersPage(), items: [] })} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(offBoard.includes('未列入本日榜單') && offBoard.includes('不在本日產業榜') && !offBoard.includes('<th>證據</th>'), 'a group off the board: no rank, no evidence column for industries')
-check(offBoard.includes('既有族群關聯待重新核實') && !offBoard.includes('題材表版本'), 'industry detail keeps the notice and has no theme table version')
+check(!offBoard.includes('待重新核實') && !offBoard.includes('class="data-gap"') && !offBoard.includes('題材表版本'), 'industry detail shows no temporary verification notice and no theme table version')
 check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
 
