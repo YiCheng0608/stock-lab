@@ -25,6 +25,7 @@ const SUITES = [
   { file: 'components/StrategyVersionCard.test.tsx' },
   { file: 'components/ui/ui.test.tsx' },
   { file: 'themes/themeBoards.test.tsx' },
+  { file: 'themes/themeSuggestions.test.tsx' },
   { file: 'news/news.test.tsx' },
   { file: 'candidates/candidates.test.tsx' },
 ]

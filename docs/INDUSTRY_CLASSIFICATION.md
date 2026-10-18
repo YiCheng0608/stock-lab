@@ -136,12 +136,14 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 **維護流程**：先改 JSON（附證據），再執行 `python -m worker.cli themes sync`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。驗證失敗時 exit 1 且不寫入；成功後由下一次 analyze／daily 計分。
 
-**候選題材（預留）**：新聞聚合提出的新題材在人工核實前以 `group_type="theme_candidate"`、`active=false`、`name_status="pending_verification"` 表示；成員 `role="candidate"`，證據同樣寫在 `source`。候選題材永遠不計分、不進榜，產生邏輯屬 LLM 任務。
+**新聞題材建議**：新聞 AI 判讀（`news_llm_results.ai_theme_candidates_json`）提出的題材，由 daily 的 `theme_suggestions` 步驟彙整進 `theme_suggestions`／`theme_suggestion_news`（規則見 [V1_SPEC 新聞題材建議](V1_SPEC.md#新聞題材建議)），狀態一律 `pending_verification`；不寫 `theme_groups`、`group_memberships` 或題材表檔，不計分、不進榜，族群頁另區列出。名稱與現有 active 題材或官方產業相同的建議記 `matched_group_id`，不當新題材列出。要把建議納入題材表，照上面的維護流程補齊附證據的成員後改 JSON 再 sync；建議本身不是證據。
+
+**候選題材群組（保留）**：`group_type="theme_candidate"`（`active=false`、`name_status="pending_verification"`、成員 `role="candidate"`）保留給日後的人工核實流程，目前沒有程式產生；這類群組即使誤設為 active 也不計分、不進榜。
 
 **欄位值域（現行）**
 
 | 欄位 | 值與意義 |
 | --- | --- |
-| `theme_groups.group_type` | `official_industry` 官方產業；`etf` ETF 類別；`instrument_theme` 舊 ETF 主題；`daily_hot_group` 新上市觀察；`theme` 題材表題材；`theme_candidate` 待核實候選題材 |
+| `theme_groups.group_type` | `official_industry` 官方產業；`etf` ETF 類別；`instrument_theme` 舊 ETF 主題；`daily_hot_group` 新上市觀察；`theme` 題材表題材；`theme_candidate` 待核實候選題材（保留，目前不產生） |
 | `theme_groups.name_status` | `pending` 名稱未對照；`official`／`verified`／`approved` 可顯示（`app.news.is_verified_theme`）；`pending_verification` 候選題材待核實 |
 | `group_memberships.role` | `member` 一般成員；`candidate` 候選題材的待核實成員 |

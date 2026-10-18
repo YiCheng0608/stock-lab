@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
@@ -27,6 +27,8 @@ import {
   getTheme,
   getThemeMembers,
   getThemeBoard,
+  getThemeSuggestion,
+  getThemeSuggestions,
   getTracking,
   getPortfolio,
   upsertPortfolio,
@@ -65,6 +67,8 @@ import { StockBarsChart } from './stock/StockBarsChart'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
+import { ThemeSuggestionsSection, type SuggestionNewsState } from './themes/ThemeSuggestionViews'
+import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection, StockCandidatePanel } from './candidates/CandidateViews'
 import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
@@ -654,7 +658,13 @@ function ThemesPage() {
   const [search, setSearch] = useState('')
   const query = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board) })
   const changeBoard = (next: ThemeBoard) => setSearchParams(next === 'industry' ? {} : { board: next }, { replace: true })
-  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error} />
+  const suggestions = useQuery({ queryKey: ['theme-suggestions', THEME_SUGGESTION_LIMIT], queryFn: () => getThemeSuggestions(THEME_SUGGESTION_LIMIT) })
+  const [expanded, setExpanded] = useState<number[]>([])
+  const fullNews = useQueries({ queries: expanded.map((id) => ({ queryKey: ['theme-suggestion', id], queryFn: () => getThemeSuggestion(id) })) })
+  const full: Record<number, SuggestionNewsState> = Object.fromEntries(expanded.map((id, index) => [id, { data: fullNews[index].data, loading: fullNews[index].isLoading, error: fullNews[index].error }]))
+  const loadAll = (id: number) => setExpanded((current) => current.includes(id) ? current : [...current, id])
+  return <ThemesBoardView board={board} onBoardChange={changeBoard} search={search} onSearchChange={setSearch} data={query.data} loading={query.isLoading} error={query.error}
+    suggestions={<ThemeSuggestionsSection data={suggestions.data} loading={suggestions.isLoading} error={suggestions.error} full={full} onLoadAll={loadAll} />} />
 }
 
 function ThemePage() {

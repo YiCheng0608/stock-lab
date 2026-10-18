@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,6 +26,8 @@ from app.models import (
     IngestionRun,
     Instrument,
     MarketBar,
+    NewsItem,
+    NewsLlmResult,
     TechnicalFeature,
     ThemeGroup,
 )
@@ -38,6 +40,7 @@ from app.theme_table import (
     parse_membership_source,
     validate_theme_table,
 )
+from worker.theme_suggestions import refresh_theme_suggestions
 
 SCORE_DATE = date(2026, 9, 4)
 LOCAL_API = "http://127.0.0.1:8000"
@@ -926,3 +929,84 @@ def test_api_theme_detail_inlines_at_most_one_page_of_members(
     assert (body["members_total"], body["members_truncated"]) == (3, True)
     full = api_client.get("/api/themes/theme-top/members", params={"page_size": 3})
     assert full.json()["meta"]["total"] == 3
+
+
+# #216 AC-3: news theme suggestions never enter a board
+
+
+def _ranked(body):
+    return [
+        (
+            item.get("theme_id") or item.get("group_id"),
+            item.get("display_name") or item.get("name"),
+            item.get("rank"),
+            item.get("score"),
+        )
+        for item in body["items"]
+    ]
+
+
+def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(
+    factory, api_client
+):
+    _stocks, dates = _scored_api_fixture(factory)
+    endpoints = [
+        ("/api/themes", {"board": "industry"}),
+        ("/api/themes", {"board": "theme"}),
+        ("/api/themes", {"only_qualified": False}),
+        ("/api/groups", {}),
+    ]
+    before = [_ranked(api_client.get(path, params=params).json()) for path, params in endpoints]
+    with factory() as db:
+
+        def group_state():
+            return (
+                [(row.id, row.group_type, row.active) for row in db.scalars(select(ThemeGroup).order_by(ThemeGroup.id))],
+                _memberships(db),
+                sorted((row.group_id, row.trading_date, row.rank, row.score) for row in db.scalars(select(GroupDailyScore))),
+            )
+
+        groups_before = group_state()
+        for index, names in enumerate((["新題材甲", "頂題材"], ["新題材甲"])):
+            news = NewsItem(
+                canonical_key=f"news:ac3:{index}",
+                source_name="鉅亨網",
+                title=f"題材新聞{index}",
+                published_at=datetime(2026, 9, 4, 1, 0),
+                collected_at=datetime(2026, 9, 4, 1, 0),
+                status="active",
+            )
+            db.add(news)
+            db.flush()
+            db.add(
+                NewsLlmResult(
+                    news_item_id=news.id,
+                    prompt_version="news_v1",
+                    llm_model="claude-haiku-5-5",
+                    llm_input_hash="0" * 64,
+                    llm_status="done",
+                    ai_unsupported=False,
+                    ai_symbol_candidates_json=[],
+                    ai_theme_candidates_json=[{"theme": name, "reason": "理由"} for name in names],
+                )
+            )
+        db.commit()
+        result = refresh_theme_suggestions(db)
+        assert (result["records"], result["new_themes"], result["matched_existing"]) == (2, 1, 1)
+        # Rescoring after the refresh sees the same groups and writes the same boards.
+        for trading_date in dates[-3:]:
+            pipeline._calculate_group_scores(db, trading_date)
+        db.commit()
+        assert group_state() == groups_before
+
+    after = [_ranked(api_client.get(path, params=params).json()) for path, params in endpoints]
+    assert after == before
+    assert "新題材甲" not in json.dumps(after, ensure_ascii=False)
+    listed = api_client.get("/api/theme-suggestions").json()
+    assert [item["display_name"] for item in listed["items"]] == ["新題材甲"]
+    assert listed["items"][0]["status"] == "pending_verification"
+    matched = api_client.get("/api/theme-suggestions", params={"include_matched": True}).json()
+    assert {item["display_name"]: (item["matched_group"] or {}).get("group_id") for item in matched["items"]} == {
+        "新題材甲": None,
+        "頂題材": "theme-top",
+    }

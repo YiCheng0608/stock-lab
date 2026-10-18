@@ -2,14 +2,15 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
--> candidates -> indicators).  catchup first collects recent official
+-> candidates -> indicators -> theme_suggestions).  catchup first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
 analyze, evaluate and candidates run only after a
 successful collect; evaluate and candidates only after a successful analyze
 (candidates read the trading date's signals, not the tracking that evaluate
 updates); indicators depend on stored bars alone, so they run after every
-successful collect.  A failure keeps its error text and the dependent steps
+successful collect, and so does theme_suggestions, which only regroups stored
+news LLM results.  A failure keeps its error text and the dependent steps
 are recorded as skipped.
 
 A first "no session" answer for today's target is recorded as
@@ -38,13 +39,15 @@ from sqlalchemy import desc, inspect, select, text
 
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
-from worker import pipeline
+from worker import pipeline, theme_suggestions
 from worker.sources import OfficialMarketDataAdapter
 
 DAILY_JOB = "daily"
-DAILY_STEPS = ("catchup", "collect", "analyze", "evaluate", "candidates", "indicators")
+DAILY_STEPS = ("catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions")
 # Steps after collect and the earlier steps each needs to have succeeded.
-STEP_REQUIRES = {"analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": ()}
+STEP_REQUIRES = {
+    "analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": (), "theme_suggestions": (),
+}
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -134,6 +137,10 @@ def _indicator_step(target: date) -> dict[str, Any]:
 def _candidate_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(CANDIDATE_MODULE)
     return getattr(module, CANDIDATE_FUNCTION)(target)
+
+
+def _theme_suggestion_step() -> dict[str, Any]:
+    return theme_suggestions.run_theme_suggestions(pipeline.SessionLocal)
 
 
 def _catchup_adapter() -> OfficialMarketDataAdapter:
@@ -496,6 +503,7 @@ def run_daily_job(
         ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
         ("candidates", 4, lambda: _candidate_step(target)),
         ("indicators", 5, lambda: _indicator_step(target)),
+        ("theme_suggestions", 6, _theme_suggestion_step),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -525,7 +533,8 @@ def run_daily_job(
     for step, sequence, action in later:
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
-        # block them.  A candidates failure blocks nothing.
+        # block them; theme_suggestions needs neither.  A candidates failure
+        # blocks nothing.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
         if blocked_by:
             reason = f"{blocked_by}_not_successful"

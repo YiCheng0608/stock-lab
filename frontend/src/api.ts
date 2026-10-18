@@ -22,6 +22,8 @@ import type {
   ThemeBoardResponse,
   ThemeDetail,
   ThemeMembersResponse,
+  ThemeSuggestion,
+  ThemeSuggestionsResponse,
   Paginated,
   Position,
   PositionInput,
@@ -35,6 +37,7 @@ import { candidatesPath } from './candidates/candidates'
 import { assertPortfolioValue } from './portfolioValues'
 import { STOCK_BARS_LIMIT, stockBarsPath } from './stock/stockBars'
 import { THEME_BOARD_LIMIT, themeBoardPath } from './themes/themeBoards'
+import { themeSuggestionsPath } from './themes/themeSuggestions'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
@@ -189,6 +192,9 @@ export const getNewsDetail = (newsId: string) =>
 
 export const getThemeBoard = (board: ThemeBoard, limit = THEME_BOARD_LIMIT) =>
   get<ThemeBoardResponse>(themeBoardPath(board, limit))
+
+export const getThemeSuggestions = (limit?: number) => get<ThemeSuggestionsResponse>(themeSuggestionsPath(limit))
+export const getThemeSuggestion = (id: number) => get<ThemeSuggestion>(`/theme-suggestions/${id}`)
 
 export const getTheme = (id: string) => get<ThemeDetail>(`/themes/${encodeURIComponent(id)}`)
 export const getThemeMembers = (id: string, params: PageParams & { sort?: string } = {}) =>

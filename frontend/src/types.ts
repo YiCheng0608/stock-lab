@@ -762,6 +762,49 @@ export type ThemeBoardMeta = {
 
 export type ThemeBoardResponse = { items: ThemeBoardItem[]; meta: ThemeBoardMeta }
 
+// News theme suggestions awaiting review (/api/theme-suggestions, #216): LLM inference, never scored or ranked.
+export type ThemeSuggestionNews = {
+  news_id: number
+  title: string
+  source_name: string
+  news_date: string
+  theme_text: string
+  reason: string | null
+}
+
+export type ThemeSuggestion = {
+  id: number
+  theme_key: string
+  display_name: string
+  status: string
+  inference: true
+  news_count: number
+  first_news_date: string
+  last_news_date: string
+  // news_v1 theme candidates carry no confidence.
+  confidence: 'not_provided' | string
+  matched_group: { group_id: string; name: string; group_type: string } | null
+  prompt_version: string
+  aggregation_version: string
+  llm_models: string[]
+  computed_at: string | null
+  news: ThemeSuggestionNews[]
+}
+
+export type ThemeSuggestionsResponse = {
+  items: ThemeSuggestion[]
+  meta: {
+    total: number
+    limit: number
+    include_matched: boolean
+    matched_total: number
+    news_per_suggestion: number
+    aggregation_version: string
+    updated_at: string | null
+    sort: string
+  }
+}
+
 // Membership source of a theme-table member (docs/INDUSTRY_CLASSIFICATION.md §7); null for other groups.
 export type ThemeEvidence = {
   kind?: string | null

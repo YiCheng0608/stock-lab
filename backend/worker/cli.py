@@ -15,6 +15,7 @@ from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .schedule_runs import PREFLIGHT_SKIP_REASONS, list_schedule_runs, record_preflight_skip
+from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 
 
@@ -83,6 +84,9 @@ def main() -> None:
     themes_subparsers = themes_parser.add_subparsers(dest="themes_command", required=True)
     themes_sync_parser = themes_subparsers.add_parser("sync", help="驗證題材表並寫入族群與成員期間（重跑冪等）")
     themes_sync_parser.add_argument("--file", help="題材表 JSON；未指定使用 backend/data/themes/themes_v1.json")
+    subparsers.add_parser(
+        "theme-suggestions", help="由新聞 AI 判讀的題材候選重算待核實題材建議（不進榜、不寫題材表，重跑冪等）"
+    )
     industry_parser = subparsers.add_parser("industry", help="官方產業群組")
     industry_subparsers = industry_parser.add_subparsers(dest="industry_command", required=True)
     industry_repair_parser = industry_subparsers.add_parser(
@@ -127,6 +131,8 @@ def main() -> None:
         result = run_candidates(parse_date(args.run_date))
     elif args.command == "themes":
         result = sync_themes(args.file)
+    elif args.command == "theme-suggestions":
+        result = run_theme_suggestions()
     elif args.command == "industry":
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
@@ -155,7 +161,7 @@ def main() -> None:
         sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command == "candidates" and result.get("status") not in {"success", "no_data"}:
         raise SystemExit(1)
-    if args.command in {"themes", "industry"} and isinstance(result, dict) and result.get("status") == "failed":
+    if args.command in {"themes", "industry", "theme-suggestions"} and isinstance(result, dict) and result.get("status") == "failed":
         raise SystemExit(1)
 
 
