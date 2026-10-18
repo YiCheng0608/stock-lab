@@ -595,6 +595,8 @@ VALID_INSTRUMENT_TYPES = frozenset({"stock", "etf", "ipo"})
 def _finite(value: object) -> bool:
     """Return whether *value* is a real, non-boolean, finite number."""
 
+    if type(value) is float:  # same answer, without the slower ABC check
+        return math.isfinite(value)
     return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(float(value))
 
 
