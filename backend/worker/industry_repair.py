@@ -39,6 +39,7 @@ from worker.pipeline import (
     _benchmark_instrument,
     _calculate_group_scores,
     _effective_trading_dates,
+    archive_group_score,
     ensure_official_industry_group,
 )
 from worker.sources import TPEX_LISTED_ENDPOINT, TWSE_LISTED_ENDPOINT, _rows, _text
@@ -272,7 +273,11 @@ def _receipt(plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def rescore_recent(db: Session, days: int) -> list[str]:
-    """Recompute ``hot_group_v1`` for the latest ``days`` TAIEX trading dates."""
+    """Recompute ``hot_group_v1`` for the latest ``days`` TAIEX trading dates.
+
+    A row written by an older hot_group version is archived before it is
+    overwritten or its rank is cleared (``pipeline.archive_group_score``).
+    """
 
     benchmark = _benchmark_instrument(db)
     if benchmark is None or days < 1:
@@ -290,7 +295,8 @@ def rescore_recent(db: Session, days: int) -> list[str]:
             select(GroupDailyScore).join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id).where(
                 GroupDailyScore.trading_date == day, ThemeGroup.active.is_(False), GroupDailyScore.rank.is_not(None),
             )
-        ):
+        ).all():
+            archive_group_score(db, score, "rank_cleared_inactive_group")
             score.rank = None
         db.flush()
     return [day.isoformat() for day in dates]

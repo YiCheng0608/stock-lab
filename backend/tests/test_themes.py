@@ -662,8 +662,9 @@ def test_member_count_counts_effective_members_and_eligible_needs_full_history(
         row = _scores(db)["theme-four"]
         assert row.details_json["member_count"] == 4
         assert row.eligible_members == 3
-        # Flow coverage is measured against member_count (existing policy).
-        assert row.details_json["institutional_flow_coverage"]["eligible"] == 4
+        # hot_group_v1 1.1.0: flow coverage is measured against eligible members.
+        assert row.details_json["institutional_flow_coverage"]["eligible"] == 3
+        assert row.details_json["institutional_flow_coverage"]["member_count"] == 4
 
 
 def test_theme_candidates_are_never_scored_or_ranked(factory):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -26,7 +27,10 @@ from app.domain import (
     ETF_CATEGORIES,
     GROUP_SCORE_WEIGHTS,
     HOT_GROUP_CONFIG,
+    HOT_GROUP_LEGACY_VERSION,
+    HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
+    OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
     STRATEGY_CONFIGS,
     calculate_group_score,
@@ -47,6 +51,7 @@ from app.models import (
     Event,
     FundamentalSnapshot,
     GroupDailyScore,
+    GroupDailyScoreArchive,
     GroupMembership,
     IngestionRun,
     Instrument,
@@ -73,8 +78,10 @@ from worker.sources import (
     OfficialDataError,
     OfficialMarketDataAdapter,
     OfficialBatch,
+    TWSE_CHIP_ENDPOINT,
     TWSE_LISTED_ENDPOINT,
     TWSE_NEW_LISTING_ENDPOINT,
+    TPEX_CHIP_HISTORY_ENDPOINT,
     TPEX_LISTED_ENDPOINT,
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
@@ -488,6 +495,54 @@ def _validated_flow_and_volume_inputs(
     instead of silently turning absent data into a neutral zero.
     """
 
+    inputs = _flow_and_volume_inputs(db, instrument_id, score_date, None)
+    return None if inputs is None else (inputs[0], inputs[1])
+
+
+def _official_institutional_file_evidence(db: Session, trading_date: date) -> dict[str, int]:
+    """Return, per exchange, a raw payload proving that day's official institutional file was received.
+
+    Rows from the official institutional parsers exist only after the report
+    date matched the request (``sources._require_reported_date``), so one such
+    chip row linked to a raw payload of that endpoint and date is the evidence.
+    """
+
+    endpoints = {"TWSE": TWSE_CHIP_ENDPOINT, "TPEx": TPEX_CHIP_HISTORY_ENDPOINT}
+    rows = db.execute(
+        select(Instrument.exchange, ChipSnapshot.source, RawPayload.id, RawPayload.endpoint, RawPayload.data_as_of)
+        .join(Instrument, Instrument.id == ChipSnapshot.instrument_id)
+        .join(RawPayload, RawPayload.id == ChipSnapshot.raw_payload_id)
+        .where(ChipSnapshot.trading_date == trading_date)
+        .distinct()
+    ).all()
+    evidence: dict[str, int] = {}
+    for exchange, source, raw_id, endpoint, data_as_of in rows:
+        if (
+            exchange in OFFICIAL_INSTITUTIONAL_CHIP_SOURCES
+            and (source or "").split("+")[0] == OFFICIAL_INSTITUTIONAL_CHIP_SOURCES[exchange]
+            and (endpoint or "").split("?", 1)[0] == endpoints[exchange]
+            and data_as_of == trading_date.isoformat()
+        ):
+            evidence[exchange] = min(raw_id, evidence.get(exchange, raw_id))
+    return evidence
+
+
+def _flow_and_volume_inputs(
+    db: Session,
+    instrument_id: int,
+    score_date: date,
+    absent_evidence: Callable[[date], int | None] | None,
+) -> tuple[float, list[float], list[dict[str, Any]]] | None:
+    """Shared body of the flow inputs; ``absent_evidence`` enables the hot_group 1.1.0 rule.
+
+    Without it (strategies, candidates) any missing chip row or component is
+    unavailable.  With it, a session whose chip row is missing or carries only
+    margin data counts as zero net flow when ``absent_evidence(day)`` returns
+    the raw payload id of that day's received official file; each such day is
+    returned with its evidence.  A row from the official file with a null
+    component stays unavailable.
+    """
+
     dates = _effective_trading_dates(db, instrument_id, score_date, 20)
     if len(dates) != 20:
         return None
@@ -515,35 +570,59 @@ def _validated_flow_and_volume_inputs(
         )
     ).all()
     chips_by_date = {chip.trading_date: chip for chip in chips}
-    if len(chips_by_date) != len(chip_dates):
+    if absent_evidence is None and len(chips_by_date) != len(chip_dates):
         return None
     flow = 0.0
+    absent: list[dict[str, Any]] = []
     for trading_date in chip_dates:
-        chip = chips_by_date[trading_date]
+        chip = chips_by_date.get(trading_date)
         components = (
-            _safe_float(chip.foreign_buy),
-            _safe_float(chip.trust_buy),
-            _safe_float(chip.dealer_buy),
+            (_safe_float(chip.foreign_buy), _safe_float(chip.trust_buy), _safe_float(chip.dealer_buy))
+            if chip is not None
+            else (None, None, None)
         )
-        if any(component is None for component in components):
+        if all(component is not None for component in components):
+            flow += sum(component for component in components if component is not None)
+            continue
+        if absent_evidence is None:
             return None
-        flow += sum(component for component in components if component is not None)
-    return flow, volumes
+        from_official_file = chip is not None and (chip.source or "").split("+")[0] in set(
+            OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.values()
+        )
+        if from_official_file or any(component is not None for component in components):
+            return None
+        raw_payload_id = absent_evidence(trading_date)
+        if raw_payload_id is None:
+            return None
+        absent.append({"trading_date": trading_date.isoformat(), "evidence_raw_payload_id": raw_payload_id})
+    return flow, volumes, absent
+
+
+def _hot_group_flow_with_absent_evidence(
+    db: Session,
+    instrument_id: int,
+    score_date: date,
+    absent_evidence: Callable[[date], int | None] | None,
+) -> tuple[float | None, list[dict[str, Any]]]:
+    """Return the hot_group flow ratio and the sessions counted as absent from the official file."""
+
+    inputs = _flow_and_volume_inputs(db, instrument_id, score_date, absent_evidence)
+    if inputs is None:
+        return None, []
+    flow, volumes, absent = inputs
+    denominator = sum(volumes)
+    return (flow / denominator if denominator > 0 else None), absent
 
 
 def _hot_group_institutional_flow_ratio(
     db: Session,
     instrument_id: int,
     score_date: date,
+    absent_evidence: Callable[[date], int | None] | None = None,
 ) -> float | None:
     """Compute hot_group_v1 flow: five-day flow / twenty-day volume sum (shares)."""
 
-    inputs = _validated_flow_and_volume_inputs(db, instrument_id, score_date)
-    if inputs is None:
-        return None
-    flow, volumes = inputs
-    denominator = sum(volumes)
-    return flow / denominator if denominator > 0 else None
+    return _hot_group_flow_with_absent_evidence(db, instrument_id, score_date, absent_evidence)[0]
 
 
 def _strategy_institutional_flow_to_average_volume_ratio(
@@ -652,12 +731,71 @@ def _catalyst_value(db: Session, instrument_ids: list[int], score_date: date, tr
     return max(0.0, min(1.0, weighted / 3.0))
 
 
+def stored_hot_group_version(score: GroupDailyScore) -> str:
+    """The hot_group_v1 version that wrote a score row (unmarked rows predate 1.1.0)."""
+
+    version = (score.details_json or {}).get("hot_group_version")
+    return version if isinstance(version, str) and version else HOT_GROUP_LEGACY_VERSION
+
+
+def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> None:
+    """Copy a score row verbatim into the archive before it is changed.
+
+    One copy per (group, date, writing version): the first copy is the
+    version's own result, so a later change to the same row is not archived
+    again.  The caller's transaction owns the write.
+    """
+
+    version = stored_hot_group_version(score)
+    exists = db.scalar(
+        select(GroupDailyScoreArchive.id).where(
+            GroupDailyScoreArchive.group_id == score.group_id,
+            GroupDailyScoreArchive.trading_date == score.trading_date,
+            GroupDailyScoreArchive.hot_group_version == version,
+        )
+    )
+    if exists is not None:
+        return
+    db.add(
+        GroupDailyScoreArchive(
+            score_id=score.id,
+            group_id=score.group_id,
+            trading_date=score.trading_date,
+            relative_return=score.relative_return,
+            relative_return_1d=score.relative_return_1d,
+            relative_return_5d=score.relative_return_5d,
+            relative_return_20d=score.relative_return_20d,
+            breadth=score.breadth,
+            volume_strength=score.volume_strength,
+            institutional_flow=score.institutional_flow,
+            catalyst=score.catalyst,
+            score=score.score,
+            rank=score.rank,
+            eligible_members=score.eligible_members,
+            data_quality=score.data_quality,
+            details_json=copy.deepcopy(score.details_json),
+            hot_group_version=version,
+            archive_reason=reason,
+            archived_at=datetime.utcnow(),
+        )
+    )
+
+
 def _calculate_group_scores(db: Session, score_date: date) -> None:
     benchmark = _benchmark_instrument(db)
     benchmark_returns = _returns_by_window(db, benchmark.id, score_date) if benchmark else {1: None, 5: None, 20: None}
     benchmark_dates = _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     computed: list[dict[str, Any]] = []
+    file_evidence: dict[date, dict[str, int]] = {}
+
+    def absent_evidence_for(exchange: str) -> Callable[[date], int | None]:
+        def evidence(trading_date: date) -> int | None:
+            if trading_date not in file_evidence:
+                file_evidence[trading_date] = _official_institutional_file_evidence(db, trading_date)
+            return file_evidence[trading_date].get(exchange)
+
+        return evidence
 
     for group in groups:
         board = _group_board(group)
@@ -705,6 +843,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             volume_5d = (sum(last_five) / len(last_five)) / (sum(prior_volumes) / len(prior_volumes)) if len(last_five) == 5 else None
             if volume_5d is None:
                 continue
+            flow_ratio, flow_absent = _hot_group_flow_with_absent_evidence(
+                db, instrument.id, score_date, absent_evidence_for(instrument.exchange)
+            )
             member_metrics.append(
                 {
                     "instrument_id": instrument.id,
@@ -718,7 +859,8 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                         window: 1.0 if excess[window] > 0 else 0.0 for window in (1, 5, 20)
                     },
                     "volume_raw": 0.50 * volume_1d + 0.50 * volume_5d,
-                    "hot_group_flow_ratio": _hot_group_institutional_flow_ratio(db, instrument.id, score_date),
+                    "hot_group_flow_ratio": flow_ratio,
+                    "flow_absent_from_official_file": flow_absent,
                     "margin_change_ratio": _margin_change_ratio(db, instrument.id, score_date),
                 }
             )
@@ -753,18 +895,26 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             if item["hot_group_flow_ratio"] is not None
             and math.isfinite(item["hot_group_flow_ratio"])
         ]
+        absent_members = [item for item in member_metrics if item["flow_absent_from_official_file"]]
         flow_coverage = {
             "available": len(flow_values),
-            # Coverage is measured against every type/category-eligible
-            # membership, not only members that happened to have a usable
-            # technical row.  Otherwise a group with 1 chip row and 99
-            # missing rows could look like a complete institutional signal.
-            "eligible": len(members),
+            # 1.1.0: the base is the eligible members, as for the other four
+            # components; every one of them still needs a flow value.  A member
+            # without a bar on the score date has no flow either way.
+            "eligible": eligible,
+            "member_count": len(members),
             "technical_metrics": eligible,
-            "ratio": len(flow_values) / len(members) if members else 0.0,
-            "complete": bool(members and len(flow_values) == len(members)),
+            "ratio": len(flow_values) / eligible if eligible else 0.0,
+            "complete": bool(eligible and len(flow_values) == eligible),
+            "absent_from_official_file_members": len(absent_members),
+            "absent_from_official_file_member_days": sum(
+                len(item["flow_absent_from_official_file"]) for item in absent_members
+            ),
+            "absent_from_official_file_dates": sorted(
+                {day["trading_date"] for item in absent_members for day in item["flow_absent_from_official_file"]}
+            ),
         }
-        flow_raw = sum(flow_values) / len(members) if flow_coverage["complete"] else None
+        flow_raw = sum(flow_values) / eligible if flow_coverage["complete"] else None
         catalyst = _catalyst_value(db, instrument_ids, score_date, trading_dates)
         categories = sorted(
             {
@@ -836,6 +986,8 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         if not score_row:
             score_row = GroupDailyScore(group_id=item["group"].id, trading_date=score_date)
             db.add(score_row)
+        elif stored_hot_group_version(score_row) != HOT_GROUP_VERSION:
+            archive_group_score(db, score_row, f"superseded_by_{HOT_GROUP_VERSION}")
         score_row.relative_return_1d = item["relative_1d"]
         score_row.relative_return_5d = item["relative_5d"]
         score_row.relative_return_20d = item["relative_20d"]
@@ -858,6 +1010,7 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 score_row.rank = None
         score_row.eligible_members = item["eligible"]
         score_row.details_json = {
+            "hot_group_version": HOT_GROUP_VERSION,
             "benchmark": "TAIEX",
             "benchmark_returns": benchmark_returns,
             "member_return_identity_version": "instrument-id-v1",
@@ -878,6 +1031,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                     "hot_group_institutional_flow_to_sum_volume_ratio_5d": member["hot_group_flow_ratio"],
                     "institutional_flow_ratio_denominator": "sum_volume_20d",
                     "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
+                    # Sessions counted as zero net flow because the member was
+                    # absent from that day's received official file.
+                    "institutional_flow_absent_from_official_file": member["flow_absent_from_official_file"],
                     "margin_balance_change_ratio_5d": member["margin_change_ratio"],
                 }
                 for member in item["member_metrics"]
@@ -1023,7 +1179,7 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
     """Return a usable as-of group return for an individual strategy.
 
     ``hot_group_v1`` may be unranked when one of its discovery components
-    (for example full-membership institutional coverage or catalyst events)
+    (for example eligible-member institutional coverage or catalyst events)
     is incomplete.  Breakout/pullback only require the verified group excess
     return, so the product ranking gate must not turn those unrelated
     components into strategy input failures.  Keep the membership, active

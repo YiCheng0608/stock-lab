@@ -143,9 +143,19 @@ GROUP_SCORE_WEIGHTS: dict[str, float] = {
 }
 
 
+# 1.0.0 required every member (not every eligible member) to have a 5-day
+# flow and treated a member absent from the day's official institutional file
+# as missing.  1.1.0 changes only that coverage rule (V1_SPEC hot_group_v1);
+# score rows it overwrites are archived first (group_daily_score_archive).
+HOT_GROUP_LEGACY_VERSION = "1.0.0"
+HOT_GROUP_VERSION = "1.1.0"
+# Chip-row sources written by the official institutional parsers; a row
+# without one of them carries only margin data.
+OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {"TWSE": "twse_t86", "TPEx": "tpex_3insti"}
+
 HOT_GROUP_CONFIG: dict[str, Any] = {
     "name": "hot_group_v1",
-    "version": "1.0.0",
+    "version": HOT_GROUP_VERSION,
     "schema_version": "hot-group-config/v1",
     "kind": "group_ranking",
     "score_scale": {"minimum": 0.0, "maximum": 100.0},
@@ -248,6 +258,22 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
                 "denominator_window_trading_days": 20,
                 "denominator_window_basis": "inclusive_signal_day",
                 "denominator_unit": "shares",
+            },
+            "coverage": {
+                "member_base": "eligible_members",
+                "required_ratio": 1.0,
+                "member_aggregation": "sum_over_eligible_members",
+                # A member with a positive-volume bar that is absent from that
+                # day's received official file had no institutional trade.
+                "absent_from_official_file": "net_zero_with_evidence",
+                "official_file_evidence": (
+                    "same_exchange_same_day_chip_row_from_official_institutional_source"
+                    "_linked_to_raw_payload_of_that_endpoint_and_date"
+                ),
+                "official_sources": OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
+                "official_file_missing": "member_flow_unavailable",
+                "official_row_with_null_component": "member_flow_unavailable",
+                "applies_to": "hot_group_only",
             },
         },
         "catalyst": {

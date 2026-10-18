@@ -503,6 +503,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0015_candidate_llm_notes', CURRENT_TIMESTAMP)"
         )
     )
+    # 0016 only adds group_daily_score_archive, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0016_group_score_archive', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
