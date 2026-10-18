@@ -341,6 +341,8 @@ export type InstrumentDetail = {
   news_cutoff?: { as_of: string | null; filter: string; limit: number }
   strategy_conditions: Record<string, { label?: string; requires: string[]; source: string; technical?: Record<string, string> }>
   signals: Signal[]
+  // The stock's row in the latest candidate run on or before the cutoff; null when it is not a candidate.
+  candidate?: CandidateItem | null
 }
 
 export type InstrumentCoverage = {
@@ -1010,4 +1012,109 @@ export type StockBarsResponse = {
     computed_at: string | null
   }
   bars: StockBarRow[]
+}
+
+// ---- candidate_score_v1 (GET /api/candidates; InstrumentDetail.candidate) ----
+// Shapes follow backend/app/candidate_view.py; scores are 0–1 and null means 無資料 (never 0).
+
+export type CandidateComponentKey = 'technical' | 'chips' | 'news_sentiment' | 'group'
+
+export type CandidateSubItem = {
+  value: number | null
+  percentile: number | null
+  weight: number
+  better: 'higher' | 'lower' | string
+  null_reason: string | null
+  null_explanation: string | null
+}
+
+export type CandidateComponent = {
+  label: string
+  score: number | null
+  weight: number
+  inference: boolean
+  item_coverage: number
+  null_reason: string | null
+  null_explanation: string | null
+  items: Record<string, CandidateSubItem>
+  // group only: the qualified group the score came from.
+  source?: { group_id: string; name: string; board: string; rank: number; board_size: number } | null
+}
+
+export type CandidateReason = {
+  code: string
+  component: CandidateComponentKey | string
+  text: string
+  params?: Record<string, string>
+  inference: boolean
+}
+
+export type CandidateGroup = {
+  group_id: string
+  name: string
+  board: 'industry' | 'theme' | string
+  qualified: boolean
+  rank: number | null
+  board_size: number | null
+  board_percentile: number | null
+  score: number | null
+  data_quality: string | null
+  score_date: string | null
+}
+
+export type CandidateLevels = {
+  entry_type: 'breakout' | 'pullback' | string
+  entry: number | null
+  entry_zone: { low: number | null; high: number | null }
+  invalid_price: number | null
+  target_1: number | null
+  target_2: number | null
+  risk_reward: number | null
+  earliest_execution_date: string | null
+}
+
+export type CandidateItem = {
+  rank: number
+  trading_date: string
+  score_version: string
+  instrument: { id: number; exchange: string; symbol: string; name: string; instrument_type: string }
+  strategy: string
+  signal_id: number
+  signal_status: string
+  levels: CandidateLevels
+  total_score: number
+  weight_coverage: number
+  partial_components: boolean
+  components: Record<CandidateComponentKey, CandidateComponent>
+  alternatives: Array<{ strategy: string; signal_id: number; total_score: number }>
+  reasons: CandidateReason[]
+  groups: CandidateGroup[]
+  data_as_of: string
+  sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
+}
+
+export type CandidateZeroReason = 'no_actionable_signals' | 'all_excluded'
+
+export type CandidatesResponse = {
+  status: 'not_computed' | 'success' | string
+  trading_date: string | null
+  score_version: string
+  computed_at?: string | null
+  evaluated_signals?: number
+  pool_count?: number
+  candidate_count: number
+  zero_reason: CandidateZeroReason | string | null
+  zero_reason_text: string | null
+  exclusions?: Record<string, number>
+  data_as_of?: string
+  news_coverage?: Record<string, unknown> | null
+  methodology: {
+    score_version: string
+    purpose: string
+    weights: Record<CandidateComponentKey, number> | null
+    minimum_weight_coverage: number | null
+    components: Record<CandidateComponentKey, { label: string; weight: number | null; inference: boolean }>
+    null_explanations: Record<string, string>
+  }
+  items: CandidateItem[]
 }
