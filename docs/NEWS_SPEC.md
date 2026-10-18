@@ -50,6 +50,11 @@
   - `symbols_json` 寫 `exchange:symbol`；個股頁依 `exchange:symbol` 或官方投影的純代號比對。
   - 產業：已核實的官方產業顯示名稱後接「股」「類股」「族群」「產業」「業」時，寫入 `theme_ids_json`；名稱落在公司名稱或更長的產業名稱內（「台光電股」的光電、「其他電子業」的電子）不算，「其他」「綜合」不比對。
 - `impact_scope`：有標的為 `instrument`，只有產業為 `theme`，都沒有時 `macro_official` 為 `market`，其他為 `unknown`。`impact_direction` 一律 `unknown`，`confidence` 為 `unknown`。
+- 非股市內容排除（`news-filter/v1`，`worker.news_sources.exclusion_reason`），只用下列規則，不用 LLM；分類或關鍵字有變動就升版：
+  - 分類：單篇 URL 路徑的目錄段落屬於該來源的排除分類，原因記 `section:<段落>`。中央社排除 `ahel`（生活，含彩券開獎）、`asoc`（社會）、`amov`（娛樂）、`aspt`（運動）、`aloc`（地方）、`acul`（文化）；CNBC 排除 `make-it`（CNBC Make It）、`select`（CNBC Select）。其他來源的 URL 沒有分類段落，不套這條。
+  - 標題關鍵字：標題經 NFKC 與小寫後含下列詞即排除，原因記 `title:<類別>`；只看標題，摘要提到不算。`lottery`：今彩539、大樂透、威力彩、雙贏彩、三星彩、四星彩、樂合彩、賓果賓果、刮刮樂、Powerball、Mega Millions。`society`：車禍、命案、兇殺、凶殺、墜樓、溺斃、性侵、酒駕。
+  - 被排除的新聞照常寫入，`status=excluded`，不刪除，raw 照存。`/api/news`、個股頁新聞、候選新聞分項與 LLM 批次只讀 `status=active`，所以不顯示、不送判讀；同時是時間衝突的列仍會出現在 `time_consistency=conflict` 的稽核查詢。每個 feed 的 run `metadata_json.feeds[]` 記 `excluded`（筆數）與 `excluded_items`（`canonical_key`、標題、URL、原因）。
+  - 既有列：每次收集先用目前規則檢查該來源 `status=active` 的列，符合者只把 `status` 改為 `excluded`，其他欄位不動，清單記在 run 的 `metadata_json.filter.existing_excluded`，`filter.version` 記規則版本。
 
 ## 4. 時間與排序
 
@@ -82,3 +87,5 @@ LLM 批次的實作（`worker.news_llm`，執行方式見 [OPERATIONS §3](OPERA
 - unknown 影響不使用買賣或紅綠暗示。
 - 篩選包含 category、source_kind、q、symbol、theme_id、impact_direction、cursor、limit；實際支援的 query 以 API 為準。
 - items/meta 明示 cursor、has_more 與 sort。response 有 `product_time` 時前端只用它，角色 unknown 就顯示待核實；完全沒有 `product_time` 的 response 才可格式化其中合法的日期欄。
+- 時間以 UTC 保存、API 輸出 aware：`news_items` 的 `published_at`、`event_at`、`collected_at` 在 DB 是無時區的 UTC（不改儲存格式）；`/api/news` 與 `/api/news/{id}` 把它們輸出為 `+00:00` 結尾的 ISO 字串，頂層 `published_at`／`event_at`／`collected_at` 與 `product_time` 同值，`product_time` 對應角色因此為 known（`time_basis`／`time_precision`／`time_consistency` 的規則不變，conflict 仍為 unknown）。`display_time` 在 `time_precision=datetime` 時同為 aware UTC；`time_precision=date`（官方公告只有 `event_date`）的 `display_time` 是日期的午夜占位，不是時刻，維持無時區輸出，`event_date` 與 `product_time` 的 date 角色不做時區轉換。沒有 `published_at` 時照 §4 依序退到 `event_at`、`event_date`。前端以台北時間顯示 aware 時刻。
+- 官方事件的時間換算：`events.details_json` 的 `published_at`（含 `PublishedAt`、`publication_time`、`publish_time`）與 `event_at`（含 `event_time`、`EventTime`）投影成 `news_items` 時，帶 offset（`Z`、`+08:00`）的值先換算成 UTC 再存成無時區 UTC，同一瞬間不因來源 offset 不同而存成不同值；沒有 offset 的值視為已是 UTC（與上述 DB 契約一致），所以來源給當地時間時 collector 必須先附 offset 再寫入 `details_json`，不得寫無 offset 的當地時間。只有日期、無法解析或超出日期範圍的值不是時刻：不補午夜，該角色留空並依 §4 退到下一個時間角色。`event_date` 是官方日曆日，不隨換算位移。媒體 feed 的來源時間換算見 [DATA_SOURCES](DATA_SOURCES.md)。

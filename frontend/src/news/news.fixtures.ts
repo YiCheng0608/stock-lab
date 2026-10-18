@@ -3,15 +3,15 @@ import type { CursorPage, NewsAi, NewsItem, ProductTime, ProductTimeRole } from 
 // Shapes follow GET /api/news and /api/news/{id} (backend/app/api.py news_dict); `ai` follows PR 176 (Issue 163)
 // news_ai_map: latest done result, inference=true, symbol candidates verified=false, name=null for unknown codes.
 
-function unknownRole(role: string, reason: string): ProductTimeRole {
+export function unknownRole(role: string, reason: string): ProductTimeRole {
   return { role, status: 'unknown', precision: 'none', value: null, utc: null, date: null, reason }
 }
 
-function knownInstant(role: string, utc: string): ProductTimeRole {
+export function knownInstant(role: string, utc: string): ProductTimeRole {
   return { role, status: 'known', precision: 'instant', value: utc, utc, date: null, reason: null }
 }
 
-function knownDate(role: string, value: string): ProductTimeRole {
+export function knownDate(role: string, value: string): ProductTimeRole {
   return { role, status: 'known', precision: 'date', value, utc: null, date: value, reason: null }
 }
 

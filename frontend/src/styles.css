@@ -218,7 +218,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .glossary-grid { grid-template-columns: repeat(2, 1fr); }
 .glossary-grid h2 { margin-top: 0; font-size: 20px; }
-.news-list-time { color: var(--color-text-muted); font: 500 12px/1.45 var(--font-mono); white-space: normal; }
+.news-list-time { color: var(--color-text-muted); font: 500 12px/1.45 var(--font-mono); white-space: nowrap; }
 
 /* ---- news (DESIGN_SYSTEM §5 card／tabs, §7 AI 推論) ------------------------------------------------ */
 .news-controls { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
@@ -410,7 +410,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .components-returns { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .evidence-cell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
 .theme-news-list { margin: 0; padding: 0; overflow: hidden; list-style: none; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
-.theme-news-list li { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
+.theme-news-list li { display: grid; grid-template-columns: 176px minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
 .theme-news-list li:last-child { border-bottom: 0; }
 .theme-news-title { overflow: hidden; color: var(--color-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .theme-news-title:hover { color: var(--color-primary); }

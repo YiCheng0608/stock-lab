@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Stat, Table, Tabs, tabId, tabPanelId } from '../components/ui'
-import { newsSourceLabel, officialEventDisplayTitle, TEMPORARY_INDUSTRY_GROUP_NOTICE } from '../presentation'
+import { newsSourceName, newsTime } from '../news/newsView'
+import { officialEventDisplayTitle, TEMPORARY_INDUSTRY_GROUP_NOTICE } from '../presentation'
 import { readChartTheme, type ChartTheme } from '../stock/stockBars'
 import type {
   NewsItem,
@@ -373,11 +374,10 @@ function MemberPager({ meta, onPageChange }: { meta: Record<string, unknown>; on
   )
 }
 
-function newsDateText(item: NewsItem): string {
-  const eventDate = formatDate(item.event_date ?? item.event_at)
-  if (eventDate) return `事件日 ${eventDate}`
-  const published = formatDate(item.published_at)
-  return published ? `發布日 ${published}` : '來源時間未提供'
+// Same product_time reading as the news page (NEWS_SPEC §6): Taipei time for a known instant, the calendar day for date-only.
+function NewsTime({ item }: { item: NewsItem }) {
+  const time = newsTime(item)
+  return <span className="news-list-time">{time.dateTime ? <time dateTime={time.dateTime}>{time.text}</time> : time.text}</span>
 }
 
 export function ThemeNewsList({ items }: { items: readonly NewsItem[] }) {
@@ -386,9 +386,9 @@ export function ThemeNewsList({ items }: { items: readonly NewsItem[] }) {
     <ul className="theme-news-list">
       {items.map((item) => (
         <li key={item.id}>
-          <span className="news-list-time">{newsDateText(item)}</span>
+          <NewsTime item={item} />
           <Link className="theme-news-title" to={'/news/' + encodeURIComponent(item.id)}>{officialEventDisplayTitle(item.title)}</Link>
-          <span className="small-note">{newsSourceLabel(item.source_name)}</span>
+          <span className="small-note">{newsSourceName(item)}</span>
         </li>
       ))}
     </ul>

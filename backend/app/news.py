@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Iterable
 
 from sqlalchemy import select
@@ -130,18 +130,35 @@ def _source_item_id(event: Event) -> str | None:
 
 
 def _parse_datetime(value: object) -> datetime | None:
+    """Return a naive UTC instant for an official-event time marker.
+
+    Database DateTime values are naive UTC in this project (NEWS_SPEC §6).  An
+    offset-aware value (``Z``, ``+08:00``) is converted to UTC before the
+    tzinfo is dropped, so the same instant is stored whatever offset the source
+    used.  A naive value already follows the database convention and is kept
+    as is.  A date without a time of day is not an instant and is rejected.
+    """
+
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
-    normalized = text.replace("Z", "+00:00")
     try:
-        parsed = datetime.fromisoformat(normalized)
+        date.fromisoformat(text)
+    except ValueError:
+        pass
+    else:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
-    # Database DateTime values are naive UTC values in this project.  Keep the
-    # projection deterministic when a source gives an offset-aware value.
+    if parsed.utcoffset() is not None:
+        try:
+            parsed = parsed.astimezone(timezone.utc)
+        except OverflowError:
+            return None
     return parsed.replace(tzinfo=None)
 
 
