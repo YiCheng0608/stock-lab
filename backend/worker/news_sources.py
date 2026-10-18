@@ -63,6 +63,9 @@ class NewsSource:
     # fixed +08:00 is exact for Taiwan publishers).  None keeps such a time
     # unknown instead of guessing.
     naive_offset: timezone | None = None
+    # Item URL path segments of publisher sections without market news; an
+    # item filed under one of them is excluded (see exclusion_reason).
+    excluded_sections: frozenset[str] = frozenset()
 
 
 def _cnbc(feed_id: str, key: str, label: str) -> NewsFeed:
@@ -86,6 +89,9 @@ NEWS_SOURCES: tuple[NewsSource, ...] = (
         ),
         item_url_rule="https://www.cna.com.tw/news/<分類>/<編號>.aspx；guid 為 CNA/<日期>/<編號>",
         terms="個人、非營利組織之非商業用途；標示「中央通訊社」；不得引用全文",
+        # The finance feed also carries 生活 (lottery draws), 社會, 娛樂, 運動,
+        # 地方 and 文化 items; the URL keeps the section code.
+        excluded_sections=frozenset({"ahel", "asoc", "amov", "aspt", "aloc", "acul"}),
     ),
     NewsSource(
         source_id="cnyes",
@@ -149,6 +155,9 @@ NEWS_SOURCES: tuple[NewsSource, ...] = (
         ),
         item_url_rule="https://www.cnbc.com/<日期>/<slug>.html；guid 為數字 ID，三個 feed 共用",
         terms="CNBC RSS 頁公開提供訂閱；www.cnbc.com robots.txt 未禁止 /id/；sponsored 項不收",
+        # CNBC Make It (careers, side businesses) and CNBC Select (consumer
+        # product reviews) are personal-finance sections, not market news.
+        excluded_sections=frozenset({"make-it", "select"}),
     ),
     NewsSource(
         source_id="marketwatch",
@@ -372,6 +381,46 @@ def normalized_title(title: str) -> str:
 
 def title_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# Version of the non-market exclusion rule; a changed section set or keyword
+# list is a new version.
+FILTER_VERSION = "news-filter/v1"
+# Title words (already NFKC and case-folded) of items without market relevance.
+# Only the title is checked, so a passing mention in a summary never excludes.
+EXCLUDED_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "lottery": (
+        "今彩539",
+        "大樂透",
+        "威力彩",
+        "雙贏彩",
+        "三星彩",
+        "四星彩",
+        "樂合彩",
+        "賓果賓果",
+        "刮刮樂",
+        "powerball",
+        "mega millions",
+    ),
+    "society": ("車禍", "命案", "兇殺", "凶殺", "墜樓", "溺斃", "性侵", "酒駕"),
+}
+
+
+def exclusion_reason(source: NewsSource, title: str, url: str) -> str | None:
+    """Why an item is not market news under FILTER_VERSION, or None to keep it.
+
+    ``section:<segment>`` when the item URL is filed under one of the source's
+    excluded sections, ``title:<reason>`` when the title has a listed word.
+    """
+
+    for segment in urlsplit(url).path.split("/")[1:-1]:
+        if segment in source.excluded_sections:
+            return f"section:{segment}"
+    text = unicodedata.normalize("NFKC", title).casefold()
+    for reason, words in EXCLUDED_TITLE_KEYWORDS.items():
+        if any(word in text for word in words):
+            return f"title:{reason}"
+    return None
 
 
 _TAG = re.compile(r"<[^>]+>")
