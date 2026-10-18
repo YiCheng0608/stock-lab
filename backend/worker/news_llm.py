@@ -53,6 +53,10 @@ DEFAULT_LIMIT = 50
 DAILY_CALL_LIMIT = 20
 # Items whose published_at (else collected_at) is older are not sent.
 STALE_AFTER = timedelta(days=3)
+# The scheduled news task (news, then news-llm) is stopped after 90 minutes
+# and never runs twice at once, so a news_llm run still marked running after
+# that long lost its process; the next run records it as failed.
+ABANDONED_AFTER = timedelta(minutes=90)
 CALL_TIMEOUT_SECONDS = 300
 SUMMARY_INPUT_CHARS = 600
 SUMMARY_MAX_CHARS = 80
@@ -715,6 +719,26 @@ def _metadata(
     }
 
 
+def close_abandoned_runs(db: Session, now: datetime | None = None) -> list[int]:
+    """Mark news_llm runs left running past ABANDONED_AFTER as failed."""
+
+    current = now or datetime.utcnow()
+    rows = db.scalars(
+        select(IngestionRun).where(
+            IngestionRun.run_type == "news_llm",
+            IngestionRun.status == "running",
+            IngestionRun.started_at < current - ABANDONED_AFTER,
+        )
+    ).all()
+    for row in rows:
+        row.status = "failed"
+        row.error = f"abandoned: no finish was recorded within {ABANDONED_AFTER}"
+        row.finished_at = current
+    if rows:
+        db.commit()
+    return [row.id for row in rows]
+
+
 def _failed_run(db: Session, label_date: date, reason: str) -> IngestionRun:
     now = datetime.utcnow()
     run = IngestionRun(
@@ -751,6 +775,10 @@ def run_news_llm(
         "prompt_version": PROMPT_VERSION,
         "date_filter": on_date.isoformat() if on_date else None,
     }
+    if not dry_run:
+        abandoned = close_abandoned_runs(db)
+        if abandoned:
+            base["abandoned_runs"] = abandoned
     command, problem = preflight()
     if problem is not None:
         # A configuration error writes no pending rows.

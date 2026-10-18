@@ -1,13 +1,20 @@
 """Scheduled daily job with an auditable run log.
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
-``schedule_run_steps`` row per step (collect -> analyze -> evaluate ->
-candidates -> indicators).  analyze, evaluate and candidates run only after a
+``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
+-> candidates -> indicators).  catchup first collects recent official
+sessions that have no successful collect yet (the machine was off, or every
+trigger of that day failed); its outcome never blocks the target date.
+analyze, evaluate and candidates run only after a
 successful collect; evaluate and candidates only after a successful analyze
 (candidates read the trading date's signals, not the tracking that evaluate
 updates); indicators depend on stored bars alone, so they run after every
 successful collect.  A failure keeps its error text and the dependent steps
 are recorded as skipped.
+
+A first "no session" answer for today's target is recorded as
+``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
+asks again and only a repeated answer becomes ``non_trading_day``.
 
 Re-running the same target date is safe: when a run for that date already
 finished as ``success`` or ``non_trading_day``, the new invocation records a
@@ -30,11 +37,12 @@ from typing import Any, Callable
 from sqlalchemy import desc, inspect, select, text
 
 from app.migration_revisions import REVISIONS
-from app.models import ScheduleRun, ScheduleRunStep
+from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
 from worker import pipeline
+from worker.sources import OfficialMarketDataAdapter
 
 DAILY_JOB = "daily"
-DAILY_STEPS = ("collect", "analyze", "evaluate", "candidates", "indicators")
+DAILY_STEPS = ("catchup", "collect", "analyze", "evaluate", "candidates", "indicators")
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {"analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": ()}
 # A run still marked running after this long has lost its process (killed,
@@ -44,6 +52,14 @@ STEP_REQUIRES = {"analyze": (), "evaluate": ("analyze",), "candidates": ("analyz
 # is detected immediately, without waiting for this limit.
 STALE_RUNNING_AFTER = timedelta(hours=2, minutes=30)
 COMPLETE_STATUSES = frozenset({"success", "non_trading_day"})
+# Both markets reported no session, but only once for today's target; the
+# next trigger confirms it.  Not complete, so that trigger runs again.
+NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
+# Catch-up looks at this many recent official sessions before the target
+# (weekdays a collect already reported as closed do not count), looking back
+# at most CATCHUP_MAX_WEEKDAYS weekdays.
+CATCHUP_SESSIONS = 5
+CATCHUP_MAX_WEEKDAYS = 15
 # Reasons the scheduler wrapper may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
 # The indicator batch (V1-G2).  A checkout without the module records the
@@ -56,6 +72,11 @@ CANDIDATE_FUNCTION = "run_candidates"
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+def _today() -> date:
+    # Local date, like pipeline.latest_weekday's default target.
+    return date.today()
 
 
 def _json_value(value: Any) -> Any:
@@ -112,6 +133,100 @@ def _indicator_step(target: date) -> dict[str, Any]:
 def _candidate_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(CANDIDATE_MODULE)
     return getattr(module, CANDIDATE_FUNCTION)(target)
+
+
+def _catchup_adapter() -> OfficialMarketDataAdapter:
+    # The backfill's historical adapter: date-scoped feeds only, no snapshot
+    # of today's classification, MOPS or ex-rights lists.
+    return OfficialMarketDataAdapter(snapshot_feeds=False)
+
+
+def _collect_state(db: Any, day: date) -> str:
+    """complete, non_trading (official no-data) or missing, from collect runs."""
+
+    rows = db.scalars(
+        select(IngestionRun).where(IngestionRun.run_type == "collect", IngestionRun.run_date == day)
+    ).all()
+    # Same test as collect's idempotency shortcut: a success with a TAIEX row.
+    if any(row.status == "success" and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
+           for row in rows):
+        return "complete"
+    if any(row.status == "skipped" for row in rows):
+        return "non_trading"
+    return "missing"
+
+
+def catchup_dates(target: date, sessions: int = CATCHUP_SESSIONS) -> tuple[list[date], list[date]]:
+    """Return (checked, missing) recent sessions before ``target``, oldest first."""
+
+    checked: list[date] = []
+    missing: list[date] = []
+    day = target
+    with pipeline.SessionLocal() as db:
+        for _ in range(CATCHUP_MAX_WEEKDAYS):
+            if len(checked) >= sessions:
+                break
+            day = pipeline.latest_weekday(day - timedelta(days=1))
+            state = _collect_state(db, day)
+            if state == "non_trading":
+                continue
+            checked.append(day)
+            if state == "missing":
+                missing.append(day)
+    return sorted(checked), sorted(missing)
+
+
+def _catchup_step(target: date, sessions: int) -> dict[str, Any]:
+    """Collect the missing recent sessions through the backfill's one-day path."""
+
+    checked, missing = catchup_dates(target, sessions)
+    dates: dict[str, dict[str, Any]] = {}
+    adapter = _catchup_adapter() if missing else None
+    for day in missing:
+        try:
+            result = pipeline.collect(day, adapter=adapter, init_schema=False)
+        except Exception as exc:  # one date must not stop the others or the target
+            result = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+        dates[day.isoformat()] = {
+            key: result[key] for key in ("status", "run_id", "records", "error") if result.get(key) is not None
+        }
+    incomplete = [day for day, item in dates.items() if item.get("status") not in {"success", "skipped"}]
+    if not incomplete:
+        status = "success"
+    elif len(incomplete) == len(dates):
+        status = "failed"
+    else:
+        status = "partial"
+    return {
+        "status": status,
+        "checked_dates": [day.isoformat() for day in checked],
+        "missing_dates": [day.isoformat() for day in missing],
+        "dates": dates,
+        "incomplete_dates": incomplete,
+        "records": sum(int(item.get("records", 0) or 0) for item in dates.values()),
+        "error": ("catch-up incomplete: " + ", ".join(
+            f"{day} {dates[day].get('status')}" for day in incomplete)) if incomplete else None,
+    }
+
+
+def _no_session_confirmed(run_id: int, target: date) -> bool:
+    """Whether a "no session" answer for ``target`` is final.
+
+    A past date's answer is final at once; for today's target an earlier run
+    must already have received the same answer.
+    """
+
+    if target < _today():
+        return True
+    with pipeline.SessionLocal() as db:
+        return db.scalar(
+            select(ScheduleRun.id).where(
+                ScheduleRun.job == DAILY_JOB,
+                ScheduleRun.target_date == target,
+                ScheduleRun.id != run_id,
+                ScheduleRun.status.in_((NON_TRADING_UNCONFIRMED, "non_trading_day")),
+            ).limit(1)
+        ) is not None
 
 
 def _ensure_schema() -> str:
@@ -331,6 +446,7 @@ def run_daily_job(
     months_back: int = 0,
     trigger: str = "manual",
     force: bool = False,
+    catchup_sessions: int = CATCHUP_SESSIONS,
 ) -> dict[str, Any]:
     _ensure_schema()
     target = pipeline.latest_weekday(end_date)
@@ -339,6 +455,13 @@ def run_daily_job(
         return finished
 
     output: dict[str, Any] = {"schedule_run_id": run_id, "date": target.isoformat(), "trigger": trigger}
+    summary_steps: dict[str, str] = {}
+    if catchup_sessions > 0:
+        # Its outcome never blocks the target date; an incomplete catch-up is
+        # kept in the step and the run summary, where the watchdog reads it.
+        caught = _run_step(run_id, "catchup", 0, lambda: _catchup_step(target, catchup_sessions))
+        output["catchup"] = caught
+        summary_steps["catchup"] = str(caught.get("status"))
     collected = _run_step(
         run_id,
         "collect",
@@ -347,6 +470,7 @@ def run_daily_job(
     )
     output["collect"] = collected
     collect_status = str(collected.get("status"))
+    summary_steps["collect"] = collect_status
     later: list[tuple[str, int, Callable[[], dict[str, Any]]]] = [
         ("analyze", 2, lambda: pipeline.analyze(init_schema=False, collect_run_id=collected.get("run_id"))),
         ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
@@ -354,24 +478,28 @@ def run_daily_job(
         ("indicators", 5, lambda: _indicator_step(target)),
     ]
     if collect_status != "success":
-        if collect_status == "skipped":
+        if collect_status == "skipped" and _no_session_confirmed(run_id, target):
             # The official sources explicitly reported no session for the
             # target weekday (holiday/typhoon closure).
             status, reason = "non_trading_day", "official_no_session"
+        elif collect_status == "skipped":
+            status, reason = NON_TRADING_UNCONFIRMED, "official_no_session_unconfirmed"
         else:
             status, reason = ("partial" if collect_status == "partial" else "failed"), "official_collection_incomplete"
         for step, sequence, _action in later:
             _record_step(run_id, step, sequence, status="skipped", error=reason)
             output[step] = {"status": "skipped", "reason": reason}
-        error = None if status == "non_trading_day" else str(collected.get("error") or reason)
+        no_session = status in {"non_trading_day", NON_TRADING_UNCONFIRMED}
+        error = None if no_session else str(collected.get("error") or reason)
         if status == "partial":
-            error = "collect partial: " + "; ".join(str(item) for item in collected.get("warnings", [])[:5])
+            warnings = collected.get("core_warnings", collected.get("warnings", [])) or []
+            error = "collect partial: " + "; ".join(str(item) for item in warnings[:5])
         _finish(run_id, status, records=int(collected.get("records", 0) or 0), error=error,
-                summary={"steps": {"collect": collect_status}, "reason": reason})
+                summary=_summary(summary_steps, collected, reason=reason))
         output["status"] = status
         return output
 
-    statuses = {"collect": collect_status}
+    statuses = summary_steps
     errors: list[str] = []
     failed: list[str] = []
     for step, sequence, action in later:
@@ -396,9 +524,19 @@ def run_daily_job(
     status = "failed" if errors else "success"
     error = "; ".join(errors) or None
     _finish(run_id, status, records=int(collected.get("records", 0) or 0), error=error,
-            summary={"steps": statuses})
+            summary=_summary(statuses, collected))
     output["status"] = status
     return output
+
+
+def _summary(steps: dict[str, str], collected: dict[str, Any], *, reason: str | None = None) -> dict[str, Any]:
+    summary: dict[str, Any] = {"steps": steps}
+    if reason:
+        summary["reason"] = reason
+    # Non-core source warnings do not change the status; keep them visible.
+    if collected.get("noncore_warnings"):
+        summary["noncore_warnings"] = list(collected["noncore_warnings"])[:20]
+    return summary
 
 
 def schedule_run_dict(run: ScheduleRun, steps: list[ScheduleRunStep]) -> dict[str, Any]:

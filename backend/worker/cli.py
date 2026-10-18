@@ -19,7 +19,7 @@ from .themes import sync_themes
 
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
-DAILY_EXIT_CODES = {"success": 0, "skipped": 0, "non_trading_day": 0, "partial": 2}
+DAILY_EXIT_CODES = {"success": 0, "skipped": 0, "non_trading_day": 0, "non_trading_unconfirmed": 0, "partial": 2}
 # news-llm: the schedule wrapper logs this next to news's own exit code; any status
 # other than these (failed, or one it does not know) is 1.
 NEWS_LLM_EXIT_CODES = {"success": 0, "skipped": 0, "dry_run": 0, "partial": 2}
@@ -46,6 +46,12 @@ def main() -> None:
         help="記錄在 schedule_runs 的觸發來源",
     )
     daily_parser.add_argument("--force", action="store_true", help="目標日已完成仍重跑各步驟（資料仍不改寫）")
+    daily_parser.add_argument(
+        "--catchup-sessions",
+        type=int,
+        default=None,
+        help="先補抓目標日前最近 N 個缺 collect 的官方交易日（預設 5；0 不補）",
+    )
     daily_parser.add_argument(
         "--skip-reason",
         choices=sorted(PREFLIGHT_SKIP_REASONS),
@@ -93,6 +99,8 @@ def main() -> None:
     news_llm_parser.add_argument("--limit", type=int, default=NEWS_LLM_DEFAULT_LIMIT, help="本次最多判讀則數")
     news_llm_parser.add_argument("--dry-run", action="store_true", help="只列出會送出的批次，不呼叫、不寫 DB")
     args = parser.parse_args()
+    if args.command == "daily" and args.catchup_sessions is not None and args.catchup_sessions < 0:
+        parser.error("--catchup-sessions must not be negative")
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}
@@ -138,6 +146,7 @@ def main() -> None:
                 months_back=args.months_back,
                 trigger=args.trigger,
                 force=args.force,
+                catchup_sessions=args.catchup_sessions,
             )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if args.command == "daily":

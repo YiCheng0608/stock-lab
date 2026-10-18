@@ -104,13 +104,23 @@ def wd(tmp_path) -> Watchdog:
     return Watchdog(tmp_path)
 
 
+def _ingestion_runs(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS ingestion_runs (id INTEGER PRIMARY KEY, run_type TEXT,"
+        " status TEXT, started_at DATETIME, metadata_json TEXT)"
+    )
+
+
+def _utc_text(epoch: int) -> str:
+    # The jobs store naive UTC timestamps.
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
+
+
 def _news_llm_db(path: Path, batches: list[list[str]]) -> None:
     with sqlite3.connect(path) as conn:
+        _ingestion_runs(conn)
         conn.execute(
-            "CREATE TABLE ingestion_runs (id INTEGER PRIMARY KEY, run_type TEXT, metadata_json TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO ingestion_runs (run_type, metadata_json) VALUES ('news', '{}')"
+            "INSERT INTO ingestion_runs (run_type, status, metadata_json) VALUES ('news', 'success', '{}')"
         )
         for statuses in batches:
             metadata = {
@@ -119,10 +129,48 @@ def _news_llm_db(path: Path, batches: list[list[str]]) -> None:
                 ]
             }
             conn.execute(
-                "INSERT INTO ingestion_runs (run_type, metadata_json) VALUES ('news_llm', ?)",
-                (json.dumps(metadata),),
+                "INSERT INTO ingestion_runs (run_type, status, started_at, metadata_json)"
+                " VALUES ('news_llm', 'partial', ?, ?)",
+                (_utc_text(NIGHT - 3600), json.dumps(metadata)),
             )
     conn.close()
+
+
+def _news_llm_runs(path: Path, runs: list[tuple[str, int]]) -> None:
+    """news_llm runs without batches: (status, started seconds before NIGHT)."""
+
+    with sqlite3.connect(path) as conn:
+        _ingestion_runs(conn)
+        for status, age in runs:
+            conn.execute(
+                "INSERT INTO ingestion_runs (run_type, status, started_at, metadata_json)"
+                " VALUES ('news_llm', ?, ?, '{}')",
+                (status, _utc_text(NIGHT - age)),
+            )
+    conn.close()
+
+
+def _daily_db(path: Path, runs: list[tuple[str, dict]], day: str = "2026-10-19") -> None:
+    """schedule_runs rows for one target date: (status, summary)."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schedule_runs (id INTEGER PRIMARY KEY, job TEXT,"
+            " target_date DATE, status TEXT, started_at DATETIME, summary_json TEXT)"
+        )
+        for status, summary in runs:
+            conn.execute(
+                "INSERT INTO schedule_runs (job, target_date, status, started_at, summary_json)"
+                " VALUES ('daily', ?, ?, ?, ?)",
+                (day, status, _utc_text(NIGHT - 3600), json.dumps(summary)),
+            )
+    conn.close()
+
+
+def _daily_log_done(wd: Watchdog) -> None:
+    (wd.logs / "daily-20261019.log").write_text(
+        "===== s start\n===== e end exit=0 seconds=9\n", encoding="utf-8"
+    )
 
 
 def _anomaly_fixtures(wd: Watchdog) -> None:
@@ -216,3 +264,112 @@ def test_unreadable_database_is_logged_and_not_reported_ok(wd):
     wd.run()
     assert wd.events() == ["news_llm_check_failed"]
     assert wd.text("gh_calls.log") == ""
+
+
+# --- daily result from schedule_runs (Issue #185) --------------------------
+
+
+@pytest.mark.parametrize(
+    ("runs", "commented"),
+    [
+        ([("skipped", {"reason": "low_memory"})], "`skipped:low_memory`"),
+        ([("partial", {"reason": "official_collection_incomplete"})], "`partial`"),
+        ([("failed", {"steps": {"collect": "success", "analyze": "failed"}})], "`failed`"),
+        ([("success", {"steps": {"catchup": "success", "collect": "success"}})], None),
+    ],
+    ids=["skipped", "partial", "failed", "success"],
+)
+def test_daily_result_comments_only_when_not_complete_and_once_a_day(wd, runs, commented):
+    _daily_log_done(wd)
+    _daily_db(wd.data / "stock.db", runs)
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    bodies = wd.text("gh_bodies.txt")
+    if commented is None:
+        assert wd.text("gh_calls.log") == ""
+        assert wd.events() == ["schedules_ok", "schedules_ok"]
+    else:
+        assert len(wd.text("gh_calls.log").splitlines()) == 1
+        assert f"daily 排程：台北 2026-10-19 的 daily 結果是 {commented}" in bodies
+        assert wd.events()[-1] == "anomaly_already_commented"
+
+
+def test_daily_result_waits_until_22_and_for_a_running_trigger(wd):
+    _daily_log_done(wd)
+    # 18:30 partial, the 21:30 trigger still running.
+    _daily_db(wd.data / "stock.db", [("partial", {}), ("running", {})])
+    wd.run(now=NIGHT - 20 * 60)  # 21:40: not judged yet
+    wd.run()  # 22:00: the 21:30 run is still running
+    assert wd.text("gh_calls.log") == ""
+    # A run still marked running past the 2.5-hour task limit has died.
+    wd.run(now=NIGHT + 100 * 60)  # 23:40, 2 h 40 min after it started
+    assert "daily 結果是 `failed`" in wd.text("gh_bodies.txt")
+
+
+def test_daily_result_reads_the_complete_run_of_the_day(wd):
+    _daily_log_done(wd)
+    _daily_db(
+        wd.data / "stock.db",
+        [
+            ("success", {"steps": {"collect": "success"}}),
+            ("skipped", {"reason": "already_complete", "related_run_id": 1}),
+            ("skipped", {"reason": "low_memory"}),
+        ],
+    )
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_daily_result_reports_unconfirmed_no_session_and_incomplete_catchup(wd):
+    _daily_log_done(wd)
+    _daily_db(wd.data / "stock.db", [("non_trading_unconfirmed", {"reason": "official_no_session_unconfirmed"})])
+    result = wd.run("--dry-run")
+    assert "daily 結果是 `non_trading_unconfirmed`" in result.stdout
+    (wd.data / "stock.db").unlink()
+    _daily_db(wd.data / "stock.db", [("success", {"steps": {"catchup": "partial", "collect": "success"}})])
+    result = wd.run("--dry-run")
+    assert "補抓前幾個交易日沒有補齊（catchup）" in result.stdout
+
+
+def test_daily_result_is_not_judged_on_weekends(wd):
+    _daily_log_done(wd)
+    _daily_db(wd.data / "stock.db", [("failed", {})], day="2026-10-18")
+    wd.run(now=NIGHT - 24 * 3600)  # Sunday 22:00
+    assert wd.text("gh_calls.log") == ""
+
+
+# --- news_llm failures without batches (Issue #185) ------------------------
+
+
+def test_three_failed_news_llm_runs_are_reported(wd):
+    # cli_not_found / api_key_env_refused write a failed run without batches;
+    # a run killed by the task limit stays running.
+    _news_llm_runs(wd.data / "stock.db", [("success", 9000), ("failed", 7200), ("failed", 3600), ("running", 5800)])
+    result = wd.run("--dry-run")
+    assert "news_llm：最近 3 筆 `run_type=news_llm` 的 run 都是 failed" in result.stdout
+
+
+def test_recent_running_news_llm_run_is_not_counted_as_failed(wd):
+    _news_llm_runs(wd.data / "stock.db", [("failed", 9000), ("failed", 7200), ("running", 600)])
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_news_llm_exit_codes_in_news_logs_are_reported(wd):
+    # news_llm_results missing: news-llm exits 1 without writing a run.
+    (wd.logs / "news-20261018.log").write_text(
+        "===== a end exit=0 seconds=5 news_llm_exit=0\n===== b end exit=0 seconds=5 news_llm_exit=1\n",
+        encoding="utf-8",
+    )
+    news = wd.logs / "news-20261019.log"
+    news.write_text(
+        "===== c end exit=0 seconds=5 news_llm_exit=wrapper_error\r\n===== d end exit=0 seconds=5 news_llm_exit=1\r\n",
+        encoding="utf-8",
+    )
+    os.utime(news, (NIGHT - 600, NIGHT - 600))
+    result = wd.run("--dry-run")
+    assert "news 日誌最後 3 次的 `news_llm_exit` 是 1 wrapper_error 1" in result.stdout
+    news.write_text("===== c end exit=0 seconds=5 news_llm_exit=1\n===== d end exit=0 seconds=5 news_llm_exit=2\n",
+                    encoding="utf-8")
+    os.utime(news, (NIGHT - 600, NIGHT - 600))
+    assert "news_llm_exit" not in wd.run("--dry-run").stdout

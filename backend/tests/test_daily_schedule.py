@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
 from app.migrations import upgrade_database
-from app.models import ChipSnapshot, IngestionRun, Instrument, MarketBar, ScheduleRun, ScheduleRunStep
+from app.models import ChipSnapshot, IngestionRun, Instrument, MarketBar, RawPayload, ScheduleRun, ScheduleRunStep
 import worker.backfill as backfill
 import worker.pipeline as pipeline
 import worker.schedule_runs as schedule_runs
@@ -21,6 +21,8 @@ from test_sources import FixtureFetcher
 
 
 DAY = date(2026, 9, 4)
+# Captured before Steps replaces it with a no-op.
+REAL_CATCHUP_STEP = schedule_runs._catchup_step
 
 
 @pytest.fixture(autouse=True)
@@ -73,6 +75,8 @@ class Steps:
         monkeypatch.setattr(pipeline, "evaluate", make("evaluate"))
         monkeypatch.setattr(schedule_runs, "_candidate_step", make("candidates"))
         monkeypatch.setattr(schedule_runs, "_indicator_step", make("indicators"))
+        # Catch-up has its own tests; here no earlier session is missing.
+        monkeypatch.setattr(schedule_runs, "_catchup_step", lambda *_args: {"status": "success", "records": 0})
 
 
 def runs(factory):
@@ -97,6 +101,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(dat
     assert [(row.status, row.trigger, row.target_date, row.records) for row in rows] == [("success", "scheduler", DAY, 12)]
     logged = by_run[rows[0].id]
     assert {name: (step.status, step.records) for name, step in logged.items()} == {
+        "catchup": ("success", 0),
         "collect": ("success", 12),
         "analyze": ("success", 3),
         "evaluate": ("success", 5),
@@ -127,6 +132,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
     rows, by_run = runs(database)
     assert rows[0].status == "partial" and "TWSE margin chips unavailable" in rows[0].error
     assert {name: step.status for name, step in by_run[rows[0].id].items()} == {
+        "catchup": "success",
         "collect": "partial",
         "analyze": "skipped",
         "evaluate": "skipped",
@@ -226,7 +232,9 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
     pipeline.run_daily(DAY)
     listed = schedule_runs.list_schedule_runs(5, DAY)
     assert listed[0]["status"] == "success"
-    assert [step["step"] for step in listed[0]["steps"]] == ["collect", "analyze", "evaluate", "candidates", "indicators"]
+    assert [step["step"] for step in listed[0]["steps"]] == [
+        "catchup", "collect", "analyze", "evaluate", "candidates", "indicators"
+    ]
 
 
 # --- collect never rewrites stored official values ----------------------
@@ -497,7 +505,8 @@ def test_cli_schedule_runs_and_daily_exit_codes(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["worker.cli", "schedule-runs"])
     cli.main()  # must not raise on a list result
     assert json_module.loads(capsys.readouterr().out) == []
-    for status, code in (("success", 0), ("partial", 2), ("failed", 1), ("non_trading_day", 0)):
+    for status, code in (("success", 0), ("partial", 2), ("failed", 1), ("non_trading_day", 0),
+                         ("non_trading_unconfirmed", 0)):
         monkeypatch.setattr(cli, "run_daily", lambda *args, _status=status, **kwargs: {"status": _status})
         monkeypatch.setattr(sys, "argv", ["worker.cli", "daily", "--date", DAY.isoformat()])
         with pytest.raises(SystemExit) as exited:
@@ -602,3 +611,258 @@ def test_0011_migration_matches_the_mapped_schedule_tables(database):
     finally:
         mapped_engine.dispose()
     assert migrated == mapped
+
+
+# --- catch-up of missed sessions (Issue #185 AC-2) --------------------------
+
+MONDAY = date(2026, 10, 19)
+
+
+def _collect_run(factory, day, status="success", taiex=1):
+    with factory() as db:
+        db.add(IngestionRun(run_type="collect", source="official", run_date=day, status=status, records=10,
+                            request_key=f"official-ohlcv:{day}:{day}", started_at=datetime.utcnow(),
+                            metadata_json={"taiex_records": taiex}))
+        db.commit()
+
+
+class CollectLog:
+    """pipeline.collect fake: records (date, path) and writes a collect run like the real one."""
+
+    def __init__(self, monkeypatch, factory, failing=()):
+        self.calls: list[tuple[date, str]] = []
+
+        def collect(day, *, adapter=None, months_back=0, init_schema=True, force=False):
+            path = "historical" if adapter == "historical-adapter" else "snapshot"
+            self.calls.append((day, path))
+            if day in failing:
+                return {"status": "failed", "records": 0, "error": "fixture outage"}
+            _collect_run(factory, day)
+            return {"status": "success", "records": 10, "run_id": None}
+
+        monkeypatch.setattr(pipeline, "collect", collect)
+        monkeypatch.setattr(schedule_runs, "_catchup_adapter", lambda: "historical-adapter")
+        monkeypatch.setattr(schedule_runs, "_catchup_step", REAL_CATCHUP_STEP)
+
+
+def _week_before_monday(factory):
+    # Fri 10-16 and Thu 10-15 were missed; Tue 10-13 was a holiday.
+    for day in (date(2026, 10, 14), date(2026, 10, 12), date(2026, 10, 9)):
+        _collect_run(factory, day)
+    _collect_run(factory, date(2026, 10, 13), status="skipped", taiex=0)
+
+
+def test_daily_collects_missed_sessions_oldest_first_then_the_target(database, monkeypatch):
+    steps = Steps(monkeypatch)
+    log = CollectLog(monkeypatch, database)
+    _week_before_monday(database)
+    result = pipeline.run_daily(MONDAY, trigger="scheduler")
+    assert result["status"] == "success"
+    assert log.calls == [(date(2026, 10, 15), "historical"), (date(2026, 10, 16), "historical"),
+                         (MONDAY, "snapshot")]
+    assert steps.calls == ["analyze", "evaluate", "candidates", "indicators"]
+    caught = result["catchup"]
+    # The holiday does not count toward the five sessions.
+    assert caught["checked_dates"] == ["2026-10-09", "2026-10-12", "2026-10-14", "2026-10-15", "2026-10-16"]
+    assert caught["missing_dates"] == ["2026-10-15", "2026-10-16"]
+    assert (caught["status"], caught["records"]) == ("success", 20)
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]
+    assert (logged["catchup"].status, logged["catchup"].sequence, logged["catchup"].records) == ("success", 0, 20)
+    assert rows[0].summary_json["steps"]["catchup"] == "success"
+
+    # Idempotent: a later run finds nothing missing and fetches only its target.
+    assert pipeline.run_daily(MONDAY)["reason"] == "already_complete"
+    forced = pipeline.run_daily(MONDAY, force=True)
+    assert forced["catchup"]["missing_dates"] == []
+    assert log.calls[3:] == [(MONDAY, "snapshot")]
+
+
+def test_incomplete_catchup_is_recorded_without_blocking_the_target(database, monkeypatch):
+    Steps(monkeypatch)
+    log = CollectLog(monkeypatch, database, failing={date(2026, 10, 15)})
+    _week_before_monday(database)
+    result = pipeline.run_daily(MONDAY)
+    assert result["status"] == "success"
+    assert [day for day, _path in log.calls] == [date(2026, 10, 15), date(2026, 10, 16), MONDAY]
+    assert result["catchup"]["status"] == "partial"
+    assert result["catchup"]["incomplete_dates"] == ["2026-10-15"]
+    rows, by_run = runs(database)
+    assert rows[0].summary_json["steps"]["catchup"] == "partial"
+    assert by_run[rows[0].id]["catchup"].error == "catch-up incomplete: 2026-10-15 failed"
+    # The next day's run tries the missed date again.
+    log.calls.clear()
+    pipeline.run_daily(date(2026, 10, 20))
+    assert log.calls[0] == (date(2026, 10, 15), "historical")
+
+
+def test_catchup_can_be_turned_off(database, monkeypatch):
+    Steps(monkeypatch)
+    log = CollectLog(monkeypatch, database)
+    result = pipeline.run_daily(MONDAY, catchup_sessions=0)
+    assert result["status"] == "success" and "catchup" not in result
+    assert log.calls == [(MONDAY, "snapshot")]
+
+
+def test_catchup_collects_a_missed_session_through_the_backfill_path(database, monkeypatch):
+    fetcher = FixtureFetcher()
+    monkeypatch.setattr(schedule_runs, "_catchup_adapter", lambda: sources.OfficialMarketDataAdapter(
+        sources.TwseAdapter(fetcher, snapshot_feeds=False), sources.TpexAdapter(fetcher, snapshot_feeds=False)))
+    for day in (date(2026, 9, 3), date(2026, 9, 2), date(2026, 9, 1), date(2026, 8, 31)):
+        _collect_run(database, day)
+    result = schedule_runs._catchup_step(date(2026, 9, 7), 5)
+    assert result["missing_dates"] == [DAY.isoformat()]
+    assert result["status"] == "success", result
+    with database() as db:
+        run = db.scalar(select(IngestionRun).where(IngestionRun.request_key == f"official-ohlcv:{DAY}:{DAY}"))
+        assert run.status == "success" and run.metadata_json["taiex_records"] > 0
+        assert db.scalar(select(MarketBar).where(MarketBar.trading_date == DAY)) is not None
+    calls = len(fetcher.calls)
+    again = schedule_runs._catchup_step(date(2026, 9, 7), 5)
+    assert again["missing_dates"] == [] and len(fetcher.calls) == calls
+
+
+# --- a first no-session answer waits for the 21:30 trigger (Issue #185 item 6)
+
+
+def test_first_no_session_answer_for_today_is_confirmed_by_the_next_trigger(database, monkeypatch):
+    steps = Steps(monkeypatch, collect={"status": "skipped", "records": 0, "no_data_dates": [DAY.isoformat()]})
+    monkeypatch.setattr(schedule_runs, "_today", lambda: DAY)
+    first = pipeline.run_daily(DAY)
+    assert first["status"] == "non_trading_unconfirmed"
+    assert pipeline.run_daily(DAY)["status"] == "non_trading_day"
+    assert pipeline.run_daily(DAY)["reason"] == "already_complete"
+    assert steps.calls == ["collect", "collect"]
+    rows, by_run = runs(database)
+    assert [row.status for row in rows] == ["non_trading_unconfirmed", "non_trading_day", "skipped"]
+    assert rows[0].error is None and rows[0].summary_json["reason"] == "official_no_session_unconfirmed"
+    assert by_run[rows[0].id]["analyze"].status == "skipped"
+
+
+def test_trading_data_at_the_second_trigger_replaces_an_unconfirmed_no_session(database, monkeypatch):
+    steps = Steps(monkeypatch, collect={"status": "skipped", "records": 0})
+    monkeypatch.setattr(schedule_runs, "_today", lambda: DAY)
+    assert pipeline.run_daily(DAY)["status"] == "non_trading_unconfirmed"
+    steps.results["collect"] = {"status": "success", "records": 10}
+    assert pipeline.run_daily(DAY)["status"] == "success"
+
+
+# --- non-core source warnings (Issue #185 item 5) -------------------------
+
+
+class CodedFetcher(FixtureFetcher):
+    """FixtureFetcher with numeric industry codes, which collect requires."""
+
+    def __call__(self, url, **kwargs):
+        payload = super().__call__(url, **kwargs)
+        if url == sources.TWSE_LISTED_ENDPOINT:
+            return [dict(row, Industry="01" if row["Code"] == "1101" else "24") for row in payload]
+        return payload
+
+
+class OutageFetcher(CodedFetcher):
+    def __init__(self, failing):
+        super().__init__()
+        self.failing = failing
+
+    def __call__(self, url, **kwargs):
+        if any(url.startswith(prefix) for prefix in self.failing):
+            self.calls.append(url)
+            raise sources.OfficialDataError(f"fixture outage {url}")
+        return super().__call__(url, **kwargs)
+
+
+def test_noncore_source_warnings_keep_the_collect_successful(database):
+    failing = (sources.TWSE_EVENT_ENDPOINT, sources.TWSE_FUNDAMENTAL_ENDPOINT, sources.TPEX_EVENT_ENDPOINT,
+               sources.TPEX_FUNDAMENTAL_ENDPOINT, sources.TPEX_SUSPEND_ENDPOINT, sources.TPEX_SUSPEND_HISTORY_ENDPOINT)
+    result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
+    assert result["status"] == "success", result
+    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 6
+    assert result["warnings"] == result["noncore_warnings"]
+    with database() as db:
+        run = db.get(IngestionRun, result["run_id"])
+        assert run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 6
+
+
+def test_core_source_warning_keeps_the_collect_partial(database):
+    failing = (sources.TWSE_MARGIN_HISTORY_ENDPOINT, sources.TWSE_EVENT_ENDPOINT)
+    result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
+    assert result["status"] == "partial"
+    assert [w.split(" ")[:3] for w in result["core_warnings"]] == [["TWSE", "margin", "chips"]]
+    assert [w.split(" ")[:3] for w in result["noncore_warnings"]] == [["TWSE", "MOPS", "events"]]
+
+
+def test_split_collect_warnings_treats_unknown_warnings_as_core():
+    core, noncore = pipeline.split_collect_warnings([
+        "TPEx MOPS fundamentals unavailable: x",
+        "TWSE MI_INDEX unavailable for 2026-10-16 endpoint=...: x",
+        "holiday_capture_unknown:{}",
+        "something new",
+    ])
+    assert noncore == ["TPEx MOPS fundamentals unavailable: x"]
+    assert len(core) == 3
+
+
+def test_daily_runs_analyze_after_a_collect_with_only_noncore_warnings(database, monkeypatch):
+    warning = "TWSE MOPS events unavailable: fixture"
+    steps = Steps(monkeypatch, collect={"status": "success", "records": 9, "warnings": [warning],
+                                        "core_warnings": [], "noncore_warnings": [warning]})
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    assert "analyze" in steps.calls
+    rows, _ = runs(database)
+    assert rows[0].summary_json["noncore_warnings"] == [warning]
+    # A partial run names only the warnings that made it partial.
+    core = "TPEx margin feed returned no rows for 2026-09-07"
+    steps.results["collect"] = {"status": "partial", "records": 9, "warnings": [warning, core],
+                                "core_warnings": [core], "noncore_warnings": [warning]}
+    assert pipeline.run_daily(DAY + timedelta(days=3))["status"] == "partial"
+    rows, _ = runs(database)
+    assert rows[-1].error == "collect partial: " + core
+
+
+# --- a fill keeps the row's raw pointer (Issue #185 item 4) -----------------
+
+
+def test_filling_empty_values_keeps_provenance_and_records_the_fill(database):
+    fetcher = CodedFetcher()
+    first = pipeline.collect(DAY, adapter=combined(fetcher))
+    assert first["status"] == "success"
+    with database() as db:
+        universe_raw = db.scalar(select(RawPayload.id).where(RawPayload.endpoint == sources.TWSE_LISTED_ENDPOINT))
+        bar = _bar(db, "1101")
+        bar_raw, turnover = bar.raw_payload_id, (bar.turnover, bar.turnover_status)
+        assert turnover[1] == "available"
+        # Stands in for an earlier capture whose turnover was unavailable.
+        bar.turnover, bar.turnover_status, bar.turnover_reason = 0.0, "unavailable", "missing"
+        bar.raw_payload_id = universe_raw
+        stamp = bar.collected_at
+        chip = db.scalar(select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id))
+        chip_raw, margin = chip.raw_payload_id, chip.margin_balance
+        chip.margin_balance = None
+        chip.raw_payload_id = universe_raw
+        db.execute(update(IngestionRun).values(status="partial"))
+        db.commit()
+
+    second = pipeline.collect(DAY, adapter=combined(fetcher))
+    assert second["status"] == "success" and second["value_fills"] == 2
+    with database() as db:
+        bar = _bar(db, "1101")
+        assert ((bar.turnover, bar.turnover_status), bar.raw_payload_id, bar.collected_at) == (
+            turnover, universe_raw, stamp
+        )
+        chip = db.scalar(select(ChipSnapshot).where(ChipSnapshot.instrument_id == bar.instrument_id))
+        assert (chip.margin_balance, chip.raw_payload_id) == (margin, universe_raw)
+        groups = db.get(IngestionRun, second["run_id"]).metadata_json["value_fill_groups"]
+    assert {(g["table"], tuple(g["fields"]), g["raw_payload_id"], tuple(g["symbols"])) for g in groups} == {
+        ("market_bars", ("turnover",), bar_raw, ("1101",)),
+        ("chip_snapshots", ("margin_balance",), chip_raw, ("1101",)),
+    }
+    assert all(g["exchange"] == "TWSE" and g["trading_date"] == DAY.isoformat() for g in groups)
+
+    # force overwrites a differing stored value, so the pointer moves to the capture.
+    with database() as db:
+        _bar(db, "1101").close += 1
+        db.commit()
+    pipeline.collect(DAY, adapter=combined(fetcher), force=True)
+    with database() as db:
+        assert _bar(db, "1101").raw_payload_id == bar_raw
