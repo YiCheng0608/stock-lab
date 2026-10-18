@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
@@ -1560,6 +1561,9 @@ def _upsert_official_instrument(db: Session, record: InstrumentRecord) -> Instru
 # are still empty, and a differing non-empty value is kept and reported as a
 # conflict.  ``overwrite`` (collect force=True) replaces stored values for an
 # explicit, deliberate refetch, but an empty incoming value never clears one.
+# A fill keeps the row's provenance (raw_payload_id, source, data_as_of,
+# collected_at), which still describes the values already stored; the filled
+# fields and the new capture are recorded as a value fill on the collect run.
 MAX_RECORDED_VALUE_CONFLICTS = 50
 
 
@@ -1571,21 +1575,47 @@ def _apply_official_values(
     overwrite: bool,
     conflicts: list[dict[str, Any]] | None,
     label: str,
-) -> bool:
-    changed = False
+) -> list[str]:
+    """Apply the values and return the names of the fields that changed."""
+
+    changed: list[str] = []
     for field_name, value in values.items():
         current = getattr(row, field_name)
         if is_new:
             setattr(row, field_name, value)
-            changed = True
+            changed.append(field_name)
         elif value is None or current == value:
             continue
         elif overwrite or current is None:
             setattr(row, field_name, value)
-            changed = True
+            changed.append(field_name)
         elif conflicts is not None:
             conflicts.append({"row": label, "field": field_name, "stored": current, "incoming": value})
     return changed
+
+
+def _set_official_provenance(
+    row: Any,
+    *,
+    changed: list[str],
+    replace: bool,
+    source: str,
+    data_as_of: datetime | None,
+    raw_payload_id: int | None,
+    fills: list[dict[str, Any]] | None,
+    fill_key: dict[str, Any],
+) -> None:
+    """Point a new or overwritten row at this capture; record a fill otherwise."""
+
+    if not changed:
+        return
+    if replace:
+        row.source = source
+        row.data_as_of = data_as_of
+        row.collected_at = datetime.utcnow()
+        row.raw_payload_id = raw_payload_id
+    elif fills is not None:
+        fills.append({**fill_key, "fields": sorted(changed), "raw_payload_id": raw_payload_id})
 
 
 def _apply_official_turnover(
@@ -1625,6 +1655,7 @@ def _upsert_official_bar(
     *,
     overwrite: bool = True,
     conflicts: list[dict[str, Any]] | None = None,
+    fills: list[dict[str, Any]] | None = None,
 ) -> MarketBar:
     bar = db.scalar(
         select(MarketBar).where(
@@ -1653,14 +1684,21 @@ def _upsert_official_bar(
         conflicts=conflicts,
         label=label,
     )
-    changed = _apply_official_turnover(
+    if _apply_official_turnover(
         bar, record, is_new=is_new, overwrite=overwrite, conflicts=conflicts, label=label
-    ) or changed
-    if changed:
-        bar.source = record.source
-        bar.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
-        bar.collected_at = datetime.utcnow()
-        bar.raw_payload_id = raw_payload_id
+    ) and "turnover" not in changed:
+        changed.append("turnover")
+    _set_official_provenance(
+        bar,
+        changed=changed,
+        replace=is_new or overwrite,
+        source=record.source,
+        data_as_of=_as_datetime(record.data_as_of, record.trading_date),
+        raw_payload_id=raw_payload_id,
+        fills=fills,
+        fill_key={"table": "market_bars", "exchange": instrument.exchange, "symbol": instrument.symbol,
+                  "trading_date": record.trading_date.isoformat()},
+    )
     return bar
 
 
@@ -1672,6 +1710,7 @@ def _upsert_official_chip(
     *,
     overwrite: bool = True,
     conflicts: list[dict[str, Any]] | None = None,
+    fills: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Persist one official chip snapshot without manufacturing missing values."""
 
@@ -1705,11 +1744,17 @@ def _upsert_official_chip(
         conflicts=conflicts,
         label=f"chip_snapshots:{instrument.exchange}:{instrument.symbol}:{record.trading_date.isoformat()}",
     )
-    if changed:
-        row.source = record.source
-        row.data_as_of = _as_datetime(record.data_as_of, record.trading_date)
-        row.collected_at = datetime.utcnow()
-        row.raw_payload_id = raw_payload_id
+    _set_official_provenance(
+        row,
+        changed=changed,
+        replace=is_new or overwrite,
+        source=record.source,
+        data_as_of=_as_datetime(record.data_as_of, record.trading_date),
+        raw_payload_id=raw_payload_id,
+        fills=fills,
+        fill_key={"table": "chip_snapshots", "exchange": instrument.exchange, "symbol": instrument.symbol,
+                  "trading_date": record.trading_date.isoformat()},
+    )
     return True
 
 
@@ -2269,6 +2314,42 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+# Warnings from sources the daily analysis does not depend on: MOPS material
+# events and EPS, and the TPEx suspension announcement/history feeds (events
+# only; they never set bar flags).  Every other warning, including any not
+# matched here, concerns OHLCV, the TAIEX baseline, the holiday calendar or
+# chips, and keeps the collect partial.
+NONCORE_WARNING_PATTERN = re.compile(
+    r"^(TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history) unavailable"
+)
+
+
+def split_collect_warnings(warnings: Iterable[str]) -> tuple[list[str], list[str]]:
+    """Return (core, noncore) warnings; only core warnings make a collect partial."""
+
+    core: list[str] = []
+    noncore: list[str] = []
+    for warning in warnings:
+        (noncore if NONCORE_WARNING_PATTERN.match(str(warning)) else core).append(str(warning))
+    return core, noncore
+
+
+def _value_fill_groups(fills: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group fill records by row kind, date, filled fields and capture."""
+
+    groups: dict[tuple[Any, ...], list[str]] = defaultdict(list)
+    for fill in fills:
+        key = (fill["table"], fill["exchange"], fill["trading_date"], tuple(fill["fields"]), fill["raw_payload_id"])
+        groups[key].append(fill["symbol"])
+    return [
+        {"table": table, "exchange": exchange, "trading_date": trading_date, "fields": list(fields),
+         "raw_payload_id": raw_payload_id, "symbols": sorted(symbols)}
+        for (table, exchange, trading_date, fields, raw_payload_id), symbols in sorted(
+            groups.items(), key=lambda item: tuple(str(part) for part in item[0])
+        )
+    ]
+
+
 def _raw_id_for_digest(raw_ids: dict[tuple[str, str], int], digest: str | None) -> int | None:
     if not digest:
         return None
@@ -2327,6 +2408,8 @@ def collect(
                 "idempotent_reuse": True,
                 "industry_membership_observations": stored_metadata.get("industry_membership_observations", {"status": "not_recorded"}),
                 "warnings": list(stored_metadata.get("warnings", []) or []),
+                "core_warnings": split_collect_warnings(stored_metadata.get("warnings", []) or [])[0],
+                "noncore_warnings": split_collect_warnings(stored_metadata.get("warnings", []) or [])[1],
                 "notices": list(stored_metadata.get("notices", []) or []),
                 "no_data_dates": list(stored_metadata.get("no_data_dates", []) or []),
             }
@@ -2389,6 +2472,7 @@ def collect(
             normalized_dates: list[date] = []
             normalized_instruments: set[tuple[str, str]] = set()
             value_conflicts: list[dict[str, Any]] = []
+            value_fills: list[dict[str, Any]] = []
             for record in batch.bars:
                 if not start_date <= record.trading_date <= score_date:
                     continue
@@ -2402,6 +2486,7 @@ def collect(
                     _raw_id_for_digest(raw_ids, record.payload_sha256),
                     overwrite=force,
                     conflicts=value_conflicts,
+                    fills=value_fills,
                 )
                 normalized_bars += 1
                 normalized_dates.append(record.trading_date)
@@ -2428,6 +2513,7 @@ def collect(
                         _raw_id_for_digest(raw_ids, chip.payload_sha256),
                         overwrite=force,
                         conflicts=value_conflicts,
+                        fills=value_fills,
                     )
                 )
             for action in batch.actions:
@@ -2460,6 +2546,19 @@ def collect(
                     }),
                     "reason": "event feed did not provide date-scoped coverage evidence",
                 }
+            # A historical batch (backfill, daily catch-up) does not query the
+            # MOPS feeds, so it has no event evidence of its own.  When an
+            # earlier collect of this request stored coverage (a snapshot
+            # collect's observed events), keep it and leave the MOPS quality
+            # rows alone instead of degrading them to the historical default.
+            stored_coverage = stored_metadata.get("event_coverage")
+            keep_snapshot_evidence = (
+                not getattr(batch, "snapshot_feeds", True)
+                and isinstance(stored_coverage, dict)
+                and bool(stored_coverage)
+            )
+            if keep_snapshot_evidence:
+                event_coverage = dict(stored_coverage)
             if getattr(batch, "snapshot_feeds", True):
                 industry_result = _ensure_official_groups(
                     db,
@@ -2542,7 +2641,7 @@ def collect(
                     },
                     source=exchange.lower(),
                 )
-            for exchange in ("TWSE", "TPEx"):
+            for exchange in () if keep_snapshot_evidence else ("TWSE", "TPEx"):
                 event_count = sum(item.exchange == exchange for item in batch.events)
                 fundamental_count = sum(item.exchange == exchange for item in batch.fundamentals)
                 event_status = event_coverage.get("status")
@@ -2584,10 +2683,13 @@ def collect(
                     source=instrument.exchange.lower(),
                 )
             latest_bar_date = max(normalized_dates) if normalized_dates else None
-            # A source warning means the official snapshot is usable only as
-            # a partial, explicitly qualified state. In particular, a
+            # A core source warning means the official snapshot is usable only
+            # as a partial, explicitly qualified state. In particular, a
             # historical MI_INDEX CDN failure must not appear complete merely
-            # because the latest requested date happened to be present.
+            # because the latest requested date happened to be present.  A
+            # non-core warning (MOPS, TPEx suspension feeds) is recorded but
+            # does not hold back analysis of complete market data.
+            core_warnings, noncore_warnings = split_collect_warnings(batch.warnings)
             if latest_bar_date is None and verified_no_data_dates:
                 run.status = "skipped"
             else:
@@ -2595,7 +2697,7 @@ def collect(
                     "success"
                     if latest_bar_date == score_date
                     and normalized_index_bars > 0
-                    and not batch.warnings
+                    and not core_warnings
                     and not verified_no_data_dates
                     else "partial"
                 )
@@ -2612,9 +2714,16 @@ def collect(
                 "fundamentals": len(batch.fundamentals),
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
+                "core_warnings": core_warnings,
+                "noncore_warnings": noncore_warnings,
                 "notices": list(getattr(batch, "notices", []) or []),
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(value_conflicts[:MAX_RECORDED_VALUE_CONFLICTS]),
+                "value_fills": len(value_fills),
+                # Accumulated over the runs that share this request key (the
+                # 18:30 and 21:30 daily collects), like the industry history.
+                "value_fill_groups": list(stored_metadata.get("value_fill_groups", []) or [])
+                + _value_fill_groups(value_fills),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
                 "industry_membership_observations": industry_result,
@@ -2627,7 +2736,7 @@ def collect(
                     missing_run_fields.append("requested_session")
                 if normalized_index_bars == 0:
                     missing_run_fields.append("taiex")
-                if batch.warnings:
+                if core_warnings:
                     missing_run_fields.append("official_warnings")
                 if verified_no_data_dates:
                     missing_run_fields.append("skipped_non_trading")
@@ -2646,6 +2755,7 @@ def collect(
                     "requested_data_as_of": batch.data_as_of or score_date.isoformat(),
                     "data_as_of": run.data_as_of,
                     "warnings": batch.warnings,
+                    "noncore_warnings": noncore_warnings,
                     "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                     "event_coverage": event_coverage,
                 },
@@ -2670,8 +2780,11 @@ def collect(
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
                 "warnings": batch.warnings,
+                "core_warnings": core_warnings,
+                "noncore_warnings": noncore_warnings,
                 "notices": list(getattr(batch, "notices", []) or []),
                 "value_conflicts": len(value_conflicts),
+                "value_fills": len(value_fills),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
             }
         except Exception as exc:
@@ -3638,9 +3751,16 @@ def run_daily(
     months_back: int = 0,
     trigger: str = "manual",
     force: bool = False,
+    catchup_sessions: int | None = None,
 ) -> dict[str, Any]:
-    """collect -> analyze -> evaluate -> indicators, logged in schedule_runs."""
+    """catchup -> collect -> analyze -> evaluate -> candidates -> indicators, logged in schedule_runs."""
 
-    from worker.schedule_runs import run_daily_job  # imports this module
+    from worker.schedule_runs import CATCHUP_SESSIONS, run_daily_job  # imports this module
 
-    return run_daily_job(end_date, months_back=months_back, trigger=trigger, force=force)
+    return run_daily_job(
+        end_date,
+        months_back=months_back,
+        trigger=trigger,
+        force=force,
+        catchup_sessions=CATCHUP_SESSIONS if catchup_sessions is None else catchup_sessions,
+    )

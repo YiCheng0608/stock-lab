@@ -32,6 +32,9 @@ done
 GH_REPO='YiCheng0608/stock-lab'
 LOCK_STALE_SECONDS=1800
 NEWS_INTERVAL_SECONDS=7200
+# The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
+# written its schedule_runs row, so an 18:30 partial is not reported early.
+DAILY_RESULT_AFTER_HM=2200
 
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 logs="$data_dir/logs"
@@ -74,7 +77,7 @@ if [ -z "$python" ]; then
   done
 fi
 if [ -z "$python" ] || ! "$python" -c 'import sys' >/dev/null 2>&1; then
-  log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 news_llm 檢查；日誌檢查照做"
+  log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm）；日誌檢查照做"
   python=""
   found=1
 fi
@@ -83,6 +86,7 @@ helper() { "$python" -X utf8 "$script_dir/watchdog_helper.py" "$@"; }
 # --- anomalies (gh and files only) -----------------------------------------------
 taipei=$((now + 28800))
 taipei_date="$(date -u -d "@$taipei" +%Y%m%d)"
+taipei_iso="$(date -u -d "@$taipei" +%Y-%m-%d)"
 taipei_hm="$(date -u -d "@$taipei" +%H%M)"
 taipei_dow="$(date -u -d "@$taipei" +%u)"
 
@@ -119,6 +123,22 @@ if compgen -G "$logs/daily-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] && [ $((
   fi
 fi
 
+# daily: from 22:00 on a weekday, the day's runs in schedule_runs (read-only
+# database) must have ended success or non_trading_day.
+if [ -n "$python" ] && [ -f "$data_dir/stock.db" ] && compgen -G "$logs/daily-*.log" >/dev/null \
+  && [ "$taipei_dow" -le 5 ] && [ $((10#$taipei_hm)) -ge "$DAILY_RESULT_AFTER_HM" ]; then
+  result="$(helper daily-result "$data_dir/stock.db" "$taipei_iso" "$now" 2>>"$work/helper.err")" || result=error
+  case "$result" in
+    success|non_trading_day|running|skip) ;;
+    none)
+      # Without a log the daily_no_end check above has reported it already.
+      [ -f "$logs/daily-$taipei_date.log" ] && anomaly daily_result "daily 排程：台北 $taipei_iso 有日誌但 \`schedule_runs\` 沒有這一天的 run（worker 未能啟動），請看 \`$logs/daily-$taipei_date.log\`。" ;;
+    error) found=1; log daily_check_failed "" "讀取 stock.db 的 schedule_runs 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
+    catchup_incomplete) anomaly daily_result "daily 排程：台北 $taipei_iso 當日成功，但補抓前幾個交易日沒有補齊（catchup），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 的 catchup 步驟，必要時依 OPERATIONS §6.4 手動 backfill。" ;;
+    *) anomaly daily_result "daily 排程：台北 $taipei_iso 的 daily 結果是 \`$result\`（不是 success／non_trading_day），請查 \`python -m worker.cli schedule-runs --date $taipei_iso\` 與 \`$logs/daily-$taipei_date.log\`。" ;;
+  esac
+fi
+
 # news: runs every 2 hours; three missed runs in a row (only once news logs exist).
 newest=0
 for file in "$logs"/news-*.log; do
@@ -130,13 +150,35 @@ if [ "$newest" -gt 0 ] && [ $((now - newest)) -gt $((3 * NEWS_INTERVAL_SECONDS))
   anomaly news_no_log "news 排程：最新日誌寫於 $(iso "$newest")，已連續 3 次（每 2 小時一次）沒有新日誌。"
 fi
 
-# news_llm: the last three batches all pending (read-only database).
+# news_llm (read-only database): the last three batches all pending; and
+# failures without batches (claude not found, API key in the environment,
+# killed by the task limit): the last three runs failed.  The news logs'
+# last three news_llm_exit values also catch a run that wrote no row at all
+# (news_llm_results table missing).
+llm_failed=""
 if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
-  pending="$(helper news-llm-pending "$data_dir/stock.db" 3 2>>"$work/helper.err")" || pending=error
+  pending="$(helper news-llm-pending "$data_dir/stock.db" 3 2>>"$work/helper.err")" \
+    && failed_runs="$(helper news-llm-failed "$data_dir/stock.db" 3 "$now" 2>>"$work/helper.err")" \
+    || pending=error
   case "$pending" in
     3) anomaly news_llm_pending "news_llm：最近連續 3 批判讀都是 pending（可能未登入 Claude Code 或額度用盡），請查 \`/api/ingestion-runs?q=news_llm\`。" ;;
     error) found=1; log news_llm_check_failed "" "讀取 stock.db 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac
+  [ "$pending" != error ] && [ "$failed_runs" = 3 ] \
+    && llm_failed="24 小時內最近 3 筆 \`run_type=news_llm\` 的 run 都是 failed（執行逾 90 分鐘仍為 running 的也算）"
 fi
+# Only end lines of the last 24 hours, so stale logs (news stopped) are not
+# reported again every day; the news_no_log check covers a stopped job.
+yesterday="$(date -u -d "@$((taipei - 86400))" +%Y%m%d)"
+llm_exits="$(for file in "$logs/news-$yesterday.log" "$logs/news-$taipei_date.log"; do
+    [ -f "$file" ] && grep -E '^===== [^ ]+ end .*news_llm_exit=' "$file"
+  done | tr -d '\r' | while read -r _ stamp rest; do
+    at="$(date -d "$stamp" +%s 2>/dev/null)" || continue
+    [ "$at" -ge $((now - 86400)) ] && [ "$at" -le "$now" ] && printf '%s\n' "${rest##*news_llm_exit=}"
+  done | tail -n 3 | tr '\n' ' ')"
+if [ "$(printf '%s' "$llm_exits" | wc -w)" -eq 3 ] && ! printf '%s' "$llm_exits" | grep -qvE '^((1|wrapper_error) )+$'; then
+  llm_failed="${llm_failed:+$llm_failed；}news 日誌 24 小時內最後 3 次的 \`news_llm_exit\` 是 ${llm_exits% }"
+fi
+[ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
 [ "$found" = 0 ] && log schedules_ok "" "排程無異常"
 exit 0

@@ -8,6 +8,11 @@ first stored ``published_at``; the one exception is the non-market filter
 ``excluded``.  Excluded items are stored, never deleted, and the reason is in
 the run metadata.  ``impact_direction`` is always ``unknown``; LLM summaries
 and direction calls are stored apart by worker.news_llm.
+
+Every write (opening a run, storing one feed, closing a run) is one unit that
+is redone after ``database is locked``: another job's long write transaction
+can outlast the 30 s busy timeout.  Only after the retries does the feed (or
+the source) count as failed.
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time as _time
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, TypeVar
 
 from sqlalchemy import inspect, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -49,6 +56,13 @@ from .news_sources import (
 from .pipeline import _upsert_raw_payload
 
 RELATION_METHOD = "rule:exact-name-code/v1"
+# A write unit that hits "database is locked" (after the 30 s busy timeout)
+# is rolled back and redone this many more times, this many seconds apart.
+LOCK_RETRIES = 3
+LOCK_RETRY_DELAY_SECONDS = 60.0
+
+T = TypeVar("T")
+
 # A source time later than collection by more than this is a clock or time
 # zone error; the item is kept but quarantined as a time conflict.
 FUTURE_TOLERANCE = timedelta(minutes=15)
@@ -403,6 +417,38 @@ def _exclude_existing(db: Session, source: NewsSource) -> list[dict[str, str]]:
     return moved
 
 
+def _is_locked(exc: BaseException) -> bool:
+    return (
+        isinstance(exc, OperationalError) and "database is locked" in str(exc).lower()
+    )
+
+
+def _sleep(seconds: float) -> None:
+    _time.sleep(seconds)
+
+
+def _write_unit(
+    db: Session, unit: Callable[[], T], on_retry: Callable[[], None] | None = None
+) -> T:
+    """Run ``unit`` (which ends in a commit); redo it after ``database is locked``.
+
+    The rollback discards the unit's pending changes, so ``unit`` must redo all
+    of them; ``on_retry`` rebuilds any in-memory state they touched.
+    """
+
+    for attempt in range(LOCK_RETRIES + 1):
+        try:
+            return unit()
+        except OperationalError as exc:
+            if not _is_locked(exc) or attempt == LOCK_RETRIES:
+                raise
+            db.rollback()
+            _sleep(LOCK_RETRY_DELAY_SECONDS)
+            if on_retry is not None:
+                on_retry()
+    raise AssertionError("unreachable")
+
+
 def _collect_source(
     db: Session,
     source: NewsSource,
@@ -410,28 +456,66 @@ def _collect_source(
     matcher: RelationMatcher,
     run_date: date,
 ) -> dict[str, Any]:
-    run = IngestionRun(
-        run_type="news",
-        source=source.source_id,
-        run_date=run_date,
-        status="running",
-        records=0,
-        started_at=datetime.utcnow(),
-    )
-    db.add(run)
-    db.commit()
-    existing_excluded = _exclude_existing(db, source)
+    def open_run() -> IngestionRun:
+        row = IngestionRun(
+            run_type="news",
+            source=source.source_id,
+            run_date=run_date,
+            status="running",
+            records=0,
+            started_at=datetime.utcnow(),
+        )
+        db.add(row)
+        db.commit()
+        return row
+
+    try:
+        run = _write_unit(db, open_run)
+    except OperationalError as exc:
+        # Nothing could be written for this source; the CLI output and the
+        # job log still carry the failure.
+        db.rollback()
+        return {
+            "source": source.source_id,
+            "run_id": None,
+            "status": "failed",
+            "error": f"run not recorded: {type(exc).__name__}: {exc}",
+            "existing_excluded": [],
+            "feeds": [],
+        }
     metadata: dict[str, Any] = {
         "source_name": source.source_name,
         "category": source.category,
         "source_kind": source.source_kind,
         "naive_time_offset": naive_offset_text(source.naive_offset),
-        "filter": {"version": FILTER_VERSION, "existing_excluded": existing_excluded},
     }
-    # The moved rows and their list land in one commit.
-    run.metadata_json = metadata
-    db.commit()
+
+    def exclude_existing() -> list[dict[str, str]]:
+        moved = _exclude_existing(db, source)
+        # The moved rows and their list land in one commit.
+        run.metadata_json = {
+            **metadata,
+            "filter": {"version": FILTER_VERSION, "existing_excluded": moved},
+        }
+        db.commit()
+        return moved
+
+    try:
+        existing_excluded = _write_unit(db, exclude_existing)
+    except OperationalError as exc:
+        db.rollback()
+        existing_excluded = []
+        metadata["filter_error"] = f"{type(exc).__name__}: {exc}"
+    metadata["filter"] = {
+        "version": FILTER_VERSION,
+        "existing_excluded": existing_excluded,
+    }
     index = _SourceIndex(db, source)
+
+    def reset_index() -> None:
+        nonlocal index
+        index = _SourceIndex(db, source)
+
     feeds: list[dict[str, Any]] = []
     for feed in source.feeds:
         result: dict[str, Any] = {"feed": feed.key, "endpoint": feed.url}
@@ -446,43 +530,72 @@ def _collect_source(
                 collected_at.isoformat(),
                 collected_at=collected_at,
             )
-            raw_row = _upsert_raw_payload(db, run, raw)
-            db.commit()
+
+            def store_raw() -> int:
+                raw_id = _upsert_raw_payload(db, run, raw).id
+                db.commit()
+                return raw_id
+
+            # The capture is kept even when the payload does not parse.
+            raw_id = _write_unit(db, store_raw)
             entries, skipped = parse_rss(response.content, source)
-            with db.begin_nested():
-                counts = _store_entries(
-                    db, source, entries, index, matcher, raw_row.id, collected_at
-                )
-            db.commit()
+
+            def store_entries() -> dict[str, Any]:
+                with db.begin_nested():
+                    counts = _store_entries(
+                        db, source, entries, index, matcher, raw_id, collected_at
+                    )
+                db.commit()
+                return counts
+
+            counts = _write_unit(db, store_entries, on_retry=reset_index)
             result.update(
                 status="success", items=len(entries), skipped=skipped, **counts
             )
         except NewsSourceError as exc:
             db.rollback()
-            index = _SourceIndex(db, source)
+            reset_index()
             result.update(status="failed", error=str(exc))
         except Exception as exc:  # noqa: BLE001 - one feed must not stop the other sources
             db.rollback()
-            index = _SourceIndex(db, source)
+            reset_index()
             result.update(status="failed", error=f"{type(exc).__name__}: {exc}")
         feeds.append(result)
     failed = [item for item in feeds if item["status"] == "failed"]
-    run.status = (
+    status = (
         "failed" if len(failed) == len(feeds) else ("partial" if failed else "success")
     )
-    run.records = sum(int(item.get("inserted", 0)) for item in feeds)
-    run.error = "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
-    run.data_as_of = datetime.utcnow().isoformat()
-    run.metadata_json = {**metadata, "feeds": feeds}
-    run.finished_at = datetime.utcnow()
-    db.commit()
-    return {
+
+    def close_run() -> None:
+        run.status = status
+        run.records = sum(int(item.get("inserted", 0)) for item in feeds)
+        run.error = (
+            "; ".join(f"{item['feed']}: {item['error']}" for item in failed) or None
+        )
+        run.data_as_of = datetime.utcnow().isoformat()
+        run.metadata_json = {**metadata, "feeds": feeds}
+        run.finished_at = datetime.utcnow()
+        db.commit()
+
+    error = None
+    try:
+        _write_unit(db, close_run)
+    except OperationalError as exc:
+        # The stored news stays; the run row is left running and the result
+        # reports the source as failed.
+        db.rollback()
+        status = "failed"
+        error = f"run result not recorded: {type(exc).__name__}: {exc}"
+    result = {
         "source": source.source_id,
         "run_id": run.id,
-        "status": run.status,
+        "status": status,
         "existing_excluded": existing_excluded,
         "feeds": feeds,
     }
+    if error:
+        result["error"] = error
+    return result
 
 
 def collect_news(

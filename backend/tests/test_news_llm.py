@@ -726,3 +726,45 @@ def test_cli_exits_1_and_names_the_reason_when_claude_is_missing(
     assert run.run_type == "news_llm" and run.status == "failed"
     assert run.error.startswith("cli_not_found: C:/missing/claude.exe")
     assert fake() == [] and _results(db) == []
+
+
+# Issue #185 -------------------------------------------------------------------
+
+
+def test_run_left_running_by_a_killed_task_is_closed_by_the_next_run(
+    db, fake, monkeypatch
+):
+    now = datetime.utcnow()
+    killed = IngestionRun(
+        run_type="news_llm",
+        source="claude-cli",
+        run_date=RUN_DATE,
+        status="running",
+        records=0,
+        started_at=now - timedelta(minutes=95),
+        metadata_json={},
+    )
+    active = IngestionRun(
+        run_type="news_llm",
+        source="claude-cli",
+        run_date=RUN_DATE,
+        status="running",
+        records=0,
+        started_at=now - timedelta(minutes=10),
+        metadata_json={},
+    )
+    db.add_all([killed, active])
+    db.commit()
+    # A dry run writes nothing, not even this repair.
+    _run(db, dry_run=True)
+    db.refresh(killed)
+    assert killed.status == "running"
+    # A configuration error still closes it: the next real run always does.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    result = _run(db)
+    assert result["status"] == "failed" and result["abandoned_runs"] == [killed.id]
+    db.refresh(killed)
+    db.refresh(active)
+    assert killed.status == "failed" and killed.error.startswith("abandoned")
+    assert killed.finished_at is not None
+    assert active.status == "running"
