@@ -1,4 +1,4 @@
-import { groupDisplayName, isTemporaryIndustryGroupName, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel, TEMPORARY_INDUSTRY_GROUP_NOTICE } from './presentation'
+import { groupDisplayName, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -57,5 +57,9 @@ expect(stockDirectoryActionLabel('new_state', 'new_state') === '研究動作待�
 expect(stockDirectoryActionLabel('wait_pullback') === '等待回踩條件', 'known state survives an absent translated label')
 expect(researchRequirementLabel('族群相對 TAIEX 的20日超額報酬') === '族群相對 加權指數 的20日超額報酬', 'mixed Chinese requirement translates benchmark name')
 
-expect(isTemporaryIndustryGroupName('Industry · Shipping'), 'legacy industry membership names use the temporary verification guard')
-expect(TEMPORARY_INDUSTRY_GROUP_NOTICE.includes('既有族群關聯待重新核實'), 'temporary industry notice keeps the fixed warning copy')
+expect(stockGroupLabel({ name: 'Industry · Financial', display_name: '金融', verified: true }) === '金融', 'verified industry row shows the official display name')
+expect(stockGroupLabel({ name: null, display_name: null, verified: false }) === '族群關聯待核實', 'unverified row stays fail-closed')
+expect(stockGroupLabel({ name: 'Industry · Shipping', display_name: '航運', verified: false }) === '族群關聯待核實', 'unverified row never shows a leaked name')
+expect(stockGroupLabel({ name: 'ETF · broad_market', display_name: 'ETF 分類：broad_market', verified: true }) === 'ETF · 大盤型', 'ETF rows keep the translated category')
+expect(stockGroupLabel({ name: 'New listings', display_name: '新上市標的', verified: true }) === '新上市族群', 'new-listing row keeps its product label')
+expect(stockGroupLabel({ name: 'Industry · X', display_name: ' ', verified: true }) === '族群名稱待核實', 'blank display name is not shown as empty')

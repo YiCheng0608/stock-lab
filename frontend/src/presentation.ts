@@ -273,15 +273,14 @@ export function researchRequirementLabel(field: string): string {
   return labels[value.toLowerCase()] ?? (/[\u3400-\u9fff]/.test(value) ? value.replace(/\bTAIEX\b/g, '加權指數') : '條件名稱待核實')
 }
 
-// Temporary UI guard for the currently known official-industry membership
-// migration issue. Remove this flag after the repaired source data is verified.
-export const TEMPORARY_INDUSTRY_GROUP_GUARD = true
-export const TEMPORARY_INDUSTRY_GROUP_NOTICE = '既有族群關聯待重新核實；排行與相關研究條件僅供查閱。'
-
-export function isTemporaryIndustryGroupName(name: string | null | undefined): boolean {
-  if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
-  const value = name?.trim() ?? ''
-  return /^industry\s*·/i.test(value) || /^產業(?:分類|代碼)/.test(value)
+// Stock-detail rows that fail verification carry no name; never show one.
+// ETF and new-listing rows keep the translated labels below because their
+// stored display names can still hold the internal category code.
+export function stockGroupLabel(group: { name: string | null; display_name: string | null; verified: boolean }): string {
+  if (!group.verified) return '族群關聯待核實'
+  const name = group.name?.trim() ?? ''
+  if (/^ETF\s*[·:：-]/i.test(name) || /^new listings$/i.test(name)) return groupDisplayName(name)
+  return group.display_name?.trim() || '族群名稱待核實'
 }
 
 export function groupDisplayName(value: string | null | undefined): string {

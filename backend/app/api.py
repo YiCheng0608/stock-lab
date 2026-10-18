@@ -536,6 +536,39 @@ def _product_group_taxonomy_verified(
     return _product_group_taxonomy_statuses(db, as_of).get(group.id, False)
 
 
+def _stock_group_row(
+    db: Session,
+    membership: GroupMembership,
+    instrument: Instrument,
+    as_of: date | None,
+) -> dict[str, Any]:
+    """One stock-detail membership row; unverified rows carry no group name.
+
+    Uses the theme pages' taxonomy gate at the same cutoff, and for official
+    groups also checks this row against the instrument's own code, so a
+    pre-D0 mismatched row stays fail-closed (docs/INDUSTRY_CLASSIFICATION.md §5.1).
+    """
+
+    group = db.get(ThemeGroup, membership.group_id)
+    verified = bool(
+        group is not None
+        and is_verified_theme(group)
+        and _product_group_taxonomy_verified(db, group, as_of)
+        and (
+            "official OpenAPI" not in str(group.source or "")
+            or _is_verified_theme_for_instrument(group, membership, instrument)
+        )
+    )
+    return {
+        "id": membership.group_id,
+        "name": group.name if verified else None,
+        "display_name": group.display_name_zh.strip() if verified else None,
+        "verified": verified,
+        "valid_from": as_date(membership.valid_from),
+        "valid_to": as_date(membership.valid_to),
+    }
+
+
 def _theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None) -> list[str]:
     if not group.active:
         return ["此族群已停用"]
@@ -2423,15 +2456,7 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
             "source": feature.source,
             "created_at": as_datetime(feature.created_at),
         } if feature else None,
-        "groups": [
-            {
-                "id": membership.group_id,
-                "name": db.get(ThemeGroup, membership.group_id).name if db.get(ThemeGroup, membership.group_id) else membership.group_id,
-                "valid_from": as_date(membership.valid_from),
-                "valid_to": as_date(membership.valid_to),
-            }
-            for membership in memberships
-        ],
+        "groups": [_stock_group_row(db, membership, instrument, as_of) for membership in memberships],
         "chips": [chip_dict(item) for item in reversed(chips)],
         "corporate_actions": [
             {

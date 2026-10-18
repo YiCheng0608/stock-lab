@@ -5,7 +5,7 @@ import ReactEChartsModule from 'echarts-for-react'
 
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Stat, Table, Tabs, tabId, tabPanelId } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
-import { officialEventDisplayTitle, TEMPORARY_INDUSTRY_GROUP_NOTICE } from '../presentation'
+import { officialEventDisplayTitle } from '../presentation'
 import { readChartTheme, type ChartTheme } from '../stock/stockBars'
 import type {
   NewsItem,
@@ -143,7 +143,6 @@ export function ThemeBoardPanel({ board, data, search }: { board: ThemeBoard; da
         <span className="small-note">{boardLabel(board)}榜 · 共 {data.meta.total} 個族群{search.trim() ? ` · 符合搜尋 ${filtered.length} 個` : ''}</span>
         <BoardDateBadges meta={data.meta} />
       </div>
-      {board === 'industry' && data.items.length > 0 && <div className="data-gap">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}
       {data.items.length === 0
         ? <Card><EmptyState reason={data.meta.empty_message ?? '此榜目前沒有族群'} /></Card>
         : filtered.length === 0
@@ -434,7 +433,6 @@ export function ThemeDetailView({
         </div>
         {version && <div className="small-note">題材表版本 {version}</div>}
       </section>
-      {detail.board === 'industry' && <div className="data-gap">{TEMPORARY_INDUSTRY_GROUP_NOTICE}</div>}
       <div className="theme-detail-grid">
         <TrendCard trend={detail.trend} dataDate={formatDate(detail.trend.at(-1)?.trading_date ?? detail.data_as_of)} />
         <ComponentsCard detail={detail} item={item} />
