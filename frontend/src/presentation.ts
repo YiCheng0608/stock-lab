@@ -273,15 +273,14 @@ export function researchRequirementLabel(field: string): string {
   return labels[value.toLowerCase()] ?? (/[\u3400-\u9fff]/.test(value) ? value.replace(/\bTAIEX\b/g, '加權指數') : '條件名稱待核實')
 }
 
-// Stock-detail groups only carry the internal `Industry · X` name, with no
-// display name or verification flag, so those rows stay masked as unverified.
-// Remove this flag once the stock detail payload returns verified display names.
-export const TEMPORARY_INDUSTRY_GROUP_GUARD = true
-
-export function isTemporaryIndustryGroupName(name: string | null | undefined): boolean {
-  if (!TEMPORARY_INDUSTRY_GROUP_GUARD) return false
-  const value = name?.trim() ?? ''
-  return /^industry\s*·/i.test(value) || /^產業(?:分類|代碼)/.test(value)
+// Stock-detail rows that fail verification carry no name; never show one.
+// ETF and new-listing rows keep the translated labels below because their
+// stored display names can still hold the internal category code.
+export function stockGroupLabel(group: { name: string | null; display_name: string | null; verified: boolean }): string {
+  if (!group.verified) return '族群關聯待核實'
+  const name = group.name?.trim() ?? ''
+  if (/^ETF\s*[·:：-]/i.test(name) || /^new listings$/i.test(name)) return groupDisplayName(name)
+  return group.display_name?.trim() || '族群名稱待核實'
 }
 
 export function groupDisplayName(value: string | null | undefined): string {

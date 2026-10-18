@@ -324,7 +324,7 @@ export type InstrumentDetail = {
   bars: StockDetailBar[]
   features: Record<string, unknown>
   feature_snapshot?: StockFeatureSnapshot | null
-  groups: Array<{ id: string; name: string; valid_from: string; valid_to: string | null }>
+  groups: Array<{ id: string; name: string | null; display_name: string | null; verified: boolean; valid_from: string; valid_to: string | null }>
   chips: StockDetailChip[]
   corporate_actions: CorporateAction[]
   fundamentals: FundamentalSnapshot[]
