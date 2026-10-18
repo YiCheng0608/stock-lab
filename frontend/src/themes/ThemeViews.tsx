@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Stat, Table, Tabs, tabId, tabPanelId } from '../components/ui'
-import { newsSourceLabel, officialEventDisplayTitle, TEMPORARY_INDUSTRY_GROUP_NOTICE } from '../presentation'
+import { newsSourceName } from '../news/newsView'
+import { officialEventDisplayTitle, TEMPORARY_INDUSTRY_GROUP_NOTICE } from '../presentation'
 import { readChartTheme, type ChartTheme } from '../stock/stockBars'
 import type {
   NewsItem,
@@ -388,7 +389,7 @@ export function ThemeNewsList({ items }: { items: readonly NewsItem[] }) {
         <li key={item.id}>
           <span className="news-list-time">{newsDateText(item)}</span>
           <Link className="theme-news-title" to={'/news/' + encodeURIComponent(item.id)}>{officialEventDisplayTitle(item.title)}</Link>
-          <span className="small-note">{newsSourceLabel(item.source_name)}</span>
+          <span className="small-note">{newsSourceName(item)}</span>
         </li>
       ))}
     </ul>
