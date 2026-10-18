@@ -6,7 +6,7 @@ import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -78,6 +78,12 @@ from worker.sources import (
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
 )
+
+# Longest normalized-price window a technical feature reads (ma60).
+FEATURE_LOOKBACK_BARS = 60
+# analyze commits derived rows every this many instruments so the SQLite
+# write lock is held only briefly (other jobs wait at most busy_timeout).
+ANALYZE_COMMIT_BATCH = 200
 
 
 def latest_weekday(value: date | None = None) -> date:
@@ -309,41 +315,50 @@ def _calculate_features(
         .order_by(MarketBar.trading_date)
     ).all()
     factors = _action_factor_by_bar(db, instrument.id, bars)
+    existing = {
+        feature.trading_date: feature
+        for feature in db.scalars(
+            select(TechnicalFeature).where(
+                TechnicalFeature.instrument_id == instrument.id,
+                *( [TechnicalFeature.trading_date <= as_of_date] if as_of_date is not None else [] ),
+            )
+        )
+    }
+    volumes = [item.volume for item in bars]
+    # Each bar's history is normalized to that bar's own factor.  Factors
+    # only change on corporate actions, so the series are built once per
+    # distinct factor, with the same expression as a per-bar rebuild.
+    series_by_factor: dict[float, tuple[list[float], list[float], list[float]]] = {}
     for index, bar in enumerate(bars):
         score_factor = factors[index] if factors else 1.0
-        normalized = [
-            {
-                "open": item.open * score_factor / (factors[position] or 1.0),
-                "high": item.high * score_factor / (factors[position] or 1.0),
-                "low": item.low * score_factor / (factors[position] or 1.0),
-                "close": item.close * score_factor / (factors[position] or 1.0),
-            }
-            for position, item in enumerate(bars[: index + 1])
-        ]
-        closes = [item["close"] for item in normalized]
-        highs = [item["high"] for item in normalized]
-        lows = [item["low"] for item in normalized]
-        volumes = [item.volume for item in bars[: index + 1]]
-        prior_closes = closes[:index]
-        prior_volumes = volumes[:index]
-        prior_highs = highs[:index]
-        prior_lows = lows[:index]
-        prior_20_volumes = prior_volumes[-20:] if len(prior_volumes) >= 20 else []
+        series = series_by_factor.get(score_factor)
+        if series is None:
+            series = tuple(
+                [getattr(item, field) * score_factor / (factor or 1.0) for item, factor in zip(bars, factors)]
+                for field in ("close", "high", "low")
+            )
+            series_by_factor[score_factor] = series
+        # Only the last FEATURE_LOOKBACK_BARS normalized bars feed the
+        # features below; ``index`` still counts the full history.
+        start = max(0, index + 1 - FEATURE_LOOKBACK_BARS)
+        closes, highs, lows = (values[start : index + 1] for values in series)
+        prior_volumes = volumes[max(0, index - 20) : index]
+        prior_20_volumes = prior_volumes if index >= 20 else []
         ma20 = moving_average(closes, 20)
         ma60 = moving_average(closes, 60)
-        atr_values = [normalized_item["high"] - normalized_item["low"] for normalized_item in normalized[-14:]]
+        atr_values = [high - low for high, low in zip(highs[-14:], lows[-14:])]
         ma5 = moving_average(closes, 5)
         feature_values: dict[str, Any] = {
-            "return_1d": round(closes[index] / closes[index - 1] - 1, 8) if index >= 1 and closes[index - 1] else None,
-            "return_5d": round(closes[index] / closes[index - 5] - 1, 8) if index >= 5 and closes[index - 5] else None,
-            "return_20d": round(closes[index] / closes[index - 20] - 1, 8) if index >= 20 and closes[index - 20] else None,
+            "return_1d": round(closes[-1] / closes[-2] - 1, 8) if index >= 1 and closes[-2] else None,
+            "return_5d": round(closes[-1] / closes[-6] - 1, 8) if index >= 5 and closes[-6] else None,
+            "return_20d": round(closes[-1] / closes[-21] - 1, 8) if index >= 20 and closes[-21] else None,
             "ma5": round(ma5, 6) if ma5 is not None else None,
             "ma20": round(ma20, 6) if ma20 is not None else None,
             "ma60": round(ma60, 6) if ma60 is not None else None,
             "high_20d": round(max(highs[-20:]), 6) if highs else None,
             "low_20d": round(min(lows[-20:]), 6) if lows else None,
-            "prior_high_20d": round(max(prior_highs[-20:]), 6) if len(prior_highs) >= 20 else None,
-            "prior_low_20d": round(min(prior_lows[-20:]), 6) if len(prior_lows) >= 20 else None,
+            "prior_high_20d": round(max(highs[-21:-1]), 6) if index >= 20 else None,
+            "prior_low_20d": round(min(lows[-21:-1]), 6) if index >= 20 else None,
             "atr14": round(sum(atr_values) / len(atr_values), 6) if atr_values else None,
             "volume": int(bar.volume),
             "volume_ratio_20d": (
@@ -358,12 +373,7 @@ def _calculate_features(
             "corporate_action_factor_signal_to_score_raw": score_factor,
             "corporate_actions_applied_through": bar.trading_date.isoformat(),
         }
-        feature = db.scalar(
-            select(TechnicalFeature).where(
-                TechnicalFeature.instrument_id == instrument.id,
-                TechnicalFeature.trading_date == bar.trading_date,
-            )
-        )
+        feature = existing.get(bar.trading_date)
         if not feature:
             feature = TechnicalFeature(
                 instrument_id=instrument.id,
@@ -372,7 +382,10 @@ def _calculate_features(
                 source="derived",
             )
             db.add(feature)
-        else:
+        elif feature.features_json != feature_values:
+            # An equal value would not be written anyway (the JSON type
+            # compares with ==); skipping it keeps the row out of the
+            # session's dirty set so unchanged history is not held in memory.
             feature.features_json = feature_values
         if (capture is not None and capture_date == bar.trading_date
                 and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1"):
@@ -2738,18 +2751,31 @@ def analyze(*, init_schema: bool = True, collect_run_id: int | None = None) -> d
     if init_schema:
         init_db()
     with SessionLocal() as db:
-        result = _analyze_session(db, collect_run_id=collect_run_id)
+        result = _analyze_session(db, collect_run_id=collect_run_id, checkpoint=db.commit)
         if result.get("status") == "success":
             db.commit()
         return result
 
 
-def _analyze_session(db: Session, *, capture: Any = None, collect_run_id: int | None = None) -> dict[str, Any]:
-    """Run analysis in the caller's transaction; only explicit callers capture.
+def _analyze_session(
+    db: Session,
+    *,
+    capture: Any = None,
+    collect_run_id: int | None = None,
+    checkpoint: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    """Run analysis in the caller's session; only explicit callers capture.
 
     ``collect_run_id`` pins the official collect run to analyze (the daily
     job passes its own, which may be an idempotently reused older row);
     otherwise the most recently updated official collect run is used.
+
+    ``checkpoint`` (``analyze`` passes ``db.commit``) is called after every
+    ANALYZE_COMMIT_BATCH instruments' features and after the group scores, so
+    each write transaction is short.  Every write is recomputed from stored
+    bars, so a failed run leaves only rows a rerun would write identically.
+    Writes are flushed only at those points; reads in between never depend on
+    unflushed rows, so the stored results match a single transaction.
     """
     query = select(IngestionRun).where(
         IngestionRun.run_type == "collect",
@@ -2780,14 +2806,22 @@ def _analyze_session(db: Session, *, capture: Any = None, collect_run_id: int | 
     else:
         return {"status": "no_data", "signals_upserted": 0}
     instruments = db.scalars(select(Instrument).where(Instrument.status == "active")).all()
-    for instrument in instruments:
+    for position, instrument in enumerate(instruments, start=1):
         if capture is not None and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1":
             _calculate_features(db, instrument, capture=capture, capture_date=score_date)
         else:
             _calculate_features(db, instrument)
+        if position % ANALYZE_COMMIT_BATCH == 0:
+            db.flush()
+            if checkpoint is not None:
+                checkpoint()
     db.flush()
+    if checkpoint is not None:
+        checkpoint()
     _calculate_group_scores(db, score_date)
     strategies = _ensure_strategies(db)
+    if checkpoint is not None:
+        checkpoint()
     signals_upserted = _generate_signals(db, score_date, strategies, capture=capture)
     return {"status": "success", "date": score_date.isoformat(), "signals_upserted": signals_upserted}
 
