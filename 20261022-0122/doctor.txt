@@ -1,0 +1,4 @@
+health 通過 GET :8227/api/health 200，本文含 "status":"ok"
+readiness 通過 api.log 第 3 行 Application startup complete，無 Database is not ready
+proxy 通過 GET :4227/api/health 200；GET :4227/ 回 HTML（<!doctype html>）
+facts 通過 db_facts.py exit 0，portfolio_positions 0
