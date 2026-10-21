@@ -35,6 +35,13 @@ BACKEND_READ_DIRS: tuple[str, ...] = ()
 BACKEND_READ_FILES: frozenset[str] = frozenset({"docs/OPERATIONS.md"})
 
 
+# Every Python file under backend/ and tools/, not only the changed ones, with the root ruff.toml.
+LINT_COMMANDS: tuple[tuple[str, ...], ...] = (
+    ("ruff", "check", "--no-cache", "backend", "tools"),
+    ("ruff", "format", "--check", "--no-cache", "backend", "tools"),
+)
+
+
 def change_flags(paths: list[str]) -> dict[str, bool]:
     shared = any(p.startswith((".github/workflows/", "tools/ci/")) for p in paths)
     # Markdown never reaches the product jobs unless a backend test reads it; the repository job checks it.
@@ -106,11 +113,10 @@ def main() -> None:
     elif args.mode == "repository":
         repository_checks(paths, args.base)
     else:
-        files = [p for p in paths if p.endswith(".py") and (ROOT / p).is_file()]
-        if files:
-            subprocess.run([sys.executable, "-m", "ruff", "check", "--no-cache", "--isolated", "--select", "E9,F63,F7,F82", "--", *files], cwd=ROOT, check=True)
-        else:
-            print("No changed Python files to lint.")
+        # Run both so one CI log shows lint and format failures together.
+        failed = [command for command in LINT_COMMANDS if subprocess.run([sys.executable, "-m", *command], cwd=ROOT).returncode]
+        if failed:
+            raise SystemExit("Failed: " + "; ".join(" ".join(command) for command in failed))
 
 
 if __name__ == "__main__":

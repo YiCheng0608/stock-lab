@@ -2,7 +2,7 @@
 import re
 import unittest
 
-from checks import ROOT, change_flags, markdown_errors
+from checks import LINT_COMMANDS, ROOT, change_flags, markdown_errors
 
 
 class RoutingTests(unittest.TestCase):
@@ -71,6 +71,17 @@ class RoutingTests(unittest.TestCase):
 
     def test_fenced_examples_are_not_links(self):
         self.assertEqual(markdown_errors("README.md", "```md\n[example](nonexistent-ci-link-target.md)\n```"), [])
+
+
+class LintTests(unittest.TestCase):
+    def test_lint_covers_whole_backend_and_tools_with_repository_settings(self):
+        self.assertEqual([command[:2] for command in LINT_COMMANDS], [("ruff", "check"), ("ruff", "format")])
+        self.assertIn("--check", LINT_COMMANDS[1])
+        for command in LINT_COMMANDS:
+            self.assertEqual(command[-2:], ("backend", "tools"))
+            self.assertNotIn("--isolated", command)
+            self.assertFalse(any(arg.startswith(("--select", "--ignore", "--config")) for arg in command), command)
+        self.assertTrue((ROOT / "ruff.toml").is_file())
 
 
 if __name__ == "__main__":

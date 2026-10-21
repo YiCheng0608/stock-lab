@@ -48,7 +48,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 | 範圍 | 命令 |
 | --- | --- |
-| 後端 | `python -m pytest backend/tests -q`；`ruff check backend`；`ruff format --check backend` |
+| 後端 | `python -m pytest backend/tests -q`；`ruff check backend tools`；`ruff format --check backend tools`（repo 根目錄執行，設定在 [`ruff.toml`](../ruff.toml)，CI 同命令） |
 | 前端 | `pnpm --dir frontend test:ci`；`pnpm --dir frontend build` |
 | 文件／repo | `python tools/ci/checks.py repository --base <完整 master SHA>` |
 
