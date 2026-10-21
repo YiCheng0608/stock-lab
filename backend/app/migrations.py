@@ -7,10 +7,17 @@ from pathlib import Path
 from sqlalchemy import Engine, inspect, text
 
 from .config import ALEMBIC_CONFIG_PATH
-from .domain import INSTITUTIONAL_FLOW_FORMULA_V1, INSTITUTIONAL_FLOW_FORMULA_V2, INSTITUTIONAL_FLOW_FORMULAS
+from .domain import (
+    INSTITUTIONAL_FLOW_FORMULA_V1,
+    INSTITUTIONAL_FLOW_FORMULA_V2,
+    INSTITUTIONAL_FLOW_FORMULAS,
+)
 from .news_json_defaults import ensure_news_json_server_defaults
 from .portfolio_share_migration import ensure_portfolio_share_integer
-from .settlement_identity_migration import preflight_settlement_identity, rebuild_settlement_identity
+from .settlement_identity_migration import (
+    preflight_settlement_identity,
+    rebuild_settlement_identity,
+)
 from .instrument_identity_migration import (
     check_sqlite_migration_integrity,
     preflight_instrument_identity,
@@ -87,7 +94,6 @@ _ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
 }
 
 
-
 def _column_names(connection, table_name: str) -> set[str]:
     return {column["name"] for column in inspect(connection).get_columns(table_name)}
 
@@ -99,7 +105,10 @@ def _has_unique_columns(connection, table_name: str, expected: tuple[str, ...]) 
         if tuple(constraint.get("column_names") or ()) == expected_set:
             return True
     for index in inspector.get_indexes(table_name):
-        if index.get("unique") and tuple(index.get("column_names") or ()) == expected_set:
+        if (
+            index.get("unique")
+            and tuple(index.get("column_names") or ()) == expected_set
+        ):
             return True
     return False
 
@@ -138,12 +147,27 @@ _STRATEGY_SCRATCH = "strategy_versions__formula_rebuild"
 # The list is closed: undeclared content that is not one of these stays
 # unclassified instead of being guessed as v1.
 _PRE_V2_CANONICAL_DIGESTS = {
-    "a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd": ("breakout_v1", "1.0.0"),
-    "03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff": ("pullback_v1", "1.0.0"),
-    "36cd82a287b2b8878c2b6efa165493ccf86b861e59dc35ffd858871c8f5c694e": ("hot_group_v1", "1.0.0"),
+    "a68f4f98f319e387e4de71c37e4fc16c225b4406c20a189f7bfdc1515e84b7cd": (
+        "breakout_v1",
+        "1.0.0",
+    ),
+    "03998a93820a3c132110d41e2496f5a94a8a7f556774cb80be23e549d4788eff": (
+        "pullback_v1",
+        "1.0.0",
+    ),
+    "36cd82a287b2b8878c2b6efa165493ccf86b861e59dc35ffd858871c8f5c694e": (
+        "hot_group_v1",
+        "1.0.0",
+    ),
 }
 _STRATEGY_LEGACY_COLUMNS = {
-    "id", "name", "version", "kind", "config_json", "active", "created_at",
+    "id",
+    "name",
+    "version",
+    "kind",
+    "config_json",
+    "active",
+    "created_at",
 }
 _STRATEGY_REBUILD_DDL = (
     f'CREATE TABLE "{_STRATEGY_SCRATCH}" ('
@@ -185,18 +209,26 @@ def _declared_formulas(snapshot: dict) -> list:
 
     declared = []
     confirmations = snapshot.get("confirmations")
-    flow = confirmations.get("institutional_flow") if isinstance(confirmations, dict) else None
+    flow = (
+        confirmations.get("institutional_flow")
+        if isinstance(confirmations, dict)
+        else None
+    )
     if isinstance(flow, dict) and "formula_version" in flow:
         declared.append(flow["formula_version"])
     components = snapshot.get("components")
-    flow = components.get("institutional_flow") if isinstance(components, dict) else None
+    flow = (
+        components.get("institutional_flow") if isinstance(components, dict) else None
+    )
     formula = flow.get("formula") if isinstance(flow, dict) else None
     if isinstance(formula, dict) and "formula_version" in formula:
         declared.append(formula["formula_version"])
     return declared
 
 
-def classify_strategy_formula(name, version, config_json, canonical_config_snapshot) -> str:
+def classify_strategy_formula(
+    name, version, config_json, canonical_config_snapshot
+) -> str:
     """Return a stored row's formula identity, or a named ``unclassified/<reason>``.
 
     Known formula values are taken from the snapshot itself; a snapshot without
@@ -217,8 +249,10 @@ def classify_strategy_formula(name, version, config_json, canonical_config_snaps
     declared = _declared_formulas(snapshot)
     if declared:
         first = declared[0]
-        if isinstance(first, str) and first in INSTITUTIONAL_FLOW_FORMULAS and all(
-            isinstance(value, str) and value == first for value in declared
+        if (
+            isinstance(first, str)
+            and first in INSTITUTIONAL_FLOW_FORMULAS
+            and all(isinstance(value, str) and value == first for value in declared)
         ):
             return first
         return UNCLASSIFIED_FORMULA_PREFIX + "unknown_formula_version"
@@ -236,33 +270,54 @@ def _strategy_formula_state(connection) -> str:
         for (name,) in connection.exec_driver_sql("SELECT name FROM temp.sqlite_schema")
     ):
         raise _strategy_error("unsupported TEMP shadow object")
-    objects = connection.exec_driver_sql("SELECT type, name FROM main.sqlite_schema").all()
+    objects = connection.exec_driver_sql(
+        "SELECT type, name FROM main.sqlite_schema"
+    ).all()
     if any(name.lower().startswith(_STRATEGY_SCRATCH) for _, name in objects):
         raise _strategy_error("occupied scratch object; manual recovery required")
-    table = next((kind for kind, name in objects if name.lower() == _STRATEGY_TABLE), None)
+    table = next(
+        (kind for kind, name in objects if name.lower() == _STRATEGY_TABLE), None
+    )
     if table is None:
         return "absent"
     if table != "table":
         raise _strategy_error(f"strategy_versions is a {table}, not a table")
-    columns = {row[1] for row in connection.exec_driver_sql(f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")')}
+    columns = {
+        row[1]
+        for row in connection.exec_driver_sql(
+            f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")'
+        )
+    }
     keys = set()
-    for index in connection.exec_driver_sql(f'PRAGMA main.index_list("{_STRATEGY_TABLE}")'):
+    for index in connection.exec_driver_sql(
+        f'PRAGMA main.index_list("{_STRATEGY_TABLE}")'
+    ):
         if not index[2]:
             continue
         parts = [
-            row for row in connection.exec_driver_sql(f'PRAGMA main.index_xinfo("{index[1]}")') if row[5]
+            row
+            for row in connection.exec_driver_sql(
+                f'PRAGMA main.index_xinfo("{index[1]}")'
+            )
+            if row[5]
         ]
         if index[4] or any(row[2] is None for row in parts):
             raise _strategy_error("partial or expression unique index")
         keys.add(tuple(row[2] for row in parts))
-    identity = {key for key in keys if {"name", "version", "formula_version"}.intersection(key)}
+    identity = {
+        key for key in keys if {"name", "version", "formula_version"}.intersection(key)
+    }
     if "formula_version" in columns:
         if identity != {("name", "version", "formula_version")}:
-            raise _strategy_error("formula_version exists but the unique identity is not (name, version, formula_version)")
+            raise _strategy_error(
+                "formula_version exists but the unique identity is not (name, version, formula_version)"
+            )
         return "current"
     if identity != {("name", "version")}:
         raise _strategy_error("legacy table lacks the unique identity (name, version)")
-    if not _STRATEGY_LEGACY_COLUMNS.issubset(columns) or columns - _STRATEGY_LEGACY_COLUMNS - {"canonical_config_snapshot"}:
+    if not _STRATEGY_LEGACY_COLUMNS.issubset(
+        columns
+    ) or columns - _STRATEGY_LEGACY_COLUMNS - {"canonical_config_snapshot"}:
         raise _strategy_error("unsupported legacy columns")
     for kind, name, owner, body in connection.exec_driver_sql(
         "SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE type IN ('trigger', 'view')"
@@ -291,21 +346,43 @@ def ensure_strategy_formula_version(connection) -> bool:
     if _strategy_formula_state(connection) != "legacy":
         return False
     if int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar() or 0):
-        raise _strategy_error("requires PRAGMA foreign_keys=OFF, owned by the migration runner")
-    columns = {row[1] for row in connection.exec_driver_sql(f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")')}
-    snapshot_column = '"canonical_config_snapshot"' if "canonical_config_snapshot" in columns else "'{}'"
+        raise _strategy_error(
+            "requires PRAGMA foreign_keys=OFF, owned by the migration runner"
+        )
+    columns = {
+        row[1]
+        for row in connection.exec_driver_sql(
+            f'PRAGMA main.table_xinfo("{_STRATEGY_TABLE}")'
+        )
+    }
+    snapshot_column = (
+        '"canonical_config_snapshot"'
+        if "canonical_config_snapshot" in columns
+        else "'{}'"
+    )
     legacy = connection.exec_driver_sql(
-        'SELECT "id", "name", "version", "kind", "config_json", ' + snapshot_column + ', "active", "created_at" '
+        'SELECT "id", "name", "version", "kind", "config_json", '
+        + snapshot_column
+        + ', "active", "created_at" '
         f'FROM "{_STRATEGY_TABLE}" ORDER BY "id"'
     ).all()
     connection.exec_driver_sql(_STRATEGY_REBUILD_DDL)
     migrated = []
     for row_id, name, version, kind, config, snapshot, active, created_at in legacy:
         formula = classify_strategy_formula(name, version, config, snapshot)
-        migrated.append((
-            row_id, name, version, formula, kind, config, snapshot,
-            active if formula == INSTITUTIONAL_FLOW_FORMULA_V2 else 0, created_at,
-        ))
+        migrated.append(
+            (
+                row_id,
+                name,
+                version,
+                formula,
+                kind,
+                config,
+                snapshot,
+                active if formula == INSTITUTIONAL_FLOW_FORMULA_V2 else 0,
+                created_at,
+            )
+        )
     if migrated:
         connection.exec_driver_sql(
             f'INSERT INTO "{_STRATEGY_SCRATCH}" '
@@ -314,17 +391,28 @@ def ensure_strategy_formula_version(connection) -> bool:
             migrated,
         )
     connection.exec_driver_sql(f'DROP TABLE "{_STRATEGY_TABLE}"')
-    connection.exec_driver_sql(f'ALTER TABLE "{_STRATEGY_SCRATCH}" RENAME TO "{_STRATEGY_TABLE}"')
-    connection.exec_driver_sql(f'CREATE INDEX "ix_strategy_versions_name" ON "{_STRATEGY_TABLE}" ("name")')
-    kept = [row[0] for row in connection.exec_driver_sql(f'SELECT "id" FROM "{_STRATEGY_TABLE}" ORDER BY "id"')]
-    if kept != [row[0] for row in legacy] or _strategy_formula_state(connection) != "current":
+    connection.exec_driver_sql(
+        f'ALTER TABLE "{_STRATEGY_SCRATCH}" RENAME TO "{_STRATEGY_TABLE}"'
+    )
+    connection.exec_driver_sql(
+        f'CREATE INDEX "ix_strategy_versions_name" ON "{_STRATEGY_TABLE}" ("name")'
+    )
+    kept = [
+        row[0]
+        for row in connection.exec_driver_sql(
+            f'SELECT "id" FROM "{_STRATEGY_TABLE}" ORDER BY "id"'
+        )
+    ]
+    if (
+        kept != [row[0] for row in legacy]
+        or _strategy_formula_state(connection) != "current"
+    ):
         raise _strategy_error("post-rebuild identity mismatch")
     if inspect(connection).has_table("signals") and connection.exec_driver_sql(
         'PRAGMA foreign_key_check("signals")'
     ).fetchmany(1):
         raise _strategy_error("post-rebuild foreign-key violation from signals")
     return True
-
 
 
 def _fallback_upgrade_on_connection(connection) -> None:
@@ -343,15 +431,18 @@ def _fallback_upgrade_on_connection(connection) -> None:
     ]
     Base.metadata.create_all(
         bind=connection,
-        tables=[table for table in Base.metadata.sorted_tables if table not in after_news_repair],
+        tables=[
+            table
+            for table in Base.metadata.sorted_tables
+            if table not in after_news_repair
+        ],
     )
     inspector = inspect(connection)
     # A pre-existing status is authoritative. Only rows from a schema that
     # lacked it receive the one-time legacy classification below.
-    had_turnover_status = (
-        inspector.has_table("market_bars")
-        and "turnover_status" in _column_names(connection, "market_bars")
-    )
+    had_turnover_status = inspector.has_table(
+        "market_bars"
+    ) and "turnover_status" in _column_names(connection, "market_bars")
     for table_name, columns in _ADDITIVE_COLUMNS.items():
         if not inspector.has_table(table_name):
             continue
@@ -359,20 +450,28 @@ def _fallback_upgrade_on_connection(connection) -> None:
         for column_name, definition in columns.items():
             if column_name not in existing:
                 connection.execute(
-                    text(f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {definition}')
+                    text(
+                        f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {definition}'
+                    )
                 )
     if inspector.has_table("market_bars") and not had_turnover_status:
-        connection.execute(text(
-            "UPDATE market_bars SET turnover_status = 'available' WHERE turnover > 0"
-        ))
-        connection.execute(text(
-            "UPDATE market_bars SET turnover_reason = 'legacy_zero_ambiguous' "
-            "WHERE turnover = 0"
-        ))
-        connection.execute(text(
-            "UPDATE market_bars SET turnover_reason = 'legacy_invalid' "
-            "WHERE turnover < 0 OR turnover IS NULL"
-        ))
+        connection.execute(
+            text(
+                "UPDATE market_bars SET turnover_status = 'available' WHERE turnover > 0"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE market_bars SET turnover_reason = 'legacy_zero_ambiguous' "
+                "WHERE turnover = 0"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE market_bars SET turnover_reason = 'legacy_invalid' "
+                "WHERE turnover < 0 OR turnover IS NULL"
+            )
+        )
     _rebuild_instruments_if_needed(connection)
     _ensure_request_key_index(connection)
     _rebuild_signal_settlements_if_needed(connection)
@@ -549,9 +648,13 @@ def _fallback_upgrade(target_engine: Engine) -> None:
                 _fallback_upgrade_on_connection(connection)
                 check_sqlite_migration_integrity(connection)
                 if preflight_settlement_identity(connection) != "current":
-                    raise RuntimeError("cannot migrate settlements: missing current identity after fallback")
+                    raise RuntimeError(
+                        "cannot migrate settlements: missing current identity after fallback"
+                    )
                 if preflight_instrument_identity(connection) != "current":
-                    raise RuntimeError("cannot migrate instruments: missing current identity after fallback")
+                    raise RuntimeError(
+                        "cannot migrate instruments: missing current identity after fallback"
+                    )
                 connection.exec_driver_sql(f'RELEASE SAVEPOINT "{savepoint}"')
                 connection.commit()
             except BaseException:
@@ -584,7 +687,6 @@ def _fallback_upgrade(target_engine: Engine) -> None:
                 raise
 
 
-
 def _escape_config_value(value: str) -> str:
     """Escape ``%`` so ConfigParser interpolation reads the value back verbatim.
 
@@ -615,7 +717,9 @@ def upgrade_database(target_engine: Engine) -> None:
         "sqlalchemy.url",
         _escape_config_value(target_engine.url.render_as_string(hide_password=False)),
     )
-    config.set_main_option("script_location", _escape_config_value(str(config_path.parent / "alembic")))
+    config.set_main_option(
+        "script_location", _escape_config_value(str(config_path.parent / "alembic"))
+    )
     # Reuse the configured engine so its SQLite foreign-key listener remains
     # active and tests can migrate an isolated database without touching the
     # production stock.db.

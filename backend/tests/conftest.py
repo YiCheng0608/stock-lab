@@ -52,7 +52,9 @@ def pytest_unconfigure(config):
 
     shutil.rmtree(_TEST_ROOT, onexc=remember)
     for path, error in failures:
-        sys.stderr.write(f"warning: could not remove {path}: {type(error).__name__}: {error}\n")
+        sys.stderr.write(
+            f"warning: could not remove {path}: {type(error).__name__}: {error}\n"
+        )
 
 
 @pytest.fixture(autouse=True)

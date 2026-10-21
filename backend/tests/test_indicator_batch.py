@@ -404,7 +404,9 @@ def daily_db(monkeypatch):
     enable_sqlite_foreign_keys(engine)
     Base.metadata.create_all(engine)
     monkeypatch.setattr(
-        pipeline, "SessionLocal", sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        pipeline,
+        "SessionLocal",
+        sessionmaker(bind=engine, autoflush=False, expire_on_commit=False),
     )
     monkeypatch.setattr(pipeline, "init_db", lambda: None)
     yield engine
@@ -422,7 +424,9 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
         or {"status": collect, "records": 1},
     )
     monkeypatch.setattr(
-        pipeline, "analyze", lambda **_kwargs: calls.append(("analyze",)) or {"status": analyze}
+        pipeline,
+        "analyze",
+        lambda **_kwargs: calls.append(("analyze",)) or {"status": analyze},
     )
     monkeypatch.setattr(
         pipeline,
@@ -440,7 +444,11 @@ def _daily_stubs(monkeypatch, *, collect="success", analyze="success", indicator
     # Catch-up of earlier sessions has its own tests (test_daily_schedule).
     from worker import schedule_runs
 
-    monkeypatch.setattr(schedule_runs, "_catchup_step", lambda *_args: {"status": "success", "records": 0})
+    monkeypatch.setattr(
+        schedule_runs,
+        "_catchup_step",
+        lambda *_args: {"status": "success", "records": 0},
+    )
     return pipeline, calls
 
 
@@ -464,7 +472,8 @@ def test_run_daily_indicator_failure_does_not_stop_evaluate(daily_db, monkeypatc
 
 
 def test_run_daily_skips_indicators_when_collect_fails_and_runs_them_when_analyze_fails(
-    daily_db, monkeypatch,
+    daily_db,
+    monkeypatch,
 ):
     pipeline, calls = _daily_stubs(monkeypatch, collect="failed")
     result = pipeline.run_daily(END)

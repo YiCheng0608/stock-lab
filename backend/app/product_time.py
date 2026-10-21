@@ -206,7 +206,11 @@ def _response_time(value: str | datetime | None) -> str:
             parsed = None
     else:
         parsed = None
-    if parsed is not None and parsed.tzinfo is not None and parsed.utcoffset() is not None:
+    if (
+        parsed is not None
+        and parsed.tzinfo is not None
+        and parsed.utcoffset() is not None
+    ):
         return parsed.astimezone(UTC).isoformat()
     return datetime.now(UTC).isoformat()
 
@@ -248,26 +252,56 @@ def build_news_product_time(
 
     conflict = str(getattr(item, "time_consistency", "") or "").casefold() == "conflict"
     item_event_date = getattr(item, "event_date", None)
-    event_date = item_event_date if item_event_date is not None else getattr(event, "event_date", None)
+    event_date = (
+        item_event_date
+        if item_event_date is not None
+        else getattr(event, "event_date", None)
+    )
     time_basis = str(getattr(item, "time_basis", "") or "").casefold()
     time_precision = str(getattr(item, "time_precision", "") or "").casefold()
     roles = {
-        "market_date": _unknown("market_date", "news_market_date_not_persisted", source="news_item"),
+        "market_date": _unknown(
+            "market_date", "news_market_date_not_persisted", source="news_item"
+        ),
         "event_date": _role_from_value(
             "event_date",
             event_date,
-            source="news_item.event_date" if item_event_date is not None else "event.event_date",
+            source="news_item.event_date"
+            if item_event_date is not None
+            else "event.event_date",
             missing_reason="news_event_date_not_persisted",
             date_role=True,
             conflict=conflict,
         ),
-        "event_at": _unknown("event_at", "news_event_at_not_display_basis", source="news_item.event_at"),
-        "published_at": _unknown("published_at", "news_published_at_not_display_basis", source="news_item.published_at"),
-        "first_available_at": _unknown("first_available_at", "news_first_available_at_not_persisted", source="news_item"),
-        "collected_at": _unknown("collected_at", "news_collected_at_not_persisted", source="news_item.collected_at"),
-        "revision_available_at": _unknown("revision_available_at", "news_revision_available_at_not_persisted", source="news_item"),
-        "decision_at": _unknown("decision_at", "news_decision_at_not_persisted", source="news_item"),
-        "generated_at": _unknown("generated_at", "news_generated_at_not_persisted", source="news_item"),
+        "event_at": _unknown(
+            "event_at", "news_event_at_not_display_basis", source="news_item.event_at"
+        ),
+        "published_at": _unknown(
+            "published_at",
+            "news_published_at_not_display_basis",
+            source="news_item.published_at",
+        ),
+        "first_available_at": _unknown(
+            "first_available_at",
+            "news_first_available_at_not_persisted",
+            source="news_item",
+        ),
+        "collected_at": _unknown(
+            "collected_at",
+            "news_collected_at_not_persisted",
+            source="news_item.collected_at",
+        ),
+        "revision_available_at": _unknown(
+            "revision_available_at",
+            "news_revision_available_at_not_persisted",
+            source="news_item",
+        ),
+        "decision_at": _unknown(
+            "decision_at", "news_decision_at_not_persisted", source="news_item"
+        ),
+        "generated_at": _unknown(
+            "generated_at", "news_generated_at_not_persisted", source="news_item"
+        ),
         "earliest_execution_at": _unknown(
             "earliest_execution_at",
             "news_earliest_execution_at_not_applicable",
@@ -280,8 +314,13 @@ def build_news_product_time(
         ),
     }
     if conflict:
-        roles["market_date"] = _unknown("market_date", "time_consistency_conflict", source="news_item")
-    elif time_basis in {"published", "event", "collected"} and time_precision in {"datetime", "date"}:
+        roles["market_date"] = _unknown(
+            "market_date", "time_consistency_conflict", source="news_item"
+        )
+    elif time_basis in {"published", "event", "collected"} and time_precision in {
+        "datetime",
+        "date",
+    }:
         role = f"{time_basis}_at"
         if time_basis == "published":
             source = "news_item.published_at"
@@ -361,12 +400,24 @@ def build_news_product_time(
         "A collection timestamp does not prove when the source first became available.",
         "Historical decision and generation times are not persisted by the NewsItem projection.",
     ]
-    if time_basis not in {"published", "event", "event_date", "collected", "unverified"} or time_precision not in {"datetime", "date", "none"}:
-        limitations.append("Invalid or missing News time_basis/time_precision does not establish a known instant.")
+    if time_basis not in {
+        "published",
+        "event",
+        "event_date",
+        "collected",
+        "unverified",
+    } or time_precision not in {"datetime", "date", "none"}:
+        limitations.append(
+            "Invalid or missing News time_basis/time_precision does not establish a known instant."
+        )
     elif time_basis == "unverified" or time_precision == "none":
-        limitations.append("Unverified or none time quality does not promote stored aware timestamps to known product instants.")
+        limitations.append(
+            "Unverified or none time quality does not promote stored aware timestamps to known product instants."
+        )
     if conflict:
-        limitations.append("Conflicting event chronology is fail-closed; legacy values are retained only for review.")
+        limitations.append(
+            "Conflicting event chronology is fail-closed; legacy values are retained only for review."
+        )
     return _assemble(
         roles,
         legacy=legacy,
@@ -391,14 +442,36 @@ def build_signal_product_time(
             missing_reason="signal_market_date_not_persisted",
             date_role=True,
         ),
-        "event_date": _unknown("event_date", "signal_event_date_not_persisted", source="signal"),
-        "event_at": _unknown("event_at", "signal_event_at_not_persisted", source="signal"),
-        "published_at": _unknown("published_at", "signal_published_at_not_persisted", source="signal"),
-        "first_available_at": _unknown("first_available_at", "signal_first_available_at_not_persisted", source="signal"),
-        "collected_at": _unknown("collected_at", "signal_collected_at_not_persisted", source="signal"),
-        "revision_available_at": _unknown("revision_available_at", "signal_revision_available_at_not_persisted", source="signal"),
-        "decision_at": _unknown("decision_at", "legacy_decision_at_not_persisted", source="signal"),
-        "generated_at": _unknown("generated_at", "legacy_generated_at_not_persisted_with_timezone", source="signal"),
+        "event_date": _unknown(
+            "event_date", "signal_event_date_not_persisted", source="signal"
+        ),
+        "event_at": _unknown(
+            "event_at", "signal_event_at_not_persisted", source="signal"
+        ),
+        "published_at": _unknown(
+            "published_at", "signal_published_at_not_persisted", source="signal"
+        ),
+        "first_available_at": _unknown(
+            "first_available_at",
+            "signal_first_available_at_not_persisted",
+            source="signal",
+        ),
+        "collected_at": _unknown(
+            "collected_at", "signal_collected_at_not_persisted", source="signal"
+        ),
+        "revision_available_at": _unknown(
+            "revision_available_at",
+            "signal_revision_available_at_not_persisted",
+            source="signal",
+        ),
+        "decision_at": _unknown(
+            "decision_at", "legacy_decision_at_not_persisted", source="signal"
+        ),
+        "generated_at": _unknown(
+            "generated_at",
+            "legacy_generated_at_not_persisted_with_timezone",
+            source="signal",
+        ),
         "earliest_execution_at": _role_from_value(
             "earliest_execution_at",
             None,
@@ -459,7 +532,9 @@ def build_action_product_time(
         else "action_event_date_not_persisted"
     )
     market_value = price_as_of if price_as_of is not None else as_of
-    market_source = "market_bar.trading_date" if price_as_of is not None else "decision.as_of"
+    market_source = (
+        "market_bar.trading_date" if price_as_of is not None else "decision.as_of"
+    )
     roles = {
         "market_date": _role_from_value(
             "market_date",
@@ -471,21 +546,41 @@ def build_action_product_time(
         "event_date": _role_from_value(
             "event_date",
             getattr(unique_event, "event_date", None),
-            source="event.event_date" if unique_event is not None else "decision.events",
+            source="event.event_date"
+            if unique_event is not None
+            else "decision.events",
             missing_reason=event_reason,
             date_role=True,
         ),
-        "event_at": _unknown("event_at", "action_event_at_not_persisted", source="decision"),
-        "published_at": _unknown("published_at", "action_published_at_not_persisted", source="decision"),
-        "first_available_at": _unknown("first_available_at", "action_first_available_at_not_persisted", source="decision"),
+        "event_at": _unknown(
+            "event_at", "action_event_at_not_persisted", source="decision"
+        ),
+        "published_at": _unknown(
+            "published_at", "action_published_at_not_persisted", source="decision"
+        ),
+        "first_available_at": _unknown(
+            "first_available_at",
+            "action_first_available_at_not_persisted",
+            source="decision",
+        ),
         "collected_at": _unknown(
             "collected_at",
             "action_collected_at_not_persisted",
             source="decision",
         ),
-        "revision_available_at": _unknown("revision_available_at", "action_revision_available_at_not_persisted", source="decision"),
-        "decision_at": _unknown("decision_at", "legacy_decision_at_not_persisted", source="decision"),
-        "generated_at": _unknown("generated_at", "legacy_generated_at_not_persisted_with_timezone", source="decision"),
+        "revision_available_at": _unknown(
+            "revision_available_at",
+            "action_revision_available_at_not_persisted",
+            source="decision",
+        ),
+        "decision_at": _unknown(
+            "decision_at", "legacy_decision_at_not_persisted", source="decision"
+        ),
+        "generated_at": _unknown(
+            "generated_at",
+            "legacy_generated_at_not_persisted_with_timezone",
+            source="decision",
+        ),
         "earliest_execution_at": _role_from_value(
             "earliest_execution_at",
             None,

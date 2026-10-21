@@ -19,12 +19,10 @@ from app.models import (
     ChipSnapshot,
     CorporateAction,
     Event,
-    GroupDailyScore,
     GroupMembership,
     IngestionRun,
     Instrument,
     MarketBar,
-    NewsItem,
     PortfolioPosition,
     RawPayload,
     Signal,
@@ -141,7 +139,9 @@ def test_backfill_plan_is_bounded_for_phase3_targets():
         "backoff": "delegated to official adapter; no unbounded retry",
     }
     assert {item["exchange"] for item in metadata["batch_plan"]} == {"TWSE", "TPEx"}
-    assert {item["domain"] for item in metadata["batch_plan"]} == set(backfill.BACKFILL_DOMAINS)
+    assert {item["domain"] for item in metadata["batch_plan"]} == set(
+        backfill.BACKFILL_DOMAINS
+    )
 
 
 def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env):
@@ -152,10 +152,16 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
     class HolidayAdapter:
         calls: list[date] = []
 
-        def fetch(self, requested_start: date, requested_end: date) -> sources.OfficialBatch:
+        def fetch(
+            self, requested_start: date, requested_end: date
+        ) -> sources.OfficialBatch:
             assert requested_start == requested_end
             self.calls.append(requested_start)
-            return _no_data_batch_for(requested_start) if requested_start in holidays else _batch_for(requested_start)
+            return (
+                _no_data_batch_for(requested_start)
+                if requested_start in holidays
+                else _batch_for(requested_start)
+            )
 
     adapter = HolidayAdapter()
     result = backfill.targeted_backfill(start, end, adapter=adapter)
@@ -164,11 +170,14 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
     assert len(metadata["requested_calendar_dates"]) == 65
     assert len(metadata["verified_trading_sessions"]) == 65
     assert metadata["target_met"] is True
-    assert metadata["skipped_non_trading"] == sorted(day.isoformat() for day in holidays)
+    assert metadata["skipped_non_trading"] == sorted(
+        day.isoformat() for day in holidays
+    )
     assert {"2026-06-08", "2026-06-09"}.issubset(set(metadata["extension_dates"]))
     assert all(item["batch_size"] <= 5 for item in metadata["batch_plan"])
     assert set(adapter.calls) == set(backfill.calendar_weekday_dates(start, end)) | {
-        date(2026, 6, 8), date(2026, 6, 9)
+        date(2026, 6, 8),
+        date(2026, 6, 9),
     }
 
     with backfill_env() as db:
@@ -182,13 +191,20 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
         }
 
     class MustNotRefetch:
-        def fetch(self, requested_start: date, requested_end: date) -> sources.OfficialBatch:  # pragma: no cover
-            raise AssertionError(f"verified/skipped date was fetched again: {requested_start}")
+        def fetch(
+            self, requested_start: date, requested_end: date
+        ) -> sources.OfficialBatch:  # pragma: no cover
+            raise AssertionError(
+                f"verified/skipped date was fetched again: {requested_start}"
+            )
 
     resumed = backfill.targeted_backfill(start, end, adapter=MustNotRefetch())
     assert resumed["id"] == result["id"]
     assert resumed["metadata"]["target_met"] is True
-    assert resumed["metadata"]["verified_trading_sessions"] == metadata["verified_trading_sessions"]
+    assert (
+        resumed["metadata"]["verified_trading_sessions"]
+        == metadata["verified_trading_sessions"]
+    )
     with backfill_env() as db:
         after = {
             name: db.query(model).count()
@@ -201,7 +217,9 @@ def test_full_target_extends_before_range_for_two_no_data_weekdays(backfill_env)
     assert after == before
 
 
-def test_coverage_uses_effective_sessions_for_stock_ipo_and_etf_boundaries(backfill_env):
+def test_coverage_uses_effective_sessions_for_stock_ipo_and_etf_boundaries(
+    backfill_env,
+):
     sessions: list[date] = []
     cursor = date(2026, 6, 1)
     while len(sessions) < 63:
@@ -211,19 +229,77 @@ def test_coverage_uses_effective_sessions_for_stock_ipo_and_etf_boundaries(backf
 
     with backfill_env() as db:
         instruments = [
-            Instrument(market="TW", exchange="TWSE", symbol="STOCK", name="Stock", instrument_type="stock", status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="BOND", name="Bond ETF", instrument_type="etf", etf_category="bond", status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="IPO19", name="IPO 19", instrument_type="ipo", listing_date=sessions[-19], status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="IPO20", name="IPO 20", instrument_type="ipo", listing_date=sessions[-20], status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="IPO59", name="IPO 59", instrument_type="ipo", listing_date=sessions[-59], status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="IPO60", name="IPO 60", instrument_type="ipo", listing_date=sessions[-60], status="active"),
-            Instrument(market="TW", exchange="TWSE", symbol="TAIEX", name="TAIEX", instrument_type="index", status="active"),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="STOCK",
+                name="Stock",
+                instrument_type="stock",
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="BOND",
+                name="Bond ETF",
+                instrument_type="etf",
+                etf_category="bond",
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="IPO19",
+                name="IPO 19",
+                instrument_type="ipo",
+                listing_date=sessions[-19],
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="IPO20",
+                name="IPO 20",
+                instrument_type="ipo",
+                listing_date=sessions[-20],
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="IPO59",
+                name="IPO 59",
+                instrument_type="ipo",
+                listing_date=sessions[-59],
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="IPO60",
+                name="IPO 60",
+                instrument_type="ipo",
+                listing_date=sessions[-60],
+                status="active",
+            ),
+            Instrument(
+                market="TW",
+                exchange="TWSE",
+                symbol="TAIEX",
+                name="TAIEX",
+                instrument_type="index",
+                status="active",
+            ),
         ]
         db.add_all(instruments)
         db.flush()
         for trading_date in sessions:
             for instrument in instruments:
-                if instrument.instrument_type != "index" and instrument.listing_date and trading_date < instrument.listing_date:
+                if (
+                    instrument.instrument_type != "index"
+                    and instrument.listing_date
+                    and trading_date < instrument.listing_date
+                ):
                     continue
                 db.add(
                     MarketBar(
@@ -257,7 +333,11 @@ def test_coverage_uses_effective_sessions_for_stock_ipo_and_etf_boundaries(backf
             db,
             sessions[0],
             sessions[-1],
-            target_keys={("TWSE", item.symbol) for item in instruments if item.instrument_type != "index"},
+            target_keys={
+                ("TWSE", item.symbol)
+                for item in instruments
+                if item.instrument_type != "index"
+            },
         )
 
     rows = {row["symbol"]: row for row in report["instrument_coverage"]}
@@ -283,19 +363,71 @@ def test_event_coverage_counts_verified_empty_not_event_date_rows(backfill_env):
     second = date(2026, 9, 4)
     third = date(2026, 9, 7)
     with backfill_env() as db:
-        taiex = Instrument(market="TW", exchange="TWSE", symbol="TAIEX", name="TAIEX", instrument_type="index", status="active")
-        stock = Instrument(market="TW", exchange="TWSE", symbol="AAA", name="Alpha", instrument_type="stock", status="active")
+        taiex = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="TAIEX",
+            name="TAIEX",
+            instrument_type="index",
+            status="active",
+        )
+        stock = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="AAA",
+            name="Alpha",
+            instrument_type="stock",
+            status="active",
+        )
         db.add_all([taiex, stock])
         db.flush()
         for trading_date in (first, second):
-            db.add_all([
-                MarketBar(instrument_id=taiex.id, trading_date=trading_date, open=100, high=101, low=99, close=100, adj_close=100, volume=1, turnover=1, source="fixture"),
-                MarketBar(instrument_id=stock.id, trading_date=trading_date, open=100, high=101, low=99, close=100, adj_close=100, volume=1, turnover=1, source="fixture"),
-            ])
-        db.add_all([
-            Event(instrument_id=stock.id, event_date=second, event_type="official", title="Observed event", source="official"),
-            Event(instrument_id=stock.id, event_date=third, event_type="official", title="Observed event", source="official"),
-        ])
+            db.add_all(
+                [
+                    MarketBar(
+                        instrument_id=taiex.id,
+                        trading_date=trading_date,
+                        open=100,
+                        high=101,
+                        low=99,
+                        close=100,
+                        adj_close=100,
+                        volume=1,
+                        turnover=1,
+                        source="fixture",
+                    ),
+                    MarketBar(
+                        instrument_id=stock.id,
+                        trading_date=trading_date,
+                        open=100,
+                        high=101,
+                        low=99,
+                        close=100,
+                        adj_close=100,
+                        volume=1,
+                        turnover=1,
+                        source="fixture",
+                    ),
+                ]
+            )
+        db.add_all(
+            [
+                Event(
+                    instrument_id=stock.id,
+                    event_date=second,
+                    event_type="official",
+                    title="Observed event",
+                    source="official",
+                ),
+                Event(
+                    instrument_id=stock.id,
+                    event_date=third,
+                    event_type="official",
+                    title="Observed event",
+                    source="official",
+                ),
+            ]
+        )
         db.commit()
         report = backfill.coverage_report(
             db,
@@ -303,8 +435,14 @@ def test_event_coverage_counts_verified_empty_not_event_date_rows(backfill_env):
             third,
             target_keys={("TWSE", "AAA")},
             event_coverage_by_date={
-                first.isoformat(): {"status": "verified_empty", "empty_dates": [first.isoformat()]},
-                second.isoformat(): {"status": "unsupported", "unsupported_dates": [second.isoformat()]},
+                first.isoformat(): {
+                    "status": "verified_empty",
+                    "empty_dates": [first.isoformat()],
+                },
+                second.isoformat(): {
+                    "status": "unsupported",
+                    "unsupported_dates": [second.isoformat()],
+                },
             },
         )
 
@@ -336,7 +474,9 @@ def test_backfill_partial_retry_and_idempotent_resume(backfill_env):
     assert initial["status"] == "partial"
     assert initial["metadata"]["completed_dates"] == [first.isoformat()]
     assert initial["metadata"]["failed_dates"] == [second.isoformat()]
-    assert initial["metadata"]["coverage_manifest"][first.isoformat()]["raw_payload_ids"]
+    assert initial["metadata"]["coverage_manifest"][first.isoformat()][
+        "raw_payload_ids"
+    ]
     assert initial["metadata"]["next_retry"] == {
         "start_date": second.isoformat(),
         "end_date": second.isoformat(),
@@ -354,27 +494,53 @@ def test_backfill_partial_retry_and_idempotent_resume(backfill_env):
     retry_adapter = RetryAttempt()
     resumed = backfill.targeted_backfill(first, second, adapter=retry_adapter)
     assert resumed["status"] == "success"
-    assert resumed["metadata"]["completed_dates"] == [first.isoformat(), second.isoformat()]
+    assert resumed["metadata"]["completed_dates"] == [
+        first.isoformat(),
+        second.isoformat(),
+    ]
     assert resumed["metadata"]["failed_dates"] == []
     assert retry_adapter.calls == [second]
-    assert resumed["metadata"]["coverage_manifest"][second.isoformat()]["raw_payload_ids"]
+    assert resumed["metadata"]["coverage_manifest"][second.isoformat()][
+        "raw_payload_ids"
+    ]
 
     reused = backfill.targeted_backfill(first, second, adapter=RetryAttempt())
     assert reused["status"] == "success"
     assert reused["id"] == resumed["id"]
 
     with backfill_env() as db:
-        assert db.scalar(select(func.count(IngestionRun.id)).where(IngestionRun.run_type == "backfill")) == 1
-        assert db.scalar(select(func.count(IngestionRun.id)).where(IngestionRun.run_type == "collect")) == 2
+        assert (
+            db.scalar(
+                select(func.count(IngestionRun.id)).where(
+                    IngestionRun.run_type == "backfill"
+                )
+            )
+            == 1
+        )
+        assert (
+            db.scalar(
+                select(func.count(IngestionRun.id)).where(
+                    IngestionRun.run_type == "collect"
+                )
+            )
+            == 2
+        )
         assert db.scalar(select(func.count(MarketBar.id))) == 4
         assert db.scalar(select(func.count(RawPayload.id))) == 2
-        assert db.scalar(
-            select(func.count(RawPayload.id)).where(RawPayload.ingestion_run_id.is_(None))
-        ) == 0
+        assert (
+            db.scalar(
+                select(func.count(RawPayload.id)).where(
+                    RawPayload.ingestion_run_id.is_(None)
+                )
+            )
+            == 0
+        )
         coverage = backfill.coverage_report(db, first, second)
         assert coverage["session_basis"] == "taiex_observed"
         assert coverage["session_count"] == 2
-        aaa = next(row for row in coverage["instrument_coverage"] if row["symbol"] == "AAA")
+        aaa = next(
+            row for row in coverage["instrument_coverage"] if row["symbol"] == "AAA"
+        )
         assert aaa["missing_bars_to_20"] == 18
         assert coverage["date_coverage"][0]["taiex_rows"] == 1
 
@@ -383,7 +549,9 @@ def test_backfill_retries_existing_collect_without_verified_taiex(backfill_env):
     """A security-only successful collect must not satisfy the session target."""
 
     trading_date = date(2026, 9, 8)
-    request_key = f"official-ohlcv:{trading_date.isoformat()}:{trading_date.isoformat()}"
+    request_key = (
+        f"official-ohlcv:{trading_date.isoformat()}:{trading_date.isoformat()}"
+    )
     with backfill_env() as db:
         db.add(
             IngestionRun(
@@ -421,7 +589,9 @@ def test_backfill_retries_existing_collect_without_verified_taiex(backfill_env):
     assert adapter.calls == [trading_date]
 
     class MustNotRefetch:
-        def fetch(self, start: date, end: date) -> sources.OfficialBatch:  # pragma: no cover
+        def fetch(
+            self, start: date, end: date
+        ) -> sources.OfficialBatch:  # pragma: no cover
             raise AssertionError("verified date was fetched again")
 
     resumed = backfill.targeted_backfill(
@@ -480,15 +650,27 @@ def test_backfill_explicit_no_data_is_skipped_and_not_retried(backfill_env):
     assert initial["metadata"]["coverage"]["skipped_non_trading_dates"] == [
         trading_date.isoformat()
     ]
-    assert initial["metadata"]["coverage_manifest"][trading_date.isoformat()]["no_data"] is True
-    assert initial["metadata"]["coverage_manifest"][trading_date.isoformat()]["status"] == "skipped_non_trading"
+    assert (
+        initial["metadata"]["coverage_manifest"][trading_date.isoformat()]["no_data"]
+        is True
+    )
+    assert (
+        initial["metadata"]["coverage_manifest"][trading_date.isoformat()]["status"]
+        == "skipped_non_trading"
+    )
     assert adapter.calls == [trading_date]
 
     class MustNotRetry:
-        def fetch(self, start: date, end: date) -> sources.OfficialBatch:  # pragma: no cover
-            raise AssertionError("explicit no-data dates must be resumable without a refetch")
+        def fetch(
+            self, start: date, end: date
+        ) -> sources.OfficialBatch:  # pragma: no cover
+            raise AssertionError(
+                "explicit no-data dates must be resumable without a refetch"
+            )
 
-    resumed = backfill.targeted_backfill(trading_date, trading_date, adapter=MustNotRetry())
+    resumed = backfill.targeted_backfill(
+        trading_date, trading_date, adapter=MustNotRetry()
+    )
     assert resumed["id"] == initial["id"]
     assert resumed["metadata"]["reused_dates"] == [trading_date.isoformat()]
 
@@ -504,14 +686,18 @@ def test_backfill_retry_budget_is_three_immediate_plus_two_targeted(backfill_env
             raise sources.OfficialDataError("fixture retry exhausted")
 
     first_adapter = AlwaysFail()
-    first = backfill.targeted_backfill(trading_date, trading_date, adapter=first_adapter)
+    first = backfill.targeted_backfill(
+        trading_date, trading_date, adapter=first_adapter
+    )
     assert first["status"] == "failed"
     assert first_adapter.calls == 3
     assert first["metadata"]["attempts"] == {trading_date.isoformat(): 3}
     assert first["metadata"]["next_retry"]["dates"] == [trading_date.isoformat()]
 
     second_adapter = AlwaysFail()
-    second = backfill.targeted_backfill(trading_date, trading_date, adapter=second_adapter)
+    second = backfill.targeted_backfill(
+        trading_date, trading_date, adapter=second_adapter
+    )
     assert second["status"] == "failed"
     assert second_adapter.calls == 2
     assert second["metadata"]["attempts"] == {trading_date.isoformat(): 5}
@@ -519,7 +705,9 @@ def test_backfill_retry_budget_is_three_immediate_plus_two_targeted(backfill_env
     assert second["metadata"]["next_retry"] is None
 
     third_adapter = AlwaysFail()
-    third = backfill.targeted_backfill(trading_date, trading_date, adapter=third_adapter)
+    third = backfill.targeted_backfill(
+        trading_date, trading_date, adapter=third_adapter
+    )
     assert third["id"] == second["id"]
     assert third_adapter.calls == 0
 
@@ -542,26 +730,93 @@ def test_failed_force_retry_does_not_overwrite_verified_row(backfill_env):
     failed = pipeline.collect(trading_date, adapter=BadAdapter(), force=True)
     assert failed["status"] == "failed"
     with backfill_env() as db:
-        instrument_id = db.scalar(select(Instrument.id).where(Instrument.symbol == "AAA"))
-        row = db.scalar(select(MarketBar).where(MarketBar.instrument_id == instrument_id, MarketBar.trading_date == trading_date))
+        instrument_id = db.scalar(
+            select(Instrument.id).where(Instrument.symbol == "AAA")
+        )
+        row = db.scalar(
+            select(MarketBar).where(
+                MarketBar.instrument_id == instrument_id,
+                MarketBar.trading_date == trading_date,
+            )
+        )
         assert row and row.close == 123.0
 
 
-def test_scope_resolution_prioritizes_portfolio_watchlist_events_and_candidates(backfill_env):
+def test_scope_resolution_prioritizes_portfolio_watchlist_events_and_candidates(
+    backfill_env,
+):
     start = date(2026, 9, 1)
     end = date(2026, 9, 4)
     with backfill_env() as db:
-        held = Instrument(market="TW", exchange="TWSE", symbol="HLD", name="Held", instrument_type="stock", status="active")
-        watched = Instrument(market="TW", exchange="TPEx", symbol="WAT", name="Watched", instrument_type="stock", is_watchlisted=True, status="active")
-        evented = Instrument(market="TW", exchange="TWSE", symbol="EVT", name="Event", instrument_type="stock", status="active")
-        candidate = Instrument(market="TW", exchange="TWSE", symbol="CAN", name="Candidate", instrument_type="stock", status="active")
-        etf = Instrument(market="TW", exchange="TWSE", symbol="ETF1", name="ETF", instrument_type="etf", etf_category="bond", status="active")
-        ipo = Instrument(market="TW", exchange="TPEx", symbol="IPO1", name="IPO", instrument_type="ipo", status="active")
+        held = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="HLD",
+            name="Held",
+            instrument_type="stock",
+            status="active",
+        )
+        watched = Instrument(
+            market="TW",
+            exchange="TPEx",
+            symbol="WAT",
+            name="Watched",
+            instrument_type="stock",
+            is_watchlisted=True,
+            status="active",
+        )
+        evented = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="EVT",
+            name="Event",
+            instrument_type="stock",
+            status="active",
+        )
+        candidate = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="CAN",
+            name="Candidate",
+            instrument_type="stock",
+            status="active",
+        )
+        etf = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="ETF1",
+            name="ETF",
+            instrument_type="etf",
+            etf_category="bond",
+            status="active",
+        )
+        ipo = Instrument(
+            market="TW",
+            exchange="TPEx",
+            symbol="IPO1",
+            name="IPO",
+            instrument_type="ipo",
+            status="active",
+        )
         db.add_all([held, watched, evented, candidate, etf, ipo])
         db.flush()
         db.add(PortfolioPosition(instrument_id=held.id, shares=10))
-        db.add(Event(instrument_id=evented.id, event_date=end, event_type="official", title="Event"))
-        db.add(Signal(signal_key="candidate-signal", signal_date=end, instrument_id=candidate.id, status="observation"))
+        db.add(
+            Event(
+                instrument_id=evented.id,
+                event_date=end,
+                event_type="official",
+                title="Event",
+            )
+        )
+        db.add(
+            Signal(
+                signal_key="candidate-signal",
+                signal_date=end,
+                instrument_id=candidate.id,
+                status="observation",
+            )
+        )
         db.commit()
 
         info = backfill.resolve_backfill_scope(db, "priority", start, end)
@@ -692,7 +947,9 @@ def test_backfill_status_and_coverage_api(backfill_env, monkeypatch):
         def fetch(self, start: date, end: date) -> sources.OfficialBatch:
             return _batch_for(start)
 
-    result = backfill.targeted_backfill(trading_date, trading_date, adapter=GoodAdapter())
+    result = backfill.targeted_backfill(
+        trading_date, trading_date, adapter=GoodAdapter()
+    )
     with backfill_env() as db:
         factory = backfill_env
         # The API dependency is replaced below with the same isolated factory
@@ -700,6 +957,7 @@ def test_backfill_status_and_coverage_api(backfill_env, monkeypatch):
         _ = factory
 
     with backfill_env() as db:
+
         def override_get_db():
             yield db
 
@@ -708,7 +966,9 @@ def test_backfill_status_and_coverage_api(backfill_env, monkeypatch):
         try:
             with TestClient(app) as client:
                 runs = client.get("/api/backfill-runs?page=1&page_size=10")
-                coverage = client.get("/api/coverage?start_date=2026-09-04&end_date=2026-09-04&symbol=AAA")
+                coverage = client.get(
+                    "/api/coverage?start_date=2026-09-04&end_date=2026-09-04&symbol=AAA"
+                )
         finally:
             app.dependency_overrides.pop(api_module.get_db, None)
 
@@ -749,7 +1009,12 @@ def test_official_snapshot_coverage_fallback_uses_raw_taiex_and_effective_gaps(
                     {
                         "title": "115年09月08日 價格指數(臺灣證券交易所)",
                         "fields": ["指數", "收盤指數"],
-                        "data": [["\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578", "47326.27"]],
+                        "data": [
+                            [
+                                "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578",
+                                "47326.27",
+                            ]
+                        ],
                     }
                 ],
             },
@@ -845,7 +1110,9 @@ def test_official_snapshot_coverage_fallback_uses_raw_taiex_and_effective_gaps(
     assert stock_coverage["missing_chips_to_20"] == 19
 
 
-def test_coverage_without_verified_baseline_is_unknown_and_compact(backfill_env, monkeypatch):
+def test_coverage_without_verified_baseline_is_unknown_and_compact(
+    backfill_env, monkeypatch
+):
     with backfill_env() as db:
         run = IngestionRun(
             run_type="collect",
@@ -934,7 +1201,12 @@ def test_snapshot_fallback_rejects_raw_payload_with_wrong_reported_date(backfill
                 "tables": [
                     {
                         "fields": ["指數", "收盤指數"],
-                        "data": [["\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578", "47326.27"]],
+                        "data": [
+                            [
+                                "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578",
+                                "47326.27",
+                            ]
+                        ],
                     }
                 ],
             },

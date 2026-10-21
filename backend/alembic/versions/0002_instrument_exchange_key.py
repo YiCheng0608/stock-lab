@@ -41,7 +41,9 @@ def upgrade() -> None:
         _rebuild_sqlite_instruments(bind)
     else:
         if _has_unique_columns(bind, "instruments", ("market", "symbol")):
-            op.drop_constraint("uq_instrument_market_symbol", "instruments", type_="unique")
+            op.drop_constraint(
+                "uq_instrument_market_symbol", "instruments", type_="unique"
+            )
         if not _has_unique_columns(bind, "instruments", ("exchange", "symbol")):
             op.create_unique_constraint(
                 "uq_instrument_exchange_symbol",

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-from . import models  # noqa: F401: populate the mapped metadata without DDL
+from . import models  # noqa: F401 -- populate the mapped metadata without DDL
 from .config import DB_PATH
 from .db import Base
 from .migration_revisions import REVISIONS
@@ -50,18 +50,23 @@ def _quote(identifier: str) -> str:
 def _check_markers(connection: sqlite3.Connection, tables: set[str]) -> None:
     has_alembic = "alembic_version" in tables
     if has_alembic:
-        rows = connection.execute("SELECT version_num FROM alembic_version LIMIT 2").fetchall()
+        rows = connection.execute(
+            "SELECT version_num FROM alembic_version LIMIT 2"
+        ).fetchall()
         if rows != [(REVISIONS[-1],)]:
             _fail("Alembic must contain exactly the current head revision")
     if "schema_migrations" in tables:
-        values = [row[0] for row in connection.execute(
-            f"SELECT version FROM schema_migrations LIMIT {len(REVISIONS) + 1}"
-        )]
+        values = [
+            row[0]
+            for row in connection.execute(
+                f"SELECT version FROM schema_migrations LIMIT {len(REVISIONS) + 1}"
+            )
+        ]
         if (
             not values
             or any(type(value) is not str for value in values)
             or len(set(values)) != len(values)
-            or set(values) != set(REVISIONS[:len(values)])
+            or set(values) != set(REVISIONS[: len(values)])
             or len(values) > len(REVISIONS)
         ):
             _fail("fallback revisions must be a distinct, nonempty known prefix")
@@ -81,17 +86,29 @@ def _empty_array_literal(default: str | None) -> bool:
     return value in ("'[]'", '"[]"')
 
 
-def _known_legacy_unique(connection: sqlite3.Connection, table: str, index: str, key: tuple) -> bool:
+def _known_legacy_unique(
+    connection: sqlite3.Connection, table: str, index: str, key: tuple
+) -> bool:
     # Revision 0001 preserves multiple legacy NULL request keys. This exact
     # predicate still enforces every non-NULL key just like nullable UNIQUE.
     # Match the entire stored DDL, not a suffix that comments could imitate.
-    if (table, index, key) != ("ingestion_runs", "ix_ingestion_runs_request_key", ("request_key",)):
+    if (table, index, key) != (
+        "ingestion_runs",
+        "ix_ingestion_runs_request_key",
+        ("request_key",),
+    ):
         return False
-    row = connection.execute("SELECT sql FROM sqlite_schema WHERE type='index' AND name=?", (index,)).fetchone()
-    return bool(row and isinstance(row[0], str) and _LEGACY_REQUEST_KEY_DDL.fullmatch(row[0]))
+    row = connection.execute(
+        "SELECT sql FROM sqlite_schema WHERE type='index' AND name=?", (index,)
+    ).fetchone()
+    return bool(
+        row and isinstance(row[0], str) and _LEGACY_REQUEST_KEY_DDL.fullmatch(row[0])
+    )
 
 
-def _check_instrument_unique_indexes(connection: sqlite3.Connection, by_name: dict[str, tuple]) -> None:
+def _check_instrument_unique_indexes(
+    connection: sqlite3.Connection, by_name: dict[str, tuple]
+) -> None:
     """Check finite identity metadata without reading rows or parsing dependencies.
 
     Named generated extras and unrelated unique keys remain outside this gate.
@@ -105,7 +122,10 @@ def _check_instrument_unique_indexes(connection: sqlite3.Connection, by_name: di
         if not index[2]:
             continue
         parts = [
-            row for row in connection.execute(f"PRAGMA main.index_xinfo({_quote(index[1])})")
+            row
+            for row in connection.execute(
+                f"PRAGMA main.index_xinfo({_quote(index[1])})"
+            )
             if row[5]
         ]
         if any(row[1] < 0 or row[2] is None for row in parts):
@@ -136,7 +156,10 @@ def _check_settlement_unique_indexes(connection: sqlite3.Connection) -> None:
         if not index[2]:
             continue
         parts = [
-            row for row in connection.execute(f"PRAGMA main.index_xinfo({_quote(index[1])})")
+            row
+            for row in connection.execute(
+                f"PRAGMA main.index_xinfo({_quote(index[1])})"
+            )
             if row[5]
         ]
         if any(row[1] < 0 or row[2] is None for row in parts):
@@ -152,7 +175,9 @@ def _check_settlement_unique_indexes(connection: sqlite3.Connection) -> None:
             _fail("signal_settlements has a noncanonical target unique identity")
         canonical_found = True
     if not canonical_found:
-        _fail("signal_settlements lacks the canonical unique identity (signal_id, horizon)")
+        _fail(
+            "signal_settlements lacks the canonical unique identity (signal_id, horizon)"
+        )
 
 
 def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
@@ -165,7 +190,9 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
         missing = set(table.columns.keys()) - by_name.keys()
         if missing:
             _fail(f"{name} is missing columns {sorted(missing)}")
-        primary = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5])
+        primary = tuple(
+            row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5]
+        )
         if primary != tuple(column.name for column in table.primary_key.columns):
             _fail(f"{name} primary key does not match mapped identity")
 
@@ -175,15 +202,24 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
             _check_settlement_unique_indexes(connection)
         if name == "portfolio_positions":
             column = by_name["shares_integer"]
-            if (column[2].strip().upper() != "INTEGER" or column[3] != 0
-                    or column[4] is not None or column[5] != 0 or column[6] != 0):
-                _fail("portfolio_positions.shares_integer requires an ordinary nullable INTEGER without a default")
+            if (
+                column[2].strip().upper() != "INTEGER"
+                or column[3] != 0
+                or column[4] is not None
+                or column[5] != 0
+                or column[6] != 0
+            ):
+                _fail(
+                    "portfolio_positions.shares_integer requires an ordinary nullable INTEGER without a default"
+                )
 
         unique_keys = set()
         for index in connection.execute(f"PRAGMA index_list({_quote(name)})"):
             if not index[2]:
                 continue
-            parts = connection.execute(f"PRAGMA index_xinfo({_quote(index[1])})").fetchall()
+            parts = connection.execute(
+                f"PRAGMA index_xinfo({_quote(index[1])})"
+            ).fetchall()
             key = tuple(row[2] for row in parts if row[5])
             if index[4] and not _known_legacy_unique(connection, name, index[1], key):
                 continue
@@ -191,26 +227,36 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
                 unique_keys.add(key)
         required_unique = {
             tuple(column.name for column in constraint.columns)
-            for constraint in table.constraints if isinstance(constraint, UniqueConstraint)
+            for constraint in table.constraints
+            if isinstance(constraint, UniqueConstraint)
         }
         required_unique.update(
-            tuple(column.name for column in index.columns) for index in table.indexes if index.unique
+            tuple(column.name for column in index.columns)
+            for index in table.indexes
+            if index.unique
         )
         if not required_unique.issubset(unique_keys):
-            _fail(f"{name} lacks required unique identities {sorted(required_unique - unique_keys)}")
+            _fail(
+                f"{name} lacks required unique identities {sorted(required_unique - unique_keys)}"
+            )
 
         foreign_groups: dict[int, list[tuple]] = {}
         for row in connection.execute(f"PRAGMA foreign_key_list({_quote(name)})"):
             foreign_groups.setdefault(row[0], []).append(row)
         actual_fks = {
-            (tuple(row[3] for row in sorted(group, key=lambda row: row[1])),
-             group[0][2], tuple(row[4] for row in sorted(group, key=lambda row: row[1])))
+            (
+                tuple(row[3] for row in sorted(group, key=lambda row: row[1])),
+                group[0][2],
+                tuple(row[4] for row in sorted(group, key=lambda row: row[1])),
+            )
             for group in foreign_groups.values()
         }
         required_fks = {
-            (tuple(element.parent.name for element in constraint.elements),
-             constraint.referred_table.name,
-             tuple(element.column.name for element in constraint.elements))
+            (
+                tuple(element.parent.name for element in constraint.elements),
+                constraint.referred_table.name,
+                tuple(element.column.name for element in constraint.elements),
+            )
             for constraint in table.foreign_key_constraints
         }
         if not required_fks.issubset(actual_fks):
@@ -218,7 +264,9 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
         if name == "news_items":
             for column in ("symbols_json", "theme_ids_json"):
                 if not _empty_array_literal(by_name[column][4]):
-                    _fail(f"news_items.{column} requires the empty-array SQL literal default")
+                    _fail(
+                        f"news_items.{column} requires the empty-array SQL literal default"
+                    )
 
 
 def check_database_readiness(path: Path | None = None) -> None:
@@ -235,10 +283,16 @@ def check_database_readiness(path: Path | None = None) -> None:
         if target.stat().st_size == 0:
             _fail("configured database file is empty")
         uri = target.resolve().as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=READ_TIMEOUT_SECONDS)) as connection:
+        with closing(
+            sqlite3.connect(uri, uri=True, timeout=READ_TIMEOUT_SECONDS)
+        ) as connection:
             connection.execute("PRAGMA query_only=ON")
             connection.execute("BEGIN")
-            objects = dict(connection.execute("SELECT name, type FROM sqlite_schema WHERE type IN ('table','view')"))
+            objects = dict(
+                connection.execute(
+                    "SELECT name, type FROM sqlite_schema WHERE type IN ('table','view')"
+                )
+            )
             tables = {name for name, kind in objects.items() if kind == "table"}
             for marker in ("alembic_version", "schema_migrations"):
                 if marker in objects and marker not in tables:

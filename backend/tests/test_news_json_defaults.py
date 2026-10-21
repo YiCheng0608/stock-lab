@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import migrations as migrations_module
 from app.db import enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.news_json_defaults import ensure_news_json_server_defaults
 
@@ -22,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "backend" / "alembic.ini"
 OLD_REVISION = "0005_news_temporal_contract"
 NEW_REVISION = "0006_news_json_defaults"
-CURRENT_HEAD = "0016_group_score_archive"
+CURRENT_HEAD = REVISIONS[-1]
 # Tables the revisions after 0006 read (0007 turnover, 0008 share integer). A
 # database stamped 0005 always has them because 0001 creates every model table.
 HEAD_PREREQUISITES = (
@@ -64,7 +65,9 @@ def _old_005_engine(
             "CONSTRAINT uq_instrument_exchange_symbol UNIQUE(exchange, symbol))"
         )
         # Empty prerequisites for the fixture's existing 0005 identity claim.
-        connection.exec_driver_sql("CREATE TABLE signals (id INTEGER NOT NULL PRIMARY KEY)")
+        connection.exec_driver_sql(
+            "CREATE TABLE signals (id INTEGER NOT NULL PRIMARY KEY)"
+        )
         for statement in HEAD_PREREQUISITES:
             connection.exec_driver_sql(statement)
         connection.exec_driver_sql(
@@ -115,7 +118,9 @@ FOREIGN KEY(signal_id) REFERENCES signals(id))"""
             "(id, market, exchange, symbol, name, instrument_type, is_watchlisted, status, created_at) "
             "VALUES (1, 'TW', 'TWSE', '2330', 'fixture', 'stock', 0, 'active', '2026-09-10')"
         )
-        connection.exec_driver_sql("INSERT INTO events(id, instrument_id) VALUES (1, 1)")
+        connection.exec_driver_sql(
+            "INSERT INTO events(id, instrument_id) VALUES (1, 1)"
+        )
         connection.exec_driver_sql(
             "INSERT INTO news_items "
             "(id, canonical_key, source_name, title, collected_at, symbols_json, "
@@ -139,8 +144,12 @@ FOREIGN KEY(signal_id) REFERENCES signals(id))"""
 
 def _alembic_config(engine: Engine) -> Config:
     config = Config(str(ALEMBIC_INI))
-    config.set_main_option("script_location", str((REPO_ROOT / "backend" / "alembic").as_posix()))
-    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
+    config.set_main_option(
+        "script_location", str((REPO_ROOT / "backend" / "alembic").as_posix())
+    )
+    config.set_main_option(
+        "sqlalchemy.url", engine.url.render_as_string(hide_password=False)
+    )
     config.attributes["connection"] = engine
     return config
 
@@ -191,17 +200,28 @@ def test_old_005_repair_preserves_bytes_self_fk_custom_objects_and_is_idempotent
     upgrade_database(engine)
     with engine.connect() as connection:
         _assert_json_defaults(connection)
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
-        assert connection.exec_driver_sql(
-            "SELECT id, hex(symbols_json), hex(theme_ids_json), custom_note, "
-            "event_id, supersedes_id FROM news_items ORDER BY id"
-        ).all() == before_rows
-        assert connection.exec_driver_sql(
-            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'custom_news_title'"
-        ).scalar_one() == "custom_news_title"
-        assert connection.exec_driver_sql(
-            "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'custom_news_audit'"
-        ).scalar_one() == "custom_news_audit"
+        assert (
+            connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT id, hex(symbols_json), hex(theme_ids_json), custom_note, "
+                "event_id, supersedes_id FROM news_items ORDER BY id"
+            ).all()
+            == before_rows
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'custom_news_title'"
+            ).scalar_one()
+            == "custom_news_title"
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'custom_news_audit'"
+            ).scalar_one()
+            == "custom_news_audit"
+        )
         custom_defaults = {
             column["name"]: _normalize_default(column.get("default"))
             for column in inspect(connection).get_columns("news_items")
@@ -260,11 +280,18 @@ def test_old_005_repair_preserves_bytes_self_fk_custom_objects_and_is_idempotent
         assert _news_signature(connection) == first_signature
         _assert_json_defaults(connection)
         if migration_path == "alembic":
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
+            assert (
+                connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).scalar_one()
+                == CURRENT_HEAD
+            )
         else:
             versions = {
                 row[0]
-                for row in connection.execute(text("SELECT version FROM schema_migrations"))
+                for row in connection.execute(
+                    text("SELECT version FROM schema_migrations")
+                )
             }
             assert NEW_REVISION in versions
     engine.dispose()
@@ -288,7 +315,9 @@ def test_fresh_schema_has_json_server_defaults_and_new_head(
     upgrade_database(engine)
     with engine.connect() as connection:
         _assert_json_defaults(connection)
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        assert (
+            connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        )
         connection.execute(
             text(
                 "INSERT INTO news_items "
@@ -301,18 +330,30 @@ def test_fresh_schema_has_json_server_defaults_and_new_head(
             "SELECT symbols_json, theme_ids_json FROM news_items"
         ).all() == [("[]", "[]")]
         if migration_path == "alembic":
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
+            assert (
+                connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).scalar_one()
+                == CURRENT_HEAD
+            )
         else:
-            assert connection.execute(
-                text("SELECT version FROM schema_migrations WHERE version = :version"),
-                {"version": NEW_REVISION},
-            ).scalar_one() == NEW_REVISION
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT version FROM schema_migrations WHERE version = :version"
+                    ),
+                    {"version": NEW_REVISION},
+                ).scalar_one()
+                == NEW_REVISION
+            )
     engine.dispose()
 
 
 @pytest.mark.parametrize("migration_path", ["alembic", "fallback"])
 @pytest.mark.parametrize("foreign_keys", [0, 1])
-def test_fresh_failure_has_no_half_created_schema(tmp_path, monkeypatch, migration_path, foreign_keys):
+def test_fresh_failure_has_no_half_created_schema(
+    tmp_path, monkeypatch, migration_path, foreign_keys
+):
     engine = create_engine(f"sqlite:///{(tmp_path / 'fresh-failure.db').as_posix()}")
     with engine.connect() as connection:
         connection.exec_driver_sql(f"PRAGMA foreign_keys={foreign_keys}")
@@ -323,20 +364,30 @@ def test_fresh_failure_has_no_half_created_schema(tmp_path, monkeypatch, migrati
             "ALEMBIC_CONFIG_PATH",
             tmp_path / "missing-alembic.ini",
         )
+
         def fail_before_repair(connection, **kwargs):
             raise RuntimeError("injected fresh failure")
-        monkeypatch.setattr(migrations_module, "ensure_news_json_server_defaults", fail_before_repair)
+
+        monkeypatch.setattr(
+            migrations_module, "ensure_news_json_server_defaults", fail_before_repair
+        )
     else:
         import app.news_json_defaults as news_json_defaults
+
         def fail_before_repair(connection, **kwargs):
             raise RuntimeError("injected fresh failure")
-        monkeypatch.setattr(news_json_defaults, "ensure_news_json_server_defaults", fail_before_repair)
+
+        monkeypatch.setattr(
+            news_json_defaults, "ensure_news_json_server_defaults", fail_before_repair
+        )
 
     with pytest.raises(RuntimeError, match="injected fresh failure"):
         upgrade_database(engine)
     with engine.connect() as connection:
         assert inspect(connection).get_table_names() == []
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        assert (
+            connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        )
     engine.dispose()
 
 
@@ -352,14 +403,18 @@ def test_alembic_external_connection_is_atomic_reusable_and_preserves_fk_mode(
         config.attributes["connection"] = connection
         command.upgrade(config, "head")
         assert connection.in_transaction() is False
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        assert (
+            connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        )
         connection.rollback()
 
         second_config = _alembic_config(engine)
         second_config.attributes["connection"] = connection
         command.upgrade(second_config, "head")
         assert connection.in_transaction() is False
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        assert (
+            connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == foreign_keys
+        )
         connection.rollback()
 
     active_engine = _old_005_engine(
@@ -427,9 +482,12 @@ def test_failed_repair_rolls_back_schema_rows_revision_and_markers_then_retries(
         upgrade_database(engine)
     with engine.connect() as connection:
         assert _news_signature(connection) == before
-        assert connection.execute(
-            text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
-        ).all() == before_objects
+        assert (
+            connection.execute(
+                text("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+            ).all()
+            == before_objects
+        )
         after_markers = {
             table: connection.execute(text(f"SELECT * FROM {table} ORDER BY 1")).all()
             for table in ("alembic_version", "schema_migrations")
@@ -499,16 +557,24 @@ def test_custom_view_and_autoincrement_are_rejected_before_mutation(tmp_path):
         ).scalar_one()
         with pytest.raises(RuntimeError, match="AUTOINCREMENT"):
             ensure_news_json_server_defaults(connection)
-        assert connection.exec_driver_sql(
-            "SELECT sql FROM sqlite_master WHERE name = 'news_items'"
-        ).scalar_one() == before_sql
-        assert connection.exec_driver_sql(
-            "SELECT seq FROM sqlite_sequence WHERE name = 'news_items'"
-        ).scalar_one() == 100
+        assert (
+            connection.exec_driver_sql(
+                "SELECT sql FROM sqlite_master WHERE name = 'news_items'"
+            ).scalar_one()
+            == before_sql
+        )
+        assert (
+            connection.exec_driver_sql(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'news_items'"
+            ).scalar_one()
+            == 100
+        )
     auto_engine.dispose()
 
 
-def test_actual_0004_fixture_reaches_new_head_without_changing_json_defaults(tmp_path, monkeypatch):
+def test_actual_0004_fixture_reaches_new_head_without_changing_json_defaults(
+    tmp_path, monkeypatch
+):
     from test_migration_recovery import _load_fixed_fixture
 
     for migration_path in ("alembic", "fallback"):
@@ -533,10 +599,20 @@ def test_actual_0004_fixture_reaches_new_head_without_changing_json_defaults(tmp
         with engine.connect() as connection:
             _assert_json_defaults(connection)
             if migration_path == "alembic":
-                assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == CURRENT_HEAD
+                assert (
+                    connection.execute(
+                        text("SELECT version_num FROM alembic_version")
+                    ).scalar_one()
+                    == CURRENT_HEAD
+                )
             else:
-                assert connection.execute(
-                    text("SELECT version FROM schema_migrations WHERE version = :version"),
-                    {"version": NEW_REVISION},
-                ).scalar_one() == NEW_REVISION
+                assert (
+                    connection.execute(
+                        text(
+                            "SELECT version FROM schema_migrations WHERE version = :version"
+                        ),
+                        {"version": NEW_REVISION},
+                    ).scalar_one()
+                    == NEW_REVISION
+                )
         engine.dispose()

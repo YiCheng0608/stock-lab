@@ -35,8 +35,12 @@ def _run_sqlite_migrations(connection) -> None:
             "refusing to commit or alter its transaction"
         )
     if connection.dialect.name != "sqlite":
-        raise RuntimeError("internal error: SQLite migration called for non-SQLite connection")
-    original_foreign_keys = int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar() or 0)
+        raise RuntimeError(
+            "internal error: SQLite migration called for non-SQLite connection"
+        )
+    original_foreign_keys = int(
+        connection.exec_driver_sql("PRAGMA foreign_keys").scalar() or 0
+    )
     connection.commit()
     migration_error = None
     try:
@@ -63,8 +67,13 @@ def _run_sqlite_migrations(connection) -> None:
         preflight_settlement_identity(connection)
         identity_state = preflight_instrument_identity(connection)
         identity_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)
-        if identity_revisions.intersection(context.get_context().get_current_heads()) and identity_state != "current":
-            raise RuntimeError("cannot migrate instruments: revision requires current identity")
+        if (
+            identity_revisions.intersection(context.get_context().get_current_heads())
+            and identity_state != "current"
+        ):
+            raise RuntimeError(
+                "cannot migrate instruments: revision requires current identity"
+            )
         connection.commit()
     except BaseException as error:
         migration_error = error
@@ -93,10 +102,11 @@ def _run_sqlite_migrations(connection) -> None:
             raise
 
 
-
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True)
+    context.configure(
+        url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
+    )
     with context.begin_transaction():
         context.run_migrations()
 
@@ -114,7 +124,11 @@ def run_migrations_online() -> None:
             if connection.dialect.name == "sqlite":
                 _run_sqlite_migrations(connection)
             else:
-                context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+                context.configure(
+                    connection=connection,
+                    target_metadata=target_metadata,
+                    compare_type=True,
+                )
                 with context.begin_transaction():
                     context.run_migrations()
                 connection.commit()
@@ -122,7 +136,11 @@ def run_migrations_online() -> None:
         if connectable.dialect.name == "sqlite":
             _run_sqlite_migrations(connectable)
         else:
-            context.configure(connection=connectable, target_metadata=target_metadata, compare_type=True)
+            context.configure(
+                connection=connectable,
+                target_metadata=target_metadata,
+                compare_type=True,
+            )
             with context.begin_transaction():
                 context.run_migrations()
             connectable.commit()

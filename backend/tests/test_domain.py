@@ -21,9 +21,18 @@ def test_canonical_v1_configs_are_json_serializable_and_numeric():
     assert json.loads(encoded) == canonical_config_snapshot()
     assert "rules" not in STRATEGY_CONFIGS["breakout_v1"]
     assert STRATEGY_CONFIGS["breakout_v1"]["version"] == "1.0.0"
-    assert STRATEGY_CONFIGS["breakout_v1"]["price"]["prior_high_lookback_trading_days"] == 20
-    assert STRATEGY_CONFIGS["breakout_v1"]["price"]["reference_excludes_signal_day"] is True
-    assert STRATEGY_CONFIGS["breakout_v1"]["volume"]["minimum_signal_to_average_ratio"] == 1.2
+    assert (
+        STRATEGY_CONFIGS["breakout_v1"]["price"]["prior_high_lookback_trading_days"]
+        == 20
+    )
+    assert (
+        STRATEGY_CONFIGS["breakout_v1"]["price"]["reference_excludes_signal_day"]
+        is True
+    )
+    assert (
+        STRATEGY_CONFIGS["breakout_v1"]["volume"]["minimum_signal_to_average_ratio"]
+        == 1.2
+    )
     etf_policy = STRATEGY_CONFIGS["breakout_v1"]["universe"]["etf_policy"]
     assert "commodity" in etf_policy["actionable_signal_categories"]
     assert etf_policy["excluded_from_general_breakout_pullback"] == {
@@ -31,7 +40,10 @@ def test_canonical_v1_configs_are_json_serializable_and_numeric():
         "leveraged": "non_actionable_etf_category",
         "inverse": "non_actionable_etf_category",
     }
-    assert HOT_GROUP_CONFIG["leaderboards"]["etf"]["collect_and_classify_all_categories"] is True
+    assert (
+        HOT_GROUP_CONFIG["leaderboards"]["etf"]["collect_and_classify_all_categories"]
+        is True
+    )
     assert HOT_GROUP_CONFIG["weights"] == {
         "relative_return": 0.35,
         "breadth": 0.25,
@@ -194,8 +206,14 @@ def test_etf_categories_and_ipo_20_60_day_boundaries():
         "etf_category_is_only_valid_for_etf",
     )
     assert instrument_eligibility("ipo", 19) == (False, "ipo_history_under_20_bars")
-    assert instrument_eligibility("ipo", 20) == (False, "ipo_observation_only_under_60_bars")
-    assert instrument_eligibility("ipo", 59) == (False, "ipo_observation_only_under_60_bars")
+    assert instrument_eligibility("ipo", 20) == (
+        False,
+        "ipo_observation_only_under_60_bars",
+    )
+    assert instrument_eligibility("ipo", 59) == (
+        False,
+        "ipo_observation_only_under_60_bars",
+    )
     assert instrument_eligibility("ipo", 60) == (True, None)
 
 

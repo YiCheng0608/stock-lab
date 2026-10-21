@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Auditable, resumable official-data backfill orchestration.
 
 The low-level official adapters remain responsible for endpoint validation and
@@ -7,6 +5,8 @@ raw capture.  This module adds a date-level retry boundary around the existing
 collector so a failed historical session can be retried without re-running a
 successful session or inventing a bar/chip row.
 """
+
+from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -38,20 +38,21 @@ from app.models import (
 from worker import pipeline
 from worker.sources import (
     OfficialBatch,
-    OfficialDataError,
     OfficialMarketDataAdapter,
 )
 
 
-BACKFILL_SCOPES = frozenset({
-    "market",
-    "portfolio",
-    "watchlist",
-    "events",
-    "candidates",
-    "priority",
-    "all",
-})
+BACKFILL_SCOPES = frozenset(
+    {
+        "market",
+        "portfolio",
+        "watchlist",
+        "events",
+        "candidates",
+        "priority",
+        "all",
+    }
+)
 
 # Phase 3 collection bounds.  The existing official adapters are deliberately
 # called with one date at a time by the first implementation, which is a
@@ -162,10 +163,12 @@ def _keys(rows: Iterable[Instrument]) -> set[tuple[str, str]]:
     return {(row.exchange, row.symbol) for row in rows}
 
 
-def _date_chunks(values: list[date], size: int = MAX_BATCH_TRADING_DATES) -> list[list[date]]:
+def _date_chunks(
+    values: list[date], size: int = MAX_BATCH_TRADING_DATES
+) -> list[list[date]]:
     if size < 1:
         raise ValueError("batch size must be positive")
-    return [values[index:index + size] for index in range(0, len(values), size)]
+    return [values[index : index + size] for index in range(0, len(values), size)]
 
 
 def _build_batch_plan(
@@ -194,8 +197,7 @@ def _build_batch_plan(
                 first = chunk[0].isoformat()
                 last = chunk[-1].isoformat()
                 request_key = (
-                    f"official-backfill:v1:{scope}:{exchange}:{domain}:"
-                    f"{first}:{last}"
+                    f"official-backfill:v1:{scope}:{exchange}:{domain}:{first}:{last}"
                 )
                 plan.append(
                     {
@@ -221,7 +223,9 @@ def _build_batch_plan(
     return plan
 
 
-def _candidate_instrument_keys(db: Session, start_date: date, end_date: date) -> set[tuple[str, str]]:
+def _candidate_instrument_keys(
+    db: Session, start_date: date, end_date: date
+) -> set[tuple[str, str]]:
     result: set[tuple[str, str]] = set()
     signal_rows = db.execute(
         select(Instrument)
@@ -250,12 +254,19 @@ def _candidate_instrument_keys(db: Session, start_date: date, end_date: date) ->
         if not isinstance(details, dict):
             continue
         values = details.get("candidate_symbols")
-        if "candidate_identity_version" in details or "candidate_instruments" in details:
+        if (
+            "candidate_identity_version" in details
+            or "candidate_instruments" in details
+        ):
             candidates = details.get("candidate_instruments")
-            if (details.get("candidate_identity_version") != "instrument-id-v1"
-                    or not isinstance(values, list) or len(values) > MAX_GROUP_CANDIDATES
-                    or any(type(value) is not str or not value.strip() for value in values)
-                    or not isinstance(candidates, list) or len(candidates) > MAX_GROUP_CANDIDATES):
+            if (
+                details.get("candidate_identity_version") != "instrument-id-v1"
+                or not isinstance(values, list)
+                or len(values) > MAX_GROUP_CANDIDATES
+                or any(type(value) is not str or not value.strip() for value in values)
+                or not isinstance(candidates, list)
+                or len(candidates) > MAX_GROUP_CANDIDATES
+            ):
                 continue
             identities: dict[int, tuple[str, str]] = {}
             pairs: set[tuple[str, str]] = set()
@@ -268,10 +279,16 @@ def _candidate_instrument_keys(db: Session, start_date: date, end_date: date) ->
                 exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
                 # SQLite INTEGER identities are signed 64-bit; reject an
                 # impossible ID before binding it can overflow the query.
-                if (type(item_id) is not int or not 0 < item_id <= 2**63 - 1
-                        or type(exchange) is not str or not exchange.strip()
-                        or type(symbol) is not str or not symbol.strip()
-                        or item_id in identities or (exchange, symbol) in pairs):
+                if (
+                    type(item_id) is not int
+                    or not 0 < item_id <= 2**63 - 1
+                    or type(exchange) is not str
+                    or not exchange.strip()
+                    or type(symbol) is not str
+                    or not symbol.strip()
+                    or item_id in identities
+                    or (exchange, symbol) in pairs
+                ):
                     valid = False
                     break
                 identities[item_id] = (exchange, symbol)
@@ -280,9 +297,12 @@ def _candidate_instrument_keys(db: Session, start_date: date, end_date: date) ->
                 continue
             # Validate all DB-local identities before filtering inactive rows.
             # A bad source must never fall back to another exchange by symbol.
-            rows = db.scalars(select(Instrument).where(Instrument.id.in_(identities))).all()
-            if (len(rows) != len(identities)
-                    or any(identities[row.id] != (row.exchange, row.symbol) for row in rows)):
+            rows = db.scalars(
+                select(Instrument).where(Instrument.id.in_(identities))
+            ).all()
+            if len(rows) != len(identities) or any(
+                identities[row.id] != (row.exchange, row.symbol) for row in rows
+            ):
                 continue
             result.update(_keys(row for row in rows if row.status == "active"))
             continue
@@ -327,7 +347,9 @@ def resolve_backfill_scope(
         target_keys = _keys(
             db.scalars(
                 select(Instrument)
-                .join(PortfolioPosition, PortfolioPosition.instrument_id == Instrument.id)
+                .join(
+                    PortfolioPosition, PortfolioPosition.instrument_id == Instrument.id
+                )
                 .where(Instrument.status == "active")
             ).all()
         )
@@ -362,7 +384,9 @@ def resolve_backfill_scope(
         portfolio_keys = _keys(
             db.scalars(
                 select(Instrument)
-                .join(PortfolioPosition, PortfolioPosition.instrument_id == Instrument.id)
+                .join(
+                    PortfolioPosition, PortfolioPosition.instrument_id == Instrument.id
+                )
                 .where(Instrument.status == "active")
             ).all()
         )
@@ -385,13 +409,16 @@ def resolve_backfill_scope(
                 )
             ).scalars()
         )
-        target_keys = portfolio_keys | watchlist_keys | event_keys | _candidate_instrument_keys(db, start_date, end_date)
+        target_keys = (
+            portfolio_keys
+            | watchlist_keys
+            | event_keys
+            | _candidate_instrument_keys(db, start_date, end_date)
+        )
         filter_keys = target_keys
 
     ordered = sorted(target_keys)
-    target_rows = [
-        row for row in all_rows if (row.exchange, row.symbol) in target_keys
-    ]
+    target_rows = [row for row in all_rows if (row.exchange, row.symbol) in target_keys]
     target_type_counts = dict(Counter(row.instrument_type for row in target_rows))
     target_etf_categories = sorted(
         {
@@ -433,7 +460,10 @@ class _ScopedOfficialAdapter:
         allowed.add(("TWSE", "TAIEX"))
 
         def keep(record: Any) -> bool:
-            return (getattr(record, "exchange", ""), getattr(record, "symbol", "")) in allowed
+            return (
+                getattr(record, "exchange", ""),
+                getattr(record, "symbol", ""),
+            ) in allowed
 
         return OfficialBatch(
             instruments=[record for record in batch.instruments if keep(record)],
@@ -499,8 +529,7 @@ def coverage_report(
 
     _validate_range(start_date, end_date)
     known_no_data = {
-        item for item in (known_no_data_dates or [])
-        if start_date <= item <= end_date
+        item for item in (known_no_data_dates or []) if start_date <= item <= end_date
     }
     all_active_rows = db.scalars(
         select(Instrument).where(Instrument.status == "active")
@@ -511,7 +540,9 @@ def coverage_report(
         if item.instrument_type in {"stock", "etf", "ipo"}
     ]
     if target_keys is not None:
-        active = [item for item in active if (item.exchange, item.symbol) in target_keys]
+        active = [
+            item for item in active if (item.exchange, item.symbol) in target_keys
+        ]
     active_by_key = {(item.exchange, item.symbol): item for item in active}
 
     all_bars = db.scalars(
@@ -539,7 +570,11 @@ def coverage_report(
         )
     ).all()
     memberships = db.execute(
-        select(GroupMembership.instrument_id, GroupMembership.valid_from, GroupMembership.valid_to)
+        select(
+            GroupMembership.instrument_id,
+            GroupMembership.valid_from,
+            GroupMembership.valid_to,
+        )
         .join(ThemeGroup, ThemeGroup.id == GroupMembership.group_id)
         .where(ThemeGroup.active.is_(True))
     ).all()
@@ -568,7 +603,11 @@ def coverage_report(
     has_manifest = has_backfill_manifest(db)
     baseline = official_snapshot_status(db, sessions, has_manifest=has_manifest)
     if sessions:
-        session_basis = "official_snapshot" if require_provenance and not has_manifest else "taiex_observed"
+        session_basis = (
+            "official_snapshot"
+            if require_provenance and not has_manifest
+            else "taiex_observed"
+        )
     else:
         session_basis = "unknown"
     if include_calendar_dates:
@@ -620,7 +659,9 @@ def coverage_report(
             if run.run_type == "backfill":
                 manifests = metadata.get("coverage_manifest") or {}
                 for day, item in manifests.items():
-                    coverage = item.get("event_coverage") if isinstance(item, dict) else None
+                    coverage = (
+                        item.get("event_coverage") if isinstance(item, dict) else None
+                    )
                     if coverage:
                         event_manifest[str(day)] = dict(coverage)
             else:
@@ -635,7 +676,9 @@ def coverage_report(
             return "unqueried"
         verified = set(str(value)[:10] for value in item.get("verified_dates", []))
         empty = set(str(value)[:10] for value in item.get("empty_dates", []))
-        unsupported = set(str(value)[:10] for value in item.get("unsupported_dates", []))
+        unsupported = set(
+            str(value)[:10] for value in item.get("unsupported_dates", [])
+        )
         partial = set(str(value)[:10] for value in item.get("partial_dates", []))
         if day.isoformat() in verified or day.isoformat() in empty:
             return "verified_empty" if day.isoformat() in empty else "success"
@@ -644,10 +687,17 @@ def coverage_report(
         if day.isoformat() in partial:
             return "partial"
         status = str(item.get("status") or "unsupported")
-        return status if status in {"complete", "verified_empty", "partial", "unsupported", "missing"} else "unsupported"
+        return (
+            status
+            if status
+            in {"complete", "verified_empty", "partial", "unsupported", "missing"}
+            else "unsupported"
+        )
 
     event_verified_dates = {
-        day for day in expected_dates if event_state(day) in {"success", "verified_empty"}
+        day
+        for day in expected_dates
+        if event_state(day) in {"success", "verified_empty"}
     }
     event_empty_dates = {
         day for day in expected_dates if event_state(day) == "verified_empty"
@@ -663,7 +713,11 @@ def coverage_report(
     }
     observed_event_dates = {row.event_date for row in event_rows}
     if event_verified_dates:
-        event_status = "complete" if not (event_unsupported_dates or event_partial_dates) else "partial"
+        event_status = (
+            "complete"
+            if not (event_unsupported_dates or event_partial_dates)
+            else "partial"
+        )
     elif event_partial_dates:
         event_status = "partial"
     elif event_manifest or observed_event_dates:
@@ -673,7 +727,9 @@ def coverage_report(
     event_summary = {
         "status": event_status,
         "denominator": "verified_event_query_sessions",
-        "target_sessions": target_chip_event_sessions if target_chip_event_sessions is not None else min(TARGET_CHIP_EVENT_SESSIONS, len(requested_weekdays)),
+        "target_sessions": target_chip_event_sessions
+        if target_chip_event_sessions is not None
+        else min(TARGET_CHIP_EVENT_SESSIONS, len(requested_weekdays)),
         "verified_sessions": len(event_verified_dates),
         "verified_empty_sessions": len(event_empty_dates),
         "partial_sessions": len(event_partial_dates),
@@ -686,10 +742,14 @@ def coverage_report(
         "reason": "event rows/dates are not used as the denominator; only date-scoped verified or verified-empty responses count",
     }
     events_by_key: dict[tuple[str, str], list[date]] = defaultdict(list)
-    event_types_by_key: dict[tuple[str, str], list[tuple[date, str]]] = defaultdict(list)
+    event_types_by_key: dict[tuple[str, str], list[tuple[date, str]]] = defaultdict(
+        list
+    )
     actions_by_key: dict[tuple[str, str], list[date]] = defaultdict(list)
     for row in event_rows:
-        instrument = instrument_by_id.get(row.instrument_id) if row.instrument_id else None
+        instrument = (
+            instrument_by_id.get(row.instrument_id) if row.instrument_id else None
+        )
         if instrument:
             key = (instrument.exchange, instrument.symbol)
             if key in active_by_key:
@@ -706,7 +766,9 @@ def coverage_report(
     for trading_date in sessions:
         seen: set[int] = set()
         for instrument_id, valid_from, valid_to in memberships:
-            if valid_from <= trading_date and (valid_to is None or valid_to >= trading_date):
+            if valid_from <= trading_date and (
+                valid_to is None or valid_to >= trading_date
+            ):
                 seen.add(instrument_id)
                 instrument = instrument_by_id.get(instrument_id)
                 if instrument:
@@ -717,9 +779,7 @@ def coverage_report(
 
     date_coverage = []
     for trading_date in expected_dates:
-        bar_count = sum(
-            1 for row in all_bars if row.trading_date == trading_date
-        )
+        bar_count = sum(1 for row in all_bars if row.trading_date == trading_date)
         non_index_bar_count = sum(
             1
             for row in all_bars
@@ -765,7 +825,8 @@ def coverage_report(
                 "membership_instruments": membership_by_date.get(trading_date, 0),
                 "event_rows": events_by_date[trading_date],
                 "event_coverage_status": event_state(trading_date),
-                "event_coverage_verified": event_state(trading_date) in {"success", "verified_empty"},
+                "event_coverage_verified": event_state(trading_date)
+                in {"success", "verified_empty"},
                 "corporate_action_rows": actions_by_date[trading_date],
             }
         )
@@ -815,7 +876,10 @@ def coverage_report(
                 "missing_chip_dates": [day.isoformat() for day in missing_chip_dates],
             }
             if missing_bars:
-                if len(eligible_sessions) < horizon and instrument.instrument_type == "ipo":
+                if (
+                    len(eligible_sessions) < horizon
+                    and instrument.instrument_type == "ipo"
+                ):
                     coverage_reasons.append("listed_under_threshold")
                 elif any(day in suspension_dates for day in missing_bar_dates):
                     coverage_reasons.append("suspended_or_no_trade")
@@ -825,7 +889,11 @@ def coverage_report(
                 coverage_reasons.append("missing_chips")
         if not sessions:
             coverage_reasons.append("missing_taiex")
-        if instrument.instrument_type == "etf" and instrument.etf_category in {"bond", "leveraged", "inverse"}:
+        if instrument.instrument_type == "etf" and instrument.etf_category in {
+            "bond",
+            "leveraged",
+            "inverse",
+        }:
             coverage_reasons.append("etf_not_general_action_eligible")
         coverage_reasons = list(dict.fromkeys(coverage_reasons))
         ipo_stage = None
@@ -842,7 +910,9 @@ def coverage_report(
                 "symbol": instrument.symbol,
                 "instrument_type": instrument.instrument_type,
                 "etf_category": instrument.etf_category,
-                "listing_date": instrument.listing_date.isoformat() if instrument.listing_date else None,
+                "listing_date": instrument.listing_date.isoformat()
+                if instrument.listing_date
+                else None,
                 "bars_total": len(bar_dates),
                 "chips_total": len(chip_dates),
                 "effective_bar_sessions": len(bar_dates),
@@ -876,7 +946,9 @@ def coverage_report(
         "baseline": baseline,
         "session_count": len(sessions),
         "sessions": [item.isoformat() for item in sessions],
-        "requested_calendar_dates": [item.isoformat() for item in sorted(requested_weekdays)],
+        "requested_calendar_dates": [
+            item.isoformat() for item in sorted(requested_weekdays)
+        ],
         "expected_dates": [item.isoformat() for item in expected_dates],
         "date_coverage": date_coverage,
         "instrument_coverage": instrument_coverage,
@@ -993,7 +1065,9 @@ def _initial_metadata(
         "date_semantics": "calendar weekdays are requested; official source responses decide actual trading sessions; weekends are excluded and explicit no-data dates are skipped_non_trading",
         "requested_dates": [item.isoformat() for item in requested_dates],
         "requested_calendar_dates": [item.isoformat() for item in requested_dates],
-        "extension_candidate_dates": [item.isoformat() for item in extension_candidates],
+        "extension_candidate_dates": [
+            item.isoformat() for item in extension_candidates
+        ],
         "extension_dates": [],
         "candidate_dates": [item.isoformat() for item in requested_dates],
         "expected_dates": [item.isoformat() for item in requested_dates],
@@ -1021,7 +1095,9 @@ def _initial_metadata(
         "market_instrument_count": scope_info["all_market_count"],
         "coverage_targets": {
             "ohlcv_taiex_sessions": target_sessions,
-            "chips_events_sessions": min(TARGET_CHIP_EVENT_SESSIONS, len(requested_dates)),
+            "chips_events_sessions": min(
+                TARGET_CHIP_EVENT_SESSIONS, len(requested_dates)
+            ),
             "max_calendar_days": OFFICIAL_MAX_BACKFILL_DAYS,
         },
         "batch_contract": {
@@ -1033,7 +1109,8 @@ def _initial_metadata(
         "retry_policy": {
             "immediate_attempts": IMMEDIATE_RETRY_ATTEMPTS,
             "targeted_retry_attempts": TARGETED_RETRY_ATTEMPTS,
-            "total_attempts_per_date": IMMEDIATE_RETRY_ATTEMPTS + TARGETED_RETRY_ATTEMPTS,
+            "total_attempts_per_date": IMMEDIATE_RETRY_ATTEMPTS
+            + TARGETED_RETRY_ATTEMPTS,
             "backoff": "delegated to official adapter; no unbounded retry",
         },
         "batch_plan": batch_plan,
@@ -1185,7 +1262,10 @@ def _update_batch_plan(
         domain = item["domain"]
         date_states = item.setdefault("date_states", {})
         date_states[iso_date] = statuses.get(domain, result_status)
-        item["attempts"] = max(int(item.get("attempts", 0) or 0), int(metadata.get("attempts", {}).get(iso_date, 0) or 0))
+        item["attempts"] = max(
+            int(item.get("attempts", 0) or 0),
+            int(metadata.get("attempts", {}).get(iso_date, 0) or 0),
+        )
         item["immediate_attempts"] = max(
             int(item.get("immediate_attempts", 0) or 0),
             int(metadata.get("immediate_attempts", {}).get(iso_date, 0) or 0),
@@ -1198,15 +1278,15 @@ def _update_batch_plan(
             set(item.get("raw_payload_ids", [])) | set(raw_payload_ids)
         )
         if error_ref:
-            item["error_refs"] = sorted(
-                set(item.get("error_refs", [])) | {error_ref}
-            )
+            item["error_refs"] = sorted(set(item.get("error_refs", [])) | {error_ref})
         item["received_dates"] = sorted(
-            day for day, state_value in date_states.items()
+            day
+            for day, state_value in date_states.items()
             if state_value in {"success", "partial"}
         )
         item["missing_dates"] = sorted(
-            day for day, state_value in date_states.items()
+            day
+            for day, state_value in date_states.items()
             if state_value in {"missing", "failed"}
         )
         states = set(date_states.values())
@@ -1250,7 +1330,9 @@ def targeted_backfill(
 
     pipeline.init_db()
     with pipeline.SessionLocal() as db:
-        run = db.scalar(select(IngestionRun).where(IngestionRun.request_key == request_key))
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.request_key == request_key)
+        )
         if (
             run
             and run.status == "success"
@@ -1267,22 +1349,38 @@ def targeted_backfill(
                 for value in target_strings
                 if isinstance(value, str) and ":" in value
             }
-            filter_keys: set[tuple[str, str]] | None = None if normalized_scope in {"market", "all"} else target_keys
+            filter_keys: set[tuple[str, str]] | None = (
+                None if normalized_scope in {"market", "all"} else target_keys
+            )
             # Forward-compatible shape repair for an interrupted pre-Phase-3
             # run: retain its existing audit fields, but add the bounded plan.
             if "batch_plan" not in metadata:
-                scope_info = resolve_backfill_scope(db, normalized_scope, start_date, end_date)
-                metadata.update(_initial_metadata(scope_info, start_date, end_date, requested_calendar_dates))
-            original_strings = metadata.get("requested_calendar_dates") or metadata.get("requested_dates") or [
-                item.isoformat() for item in requested_calendar_dates
+                scope_info = resolve_backfill_scope(
+                    db, normalized_scope, start_date, end_date
+                )
+                metadata.update(
+                    _initial_metadata(
+                        scope_info, start_date, end_date, requested_calendar_dates
+                    )
+                )
+            original_strings = (
+                metadata.get("requested_calendar_dates")
+                or metadata.get("requested_dates")
+                or [item.isoformat() for item in requested_calendar_dates]
+            )
+            original_dates = [
+                date.fromisoformat(str(item)[:10]) for item in original_strings
             ]
-            original_dates = [date.fromisoformat(str(item)[:10]) for item in original_strings]
             extension_dates = [
                 date.fromisoformat(str(item)[:10])
                 for item in metadata.get("extension_dates", [])
             ]
-            candidate_dates = original_dates + [item for item in extension_dates if item not in original_dates]
-            metadata["requested_calendar_dates"] = [item.isoformat() for item in original_dates]
+            candidate_dates = original_dates + [
+                item for item in extension_dates if item not in original_dates
+            ]
+            metadata["requested_calendar_dates"] = [
+                item.isoformat() for item in original_dates
+            ]
             metadata["extension_candidate_dates"] = [
                 item.isoformat()
                 for item in _extension_candidate_dates(start_date, end_date)
@@ -1291,7 +1389,9 @@ def targeted_backfill(
             metadata["extension_dates"] = [item.isoformat() for item in extension_dates]
             metadata["candidate_dates"] = [item.isoformat() for item in candidate_dates]
             metadata["requested_dates"] = [item.isoformat() for item in candidate_dates]
-            _merge_batch_plan(metadata, normalized_scope, start_date, end_date, candidate_dates)
+            _merge_batch_plan(
+                metadata, normalized_scope, start_date, end_date, candidate_dates
+            )
             if force:
                 metadata["completed_dates"] = []
                 metadata["partial_dates"] = []
@@ -1308,8 +1408,12 @@ def targeted_backfill(
                 metadata["date_results"] = {}
                 metadata["coverage_manifest"] = {}
                 metadata["extension_dates"] = []
-                metadata["candidate_dates"] = [item.isoformat() for item in original_dates]
-                metadata["requested_dates"] = [item.isoformat() for item in original_dates]
+                metadata["candidate_dates"] = [
+                    item.isoformat() for item in original_dates
+                ]
+                metadata["requested_dates"] = [
+                    item.isoformat() for item in original_dates
+                ]
                 metadata["verified_trading_sessions"] = []
                 metadata["target_met"] = _target_session_count(original_dates) == 0
                 metadata["batch_plan"] = _build_batch_plan(
@@ -1317,8 +1421,12 @@ def targeted_backfill(
                 )
                 candidate_dates = list(original_dates)
         else:
-            scope_info = resolve_backfill_scope(db, normalized_scope, start_date, end_date)
-            metadata = _initial_metadata(scope_info, start_date, end_date, requested_calendar_dates)
+            scope_info = resolve_backfill_scope(
+                db, normalized_scope, start_date, end_date
+            )
+            metadata = _initial_metadata(
+                scope_info, start_date, end_date, requested_calendar_dates
+            )
             candidate_dates = list(requested_calendar_dates)
             filter_keys = scope_info["filter_keys"]
             run = IngestionRun(
@@ -1383,7 +1491,11 @@ def targeted_backfill(
     # audit state before resuming so the date receives a bounded retry instead
     # of being silently reused forever.
     for stale_date in list(completed):
-        audit = date_results.get(stale_date) or (metadata.get("coverage_manifest") or {}).get(stale_date) or {}
+        audit = (
+            date_results.get(stale_date)
+            or (metadata.get("coverage_manifest") or {}).get(stale_date)
+            or {}
+        )
         stale_statuses = audit.get("domain_status") if isinstance(audit, dict) else None
         if isinstance(stale_statuses, dict) and (
             stale_statuses.get("ohlcv") != "success"
@@ -1392,7 +1504,9 @@ def targeted_backfill(
             completed.discard(stale_date)
             partial.add(stale_date)
             reused.discard(stale_date)
-            errors.setdefault(stale_date, "previous attempt lacked verified OHLCV/TAIEX coverage")
+            errors.setdefault(
+                stale_date, "previous attempt lacked verified OHLCV/TAIEX coverage"
+            )
     target_sessions = int(
         (metadata.get("coverage_targets") or {}).get(
             "ohlcv_taiex_sessions",
@@ -1400,7 +1514,9 @@ def targeted_backfill(
         )
         or 0
     )
-    extension_dates = set(str(item)[:10] for item in metadata.get("extension_dates", []))
+    extension_dates = set(
+        str(item)[:10] for item in metadata.get("extension_dates", [])
+    )
     extension_candidates = [
         str(item)[:10]
         for item in metadata.get("extension_candidate_dates", [])
@@ -1430,7 +1546,9 @@ def targeted_backfill(
     def persist_state(status: str = "running", error: str | None = None) -> None:
         verified = sorted(verified_trading_dates())
         for skipped_date in skipped:
-            skipped_manifest = metadata.setdefault("coverage_manifest", {}).get(skipped_date)
+            skipped_manifest = metadata.setdefault("coverage_manifest", {}).get(
+                skipped_date
+            )
             if isinstance(skipped_manifest, dict) and skipped_manifest.get("no_data"):
                 skipped_manifest["status"] = "skipped_non_trading"
         metadata.update(
@@ -1505,7 +1623,10 @@ def targeted_backfill(
         total_before = int(attempts.get(iso_date, 0) or 0)
         immediate_before = int(immediate_attempts.get(iso_date, 0) or 0)
         targeted_before = int(targeted_attempts.get(iso_date, 0) or 0)
-        if total_before >= IMMEDIATE_RETRY_ATTEMPTS + TARGETED_RETRY_ATTEMPTS and not force:
+        if (
+            total_before >= IMMEDIATE_RETRY_ATTEMPTS + TARGETED_RETRY_ATTEMPTS
+            and not force
+        ):
             exhausted.add(iso_date)
             continue
         if immediate_before < IMMEDIATE_RETRY_ATTEMPTS and total_before == 0:
@@ -1522,9 +1643,13 @@ def targeted_backfill(
         for _ in range(remaining):
             attempts[iso_date] = int(attempts.get(iso_date, 0) or 0) + 1
             if phase == "immediate":
-                immediate_attempts[iso_date] = int(immediate_attempts.get(iso_date, 0) or 0) + 1
+                immediate_attempts[iso_date] = (
+                    int(immediate_attempts.get(iso_date, 0) or 0) + 1
+                )
             else:
-                targeted_attempts[iso_date] = int(targeted_attempts.get(iso_date, 0) or 0) + 1
+                targeted_attempts[iso_date] = (
+                    int(targeted_attempts.get(iso_date, 0) or 0) + 1
+                )
             try:
                 result = pipeline.collect(
                     trading_date,
@@ -1547,7 +1672,9 @@ def targeted_backfill(
             no_data = iso_date in set(result.get("no_data_dates", []) or [])
             raw_ids, _endpoints = _collect_raw_audit(result.get("run_id"))
             error_text = result.get("error")
-            error_ref = f"collect:{result.get('run_id')}" if result.get("run_id") else None
+            error_ref = (
+                f"collect:{result.get('run_id')}" if result.get("run_id") else None
+            )
             if error_text and error_ref:
                 error_refs.setdefault(iso_date, [])
                 if error_ref not in error_refs[iso_date]:
@@ -1560,7 +1687,9 @@ def targeted_backfill(
                 raw_payload_ids=raw_ids,
                 error_ref=error_ref,
             )
-            history = date_results.setdefault(iso_date, {}).setdefault("attempt_history", [])
+            history = date_results.setdefault(iso_date, {}).setdefault(
+                "attempt_history", []
+            )
             history.append(
                 {
                     "attempt": attempts[iso_date],
@@ -1607,7 +1736,9 @@ def targeted_backfill(
 
         result_status = str((terminal_result or {}).get("status", "failed"))
         result_records = int((terminal_result or {}).get("records", 0) or 0)
-        no_data = iso_date in set((terminal_result or {}).get("no_data_dates", []) or [])
+        no_data = iso_date in set(
+            (terminal_result or {}).get("no_data_dates", []) or []
+        )
         terminal_statuses = _domain_statuses(terminal_result or {}, no_data=no_data)
         market_verified = _market_date_is_verified(
             terminal_result or {},
@@ -1634,10 +1765,12 @@ def targeted_backfill(
         else:
             failed.add(iso_date)
             errors[iso_date] = str(
-                (terminal_result or {}).get("error")
-                or "official date backfill failed"
+                (terminal_result or {}).get("error") or "official date backfill failed"
             )
-        if attempts.get(iso_date, 0) >= IMMEDIATE_RETRY_ATTEMPTS + TARGETED_RETRY_ATTEMPTS:
+        if (
+            attempts.get(iso_date, 0)
+            >= IMMEDIATE_RETRY_ATTEMPTS + TARGETED_RETRY_ATTEMPTS
+        ):
             exhausted.add(iso_date)
         persist_state()
 
@@ -1658,7 +1791,7 @@ def targeted_backfill(
             tuple(value.split(":", 1))
             for value in target_strings
             if isinstance(value, str) and ":" in value
-            }
+        }
         event_coverage_by_date = {
             day: item.get("event_coverage")
             for day, item in (metadata.get("coverage_manifest") or {}).items()
@@ -1681,7 +1814,9 @@ def targeted_backfill(
     metadata["coverage"] = report["summary"]
     metadata["coverage_manifest_summary"] = {
         "requested_dates": len(candidate_dates),
-        "requested_calendar_dates": len(metadata.get("requested_calendar_dates", requested_calendar_dates)),
+        "requested_calendar_dates": len(
+            metadata.get("requested_calendar_dates", requested_calendar_dates)
+        ),
         "extension_dates": len(extension_dates),
         "received_dates": len(completed | partial),
         "missing_dates": len(failed | partial),
@@ -1715,7 +1850,9 @@ def targeted_backfill(
     else:
         final_status = "success"
         final_error = None
-    _persist_progress(run_id, metadata, status=final_status, error=final_error, finished=True)
+    _persist_progress(
+        run_id, metadata, status=final_status, error=final_error, finished=True
+    )
     with pipeline.SessionLocal() as db:
         return backfill_run_dict(db.get(IngestionRun, run_id))
 
@@ -1738,7 +1875,9 @@ def backfill_windows(start_date: date, end_date: date) -> list[tuple[date, date]
     windows: list[tuple[date, date]] = []
     cursor = start_date
     while cursor <= end_date:
-        window_end = min(end_date, cursor + timedelta(days=OFFICIAL_MAX_BACKFILL_DAYS - 1))
+        window_end = min(
+            end_date, cursor + timedelta(days=OFFICIAL_MAX_BACKFILL_DAYS - 1)
+        )
         windows.append((cursor, window_end))
         cursor = window_end + timedelta(days=1)
     return windows
@@ -1792,7 +1931,9 @@ def chunked_backfill(
                 "completed_dates": len(metadata.get("completed_dates", []) or []),
                 "partial_dates": sorted(metadata.get("partial_dates", []) or []),
                 "failed_dates": sorted(metadata.get("failed_dates", []) or []),
-                "skipped_non_trading_dates": len(metadata.get("skipped_non_trading_dates", []) or []),
+                "skipped_non_trading_dates": len(
+                    metadata.get("skipped_non_trading_dates", []) or []
+                ),
             }
         )
     # A date retried successfully in a later window is no longer missing.

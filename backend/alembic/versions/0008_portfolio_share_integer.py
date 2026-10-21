@@ -3,6 +3,7 @@
 Revision ID: 0008_portfolio_share_integer
 Revises: 0007_turnover_availability
 """
+
 from __future__ import annotations
 
 from alembic import op
@@ -20,4 +21,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Portfolio exact share migration is forward-only to preserve legacy data")
+    raise RuntimeError(
+        "Portfolio exact share migration is forward-only to preserve legacy data"
+    )

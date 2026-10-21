@@ -47,11 +47,22 @@ from worker.sources import OfficialMarketDataAdapter
 
 DAILY_JOB = "daily"
 DAILY_STEPS = (
-    "catchup", "collect", "analyze", "evaluate", "candidates", "indicators", "theme_suggestions", "candidate_notes",
+    "catchup",
+    "collect",
+    "analyze",
+    "evaluate",
+    "candidates",
+    "indicators",
+    "theme_suggestions",
+    "candidate_notes",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
-    "analyze": (), "evaluate": ("analyze",), "candidates": ("analyze",), "indicators": (), "theme_suggestions": (),
+    "analyze": (),
+    "evaluate": ("analyze",),
+    "candidates": ("analyze",),
+    "indicators": (),
+    "theme_suggestions": (),
     "candidate_notes": ("candidates",),
 }
 # LLM steps whose failure (timeout, claude missing, quota) is kept on the step
@@ -112,7 +123,9 @@ def _compact(result: dict[str, Any]) -> dict[str, Any]:
     observations = details.pop("industry_membership_observations", None)
     if isinstance(observations, dict):
         details["industry_membership_observations"] = {
-            key: value for key, value in observations.items() if not isinstance(value, (list, dict))
+            key: value
+            for key, value in observations.items()
+            if not isinstance(value, (list, dict))
         }
     coverage = details.pop("event_coverage", None)
     if isinstance(coverage, dict):
@@ -126,7 +139,9 @@ def _step_records(step: str, result: dict[str, Any]) -> int | None:
     if step == "analyze":
         return int(result.get("signals_upserted", 0) or 0)
     if step == "evaluate":
-        return int(result.get("evaluations_written", 0) or 0) + int(result.get("settlements_written", 0) or 0)
+        return int(result.get("evaluations_written", 0) or 0) + int(
+            result.get("settlements_written", 0) or 0
+        )
     for key in ("records", "written", "rows_written"):
         if isinstance(result.get(key), int):
             return int(result[key])
@@ -139,10 +154,16 @@ def _indicator_step(target: date) -> dict[str, Any]:
     except ModuleNotFoundError as exc:
         if exc.name != INDICATOR_MODULE:
             raise
-        return {"status": "not_configured", "reason": f"{INDICATOR_MODULE} is not installed"}
+        return {
+            "status": "not_configured",
+            "reason": f"{INDICATOR_MODULE} is not installed",
+        }
     runner = getattr(module, INDICATOR_FUNCTION, None)
     if runner is None:
-        return {"status": "not_configured", "reason": f"{INDICATOR_MODULE}.{INDICATOR_FUNCTION} is missing"}
+        return {
+            "status": "not_configured",
+            "reason": f"{INDICATOR_MODULE}.{INDICATOR_FUNCTION} is missing",
+        }
     return runner(target)
 
 
@@ -177,30 +198,44 @@ def _collect_state(db: Any, day: date) -> str:
     """
 
     rows = db.scalars(
-        select(IngestionRun).where(IngestionRun.run_type == "collect", IngestionRun.run_date == day)
+        select(IngestionRun).where(
+            IngestionRun.run_type == "collect", IngestionRun.run_date == day
+        )
     ).all()
     # Same test as collect's idempotency shortcut: a success with a TAIEX row.
-    if any(row.status == "success" and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
-           for row in rows):
+    if any(
+        row.status == "success"
+        and int((row.metadata_json or {}).get("taiex_records", 0) or 0) > 0
+        for row in rows
+    ):
         return "complete"
     skipped = [row for row in rows if row.status == "skipped"]
     if not skipped:
         return "missing"
     # The end of the Taipei day in naive UTC, like the stored timestamps.
-    day_end = datetime(day.year, day.month, day.day) + timedelta(days=1) - TAIPEI_UTC_OFFSET
-    if any((row.finished_at or row.started_at or datetime.min) >= day_end for row in skipped):
+    day_end = (
+        datetime(day.year, day.month, day.day) + timedelta(days=1) - TAIPEI_UTC_OFFSET
+    )
+    if any(
+        (row.finished_at or row.started_at or datetime.min) >= day_end
+        for row in skipped
+    ):
         return "non_trading"
     confirmed = db.scalar(
-        select(ScheduleRun.id).where(
+        select(ScheduleRun.id)
+        .where(
             ScheduleRun.job == DAILY_JOB,
             ScheduleRun.target_date == day,
             ScheduleRun.status == "non_trading_day",
-        ).limit(1)
+        )
+        .limit(1)
     )
     return "non_trading" if confirmed is not None else "missing"
 
 
-def catchup_dates(target: date, sessions: int = CATCHUP_SESSIONS) -> tuple[list[date], list[date]]:
+def catchup_dates(
+    target: date, sessions: int = CATCHUP_SESSIONS
+) -> tuple[list[date], list[date]]:
     """Return (checked, missing) recent sessions before ``target``, oldest first."""
 
     checked: list[date] = []
@@ -232,9 +267,15 @@ def _catchup_step(target: date, sessions: int) -> dict[str, Any]:
         except Exception as exc:  # one date must not stop the others or the target
             result = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
         dates[day.isoformat()] = {
-            key: result[key] for key in ("status", "run_id", "records", "error") if result.get(key) is not None
+            key: result[key]
+            for key in ("status", "run_id", "records", "error")
+            if result.get(key) is not None
         }
-    incomplete = [day for day, item in dates.items() if item.get("status") not in {"success", "skipped"}]
+    incomplete = [
+        day
+        for day, item in dates.items()
+        if item.get("status") not in {"success", "skipped"}
+    ]
     if not incomplete:
         status = "success"
     elif len(incomplete) == len(dates):
@@ -248,8 +289,12 @@ def _catchup_step(target: date, sessions: int) -> dict[str, Any]:
         "dates": dates,
         "incomplete_dates": incomplete,
         "records": sum(int(item.get("records", 0) or 0) for item in dates.values()),
-        "error": ("catch-up incomplete: " + ", ".join(
-            f"{day} {dates[day].get('status')}" for day in incomplete)) if incomplete else None,
+        "error": (
+            "catch-up incomplete: "
+            + ", ".join(f"{day} {dates[day].get('status')}" for day in incomplete)
+        )
+        if incomplete
+        else None,
     }
 
 
@@ -263,14 +308,21 @@ def _no_session_confirmed(run_id: int, target: date) -> bool:
     if target < _today():
         return True
     with pipeline.SessionLocal() as db:
-        return db.scalar(
-            select(ScheduleRun.id).where(
-                ScheduleRun.job == DAILY_JOB,
-                ScheduleRun.target_date == target,
-                ScheduleRun.id != run_id,
-                ScheduleRun.status.in_((NON_TRADING_UNCONFIRMED, "non_trading_day")),
-            ).limit(1)
-        ) is not None
+        return (
+            db.scalar(
+                select(ScheduleRun.id)
+                .where(
+                    ScheduleRun.job == DAILY_JOB,
+                    ScheduleRun.target_date == target,
+                    ScheduleRun.id != run_id,
+                    ScheduleRun.status.in_(
+                        (NON_TRADING_UNCONFIRMED, "non_trading_day")
+                    ),
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
 
 def _ensure_schema() -> str:
@@ -285,7 +337,11 @@ def _ensure_schema() -> str:
         bind = db.get_bind()
         current = None
         if inspect(bind).has_table("alembic_version"):
-            current = db.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+            current = (
+                db.execute(text("SELECT version_num FROM alembic_version"))
+                .scalars()
+                .all()
+            )
     if current == [REVISIONS[-1]]:
         return "current"
     pipeline.init_db()
@@ -341,7 +397,9 @@ def _run_step(
             "traceback": traceback.format_exc(limit=8),
         }
     status = str(result.get("status") or "failed")
-    error = result.get("error") or (result.get("reason") if status in {"failed", "partial", "skipped"} else None)
+    error = result.get("error") or (
+        result.get("reason") if status in {"failed", "partial", "skipped"} else None
+    )
     _record_step(
         run_id,
         step,
@@ -356,7 +414,14 @@ def _run_step(
     return result
 
 
-def _finish(run_id: int, status: str, *, records: int, error: str | None, summary: dict[str, Any]) -> None:
+def _finish(
+    run_id: int,
+    status: str,
+    *,
+    records: int,
+    error: str | None,
+    summary: dict[str, Any],
+) -> None:
     with pipeline.SessionLocal() as db:
         run = db.get(ScheduleRun, run_id)
         run.status = status
@@ -405,7 +470,9 @@ def _abandoned_reason(row: ScheduleRun, now: datetime, host: str) -> str | None:
     return None
 
 
-def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, Any] | None]:
+def _start_run(
+    target: date, trigger: str, force: bool
+) -> tuple[int, dict[str, Any] | None]:
     """Create the run row; return a finished result when nothing should run."""
 
     now = _utcnow()
@@ -427,7 +494,9 @@ def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, 
                 row.finished_at = now
             elif active is None:
                 active = row
-        complete = next((row for row in previous if row.status in COMPLETE_STATUSES), None)
+        complete = next(
+            (row for row in previous if row.status in COMPLETE_STATUSES), None
+        )
         run = ScheduleRun(
             job=DAILY_JOB,
             target_date=target,
@@ -461,7 +530,9 @@ def _start_run(target: date, trigger: str, force: bool) -> tuple[int, dict[str, 
         return run.id, None
 
 
-def record_preflight_skip(end_date: date | None, *, reason: str, trigger: str = "scheduler") -> dict[str, Any]:
+def record_preflight_skip(
+    end_date: date | None, *, reason: str, trigger: str = "scheduler"
+) -> dict[str, Any]:
     """Log a run the scheduler wrapper declined to start; no step runs."""
 
     if reason not in PREFLIGHT_SKIP_REASONS:
@@ -481,7 +552,12 @@ def record_preflight_skip(end_date: date | None, *, reason: str, trigger: str = 
         )
         db.add(run)
         db.commit()
-        return {"status": "skipped", "reason": reason, "schedule_run_id": run.id, "date": target.isoformat()}
+        return {
+            "status": "skipped",
+            "reason": reason,
+            "schedule_run_id": run.id,
+            "date": target.isoformat(),
+        }
 
 
 def run_daily_job(
@@ -498,12 +574,18 @@ def run_daily_job(
     if finished is not None:
         return finished
 
-    output: dict[str, Any] = {"schedule_run_id": run_id, "date": target.isoformat(), "trigger": trigger}
+    output: dict[str, Any] = {
+        "schedule_run_id": run_id,
+        "date": target.isoformat(),
+        "trigger": trigger,
+    }
     summary_steps: dict[str, str] = {}
     if catchup_sessions > 0:
         # Its outcome never blocks the target date; an incomplete catch-up is
         # kept in the step and the run summary, where the watchdog reads it.
-        caught = _run_step(run_id, "catchup", 0, lambda: _catchup_step(target, catchup_sessions))
+        caught = _run_step(
+            run_id, "catchup", 0, lambda: _catchup_step(target, catchup_sessions)
+        )
         output["catchup"] = caught
         summary_steps["catchup"] = str(caught.get("status"))
     collected = _run_step(
@@ -516,7 +598,13 @@ def run_daily_job(
     collect_status = str(collected.get("status"))
     summary_steps["collect"] = collect_status
     later: list[tuple[str, int, Callable[[], dict[str, Any]]]] = [
-        ("analyze", 2, lambda: pipeline.analyze(init_schema=False, collect_run_id=collected.get("run_id"))),
+        (
+            "analyze",
+            2,
+            lambda: pipeline.analyze(
+                init_schema=False, collect_run_id=collected.get("run_id")
+            ),
+        ),
         ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
         ("candidates", 4, lambda: _candidate_step(target)),
         ("indicators", 5, lambda: _indicator_step(target)),
@@ -531,17 +619,27 @@ def run_daily_job(
         elif collect_status == "skipped":
             status, reason = NON_TRADING_UNCONFIRMED, "official_no_session_unconfirmed"
         else:
-            status, reason = ("partial" if collect_status == "partial" else "failed"), "official_collection_incomplete"
+            status, reason = (
+                ("partial" if collect_status == "partial" else "failed"),
+                "official_collection_incomplete",
+            )
         for step, sequence, _action in later:
             _record_step(run_id, step, sequence, status="skipped", error=reason)
             output[step] = {"status": "skipped", "reason": reason}
         no_session = status in {"non_trading_day", NON_TRADING_UNCONFIRMED}
         error = None if no_session else str(collected.get("error") or reason)
         if status == "partial":
-            warnings = collected.get("core_warnings", collected.get("warnings", [])) or []
+            warnings = (
+                collected.get("core_warnings", collected.get("warnings", [])) or []
+            )
             error = "collect partial: " + "; ".join(str(item) for item in warnings[:5])
-        _finish(run_id, status, records=int(collected.get("records", 0) or 0), error=error,
-                summary=_summary(summary_steps, collected, reason=reason))
+        _finish(
+            run_id,
+            status,
+            records=int(collected.get("records", 0) or 0),
+            error=error,
+            summary=_summary(summary_steps, collected, reason=reason),
+        )
         output["status"] = status
         return output
 
@@ -564,19 +662,30 @@ def run_daily_job(
         result = _run_step(run_id, step, sequence, action)
         output[step] = result
         statuses[step] = str(result.get("status"))
-        acceptable = {"success", "no_data"} | ({"not_configured"} if step == "indicators" else set())
+        acceptable = {"success", "no_data"} | (
+            {"not_configured"} if step == "indicators" else set()
+        )
         if statuses[step] not in acceptable and step not in NON_BLOCKING_STEPS:
             failed.append(step)
-            errors.append(f"{step}: {result.get('error') or result.get('reason') or statuses[step]}")
+            errors.append(
+                f"{step}: {result.get('error') or result.get('reason') or statuses[step]}"
+            )
     status = "failed" if errors else "success"
     error = "; ".join(errors) or None
-    _finish(run_id, status, records=int(collected.get("records", 0) or 0), error=error,
-            summary=_summary(statuses, collected))
+    _finish(
+        run_id,
+        status,
+        records=int(collected.get("records", 0) or 0),
+        error=error,
+        summary=_summary(statuses, collected),
+    )
     output["status"] = status
     return output
 
 
-def _summary(steps: dict[str, str], collected: dict[str, Any], *, reason: str | None = None) -> dict[str, Any]:
+def _summary(
+    steps: dict[str, str], collected: dict[str, Any], *, reason: str | None = None
+) -> dict[str, Any]:
     summary: dict[str, Any] = {"steps": steps}
     if reason:
         summary["reason"] = reason
@@ -603,7 +712,9 @@ def schedule_run_dict(run: ScheduleRun, steps: list[ScheduleRunStep]) -> dict[st
                 "step": step.step,
                 "status": step.status,
                 "started_at": step.started_at.isoformat() if step.started_at else None,
-                "finished_at": step.finished_at.isoformat() if step.finished_at else None,
+                "finished_at": step.finished_at.isoformat()
+                if step.finished_at
+                else None,
                 "records": step.records,
                 "error": step.error,
                 "ingestion_run_id": step.ingestion_run_id,
@@ -613,7 +724,9 @@ def schedule_run_dict(run: ScheduleRun, steps: list[ScheduleRunStep]) -> dict[st
     }
 
 
-def list_schedule_runs(limit: int = 20, target_date: date | None = None) -> list[dict[str, Any]]:
+def list_schedule_runs(
+    limit: int = 20, target_date: date | None = None
+) -> list[dict[str, Any]]:
     with pipeline.SessionLocal() as db:
         query = select(ScheduleRun).order_by(desc(ScheduleRun.id)).limit(limit)
         if target_date is not None:
@@ -621,6 +734,8 @@ def list_schedule_runs(limit: int = 20, target_date: date | None = None) -> list
         runs = db.scalars(query).all()
         result = []
         for run in runs:
-            steps = db.scalars(select(ScheduleRunStep).where(ScheduleRunStep.schedule_run_id == run.id)).all()
+            steps = db.scalars(
+                select(ScheduleRunStep).where(ScheduleRunStep.schedule_run_id == run.id)
+            ).all()
             result.append(schedule_run_dict(run, list(steps)))
         return result

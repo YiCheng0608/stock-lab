@@ -17,9 +17,8 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, inspect, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError
 
 from app.db import enable_sqlite_foreign_keys
 
@@ -60,8 +59,12 @@ FOREIGN KEY(signal_id) REFERENCES signals(id))""")
 
 def _alembic_config(engine: Engine) -> Config:
     config = Config(str(ALEMBIC_INI))
-    config.set_main_option("script_location", str((REPO_ROOT / "backend" / "alembic").as_posix()))
-    config.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
+    config.set_main_option(
+        "script_location", str((REPO_ROOT / "backend" / "alembic").as_posix())
+    )
+    config.set_main_option(
+        "sqlalchemy.url", engine.url.render_as_string(hide_password=False)
+    )
     # The checked-in env.py reuses this engine and commits SQLite's version
     # table after non-transactional DDL completes.
     config.attributes["connection"] = engine
@@ -79,7 +82,11 @@ def _normalize_default(value: Any) -> str | None:
     normalized = str(value).strip()
     while normalized.startswith("(") and normalized.endswith(")"):
         normalized = normalized[1:-1].strip()
-    if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in "'\"":
+    if (
+        len(normalized) >= 2
+        and normalized[0] == normalized[-1]
+        and normalized[0] in "'\""
+    ):
         normalized = normalized[1:-1]
     return normalized.replace("''", "'")
 
@@ -160,9 +167,14 @@ def _schema_descriptor(connection, tables: list[str]) -> dict[str, Any]:
             "columns": _column_contract(connection, table_name),
             "primary_key": {
                 "name": inspector.get_pk_constraint(table_name).get("name"),
-                "columns": list(inspector.get_pk_constraint(table_name).get("constrained_columns") or ()),
+                "columns": list(
+                    inspector.get_pk_constraint(table_name).get("constrained_columns")
+                    or ()
+                ),
             },
-            "indexes": sorted(indexes, key=lambda item: (item["name"] or "", item["columns"])),
+            "indexes": sorted(
+                indexes, key=lambda item: (item["name"] or "", item["columns"])
+            ),
             "unique_constraints": sorted(
                 unique_constraints,
                 key=lambda item: (item["name"] or "", item["columns"]),
@@ -185,35 +197,47 @@ def _database_fingerprint(connection, tables: list[str]) -> str:
     for table_name in sorted(tables):
         columns = [column["name"] for column in inspector.get_columns(table_name)]
         quoted_columns = ", ".join(f'"{column}"' for column in columns)
-        rows = connection.execute(text(f'SELECT {quoted_columns} FROM "{table_name}"')).fetchall()
-        canonical_rows = [
-            [_canonical_value(value) for value in row]
-            for row in rows
-        ]
-        canonical_rows.sort(key=lambda row: json.dumps(row, ensure_ascii=False, sort_keys=True, default=str))
+        rows = connection.execute(
+            text(f'SELECT {quoted_columns} FROM "{table_name}"')
+        ).fetchall()
+        canonical_rows = [[_canonical_value(value) for value in row] for row in rows]
+        canonical_rows.sort(
+            key=lambda row: json.dumps(
+                row, ensure_ascii=False, sort_keys=True, default=str
+            )
+        )
         table_payload[table_name] = canonical_rows
     payload = {
         "schema": _schema_descriptor(connection, tables),
         "rows": table_payload,
     }
-    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    serialized = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _common_rows_fingerprint(connection, manifest: dict[str, Any]) -> str:
-    tables = [table for table in manifest["common_columns"] if table != "alembic_version"]
+    tables = [
+        table for table in manifest["common_columns"] if table != "alembic_version"
+    ]
     payload: dict[str, Any] = {}
     for table_name in sorted(tables):
         columns = manifest["common_columns"][table_name]
         quoted_columns = ", ".join(f'"{column}"' for column in columns)
-        rows = connection.execute(text(f'SELECT {quoted_columns} FROM "{table_name}"')).fetchall()
-        canonical_rows = [
-            [_canonical_value(value) for value in row]
-            for row in rows
-        ]
-        canonical_rows.sort(key=lambda row: json.dumps(row, ensure_ascii=False, sort_keys=True, default=str))
+        rows = connection.execute(
+            text(f'SELECT {quoted_columns} FROM "{table_name}"')
+        ).fetchall()
+        canonical_rows = [[_canonical_value(value) for value in row] for row in rows]
+        canonical_rows.sort(
+            key=lambda row: json.dumps(
+                row, ensure_ascii=False, sort_keys=True, default=str
+            )
+        )
         payload[table_name] = {"columns": columns, "rows": canonical_rows}
-    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    serialized = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -234,7 +258,9 @@ def _revision(connection) -> list[str]:
 
 def _row_counts(connection, manifest: dict[str, Any]) -> dict[str, int]:
     return {
-        table_name: connection.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar_one()
+        table_name: connection.execute(
+            text(f'SELECT COUNT(*) FROM "{table_name}"')
+        ).scalar_one()
         for table_name in manifest["expected_row_counts"]
     }
 
@@ -242,7 +268,9 @@ def _row_counts(connection, manifest: dict[str, Any]) -> dict[str, int]:
 def _assert_required_constraints(connection, manifest: dict[str, Any]) -> None:
     inspector = inspect(connection)
     actual_primary_keys = {
-        table_name: tuple(inspector.get_pk_constraint(table_name).get("constrained_columns") or ())
+        table_name: tuple(
+            inspector.get_pk_constraint(table_name).get("constrained_columns") or ()
+        )
         for table_name, _columns in manifest["required_primary_keys"]
     }
     expected_primary_keys = {
@@ -260,7 +288,9 @@ def _assert_required_constraints(connection, manifest: dict[str, Any]) -> None:
             actual_foreign_keys.update(_foreign_key_signatures(connection, table_name))
     expected_foreign_keys = {
         (table_name, tuple(columns), referred_table, tuple(referred_columns))
-        for table_name, columns, referred_table, referred_columns in manifest["required_foreign_keys"]
+        for table_name, columns, referred_table, referred_columns in manifest[
+            "required_foreign_keys"
+        ]
     }
     assert expected_foreign_keys <= actual_foreign_keys
 
@@ -292,10 +322,13 @@ def _assert_upgraded_temporal_contract(connection, manifest: dict[str, Any]) -> 
     expected_values = manifest["expected_temporal_values"]
     target_names = list(manifest["target_columns"])
     selected = ", ".join(["id", *[f'"{name}"' for name in target_names]])
-    rows = connection.execute(text(f'SELECT {selected} FROM "news_items" ORDER BY id')).mappings().all()
+    rows = (
+        connection.execute(text(f'SELECT {selected} FROM "news_items" ORDER BY id'))
+        .mappings()
+        .all()
+    )
     actual_values = {
-        str(row["id"]): {name: row[name] for name in target_names}
-        for row in rows
+        str(row["id"]): {name: row[name] for name in target_names} for row in rows
     }
     assert actual_values == expected_values
 
@@ -313,7 +346,9 @@ def _news_schema_contract(connection) -> dict[str, Any]:
     }
     return {
         "columns": _column_contract(connection, "news_items"),
-        "primary_key": tuple(inspector.get_pk_constraint("news_items").get("constrained_columns") or ()),
+        "primary_key": tuple(
+            inspector.get_pk_constraint("news_items").get("constrained_columns") or ()
+        ),
         "foreign_keys": sorted(_foreign_key_signatures(connection, "news_items")),
         "unique_columns": sorted(_unique_signatures(connection, "news_items")),
         "required_index_columns": sorted(required_index_columns & actual_index_columns),
@@ -329,23 +364,31 @@ def _sha256(path: Path) -> str:
 
 
 def _sqlite_backup(source: Path, destination: Path) -> None:
-    with sqlite3.connect(source) as source_connection, sqlite3.connect(destination) as destination_connection:
+    with (
+        sqlite3.connect(source) as source_connection,
+        sqlite3.connect(destination) as destination_connection,
+    ):
         source_connection.backup(destination_connection)
 
 
-def _assert_restored_database(path: Path, manifest: dict[str, Any], expected_fingerprint: str) -> None:
+def _assert_restored_database(
+    path: Path, manifest: dict[str, Any], expected_fingerprint: str
+) -> None:
     engine = _new_engine(path)
     try:
         with engine.connect() as connection:
             actual_tables = set(inspect(connection).get_table_names())
             missing_tables = set(manifest["tables"]) - actual_tables
-            assert not missing_tables, f"restored database missing table(s): {sorted(missing_tables)}"
+            assert not missing_tables, (
+                f"restored database missing table(s): {sorted(missing_tables)}"
+            )
             _integrity_checks(connection)
             assert _revision(connection) == [manifest["revision_after"]]
             _assert_required_constraints(connection, manifest)
-            assert _database_fingerprint(connection, manifest["tables"]) == expected_fingerprint, (
-                "restored full-content schema-and-row fingerprint differs from backup"
-            )
+            assert (
+                _database_fingerprint(connection, manifest["tables"])
+                == expected_fingerprint
+            ), "restored full-content schema-and-row fingerprint differs from backup"
             _assert_upgraded_temporal_contract(connection, manifest)
     finally:
         engine.dispose()
@@ -358,10 +401,10 @@ def test_fixed_0004_prehead_upgrade_preserves_rows_and_is_idempotent(tmp_path):
     try:
         _load_fixed_fixture(database_path)
         with engine.connect() as connection:
-            inspector = inspect(connection)
             assert _revision(connection) == [manifest["revision_before"]]
             assert not (
-                set(manifest["target_columns"]) & set(_column_contract(connection, "news_items"))
+                set(manifest["target_columns"])
+                & set(_column_contract(connection, "news_items"))
             ), "0004 fixture must genuinely lack every 0005 target column"
             assert _row_counts(connection, manifest) == manifest["expected_row_counts"]
             before_rows = _common_rows_fingerprint(connection, manifest)
@@ -373,13 +416,18 @@ def test_fixed_0004_prehead_upgrade_preserves_rows_and_is_idempotent(tmp_path):
             assert _common_rows_fingerprint(connection, manifest) == before_rows
             _assert_upgraded_temporal_contract(connection, manifest)
             _integrity_checks(connection)
-            first_upgrade_fingerprint = _database_fingerprint(connection, manifest["tables"])
+            first_upgrade_fingerprint = _database_fingerprint(
+                connection, manifest["tables"]
+            )
 
         # A second real Alembic command must not drift either schema or rows.
         _upgrade_to_fixture_revision(engine)
         with engine.connect() as connection:
             assert _revision(connection) == [manifest["revision_after"]]
-            assert _database_fingerprint(connection, manifest["tables"]) == first_upgrade_fingerprint
+            assert (
+                _database_fingerprint(connection, manifest["tables"])
+                == first_upgrade_fingerprint
+            )
             assert _common_rows_fingerprint(connection, manifest) == before_rows
             _assert_upgraded_temporal_contract(connection, manifest)
             _integrity_checks(connection)
@@ -397,13 +445,21 @@ def test_fresh_contract_has_no_known_default_drift_after_model_fix(tmp_path):
         _load_fixed_fixture(upgraded_path)
         _upgrade_to_fixture_revision(upgraded)
         _upgrade_to_fixture_revision(fresh)
-        with upgraded.connect() as upgraded_connection, fresh.connect() as fresh_connection:
+        with (
+            upgraded.connect() as upgraded_connection,
+            fresh.connect() as fresh_connection,
+        ):
             upgraded_contract = _news_schema_contract(upgraded_connection)
             fresh_contract = _news_schema_contract(fresh_connection)
             assert upgraded_contract == fresh_contract
             assert upgraded_contract["foreign_keys"] == fresh_contract["foreign_keys"]
-            assert upgraded_contract["unique_columns"] == fresh_contract["unique_columns"]
-            assert upgraded_contract["required_index_columns"] == fresh_contract["required_index_columns"]
+            assert (
+                upgraded_contract["unique_columns"] == fresh_contract["unique_columns"]
+            )
+            assert (
+                upgraded_contract["required_index_columns"]
+                == fresh_contract["required_index_columns"]
+            )
 
             expected_drift = {}
             assert set(upgraded_contract["columns"]) == set(fresh_contract["columns"])
@@ -488,7 +544,9 @@ def test_isolated_sqlite_backup_restore_round_trip_and_fault_detection(tmp_path)
     faulty_delete_path = tmp_path / "faulty-delete-copy.db"
     faulty_constraint_path = tmp_path / "faulty-constraint-copy.db"
     restored_path = tmp_path / "restored-new-path.db"
-    fixture_hashes_before = {_path.name: _sha256(_path) for _path in (FIXTURE_SQL, FIXTURE_MANIFEST)}
+    fixture_hashes_before = {
+        _path.name: _sha256(_path) for _path in (FIXTURE_SQL, FIXTURE_MANIFEST)
+    }
 
     source_engine = _new_engine(source_path)
     try:
@@ -539,7 +597,9 @@ def test_isolated_sqlite_backup_restore_round_trip_and_fault_detection(tmp_path)
             )
             faulty_connection.execute("PRAGMA foreign_keys=ON")
         with pytest.raises(AssertionError, match="primary key contract"):
-            _assert_restored_database(faulty_constraint_path, manifest, source_fingerprint)
+            _assert_restored_database(
+                faulty_constraint_path, manifest, source_fingerprint
+            )
 
         # Recovery is a new path populated through SQLite's backup API; the
         # original source/backup are never overwritten.
@@ -547,7 +607,10 @@ def test_isolated_sqlite_backup_restore_round_trip_and_fault_detection(tmp_path)
         _assert_restored_database(restored_path, manifest, source_fingerprint)
         assert _sha256(backup_path) == backup_hash_before
         with source_engine.connect() as connection:
-            assert _database_fingerprint(connection, manifest["tables"]) == source_fingerprint
+            assert (
+                _database_fingerprint(connection, manifest["tables"])
+                == source_fingerprint
+            )
         assert fixture_hashes_before == {
             _path.name: _sha256(_path) for _path in (FIXTURE_SQL, FIXTURE_MANIFEST)
         }
@@ -568,6 +631,8 @@ def test_restore_validation_rejects_bad_backup_and_wrong_schema(tmp_path):
         connection.execute(
             "CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY NOT NULL)"
         )
-        connection.execute("INSERT INTO alembic_version(version_num) VALUES ('0005_news_temporal_contract')")
+        connection.execute(
+            "INSERT INTO alembic_version(version_num) VALUES ('0005_news_temporal_contract')"
+        )
     with pytest.raises(AssertionError, match="missing table"):
         _assert_restored_database(wrong_schema, manifest, expected_fingerprint)

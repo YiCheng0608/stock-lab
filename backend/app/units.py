@@ -39,7 +39,9 @@ def _position_total(value: Any, field_name: str, multiplier: int = 1) -> int:
         limit = MAX_INT64_SHARES
         # Bound length before parsing; accept canonical ASCII decimal only.
         if len(value) > 19 or not re.fullmatch(r"[1-9][0-9]*", value, flags=re.ASCII):
-            raise ValueError(f"{field_name} must be a canonical positive integer string")
+            raise ValueError(
+                f"{field_name} must be a canonical positive integer string"
+            )
         value = int(value)
     total = _strict_positive_integer(value, field_name) * multiplier
     if total > limit:
@@ -51,8 +53,12 @@ def safe_legacy_position_shares(value: Any) -> int | None:
     """Trust only the current safe stored number, never reconstruct an origin."""
     if type(value) is int and 0 <= value <= MAX_SAFE_SHARES:
         return value
-    if (type(value) is float and math.isfinite(value) and value.is_integer()
-            and 0 <= value <= MAX_SAFE_SHARES):
+    if (
+        type(value) is float
+        and math.isfinite(value)
+        and value.is_integer()
+        and 0 <= value <= MAX_SAFE_SHARES
+    ):
         return int(value)
     return None
 
@@ -60,7 +66,11 @@ def safe_legacy_position_shares(value: Any) -> int | None:
 def trusted_position_shares(legacy: Any, integer: Any = None) -> int | None:
     """A present malformed integer must not fall back to a legacy Float."""
     if integer is not None:
-        return integer if type(integer) is int and 0 <= integer <= MAX_INT64_SHARES else None
+        return (
+            integer
+            if type(integer) is int and 0 <= integer <= MAX_INT64_SHARES
+            else None
+        )
     return safe_legacy_position_shares(legacy)
 
 
@@ -121,11 +131,17 @@ def split_shares(shares: Any) -> tuple[int, int]:
     # establish the current stored integer within the binary64 safe range.
     if type(shares) is int and 0 <= shares <= MAX_INT64_SHARES:
         total = shares
-    elif (type(shares) is float and math.isfinite(shares) and shares.is_integer()
-          and 0 <= shares <= MAX_SAFE_SHARES):
+    elif (
+        type(shares) is float
+        and math.isfinite(shares)
+        and shares.is_integer()
+        and 0 <= shares <= MAX_SAFE_SHARES
+    ):
         total = int(shares)
     else:
-        raise ValueError("shares must be an int64 integer or a safe stored Float integer")
+        raise ValueError(
+            "shares must be an int64 integer or a safe stored Float integer"
+        )
     return divmod(total, LOT_SIZE)
 
 

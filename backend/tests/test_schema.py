@@ -1,14 +1,12 @@
 import pytest
 
-from datetime import date
-
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app import migrations as migrations_module
 from app.db import enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
-from app.models import Event, Instrument
 
 
 def test_v1_schema_has_new_tables_unique_settlements_and_sqlite_foreign_keys(tmp_path):
@@ -37,7 +35,13 @@ def test_v1_schema_has_new_tables_unique_settlements_and_sqlite_foreign_keys(tmp
     }
     assert ("signal_id", "horizon") in settlement_uniques
     theme_columns = {column["name"] for column in inspector.get_columns("theme_groups")}
-    assert {"display_name_zh", "display_description_zh", "display_category", "name_source", "name_status"}.issubset(theme_columns)
+    assert {
+        "display_name_zh",
+        "display_description_zh",
+        "display_category",
+        "name_source",
+        "name_status",
+    }.issubset(theme_columns)
 
     with engine.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
@@ -131,32 +135,17 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                     text("SELECT version_num FROM alembic_version ORDER BY version_num")
                 )
             ]
-            assert revisions == ["0016_group_score_archive"]
+            assert revisions == [REVISIONS[-1]]
             assert not inspector.has_table("schema_migrations")
         else:
             assert inspector.has_table("schema_migrations")
             versions = {
                 item[0]
-                for item in connection.execute(text("SELECT version FROM schema_migrations"))
+                for item in connection.execute(
+                    text("SELECT version FROM schema_migrations")
+                )
             }
-            assert versions == {
-                "0001_schema_v1",
-                "0002_instrument_exchange_key",
-                "0003_backtest_run_metadata",
-                "0004_product_news_themes",
-                "0005_news_temporal_contract",
-                "0006_news_json_defaults",
-                "0007_turnover_availability",
-                "0008_portfolio_share_integer",
-                "0009_strategy_formula_version",
-                "0010_technical_indicators",
-                "0011_schedule_runs",
-                "0012_news_llm",
-                "0013_candidates",
-                "0014_theme_suggestions",
-                "0015_candidate_llm_notes",
-                "0016_group_score_archive",
-            }
+            assert versions == set(REVISIONS)
             assert not inspector.has_table("alembic_version")
 
 
@@ -187,7 +176,20 @@ def test_product_migration_preserves_existing_official_rows(tmp_path):
     upgrade_database(engine)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT COUNT(*) FROM instruments WHERE symbol = '2330'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM events WHERE title = 'Official event'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM news_items")).scalar_one() == 0
+        assert (
+            connection.execute(
+                text("SELECT COUNT(*) FROM instruments WHERE symbol = '2330'")
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text("SELECT COUNT(*) FROM events WHERE title = 'Official event'")
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(text("SELECT COUNT(*) FROM news_items")).scalar_one()
+            == 0
+        )
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1

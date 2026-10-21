@@ -1,0 +1,10 @@
+# Python lint and format settings for backend/ and tools/. CI runs `ruff check backend tools`
+# and `ruff format --check backend tools` from the repository root (tools/ci/checks.py lint).
+# Kept at the root so tools/ uses the same settings as backend/.
+required-version = "==0.14.14"  # same pin as .github/workflows/ci.yml
+target-version = "py312"  # CI runs Python 3.12.14
+line-length = 88  # ruff's default, which the already formatted files use
+
+[lint]
+# Ruff's default rule set, written out so a ruff upgrade cannot change it silently. No ignores.
+select = ["E4", "E7", "E9", "F"]

@@ -13,14 +13,22 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .coverage import verified_taiex_sessions
-from .decision_market_reads import DecisionMarketRead, load_decision_market_reads, market_read_status
+from .decision_market_reads import (
+    DecisionMarketRead,
+    load_decision_market_reads,
+    market_read_status,
+)
 from .config import MAX_GROUP_CANDIDATES
 from .domain import ETF_CATEGORIES, signal_confidence_semantics
-from .level_semantics import build_level_semantics, build_stop_price_semantics, utc_now_iso
+from .level_semantics import (
+    build_level_semantics,
+    build_stop_price_semantics,
+    utc_now_iso,
+)
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
@@ -93,7 +101,9 @@ def _same_adjustment_basis(left: DecisionMarketRead, right: DecisionMarketRead) 
 
 def _trusted_bar_for_display(row: DecisionMarketRead) -> bool:
     source = str(row.source or "").casefold()
-    return bool(source) and not any(token in source for token in ("legacy", "demo", "fake"))
+    return bool(source) and not any(
+        token in source for token in ("legacy", "demo", "fake")
+    )
 
 
 def _verified_adjacent_change(
@@ -110,7 +120,13 @@ def _verified_adjacent_change(
     explicit ``unverified`` UI state.
     """
 
-    if bar is None or not bar.core_valid or not as_of or not _trusted_bar_for_display(bar) or bar.is_suspended:
+    if (
+        bar is None
+        or not bar.core_valid
+        or not as_of
+        or not _trusted_bar_for_display(bar)
+        or bar.is_suspended
+    ):
         return None, None, None
     current_close = _finite(bar.close)
     if current_close is None or current_close <= 0:
@@ -133,10 +149,19 @@ def _verified_adjacent_change(
         return None, None, None
     previous_date = sessions[index - 1]
     previous = next((row for row in bars if row.trading_date == previous_date), None)
-    if previous is None or not previous.core_valid or previous.is_suspended or not _trusted_bar_for_display(previous):
+    if (
+        previous is None
+        or not previous.core_valid
+        or previous.is_suspended
+        or not _trusted_bar_for_display(previous)
+    ):
         return None, None, None
     previous_close = _finite(previous.close)
-    if previous_close is None or previous_close <= 0 or not _same_adjustment_basis(previous, bar):
+    if (
+        previous_close is None
+        or previous_close <= 0
+        or not _same_adjustment_basis(previous, bar)
+    ):
         return None, None, None
     change = current_close - previous_close
     percent = _finite(change / previous_close)
@@ -192,8 +217,14 @@ def _prepare_decision_context(
         return existing
     # A larger later request replaces the context for this as-of date.  This
     # keeps direct single-instrument calls and paged API calls compatible.
-    instrument_rows = db.scalars(select(Instrument).where(Instrument.id.in_(ids))).all() if ids else []
-    bars_by_instrument, unlocated_bars_by_instrument = load_decision_market_reads(db, ids, as_of)
+    instrument_rows = (
+        db.scalars(select(Instrument).where(Instrument.id.in_(ids))).all()
+        if ids
+        else []
+    )
+    bars_by_instrument, unlocated_bars_by_instrument = load_decision_market_reads(
+        db, ids, as_of
+    )
 
     chips_by_instrument: dict[int, list[ChipSnapshot]] = defaultdict(list)
     if ids:
@@ -201,13 +232,19 @@ def _prepare_decision_context(
         if as_of:
             chip_query = chip_query.where(ChipSnapshot.trading_date <= as_of)
         for row in db.scalars(
-            chip_query.order_by(ChipSnapshot.instrument_id, desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id))
+            chip_query.order_by(
+                ChipSnapshot.instrument_id,
+                desc(ChipSnapshot.trading_date),
+                desc(ChipSnapshot.id),
+            )
         ).all():
             if len(chips_by_instrument[row.instrument_id]) < 120:
                 chips_by_instrument[row.instrument_id].append(row)
 
     signals_by_instrument: dict[int, dict[str, Signal]] = defaultdict(dict)
-    strategy_versions_by_instrument: dict[int, dict[str, StrategyVersion]] = defaultdict(dict)
+    strategy_versions_by_instrument: dict[int, dict[str, StrategyVersion]] = (
+        defaultdict(dict)
+    )
     if ids:
         signal_query = (
             select(Signal, StrategyVersion)
@@ -220,10 +257,16 @@ def _prepare_decision_context(
             signal_query.order_by(desc(Signal.signal_date), desc(Signal.id))
         ).all():
             if strategy_version.name in {"breakout_v1", "pullback_v1"}:
-                signals_by_instrument[signal.instrument_id].setdefault(strategy_version.name, signal)
-                strategy_versions_by_instrument[signal.instrument_id].setdefault(strategy_version.name, strategy_version)
+                signals_by_instrument[signal.instrument_id].setdefault(
+                    strategy_version.name, signal
+                )
+                strategy_versions_by_instrument[signal.instrument_id].setdefault(
+                    strategy_version.name, strategy_version
+                )
 
-    groups_by_instrument: dict[int, list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]] = defaultdict(list)
+    groups_by_instrument: dict[
+        int, list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]
+    ] = defaultdict(list)
     if ids:
         group_query = (
             select(ThemeGroup, GroupDailyScore, GroupMembership)
@@ -233,7 +276,10 @@ def _prepare_decision_context(
                 ThemeGroup.active.is_(True),
                 GroupMembership.instrument_id.in_(ids),
                 GroupMembership.valid_from <= (as_of or date.max),
-                (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= (as_of or date.max))),
+                (
+                    GroupMembership.valid_to.is_(None)
+                    | (GroupMembership.valid_to >= (as_of or date.max))
+                ),
                 GroupDailyScore.trading_date <= (as_of or date.max),
             )
             .order_by(desc(GroupDailyScore.trading_date), desc(GroupDailyScore.id))
@@ -244,7 +290,9 @@ def _prepare_decision_context(
             if marker in seen_groups:
                 continue
             seen_groups.add(marker)
-            groups_by_instrument[membership.instrument_id].append((group, score, membership))
+            groups_by_instrument[membership.instrument_id].append(
+                (group, score, membership)
+            )
 
     quality_by_key: dict[str, DataQuality] = {}
     # DataQuality is also the audit store for every daily ingestion domain and
@@ -259,7 +307,9 @@ def _prepare_decision_context(
     )
     if as_of:
         quality_query = quality_query.where(DataQuality.as_of_date <= as_of)
-    for row in db.scalars(quality_query.order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))).all():
+    for row in db.scalars(
+        quality_query.order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
+    ).all():
         quality_by_key.setdefault(row.entity_key, row)
 
     positions_by_instrument: dict[int, PortfolioPosition] = {}
@@ -274,7 +324,9 @@ def _prepare_decision_context(
         event_query = select(Event).where(Event.instrument_id.in_(ids))
         if as_of:
             event_query = event_query.where(Event.event_date <= as_of)
-        for row in db.scalars(event_query.order_by(desc(Event.event_date), desc(Event.id))).all():
+        for row in db.scalars(
+            event_query.order_by(desc(Event.event_date), desc(Event.id))
+        ).all():
             events_by_instrument[row.instrument_id].append(row)
 
     context = {
@@ -294,21 +346,37 @@ def _prepare_decision_context(
     return context
 
 
-def _latest_bar(db: Session, instrument_id: int, as_of: date | None) -> DecisionMarketRead | None:
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+def _latest_bar(
+    db: Session, instrument_id: int, as_of: date | None
+) -> DecisionMarketRead | None:
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument_id in context["instrument_ids"]:
         rows = context["bars_by_instrument"].get(instrument_id, [])
-        return context["unlocated_bars_by_instrument"].get(instrument_id) or (rows[0] if rows else None)
-    rows_by_id, unlocated = load_decision_market_reads(db, [instrument_id], as_of, limit=1)
+        return context["unlocated_bars_by_instrument"].get(instrument_id) or (
+            rows[0] if rows else None
+        )
+    rows_by_id, unlocated = load_decision_market_reads(
+        db, [instrument_id], as_of, limit=1
+    )
     rows = rows_by_id[instrument_id]
     return unlocated.get(instrument_id) or (rows[0] if rows else None)
 
 
-def _bars(db: Session, instrument_id: int, as_of: date | None, limit: int = 120) -> list[DecisionMarketRead]:
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+def _bars(
+    db: Session, instrument_id: int, as_of: date | None, limit: int = 120
+) -> list[DecisionMarketRead]:
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument_id in context["instrument_ids"]:
-        return list(reversed(context["bars_by_instrument"].get(instrument_id, [])[:limit]))
-    rows_by_id, _unlocated = load_decision_market_reads(db, [instrument_id], as_of, limit=limit)
+        return list(
+            reversed(context["bars_by_instrument"].get(instrument_id, [])[:limit])
+        )
+    rows_by_id, _unlocated = load_decision_market_reads(
+        db, [instrument_id], as_of, limit=limit
+    )
     return list(reversed(rows_by_id[instrument_id]))
 
 
@@ -368,11 +436,18 @@ def _instrument_coverage(
     bar_dates = {
         row.trading_date
         for row in bars
-        if row.core_valid and (instrument.listing_date is None or row.trading_date >= instrument.listing_date)
+        if row.core_valid
+        and (
+            instrument.listing_date is None
+            or row.trading_date >= instrument.listing_date
+        )
     }
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
-        chip_dates = {row.trading_date for row in context["chips_by_instrument"].get(instrument.id, [])}
+        chip_dates = {
+            row.trading_date
+            for row in context["chips_by_instrument"].get(instrument.id, [])
+        }
     else:
         chip_dates = set(
             db.scalars(
@@ -446,12 +521,18 @@ def _instrument_coverage(
             reasons.append("missing_bar_dates")
     if missing_chips[20] or missing_chips[60]:
         reasons.append("missing_chips")
-    if instrument.instrument_type == "etf" and instrument.etf_category in {"bond", "leveraged", "inverse"}:
+    if instrument.instrument_type == "etf" and instrument.etf_category in {
+        "bond",
+        "leveraged",
+        "inverse",
+    }:
         reasons.append("etf_not_general_action_eligible")
     if instrument.instrument_type == "ipo":
         ipo_stage = (
-            "not_observable" if len(bar_dates) < 20
-            else "observation_only" if len(bar_dates) < 60
+            "not_observable"
+            if len(bar_dates) < 20
+            else "observation_only"
+            if len(bar_dates) < 60
             else "actionable_eligible"
         )
     else:
@@ -475,8 +556,12 @@ def _instrument_coverage(
     }
 
 
-def _latest_strategy_signals(db: Session, instrument_id: int, as_of: date | None) -> dict[str, Signal]:
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+def _latest_strategy_signals(
+    db: Session, instrument_id: int, as_of: date | None
+) -> dict[str, Signal]:
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument_id in context["instrument_ids"]:
         return dict(context["signals_by_instrument"].get(instrument_id, {}))
     query = (
@@ -494,8 +579,12 @@ def _latest_strategy_signals(db: Session, instrument_id: int, as_of: date | None
     return result
 
 
-def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tuple[bool, list[str], list[ChipSnapshot]]:
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+def _chips_complete(
+    db: Session, instrument_id: int, as_of: date | None
+) -> tuple[bool, list[str], list[ChipSnapshot]]:
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument_id in context["instrument_ids"]:
         rows = list(reversed(context["chips_by_instrument"].get(instrument_id, [])[:5]))
     else:
@@ -505,20 +594,30 @@ def _chips_complete(db: Session, instrument_id: int, as_of: date | None) -> tupl
         rows = list(
             reversed(
                 db.scalars(
-                    query.order_by(desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id)).limit(5)
+                    query.order_by(
+                        desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id)
+                    ).limit(5)
                 ).all()
             )
         )
     missing: list[str] = []
     if len({row.trading_date for row in rows}) < 5:
         missing.append("institutional_flow_5d")
-    for field in ("foreign_buy", "trust_buy", "dealer_buy", "margin_balance", "margin_change"):
+    for field in (
+        "foreign_buy",
+        "trust_buy",
+        "dealer_buy",
+        "margin_balance",
+        "margin_change",
+    ):
         if len(rows) < 5 or any(_finite(getattr(row, field)) is None for row in rows):
             missing.append(field)
     return not missing, list(dict.fromkeys(missing)), rows
 
 
-def _effective_groups_for_instrument(db: Session, instrument_id: int, as_of: date | None) -> list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]:
+def _effective_groups_for_instrument(
+    db: Session, instrument_id: int, as_of: date | None
+) -> list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]:
     if not as_of:
         return []
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
@@ -547,9 +646,13 @@ def _effective_groups_for_instrument(db: Session, instrument_id: int, as_of: dat
     return result
 
 
-def _qualified_groups_for_instrument(db: Session, instrument: Instrument, as_of: date | None) -> list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]:
+def _qualified_groups_for_instrument(
+    db: Session, instrument: Instrument, as_of: date | None
+) -> list[tuple[ThemeGroup, GroupDailyScore, GroupMembership]]:
     result = []
-    for group, score, membership in _effective_groups_for_instrument(db, instrument.id, as_of):
+    for group, score, membership in _effective_groups_for_instrument(
+        db, instrument.id, as_of
+    ):
         details = score.details_json or {}
         leaderboard = details.get("leaderboard")
         # ETF and company leaderboards are deliberately not mixed.  The group
@@ -571,9 +674,17 @@ def _qualified_groups_for_instrument(db: Session, instrument: Instrument, as_of:
 
 def _signal_levels(signal: Signal, strategy_name: str) -> dict[str, float | None]:
     return {
-        "trigger_price": _finite(signal.breakout_price if strategy_name == "breakout_v1" else signal.reference_entry),
-        "entry_low": _finite(signal.pullback_low if strategy_name == "pullback_v1" else None),
-        "entry_high": _finite(signal.pullback_high if strategy_name == "pullback_v1" else None),
+        "trigger_price": _finite(
+            signal.breakout_price
+            if strategy_name == "breakout_v1"
+            else signal.reference_entry
+        ),
+        "entry_low": _finite(
+            signal.pullback_low if strategy_name == "pullback_v1" else None
+        ),
+        "entry_high": _finite(
+            signal.pullback_high if strategy_name == "pullback_v1" else None
+        ),
         "invalid_price": _finite(signal.invalid_price),
         "target_1": _finite(signal.target_1),
         "target_2": _finite(signal.target_2),
@@ -585,16 +696,28 @@ def _risk_reward(signal: Signal, levels: dict[str, float | None]) -> float | Non
     candidates = [
         evidence.get("risk_reward"),
         evidence.get("risk_reward_ratio"),
-        (evidence.get("levels") or {}).get("risk_reward") if isinstance(evidence.get("levels"), dict) else None,
+        (evidence.get("levels") or {}).get("risk_reward")
+        if isinstance(evidence.get("levels"), dict)
+        else None,
     ]
     for candidate in candidates:
         value = _finite(candidate)
         if value is not None:
             return value
-    entry = levels.get("trigger_price") or levels.get("entry_high") or levels.get("entry_low")
+    entry = (
+        levels.get("trigger_price")
+        or levels.get("entry_high")
+        or levels.get("entry_low")
+    )
     stop = levels.get("invalid_price")
     target = levels.get("target_1")
-    if entry is None or stop is None or target is None or entry <= stop or target <= entry:
+    if (
+        entry is None
+        or stop is None
+        or target is None
+        or entry <= stop
+        or target <= entry
+    ):
         return None
     ratio = (target - entry) / (entry - stop)
     return ratio
@@ -633,14 +756,24 @@ def _strategy_result(
     # produce a trigger/entry/target.  Those absent levels describe why there
     # is no waiting instruction; they are not missing source data.  Conditional
     # and incomplete results still treat the same fields as hard blockers.
-    complete_observation = signal.status == "observation" and signal.data_quality == "complete"
+    complete_observation = (
+        signal.status == "observation" and signal.data_quality == "complete"
+    )
     wait_missing = list(dict.fromkeys(level_missing)) if complete_observation else []
     if not complete_observation:
         missing.extend(level_missing)
-    if as_of and signal.data_cutoff and str(signal.data_cutoff)[:10] > as_of.isoformat():
+    if (
+        as_of
+        and signal.data_cutoff
+        and str(signal.data_cutoff)[:10] > as_of.isoformat()
+    ):
         missing.append("data_cutoff")
     evidence = signal.rule_evidence_json or {}
-    evidence_strategy_version = evidence.get("strategy_version") if isinstance(evidence.get("strategy_version"), str) else None
+    evidence_strategy_version = (
+        evidence.get("strategy_version")
+        if isinstance(evidence.get("strategy_version"), str)
+        else None
+    )
     confidence_semantics = signal_confidence_semantics(
         signal.confidence,
         evidence,
@@ -673,7 +806,11 @@ def _strategy_result(
         signal,
         response_generated_at=response_generated_at,
     )
-    inputs = evidence.get("inputs") if isinstance(evidence, dict) and isinstance(evidence.get("inputs"), dict) else {}
+    inputs = (
+        evidence.get("inputs")
+        if isinstance(evidence, dict) and isinstance(evidence.get("inputs"), dict)
+        else {}
+    )
     for field in (
         "group_excess_return_20d",
         "institutional_flow_to_turnover_ratio_5d",
@@ -695,7 +832,9 @@ def _strategy_result(
         "level_semantics": level_semantics,
         "product_time": product_time,
         "response_generated_at": product_time["response_generated_at"],
-        "earliest_execution_date": signal.earliest_execution_date.isoformat() if signal.earliest_execution_date else None,
+        "earliest_execution_date": signal.earliest_execution_date.isoformat()
+        if signal.earliest_execution_date
+        else None,
         "missing": list(dict.fromkeys(missing)),
         "wait_missing": wait_missing,
         "evidence": evidence,
@@ -751,12 +890,16 @@ def _group_ids_and_blockers(
     return [group.id for group, _score, _membership in qualified], [], evidence
 
 
-def _quality_blockers(db: Session, instrument: Instrument, as_of: date | None) -> list[str]:
+def _quality_blockers(
+    db: Session, instrument: Instrument, as_of: date | None
+) -> list[str]:
     if not as_of:
         return ["data_as_of"]
     context = db.info.get("_decision_contexts", {}).get(as_of.isoformat())
     if context and instrument.id in context["instrument_ids"]:
-        quality = context["quality_by_key"].get(f"{instrument.exchange}:{instrument.symbol}")
+        quality = context["quality_by_key"].get(
+            f"{instrument.exchange}:{instrument.symbol}"
+        )
     else:
         quality = db.scalar(
             select(DataQuality)
@@ -768,7 +911,12 @@ def _quality_blockers(db: Session, instrument: Instrument, as_of: date | None) -
             .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
             .limit(1)
         )
-    if quality and quality.status in {"missing", "partial", "insufficient", "data_incomplete"}:
+    if quality and quality.status in {
+        "missing",
+        "partial",
+        "insufficient",
+        "data_incomplete",
+    }:
         return list(quality.missing_fields_json or [])
     return []
 
@@ -805,24 +953,47 @@ def _priority_missing(fields: Iterable[str], *, held: bool) -> list[dict[str, st
         priority = priority_by_field.get(field, "action_validation")
         if held and priority == "action_validation":
             priority = "持倉風險"
-        result.append({"field": field, "priority": priority, "priority_label": labels.get(priority, priority), "reason": "尚未取得足以支持此用途的完整資料"})
+        result.append(
+            {
+                "field": field,
+                "priority": priority,
+                "priority_label": labels.get(priority, priority),
+                "reason": "尚未取得足以支持此用途的完整資料",
+            }
+        )
     return result
 
 
-def build_decision_summary(db: Session, instrument: Instrument, as_of: date | None = None) -> dict[str, Any]:
+def build_decision_summary(
+    db: Session, instrument: Instrument, as_of: date | None = None
+) -> dict[str, Any]:
     run, official_as_of = latest_official_as_of(db)
     if as_of is None:
         as_of = official_as_of
     _prepare_decision_context(db, as_of, [instrument.id])
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument.id in context["instrument_ids"]:
         held_position = context["positions_by_instrument"].get(instrument.id)
     else:
-        held_position = db.scalar(select(PortfolioPosition).where(PortfolioPosition.instrument_id == instrument.id))
-    held = position_held(held_position.shares, held_position.shares_integer) if held_position else False
-    quantity_status = "absent" if held_position is None else "unknown" if held is None else "known"
+        held_position = db.scalar(
+            select(PortfolioPosition).where(
+                PortfolioPosition.instrument_id == instrument.id
+            )
+        )
+    held = (
+        position_held(held_position.shares, held_position.shares_integer)
+        if held_position
+        else False
+    )
+    quantity_status = (
+        "absent" if held_position is None else "unknown" if held is None else "known"
+    )
     unknown_quantity = quantity_status == "unknown"
-    position_stop, position_stop_status = read_portfolio_value(held_position.stop_price if held_position else None)
+    position_stop, position_stop_status = read_portfolio_value(
+        held_position.stop_price if held_position else None
+    )
     invalid_held_stop = held and position_stop_status == "invalid"
     watchlisted = bool(instrument.is_watchlisted)
     bar = _latest_bar(db, instrument.id, as_of)
@@ -831,12 +1002,18 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     coverage = _instrument_coverage(db, instrument, as_of, bars)
     signals = _latest_strategy_signals(db, instrument.id, as_of)
     generated_at = utc_now_iso()
-    decision_context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+    decision_context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     strategy_versions = (
-        decision_context.get("strategy_versions_by_instrument", {}).get(instrument.id, {})
+        decision_context.get("strategy_versions_by_instrument", {}).get(
+            instrument.id, {}
+        )
         if decision_context and instrument.id in decision_context["instrument_ids"]
         else {
-            name: db.get(StrategyVersion, signal.strategy_version_id) if signal.strategy_version_id else None
+            name: db.get(StrategyVersion, signal.strategy_version_id)
+            if signal.strategy_version_id
+            else None
             for name, signal in signals.items()
         }
     )
@@ -850,10 +1027,20 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         )
         for name in ("breakout_v1", "pullback_v1")
     }
-    strategy_results = {name: result for name, result in strategy_results.items() if result is not None}
-    valid_results = [result for result in strategy_results.values() if _strategy_has_valid_levels(result)]
-    conditional = [result for result in valid_results if result["status"] == "conditional"]
-    observation = [result for result in valid_results if result["status"] == "observation"]
+    strategy_results = {
+        name: result for name, result in strategy_results.items() if result is not None
+    }
+    valid_results = [
+        result
+        for result in strategy_results.values()
+        if _strategy_has_valid_levels(result)
+    ]
+    conditional = [
+        result for result in valid_results if result["status"] == "conditional"
+    ]
+    observation = [
+        result for result in valid_results if result["status"] == "observation"
+    ]
     complete_observations = [
         result
         for result in strategy_results.values()
@@ -861,7 +1048,9 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         and result.get("data_quality") == "complete"
         and not result.get("missing")
     ]
-    actionable_conditionals = [result for result in conditional if _strategy_is_actionable(result)]
+    actionable_conditionals = [
+        result for result in conditional if _strategy_is_actionable(result)
+    ]
     missing: list[str] = []
     if run is None or run.status != "success" or not official_as_of:
         missing.append("data_as_of")
@@ -874,9 +1063,15 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         # Keep the product-level blocker explicit even though the numeric
         # coverage fields remain null (unknown is not zero measured sessions).
         missing.extend(["bars_20d", "bars_60d"])
-    if coverage["missing_bars_to_20"] is not None and coverage["missing_bars_to_20"] > 0:
+    if (
+        coverage["missing_bars_to_20"] is not None
+        and coverage["missing_bars_to_20"] > 0
+    ):
         missing.append("bars_20d")
-    if coverage["missing_bars_to_60"] is not None and coverage["missing_bars_to_60"] > 0:
+    if (
+        coverage["missing_bars_to_60"] is not None
+        and coverage["missing_bars_to_60"] > 0
+    ):
         missing.append("bars_60d")
     if not strategy_results and bar is not None and len(bars) < 20:
         missing.append("signal")
@@ -887,9 +1082,16 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     # when the alternate strategy or a non-actionable background snapshot was
     # incomplete.  When no actionable conditional exists, keep the
     # fail-closed chip check for a possible observation/wait decision.
-    if strategy_results and not actionable_conditionals and not complete_observations and not chip_complete:
+    if (
+        strategy_results
+        and not actionable_conditionals
+        and not complete_observations
+        and not chip_complete
+    ):
         missing.extend(chip_missing)
-    group_ids, group_missing, group_evidence = _group_ids_and_blockers(db, instrument, as_of)
+    group_ids, group_missing, group_evidence = _group_ids_and_blockers(
+        db, instrument, as_of
+    )
     # A qualified theme is discovery context, not an additional hard gate for
     # a canonical individual strategy.  The strategy's persisted
     # group-relative input remains visible in its evidence and is validated by
@@ -907,7 +1109,11 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     # A fully scanned instrument may legitimately have no passing setup.  In
     # that case the action is ``no_condition`` but the source data can still be
     # complete; absence of a Signal row is not itself a recommendation.
-    data_quality = "complete" if not missing and run is not None and run.status == "success" and bar else ("missing" if not bar and not official_as_of else "partial")
+    data_quality = (
+        "complete"
+        if not missing and run is not None and run.status == "success" and bar
+        else ("missing" if not bar and not official_as_of else "partial")
+    )
 
     current_price = bar.close if bar and bar.core_valid else None
     price_as_of = bar.trading_date.isoformat() if bar and bar.core_valid else None
@@ -935,30 +1141,53 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         first, second = conditional[0], conditional[1]
         first_price = first["levels"].get("trigger_price")
         second_price = second["levels"].get("trigger_price")
-        if first_price and second_price and abs(first_price - second_price) / max(first_price, second_price) > 0.05:
+        if (
+            first_price
+            and second_price
+            and abs(first_price - second_price) / max(first_price, second_price) > 0.05
+        ):
             conflicts.append("兩個策略的觸發價差異超過 5%")
     if conditional and observation:
-        breakout = next((item for item in valid_results if item["strategy"] == "breakout_v1"), None)
-        pullback = next((item for item in valid_results if item["strategy"] == "pullback_v1"), None)
-        if breakout and pullback and pullback["levels"].get("entry_low") and breakout["levels"].get("trigger_price"):
+        breakout = next(
+            (item for item in valid_results if item["strategy"] == "breakout_v1"), None
+        )
+        pullback = next(
+            (item for item in valid_results if item["strategy"] == "pullback_v1"), None
+        )
+        if (
+            breakout
+            and pullback
+            and pullback["levels"].get("entry_low")
+            and breakout["levels"].get("trigger_price")
+        ):
             if breakout["levels"]["trigger_price"] < pullback["levels"]["entry_low"]:
                 conflicts.append("突破觸發價低於回踩區")
 
     selected: dict[str, Any] | None = None
     if conditional:
-        selected = next((item for item in conditional if item["strategy"] == "breakout_v1"), conditional[0])
+        selected = next(
+            (item for item in conditional if item["strategy"] == "breakout_v1"),
+            conditional[0],
+        )
     elif observation:
-        selected = next((item for item in observation if item["strategy"] == "pullback_v1"), observation[0])
+        selected = next(
+            (item for item in observation if item["strategy"] == "pullback_v1"),
+            observation[0],
+        )
     if complete and selected:
         selected_levels = selected["levels"]
         levels.update(
             {
-                "trigger_kind": "breakout" if selected["strategy"] == "breakout_v1" else "pullback",
+                "trigger_kind": "breakout"
+                if selected["strategy"] == "breakout_v1"
+                else "pullback",
                 "trigger_price": selected_levels.get("trigger_price"),
                 "entry_low": selected_levels.get("entry_low"),
                 "entry_high": selected_levels.get("entry_high"),
                 "invalid_price": selected_levels.get("invalid_price"),
-                "stop_price": position_stop if position_stop_status != "missing" else selected_levels.get("invalid_price"),
+                "stop_price": position_stop
+                if position_stop_status != "missing"
+                else selected_levels.get("invalid_price"),
                 "target_1": selected_levels.get("target_1"),
                 "target_2": selected_levels.get("target_2"),
                 "risk_reward": selected.get("risk_reward"),
@@ -966,20 +1195,27 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
             }
         )
 
-    context = db.info.get("_decision_contexts", {}).get(as_of.isoformat() if as_of else "none")
+    context = db.info.get("_decision_contexts", {}).get(
+        as_of.isoformat() if as_of else "none"
+    )
     if context and instrument.id in context["instrument_ids"]:
         related_events = context["events_by_instrument"].get(instrument.id, [])[:5]
     else:
         related_events = db.scalars(
             select(Event)
-            .where(Event.instrument_id == instrument.id, Event.event_date <= (as_of or date.max))
+            .where(
+                Event.instrument_id == instrument.id,
+                Event.event_date <= (as_of or date.max),
+            )
             .order_by(desc(Event.event_date), desc(Event.id))
             .limit(5)
         ).all()
     recent_event_cutoff = (as_of - timedelta(days=7)) if as_of else date.min
     has_recent_event = any(
         event.event_date >= recent_event_cutoff
-        and (event.source or "").casefold().startswith(("mops", "twse", "tpex", "official"))
+        and (event.source or "")
+        .casefold()
+        .startswith(("mops", "twse", "tpex", "official"))
         for event in related_events
     )
     product_time = build_action_product_time(
@@ -998,7 +1234,12 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         action_state = "manual_review"
     elif invalid_held_stop:
         action_state = "manual_review"
-    elif held and current_price is not None and levels.get("stop_price") is not None and current_price <= levels["stop_price"]:
+    elif (
+        held
+        and current_price is not None
+        and levels.get("stop_price") is not None
+        and current_price <= levels["stop_price"]
+    ):
         action_state = "reduce_exit"
     elif held:
         action_state = "hold_observe"
@@ -1007,14 +1248,22 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     elif conditional:
         action_state = "conditional_entry"
     elif observation:
-        action_state = "wait_pullback" if selected and selected["strategy"] == "pullback_v1" else "wait_breakout"
+        action_state = (
+            "wait_pullback"
+            if selected and selected["strategy"] == "pullback_v1"
+            else "wait_breakout"
+        )
     else:
         action_state = "no_condition"
 
     if action_state == "reduce_exit":
         priority = 0
     elif action_state == "data_insufficient":
-        priority = 1 if held or unknown_quantity else (4 if watchlisted or has_recent_event else 6)
+        priority = (
+            1
+            if held or unknown_quantity
+            else (4 if watchlisted or has_recent_event else 6)
+        )
     elif action_state == "conditional_entry":
         priority = 2
     elif action_state in {"wait_breakout", "wait_pullback", "manual_review"}:
@@ -1030,15 +1279,37 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         if coverage["coverage_status"] == "unknown":
             data_gap = "尚無可核實交易日基準，尚不能計算進場、失效與目標價。"
         else:
-            if coverage["missing_bars_to_20"] is not None and coverage["missing_bars_to_20"] > 0:
-                coverage_gaps.append(f"20 日基準還缺 {coverage['missing_bars_to_20']} 個有效交易日")
-            if coverage["missing_bars_to_60"] is not None and coverage["missing_bars_to_60"] > 0:
-                coverage_gaps.append(f"60 日基準還缺 {coverage['missing_bars_to_60']} 個有效交易日")
+            if (
+                coverage["missing_bars_to_20"] is not None
+                and coverage["missing_bars_to_20"] > 0
+            ):
+                coverage_gaps.append(
+                    f"20 日基準還缺 {coverage['missing_bars_to_20']} 個有效交易日"
+                )
+            if (
+                coverage["missing_bars_to_60"] is not None
+                and coverage["missing_bars_to_60"] > 0
+            ):
+                coverage_gaps.append(
+                    f"60 日基準還缺 {coverage['missing_bars_to_60']} 個有效交易日"
+                )
             if coverage_gaps:
                 data_gap = "；".join(coverage_gaps) + "，尚不能計算進場、失效與目標價。"
-            elif any(field in missing for field in ("institutional_flow_5d", "foreign_buy", "trust_buy", "dealer_buy", "margin_balance", "margin_change")):
+            elif any(
+                field in missing
+                for field in (
+                    "institutional_flow_5d",
+                    "foreign_buy",
+                    "trust_buy",
+                    "dealer_buy",
+                    "margin_balance",
+                    "margin_change",
+                )
+            ):
                 data_gap = "官方籌碼資料尚未完整，尚不能驗證進場、失效與目標價。"
-            elif any(field in missing for field in ("theme_membership", "qualified_theme")):
+            elif any(
+                field in missing for field in ("theme_membership", "qualified_theme")
+            ):
                 data_gap = "官方族群資料尚未完整，尚不能驗證進場、失效與目標價。"
             else:
                 data_gap = "研究資料尚未完整，尚不能計算進場、失效與目標價。"
@@ -1058,9 +1329,13 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         action_instruction = "現在：持有觀察，等待條件或風險變化。"
         data_gap = None
     elif action_state == "manual_review":
-        action_instruction = ("庫存股數待核實，先核對原記錄。" if unknown_quantity else
-                              "庫存停損待核實，先核對原記錄。" if invalid_held_stop else
-                              "現在：先人工核對互相衝突的條件。")
+        action_instruction = (
+            "庫存股數待核實，先核對原記錄。"
+            if unknown_quantity
+            else "庫存停損待核實，先核對原記錄。"
+            if invalid_held_stop
+            else "現在：先人工核對互相衝突的條件。"
+        )
         data_gap = None
     else:
         action_instruction = "現在：先觀察，尚無成立條件。"
@@ -1098,13 +1373,21 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     elif action_state == "wait_pullback":
         display_instruction = "等待回到觀察區間後，再重新核對趨勢、量能與籌碼。"
     elif action_state == "hold_observe":
-        display_instruction = "目前未見已核實的減碼／退場條件；持續留意失效價、使用者停損與資料更新。"
+        display_instruction = (
+            "目前未見已核實的減碼／退場條件；持續留意失效價、使用者停損與資料更新。"
+        )
     elif action_state == "reduce_exit":
-        display_instruction = "已碰到既定風險條件，請依自己的風險規畫重新研究減碼或退場。"
+        display_instruction = (
+            "已碰到既定風險條件，請依自己的風險規畫重新研究減碼或退場。"
+        )
     elif action_state == "manual_review":
-        display_instruction = ("庫存股數待核實，先核對原記錄。" if unknown_quantity else
-                               "庫存停損待核實，先核對原記錄。" if invalid_held_stop else
-                               "資料截止、價位或研究條件存在無法自動調和的衝突，先人工核對證據。")
+        display_instruction = (
+            "庫存股數待核實，先核對原記錄。"
+            if unknown_quantity
+            else "庫存停損待核實，先核對原記錄。"
+            if invalid_held_stop
+            else "資料截止、價位或研究條件存在無法自動調和的衝突，先人工核對證據。"
+        )
     else:
         display_instruction = "資料足夠，但目前尚未符合研究條件；持續觀察。"
 
@@ -1131,16 +1414,23 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     )
     if selected_level_semantics is None:
         selected_level_semantics = build_level_semantics(
-            strategy_name=selected.get("level_semantics", {}).get("strategy", {}).get("name") if selected and action_state != "manual_review" else None,
-            strategy_version=selected.get("level_semantics", {}).get("strategy", {}).get("version") if selected and action_state != "manual_review" else None,
+            strategy_name=selected.get("level_semantics", {})
+            .get("strategy", {})
+            .get("name")
+            if selected and action_state != "manual_review"
+            else None,
+            strategy_version=selected.get("level_semantics", {})
+            .get("strategy", {})
+            .get("version")
+            if selected and action_state != "manual_review"
+            else None,
             field_mapping=action_field_mapping,
             response_generated_at=generated_at,
         )
     stop_price_semantics = build_stop_price_semantics(
         has_position_stop=position_stop_status == "known",
         has_rule_fallback=bool(
-            position_stop_status == "missing"
-            and levels.get("stop_price") is not None
+            position_stop_status == "missing" and levels.get("stop_price") is not None
         ),
         rule_semantics_known=selected_level_semantics.get("kind") == "rule_reference",
         invalid_position_stop=position_stop_status == "invalid",
@@ -1154,7 +1444,10 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
             "invalid": levels.get("invalid_price"),
         }
     elif action_state == "wait_breakout":
-        primary_levels = {"kind": "breakout_observation", "trigger": levels.get("trigger_price")}
+        primary_levels = {
+            "kind": "breakout_observation",
+            "trigger": levels.get("trigger_price"),
+        }
     elif action_state == "wait_pullback":
         primary_levels = {
             "kind": "pullback_observation",
@@ -1227,8 +1520,16 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         ),
         "primary_levels": primary_levels,
         "data_status": {
-            "source": "official_snapshot" if bar and bar.core_valid and not str(bar.source or "").lower().startswith("fixture") else "snapshot_pending",
-            "market": "complete" if quote_read["status"] == "known" else "partial" if bar else "missing",
+            "source": "official_snapshot"
+            if bar
+            and bar.core_valid
+            and not str(bar.source or "").lower().startswith("fixture")
+            else "snapshot_pending",
+            "market": "complete"
+            if quote_read["status"] == "known"
+            else "partial"
+            if bar
+            else "missing",
             "strategy": "complete" if data_quality == "complete" else "partial",
         },
         "context_badges": context_badges[:3],
@@ -1246,7 +1547,11 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
         "price_change_pct": price_change_pct,
         **levels,
         "primary_strategy": selected.get("strategy") if selected else None,
-        "alternative_strategies": [result["strategy"] for result in strategy_results.values() if not selected or result["strategy"] != selected["strategy"]],
+        "alternative_strategies": [
+            result["strategy"]
+            for result in strategy_results.values()
+            if not selected or result["strategy"] != selected["strategy"]
+        ],
         "strategies": list(strategy_results.values()),
         "reasons": reasons,
         "conflicts": conflicts,
@@ -1262,7 +1567,9 @@ def build_decision_summary(db: Session, instrument: Instrument, as_of: date | No
     }
 
 
-def _latest_group_scores(db: Session, as_of: date | None) -> list[tuple[ThemeGroup, GroupDailyScore]]:
+def _latest_group_scores(
+    db: Session, as_of: date | None
+) -> list[tuple[ThemeGroup, GroupDailyScore]]:
     if not as_of:
         return []
     rows = db.execute(
@@ -1281,7 +1588,10 @@ def _latest_group_scores(db: Session, as_of: date | None) -> list[tuple[ThemeGro
 
 
 def _group_candidate_ids(
-    db: Session, group: ThemeGroup, score: GroupDailyScore, as_of: date,
+    db: Session,
+    group: ThemeGroup,
+    score: GroupDailyScore,
+    as_of: date,
 ) -> set[int]:
     """Resolve score-day identities, then retain the same current members.
 
@@ -1293,8 +1603,11 @@ def _group_candidate_ids(
     if not isinstance(details, dict):
         return set()
     symbols = details.get("candidate_symbols")
-    if (not isinstance(symbols, list) or len(symbols) > MAX_GROUP_CANDIDATES
-            or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)):
+    if (
+        not isinstance(symbols, list)
+        or len(symbols) > MAX_GROUP_CANDIDATES
+        or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)
+    ):
         return set()
     versioned = "candidate_identity_version" in details
     candidates = details.get("candidate_instruments")
@@ -1309,9 +1622,14 @@ def _group_candidate_ids(
                 return set()
             item_id = candidate.get("instrument_id")
             exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
-            if (type(item_id) is not int or item_id <= 0
-                    or type(exchange) is not str or not exchange.strip()
-                    or type(symbol) is not str or not symbol.strip()):
+            if (
+                type(item_id) is not int
+                or item_id <= 0
+                or type(exchange) is not str
+                or not exchange.strip()
+                or type(symbol) is not str
+                or not symbol.strip()
+            ):
                 return set()
             if item_id in ids or (exchange, symbol) in pairs:
                 return set()
@@ -1326,19 +1644,36 @@ def _group_candidate_ids(
 
     # Small projections only: this runs before action-center pagination.
     rows = db.execute(
-        select(Instrument.id, Instrument.exchange, Instrument.symbol,
-               Instrument.status, Instrument.instrument_type, Instrument.etf_category,
-               GroupMembership.valid_from, GroupMembership.valid_to)
+        select(
+            Instrument.id,
+            Instrument.exchange,
+            Instrument.symbol,
+            Instrument.status,
+            Instrument.instrument_type,
+            Instrument.etf_category,
+            GroupMembership.valid_from,
+            GroupMembership.valid_to,
+        )
         .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
-        .where(GroupMembership.group_id == group.id,
-               GroupMembership.valid_from <= as_of,
-               (GroupMembership.valid_to.is_(None)
-                | (GroupMembership.valid_to >= score.trading_date)))
+        .where(
+            GroupMembership.group_id == group.id,
+            GroupMembership.valid_from <= as_of,
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= score.trading_date)
+            ),
+        )
     ).all()
-    is_etf_group = group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    is_etf_group = (
+        group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    )
     source_members, current_ids = {}, set()
     for item_id, exchange, symbol, status, kind, category, start, end in rows:
-        allowed = (kind == "etf" and category in ETF_CATEGORIES) if is_etf_group else kind in {"stock", "ipo"}
+        allowed = (
+            (kind == "etf" and category in ETF_CATEGORIES)
+            if is_etf_group
+            else kind in {"stock", "ipo"}
+        )
         if not allowed:
             continue
         if start <= score.trading_date and (end is None or end >= score.trading_date):
@@ -1347,7 +1682,10 @@ def _group_candidate_ids(
             current_ids.add(item_id)
     if versioned:
         for candidate in candidates:
-            if source_members.get(candidate["instrument_id"]) != (candidate["exchange"], candidate["symbol"]):
+            if source_members.get(candidate["instrument_id"]) != (
+                candidate["exchange"],
+                candidate["symbol"],
+            ):
                 return set()
         return {candidate["instrument_id"] for candidate in candidates} & current_ids
 
@@ -1356,16 +1694,27 @@ def _group_candidate_ids(
     for symbol in set(symbols):
         if symbols.count(symbol) != 1:
             continue
-        matches = {item_id for item_id, pair in source_members.items() if pair[1] == symbol}
+        matches = {
+            item_id for item_id, pair in source_members.items() if pair[1] == symbol
+        }
         if len(matches) == 1:
             result.update(matches & current_ids)
     return result
 
 
-def position_holding_ids(db: Session, instrument_ids: Iterable[int] | None = None) -> tuple[set[int], set[int], set[int]]:
+def position_holding_ids(
+    db: Session, instrument_ids: Iterable[int] | None = None
+) -> tuple[set[int], set[int], set[int]]:
     """Read cheap quantity projections; record existence never proves holding."""
-    query = select(PortfolioPosition.instrument_id, PortfolioPosition.shares, PortfolioPosition.shares_integer).join(
-        Instrument, Instrument.id == PortfolioPosition.instrument_id).where(Instrument.status == "active")
+    query = (
+        select(
+            PortfolioPosition.instrument_id,
+            PortfolioPosition.shares,
+            PortfolioPosition.shares_integer,
+        )
+        .join(Instrument, Instrument.id == PortfolioPosition.instrument_id)
+        .where(Instrument.status == "active")
+    )
     if instrument_ids is not None:
         query = query.where(PortfolioPosition.instrument_id.in_(list(instrument_ids)))
     held_ids, unknown_ids, recorded_ids = set(), set(), set()
@@ -1394,15 +1743,42 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     if not as_of:
         rows = db.execute(
             select(Instrument.id, Instrument.exchange, Instrument.symbol)
-            .join(PortfolioPosition, PortfolioPosition.instrument_id == Instrument.id, isouter=True)
-            .where(Instrument.status == "active", (PortfolioPosition.id.is_not(None) | Instrument.is_watchlisted.is_(True)))
+            .join(
+                PortfolioPosition,
+                PortfolioPosition.instrument_id == Instrument.id,
+                isouter=True,
+            )
+            .where(
+                Instrument.status == "active",
+                (
+                    PortfolioPosition.id.is_not(None)
+                    | Instrument.is_watchlisted.is_(True)
+                ),
+            )
         ).all()
-        keys = {int(item_id): (str(exchange), str(symbol), int(item_id)) for item_id, exchange, symbol in rows}
-        return sorted(keys, key=lambda item_id: (
-            0 if item_id in held_ids else 1 if item_id in unknown_ids else
-            3 if item_id in recorded_ids else 2, keys[item_id]))
+        keys = {
+            int(item_id): (str(exchange), str(symbol), int(item_id))
+            for item_id, exchange, symbol in rows
+        }
+        return sorted(
+            keys,
+            key=lambda item_id: (
+                0
+                if item_id in held_ids
+                else 1
+                if item_id in unknown_ids
+                else 3
+                if item_id in recorded_ids
+                else 2,
+                keys[item_id],
+            ),
+        )
     watch_ids: set[int] = set(
-        db.scalars(select(Instrument.id).where(Instrument.status == "active", Instrument.is_watchlisted.is_(True))).all()
+        db.scalars(
+            select(Instrument.id).where(
+                Instrument.status == "active", Instrument.is_watchlisted.is_(True)
+            )
+        ).all()
     )
     # A canonical conditional signal is an action candidate even when its
     # instrument is not one of the currently qualified theme's displayed
@@ -1438,7 +1814,11 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     )
     candidate_ids: set[int] = set()
     for group, score in _latest_group_scores(db, as_of):
-        if score.data_quality != "complete" or (score.eligible_members or 0) < 3 or score.rank is None:
+        if (
+            score.data_quality != "complete"
+            or (score.eligible_members or 0) < 3
+            or score.rank is None
+        ):
             continue
         details = score.details_json
         if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
@@ -1456,14 +1836,25 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
             )
         ).all()
     )
-    all_ids = recorded_ids | watch_ids | conditional_ids | observation_ids | candidate_ids | event_ids
+    all_ids = (
+        recorded_ids
+        | watch_ids
+        | conditional_ids
+        | observation_ids
+        | candidate_ids
+        | event_ids
+    )
     if not all_ids:
         return []
     rows = db.execute(
-        select(Instrument.id, Instrument.exchange, Instrument.symbol)
-        .where(Instrument.id.in_(all_ids), Instrument.status == "active")
+        select(Instrument.id, Instrument.exchange, Instrument.symbol).where(
+            Instrument.id.in_(all_ids), Instrument.status == "active"
+        )
     ).all()
-    keys = {int(item_id): (str(exchange), str(symbol), int(item_id)) for item_id, exchange, symbol in rows}
+    keys = {
+        int(item_id): (str(exchange), str(symbol), int(item_id))
+        for item_id, exchange, symbol in rows
+    }
     # Approximate the exact product order using persisted state categories;
     # stable secondary keys keep cursor traversal deterministic.
     ordered_ids: list[int] = []
@@ -1484,15 +1875,25 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
     return ordered_ids
 
 
-def build_action_summaries(db: Session, as_of: date | None = None, instrument_ids: Iterable[int] | None = None) -> list[dict[str, Any]]:
+def build_action_summaries(
+    db: Session, as_of: date | None = None, instrument_ids: Iterable[int] | None = None
+) -> list[dict[str, Any]]:
     if as_of is None:
         _run, as_of = latest_official_as_of(db)
-    ids = list(instrument_ids) if instrument_ids is not None else prioritized_instrument_ids(db, as_of)
+    ids = (
+        list(instrument_ids)
+        if instrument_ids is not None
+        else prioritized_instrument_ids(db, as_of)
+    )
     if not ids:
         return []
-    instruments = db.scalars(select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")).all()
+    instruments = db.scalars(
+        select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")
+    ).all()
     _prepare_decision_context(db, as_of, ids)
-    summaries = [build_decision_summary(db, instrument, as_of) for instrument in instruments]
+    summaries = [
+        build_decision_summary(db, instrument, as_of) for instrument in instruments
+    ]
     summaries.sort(
         key=lambda item: (
             item.get("priority", 99),
@@ -1508,6 +1909,10 @@ def build_action_summaries(db: Session, as_of: date | None = None, instrument_id
     unique: dict[tuple[str, str, str | None], dict[str, Any]] = {}
     for item in summaries:
         instrument = item.get("instrument") or {}
-        key = (str(instrument.get("exchange")), str(instrument.get("symbol")), item.get("as_of"))
+        key = (
+            str(instrument.get("exchange")),
+            str(instrument.get("symbol")),
+            item.get("as_of"),
+        )
         unique.setdefault(key, item)
     return list(unique.values())
