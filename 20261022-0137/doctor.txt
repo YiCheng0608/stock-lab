@@ -1,0 +1,4 @@
+health 通過 GET /api/health 200，本文 {"status":"ok","service":"taiwan-stock-research"}
+readiness 通過 api.log 第 3 行 Application startup complete.；無 Database is not ready
+proxy 通過 4227/api/health 200；4227/ 回 text/html（<!doctype html>）
+facts 通過 db_facts.py exit 0；portfolio_positions 0

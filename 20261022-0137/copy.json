@@ -1,0 +1,8 @@
+{
+  "copy": "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-227-verify-skill/.local/verify/stock.db",
+  "source": "C:/Users/YiCheng/stock-lab-data/stock.db",
+  "source_latest_trading_date": "2026-10-21",
+  "alembic_version": "0016_group_score_archive",
+  "bytes": 2314493952,
+  "seconds": 5.9
+}
