@@ -19,7 +19,8 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 | API Python（有後端依賴） | `C:/Users/YiCheng/stock-lab-release/.venv/Scripts/python.exe`（只讀用它的套件，不改這個 venv） |
 | API | `http://127.0.0.1:8227` |
 | 前端（vite preview，`/api` 轉給 8227） | `http://127.0.0.1:4227`，設定檔 `.claude/skills/verify-stock-lab/vite.preview.mjs` |
-| 輸出目錄 | `.local/verify/out/<YYYYMMDD-HHMM>/` |
+| 輸出目錄 | `.local/verify/out/<YYYYMMDD-HHMM>/`（台北時間） |
+| 台北時間 | `TZ=UTC-8 date '+%F %H:%M'` |
 
 先設好變數（之後每個命令開頭都重設，Bash 工具不保留 shell 狀態）：
 
@@ -33,7 +34,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 ## 1. Launch
 
 1. **停止條件**（任一成立就不啟動，五個導覽全部「無法判定」，直接到 Evidence 寫原因）：
-   - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=Asia/Taipei date +%H%M` 在 `1830`～`2130` 之間。
+   - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
 2. **埠**：`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Cleanup 第 1 步判斷是不是本 skill 先前留下的；是就關掉，不是就停止（無法判定：埠被其他程序占用）。
 3. **建輸出目錄**：`mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs`，記下開始時間。
