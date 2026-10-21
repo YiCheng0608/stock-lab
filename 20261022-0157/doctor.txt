@@ -1,0 +1,4 @@
+health 通過 200 {"status":"ok"}
+readiness 通過 api.log 有 Application startup complete
+proxy 通過 4227/api/health 200，/ 回 HTML
+facts 通過 db_facts.py exit 0
