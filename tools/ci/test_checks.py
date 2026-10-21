@@ -1,7 +1,10 @@
 """Test routing without running product services or writing fixtures."""
 
 import json
+from pathlib import Path
 import re
+import subprocess
+import tempfile
 import unittest
 
 from checks import (
@@ -10,8 +13,10 @@ from checks import (
     ROOT,
     ac_results,
     change_flags,
+    changed_paths,
     high_risk,
     markdown_errors,
+    pr_changes,
     pr_errors,
 )
 
@@ -355,6 +360,22 @@ class PrGateTests(unittest.TestCase):
         for entry in HIGH_RISK_PATHS:
             self.assertTrue(list(ROOT.glob(entry.rstrip("/"))), entry)
 
+    def test_e_reads_only_commits_since_the_merge_base(self):
+        # git range in a temporary repository: master moved after the PR opened.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            sha = PrRange.build(repo)
+            fork, paths, commits = pr_changes(sha["M"], repo)
+            errors = pr_errors(GOOD_BODY, paths, [], commits)
+            self.assertEqual((fork, errors), (sha["M"], []))
+            _, paths, commits = pr_changes(sha["A"], repo)  # stale base
+            self.assertEqual(
+                rules(
+                    pr_errors(GOOD_BODY.replace("Closes #12", ""), paths, [], commits)
+                ),
+                ["a", "d", "e"],
+            )
+
     def test_e_commit_messages_without_closing_keywords(self):
         for message in [
             "Fix #12 typo",
@@ -375,6 +396,93 @@ class PrGateTests(unittest.TestCase):
         ]:
             errors = self.check(paths=["docs/x.md"], commits={"b" * 40: message})
             self.assertEqual(errors, [], message)
+
+
+class PrRange(unittest.TestCase):
+    """pr_changes against the base branch tip, in a throwaway repository.
+
+    A (master when the PR opened) -> P (PR: docs only); A -> M (master later: a worker
+    file, a commit naming 'fixes #9'). CI checks out a merge ref with parents (M, P).
+    """
+
+    @staticmethod
+    def git(repo: Path, *args: str) -> str:
+        return subprocess.check_output(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            cwd=repo,
+            text=True,
+        ).strip()
+
+    @classmethod
+    def build(cls, repo: Path) -> dict[str, str]:
+        def git(*args: str) -> str:
+            return cls.git(repo, *args)
+
+        def commit(path: str, message: str) -> str:
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).write_text(message, encoding="utf-8")
+            git("add", path)
+            git("commit", "-q", "-m", message)
+            return git("rev-parse", "HEAD")
+
+        git("init", "-q", "-b", "master")
+        sha = {"A": commit("README.md", "start")}
+        git("checkout", "-q", "-b", "pr")
+        sha["P"] = commit("docs/x.md", "[1] Docs")
+        git("checkout", "-q", "master")
+        sha["M"] = commit("backend/worker/x.py", "Worker change, fixes #9")
+        git("checkout", "-q", "--detach", sha["M"])
+        git("merge", "-q", "--no-ff", "-m", "Merge P into M", "pr")
+        return sha
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name)
+        self.sha = self.build(self.repo)
+
+    def test_merge_ref_with_current_tip_is_only_the_pr(self):
+        fork, paths, commits = pr_changes(self.sha["M"], self.repo)
+        self.assertEqual(fork, self.sha["M"])
+        self.assertEqual(paths, ["docs/x.md"])
+        self.assertEqual(list(commits), [self.sha["P"]])
+
+    def test_stale_base_would_count_master_commits(self):
+        # Why CI passes origin/<base ref>: the old base is an ancestor of the merge ref.
+        _, paths, commits = pr_changes(self.sha["A"], self.repo)
+        self.assertIn("backend/worker/x.py", paths)
+        self.assertIn(self.sha["M"], commits)
+
+    def test_base_ahead_of_the_branch_uses_the_merge_base(self):
+        self.git(self.repo, "checkout", "-q", "pr")
+        self.assertIn("backend/worker/x.py", changed_paths(self.sha["M"], self.repo))
+        fork, paths, commits = pr_changes(self.sha["M"], self.repo)
+        self.assertEqual(fork, self.sha["A"])
+        self.assertEqual(paths, ["docs/x.md"])
+        self.assertEqual(list(commits), [self.sha["P"]])
+
+    def test_branch_that_merged_master_is_only_the_pr(self):
+        def git(*args: str) -> str:
+            return self.git(self.repo, *args)
+
+        git("checkout", "-q", "pr")
+        git("merge", "-q", "--no-ff", "-m", "Merge master into pr", "master")
+        head = git("rev-parse", "HEAD")
+        git("checkout", "-q", "--detach", self.sha["M"])
+        git("merge", "-q", "--no-ff", "-m", "Merge pr into M", head)
+        fork, paths, commits = pr_changes(self.sha["M"], self.repo)
+        self.assertEqual((fork, paths), (self.sha["M"], ["docs/x.md"]))
+        self.assertEqual(list(commits), [self.sha["P"]])
+
+    def test_ci_passes_the_base_branch_tip_not_the_event_base_sha(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        (run,) = re.findall(r"run: (.*checks\.py pr .*)", workflow)
+        self.assertIn('--base "$(git rev-parse "refs/remotes/origin/$BASE_REF")"', run)
+        self.assertIn("BASE_REF: ${{ github.event.pull_request.base.ref }}", workflow)
+
+    def test_base_must_be_a_full_sha(self):
+        with self.assertRaises(ValueError):
+            pr_changes("master", self.repo)
 
 
 if __name__ == "__main__":

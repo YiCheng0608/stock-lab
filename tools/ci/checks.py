@@ -16,17 +16,17 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def git(*args: str) -> bytes:
-    return subprocess.check_output(["git", *args], cwd=ROOT)
+def git(*args: str, cwd: Path = ROOT) -> bytes:
+    return subprocess.check_output(["git", *args], cwd=cwd)
 
 
-def changed_paths(base: str) -> list[str]:
+def changed_paths(base: str, cwd: Path = ROOT) -> list[str]:
     if not re.fullmatch(r"[0-9a-f]{40}", base):
         raise ValueError("base must be a full Git SHA")
     if base == "0" * 40:
-        result = git("ls-files", "-z")
+        result = git("ls-files", "-z", cwd=cwd)
     else:
-        result = git("diff", "--name-only", "--no-renames", "-z", base, "HEAD")
+        result = git("diff", "--name-only", "--no-renames", "-z", base, "HEAD", cwd=cwd)
     return [name.decode("utf-8") for name in result.split(b"\0") if name]
 
 
@@ -267,8 +267,21 @@ def pr_errors(
     return errors
 
 
-def commit_messages(base: str) -> dict[str, str]:
-    out = git("log", "--no-merges", "-z", "--format=%H%n%B", f"{base}..HEAD")
+def pr_changes(base: str, cwd: Path = ROOT) -> tuple[str, list[str], dict[str, str]]:
+    """The merge-base with the base branch tip, and the paths and commits since it.
+
+    Pass the base branch tip as it is now: a pull_request.base.sha recorded before master
+    moved is an ancestor of the merge ref, so it would count master's newer commits as the
+    PR's. The merge-base leaves out master commits the branch lacks or already merged.
+    """
+    if not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise ValueError("base must be a full Git SHA")
+    fork = git("merge-base", base, "HEAD", cwd=cwd).decode("ascii").strip()
+    return fork, changed_paths(fork, cwd), commit_messages(fork, cwd)
+
+
+def commit_messages(base: str, cwd: Path = ROOT) -> dict[str, str]:
+    out = git("log", "--no-merges", "-z", "--format=%H%n%B", f"{base}..HEAD", cwd=cwd)
     commits = {}
     for entry in out.decode("utf-8").split("\0"):
         if entry.strip():
@@ -282,6 +295,16 @@ def main() -> None:
     parser.add_argument("mode", choices=("changes", "repository", "lint", "pr"))
     parser.add_argument("--base", required=True)
     args = parser.parse_args()
+    if args.mode == "pr":
+        fork, paths, commits = pr_changes(args.base)
+        # CI passes the event fields through env: (never interpolated into run:).
+        errors = pr_errors(
+            os.environ["PR_BODY"], paths, json.loads(os.environ["PR_LABELS"]), commits
+        )
+        if errors:
+            raise SystemExit("PR gate failed:\n" + "\n".join(errors))
+        print(f"PR gate passed for {len(paths)} changed paths since {fork}.")
+        return
     paths = changed_paths(args.base)
     if args.mode == "changes":
         flags = change_flags(paths)
@@ -291,17 +314,6 @@ def main() -> None:
                 print(f"{name}={str(value).lower()}", file=output)
     elif args.mode == "repository":
         repository_checks(paths, args.base)
-    elif args.mode == "pr":
-        # CI passes the event fields through env: (never interpolated into run:).
-        errors = pr_errors(
-            os.environ["PR_BODY"],
-            paths,
-            json.loads(os.environ["PR_LABELS"]),
-            commit_messages(args.base),
-        )
-        if errors:
-            raise SystemExit("PR gate failed:\n" + "\n".join(errors))
-        print(f"PR gate passed for {len(paths)} changed paths.")
     else:
         # Run both so one CI log shows lint and format failures together.
         failed = [

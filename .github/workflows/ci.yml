@@ -71,11 +71,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # The base branch tip as fetched now, not BASE_SHA: pull_request.base.sha stays at its
+      # old value after master moves, and an edited/labeled rerun checks out a merge ref that
+      # already contains master's newer commits. checks.py diffs from the merge-base.
       - name: pr
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: python3 -B tools/ci/checks.py pr --base "$BASE_SHA"
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: python3 -B tools/ci/checks.py pr --base "$(git rev-parse "refs/remotes/origin/$BASE_REF")"
 
   backend:
     name: backend
