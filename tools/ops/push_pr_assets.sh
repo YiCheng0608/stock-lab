@@ -92,7 +92,8 @@ done < <(cd "$dir" && find . -type f -not -path '*/.*' -print0 | sort -z)
 
 for rel in "${files[@]}"; do
   case "$rel" in *[!A-Za-z0-9._/-]*) die "file name needs letters, digits, '.', '_', '-' only: $rel" ;; esac
-  blob="$(git hash-object -w -- "$dir/$rel")"
+  # --no-filters: keep the evidence bytes as written (no .gitattributes eol conversion).
+  blob="$(git hash-object -w --no-filters -- "$dir/$rel")"
   git update-index --add --cacheinfo "100644,$blob,$prefix/$rel"
 done
 

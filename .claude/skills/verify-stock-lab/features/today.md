@@ -37,9 +37,9 @@
 | T3 | 資料截至卡 | 整行 `資料截至` 的下一行是 `<D/>`，再下一行非空且等於 `market.source_label`（null 時只要求非空） |
 | T4 | 熱門族群日期 | 整行 `熱門族群` 之後第一個 `資料 ` 開頭的行是 `資料 <B/>`；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
 | T5 | 熱門族群卡 | 整行 `資料 <B/> · 相對加權指數` 的行數 = `min(10, items 數)`；`items[0].display_name` 為整行出現。`items` 空時改查空資料文案 |
-| T6 | 新聞卡與 AI 標記 | `dashboard.news` 前 3 則的標題（`title`）各為整行出現；其中 `news-<id>.json` 的 `ai.status` 為 `done` 且 `ai.inference` 為 true 的，卡片方向行之後要有整行 `AI 推論`（以標題行到下一張卡之間的文字判斷）；有 AI 判讀卻顯示 `影響尚未判定` 為失敗 |
+| T6 | 新聞卡與 AI 標記 | `dashboard.news` 前 3 則的標題（`title`）各為整行出現；其中 `news-<id>.json` 的 `ai.status` 為 `done` 且 `ai.inference` 為 true 的，卡片方向行之後要有整行 `AI 推論`（一張卡的範圍是它的標題行到下一則標題行之前；最後一則到 `熱門族群` 之前）；有 AI 判讀卻顯示 `影響尚未判定` 為失敗 |
 | T7 | 明日候選日期與來源 | `status` 為清單時：整行 `明日候選` 的下一行是 `資料 <C/>`、再下一行 `<candidate_count> 檔`；`^來源：` 行數 = `items` 數，且 `C` 等於 `facts.json` 的 `candidate_run_latest_trading_date` |
-| T8 | 明日候選推論標記 | 每個 `components.news_sentiment.inference` 為 true 的候選，其來源行結尾為 `（推論）`；說明區標題 `AI 推論` 的整行數 ≥ `items` 數；免責句 `由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。` 的行數 = `items` 數 |
+| T8 | 明日候選推論標記 | 第 i 個 `^來源：` 行對應 `items[i]`（卡片依名次排列）；`components.news_sentiment.inference` 為 true 的候選，其來源行結尾為 `（推論）`；說明區標題 `AI 推論` 的整行數 ≥ `items` 數；免責句 `由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。` 的行數 = `items` 數 |
 | T9 | 關注標的 | `查看個股詳情 →` 的行數 k > 0 時，`^資料日 [0-9]{4}/[0-9]{2}/[0-9]{2}$` 的行數也 = k；k = 0 時空資料文案為整行出現 |
 
 ## 判定

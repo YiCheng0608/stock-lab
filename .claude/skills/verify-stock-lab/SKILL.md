@@ -37,7 +37,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
 2. **埠**：`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Cleanup 第 1 步判斷是不是本 skill 先前留下的；是就關掉，不是就停止（無法判定：埠被其他程序占用）。
-3. **建輸出目錄**：`mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs`。耗時以 `echo "<段名> $(date +%s)" >> "$OUT/.timing"` 在 Launch、Doctor、Drive、Evidence 各段開頭與 Drive 結束各記一行（隱藏檔，不推送）；summary 標題時間用這次的開始時間（與 `$OUT` 同一分鐘）。
+3. **建輸出目錄**：`mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs`。耗時以 `echo "<段名> <epoch 秒>" >> "$OUT/.timing"` 記錄（隱藏檔，不推送）：Launch 用第 1 步開始時的 `date +%s`，Doctor、Drive、Evidence 各段開頭與 Drive 結束各記一行；summary 標題時間用這次的開始時間（與 `$OUT` 同一分鐘）。
 4. **副本**（唯讀複製，約 10 秒；副本已存在也重做，確保是最新快照）：
 
    ```bash
@@ -59,6 +59,8 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
    cd "$WT" && STOCK_DATA_DIR="$V" STOCK_DB_PATH="$V/stock.db" STOCK_RAW_DIR="$V/raw" PYTHONPATH="$WT/backend" \
      "$APIPY" -B -m uvicorn app.main:app --host 127.0.0.1 --port 8227 > "$V/logs/api.log" 2>&1
    ```
+
+背景程序被 Cleanup 的 `taskkill` 結束時，Bash 工具會通知該背景工作 failed（exit 1），屬預期。
 
 8. **前端**（背景）：
 
@@ -90,10 +92,11 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 
 共通規則：
 
-- 比對 API 字串與頁面文字前，兩邊都把空白正規化：全形空白（U+3000）與連續空白都換成一個半形空白、去頭尾空白（瀏覽器的頁面文字會改寫空白）。
+- 比對 API 字串與頁面文字前，兩邊都把空白正規化：全形空白（U+3000）與連續半形空白換成一個半形空白、去頭尾空白（瀏覽器的頁面文字會改寫空白）。tab 不動：表格列以 tab 分欄，檢查裡的 `	` 就是 tab。
+- 「下一行」指下一個非空白行（頁面文字有很多空行）。
+- 一個導覽同時有失敗與無法判定的檢查時，結果是失敗，兩種都列出。
 - 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。
 - DB 與 API 裡沒有時區的時間（例如 `news_items.published_at`、`ai.generated_at`）是 UTC，與台北時間比較前加 8 小時。
-
 - 截圖 JSON 的 `ready` 為 false、`missingClicks` 非空，或該頁依賴的 API 非 200 → 依賴它的檢查判「無法判定」（不是失敗），原因寫哪個 URL。
 - 頁面文字與 API／DB 不一致 → 失敗，證據寫兩邊的值。
 - 無資料時檢查的是空狀態文案，不是無法判定。
@@ -107,7 +110,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
    ```markdown
    ## verify-stock-lab 結果（2026-10-22 01:30 台北）
 
-   - 程式：`task/227-verify-skill` @ `5fbf04c`
+   - 程式：`task/227-verify-skill` @ `5fbf04c`（`git status --short` 有未 commit 的改動時，列出檔名並註明照工作樹建置）
    - 副本：資料日 2026-10-21（`market_bars` 最新），alembic `0016_group_score_archive`，複製 10.1 秒
    - Doctor：health 200、readiness 通過、proxy 200
    - 證據：https://github.com/YiCheng0608/stock-lab/tree/pr-assets/227/20261022-0130

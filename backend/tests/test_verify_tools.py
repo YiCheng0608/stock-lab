@@ -378,7 +378,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _git(tmp_path, "init", "-q", "--bare", str(bare))
     _git(tmp_path, "init", "-q", str(work))
     (work / "README").write_text("x\n")
-    _git(work, "add", "README")
+    # Same eol rule as this repository; evidence must still keep its own bytes.
+    (work / ".gitattributes").write_text("* text=auto eol=lf\n")
+    _git(work, "add", "README", ".gitattributes")
     _git(work, "commit", "-q", "-m", "init")
     _git(work, "remote", "add", "origin", bare.as_posix())
     return work
@@ -420,7 +422,7 @@ def test_push_pr_assets_orphan_then_child_commit(repo: Path) -> None:
     first = _evidence(
         repo.parent,
         "run1",
-        {"today-390.png": b"png", "api/health.json": b"{}", ".hidden": b"x"},
+        {"today-390.png": b"png", "api/health.json": b"{}\r\n", ".hidden": b"x"},
     )
     result = _push(repo, "--issue", "227", "--dir", first.as_posix(), "--web", WEB)
     assert result.returncode == 0, result.stderr
@@ -436,6 +438,13 @@ def test_push_pr_assets_orphan_then_child_commit(repo: Path) -> None:
         "run1/api/health.json",
         "run1/today-390.png",
     ]
+    raw = subprocess.run(
+        ["git", "cat-file", "blob", f"{head}:run1/api/health.json"],
+        cwd=bare,
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert raw == b"{}\r\n"
 
     second = _evidence(repo.parent, "run2", {"today-390.png": b"png2"})
     result = _push(
