@@ -25,7 +25,7 @@ from app.models import (
     StrategyVersion,
     ThemeGroup,
 )
-from app.news import _parse_datetime, sync_news_from_events
+from app.news import _parse_datetime
 from app.decision import build_action_summaries
 from app.main import app
 from app.taxonomy import canonical_group_id

@@ -1,0 +1,5 @@
+# Whole-tree formatting commits that `git blame` should skip.
+# Enable once per checkout: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# #225 ruff format backend tools
+64ff7da77aa93a07b5340acd5be1be4dd0f5c80e

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Auditable, resumable official-data backfill orchestration.
 
 The low-level official adapters remain responsible for endpoint validation and
@@ -7,6 +5,8 @@ raw capture.  This module adds a date-level retry boundary around the existing
 collector so a failed historical session can be retried without re-running a
 successful session or inventing a bar/chip row.
 """
+
+from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -38,7 +38,6 @@ from app.models import (
 from worker import pipeline
 from worker.sources import (
     OfficialBatch,
-    OfficialDataError,
     OfficialMarketDataAdapter,
 )
 

@@ -17,9 +17,8 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, inspect, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError
 
 from app.db import enable_sqlite_foreign_keys
 
@@ -402,7 +401,6 @@ def test_fixed_0004_prehead_upgrade_preserves_rows_and_is_idempotent(tmp_path):
     try:
         _load_fixed_fixture(database_path)
         with engine.connect() as connection:
-            inspector = inspect(connection)
             assert _revision(connection) == [manifest["revision_before"]]
             assert not (
                 set(manifest["target_columns"])

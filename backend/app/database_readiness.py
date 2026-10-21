@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-from . import models  # noqa: F401: populate the mapped metadata without DDL
+from . import models  # noqa: F401 -- populate the mapped metadata without DDL
 from .config import DB_PATH
 from .db import Base
 from .migration_revisions import REVISIONS

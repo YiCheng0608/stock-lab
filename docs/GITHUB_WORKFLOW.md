@@ -52,6 +52,8 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 | 前端 | `pnpm --dir frontend test:ci`；`pnpm --dir frontend build` |
 | 文件／repo | `python tools/ci/checks.py repository --base <完整 master SHA>` |
 
+每個 checkout 設一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，`git blame` 會略過 [`.git-blame-ignore-revs`](../.git-blame-ignore-revs) 列出的全檔格式化 commit。
+
 Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`（PATH 上的 python 是 Store stub）。後端依賴依 `backend/requirements.txt` 安裝，並以 `backend/validation-requirements.lock.txt` 為 constraints（與 CI 相同）；資料路徑見 [OPERATIONS](OPERATIONS.md)。
 
 ## Review 與合併

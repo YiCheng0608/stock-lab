@@ -2023,7 +2023,6 @@ class TwseAdapter:
         if not listed_rows and not etf_rows:
             raise OfficialDataError("TWSE universe payloads contained no instruments")
 
-        etf_codes = {_text(row, "基金代號", "FundCode", "代號") for row in etf_rows}
         recent_codes = {
             _text(row, "Code", "公司代號", "證券代號")
             for row in new_rows

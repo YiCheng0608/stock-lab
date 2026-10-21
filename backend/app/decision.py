@@ -13,7 +13,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .coverage import verified_taiex_sessions

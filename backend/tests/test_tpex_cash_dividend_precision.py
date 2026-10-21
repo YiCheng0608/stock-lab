@@ -23,7 +23,11 @@ from app.models import (
 import worker.pipeline as pipeline
 import worker.sources as sources
 from test_sources import FixtureFetcher
-from test_tpex_corporate_action_mapping import DAY, SAVED, actions, database
+import test_tpex_corporate_action_mapping as mapping
+from test_tpex_corporate_action_mapping import DAY, SAVED, actions
+
+# pytest finds a fixture by module attribute name; the tests below request `database`.
+database = mapping.database
 
 
 @pytest.fixture(autouse=True)

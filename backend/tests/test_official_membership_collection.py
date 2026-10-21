@@ -15,7 +15,6 @@ from app.models import (
     MarketBar,
     IngestionRun,
 )
-from app.taxonomy import canonical_group_id
 from worker import pipeline, sources
 
 

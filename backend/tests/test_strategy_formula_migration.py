@@ -64,7 +64,9 @@ def pre_v2():
 
 
 def raw_row(row_id, name, version, kind, config, snapshot, active=1):
-    dump = lambda value: value if isinstance(value, str) else json.dumps(value)
+    def dump(value):
+        return value if isinstance(value, str) else json.dumps(value)
+
     return (row_id, name, version, kind, dump(config), dump(snapshot), active, CREATED)
 
 
@@ -476,7 +478,9 @@ def test_old_signals_read_the_same_except_strategy_active(tmp_path, monkeypatch,
 
 
 def snapshot_case(name, version, config, snapshot):
-    dump = lambda value: value if isinstance(value, str) else json.dumps(value)
+    def dump(value):
+        return value if isinstance(value, str) else json.dumps(value)
+
     return name, version, dump(config), dump(snapshot)
 
 

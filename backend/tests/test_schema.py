@@ -1,7 +1,5 @@
 import pytest
 
-from datetime import date
-
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
@@ -9,7 +7,6 @@ from app import migrations as migrations_module
 from app.db import enable_sqlite_foreign_keys
 from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
-from app.models import Event, Instrument
 
 
 def test_v1_schema_has_new_tables_unique_settlements_and_sqlite_foreign_keys(tmp_path):
