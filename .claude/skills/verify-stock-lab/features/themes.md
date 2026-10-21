@@ -8,7 +8,7 @@
 | --- | --- |
 | `themes-industry.json` | `/themes?board=industry&limit=100` |
 | `themes-theme.json` | `/themes?board=theme&limit=100` |
-| `theme-suggestions.json` | `/theme-suggestions?limit=12` |
+| `theme-suggestions.json` | `/theme-suggestions?limit=20`（與頁面的 `THEME_SUGGESTION_LIMIT` 相同） |
 | `theme-detail.json` | `/themes/<T>`，`T` = 今日記下的 `items[0].theme_id` |
 | `theme-members.json` | `/themes/<T>/members?page=1&page_size=30&sort=price` |
 
