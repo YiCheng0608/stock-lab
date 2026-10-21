@@ -98,7 +98,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 | 命令 | 用途 |
 | --- | --- |
-| `python tools/ops/copy_db.py --src <stock.db> --dest <目錄>` | 以 `mode=ro` 連線經 SQLite backup API 複製一份快照（含 WAL 內容；唯讀連線無法也不需要 checkpoint），寫成 `<目錄>/stock.db`；目的地不得在來源目錄內；印出副本路徑與來源最新 `trading_date` |
+| `python tools/ops/copy_db.py --src <stock.db> --dest <目錄> [--force]` | 以 `mode=ro` 連線經 SQLite backup API 複製一份快照（含 WAL 內容；唯讀連線無法也不需要 checkpoint），寫成 `<目錄>/stock.db`；目的地不得在來源目錄內，已有 `stock.db` 時要加 `--force` 才覆蓋；印出副本路徑與來源最新 `trading_date` |
 | `node tools/ops/screenshot.cjs --url <頁> --out <目錄>` | headless Edge（或 Chrome）截 1280 與 390 全頁圖並存頁面文字；等骨架消失與請求結束、展開 `details`，可 `--click` 切分頁；印出 `scrollWidth` 與錯誤 |
 | `bash tools/ops/push_pr_assets.sh --issue <n> --dir <目錄>` | 不動 checkout，把目錄推到 `pr-assets/<n>`（第一次 orphan commit，之後疊加不強推），印出可貼 PR 的連結 |
 

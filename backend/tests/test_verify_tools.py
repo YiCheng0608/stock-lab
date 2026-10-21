@@ -55,9 +55,18 @@ def _run(args: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
 # ---- copy_db.py ----
 
 
-def _copy(src: Path, dest: Path) -> subprocess.CompletedProcess[str]:
+def _copy(src: Path, dest: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return _run(
-        [sys.executable, "-B", str(COPY_DB), "--src", str(src), "--dest", str(dest)]
+        [
+            sys.executable,
+            "-B",
+            str(COPY_DB),
+            "--src",
+            str(src),
+            "--dest",
+            str(dest),
+            *extra,
+        ]
     )
 
 
@@ -114,6 +123,28 @@ def test_copy_db_copies_wal_frames_without_writing_the_source(tmp_path: Path) ->
         assert conn.execute("SELECT count(*) FROM market_bars").fetchone() == (2,)
 
 
+def test_copy_db_leaves_a_writerless_wal_source_untouched(tmp_path: Path) -> None:
+    """No connection is open on the source; only mode=ro keeps the close from
+    checkpointing the -wal into the main file and deleting it."""
+    live = tmp_path / "live" / "stock.db"
+    writer = _wal_source(live)
+    src = tmp_path / "prod" / "stock.db"
+    src.parent.mkdir()
+    try:
+        # Snapshot the pair while the writer holds them, so the copies keep the -wal.
+        shutil.copyfile(live, src)
+        shutil.copyfile(Path(str(live) + "-wal"), Path(str(src) + "-wal"))
+    finally:
+        writer.close()
+    wal = Path(str(src) + "-wal")
+    before = (_digest(src), _digest(wal))
+    result = _copy(src, tmp_path / "verify")
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["source_latest_trading_date"] == "2026-10-21"
+    assert wal.exists()
+    assert (_digest(src), _digest(wal)) == before
+
+
 def test_copy_db_refuses_a_destination_inside_the_source_directory(
     tmp_path: Path,
 ) -> None:
@@ -136,7 +167,13 @@ def test_copy_db_replaces_an_older_copy_and_its_stale_side_files(
     (dest / "stock.db").write_bytes(b"old")
     (dest / "stock.db-wal").write_bytes(b"stale")
     (dest / "stock.db-shm").write_bytes(b"stale")
+    # Without --force an existing copy is refused and nothing there changes.
     result = _copy(src, dest)
+    assert result.returncode == 1
+    assert "pass --force" in result.stderr
+    assert (dest / "stock.db").read_bytes() == b"old"
+    assert (dest / "stock.db-wal").read_bytes() == b"stale"
+    result = _copy(src, dest, "--force")
     assert result.returncode == 0, result.stderr
     assert sorted(p.name for p in dest.iterdir()) == ["stock.db"]
 

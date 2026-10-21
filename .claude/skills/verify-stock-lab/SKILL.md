@@ -36,12 +36,12 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 1. **停止條件**（任一成立就不啟動，五個導覽全部「無法判定」，直接到 Evidence 寫原因）：
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
-2. **埠**：`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Cleanup 第 1 步判斷是不是本 skill 先前留下的；是就關掉，不是就停止（無法判定：埠被其他程序占用）。
+2. **埠**：埠是固定的，所以整台機器同一時間只能有一個 verify-stock-lab 在跑。`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Cleanup 第 1 步判斷是不是**本 worktree** 先前留下的；是就關掉，不是（包括別的 worktree 正在跑的 verify）就不動它並停止（無法判定：埠被其他程序占用，寫出 PID 與命令列）。
 3. **建輸出目錄**：`mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs`。耗時以 `echo "<段名> <epoch 秒>" >> "$OUT/.timing"` 記錄（隱藏檔，不推送）：Launch 用第 1 步開始時的 `date +%s`，Doctor、Drive、Evidence 各段開頭與 Drive 結束各記一行；summary 標題時間用這次的開始時間（與 `$OUT` 同一分鐘）。
 4. **副本**（唯讀複製，約 10 秒；副本已存在也重做，確保是最新快照）：
 
    ```bash
-   "$PY" -B "$WT/tools/ops/copy_db.py" --src C:/Users/YiCheng/stock-lab-data/stock.db --dest "$V" > "$OUT/copy.json"
+   "$PY" -B "$WT/tools/ops/copy_db.py" --src C:/Users/YiCheng/stock-lab-data/stock.db --dest "$V" --force > "$OUT/copy.json"
    ```
 
    失敗（exit 非 0）→ 全部無法判定，原因寫 stderr。
@@ -57,7 +57,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 
    ```bash
    cd "$WT" && STOCK_DATA_DIR="$V" STOCK_DB_PATH="$V/stock.db" STOCK_RAW_DIR="$V/raw" PYTHONPATH="$WT/backend" \
-     "$APIPY" -B -m uvicorn app.main:app --host 127.0.0.1 --port 8227 > "$V/logs/api.log" 2>&1
+     "$APIPY" -B -m uvicorn app.main:app --app-dir "$WT/backend" --host 127.0.0.1 --port 8227 > "$V/logs/api.log" 2>&1
    ```
 
 背景程序被 Cleanup 的 `taskkill` 結束時，Bash 工具會通知該背景工作 failed（exit 1），屬預期。
@@ -65,7 +65,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 8. **前端**（背景）：
 
    ```bash
-   cd "$WT/frontend" && node node_modules/vite/bin/vite.js preview --config ../.claude/skills/verify-stock-lab/vite.preview.mjs > "$V/logs/preview.log" 2>&1
+   cd "$WT/frontend" && node node_modules/vite/bin/vite.js preview --config "$WT/.claude/skills/verify-stock-lab/vite.preview.mjs" > "$V/logs/preview.log" 2>&1
    ```
 
 三個 `STOCK_*` 永遠指向 `$V`；任何命令出現 `stock-lab-data` 只能是第 4 步的 `--src`。
@@ -136,7 +136,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 
 在 Evidence 第 3 步的推送之前做。只關本 skill 啟動的程序、只刪本 skill 的暫存：
 
-1. 對 8227 與 4227 各做一次：`netstat -ano | grep LISTENING | grep ':<埠> '` 取 PID，用 `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=<PID>').CommandLine"` 讀命令列；8227 必須含 `uvicorn` 與 `--port 8227`，4227 必須含 `vite.preview.mjs`，符合才 `taskkill //PID <PID> //T //F`，不符合就不動並在 summary 記下。8227 的監聽程序是 venv 啟動器的子程序，命令列顯示的是 codex runtime 的 `python.exe`，屬正常；`taskkill` 的輸出在 Git Bash 是亂碼，以下一步的 `netstat` 為準。
+1. 對 8227 與 4227 各做一次：`netstat -ano | grep LISTENING | grep ':<埠> '` 取 PID，用 `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=<PID>').CommandLine"` 讀命令列；8227 必須同時含 `uvicorn`、`--port 8227` 與 `--app-dir "$WT/backend"` 的路徑，4227 必須含 `$WT/.claude/skills/verify-stock-lab/vite.preview.mjs`（`$WT` 照 `git rev-parse --show-toplevel` 的 `C:/...` 寫法，比對不分大小寫）。兩者都含本 worktree 的絕對路徑，所以別的 worktree 起的 verify 不會被判成自己的。符合才 `taskkill //PID <PID> //T //F`，不符合就不動並在 summary 記下。8227 的監聽程序是 venv 啟動器的子程序，命令列顯示的是 codex runtime 的 `python.exe`，屬正常；`taskkill` 的輸出在 Git Bash 是亂碼，以下一步的 `netstat` 為準。
 2. 再跑一次第 1 步的 `netstat`，兩個埠都不再 LISTENING。
 3. 刪 `$V/dist`、`$V/raw`（API 啟動時建的空目錄）、`$V/stock.db`（含同名 `-wal`、`-shm`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。
 4. `ls -a "$OUT/shots"` 不應有 `.browser-*`（screenshot.cjs 自己會刪；殘留就刪掉並記下）。

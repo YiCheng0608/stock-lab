@@ -7,9 +7,11 @@ written to ``<dest>/stock.db.partial``, switched to a rollback journal so it is
 a single self-contained file, and only then renamed to ``<dest>/stock.db``.
 
 The destination must not be the source's directory or inside it, so the
-production data directory is never written. Prints one JSON object: the copy
-path, the source path, the source's latest ``market_bars.trading_date`` and
-the copied Alembic revision.
+production data directory is never written. An existing ``<dest>/stock.db`` is
+replaced only with ``--force``, so a mistyped destination (another worktree's
+copy, say) is refused before anything there is touched. Prints one JSON object:
+the copy path, the source path, the source's latest ``market_bars.trading_date``
+and the copied Alembic revision.
 """
 
 from __future__ import annotations
@@ -47,6 +49,11 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help=f"directory for the copy ({COPY_NAME}); created when missing",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=f"replace an existing <dest>/{COPY_NAME} and its -wal/-shm files",
+    )
     return parser
 
 
@@ -61,7 +68,7 @@ def _scalar(conn: sqlite3.Connection, table: str, sql: str) -> object:
     return conn.execute(sql).fetchone()[0] if exists else None
 
 
-def copy_db(src: Path, dest: Path) -> dict[str, object]:
+def copy_db(src: Path, dest: Path, force: bool = False) -> dict[str, object]:
     src = src.resolve()
     dest = dest.resolve()
     if not src.is_file():
@@ -71,8 +78,10 @@ def copy_db(src: Path, dest: Path) -> dict[str, object]:
             f"destination {dest} is inside the source directory {src.parent}; "
             "choose a directory outside it"
         )
-    dest.mkdir(parents=True, exist_ok=True)
     target = dest / COPY_NAME
+    if target.exists() and not force:
+        raise CopyError(f"{target} already exists; pass --force to replace it")
+    dest.mkdir(parents=True, exist_ok=True)
     partial = dest / (COPY_NAME + ".partial")
     for name in [partial.name] + [partial.name + s for s in SIDE_FILES]:
         (dest / name).unlink(missing_ok=True)
@@ -112,7 +121,7 @@ def copy_db(src: Path, dest: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        result = copy_db(Path(args.src), Path(args.dest))
+        result = copy_db(Path(args.src), Path(args.dest), force=args.force)
     except (CopyError, sqlite3.Error) as error:
         print(f"copy_db: {error}", file=sys.stderr)
         return 1
