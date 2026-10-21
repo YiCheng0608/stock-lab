@@ -29,10 +29,10 @@ def changed_paths(base: str) -> list[str]:
 
 
 # Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
-# Keep in step with backend/tests. None today: no backend test reads frontend/ since #179 removed the
-# App.tsx renderer check (the frontend no longer renders candidate identities).
+# Keep in step with backend/tests. No backend test reads frontend/ since #179 removed the App.tsx
+# renderer check; test_database_readiness reads the Alembic head stated in docs/OPERATIONS.md.
 BACKEND_READ_DIRS: tuple[str, ...] = ()
-BACKEND_READ_FILES: frozenset[str] = frozenset()
+BACKEND_READ_FILES: frozenset[str] = frozenset({"docs/OPERATIONS.md"})
 
 
 def change_flags(paths: list[str]) -> dict[str, bool]:

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import migrations
 from app.db import Base, enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.models import Instrument
 
 
@@ -101,7 +102,7 @@ def test_upgrade_classifies_only_legacy_rows_and_preserves_values(mode):
             if mode == "alembic":
                 assert connection.exec_driver_sql(
                     "SELECT version_num FROM alembic_version"
-                ).scalar() == "0016_group_score_archive"
+                ).scalar() == REVISIONS[-1]
             else:
                 assert connection.exec_driver_sql(
                     "SELECT count(*) FROM schema_migrations "

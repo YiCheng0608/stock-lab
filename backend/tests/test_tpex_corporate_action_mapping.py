@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db import enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.models import CorporateAction, Instrument, MarketBar, RawPayload, Signal, SignalEvaluation
 import worker.pipeline as pipeline
@@ -213,7 +214,7 @@ def database(tmp_path, monkeypatch):
     with engine.connect() as connection:
         assert connection.execute(text("PRAGMA integrity_check")).scalar_one() == "ok"
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
-        assert connection.execute(text("select version_num from alembic_version")).scalar_one() == "0016_group_score_archive"
+        assert connection.execute(text("select version_num from alembic_version")).scalar_one() == REVISIONS[-1]
     engine.dispose()
 
 

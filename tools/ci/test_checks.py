@@ -51,6 +51,12 @@ class RoutingTests(unittest.TestCase):
         for name in sorted(read):
             self.assertTrue(change_flags([name])["python"], name)
 
+    def test_docs_read_by_backend_tests_require_python(self):
+        for path in sorted((ROOT / "backend/tests").glob("*.py")):
+            for name in re.findall(r'"docs" / "([\w.-]+)"', path.read_text(encoding="utf-8")):
+                self.assertTrue(change_flags([f"docs/{name}"])["python"], name)
+        self.assertTrue(change_flags(["docs/OPERATIONS.md"])["python"])
+
     def test_links(self):
         self.assertEqual(markdown_errors("README.md", "[ok](docs/ROADMAP.md) [web](https://example.com) [anchor](#x)"), [])
         self.assertEqual(len(markdown_errors("README.md", "[bad](nonexistent-ci-link-target.md)")), 1)

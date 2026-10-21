@@ -15,12 +15,13 @@ from sqlalchemy.orm import Session
 
 from app import api as api_module, database_readiness as readiness, domain, migrations
 from app.db import enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, Instrument, MarketBar, Signal
 from worker import pipeline
 
 FIXTURE = Path(__file__).parent / "fixtures" / "strategy_snapshots_pre_v2.json"
 V1, V2 = domain.INSTITUTIONAL_FLOW_FORMULA_V1, domain.INSTITUTIONAL_FLOW_FORMULA_V2
-HEAD = "0016_group_score_archive"
+HEAD = REVISIONS[-1]
 PREVIOUS = "0008_portfolio_share_integer"
 # Alembic is optional in the bundled runtime; without it the upgrade is the SQLAlchemy fallback.
 try:

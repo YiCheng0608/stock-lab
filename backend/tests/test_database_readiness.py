@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -112,6 +113,12 @@ def test_actual_forced_fallback_nine_revisions(tmp_path, monkeypatch):
         assert connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall() == [(v,) for v in readiness.REVISIONS]
         assert not connection.execute("SELECT name FROM sqlite_schema WHERE name='alembic_version'").fetchall()
     check_unchanged(path)
+
+
+def test_operations_doc_names_the_code_head():
+    # OPERATIONS states the head in prose; REVISIONS is the single source it must follow.
+    text = (Path(__file__).resolve().parents[2] / "docs" / "OPERATIONS.md").read_text(encoding="utf-8")
+    assert re.findall(r"程式 Alembic head 是 `([^`]+)`", text) == [readiness.REVISIONS[-1]]
 
 
 def test_head_0016_is_ready_but_a_0015_database_is_not(ready_db):

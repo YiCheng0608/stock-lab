@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import migrations as migrations_module
 from app.db import enable_sqlite_foreign_keys
+from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
 from app.models import Event, Instrument
 
@@ -131,7 +132,7 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                     text("SELECT version_num FROM alembic_version ORDER BY version_num")
                 )
             ]
-            assert revisions == ["0016_group_score_archive"]
+            assert revisions == [REVISIONS[-1]]
             assert not inspector.has_table("schema_migrations")
         else:
             assert inspector.has_table("schema_migrations")
@@ -139,24 +140,7 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
                 item[0]
                 for item in connection.execute(text("SELECT version FROM schema_migrations"))
             }
-            assert versions == {
-                "0001_schema_v1",
-                "0002_instrument_exchange_key",
-                "0003_backtest_run_metadata",
-                "0004_product_news_themes",
-                "0005_news_temporal_contract",
-                "0006_news_json_defaults",
-                "0007_turnover_availability",
-                "0008_portfolio_share_integer",
-                "0009_strategy_formula_version",
-                "0010_technical_indicators",
-                "0011_schedule_runs",
-                "0012_news_llm",
-                "0013_candidates",
-                "0014_theme_suggestions",
-                "0015_candidate_llm_notes",
-                "0016_group_score_archive",
-            }
+            assert versions == set(REVISIONS)
             assert not inspector.has_table("alembic_version")
 
 

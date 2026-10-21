@@ -16,13 +16,14 @@ from app import instrument_identity_migration as identity
 from app import migrations
 from app.db import Base
 from app import models  # noqa: F401
+from app.migration_revisions import REVISIONS
 
 ROOT = Path(__file__).resolve().parents[2]
 ENTRIES = ['engine', 'external', 'fallback']
 CHILDREN = ['group_memberships', 'market_bars', 'chip_snapshots', 'technical_features',
             'signals', 'portfolio_positions', 'corporate_actions', 'fundamental_snapshots', 'events',
             'technical_indicators', 'daily_candidates']
-HEAD = '0016_group_score_archive'
+HEAD = REVISIONS[-1]
 DDL = '''CREATE TABLE instruments (
  id INTEGER NOT NULL PRIMARY KEY, market VARCHAR(20) NOT NULL,
  exchange VARCHAR(20) NOT NULL DEFAULT 'TWSE', symbol VARCHAR(30) NOT NULL,
