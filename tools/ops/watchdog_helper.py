@@ -15,6 +15,15 @@ The result goes to stdout without a trailing newline.
                                    non_trading_day, running, none, skip, a
                                    failing run status, skipped:<reason>, or
                                    catchup_incomplete
+  invariants <db> <today>          one line per data invariant,
+                                   "<name> ok|violation|skip key=value ...":
+                                   future_trading_date (latest market_bars
+                                   trading_date after <today>, YYYY-MM-DD),
+                                   latest_bar_provenance (bars of the latest
+                                   trading_date with an unknown or empty source
+                                   or no data_as_of), llm_done_provenance
+                                   (done news_llm_results without llm_model or
+                                   prompt_version)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -153,6 +162,57 @@ def daily_result(db: str, day: str, now: str) -> str:
     return "none"
 
 
+def _state(violations: int) -> str:
+    return "violation" if violations else "ok"
+
+
+def invariants(db: str, today: str) -> str:
+    lines: list[str] = []
+    with _connect(db) as conn:
+        latest = None
+        if _has_table(conn, "market_bars"):
+            latest = conn.execute(
+                "SELECT max(trading_date) FROM market_bars"
+            ).fetchone()[0]
+        if latest is None:
+            lines.append("future_trading_date skip reason=no_market_bars")
+            lines.append("latest_bar_provenance skip reason=no_market_bars")
+        else:
+            # Date columns are ISO text, so they compare with today as strings.
+            latest = str(latest)[:10]
+            lines.append(
+                f"future_trading_date {_state(latest > today)}"
+                f" max_trading_date={latest} today={today}"
+            )
+            bars, unknown, no_as_of = conn.execute(
+                "SELECT count(*),"
+                " coalesce(sum(source IS NULL OR source IN ('', 'unknown')), 0),"
+                " coalesce(sum(data_as_of IS NULL), 0)"
+                " FROM market_bars WHERE trading_date=("
+                "SELECT max(trading_date) FROM market_bars)"
+            ).fetchone()
+            lines.append(
+                f"latest_bar_provenance {_state(unknown + no_as_of)}"
+                f" trading_date={latest} bars={bars}"
+                f" unknown_source={unknown} null_data_as_of={no_as_of}"
+            )
+        if not _has_table(conn, "news_llm_results"):
+            lines.append("llm_done_provenance skip reason=no_news_llm_results")
+        else:
+            done, no_model, no_prompt = conn.execute(
+                "SELECT count(*),"
+                " coalesce(sum(llm_model IS NULL OR llm_model=''), 0),"
+                " coalesce(sum(prompt_version IS NULL OR prompt_version=''), 0)"
+                " FROM news_llm_results WHERE llm_status='done'"
+            ).fetchone()
+            lines.append(
+                f"llm_done_provenance {_state(no_model + no_prompt)}"
+                f" done={done} missing_model={no_model}"
+                f" empty_prompt_version={no_prompt}"
+            )
+    return "\n".join(lines)
+
+
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     command, args = argv[0], argv[1:]
@@ -162,6 +222,8 @@ def main(argv: list[str]) -> int:
         out = news_llm_failed(args[0], int(args[1]), args[2])
     elif command == "daily-result":
         out = daily_result(args[0], args[1], args[2])
+    elif command == "invariants":
+        out = invariants(args[0], args[1])
     else:
         raise SystemExit(f"unknown command: {command}")
     sys.stdout.write(out)

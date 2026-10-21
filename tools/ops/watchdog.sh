@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Schedule watchdog, run every 15 minutes by Windows Task Scheduler
 # (tools/ops/Register-Watchdog.ps1). Checks the daily, news and news-llm jobs
-# for anomalies from their logs and the read-only database, and comments on
-# #1. Operation: docs/OPERATIONS.md §6.1. Every run appends to
-# <data>/logs/watchdog.log.
+# for anomalies from their logs and the read-only database, and the data
+# invariants in that database, and comments on #1. Operation:
+# docs/OPERATIONS.md §6.1. Every run appends to <data>/logs/watchdog.log.
 #
 # Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--python EXE]
 #   --dry-run       decide and print the actions; no comment
@@ -77,7 +77,7 @@ if [ -z "$python" ]; then
   done
 fi
 if [ -z "$python" ] || ! "$python" -c 'import sys' >/dev/null 2>&1; then
-  log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm）；日誌檢查照做"
+  log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm、資料不變量）；日誌檢查照做"
   python=""
   found=1
 fi
@@ -180,5 +180,25 @@ if [ "$(printf '%s' "$llm_exits" | wc -w)" -eq 3 ] && ! printf '%s' "$llm_exits"
   llm_failed="${llm_failed:+$llm_failed；}news 日誌 24 小時內最後 3 次的 \`news_llm_exit\` 是 ${llm_exits% }"
 fi
 [ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
+
+# Data invariants (read-only database), every run: the numbers go to stdout,
+# a violation is reported like any other anomaly. The data is not repaired.
+if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
+  if checks="$(helper invariants "$data_dir/stock.db" "$taipei_iso" 2>>"$work/helper.err")"; then
+    value() { printf '%s\n' $facts | sed -n "s/^$1=//p"; }  # value KEY: from this line's facts
+    while read -r name state facts; do
+      printf 'invariant %s %s %s\n' "$name" "$state" "$facts"
+      [ "$state" = violation ] || continue
+      case "$name" in
+        future_trading_date) anomaly invariant_future_date "資料不變量：\`market_bars\` 最新 \`trading_date\` 是 $(value max_trading_date)，晚於台北今日 $(value today)（日期解析或來源錯誤），請查最近的 daily 日誌與 \`/api/ingestion-runs\`。" ;;
+        latest_bar_provenance) anomaly invariant_bar_provenance "資料不變量：最新交易日 $(value trading_date) 的 $(value bars) 列 \`market_bars\` 中，$(value unknown_source) 列 \`source\` 是 \`unknown\` 或空、$(value null_data_as_of) 列沒有 \`data_as_of\`，請查該日的 daily 日誌與寫入來源。" ;;
+        llm_done_provenance) anomaly invariant_llm_provenance "資料不變量：\`news_llm_results\` 的 $(value done) 列 \`llm_status=done\` 中，$(value missing_model) 列沒有 \`llm_model\`、$(value empty_prompt_version) 列 \`prompt_version\` 為空，請查 news 日誌的 news-llm 段落。" ;;
+      esac
+    done <<<"$checks"
+  else
+    found=1
+    log invariants_check_failed "" "讀取 stock.db 的資料不變量失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)"
+  fi
+fi
 [ "$found" = 0 ] && log schedules_ok "" "排程無異常"
 exit 0
