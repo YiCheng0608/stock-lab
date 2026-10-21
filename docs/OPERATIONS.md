@@ -113,14 +113,19 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 ### 6.1 排程看門狗
 
-`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+`tools/ops/watchdog.sh`（Git Bash）每 15 分鐘由工作 `\stock-lab\watchdog` 執行，只檢查排程與資料不變量：以檔案與唯讀 DB 判定異常並在 [#1](https://github.com/YiCheng0608/stock-lab/issues/1) 留言「待使用者」，每個異常每台北日最多一則。不判定統籌是否在線、不開或喚醒統籌（統籌開啟見[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
 
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
+- 資料不變量（每輪、不分時段，唯讀查 `stock.db`；各條數字印在 stdout，`--dry-run` 可看）：
+  - `invariant_future_date`：`market_bars` 最新 `trading_date` 晚於台北今日。
+  - `invariant_bar_provenance`：最新 `trading_date` 的 `market_bars` 有 `source` 為 `unknown`／空，或 `data_as_of` 為空。
+  - `invariant_llm_provenance`：`news_llm_results` 中 `llm_status=done` 的列沒有 `llm_model`，或 `prompt_version` 為空。
+  - 處置：看門狗不修資料，違反持續存在就每台北日留言一則。前兩條查該日 daily 日誌與 `/api/ingestion-runs`，修好寫入端後依 [§6.4](#64-重跑與回補) 重跑或回補該日；第三條查 news 日誌的 news-llm 段落。修正資料前先備份 `stock.db`（[§2.1](#21-安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
 
-`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有已登入的 `gh`；Python 只用來唯讀查 DB（找不到時跳過 daily 結果與 `news_llm` 的 DB 檢查，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
+`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有已登入的 `gh`；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
@@ -129,9 +134,9 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 查詢 | `schtasks /query /tn "\stock-lab\watchdog" /v /fo list` |
 | 停用／啟用 | `Disable-ScheduledTask -TaskPath \stock-lab\ -TaskName watchdog`／`Enable-ScheduledTask ...` |
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
-| 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言） |
+| 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言與資料不變量的數字） |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。執行中持有 `logs/watchdog.lock/`，殘留超過 30 分鐘自動移除；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。執行中持有 `logs/watchdog.lock/`，殘留超過 30 分鐘自動移除；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`invariants_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
