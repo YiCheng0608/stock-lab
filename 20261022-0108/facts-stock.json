@@ -1,0 +1,18 @@
+{
+  "market_latest_trading_date": "2026-10-21",
+  "group_scores_latest_trading_date": "2026-10-21",
+  "candidate_run_latest_trading_date": "2026-10-21",
+  "candidate_count_latest": 20,
+  "news_items": 1960,
+  "news_latest_published_at": "2026-10-21 15:59:00.000000",
+  "news_llm_done": 1672,
+  "theme_suggestions": 454,
+  "portfolio_positions": 0,
+  "alembic_version": "0016_group_score_archive",
+  "instrument": {
+    "exchange": "TWSE",
+    "symbol": "3004",
+    "latest_trading_date": "2026-10-21",
+    "source": "twse"
+  }
+}
