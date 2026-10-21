@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -483,6 +484,79 @@ class PrRange(unittest.TestCase):
     def test_base_must_be_a_full_sha(self):
         with self.assertRaises(ValueError):
             pr_changes("master", self.repo)
+
+
+class RepositoryWorkingTree(unittest.TestCase):
+    """`checks.py repository` on an uncommitted `git merge --no-commit` (#228).
+
+    A -> P (branch: docs/x.md); A -> M (master: docs/m.md). The branch merges master
+    without committing, so HEAD is still P; the check must judge the merge result.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name)
+
+        def git(*args: str) -> str:
+            return PrRange.git(self.repo, *args)
+
+        def commit(path: str, text: str) -> str:
+            (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / path).write_text(text, encoding="utf-8")
+            git("add", path)
+            git("commit", "-q", "-m", path)
+            return git("rev-parse", "HEAD")
+
+        git("init", "-q", "-b", "master")
+        # The copy runs with its own ROOT, so it checks this repository.
+        commit("tools/ci/checks.py", (ROOT / "tools/ci/checks.py").read_text("utf-8"))
+        commit("README.md", "start\n")
+        git("checkout", "-q", "-b", "pr")
+        commit("docs/x.md", "x\n")
+        git("checkout", "-q", "master")
+        self.master = commit("docs/m.md", "m\n")
+        git("checkout", "-q", "pr")
+        # Quiet: -q still prints "stopped before committing" to stderr.
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+            + ["merge", "-q", "--no-ff", "--no-commit", "master"],
+            cwd=self.repo,
+            capture_output=True,
+            check=True,
+        )
+        self.git = git
+
+    def run_check(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-B", "tools/ci/checks.py", "repository"]
+            + ["--base", self.master],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+        )
+
+    def resolve(self, text: str) -> None:
+        # README.md is the same on both sides; only the merge resolution touches it.
+        (self.repo / "README.md").write_text(text, encoding="utf-8")
+        self.git("add", "README.md")
+
+    def test_clean_merge_result_has_only_the_branch_change(self):
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("passed for 1 changed paths", result.stdout)
+
+    def test_whitespace_in_the_merge_result_fails(self):
+        self.resolve("start \n")
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("README.md:1: trailing whitespace", result.stdout)
+
+    def test_file_only_the_merge_touched_is_read(self):
+        self.resolve("start\n[gone](missing.md)\n")
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("README.md: missing relative link missing.md", result.stderr)
 
 
 if __name__ == "__main__":
