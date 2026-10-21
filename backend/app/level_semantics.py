@@ -22,13 +22,41 @@ KNOWN_FORMULA_VERSION = "legacy-risk-levels/v1"
 KNOWN_FORMULA_SOURCE = "backend.worker.pipeline._risk_levels"
 
 SIGNAL_FIELD_DEFINITIONS: dict[str, dict[str, str]] = {
-    "breakout_price": {"role": "rule_trigger", "label_zh": "規則觸發價", "source_field": "breakout_price"},
-    "pullback_low": {"role": "rule_observation_zone", "label_zh": "規則回踩觀察區下緣", "source_field": "pullback_low"},
-    "pullback_high": {"role": "rule_observation_zone", "label_zh": "規則回踩觀察區上緣", "source_field": "pullback_high"},
-    "reference_entry": {"role": "rule_calculation_reference", "label_zh": "規則計算參考價", "source_field": "reference_entry"},
-    "invalid_price": {"role": "rule_invalidation_reference", "label_zh": "規則失效參考價", "source_field": "invalid_price"},
-    "target_1": {"role": "rule_reference_target", "label_zh": "規則參考目標一", "source_field": "target_1"},
-    "target_2": {"role": "rule_reference_target", "label_zh": "規則參考目標二", "source_field": "target_2"},
+    "breakout_price": {
+        "role": "rule_trigger",
+        "label_zh": "規則觸發價",
+        "source_field": "breakout_price",
+    },
+    "pullback_low": {
+        "role": "rule_observation_zone",
+        "label_zh": "規則回踩觀察區下緣",
+        "source_field": "pullback_low",
+    },
+    "pullback_high": {
+        "role": "rule_observation_zone",
+        "label_zh": "規則回踩觀察區上緣",
+        "source_field": "pullback_high",
+    },
+    "reference_entry": {
+        "role": "rule_calculation_reference",
+        "label_zh": "規則計算參考價",
+        "source_field": "reference_entry",
+    },
+    "invalid_price": {
+        "role": "rule_invalidation_reference",
+        "label_zh": "規則失效參考價",
+        "source_field": "invalid_price",
+    },
+    "target_1": {
+        "role": "rule_reference_target",
+        "label_zh": "規則參考目標一",
+        "source_field": "target_1",
+    },
+    "target_2": {
+        "role": "rule_reference_target",
+        "label_zh": "規則參考目標二",
+        "source_field": "target_2",
+    },
 }
 UNKNOWN_LEVEL_LABEL = "價位（語意未確認）"
 
@@ -74,11 +102,14 @@ def build_level_semantics(
     if known:
         fields = {
             output_field: {
-                **SIGNAL_FIELD_DEFINITIONS.get(source_field, {
-                    "role": "unknown",
-                    "label_zh": UNKNOWN_LEVEL_LABEL,
-                    "source_field": source_field,
-                }),
+                **SIGNAL_FIELD_DEFINITIONS.get(
+                    source_field,
+                    {
+                        "role": "unknown",
+                        "label_zh": UNKNOWN_LEVEL_LABEL,
+                        "source_field": source_field,
+                    },
+                ),
                 "source_field": source_field,
             }
             for output_field, source_field in mapping.items()
@@ -91,9 +122,18 @@ def build_level_semantics(
             "expression": "risk=max(atr if truthy else entry*0.02, entry*0.01); invalid=max(0.01, entry-risk); target_1=entry+1.6*risk; target_2=entry+3*risk",
             "rounding": "round each returned level to 2 decimal places",
         }
-        cost_included: dict[str, Any] = {"value": False, "reason": "legacy_level_formula_excludes_costs"}
-        decision_at: dict[str, Any] = {"value": None, "reason": "legacy_decision_at_not_persisted"}
-        generated_at: dict[str, Any] = {"value": None, "reason": "legacy_generated_at_not_persisted_with_timezone"}
+        cost_included: dict[str, Any] = {
+            "value": False,
+            "reason": "legacy_level_formula_excludes_costs",
+        }
+        decision_at: dict[str, Any] = {
+            "value": None,
+            "reason": "legacy_decision_at_not_persisted",
+        }
+        generated_at: dict[str, Any] = {
+            "value": None,
+            "reason": "legacy_generated_at_not_persisted_with_timezone",
+        }
         reason = "canonical_v1_allowlist"
         kind = "rule_reference"
     else:

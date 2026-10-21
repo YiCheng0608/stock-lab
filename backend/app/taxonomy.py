@@ -154,17 +154,23 @@ def canonical_industry_label(exchange: str | None, value: str | None) -> str | N
         return None
     code = raw.zfill(2) if raw.isdigit() else None
     if code:
-        return INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE.get(_exchange_key(exchange), {}).get(code)
+        return INDUSTRY_CODE_TO_CANONICAL_BY_EXCHANGE.get(
+            _exchange_key(exchange), {}
+        ).get(code)
     lowered = raw.casefold()
     if raw in INDUSTRY_DISPLAY_ZH:
         return raw
     if lowered in {label.casefold() for label in INDUSTRY_DISPLAY_ZH}:
-        return next(label for label in INDUSTRY_DISPLAY_ZH if label.casefold() == lowered)
+        return next(
+            label for label in INDUSTRY_DISPLAY_ZH if label.casefold() == lowered
+        )
     return _CANONICAL_ALIASES.get(lowered)
 
 
 def canonical_group_id(group_type: str, label: str) -> str:
     """Return the market-wide id for a normalised group label."""
 
-    digest = hashlib.sha1(f"{group_type}:{label.lower()}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1(f"{group_type}:{label.lower()}".encode("utf-8")).hexdigest()[
+        :16
+    ]
     return f"official-{group_type}-{digest}"

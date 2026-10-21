@@ -9,7 +9,9 @@ from .pipeline import collect
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="台股研究資料收集 worker")
-    parser.add_argument("--date", dest="run_date", help="YYYY-MM-DD；未指定使用最近工作日")
+    parser.add_argument(
+        "--date", dest="run_date", help="YYYY-MM-DD；未指定使用最近工作日"
+    )
     parser.add_argument("--months-back", type=int, choices=range(4), default=0)
     args = parser.parse_args()
     result = collect(

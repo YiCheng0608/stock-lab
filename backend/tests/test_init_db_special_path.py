@@ -67,7 +67,9 @@ def _migrate(db_path: Path, *, use_fallback: bool = False) -> None:
         if use_fallback:
             # A missing alembic.ini routes upgrade_database to its local fallback.
             with pytest.MonkeyPatch.context() as patch:
-                patch.setattr(migrations, "ALEMBIC_CONFIG_PATH", db_path.parent / "absent.ini")
+                patch.setattr(
+                    migrations, "ALEMBIC_CONFIG_PATH", db_path.parent / "absent.ini"
+                )
                 migrations.upgrade_database(engine)
         else:
             migrations.upgrade_database(engine)
@@ -121,7 +123,9 @@ def plain_schema() -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def plain_fallback_schema() -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="stock-init-db-plain-fallback-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="stock-init-db-plain-fallback-"
+    ) as directory:
         db_path = Path(directory) / "plain.db"
         _migrate(db_path, use_fallback=True)
         snapshot = _schema_snapshot(db_path)
@@ -132,7 +136,9 @@ def plain_fallback_schema() -> dict[str, Any]:
 class _UpgradeSpy:
     """Capture the Config ``upgrade_database`` builds; optionally drop its shared engine."""
 
-    def __init__(self, monkeypatch: pytest.MonkeyPatch, *, drop_connection: bool = False) -> None:
+    def __init__(
+        self, monkeypatch: pytest.MonkeyPatch, *, drop_connection: bool = False
+    ) -> None:
         self.config: Any = None
         real_upgrade = alembic_command.upgrade
 
@@ -183,13 +189,17 @@ def test_config_options_read_back_verbatim(
     # env.py reads the URL with get_main_option (offline) and get_section
     # (engine_from_config); both must return the path, not an interpolated one.
     assert config.get_main_option("sqlalchemy.url") == expected_url
-    assert config.get_section(config.config_ini_section)["sqlalchemy.url"] == expected_url
+    assert (
+        config.get_section(config.config_ini_section)["sqlalchemy.url"] == expected_url
+    )
     assert config.get_main_option("script_location") == expected_location
 
 
 @special_names
 def test_upgrade_through_config_url_special_path_matches_plain_schema(
-    name: str, isolated_root: Path, monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    isolated_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
     plain_schema: dict[str, Any],
 ) -> None:
     db_path = _special_db(isolated_root, name)
@@ -210,7 +220,9 @@ def test_cli_init_db_special_path_matches_plain_schema(
     raw_dir = db_path.parent / "raw"
     # Every STOCK_* location points into the temporary directory so the
     # subprocess cannot fall back to the repository or daily data paths.
-    env = {key: value for key, value in os.environ.items() if not key.startswith("STOCK_")}
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith("STOCK_")
+    }
     env.update(
         STOCK_DATA_DIR=str(db_path.parent),
         STOCK_RAW_DIR=str(raw_dir),

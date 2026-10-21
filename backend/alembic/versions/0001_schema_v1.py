@@ -11,7 +11,10 @@ from sqlalchemy import inspect, text
 
 import app.models  # noqa: F401
 from app.db import Base
-from app.settlement_identity_migration import preflight_settlement_identity, rebuild_settlement_identity
+from app.settlement_identity_migration import (
+    preflight_settlement_identity,
+    rebuild_settlement_identity,
+)
 
 
 revision = "0001_schema_v1"
@@ -72,7 +75,6 @@ def _additive_columns() -> dict[str, dict[str, str]]:
     }
 
 
-
 def _has_unique_columns(bind, table_name: str, expected: tuple[str, ...]) -> bool:
     inspector = inspect(bind)
     wanted = tuple(expected)
@@ -103,7 +105,6 @@ def _rebuild_signal_settlements_if_needed(connection) -> None:
     rebuild_settlement_identity(connection)
 
 
-
 def upgrade() -> None:
     bind = op.get_bind()
     preflight_settlement_identity(bind)
@@ -119,7 +120,11 @@ def upgrade() -> None:
         existing = {column["name"] for column in inspect(bind).get_columns(table_name)}
         for column_name, definition in columns.items():
             if column_name not in existing:
-                bind.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {definition}'))
+                bind.execute(
+                    text(
+                        f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {definition}'
+                    )
+                )
     _ensure_request_key_index(bind)
     _rebuild_signal_settlements_if_needed(bind)
 
@@ -127,4 +132,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     # The project explicitly preserves legacy data; destructive downgrades are
     # intentionally unsupported.
-    raise RuntimeError("The v1 schema migration is forward-only to preserve legacy data")
+    raise RuntimeError(
+        "The v1 schema migration is forward-only to preserve legacy data"
+    )

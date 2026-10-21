@@ -25,7 +25,7 @@ def upgrade() -> None:
         bind.execute(
             text(
                 'ALTER TABLE "ingestion_runs" '
-                'ADD COLUMN "metadata_json" JSON NOT NULL DEFAULT \'{}\''
+                "ADD COLUMN \"metadata_json\" JSON NOT NULL DEFAULT '{}'"
             )
         )
 

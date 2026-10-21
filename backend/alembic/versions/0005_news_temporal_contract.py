@@ -32,14 +32,15 @@ def upgrade() -> None:
     )
     for name, definition in columns:
         if name not in existing:
-            bind.exec_driver_sql(f'ALTER TABLE "news_items" ADD COLUMN "{name}" {definition}')
+            bind.exec_driver_sql(
+                f'ALTER TABLE "news_items" ADD COLUMN "{name}" {definition}'
+            )
     bind.exec_driver_sql(
         'CREATE INDEX IF NOT EXISTS "ix_news_display_id" '
         'ON "news_items" ("display_time", "id")'
     )
     bind.exec_driver_sql(
-        'CREATE INDEX IF NOT EXISTS "ix_news_event_date" '
-        'ON "news_items" ("event_date")'
+        'CREATE INDEX IF NOT EXISTS "ix_news_event_date" ON "news_items" ("event_date")'
     )
     bind.exec_driver_sql(
         'CREATE INDEX IF NOT EXISTS "ix_news_time_consistency" '

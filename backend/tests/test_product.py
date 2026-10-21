@@ -60,9 +60,33 @@ def _add_base_fixture(db):
         data_as_of=as_of.isoformat(),
         request_key="official-fixture-20260908",
     )
-    alpha = Instrument(market="TW", exchange="TWSE", symbol="AAA", name="Alpha", instrument_type="stock", industry="24", status="active")
-    beta = Instrument(market="TW", exchange="TPEx", symbol="BBB", name="Beta", instrument_type="stock", industry="24", status="active")
-    etf = Instrument(market="TW", exchange="TWSE", symbol="00679B", name="Bond fund", instrument_type="etf", etf_category="bond", status="active")
+    alpha = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="AAA",
+        name="Alpha",
+        instrument_type="stock",
+        industry="24",
+        status="active",
+    )
+    beta = Instrument(
+        market="TW",
+        exchange="TPEx",
+        symbol="BBB",
+        name="Beta",
+        instrument_type="stock",
+        industry="24",
+        status="active",
+    )
+    etf = Instrument(
+        market="TW",
+        exchange="TWSE",
+        symbol="00679B",
+        name="Bond fund",
+        instrument_type="etf",
+        etf_category="bond",
+        status="active",
+    )
     complete = ThemeGroup(
         id="theme-complete",
         name="Industry · Semiconductor",
@@ -77,9 +101,24 @@ def _add_base_fixture(db):
     db.flush()
     db.add_all(
         [
-            GroupMembership(group_id=complete.id, instrument_id=alpha.id, valid_from=date(2020, 1, 1), source="official"),
-            GroupMembership(group_id=complete.id, instrument_id=beta.id, valid_from=date(2020, 1, 1), source="official"),
-            GroupMembership(group_id=complete.id, instrument_id=etf.id, valid_from=date(2020, 1, 1), source="official"),
+            GroupMembership(
+                group_id=complete.id,
+                instrument_id=alpha.id,
+                valid_from=date(2020, 1, 1),
+                source="official",
+            ),
+            GroupMembership(
+                group_id=complete.id,
+                instrument_id=beta.id,
+                valid_from=date(2020, 1, 1),
+                source="official",
+            ),
+            GroupMembership(
+                group_id=complete.id,
+                instrument_id=etf.id,
+                valid_from=date(2020, 1, 1),
+                source="official",
+            ),
             GroupDailyScore(
                 group_id=complete.id,
                 trading_date=as_of,
@@ -91,7 +130,11 @@ def _add_base_fixture(db):
                 rank=1,
                 eligible_members=3,
                 data_quality="complete",
-                details_json={"benchmark": "TAIEX", "leaderboard": "equity", "candidate_symbols": ["AAA", "BBB"]},
+                details_json={
+                    "benchmark": "TAIEX",
+                    "leaderboard": "equity",
+                    "candidate_symbols": ["AAA", "BBB"],
+                },
             ),
             GroupDailyScore(
                 group_id=incomplete.id,
@@ -302,7 +345,9 @@ def test_news_order_dedupe_and_official_feed_provenance(product_api):
     with TestClient(app) as client:
         first = client.get("/api/news?limit=1")
         first_again = client.get("/api/news?limit=10")
-        next_page = client.get(f"/api/news?limit=1&cursor={first.json()['meta']['next_cursor']}")
+        next_page = client.get(
+            f"/api/news?limit=1&cursor={first.json()['meta']['next_cursor']}"
+        )
 
     assert first.status_code == 200
     assert first.json()["items"][0]["title"] == "New official notice"
@@ -318,11 +363,30 @@ def test_news_order_dedupe_and_official_feed_provenance(product_api):
 def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
     with product_api() as db:
         as_of, _alpha, _beta, _etf = _add_base_fixture(db)
-        gamma = Instrument(market="TW", exchange="TWSE", symbol="GAM", name="Gamma", instrument_type="stock", status="active")
-        pending = ThemeGroup(id="theme-pending", name="Industry · Shipping", active=True, name_status="pending")
+        gamma = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="GAM",
+            name="Gamma",
+            instrument_type="stock",
+            status="active",
+        )
+        pending = ThemeGroup(
+            id="theme-pending",
+            name="Industry · Shipping",
+            active=True,
+            name_status="pending",
+        )
         db.add_all([gamma, pending])
         db.flush()
-        db.add(GroupMembership(group_id=pending.id, instrument_id=gamma.id, valid_from=date(2020, 1, 1), source="official"))
+        db.add(
+            GroupMembership(
+                group_id=pending.id,
+                instrument_id=gamma.id,
+                valid_from=date(2020, 1, 1),
+                source="official",
+            )
+        )
         long_description = "官方公告內容 " * 40
         db.add(
             Event(
@@ -341,15 +405,21 @@ def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
     with TestClient(app) as client:
         first = client.get("/api/news?limit=10")
     assert first.status_code == 200
-    item = next(row for row in first.json()["items"] if row["title"] == "Gamma official notice")
+    item = next(
+        row for row in first.json()["items"] if row["title"] == "Gamma official notice"
+    )
     assert item["themes"] == []
-    assert item["instruments"] == [{"exchange": "TWSE", "symbol": "GAM", "name": "Gamma"}]
+    assert item["instruments"] == [
+        {"exchange": "TWSE", "symbol": "GAM", "name": "Gamma"}
+    ]
     assert item["summary"] == long_description
     assert item["summary_preview"]
     assert len(item["summary_preview"]) <= 120
 
     with product_api() as db:
-        projected = db.scalar(select(NewsItem).where(NewsItem.title == "Gamma official notice"))
+        projected = db.scalar(
+            select(NewsItem).where(NewsItem.title == "Gamma official notice")
+        )
         assert projected is not None
         projected.status = "retracted"
         db.commit()
@@ -357,14 +427,23 @@ def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
     with TestClient(app) as client:
         second = client.get("/api/news?limit=10")
     assert second.status_code == 200
-    assert all(row["title"] != "Gamma official notice" for row in second.json()["items"])
+    assert all(
+        row["title"] != "Gamma official notice" for row in second.json()["items"]
+    )
     with product_api() as db:
         assert db.scalar(select(func_count_news())) == 1
-        assert db.scalar(select(NewsItem.status).where(NewsItem.title == "Gamma official notice")) == "retracted"
+        assert (
+            db.scalar(
+                select(NewsItem.status).where(NewsItem.title == "Gamma official notice")
+            )
+            == "retracted"
+        )
 
         # A later reconciliation state is also terminal.  Refreshing the
         # projection must never make an operator-suppressed item active again.
-        projected = db.scalar(select(NewsItem).where(NewsItem.title == "Gamma official notice"))
+        projected = db.scalar(
+            select(NewsItem).where(NewsItem.title == "Gamma official notice")
+        )
         assert projected is not None
         projected.status = "superseded"
         db.commit()
@@ -374,7 +453,12 @@ def test_news_projection_persists_once_and_hides_unverified_theme(product_api):
     assert third.status_code == 200
     assert all(row["title"] != "Gamma official notice" for row in third.json()["items"])
     with product_api() as db:
-        assert db.scalar(select(NewsItem.status).where(NewsItem.title == "Gamma official notice")) == "superseded"
+        assert (
+            db.scalar(
+                select(NewsItem.status).where(NewsItem.title == "Gamma official notice")
+            )
+            == "superseded"
+        )
 
 
 def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
@@ -398,7 +482,11 @@ def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
         response = client.get("/api/dashboard")
 
     assert response.status_code == 200
-    item = next(row for row in response.json()["news"] if row["title"] == "Compact dashboard notice")
+    item = next(
+        row
+        for row in response.json()["news"]
+        if row["title"] == "Compact dashboard notice"
+    )
     assert "summary" not in item
     assert "provenance" not in item
     assert len(item["summary_preview"]) <= 120
@@ -406,7 +494,9 @@ def test_dashboard_news_and_group_rows_use_compact_projections(product_api):
     assert all("methodology" not in row for row in response.json()["groups"])
 
 
-def test_official_cross_exchange_taxonomy_conflict_is_hidden_from_theme_product_list(product_api):
+def test_official_cross_exchange_taxonomy_conflict_is_hidden_from_theme_product_list(
+    product_api,
+):
     """A stale official-looking mixed group must not become a product theme."""
 
     with product_api() as db:
@@ -460,6 +550,7 @@ def test_official_cross_exchange_taxonomy_conflict_is_hidden_from_theme_product_
     assert response.status_code == 200
     assert all(item["theme_id"] != group.id for item in response.json()["items"])
 
+
 def test_news_cursor_has_stable_collected_event_id_order(product_api):
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
@@ -505,11 +596,17 @@ def test_news_cursor_has_stable_collected_event_id_order(product_api):
             cursor = page["meta"]["next_cursor"]
             if not cursor:
                 break
-    assert titles == ["later collected event", "same-time newer event", "same-time older event"]
+    assert titles == [
+        "later collected event",
+        "same-time newer event",
+        "same-time older event",
+    ]
     assert len(titles) == len(set(titles))
 
 
-def test_news_order_prioritizes_published_then_event_then_collected_and_detail(product_api):
+def test_news_order_prioritizes_published_then_event_then_collected_and_detail(
+    product_api,
+):
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         db.add_all(
@@ -542,7 +639,10 @@ def test_news_order_prioritizes_published_then_event_then_collected_and_detail(p
 
     assert response.status_code == 200
     assert response.json()["items"][0]["title"] == "Newer event"
-    assert response.json()["meta"]["sort"] == "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc"
+    assert (
+        response.json()["meta"]["sort"]
+        == "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc"
+    )
     assert detail.status_code == 200
     assert detail.json()["title"] == "Newer event"
     assert detail.json()["collected_at"] is not None
@@ -587,7 +687,9 @@ def test_news_temporal_contract_and_mops_conflict_quarantine(product_api):
 
     with TestClient(app) as client:
         default = client.get("/api/news?limit=1")
-        next_page = client.get(f"/api/news?limit=1&cursor={default.json()['meta']['next_cursor']}")
+        next_page = client.get(
+            f"/api/news?limit=1&cursor={default.json()['meta']['next_cursor']}"
+        )
         conflicts = client.get("/api/news?limit=10&time_consistency=conflict")
 
     assert default.status_code == 200
@@ -608,7 +710,9 @@ def test_news_temporal_contract_and_mops_conflict_quarantine(product_api):
     assert conflict["themes"] == []
 
     with product_api() as db:
-        quarantined = db.scalar(select(NewsItem).where(NewsItem.title == "Conflicting MOPS event"))
+        quarantined = db.scalar(
+            select(NewsItem).where(NewsItem.title == "Conflicting MOPS event")
+        )
         assert quarantined is not None
         assert quarantined.status == "quarantined"
 
@@ -683,7 +787,9 @@ def test_feed_news_api_exposes_aware_utc_and_known_published_at(product_api):
         db.commit()
 
     with TestClient(app) as client:
-        rows = _news_by_title(client, ["feed published", "feed date only", "feed no time"])
+        rows = _news_by_title(
+            client, ["feed published", "feed date only", "feed no time"]
+        )
 
     for payload in rows["feed published"]:
         roles = payload["product_time"]["roles"]
@@ -698,7 +804,10 @@ def test_feed_news_api_exposes_aware_utc_and_known_published_at(product_api):
         assert payload["display_time"] == roles["published_at"]["value"]
         assert payload["collected_at"] == roles["collected_at"]["value"]
         assert payload["event_at"] is None
-        assert payload["time_basis"] == "published" and payload["time_precision"] == "datetime"
+        assert (
+            payload["time_basis"] == "published"
+            and payload["time_precision"] == "datetime"
+        )
 
     # Without published_at the item keeps the event／date rules: no instant is invented.
     for payload in rows["feed date only"]:
@@ -718,7 +827,10 @@ def test_feed_news_api_exposes_aware_utc_and_known_published_at(product_api):
         assert roles["event_date"]["status"] == "unknown"
         assert payload["published_at"] is None and payload["event_at"] is None
         # The row has no source time, so the sort view falls back to the collection instant.
-        assert payload["time_basis"] == "collected" and payload["time_precision"] == "datetime"
+        assert (
+            payload["time_basis"] == "collected"
+            and payload["time_precision"] == "datetime"
+        )
         assert payload["display_time"] == "2026-10-17T09:00:05+00:00"
         assert payload["collected_at"] == "2026-10-17T09:00:05+00:00"
 
@@ -760,16 +872,27 @@ def test_official_news_date_only_stays_naive_and_event_time_becomes_aware(produc
 
     with TestClient(app) as client:
         rows = _news_by_title(
-            client, ["Official date only", "Official with published time", "Official with event time"]
+            client,
+            [
+                "Official date only",
+                "Official with published time",
+                "Official with event time",
+            ],
         )
 
     for payload in rows["Official date only"]:
         roles = payload["product_time"]["roles"]
-        assert payload["time_basis"] == "event_date" and payload["time_precision"] == "date"
+        assert (
+            payload["time_basis"] == "event_date"
+            and payload["time_precision"] == "date"
+        )
         assert payload["display_time"] == "2026-09-08T00:00:00"
         assert payload["published_at"] is None and payload["event_at"] is None
         assert payload["event_date"] == "2026-09-08"
-        assert roles["event_date"]["status"] == "known" and roles["event_date"]["precision"] == "date"
+        assert (
+            roles["event_date"]["status"] == "known"
+            and roles["event_date"]["precision"] == "date"
+        )
         assert roles["event_date"]["value"] == "2026-09-08"
         assert roles["published_at"]["status"] == "unknown"
         assert roles["event_at"]["status"] == "unknown"
@@ -831,7 +954,9 @@ def test_official_news_offset_times_are_converted_to_utc(product_api):
         db.commit()
 
     with TestClient(app) as client:
-        rows = _news_by_title(client, ["Published +08:00", "Event only -05:00", "Published Z"])
+        rows = _news_by_title(
+            client, ["Published +08:00", "Event only -05:00", "Published Z"]
+        )
 
     # 09:30 in Taipei is 01:30 UTC; the same instant, not the same clock reading.
     for payload in rows["Published +08:00"]:
@@ -839,7 +964,10 @@ def test_official_news_offset_times_are_converted_to_utc(product_api):
         assert payload["published_at"] == "2026-09-07T01:30:00+00:00"
         assert payload["event_at"] == "2026-09-07T01:00:00+00:00"
         assert payload["display_time"] == "2026-09-07T01:30:00+00:00"
-        assert payload["time_basis"] == "published" and payload["time_precision"] == "datetime"
+        assert (
+            payload["time_basis"] == "published"
+            and payload["time_precision"] == "datetime"
+        )
         assert roles["published_at"]["status"] == "known"
         assert roles["published_at"]["value"] == "2026-09-07T01:30:00+00:00"
 
@@ -849,7 +977,9 @@ def test_official_news_offset_times_are_converted_to_utc(product_api):
         assert payload["published_at"] is None
         assert payload["event_at"] == "2026-09-08T01:00:00+00:00"
         assert payload["display_time"] == "2026-09-08T01:00:00+00:00"
-        assert payload["time_basis"] == "event" and payload["time_precision"] == "datetime"
+        assert (
+            payload["time_basis"] == "event" and payload["time_precision"] == "datetime"
+        )
         assert roles["event_at"]["value"] == "2026-09-08T01:00:00+00:00"
 
     for payload in rows["Published Z"]:
@@ -888,7 +1018,10 @@ def test_official_news_date_only_marker_is_not_promoted_to_an_instant(product_ap
     for payload in rows["Date only marker"]:
         roles = payload["product_time"]["roles"]
         assert payload["published_at"] is None and payload["event_at"] is None
-        assert payload["time_basis"] == "event_date" and payload["time_precision"] == "date"
+        assert (
+            payload["time_basis"] == "event_date"
+            and payload["time_precision"] == "date"
+        )
         assert payload["display_time"] == "2026-09-08T00:00:00"
         assert roles["published_at"]["status"] == "unknown"
         assert roles["event_at"]["status"] == "unknown"
@@ -946,7 +1079,9 @@ def test_news_cursor_and_sort_keep_working_with_aware_display_time(product_api):
     with TestClient(app) as client:
         cursor = None
         for _ in range(5):
-            page = client.get("/api/news?limit=1" + (f"&cursor={cursor}" if cursor else "")).json()
+            page = client.get(
+                "/api/news?limit=1" + (f"&cursor={cursor}" if cursor else "")
+            ).json()
             titles.extend(item["title"] for item in page["items"])
             cursor = page["meta"]["next_cursor"]
             if not cursor:
@@ -991,10 +1126,21 @@ def test_product_price_change_requires_adjacent_verified_same_basis(product_api)
             sha256="c" * 64,
             data_as_of=as_of.isoformat(),
         )
-        taiex = Instrument(market="TW", exchange="TWSE", symbol="TAIEX", name="TAIEX", instrument_type="index", status="active")
+        taiex = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="TAIEX",
+            name="TAIEX",
+            instrument_type="index",
+            status="active",
+        )
         db.add_all([raw_previous, raw_current, taiex])
         db.flush()
-        current = db.scalar(select(MarketBar).where(MarketBar.instrument_id == alpha.id, MarketBar.trading_date == as_of))
+        current = db.scalar(
+            select(MarketBar).where(
+                MarketBar.instrument_id == alpha.id, MarketBar.trading_date == as_of
+            )
+        )
         assert current is not None
         current.source = "official"
         current.raw_payload_id = raw_current.id
@@ -1093,7 +1239,13 @@ def test_actions_are_deduplicated_and_prioritize_held_data_quality(product_api):
     with product_api() as db:
         _as_of, alpha, _beta, _etf = _add_base_fixture(db)
         db.add(PortfolioPosition(instrument_id=alpha.id, shares=10, average_cost=100))
-        strategy = StrategyVersion(name="breakout_v1", version="1.0.0", kind="technical", config_json={}, canonical_config_snapshot={})
+        strategy = StrategyVersion(
+            name="breakout_v1",
+            version="1.0.0",
+            kind="technical",
+            config_json={},
+            canonical_config_snapshot={},
+        )
         db.add(strategy)
         db.flush()
         db.add(
@@ -1105,12 +1257,17 @@ def test_actions_are_deduplicated_and_prioritize_held_data_quality(product_api):
                 status="data_incomplete",
                 data_quality="incomplete",
                 entry_type="conditional",
-                rule_evidence_json={"inputs": {"institutional_flow_to_turnover_ratio_5d": None}},
+                rule_evidence_json={
+                    "inputs": {"institutional_flow_to_turnover_ratio_5d": None}
+                },
             )
         )
         db.commit()
         summaries = build_action_summaries(db)
-        assert len([item for item in summaries if item["instrument"]["symbol"] == "AAA"]) == 1
+        assert (
+            len([item for item in summaries if item["instrument"]["symbol"] == "AAA"])
+            == 1
+        )
         assert summaries[0]["action_state"] == "data_insufficient"
         assert summaries[0]["held"] is True
         assert summaries[0]["missing_data_priority"]
@@ -1147,16 +1304,30 @@ def test_action_list_is_compact_while_detail_keeps_audit_evidence(product_api):
     assert detail_summary["evidence_refs"]
     assert detail_summary["level_semantics"]["kind"] == "rule_reference"
     assert detail_summary["level_semantics"]["version"] == "signal-level-semantics/v1"
-    assert detail_summary["level_semantics"]["formula"]["version"] == "legacy-risk-levels/v1"
-    assert detail_summary["level_semantics"]["fields"]["trigger_price"]["source_field"] == "breakout_price"
+    assert (
+        detail_summary["level_semantics"]["formula"]["version"]
+        == "legacy-risk-levels/v1"
+    )
+    assert (
+        detail_summary["level_semantics"]["fields"]["trigger_price"]["source_field"]
+        == "breakout_price"
+    )
     assert detail_summary["level_semantics"]["price_basis"]["value"] is None
     assert detail_summary["level_semantics"]["decision_at"]["value"] is None
     assert detail_summary["level_semantics"]["generated_at"]["value"] is None
     assert detail_summary["stop_price_semantics"]["origin"] == "signal.invalid_price"
-    assert detail_summary["primary_levels"]["semantics"]["trigger"]["source_field"] == "breakout_price"
-    assert detail_summary["primary_levels"]["semantics"]["invalid"]["source_field"] == "invalid_price"
+    assert (
+        detail_summary["primary_levels"]["semantics"]["trigger"]["source_field"]
+        == "breakout_price"
+    )
+    assert (
+        detail_summary["primary_levels"]["semantics"]["invalid"]["source_field"]
+        == "invalid_price"
+    )
     assert item["level_semantics"]["kind"] == "rule_reference"
-    assert item["level_semantics"]["fields"]["trigger_price"]["label_zh"] == "規則觸發價"
+    assert (
+        item["level_semantics"]["fields"]["trigger_price"]["label_zh"] == "規則觸發價"
+    )
 
 
 def test_nonempty_tracking_projects_signal_product_time(product_api):
@@ -1164,7 +1335,9 @@ def test_nonempty_tracking_projects_signal_product_time(product_api):
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         _add_signal_pair(db, alpha, as_of)
         db.flush()
-        signal = db.scalar(select(Signal).where(Signal.signal_key == "fixture-AAA-breakout"))
+        signal = db.scalar(
+            select(Signal).where(Signal.signal_key == "fixture-AAA-breakout")
+        )
         assert signal is not None
         db.add(
             SignalEvaluation(
@@ -1186,7 +1359,10 @@ def test_nonempty_tracking_projects_signal_product_time(product_api):
     row_signal = tracking.json()["rows"][0]["signal"]
     assert row_signal["product_time"]["version"] == "product-time/v1"
     assert row_signal["product_time"]["roles"]["market_date"]["status"] == "known"
-    assert row_signal["product_time"]["roles"]["earliest_execution_at"]["status"] == "unknown"
+    assert (
+        row_signal["product_time"]["roles"]["earliest_execution_at"]["status"]
+        == "unknown"
+    )
     assert scoped.status_code == 200
     assert scoped.json()["signal"]["product_time"]["version"] == "product-time/v1"
 
@@ -1196,14 +1372,21 @@ def test_action_stop_semantics_preserve_position_origin(product_api):
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         _add_decision_history(db, alpha, as_of)
         _add_signal_pair(db, alpha, as_of)
-        db.add(PortfolioPosition(instrument_id=alpha.id, shares=10, average_cost=100, stop_price=101))
+        db.add(
+            PortfolioPosition(
+                instrument_id=alpha.id, shares=10, average_cost=100, stop_price=101
+            )
+        )
         db.commit()
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
     assert summary["action_state"] == "hold_observe"
     assert summary["stop_price_semantics"]["kind"] == "user_position_risk_input"
     assert summary["stop_price_semantics"]["origin"] == "portfolio_position.stop_price"
-    assert summary["primary_levels"]["semantics"]["stop"]["kind"] == "user_position_risk_input"
+    assert (
+        summary["primary_levels"]["semantics"]["stop"]["kind"]
+        == "user_position_risk_input"
+    )
     assert summary["primary_levels"]["semantics"]["stop"]["is_rule_reference"] is False
 
 
@@ -1228,11 +1411,17 @@ def test_action_context_does_not_issue_per_field_queries(product_api):
     # One summary should be served by the batched context, not a query for
     # each strategy/coverage/evidence field.
     assert len(statements) <= 25
-    strategy_queries = [statement for statement in statements if "from strategy_versions" in statement.lower()]
+    strategy_queries = [
+        statement
+        for statement in statements
+        if "from strategy_versions" in statement.lower()
+    ]
     assert len(strategy_queries) <= 1
 
 
-def test_complete_conditional_wins_over_observation_without_level_pollution(product_api):
+def test_complete_conditional_wins_over_observation_without_level_pollution(
+    product_api,
+):
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         _add_decision_history(db, alpha, as_of)
@@ -1242,7 +1431,9 @@ def test_complete_conditional_wins_over_observation_without_level_pollution(prod
 
     assert summary["action_state"] == "conditional_entry"
     assert summary["display_action"] == "符合條件後可研究進場"
-    assert summary["display_instruction"].startswith("僅在觸發價與資料條件同時成立時研究進場")
+    assert summary["display_instruction"].startswith(
+        "僅在觸發價與資料條件同時成立時研究進場"
+    )
     assert summary["primary_reason"]["scope"] == "breakout"
     assert summary["primary_levels"]["kind"] == "trigger_invalid"
     assert summary["primary_strategy"] == "breakout_v1"
@@ -1259,12 +1450,20 @@ def test_complete_conditional_wins_over_observation_without_level_pollution(prod
 def test_unqualified_theme_does_not_block_complete_conditional(product_api):
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
-        score = db.scalar(select(GroupDailyScore).where(GroupDailyScore.group_id == "theme-complete"))
+        score = db.scalar(
+            select(GroupDailyScore).where(GroupDailyScore.group_id == "theme-complete")
+        )
         assert score is not None
         score.data_quality = "partial"
         score.eligible_members = 2
         _add_decision_history(db, alpha, as_of)
-        _add_signal_pair(db, alpha, as_of, pullback_status="data_incomplete", pullback_quality="incomplete")
+        _add_signal_pair(
+            db,
+            alpha,
+            as_of,
+            pullback_status="data_incomplete",
+            pullback_quality="incomplete",
+        )
         db.commit()
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
@@ -1295,7 +1494,10 @@ def test_incomplete_primary_strategy_fails_closed_but_exposes_alternative(produc
     assert summary["trigger_price"] is None
     assert "signal_data_quality" in summary["blocking_reasons"]
     assert "data_incomplete" in summary["blocking_reasons"]
-    assert {item["strategy"] for item in summary["strategies"]} == {"breakout_v1", "pullback_v1"}
+    assert {item["strategy"] for item in summary["strategies"]} == {
+        "breakout_v1",
+        "pullback_v1",
+    }
 
 
 def test_complete_observations_without_wait_levels_are_no_condition(product_api):
@@ -1316,8 +1518,14 @@ def test_complete_observations_without_wait_levels_are_no_condition(product_api)
     assert summary["action_state"] == "no_condition"
     assert summary["blocking_reasons"] == []
     assert summary["primary_strategy"] is None
-    assert all(summary[key] is None for key in ("trigger_price", "invalid_price", "target_1", "risk_reward"))
-    assert {item["strategy"] for item in summary["strategies"]} == {"breakout_v1", "pullback_v1"}
+    assert all(
+        summary[key] is None
+        for key in ("trigger_price", "invalid_price", "target_1", "risk_reward")
+    )
+    assert {item["strategy"] for item in summary["strategies"]} == {
+        "breakout_v1",
+        "pullback_v1",
+    }
     assert all(item["data_quality"] == "complete" for item in summary["strategies"])
 
 
@@ -1349,7 +1557,14 @@ def test_observation_can_wait_without_incomplete_alternative_blocking(product_ap
     with product_api() as db:
         as_of, alpha, _beta, _etf = _add_base_fixture(db)
         _add_decision_history(db, alpha, as_of)
-        _add_signal_pair(db, alpha, as_of, breakout_status="observation", pullback_status="data_incomplete", pullback_quality="incomplete")
+        _add_signal_pair(
+            db,
+            alpha,
+            as_of,
+            breakout_status="observation",
+            pullback_status="data_incomplete",
+            pullback_quality="incomplete",
+        )
         db.commit()
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
@@ -1371,17 +1586,27 @@ def test_actions_include_complete_conditional_outside_qualified_candidates(produ
             status="active",
         )
         _add_decision_history(db, alpha, as_of, extra_instrument=outsider)
-        _add_signal_pair(db, outsider, as_of, pullback_status="data_incomplete", pullback_quality="incomplete")
+        _add_signal_pair(
+            db,
+            outsider,
+            as_of,
+            pullback_status="data_incomplete",
+            pullback_quality="incomplete",
+        )
         db.commit()
 
         summaries = build_action_summaries(db, as_of)
-        outsider_summary = next(item for item in summaries if item["instrument"]["symbol"] == "OUT")
+        outsider_summary = next(
+            item for item in summaries if item["instrument"]["symbol"] == "OUT"
+        )
         assert outsider_summary["action_state"] == "conditional_entry"
 
     with TestClient(app) as client:
         response = client.get("/api/actions?limit=100")
     assert response.status_code == 200
-    assert any(item["instrument"]["symbol"] == "OUT" for item in response.json()["items"])
+    assert any(
+        item["instrument"]["symbol"] == "OUT" for item in response.json()["items"]
+    )
 
 
 def test_action_summary_preserves_two_strategy_conflict(product_api):
@@ -1390,7 +1615,14 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
         # Enough historical rows for both canonical strategy families.  The
         # exact calendar is synthetic fixture data; it is never exposed as an
         # official source.
-        taiex = Instrument(market="TW", exchange="TWSE", symbol="TAIEX", name="TAIEX", instrument_type="index", status="active")
+        taiex = Instrument(
+            market="TW",
+            exchange="TWSE",
+            symbol="TAIEX",
+            name="TAIEX",
+            instrument_type="index",
+            status="active",
+        )
         db.add(taiex)
         db.flush()
         for index in range(0, 61):
@@ -1441,11 +1673,29 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
                     source="official-fixture",
                 )
             )
-        breakout = StrategyVersion(name="breakout_v1", version="1.0.0", kind="technical", config_json={}, canonical_config_snapshot={})
-        pullback = StrategyVersion(name="pullback_v1", version="1.0.0", kind="technical", config_json={}, canonical_config_snapshot={})
+        breakout = StrategyVersion(
+            name="breakout_v1",
+            version="1.0.0",
+            kind="technical",
+            config_json={},
+            canonical_config_snapshot={},
+        )
+        pullback = StrategyVersion(
+            name="pullback_v1",
+            version="1.0.0",
+            kind="technical",
+            config_json={},
+            canonical_config_snapshot={},
+        )
         db.add_all([breakout, pullback])
         db.flush()
-        common_evidence = {"inputs": {"group_excess_return_20d": 0.1, "institutional_flow_to_turnover_ratio_5d": 0.01, "margin_balance_change_ratio_5d": 0.02}}
+        common_evidence = {
+            "inputs": {
+                "group_excess_return_20d": 0.1,
+                "institutional_flow_to_turnover_ratio_5d": 0.01,
+                "margin_balance_change_ratio_5d": 0.02,
+            }
+        }
         db.add_all(
             [
                 Signal(
@@ -1482,7 +1732,10 @@ def test_action_summary_preserves_two_strategy_conflict(product_api):
         summary = build_action_summaries(db, instrument_ids=[alpha.id])[0]
 
     assert summary["action_state"] == "manual_review"
-    assert set(summary["alternative_strategies"] + [summary["primary_strategy"]]) == {"breakout_v1", "pullback_v1"}
+    assert set(summary["alternative_strategies"] + [summary["primary_strategy"]]) == {
+        "breakout_v1",
+        "pullback_v1",
+    }
     assert summary["conflicts"]
 
 

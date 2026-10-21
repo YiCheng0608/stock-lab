@@ -27,20 +27,32 @@ def upgrade() -> None:
     if added_status:
         op.add_column(
             "market_bars",
-            Column("turnover_status", String(20), nullable=False, server_default="unknown"),
+            Column(
+                "turnover_status", String(20), nullable=False, server_default="unknown"
+            ),
         )
     if "turnover_reason" not in columns:
-        op.add_column("market_bars", Column("turnover_reason", String(40), nullable=True))
+        op.add_column(
+            "market_bars", Column("turnover_reason", String(40), nullable=True)
+        )
     if added_status:
-        bind.execute(text("UPDATE market_bars SET turnover_status = 'available' WHERE turnover > 0"))
-        bind.execute(text(
-            "UPDATE market_bars SET turnover_reason = 'legacy_zero_ambiguous' "
-            "WHERE turnover = 0"
-        ))
-        bind.execute(text(
-            "UPDATE market_bars SET turnover_reason = 'legacy_invalid' "
-            "WHERE turnover < 0 OR turnover IS NULL"
-        ))
+        bind.execute(
+            text(
+                "UPDATE market_bars SET turnover_status = 'available' WHERE turnover > 0"
+            )
+        )
+        bind.execute(
+            text(
+                "UPDATE market_bars SET turnover_reason = 'legacy_zero_ambiguous' "
+                "WHERE turnover = 0"
+            )
+        )
+        bind.execute(
+            text(
+                "UPDATE market_bars SET turnover_reason = 'legacy_invalid' "
+                "WHERE turnover < 0 OR turnover IS NULL"
+            )
+        )
 
 
 def downgrade() -> None:

@@ -947,9 +947,7 @@ def _ranked(body):
     ]
 
 
-def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(
-    factory, api_client
-):
+def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(factory, api_client):
     _stocks, dates = _scored_api_fixture(factory)
     endpoints = [
         ("/api/themes", {"board": "industry"}),
@@ -957,14 +955,23 @@ def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(
         ("/api/themes", {"only_qualified": False}),
         ("/api/groups", {}),
     ]
-    before = [_ranked(api_client.get(path, params=params).json()) for path, params in endpoints]
+    before = [
+        _ranked(api_client.get(path, params=params).json())
+        for path, params in endpoints
+    ]
     with factory() as db:
 
         def group_state():
             return (
-                [(row.id, row.group_type, row.active) for row in db.scalars(select(ThemeGroup).order_by(ThemeGroup.id))],
+                [
+                    (row.id, row.group_type, row.active)
+                    for row in db.scalars(select(ThemeGroup).order_by(ThemeGroup.id))
+                ],
                 _memberships(db),
-                sorted((row.group_id, row.trading_date, row.rank, row.score) for row in db.scalars(select(GroupDailyScore))),
+                sorted(
+                    (row.group_id, row.trading_date, row.rank, row.score)
+                    for row in db.scalars(select(GroupDailyScore))
+                ),
             )
 
         groups_before = group_state()
@@ -988,26 +995,40 @@ def test_news_theme_suggestions_are_never_scored_ranked_or_grouped(
                     llm_status="done",
                     ai_unsupported=False,
                     ai_symbol_candidates_json=[],
-                    ai_theme_candidates_json=[{"theme": name, "reason": "理由"} for name in names],
+                    ai_theme_candidates_json=[
+                        {"theme": name, "reason": "理由"} for name in names
+                    ],
                 )
             )
         db.commit()
         result = refresh_theme_suggestions(db)
-        assert (result["records"], result["new_themes"], result["matched_existing"]) == (2, 1, 1)
+        assert (
+            result["records"],
+            result["new_themes"],
+            result["matched_existing"],
+        ) == (2, 1, 1)
         # Rescoring after the refresh sees the same groups and writes the same boards.
         for trading_date in dates[-3:]:
             pipeline._calculate_group_scores(db, trading_date)
         db.commit()
         assert group_state() == groups_before
 
-    after = [_ranked(api_client.get(path, params=params).json()) for path, params in endpoints]
+    after = [
+        _ranked(api_client.get(path, params=params).json())
+        for path, params in endpoints
+    ]
     assert after == before
     assert "新題材甲" not in json.dumps(after, ensure_ascii=False)
     listed = api_client.get("/api/theme-suggestions").json()
     assert [item["display_name"] for item in listed["items"]] == ["新題材甲"]
     assert listed["items"][0]["status"] == "pending_verification"
-    matched = api_client.get("/api/theme-suggestions", params={"include_matched": True}).json()
-    assert {item["display_name"]: (item["matched_group"] or {}).get("group_id") for item in matched["items"]} == {
+    matched = api_client.get(
+        "/api/theme-suggestions", params={"include_matched": True}
+    ).json()
+    assert {
+        item["display_name"]: (item["matched_group"] or {}).get("group_id")
+        for item in matched["items"]
+    } == {
         "新題材甲": None,
         "頂題材": "theme-top",
     }

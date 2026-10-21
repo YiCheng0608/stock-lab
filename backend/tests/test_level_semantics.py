@@ -25,11 +25,20 @@ def test_known_v1_semantics_are_canonical_and_do_not_invent_history_times() -> N
     }
     assert semantics["fields"]["target_1"]["label_zh"] == "規則參考目標一"
     assert semantics["fields"]["target_2"]["label_zh"] == "規則參考目標二"
-    assert semantics["price_basis"] == {"value": None, "reason": "legacy_price_basis_not_persisted"}
-    assert semantics["cost_included"] == {"value": False, "reason": "legacy_level_formula_excludes_costs"}
+    assert semantics["price_basis"] == {
+        "value": None,
+        "reason": "legacy_price_basis_not_persisted",
+    }
+    assert semantics["cost_included"] == {
+        "value": False,
+        "reason": "legacy_level_formula_excludes_costs",
+    }
     assert semantics["decision_at"]["value"] is None
     assert semantics["generated_at"]["value"] is None
-    assert semantics["generated_at"]["reason"] == "legacy_generated_at_not_persisted_with_timezone"
+    assert (
+        semantics["generated_at"]["reason"]
+        == "legacy_generated_at_not_persisted_with_timezone"
+    )
 
 
 def test_unknown_relation_cannot_be_upgraded_by_strategy_like_values() -> None:
@@ -46,9 +55,15 @@ def test_unknown_relation_cannot_be_upgraded_by_strategy_like_values() -> None:
     assert semantics["fields"]["trigger_price"]["label_zh"] == "價位（語意未確認）"
 
 
-def test_stop_price_origin_keeps_user_position_risk_separate_from_rule_invalid() -> None:
-    user_stop = build_stop_price_semantics(has_position_stop=True, has_rule_fallback=True)
-    rule_stop = build_stop_price_semantics(has_position_stop=False, has_rule_fallback=True, rule_semantics_known=True)
+def test_stop_price_origin_keeps_user_position_risk_separate_from_rule_invalid() -> (
+    None
+):
+    user_stop = build_stop_price_semantics(
+        has_position_stop=True, has_rule_fallback=True
+    )
+    rule_stop = build_stop_price_semantics(
+        has_position_stop=False, has_rule_fallback=True, rule_semantics_known=True
+    )
 
     assert user_stop["kind"] == "user_position_risk_input"
     assert user_stop["origin"] == "portfolio_position.stop_price"
@@ -56,5 +71,7 @@ def test_stop_price_origin_keeps_user_position_risk_separate_from_rule_invalid()
     assert rule_stop["kind"] == "rule_reference"
     assert rule_stop["origin"] == "signal.invalid_price"
     assert rule_stop["is_rule_reference"] is True
-    unknown_stop = build_stop_price_semantics(has_position_stop=False, has_rule_fallback=False)
+    unknown_stop = build_stop_price_semantics(
+        has_position_stop=False, has_rule_fallback=False
+    )
     assert unknown_stop["reason"] == "no_rule_or_position_stop"

@@ -40,7 +40,14 @@ def check_unchanged(path, reason=None):
     if reason:
         with pytest.raises(readiness.DatabaseReadinessError, match=reason) as error:
             readiness.check_database_readiness(path)
-        for message in ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR", "backup", "external copy", "init-db"):
+        for message in (
+            "STOCK_DATA_DIR",
+            "STOCK_DB_PATH",
+            "STOCK_RAW_DIR",
+            "backup",
+            "external copy",
+            "init-db",
+        ):
             assert message in str(error.value)
     else:
         readiness.check_database_readiness(path)
@@ -52,11 +59,16 @@ def markers(path, alembic, fallback):
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE IF EXISTS alembic_version")
         connection.execute("DROP TABLE IF EXISTS schema_migrations")
-        for name, column, values in (("alembic_version", "version_num", alembic), ("schema_migrations", "version", fallback)):
+        for name, column, values in (
+            ("alembic_version", "version_num", alembic),
+            ("schema_migrations", "version", fallback),
+        ):
             if values is not None:
                 # No affinity/constraints: malformed values must reach validation.
                 connection.execute(f"CREATE TABLE {name} ({column})")
-                connection.executemany(f"INSERT INTO {name} VALUES (?)", [(value,) for value in values])
+                connection.executemany(
+                    f"INSERT INTO {name} VALUES (?)", [(value,) for value in values]
+                )
 
 
 def test_current_head_and_fallback_count_in_memory():
@@ -64,21 +76,35 @@ def test_current_head_and_fallback_count_in_memory():
     assert readiness.REVISIONS[-1] == "0016_group_score_archive"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
-        connection.execute("INSERT INTO alembic_version VALUES (?)", (readiness.REVISIONS[-1],))
+        connection.execute(
+            "INSERT INTO alembic_version VALUES (?)", (readiness.REVISIONS[-1],)
+        )
         readiness._check_markers(connection, {"alembic_version"})
-        connection.execute("UPDATE alembic_version SET version_num = ?", (readiness.REVISIONS[-2],))
-        with pytest.raises(readiness.DatabaseReadinessError, match="current head revision"):
+        connection.execute(
+            "UPDATE alembic_version SET version_num = ?", (readiness.REVISIONS[-2],)
+        )
+        with pytest.raises(
+            readiness.DatabaseReadinessError, match="current head revision"
+        ):
             readiness._check_markers(connection, {"alembic_version"})
         connection.execute("DROP TABLE alembic_version")
         connection.execute("CREATE TABLE schema_migrations (version TEXT)")
         connection.executemany(
-            "INSERT INTO schema_migrations VALUES (?)", [(revision,) for revision in readiness.REVISIONS]
+            "INSERT INTO schema_migrations VALUES (?)",
+            [(revision,) for revision in readiness.REVISIONS],
         )
         readiness._check_markers(connection, {"schema_migrations"})
-        connection.execute("DELETE FROM schema_migrations WHERE version = ?", (readiness.REVISIONS[-1],))
-        with pytest.raises(readiness.DatabaseReadinessError, match="all known revisions"):
+        connection.execute(
+            "DELETE FROM schema_migrations WHERE version = ?",
+            (readiness.REVISIONS[-1],),
+        )
+        with pytest.raises(
+            readiness.DatabaseReadinessError, match="all known revisions"
+        ):
             readiness._check_markers(connection, {"schema_migrations"})
-        connection.execute("INSERT INTO schema_migrations VALUES (?)", (readiness.REVISIONS[-1],))
+        connection.execute(
+            "INSERT INTO schema_migrations VALUES (?)", (readiness.REVISIONS[-1],)
+        )
         connection.execute("INSERT INTO schema_migrations VALUES ('future_revision')")
         with pytest.raises(readiness.DatabaseReadinessError, match="known prefix"):
             readiness._check_markers(connection, {"schema_migrations"})
@@ -92,6 +118,7 @@ def test_alembic_head_repeat_and_migration_bombs(ready_db, monkeypatch):
     monkeypatch.setattr(migrations, "_fallback_upgrade", bomb)
     monkeypatch.setattr(Base.metadata, "create_all", bomb)
     from app import db, news_json_defaults
+
     monkeypatch.setattr(db, "init_db", bomb)
     monkeypatch.setattr(news_json_defaults, "ensure_news_json_server_defaults", bomb)
     check_unchanged(ready_db)
@@ -110,19 +137,30 @@ def test_actual_forced_fallback_nine_revisions(tmp_path, monkeypatch):
     migrations.upgrade_database(engine)
     engine.dispose()
     with sqlite3.connect(path) as connection:
-        assert connection.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall() == [(v,) for v in readiness.REVISIONS]
-        assert not connection.execute("SELECT name FROM sqlite_schema WHERE name='alembic_version'").fetchall()
+        assert connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version"
+        ).fetchall() == [(v,) for v in readiness.REVISIONS]
+        assert not connection.execute(
+            "SELECT name FROM sqlite_schema WHERE name='alembic_version'"
+        ).fetchall()
     check_unchanged(path)
 
 
 def test_operations_doc_names_the_code_head():
     # OPERATIONS states the head in prose; REVISIONS is the single source it must follow.
-    text = (Path(__file__).resolve().parents[2] / "docs" / "OPERATIONS.md").read_text(encoding="utf-8")
-    assert re.findall(r"程式 Alembic head 是 `([^`]+)`", text) == [readiness.REVISIONS[-1]]
+    text = (Path(__file__).resolve().parents[2] / "docs" / "OPERATIONS.md").read_text(
+        encoding="utf-8"
+    )
+    assert re.findall(r"程式 Alembic head 是 `([^`]+)`", text) == [
+        readiness.REVISIONS[-1]
+    ]
 
 
 def test_head_0016_is_ready_but_a_0015_database_is_not(ready_db):
-    assert readiness.REVISIONS[-2:] == ("0015_candidate_llm_notes", "0016_group_score_archive")
+    assert readiness.REVISIONS[-2:] == (
+        "0015_candidate_llm_notes",
+        "0016_group_score_archive",
+    )
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     check_unchanged(ready_db)
     markers(ready_db, [readiness.REVISIONS[-2]], None)
@@ -154,7 +192,9 @@ STRATEGY_VERSIONS_DDL = {
 
 
 @pytest.mark.parametrize("shape", sorted(STRATEGY_VERSIONS_DDL))
-def test_strategy_identity_before_0009_is_not_ready_even_with_the_head_marker(ready_db, shape):
+def test_strategy_identity_before_0009_is_not_ready_even_with_the_head_marker(
+    ready_db, shape
+):
     ddl, reason = STRATEGY_VERSIONS_DDL[shape]
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     with sqlite3.connect(ready_db) as connection:
@@ -169,14 +209,38 @@ def test_head_with_known_fallback_prefix(ready_db, prefix):
     check_unchanged(ready_db)
 
 
-@pytest.mark.parametrize("alembic", [[], [None], [6], [b"0007_turnover_availability"], ["unknown"], [readiness.REVISIONS[-2]], [readiness.REVISIONS[-1]] * 2])
+@pytest.mark.parametrize(
+    "alembic",
+    [
+        [],
+        [None],
+        [6],
+        [b"0007_turnover_availability"],
+        ["unknown"],
+        [readiness.REVISIONS[-2]],
+        [readiness.REVISIONS[-1]] * 2,
+    ],
+)
 def test_bad_alembic_cannot_be_overridden_by_full_fallback(ready_db, alembic):
     markers(ready_db, alembic, readiness.REVISIONS)
     check_unchanged(ready_db, "Alembic")
 
 
 @pytest.mark.parametrize("alembic", [None, [readiness.REVISIONS[-1]]])
-@pytest.mark.parametrize("fallback", [[], [None], [6], [b"0001_schema_v1"], ["unknown"], [readiness.REVISIONS[1]], [readiness.REVISIONS[0]] * 2, [readiness.REVISIONS[0], readiness.REVISIONS[2]], [*readiness.REVISIONS, "future"]])
+@pytest.mark.parametrize(
+    "fallback",
+    [
+        [],
+        [None],
+        [6],
+        [b"0001_schema_v1"],
+        ["unknown"],
+        [readiness.REVISIONS[1]],
+        [readiness.REVISIONS[0]] * 2,
+        [readiness.REVISIONS[0], readiness.REVISIONS[2]],
+        [*readiness.REVISIONS, "future"],
+    ],
+)
 def test_bad_fallback_markers(ready_db, alembic, fallback):
     markers(ready_db, alembic, fallback)
     check_unchanged(ready_db, "fallback")
@@ -188,7 +252,9 @@ def test_fallback_only_stale_prefix(ready_db, prefix):
     check_unchanged(ready_db, "all known")
 
 
-@pytest.mark.parametrize("kind", ["missing", "zero", "tableless", "unversioned", "not_sqlite", "directory"])
+@pytest.mark.parametrize(
+    "kind", ["missing", "zero", "tableless", "unversioned", "not_sqlite", "directory"]
+)
 def test_unready_files(tmp_path, kind):
     path = tmp_path / "unready.db"
     if kind == "zero":
@@ -210,11 +276,16 @@ def test_unready_files(tmp_path, kind):
     check_unchanged(path, "Database is not ready")
 
 
-@pytest.mark.parametrize("marker,column", [("alembic_version", "version_num"), ("schema_migrations", "version")])
+@pytest.mark.parametrize(
+    "marker,column",
+    [("alembic_version", "version_num"), ("schema_migrations", "version")],
+)
 def test_marker_view_or_malformed_table(ready_db, marker, column):
     with sqlite3.connect(ready_db) as connection:
         connection.execute(f"DROP TABLE IF EXISTS {marker}")
-        connection.execute(f"CREATE VIEW {marker} AS SELECT '0007_turnover_availability' AS {column}")
+        connection.execute(
+            f"CREATE VIEW {marker} AS SELECT '0007_turnover_availability' AS {column}"
+        )
     check_unchanged(ready_db, "real table")
     with sqlite3.connect(ready_db) as connection:
         connection.execute(f"DROP VIEW {marker}")
@@ -222,7 +293,20 @@ def test_marker_view_or_malformed_table(ready_db, marker, column):
     check_unchanged(ready_db, "cannot read")
 
 
-@pytest.mark.parametrize("defect", ["table", "view", "column", "pk", "fk", "unique", "partial_unique", "default", "expression_default"])
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "table",
+        "view",
+        "column",
+        "pk",
+        "fk",
+        "unique",
+        "partial_unique",
+        "default",
+        "expression_default",
+    ],
+)
 def test_finite_schema_faults(ready_db, defect):
     with sqlite3.connect(ready_db) as connection:
         if defect in ("table", "view"):
@@ -230,20 +314,32 @@ def test_finite_schema_faults(ready_db, defect):
             if defect == "view":
                 connection.execute("CREATE VIEW data_quality AS SELECT 1 AS id")
         elif defect == "column":
-            connection.execute("ALTER TABLE data_quality RENAME COLUMN source TO custom_source")
+            connection.execute(
+                "ALTER TABLE data_quality RENAME COLUMN source TO custom_source"
+            )
         elif defect in ("unique", "partial_unique"):
             connection.execute("DROP INDEX ix_signals_signal_key")
             if defect == "partial_unique":
-                connection.execute("CREATE UNIQUE INDEX ix_signals_signal_key ON signals(signal_key) WHERE id > 0")
+                connection.execute(
+                    "CREATE UNIQUE INDEX ix_signals_signal_key ON signals(signal_key) WHERE id > 0"
+                )
         else:
             table = "portfolio_positions" if defect in ("pk", "fk") else "news_items"
-            ddl = connection.execute("SELECT sql FROM sqlite_schema WHERE name=?", (table,)).fetchone()[0]
+            ddl = connection.execute(
+                "SELECT sql FROM sqlite_schema WHERE name=?", (table,)
+            ).fetchone()[0]
             if defect == "pk":
                 ddl = ddl.replace("PRIMARY KEY (id),", "")
             elif defect == "fk":
-                ddl = ddl.replace("FOREIGN KEY(instrument_id) REFERENCES instruments (id)", "CHECK (1=1)")
+                ddl = ddl.replace(
+                    "FOREIGN KEY(instrument_id) REFERENCES instruments (id)",
+                    "CHECK (1=1)",
+                )
             else:
-                ddl = ddl.replace("DEFAULT '[]'", "" if defect == "default" else "DEFAULT (json_array())")
+                ddl = ddl.replace(
+                    "DEFAULT '[]'",
+                    "" if defect == "default" else "DEFAULT (json_array())",
+                )
             connection.execute(f"DROP TABLE {table}")
             connection.execute(ddl)
     check_unchanged(ready_db, "Database is not ready")
@@ -280,24 +376,31 @@ def test_locked_database_has_bounded_read_failure(ready_db):
 def test_read_connection_and_single_transaction(ready_db, monkeypatch):
     connect = sqlite3.connect
     statements = []
+
     def observe(database, **kwargs):
         assert database.endswith("?mode=ro") and kwargs["uri"] is True
         assert kwargs["timeout"] == readiness.READ_TIMEOUT_SECONDS
         connection = connect(database, **kwargs)
         connection.set_trace_callback(statements.append)
         return connection
+
     monkeypatch.setattr(readiness.sqlite3, "connect", observe)
     readiness.check_database_readiness(ready_db)
     assert statements[:2] == ["PRAGMA query_only=ON", "BEGIN"]
     assert sum(statement == "BEGIN" for statement in statements) == 1
-    assert all(statement.startswith(("SELECT ", "PRAGMA ", "BEGIN")) for statement in statements)
+    assert all(
+        statement.startswith(("SELECT ", "PRAGMA ", "BEGIN"))
+        for statement in statements
+    )
 
 
 def test_unreadable_connection_fails_without_retry(ready_db, monkeypatch):
     calls = []
+
     def denied(*args, **kwargs):
         calls.append(args)
         raise sqlite3.OperationalError("unable to open database file")
+
     monkeypatch.setattr(readiness.sqlite3, "connect", denied)
     check_unchanged(ready_db, "unable to open")
     assert len(calls) == 1
@@ -315,13 +418,35 @@ def test_invalid_startup_does_not_serve(tmp_path, monkeypatch):
 def test_explicit_cli_init_then_real_startup(tmp_path):
     root = Path(__file__).resolve().parents[2]
     data = tmp_path / "explicit"
-    env = dict(os.environ, STOCK_DATA_DIR=str(data), STOCK_DB_PATH=str(data / "stock.db"), STOCK_RAW_DIR=str(data / "raw"), PYTHONDONTWRITEBYTECODE="1")
-    env["PYTHONPATH"] = os.pathsep.join([str(root / "backend"), str(root / "backend/.deps"), *sys.path])
-    initialized = subprocess.run([sys.executable, "-m", "worker.cli", "init-db"], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    env = dict(
+        os.environ,
+        STOCK_DATA_DIR=str(data),
+        STOCK_DB_PATH=str(data / "stock.db"),
+        STOCK_RAW_DIR=str(data / "raw"),
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(root / "backend"), str(root / "backend/.deps"), *sys.path]
+    )
+    initialized = subprocess.run(
+        [sys.executable, "-m", "worker.cli", "init-db"],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     assert initialized.returncode == 0, initialized.stdout + initialized.stderr
     before = fingerprint(data / "stock.db")
     code = "from fastapi.testclient import TestClient; from app.main import app\nwith TestClient(app) as client: assert client.get('/api/health').json()['status']=='ok'"
-    started = subprocess.run([sys.executable, "-c", code], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    started = subprocess.run(
+        [sys.executable, "-c", code],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     assert started.returncode == 0, started.stdout + started.stderr
     assert fingerprint(data / "stock.db") == before
 
@@ -337,13 +462,24 @@ def test_readiness_revision_constants_match_checked_in_single_chain():
     assert script.get_heads() == [readiness.REVISIONS[-1]]
     chain = list(reversed(list(script.walk_revisions())))
     assert tuple(revision.revision for revision in chain) == readiness.REVISIONS
-    assert tuple(revision.down_revision for revision in chain) == (None, *readiness.REVISIONS[:-1])
+    assert tuple(revision.down_revision for revision in chain) == (
+        None,
+        *readiness.REVISIONS[:-1],
+    )
 
 
-def test_revision_module_import_loads_no_config_or_database_and_creates_nothing(tmp_path):
+def test_revision_module_import_loads_no_config_or_database_and_creates_nothing(
+    tmp_path,
+):
     root = Path(__file__).resolve().parents[2]
     data = tmp_path / "absent-data"
-    env = dict(os.environ, STOCK_DATA_DIR=str(data), STOCK_DB_PATH=str(data / "stock.db"), STOCK_RAW_DIR=str(data / "raw"), PYTHONDONTWRITEBYTECODE="1")
+    env = dict(
+        os.environ,
+        STOCK_DATA_DIR=str(data),
+        STOCK_DB_PATH=str(data / "stock.db"),
+        STOCK_RAW_DIR=str(data / "raw"),
+        PYTHONDONTWRITEBYTECODE="1",
+    )
     env["PYTHONPATH"] = os.pathsep.join([str(root / "backend"), *sys.path])
     code = (
         "import sys, app.migration_revisions as revisions\n"
@@ -351,9 +487,19 @@ def test_revision_module_import_loads_no_config_or_database_and_creates_nothing(
         "assert not loaded, loaded\n"
         "print(len(revisions.REVISIONS), revisions.REVISIONS[-1])"
     )
-    result = subprocess.run([sys.executable, "-c", code], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        env=env,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.split() == [str(len(readiness.REVISIONS)), readiness.REVISIONS[-1]]
+    assert result.stdout.split() == [
+        str(len(readiness.REVISIONS)),
+        readiness.REVISIONS[-1],
+    ]
     assert not data.exists()
 
 
@@ -363,22 +509,38 @@ def test_revision_module_is_the_single_source_of_every_consumer():
     backend = Path(__file__).resolve().parents[1]
     assert readiness.REVISIONS is migration_revisions.REVISIONS
     assert settlement_identity_migration.REVISIONS == set(migration_revisions.REVISIONS)
-    assert migration_revisions.INSTRUMENT_IDENTITY_REVISIONS == migration_revisions.REVISIONS[1:]
-    assert set(migration_revisions.INSTRUMENT_IDENTITY_REVISIONS) == set(migration_revisions.REVISIONS) - {"0001_schema_v1"}
-    assert "identity_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)" in (backend / "alembic/env.py").read_text(encoding="utf-8")
+    assert (
+        migration_revisions.INSTRUMENT_IDENTITY_REVISIONS
+        == migration_revisions.REVISIONS[1:]
+    )
+    assert set(migration_revisions.INSTRUMENT_IDENTITY_REVISIONS) == set(
+        migration_revisions.REVISIONS
+    ) - {"0001_schema_v1"}
+    assert "identity_revisions = set(INSTRUMENT_IDENTITY_REVISIONS)" in (
+        backend / "alembic/env.py"
+    ).read_text(encoding="utf-8")
     head = migration_revisions.REVISIONS[-1]
     holders = {
         path.relative_to(backend).as_posix()
-        for path in [*backend.glob("app/**/*.py"), *backend.glob("worker/**/*.py"), backend / "alembic/env.py"]
+        for path in [
+            *backend.glob("app/**/*.py"),
+            *backend.glob("worker/**/*.py"),
+            backend / "alembic/env.py",
+        ]
         if head in path.read_text(encoding="utf-8")
     }
     assert "app/migration_revisions.py" in holders
     assert holders <= {"app/migration_revisions.py", "app/migrations.py"}
 
 
-@pytest.mark.parametrize("family, column", [("alembic_version", "version_num"), ("schema_migrations", "version")])
+@pytest.mark.parametrize(
+    "family, column",
+    [("alembic_version", "version_num"), ("schema_migrations", "version")],
+)
 @pytest.mark.parametrize("revision", readiness.REVISIONS)
-def test_instrument_identity_claim_gate_covers_every_revision_but_0001(revision, family, column):
+def test_instrument_identity_claim_gate_covers_every_revision_but_0001(
+    revision, family, column
+):
     from app import instrument_identity_migration
 
     engine = create_engine("sqlite://")
@@ -386,18 +548,26 @@ def test_instrument_identity_claim_gate_covers_every_revision_but_0001(revision,
         connection.exec_driver_sql(f"CREATE TABLE {family}({column} TEXT PRIMARY KEY)")
         connection.exec_driver_sql(f"INSERT INTO {family} VALUES (?)", (revision,))
         if revision == "0001_schema_v1":
-            assert instrument_identity_migration.preflight_instrument_identity(connection) == "absent"
+            assert (
+                instrument_identity_migration.preflight_instrument_identity(connection)
+                == "absent"
+            )
         else:
-            with pytest.raises(RuntimeError, match="revision requires current identity"):
+            with pytest.raises(
+                RuntimeError, match="revision requires current identity"
+            ):
                 instrument_identity_migration.preflight_instrument_identity(connection)
     engine.dispose()
 
 
-@pytest.mark.parametrize("ddl", [
-    'CREATE UNIQUE INDEX "ix_ingestion_runs_request_key" ON "ingestion_runs" ("request_key") WHERE "request_key" IS NOT NULL',
-    'create unique index ix_ingestion_runs_request_key on ingestion_runs(request_key) where request_key is not null',
-    'CREATE\nUNIQUE INDEX "ix_ingestion_runs_request_key" ON ingestion_runs ( request_key )\nWHERE "request_key" IS NOT NULL',
-])
+@pytest.mark.parametrize(
+    "ddl",
+    [
+        'CREATE UNIQUE INDEX "ix_ingestion_runs_request_key" ON "ingestion_runs" ("request_key") WHERE "request_key" IS NOT NULL',
+        "create unique index ix_ingestion_runs_request_key on ingestion_runs(request_key) where request_key is not null",
+        'CREATE\nUNIQUE INDEX "ix_ingestion_runs_request_key" ON ingestion_runs ( request_key )\nWHERE "request_key" IS NOT NULL',
+    ],
+)
 def test_known_legacy_partial_unique_is_accepted(ready_db, ddl):
     with sqlite3.connect(ready_db) as connection:
         connection.execute("DROP INDEX ix_ingestion_runs_request_key")
@@ -405,16 +575,19 @@ def test_known_legacy_partial_unique_is_accepted(ready_db, ddl):
     check_unchanged(ready_db)
 
 
-@pytest.mark.parametrize("tail", [
-    'ON ingestion_runs(request_key) WHERE request_key IS NULL',
-    'ON ingestion_runs(request_key) WHERE request_key IS NOT NULL AND request_key != \'excluded\'',
-    'ON ingestion_runs(request_key) WHERE request_key IS NOT NULL OR id > 0',
-    'ON ingestion_runs(request_key) WHERE request_key != \'excluded\'',
-    'ON ingestion_runs(request_key) WHERE id > 0 /* WHERE request_key IS NOT NULL */',
-    'ON ingestion_runs(request_key) WHERE request_key = \'WHERE request_key IS NOT NULL\'',
-    'ON ingestion_runs(source) WHERE request_key IS NOT NULL',
-    'ON raw_payloads(source) WHERE source IS NOT NULL',
-])
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "ON ingestion_runs(request_key) WHERE request_key IS NULL",
+        "ON ingestion_runs(request_key) WHERE request_key IS NOT NULL AND request_key != 'excluded'",
+        "ON ingestion_runs(request_key) WHERE request_key IS NOT NULL OR id > 0",
+        "ON ingestion_runs(request_key) WHERE request_key != 'excluded'",
+        "ON ingestion_runs(request_key) WHERE id > 0 /* WHERE request_key IS NOT NULL */",
+        "ON ingestion_runs(request_key) WHERE request_key = 'WHERE request_key IS NOT NULL'",
+        "ON ingestion_runs(source) WHERE request_key IS NOT NULL",
+        "ON raw_payloads(source) WHERE source IS NOT NULL",
+    ],
+)
 def test_partial_unique_spoofs_are_rejected(ready_db, tail):
     with sqlite3.connect(ready_db) as connection:
         connection.execute("DROP INDEX ix_ingestion_runs_request_key")
@@ -427,8 +600,13 @@ def test_known_partial_and_full_unique_enforce_nonnull_keys(tmp_path, partial):
     path = tmp_path / "unique-semantics.db"
     with sqlite3.connect(path) as connection:
         connection.execute("CREATE TABLE ingestion_runs (request_key TEXT)")
-        connection.execute("CREATE UNIQUE INDEX ix_ingestion_runs_request_key ON ingestion_runs(request_key)" + (" WHERE request_key IS NOT NULL" if partial else ""))
+        connection.execute(
+            "CREATE UNIQUE INDEX ix_ingestion_runs_request_key ON ingestion_runs(request_key)"
+            + (" WHERE request_key IS NOT NULL" if partial else "")
+        )
         connection.execute("INSERT INTO ingestion_runs VALUES (NULL), (NULL), ('one')")
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute("INSERT INTO ingestion_runs VALUES ('one')")
-        assert connection.execute("SELECT COUNT(*) FROM ingestion_runs").fetchone() == (3,)
+        assert connection.execute("SELECT COUNT(*) FROM ingestion_runs").fetchone() == (
+            3,
+        )

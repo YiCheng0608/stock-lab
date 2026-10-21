@@ -14,7 +14,9 @@ engine = create_engine(
     f"sqlite:///{DB_PATH.as_posix()}",
     connect_args={"check_same_thread": False},
 )
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+SessionLocal = sessionmaker(
+    bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+)
 
 
 def enable_sqlite_foreign_keys(target_engine: Engine) -> None:

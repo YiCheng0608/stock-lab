@@ -273,7 +273,10 @@ def _theme_ids_for_event(db: Session, event: Event) -> list[str]:
         .where(
             GroupMembership.instrument_id == event.instrument_id,
             GroupMembership.valid_from <= event.event_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= event.event_date)),
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= event.event_date)
+            ),
             ThemeGroup.active.is_(True),
         )
         .order_by(GroupMembership.group_id)
@@ -325,18 +328,24 @@ def _canonical_key(event: Event) -> str:
     return f"official-event:{digest}"
 
 
-def _content_hash(event: Event, instrument: Instrument | None, theme_ids: list[str]) -> str:
+def _content_hash(
+    event: Event, instrument: Instrument | None, theme_ids: list[str]
+) -> str:
     payload = {
         "source": event.source,
         "event_date": event.event_date.isoformat(),
         "event_type": event.event_type,
         "title": event.title,
         "description": event.description,
-        "instrument": f"{instrument.exchange}:{instrument.symbol}" if instrument else None,
+        "instrument": f"{instrument.exchange}:{instrument.symbol}"
+        if instrument
+        else None,
         "theme_ids": theme_ids,
         "details": event.details_json or {},
     }
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, default=str
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -353,16 +362,24 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
     duplicate/retracted by an operator.
     """
 
-    event_rows = list(events) if events is not None else db.scalars(select(Event).order_by(Event.id)).all()
+    event_rows = (
+        list(events)
+        if events is not None
+        else db.scalars(select(Event).order_by(Event.id)).all()
+    )
     event_rows = [event for event in event_rows if _is_official_event(event)]
     # Projection is called by the dashboard and news feed.  Batch-load the
     # small relational context once so a market-sized event set cannot turn
     # into an N+1 query storm.
-    instrument_ids = {int(event.instrument_id) for event in event_rows if event.instrument_id}
+    instrument_ids = {
+        int(event.instrument_id) for event in event_rows if event.instrument_id
+    }
     instruments_by_id = {
         instrument.id: instrument
         for instrument in (
-            db.scalars(select(Instrument).where(Instrument.id.in_(instrument_ids))).all()
+            db.scalars(
+                select(Instrument).where(Instrument.id.in_(instrument_ids))
+            ).all()
             if instrument_ids
             else []
         )
@@ -378,12 +395,16 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
             )
             .order_by(GroupMembership.instrument_id, GroupMembership.group_id)
         ).all():
-            memberships_by_instrument.setdefault(membership.instrument_id, []).append((membership, group))
+            memberships_by_instrument.setdefault(membership.instrument_id, []).append(
+                (membership, group)
+            )
     canonical_keys = {_canonical_key(event) for event in event_rows}
     items_by_key = {
         item.canonical_key: item
         for item in (
-            db.scalars(select(NewsItem).where(NewsItem.canonical_key.in_(canonical_keys))).all()
+            db.scalars(
+                select(NewsItem).where(NewsItem.canonical_key.in_(canonical_keys))
+            ).all()
             if canonical_keys
             else []
         )
@@ -391,7 +412,9 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
 
     changed = 0
     for event in event_rows:
-        instrument = instruments_by_id.get(event.instrument_id) if event.instrument_id else None
+        instrument = (
+            instruments_by_id.get(event.instrument_id) if event.instrument_id else None
+        )
         theme_ids = _verified_theme_ids_from_rows(
             event,
             instrument,
@@ -468,13 +491,21 @@ def sync_news_from_events(db: Session, events: Iterable[Event] | None = None) ->
         # A time-conflicted MOPS row remains available by id for audit, but it
         # must not create a product association, theme context, or action
         # priority until an operator verifies the chronology.
-        item.symbols_json = [] if time_conflict else ([instrument.symbol] if instrument else [])
+        item.symbols_json = (
+            [] if time_conflict else ([instrument.symbol] if instrument else [])
+        )
         item.theme_ids_json = [] if time_conflict else theme_ids
-        item.impact_scope = "market" if time_conflict else ("instrument" if instrument else "market")
+        item.impact_scope = (
+            "market" if time_conflict else ("instrument" if instrument else "market")
+        )
         item.impact_direction = "unknown"
         item.impact_rationale = None
-        item.impact_method = "time_consistency_conflict" if time_conflict else "default_unknown"
-        item.confidence = "unknown" if time_conflict else ("high" if instrument else "unknown")
+        item.impact_method = (
+            "time_consistency_conflict" if time_conflict else "default_unknown"
+        )
+        item.confidence = (
+            "unknown" if time_conflict else ("high" if instrument else "unknown")
+        )
         item.raw_payload_id = event.raw_payload_id
         item.event_id = event.id
         item.content_hash = _content_hash(event, instrument, theme_ids)

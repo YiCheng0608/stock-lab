@@ -91,7 +91,9 @@ def signal_confidence_semantics(
     if isinstance(evidence, Mapping):
         if strategy_name is None and isinstance(evidence.get("strategy"), str):
             strategy_name = evidence["strategy"]
-        if strategy_version is None and isinstance(evidence.get("strategy_version"), str):
+        if strategy_version is None and isinstance(
+            evidence.get("strategy_version"), str
+        ):
             strategy_version = evidence["strategy_version"]
     legacy_fixed = (
         isinstance(confidence, Real)
@@ -103,7 +105,12 @@ def signal_confidence_semantics(
     )
     if legacy_fixed:
         return dict(LEGACY_SIGNAL_CONFIDENCE_SEMANTICS)
-    return dict(SIGNAL_CONFIDENCE_SEMANTICS if confidence is None else UNKNOWN_SIGNAL_CONFIDENCE_SEMANTICS)
+    return dict(
+        SIGNAL_CONFIDENCE_SEMANTICS
+        if confidence is None
+        else UNKNOWN_SIGNAL_CONFIDENCE_SEMANTICS
+    )
+
 
 ETF_CATEGORIES = frozenset(
     {
@@ -151,7 +158,10 @@ HOT_GROUP_LEGACY_VERSION = "1.0.0"
 HOT_GROUP_VERSION = "1.1.0"
 # Chip-row sources written by the official institutional parsers; a row
 # without one of them carries only margin data.
-OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {"TWSE": "twse_t86", "TPEx": "tpex_3insti"}
+OFFICIAL_INSTITUTIONAL_CHIP_SOURCES: dict[str, str] = {
+    "TWSE": "twse_t86",
+    "TPEx": "tpex_3insti",
+}
 
 HOT_GROUP_CONFIG: dict[str, Any] = {
     "name": "hot_group_v1",
@@ -566,7 +576,13 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
     "required_components": ["technical"],
     "list_size": {"maximum": 20, "minimum_target": 10},
     "max_reasons": 4,
-    "tie_break": ["total_desc", "technical_desc", "chips_desc", "exchange_asc", "symbol_asc"],
+    "tie_break": [
+        "total_desc",
+        "technical_desc",
+        "chips_desc",
+        "exchange_asc",
+        "symbol_asc",
+    ],
 }
 
 
@@ -581,7 +597,11 @@ def weighted_available_mean(
     floor.  Zero-weight items never contribute.
     """
 
-    usable = {key: float(values[key]) for key in weights if weights[key] > 0 and _finite(values.get(key))}
+    usable = {
+        key: float(values[key])
+        for key in weights
+        if weights[key] > 0 and _finite(values.get(key))
+    }
     coverage = sum(weights[key] for key in usable)
     if coverage <= 0:
         return None, 0.0
@@ -604,10 +624,18 @@ class RuleEvaluation:
 
 
 SIGNAL_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
-    "observation": frozenset({"conditional", "data_incomplete", "invalid_levels", "expired"}),
-    "conditional": frozenset({"active", "data_incomplete", "invalid_levels", "expired"}),
-    "active": frozenset({"target_1_hit", "target_2_hit", "invalidated", "expired", "incomparable"}),
-    "target_1_hit": frozenset({"target_2_hit", "invalidated", "expired", "incomparable"}),
+    "observation": frozenset(
+        {"conditional", "data_incomplete", "invalid_levels", "expired"}
+    ),
+    "conditional": frozenset(
+        {"active", "data_incomplete", "invalid_levels", "expired"}
+    ),
+    "active": frozenset(
+        {"target_1_hit", "target_2_hit", "invalidated", "expired", "incomparable"}
+    ),
+    "target_1_hit": frozenset(
+        {"target_2_hit", "invalidated", "expired", "incomparable"}
+    ),
     "target_2_hit": frozenset({"settled"}),
     "invalidated": frozenset({"settled"}),
     "expired": frozenset({"settled"}),
@@ -626,7 +654,11 @@ def _finite(value: object) -> bool:
 
     if type(value) is float:  # same answer, without the slower ABC check
         return math.isfinite(value)
-    return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(float(value))
+    return (
+        isinstance(value, Real)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
 
 
 def _positive(value: object) -> bool:
@@ -653,7 +685,9 @@ def _trailing_positive_history(
     return [float(value) for value in trailing], ()
 
 
-def _required_finite(values: Mapping[str, object]) -> tuple[dict[str, float], tuple[str, ...]]:
+def _required_finite(
+    values: Mapping[str, object],
+) -> tuple[dict[str, float], tuple[str, ...]]:
     parsed: dict[str, float] = {}
     errors: list[str] = []
     for key, value in values.items():
@@ -717,9 +751,17 @@ def validate_signal_levels(
         elif first_target is not None and second_target <= first_target:
             errors.append("target_2_must_exceed_target_1")
 
-    if not _finite(minimum_first_target_risk_reward) or float(minimum_first_target_risk_reward) <= 0:
+    if (
+        not _finite(minimum_first_target_risk_reward)
+        or float(minimum_first_target_risk_reward) <= 0
+    ):
         errors.append("minimum_first_target_risk_reward_must_be_finite_and_positive")
-    elif entry is not None and invalid is not None and first_target is not None and invalid < entry < first_target:
+    elif (
+        entry is not None
+        and invalid is not None
+        and first_target is not None
+        and invalid < entry < first_target
+    ):
         risk_reward = (first_target - entry) / (entry - invalid)
         if risk_reward < float(minimum_first_target_risk_reward):
             errors.append("target_1_risk_reward_below_minimum")
@@ -727,7 +769,9 @@ def validate_signal_levels(
     return ValidationResult(valid=not errors, errors=tuple(errors))
 
 
-def validate_signal_status_transition(current_status: str, next_status: str) -> ValidationResult:
+def validate_signal_status_transition(
+    current_status: str, next_status: str
+) -> ValidationResult:
     """Accept only declared, forward signal-lifecycle transitions.
 
     Idempotent transitions are accepted so a retry can safely persist a state
@@ -738,7 +782,10 @@ def validate_signal_status_transition(current_status: str, next_status: str) -> 
         return ValidationResult(False, ("unsupported_current_status",))
     if next_status not in SIGNAL_STATUS_TRANSITIONS:
         return ValidationResult(False, ("unsupported_next_status",))
-    if current_status == next_status or next_status in SIGNAL_STATUS_TRANSITIONS[current_status]:
+    if (
+        current_status == next_status
+        or next_status in SIGNAL_STATUS_TRANSITIONS[current_status]
+    ):
         return ValidationResult(True)
     return ValidationResult(False, ("illegal_signal_status_transition",))
 
@@ -757,7 +804,9 @@ def group_score_quality(values: Mapping[str, float | None]) -> str:
         for key in GROUP_SCORE_WEIGHTS
         if _finite(values.get(key))
     )
-    minimum_available_weight = float(HOT_GROUP_CONFIG["missing_data"]["minimum_available_weight"])
+    minimum_available_weight = float(
+        HOT_GROUP_CONFIG["missing_data"]["minimum_available_weight"]
+    )
     if available_weight + 1e-12 < minimum_available_weight:
         return "insufficient_data"
     if available_weight < 1.0 - 1e-12:
@@ -783,7 +832,9 @@ def calculate_group_score(values: Mapping[str, float | None]) -> float | None:
         return None
     weight_total = sum(GROUP_SCORE_WEIGHTS[key] for key in usable)
     return round(
-        sum(usable[key] * GROUP_SCORE_WEIGHTS[key] for key in usable) / weight_total * 100,
+        sum(usable[key] * GROUP_SCORE_WEIGHTS[key] for key in usable)
+        / weight_total
+        * 100,
         2,
     )
 
@@ -808,7 +859,10 @@ def instrument_eligibility(
         if etf_category not in ETF_CATEGORIES:
             return False, "unsupported_or_missing_etf_category"
         if etf_category in NON_ACTIONABLE_ETF_CATEGORIES:
-            return False, f"etf_category_excluded_from_actionable_signals:{etf_category}"
+            return (
+                False,
+                f"etf_category_excluded_from_actionable_signals:{etf_category}",
+            )
     if instrument_type != "etf" and etf_category is not None:
         return False, "etf_category_is_only_valid_for_etf"
     if instrument_type == "ipo":
@@ -854,7 +908,9 @@ def evaluate_breakout_v1(
     if missing:
         return RuleEvaluation(False, "data_incomplete", missing)
     if metrics["close"] <= 0 or metrics["volume"] <= 0:
-        return RuleEvaluation(False, "data_incomplete", ("close_or_volume_must_be_positive",))
+        return RuleEvaluation(
+            False, "data_incomplete", ("close_or_volume_must_be_positive",)
+        )
 
     config = STRATEGY_CONFIGS["breakout_v1"]
     failures: list[str] = []
@@ -863,11 +919,22 @@ def evaluate_breakout_v1(
     volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
     if volume_ratio < config["volume"]["minimum_signal_to_average_ratio"]:
         failures.append("volume_ratio_below_1_20")
-    if metrics["group_excess_return_20d"] <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]:
+    if (
+        metrics["group_excess_return_20d"]
+        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
+    ):
         failures.append("group_relative_strength_not_positive")
-    if metrics["institutional_flow_to_turnover_ratio_5d"] < config["confirmations"]["institutional_flow"]["minimum_net_flow_to_turnover_ratio"]:
+    if (
+        metrics["institutional_flow_to_turnover_ratio_5d"]
+        < config["confirmations"]["institutional_flow"][
+            "minimum_net_flow_to_turnover_ratio"
+        ]
+    ):
         failures.append("institutional_flow_materially_adverse")
-    if metrics["margin_balance_change_ratio_5d"] > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]:
+    if (
+        metrics["margin_balance_change_ratio_5d"]
+        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
+    ):
         failures.append("margin_financing_increase_abnormal")
     if failures:
         return RuleEvaluation(False, "rejected", tuple(failures))
@@ -890,7 +957,9 @@ def evaluate_pullback_v1(
 
     config = STRATEGY_CONFIGS["pullback_v1"]
     if not isinstance(bar_count, int) or isinstance(bar_count, bool):
-        return RuleEvaluation(False, "data_incomplete", ("bar_count_missing_or_invalid",))
+        return RuleEvaluation(
+            False, "data_incomplete", ("bar_count_missing_or_invalid",)
+        )
     if bar_count < config["trend"]["minimum_history_trading_days"]:
         return RuleEvaluation(False, "data_incomplete", ("history_under_60_bars",))
 
@@ -912,7 +981,9 @@ def evaluate_pullback_v1(
     if missing:
         return RuleEvaluation(False, "data_incomplete", missing)
     if any(metrics[key] <= 0 for key in ("close", "ma20", "ma60", "volume")):
-        return RuleEvaluation(False, "data_incomplete", ("price_and_volume_inputs_must_be_positive",))
+        return RuleEvaluation(
+            False, "data_incomplete", ("price_and_volume_inputs_must_be_positive",)
+        )
 
     failures: list[str] = []
     if metrics["ma20"] <= metrics["ma60"]:
@@ -921,17 +992,36 @@ def evaluate_pullback_v1(
         failures.append("close_below_ma60")
     close_to_ma20 = metrics["close"] / metrics["ma20"]
     support_zone = config["support_zone"]
-    if not support_zone["minimum_close_to_ma20_ratio"] <= close_to_ma20 <= support_zone["maximum_close_to_ma20_ratio"]:
+    if (
+        not support_zone["minimum_close_to_ma20_ratio"]
+        <= close_to_ma20
+        <= support_zone["maximum_close_to_ma20_ratio"]
+    ):
         failures.append("close_outside_ma20_support_zone")
     volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
     volume_config = config["volume"]
-    if not volume_config["minimum_signal_to_average_ratio"] <= volume_ratio <= volume_config["maximum_signal_to_average_ratio"]:
+    if (
+        not volume_config["minimum_signal_to_average_ratio"]
+        <= volume_ratio
+        <= volume_config["maximum_signal_to_average_ratio"]
+    ):
         failures.append("pullback_volume_ratio_outside_range")
-    if metrics["group_excess_return_20d"] <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]:
+    if (
+        metrics["group_excess_return_20d"]
+        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
+    ):
         failures.append("group_relative_strength_not_positive")
-    if metrics["institutional_flow_to_turnover_ratio_5d"] < config["confirmations"]["institutional_flow"]["minimum_net_flow_to_turnover_ratio"]:
+    if (
+        metrics["institutional_flow_to_turnover_ratio_5d"]
+        < config["confirmations"]["institutional_flow"][
+            "minimum_net_flow_to_turnover_ratio"
+        ]
+    ):
         failures.append("institutional_flow_materially_adverse")
-    if metrics["margin_balance_change_ratio_5d"] > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]:
+    if (
+        metrics["margin_balance_change_ratio_5d"]
+        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
+    ):
         failures.append("margin_financing_increase_abnormal")
     if failures:
         return RuleEvaluation(False, "rejected", tuple(failures))

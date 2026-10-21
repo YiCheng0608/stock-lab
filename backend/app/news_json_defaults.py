@@ -34,7 +34,11 @@ def _normalize_default(value: Any) -> str | None:
     normalized = str(value).strip()
     while normalized.startswith("(") and normalized.endswith(")"):
         normalized = normalized[1:-1].strip()
-    if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in "'\"":
+    if (
+        len(normalized) >= 2
+        and normalized[0] == normalized[-1]
+        and normalized[0] in "'\""
+    ):
         normalized = normalized[1:-1]
     return normalized.replace("''", "'")
 
@@ -87,7 +91,9 @@ def _split_table_definitions(body: str) -> list[str]:
             depth += 1
         elif character == ")":
             if depth == 0:
-                raise RuntimeError("cannot repair news_items: malformed table definition")
+                raise RuntimeError(
+                    "cannot repair news_items: malformed table definition"
+                )
             depth -= 1
         elif character == "," and depth == 0:
             parts.append(body[start:index])
@@ -101,7 +107,7 @@ def _split_table_definitions(body: str) -> list[str]:
 
 def _unquote_identifier(token: str) -> str:
     token = token.strip()
-    if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"`":
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in '"`':
         return token[1:-1].replace(token[0] * 2, token[0])
     if token.startswith("[") and token.endswith("]"):
         return token[1:-1]
@@ -174,19 +180,27 @@ def _replace_self_references(sql: str, temporary_name: str) -> str:
                 while index < len(sql) and sql[index].isspace():
                     index += 1
                 identifier_start = index
-                if index < len(sql) and sql[index] in "\"`[":
+                if index < len(sql) and sql[index] in '"`[':
                     quote = "]" if sql[index] == "[" else sql[index]
                     index += 1
                     while index < len(sql) and sql[index] != quote:
-                        if index + 1 < len(sql) and sql[index] == quote and sql[index + 1] == quote:
+                        if (
+                            index + 1 < len(sql)
+                            and sql[index] == quote
+                            and sql[index + 1] == quote
+                        ):
                             index += 2
                         else:
                             index += 1
                     if index >= len(sql):
-                        raise RuntimeError("cannot repair news_items: malformed FK identifier")
+                        raise RuntimeError(
+                            "cannot repair news_items: malformed FK identifier"
+                        )
                     index += 1
                 else:
-                    while index < len(sql) and (sql[index].isalnum() or sql[index] in "_$."):
+                    while index < len(sql) and (
+                        sql[index].isalnum() or sql[index] in "_$."
+                    ):
                         index += 1
                 identifier = _unquote_identifier(sql[identifier_start:index])
                 if identifier == "news_items":
@@ -230,7 +244,9 @@ def _patched_create_table_sql(table_sql: str, temporary_name: str) -> str:
     return _replace_table_name(rebuilt_sql, "news_items", temporary_name)
 
 
-def _sqlite_master_sql(connection, object_type: str, *, table_name: str) -> list[tuple[str, str]]:
+def _sqlite_master_sql(
+    connection, object_type: str, *, table_name: str
+) -> list[tuple[str, str]]:
     rows = connection.execute(
         text(
             "SELECT name, sql FROM sqlite_master "
@@ -244,7 +260,9 @@ def _sqlite_master_sql(connection, object_type: str, *, table_name: str) -> list
 
 def _assert_no_dependent_views(connection, table_name: str) -> None:
     rows = connection.execute(
-        text("SELECT name, sql FROM sqlite_master WHERE type = 'view' AND sql IS NOT NULL")
+        text(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'view' AND sql IS NOT NULL"
+        )
     ).all()
     for name, sql in rows:
         if re.search(
@@ -297,14 +315,18 @@ def _assert_no_inbound_foreign_keys(connection, table_name: str) -> None:
                 )
 
 
-def _assert_copyable_columns(connection, table_name: str, columns: list[dict[str, Any]]) -> None:
+def _assert_copyable_columns(
+    connection, table_name: str, columns: list[dict[str, Any]]
+) -> None:
     # PRAGMA table_xinfo marks generated/hidden columns.  They cannot be part
     # of the explicit INSERT column list used for byte-preserving copying.
     rows = connection.exec_driver_sql(
         f"PRAGMA table_xinfo({_quote_identifier(table_name)})"
     ).all()
     hidden_by_name = {str(row[1]): int(row[6] or 0) for row in rows if len(row) > 6}
-    unsupported = [column["name"] for column in columns if hidden_by_name.get(column["name"], 0)]
+    unsupported = [
+        column["name"] for column in columns if hidden_by_name.get(column["name"], 0)
+    ]
     if unsupported:
         raise RuntimeError(
             "cannot repair news_items: generated or hidden column(s) cannot "
@@ -336,7 +358,9 @@ def _repair_sqlite_news_defaults(
         )
 
     table_sql = connection.execute(
-        text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'news_items'")
+        text(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'news_items'"
+        )
     ).scalar_one_or_none()
     if not table_sql:
         raise RuntimeError("cannot repair news_items: SQLite table DDL is unavailable")
@@ -369,9 +393,7 @@ def _repair_sqlite_news_defaults(
         # self-FK point at itself, so SQLite can keep foreign_keys=ON while
         # the old table is dropped; creating the temporary table while the
         # old name still exists would make DROP TABLE fail on that FK.
-        connection.exec_driver_sql(
-            f"ALTER TABLE {quoted_table} RENAME TO {quoted_old}"
-        )
+        connection.exec_driver_sql(f"ALTER TABLE {quoted_table} RENAME TO {quoted_old}")
         patched_sql = _patched_create_table_sql(str(table_sql), temporary_name)
         patched_sql = _replace_self_references(patched_sql, temporary_name)
         connection.exec_driver_sql(patched_sql)
@@ -412,7 +434,9 @@ def _repair_sqlite_news_defaults(
             )
 
         if connection.exec_driver_sql("PRAGMA integrity_check").scalar() != "ok":
-            raise RuntimeError("cannot repair news_items: SQLite integrity_check failed")
+            raise RuntimeError(
+                "cannot repair news_items: SQLite integrity_check failed"
+            )
         remaining_violations = _foreign_key_check(connection)
         if remaining_violations:
             raise RuntimeError(
@@ -427,7 +451,9 @@ def _repair_sqlite_news_defaults(
                 f"ROLLBACK TO SAVEPOINT {_quote_identifier(savepoint)}"
             )
         finally:
-            connection.exec_driver_sql(f"RELEASE SAVEPOINT {_quote_identifier(savepoint)}")
+            connection.exec_driver_sql(
+                f"RELEASE SAVEPOINT {_quote_identifier(savepoint)}"
+            )
         raise
 
 
@@ -451,8 +477,7 @@ def ensure_news_json_server_defaults(
     missing = [name for name in _TARGET_COLUMNS if name not in columns]
     if missing:
         raise RuntimeError(
-            "cannot repair news_items: target column(s) missing: "
-            f"{missing}"
+            f"cannot repair news_items: target column(s) missing: {missing}"
         )
     unexpected_defaults = {
         name: _normalize_default(columns[name].get("default"))

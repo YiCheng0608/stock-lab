@@ -21,6 +21,7 @@ A request without Origin and Sec-Fetch-Site (curl, scripts) is a non-browser cal
 Limits: ``--host 0.0.0.0`` or LAN access, IPv6 ``[::1]`` and a Unix socket (no ``scope["server"]`` port) are refused; a front end
 on an origin outside the allow list is refused; a GET is never checked, so a saved-data GET that spends a read budget stays exposed.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,9 @@ CROSS_SITE_VALUES = ("same-site", "cross-site")
 
 def _values(raw_headers, name):
     wanted = name.lower().encode("latin-1")
-    return [bytes(v).decode("latin-1") for k, v in raw_headers if bytes(k).lower() == wanted]
+    return [
+        bytes(v).decode("latin-1") for k, v in raw_headers if bytes(k).lower() == wanted
+    ]
 
 
 def _listen_port(server):
@@ -50,14 +53,22 @@ def refusal(method, raw_headers, server, allowed_origins):
     if method not in GATED_METHODS:
         return None
     port, host = _listen_port(server), _values(raw_headers, "host")
-    if port is None or len(host) != 1 or host[0] not in ("%s:%d" % (name, port) for name in LOCAL_NAMES):
+    if (
+        port is None
+        or len(host) != 1
+        or host[0] not in ("%s:%d" % (name, port) for name in LOCAL_NAMES)
+    ):
         return 403, "host_not_admitted"
     origins = _values(raw_headers, "origin")
-    origin_ok = len(origins) == 1 and (origins[0] in allowed_origins or origins[0] == "http://" + host[0])
+    origin_ok = len(origins) == 1 and (
+        origins[0] in allowed_origins or origins[0] == "http://" + host[0]
+    )
     site = _values(raw_headers, "sec-fetch-site")
     if site:
         kind = site[0].lower() if len(site) == 1 else ""
-        if kind not in SAME_SITE_VALUES and not (kind in CROSS_SITE_VALUES and origin_ok):
+        if kind not in SAME_SITE_VALUES and not (
+            kind in CROSS_SITE_VALUES and origin_ok
+        ):
             return 403, "cross_site_rejected"
     if origins and not origin_ok:
         return 403, "origin_not_admitted"
@@ -72,18 +83,33 @@ class BrowserGate:
     """ASGI middleware: refuse before the wrapped app sees the request; lifespan and websocket scopes pass through."""
 
     def __init__(self, app, *, allowed_origins):
-        self.app, self.allowed_origins, self.refusals = app, frozenset(allowed_origins), {}
+        self.app, self.allowed_origins, self.refusals = (
+            app,
+            frozenset(allowed_origins),
+            {},
+        )
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        refused = refusal(scope["method"], scope["headers"], scope.get("server"), self.allowed_origins)
+        refused = refusal(
+            scope["method"], scope["headers"], scope.get("server"), self.allowed_origins
+        )
         if refused is None:
             return await self.app(scope, receive, send)
         status, reason = refused
         self.refusals[reason] = self.refusals.get(reason, 0) + 1
         body = json.dumps({"reason": reason}, separators=(",", ":")).encode("ascii")
-        await send({"type": "http.response.start", "status": status, "headers": [
-            (b"content-type", b"application/json"), (b"content-length", str(len(body)).encode("ascii")), (b"cache-control", b"no-store")]})
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                    (b"cache-control", b"no-store"),
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": body})
         return None

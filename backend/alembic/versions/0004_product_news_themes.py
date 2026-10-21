@@ -11,7 +11,17 @@ when the application reads or refreshes the official feed.
 from __future__ import annotations
 
 from alembic import op
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, inspect
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+    inspect,
+)
 
 
 revision = "0004_product_news_themes"
@@ -34,7 +44,9 @@ def _add_theme_columns(bind) -> None:
     )
     for name, definition in columns:
         if name not in existing:
-            bind.exec_driver_sql(f'ALTER TABLE "theme_groups" ADD COLUMN "{name}" {definition}')
+            bind.exec_driver_sql(
+                f'ALTER TABLE "theme_groups" ADD COLUMN "{name}" {definition}'
+            )
 
 
 def _create_news_table(bind) -> None:
@@ -46,10 +58,17 @@ def _create_news_table(bind) -> None:
         Column("canonical_key", String(length=300), nullable=False),
         Column("dedupe_cluster_id", String(length=160), nullable=True),
         Column("category", String(length=30), nullable=False, server_default="taiwan"),
-        Column("source_kind", String(length=40), nullable=False, server_default="official_disclosure"),
+        Column(
+            "source_kind",
+            String(length=40),
+            nullable=False,
+            server_default="official_disclosure",
+        ),
         Column("source_name", String(length=120), nullable=False),
         Column("source_url", String(length=800), nullable=True),
-        Column("source_url_kind", String(length=20), nullable=False, server_default="none"),
+        Column(
+            "source_url_kind", String(length=20), nullable=False, server_default="none"
+        ),
         Column("source_item_id", String(length=180), nullable=True),
         Column("title", String(length=300), nullable=False),
         Column("summary", Text, nullable=True),
@@ -59,11 +78,28 @@ def _create_news_table(bind) -> None:
         Column("collected_at", DateTime, nullable=False),
         Column("symbols_json", JSON, nullable=False, server_default="[]"),
         Column("theme_ids_json", JSON, nullable=False, server_default="[]"),
-        Column("impact_scope", String(length=30), nullable=False, server_default="instrument"),
-        Column("impact_direction", String(length=30), nullable=False, server_default="unknown"),
+        Column(
+            "impact_scope",
+            String(length=30),
+            nullable=False,
+            server_default="instrument",
+        ),
+        Column(
+            "impact_direction",
+            String(length=30),
+            nullable=False,
+            server_default="unknown",
+        ),
         Column("impact_rationale", Text, nullable=True),
-        Column("impact_method", String(length=120), nullable=False, server_default="default_unknown"),
-        Column("confidence", String(length=20), nullable=False, server_default="unknown"),
+        Column(
+            "impact_method",
+            String(length=120),
+            nullable=False,
+            server_default="default_unknown",
+        ),
+        Column(
+            "confidence", String(length=20), nullable=False, server_default="unknown"
+        ),
         Column("raw_payload_id", Integer, ForeignKey("raw_payloads.id"), nullable=True),
         Column("event_id", Integer, ForeignKey("events.id"), nullable=True),
         Column("content_hash", String(length=64), nullable=True),
@@ -81,10 +117,14 @@ def upgrade() -> None:
     # remains safe when a partially applied desktop migration already created
     # the table.
     inspector = inspect(bind)
-    unique_names = {
-        constraint.get("name")
-        for constraint in inspector.get_unique_constraints("news_items")
-    } if inspector.has_table("news_items") else set()
+    unique_names = (
+        {
+            constraint.get("name")
+            for constraint in inspector.get_unique_constraints("news_items")
+        }
+        if inspector.has_table("news_items")
+        else set()
+    )
     if "uq_news_canonical_key" not in unique_names:
         bind.exec_driver_sql(
             'CREATE UNIQUE INDEX IF NOT EXISTS "uq_news_canonical_key" '

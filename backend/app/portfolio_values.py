@@ -1,11 +1,14 @@
 """Read legacy Float values without repairing or guessing their provenance."""
+
 from __future__ import annotations
 
 import math
 from typing import Any, Literal
 
 
-def read_portfolio_value(value: Any) -> tuple[float | None, Literal["known", "missing", "invalid"]]:
+def read_portfolio_value(
+    value: Any,
+) -> tuple[float | None, Literal["known", "missing", "invalid"]]:
     if value is None:
         return None, "missing"
     if type(value) not in {int, float}:

@@ -106,14 +106,32 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
                 "rejected": "尚未成立",
                 "data_incomplete": "資料待補",
             }.get(state, "狀態待核實")
-            reason_labels = [display_reason(item, fallback="") for item in reasons.split(",") if item]
-            suffix = "（" + "、".join(item for item in reason_labels if item) + "）" if any(reason_labels) else ""
+            reason_labels = [
+                display_reason(item, fallback="") for item in reasons.split(",") if item
+            ]
+            suffix = (
+                "（" + "、".join(item for item in reason_labels if item) + "）"
+                if any(reason_labels)
+                else ""
+            )
             return f"{strategy}：{state_label}{suffix}"
         if key == "missing":
-            labels = [display_reason(item, fallback="") for item in raw_value.split(",") if item]
-            return "待補資料：" + "、".join(item for item in labels if item) if any(labels) else "必要研究資料尚未齊備"
+            labels = [
+                display_reason(item, fallback="")
+                for item in raw_value.split(",")
+                if item
+            ]
+            return (
+                "待補資料：" + "、".join(item for item in labels if item)
+                if any(labels)
+                else "必要研究資料尚未齊備"
+            )
         if key == "group":
-            return "族群條件待補" if raw_value.casefold() == "missing" else "族群條件已核對"
+            return (
+                "族群條件待補"
+                if raw_value.casefold() == "missing"
+                else "族群條件已核對"
+            )
     if "資料不足" in value:
         return value.replace("資料不足", "資料尚未齊備")
     # A machine-looking token that is not in the allowlist must not be
@@ -130,7 +148,17 @@ def primary_reason(
     missing: list[Any],
     strategy: str | None = None,
 ) -> dict[str, str]:
-    source = missing[0] if action_state == "data_insufficient" and missing else (reasons[0] if reasons else action_state)
+    source = (
+        missing[0]
+        if action_state == "data_insufficient" and missing
+        else (reasons[0] if reasons else action_state)
+    )
     label = display_reason(source)
-    scope = "breakout" if strategy == "breakout_v1" else "pullback" if strategy == "pullback_v1" else "research"
+    scope = (
+        "breakout"
+        if strategy == "breakout_v1"
+        else "pullback"
+        if strategy == "pullback_v1"
+        else "research"
+    )
     return {"label": label, "scope": scope}

@@ -46,14 +46,17 @@ def has_backfill_manifest(db: Session) -> bool:
     any bounded baseline.
     """
 
-    return db.scalar(
-        select(IngestionRun.id)
-        .where(
-            IngestionRun.source == "official",
-            IngestionRun.run_type == "backfill",
+    return (
+        db.scalar(
+            select(IngestionRun.id)
+            .where(
+                IngestionRun.source == "official",
+                IngestionRun.run_type == "backfill",
+            )
+            .limit(1)
         )
-        .limit(1)
-    ) is not None
+        is not None
+    )
 
 
 def _official_run_ids(db: Session) -> set[int]:
@@ -122,7 +125,11 @@ def verified_taiex_sessions(
     query = (
         # Untyped necessary columns avoid unrelated MarketBar DateTime/price
         # processors. RawPayload and its official file gate remain unchanged.
-        select(literal_column("market_bars.trading_date"), literal_column("market_bars.source"), RawPayload)
+        select(
+            literal_column("market_bars.trading_date"),
+            literal_column("market_bars.source"),
+            RawPayload,
+        )
         .select_from(MarketBar)
         .join(Instrument, Instrument.id == MarketBar.instrument_id)
         .outerjoin(RawPayload, RawPayload.id == MarketBar.raw_payload_id)

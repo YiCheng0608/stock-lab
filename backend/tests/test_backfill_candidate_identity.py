@@ -14,7 +14,14 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app import api
 from app.db import Base, enable_sqlite_foreign_keys
-from app.models import Event, GroupDailyScore, Instrument, PortfolioPosition, Signal, ThemeGroup
+from app.models import (
+    Event,
+    GroupDailyScore,
+    Instrument,
+    PortfolioPosition,
+    Signal,
+    ThemeGroup,
+)
 from worker import backfill
 from worker.sources import InstrumentRecord, OfficialBatch
 
@@ -28,23 +35,37 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
         self.addCleanup(self.engine.dispose)
         self.addCleanup(self.db.close)
         self.day = date(2026, 9, 4)
-        specs = [("TWSE", "SAME"), ("TPEx", "SAME"), ("TWSE", "OTHER"),
-                 ("TWSE", "123"), ("TWSE", "None"), ("TWSE", "HELD"),
-                 ("TWSE", "WATCH"), ("TWSE", "EVENT"), ("TWSE", "SIGNAL")]
+        specs = [
+            ("TWSE", "SAME"),
+            ("TPEx", "SAME"),
+            ("TWSE", "OTHER"),
+            ("TWSE", "123"),
+            ("TWSE", "None"),
+            ("TWSE", "HELD"),
+            ("TWSE", "WATCH"),
+            ("TWSE", "EVENT"),
+            ("TWSE", "SIGNAL"),
+        ]
         self.stocks = [Instrument(exchange=e, symbol=s, name=s) for e, s in specs]
         # Deliberately inactive group, missing membership/rank/score and poor
         # quality: collecting missing coverage must not require eligibility.
         self.db.add_all(self.stocks + [ThemeGroup(id="g", name="g", active=False)])
         self.db.flush()
-        self.score = GroupDailyScore(group_id="g", trading_date=self.day, data_quality="missing")
+        self.score = GroupDailyScore(
+            group_id="g", trading_date=self.day, data_quality="missing"
+        )
         self.db.add(self.score)
 
     def typed(self, *indices):
         items = [self.stocks[i] for i in indices]
-        return {"candidate_identity_version": "instrument-id-v1",
-                "candidate_symbols": [item.symbol for item in items],
-                "candidate_instruments": [dict(instrument_id=item.id, exchange=item.exchange,
-                                                symbol=item.symbol) for item in items]}
+        return {
+            "candidate_identity_version": "instrument-id-v1",
+            "candidate_symbols": [item.symbol for item in items],
+            "candidate_instruments": [
+                dict(instrument_id=item.id, exchange=item.exchange, symbol=item.symbol)
+                for item in items
+            ],
+        }
 
     def persist(self, details):
         expected = deepcopy(details)
@@ -53,10 +74,17 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
         self.db.flush()
         self.db.expire_all()
         self.assertEqual(self.score.details_json, expected)
-        if isinstance(expected, dict) and isinstance(expected.get("candidate_instruments"), list):
-            for actual, wanted in zip(self.score.details_json["candidate_instruments"], expected["candidate_instruments"]):
+        if isinstance(expected, dict) and isinstance(
+            expected.get("candidate_instruments"), list
+        ):
+            for actual, wanted in zip(
+                self.score.details_json["candidate_instruments"],
+                expected["candidate_instruments"],
+            ):
                 if isinstance(wanted, dict) and "instrument_id" in wanted:
-                    self.assertIs(type(actual["instrument_id"]), type(wanted["instrument_id"]))
+                    self.assertIs(
+                        type(actual["instrument_id"]), type(wanted["instrument_id"])
+                    )
 
     def check_path(self, expected, scope="candidates", check_api=False):
         self.db.flush()
@@ -68,29 +96,54 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
         plan = backfill._initial_metadata(info, self.day, self.day, [self.day])
         self.assertEqual(plan["target_instruments"], expected)
         self.assertEqual(len(plan["batch_plan"]), 13)
-        self.assertTrue(all(item["requested_dates"] == [self.day.isoformat()]
-                            for item in plan["batch_plan"]))
-        records = [InstrumentRecord(symbol=item.symbol, exchange=item.exchange, name=item.name)
-                   for item in self.stocks]
+        self.assertTrue(
+            all(
+                item["requested_dates"] == [self.day.isoformat()]
+                for item in plan["batch_plan"]
+            )
+        )
+        records = [
+            InstrumentRecord(symbol=item.symbol, exchange=item.exchange, name=item.name)
+            for item in self.stocks
+        ]
         records.append(InstrumentRecord(symbol="TAIEX", exchange="TWSE", name="Index"))
 
         class LocalAdapter:
             def fetch(delegate, start, end):
                 return OfficialBatch(instruments=records)
 
-        batch = backfill._ScopedOfficialAdapter(LocalAdapter(), info["filter_keys"]).fetch(self.day, self.day)
-        self.assertEqual({item.exchange + ":" + item.symbol for item in batch.instruments},
-                         set(expected) | {"TWSE:TAIEX"})
+        batch = backfill._ScopedOfficialAdapter(
+            LocalAdapter(), info["filter_keys"]
+        ).fetch(self.day, self.day)
+        self.assertEqual(
+            {item.exchange + ":" + item.symbol for item in batch.instruments},
+            set(expected) | {"TWSE:TAIEX"},
+        )
         if check_api:
-            report = api.coverage(start_date=self.day, end_date=self.day, scope=scope,
-                                  exchange=None, symbol=None, db=self.db)
+            report = api.coverage(
+                start_date=self.day,
+                end_date=self.day,
+                scope=scope,
+                exchange=None,
+                symbol=None,
+                db=self.db,
+            )
             self.assertEqual(report["scope"], scope)
-            self.assertEqual({item["exchange"] + ":" + item["symbol"]
-                              for item in report["instrument_coverage"]}, set(expected))
+            self.assertEqual(
+                {
+                    item["exchange"] + ":" + item["symbol"]
+                    for item in report["instrument_coverage"]
+                },
+                set(expected),
+            )
 
     def test_typed_exact_markets_and_empty_through_api(self):
-        for indices, expected in [((0,), ["TWSE:SAME"]), ((1,), ["TPEx:SAME"]),
-                                  ((0, 1), ["TWSE:SAME", "TPEx:SAME"]), ((), [])]:
+        for indices, expected in [
+            ((0,), ["TWSE:SAME"]),
+            ((1,), ["TPEx:SAME"]),
+            ((0, 1), ["TWSE:SAME", "TPEx:SAME"]),
+            ((), []),
+        ]:
             with self.subTest(indices=indices):
                 self.persist(self.typed(*indices))
                 self.check_path(expected, check_api=True)
@@ -129,9 +182,14 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
                     bad["candidate_instruments"][1][field] = value
                     self.persist(bad)
                     self.check_path([])
-        for field, value in [("exchange", "TPEx"), ("symbol", "OTHER"),
-                             ("exchange", ""), ("symbol", "  "),
-                             ("exchange", 1), ("symbol", None)]:
+        for field, value in [
+            ("exchange", "TPEx"),
+            ("symbol", "OTHER"),
+            ("exchange", ""),
+            ("symbol", "  "),
+            ("exchange", 1),
+            ("symbol", None),
+        ]:
             with self.subTest(field=field, value=value):
                 bad = self.typed(0, 2)
                 bad["candidate_instruments"][0][field] = value
@@ -141,17 +199,33 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
     def test_malformed_typed_envelopes_never_fall_back(self):
         valid = self.typed(0, 2)
         cases = []
-        for field, value in [("candidate_identity_version", "v2"), ("candidate_identity_version", None),
-                             ("candidate_instruments", None), ("candidate_instruments", {}),
-                             ("candidate_instruments", [None]), ("candidate_symbols", None),
-                             ("candidate_symbols", "SAME"), ("candidate_symbols", [123]),
-                             ("candidate_symbols", [" "]), ("candidate_symbols", ["OTHER", "SAME"]),
-                             ("candidate_symbols", ["SAME"])]:
-            bad = deepcopy(valid); bad[field] = value; cases.append(bad)
+        for field, value in [
+            ("candidate_identity_version", "v2"),
+            ("candidate_identity_version", None),
+            ("candidate_instruments", None),
+            ("candidate_instruments", {}),
+            ("candidate_instruments", [None]),
+            ("candidate_symbols", None),
+            ("candidate_symbols", "SAME"),
+            ("candidate_symbols", [123]),
+            ("candidate_symbols", [" "]),
+            ("candidate_symbols", ["OTHER", "SAME"]),
+            ("candidate_symbols", ["SAME"]),
+        ]:
+            bad = deepcopy(valid)
+            bad[field] = value
+            cases.append(bad)
         for field in valid:
-            bad = deepcopy(valid); del bad[field]; cases.append(bad)
+            bad = deepcopy(valid)
+            del bad[field]
+            cases.append(bad)
         cases += [self.typed(0, 0), self.typed(0, 1, 2, 3, 4)]
-        cases.append({"candidate_identity_version": "instrument-id-v1", "candidate_instruments": []})
+        cases.append(
+            {
+                "candidate_identity_version": "instrument-id-v1",
+                "candidate_instruments": [],
+            }
+        )
         pair_duplicate = self.typed(0, 1)
         pair_duplicate["candidate_instruments"][1]["exchange"] = "TWSE"
         cases.append(pair_duplicate)
@@ -161,10 +235,13 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
                 self.check_path([])
 
     def test_legacy_coercion_duplicates_and_all_active_exchanges(self):
-        for values, expected in [(["SAME", "SAME", " SAME ", "missing"], ["TWSE:SAME", "TPEx:SAME"]),
-                                 (["OTHER"], ["TWSE:OTHER"]),
-                                 ([123, None, ""], ["TWSE:123", "TWSE:None"]),
-                                 ([], []), ("SAME", [])]:
+        for values, expected in [
+            (["SAME", "SAME", " SAME ", "missing"], ["TWSE:SAME", "TPEx:SAME"]),
+            (["OTHER"], ["TWSE:OTHER"]),
+            ([123, None, ""], ["TWSE:123", "TWSE:None"]),
+            ([], []),
+            ("SAME", []),
+        ]:
             with self.subTest(values=values):
                 self.persist({"candidate_symbols": values})
                 self.check_path(expected, check_api=True)
@@ -183,8 +260,13 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
         self.score.trading_date = self.day
         self.db.add(ThemeGroup(id="g2", name="g2"))
         self.db.flush()
-        self.db.add(GroupDailyScore(group_id="g2", trading_date=self.day,
-                                   details_json={"candidate_symbols": ["OTHER"]}))
+        self.db.add(
+            GroupDailyScore(
+                group_id="g2",
+                trading_date=self.day,
+                details_json={"candidate_symbols": ["OTHER"]},
+            )
+        )
         self.check_path(["TWSE:SAME", "TWSE:OTHER"])
         bad = self.typed(0)
         bad["candidate_instruments"][0]["instrument_id"] = 999
@@ -192,16 +274,33 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
         self.check_path(["TWSE:OTHER"])
 
     def test_signal_and_priority_sources_survive_invalid_candidate(self):
-        self.db.add(Signal(signal_key="s", instrument_id=self.stocks[8].id,
-                           signal_date=self.day, status="observation"))
+        self.db.add(
+            Signal(
+                signal_key="s",
+                instrument_id=self.stocks[8].id,
+                signal_date=self.day,
+                status="observation",
+            )
+        )
         self.db.add(PortfolioPosition(instrument_id=self.stocks[5].id, shares=1))
         self.stocks[6].is_watchlisted = True
-        self.db.add(Event(instrument_id=self.stocks[7].id, event_date=self.day,
-                          event_type="fixture", title="fixture"))
-        self.persist({"candidate_identity_version": "bad", "candidate_symbols": ["SAME"]})
+        self.db.add(
+            Event(
+                instrument_id=self.stocks[7].id,
+                event_date=self.day,
+                event_type="fixture",
+                title="fixture",
+            )
+        )
+        self.persist(
+            {"candidate_identity_version": "bad", "candidate_symbols": ["SAME"]}
+        )
         self.check_path(["TWSE:SIGNAL"], check_api=True)
-        self.check_path(["TWSE:SIGNAL", "TWSE:HELD", "TWSE:WATCH", "TWSE:EVENT"],
-                        scope="priority", check_api=True)
+        self.check_path(
+            ["TWSE:SIGNAL", "TWSE:HELD", "TWSE:WATCH", "TWSE:EVENT"],
+            scope="priority",
+            check_api=True,
+        )
 
     def test_collection_does_not_require_decision_type_or_category(self):
         self.stocks[0].instrument_type = "etf"

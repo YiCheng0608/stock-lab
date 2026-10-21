@@ -360,7 +360,9 @@ _TERMS: tuple[dict[str, Any], ...] = (
 )
 
 
-def glossary_terms(q: str | None = None, category: str | None = None) -> list[dict[str, Any]]:
+def glossary_terms(
+    q: str | None = None, category: str | None = None
+) -> list[dict[str, Any]]:
     rows = [dict(term) for term in _TERMS]
     if q and q.strip():
         needle = q.strip().casefold()

@@ -1,4 +1,5 @@
 """Small, offline CI checks; do not import application configuration or data."""
+
 from __future__ import annotations
 
 import argparse
@@ -47,8 +48,15 @@ def change_flags(paths: list[str]) -> dict[str, bool]:
     # Markdown never reaches the product jobs unless a backend test reads it; the repository job checks it.
     product = [p for p in paths if not p.lower().endswith(".md")]
     return {
-        "python": shared or any(p in BACKEND_READ_FILES for p in paths) or any(p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS) or p.endswith(".py") for p in product),
-        "frontend": shared or any(p.startswith(("frontend/", "tools/", "backend/")) for p in product),
+        "python": shared
+        or any(p in BACKEND_READ_FILES for p in paths)
+        or any(
+            p.startswith(("backend/", "tools/") + BACKEND_READ_DIRS)
+            or p.endswith(".py")
+            for p in product
+        ),
+        "frontend": shared
+        or any(p.startswith(("frontend/", "tools/", "backend/")) for p in product),
     }
 
 
@@ -57,8 +65,12 @@ def markdown_errors(path: str, text: str) -> list[str]:
     # remain the local reviewer's responsibility. Ignore fenced code examples.
     prose = re.sub(r"^(`{3,}|~{3,}).*?^\1[^\n]*$", "", text, flags=re.M | re.S)
     errors = []
-    targets = re.findall(r"\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)", prose)
-    targets += re.findall(r"^ {0,3}\[(?!\^)[^\]]+\]:\s*(<[^>]+>|\S+)", prose, flags=re.M)
+    targets = re.findall(
+        r"\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)", prose
+    )
+    targets += re.findall(
+        r"^ {0,3}\[(?!\^)[^\]]+\]:\s*(<[^>]+>|\S+)", prose, flags=re.M
+    )
     for raw in targets:
         link = raw.strip("<>")
         parsed = urlsplit(link)
@@ -76,7 +88,13 @@ def repository_checks(paths: list[str], base: str) -> None:
         subprocess.run(["git", "diff", "--check", base, "HEAD"], cwd=ROOT, check=True)
     for name in paths:
         path = ROOT / name
-        if not path.is_file() or path.suffix.lower() not in {".md", ".py", ".json", ".yaml", ".yml"}:
+        if not path.is_file() or path.suffix.lower() not in {
+            ".md",
+            ".py",
+            ".json",
+            ".yaml",
+            ".yml",
+        }:
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -88,6 +106,7 @@ def repository_checks(paths: list[str], base: str) -> None:
                 json.loads(text)
             elif path.suffix in {".yaml", ".yml"}:
                 import yaml
+
                 yaml.load(text, Loader=yaml.BaseLoader)
             elif path.suffix == ".md":
                 errors.extend(markdown_errors(name, text))
@@ -95,7 +114,9 @@ def repository_checks(paths: list[str], base: str) -> None:
             errors.append(f"{name}: {exc}")
     if errors:
         raise ValueError("\n".join(errors))
-    print(f"Repository checks passed for {len(paths)} changed paths (external links/anchors not checked).")
+    print(
+        f"Repository checks passed for {len(paths)} changed paths (external links/anchors not checked)."
+    )
 
 
 def main() -> None:
@@ -114,9 +135,15 @@ def main() -> None:
         repository_checks(paths, args.base)
     else:
         # Run both so one CI log shows lint and format failures together.
-        failed = [command for command in LINT_COMMANDS if subprocess.run([sys.executable, "-m", *command], cwd=ROOT).returncode]
+        failed = [
+            command
+            for command in LINT_COMMANDS
+            if subprocess.run([sys.executable, "-m", *command], cwd=ROOT).returncode
+        ]
         if failed:
-            raise SystemExit("Failed: " + "; ".join(" ".join(command) for command in failed))
+            raise SystemExit(
+                "Failed: " + "; ".join(" ".join(command) for command in failed)
+            )
 
 
 if __name__ == "__main__":

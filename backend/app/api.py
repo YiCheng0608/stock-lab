@@ -10,12 +10,27 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, StrictInt, StrictStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictInt,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from .config import API_PREFIX, DEFAULT_CORS_ORIGINS, MAX_GROUP_CANDIDATES, OFFICIAL_MAX_BACKFILL_DAYS
-from .candidate_view import DEFAULT_LIMIT as CANDIDATES_DEFAULT_LIMIT, MAX_LIMIT as CANDIDATES_MAX_LIMIT
+from .config import (
+    API_PREFIX,
+    DEFAULT_CORS_ORIGINS,
+    MAX_GROUP_CANDIDATES,
+    OFFICIAL_MAX_BACKFILL_DAYS,
+)
+from .candidate_view import (
+    DEFAULT_LIMIT as CANDIDATES_DEFAULT_LIMIT,
+    MAX_LIMIT as CANDIDATES_MAX_LIMIT,
+)
 from .candidate_view import candidate_for_instrument, candidate_list
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
@@ -61,7 +76,10 @@ from .decision import (
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
 from .theme_table import parse_membership_source
-from .theme_suggestions import DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT, MAX_LIMIT as THEME_SUGGESTIONS_MAX_LIMIT
+from .theme_suggestions import (
+    DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT,
+    MAX_LIMIT as THEME_SUGGESTIONS_MAX_LIMIT,
+)
 from .theme_suggestions import suggestion_detail, suggestion_list
 from .news import (
     _is_verified_theme_for_instrument,
@@ -75,8 +93,18 @@ from .product_time import (
 )
 from .portfolio_values import read_portfolio_value
 from .portfolio_quotes import portfolio_quote
-from .units import MAX_SAFE_SHARES, share_quantity_dict, shares_from_position_quantity, trusted_position_shares, volume_exact_text
-from .stock_bars import DEFAULT_LIMIT as BARS_DEFAULT_LIMIT, MAX_LIMIT as BARS_MAX_LIMIT, build_stock_bars
+from .units import (
+    MAX_SAFE_SHARES,
+    share_quantity_dict,
+    shares_from_position_quantity,
+    trusted_position_shares,
+    volume_exact_text,
+)
+from .stock_bars import (
+    DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
+    MAX_LIMIT as BARS_MAX_LIMIT,
+    build_stock_bars,
+)
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -99,18 +127,19 @@ def _paginate_query(
     page_size: int,
     order_by: tuple[Any, ...],
 ) -> tuple[list[Any], int]:
-    total = db.scalar(
-        select(func.count()).select_from(query.order_by(None).subquery())
-    ) or 0
+    total = (
+        db.scalar(select(func.count()).select_from(query.order_by(None).subquery()))
+        or 0
+    )
     rows = db.scalars(
-        query.order_by(*order_by)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        query.order_by(*order_by).offset((page - 1) * page_size).limit(page_size)
     ).all()
     return rows, int(total)
 
 
-def _page_response(items: list[dict[str, Any]], *, page: int, page_size: int, total: int) -> dict[str, Any]:
+def _page_response(
+    items: list[dict[str, Any]], *, page: int, page_size: int, total: int
+) -> dict[str, Any]:
     total_pages = (total + page_size - 1) // page_size if total else 0
     return {
         "items": items,
@@ -291,11 +320,16 @@ def evaluation_dict(item: SignalEvaluation) -> dict[str, Any]:
 
 def latest_run(db: Session) -> IngestionRun | None:
     return db.scalar(
-        select(IngestionRun).where(
+        select(IngestionRun)
+        .where(
             IngestionRun.run_type == "collect",
             IngestionRun.source == "official",
         )
-        .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.started_at), desc(IngestionRun.id))
+        .order_by(
+            desc(IngestionRun.updated_at),
+            desc(IngestionRun.started_at),
+            desc(IngestionRun.id),
+        )
         .limit(1)
     )
 
@@ -337,62 +371,119 @@ def _candidate_symbols(score: GroupDailyScore | None) -> list[str]:
     symbols = _score_details(score).get("candidate_symbols")
     # Retain ordered display text, including repeated symbols across markets.
     # Malformed JSON is not coerced into a new symbol or a renderable object.
-    return [symbol for symbol in symbols if type(symbol) is str and symbol.strip()] if isinstance(symbols, list) else []
+    return (
+        [symbol for symbol in symbols if type(symbol) is str and symbol.strip()]
+        if isinstance(symbols, list)
+        else []
+    )
 
 
-def _public_candidate_identity(db: Session | None, group: ThemeGroup, score: GroupDailyScore | None) -> dict[str, Any]:
+def _public_candidate_identity(
+    db: Session | None, group: ThemeGroup, score: GroupDailyScore | None
+) -> dict[str, Any]:
     """Verify the whole source-day envelope; never infer legacy identities.
 
     This is a historical display projection, not current action eligibility.
     Status/type/category are current metadata; only membership dates have
     historical bounds. IDs are strings on the public JSON/JavaScript boundary.
     """
-    empty = {"public_candidate_identity_version": "instrument-id-string-v1", "candidate_instruments": []}
+    empty = {
+        "public_candidate_identity_version": "instrument-id-string-v1",
+        "candidate_instruments": [],
+    }
     details = _score_details(score)
-    symbols, candidates = details.get("candidate_symbols"), details.get("candidate_instruments")
-    if (db is None or not score or score.group_id != group.id or not score.trading_date
-            or details.get("candidate_identity_version") != "instrument-id-v1"
-            or not isinstance(symbols, list) or not isinstance(candidates, list)
-            or len(candidates) > MAX_GROUP_CANDIDATES or len(symbols) != len(candidates)
-            or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)):
+    symbols, candidates = (
+        details.get("candidate_symbols"),
+        details.get("candidate_instruments"),
+    )
+    if (
+        db is None
+        or not score
+        or score.group_id != group.id
+        or not score.trading_date
+        or details.get("candidate_identity_version") != "instrument-id-v1"
+        or not isinstance(symbols, list)
+        or not isinstance(candidates, list)
+        or len(candidates) > MAX_GROUP_CANDIDATES
+        or len(symbols) != len(candidates)
+        or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)
+    ):
         return empty
     ids, pairs = set(), set()
     for candidate in candidates:
         if not isinstance(candidate, dict):
             return empty
-        item_id, exchange, symbol = (candidate.get(key) for key in ("instrument_id", "exchange", "symbol"))
-        if (type(item_id) is not int or not 0 < item_id <= 9223372036854775807
-                or type(exchange) is not str or not exchange.strip()
-                or type(symbol) is not str or not symbol.strip()
-                or item_id in ids or (exchange, symbol) in pairs):
+        item_id, exchange, symbol = (
+            candidate.get(key) for key in ("instrument_id", "exchange", "symbol")
+        )
+        if (
+            type(item_id) is not int
+            or not 0 < item_id <= 9223372036854775807
+            or type(exchange) is not str
+            or not exchange.strip()
+            or type(symbol) is not str
+            or not symbol.strip()
+            or item_id in ids
+            or (exchange, symbol) in pairs
+        ):
             return empty
         ids.add(item_id)
         pairs.add((exchange, symbol))
     if [candidate["symbol"] for candidate in candidates] != symbols or not candidates:
         return empty
     rows = db.execute(
-        select(Instrument.id, Instrument.exchange, Instrument.symbol,
-               Instrument.instrument_type, Instrument.etf_category)
+        select(
+            Instrument.id,
+            Instrument.exchange,
+            Instrument.symbol,
+            Instrument.instrument_type,
+            Instrument.etf_category,
+        )
         .join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
-        .where(Instrument.id.in_(ids), GroupMembership.group_id == group.id,
-               GroupMembership.valid_from <= score.trading_date,
-               (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= score.trading_date)))
+        .where(
+            Instrument.id.in_(ids),
+            GroupMembership.group_id == group.id,
+            GroupMembership.valid_from <= score.trading_date,
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= score.trading_date)
+            ),
+        )
     ).all()
-    etf_group = group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    etf_group = (
+        group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower()
+    )
     source_members = {
-        item_id: (exchange, symbol) for item_id, exchange, symbol, kind, category in rows
-        if ((kind == "etf" and category in ETF_CATEGORIES) if etf_group else kind in {"stock", "ipo"})
+        item_id: (exchange, symbol)
+        for item_id, exchange, symbol, kind, category in rows
+        if (
+            (kind == "etf" and category in ETF_CATEGORIES)
+            if etf_group
+            else kind in {"stock", "ipo"}
+        )
     }
-    if any(source_members.get(candidate["instrument_id"]) != (candidate["exchange"], candidate["symbol"])
-           for candidate in candidates):
-        return empty
-    return {**empty, "candidate_instruments": [
-        {"instrument_id": str(candidate["instrument_id"]), "exchange": candidate["exchange"], "symbol": candidate["symbol"]}
+    if any(
+        source_members.get(candidate["instrument_id"])
+        != (candidate["exchange"], candidate["symbol"])
         for candidate in candidates
-    ]}
+    ):
+        return empty
+    return {
+        **empty,
+        "candidate_instruments": [
+            {
+                "instrument_id": str(candidate["instrument_id"]),
+                "exchange": candidate["exchange"],
+                "symbol": candidate["symbol"],
+            }
+            for candidate in candidates
+        ],
+    }
 
 
-def score_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
+def score_dict(
+    group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None
+) -> dict[str, Any]:
     if not score:
         return {
             "group_id": group.id,
@@ -468,7 +559,9 @@ def _theme_qualified(group: ThemeGroup, score: GroupDailyScore | None) -> bool:
     )
 
 
-def _product_group_taxonomy_statuses(db: Session, as_of: date | None) -> dict[str, bool]:
+def _product_group_taxonomy_statuses(
+    db: Session, as_of: date | None
+) -> dict[str, bool]:
     """Batch-compute official group validity for one product cutoff."""
 
     key = as_of.isoformat() if as_of else "none"
@@ -482,10 +575,7 @@ def _product_group_taxonomy_statuses(db: Session, as_of: date | None) -> dict[st
             ThemeGroup.source.like("%official OpenAPI%"),
         )
     ).all()
-    statuses = {
-        group.id: bool(is_verified_theme(group))
-        for group in official_groups
-    }
+    statuses = {group.id: bool(is_verified_theme(group)) for group in official_groups}
     if official_groups:
         group_ids = list(statuses)
         rows = db.execute(
@@ -495,7 +585,10 @@ def _product_group_taxonomy_statuses(db: Session, as_of: date | None) -> dict[st
             .where(
                 GroupMembership.group_id.in_(group_ids),
                 GroupMembership.valid_from <= effective_date,
-                (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
+                (
+                    GroupMembership.valid_to.is_(None)
+                    | (GroupMembership.valid_to >= effective_date)
+                ),
                 Instrument.status == "active",
             )
         ).all()
@@ -504,7 +597,9 @@ def _product_group_taxonomy_statuses(db: Session, as_of: date | None) -> dict[st
             if "official OpenAPI" not in str(membership.source or ""):
                 continue
             seen_members[group.id] += 1
-            statuses[group.id] = statuses[group.id] and _is_verified_theme_for_instrument(
+            statuses[group.id] = statuses[
+                group.id
+            ] and _is_verified_theme_for_instrument(
                 group,
                 membership,
                 instrument,
@@ -571,7 +666,9 @@ def _stock_group_row(
     }
 
 
-def _theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None) -> list[str]:
+def _theme_missing_reasons(
+    group: ThemeGroup, score: GroupDailyScore | None
+) -> list[str]:
     if not group.active:
         return ["此族群已停用"]
     if not score:
@@ -622,7 +719,9 @@ def _safe_group_description(group: ThemeGroup, score: GroupDailyScore | None) ->
     return "官方族群資料尚未完整。"
 
 
-def _safe_theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None) -> list[str]:
+def _safe_theme_missing_reasons(
+    group: ThemeGroup, score: GroupDailyScore | None
+) -> list[str]:
     if not group.active:
         return ["此族群目前未啟用"]
     if not is_verified_theme(group):
@@ -633,7 +732,9 @@ def _safe_theme_missing_reasons(group: ThemeGroup, score: GroupDailyScore | None
     if score.data_quality != "complete":
         missing.append("族群資料尚未完整")
     if (score.eligible_members or 0) < 3:
-        missing.append(f"目前只有 {score.eligible_members or 0} 檔有效成員，至少需要 3 檔")
+        missing.append(
+            f"目前只有 {score.eligible_members or 0} 檔有效成員，至少需要 3 檔"
+        )
     if score.rank is None:
         missing.append("尚未取得有效排行")
     if _score_details(score).get("benchmark") != "TAIEX":
@@ -654,11 +755,15 @@ def _safe_theme_why_hot(score: GroupDailyScore | None) -> list[str]:
     for field, label in values:
         value = getattr(score, field, None)
         if value is not None:
-            reasons.append(f"{label} {value:.0%}" if field == "breadth" else f"{label} {value:.2%}")
+            reasons.append(
+                f"{label} {value:.0%}" if field == "breadth" else f"{label} {value:.2%}"
+            )
     return reasons[:3]
 
 
-def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
+def theme_product_dict(
+    group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None
+) -> dict[str, Any]:
     details = _score_details(score)
     qualified = _theme_qualified(group, score)
     metrics = {
@@ -673,7 +778,8 @@ def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Ses
         "theme_id": group.id,
         "display_name": _group_display_name(group),
         "description": _safe_group_description(group, score),
-        "category": group.display_category or ("ETF" if group.group_type == "etf" else "股票族群"),
+        "category": group.display_category
+        or ("ETF" if group.group_type == "etf" else "股票族群"),
         "name_status": group.name_status,
         "qualified": qualified,
         "score": score.score if score else None,
@@ -684,7 +790,9 @@ def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Ses
         "minimum_members": 3,
         "metrics": metrics,
         "why_hot": _safe_theme_why_hot(score) if qualified else [],
-        "missing_reasons": [] if qualified else _safe_theme_missing_reasons(group, score),
+        "missing_reasons": []
+        if qualified
+        else _safe_theme_missing_reasons(group, score),
         "candidate_symbols": _candidate_symbols(score) if qualified else [],
         **_public_candidate_identity(db, group, score if qualified else None),
         "benchmark": details.get("benchmark") if score else None,
@@ -695,7 +803,9 @@ def theme_product_dict(group: ThemeGroup, score: GroupDailyScore | None, db: Ses
 
 
 def _encode_cursor(offset: int) -> str:
-    raw = json.dumps({"offset": max(0, int(offset))}, separators=(",", ":")).encode("utf-8")
+    raw = json.dumps({"offset": max(0, int(offset))}, separators=(",", ":")).encode(
+        "utf-8"
+    )
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
@@ -788,7 +898,13 @@ def _news_order_by() -> tuple[Any, ...]:
     )
 
 
-_NEWS_TIME_BASIS_RANK = {"published": 4, "event": 3, "event_date": 2, "collected": 1, "unverified": 0}
+_NEWS_TIME_BASIS_RANK = {
+    "published": 4,
+    "event": 3,
+    "event_date": 2,
+    "collected": 1,
+    "unverified": 0,
+}
 _NEWS_TIME_PRECISION_RANK = {"datetime": 2, "date": 1, "none": 0}
 
 
@@ -863,7 +979,9 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
         if not isinstance(payload, dict):
             raise ValueError
         display_time = payload.get("display_time")
-        parsed_time = datetime.fromisoformat(display_time) if display_time else datetime.min
+        parsed_time = (
+            datetime.fromisoformat(display_time) if display_time else datetime.min
+        )
         if parsed_time.tzinfo is not None:
             parsed_time = parsed_time.replace(tzinfo=None)
         time_basis = str(payload["time_basis"])
@@ -872,7 +990,11 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
         if not isinstance(canonical_key, str):
             raise ValueError
         item_id = int(payload["id"])
-        if time_basis not in _NEWS_TIME_BASIS_RANK or time_precision not in _NEWS_TIME_PRECISION_RANK or item_id < 1:
+        if (
+            time_basis not in _NEWS_TIME_BASIS_RANK
+            or time_precision not in _NEWS_TIME_PRECISION_RANK
+            or item_id < 1
+        ):
             raise ValueError
         return (
             parsed_time,
@@ -881,11 +1003,20 @@ def _decode_news_cursor(cursor: str | None) -> tuple[Any, ...] | None:
             canonical_key,
             item_id,
         )
-    except (ValueError, KeyError, TypeError, json.JSONDecodeError, binascii.Error, UnicodeDecodeError):
+    except (
+        ValueError,
+        KeyError,
+        TypeError,
+        json.JSONDecodeError,
+        binascii.Error,
+        UnicodeDecodeError,
+    ):
         raise HTTPException(status_code=400, detail="invalid cursor")
 
 
-def _news_theme_ids(db: Session, item: NewsItem, event: Event | None = None) -> list[str]:
+def _news_theme_ids(
+    db: Session, item: NewsItem, event: Event | None = None
+) -> list[str]:
     """Recompute safe themes from current membership, never legacy JSON alone."""
 
     if getattr(item, "time_consistency", None) == "conflict":
@@ -923,14 +1054,18 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
         for row in latest.values()
         for candidate in row.ai_symbol_candidates_json or []
     } - {""}
-    names = {
-        (exchange, symbol): name
-        for exchange, symbol, name in db.execute(
-            select(Instrument.exchange, Instrument.symbol, Instrument.name).where(
-                Instrument.symbol.in_(codes)
-            )
-        ).all()
-    } if codes else {}
+    names = (
+        {
+            (exchange, symbol): name
+            for exchange, symbol, name in db.execute(
+                select(Instrument.exchange, Instrument.symbol, Instrument.name).where(
+                    Instrument.symbol.in_(codes)
+                )
+            ).all()
+        }
+        if codes
+        else {}
+    )
     result: dict[int, dict[str, Any]] = {}
     for news_id, row in latest.items():
         symbol_candidates = []
@@ -1010,7 +1145,9 @@ def news_dict(
     for theme_id in verified_theme_ids:
         group = db.get(ThemeGroup, theme_id)
         if is_verified_theme(group):
-            themes.append({"theme_id": group.id, "display_name": _group_display_name(group)})
+            themes.append(
+                {"theme_id": group.id, "display_name": _group_display_name(group)}
+            )
     related_instruments: list[dict[str, str]] = []
     if event and event.instrument_id and time_consistency != "conflict":
         instrument = db.get(Instrument, event.instrument_id)
@@ -1026,14 +1163,28 @@ def news_dict(
         # Media items store rule relations as ``exchange:symbol``.
         for value in item.symbols_json or []:
             exchange, _, symbol = str(value).partition(":")
-            instrument = db.scalar(
-                select(Instrument).where(Instrument.exchange == exchange, Instrument.symbol == symbol)
-            ) if symbol else None
+            instrument = (
+                db.scalar(
+                    select(Instrument).where(
+                        Instrument.exchange == exchange, Instrument.symbol == symbol
+                    )
+                )
+                if symbol
+                else None
+            )
             if instrument:
                 related_instruments.append(
-                    {"exchange": instrument.exchange, "symbol": instrument.symbol, "name": instrument.name}
+                    {
+                        "exchange": instrument.exchange,
+                        "symbol": instrument.symbol,
+                        "name": instrument.name,
+                    }
                 )
-    raw_payload = db.get(RawPayload, item.raw_payload_id) if event is None and item.raw_payload_id else None
+    raw_payload = (
+        db.get(RawPayload, item.raw_payload_id)
+        if event is None and item.raw_payload_id
+        else None
+    )
     return {
         "id": str(item.id),
         "canonical_key": item.canonical_key,
@@ -1054,9 +1205,13 @@ def news_dict(
         "language": item.language,
         "published_at": as_datetime(_utc_aware(item.published_at)),
         "event_at": as_datetime(_utc_aware(item.event_at)),
-        "event_date": as_date(getattr(item, "event_date", None) or (event.event_date if event else None)),
+        "event_date": as_date(
+            getattr(item, "event_date", None) or (event.event_date if event else None)
+        ),
         # A date-precision display_time is a midnight placeholder, not an instant.
-        "display_time": as_datetime(_utc_aware(display_time) if time_precision == "datetime" else display_time),
+        "display_time": as_datetime(
+            _utc_aware(display_time) if time_precision == "datetime" else display_time
+        ),
         "time_basis": time_basis,
         "time_precision": time_precision,
         "time_consistency": time_consistency,
@@ -1084,18 +1239,30 @@ def news_dict(
         "provenance": {
             "event_id": item.event_id,
             "raw_payload_id": item.raw_payload_id,
-            "endpoint": event.endpoint if event else (raw_payload.endpoint if raw_payload else None),
-            "data_as_of": event.data_as_of if event else (raw_payload.data_as_of if raw_payload else None),
+            "endpoint": event.endpoint
+            if event
+            else (raw_payload.endpoint if raw_payload else None),
+            "data_as_of": event.data_as_of
+            if event
+            else (raw_payload.data_as_of if raw_payload else None),
         },
     }
 
 
-_NEWS_SORT_DESCRIPTION = "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc"
+_NEWS_SORT_DESCRIPTION = (
+    "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc"
+)
 
 
-def signal_dict(db: Session, item: Signal, *, include_evidence: bool = True) -> dict[str, Any]:
+def signal_dict(
+    db: Session, item: Signal, *, include_evidence: bool = True
+) -> dict[str, Any]:
     instrument = db.get(Instrument, item.instrument_id)
-    strategy = db.get(StrategyVersion, item.strategy_version_id) if item.strategy_version_id else None
+    strategy = (
+        db.get(StrategyVersion, item.strategy_version_id)
+        if item.strategy_version_id
+        else None
+    )
     evidence = item.rule_evidence_json or {}
     level_semantics = build_level_semantics(
         strategy_name=strategy.name if strategy else None,
@@ -1212,11 +1379,15 @@ def compact_action_summary(item: dict[str, Any]) -> dict[str, Any]:
     payload = {key: item.get(key) for key in _ACTION_LIST_FIELDS if key in item}
     payload["reasons"] = list(payload.get("reasons") or [])[:3]
     payload["display_reasons"] = list(payload.get("display_reasons") or [])[:3]
-    payload["missing_data_priority"] = list(payload.get("missing_data_priority") or [])[:4]
+    payload["missing_data_priority"] = list(payload.get("missing_data_priority") or [])[
+        :4
+    ]
     return payload
 
 
-def compact_group_summary(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
+def compact_group_summary(
+    group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None
+) -> dict[str, Any]:
     """Keep the compatibility dashboard group field lightweight."""
 
     payload = score_dict(group, score, db)
@@ -1226,7 +1397,9 @@ def compact_group_summary(group: ThemeGroup, score: GroupDailyScore | None, db: 
     return payload
 
 
-def compact_theme_summary(group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None) -> dict[str, Any]:
+def compact_theme_summary(
+    group: ThemeGroup, score: GroupDailyScore | None, db: Session | None = None
+) -> dict[str, Any]:
     """Return the dashboard theme card without research-detail methodology."""
 
     payload = theme_product_dict(group, score, db)
@@ -1293,7 +1466,9 @@ def action_candidate_ids(
     if not ordered_ids:
         return [], set(), set()
     instruments = db.scalars(
-        select(Instrument).where(Instrument.id.in_(ordered_ids), Instrument.status == "active")
+        select(Instrument).where(
+            Instrument.id.in_(ordered_ids), Instrument.status == "active"
+        )
     ).all()
     by_id = {item.id: item for item in instruments}
     held_ids, unknown_ids, _recorded_ids = position_holding_ids(db, ordered_ids)
@@ -1306,7 +1481,10 @@ def action_candidate_ids(
                     GroupMembership.group_id == theme_id,
                     GroupMembership.instrument_id.in_(ordered_ids),
                     GroupMembership.valid_from <= effective_date,
-                    (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
+                    (
+                        GroupMembership.valid_to.is_(None)
+                        | (GroupMembership.valid_to >= effective_date)
+                    ),
                 )
             ).all()
         )
@@ -1341,22 +1519,35 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         db.commit()
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     scores = latest_scores(db)
-    group_rows = [compact_group_summary(group, scores.get(group.id), db) for group in groups]
-    group_rows.sort(key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"]))
+    group_rows = [
+        compact_group_summary(group, scores.get(group.id), db) for group in groups
+    ]
+    group_rows.sort(
+        key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"])
+    )
 
-    instruments_count = db.scalar(
-        select(func.count(Instrument.id)).where(Instrument.instrument_type != "index")
-    ) or 0
+    instruments_count = (
+        db.scalar(
+            select(func.count(Instrument.id)).where(
+                Instrument.instrument_type != "index"
+            )
+        )
+        or 0
+    )
     bars_count = db.scalar(select(func.count(MarketBar.id))) or 0
     signal_rows = db.scalars(
         select(Signal).order_by(desc(Signal.signal_date), desc(Signal.id)).limit(8)
     ).all()
-    status_rows = db.execute(select(Signal.status, func.count(Signal.id)).group_by(Signal.status)).all()
+    status_rows = db.execute(
+        select(Signal.status, func.count(Signal.id)).group_by(Signal.status)
+    ).all()
     run = latest_run(db)
     if run:
         mode = "official" if run.status == "success" else "official_partial"
         source_label = "TWSE/TPEx official feeds"
-        scan_scope = "official universe; only rows with complete source data are actionable"
+        scan_scope = (
+            "official universe; only rows with complete source data are actionable"
+        )
         source_label_zh = "TWSE／TPEx 官方資料"
         scan_scope_label = "官方標的範圍；只有資料完整的項目可進入行動摘要"
     else:
@@ -1374,33 +1565,52 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         verified_as_of = None
 
     run, official_as_of = latest_official_as_of(db)
-    product_scores = scores_as_of(db, official_as_of) if run and run.status == "success" else {}
+    product_scores = (
+        scores_as_of(db, official_as_of) if run and run.status == "success" else {}
+    )
     product_themes = [
         compact_theme_summary(group, product_scores.get(group.id), db)
         for group in groups
         if _product_group_taxonomy_verified(db, group, official_as_of)
     ]
-    product_themes.sort(key=lambda item: (not item["qualified"], item["rank"] is None, item["rank"] or 999, item["display_name"]))
+    product_themes.sort(
+        key=lambda item: (
+            not item["qualified"],
+            item["rank"] is None,
+            item["rank"] or 999,
+            item["display_name"],
+        )
+    )
     product_themes = product_themes[:8]
     # Build only the compact first page for the home dashboard.  Full
     # strategies/evidence/coverage are reserved for stock/action detail.
     action_candidate_ids = prioritized_instrument_ids(db, official_as_of)
-    action_rows = build_action_summaries(db, official_as_of, instrument_ids=action_candidate_ids[:8])
+    action_rows = build_action_summaries(
+        db, official_as_of, instrument_ids=action_candidate_ids[:8]
+    )
     product_news = db.scalars(
         select(NewsItem)
         .outerjoin(Event, NewsItem.event_id == Event.id)
         .where(
             NewsItem.status == "active",
-            or_(NewsItem.time_consistency.is_(None), NewsItem.time_consistency != "conflict"),
+            or_(
+                NewsItem.time_consistency.is_(None),
+                NewsItem.time_consistency != "conflict",
+            ),
         )
         .order_by(*_news_order_by())
         .limit(6)
     ).all()
-    actionable = [item for item in action_rows if item["action_state"] not in {"data_insufficient", "no_condition"}]
+    actionable = [
+        item
+        for item in action_rows
+        if item["action_state"] not in {"data_insufficient", "no_condition"}
+    ]
     display_actions = [
         item
         for item in action_rows
-        if item["action_state"] != "data_insufficient" or item.get("held") is True
+        if item["action_state"] != "data_insufficient"
+        or item.get("held") is True
         or item.get("position_quantity_status") == "unknown"
     ]
     return {
@@ -1427,7 +1637,9 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "updated_at": as_datetime(run.updated_at) if run else None,
         },
         "groups": group_rows,
-        "signals": [signal_dict(db, item, include_evidence=False) for item in signal_rows],
+        "signals": [
+            signal_dict(db, item, include_evidence=False) for item in signal_rows
+        ],
         "signal_status_counts": {status: count for status, count in status_rows},
         # Product IA read model.  Legacy fields above remain for compatibility
         # with the Phase 1 research surface.
@@ -1438,15 +1650,24 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         "action_counts": {
             "total": len(action_candidate_ids),
             "actionable": len(actionable),
-            "data_insufficient": sum(item["action_state"] == "data_insufficient" for item in action_rows),
+            "data_insufficient": sum(
+                item["action_state"] == "data_insufficient" for item in action_rows
+            ),
             "held": sum(item.get("held") is True for item in action_rows),
-            "held_unknown": sum(item.get("position_quantity_status") == "unknown" for item in action_rows),
+            "held_unknown": sum(
+                item.get("position_quantity_status") == "unknown"
+                for item in action_rows
+            ),
             "scope": "compact_first_page",
         },
         "empty_states": {
             "news": "尚未接入核准的國際／媒體新聞" if not product_news else None,
-            "themes": "目前沒有同時達到完整資料與至少 3 檔成員的熱門族群" if not any(item["qualified"] for item in product_themes) else None,
-            "actions": "目前沒有資料完整的可執行條件；請查看缺少資料與補齊優先級" if not actionable else None,
+            "themes": "目前沒有同時達到完整資料與至少 3 檔成員的熱門族群"
+            if not any(item["qualified"] for item in product_themes)
+            else None,
+            "actions": "目前沒有資料完整的可執行條件；請查看缺少資料與補齊優先級"
+            if not actionable
+            else None,
         },
     }
 
@@ -1475,7 +1696,10 @@ def news(
     else:
         query = select(NewsItem).where(NewsItem.status == "active")
         query = query.where(
-            or_(NewsItem.time_consistency.is_(None), NewsItem.time_consistency != "conflict")
+            or_(
+                NewsItem.time_consistency.is_(None),
+                NewsItem.time_consistency != "conflict",
+            )
         )
         if time_consistency:
             query = query.where(NewsItem.time_consistency == time_consistency)
@@ -1486,8 +1710,9 @@ def news(
     if impact_direction:
         query = query.where(NewsItem.impact_direction == impact_direction)
     rows = db.scalars(
-        query.outerjoin(Event, NewsItem.event_id == Event.id)
-        .order_by(*_news_order_by())
+        query.outerjoin(Event, NewsItem.event_id == Event.id).order_by(
+            *_news_order_by()
+        )
     ).all()
     needle = q.strip().casefold() if q and q.strip() else None
     symbol_needle = symbol.strip().casefold() if symbol and symbol.strip() else None
@@ -1512,7 +1737,10 @@ def news(
             ).casefold()
             if needle not in haystack:
                 continue
-        if symbol_needle and not any(symbol_needle in str(value).casefold() for value in (item.symbols_json or [])):
+        if symbol_needle and not any(
+            symbol_needle in str(value).casefold()
+            for value in (item.symbols_json or [])
+        ):
             continue
         if theme_id and theme_id not in _news_theme_ids(db, item):
             continue
@@ -1526,7 +1754,9 @@ def news(
     if cursor_key is None:
         after_cursor = filtered
     else:
-        after_cursor = [item for item in filtered if _news_sort_key(db, item) < cursor_key]
+        after_cursor = [
+            item for item in filtered if _news_sort_key(db, item) < cursor_key
+        ]
     page = after_cursor[:limit]
     has_more = len(after_cursor) > len(page)
     run, _as_of = latest_official_as_of(db)
@@ -1535,7 +1765,9 @@ def news(
         "items": [news_dict(db, item, ai_by_id) for item in page],
         "meta": {
             "limit": limit,
-            "next_cursor": _encode_news_cursor(db, page[-1]) if has_more and page else None,
+            "next_cursor": _encode_news_cursor(db, page[-1])
+            if has_more and page
+            else None,
             "has_more": has_more,
             "sort": _NEWS_SORT_DESCRIPTION,
             "data_as_of": run.data_as_of if run else None,
@@ -1556,7 +1788,13 @@ def news_detail(news_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     return news_dict(db, item)
 
 
-BOARD_COMPONENTS = ("relative_return", "breadth", "volume_strength", "institutional_flow", "catalyst")
+BOARD_COMPONENTS = (
+    "relative_return",
+    "breadth",
+    "volume_strength",
+    "institutional_flow",
+    "catalyst",
+)
 BOARD_QUALITIES = ("complete", "partial")
 BOARD_TREND_SESSIONS = 20
 LEGACY_BOARD_ORDER = {"industry": 0, "theme": 1}
@@ -1569,7 +1807,11 @@ BOARD_EMPTY_MESSAGES = {
 
 
 def _finite_or_none(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+    ):
         return None
     return float(value)
 
@@ -1578,7 +1820,9 @@ def _theme_evidence(membership: GroupMembership) -> dict[str, Any]:
     return {"theme_evidence": parse_membership_source(membership.source)}
 
 
-def _board_item(db: Session, group: ThemeGroup, score: GroupDailyScore) -> dict[str, Any]:
+def _board_item(
+    db: Session, group: ThemeGroup, score: GroupDailyScore
+) -> dict[str, Any]:
     details = _score_details(score)
     normalized = details.get("normalized_values")
     normalized = normalized if isinstance(normalized, dict) else {}
@@ -1591,7 +1835,9 @@ def _board_item(db: Session, group: ThemeGroup, score: GroupDailyScore) -> dict[
         "rank": score.rank,
         "score": score.score,
         "quality": score.data_quality,
-        "components": {key: _finite_or_none(normalized.get(key)) for key in BOARD_COMPONENTS},
+        "components": {
+            key: _finite_or_none(normalized.get(key)) for key in BOARD_COMPONENTS
+        },
         "relative_returns": {
             "1d": score.relative_return_1d,
             "5d": score.relative_return_5d,
@@ -1605,7 +1851,9 @@ def _board_item(db: Session, group: ThemeGroup, score: GroupDailyScore) -> dict[
     }
 
 
-def _board_ranking(db: Session, board: str, requested_date: date | None, limit: int) -> dict[str, Any]:
+def _board_ranking(
+    db: Session, board: str, requested_date: date | None, limit: int
+) -> dict[str, Any]:
     """One board's ranked groups for one score date (latest official date by default)."""
 
     run, as_of = latest_official_as_of(db)
@@ -1622,7 +1870,14 @@ def _board_ranking(db: Session, board: str, requested_date: date | None, limit: 
     }
 
     def empty(reason: str) -> dict[str, Any]:
-        return {"items": [], "meta": {**meta, "empty_reason": reason, "empty_message": BOARD_EMPTY_MESSAGES[reason]}}
+        return {
+            "items": [],
+            "meta": {
+                **meta,
+                "empty_reason": reason,
+                "empty_message": BOARD_EMPTY_MESSAGES[reason],
+            },
+        }
 
     board_filter = GroupDailyScore.details_json["board"].as_string() == board
     if run is None or run.status != "success" or as_of is None:
@@ -1631,7 +1886,9 @@ def _board_ranking(db: Session, board: str, requested_date: date | None, limit: 
         score_date = requested_date
     else:
         score_date = db.scalar(
-            select(func.max(GroupDailyScore.trading_date)).where(GroupDailyScore.trading_date <= as_of, board_filter)
+            select(func.max(GroupDailyScore.trading_date)).where(
+                GroupDailyScore.trading_date <= as_of, board_filter
+            )
         )
         if score_date is None:
             return empty("no_board_scores")
@@ -1639,7 +1896,11 @@ def _board_ranking(db: Session, board: str, requested_date: date | None, limit: 
     rows = db.execute(
         select(ThemeGroup, GroupDailyScore)
         .join(GroupDailyScore, GroupDailyScore.group_id == ThemeGroup.id)
-        .where(ThemeGroup.active.is_(True), GroupDailyScore.trading_date == score_date, board_filter)
+        .where(
+            ThemeGroup.active.is_(True),
+            GroupDailyScore.trading_date == score_date,
+            board_filter,
+        )
     ).all()
     if not rows:
         return empty("no_scores_for_date")
@@ -1655,7 +1916,10 @@ def _board_ranking(db: Session, board: str, requested_date: date | None, limit: 
         return empty("no_ranked_groups")
     ranked.sort(key=lambda pair: (pair[1].rank, pair[0].id))
     meta["total"] = len(ranked)
-    return {"items": [_board_item(db, group, score) for group, score in ranked[:limit]], "meta": meta}
+    return {
+        "items": [_board_item(db, group, score) for group, score in ranked[:limit]],
+        "meta": meta,
+    }
 
 
 @router.get("/themes")
@@ -1677,13 +1941,17 @@ def themes(
     score_rows = scores_as_of(db, as_of) if run and run.status == "success" else {}
     rows: list[dict[str, Any]] = []
     board_order: dict[str, int] = {}
-    for group in db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all():
+    for group in db.scalars(
+        select(ThemeGroup).where(ThemeGroup.active.is_(True))
+    ).all():
         if not _product_group_taxonomy_verified(db, group, as_of):
             continue
         score = score_rows.get(group.id)
         item = theme_product_dict(group, score, db)
         # Industry and theme ranks are separate boards: list industries first.
-        board_order[group.id] = LEGACY_BOARD_ORDER.get(_score_details(score).get("board") or _group_board(group), 2)
+        board_order[group.id] = LEGACY_BOARD_ORDER.get(
+            _score_details(score).get("board") or _group_board(group), 2
+        )
         if only_qualified and not item["qualified"]:
             continue
         if leaderboard and item.get("leaderboard") != leaderboard:
@@ -1692,7 +1960,13 @@ def themes(
             needle = q.strip().casefold()
             haystack = " ".join(
                 str(item.get(field) or "")
-                for field in ("theme_id", "display_name", "description", "category", "leaderboard")
+                for field in (
+                    "theme_id",
+                    "display_name",
+                    "description",
+                    "category",
+                    "leaderboard",
+                )
             ).casefold()
             if needle not in haystack:
                 continue
@@ -1730,7 +2004,10 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
     trend_rows = (
         db.scalars(
             select(GroupDailyScore)
-            .where(GroupDailyScore.group_id == theme_id, GroupDailyScore.trading_date <= as_of)
+            .where(
+                GroupDailyScore.group_id == theme_id,
+                GroupDailyScore.trading_date <= as_of,
+            )
             .order_by(desc(GroupDailyScore.trading_date))
             .limit(BOARD_TREND_SESSIONS)
         ).all()
@@ -1744,7 +2021,10 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
         .where(
             GroupMembership.group_id == theme_id,
             GroupMembership.valid_from <= effective_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= effective_date)
+            ),
             Instrument.status == "active",
         )
         .order_by(Instrument.exchange, Instrument.symbol)
@@ -1805,13 +2085,21 @@ def theme_members(
         .where(
             GroupMembership.group_id == theme_id,
             GroupMembership.valid_from <= effective_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= effective_date)
+            ),
             Instrument.status == "active",
         )
     ).all()
     members: list[dict[str, Any]] = []
     for membership, instrument in memberships:
-        if q and q.strip() and q.strip().casefold() not in f"{instrument.symbol} {instrument.name}".casefold():
+        if (
+            q
+            and q.strip()
+            and q.strip().casefold()
+            not in f"{instrument.symbol} {instrument.name}".casefold()
+        ):
             continue
         latest_bar = db.scalar(
             select(MarketBar)
@@ -1834,7 +2122,13 @@ def theme_members(
             }
         )
     if sort == "price":
-        members.sort(key=lambda item: (item["latest_bar"] is None, -(item["latest_bar"]["close"] if item["latest_bar"] else 0), item["symbol"]))
+        members.sort(
+            key=lambda item: (
+                item["latest_bar"] is None,
+                -(item["latest_bar"]["close"] if item["latest_bar"] else 0),
+                item["symbol"],
+            )
+        )
     elif sort == "name":
         members.sort(key=lambda item: (item["name"], item["symbol"]))
     else:
@@ -1842,14 +2136,22 @@ def theme_members(
     total = len(members)
     start = (page - 1) * page_size
     return {
-        "theme": theme_product_dict(group, scores_as_of(db, as_of).get(theme_id) if run and run.status == "success" else None, db),
+        "theme": theme_product_dict(
+            group,
+            scores_as_of(db, as_of).get(theme_id)
+            if run and run.status == "success"
+            else None,
+            db,
+        ),
         **_directory_response(
             members[start : start + page_size],
             page=page,
             page_size=page_size,
             total=total,
             q=q,
-            data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
+            data_as_of=run.data_as_of
+            if run
+            else (as_of.isoformat() if as_of else None),
             sort=sort,
         ),
     }
@@ -1867,10 +2169,14 @@ def stocks(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
-    query = select(Instrument).where(Instrument.status == "active", Instrument.instrument_type != "index")
+    query = select(Instrument).where(
+        Instrument.status == "active", Instrument.instrument_type != "index"
+    )
     if q and q.strip():
         needle = f"%{q.strip()}%"
-        query = query.where(or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle)))
+        query = query.where(
+            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
+        )
     if exchange:
         query = query.where(Instrument.exchange == exchange)
     if instrument_type:
@@ -1879,11 +2185,18 @@ def stocks(
         query = query.where(Instrument.is_watchlisted.is_(True))
     if theme_id:
         effective_date = as_of or date.today()
-        query = query.join(GroupMembership, GroupMembership.instrument_id == Instrument.id).where(
-            GroupMembership.group_id == theme_id,
-            GroupMembership.valid_from <= effective_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= effective_date)),
-        ).distinct()
+        query = (
+            query.join(GroupMembership, GroupMembership.instrument_id == Instrument.id)
+            .where(
+                GroupMembership.group_id == theme_id,
+                GroupMembership.valid_from <= effective_date,
+                (
+                    GroupMembership.valid_to.is_(None)
+                    | (GroupMembership.valid_to >= effective_date)
+                ),
+            )
+            .distinct()
+        )
     rows, total = _paginate_query(
         db,
         query,
@@ -1918,14 +2231,20 @@ def stocks(
     )
 
 
-def _stock_cutoff(db: Session, instrument: Instrument, requested: date | None) -> date | None:
+def _stock_cutoff(
+    db: Session, instrument: Instrument, requested: date | None
+) -> date | None:
     """Default to the latest stored market date; an explicit date is never advanced.
 
     A stock with no prices falls back to the latest date of its other stored records.
     """
     if requested is not None:
         return requested
-    latest_bar = db.scalar(select(func.max(MarketBar.trading_date)).where(MarketBar.instrument_id == instrument.id))
+    latest_bar = db.scalar(
+        select(func.max(MarketBar.trading_date)).where(
+            MarketBar.instrument_id == instrument.id
+        )
+    )
     if latest_bar is not None:
         return latest_bar
     observed = [
@@ -1936,14 +2255,22 @@ def _stock_cutoff(db: Session, instrument: Instrument, requested: date | None) -
             (ChipSnapshot, ChipSnapshot.trading_date),
             (Event, Event.event_date),
             (CorporateAction, CorporateAction.action_date),
-            (FundamentalSnapshot, func.coalesce(FundamentalSnapshot.announcement_date, FundamentalSnapshot.period_end)),
+            (
+                FundamentalSnapshot,
+                func.coalesce(
+                    FundamentalSnapshot.announcement_date,
+                    FundamentalSnapshot.period_end,
+                ),
+            ),
         )
     ]
     return max((day for day in observed if day is not None), default=None)
 
 
 @router.get("/stocks/{exchange}/{symbol}")
-def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+def stock_detail(
+    exchange: str, symbol: str, db: Session = Depends(get_db), as_of: date | None = None
+) -> dict[str, Any]:
     instrument_row = _find_instrument(db, symbol, exchange)
     if not instrument_row:
         raise HTTPException(status_code=404, detail="instrument not found")
@@ -1953,10 +2280,16 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
     payload = instrument_detail(symbol, exchange, db, cutoff or date.min)
     instrument = payload["instrument"]
     instrument_row = db.get(Instrument, instrument["id"])
-    payload["decision_summary"] = build_decision_summary(db, instrument_row, cutoff) if instrument_row and cutoff and cutoff >= date(1, 1, 8) else None
+    payload["decision_summary"] = (
+        build_decision_summary(db, instrument_row, cutoff)
+        if instrument_row and cutoff and cutoff >= date(1, 1, 8)
+        else None
+    )
     if payload["decision_summary"]:
         payload["product_time"] = payload["decision_summary"].get("product_time")
-        payload["response_generated_at"] = payload["decision_summary"].get("response_generated_at")
+        payload["response_generated_at"] = payload["decision_summary"].get(
+            "response_generated_at"
+        )
     payload["coverage"] = (
         payload["decision_summary"].get("coverage")
         if payload.get("decision_summary")
@@ -1969,7 +2302,10 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
             select(NewsItem)
             .where(
                 NewsItem.status == "active",
-                or_(NewsItem.time_consistency.is_(None), NewsItem.time_consistency != "conflict"),
+                or_(
+                    NewsItem.time_consistency.is_(None),
+                    NewsItem.time_consistency != "conflict",
+                ),
                 _news_symbol_filter(instrument_row),
                 _stock_news_cutoff_filter(cutoff),
             )
@@ -1979,12 +2315,19 @@ def stock_detail(exchange: str, symbol: str, db: Session = Depends(get_db), as_o
         ).all()
         news_ai = news_ai_map(db, news_rows)
         payload["news"] = [news_dict(db, item, news_ai) for item in news_rows]
-        payload["news_cutoff"] = {"as_of": cutoff.isoformat() if cutoff else None,
-                                  "filter": "verified_publication_or_event", "limit": 20}
+        payload["news_cutoff"] = {
+            "as_of": cutoff.isoformat() if cutoff else None,
+            "filter": "verified_publication_or_event",
+            "limit": 20,
+        }
     else:
         payload["news"] = []
     # The stock's row in the latest daily candidate list on or before the cutoff.
-    payload["candidate"] = candidate_for_instrument(db, instrument_row.id, cutoff) if instrument_row else None
+    payload["candidate"] = (
+        candidate_for_instrument(db, instrument_row.id, cutoff)
+        if instrument_row
+        else None
+    )
     return payload
 
 
@@ -2001,7 +2344,9 @@ def candidates(
 @router.get("/theme-suggestions")
 def theme_suggestions(
     include_matched: bool = False,
-    limit: int = Query(THEME_SUGGESTIONS_DEFAULT_LIMIT, ge=1, le=THEME_SUGGESTIONS_MAX_LIMIT),
+    limit: int = Query(
+        THEME_SUGGESTIONS_DEFAULT_LIMIT, ge=1, le=THEME_SUGGESTIONS_MAX_LIMIT
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """News theme suggestions awaiting review (LLM inference, never ranked)."""
@@ -2009,7 +2354,9 @@ def theme_suggestions(
 
 
 @router.get("/theme-suggestions/{suggestion_id}")
-def theme_suggestion(suggestion_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+def theme_suggestion(
+    suggestion_id: int, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     item = suggestion_detail(db, suggestion_id)
     if item is None:
         raise HTTPException(status_code=404, detail="theme suggestion not found")
@@ -2025,7 +2372,9 @@ def _news_symbol_filter(instrument: Instrument):
     symbols = cast(NewsItem.symbols_json, String)
     return or_(
         symbols.contains(json.dumps(instrument.symbol), autoescape=True),
-        symbols.contains(json.dumps(f"{instrument.exchange}:{instrument.symbol}"), autoescape=True),
+        symbols.contains(
+            json.dumps(f"{instrument.exchange}:{instrument.symbol}"), autoescape=True
+        ),
     )
 
 
@@ -2037,21 +2386,49 @@ def _stock_news_cutoff_filter(cutoff: date | None):
     """
     if cutoff is None:
         return False
-    last_utc_instant = datetime.combine(cutoff, datetime.max.time()) - timedelta(hours=8)
-    persisted = and_(NewsItem.display_time.is_not(None), NewsItem.time_basis.in_(_NEWS_TIME_BASIS_RANK),
-                     NewsItem.time_precision.in_(_NEWS_TIME_PRECISION_RANK))
+    last_utc_instant = datetime.combine(cutoff, datetime.max.time()) - timedelta(
+        hours=8
+    )
+    persisted = and_(
+        NewsItem.display_time.is_not(None),
+        NewsItem.time_basis.in_(_NEWS_TIME_BASIS_RANK),
+        NewsItem.time_precision.in_(_NEWS_TIME_PRECISION_RANK),
+    )
     event_day = func.coalesce(NewsItem.event_date, Event.event_date)
     original_fallback = or_(
-        and_(NewsItem.published_at.is_not(None), NewsItem.published_at <= last_utc_instant),
-        and_(NewsItem.published_at.is_(None), NewsItem.event_at.is_not(None), NewsItem.event_at <= last_utc_instant),
-        and_(NewsItem.published_at.is_(None), NewsItem.event_at.is_(None), event_day <= cutoff),
+        and_(
+            NewsItem.published_at.is_not(None),
+            NewsItem.published_at <= last_utc_instant,
+        ),
+        and_(
+            NewsItem.published_at.is_(None),
+            NewsItem.event_at.is_not(None),
+            NewsItem.event_at <= last_utc_instant,
+        ),
+        and_(
+            NewsItem.published_at.is_(None),
+            NewsItem.event_at.is_(None),
+            event_day <= cutoff,
+        ),
     )
-    return and_(NewsItem.time_consistency == "verified", or_(
-        and_(persisted, NewsItem.time_basis.in_({"published", "event"}), NewsItem.time_precision == "datetime",
-             NewsItem.display_time <= last_utc_instant),
-        and_(persisted, NewsItem.time_basis == "event_date", NewsItem.time_precision == "date", event_day <= cutoff),
-        and_(~func.coalesce(persisted, False), original_fallback),
-    ))
+    return and_(
+        NewsItem.time_consistency == "verified",
+        or_(
+            and_(
+                persisted,
+                NewsItem.time_basis.in_({"published", "event"}),
+                NewsItem.time_precision == "datetime",
+                NewsItem.display_time <= last_utc_instant,
+            ),
+            and_(
+                persisted,
+                NewsItem.time_basis == "event_date",
+                NewsItem.time_precision == "date",
+                event_day <= cutoff,
+            ),
+            and_(~func.coalesce(persisted, False), original_fallback),
+        ),
+    )
 
 
 @router.get("/stocks/{exchange}/{symbol}/bars")
@@ -2096,13 +2473,32 @@ def actions(
     if state:
         state_rows = build_action_summaries(db, as_of, instrument_ids=filtered_ids)
         state_rows = [item for item in state_rows if item.get("action_state") == state]
-        state_rows.sort(key=lambda item: filtered_ids.index(item["instrument"]["id"]) if item.get("instrument", {}).get("id") in filtered_ids else len(filtered_ids))
+        state_rows.sort(
+            key=lambda item: filtered_ids.index(item["instrument"]["id"])
+            if item.get("instrument", {}).get("id") in filtered_ids
+            else len(filtered_ids)
+        )
         total = len(state_rows)
         page = state_rows[offset : offset + limit]
         held_count = sum(item.get("held") is True for item in state_rows)
-        held_unknown_count = sum(item.get("position_quantity_status") == "unknown" for item in state_rows)
-        actionable_count = sum(item.get("action_state") in {"conditional_entry", "wait_breakout", "wait_pullback", "hold_observe", "reduce_exit", "manual_review"} for item in state_rows)
-        data_insufficient_count = sum(item.get("action_state") == "data_insufficient" for item in state_rows)
+        held_unknown_count = sum(
+            item.get("position_quantity_status") == "unknown" for item in state_rows
+        )
+        actionable_count = sum(
+            item.get("action_state")
+            in {
+                "conditional_entry",
+                "wait_breakout",
+                "wait_pullback",
+                "hold_observe",
+                "reduce_exit",
+                "manual_review",
+            }
+            for item in state_rows
+        )
+        data_insufficient_count = sum(
+            item.get("action_state") == "data_insufficient" for item in state_rows
+        )
     else:
         page_ids = filtered_ids[offset : offset + limit]
         page = build_action_summaries(db, as_of, instrument_ids=page_ids)
@@ -2111,8 +2507,21 @@ def actions(
         total = len(filtered_ids)
         held_count = sum(item_id in held_ids for item_id in filtered_ids)
         held_unknown_count = sum(item_id in unknown_ids for item_id in filtered_ids)
-        actionable_count = sum(item.get("action_state") in {"conditional_entry", "wait_breakout", "wait_pullback", "hold_observe", "reduce_exit", "manual_review"} for item in page)
-        data_insufficient_count = sum(item.get("action_state") == "data_insufficient" for item in page)
+        actionable_count = sum(
+            item.get("action_state")
+            in {
+                "conditional_entry",
+                "wait_breakout",
+                "wait_pullback",
+                "hold_observe",
+                "reduce_exit",
+                "manual_review",
+            }
+            for item in page
+        )
+        data_insufficient_count = sum(
+            item.get("action_state") == "data_insufficient" for item in page
+        )
     return _cursor_response(
         [compact_action_summary(item) for item in page],
         offset=offset,
@@ -2128,13 +2537,17 @@ def actions(
             "data_insufficient": data_insufficient_count,
             "held": held_count,
             "held_unknown": held_unknown_count,
-            "scope": "filtered_results" if state else "page_for_actionable_and_data_insufficient_counts",
+            "scope": "filtered_results"
+            if state
+            else "page_for_actionable_and_data_insufficient_counts",
         },
     }
 
 
 @router.get("/actions/{exchange}/{symbol}")
-def action_detail(exchange: str, symbol: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+def action_detail(
+    exchange: str, symbol: str, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
@@ -2160,13 +2573,16 @@ def system_data_quality(
         query = query.where(DataQuality.entity_type == entity_type)
     if status:
         query = query.where(DataQuality.status == status)
-    rows = db.scalars(query.order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))).all()
+    rows = db.scalars(
+        query.order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
+    ).all()
     needle = q.strip().casefold() if q and q.strip() else None
     if needle:
         rows = [
             row
             for row in rows
-            if needle in f"{row.entity_type} {row.entity_key} {row.status} {row.source or ''}".casefold()
+            if needle
+            in f"{row.entity_type} {row.entity_key} {row.status} {row.source or ''}".casefold()
         ]
     offset = _decode_cursor(cursor)
     page = rows[offset : offset + limit]
@@ -2181,7 +2597,9 @@ def system_data_quality(
 
 
 @router.get("/glossary")
-def glossary(q: str | None = Query(default=None), category: str | None = None) -> dict[str, Any]:
+def glossary(
+    q: str | None = Query(default=None), category: str | None = None
+) -> dict[str, Any]:
     items = glossary_terms(q=q, category=category)
     return {"items": items, "meta": {"version": GLOSSARY_VERSION, "total": len(items)}}
 
@@ -2191,14 +2609,18 @@ def groups(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
     scores = latest_scores(db)
     rows = [
         score_dict(group, scores.get(group.id), db)
-        for group in db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
+        for group in db.scalars(
+            select(ThemeGroup).where(ThemeGroup.active.is_(True))
+        ).all()
     ]
     if q and q.strip():
         needle = q.strip().casefold()
@@ -2210,10 +2632,14 @@ def groups(
                 for field in ("group_id", "name", "group_type", "leaderboard")
             )
         ]
-    rows = sorted(rows, key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"]))
+    rows = sorted(
+        rows, key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"])
+    )
     total = len(rows)
     start = (page - 1) * page_size
-    return _page_response(rows[start : start + page_size], page=page, page_size=page_size, total=total)
+    return _page_response(
+        rows[start : start + page_size], page=page, page_size=page_size, total=total
+    )
 
 
 @router.get("/groups/{group_id}")
@@ -2255,7 +2681,12 @@ def group_detail(group_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
                 "features": latest_feature.features_json if latest_feature else {},
             }
         )
-    members.sort(key=lambda item: (item["latest_bar"] is None, -(item["latest_bar"]["close"] if item["latest_bar"] else 0)))
+    members.sort(
+        key=lambda item: (
+            item["latest_bar"] is None,
+            -(item["latest_bar"]["close"] if item["latest_bar"] else 0),
+        )
+    )
     return {
         "group": score_dict(group, score, db),
         "members": members,
@@ -2271,14 +2702,18 @@ def instruments(
     watchlist_only: bool = False,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
     query = select(Instrument).where(Instrument.status == "active")
     if q and q.strip():
         needle = f"%{q.strip()}%"
-        query = query.where(or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle)))
+        query = query.where(
+            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
+        )
     if instrument_type:
         query = query.where(Instrument.instrument_type == instrument_type)
     if exchange:
@@ -2300,7 +2735,9 @@ def instruments(
     )
 
 
-def _find_instrument(db: Session, symbol: str, exchange: str | None = None) -> Instrument | None:
+def _find_instrument(
+    db: Session, symbol: str, exchange: str | None = None
+) -> Instrument | None:
     query = select(Instrument).where(Instrument.symbol == symbol)
     if exchange:
         query = query.where(Instrument.exchange == exchange)
@@ -2324,7 +2761,9 @@ def _instrument_quality_summary(
         market_missing.append("latest_market_date")
     elif "fixture" in (latest_bar.source or "").casefold():
         market_missing.append("official_market_source")
-    market_status = "complete" if not market_missing else ("partial" if latest_bar else "missing")
+    market_status = (
+        "complete" if not market_missing else ("partial" if latest_bar else "missing")
+    )
     research_status = decision.get("data_quality") or "missing"
     if research_status == "complete":
         research_label = "策略判斷資料完整"
@@ -2336,7 +2775,9 @@ def _instrument_quality_summary(
     return {
         "market": {
             "status": market_status,
-            "label": "當日行情來源完整" if market_status == "complete" else "當日行情來源尚未完整",
+            "label": "當日行情來源完整"
+            if market_status == "complete"
+            else "當日行情來源尚未完整",
             "as_of": as_of.isoformat() if as_of else None,
             "missing_fields": market_missing,
             "source": run.source if run else None,
@@ -2352,13 +2793,18 @@ def _instrument_quality_summary(
     }
 
 
-def _source_action_classification(item: CorporateAction, instrument: Instrument) -> dict[str, Any]:
+def _source_action_classification(
+    item: CorporateAction, instrument: Instrument
+) -> dict[str, Any]:
     """Project local source-field consistency, not event identity or authenticity."""
     details = item.details_json
     raw = details.get("Exdividend") if isinstance(details, Mapping) else None
-    result = {"kind": "unknown", "label": "未知",
-              "raw": {"field": "Exdividend", "value": raw if isinstance(raw, str) else None},
-              "reason": "unsupported_source"}
+    result = {
+        "kind": "unknown",
+        "label": "未知",
+        "raw": {"field": "Exdividend", "value": raw if isinstance(raw, str) else None},
+        "reason": "unsupported_source",
+    }
     if item.source != "twse" or instrument.exchange != "TWSE":
         return result
     if not isinstance(details, Mapping) or not details:
@@ -2377,8 +2823,11 @@ def _source_action_classification(item: CorporateAction, instrument: Instrument)
             return None
 
     parsed_day = roc_date(day)
-    kinds = {"息": ("ex_dividend", "除息"), "權": ("ex_right", "除權"),
-             "權息": ("ex_right_and_dividend", "除權息")}
+    kinds = {
+        "息": ("ex_dividend", "除息"),
+        "權": ("ex_right", "除權"),
+        "權息": ("ex_right_and_dividend", "除權息"),
+    }
     for alias in ("股票代號", "證券代號", "除權息日期", "除權息"):
         value = details.get(alias)
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -2394,65 +2843,104 @@ def _source_action_classification(item: CorporateAction, instrument: Instrument)
             matches = value == code
         if not matches:
             return dict(result, reason="alias_conflict")
-    if code != instrument.symbol or parsed_day is None or parsed_day != item.action_date:
+    if (
+        code != instrument.symbol
+        or parsed_day is None
+        or parsed_day != item.action_date
+    ):
         return dict(result, reason="identity_mismatch")
     if kind not in kinds:
         return dict(result, reason="unknown_raw_value")
-    return dict(result, kind=kinds[kind][0], label=kinds[kind][1], reason="trusted_twse_exact_fields")
+    return dict(
+        result,
+        kind=kinds[kind][0],
+        label=kinds[kind][1],
+        reason="trusted_twse_exact_fields",
+    )
 
 
 @router.get("/instruments/{symbol}")
-def instrument_detail(symbol: str, exchange: str | None = None, db: Session = Depends(get_db), as_of: date | None = None) -> dict[str, Any]:
+def instrument_detail(
+    symbol: str,
+    exchange: str | None = None,
+    db: Session = Depends(get_db),
+    as_of: date | None = None,
+) -> dict[str, Any]:
     instrument = _find_instrument(db, symbol, exchange)
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
     bars = db.scalars(
         select(MarketBar)
-        .where(MarketBar.instrument_id == instrument.id, MarketBar.trading_date <= (as_of or date.max))
+        .where(
+            MarketBar.instrument_id == instrument.id,
+            MarketBar.trading_date <= (as_of or date.max),
+        )
         .order_by(desc(MarketBar.trading_date), desc(MarketBar.id))
         .limit(120)
     ).all()
     feature = db.scalar(
         select(TechnicalFeature)
-        .where(TechnicalFeature.instrument_id == instrument.id, TechnicalFeature.trading_date <= (as_of or date.max))
+        .where(
+            TechnicalFeature.instrument_id == instrument.id,
+            TechnicalFeature.trading_date <= (as_of or date.max),
+        )
         .order_by(desc(TechnicalFeature.trading_date), desc(TechnicalFeature.id))
         .limit(1)
     )
     memberships = db.scalars(
         select(GroupMembership)
-        .where(GroupMembership.instrument_id == instrument.id,
-               GroupMembership.valid_from <= (as_of or date.max),
-               or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of) if as_of else True)
+        .where(
+            GroupMembership.instrument_id == instrument.id,
+            GroupMembership.valid_from <= (as_of or date.max),
+            or_(GroupMembership.valid_to.is_(None), GroupMembership.valid_to >= as_of)
+            if as_of
+            else True,
+        )
         .order_by(GroupMembership.valid_from)
     ).all()
     signals = db.scalars(
         select(Signal)
-        .where(Signal.instrument_id == instrument.id, Signal.signal_date <= (as_of or date.max))
+        .where(
+            Signal.instrument_id == instrument.id,
+            Signal.signal_date <= (as_of or date.max),
+        )
         .order_by(desc(Signal.signal_date), desc(Signal.id))
         .limit(20)
     ).all()
     chips = db.scalars(
         select(ChipSnapshot)
-        .where(ChipSnapshot.instrument_id == instrument.id, ChipSnapshot.trading_date <= (as_of or date.max))
+        .where(
+            ChipSnapshot.instrument_id == instrument.id,
+            ChipSnapshot.trading_date <= (as_of or date.max),
+        )
         .order_by(desc(ChipSnapshot.trading_date), desc(ChipSnapshot.id))
         .limit(120)
     ).all()
     actions = db.scalars(
         select(CorporateAction)
-        .where(CorporateAction.instrument_id == instrument.id, CorporateAction.action_date <= (as_of or date.max))
+        .where(
+            CorporateAction.instrument_id == instrument.id,
+            CorporateAction.action_date <= (as_of or date.max),
+        )
         .order_by(desc(CorporateAction.action_date))
         .limit(50)
     ).all()
     fundamentals = db.scalars(
         select(FundamentalSnapshot)
-        .where(FundamentalSnapshot.instrument_id == instrument.id, FundamentalSnapshot.period_end <= (as_of or date.max),
-               FundamentalSnapshot.announcement_date <= as_of if as_of else True)
+        .where(
+            FundamentalSnapshot.instrument_id == instrument.id,
+            FundamentalSnapshot.period_end <= (as_of or date.max),
+            FundamentalSnapshot.announcement_date <= as_of if as_of else True,
+        )
         .order_by(desc(FundamentalSnapshot.period_end))
         .limit(20)
     ).all()
     events = db.scalars(
         select(Event)
-        .where(Event.instrument_id == instrument.id, Event.event_date <= (as_of or date.max))
+        .where(
+            Event.instrument_id == instrument.id,
+            Event.event_date <= (as_of or date.max),
+        )
         .order_by(desc(Event.event_date), desc(Event.id))
         .limit(50)
     ).all()
@@ -2466,23 +2954,36 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         .order_by(desc(DataQuality.as_of_date), desc(DataQuality.id))
         .limit(10)
     ).all()
-    decision = build_decision_summary(db, instrument, as_of) if as_of is None or as_of >= date(1, 1, 8) else {}
+    decision = (
+        build_decision_summary(db, instrument, as_of)
+        if as_of is None or as_of >= date(1, 1, 8)
+        else {}
+    )
     return {
         "instrument": instrument_dict(instrument),
         "bars": [bar_dict(item) for item in reversed(bars)],
-        "features": feature.features_json if feature and feature.features_json is not None else {},
+        "features": feature.features_json
+        if feature and feature.features_json is not None
+        else {},
         "feature_snapshot": {
             "trading_date": as_date(feature.trading_date),
             "source": feature.source,
             "created_at": as_datetime(feature.created_at),
-        } if feature else None,
-        "groups": [_stock_group_row(db, membership, instrument, as_of) for membership in memberships],
+        }
+        if feature
+        else None,
+        "groups": [
+            _stock_group_row(db, membership, instrument, as_of)
+            for membership in memberships
+        ],
         "chips": [chip_dict(item) for item in reversed(chips)],
         "corporate_actions": [
             {
                 "date": as_date(item.action_date),
                 "type": item.action_type,
-                "source_action_classification": _source_action_classification(item, instrument),
+                "source_action_classification": _source_action_classification(
+                    item, instrument
+                ),
                 "cash_dividend": item.cash_dividend,
                 "stock_dividend_ratio": item.stock_dividend_ratio,
                 "split_ratio": item.split_ratio,
@@ -2523,15 +3024,35 @@ def instrument_detail(symbol: str, exchange: str | None = None, db: Session = De
         "strategy_conditions": {
             "breakout": {
                 "label": "突破條件",
-                "requires": ["20 日前期高點", "20 日前期成交量", "族群相對 TAIEX 的 20 日超額報酬", "5 日法人流向", "5 日融資餘額變化率"],
+                "requires": [
+                    "20 日前期高點",
+                    "20 日前期成交量",
+                    "族群相對 TAIEX 的 20 日超額報酬",
+                    "5 日法人流向",
+                    "5 日融資餘額變化率",
+                ],
                 "source": "系統固定研究規則",
-                "technical": {"rule_label": "突破條件固定版本", "basis_label": "只使用資料日以前的已驗證資料"},
+                "technical": {
+                    "rule_label": "突破條件固定版本",
+                    "basis_label": "只使用資料日以前的已驗證資料",
+                },
             },
             "pullback": {
                 "label": "回踩條件",
-                "requires": ["60 日有效行情日數", "MA20", "MA60", "20 日前期成交量", "族群相對 TAIEX 的 20 日超額報酬", "5 日法人流向", "5 日融資餘額變化率"],
+                "requires": [
+                    "60 日有效行情日數",
+                    "MA20",
+                    "MA60",
+                    "20 日前期成交量",
+                    "族群相對 TAIEX 的 20 日超額報酬",
+                    "5 日法人流向",
+                    "5 日融資餘額變化率",
+                ],
                 "source": "系統固定研究規則",
-                "technical": {"rule_label": "回踩條件固定版本", "basis_label": "只使用資料日以前的已驗證資料"},
+                "technical": {
+                    "rule_label": "回踩條件固定版本",
+                    "basis_label": "只使用資料日以前的已驗證資料",
+                },
             },
         },
         "signals": [signal_dict(db, item) for item in signals],
@@ -2545,7 +3066,9 @@ def signals(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
@@ -2607,7 +3130,9 @@ def events(
     exchange: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
@@ -2644,7 +3169,11 @@ def events(
 
 
 def _tracking_rows(db: Session, signal_key: str | None = None) -> list[dict[str, Any]]:
-    query = select(SignalEvaluation).order_by(desc(SignalEvaluation.session_date), desc(SignalEvaluation.id)).limit(1000)
+    query = (
+        select(SignalEvaluation)
+        .order_by(desc(SignalEvaluation.session_date), desc(SignalEvaluation.id))
+        .limit(1000)
+    )
     evaluations = db.scalars(query).all()
     rows: list[dict[str, Any]] = []
     for evaluation in evaluations:
@@ -2666,14 +3195,18 @@ def _tracking_rows(db: Session, signal_key: str | None = None) -> list[dict[str,
 def tracking(db: Session = Depends(get_db)) -> dict[str, Any]:
     rows = _tracking_rows(db)
     settlements = db.scalars(
-        select(SignalSettlement).order_by(desc(SignalSettlement.settlement_date), desc(SignalSettlement.id)).limit(1000)
+        select(SignalSettlement)
+        .order_by(desc(SignalSettlement.settlement_date), desc(SignalSettlement.id))
+        .limit(1000)
     ).all()
     return {
         "rows": rows,
         "settlements": [
             {
                 **settlement_dict(item),
-                "signal_key": db.get(Signal, item.signal_id).signal_key if db.get(Signal, item.signal_id) else None,
+                "signal_key": db.get(Signal, item.signal_id).signal_key
+                if db.get(Signal, item.signal_id)
+                else None,
             }
             for item in settlements
         ],
@@ -2691,7 +3224,9 @@ def tracking_signal(signal_key: str, db: Session = Depends(get_db)) -> dict[str,
     if not signal:
         raise HTTPException(status_code=404, detail="signal not found")
     settlements = db.scalars(
-        select(SignalSettlement).where(SignalSettlement.signal_id == signal.id).order_by(SignalSettlement.horizon)
+        select(SignalSettlement)
+        .where(SignalSettlement.signal_id == signal.id)
+        .order_by(SignalSettlement.horizon)
     ).all()
     return {
         "signal": signal_dict(db, signal),
@@ -2728,9 +3263,13 @@ class PositionInput(BaseModel):
         # Invalid raw JSON may contain NaN/Infinity, even inside containers.
         # A safe replacement fails the float field without echoing those
         # values into a 422 response or reaching any database mutation.
-        return {"invalid_portfolio_value": "expected a finite nonnegative JSON number or null"}
+        return {
+            "invalid_portfolio_value": "expected a finite nonnegative JSON number or null"
+        }
 
-    @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="before")
+    @field_validator(
+        "shares", "quantity", "quantity_lots", "odd_lot_shares", mode="before"
+    )
     @classmethod
     def json_safe_invalid_quantity(cls, value: Any) -> Any:
         # JSON decoders may admit NaN/Infinity. An invalid JSON-safe object
@@ -2739,7 +3278,9 @@ class PositionInput(BaseModel):
             return {"invalid_nonfinite_quantity": str(value)}
         return value
 
-    @field_validator("shares", "quantity", "quantity_lots", "odd_lot_shares", mode="after")
+    @field_validator(
+        "shares", "quantity", "quantity_lots", "odd_lot_shares", mode="after"
+    )
     @classmethod
     def validate_quantity_value(cls, value: Any) -> Any:
         # Reject malformed quantities before model-level representation checks.
@@ -2766,8 +3307,10 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
     quantity = share_quantity_dict(total) if total is not None else None
     # Numeric compatibility never exposes an unsafe or conflicting raw Float.
     shares = total if total is not None and total <= MAX_SAFE_SHARES else None
-    values = {field: read_portfolio_value(getattr(position, field))
-              for field in ("average_cost", "stop_price", "risk_budget")}
+    values = {
+        field: read_portfolio_value(getattr(position, field))
+        for field in ("average_cost", "stop_price", "risk_budget")
+    }
     average_cost = values["average_cost"][0]
     market_value = unrealized_pnl = None
     if total is None:
@@ -2780,16 +3323,26 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         if market_status == "known":
             try:
                 market_value = price * shares
-                market_status = "local_estimate" if math.isfinite(market_value) else "invalid"
+                market_status = (
+                    "local_estimate" if math.isfinite(market_value) else "invalid"
+                )
             except (OverflowError, TypeError, ValueError):
                 market_status = "invalid"
             if market_status != "local_estimate":
                 market_value = None
         cost_status = values["average_cost"][1]
-        pnl_status = "invalid" if cost_status == "invalid" else "missing" if cost_status == "missing" else market_status
+        pnl_status = (
+            "invalid"
+            if cost_status == "invalid"
+            else "missing"
+            if cost_status == "missing"
+            else market_status
+        )
         if market_status == "local_estimate" and cost_status == "known":
             unrealized_pnl = market_value - average_cost * shares
-            pnl_status = "local_estimate" if math.isfinite(unrealized_pnl) else "invalid"
+            pnl_status = (
+                "local_estimate" if math.isfinite(unrealized_pnl) else "invalid"
+            )
             if pnl_status != "local_estimate":
                 unrealized_pnl = None
     return {
@@ -2800,14 +3353,19 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
         "quantity": quantity,
         "position_quantity_status": "known" if total is not None else "unknown",
         **{field: value for field, (value, _status) in values.items()},
-        "portfolio_value_status": {field: status for field, (_value, status) in values.items()},
+        "portfolio_value_status": {
+            field: status for field, (_value, status) in values.items()
+        },
         "note": position.note,
         "updated_at": as_datetime(position.updated_at),
         "latest_bar": latest_bar,
         "portfolio_quote": quote,
         "market_value": market_value,
         "unrealized_pnl": unrealized_pnl,
-        "valuation_status": {"market_value": market_status, "unrealized_pnl": pnl_status},
+        "valuation_status": {
+            "market_value": market_status,
+            "unrealized_pnl": pnl_status,
+        },
     }
 
 
@@ -2816,14 +3374,20 @@ def portfolio(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
-    query = select(PortfolioPosition).join(Instrument, Instrument.id == PortfolioPosition.instrument_id)
+    query = select(PortfolioPosition).join(
+        Instrument, Instrument.id == PortfolioPosition.instrument_id
+    )
     if q and q.strip():
         needle = f"%{q.strip()}%"
-        query = query.where(or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle)))
+        query = query.where(
+            or_(Instrument.symbol.ilike(needle), Instrument.name.ilike(needle))
+        )
     rows, total = _paginate_query(
         db,
         query,
@@ -2840,11 +3404,19 @@ def portfolio(
 
 
 @router.post("/portfolio")
-def upsert_portfolio(position_input: PositionInput, db: Session = Depends(get_db)) -> dict[str, Any]:
-    instrument = _find_instrument(db, position_input.symbol.strip(), position_input.exchange)
+def upsert_portfolio(
+    position_input: PositionInput, db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    instrument = _find_instrument(
+        db, position_input.symbol.strip(), position_input.exchange
+    )
     if not instrument:
         raise HTTPException(status_code=404, detail="instrument not found")
-    position = db.scalar(select(PortfolioPosition).where(PortfolioPosition.instrument_id == instrument.id))
+    position = db.scalar(
+        select(PortfolioPosition).where(
+            PortfolioPosition.instrument_id == instrument.id
+        )
+    )
     if not position:
         position = PortfolioPosition(instrument_id=instrument.id)
         db.add(position)
@@ -2877,7 +3449,9 @@ def data_quality(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
@@ -2918,7 +3492,9 @@ def raw_payloads(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
@@ -2958,7 +3534,9 @@ def ingestion_runs(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)
@@ -3004,7 +3582,9 @@ def ingestion_runs(
 
 
 @router.get("/backtest/summary")
-def backtest_summary(run_id: int | None = None, db: Session = Depends(get_db)) -> dict[str, Any]:
+def backtest_summary(
+    run_id: int | None = None, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     """Expose technical backtest counts, explicitly separated by universe type."""
 
     return summarize_backtest(db, run_id)
@@ -3076,7 +3656,9 @@ def coverage(
     else:
         resolved_start = resolved_end - timedelta(days=OFFICIAL_MAX_BACKFILL_DAYS)
     if resolved_start > resolved_end:
-        raise HTTPException(status_code=422, detail="start_date must be on or before end_date")
+        raise HTTPException(
+            status_code=422, detail="start_date must be on or before end_date"
+        )
 
     target_keys: set[tuple[str, str]] | None = None
     scope_info: dict[str, Any] | None = None
@@ -3084,7 +3666,11 @@ def coverage(
         if scope.strip().lower() not in BACKFILL_SCOPES:
             raise HTTPException(status_code=422, detail="unsupported coverage scope")
         scope_info = resolve_backfill_scope(db, scope, resolved_start, resolved_end)
-        target_keys = None if scope_info["scope"] in {"market", "all"} else set(scope_info["target_keys"])
+        target_keys = (
+            None
+            if scope_info["scope"] in {"market", "all"}
+            else set(scope_info["target_keys"])
+        )
     elif exchange or symbol:
         query = select(Instrument).where(Instrument.status == "active")
         if exchange:
@@ -3105,7 +3691,11 @@ def coverage(
         require_provenance=not has_manifest,
         include_calendar_dates=has_manifest or explicit_range,
     )
-    report["scope"] = scope_info["scope"] if scope_info else ("instrument_filter" if target_keys is not None else "market")
+    report["scope"] = (
+        scope_info["scope"]
+        if scope_info
+        else ("instrument_filter" if target_keys is not None else "market")
+    )
     return report
 
 
@@ -3114,7 +3704,9 @@ def strategies(
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    limit: int | None = Query(default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False),
+    limit: int | None = Query(
+        default=None, ge=1, le=MAX_PAGE_SIZE, include_in_schema=False
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     page_size = _effective_page_size(page_size, limit)

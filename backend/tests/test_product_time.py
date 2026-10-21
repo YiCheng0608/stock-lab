@@ -35,7 +35,10 @@ def test_news_product_time_preserves_date_precision_and_normalizes_aware_values(
     assert result["roles"]["published_at"]["value"] == "2026-09-08T01:30:00+00:00"
     assert result["roles"]["collected_at"]["status"] == "known"
     assert result["response_generated_at"] == "2026-09-08T02:00:00+00:00"
-    assert result["roles"]["event_date"]["timezone_policy"] == "calendar_date_no_timezone_conversion"
+    assert (
+        result["roles"]["event_date"]["timezone_policy"]
+        == "calendar_date_no_timezone_conversion"
+    )
 
 
 def test_news_product_time_fails_closed_for_naive_date_only_missing_and_conflict():
@@ -64,7 +67,11 @@ def test_news_product_time_fails_closed_for_naive_date_only_missing_and_conflict
 
 
 def test_news_product_time_requires_explicit_basis_and_precision_for_instants():
-    for precision, basis in (("none", "unverified"), ("invalid", "unverified"), ("datetime", "unverified")):
+    for precision, basis in (
+        ("none", "unverified"),
+        ("invalid", "unverified"),
+        ("datetime", "unverified"),
+    ):
         item = SimpleNamespace(
             event_date=date(2026, 9, 8),
             event_at=datetime(2026, 9, 8, 1, 30, tzinfo=UTC),
@@ -97,11 +104,17 @@ def test_signal_product_time_ignores_spoofed_evidence_and_keeps_legacy_dates():
 
     assert result["roles"]["market_date"]["value"] == "2026-09-08"
     assert result["roles"]["earliest_execution_at"]["status"] == "unknown"
-    assert result["roles"]["earliest_execution_at"]["reason"] == "legacy_earliest_execution_date_is_date_only"
+    assert (
+        result["roles"]["earliest_execution_at"]["reason"]
+        == "legacy_earliest_execution_date_is_date_only"
+    )
     assert result["roles"]["earliest_execution_date"]["value"] == "2026-09-09"
     assert result["roles"]["earliest_execution_date"]["precision"] == "date"
     assert result["roles"]["generated_at"]["status"] == "unknown"
-    assert result["roles"]["generated_at"]["reason"] == "legacy_generated_at_not_persisted_with_timezone"
+    assert (
+        result["roles"]["generated_at"]["reason"]
+        == "legacy_generated_at_not_persisted_with_timezone"
+    )
     assert result["legacy"]["created_at"] == "2026-09-08T09:00:00"
     assert any("evidence markers" in value for value in result["limitations"])
 

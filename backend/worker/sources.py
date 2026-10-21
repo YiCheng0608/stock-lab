@@ -177,31 +177,19 @@ def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Merge exchange event-feed audit without treating event rows as sessions."""
 
     items = [item for item in values if item]
-    verified = sorted({
-        str(day)
-        for item in items
-        for day in item.get("verified_dates", [])
-    })
-    empty = sorted({
-        str(day)
-        for item in items
-        for day in item.get("empty_dates", [])
-    })
-    unsupported = sorted({
-        str(day)
-        for item in items
-        for day in item.get("unsupported_dates", [])
-    })
-    partial = sorted({
-        str(day)
-        for item in items
-        for day in item.get("partial_dates", [])
-    })
-    observed = sorted({
-        str(day)
-        for item in items
-        for day in item.get("observed_event_dates", [])
-    })
+    verified = sorted(
+        {str(day) for item in items for day in item.get("verified_dates", [])}
+    )
+    empty = sorted({str(day) for item in items for day in item.get("empty_dates", [])})
+    unsupported = sorted(
+        {str(day) for item in items for day in item.get("unsupported_dates", [])}
+    )
+    partial = sorted(
+        {str(day) for item in items for day in item.get("partial_dates", [])}
+    )
+    observed = sorted(
+        {str(day) for item in items for day in item.get("observed_event_dates", [])}
+    )
     if verified or empty:
         status = "complete" if not (unsupported or partial) else "partial"
     elif partial:
@@ -221,7 +209,8 @@ def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "sources": [item.get("source") for item in items if item.get("source")],
         "reason": "; ".join(
             str(item.get("reason")) for item in items if item.get("reason")
-        ) or None,
+        )
+        or None,
     }
 
 
@@ -354,7 +343,9 @@ def fetch_json(
         _throttle_official_host(url)
         try:
             if method.upper() == "POST":
-                response = httpx.post(url, data=data, timeout=timeout_seconds, headers=headers)
+                response = httpx.post(
+                    url, data=data, timeout=timeout_seconds, headers=headers
+                )
             else:
                 response = httpx.get(url, timeout=timeout_seconds, headers=headers)
         except httpx.TransportError as exc:
@@ -369,8 +360,14 @@ def fetch_json(
         # usable redirect and must never be treated as a successful payload;
         # retry it as a bounded transient response so a later CDN edge can
         # return either the requested report or the explicit no-data JSON.
-        retryable_redirect = response.status_code == 307 and not response.headers.get("location")
-        if retryable_redirect and attempt >= 2 and url.startswith(TWSE_DAILY_HISTORY_ENDPOINT):
+        retryable_redirect = response.status_code == 307 and not response.headers.get(
+            "location"
+        )
+        if (
+            retryable_redirect
+            and attempt >= 2
+            and url.startswith(TWSE_DAILY_HISTORY_ENDPOINT)
+        ):
             # A short page warm-up gives TWSE's CDN a valid report context.  A
             # request made on the same Client then often receives the JSON
             # report even when the first edge response was a body-bearing 307.
@@ -379,13 +376,21 @@ def fetch_json(
                 with httpx.Client(timeout=timeout_seconds, headers=headers) as client:
                     client.get(TWSE_MI_INDEX_PAGE)
                     primed_response = client.get(url)
-                if primed_response.status_code != 307 or primed_response.headers.get("location"):
+                if primed_response.status_code != 307 or primed_response.headers.get(
+                    "location"
+                ):
                     response = primed_response
                     retryable_redirect = False
             except httpx.TransportError:
                 pass
-        if response.status_code == 429 or response.status_code >= 500 or retryable_redirect:
-            status_retry_limit = redirect_retry_limit if retryable_redirect else retry_limit
+        if (
+            response.status_code == 429
+            or response.status_code >= 500
+            or retryable_redirect
+        ):
+            status_retry_limit = (
+                redirect_retry_limit if retryable_redirect else retry_limit
+            )
             if attempt + 1 >= status_retry_limit:
                 try:
                     response.raise_for_status()
@@ -395,7 +400,11 @@ def fetch_json(
                     ) from exc
             retry_after = response.headers.get("Retry-After")
             try:
-                delay = max(0.0, min(2.0, float(retry_after))) if retry_after else 0.25 * (2**attempt)
+                delay = (
+                    max(0.0, min(2.0, float(retry_after)))
+                    if retry_after
+                    else 0.25 * (2**attempt)
+                )
             except (TypeError, ValueError):
                 delay = 0.25 * (2**attempt)
             time.sleep(delay)
@@ -412,13 +421,17 @@ def fetch_json(
         try:
             return response.json()
         except ValueError as exc:
-            raise OfficialDataError(f"official endpoint returned non-JSON: {url}") from exc
+            raise OfficialDataError(
+                f"official endpoint returned non-JSON: {url}"
+            ) from exc
     raise OfficialDataError(f"official endpoint retry budget exhausted: {url}")
 
 
 def _encode_payload(payload: Any) -> bytes:
     try:
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise OfficialDataError("official payload is not JSON serializable") from exc
 
@@ -476,7 +489,9 @@ def capture_payload(
         data_as_of,
         collected_at=collected,
     )
-    return FetchedPayload(source, endpoint, payload, data_as_of, collected, path, digest)
+    return FetchedPayload(
+        source, endpoint, payload, data_as_of, collected, path, digest
+    )
 
 
 def _rows(payload: Any) -> list[dict[str, Any]]:
@@ -580,7 +595,11 @@ def parse_roc_date(value: Any) -> date | None:
             if len(digits) == 8:
                 year, month, day = int(digits[:4]), int(digits[4:6]), int(digits[6:])
             elif len(digits) == 7:
-                year, month, day = int(digits[:3]) + 1911, int(digits[3:5]), int(digits[5:])
+                year, month, day = (
+                    int(digits[:3]) + 1911,
+                    int(digits[3:5]),
+                    int(digits[5:]),
+                )
             else:
                 return None
         if year < 1000:
@@ -632,7 +651,11 @@ def _has_tabular_rows(payload: Any) -> bool:
     tables = payload.get("tables")
     if isinstance(tables, list):
         for table in tables:
-            if isinstance(table, dict) and isinstance(table.get("data"), list) and table["data"]:
+            if (
+                isinstance(table, dict)
+                and isinstance(table.get("data"), list)
+                and table["data"]
+            ):
                 return True
     for key in ("rows", "items", "result"):
         value = payload.get(key)
@@ -667,7 +690,9 @@ def _is_twse_mi_index_no_data(payload: Any, endpoint: str) -> bool:
     )
 
 
-def _date_from_row(row: dict[str, Any], *keys: str, default: date | None = None) -> date | None:
+def _date_from_row(
+    row: dict[str, Any], *keys: str, default: date | None = None
+) -> date | None:
     return parse_roc_date(_text(row, *keys)) or default
 
 
@@ -681,7 +706,9 @@ def parse_suspended_symbols(payload: Any) -> set[str]:
 
     symbols: set[str] = set()
     for row in _rows(payload):
-        symbol = _text(row, "SecuritiesCompanyCode", "Code", "Symbol", "霅隞??", "隞??")
+        symbol = _text(
+            row, "SecuritiesCompanyCode", "Code", "Symbol", "霅隞??", "隞??"
+        )
         if symbol:
             symbols.add(symbol)
     return symbols
@@ -707,7 +734,9 @@ def _call_fetcher(
         raise OfficialDataError(f"official endpoint failed: {url}: {exc}") from exc
 
 
-def normalize_etf_category(value: Any, *, symbol: str = "", name: str = "") -> str | None:
+def normalize_etf_category(
+    value: Any, *, symbol: str = "", name: str = ""
+) -> str | None:
     """Map official ETF descriptions to the domain's finite category set.
 
     TWSE publishes a free-text fund type and TPEx publishes ETF identifiers
@@ -727,7 +756,10 @@ def normalize_etf_category(value: Any, *, symbol: str = "", name: str = "") -> s
         return None
     if any(token in text_value for token in ("inverse", "反向", "反1", "反二", "反三")):
         return "inverse"
-    if any(token in text_value for token in ("leveraged", "槓桿", "正2", "正三", "2x", "3x")):
+    if any(
+        token in text_value
+        for token in ("leveraged", "槓桿", "正2", "正三", "2x", "3x")
+    ):
         return "leveraged"
     if any(token in text_value for token in ("bond", "債券", "債")):
         return "bond"
@@ -737,14 +769,23 @@ def normalize_etf_category(value: Any, *, symbol: str = "", name: str = "") -> s
         return "dividend"
     if any(token in text_value for token in ("sector", "產業", "類股")):
         return "sector"
-    if any(token in text_value for token in ("broad", "market", "大盤", "台灣50", "0050", "指數")):
+    if any(
+        token in text_value
+        for token in ("broad", "market", "大盤", "台灣50", "0050", "指數")
+    ):
         return "broad_market"
     if "etf" in text_value or symbol.strip().upper().startswith("00"):
         return "thematic"
-    return "thematic" if any(category in text_value for category in ETF_CATEGORIES) else "thematic"
+    return (
+        "thematic"
+        if any(category in text_value for category in ETF_CATEGORIES)
+        else "thematic"
+    )
 
 
-def _is_recent_listing(as_of: date, listing_date: date | None, window_days: int = 60) -> bool:
+def _is_recent_listing(
+    as_of: date, listing_date: date | None, window_days: int = 60
+) -> bool:
     if listing_date is None:
         return False
     age = (as_of - listing_date).days
@@ -757,14 +798,20 @@ def is_tpex_etf_code(symbol: str, name: str = "") -> bool:
         return True
     # TPEx documents ETF suffixes for foreign-currency, futures, active and
     # bond ETFs.  Numeric TWSE ETFs are identified from t187ap47_L instead.
-    return len(upper) >= 5 and upper.startswith("00") and upper[-1].isalpha() and upper[-1] in {
-        "A",
-        "C",
-        "D",
-        "K",
-        "T",
-        "U",
-    }
+    return (
+        len(upper) >= 5
+        and upper.startswith("00")
+        and upper[-1].isalpha()
+        and upper[-1]
+        in {
+            "A",
+            "C",
+            "D",
+            "K",
+            "T",
+            "U",
+        }
+    )
 
 
 def _is_tpex_non_scope_product(symbol: str, name: str) -> bool:
@@ -795,7 +842,11 @@ def _month_starts(start: date, end: date) -> list[date]:
     result: list[date] = []
     while cursor <= end:
         result.append(cursor)
-        cursor = date(cursor.year + (cursor.month == 12), 1 if cursor.month == 12 else cursor.month + 1, 1)
+        cursor = date(
+            cursor.year + (cursor.month == 12),
+            1 if cursor.month == 12 else cursor.month + 1,
+            1,
+        )
     return result
 
 
@@ -833,7 +884,9 @@ def _ensure_backfill_window(start: date, end: date) -> None:
     if start > end:
         raise ValueError("start date must not be after end date")
     if (end - start).days > OFFICIAL_MAX_BACKFILL_DAYS:
-        raise ValueError(f"official backfill is limited to {OFFICIAL_MAX_BACKFILL_DAYS} days")
+        raise ValueError(
+            f"official backfill is limited to {OFFICIAL_MAX_BACKFILL_DAYS} days"
+        )
 
 
 def _volume_from_row(row: dict[str, Any], *keys: str) -> int | None:
@@ -851,13 +904,18 @@ def _volume_from_row(row: dict[str, Any], *keys: str) -> int | None:
             return int(raw) if 0 <= raw <= 9223372036854775807 else None
         if isinstance(raw, str):
             raw = raw.strip()
-            if not re.fullmatch(r"[+]?(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]+)?", raw):
+            if not re.fullmatch(
+                r"[+]?(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]+)?", raw
+            ):
                 return None
             raw = raw.replace(",", "")
         try:
             number = Decimal(raw)
-            if (not number.is_finite() or not 0 <= number <= 9223372036854775807
-                    or number != number.to_integral_value()):
+            if (
+                not number.is_finite()
+                or not 0 <= number <= 9223372036854775807
+                or number != number.to_integral_value()
+            ):
                 return None
             return int(number)
         except (InvalidOperation, OverflowError, ValueError):
@@ -865,13 +923,17 @@ def _volume_from_row(row: dict[str, Any], *keys: str) -> int | None:
     return None
 
 
-def _turnover_from_row(row: dict[str, Any], *keys: str) -> tuple[float, str, str | None]:
+def _turnover_from_row(
+    row: dict[str, Any], *keys: str
+) -> tuple[float, str, str | None]:
     raw = _text(row, *keys)
     if not raw or raw.upper() in {"--", "-", "X", "N/A", "無"} or set(raw) == {"-"}:
         return 0.0, "unavailable", "missing"
     # Money must be a complete, nonnegative number; parse_number intentionally
     # accepts numeric fragments and therefore cannot establish availability.
-    if not re.fullmatch(r"\+?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:[eE][+-]?\d+)?", raw):
+    if not re.fullmatch(
+        r"\+?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:[eE][+-]?\d+)?", raw
+    ):
         return 0.0, "unavailable", "invalid"
     try:
         amount = float(Decimal(raw.replace(",", "")))
@@ -882,7 +944,9 @@ def _turnover_from_row(row: dict[str, Any], *keys: str) -> tuple[float, str, str
     return amount, "available", None
 
 
-def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None) -> list[BarRecord]:
+def parse_twse_daily_rows(
+    payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
+) -> list[BarRecord]:
     result: list[BarRecord] = []
     for row in _rows(payload):
         symbol = _text(row, "Code", "證券代號", "股票代號")
@@ -895,7 +959,11 @@ def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TradeValue", "成交金額", "成交值"
         )
-        if not symbol or not trading_date or None in {open_price, high, low, close, volume}:
+        if (
+            not symbol
+            or not trading_date
+            or None in {open_price, high, low, close, volume}
+        ):
             continue
         result.append(
             BarRecord(
@@ -919,11 +987,15 @@ def parse_twse_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
     return result
 
 
-def parse_tpex_daily_rows(payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None) -> list[BarRecord]:
+def parse_tpex_daily_rows(
+    payload: Any, *, data_as_of: str | None = None, payload_sha256: str | None = None
+) -> list[BarRecord]:
     result: list[BarRecord] = []
     for row in _rows(payload):
         symbol = _text(row, "SecuritiesCompanyCode", "證券代號", "代號")
-        trading_date = _date_from_row(row, "Date", "資料日期", "日期", default=parse_roc_date(data_as_of))
+        trading_date = _date_from_row(
+            row, "Date", "資料日期", "日期", default=parse_roc_date(data_as_of)
+        )
         open_price = parse_number(_text(row, "Open", "開盤"))
         high = parse_number(_text(row, "High", "最高"))
         low = parse_number(_text(row, "Low", "最低"))
@@ -932,7 +1004,11 @@ def parse_tpex_daily_rows(payload: Any, *, data_as_of: str | None = None, payloa
         turnover, turnover_status, turnover_reason = _turnover_from_row(
             row, "TransactionAmount", "成交金額", "成交金額(元)", "成交值"
         )
-        if not symbol or not trading_date or None in {open_price, high, low, close, volume}:
+        if (
+            not symbol
+            or not trading_date
+            or None in {open_price, high, low, close, volume}
+        ):
             continue
         result.append(
             BarRecord(
@@ -970,10 +1046,7 @@ def _number_from_row(
         value = parse_number(row.get(key))
         if value is not None:
             return value
-    normalized = {
-        _normalized_field_name(key): value
-        for key, value in row.items()
-    }
+    normalized = {_normalized_field_name(key): value for key, value in row.items()}
     for required_tokens in contains:
         for key, value in normalized.items():
             if all(_normalized_field_name(token) in key for token in required_tokens):
@@ -1016,7 +1089,11 @@ def parse_twse_institutional_rows(
         )
         dealer_buy = _number_from_row(
             row,
-            exact_keys=("DealerBuySellDifference", "DealersBuySellDifference", "自營商買賣超股數"),
+            exact_keys=(
+                "DealerBuySellDifference",
+                "DealersBuySellDifference",
+                "自營商買賣超股數",
+            ),
             contains=(("dealer", "difference"), ("自營商", "買賣超")),
         )
         result.append(
@@ -1079,7 +1156,9 @@ def parse_twse_margin_rows(
                         symbol=symbol,
                         trading_date=trading_date,
                         margin_balance=current,
-                        margin_change=(current - previous) if current is not None and previous is not None else None,
+                        margin_change=(current - previous)
+                        if current is not None and previous is not None
+                        else None,
                         exchange="TWSE",
                         source="twse_margin",
                         data_as_of=data_as_of or trading_date.isoformat(),
@@ -1107,7 +1186,9 @@ def parse_twse_margin_rows(
                 symbol=symbol,
                 trading_date=trading_date,
                 margin_balance=current,
-                margin_change=(current - previous) if current is not None and previous is not None else None,
+                margin_change=(current - previous)
+                if current is not None and previous is not None
+                else None,
                 exchange="TWSE",
                 source="twse_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1153,12 +1234,18 @@ def parse_tpex_institutional_rows(
         return result
     result: list[ChipRecord] = []
     for row in _rows(payload):
-        symbol = _text(row, "SecuritiesCompanyCode", "Code", "股票代號", "證券代號", "代號")
+        symbol = _text(
+            row, "SecuritiesCompanyCode", "Code", "股票代號", "證券代號", "代號"
+        )
         if not symbol:
             continue
         foreign_buy = _number_from_row(
             row,
-            exact_keys=("ForeignBuySellDifference", "ForeignInvestorsDifference", "Foreign-BuySellDifference"),
+            exact_keys=(
+                "ForeignBuySellDifference",
+                "ForeignInvestorsDifference",
+                "Foreign-BuySellDifference",
+            ),
             contains=(("foreign", "difference"), ("外資", "差額")),
         )
         trust_buy = _number_from_row(
@@ -1168,12 +1255,20 @@ def parse_tpex_institutional_rows(
                 "SecuritiesInvestmentTrustCompanies-BuySellDifference",
                 "InvestmentTrustDifference",
             ),
-            contains=(("securitiesinvestmenttrustcompanies", "difference"), ("investmenttrust", "difference"), ("投信", "差額")),
+            contains=(
+                ("securitiesinvestmenttrustcompanies", "difference"),
+                ("investmenttrust", "difference"),
+                ("投信", "差額"),
+            ),
         )
         dealer_buy = _number_from_row(
             row,
             exact_keys=("DealersDifference", "DealerDifference"),
-            contains=(("dealers", "difference"), ("dealer", "difference"), ("自營商", "差額")),
+            contains=(
+                ("dealers", "difference"),
+                ("dealer", "difference"),
+                ("自營商", "差額"),
+            ),
         )
         result.append(
             ChipRecord(
@@ -1218,7 +1313,9 @@ def parse_tpex_margin_rows(
                         symbol=symbol,
                         trading_date=trading_date,
                         margin_balance=current,
-                        margin_change=(current - previous) if current is not None and previous is not None else None,
+                        margin_change=(current - previous)
+                        if current is not None and previous is not None
+                        else None,
                         exchange="TPEx",
                         source="tpex_margin",
                         data_as_of=data_as_of or trading_date.isoformat(),
@@ -1228,7 +1325,9 @@ def parse_tpex_margin_rows(
             return result
     result: list[ChipRecord] = []
     for row in _rows(payload):
-        symbol = _text(row, "SecuritiesCompanyCode", "Code", "股票代號", "證券代號", "代號")
+        symbol = _text(
+            row, "SecuritiesCompanyCode", "Code", "股票代號", "證券代號", "代號"
+        )
         if not symbol:
             continue
         previous = _number_from_row(
@@ -1246,7 +1345,9 @@ def parse_tpex_margin_rows(
                 symbol=symbol,
                 trading_date=trading_date,
                 margin_balance=current,
-                margin_change=(current - previous) if current is not None and previous is not None else None,
+                margin_change=(current - previous)
+                if current is not None and previous is not None
+                else None,
                 exchange="TPEx",
                 source="tpex_margin",
                 data_as_of=data_as_of or trading_date.isoformat(),
@@ -1313,8 +1414,12 @@ def parse_tpex_suspension_history_rows(
         starts: list[date] = []
         resumptions: list[tuple[date, dict[str, Any]]] = []
         for row in symbol_rows:
-            start_text = _text(row, "DateOfSuspendedTrading", "SuspendedTradingDate", "停牌日期")
-            resume_text = _text(row, "DateOfResumedTrading", "ResumedTradingDate", "復牌日期")
+            start_text = _text(
+                row, "DateOfSuspendedTrading", "SuspendedTradingDate", "停牌日期"
+            )
+            resume_text = _text(
+                row, "DateOfResumedTrading", "ResumedTradingDate", "復牌日期"
+            )
             start_date = parse_roc_date(start_text)
             resume_date = parse_roc_date(resume_text)
             if start_date and not resume_text:
@@ -1409,8 +1514,12 @@ def parse_twse_historical_payload(
             for row in payload["data"]
             if isinstance(row, (list, tuple))
         ]
-        return parse_twse_daily_rows(rows, data_as_of=data_as_of, payload_sha256=payload_sha256)
-    return parse_twse_daily_rows(payload, data_as_of=data_as_of, payload_sha256=payload_sha256)
+        return parse_twse_daily_rows(
+            rows, data_as_of=data_as_of, payload_sha256=payload_sha256
+        )
+    return parse_twse_daily_rows(
+        payload, data_as_of=data_as_of, payload_sha256=payload_sha256
+    )
 
 
 def parse_twse_all_daily_payload(
@@ -1482,7 +1591,9 @@ def parse_twse_taiex_from_all_daily_payload(
     # official table and labels instead of relying on table order or a value
     # position.  Returning no row is deliberately fail-closed; callers treat
     # this as an unverified session and must not persist a guessed benchmark.
-    price_table_title = "\u50f9\u683c\u6307\u6578(\u81fa\u7063\u8b49\u5238\u4ea4\u6613\u6240)"
+    price_table_title = (
+        "\u50f9\u683c\u6307\u6578(\u81fa\u7063\u8b49\u5238\u4ea4\u6613\u6240)"
+    )
     index_label = "\u767c\u884c\u91cf\u52a0\u6b0a\u80a1\u50f9\u6307\u6578"
     close_label = "\u6536\u76e4\u6307\u6578"
     candidates: list[float] = []
@@ -1618,10 +1729,18 @@ def parse_twse_index_history_payload(
     result: list[BarRecord] = []
     for row in rows:
         trading_date = _date_from_row(row, "Date", "\u65e5\u671f")
-        open_price = parse_number(_text(row, "OpeningIndex", "\u958b\u76e4\u6307\u6578", "\u958b\u76e4"))
-        high = parse_number(_text(row, "HighestIndex", "\u6700\u9ad8\u6307\u6578", "\u6700\u9ad8"))
-        low = parse_number(_text(row, "LowestIndex", "\u6700\u4f4e\u6307\u6578", "\u6700\u4f4e"))
-        close = parse_number(_text(row, "ClosingIndex", "\u6536\u76e4\u6307\u6578", "\u6536\u76e4"))
+        open_price = parse_number(
+            _text(row, "OpeningIndex", "\u958b\u76e4\u6307\u6578", "\u958b\u76e4")
+        )
+        high = parse_number(
+            _text(row, "HighestIndex", "\u6700\u9ad8\u6307\u6578", "\u6700\u9ad8")
+        )
+        low = parse_number(
+            _text(row, "LowestIndex", "\u6700\u4f4e\u6307\u6578", "\u6700\u4f4e")
+        )
+        close = parse_number(
+            _text(row, "ClosingIndex", "\u6536\u76e4\u6307\u6578", "\u6536\u76e4")
+        )
         if not trading_date or close is None:
             continue
         result.append(
@@ -1657,7 +1776,13 @@ def parse_mops_event_rows(
 
     result: list[EventRecord] = []
     for row in _rows(payload):
-        symbol = _text(row, "Code", "SecuritiesCompanyCode", "\u516c\u53f8\u4ee3\u865f", "\u8b49\u5238\u4ee3\u865f")
+        symbol = _text(
+            row,
+            "Code",
+            "SecuritiesCompanyCode",
+            "\u516c\u53f8\u4ee3\u865f",
+            "\u8b49\u5238\u4ee3\u865f",
+        )
         event_date = _date_from_row(
             row,
             "AnnouncementDate",
@@ -1706,23 +1831,42 @@ def _disambiguate_event_titles(records: list[EventRecord]) -> list[EventRecord]:
 
     groups: dict[tuple[str, str, date, str, str], list[EventRecord]] = defaultdict(list)
     for record in records:
-        groups[(record.exchange, record.symbol, record.event_date, record.event_type, record.title)].append(record)
+        groups[
+            (
+                record.exchange,
+                record.symbol,
+                record.event_date,
+                record.event_type,
+                record.title,
+            )
+        ].append(record)
     result: list[EventRecord] = []
     for group in groups.values():
         unique: dict[tuple[str, str], EventRecord] = {}
         for record in group:
-            unique.setdefault((_announcement_time(record), record.description or ""), record)
-        ordered = sorted(unique.values(), key=lambda item: (_announcement_time(item), item.description or ""))
+            unique.setdefault(
+                (_announcement_time(record), record.description or ""), record
+            )
+        ordered = sorted(
+            unique.values(),
+            key=lambda item: (_announcement_time(item), item.description or ""),
+        )
         used_titles: set[str] = set()
         for index, record in enumerate(ordered):
             title = record.title
             if index:
                 time_text = _announcement_time(record)
-                title = f"{record.title}（發言時間 {time_text}）" if time_text else f"{record.title}（#{index + 1}）"
+                title = (
+                    f"{record.title}（發言時間 {time_text}）"
+                    if time_text
+                    else f"{record.title}（#{index + 1}）"
+                )
                 if title in used_titles:
                     title = f"{title}（#{index + 1}）"
             used_titles.add(title)
-            result.append(replace(record, title=title) if title != record.title else record)
+            result.append(
+                replace(record, title=title) if title != record.title else record
+            )
     return result
 
 
@@ -1761,7 +1905,13 @@ def parse_mops_fundamental_rows(
 
     result: list[FundamentalRecord] = []
     for row in _rows(payload):
-        symbol = _text(row, "Code", "SecuritiesCompanyCode", "\u516c\u53f8\u4ee3\u865f", "\u8b49\u5238\u4ee3\u865f")
+        symbol = _text(
+            row,
+            "Code",
+            "SecuritiesCompanyCode",
+            "\u516c\u53f8\u4ee3\u865f",
+            "\u8b49\u5238\u4ee3\u865f",
+        )
         period_end, fiscal_period = _mops_period_end(row)
         if not symbol or period_end is None:
             continue
@@ -1770,10 +1920,22 @@ def parse_mops_fundamental_rows(
                 symbol=symbol,
                 period_end=period_end,
                 fiscal_period=fiscal_period,
-                announcement_date=_date_from_row(row, "AnnouncementDate", "Date", "\u51fa\u8868\u65e5\u671f"),
+                announcement_date=_date_from_row(
+                    row, "AnnouncementDate", "Date", "\u51fa\u8868\u65e5\u671f"
+                ),
                 revenue=parse_number(_text(row, "Revenue", "\u71df\u696d\u6536\u5165")),
-                eps=parse_number(_text(row, "EPS", "BasicEPS", "\u57fa\u672c\u6bcf\u80a1\u76c8\u9918", "\u57fa\u672c\u6bcf\u80a1\u76c8\u9918(\u5143)")),
-                roe=parse_number(_text(row, "ROE", "\u80a1\u6771\u6b0a\u76ca\u5831\u916c\u7387")),
+                eps=parse_number(
+                    _text(
+                        row,
+                        "EPS",
+                        "BasicEPS",
+                        "\u57fa\u672c\u6bcf\u80a1\u76c8\u9918",
+                        "\u57fa\u672c\u6bcf\u80a1\u76c8\u9918(\u5143)",
+                    )
+                ),
+                roe=parse_number(
+                    _text(row, "ROE", "\u80a1\u6771\u6b0a\u76ca\u5831\u916c\u7387")
+                ),
                 details=dict(row),
                 exchange=exchange,
                 payload_sha256=payload_sha256,
@@ -1813,7 +1975,9 @@ class TwseAdapter:
         # every historical date.  The authoritative universe is then fetched
         # once per adapter instance; it is today's list either way.
         self.snapshot_feeds = snapshot_feeds
-        self._universe_cache: tuple[list[InstrumentRecord], list[FetchedPayload]] | None = None
+        self._universe_cache: (
+            tuple[list[InstrumentRecord], list[FetchedPayload]] | None
+        ) = None
         # Local library opt-in only. collect callers must use force=True to
         # bypass reuse of an existing successful run. Other feeds stay legacy.
         self.stock_day_capture = stock_day_capture
@@ -1847,7 +2011,9 @@ class TwseAdapter:
         self.captured_payloads.append(captured)
         return captured
 
-    def fetch_universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+    def fetch_universe(
+        self, as_of: date
+    ) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         listed_payload = self._fetch(TWSE_LISTED_ENDPOINT, as_of.isoformat())
         etf_payload = self._fetch(TWSE_ETF_ENDPOINT, as_of.isoformat())
         new_listing_payload = self._fetch(TWSE_NEW_LISTING_ENDPOINT, as_of.isoformat())
@@ -1881,7 +2047,12 @@ class TwseAdapter:
             if not symbol:
                 continue
             listing_date = _date_from_row(row, "上市日期", "DateOfListing")
-            instrument_type = "ipo" if symbol in recent_codes or (listing_date and (as_of - listing_date).days <= 60) else "stock"
+            instrument_type = (
+                "ipo"
+                if symbol in recent_codes
+                or (listing_date and (as_of - listing_date).days <= 60)
+                else "stock"
+            )
             records[symbol] = InstrumentRecord(
                 symbol=symbol,
                 name=_text(row, "公司簡稱", "公司名稱", "Name") or symbol,
@@ -1898,7 +2069,8 @@ class TwseAdapter:
             listing_date = _date_from_row(row, "上市日期", "DateOfListing")
             records[symbol] = InstrumentRecord(
                 symbol=symbol,
-                name=_text(row, "基金簡稱", "基金中文名稱", "基金名稱", "Name") or symbol,
+                name=_text(row, "基金簡稱", "基金中文名稱", "基金名稱", "Name")
+                or symbol,
                 exchange="TWSE",
                 instrument_type="etf",
                 etf_category=_text(row, "基金類型", "FundType") or None,
@@ -1929,7 +2101,12 @@ class TwseAdapter:
         for row in new_rows:
             symbol = _text(row, "Code", "Symbol")
             listing_date = _date_from_row(row, "ApprovedListingDate", "ListingDate")
-            if not symbol or listing_date is None or listing_date > as_of or symbol in records:
+            if (
+                not symbol
+                or listing_date is None
+                or listing_date > as_of
+                or symbol in records
+            ):
                 continue
             records[symbol] = InstrumentRecord(
                 symbol=symbol,
@@ -1969,7 +2146,9 @@ class TwseAdapter:
             )
         return normalized_records, [listed_payload, etf_payload, new_listing_payload]
 
-    def fetch_bars(self, symbols: Iterable[str], start: date, end: date) -> tuple[list[BarRecord], list[FetchedPayload]]:
+    def fetch_bars(
+        self, symbols: Iterable[str], start: date, end: date
+    ) -> tuple[list[BarRecord], list[FetchedPayload]]:
         _ensure_backfill_window(start, end)
         self.fetch_warnings = []
         self.no_data_dates = []
@@ -1993,19 +2172,31 @@ class TwseAdapter:
             daily_payload = self._fetch(TWSE_DAILY_ENDPOINT, end.isoformat())
             daily_bars = [
                 bar
-                for bar in parse_twse_daily_rows(daily_payload.payload, data_as_of=end.isoformat(), payload_sha256=daily_payload.sha256)
+                for bar in parse_twse_daily_rows(
+                    daily_payload.payload,
+                    data_as_of=end.isoformat(),
+                    payload_sha256=daily_payload.sha256,
+                )
                 if start <= bar.trading_date <= end and bar.symbol in symbol_list
             ]
         else:
-            daily_bars, daily_payload, self.stock_day_unavailable = self.stock_day_capture.select(symbol_list, end)
+            daily_bars, daily_payload, self.stock_day_unavailable = (
+                self.stock_day_capture.select(symbol_list, end)
+            )
             self.captured_payloads.append(daily_payload)
             for unavailable in self.stock_day_unavailable:
-                self.fetch_warnings.append("stock_day_capture_unavailable:" + json.dumps(unavailable, sort_keys=True))
+                self.fetch_warnings.append(
+                    "stock_day_capture_unavailable:"
+                    + json.dumps(unavailable, sort_keys=True)
+                )
             for bar in daily_bars:
                 if bar.turnover_status == "unavailable":
                     self.fetch_warnings.append(
                         "stock_day_capture_turnover_unavailable:"
-                        + json.dumps({"symbol": bar.symbol, "reason": bar.turnover_reason}, sort_keys=True)
+                        + json.dumps(
+                            {"symbol": bar.symbol, "reason": bar.turnover_reason},
+                            sort_keys=True,
+                        )
                     )
         if daily_payload is not None:
             payloads.append(daily_payload)
@@ -2017,7 +2208,9 @@ class TwseAdapter:
             # MI_INDEX request remains fail-closed for that date.
             if self.holiday_capture is None:
                 try:
-                    holiday_payload = self._fetch(TWSE_HOLIDAY_ENDPOINT, end.isoformat())
+                    holiday_payload = self._fetch(
+                        TWSE_HOLIDAY_ENDPOINT, end.isoformat()
+                    )
                 except OfficialDataError as exc:
                     holiday_payload = None
                     self.fetch_warnings.append(
@@ -2026,14 +2219,20 @@ class TwseAdapter:
                     )
                 if holiday_payload is not None:
                     payloads.append(holiday_payload)
-                    closed_dates = _official_non_trading_dates(holiday_payload.payload, start, end)
+                    closed_dates = _official_non_trading_dates(
+                        holiday_payload.payload, start, end
+                    )
             else:
-                closed_dates, holiday_payload, self.holiday_unknown = self.holiday_capture.select(start, end)
+                closed_dates, holiday_payload, self.holiday_unknown = (
+                    self.holiday_capture.select(start, end)
+                )
                 self.captured_payloads.append(holiday_payload)
                 payloads.append(holiday_payload)
                 self.holiday_closed_dates = closed_dates
                 for unknown in self.holiday_unknown:
-                    self.fetch_warnings.append("holiday_capture_unknown:" + json.dumps(unknown, sort_keys=True))
+                    self.fetch_warnings.append(
+                        "holiday_capture_unknown:" + json.dumps(unknown, sort_keys=True)
+                    )
                 # Check all observed daily rows, including securities outside
                 # the selected universe. The calendar cannot erase an already
                 # visible valid trading observation for a supposedly closed day.
@@ -2089,7 +2288,8 @@ class TwseAdapter:
             bars.extend(
                 bar
                 for bar in parsed
-                if start <= bar.trading_date <= end and bar.symbol in symbol_list
+                if start <= bar.trading_date <= end
+                and bar.symbol in symbol_list
                 # The captured snapshot owns all selected securities on end,
                 # including missing/invalid rows; history cannot fill them.
                 and not (self.stock_day_capture is not None and trading_date == end)
@@ -2117,12 +2317,28 @@ class TwseAdapter:
             if bar.trading_date not in self.holiday_closed_dates:
                 continue
             prices = (bar.open, bar.high, bar.low, bar.close)
-            valid = all(isinstance(value, (int, float)) and not isinstance(value, bool)
-                        and math.isfinite(value) and value > 0 for value in prices)
-            if valid and bar.low <= bar.open <= bar.high and bar.low <= bar.close <= bar.high:
-                raise OfficialDataError("holiday_capture_trading_conflict:" + bar.trading_date.isoformat() + ":" + bar.symbol)
+            valid = all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and value > 0
+                for value in prices
+            )
+            if (
+                valid
+                and bar.low <= bar.open <= bar.high
+                and bar.low <= bar.close <= bar.high
+            ):
+                raise OfficialDataError(
+                    "holiday_capture_trading_conflict:"
+                    + bar.trading_date.isoformat()
+                    + ":"
+                    + bar.symbol
+                )
 
-    def fetch_actions(self, as_of: date) -> tuple[list[ActionRecord], list[FetchedPayload]]:
+    def fetch_actions(
+        self, as_of: date
+    ) -> tuple[list[ActionRecord], list[FetchedPayload]]:
         payload = self._fetch(TWSE_ACTION_ENDPOINT, as_of.isoformat())
         result: list[ActionRecord] = []
         for row in _rows(payload.payload):
@@ -2139,12 +2355,24 @@ class TwseAdapter:
                 ActionRecord(
                     symbol=symbol,
                     action_date=action_date,
-                    action_type="ex_dividend" if "除息" in _text(row, "Exdividend", "除權息") else "corporate_action",
+                    action_type="ex_dividend"
+                    if "除息" in _text(row, "Exdividend", "除權息")
+                    else "corporate_action",
                     cash_dividend=parse_number(_text(row, "CashDividend", "現金股利")),
-                    stock_dividend_ratio=parse_number(_text(row, "StockDividendRatio", "無償配股率")),
-                    split_ratio=parse_number(_text(row, "SplitRatio", "分割比例", "分割率")),
+                    stock_dividend_ratio=parse_number(
+                        _text(row, "StockDividendRatio", "無償配股率")
+                    ),
+                    split_ratio=parse_number(
+                        _text(row, "SplitRatio", "分割比例", "分割率")
+                    ),
                     reference_price=parse_number(
-                        _text(row, "ReferencePrice", "OpeningReferencePrice", "開盤參考價", "除權息前收盤價")
+                        _text(
+                            row,
+                            "ReferencePrice",
+                            "OpeningReferencePrice",
+                            "開盤參考價",
+                            "除權息前收盤價",
+                        )
                     ),
                     details=dict(row),
                     exchange="TWSE",
@@ -2168,7 +2396,9 @@ class TwseAdapter:
             )
         return result, [payload]
 
-    def fetch_index_history(self, start: date, end: date) -> tuple[list[BarRecord], list[FetchedPayload]]:
+    def fetch_index_history(
+        self, start: date, end: date
+    ) -> tuple[list[BarRecord], list[FetchedPayload]]:
         """Fetch date-scoped official TAIEX rows for group benchmarking."""
 
         _ensure_backfill_window(start, end)
@@ -2232,22 +2462,32 @@ class TwseAdapter:
             try:
                 chip_payload = self._fetch(chip_endpoint, trading_date.isoformat())
                 payloads.append(chip_payload)
-                _require_reported_date(chip_payload.payload, trading_date, TWSE_CHIP_ENDPOINT)
+                _require_reported_date(
+                    chip_payload.payload, trading_date, TWSE_CHIP_ENDPOINT
+                )
                 parsed = parse_twse_institutional_rows(
                     chip_payload.payload,
                     trading_date=trading_date,
                     data_as_of=trading_date.isoformat(),
                     payload_sha256=chip_payload.sha256,
                 )
-                institutional.extend(item for item in parsed if item.symbol in allowed_symbols)
+                institutional.extend(
+                    item for item in parsed if item.symbol in allowed_symbols
+                )
                 if not parsed:
-                    warnings.append(f"TWSE institutional chip feed returned no rows for {trading_date.isoformat()}")
+                    warnings.append(
+                        f"TWSE institutional chip feed returned no rows for {trading_date.isoformat()}"
+                    )
             except OfficialDataError as exc:
-                warnings.append(f"TWSE institutional chips unavailable for {trading_date.isoformat()}: {exc}")
+                warnings.append(
+                    f"TWSE institutional chips unavailable for {trading_date.isoformat()}: {exc}"
+                )
             try:
                 margin_payload = self._fetch(margin_endpoint, trading_date.isoformat())
                 payloads.append(margin_payload)
-                _require_reported_date(margin_payload.payload, trading_date, TWSE_MARGIN_HISTORY_ENDPOINT)
+                _require_reported_date(
+                    margin_payload.payload, trading_date, TWSE_MARGIN_HISTORY_ENDPOINT
+                )
                 parsed = parse_twse_margin_rows(
                     margin_payload.payload,
                     trading_date=trading_date,
@@ -2256,16 +2496,24 @@ class TwseAdapter:
                 )
                 margin.extend(item for item in parsed if item.symbol in allowed_symbols)
                 if not parsed:
-                    warnings.append(f"TWSE margin feed returned no rows for {trading_date.isoformat()}")
+                    warnings.append(
+                        f"TWSE margin feed returned no rows for {trading_date.isoformat()}"
+                    )
             except OfficialDataError as exc:
-                warnings.append(f"TWSE margin chips unavailable for {trading_date.isoformat()}: {exc}")
+                warnings.append(
+                    f"TWSE margin chips unavailable for {trading_date.isoformat()}: {exc}"
+                )
         return (
-            merge_chip_records(institutional, margin, allowed_symbols=allowed_symbols, exchange="TWSE"),
+            merge_chip_records(
+                institutional, margin, allowed_symbols=allowed_symbols, exchange="TWSE"
+            ),
             payloads,
             warnings,
         )
 
-    def _universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+    def _universe(
+        self, as_of: date
+    ) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         if self.snapshot_feeds:
             return self.fetch_universe(as_of)
         if self._universe_cache is None:
@@ -2279,13 +2527,17 @@ class TwseAdapter:
         self.fetch_warnings = []
         self.no_data_dates = []
         instruments, universe_payloads = self._universe(end)
-        bars, bar_payloads = self.fetch_bars((item.symbol for item in instruments), start, end)
+        bars, bar_payloads = self.fetch_bars(
+            (item.symbol for item in instruments), start, end
+        )
         chip_dates = {bar.trading_date for bar in bars if bar.symbol != "TAIEX"}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
             chip_dates,
             {item.symbol for item in instruments},
         )
-        index_record = InstrumentRecord("TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index")
+        index_record = InstrumentRecord(
+            "TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index"
+        )
         warnings: list[str] = list(self.fetch_warnings) + list(chip_warnings)
         if not self.snapshot_feeds:
             return OfficialBatch(
@@ -2296,7 +2548,9 @@ class TwseAdapter:
                 warnings=warnings,
                 data_as_of=end.isoformat(),
                 no_data_dates=sorted(set(self.no_data_dates)),
-                event_coverage=_historical_event_coverage(end, "TWSE MOPS material-information feed"),
+                event_coverage=_historical_event_coverage(
+                    end, "TWSE MOPS material-information feed"
+                ),
                 snapshot_feeds=False,
             )
         actions, action_payloads = self.fetch_actions(end)
@@ -2306,7 +2560,9 @@ class TwseAdapter:
         # verified no-data date, where it would describe another session.
         index_bars: list[BarRecord] = []
         index_payloads: list[FetchedPayload] = []
-        has_end_taiex = any(bar.symbol == "TAIEX" and bar.trading_date == end for bar in bars)
+        has_end_taiex = any(
+            bar.symbol == "TAIEX" and bar.trading_date == end for bar in bars
+        )
         if not has_end_taiex and end not in self.no_data_dates:
             index_bars, index_payloads = self.fetch_index(end)
             index_bars = [bar for bar in index_bars if start <= bar.trading_date <= end]
@@ -2330,7 +2586,9 @@ class TwseAdapter:
         except OfficialDataError as exc:
             warnings.append(f"TWSE MOPS events unavailable: {exc}")
         try:
-            fundamental_payload = self._fetch(TWSE_FUNDAMENTAL_ENDPOINT, end.isoformat())
+            fundamental_payload = self._fetch(
+                TWSE_FUNDAMENTAL_ENDPOINT, end.isoformat()
+            )
             mops_payloads.append(fundamental_payload)
             fundamentals = [
                 fundamental
@@ -2339,7 +2597,8 @@ class TwseAdapter:
                     exchange="TWSE",
                     payload_sha256=fundamental_payload.sha256,
                 )
-                if not fundamental.announcement_date or fundamental.announcement_date <= end
+                if not fundamental.announcement_date
+                or fundamental.announcement_date <= end
             ]
         except OfficialDataError as exc:
             warnings.append(f"TWSE MOPS fundamentals unavailable: {exc}")
@@ -2349,7 +2608,9 @@ class TwseAdapter:
             "verified_dates": [],
             "empty_dates": [],
             "unsupported_dates": [end.isoformat()],
-            "observed_event_dates": sorted({item.event_date.isoformat() for item in events}),
+            "observed_event_dates": sorted(
+                {item.event_date.isoformat() for item in events}
+            ),
             "source": "TWSE MOPS material-information feed",
             "reason": "the official feed is an event-date list, not a date-scoped empty-session response",
         }
@@ -2360,7 +2621,12 @@ class TwseAdapter:
             actions=actions,
             fundamentals=fundamentals,
             events=events,
-            payloads=universe_payloads + bar_payloads + chip_payloads + action_payloads + index_payloads + mops_payloads,
+            payloads=universe_payloads
+            + bar_payloads
+            + chip_payloads
+            + action_payloads
+            + index_payloads
+            + mops_payloads,
             warnings=warnings,
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
@@ -2371,14 +2637,18 @@ class TwseAdapter:
 class TpexAdapter:
     source = "tpex"
 
-    def __init__(self, fetcher: Callable[..., Any] = fetch_json, *, snapshot_feeds: bool = True) -> None:
+    def __init__(
+        self, fetcher: Callable[..., Any] = fetch_json, *, snapshot_feeds: bool = True
+    ) -> None:
         self.fetcher = fetcher
         self.captured_payloads: list[FetchedPayload] = []
         self.no_data_dates: list[date] = []
         # See TwseAdapter: historical backfill skips current-only feeds and
         # reuses one universe fetch per adapter instance.
         self.snapshot_feeds = snapshot_feeds
-        self._universe_cache: tuple[list[InstrumentRecord], list[FetchedPayload]] | None = None
+        self._universe_cache: (
+            tuple[list[InstrumentRecord], list[FetchedPayload]] | None
+        ) = None
 
     def _fetch(
         self,
@@ -2393,7 +2663,9 @@ class TpexAdapter:
         self.captured_payloads.append(captured)
         return captured
 
-    def _fetch_authoritative_universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+    def _fetch_authoritative_universe(
+        self, as_of: date
+    ) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         """Build TPEx scope from MOPS stock master plus the ETF allowlist.
 
         The daily quote table is intentionally not a universe source: it also
@@ -2421,9 +2693,12 @@ class TpexAdapter:
                 symbol=symbol,
                 name=name,
                 exchange="TPEx",
-                instrument_type="ipo" if _is_recent_listing(as_of, listing_date) else "stock",
+                instrument_type="ipo"
+                if _is_recent_listing(as_of, listing_date)
+                else "stock",
                 listing_date=listing_date,
-                industry=_text(row, "SecuritiesIndustryCode", "Industry", "產業別") or None,
+                industry=_text(row, "SecuritiesIndustryCode", "Industry", "產業別")
+                or None,
                 payload_sha256=listed_payload.sha256,
             )
         for row in etf_rows:
@@ -2431,14 +2706,18 @@ class TpexAdapter:
             name = _text(row, "stockName", "StockName", "Name", "名稱") or symbol
             if not symbol:
                 continue
-            listing_date = _date_from_row(row, "listingDate", "ListingDate", "DateOfListing", "上市日期")
+            listing_date = _date_from_row(
+                row, "listingDate", "ListingDate", "DateOfListing", "上市日期"
+            )
             index_name = _text(row, "indexName", "IndexName", "指數名稱")
             records[symbol] = InstrumentRecord(
                 symbol=symbol,
                 name=name,
                 exchange="TPEx",
                 instrument_type="etf",
-                etf_category=normalize_etf_category(index_name, symbol=symbol, name=name),
+                etf_category=normalize_etf_category(
+                    index_name, symbol=symbol, name=name
+                ),
                 listing_date=listing_date,
                 industry="ETF",
                 payload_sha256=etf_payload.sha256,
@@ -2449,10 +2728,14 @@ class TpexAdapter:
             )
         return list(records.values()), [listed_payload, etf_payload]
 
-    def fetch_universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+    def fetch_universe(
+        self, as_of: date
+    ) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         return self._fetch_authoritative_universe(as_of)
 
-    def _universe(self, as_of: date) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
+    def _universe(
+        self, as_of: date
+    ) -> tuple[list[InstrumentRecord], list[FetchedPayload]]:
         if self.snapshot_feeds:
             return self.fetch_universe(as_of)
         if self._universe_cache is None:
@@ -2461,7 +2744,9 @@ class TpexAdapter:
             self.captured_payloads.extend(self._universe_cache[1])
         return self._universe_cache
 
-    def fetch_bars(self, symbols: Iterable[str], start: date, end: date) -> tuple[list[BarRecord], list[FetchedPayload]]:
+    def fetch_bars(
+        self, symbols: Iterable[str], start: date, end: date
+    ) -> tuple[list[BarRecord], list[FetchedPayload]]:
         _ensure_backfill_window(start, end)
         self.no_data_dates = []
         wanted = set(symbols)
@@ -2492,8 +2777,11 @@ class TpexAdapter:
                 for bar in parsed_rows
                 if bar.symbol in wanted and start <= bar.trading_date <= end
             ]
-            if (not parsed_rows and isinstance(payload.payload, dict)
-                    and not _has_tabular_rows(payload.payload)):
+            if (
+                not parsed_rows
+                and isinstance(payload.payload, dict)
+                and not _has_tabular_rows(payload.payload)
+            ):
                 # An empty, date-validated TPEx table is explicit no-data
                 # evidence.  Do not manufacture a bar or reinterpret it as
                 # the latest available session.
@@ -2507,7 +2795,9 @@ class TpexAdapter:
                 "TPEx official historical quote endpoint returned no prior-session OHLCV "
                 f"for requested range {start.isoformat()}..{end.isoformat()}"
             )
-        return list({(bar.symbol, bar.trading_date): bar for bar in bars}.values()), payloads
+        return list(
+            {(bar.symbol, bar.trading_date): bar for bar in bars}.values()
+        ), payloads
 
     def fetch_chips(
         self,
@@ -2535,18 +2825,26 @@ class TpexAdapter:
                     },
                 )
                 payloads.append(chip_payload)
-                _require_reported_date(chip_payload.payload, trading_date, TPEX_CHIP_HISTORY_ENDPOINT)
+                _require_reported_date(
+                    chip_payload.payload, trading_date, TPEX_CHIP_HISTORY_ENDPOINT
+                )
                 parsed = parse_tpex_institutional_rows(
                     chip_payload.payload,
                     trading_date=trading_date,
                     data_as_of=trading_date.isoformat(),
                     payload_sha256=chip_payload.sha256,
                 )
-                institutional.extend(item for item in parsed if item.symbol in allowed_symbols)
+                institutional.extend(
+                    item for item in parsed if item.symbol in allowed_symbols
+                )
                 if not parsed:
-                    warnings.append(f"TPEx institutional chip feed returned no rows for {trading_date.isoformat()}")
+                    warnings.append(
+                        f"TPEx institutional chip feed returned no rows for {trading_date.isoformat()}"
+                    )
             except OfficialDataError as exc:
-                warnings.append(f"TPEx institutional chips unavailable for {trading_date.isoformat()}: {exc}")
+                warnings.append(
+                    f"TPEx institutional chips unavailable for {trading_date.isoformat()}: {exc}"
+                )
             try:
                 margin_payload = self._fetch(
                     TPEX_MARGIN_HISTORY_ENDPOINT,
@@ -2555,7 +2853,9 @@ class TpexAdapter:
                     data={"date": date_text, "response": "json"},
                 )
                 payloads.append(margin_payload)
-                _require_reported_date(margin_payload.payload, trading_date, TPEX_MARGIN_HISTORY_ENDPOINT)
+                _require_reported_date(
+                    margin_payload.payload, trading_date, TPEX_MARGIN_HISTORY_ENDPOINT
+                )
                 parsed = parse_tpex_margin_rows(
                     margin_payload.payload,
                     trading_date=trading_date,
@@ -2564,16 +2864,24 @@ class TpexAdapter:
                 )
                 margin.extend(item for item in parsed if item.symbol in allowed_symbols)
                 if not parsed:
-                    warnings.append(f"TPEx margin feed returned no rows for {trading_date.isoformat()}")
+                    warnings.append(
+                        f"TPEx margin feed returned no rows for {trading_date.isoformat()}"
+                    )
             except OfficialDataError as exc:
-                warnings.append(f"TPEx margin chips unavailable for {trading_date.isoformat()}: {exc}")
+                warnings.append(
+                    f"TPEx margin chips unavailable for {trading_date.isoformat()}: {exc}"
+                )
         return (
-            merge_chip_records(institutional, margin, allowed_symbols=allowed_symbols, exchange="TPEx"),
+            merge_chip_records(
+                institutional, margin, allowed_symbols=allowed_symbols, exchange="TPEx"
+            ),
             payloads,
             warnings,
         )
 
-    def fetch_actions(self, as_of: date) -> tuple[list[ActionRecord], list[FetchedPayload]]:
+    def fetch_actions(
+        self, as_of: date
+    ) -> tuple[list[ActionRecord], list[FetchedPayload]]:
         payload = self._fetch(TPEX_ACTION_ENDPOINT, as_of.isoformat())
         result: list[ActionRecord] = []
         for row in _rows(payload.payload):
@@ -2585,15 +2893,25 @@ class TpexAdapter:
                 continue
             # TPEx publishes free shares per thousand old shares. StockDividend
             # is a monetary rights value, not a share ratio.
-            free_shares = parse_number(_text(row, "StockDivdendThousandShares", "每仟股無償配股"))
+            free_shares = parse_number(
+                _text(row, "StockDivdendThousandShares", "每仟股無償配股")
+            )
             result.append(
                 ActionRecord(
                     symbol=symbol,
                     action_date=action_date,
-                    action_type="ex_dividend" if "息" in _text(row, "ExRightsDiviend", "權或息") else "corporate_action",
-                    cash_dividend=parse_number(_text(row, "CashDivdend", "CashDividend", "現金股利", "息值")),
-                    stock_dividend_ratio=free_shares / 1000 if free_shares is not None else None,
-                    reference_price=parse_number(_text(row, "ClosePriceBeforeExRightsDiviend", "除權息前收盤價")),
+                    action_type="ex_dividend"
+                    if "息" in _text(row, "ExRightsDiviend", "權或息")
+                    else "corporate_action",
+                    cash_dividend=parse_number(
+                        _text(row, "CashDivdend", "CashDividend", "現金股利", "息值")
+                    ),
+                    stock_dividend_ratio=free_shares / 1000
+                    if free_shares is not None
+                    else None,
+                    reference_price=parse_number(
+                        _text(row, "ClosePriceBeforeExRightsDiviend", "除權息前收盤價")
+                    ),
                     details=dict(row),
                     exchange="TPEx",
                     payload_sha256=payload.sha256,
@@ -2605,7 +2923,9 @@ class TpexAdapter:
         self.captured_payloads = []
         self.no_data_dates = []
         instruments, universe_payloads = self._universe(end)
-        bars, bar_payloads = self.fetch_bars((item.symbol for item in instruments), start, end)
+        bars, bar_payloads = self.fetch_bars(
+            (item.symbol for item in instruments), start, end
+        )
         chip_dates = {bar.trading_date for bar in bars}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
             chip_dates,
@@ -2620,7 +2940,9 @@ class TpexAdapter:
                 warnings=list(chip_warnings),
                 data_as_of=end.isoformat(),
                 no_data_dates=sorted(set(self.no_data_dates)),
-                event_coverage=_historical_event_coverage(end, "TPEx suspension-history/MOPS event feeds"),
+                event_coverage=_historical_event_coverage(
+                    end, "TPEx suspension-history/MOPS event feeds"
+                ),
                 snapshot_feeds=False,
             )
         actions, action_payloads = self.fetch_actions(end)
@@ -2675,7 +2997,9 @@ class TpexAdapter:
         except OfficialDataError as exc:
             warnings.append(f"TPEx MOPS events unavailable: {exc}")
         try:
-            fundamental_payload = self._fetch(TPEX_FUNDAMENTAL_ENDPOINT, end.isoformat())
+            fundamental_payload = self._fetch(
+                TPEX_FUNDAMENTAL_ENDPOINT, end.isoformat()
+            )
             mops_payloads.append(fundamental_payload)
             fundamentals = [
                 fundamental
@@ -2684,7 +3008,8 @@ class TpexAdapter:
                     exchange="TPEx",
                     payload_sha256=fundamental_payload.sha256,
                 )
-                if not fundamental.announcement_date or fundamental.announcement_date <= end
+                if not fundamental.announcement_date
+                or fundamental.announcement_date <= end
             ]
         except OfficialDataError as exc:
             warnings.append(f"TPEx MOPS fundamentals unavailable: {exc}")
@@ -2694,7 +3019,9 @@ class TpexAdapter:
             "verified_dates": [],
             "empty_dates": [],
             "unsupported_dates": [end.isoformat()],
-            "observed_event_dates": sorted({item.event_date.isoformat() for item in events}),
+            "observed_event_dates": sorted(
+                {item.event_date.isoformat() for item in events}
+            ),
             "source": "TPEx suspension-history/MOPS event feeds",
             "reason": "the official feeds are event-date lists, not date-scoped empty-session responses",
         }
@@ -2705,7 +3032,12 @@ class TpexAdapter:
             actions=actions,
             fundamentals=fundamentals,
             events=events,
-            payloads=universe_payloads + bar_payloads + chip_payloads + action_payloads + suspension_payloads + mops_payloads,
+            payloads=universe_payloads
+            + bar_payloads
+            + chip_payloads
+            + action_payloads
+            + suspension_payloads
+            + mops_payloads,
             warnings=warnings,
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
@@ -2747,13 +3079,27 @@ class OfficialMarketDataAdapter:
         self.captured_payloads.extend(
             getattr(self.tpex, "captured_payloads", tpex_batch.payloads)
         )
-        instruments = {(item.exchange, item.symbol): item for item in twse_batch.instruments}
-        instruments.update({(item.exchange, item.symbol): item for item in tpex_batch.instruments})
-        bars = {(item.exchange, item.symbol, item.trading_date): item for item in twse_batch.bars}
-        bars.update({(item.exchange, item.symbol, item.trading_date): item for item in tpex_batch.bars})
+        instruments = {
+            (item.exchange, item.symbol): item for item in twse_batch.instruments
+        }
+        instruments.update(
+            {(item.exchange, item.symbol): item for item in tpex_batch.instruments}
+        )
+        bars = {
+            (item.exchange, item.symbol, item.trading_date): item
+            for item in twse_batch.bars
+        }
+        bars.update(
+            {
+                (item.exchange, item.symbol, item.trading_date): item
+                for item in tpex_batch.bars
+            }
+        )
         no_data_dates = sorted(set(twse_batch.no_data_dates + tpex_batch.no_data_dates))
         if not instruments or (not bars and not no_data_dates):
-            raise OfficialDataError("official feeds returned no normalized universe or OHLCV")
+            raise OfficialDataError(
+                "official feeds returned no normalized universe or OHLCV"
+            )
         return OfficialBatch(
             instruments=list(instruments.values()),
             bars=list(bars.values()),
@@ -2763,7 +3109,10 @@ class OfficialMarketDataAdapter:
             events=twse_batch.events + tpex_batch.events,
             payloads=twse_batch.payloads + tpex_batch.payloads,
             warnings=twse_batch.warnings + tpex_batch.warnings,
-            data_as_of=max(filter(None, [twse_batch.data_as_of, tpex_batch.data_as_of]), default=end.isoformat()),
+            data_as_of=max(
+                filter(None, [twse_batch.data_as_of, tpex_batch.data_as_of]),
+                default=end.isoformat(),
+            ),
             no_data_dates=no_data_dates,
             event_coverage=_merge_event_coverage(
                 [twse_batch.event_coverage, tpex_batch.event_coverage]

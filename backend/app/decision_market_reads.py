@@ -1,4 +1,5 @@
 """Bounded action read values; classification does not establish provenance."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,7 +29,9 @@ def read_market_source(value: Any) -> str | None:
         value.encode("utf-8", errors="strict")
     except UnicodeError:
         return None
-    if re.fullmatch(r"[\s\ufeff]+", value) or any(ord(char) < 32 or ord(char) == 127 for char in value):
+    if re.fullmatch(r"[\s\ufeff]+", value) or any(
+        ord(char) < 32 or ord(char) == 127 for char in value
+    ):
         return None
     return value
 
@@ -58,8 +61,11 @@ class DecisionMarketRead:
 
     @property
     def invalid_fields(self) -> list[str]:
-        return [field for field in ("trading_date", "close", "source", "is_suspended")
-                if getattr(self, field) is None]
+        return [
+            field
+            for field in ("trading_date", "close", "source", "is_suspended")
+            if getattr(self, field) is None
+        ]
 
     @property
     def core_valid(self) -> bool:
@@ -70,17 +76,25 @@ def _project(row: Any) -> DecisionMarketRead:
     suspension = row["is_suspended"]
     raw_id = row["raw_payload_id"]
     return DecisionMarketRead(
-        id=row["id"], instrument_id=row["instrument_id"],
+        id=row["id"],
+        instrument_id=row["instrument_id"],
         trading_date=read_market_date(row["trading_date"]),
-        close=read_positive_price(row["close"]), adj_close=read_positive_price(row["adj_close"]),
+        close=read_positive_price(row["close"]),
+        adj_close=read_positive_price(row["adj_close"]),
         source=read_market_source(row["source"]),
-        is_suspended=bool(suspension) if type(suspension) is int and suspension in {0, 1} else None,
+        is_suspended=bool(suspension)
+        if type(suspension) is int and suspension in {0, 1}
+        else None,
         raw_payload_id=raw_id if type(raw_id) is int and raw_id > 0 else None,
     )
 
 
 def load_decision_market_reads(
-    db: Session, instrument_ids: Iterable[int], as_of: date | None, *, limit: int = 120,
+    db: Session,
+    instrument_ids: Iterable[int],
+    as_of: date | None,
+    *,
+    limit: int = 120,
 ) -> tuple[dict[int, list[DecisionMarketRead]], dict[int, DecisionMarketRead]]:
     ids = set(instrument_ids)
     if not ids:
@@ -106,9 +120,17 @@ def load_decision_market_reads(
             rows.append(row)
     # Cap precedes value validation: removing bad rows must not refill history
     # from earlier rows or change the persisted ordering of a valid input set.
-    return {item_id: [_project(row) for row in rows] for item_id, rows in candidates.items()}, unlocated
+    return {
+        item_id: [_project(row) for row in rows] for item_id, rows in candidates.items()
+    }, unlocated
 
 
 def market_read_status(row: DecisionMarketRead | None) -> dict[str, Any]:
-    return {"status": "missing" if row is None else "known" if row.core_valid else "invalid",
-            "invalid_fields": row.invalid_fields if row is not None else []}
+    return {
+        "status": "missing"
+        if row is None
+        else "known"
+        if row.core_valid
+        else "invalid",
+        "invalid_fields": row.invalid_fields if row is not None else [],
+    }

@@ -66,7 +66,11 @@ from app.models import (
     ThemeGroup,
 )
 from app.news import sync_news_from_events
-from app.taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id, canonical_industry_label
+from app.taxonomy import (
+    INDUSTRY_DISPLAY_ZH,
+    canonical_group_id,
+    canonical_industry_label,
+)
 from app.theme_table import THEME_CANDIDATE_GROUP_TYPE, THEME_GROUP_TYPE
 from worker.sources import (
     ActionRecord,
@@ -114,10 +118,14 @@ def business_days(end: date, count: int) -> list[date]:
 def _as_datetime(value: str | None, fallback: date | None = None) -> datetime | None:
     if value:
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
         except ValueError:
             try:
-                return datetime.combine(date.fromisoformat(value[:10]), datetime.min.time())
+                return datetime.combine(
+                    date.fromisoformat(value[:10]), datetime.min.time()
+                )
             except ValueError:
                 pass
     return datetime.combine(fallback, datetime.min.time()) if fallback else None
@@ -133,14 +141,19 @@ def _safe_float(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _effective_memberships(db: Session, group_id: str, score_date: date) -> list[tuple[GroupMembership, Instrument]]:
+def _effective_memberships(
+    db: Session, group_id: str, score_date: date
+) -> list[tuple[GroupMembership, Instrument]]:
     rows = db.execute(
         select(GroupMembership, Instrument)
         .join(Instrument, Instrument.id == GroupMembership.instrument_id)
         .where(
             GroupMembership.group_id == group_id,
             GroupMembership.valid_from <= score_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= score_date)),
+            (
+                GroupMembership.valid_to.is_(None)
+                | (GroupMembership.valid_to >= score_date)
+            ),
             Instrument.status == "active",
         )
     ).all()
@@ -231,7 +244,9 @@ def _ensure_membership(
         )
 
 
-def _action_factor_by_bar(db: Session, instrument_id: int, bars: list[MarketBar]) -> list[float]:
+def _action_factor_by_bar(
+    db: Session, instrument_id: int, bars: list[MarketBar]
+) -> list[float]:
     """Return the raw price-basis factor effective at each bar date.
 
     A factor maps the signal-date basis to the raw basis at the bar date.  A
@@ -257,7 +272,8 @@ def _action_factor_by_bar(db: Session, instrument_id: int, bars: list[MarketBar]
             (
                 candidate
                 for candidate in reversed(bars)
-                if candidate.trading_date < action.action_date and _safe_float(candidate.close) is not None
+                if candidate.trading_date < action.action_date
+                and _safe_float(candidate.close) is not None
             ),
             None,
         )
@@ -265,7 +281,9 @@ def _action_factor_by_bar(db: Session, instrument_id: int, bars: list[MarketBar]
             fallback_reference_prices[action.action_date] = previous.close
     factors: list[float] = []
     for bar in bars:
-        effective = [action for action in actions if action.action_date <= bar.trading_date]
+        effective = [
+            action for action in actions if action.action_date <= bar.trading_date
+        ]
         factor, _applied = _corporate_action_factor(
             effective,
             fallback_reference_prices=fallback_reference_prices,
@@ -283,7 +301,10 @@ def _normalized_history_for_score_date(
 
     bars = db.scalars(
         select(MarketBar)
-        .where(MarketBar.instrument_id == instrument_id, MarketBar.trading_date <= score_date)
+        .where(
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date <= score_date,
+        )
         .order_by(MarketBar.trading_date)
     ).all()
     factors = _action_factor_by_bar(db, instrument_id, bars)
@@ -318,7 +339,7 @@ def _calculate_features(
         select(MarketBar)
         .where(
             MarketBar.instrument_id == instrument.id,
-            *( [MarketBar.trading_date <= as_of_date] if as_of_date is not None else [] ),
+            *([MarketBar.trading_date <= as_of_date] if as_of_date is not None else []),
         )
         .order_by(MarketBar.trading_date)
     ).all()
@@ -328,7 +349,11 @@ def _calculate_features(
         for feature in db.scalars(
             select(TechnicalFeature).where(
                 TechnicalFeature.instrument_id == instrument.id,
-                *( [TechnicalFeature.trading_date <= as_of_date] if as_of_date is not None else [] ),
+                *(
+                    [TechnicalFeature.trading_date <= as_of_date]
+                    if as_of_date is not None
+                    else []
+                ),
             )
         )
     }
@@ -342,7 +367,10 @@ def _calculate_features(
         series = series_by_factor.get(score_factor)
         if series is None:
             series = tuple(
-                [getattr(item, field) * score_factor / (factor or 1.0) for item, factor in zip(bars, factors)]
+                [
+                    getattr(item, field) * score_factor / (factor or 1.0)
+                    for item, factor in zip(bars, factors)
+                ]
                 for field in ("close", "high", "low")
             )
             series_by_factor[score_factor] = series
@@ -357,9 +385,15 @@ def _calculate_features(
         atr_values = [high - low for high, low in zip(highs[-14:], lows[-14:])]
         ma5 = moving_average(closes, 5)
         feature_values: dict[str, Any] = {
-            "return_1d": round(closes[-1] / closes[-2] - 1, 8) if index >= 1 and closes[-2] else None,
-            "return_5d": round(closes[-1] / closes[-6] - 1, 8) if index >= 5 and closes[-6] else None,
-            "return_20d": round(closes[-1] / closes[-21] - 1, 8) if index >= 20 and closes[-21] else None,
+            "return_1d": round(closes[-1] / closes[-2] - 1, 8)
+            if index >= 1 and closes[-2]
+            else None,
+            "return_5d": round(closes[-1] / closes[-6] - 1, 8)
+            if index >= 5 and closes[-6]
+            else None,
+            "return_20d": round(closes[-1] / closes[-21] - 1, 8)
+            if index >= 20 and closes[-21]
+            else None,
             "ma5": round(ma5, 6) if ma5 is not None else None,
             "ma20": round(ma20, 6) if ma20 is not None else None,
             "ma60": round(ma60, 6) if ma60 is not None else None,
@@ -367,7 +401,9 @@ def _calculate_features(
             "low_20d": round(min(lows[-20:]), 6) if lows else None,
             "prior_high_20d": round(max(highs[-21:-1]), 6) if index >= 20 else None,
             "prior_low_20d": round(min(lows[-21:-1]), 6) if index >= 20 else None,
-            "atr14": round(sum(atr_values) / len(atr_values), 6) if atr_values else None,
+            "atr14": round(sum(atr_values) / len(atr_values), 6)
+            if atr_values
+            else None,
             "volume": int(bar.volume),
             "volume_ratio_20d": (
                 round(bar.volume / (sum(prior_20_volumes) / len(prior_20_volumes)), 6)
@@ -395,17 +431,27 @@ def _calculate_features(
             # compares with ==); skipping it keeps the row out of the
             # session's dirty set so unchanged history is not held in memory.
             feature.features_json = feature_values
-        if (capture is not None and capture_date == bar.trading_date
-                and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1"):
+        if (
+            capture is not None
+            and capture_date == bar.trading_date
+            and getattr(capture, "input_provenance", None)
+            == "selected-bar-prior-volumes/v1"
+        ):
             db.flush()
             capture.freeze_prior_volumes(
-                db, instrument=instrument, feature=feature, bars=bars, index=index,
+                db,
+                instrument=instrument,
+                feature=feature,
+                bars=bars,
+                index=index,
                 target_date=bar.trading_date,
                 projected_values=[int(value) for value in prior_volumes[-20:]],
             )
 
 
-def _prior_20_window(db: Session, instrument_id: int, trading_date: date) -> dict[str, list]:
+def _prior_20_window(
+    db: Session, instrument_id: int, trading_date: date
+) -> dict[str, list]:
     """The up-to-20 bars before ``trading_date``, derived from market_bars.
 
     Same values technical_features used to store as prior_20_highs/volumes:
@@ -413,16 +459,23 @@ def _prior_20_window(db: Session, instrument_id: int, trading_date: date) -> dic
     """
     bars = db.scalars(
         select(MarketBar)
-        .where(MarketBar.instrument_id == instrument_id, MarketBar.trading_date <= trading_date)
+        .where(
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date <= trading_date,
+        )
         .order_by(MarketBar.trading_date)
     ).all()
     factors = _action_factor_by_bar(db, instrument_id, bars)
     score_factor = factors[-1] if factors else 1.0
     prior = [
-        (bar, factor) for bar, factor in zip(bars, factors) if bar.trading_date < trading_date
+        (bar, factor)
+        for bar, factor in zip(bars, factors)
+        if bar.trading_date < trading_date
     ][-20:]
     return {
-        "highs": [round(bar.high * score_factor / (factor or 1.0), 6) for bar, factor in prior],
+        "highs": [
+            round(bar.high * score_factor / (factor or 1.0), 6) for bar, factor in prior
+        ],
         "volumes": [int(bar.volume) for bar, _factor in prior],
     }
 
@@ -450,23 +503,46 @@ def _price_return(
         for bar in bars
         if bar.trading_date <= score_date
         and not bar.is_suspended
-        and (normalized.get(bar.trading_date, {}).get("close", bar.close) if normalized else (bar.close or bar.adj_close))
+        and (
+            normalized.get(bar.trading_date, {}).get("close", bar.close)
+            if normalized
+            else (bar.close or bar.adj_close)
+        )
     ]
     if len(usable) < window + 1:
         return None
-    current = normalized.get(usable[-1].trading_date, {}).get("close", usable[-1].close) if normalized else (usable[-1].close or usable[-1].adj_close)
-    previous = normalized.get(usable[-window - 1].trading_date, {}).get("close", usable[-window - 1].close) if normalized else (usable[-window - 1].close or usable[-window - 1].adj_close)
+    current = (
+        normalized.get(usable[-1].trading_date, {}).get("close", usable[-1].close)
+        if normalized
+        else (usable[-1].close or usable[-1].adj_close)
+    )
+    previous = (
+        normalized.get(usable[-window - 1].trading_date, {}).get(
+            "close", usable[-window - 1].close
+        )
+        if normalized
+        else (usable[-window - 1].close or usable[-window - 1].adj_close)
+    )
     if not current or not previous:
         return None
     return current / previous - 1.0
 
 
-def _returns_by_window(db: Session, instrument_id: int, score_date: date) -> dict[int, float | None]:
-    bars, normalized, _score_factor = _normalized_history_for_score_date(db, instrument_id, score_date)
-    return {window: _price_return(bars, score_date, window, normalized) for window in (1, 5, 20)}
+def _returns_by_window(
+    db: Session, instrument_id: int, score_date: date
+) -> dict[int, float | None]:
+    bars, normalized, _score_factor = _normalized_history_for_score_date(
+        db, instrument_id, score_date
+    )
+    return {
+        window: _price_return(bars, score_date, window, normalized)
+        for window in (1, 5, 20)
+    }
 
 
-def _effective_trading_dates(db: Session, instrument_id: int, score_date: date, window: int = 20) -> list[date]:
+def _effective_trading_dates(
+    db: Session, instrument_id: int, score_date: date, window: int = 20
+) -> list[date]:
     rows = db.scalars(
         select(MarketBar.trading_date)
         .where(
@@ -499,7 +575,9 @@ def _validated_flow_and_volume_inputs(
     return None if inputs is None else (inputs[0], inputs[1])
 
 
-def _official_institutional_file_evidence(db: Session, trading_date: date) -> dict[str, int]:
+def _official_institutional_file_evidence(
+    db: Session, trading_date: date
+) -> dict[str, int]:
     """Return, per exchange, a raw payload proving that day's official institutional file was received.
 
     Rows from the official institutional parsers exist only after the report
@@ -509,7 +587,13 @@ def _official_institutional_file_evidence(db: Session, trading_date: date) -> di
 
     endpoints = {"TWSE": TWSE_CHIP_ENDPOINT, "TPEx": TPEX_CHIP_HISTORY_ENDPOINT}
     rows = db.execute(
-        select(Instrument.exchange, ChipSnapshot.source, RawPayload.id, RawPayload.endpoint, RawPayload.data_as_of)
+        select(
+            Instrument.exchange,
+            ChipSnapshot.source,
+            RawPayload.id,
+            RawPayload.endpoint,
+            RawPayload.data_as_of,
+        )
         .join(Instrument, Instrument.id == ChipSnapshot.instrument_id)
         .join(RawPayload, RawPayload.id == ChipSnapshot.raw_payload_id)
         .where(ChipSnapshot.trading_date == trading_date)
@@ -519,7 +603,8 @@ def _official_institutional_file_evidence(db: Session, trading_date: date) -> di
     for exchange, source, raw_id, endpoint, data_as_of in rows:
         if (
             exchange in OFFICIAL_INSTITUTIONAL_CHIP_SOURCES
-            and (source or "").split("+")[0] == OFFICIAL_INSTITUTIONAL_CHIP_SOURCES[exchange]
+            and (source or "").split("+")[0]
+            == OFFICIAL_INSTITUTIONAL_CHIP_SOURCES[exchange]
             and (endpoint or "").split("?", 1)[0] == endpoints[exchange]
             and data_as_of == trading_date.isoformat()
         ):
@@ -577,7 +662,11 @@ def _flow_and_volume_inputs(
     for trading_date in chip_dates:
         chip = chips_by_date.get(trading_date)
         components = (
-            (_safe_float(chip.foreign_buy), _safe_float(chip.trust_buy), _safe_float(chip.dealer_buy))
+            (
+                _safe_float(chip.foreign_buy),
+                _safe_float(chip.trust_buy),
+                _safe_float(chip.dealer_buy),
+            )
             if chip is not None
             else (None, None, None)
         )
@@ -586,15 +675,20 @@ def _flow_and_volume_inputs(
             continue
         if absent_evidence is None:
             return None
-        from_official_file = chip is not None and (chip.source or "").split("+")[0] in set(
-            OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.values()
-        )
+        from_official_file = chip is not None and (chip.source or "").split("+")[
+            0
+        ] in set(OFFICIAL_INSTITUTIONAL_CHIP_SOURCES.values())
         if from_official_file or any(component is not None for component in components):
             return None
         raw_payload_id = absent_evidence(trading_date)
         if raw_payload_id is None:
             return None
-        absent.append({"trading_date": trading_date.isoformat(), "evidence_raw_payload_id": raw_payload_id})
+        absent.append(
+            {
+                "trading_date": trading_date.isoformat(),
+                "evidence_raw_payload_id": raw_payload_id,
+            }
+        )
     return flow, volumes, absent
 
 
@@ -622,7 +716,9 @@ def _hot_group_institutional_flow_ratio(
 ) -> float | None:
     """Compute hot_group_v1 flow: five-day flow / twenty-day volume sum (shares)."""
 
-    return _hot_group_flow_with_absent_evidence(db, instrument_id, score_date, absent_evidence)[0]
+    return _hot_group_flow_with_absent_evidence(
+        db, instrument_id, score_date, absent_evidence
+    )[0]
 
 
 def _strategy_institutional_flow_to_average_volume_ratio(
@@ -640,28 +736,44 @@ def _strategy_institutional_flow_to_average_volume_ratio(
     return flow / average_volume if average_volume > 0 else None
 
 
-def _margin_change_ratio(db: Session, instrument_id: int, score_date: date) -> float | None:
+def _margin_change_ratio(
+    db: Session, instrument_id: int, score_date: date
+) -> float | None:
     dates = _effective_trading_dates(db, instrument_id, score_date, 6)
     if len(dates) < 6:
         return None
     chips = db.scalars(
         select(ChipSnapshot)
-        .where(ChipSnapshot.instrument_id == instrument_id, ChipSnapshot.trading_date.in_(dates))
+        .where(
+            ChipSnapshot.instrument_id == instrument_id,
+            ChipSnapshot.trading_date.in_(dates),
+        )
         .order_by(ChipSnapshot.trading_date)
     ).all()
-    if len(chips) < 6 or chips[0].margin_balance in (None, 0) or chips[-1].margin_balance is None:
+    if (
+        len(chips) < 6
+        or chips[0].margin_balance in (None, 0)
+        or chips[-1].margin_balance is None
+    ):
         return None
-    return (chips[-1].margin_balance - chips[0].margin_balance) / abs(chips[0].margin_balance)
+    return (chips[-1].margin_balance - chips[0].margin_balance) / abs(
+        chips[0].margin_balance
+    )
 
 
-def _allowed_group_members(group: ThemeGroup, members: list[tuple[GroupMembership, Instrument]]) -> list[tuple[GroupMembership, Instrument]]:
+def _allowed_group_members(
+    group: ThemeGroup, members: list[tuple[GroupMembership, Instrument]]
+) -> list[tuple[GroupMembership, Instrument]]:
     group_name = group.name.lower()
-    is_etf_group = group.group_type in {"etf", "instrument_theme"} or "etf" in group_name
+    is_etf_group = (
+        group.group_type in {"etf", "instrument_theme"} or "etf" in group_name
+    )
     if is_etf_group:
         return [
             (membership, instrument)
             for membership, instrument in members
-            if instrument.instrument_type == "etf" and instrument.etf_category in ETF_CATEGORIES
+            if instrument.instrument_type == "etf"
+            and instrument.etf_category in ETF_CATEGORIES
         ]
     return [
         (membership, instrument)
@@ -700,7 +812,9 @@ def _percentile(value: float | None, peers: list[float | None]) -> float | None:
     return max(0.0, min(1.0, (less + (equal - 1) / 2) / (len(valid) - 1)))
 
 
-def _catalyst_value(db: Session, instrument_ids: list[int], score_date: date, trading_dates: list[date]) -> float | None:
+def _catalyst_value(
+    db: Session, instrument_ids: list[int], score_date: date, trading_dates: list[date]
+) -> float | None:
     if not instrument_ids or not trading_dates:
         return None
     events = db.scalars(
@@ -783,8 +897,14 @@ def archive_group_score(db: Session, score: GroupDailyScore, reason: str) -> Non
 
 def _calculate_group_scores(db: Session, score_date: date) -> None:
     benchmark = _benchmark_instrument(db)
-    benchmark_returns = _returns_by_window(db, benchmark.id, score_date) if benchmark else {1: None, 5: None, 20: None}
-    benchmark_dates = _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
+    benchmark_returns = (
+        _returns_by_window(db, benchmark.id, score_date)
+        if benchmark
+        else {1: None, 5: None, 20: None}
+    )
+    benchmark_dates = (
+        _effective_trading_dates(db, benchmark.id, score_date, 20) if benchmark else []
+    )
     groups = db.scalars(select(ThemeGroup).where(ThemeGroup.active.is_(True))).all()
     computed: list[dict[str, Any]] = []
     file_evidence: dict[date, dict[str, int]] = {}
@@ -792,7 +912,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     def absent_evidence_for(exchange: str) -> Callable[[date], int | None]:
         def evidence(trading_date: date) -> int | None:
             if trading_date not in file_evidence:
-                file_evidence[trading_date] = _official_institutional_file_evidence(db, trading_date)
+                file_evidence[trading_date] = _official_institutional_file_evidence(
+                    db, trading_date
+                )
             return file_evidence[trading_date].get(exchange)
 
         return evidence
@@ -801,11 +923,16 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         board = _group_board(group)
         if board is None:
             continue
-        members = _allowed_group_members(group, _effective_memberships(db, group.id, score_date))
+        members = _allowed_group_members(
+            group, _effective_memberships(db, group.id, score_date)
+        )
         member_metrics: list[dict[str, Any]] = []
         for _membership, instrument in members:
             returns = _returns_by_window(db, instrument.id, score_date)
-            if any(returns[window] is None or benchmark_returns[window] is None for window in (1, 5, 20)):
+            if any(
+                returns[window] is None or benchmark_returns[window] is None
+                for window in (1, 5, 20)
+            ):
                 continue
             features = db.scalar(
                 select(TechnicalFeature).where(
@@ -814,7 +941,11 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 )
             )
             values = features.features_json if features else {}
-            prior_volumes = _prior_20_window(db, instrument.id, score_date)["volumes"] if features else []
+            prior_volumes = (
+                _prior_20_window(db, instrument.id, score_date)["volumes"]
+                if features
+                else []
+            )
             current_volume = _safe_float(values.get("volume", None))
             if current_volume is None:
                 bar = db.scalar(
@@ -840,7 +971,12 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 .order_by(desc(MarketBar.trading_date))
                 .limit(5)
             ).all()
-            volume_5d = (sum(last_five) / len(last_five)) / (sum(prior_volumes) / len(prior_volumes)) if len(last_five) == 5 else None
+            volume_5d = (
+                (sum(last_five) / len(last_five))
+                / (sum(prior_volumes) / len(prior_volumes))
+                if len(last_five) == 5
+                else None
+            )
             if volume_5d is None:
                 continue
             flow_ratio, flow_absent = _hot_group_flow_with_absent_evidence(
@@ -854,14 +990,19 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                     "instrument_type": instrument.instrument_type,
                     "etf_category": instrument.etf_category,
                     "excess": excess,
-                    "relative_weighted": 0.20 * excess[1] + 0.30 * excess[5] + 0.50 * excess[20],
+                    "relative_weighted": 0.20 * excess[1]
+                    + 0.30 * excess[5]
+                    + 0.50 * excess[20],
                     "breadth": {
-                        window: 1.0 if excess[window] > 0 else 0.0 for window in (1, 5, 20)
+                        window: 1.0 if excess[window] > 0 else 0.0
+                        for window in (1, 5, 20)
                     },
                     "volume_raw": 0.50 * volume_1d + 0.50 * volume_5d,
                     "hot_group_flow_ratio": flow_ratio,
                     "flow_absent_from_official_file": flow_absent,
-                    "margin_change_ratio": _margin_change_ratio(db, instrument.id, score_date),
+                    "margin_change_ratio": _margin_change_ratio(
+                        db, instrument.id, score_date
+                    ),
                 }
             )
 
@@ -870,32 +1011,56 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         if benchmark_dates:
             trading_dates = benchmark_dates
         elif instrument_ids:
-            trading_dates = _effective_trading_dates(db, instrument_ids[0], score_date, 20)
+            trading_dates = _effective_trading_dates(
+                db, instrument_ids[0], score_date, 20
+            )
         else:
             trading_dates = []
         raw_relative = (
-            sum(item["relative_weighted"] for item in member_metrics) / eligible if eligible else None
+            sum(item["relative_weighted"] for item in member_metrics) / eligible
+            if eligible
+            else None
         )
-        relative_1d = sum(item["excess"][1] for item in member_metrics) / eligible if eligible else None
-        relative_5d = sum(item["excess"][5] for item in member_metrics) / eligible if eligible else None
-        relative_20d = sum(item["excess"][20] for item in member_metrics) / eligible if eligible else None
+        relative_1d = (
+            sum(item["excess"][1] for item in member_metrics) / eligible
+            if eligible
+            else None
+        )
+        relative_5d = (
+            sum(item["excess"][5] for item in member_metrics) / eligible
+            if eligible
+            else None
+        )
+        relative_20d = (
+            sum(item["excess"][20] for item in member_metrics) / eligible
+            if eligible
+            else None
+        )
         breadth = (
             sum(
-                0.20 * item["breadth"][1] + 0.30 * item["breadth"][5] + 0.50 * item["breadth"][20]
+                0.20 * item["breadth"][1]
+                + 0.30 * item["breadth"][5]
+                + 0.50 * item["breadth"][20]
                 for item in member_metrics
             )
             / eligible
             if eligible
             else None
         )
-        volume_raw = median(item["volume_raw"] for item in member_metrics) if member_metrics else None
+        volume_raw = (
+            median(item["volume_raw"] for item in member_metrics)
+            if member_metrics
+            else None
+        )
         flow_values = [
             item["hot_group_flow_ratio"]
             for item in member_metrics
             if item["hot_group_flow_ratio"] is not None
             and math.isfinite(item["hot_group_flow_ratio"])
         ]
-        absent_members = [item for item in member_metrics if item["flow_absent_from_official_file"]]
+        absent_members = [
+            item for item in member_metrics if item["flow_absent_from_official_file"]
+        ]
         flow_coverage = {
             "available": len(flow_values),
             # 1.1.0: the base is the eligible members, as for the other four
@@ -911,19 +1076,24 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 len(item["flow_absent_from_official_file"]) for item in absent_members
             ),
             "absent_from_official_file_dates": sorted(
-                {day["trading_date"] for item in absent_members for day in item["flow_absent_from_official_file"]}
+                {
+                    day["trading_date"]
+                    for item in absent_members
+                    for day in item["flow_absent_from_official_file"]
+                }
             ),
         }
         flow_raw = sum(flow_values) / eligible if flow_coverage["complete"] else None
         catalyst = _catalyst_value(db, instrument_ids, score_date, trading_dates)
         categories = sorted(
-            {
-                item["etf_category"]
-                for item in member_metrics
-                if item["etf_category"]
-            }
+            {item["etf_category"] for item in member_metrics if item["etf_category"]}
         )
-        leaderboard = "etf:" + (categories[0] if categories else "unclassified") if group.group_type in {"etf", "instrument_theme"} or "etf" in group.name.lower() else "equity"
+        leaderboard = (
+            "etf:" + (categories[0] if categories else "unclassified")
+            if group.group_type in {"etf", "instrument_theme"}
+            or "etf" in group.name.lower()
+            else "equity"
+        )
         candidate_rows = sorted(
             member_metrics,
             key=lambda item: (item["excess"][20], item["excess"][5], item["symbol"]),
@@ -967,14 +1137,25 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
     for item in computed:
         raw = item["raw_values"]
         peers = [
-            other for other in computed
-            if (other["leaderboard"], other["board"]) == (item["leaderboard"], item["board"])
+            other
+            for other in computed
+            if (other["leaderboard"], other["board"])
+            == (item["leaderboard"], item["board"])
         ]
         normalized = {
-            "relative_return": _percentile(raw["relative_return"], [other["raw_values"]["relative_return"] for other in peers]),
+            "relative_return": _percentile(
+                raw["relative_return"],
+                [other["raw_values"]["relative_return"] for other in peers],
+            ),
             "breadth": raw["breadth"],
-            "volume_strength": _percentile(raw["volume_strength"], [other["raw_values"]["volume_strength"] for other in peers]),
-            "institutional_flow": _percentile(raw["institutional_flow"], [other["raw_values"]["institutional_flow"] for other in peers]),
+            "volume_strength": _percentile(
+                raw["volume_strength"],
+                [other["raw_values"]["volume_strength"] for other in peers],
+            ),
+            "institutional_flow": _percentile(
+                raw["institutional_flow"],
+                [other["raw_values"]["institutional_flow"] for other in peers],
+            ),
             "catalyst": raw["catalyst"],
         }
         score_row = db.scalar(
@@ -984,7 +1165,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             )
         )
         if not score_row:
-            score_row = GroupDailyScore(group_id=item["group"].id, trading_date=score_date)
+            score_row = GroupDailyScore(
+                group_id=item["group"].id, trading_date=score_date
+            )
             db.add(score_row)
         elif stored_hot_group_version(score_row) != HOT_GROUP_VERSION:
             archive_group_score(db, score_row, f"superseded_by_{HOT_GROUP_VERSION}")
@@ -1004,7 +1187,9 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
             score_row.score = calculate_group_score(normalized)
             quality = group_score_quality(normalized)
             score_row.data_quality = (
-                "partial" if not item["flow_coverage"]["complete"] and quality == "complete" else quality
+                "partial"
+                if not item["flow_coverage"]["complete"] and quality == "complete"
+                else quality
             )
             if score_row.score is None:
                 score_row.rank = None
@@ -1027,13 +1212,19 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                     # payload, while explicitly recording the hot-group
                     # denominator and formula version so it cannot be confused
                     # with a strategy evaluator's average-daily-volume ratio.
-                    "institutional_flow_to_turnover_ratio_5d": member["hot_group_flow_ratio"],
-                    "hot_group_institutional_flow_to_sum_volume_ratio_5d": member["hot_group_flow_ratio"],
+                    "institutional_flow_to_turnover_ratio_5d": member[
+                        "hot_group_flow_ratio"
+                    ],
+                    "hot_group_institutional_flow_to_sum_volume_ratio_5d": member[
+                        "hot_group_flow_ratio"
+                    ],
                     "institutional_flow_ratio_denominator": "sum_volume_20d",
                     "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
                     # Sessions counted as zero net flow because the member was
                     # absent from that day's received official file.
-                    "institutional_flow_absent_from_official_file": member["flow_absent_from_official_file"],
+                    "institutional_flow_absent_from_official_file": member[
+                        "flow_absent_from_official_file"
+                    ],
                     "margin_balance_change_ratio_5d": member["margin_change_ratio"],
                 }
                 for member in item["member_metrics"]
@@ -1045,7 +1236,10 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
                 else []
             ),
             "candidate_symbols": (
-                [candidate["symbol"] for candidate in item["candidates"][:MAX_GROUP_CANDIDATES]]
+                [
+                    candidate["symbol"]
+                    for candidate in item["candidates"][:MAX_GROUP_CANDIDATES]
+                ]
                 if score_row.score is not None
                 else []
             ),
@@ -1067,11 +1261,14 @@ def _calculate_group_scores(db: Session, score_date: date) -> None:
         peers = [
             other["score_row"]
             for other in computed
-            if (other["leaderboard"], other["board"]) == (item["leaderboard"], item["board"])
+            if (other["leaderboard"], other["board"])
+            == (item["leaderboard"], item["board"])
             and other.get("score_row") is not None
             and other["score_row"].score is not None
         ]
-        for rank, row in enumerate(sorted(peers, key=lambda value: value.score, reverse=True), start=1):
+        for rank, row in enumerate(
+            sorted(peers, key=lambda value: value.score, reverse=True), start=1
+        ):
             row.rank = rank
 
 
@@ -1138,7 +1335,9 @@ def _ensure_strategies(db: Session) -> dict[str, StrategyVersion]:
     return versions
 
 
-def _require_same_formula(db: Session, signal: Signal, strategy: StrategyVersion) -> None:
+def _require_same_formula(
+    db: Session, signal: Signal, strategy: StrategyVersion
+) -> None:
     """Refuse to rewrite a stored signal that belongs to another formula.
 
     The analysis ``signal_key`` carries name and version but not the formula, so
@@ -1148,7 +1347,11 @@ def _require_same_formula(db: Session, signal: Signal, strategy: StrategyVersion
 
     if signal.strategy_version_id == strategy.id:
         return
-    stored = db.get(StrategyVersion, signal.strategy_version_id) if signal.strategy_version_id else None
+    stored = (
+        db.get(StrategyVersion, signal.strategy_version_id)
+        if signal.strategy_version_id
+        else None
+    )
     raise StrategyVersionError(
         "signal_formula_conflict",
         f"signal {signal.signal_key} (id {signal.id}) is stored under formula "
@@ -1175,7 +1378,9 @@ def _next_execution_date(
     )
 
 
-def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -> GroupDailyScore | None:
+def _best_group_for_signal(
+    db: Session, instrument_id: int, signal_date: date
+) -> GroupDailyScore | None:
     """Return a usable as-of group return for an individual strategy.
 
     ``hot_group_v1`` may be unranked when one of its discovery components
@@ -1186,24 +1391,33 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
     group, TAIEX provenance, minimum-member, and finite-return gates here;
     the product ``/themes`` and action qualification gates remain stricter.
     """
-    rows = db.execute(
-        select(GroupDailyScore)
-        .join(GroupMembership, GroupMembership.group_id == GroupDailyScore.group_id)
-        .join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id)
-        .where(
-            GroupMembership.instrument_id == instrument_id,
-            GroupMembership.valid_from <= signal_date,
-            (GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= signal_date)),
-            ThemeGroup.active.is_(True),
-            # Strategy group confirmation keeps its pre-theme input; themes
-            # are ranked research context only.
-            ThemeGroup.group_type != THEME_GROUP_TYPE,
-            GroupDailyScore.trading_date == signal_date,
-            GroupDailyScore.relative_return_20d.is_not(None),
-            GroupDailyScore.eligible_members >= MIN_GROUP_MEMBERS,
+    rows = (
+        db.execute(
+            select(GroupDailyScore)
+            .join(GroupMembership, GroupMembership.group_id == GroupDailyScore.group_id)
+            .join(ThemeGroup, ThemeGroup.id == GroupDailyScore.group_id)
+            .where(
+                GroupMembership.instrument_id == instrument_id,
+                GroupMembership.valid_from <= signal_date,
+                (
+                    GroupMembership.valid_to.is_(None)
+                    | (GroupMembership.valid_to >= signal_date)
+                ),
+                ThemeGroup.active.is_(True),
+                # Strategy group confirmation keeps its pre-theme input; themes
+                # are ranked research context only.
+                ThemeGroup.group_type != THEME_GROUP_TYPE,
+                GroupDailyScore.trading_date == signal_date,
+                GroupDailyScore.relative_return_20d.is_not(None),
+                GroupDailyScore.eligible_members >= MIN_GROUP_MEMBERS,
+            )
+            .order_by(
+                desc(GroupDailyScore.score), desc(GroupDailyScore.relative_return_20d)
+            )
         )
-        .order_by(desc(GroupDailyScore.score), desc(GroupDailyScore.relative_return_20d))
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for row in rows:
         details = row.details_json or {}
         if details.get("benchmark") != "TAIEX":
@@ -1215,16 +1429,28 @@ def _best_group_for_signal(db: Session, instrument_id: int, signal_date: date) -
 
 
 def _resolve_group_member_return(
-    db: Session, group_score: GroupDailyScore | None, instrument: Instrument, signal_date: date,
+    db: Session,
+    group_score: GroupDailyScore | None,
+    instrument: Instrument,
+    signal_date: date,
 ) -> tuple[int | float | None, dict[str, Any]]:
     """Resolve versioned member evidence without guessing an exchange identity."""
-    requested = {"instrument_id": instrument.id, "exchange": instrument.exchange, "symbol": instrument.symbol}
+    requested = {
+        "instrument_id": instrument.id,
+        "exchange": instrument.exchange,
+        "symbol": instrument.symbol,
+    }
     audit = {
         "version": "group-member-return-lookup/v1",
         "member_return_identity_version": None,
         "group_id": group_score.group_id if group_score else None,
-        "group_score_date": group_score.trading_date.isoformat() if group_score else None,
-        "requested": requested, "matched": None, "mode": "rejected", "reason": None,
+        "group_score_date": group_score.trading_date.isoformat()
+        if group_score
+        else None,
+        "requested": requested,
+        "matched": None,
+        "mode": "rejected",
+        "reason": None,
     }
 
     def finish(reason: str, value: int | float | None = None):
@@ -1253,9 +1479,19 @@ def _resolve_group_member_return(
             return finish("unsupported_identity_version")
         ids, pairs = set(), set()
         for row in rows:
-            row_id, exchange, symbol = row.get("instrument_id"), row.get("exchange"), row.get("symbol")
-            if (type(row_id) is not int or row_id <= 0 or type(exchange) is not str
-                    or not exchange or type(symbol) is not str or not symbol):
+            row_id, exchange, symbol = (
+                row.get("instrument_id"),
+                row.get("exchange"),
+                row.get("symbol"),
+            )
+            if (
+                type(row_id) is not int
+                or row_id <= 0
+                or type(exchange) is not str
+                or not exchange
+                or type(symbol) is not str
+                or not symbol
+            ):
                 return finish("invalid_member_identity")
             if row_id in ids or (exchange, symbol) in pairs:
                 return finish("duplicate_member_identity")
@@ -1265,7 +1501,10 @@ def _resolve_group_member_return(
         if not matches:
             return finish("member_not_found")
         member = matches[0]
-        if member["exchange"] != instrument.exchange or member["symbol"] != instrument.symbol:
+        if (
+            member["exchange"] != instrument.exchange
+            or member["symbol"] != instrument.symbol
+        ):
             return finish("member_identity_conflict")
     else:
         audit["mode"] = "legacy_symbol_unique"
@@ -1276,8 +1515,12 @@ def _resolve_group_member_return(
         group = db.get(ThemeGroup, group_score.group_id)
         if group is None:
             return finish("group_missing")
-        members = _allowed_group_members(group, _effective_memberships(db, group.id, signal_date))
-        matching_ids = {item.id for _membership, item in members if item.symbol == instrument.symbol}
+        members = _allowed_group_members(
+            group, _effective_memberships(db, group.id, signal_date)
+        )
+        matching_ids = {
+            item.id for _membership, item in members if item.symbol == instrument.symbol
+        }
         if matching_ids != {instrument.id}:
             return finish("legacy_membership_ambiguous_or_missing")
         matches = [row for row in rows if row["symbol"] == instrument.symbol]
@@ -1309,13 +1552,22 @@ def _set_signal_status(signal: Signal, next_status: str) -> None:
     # A later retry may fill data that was previously incomplete.  Follow the
     # declared lifecycle through observation before promoting it to a new
     # actionable state; never bypass the domain transition contract.
-    if signal.status in {"data_incomplete", "invalid_levels"} and next_status == "conditional":
+    if (
+        signal.status in {"data_incomplete", "invalid_levels"}
+        and next_status == "conditional"
+    ):
         signal.status = "observation"
     # Tracking may discover an outcome on the first executable session.  The
     # canonical lifecycle still requires conditional -> active before moving
     # to target/invalid/incomparable, so explicitly walk those intermediate
     # states instead of bypassing the domain contract.
-    if next_status in {"active", "target_1_hit", "target_2_hit", "invalidated", "incomparable"}:
+    if next_status in {
+        "active",
+        "target_1_hit",
+        "target_2_hit",
+        "invalidated",
+        "incomparable",
+    }:
         if signal.status in {"data_incomplete", "invalid_levels"}:
             signal.status = "observation"
         if signal.status == "observation":
@@ -1364,7 +1616,9 @@ def _upsert_signal_for_strategy(
         instrument.etf_category,
     )
     group_score = _best_group_for_signal(db, instrument.id, signal_date)
-    group_excess, group_member_return_lookup = _resolve_group_member_return(db, group_score, instrument, signal_date)
+    group_excess, group_member_return_lookup = _resolve_group_member_return(
+        db, group_score, instrument, signal_date
+    )
     strategy_flow_ratio = _strategy_institutional_flow_to_average_volume_ratio(
         db,
         instrument.id,
@@ -1388,24 +1642,38 @@ def _upsert_signal_for_strategy(
         margin_balance_change_ratio_5d=margin_ratio,
     )
     input_provenance = None
-    capture_mode = getattr(capture, "input_provenance", None) if capture is not None else None
+    capture_mode = (
+        getattr(capture, "input_provenance", None) if capture is not None else None
+    )
     if capture_mode in ("selected-bar/v1", "selected-bar-prior-volumes/v1"):
         selected_bar = capture.selected_bar_provenance(
-            db, bar=bar, instrument=instrument, signal_date=signal_date,
-            close=close, volume=volume,
+            db,
+            bar=bar,
+            instrument=instrument,
+            signal_date=signal_date,
+            close=close,
+            volume=volume,
         )
         input_provenance = selected_bar
         if capture_mode == "selected-bar-prior-volumes/v1":
             prior_input = capture.prior_volumes_provenance(
-                db, instrument=instrument, feature=feature, signal_date=signal_date,
+                db,
+                instrument=instrument,
+                feature=feature,
+                signal_date=signal_date,
                 arguments=breakout_arguments,
             )
-            input_provenance = {"selected_bar": selected_bar, "prior_volumes": prior_input}
+            input_provenance = {
+                "selected_bar": selected_bar,
+                "prior_volumes": prior_input,
+            }
     if capture is not None:
         if input_provenance is None:
             capture.before("breakout_v1", breakout_arguments)
         else:
-            capture.before("breakout_v1", breakout_arguments, input_provenance=input_provenance)
+            capture.before(
+                "breakout_v1", breakout_arguments, input_provenance=input_provenance
+            )
     breakout = evaluate_breakout_v1(**breakout_arguments)
     if capture is not None:
         capture.after("breakout_v1", breakout)
@@ -1424,7 +1692,9 @@ def _upsert_signal_for_strategy(
         if input_provenance is None:
             capture.before("pullback_v1", pullback_arguments)
         else:
-            capture.before("pullback_v1", pullback_arguments, input_provenance=input_provenance)
+            capture.before(
+                "pullback_v1", pullback_arguments, input_provenance=input_provenance
+            )
     pullback = evaluate_pullback_v1(**pullback_arguments)
     if capture is not None:
         capture.after("pullback_v1", pullback)
@@ -1444,8 +1714,14 @@ def _upsert_signal_for_strategy(
     target_2: float | None = None
     if chosen is not None and close is not None:
         if chosen_kind == "breakout":
-            prior_high = max(prior_highs[-20:]) if prior_highs and len(prior_highs) >= 20 else close
-            entry, invalid_price, target_1, target_2 = _risk_levels(max(close, float(prior_high)), atr)
+            prior_high = (
+                max(prior_highs[-20:])
+                if prior_highs and len(prior_highs) >= 20
+                else close
+            )
+            entry, invalid_price, target_1, target_2 = _risk_levels(
+                max(close, float(prior_high)), atr
+            )
             breakout_price = entry
         else:
             entry = round(close, 2)
@@ -1453,7 +1729,9 @@ def _upsert_signal_for_strategy(
             zone_width = max((atr or close * 0.01) * 0.5, close * 0.005)
             pullback_low = round(max(0.01, support - zone_width), 2)
             pullback_high = round(support + zone_width, 2)
-            reference_entry, invalid_price, target_1, target_2 = _risk_levels(entry, atr)
+            reference_entry, invalid_price, target_1, target_2 = _risk_levels(
+                entry, atr
+            )
     entry_type = chosen_kind
     validation = validate_signal_levels(
         entry_type=entry_type,
@@ -1465,7 +1743,11 @@ def _upsert_signal_for_strategy(
     )
     missing_reasons = list(
         dict.fromkeys(
-            list(chosen.reasons if chosen is not None and chosen.state == "data_incomplete" else ())
+            list(
+                chosen.reasons
+                if chosen is not None and chosen.state == "data_incomplete"
+                else ()
+            )
             + list(
                 breakout.reasons
                 if strategy_key == "breakout_v1" and breakout.state == "data_incomplete"
@@ -1553,7 +1835,9 @@ def _upsert_signal_for_strategy(
             f"breakout={breakout.state}:{','.join(breakout.reasons)}",
             f"pullback={pullback.state}:{','.join(pullback.reasons)}",
             f"group={group_score.group_id if group_score else 'missing'}",
-            f"missing={','.join(missing_reasons)}" if missing_reasons else "required inputs complete",
+            f"missing={','.join(missing_reasons)}"
+            if missing_reasons
+            else "required inputs complete",
         ]
     )
     signal.data_cutoff = f"{signal_date.isoformat()} 13:30 Asia/Taipei"
@@ -1564,7 +1848,11 @@ def _upsert_signal_for_strategy(
         signal_date,
         max_date=data_cutoff,
     )
-    signal.data_quality = "complete" if status in {"conditional", "observation"} and not missing_reasons else "incomplete"
+    signal.data_quality = (
+        "complete"
+        if status in {"conditional", "observation"} and not missing_reasons
+        else "incomplete"
+    )
     signal.rule_evidence_json = {
         # Preserve legacy/audit-only keys while refreshing the canonical fields
         # below for the current evaluation.
@@ -1597,7 +1885,9 @@ def _upsert_signal_for_strategy(
         "risk_validation": {"valid": validation.valid, "errors": validation.errors},
         "execution": {
             "signal_time": "T_close",
-            "earliest": signal.earliest_execution_date.isoformat() if signal.earliest_execution_date else None,
+            "earliest": signal.earliest_execution_date.isoformat()
+            if signal.earliest_execution_date
+            else None,
             "fill_policy": "next_session_open_or_better_plus_adverse_slippage",
             "execution_slippage_bps": EXECUTION_SLIPPAGE_BPS,
             "round_trip_transaction_cost_bps": ROUND_TRIP_TRANSACTION_COST_BPS,
@@ -1605,8 +1895,14 @@ def _upsert_signal_for_strategy(
         },
     }
     if capture is not None:
-        capture.persist(db, signal=signal, instrument=instrument, strategy=strategy,
-                        strategy_key=strategy_key, namespace=namespace)
+        capture.persist(
+            db,
+            signal=signal,
+            instrument=instrument,
+            strategy=strategy,
+            strategy_key=strategy_key,
+            namespace=namespace,
+        )
     return True
 
 
@@ -1650,7 +1946,10 @@ def _generate_signals(
     capture: Any = None,
 ) -> int:
     instruments = db.scalars(
-        select(Instrument).where(Instrument.instrument_type.in_({"stock", "etf", "ipo"}), Instrument.status == "active")
+        select(Instrument).where(
+            Instrument.instrument_type.in_({"stock", "etf", "ipo"}),
+            Instrument.status == "active",
+        )
     ).all()
     count = 0
     for instrument in instruments:
@@ -1668,7 +1967,9 @@ def _generate_signals(
     return count
 
 
-def _upsert_raw_payload(db: Session, run: IngestionRun, payload: FetchedPayload) -> RawPayload:
+def _upsert_raw_payload(
+    db: Session, run: IngestionRun, payload: FetchedPayload
+) -> RawPayload:
     # SQLAlchemy's timestamp default must not turn missing capture evidence
     # into an apparently valid observation time.
     if not isinstance(payload.collected_at, datetime):
@@ -1690,8 +1991,11 @@ def _upsert_raw_payload(db: Session, run: IngestionRun, payload: FetchedPayload)
         payload_path=str(payload.payload_path),
         sha256=payload.sha256,
         data_as_of=payload.data_as_of,
-        collected_at=(payload.collected_at.astimezone(timezone.utc).replace(tzinfo=None)
-                      if payload.collected_at.tzinfo is not None else payload.collected_at),
+        collected_at=(
+            payload.collected_at.astimezone(timezone.utc).replace(tzinfo=None)
+            if payload.collected_at.tzinfo is not None
+            else payload.collected_at
+        ),
     )
     db.add(row)
     db.flush()
@@ -1746,7 +2050,14 @@ def _apply_official_values(
             setattr(row, field_name, value)
             changed.append(field_name)
         elif conflicts is not None:
-            conflicts.append({"row": label, "field": field_name, "stored": current, "incoming": value})
+            conflicts.append(
+                {
+                    "row": label,
+                    "field": field_name,
+                    "stored": current,
+                    "incoming": value,
+                }
+            )
     return changed
 
 
@@ -1771,7 +2082,9 @@ def _set_official_provenance(
         row.collected_at = datetime.utcnow()
         row.raw_payload_id = raw_payload_id
     elif fills is not None:
-        fills.append({**fill_key, "fields": sorted(changed), "raw_payload_id": raw_payload_id})
+        fills.append(
+            {**fill_key, "fields": sorted(changed), "raw_payload_id": raw_payload_id}
+        )
 
 
 def _apply_official_turnover(
@@ -1797,7 +2110,14 @@ def _apply_official_turnover(
             return False
         if bar.turnover_status == "available" and not overwrite:
             if conflicts is not None:
-                conflicts.append({"row": label, "field": "turnover", "stored": list(stored), "incoming": list(incoming)})
+                conflicts.append(
+                    {
+                        "row": label,
+                        "field": "turnover",
+                        "stored": list(stored),
+                        "incoming": list(incoming),
+                    }
+                )
             return False
     bar.turnover, bar.turnover_status, bar.turnover_reason = incoming
     return True
@@ -1840,9 +2160,17 @@ def _upsert_official_bar(
         conflicts=conflicts,
         label=label,
     )
-    if _apply_official_turnover(
-        bar, record, is_new=is_new, overwrite=overwrite, conflicts=conflicts, label=label
-    ) and "turnover" not in changed:
+    if (
+        _apply_official_turnover(
+            bar,
+            record,
+            is_new=is_new,
+            overwrite=overwrite,
+            conflicts=conflicts,
+            label=label,
+        )
+        and "turnover" not in changed
+    ):
         changed.append("turnover")
     _set_official_provenance(
         bar,
@@ -1852,8 +2180,12 @@ def _upsert_official_bar(
         data_as_of=_as_datetime(record.data_as_of, record.trading_date),
         raw_payload_id=raw_payload_id,
         fills=fills,
-        fill_key={"table": "market_bars", "exchange": instrument.exchange, "symbol": instrument.symbol,
-                  "trading_date": record.trading_date.isoformat()},
+        fill_key={
+            "table": "market_bars",
+            "exchange": instrument.exchange,
+            "symbol": instrument.symbol,
+            "trading_date": record.trading_date.isoformat(),
+        },
     )
     return bar
 
@@ -1908,13 +2240,22 @@ def _upsert_official_chip(
         data_as_of=_as_datetime(record.data_as_of, record.trading_date),
         raw_payload_id=raw_payload_id,
         fills=fills,
-        fill_key={"table": "chip_snapshots", "exchange": instrument.exchange, "symbol": instrument.symbol,
-                  "trading_date": record.trading_date.isoformat()},
+        fill_key={
+            "table": "chip_snapshots",
+            "exchange": instrument.exchange,
+            "symbol": instrument.symbol,
+            "trading_date": record.trading_date.isoformat(),
+        },
     )
     return True
 
 
-def _upsert_action(db: Session, action: ActionRecord, instruments: dict[tuple[str, str], Instrument], raw_payload_id: int | None) -> None:
+def _upsert_action(
+    db: Session,
+    action: ActionRecord,
+    instruments: dict[tuple[str, str], Instrument],
+    raw_payload_id: int | None,
+) -> None:
     instrument = instruments.get((action.exchange, action.symbol))
     if not instrument:
         return
@@ -2022,7 +2363,9 @@ _ETF_CATEGORY_NAMES_ZH = {
 }
 
 
-def _official_industry_label(value: str | None, exchange: str | None = None) -> str | None:
+def _official_industry_label(
+    value: str | None, exchange: str | None = None
+) -> str | None:
     """Return the exchange-normalised official industry label.
 
     ``exchange`` is optional only for compatibility with older callers that
@@ -2053,11 +2396,17 @@ def ensure_official_industry_group(db: Session, label: str) -> ThemeGroup:
     group = db.get(ThemeGroup, group_id)
     if group is None:
         group = ThemeGroup(
-            id=group_id, name=f"Industry · {label}", group_type="official_industry",
-            definition_version="official-v1", source=OFFICIAL_INDUSTRY_SOURCE, active=True,
+            id=group_id,
+            name=f"Industry · {label}",
+            group_type="official_industry",
+            definition_version="official-v1",
+            source=OFFICIAL_INDUSTRY_SOURCE,
+            active=True,
             display_name_zh=INDUSTRY_DISPLAY_ZH[label],
             display_description_zh="依官方共同產業分類建立的市場族群。",
-            display_category="股票族群", name_source="TWSE/TPEx official classification", name_status="official",
+            display_category="股票族群",
+            name_source="TWSE/TPEx official classification",
+            name_status="official",
         )
         db.add(group)
         db.flush()
@@ -2076,10 +2425,15 @@ def _industry_observations(
     run_id: int | None,
 ) -> dict[str, Any]:
     """Preflight then project current industry observations, never effective history."""
+
     def utc(value: datetime) -> datetime:
         if not isinstance(value, datetime):
             raise OfficialDataError("industry observation requires a capture timestamp")
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
 
     now = utc(observed_now)
     captures = list(payloads)
@@ -2089,7 +2443,9 @@ def _industry_observations(
     official = "TWSE/TPEx official OpenAPI"
     for record in records:
         if record.instrument_type not in {"stock", "ipo", "etf", "index"}:
-            raise OfficialDataError("unsupported instrument type for official membership")
+            raise OfficialDataError(
+                "unsupported instrument type for official membership"
+            )
         key = (record.exchange, record.symbol)
         if key in seen:
             raise OfficialDataError("duplicate industry observation for instrument")
@@ -2100,22 +2456,40 @@ def _industry_observations(
         if instrument is None:
             raise OfficialDataError("industry observation has no normalized instrument")
         endpoints = {
-            "TWSE": {TWSE_LISTED_ENDPOINT, TWSE_NEW_LISTING_ENDPOINT} if record.instrument_type == "ipo" else {TWSE_LISTED_ENDPOINT},
+            "TWSE": {TWSE_LISTED_ENDPOINT, TWSE_NEW_LISTING_ENDPOINT}
+            if record.instrument_type == "ipo"
+            else {TWSE_LISTED_ENDPOINT},
             "TPEx": {TPEX_LISTED_ENDPOINT},
         }.get(record.exchange, set())
-        matches = [p for p in captures if record.payload_sha256 and p.sha256 == record.payload_sha256
-                   and p.source == record.exchange.lower() and p.endpoint in endpoints]
+        matches = [
+            p
+            for p in captures
+            if record.payload_sha256
+            and p.sha256 == record.payload_sha256
+            and p.source == record.exchange.lower()
+            and p.endpoint in endpoints
+        ]
         if len(matches) != 1:
-            raise OfficialDataError("industry observation requires one authoritative universe capture")
+            raise OfficialDataError(
+                "industry observation requires one authoritative universe capture"
+            )
         capture = matches[0]
         captured = utc(capture.collected_at)
         if captured > now:
             raise OfficialDataError("industry observation capture is in the future")
         day = captured.astimezone(timezone(timedelta(hours=8))).date()
-        raw = db.scalar(select(RawPayload).where(
-            RawPayload.ingestion_run_id == run_id, RawPayload.source == capture.source,
-            RawPayload.endpoint == capture.endpoint, RawPayload.sha256 == capture.sha256,
-        )) if run_id is not None else None
+        raw = (
+            db.scalar(
+                select(RawPayload).where(
+                    RawPayload.ingestion_run_id == run_id,
+                    RawPayload.source == capture.source,
+                    RawPayload.endpoint == capture.endpoint,
+                    RawPayload.sha256 == capture.sha256,
+                )
+            )
+            if run_id is not None
+            else None
+        )
         if run_id is not None and raw is None:
             raise OfficialDataError("industry observation has no persisted raw capture")
         new_listing_only = capture.endpoint == TWSE_NEW_LISTING_ENDPOINT
@@ -2123,58 +2497,102 @@ def _industry_observations(
         if not new_listing_only and not value:
             raise OfficialDataError("missing industry classification evidence")
         if not new_listing_only and not (value.isascii() and value.isdigit()):
-            raise OfficialDataError("ambiguous nonnumeric industry classification evidence")
-        label = canonical_industry_label(record.exchange, value) if value.isascii() and value.isdigit() else None
+            raise OfficialDataError(
+                "ambiguous nonnumeric industry classification evidence"
+            )
+        label = (
+            canonical_industry_label(record.exchange, value)
+            if value.isascii() and value.isdigit()
+            else None
+        )
         receipt = {
-            "exchange": record.exchange, "symbol": record.symbol,
-            "source": capture.source, "endpoint": capture.endpoint, "sha256": capture.sha256,
-            "captured_at_utc": captured.isoformat(), "observed_date": day.isoformat(),
-            "score_date": score_date.isoformat(), "raw_payload_id": raw.id if raw else None,
-            "stored_raw_collected_at_utc": utc(raw.collected_at).isoformat() if raw else None,
+            "exchange": record.exchange,
+            "symbol": record.symbol,
+            "source": capture.source,
+            "endpoint": capture.endpoint,
+            "sha256": capture.sha256,
+            "captured_at_utc": captured.isoformat(),
+            "observed_date": day.isoformat(),
+            "score_date": score_date.isoformat(),
+            "raw_payload_id": raw.id if raw else None,
+            "stored_raw_collected_at_utc": utc(raw.collected_at).isoformat()
+            if raw
+            else None,
             "time_semantics": "current_source_observation_not_classification_effective_date",
             "raw_time_relationship": "stored_raw_may_be_earlier_identical_content_capture",
             "raw_classification": record.industry,
-            "classification_status": "unresolved" if new_listing_only else ("known" if label else "unknown_special_or_unsupported"),
-            "status": "unresolved_new_listing_only" if new_listing_only else ("skipped_after_score_date" if day > score_date else "applied"),
+            "classification_status": "unresolved"
+            if new_listing_only
+            else ("known" if label else "unknown_special_or_unsupported"),
+            "status": "unresolved_new_listing_only"
+            if new_listing_only
+            else ("skipped_after_score_date" if day > score_date else "applied"),
         }
         receipts.append(receipt)
         if new_listing_only or day > score_date:
             continue
         target_id = canonical_group_id("industry", label) if label else None
         group = db.get(ThemeGroup, target_id) if target_id else None
-        if group and (group.name != f"Industry · {label}" or group.group_type != "official_industry"
-                      or group.definition_version != "official-v1" or group.source != official
-                      or not group.active):
+        if group and (
+            group.name != f"Industry · {label}"
+            or group.group_type != "official_industry"
+            or group.definition_version != "official-v1"
+            or group.source != official
+            or not group.active
+        ):
             raise OfficialDataError("canonical industry group identity conflict")
-        periods = db.execute(select(GroupMembership, ThemeGroup).join(ThemeGroup).where(
-            GroupMembership.instrument_id == instrument.id,
-        )).all()
+        periods = db.execute(
+            select(GroupMembership, ThemeGroup)
+            .join(ThemeGroup)
+            .where(
+                GroupMembership.instrument_id == instrument.id,
+            )
+        ).all()
         history = []
         expected_source = f"{official}; exchange={record.exchange}"
         for membership, parent in periods:
-            if membership.source not in {official, f"{official}; exchange=TWSE", f"{official}; exchange=TPEx"}:
+            if membership.source not in {
+                official,
+                f"{official}; exchange=TWSE",
+                f"{official}; exchange=TPEx",
+            }:
                 # A manual row at the same unique key cannot be repurposed.
                 if target_id == membership.group_id and membership.valid_from == day:
-                    raise OfficialDataError("manual membership conflicts with industry observation")
+                    raise OfficialDataError(
+                        "manual membership conflicts with industry observation"
+                    )
                 continue
-            if parent.group_type != "official_industry" and not parent.id.startswith("official-industry-"):
+            if parent.group_type != "official_industry" and not parent.id.startswith(
+                "official-industry-"
+            ):
                 continue
             if membership.source not in {official, expected_source}:
-                raise OfficialDataError("official industry membership exchange conflict")
-            if membership.valid_from > day or (membership.valid_to is not None and membership.valid_to < membership.valid_from):
+                raise OfficialDataError(
+                    "official industry membership exchange conflict"
+                )
+            if membership.valid_from > day or (
+                membership.valid_to is not None
+                and membership.valid_to < membership.valid_from
+            ):
                 raise OfficialDataError("future or inverted industry membership period")
             history.append(membership)
         history.sort(key=lambda row: row.valid_from)
         for previous, current in zip(history, history[1:]):
             if previous.valid_to is None or previous.valid_to >= current.valid_from:
-                raise OfficialDataError("overlapping official industry membership periods")
+                raise OfficialDataError(
+                    "overlapping official industry membership periods"
+                )
         active = [row for row in history if row.valid_to is None or row.valid_to >= day]
         current = active[0] if active else None
         if current and current.valid_to is not None:
             raise OfficialDataError("closed industry period overlaps observation")
         if current and current.group_id != target_id and current.valid_from == day:
-            raise OfficialDataError("same-day industry transition cannot preserve daily history")
-        plans.append((instrument, day, label, target_id, group, current, expected_source))
+            raise OfficialDataError(
+                "same-day industry transition cannot preserve daily history"
+            )
+        plans.append(
+            (instrument, day, label, target_id, group, current, expected_source)
+        )
 
     # No membership or group mutation until every ordinary record passes.
     for instrument, day, label, target_id, group, current, source in plans:
@@ -2189,11 +2607,16 @@ def _industry_observations(
             db.flush()
     skipped = sum(r["status"] == "skipped_after_score_date" for r in receipts)
     unresolved = sum(r["status"] == "unresolved_new_listing_only" for r in receipts)
-    return {"version": "industry-observation-v1", "observations": receipts,
-            "status": "partial" if skipped or unresolved else "observed",
-            "scope": "ordinary_industry_only", "skipped_count": skipped, "unresolved_count": unresolved,
-            "warnings": (["industry_observation_after_score_date"] if skipped else [])
-                        + (["industry_unresolved_new_listing_only"] if unresolved else [])}
+    return {
+        "version": "industry-observation-v1",
+        "observations": receipts,
+        "status": "partial" if skipped or unresolved else "observed",
+        "scope": "ordinary_industry_only",
+        "skipped_count": skipped,
+        "unresolved_count": unresolved,
+        "warnings": (["industry_observation_after_score_date"] if skipped else [])
+        + (["industry_unresolved_new_listing_only"] if unresolved else []),
+    }
 
 
 def _nonindustry_observations(
@@ -2209,72 +2632,131 @@ def _nonindustry_observations(
     official = "TWSE/TPEx official OpenAPI"
     hot_id = canonical_group_id("new-listings", "new-listings")
     results: dict[str, Any] = {
-        domain: {"version": f"{domain}-observation-v1", "scope": domain,
-                 "observations": [], "status": "observed", "skipped_count": 0,
-                 "unresolved_count": 0}
+        domain: {
+            "version": f"{domain}-observation-v1",
+            "scope": domain,
+            "observations": [],
+            "status": "observed",
+            "skipped_count": 0,
+            "unresolved_count": 0,
+        }
         for domain in ("etf", "newlisting")
     }
     plans = []
 
     def utc(value: datetime) -> datetime:
         if not isinstance(value, datetime):
-            raise OfficialDataError("membership observation requires a capture timestamp")
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+            raise OfficialDataError(
+                "membership observation requires a capture timestamp"
+            )
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
 
     now = utc(observed_now)
     for record in records:
         key = (record.exchange, record.symbol)
         if record.instrument_type == "index":
             for domain in results:
-                results[domain]["observations"].append({
-                    "exchange": record.exchange, "symbol": record.symbol,
-                    "status": "unresolved_synthetic_index", "score_date": score_date.isoformat(),
-                    "reason": "no authoritative universe type-transition evidence; history retained",
-                })
+                results[domain]["observations"].append(
+                    {
+                        "exchange": record.exchange,
+                        "symbol": record.symbol,
+                        "status": "unresolved_synthetic_index",
+                        "score_date": score_date.isoformat(),
+                        "reason": "no authoritative universe type-transition evidence; history retained",
+                    }
+                )
             continue
         instrument = instruments.get(key)
         if instrument is None:
-            raise OfficialDataError("membership observation has no normalized instrument")
-        endpoints = ({"TWSE": {TWSE_ETF_ENDPOINT}, "TPEx": {TPEX_ETF_ENDPOINT}}
-                     if record.instrument_type == "etf" else
-                     {"TWSE": {TWSE_LISTED_ENDPOINT, TWSE_NEW_LISTING_ENDPOINT}
-                      if record.instrument_type == "ipo" else {TWSE_LISTED_ENDPOINT},
-                      "TPEx": {TPEX_LISTED_ENDPOINT}}).get(record.exchange, set())
-        matches = [p for p in captures if record.payload_sha256 and p.sha256 == record.payload_sha256
-                   and p.source == record.exchange.lower() and p.endpoint in endpoints]
+            raise OfficialDataError(
+                "membership observation has no normalized instrument"
+            )
+        endpoints = (
+            {"TWSE": {TWSE_ETF_ENDPOINT}, "TPEx": {TPEX_ETF_ENDPOINT}}
+            if record.instrument_type == "etf"
+            else {
+                "TWSE": {TWSE_LISTED_ENDPOINT, TWSE_NEW_LISTING_ENDPOINT}
+                if record.instrument_type == "ipo"
+                else {TWSE_LISTED_ENDPOINT},
+                "TPEx": {TPEX_LISTED_ENDPOINT},
+            }
+        ).get(record.exchange, set())
+        matches = [
+            p
+            for p in captures
+            if record.payload_sha256
+            and p.sha256 == record.payload_sha256
+            and p.source == record.exchange.lower()
+            and p.endpoint in endpoints
+        ]
         if len(matches) != 1:
-            raise OfficialDataError("ETF/listing observation requires one authoritative universe capture")
+            raise OfficialDataError(
+                "ETF/listing observation requires one authoritative universe capture"
+            )
         capture = matches[0]
         captured = utc(capture.collected_at)
         if captured > now:
             raise OfficialDataError("ETF/listing observation capture is in the future")
         day = captured.astimezone(timezone(timedelta(hours=8))).date()
-        raw = db.scalar(select(RawPayload).where(
-            RawPayload.ingestion_run_id == run_id, RawPayload.source == capture.source,
-            RawPayload.endpoint == capture.endpoint, RawPayload.sha256 == capture.sha256,
-        )) if run_id is not None else None
+        raw = (
+            db.scalar(
+                select(RawPayload).where(
+                    RawPayload.ingestion_run_id == run_id,
+                    RawPayload.source == capture.source,
+                    RawPayload.endpoint == capture.endpoint,
+                    RawPayload.sha256 == capture.sha256,
+                )
+            )
+            if run_id is not None
+            else None
+        )
         if run_id is not None and raw is None:
-            raise OfficialDataError("ETF/listing observation has no persisted raw capture")
+            raise OfficialDataError(
+                "ETF/listing observation has no persisted raw capture"
+            )
         evidence = {
-            "exchange": record.exchange, "symbol": record.symbol, "instrument_type": record.instrument_type,
-            "source": capture.source, "endpoint": capture.endpoint, "sha256": capture.sha256,
-            "captured_at_utc": captured.isoformat(), "observed_date": day.isoformat(),
-            "score_date": score_date.isoformat(), "raw_payload_id": raw.id if raw else None,
-            "stored_raw_collected_at_utc": utc(raw.collected_at).isoformat() if raw else None,
+            "exchange": record.exchange,
+            "symbol": record.symbol,
+            "instrument_type": record.instrument_type,
+            "source": capture.source,
+            "endpoint": capture.endpoint,
+            "sha256": capture.sha256,
+            "captured_at_utc": captured.isoformat(),
+            "observed_date": day.isoformat(),
+            "score_date": score_date.isoformat(),
+            "raw_payload_id": raw.id if raw else None,
+            "stored_raw_collected_at_utc": utc(raw.collected_at).isoformat()
+            if raw
+            else None,
             "raw_time_relationship": "stored_raw_may_be_earlier_identical_content_capture",
         }
         for domain in results:
-            receipt = {**evidence, "status": "applied", "action": "unchanged",
-                       "time_semantics": "current_source_observation_not_classification_effective_date"}
+            receipt = {
+                **evidence,
+                "status": "applied",
+                "action": "unchanged",
+                "time_semantics": "current_source_observation_not_classification_effective_date",
+            }
             results[domain]["observations"].append(receipt)
             if domain == "etf":
-                receipt.update(classification_method="local_heuristic_from_official_universe",
-                               classification_method_version="normalize_etf_category-v1",
-                               normalized_category=record.etf_category)
+                receipt.update(
+                    classification_method="local_heuristic_from_official_universe",
+                    classification_method_version="normalize_etf_category-v1",
+                    normalized_category=record.etf_category,
+                )
             else:
-                receipt.update(listing_date=record.listing_date.isoformat() if record.listing_date else None,
-                               window_days=60, window_end_inclusive=True,
-                               time_semantics="observed_listing_window_no_pre_capture_membership_claim")
+                receipt.update(
+                    listing_date=record.listing_date.isoformat()
+                    if record.listing_date
+                    else None,
+                    window_days=60,
+                    window_end_inclusive=True,
+                    time_semantics="observed_listing_window_no_pre_capture_membership_claim",
+                )
             if day > score_date:
                 receipt["status"] = "skipped_after_score_date"
                 continue
@@ -2283,7 +2765,9 @@ def _nonindustry_observations(
             name = None
             if domain == "etf" and record.instrument_type == "etf":
                 if record.etf_category not in ETF_CATEGORIES:
-                    raise OfficialDataError("missing or ambiguous ETF classification evidence")
+                    raise OfficialDataError(
+                        "missing or ambiguous ETF classification evidence"
+                    )
                 target_id = canonical_group_id("etf", record.etf_category)
                 name = f"ETF · {record.etf_category}"
             elif domain == "newlisting" and record.instrument_type in {"stock", "ipo"}:
@@ -2296,98 +2780,228 @@ def _nonindustry_observations(
                     target_id = hot_id
                     name = "New listings"
             group_type = "etf" if domain == "etf" else "daily_hot_group"
-            if domain == "newlisting" and record.instrument_type == "etf" and record.listing_date:
+            if (
+                domain == "newlisting"
+                and record.instrument_type == "etf"
+                and record.listing_date
+            ):
                 expiry = record.listing_date + timedelta(days=60)
             group = db.get(ThemeGroup, target_id) if target_id else None
-            if group and (group.name != name or group.group_type != group_type
-                          or group.definition_version != "official-v1" or group.source != official
-                          or not group.active):
+            if group and (
+                group.name != name
+                or group.group_type != group_type
+                or group.definition_version != "official-v1"
+                or group.source != official
+                or not group.active
+            ):
                 raise OfficialDataError(f"canonical {domain} group identity conflict")
             history = []
             expected_source = f"{official}; exchange={record.exchange}"
-            for membership, parent in db.execute(select(GroupMembership, ThemeGroup).join(ThemeGroup).where(
-                GroupMembership.instrument_id == instrument.id,
-            )).all():
-                if membership.source not in {official, f"{official}; exchange=TWSE", f"{official}; exchange=TPEx"}:
-                    if membership.group_id == target_id and membership.valid_from == day:
-                        raise OfficialDataError(f"manual membership conflicts with {domain} observation")
+            for membership, parent in db.execute(
+                select(GroupMembership, ThemeGroup)
+                .join(ThemeGroup)
+                .where(
+                    GroupMembership.instrument_id == instrument.id,
+                )
+            ).all():
+                if membership.source not in {
+                    official,
+                    f"{official}; exchange=TWSE",
+                    f"{official}; exchange=TPEx",
+                }:
+                    if (
+                        membership.group_id == target_id
+                        and membership.valid_from == day
+                    ):
+                        raise OfficialDataError(
+                            f"manual membership conflicts with {domain} observation"
+                        )
                     continue
-                in_domain = parent.id.startswith("official-etf-") if domain == "etf" else parent.id == hot_id
+                in_domain = (
+                    parent.id.startswith("official-etf-")
+                    if domain == "etf"
+                    else parent.id == hot_id
+                )
                 if not in_domain:
                     continue
-                expected_name = (next((f"ETF · {category}" for category in ETF_CATEGORIES
-                                       if canonical_group_id("etf", category) == parent.id), None)
-                                 if domain == "etf" else "New listings")
-                if (parent.group_type != group_type or parent.source != official
-                        or parent.definition_version != "official-v1" or not parent.active
-                        or parent.name != expected_name):
-                    raise OfficialDataError(f"canonical {domain} history identity conflict")
+                expected_name = (
+                    next(
+                        (
+                            f"ETF · {category}"
+                            for category in ETF_CATEGORIES
+                            if canonical_group_id("etf", category) == parent.id
+                        ),
+                        None,
+                    )
+                    if domain == "etf"
+                    else "New listings"
+                )
+                if (
+                    parent.group_type != group_type
+                    or parent.source != official
+                    or parent.definition_version != "official-v1"
+                    or not parent.active
+                    or parent.name != expected_name
+                ):
+                    raise OfficialDataError(
+                        f"canonical {domain} history identity conflict"
+                    )
                 if membership.source not in {official, expected_source}:
-                    raise OfficialDataError(f"official {domain} membership exchange conflict")
-                if membership.valid_from > day or (membership.valid_to is not None and membership.valid_to < membership.valid_from):
-                    raise OfficialDataError(f"future or inverted {domain} membership period")
+                    raise OfficialDataError(
+                        f"official {domain} membership exchange conflict"
+                    )
+                if membership.valid_from > day or (
+                    membership.valid_to is not None
+                    and membership.valid_to < membership.valid_from
+                ):
+                    raise OfficialDataError(
+                        f"future or inverted {domain} membership period"
+                    )
                 history.append(membership)
             history.sort(key=lambda row: row.valid_from)
             for previous, current in zip(history, history[1:]):
                 if previous.valid_to is None or previous.valid_to >= current.valid_from:
-                    raise OfficialDataError(f"overlapping official {domain} membership periods")
-            if (record.instrument_type in {"stock", "ipo"} and record.listing_date
-                    and record.listing_date > day and history):
-                raise OfficialDataError(f"future listing date conflicts with existing {domain} history")
-            active = [row for row in history if row.valid_to is None or row.valid_to >= day]
+                    raise OfficialDataError(
+                        f"overlapping official {domain} membership periods"
+                    )
+            if (
+                record.instrument_type in {"stock", "ipo"}
+                and record.listing_date
+                and record.listing_date > day
+                and history
+            ):
+                raise OfficialDataError(
+                    f"future listing date conflicts with existing {domain} history"
+                )
+            active = [
+                row for row in history if row.valid_to is None or row.valid_to >= day
+            ]
             current = active[0] if active else None
             if current and current.valid_to is not None:
-                if not (domain == "newlisting" and current.valid_to == expiry
-                        and (target_id == current.group_id or record.instrument_type == "etf")):
-                    raise OfficialDataError(f"closed {domain} period overlaps observation or conflicts with expiry")
+                if not (
+                    domain == "newlisting"
+                    and current.valid_to == expiry
+                    and (
+                        target_id == current.group_id or record.instrument_type == "etf"
+                    )
+                ):
+                    raise OfficialDataError(
+                        f"closed {domain} period overlaps observation or conflicts with expiry"
+                    )
             if current and current.group_id != target_id and current.valid_from == day:
-                raise OfficialDataError(f"same-day {domain} transition cannot preserve daily history")
+                raise OfficialDataError(
+                    f"same-day {domain} transition cannot preserve daily history"
+                )
             # An expired bounded listing row is immutable evidence.  Re-observing
             # the same known event must not extend it into a second interval.
             if domain == "newlisting" and target_id and not current and history:
                 if history[-1].valid_to != expiry:
-                    raise OfficialDataError("newlisting expiry conflicts with closed history")
-            plans.append((domain, instrument, day, target_id, name, group_type, group,
-                          current, expiry, expected_source, receipt))
+                    raise OfficialDataError(
+                        "newlisting expiry conflicts with closed history"
+                    )
+            plans.append(
+                (
+                    domain,
+                    instrument,
+                    day,
+                    target_id,
+                    name,
+                    group_type,
+                    group,
+                    current,
+                    expiry,
+                    expected_source,
+                    receipt,
+                )
+            )
 
-    for domain, instrument, day, target_id, name, group_type, group, current, expiry, source, receipt in plans:
+    for (
+        domain,
+        instrument,
+        day,
+        target_id,
+        name,
+        group_type,
+        group,
+        current,
+        expiry,
+        source,
+        receipt,
+    ) in plans:
         if current and current.group_id == target_id:
             if domain == "newlisting" and current.valid_to is None:
                 current.valid_to = expiry
                 receipt["action"] = "legacy_window_cap"
-                receipt["historical_limit"] = "existing_start_retained_not_validated_as_point_in_time"
+                receipt["historical_limit"] = (
+                    "existing_start_retained_not_validated_as_point_in_time"
+                )
             continue
         if current:
             current.valid_to = day - timedelta(days=1)
             receipt["action"] = "closed_at_observation"
             if domain == "newlisting" and expiry is not None and day > expiry:
                 receipt["action"] = "legacy_forward_close"
-                receipt["historical_limit"] = "past_out_of_window_membership_retained_not_rewritten"
+                receipt["historical_limit"] = (
+                    "past_out_of_window_membership_retained_not_rewritten"
+                )
         if not target_id:
             continue
         group = group or db.get(ThemeGroup, target_id)
         if group is None:
-            db.add(ThemeGroup(
-                id=target_id, name=name, group_type=group_type, definition_version="official-v1",
-                source=official, active=True,
-                display_name_zh=(_ETF_CATEGORY_NAMES_ZH.get(name.split("·", 1)[-1].strip(), f"ETF 分類：{name.split('·', 1)[-1].strip()}")
-                                 if domain == "etf" else "新上市標的"),
-                display_description_zh=("依官方來源文字、代號與名稱推定的本地 ETF 分類。" if domain == "etf"
-                                        else "依觀測到的上市日期建立至第 60 日的短期觀察族群。"),
-                display_category="ETF" if domain == "etf" else "新上市",
-                name_source="local heuristic from official universe" if domain == "etf" else "TWSE/TPEx official listing date",
-                name_status="inferred" if domain == "etf" else "official",
-            ))
+            db.add(
+                ThemeGroup(
+                    id=target_id,
+                    name=name,
+                    group_type=group_type,
+                    definition_version="official-v1",
+                    source=official,
+                    active=True,
+                    display_name_zh=(
+                        _ETF_CATEGORY_NAMES_ZH.get(
+                            name.split("·", 1)[-1].strip(),
+                            f"ETF 分類：{name.split('·', 1)[-1].strip()}",
+                        )
+                        if domain == "etf"
+                        else "新上市標的"
+                    ),
+                    display_description_zh=(
+                        "依官方來源文字、代號與名稱推定的本地 ETF 分類。"
+                        if domain == "etf"
+                        else "依觀測到的上市日期建立至第 60 日的短期觀察族群。"
+                    ),
+                    display_category="ETF" if domain == "etf" else "新上市",
+                    name_source="local heuristic from official universe"
+                    if domain == "etf"
+                    else "TWSE/TPEx official listing date",
+                    name_status="inferred" if domain == "etf" else "official",
+                )
+            )
             db.flush()
-        db.add(GroupMembership(group_id=target_id, instrument_id=instrument.id, valid_from=day,
-                               valid_to=expiry if domain == "newlisting" else None,
-                               role="member", confidence=1.0, source=source))
+        db.add(
+            GroupMembership(
+                group_id=target_id,
+                instrument_id=instrument.id,
+                valid_from=day,
+                valid_to=expiry if domain == "newlisting" else None,
+                role="member",
+                confidence=1.0,
+                source=source,
+            )
+        )
         receipt["action"] = "transitioned" if current else "opened"
         db.flush()
     for result in results.values():
-        result["skipped_count"] = sum(r["status"] == "skipped_after_score_date" for r in result["observations"])
-        result["unresolved_count"] = sum(r["status"].startswith("unresolved_") for r in result["observations"])
-        result["status"] = "partial" if result["skipped_count"] or result["unresolved_count"] else "observed"
+        result["skipped_count"] = sum(
+            r["status"] == "skipped_after_score_date" for r in result["observations"]
+        )
+        result["unresolved_count"] = sum(
+            r["status"].startswith("unresolved_") for r in result["observations"]
+        )
+        result["status"] = (
+            "partial"
+            if result["skipped_count"] or result["unresolved_count"]
+            else "observed"
+        )
     return results
 
 
@@ -2411,14 +3025,23 @@ def _ensure_official_groups(
     del start_date  # Requested history is never an observation timestamp.
     records, captures = list(records), list(payloads)
     connection = db.connection()
-    if connection.dialect.name == "sqlite" and not connection.connection.driver_connection.in_transaction:
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
         # sqlite3 legacy mode does not BEGIN for SELECT or SAVEPOINT.  Without
         # a physical outer transaction, RELEASE would commit this helper's
         # changes even when the caller subsequently rolls back its Session.
         connection.exec_driver_sql("BEGIN")
     with db.begin_nested():
-        result = _industry_observations(db, records, instruments, captures, score_date, observed_now, run_id)
-        result.update(_nonindustry_observations(db, records, instruments, captures, score_date, observed_now, run_id))
+        result = _industry_observations(
+            db, records, instruments, captures, score_date, observed_now, run_id
+        )
+        result.update(
+            _nonindustry_observations(
+                db, records, instruments, captures, score_date, observed_now, run_id
+            )
+        )
         db.flush()
     return result
 
@@ -2455,7 +3078,11 @@ def _upsert_quality(
 
 
 def _official_start_date(end_date: date, months_back: int) -> date:
-    if not isinstance(months_back, int) or isinstance(months_back, bool) or not 0 <= months_back <= 3:
+    if (
+        not isinstance(months_back, int)
+        or isinstance(months_back, bool)
+        or not 0 <= months_back <= 3
+    ):
         raise ValueError("months_back must be an integer between 0 and 3")
     start = end_date - timedelta(days=30 * months_back)
     if (end_date - start).days > OFFICIAL_MAX_BACKFILL_DAYS:
@@ -2465,7 +3092,10 @@ def _official_start_date(end_date: date, months_back: int) -> date:
 
 def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
-        {key: (value.isoformat() if isinstance(value, (date, datetime)) else value) for key, value in item.items()}
+        {
+            key: (value.isoformat() if isinstance(value, (date, datetime)) else value)
+            for key, value in item.items()
+        }
         for item in values
     ]
 
@@ -2486,7 +3116,9 @@ def split_collect_warnings(warnings: Iterable[str]) -> tuple[list[str], list[str
     core: list[str] = []
     noncore: list[str] = []
     for warning in warnings:
-        (noncore if NONCORE_WARNING_PATTERN.match(str(warning)) else core).append(str(warning))
+        (noncore if NONCORE_WARNING_PATTERN.match(str(warning)) else core).append(
+            str(warning)
+        )
     return core, noncore
 
 
@@ -2495,18 +3127,32 @@ def _value_fill_groups(fills: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     groups: dict[tuple[Any, ...], list[str]] = defaultdict(list)
     for fill in fills:
-        key = (fill["table"], fill["exchange"], fill["trading_date"], tuple(fill["fields"]), fill["raw_payload_id"])
+        key = (
+            fill["table"],
+            fill["exchange"],
+            fill["trading_date"],
+            tuple(fill["fields"]),
+            fill["raw_payload_id"],
+        )
         groups[key].append(fill["symbol"])
     return [
-        {"table": table, "exchange": exchange, "trading_date": trading_date, "fields": list(fields),
-         "raw_payload_id": raw_payload_id, "symbols": sorted(symbols)}
+        {
+            "table": table,
+            "exchange": exchange,
+            "trading_date": trading_date,
+            "fields": list(fields),
+            "raw_payload_id": raw_payload_id,
+            "symbols": sorted(symbols),
+        }
         for (table, exchange, trading_date, fields, raw_payload_id), symbols in sorted(
             groups.items(), key=lambda item: tuple(str(part) for part in item[0])
         )
     ]
 
 
-def _raw_id_for_digest(raw_ids: dict[tuple[str, str], int], digest: str | None) -> int | None:
+def _raw_id_for_digest(
+    raw_ids: dict[tuple[str, str], int], digest: str | None
+) -> int | None:
     if not digest:
         return None
     for (_source, payload_digest), raw_id in raw_ids.items():
@@ -2532,7 +3178,9 @@ def collect(
     request_key = f"official-ohlcv:{start_date.isoformat()}:{score_date.isoformat()}"
     now = datetime.utcnow()
     with SessionLocal() as db:
-        run = db.scalar(select(IngestionRun).where(IngestionRun.request_key == request_key))
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.request_key == request_key)
+        )
         stored_metadata = (run.metadata_json or {}) if run else {}
         # A market snapshot is not complete merely because security OHLCV
         # rows exist.  TAIEX is the verified-session baseline used by the
@@ -2546,9 +3194,14 @@ def collect(
             and int(stored_metadata.get("taiex_records", 0) or 0) > 0
             and not force
         ):
-            stored_raw_payloads = db.scalar(
-                select(func.count(RawPayload.id)).where(RawPayload.ingestion_run_id == run.id)
-            ) or 0
+            stored_raw_payloads = (
+                db.scalar(
+                    select(func.count(RawPayload.id)).where(
+                        RawPayload.ingestion_run_id == run.id
+                    )
+                )
+                or 0
+            )
             return {
                 "status": "success",
                 "date": score_date.isoformat(),
@@ -2562,10 +3215,16 @@ def collect(
                 "raw_payloads": stored_raw_payloads,
                 "run_id": run.id,
                 "idempotent_reuse": True,
-                "industry_membership_observations": stored_metadata.get("industry_membership_observations", {"status": "not_recorded"}),
+                "industry_membership_observations": stored_metadata.get(
+                    "industry_membership_observations", {"status": "not_recorded"}
+                ),
                 "warnings": list(stored_metadata.get("warnings", []) or []),
-                "core_warnings": split_collect_warnings(stored_metadata.get("warnings", []) or [])[0],
-                "noncore_warnings": split_collect_warnings(stored_metadata.get("warnings", []) or [])[1],
+                "core_warnings": split_collect_warnings(
+                    stored_metadata.get("warnings", []) or []
+                )[0],
+                "noncore_warnings": split_collect_warnings(
+                    stored_metadata.get("warnings", []) or []
+                )[1],
                 "notices": list(stored_metadata.get("notices", []) or []),
                 "no_data_dates": list(stored_metadata.get("no_data_dates", []) or []),
             }
@@ -2604,9 +3263,13 @@ def collect(
                 }
             )
             if not batch.instruments or (not batch.bars and not batch_no_data_dates):
-                raise OfficialDataError("official batch contained no instruments or OHLCV")
+                raise OfficialDataError(
+                    "official batch contained no instruments or OHLCV"
+                )
             if not batch.payloads:
-                raise OfficialDataError("official batch did not include raw payload captures")
+                raise OfficialDataError(
+                    "official batch did not include raw payload captures"
+                )
             raw_ids: dict[tuple[str, str], int] = {}
             stored_raw_ids: set[int] = set()
             for payload in batch.payloads:
@@ -2620,7 +3283,9 @@ def collect(
             db.commit()
             instruments: dict[tuple[str, str], Instrument] = {}
             for record in batch.instruments:
-                instruments[(record.exchange, record.symbol)] = _upsert_official_instrument(db, record)
+                instruments[(record.exchange, record.symbol)] = (
+                    _upsert_official_instrument(db, record)
+                )
             normalized_bars = 0
             normalized_non_index_bars = 0
             normalized_index_bars = 0
@@ -2656,10 +3321,11 @@ def collect(
                 item for item in batch_no_data_dates if item not in normalized_date_set
             )
             if (
-                (normalized_bars == 0 or normalized_non_index_bars == 0)
-                and not verified_no_data_dates
-            ):
-                raise OfficialDataError("official payloads contained no normalized security OHLCV rows")
+                normalized_bars == 0 or normalized_non_index_bars == 0
+            ) and not verified_no_data_dates:
+                raise OfficialDataError(
+                    "official payloads contained no normalized security OHLCV rows"
+                )
             for chip in batch.chips:
                 normalized_chips += int(
                     _upsert_official_chip(
@@ -2673,7 +3339,12 @@ def collect(
                     )
                 )
             for action in batch.actions:
-                _upsert_action(db, action, instruments, _raw_id_for_digest(raw_ids, action.payload_sha256))
+                _upsert_action(
+                    db,
+                    action,
+                    instruments,
+                    _raw_id_for_digest(raw_ids, action.payload_sha256),
+                )
             for fundamental in batch.fundamentals:
                 _upsert_fundamental(
                     db,
@@ -2697,9 +3368,9 @@ def collect(
                     "empty_dates": [],
                     "unsupported_dates": [],
                     "partial_dates": [],
-                    "observed_event_dates": sorted({
-                        item.event_date.isoformat() for item in batch.events
-                    }),
+                    "observed_event_dates": sorted(
+                        {item.event_date.isoformat() for item in batch.events}
+                    ),
                     "reason": "event feed did not provide date-scoped coverage evidence",
                 }
             # A historical batch (backfill, daily catch-up) does not query the
@@ -2786,20 +3457,34 @@ def collect(
                     "chip_snapshots",
                     exchange,
                     score_date,
-                    "complete" if chip_complete else ("partial" if observed else "missing"),
+                    "complete"
+                    if chip_complete
+                    else ("partial" if observed else "missing"),
                     [] if chip_complete else ["institutional_flow", "margin_balance"],
                     {
-                        "records": sum(1 for record in batch.chips if record.exchange == exchange),
+                        "records": sum(
+                            1 for record in batch.chips if record.exchange == exchange
+                        ),
                         "complete_records": complete_rows,
                         "expected_records": expected_count,
-                        "coverage": len(observed) / expected_count if expected_count else 0.0,
-                        "data_as_of": sorted({record.trading_date.isoformat() for record in batch.chips if record.exchange == exchange}),
+                        "coverage": len(observed) / expected_count
+                        if expected_count
+                        else 0.0,
+                        "data_as_of": sorted(
+                            {
+                                record.trading_date.isoformat()
+                                for record in batch.chips
+                                if record.exchange == exchange
+                            }
+                        ),
                     },
                     source=exchange.lower(),
                 )
             for exchange in () if keep_snapshot_evidence else ("TWSE", "TPEx"):
                 event_count = sum(item.exchange == exchange for item in batch.events)
-                fundamental_count = sum(item.exchange == exchange for item in batch.fundamentals)
+                fundamental_count = sum(
+                    item.exchange == exchange for item in batch.fundamentals
+                )
                 event_status = event_coverage.get("status")
                 event_complete = event_status in {"complete", "verified_empty"}
                 _upsert_quality(
@@ -2827,7 +3512,10 @@ def collect(
                     source=exchange.lower(),
                 )
             for instrument in instruments.values():
-                has_ohlcv = (instrument.exchange, instrument.symbol) in normalized_instruments
+                has_ohlcv = (
+                    instrument.exchange,
+                    instrument.symbol,
+                ) in normalized_instruments
                 _upsert_quality(
                     db,
                     "instrument",
@@ -2835,7 +3523,10 @@ def collect(
                     score_date,
                     "complete" if has_ohlcv else "missing",
                     [] if has_ohlcv else ["ohlcv"],
-                    {"source": instrument.exchange, "backfill_start": start_date.isoformat()},
+                    {
+                        "source": instrument.exchange,
+                        "backfill_start": start_date.isoformat(),
+                    },
                     source=instrument.exchange.lower(),
                 )
             latest_bar_date = max(normalized_dates) if normalized_dates else None
@@ -2874,17 +3565,30 @@ def collect(
                 "noncore_warnings": noncore_warnings,
                 "notices": list(getattr(batch, "notices", []) or []),
                 "value_conflicts": len(value_conflicts),
-                "value_conflict_samples": _json_safe(value_conflicts[:MAX_RECORDED_VALUE_CONFLICTS]),
+                "value_conflict_samples": _json_safe(
+                    value_conflicts[:MAX_RECORDED_VALUE_CONFLICTS]
+                ),
                 "value_fills": len(value_fills),
                 # Accumulated over the runs that share this request key (the
                 # 18:30 and 21:30 daily collects), like the industry history.
-                "value_fill_groups": list(stored_metadata.get("value_fill_groups", []) or [])
+                "value_fill_groups": list(
+                    stored_metadata.get("value_fill_groups", []) or []
+                )
                 + _value_fill_groups(value_fills),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
                 "event_coverage": event_coverage,
                 "industry_membership_observations": industry_result,
-                "industry_observation_history": list(stored_metadata.get("industry_observation_history", [])) + ([stored_metadata["industry_membership_observations"]] if "industry_membership_observations" in stored_metadata else []),
-                "industry_failed_attempts": list(stored_metadata.get("industry_failed_attempts", [])),
+                "industry_observation_history": list(
+                    stored_metadata.get("industry_observation_history", [])
+                )
+                + (
+                    [stored_metadata["industry_membership_observations"]]
+                    if "industry_membership_observations" in stored_metadata
+                    else []
+                ),
+                "industry_failed_attempts": list(
+                    stored_metadata.get("industry_failed_attempts", [])
+                ),
             }
             missing_run_fields: list[str] = []
             if run.status != "success":
@@ -2912,7 +3616,9 @@ def collect(
                     "data_as_of": run.data_as_of,
                     "warnings": batch.warnings,
                     "noncore_warnings": noncore_warnings,
-                    "no_data_dates": [item.isoformat() for item in verified_no_data_dates],
+                    "no_data_dates": [
+                        item.isoformat() for item in verified_no_data_dates
+                    ],
                     "event_coverage": event_coverage,
                 },
                 source="official",
@@ -2965,23 +3671,55 @@ def collect(
                                 # A bad capture must not prevent recording the
                                 # failed run or persisting the other captures.
                                 with db.begin_nested():
-                                    captured_raw_id = _upsert_raw_payload(db, failed_run, payload).id
+                                    captured_raw_id = _upsert_raw_payload(
+                                        db, failed_run, payload
+                                    ).id
                                 captured_raw_ids.add(captured_raw_id)
                             except Exception as raw_exc:
-                                raw_persistence_errors.append({"source": payload.source,
-                                    "endpoint": payload.endpoint, "sha256": payload.sha256,
-                                    "payload_path": str(payload.payload_path),
-                                    "reason": f"{type(raw_exc).__name__}: {raw_exc}"})
+                                raw_persistence_errors.append(
+                                    {
+                                        "source": payload.source,
+                                        "endpoint": payload.endpoint,
+                                        "sha256": payload.sha256,
+                                        "payload_path": str(payload.payload_path),
+                                        "reason": f"{type(raw_exc).__name__}: {raw_exc}",
+                                    }
+                                )
                     raw_payload_count = len(captured_raw_ids)
-                    failed_attempt = {"status": "failed", "error": str(exc), "attempted_at_utc": datetime.utcnow().isoformat(),
-                                      "raw_payload_ids": sorted(captured_raw_ids), "raw_persistence_errors": raw_persistence_errors,
-                                      "captures": [{"source": p.source, "endpoint": p.endpoint, "sha256": p.sha256, "payload_path": str(p.payload_path),
-                                                    "collected_at": p.collected_at.isoformat() if isinstance(p.collected_at, datetime) else None,
-                                                    "invalid_timestamp_value": str(p.collected_at) if p.collected_at is not None and not isinstance(p.collected_at, datetime) else None,
-                                                    "timestamp_status": "provided" if isinstance(p.collected_at, datetime) else "missing_or_invalid"}
-                                                   for p in captured_payloads]}
-                    failed_run.metadata_json = {**stored_metadata, "industry_observation_attempt": failed_attempt,
-                                                "industry_failed_attempts": list(stored_metadata.get("industry_failed_attempts", [])) + [failed_attempt]}
+                    failed_attempt = {
+                        "status": "failed",
+                        "error": str(exc),
+                        "attempted_at_utc": datetime.utcnow().isoformat(),
+                        "raw_payload_ids": sorted(captured_raw_ids),
+                        "raw_persistence_errors": raw_persistence_errors,
+                        "captures": [
+                            {
+                                "source": p.source,
+                                "endpoint": p.endpoint,
+                                "sha256": p.sha256,
+                                "payload_path": str(p.payload_path),
+                                "collected_at": p.collected_at.isoformat()
+                                if isinstance(p.collected_at, datetime)
+                                else None,
+                                "invalid_timestamp_value": str(p.collected_at)
+                                if p.collected_at is not None
+                                and not isinstance(p.collected_at, datetime)
+                                else None,
+                                "timestamp_status": "provided"
+                                if isinstance(p.collected_at, datetime)
+                                else "missing_or_invalid",
+                            }
+                            for p in captured_payloads
+                        ],
+                    }
+                    failed_run.metadata_json = {
+                        **stored_metadata,
+                        "industry_observation_attempt": failed_attempt,
+                        "industry_failed_attempts": list(
+                            stored_metadata.get("industry_failed_attempts", [])
+                        )
+                        + [failed_attempt],
+                    }
                     failed_run.status = "failed"
                     failed_run.records = 0
                     failed_run.error = f"{type(exc).__name__}: {exc}"
@@ -3016,11 +3754,15 @@ def collect(
             }
 
 
-def analyze(*, init_schema: bool = True, collect_run_id: int | None = None) -> dict[str, Any]:
+def analyze(
+    *, init_schema: bool = True, collect_run_id: int | None = None
+) -> dict[str, Any]:
     if init_schema:
         init_db()
     with SessionLocal() as db:
-        result = _analyze_session(db, collect_run_id=collect_run_id, checkpoint=db.commit)
+        result = _analyze_session(
+            db, collect_run_id=collect_run_id, checkpoint=db.commit
+        )
         if result.get("status") == "success":
             db.commit()
         return result
@@ -3074,10 +3816,18 @@ def _analyze_session(
             }
     else:
         return {"status": "no_data", "signals_upserted": 0}
-    instruments = db.scalars(select(Instrument).where(Instrument.status == "active")).all()
+    instruments = db.scalars(
+        select(Instrument).where(Instrument.status == "active")
+    ).all()
     for position, instrument in enumerate(instruments, start=1):
-        if capture is not None and getattr(capture, "input_provenance", None) == "selected-bar-prior-volumes/v1":
-            _calculate_features(db, instrument, capture=capture, capture_date=score_date)
+        if (
+            capture is not None
+            and getattr(capture, "input_provenance", None)
+            == "selected-bar-prior-volumes/v1"
+        ):
+            _calculate_features(
+                db, instrument, capture=capture, capture_date=score_date
+            )
         else:
             _calculate_features(db, instrument)
         if position % ANALYZE_COMMIT_BATCH == 0:
@@ -3092,7 +3842,11 @@ def _analyze_session(
     if checkpoint is not None:
         checkpoint()
     signals_upserted = _generate_signals(db, score_date, strategies, capture=capture)
-    return {"status": "success", "date": score_date.isoformat(), "signals_upserted": signals_upserted}
+    return {
+        "status": "success",
+        "date": score_date.isoformat(),
+        "signals_upserted": signals_upserted,
+    }
 
 
 def _corporate_action_factor(
@@ -3114,7 +3868,11 @@ def _corporate_action_factor(
             # shares per old share), while fixtures/normalized records may
             # already publish the raw-price factor 0.5.  Both represent the
             # same signal-basis -> post-action-basis direction.
-            factor = factor / action.split_ratio if action.split_ratio > 1 else factor * action.split_ratio
+            factor = (
+                factor / action.split_ratio
+                if action.split_ratio > 1
+                else factor * action.split_ratio
+            )
             applied = True
         if action.stock_dividend_ratio and action.stock_dividend_ratio > 0:
             factor /= 1.0 + action.stock_dividend_ratio
@@ -3153,7 +3911,9 @@ def _sell_fill_with_slippage(price: float | None) -> float | None:
     return round(price * (1.0 - EXECUTION_SLIPPAGE_BPS / 10_000.0), 8)
 
 
-def _upsert_evaluation(db: Session, signal: Signal, bar: MarketBar, data: dict[str, Any]) -> SignalEvaluation:
+def _upsert_evaluation(
+    db: Session, signal: Signal, bar: MarketBar, data: dict[str, Any]
+) -> SignalEvaluation:
     evaluation = db.scalar(
         select(SignalEvaluation).where(
             SignalEvaluation.signal_id == signal.id,
@@ -3161,14 +3921,18 @@ def _upsert_evaluation(db: Session, signal: Signal, bar: MarketBar, data: dict[s
         )
     )
     if not evaluation:
-        evaluation = SignalEvaluation(signal_id=signal.id, session_date=bar.trading_date)
+        evaluation = SignalEvaluation(
+            signal_id=signal.id, session_date=bar.trading_date
+        )
         db.add(evaluation)
     for key, value in data.items():
         setattr(evaluation, key, value)
     return evaluation
 
 
-def _upsert_settlement(db: Session, signal: Signal, horizon: int, data: dict[str, Any]) -> SignalSettlement:
+def _upsert_settlement(
+    db: Session, signal: Signal, horizon: int, data: dict[str, Any]
+) -> SignalSettlement:
     settlement = db.scalar(
         select(SignalSettlement).where(
             SignalSettlement.signal_id == signal.id,
@@ -3271,7 +4035,9 @@ def _evaluate_signal_tracking(
         .order_by(desc(MarketBar.trading_date))
         .limit(20)
     ).all()
-    prior_volume_values = [bar.volume for bar in prior_bars if bar.volume and bar.volume > 0]
+    prior_volume_values = [
+        bar.volume for bar in prior_bars if bar.volume and bar.volume > 0
+    ]
     prior_volume_average = (
         sum(prior_volume_values) / len(prior_volume_values)
         if len(prior_volume_values) == 20
@@ -3324,7 +4090,9 @@ def _evaluate_signal_tracking(
     signal.data_quality = signal.data_quality or "complete"
     previous_observed_date = signal.signal_date
     for session_no, bar in enumerate(bars, start=1):
-        actions = [action for action in action_rows if action.action_date <= bar.trading_date]
+        actions = [
+            action for action in action_rows if action.action_date <= bar.trading_date
+        ]
         factor, action_applied = _corporate_action_factor(
             actions,
             fallback_reference_prices=fallback_reference_prices,
@@ -3356,11 +4124,23 @@ def _evaluate_signal_tracking(
             or suspension_gap
         )
         previous_observed_date = bar.trading_date
-        breakout_level_raw = signal.breakout_price * factor if signal.breakout_price is not None else None
-        pullback_low_level_raw = signal.pullback_low * factor if signal.pullback_low is not None else None
-        pullback_high_level_raw = signal.pullback_high * factor if signal.pullback_high is not None else None
-        invalid_level_raw = signal.invalid_price * factor if signal.invalid_price is not None else None
-        target_level_raw = signal.target_1 * factor if signal.target_1 is not None else None
+        breakout_level_raw = (
+            signal.breakout_price * factor
+            if signal.breakout_price is not None
+            else None
+        )
+        pullback_low_level_raw = (
+            signal.pullback_low * factor if signal.pullback_low is not None else None
+        )
+        pullback_high_level_raw = (
+            signal.pullback_high * factor if signal.pullback_high is not None else None
+        )
+        invalid_level_raw = (
+            signal.invalid_price * factor if signal.invalid_price is not None else None
+        )
+        target_level_raw = (
+            signal.target_1 * factor if signal.target_1 is not None else None
+        )
         breakout_trigger = False
         pullback_trigger = False
         target_trigger = False
@@ -3380,16 +4160,28 @@ def _evaluate_signal_tracking(
             comparable = False
         else:
             if not executed:
-                if signal.entry_type == "breakout" and signal.breakout_price is not None:
-                    breakout_trigger = breakout_level_raw is not None and bar.high >= breakout_level_raw
+                if (
+                    signal.entry_type == "breakout"
+                    and signal.breakout_price is not None
+                ):
+                    breakout_trigger = (
+                        breakout_level_raw is not None
+                        and bar.high >= breakout_level_raw
+                    )
                     if breakout_trigger:
                         raw_execution_price = (
                             max(bar.open, breakout_level_raw)
                             if bar.open >= breakout_level_raw
                             else breakout_level_raw
                         )
-                        current_execution_price = _buy_fill_with_slippage(raw_execution_price)
-                elif signal.entry_type == "pullback" and signal.pullback_low is not None and signal.pullback_high is not None:
+                        current_execution_price = _buy_fill_with_slippage(
+                            raw_execution_price
+                        )
+                elif (
+                    signal.entry_type == "pullback"
+                    and signal.pullback_low is not None
+                    and signal.pullback_high is not None
+                ):
                     pullback_trigger = (
                         pullback_low_level_raw is not None
                         and pullback_high_level_raw is not None
@@ -3399,10 +4191,17 @@ def _evaluate_signal_tracking(
                     if pullback_trigger:
                         raw_execution_price = (
                             bar.open
-                            if pullback_low_level_raw <= bar.open <= pullback_high_level_raw
-                            else min(max(bar.open, pullback_low_level_raw), pullback_high_level_raw)
+                            if pullback_low_level_raw
+                            <= bar.open
+                            <= pullback_high_level_raw
+                            else min(
+                                max(bar.open, pullback_low_level_raw),
+                                pullback_high_level_raw,
+                            )
                         )
-                        current_execution_price = _buy_fill_with_slippage(raw_execution_price)
+                        current_execution_price = _buy_fill_with_slippage(
+                            raw_execution_price
+                        )
                 if breakout_trigger or pullback_trigger:
                     executed = True
                     execution_date = bar.trading_date
@@ -3418,7 +4217,9 @@ def _evaluate_signal_tracking(
             if executed and execution_price is not None:
                 if ambiguous:
                     status = "ambiguous"
-                    reason = "same-session stop and target both touched; order is unknowable"
+                    reason = (
+                        "same-session stop and target both touched; order is unknowable"
+                    )
                     comparable = False
                 elif first_outcome is not None:
                     # Once an exit is observed, later bars cannot overwrite
@@ -3426,8 +4227,12 @@ def _evaluate_signal_tracking(
                     status = first_outcome
                     reason = "position already closed on first observed outcome"
                 else:
-                    invalid_trigger = invalid_level_raw is not None and bar.low <= invalid_level_raw
-                    target_trigger = target_level_raw is not None and bar.high >= target_level_raw
+                    invalid_trigger = (
+                        invalid_level_raw is not None and bar.low <= invalid_level_raw
+                    )
+                    target_trigger = (
+                        target_level_raw is not None and bar.high >= target_level_raw
+                    )
                     if invalid_trigger and target_trigger:
                         status = "ambiguous"
                         reason = "same-session stop and target both touched; order is unknowable"
@@ -3463,8 +4268,16 @@ def _evaluate_signal_tracking(
             for value in (chip.foreign_buy, chip.trust_buy, chip.dealer_buy)
         ):
             flow_confirmation = "available"
-            margin_confirmation = "available" if _safe_float(chip.margin_balance) is not None else "missing"
-        group_confirmation = "available" if _best_group_for_signal(db, signal.instrument_id, signal.signal_date) else "missing"
+            margin_confirmation = (
+                "available"
+                if _safe_float(chip.margin_balance) is not None
+                else "missing"
+            )
+        group_confirmation = (
+            "available"
+            if _best_group_for_signal(db, signal.instrument_id, signal.signal_date)
+            else "missing"
+        )
         evaluation = _upsert_evaluation(
             db,
             signal,
@@ -3491,7 +4304,9 @@ def _evaluate_signal_tracking(
                 "institutional_confirmation": flow_confirmation,
                 "leverage_confirmation": margin_confirmation,
                 "subgroup_confirmation": group_confirmation,
-                "full_confirmation": flow_confirmation == "available" and margin_confirmation == "available" and group_confirmation == "available",
+                "full_confirmation": flow_confirmation == "available"
+                and margin_confirmation == "available"
+                and group_confirmation == "available",
                 "status": status,
                 "reason": reason,
                 "source": bar.source,
@@ -3502,7 +4317,9 @@ def _evaluate_signal_tracking(
                 "corporate_action_applied": action_applied,
                 "suspended": suspended,
                 "comparable": comparable,
-                "trigger_order": "ambiguous" if ambiguous else (first_outcome or "none"),
+                "trigger_order": "ambiguous"
+                if ambiguous
+                else (first_outcome or "none"),
                 "data_quality": "incomplete" if not comparable else "complete",
             },
         )
@@ -3554,7 +4371,9 @@ def _evaluate_signal_tracking(
             )
             return_value = None
             if comparable and execution_price:
-                has_early_outcome = outcome_session_no is not None and outcome_session_no <= horizon
+                has_early_outcome = (
+                    outcome_session_no is not None and outcome_session_no <= horizon
+                )
                 entry_factor = execution_factor or 1.0
                 # Execution/outcome prices are actual raw fills.  Convert
                 # both to the signal-date basis (raw / factor) before the
@@ -3564,10 +4383,14 @@ def _evaluate_signal_tracking(
                     exit_factor = outcome_factor or 1.0
                     comparable_exit = outcome_price / exit_factor
                 else:
-                    comparable_exit = (horizon_eval.adjusted_ohlc_json or {}).get("close")
+                    comparable_exit = (horizon_eval.adjusted_ohlc_json or {}).get(
+                        "close"
+                    )
                 if comparable_exit is not None and comparable_entry > 0:
                     gross_return = comparable_exit / comparable_entry - 1.0
-                    return_value = gross_return - ROUND_TRIP_TRANSACTION_COST_BPS / 10_000.0
+                    return_value = (
+                        gross_return - ROUND_TRIP_TRANSACTION_COST_BPS / 10_000.0
+                    )
             final_status = horizon_eval.status if comparable else "incomparable"
             incomparable_reason = None
             if not comparable:
@@ -3601,16 +4424,30 @@ def evaluate(*, init_schema: bool = True) -> dict[str, Any]:
         signals = db.scalars(
             select(Signal).where(
                 Signal.status.in_(
-                    {"conditional", "active", "target_1_hit", "invalidated", "observation", "incomparable"}
+                    {
+                        "conditional",
+                        "active",
+                        "target_1_hit",
+                        "invalidated",
+                        "observation",
+                        "incomparable",
+                    }
                 )
             )
         ).all()
         if not signals:
-            return {"status": "no_data", "signals_checked": 0, "evaluations_written": 0, "settlements_written": 0}
+            return {
+                "status": "no_data",
+                "signals_checked": 0,
+                "evaluations_written": 0,
+                "settlements_written": 0,
+            }
         evaluations = 0
         settlements = 0
         for signal in signals:
-            current_evaluations, current_settlements = _evaluate_signal_tracking(db, signal)
+            current_evaluations, current_settlements = _evaluate_signal_tracking(
+                db, signal
+            )
             evaluations += current_evaluations
             settlements += current_settlements
         db.commit()
@@ -3653,11 +4490,15 @@ def _backtest_assessment(metadata: dict[str, Any], *, status: str) -> str:
 def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]:
     """Summarize technical backtest settlements without claiming evidence."""
 
-    run = db.get(IngestionRun, run_id) if run_id is not None else db.scalar(
-        select(IngestionRun)
-        .where(IngestionRun.run_type == "backtest")
-        .order_by(desc(IngestionRun.id))
-        .limit(1)
+    run = (
+        db.get(IngestionRun, run_id)
+        if run_id is not None
+        else db.scalar(
+            select(IngestionRun)
+            .where(IngestionRun.run_type == "backtest")
+            .order_by(desc(IngestionRun.id))
+            .limit(1)
+        )
     )
     if not run:
         return {
@@ -3669,11 +4510,15 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     expected_prefix = f"backtest-{run.id}-"
     signals = [
         signal
-        for signal in db.scalars(select(Signal).where(Signal.signal_key.like("backtest-%"))).all()
+        for signal in db.scalars(
+            select(Signal).where(Signal.signal_key.like("backtest-%"))
+        ).all()
         if signal.signal_key.startswith(expected_prefix)
     ]
     actionable_signals = [
-        signal for signal in signals if (signal.rule_evidence_json or {}).get("actionable")
+        signal
+        for signal in signals
+        if (signal.rule_evidence_json or {}).get("actionable")
     ]
     zero_actionable_count = len(signals) - len(actionable_signals)
     grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
@@ -3682,7 +4527,11 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
         # only a conditional setup is a performance sample.  This guard also
         # protects summaries of legacy runs that may contain settlements for
         # non-actionable rows.
-        strategy = db.get(StrategyVersion, signal.strategy_version_id) if signal.strategy_version_id else None
+        strategy = (
+            db.get(StrategyVersion, signal.strategy_version_id)
+            if signal.strategy_version_id
+            else None
+        )
         instrument = db.get(Instrument, signal.instrument_id)
         if not strategy or not instrument:
             continue
@@ -3690,7 +4539,12 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
             select(SignalSettlement).where(SignalSettlement.signal_id == signal.id)
         ).all()
         for settlement in settlements:
-            key = (strategy.name, strategy.version, instrument.instrument_type, settlement.horizon)
+            key = (
+                strategy.name,
+                strategy.version,
+                instrument.instrument_type,
+                settlement.horizon,
+            )
             row = grouped.setdefault(
                 key,
                 {
@@ -3749,9 +4603,13 @@ def backtest(
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
     init_db()
-    request_key = f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
+    request_key = (
+        f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
+    )
     with SessionLocal() as db:
-        run = db.scalar(select(IngestionRun).where(IngestionRun.request_key == request_key))
+        run = db.scalar(
+            select(IngestionRun).where(IngestionRun.request_key == request_key)
+        )
         if run and run.status == "success" and not force:
             summary = summarize_backtest(db, run.id)
             summary["idempotent_reuse"] = True
@@ -3813,12 +4671,17 @@ def backtest(
             db.flush()
             score_dates = db.scalars(
                 select(MarketBar.trading_date)
-                .where(MarketBar.trading_date >= start_date, MarketBar.trading_date <= end_date)
+                .where(
+                    MarketBar.trading_date >= start_date,
+                    MarketBar.trading_date <= end_date,
+                )
                 .distinct()
                 .order_by(MarketBar.trading_date)
             ).all()
             metadata["score_session_count"] = len(score_dates)
-            metadata["as_of_rule"] = "all feature/group inputs are bounded by score_date"
+            metadata["as_of_rule"] = (
+                "all feature/group inputs are bounded by score_date"
+            )
             signal_count = 0
             for score_date in score_dates:
                 _calculate_group_scores(db, score_date)
@@ -3911,12 +4774,17 @@ def run_daily(
 ) -> dict[str, Any]:
     """catchup -> collect -> analyze -> evaluate -> candidates -> indicators, logged in schedule_runs."""
 
-    from worker.schedule_runs import CATCHUP_SESSIONS, run_daily_job  # imports this module
+    from worker.schedule_runs import (
+        CATCHUP_SESSIONS,
+        run_daily_job,
+    )  # imports this module
 
     return run_daily_job(
         end_date,
         months_back=months_back,
         trigger=trigger,
         force=force,
-        catchup_sessions=CATCHUP_SESSIONS if catchup_sessions is None else catchup_sessions,
+        catchup_sessions=CATCHUP_SESSIONS
+        if catchup_sessions is None
+        else catchup_sessions,
     )

@@ -9,6 +9,7 @@ and rows that are not the current formula are deactivated.
 Revision ID: 0009_strategy_formula_version
 Revises: 0008_portfolio_share_integer
 """
+
 from __future__ import annotations
 
 from alembic import op
@@ -26,4 +27,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Strategy formula identity migration is forward-only to preserve legacy data")
+    raise RuntimeError(
+        "Strategy formula identity migration is forward-only to preserve legacy data"
+    )

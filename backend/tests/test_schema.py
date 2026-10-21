@@ -38,7 +38,13 @@ def test_v1_schema_has_new_tables_unique_settlements_and_sqlite_foreign_keys(tmp
     }
     assert ("signal_id", "horizon") in settlement_uniques
     theme_columns = {column["name"] for column in inspector.get_columns("theme_groups")}
-    assert {"display_name_zh", "display_description_zh", "display_category", "name_source", "name_status"}.issubset(theme_columns)
+    assert {
+        "display_name_zh",
+        "display_description_zh",
+        "display_category",
+        "name_source",
+        "name_status",
+    }.issubset(theme_columns)
 
     with engine.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
@@ -138,7 +144,9 @@ def test_legacy_instrument_identity_migrates_forward_without_losing_rows(
             assert inspector.has_table("schema_migrations")
             versions = {
                 item[0]
-                for item in connection.execute(text("SELECT version FROM schema_migrations"))
+                for item in connection.execute(
+                    text("SELECT version FROM schema_migrations")
+                )
             }
             assert versions == set(REVISIONS)
             assert not inspector.has_table("alembic_version")
@@ -171,7 +179,20 @@ def test_product_migration_preserves_existing_official_rows(tmp_path):
     upgrade_database(engine)
 
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT COUNT(*) FROM instruments WHERE symbol = '2330'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM events WHERE title = 'Official event'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM news_items")).scalar_one() == 0
+        assert (
+            connection.execute(
+                text("SELECT COUNT(*) FROM instruments WHERE symbol = '2330'")
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(
+                text("SELECT COUNT(*) FROM events WHERE title = 'Official event'")
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(text("SELECT COUNT(*) FROM news_items")).scalar_one()
+            == 0
+        )
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
