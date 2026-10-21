@@ -9,6 +9,7 @@ directory.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -268,7 +269,7 @@ def test_lock_prevents_reentry_and_stale_lock_is_removed(wd):
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
     (wd.data / "stock.db").write_bytes(b"not a database")
     wd.run()
-    assert wd.events() == ["news_llm_check_failed"]
+    assert wd.events() == ["news_llm_check_failed", "invariants_check_failed"]
     assert wd.text("gh_calls.log") == ""
 
 
@@ -435,3 +436,149 @@ def test_news_llm_failures_older_than_a_day_are_not_reported_again(wd):
     assert "news_llm：" not in result.stdout
     # The stopped job itself is reported by the news log check.
     assert "news 排程：最新日誌寫於" in result.stdout
+
+
+# --- data invariants (Issue #229) -------------------------------------------
+
+# Latest bars of NIGHT's Taipei day 2026-10-19; an older day's unknown source
+# is outside the provenance check.
+HEALTHY_BARS = [
+    ("2026-10-16", "unknown", None),
+    ("2026-10-19", "twse_stock_day_all", "2026-10-19 00:00:00.000000"),
+    ("2026-10-19", "tpex_daily_close", "2026-10-19 00:00:00.000000"),
+]
+# Pending rows have no model yet.
+HEALTHY_LLM = [("done", "claude-sonnet-5-5", "news-v3"), ("pending", None, "news-v3")]
+
+
+def _invariant_db(
+    path: Path,
+    bars: list[tuple[str, str | None, str | None]],
+    llm: list[tuple[str, str | None, str | None]],
+) -> None:
+    """market_bars (trading_date, source, data_as_of) and news_llm_results
+    (llm_status, llm_model, prompt_version) rows."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE market_bars (id INTEGER PRIMARY KEY, trading_date DATE,"
+            " source VARCHAR(120), data_as_of DATETIME)"
+        )
+        conn.executemany(
+            "INSERT INTO market_bars (trading_date, source, data_as_of) VALUES (?, ?, ?)",
+            bars,
+        )
+        conn.execute(
+            "CREATE TABLE news_llm_results (id INTEGER PRIMARY KEY,"
+            " llm_status VARCHAR(20), llm_model VARCHAR(80), prompt_version VARCHAR(40))"
+        )
+        conn.executemany(
+            "INSERT INTO news_llm_results (llm_status, llm_model, prompt_version)"
+            " VALUES (?, ?, ?)",
+            llm,
+        )
+    conn.close()
+
+
+def test_invariants_hold_on_healthy_data(wd):
+    _invariant_db(wd.data / "stock.db", HEALTHY_BARS, HEALTHY_LLM)
+    result = wd.run()
+    assert wd.text("gh_calls.log") == ""
+    assert wd.events() == ["schedules_ok"]
+    assert (
+        "invariant future_trading_date ok max_trading_date=2026-10-19 today=2026-10-19\n"
+        "invariant latest_bar_provenance ok trading_date=2026-10-19 bars=2"
+        " unknown_source=0 null_data_as_of=0\n"
+        "invariant llm_done_provenance ok done=1 missing_model=0"
+        " empty_prompt_version=0\n"
+    ) in result.stdout
+
+
+def test_invariants_skip_empty_tables(wd):
+    _invariant_db(wd.data / "stock.db", [], [])
+    result = wd.run()
+    assert wd.events() == ["schedules_ok"]
+    assert "invariant future_trading_date skip reason=no_market_bars" in result.stdout
+    assert "invariant llm_done_provenance ok done=0" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("bars", "llm", "commented"),
+    [
+        (
+            [*HEALTHY_BARS, ("2026-10-20", "twse_stock_day_all", "2026-10-20")],
+            HEALTHY_LLM,
+            "資料不變量：`market_bars` 最新 `trading_date` 是 2026-10-20，晚於台北今日 2026-10-19",
+        ),
+        (
+            [*HEALTHY_BARS, ("2026-10-19", "unknown", "2026-10-19")],
+            HEALTHY_LLM,
+            "資料不變量：最新交易日 2026-10-19 的 3 列 `market_bars` 中，1 列 `source` 是 `unknown` 或空、0 列沒有 `data_as_of`",
+        ),
+        (
+            [*HEALTHY_BARS, ("2026-10-19", "twse_stock_day_all", None)],
+            HEALTHY_LLM,
+            "資料不變量：最新交易日 2026-10-19 的 3 列 `market_bars` 中，0 列 `source` 是 `unknown` 或空、1 列沒有 `data_as_of`",
+        ),
+        (
+            HEALTHY_BARS,
+            [*HEALTHY_LLM, ("done", None, "news-v3")],
+            "資料不變量：`news_llm_results` 的 2 列 `llm_status=done` 中，1 列沒有 `llm_model`、0 列 `prompt_version` 為空",
+        ),
+        (
+            HEALTHY_BARS,
+            [*HEALTHY_LLM, ("done", "claude-sonnet-5-5", "")],
+            "資料不變量：`news_llm_results` 的 2 列 `llm_status=done` 中，0 列沒有 `llm_model`、1 列 `prompt_version` 為空",
+        ),
+    ],
+    ids=[
+        "future_date",
+        "unknown_source",
+        "null_data_as_of",
+        "null_llm_model",
+        "empty_prompt_version",
+    ],
+)
+def test_invariant_violation_is_commented_once_a_day(wd, bars, llm, commented):
+    _invariant_db(wd.data / "stock.db", bars, llm)
+    db = wd.data / "stock.db"
+    before = (db.read_bytes(), db.stat().st_mtime_ns)
+    dry = wd.run("--dry-run")
+    assert f"將在 #1 留言：\n待使用者：{commented}" in dry.stdout
+    assert " violation " in dry.stdout
+    assert wd.text("gh_calls.log") == ""
+    wd.run()
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+    assert f"待使用者：{commented}" in wd.text("gh_bodies.txt")
+    assert wd.events()[-1] == "anomaly_already_commented"
+    # The watchdog only reads the database.
+    assert (db.read_bytes(), db.stat().st_mtime_ns) == before
+
+
+def _helper_module():
+    spec = importlib.util.spec_from_file_location(
+        "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_helper_connection_refuses_writes(tmp_path):
+    # Every helper check, the invariants included, reads through _connect.
+    helper = _helper_module()
+    db = tmp_path / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    conn = helper._connect(str(db))
+    try:
+        assert conn.execute("PRAGMA query_only").fetchone() == (1,)
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("UPDATE market_bars SET source='unknown'")
+        # mode=ro still refuses with query_only switched off.
+        conn.execute("PRAGMA query_only=OFF")
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("UPDATE market_bars SET source='unknown'")
+    finally:
+        conn.close()
+    assert "unknown_source=0" in helper.invariants(str(db), "2026-10-19")
