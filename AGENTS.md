@@ -27,12 +27,12 @@
 
 ## 任務生命週期
 
-1. **建 Issue**：目標、範圍與不做事項、3～5 條可驗收的 AC、依賴、對應 ROADMAP 里程碑；套 V1 milestone。小改動可直接開 PR 不建 Issue。
+1. **建 Issue**：目標、範圍與不做事項、3～5 條可驗收的 AC、依賴、對應 ROADMAP 里程碑；套 V1 milestone。要不要建 Issue 依工作手冊的[分流](docs/GITHUB_WORKFLOW.md#分流)。
 2. **開 worktree**：以 Orca 從最新 `origin/master` 建 `task/<issue>-<slug>`，啟動工程師 session 並送任務全文。
 3. **實作與自測**：工程師在 worktree 完成程式、測試與文件；跑後端 `pytest`、`ruff`、前端測試與 build（見[工作手冊](docs/GITHUB_WORKFLOW.md#本機檢查)）。
 4. **PR**：描述做了什麼、怎麼驗、未做什麼；`Closes #<issue>`。CI 必須綠。
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
-6. **結案**：合併後 master CI 綠即關 Issue、刪遠端 branch、移除 worktree。master CI 紅就先修，不開新功能。
+6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
 並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個。衝突由後合併者在自己的 branch 解決，不全選一方。
 
@@ -54,6 +54,36 @@
 - ROADMAP 寫方向、版本範圍與已完成能力；規格文件（PRODUCT_SPEC、V1_SPEC、NEWS_SPEC 等）只寫確定的契約；過程與待辦留 Issue。
 - 功能完成的同一個 PR 更新受影響文件；內容失效時同批刪除指向它的連結。
 - 同一規則只寫一次，其他處放連結。
+
+## 規則與強制手段
+
+會擋下違規的檢查列在這裡；強制手段寫「無」的規則只靠文件與 review。新增檢查時同一個 PR 補一列。hook 有問題時 revert `.claude/settings.json` 即可停用。
+
+| 規則 | 強制手段 | 檔案／設定 |
+| --- | --- | --- |
+| 改產品或高風險路徑的 PR 要對應 Issue（`Closes #<issue>`） | CI `pr` 規則 a | `tools/ci/checks.py`（`needs_issue`）、`.github/workflows/ci.yml`（`pr` job） |
+| 「AC 逐條結果」每條要有內容 | CI `pr` 規則 b | `tools/ci/checks.py`（`ac_results`） |
+| AC 證據是命令與輸出、查詢結果或截圖連結，只寫「通過」不算 | 無（統籌 review；規則 b 只查有沒有內容） | `docs/GITHUB_WORKFLOW.md` |
+| 前端變更附截圖 | CI `pr` 規則 c | `tools/ci/checks.py`（`frontend_source`） |
+| 高風險路徑要獨立 review | CI `pr` 規則 d（`independent-review` label） | `tools/ci/checks.py`（`HIGH_RISK_PATHS`） |
+| 獨立 review 寫出變更安全所依據的事實與證明方式 | 無 | `docs/GITHUB_WORKFLOW.md` |
+| commit 訊息不得有 closing keyword | CI `pr` 規則 e | `tools/ci/checks.py`（`CLOSING_KEYWORD`） |
+| 改 PR 本文或 label 後重新檢查 | CI `pull_request.types` 含 `edited`、`labeled`、`unlabeled` | `.github/workflows/ci.yml` |
+| PR 套模板 | 部分：規則 a、b 檢查 `Closes` 與 AC 區，其餘欄位無 | `.github/pull_request_template.md` |
+| 不在 master 管理 checkout 改檔 | Claude Code PreToolUse hook（Edit、Write） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
+| 不跑 `git clean -x`／`-X` | PreToolUse hook（Bash、PowerShell） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
+| 不用裸 `git stash`、`git stash pop`、`git stash clear` | PreToolUse hook（Bash、PowerShell） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
+| 不強推（含 `--force-with-lease`） | PreToolUse hook（Bash、PowerShell）；master 另有主線規則 | `tools/ops/agent_guard.cjs`、[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026) |
+| 不刪資料目錄 | PreToolUse hook：遞迴刪除且命令含 `stock-lab-data`／`STOCK_DATA_DIR` | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
+| 經 PR、只用 merge commit、CI `required` 綠才合併 | 主線規則 | [主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026) |
+| 合併後刪遠端 branch | GitHub repo 設定 `delete_branch_on_merge=true` | repo 設定（`gh api repos/YiCheng0608/stock-lab --jq .delete_branch_on_merge`） |
+| 依分流決定是否建 Issue | 部分：第 1、2 類由 CI `pr` 規則 a、d | `docs/GITHUB_WORKFLOW.md`（分流） |
+| Python lint 與格式（#225） | CI `repository` job 的 `lint` step | `tools/ci/checks.py`（`LINT_COMMANDS`）、`ruff.toml` |
+| Alembic head 只有一個來源（#225） | 後端測試 `test_operations_doc_names_the_code_head` | `backend/app/migration_revisions.py`、`backend/tests/test_database_readiness.py` |
+| `git blame` 略過全檔格式化 commit（#225） | 無（每個 checkout 手動設 `blame.ignoreRevsFile`） | `.git-blame-ignore-revs` |
+| worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `.github/pull_request_template.md` |
+| 統籌接手時核對前任標「已完成」的事 | 無 | `docs/GITHUB_WORKFLOW.md`（統籌 session） |
+| 同類錯誤第二次發生就編成檢查 | 無（流程見 #228） | `docs/GITHUB_WORKFLOW.md`（任務流程第 6 步） |
 
 ## 上下文壓縮時保留
 

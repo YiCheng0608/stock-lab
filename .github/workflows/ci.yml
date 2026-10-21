@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [master]
+    # edited and (un)labeled rerun the pr gate when the body or labels change.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
     branches: [master]
 
@@ -49,11 +51,35 @@ jobs:
       - run: python -m pip install --disable-pip-version-check --no-cache-dir ruff==0.14.14 PyYAML==6.0.3
       - name: unittest
         run: python -B -m unittest discover -s tools/ci -p 'test_*.py' -v
+      - name: agent guard hook
+        run: node --test tools/ops/agent_guard.test.cjs
       - name: repository
         run: python -B tools/ci/checks.py repository --base "$BASE_SHA"
       # Whole backend/ and tools/ trees with the root ruff.toml (ruff check and ruff format --check).
       - name: lint
         run: python -B tools/ci/checks.py lint --base "$BASE_SHA"
+
+  # PR body, labels and commit messages (tools/ci/checks.py pr). The event fields go through
+  # env: so their text is never part of the shell script.
+  pr:
+    name: pr
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The base branch tip as fetched now, not BASE_SHA: pull_request.base.sha stays at its
+      # old value after master moves, and an edited/labeled rerun checks out a merge ref that
+      # already contains master's newer commits. checks.py diffs from the merge-base.
+      - name: pr
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: python3 -B tools/ci/checks.py pr --base "$(git rev-parse "refs/remotes/origin/$BASE_REF")"
 
   backend:
     name: backend
@@ -102,11 +128,12 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, backend, frontend]
+    needs: [changes, repository, pr, backend, frontend]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       RESULTS: ${{ toJSON(needs) }}
+      EVENT: ${{ github.event_name }}
     steps:
       - name: Require every applicable check to succeed
         run: |
@@ -115,6 +142,8 @@ jobs:
           jobs = json.loads(os.environ['RESULTS'])
           assert jobs['changes']['result'] == 'success', jobs
           assert jobs['repository']['result'] == 'success', jobs
+          pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
+          assert jobs['pr']['result'] == pr, jobs
           for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
