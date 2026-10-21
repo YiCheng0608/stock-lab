@@ -31,6 +31,8 @@ width: {"url","width","ready","png","txt","scrollWidth","clientWidth","overflow"
 const MOBILE_MAX_WIDTH = 600
 const VIEWPORT_HEIGHT = { desktop: 900, mobile: 844 }
 const MAX_CAPTURE_HEIGHT = 20000
+// A cold browser start on a shared CI runner can take well over 30 s.
+const BROWSER_START_MS = 90000
 const POLL_MS = 250
 // The page is ready after this many consecutive polls with no loading marker.
 const STABLE_POLLS = 3
@@ -101,8 +103,9 @@ function browserArgs(profileDir, platform = process.platform) {
     '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--hide-scrollbars',
     '--disable-extensions', '--mute-audio',
   ]
-  // Ubuntu 24.04 restricts unprivileged user namespaces, which the Chrome sandbox needs.
-  if (platform === 'linux') args.push('--no-sandbox')
+  // Ubuntu 24.04 restricts unprivileged user namespaces, which the Chrome sandbox needs;
+  // CI containers also give /dev/shm too little room for the renderer.
+  if (platform === 'linux') args.push('--no-sandbox', '--disable-dev-shm-usage')
   return [...args, 'about:blank']
 }
 
@@ -113,7 +116,8 @@ function viewport(width) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function waitForFile(file, timeoutMs) {
+// The browser writes DevToolsActivePort once it listens; stop early when it fails first.
+async function waitForPortFile(file, child, stderr, timeoutMs) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -122,9 +126,21 @@ async function waitForFile(file, timeoutMs) {
     } catch {
       // not written yet
     }
+    // Exit 0 is not a failure: msedge.exe on Windows can hand off to another process and exit.
+    if ((child.exitCode !== null && child.exitCode !== 0) || child.signalCode !== null) {
+      throw new Error(`browser exited (${child.exitCode ?? child.signalCode}) before listening; stderr: ${stderr.tail() || '(empty)'}`)
+    }
     await sleep(100)
   }
-  throw new Error(`browser did not write ${file} within ${timeoutMs} ms`)
+  throw new Error(`browser did not write ${file} within ${timeoutMs} ms; stderr: ${stderr.tail() || '(empty)'}`)
+}
+
+// Keeps the last few KB of the browser's stderr for error messages.
+function stderrTail(stream, limit = 4000) {
+  let text = ''
+  stream.setEncoding('utf8')
+  stream.on('data', (chunk) => { text = (text + chunk).slice(-limit) })
+  return { tail: () => text.trim().split('\n').slice(-15).join(' | ') }
 }
 
 class Cdp {
@@ -259,12 +275,13 @@ async function run(options) {
   if (!browser) throw new Error('no Edge or Chrome found; pass --browser or set SCREENSHOT_BROWSER')
   fs.mkdirSync(options.out, { recursive: true })
   const profileDir = fs.mkdtempSync(path.join(path.resolve(options.out), '.browser-'))
-  const child = spawn(browser, browserArgs(profileDir), { stdio: 'ignore' })
+  const child = spawn(browser, browserArgs(profileDir), { stdio: ['ignore', 'ignore', 'pipe'] })
+  const stderr = stderrTail(child.stderr)
   const exited = new Promise((resolve) => child.once('exit', resolve))
   let cdp
   let allReady = true
   try {
-    const active = await waitForFile(path.join(profileDir, 'DevToolsActivePort'), 30000)
+    const active = await waitForPortFile(path.join(profileDir, 'DevToolsActivePort'), child, stderr, BROWSER_START_MS)
     const port = active.split('\n')[0].trim()
     const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
     const page = targets.find((target) => target.type === 'page')

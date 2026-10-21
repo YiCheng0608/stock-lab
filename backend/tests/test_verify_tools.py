@@ -291,6 +291,30 @@ console.log(JSON.stringify({
     assert out["env"] == "x" and out["none"] is None
 
 
+@needs_node
+def test_screenshot_reports_a_browser_that_exits_before_listening(
+    tmp_path: Path,
+) -> None:
+    # node rejects --headless=new and exits at once, like a browser that cannot start.
+    started = time.monotonic()
+    result = _run(
+        [
+            NODE,
+            str(SCREENSHOT),
+            "--url",
+            "http://127.0.0.1:9/",
+            "--out",
+            str(tmp_path / "shots"),
+            "--browser",
+            NODE,
+        ]
+    )
+    assert result.returncode == 1
+    assert "browser exited" in result.stderr and "headless" in result.stderr
+    assert time.monotonic() - started < 30
+    assert list((tmp_path / "shots").iterdir()) == []
+
+
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body><div class="skeleton">loading</div>
