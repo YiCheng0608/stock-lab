@@ -20,13 +20,15 @@ def git(*args: str, cwd: Path = ROOT) -> bytes:
     return subprocess.check_output(["git", *args], cwd=cwd)
 
 
-def changed_paths(base: str, cwd: Path = ROOT) -> list[str]:
+def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[str]:
+    """Paths changed from base to HEAD, or to the working tree when worktree is set."""
     if not re.fullmatch(r"[0-9a-f]{40}", base):
         raise ValueError("base must be a full Git SHA")
     if base == "0" * 40:
         result = git("ls-files", "-z", cwd=cwd)
     else:
-        result = git("diff", "--name-only", "--no-renames", "-z", base, "HEAD", cwd=cwd)
+        tip = () if worktree else ("HEAD",)
+        result = git("diff", "--name-only", "--no-renames", "-z", base, *tip, cwd=cwd)
     return [name.decode("utf-8") for name in result.split(b"\0") if name]
 
 
@@ -84,9 +86,14 @@ def markdown_errors(path: str, text: str) -> list[str]:
 
 
 def repository_checks(paths: list[str], base: str) -> None:
+    """Check the working tree against base, the same files the checks below read.
+
+    In CI the working tree is HEAD. Locally it includes staged and unstaged edits, so an
+    uncommitted `git merge --no-commit` result is what gets checked, not the pre-merge HEAD.
+    """
     errors = []
     if base != "0" * 40:
-        subprocess.run(["git", "diff", "--check", base, "HEAD"], cwd=ROOT, check=True)
+        subprocess.run(["git", "diff", "--check", base], cwd=ROOT, check=True)
     for name in paths:
         path = ROOT / name
         if not path.is_file() or path.suffix.lower() not in {
@@ -305,7 +312,7 @@ def main() -> None:
             raise SystemExit("PR gate failed:\n" + "\n".join(errors))
         print(f"PR gate passed for {len(paths)} changed paths since {fork}.")
         return
-    paths = changed_paths(args.base)
+    paths = changed_paths(args.base, worktree=args.mode == "repository")
     if args.mode == "changes":
         flags = change_flags(paths)
         print(json.dumps({"paths": paths, "required": flags}))

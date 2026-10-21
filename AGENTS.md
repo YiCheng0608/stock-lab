@@ -83,7 +83,8 @@
 | `git blame` 略過全檔格式化 commit（#225） | 無（每個 checkout 手動設 `blame.ignoreRevsFile`） | `.git-blame-ignore-revs` |
 | worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `.github/pull_request_template.md` |
 | 統籌接手時核對前任標「已完成」的事 | 無 | `docs/GITHUB_WORKFLOW.md`（統籌 session） |
-| 同類錯誤第二次發生就編成檢查 | 無（流程見 #228） | `docs/GITHUB_WORKFLOW.md`（任務流程第 6 步） |
+| 同類錯誤第二次發生就編成檢查 | 無（流程用 encode-lesson skill，#228） | `docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/encode-lesson/SKILL.md` |
+| `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
 
 ## 上下文壓縮時保留
 
