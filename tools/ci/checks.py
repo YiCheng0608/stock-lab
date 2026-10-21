@@ -145,6 +145,10 @@ CLOSES = re.compile(r"\bcloses\s+#\d+\b", re.I)
 CLOSING_KEYWORD = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?[ \t]+#\d+", re.I
 )
+# The section label starts its line (after a list or checkbox marker), unlike prose naming it.
+AC_SECTION = re.compile(
+    r"^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?)?(?:#{1,6}\s+)?(?:\*\*)?AC 逐條結果"
+)
 AC_ITEM = re.compile(
     r"^(\s*)(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)?(?:\*\*|__)?AC-?(\d+)\b(.*)$"
 )
@@ -188,7 +192,7 @@ def needs_issue(paths: list[str]) -> list[str]:
 def ac_results(body: str) -> dict[str, str] | None:
     """AC number -> result text in the 「AC 逐條結果」 section, or None without one."""
     lines = body.splitlines()
-    start = next((i for i, line in enumerate(lines) if "AC 逐條結果" in line), None)
+    start = next((i for i, line in enumerate(lines) if AC_SECTION.match(line)), None)
     if start is None:
         return None
     end = next(

@@ -309,6 +309,11 @@ class PrGateTests(unittest.TestCase):
             )
         self.assertEqual(self.check(filled, API), [])
 
+    def test_b_prose_naming_the_section_is_not_the_section(self):
+        body = "## 做了什麼\n\n- b. 「AC 逐條結果」區每條要有內容\n\n" + GOOD_BODY
+        self.assertEqual(ac_results(body).keys(), {"AC-1", "AC-2"})
+        self.assertEqual(self.check(body, API), [])
+
     def test_b_section_ends_at_next_heading(self):
         body = GOOD_BODY + "\n## 未做\n\n- AC-9 之後再說\n"
         self.assertEqual(ac_results(body).keys(), {"AC-1", "AC-2"})
