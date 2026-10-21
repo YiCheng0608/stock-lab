@@ -9,6 +9,7 @@ directory.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -553,3 +554,31 @@ def test_invariant_violation_is_commented_once_a_day(wd, bars, llm, commented):
     assert wd.events()[-1] == "anomaly_already_commented"
     # The watchdog only reads the database.
     assert (db.read_bytes(), db.stat().st_mtime_ns) == before
+
+
+def _helper_module():
+    spec = importlib.util.spec_from_file_location(
+        "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_helper_connection_refuses_writes(tmp_path):
+    # Every helper check, the invariants included, reads through _connect.
+    helper = _helper_module()
+    db = tmp_path / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    conn = helper._connect(str(db))
+    try:
+        assert conn.execute("PRAGMA query_only").fetchone() == (1,)
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("UPDATE market_bars SET source='unknown'")
+        # mode=ro still refuses with query_only switched off.
+        conn.execute("PRAGMA query_only=OFF")
+        with pytest.raises(sqlite3.OperationalError, match="readonly"):
+            conn.execute("UPDATE market_bars SET source='unknown'")
+    finally:
+        conn.close()
+    assert "unknown_source=0" in helper.invariants(str(db), "2026-10-19")
