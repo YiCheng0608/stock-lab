@@ -33,7 +33,7 @@
 | 編號 | 檢查 | 怎麼判 |
 | --- | --- | --- |
 | N1 | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| N2 | 列表與 API 一致 | 三個分頁各自：API `items` 空時空資料文案為整行出現；否則前 3 則 `title`（官方公告可能改寫標題，改比 `source_name` 標籤與時間）依序為整行出現 |
+| N2 | 列表與 API 一致 | 國內用 `news-1280.txt`、國際用 `news-international-1280.txt`、官方用 `news-official-1280.txt`（N3、N4 同）。三個分頁各自：API `items` 空時空資料文案為整行出現；否則前 3 則 `title`（官方公告的標題會被改寫，改比來源 badge 與時間行：badge 是 `newsSourceLabel(source_name)`（`frontend/src/presentation.ts`，例如 `MOPS` → `公開資訊觀測站公告`），時間行是 `事件日 <event_date 的 YYYY/MM/DD>`）依序為整行出現 |
 | N3 | 每張卡有時間 | 各分頁 `^(發布於\|事件於\|事件日) \|^來源時間(待核實\|未提供)$` 的行數 = API `items` 數 |
 | N4 | AI 標記 | 各分頁整行 `AI 推論` 的行數 = API `items` 中 `ai.status` 為 `done` 且 `ai.inference` 為 true 的數量 |
 | N5 | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
