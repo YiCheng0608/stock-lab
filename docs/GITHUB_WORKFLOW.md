@@ -24,6 +24,16 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 資料（排程、collector、DB）與功能（指標、API、UI）可拆成不同任務並行；功能任務先用小 fixture 開發，接真實資料是整合步驟，寫在 AC 裡。
 
+## 分流
+
+開工前依序問，第一個答「是」就停：
+
+1. 改到[高風險路徑](../tools/ci/checks.py)（`HIGH_RISK_PATHS`，清單只在該處維護）嗎？是：完整流程（Issue、AC、worktree），PR 加 `independent-review` label，AC 含正式 DB 唯讀副本實測。
+2. 改到 `backend/app/`、`backend/worker/`、`backend/alembic/`、`backend/data/`、`frontend/src/` 的非測試檔嗎？是：Issue、AC、worktree；小的統籌可自做。
+3. 其餘（文件、流程檔、`tools/ci/`、純測試改動）：可直接開 PR 不建 Issue，驗證欄寫 CI；規模大仍可建 Issue。
+
+另兩條與大小無關：要拆成多張就開 `[功能]` 母單；碰到共用檔案且有任務進行中，先在 Issue 協調（[任務流程](#任務流程)第 3 步）。第 1、2 類由 CI 的 `pr` 檢查（規則 a、d，見 [Review 與合併](#review-與合併)）擋下沒有 `Closes #<issue>` 或缺 label 的 PR。
+
 ## 任務流程
 
 1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。
@@ -41,8 +51,8 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報只寫在 Issue 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（review 意見、回覆提問、決定）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
-5. **PR**：套 [PR 模板](../.github/pull_request_template.md)，`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；統籌關工程師 terminal、刪遠端與本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。
+5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌關工程師 terminal、刪本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。同類錯誤第二次發生時，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228) 的 skill），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。
 
 ## 本機檢查
 
@@ -58,9 +68,14 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 
 ## Review 與合併
 
-- PR 必須 CI 全綠（`.github/workflows/ci.yml`）。
-- 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界。
-- 以下情況加一次獨立 review（`/code-review` 或另開 session）：新資料管線、策略或指標公式、DB migration、排程。
+- PR 必須 CI 全綠（`.github/workflows/ci.yml`）。CI 的 `pr` 檢查（[`tools/ci/checks.py`](../tools/ci/checks.py) `pr` 模式）讀 PR 本文、label 與 commit 訊息；改本文或 label 會自動重跑：
+  - a. 改到[分流](#分流)第 1、2 類路徑，本文要有 `Closes #<issue>`。
+  - b. 本文「AC 逐條結果」的每一條 AC 後面要有內容；第 1、2 類 PR 必須有這一區。
+  - c. 改到 `frontend/src/` 的非測試檔，本文要有圖片或 `pr-assets` 連結。
+  - d. 改到 `HIGH_RISK_PATHS`，PR 要有 `independent-review` label。
+  - e. commit 訊息不得有 closing keyword（`Fix #N`、`Closes #N`、`Resolves #N` 等）：commit 一進 master 就會關 Issue，早於結案步驟。
+- 統籌 review 重點：AC 是否逐條有驗證、文件是否同步、是否遵守 DESIGN_SYSTEM、有沒有寫死色碼／路徑／金鑰、測試是否覆蓋邊界。AC 證據必須是命令與輸出、查詢結果或截圖連結，只寫「通過」不算。
+- 改到 [`HIGH_RISK_PATHS`](../tools/ci/checks.py) 的 PR 加一次獨立 review（`/code-review` 或另開 session）並加 `independent-review` label。獨立 review 要寫出「這個變更安全是因為哪一個事實」，以及證明它的方式（命令與輸出、查詢或測試名稱）。
 - 合併用 merge commit，不 squash／rebase；衝突由 PR 作者在自己 branch 解決。主線規則要求 PR 分支跟上 master：master 前進後統籌以 `gh api -X PUT repos/YiCheng0608/stock-lab/pulls/<n>/update-branch -f expected_head_sha=<head>` 把 master 併入（merge commit），CI 重跑綠再合併。
 - master CI 紅：先修 master（fix-forward PR），修好前不合併其他 PR。
 
@@ -78,7 +93,7 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 `--autocompact 400k` 把自動壓縮視窗設在 400K，不等到模型上限才壓縮。標題只是給人看的，存活判定一律用心跳檔。接手文固定如下，開啟者原文送出，心跳記的舊 terminal 已不存在時刪掉最後一句；開啟者若不是統籌本人，開完只回報 handle，不再對 repo 寫入：
 
 ```text
-你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；回覆所有最後一則是工程師提問且無統籌回覆的 Issue；兌現前任在 Issue 標「統籌承諾」的事；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
+你是 stock-lab 的統籌。先讀 AGENTS.md、docs/GITHUB_WORKFLOW.md、docs/ROADMAP.md、治理 Issue #1 本文的決策索引與最近 10 則留言、所有 open Issues 與 PR、最近 48 小時內關閉的 Issue 與合併的 PR 的最後一則留言。接著：寫心跳檔；掛 GitHub 背景監看（since 取接手前 1 小時）與定時巡檢（手冊「無人值守運作」）；在 #1 留言「統籌 session 更換：<terminal handle>／<session id>」並更新 #1 本文的現任統籌；回覆所有最後一則是工程師提問且無統籌回覆的 Issue；兌現前任在 Issue 標「統籌承諾」的事；核對前任標「已完成」的事，不只接續；然後依手冊推進。回覆使用者一律繁體中文。舊統籌 terminal 為 <舊 handle>，用 orca terminal wait --for tui-idle 確認它閒置後以 orca terminal close 關掉它。
 ```
 
 **自動換手機制**（統籌 session 自己執行，不需要人在場）：
