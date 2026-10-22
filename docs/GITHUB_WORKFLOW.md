@@ -36,7 +36,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 任務流程
 
-1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。
+1. **建單**：套 [任務模板](../.github/ISSUE_TEMPLATE/task.md)，填目標、範圍、AC、依賴、對應 gate；套 milestone；看板設待辦。UI 任務（改五個主導航的頁面）的 AC 固定加一條「更新對應的 [`features/*.md`](../.claude/skills/verify-stock-lab/features/) 或寫明不需更新」。
 2. **開工**：統籌以 Orca 從最新 `origin/master` 建 worktree，branch `task/<issue>-<slug>`：
 
    ```text
@@ -52,7 +52,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌關工程師 terminal、刪本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。同類錯誤第二次發生時，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228) 的 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌關工程師 terminal、刪本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。同類錯誤第二次發生時，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228) 的 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。G7 驗收前，統籌在最新 master 的 worktree 跑一次 [verify-stock-lab](../.claude/skills/verify-stock-lab/SKILL.md)，結果貼在 G7 的 Issue。
 
 ## 本機檢查
 
