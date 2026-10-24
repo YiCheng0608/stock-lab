@@ -72,8 +72,8 @@ def markers(path, alembic, fallback):
 
 
 def test_current_head_and_fallback_count_in_memory():
-    assert len(readiness.REVISIONS) == 16
-    assert readiness.REVISIONS[-1] == "0016_group_score_archive"
+    assert len(readiness.REVISIONS) == 17
+    assert readiness.REVISIONS[-1] == "0017_tracking_plans"
     with sqlite3.connect(":memory:") as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT)")
         connection.execute(
@@ -156,10 +156,10 @@ def test_operations_doc_names_the_code_head():
     ]
 
 
-def test_head_0016_is_ready_but_a_0015_database_is_not(ready_db):
+def test_head_0017_is_ready_but_a_0016_database_is_not(ready_db):
     assert readiness.REVISIONS[-2:] == (
-        "0015_candidate_llm_notes",
         "0016_group_score_archive",
+        "0017_tracking_plans",
     )
     markers(ready_db, [readiness.REVISIONS[-1]], None)
     check_unchanged(ready_db)
@@ -593,6 +593,40 @@ def test_partial_unique_spoofs_are_rejected(ready_db, tail):
         connection.execute("DROP INDEX ix_ingestion_runs_request_key")
         connection.execute("CREATE UNIQUE INDEX ix_ingestion_runs_request_key " + tail)
     check_unchanged(ready_db, "unique identities")
+
+
+@pytest.mark.parametrize(
+    "ddl",
+    [
+        'CREATE UNIQUE INDEX "uq_tracking_plan_open_signal" ON "tracking_plans" ("signal_id") WHERE "cancelled_at" IS NULL',
+        "create unique index uq_tracking_plan_open_signal on tracking_plans(signal_id) where cancelled_at is null",
+    ],
+)
+def test_open_plan_partial_unique_is_accepted(ready_db, ddl):
+    with sqlite3.connect(ready_db) as connection:
+        connection.execute("DROP INDEX uq_tracking_plan_open_signal")
+        connection.execute(ddl)
+    check_unchanged(ready_db)
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        None,
+        "ON tracking_plans(signal_id) WHERE cancelled_at IS NOT NULL",
+        "ON tracking_plans(signal_id) WHERE cancelled_at IS NULL AND status = 'pending'",
+        "ON tracking_plans(signal_id) WHERE status != 'cancelled'",
+        "ON tracking_plans(instrument_id) WHERE cancelled_at IS NULL",
+    ],
+)
+def test_open_plan_partial_unique_spoofs_are_rejected(ready_db, tail):
+    with sqlite3.connect(ready_db) as connection:
+        connection.execute("DROP INDEX uq_tracking_plan_open_signal")
+        if tail:
+            connection.execute(
+                "CREATE UNIQUE INDEX uq_tracking_plan_open_signal " + tail
+            )
+    check_unchanged(ready_db, "tracking_plans lacks required unique identities")
 
 
 @pytest.mark.parametrize("partial", [False, True])

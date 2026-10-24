@@ -43,6 +43,7 @@ _CHILDREN = {
     "fundamental_snapshots",
     "events",
     "daily_candidates",
+    "tracking_plans",
 }
 _TOKEN = re.compile(
     r"\s+|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^]]*\]|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[(),;]"

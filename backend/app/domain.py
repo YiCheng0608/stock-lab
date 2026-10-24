@@ -790,6 +790,52 @@ def validate_signal_status_transition(
     return ValidationResult(False, ("illegal_signal_status_transition",))
 
 
+# User tracking plans (V1_SPEC 使用者追蹤計畫).  pending may jump straight to an
+# outcome: a fill and its exit can happen in the same session, and a run that
+# follows missed daily runs can see a fill and the end of the window at once.
+PLAN_TRACKING_VERSION = "plan_tracking_v1"
+PLAN_OPEN_STATUSES = frozenset({"pending", "triggered"})
+PLAN_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
+    "pending": frozenset(
+        {
+            "triggered",
+            "target_hit",
+            "invalidated",
+            "incomparable",
+            "expired",
+            "closed",
+            "cancelled",
+        }
+    ),
+    "triggered": frozenset(
+        {"target_hit", "invalidated", "incomparable", "closed", "cancelled"}
+    ),
+    "target_hit": frozenset(),
+    "invalidated": frozenset(),
+    "incomparable": frozenset(),
+    "expired": frozenset(),
+    "closed": frozenset(),
+    "cancelled": frozenset(),
+}
+
+
+def validate_plan_status_transition(
+    current_status: str, next_status: str
+) -> ValidationResult:
+    """Accept only declared plan transitions; staying in a status is always fine."""
+
+    if current_status not in PLAN_STATUS_TRANSITIONS:
+        return ValidationResult(False, ("unsupported_current_status",))
+    if next_status not in PLAN_STATUS_TRANSITIONS:
+        return ValidationResult(False, ("unsupported_next_status",))
+    if (
+        current_status == next_status
+        or next_status in PLAN_STATUS_TRANSITIONS[current_status]
+    ):
+        return ValidationResult(True)
+    return ValidationResult(False, ("illegal_plan_status_transition",))
+
+
 def clamp01(value: float | None, default: float | None = None) -> float | None:
     if not _finite(value):
         return default

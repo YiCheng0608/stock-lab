@@ -27,6 +27,28 @@ _LEGACY_REQUEST_KEY_DDL = re.compile(
     r'(?:request_key|"request_key")\s+IS\s+NOT\s+NULL\s*',
     re.IGNORECASE,
 )
+# 0017: at most one plan per signal that is not cancelled (V1_SPEC 使用者追蹤計畫).
+_OPEN_PLAN_SIGNAL_DDL = re.compile(
+    r'\s*CREATE\s+UNIQUE\s+INDEX\s+(?:uq_tracking_plan_open_signal|"uq_tracking_plan_open_signal")'
+    r'\s+ON\s+(?:tracking_plans|"tracking_plans")\s*'
+    r'\(\s*(?:signal_id|"signal_id")\s*\)\s+WHERE\s+'
+    r'(?:cancelled_at|"cancelled_at")\s+IS\s+NULL\s*',
+    re.IGNORECASE,
+)
+# The partial unique indexes that count as the model's unique identity, by
+# (table, index, key) and the entire stored DDL each must match.
+_KNOWN_PARTIAL_UNIQUE = {
+    (
+        "ingestion_runs",
+        "ix_ingestion_runs_request_key",
+        ("request_key",),
+    ): _LEGACY_REQUEST_KEY_DDL,
+    (
+        "tracking_plans",
+        "uq_tracking_plan_open_signal",
+        ("signal_id",),
+    ): _OPEN_PLAN_SIGNAL_DDL,
+}
 
 
 class DatabaseReadinessError(RuntimeError):
@@ -86,24 +108,20 @@ def _empty_array_literal(default: str | None) -> bool:
     return value in ("'[]'", '"[]"')
 
 
-def _known_legacy_unique(
+def _known_partial_unique(
     connection: sqlite3.Connection, table: str, index: str, key: tuple
 ) -> bool:
     # Revision 0001 preserves multiple legacy NULL request keys. This exact
     # predicate still enforces every non-NULL key just like nullable UNIQUE.
+    # 0017 keeps cancelled tracking plans next to the signal's open one.
     # Match the entire stored DDL, not a suffix that comments could imitate.
-    if (table, index, key) != (
-        "ingestion_runs",
-        "ix_ingestion_runs_request_key",
-        ("request_key",),
-    ):
+    ddl = _KNOWN_PARTIAL_UNIQUE.get((table, index, key))
+    if ddl is None:
         return False
     row = connection.execute(
         "SELECT sql FROM sqlite_schema WHERE type='index' AND name=?", (index,)
     ).fetchone()
-    return bool(
-        row and isinstance(row[0], str) and _LEGACY_REQUEST_KEY_DDL.fullmatch(row[0])
-    )
+    return bool(row and isinstance(row[0], str) and ddl.fullmatch(row[0]))
 
 
 def _check_instrument_unique_indexes(
@@ -221,7 +239,7 @@ def _check_schema(connection: sqlite3.Connection, tables: set[str]) -> None:
                 f"PRAGMA index_xinfo({_quote(index[1])})"
             ).fetchall()
             key = tuple(row[2] for row in parts if row[5])
-            if index[4] and not _known_legacy_unique(connection, name, index[1], key):
+            if index[4] and not _known_partial_unique(connection, name, index[1], key):
                 continue
             if all(part is not None for part in key):
                 unique_keys.add(key)
