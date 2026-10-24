@@ -109,6 +109,9 @@ _INSTRUMENTS = (
     (7, "TPEx", "9204", "示範生技", "stock", None, "22", date(2018, 8, 8)),
     (8, "TWSE", "00990", "示範台灣五十", "etf", "broad_market", None, date(2020, 6, 1)),
     (9, "TWSE", "TAIEX", "發行量加權股價指數", "index", None, None, None),
+    # Instrument lifecycle (Issue #212), see LIFECYCLE.
+    (10, "TPEx", "9205", "示範下市", "stock", None, "22", date(2010, 4, 1)),
+    (11, "TPEx", "9206", "示範轉市", "stock", None, "25", date(2011, 6, 1)),
 )
 # symbol -> first close, daily drift, base volume in lots
 PRICE_PLAN = {
@@ -121,12 +124,37 @@ PRICE_PLAN = {
     "9204": (90.0, -0.0004, 1200),
     "00990": (50.0, 0.0008, 20000),
     "TAIEX": (22000.0, 0.0006, 5000000),
+    "9205": (30.0, -0.0010, 900),
+    "9206": (70.0, 0.0009, 1500),
 }
 BREAKS_OUT = {"9101", "9103", "9201", "00990"}  # close above the 20-day high on T
 WATCHLIST = {"9201"}
 INSTRUMENT_IDS = {row[2]: row[0] for row in _INSTRUMENTS}
 STOCKS = [row for row in _INSTRUMENTS if row[4] == "stock"]
 NO_CHIPS = {"9204"}  # the no-data case: no institutional or margin rows at all
+
+# ---- instrument lifecycle (Issue #212) ----
+# The rows the collector leaves for a TPEx stock that left the official lists
+# (9205) and one that moved to TWSE (9206); backend/tests/
+# test_instrument_lifecycle.py rebuilds them with the worker.  Neither is in a
+# current list, page or count; their history stays.
+DELISTED, TRANSFERRED = "9205", "9206"
+# 9206 kept trading on TPEx after the TPEx list stopped carrying it: the quote
+# rows from LIST_GAP_FROM to its last bar are the rows #212 stopped dropping.
+LIST_GAP_FROM = SESSIONS[-13]
+# symbol: status, last bar, day the lists were observed without it, TWSE
+# listing date (a transfer) or None
+LIFECYCLE = {
+    DELISTED: ("delisted", SESSIONS[-21], SESSIONS[-15], None),
+    TRANSFERRED: ("transferred", SESSIONS[-11], SESSIONS[-10], SESSIONS[-10]),
+}
+
+
+def lifecycle_close_day(symbol: str) -> date:
+    """The last day its memberships count: before the new listing or observation."""
+
+    _status, _last_bar, observed, listed_elsewhere = LIFECYCLE[symbol]
+    return (listed_elsewhere or observed) - timedelta(days=1)
 
 
 def _instrument_rows() -> list[dict[str, Any]]:
@@ -142,7 +170,7 @@ def _instrument_rows() -> list[dict[str, Any]]:
             "industry": industry,
             "listing_date": listed,
             "is_watchlisted": symbol in WATCHLIST,
-            "status": "active",
+            "status": LIFECYCLE[symbol][0] if symbol in LIFECYCLE else "active",
             "created_at": CREATED_AT,
         }
         for item_id, exchange, symbol, name, kind, category, industry, listed in (
@@ -176,6 +204,8 @@ def _series(symbol: str) -> list[dict[str, Any]]:
                 "volume": volume,
             }
         )
+    if symbol in LIFECYCLE:
+        rows = [row for row in rows if row["day"] <= LIFECYCLE[symbol][1]]
     if symbol in BREAKS_OUT:
         prior = rows[-21:-1]
         last = rows[-1]
@@ -276,7 +306,7 @@ def _chip_rows() -> list[dict[str, Any]]:
     rows = []
     next_id = 1
     for item_id, exchange, symbol, _name, kind, *_rest in STOCKS:
-        if symbol in NO_CHIPS:
+        if symbol in NO_CHIPS or symbol in LIFECYCLE:
             continue
         for i, day in enumerate(CHIP_SESSIONS):
             wobble = ((i * 7 + item_id) % 5) - 2
@@ -327,6 +357,29 @@ def _data_quality_rows() -> list[dict[str, Any]]:
                 },
                 "source": "official",
                 "checked_at": COLLECTED_AT,
+            }
+        )
+    for offset, (symbol, (status, _last, observed, listed)) in enumerate(
+        sorted(LIFECYCLE.items())
+    ):
+        rows.append(
+            {
+                "id": 100 + offset,
+                "entity_type": "instrument_status",
+                "entity_key": f"TPEx:{symbol}",
+                "as_of_date": observed,
+                "status": status,
+                "missing_fields_json": [],
+                "checks_json": {
+                    "previous_status": "active",
+                    "status": status,
+                    "reason": "listed_on_other_exchange"
+                    if listed
+                    else "absent_from_official_lists",
+                    "close_day": lifecycle_close_day(symbol).isoformat(),
+                },
+                "source": "tpex",
+                "checked_at": _at(observed, 10),
             }
         )
     return rows
@@ -389,6 +442,7 @@ GROUP_PLAN = {
     SEMICONDUCTOR_ID: ("industry", ["9101", "9201", "9102"], 1, "complete"),
     COMPUTER_ID: ("industry", ["9103", "9202", "9203"], 2, "complete"),
     # One member is below MIN_GROUP_MEMBERS: stored unscored and unranked.
+    # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
     BIOTECH_ID: ("industry", ["9204"], None, "insufficient_members"),
     AI_SERVER_ID: ("theme", ["9101", "9103", "9202"], 1, "complete"),
     PACKAGING_ID: ("theme", ["9101", "9201", "9102"], 2, "complete"),
@@ -421,10 +475,25 @@ def _membership_rows() -> list[dict[str, Any]]:
                     "role": "member",
                     "confidence": 1.0,
                     "valid_from": MEMBERS_FROM,
+                    "valid_to": None,
                     "source": _membership_source(group_id, symbol),
                 }
             )
             next_id += 1
+    for symbol, group_id in ((DELISTED, BIOTECH_ID), (TRANSFERRED, COMPUTER_ID)):
+        rows.append(
+            {
+                "id": next_id,
+                "group_id": group_id,
+                "instrument_id": INSTRUMENT_IDS[symbol],
+                "role": "member",
+                "confidence": 1.0,
+                "valid_from": MEMBERS_FROM,
+                "valid_to": lifecycle_close_day(symbol),
+                "source": f"{OFFICIAL_INDUSTRY_SOURCE}; exchange=TPEx",
+            }
+        )
+        next_id += 1
     return rows
 
 
@@ -1482,7 +1551,6 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
     },
     "candidate_runs": {"zero_reason": "當日有 3 檔候選，不是零候選"},
     "chip_snapshots": {"raw_payload_id": "假資料不附法人原始檔"},
-    "group_memberships": {"valid_to": "成員都仍有效"},
     "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
         "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫"
@@ -1612,6 +1680,9 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("theme-suggestions?limit=20", "meta.total", 2),
         ("theme-suggestions?limit=20", "items[].news_count", [2, 1]),
         (f"themes/{TOP_THEME}", "members_total", 3),
+        # The delisted 9205 and the moved 9206 left these groups (LIFECYCLE).
+        (f"themes/{BIOTECH_ID}", "members_total", 1),
+        (f"themes/{COMPUTER_ID}", "members_total", 3),
         (f"themes/{TOP_THEME}", "trend", 5),
         (f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=price", "meta.total", 3),
         (
@@ -1623,6 +1694,19 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "stocks": [
         ("stocks?page=1&page_size=30", "meta.total", 8),
         ("stocks?page=1&page_size=30", "items", 8),
+        # Neither lifecycle stock is a current instrument; their history stays.
+        (
+            "stocks?q=920&page=1&page_size=30",
+            "items[].instrument.symbol",
+            ["9201", "9202", "9203", "9204"],
+        ),
+        (f"stocks/TPEx/{DELISTED}", "instrument.status", "delisted"),
+        (f"stocks/TPEx/{TRANSFERRED}", "instrument.status", "transferred"),
+        (
+            f"stocks/TPEx/{DELISTED}/bars?interval=day&limit=250",
+            "bars.-1.date",
+            LIFECYCLE[DELISTED][1].isoformat(),
+        ),
         (f"stocks/{E}/{S}", "chips", 25),
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),

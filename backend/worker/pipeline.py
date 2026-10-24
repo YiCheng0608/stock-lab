@@ -6,6 +6,7 @@ import math
 import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Iterable
 
@@ -93,6 +94,11 @@ from worker.sources import (
     TPEX_LISTED_ENDPOINT,
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
+    TPEX_HISTORY_API,
+    TWSE_DAILY_HISTORY_ENDPOINT,
+    _require_reported_date,
+    _rows,
+    _text,
 )
 
 # Longest normalized-price window a technical feature reads (ma60).
@@ -201,7 +207,10 @@ def get_or_create_instrument(
             item.etf_category = etf_category
             item.industry = industry or item.industry
             item.listing_date = listing_date or item.listing_date
-            item.status = "active"
+            # Being listed again ends delisted/transferred; dormant (listed but
+            # without quote rows) ends only when a quote row returns.
+            if item.status != "dormant":
+                item.status = "active"
         return item
     item = Instrument(
         market="TW",
@@ -3050,6 +3059,506 @@ def _ensure_official_groups(
     return result
 
 
+# ---- instrument lifecycle (Issue #212) ----
+
+UNIVERSE_ENDPOINTS = {
+    "TWSE": (TWSE_LISTED_ENDPOINT, TWSE_ETF_ENDPOINT, TWSE_NEW_LISTING_ENDPOINT),
+    "TPEx": (TPEX_LISTED_ENDPOINT, TPEX_ETF_ENDPOINT),
+}
+OTHER_EXCHANGE = {"TWSE": "TPEx", "TPEx": "TWSE"}
+LISTED_INSTRUMENT_TYPES = ("stock", "ipo", "etf")
+# A sync that would close more than this share of one exchange's active
+# instruments (at least STATUS_SYNC_MIN_LIMIT) is not applied: an incomplete
+# official list must not delist the market.  The skip is a non-core warning
+# plus a data_quality row the watchdog reports (OPERATIONS §6.1).
+STATUS_SYNC_MAX_SHARE = 0.05
+STATUS_SYNC_MIN_LIMIT = 5
+STATUS_SYNC_VERSION = "instrument-status-v1"
+# A listed instrument with no row in the stored quote tables of this many
+# sessions is presumed dormant (suspended or about to be delisted).
+DORMANT_SESSIONS = 60
+# The pre-rwd TWSE all-security report, still present in older captures.
+TWSE_LEGACY_DAILY_HISTORY_ENDPOINT = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
+QUOTE_TABLE_ENDPOINTS = {
+    "TPEx": RawPayload.endpoint == TPEX_HISTORY_API,
+    "TWSE": RawPayload.endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
+    | RawPayload.endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?"),
+}
+TAIPEI = timezone(timedelta(hours=8))
+
+
+def stored_instrument(db: Session, exchange: str, symbol: str) -> Instrument | None:
+    return db.scalar(
+        select(Instrument).where(
+            Instrument.market == "TW",
+            Instrument.exchange == exchange,
+            Instrument.symbol == symbol,
+        )
+    )
+
+
+def note_unmatched_bar(
+    unmatched: dict[tuple[str, str], dict[str, Any]],
+    record: BarRecord,
+    raw_payload_id: int | None,
+    name: str | None = None,
+) -> None:
+    entry = unmatched.setdefault(
+        (record.exchange, record.symbol),
+        {
+            "exchange": record.exchange,
+            "symbol": record.symbol,
+            "name": name,
+            "source": record.source,
+            "trading_dates": set(),
+            "raw_payload_ids": set(),
+        },
+    )
+    entry["trading_dates"].add(record.trading_date)
+    if raw_payload_id is not None:
+        entry["raw_payload_ids"].add(raw_payload_id)
+
+
+def record_unmatched_bars(
+    db: Session, unmatched: dict[tuple[str, str], dict[str, Any]], as_of: date
+) -> list[dict[str, Any]]:
+    """Record official quote rows that have no instrument, one row per code."""
+
+    summary = []
+    for (exchange, symbol), entry in sorted(unmatched.items()):
+        dates = sorted(entry["trading_dates"])
+        checks = {
+            "reason": "no_instrument_in_official_master_or_database",
+            "exchange": exchange,
+            "symbol": symbol,
+            "name": entry["name"],
+            "source": entry["source"],
+            "trading_dates": [item.isoformat() for item in dates],
+            "raw_payload_ids": sorted(entry["raw_payload_ids"]),
+        }
+        _upsert_quality(
+            db,
+            "unmatched_bar",
+            f"{exchange}:{symbol}",
+            as_of,
+            "missing",
+            ["instrument"],
+            checks,
+            source=exchange.lower(),
+        )
+        summary.append(
+            {
+                "exchange": exchange,
+                "symbol": symbol,
+                "first_date": dates[0].isoformat(),
+                "last_date": dates[-1].isoformat(),
+                "rows": len(dates),
+            }
+        )
+    return summary
+
+
+def universe_evidence(
+    captures: Iterable[FetchedPayload],
+    raw_payload_id: Callable[[FetchedPayload], int | None],
+) -> dict[str, dict[str, Any]]:
+    """Per exchange, the official list captures a status sync relies on.
+
+    An exchange is left out unless every list its universe is built from was
+    captured.  Its observed date is the Asia/Taipei date of the issuer-master
+    capture: the lists describe the day they were fetched.
+    """
+
+    by_endpoint = {(item.source, item.endpoint): item for item in captures}
+    evidence: dict[str, dict[str, Any]] = {}
+    for exchange, endpoints in UNIVERSE_ENDPOINTS.items():
+        found = [by_endpoint.get((exchange.lower(), item)) for item in endpoints]
+        if not all(found):
+            continue
+        captured = found[0].collected_at
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=timezone.utc)
+        evidence[exchange] = {
+            "observed_date": captured.astimezone(TAIPEI).date(),
+            "captures": [
+                {
+                    "endpoint": item.endpoint,
+                    "sha256": item.sha256,
+                    "raw_payload_id": raw_payload_id(item),
+                }
+                for item in found
+            ],
+        }
+    return evidence
+
+
+def _quote_row_codes(payload: Any) -> set[str]:
+    """Every code with a row in an official daily quote table, traded or not."""
+
+    tables = payload.get("tables") if isinstance(payload, dict) else None
+    rows = (
+        [row for table in tables if isinstance(table, dict) for row in _rows(table)]
+        if isinstance(tables, list)
+        else _rows(payload)
+    )
+    return {
+        code
+        for row in rows
+        if (code := _text(row, "證券代號", "代號", "SecuritiesCompanyCode", "Code"))
+    }
+
+
+def _quote_sessions(db: Session, observed: date) -> list[date]:
+    """The latest DORMANT_SESSIONS TAIEX sessions up to ``observed``."""
+
+    benchmark = _benchmark_instrument(db)
+    if benchmark is None:
+        return []
+    return sorted(
+        db.scalars(
+            select(MarketBar.trading_date)
+            .where(
+                MarketBar.instrument_id == benchmark.id,
+                MarketBar.trading_date <= observed,
+            )
+            .order_by(MarketBar.trading_date.desc())
+            .limit(DORMANT_SESSIONS)
+        ).all()
+    )
+
+
+def _stored_quote_rows(
+    db: Session, exchange: str, sessions: list[date]
+) -> tuple[set[str], list[int]] | None:
+    """Codes with a row in the stored quote table of any session, or None.
+
+    None when a session has no stored, date-checked quote table: the absence
+    of a row is then not proven.
+    """
+
+    wanted = {day.isoformat() for day in sessions}
+    found: dict[str, tuple[set[str], int]] = {}
+    for raw in db.scalars(
+        select(RawPayload)
+        .where(
+            RawPayload.source == exchange.lower(),
+            QUOTE_TABLE_ENDPOINTS[exchange],
+            func.substr(RawPayload.data_as_of, 1, 10).in_(wanted),
+        )
+        .order_by(RawPayload.collected_at.desc(), RawPayload.id.desc())
+    ):
+        day = str(raw.data_as_of)[:10]
+        if day in found or not raw.payload_path:
+            continue
+        try:
+            payload = json.loads(Path(raw.payload_path).read_bytes())
+            _require_reported_date(payload, date.fromisoformat(day), raw.endpoint)
+        except (OSError, ValueError, OfficialDataError):
+            continue
+        found[day] = (_quote_row_codes(payload), raw.id)
+    if set(found) != wanted:
+        return None
+    codes = set().union(*(item[0] for item in found.values()))
+    return codes, sorted(item[1] for item in found.values())
+
+
+def plan_instrument_status(
+    db: Session,
+    records: Iterable[InstrumentRecord],
+    evidence: dict[str, dict[str, Any]],
+    *,
+    max_share: float = STATUS_SYNC_MAX_SHARE,
+) -> dict[str, Any]:
+    """Which instruments the official lists or quote tables say are gone; no writes.
+
+    A current (or dormant) stock, IPO or ETF absent from its exchange's lists
+    is ``transferred`` when the other exchange lists the same code, otherwise
+    ``delisted``; its open memberships close the day before the new listing (a
+    transfer with a known listing date) or the day before the observation.
+    A listed one whose code has no row in any stored quote table of the last
+    DORMANT_SESSIONS sessions is presumed ``dormant``; ``collect`` makes it
+    active again when a quote row returns.
+    """
+
+    universe = {(record.exchange, record.symbol): record for record in records}
+    exchanges: dict[str, dict[str, Any]] = {}
+    changes: list[dict[str, Any]] = []
+    for exchange, proof in sorted(evidence.items()):
+        observed = proof["observed_date"]
+        current = db.scalars(
+            select(Instrument)
+            .where(
+                Instrument.market == "TW",
+                Instrument.exchange == exchange,
+                Instrument.status.in_(("active", "dormant")),
+                Instrument.instrument_type.in_(LISTED_INSTRUMENT_TYPES),
+            )
+            .order_by(Instrument.symbol, Instrument.id)
+        ).all()
+        active = [item for item in current if item.status == "active"]
+        absent = [item for item in current if (exchange, item.symbol) not in universe]
+        dormant: list[Instrument] = []
+        sessions = _quote_sessions(db, observed)
+        dormancy: dict[str, Any] = {"status": "not_checked"}
+        if len(sessions) < DORMANT_SESSIONS:
+            dormancy["reason"] = f"{len(sessions)} stored sessions"
+        else:
+            last_bars = dict(
+                db.execute(
+                    select(MarketBar.instrument_id, func.max(MarketBar.trading_date))
+                    .join(Instrument, Instrument.id == MarketBar.instrument_id)
+                    .where(
+                        Instrument.exchange == exchange,
+                        Instrument.status == "active",
+                    )
+                    .group_by(MarketBar.instrument_id)
+                ).all()
+            )
+            quiet = [
+                item
+                for item in active
+                if (exchange, item.symbol) in universe
+                and (last_bars.get(item.id) is None or last_bars[item.id] < sessions[0])
+            ]
+            rows = _stored_quote_rows(db, exchange, sessions) if quiet else None
+            if rows is not None:
+                codes, raw_ids = rows
+                dormant = [item for item in quiet if item.symbol not in codes]
+                dormancy = {
+                    "status": "checked",
+                    "presumption": f"no quote row in the last {DORMANT_SESSIONS} sessions",
+                    "sessions": [sessions[0].isoformat(), sessions[-1].isoformat()],
+                    "raw_payload_ids": raw_ids,
+                    "last_bars": {
+                        item.symbol: _iso(last_bars.get(item.id)) for item in dormant
+                    },
+                }
+            elif quiet:
+                dormancy = {"status": "unverifiable", "reason": "missing quote table"}
+            else:
+                dormancy = {"status": "checked", "reason": "no quiet instrument"}
+        # A dormant code back in the latest quote table, traded or not.
+        revived: list[Instrument] = []
+        resting = [
+            item
+            for item in current
+            if item.status == "dormant" and (exchange, item.symbol) in universe
+        ]
+        latest = _stored_quote_rows(db, exchange, sessions[-1:]) if resting else None
+        if resting and sessions and latest is not None:
+            revived = [item for item in resting if item.symbol in latest[0]]
+        planned = len(absent) + len(dormant)
+        limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
+        exchanges[exchange] = {
+            "observed_date": observed,
+            "active": len(active),
+            "absent": len(absent),
+            "dormant": len(dormant),
+            "limit": limit,
+            "status": "skipped" if planned > limit else "applied",
+            "absent_symbols": [item.symbol for item in absent][:50],
+            "dormant_symbols": [item.symbol for item in dormant][:50],
+            "revived_symbols": [item.symbol for item in revived][:50],
+            "captures": proof["captures"],
+            "dormancy": dormancy,
+        }
+        if planned > limit:
+            continue
+        for instrument in revived:
+            changes.append(
+                {
+                    "instrument": instrument,
+                    "status": "active",
+                    "reason": "quote_row_returned",
+                    "observed_date": observed,
+                    "close_day": observed - timedelta(days=1),
+                    "moved_to": None,
+                    "memberships": [],
+                }
+            )
+        for instrument in absent + dormant:
+            moved_to = None
+            if instrument in dormant:
+                status = "dormant"
+                reason = f"presumed: no quote row in {DORMANT_SESSIONS} sessions"
+            else:
+                moved_to = universe.get((OTHER_EXCHANGE[exchange], instrument.symbol))
+                status, reason = (
+                    ("transferred", "listed_on_other_exchange")
+                    if moved_to
+                    else ("delisted", "absent_from_official_lists")
+                )
+            close_day = observed - timedelta(days=1)
+            if (
+                moved_to is not None
+                and moved_to.listing_date is not None
+                and moved_to.listing_date <= observed
+            ):
+                close_day = moved_to.listing_date - timedelta(days=1)
+            memberships = db.scalars(
+                select(GroupMembership)
+                .where(
+                    GroupMembership.instrument_id == instrument.id,
+                    GroupMembership.valid_to.is_(None)
+                    | (GroupMembership.valid_to > close_day),
+                )
+                .order_by(GroupMembership.id)
+            ).all()
+            changes.append(
+                {
+                    "instrument": instrument,
+                    "status": status,
+                    "reason": reason,
+                    "observed_date": observed,
+                    "close_day": close_day,
+                    "moved_to": moved_to,
+                    "memberships": memberships,
+                }
+            )
+    return {"exchanges": exchanges, "changes": changes}
+
+
+def reactivate_dormant(db: Session, instrument: Instrument, record: BarRecord) -> None:
+    """A dormant instrument with a quote row after it went dormant is current again.
+
+    A backfilled row from before the dormancy observation (or, without one,
+    not after the last stored bar) says nothing about today and changes
+    nothing.
+    """
+
+    since = db.scalar(
+        select(func.max(DataQuality.as_of_date)).where(
+            DataQuality.entity_type == "instrument_status",
+            DataQuality.entity_key == f"{instrument.exchange}:{instrument.symbol}",
+            DataQuality.status == "dormant",
+        )
+    ) or db.scalar(
+        select(func.max(MarketBar.trading_date)).where(
+            MarketBar.instrument_id == instrument.id
+        )
+    )
+    if since is not None and record.trading_date <= since:
+        return
+    instrument.status = "active"
+    _upsert_quality(
+        db,
+        "instrument_status",
+        f"{instrument.exchange}:{instrument.symbol}",
+        record.trading_date,
+        "active",
+        [],
+        {
+            "version": STATUS_SYNC_VERSION,
+            "exchange": instrument.exchange,
+            "symbol": instrument.symbol,
+            "previous_status": "dormant",
+            "status": "active",
+            "reason": "quote_row_returned",
+            "trading_date": record.trading_date.isoformat(),
+            "source": record.source,
+        },
+        source=instrument.exchange.lower(),
+    )
+
+
+def _iso(value: date | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def apply_instrument_status(db: Session, plan: dict[str, Any]) -> dict[str, Any]:
+    """Write a status plan: status, membership ends and data_quality evidence.
+
+    Memberships are closed, never deleted; an end before a row's start is
+    clamped to the start so no period is inverted.
+    """
+
+    receipts = []
+    for change in plan["changes"]:
+        instrument = change["instrument"]
+        moved_to = change["moved_to"]
+        closed = []
+        for membership in change["memberships"]:
+            new_end = max(change["close_day"], membership.valid_from)
+            closed.append(
+                {
+                    "membership_id": membership.id,
+                    "group_id": membership.group_id,
+                    "valid_from": _iso(membership.valid_from),
+                    "old_valid_to": _iso(membership.valid_to),
+                    "new_valid_to": _iso(new_end),
+                }
+            )
+            membership.valid_to = new_end
+        receipt = {
+            "version": STATUS_SYNC_VERSION,
+            "exchange": instrument.exchange,
+            "symbol": instrument.symbol,
+            "name": instrument.name,
+            "previous_status": instrument.status,
+            "status": change["status"],
+            "reason": change["reason"],
+            "observed_date": _iso(change["observed_date"]),
+            "close_day": _iso(change["close_day"]),
+            "moved_to": {
+                "exchange": moved_to.exchange,
+                "listing_date": _iso(moved_to.listing_date),
+            }
+            if moved_to
+            else None,
+            "closed_memberships": closed,
+            "evidence": plan["exchanges"][instrument.exchange]["captures"],
+            "presumption": plan["exchanges"][instrument.exchange]["dormancy"]
+            if change["status"] == "dormant"
+            else None,
+        }
+        instrument.status = change["status"]
+        _upsert_quality(
+            db,
+            "instrument_status",
+            f"{instrument.exchange}:{instrument.symbol}",
+            change["observed_date"],
+            change["status"],
+            [],
+            receipt,
+            source=instrument.exchange.lower(),
+        )
+        receipts.append(receipt)
+    warnings = []
+    exchanges = {}
+    for exchange, item in plan["exchanges"].items():
+        exchanges[exchange] = {
+            **item,
+            "observed_date": _iso(item["observed_date"]),
+            "changes": sum(receipt["exchange"] == exchange for receipt in receipts),
+        }
+        skipped = item["status"] == "skipped"
+        if skipped:
+            warnings.append(
+                f"instrument status sync skipped for {exchange}: "
+                f"{item['absent'] + item['dormant']} of {item['active']} active "
+                f"instruments would change ({item['absent']} absent from the "
+                f"official lists, {item['dormant']} without a quote row for "
+                f"{DORMANT_SESSIONS} sessions; limit {item['limit']})"
+            )
+        _upsert_quality(
+            db,
+            "instrument_status_sync",
+            exchange,
+            item["observed_date"],
+            item["status"],
+            ["instrument_status"] if skipped else [],
+            exchanges[exchange],
+            source=exchange.lower(),
+        )
+    db.flush()
+    return {
+        "version": STATUS_SYNC_VERSION,
+        "exchanges": exchanges,
+        "changes": receipts,
+        "warnings": warnings,
+    }
+
+
 def _upsert_quality(
     db: Session,
     entity_type: str,
@@ -3106,11 +3615,13 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 # Warnings from sources the daily analysis does not depend on: MOPS material
 # events and EPS, and the TPEx suspension announcement/history feeds (events
-# only; they never set bar flags).  Every other warning, including any not
+# only; they never set bar flags), and a skipped instrument status sync (the
+# watchdog reports it).  Every other warning, including any not
 # matched here, concerns OHLCV, the TAIEX baseline, the holiday calendar or
 # chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
-    r"^(TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history) unavailable"
+    r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history) unavailable"
+    r"|instrument status sync skipped)"
 )
 
 
@@ -3298,11 +3809,26 @@ def collect(
             normalized_instruments: set[tuple[str, str]] = set()
             value_conflicts: list[dict[str, Any]] = []
             value_fills: list[dict[str, Any]] = []
+            # A quote row whose code is not in today's lists still belongs to
+            # a stored instrument (delisted, moved, or a list that lagged);
+            # one with no instrument at all is recorded, not dropped.
+            known: dict[tuple[str, str], Instrument | None] = dict(instruments)
+            unmatched: dict[tuple[str, str], dict[str, Any]] = {}
             for record in batch.bars:
                 if not start_date <= record.trading_date <= score_date:
                     continue
-                instrument = instruments.get((record.exchange, record.symbol))
+                key = (record.exchange, record.symbol)
+                if key not in known:
+                    known[key] = stored_instrument(db, *key)
+                instrument = known[key]
+                if instrument is not None and instrument.status == "dormant":
+                    reactivate_dormant(db, instrument, record)
                 if not instrument:
+                    note_unmatched_bar(
+                        unmatched,
+                        record,
+                        _raw_id_for_digest(raw_ids, record.payload_sha256),
+                    )
                     continue
                 _upsert_official_bar(
                     db,
@@ -3335,7 +3861,7 @@ def collect(
                     _upsert_official_chip(
                         db,
                         chip,
-                        instruments,
+                        known,
                         _raw_id_for_digest(raw_ids, chip.payload_sha256),
                         overwrite=force,
                         conflicts=value_conflicts,
@@ -3393,7 +3919,13 @@ def collect(
             if getattr(batch, "snapshot_feeds", True):
                 industry_result = _ensure_official_groups(
                     db,
-                    batch.instruments,
+                    # A dormant instrument's memberships stay closed.
+                    [
+                        record
+                        for record in batch.instruments
+                        if instruments[(record.exchange, record.symbol)].status
+                        != "dormant"
+                    ],
                     instruments,
                     start_date,
                     score_date,
@@ -3401,6 +3933,22 @@ def collect(
                     observed_now=datetime.utcnow(),
                     run_id=run.id,
                 )
+                # Only today's lists say what is listed now; a historical
+                # batch carries no such observation of its sessions.
+                status_result = apply_instrument_status(
+                    db,
+                    plan_instrument_status(
+                        db,
+                        batch.instruments,
+                        universe_evidence(
+                            batch.payloads,
+                            lambda capture: raw_ids.get(
+                                (capture.source, capture.sha256)
+                            ),
+                        ),
+                    ),
+                )
+                batch.warnings.extend(status_result["warnings"])
                 # Project official Events only after memberships are in place so
                 # the NewsItem relation carries the effective theme IDs.  The
                 # projection is idempotent and retains Event/raw provenance.
@@ -3412,6 +3960,14 @@ def collect(
                     "status": "not_requested",
                     "reason": "historical batch without current snapshot feeds",
                 }
+                status_result = dict(industry_result)
+            unmatched_bars = record_unmatched_bars(db, unmatched, score_date)
+            notices = list(getattr(batch, "notices", []) or [])
+            if unmatched_bars:
+                notices.append(
+                    f"{len(unmatched_bars)} ordinary-share codes had official quote "
+                    "rows but no instrument; recorded as data_quality unmatched_bar"
+                )
             expected_chip_dates = {
                 record.trading_date
                 for record in batch.bars
@@ -3567,7 +4123,9 @@ def collect(
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,
-                "notices": list(getattr(batch, "notices", []) or []),
+                "notices": notices,
+                "unmatched_bars": unmatched_bars,
+                "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_conflict_samples": _json_safe(
                     value_conflicts[:MAX_RECORDED_VALUE_CONFLICTS]
@@ -3648,7 +4206,9 @@ def collect(
                 "warnings": batch.warnings,
                 "core_warnings": core_warnings,
                 "noncore_warnings": noncore_warnings,
-                "notices": list(getattr(batch, "notices", []) or []),
+                "notices": notices,
+                "unmatched_bars": unmatched_bars,
+                "instrument_status_sync": status_result,
                 "value_conflicts": len(value_conflicts),
                 "value_fills": len(value_fills),
                 "no_data_dates": [item.isoformat() for item in verified_no_data_dates],

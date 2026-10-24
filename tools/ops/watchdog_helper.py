@@ -210,6 +210,28 @@ def invariants(db: str, today: str) -> str:
                 f" done={done} missing_model={no_model}"
                 f" empty_prompt_version={no_prompt}"
             )
+        if not _has_table(conn, "data_quality"):
+            lines.append("instrument_status_sync skip reason=no_data_quality")
+        else:
+            # The latest sync of each exchange (Issue #212); a skip leaves the
+            # statuses stale until a later sync applies.
+            rows = conn.execute(
+                "SELECT entity_key, status, as_of_date, checks_json FROM data_quality d"
+                " WHERE entity_type='instrument_status_sync' AND as_of_date=("
+                "SELECT max(as_of_date) FROM data_quality e"
+                " WHERE e.entity_type=d.entity_type AND e.entity_key=d.entity_key)"
+                " ORDER BY entity_key"
+            ).fetchall()
+            skipped = [
+                f"{key}@{str(day)[:10]}:absent={_json(checks).get('absent', '?')}"
+                f",dormant={_json(checks).get('dormant', '?')}"
+                for key, status, day, checks in rows
+                if status == "skipped"
+            ]
+            lines.append(
+                f"instrument_status_sync {_state(len(skipped))}"
+                f" exchanges={len(rows)} skipped={','.join(skipped) or 'none'}"
+            )
     return "\n".join(lines)
 
 

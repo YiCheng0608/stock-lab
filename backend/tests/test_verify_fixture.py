@@ -164,8 +164,9 @@ def test_a_head_column_the_fixture_does_not_write_fails(tmp_path):
     head = _head_columns(
         tmp_path / "head.db", "ALTER TABLE instruments ADD COLUMN isin VARCHAR(12)"
     )
+    rows = len(fixture_data.TABLES["instruments"])
     assert _problems(head) == [
-        "instruments.isin: head column missing from 9 fixture row(s) "
+        f"instruments.isin: head column missing from {rows} fixture row(s) "
         "and not in INTENTIONALLY_EMPTY"
     ]
 
