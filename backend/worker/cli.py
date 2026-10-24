@@ -12,6 +12,7 @@ from .candidate_notes import run_candidate_notes_batch
 from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
+from .instrument_repair import run_instrument_repair
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
@@ -178,6 +179,34 @@ def main() -> None:
         default=0,
         help="--apply 後重算最近 N 個交易日的族群分數",
     )
+    instruments_parser = subparsers.add_parser("instruments", help="標的狀態與歷史")
+    instruments_subparsers = instruments_parser.add_subparsers(
+        dest="instruments_command", required=True
+    )
+    instruments_repair_parser = instruments_subparsers.add_parser(
+        "repair",
+        help="依已保存的官方清單與行情 raw 同步標的狀態、補回被丟掉的日線與籌碼（預設 dry-run，重跑冪等）",
+    )
+    instruments_repair_parser.add_argument(
+        "--apply", action="store_true", help="寫入 DB；未指定只列出預計變更"
+    )
+    instruments_repair_parser.add_argument(
+        "--include-delisted",
+        action="store_true",
+        help="為已不在官方清單、DB 也沒有的普通股代號建 delisted／transferred 標的並補歷史",
+    )
+    instruments_repair_parser.add_argument(
+        "--max-status-share",
+        type=float,
+        default=0.05,
+        help="單一交易所一次最多改狀態的現行標的比例（預設 0.05；防呆觸發且已核對官方公告時才放寬）",
+    )
+    instruments_repair_parser.add_argument(
+        "--rescore-days",
+        type=int,
+        default=0,
+        help="--apply 後重算最近 N 個交易日的族群分數",
+    )
     news_parser = subparsers.add_parser(
         "news", help="抓取國內／國際財經新聞 feed 並寫入 news_items"
     )
@@ -249,6 +278,17 @@ def main() -> None:
         if args.rescore_days < 0 or (args.rescore_days and not args.apply):
             parser.error("--rescore-days needs --apply and must not be negative")
         result = run_industry_repair(apply=args.apply, rescore_days=args.rescore_days)
+    elif args.command == "instruments":
+        if args.rescore_days < 0 or (args.rescore_days and not args.apply):
+            parser.error("--rescore-days needs --apply and must not be negative")
+        if not 0 < args.max_status_share <= 1:
+            parser.error("--max-status-share must be in (0, 1]")
+        result = run_instrument_repair(
+            apply=args.apply,
+            include_delisted=args.include_delisted,
+            rescore_days=args.rescore_days,
+            max_status_share=args.max_status_share,
+        )
     elif args.command == "news":
         result = run_news_batch(parse_date(args.run_date))
     elif args.command == "news-llm":
@@ -281,7 +321,7 @@ def main() -> None:
     }:
         raise SystemExit(1)
     if (
-        args.command in {"themes", "industry", "theme-suggestions"}
+        args.command in {"themes", "industry", "instruments", "theme-suggestions"}
         and isinstance(result, dict)
         and result.get("status") == "failed"
     ):

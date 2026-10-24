@@ -1535,10 +1535,13 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         key=lambda item: (item["rank"] is None, item["rank"] or 999, item["name"])
     )
 
+    # Current instruments only: a delisted or moved one keeps its history but
+    # is not part of today's market (Issue #212).
     instruments_count = (
         db.scalar(
             select(func.count(Instrument.id)).where(
-                Instrument.instrument_type != "index"
+                Instrument.instrument_type != "index",
+                Instrument.status == "active",
             )
         )
         or 0

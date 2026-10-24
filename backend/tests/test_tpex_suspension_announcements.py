@@ -28,6 +28,16 @@ from test_sources import FixtureFetcher
 
 
 DAY = date(2026, 9, 4)
+
+
+def _listed_bars(batch):
+    """Bars of the listed universe; the fixture's 7002 quote row has no listing
+    and reaches the collector unmatched (Issue #212)."""
+
+    listed = {item.symbol for item in batch.instruments}
+    return [bar for bar in batch.bars if bar.symbol in listed]
+
+
 WARNING = "announcements do not establish bar suspension status"
 
 
@@ -111,7 +121,7 @@ def test_notice_does_not_override_date_scoped_bars(today, captured_day, monkeypa
     monkeypatch.setattr(sources, "datetime", CaptureClock)
     fetcher = NoticeFetcher(today)
     batch = sources.TpexAdapter(fetcher).fetch(DAY, DAY)
-    assert {(bar.symbol, bar.trading_date) for bar in batch.bars} == {
+    assert {(bar.symbol, bar.trading_date) for bar in _listed_bars(batch)} == {
         ("7001", DAY),
         ("00679B", DAY),
     }
@@ -158,7 +168,9 @@ def test_independent_flags_and_multiple_dates_are_preserved(monkeypatch):
     monkeypatch.setattr(adapter, "fetch_bars", supplied_bars)
     monkeypatch.setattr(adapter, "fetch_chips", lambda *args: ([], [], []))
     batch = adapter.fetch(date(2026, 9, 3), DAY)
-    assert {(b.symbol, b.trading_date): b.is_suspended for b in batch.bars} == {
+    assert {
+        (b.symbol, b.trading_date): b.is_suspended for b in _listed_bars(batch)
+    } == {
         ("7001", DAY): False,
         ("00679B", DAY): True,
         ("7001", date(2026, 9, 3)): True,

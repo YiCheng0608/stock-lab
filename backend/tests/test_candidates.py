@@ -510,6 +510,21 @@ def test_etf_invalid_levels_and_status_are_excluded(db):
     }
 
 
+@pytest.mark.parametrize("status", ["delisted", "transferred"])
+def test_delisted_and_transferred_instruments_are_not_candidates(db, status):
+    # Issue #212: the collector's status sync marks instruments that left the
+    # official lists; their stored signals never enter the pool.
+    good = stock(db, "1101")
+    gone = stock(db, "8908", exchange="TPEx")
+    signal(db, good)
+    signal(db, gone)
+    gone.status = status
+    db.commit()
+    result = compute_daily_candidates(db, T)
+    assert [row.instrument_id for row in rows(db)] == [good.id]
+    assert result["exclusions"] == {"instrument_inactive": 1}
+
+
 def test_missing_technical_inputs_fail_the_coverage_floor(db):
     a = stock(db, "1101")
     b = stock(db, "1102")

@@ -556,6 +556,62 @@ def test_invariant_violation_is_commented_once_a_day(wd, bars, llm, commented):
     assert (db.read_bytes(), db.stat().st_mtime_ns) == before
 
 
+def _status_sync_rows(path: Path, rows: list[tuple[str, str, str, str]]) -> None:
+    """data_quality instrument_status_sync rows
+    (entity_key, status, as_of_date, checks_json)."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE data_quality (id INTEGER PRIMARY KEY,"
+            " entity_type VARCHAR(40), entity_key VARCHAR(160), as_of_date DATE,"
+            " status VARCHAR(30), checks_json JSON)"
+        )
+        conn.executemany(
+            "INSERT INTO data_quality"
+            " (entity_type, entity_key, status, as_of_date, checks_json)"
+            " VALUES ('instrument_status_sync', ?, ?, ?, ?)",
+            rows,
+        )
+    conn.close()
+
+
+def test_a_skipped_status_sync_is_commented_until_a_later_sync_applies(wd):
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    _status_sync_rows(
+        db,
+        [
+            # superseded by a later sync
+            ("TWSE", "skipped", "2026-10-15", '{"absent": 90, "dormant": 0}'),
+            ("TWSE", "applied", "2026-10-16", '{"absent": 1, "dormant": 0}'),
+            ("TPEx", "applied", "2026-10-15", '{"absent": 0, "dormant": 0}'),
+            ("TPEx", "skipped", "2026-10-16", '{"absent": 3, "dormant": 60}'),
+        ],
+    )
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant instrument_status_sync violation exchanges=2"
+        " skipped=TPEx@2026-10-16:absent=3,dormant=60"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：最近一次標的狀態同步被防呆略過"
+        "（TPEx@2026-10-16:absent=3,dormant=60；"
+    ) in dry.stdout
+
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "INSERT INTO data_quality (entity_type, entity_key, status, as_of_date)"
+            " VALUES ('instrument_status_sync', 'TPEx', 'applied', '2026-10-19')"
+        )
+    conn.close()
+    result = wd.run()
+    assert "invariant instrument_status_sync ok exchanges=2 skipped=none" in (
+        result.stdout
+    )
+    assert wd.events()[-1] == "schedules_ok"
+    assert wd.text("gh_calls.log") == ""
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")

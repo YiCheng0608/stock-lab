@@ -245,6 +245,16 @@ function translateStructuredReason(value: string): string | null {
   return null
 }
 
+// The directory's latest close is labelled with its own date when it is older
+// than the latest official session, so an old price never reads as today's.
+export function staleCloseDateLabel(priceAsOf: string | null | undefined, latestAsOf: string | null | undefined): string | null {
+  if (!priceAsOf) return null
+  const day = priceAsOf.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  if (latestAsOf && day >= latestAsOf.slice(0, 10)) return null
+  return '（' + day.replace(/-/g, '/') + '）'
+}
+
 export function stockDirectoryActionLabel(actionState?: string, actionLabel?: string): string {
   const state = actionState?.trim().toLowerCase() ?? ''
   const label = actionLabel?.trim() ?? ''

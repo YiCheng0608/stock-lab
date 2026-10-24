@@ -16,12 +16,12 @@
 
 | 資料域 | 端點 | 用途與處理 | 限制 |
 | --- | --- | --- | --- |
-| TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。 | 名單是取得當下狀態，不含歷史上下市版本。 |
+| TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。`company/newlisting` 列出 2011 年起所有上市案，只把 60 天內生效、主檔還沒有的列當新上市（`ipo`）。 | 名單是取得當下狀態，不含歷史上下市版本；用法見[標的狀態同步](#標的狀態同步)。 |
 | TPEx universe | [issuer master `mopsfin_t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)、[ETF allowlist `etfFilter`](https://info.tpex.org.tw/api/etfFilter)（POST） | 建立上櫃普通股與 ETF allowlist。 | 混合行情中的權證、CB、ETN、興櫃不當成股票；興櫃 feed 不用來建 universe。 |
-| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 依 allowlist 過濾，讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
+| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
 | TWSE 交易日曆 | [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule) | 多日回補時作正面排除清單：明列休市日不送 `MI_INDEX`。 | 取得失敗不推論休市，該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本。 |
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。 | 只有收盤值；合成的 O／H／L、成交量與成交額不是真實欄位。 |
-| TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取並依股票／ETF allowlist 過濾，讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
+| TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減。 | 請求可能被限流、重導或缺可驗證日期。 |
 | TPEx 籌碼 | 法人 [`insti/dailyTrade`](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [`margin/balance`](https://www.tpex.org.tw/www/zh-tw/margin/balance) | 同 TWSE 口徑；[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 | 缺資料時不補 0；官方檔未列的語意見[法人口徑](#法人口徑)。 |
 | 公司行動 | TWSE [`TWT48U_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/TWT48U_ALL)；TPEx [`tpex_exright_daily`](https://www.tpex.org.tw/openapi/v1/tpex_exright_daily) | 除權息資料寫入 corporate actions，作價格調整與追蹤比較。 | `TWT48U_ALL` 可含未來預告，須保存擷取時間；完整歷史與更正紀錄不明。欄位規則見[公司行動欄位](#公司行動欄位)。 |
@@ -32,7 +32,30 @@
 
 ### 核心與非核心來源
 
-collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`）及 TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`，缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`）及 TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+
+### 標的狀態同步
+
+官方清單只描述取得當下有哪些標的（上表的 TWSE、TPEx universe），行情表則會留著已離開清單的公司列。規則如下（[#212](https://github.com/YiCheng0608/stock-lab/issues/212)）：
+
+- **行情與籌碼不以當天清單過濾普通股**：
+  - 4 位數、非 0 開頭、非 91 開頭的代號一律保留；ETF（0 開頭）、特別股（帶字母）、權證、可轉債、ETN、存託憑證（91 開頭或 6 位數）仍只收 allowlist 內的。
+  - collect 把這些列寫入 DB 中同交易所、同代號的既有標的；DB 沒有的記為 `unmatched_bar`，不建標的、不丟棄（[OPERATIONS §6.4](OPERATIONS.md#64-重跑與回補)）。
+- **狀態**：只有抓當日快照的 collect 會同步，歷史回補與 catchup 不做。
+  - 現行的股票、`ipo` 或 ETF 若不在所屬交易所當天的清單：另一交易所清單有同代號時標 `transferred`，否則標 `delisted`。
+  - 該標的未關的成員列（產業、ETF、題材）一律關閉，不刪列：轉市關到新市場上市日前一天，下市關到清單觀測日前一天，都不早於該列的 `valid_from`。
+  - 每次變更寫一列 `data_quality`（`entity_type=instrument_status`），記前後狀態、原因、關閉的成員列與清單 capture 的 endpoint、SHA-256、raw id。
+  - **休眠（推定）**：仍在清單內、但最近 60 個交易日的已存行情表（TPEx `dailyQuotes`、TWSE `MI_INDEX`）完全沒有該代號這一列的現行標的，標 `dormant`。無成交的 `--` 列也算有列，所以停牌一兩個月的正常股票不會被關。
+    - 要先有 60 個 TAIEX 交易日，且每一天都有已存、日期核對過的行情表才判定，否則該次不判定。
+    - 證據寫在 `instrument_status` 列的 `presumption`：推定敘述、檢查的交易日區間、60 個 raw id 與最後日線日，和依清單判定的 `delisted`／`transferred` 分開。
+    - 清單更新不會讓 `dormant` 回到 `active`，只有行情列重新出現才會：下一次同步看到最新行情表又有這一列，或 collect 寫入它晚於休眠判定日（沒有判定紀錄時為最後一根日線）的日線。回補休眠以前的舊日期只補日線，不改狀態。休眠中不投影產業與 ETF 成員列。
+  - 標的重新出現在清單時，`delisted`／`transferred` 改回 `active`。
+  - `delisted`／`transferred`／`dormant` 標的保留歷史，個股頁仍可查；但不進 `/api/stocks` 清單、首頁標的數、族群成員數與分數、訊號與候選池。
+- **防呆**：某交易所一次要改（`delisted`、`transferred`、`dormant` 合計）的標的超過現行標的的 5%（至少 5 檔）時，該交易所整批不改，記 `noncore_warnings` 與 `instrument_status_sync` 為 `skipped`，由看門狗留言（[OPERATIONS §6.1](OPERATIONS.md#61-排程看門狗)）。
+- **轉上市**：
+  - `company/newlisting` 的 `Note` 欄寫「櫃轉市」（例如 8908 欣雄 `ApprovedListingDate 1151016`）。新市場的標的在 60 天內和新上市一樣標 `ipo`，舊市場的標的標 `transferred`，兩邊的歷史目前分開存。
+  - 之後要合併前後歷史時，以 `Note=櫃轉市`、舊標的 `transferred` 狀態，以及 `instrument_status` 列記的新市場上市日，把同代號的兩個標的接起來。合併延後到 G7 之後（[#1](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6385195520)）。
+- **限制**：沒有接終止上市或停牌公告。仍在清單內、停止買賣未滿 60 個交易日的股票維持 `active`；日線停在最後交易日，`/stocks` 列表在最近收盤下方標出它的日期。
 
 ## 官方來源共同限制
 

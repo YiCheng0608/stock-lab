@@ -439,10 +439,11 @@ def test_official_adapters_normalize_universe_bars_actions_and_mops(
     assert by_key[("TPEx", "00679B")].etf_category == "bond"
     assert ("TPEx", "7002") not in by_key
     assert ("TPEx", "700019") not in by_key
-    assert all(
-        not (item.exchange == "TPEx" and item.symbol in {"7002", "700019"})
-        for item in batch.bars
-    )
+    tpex_bar_symbols = {item.symbol for item in batch.bars if item.exchange == "TPEx"}
+    assert "700019" not in tpex_bar_symbols
+    # A four-digit code outside the lists reaches the collector, which writes
+    # it only to a stored instrument and otherwise records it (Issue #212).
+    assert "7002" in tpex_bar_symbols
     assert any(item.exchange == "TWSE" for item in batch.bars)
     assert all(not item.is_suspended for item in batch.bars if item.exchange == "TPEx")
     # Informational only: kept as a notice so it never downgrades the run.
