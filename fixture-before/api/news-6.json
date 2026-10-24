@@ -1,0 +1,233 @@
+{
+  "id": "6",
+  "canonical_key": "news:fixture:6",
+  "dedupe_cluster_id": "news:fixture:6",
+  "category": "company",
+  "source_kind": "official_disclosure",
+  "source_name": "MOPS",
+  "source": {
+    "name": "MOPS",
+    "url": "https://example.com/news/6",
+    "url_kind": "item"
+  },
+  "source_item_id": "fixture-6",
+  "title": "示範封測 公告董事會通過現金股利分派",
+  "summary": "虛構公告：董事會決議每股配發現金股利 3 元。",
+  "description": "虛構公告：董事會決議每股配發現金股利 3 元。",
+  "summary_preview": "虛構公告：董事會決議每股配發現金股利 3 元。",
+  "language": "zh-Hant",
+  "published_at": null,
+  "event_at": null,
+  "event_date": "2026-10-16",
+  "display_time": "2026-10-16T00:00:00",
+  "time_basis": "event_date",
+  "time_precision": "date",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "known",
+        "precision": "date",
+        "value": "2026-10-16",
+        "utc": null,
+        "date": "2026-10-16",
+        "source": "news_item.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "calendar_date_no_timezone_conversion"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_published_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-16T09:30:00+00:00",
+        "utc": "2026-10-16T09:30:00+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-24T14:26:40.850185+00:00",
+    "legacy": {
+      "published_at": null,
+      "event_at": null,
+      "event_date": "2026-10-16",
+      "display_time": "2026-10-16T00:00:00",
+      "time_basis": "event_date",
+      "time_precision": "date",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-16T09:30:00+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-24T14:26:40.850185+00:00",
+  "collected_at": "2026-10-16T09:30:00+00:00",
+  "symbols": [
+    "TWSE:9102"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "9102",
+      "name": "示範封測"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "default_unknown",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "7a2dd53527083ff050580d76c67cdc823364f4f419708a78d815a020bf402d5e",
+  "detail_url": "/news/6",
+  "ai": null,
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 5,
+    "endpoint": "https://example.net/mops/material-information",
+    "data_as_of": "2026-10-16"
+  }
+}

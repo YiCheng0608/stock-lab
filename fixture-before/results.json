@@ -1,0 +1,155 @@
+[
+  {
+    "page": "today",
+    "code": "API",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "/api/dashboard news[].ai.status：預期 ['done', 'done', None, 'done', 'done', None]，實際 [None, None, None, None, None, None]",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026-10-16` = facts 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料截至` → 2026/10/16 → TWSE／TPEx 官方資料",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`；B = facts 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張卡 `資料 2026/10/16 · 相對加權指數`；#1 `半導體`",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T6",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "id 1 有 AI 判讀卻顯示 `影響尚未判定`（today-1280.txt 第 25 行）；id 5 有 AI 判讀卻顯示 `影響尚未判定`（today-1280.txt 第 35 行）",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T7",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`、`3 檔`；來源行 3 = items；C = facts",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T8",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 3 行；免責句 3 行",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T9",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張卡各有 `資料日`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "API",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "/api/news/1 ai.generated_at：預期 '2026-10-16T03:01:00+00:00'，實際 '2026-10-16T03:01:00'",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "domestic 前 3 則、international 前 2 則、official 前 1 則依序出現",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "時間行 domestic 3／3、international 2／2、official 1／1",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`AI 推論`／AI 判讀 domestic 2／2、international 2／2、official 0／0",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "最新新聞 2026-10-16 09:30（台北）≤ 現在；國內第一則 `發布於 2026/10/16 09:30`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N6",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "ai.generated_at '2026-10-16T03:01:00' 沒有時區",
+    "known": null
+  }
+]
