@@ -38,17 +38,17 @@
 
 ## 檢查
 
-| 編號 | 檢查 | 怎麼判 |
-| --- | --- | --- |
-| S1 | 頁面可用 | 每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| S2 | 目錄 | `stocks-1280.txt` 有表頭整行 `代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料`；`items[0].instrument.symbol` 開頭的列存在；`第 1／<total_pages> 頁 · 共 <total 千分位> 筆` 為整行 |
-| S3 | 頁首資料日與來源 | `stock-1280.txt` 有整行 `<S>`；第一個 `資料 ` 開頭的行在導覽列（`資料 <facts D>`），第二個是 `資料 <I>`，其下一行以 `來源 ` 開頭且不是 `來源 尚無已核對的價格來源`；`I` 等於 `stock-bars.json` 的 `data_as_of` |
-| S4 | K 線卡 | 整行 `K 線與技術指標` 的下一行是 `資料 <I>`；有 `來源 ` 開頭的行與 `日線批次計算於` 開頭的行 |
-| S5 | 研究條件 | `stock-research-1280.txt` 有整行 `研究動作`；有 `資料日期：<I/>` 開頭的行與 `資料日：<I/> · 價位語意：` 開頭的行（`decision_summary` 為 null 時改查 `尚無行動摘要。`）；`stock.json` 的 `candidate` 非 null 時再查整行 `明日候選`、`AI 推論` 至少 1 行、`^來源：` 行結尾為 `（推論）` |
-| S6 | 新聞與公告 | `stock-news-1280.txt` 有整行 `<S> 相關新聞`；`stock-news.json` 中 `instruments[]` 有 `exchange` = `<E>` 且 `symbol` = `<S>` 的則數為 0 時有 `尚無與此股已核實關聯的新聞或公告。`，否則時間行數（同新聞 N3 的規則）≥ 1 |
-| S7 | 資料說明 | `stock-data-1280.txt` 整行 `K 線資料日期` 的下一行是 `<I>`；整行 `行情來源` 的下一行非空且不是 `待核實`；有 `資料日 <I/>` 結尾的行 |
-| S8 | 資料日與 DB 一致 | `I` 等於 `facts-stock.json` 的 `instrument.latest_trading_date`；`instrument.source` 非空 |
-| S9 | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>\t` 開頭的行（表格第一列是最新一筆），且含 ` · 資料截至：` 的行數 = `min(30, chips 數)` |
+| 編號 | 類型 | 檢查 | 怎麼判 |
+| --- | --- | --- | --- |
+| S1 | CI | 頁面可用 | 每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
+| S2 | CI | 目錄 | `stocks-1280.txt` 有表頭整行 `代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料`；`items[0].instrument.symbol` 開頭的列存在；`第 1／<total_pages> 頁 · 共 <total 千分位> 筆` 為整行 |
+| S3 | CI | 頁首資料日與來源 | `stock-1280.txt` 有整行 `<S>`；第一個 `資料 ` 開頭的行在導覽列（`資料 <facts D>`），第二個是 `資料 <I>`，其下一行以 `來源 ` 開頭且不是 `來源 尚無已核對的價格來源`；`I` 等於 `stock-bars.json` 的 `data_as_of` |
+| S4 | CI | K 線卡 | 整行 `K 線與技術指標` 的下一行是 `資料 <I>`；有 `來源 ` 開頭的行與 `日線批次計算於` 開頭的行 |
+| S5 | CI | 研究條件 | `stock-research-1280.txt` 有整行 `研究動作`；有 `資料日期：<I/>` 開頭的行與 `資料日：<I/> · 價位語意：` 開頭的行（`decision_summary` 為 null 時改查 `尚無行動摘要。`）；`stock.json` 的 `candidate` 非 null 時再查整行 `明日候選`、`AI 推論` 至少 1 行、`^來源：` 行結尾為 `（推論）` |
+| S6 | CI | 新聞與公告 | `stock-news-1280.txt` 有整行 `<S> 相關新聞`；`stock-news.json` 中 `instruments[]` 有 `exchange` = `<E>` 且 `symbol` = `<S>` 的則數為 0 時有 `尚無與此股已核實關聯的新聞或公告。`，否則時間行數（同新聞 N3 的規則）≥ 1 |
+| S7 | CI | 資料說明 | `stock-data-1280.txt` 整行 `K 線資料日期` 的下一行是 `<I>`；整行 `行情來源` 的下一行非空且不是 `待核實`；有 `資料日 <I/>` 結尾的行 |
+| S8 | CI | 資料日與 DB 一致 | `I` 等於 `facts-stock.json` 的 `instrument.latest_trading_date`；`instrument.source` 非空 |
+| S9 | CI | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>\t` 開頭的行（表格第一列是最新一筆），且含 ` · 資料截至：` 的行數 = `min(30, chips 數)` |
 
 ## 陷阱
 
