@@ -376,3 +376,32 @@ def test_manual_samples_follow_the_written_rules(tmp_path):
         (tmp_path / "out" / "manual" / "T10.json").read_text(encoding="utf-8")
     )
     assert [item["rank"] for item in t10["items"]] == [1, 2, 3]
+
+
+def test_the_news_sample_pages_back_to_the_data_date(tmp_path):
+    # 2026-10-24 23:47: the newest 100 domestic news were all after D (10/22), so
+    # the first page alone gave 0 samples.
+    ai = {"status": "done", "inference": True}
+    later = [
+        {"id": str(n), "published_at": "2026-10-24T01:00:00+00:00", "ai": ai}
+        for n in range(100, 200)
+    ]
+    on_d = [
+        {"id": "1", "published_at": "2026-10-22T05:00:00+00:00", "ai": ai},
+        {"id": "2", "published_at": "2026-10-21T05:00:00+00:00", "ai": ai},
+    ]
+    cursor = "eyJpZCI6Mn0+/="
+    payloads = {
+        "dashboard": {**DASHBOARD, "as_of": DAY},
+        "news?category=domestic&limit=100": {
+            "items": later,
+            "meta": {"has_more": True, "next_cursor": cursor},
+        },
+        "news?category=domestic&limit=100&cursor=eyJpZCI6Mn0%2B/%3D": {
+            "items": on_d,
+            "meta": {"has_more": True, "next_cursor": "never-read"},
+        },
+        "news/1": {"id": "1", "ai": ai},
+    }
+    sample = page_checks.news_sample(_run(tmp_path, payloads))
+    assert [item["id"] for item in sample["items"]] == ["1"]

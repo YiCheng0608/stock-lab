@@ -44,6 +44,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -1686,6 +1687,7 @@ def a7(run: Run) -> str:
 Sampler = Callable[[Run], dict]
 MANUAL: dict[str, dict[str, Sampler]] = {page: {} for page in PAGES}
 NEWS_SAMPLE = 5
+NEWS_PAGES = 5  # pages of 100 news searched for D
 CANDIDATE_SAMPLE = 3
 
 
@@ -1715,12 +1717,25 @@ def taipei_day(value: Any) -> str | None:
 @manual("news", "N7", "N8")
 def news_sample(run: Run) -> dict:
     d = run.D()
-    listed = run.get("news?category=domestic&limit=100", "news-domestic-100.json")
-    picked = [
-        item
-        for item in listed.get("items") or []
-        if usable_ai(item.get("ai")) and taipei_day(item.get("published_at")) == d
-    ][:NEWS_SAMPLE]
+    picked, cursor = [], ""
+    # Newest first: page back until D's news are passed (a run days after D starts later).
+    for page in range(1, NEWS_PAGES + 1):
+        path = "news?category=domestic&limit=100" + (
+            f"&cursor={urllib.parse.quote(cursor)}" if cursor else ""
+        )
+        listed = run.get(path, f"news-domestic-100-{page}.json")
+        rows = listed.get("items") or []
+        picked += [
+            item
+            for item in rows
+            if usable_ai(item.get("ai")) and taipei_day(item.get("published_at")) == d
+        ]
+        meta = listed.get("meta") or {}
+        older = any((taipei_day(item.get("published_at")) or d) < d for item in rows)
+        if len(picked) >= NEWS_SAMPLE or older or not meta.get("has_more"):
+            break
+        cursor = meta.get("next_cursor") or ""
+    picked = picked[:NEWS_SAMPLE]
     items = []
     for item in picked:
         detail = run.get(f"news/{item['id']}", f"news-{item['id']}.json")
@@ -1741,7 +1756,7 @@ def news_sample(run: Run) -> dict:
             }
         )
     return {
-        "rule": f"/news?category=domestic&limit=100 中台北發布日 = D（{d}）且有 AI 判讀的前 {NEWS_SAMPLE} 則，API 順序",
+        "rule": f"/news?category=domestic&limit=100（依 next_cursor 往後最多 {NEWS_PAGES} 頁）中台北發布日 = D（{d}）且有 AI 判讀的前 {NEWS_SAMPLE} 則，API 順序",
         "items": items,
     }
 
