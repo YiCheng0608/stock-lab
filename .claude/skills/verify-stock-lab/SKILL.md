@@ -30,7 +30,7 @@ CI 失敗想在本機重現，或改了 verify 工具想先跑一次時用。需
 ```bash
 WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify/ci"; mkdir -p "$V/logs"
 PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages"
+export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages" PYTHONUTF8=1
 "$PY" -B "$WT/tools/verify/verify_plan.py" --base "$(git rev-parse origin/master)"   # 看 CI 會驗哪幾頁
 "$PY" -B "$WT/tools/verify/fixture_db.py" --dest "$V/db" > "$V/logs/fixture.json"   # $V/db 須不存在或為空
 ```
@@ -56,11 +56,11 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    ```bash
    WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify"
    PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
-   export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages"
+   export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages" PYTHONUTF8=1
    OUT=$(cat "$V/current")   # 第 3 步寫入
    ```
 
-   `$PY` 是 release venv 的基底直譯器（同為 3.12.14），借 venv 的套件跑 API；不直接執行 venv 的 `python.exe`，因為它是啟動器，真正監聽的是它的子程序，收尾時關不乾淨。
+   `$PY` 是 release venv 的基底直譯器（同為 3.12.14），借 venv 的套件跑 API；不直接執行 venv 的 `python.exe`，因為它是啟動器，真正監聽的是它的子程序，收尾時關不乾淨。`PYTHONUTF8=1`：Windows 的 stdout 預設是 cp950，`page_checks.py` 印到含 `\xa0` 等字元的新聞標題會在寫完 summary 前中斷。
 3. **輸出目錄**：`$OUT` 只算一次，之後一律從 `$V/current` 讀（跨分鐘重算會變成另一個目錄）。
 
    ```bash
@@ -158,14 +158,18 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 3. **API**（Bash 工具 `run_in_background: true`；PID 寫進 `$V/api.pid`）：
 
    ```bash
-   . "$V/ports"; D="$(dirname "$DB")"; cd "$WT" && STOCK_DATA_DIR="$D" STOCK_DB_PATH="$DB" STOCK_RAW_DIR="$D/raw" \
+   . "$V/ports"; D="$(dirname "$DB")"; cd "$WT" || exit 1
+   STOCK_DATA_DIR="$D" STOCK_DB_PATH="$DB" STOCK_RAW_DIR="$D/raw" \
      "$PY" -B -m uvicorn app.main:app --host 127.0.0.1 --port "$API_PORT" > "$V/logs/api.log" 2>&1 & echo $! > "$V/api.pid"; wait
    ```
+
+   `cd` 要單獨一行：寫成 `cd ... && 程式 &` 時背景的是整個 `&&` 串成的子 shell，`$!` 是子 shell 的 PID，收尾 `kill` 只殺到子 shell，服務會留著。
 
 4. **前端**（同樣背景執行；PID 寫進 `$V/web.pid`）：
 
    ```bash
-   . "$V/ports"; cd "$WT/frontend" && VERIFY_DIST="$V/dist" VERIFY_WEB_PORT="$WEB_PORT" VERIFY_API_URL="http://127.0.0.1:$API_PORT" \
+   . "$V/ports"; cd "$WT/frontend" || exit 1
+   VERIFY_DIST="$V/dist" VERIFY_WEB_PORT="$WEB_PORT" VERIFY_API_URL="http://127.0.0.1:$API_PORT" \
      node node_modules/vite/bin/vite.js preview --config "$WT/tools/verify/vite.preview.mjs" > "$V/logs/preview.log" 2>&1 & echo $! > "$V/web.pid"; wait
    ```
 
@@ -182,7 +186,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 
 只關本 skill 啟動的程序、只刪本 skill 的暫存：
 
-1. `kill $(cat "$V/api.pid") $(cat "$V/web.pid")`，再 `ps -p $(cat "$V/api.pid"),$(cat "$V/web.pid")` 確認兩個都已不在（只剩表頭）；背景工作因此回報 failed 屬預期。之後刪 `$V/api.pid`、`$V/web.pid`、`$V/ports`。
+1. `kill $(cat "$V/api.pid") $(cat "$V/web.pid")`，再 `. "$V/ports"; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$API_PORT/api/health" "http://127.0.0.1:$WEB_PORT/api/health"` 確認兩個都印 `000`（連不上；程序約 1 秒後才結束，緊接著查可能還是 200，另起一個命令再查）；背景工作因此回報 failed 屬預期。再查還有回應就是服務沒關到，用 PowerShell `Get-NetTCPConnection -State Listen -LocalPort <埠>` 找出 `OwningProcess` 再 `Stop-Process`。之後刪 `$V/api.pid`、`$V/web.pid`、`$V/ports`。
 2. 刪 `$V/dist`；CI 模式另刪 `$V/db`；真資料模式另刪 `$V/raw`（API 啟動時建的空目錄）與 `$V/stock.db`（含同名 `-wal`、`-shm`、`-journal`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。
 3. `ls -a "$OUT/shots"`（私人模式看 `$OUT/.private/shots`）不應有 `.browser-*`（`screenshot.cjs` 自己會刪；殘留就刪掉並記在 summary 最後一段「清理」）。
 4. 不刪 `frontend/node_modules`（下次重用）；不碰 `.local/verify` 以外的路徑。
