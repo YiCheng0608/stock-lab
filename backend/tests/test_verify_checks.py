@@ -302,6 +302,87 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
     assert passing.failed and "從 KNOWN_FAILURES 移除 actions A5" in passing.detail
 
 
+def _t6_run(tmp_path, ai, card_ai, card):
+    item = {"id": "7", "title": "新聞甲", "ai": card_ai}
+    return FakeRun(
+        tmp_path,
+        {"dashboard": {"news": [item]}, "news/7": {"ai": ai}},
+        {
+            "today-1280": f"今日市場／重大事件\n新聞甲\n摘要\n{card}未有已核實的標的或族群\n熱門族群\n"
+        },
+    )
+
+
+AI_DONE = {"status": "done", "inference": True, "impact_direction": "positive"}
+
+
+def test_t6_passes_when_the_card_shows_the_ai_direction(tmp_path):
+    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能正向\nAI 推論\n")
+    assert "7 `可能正向`" in page_checks.t6(run)
+    # An unsupported item's AI direction is 影響尚未判定, as on the news page.
+    unsupported = {**AI_DONE, "unsupported": True}
+    run = _t6_run(tmp_path, unsupported, unsupported, "影響尚未判定\nAI 推論\n")
+    assert "7 `影響尚未判定`" in page_checks.t6(run)
+
+
+def test_t6_fails_when_the_card_falls_back_to_the_rule_direction(tmp_path):
+    # #233: dashboard.news had no ai block, so the card showed the rule direction.
+    run = _t6_run(tmp_path, AI_DONE, None, "影響尚未判定\n")
+    with pytest.raises(page_checks.Fail) as error:
+        page_checks.t6(run)
+    assert "ai 與 /api/news/<id> 不同" in str(error.value)
+    assert "卡片沒有 `AI 推論`" in str(error.value)
+
+
+def test_t6_fails_when_the_card_direction_differs(tmp_path):
+    run = _t6_run(tmp_path, AI_DONE, AI_DONE, "可能負向\nAI 推論\n")
+    with pytest.raises(
+        page_checks.Fail, match="卡片方向 `可能負向`，AI 方向 `可能正向`"
+    ):
+        page_checks.t6(run)
+
+
+def _n6_run(tmp_path, generated_at, shown):
+    ai = {
+        "status": "done",
+        "inference": True,
+        "model": "m",
+        "prompt_version": "news_v1",
+        "generated_at": generated_at,
+    }
+    page = (
+        "來源事實\nAI 摘要與判讀\nAI 推論\n"
+        f"模型 m · 提示版本 news_v1 · 產生時間 {shown}。候選未經規則核實。\n"
+    )
+    return FakeRun(
+        tmp_path,
+        {
+            "news?category=domestic&limit=20": {"items": [{"id": "7", "ai": ai}]},
+            "news/7": {"ai": ai},
+        },
+        {"news-detail-1280": page},
+    )
+
+
+def test_n6_needs_the_taipei_generated_time(tmp_path):
+    run = _n6_run(tmp_path, "2026-10-21T16:01:32.746332+00:00", "2026/10/22 00:01")
+    assert "產生時間 2026/10/22 00:01" in page_checks.n6(run)
+    assert page_checks.taipei_minute("2026-10-21T16:01:32Z") == "2026/10/22 00:01"
+
+
+def test_n6_fails_when_the_generated_time_is_pending(tmp_path):
+    # #234: the page wrote 待核實 while the API had a time.
+    run = _n6_run(tmp_path, "2026-10-21T16:01:32.746332+00:00", "待核實")
+    with pytest.raises(page_checks.Fail, match="沒有 `產生時間 2026/10/22 00:01`"):
+        page_checks.n6(run)
+
+
+def test_n6_fails_when_generated_at_has_no_zone(tmp_path):
+    run = _n6_run(tmp_path, "2026-10-21T16:01:32.746332", "待核實")
+    with pytest.raises(page_checks.Fail, match="沒有時區"):
+        page_checks.n6(run)
+
+
 def test_news_source_label_matches_the_frontend():
     presentation = (ROOT / "frontend" / "src" / "presentation.ts").read_text(
         encoding="utf-8"

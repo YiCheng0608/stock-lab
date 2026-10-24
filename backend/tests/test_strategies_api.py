@@ -127,7 +127,8 @@ def test_existing_strategy_fields_are_unchanged(client):
         v1["config"],
         v1["canonical_config_snapshot"],
     ) == ("1.0.0", "breakout", False, {"a": 1}, {"snap": 1})
-    assert v1["created_at"] == "2026-10-01T02:03:04"
+    # Stored naive UTC; the API states the zone (#234).
+    assert v1["created_at"] == "2026-10-01T02:03:04+00:00"
     assert (v2["active"], v2["config"], v2["canonical_config_snapshot"]) == (
         True,
         {"a": 2},

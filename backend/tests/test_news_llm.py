@@ -674,6 +674,72 @@ def test_news_list_reads_llm_results_in_one_query(db, fake, client):
     assert sum("news_llm_results" in statement for statement in statements) == 1
 
 
+def _statements(db, call):
+    from sqlalchemy import event
+
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        return call(), statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
+def test_dashboard_news_has_the_same_ai_block_as_the_detail(db, fake, client):
+    # #233: the today card and /news/<id> must give one reading of the same item.
+    items = _add_news(db, 3)
+    _run(db)
+    pending = _add_news(db, 1, start=3)[0]
+    news, statements = _statements(
+        db, lambda: client.get(f"{router.prefix}/dashboard").json()["news"]
+    )
+    assert [row["id"] for row in news] == [str(item.id) for item in items] + [
+        str(pending.id)
+    ]
+    for row in news[:3]:
+        detail = client.get(f"{router.prefix}/news/{row['id']}").json()
+        assert row["ai"]["inference"] is True and row["ai"]["status"] == "done"
+        assert row["ai"] == detail["ai"]
+    assert news[3]["ai"] is None
+    assert sum("news_llm_results" in statement for statement in statements) == 1
+
+
+def _utc_instant(value):
+    parsed = datetime.fromisoformat(value)
+    assert parsed.utcoffset() == timedelta(0), value
+    return parsed.replace(tzinfo=None)
+
+
+def test_ai_generated_at_is_utc_with_its_zone(db, fake, client):
+    # #234: a naive value made the detail page show 產生時間 待核實.
+    item = _add_news(db, 1)[0]
+    _run(db)
+    stored = _results(db)[0].llm_run_at
+    detail = client.get(f"{router.prefix}/news/{item.id}").json()
+    assert _utc_instant(detail["ai"]["generated_at"]) == stored
+    listed = client.get(f"{router.prefix}/news").json()["items"]
+    assert _utc_instant(listed[0]["ai"]["generated_at"]) == stored
+
+
+def test_run_and_payload_instants_are_utc_with_their_zone(db, fake, client):
+    # #234 inventory: stored DateTime instants are naive UTC; the API states the zone.
+    _add_news(db, 1)
+    _run(db)
+    run = client.get(f"{router.prefix}/ingestion-runs").json()["items"][0]
+    for key in ("started_at", "finished_at", "updated_at"):
+        _utc_instant(run[key])
+    payload = client.get(f"{router.prefix}/raw-payloads").json()["items"][0]
+    _utc_instant(payload["collected_at"])
+    dashboard = client.get(f"{router.prefix}/dashboard").json()
+    if dashboard["data_quality"]["updated_at"] is not None:
+        _utc_instant(dashboard["data_quality"]["updated_at"])
+
+
 # Schedule wrapper: exit codes ------------------------------------------------------
 
 

@@ -7,6 +7,7 @@ recomputed on the weekly series with the same formulas (app.indicators).
 
 from __future__ import annotations
 
+from datetime import timezone
 from typing import Any
 
 from sqlalchemy import desc, select
@@ -84,6 +85,9 @@ def _daily(
             else {name: NOT_COMPUTED for name in FIELDS}
         )
         items.append(item)
+    # computed_at is UTC-naive (worker.indicator_batch); send it with its offset.
+    if computed_at is not None:
+        computed_at = computed_at.replace(tzinfo=timezone.utc)
     return items, _iso(computed_at)
 
 

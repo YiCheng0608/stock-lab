@@ -1223,6 +1223,12 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("dashboard", "market.instruments", 8),  # 7 stocks + 1 ETF, not TAIEX
         ("dashboard", "news", 6),
         ("dashboard", "news[].id", ["1", "5", "6", "4", "2", "3"]),
+        # The today card carries the detail's ai block (#233).
+        (
+            "dashboard",
+            "news[].ai.status",
+            ["done", "done", None, "done", "done", None],
+        ),
         ("dashboard", "themes", 5),
         (
             "dashboard",
@@ -1261,6 +1267,8 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
         ("news/1", "ai.model", LLM_MODEL),
         ("news/1", "ai.prompt_version", "news_v1"),
+        # llm_run_at is stored naive UTC; the API states the zone (#234).
+        ("news/1", "ai.generated_at", f"{D}T03:01:00+00:00"),
     ],
     "themes": [
         ("themes?board=industry&limit=100", "meta.total", 2),

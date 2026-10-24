@@ -170,6 +170,24 @@ def as_datetime(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _utc_aware(value: datetime | None) -> datetime | None:
+    """Expose a stored instant as aware UTC (docs/NEWS_SPEC.md §6).
+
+    DateTime columns written by the workers hold naive UTC; the API states the
+    zone so ``product_time`` and the frontend need not guess one.
+    """
+
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def as_utc_datetime(value: datetime | None) -> str | None:
+    return as_datetime(_utc_aware(value))
+
+
 def instrument_dict(item: Instrument | None) -> dict[str, Any] | None:
     if not item:
         return None
@@ -205,7 +223,7 @@ def bar_dict(item: MarketBar | None) -> dict[str, Any] | None:
         "turnover_reason": item.turnover_reason,
         "source": item.source,
         "data_as_of": as_datetime(item.data_as_of),
-        "collected_at": as_datetime(item.collected_at),
+        "collected_at": as_utc_datetime(item.collected_at),
         "is_suspended": bool(item.is_suspended),
     }
 
@@ -223,7 +241,7 @@ def chip_dict(item: ChipSnapshot) -> dict[str, Any]:
         "day_trade_ratio": item.day_trade_ratio,
         "source": item.source,
         "data_as_of": as_datetime(item.data_as_of),
-        "collected_at": as_datetime(item.collected_at),
+        "collected_at": as_utc_datetime(item.collected_at),
     }
 
 
@@ -236,7 +254,7 @@ def quality_dict(item: DataQuality) -> dict[str, Any]:
         "missing_fields": item.missing_fields_json or [],
         "checks": item.checks_json or {},
         "source": item.source,
-        "checked_at": as_datetime(item.checked_at),
+        "checked_at": as_utc_datetime(item.checked_at),
     }
 
 
@@ -248,7 +266,7 @@ def raw_payload_dict(item: RawPayload) -> dict[str, Any]:
         "endpoint": item.endpoint,
         "sha256": item.sha256,
         "data_as_of": item.data_as_of,
-        "collected_at": as_datetime(item.collected_at),
+        "collected_at": as_utc_datetime(item.collected_at),
     }
 
 
@@ -265,7 +283,7 @@ def event_dict(db: Session, item: Event) -> dict[str, Any]:
         "endpoint": item.endpoint,
         "raw_payload_id": item.raw_payload_id,
         "data_as_of": item.data_as_of,
-        "collected_at": as_datetime(item.collected_at),
+        "collected_at": as_utc_datetime(item.collected_at),
     }
 
 
@@ -1096,23 +1114,9 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
             "model": row.llm_model,
             "prompt_version": row.prompt_version,
             "input_hash": row.llm_input_hash,
-            "generated_at": as_datetime(row.llm_run_at),
+            "generated_at": as_utc_datetime(row.llm_run_at),
         }
     return result
-
-
-def _utc_aware(value: datetime | None) -> datetime | None:
-    """Expose a stored news instant as aware UTC (docs/NEWS_SPEC.md §6).
-
-    ``news_items`` DateTime columns hold naive UTC; the API states the zone so
-    ``product_time`` can mark the instant known instead of guessing a zone.
-    """
-
-    if value is None:
-        return None
-    if value.tzinfo is None or value.utcoffset() is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 class _UtcNewsItem:
@@ -1205,8 +1209,8 @@ def news_dict(
         "description": event.description if event else item.summary,
         "summary_preview": _summary_preview(item.summary),
         "language": item.language,
-        "published_at": as_datetime(_utc_aware(item.published_at)),
-        "event_at": as_datetime(_utc_aware(item.event_at)),
+        "published_at": as_utc_datetime(item.published_at),
+        "event_at": as_utc_datetime(item.event_at),
         "event_date": as_date(
             getattr(item, "event_date", None) or (event.event_date if event else None)
         ),
@@ -1219,7 +1223,7 @@ def news_dict(
         "time_consistency": time_consistency,
         "product_time": product_time,
         "response_generated_at": product_time["response_generated_at"],
-        "collected_at": as_datetime(_utc_aware(item.collected_at)),
+        "collected_at": as_utc_datetime(item.collected_at),
         "symbols": item.symbols_json or [],
         "instruments": related_instruments,
         "themes": themes,
@@ -1411,16 +1415,18 @@ def compact_theme_summary(
     return payload
 
 
-def compact_news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
+def compact_news_dict(
+    db: Session, item: NewsItem, ai: dict[int, dict[str, Any]]
+) -> dict[str, Any]:
     """Return the small dashboard/news-list projection.
 
     The detail endpoint remains the only product surface that needs full
-    summary/provenance payloads; list rows carry only the event metadata and
-    linked instruments.
+    summary/provenance payloads; list rows carry only the event metadata,
+    linked instruments and the same ``ai`` block as the detail, so a card and
+    ``/news/<id>`` give one reading.  Pass ``ai`` from news_ai_map.
     """
 
-    # The compact projection has no ``ai`` block; skip its queries.
-    payload = news_dict(db, item, ai={})
+    payload = news_dict(db, item, ai)
     return {
         key: payload[key]
         for key in (
@@ -1449,6 +1455,7 @@ def compact_news_dict(db: Session, item: NewsItem) -> dict[str, Any]:
             "confidence",
             "status",
             "detail_url",
+            "ai",
         )
     }
 
@@ -1607,6 +1614,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         .order_by(*_news_order_by())
         .limit(6)
     ).all()
+    news_ai = news_ai_map(db, product_news)
     actionable = [
         item
         for item in action_rows
@@ -1640,7 +1648,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "latest_run_records": run.records if run else 0,
             "data_as_of": run.data_as_of if run else None,
             "error": run.error if run else None,
-            "updated_at": as_datetime(run.updated_at) if run else None,
+            "updated_at": as_utc_datetime(run.updated_at) if run else None,
         },
         "groups": group_rows,
         "signals": [
@@ -1649,7 +1657,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         "signal_status_counts": {status: count for status, count in status_rows},
         # Product IA read model.  Legacy fields above remain for compatibility
         # with the Phase 1 research surface.
-        "news": [compact_news_dict(db, item) for item in product_news],
+        "news": [compact_news_dict(db, item, news_ai) for item in product_news],
         "themes": product_themes,
         "candidates": [compact_action_summary(item) for item in actionable[:8]],
         "actions": [compact_action_summary(item) for item in display_actions[:8]],
@@ -2974,7 +2982,7 @@ def instrument_detail(
         "feature_snapshot": {
             "trading_date": as_date(feature.trading_date),
             "source": feature.source,
-            "created_at": as_datetime(feature.created_at),
+            "created_at": as_utc_datetime(feature.created_at),
         }
         if feature
         else None,
@@ -3363,7 +3371,7 @@ def position_dict(db: Session, position: PortfolioPosition) -> dict[str, Any]:
             field: status for field, (_value, status) in values.items()
         },
         "note": position.note,
-        "updated_at": as_datetime(position.updated_at),
+        "updated_at": as_utc_datetime(position.updated_at),
         "latest_bar": latest_bar,
         "portfolio_quote": quote,
         "market_value": market_value,
@@ -3578,9 +3586,9 @@ def ingestion_runs(
             "request_key": run.request_key,
             "data_as_of": run.data_as_of,
             "metadata": run.metadata_json or {},
-            "started_at": as_datetime(run.started_at),
-            "finished_at": as_datetime(run.finished_at),
-            "updated_at": as_datetime(run.updated_at),
+            "started_at": as_utc_datetime(run.started_at),
+            "finished_at": as_utc_datetime(run.finished_at),
+            "updated_at": as_utc_datetime(run.updated_at),
         }
         for run in rows
     ]
@@ -3743,7 +3751,7 @@ def strategies(
             "active": row.active,
             "config": row.config_json or {},
             "canonical_config_snapshot": row.canonical_config_snapshot or {},
-            "created_at": as_datetime(row.created_at),
+            "created_at": as_utc_datetime(row.created_at),
         }
         for row in rows
     ]
