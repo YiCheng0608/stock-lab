@@ -20,6 +20,7 @@
 | 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
+| 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
 | API route | `GET /dashboard` |
 | API route | `GET /themes` |
 | API route | `GET /candidates` |
@@ -37,7 +38,7 @@
 | 資料截至卡 | `dashboard.as_of`、`market.source_label` | `資料截至` 下一行 `<D/>`，再下一行來源名稱 | — | `尚無官方快照` |
 | 今日市場／重大事件 | `dashboard.news` 前 3 則 | 每張卡：來源 badge、`發布於／事件於／事件日 …` 時間 | 有 AI 判讀的卡在方向後接 `AI 推論` | `市場新聞區尚無可顯示內容。` |
 | 熱門族群 | `today-board.json` | 榜別分頁下一行 `資料 <B/>`；每張卡 `資料 <B/> · 相對加權指數` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
-| 明日候選 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每張卡 `資料日期 <C/>`、`來源：…` | 新聞情緒分項與理由後的 `推論`；每張卡的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
+| 明日候選 | `candidates.json` | 標題下 `資料 <C/>` 與 `<n> 檔`；每張卡 `資料日期 <C/>`、`來源：…`；每張卡一行 `加入追蹤`（按鈕）或 `已在追蹤`（連到行動頁的計畫） | 新聞情緒分項與理由後的 `推論`；每張卡的 `AI 推論` 說明區；來源行結尾 `（推論）` | `當日零候選`／`尚無候選清單` |
 | 關注標的 | `dashboard.actions` ＋ `dashboard.candidates` | 每張卡 `資料日 YYYY/MM/DD` | — | `dashboard.empty_states.actions` 或 `目前沒有可顯示的行動摘要。` |
 
 `D` = `dashboard.as_of` 前 10 字；`B` = `today-board.json` 的 `meta.trading_date`；`C` = `candidates.json` 的 `trading_date`。
@@ -56,6 +57,7 @@
 | T8 | CI | 明日候選推論標記 | 在 T7 之後（T7 沒通過時 T8 的失敗記「無法判定（上游 T7）」）。第 i 個 `^來源：` 行對應 `items[i]`（卡片依名次排列）；`components.news_sentiment.inference` 為 true 的候選，其來源行結尾為 `（推論）`；說明區標題 `AI 推論` 的整行數 ≥ `items` 數；免責句 `由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。` 的行數 = `items` 數 |
 | T9 | CI | 關注標的 | `查看個股詳情 →` 的行數 k > 0 時，`^資料日 [0-9]{4}/[0-9]{2}/[0-9]{2}$` 的行數也 = k。k = 0 時：`dashboard.json` 的 `actions`＋`candidates` 有頁面會顯示的項目（同 `TodayPage` 的 `homeActions`：`action_state` 不是 `data_insufficient`，或 `held` 為 true，或 `position_quantity_status` 為 `unknown`），或 `candidates.json` 有 `items` 且 `trading_date` 等於 `facts.json` 的 `market_latest_trading_date`，判失敗；都沒有才查空資料文案整行出現 |
 | T10 | 人工 | 候選進出點說明 | 樣本：`candidates.json` 依名次前 3 檔（`manual/T10.json`）。每檔 `llm_note` 寫到的價位（進場、突破、拉回區間、停損、目標）都等於 `levels` 的對應值，進場方式與 `levels.entry_type` 一致，沒有 `levels` 以外的價位、保證或買賣指示；`llm_note` 未完成的那檔記無法判定。一檔不符即失敗，證據寫代號、說明原句與 `levels` 值 |
+| T11 | CI | 加入追蹤 | 在 T7 之後。`items` 非空時，整行 `加入追蹤` 與整行 `已在追蹤` 的行數合計 = `items` 數，`已在追蹤` 的行數 = `items[].open_plan_id` 非 null 的筆數；`items` 空時兩種行都不出現 |
 
 ## 陷阱
 
@@ -64,7 +66,7 @@
 
 ## 判定
 
-- 通過：T1～T9 全部通過；T10 由人工判讀另記。
+- 通過：T1～T9、T11 全部通過；T10 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（API 非 200、截圖未 ready，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

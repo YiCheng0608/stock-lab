@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain import CANDIDATE_SCORE_VERSION
+from app.domain import CANDIDATE_SCORE_VERSION, PLAN_OPEN_STATUSES
 
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "tools" / "ops"
@@ -264,6 +264,7 @@ def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> No
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
+    assert set(module.PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
 
 
 # ---- screenshot.cjs ----

@@ -379,10 +379,10 @@ def test_primary_api_routes_use_isolated_source_of_truth(isolated_api):
         and instrument_tpex.json()["instrument"]["exchange"] == "TPEx"
     )
     assert signals.status_code == 200 and len(signals.json()["items"]) == 1
-    assert tracking.status_code == 200 and tracking.json()["summary"]["horizons"] == [
-        5,
-        20,
-    ]
+    assert tracking.status_code == 200 and tracking.json()["summary"] == {
+        "open": 0,
+        "closed": 0,
+    }
     assert portfolio.status_code == 200 and portfolio.json()["items"] == []
     assert (
         quality.status_code == 200

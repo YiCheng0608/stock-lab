@@ -148,6 +148,7 @@
 - 無資料：欄位留空顯示「—」加 muted 原因，不顯示 0。
 - LLM 推論內容：左側 2px 強調色（`--color-accent`）豎線加「AI 推論」小 badge，與事實分區。
 - 進出點卡：進場區主文字色 mono；停損 `--color-error`；目標 `--color-success`；RR 用 badge。
+- 追蹤計畫卡（行動頁「追蹤計畫」「追蹤回看」）：版面同 `card` 網格（桌面 2 欄、手機 1 欄），價位列沿用進出點卡的顏色；右上狀態 badge 加資料日期 badge。狀態 badge 對照：待觸發 primary、已觸發 warning、達標 success、失效 error、無法比較 warning、到期／期滿結算／已取消 預設（無色）。行情更正待核對用 warning 框（`warning-box`），模擬報酬用 mono 600、不上漲跌色（模擬結果不是行情）。「加入追蹤」是 `btn-secondary`、「取消追蹤」是 `btn-ghost`，兩者都不用主按鈕。
 - 候選清單理由：照 API 順序全部顯示（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。
 
 ## 8. 無障礙與動效
