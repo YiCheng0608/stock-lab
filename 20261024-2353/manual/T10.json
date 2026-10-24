@@ -1,0 +1,111 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-10-22",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 162,
+        "exchange": "TWSE",
+        "symbol": "1712",
+        "name": "興農",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 40.25,
+        "entry_zone": {
+          "low": 39.87,
+          "high": 40.31
+        },
+        "invalid_price": 39.81,
+        "target_1": 40.95,
+        "target_2": 41.57,
+        "risk_reward": 1.5909,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線、距均線 0.4%，籌碼分項 90 分最高：三大法人 5 日與 20 日皆淨買超。技術 82 分，所屬「化學」產業熱度第 8。",
+        "levels": "規則的進場區為 39.87～40.31，條件失效的停損 39.81 僅略低於進場區下緣，距離很近。第一目標 40.95、第二目標 41.57，第一目標 RR 約 1.59。",
+        "risks": "新聞情緒 47 分且近 3 日無關聯新聞，該分項缺乏實質依據。回踩當日量比僅 0.7，停損距離很窄。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-24T06:54:08.519461+00:00",
+        "input_hash": "df599e17bf91c6e929e40ca94a41b2b833d02f58289c8fa9bc33934fb6061ffc"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 835,
+        "exchange": "TWSE",
+        "symbol": "6416",
+        "name": "瑞祺電通",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 119.5,
+        "entry_zone": {
+          "low": 116.72,
+          "high": 121.47
+        },
+        "invalid_price": 114.75,
+        "target_1": 127.1,
+        "target_2": 133.75,
+        "risk_reward": 1.6,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "技術分項 92 分最高，回測 20 日均線、距均線 0.3%；三大法人 5 日與 20 日淨買超，籌碼 76 分。所屬「通信網路」熱度第 15。",
+        "levels": "規則的進場區為 116.72～121.47，條件失效的停損 114.75 低於進場區下緣。第一目標 127.1、第二目標 133.75，第一目標 RR 為 1.6。",
+        "risks": "族群分項僅 58 分，產業熱度排名偏後。近 5 日法人買超僅約 20 日均量的 0.55 倍，新聞無關聯資料，情緒 47 分缺乏依據。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-24T06:54:08.519461+00:00",
+        "input_hash": "bcf69ff0a079c187d76330dafa141e4207db13760f00b643c7d9784abd1c0069"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 482,
+        "exchange": "TWSE",
+        "symbol": "2880",
+        "name": "華南金",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 50.3,
+        "entry_zone": {
+          "low": 50.3,
+          "high": 50.3
+        },
+        "invalid_price": 48.89,
+        "target_1": 52.55,
+        "target_2": 54.52,
+        "risk_reward": 1.5957,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破 20 日高點、量比 1.4，籌碼 93 分、新聞情緒 95 分、族群 82 分偏高；所屬「金融」熱度第 7，三大法人 5 日淨買超。",
+        "levels": "突破條件的規則進場區為單一價 50.3，條件失效的停損 48.89，兩者有一段距離。第一目標 52.55、第二目標 54.52，第一目標 RR 約 1.6。",
+        "risks": "技術分項僅 40 分偏低。新聞情緒高分來自 AI 推論，而關聯新聞方向有 mixed、positive、unknown 並存，且整併案仍待主管機關核准。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-24T06:54:08.519461+00:00",
+        "input_hash": "ecff368d793206200e7afc398b32e7ef7ef96c24f58283db8d8c196ff0043e0a"
+      }
+    }
+  ]
+}

@@ -1,0 +1,645 @@
+{
+  "items": [
+    {
+      "theme_id": "theme-financial-holding",
+      "display_name": "金控",
+      "description": "旗下整合銀行、壽險、產險、證券與投信等子公司的金融控股公司。",
+      "board": "theme",
+      "rank": 1,
+      "score": 93.43,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.9090909090909091,
+        "breadth": 1.0,
+        "volume_strength": 0.8181818181818182,
+        "institutional_flow": 1.0,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.02695172119492926,
+        "5d": 0.03442246208894908,
+        "20d": 0.08177176957177672
+      },
+      "eligible_members": 6,
+      "member_count": 6,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2886",
+        "2884",
+        "2891",
+        "2885"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "488",
+          "exchange": "TWSE",
+          "symbol": "2886"
+        },
+        {
+          "instrument_id": "486",
+          "exchange": "TWSE",
+          "symbol": "2884"
+        },
+        {
+          "instrument_id": "492",
+          "exchange": "TWSE",
+          "symbol": "2891"
+        },
+        {
+          "instrument_id": "487",
+          "exchange": "TWSE",
+          "symbol": "2885"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-abf-substrate",
+      "display_name": "ABF 載板",
+      "description": "生產 ABF（FC-BGA）等高階 IC 載板，供 CPU、GPU 與 AI 加速晶片封裝使用的載板廠。",
+      "board": "theme",
+      "rank": 2,
+      "score": 78.37,
+      "quality": "partial",
+      "components": {
+        "relative_return": 1.0,
+        "breadth": 0.7666666666666666,
+        "volume_strength": 0.7272727272727273,
+        "institutional_flow": 0.36363636363636365,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": -0.013072627102092152,
+        "5d": 0.005424355910622254,
+        "20d": 0.18494624471877208
+      },
+      "eligible_members": 3,
+      "member_count": 3,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "8046",
+        "3189",
+        "3037"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "997",
+          "exchange": "TWSE",
+          "symbol": "8046"
+        },
+        {
+          "instrument_id": "575",
+          "exchange": "TWSE",
+          "symbol": "3189"
+        },
+        {
+          "instrument_id": "541",
+          "exchange": "TWSE",
+          "symbol": "3037"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-ai-server",
+      "display_name": "AI 伺服器",
+      "description": "設計、組裝與出貨 AI 伺服器、GPU 機櫃與資料中心伺服器系統的代工廠與品牌廠。",
+      "board": "theme",
+      "rank": 3,
+      "score": 70.36,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.7272727272727273,
+        "breadth": 0.5875,
+        "volume_strength": 0.6363636363636364,
+        "institutional_flow": 0.9090909090909091,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": -0.003543961734191331,
+        "5d": 0.03224973662395231,
+        "20d": 0.0008237641063082585
+      },
+      "eligible_members": 8,
+      "member_count": 8,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "3231",
+        "3706",
+        "2357",
+        "2317"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "578",
+          "exchange": "TWSE",
+          "symbol": "3231"
+        },
+        {
+          "instrument_id": "643",
+          "exchange": "TWSE",
+          "symbol": "3706"
+        },
+        {
+          "instrument_id": "299",
+          "exchange": "TWSE",
+          "symbol": "2357"
+        },
+        {
+          "instrument_id": "274",
+          "exchange": "TWSE",
+          "symbol": "2317"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-biotech-pharma",
+      "display_name": "生技製藥",
+      "description": "新藥研發、學名藥與特色藥製造，以及藥品與生物藥委託開發製造（CDMO）業者。",
+      "board": "theme",
+      "rank": 4,
+      "score": 63.45,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.8181818181818182,
+        "breadth": 0.6166666666666667,
+        "volume_strength": 0.36363636363636365,
+        "institutional_flow": 0.8181818181818182,
+        "catalyst": 0.16666666666666666
+      },
+      "relative_returns": {
+        "1d": 0.008697269531027138,
+        "5d": -0.003162624178690232,
+        "20d": 0.031925451875205145
+      },
+      "eligible_members": 6,
+      "member_count": 6,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4743",
+        "6446",
+        "4162",
+        "1795"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1724",
+          "exchange": "TPEx",
+          "symbol": "4743"
+        },
+        {
+          "instrument_id": "841",
+          "exchange": "TWSE",
+          "symbol": "6446"
+        },
+        {
+          "instrument_id": "1653",
+          "exchange": "TPEx",
+          "symbol": "4162"
+        },
+        {
+          "instrument_id": "190",
+          "exchange": "TWSE",
+          "symbol": "1795"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-thermal",
+      "display_name": "散熱",
+      "description": "供應 AI 伺服器與資料中心用水冷板、液冷系統、均熱片、風扇與熱交換器等散熱元件與模組的廠商。",
+      "board": "theme",
+      "rank": 5,
+      "score": 57.32,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.6363636363636364,
+        "breadth": 0.3,
+        "volume_strength": 0.9090909090909091,
+        "institutional_flow": 0.5454545454545454,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": -0.019510710131270148,
+        "5d": -0.010016469711022139,
+        "20d": 0.0011177142378771914
+      },
+      "eligible_members": 6,
+      "member_count": 6,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "3653",
+        "8996",
+        "6230",
+        "2421"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "630",
+          "exchange": "TWSE",
+          "symbol": "3653"
+        },
+        {
+          "instrument_id": "1046",
+          "exchange": "TWSE",
+          "symbol": "8996"
+        },
+        {
+          "instrument_id": "816",
+          "exchange": "TWSE",
+          "symbol": "6230"
+        },
+        {
+          "instrument_id": "342",
+          "exchange": "TWSE",
+          "symbol": "2421"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-heavy-electrical",
+      "display_name": "重電",
+      "description": "生產電力變壓器、氣體絕緣開關（GIS）與配電設備，受惠電網強化與資料中心用電需求的重電廠。",
+      "board": "theme",
+      "rank": 6,
+      "score": 47.78,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.5454545454545454,
+        "breadth": 0.52,
+        "volume_strength": 0.09090909090909091,
+        "institutional_flow": 0.6363636363636364,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.006914645467782398,
+        "5d": -0.0041836996712822485,
+        "20d": -0.013768932309548653
+      },
+      "eligible_members": 5,
+      "member_count": 5,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1504",
+        "1503",
+        "1514",
+        "1513"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "103",
+          "exchange": "TWSE",
+          "symbol": "1504"
+        },
+        {
+          "instrument_id": "102",
+          "exchange": "TWSE",
+          "symbol": "1503"
+        },
+        {
+          "instrument_id": "107",
+          "exchange": "TWSE",
+          "symbol": "1514"
+        },
+        {
+          "instrument_id": "106",
+          "exchange": "TWSE",
+          "symbol": "1513"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-leo-satellite",
+      "display_name": "低軌衛星",
+      "description": "低軌衛星本體與酬載元件、衛星用印刷電路板、射頻模組，以及地面站與用戶終端設備等通訊供應鏈。",
+      "board": "theme",
+      "rank": 7,
+      "score": 47.37,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.45454545454545453,
+        "breadth": 0.41428571428571426,
+        "volume_strength": 1.0,
+        "institutional_flow": 0.09090909090909091,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": -0.026075621214466542,
+        "5d": -0.010206827430937244,
+        "20d": -0.025792660933939917
+      },
+      "eligible_members": 7,
+      "member_count": 7,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2312",
+        "2313",
+        "6285",
+        "3138"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "270",
+          "exchange": "TWSE",
+          "symbol": "2312"
+        },
+        {
+          "instrument_id": "271",
+          "exchange": "TWSE",
+          "symbol": "2313"
+        },
+        {
+          "instrument_id": "829",
+          "exchange": "TWSE",
+          "symbol": "6285"
+        },
+        {
+          "instrument_id": "569",
+          "exchange": "TWSE",
+          "symbol": "3138"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-electric-vehicle",
+      "display_name": "電動車",
+      "description": "電動車動力系統、減速齒輪、高壓線束、車載充電與充電樁等零組件，以及電動車銷售相關業者。",
+      "board": "theme",
+      "rank": 8,
+      "score": 33.01,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.36363636363636365,
+        "breadth": 0.24285714285714285,
+        "volume_strength": 0.5454545454545454,
+        "institutional_flow": 0.18181818181818182,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.0011774126032068383,
+        "5d": -0.01204429722885896,
+        "20d": -0.04445757283623248
+      },
+      "eligible_members": 7,
+      "member_count": 7,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2207",
+        "6282",
+        "1533",
+        "1536"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "248",
+          "exchange": "TWSE",
+          "symbol": "2207"
+        },
+        {
+          "instrument_id": "827",
+          "exchange": "TWSE",
+          "symbol": "6282"
+        },
+        {
+          "instrument_id": "123",
+          "exchange": "TWSE",
+          "symbol": "1533"
+        },
+        {
+          "instrument_id": "125",
+          "exchange": "TWSE",
+          "symbol": "1536"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-memory",
+      "display_name": "記憶體",
+      "description": "DRAM、NOR／NAND Flash 記憶體晶片製造商，以及快閃記憶體控制晶片、記憶體模組與儲存品牌廠。",
+      "board": "theme",
+      "rank": 9,
+      "score": 27.23,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.09090909090909091,
+        "breadth": 0.21666666666666667,
+        "volume_strength": 0.18181818181818182,
+        "institutional_flow": 0.7272727272727273,
+        "catalyst": 0.5
+      },
+      "relative_returns": {
+        "1d": -0.007332904516190508,
+        "5d": -0.007284892652114054,
+        "20d": -0.10798327584170907
+      },
+      "eligible_members": 6,
+      "member_count": 6,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4967",
+        "2344",
+        "8299",
+        "3260"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "727",
+          "exchange": "TWSE",
+          "symbol": "4967"
+        },
+        {
+          "instrument_id": "288",
+          "exchange": "TWSE",
+          "symbol": "2344"
+        },
+        {
+          "instrument_id": "2225",
+          "exchange": "TPEx",
+          "symbol": "8299"
+        },
+        {
+          "instrument_id": "1511",
+          "exchange": "TPEx",
+          "symbol": "3260"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-semiconductor-equipment",
+      "display_name": "半導體設備",
+      "description": "供應晶圓廠與封測廠製程設備、設備次系統，以及無塵室與廠務工程的廠商。",
+      "board": "theme",
+      "rank": 10,
+      "score": 22.49,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.2727272727272727,
+        "breadth": 0.2875,
+        "volume_strength": 0.0,
+        "institutional_flow": 0.2727272727272727,
+        "catalyst": 0.16666666666666666
+      },
+      "relative_returns": {
+        "1d": -0.015043975831548304,
+        "5d": -0.040585298988019325,
+        "20d": -0.030693778238942607
+      },
+      "eligible_members": 8,
+      "member_count": 8,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6196",
+        "6187",
+        "3413",
+        "2404"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "802",
+          "exchange": "TWSE",
+          "symbol": "6196"
+        },
+        {
+          "instrument_id": "1919",
+          "exchange": "TPEx",
+          "symbol": "6187"
+        },
+        {
+          "instrument_id": "593",
+          "exchange": "TWSE",
+          "symbol": "3413"
+        },
+        {
+          "instrument_id": "330",
+          "exchange": "TWSE",
+          "symbol": "2404"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-cowos",
+      "display_name": "CoWoS 先進封裝",
+      "description": "以 CoWoS 為核心的 2.5D／3D 先進封裝，含晶圓代工與封測產能，以及濕製程、點膠、挑揀與黏晶等設備和測試供應鏈。",
+      "board": "theme",
+      "rank": 11,
+      "score": 19.13,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.18181818181818182,
+        "breadth": 0.17142857142857143,
+        "volume_strength": 0.45454545454545453,
+        "institutional_flow": 0.0,
+        "catalyst": 0.16666666666666666
+      },
+      "relative_returns": {
+        "1d": -0.02449504505004485,
+        "5d": -0.041617755449456194,
+        "20d": -0.06132370111144314
+      },
+      "eligible_members": 7,
+      "member_count": 7,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6187",
+        "3711",
+        "2330",
+        "2449"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1919",
+          "exchange": "TPEx",
+          "symbol": "6187"
+        },
+        {
+          "instrument_id": "645",
+          "exchange": "TWSE",
+          "symbol": "3711"
+        },
+        {
+          "instrument_id": "281",
+          "exchange": "TWSE",
+          "symbol": "2330"
+        },
+        {
+          "instrument_id": "362",
+          "exchange": "TWSE",
+          "symbol": "2449"
+        }
+      ]
+    },
+    {
+      "theme_id": "theme-silicon-photonics",
+      "display_name": "矽光子／光通訊",
+      "description": "資料中心與電信用光通訊元件，涵蓋雷射與磊晶片、光收發模組、光纖連接與被動元件，以及矽光子／CPO 供應鏈。",
+      "board": "theme",
+      "rank": 12,
+      "score": 17.47,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.0,
+        "breadth": 0.0625,
+        "volume_strength": 0.2727272727272727,
+        "institutional_flow": 0.45454545454545453,
+        "catalyst": 0.5
+      },
+      "relative_returns": {
+        "1d": -0.052060457599174215,
+        "5d": -0.0772914851708115,
+        "20d": -0.11254481788901582
+      },
+      "eligible_members": 8,
+      "member_count": 8,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6187",
+        "4977",
+        "6442",
+        "3163"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1919",
+          "exchange": "TPEx",
+          "symbol": "6187"
+        },
+        {
+          "instrument_id": "730",
+          "exchange": "TWSE",
+          "symbol": "4977"
+        },
+        {
+          "instrument_id": "839",
+          "exchange": "TWSE",
+          "symbol": "6442"
+        },
+        {
+          "instrument_id": "1485",
+          "exchange": "TPEx",
+          "symbol": "3163"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "board": "theme",
+    "requested_date": null,
+    "trading_date": "2026-10-22",
+    "data_as_of": "2026-10-22",
+    "limit": 100,
+    "total": 12,
+    "sort": "rank asc",
+    "empty_reason": null,
+    "empty_message": null
+  }
+}

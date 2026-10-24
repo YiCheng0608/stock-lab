@@ -1,0 +1,1817 @@
+{
+  "items": [
+    {
+      "theme_id": "official-industry-b597d5609a60578d",
+      "display_name": "鋼鐵",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 1,
+      "score": 94.9,
+      "quality": "partial",
+      "components": {
+        "relative_return": 1.0,
+        "breadth": 0.9617021276595745,
+        "volume_strength": 0.7575757575757576,
+        "institutional_flow": 1.0,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.02024847111520128,
+        "5d": 0.03915228290734505,
+        "20d": 0.10533439075594572
+      },
+      "eligible_members": 47,
+      "member_count": 48,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2033",
+        "5013",
+        "2069",
+        "2030"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "226",
+          "exchange": "TWSE",
+          "symbol": "2033"
+        },
+        {
+          "instrument_id": "1761",
+          "exchange": "TPEx",
+          "symbol": "5013"
+        },
+        {
+          "instrument_id": "232",
+          "exchange": "TWSE",
+          "symbol": "2069"
+        },
+        {
+          "instrument_id": "223",
+          "exchange": "TWSE",
+          "symbol": "2030"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-3dc064dd4f87e891",
+      "display_name": "資訊服務",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 2,
+      "score": 94.35,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.9696969696969697,
+        "breadth": 0.8711111111111112,
+        "volume_strength": 1.0,
+        "institutional_flow": 0.9090909090909091,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.03456271707653536,
+        "5d": 0.05412356672719814,
+        "20d": 0.08117249098755715
+      },
+      "eligible_members": 45,
+      "member_count": 45,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6751",
+        "6240",
+        "8099",
+        "3147"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2071",
+          "exchange": "TPEx",
+          "symbol": "6751"
+        },
+        {
+          "instrument_id": "1947",
+          "exchange": "TPEx",
+          "symbol": "6240"
+        },
+        {
+          "instrument_id": "2203",
+          "exchange": "TPEx",
+          "symbol": "8099"
+        },
+        {
+          "instrument_id": "1481",
+          "exchange": "TPEx",
+          "symbol": "3147"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-4c9bd2fdec1b2e5f",
+      "display_name": "水泥",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 3,
+      "score": 92.29,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.8787878787878788,
+        "breadth": 0.9285714285714286,
+        "volume_strength": 0.9696969696969697,
+        "institutional_flow": 0.9696969696969697,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.030565730074668434,
+        "5d": 0.03051104205599223,
+        "20d": 0.06247099509544191
+      },
+      "eligible_members": 7,
+      "member_count": 7,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1101",
+        "1102",
+        "1103",
+        "1104"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1",
+          "exchange": "TWSE",
+          "symbol": "1101"
+        },
+        {
+          "instrument_id": "2",
+          "exchange": "TWSE",
+          "symbol": "1102"
+        },
+        {
+          "instrument_id": "3",
+          "exchange": "TWSE",
+          "symbol": "1103"
+        },
+        {
+          "instrument_id": "4",
+          "exchange": "TWSE",
+          "symbol": "1104"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-8e1a4638fc0921b6",
+      "display_name": "玻璃陶瓷",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 4,
+      "score": 79.97,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.9393939393939394,
+        "breadth": 0.8,
+        "volume_strength": 0.8484848484848485,
+        "institutional_flow": 0.42424242424242425,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.010862696971838082,
+        "5d": 0.05312797851015196,
+        "20d": 0.07939756092175887
+      },
+      "eligible_members": 5,
+      "member_count": 5,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1809",
+        "1802",
+        "1817",
+        "1806"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "195",
+          "exchange": "TWSE",
+          "symbol": "1809"
+        },
+        {
+          "instrument_id": "191",
+          "exchange": "TWSE",
+          "symbol": "1802"
+        },
+        {
+          "instrument_id": "197",
+          "exchange": "TWSE",
+          "symbol": "1817"
+        },
+        {
+          "instrument_id": "193",
+          "exchange": "TWSE",
+          "symbol": "1806"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-622a959665312ecd",
+      "display_name": "數位雲端",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 5,
+      "score": 79.8,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.8181818181818182,
+        "breadth": 0.664864864864865,
+        "volume_strength": 0.8787878787878788,
+        "institutional_flow": 0.7575757575757576,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.01260651345441976,
+        "5d": 0.029363897336310493,
+        "20d": 0.033159816061354694
+      },
+      "eligible_members": 37,
+      "member_count": 40,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6925",
+        "7547",
+        "6689",
+        "6811"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2111",
+          "exchange": "TPEx",
+          "symbol": "6925"
+        },
+        {
+          "instrument_id": "2125",
+          "exchange": "TPEx",
+          "symbol": "7547"
+        },
+        {
+          "instrument_id": "886",
+          "exchange": "TWSE",
+          "symbol": "6689"
+        },
+        {
+          "instrument_id": "2082",
+          "exchange": "TPEx",
+          "symbol": "6811"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-08bca509e5c168ba",
+      "display_name": "貿易百貨",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 6,
+      "score": 74.62,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.696969696969697,
+        "breadth": 0.7833333333333333,
+        "volume_strength": 0.6060606060606061,
+        "institutional_flow": 0.9393939393939394,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.01798784328800321,
+        "5d": 0.010685188526168652,
+        "20d": 0.029767267921384694
+      },
+      "eligible_members": 18,
+      "member_count": 18,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2939",
+        "2901",
+        "2912",
+        "8429"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "508",
+          "exchange": "TWSE",
+          "symbol": "2939"
+        },
+        {
+          "instrument_id": "495",
+          "exchange": "TWSE",
+          "symbol": "2901"
+        },
+        {
+          "instrument_id": "503",
+          "exchange": "TWSE",
+          "symbol": "2912"
+        },
+        {
+          "instrument_id": "1026",
+          "exchange": "TWSE",
+          "symbol": "8429"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-94d658309b8d4f69",
+      "display_name": "金融",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 7,
+      "score": 70.6,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.7272727272727273,
+        "breadth": 0.7150000000000001,
+        "volume_strength": 0.7878787878787878,
+        "institutional_flow": 0.696969696969697,
+        "catalyst": 0.5
+      },
+      "relative_returns": {
+        "1d": 0.017210590903396755,
+        "5d": 0.008276904723938012,
+        "20d": 0.03916681504963261
+      },
+      "eligible_members": 40,
+      "member_count": 40,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6021",
+        "5876",
+        "6028",
+        "2886"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1870",
+          "exchange": "TPEx",
+          "symbol": "6021"
+        },
+        {
+          "instrument_id": "770",
+          "exchange": "TWSE",
+          "symbol": "5876"
+        },
+        {
+          "instrument_id": "1873",
+          "exchange": "TPEx",
+          "symbol": "6028"
+        },
+        {
+          "instrument_id": "488",
+          "exchange": "TWSE",
+          "symbol": "2886"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-630bc61b2b964225",
+      "display_name": "化學",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 8,
+      "score": 67.67,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.9090909090909091,
+        "breadth": 0.6642857142857143,
+        "volume_strength": 0.18181818181818182,
+        "institutional_flow": 0.5454545454545454,
+        "catalyst": 0.8333333333333334
+      },
+      "relative_returns": {
+        "1d": 0.002190327535345958,
+        "5d": 0.018742791855952606,
+        "20d": 0.08406276212251408
+      },
+      "eligible_members": 42,
+      "member_count": 42,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4720",
+        "4741",
+        "4706",
+        "1709"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "695",
+          "exchange": "TWSE",
+          "symbol": "4720"
+        },
+        {
+          "instrument_id": "1723",
+          "exchange": "TPEx",
+          "symbol": "4741"
+        },
+        {
+          "instrument_id": "1713",
+          "exchange": "TPEx",
+          "symbol": "4706"
+        },
+        {
+          "instrument_id": "159",
+          "exchange": "TWSE",
+          "symbol": "1709"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-cb36c72bfd3b425e",
+      "display_name": "橡膠",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 9,
+      "score": 67.51,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.7878787878787878,
+        "breadth": 0.8,
+        "volume_strength": 0.030303030303030304,
+        "institutional_flow": 0.8484848484848485,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.015622575430702527,
+        "5d": 0.004956842606911518,
+        "20d": 0.0445909609041393
+      },
+      "eligible_members": 11,
+      "member_count": 11,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2104",
+        "2107",
+        "2105",
+        "6582"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "237",
+          "exchange": "TWSE",
+          "symbol": "2104"
+        },
+        {
+          "instrument_id": "240",
+          "exchange": "TWSE",
+          "symbol": "2107"
+        },
+        {
+          "instrument_id": "238",
+          "exchange": "TWSE",
+          "symbol": "2105"
+        },
+        {
+          "instrument_id": "864",
+          "exchange": "TWSE",
+          "symbol": "6582"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-8cabceddc30db448",
+      "display_name": "居家生活",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 10,
+      "score": 65.11,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.6363636363636364,
+        "breadth": 0.8527777777777777,
+        "volume_strength": 0.9393939393939394,
+        "institutional_flow": 0.2727272727272727,
+        "catalyst": 0.3333333333333333
+      },
+      "relative_returns": {
+        "1d": 0.015802543842178933,
+        "5d": 0.009096055830662043,
+        "20d": 0.029876372021808276
+      },
+      "eligible_members": 36,
+      "member_count": 36,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4609",
+        "3067",
+        "2924",
+        "6616"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1711",
+          "exchange": "TPEx",
+          "symbol": "4609"
+        },
+        {
+          "instrument_id": "1462",
+          "exchange": "TPEx",
+          "symbol": "3067"
+        },
+        {
+          "instrument_id": "1453",
+          "exchange": "TPEx",
+          "symbol": "2924"
+        },
+        {
+          "instrument_id": "2032",
+          "exchange": "TPEx",
+          "symbol": "6616"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-17a9540aad5c19fa",
+      "display_name": "塑膠",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 11,
+      "score": 64.0,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.8484848484848485,
+        "breadth": 0.6434782608695653,
+        "volume_strength": 0.15151515151515152,
+        "institutional_flow": 0.6363636363636364,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.009393959692355772,
+        "5d": -0.007996261477223775,
+        "20d": 0.060552946030130124
+      },
+      "eligible_members": 23,
+      "member_count": 25,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1303",
+        "1301",
+        "9950",
+        "1310"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "29",
+          "exchange": "TWSE",
+          "symbol": "1303"
+        },
+        {
+          "instrument_id": "28",
+          "exchange": "TWSE",
+          "symbol": "1301"
+        },
+        {
+          "instrument_id": "2278",
+          "exchange": "TPEx",
+          "symbol": "9950"
+        },
+        {
+          "instrument_id": "35",
+          "exchange": "TWSE",
+          "symbol": "1310"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-35423f5368e5eefd",
+      "display_name": "文化創意",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 12,
+      "score": 63.49,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.5151515151515151,
+        "breadth": 0.764,
+        "volume_strength": 0.6363636363636364,
+        "institutional_flow": 0.7878787878787878,
+        "catalyst": 0.5
+      },
+      "relative_returns": {
+        "1d": 0.015943557611987624,
+        "5d": 0.015408574405917355,
+        "20d": 0.022343462737133443
+      },
+      "eligible_members": 25,
+      "member_count": 26,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "7584",
+        "4806",
+        "3293",
+        "6144"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2127",
+          "exchange": "TPEx",
+          "symbol": "7584"
+        },
+        {
+          "instrument_id": "1735",
+          "exchange": "TPEx",
+          "symbol": "4806"
+        },
+        {
+          "instrument_id": "1523",
+          "exchange": "TPEx",
+          "symbol": "3293"
+        },
+        {
+          "instrument_id": "1895",
+          "exchange": "TPEx",
+          "symbol": "6144"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-b1831c6fca471e0d",
+      "display_name": "其他",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 13,
+      "score": 63.29,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.7575757575757576,
+        "breadth": 0.7255555555555555,
+        "volume_strength": 0.24242424242424243,
+        "institutional_flow": 0.3333333333333333,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.011504589164720356,
+        "5d": 0.016502694289373072,
+        "20d": 0.03713708937931875
+      },
+      "eligible_members": 90,
+      "member_count": 94,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "8437",
+        "6957",
+        "4556",
+        "6199"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2247",
+          "exchange": "TPEx",
+          "symbol": "8437"
+        },
+        {
+          "instrument_id": "952",
+          "exchange": "TWSE",
+          "symbol": "6957"
+        },
+        {
+          "instrument_id": "1703",
+          "exchange": "TPEx",
+          "symbol": "4556"
+        },
+        {
+          "instrument_id": "1925",
+          "exchange": "TPEx",
+          "symbol": "6199"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-427c8d2e58996415",
+      "display_name": "光電",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 14,
+      "score": 60.27,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.6666666666666666,
+        "breadth": 0.5499999999999999,
+        "volume_strength": 0.3939393939393939,
+        "institutional_flow": 0.48484848484848486,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": -0.003702477902913761,
+        "5d": 0.013479419121283169,
+        "20d": 0.03620272528076349
+      },
+      "eligible_members": 116,
+      "member_count": 116,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2466",
+        "6278",
+        "6456",
+        "6225"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "376",
+          "exchange": "TWSE",
+          "symbol": "2466"
+        },
+        {
+          "instrument_id": "825",
+          "exchange": "TWSE",
+          "symbol": "6278"
+        },
+        {
+          "instrument_id": "844",
+          "exchange": "TWSE",
+          "symbol": "6456"
+        },
+        {
+          "instrument_id": "814",
+          "exchange": "TWSE",
+          "symbol": "6225"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-657bfca32dacb091",
+      "display_name": "通信網路",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 15,
+      "score": 59.0,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.42424242424242425,
+        "breadth": 0.5842696629213483,
+        "volume_strength": 0.42424242424242425,
+        "institutional_flow": 0.8787878787878788,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": -0.005551459119941365,
+        "5d": 0.014405768392908344,
+        "20d": 0.028862592957765484
+      },
+      "eligible_members": 89,
+      "member_count": 92,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "3632",
+        "2424",
+        "8089",
+        "3564"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1610",
+          "exchange": "TPEx",
+          "symbol": "3632"
+        },
+        {
+          "instrument_id": "344",
+          "exchange": "TWSE",
+          "symbol": "2424"
+        },
+        {
+          "instrument_id": "2197",
+          "exchange": "TPEx",
+          "symbol": "8089"
+        },
+        {
+          "instrument_id": "1591",
+          "exchange": "TPEx",
+          "symbol": "3564"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-619f4b496b333d8f",
+      "display_name": "電子零組件",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 16,
+      "score": 58.7,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.5757575757575758,
+        "breadth": 0.48750000000000004,
+        "volume_strength": 0.7272727272727273,
+        "institutional_flow": 0.36363636363636365,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": -0.015356863974558035,
+        "5d": -0.0068029023194277295,
+        "20d": 0.050085158893368995
+      },
+      "eligible_members": 208,
+      "member_count": 210,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6672",
+        "3597",
+        "3354",
+        "5228"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "884",
+          "exchange": "TWSE",
+          "symbol": "6672"
+        },
+        {
+          "instrument_id": "1599",
+          "exchange": "TPEx",
+          "symbol": "3597"
+        },
+        {
+          "instrument_id": "1538",
+          "exchange": "TPEx",
+          "symbol": "3354"
+        },
+        {
+          "instrument_id": "1777",
+          "exchange": "TPEx",
+          "symbol": "5228"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-d60be8febbae1cd6",
+      "display_name": "電腦及週邊",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 17,
+      "score": 57.16,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.3939393939393939,
+        "breadth": 0.5165137614678899,
+        "volume_strength": 0.5454545454545454,
+        "institutional_flow": 0.8181818181818182,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.0010845114648355039,
+        "5d": 0.02012859411493485,
+        "20d": 0.022060473220230182
+      },
+      "eligible_members": 109,
+      "member_count": 109,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "3625",
+        "3287",
+        "5465",
+        "1569"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1605",
+          "exchange": "TPEx",
+          "symbol": "3625"
+        },
+        {
+          "instrument_id": "1519",
+          "exchange": "TPEx",
+          "symbol": "3287"
+        },
+        {
+          "instrument_id": "1828",
+          "exchange": "TPEx",
+          "symbol": "5465"
+        },
+        {
+          "instrument_id": "1400",
+          "exchange": "TPEx",
+          "symbol": "1569"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-d88d011b051a09df",
+      "display_name": "觀光餐旅",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 18,
+      "score": 55.99,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.24242424242424243,
+        "breadth": 0.827659574468085,
+        "volume_strength": 0.6666666666666666,
+        "institutional_flow": 0.45454545454545453,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.015526296958052672,
+        "5d": 0.011610042182003368,
+        "20d": 0.014623959467217899
+      },
+      "eligible_members": 47,
+      "member_count": 51,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "5301",
+        "2727",
+        "2723",
+        "4419"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1790",
+          "exchange": "TPEx",
+          "symbol": "5301"
+        },
+        {
+          "instrument_id": "462",
+          "exchange": "TWSE",
+          "symbol": "2727"
+        },
+        {
+          "instrument_id": "461",
+          "exchange": "TWSE",
+          "symbol": "2723"
+        },
+        {
+          "instrument_id": "1677",
+          "exchange": "TPEx",
+          "symbol": "4419"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-0435ae1f54a7615d",
+      "display_name": "航運",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 19,
+      "score": 55.02,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.48484848484848486,
+        "breadth": 0.7382352941176471,
+        "volume_strength": 0.2727272727272727,
+        "institutional_flow": 0.6666666666666666,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.016665899940447627,
+        "5d": 0.009731266800040354,
+        "20d": 0.024346290624028846
+      },
+      "eligible_members": 34,
+      "member_count": 34,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2611",
+        "2603",
+        "5601",
+        "5603"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "437",
+          "exchange": "TWSE",
+          "symbol": "2611"
+        },
+        {
+          "instrument_id": "430",
+          "exchange": "TWSE",
+          "symbol": "2603"
+        },
+        {
+          "instrument_id": "1854",
+          "exchange": "TPEx",
+          "symbol": "5601"
+        },
+        {
+          "instrument_id": "1855",
+          "exchange": "TPEx",
+          "symbol": "5603"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-5d53b598ae47c823",
+      "display_name": "油電燃氣",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 20,
+      "score": 54.55,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.5454545454545454,
+        "breadth": 0.7818181818181817,
+        "volume_strength": 0.696969696969697,
+        "institutional_flow": 0.0,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.01596206274679569,
+        "5d": 0.001421203505553152,
+        "20d": 0.03186991097819838
+      },
+      "eligible_members": 11,
+      "member_count": 13,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6505",
+        "8917",
+        "9937",
+        "9931"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "850",
+          "exchange": "TWSE",
+          "symbol": "6505"
+        },
+        {
+          "instrument_id": "2260",
+          "exchange": "TPEx",
+          "symbol": "8917"
+        },
+        {
+          "instrument_id": "1083",
+          "exchange": "TWSE",
+          "symbol": "9937"
+        },
+        {
+          "instrument_id": "1079",
+          "exchange": "TWSE",
+          "symbol": "9931"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-b3e4fde64ad389a7",
+      "display_name": "電機機械",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 21,
+      "score": 53.6,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.36363636363636365,
+        "breadth": 0.6168421052631579,
+        "volume_strength": 0.5151515151515151,
+        "institutional_flow": 0.5151515151515151,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.007525353042000384,
+        "5d": 0.017789063807726234,
+        "20d": 0.017669312509974618
+      },
+      "eligible_members": 95,
+      "member_count": 102,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4566",
+        "4526",
+        "4584",
+        "4563"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "684",
+          "exchange": "TWSE",
+          "symbol": "4566"
+        },
+        {
+          "instrument_id": "672",
+          "exchange": "TWSE",
+          "symbol": "4526"
+        },
+        {
+          "instrument_id": "1710",
+          "exchange": "TPEx",
+          "symbol": "4584"
+        },
+        {
+          "instrument_id": "1706",
+          "exchange": "TPEx",
+          "symbol": "4563"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-17661791d0d765c5",
+      "display_name": "生技醫療",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 22,
+      "score": 51.15,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.30303030303030304,
+        "breadth": 0.6762820512820513,
+        "volume_strength": 0.3333333333333333,
+        "institutional_flow": 0.5757575757575758,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.011285620553657942,
+        "5d": 0.008878981346652676,
+        "20d": 0.020193567887337765
+      },
+      "eligible_members": 156,
+      "member_count": 160,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4174",
+        "6550",
+        "4188",
+        "6934"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1660",
+          "exchange": "TPEx",
+          "symbol": "4174"
+        },
+        {
+          "instrument_id": "858",
+          "exchange": "TWSE",
+          "symbol": "6550"
+        },
+        {
+          "instrument_id": "1663",
+          "exchange": "TPEx",
+          "symbol": "4188"
+        },
+        {
+          "instrument_id": "943",
+          "exchange": "TWSE",
+          "symbol": "6934"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-51ace185d35a03ab",
+      "display_name": "紡織纖維",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 23,
+      "score": 49.17,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.6060606060606061,
+        "breadth": 0.7607843137254902,
+        "volume_strength": 0.30303030303030304,
+        "institutional_flow": 0.18181818181818182,
+        "catalyst": 0.16666666666666666
+      },
+      "relative_returns": {
+        "1d": 0.01612456340753218,
+        "5d": 0.004531058937206282,
+        "20d": 0.032022407819506785
+      },
+      "eligible_members": 51,
+      "member_count": 52,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1476",
+        "1459",
+        "1477",
+        "4426"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "100",
+          "exchange": "TWSE",
+          "symbol": "1476"
+        },
+        {
+          "instrument_id": "86",
+          "exchange": "TWSE",
+          "symbol": "1459"
+        },
+        {
+          "instrument_id": "101",
+          "exchange": "TWSE",
+          "symbol": "1477"
+        },
+        {
+          "instrument_id": "667",
+          "exchange": "TWSE",
+          "symbol": "4426"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-af92f66f5a35733b",
+      "display_name": "綠能環保",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 24,
+      "score": 48.89,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.06060606060606061,
+        "breadth": 0.5434782608695652,
+        "volume_strength": 0.8181818181818182,
+        "institutional_flow": 0.7272727272727273,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.006622378874744515,
+        "5d": -0.005706465233933526,
+        "20d": 0.010873396042466456
+      },
+      "eligible_members": 46,
+      "member_count": 46,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "5205",
+        "5432",
+        "6894",
+        "4924"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1767",
+          "exchange": "TPEx",
+          "symbol": "5205"
+        },
+        {
+          "instrument_id": "1818",
+          "exchange": "TPEx",
+          "symbol": "5432"
+        },
+        {
+          "instrument_id": "2102",
+          "exchange": "TPEx",
+          "symbol": "6894"
+        },
+        {
+          "instrument_id": "1743",
+          "exchange": "TPEx",
+          "symbol": "4924"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-fcee90cdbb9794f7",
+      "display_name": "造紙",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 25,
+      "score": 41.86,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.3333333333333333,
+        "breadth": 0.7857142857142857,
+        "volume_strength": 0.36363636363636365,
+        "institutional_flow": 0.06060606060606061,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.020347274914312763,
+        "5d": -0.004583359167284521,
+        "20d": 0.02554980754112392
+      },
+      "eligible_members": 7,
+      "member_count": 7,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1904",
+        "1906",
+        "1903",
+        "6790"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "199",
+          "exchange": "TWSE",
+          "symbol": "1904"
+        },
+        {
+          "instrument_id": "201",
+          "exchange": "TWSE",
+          "symbol": "1906"
+        },
+        {
+          "instrument_id": "198",
+          "exchange": "TWSE",
+          "symbol": "1903"
+        },
+        {
+          "instrument_id": "907",
+          "exchange": "TWSE",
+          "symbol": "6790"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-03e261edf65c1bbd",
+      "display_name": "電器電纜",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 26,
+      "score": 40.63,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.45454545454545453,
+        "breadth": 0.7352941176470589,
+        "volume_strength": 0.06060606060606061,
+        "institutional_flow": 0.09090909090909091,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.009366760556396481,
+        "5d": -0.0011625354477067709,
+        "20d": 0.032755547698848114
+      },
+      "eligible_members": 17,
+      "member_count": 17,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1617",
+        "1615",
+        "2061",
+        "1614"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "152",
+          "exchange": "TWSE",
+          "symbol": "1617"
+        },
+        {
+          "instrument_id": "150",
+          "exchange": "TWSE",
+          "symbol": "1615"
+        },
+        {
+          "instrument_id": "1421",
+          "exchange": "TPEx",
+          "symbol": "2061"
+        },
+        {
+          "instrument_id": "149",
+          "exchange": "TWSE",
+          "symbol": "1614"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-a2c05fab456a3948",
+      "display_name": "建材營造",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 27,
+      "score": 40.46,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.12121212121212122,
+        "breadth": 0.6670588235294118,
+        "volume_strength": 0.48484848484848486,
+        "institutional_flow": 0.15151515151515152,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": 0.015589184598610282,
+        "5d": 0.008331873295927907,
+        "20d": 0.002142068200927919
+      },
+      "eligible_members": 85,
+      "member_count": 88,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "5516",
+        "1456",
+        "5521",
+        "3703"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1845",
+          "exchange": "TPEx",
+          "symbol": "5516"
+        },
+        {
+          "instrument_id": "84",
+          "exchange": "TWSE",
+          "symbol": "1456"
+        },
+        {
+          "instrument_id": "758",
+          "exchange": "TWSE",
+          "symbol": "5521"
+        },
+        {
+          "instrument_id": "640",
+          "exchange": "TWSE",
+          "symbol": "3703"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-075e3aa8d9c76d2c",
+      "display_name": "農業科技",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 28,
+      "score": 38.95,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.2727272727272727,
+        "breadth": 0.875,
+        "volume_strength": 0.0,
+        "institutional_flow": 0.24242424242424243,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.019830043530754876,
+        "5d": 0.018967250092236154,
+        "20d": 0.010659207380010527
+      },
+      "eligible_members": 4,
+      "member_count": 4,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4171",
+        "6578",
+        "1240",
+        "6508"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1658",
+          "exchange": "TPEx",
+          "symbol": "4171"
+        },
+        {
+          "instrument_id": "2020",
+          "exchange": "TPEx",
+          "symbol": "6578"
+        },
+        {
+          "instrument_id": "1392",
+          "exchange": "TPEx",
+          "symbol": "1240"
+        },
+        {
+          "instrument_id": "1995",
+          "exchange": "TPEx",
+          "symbol": "6508"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-1d2be0bfb026148d",
+      "display_name": "運動休閒",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 29,
+      "score": 38.11,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.15151515151515152,
+        "breadth": 0.5961538461538461,
+        "volume_strength": 0.9090909090909091,
+        "institutional_flow": 0.030303030303030304,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.008938346948655217,
+        "5d": -0.004579748808499249,
+        "20d": 0.017859526501445268
+      },
+      "eligible_members": 26,
+      "member_count": 27,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "9960",
+        "8467",
+        "9904",
+        "8462"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2280",
+          "exchange": "TPEx",
+          "symbol": "9960"
+        },
+        {
+          "instrument_id": "1035",
+          "exchange": "TWSE",
+          "symbol": "8467"
+        },
+        {
+          "instrument_id": "1059",
+          "exchange": "TWSE",
+          "symbol": "9904"
+        },
+        {
+          "instrument_id": "1031",
+          "exchange": "TWSE",
+          "symbol": "8462"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-206d1b19286222a7",
+      "display_name": "食品",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 30,
+      "score": 37.79,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.18181818181818182,
+        "breadth": 0.7606060606060606,
+        "volume_strength": 0.45454545454545453,
+        "institutional_flow": 0.12121212121212122,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.01724768144444518,
+        "5d": 0.007121772377822529,
+        "20d": 0.007778488270707986
+      },
+      "eligible_members": 33,
+      "member_count": 34,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "1216",
+        "1295",
+        "1236",
+        "1264"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "13",
+          "exchange": "TWSE",
+          "symbol": "1216"
+        },
+        {
+          "instrument_id": "1397",
+          "exchange": "TPEx",
+          "symbol": "1295"
+        },
+        {
+          "instrument_id": "26",
+          "exchange": "TWSE",
+          "symbol": "1236"
+        },
+        {
+          "instrument_id": "1394",
+          "exchange": "TPEx",
+          "symbol": "1264"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-ba2f18f84b855d0d",
+      "display_name": "汽車",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 31,
+      "score": 36.76,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.21212121212121213,
+        "breadth": 0.5534883720930233,
+        "volume_strength": 0.5757575757575758,
+        "institutional_flow": 0.21212121212121213,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.009459535227271483,
+        "5d": 0.0036565557124573506,
+        "20d": 0.018540544866428855
+      },
+      "eligible_members": 43,
+      "member_count": 44,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "2254",
+        "2241",
+        "4557",
+        "3717"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "263",
+          "exchange": "TWSE",
+          "symbol": "2254"
+        },
+        {
+          "instrument_id": "258",
+          "exchange": "TWSE",
+          "symbol": "2241"
+        },
+        {
+          "instrument_id": "680",
+          "exchange": "TWSE",
+          "symbol": "4557"
+        },
+        {
+          "instrument_id": "650",
+          "exchange": "TWSE",
+          "symbol": "3717"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-1858340d045a575f",
+      "display_name": "半導體",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 32,
+      "score": 29.0,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.0,
+        "breadth": 0.3419512195121951,
+        "volume_strength": 0.09090909090909091,
+        "institutional_flow": 0.6060606060606061,
+        "catalyst": 1.0
+      },
+      "relative_returns": {
+        "1d": -0.013907813194323023,
+        "5d": -0.007614662155835278,
+        "20d": -0.019343987101908607
+      },
+      "eligible_members": 205,
+      "member_count": 207,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "6708",
+        "7730",
+        "2340",
+        "6756"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2057",
+          "exchange": "TPEx",
+          "symbol": "6708"
+        },
+        {
+          "instrument_id": "966",
+          "exchange": "TWSE",
+          "symbol": "7730"
+        },
+        {
+          "instrument_id": "286",
+          "exchange": "TWSE",
+          "symbol": "2340"
+        },
+        {
+          "instrument_id": "898",
+          "exchange": "TWSE",
+          "symbol": "6756"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-5cb7c92a21d967ab",
+      "display_name": "其他電子",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 33,
+      "score": 28.06,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.09090909090909091,
+        "breadth": 0.48586956521739133,
+        "volume_strength": 0.21212121212121213,
+        "institutional_flow": 0.30303030303030304,
+        "catalyst": 0.5
+      },
+      "relative_returns": {
+        "1d": -0.0033134200350828334,
+        "5d": -0.004011536985103326,
+        "20d": 0.014470276732021774
+      },
+      "eligible_members": 92,
+      "member_count": 95,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "4577",
+        "8201",
+        "6877",
+        "4760"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1708",
+          "exchange": "TPEx",
+          "symbol": "4577"
+        },
+        {
+          "instrument_id": "1012",
+          "exchange": "TWSE",
+          "symbol": "8201"
+        },
+        {
+          "instrument_id": "2099",
+          "exchange": "TPEx",
+          "symbol": "6877"
+        },
+        {
+          "instrument_id": "1730",
+          "exchange": "TPEx",
+          "symbol": "4760"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-2e3a61ca7ba10648",
+      "display_name": "電子通路",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 34,
+      "score": 25.63,
+      "quality": "partial",
+      "components": {
+        "relative_return": 0.030303030303030304,
+        "breadth": 0.5710526315789474,
+        "volume_strength": 0.12121212121212122,
+        "institutional_flow": 0.3939393939393939,
+        "catalyst": null
+      },
+      "relative_returns": {
+        "1d": 0.0014550480318071414,
+        "5d": 0.0057917500069329325,
+        "20d": -0.010465812980838879
+      },
+      "eligible_members": 38,
+      "member_count": 38,
+      "trading_date": "2026-10-22",
+      "candidate_symbols": [
+        "8068",
+        "2347",
+        "3010",
+        "3048"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "2184",
+          "exchange": "TPEx",
+          "symbol": "8068"
+        },
+        {
+          "instrument_id": "290",
+          "exchange": "TWSE",
+          "symbol": "2347"
+        },
+        {
+          "instrument_id": "516",
+          "exchange": "TWSE",
+          "symbol": "3010"
+        },
+        {
+          "instrument_id": "551",
+          "exchange": "TWSE",
+          "symbol": "3048"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "board": "industry",
+    "requested_date": null,
+    "trading_date": "2026-10-22",
+    "data_as_of": "2026-10-22",
+    "limit": 100,
+    "total": 34,
+    "sort": "rank asc",
+    "empty_reason": null,
+    "empty_message": null
+  }
+}

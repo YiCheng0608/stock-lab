@@ -1,0 +1,248 @@
+{
+  "id": "2458",
+  "canonical_key": "news:cna:bd238438cffc7642322a7a57c85094c34ac1959c98df34a16de48344e108b550",
+  "dedupe_cluster_id": "news-title:866bc5a091a1c3ad907bf6fe3bf43313",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "中央社",
+  "source": {
+    "name": "中央社",
+    "url": "https://www.cna.com.tw/news/afe/202610220437.aspx",
+    "url_kind": "item"
+  },
+  "source_item_id": "CNA/2026-10-22/202610220437",
+  "title": "經濟部樂見美光與台中工會達成協議　盼桃園廠續協商",
+  "summary": "（中央社記者曾筠庭台北22日電）美光（Micron）與台灣美光記憶體工會（台中工會）昨天達成勞資協議且取得多項共識。經濟部今天晚間表示，政府樂見雙方理性溝通、共創雙贏，並指出協議涵蓋調薪、勞退提撥及輪班津貼等3大成果，更盼桃園廠持續溝通協商。",
+  "description": "（中央社記者曾筠庭台北22日電）美光（Micron）與台灣美光記憶體工會（台中工會）昨天達成勞資協議且取得多項共識。經濟部今天晚間表示，政府樂見雙方理性溝通、共創雙贏，並指出協議涵蓋調薪、勞退提撥及輪班津貼等3大成果，更盼桃園廠持續溝通協商。",
+  "summary_preview": "（中央社記者曾筠庭台北22日電）美光（Micron）與台灣美光記憶體工會（台中工會）昨天達成勞資協議且取得多項共識。經濟部今天晚間表示，政府樂見雙方理性溝通、共創雙贏，並指出協議涵蓋調薪、勞退提撥及輪班津貼等3大成果，更盼桃園廠持續溝通協…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-22T15:37:08+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-22T15:37:08+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T15:37:08+00:00",
+        "utc": "2026-10-22T15:37:08+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T18:00:03.187473+00:00",
+        "utc": "2026-10-22T18:00:03.187473+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-24T15:57:18.624670+00:00",
+    "legacy": {
+      "published_at": "2026-10-22T15:37:08+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T15:37:08",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-22T18:00:03.187473+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-24T15:57:18.624670+00:00",
+  "collected_at": "2026-10-22T18:00:03.187473+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "ba4f724c1696e0118b5c548d236bd4d103018fceb803275e8a28b1661dfe99db",
+  "detail_url": "/news/2458",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "經濟部樂見美光與台中工會達成協議，盼桃園廠續協商調薪與勞退等議題。",
+    "symbol_candidates": [],
+    "theme_candidates": [
+      {
+        "theme": "記憶體",
+        "reason": "美光為記憶體大廠，勞資協議涉及其台灣廠區營運。"
+      },
+      {
+        "theme": "半導體",
+        "reason": "勞資爭議影響台灣半導體產業人力與生產穩定性。"
+      }
+    ],
+    "impact_direction": "mixed",
+    "impact_scope": "theme",
+    "impact_rationale": "台中勞資協議降低部分爭議風險，但桃園廠仍待協商，後續影響不確定。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "9a83e345a9eaa8870eae0752bfc204a5cc7ef28e8e0f92d853c29eaef7ee7989",
+    "generated_at": "2026-10-22T18:01:09.235381+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7203,
+    "endpoint": "https://feeds.feedburner.com/rsscna/finance",
+    "data_as_of": "2026-10-22T18:00:03.187473"
+  }
+}
