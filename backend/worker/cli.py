@@ -15,6 +15,7 @@ from .industry_repair import run_industry_repair
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
+from .plan_tracking import run_plan_tracking
 from .schedule_runs import (
     PREFLIGHT_SKIP_REASONS,
     list_schedule_runs,
@@ -122,6 +123,15 @@ def main() -> None:
     candidates_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD；未指定使用最新訊號日"
     )
+    plans_parser = subparsers.add_parser(
+        "track-plans",
+        help="更新使用者追蹤計畫的模擬觸發與結果（daily 的 plan_tracking 步驟；同日重跑冪等）",
+    )
+    plans_parser.add_argument(
+        "--date",
+        dest="run_date",
+        help="YYYY-MM-DD 目標交易日；未指定使用 DB 最新日線日",
+    )
     notes_parser = subparsers.add_parser(
         "candidate-notes",
         help="以 claude -p 為每日候選產生 AI 進出點說明（同日同提示版本已完成者不重算）",
@@ -223,6 +233,8 @@ def main() -> None:
         result = run_indicator_batch(parse_date(args.run_date), rebuild=args.rebuild)
     elif args.command == "candidates":
         result = run_candidates(parse_date(args.run_date))
+    elif args.command == "track-plans":
+        result = run_plan_tracking(parse_date(args.run_date))
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -263,7 +275,7 @@ def main() -> None:
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command in {"news-llm", "candidate-notes"}:
         sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
-    if args.command == "candidates" and result.get("status") not in {
+    if args.command in {"candidates", "track-plans"} and result.get("status") not in {
         "success",
         "no_data",
     }:
