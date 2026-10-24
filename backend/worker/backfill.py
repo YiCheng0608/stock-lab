@@ -239,89 +239,64 @@ def _candidate_instrument_keys(
     result.update(_keys(signal_rows))
 
     # Group candidates are stored in the score evidence because the score is
-    # the as-of source of the candidate list.  Resolve by symbol only when the
-    # historical evidence lacks exchange provenance, retaining all matching
-    # active exchange rows rather than guessing one.
+    # the as-of source of the candidate list.  A score without the identity
+    # marker has symbol text only and contributes no candidates.
     scores = db.scalars(
         select(GroupDailyScore).where(
             GroupDailyScore.trading_date >= start_date,
             GroupDailyScore.trading_date <= end_date,
         )
     ).all()
-    symbols: set[str] = set()
     for score in scores:
         details = score.details_json
         if not isinstance(details, dict):
             continue
         values = details.get("candidate_symbols")
+        candidates = details.get("candidate_instruments")
         if (
-            "candidate_identity_version" in details
-            or "candidate_instruments" in details
+            details.get("candidate_identity_version") != "instrument-id-v1"
+            or not isinstance(values, list)
+            or len(values) > MAX_GROUP_CANDIDATES
+            or any(type(value) is not str or not value.strip() for value in values)
+            or not isinstance(candidates, list)
+            or len(candidates) > MAX_GROUP_CANDIDATES
         ):
-            candidates = details.get("candidate_instruments")
-            if (
-                details.get("candidate_identity_version") != "instrument-id-v1"
-                or not isinstance(values, list)
-                or len(values) > MAX_GROUP_CANDIDATES
-                or any(type(value) is not str or not value.strip() for value in values)
-                or not isinstance(candidates, list)
-                or len(candidates) > MAX_GROUP_CANDIDATES
-            ):
-                continue
-            identities: dict[int, tuple[str, str]] = {}
-            pairs: set[tuple[str, str]] = set()
-            valid = True
-            for candidate in candidates:
-                if not isinstance(candidate, dict):
-                    valid = False
-                    break
-                item_id = candidate.get("instrument_id")
-                exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
-                # SQLite INTEGER identities are signed 64-bit; reject an
-                # impossible ID before binding it can overflow the query.
-                if (
-                    type(item_id) is not int
-                    or not 0 < item_id <= 2**63 - 1
-                    or type(exchange) is not str
-                    or not exchange.strip()
-                    or type(symbol) is not str
-                    or not symbol.strip()
-                    or item_id in identities
-                    or (exchange, symbol) in pairs
-                ):
-                    valid = False
-                    break
-                identities[item_id] = (exchange, symbol)
-                pairs.add((exchange, symbol))
-            if not valid or [pair[1] for pair in identities.values()] != values:
-                continue
-            # Validate all DB-local identities before filtering inactive rows.
-            # A bad source must never fall back to another exchange by symbol.
-            rows = db.scalars(
-                select(Instrument).where(Instrument.id.in_(identities))
-            ).all()
-            if len(rows) != len(identities) or any(
-                identities[row.id] != (row.exchange, row.symbol) for row in rows
-            ):
-                continue
-            result.update(_keys(row for row in rows if row.status == "active"))
             continue
-        # Legacy evidence intentionally widens collection to every active
-        # exchange match. Backfill repairs coverage, so decision eligibility
-        # (membership, rank, group status, type/category) is not a prerequisite.
-        if isinstance(values, list):
-            symbols.update(str(value).strip() for value in values if str(value).strip())
-    if symbols:
-        result.update(
-            _keys(
-                db.scalars(
-                    select(Instrument).where(
-                        Instrument.symbol.in_(symbols),
-                        Instrument.status == "active",
-                    )
-                ).all()
-            )
-        )
+        identities: dict[int, tuple[str, str]] = {}
+        pairs: set[tuple[str, str]] = set()
+        valid = True
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                valid = False
+                break
+            item_id = candidate.get("instrument_id")
+            exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
+            # SQLite INTEGER identities are signed 64-bit; reject an
+            # impossible ID before binding it can overflow the query.
+            if (
+                type(item_id) is not int
+                or not 0 < item_id <= 2**63 - 1
+                or type(exchange) is not str
+                or not exchange.strip()
+                or type(symbol) is not str
+                or not symbol.strip()
+                or item_id in identities
+                or (exchange, symbol) in pairs
+            ):
+                valid = False
+                break
+            identities[item_id] = (exchange, symbol)
+            pairs.add((exchange, symbol))
+        if not valid or [pair[1] for pair in identities.values()] != values:
+            continue
+        # Validate all DB-local identities before filtering inactive rows.
+        # A bad source must never fall back to another exchange by symbol.
+        rows = db.scalars(select(Instrument).where(Instrument.id.in_(identities))).all()
+        if len(rows) != len(identities) or any(
+            identities[row.id] != (row.exchange, row.symbol) for row in rows
+        ):
+            continue
+        result.update(_keys(row for row in rows if row.status == "active"))
     return result
 
 
