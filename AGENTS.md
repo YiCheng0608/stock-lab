@@ -87,6 +87,7 @@
 | 五個主導航在假資料庫上通過 features 標「CI」的檢查（#243） | CI `verify` job（`required` 依賴它；已知產品缺陷列在 `KNOWN_FAILURES` 並附 Issue） | `tools/verify/page_checks.py`、`.github/workflows/ci.yml`（`verify` job） |
 | features 標「CI」的檢查都有實作、有實作的都標「CI」（#243） | CI `verify` job（`page_checks.py` 不一致就 exit 2）；後端測試 `test_every_ci_check_in_features_is_implemented` | `tools/verify/page_checks.py`（`registry_problems`）、`backend/tests/test_verify_checks.py` |
 | `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
+| 排程 wrapper 不用 WMI 讀記憶體：系統忙時 WMI 取消呼叫，job 連日誌都沒寫就停（#246） | 後端測試：`test_the_wrapper_source_has_no_wmi_call`（CI 也跑）；Windows 本機另有 harness 讓 WMI 一律失敗後跑 wrapper（`test_the_wrapper_reads_free_memory_without_wmi`，CI 跳過） | `tools/Invoke-WorkerJob.ps1`、`backend/tests/test_worker_job_scripts.py`（`NO_WMI_MODULE`、`WMI_COMMAND`） |
 
 ## 上下文壓縮時保留
 
