@@ -4,21 +4,32 @@
 
 ## API
 
-| 檔名 | URL（前綴 `http://127.0.0.1:8227/api`） |
+| 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
 | --- | --- |
 | `news-domestic.json` | `/news?category=domestic&limit=20` |
 | `news-international.json` | `/news?category=international&limit=20` |
 | `news-official.json` | `/news?source_kind=official_disclosure&limit=20` |
 | `news-detail.json` | `/news/<id>`，`id` 取 `news-domestic.json` 第一則 `ai.status` 為 `done` 的項目（沒有就取第一則） |
 
+## 驗證範圍
+
+改到下列前端檔或 API route 時，CI 驗這一頁；規則見 [README 驗證範圍](README.md#驗證範圍)。
+
+| 種類 | 對象 |
+| --- | --- |
+| 前端檔 | `frontend/src/news/NewsViews.tsx` |
+| API route | `GET /dashboard` |
+| API route | `GET /news` |
+| API route | `GET /news/{news_id}` |
+
 ## 截圖
 
 | 名稱 | 參數 |
 | --- | --- |
-| `news` | `--url http://127.0.0.1:4227/news --name news`（1280 與 390） |
-| `news-international` | `--url "http://127.0.0.1:4227/news?tab=international" --name news-international --widths 1280` |
-| `news-official` | `--url "http://127.0.0.1:4227/news?tab=official" --name news-official --widths 1280` |
-| `news-detail` | `--url http://127.0.0.1:4227/news/<id> --name news-detail`（1280 與 390） |
+| `news` | `--url <WEB>/news --name news`（1280 與 390） |
+| `news-international` | `--url "<WEB>/news?tab=international" --name news-international --widths 1280` |
+| `news-official` | `--url "<WEB>/news?tab=official" --name news-official --widths 1280` |
+| `news-detail` | `--url <WEB>/news/<id> --name news-detail`（1280 與 390） |
 
 ## 預期資料與標記
 

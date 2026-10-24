@@ -4,7 +4,7 @@
 
 ## API
 
-| 檔名 | URL（前綴 `http://127.0.0.1:8227/api`） |
+| 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
 | --- | --- |
 | `stocks.json` | `/stocks?page=1&page_size=30` |
 | `stock.json` | `/stocks/<E>/<S>` |
@@ -13,12 +13,28 @@
 
 `E`、`S` 為族群檔記下的成員。另跑 `"$PY" -B "$WT/.claude/skills/verify-stock-lab/db_facts.py" "$V/stock.db" <E> <S> > "$OUT/facts-stock.json"`，`I` = 其中 `instrument.latest_trading_date`。
 
+## 驗證範圍
+
+改到下列前端檔或 API route 時，CI 驗這一頁；規則見 [README 驗證範圍](README.md#驗證範圍)。
+
+| 種類 | 對象 |
+| --- | --- |
+| 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
+| 前端檔 | `frontend/src/news/NewsViews.tsx` |
+| 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
+| 前端檔 | `frontend/src/stock/StockHeader.tsx` |
+| API route | `GET /dashboard` |
+| API route | `GET /stocks` |
+| API route | `GET /stocks/{exchange}/{symbol}` |
+| API route | `GET /stocks/{exchange}/{symbol}/bars` |
+| API route | `GET /news` |
+
 ## 截圖
 
 | 名稱 | 參數 |
 | --- | --- |
-| `stocks` | `--url http://127.0.0.1:4227/stocks --name stocks`（1280 與 390） |
-| `stock` | `--url http://127.0.0.1:4227/stocks/<E>/<S> --name stock`（1280 與 390，預設「圖表與指標」分頁） |
+| `stocks` | `--url <WEB>/stocks --name stocks`（1280 與 390） |
+| `stock` | `--url <WEB>/stocks/<E>/<S> --name stock`（1280 與 390，預設「圖表與指標」分頁） |
 | `stock-chips` | 同上 URL，`--name stock-chips --widths 1280 --click '#stock-tab-chips'` |
 | `stock-research` | 同上 URL，`--name stock-research --widths 1280 --click '#stock-tab-research'` |
 | `stock-news` | 同上 URL，`--name stock-news --widths 1280 --click '#stock-tab-news'` |
