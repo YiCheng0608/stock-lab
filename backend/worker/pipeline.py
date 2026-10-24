@@ -13,12 +13,10 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.config import (
-    EXECUTION_SLIPPAGE_BPS,
     MAX_GROUP_CANDIDATES,
     MIN_GROUP_CANDIDATES,
     MIN_GROUP_MEMBERS,
     OFFICIAL_MAX_BACKFILL_DAYS,
-    ROUND_TRIP_TRANSACTION_COST_BPS,
 )
 from app.db import SessionLocal, init_db
 from app.domain import (
@@ -69,6 +67,15 @@ from app.taxonomy import (
     canonical_industry_label,
 )
 from app.theme_table import THEME_CANDIDATE_GROUP_TYPE, THEME_GROUP_TYPE
+from app.tracking import (
+    EXECUTION_SLIPPAGE_BPS,
+    ROUND_TRIP_TRANSACTION_COST_BPS,
+    TRACKING_WINDOW_SESSIONS,
+    TrackBar,
+    TrackLevels,
+    settle,
+    track_path,
+)
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -3887,27 +3894,6 @@ def _corporate_action_factor(
     return factor, applied
 
 
-def _buy_fill_with_slippage(price: float | None) -> float | None:
-    """Model a documented adverse fill for a long position.
-
-    The source OHLC remains untouched.  The adjusted execution price is only
-    used for tracking returns and is recorded in the signal evidence so a
-    reviewer can reproduce the net result.
-    """
-
-    if price is None or not math.isfinite(price) or price <= 0:
-        return None
-    return round(price * (1.0 + EXECUTION_SLIPPAGE_BPS / 10_000.0), 8)
-
-
-def _sell_fill_with_slippage(price: float | None) -> float | None:
-    """Model an adverse sell fill for a long position."""
-
-    if price is None or not math.isfinite(price) or price <= 0:
-        return None
-    return round(price * (1.0 - EXECUTION_SLIPPAGE_BPS / 10_000.0), 8)
-
-
 def _upsert_evaluation(
     db: Session, signal: Signal, bar: MarketBar, data: dict[str, Any]
 ) -> SignalEvaluation:
@@ -3976,17 +3962,26 @@ def _suspension_gap_between(
     return False
 
 
-def _evaluate_signal_tracking(
+def _tracking_inputs(
     db: Session,
-    signal: Signal,
+    instrument_id: int,
+    start_after: date,
     *,
     evaluation_cutoff: date | None = None,
-) -> tuple[int, int]:
+) -> tuple[list[MarketBar], list[TrackBar]]:
+    """The tracked sessions after ``start_after`` and their price bases.
+
+    Shared by signal and plan tracking: at most TRACKING_WINDOW_SESSIONS stored
+    bars after ``start_after`` (none after ``evaluation_cutoff``), each with the
+    corporate-action factor from ``start_after``'s price basis and whether an
+    official suspension interval hid a missing session before it.
+    """
+
     bars = db.scalars(
         select(MarketBar)
         .where(
-            MarketBar.instrument_id == signal.instrument_id,
-            MarketBar.trading_date > signal.signal_date,
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date > start_after,
             *(
                 [MarketBar.trading_date <= evaluation_cutoff]
                 if evaluation_cutoff is not None
@@ -3994,8 +3989,105 @@ def _evaluate_signal_tracking(
             ),
         )
         .order_by(MarketBar.trading_date)
-        .limit(20)
+        .limit(TRACKING_WINDOW_SESSIONS)
     ).all()
+    if not bars:
+        return [], []
+    action_rows = db.scalars(
+        select(CorporateAction).where(
+            CorporateAction.instrument_id == instrument_id,
+            CorporateAction.action_date > start_after,
+            CorporateAction.action_date <= bars[-1].trading_date,
+            *(
+                [CorporateAction.action_date <= evaluation_cutoff]
+                if evaluation_cutoff is not None
+                else []
+            ),
+        )
+    ).all()
+    # TWSE's daily corporate-action feed usually carries the cash/stock
+    # amounts but not the pre-ex reference price.  Use the last official bar
+    # before the action as a deterministic fallback; without this, a cash
+    # dividend would be stored yet silently left unadjusted in OOS returns.
+    fallback_reference_prices: dict[date, float] = {}
+    for action in action_rows:
+        if action.reference_price is not None:
+            continue
+        previous_bar = db.scalar(
+            select(MarketBar)
+            .where(
+                MarketBar.instrument_id == instrument_id,
+                MarketBar.trading_date < action.action_date,
+            )
+            .order_by(desc(MarketBar.trading_date))
+            .limit(1)
+        )
+        if previous_bar:
+            previous_close = _safe_float(previous_bar.close)
+            if previous_close and previous_close > 0:
+                fallback_reference_prices[action.action_date] = previous_close
+    tracked: list[TrackBar] = []
+    previous_observed_date = start_after
+    for bar in bars:
+        actions = [
+            action for action in action_rows if action.action_date <= bar.trading_date
+        ]
+        factor, action_applied = _corporate_action_factor(
+            actions,
+            fallback_reference_prices=fallback_reference_prices,
+        )
+        suspension_gap = _suspension_gap_between(
+            db,
+            instrument_id,
+            previous_observed_date,
+            bar.trading_date,
+        )
+        previous_observed_date = bar.trading_date
+        tracked.append(
+            TrackBar(
+                trading_date=bar.trading_date,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                adj_close=bar.adj_close,
+                volume=bar.volume,
+                is_suspended=bool(bar.is_suspended),
+                source=bar.source,
+                data_time=bar.data_as_of.isoformat() if bar.data_as_of else None,
+                factor=factor,
+                action_applied=action_applied,
+                suspension_gap=suspension_gap,
+            )
+        )
+    return list(bars), tracked
+
+
+def track_levels(row: Any) -> TrackLevels:
+    """The tracked levels of a signal or a tracking plan (same column names)."""
+
+    return TrackLevels(
+        entry_type=row.entry_type,
+        breakout_price=row.breakout_price,
+        pullback_low=row.pullback_low,
+        pullback_high=row.pullback_high,
+        invalid_price=row.invalid_price,
+        target_1=row.target_1,
+    )
+
+
+def _evaluate_signal_tracking(
+    db: Session,
+    signal: Signal,
+    *,
+    evaluation_cutoff: date | None = None,
+) -> tuple[int, int]:
+    bars, tracked = _tracking_inputs(
+        db,
+        signal.instrument_id,
+        signal.signal_date,
+        evaluation_cutoff=evaluation_cutoff,
+    )
     if not bars:
         if evaluation_cutoff is not None:
             for horizon in (5, 20):
@@ -4040,218 +4132,13 @@ def _evaluate_signal_tracking(
         if len(prior_volume_values) == 20
         else None
     )
-    action_rows = db.scalars(
-        select(CorporateAction).where(
-            CorporateAction.instrument_id == signal.instrument_id,
-            CorporateAction.action_date > signal.signal_date,
-            CorporateAction.action_date <= bars[-1].trading_date,
-            *(
-                [CorporateAction.action_date <= evaluation_cutoff]
-                if evaluation_cutoff is not None
-                else []
-            ),
-        )
-    ).all()
-    # TWSE's daily corporate-action feed usually carries the cash/stock
-    # amounts but not the pre-ex reference price.  Use the last official bar
-    # before the action as a deterministic fallback; without this, a cash
-    # dividend would be stored yet silently left unadjusted in OOS returns.
-    fallback_reference_prices: dict[date, float] = {}
-    for action in action_rows:
-        if action.reference_price is not None:
-            continue
-        previous_bar = db.scalar(
-            select(MarketBar)
-            .where(
-                MarketBar.instrument_id == signal.instrument_id,
-                MarketBar.trading_date < action.action_date,
-            )
-            .order_by(desc(MarketBar.trading_date))
-            .limit(1)
-        )
-        if previous_bar:
-            previous_close = _safe_float(previous_bar.close)
-            if previous_close and previous_close > 0:
-                fallback_reference_prices[action.action_date] = previous_close
-    evaluations: list[SignalEvaluation] = []
-    executed = False
-    execution_date: date | None = None
-    execution_price: float | None = None
-    first_outcome: str | None = None
-    outcome_session_no: int | None = None
-    outcome_price: float | None = None
-    execution_factor: float | None = None
-    outcome_factor: float | None = None
-    factor_by_session: dict[int, float] = {}
-    ambiguous = False
     signal.data_quality = signal.data_quality or "complete"
-    previous_observed_date = signal.signal_date
-    for session_no, bar in enumerate(bars, start=1):
-        actions = [
-            action for action in action_rows if action.action_date <= bar.trading_date
-        ]
-        factor, action_applied = _corporate_action_factor(
-            actions,
-            fallback_reference_prices=fallback_reference_prices,
-        )
-        factor_by_session[session_no] = factor
-        # ``factor`` maps the signal-date price basis to the current raw
-        # basis (for a 2-for-1 split, signal level 100 -> raw level 50 and
-        # factor=0.5).  Keep raw OHLC untouched for execution and trigger
-        # checks; ``adjusted_ohlc_json`` is explicitly the inverse mapping,
-        # normalized back to the signal-date basis for return comparison.
-        adjusted = {
-            "basis": "signal_date_normalized",
-            "factor_signal_to_raw": factor,
-            "open": round(bar.open / factor, 8),
-            "high": round(bar.high / factor, 8),
-            "low": round(bar.low / factor, 8),
-            "close": round(bar.close / factor, 8),
-            "adj_close": round((bar.adj_close or bar.close) / factor, 8),
-        }
-        suspension_gap = _suspension_gap_between(
-            db,
-            signal.instrument_id,
-            previous_observed_date,
-            bar.trading_date,
-        )
-        suspended = bool(
-            bar.is_suspended
-            or (bar.volume == 0 and bar.open == bar.high == bar.low == bar.close)
-            or suspension_gap
-        )
-        previous_observed_date = bar.trading_date
-        breakout_level_raw = (
-            signal.breakout_price * factor
-            if signal.breakout_price is not None
-            else None
-        )
-        pullback_low_level_raw = (
-            signal.pullback_low * factor if signal.pullback_low is not None else None
-        )
-        pullback_high_level_raw = (
-            signal.pullback_high * factor if signal.pullback_high is not None else None
-        )
-        invalid_level_raw = (
-            signal.invalid_price * factor if signal.invalid_price is not None else None
-        )
-        target_level_raw = (
-            signal.target_1 * factor if signal.target_1 is not None else None
-        )
-        breakout_trigger = False
-        pullback_trigger = False
-        target_trigger = False
-        invalid_trigger = False
-        status = "pending"
-        reason = ""
-        comparable = not suspended
-        current_execution_price = execution_price
-        if suspended:
-            status = "suspended"
-            reason = (
-                "official suspension interval contains a missing market session; "
-                "no price trigger inferred"
-                if suspension_gap
-                else "trading suspended; no price trigger inferred"
-            )
-            comparable = False
-        else:
-            if not executed:
-                if (
-                    signal.entry_type == "breakout"
-                    and signal.breakout_price is not None
-                ):
-                    breakout_trigger = (
-                        breakout_level_raw is not None
-                        and bar.high >= breakout_level_raw
-                    )
-                    if breakout_trigger:
-                        raw_execution_price = (
-                            max(bar.open, breakout_level_raw)
-                            if bar.open >= breakout_level_raw
-                            else breakout_level_raw
-                        )
-                        current_execution_price = _buy_fill_with_slippage(
-                            raw_execution_price
-                        )
-                elif (
-                    signal.entry_type == "pullback"
-                    and signal.pullback_low is not None
-                    and signal.pullback_high is not None
-                ):
-                    pullback_trigger = (
-                        pullback_low_level_raw is not None
-                        and pullback_high_level_raw is not None
-                        and bar.low <= pullback_high_level_raw
-                        and bar.high >= pullback_low_level_raw
-                    )
-                    if pullback_trigger:
-                        raw_execution_price = (
-                            bar.open
-                            if pullback_low_level_raw
-                            <= bar.open
-                            <= pullback_high_level_raw
-                            else min(
-                                max(bar.open, pullback_low_level_raw),
-                                pullback_high_level_raw,
-                            )
-                        )
-                        current_execution_price = _buy_fill_with_slippage(
-                            raw_execution_price
-                        )
-                if breakout_trigger or pullback_trigger:
-                    executed = True
-                    execution_date = bar.trading_date
-                    execution_price = current_execution_price
-                    execution_factor = factor
-                    signal.execution_date = execution_date
-                    signal.execution_price = execution_price
-                    status = "active"
-                    reason = "earliest executable fill from T+1"
-                else:
-                    status = "not_triggered"
-                    reason = "conditional entry was not reached"
-            if executed and execution_price is not None:
-                if ambiguous:
-                    status = "ambiguous"
-                    reason = (
-                        "same-session stop and target both touched; order is unknowable"
-                    )
-                    comparable = False
-                elif first_outcome is not None:
-                    # Once an exit is observed, later bars cannot overwrite
-                    # the first outcome or introduce look-ahead bias.
-                    status = first_outcome
-                    reason = "position already closed on first observed outcome"
-                else:
-                    invalid_trigger = (
-                        invalid_level_raw is not None and bar.low <= invalid_level_raw
-                    )
-                    target_trigger = (
-                        target_level_raw is not None and bar.high >= target_level_raw
-                    )
-                    if invalid_trigger and target_trigger:
-                        status = "ambiguous"
-                        reason = "same-session stop and target both touched; order is unknowable"
-                        comparable = False
-                        ambiguous = True
-                    elif invalid_trigger:
-                        status = "invalidated"
-                        reason = "invalid price touched"
-                        first_outcome = "invalidated"
-                        outcome_session_no = session_no
-                        outcome_price = _sell_fill_with_slippage(invalid_level_raw)
-                        outcome_factor = factor
-                    elif target_trigger:
-                        status = "target_1_hit"
-                        reason = "first target touched"
-                        first_outcome = "target_1_hit"
-                        outcome_session_no = session_no
-                        outcome_price = _sell_fill_with_slippage(target_level_raw)
-                        outcome_factor = factor
-                    else:
-                        status = "active"
-                        reason = "position remains within defined levels"
+    path = track_path(track_levels(signal), tracked)
+    if path.executed:
+        signal.execution_date = path.execution_date
+        signal.execution_price = path.execution_price
+    evaluations: list[SignalEvaluation] = []
+    for bar, session in zip(bars, path.sessions):
         chip = db.scalar(
             select(ChipSnapshot).where(
                 ChipSnapshot.instrument_id == signal.instrument_id,
@@ -4280,7 +4167,7 @@ def _evaluate_signal_tracking(
             signal,
             bar,
             {
-                "session_no": session_no,
+                "session_no": session.session_no,
                 "ohlc_json": {
                     "open": bar.open,
                     "high": bar.high,
@@ -4294,122 +4181,51 @@ def _evaluate_signal_tracking(
                     if prior_volume_average and bar.volume is not None
                     else None
                 ),
-                "pullback_price_trigger": pullback_trigger,
-                "breakout_price_trigger": breakout_trigger,
-                "target_price_trigger": target_trigger,
-                "invalid_price_trigger": invalid_trigger,
+                "pullback_price_trigger": session.pullback_trigger,
+                "breakout_price_trigger": session.breakout_trigger,
+                "target_price_trigger": session.target_trigger,
+                "invalid_price_trigger": session.invalid_trigger,
                 "institutional_confirmation": flow_confirmation,
                 "leverage_confirmation": margin_confirmation,
                 "subgroup_confirmation": group_confirmation,
                 "full_confirmation": flow_confirmation == "available"
                 and margin_confirmation == "available"
                 and group_confirmation == "available",
-                "status": status,
-                "reason": reason,
-                "source": bar.source,
-                "data_time": bar.data_as_of.isoformat() if bar.data_as_of else None,
-                "execution_date": execution_date,
-                "execution_price": execution_price,
-                "adjusted_ohlc_json": adjusted,
-                "corporate_action_applied": action_applied,
-                "suspended": suspended,
-                "comparable": comparable,
-                "trigger_order": "ambiguous"
-                if ambiguous
-                else (first_outcome or "none"),
-                "data_quality": "incomplete" if not comparable else "complete",
+                "status": session.status,
+                "reason": session.reason,
+                "source": session.source,
+                "data_time": session.data_time,
+                "execution_date": session.execution_date,
+                "execution_price": session.execution_price,
+                "adjusted_ohlc_json": session.adjusted,
+                "corporate_action_applied": session.action_applied,
+                "suspended": session.suspended,
+                "comparable": session.comparable,
+                "trigger_order": session.trigger_order,
+                "data_quality": "incomplete" if not session.comparable else "complete",
             },
         )
         evaluations.append(evaluation)
-    if not executed:
+    if not path.executed:
         # A daily run may only have a partial post-signal history.  Keep the
         # conditional/observation state until the full 20-session window is
         # available; otherwise a T+5 run would permanently block T+20 OOS.
-        if len(bars) >= 20:
+        if len(bars) >= TRACKING_WINDOW_SESSIONS:
             _set_signal_status(signal, "expired")
-    elif ambiguous:
+    elif path.ambiguous:
         _set_signal_status(signal, "incomparable")
-    elif first_outcome == "invalidated":
+    elif path.first_outcome == "invalidated":
         _set_signal_status(signal, "invalidated")
-    elif first_outcome == "target_1_hit":
+    elif path.first_outcome == "target_1_hit":
         _set_signal_status(signal, "target_1_hit")
     else:
         _set_signal_status(signal, "active")
-    if ambiguous or any(item.comparable is False for item in evaluations):
+    if path.ambiguous or any(item.comparable is False for item in evaluations):
         signal.data_quality = "incomplete"
 
     settlement_count = 0
     for horizon in (5, 20):
-        if len(evaluations) < horizon:
-            settlement_date = evaluations[-1].session_date
-            settlement_data = {
-                "settlement_date": settlement_date,
-                "final_status": "incomparable",
-                "first_trigger": first_outcome,
-                "return_or_risk": None,
-                "incomparable_reason": f"only {len(evaluations)} trading sessions available; {horizon} required",
-                "source": evaluations[-1].source,
-                "data_time": evaluations[-1].data_time,
-                "execution_date": execution_date,
-                "execution_price": execution_price,
-                "comparable": False,
-                "data_quality": "incomplete",
-            }
-        else:
-            horizon_eval = evaluations[horizon - 1]
-            window_has_non_comparable_session = any(
-                item.comparable is False for item in evaluations[:horizon]
-            )
-            comparable = bool(
-                horizon_eval.comparable
-                and execution_price
-                and not ambiguous
-                and not window_has_non_comparable_session
-            )
-            return_value = None
-            if comparable and execution_price:
-                has_early_outcome = (
-                    outcome_session_no is not None and outcome_session_no <= horizon
-                )
-                entry_factor = execution_factor or 1.0
-                # Execution/outcome prices are actual raw fills.  Convert
-                # both to the signal-date basis (raw / factor) before the
-                # return calculation; a split must not manufacture a loss.
-                comparable_entry = execution_price / entry_factor
-                if has_early_outcome and outcome_price is not None:
-                    exit_factor = outcome_factor or 1.0
-                    comparable_exit = outcome_price / exit_factor
-                else:
-                    comparable_exit = (horizon_eval.adjusted_ohlc_json or {}).get(
-                        "close"
-                    )
-                if comparable_exit is not None and comparable_entry > 0:
-                    gross_return = comparable_exit / comparable_entry - 1.0
-                    return_value = (
-                        gross_return - ROUND_TRIP_TRANSACTION_COST_BPS / 10_000.0
-                    )
-            final_status = horizon_eval.status if comparable else "incomparable"
-            incomparable_reason = None
-            if not comparable:
-                incomparable_reason = (
-                    "suspended or otherwise non-comparable session in horizon"
-                    if window_has_non_comparable_session
-                    else horizon_eval.reason or "price path is not comparable"
-                )
-            settlement_data = {
-                "settlement_date": horizon_eval.session_date,
-                "final_status": final_status,
-                "first_trigger": first_outcome,
-                "return_or_risk": return_value,
-                "incomparable_reason": incomparable_reason,
-                "source": horizon_eval.source,
-                "data_time": horizon_eval.data_time,
-                "execution_date": execution_date,
-                "execution_price": execution_price,
-                "comparable": comparable,
-                "data_quality": "complete" if comparable else "incomplete",
-            }
-        _upsert_settlement(db, signal, horizon, settlement_data)
+        _upsert_settlement(db, signal, horizon, settle(path, horizon))
         settlement_count += 1
     return len(evaluations), settlement_count
 

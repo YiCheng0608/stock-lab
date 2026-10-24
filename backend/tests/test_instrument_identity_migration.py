@@ -33,6 +33,7 @@ CHILDREN = [
     "events",
     "technical_indicators",
     "daily_candidates",
+    "tracking_plans",
 ]
 HEAD = REVISIONS[-1]
 DDL = """CREATE TABLE instruments (
@@ -249,6 +250,8 @@ def _fixture(tmp_path, fk, variant="plain", *, children=True):
                 if table.name == "daily_candidates":
                     # Integer parents seeded above with id 11.
                     values.update(signal_id=11, candidate_run_id=11)
+                if table.name == "tracking_plans":
+                    values.update(signal_id=11)
                 c.execute(table.insert().values(**values))
     with engine.connect() as c:
         c.exec_driver_sql(f"PRAGMA foreign_keys={fk}")
@@ -269,7 +272,7 @@ def _assert_head(engine, entry):
         if entry == "fallback":
             assert (
                 len(c.exec_driver_sql("SELECT version FROM schema_migrations").all())
-                == 16
+                == 17
             )
             assert (
                 c.exec_driver_sql(

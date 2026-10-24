@@ -2,7 +2,8 @@
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
--> candidates -> indicators -> theme_suggestions -> candidate_notes).  catchup
+-> candidates -> indicators -> theme_suggestions -> plan_tracking ->
+candidate_notes).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -11,10 +12,12 @@ successful collect; evaluate and candidates only after a successful analyze
 (candidates read the trading date's signals, not the tracking that evaluate
 updates); indicators depend on stored bars alone, so they run after every
 successful collect, and so does theme_suggestions, which only regroups stored
-news LLM results.  A failure keeps its error text and the dependent steps
-are recorded as skipped.  candidate_notes (LLM explanations of the day's
-candidates) runs last after a successful candidates step; whatever its
-status, it only stays on its step row and never changes the run status.
+news LLM results, and plan_tracking, which tracks the user plans' own copy of
+their levels on the stored bars.  A failure keeps its error text and the
+dependent steps are recorded as skipped.  candidate_notes (LLM explanations
+of the day's candidates) runs last after a successful candidates step;
+whatever its status, it only stays on its step row and never changes the run
+status.
 
 A first "no session" answer for today's target is recorded as
 ``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
@@ -54,6 +57,7 @@ DAILY_STEPS = (
     "candidates",
     "indicators",
     "theme_suggestions",
+    "plan_tracking",
     "candidate_notes",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
@@ -63,6 +67,7 @@ STEP_REQUIRES = {
     "candidates": ("analyze",),
     "indicators": (),
     "theme_suggestions": (),
+    "plan_tracking": (),
     "candidate_notes": ("candidates",),
 }
 # LLM steps whose failure (timeout, claude missing, quota) is kept on the step
@@ -95,6 +100,8 @@ CANDIDATE_MODULE = "worker.candidates"
 CANDIDATE_FUNCTION = "run_candidates"
 CANDIDATE_NOTE_MODULE = "worker.candidate_notes"
 CANDIDATE_NOTE_FUNCTION = "run_candidate_notes_batch"
+PLAN_TRACKING_MODULE = "worker.plan_tracking"
+PLAN_TRACKING_FUNCTION = "run_plan_tracking"
 
 
 def _utcnow() -> datetime:
@@ -175,6 +182,11 @@ def _candidate_step(target: date) -> dict[str, Any]:
 def _candidate_note_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(CANDIDATE_NOTE_MODULE)
     return getattr(module, CANDIDATE_NOTE_FUNCTION)(target)
+
+
+def _plan_tracking_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(PLAN_TRACKING_MODULE)
+    return getattr(module, PLAN_TRACKING_FUNCTION)(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -609,7 +621,10 @@ def run_daily_job(
         ("candidates", 4, lambda: _candidate_step(target)),
         ("indicators", 5, lambda: _indicator_step(target)),
         ("theme_suggestions", 6, _theme_suggestion_step),
-        ("candidate_notes", 7, lambda: _candidate_note_step(target)),
+        # Before the LLM notes, which can take long; the sequence only orders
+        # the step rows (rows are found by step name).
+        ("plan_tracking", 7, lambda: _plan_tracking_step(target)),
+        ("candidate_notes", 8, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -649,8 +664,9 @@ def run_daily_job(
     for step, sequence, action in later:
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
-        # block them; theme_suggestions needs neither.  A candidates failure
-        # blocks only candidate_notes, whose own result never fails the run.
+        # block them; theme_suggestions and plan_tracking need neither.  A
+        # candidates failure blocks only candidate_notes, whose own result
+        # never fails the run.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
         if blocked_by:
             reason = f"{blocked_by}_not_successful"
