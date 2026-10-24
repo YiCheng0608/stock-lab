@@ -347,23 +347,26 @@ def changed_lines(diff: str) -> set[int]:
 
 @dataclass
 class Plan:
-    files: list[tuple[str, str, str]] = field(
-        default_factory=list
-    )  # path, scope, reason
-    reasons: dict[str, list[str]] = field(default_factory=dict)  # page -> reasons
+    # (path, scope, reason) per decision; page -> the files (and routes) that brought it in
+    files: list[tuple[str, str, str]] = field(default_factory=list)
+    reasons: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def pages(self) -> list[str]:
         return [page for page in PAGES if page in self.reasons]
 
-    def add(self, path: str, pages: set[str] | None, reason: str) -> None:
+    def add(
+        self, path: str, pages: set[str] | None, reason: str, via: str = ""
+    ) -> None:
         targets = PAGES if pages is None else [p for p in PAGES if p in pages]
         scope = (
             "全部五頁" if pages is None else "、".join(targets) if targets else "不驗"
         )
         self.files.append((path, scope, reason))
+        cause = f"`{path}` {via}".strip()
         for page in targets:
-            self.reasons.setdefault(page, []).append(f"`{path}`：{reason}")
+            if cause not in self.reasons.setdefault(page, []):
+                self.reasons[page].append(cause)
 
 
 def plan_for(
@@ -399,10 +402,15 @@ def plan_for(
                 elif route in rules.routes:
                     via = "、".join(sorted(names))
                     plan.add(
-                        path, rules.routes[route], f"route `{route}`（改到 {via}）"
+                        path,
+                        rules.routes[route],
+                        f"route `{route}`（改到 {via}）",
+                        f"`{route}`",
                     )
                 else:
-                    plan.add(path, None, f"route `{route}` 沒有對到任何頁")
+                    plan.add(
+                        path, None, f"route `{route}` 沒有對到任何頁", f"`{route}`"
+                    )
     return plan
 
 
@@ -417,11 +425,11 @@ def markdown(plan: Plan, head: str) -> str:
     )
     lines = ["## verify plan", "", head, f"- 範圍：{scope}", ""]
     if pages:
-        lines += ["| 頁 | 理由 |", "| --- | --- |"]
+        lines += ["| 頁 | 因為改到（理由見下表） |", "| --- | --- |"]
         for page in pages:
-            reasons = plan.reasons[page]
-            shown = "；".join(reasons[:5]) + (
-                f"；另 {len(reasons) - 5} 項" if len(reasons) > 5 else ""
+            causes = plan.reasons[page]
+            shown = "、".join(causes[:5]) + (
+                f" 等 {len(causes)} 項" if len(causes) > 5 else ""
             )
             lines.append(f"| {NAMES[page]} | {shown.replace('|', '/')} |")
         lines.append("")
