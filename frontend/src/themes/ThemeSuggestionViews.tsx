@@ -1,4 +1,3 @@
-// #245 AC-3 temporary single-page change, reverted next
 import { Link } from 'react-router-dom'
 
 import { Badge, Card, EmptyState, Skeleton } from '../components/ui'
