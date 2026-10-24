@@ -472,3 +472,15 @@ def test_a_cancel_read_while_pending_cancels_the_triggered_plan(file_sessions):
         pytest.approx(100.0 * BUY),
         1,
     )
+
+
+def test_a_cancel_that_cannot_be_written_returns_plan_changed(db, client):
+    # A row left by the race before #253: cancelled_at is set but the status is open.
+    plan_id = add(client, signal(db, stock(db)).id).json()["plan"]["id"]
+    plan = db.get(TrackingPlan, plan_id)
+    plan.cancelled_at = datetime(2026, 9, 2, 14, 0)
+    db.commit()
+    response = client.post(f"/api/tracking/plans/{plan_id}/cancel")
+    assert (response.status_code, response.json()["detail"]) == (409, "plan_changed")
+    db.expire_all()
+    assert db.get(TrackingPlan, plan_id).status == "pending"

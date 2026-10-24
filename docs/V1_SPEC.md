@@ -200,7 +200,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 | `GET /tracking?status=open\|closed\|all&page&page_size` | 計畫清單（預設 `all`，`page_size` 1～100、預設 50）：進行中在前（依 `plan_date` 新到舊），已結束與已取消的依 `outcome_date`、否則 `last_session_date`、否則 `plan_date` 新到舊；同日依 `id` 新到舊。每筆含標的、來源、版本、價位（與候選相同的 `levels` 形狀，含 RR）、狀態、`open`、模擬成交與結果、`data_quality`、`created_at`（UTC，帶時區）；`summary` 為進行中與已結束的筆數，`meta` 為 `tracking_version`、視窗、滑價與成本假設、`simulated: true` |
 | `POST /tracking` body `{signal_id, daily_candidate_id?}` | 建立，回 `{created, plan}`；同一訊號已有未取消的計畫時回原計畫與 `created: false`。拒絕時 `detail` 為規則碼：404 `signal_not_found`／`candidate_not_found`，422 `signal_not_conditional`／`invalid_levels`／`candidate_signal_mismatch`，409 `stale_signal` |
 | `GET /tracking/plans/{plan_id}` | 單一計畫與逐日 `sessions`（日期、第幾日、狀態、原始與還原 OHLC、觸發、停牌、可比較、模擬成交價、來源）；404 `plan_not_found` |
-| `POST /tracking/plans/{plan_id}/cancel` | 取消（冪等），回 `{plan}`；404 `plan_not_found`、409 `plan_already_closed` |
+| `POST /tracking/plans/{plan_id}/cancel` | 取消（冪等），回 `{plan}`；404 `plan_not_found`、409 `plan_already_closed`。409 `plan_changed`：條件寫入連續失敗、依重讀的狀態重判（每個進行中狀態最多一次）後仍沒寫進去，例如這次取消期間 daily 又改了計畫兩次，或舊資料留下 `cancelled_at` 有值、狀態卻仍是 `pending`／`triggered` 的列；計畫不改，重新整理後再取消 |
 
 系統訊號的單筆追蹤留在 `GET /tracking/{signal_key}`。`/api/candidates` 的每筆候選另帶 `candidate_id`（`daily_candidates.id`）與 `open_plan_id`（該訊號未取消的計畫，沒有為 null），個股 API 的 `decision_summary.strategies[]` 也帶 `open_plan_id`。畫面文案見 [UI_COPY_SPEC §11](UI_COPY_SPEC.md#11-追蹤計畫)。
 
