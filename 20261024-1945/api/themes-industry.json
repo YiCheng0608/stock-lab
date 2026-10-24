@@ -1,0 +1,14 @@
+{
+  "items": [],
+  "meta": {
+    "board": "industry",
+    "requested_date": null,
+    "trading_date": null,
+    "data_as_of": null,
+    "limit": 100,
+    "total": 0,
+    "sort": "rank asc",
+    "empty_reason": "no_official_run",
+    "empty_message": "尚無成功的官方資料擷取，無法提供族群榜。"
+  }
+}

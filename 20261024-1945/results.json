@@ -1,0 +1,344 @@
+[
+  {
+    "page": "today",
+    "code": "T1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T2",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：dashboard.json 沒有 as_of（D）",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T3",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：dashboard.json 沒有 as_of（D）",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T4",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 沒有 meta.trading_date（B）",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T5",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 沒有 meta.trading_date（B）",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T6",
+    "subject": "",
+    "status": "失敗（已知）",
+    "failed": false,
+    "detail": "缺新聞標題整行 `颱風假台股該不該開盤？政大教授點出交易真相  網友反問：誰要當韭菜`（id 2845）",
+    "known": "https://github.com/YiCheng0608/stock-lab/issues/233"
+  },
+  {
+    "page": "today",
+    "code": "T7",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/22`、`20 檔`；來源行 20 = items；C = facts",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T8",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "20 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 20 行；免責句 20 行",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T9",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "沒有卡片，顯示 `目前沒有資料完整的可執行條件；請查看缺少資料與補齊優先級`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N2",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "domestic：缺 `颱風假台股該不該開盤？政大教授點出交易真相  網友反問：誰要當韭菜`（news-1280.txt）",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "時間行 domestic 20／20、international 20／20、official 20／20",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`AI 推論`／AI 判讀 domestic 20／20、international 20／20、official 20／20",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "最新新聞 2026-10-24 16:45（台北）≤ 現在；國內第一則 `發布於 2026/10/24 16:45`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N6",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "id 2845：來源事實／AI 摘要與判讀分欄，`模型 claude-haiku-5-5 · 提示版本 news_v1`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G2",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "`產業榜 · 共 0 個族群` 下一行是 '資料日期待核實'，預期 `資料 `（themes-1280.txt 第 15 行）；產業榜 B None ≠ facts 2026-10-22；`題材榜 · 共 0 個族群` 下一行是 '資料日期待核實'，預期 `資料 `（themes-theme-1280.txt 第 15 行）；題材榜 B None ≠ facts 2026-10-22",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "items 空，顯示 `尚無成功的官方資料擷取，無法提供族群榜。`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "20 個建議：`待核實` 20、`AI 推論` 20 行，`587 個建議`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G5",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G6",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G7",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S1",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S2",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S3",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S4",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S5",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S6",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S7",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S8",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S9",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "沒有庫存，顯示 `尚未建立庫存。`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`第 1 頁 · 本頁 3 筆 · 共 3 筆`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A4",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "actions.json 沒有 meta.data_as_of",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "沒有 `AI 推論` 與 `（推論）`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A6",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A7",
+    "subject": "",
+    "status": "失敗",
+    "failed": true,
+    "detail": "無法判定：today-board.json 的 items 為空（T）",
+    "known": null
+  }
+]
