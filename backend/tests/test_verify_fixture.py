@@ -13,14 +13,16 @@ import copy
 import importlib.util
 import json
 import re
+import sqlite3
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 import app.api as api_module
 import app.main as main_module
@@ -28,6 +30,7 @@ from app.database_readiness import check_database_readiness
 from app.db import enable_sqlite_foreign_keys
 from app.migration_revisions import REVISIONS
 from app.migrations import upgrade_database
+from worker.plan_tracking import track_open_plans
 
 ROOT = Path(__file__).resolve().parents[2]
 VERIFY = ROOT / "tools" / "verify"
@@ -308,6 +311,32 @@ def test_api_reads_leave_the_fixture_unchanged(built, client):
     for page in PAGES:
         _mismatches(client, fixture_data.EXPECTED[page])
     assert fixture_db.summarize(path) == summary
+
+
+def test_the_daily_plan_tracking_step_changes_nothing_in_the_fixture(built, tmp_path):
+    """The fixture's plans and sessions are what the shared rules write (#253)."""
+
+    path, summary = built
+    copy_path = tmp_path / "plans.db"
+    source, target = sqlite3.connect(path), sqlite3.connect(copy_path)
+    try:
+        source.backup(target)
+    finally:
+        source.close()
+        target.close()
+    engine = create_engine(f"sqlite:///{copy_path.as_posix()}")
+    enable_sqlite_foreign_keys(engine)
+    try:
+        with Session(engine, autoflush=False, expire_on_commit=False) as db:
+            result = track_open_plans(
+                db, fixture_data.T, now=datetime(2030, 1, 1, 12, 0)
+            )
+            db.commit()
+    finally:
+        engine.dispose()
+    assert (result["plans_checked"], result["sessions_written"]) == (2, 0)
+    assert result["transitions"] == {} and result["transition_conflicts"] == 0
+    assert fixture_db.summarize(copy_path) == summary
 
 
 def _feature_endpoints(page_file: str) -> list[str]:

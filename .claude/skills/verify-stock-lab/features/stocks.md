@@ -23,6 +23,7 @@
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
 | 前端檔 | `frontend/src/stock/StockHeader.tsx` |
+| 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
 | API route | `GET /dashboard` |
 | API route | `GET /stocks` |
 | API route | `GET /stocks/{exchange}/{symbol}` |
