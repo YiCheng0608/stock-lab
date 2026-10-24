@@ -1,0 +1,109 @@
+{
+  "items": [
+    {
+      "theme_id": "official-industry-1858340d045a575f",
+      "display_name": "半導體",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 1,
+      "score": 93.5,
+      "quality": "complete",
+      "components": {
+        "relative_return": 1.0,
+        "breadth": 0.9,
+        "volume_strength": 1.0,
+        "institutional_flow": 1.0,
+        "catalyst": 0.6
+      },
+      "relative_returns": {
+        "1d": 0.012,
+        "5d": 0.035,
+        "20d": 0.08
+      },
+      "eligible_members": 3,
+      "member_count": 3,
+      "trading_date": "2026-10-16",
+      "candidate_symbols": [
+        "9101",
+        "9201",
+        "9102"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "1",
+          "exchange": "TWSE",
+          "symbol": "9101"
+        },
+        {
+          "instrument_id": "4",
+          "exchange": "TPEx",
+          "symbol": "9201"
+        },
+        {
+          "instrument_id": "2",
+          "exchange": "TWSE",
+          "symbol": "9102"
+        }
+      ]
+    },
+    {
+      "theme_id": "official-industry-d60be8febbae1cd6",
+      "display_name": "電腦及週邊",
+      "description": "依官方共同產業分類建立的市場族群。",
+      "board": "industry",
+      "rank": 2,
+      "score": 18.0,
+      "quality": "complete",
+      "components": {
+        "relative_return": 0.0,
+        "breadth": 0.6,
+        "volume_strength": 0.0,
+        "institutional_flow": 0.0,
+        "catalyst": 0.3
+      },
+      "relative_returns": {
+        "1d": 0.004,
+        "5d": 0.015,
+        "20d": 0.03
+      },
+      "eligible_members": 3,
+      "member_count": 3,
+      "trading_date": "2026-10-16",
+      "candidate_symbols": [
+        "9103",
+        "9202",
+        "9203"
+      ],
+      "public_candidate_identity_version": "instrument-id-string-v1",
+      "candidate_instruments": [
+        {
+          "instrument_id": "3",
+          "exchange": "TWSE",
+          "symbol": "9103"
+        },
+        {
+          "instrument_id": "5",
+          "exchange": "TPEx",
+          "symbol": "9202"
+        },
+        {
+          "instrument_id": "6",
+          "exchange": "TPEx",
+          "symbol": "9203"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "board": "industry",
+    "requested_date": null,
+    "trading_date": "2026-10-16",
+    "data_as_of": "2026-10-16",
+    "limit": 100,
+    "total": 2,
+    "sort": "rank asc",
+    "empty_reason": null,
+    "empty_message": null
+  }
+}

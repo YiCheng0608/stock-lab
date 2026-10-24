@@ -1,0 +1,18 @@
+{
+  "market_latest_trading_date": "2026-10-16",
+  "group_scores_latest_trading_date": "2026-10-16",
+  "candidate_run_latest_trading_date": "2026-10-16",
+  "candidate_count_latest": 3,
+  "news_items": 6,
+  "news_latest_published_at": "2026-10-16 01:30:00.000000",
+  "news_llm_done": 4,
+  "theme_suggestions": 2,
+  "portfolio_positions": 1,
+  "alembic_version": "0016_group_score_archive",
+  "instrument": {
+    "exchange": "TWSE",
+    "symbol": "9101",
+    "latest_trading_date": "2026-10-16",
+    "source": "twse"
+  }
+}

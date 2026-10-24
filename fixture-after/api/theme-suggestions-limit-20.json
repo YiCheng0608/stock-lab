@@ -1,0 +1,78 @@
+{
+  "items": [
+    {
+      "id": 1,
+      "theme_key": "示範液冷散熱",
+      "display_name": "示範液冷散熱",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 2,
+      "first_news_date": "2026-10-15",
+      "last_news_date": "2026-10-15",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-10-16T04:00:00+00:00",
+      "news": [
+        {
+          "news_id": 4,
+          "title": "Demo: global chip equipment orders rise for a third month",
+          "source_name": "Demo Wire",
+          "news_date": "2026-10-15",
+          "theme_text": "示範液冷散熱",
+          "reason": "資料中心擴建帶動"
+        },
+        {
+          "news_id": 2,
+          "title": "伺服器需求升溫 示範電腦液冷機櫃接單轉強",
+          "source_name": "示範財經社",
+          "news_date": "2026-10-15",
+          "theme_text": "示範液冷散熱",
+          "reason": "液冷機櫃需求"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "theme_key": "示範車用晶片",
+      "display_name": "示範車用晶片",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 1,
+      "first_news_date": "2026-10-16",
+      "last_news_date": "2026-10-16",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-sonnet-5-5"
+      ],
+      "computed_at": "2026-10-16T04:00:00+00:00",
+      "news": [
+        {
+          "news_id": 1,
+          "title": "示範晶圓第三季營收創新高 先進製程需求續強",
+          "source_name": "示範財經社",
+          "news_date": "2026-10-16",
+          "theme_text": "示範車用晶片",
+          "reason": "先進製程需求來自車用"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "limit": 20,
+    "include_matched": false,
+    "matched_total": 0,
+    "news_per_suggestion": 5,
+    "aggregation_version": "theme_suggestions_v1",
+    "updated_at": "2026-10-16T04:00:00+00:00",
+    "sort": "news_count desc, last_news_date desc, theme_key asc"
+  }
+}

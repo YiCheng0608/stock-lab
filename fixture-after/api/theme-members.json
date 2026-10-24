@@ -1,0 +1,323 @@
+{
+  "theme": {
+    "theme_id": "official-industry-1858340d045a575f",
+    "display_name": "半導體",
+    "description": "依官方共同產業分類建立的市場族群。",
+    "category": "股票族群",
+    "name_status": "official",
+    "qualified": true,
+    "score": 93.5,
+    "rank": 1,
+    "trading_date": "2026-10-16",
+    "data_quality": "complete",
+    "eligible_members": 3,
+    "minimum_members": 3,
+    "metrics": {
+      "relative_return_1d": 0.012,
+      "relative_return_5d": 0.035,
+      "relative_return_20d": 0.08,
+      "breadth": 0.9,
+      "volume_strength": 1.0,
+      "institutional_flow": 1.0
+    },
+    "why_hot": [
+      "20 日相對 TAIEX 8.00%",
+      "成員上漲廣度 90%",
+      "成交量強度 100.00%"
+    ],
+    "missing_reasons": [],
+    "candidate_symbols": [
+      "9101",
+      "9201",
+      "9102"
+    ],
+    "public_candidate_identity_version": "instrument-id-string-v1",
+    "candidate_instruments": [
+      {
+        "instrument_id": "1",
+        "exchange": "TWSE",
+        "symbol": "9101"
+      },
+      {
+        "instrument_id": "4",
+        "exchange": "TPEx",
+        "symbol": "9201"
+      },
+      {
+        "instrument_id": "2",
+        "exchange": "TWSE",
+        "symbol": "9102"
+      }
+    ],
+    "benchmark": "TAIEX",
+    "benchmark_returns": {
+      "1d": 0.004,
+      "5d": 0.011,
+      "20d": 0.025
+    },
+    "leaderboard": "equity",
+    "methodology": {
+      "relative_return": {
+        "weight": 0.35,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile_of_weighted_sum",
+          "member_aggregation": "equal_weight_mean",
+          "terms": [
+            {
+              "weight": 0.2,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.5,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "breadth": {
+        "weight": 0.25,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "weighted_mean",
+          "member_aggregation": "share_of_members_with_positive_excess_return",
+          "terms": [
+            {
+              "weight": 0.2,
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.5,
+              "window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "volume_strength": {
+        "weight": 0.15,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile_of_weighted_sum",
+          "member_aggregation": "median",
+          "terms": [
+            {
+              "weight": 0.5,
+              "metric": "volume_1d / mean(volume_prior_20d)",
+              "signal_window_trading_days": 1,
+              "baseline_window_trading_days": 20
+            },
+            {
+              "weight": 0.5,
+              "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+              "signal_window_trading_days": 5,
+              "baseline_window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "institutional_flow": {
+        "weight": 0.15,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile",
+          "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+          "formula_version": "institutional-flow/v2-shares-per-share-volume",
+          "flow_window_trading_days": 5,
+          "flow_unit": "shares",
+          "denominator_window_trading_days": 20,
+          "denominator_window_basis": "inclusive_signal_day",
+          "denominator_unit": "shares"
+        },
+        "coverage": {
+          "member_base": "eligible_members",
+          "required_ratio": 1.0,
+          "member_aggregation": "sum_over_eligible_members",
+          "absent_from_official_file": "net_zero_with_evidence",
+          "official_file_evidence": "same_exchange_same_day_chip_row_from_official_institutional_source_linked_to_raw_payload_of_that_endpoint_and_date",
+          "official_sources": {
+            "TWSE": "twse_t86",
+            "TPEx": "tpex_3insti"
+          },
+          "official_file_missing": "member_flow_unavailable",
+          "official_row_with_null_component": "member_flow_unavailable",
+          "applies_to": "hot_group_only"
+        }
+      },
+      "catalyst": {
+        "weight": 0.1,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "weighted_capped_distinct_verified_events",
+          "terms": [
+            {
+              "weight": 0.5,
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.2,
+              "window_trading_days": 20
+            }
+          ],
+          "normalization": {
+            "cap_distinct_events": 3
+          },
+          "accepted_source_types": [
+            "mops_material_information",
+            "twse_tpex_official_announcement",
+            "issuer_filing"
+          ]
+        },
+        "missing_value": null,
+        "missing_policy": "component_null_and_data_quality_partial"
+      }
+    }
+  },
+  "items": [
+    {
+      "id": 1,
+      "market": "TW",
+      "exchange": "TWSE",
+      "symbol": "9101",
+      "name": "示範晶圓",
+      "industry": "24",
+      "instrument_type": "stock",
+      "etf_category": null,
+      "listing_date": "2001-03-05",
+      "is_watchlisted": false,
+      "status": "active",
+      "role": "member",
+      "confidence": 1.0,
+      "valid_from": "2026-01-02",
+      "valid_to": null,
+      "theme_evidence": null,
+      "latest_bar": {
+        "date": "2026-10-16",
+        "open": 385.34,
+        "high": 390.79,
+        "low": 383.8,
+        "close": 389.23,
+        "adj_close": 389.23,
+        "volume": 16640000,
+        "volume_exact": "16640000",
+        "turnover": 6476787200.0,
+        "turnover_status": "available",
+        "turnover_reason": null,
+        "source": "twse",
+        "data_as_of": "2026-10-16T06:00:00",
+        "collected_at": "2026-10-16T09:30:00+00:00",
+        "is_suspended": false
+      }
+    },
+    {
+      "id": 2,
+      "market": "TW",
+      "exchange": "TWSE",
+      "symbol": "9102",
+      "name": "示範封測",
+      "industry": "24",
+      "instrument_type": "stock",
+      "etf_category": null,
+      "listing_date": "2004-07-01",
+      "is_watchlisted": false,
+      "status": "active",
+      "role": "member",
+      "confidence": 1.0,
+      "valid_from": "2026-01-02",
+      "valid_to": null,
+      "theme_evidence": null,
+      "latest_bar": {
+        "date": "2026-10-16",
+        "open": 170.82,
+        "high": 172.92,
+        "low": 169.92,
+        "close": 172.02,
+        "adj_close": 172.02,
+        "volume": 6500000,
+        "volume_exact": "6500000",
+        "turnover": 1118130000.0,
+        "turnover_status": "available",
+        "turnover_reason": null,
+        "source": "twse",
+        "data_as_of": "2026-10-16T06:00:00",
+        "collected_at": "2026-10-16T09:30:00+00:00",
+        "is_suspended": false
+      }
+    },
+    {
+      "id": 4,
+      "market": "TW",
+      "exchange": "TPEx",
+      "symbol": "9201",
+      "name": "示範矽材",
+      "industry": "24",
+      "instrument_type": "stock",
+      "etf_category": null,
+      "listing_date": "2012-11-20",
+      "is_watchlisted": true,
+      "status": "active",
+      "role": "member",
+      "confidence": 1.0,
+      "valid_from": "2026-01-02",
+      "valid_to": null,
+      "theme_evidence": null,
+      "latest_bar": {
+        "date": "2026-10-16",
+        "open": 74.04,
+        "high": 75.09,
+        "low": 73.74,
+        "close": 74.79,
+        "adj_close": 74.79,
+        "volume": 6240000,
+        "volume_exact": "6240000",
+        "turnover": 466689600.0,
+        "turnover_status": "available",
+        "turnover_reason": null,
+        "source": "tpex",
+        "data_as_of": "2026-10-16T06:00:00",
+        "collected_at": "2026-10-16T09:30:00+00:00",
+        "is_suspended": false
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "page_size": 30,
+    "total": 3,
+    "total_pages": 1,
+    "has_previous": false,
+    "has_next": false,
+    "q": "",
+    "sort": "price",
+    "data_as_of": "2026-10-16"
+  }
+}

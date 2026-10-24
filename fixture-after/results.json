@@ -1,0 +1,461 @@
+[
+  {
+    "page": "today",
+    "code": "API",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "21 項 = fixture_data.EXPECTED",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026-10-16` = facts 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料截至` → 2026/10/16 → TWSE／TPEx 官方資料",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`；B = facts 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 張卡 `資料 2026/10/16 · 相對加權指數`；#1 `半導體`",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T6",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "前 3 則標題都在；有 AI 判讀的 2 張卡有 `AI 推論`",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T7",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料 2026/10/16`、`3 檔`；來源行 3 = items；C = facts",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T8",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 5 行；免責句 3 行",
+    "known": null
+  },
+  {
+    "page": "today",
+    "code": "T9",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張卡各有 `資料日`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "API",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "9 項 = fixture_data.EXPECTED",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "domestic 前 3 則、international 前 2 則、official 前 1 則依序出現",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "時間行 domestic 3／3、international 2／2、official 1／1",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`AI 推論`／AI 判讀 domestic 2／2、international 2／2、official 0／0",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "最新新聞 2026-10-16 09:30（台北）≤ 現在；國內第一則 `發布於 2026/10/16 09:30`",
+    "known": null
+  },
+  {
+    "page": "news",
+    "code": "N6",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "id 1：來源事實／AI 摘要與判讀分欄，`模型 claude-sonnet-5-5 · 提示版本 news_v1 · 產生時間 2026/10/16 11:01`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "API",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "11 項 = fixture_data.EXPECTED",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "5 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`產業榜 · 共 2 個族群` → `資料 2026/10/16`、`題材榜 · 共 2 個族群` → `資料 2026/10/16`；= facts 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "1280 表頭與 `半導體`…`電腦及週邊`；390 `#1` → `半導體`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "2 個建議：`待核實` 2、`AI 推論` 2 行，`2 個建議`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "熱度走勢、五分項皆 `資料 2026/10/16`；`成員資料截至 2026/10/16`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G6",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "表頭、第一個成員 9101 示範晶圓、`共 3 檔`",
+    "known": null
+  },
+  {
+    "page": "themes",
+    "code": "G7",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "今日 #1 = 產業榜 #1 = 詳情 = `半導體`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "API",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "12 項 = fixture_data.EXPECTED",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S1",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "8 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S1",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "6 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "表頭、第一列、`第 1／1 頁 · 共 8 筆`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S3",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "頁首 `資料 2026-10-16`、`來源 臺灣證券交易所`；bars data_as_of 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S3",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "頁首 `資料 2026-10-16`、`來源 證券櫃檯買賣中心`；bars data_as_of 2026-10-16",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S4",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "K 線卡 `資料 2026-10-16`、來源與批次時間",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S4",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "K 線卡 `資料 2026-10-16`、來源與批次時間",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S5",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料日期：2026/10/16`、`資料日：2026/10/16 · 價位語意：`；候選 #1：`明日候選`、`AI 推論`、`（推論）`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S5",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "`資料日期：2026/10/16`、`資料日：2026/10/16 · 價位語意：`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S6",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "1 則相符新聞，時間行 1",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S6",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "0 則相符新聞，顯示 `尚無與此股已核實關聯的新聞或公告。`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S7",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "K 線資料日期 2026-10-16、行情來源 `臺灣證券交易所`、`…資料日 2026/10/16`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S7",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "K 線資料日期 2026-10-16、行情來源 `證券櫃檯買賣中心`、`…資料日 2026/10/16`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S8",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "facts I 2026-10-16 = API；source `twse`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S8",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "facts I 2026-10-16 = API；source `tpex`",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S9",
+    "subject": "TWSE 9101",
+    "status": "通過",
+    "failed": false,
+    "detail": "最新一列 2026/10/16；來源行 25 = min(30, 25)",
+    "known": null
+  },
+  {
+    "page": "stocks",
+    "code": "S9",
+    "subject": "TPEx 9204",
+    "status": "通過",
+    "failed": false,
+    "detail": "chips 空，顯示 `尚無可核實的籌碼資料。`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "API",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "8 項 = fixture_data.EXPECTED",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A1",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "3 張截圖 ready，無錯誤，無橫向捲動",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A2",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "1 筆庫存各有 `記錄來源`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A3",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "`第 1 頁 · 本頁 7 筆 · 共 7 筆`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A4",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "7 張卡、7 行資料日 ≤ 2026/10/16；data_as_of = facts",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A5",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "沒有 `AI 推論` 與 `（推論）`",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A6",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "TWSE 9101：`資料日：2026/10/16` = data_cutoff",
+    "known": null
+  },
+  {
+    "page": "actions",
+    "code": "A7",
+    "subject": "",
+    "status": "通過",
+    "failed": false,
+    "detail": "頁首 `9101`／`示範晶圓` = stock.json",
+    "known": null
+  }
+]

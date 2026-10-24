@@ -1,0 +1,81 @@
+{
+  "items": [
+    {
+      "id": 1,
+      "instrument": {
+        "id": 2,
+        "market": "TW",
+        "exchange": "TWSE",
+        "symbol": "9102",
+        "name": "示範封測",
+        "industry": "24",
+        "instrument_type": "stock",
+        "etf_category": null,
+        "listing_date": "2004-07-01",
+        "is_watchlisted": false,
+        "status": "active"
+      },
+      "shares": 2000,
+      "shares_exact": "2000",
+      "quantity": {
+        "total_shares": 2000,
+        "total_shares_exact": "2000",
+        "quantity_lots": 2,
+        "quantity_lots_exact": "2",
+        "odd_lot_shares": 0,
+        "unit": "lot",
+        "display": "2 張"
+      },
+      "position_quantity_status": "known",
+      "average_cost": 150.0,
+      "stop_price": 140.0,
+      "risk_budget": 20000.0,
+      "portfolio_value_status": {
+        "average_cost": "known",
+        "stop_price": "known",
+        "risk_budget": "known"
+      },
+      "note": "示範庫存（虛構）",
+      "updated_at": "2026-10-01T02:00:00+00:00",
+      "latest_bar": {
+        "close": 172.02,
+        "date": "2026-10-16",
+        "source": "twse",
+        "data_as_of": "2026-10-16 06:00:00.000000",
+        "collected_at": "2026-10-16 09:30:00.000000"
+      },
+      "portfolio_quote": {
+        "close": 172.02,
+        "close_status": "known",
+        "recorded": {
+          "date": "2026-10-16",
+          "source": "twse",
+          "data_as_of": "2026-10-16 06:00:00.000000",
+          "collected_at": "2026-10-16 09:30:00.000000"
+        },
+        "record_status": {
+          "date": "known",
+          "source": "known",
+          "data_as_of": "known",
+          "collected_at": "known"
+        },
+        "source_verification": "unverified",
+        "date_verification": "unverified"
+      },
+      "market_value": 344040.0,
+      "unrealized_pnl": 44040.0,
+      "valuation_status": {
+        "market_value": "local_estimate",
+        "unrealized_pnl": "local_estimate"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total": 1,
+    "total_pages": 1,
+    "has_previous": false,
+    "has_next": false
+  }
+}
