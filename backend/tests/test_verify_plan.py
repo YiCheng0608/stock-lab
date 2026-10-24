@@ -1,8 +1,13 @@
 """tools/verify/verify_plan.py, which pages the CI verify job checks (Issue #245).
 
 The rules live in the 驗證範圍 tables of the features files; these tests run
-them on made-up change sets and keep the tables in step with backend/app/api.py
-(every route mapped to a page or excluded with a reason) and frontend/src.
+them on made-up change sets and keep the route table in step with
+backend/app/api.py (every route mapped to a page or excluded with a reason).
+
+Frontend cases run on a small frontend tree written to tmp_path, not on the
+repository's frontend: the backend job does not run for frontend changes.  The
+repository's frontend tables are checked by verify_plan.py itself, which the CI
+verify job runs on every change.
 """
 
 from __future__ import annotations
@@ -10,6 +15,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 API_SOURCE = (ROOT / "backend" / "app" / "api.py").read_text(encoding="utf-8")
@@ -27,13 +34,51 @@ def _load():
 
 verify_plan = _load()
 RULES = verify_plan.load_rules()
-IMPORTERS = verify_plan.frontend_importers()
 ALL = list(verify_plan.PAGES)
+FE = verify_plan.FRONTEND  # the frontend source directory, relative to the repository
+
+# A frontend tree shaped like the real one: App.tsx and main.tsx are the shell;
+# the view modules are the files the features tables list.
+TREE = {
+    "main.tsx": "import App from './App'\nimport './styles.css'\n",
+    "App.tsx": (
+        "import { Card } from './components/ui'\n"
+        "import { ThemeSuggestionsSection } from './themes/ThemeSuggestionViews'\n"
+        "import { HotGroupsSection } from './themes/ThemeViews'\n"
+        "import { StockBarsChart } from './stock/StockBarsChart'\n"
+        "import { NewsCard } from './news/NewsViews'\n"
+    ),
+    "styles.css": "body {}\n",
+    "components/ui/index.ts": "export { Card } from './Card'\n",
+    "components/ui/Card.tsx": "export const Card = 1\n",
+    "themes/ThemeSuggestionViews.tsx": (
+        "import { AiBadge } from '../news/NewsViews'\n"
+        "import { Card } from '../components/ui'\n"
+    ),
+    "themes/ThemeViews.tsx": "import { readChartTheme } from '../stock/stockBars'\n",
+    "themes/themeSuggestions.test.tsx": "import { X } from './ThemeSuggestionViews'\n",
+    "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
+    "stock/StockHeader.tsx": "import { quote } from './stockBars'\n",
+    "stock/stockBars.ts": "export const bars = 1\n",
+    "news/NewsViews.tsx": "export const AiBadge = 1\n",
+    "candidates/CandidateViews.tsx": "import { AiBadge } from '../news/NewsViews'\n",
+}
 
 
-def plan(*paths: str, api_source: str = API_SOURCE, api_lines=()):
+@pytest.fixture
+def importers(tmp_path: Path) -> dict[str, set[str]]:
+    for name, text in TREE.items():
+        path = tmp_path / FE / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return verify_plan.frontend_importers(tmp_path)
+
+
+def plan(
+    *paths: str, importers=None, api_source: str | None = API_SOURCE, api_lines=()
+):
     return verify_plan.plan_for(
-        list(paths), RULES, api_source, set(api_lines), IMPORTERS
+        list(paths), RULES, api_source, set(api_lines), importers or {}
     )
 
 
@@ -47,14 +92,17 @@ def route_lines(route: str, source: str = API_SOURCE) -> set[int]:
 # ---- AC-1: the page range of each kind of change ----
 
 
-def test_single_frontend_page_verifies_only_that_page():
-    result = plan("frontend/src/themes/ThemeSuggestionViews.tsx")
+def test_single_frontend_page_verifies_only_that_page(importers):
+    result = plan(FE + "themes/ThemeSuggestionViews.tsx", importers=importers)
     assert result.pages == ["themes"]
 
 
-def test_frontend_file_shared_by_some_pages_verifies_those_pages():
-    assert plan("frontend/src/stock/StockBarsChart.tsx").pages == ["stocks", "actions"]
-    assert plan("frontend/src/themes/ThemeViews.tsx").pages == ["today", "themes"]
+def test_frontend_file_shared_by_some_pages_verifies_those_pages(importers):
+    result = plan(FE + "stock/StockBarsChart.tsx", importers=importers)
+    assert result.pages == ["stocks", "actions"]
+    # Not listed: the pages of the listed files importing it.
+    result = plan(FE + "stock/stockBars.ts", importers=importers)
+    assert result.pages == ["today", "themes", "stocks", "actions"]
 
 
 def test_api_endpoint_verifies_the_pages_that_use_it():
@@ -90,7 +138,8 @@ def candidates():
 
 @router.get("/stocks")
 def stocks():
-    return 1
+    candidates = 1  # a local named like another route is not that route
+    return candidates
 
 
 @router.get("/health")
@@ -107,15 +156,25 @@ def test_api_helper_change_reaches_the_routes_that_use_it():
     assert verify_plan.touched_routes(SOURCE, {line_of("LIMIT = 10")}) == {
         "GET /candidates": {"LIMIT"}
     }
-    result = plan(
-        "backend/app/api.py", api_source=SOURCE, api_lines=[line_of("    return LIMIT")]
-    )
-    assert result.pages == ["today"]
+    lines = [line_of("    return LIMIT")]
+    assert plan("backend/app/api.py", api_source=SOURCE, api_lines=lines).pages == [
+        "today"
+    ]
+
+
+def test_api_route_change_does_not_reach_a_local_of_the_same_name():
+    lines = {line_of("    return helper()")}
+    assert set(verify_plan.touched_routes(SOURCE, lines)) == {"GET /candidates"}
 
 
 def test_api_router_change_reaches_every_route():
     touched = verify_plan.touched_routes(SOURCE, {line_of("router = APIRouter()")})
     assert set(touched) == {"GET /candidates", "GET /stocks", "GET /health"}
+
+
+def test_api_import_change_reaches_the_routes_through_the_router():
+    result = plan("backend/app/api.py", api_source=SOURCE, api_lines=[2])
+    assert result.pages == ["today", "stocks"]
 
 
 def test_api_change_outside_routes_is_not_verified():
@@ -124,25 +183,28 @@ def test_api_change_outside_routes_is_not_verified():
     assert result.pages == []
 
 
-def test_api_import_change_reaches_the_routes_through_the_router():
-    result = plan("backend/app/api.py", api_source=SOURCE, api_lines=[2])
-    assert result.pages == ["today", "stocks"]
-
-
 def test_api_deletion_marks_the_lines_around_it():
     diff = "@@ -10,3 +9,0 @@\n-a\n-b\n-c\n@@ -20 +18,2 @@\n+x\n+y\n"
     assert verify_plan.changed_lines(diff) == {9, 10, 18, 19}
 
 
-def test_style_and_shared_component_verify_every_page():
-    for path in (
-        "frontend/src/styles.css",
-        "frontend/src/styles/tokens.css",
-        "frontend/src/components/ui/Badge.tsx",
-        "frontend/src/App.tsx",
-        "frontend/src/types.ts",
+def test_api_deleted_verifies_every_page():
+    assert plan("backend/app/api.py", api_source=None).pages == ALL
+
+
+def test_style_and_shared_component_verify_every_page(importers):
+    for name in (
+        "styles.css",
+        "components/ui/Card.tsx",
+        "components/ui/index.ts",
+        "App.tsx",
+        "main.tsx",
     ):
-        assert plan(path).pages == ALL, path
+        assert plan(FE + name, importers=importers).pages == ALL, name
+
+
+def test_frontend_file_nothing_imports_verifies_every_page(importers):
+    assert plan(FE + "styles/tokens.css", importers=importers).pages == ALL
 
 
 def test_worker_schema_and_unlisted_paths_verify_every_page():
@@ -150,7 +212,7 @@ def test_worker_schema_and_unlisted_paths_verify_every_page():
         "backend/worker/cli.py",
         "backend/app/scoring.py",
         "backend/alembic/versions/0099_new.py",
-        "frontend/package.json",
+        "backend/requirements.txt",
         "somewhere/new.txt",
     ):
         assert plan(path).pages == ALL, path
@@ -168,38 +230,43 @@ def test_verify_tools_verify_every_page():
         assert plan(path).pages == ALL, path
 
 
-def test_docs_and_tests_only_are_not_verified():
+def test_docs_and_tests_only_are_not_verified(importers):
     result = plan(
         "docs/GITHUB_WORKFLOW.md",
         "AGENTS.md",
         "backend/tests/test_api.py",
-        "frontend/src/news/news.test.tsx",
-        "frontend/src/news/news.fixtures.ts",
+        FE + "themes/themeSuggestions.test.tsx",
+        FE + "news/news.fixtures.ts",
         "tools/ci/checks.py",
         ".github/pull_request_template.md",
+        importers=importers,
     )
     assert result.pages == []
     assert {scope for _, scope, _ in result.files} == {"不驗"}
 
 
-def test_plan_names_a_reason_for_each_page():
+def test_plan_names_a_reason_for_each_page(importers):
     result = plan(
-        "frontend/src/themes/ThemeSuggestionViews.tsx",
+        FE + "themes/ThemeSuggestionViews.tsx",
         "backend/app/api.py",
+        importers=importers,
         api_lines=route_lines("GET /candidates"),
     )
     assert result.pages == ["today", "themes"]
     text = verify_plan.markdown(result, "- head")
-    assert "GET /candidates" in text and "ThemeSuggestionViews.tsx" in text
-    assert "| 今日 `/` |" in text and "| 族群 `/themes` |" in text
+    assert "| 今日 `/` | `backend/app/api.py` `GET /candidates` |" in text
+    assert "| 族群 `/themes` | `" + FE + "themes/ThemeSuggestionViews.tsx` |" in text
+    assert "- 範圍：不驗" in verify_plan.markdown(plan("docs/a.md"), "- head")
 
 
 def test_glob_patterns():
-    match = lambda pattern, path: bool(verify_plan.glob_regex(pattern).match(path))  # noqa: E731
+    def match(pattern: str, path: str) -> bool:
+        return bool(verify_plan.glob_regex(pattern).match(path))
+
     assert match("**/*.md", "AGENTS.md") and match("**/*.md", "docs/a/b.md")
-    assert match("frontend/src/**/*.test.ts", "frontend/src/a.test.ts")
-    assert match("frontend/src/**/*.test.ts", "frontend/src/x/y/a.test.ts")
-    assert not match("frontend/src/*.ts", "frontend/src/x/a.ts")
+    assert match("src/**/*.test.ts", "src/a.test.ts")
+    assert match("src/**/*.test.ts", "src/x/y/a.test.ts")
+    assert not match("src/*.ts", "src/x/a.ts")
     assert not match("docs/**", "docsx/a.md")
 
 
@@ -233,22 +300,17 @@ def test_api_routes_match_the_router():
     assert served == set(verify_plan.api_routes(API_SOURCE))
 
 
-def test_listed_frontend_files_exist():
-    missing = [path for path in RULES.frontend if not (ROOT / path).is_file()]
-    assert missing == []
+def test_frontend_tables_match_the_tree(importers, tmp_path):
+    assert verify_plan.frontend_problems(RULES, importers, tmp_path) == []
 
 
-def test_listed_frontend_files_cover_the_pages_of_their_importers():
-    """A listed file's pages include every page of a file that imports it."""
-
-    problems = []
-    for path, pages in RULES.frontend.items():
-        for user in sorted(IMPORTERS.get(path, ())):
-            kind = verify_plan.path_rule(RULES, user)[1]
-            if user in verify_plan.SHELL or kind == verify_plan.NONE:
-                continue
-            found, _ = verify_plan.frontend_pages(user, RULES, IMPORTERS)
-            missing = set(ALL if found is None else found) - pages
-            if missing:
-                problems.append(f"{path} 被 {user} import，少了 {sorted(missing)}")
-    assert problems == []
+def test_frontend_problems_name_a_missing_page_and_a_missing_file(importers, tmp_path):
+    rules = verify_plan.load_rules()
+    rules.frontend[FE + "news/NewsViews.tsx"] = {"news"}
+    rules.frontend[FE + "gone.tsx"] = {"news"}
+    problems = verify_plan.frontend_problems(rules, importers, tmp_path)
+    assert f"驗證範圍列了前端檔 `{FE}gone.tsx`，檔案不存在" in problems
+    assert (
+        f"前端檔 `{FE}news/NewsViews.tsx` 被 `{FE}themes/ThemeSuggestionViews.tsx` "
+        "import，驗證範圍少了 themes"
+    ) in problems

@@ -58,7 +58,7 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 
 ### 不屬於五頁的 route
 
-`backend/app/api.py` 的每個 route 都要列在某頁的「驗證範圍」或本表，`backend/tests/test_verify_plan.py` 擋下沒對到的新 route 與已不存在的列。
+`backend/app/api.py` 的每個 route 都要列在某頁的「驗證範圍」或本表。`verify_plan.py` 每次先檢查：有 route 沒對到、表裡列了不存在的 route 或前端檔、前端檔清單少了 import 它的檔所屬的頁，就以 exit 2 結束（CI `verify` job 失敗）；`backend/tests/test_verify_plan.py` 對 `api.py` 做同樣的 route 檢查。
 
 | route | 理由 |
 | --- | --- |

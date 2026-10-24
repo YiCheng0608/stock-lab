@@ -16,8 +16,11 @@ patterns to 全套／不驗／前端檔／API route, and each ``features/<page>.
   other module-level names) a function, constant or import whose lines changed.
 
 Prints the plan as Markdown and writes ``pages=<comma separated pages>`` (empty:
-nothing to verify) to ``--output`` (``$GITHUB_OUTPUT`` in CI).  Standard library
-only, so CI runs it before installing anything.
+nothing to verify) to ``--output`` (``$GITHUB_OUTPUT`` in CI).  Exit 2 without a
+plan when the tables and the code disagree: a route of api.py on no page and not
+excluded, a row naming no route, a listed frontend file that is gone, or one
+whose pages miss a page of a file importing it.  Standard library only, so CI
+runs it before installing anything.
 """
 
 from __future__ import annotations
@@ -299,6 +302,30 @@ def route_problems(source: str, rules: Rules) -> list[str]:
     return problems
 
 
+def frontend_problems(
+    rules: Rules, importers: dict[str, set[str]], root: Path = ROOT
+) -> list[str]:
+    """Listed frontend files that are gone, or whose pages miss a page of a file importing them."""
+
+    problems = [
+        f"驗證範圍列了前端檔 `{path}`，檔案不存在"
+        for path in rules.frontend
+        if not (root / path).is_file()
+    ]
+    for path, pages in sorted(rules.frontend.items()):
+        for user in sorted(importers.get(path, ())):
+            if user in SHELL or path_rule(rules, user)[1] == NONE:
+                continue
+            found, _ = frontend_pages(user, rules, importers)
+            wanted = set(PAGES) if found is None else found
+            missing = [p for p in PAGES if p in wanted and p not in pages]
+            if missing:
+                problems.append(
+                    f"前端檔 `{path}` 被 `{user}` import，驗證範圍少了 {'、'.join(missing)}"
+                )
+    return problems
+
+
 def touched_routes(source: str, lines: set[int]) -> dict[str, set[str]]:
     """Route -> the changed module-level names it reaches (its own name when it changed)."""
 
@@ -458,6 +485,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--base must be a full Git SHA")
 
     rules = load_rules()
+    importers = frontend_importers()
+    problems = route_problems(
+        (ROOT / API).read_text(encoding="utf-8"), rules
+    ) + frontend_problems(rules, importers)
+    if problems:
+        print("驗證範圍與程式不一致：\n" + "\n".join(problems), file=sys.stderr)
+        return 2
     head = git("rev-parse", "HEAD").strip()
     if args.base == "0" * 40:
         fork, paths = None, sorted(git("ls-files").splitlines())
@@ -474,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
                 git("diff", "-U0", "--no-renames", fork, "HEAD", "--", API)
             )
         )
-    plan = plan_for(paths, rules, api_source, api_lines, frontend_importers())
+    plan = plan_for(paths, rules, api_source, api_lines, importers)
     print(
         markdown(
             plan,
