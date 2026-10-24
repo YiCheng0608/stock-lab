@@ -30,7 +30,10 @@ import type {
   RawPayload,
   Signal,
   StrategyRow,
-  TrackingResponse,
+  SignalTrackingResponse,
+  AddPlanResponse,
+  TrackingPlanDetail,
+  TrackingPlansResponse,
 } from './types'
 
 import { candidatesPath } from './candidates/candidates'
@@ -41,10 +44,29 @@ import { themeSuggestionsPath } from './themes/themeSuggestions'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api'
 
+// A non-2xx response; `code` is the API's string `detail` (e.g. a tracking plan rule code), when it has one.
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string | null
+
+  constructor(status: number, body: string) {
+    super(`API ${status}: ${body}`)
+    this.status = status
+    let code: string | null = null
+    try {
+      const detail = (JSON.parse(body) as { detail?: unknown }).detail
+      if (typeof detail === 'string') code = detail
+    } catch {
+      code = null
+    }
+    this.code = code
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
   const response = await fetch(API_BASE + path)
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await response.text()}`)
+    throw new ApiError(response.status, await response.text())
   }
   return response.json() as Promise<T>
 }
@@ -56,7 +78,7 @@ async function post<T>(path: string, payload: unknown): Promise<T> {
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new Error(`API ${response.status}: ${await response.text()}`)
+    throw new ApiError(response.status, await response.text())
   }
   return response.json() as Promise<T>
 }
@@ -113,11 +135,15 @@ export const getEvents = (params: PageParams & { event_type?: string; exchange?:
       exchange: params.exchange,
     })}`,
   )
-export const getTracking = () => get<TrackingResponse>('/tracking')
+export const getTrackingPlans = (params: { status?: 'open' | 'closed' | 'all'; page?: number; page_size?: number } = {}) =>
+  get<TrackingPlansResponse>(`/tracking${queryString(params)}`)
+export const getTrackingPlan = (planId: number) => get<TrackingPlanDetail>(`/tracking/plans/${planId}`)
+export const addTrackingPlan = (payload: { signal_id: number; daily_candidate_id?: number }) =>
+  post<AddPlanResponse>('/tracking', payload)
+export const cancelTrackingPlan = (planId: number) =>
+  post<{ plan: AddPlanResponse['plan'] }>(`/tracking/plans/${planId}/cancel`, {})
 export const getTrackingSignal = (signalKey: string) =>
-  get<{ signal: Signal; evaluations: TrackingResponse['rows']; settlements: TrackingResponse['settlements'] }>(
-    `/tracking/${encodeURIComponent(signalKey)}`,
-  )
+  get<SignalTrackingResponse>(`/tracking/${encodeURIComponent(signalKey)}`)
 export const getPortfolio = (params: PageParams = {}) =>
   get<Paginated<Position>>(`/portfolio${queryString(params)}`)
 export const upsertPortfolio = (payload: PositionInput) => {

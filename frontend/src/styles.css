@@ -458,6 +458,28 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-note-empty { margin: 0 0 var(--space-2); color: var(--color-text-muted); font-size: 14px; }
 .candidate-note .small-note { margin: 0; }
 
+/* ---- user tracking plans (#253, DESIGN_SYSTEM §7) ----------------------------------------------- */
+.plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.plan-error { flex: 1 1 100%; color: var(--color-warning); }
+.tracking-section .section-head { flex-wrap: wrap; }
+.tracking-section > .small-note { margin: 0 0 var(--space-3); }
+.plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.plan-card { min-width: 0; padding: var(--space-5); }
+.plan-card .card-head { margin-bottom: 0; }
+.plan-card .card-title { font-size: 18px; overflow-wrap: anywhere; }
+.plan-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.plan-conflict { margin-bottom: 0; }
+.plan-lines { display: grid; gap: var(--space-1); margin-top: var(--space-3); }
+.plan-lines .small-note { margin: 0; }
+.plan-result { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.plan-cancel { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.plan-history { margin-top: var(--space-3); }
+.plan-history .table-wrap { margin-bottom: var(--space-2); }
+.stock-plan-panel { margin-top: var(--space-6); }
+.plan-strategy-list { display: grid; gap: var(--space-3); margin: 0 0 var(--space-3); padding: 0; list-style: none; }
+.plan-strategy-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
+.plan-strategy-list .plan-add { margin-top: 0; }
+
 /* ---- news theme suggestions (#216, DESIGN_SYSTEM §7: LLM output with the accent bar) ------------- */
 .theme-suggestions { margin-top: var(--space-10); }
 .theme-suggestions .section-head { flex-wrap: wrap; }
@@ -496,7 +518,7 @@ a.symbol-link:hover { color: var(--color-primary); }
   .theme-news-title { white-space: normal; }
   .stat-grid, .three-stats { grid-template-columns: repeat(2, 1fr); margin-bottom: var(--space-10); }
   .position-list, .news-grid, .action-grid, .glossary-grid, .inline-form { grid-template-columns: 1fr; }
-  .candidate-grid, .theme-suggestion-grid { grid-template-columns: 1fr; }
+  .candidate-grid, .theme-suggestion-grid, .plan-grid { grid-template-columns: 1fr; }
   .news-cards, .news-detail-grid { grid-template-columns: 1fr; }
   .data-explanation { margin-left: 0; }
 }
@@ -507,7 +529,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   h1, .stock-header-name { font-size: 26px; }
   .stock-header-close { font-size: 30px; }
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
-  .candidate-card { padding: var(--space-4); }
+  .candidate-card, .plan-card { padding: var(--space-4); }
+  .plan-card .card-head { flex-wrap: wrap; }
   .candidate-levels, .candidate-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .board-table-wrap { display: none; }
   .board-cards { display: grid; }
