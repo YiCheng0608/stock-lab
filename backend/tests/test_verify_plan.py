@@ -230,6 +230,25 @@ def test_verify_tools_verify_every_page():
         assert plan(path).pages == ALL, path
 
 
+@pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+def test_nightly_and_manual_runs_verify_every_page(event, tmp_path):
+    # #251: master's nightly run checks all five pages whatever its last push changed.
+    assert verify_plan.plan_for_event(event).pages == ALL
+    output = tmp_path / "output"
+    assert (
+        verify_plan.main(
+            ["--base", "0" * 40, "--event", event, "--output", str(output)]
+        )
+        == 0
+    )
+    assert output.read_text(encoding="utf-8") == f"pages={','.join(ALL)}\n"
+
+
+def test_pull_requests_and_pushes_follow_the_diff():
+    for event in ("pull_request", "push", ""):
+        assert verify_plan.plan_for_event(event) is None
+
+
 def test_docs_and_tests_only_are_not_verified(importers):
     result = plan(
         "docs/GITHUB_WORKFLOW.md",

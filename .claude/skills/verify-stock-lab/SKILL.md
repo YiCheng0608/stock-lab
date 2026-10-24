@@ -1,6 +1,6 @@
 ---
 name: verify-stock-lab
-description: 對 stock-lab 五個主導航（今日、新聞、族群、個股、行動）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾時於本機用正式 DB 的唯讀副本跑 `page_checks.py`，agent 只做標「人工」的檢查與判讀，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。G7 驗收、gate 收尾或使用者說「跑 verify-stock-lab」時使用。
+description: 對 stock-lab 五個主導航（今日、新聞、族群、個股、行動）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾與 G7 窗口頭尾時於本機用正式 DB 的唯讀副本跑 `page_checks.py`，agent 只判讀標「人工」的檢查（樣本由程式依規則抽好）與失敗原因，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。G7 驗收、gate 收尾或使用者說「跑 verify-stock-lab」時使用。
 ---
 
 # verify-stock-lab
@@ -9,8 +9,8 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 
 | 模式 | 什麼時候 | 資料 | 誰跑 |
 | --- | --- | --- | --- |
-| [CI 模式](#ci-模式) | 每個 PR 與 master push | 假資料庫（[`fixture_db.py`](../../../tools/verify/fixture_db.py)），數值固定 | CI `verify` job，自動 |
-| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`） | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
+| [CI 模式](#ci-模式) | 每個 PR 與 master push；master 每晚 22:40（台北）與手動觸發（`workflow_dispatch`）跑五頁全套 | 假資料庫（[`fixture_db.py`](../../../tools/verify/fixture_db.py)），數值固定 | CI `verify` job，自動 |
+| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`） | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
 
 回覆使用者一律繁體中文。所有命令在 Git Bash（Claude Code 的 Bash 工具）執行，cwd 為 worktree 根目錄。
 
@@ -18,9 +18,9 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 
 CI `verify` job（`.github/workflows/ci.yml`）每次：
 
-1. 跑 [`tools/verify/verify_plan.py`](../../../tools/verify/verify_plan.py)，依 PR 改到的檔案決定要驗哪幾頁（規則在 [features 驗證範圍](features/README.md#驗證範圍)），plan 寫進 job summary。一頁都不用驗時其餘步驟全部跳過，job 仍以 success 結束。
+1. 跑 [`tools/verify/verify_plan.py`](../../../tools/verify/verify_plan.py)，依 PR 改到的檔案決定要驗哪幾頁（規則在 [features 驗證範圍](features/README.md#驗證範圍)），plan 寫進 job summary。一頁都不用驗時其餘步驟全部跳過，job 仍以 success 結束。每晚排程（`schedule`）與手動觸發（`workflow_dispatch`）以 `--event` 選全部五頁。
 2. 用 `fixture_db.py` 建假資料庫，建置前端，在 runner 上起 API 與 vite preview（[`tools/verify/vite.preview.mjs`](../../../tools/verify/vite.preview.mjs)）。
-3. 跑 `page_checks.py --fixture --pages <plan 的頁>`：每頁的 `CI` 檢查，加上 `API` 檢查（頁面用到的 API 回應等於 `fixture_data.EXPECTED`）。`KNOWN_FAILURES` 列出的已知產品缺陷照報但不讓 job 失敗，修好後要從清單移除。
+3. 跑 `page_checks.py --fixture --pages <plan 的頁>`：每頁的 `CI` 檢查，加上 `API` 檢查（頁面用到的 API 回應等於 `fixture_data.EXPECTED`）。結果是三態（[features 三態與上游](features/README.md#三態與上游)）；假資料庫每個值都在，所以 `--fixture` 下無法判定也讓 job 失敗。`KNOWN_FAILURES` 列出的已知產品缺陷只在失敗訊息含登記的片段時照報而不讓 job 失敗（[已知失敗](features/README.md#已知失敗)），修好後要從清單移除。
 4. 結果寫進 job summary；`out/`（API JSON、截圖、`summary.md`、`results.json`）與 `logs/` 上傳成 artifact `verify-<attempt>`，保留 14 天。
 
 ### 本機重跑
@@ -51,6 +51,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 1. **停止條件**（任一成立就不跑，直接回覆原因）：
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
+   - G7 的那兩次：G7 證據必須是 master 上已 commit 的程式。先 `git fetch origin master`；worktree 要從最新 `origin/master` 建，沒有額外 commit、沒有未 commit 的改動。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設）：
 
    ```bash
@@ -82,17 +83,17 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 照[起服務](#起服務)（`DB="$V/stock.db"`），再跑（私人模式把 `--out "$OUT"` 換成 `--out "$OUT/.private"`）：
 
 ```bash
-"$PY" -B "$WT/tools/verify/page_checks.py" --db "$V/stock.db" --out "$OUT" \
+"$PY" -B "$WT/tools/verify/page_checks.py" --db "$V/stock.db" --out "$OUT" [--g7] \
   --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT" > "$V/logs/checks.log" 2>&1
 ```
 
-約 3～5 分鐘。exit 0 全部通過、1 有失敗、2 是 features 檔與程式不一致（工具問題，五個導覽判無法判定並附 stderr）。輸出：`summary.md`（每頁每條檢查的結果與證據）、`results.json`、`api/`、`shots/`。
+約 3～5 分鐘。exit 0 沒有失敗（可能有無法判定）、1 有失敗、2 是 features 檔與程式不一致或 `--g7` 前置不符（不跑檢查；features 不一致時五個導覽判無法判定並附 stderr）。輸出：`summary.md`（開頭是程式版本、個股 `E`／`S` 的來源、三態計數與人工檢查樣本，接著每頁每條檢查的三態結果與證據）、`results.json`、`api/`、`shots/`、`manual/`（人工檢查樣本）。
 
 ### 3. 人工檢查與判讀
 
-1. 各 features 檔「檢查」表類型為 `人工` 的條目由 agent 做：讀 `shots/*.txt`、`shots/*.png`、`api/*.json`，照該條「怎麼判」記 `通過`／`失敗`／`無法判定` 與一句證據。目前沒有標人工的檢查時這步略過，summary 寫「無人工檢查」。
-2. `page_checks.py` 判失敗或無法判定的每一條，選一個[原因類別](features/README.md#原因類別)（文件漂移、工具缺口、產品缺陷）。不改檢查讓它通過：判成文件漂移或工具缺口的照實記下，另開 PR 修。
-3. 每個導覽的三態：任一條失敗 → 失敗；沒有失敗但有無法判定 → 無法判定；否則通過。
+1. **人工檢查**（features 類型 `人工`）：樣本已由 `page_checks.py` 依寫死的規則抽好，在 `manual/<編號>.json`（規則寫在檔內 `rule` 與該條「怎麼判」）；不另挑、不增減樣本。判讀交給獨立 session：另開一個 Claude session，只給它 `$OUT` 路徑、features 檔與這一節，請它逐筆照「怎麼判」記 `通過`／`失敗`／`無法判定` 與一句證據（失敗寫樣本 id 與原句）；跑 `page_checks.py` 的 session 不自己判。樣本 0 筆或檔內有 `error` 時該條記無法判定。
+2. `page_checks.py` 判失敗或無法判定的每一條，選一個[原因類別](features/README.md#原因類別)（文件漂移、工具缺口、產品缺陷）。「無法判定（上游 X）」的原因類別跟上游 X 相同。不改檢查讓它通過：判成文件漂移或工具缺口的照實記下，另開 PR 修。
+3. 每個導覽的三態（CI 與人工檢查一起算）：任一條失敗 → 失敗；沒有失敗但有無法判定 → 無法判定；否則通過。
 
 #### 人工檢查的共通規則
 
@@ -114,15 +115,16 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    ```markdown
    ## verify-stock-lab 真資料結果（2026-10-22 01:30 台北）
 
-   - 程式：`task/227-verify-skill` @ `5fbf04c`（`git status --short` 有未 commit 的改動時，列出檔名並註明照工作樹建置）
+   - 程式：`task/227-verify-skill` @ `5fbf04c`（照 `summary.md` 開頭的「程式」行；有未 commit 的改動時註明照工作樹建置；G7 加註 `--g7`）
    - 副本：資料日 2026-10-21（`facts.json` 的 `market_latest_trading_date`），alembic `0016_group_score_archive`，複製 10.1 秒
+   - 個股 E／S：TWSE 3004，今日榜 #1 族群「電機機械」的第一個成員（照 `summary.md` 開頭的「個股 E／S」行）
    - 證據：https://github.com/YiCheng0608/stock-lab/tree/pr-assets/227/20261022-0130
-   - 人工檢查：無
+   - 人工檢查（獨立 session 判讀）：T10 通過；N7 失敗（id 2851 摘要多出原文沒有的營收數字）；N8 通過
 
    | 導覽 | 結果 | 失敗或無法判定的檢查（原因類別） |
    | --- | --- | --- |
    | 今日 `/` | 通過 | — |
-   | 新聞 `/news` | 通過 | — |
+   | 新聞 `/news` | 失敗 | N7：AI 摘要不忠於原文（產品缺陷） |
    | 族群 `/themes` | 失敗 | G2：族群榜缺資料日期標記（產品缺陷） |
    | 個股 `/stocks` | 通過 | — |
    | 行動 `/actions` | 無法判定 | A1：`/api/actions?limit=20` 回 500（產品缺陷） |
@@ -134,7 +136,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 
 ### 私人資料
 
-私人模式（`facts.json` 的 `portfolio_positions` 大於 0）時，`page_checks.py` 的輸出整個寫到 `$OUT/.private/`（不推送），並 `mv "$OUT/copy.json" "$OUT/.private/"`。推送的 summary 改用 `page_checks.py` 同時寫出的 `status.md`（同樣的表格，只有每條檢查的結果，不含證據文字）：`cp "$OUT/.private/status.md" "$OUT/summary.md"`，再照[證據](#4-證據)第 2 步在前面加段落並註明「私人模式」；人工檢查的證據只寫檔名、行號與行數。
+私人模式（`facts.json` 的 `portfolio_positions` 大於 0）時，`page_checks.py` 的輸出整個寫到 `$OUT/.private/`（不推送），並 `mv "$OUT/copy.json" "$OUT/.private/"`。推送的 summary 改用 `page_checks.py` 同時寫出的 `status.md`（同樣的表格，只有每條檢查的結果，不含證據文字）：`cp "$OUT/.private/status.md" "$OUT/summary.md"`，再照[證據](#4-證據)第 2 步在前面加段落並註明「私人模式」。人工檢查樣本只有新聞與候選、沒有庫存，可以推送：`cp -r "$OUT/.private/manual" "$OUT/"`；人工檢查的證據寫樣本 id 與原句，不抄庫存行。
 
 ## 起服務
 

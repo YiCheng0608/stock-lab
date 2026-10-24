@@ -84,7 +84,12 @@
 | worktree 外暫存目錄路徑寫進 PR | 無（PR 模板欄位） | `.github/pull_request_template.md` |
 | 統籌接手時核對前任標「已完成」的事 | 無 | `docs/GITHUB_WORKFLOW.md`（統籌 session） |
 | 同類錯誤第二次發生就編成檢查 | 無（流程用 encode-lesson skill，#228） | `docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/encode-lesson/SKILL.md` |
-| 五個主導航在假資料庫上通過 features 標「CI」的檢查（#243） | CI `verify` job（`required` 依賴它；已知產品缺陷列在 `KNOWN_FAILURES` 並附 Issue） | `tools/verify/page_checks.py`、`.github/workflows/ci.yml`（`verify` job） |
+| 五個主導航在假資料庫上通過 features 標「CI」的檢查（#243） | CI `verify` job（`required` 依賴它；已知產品缺陷列在 `KNOWN_FAILURES` 並附 Issue 與失敗訊息片段，訊息不符照常失敗，#251） | `tools/verify/page_checks.py`、`.github/workflows/ci.yml`（`verify` job） |
+| verify 結果三態：上游沒通過的檢查記「無法判定（上游 X）」、不計失敗；假資料庫上無法判定也讓 CI 失敗（#251） | 後端測試 `test_verify_tristate.py`（10/24 真資料情境）；CI `verify` job | `tools/verify/page_checks.py`（`OWNERS`、`AFTER`、`judge`、`blocking`） |
+| 空狀態與 DB／其他 API 交叉核對，另一處有資料就判失敗；個股選股依序備援（#251） | 後端測試 `test_verify_tristate.py`；CI `verify` job | `tools/verify/page_checks.py`（`empty_board`、T7、T9、A4、`Run.stock`） |
+| master 每晚與手動觸發跑 CI 全套，`verify` 驗五頁（#251） | CI `schedule`、`workflow_dispatch`；後端測試 `test_nightly_and_manual_runs_verify_every_page` | `.github/workflows/ci.yml`、`tools/verify/verify_plan.py`（`FULL_EVENTS`） |
+| features 標「人工」的檢查有寫死的抽樣規則（#251） | `page_checks.py` exit 2；後端測試 `test_every_manual_check_has_a_sampler` | `tools/verify/page_checks.py`（`MANUAL`、`registry_problems`） |
+| G7 真資料 verify 用 master 上已 commit 的程式，5 日窗口頭尾各跑一次；人工檢查由另一個 session 判讀（#251） | 部分：`page_checks.py --g7` 在有未 commit 改動或 HEAD 不在 origin/master 時 exit 2；時點與獨立判讀無 | `tools/verify/page_checks.py`（`g7_problems`）、`docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/verify-stock-lab/SKILL.md` |
 | features 標「CI」的檢查都有實作、有實作的都標「CI」（#243） | CI `verify` job（`page_checks.py` 不一致就 exit 2）；後端測試 `test_every_ci_check_in_features_is_implemented` | `tools/verify/page_checks.py`（`registry_problems`）、`backend/tests/test_verify_checks.py` |
 | `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
 | CI `verify` job 只驗改動影響的頁，依 features「驗證範圍」選頁；不驗時 job 仍 success（#245） | CI `verify` job 的 Plan step；後端測試 `test_verify_plan.py`（各類改動的頁面範圍、前端檔清單涵蓋 import 它的檔） | `tools/verify/verify_plan.py`、`.claude/skills/verify-stock-lab/features/README.md`（驗證範圍）、`.github/workflows/ci.yml`（`verify` job） |
