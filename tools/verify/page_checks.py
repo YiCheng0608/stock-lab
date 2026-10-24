@@ -1809,8 +1809,12 @@ def a8(run: Run) -> str:
 @check("actions", "A9", after=("A8",))
 def a9(run: Run) -> str:
     text, (opened, closed) = run.text(ACTIONS), plans(run)
+    items, cards = opened + closed, plan_cards(text)
+    expect(
+        len(cards) == len(items), f"`計畫資料日` {len(cards)} 行，計畫 {len(items)} 筆"
+    )
     problems = []
-    for item, card in zip(opened + closed, plan_cards(text)):
+    for item, card in zip(items, cards):
         name = f"計畫 {item.get('id')}"
         badge = next(
             (i for i in range(card - 1, 0, -1) if BADGE_DATE_LINE.match(text.lines[i])),
@@ -1889,6 +1893,9 @@ def a10(run: Run) -> str:
 def a11(run: Run) -> str:
     text, (opened, closed) = run.text(ACTIONS), plans(run)
     items, cards = opened + closed, plan_cards(text)
+    expect(
+        len(cards) == len(items), f"`計畫資料日` {len(cards)} 行，計畫 {len(items)} 筆"
+    )
     rows_of: list[list[tuple[str, str, str]]] = []
     for n, card in enumerate(cards):
         end = cards[n + 1] if n + 1 < len(cards) else len(text.lines)

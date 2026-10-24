@@ -267,3 +267,15 @@ def test_t11_counts_one_add_or_tracked_line_per_candidate(tmp_path):
     run = FakeRun(tmp_path, {"candidates": payload}, {"today-1280": "加入追蹤\n"})
     with pytest.raises(page_checks.Fail, match="items 2"):
         page_checks.t11(run)
+
+
+def test_a11_fails_instead_of_crashing_when_the_page_has_no_plan_cards(tmp_path):
+    # The page from before #253 has no plan cards: a failure (then 無法判定 after A8), not an IndexError.
+    with pytest.raises(page_checks.Fail, match="`計畫資料日` 0 行，計畫 4 筆"):
+        page_checks.a11(actions_run(tmp_path, "我的庫存\n查看個股詳情 →"))
+
+
+def test_a9_does_not_pass_a_page_without_the_plan_cards(tmp_path):
+    # Found on the page from before #253: zip() over no cards checked nothing and passed.
+    with pytest.raises(page_checks.Fail, match="`計畫資料日` 0 行，計畫 4 筆"):
+        page_checks.a9(actions_run(tmp_path, "我的庫存\n查看個股詳情 →"))
