@@ -16,11 +16,20 @@ page also gets an ``API`` check comparing its APIs with
 ``fixture_data.NO_DATA_STOCK``.  It imports ``fixture_data``, so ``backend/``'s
 requirements must be installed.
 
-Writes ``<out>/api/*.json``, ``<out>/shots/*.png|txt|jsonl``,
+Each check ends 通過, 失敗 or 無法判定 (Issue #251): 無法判定 when an API was not
+200, a screenshot was not ready, or an upstream check (``OWNERS``, ``after``)
+did not pass; 無法判定 is never counted as 失敗.  The stocks checks run on E/S
+picked from today's #1 group, else candidate #1, else the first listed stock.
+The checks that features label ``人工`` get their samples, picked by the rules
+written in ``MANUAL``, in ``<out>/manual/<code>.json`` for an agent to judge.
+
+Writes ``<out>/api/*.json``, ``<out>/shots/*.png|txt|jsonl``, ``<out>/manual/``,
 ``<out>/results.json``, ``<out>/summary.md`` and ``<out>/status.md`` (the same
 tables without the evidence, for runs on private data) and prints one line per check.
-Exit 0 when every check passed (a check in ``KNOWN_FAILURES`` may fail), 1 when
-one failed, 2 when the features files and ``CHECKS`` disagree.
+Exit 0 when no check failed (a matching ``KNOWN_FAILURES`` entry may fail; with
+``--fixture`` no check may be 無法判定 either), 1 when one did, 2 when the
+features files and ``CHECKS``/``MANUAL`` disagree or ``--g7`` finds the program
+is not committed on origin/master.
 """
 
 from __future__ import annotations
@@ -49,9 +58,20 @@ SCREENSHOT = ROOT / "tools" / "ops" / "screenshot.cjs"
 PAGES = ("today", "news", "themes", "stocks", "actions")
 TAIPEI = timezone(timedelta(hours=8))
 
-# A check that fails because of a known product defect: it is reported, but does
-# not fail the run.  When it passes the run fails, so the entry is removed with the fix.
-KNOWN_FAILURES: dict[tuple[str, str], str] = {}
+
+@dataclass(frozen=True)
+class Known:
+    """A known product defect: the Issue and a fragment of the failure message it causes."""
+
+    issue: str
+    match: str
+
+
+# A check that fails because of a known product defect: reported, but it does not
+# fail the run.  Only a failure whose message contains ``match`` is the known one;
+# any other failure of the check fails as usual (#251: T6 failed on U+00A0 while
+# listed for #233).  When it passes the run fails, so the entry goes with the fix.
+KNOWN_FAILURES: dict[tuple[str, str], Known] = {}
 
 API_ATTEMPTS = 3
 API_TIMEOUT_S = 30
@@ -76,10 +96,13 @@ def feature_checks(features: Path = FEATURES) -> dict[str, dict[str, str]]:
 
 
 def registry_problems(
-    labels: dict[str, dict[str, str]], checks: dict[str, dict[str, Any]]
+    labels: dict[str, dict[str, str]],
+    checks: dict[str, dict[str, Any]],
+    manual: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
-    """Every CI check needs an implementation, and every implementation a CI label."""
+    """Every CI check needs an implementation and every 人工 check a sampler (``MANUAL``), and back."""
 
+    manual = MANUAL if manual is None else manual
     problems = []
     for page in PAGES:
         page_labels = labels.get(page, {})
@@ -88,10 +111,17 @@ def registry_problems(
                 problems.append(f"{page}.md {code}: 類型 is {kind!r}, not CI or 人工")
             elif kind == "CI" and code not in checks.get(page, {}):
                 problems.append(f"{page}.md {code}: labeled CI but not implemented")
+            elif kind == "人工" and code not in manual.get(page, {}):
+                problems.append(f"{page}.md {code}: labeled 人工 but has no sampler")
         for code in checks.get(page, {}):
             if page_labels.get(code) != "CI":
                 problems.append(
                     f"{page} {code}: implemented but {page}.md does not label it CI"
+                )
+        for code in manual.get(page, {}):
+            if page_labels.get(code) != "人工":
+                problems.append(
+                    f"{page} {code}: sampled but {page}.md does not label it 人工"
                 )
     return problems
 
@@ -173,15 +203,33 @@ class Text:
 # ---- results ----
 
 
-class Fail(Exception):
-    """A failed check; the message is the evidence (expected vs actual)."""
+PASS, FAIL, UNDETERMINED = "通過", "失敗", "無法判定"
 
 
-class Undetermined(Fail):
+class CheckError(Exception):
+    """A check that did not pass; the message is the evidence."""
+
+
+class Fail(CheckError):
+    """A failed check: expected vs actual."""
+
+
+class Undetermined(CheckError):
     """A check that could not run: an API was not 200 or a screenshot was not ready."""
 
     def __str__(self) -> str:
         return f"無法判定：{super().__str__()}"
+
+
+class Upstream(Undetermined):
+    """A check that could not run because its upstream check did not pass or has no value."""
+
+    def __init__(self, upstream: str, reason: str) -> None:
+        super().__init__(reason)
+        self.upstream = upstream
+
+    def __str__(self) -> str:
+        return f"無法判定（上游 {self.upstream}）：{self.args[0]}"
 
 
 def expect(condition: bool, message: str) -> None:
@@ -193,21 +241,26 @@ def expect(condition: bool, message: str) -> None:
 class Result:
     page: str
     code: str
-    ok: bool
+    state: str  # PASS, FAIL or UNDETERMINED
     detail: str
     subject: str = ""
-    known: str | None = None
+    known: str | None = None  # the Issue of the matching KNOWN_FAILURES entry
+    upstream: str | None = None  # the upstream check an undetermined result waits on
 
     @property
     def status(self) -> str:
         if self.known:
-            return "失敗（已知）" if not self.ok else "失敗（已知失敗卻通過）"
-        return "通過" if self.ok else "失敗"
+            return "失敗（已知）" if self.state == FAIL else "失敗（已知失敗卻通過）"
+        return self.state
 
     @property
     def failed(self) -> bool:
         # A known failure that passes fails the run, so KNOWN_FAILURES stays current.
-        return self.ok if self.known else not self.ok
+        return self.state == PASS if self.known else self.state == FAIL
+
+    @property
+    def undetermined(self) -> bool:
+        return self.state == UNDETERMINED
 
     @property
     def label(self) -> str:
@@ -272,6 +325,10 @@ class Run:
         self.responses: dict[str, tuple[int, Any]] = {}
         self.shots: dict[str, dict[int, dict]] = {}
         self._facts: dict[tuple, dict] = {}
+        # (page, code, stock label or "") -> result, as run_page records them
+        self.done: dict[tuple[str, str, str], Result] = {}
+        self._stock: Stock | CheckError | None = None
+        self.picked = ""  # where E/S came from, for the summary
         for sub in ("api", "shots"):
             (out / sub).mkdir(parents=True, exist_ok=True)
 
@@ -406,22 +463,36 @@ class Run:
     def today_board(self) -> dict:
         return self.get("themes?board=industry&limit=10", "today-board.json")
 
-    def D(self) -> str:
+    def needs(self, value: str, found: Any, missing: str, subject: str = "") -> Any:
+        """``found`` for a check that uses ``value``; Upstream when the owner did not pass or it is missing."""
+
+        page, code = OWNERS[value]
+        owner = self.done.get((page, code, subject))
+        if owner is not None and owner.state != PASS:
+            raise Upstream(owner.upstream or code, f"{code} {owner.status}")
+        if not found:
+            raise Upstream(code, missing)
+        return found
+
+    # The owners (T2, T4, T5) read the raw values and judge a missing one themselves.
+    def raw_D(self) -> str | None:
         as_of = self.dashboard().get("as_of")
-        if not as_of:
-            raise Undetermined("dashboard.json 沒有 as_of（D）")
-        return as_of[:10]
+        return as_of[:10] if as_of else None
+
+    def D(self) -> str:
+        return self.needs("D", self.raw_D(), "dashboard.json 沒有 as_of（D）")
+
+    def raw_B(self) -> str | None:
+        return (self.today_board().get("meta") or {}).get("trading_date")
 
     def B(self) -> str:
-        day = self.today_board()["meta"].get("trading_date")
-        if not day:
-            raise Undetermined("today-board.json 沒有 meta.trading_date（B）")
-        return day
+        return self.needs(
+            "B", self.raw_B(), "today-board.json 沒有 meta.trading_date（B）"
+        )
 
     def T(self) -> tuple[str, str]:
         items = self.today_board().get("items") or []
-        if not items:
-            raise Undetermined("today-board.json 的 items 為空（T）")
+        self.needs("T", items, "today-board.json 的 items 為空（T）")
         return items[0]["theme_id"], items[0]["display_name"]
 
     def theme_members(self) -> dict:
@@ -431,11 +502,64 @@ class Run:
             "theme-members.json",
         )
 
-    def path_stock(self) -> Stock:
+    def stock(self) -> Stock:
+        """E/S, picked once per run from the first source that has one (features/README.md)."""
+
+        if self._stock is None:
+            self._stock = self._pick()
+        if isinstance(self._stock, CheckError):
+            raise self._stock
+        return self._stock
+
+    def _pick(self) -> Stock | CheckError:
+        skipped = []
+        for source, pick in (
+            ("今日榜", self._pick_from_board),
+            ("明日候選", self._pick_from_candidates),
+            ("市場列表", self._pick_from_list),
+        ):
+            try:
+                stock, how = pick()
+            except CheckError as error:
+                skipped.append(f"{source}：{error.args[0]}")
+                continue
+            self.picked = how + (f"（略過 {'；'.join(skipped)}）" if skipped else "")
+            return stock
+        self.picked = "沒有可用的個股：" + "；".join(skipped)
+        return Undetermined(self.picked)
+
+    def _pick_from_board(self) -> tuple[Stock, str]:
+        _theme_id, name = self.T()
         items = self.theme_members().get("items") or []
         if not items:
-            raise Undetermined("theme-members.json 的 items 為空（E、S）")
-        return Stock(items[0]["exchange"], items[0]["symbol"])
+            raise Undetermined("theme-members.json 的 items 為空")
+        stock = Stock(items[0]["exchange"], items[0]["symbol"])
+        return stock, f"今日榜 #1 族群「{name}」的第一個成員"
+
+    def _pick_from_candidates(self) -> tuple[Stock, str]:
+        items = self.get("candidates", "candidates.json").get("items") or []
+        if not items:
+            raise Undetermined("candidates.json 的 items 為空")
+        instrument = items[0]["instrument"]
+        return Stock(instrument["exchange"], instrument["symbol"]), "明日候選 #1"
+
+    def _pick_from_list(self) -> tuple[Stock, str]:
+        items = self.get("stocks?page=1&page_size=30", "stocks.json").get("items") or []
+        if not items:
+            raise Undetermined("stocks.json 的 items 為空")
+        instrument = items[0]["instrument"]
+        return Stock(instrument["exchange"], instrument["symbol"]), "市場列表第一筆"
+
+
+# The check that owns each value passed between checks (features/README.md 跨檔傳遞的值).
+# A check using the value is 無法判定（上游 <owner>） when the value is missing or the
+# owner did not pass, so one defect is one failure, not one per page (#251).
+OWNERS: dict[str, tuple[str, str]] = {
+    "D": ("today", "T2"),
+    "B": ("today", "T4"),
+    "T": ("today", "T5"),
+    "I": ("stocks", "S8"),
+}
 
 
 # ---- shots per page ----
@@ -453,7 +577,7 @@ def news_shots(run: Run) -> list[Shot]:
     ]
     try:
         shots.append(Shot("news-detail", f"/news/{news_detail_id(run)}"))
-    except Fail:
+    except CheckError:
         pass  # N6 reports the missing id
     return shots
 
@@ -465,7 +589,7 @@ def themes_shots(run: Run) -> list[Shot]:
     ]
     try:
         shots.append(Shot("theme-detail", f"/themes/{run.T()[0]}"))
-    except Fail:
+    except CheckError:
         pass
     return shots
 
@@ -498,8 +622,8 @@ def action_detail_shot(stock: Stock) -> Shot:
 def actions_shots(run: Run) -> list[Shot]:
     shots = [Shot("actions", "/actions")]
     try:
-        shots.append(action_detail_shot(run.path_stock()))
-    except Fail:
+        shots.append(action_detail_shot(run.stock()))
+    except CheckError:
         pass
     return shots
 
@@ -530,13 +654,26 @@ def usable(run: Run, shots: list[Shot]) -> str:
 CheckFn = Callable[..., str]
 CHECKS: dict[str, dict[str, CheckFn]] = {page: {} for page in PAGES}
 PER_STOCK: set[str] = set()  # stocks checks that run once per Stock
+NEEDS_STOCK: set[str] = set()  # of those, the ones that cannot run without E/S
+# (page, code) -> same-page checks that must pass first; a failure is then 無法判定（上游 X）
+AFTER: dict[tuple[str, str], tuple[str, ...]] = {}
 
 
-def check(page: str, code: str, per_stock: bool = False):
+def check(
+    page: str,
+    code: str,
+    per_stock: bool = False,
+    needs_stock: bool | None = None,
+    after: tuple[str, ...] = (),
+):
     def register(fn: CheckFn) -> CheckFn:
         CHECKS[page][code] = fn
         if per_stock:
             PER_STOCK.add(code)
+        if per_stock if needs_stock is None else needs_stock:
+            NEEDS_STOCK.add(code)
+        if after:
+            AFTER[(page, code)] = after
         return fn
 
     return register
@@ -545,6 +682,7 @@ def check(page: str, code: str, per_stock: bool = False):
 # ---- today ----
 
 TODAY = Shot("today", "/")
+PENDING_DATE = "資料日期待核實"  # DateBadge without a date
 
 
 @check("today", "T1")
@@ -554,9 +692,17 @@ def t1(run: Run) -> str:
 
 @check("today", "T2")
 def t2(run: Run) -> str:
-    text, d = run.text(TODAY), run.D()
-    expect(text.has(f"資料 {d}"), f"缺整行 `資料 {d}`（{text.name}）")
+    text, d = run.text(TODAY), run.raw_D()
     latest = run.facts()["market_latest_trading_date"]
+    if not d:
+        # #251: the DB has bars, so a page without a data date is a defect, not 無法判定.
+        expect(
+            latest is None,
+            f"dashboard.as_of 為 null，但 DB market_bars 最新 {latest}",
+        )
+        expect(text.has(PENDING_DATE), f"as_of 為 null，缺整行 `{PENDING_DATE}`")
+        return f"DB 與 dashboard 都沒有資料日，顯示 `{PENDING_DATE}`"
+    expect(text.has(f"資料 {d}"), f"缺整行 `資料 {d}`（{text.name}）")
     expect(d == latest, f"D {d} ≠ facts market_latest_trading_date {latest}")
     return f"`資料 {d}` = facts {latest}"
 
@@ -587,13 +733,20 @@ def first_data_line_after(text: Text, title: str) -> tuple[int, str | None]:
 
 @check("today", "T4")
 def t4(run: Run) -> str:
-    text, b = run.text(TODAY), run.B()
+    text, b = run.text(TODAY), run.raw_B()
+    latest = run.facts()["group_scores_latest_trading_date"]
+    if not b:
+        expect(
+            latest is None,
+            f"today-board.json meta.trading_date 為 null，但 DB group_daily_scores 最新 {latest}",
+        )
+        expect(text.has(PENDING_DATE), f"B 為 null，缺整行 `{PENDING_DATE}`")
+        return f"DB 與族群榜都沒有資料日，顯示 `{PENDING_DATE}`"
     j, line = first_data_line_after(text, "熱門族群")
     expect(
         line == f"資料 {slash(b)}",
         f"`熱門族群` 後第一個資料行是 {line!r}，預期 `資料 {slash(b)}`（{text.at(j)}）",
     )
-    latest = run.facts()["group_scores_latest_trading_date"]
     expect(b == latest, f"B {b} ≠ facts group_scores_latest_trading_date {latest}")
     return f"`{line}`；B = facts {latest}"
 
@@ -602,14 +755,43 @@ def board_empty_message(board: dict) -> str:
     return (board.get("meta") or {}).get("empty_message") or "此榜目前沒有族群"
 
 
+def empty_board(run: Run, board: dict, text: Text, name: str) -> str:
+    """An empty board passes only on its empty message and when no other source has scores (#251)."""
+
+    day = (board.get("meta") or {}).get("trading_date")
+    latest = run.facts()["group_scores_latest_trading_date"]
+    elsewhere = []
+    if latest and day in (None, latest):
+        elsewhere.append(f"DB group_daily_scores {latest} 有名次")
+    ranked = [
+        group
+        for group in run.dashboard().get("groups") or []
+        if group.get("rank") is not None
+        and group.get("trading_date") in {day or latest} - {None}
+    ]
+    if ranked:
+        elsewhere.append(
+            f"dashboard.groups 有 {len(ranked)} 個 {ranked[0]['trading_date']} 有名次的族群"
+        )
+    message = board_empty_message(board)
+    expect(
+        not elsewhere,
+        f"{name} items 空（顯示 `{message}`），但 " + "、".join(elsewhere),
+    )
+    expect(text.has(message), f"{name} items 空，缺空資料文案 `{message}`")
+    return f"items 空，DB 與 dashboard 也沒有名次，顯示 `{message}`"
+
+
 @check("today", "T5")
 def t5(run: Run) -> str:
-    text, board, b = run.text(TODAY), run.today_board(), run.B()
+    text, board = run.text(TODAY), run.today_board()
     items = board.get("items") or []
     if not items:
-        message = board_empty_message(board)
-        expect(text.has(message), f"items 空，缺空資料文案 `{message}`")
-        return f"items 空，顯示 `{message}`"
+        run.needs(
+            "B", True, ""
+        )  # T4 failing on the same missing scores is the one failure
+        return empty_board(run, board, text, "today-board.json")
+    b = run.B()
     marker = f"資料 {slash(b)} · 相對加權指數"
     cards = text.count(lambda line: line == marker)
     expect(
@@ -700,12 +882,25 @@ def source_lines(text: Text) -> list[int]:
 def t7(run: Run) -> str:
     text, payload = run.text(TODAY), candidates(run)
     items = payload.get("items") or []
+    if payload.get("status") == "not_computed" or not items:
+        # #251: an empty list passes only when the DB has no candidates for that day either.
+        facts = run.facts()
+        latest, count = (
+            facts["candidate_run_latest_trading_date"],
+            facts["candidate_count_latest"],
+        )
+        day = payload.get("trading_date")
+        expect(
+            not (count and day in (None, latest)),
+            f"candidates.json {payload.get('status')}、items {len(items)}，"
+            f"但 DB candidate_runs {latest} 有 {count} 檔",
+        )
     if payload.get("status") == "not_computed":
         expect(text.has("尚無候選清單"), "status not_computed，缺 `尚無候選清單`")
-        return "not_computed，顯示 `尚無候選清單`"
+        return "not_computed，DB 也沒有當日候選，顯示 `尚無候選清單`"
     if not items:
         expect(text.has("當日零候選"), "items 空，缺 `當日零候選`")
-        return "items 空，顯示 `當日零候選`"
+        return "items 空，DB 也是 0 檔，顯示 `當日零候選`"
     c = payload["trading_date"]
     i = text.find("明日候選")
     expect(i >= 0, "缺整行 `明日候選`")
@@ -730,7 +925,8 @@ def news_inference(item: dict) -> bool:
     return bool((components.get("news_sentiment") or {}).get("inference"))
 
 
-@check("today", "T8")
+# T8 counts the same 來源 rows as T7, so a T7 failure is not counted twice.
+@check("today", "T8", after=("T7",))
 def t8(run: Run) -> str:
     text, payload = run.text(TODAY), candidates(run)
     items = payload.get("items") or []
@@ -752,16 +948,51 @@ def t8(run: Run) -> str:
     return f"{inferred} 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` {notes} 行；免責句 {disclaimers} 行"
 
 
+def home_actions(dashboard: dict) -> list[dict]:
+    """The 關注標的 cards of TodayPage (frontend/src/App.tsx homeActions), deduplicated."""
+
+    shown = {}
+    for action in (dashboard.get("actions") or []) + (
+        dashboard.get("candidates") or []
+    ):
+        if (
+            action.get("action_state") != "data_insufficient"
+            or action.get("held") is True
+            or action.get("position_quantity_status") == "unknown"
+        ):
+            instrument = action.get("instrument") or {}
+            key = (
+                instrument.get("exchange"),
+                instrument.get("symbol"),
+                action.get("as_of"),
+            )
+            shown.setdefault(key, action)
+    return list(shown.values())
+
+
 @check("today", "T9")
 def t9(run: Run) -> str:
     text = run.text(TODAY)
     k = text.count(lambda line: line == "查看個股詳情 →")
     if k == 0:
+        # #251: the empty state passes only when no other source has something to show.
+        shown = home_actions(run.dashboard())
+        expect(
+            not shown,
+            f"沒有卡片，但 dashboard.actions／candidates 有 {len(shown)} 筆可顯示",
+        )
+        payload = candidates(run)
+        listed, day = payload.get("items") or [], payload.get("trading_date")
+        latest = run.facts()["market_latest_trading_date"]
+        expect(
+            not (listed and day and day == latest),
+            f"沒有卡片，但 candidates.json 有 {len(listed)} 檔 {day}（DB 最新交易日）成立條件的候選",
+        )
         message = (run.dashboard().get("empty_states") or {}).get(
             "actions"
         ) or "目前沒有可顯示的行動摘要。"
         expect(text.has(message), f"沒有卡片，缺空資料文案 `{message}`")
-        return f"沒有卡片，顯示 `{message}`"
+        return f"沒有卡片，dashboard 與候選也沒有，顯示 `{message}`"
     dates = text.count(lambda line: bool(DATE_LINE.match(line)))
     expect(dates == k, f"`查看個股詳情 →` {k} 行，`資料日 YYYY/MM/DD` {dates} 行")
     return f"{k} 張卡各有 `資料日`"
@@ -1003,15 +1234,14 @@ def g2(run: Run) -> str:
     return "、".join(notes) + f"；= facts {latest}"
 
 
-@check("themes", "G3")
+# G2 failing on a board without a date already counts the missing scores once.
+@check("themes", "G3", after=("G2",))
 def g3(run: Run) -> str:
     payload = board(run, "industry")
     items = payload.get("items") or []
     wide, narrow = run.text(THEMES), run.text(THEMES, 390)
     if not items:
-        message = board_empty_message(payload)
-        expect(wide.has(message), f"items 空，缺 `{message}`")
-        return f"items 空，顯示 `{message}`"
+        return empty_board(run, payload, wide, "themes-industry.json")
     expect(
         wide.find_where(lambda line: line.startswith("排名\t族群")) >= 0,
         "1280 缺 `排名\\t族群` 開頭的表頭",
@@ -1097,13 +1327,13 @@ def g6(run: Run) -> str:
 
 @check("themes", "G7")
 def g7(run: Run) -> str:
+    payload, text = theme_detail(run)  # T first: without it there is no path to compare
     today = run.text(TODAY)
     start = today.find("熱門族群")
     i = today.find("#1", max(start, 0))
     expect(i >= 0, "今日頁 `熱門族群` 之後缺 `#1`")
     today_name = today.after(i)
     board_name = (board(run, "industry").get("items") or [{}])[0].get("display_name")
-    payload, text = theme_detail(run)
     detail_name = (payload.get("theme") or {}).get("display_name")
     expect(
         today_name == board_name == detail_name,
@@ -1143,29 +1373,38 @@ def stock_news(run: Run, stock: Stock) -> dict:
     return run.get(f"news?symbol={stock.symbol}&limit=50", f"stock-news{suffix}.json")
 
 
+def raw_I(run: Run, stock: Stock) -> str | None:
+    return (run.facts(stock).get("instrument") or {}).get("latest_trading_date")
+
+
 def stock_I(run: Run, stock: Stock) -> str:
-    day = (run.facts(stock).get("instrument") or {}).get("latest_trading_date")
-    if not day:
-        raise Undetermined(f"facts-{stock.prefix}.json 沒有 latest_trading_date（I）")
-    return day
+    missing = f"facts-{stock.prefix}.json 沒有 latest_trading_date（I）"
+    return run.needs("I", raw_I(run, stock), missing, stock.label)
 
 
 def stock_text(run: Run, stock: Stock, tab: str = "main", width: int = 1280) -> Text:
     return run.text(stock_shots(stock)[tab], width)
 
 
-@check("stocks", "S1", per_stock=True)
-def s1(run: Run, stock: Stock) -> str:
+STOCKS = Shot("stocks", "/stocks")
+
+
+# The directory /stocks needs no E/S (#251); without one only the stock pages go unchecked.
+@check("stocks", "S1", per_stock=True, needs_stock=False)
+def s1(run: Run, stock: Stock | None) -> str:
+    if stock is None:
+        detail = usable(run, [STOCKS])
+        return f"{detail}（只驗 /stocks；未選到個股：{run.picked}）"
     shots = list(stock_shots(stock).values())
     if stock.prefix == "stock":
-        shots.insert(0, Shot("stocks", "/stocks"))
+        shots.insert(0, STOCKS)
     return usable(run, shots)
 
 
 @check("stocks", "S2")
-def s2(run: Run, stock: Stock) -> str:
+def s2(run: Run, stock: Stock | None) -> str:
     payload = run.get("stocks?page=1&page_size=30", "stocks.json")
-    text = run.text(Shot("stocks", "/stocks"))
+    text = run.text(STOCKS)
     header = "代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料"
     expect(text.has(header), "缺目錄表頭整行")
     items = payload.get("items") or []
@@ -1293,7 +1532,9 @@ def s7(run: Run, stock: Stock) -> str:
 @check("stocks", "S8", per_stock=True)
 def s8(run: Run, stock: Stock) -> str:
     instrument = run.facts(stock).get("instrument") or {}
-    i = stock_I(run, stock)
+    i = raw_I(run, stock)
+    if not i:
+        raise Undetermined(f"facts-{stock.prefix}.json 沒有 latest_trading_date（I）")
     bars_as_of = stock_bars(run, stock).get("data_as_of")
     expect(i == bars_as_of, f"facts I {i} ≠ stock-bars data_as_of {bars_as_of}")
     expect(bool(instrument.get("source")), "facts instrument.source 為空")
@@ -1367,6 +1608,9 @@ def a3(run: Run) -> str:
 def a4(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
     k = text.count(lambda line: line == "查看個股詳情 →")
+    items = payload.get("items") or []
+    # #251: zero cards against a non-empty API is a page that lost its cards, not a pass.
+    expect(k > 0 or not items, f"actions.json items {len(items)}，頁面沒有任何行動卡")
     dates = [m.group(1) for line in text.lines if (m := DATE_LINE.match(line))]
     expect(len(dates) == k, f"`查看個股詳情 →` {k} 行，`資料日` {len(dates)} 行")
     as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
@@ -1390,11 +1634,15 @@ def a5(run: Run) -> str:
         if "AI 推論" in line or "（推論）" in line
     ]
     expect(not hits, f"出現 LLM 推論標記：{'、'.join(hits)}")
-    return "沒有 `AI 推論` 與 `（推論）`"
+    # #251: a check for what must be absent proves nothing on a page without cards.
+    k = text.count(lambda line: line == "查看個股詳情 →")
+    if k == 0:
+        raise Undetermined("頁面沒有行動卡，沒有可查的內容")
+    return f"{k} 張卡，沒有 `AI 推論` 與 `（推論）`"
 
 
 def action_detail(run: Run) -> tuple[Stock, dict, Text]:
-    stock = run.path_stock()
+    stock = run.stock()
     payload = run.get(f"actions/{stock.exchange}/{stock.symbol}", "action-detail.json")
     return stock, payload, run.text(action_detail_shot(stock))
 
@@ -1430,6 +1678,115 @@ def a7(run: Run) -> str:
     return f"頁首 `{symbol}`／`{name}` = stock.json"
 
 
+# ---- manual checks: samples picked by fixed rules, judged by an agent ----
+#
+# Each features check labeled 人工 has a sampler here (registry_problems enforces
+# it), so the sample is fixed by code before anyone looks at the pages (#251).
+
+Sampler = Callable[[Run], dict]
+MANUAL: dict[str, dict[str, Sampler]] = {page: {} for page in PAGES}
+NEWS_SAMPLE = 5
+CANDIDATE_SAMPLE = 3
+
+
+def manual(page: str, *codes: str):
+    def register(fn: Sampler) -> Sampler:
+        for code in codes:
+            MANUAL[page][code] = fn
+        return fn
+
+    return register
+
+
+def taipei_day(value: Any) -> str | None:
+    """The Taipei date of an API instant; one without a zone is UTC (features/news.md 陷阱)."""
+
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(TAIPEI).date().isoformat()
+
+
+@manual("news", "N7", "N8")
+def news_sample(run: Run) -> dict:
+    d = run.D()
+    listed = run.get("news?category=domestic&limit=100", "news-domestic-100.json")
+    picked = [
+        item
+        for item in listed.get("items") or []
+        if usable_ai(item.get("ai")) and taipei_day(item.get("published_at")) == d
+    ][:NEWS_SAMPLE]
+    items = []
+    for item in picked:
+        detail = run.get(f"news/{item['id']}", f"news-{item['id']}.json")
+        items.append(
+            {
+                key: detail.get(key)
+                for key in (
+                    "id",
+                    "title",
+                    "source",
+                    "published_at",
+                    "summary",
+                    "description",
+                    "instruments",
+                    "themes",
+                    "ai",
+                )
+            }
+        )
+    return {
+        "rule": f"/news?category=domestic&limit=100 中台北發布日 = D（{d}）且有 AI 判讀的前 {NEWS_SAMPLE} 則，API 順序",
+        "items": items,
+    }
+
+
+@manual("today", "T10")
+def candidate_sample(run: Run) -> dict:
+    payload = candidates(run)
+    return {
+        "rule": f"candidates.json 依名次前 {CANDIDATE_SAMPLE} 檔",
+        "trading_date": payload.get("trading_date"),
+        "items": [
+            {
+                key: item.get(key)
+                for key in ("rank", "instrument", "strategy", "levels", "llm_note")
+            }
+            for item in (payload.get("items") or [])[:CANDIDATE_SAMPLE]
+        ],
+    }
+
+
+def write_samples(run: Run, pages: list[str]) -> list[tuple[str, str, str]]:
+    """(page, code, note) per manual check; the samples go to <out>/manual/<code>.json."""
+
+    folder = run.out / "manual"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows, taken = [], {}
+    for page in pages:
+        for code, sampler in MANUAL[page].items():
+            if sampler not in taken:
+                try:
+                    taken[sampler] = sampler(run)
+                except CheckError as error:
+                    taken[sampler] = {"error": str(error), "items": []}
+            sample = taken[sampler]
+            (folder / f"{code}.json").write_text(
+                json.dumps(sample, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            count = len(sample["items"])
+            note = sample.get("error") or (
+                f"{count} 筆，`manual/{code}.json`" if count else "樣本 0 筆：無法判定"
+            )
+            rows.append((page, code, note))
+    return rows
+
+
 # ---- fixture expectations ----
 
 
@@ -1445,7 +1802,7 @@ def expected_check(run: Run, fixture, page: str) -> str:
     for path, json_path, want in fixture.EXPECTED[page]:
         try:
             payload = run.get(path)
-        except Fail as error:
+        except CheckError as error:
             problems.append(str(error))
             continue
         got = fixture.actual_for(payload, json_path, want)
@@ -1458,37 +1815,71 @@ def expected_check(run: Run, fixture, page: str) -> str:
 # ---- driver ----
 
 
+def run_order(page: str) -> list[str]:
+    """The page's codes with its owners and ``after`` targets first, so their results exist when used."""
+
+    codes = list(CHECKS[page])
+    first = {code for owner_page, code in OWNERS.values() if owner_page == page}
+    first |= {up for (p, _), ups in AFTER.items() if p == page for up in ups}
+    return sorted(codes, key=lambda code: (code not in first, codes.index(code)))
+
+
+def judge(run: Run, page: str, code: str, stock: Stock | None, label: str) -> Result:
+    """Run one check; a failure after an upstream that did not pass is 無法判定（上游 X）."""
+
+    fn, upstream = CHECKS[page][code], None
+    try:
+        if stock is None and code in NEEDS_STOCK:
+            run.stock()  # raises why no E/S was picked
+        detail = fn(run, stock) if page == "stocks" else fn(run)
+        state = PASS
+    except Fail as error:
+        detail, state = str(error), FAIL
+    except Undetermined as error:
+        detail, state = str(error), UNDETERMINED
+        upstream = getattr(error, "upstream", None)
+    subject = stock.label if stock else ""
+    for up in AFTER.get((page, code), ()) if state == FAIL else ():
+        owner = run.done.get((page, up, subject)) or run.done.get((page, up, ""))
+        if owner is not None and owner.state != PASS:
+            upstream = owner.upstream or up
+            detail, state = str(Upstream(upstream, detail)), UNDETERMINED
+            break
+    known, issue = KNOWN_FAILURES.get((page, code)), None
+    if known and state == FAIL and known.match in detail:
+        issue = known.issue
+    elif known and state == PASS:
+        issue = known.issue
+        detail += f"；修好了就從 KNOWN_FAILURES 移除 {page} {code}"
+    elif known and state == FAIL:
+        detail += f"（不是已知失敗 {known.issue}：訊息沒有 `{known.match}`）"
+    result = Result(page, code, state, detail, label, issue, upstream)
+    run.done[(page, code, subject)] = result
+    return result
+
+
 def run_page(run: Run, page: str, stocks: list[Stock]) -> list[Result]:
     results = []
-    for code, fn in CHECKS[page].items():
+    for code in run_order(page):
         subjects: list[Stock | None] = [None]
         if page == "stocks":
-            subjects = list(stocks) if code in PER_STOCK else list(stocks[:1])
-            if not subjects:
-                try:
-                    run.path_stock()
-                except Fail as error:
-                    results.append(Result(page, code, False, str(error)))
-                continue
+            subjects = (list(stocks) if code in PER_STOCK else list(stocks[:1])) or [
+                None
+            ]
         for stock in subjects:
-            label = stock.label if code in PER_STOCK and len(stocks) > 1 else ""
-            try:
-                detail = fn(run, stock) if page == "stocks" else fn(run)
-                ok = True
-            except Fail as error:
-                detail, ok = str(error), False
-            known = KNOWN_FAILURES.get((page, code))
-            if known and ok:
-                detail += f"；修好了就從 KNOWN_FAILURES 移除 {page} {code}"
-            results.append(Result(page, code, ok, detail, label, known))
-    return results
+            label = (
+                stock.label if stock and code in PER_STOCK and len(stocks) > 1 else ""
+            )
+            results.append(judge(run, page, code, stock, label))
+    order = list(CHECKS[page])
+    return sorted(results, key=lambda r: order.index(r.code))
 
 
 def stocks_for(run: Run, fixture) -> list[Stock]:
     try:
-        stocks = [run.path_stock()]
-    except Fail:
-        return []  # run_page reports the missing E/S on every stocks check
+        stocks = [run.stock()]
+    except CheckError:
+        return []  # judge reports why on every stocks check that needs E/S
     if fixture is not None:
         exchange, symbol = fixture.NO_DATA_STOCK
         stocks.append(Stock(exchange, symbol, f"stock-{exchange}-{symbol}"))
@@ -1514,8 +1905,28 @@ def prefetch(run: Run, pages: list[str], stocks: list[Stock], jobs: int) -> None
         list(pool.map(run.shoot, shots.values()))
 
 
+def blocking(results: list[Result], fixture: bool) -> list[Result]:
+    """The results that fail the run; on the fixture database every value exists, so 無法判定 too."""
+
+    return [r for r in results if r.failed or (fixture and r.undetermined)]
+
+
+def verdict(rows: list[Result]) -> str:
+    """A page: 失敗 when a check failed, else 無法判定 when one was, else 通過."""
+
+    if any(r.failed for r in rows):
+        return FAIL
+    if any(r.undetermined for r in rows):
+        return UNDETERMINED
+    return "失敗（已知）" if any(r.known for r in rows) else PASS
+
+
 def summary_markdown(
-    results: list[Result], pages: list[str], head: str, evidence: bool = True
+    results: list[Result],
+    pages: list[str],
+    head: str,
+    evidence: bool = True,
+    samples: list[tuple[str, str, str]] = (),
 ) -> str:
     """Per page tables; without ``evidence`` only each check's result (no page text)."""
 
@@ -1527,10 +1938,18 @@ def summary_markdown(
         "stocks": "個股 `/stocks`",
         "actions": "行動 `/actions`",
     }
+    if samples:
+        lines += [
+            "### 人工檢查樣本（依 features 規則抽樣，判讀見 SKILL 真資料模式第 3 步）",
+            "",
+            "| 檢查 | 樣本 |",
+            "| --- | --- |",
+        ]
+        lines += [f"| {code} | {note.replace('|', '/')} |" for _, code, note in samples]
+        lines.append("")
     for page in pages:
         rows = [r for r in results if r.page == page]
-        verdict = "失敗" if any(r.failed for r in rows) else "通過"
-        lines += [f"### {names[page]}：{verdict}", ""]
+        lines += [f"### {names[page]}：{verdict(rows)}", ""]
         if not evidence:
             lines += ["| 檢查 | 結果 |", "| --- | --- |"]
             lines += [f"| {r.label} | {r.status} |" for r in rows] + [""]
@@ -1565,6 +1984,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--browser", help="browser executable for screenshot.cjs")
     parser.add_argument("--jobs", type=int, default=4, help="screenshots taken at once")
+    parser.add_argument(
+        "--g7",
+        action="store_true",
+        help="refuse unless the program is committed on origin/master (G7 evidence)",
+    )
     args = parser.parse_args(argv)
     if not args.api or not args.web:
         parser.error(
@@ -1579,6 +2003,10 @@ def main(argv: list[str] | None = None) -> int:
     if problems:
         print("features 與 CHECKS 不一致：\n" + "\n".join(problems), file=sys.stderr)
         return 2
+    problems = g7_problems() if args.g7 else []
+    if problems:
+        print("--g7：" + "；".join(problems), file=sys.stderr)
+        return 2
 
     started = time.monotonic()
     run = Run(args.api, args.web, args.db, args.out, args.browser)
@@ -1591,10 +2019,10 @@ def main(argv: list[str] | None = None) -> int:
         page_started = time.monotonic()
         if fixture is not None:
             try:
-                detail, ok = expected_check(run, fixture, page), True
+                detail, state = expected_check(run, fixture, page), PASS
             except Fail as error:
-                detail, ok = str(error), False
-            results.append(Result(page, "API", ok, detail))
+                detail, state = str(error), FAIL
+            results.append(Result(page, "API", state, detail))
         results += run_page(run, page, stocks)
         for r in (r for r in results if r.page == page):
             print(
@@ -1602,21 +2030,28 @@ def main(argv: list[str] | None = None) -> int:
                 + (f"（已知：{r.known}）" if r.known else "")
             )
         print(f"{page}: {time.monotonic() - page_started:.1f} s", file=sys.stderr)
+    samples = write_samples(run, pages)
 
-    failed = [r for r in results if r.failed]
+    failed = blocking(results, fixture is not None)
+    undetermined = sum(r.undetermined for r in results)
+    picked = f"{stocks[0].label}，{run.picked}" if stocks else run.picked or "未選"
     head = (
         f"## verify 檢查結果（{run.now:%Y-%m-%d %H:%M} 台北）\n\n"
+        f"- 程式：{program()}\n"
         f"- API `{args.api}`、前端 `{args.web}`、DB `{args.db.name}`"
         f"{'（假資料庫）' if fixture else ''}\n"
-        f"- {len(results)} 項：通過 {sum(r.ok for r in results)}、"
-        f"失敗 {len(failed)}、已知失敗 {sum(1 for r in results if r.known and not r.ok)}；"
+        f"- 個股 E／S：{picked}\n"
+        f"- {len(results)} 項：通過 {sum(r.state == PASS and not r.known for r in results)}、"
+        f"失敗 {sum(r.failed for r in results)}、無法判定 {undetermined}、"
+        f"已知失敗 {sum(r.state == FAIL and bool(r.known) for r in results)}；"
         f"耗時 {time.monotonic() - started:.0f} 秒"
     )
     (args.out / "summary.md").write_text(
-        summary_markdown(results, pages, head), encoding="utf-8"
+        summary_markdown(results, pages, head, samples=samples), encoding="utf-8"
     )
     (args.out / "status.md").write_text(
-        summary_markdown(results, pages, head, evidence=False), encoding="utf-8"
+        summary_markdown(results, pages, head, evidence=False, samples=samples),
+        encoding="utf-8",
     )
     (args.out / "results.json").write_text(
         json.dumps(
@@ -1625,10 +2060,12 @@ def main(argv: list[str] | None = None) -> int:
                     "page": r.page,
                     "code": r.code,
                     "subject": r.subject,
+                    "state": r.state,
                     "status": r.status,
                     "failed": r.failed,
                     "detail": r.detail,
                     "known": r.known,
+                    "upstream": r.upstream,
                 }
                 for r in results
             ],
@@ -1639,9 +2076,54 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(
         f"{len(results)} checks, {len(failed)} failed"
-        + (": " + ", ".join(f"{r.page} {r.label}" for r in failed) if failed else ""),
+        + (": " + ", ".join(f"{r.page} {r.label}" for r in failed) if failed else "")
+        + f", {undetermined} undetermined",
     )
     return 1 if failed else 0
+
+
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args], cwd=ROOT, capture_output=True, text=True, check=check
+    )
+
+
+def dirty_files() -> list[str]:
+    return [line[3:] for line in git("status", "--porcelain").stdout.splitlines()]
+
+
+def program() -> str:
+    """The branch and commit that ran, and the uncommitted files if any."""
+
+    try:
+        branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        head = git("rev-parse", "--short", "HEAD").stdout.strip()
+        dirty = dirty_files()
+    except (OSError, subprocess.CalledProcessError):
+        return "未知（git 不可用）"
+    state = f"未 commit：{'、'.join(dirty)}" if dirty else "工作樹乾淨"
+    return f"`{branch}` @ `{head}`（{state}）"
+
+
+def g7_problems() -> list[str]:
+    """Why this checkout cannot give G7 evidence: it must be master's committed code (#251)."""
+
+    try:
+        dirty = dirty_files()
+        head = git("rev-parse", "HEAD").stdout.strip()
+        ancestor = git(
+            "merge-base", "--is-ancestor", head, "origin/master", check=False
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        return [f"git 不可用：{error}"]
+    problems = []
+    if dirty:
+        problems.append(f"工作樹有未 commit 的檔：{'、'.join(dirty)}")
+    if ancestor.returncode != 0:
+        problems.append(
+            f"HEAD {head[:7]} 不在 origin/master 上（先 git fetch origin master，從它建 worktree）"
+        )
+    return problems
 
 
 if __name__ == "__main__":
