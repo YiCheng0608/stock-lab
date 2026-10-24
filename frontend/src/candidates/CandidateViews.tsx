@@ -169,7 +169,7 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
           : !state
             ? null
             : state.kind === 'list'
-              ? <div className="candidate-grid">{state.items.map((item) => <CandidateCard key={item.instrument.exchange + item.instrument.symbol} item={item} />)}</div>
+              ? null
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
     </section>
   )
