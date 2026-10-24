@@ -184,9 +184,24 @@ def _date_from_as_of(value: str | date | datetime | None) -> date | None:
 
 
 def latest_official_run(db: Session) -> IngestionRun | None:
+    """The newest successful official collect run: the pages' data date.
+
+    Only "success" counts (Issue #249).  "skipped" (a verified no-data day such
+    as a market holiday), "failed" and "running" have no data date, so the
+    newest of those would blank every page.  "partial" has bars but analyze
+    does not run on it, so it has no scores or signals; it is usually the 18:30
+    collect before institutional data is published, and the 21:30 rerun turns
+    the same row into "success".
+    """
+
     return db.scalar(
         select(IngestionRun)
-        .where(IngestionRun.run_type == "collect", IngestionRun.source == "official")
+        .where(
+            IngestionRun.run_type == "collect",
+            IngestionRun.source == "official",
+            IngestionRun.status == "success",
+            IngestionRun.data_as_of.is_not(None),
+        )
         .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
         .limit(1)
     )

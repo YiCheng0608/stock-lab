@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -524,6 +524,85 @@ def test_dashboard_ignores_newer_backtest_run_for_official_state(isolated_api):
     assert payload["as_of"] == "2026-09-04"
     assert payload["data_quality"]["latest_run_source"] == "official"
     assert payload["data_quality"]["latest_run_records"] == 2308
+
+
+@pytest.mark.parametrize(
+    ("newer_status", "newer_as_of"),
+    [
+        # A market holiday (Issue #249): the 10/23 typhoon run found no data.
+        ("skipped", None),
+        ("failed", None),
+        # The daily job's collect step is in progress.
+        ("running", None),
+        # The 18:30 collect before institutional data: bars, but no analysis.
+        ("partial", "2026-10-23"),
+    ],
+)
+def test_a_newer_unsuccessful_official_run_keeps_the_last_data_date(
+    isolated_api, newer_status, newer_as_of
+):
+    with isolated_api() as db:
+        db.add_all(
+            [
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=date(2026, 10, 22),
+                    status="success",
+                    records=2308,
+                    data_as_of="2026-10-22",
+                    request_key="official-ohlcv:2026-10-22",
+                    updated_at=datetime(2026, 10, 22, 13, 30),
+                ),
+                IngestionRun(
+                    run_type="collect",
+                    source="official",
+                    run_date=date(2026, 10, 23),
+                    status=newer_status,
+                    records=0,
+                    data_as_of=newer_as_of,
+                    request_key="official-ohlcv:2026-10-23",
+                    updated_at=datetime(2026, 10, 23, 13, 30),
+                ),
+            ]
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        dashboard = client.get("/api/dashboard").json()
+        board = client.get("/api/themes", params={"board": "industry"}).json()
+        news = client.get("/api/news").json()
+
+    assert dashboard["as_of"] == "2026-10-22"
+    assert dashboard["mode"] == "official"
+    assert dashboard["data_quality"]["latest_run"] == "success"
+    assert board["meta"]["data_as_of"] == "2026-10-22"
+    assert board["meta"]["empty_reason"] != "no_official_run"
+    assert news["meta"]["data_as_of"] == "2026-10-22"
+
+
+def test_dashboard_falls_back_to_the_newest_attempt_without_a_success(isolated_api):
+    with isolated_api() as db:
+        db.add(
+            IngestionRun(
+                run_type="collect",
+                source="official",
+                run_date=date(2026, 10, 23),
+                status="partial",
+                records=10,
+                data_as_of="2026-10-23",
+            )
+        )
+        db.commit()
+
+    with TestClient(app) as client:
+        dashboard = client.get("/api/dashboard").json()
+        board = client.get("/api/themes", params={"board": "industry"}).json()
+
+    assert dashboard["mode"] == "official_partial"
+    assert dashboard["as_of"] == "2026-10-23"
+    assert dashboard["data_quality"]["latest_run"] == "partial"
+    assert board["meta"]["empty_reason"] == "no_official_run"
 
 
 def test_paginated_collections_support_search_and_boundaries(isolated_api):

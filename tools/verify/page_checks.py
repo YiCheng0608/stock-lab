@@ -101,10 +101,15 @@ def registry_problems(
 # ---- page text ----
 
 
-def normalize(line: str) -> str:
-    """The SKILL's whitespace rule: U+3000 and runs of spaces become one space; tabs stay."""
+# Any whitespace but tab: U+3000, U+00A0 (a news title's NBSP shows as a plain
+# space in the browser, Issue #249) and the other Unicode spaces.
+SPACES = re.compile(r"[^\S\t]+")
 
-    return re.sub(r" {2,}", " ", line.replace("\u3000", " ")).strip(" ")
+
+def normalize(line: str) -> str:
+    """The SKILL's whitespace rule: runs of non-tab whitespace become one space; tabs stay."""
+
+    return SPACES.sub(" ", line).strip(" ")
 
 
 def slash(day: str) -> str:
@@ -136,14 +141,15 @@ class Text:
                 self.lines.append(value)
                 self.numbers.append(number)
 
+    # Expected lines come from API strings, so they get the same whitespace rule.
     def has(self, line: str) -> bool:
-        return line in self.lines
+        return normalize(line) in self.lines
 
     def find(self, line: str, start: int = 0) -> int:
         """Index of the first whole line equal to ``line`` at or after ``start``; -1 if none."""
 
         try:
-            return self.lines.index(line, start)
+            return self.lines.index(normalize(line), start)
         except ValueError:
             return -1
 

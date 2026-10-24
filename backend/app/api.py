@@ -318,7 +318,9 @@ def evaluation_dict(item: SignalEvaluation) -> dict[str, Any]:
     }
 
 
-def latest_run(db: Session) -> IngestionRun | None:
+def latest_official_attempt(db: Session) -> IngestionRun | None:
+    """The newest official collect run of any status, with or without data."""
+
     return db.scalar(
         select(IngestionRun)
         .where(
@@ -1541,7 +1543,10 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     status_rows = db.execute(
         select(Signal.status, func.count(Signal.id)).group_by(Signal.status)
     ).all()
-    run = latest_run(db)
+    # The latest successful run (Issue #249: a newer holiday "skipped" run must
+    # not blank as_of); the newest attempt only when none has succeeded.
+    official_run, official_as_of = latest_official_as_of(db)
+    run = official_run or latest_official_attempt(db)
     if run:
         mode = "official" if run.status == "success" else "official_partial"
         source_label = "TWSE/TPEx official feeds"
@@ -1564,9 +1569,10 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         # an older bar as though it belonged to this run.
         verified_as_of = None
 
-    run, official_as_of = latest_official_as_of(db)
     product_scores = (
-        scores_as_of(db, official_as_of) if run and run.status == "success" else {}
+        scores_as_of(db, official_as_of)
+        if official_run and official_run.status == "success"
+        else {}
     )
     product_themes = [
         compact_theme_summary(group, product_scores.get(group.id), db)
