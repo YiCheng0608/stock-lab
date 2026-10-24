@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -215,8 +216,8 @@ def test_plan_transitions_only_move_forward():
 # ---- database: creation, daily update, cancellation ----
 
 
-@pytest.fixture
-def db():
+@contextmanager
+def fresh_session():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -227,6 +228,12 @@ def db():
         session.commit()
         yield session
     engine.dispose()
+
+
+@pytest.fixture
+def db():
+    with fresh_session() as session:
+        yield session
 
 
 def stock(db, symbol="9101"):
@@ -561,20 +568,87 @@ def test_a_suspension_keeps_the_status_and_makes_the_result_incomparable(db):
     )
 
 
-def test_a_stock_without_bars_for_the_whole_window_is_incomparable(db):
+def market_days(db, count):
+    """Another stock trades every session; returns the market session dates."""
+
+    return follow(db, stock(db, "9999"), *[FLAT] * count)
+
+
+def test_the_window_is_the_stock_own_bars_not_the_market_sessions(db):
     instrument, plan = new_plan(db)
-    days = follow(db, instrument, *[FLAT] * 5)
-    # The rest of the market keeps trading for the full window.
-    market = stock(db, "9999")
-    follow(db, market, *[FLAT] * 20)
-    run(db, days[-1])
-    assert plan.status == "pending"
-    assert run(db, sessions_after(PLAN_DAY, 20)[-1])["transitions"] == {
-        "pending->incomparable": 1
-    }
-    assert plan.status_reason == "missing_sessions"
-    assert plan.incomparable_reason == (
-        "only 5 of 20 market sessions have a bar for this stock"
+    days = market_days(db, 21)
+    # The stock has no bar on the 10th market session (no suspension event).
+    stored = [day for i, day in enumerate(days) if i != 9]
+    add_bars(db, instrument, [(stored[0], FILL)] + [(d, INSIDE) for d in stored[1:]])
+    run(db, days[19])
+    assert (plan.status, plan.sessions_observed) == ("triggered", 19)
+    assert run(db, days[20])["transitions"] == {"triggered->closed": 1}
+    assert (plan.outcome_date, plan.sessions_observed) == (days[20], 20)
+    assert plan.result_return == pytest.approx(101.0 / (100.0 * BUY) - 1 - COST)
+
+
+def plan_result(run_days, build):
+    """The plan and its sessions after running the step on ``run_days``."""
+
+    with fresh_session() as db:
+        _instrument, plan = new_plan(db)
+        days = build(db, _instrument)
+        for index in run_days:
+            run(db, days[index])
+        return snapshot(db, plan)
+
+
+def one_missing_bar(db, instrument):
+    days = market_days(db, 25)
+    stored = [day for i, day in enumerate(days) if i != 9]
+    add_bars(db, instrument, [(stored[0], FILL)] + [(d, INSIDE) for d in stored[1:]])
+    return days
+
+
+def nineteen_bars_in_forty_sessions(db, instrument):
+    days = market_days(db, 45)
+    add_bars(db, instrument, [(d, FLAT) for d in days[:19]] + [(days[44], FLAT)])
+    return days
+
+
+@pytest.mark.parametrize(
+    "build, skipped, status",
+    [
+        (one_missing_bar, (19, 20), "closed"),
+        (nineteen_bars_in_forty_sessions, tuple(range(4, 44)), "incomparable"),
+    ],
+)
+def test_missed_daily_runs_give_the_same_result(build, skipped, status):
+    sessions = 45 if build is nineteen_bars_in_forty_sessions else 25
+    every_day = plan_result(range(sessions), build)
+    with_gaps = plan_result([i for i in range(sessions) if i not in skipped], build)
+    assert every_day == with_gaps
+    assert every_day[0]["status"] == status
+
+
+def test_too_few_bars_within_forty_market_sessions_is_incomparable(db):
+    instrument, plan = new_plan(db)
+    days = market_days(db, 45)
+    add_bars(db, instrument, [(d, FLAT) for d in days[:19]] + [(days[44], FLAT)])
+    run(db, days[38])
+    assert (plan.status, plan.sessions_observed) == ("pending", 19)
+    assert run(db, days[39])["transitions"] == {"pending->incomparable": 1}
+    assert (plan.status_reason, plan.result_comparable) == (
+        "insufficient_sessions",
+        False,
+    )
+    assert plan.incomparable_reason == "only 19 of 20 bars within 40 market sessions"
+    # The bar on the 45th market session is never read.
+    assert len(session_rows(db, plan)) == 19
+
+
+def test_the_forty_session_cap_never_reads_a_later_bar():
+    # Run first on the 45th session: the 20th bar there must not complete the
+    # window, or the result would depend on when the step ran.
+    result = plan_result([44], nineteen_bars_in_forty_sessions)
+    assert (result[0]["status"], result[0]["sessions_observed"]) == (
+        "incomparable",
+        19,
     )
 
 
@@ -672,6 +746,24 @@ def test_a_correction_that_would_move_back_keeps_the_stored_state(db):
         "transition_conflict:triggered->pending",
     )
     assert snapshot(db, plan)[1] == before_rows
+    # Still open, so later runs keep recomputing; once the bars allow the
+    # stored state again the plan is updated and the mark is cleared.
+    assert run(db, days[0])["transition_conflicts"] == 1
+    corrected = db.get(MarketBar, corrected.id)
+    corrected.high = 100.5
+    db.commit()
+    later = follow(db, instrument, TARGET, start=days[0])
+    result = run(db, later[0])
+    assert (result["transition_conflicts"], result["transitions"]) == (
+        0,
+        {"triggered->target_hit": 1},
+    )
+    plan = db.get(TrackingPlan, plan.id)
+    assert (plan.status, plan.data_quality, plan.status_reason) == (
+        "target_hit",
+        "complete",
+        "target_1_touched",
+    )
 
 
 def test_plans_and_system_signals_share_the_tracking_rules(db):

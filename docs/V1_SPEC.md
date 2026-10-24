@@ -172,7 +172,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 同一訊號同時最多一個未取消的計畫（部分唯一索引 `uq_tracking_plan_open_signal`），重複加入回傳原計畫；取消後可再建一個新計畫。建立時快照策略名稱、`strategy_version_id`、`formula_version`、`score_version`、`tracking_version`、計畫資料日（`plan_date`＝訊號日）、最早執行日與全部價位，之後訊號被 analyze 改寫也不影響計畫。
 
-**每日更新**（daily 的 `plan_tracking` 步驟，`worker.plan_tracking`）：每個未結束的計畫從 `plan_date` 起以[Tracking 口徑](#tracking-與-technical-backtest-口徑)重算，最多 20 個交易日（`window_sessions`），不讀目標日之後的日線；每個交易日寫一列 `tracking_plan_sessions`（狀態、觸發、原始與還原 OHLC、是否停牌、模擬成交價、來源）。
+**每日更新**（daily 的 `plan_tracking` 步驟，`worker.plan_tracking`）：每個未結束的計畫從 `plan_date` 起以[Tracking 口徑](#tracking-與-technical-backtest-口徑)重算。視窗與訊號追蹤相同，是該股在 `plan_date` 之後的前 20 根日線（`window_sessions`），不是全市場的前 20 個交易日；該股缺日線時視窗往後延。最多等到全市場在 `plan_date` 之後的第 40 個交易日（`MARKET_SESSION_LIMIT`）：到那時該股仍不足 20 根日線就結束為 `incomparable`。重算讀的日線截止於 min(目標日, 全市場第 40 個交易日)，所以同一份資料不論哪天執行、漏跑幾天，結果都相同。每根日線寫一列 `tracking_plan_sessions`（狀態、觸發、原始與還原 OHLC、是否停牌、模擬成交價、來源）。
 
 | 狀態 | 進入條件 | 模擬結果 |
 | --- | --- | --- |
@@ -180,16 +180,16 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 | `triggered` 已觸發 | 突破價或回踩區首次觸及，模擬成交 | 無（未出場） |
 | `target_hit` 達標 | 成交後首次觸及目標一 | 以目標一扣賣出滑價出場 |
 | `invalidated` 失效 | 成交後首次觸及失效價（策略失效價，不是使用者停損） | 以失效價扣賣出滑價出場 |
-| `expired` 到期 | 20 個交易日內沒有成交 | 無 |
-| `closed` 期滿結算 | 已成交，20 個交易日內未達標也未失效 | 以第 20 個交易日收盤結算 |
-| `incomparable` 無法比較 | 同一交易日失效價與目標一都觸及（順序不明）；或市場已過 20 個交易日但該股不足 20 根日線（長期停牌、下市） | 無 |
+| `expired` 到期 | 視窗的 20 根日線內沒有成交 | 無 |
+| `closed` 期滿結算 | 已成交，視窗的 20 根日線內未達標也未失效 | 以第 20 根日線的收盤結算 |
+| `incomparable` 無法比較 | 同一交易日失效價與目標一都觸及（順序不明）；或全市場在 `plan_date` 之後已有 40 個交易日、該股仍不足 20 根日線（長期停牌、下市、缺日線；`status_reason=insufficient_sessions`） | 無 |
 | `cancelled` 已取消 | 使用者取消未結束的計畫 | 保留取消前的成交與明細 |
 
-允許的轉換只有 `pending` → `triggered`／`target_hit`／`invalidated`／`incomparable`／`expired`／`closed`／`cancelled`，與 `triggered` → `target_hit`／`invalidated`／`incomparable`／`closed`／`cancelled`（`app.domain.PLAN_STATUS_TRANSITIONS`）；同一交易日成交又出場、或漏跑幾天後一次看到成交與期滿時直接跳到結果。其餘狀態都是終態，之後不再重算。
+允許的轉換只有 `pending` → `triggered`／`target_hit`／`invalidated`／`incomparable`／`expired`／`closed`／`cancelled`，與 `triggered` → `target_hit`／`invalidated`／`incomparable`／`closed`／`cancelled`（`app.domain.PLAN_STATUS_TRANSITIONS`）；同一根日線成交又出場、或成交與期滿出現在同一次執行（第 20 根日線才成交，或漏跑幾天）時直接跳到結果。其餘狀態都是終態，之後不再重算。
 
-- **模擬報酬**（`result_return`）：達標、失效、期滿結算才有，＝出場價÷成交價（兩者都換回計畫資料日的價格基準）− 1 − 30 bps；成交到出場之間有停牌或其他不可比較的交易日時 `result_comparable=false`、報酬為 null 並寫原因，狀態不變。
+- **模擬報酬**（`result_return`）：達標、失效、期滿結算才有，＝出場價÷成交價（兩者都換回計畫資料日的價格基準）− 1 − 30 bps；從第 1 根日線到出場（期滿結算為第 20 根）之間有停牌或其他不可比較的日線時（含成交前的停牌日），`result_comparable=false`、報酬為 null 並寫原因，狀態不變。
 - **停牌**：停牌日（`is_suspended`、零量一字線、或官方停牌區間內缺日線）記一列 `suspended`，不推論觸發，狀態不變。
-- **冪等**：同一目標日重跑寫出相同的列，值沒變就不改寫、`updated_at` 不動。重算出不允許的轉換（例如行情更正後原本的成交不成立）時保留原狀態與明細，`data_quality` 記 `transition_conflict`、`status_reason` 記 `transition_conflict:<原>-><新>`，不倒退。
+- **冪等**：同一目標日重跑寫出相同的列，值沒變就不改寫、`updated_at` 不動。重算出不允許的轉換（例如行情更正後原本的成交不成立）時保留原狀態與明細，`data_quality` 記 `transition_conflict`、`status_reason` 記 `transition_conflict:<原>-><新>`，不倒退。這種計畫仍是 `pending`／`triggered`，之後每次執行都照常重算：行情恢復到允許的轉換時就照新結果更新，`data_quality` 也改回；在那之前一直標 `transition_conflict`。`GET /tracking`（#253 實作）照常回傳這筆計畫與原狀態，並帶 `data_quality` 與 `status_reason`；行動頁在該張卡標示「行情有更正，狀態待核對」，不顯示重算出的新狀態。
 - **取消**（`app.tracking_plans.cancel_plan`）：只能取消 `pending`／`triggered` 的計畫，記 `cancelled_at` 與 `status_reason=cancelled_while_<原狀態>`；已結束的計畫回 `plan_already_closed`。計畫與明細都不刪。
 
 ## 策略版本識別

@@ -4,9 +4,14 @@ The ``plan_tracking`` step of ``worker.cli daily`` (after a successful collect;
 it needs no analyze because a plan keeps its own copy of the levels) and
 ``worker.cli track-plans``.  Every open plan is recomputed from its plan date
 with the shared tracking rules (``app.tracking.track_path``, the same as the
-system signal tracking), using no bar after the target date.  The same target
-date gives the same rows: values are written, and ``updated_at`` moved, only
-when they change.  An ended or cancelled plan is never recomputed, and a
+system signal tracking): the window is the stock's own first 20 bars after the
+plan date, as for a signal.  A stock that still has fewer bars once the market
+has had MARKET_SESSION_LIMIT sessions after the plan date ends as
+``incomparable`` (``insufficient_sessions``).  No bar after the target date, or
+after that last market session, is read, so the same stored data gives the
+same result whichever day the step runs and however many daily runs were
+missed.  The same target date gives the same rows: values are written, and
+``updated_at`` moved, only when they change.  An ended or cancelled plan is never recomputed, and a
 recomputed status the plan may not move to (a corrected bar would take it
 back) keeps the stored state and marks ``transition_conflict``.
 """
@@ -26,6 +31,9 @@ from app.tracking import AMBIGUOUS_REASON, TrackPath, settle, track_path
 from worker import pipeline
 
 TRANSITION_CONFLICT = "transition_conflict"
+# Market sessions after the plan date within which the stock must have its 20
+# bars (twice the window); later bars are never read.
+MARKET_SESSION_LIMIT = 40
 
 
 def _assign(row: Any, values: dict[str, Any]) -> bool:
@@ -39,25 +47,28 @@ def _assign(row: Any, values: dict[str, Any]) -> bool:
     return changed
 
 
-def _market_sessions_after(
+def _market_dates_after(
     db: Session, start_after: date, cutoff: date, limit: int
-) -> int:
-    """How many market sessions (any stored bar) follow ``start_after``, up to ``limit``."""
+) -> list[date]:
+    """The first ``limit`` market sessions (any stored bar) after ``start_after``."""
 
-    rows = db.scalars(
+    return db.scalars(
         select(MarketBar.trading_date)
         .where(MarketBar.trading_date > start_after, MarketBar.trading_date <= cutoff)
         .distinct()
         .order_by(MarketBar.trading_date)
         .limit(limit)
     ).all()
-    return len(rows)
 
 
 def plan_outcome(
-    path: TrackPath, bars: list[MarketBar], window: int, market_sessions: int
+    path: TrackPath, bars: list[MarketBar], window: int, market_limit_reached: bool
 ) -> dict[str, Any]:
-    """The plan's status and simulated result for one tracked path."""
+    """The plan's status and simulated result for one tracked path.
+
+    ``market_limit_reached``: the market has had MARKET_SESSION_LIMIT sessions
+    after the plan date (up to the target date).
+    """
 
     sessions = path.sessions
     count = len(sessions)
@@ -93,15 +104,16 @@ def plan_outcome(
         settled_at = window
     elif count >= window:
         result.update(status="expired", status_reason="window_ended_without_entry")
-    elif market_sessions >= window:
-        # The market finished the window but the stock has fewer bars (long
-        # suspension, delisting): the path cannot be completed.
+    elif market_limit_reached:
+        # Long suspension, delisting or missing bars: the stock did not get
+        # its window within the market sessions allowed.
         result.update(
             status="incomparable",
-            status_reason="missing_sessions",
+            status_reason="insufficient_sessions",
             result_comparable=False,
             incomparable_reason=(
-                f"only {count} of {window} market sessions have a bar for this stock"
+                f"only {count} of {window} bars within {MARKET_SESSION_LIMIT} "
+                "market sessions"
             ),
         )
     elif path.executed:
@@ -181,18 +193,21 @@ def _write_sessions(
 def track_plan(
     db: Session,
     plan: TrackingPlan,
-    target: date,
+    cutoff: date,
     *,
     now: datetime,
-    market_sessions: int,
+    market_limit_reached: bool,
 ) -> tuple[str | None, int]:
-    """Update one open plan; returns ``(transition or None, session rows written)``."""
+    """Update one open plan with the bars up to ``cutoff``.
+
+    Returns ``(transition or None, session rows written)``.
+    """
 
     bars, tracked = pipeline._tracking_inputs(
-        db, plan.instrument_id, plan.plan_date, evaluation_cutoff=target
+        db, plan.instrument_id, plan.plan_date, evaluation_cutoff=cutoff
     )
     path = track_path(pipeline.track_levels(plan), tracked)
-    outcome = plan_outcome(path, bars, plan.window_sessions, market_sessions)
+    outcome = plan_outcome(path, bars, plan.window_sessions, market_limit_reached)
     previous = plan.status
     if not validate_plan_status_transition(previous, outcome["status"]).valid:
         conflict = {
@@ -212,7 +227,11 @@ def track_plan(
 def track_open_plans(
     db: Session, target: date, *, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Update every open plan with the bars up to ``target`` (caller commits)."""
+    """Update every open plan with the bars up to ``target`` (caller commits).
+
+    A plan reads no bar after the MARKET_SESSION_LIMIT-th market session after
+    its plan date either.
+    """
 
     stamp = now or datetime.utcnow()
     plans = db.scalars(
@@ -223,15 +242,20 @@ def track_open_plans(
     transitions: Counter[str] = Counter()
     written = 0
     conflicts = 0
-    market_sessions: dict[tuple[date, int], int] = {}
+    market_dates: dict[date, list[date]] = {}
     for plan in plans:
-        key = (plan.plan_date, plan.window_sessions)
-        if key not in market_sessions:
-            market_sessions[key] = _market_sessions_after(
-                db, plan.plan_date, target, plan.window_sessions
+        if plan.plan_date not in market_dates:
+            market_dates[plan.plan_date] = _market_dates_after(
+                db, plan.plan_date, target, MARKET_SESSION_LIMIT
             )
+        dates = market_dates[plan.plan_date]
+        limit_reached = len(dates) >= MARKET_SESSION_LIMIT
         transition, rows = track_plan(
-            db, plan, target, now=stamp, market_sessions=market_sessions[key]
+            db,
+            plan,
+            dates[MARKET_SESSION_LIMIT - 1] if limit_reached else target,
+            now=stamp,
+            market_limit_reached=limit_reached,
         )
         written += rows
         if transition:
