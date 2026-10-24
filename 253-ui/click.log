@@ -1,0 +1,8 @@
+clicked add in plan panel: true
+panel link: /actions#plan-7
+candidate card shows 已在追蹤: true
+new plan card status: 待觸發
+click 取消追蹤: true
+click 確定取消: true
+history card status: 已取消
+history result line: 模擬報酬：無法比較（已取消）
