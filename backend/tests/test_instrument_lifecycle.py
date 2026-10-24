@@ -623,3 +623,159 @@ def test_snapshot_collect_syncs_status_and_historical_collect_does_not(
         ("8183", "delisted")
     ]
     assert SCORE_DATE - timedelta(days=1) == date.fromisoformat(changes[0]["close_day"])
+
+
+# ---- the verify fixture's lifecycle rows are what the worker writes ----
+
+
+def _fixture_data():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "tools" / "verify" / "fixture_data.py"
+    spec = importlib.util.spec_from_file_location("fixture_data_lifecycle", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_verify_fixture_lifecycle_rows_are_what_the_worker_writes(
+    pipeline_env,
+):
+    fixture = _fixture_data()
+    instruments = {row["id"]: row for row in fixture.TABLES["instruments"]}
+    stocks = [row for row in instruments.values() if row["instrument_type"] == "stock"]
+    lifecycle_ids = {row["id"] for row in stocks if row["symbol"] in fixture.LIFECYCLE}
+    memberships = [
+        row
+        for row in fixture.TABLES["group_memberships"]
+        if row["instrument_id"] in lifecycle_ids
+    ]
+    bars = {
+        (row["instrument_id"], row["trading_date"]): row
+        for row in fixture.TABLES["market_bars"]
+    }
+    moved = next(row for row in stocks if row["symbol"] == fixture.TRANSFERRED)
+
+    # Before: every stock is current and the memberships are open.
+    with pipeline_env() as db:
+        for group in fixture.TABLES["theme_groups"]:
+            db.add(ThemeGroup(**group))
+        for row in stocks:
+            db.add(Instrument(**{**row, "status": "active"}))
+        db.flush()  # no relationship() orders these inserts before memberships
+        for row in memberships:
+            db.add(GroupMembership(**{**row, "valid_to": None}))
+        db.commit()
+
+    # 1. A quote row of 9206 while the TPEx list no longer carries it.
+    day = fixture.SESSIONS[-12]
+    assert fixture.LIST_GAP_FROM <= day <= fixture.LIFECYCLE[fixture.TRANSFERRED][1]
+    want = bars[(moved["id"], day)]
+    quotes = _capture("tpex", sources.TPEX_HISTORY_API, {"fixture": day.isoformat()})
+    record = sources.BarRecord(
+        symbol=moved["symbol"],
+        trading_date=day,
+        open=want["open"],
+        high=want["high"],
+        low=want["low"],
+        close=want["close"],
+        volume=want["volume"],
+        turnover=want["turnover"],
+        exchange="TPEx",
+        source="tpex",
+        payload_sha256=quotes.sha256,
+        turnover_status="available",
+    )
+    listed = [
+        sources.InstrumentRecord(row["symbol"], row["name"], exchange=row["exchange"])
+        for row in stocks
+        if row["id"] not in lifecycle_ids
+    ]
+    pipeline.collect(
+        day,
+        adapter=FakeAdapter(
+            sources.OfficialBatch(
+                instruments=[
+                    sources.InstrumentRecord(
+                        "TAIEX", "TAIEX", exchange="TWSE", instrument_type="index"
+                    ),
+                    *listed,
+                ],
+                bars=[_bar("TAIEX", "TWSE", quotes.sha256, day), record],
+                payloads=[quotes],
+                data_as_of=day.isoformat(),
+                snapshot_feeds=False,
+            )
+        ),
+    )
+
+    # 2. The lists observed without each lifecycle stock.
+    for symbol, (_status, _last, observed, listed_elsewhere) in sorted(
+        fixture.LIFECYCLE.items(), key=lambda item: item[1][2]
+    ):
+        at = datetime.combine(observed, datetime.min.time()) + timedelta(hours=10)
+        captures = [
+            sources.capture_payload(
+                exchange.lower(), endpoint, {"lists": symbol}, None, collected_at=at
+            )
+            for exchange, endpoints in pipeline.UNIVERSE_ENDPOINTS.items()
+            for endpoint in endpoints
+        ]
+        with pipeline_env() as db:
+            current = [
+                sources.InstrumentRecord(item.symbol, item.name, exchange=item.exchange)
+                for item in db.scalars(
+                    select(Instrument).where(Instrument.status == "active")
+                )
+                if item.symbol != symbol
+            ]
+            if listed_elsewhere:
+                current.append(
+                    sources.InstrumentRecord(
+                        symbol,
+                        symbol,
+                        exchange="TWSE",
+                        instrument_type="ipo",
+                        listing_date=listed_elsewhere,
+                    )
+                )
+            pipeline.apply_instrument_status(
+                db,
+                pipeline.plan_instrument_status(
+                    db, current, pipeline.universe_evidence(captures, lambda _: None)
+                ),
+            )
+            db.commit()
+
+    with pipeline_env() as db:
+        for row in stocks:
+            assert db.get(Instrument, row["id"]).status == row["status"], row["symbol"]
+        for row in memberships:
+            assert db.get(GroupMembership, row["id"]).valid_to == row["valid_to"]
+        written = db.scalar(
+            select(MarketBar).where(
+                MarketBar.instrument_id == moved["id"], MarketBar.trading_date == day
+            )
+        )
+        assert written is not None
+        assert (written.open, written.close, written.volume) == (
+            want["open"],
+            want["close"],
+            want["volume"],
+        )
+
+
+@pytest.mark.parametrize("status", ["delisted", "transferred"])
+def test_group_members_and_scores_count_current_instruments_only(pipeline_env, status):
+    """member_count and every group score read ``_effective_memberships``."""
+
+    with pipeline_env() as db:
+        ids = _seed_market(db, TWSE_CODES[:3], ["8908"])
+        db.get(Instrument, ids[("TPEx", "8908")]).status = status
+        db.flush()
+        members = pipeline._effective_memberships(
+            db, "official-industry-oil-gas-electricity", SCORE_DATE
+        )
+        # Even an open membership row does not count a non-current instrument.
+        assert sorted(instrument.symbol for _m, instrument in members) == TWSE_CODES[:3]

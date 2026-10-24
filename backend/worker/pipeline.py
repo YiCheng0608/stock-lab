@@ -3170,6 +3170,8 @@ def plan_instrument_status(
     db: Session,
     records: Iterable[InstrumentRecord],
     evidence: dict[str, dict[str, Any]],
+    *,
+    max_share: float = STATUS_SYNC_MAX_SHARE,
 ) -> dict[str, Any]:
     """Which active instruments the official lists no longer carry; no writes.
 
@@ -3195,7 +3197,7 @@ def plan_instrument_status(
             .order_by(Instrument.symbol, Instrument.id)
         ).all()
         absent = [item for item in active if (exchange, item.symbol) not in universe]
-        limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * STATUS_SYNC_MAX_SHARE))
+        limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
         exchanges[exchange] = {
             "observed_date": observed,
             "active": len(active),
