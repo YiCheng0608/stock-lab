@@ -1423,7 +1423,7 @@ def run_page(run: Run, page: str, stocks: list[Stock]) -> list[Result]:
                     results.append(Result(page, code, False, str(error)))
                 continue
         for stock in subjects:
-            label = stock.label if page == "stocks" and len(stocks) > 1 else ""
+            label = stock.label if code in PER_STOCK and len(stocks) > 1 else ""
             try:
                 detail = fn(run, stock) if page == "stocks" else fn(run)
                 ok = True
