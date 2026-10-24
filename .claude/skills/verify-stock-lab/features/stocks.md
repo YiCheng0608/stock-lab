@@ -48,7 +48,7 @@
 | S6 | 新聞與公告 | `stock-news-1280.txt` 有整行 `<S> 相關新聞`；`stock-news.json` 中 `instruments[]` 有 `exchange` = `<E>` 且 `symbol` = `<S>` 的則數為 0 時有 `尚無與此股已核實關聯的新聞或公告。`，否則時間行數（同新聞 N3 的規則）≥ 1 |
 | S7 | 資料說明 | `stock-data-1280.txt` 整行 `K 線資料日期` 的下一行是 `<I>`；整行 `行情來源` 的下一行非空且不是 `待核實`；有 `資料日 <I/>` 結尾的行 |
 | S8 | 資料日與 DB 一致 | `I` 等於 `facts-stock.json` 的 `instrument.latest_trading_date`；`instrument.source` 非空 |
-| S9 | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>	` 開頭的行（表格第一列是最新一筆），且含 ` · 資料截至：` 的行數 = `min(30, chips 數)` |
+| S9 | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>\t` 開頭的行（表格第一列是最新一筆），且含 ` · 資料截至：` 的行數 = `min(30, chips 數)` |
 
 ## 陷阱
 
