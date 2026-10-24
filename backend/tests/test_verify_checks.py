@@ -107,6 +107,15 @@ def test_normalize_keeps_tabs_and_collapses_spaces():
     assert page_checks.normalize("排名\t族群\t") == "排名\t族群\t"
 
 
+def test_normalize_treats_unicode_spaces_as_spaces():
+    # Issue #249: news 2845's title has "\xa0 ", which the browser shows as one space.
+    title = "交易真相\xa0 網友反問"
+    assert page_checks.normalize(title) == "交易真相 網友反問"
+    assert page_checks.normalize(" 資料 2026/10/16\xa0") == "資料 2026/10/16"
+    # The expected string from the API is normalized too, not only the page text.
+    assert page_checks.Text("p.txt", "交易真相 網友反問\n").has(title)
+
+
 def test_text_skips_blank_lines_and_keeps_line_numbers():
     text = page_checks.Text("p.txt", "明日候選\n\n  \n資料 2026/10/16\n3 檔\n")
     assert text.lines == ["明日候選", "資料 2026/10/16", "3 檔"]

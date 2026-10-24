@@ -646,15 +646,26 @@ def _signal_rows() -> list[dict[str, Any]]:
 
 
 def _ingestion_rows() -> list[dict[str, Any]]:
-    def run(item_id, run_type, source, records, data_as_of, metadata, start):
+    def run(
+        item_id,
+        run_type,
+        source,
+        records,
+        data_as_of,
+        metadata,
+        start,
+        *,
+        run_date=T,
+        status="success",
+    ):
         return {
             "id": item_id,
             "run_type": run_type,
             "source": source,
-            "run_date": T,
-            "status": "success",
+            "run_date": run_date,
+            "status": status,
             "records": records,
-            "request_key": f"{run_type}:{source}:{T.isoformat()}",
+            "request_key": f"{run_type}:{source}:{run_date.isoformat()}",
             "data_as_of": data_as_of,
             "metadata_json": metadata,
             "started_at": start,
@@ -690,6 +701,19 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             None,
             {"prompt_version": CANDIDATE_NOTE_PROMPT_VERSION, "calls": 3},
             _at(T, 10),
+        ),
+        # The next weekday was a market holiday (Issue #249): the newest official
+        # collect run found no data, and the pages keep showing T.
+        run(
+            5,
+            "collect",
+            "official",
+            0,
+            None,
+            {"fixture": True, "no_data_dates": [NEXT_SESSION.isoformat()]},
+            _at(NEXT_SESSION, 13, 20),
+            run_date=NEXT_SESSION,
+            status="skipped",
         ),
     ]
 
@@ -1136,7 +1160,7 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
     "candidate_runs": {"zero_reason": "當日有 3 檔候選，不是零候選"},
     "chip_snapshots": {"raw_payload_id": "假資料不附法人原始檔"},
     "group_memberships": {"valid_to": "成員都仍有效"},
-    "ingestion_runs": {"error": "每次執行都成功"},
+    "ingestion_runs": {"error": "沒有失敗的執行；休市日的 skipped 不寫 error"},
     "market_bars": {
         "turnover_reason": "成交值都是 available；原因只在 unavailable／unknown 時寫"
     },
@@ -1155,7 +1179,7 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "pullback_low": "同 reference_entry",
         "pullback_high": "同 reference_entry",
         "confidence": "新訊號不寫信心值（SIGNAL_CONFIDENCE_SEMANTICS：未校準）",
-        "execution_date": "下一交易日 2026-10-19 尚未發生，沒有成交",
+        "execution_date": "最早可成交日 2026-10-19 休市（ingestion_runs id 5 skipped），還沒有成交",
         "execution_price": "同 execution_date",
     },
     "theme_suggestions": {"matched_group_id": "兩個建議都是新題材，未對應既有族群"},
