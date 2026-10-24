@@ -1,7 +1,7 @@
 """verify checks of the user tracking plans (#253): today T11, actions A8-A11.
 
 The page text is written the way the browser's innerText lays out
-frontend/src/tracking/TrackingViews.tsx (one line per block, table cells
+the tracking views (TrackingViews.tsx; one line per block, table cells
 joined by tabs); the CI ``verify`` job runs the same checks on screenshots of
 the fixture database.
 """
