@@ -47,12 +47,14 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    orca terminal send --terminal <handle> --text "<任務全文：Issue 連結、AC、白名單、驗證方式>" --enter --json
    ```
 
-   看板設開發中。工程師接手後在 Issue 留一則「開工」留言（session、branch、HEAD）。
+   看板設開發中。工程師接手後在 Issue 留一則「開工」留言（session、branch、HEAD）。UI 任務與改到 `backend/app/api.py` 回應結構的任務，任務全文要求工程師完成後在自己的 branch 跑一次 [verify-stock-lab](../.claude/skills/verify-stock-lab/SKILL.md)，`pr-assets` 連結貼進 PR「怎麼驗證」（[Review 與合併](#review-與合併)規則 c 已接受）。
    派工後統籌保持一個背景監看（每分鐘查 `gh pr list` 的新 PR 與 repo 層級 `issues/comments?since=` 的新留言），直到所有進行中任務結案；監看到期就重掛，換統籌 session 時由新 session 重掛。工程師的提問與回報只寫在 Issue 留言，不依賴口頭通知。反方向：工程師 session 不會自己查 GitHub，統籌在 Issue／PR 留言給工程師（review 意見、回覆提問、決定）後，必須對該工程師 terminal 送一句短通知並附留言連結，再讀回確認已開始處理；內容以留言為準，terminal 只用來喚醒。
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌關工程師 terminal、刪本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。同類錯誤第二次發生時，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228) 的 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。G7 驗收前，統籌在最新 master 的 worktree 跑一次 [verify-stock-lab](../.claude/skills/verify-stock-lab/SKILL.md)，結果貼在 G7 的 Issue。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌關工程師 terminal、刪本地 branch、`orca worktree rm --force`（殘留目錄再手動刪）、刪工程師在 worktree 外建立的暫存目錄（PR 本文須寫出路徑）、刷新程式索引；Issue 有「統籌承諾」留言時依承諾的順序與時點清理。
+   結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。
+   每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次全套 [verify-stock-lab](../.claude/skills/verify-stock-lab/SKILL.md)，結果貼在該 gate 的 Issue。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。G7 另有兩點：證據由另一個 session 獨立 review；verify 放在排程連跑 5 個交易日的開頭。
 
 ## 本機檢查
 
