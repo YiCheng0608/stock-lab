@@ -10,8 +10,6 @@
 | `portfolio.json` | `/portfolio?page=1&page_size=20` |
 | `action-detail.json` | `/actions/<E>/<S>` |
 
-`facts.json` 的 `portfolio_positions` 大於 0 時，本檔的 API JSON 與截圖都寫到 `$OUT/.private/`（SKILL Doctor 第 4 步）。
-
 ## 截圖
 
 | 名稱 | 參數 |
@@ -36,9 +34,15 @@
 | A2 | 庫存區 | `actions-1280.txt` 有整行 `我的庫存`；`portfolio.json` 的 `items` 空時有整行 `尚未建立庫存。`，否則 `記錄來源 ` 開頭的行數 = `items` 數 |
 | A3 | 分頁與總數 | `第 1 頁 · 本頁 <items 數> 筆 · 共 <meta.total 千分位> 筆` 為整行 |
 | A4 | 卡片資料日 | `查看個股詳情 →` 的行數 k（展開的待補區也算）= `^資料日 [0-9]{4}/[0-9]{2}/[0-9]{2}$` 的行數；這些日期都等於 `meta.data_as_of` 的 `YYYY/MM/DD` 或更早，且 `meta.data_as_of` 等於 `facts.json` 的 `market_latest_trading_date` |
-| A5 | 沒有未標示的推論 | `actions-1280.txt` 不含 `推論`（本頁不放 LLM 產出；出現就判失敗並抄該行） |
+| A5 | 沒有未標示的推論 | `actions-1280.txt` 不含 `AI 推論` 與 `（推論）` 兩個字串（`grep -F`；本頁不放 LLM 產出；出現就判失敗並記行號） |
 | A6 | 追蹤詳情 | `action-detail-1280.txt` 有整行 `<S>` 與 `研究動作`；`decision_summary` 非 null 時有 `資料日：` 開頭的行，其日期等於 `decision_summary.data_cutoff` 的 `YYYY/MM/DD`（前 10 字）；null 時有 `尚無行動摘要。` |
 | A7 | 路徑一致 | `action-detail` 頁首代號與名稱等於個股頁（`stock.json` 的 `instrument.symbol`、`name`） |
+
+## 陷阱
+
+- **私人資料**：`facts.json` 的 `portfolio_positions` 大於 0 時是私人模式，範圍是本次所有導覽，不只本檔（[SKILL Doctor 第 4 步](../SKILL.md#2-doctor)）：截圖與 API JSON 寫到 `$OUT/.private/`，`results/*.md` 只寫行號與行數，不抄庫存行。
+- A5 只比 LLM 產出的標記 `AI 推論` 與 `（推論）`；說明文字裡的一般用語「推論」不算。
+- `/actions/:exchange/:symbol` 共用 `StockPage`，分頁按鈕 id 同個股（`#stock-tab-research`）。
 
 ## 判定
 
@@ -51,11 +55,11 @@
 ```markdown
 ### 行動 `/actions`：通過
 
-| 檢查 | 結果 | 證據 |
-| --- | --- | --- |
-| A3 | 通過 | `第 1 頁 · 本頁 20 筆 · 共 1,858 筆` |
-| A4 | 通過 | 20 張卡、20 行 `資料日 2026/10/21`；data_as_of 2026-10-21 = facts |
-| A6 | 通過 | TWSE 3004 研究動作 `暫無研究條件`，`資料日：2026/10/21` = data_cutoff |
+| 檢查 | 結果 | 原因類別 | 證據 |
+| --- | --- | --- | --- |
+| A3 | 通過 | — | `第 1 頁 · 本頁 20 筆 · 共 1,858 筆` |
+| A4 | 通過 | — | 20 張卡、20 行 `資料日 2026/10/21`；data_as_of 2026-10-21 = facts |
+| A6 | 通過 | — | TWSE 3004 研究動作 `暫無研究條件`，`資料日：2026/10/21` = data_cutoff |
 
 截圖：shots/actions-1280.png、shots/actions-390.png、shots/action-detail-1280.png
 ```

@@ -16,11 +16,13 @@ description: 同類錯誤第二次發生時，把它編成會失敗的檢查（�
 ```bash
 git log --all --oneline -i --grep="<關鍵字>"
 gh issue list --state all --search "<關鍵字>" --limit 30 --json number,title
-gh api --paginate "repos/YiCheng0608/stock-lab/issues/comments?per_page=100" \
-  --jq '.[] | select(.body | test("<正規式>")) | "\(.html_url) \(.created_at)"'
+gh search issues "第一次：<關鍵字>" --repo YiCheng0608/stock-lab --match comments --include-prs \
+  --json number,title,url
+gh issue view <上一行找到的編號> --json comments \
+  --jq '.comments[] | select(.body | startswith("第一次：")) | "\(.url) \(.createdAt)"'
 ```
 
-再查使用者記憶檔（`~/.claude/projects/*/memory/`）有沒有同一件事。只出現一次就停：在原 Issue 留言記下「第一次」與連結，不寫檢查。
+再查使用者記憶檔（`~/.claude/projects/*/memory/`）有沒有同一件事。只出現一次就停，不寫檢查：在原 Issue 留言，第一行固定寫 `第一次：<關鍵字>`（關鍵字用指令、檔名或錯誤訊息裡的固定字串，下一次才查得到），第二行起寫發生了什麼與連結。
 
 產出：先例清單，每列一次發生，連結要能點開。
 
@@ -39,7 +41,7 @@ gh api --paginate "repos/YiCheng0608/stock-lab/issues/comments?per_page=100" \
 2. **型別**：用型別或資料結構讓錯誤無法表達。
 3. **lint／CI**：在 `tools/ci/checks.py` 或 CI 加一條會失敗的規則。
 4. **測試**：寫一個錯誤重現就會紅的測試。
-5. **文件**：只能靠人遵守，強制手段寫「無」。
+5. **文件**：只能靠人遵守，強制手段寫「無」。寫在執行那一步會讀到的顯眼處（不是附錄或另一份文件），並附一個真實失敗範例（命令、輸出或連結）。
 
 選到第 N 層時，第 1 到 N−1 層每一層都要寫一句為何做不到。要的是「壞了就失敗」的檢查，不是產生報告給人看。架構層的修正也要配一個測試，否則日後被改回去不會有人發現。
 
@@ -70,7 +72,7 @@ gh api --paginate "repos/YiCheng0608/stock-lab/issues/comments?per_page=100" \
 
 對犯錯的狀態跑新檢查必須失敗，修正後必須通過。犯錯的狀態用以下其中一種取得：
 
-- 檢查的是程式行為：把被修的檔換回修正前的版本（`git show <base>:<path> > <備份>` 再複製過去），跑完用備份還原並 `cmp` 確認。
+- 檢查的是程式行為：先 `cp <path> <備份>` 保存修正版，再 `git show <base>:<path> > <path>` 換回修正前的版本跑紅，最後 `cp <備份> <path>` 還原，並 `cmp <備份> <path>` 確認一致後跑綠。備份放 session scratchpad。
 - 檢查的是資料或文件：在暫存目錄重建犯錯的 commit 或狀態。
 
 不要用 `git checkout` 還原：它會把還沒 commit 的修改一起退回。
@@ -98,6 +100,10 @@ Ran 3 tests ... OK   exit 0
 ## 5. 更新 AGENTS 對照表
 
 在 [AGENTS.md「規則與強制手段」](../../../AGENTS.md#規則與強制手段)新增一列；規則原本有一列寫「無」就改那一列，不另加。強制手段寫會失敗的那個檢查，檔案欄附路徑與函式或測試名稱，規則欄附來源 Issue 編號。同一個 PR 更新寫到這條規則的文件。
+
+- 對照表已列、強制手段寫「無」的規則再犯，直接算第二次，不必回第 1 步找先例。
+- 錯誤已不可能發生（例如架構改掉了它出現的地方）時，刪掉該列。
+- 檢查落地後，刪掉文件裡被它取代的文字指令，只留指向檢查的連結。
 
 產出：對照表的 diff。
 
