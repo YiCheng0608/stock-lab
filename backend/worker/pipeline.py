@@ -1442,7 +1442,6 @@ def _best_group_for_signal(
 
 
 def _resolve_group_member_return(
-    db: Session,
     group_score: GroupDailyScore | None,
     instrument: Instrument,
     signal_date: date,
@@ -1486,60 +1485,40 @@ def _resolve_group_member_return(
     rows = details.get("member_returns")
     if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
         return finish("invalid_member_returns")
-    if "member_return_identity_version" in details:
-        audit["mode"] = "instrument_id"
-        if marker != "instrument-id-v1":
-            return finish("unsupported_identity_version")
-        ids, pairs = set(), set()
-        for row in rows:
-            row_id, exchange, symbol = (
-                row.get("instrument_id"),
-                row.get("exchange"),
-                row.get("symbol"),
-            )
-            if (
-                type(row_id) is not int
-                or row_id <= 0
-                or type(exchange) is not str
-                or not exchange
-                or type(symbol) is not str
-                or not symbol
-            ):
-                return finish("invalid_member_identity")
-            if row_id in ids or (exchange, symbol) in pairs:
-                return finish("duplicate_member_identity")
-            ids.add(row_id)
-            pairs.add((exchange, symbol))
-        matches = [row for row in rows if row["instrument_id"] == instrument.id]
-        if not matches:
-            return finish("member_not_found")
-        member = matches[0]
-        if (
-            member["exchange"] != instrument.exchange
-            or member["symbol"] != instrument.symbol
-        ):
-            return finish("member_identity_conflict")
-    else:
-        audit["mode"] = "legacy_symbol_unique"
-        if any("instrument_id" in row or "exchange" in row for row in rows):
-            return finish("unversioned_member_identity")
-        if any(type(row.get("symbol")) is not str or not row["symbol"] for row in rows):
-            return finish("invalid_legacy_identity")
-        group = db.get(ThemeGroup, group_score.group_id)
-        if group is None:
-            return finish("group_missing")
-        members = _allowed_group_members(
-            group, _effective_memberships(db, group.id, signal_date)
+    # A score without the marker carries symbol text only; that cannot prove
+    # which exchange's instrument the return belongs to.
+    if marker != "instrument-id-v1":
+        return finish("unsupported_identity_version")
+    audit["mode"] = "instrument_id"
+    ids, pairs = set(), set()
+    for row in rows:
+        row_id, exchange, symbol = (
+            row.get("instrument_id"),
+            row.get("exchange"),
+            row.get("symbol"),
         )
-        matching_ids = {
-            item.id for _membership, item in members if item.symbol == instrument.symbol
-        }
-        if matching_ids != {instrument.id}:
-            return finish("legacy_membership_ambiguous_or_missing")
-        matches = [row for row in rows if row["symbol"] == instrument.symbol]
-        if len(matches) != 1:
-            return finish("legacy_return_ambiguous_or_missing")
-        member = matches[0]
+        if (
+            type(row_id) is not int
+            or row_id <= 0
+            or type(exchange) is not str
+            or not exchange
+            or type(symbol) is not str
+            or not symbol
+        ):
+            return finish("invalid_member_identity")
+        if row_id in ids or (exchange, symbol) in pairs:
+            return finish("duplicate_member_identity")
+        ids.add(row_id)
+        pairs.add((exchange, symbol))
+    matches = [row for row in rows if row["instrument_id"] == instrument.id]
+    if not matches:
+        return finish("member_not_found")
+    member = matches[0]
+    if (
+        member["exchange"] != instrument.exchange
+        or member["symbol"] != instrument.symbol
+    ):
+        return finish("member_identity_conflict")
     value = member.get("excess_return_20d")
     if type(value) not in (int, float):
         return finish("invalid_member_return")
@@ -1630,7 +1609,7 @@ def _upsert_signal_for_strategy(
     )
     group_score = _best_group_for_signal(db, instrument.id, signal_date)
     group_excess, group_member_return_lookup = _resolve_group_member_return(
-        db, group_score, instrument, signal_date
+        group_score, instrument, signal_date
     )
     strategy_flow_ratio = _strategy_institutional_flow_to_average_volume_ratio(
         db,

@@ -185,7 +185,7 @@ class GroupCandidateIdentityTest(unittest.TestCase):
     def expected(self, stocks, *keys):
         return [stocks[key].id for key in keys]
 
-    def legacy(self, score):
+    def symbol_only(self, score):
         details = deepcopy(score.details_json)
         details.pop("candidate_identity_version")
         details.pop("candidate_instruments")
@@ -317,88 +317,57 @@ class GroupCandidateIdentityTest(unittest.TestCase):
             score.details_json = details
             self.assertEqual(self.decision(db, day), [])
 
-    def test_legacy_unique_ambiguous_repeated_and_malformed(self):
+    def test_symbol_only_score_has_no_candidates(self):
         for duplicate in (False, True):
             with (
                 self.subTest(duplicate=duplicate),
                 self.fixture(duplicate=duplicate) as (db, group, score, stocks, day),
             ):
-                self.legacy(score)
-                expected = self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C")
-                if not duplicate:
-                    expected += self.expected(stocks, "TWSE:SAME")
-                self.assertEqual(self.decision(db, day), expected)
-        for symbols in (
-            ["SAME", "SAME", "A"],
-            ["SAME", None],
-            "SAME",
-            [""],
-            [1],
-            ["SAME"] * 5,
-        ):
-            with (
-                self.subTest(symbols=symbols),
-                self.fixture(duplicate=False) as (db, group, score, stocks, day),
-            ):
-                self.legacy(score)
-                details = deepcopy(score.details_json)
-                details["candidate_symbols"] = symbols
-                score.details_json = details
-                expected = (
-                    self.expected(stocks, "TWSE:A")
-                    if symbols == ["SAME", "SAME", "A"]
-                    else []
-                )
-                self.assertEqual(self.decision(db, day), expected)
+                self.symbol_only(score)
+                self.assertEqual(self.decision(db, day), [])
 
-    def test_cross_date_never_rebinds_or_unlocks_ambiguity(self):
-        for legacy in (False, True):
-            for duplicate in (False, True):
-                for exit_winner in (False, True):
-                    with (
-                        self.subTest(
-                            legacy=legacy, duplicate=duplicate, exit_winner=exit_winner
-                        ),
-                        self.fixture(duplicate=duplicate) as (
-                            db,
-                            group,
-                            score,
-                            stocks,
-                            day,
-                        ),
-                    ):
-                        if legacy:
-                            self.legacy(score)
-                        later = day + timedelta(days=3)
-                        if exit_winner:
-                            member = db.scalar(
-                                select(GroupMembership).where(
-                                    GroupMembership.instrument_id
-                                    == stocks["TWSE:SAME"].id
-                                )
+    def test_cross_date_never_rebinds(self):
+        for duplicate in (False, True):
+            for exit_winner in (False, True):
+                with (
+                    self.subTest(duplicate=duplicate, exit_winner=exit_winner),
+                    self.fixture(duplicate=duplicate) as (
+                        db,
+                        group,
+                        score,
+                        stocks,
+                        day,
+                    ),
+                ):
+                    later = day + timedelta(days=3)
+                    if exit_winner:
+                        member = db.scalar(
+                            select(GroupMembership).where(
+                                GroupMembership.instrument_id == stocks["TWSE:SAME"].id
                             )
-                            member.valid_to = day
-                        if not duplicate:
-                            newcomer = Instrument(
-                                exchange="TPEX",
-                                symbol="SAME",
-                                name="Later entrant",
-                                instrument_type="stock",
+                        )
+                        member.valid_to = day
+                    if not duplicate:
+                        newcomer = Instrument(
+                            exchange="TPEX",
+                            symbol="SAME",
+                            name="Later entrant",
+                            instrument_type="stock",
+                        )
+                        db.add(newcomer)
+                        db.flush()
+                        db.add(
+                            GroupMembership(
+                                group_id=group.id,
+                                instrument_id=newcomer.id,
+                                valid_from=later,
+                                source="memory-fixture",
                             )
-                            db.add(newcomer)
-                            db.flush()
-                            db.add(
-                                GroupMembership(
-                                    group_id=group.id,
-                                    instrument_id=newcomer.id,
-                                    valid_from=later,
-                                    source="memory-fixture",
-                                )
-                            )
-                        expected = self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C")
-                        if not exit_winner and not (legacy and duplicate):
-                            expected += self.expected(stocks, "TWSE:SAME")
-                        self.assertEqual(self.decision(db, later), expected)
+                        )
+                    expected = self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C")
+                    if not exit_winner:
+                        expected += self.expected(stocks, "TWSE:SAME")
+                    self.assertEqual(self.decision(db, later), expected)
 
     def test_source_day_membership_invalid_rejects_versioned_source(self):
         for mode in ("future", "expired", "other_group"):
@@ -425,32 +394,19 @@ class GroupCandidateIdentityTest(unittest.TestCase):
                 self.assertEqual(self.decision(db, day + timedelta(days=3)), [])
 
     def test_period_boundaries_and_inactive_status(self):
-        for legacy in (False, True):
-            with (
-                self.subTest(legacy=legacy),
-                self.fixture(duplicate=False) as (db, group, score, stocks, day),
-            ):
-                if legacy:
-                    self.legacy(score)
-                member = db.scalar(
-                    select(GroupMembership).where(
-                        GroupMembership.instrument_id == stocks["TWSE:SAME"].id
-                    )
+        with self.fixture(duplicate=False) as (db, group, score, stocks, day):
+            member = db.scalar(
+                select(GroupMembership).where(
+                    GroupMembership.instrument_id == stocks["TWSE:SAME"].id
                 )
-                member.valid_from = member.valid_to = day
-                self.assertIn(stocks["TWSE:SAME"].id, self.decision(db, day))
-                self.assertNotIn(
-                    stocks["TWSE:SAME"].id, self.decision(db, day + timedelta(days=1))
-                )
-        with self.fixture() as (db, group, score, stocks, day):
-            stocks["TWSE:SAME"].status = "inactive"
-            self.assertEqual(
-                self.decision(db, day),
-                self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C"),
+            )
+            member.valid_from = member.valid_to = day
+            self.assertIn(stocks["TWSE:SAME"].id, self.decision(db, day))
+            self.assertNotIn(
+                stocks["TWSE:SAME"].id, self.decision(db, day + timedelta(days=1))
             )
         with self.fixture() as (db, group, score, stocks, day):
-            self.legacy(score)
-            stocks["TPEX:SAME"].status = "inactive"
+            stocks["TWSE:SAME"].status = "inactive"
             self.assertEqual(
                 self.decision(db, day),
                 self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C"),

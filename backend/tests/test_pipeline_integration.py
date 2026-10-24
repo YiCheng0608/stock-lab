@@ -1308,8 +1308,14 @@ def test_strategy_group_return_does_not_require_complete_hot_group_score(
                 relative_return_20d=-0.02,
                 details_json={
                     "benchmark": "TAIEX",
+                    "member_return_identity_version": "instrument-id-v1",
                     "member_returns": [
-                        {"symbol": instrument.symbol, "excess_return_20d": -0.02}
+                        {
+                            "instrument_id": instrument.id,
+                            "exchange": instrument.exchange,
+                            "symbol": instrument.symbol,
+                            "excess_return_20d": -0.02,
+                        }
                     ],
                 },
             )
