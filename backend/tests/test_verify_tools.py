@@ -9,6 +9,7 @@ bash. Nothing touches the real data directory or GitHub.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -21,6 +22,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+
+from app.domain import CANDIDATE_SCORE_VERSION
 
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "tools" / "ops"
@@ -230,6 +233,37 @@ def test_db_facts_reads_the_copy_without_writing(tmp_path: Path) -> None:
     assert _digest(db) == before
     assert sorted(p.name for p in db.parent.iterdir()) == ["stock.db"]
     assert _run([sys.executable, "-B", str(DB_FACTS)]).returncode == 2
+
+
+def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> None:
+    # The API only serves CANDIDATE_SCORE_VERSION runs (candidate_view._run_for);
+    # a newer run of another version must not become the fact T7 compares (#237).
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE candidate_runs (id INTEGER PRIMARY KEY, trading_date TEXT,"
+            " score_version TEXT, candidate_count INTEGER)"
+        )
+        conn.executemany(
+            "INSERT INTO candidate_runs VALUES (?, ?, ?, ?)",
+            [
+                (1, "2026-10-20", CANDIDATE_SCORE_VERSION, 3),
+                (2, "2026-10-21", CANDIDATE_SCORE_VERSION, 5),
+                (3, "2026-10-22", "candidate_score_v0", 9),
+            ],
+        )
+    conn.close()
+    result = _run([sys.executable, "-B", str(DB_FACTS), str(db)])
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout)
+    assert out["candidate_run_latest_trading_date"] == "2026-10-21"
+    assert out["candidate_count_latest"] == 5
+
+    # db_facts.py runs on the stdlib-only tool Python and keeps its own copy.
+    spec = importlib.util.spec_from_file_location("db_facts", DB_FACTS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
 
 
 # ---- screenshot.cjs ----

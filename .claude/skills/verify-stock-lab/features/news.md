@@ -39,6 +39,11 @@
 | N5 | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
 | N6 | 詳情分欄 | `news-detail-1280.txt` 有整行 `來源事實` 與 `AI 摘要與判讀`，`AI 摘要與判讀` 下一行是 `AI 推論`；`ai` 為 done 時有 `模型 <ai.model> · 提示版本 <ai.prompt_version>` 開頭的行，否則有 `此則尚未產生 AI 摘要與判讀。` |
 
+## 陷阱
+
+- 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。今日 T6 與個股「新聞與公告」也用這個定義。
+- DB 與 API 裡沒有時區的時間（例如 `news_items.published_at`、`ai.generated_at`）是 UTC，與台北時間比較前加 8 小時（N5）。
+
 ## 判定
 
 - 通過：N1～N6 全部通過。
@@ -50,11 +55,11 @@
 ```markdown
 ### 新聞 `/news`：通過
 
-| 檢查 | 結果 | 證據 |
-| --- | --- | --- |
-| N1 | 通過 | 5 張截圖 ready，無錯誤，無橫向捲動 |
-| N3 | 通過 | 國內 20／20、國際 20／20、官方 20／20 張卡有時間行 |
-| N4 | 通過 | 國內 `AI 推論` 18 行 = API done 18 則 |
+| 檢查 | 結果 | 原因類別 | 證據 |
+| --- | --- | --- | --- |
+| N1 | 通過 | — | 5 張截圖 ready，無錯誤，無橫向捲動 |
+| N3 | 通過 | — | 國內 20／20、國際 20／20、官方 20／20 張卡有時間行 |
+| N4 | 通過 | — | 國內 `AI 推論` 18 行 = API done 18 則 |
 
 截圖：shots/news-1280.png、shots/news-390.png、shots/news-detail-1280.png
 ```

@@ -5,6 +5,8 @@ Usage: python db_facts.py <copy stock.db> [<exchange> <symbol>]
 Opens the copy with mode=ro and query_only and prints one JSON object with the
 latest dates and counts the feature checks compare against. A missing table
 gives null. With an instrument, also its latest market bar date and source.
+Candidate facts only count runs of the current score version, as the API does
+(backend/app/candidate_view.py, _run_for).
 """
 
 from __future__ import annotations
@@ -14,6 +16,11 @@ import sqlite3
 import sys
 from contextlib import closing
 from pathlib import Path
+
+# Same value as backend/app/domain.py; backend/tests/test_verify_tools.py keeps
+# them equal. This script runs on the stdlib-only tool Python, so it cannot
+# import the backend (#237).
+CANDIDATE_SCORE_VERSION = "candidate_score_v1"
 
 QUERIES = {
     "market_latest_trading_date": (
@@ -26,11 +33,13 @@ QUERIES = {
     ),
     "candidate_run_latest_trading_date": (
         "candidate_runs",
-        "SELECT max(trading_date) FROM candidate_runs",
+        "SELECT max(trading_date) FROM candidate_runs"
+        f" WHERE score_version = '{CANDIDATE_SCORE_VERSION}'",
     ),
     "candidate_count_latest": (
         "candidate_runs",
         "SELECT candidate_count FROM candidate_runs"
+        f" WHERE score_version = '{CANDIDATE_SCORE_VERSION}'"
         " ORDER BY trading_date DESC, id DESC LIMIT 1",
     ),
     "news_items": ("news_items", "SELECT count(*) FROM news_items"),

@@ -28,16 +28,25 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 WT="$(git rev-parse --show-toplevel)"; V="$WT/.local/verify"
 PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
 APIPY=C:/Users/YiCheng/stock-lab-release/.venv/Scripts/python.exe
-OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一個值
+OUT=$(cat "$V/current")   # Launch 第 3 步寫入；第 3 步之前還沒有 $OUT
 ```
+
+`$OUT` 只在 Launch 第 3 步算一次，之後一律從 `$V/current` 讀，不要重算 `date`（跨分鐘會變成另一個目錄）。
 
 ## 1. Launch
 
 1. **停止條件**（任一成立就不啟動，五個導覽全部「無法判定」，直接到 Evidence 寫原因）：
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
-2. **埠**：埠是固定的，所以整台機器同一時間只能有一個 verify-stock-lab 在跑。`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Cleanup 第 1 步判斷是不是**本 worktree** 先前留下的；是就關掉，不是（包括別的 worktree 正在跑的 verify）就不動它並停止（無法判定：埠被其他程序占用，寫出 PID 與命令列）。
-3. **建輸出目錄**：`mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs`。耗時以 `echo "<段名> <epoch 秒>" >> "$OUT/.timing"` 記錄（隱藏檔，不推送）：Launch 用第 1 步開始時的 `date +%s`，Doctor、Drive、Evidence 各段開頭與 Drive 結束各記一行；summary 標題時間用這次的開始時間（與 `$OUT` 同一分鐘）。
+2. **埠**：埠是固定的，所以整台機器同一時間只能有一個 verify-stock-lab 在跑。`netstat -ano | grep LISTENING | grep -E ':(8227|4227) '`。有占用時依 Doctor 第 2 步 `owner` 的比對判斷是不是**本 worktree** 先前留下的；是就關掉，不是（包括別的 worktree 正在跑的 verify）就不動它並停止（無法判定：埠被其他程序占用，寫出 PID 與命令列）。
+3. **建輸出目錄**並把路徑寫進 `$V/current`（之後的命令都用 `OUT=$(cat "$V/current")`）：
+
+   ```bash
+   OUT="$V/out/$(TZ=UTC-8 date +%Y%m%d-%H%M)"
+   mkdir -p "$OUT"/api "$OUT"/shots "$OUT"/results "$V"/logs && printf '%s\n' "$OUT" > "$V/current"
+   ```
+
+   耗時以 `echo "<段名> <epoch 秒>" >> "$OUT/.timing"` 記錄（隱藏檔，不推送）：Launch 用第 1 步開始時的 `date +%s`，Doctor、Drive、Evidence 各段開頭與 Drive 結束各記一行；summary 標題時間用這次的開始時間（與 `$OUT` 同一分鐘）。
 4. **副本**（唯讀複製，約 10 秒；副本已存在也重做，確保是最新快照）：
 
    ```bash
@@ -78,25 +87,25 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
    - `readiness`：`$V/logs/api.log` 有 `Application startup complete`；出現 `Database is not ready` 就失敗並抄該行。
    - `proxy`：`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4227/api/health` 為 200，且 `http://127.0.0.1:4227/` 回 HTML。
    - `facts`：`"$PY" -B "$WT/.claude/skills/verify-stock-lab/db_facts.py" "$V/stock.db" > "$OUT/facts.json"` 成功。
+   - `owner`：8227 與 4227 的監聽程序是本 worktree 起的。各埠 `netstat -ano | grep LISTENING | grep ':<埠> '` 取 PID，用 `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=<PID>').CommandLine"` 讀命令列；8227 必須同時含 `uvicorn`、`--port 8227` 與 `--app-dir "$WT/backend"` 的路徑，4227 必須含 `$WT/.claude/skills/verify-stock-lab/vite.preview.mjs`（`$WT` 照 `git rev-parse --show-toplevel` 的 `C:/...` 寫法，比對不分大小寫）。兩者都含本 worktree 的絕對路徑，所以別的 worktree 起的 verify 不會被判成自己的。8227 的監聽程序是 venv 啟動器的子程序，命令列顯示的是 codex runtime 的 `python.exe`，屬正常。不符合時說明欄寫 PID 與命令列。
 3. 任一項失敗 → 五個導覽全部無法判定（原因寫失敗項），跳到 Evidence。
-4. **私人資料**：`facts.json` 的 `portfolio_positions` 大於 0 時，今日與行動頁會出現庫存，本次所有截圖與 API JSON 改寫到 `$OUT/.private/`（不推送），摘要註明。
+4. **私人資料**：`facts.json` 的 `portfolio_positions` 大於 0 時，今日與行動頁會出現庫存，本次**所有導覽**的截圖與 API JSON 都改寫到 `$OUT/.private/`（不推送）：Drive 的 `$OUT/api`、`$OUT/shots` 一律換成 `$OUT/.private/api`、`$OUT/.private/shots`，並 `mkdir -p "$OUT/.private/api" "$OUT/.private/shots" && mv "$OUT/copy.json" "$OUT/.private/"`（`copy.json` 不推送）。`results/*.md` 與 `summary.md` 不抄頁面文字，證據只寫檔名、行號與行數；摘要註明「私人模式」。
 
 ## 3. Drive
 
-依序執行 `features/today.md`、`features/news.md`、`features/themes.md`、`features/stocks.md`、`features/actions.md`（同目錄）。後面的檔案會用前面記下的值（族群 → 個股 → 行動走同一條路徑），順序不可換。導覽代號固定用英文檔名 `today`、`news`、`themes`、`stocks`、`actions`（`push_pr_assets.sh` 只收 ASCII 檔名）。每個檔案：
+依 [`features/README.md`](features/README.md) 的順序執行五個 features 檔；順序與跨檔傳遞的值見該檔。導覽代號固定用英文檔名 `today`、`news`、`themes`、`stocks`、`actions`（`push_pr_assets.sh` 只收 ASCII 檔名）。每個檔案：
 
 1. 依「API」小節抓 JSON 存 `$OUT/api/<檔名>`（`curl -s -o <檔> -w '%{http_code}'`，非 200 記下）。
 2. 依「截圖」小節跑 `node "$WT/tools/ops/screenshot.cjs" --url <頁> --out "$OUT/shots" [...]`，把 stdout 追加到 `$OUT/shots/<導覽代號>.jsonl`。每行 JSON 的 `txt` 是頁面文字檔的路徑，檢查都對檔案內容做（`grep -Fx` 比整行、`grep -F` 比片段）；需要時再看 `png`。
-3. 逐條跑「檢查」，每條記 `通過`／`失敗`／`無法判定` 與一句證據（預期值、實際值、來源檔與行號）。
+3. 逐條跑「檢查」，每條記 `通過`／`失敗`／`無法判定` 與一句證據（預期值、實際值、來源檔與行號）；失敗與無法判定另記原因類別（見 [README](features/README.md#原因類別)）。
 4. 依「判定」小節得出該導覽的三態，照「輸出格式」寫 `$OUT/results/<導覽代號>.md`。各 features 檔的輸出格式範例只示範格式，數值與結論是虛構的。
+5. 檔案做完後 `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8227/api/health` 一次。不是 200 → 後面的導覽全判「無法判定（API 已掛）」，不再抓截圖，並把 `tail -n 20 "$V/logs/api.log"` 抄進 summary（私人模式改存 `$OUT/.private/api-tail.txt`，summary 只寫行數）。
 
-共通規則：
+共通規則（各頁特有的陷阱寫在該 features 檔的「陷阱」小節）：
 
 - 比對 API 字串與頁面文字前，兩邊都把空白正規化：換行（`\r`、`\n`）、全形空白（U+3000）與連續半形空白換成一個半形空白、去頭尾空白（瀏覽器的頁面文字會改寫空白）。tab 不動：表格列以 tab 分欄，檢查裡的 `\t` 就是 tab。
 - 「下一行」指下一個非空白行（頁面文字有很多空行）。
 - 一個導覽同時有失敗與無法判定的檢查時，結果是失敗，兩種都列出。
-- 「有 AI 判讀」與前端 `usableAi` 相同：`ai.status` 為 `done` 且 `ai.inference` 為 true（方向欄位是 `ai.impact_direction`）。
-- DB 與 API 裡沒有時區的時間（例如 `news_items.published_at`、`ai.generated_at`）是 UTC，與台北時間比較前加 8 小時。
 - 截圖 JSON 的 `ready` 為 false、`missingClicks` 非空，或該頁依賴的 API 非 200 → 依賴它的檢查判「無法判定」（不是失敗），原因寫哪個 URL。
 - 頁面文字與 API／DB 不一致 → 失敗，證據寫兩邊的值。
 - 無資料時檢查的是空狀態文案，不是無法判定。
@@ -112,7 +121,7 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 
    - 程式：`task/227-verify-skill` @ `5fbf04c`（`git status --short` 有未 commit 的改動時，列出檔名並註明照工作樹建置）
    - 副本：資料日 2026-10-21（`market_bars` 最新），alembic `0016_group_score_archive`，複製 10.1 秒
-   - Doctor：health 200、readiness 通過、proxy 200
+   - Doctor：health 200、readiness 通過、proxy 200、owner 通過
    - 證據：https://github.com/YiCheng0608/stock-lab/tree/pr-assets/227/20261022-0130
 
    | 導覽 | 結果 | 失敗或無法判定的檢查 |
@@ -136,8 +145,8 @@ OUT="$V/out/<這次的 YYYYMMDD-HHMM>"   # 第一次設定後固定，用同一�
 
 在 Evidence 第 3 步的推送之前做。只關本 skill 啟動的程序、只刪本 skill 的暫存：
 
-1. 對 8227 與 4227 各做一次：`netstat -ano | grep LISTENING | grep ':<埠> '` 取 PID，用 `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=<PID>').CommandLine"` 讀命令列；8227 必須同時含 `uvicorn`、`--port 8227` 與 `--app-dir "$WT/backend"` 的路徑，4227 必須含 `$WT/.claude/skills/verify-stock-lab/vite.preview.mjs`（`$WT` 照 `git rev-parse --show-toplevel` 的 `C:/...` 寫法，比對不分大小寫）。兩者都含本 worktree 的絕對路徑，所以別的 worktree 起的 verify 不會被判成自己的。符合才 `taskkill //PID <PID> //T //F`，不符合就不動並在 summary 記下。8227 的監聽程序是 venv 啟動器的子程序，命令列顯示的是 codex runtime 的 `python.exe`，屬正常；`taskkill` 的輸出在 Git Bash 是亂碼，以下一步的 `netstat` 為準。
+1. 對 8227 與 4227 各做一次 Doctor 第 2 步 `owner` 的比對（重新取 PID 與命令列，不沿用 Doctor 的結果）。符合才 `taskkill //PID <PID> //T //F`，不符合就不動並在 summary 記下。`taskkill` 的輸出在 Git Bash 是亂碼，以下一步的 `netstat` 為準。
 2. 再跑一次第 1 步的 `netstat`，兩個埠都不再 LISTENING。
-3. 刪 `$V/dist`、`$V/raw`（API 啟動時建的空目錄）、`$V/stock.db`（含同名 `-wal`、`-shm`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。
-4. `ls -a "$OUT/shots"` 不應有 `.browser-*`（screenshot.cjs 自己會刪；殘留就刪掉並記下）。
+3. 刪 `$V/dist`、`$V/raw`（API 啟動時建的空目錄）、`$V/stock.db`（含同名 `-wal`、`-shm`、`-journal`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。
+4. `ls -a "$OUT/shots"`（私人模式另看 `$OUT/.private/shots`）不應有 `.browser-*`（screenshot.cjs 自己會刪；殘留就刪掉並記下）。
 5. 不刪 `frontend/node_modules`（下次重用）；不碰 `.local/verify` 以外的路徑。
