@@ -814,6 +814,27 @@ def is_tpex_etf_code(symbol: str, name: str = "") -> bool:
     )
 
 
+def is_common_stock_code(symbol: str) -> bool:
+    """A four-digit code not starting with 0: an ordinary share on TWSE/TPEx.
+
+    The daily quote tables keep a company's rows after it leaves the current
+    issuer master (delisting, transfer to the other exchange, a listing the
+    master has not propagated yet).  Those rows are not filtered by the
+    master; the collector resolves them against stored instruments or records
+    them as unmatched.  ETFs start with 0; preferred shares carry a letter;
+    warrants, CBs, ETNs and most depositary receipts have five or more
+    characters.
+    """
+
+    return (
+        len(symbol) == 4
+        and symbol.isdigit()
+        and symbol[0] != "0"
+        # TWSE numbers depositary receipts 91xx; they are not ordinary shares.
+        and not symbol.startswith("91")
+    )
+
+
 def _is_tpex_non_scope_product(symbol: str, name: str) -> bool:
     """Reject products outside the listed/OTC stock + ETF research scope."""
 
@@ -1957,6 +1978,152 @@ def _historical_event_coverage(end: date, source: str) -> dict[str, Any]:
     }
 
 
+def _chip_symbols(
+    instruments: Iterable[InstrumentRecord], bars: Iterable[BarRecord]
+) -> set[str]:
+    """Chips are kept for the universe and for every ordinary-share quote row."""
+
+    return {item.symbol for item in instruments} | {
+        bar.symbol for bar in bars if is_common_stock_code(bar.symbol)
+    }
+
+
+def twse_universe_records(
+    listed_payload: FetchedPayload,
+    etf_payload: FetchedPayload,
+    new_listing_payload: FetchedPayload,
+    as_of: date,
+) -> list[InstrumentRecord]:
+    """Build the TWSE stock/ETF universe from the three official list captures.
+
+    Also used by ``worker.instrument_repair`` on stored captures, so it does
+    no I/O.
+    """
+
+    listed_rows = _rows(listed_payload.payload)
+    etf_rows = _rows(etf_payload.payload)
+    new_rows = _rows(new_listing_payload.payload)
+    if not listed_rows and not etf_rows:
+        raise OfficialDataError("TWSE universe payloads contained no instruments")
+
+    # Restrict IPO classification to approved listings that are already
+    # effective as of the requested market date.  Future approved rows
+    # must not become actionable IPOs.
+    recent_codes = {
+        code
+        for row in new_rows
+        if (code := _text(row, "Code"))
+        and _is_recent_listing(
+            as_of,
+            _date_from_row(row, "ApprovedListingDate", "ListingDate"),
+        )
+    }
+    records: dict[str, InstrumentRecord] = {}
+    for row in listed_rows:
+        symbol = _text(row, "公司代號", "Code", "證券代號")
+        if not symbol:
+            continue
+        listing_date = _date_from_row(row, "上市日期", "DateOfListing")
+        instrument_type = (
+            "ipo"
+            if symbol in recent_codes
+            or (listing_date and (as_of - listing_date).days <= 60)
+            else "stock"
+        )
+        records[symbol] = InstrumentRecord(
+            symbol=symbol,
+            name=_text(row, "公司簡稱", "公司名稱", "Name") or symbol,
+            exchange="TWSE",
+            instrument_type=instrument_type,
+            listing_date=listing_date,
+            industry=_text(row, "產業別", "Industry") or None,
+            payload_sha256=listed_payload.sha256,
+        )
+    for row in etf_rows:
+        symbol = _text(row, "基金代號", "FundCode", "代號")
+        if not symbol:
+            continue
+        listing_date = _date_from_row(row, "上市日期", "DateOfListing")
+        records[symbol] = InstrumentRecord(
+            symbol=symbol,
+            name=_text(row, "基金簡稱", "基金中文名稱", "基金名稱", "Name") or symbol,
+            exchange="TWSE",
+            instrument_type="etf",
+            etf_category=_text(row, "基金類型", "FundType") or None,
+            listing_date=listing_date,
+            industry="ETF",
+            payload_sha256=etf_payload.sha256,
+        )
+    for symbol, record in list(records.items()):
+        if record.instrument_type == "ipo" and not (
+            symbol in recent_codes or _is_recent_listing(as_of, record.listing_date)
+        ):
+            records[symbol] = InstrumentRecord(
+                symbol=record.symbol,
+                name=record.name,
+                market=record.market,
+                exchange=record.exchange,
+                instrument_type="stock",
+                etf_category=record.etf_category,
+                listing_date=record.listing_date,
+                industry=record.industry,
+                status=record.status,
+                payload_sha256=record.payload_sha256,
+            )
+
+    # Keep approved new listings in the universe even if the issuer master
+    # has not propagated the row yet.  Their missing history then remains
+    # visible as non-actionable data rather than disappearing silently.
+    # newlisting keeps every listing since 2011; an older row whose company is
+    # no longer in the master was delisted or moved, so it is not a listing.
+    for row in new_rows:
+        symbol = _text(row, "Code", "Symbol")
+        listing_date = _date_from_row(row, "ApprovedListingDate", "ListingDate")
+        if (
+            not symbol
+            or not _is_recent_listing(as_of, listing_date)
+            or symbol in records
+        ):
+            continue
+        records[symbol] = InstrumentRecord(
+            symbol=symbol,
+            name=_text(row, "Name", "CompanyName", "Company") or symbol,
+            exchange="TWSE",
+            instrument_type="ipo",
+            listing_date=listing_date,
+            industry=_text(row, "Industry") or None,
+            payload_sha256=new_listing_payload.sha256,
+        )
+
+    # The OpenAPI ETF feed exposes free-text FundType values.  Normalize
+    # them to the finite strategy-contract categories before persistence;
+    # a missing description remains None and therefore fails closed.
+    normalized_records: list[InstrumentRecord] = []
+    for record in records.values():
+        if record.instrument_type != "etf":
+            normalized_records.append(record)
+            continue
+        normalized_records.append(
+            InstrumentRecord(
+                symbol=record.symbol,
+                name=record.name,
+                market=record.market,
+                exchange=record.exchange,
+                instrument_type=record.instrument_type,
+                etf_category=normalize_etf_category(
+                    record.etf_category,
+                    symbol=record.symbol,
+                    name=record.name,
+                ),
+                listing_date=record.listing_date,
+                industry=record.industry,
+                status=record.status,
+                payload_sha256=record.payload_sha256,
+            )
+        )
+    return normalized_records
+
+
 class TwseAdapter:
     source = "twse"
 
@@ -2017,133 +2184,9 @@ class TwseAdapter:
         listed_payload = self._fetch(TWSE_LISTED_ENDPOINT, as_of.isoformat())
         etf_payload = self._fetch(TWSE_ETF_ENDPOINT, as_of.isoformat())
         new_listing_payload = self._fetch(TWSE_NEW_LISTING_ENDPOINT, as_of.isoformat())
-        listed_rows = _rows(listed_payload.payload)
-        etf_rows = _rows(etf_payload.payload)
-        new_rows = _rows(new_listing_payload.payload)
-        if not listed_rows and not etf_rows:
-            raise OfficialDataError("TWSE universe payloads contained no instruments")
-
-        recent_codes = {
-            _text(row, "Code", "公司代號", "證券代號")
-            for row in new_rows
-            if _date_from_row(row, "ApprovedListingDate", "ListingDate")
-        }
-        # Restrict IPO classification to approved listings that are already
-        # effective as of the requested market date.  Future approved rows
-        # must not become actionable IPOs.
-        recent_codes = {
-            code
-            for row in new_rows
-            if (code := _text(row, "Code"))
-            and _is_recent_listing(
-                as_of,
-                _date_from_row(row, "ApprovedListingDate", "ListingDate"),
-            )
-        }
-        records: dict[str, InstrumentRecord] = {}
-        for row in listed_rows:
-            symbol = _text(row, "公司代號", "Code", "證券代號")
-            if not symbol:
-                continue
-            listing_date = _date_from_row(row, "上市日期", "DateOfListing")
-            instrument_type = (
-                "ipo"
-                if symbol in recent_codes
-                or (listing_date and (as_of - listing_date).days <= 60)
-                else "stock"
-            )
-            records[symbol] = InstrumentRecord(
-                symbol=symbol,
-                name=_text(row, "公司簡稱", "公司名稱", "Name") or symbol,
-                exchange="TWSE",
-                instrument_type=instrument_type,
-                listing_date=listing_date,
-                industry=_text(row, "產業別", "Industry") or None,
-                payload_sha256=listed_payload.sha256,
-            )
-        for row in etf_rows:
-            symbol = _text(row, "基金代號", "FundCode", "代號")
-            if not symbol:
-                continue
-            listing_date = _date_from_row(row, "上市日期", "DateOfListing")
-            records[symbol] = InstrumentRecord(
-                symbol=symbol,
-                name=_text(row, "基金簡稱", "基金中文名稱", "基金名稱", "Name")
-                or symbol,
-                exchange="TWSE",
-                instrument_type="etf",
-                etf_category=_text(row, "基金類型", "FundType") or None,
-                listing_date=listing_date,
-                industry="ETF",
-                payload_sha256=etf_payload.sha256,
-            )
-        for symbol, record in list(records.items()):
-            if record.instrument_type == "ipo" and not (
-                symbol in recent_codes or _is_recent_listing(as_of, record.listing_date)
-            ):
-                records[symbol] = InstrumentRecord(
-                    symbol=record.symbol,
-                    name=record.name,
-                    market=record.market,
-                    exchange=record.exchange,
-                    instrument_type="stock",
-                    etf_category=record.etf_category,
-                    listing_date=record.listing_date,
-                    industry=record.industry,
-                    status=record.status,
-                    payload_sha256=record.payload_sha256,
-                )
-
-        # Keep approved new listings in the universe even if the issuer master
-        # has not propagated the row yet.  Their missing history then remains
-        # visible as non-actionable data rather than disappearing silently.
-        for row in new_rows:
-            symbol = _text(row, "Code", "Symbol")
-            listing_date = _date_from_row(row, "ApprovedListingDate", "ListingDate")
-            if (
-                not symbol
-                or listing_date is None
-                or listing_date > as_of
-                or symbol in records
-            ):
-                continue
-            records[symbol] = InstrumentRecord(
-                symbol=symbol,
-                name=_text(row, "Name", "CompanyName", "Company") or symbol,
-                exchange="TWSE",
-                instrument_type="ipo",
-                listing_date=listing_date,
-                industry=_text(row, "Industry") or None,
-                payload_sha256=new_listing_payload.sha256,
-            )
-
-        # The OpenAPI ETF feed exposes free-text FundType values.  Normalize
-        # them to the finite strategy-contract categories before persistence;
-        # a missing description remains None and therefore fails closed.
-        normalized_records: list[InstrumentRecord] = []
-        for record in records.values():
-            if record.instrument_type != "etf":
-                normalized_records.append(record)
-                continue
-            normalized_records.append(
-                InstrumentRecord(
-                    symbol=record.symbol,
-                    name=record.name,
-                    market=record.market,
-                    exchange=record.exchange,
-                    instrument_type=record.instrument_type,
-                    etf_category=normalize_etf_category(
-                        record.etf_category,
-                        symbol=record.symbol,
-                        name=record.name,
-                    ),
-                    listing_date=record.listing_date,
-                    industry=record.industry,
-                    status=record.status,
-                    payload_sha256=record.payload_sha256,
-                )
-            )
-        return normalized_records, [listed_payload, etf_payload, new_listing_payload]
+        return twse_universe_records(
+            listed_payload, etf_payload, new_listing_payload, as_of
+        ), [listed_payload, etf_payload, new_listing_payload]
 
     def fetch_bars(
         self, symbols: Iterable[str], start: date, end: date
@@ -2157,6 +2200,7 @@ class TwseAdapter:
         symbol_list = list(dict.fromkeys(symbols))
         if not symbol_list:
             return [], []
+        wanted = set(symbol_list)
         payloads: list[FetchedPayload] = []
         bars: list[BarRecord] = []
         # STOCK_DAY_ALL is the official OpenAPI daily all-securities feed.  It
@@ -2176,7 +2220,8 @@ class TwseAdapter:
                     data_as_of=end.isoformat(),
                     payload_sha256=daily_payload.sha256,
                 )
-                if start <= bar.trading_date <= end and bar.symbol in symbol_list
+                if start <= bar.trading_date <= end
+                and (bar.symbol in wanted or is_common_stock_code(bar.symbol))
             ]
         else:
             daily_bars, daily_payload, self.stock_day_unavailable = (
@@ -2288,7 +2333,7 @@ class TwseAdapter:
                 bar
                 for bar in parsed
                 if start <= bar.trading_date <= end
-                and bar.symbol in symbol_list
+                and (bar.symbol in wanted or is_common_stock_code(bar.symbol))
                 # The captured snapshot owns all selected securities on end,
                 # including missing/invalid rows; history cannot fill them.
                 and not (self.stock_day_capture is not None and trading_date == end)
@@ -2531,8 +2576,7 @@ class TwseAdapter:
         )
         chip_dates = {bar.trading_date for bar in bars if bar.symbol != "TAIEX"}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
-            chip_dates,
-            {item.symbol for item in instruments},
+            chip_dates, _chip_symbols(instruments, bars)
         )
         index_record = InstrumentRecord(
             "TAIEX", "TAIEX", exchange="TWSE", instrument_type="index", industry="Index"
@@ -2633,6 +2677,60 @@ class TwseAdapter:
         )
 
 
+def tpex_universe_records(
+    listed_payload: FetchedPayload, etf_payload: FetchedPayload, as_of: date
+) -> list[InstrumentRecord]:
+    """Build the TPEx stock/ETF universe from the issuer master and ETF list.
+
+    Also used by ``worker.instrument_repair`` on stored captures; no I/O.
+    """
+
+    listed_rows = _rows(listed_payload.payload)
+    etf_rows = _rows(etf_payload.payload)
+    records: dict[str, InstrumentRecord] = {}
+    for row in listed_rows:
+        symbol = _text(row, "SecuritiesCompanyCode", "Code", "證券代號", "代號")
+        name = _text(row, "CompanyAbbreviation", "CompanyName", "名稱") or symbol
+        if not symbol or _is_tpex_non_scope_product(symbol, name):
+            continue
+        listing_date = _date_from_row(row, "DateOfListing", "上市日期", "掛牌日期")
+        records[symbol] = InstrumentRecord(
+            symbol=symbol,
+            name=name,
+            exchange="TPEx",
+            instrument_type="ipo"
+            if _is_recent_listing(as_of, listing_date)
+            else "stock",
+            listing_date=listing_date,
+            industry=_text(row, "SecuritiesIndustryCode", "Industry", "產業別") or None,
+            payload_sha256=listed_payload.sha256,
+        )
+    for row in etf_rows:
+        symbol = _text(row, "stockNo", "StockNo", "Code", "代號")
+        name = _text(row, "stockName", "StockName", "Name", "名稱") or symbol
+        if not symbol:
+            continue
+        listing_date = _date_from_row(
+            row, "listingDate", "ListingDate", "DateOfListing", "上市日期"
+        )
+        index_name = _text(row, "indexName", "IndexName", "指數名稱")
+        records[symbol] = InstrumentRecord(
+            symbol=symbol,
+            name=name,
+            exchange="TPEx",
+            instrument_type="etf",
+            etf_category=normalize_etf_category(index_name, symbol=symbol, name=name),
+            listing_date=listing_date,
+            industry="ETF",
+            payload_sha256=etf_payload.sha256,
+        )
+    if not records:
+        raise OfficialDataError(
+            "TPEx authoritative MOPS stock master and ETF allowlist contained no instruments"
+        )
+    return list(records.values())
+
+
 class TpexAdapter:
     source = "tpex"
 
@@ -2669,7 +2767,8 @@ class TpexAdapter:
 
         The daily quote table is intentionally not a universe source: it also
         contains warrants, ETNs, bonds, and other products.  It is fetched by
-        ``fetch_bars`` and filtered against these records.
+        ``fetch_bars`` and filtered to these records plus ordinary-share codes
+        (``is_common_stock_code``).
         """
 
         listed_payload = self._fetch(TPEX_LISTED_ENDPOINT, as_of.isoformat())
@@ -2679,53 +2778,10 @@ class TpexAdapter:
             method="POST",
             data={"response": "json"},
         )
-        listed_rows = _rows(listed_payload.payload)
-        etf_rows = _rows(etf_payload.payload)
-        records: dict[str, InstrumentRecord] = {}
-        for row in listed_rows:
-            symbol = _text(row, "SecuritiesCompanyCode", "Code", "證券代號", "代號")
-            name = _text(row, "CompanyAbbreviation", "CompanyName", "名稱") or symbol
-            if not symbol or _is_tpex_non_scope_product(symbol, name):
-                continue
-            listing_date = _date_from_row(row, "DateOfListing", "上市日期", "掛牌日期")
-            records[symbol] = InstrumentRecord(
-                symbol=symbol,
-                name=name,
-                exchange="TPEx",
-                instrument_type="ipo"
-                if _is_recent_listing(as_of, listing_date)
-                else "stock",
-                listing_date=listing_date,
-                industry=_text(row, "SecuritiesIndustryCode", "Industry", "產業別")
-                or None,
-                payload_sha256=listed_payload.sha256,
-            )
-        for row in etf_rows:
-            symbol = _text(row, "stockNo", "StockNo", "Code", "代號")
-            name = _text(row, "stockName", "StockName", "Name", "名稱") or symbol
-            if not symbol:
-                continue
-            listing_date = _date_from_row(
-                row, "listingDate", "ListingDate", "DateOfListing", "上市日期"
-            )
-            index_name = _text(row, "indexName", "IndexName", "指數名稱")
-            records[symbol] = InstrumentRecord(
-                symbol=symbol,
-                name=name,
-                exchange="TPEx",
-                instrument_type="etf",
-                etf_category=normalize_etf_category(
-                    index_name, symbol=symbol, name=name
-                ),
-                listing_date=listing_date,
-                industry="ETF",
-                payload_sha256=etf_payload.sha256,
-            )
-        if not records:
-            raise OfficialDataError(
-                "TPEx authoritative MOPS stock master and ETF allowlist contained no instruments"
-            )
-        return list(records.values()), [listed_payload, etf_payload]
+        return tpex_universe_records(listed_payload, etf_payload, as_of), [
+            listed_payload,
+            etf_payload,
+        ]
 
     def fetch_universe(
         self, as_of: date
@@ -2774,7 +2830,8 @@ class TpexAdapter:
             historical_rows = [
                 bar
                 for bar in parsed_rows
-                if bar.symbol in wanted and start <= bar.trading_date <= end
+                if (bar.symbol in wanted or is_common_stock_code(bar.symbol))
+                and start <= bar.trading_date <= end
             ]
             if (
                 not parsed_rows
@@ -2927,8 +2984,7 @@ class TpexAdapter:
         )
         chip_dates = {bar.trading_date for bar in bars}
         chips, chip_payloads, chip_warnings = self.fetch_chips(
-            chip_dates,
-            {item.symbol for item in instruments},
+            chip_dates, _chip_symbols(instruments, bars)
         )
         if not self.snapshot_feeds:
             return OfficialBatch(
