@@ -7,6 +7,11 @@ on:
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
     branches: [master]
+  # Master's full suite every night (22:40 Taipei) and on demand: changes, backend and
+  # frontend run on every file, verify on all five pages (verify_plan.py --event, #251).
+  schedule:
+    - cron: '40 14 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,7 +23,8 @@ concurrency:
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONUTF8: '1'
-  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  # A schedule or workflow_dispatch event has neither: the all-zero SHA means every file.
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '0000000000000000000000000000000000000000' }}
 
 jobs:
   changes:
@@ -128,7 +134,8 @@ jobs:
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
   # Only the pages the change needs (tools/verify/verify_plan.py, #245); with none, every later
-  # step is skipped and the job still succeeds, so required's assertion holds.
+  # step is skipped and the job still succeeds, so required's assertion holds. The nightly and
+  # manual runs verify all five pages (#251).
   verify:
     name: verify
     runs-on: ubuntu-24.04
@@ -150,7 +157,7 @@ jobs:
           set -o pipefail
           base="$BASE_SHA"
           if [ -n "$BASE_REF" ]; then base="$(git rev-parse "refs/remotes/origin/$BASE_REF")"; fi
-          python3 -B tools/verify/verify_plan.py --base "$base" --output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 -B tools/verify/verify_plan.py --base "$base" --event "$GITHUB_EVENT_NAME" --output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.plan.outputs.pages != ''
         with:
