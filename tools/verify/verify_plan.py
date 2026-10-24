@@ -15,6 +15,9 @@ patterns to 全套／不驗／前端檔／API route, and each ``features/<page>.
   the route functions whose lines changed, or that use (directly or through
   other module-level names) a function, constant or import whose lines changed.
 
+``--event schedule`` and ``--event workflow_dispatch`` (the nightly and manual
+runs of master, Issue #251) verify all five pages whatever changed.
+
 Prints the plan as Markdown and writes ``pages=<comma separated pages>`` (empty:
 nothing to verify) to ``--output`` (``$GITHUB_OUTPUT`` in CI).  Exit 2 without a
 plan when the tables and the code disagree: a route of api.py on no page and not
@@ -51,6 +54,8 @@ ROUTE_METHODS = ("get", "post", "put", "patch", "delete")
 
 ALL, NONE, FRONTEND_KIND, ROUTE_KIND = "全套", "不驗", "前端檔", "API route"
 KINDS = (ALL, NONE, FRONTEND_KIND, ROUTE_KIND)
+# GitHub events that verify every page: master's nightly run and a manual run.
+FULL_EVENTS = {"schedule": "每晚定期全套", "workflow_dispatch": "手動觸發全套"}
 
 
 # ---- features tables ----
@@ -441,6 +446,16 @@ def plan_for(
     return plan
 
 
+def plan_for_event(event: str) -> Plan | None:
+    """All five pages for a nightly or manual run; None for any other event."""
+
+    if event not in FULL_EVENTS:
+        return None
+    plan = Plan()
+    plan.add(f"（{event}）", None, FULL_EVENTS[event])
+    return plan
+
+
 def markdown(plan: Plan, head: str) -> str:
     pages = plan.pages
     scope = (
@@ -480,6 +495,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", required=True, help="full SHA of the base branch tip")
     parser.add_argument("--output", type=Path, help="append pages=<csv> to this file")
+    parser.add_argument(
+        "--event",
+        default="",
+        help="GitHub event; schedule and workflow_dispatch: all pages",
+    )
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.base):
         parser.error("--base must be a full Git SHA")
@@ -493,10 +513,26 @@ def main(argv: list[str] | None = None) -> int:
         print("驗證範圍與程式不一致：\n" + "\n".join(problems), file=sys.stderr)
         return 2
     head = git("rev-parse", "HEAD").strip()
-    if args.base == "0" * 40:
+    plan = plan_for_event(args.event)
+    if plan is not None:
+        print(markdown(plan, f"- 觸發 `{args.event}`，HEAD `{head[:7]}`"))
+    else:
+        plan = diff_plan(args.base, head, rules, importers)
+    if args.output:
+        with args.output.open("a", encoding="utf-8") as out:
+            out.write(f"pages={','.join(plan.pages)}\n")
+    return 0
+
+
+def diff_plan(
+    base: str, head: str, rules: Rules, importers: dict[str, set[str]]
+) -> Plan:
+    """The plan for the files changed from the merge-base of ``base`` to HEAD, printed."""
+
+    if base == "0" * 40:
         fork, paths = None, sorted(git("ls-files").splitlines())
     else:
-        fork = git("merge-base", args.base, "HEAD").strip()
+        fork = git("merge-base", base, "HEAD").strip()
         paths = git("diff", "--name-only", "--no-renames", fork, "HEAD").splitlines()
     api_source, api_lines = None, set()
     if API in paths and (ROOT / API).is_file():
@@ -516,10 +552,7 @@ def main(argv: list[str] | None = None) -> int:
             f"改動 {len(paths)} 檔",
         )
     )
-    if args.output:
-        with args.output.open("a", encoding="utf-8") as out:
-            out.write(f"pages={','.join(plan.pages)}\n")
-    return 0
+    return plan
 
 
 if __name__ == "__main__":

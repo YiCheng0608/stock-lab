@@ -53,11 +53,11 @@
 | --- | --- | --- | --- |
 | G1 | CI | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
 | G2 | CI | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
-| G3 | CI | 榜單內容 | 1280 表格：以 `排名\t族群` 開頭的表頭存在；`items[0].display_name` 與 `items[-1].display_name` 各為整行出現。390：`#1` 為整行、下一行為 `items[0].display_name` |
+| G3 | CI | 榜單內容 | 在 G2 之後（G2 沒通過時 G3 的失敗記「無法判定（上游 G2）」）。`items` 空時同 today T5 的[空狀態交叉核對](README.md#空狀態交叉核對)：DB 或 dashboard 有該日名次就失敗，都沒有才查空資料文案。1280 表格：以 `排名\t族群` 開頭的表頭存在；`items[0].display_name` 與 `items[-1].display_name` 各為整行出現。390：`#1` 為整行、下一行為 `items[0].display_name` |
 | G4 | CI | 題材建議推論標記 | 看 `themes-1280.txt`。`items` 非空時：整行 `待核實` 的行數 ≥ `items` 數，整行 `AI 推論` 的行數 ≥ `items` 數，且 `<meta.total> 個建議` 開頭的行存在；空時空資料文案為整行出現 |
-| G5 | CI | 詳情日期 | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
-| G6 | CI | 詳情成員 | 表頭 `代號\t名稱\t市場\t角色\t收盤\t資料日期` 存在；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
-| G7 | CI | 今日到族群一致 | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
+| G5 | CI | 詳情日期（用 `T`，上游 today T5） | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
+| G6 | CI | 詳情成員（用 `T`，上游 today T5） | 表頭 `代號\t名稱\t市場\t角色\t收盤\t資料日期` 存在；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
+| G7 | CI | 今日到族群一致（用 `T`，上游 today T5） | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
 
 ## 陷阱
 
@@ -68,7 +68,7 @@
 
 - 通過：G1～G7 全部通過。
 - 失敗：任一條失敗，列出編號、預期與實際。
-- 無法判定：截圖未 ready 或 API 非 200；依賴它的檢查不判。
+- 無法判定：沒有失敗，但有檢查無法判定（截圖未 ready 或 API 非 200，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 
 ## 輸出格式
 
@@ -82,5 +82,3 @@
 
 截圖：shots/themes-1280.png、shots/themes-390.png、shots/theme-detail-1280.png
 ```
-
-記下供個股使用：`theme-members.json` 第一個成員的 `exchange` 與 `symbol`（記為 `E`、`S`）。

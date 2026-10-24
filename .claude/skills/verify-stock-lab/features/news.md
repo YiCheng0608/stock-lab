@@ -49,6 +49,8 @@
 | N4 | CI | AI 標記 | 各分頁整行 `AI 推論` 的行數 = API `items` 中 `ai.status` 為 `done` 且 `ai.inference` 為 true 的數量 |
 | N5 | CI | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
 | N6 | CI | 詳情分欄 | `news-detail-1280.txt` 有整行 `來源事實` 與 `AI 摘要與判讀`，`AI 摘要與判讀` 下一行是 `AI 推論`；`ai` 為 done 時有 `模型 <ai.model> · 提示版本 <ai.prompt_version>` 開頭的行，同一行有 `產生時間 <ai.generated_at 的台北時間 YYYY/MM/DD HH:mm>`（`generated_at` 沒有時區為失敗，#234），否則有 `此則尚未產生 AI 摘要與判讀。` |
+| N7 | 人工 | AI 摘要忠於原文 | 樣本：`/news?category=domestic&limit=100`（依 `meta.next_cursor` 往後翻到 `D` 之前為止，最多 5 頁）中台北發布日等於 `D`、有 AI 判讀的前 5 則，API 順序（`manual/N7.json`，含 `/news/<id>` 的 `title`、`summary`、`description`、`source` 與 `ai`）。每則 `ai.summary` 的主體、數字、時間與事件都能在 `title`／`summary`／`description` 找到，沒有原文沒有的事實或結論；原文只有標題、無從核對的那則記無法判定。一則不符即失敗，證據寫 id、摘要原句與原文 |
+| N8 | 人工 | AI 方向與關聯有原文依據 | 樣本同 N7（`manual/N8.json`）。每則 `ai.impact_direction` 與 `ai.impact_rationale` 能由原文推得（`ai.unsupported` 為 true 時方向應是未判定）；`ai.symbol_candidates`、`ai.theme_candidates` 的每一項在原文有提及或可直接推得。一則不符即失敗，證據寫 id、AI 的方向或候選與原文 |
 
 ## 陷阱
 
@@ -57,9 +59,9 @@
 
 ## 判定
 
-- 通過：N1～N6 全部通過。
+- 通過：N1～N6 全部通過；N7、N8 由人工判讀另記。
 - 失敗：任一條失敗，列出編號、分頁、預期與實際。
-- 無法判定：截圖未 ready 或 API 非 200；依賴它的檢查不判。
+- 無法判定：沒有失敗，但有檢查無法判定（截圖未 ready 或 API 非 200，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 
 ## 輸出格式
 

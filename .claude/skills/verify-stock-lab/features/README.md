@@ -1,30 +1,55 @@
 # features
 
-[`page_checks.py`](../../../../tools/verify/page_checks.py) 與人工檢查都依下表順序做五個檔。後面的檔案會用前面記下的值（今日 → 族群 → 個股 → 行動走同一條路徑），順序不可換；CI 只驗其中幾頁時，`page_checks.py` 自己向 API 取前面的值。
+[`page_checks.py`](../../../../tools/verify/page_checks.py) 與人工檢查都依下表順序做五個檔。後面的檔案會用前面記下的值（今日 → 族群 → 個股 → 行動走同一條路徑），順序不可換；CI 只驗其中幾頁時，`page_checks.py` 自己向 API 取前面的值。同一頁內，負責某值的檢查（下表「負責的檢查」）先跑，結果仍依編號列出。
 
 | 順序 | 檔案 | 導覽代號 | 記下供後面使用 |
 | --- | --- | --- | --- |
 | 1 | [today.md](today.md) | `today` | `D`、`B`、`today-board.json` 的 `items[0].theme_id`（`T`）與 `display_name` |
 | 2 | [news.md](news.md) | `news` | — |
-| 3 | [themes.md](themes.md) | `themes` | `theme-members.json` 第一個成員的 `exchange`、`symbol`（`E`、`S`） |
+| 3 | [themes.md](themes.md) | `themes` | — |
 | 4 | [stocks.md](stocks.md) | `stocks` | `I`、`stock.json` |
 | 5 | [actions.md](actions.md) | `actions` | — |
 
 ## 跨檔傳遞的值
 
-| 值 | 定義 | 記下的檔 | 使用的檔 |
+| 值 | 定義 | 負責的檢查（上游） | 使用的檔 |
 | --- | --- | --- | --- |
-| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today | stocks S3（導覽列的 `資料 <D>`） |
-| `B` | `today-board.json` 的 `meta.trading_date` | today | themes（族群榜 `B` 指各榜自己的 `meta.trading_date`，與今日的 `B` 應同一天） |
-| `T`、名稱 | `today-board.json` 的 `items[0].theme_id` 與 `display_name` | today | themes 的 `theme-detail`／`theme-members` URL 與 G7 |
-| `E`、`S` | `theme-members.json` 第一個成員的 `exchange`、`symbol` | themes | stocks 的 API、截圖與 S3、S6；actions 的 `action-detail` 與 A6、A7 |
-| `I` | `facts-stock.json` 的 `instrument.latest_trading_date` | stocks | stocks S3～S8 |
+| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today T2 | stocks S3（導覽列的 `資料 <D>`）；news N7、N8 的抽樣日 |
+| `B` | `today-board.json` 的 `meta.trading_date` | today T4 | today T5；themes（族群榜 `B` 指各榜自己的 `meta.trading_date`，與今日的 `B` 應同一天） |
+| `T`、名稱 | `today-board.json` 的 `items[0].theme_id` 與 `display_name` | today T5 | themes 的 `theme-detail`／`theme-members` URL 與 G5～G7 |
+| `E`、`S` | 見下方[選股](#選股) | — | stocks 的 API、截圖與 S1、S3～S9；actions 的 `action-detail` 與 A6、A7 |
+| `I` | `facts-stock.json` 的 `instrument.latest_trading_date` | stocks S8 | stocks S3～S7 |
 
-前一個檔沒記下某個值（API 非 200、清單為空）時，用到它的檢查判「無法判定」，原因寫缺哪個值、來自哪個檔。
+### 選股
+
+`E`、`S` 依序取第一個有的來源，整次 run 只選一次；`summary.md` 開頭的「個股 E／S」寫明用了哪個來源、前面的來源為什麼略過：
+
+1. 今日榜：`today-board.json` #1 族群（`T`）的 `theme-members.json` 第一個成員（今日 → 族群 → 個股的路徑）；
+2. 明日候選：`candidates.json` 的 `items[0].instrument`；
+3. 市場列表：`stocks.json`（`/stocks?page=1&page_size=30`）的 `items[0].instrument`。
+
+三個都沒有時，需要特定個股的檢查（S3～S9、A6、A7）判「無法判定」並寫三個來源各缺什麼；不需要特定個股的 S1（只驗 `/stocks`）與 S2 照常判。
+
+## 三態與上游
+
+每條檢查的結果是 `通過`、`失敗` 或 `無法判定`，各頁的標題也是三態：任一條失敗 → 失敗；沒有失敗但有無法判定 → 無法判定；否則通過。無法判定不計入失敗。
+
+- **無法判定**：API 非 200、截圖未 ready（含 `missingClicks`），或上游沒通過。
+- **上游**：上表「負責的檢查」是該值的上游；另有同頁的先後關係（today T8 在 T7 之後、themes G3 在 G2 之後，兩者數的是同一批資料）。用到某值的檢查，在該值缺少或上游沒通過時判「無法判定（上游 X）」，原因寫上游的編號與結果。同一個缺陷只在上游記一次失敗，不在每一頁各記一次。
+- **上游自己不判無法判定**：負責 `D`、`B`、`T` 的檢查在值缺少時改做[空狀態交叉核對](#空狀態交叉核對)：DB 有資料就是失敗，DB 也沒有才查空狀態文案。
+- `page_checks.py --fixture`（CI）把無法判定也當成失敗：假資料庫每個值都在，無法判定代表工具或 API 壞了。
+
+## 空狀態交叉核對
+
+頁面顯示空狀態（「此榜目前沒有族群」、「當日零候選」、「目前沒有可顯示的行動摘要。」等）時，不只查文案：DB（`facts.json`）或另一支 API 有資料就判失敗，證據寫兩邊的值。涵蓋 today T2、T4、T5、T7、T9，themes G3，actions A4；actions A5（反向檢查）在頁面沒有任何行動卡時判無法判定，不判通過。
+
+## 已知失敗
+
+`page_checks.py` 的 `KNOWN_FAILURES` 以（頁、編號）為鍵，值是 Issue 連結與該缺陷的失敗訊息片段（`Known(issue, match)`）。失敗訊息含這個片段才算已知失敗（照報、不讓 run 失敗）；同一條檢查的其他失敗照常判失敗；已知失敗卻通過時 run 失敗，修好的 PR 同時移除該列。
 
 ## 檢查類型
 
-各檔「檢查」表的 `類型` 欄：`CI` 是機械式檢查，[`tools/verify/page_checks.py`](../../../../tools/verify/page_checks.py) 有實作，CI `verify` job 每次在假資料庫上跑；`人工` 要 agent 判斷，不寫成程式。新增或改類型時兩邊一起改，`backend/tests/test_verify_checks.py` 會擋下標 `CI` 卻沒實作、或有實作卻沒標 `CI` 的檢查。
+各檔「檢查」表的 `類型` 欄：`CI` 是機械式檢查，[`tools/verify/page_checks.py`](../../../../tools/verify/page_checks.py) 有實作，CI `verify` job 每次在假資料庫上跑；`人工` 要 agent 判斷，抽樣規則寫死在 `page_checks.py` 的 `MANUAL`：每次 run 依規則取樣本寫到 `manual/<編號>.json`，`summary.md` 列出樣本數，判讀交給獨立 session（[SKILL 真資料模式](../SKILL.md#3-人工檢查與判讀)第 3 步），不自行挑樣本。新增或改類型時兩邊一起改，`backend/tests/test_verify_checks.py` 會擋下標 `CI` 卻沒實作、有實作卻沒標 `CI`、標 `人工` 卻沒有抽樣規則、或有抽樣規則卻沒標 `人工` 的檢查。
 
 ## 驗證範圍
 

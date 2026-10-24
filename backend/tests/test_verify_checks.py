@@ -63,18 +63,52 @@ def _features_with(tmp_path: Path, page: str, row: str) -> Path:
 
 
 def test_a_new_ci_check_without_code_fails(tmp_path):
-    features = _features_with(tmp_path, "today", "| T10 | CI | 新檢查 | 某條件 |")
+    features = _features_with(tmp_path, "today", "| T99 | CI | 新檢查 | 某條件 |")
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["today.md T10: labeled CI but not implemented"]
+    assert problems == ["today.md T99: labeled CI but not implemented"]
 
 
-def test_a_manual_check_needs_no_code(tmp_path):
-    features = _features_with(tmp_path, "news", "| N7 | 人工 | 摘要合理 | agent 判斷 |")
+def test_every_manual_check_has_a_sampler():
+    labels = page_checks.feature_checks()
+    manual = {
+        (page, code)
+        for page, codes in labels.items()
+        for code, kind in codes.items()
+        if kind == "人工"
+    }
+    assert {("news", "N7"), ("news", "N8"), ("today", "T10")} <= manual
+    assert all(code in page_checks.MANUAL[page] for page, code in manual)
+
+
+def test_a_manual_check_without_a_sampler_fails(tmp_path):
+    # #251: the sample is fixed by code, not picked by whoever judges it.
+    features = _features_with(
+        tmp_path, "news", "| N99 | 人工 | 摘要合理 | agent 判斷 |"
+    )
     labels = page_checks.feature_checks(features)
-    assert labels["news"]["N7"] == "人工"
-    assert page_checks.registry_problems(labels, page_checks.CHECKS) == []
+    assert labels["news"]["N99"] == "人工"
+    assert page_checks.registry_problems(labels, page_checks.CHECKS) == [
+        "news.md N99: labeled 人工 but has no sampler"
+    ]
+
+
+def test_a_sampler_without_a_manual_label_fails(tmp_path):
+    features = tmp_path / "features"
+    shutil.copytree(FEATURES, features)
+    path = features / "today.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("| T10 | 人工 |", "| T10 | CI |"),
+        encoding="utf-8",
+    )
+    problems = page_checks.registry_problems(
+        page_checks.feature_checks(features), page_checks.CHECKS
+    )
+    assert problems == [
+        "today.md T10: labeled CI but not implemented",
+        "today T10: sampled but today.md does not label it 人工",
+    ]
 
 
 def test_a_check_without_a_type_fails(tmp_path):
@@ -96,7 +130,10 @@ def test_code_that_features_label_manual_fails(tmp_path):
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["actions A5: implemented but actions.md does not label it CI"]
+    assert problems == [
+        "actions.md A5: labeled 人工 but has no sampler",
+        "actions A5: implemented but actions.md does not label it CI",
+    ]
 
 
 # ---- page text ----
@@ -287,14 +324,16 @@ def test_page_usable_reports_errors_and_overflow(tmp_path):
 
 def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatch):
     monkeypatch.setitem(
-        page_checks.KNOWN_FAILURES, ("actions", "A5"), "https://example/1"
+        page_checks.KNOWN_FAILURES,
+        ("actions", "A5"),
+        page_checks.Known("https://example/1", "出現 LLM 推論標記"),
     )
-    clean = FakeRun(tmp_path, {}, {"actions-1280": "我的庫存\n"})
+    clean = FakeRun(tmp_path, {}, {"actions-1280": "我的庫存\n查看個股詳情 →\n"})
     marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
     monkeypatch.setitem(page_checks.CHECKS, "actions", {"A5": page_checks.a5})
     (failing,) = page_checks.run_page(marked, "actions", [])
-    assert (failing.ok, failing.failed, failing.status) == (
-        False,
+    assert (failing.state, failing.failed, failing.status) == (
+        "失敗",
         False,
         "失敗（已知）",
     )
@@ -402,8 +441,8 @@ def test_news_source_label_matches_the_frontend():
 
 def test_status_summary_leaves_out_the_evidence():
     results = [
-        page_checks.Result("actions", "A2", True, "庫存 2330 台積電 100 股"),
-        page_checks.Result("actions", "A3", False, "預期 X，實際 Y"),
+        page_checks.Result("actions", "A2", "通過", "庫存 2330 台積電 100 股"),
+        page_checks.Result("actions", "A3", "失敗", "預期 X，實際 Y"),
     ]
     full = page_checks.summary_markdown(results, ["actions"], "## head")
     status = page_checks.summary_markdown(results, ["actions"], "## head", False)
