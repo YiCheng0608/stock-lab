@@ -48,7 +48,7 @@ collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`�
   - **休眠（推定）**：仍在清單內、但最近 60 個交易日的已存行情表（TPEx `dailyQuotes`、TWSE `MI_INDEX`）完全沒有該代號這一列的現行標的，標 `dormant`。無成交的 `--` 列也算有列，所以停牌一兩個月的正常股票不會被關。
     - 要先有 60 個 TAIEX 交易日，且每一天都有已存、日期核對過的行情表才判定，否則該次不判定。
     - 證據寫在 `instrument_status` 列的 `presumption`：推定敘述、檢查的交易日區間、60 個 raw id 與最後日線日，和依清單判定的 `delisted`／`transferred` 分開。
-    - 清單更新不會讓 `dormant` 回到 `active`，只有行情列重新出現才會：下一次同步看到最新行情表又有這一列，或 collect 又寫入它的日線。休眠中不投影產業與 ETF 成員列。
+    - 清單更新不會讓 `dormant` 回到 `active`，只有行情列重新出現才會：下一次同步看到最新行情表又有這一列，或 collect 寫入它晚於休眠判定日（沒有判定紀錄時為最後一根日線）的日線。回補休眠以前的舊日期只補日線，不改狀態。休眠中不投影產業與 ETF 成員列。
   - 標的重新出現在清單時，`delisted`／`transferred` 改回 `active`。
   - `delisted`／`transferred`／`dormant` 標的保留歷史，個股頁仍可查；但不進 `/api/stocks` 清單、首頁標的數、族群成員數與分數、訊號與候選池。
 - **防呆**：某交易所一次要改（`delisted`、`transferred`、`dormant` 合計）的標的超過現行標的的 5%（至少 5 檔）時，該交易所整批不改，記 `noncore_warnings` 與 `instrument_status_sync` 為 `skipped`，由看門狗留言（[OPERATIONS §6.1](OPERATIONS.md#61-排程看門狗)）。

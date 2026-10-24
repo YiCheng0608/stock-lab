@@ -8,6 +8,7 @@ today's lists and ``collect`` skipped a row whose code was not in the batch.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -543,7 +544,8 @@ def test_status_sync_skips_an_exchange_whose_list_looks_incomplete(pipeline_env)
         assert result["exchanges"]["TWSE"]["status"] == "applied"
         assert result["warnings"] == [
             "instrument status sync skipped for TPEx: 6 of 30 active instruments "
-            "are absent from the official lists (limit 5)"
+            "would change (6 absent from the official lists, 0 without a quote "
+            "row for 60 sessions; limit 5)"
         ]
         rows = {
             row.entity_key: row
@@ -1005,3 +1007,48 @@ def test_collect_makes_a_dormant_instrument_current_when_it_trades_again(
             )
         )
         assert quality.checks_json["reason"] == "quote_row_returned"
+
+
+def test_a_backfilled_row_from_before_dormancy_keeps_the_instrument_dormant(
+    pipeline_env,
+):
+    """Review of #257: a manual backfill of older sessions must not flip a
+    dormant instrument back to active (it would be presumed dormant again the
+    next day, churning memberships and quality rows)."""
+
+    older = SCORE_DATE - timedelta(days=7)
+    with pipeline_env() as db:
+        resting = _instrument(db, "TPEx", "4804", status="dormant")
+        pipeline._upsert_quality(
+            db,
+            "instrument_status",
+            "TPEx:4804",
+            SCORE_DATE - timedelta(days=1),
+            "dormant",
+            [],
+            {"reason": "presumed: no quote row in 60 sessions"},
+        )
+        db.commit()
+        resting_id = resting.id
+
+    batch = _historical_batch(("TPEx", "4804"))
+    batch.bars = [replace(bar, trading_date=older) for bar in batch.bars]
+    batch.chips = [replace(chip, trading_date=older) for chip in batch.chips]
+    pipeline.collect(older, adapter=FakeAdapter(batch))
+
+    with pipeline_env() as db:
+        assert db.get(Instrument, resting_id).status == "dormant"
+        # The backfilled bar itself is still written.
+        assert db.scalar(
+            select(MarketBar).where(
+                MarketBar.instrument_id == resting_id,
+                MarketBar.trading_date == older,
+            )
+        )
+
+    # A row after the dormancy observation does make it current.
+    pipeline.collect(
+        SCORE_DATE, adapter=FakeAdapter(_historical_batch(("TPEx", "4804")))
+    )
+    with pipeline_env() as db:
+        assert db.get(Instrument, resting_id).status == "active"

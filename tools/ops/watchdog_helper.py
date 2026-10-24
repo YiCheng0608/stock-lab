@@ -216,15 +216,16 @@ def invariants(db: str, today: str) -> str:
             # The latest sync of each exchange (Issue #212); a skip leaves the
             # statuses stale until a later sync applies.
             rows = conn.execute(
-                "SELECT entity_key, status, as_of_date FROM data_quality d"
+                "SELECT entity_key, status, as_of_date, checks_json FROM data_quality d"
                 " WHERE entity_type='instrument_status_sync' AND as_of_date=("
                 "SELECT max(as_of_date) FROM data_quality e"
                 " WHERE e.entity_type=d.entity_type AND e.entity_key=d.entity_key)"
                 " ORDER BY entity_key"
             ).fetchall()
             skipped = [
-                f"{key}@{str(day)[:10]}"
-                for key, status, day in rows
+                f"{key}@{str(day)[:10]}:absent={_json(checks).get('absent', '?')}"
+                f",dormant={_json(checks).get('dormant', '?')}"
+                for key, status, day, checks in rows
                 if status == "skipped"
             ]
             lines.append(

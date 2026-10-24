@@ -3412,8 +3412,26 @@ def plan_instrument_status(
 
 
 def reactivate_dormant(db: Session, instrument: Instrument, record: BarRecord) -> None:
-    """A dormant instrument with a quote row again is current again."""
+    """A dormant instrument with a quote row after it went dormant is current again.
 
+    A backfilled row from before the dormancy observation (or, without one,
+    not after the last stored bar) says nothing about today and changes
+    nothing.
+    """
+
+    since = db.scalar(
+        select(func.max(DataQuality.as_of_date)).where(
+            DataQuality.entity_type == "instrument_status",
+            DataQuality.entity_key == f"{instrument.exchange}:{instrument.symbol}",
+            DataQuality.status == "dormant",
+        )
+    ) or db.scalar(
+        select(func.max(MarketBar.trading_date)).where(
+            MarketBar.instrument_id == instrument.id
+        )
+    )
+    if since is not None and record.trading_date <= since:
+        return
     instrument.status = "active"
     _upsert_quality(
         db,
@@ -3510,8 +3528,10 @@ def apply_instrument_status(db: Session, plan: dict[str, Any]) -> dict[str, Any]
         if skipped:
             warnings.append(
                 f"instrument status sync skipped for {exchange}: "
-                f"{item['absent']} of {item['active']} active instruments are "
-                f"absent from the official lists (limit {item['limit']})"
+                f"{item['absent'] + item['dormant']} of {item['active']} active "
+                f"instruments would change ({item['absent']} absent from the "
+                f"official lists, {item['dormant']} without a quote row for "
+                f"{DORMANT_SESSIONS} sessions; limit {item['limit']})"
             )
         _upsert_quality(
             db,
