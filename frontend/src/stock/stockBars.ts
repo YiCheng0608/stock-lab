@@ -75,7 +75,7 @@ export function sourcesLabel(sources: readonly string[]): string {
   return names.length ? names.join('、') : '來源未提供'
 }
 
-// `indicators.computed_at` is naive UTC (the batch stores datetime.now(timezone.utc) without tzinfo); show Taiwan time.
+// `indicators.computed_at` is UTC with its offset (a naive value is read as UTC too); show Taiwan time.
 export function formatTaipeiDateTime(value: string | null | undefined): string | null {
   if (!value) return null
   const parsed = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z')
