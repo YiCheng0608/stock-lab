@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -898,3 +899,91 @@ class ThemeSuggestionNews(Base):
     theme_text: Mapped[str] = mapped_column(String(80))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     news_date: Mapped[date] = mapped_column(Date)
+
+
+class TrackingPlan(Base):
+    """A user's tracking plan copied from one conditional signal (V1_SPEC 使用者追蹤計畫).
+
+    Strategy, version and levels are a snapshot taken at creation, so a later
+    rewrite of the signal never changes the plan.  ``worker.plan_tracking``
+    updates the simulated fill and outcome every daily run; nothing here is a
+    real trade or a portfolio position.  At most one plan per signal is not
+    cancelled at a time.
+    """
+
+    __tablename__ = "tracking_plans"
+    __table_args__ = (
+        Index(
+            "uq_tracking_plan_open_signal",
+            "signal_id",
+            unique=True,
+            sqlite_where=text("cancelled_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(ForeignKey("instruments.id"), index=True)
+    signal_id: Mapped[int] = mapped_column(ForeignKey("signals.id"), index=True)
+    daily_candidate_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_candidates.id"), nullable=True
+    )
+    source_kind: Mapped[str] = mapped_column(String(20))
+    strategy: Mapped[str] = mapped_column(String(60))
+    strategy_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("strategy_versions.id"), nullable=True
+    )
+    formula_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    score_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    tracking_version: Mapped[str] = mapped_column(String(40))
+    plan_date: Mapped[date] = mapped_column(Date, index=True)
+    earliest_execution_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    entry_type: Mapped[str] = mapped_column(String(30))
+    reference_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pullback_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pullback_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    breakout_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invalid_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    window_sessions: Mapped[int] = mapped_column(Integer, default=20)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sessions_observed: Mapped[int] = mapped_column(Integer, default=0)
+    last_session_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    execution_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    execution_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    outcome_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    outcome_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    result_return: Mapped[float | None] = mapped_column(Float, nullable=True)
+    result_comparable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    incomparable_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    data_quality: Mapped[str] = mapped_column(String(30), default="complete")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TrackingPlanSession(Base):
+    """One tracked session of a plan, kept for the look-back history."""
+
+    __tablename__ = "tracking_plan_sessions"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "session_date", name="uq_tracking_plan_session"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("tracking_plans.id"), index=True)
+    session_date: Mapped[date] = mapped_column(Date)
+    session_no: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(40))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ohlc_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    adjusted_ohlc_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    entry_trigger: Mapped[bool] = mapped_column(Boolean, default=False)
+    target_trigger: Mapped[bool] = mapped_column(Boolean, default=False)
+    invalid_trigger: Mapped[bool] = mapped_column(Boolean, default=False)
+    suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    comparable: Mapped[bool] = mapped_column(Boolean, default=True)
+    execution_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    data_time: Mapped[str | None] = mapped_column(String(80), nullable=True)

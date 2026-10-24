@@ -609,6 +609,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0016_group_score_archive', CURRENT_TIMESTAMP)"
         )
     )
+    # 0017 only adds tracking_plans/tracking_plan_sessions, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0017_tracking_plans', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:
