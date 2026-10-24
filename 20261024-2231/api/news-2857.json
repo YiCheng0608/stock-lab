@@ -1,0 +1,248 @@
+{
+  "id": "2857",
+  "canonical_key": "news:cnyes:7e3a45e59741c233aad855a3ffefa683f55f83e186fb84f0c8c8b9aa32c9953e",
+  "dedupe_cluster_id": "news-title:86eba56ca0a71f3ea448232b6ab7015e",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6637127",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6637127",
+  "title": "〈熱門股〉防詐業務需求強勁 GOGOLOOK股價周漲2成",
+  "summary": "GOGOLOOK受海外市場擴張與防詐、金融科技布局帶動，本周股價大漲20%，周線連2紅，續戰歷史前高。 公司看好下半年獲利優於上半年，ASI在日本推廣順利，JUJI營收比重可望上看30%。",
+  "description": "GOGOLOOK受海外市場擴張與防詐、金融科技布局帶動，本周股價大漲20%，周線連2紅，續戰歷史前高。 公司看好下半年獲利優於上半年，ASI在日本推廣順利，JUJI營收比重可望上看30%。",
+  "summary_preview": "GOGOLOOK受海外市場擴張與防詐、金融科技布局帶動，本周股價大漲20%，周線連2紅，續戰歷史前高。 公司看好下半年獲利優於上半年，ASI在日本推廣順利，JUJI營收比重可望上看30%。",
+  "language": "zh-Hant",
+  "published_at": "2026-10-24T13:18:53+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-24T13:18:53+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-24T13:18:53+00:00",
+        "utc": "2026-10-24T13:18:53+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-24T14:00:05.055968+00:00",
+        "utc": "2026-10-24T14:00:05.055968+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-24T14:33:14.208539+00:00",
+    "legacy": {
+      "published_at": "2026-10-24T13:18:53+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-24T13:18:53",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-24T14:00:05.055968+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-24T14:33:14.208539+00:00",
+  "collected_at": "2026-10-24T14:00:05.055968+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "440ccef0a3879def486604f1ce32b67e89b94c25bf484d5b49e28b5c27ceb47e",
+  "detail_url": "/news/2857",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "GOGOLOOK受防詐與金融科技布局帶動，本周股價大漲20%，周線連兩紅、續創歷史新高。",
+    "symbol_candidates": [],
+    "theme_candidates": [
+      {
+        "theme": "防詐科技",
+        "reason": "新聞指防詐業務需求強勁，帶動公司股價與營收展望。"
+      },
+      {
+        "theme": "金融科技",
+        "reason": "公司布局金融科技，成為股價上漲的題材之一。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "周漲20%且公司看好下半年獲利優於上半年，對該股為正向。新聞未列股票代號，故未列出標的。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "6e9a6069a5fcdc1491f8f6c0a932c2d6936c25c277340bd13b69165fa66a543b",
+    "generated_at": "2026-10-24T14:00:59.251375+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7458,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-10-24T14:00:05.055968"
+  }
+}
