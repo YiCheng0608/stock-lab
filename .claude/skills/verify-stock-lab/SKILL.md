@@ -109,7 +109,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 ### 4. 證據
 
 1. 先照[收尾](#收尾)關服務、刪副本。
-2. 在 `page_checks.py` 的 `summary.md` 最前面插入下列段落（可直接貼 PR 或 Issue），原有的各頁表格留在後面：
+2. 在 `page_checks.py` 的 `summary.md`（私人模式是 `$OUT/summary.md`，見[私人資料](#私人資料)）最前面插入下列段落（可直接貼 PR 或 Issue），原有的各頁表格留在後面：
 
    ```markdown
    ## verify-stock-lab 真資料結果（2026-10-22 01:30 台北）
@@ -134,13 +134,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 
 ### 私人資料
 
-私人模式（`facts.json` 的 `portfolio_positions` 大於 0）時，`page_checks.py` 的輸出整個寫到 `$OUT/.private/`（不推送），並 `mv "$OUT/copy.json" "$OUT/.private/"`。推送的 `$OUT/summary.md` 只列每條檢查的狀態，不抄證據文字：
-
-```bash
-"$PY" -B -c "import json,sys; rows=json.load(open(sys.argv[1],encoding='utf-8')); print('| 頁 | 檢查 | 結果 |\n| --- | --- | --- |'); [print(f\"| {r['page']} | {r['code']} {r['subject']} | {r['status']} |\") for r in rows]" "$OUT/.private/results.json" > "$OUT/summary.md"
-```
-
-再照[證據](#4-證據)第 2 步在前面加段落，並註明「私人模式」；人工檢查的證據只寫檔名、行號與行數。
+私人模式（`facts.json` 的 `portfolio_positions` 大於 0）時，`page_checks.py` 的輸出整個寫到 `$OUT/.private/`（不推送），並 `mv "$OUT/copy.json" "$OUT/.private/"`。推送的 summary 改用 `page_checks.py` 同時寫出的 `status.md`（同樣的表格，只有每條檢查的結果，不含證據文字）：`cp "$OUT/.private/status.md" "$OUT/summary.md"`，再照[證據](#4-證據)第 2 步在前面加段落並註明「私人模式」；人工檢查的證據只寫檔名、行號與行數。
 
 ## 起服務
 

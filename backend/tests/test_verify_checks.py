@@ -308,3 +308,16 @@ def test_news_source_label_matches_the_frontend():
     assert page_checks.news_source_label("mops_material") == "公開資訊觀測站公告"
     assert page_checks.news_source_label("tpex_news") == "櫃買中心官方資料"
     assert page_checks.news_source_label(None) == "官方公告資料"
+
+
+def test_status_summary_leaves_out_the_evidence():
+    results = [
+        page_checks.Result("actions", "A2", True, "庫存 2330 台積電 100 股"),
+        page_checks.Result("actions", "A3", False, "預期 X，實際 Y"),
+    ]
+    full = page_checks.summary_markdown(results, ["actions"], "## head")
+    status = page_checks.summary_markdown(results, ["actions"], "## head", False)
+    assert "台積電" in full and "預期 X" in full
+    assert "台積電" not in status and "預期 X" not in status
+    assert "### 行動 `/actions`：失敗" in status
+    assert "| A2 | 通過 |" in status and "| A3 | 失敗 |" in status
