@@ -127,6 +127,8 @@ jobs:
 
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
+  # Only the pages the change needs (tools/verify/verify_plan.py, #245); with none, every later
+  # step is skipped and the job still succeeds, so required's assertion holds.
   verify:
     name: verify
     runs-on: ubuntu-24.04
@@ -137,16 +139,30 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          fetch-depth: 0
           persist-credentials: false
+      # A pull request diffs from the merge-base with the base branch tip as fetched now (see the pr job).
+      - name: Plan
+        id: plan
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -o pipefail
+          base="$BASE_SHA"
+          if [ -n "$BASE_REF" ]; then base="$(git rev-parse "refs/remotes/origin/$BASE_REF")"; fi
+          python3 -B tools/verify/verify_plan.py --base "$base" --output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: steps.plan.outputs.pages != ''
         with:
           python-version: '3.12.14'
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: steps.plan.outputs.pages != ''
         with:
           node-version: '22'
           package-manager-cache: false
       # The runner has no CJK monospace font; without it the screenshots show boxes (the text checks do not care).
       - name: Install
+        if: steps.plan.outputs.pages != ''
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null
           python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
@@ -154,16 +170,19 @@ jobs:
           pnpm --dir frontend install --frozen-lockfile
           echo "V=$RUNNER_TEMP/verify" >> "$GITHUB_ENV"
       - name: Fixture database
+        if: steps.plan.outputs.pages != ''
         run: |
           mkdir -p "$V/logs"
           python -B tools/verify/fixture_db.py --dest "$V/db" > "$V/logs/fixture.json"
       - name: Build frontend
+        if: steps.plan.outputs.pages != ''
         working-directory: frontend
         env:
           VITE_API_BASE: /api
         run: node node_modules/vite/bin/vite.js build --outDir "$V/dist" --emptyOutDir > "$V/logs/build.log" 2>&1
       # Both servers outlive this step; the runner stops them when the job ends.
       - name: Start API and preview
+        if: steps.plan.outputs.pages != ''
         run: |
           STOCK_DATA_DIR="$V/db" STOCK_DB_PATH="$V/db/stock.db" STOCK_RAW_DIR="$V/db/raw" PYTHONPATH=backend \
             nohup python -B -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port "$API_PORT" > "$V/logs/api.log" 2>&1 &
@@ -172,17 +191,20 @@ jobs:
           curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-connrefused --retry-all-errors "http://127.0.0.1:$API_PORT/api/health"
           curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-connrefused --retry-all-errors "http://127.0.0.1:$WEB_PORT/api/health"
       - name: Checks
+        if: steps.plan.outputs.pages != ''
         timeout-minutes: 8
+        env:
+          PAGES: ${{ steps.plan.outputs.pages }}
         run: >-
           python -B tools/verify/page_checks.py --fixture --db "$V/db/stock.db" --out "$V/out"
-          --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT"
+          --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT" --pages "$PAGES"
       - name: Summary
-        if: always()
+        if: always() && steps.plan.outputs.pages != ''
         run: |
           if [ -f "$V/out/summary.md" ]; then cat "$V/out/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
           tail -n 20 "$V/logs/api.log" "$V/logs/preview.log" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+        if: always() && steps.plan.outputs.pages != ''
         with:
           name: verify-${{ github.run_attempt }}
           path: |

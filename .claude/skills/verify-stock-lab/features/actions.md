@@ -4,18 +4,36 @@
 
 ## API
 
-| 檔名 | URL（前綴 `http://127.0.0.1:8227/api`） |
+| 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
 | --- | --- |
 | `actions.json` | `/actions?limit=20` |
 | `portfolio.json` | `/portfolio?page=1&page_size=20` |
 | `action-detail.json` | `/actions/<E>/<S>` |
 
+## 驗證範圍
+
+改到下列前端檔或 API route 時，CI 驗這一頁；規則見 [README 驗證範圍](README.md#驗證範圍)。
+
+| 種類 | 對象 |
+| --- | --- |
+| 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
+| 前端檔 | `frontend/src/news/NewsViews.tsx` |
+| 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
+| 前端檔 | `frontend/src/stock/StockHeader.tsx` |
+| API route | `GET /dashboard` |
+| API route | `GET /actions` |
+| API route | `GET /actions/{exchange}/{symbol}` |
+| API route | `GET /portfolio` |
+| API route | `GET /stocks/{exchange}/{symbol}` |
+| API route | `GET /stocks/{exchange}/{symbol}/bars` |
+| API route | `GET /news` |
+
 ## 截圖
 
 | 名稱 | 參數 |
 | --- | --- |
-| `actions` | `--url http://127.0.0.1:4227/actions --name actions`（1280 與 390） |
-| `action-detail` | `--url http://127.0.0.1:4227/actions/<E>/<S> --name action-detail --widths 1280 --click '#stock-tab-research'` |
+| `actions` | `--url <WEB>/actions --name actions`（1280 與 390） |
+| `action-detail` | `--url <WEB>/actions/<E>/<S> --name action-detail --widths 1280 --click '#stock-tab-research'` |
 
 ## 預期資料與標記
 
@@ -40,7 +58,7 @@
 
 ## 陷阱
 
-- **私人資料**：`facts.json` 的 `portfolio_positions` 大於 0 時是私人模式，範圍是本次所有導覽，不只本檔（[SKILL Doctor 第 4 步](../SKILL.md#2-doctor)）：截圖與 API JSON 寫到 `$OUT/.private/`，`results/*.md` 只寫行號與行數，不抄庫存行。
+- **私人資料**：`facts.json` 的 `portfolio_positions` 大於 0 時是私人模式，範圍是本次所有導覽，不只本檔（[SKILL 私人資料](../SKILL.md#私人資料)）：`page_checks.py` 的輸出整個寫到 `$OUT/.private/`，推送的 summary 只列每條檢查的狀態，人工檢查的證據只寫行號與行數，不抄庫存行。
 - A5 只比 LLM 產出的標記 `AI 推論` 與 `（推論）`；說明文字裡的一般用語「推論」不算。
 - `/actions/:exchange/:symbol` 共用 `StockPage`，分頁按鈕 id 同個股（`#stock-tab-research`）。
 

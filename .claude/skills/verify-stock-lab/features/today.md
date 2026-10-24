@@ -4,16 +4,30 @@
 
 ## API
 
-| 檔名 | URL（前綴 `http://127.0.0.1:8227/api`） |
+| 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
 | --- | --- |
 | `dashboard.json` | `/dashboard` |
 | `today-board.json` | `/themes?board=industry&limit=10` |
 | `candidates.json` | `/candidates` |
 | `news-<id>.json` | `/news/<id>`，`dashboard.json` 的 `news` 前 3 則各一個 |
 
+## 驗證範圍
+
+改到下列前端檔或 API route 時，CI 驗這一頁；規則見 [README 驗證範圍](README.md#驗證範圍)。
+
+| 種類 | 對象 |
+| --- | --- |
+| 前端檔 | `frontend/src/candidates/CandidateViews.tsx` |
+| 前端檔 | `frontend/src/news/NewsViews.tsx` |
+| 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
+| API route | `GET /dashboard` |
+| API route | `GET /themes` |
+| API route | `GET /candidates` |
+| API route | `GET /news/{news_id}` |
+
 ## 截圖
 
-`--url http://127.0.0.1:4227/ --name today`（1280 與 390）。
+`--url <WEB>/ --name today`（1280 與 390）。
 
 ## 預期資料與標記
 

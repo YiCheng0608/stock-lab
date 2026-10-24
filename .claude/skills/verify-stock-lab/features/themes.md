@@ -4,7 +4,7 @@
 
 ## API
 
-| 檔名 | URL（前綴 `http://127.0.0.1:8227/api`） |
+| 檔名 | URL（前綴 `<API>/api`，`<API>` 為 API 的 origin） |
 | --- | --- |
 | `themes-industry.json` | `/themes?board=industry&limit=100` |
 | `themes-theme.json` | `/themes?board=theme&limit=100` |
@@ -12,13 +12,30 @@
 | `theme-detail.json` | `/themes/<T>`，`T` = 今日記下的 `items[0].theme_id` |
 | `theme-members.json` | `/themes/<T>/members?page=1&page_size=30&sort=price` |
 
+## 驗證範圍
+
+改到下列前端檔或 API route 時，CI 驗這一頁；規則見 [README 驗證範圍](README.md#驗證範圍)。
+
+| 種類 | 對象 |
+| --- | --- |
+| 前端檔 | `frontend/src/news/NewsViews.tsx` |
+| 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
+| 前端檔 | `frontend/src/themes/ThemeSuggestionViews.tsx` |
+| API route | `GET /dashboard` |
+| API route | `GET /themes` |
+| API route | `GET /themes/{theme_id}` |
+| API route | `GET /themes/{theme_id}/members` |
+| API route | `GET /theme-suggestions` |
+| API route | `GET /theme-suggestions/{suggestion_id}` |
+| API route | `GET /news` |
+
 ## 截圖
 
 | 名稱 | 參數 |
 | --- | --- |
-| `themes` | `--url http://127.0.0.1:4227/themes --name themes`（1280 與 390） |
-| `themes-theme` | `--url "http://127.0.0.1:4227/themes?board=theme" --name themes-theme --widths 1280` |
-| `theme-detail` | `--url http://127.0.0.1:4227/themes/<T> --name theme-detail`（1280 與 390） |
+| `themes` | `--url <WEB>/themes --name themes`（1280 與 390） |
+| `themes-theme` | `--url "<WEB>/themes?board=theme" --name themes-theme --widths 1280` |
+| `theme-detail` | `--url <WEB>/themes/<T> --name theme-detail`（1280 與 390） |
 
 ## 預期資料與標記
 

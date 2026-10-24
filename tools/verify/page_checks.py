@@ -17,7 +17,8 @@ page also gets an ``API`` check comparing its APIs with
 requirements must be installed.
 
 Writes ``<out>/api/*.json``, ``<out>/shots/*.png|txt|jsonl``,
-``<out>/results.json`` and ``<out>/summary.md`` and prints one line per check.
+``<out>/results.json``, ``<out>/summary.md`` and ``<out>/status.md`` (the same
+tables without the evidence, for runs on private data) and prints one line per check.
 Exit 0 when every check passed (a check in ``KNOWN_FAILURES`` may fail), 1 when
 one failed, 2 when the features files and ``CHECKS`` disagree.
 """
@@ -1466,7 +1467,11 @@ def prefetch(run: Run, pages: list[str], stocks: list[Stock], jobs: int) -> None
         list(pool.map(run.shoot, shots.values()))
 
 
-def summary_markdown(results: list[Result], pages: list[str], head: str) -> str:
+def summary_markdown(
+    results: list[Result], pages: list[str], head: str, evidence: bool = True
+) -> str:
+    """Per page tables; without ``evidence`` only each check's result (no page text)."""
+
     lines = [head, ""]
     names = {
         "today": "今日 `/`",
@@ -1478,12 +1483,12 @@ def summary_markdown(results: list[Result], pages: list[str], head: str) -> str:
     for page in pages:
         rows = [r for r in results if r.page == page]
         verdict = "失敗" if any(r.failed for r in rows) else "通過"
-        lines += [
-            f"### {names[page]}：{verdict}",
-            "",
-            "| 檢查 | 結果 | 證據 |",
-            "| --- | --- | --- |",
-        ]
+        lines += [f"### {names[page]}：{verdict}", ""]
+        if not evidence:
+            lines += ["| 檢查 | 結果 |", "| --- | --- |"]
+            lines += [f"| {r.label} | {r.status} |" for r in rows] + [""]
+            continue
+        lines += ["| 檢查 | 結果 | 證據 |", "| --- | --- | --- |"]
         for r in rows:
             detail = r.detail.replace("|", "\\|").replace("\t", "\\t")
             if r.known:
@@ -1562,6 +1567,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     (args.out / "summary.md").write_text(
         summary_markdown(results, pages, head), encoding="utf-8"
+    )
+    (args.out / "status.md").write_text(
+        summary_markdown(results, pages, head, evidence=False), encoding="utf-8"
     )
     (args.out / "results.json").write_text(
         json.dumps(
