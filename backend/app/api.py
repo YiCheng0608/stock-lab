@@ -401,7 +401,7 @@ def _candidate_symbols(score: GroupDailyScore | None) -> list[str]:
 def _public_candidate_identity(
     db: Session | None, group: ThemeGroup, score: GroupDailyScore | None
 ) -> dict[str, Any]:
-    """Verify the whole source-day envelope; never infer legacy identities.
+    """Verify the whole source-day envelope; never infer identities from symbols.
 
     This is a historical display projection, not current action eligibility.
     Status/type/category are current metadata; only membership dates have
