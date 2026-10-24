@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 import worker.pipeline as pipeline
@@ -779,3 +779,229 @@ def test_group_members_and_scores_count_current_instruments_only(pipeline_env, s
         )
         # Even an open membership row does not count a non-current instrument.
         assert sorted(instrument.symbol for _m, instrument in members) == TWSE_CODES[:3]
+
+
+# ---- dormant: listed, but no quote row for 60 sessions ----
+
+
+def _dormancy_market(db, *, skip_raw_on=None):
+    """60 TAIEX sessions to SCORE_DATE with stored TPEx quote tables.
+
+    6000-6009 trade every session; 4804 last traded before the window and has
+    no row since; 8047 has an untraded ``--`` row every session; 5703 traded
+    inside the window.
+    """
+
+    sessions = []
+    day = SCORE_DATE
+    while len(sessions) < pipeline.DORMANT_SESSIONS:
+        if day.weekday() < 5:
+            sessions.append(day)
+        day -= timedelta(days=1)
+    sessions.reverse()
+    taiex = _instrument(db, "TWSE", "TAIEX", instrument_type="index")
+    codes = TPEX_CODES[:10] + ["4804", "8047", "5703"]
+    ids = {code: _instrument(db, "TPEx", code).id for code in codes}
+    for day in sessions:
+        db.add(
+            MarketBar(
+                instrument_id=taiex.id,
+                trading_date=day,
+                open=1,
+                high=1,
+                low=1,
+                close=1,
+                adj_close=1,
+                volume=0,
+                turnover=0,
+            )
+        )
+        for code in TPEX_CODES[:10]:
+            db.add(
+                MarketBar(
+                    instrument_id=ids[code],
+                    trading_date=day,
+                    open=1,
+                    high=1,
+                    low=1,
+                    close=1,
+                    adj_close=1,
+                    volume=1,
+                    turnover=1,
+                )
+            )
+        if day == skip_raw_on:
+            continue
+        rows = [
+            [code, code, "10", "0", "10", "10", "10", "10", "1", "10"]
+            for code in TPEX_CODES[:10] + ["5703"]
+        ]
+        rows.append(["8047", "星雲", "--", "", "--", "--", "--", "--", "0", "0"])
+        _store_quotes(db, day, rows)
+    for code, day in (
+        ("4804", sessions[0] - timedelta(days=30)),
+        ("5703", sessions[30]),
+    ):
+        db.add(
+            MarketBar(
+                instrument_id=ids[code],
+                trading_date=day,
+                open=1,
+                high=1,
+                low=1,
+                close=1,
+                adj_close=1,
+                volume=1,
+                turnover=1,
+            )
+        )
+    db.flush()
+    records = [sources.InstrumentRecord(code, code, exchange="TPEx") for code in codes]
+    captures = [
+        _capture("tpex", sources.TPEX_LISTED_ENDPOINT, {"codes": codes}),
+        _capture("tpex", sources.TPEX_ETF_ENDPOINT, []),
+    ]
+    return sessions, ids, records, pipeline.universe_evidence(captures, lambda _: 1)
+
+
+def _store_quotes(db, day, rows):
+    from app.models import RawPayload
+
+    payload = {
+        "stat": "ok",
+        "date": day.strftime("%Y%m%d"),
+        "tables": [
+            {
+                "fields": [
+                    "代號",
+                    "名稱",
+                    "收盤",
+                    "漲跌",
+                    "開盤",
+                    "最高",
+                    "最低",
+                    "均價",
+                    "成交股數",
+                    "成交金額(元)",
+                ],
+                "data": rows,
+            }
+        ],
+    }
+    capture = sources.capture_payload(
+        "tpex",
+        sources.TPEX_HISTORY_API,
+        payload,
+        day.isoformat(),
+        collected_at=datetime.combine(day, datetime.min.time()) + timedelta(hours=10),
+    )
+    db.add(
+        RawPayload(
+            source="tpex",
+            endpoint=sources.TPEX_HISTORY_API,
+            payload_path=str(capture.payload_path),
+            sha256=capture.sha256,
+            data_as_of=day.isoformat(),
+            collected_at=capture.collected_at,
+        )
+    )
+    db.flush()
+
+
+def test_a_listed_instrument_without_quote_rows_for_60_sessions_is_dormant(
+    pipeline_env,
+):
+    with pipeline_env() as db:
+        sessions, ids, records, evidence = _dormancy_market(db)
+        plan = pipeline.plan_instrument_status(db, records, evidence)
+        result = pipeline.apply_instrument_status(db, plan)
+        db.commit()
+
+        assert [(c["symbol"], c["status"]) for c in result["changes"]] == [
+            ("4804", "dormant")
+        ]
+        # An untraded "--" row is a row: 8047 stays current, as does 5703.
+        assert db.get(Instrument, ids["8047"]).status == "active"
+        assert db.get(Instrument, ids["5703"]).status == "active"
+        quality = db.scalar(
+            select(DataQuality).where(
+                DataQuality.entity_type == "instrument_status",
+                DataQuality.entity_key == "TPEx:4804",
+            )
+        )
+        assert quality.status == "dormant"
+        assert quality.checks_json["reason"] == "presumed: no quote row in 60 sessions"
+        presumption = quality.checks_json["presumption"]
+        assert presumption["sessions"] == [
+            sessions[0].isoformat(),
+            sessions[-1].isoformat(),
+        ]
+        assert len(presumption["raw_payload_ids"]) == 60
+        assert presumption["last_bars"] == {
+            "4804": (sessions[0] - timedelta(days=30)).isoformat()
+        }
+
+        # Still listed: a list refresh keeps it dormant and out of memberships.
+        pipeline._upsert_official_instrument(
+            db, sources.InstrumentRecord("4804", "大略-KY", exchange="TPEx")
+        )
+        assert db.get(Instrument, ids["4804"]).status == "dormant"
+
+        # Its row returns, even untraded: the next sync makes it current.
+        _store_quotes(
+            db,
+            sessions[-1],
+            [["4804", "大略-KY", "--", "", "--", "--", "--", "--", "0", "0"]],
+        )
+        db.query(pipeline.RawPayload).filter(
+            pipeline.RawPayload.data_as_of == sessions[-1].isoformat()
+        ).filter(
+            pipeline.RawPayload.id
+            != db.scalar(select(func.max(pipeline.RawPayload.id)))
+        ).delete()
+        again = pipeline.apply_instrument_status(
+            db, pipeline.plan_instrument_status(db, records, evidence)
+        )
+        assert [(c["symbol"], c["status"], c["reason"]) for c in again["changes"]] == [
+            ("4804", "active", "quote_row_returned")
+        ]
+
+
+def test_dormancy_is_not_presumed_when_a_session_has_no_stored_quote_table(
+    pipeline_env,
+):
+    with pipeline_env() as db:
+        sessions, ids, records, evidence = _dormancy_market(db, skip_raw_on=None)
+        sessions_missing = sessions[10]
+        db.query(pipeline.RawPayload).filter(
+            pipeline.RawPayload.data_as_of == sessions_missing.isoformat()
+        ).delete()
+        plan = pipeline.plan_instrument_status(db, records, evidence)
+        assert plan["changes"] == []
+        assert plan["exchanges"]["TPEx"]["dormancy"] == {
+            "status": "unverifiable",
+            "reason": "missing quote table",
+        }
+
+
+def test_collect_makes_a_dormant_instrument_current_when_it_trades_again(
+    pipeline_env,
+):
+    with pipeline_env() as db:
+        resting = _instrument(db, "TPEx", "4804", status="dormant")
+        db.commit()
+        resting_id = resting.id
+
+    pipeline.collect(
+        SCORE_DATE, adapter=FakeAdapter(_historical_batch(("TPEx", "4804")))
+    )
+
+    with pipeline_env() as db:
+        assert db.get(Instrument, resting_id).status == "active"
+        quality = db.scalar(
+            select(DataQuality).where(
+                DataQuality.entity_type == "instrument_status",
+                DataQuality.entity_key == "TPEx:4804",
+            )
+        )
+        assert quality.checks_json["reason"] == "quote_row_returned"

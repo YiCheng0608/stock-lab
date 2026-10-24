@@ -6,6 +6,7 @@ import math
 import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Iterable
 
@@ -86,6 +87,11 @@ from worker.sources import (
     TPEX_LISTED_ENDPOINT,
     TWSE_ETF_ENDPOINT,
     TPEX_ETF_ENDPOINT,
+    TPEX_HISTORY_API,
+    TWSE_DAILY_HISTORY_ENDPOINT,
+    _require_reported_date,
+    _rows,
+    _text,
 )
 
 # Longest normalized-price window a technical feature reads (ma60).
@@ -194,7 +200,10 @@ def get_or_create_instrument(
             item.etf_category = etf_category
             item.industry = industry or item.industry
             item.listing_date = listing_date or item.listing_date
-            item.status = "active"
+            # Being listed again ends delisted/transferred; dormant (listed but
+            # without quote rows) ends only when a quote row returns.
+            if item.status != "dormant":
+                item.status = "active"
         return item
     item = Instrument(
         market="TW",
@@ -3058,6 +3067,16 @@ LISTED_INSTRUMENT_TYPES = ("stock", "ipo", "etf")
 STATUS_SYNC_MAX_SHARE = 0.05
 STATUS_SYNC_MIN_LIMIT = 5
 STATUS_SYNC_VERSION = "instrument-status-v1"
+# A listed instrument with no row in the stored quote tables of this many
+# sessions is presumed dormant (suspended or about to be delisted).
+DORMANT_SESSIONS = 60
+# The pre-rwd TWSE all-security report, still present in older captures.
+TWSE_LEGACY_DAILY_HISTORY_ENDPOINT = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
+QUOTE_TABLE_ENDPOINTS = {
+    "TPEx": RawPayload.endpoint == TPEX_HISTORY_API,
+    "TWSE": RawPayload.endpoint.startswith(TWSE_DAILY_HISTORY_ENDPOINT + "?")
+    | RawPayload.endpoint.startswith(TWSE_LEGACY_DAILY_HISTORY_ENDPOINT + "?"),
+}
 TAIPEI = timezone(timedelta(hours=8))
 
 
@@ -3166,6 +3185,76 @@ def universe_evidence(
     return evidence
 
 
+def _quote_row_codes(payload: Any) -> set[str]:
+    """Every code with a row in an official daily quote table, traded or not."""
+
+    tables = payload.get("tables") if isinstance(payload, dict) else None
+    rows = (
+        [row for table in tables if isinstance(table, dict) for row in _rows(table)]
+        if isinstance(tables, list)
+        else _rows(payload)
+    )
+    return {
+        code
+        for row in rows
+        if (code := _text(row, "證券代號", "代號", "SecuritiesCompanyCode", "Code"))
+    }
+
+
+def _quote_sessions(db: Session, observed: date) -> list[date]:
+    """The latest DORMANT_SESSIONS TAIEX sessions up to ``observed``."""
+
+    benchmark = _benchmark_instrument(db)
+    if benchmark is None:
+        return []
+    return sorted(
+        db.scalars(
+            select(MarketBar.trading_date)
+            .where(
+                MarketBar.instrument_id == benchmark.id,
+                MarketBar.trading_date <= observed,
+            )
+            .order_by(MarketBar.trading_date.desc())
+            .limit(DORMANT_SESSIONS)
+        ).all()
+    )
+
+
+def _stored_quote_rows(
+    db: Session, exchange: str, sessions: list[date]
+) -> tuple[set[str], list[int]] | None:
+    """Codes with a row in the stored quote table of any session, or None.
+
+    None when a session has no stored, date-checked quote table: the absence
+    of a row is then not proven.
+    """
+
+    wanted = {day.isoformat() for day in sessions}
+    found: dict[str, tuple[set[str], int]] = {}
+    for raw in db.scalars(
+        select(RawPayload)
+        .where(
+            RawPayload.source == exchange.lower(),
+            QUOTE_TABLE_ENDPOINTS[exchange],
+            func.substr(RawPayload.data_as_of, 1, 10).in_(wanted),
+        )
+        .order_by(RawPayload.collected_at.desc(), RawPayload.id.desc())
+    ):
+        day = str(raw.data_as_of)[:10]
+        if day in found or not raw.payload_path:
+            continue
+        try:
+            payload = json.loads(Path(raw.payload_path).read_bytes())
+            _require_reported_date(payload, date.fromisoformat(day), raw.endpoint)
+        except (OSError, ValueError, OfficialDataError):
+            continue
+        found[day] = (_quote_row_codes(payload), raw.id)
+    if set(found) != wanted:
+        return None
+    codes = set().union(*(item[0] for item in found.values()))
+    return codes, sorted(item[1] for item in found.values())
+
+
 def plan_instrument_status(
     db: Session,
     records: Iterable[InstrumentRecord],
@@ -3173,12 +3262,15 @@ def plan_instrument_status(
     *,
     max_share: float = STATUS_SYNC_MAX_SHARE,
 ) -> dict[str, Any]:
-    """Which active instruments the official lists no longer carry; no writes.
+    """Which instruments the official lists or quote tables say are gone; no writes.
 
-    An active stock, IPO or ETF absent from its exchange's lists is
-    ``transferred`` when the other exchange lists the same code, otherwise
-    ``delisted``.  Its open memberships close the day before the new listing
-    (a transfer with a known listing date) or the day before the observation.
+    A current (or dormant) stock, IPO or ETF absent from its exchange's lists
+    is ``transferred`` when the other exchange lists the same code, otherwise
+    ``delisted``; its open memberships close the day before the new listing (a
+    transfer with a known listing date) or the day before the observation.
+    A listed one whose code has no row in any stored quote table of the last
+    DORMANT_SESSIONS sessions is presumed ``dormant``; ``collect`` makes it
+    active again when a quote row returns.
     """
 
     universe = {(record.exchange, record.symbol): record for record in records}
@@ -3186,31 +3278,109 @@ def plan_instrument_status(
     changes: list[dict[str, Any]] = []
     for exchange, proof in sorted(evidence.items()):
         observed = proof["observed_date"]
-        active = db.scalars(
+        current = db.scalars(
             select(Instrument)
             .where(
                 Instrument.market == "TW",
                 Instrument.exchange == exchange,
-                Instrument.status == "active",
+                Instrument.status.in_(("active", "dormant")),
                 Instrument.instrument_type.in_(LISTED_INSTRUMENT_TYPES),
             )
             .order_by(Instrument.symbol, Instrument.id)
         ).all()
-        absent = [item for item in active if (exchange, item.symbol) not in universe]
+        active = [item for item in current if item.status == "active"]
+        absent = [item for item in current if (exchange, item.symbol) not in universe]
+        dormant: list[Instrument] = []
+        sessions = _quote_sessions(db, observed)
+        dormancy: dict[str, Any] = {"status": "not_checked"}
+        if len(sessions) < DORMANT_SESSIONS:
+            dormancy["reason"] = f"{len(sessions)} stored sessions"
+        else:
+            last_bars = dict(
+                db.execute(
+                    select(MarketBar.instrument_id, func.max(MarketBar.trading_date))
+                    .join(Instrument, Instrument.id == MarketBar.instrument_id)
+                    .where(
+                        Instrument.exchange == exchange,
+                        Instrument.status == "active",
+                    )
+                    .group_by(MarketBar.instrument_id)
+                ).all()
+            )
+            quiet = [
+                item
+                for item in active
+                if (exchange, item.symbol) in universe
+                and (last_bars.get(item.id) is None or last_bars[item.id] < sessions[0])
+            ]
+            rows = _stored_quote_rows(db, exchange, sessions) if quiet else None
+            if rows is not None:
+                codes, raw_ids = rows
+                dormant = [item for item in quiet if item.symbol not in codes]
+                dormancy = {
+                    "status": "checked",
+                    "presumption": f"no quote row in the last {DORMANT_SESSIONS} sessions",
+                    "sessions": [sessions[0].isoformat(), sessions[-1].isoformat()],
+                    "raw_payload_ids": raw_ids,
+                    "last_bars": {
+                        item.symbol: _iso(last_bars.get(item.id)) for item in dormant
+                    },
+                }
+            elif quiet:
+                dormancy = {"status": "unverifiable", "reason": "missing quote table"}
+            else:
+                dormancy = {"status": "checked", "reason": "no quiet instrument"}
+        # A dormant code back in the latest quote table, traded or not.
+        revived: list[Instrument] = []
+        resting = [
+            item
+            for item in current
+            if item.status == "dormant" and (exchange, item.symbol) in universe
+        ]
+        latest = _stored_quote_rows(db, exchange, sessions[-1:]) if resting else None
+        if resting and sessions and latest is not None:
+            revived = [item for item in resting if item.symbol in latest[0]]
+        planned = len(absent) + len(dormant)
         limit = max(STATUS_SYNC_MIN_LIMIT, int(len(active) * max_share))
         exchanges[exchange] = {
             "observed_date": observed,
             "active": len(active),
             "absent": len(absent),
+            "dormant": len(dormant),
             "limit": limit,
-            "status": "skipped" if len(absent) > limit else "applied",
+            "status": "skipped" if planned > limit else "applied",
             "absent_symbols": [item.symbol for item in absent][:50],
+            "dormant_symbols": [item.symbol for item in dormant][:50],
+            "revived_symbols": [item.symbol for item in revived][:50],
             "captures": proof["captures"],
+            "dormancy": dormancy,
         }
-        if len(absent) > limit:
+        if planned > limit:
             continue
-        for instrument in absent:
-            moved_to = universe.get((OTHER_EXCHANGE[exchange], instrument.symbol))
+        for instrument in revived:
+            changes.append(
+                {
+                    "instrument": instrument,
+                    "status": "active",
+                    "reason": "quote_row_returned",
+                    "observed_date": observed,
+                    "close_day": observed - timedelta(days=1),
+                    "moved_to": None,
+                    "memberships": [],
+                }
+            )
+        for instrument in absent + dormant:
+            moved_to = None
+            if instrument in dormant:
+                status = "dormant"
+                reason = f"presumed: no quote row in {DORMANT_SESSIONS} sessions"
+            else:
+                moved_to = universe.get((OTHER_EXCHANGE[exchange], instrument.symbol))
+                status, reason = (
+                    ("transferred", "listed_on_other_exchange")
+                    if moved_to
+                    else ("delisted", "absent_from_official_lists")
+                )
             close_day = observed - timedelta(days=1)
             if (
                 moved_to is not None
@@ -3230,10 +3400,8 @@ def plan_instrument_status(
             changes.append(
                 {
                     "instrument": instrument,
-                    "status": "transferred" if moved_to else "delisted",
-                    "reason": "listed_on_other_exchange"
-                    if moved_to
-                    else "absent_from_official_lists",
+                    "status": status,
+                    "reason": reason,
                     "observed_date": observed,
                     "close_day": close_day,
                     "moved_to": moved_to,
@@ -3241,6 +3409,31 @@ def plan_instrument_status(
                 }
             )
     return {"exchanges": exchanges, "changes": changes}
+
+
+def reactivate_dormant(db: Session, instrument: Instrument, record: BarRecord) -> None:
+    """A dormant instrument with a quote row again is current again."""
+
+    instrument.status = "active"
+    _upsert_quality(
+        db,
+        "instrument_status",
+        f"{instrument.exchange}:{instrument.symbol}",
+        record.trading_date,
+        "active",
+        [],
+        {
+            "version": STATUS_SYNC_VERSION,
+            "exchange": instrument.exchange,
+            "symbol": instrument.symbol,
+            "previous_status": "dormant",
+            "status": "active",
+            "reason": "quote_row_returned",
+            "trading_date": record.trading_date.isoformat(),
+            "source": record.source,
+        },
+        source=instrument.exchange.lower(),
+    )
 
 
 def _iso(value: date | None) -> str | None:
@@ -3289,6 +3482,9 @@ def apply_instrument_status(db: Session, plan: dict[str, Any]) -> dict[str, Any]
             else None,
             "closed_memberships": closed,
             "evidence": plan["exchanges"][instrument.exchange]["captures"],
+            "presumption": plan["exchanges"][instrument.exchange]["dormancy"]
+            if change["status"] == "dormant"
+            else None,
         }
         instrument.status = change["status"]
         _upsert_quality(
@@ -3598,6 +3794,8 @@ def collect(
                 if key not in known:
                     known[key] = stored_instrument(db, *key)
                 instrument = known[key]
+                if instrument is not None and instrument.status == "dormant":
+                    reactivate_dormant(db, instrument, record)
                 if not instrument:
                     note_unmatched_bar(
                         unmatched,
@@ -3694,7 +3892,13 @@ def collect(
             if getattr(batch, "snapshot_feeds", True):
                 industry_result = _ensure_official_groups(
                     db,
-                    batch.instruments,
+                    # A dormant instrument's memberships stay closed.
+                    [
+                        record
+                        for record in batch.instruments
+                        if instruments[(record.exchange, record.symbol)].status
+                        != "dormant"
+                    ],
                     instruments,
                     start_date,
                     score_date,

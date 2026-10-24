@@ -39,6 +39,7 @@ from worker.pipeline import (
     OTHER_EXCHANGE,
     STATUS_SYNC_MAX_SHARE,
     TAIPEI,
+    TWSE_LEGACY_DAILY_HISTORY_ENDPOINT,
     UNIVERSE_ENDPOINTS,
     _upsert_official_bar,
     _upsert_official_chip,
@@ -83,8 +84,6 @@ from worker.sources import (
 
 REPAIR_VERSION = "instrument-repair-v1"
 RUN_TYPE = "instrument_repair"
-# The pre-rwd TWSE all-security report, still present in older captures.
-TWSE_LEGACY_DAILY_HISTORY_ENDPOINT = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
 # A code whose quotes continue into the last week may be a listing the lists
 # have not caught up with; it is reported, never created.
 STALE_SESSIONS = 5

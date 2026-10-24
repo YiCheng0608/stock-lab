@@ -1,4 +1,4 @@
-import { groupDisplayName, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
+import { groupDisplayName, staleCloseDateLabel, stockGroupLabel, researchRequirementLabel, stockDirectoryActionLabel, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productTimeRoleDateTime, productTimeRoleKnown, productTimeRoleLabel, stopPriceFieldLabel } from './presentation'
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -63,3 +63,10 @@ expect(stockGroupLabel({ name: 'Industry · Shipping', display_name: '航運', v
 expect(stockGroupLabel({ name: 'ETF · broad_market', display_name: 'ETF 分類：broad_market', verified: true }) === 'ETF · 大盤型', 'ETF rows keep the translated category')
 expect(stockGroupLabel({ name: 'New listings', display_name: '新上市標的', verified: true }) === '新上市族群', 'new-listing row keeps its product label')
 expect(stockGroupLabel({ name: 'Industry · X', display_name: ' ', verified: true }) === '族群名稱待核實', 'blank display name is not shown as empty')
+
+// Issue #212: an old close in the stock directory carries its own date.
+expect(staleCloseDateLabel('2026-10-14', '2026-10-22') === '（2026/10/14）', 'older close shows its date')
+expect(staleCloseDateLabel('2026-10-22T00:00:00', '2026-10-22') === null, 'current close has no extra date')
+expect(staleCloseDateLabel('2026-10-14', null) === '（2026/10/14）', 'unknown latest session still dates the close')
+expect(staleCloseDateLabel(null, '2026-10-22') === null, 'no close date, no label')
+expect(staleCloseDateLabel('not a date', '2026-10-22') === null, 'malformed date is not shown')
