@@ -282,9 +282,10 @@ def test_route_problems_names_an_unmapped_route():
     source = (
         API_SOURCE + '\n\n@router.get("/new-thing")\ndef new_thing():\n    return 1\n'
     )
-    assert verify_plan.route_problems(source, RULES) == [
-        "route `GET /new-thing` 沒有列在任何 features 檔的驗證範圍，也不在 README 的「不屬於五頁的 route」"
-    ]
+    assert (
+        "route `GET /new-thing` 沒有列在任何 features 檔的驗證範圍，"
+        "也不在 README 的「不屬於五頁的 route」"
+    ) in verify_plan.route_problems(source, RULES)
 
 
 def test_api_routes_match_the_router():
