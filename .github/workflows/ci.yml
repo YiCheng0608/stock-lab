@@ -150,6 +150,7 @@ jobs:
           set -o pipefail
           base="$BASE_SHA"
           if [ -n "$BASE_REF" ]; then base="$(git rev-parse "refs/remotes/origin/$BASE_REF")"; fi
+          base="$(git rev-parse HEAD^2~1)"  # TEMPORARY (#245 AC-3): plan only the PR's last commit; reverted next
           python3 -B tools/verify/verify_plan.py --base "$base" --output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         if: steps.plan.outputs.pages != ''
