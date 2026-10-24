@@ -234,20 +234,11 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
                 self.persist(bad)
                 self.check_path([])
 
-    def test_legacy_coercion_duplicates_and_all_active_exchanges(self):
-        for values, expected in [
-            (["SAME", "SAME", " SAME ", "missing"], ["TWSE:SAME", "TPEx:SAME"]),
-            (["OTHER"], ["TWSE:OTHER"]),
-            ([123, None, ""], ["TWSE:123", "TWSE:None"]),
-            ([], []),
-            ("SAME", []),
-        ]:
+    def test_symbol_only_and_non_object_details_contribute_nothing(self):
+        for values in (["SAME"], ["OTHER"], [123, None, ""], [], "SAME"):
             with self.subTest(values=values):
                 self.persist({"candidate_symbols": values})
-                self.check_path(expected, check_api=True)
-        self.stocks[0].status = "inactive"
-        self.persist({"candidate_symbols": ["SAME"]})
-        self.check_path(["TPEx:SAME"])
+                self.check_path([], check_api=True)
         for details in [None, [], "bad", 42, {}]:
             self.persist(details)
             self.check_path([])
@@ -264,7 +255,7 @@ class BackfillCandidateIdentityTest(unittest.TestCase):
             GroupDailyScore(
                 group_id="g2",
                 trading_date=self.day,
-                details_json={"candidate_symbols": ["OTHER"]},
+                details_json=self.typed(2),
             )
         )
         self.check_path(["TWSE:SAME", "TWSE:OTHER"])

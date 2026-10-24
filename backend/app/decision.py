@@ -1611,8 +1611,8 @@ def _group_candidate_ids(
     """Resolve score-day identities, then retain the same current members.
 
     Instrument status/type/category are current metadata, not historical
-    truth. Inactive rows remain in source-day ambiguity checks; otherwise
-    today's status could make an ambiguous old symbol appear unique.
+    truth. A score without the identity marker has symbol text only and
+    contributes no candidates.
     """
     details = score.details_json
     if not isinstance(details, dict):
@@ -1624,35 +1624,31 @@ def _group_candidate_ids(
         or any(type(symbol) is not str or not symbol.strip() for symbol in symbols)
     ):
         return set()
-    versioned = "candidate_identity_version" in details
+    if details.get("candidate_identity_version") != "instrument-id-v1":
+        return set()
     candidates = details.get("candidate_instruments")
-    if versioned:
-        if details["candidate_identity_version"] != "instrument-id-v1":
+    if not isinstance(candidates, list) or len(candidates) > MAX_GROUP_CANDIDATES:
+        return set()
+    ids, pairs = set(), set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
             return set()
-        if not isinstance(candidates, list) or len(candidates) > MAX_GROUP_CANDIDATES:
+        item_id = candidate.get("instrument_id")
+        exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
+        if (
+            type(item_id) is not int
+            or item_id <= 0
+            or type(exchange) is not str
+            or not exchange.strip()
+            or type(symbol) is not str
+            or not symbol.strip()
+        ):
             return set()
-        ids, pairs = set(), set()
-        for candidate in candidates:
-            if not isinstance(candidate, dict):
-                return set()
-            item_id = candidate.get("instrument_id")
-            exchange, symbol = candidate.get("exchange"), candidate.get("symbol")
-            if (
-                type(item_id) is not int
-                or item_id <= 0
-                or type(exchange) is not str
-                or not exchange.strip()
-                or type(symbol) is not str
-                or not symbol.strip()
-            ):
-                return set()
-            if item_id in ids or (exchange, symbol) in pairs:
-                return set()
-            ids.add(item_id)
-            pairs.add((exchange, symbol))
-        if [candidate["symbol"] for candidate in candidates] != symbols:
+        if item_id in ids or (exchange, symbol) in pairs:
             return set()
-    elif "candidate_instruments" in details:
+        ids.add(item_id)
+        pairs.add((exchange, symbol))
+    if [candidate["symbol"] for candidate in candidates] != symbols:
         return set()
     if not symbols:
         return set()
@@ -1695,26 +1691,13 @@ def _group_candidate_ids(
             source_members[item_id] = (exchange, symbol)
         if start <= as_of and (end is None or end >= as_of) and status == "active":
             current_ids.add(item_id)
-    if versioned:
-        for candidate in candidates:
-            if source_members.get(candidate["instrument_id"]) != (
-                candidate["exchange"],
-                candidate["symbol"],
-            ):
-                return set()
-        return {candidate["instrument_id"] for candidate in candidates} & current_ids
-
-    # A repeated legacy symbol cannot prove which ranked slot it represented.
-    result = set()
-    for symbol in set(symbols):
-        if symbols.count(symbol) != 1:
-            continue
-        matches = {
-            item_id for item_id, pair in source_members.items() if pair[1] == symbol
-        }
-        if len(matches) == 1:
-            result.update(matches & current_ids)
-    return result
+    for candidate in candidates:
+        if source_members.get(candidate["instrument_id"]) != (
+            candidate["exchange"],
+            candidate["symbol"],
+        ):
+            return set()
+    return {candidate["instrument_id"] for candidate in candidates} & current_ids
 
 
 def position_holding_ids(

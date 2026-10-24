@@ -1,4 +1,4 @@
-"""Canonical group-member return lookup and strict legacy compatibility.
+"""Canonical group-member return lookup; symbol-only evidence is rejected.
 Run directly with unittest/runpy and explicit isolated STOCK_* paths; this
 avoids the repository pytest conftest's additional disk fixtures.
 """
@@ -47,7 +47,6 @@ class GroupMemberIdentityTest(unittest.TestCase):
         self,
         exchanges,
         duplicate_symbol=True,
-        legacy=False,
         mutate=None,
         rejected=False,
         before_calculation=None,
@@ -199,13 +198,6 @@ class GroupMemberIdentityTest(unittest.TestCase):
                         for row in rows
                     )
                 )
-                if legacy:
-                    details = deepcopy(score.details_json)
-                    details.pop("member_return_identity_version")
-                    for row in details["member_returns"]:
-                        row.pop("instrument_id")
-                        row.pop("exchange")
-                    score.details_json = details
                 if mutate:
                     mutate(db, score, stocks, group, score_date)
                 db.flush()
@@ -278,10 +270,7 @@ class GroupMemberIdentityTest(unittest.TestCase):
                     else:
                         self.assertAlmostEqual(actual[stock.id], expected[stock.id])
                         self.assertEqual(audit["matched"], audit["requested"])
-                        self.assertEqual(
-                            audit["mode"],
-                            "legacy_symbol_unique" if legacy else "instrument_id",
-                        )
+                        self.assertEqual(audit["mode"], "instrument_id")
                         self.assertEqual(audit["reason"], "matched")
                 if not mutate and not before_calculation:
                     print(
@@ -311,31 +300,6 @@ class GroupMemberIdentityTest(unittest.TestCase):
 
     def test_duplicate_symbol_tpex_first(self):
         self.run_case(["TPEX", "TWSE"])
-
-    def test_unique_legacy_symbols_remain_resolvable(self):
-        self.run_case(["TWSE", "TPEX"], duplicate_symbol=False, legacy=True)
-
-    def test_legacy_duplicate_symbol_rejected(self):
-        self.run_case(
-            ["TWSE", "TPEX"], legacy=True, rejected=True, mutate=lambda *args: None
-        )
-
-    def test_technical_exclusion_does_not_make_legacy_identity_unique(self):
-        def exclude(db, stocks, group, day):
-            feature = db.scalar(
-                select(TechnicalFeature).where(
-                    TechnicalFeature.instrument_id == stocks[1].id
-                )
-            )
-            feature.features_json = {}
-
-        self.run_case(
-            ["TWSE", "TPEX"],
-            legacy=True,
-            rejected=True,
-            before_calculation=exclude,
-            extra_member=True,
-        )
 
     def test_canonical_malformed_evidence_rejected(self):
         def edit(change):
@@ -380,112 +344,38 @@ class GroupMemberIdentityTest(unittest.TestCase):
                 self.run_case(["TWSE", "TPEX"], mutate=edit(change), rejected=True)
 
     def test_technically_excluded_target_never_borrows_other_exchange_return(self):
-        for legacy in (False, True):
-            with self.subTest(legacy=legacy):
-
-                def exclude_target(db, stocks, group, day):
-                    # Zero prior volumes leave no 20-day volume baseline for hot_group_v1.
-                    for bar in db.scalars(
-                        select(MarketBar).where(
-                            MarketBar.instrument_id == stocks[0].id,
-                            MarketBar.trading_date < day,
-                        )
-                    ):
-                        bar.volume = 0
-
-                self.run_case(
-                    ["TWSE", "TPEX"],
-                    legacy=legacy,
-                    rejected=True,
-                    before_calculation=exclude_target,
-                    extra_member=True,
+        def exclude_target(db, stocks, group, day):
+            # Zero prior volumes leave no 20-day volume baseline for hot_group_v1.
+            for bar in db.scalars(
+                select(MarketBar).where(
+                    MarketBar.instrument_id == stocks[0].id,
+                    MarketBar.trading_date < day,
                 )
+            ):
+                bar.volume = 0
+
+        self.run_case(
+            ["TWSE", "TPEX"],
+            rejected=True,
+            before_calculation=exclude_target,
+            extra_member=True,
+        )
 
     def test_return_types_and_finiteness(self):
-        for legacy in (False, True):
-            for value in (True, "0.2", None, float("nan"), float("inf"), -float("inf")):
-                with self.subTest(legacy=legacy, value=value):
+        for value in (True, "0.2", None, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
 
-                    def mutate(db, score, stocks, group, day):
-                        details = deepcopy(score.details_json)
-                        details["member_returns"][0]["excess_return_20d"] = value
-                        score.details_json = details
-
-                    self.run_case(
-                        ["TWSE", "TPEX"],
-                        duplicate_symbol=False,
-                        legacy=legacy,
-                        mutate=mutate,
-                        rejected=True,
-                    )
-
-    def test_legacy_effective_membership_boundaries(self):
-        for boundary, ambiguous in (
-            ("starts_today", True),
-            ("ends_today", True),
-            ("starts_tomorrow", False),
-            ("ended_yesterday", False),
-        ):
-            with self.subTest(boundary=boundary):
-
-                def membership(db, stocks, group, day):
-                    member = db.scalar(
-                        select(GroupMembership).where(
-                            GroupMembership.instrument_id == stocks[1].id
-                        )
-                    )
-                    if boundary == "starts_today":
-                        member.valid_from = day
-                    elif boundary == "ends_today":
-                        member.valid_to = day
-                    elif boundary == "starts_tomorrow":
-                        member.valid_from = day + timedelta(days=1)
-                    else:
-                        member.valid_to = day - timedelta(days=1)
+                def mutate(db, score, stocks, group, day):
+                    details = deepcopy(score.details_json)
+                    details["member_returns"][0]["excess_return_20d"] = value
+                    score.details_json = details
 
                 self.run_case(
                     ["TWSE", "TPEX"],
-                    legacy=True,
-                    rejected=ambiguous,
-                    before_calculation=membership,
-                    extra_member=True,
+                    duplicate_symbol=False,
+                    mutate=mutate,
+                    rejected=True,
                 )
-
-    def test_legacy_duplicate_return_and_wrong_group_rejected(self):
-        for wrong_group in (False, True):
-
-            def mutate(db, score, stocks, group, day):
-                if wrong_group:
-                    other = ThemeGroup(
-                        id="other", name="Other", group_type="official_industry"
-                    )
-                    db.add(other)
-                    db.flush()
-                    # Resolver must check the score's own group, never a global symbol match.
-                    copied = GroupDailyScore(
-                        group_id=other.id,
-                        trading_date=day,
-                        details_json=score.details_json,
-                    )
-                    value, audit = pipeline._resolve_group_member_return(
-                        db, copied, stocks[0], day
-                    )
-                    self.assertIsNone(value)
-                    self.assertEqual(
-                        audit["reason"], "legacy_membership_ambiguous_or_missing"
-                    )
-                else:
-                    details = deepcopy(score.details_json)
-                    details["member_returns"].append(dict(details["member_returns"][0]))
-                    score.details_json = details
-
-            self.run_case(
-                ["TWSE", "TPEX"],
-                duplicate_symbol=False,
-                legacy=True,
-                mutate=mutate,
-                rejected=not wrong_group,
-            )
 
     def test_nonmember_and_wrong_date_do_not_use_group_evidence(self):
         for condition in (
@@ -519,43 +409,34 @@ class GroupMemberIdentityTest(unittest.TestCase):
                     group_available=False,
                 )
 
-    def test_legacy_partial_identity_and_disallowed_member_rejected(self):
-        for condition in ("partial_id", "partial_exchange", "disallowed_type"):
-            with self.subTest(condition=condition):
-
-                def mutate(db, score, stocks, group, day):
-                    if condition == "disallowed_type":
-                        stocks[0].instrument_type = "index"
-                    else:
-                        details = deepcopy(score.details_json)
-                        details["member_returns"][0].update(
-                            {"instrument_id": stocks[0].id}
-                            if condition == "partial_id"
-                            else {"exchange": "TWSE"}
-                        )
-                        score.details_json = details
-
-                self.run_case(
-                    ["TWSE", "TPEX"],
-                    duplicate_symbol=False,
-                    legacy=True,
-                    mutate=mutate,
-                    rejected=True,
-                )
-
     def test_finite_integer_return_is_accepted(self):
         def mutate(db, score, stocks, group, day):
             details = deepcopy(score.details_json)
             details["member_returns"][0]["excess_return_20d"] = 0
             score.details_json = details
-            value, audit = pipeline._resolve_group_member_return(
-                db, score, stocks[0], day
-            )
+            value, audit = pipeline._resolve_group_member_return(score, stocks[0], day)
             self.assertEqual(value, 0)
             self.assertEqual(audit["reason"], "matched")
             details["member_returns"][0]["excess_return_20d"] = 0.2
 
         self.run_case(["TWSE", "TPEX"], mutate=mutate)
+
+    def test_symbol_only_evidence_is_an_unsupported_version(self):
+        def mutate(db, score, stocks, group, day):
+            details = deepcopy(score.details_json)
+            details.pop("member_return_identity_version")
+            for row in details["member_returns"]:
+                row.pop("instrument_id")
+                row.pop("exchange")
+            score.details_json = details
+            value, audit = pipeline._resolve_group_member_return(score, stocks[0], day)
+            self.assertIsNone(value)
+            self.assertEqual(audit["mode"], "rejected")
+            self.assertEqual(audit["reason"], "unsupported_identity_version")
+
+        self.run_case(
+            ["TWSE", "TPEX"], duplicate_symbol=False, mutate=mutate, rejected=True
+        )
 
 
 if __name__ == "__main__":

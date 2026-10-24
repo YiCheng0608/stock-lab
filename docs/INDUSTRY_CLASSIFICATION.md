@@ -103,12 +103,11 @@ Baseline（2026-09-14）之前匯入的 1984 筆一般產業 membership 用了�
 
 `GroupDailyScore.details_json` 以 `member_return_identity_version` 與 `candidate_identity_version`（皆為 `instrument-id-v1`）標記 typed 身分；`hot_group_v1` 公式、候選排序與 top 4 上限不受本節影響。`Instrument.status`、類型與 ETF 類別沒有歷史版本，下列核對不構成 PIT 證明。
 
-- **結構**：`member_returns[]` 與 `candidate_instruments[]`（score 已排序成員的 top 4）每列有正整數且非布林的 `instrument_id`（同一 DB 的本地鍵）與非空 `exchange`、`symbol`，ID 與 pair 各自唯一；`candidate_symbols` 是等長同序的文字投影，不能反推身分。marker 未知、結構錯誤、重複或投影不一致時，該 score 的成員報酬或候選來源整份 fail-closed，不以 symbol 猜測。
+- **結構**：`member_returns[]` 與 `candidate_instruments[]`（score 已排序成員的 top 4）每列有正整數且非布林的 `instrument_id`（同一 DB 的本地鍵）與非空 `exchange`、`symbol`，ID 與 pair 各自唯一；`candidate_symbols` 是等長同序的文字投影，不能反推身分。沒有 marker、marker 未知、結構錯誤、重複或投影不一致時，該 score 的成員報酬或候選來源整份 fail-closed，不以 symbol 猜測。
 - **策略輸入**（`worker.pipeline._resolve_group_member_return`）：以 `instrument_id` 找列並核對 exchange＋symbol；`excess_return_20d` 只接受有限數值；結果寫入 Signal 的 `rule_evidence_json.group_member_return_lookup`，拒絕時走缺資料語意。
 - **Decision 候選**（`decision._group_candidate_ids`）：先以 `score.trading_date` 驗證 ID 對應、當日有效 membership 與 producer 的類型／ETF 類別 gate，任一列不合即拒絕整個 score；再以 requested as-of 逐 ID 排除已退出或 inactive 者，不改綁同 symbol 的另一列。
 - **回補與 coverage**（`worker.backfill._candidate_instrument_keys`）：合法 typed 候選逐列對照 Instrument 後，納入目前 active 的 ID；不套 decision 的 membership 縮選，malformed score 只移除該 score。
 - **Public API**（`api._public_candidate_identity`）：另回 `public_candidate_identity_version="instrument-id-string-v1"` 與十進位字串 `instrument_id`；以來源日 `score.trading_date` 驗證 membership 與 gate，任一不合即整份 `candidate_instruments` 為空。族群詳情只在 typed 身分合法時連到 `/stocks/{exchange}/{symbol}`；候選「評分日期」讀 score `trading_date`，成員表讀 members response `meta.data_as_of`。
-- **沒有 marker 的 score**：只有 symbol 文字時，策略輸入與 decision 候選要求來源日恰好一個有效同 symbol 成員（`legacy_symbol_unique`），另一市場同 symbol 成員有效即拒絕；回補納入所有 active 的同 symbol 標的；public API 只顯示文字、不產生連結。
 
 ## 7. 題材表
 
