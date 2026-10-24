@@ -78,7 +78,7 @@ LLM 批次的實作（`worker.news_llm`，執行方式見 [OPERATIONS §3](OPERA
 - **保存**：`news_llm_results` 每則×提示版本一列（unique），欄位 `ai_summary`（≤80 字繁中）、`ai_symbol_candidates_json`（`exchange:symbol`＋理由＋把握 high／medium／low）、`ai_theme_candidates_json`（題材名＋理由）、`ai_impact_direction`（positive／negative／mixed／unknown）、`ai_impact_scope`（instrument／theme／market）、`ai_impact_rationale`、`ai_unsupported`，以及 `llm_model`（CLI 回報的實際模型）、`prompt_version`、`llm_input_hash`（送出內容的 SHA-256）、`llm_run_at`、`llm_status`（`done`／`pending`／`skipped_stale`）、`llm_error` 與 ingestion run、raw 參照。`news_items` 的 `symbols_json`、`theme_ids_json`、`summary`、`impact_*` 不被改寫。
 - **驗證**：Python 端以同一份 schema 檢查：回應須含每個送出 id 恰一次，物件不得有 schema 以外的 key，代號須符合 `^(TWSE|TPEx):[0-9A-Z]{4,6}$`，摘要 ≤80 字、理由與方向理由 ≤120 字、題材名 ≤40 字。任一則不符時整批標 `pending`，不保存部分結果。`unsupported=true` 時方向一律存 `unknown`。重試失敗只更新狀態與原因，不清掉同版本已有的 AI 欄位。
 - **失敗**：超時、非 JSON、不符 schema 只影響該批，其他批照跑。未登入、額度限制或 CLI 無法啟動時，該批標 `pending` 並停止本次執行，其餘批次記為 skipped、不寫列，不再呼叫。
-- **API**：`/api/news`、`/api/news/{id}` 與個股頁新聞的每則有 `ai` 物件（最新一筆 `done` 結果，沒有時為 `null`），`inference=true`，含摘要、候選、方向、範圍、理由、`unsupported`、模型、提示版本、輸入雜湊與 `generated_at`。`ai.symbol_candidates` 每個標 `verified=false`，代號存在於 instruments 時附名稱、否則 `name=null`；規則命中的已核實標的仍只在 `symbols`／`instruments`。
+- **API**：`/api/news`、`/api/news/{id}`、個股頁新聞與 `/api/dashboard` 的 `news` 每則有 `ai` 物件（最新一筆 `done` 結果，沒有時為 `null`；同一則在各處相同，列表一次查完），`inference=true`，含摘要、候選、方向、範圍、理由、`unsupported`、模型、提示版本、輸入雜湊與 `generated_at`（`llm_run_at` 存無時區 UTC，輸出 `+00:00` 結尾）。`ai.symbol_candidates` 每個標 `verified=false`，代號存在於 instruments 時附名稱、否則 `name=null`；規則命中的已核實標的仍只在 `symbols`／`instruments`。
 
 ## 6. UI 與 API 契約
 

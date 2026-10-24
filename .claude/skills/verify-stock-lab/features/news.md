@@ -48,7 +48,7 @@
 | N3 | CI | 每張卡有時間 | 各分頁 `^(發布於\|事件於\|事件日) \|^來源時間(待核實\|未提供)$` 的行數 = API `items` 數 |
 | N4 | CI | AI 標記 | 各分頁整行 `AI 推論` 的行數 = API `items` 中 `ai.status` 為 `done` 且 `ai.inference` 為 true 的數量 |
 | N5 | CI | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
-| N6 | CI | 詳情分欄 | `news-detail-1280.txt` 有整行 `來源事實` 與 `AI 摘要與判讀`，`AI 摘要與判讀` 下一行是 `AI 推論`；`ai` 為 done 時有 `模型 <ai.model> · 提示版本 <ai.prompt_version>` 開頭的行，否則有 `此則尚未產生 AI 摘要與判讀。` |
+| N6 | CI | 詳情分欄 | `news-detail-1280.txt` 有整行 `來源事實` 與 `AI 摘要與判讀`，`AI 摘要與判讀` 下一行是 `AI 推論`；`ai` 為 done 時有 `模型 <ai.model> · 提示版本 <ai.prompt_version>` 開頭的行，同一行有 `產生時間 <ai.generated_at 的台北時間 YYYY/MM/DD HH:mm>`（`generated_at` 沒有時區為失敗，#234），否則有 `此則尚未產生 AI 摘要與判讀。` |
 
 ## 陷阱
 

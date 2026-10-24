@@ -51,9 +51,7 @@ TAIPEI = timezone(timedelta(hours=8))
 
 # A check that fails because of a known product defect: it is reported, but does
 # not fail the run.  When it passes the run fails, so the entry is removed with the fix.
-KNOWN_FAILURES: dict[tuple[str, str], str] = {
-    ("today", "T6"): "https://github.com/YiCheng0608/stock-lab/issues/233",
-}
+KNOWN_FAILURES: dict[tuple[str, str], str] = {}
 
 API_ATTEMPTS = 3
 API_TIMEOUT_S = 30
@@ -633,6 +631,16 @@ def usable_ai(ai: Any) -> bool:
     )
 
 
+DIRECTION_LABELS = {"positive": "可能正向", "negative": "可能負向", "mixed": "正負互見"}
+
+
+def ai_direction_label(ai: dict) -> str:
+    """directionView(aiDirection(ai)) in frontend/src/news/newsView.ts."""
+
+    direction = None if ai.get("unsupported") else ai.get("impact_direction")
+    return DIRECTION_LABELS.get(direction, "影響尚未判定")
+
+
 @check("today", "T6")
 def t6(run: Run) -> str:
     text = run.text(TODAY)
@@ -648,23 +656,36 @@ def t6(run: Run) -> str:
         starts.append(i)
     end = text.find("熱門族群")
     bounds = sorted(starts) + [end if end >= 0 else len(text.lines)]
-    problems, marked = [], 0
+    problems, marked = [], []
     for item, start in zip(news, starts):
         detail = run.get(f"news/{item['id']}", f"news-{item['id']}.json")
-        if not usable_ai(detail.get("ai")):
+        ai = detail.get("ai")
+        if not usable_ai(ai):
             continue
+        if item.get("ai") != ai:
+            problems.append(
+                f"id {item['id']} 的 dashboard.news ai 與 /api/news/<id> 不同"
+            )
         stop = bounds[bounds.index(start) + 1]
         card = text.lines[start:stop]
-        if "影響尚未判定" in card:
+        want = ai_direction_label(ai)
+        if "AI 推論" not in card:
             problems.append(
-                f"id {item['id']} 有 AI 判讀卻顯示 `影響尚未判定`（{text.at(start)}）"
+                f"id {item['id']} 有 AI 判讀但卡片沒有 `AI 推論`（{text.at(start)}）"
             )
-        elif "AI 推論" not in card:
-            problems.append(f"id {item['id']} 有 AI 判讀但卡片沒有 `AI 推論`")
+            continue
+        shown = card[card.index("AI 推論") - 1]
+        if shown != want:
+            problems.append(
+                f"id {item['id']} 卡片方向 `{shown}`，AI 方向 `{want}`（{text.at(start)}）"
+            )
         else:
-            marked += 1
+            marked.append(f"{item['id']} `{want}`")
     expect(not problems, "；".join(problems))
-    return f"前 {len(news)} 則標題都在；有 AI 判讀的 {marked} 張卡有 `AI 推論`"
+    return (
+        f"前 {len(news)} 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`："
+        + ("、".join(marked) or "無")
+    )
 
 
 def candidates(run: Run) -> dict:
@@ -890,6 +911,18 @@ def n5(run: Run) -> str:
     return f"最新新聞 {published:%F %H:%M}（台北）≤ 現在；國內第一則 `{text.lines[i]}`"
 
 
+def taipei_minute(value: Any) -> str | None:
+    """Same as formatTaipeiInstant in frontend/src/news/newsView.ts: None without a zone."""
+
+    if not isinstance(value, str) or not re.search(r"(?:Z|[+-]\d\d:\d\d)$", value):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return f"{parsed.astimezone(TAIPEI):%Y/%m/%d %H:%M}"
+
+
 @check("news", "N6")
 def n6(run: Run) -> str:
     news_id = news_detail_id(run)
@@ -905,11 +938,19 @@ def n6(run: Run) -> str:
     ai = detail.get("ai") or {}
     if ai.get("status") == "done":
         prefix = f"模型 {ai.get('model')} · 提示版本 {ai.get('prompt_version')}"
+        line = text.find_where(lambda line: line.startswith(prefix))
+        expect(line >= 0, f"缺 `{prefix}` 開頭的行")
+        generated = taipei_minute(ai.get("generated_at"))
         expect(
-            text.find_where(lambda line: line.startswith(prefix)) >= 0,
-            f"缺 `{prefix}` 開頭的行",
+            generated is not None,
+            f"ai.generated_at {ai.get('generated_at')!r} 沒有時區",
         )
-        return f"id {news_id}：來源事實／AI 摘要與判讀分欄，`{prefix}`"
+        stamp = f"產生時間 {generated}"
+        expect(
+            stamp in text.lines[line],
+            f"{text.at(line)} 沒有 `{stamp}`：{text.lines[line]!r}",
+        )
+        return f"id {news_id}：來源事實／AI 摘要與判讀分欄，`{prefix} · {stamp}`"
     expect(text.has("此則尚未產生 AI 摘要與判讀。"), "ai 未完成，缺空狀態文案")
     return f"id {news_id}：AI 未完成，顯示空狀態"
 
