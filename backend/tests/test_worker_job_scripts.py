@@ -3,7 +3,8 @@
 The wrapper runs against a fake interpreter (a .cmd that logs its arguments and
 exits with a chosen code), so no worker, DB, network or Claude call is involved.
 The registration script is only ever run with -WhatIf: nothing is registered.
-Windows PowerShell 5.1 is required, so these tests are skipped on other systems.
+Windows PowerShell 5.1 is required, so the tests that run a script are skipped
+on other systems.
 
 The wrapper inspects the git dir of the checkout it lives in (index.lock or
 MERGE_HEAD means a git operation is in progress and the job is skipped). Run from
@@ -12,6 +13,14 @@ uncommitted merge failed six of them every time, and a git command holding
 index.lock for a moment failed a few at random. So the harness copies the scripts
 into a project tree of its own under tmp_path, with a clean .git, and only the
 tests that mean to exercise git_busy put a marker there.
+
+The wrapper also used to read free memory through WMI (Get-CimInstance). On a
+busy machine WMI cancels those calls (0x80041032 in the WMI-Activity event log),
+the wrapper stopped before its first log line, and 13 to 15 of these tests failed
+in whole-suite runs; it looked like interference from the test file before this
+one (#246). Every wrapper run here has Get-CimInstance and Get-WmiObject replaced
+by a module that throws, so the wrapper must work without WMI; a source check that
+also runs on Linux CI refuses WMI cmdlets in the wrapper.
 """
 
 from __future__ import annotations
@@ -27,9 +36,6 @@ from types import SimpleNamespace
 import pytest
 
 POWERSHELL = shutil.which("powershell.exe") if sys.platform == "win32" else None
-pytestmark = pytest.mark.skipif(
-    POWERSHELL is None, reason="Windows PowerShell is required"
-)
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 SCRIPTS = ("Invoke-WorkerJob.ps1", "Register-WorkerSchedule.ps1")
@@ -52,9 +58,20 @@ echo llm-stderr-line 1>&2
 exit /b %FAKE_NEWS_LLM_EXIT%
 """
 
+# Found first on PSModulePath, so command lookup picks these over CimCmdlets and
+# Microsoft.PowerShell.Management: any WMI call fails the way a cancelled one does.
+WMI_CANCELLED = "Call cancelled (WMI 0x80041032, simulated by the test harness)"
+NO_WMI_MODULE = f"""
+function Get-CimInstance {{ throw '{WMI_CANCELLED}' }}
+function Get-WmiObject {{ throw '{WMI_CANCELLED}' }}
+Export-ModuleMember -Function Get-CimInstance, Get-WmiObject
+"""
+
 
 @pytest.fixture
 def harness(tmp_path):
+    if POWERSHELL is None:
+        pytest.skip("Windows PowerShell is required")
     # The project tree the scripts run in: their own copies (the wrapper finds its
     # checkout through its own location) and a clean .git. Never the real checkout.
     project = tmp_path / "project"
@@ -73,6 +90,11 @@ def harness(tmp_path):
     data.mkdir()
     (data / "stock.db").touch()
     calls = tmp_path / "calls.log"
+    no_wmi = tmp_path / "no-wmi"
+    (no_wmi / "NoWmi").mkdir(parents=True)
+    (no_wmi / "NoWmi" / "NoWmi.psm1").write_text(NO_WMI_MODULE, encoding="utf-8")
+    # os.environ keys are upper case on Windows.
+    module_path = os.pathsep.join([str(no_wmi), os.environ.get("PSMODULEPATH", "")])
 
     def git_state(marker, *, linked=False):
         """Leave `marker` (index.lock, MERGE_HEAD) in the project's git dir.
@@ -95,6 +117,7 @@ def harness(tmp_path):
             "FAKE_LOG": str(calls),
             "FAKE_NEWS_EXIT": str(news_exit),
             "FAKE_NEWS_LLM_EXIT": str(llm_exit),
+            "PSMODULEPATH": module_path,
         }
         environment.pop("STOCK_CLAUDE_CLI", None)
         environment.update(env or {})
@@ -170,6 +193,7 @@ def harness(tmp_path):
         git_state=git_state,
         root=tmp_path,
         fake=fake,
+        module_path=module_path,
     )
 
 
@@ -295,6 +319,71 @@ def test_a_clean_git_dir_does_not_block_the_job(harness):
     result = harness.invoke("news")
     assert result.steps == ["news", "news-llm"]
     assert skipped_line(result.log) is None
+
+
+# WMI cancelled calls (#246) ----------------------------------------------------
+
+
+def test_the_harness_makes_every_wmi_call_fail(harness):
+    # Without this the WMI-free check below would pass vacuously.
+    completed = subprocess.run(
+        [
+            POWERSHELL,
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "foreach ($c in 'Get-CimInstance', 'Get-WmiObject') {"
+            ' try { & $c Win32_OperatingSystem | Out-Null; "$c ok" }'
+            ' catch { "$c failed: $($_.Exception.Message)" } }',
+        ],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        env={**os.environ, "PSMODULEPATH": harness.module_path},
+        timeout=120,
+        check=False,
+    )
+    assert completed.stdout.splitlines() == [
+        f"Get-CimInstance failed: {WMI_CANCELLED}",
+        f"Get-WmiObject failed: {WMI_CANCELLED}",
+    ], completed.stdout + completed.stderr
+
+
+def test_the_wrapper_reads_free_memory_without_wmi(harness):
+    result = harness.invoke("news")
+    assert result.code == 0, (
+        "tools/Invoke-WorkerJob.ps1 must not use WMI (Get-CimInstance, Get-WmiObject):"
+        " busy machines cancel the call and the job never starts (#246)\n"
+        + result.stdout
+        + result.stderr
+    )
+    assert result.steps == ["news", "news-llm"]
+    free_mb = re.search(r" free_mb=(\d+)", result.log.splitlines()[0])
+    assert free_mb and int(free_mb.group(1)) > 0
+
+
+# Cmdlets, aliases and type accelerators that go through WMI.
+WMI_COMMAND = re.compile(
+    r"\b(Get-CimInstance|Get-CimAssociatedInstance|Invoke-CimMethod|Get-WmiObject"
+    r"|Invoke-WmiMethod|gcim|gwmi)\b|\[wmi(class|searcher)?\]",
+    re.IGNORECASE,
+)
+
+
+def test_the_wrapper_source_has_no_wmi_call():
+    # Runs on Linux CI too, where the script tests above are skipped.
+    lines = (TOOLS / "Invoke-WorkerJob.ps1").read_text(encoding="utf-8").splitlines()
+    found = [
+        f"tools/Invoke-WorkerJob.ps1:{number}: {line.strip()}"
+        for number, line in enumerate(lines, start=1)
+        if WMI_COMMAND.search(line)
+    ]
+    assert not found, (
+        "WMI in the scheduled job wrapper: busy machines cancel the call and the job"
+        " never starts (#246)\n" + "\n".join(found)
+    )
 
 
 def test_daily_log_layout_is_unchanged(harness):

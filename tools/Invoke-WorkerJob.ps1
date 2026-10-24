@@ -110,7 +110,11 @@ function Get-GitDir([string]$root) {
 }
 
 $skipReason = $null
-$freeMB = [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024)
+# Available physical memory from GlobalMemoryStatusEx, not WMI: on a busy machine
+# WMI cancels Win32_OperatingSystem queries (0x80041032), and the job then stopped
+# before writing a single log line (#246).
+Add-Type -AssemblyName Microsoft.VisualBasic
+$freeMB = [int]((New-Object Microsoft.VisualBasic.Devices.ComputerInfo).AvailablePhysicalMemory / 1MB)
 if ($freeMB -lt $MinFreeMemoryGB * 1024) { $skipReason = 'low_memory' }
 $gitDir = Get-GitDir $projectRoot
 if (-not $skipReason -and $gitDir) {
