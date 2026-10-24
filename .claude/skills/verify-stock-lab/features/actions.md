@@ -28,15 +28,15 @@
 
 ## 檢查
 
-| 編號 | 檢查 | 怎麼判 |
-| --- | --- | --- |
-| A1 | 頁面可用 | 每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| A2 | 庫存區 | `actions-1280.txt` 有整行 `我的庫存`；`portfolio.json` 的 `items` 空時有整行 `尚未建立庫存。`，否則 `記錄來源 ` 開頭的行數 = `items` 數 |
-| A3 | 分頁與總數 | `第 1 頁 · 本頁 <items 數> 筆 · 共 <meta.total 千分位> 筆` 為整行 |
-| A4 | 卡片資料日 | `查看個股詳情 →` 的行數 k（展開的待補區也算）= `^資料日 [0-9]{4}/[0-9]{2}/[0-9]{2}$` 的行數；這些日期都等於 `meta.data_as_of` 的 `YYYY/MM/DD` 或更早，且 `meta.data_as_of` 等於 `facts.json` 的 `market_latest_trading_date` |
-| A5 | 沒有未標示的推論 | `actions-1280.txt` 不含 `AI 推論` 與 `（推論）` 兩個字串（`grep -F`；本頁不放 LLM 產出；出現就判失敗並記行號） |
-| A6 | 追蹤詳情 | `action-detail-1280.txt` 有整行 `<S>` 與 `研究動作`；`decision_summary` 非 null 時有 `資料日：` 開頭的行，其日期等於 `decision_summary.data_cutoff` 的 `YYYY/MM/DD`（前 10 字）；null 時有 `尚無行動摘要。` |
-| A7 | 路徑一致 | `action-detail` 頁首代號與名稱等於個股頁（`stock.json` 的 `instrument.symbol`、`name`） |
+| 編號 | 類型 | 檢查 | 怎麼判 |
+| --- | --- | --- | --- |
+| A1 | CI | 頁面可用 | 每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
+| A2 | CI | 庫存區 | `actions-1280.txt` 有整行 `我的庫存`；`portfolio.json` 的 `items` 空時有整行 `尚未建立庫存。`，否則 `記錄來源 ` 開頭的行數 = `items` 數 |
+| A3 | CI | 分頁與總數 | `第 1 頁 · 本頁 <items 數> 筆 · 共 <meta.total 千分位> 筆` 為整行 |
+| A4 | CI | 卡片資料日 | `查看個股詳情 →` 的行數 k（展開的待補區也算）= `^資料日 [0-9]{4}/[0-9]{2}/[0-9]{2}$` 的行數；這些日期都等於 `meta.data_as_of` 的 `YYYY/MM/DD` 或更早，且 `meta.data_as_of` 等於 `facts.json` 的 `market_latest_trading_date` |
+| A5 | CI | 沒有未標示的推論 | `actions-1280.txt` 不含 `AI 推論` 與 `（推論）` 兩個字串（`grep -F`；本頁不放 LLM 產出；出現就判失敗並記行號） |
+| A6 | CI | 追蹤詳情 | `action-detail-1280.txt` 有整行 `<S>` 與 `研究動作`；`decision_summary` 非 null 時有 `資料日：` 開頭的行，其日期等於 `decision_summary.data_cutoff` 的 `YYYY/MM/DD`（前 10 字）；null 時有 `尚無行動摘要。` |
+| A7 | CI | 路徑一致 | `action-detail` 頁首代號與名稱等於個股頁（`stock.json` 的 `instrument.symbol`、`name`） |
 
 ## 陷阱
 

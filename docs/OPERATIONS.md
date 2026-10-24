@@ -102,6 +102,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | `node tools/ops/screenshot.cjs --url <頁> --out <目錄>` | headless Edge（或 Chrome）截 1280 與 390 全頁圖並存頁面文字；等骨架消失與請求結束、展開 `details`，可 `--click` 切分頁；印出 `scrollWidth` 與錯誤 |
 | `bash tools/ops/push_pr_assets.sh --issue <n> --dir <目錄>` | 不動 checkout，把目錄推到 `pr-assets/<n>`（第一次 orphan commit，之後疊加不強推），印出可貼 PR 的連結 |
 | `python tools/verify/fixture_db.py --dest <空目錄>` | 產生 verify 用的固定假資料庫 `<目錄>/stock.db`：走 `init-db` 的 migration 到 head，寫入 `tools/verify/fixture_data.py` 的虛構資料（五個主導航都有內容，每頁預期寫在 `EXPECTED`）；印出 `alembic_version`、各表列數與內容雜湊，兩次產生結果相同。schema 同步與 API 預期由 `backend/tests/test_verify_fixture.py` 檢查 |
+| `python tools/verify/page_checks.py --api <API> --web <preview> --db <stock.db> --out <目錄> [--fixture]` | 跑 `features/*.md` 標「CI」的全部檢查：抓 API、以 `screenshot.cjs` 截圖（4 個瀏覽器並行）、比對頁面文字與 API／`db_facts.py`；`--fixture` 另比對 `EXPECTED` 並對無資料的 9204 跑個股檢查。輸出 `summary.md`、`results.json`、`api/`、`shots/`，有失敗 exit 1（`KNOWN_FAILURES` 列的已知產品缺陷除外）。preview 用 `tools/verify/vite.preview.mjs`（`VERIFY_DIST`、`VERIFY_WEB_PORT`、`VERIFY_API_URL`）。CI `verify` job 每次以假資料庫跑全部五頁，結果與截圖上傳成 artifact `verify-<attempt>` |
 | `python tools/verify/freeze_candidates.py [--check]` | 以現行 `worker.candidates` 重算假資料的每日候選並寫回 `tools/verify/fixture_candidates.json`；`--check` 只比對（後端測試會跑），改訊號、族群或候選評分後要重跑 |
 
 ## 6. 排程

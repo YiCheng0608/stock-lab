@@ -32,15 +32,15 @@
 
 ## 檢查
 
-| 編號 | 檢查 | 怎麼判 |
-| --- | --- | --- |
-| G1 | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| G2 | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
-| G3 | 榜單內容 | 1280 表格：以 `排名\t族群` 開頭的表頭存在；`items[0].display_name` 與 `items[-1].display_name` 各為整行出現。390：`#1` 為整行、下一行為 `items[0].display_name` |
-| G4 | 題材建議推論標記 | 看 `themes-1280.txt`。`items` 非空時：整行 `待核實` 的行數 ≥ `items` 數，整行 `AI 推論` 的行數 ≥ `items` 數，且 `<meta.total> 個建議` 開頭的行存在；空時空資料文案為整行出現 |
-| G5 | 詳情日期 | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
-| G6 | 詳情成員 | 表頭 `代號\t名稱\t市場\t角色\t收盤\t資料日期` 存在；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計） |
-| G7 | 今日到族群一致 | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
+| 編號 | 類型 | 檢查 | 怎麼判 |
+| --- | --- | --- | --- |
+| G1 | CI | 頁面可用 | 每張截圖 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
+| G2 | CI | 榜單資料日期標記 | `themes-1280.txt` 整行 `產業榜 · 共 <total> 個族群` 的下一行是 `資料 <B/>`；`themes-theme-1280.txt` 的 `題材榜 · 共 <total> 個族群` 同樣；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date` |
+| G3 | CI | 榜單內容 | 1280 表格：以 `排名\t族群` 開頭的表頭存在；`items[0].display_name` 與 `items[-1].display_name` 各為整行出現。390：`#1` 為整行、下一行為 `items[0].display_name` |
+| G4 | CI | 題材建議推論標記 | 看 `themes-1280.txt`。`items` 非空時：整行 `待核實` 的行數 ≥ `items` 數，整行 `AI 推論` 的行數 ≥ `items` 數，且 `<meta.total> 個建議` 開頭的行存在；空時空資料文案為整行出現 |
+| G5 | CI | 詳情日期 | `theme-detail-1280.txt` 整行 `熱度走勢` 與 `五分項` 的下一行都是 `資料 <B/>`；有 `成員資料截至 <M/>` 這行 |
+| G6 | CI | 詳情成員 | 表頭 `代號\t名稱\t市場\t角色\t收盤\t資料日期` 存在；`theme-members.json` 第一個成員的 `symbol` 與 `name` 出現在同一行；`第 1／<total_pages> 頁 · 共 <meta.total> 檔` 存在（`total_pages` 以每頁 30 檔計；只有 1 頁時 `MemberPager` 只顯示 `共 <meta.total> 檔`） |
+| G7 | CI | 今日到族群一致 | 今日頁 `#1` 的族群名稱 = 本頁產業榜 `items[0].display_name` = `theme-detail.json` 的 `theme.display_name`，且這個名稱在 `theme-detail-1280.txt` 的 `← 回到…榜` 之後、`排名` 之前為整行出現 |
 
 ## 陷阱
 

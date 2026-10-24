@@ -125,10 +125,76 @@ jobs:
       - run: pnpm --dir frontend run test:ci
       - run: pnpm --dir frontend run build
 
+  # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
+  # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      API_PORT: '18000'
+      WEB_PORT: '14000'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.14'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      # The runner has no CJK monospace font; without it the screenshots show boxes (the text checks do not care).
+      - name: Install
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null
+          python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
+          npm install --global pnpm@10.18.3
+          pnpm --dir frontend install --frozen-lockfile
+          echo "V=$RUNNER_TEMP/verify" >> "$GITHUB_ENV"
+      - name: Fixture database
+        run: |
+          mkdir -p "$V/logs"
+          python -B tools/verify/fixture_db.py --dest "$V/db" > "$V/logs/fixture.json"
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE: /api
+        run: node node_modules/vite/bin/vite.js build --outDir "$V/dist" --emptyOutDir > "$V/logs/build.log" 2>&1
+      # Both servers outlive this step; the runner stops them when the job ends.
+      - name: Start API and preview
+        run: |
+          STOCK_DATA_DIR="$V/db" STOCK_DB_PATH="$V/db/stock.db" STOCK_RAW_DIR="$V/db/raw" PYTHONPATH=backend \
+            nohup python -B -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port "$API_PORT" > "$V/logs/api.log" 2>&1 &
+          (cd frontend && VERIFY_DIST="$V/dist" VERIFY_WEB_PORT="$WEB_PORT" VERIFY_API_URL="http://127.0.0.1:$API_PORT" \
+            nohup node node_modules/vite/bin/vite.js preview --config ../tools/verify/vite.preview.mjs > "$V/logs/preview.log" 2>&1 &)
+          curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-connrefused --retry-all-errors "http://127.0.0.1:$API_PORT/api/health"
+          curl -fsS -o /dev/null --retry 60 --retry-delay 1 --retry-connrefused --retry-all-errors "http://127.0.0.1:$WEB_PORT/api/health"
+      - name: Checks
+        timeout-minutes: 8
+        run: >-
+          python -B tools/verify/page_checks.py --fixture --db "$V/db/stock.db" --out "$V/out"
+          --api "http://127.0.0.1:$API_PORT" --web "http://127.0.0.1:$WEB_PORT"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f "$V/out/summary.md" ]; then cat "$V/out/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+          tail -n 20 "$V/logs/api.log" "$V/logs/preview.log" || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verify-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verify/out
+            ${{ runner.temp }}/verify/logs
+          if-no-files-found: warn
+          retention-days: 14
+
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, frontend]
+    needs: [changes, repository, pr, backend, frontend, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -142,6 +208,7 @@ jobs:
           jobs = json.loads(os.environ['RESULTS'])
           assert jobs['changes']['result'] == 'success', jobs
           assert jobs['repository']['result'] == 'success', jobs
+          assert jobs['verify']['result'] == 'success', jobs
           pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
           assert jobs['pr']['result'] == pr, jobs
           for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
