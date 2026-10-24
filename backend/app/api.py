@@ -57,6 +57,7 @@ from .models import (
     StrategyVersion,
     TechnicalFeature,
     ThemeGroup,
+    TrackingPlan,
 )
 from worker.pipeline import _group_board, summarize_backtest
 from worker.backfill import (
@@ -105,6 +106,15 @@ from .stock_bars import (
     MAX_LIMIT as BARS_MAX_LIMIT,
     build_stock_bars,
 )
+from .tracking_plan_view import (
+    PlanScope,
+    plan_dict,
+    plan_list_query,
+    plan_sessions,
+    plan_summary,
+    tracking_meta,
+)
+from .tracking_plans import PlanRequestError, cancel_plan, create_plan, open_plan_ids
 
 
 router = APIRouter(prefix=API_PREFIX)
@@ -2300,6 +2310,11 @@ def stock_detail(
         else None
     )
     if payload["decision_summary"]:
+        # The stock page's "加入追蹤" needs to know which strategy rows are tracked.
+        strategies = payload["decision_summary"].get("strategies") or []
+        tracked = open_plan_ids(db, [row["signal_id"] for row in strategies])
+        for row in strategies:
+            row["open_plan_id"] = tracked.get(row["signal_id"])
         payload["product_time"] = payload["decision_summary"].get("product_time")
         payload["response_generated_at"] = payload["decision_summary"].get(
             "response_generated_at"
@@ -3205,31 +3220,80 @@ def _tracking_rows(db: Session, signal_key: str | None = None) -> list[dict[str,
     return rows
 
 
+class PlanInput(BaseModel):
+    signal_id: StrictInt
+    daily_candidate_id: StrictInt | None = None
+
+
+def _plan_error(error: PlanRequestError) -> HTTPException:
+    return HTTPException(status_code=error.status_code, detail=error.code)
+
+
 @router.get("/tracking")
-def tracking(db: Session = Depends(get_db)) -> dict[str, Any]:
-    rows = _tracking_rows(db)
-    settlements = db.scalars(
-        select(SignalSettlement)
-        .order_by(desc(SignalSettlement.settlement_date), desc(SignalSettlement.id))
-        .limit(1000)
-    ).all()
+def tracking(
+    status: PlanScope = "all",
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """User tracking plans (V1_SPEC 使用者追蹤計畫): open first, then the latest ended.
+
+    The system signal tracking of one signal stays at /tracking/{signal_key}.
+    """
+    query, order_by = plan_list_query(status)
+    rows, total = _paginate_query(
+        db, query, page=page, page_size=page_size, order_by=order_by
+    )
     return {
-        "rows": rows,
-        "settlements": [
-            {
-                **settlement_dict(item),
-                "signal_key": db.get(Signal, item.signal_id).signal_key
-                if db.get(Signal, item.signal_id)
-                else None,
-            }
-            for item in settlements
-        ],
-        "summary": {
-            "evaluation_rows": len(rows),
-            "settlement_rows": len(settlements),
-            "horizons": [5, 20],
-        },
+        **_page_response(
+            [plan_dict(db, plan) for plan in rows],
+            page=page,
+            page_size=page_size,
+            total=total,
+        ),
+        "summary": plan_summary(db),
+        "meta": tracking_meta(),
     }
+
+
+@router.post("/tracking")
+def add_tracking_plan(
+    plan_input: PlanInput, db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Track a conditional signal of the stock's latest data date (idempotent)."""
+    try:
+        plan, created = create_plan(
+            db, plan_input.signal_id, daily_candidate_id=plan_input.daily_candidate_id
+        )
+    except PlanRequestError as error:
+        db.rollback()
+        raise _plan_error(error) from error
+    db.commit()
+    return {"created": created, "plan": plan_dict(db, plan), "meta": tracking_meta()}
+
+
+@router.get("/tracking/plans/{plan_id}")
+def tracking_plan(plan_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    plan = db.get(TrackingPlan, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="plan_not_found")
+    return {
+        "plan": plan_dict(db, plan),
+        "sessions": plan_sessions(db, plan),
+        "meta": tracking_meta(),
+    }
+
+
+@router.post("/tracking/plans/{plan_id}/cancel")
+def cancel_tracking_plan(plan_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Cancel an open plan (idempotent); the plan and its sessions are kept."""
+    try:
+        plan = cancel_plan(db, plan_id)
+    except PlanRequestError as error:
+        db.rollback()
+        raise _plan_error(error) from error
+    db.commit()
+    return {"plan": plan_dict(db, plan), "meta": tracking_meta()}
 
 
 @router.get("/tracking/{signal_key}")
