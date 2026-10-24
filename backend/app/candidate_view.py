@@ -255,7 +255,10 @@ def candidate_list(
         "status": run.status,
         "trading_date": run.trading_date.isoformat(),
         "score_version": run.score_version,
-        "computed_at": run.computed_at.isoformat() if run.computed_at else None,
+        # computed_at is UTC-naive; the instant carries its offset.
+        "computed_at": run.computed_at.replace(tzinfo=timezone.utc).isoformat()
+        if run.computed_at
+        else None,
         "evaluated_signals": run.evaluated_signals,
         "pool_count": run.pool_count,
         "candidate_count": run.candidate_count,
