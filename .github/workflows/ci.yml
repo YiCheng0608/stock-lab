@@ -145,8 +145,10 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      # The runner has no CJK monospace font; without it the screenshots show boxes (the text checks do not care).
       - name: Install
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk > /dev/null
           python -m pip install --disable-pip-version-check --no-cache-dir -r backend/requirements.txt -c backend/validation-requirements.lock.txt
           npm install --global pnpm@10.18.3
           pnpm --dir frontend install --frozen-lockfile
