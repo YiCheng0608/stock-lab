@@ -17,7 +17,9 @@ from sqlalchemy.pool import StaticPool
 from app.api import get_db, router
 from app.db import Base, enable_sqlite_foreign_keys
 from app.domain import (
+    CANDIDATE_SCORE,
     CANDIDATE_SCORE_V1,
+    CANDIDATE_SCORE_V2,
     CANDIDATE_SCORE_VERSION,
     weighted_available_mean,
 )
@@ -35,7 +37,7 @@ from app.models import (
     Signal,
     ThemeGroup,
 )
-from worker import pipeline
+from worker import news_llm, pipeline
 from worker.candidates import _chip_inputs, compute_daily_candidates
 
 
@@ -51,6 +53,9 @@ def _weekdays(end: date, count: int) -> list[date]:
 T = date(2026, 9, 4)
 DAYS = _weekdays(T, 25)
 CLOSE = 100.0
+NEWS_PROMPT_VERSION = CANDIDATE_SCORE["components"]["news_sentiment"][
+    "llm_prompt_version"
+]
 
 
 @pytest.fixture
@@ -250,7 +255,7 @@ def news(db, symbols, direction, *, published=None, event_date=None, key=None):
         db.add(
             NewsLlmResult(
                 news_item_id=item.id,
-                prompt_version="news_v1",
+                prompt_version=NEWS_PROMPT_VERSION,
                 llm_input_hash="x" * 64,
                 llm_status="done",
                 ai_impact_direction=direction,
@@ -264,14 +269,18 @@ def rows(db):
     return db.scalars(select(DailyCandidate).order_by(DailyCandidate.rank)).all()
 
 
+def _snapshot_sha256(config):
+    snapshot = json.dumps(config, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
+
+
 def test_config_snapshot_is_pinned_and_weights_sum_to_one():
     """Changing candidate_score_v1 without a new version must fail here."""
 
-    snapshot = json.dumps(CANDIDATE_SCORE_V1, sort_keys=True, ensure_ascii=False)
-    assert hashlib.sha256(snapshot.encode("utf-8")).hexdigest() == (
+    assert _snapshot_sha256(CANDIDATE_SCORE_V1) == (
         "bf477ab5a61bb4aa8c1d6962ebe19d21b4c608083fe3593b718dbbc429a262c8"
     )
-    assert CANDIDATE_SCORE_V1["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v1"
+    assert CANDIDATE_SCORE_V1["name"] == "candidate_score_v1"
     assert sum(CANDIDATE_SCORE_V1["weights"].values()) == pytest.approx(1.0)
     assert CANDIDATE_SCORE_V1["weights"] == {
         "technical": 0.35,
@@ -285,6 +294,29 @@ def test_config_snapshot_is_pinned_and_weights_sum_to_one():
     assert (
         CANDIDATE_SCORE_V1["components"]["technical"]["items"]["risk_reward"]["weight"]
         == 0.0
+    )
+
+
+def test_v2_differs_from_v1_only_in_its_name_and_news_prompt():
+    """Changing candidate_score_v2 without a new version must fail here (#262)."""
+
+    assert _snapshot_sha256(CANDIDATE_SCORE_V2) == (
+        "461c472b405da8aa2609ec7c850fa3890faa89f838a8a08a2d99ff8fc3f964d3"
+    )
+    assert CANDIDATE_SCORE is CANDIDATE_SCORE_V2
+    assert CANDIDATE_SCORE["name"] == CANDIDATE_SCORE_VERSION == "candidate_score_v2"
+    expected = copy.deepcopy(CANDIDATE_SCORE_V1)
+    expected["name"] = "candidate_score_v2"
+    expected["components"]["news_sentiment"]["llm_prompt_version"] = "news_v2"
+    assert CANDIDATE_SCORE_V2 == expected
+
+
+def test_score_reads_the_news_prompt_version_the_news_llm_writes():
+    """A news prompt upgrade without a score version would leave news unscored."""
+
+    assert (
+        CANDIDATE_SCORE["components"]["news_sentiment"]["llm_prompt_version"]
+        == news_llm.PROMPT_VERSION
     )
 
 

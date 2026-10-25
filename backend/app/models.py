@@ -712,7 +712,9 @@ class NewsLlmResult(Base):
 
     Kept apart from NewsItem so rule relations (``symbols_json``) and the
     source summary are never overwritten; a new prompt version adds rows and
-    older rows stay.  ``llm_status`` is ``done`` or ``pending`` (retried later).
+    older rows stay.  ``llm_status`` is ``done``, ``pending`` (retried later),
+    ``skipped_stale`` (too old, not sent) or ``rejected`` (failed the summary
+    check, not sent again).
     """
 
     __tablename__ = "news_llm_results"
