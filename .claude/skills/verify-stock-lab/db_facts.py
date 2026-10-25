@@ -20,7 +20,7 @@ from pathlib import Path
 # Same value as backend/app/domain.py; backend/tests/test_verify_tools.py keeps
 # them equal. This script runs on the stdlib-only tool Python, so it cannot
 # import the backend (#237).
-CANDIDATE_SCORE_VERSION = "candidate_score_v1"
+CANDIDATE_SCORE_VERSION = "candidate_score_v2"
 # Same as backend/app/domain.py PLAN_OPEN_STATUSES (kept equal by the same test).
 PLAN_OPEN_STATUSES = ("pending", "triggered")
 _OPEN = ", ".join(f"'{status}'" for status in PLAN_OPEN_STATUSES)

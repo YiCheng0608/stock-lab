@@ -24,7 +24,7 @@
           "2026-10-14",
           "2026-10-16"
         ],
-        "llm_prompt_version": "news_v1",
+        "llm_prompt_version": "news_v2",
         "news_collection_runs": 1,
         "news_items_in_window": 6,
         "llm_scored_items": 4,

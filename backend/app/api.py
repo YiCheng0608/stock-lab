@@ -1065,7 +1065,9 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
     """Latest done LLM result per news item (worker.news_llm), in two queries.
 
     The result is inference, kept apart from source facts; symbol candidates are
-    unverified and rule relations stay in ``symbols``.
+    unverified and rule relations stay in ``symbols``.  An item whose latest
+    done-or-rejected result is ``rejected`` (failed the summary check) has no
+    AI block, so an older prompt version's result is not shown in its place.
     """
 
     ids = [item.id for item in items]
@@ -1073,12 +1075,16 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
         return {}
     rows = db.scalars(
         select(NewsLlmResult)
-        .where(NewsLlmResult.news_item_id.in_(ids), NewsLlmResult.llm_status == "done")
+        .where(
+            NewsLlmResult.news_item_id.in_(ids),
+            NewsLlmResult.llm_status.in_(("done", "rejected")),
+        )
         .order_by(NewsLlmResult.llm_run_at.desc(), NewsLlmResult.id.desc())
     ).all()
     latest: dict[int, NewsLlmResult] = {}
     for row in rows:
         latest.setdefault(row.news_item_id, row)
+    latest = {key: row for key, row in latest.items() if row.llm_status == "done"}
     codes = {
         str(candidate.get("symbol", "")).partition(":")[2]
         for row in latest.values()

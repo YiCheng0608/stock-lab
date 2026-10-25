@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[`candidate_score_v1`](#candidate_score_v1)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
+本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
 ## 共通原則
 
@@ -86,7 +86,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 | group | 0.20 | 榜內 percentile（1） | 所屬合格群組 `1−(rank−1)/(同榜有排名群組數−1)` 的最大值，同榜只有 1 群組時 0.5；不再做跨股 percentile | — |
 
 - **籌碼**取 T（含）以前最後 20 根非停牌日線，最後一根必須是 T；任一籌碼欄缺、日線不足或量非正時該子項為 null。
-- **新聞**：窗口為 T−2～T 三個台北日曆日；`datetime` 精度的時間以 UTC＋8 換日，`date` 精度直接用日期。只算 `status=active`、`time_consistency=verified`、`symbols_json` 規則命中（裸代號或 `交易所:代號`）的新聞；方向取設定中 `llm_prompt_version`（目前 `news_v1`）且 `llm_status=done` 的 `ai_impact_direction`：positive +1、negative −1、mixed 0，unknown 與未判讀不計分（計入 `unscored`）。原值為加總；窗口內有任一 `run_type=news` 的 success／partial 收集 run（`run_date` 為台北日期，`worker.cli news` 預設取台北今日）時，沒有關聯新聞是有效 0，否則全市場此分項為 null（`news_collection_missing`）。多數股票原值為 0，mid-rank 會落在中段；`instruments_with_news` 記有新聞的股票數。只用計算當下 DB 已有的資料，同日不重算。
+- **新聞**：窗口為 T−2～T 三個台北日曆日；`datetime` 精度的時間以 UTC＋8 換日，`date` 精度直接用日期。只算 `status=active`、`time_consistency=verified`、`symbols_json` 規則命中（裸代號或 `交易所:代號`）的新聞；方向取設定中 `llm_prompt_version`（v1 為 `news_v1`，[v2](#candidate_score_v2) 為 `news_v2`）且 `llm_status=done` 的 `ai_impact_direction`：positive +1、negative −1、mixed 0，unknown 與未判讀不計分（計入 `unscored`）。原值為加總；窗口內有任一 `run_type=news` 的 success／partial 收集 run（`run_date` 為台北日期，`worker.cli news` 預設取台北今日）時，沒有關聯新聞是有效 0，否則全市場此分項為 null（`news_collection_missing`）。多數股票原值為 0，mid-rank 會落在中段；`instruments_with_news` 記有新聞的股票數。只用計算當下 DB 已有的資料，同日不重算。
 - **族群**：群組須 active、T 日成員有效、榜別為產業或題材（新上市觀察與 ETF 分區不算），且 T 日分數列符合 `app.decision._qualified_groups_for_instrument` 的條件（`complete`、合格成員 ≥3、有排名、TAIEX 基準、非 ETF 榜）；不以較早日的分數替代。分項 JSON 記所取群組、榜別、排名與同榜群組數。
 
 **總分與名單**：總分 = `Σ wᵢ·sᵢ / Σ wᵢ`，只對非 null 分項（重新正規化），`weight_coverage = Σ wᵢ（非 null）` 一併保存；technical 必須有值且 `weight_coverage ≥ 0.65`，否則排除（`insufficient_score_coverage`）；門檻只看權重合計，不另外要求 chips 有值（可行動訊號本身已要求籌碼輸入）。同一標的兩策略都入池時只留總分高者（同分取 breakout），另一筆記在分項 JSON 的 `alternatives`。排序鍵：總分 desc → technical desc → chips desc → `exchange` asc → `symbol` asc。取前 20；少於 10 檔照實際數量；零檔是合法結果，原因 `no_actionable_signals`（T 日沒有可行動訊號）或 `all_excluded`（可行動訊號全被排除）。T 日沒有任何訊號時回 `no_data`（`no_signals_for_date`）且不寫列，待 analyze 補上後再算。
@@ -110,6 +110,10 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 - **執行**：`daily` 最後一步 `candidate_notes`（candidates 成功後），失敗不影響 daily；手動 `python -m worker.cli candidate-notes`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。
 - **API**：`llm_note` 為 null（未嘗試）或 `{status, inference: true, selection, levels, risks, model, prompt_version, generated_at（帶 +00:00）, input_hash}`；優先取現行提示版本的 `done`，其次其他版本最新的 `done`，都沒有時為 `pending` 且三段文字為 null。文案見 [UI_COPY_SPEC §10](UI_COPY_SPEC.md#10-每日候選)。
 
+## candidate_score_v2
+
+目前的評分版本（`CANDIDATE_SCORE_VERSION`，[#262](https://github.com/YiCheng0608/stock-lab/issues/262)）。與 [candidate_score_v1](#candidate_score_v1) 只差兩處：`name` 為 `candidate_score_v2`，新聞分項的 `llm_prompt_version` 為 `news_v2`（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論) 的現行新聞提示）；其餘權重、子項、窗口、門檻、名單、理由、保存與 API 規則都照 v1。設定是 `domain.py` 的 `CANDIDATE_SCORE_V2`（快照與「只差兩處」由 `test_candidates.py` 釘住），`CANDIDATE_SCORE` 指向它。新聞提示再升版時本版也要升版：測試 `test_score_reads_the_news_prompt_version_the_news_llm_writes` 要求評分讀的版本等於 `worker.news_llm.PROMPT_VERSION`，否則新版提示寫的方向不會被計分。`/api/candidates` 與個股 `candidate` 只讀目前版本的 run，v1 的 run 與列保留不改。換版的 T 日窗口內若有只做過 `news_v1` 判讀的新聞，這些新聞記 `unscored`。
+
 ## 新聞題材建議
 
 新聞 AI 判讀（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）的 `theme_candidates` 彙整成待核實的題材建議。建議是 LLM 推論：不計分、不排名、不寫 `theme_groups`／`group_memberships`／題材表，也不作為候選或行動的理由；人工核實與納入流程見[題材表](INDUSTRY_CLASSIFICATION.md#7-題材表)。實作在 `backend/worker/theme_suggestions.py`，彙整規則版本 `theme_suggestions_v1`（`app.theme_suggestions.AGGREGATION_VERSION`），規則改變要升版。
@@ -117,7 +121,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 - **來源**：`news_llm_results` 中 `llm_status=done` 且 `ai_unsupported` 不為 true 的列，對應的 `news_items.status=active`；`pending`、`skipped_stale` 與資訊不足（unsupported）的判讀不取。
 - **合併**：同一提示版本內，以題材名的 NFKC 正規化、去除所有空白、casefold 後的字串為鍵（`theme_key`），例如「AI 伺服器」「AI伺服器」「ＡＩ 伺服器」同一鍵；不做同義詞或模糊比對。不同提示版本各自成列，不跨版本合併。同一則新聞重複提同一鍵只算一次，保留第一個寫法與理由。
 - **欄位**（`theme_suggestions`，每個提示版本 × 鍵一列）：`display_name` 取該鍵出現最多的原始寫法（同票取新聞日最早者）；`news_count` 為不重複新聞則數；`first_news_date`／`last_news_date` 為新聞台北日期（`published_at`，缺則 `collected_at`）；`llm_models_json` 為參與判讀的模型去重清單；`prompt_version`、`aggregation_version`；`matched_group_id`：鍵與 active 的題材表題材或官方產業的 `display_name_zh`／`name` 鍵完全相同時記該群組（題材優先），代表不是新題材；`status` 固定 `pending_verification`；`computed_at` 為內容最後變動時間（UTC）。`theme_suggestion_news` 每個建議 × 新聞一列，記 `news_llm_result_id`、模型的題材寫法 `theme_text`、理由 `reason` 與新聞日期。
-- **模型把握**：`news_v1` 的題材候選沒有把握欄位，建議不帶把握值，API 回 `confidence=not_provided`；不挪用個股候選的把握。
+- **模型把握**：`news_v1`、`news_v2` 的題材候選沒有把握欄位，建議不帶把握值，API 回 `confidence=not_provided`；不挪用個股候選的把握。
 - **冪等**：每次由全部來源列重算，只寫有差異的列；內容不變不改 `computed_at`。來源不再出現的鍵與連結刪除（例如判讀改為 unsupported 或新聞失效）。
 - **執行**：`daily` 最後一步 `theme_suggestions`（collect 成功即跑，不依賴 analyze），或 `python -m worker.cli theme-suggestions`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）。
 - **API**：`GET /api/theme-suggestions?limit=&include_matched=`（`limit` 1～50，預設 20）依 `news_count` 由多到少、`last_news_date` 由新到舊排序；預設只列 `matched_group_id` 為空者，`include_matched=true` 才含與既有族群同名者（附 `matched_group`）。每項有 `status`、`inference=true`、則數、首末日期、`confidence`、版本欄位與最近 5 則關聯新聞（標題、來源、日期、題材寫法、理由）；`meta` 有 `total`、`matched_total` 與 `updated_at`。`GET /api/theme-suggestions/{id}` 回傳單一建議與全部關聯新聞。文案見 [UI_COPY_SPEC §8.6](UI_COPY_SPEC.md#86-新聞題材建議)。

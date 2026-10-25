@@ -13,16 +13,17 @@ import sys
 import time
 
 
-def _ids(prompt: str) -> list[int]:
+def _news(prompt: str) -> list[dict]:
     # The prompt text itself mentions <news>; the data block is the last one.
     body = prompt.rsplit("<news>", 1)[1].split("</news>", 1)[0]
-    return [item["id"] for item in json.loads(body)]
+    return json.loads(body)
 
 
-def _item(news_id: int) -> dict:
+def _item(news: dict) -> dict:
+    # Built from the sent title only, so the summary check passes.
     return {
-        "id": news_id,
-        "summary_zh": f"摘要{news_id}",
+        "id": news["id"],
+        "summary_zh": f"摘要：{news['title']}",
         "symbol_candidates": [
             {
                 "symbol": "TWSE:2330",
@@ -46,7 +47,7 @@ def _envelope(structured, *, is_error=False, result="") -> dict:
         "result": result,
         "structured_output": structured,
         "modelUsage": {
-            "claude-haiku-fake": {
+            "claude-sonnet-fake": {
                 "inputTokens": 10,
                 "outputTokens": 20,
                 "cacheReadInputTokens": 300,
@@ -73,7 +74,8 @@ def main() -> int:
         calls = sum(1 for _ in handle)
     modes = os.environ.get("FAKE_CLAUDE_MODES", "ok").split(",")
     mode = modes[min(calls, len(modes) - 1)]
-    ids = _ids(prompt)
+    news = _news(prompt)
+    ids = [item["id"] for item in news]
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(
             json.dumps(
@@ -116,13 +118,16 @@ def main() -> int:
     if mode == "invalid_json":
         _out("this is not json")
         return 0
-    items = [_item(news_id) for news_id in ids]
+    items = [_item(item) for item in news]
     if mode == "missing_field":
         del items[0]["impact_direction"]
     if mode == "extra_key":
         items[0]["buy_signal"] = True
     if mode == "long_reason":
         items[0]["symbol_candidates"][0]["reason"] = "理" * 121
+    if mode == "rounded_number":
+        # A number the source writes as 44.28.
+        items[0]["summary_zh"] = "營收年增44%"
     _out(json.dumps(_envelope({"items": items}), ensure_ascii=False))
     return 0
 
