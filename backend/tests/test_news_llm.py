@@ -159,7 +159,7 @@ def test_batches_are_split_and_results_saved(db, fake):
             "-p",
             "--no-session-persistence",
             "--model",
-            "haiku",
+            "sonnet",
             "--output-format",
             "json",
         ]
@@ -176,7 +176,7 @@ def test_batches_are_split_and_results_saved(db, fake):
     assert len(rows) == 30
     row = next(row for row in rows if row.news_item_id == items[0].id)
     assert row.llm_status == "done" and row.prompt_version == PROMPT_VERSION
-    assert row.llm_model == "claude-haiku-fake"
+    assert row.llm_model == "claude-sonnet-fake"
     assert row.ai_summary == f"摘要：{items[0].title}"
     assert row.ai_symbol_candidates_json == [
         {
@@ -547,7 +547,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
     assert (
         ai["impact_direction"] == "positive" and ai["prompt_version"] == PROMPT_VERSION
     )
-    assert ai["model"] == "claude-haiku-fake" and ai["generated_at"]
+    assert ai["model"] == "claude-sonnet-fake" and ai["generated_at"]
 
     listed = client.get(f"{router.prefix}/news").json()["items"]
     assert listed[0]["ai"]["inference"] is True
@@ -886,7 +886,7 @@ def test_summary_number_missing_from_the_source_is_rejected(db, fake, monkeypatc
     assert row.llm_status == "rejected" and row.prompt_version == PROMPT_VERSION
     assert row.llm_error == "summary_check: numbers 44 not in the source"
     assert row.ai_summary is None and row.ai_impact_direction is None
-    assert row.raw_payload_id is not None and row.llm_model == "claude-haiku-fake"
+    assert row.raw_payload_id is not None and row.llm_model == "claude-sonnet-fake"
     assert _results(db, news_item_id=other.id)[0].llm_status == "done"
     run = db.get(IngestionRun, result["run_id"])
     assert run.records == 1
@@ -908,7 +908,7 @@ def test_latest_rejected_result_hides_an_older_done_one(db, fake, client, monkey
         NewsLlmResult(
             news_item_id=item.id,
             prompt_version="news_v1",
-            llm_model="claude-haiku-fake",
+            llm_model="claude-sonnet-fake",
             llm_input_hash="x" * 64,
             llm_run_at=BASE_TIME,
             llm_status="done",

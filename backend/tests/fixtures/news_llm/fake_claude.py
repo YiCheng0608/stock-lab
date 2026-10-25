@@ -47,7 +47,7 @@ def _envelope(structured, *, is_error=False, result="") -> dict:
         "result": result,
         "structured_output": structured,
         "modelUsage": {
-            "claude-haiku-fake": {
+            "claude-sonnet-fake": {
                 "inputTokens": 10,
                 "outputTokens": 20,
                 "cacheReadInputTokens": 300,
