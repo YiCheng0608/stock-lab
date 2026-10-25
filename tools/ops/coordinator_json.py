@@ -18,11 +18,21 @@ value is missing or the condition is false, so a script can test the exit code.
   prs                 one line per open PR (CI rollup and mergeStateStatus)
   comments            one line per new Issue/PR comment
   utf8 FILE           exit 0 when FILE is non-empty valid UTF-8 (no stdin)
+  within A B          "yes" when A is B or under B, else "no" (no stdin)
+  guard PATH [--residual] [--home H] [--data D]... [--root R]...
+                      why close_task.sh must not delete PATH, or nothing (no stdin)
+
+Paths given to within and guard are native (on Windows, `cygpath -m` of what bash has).
+Each is compared in two forms: as written (absolute, normalised) and as the file system
+resolves it (os.path.realpath: junctions and symlinks followed, 8.3 short names
+expanded), so neither a link in the middle of a path nor a short name hides a
+protected directory (#283 review B1, B2).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import PurePosixPath
 
@@ -51,6 +61,86 @@ def _norm(path: str) -> str:
     if len(p) > 2 and p[0] == "/" and p[2:3] in ("/", "") and p[1].isalpha():
         p = p[1] + ":" + p[2:]
     return str(PurePosixPath(p)).lower()
+
+
+def _forms(path: str) -> tuple[str, str]:
+    """(as written, as resolved), both case-normalised."""
+    written = os.path.normcase(os.path.abspath(path))
+    return written, os.path.normcase(os.path.realpath(path))
+
+
+def _inside(a: str, b: str) -> bool:
+    """a is b or under b; both from _forms."""
+    a, b = (p if p.endswith(os.sep) else p + os.sep for p in (a, b))
+    return a.startswith(b)
+
+
+def _overlaps(a: str, b: str) -> bool:
+    return any(_inside(x, y) or _inside(y, x) for x in _forms(a) for y in _forms(b))
+
+
+def _has_git_inside(top: str) -> bool:
+    """A .git anywhere under top, without entering a junction or symlink."""
+    stack = [top]
+    while stack:
+        try:
+            entries = list(os.scandir(stack.pop()))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name == ".git":
+                return True
+            if entry.is_junction() or entry.is_symlink():
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                stack.append(entry.path)
+    return False
+
+
+def guard(
+    path: str, residual: bool, home: list[str], data: list[str], roots: list[str]
+):
+    written, real = _forms(path)
+    if written != real:
+        return f"經過 junction／symlink 或用了短檔名（實際位置 {real}），請改用實際路徑"
+    if "stock-lab-data" in written.replace("\\", "/").split("/"):
+        return "在 stock-lab-data 之下"
+    for d in data:
+        if _overlaps(path, d):
+            return f"是資料目錄或與它重疊（{d}）"
+    if os.path.dirname(written) == written:
+        return "是根目錄或磁碟根目錄"
+    for h in home:
+        if any(_inside(x, y) for x in _forms(h) for y in _forms(path)):
+            return "是 $HOME 或它的上層"
+    for r in roots:
+        if _overlaps(path, r):
+            return f"是 git checkout 或與它重疊（{r}）"
+    if residual:
+        return ""
+    d = real
+    while True:
+        if os.path.lexists(os.path.join(d, ".git")):
+            return f"位於 git repo 之內（{d}）"
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    if os.path.isdir(real) and _has_git_inside(real):
+        return "裡面有 .git"
+    return ""
+
+
+def _guard_args(args: list[str]) -> int:
+    path, residual, lists = args[0], False, {"--home": [], "--data": [], "--root": []}
+    rest = iter(args[1:])
+    for flag in rest:
+        if flag == "--residual":
+            residual = True
+        else:
+            lists[flag].append(next(rest))
+    print(guard(path, residual, lists["--home"], lists["--data"], lists["--root"]))
+    return 0
 
 
 def get(doc, path: str):
@@ -124,6 +214,15 @@ def main(argv: list[str]) -> int:
         except (OSError, UnicodeDecodeError):
             return 1
         return 0 if text.strip() else 1
+    if command == "within":
+        print(
+            "yes"
+            if any(_inside(a, b) for a in _forms(args[0]) for b in _forms(args[1]))
+            else "no"
+        )
+        return 0
+    if command == "guard":
+        return _guard_args(args)
     doc = _load()
     if doc is None:
         return 1

@@ -4,8 +4,9 @@
 # open PRs with CI and mergeStateStatus, Issue/PR comments since --since, and the
 # schedule jobs' latest log lines. Prints a short summary.
 #
-# The only file written is <data>/logs/coordinator-heartbeat.json. gh calls stop at
-# --max-gh: the 5000/hour API limit is shared by every session on the account.
+# The only file written is <data>/logs/coordinator-heartbeat.json (through a temporary
+# file in the same directory and mv). gh calls stop at --max-gh: the 5000/hour API limit
+# is shared by every session on the account.
 #
 # Usage: patrol.sh [options]
 #   --session-id ID   default $CLAUDE_CODE_SESSION_ID
@@ -13,6 +14,8 @@
 #   --since ISO       comments after this UTC time (2026-10-25T12:00:00Z); default the
 #                     previous heartbeat of the same session, else one hour ago
 #   --max-gh N        at most N gh calls, default 2 (open PRs, comments)
+#   --take-over       overwrite another session's heartbeat younger than an hour (a new
+#                     coordinator taking over without the old one's handoff marker)
 #   --data-dir DIR    default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Test hook: PATROL_NOW (epoch seconds).
@@ -20,10 +23,11 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" since="" max_gh=2
+session_id="${CLAUDE_CODE_SESSION_ID:-}" handle="${ORCA_TERMINAL_HANDLE:-}" since="" max_gh=2 take_over=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    -h | --help) sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --take-over) take_over=1; shift; continue ;;
     --session-id | --terminal | --since | --max-gh | --data-dir | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
       case "$1" in
@@ -53,16 +57,33 @@ logs="$data_dir/logs"
 heartbeat="$logs/coordinator-heartbeat.json"
 [ -d "$logs" ] || die "資料目錄沒有 logs/：$logs" 2
 
-# 1. heartbeat (the previous one of this session gives the default --since)
-if [ -z "$since" ] && [ -f "$heartbeat" ] \
-  && [ "$(cj get session_id <"$heartbeat")" = "$session_id" ]; then
-  since="$(cj get written_at <"$heartbeat")"
-  [[ "$since" =~ $iso_re ]] || since=""
+# 1. heartbeat. Another session's heartbeat younger than an hour (the handbook's liveness
+# window) is kept unless that session left a handoff marker or --take-over is given
+# (#283 review L7). The same session's previous heartbeat is the default --since.
+prev_session="" prev_at=""
+if [ -f "$heartbeat" ]; then
+  prev_session="$(cj get session_id <"$heartbeat" || true)"
+  prev_at="$(cj get written_at <"$heartbeat" || true)"
+  [[ "$prev_at" =~ $iso_re ]] || prev_at=""
 fi
+if [ -n "$prev_session" ] && [ "$prev_session" != "$session_id" ] && [ -n "$prev_at" ] \
+  && [ "$take_over" = 0 ]; then
+  marker_ok=0
+  case "$prev_session" in *[!A-Za-z0-9_-]*) ;; *) [ -f "$logs/handoff-$prev_session.json" ] && marker_ok=1 ;; esac
+  age=$((now - $(date -u -d "$prev_at" +%s)))
+  if [ "$marker_ok" = 0 ] && [ "$age" -lt 3600 ]; then
+    die "心跳檔屬於另一個統籌 session $prev_session（${prev_at}，$((age / 60)) 分鐘前），它沒有換手標記，未覆寫；確定接手才加 --take-over" 3
+  fi
+fi
+[ -n "$since" ] || { [ "$prev_session" = "$session_id" ] && since="$prev_at"; }
 [ -n "$since" ] || since="$(iso $((now - 3600)))"
 written_at="$(iso "$now")"
-printf '{"session_id":"%s","terminal_handle":"%s","written_at":"%s"}' "$session_id" "$handle" "$written_at" >"$heartbeat" \
-  || die "寫不進心跳檔：$heartbeat" 2
+tmp="$logs/.coordinator-heartbeat.json.tmp.$$"
+if ! printf '{"session_id":"%s","terminal_handle":"%s","written_at":"%s"}' "$session_id" "$handle" "$written_at" >"$tmp" \
+  || ! mv -f "$tmp" "$heartbeat"; then
+  rm -f "$tmp"
+  die "寫不進心跳檔：$heartbeat" 2
+fi
 [ "$(cj get written_at <"$heartbeat")" = "$written_at" ] || die "心跳檔讀回不符：$heartbeat" 2
 echo "心跳 $written_at session=$session_id terminal=$handle（$heartbeat）"
 

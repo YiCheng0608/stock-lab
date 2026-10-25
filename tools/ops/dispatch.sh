@@ -13,8 +13,9 @@
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 #   --no-board        leave the board alone (a dry run on a throwaway branch)
 # Prints one JSON line (worktree, branch, head, terminal, sent, turn_started, board, error).
-# Exit 0 when sent and started; 1 before sending (nothing was sent); 3 sent but the turn
-# was not seen starting (read the terminal, do not resend); 4 board update failed;
+# Exit 0 when sent and started; 1 before sending (nothing was sent); 3 the text may be
+# in the terminal but the turn was not seen starting, or the send itself failed or was
+# not accepted ("sent": null, read the terminal, do not resend); 4 board update failed;
 # 2/64 bad setup or arguments.
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +25,7 @@ issue="" slug="" task_file="" model="claude-opus-5-5" effort="high" repo_id=""
 wait_ms=60000 submit_wait=30 set_board=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    -h | --help) sed -n '2,19p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --no-board) set_board=0 ;;
     --task-file | --model | --effort | --repo-id | --wait-ms | --submit-wait | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
@@ -101,8 +102,10 @@ printf '%s' "$out" | cj satisfied || report 1 "terminal 未就緒（wait 沒有 
 
 # No CR: in Claude Code's prompt a carriage return is Enter and would submit early.
 out="$(orca terminal send --terminal "$handle" --text "$(tr -d '\r' <"$task_file")" --enter \
-  --wait-submit "$submit_wait" --json)" || report 1 "orca terminal send 失敗，任務未確認送出（先 terminal read 再決定）"
-[ "$(printf '%s' "$out" | cj get result.send.accepted)" = true ] || report 1 "orca terminal send 未被接受"
+  --wait-submit "$submit_wait" --json)" \
+  || { sent=null; report 3 "orca terminal send 失敗，文字可能已送出：先 orca terminal read，不要重送"; }
+[ "$(printf '%s' "$out" | cj get result.send.accepted)" = true ] \
+  || { sent=null; report 3 "orca terminal send 未回報接受，文字可能已送出：先 orca terminal read，不要重送"; }
 sent=true
 case " $(printf '%s' "$out" | cj stages) " in *" turn_started "*) started=true ;; esac
 # Read back: the terminal tail goes to stderr for the coordinator to look at.

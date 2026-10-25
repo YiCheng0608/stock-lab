@@ -80,45 +80,29 @@ board_set() {
 # --- paths close_task.sh must never delete (tested on their own: guard_dir deletes nothing)
 is_windows() { case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) return 0 ;; esac; return 1; }
 
-# norm PATH: absolute, '..' and '.' removed, symlinks not resolved; lower case on Windows.
-norm() {
-  local p="$1"
-  if is_windows; then
-    p="$(cygpath -u -- "$p")"
-    p="$(realpath -m -s -- "$p")"
-    printf '%s' "${p,,}"
-  else
-    realpath -m -s -- "$p"
-  fi
-}
-within() { [ "$1" = "$2" ] || case "$1" in "$2"/*) return 0 ;; *) return 1 ;; esac; } # within A B: A is B or under B
+# native PATH: the one spelling Python compares on Windows. `cygpath -m` gives C:/… for
+# /c/…, /tmp/… and C:\… alike (cygpath -u turned C:/…/AppData/Local/Temp into /tmp but
+# left /c/… as it was, so two spellings of one path did not match: #283 review M4).
+native() { if is_windows; then cygpath -m -- "$1"; else printf '%s' "$1"; fi; }
 
-# guard_dir PATH [residual]: why PATH must not be deleted, or nothing. "residual" is a
-# worktree directory git no longer lists: its own .git file does not count.
+# within A B: A is B or under B, as written and as resolved. Anything but a clear "no"
+# (Python failed) counts as inside, so a check built on it refuses.
+within() { [ "$(cj within "$(native "$1")" "$(native "$2")" 2>/dev/null)" != no ]; }
+
+# guard_dir PATH [residual]: why PATH must not be deleted, or nothing; the comparison is
+# `guard` in coordinator_json.py. "residual" is a worktree directory git no longer lists:
+# its own .git file does not count. Fails closed: an error is a reason.
 guard_dir() {
-  local p d home root
-  p="$(norm "$1")"
-  home="$(norm "$HOME")"
-  case "/${p#/}/" in */stock-lab-data/*) echo "在 stock-lab-data 之下"; return ;; esac
-  for d in "$data_dir" ${STOCK_DATA_DIR:+"$STOCK_DATA_DIR"}; do
-    d="$(norm "$d")"
-    if within "$p" "$d" || within "$d" "$p"; then echo "是資料目錄或包含資料目錄（$d）"; return; fi
-  done
-  [ "$p" = / ] && { echo "是根目錄"; return; }
-  is_windows && case "$p" in /[a-z] | /[a-z]/) echo "是磁碟根目錄"; return ;; esac
-  within "$home" "$p" && { echo "是 \$HOME 或它的上層"; return; }
+  local roots root out args=()
+  roots="$(git -C "$repo_root" worktree list --porcelain)" || { echo "讀不到 git worktree list"; return 0; }
+  args+=(--home "$(native "$HOME")" --data "$(native "$data_dir")")
+  [ -n "${STOCK_DATA_DIR:-}" ] && args+=(--data "$(native "$STOCK_DATA_DIR")")
+  # On Windows "/" is the Git for Windows directory (cygpath -m / → C:/Program Files/Git).
+  is_windows && args+=(--root "$(cygpath -m /)")
   while IFS= read -r root; do
-    root="$(norm "$root")"
-    if within "$p" "$root" || within "$root" "$p"; then echo "是 git checkout 或與它重疊（$root）"; return; fi
-  done < <(git -C "$repo_root" worktree list --porcelain | tr -d '\r' | sed -n 's/^worktree //p'; printf '%s\n' "$repo_root")
-  [ "${2:-}" = residual ] && return
-  d="$p"
-  while [ -n "$d" ] && [ "$d" != / ]; do
-    { [ -e "$d/.git" ] || [ -L "$d/.git" ]; } && { echo "位於 git repo 之內（$d）"; return; }
-    d="${d%/*}"
-  done
-  if [ -d "$p" ] && [ ! -L "$p" ] && [ -n "$(find "$p" -name .git -print -quit 2>/dev/null)" ]; then
-    echo "裡面有 .git"
-  fi
-  return 0
+    [ -n "$root" ] && args+=(--root "$(native "$root")")
+  done < <(printf '%s\n' "$roots" | tr -d '\r' | sed -n 's/^worktree //p'; printf '%s\n' "$repo_root")
+  [ "${2:-}" = residual ] && args+=(--residual)
+  out="$(cj guard "$(native "$1")" "${args[@]}")" || out="路徑檢查失敗"
+  printf '%s' "$out"
 }

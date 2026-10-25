@@ -11,7 +11,9 @@
 #     every worktree `git worktree list` names (the task's own worktree goes through
 #     `orca worktree rm`, never --extra-dir), anything inside a git repo or holding a
 #     .git, $HOME and its parents, / and drive roots, any stock-lab-data directory and
-#     what is under it, and $STOCK_DATA_DIR.
+#     what is under it, and $STOCK_DATA_DIR. Paths are compared as written and as
+#     resolved; one whose resolved form differs (a junction or symlink on the way, an
+#     8.3 short name) is refused outright. A failed orca, gh or git read refuses too.
 # Deleting checks guard_dir again (remove_tree), so one broken check is not enough to
 # delete a protected path.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
@@ -21,6 +23,7 @@
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
 #   --pr N            the task's PR; default: the merged PR whose head is the branch
+#   --allow-pr-head-mismatch  accept a --pr whose head is another branch (a dry run)
 #   --no-board        leave the board alone (a dry run on a throwaway branch)
 #   --repo-id ID      Orca repo id; default: the repo whose remote is YiCheng0608/stock-lab
 #   --idle-seconds N  a shell terminal is idle after N seconds without output, default 30
@@ -32,12 +35,13 @@ set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
-issue="" slug="" pr="" repo_id="" idle_seconds=30 set_board=1
+issue="" slug="" pr="" repo_id="" idle_seconds=30 set_board=1 allow_head_mismatch=0
 extra=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    -h | --help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --no-board) set_board=0 ;;
+    --allow-pr-head-mismatch) allow_head_mismatch=1 ;;
     --extra-dir | --slug | --pr | --repo-id | --idle-seconds | --python)
       [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value" 64
       case "$1" in
@@ -110,7 +114,10 @@ remove_tree() {
 
 # --- checks: nothing is deleted before all of them pass ---------------------------
 orca_repo_id
-mapfile -t found < <(orca worktree list --repo "id:$repo_id" --json | cj worktrees "$prefix$slug" \
+# A failed listing is not an empty one (#283 review M3).
+listing="$(orca worktree list --repo "id:$repo_id" --json)"
+printf '%s' "$listing" | cj ok || refuse "orca worktree list 失敗"
+mapfile -t found < <(printf '%s' "$listing" | cj worktrees "$prefix$slug" \
   | awk -F '\t' -v want="$prefix$slug" -v exact="${slug:+1}" '!exact || $2 == want')
 [ ${#found[@]} -le 1 ] || refuse "有多個 $prefix* worktree（用 --slug 指定）：${found[*]}"
 if [ ${#found[@]} -eq 1 ]; then
@@ -137,7 +144,8 @@ pr="$(printf '%s' "$out" | cj get 0.number)"
 merge_sha="$(printf '%s' "$out" | cj get 0.mergeCommit.oid)" || refuse "PR #$pr 沒有 merge commit"
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
 [ -n "$branch" ] || branch="$head_ref"
-[ "$head_ref" = "$branch" ] || printf 'close_task.sh: 注意：PR #%s 的 head 是 %s，不是 %s\n' "$pr" "$head_ref" "$branch" >&2
+[ "$head_ref" = "$branch" ] || [ "$allow_head_mismatch" = 1 ] \
+  || refuse "PR #$pr 的 head 是 $head_ref，不是 $branch（確定要借用這個 PR 才加 --allow-pr-head-mismatch）"
 
 out="$(gh run list --repo "$GH_REPO" --branch master --event push --workflow CI --limit 20 \
   --json headSha,status,conclusion)" || refuse "gh run list 失敗"
@@ -153,12 +161,14 @@ fi
 
 terminals=()
 if [ -n "$wt_path" ]; then
-  here="$(norm "$PWD")"
-  within "$here" "$(norm "$wt_path")" && refuse "目前目錄在要刪的 worktree 裡"
-  within "$(norm "$repo_root")" "$(norm "$wt_path")" && refuse "這支腳本來自要刪的 worktree，請從 master checkout 執行"
+  within "$PWD" "$wt_path" && refuse "目前目錄在要刪的 worktree 裡"
+  within "$repo_root" "$wt_path" && refuse "這支腳本來自要刪的 worktree，請從 master checkout 執行"
   if [ -d "$wt_path" ]; then
-    [ -z "$(git -C "$wt_path" status --porcelain | tr -d '\r')" ] || refuse "worktree 有未 commit 的改動：$wt_path"
+    status="$(git -C "$wt_path" status --porcelain)" || refuse "讀不到 worktree 的 git status：$wt_path"
+    [ -z "$(printf '%s' "$status" | tr -d '\r')" ] || refuse "worktree 有未 commit 的改動：$wt_path"
   fi
+  listing="$(orca terminal list --json)"
+  printf '%s' "$listing" | cj ok || refuse "orca terminal list 失敗"
   now_ms="$(($(date +%s) * 1000))"
   while read -r handle agent last; do
     [ -n "$handle" ] || continue
@@ -170,7 +180,7 @@ if [ -n "$wt_path" ]; then
       refuse "terminal $handle 在 $idle_seconds 秒內仍有輸出"
     fi
     terminals+=("$handle")
-  done < <(orca terminal list --json | cj terminals "$wt_path")
+  done < <(printf '%s' "$listing" | cj terminals "$wt_path")
 fi
 
 extra_live=()

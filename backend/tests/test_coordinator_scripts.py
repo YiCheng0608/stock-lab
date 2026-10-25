@@ -870,3 +870,188 @@ def test_patrol_ignores_another_sessions_heartbeat_for_since(patrol: Harness) ->
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
+
+
+# --- review of PR #283 -------------------------------------------------------------
+
+
+def _short_name(path: Path) -> str:
+    """The 8.3 short form of an existing Windows path (the long form when disabled)."""
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(1024)
+    if not ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, 1024):
+        return str(path)
+    return buffer.value
+
+
+def test_close_task_refuses_an_extra_dir_reaching_the_data_dir_through_a_link(
+    close: Harness,
+) -> None:
+    """B1: <x>/lnk/logs with lnk -> the data directory must not delete its logs."""
+    keep = close.data / "logs" / "keep.log"
+    keep.write_text("k", encoding="utf-8")
+    hop = close.root / "hop"
+    hop.mkdir()
+    _link(close.data, hop / "lnk")
+    try:
+        result = close.close_task(close.extra, hop / "lnk" / "logs")
+        assert keep.is_file()
+        assert result.returncode == 1, result.stdout + result.stderr
+        _assert_nothing_deleted(close)
+    finally:
+        link = hop / "lnk"
+        if link.is_symlink():
+            link.unlink()
+        elif link.is_junction():
+            os.rmdir(link)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="8.3 short names exist on Windows only")
+def test_close_task_refuses_the_data_dir_by_its_short_name(close: Harness) -> None:
+    """B2: C:/Users/YiCheng/STOCK-~3 is the real data directory's short name."""
+    data = close.root / "stockdata-production"
+    (data / "raw").mkdir(parents=True)
+    (data / "raw" / "keep.db").write_text("k", encoding="utf-8")
+    short = _short_name(data)
+    if Path(short).name.lower() == data.name.lower():
+        pytest.skip("8.3 short names are disabled on this volume")
+    result = close.run(
+        "close_task.sh",
+        "282",
+        "--extra-dir",
+        close.extra.as_posix(),
+        "--extra-dir",
+        short.replace("\\", "/") + "/raw",
+        STOCK_DATA_DIR=data.as_posix(),
+    )
+    assert (data / "raw" / "keep.db").is_file()
+    assert result.returncode == 1, result.stdout + result.stderr
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the /tmp alias is Git Bash on Windows")
+def test_guard_dir_sees_one_path_in_its_msys_and_windows_spellings(h: Harness) -> None:
+    """M4: cygpath -u turned C:/…/AppData/Local/Temp/x into /tmp/x but left /c/… alone."""
+    native = subprocess.run(
+        [BASH, "-c", "cygpath -m /tmp"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    data_msys = "/tmp/zz-coordinator-guard-test/data"
+    data_windows = native + "/zz-coordinator-guard-test/data"
+    drive, rest = native[0].lower(), native[2:]
+    for data, extra in (
+        (data_msys, data_windows + "/logs"),
+        (data_windows, f"/{drive}{rest}/zz-coordinator-guard-test/data/logs"),
+        (data_windows, "/tmp/zz-coordinator-guard-test/data/logs"),
+    ):
+        reason = h.run_bash(
+            'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; guard_dir "$@"',
+            h.ops.as_posix(),
+            extra,
+            STOCK_DATA_DIR=data,
+        ).stdout.strip()
+        assert reason, (data, extra)
+
+
+@pytest.mark.parametrize("listing", ["orca_terminal_list", "orca_worktree_list"])
+def test_close_task_deletes_nothing_when_an_orca_listing_fails(
+    close: Harness, listing: str
+) -> None:
+    """M3: an ok:false listing is not "no terminals" / "no worktree"."""
+    close.answer(listing, {"ok": False, "error": {"code": "runtime_unavailable"}})
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize(
+    "send",
+    [
+        {"ok": False, "error": {"code": "transport", "message": "lost"}},
+        _ok({"send": {"accepted": False}}),
+    ],
+    ids=["send-failed", "not-accepted"],
+)
+def test_dispatch_treats_an_unconfirmed_send_as_maybe_sent(
+    dispatch: Harness, send: dict
+) -> None:
+    """L5: the text may be in the terminal already, so not exit 1 (\"not sent\")."""
+    dispatch.answer("orca_terminal_send", send)
+    result = _dispatch(dispatch)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert _json_line(result)["sent"] is None
+    assert (
+        len([c for c in dispatch.calls("orca") if c.startswith("terminal send")]) == 1
+    )
+
+
+def test_close_task_refuses_a_pr_whose_head_is_another_branch(close: Harness) -> None:
+    """L6: --pr pointing at another task's PR is refused unless explicitly allowed."""
+    close.answer(
+        "gh_pr_view",
+        {
+            "number": 271,
+            "state": "MERGED",
+            "mergeCommit": {"oid": MERGE_SHA},
+            "headRefName": "task/264-news-candidate-exchange",
+        },
+    )
+    result = close.run(
+        "close_task.sh", "282", "--pr", "271", "--extra-dir", close.extra.as_posix()
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    _assert_nothing_deleted(close)
+    result = close.run(
+        "close_task.sh",
+        "282",
+        "--pr",
+        "271",
+        "--allow-pr-head-mismatch",
+        "--no-board",
+        "--extra-dir",
+        close.extra.as_posix(),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not close.wt.exists()
+
+
+def _heartbeat(h: Harness, session: str, written_at: str) -> Path:
+    path = h.data / "logs" / "coordinator-heartbeat.json"
+    path.write_text(
+        json.dumps(
+            {
+                "session_id": session,
+                "terminal_handle": "term_x",
+                "written_at": written_at,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_patrol_does_not_overwrite_another_live_coordinators_heartbeat(
+    patrol: Harness,
+) -> None:
+    """L7: a heartbeat of another session from 20 minutes ago stays as it is."""
+    path = _heartbeat(patrol, "other", "2026-10-25T11:40:00Z")
+    before = path.read_bytes()
+    result = _patrol(patrol)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert path.read_bytes() == before
+    assert not patrol.calls("gh")
+
+
+@pytest.mark.parametrize("how", ["handoff-marker", "take-over", "stale"])
+def test_patrol_takes_over_a_heartbeat_when_allowed(patrol: Harness, how: str) -> None:
+    written = "2026-10-25T10:30:00Z" if how == "stale" else "2026-10-25T11:40:00Z"
+    path = _heartbeat(patrol, "other", written)
+    args = []
+    if how == "handoff-marker":
+        (patrol.data / "logs" / "handoff-other.json").write_text("{}", encoding="utf-8")
+    elif how == "take-over":
+        args = ["--take-over"]
+    result = _patrol(patrol, *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"
+    assert not list((patrol.data / "logs").glob("*.tmp*"))
