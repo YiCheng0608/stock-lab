@@ -36,6 +36,42 @@ REGISTRY: dict[str, Strategy] = {
     strategy.key: strategy for strategy in (BREAKOUT_V1, PULLBACK_V1)
 }
 
+# ``kind`` keys each strategy's state in every signal's rule_evidence_json
+# and rationale, next to these fixed keys (worker.pipeline writes them; the
+# rationale's ``group=`` and ``missing=`` parts are read by presentation).
+# A kind equal to one of them, or to another strategy's kind, would silently
+# overwrite that entry.
+RESERVED_KINDS = frozenset(
+    {
+        "strategy",
+        "strategy_version",
+        "group_member_return_lookup",
+        "confidence_semantics",
+        "actionable",
+        "inputs",
+        "risk_validation",
+        "execution",
+        "group",
+        "missing",
+    }
+)
+
+
+def registry_problems(registry: Mapping[str, Strategy]) -> list[str]:
+    """Kinds that are reused or reserved; empty for a usable registry."""
+
+    problems = []
+    seen: dict[str, str] = {}
+    for key, strategy in registry.items():
+        if strategy.kind in RESERVED_KINDS:
+            problems.append(f"{key}: kind {strategy.kind!r} is a reserved key")
+        if strategy.kind in seen:
+            problems.append(
+                f"{key}: kind {strategy.kind!r} is already used by {seen[strategy.kind]}"
+            )
+        seen.setdefault(strategy.kind, key)
+    return problems
+
 
 def strategy_by_kind(kind: str) -> Strategy | None:
     return next(
@@ -64,6 +100,7 @@ __all__ = [
     "ENTRY_REQUIRED_LEVELS",
     "LEGACY_RISK_LEVELS_FORMULA",
     "REGISTRY",
+    "RESERVED_KINDS",
     "SignalLevels",
     "Strategy",
     "StrategyInputs",
@@ -72,6 +109,7 @@ __all__ = [
     "evaluate_breakout_v1",
     "evaluate_pullback_v1",
     "finite_number",
+    "registry_problems",
     "risk_levels",
     "strategy_by_kind",
     "strategy_configs",

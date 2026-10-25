@@ -218,6 +218,16 @@ def test_a_strategy_added_to_the_registry_gets_signal_rows_from_analyze(
                 "fake_test=passed:" in (signal.rationale or "")
                 for signal in by_name.values()
             )
+            # RESERVED_KINDS is exactly what a row holds besides the kinds.
+            kinds = {strategy.kind for strategy in REGISTRY.values()}
+            for signal in by_name.values():
+                rationale_keys = {
+                    part.split("=", 1)[0]
+                    for part in signal.rationale.split("; ")
+                    if "=" in part
+                }
+                fixed = (set(signal.rule_evidence_json) | rationale_keys) - kinds
+                assert fixed == strategies.RESERVED_KINDS
             version = db.scalar(
                 select(StrategyVersion).where(
                     StrategyVersion.name == FAKE_CONFIG["name"]
@@ -237,3 +247,24 @@ def test_registry_declaration_order_is_breakout_then_pullback():
     for key, strategy in REGISTRY.items():
         assert strategy.key == key == strategy.config["name"]
         assert strategy.kind == strategy.config["kind"]
+
+
+def _with_kind(name: str, kind: str) -> FakeStrategy:
+    strategy = FakeStrategy()
+    strategy.config = {**FAKE_CONFIG, "name": name, "kind": kind}
+    return strategy
+
+
+def test_every_registered_kind_is_unique_and_not_reserved():
+    assert strategies.registry_problems(REGISTRY) == []
+
+
+def test_a_reused_or_reserved_kind_is_a_registry_problem():
+    reused = {**REGISTRY, "breakout_v2": _with_kind("breakout_v2", "breakout")}
+    assert strategies.registry_problems(reused) == [
+        "breakout_v2: kind 'breakout' is already used by breakout_v1"
+    ]
+    reserved = {**REGISTRY, "inputs_v1": _with_kind("inputs_v1", "inputs")}
+    assert strategies.registry_problems(reserved) == [
+        "inputs_v1: kind 'inputs' is a reserved key"
+    ]
