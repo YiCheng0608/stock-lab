@@ -101,7 +101,15 @@
 | 次要數字（表格、統計） | 14–16px／500–600，`--font-mono`，`tabular-nums` | 靠右對齊 |
 | 漲跌 | 同欄位字級／600 | 色依 `--color-up`／`--color-down`／`--color-flat`，正數帶 `+` |
 
-所有金額與百分比用 `font-variant-numeric: tabular-nums` 對齊；千分位逗號；百分比兩位小數；價格依標的 tick 顯示小數位。
+所有金額與百分比用 `font-variant-numeric: tabular-nums` 對齊；千分位逗號。同一欄（表格的一欄、同類卡片的同一欄位）小數位數固定，不因數值而去掉尾端 0（`21.10` 不寫 `21.1`）：
+
+| 數值 | 位數 |
+| --- | --- |
+| 單一標的的價格（K 線表、個股頁、行動卡收盤與漲跌） | 依該標的最近收盤的 tick（`priceDigits`）：50 元以下 2 位、50～500 元 1 位、500 元以上 0 位；ETF 2 位。漲跌金額與收盤同位數 |
+| 跨標的的價格欄（個股清單、族群成員） | 2 位 |
+| 規則算出的價位（進場、觸發、停損、目標） | 2 位 |
+| 百分比 | 2 位（另有規定者依 [UI_COPY_SPEC](UI_COPY_SPEC.md)） |
+| 張數、筆數、檔數、日數 | 整數；張的換算見 [UI_COPY_SPEC §8.3](UI_COPY_SPEC.md#83-張零股) |
 
 ## 4. 版面與導航
 
@@ -123,13 +131,20 @@
 | `btn-primary` | 漸層 `135deg, --color-primary → --color-primary-dark`，白字 600，圓角 10px，padding 14px 28px；hover 上移 2px 加 `--shadow-btn`。每個畫面最多一個主按鈕。 |
 | `btn-secondary` | 透明底、1px `--color-border`、主文字色，圓角 10px；hover 底轉 card 色、邊線轉主文字色。 |
 | `btn-ghost` | 無邊無底 muted 文字，hover 轉主文字色；用於導航與表格內動作。 |
-| 表格 | 容器用 card；表頭 14px muted、底邊 1px；列高 56px、底邊 1px `--color-border`、最後一列無邊；hover 列底 `--color-bg-elevated`；數字欄靠右 mono；每列右側可放一個小的 `btn-primary`（text-sm、padding 8px 16px）或 ghost 連結。 |
+| 表格 | 容器用 card；表頭 14px muted、底邊 1px；列高 56px、底邊 1px `--color-border`、最後一列無邊；hover 列底 `--color-bg-elevated`；每列右側可放一個小的 `btn-primary`（text-sm、padding 8px 16px）或 ghost 連結。數字欄的表頭與內容一起靠右（同一個 `num` class，由共用 `DataTable` 的欄位定義同時套到 th 與 td），內容 mono、`tabular-nums`、不換行；文字欄靠左，可換行。窄版規則見 §5.1。 |
 | 列表項（個股列） | 左：40px 圓角方塊顯示代號前綴或產業縮寫（`--color-bg-elevated`）＋代號（600）與名稱（muted 14px）；右：價格（mono）與漲跌（色＋正負號）。 |
 | 輸入框 | 底 `--color-bg-alt`、1px 邊、圓角 8px、padding 12px 16px；focus 邊線轉主色，無外框光暈。 |
 | 分頁籤（tabs） | 文字 tabs，選中者主文字色加 2px 主色底線；用於指標面板（MACD／RSI／KD／布林）、新聞國內／國際／官方公告、族群產業／題材。 |
 | 空狀態 | 卡片內置中 muted 文字「無資料」加一行原因（如「日線不足 60 根」），不用插圖。 |
 | 載入 | 卡片骨架（`--color-bg-elevated` 條塊，淡入淡出），不用旋轉圖示。 |
 | Toast／錯誤 | 右上角 card 樣式，左側 4px 色條（success／warning／error）。 |
+
+### 5.1 窄版與卡片內的表格
+
+- 表格寬度依內容，不設固定最小寬度；容器 `overflow-x: auto`，欄位放不下時只在表格內橫向捲動，頁面本身不得出現橫向捲動。
+- 640px 以下：儲存格左右 padding 8px、列高 44px；第一欄（日期、代號或子項名）固定在左側（`position: sticky`），捲動時仍看得到這一列是什麼。
+- 卡片內的表格（例如候選卡的評分細節）至多 4 欄，分組標題放在獨立的整列（`colSpan`），不另占一欄，讓數字欄在 390px 寬的卡片內完整可見。
+- 欄位多、需要逐列比較的榜單（族群榜）在 640px 以下改用卡片呈現。
 
 ## 6. 圖表（ECharts）
 
