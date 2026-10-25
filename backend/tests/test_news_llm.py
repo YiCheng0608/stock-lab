@@ -542,6 +542,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
             "reason": "新聞提到晶圓代工需求",
             "confidence": "medium",
             "verified": False,
+            "exchange_corrected": False,
         }
     ]
     assert (
@@ -738,6 +739,163 @@ def test_run_and_payload_instants_are_utc_with_their_zone(db, fake, client):
     dashboard = client.get(f"{router.prefix}/dashboard").json()
     if dashboard["data_quality"]["updated_at"] is not None:
         _utc_instant(dashboard["data_quality"]["updated_at"])
+
+
+# Candidate exchange (#264) -----------------------------------------------------------
+
+
+def _candidate_views(db, client, instruments, written):
+    """``ai.symbol_candidates`` as ``/news/<id>`` shows them for a done result.
+
+    ``instruments`` are extra (exchange, symbol, name, status) master rows;
+    ``written`` are the ``exchange:symbol`` strings the model stored.
+    """
+
+    db.add_all(
+        Instrument(
+            exchange=exchange,
+            symbol=symbol,
+            name=name,
+            instrument_type="stock",
+            status=status,
+        )
+        for exchange, symbol, name, status in instruments
+    )
+    item = _add_news(db, 1)[0]
+    db.add(
+        NewsLlmResult(
+            news_item_id=item.id,
+            prompt_version=PROMPT_VERSION,
+            llm_model="claude-sonnet-fake",
+            llm_input_hash="0" * 64,
+            llm_run_at=NOW,
+            llm_status="done",
+            ai_summary="摘要",
+            ai_symbol_candidates_json=[
+                {"symbol": symbol, "reason": "理由", "confidence": "high"}
+                for symbol in written
+            ],
+            ai_theme_candidates_json=[],
+            ai_impact_direction="positive",
+            ai_impact_scope="instrument",
+            ai_impact_rationale="理由",
+            ai_unsupported=False,
+        )
+    )
+    db.commit()
+    detail = client.get(f"{router.prefix}/news/{item.id}").json()
+    return [
+        (row["exchange"], row["symbol"], row["name"], row.get("exchange_corrected"))
+        for row in detail["ai"]["symbol_candidates"]
+    ]
+
+
+def _moved_to(exchange, status_there="active"):
+    """Master rows of a code listed on both exchanges, one of them ``transferred``."""
+
+    old = "TPEx" if exchange == "TWSE" else "TWSE"
+    return [
+        (old, "5236", "轉市股", "transferred"),
+        (exchange, "5236", "轉市股", status_there),
+    ]
+
+
+@pytest.mark.parametrize(
+    "instruments,written,shown",
+    [
+        pytest.param(
+            [("TWSE", "6515", "穎崴", "active")],
+            "TPEx:6515",
+            ("TWSE", "6515", "穎崴", True),
+            id="tpex-written-for-a-twse-code",
+        ),
+        pytest.param(
+            [("TPEx", "6279", "胡連", "active")],
+            "TWSE:6279",
+            ("TPEx", "6279", "胡連", True),
+            id="twse-written-for-a-tpex-code",
+        ),
+        pytest.param(
+            _moved_to("TWSE"),
+            "TPEx:5236",
+            ("TWSE", "5236", "轉市股", True),
+            id="written-exchange-is-the-transferred-row",
+        ),
+        pytest.param(
+            _moved_to("TPEx"),
+            "TWSE:5236",
+            ("TPEx", "5236", "轉市股", True),
+            id="written-exchange-is-the-transferred-row-other-way",
+        ),
+        pytest.param(
+            _moved_to("TWSE"),
+            "TWSE:5236",
+            ("TWSE", "5236", "轉市股", False),
+            id="written-exchange-is-the-active-row",
+        ),
+        pytest.param(
+            [],  # the db fixture already lists TWSE:2330
+            "TWSE:2330",
+            ("TWSE", "2330", "台積電", False),
+            id="right-exchange",
+        ),
+        pytest.param(
+            [("TWSE", "7001", "甲", "active"), ("TPEx", "7001", "乙", "active")],
+            "TPEx:7001",
+            ("TPEx", "7001", "乙", False),
+            id="two-active-rows-the-written-exchange-has-one",
+        ),
+        pytest.param(
+            [("TWSE", "7002", "甲", "active"), ("OTC", "7002", "乙", "active")],
+            "TPEx:7002",
+            ("TPEx", "7002", None, False),
+            id="two-active-rows-neither-on-the-written-exchange",
+        ),
+        pytest.param(
+            [],
+            "TWSE:6392",
+            ("TWSE", "6392", None, False),
+            id="code-not-in-the-master",
+        ),
+        pytest.param(
+            [("TWSE", "7003", "甲", "delisted")],
+            "TWSE:7003",
+            ("TWSE", "7003", "甲", False),
+            id="no-active-row-keeps-the-written-exchange-row",
+        ),
+        pytest.param(
+            [("TWSE", "7004", "甲", "delisted")],
+            "TPEx:7004",
+            ("TPEx", "7004", None, False),
+            id="no-active-row-and-wrong-exchange",
+        ),
+        pytest.param(
+            [("TWSE", "7005", "甲", "dormant"), ("TPEx", "7005", "甲", "delisted")],
+            "TPEx:7005",
+            ("TPEx", "7005", "甲", False),
+            id="no-active-row-among-two",
+        ),
+    ],
+)
+def test_candidate_exchange_follows_the_master_when_the_model_wrote_it_wrong(
+    db, client, instruments, written, shown
+):
+    # #264: 80 of 1,570 production candidates named the other exchange and showed
+    # 「代號未對應到已知標的」.
+    assert _candidate_views(db, client, instruments, [written]) == [shown]
+
+
+def test_a_corrected_candidate_links_to_the_active_instrument(db, client):
+    db.add(Instrument(exchange="TWSE", symbol="6515", name="穎崴", status="active"))
+    db.commit()
+    shown = _candidate_views(db, client, [], ["TPEx:6515", "TWSE:2330"])
+    assert shown == [
+        ("TWSE", "6515", "穎崴", True),
+        ("TWSE", "2330", "台積電", False),
+    ]
+    # The stored inference keeps what the model wrote; only the read side follows the master.
+    stored = db.scalars(select(NewsLlmResult)).one().ai_symbol_candidates_json
+    assert [row["symbol"] for row in stored] == ["TPEx:6515", "TWSE:2330"]
 
 
 # Schedule wrapper: exit codes ------------------------------------------------------
