@@ -85,13 +85,19 @@ is_windows() { case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) return 0 ;; esac;
 # left /c/… as it was: #283 review M4). Only the spelling changes: cygpath resolves
 # junctions, so it is used for nothing but a mount's own top directory, and a link in
 # the path stays visible to `guard` in coordinator_json.py.
+# Prints nothing and fails for a path that is not local and absolute: UNC and device
+# paths (\\server\share, //server/share, \\?\…, \\.\…), drive-relative ones (C:x, \x)
+# and relative ones (#283 review M1). Callers treat that as protected.
 native() {
   local p="$1" top
-  is_windows || { printf '%s' "$p"; return; }
+  case "$p" in '\'* | //*) return 1 ;; esac
+  if ! is_windows; then
+    case "$p" in /*) printf '%s' "$p"; return 0 ;; *) return 1 ;; esac
+  fi
   case "$p" in
-    [A-Za-z]:[\\/]* | [A-Za-z]:) printf '%s' "${p//\\//}"; return ;;
+    [A-Za-z]:[\\/]*) printf '%s' "${p//\\//}"; return 0 ;;
     /*) ;;
-    *) p="$PWD/$p" ;;
+    *) return 1 ;;
   esac
   if [[ "$p" =~ ^/([A-Za-z])(/.*)?$ ]]; then
     printf '%s:%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]:-/}"
@@ -104,22 +110,32 @@ native() {
 
 # within A B: A is B or under B, as written and as resolved. Anything but a clear "no"
 # (Python failed) counts as inside, so a check built on it refuses.
-within() { [ "$(cj within "$(native "$1")" "$(native "$2")" 2>/dev/null)" != no ]; }
+within() {
+  local a b
+  a="$(native "$1")" && b="$(native "$2")" || return 0
+  [ "$(cj within "$a" "$b" 2>/dev/null)" != no ]
+}
 
 # guard_dir PATH [residual]: why PATH must not be deleted, or nothing; the comparison is
 # `guard` in coordinator_json.py. "residual" is a worktree directory git no longer lists:
 # its own .git file does not count. Fails closed: an error is a reason.
 guard_dir() {
-  local roots root out args=()
+  local p roots root x out args=()
+  p="$(native "$1")" || { echo "不是本機的絕對路徑（UNC、裝置路徑或相對路徑），請改用 C:/… 或 /… 的實際路徑"; return 0; }
   roots="$(git -C "$repo_root" worktree list --porcelain)" || { echo "讀不到 git worktree list"; return 0; }
+  for x in "$HOME" "$data_dir" ${STOCK_DATA_DIR:+"$STOCK_DATA_DIR"}; do
+    native "$x" >/dev/null || { echo "\$HOME 或資料目錄不是本機的絕對路徑：$x"; return 0; }
+  done
   args+=(--home "$(native "$HOME")" --data "$(native "$data_dir")")
   [ -n "${STOCK_DATA_DIR:-}" ] && args+=(--data "$(native "$STOCK_DATA_DIR")")
   # On Windows "/" is the Git for Windows directory (cygpath -m / → C:/Program Files/Git).
   is_windows && args+=(--root "$(cygpath -m /)")
   while IFS= read -r root; do
-    [ -n "$root" ] && args+=(--root "$(native "$root")")
+    [ -n "$root" ] || continue
+    x="$(native "$root")" || { echo "git checkout 的路徑不是本機的絕對路徑：$root"; return 0; }
+    args+=(--root "$x")
   done < <(printf '%s\n' "$roots" | tr -d '\r' | sed -n 's/^worktree //p'; printf '%s\n' "$repo_root")
   [ "${2:-}" = residual ] && args+=(--residual)
-  out="$(cj guard "$(native "$1")" "${args[@]}")" || out="路徑檢查失敗"
+  out="$(cj guard "$p" "${args[@]}")" || out="路徑檢查失敗"
   printf '%s' "$out"
 }

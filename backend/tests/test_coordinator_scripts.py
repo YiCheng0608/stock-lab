@@ -933,16 +933,21 @@ def test_close_task_refuses_the_data_dir_by_its_short_name(close: Harness) -> No
 @pytest.mark.skipif(os.name != "nt", reason="the /tmp alias is Git Bash on Windows")
 def test_guard_dir_sees_one_path_in_its_msys_and_windows_spellings(h: Harness) -> None:
     """M4: cygpath -u turned C:/…/AppData/Local/Temp/x into /tmp/x but left /c/… alone."""
-    native = subprocess.run(
+    # Only the sandbox's own data directory, spelled through the /tmp mount: that needs
+    # tmp_path under the mount (pytest's default basetemp in %TEMP% is).
+    temp = subprocess.run(
         [BASH, "-c", "cygpath -m /tmp"], capture_output=True, text=True, check=True
     ).stdout.strip()
-    data_msys = "/tmp/zz-coordinator-guard-test/data"
-    data_windows = native + "/zz-coordinator-guard-test/data"
-    drive, rest = native[0].lower(), native[2:]
+    data_windows = h.data.as_posix()
+    if not data_windows.lower().startswith(temp.lower() + "/"):
+        pytest.skip(f"tmp_path is not under the /tmp mount ({temp}): no /tmp spelling")
+    data_msys = "/tmp" + data_windows[len(temp) :]
+    data_drive = _bash_path(h.data)
     for data, extra in (
         (data_msys, data_windows + "/logs"),
-        (data_windows, f"/{drive}{rest}/zz-coordinator-guard-test/data/logs"),
-        (data_windows, "/tmp/zz-coordinator-guard-test/data/logs"),
+        (data_windows, data_drive + "/logs"),
+        (data_windows, data_msys + "/logs"),
+        (data_drive, data_msys + "/logs"),
     ):
         reason = h.run_bash(
             'script_dir="$1"; shift; . "$script_dir/coordinator_lib.sh"; guard_dir "$@"',
@@ -1104,3 +1109,97 @@ def test_close_task_never_takes_the_pr_head_as_the_branch_of_another_task(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "task/264-news-candidate-exchange" in close.branches()
     assert not [c for c in close.calls("git") if " branch -D " in f" {c} "]
+
+
+# Built inside bash, from a file: passed from Python as an argument (argv or -c), MSYS
+# rewrites the backslashes before the script sees them, so a UNC path could not be
+# tested that way (#283 review M1). Only the sandbox's data directory is spelled.
+NON_LOCAL_SPELLINGS = r"""
+script_dir="$1"
+. "$script_dir/coordinator_lib.sh"
+spellings() {
+  local d="$STOCK_DATA_DIR" w
+  if command -v cygpath >/dev/null 2>&1; then
+    w="$(cygpath -w "$d")"
+    printf '%s\n' "\\\\localhost\\${w:0:1}\$${w:2}\\raw" \
+      "//localhost/${w:0:1}\$/${d:3}/raw" \
+      "\\\\?\\$w\\raw" \
+      "\\\\.\\$w\\raw" \
+      "//?/$d/raw" \
+      "${w:0:2}raw" \
+      "\\${w:3}\\raw"
+  else
+    printf '%s\n' "//localhost$d/raw" "\\\\localhost$d/raw" "//$d/raw"
+  fi
+  printf '%s\n' "raw" "data/raw" "./data/raw"
+}
+spellings | while IFS= read -r p; do printf '%s\t%s\n' "$p" "$(guard_dir "$p")"; done
+"""
+
+UNC_CLOSE_TASK = r"""
+w="$(cygpath -w "$STOCK_DATA_DIR")"
+unc="\\\\localhost\\${w:0:1}\$${w:2}\\raw"
+printf 'extra=%s\n' "$unc" >&2
+exec bash "$1" 282 --extra-dir "$2" --extra-dir "$unc"
+"""
+
+
+def _bash_file(
+    h: Harness, name: str, body: str, *args: str
+) -> subprocess.CompletedProcess:
+    script = h.root / name
+    script.write_text(body, encoding="utf-8", newline="\n")
+    return h.run_bash('f="$1"; shift; . "$f"', script.as_posix(), *args)
+
+
+def test_guard_dir_refuses_unc_device_and_relative_paths(h: Harness) -> None:
+    """M1: \\\\localhost\\C$\\… reached the data directory past both guards."""
+    result = _bash_file(h, "spellings.sh", NON_LOCAL_SPELLINGS, h.ops.as_posix())
+    assert result.returncode == 0, result.stderr
+    rows = [line.split("\t", 1) for line in result.stdout.splitlines()]
+    assert len(rows) >= 6, result.stdout
+    assert any(row[0].startswith("\\\\") for row in rows), result.stdout
+    for row in rows:
+        assert len(row) == 2 and row[1], row
+
+
+@pytest.mark.skipif(os.name != "nt", reason="UNC paths are a Windows matter")
+def test_close_task_refuses_a_unc_extra_dir_built_in_bash(close: Harness) -> None:
+    keep = close.data / "raw" / "keep.db"
+    keep.parent.mkdir(parents=True, exist_ok=True)
+    keep.write_text("k", encoding="utf-8")
+    result = _bash_file(
+        close,
+        "close_unc.sh",
+        UNC_CLOSE_TASK,
+        (close.ops / "close_task.sh").as_posix(),
+        close.extra.as_posix(),
+    )
+    assert "extra=\\\\localhost\\" in result.stderr, result.stderr
+    assert keep.is_file()
+    assert result.returncode == 1, result.stdout + result.stderr
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"session_id":"other","terminal_handle":"t","written_at":"yesterday"}',
+        '{"session_id":"sess-1","terminal_handle":"t","written_at":"bad"}',
+        '{"terminal_handle":"t","written_at":"2026-10-25T11:40:00Z"}',
+        "not json",
+        "",
+    ],
+    ids=["bad-time", "own-session-bad-time", "no-session", "not-json", "empty"],
+)
+def test_patrol_keeps_a_heartbeat_it_cannot_read(patrol: Harness, content: str) -> None:
+    """L3: a malformed heartbeat counts as another session's; --take-over replaces it."""
+    path = patrol.data / "logs" / "coordinator-heartbeat.json"
+    path.write_text(content, encoding="utf-8")
+    before = path.read_bytes()
+    result = _patrol(patrol)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert path.read_bytes() == before and not patrol.calls("gh")
+    result = _patrol(patrol, "--take-over")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"

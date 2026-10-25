@@ -59,21 +59,24 @@ heartbeat="$logs/coordinator-heartbeat.json"
 
 # 1. heartbeat. Another session's heartbeat younger than an hour (the handbook's liveness
 # window) is kept unless that session left a handoff marker or --take-over is given
-# (#283 review L7). The same session's previous heartbeat is the default --since.
+# (#283 review L7). A heartbeat that cannot be read (not JSON, no session id, a bad
+# written_at) is treated the same: kept unless --take-over (#283 review L3). The same
+# session's previous heartbeat is the default --since.
 prev_session="" prev_at=""
-if [ -f "$heartbeat" ]; then
-  prev_session="$(cj get session_id <"$heartbeat" || true)"
-  prev_at="$(cj get written_at <"$heartbeat" || true)"
-  [[ "$prev_at" =~ $iso_re ]] || prev_at=""
-fi
-if [ -n "$prev_session" ] && [ "$prev_session" != "$session_id" ] && [ -n "$prev_at" ] \
-  && [ "$take_over" = 0 ]; then
-  marker_ok=0
-  case "$prev_session" in *[!A-Za-z0-9_-]*) ;; *) [ -f "$logs/handoff-$prev_session.json" ] && marker_ok=1 ;; esac
-  age=$((now - $(date -u -d "$prev_at" +%s)))
-  if [ "$marker_ok" = 0 ] && [ "$age" -lt 3600 ]; then
-    die "心跳檔屬於另一個統籌 session $prev_session（${prev_at}，$((age / 60)) 分鐘前），它沒有換手標記，未覆寫；確定接手才加 --take-over" 3
+if [ -e "$heartbeat" ]; then
+  prev_session="$(cj get session_id <"$heartbeat" 2>/dev/null)" || prev_session=""
+  prev_at="$(cj get written_at <"$heartbeat" 2>/dev/null)" || prev_at=""
+  prev_epoch=""
+  [[ "$prev_at" =~ $iso_re ]] && prev_epoch="$(date -u -d "$prev_at" +%s 2>/dev/null)"
+  case "$prev_session" in '' | *[!A-Za-z0-9_-]*) prev_epoch="" ;; esac
+  if [ "$take_over" = 0 ]; then
+    [ -n "$prev_epoch" ] || die "心跳檔讀不懂（session_id 或 written_at 缺少或格式不對），視同另一個 session 的心跳，未覆寫；確定接手才加 --take-over：$heartbeat" 3
+    if [ "$prev_session" != "$session_id" ] && [ ! -f "$logs/handoff-$prev_session.json" ] \
+      && [ $((now - prev_epoch)) -lt 3600 ]; then
+      die "心跳檔屬於另一個統籌 session $prev_session（${prev_at}，$(((now - prev_epoch) / 60)) 分鐘前），它沒有換手標記，未覆寫；確定接手才加 --take-over" 3
+    fi
   fi
+  [ -n "$prev_epoch" ] || prev_session=""
 fi
 [ -n "$since" ] || { [ "$prev_session" = "$session_id" ] && since="$prev_at"; }
 [ -n "$since" ] || since="$(iso $((now - 3600)))"

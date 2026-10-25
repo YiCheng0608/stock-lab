@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import PurePosixPath
 
@@ -100,6 +101,13 @@ def _has_git_inside(top: str) -> bool:
 def guard(
     path: str, residual: bool, home: list[str], data: list[str], roots: list[str]
 ):
+    # Local and absolute only: no UNC or device path (\\server\share, //server/share,
+    # \\?\…, \\.\…), nothing drive- or directory-relative (#283 review M1).
+    local = (
+        re.match(r"[A-Za-z]:[\\/]", path) if os.name == "nt" else path.startswith("/")
+    )
+    if not local or path.startswith(("\\", "//")):
+        return "不是本機的絕對路徑（UNC、裝置路徑或相對路徑），請改用 C:/… 或 /… 的實際路徑"
     written, real = _forms(path)
     if written != real:
         return f"經過 junction／symlink 或用了短檔名（實際位置 {real}），請改用實際路徑"
