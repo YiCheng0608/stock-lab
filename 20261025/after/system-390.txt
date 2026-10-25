@@ -1,0 +1,1292 @@
+台股研究台
+系統頁
+資料品質
+
+管理型檢視：原始資料、擷取工作、資料品質與固定規則設定快照。
+
+官方資料
+此頁不在主導航，供稽核使用。
+查看官方資料回補與覆蓋度
+擷取狀態
+
+資料量單位：筆。空白表示未提供資料或數值待核實。
+
+更新	來源	資料日	狀態	筆數	資料截至	錯誤
+2026/10/25 下午02:01	來源待核實	2026-10-25	成功	50	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	7	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	1	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午02:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午12:01	來源待核實	2026-10-25	成功	50	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	4	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	2	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	1	2026/10/25	—
+2026/10/25 下午12:00	來源待核實	2026-10-25	成功	5	2026/10/25	—
+2026/10/25 上午10:01	來源待核實	2026-10-25	成功	20	2026/10/25	—
+2026/10/25 上午10:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 上午10:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+2026/10/25 上午10:00	來源待核實	2026-10-25	成功	0	2026/10/25	—
+原始來源
+擷取時間	資料批次	來源	資料日	來源位置	內容校驗碼
+2026-10-25T06:01:23.948274+00:00	1,284	來源待核實	2026-10-25T06:01:23.948274	claude -p --model sonnet	964e4fcab81a186fa3cc0d4950792ff5dd7cc942a42d11d20cf8707347ae3dbf
+2026-10-25T06:00:53.839046+00:00	1,284	來源待核實	2026-10-25T06:00:53.839046	claude -p --model sonnet	c3539a02e66b65b0fd015cc4f47699bfabf3a814ac3fd8585e6893f51a72ae08
+2026-10-25T06:00:21.885086+00:00	1,283	來源待核實	2026-10-25T06:00:21.885086	https://www.federalreserve.gov/feeds/press_all.xml	1b4b89a3cd4bdfc9e316653112710ee376811e96420a15bf52e3cf241eb8e364
+2026-10-25T06:00:19.422654+00:00	1,282	來源待核實	2026-10-25T06:00:19.422654	https://feeds.content.dowjones.io/public/rss/mw_topstories	57ce0b5e541bc169d7fa3fc3590cbc1c1a01387a208808322f9aced280cfd201
+2026-10-25T06:00:16.960249+00:00	1,281	來源待核實	2026-10-25T06:00:16.960249	https://www.cnbc.com/id/19854910/device/rss/rss.html	9b91ee76035ab9ab109b9ccd056ec448c10dfae0364f4bdcf79cc0e3bc0ceba9
+2026-10-25T06:00:14.579049+00:00	1,281	來源待核實	2026-10-25T06:00:14.579049	https://www.cnbc.com/id/20409666/device/rss/rss.html	7ccf9fe4b592196fe6ca883bb920d64754d2ca89bf4a3c70704cd82c7c6185cb
+2026-10-25T06:00:12.244669+00:00	1,281	來源待核實	2026-10-25T06:00:12.244669	https://www.cnbc.com/id/100003114/device/rss/rss.html	d01220fbf99f12ee403ac4dd0da26f6308f85b91fb724d537cb3208628de83be
+2026-10-25T06:00:09.996305+00:00	1,280	來源待核實	2026-10-25T06:00:09.996305	https://tw.stock.yahoo.com/rss?category=tw-market	fc2f8e7a55e43647cea23a247e2cedc14e6ac1fa7ecbc363795381df32cc20f4
+2026-10-25T06:00:07.673588+00:00	1,279	來源待核實	2026-10-25T06:00:07.673588	https://www.ctee.com.tw/rss_web/livenews/stock	981295b8944e094d4562690f38d16332bc9077116bd4c1f2e993dac348371b52
+2026-10-25T06:00:05.444101+00:00	1,278	來源待核實	2026-10-25T06:00:05.444101	https://news.cnyes.com/rss/v1/news/category/tw_stock	96baef59f817bdda52394021c90cf75eca40020b9a863a78cbadff46ab0c912d
+2026-10-25T06:00:04.194168+00:00	1,277	來源待核實	2026-10-25T06:00:04.194168	https://feeds.feedburner.com/rsscna/finance	654114f1580e3c0ee600d38a9e010cbe30edf7c6f222aaf7b190139962d66145
+2026-10-25T04:01:30.967663+00:00	1,276	來源待核實	2026-10-25T04:01:30.967663	claude -p --model sonnet	d6d98b78faa0584e458139b10ba3c6eda509f9f3a994f17e08ac12480cdfb1fc
+2026-10-25T04:00:57.224497+00:00	1,276	來源待核實	2026-10-25T04:00:57.224497	claude -p --model sonnet	d0d338270ca2d70721a98d15e098d8c0b11c9cbe9688b65c1764b165764b7e6b
+2026-10-25T04:00:21.291827+00:00	1,275	來源待核實	2026-10-25T04:00:21.291827	https://www.federalreserve.gov/feeds/press_all.xml	1b4b89a3cd4bdfc9e316653112710ee376811e96420a15bf52e3cf241eb8e364
+2026-10-25T04:00:18.863012+00:00	1,274	來源待核實	2026-10-25T04:00:18.863012	https://feeds.content.dowjones.io/public/rss/mw_topstories	14f4688fdd78feb1a4a7e4820e6cada58ce3efd4e431ea3d29b4a643212b3694
+2026-10-25T04:00:16.624084+00:00	1,273	來源待核實	2026-10-25T04:00:16.624084	https://www.cnbc.com/id/19854910/device/rss/rss.html	9b91ee76035ab9ab109b9ccd056ec448c10dfae0364f4bdcf79cc0e3bc0ceba9
+2026-10-25T04:00:14.407842+00:00	1,273	來源待核實	2026-10-25T04:00:14.407842	https://www.cnbc.com/id/20409666/device/rss/rss.html	7ccf9fe4b592196fe6ca883bb920d64754d2ca89bf4a3c70704cd82c7c6185cb
+2026-10-25T04:00:12.070955+00:00	1,273	來源待核實	2026-10-25T04:00:12.070955	https://www.cnbc.com/id/100003114/device/rss/rss.html	d01220fbf99f12ee403ac4dd0da26f6308f85b91fb724d537cb3208628de83be
+2026-10-25T04:00:09.831847+00:00	1,272	來源待核實	2026-10-25T04:00:09.831847	https://tw.stock.yahoo.com/rss?category=tw-market	318deee4c726b994254d2f9a310186f586e2dc41dcdc8f5937b68c0e74a6a711
+2026-10-25T04:00:07.467990+00:00	1,271	來源待核實	2026-10-25T04:00:07.467990	https://www.ctee.com.tw/rss_web/livenews/stock	dd64941d908038ac0bd9eeee54fc89bd86bcb95ae9d9164318103177c484c1a7
+2026-10-25T04:00:05.380602+00:00	1,270	來源待核實	2026-10-25T04:00:05.380602	https://news.cnyes.com/rss/v1/news/category/tw_stock	f3c124f7d48ab6bf89201652f20ad5011be15e7b5ee20f14ca78372e32bf5725
+2026-10-25T04:00:04.085862+00:00	1,269	來源待核實	2026-10-25T04:00:04.085862	https://feeds.feedburner.com/rsscna/finance	654114f1580e3c0ee600d38a9e010cbe30edf7c6f222aaf7b190139962d66145
+2026-10-25T02:01:30.047527+00:00	1,268	來源待核實	2026-10-25T02:01:30.047527	claude -p --model haiku	23abcfebac400f666e742adbb2c55744bc3f14815b6a94e62bb43e270114930c
+2026-10-25T02:00:19.289003+00:00	1,267	來源待核實	2026-10-25T02:00:19.289003	https://www.federalreserve.gov/feeds/press_all.xml	1b4b89a3cd4bdfc9e316653112710ee376811e96420a15bf52e3cf241eb8e364
+2026-10-25T02:00:16.768702+00:00	1,266	來源待核實	2026-10-25T02:00:16.768702	https://feeds.content.dowjones.io/public/rss/mw_topstories	d866f3f8931262268832a59508643bcbcd8d7e88147a821e2720e01c16b7cafa
+2026-10-25T02:00:14.515170+00:00	1,265	來源待核實	2026-10-25T02:00:14.515170	https://www.cnbc.com/id/19854910/device/rss/rss.html	9b91ee76035ab9ab109b9ccd056ec448c10dfae0364f4bdcf79cc0e3bc0ceba9
+2026-10-25T02:00:12.278253+00:00	1,265	來源待核實	2026-10-25T02:00:12.278253	https://www.cnbc.com/id/20409666/device/rss/rss.html	7ccf9fe4b592196fe6ca883bb920d64754d2ca89bf4a3c70704cd82c7c6185cb
+2026-10-25T02:00:09.867137+00:00	1,265	來源待核實	2026-10-25T02:00:09.867137	https://www.cnbc.com/id/100003114/device/rss/rss.html	d01220fbf99f12ee403ac4dd0da26f6308f85b91fb724d537cb3208628de83be
+2026-10-25T02:00:07.633189+00:00	1,264	來源待核實	2026-10-25T02:00:07.633189	https://tw.stock.yahoo.com/rss?category=tw-market	d6327f881e5c0c6a46d7185c563d9db0ecf1e7ebd8afd00cf51a4db5c86d490d
+2026-10-25T02:00:05.331380+00:00	1,263	來源待核實	2026-10-25T02:00:05.331380	https://www.ctee.com.tw/rss_web/livenews/stock	b926a3756c8cae791cf330ed09e069b437e0fecf2065a8e8c29167b45036bac8
+資料品質
+2026-10-23 · TWSE:2888
+待確認
+完整
+2026-10-23 · TWSE:2809
+待確認
+完整
+2026-10-23 · TPEx:8420
+待確認
+完整
+2026-10-23 · TPEx:6747
+待確認
+完整
+2026-10-23 · TPEx:6589
+待確認
+完整
+2026-10-23 · TPEx:6514
+待確認
+完整
+2026-10-23 · TPEx:6457
+待確認
+完整
+2026-10-23 · TPEx:6287
+待確認
+完整
+2026-10-23 · TPEx:5371
+待確認
+完整
+2026-10-23 · TPEx:5236
+待確認
+完整
+2026-10-23 · TPEx:4987
+待確認
+完整
+2026-10-23 · TPEx:4945
+待確認
+完整
+2026-10-23 · TPEx:4130
+待確認
+完整
+2026-10-23 · TPEx:3426
+待確認
+完整
+2026-10-23 · TPEx:3202
+待確認
+完整
+2026-10-23 · TWSE
+待確認
+完整
+2026-10-23 · TPEx
+待確認
+完整
+2026-10-23 · TWSE:1589
+待確認
+完整
+2026-10-23 · TWSE:00925
+待確認
+完整
+2026-10-23 · TWSE:00906
+待確認
+完整
+2026-10-23 · TWSE:00866
+待確認
+完整
+2026-10-23 · TWSE:008201
+待確認
+完整
+2026-10-23 · TWSE:0081
+待確認
+完整
+2026-10-23 · TWSE:0080
+待確認
+完整
+2026-10-23 · TWSE:00776
+待確認
+完整
+2026-10-23 · TWSE:00774C
+待確認
+完整
+2026-10-23 · TWSE:00774B
+待確認
+完整
+2026-10-23 · TWSE:00767
+待確認
+完整
+2026-10-23 · TWSE:00766L
+待確認
+完整
+2026-10-23 · TWSE:00743
+待確認
+完整
+策略版本
+突破條件 · 規則版本 1.0.0
+待確認
+公式版本 institutional-flow/v1-shares-per-twd-turnover
+查看規則設定
+{
+  "confirmations": {
+    "group_relative_strength": {
+      "benchmark_id": "TAIEX",
+      "minimum_excess_return": 0,
+      "operator": "gt",
+      "return_window_trading_days": 20
+    },
+    "institutional_flow": {
+      "flow_window_trading_days": 5,
+      "minimum_net_flow_to_turnover_ratio": -0.003,
+      "normalizer": "average_daily_turnover_20d",
+      "operator": "gte"
+    },
+    "margin_financing": {
+      "change_window_trading_days": 5,
+      "maximum_balance_change_ratio": 0.05,
+      "operator": "lte"
+    }
+  },
+  "data_policy": {
+    "on_missing_required_input": "fail_closed_data_incomplete",
+    "required_inputs": [
+      "close",
+      "prior_20_highs",
+      "volume",
+      "prior_20_volumes",
+      "group_excess_return_20d",
+      "institutional_flow_to_turnover_ratio_5d",
+      "margin_balance_change_ratio_5d"
+    ]
+  },
+  "execution": {
+    "earliest_execution": "T+1",
+    "execution_price_field": "next_session_open_or_better_documented_fill",
+    "no_same_day_fill": true,
+    "signal_time": "T_close"
+  },
+  "kind": "breakout",
+  "name": "breakout_v1",
+  "price": {
+    "breakout_operator": "gt",
+    "prior_high_lookback_trading_days": 20,
+    "reference_excludes_signal_day": true,
+    "reference_price_field": "high",
+    "signal_price_field": "close"
+  },
+  "risk_management": {
+    "first_target_minimum_risk_reward": 1.5,
+    "invalid_price_must_be_below_entry": true,
+    "target_1_must_exceed_entry": true,
+    "target_2_must_exceed_target_1_when_present": true
+  },
+  "schema_version": "strategy-config/v1",
+  "universe": {
+    "etf_categories": [
+      "bond",
+      "broad_market",
+      "commodity",
+      "dividend",
+      "inverse",
+      "leveraged",
+      "sector",
+      "thematic"
+    ],
+    "etf_policy": {
+      "actionable_signal_categories": [
+        "broad_market",
+        "commodity",
+        "dividend",
+        "sector",
+        "thematic"
+      ],
+      "collect_and_classify_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "excluded_from_general_breakout_pullback": {
+        "bond": "non_actionable_etf_category",
+        "inverse": "non_actionable_etf_category",
+        "leveraged": "non_actionable_etf_category"
+      },
+      "hot_group_rank_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ]
+    },
+    "instrument_types": [
+      "stock",
+      "etf",
+      "ipo"
+    ],
+    "ipo_actionable_minimum_bars": 60,
+    "ipo_observation_minimum_bars": 20
+  },
+  "version": "1.0.0",
+  "volume": {
+    "average_excludes_signal_day": true,
+    "average_lookback_trading_days": 20,
+    "minimum_signal_to_average_ratio": 1.2,
+    "operator": "gte",
+    "signal_volume_field": "volume"
+  }
+}
+突破條件 · 規則版本 1.0.0
+完整
+公式版本 institutional-flow/v2-shares-per-share-volume
+查看規則設定
+{
+  "confirmations": {
+    "group_relative_strength": {
+      "benchmark_id": "TAIEX",
+      "minimum_excess_return": 0,
+      "operator": "gt",
+      "return_window_trading_days": 20
+    },
+    "institutional_flow": {
+      "flow_unit": "shares",
+      "flow_window_trading_days": 5,
+      "formula_version": "institutional-flow/v2-shares-per-share-volume",
+      "minimum_net_flow_to_turnover_ratio": -0.003,
+      "normalizer": "average_daily_volume_20d",
+      "normalizer_unit": "shares",
+      "normalizer_window_basis": "inclusive_signal_day",
+      "normalizer_window_trading_days": 20,
+      "operator": "gte"
+    },
+    "margin_financing": {
+      "change_window_trading_days": 5,
+      "maximum_balance_change_ratio": 0.05,
+      "operator": "lte"
+    }
+  },
+  "data_policy": {
+    "on_missing_required_input": "fail_closed_data_incomplete",
+    "required_inputs": [
+      "close",
+      "prior_20_highs",
+      "volume",
+      "prior_20_volumes",
+      "group_excess_return_20d",
+      "institutional_flow_to_turnover_ratio_5d",
+      "margin_balance_change_ratio_5d"
+    ]
+  },
+  "execution": {
+    "earliest_execution": "T+1",
+    "execution_price_field": "next_session_open_or_better_documented_fill",
+    "no_same_day_fill": true,
+    "signal_time": "T_close"
+  },
+  "kind": "breakout",
+  "name": "breakout_v1",
+  "price": {
+    "breakout_operator": "gt",
+    "prior_high_lookback_trading_days": 20,
+    "reference_excludes_signal_day": true,
+    "reference_price_field": "high",
+    "signal_price_field": "close"
+  },
+  "risk_management": {
+    "first_target_minimum_risk_reward": 1.5,
+    "invalid_price_must_be_below_entry": true,
+    "target_1_must_exceed_entry": true,
+    "target_2_must_exceed_target_1_when_present": true
+  },
+  "schema_version": "strategy-config/v1",
+  "universe": {
+    "etf_categories": [
+      "bond",
+      "broad_market",
+      "commodity",
+      "dividend",
+      "inverse",
+      "leveraged",
+      "sector",
+      "thematic"
+    ],
+    "etf_policy": {
+      "actionable_signal_categories": [
+        "broad_market",
+        "commodity",
+        "dividend",
+        "sector",
+        "thematic"
+      ],
+      "collect_and_classify_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "excluded_from_general_breakout_pullback": {
+        "bond": "non_actionable_etf_category",
+        "inverse": "non_actionable_etf_category",
+        "leveraged": "non_actionable_etf_category"
+      },
+      "hot_group_rank_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ]
+    },
+    "instrument_types": [
+      "stock",
+      "etf",
+      "ipo"
+    ],
+    "ipo_actionable_minimum_bars": 60,
+    "ipo_observation_minimum_bars": 20
+  },
+  "version": "1.0.0",
+  "volume": {
+    "average_excludes_signal_day": true,
+    "average_lookback_trading_days": 20,
+    "minimum_signal_to_average_ratio": 1.2,
+    "operator": "gte",
+    "signal_volume_field": "volume"
+  }
+}
+策略條件 · 規則版本 1.0.0
+待確認
+公式版本 institutional-flow/v1-shares-per-twd-turnover
+查看規則設定
+{
+  "benchmark": {
+    "id": "TAIEX",
+    "price_field": "adj_close",
+    "return_formula": "adj_close[t] / adj_close[t-window] - 1"
+  },
+  "components": {
+    "breadth": {
+      "formula": {
+        "member_aggregation": "share_of_members_with_positive_excess_return",
+        "operation": "weighted_mean",
+        "terms": [
+          {
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.25
+    },
+    "catalyst": {
+      "formula": {
+        "accepted_source_types": [
+          "mops_material_information",
+          "twse_tpex_official_announcement",
+          "issuer_filing"
+        ],
+        "normalization": {
+          "cap_distinct_events": 3
+        },
+        "operation": "weighted_capped_distinct_verified_events",
+        "terms": [
+          {
+            "weight": 0.5,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.2,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "missing_policy": "component_null_and_data_quality_partial",
+      "missing_value": null,
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.1
+    },
+    "institutional_flow": {
+      "formula": {
+        "flow_window_trading_days": 5,
+        "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(turnover, 20d)",
+        "operation": "cross_sectional_percentile",
+        "turnover_window_trading_days": 20
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    },
+    "relative_return": {
+      "formula": {
+        "member_aggregation": "equal_weight_mean",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.35
+    },
+    "volume_strength": {
+      "formula": {
+        "member_aggregation": "median",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "volume_1d / mean(volume_prior_20d)",
+            "signal_window_trading_days": 1,
+            "weight": 0.5
+          },
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+            "signal_window_trading_days": 5,
+            "weight": 0.5
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    }
+  },
+  "kind": "group_ranking",
+  "leaderboards": {
+    "equity": {
+      "benchmark_id": "TAIEX",
+      "instrument_types": [
+        "stock",
+        "ipo"
+      ]
+    },
+    "etf": {
+      "benchmark_id": "TAIEX",
+      "collect_and_classify_all_categories": true,
+      "included_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "instrument_types": [
+        "etf"
+      ],
+      "partition_by": "etf_category",
+      "separate_from_equity": true
+    }
+  },
+  "membership": {
+    "effective_on_score_date": "valid_from_lte_score_date_and_(valid_to_is_null_or_valid_to_gte_score_date)",
+    "exclude_members_without_required_history": true,
+    "minimum_eligible_members": 3
+  },
+  "missing_data": {
+    "component_value": null,
+    "do_not_substitute_neutral_catalyst_score": true,
+    "minimum_available_weight": 0.9,
+    "quality_complete_only_if_all_components_present": true,
+    "quality_when_catalyst_missing": "partial",
+    "score_policy": "renormalize_available_component_weights"
+  },
+  "name": "hot_group_v1",
+  "schema_version": "hot-group-config/v1",
+  "score_scale": {
+    "maximum": 100,
+    "minimum": 0
+  },
+  "version": "1.0.0",
+  "weights": {
+    "breadth": 0.25,
+    "catalyst": 0.1,
+    "institutional_flow": 0.15,
+    "relative_return": 0.35,
+    "volume_strength": 0.15
+  },
+  "windows_trading_days": {
+    "five_day": 5,
+    "one_day": 1,
+    "twenty_day": 20
+  }
+}
+策略條件 · 規則版本 1.0.0
+完整
+公式版本 institutional-flow/v2-shares-per-share-volume
+查看規則設定
+{
+  "benchmark": {
+    "id": "TAIEX",
+    "price_field": "adj_close",
+    "return_formula": "adj_close[t] / adj_close[t-window] - 1"
+  },
+  "components": {
+    "breadth": {
+      "formula": {
+        "member_aggregation": "share_of_members_with_positive_excess_return",
+        "operation": "weighted_mean",
+        "terms": [
+          {
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.25
+    },
+    "catalyst": {
+      "formula": {
+        "accepted_source_types": [
+          "mops_material_information",
+          "twse_tpex_official_announcement",
+          "issuer_filing"
+        ],
+        "normalization": {
+          "cap_distinct_events": 3
+        },
+        "operation": "weighted_capped_distinct_verified_events",
+        "terms": [
+          {
+            "weight": 0.5,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.2,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "missing_policy": "component_null_and_data_quality_partial",
+      "missing_value": null,
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.1
+    },
+    "institutional_flow": {
+      "formula": {
+        "denominator_unit": "shares",
+        "denominator_window_basis": "inclusive_signal_day",
+        "denominator_window_trading_days": 20,
+        "flow_unit": "shares",
+        "flow_window_trading_days": 5,
+        "formula_version": "institutional-flow/v2-shares-per-share-volume",
+        "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+        "operation": "cross_sectional_percentile"
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    },
+    "relative_return": {
+      "formula": {
+        "member_aggregation": "equal_weight_mean",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.35
+    },
+    "volume_strength": {
+      "formula": {
+        "member_aggregation": "median",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "volume_1d / mean(volume_prior_20d)",
+            "signal_window_trading_days": 1,
+            "weight": 0.5
+          },
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+            "signal_window_trading_days": 5,
+            "weight": 0.5
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    }
+  },
+  "kind": "group_ranking",
+  "leaderboards": {
+    "equity": {
+      "benchmark_id": "TAIEX",
+      "instrument_types": [
+        "stock",
+        "ipo"
+      ]
+    },
+    "etf": {
+      "benchmark_id": "TAIEX",
+      "collect_and_classify_all_categories": true,
+      "included_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "instrument_types": [
+        "etf"
+      ],
+      "partition_by": "etf_category",
+      "separate_from_equity": true
+    }
+  },
+  "membership": {
+    "effective_on_score_date": "valid_from_lte_score_date_and_(valid_to_is_null_or_valid_to_gte_score_date)",
+    "exclude_members_without_required_history": true,
+    "minimum_eligible_members": 3
+  },
+  "missing_data": {
+    "component_value": null,
+    "do_not_substitute_neutral_catalyst_score": true,
+    "minimum_available_weight": 0.9,
+    "quality_complete_only_if_all_components_present": true,
+    "quality_when_catalyst_missing": "partial",
+    "score_policy": "renormalize_available_component_weights"
+  },
+  "name": "hot_group_v1",
+  "schema_version": "hot-group-config/v1",
+  "score_scale": {
+    "maximum": 100,
+    "minimum": 0
+  },
+  "version": "1.0.0",
+  "weights": {
+    "breadth": 0.25,
+    "catalyst": 0.1,
+    "institutional_flow": 0.15,
+    "relative_return": 0.35,
+    "volume_strength": 0.15
+  },
+  "windows_trading_days": {
+    "five_day": 5,
+    "one_day": 1,
+    "twenty_day": 20
+  }
+}
+策略條件 · 規則版本 1.1.0
+完整
+公式版本 institutional-flow/v2-shares-per-share-volume
+查看規則設定
+{
+  "benchmark": {
+    "id": "TAIEX",
+    "price_field": "adj_close",
+    "return_formula": "adj_close[t] / adj_close[t-window] - 1"
+  },
+  "components": {
+    "breadth": {
+      "formula": {
+        "member_aggregation": "share_of_members_with_positive_excess_return",
+        "operation": "weighted_mean",
+        "terms": [
+          {
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.25
+    },
+    "catalyst": {
+      "formula": {
+        "accepted_source_types": [
+          "mops_material_information",
+          "twse_tpex_official_announcement",
+          "issuer_filing"
+        ],
+        "normalization": {
+          "cap_distinct_events": 3
+        },
+        "operation": "weighted_capped_distinct_verified_events",
+        "terms": [
+          {
+            "weight": 0.5,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.2,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "missing_policy": "component_null_and_data_quality_partial",
+      "missing_value": null,
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.1
+    },
+    "institutional_flow": {
+      "coverage": {
+        "absent_from_official_file": "net_zero_with_evidence",
+        "applies_to": "hot_group_only",
+        "member_aggregation": "sum_over_eligible_members",
+        "member_base": "eligible_members",
+        "official_file_evidence": "same_exchange_same_day_chip_row_from_official_institutional_source_linked_to_raw_payload_of_that_endpoint_and_date",
+        "official_file_missing": "member_flow_unavailable",
+        "official_row_with_null_component": "member_flow_unavailable",
+        "official_sources": {
+          "TPEx": "tpex_3insti",
+          "TWSE": "twse_t86"
+        },
+        "required_ratio": 1
+      },
+      "formula": {
+        "denominator_unit": "shares",
+        "denominator_window_basis": "inclusive_signal_day",
+        "denominator_window_trading_days": 20,
+        "flow_unit": "shares",
+        "flow_window_trading_days": 5,
+        "formula_version": "institutional-flow/v2-shares-per-share-volume",
+        "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+        "operation": "cross_sectional_percentile"
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    },
+    "relative_return": {
+      "formula": {
+        "member_aggregation": "equal_weight_mean",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "metric": "group_return_minus_benchmark_return",
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.35
+    },
+    "volume_strength": {
+      "formula": {
+        "member_aggregation": "median",
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "terms": [
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "volume_1d / mean(volume_prior_20d)",
+            "signal_window_trading_days": 1,
+            "weight": 0.5
+          },
+          {
+            "baseline_window_trading_days": 20,
+            "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+            "signal_window_trading_days": 5,
+            "weight": 0.5
+          }
+        ]
+      },
+      "value_range": [
+        0,
+        1
+      ],
+      "weight": 0.15
+    }
+  },
+  "kind": "group_ranking",
+  "leaderboards": {
+    "equity": {
+      "benchmark_id": "TAIEX",
+      "instrument_types": [
+        "stock",
+        "ipo"
+      ]
+    },
+    "etf": {
+      "benchmark_id": "TAIEX",
+      "collect_and_classify_all_categories": true,
+      "included_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "instrument_types": [
+        "etf"
+      ],
+      "partition_by": "etf_category",
+      "separate_from_equity": true
+    }
+  },
+  "membership": {
+    "effective_on_score_date": "valid_from_lte_score_date_and_(valid_to_is_null_or_valid_to_gte_score_date)",
+    "exclude_members_without_required_history": true,
+    "minimum_eligible_members": 3
+  },
+  "missing_data": {
+    "component_value": null,
+    "do_not_substitute_neutral_catalyst_score": true,
+    "minimum_available_weight": 0.9,
+    "quality_complete_only_if_all_components_present": true,
+    "quality_when_catalyst_missing": "partial",
+    "score_policy": "renormalize_available_component_weights"
+  },
+  "name": "hot_group_v1",
+  "schema_version": "hot-group-config/v1",
+  "score_scale": {
+    "maximum": 100,
+    "minimum": 0
+  },
+  "version": "1.1.0",
+  "weights": {
+    "breadth": 0.25,
+    "catalyst": 0.1,
+    "institutional_flow": 0.15,
+    "relative_return": 0.35,
+    "volume_strength": 0.15
+  },
+  "windows_trading_days": {
+    "five_day": 5,
+    "one_day": 1,
+    "twenty_day": 20
+  }
+}
+回踩條件 · 規則版本 1.0.0
+待確認
+公式版本 institutional-flow/v1-shares-per-twd-turnover
+查看規則設定
+{
+  "confirmations": {
+    "group_relative_strength": {
+      "benchmark_id": "TAIEX",
+      "minimum_excess_return": 0,
+      "operator": "gt",
+      "return_window_trading_days": 20
+    },
+    "institutional_flow": {
+      "flow_window_trading_days": 5,
+      "minimum_net_flow_to_turnover_ratio": -0.003,
+      "normalizer": "average_daily_turnover_20d",
+      "operator": "gte"
+    },
+    "margin_financing": {
+      "change_window_trading_days": 5,
+      "maximum_balance_change_ratio": 0.05,
+      "operator": "lte"
+    }
+  },
+  "data_policy": {
+    "on_missing_required_input": "fail_closed_data_incomplete",
+    "required_inputs": [
+      "bar_count_60d",
+      "close",
+      "ma20",
+      "ma60",
+      "volume",
+      "prior_20_volumes",
+      "group_excess_return_20d",
+      "institutional_flow_to_turnover_ratio_5d",
+      "margin_balance_change_ratio_5d"
+    ]
+  },
+  "execution": {
+    "earliest_execution": "T+1",
+    "execution_price_field": "next_session_open_or_better_documented_fill",
+    "no_same_day_fill": true,
+    "signal_time": "T_close"
+  },
+  "kind": "pullback",
+  "name": "pullback_v1",
+  "risk_management": {
+    "first_target_minimum_risk_reward": 1.5,
+    "invalid_price_must_be_below_entry": true,
+    "target_1_must_exceed_entry": true,
+    "target_2_must_exceed_target_1_when_present": true
+  },
+  "schema_version": "strategy-config/v1",
+  "support_zone": {
+    "bounds_inclusive": true,
+    "maximum_close_to_ma20_ratio": 1.02,
+    "minimum_close_to_ma20_ratio": 0.97,
+    "reference": "ma20"
+  },
+  "trend": {
+    "close_must_be_at_or_above": "ma60",
+    "fast_ma_window_trading_days": 20,
+    "ma_alignment": "ma20_gt_ma60",
+    "minimum_history_trading_days": 60,
+    "slow_ma_window_trading_days": 60
+  },
+  "universe": {
+    "etf_categories": [
+      "bond",
+      "broad_market",
+      "commodity",
+      "dividend",
+      "inverse",
+      "leveraged",
+      "sector",
+      "thematic"
+    ],
+    "etf_policy": {
+      "actionable_signal_categories": [
+        "broad_market",
+        "commodity",
+        "dividend",
+        "sector",
+        "thematic"
+      ],
+      "collect_and_classify_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "excluded_from_general_breakout_pullback": {
+        "bond": "non_actionable_etf_category",
+        "inverse": "non_actionable_etf_category",
+        "leveraged": "non_actionable_etf_category"
+      },
+      "hot_group_rank_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ]
+    },
+    "instrument_types": [
+      "stock",
+      "etf",
+      "ipo"
+    ],
+    "ipo_actionable_minimum_bars": 60,
+    "ipo_observation_minimum_bars": 20
+  },
+  "version": "1.0.0",
+  "volume": {
+    "average_excludes_signal_day": true,
+    "average_lookback_trading_days": 20,
+    "bounds_inclusive": true,
+    "maximum_signal_to_average_ratio": 1.2,
+    "minimum_signal_to_average_ratio": 0.6,
+    "signal_volume_field": "volume"
+  }
+}
+回踩條件 · 規則版本 1.0.0
+完整
+公式版本 institutional-flow/v2-shares-per-share-volume
+查看規則設定
+{
+  "confirmations": {
+    "group_relative_strength": {
+      "benchmark_id": "TAIEX",
+      "minimum_excess_return": 0,
+      "operator": "gt",
+      "return_window_trading_days": 20
+    },
+    "institutional_flow": {
+      "flow_unit": "shares",
+      "flow_window_trading_days": 5,
+      "formula_version": "institutional-flow/v2-shares-per-share-volume",
+      "minimum_net_flow_to_turnover_ratio": -0.003,
+      "normalizer": "average_daily_volume_20d",
+      "normalizer_unit": "shares",
+      "normalizer_window_basis": "inclusive_signal_day",
+      "normalizer_window_trading_days": 20,
+      "operator": "gte"
+    },
+    "margin_financing": {
+      "change_window_trading_days": 5,
+      "maximum_balance_change_ratio": 0.05,
+      "operator": "lte"
+    }
+  },
+  "data_policy": {
+    "on_missing_required_input": "fail_closed_data_incomplete",
+    "required_inputs": [
+      "bar_count_60d",
+      "close",
+      "ma20",
+      "ma60",
+      "volume",
+      "prior_20_volumes",
+      "group_excess_return_20d",
+      "institutional_flow_to_turnover_ratio_5d",
+      "margin_balance_change_ratio_5d"
+    ]
+  },
+  "execution": {
+    "earliest_execution": "T+1",
+    "execution_price_field": "next_session_open_or_better_documented_fill",
+    "no_same_day_fill": true,
+    "signal_time": "T_close"
+  },
+  "kind": "pullback",
+  "name": "pullback_v1",
+  "risk_management": {
+    "first_target_minimum_risk_reward": 1.5,
+    "invalid_price_must_be_below_entry": true,
+    "target_1_must_exceed_entry": true,
+    "target_2_must_exceed_target_1_when_present": true
+  },
+  "schema_version": "strategy-config/v1",
+  "support_zone": {
+    "bounds_inclusive": true,
+    "maximum_close_to_ma20_ratio": 1.02,
+    "minimum_close_to_ma20_ratio": 0.97,
+    "reference": "ma20"
+  },
+  "trend": {
+    "close_must_be_at_or_above": "ma60",
+    "fast_ma_window_trading_days": 20,
+    "ma_alignment": "ma20_gt_ma60",
+    "minimum_history_trading_days": 60,
+    "slow_ma_window_trading_days": 60
+  },
+  "universe": {
+    "etf_categories": [
+      "bond",
+      "broad_market",
+      "commodity",
+      "dividend",
+      "inverse",
+      "leveraged",
+      "sector",
+      "thematic"
+    ],
+    "etf_policy": {
+      "actionable_signal_categories": [
+        "broad_market",
+        "commodity",
+        "dividend",
+        "sector",
+        "thematic"
+      ],
+      "collect_and_classify_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ],
+      "excluded_from_general_breakout_pullback": {
+        "bond": "non_actionable_etf_category",
+        "inverse": "non_actionable_etf_category",
+        "leveraged": "non_actionable_etf_category"
+      },
+      "hot_group_rank_categories": [
+        "bond",
+        "broad_market",
+        "commodity",
+        "dividend",
+        "inverse",
+        "leveraged",
+        "sector",
+        "thematic"
+      ]
+    },
+    "instrument_types": [
+      "stock",
+      "etf",
+      "ipo"
+    ],
+    "ipo_actionable_minimum_bars": 60,
+    "ipo_observation_minimum_bars": 20
+  },
+  "version": "1.0.0",
+  "volume": {
+    "average_excludes_signal_day": true,
+    "average_lookback_trading_days": 20,
+    "bounds_inclusive": true,
+    "maximum_signal_to_average_ratio": 1.2,
+    "minimum_signal_to_average_ratio": 0.6,
+    "signal_volume_field": "volume"
+  }
+}
+T 日收盤訊號 · 最早 T+1 執行 · T+5／T+20 追蹤
+僅使用官方資料 · 詳細來源見各頁資料說明
+技術回測
+資料覆蓋度
+策略版本
+資料品質
+用語表

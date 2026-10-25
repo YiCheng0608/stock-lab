@@ -1,0 +1,84 @@
+units exact volume cases passed
+units exact position and raw input boundaries passed
+units canonical lots 48 checks passed
+PASS units.test.ts
+PASS search.test.ts
+PASS presentation.test.ts
+PASS noHardcodedColors.test.ts
+PASS stock/stockBars.test.tsx
+PASS components/StrategyVersionCard.test.tsx
+PASS components/ui/ui.test.tsx
+PASS themes/themeBoards.test.tsx
+PASS themes/themeSuggestions.test.tsx
+PASS news/news.test.tsx
+PASS candidates/candidates.test.tsx
+table checks failed:
+- DataTable: render failed (components/ui does not export DataTable)
+- DataTable: no table rendered
+- DataTable keeps the unit note above the table
+- App.tsx: writes <table>/<th>/<td> by hand; use DataTable so th and td share num
+- App.tsx: uses numeric-cell; DataTable column num replaces it
+- candidates/CandidateViews.tsx: writes <table>/<th>/<td> by hand; use DataTable so th and td share num
+- stock/StockBarsChart.tsx: writes <table>/<th>/<td> by hand; use DataTable so th and td share num
+- themes/ThemeViews.tsx: writes <table>/<th>/<td> by hand; use DataTable so th and td share num
+- lots: 1 shares should be 0, got 0.001
+- lots: -1 shares should be 0, got -0.001
+- lots: 499 shares should be 0, got 0.499
+- lots: -499 shares should be 0, got -0.499
+- lots: 500 shares should be 1, got 0.5
+- lots: -500 shares should be -1, got -0.5
+- lots: 999 shares should be 1, got 0.999
+- lots: 1500 shares should be 2, got 1.5
+- lots: -7500 shares should be -8, got -7.5
+- lots: 53500 shares should be 54, got 53.5
+- lots: 57797 shares should be 58, got 57.797
+- lots: 29796590 shares should be 29,797, got 29,796.59
+- lots: -12694626 shares should be -12,695, got -12,694.626
+- lots: 9223372036854775807 shares should be 9,223,372,036,854,776, got 9,223,372,036,854,775.807
+- lots: -9223372036854775807 shares should be -9,223,372,036,854,776, got -9,223,372,036,854,775.807
+- 5-day sum rounds on the exact string
+- 20-day sum rounds on the exact string
+- institutional flow shows signed whole lots
+- an odd-lot flow is 0 without a sign
+- volume is whole lots
+- table numbers keep their fixed decimals
+- a value that rounds to zero has no minus sign
+- 個股籌碼: header 「外資買賣超」 is not right-aligned (th without num)
+- 個股籌碼: header 「投信」 is not right-aligned (th without num)
+- 個股籌碼: header 「自營商」 is not right-aligned (th without num)
+- 個股籌碼: header 「融資增減」 is not right-aligned (th without num)
+- 個股籌碼: numeric-cell is merged into num
+- 個股籌碼: institutional flow is whole lots
+- BarTable: render failed (App does not export BarTable)
+- 原始行情: no table rendered
+- 原始行情: prices keep two decimals under 50, volume is whole lots
+- StockTable: render failed (App does not export StockTable)
+- 個股清單: no table rendered
+- 個股清單: a column across stocks keeps two decimals
+- 族群成員: closes keep two decimals
+- 今日候選評分細節: a body row has 4 cells for 5 headers
+- 今日候選評分細節: column 「子項」 th and td disagree on num
+- 今日候選評分細節: a body row has 4 cells for 5 headers
+- 今日候選評分細節: column 「子項」 th and td disagree on num
+- 今日候選評分細節: a body row has 4 cells for 5 headers
+- 今日候選評分細節: column 「子項」 th and td disagree on num
+- 今日候選評分細節: a body row has 4 cells for 5 headers
+- 今日候選評分細節: column 「子項」 th and td disagree on num
+- 今日候選評分細節: 5 columns in a card; the group title belongs on its own row (§5.1)
+- 今日與行動卡片: close keeps the tick decimals (21.10), got 1742| 台蠟|條件進場|上市 · 股票|最近收盤（報價幣別元）|21.1|漲跌（元／%） +0.6（+2.93）|資料日 2026/10/22|查看個股詳情 →
+- 今日與行動卡片: change uses the price decimals and the percent sign
+- IngestionRunTable: render failed (App does not export IngestionRunTable)
+- 系統頁擷取狀態: no table rendered
+- RawTable: render failed (App does not export RawTable)
+- 系統頁原始來源: no table rendered
+- BacktestTable: render failed (App does not export BacktestTable)
+- 技術回測: no table rendered
+- BackfillRunTable: render failed (App does not export BackfillRunTable)
+- 回補紀錄: no table rendered
+FAIL tables.test.tsx: Error: 62 of 192 table checks failed (listed above)
+    at Object.<anonymous> (C:\Users\YiCheng\AppData\Local\Temp\claude\C--Users-YiCheng-orca-workspaces-taiwan-stock-research-task-267-table-alignment\17f5590a-0bf5-4429-94e2-7cc9904e2183\scratchpad\fe\src\tables.test.tsx:5362:9)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at loadModule (C:\Users\YiCheng\AppData\Local\Temp\claude\C--Users-YiCheng-orca-workspaces-taiwan-stock-research-task-267-table-alignment\17f5590a-0bf5-4429-94e2-7cc9904e2183\scratchpad\fe\scripts\ci-test.cjs:56:14)
+    at runSuite (C:\Users\YiCheng\AppData\Local\Temp\claude\C--Users-YiCheng-orca-workspaces-taiwan-stock-research-task-267-table-alignment\17f5590a-0bf5-4429-94e2-7cc9904e2183\scratchpad\fe\scripts\ci-test.cjs:80:20)
+    at C:\Users\YiCheng\AppData\Local\Temp\claude\C--Users-YiCheng-orca-workspaces-taiwan-stock-research-task-267-table-alignment\17f5590a-0bf5-4429-94e2-7cc9904e2183\scratchpad\fe\scripts\ci-test.cjs:113:56
+Failed 1: tables.test.tsx
