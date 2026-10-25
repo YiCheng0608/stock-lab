@@ -177,7 +177,7 @@ def test_batches_are_split_and_results_saved(db, fake):
     row = next(row for row in rows if row.news_item_id == items[0].id)
     assert row.llm_status == "done" and row.prompt_version == PROMPT_VERSION
     assert row.llm_model == "claude-haiku-fake"
-    assert row.ai_summary == f"摘要{items[0].id}"
+    assert row.ai_summary == f"摘要：{items[0].title}"
     assert row.ai_symbol_candidates_json == [
         {
             "symbol": "TWSE:2330",
@@ -228,12 +228,12 @@ def test_rerun_does_not_call_again_for_done_items(db, fake):
 def test_new_prompt_version_reruns_and_keeps_old_results(db, fake, monkeypatch):
     items = _add_news(db, 2)
     _run(db)
-    monkeypatch.setattr(news_llm, "PROMPT_VERSION", "news_v2")
+    monkeypatch.setattr(news_llm, "PROMPT_VERSION", "news_next")
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "ok")
     rerun = _run(db)
     assert rerun["selected"] == 2 and rerun["done"] == 2
     rows = _results(db, news_item_id=items[0].id)
-    assert [row.prompt_version for row in rows] == ["news_v1", "news_v2"]
+    assert [row.prompt_version for row in rows] == [PROMPT_VERSION, "news_next"]
     assert all(row.llm_status == "done" for row in rows)
 
 
@@ -388,7 +388,7 @@ def test_pending_retry_failure_keeps_earlier_done_fields(db, fake, monkeypatch):
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "invalid_json")
     _run(db)
     row = _results(db, news_item_id=items[0].id)[0]
-    assert row.llm_status == "pending" and row.ai_summary == f"摘要{items[0].id}"
+    assert row.llm_status == "pending" and row.ai_summary == f"摘要：{items[0].title}"
 
 
 def test_validation_rejects_missing_extra_and_bad_fields():
@@ -533,7 +533,7 @@ def test_rule_relations_and_llm_candidates_stay_in_separate_fields(db, fake, cli
     assert detail["impact"]["direction"] == "unknown"
     ai = detail["ai"]
     assert ai["inference"] is True and ai["status"] == "done"
-    assert ai["summary"] == f"摘要{item.id}"
+    assert ai["summary"] == f"摘要：{item.title}"
     assert ai["symbol_candidates"] == [
         {
             "exchange": "TWSE",
@@ -834,3 +834,94 @@ def test_run_left_running_by_a_killed_task_is_closed_by_the_next_run(
     assert killed.status == "failed" and killed.error.startswith("abandoned")
     assert killed.finished_at is not None
     assert active.status == "running"
+
+
+# Issue #262 -------------------------------------------------------------------
+
+
+def test_current_prompt_states_the_faithfulness_rules():
+    # news_v1 merged facts of different subjects (G7 rehearsal N7, news 2458).
+    text = news_llm.prompt_text()
+    assert PROMPT_VERSION != "news_v1"
+    for rule in (
+        "主體（公司、機構、人物、地點）、數字、時間與事件，都要能在該則的標題或摘要找到",
+        "數字照原文的寫法抄",
+        "原文寫在甲身上的成果、數字或動作，不得移到乙身上",
+        "不補原文沒寫的因果",
+    ):
+        assert rule in text
+
+
+@pytest.mark.parametrize(
+    ("title", "summary", "ai_summary", "missing"),
+    [
+        ("營收年增44.28%", "", "營收年增44%", ["44"]),
+        ("建三奈米廠", "", "建3奈米廠", ["3"]),
+        ("營收達30億元", "", "營收3億元", ["3"]),
+        ("外資賣超5,862.28億元", "", "外資賣超5862.28億元", []),
+        ("外資賣超５８６２億元", "", "外資賣超5,862億元", []),
+        ("10月22日法說", "營收年增44.28%", "10/22法說，營收年增44.28%", []),
+        ("沒有數字", "", "2026年營收創高", ["2026"]),
+        # English sources may translate amounts, so they are not checked.
+        ("Musk gave $158 million", "", "馬斯克捐1.58億美元", []),
+    ],
+)
+def test_summary_numbers_must_be_written_in_a_chinese_source(
+    title, summary, ai_summary, missing
+):
+    payload = {"title": title, "summary": summary}
+    assert news_llm.summary_numbers_missing(payload, ai_summary) == missing
+
+
+def test_summary_number_missing_from_the_source_is_rejected(db, fake, monkeypatch):
+    rounded, other = _add_news(db, 2, summary="營收年增44.28%")
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "rounded_number")
+    result = _run(db)
+
+    assert result["status"] == "success" and result["calls"] == 1
+    assert (result["done"], result["rejected"], result["pending"]) == (1, 1, 0)
+    row = _results(db, news_item_id=rounded.id)[0]
+    assert row.llm_status == "rejected" and row.prompt_version == PROMPT_VERSION
+    assert row.llm_error == "summary_check: numbers 44 not in the source"
+    assert row.ai_summary is None and row.ai_impact_direction is None
+    assert row.raw_payload_id is not None and row.llm_model == "claude-haiku-fake"
+    assert _results(db, news_item_id=other.id)[0].llm_status == "done"
+    run = db.get(IngestionRun, result["run_id"])
+    assert run.records == 1
+    assert run.metadata_json["batches"][0]["rejected_ids"] == [rounded.id]
+
+
+def test_rejected_item_is_settled_and_not_sent_again(db, fake, monkeypatch):
+    _add_news(db, 1, summary="營收年增44.28%")
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "rounded_number")
+    _run(db)
+    again = _run(db)
+    assert again["selected"] == 0 and again["calls"] == 0
+    assert len(fake()) == 1
+
+
+def test_latest_rejected_result_hides_an_older_done_one(db, fake, client, monkeypatch):
+    item = _add_news(db, 1, summary="營收年增44.28%")[0]
+    db.add(
+        NewsLlmResult(
+            news_item_id=item.id,
+            prompt_version="news_v1",
+            llm_model="claude-haiku-fake",
+            llm_input_hash="x" * 64,
+            llm_run_at=BASE_TIME,
+            llm_status="done",
+            ai_summary="營收年增44%",
+            ai_symbol_candidates_json=[],
+            ai_theme_candidates_json=[],
+        )
+    )
+    db.commit()
+    assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"]["summary"] == (
+        "營收年增44%"
+    )
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "rounded_number")
+    _run(db)
+    assert _results(db, prompt_version=PROMPT_VERSION)[0].llm_status == "rejected"
+    assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
+    listed = client.get(f"{router.prefix}/news").json()["items"]
+    assert [entry["ai"] for entry in listed] == [None]

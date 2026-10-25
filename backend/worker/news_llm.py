@@ -6,6 +6,8 @@ headless mode, logged in with the user's subscription (no API key).  Results
 go to news_llm_results, one row per item and prompt version, so the rule
 relations and source summary on news_items are never overwritten and older
 prompt versions stay.  Older items are marked ``skipped_stale`` and not sent.
+An item whose summary writes a number its Chinese source does not is stored
+``rejected`` without AI fields and is not sent again.
 
 A failing batch (timeout, invalid JSON, schema mismatch) marks its items
 ``pending`` with the reason and the other batches still run; pending items
@@ -25,6 +27,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -40,11 +43,11 @@ from . import sources
 from .news_sources import TAIPEI
 from .pipeline import _upsert_raw_payload
 
-PROMPT_VERSION = "news_v1"
+PROMPT_VERSION = "news_v2"
 PROMPT_PATH = Path(__file__).with_name("prompts") / f"{PROMPT_VERSION}.md"
 # Pinned hash of the prompt text (LF line endings).  Editing the prompt
 # without a new PROMPT_VERSION fails the prompt version test.
-PROMPT_SHA256 = "bbb3b265f48b992eda24a71b2b36db6144f2fa46b4dd49577ab85704455ccb63"
+PROMPT_SHA256 = "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f"
 MODEL = "haiku"
 BATCH_SIZE = 25
 DEFAULT_LIMIT = 50
@@ -73,6 +76,9 @@ STRIPPED_ENV_PREFIXES = ("CLAUDE_CODE_", "ANTHROPIC_")
 API_KEY_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
 # Failures every later call in the same run would repeat.
 FATAL_REASONS = frozenset({"not_logged_in", "rate_limited", "cli_not_started"})
+# A rejected item failed the summary check; like done and skipped_stale it is
+# not sent again for this prompt version.
+SETTLED_STATUSES = ("done", "skipped_stale", "rejected")
 RAW_SOURCE = "news_llm"
 RAW_ENDPOINT = f"claude -p --model {MODEL}"
 
@@ -81,6 +87,12 @@ SCOPES = ("instrument", "theme", "market")
 CONFIDENCES = ("high", "medium", "low")
 SYMBOL_PATTERN = "^(TWSE|TPEx):[0-9A-Z]{4,6}$"
 _SYMBOL = re.compile(SYMBOL_PATTERN)
+# Summary check (news_v2): every number in the summary of a Chinese source
+# must appear in its title or summary as written.  English sources are not
+# checked, since the prompt lets their amounts be translated (million -> 萬).
+_HAN = re.compile(r"[\u4e00-\u9fff]")
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+_THOUSANDS_COMMA = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 
 _CANDIDATE_SYMBOL = {
     "type": "object",
@@ -305,12 +317,32 @@ def build_prompt(template: str, inputs: list[dict[str, Any]]) -> str:
     return f"{template.rstrip()}\n\n<news>\n{news}\n</news>\n"
 
 
+def _numbers(text: str) -> list[str]:
+    normalized = _THOUSANDS_COMMA.sub("", unicodedata.normalize("NFKC", text))
+    return _NUMBER.findall(normalized)
+
+
+def summary_numbers_missing(payload: dict[str, Any], summary: str) -> list[str]:
+    """Numbers of ``summary`` not written in the item's sent title or summary.
+
+    Whole numbers are compared (``3`` does not match ``30``) after NFKC and
+    removing thousands separators.  Sources without Chinese text are not
+    checked and give ``[]``.
+    """
+
+    source = f"{payload.get('title') or ''}\n{payload.get('summary') or ''}"
+    if not _HAN.search(source):
+        return []
+    written = set(_numbers(source))
+    return list(dict.fromkeys(n for n in _numbers(summary) if n not in written))
+
+
 def _candidates_query(db: Session, on_date: date | None):
-    """Active items without a done or skipped_stale result for the current prompt."""
+    """Active items without a settled result for the current prompt."""
 
     settled = select(NewsLlmResult.news_item_id).where(
         NewsLlmResult.prompt_version == PROMPT_VERSION,
-        NewsLlmResult.llm_status.in_(("done", "skipped_stale")),
+        NewsLlmResult.llm_status.in_(SETTLED_STATUSES),
     )
     query = select(NewsItem).where(
         NewsItem.status == "active", NewsItem.id.not_in(settled)
@@ -600,10 +632,11 @@ def _store_status(
     run: IngestionRun,
     raw_payload_id: int | None,
     run_at: datetime,
+    model: str | None = None,
 ) -> None:
     # Only status, reason and audit links change; no ai_* field is written.
     row = _result_row(db, item.id) or _new_row(item)
-    row.llm_model = row.llm_model or MODEL
+    row.llm_model = model or row.llm_model or MODEL
     row.llm_input_hash = input_hash(item_input(item))
     row.llm_run_at = run_at
     row.llm_status = status
@@ -675,17 +708,34 @@ def _run_batch(
         summary.update(status="pending", reason=exc.reason, error=str(exc)[:500])
         return summary
     model, usage = _usage(envelope)
-    for item in items:
+    rejected: list[int] = []
+    for item, payload in zip(items, inputs):
+        output = outputs[item.id]
+        missing = summary_numbers_missing(payload, output["summary"])
+        if missing:
+            # Only this item; its output stays in the raw payload.
+            rejected.append(item.id)
+            _store_status(
+                db,
+                item,
+                "rejected",
+                f"summary_check: numbers {', '.join(missing)} not in the source",
+                run=run,
+                raw_payload_id=raw_row.id,
+                run_at=run_at,
+                model=model,
+            )
+            continue
         _store_done(
             db,
             item,
-            outputs[item.id],
+            output,
             model=model,
             run=run,
             raw_payload_id=raw_row.id,
             run_at=run_at,
         )
-    summary.update(status="done", model=model, usage=usage)
+    summary.update(status="done", model=model, usage=usage, rejected_ids=rejected)
     return summary
 
 
@@ -892,8 +942,9 @@ def run_news_llm(
     for reason in sorted({item["reason"] for item in skipped}):
         count = sum(1 for item in skipped if item["reason"] == reason)
         errors.append(f"{reason}: {count} batch(es) skipped")
+    rejected = sum(len(item["rejected_ids"]) for item in done)
     run.status = status
-    run.records = sum(len(item["news_ids"]) for item in done)
+    run.records = sum(len(item["news_ids"]) for item in done) - rejected
     run.error = "; ".join(errors) or None
     run.data_as_of = datetime.utcnow().isoformat()
     run.metadata_json = _metadata(
@@ -906,6 +957,7 @@ def run_news_llm(
         "status": status,
         "run_id": run.id,
         "done": run.records,
+        "rejected": rejected,
         "pending": sum(len(item["news_ids"]) for item in failed),
         "skipped": sum(len(item["news_ids"]) for item in skipped),
         "calls": len(results),

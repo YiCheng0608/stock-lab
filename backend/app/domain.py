@@ -468,18 +468,19 @@ CANONICAL_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 
-# Daily candidate ranking (V1_SPEC candidate_score_v1).  The score only orders
-# signals the strategies already judged conditional; it never changes a
-# strategy decision and is not a win rate or expected return.  Any change to
-# this dictionary requires a new version: stored candidates keep the version
-# and a snapshot of the configuration they were scored with.  It is kept out
-# of CANONICAL_CONFIGS, whose snapshot identifies strategy rows.
-CANDIDATE_SCORE_VERSION = "candidate_score_v1"
+# Daily candidate ranking (V1_SPEC candidate_score_v1, candidate_score_v2).
+# The score only orders signals the strategies already judged conditional; it
+# never changes a strategy decision and is not a win rate or expected return.
+# Any change to these dictionaries requires a new version: stored candidates
+# keep the version and a snapshot of the configuration they were scored with.
+# They are kept out of CANONICAL_CONFIGS, whose snapshot identifies strategy
+# rows.  CANDIDATE_SCORE is the current version.
+CANDIDATE_SCORE_VERSION = "candidate_score_v2"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
 CANDIDATE_NOTE_PROMPT_VERSION = "candidate_notes_v1"
 CANDIDATE_SCORE_V1: dict[str, Any] = {
-    "name": CANDIDATE_SCORE_VERSION,
+    "name": "candidate_score_v1",
     "schema_version": "candidate-score-config/v1",
     "purpose": "ranking_only_not_win_rate_or_expected_return",
     "percentile": "mid_rank_same_day:(less+(equal-1)/2)/(n-1);single_value=0.5",
@@ -584,6 +585,12 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
         "symbol_asc",
     ],
 }
+# candidate_score_v2 (#262): candidate_score_v1 with the news direction read
+# from the news_v2 prompt, the news LLM's version from then on.
+CANDIDATE_SCORE_V2: dict[str, Any] = json.loads(json.dumps(CANDIDATE_SCORE_V1))
+CANDIDATE_SCORE_V2["name"] = "candidate_score_v2"
+CANDIDATE_SCORE_V2["components"]["news_sentiment"]["llm_prompt_version"] = "news_v2"
+CANDIDATE_SCORE = CANDIDATE_SCORE_V2
 
 
 def weighted_available_mean(

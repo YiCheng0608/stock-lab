@@ -1,4 +1,4 @@
-"""Daily candidate list scored with ``candidate_score_v1`` (V1_SPEC).
+"""Daily candidate list scored with the current candidate_score version (V1_SPEC).
 
 Runs after ``analyze``: it reads the trading date's ``breakout_v1`` /
 ``pullback_v1`` signals, keeps the ones analyze judged actionable
@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.config import MIN_GROUP_MEMBERS
 from app.domain import (
-    CANDIDATE_SCORE_V1,
+    CANDIDATE_SCORE,
     CANDIDATE_SCORE_VERSION,
     validate_signal_levels,
     weighted_available_mean,
@@ -612,7 +612,7 @@ def compute_daily_candidates(
     db: Session,
     trading_date: date,
     *,
-    config: dict[str, Any] = CANDIDATE_SCORE_V1,
+    config: dict[str, Any] = CANDIDATE_SCORE,
 ) -> dict[str, Any]:
     """Score, rank and store one trading date's candidates (committed)."""
 
@@ -960,9 +960,7 @@ def _score_pool(
 def latest_signal_date(db: Session) -> date | None:
     return db.scalar(
         select(func.max(Signal.signal_date)).where(
-            Signal.signal_key.like(
-                f"{CANDIDATE_SCORE_V1['pool']['signal_namespace']}-%"
-            )
+            Signal.signal_key.like(f"{CANDIDATE_SCORE['pool']['signal_namespace']}-%")
         )
     )
 

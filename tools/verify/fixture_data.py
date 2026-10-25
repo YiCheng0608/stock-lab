@@ -30,7 +30,7 @@ from typing import Any
 
 from app.domain import (
     CANDIDATE_NOTE_PROMPT_VERSION,
-    CANDIDATE_SCORE_V1,
+    CANDIDATE_SCORE,
     CANDIDATE_SCORE_VERSION,
     CANONICAL_CONFIGS,
     GROUP_SCORE_WEIGHTS,
@@ -759,7 +759,7 @@ def _ingestion_rows() -> list[dict[str, Any]]:
             "claude",
             4,
             None,
-            {"prompt_version": "news_v1", "calls": 4},
+            {"prompt_version": NEWS_PROMPT_VERSION, "calls": 4},
             _at(T, 3),
         ),
         run(
@@ -956,6 +956,10 @@ def _news_rows() -> list[dict[str, Any]]:
 
 
 LLM_MODEL = "claude-sonnet-5-5"
+# The news prompt version the current candidate score reads (#262).
+NEWS_PROMPT_VERSION = CANDIDATE_SCORE["components"]["news_sentiment"][
+    "llm_prompt_version"
+]
 
 
 def _llm_rows() -> list[dict[str, Any]]:
@@ -963,9 +967,9 @@ def _llm_rows() -> list[dict[str, Any]]:
         return {
             "id": item_id,
             "news_item_id": news_id,
-            "prompt_version": "news_v1",
+            "prompt_version": NEWS_PROMPT_VERSION,
             "llm_model": LLM_MODEL,
-            "llm_input_hash": _sha(f"news_v1|{news_id}"),
+            "llm_input_hash": _sha(f"{NEWS_PROMPT_VERSION}|{news_id}"),
             "llm_run_at": _at(T, 3, item_id),
             "llm_status": "done",
             "ai_summary": summary,
@@ -1030,7 +1034,7 @@ def _suggestion_rows() -> list[dict[str, Any]]:
             "id": item_id,
             "theme_key": name,  # theme_key(): NFKC, no whitespace, casefold
             "display_name": name,
-            "prompt_version": "news_v1",
+            "prompt_version": NEWS_PROMPT_VERSION,
             "aggregation_version": "theme_suggestions_v1",
             "llm_models_json": [LLM_MODEL],
             "news_count": count,
@@ -1101,7 +1105,7 @@ def _candidate_run_rows() -> list[dict[str, Any]]:
             "pool_count": run["pool_count"],
             "candidate_count": run["candidate_count"],
             "exclusions_json": run["exclusions_json"],
-            "config_json": json.loads(json.dumps(CANDIDATE_SCORE_V1)),
+            "config_json": json.loads(json.dumps(CANDIDATE_SCORE)),
             "summary_json": run["summary_json"],
             "computed_at": _at(T, 10),
         }
@@ -1334,7 +1338,7 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "MOPS",
         ),
         ("news/1", "ai.model", LLM_MODEL),
-        ("news/1", "ai.prompt_version", "news_v1"),
+        ("news/1", "ai.prompt_version", NEWS_PROMPT_VERSION),
         # llm_run_at is stored naive UTC; the API states the zone (#234).
         ("news/1", "ai.generated_at", f"{D}T03:01:00+00:00"),
     ],
