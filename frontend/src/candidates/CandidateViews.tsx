@@ -64,7 +64,7 @@ type SubItemRow = { key: CandidateComponentKey; label: string; component: Candid
 
 // Four columns at most inside a card; the component title is its own row (DESIGN_SYSTEM §5.1).
 const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
-  { key: 'sub', header: '子項', cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
+  { key: 'sub', header: '子項', wrap: true, cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
   { key: 'value', header: '原值', num: true, cell: ({ name, sub }) => formatSubItemValue(name, sub.value) },
   { key: 'percentile', header: 'percentile', num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
   { key: 'weight', header: '子項權重', num: true, cell: ({ sub }) => `${Math.round(sub.weight * 100)}%` },

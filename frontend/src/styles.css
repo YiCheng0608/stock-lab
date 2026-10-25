@@ -100,7 +100,8 @@ pre { max-height: 300px; overflow: auto; margin: var(--space-4) 0 0; padding: va
 /* DESIGN_SYSTEM §5 / §5.1: width follows the content (no fixed minimum); numeric th and td share `num`. */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { color: var(--color-text-muted); font-size: 14px; font-weight: 500; text-align: left; }
-th, td { height: 56px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); text-align: left; }
+th, td { height: 56px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); text-align: left; white-space: nowrap; }
+.cell-wrap { min-width: 8em; white-space: normal; }
 tbody tr { transition: var(--transition); }
 tbody tr:hover { background: var(--color-bg-elevated); }
 tr:last-child td { border-bottom: 0; }
@@ -516,7 +517,9 @@ a.symbol-link:hover { color: var(--color-primary); }
   th, td { height: 44px; padding: 0 var(--space-2); }
   .table-wrap th:first-child, .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-bg-card); }
   .table-wrap tbody tr:hover td:first-child { background: var(--color-bg-elevated); }
-  .table-wrap .table-group-row td:first-child { position: static; background: var(--color-bg-alt); }
+  .table-wrap .table-group-row td:first-child { position: static; background: var(--color-bg-alt); white-space: normal; }
+  .table-wrap .wide-only { display: none; }
+  .table-wrap .cell-wrap { min-width: 0; }
   .board-table-wrap { display: none; }
   .board-cards { display: grid; }
   .board-controls .board-search { flex: 1 1 100%; max-width: none; }

@@ -675,8 +675,8 @@ function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<St
   return [
     { key: 'symbol', header: '代號', cell: (row) => { const instrument = instrumentOf(row); return <Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link> } },
     { key: 'name', header: '名稱', cell: (row) => instrumentOf(row).name },
-    { key: 'exchange', header: '交易所', cell: (row) => marketDisplayLabel(instrumentOf(row).exchange) },
-    { key: 'type', header: '類型', cell: (row) => instrumentTypeLabel(instrumentOf(row).instrument_type) },
+    { key: 'exchange', header: '交易所', wideOnly: true, cell: (row) => marketDisplayLabel(instrumentOf(row).exchange) },
+    { key: 'type', header: '類型', wideOnly: true, cell: (row) => instrumentTypeLabel(instrumentOf(row).instrument_type) },
     {
       // A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
       key: 'close', header: '最近收盤', num: true, cell: (row) => {

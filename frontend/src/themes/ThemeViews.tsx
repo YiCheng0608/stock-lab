@@ -328,8 +328,8 @@ const memberPath = (row: MemberRow) => '/stocks/' + encodeURIComponent(row.excha
 const MEMBER_COLUMNS: ReadonlyArray<Column<MemberRow>> = [
   { key: 'symbol', header: '代號', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.symbol}</Link> },
   { key: 'name', header: '名稱', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.name}</Link> },
-  { key: 'market', header: '市場', cell: (row) => marketLabel(row.exchange) },
-  { key: 'role', header: '角色', cell: (row) => roleLabel(row.role) },
+  { key: 'market', header: '市場', wideOnly: true, cell: (row) => marketLabel(row.exchange) },
+  { key: 'role', header: '角色', wideOnly: true, cell: (row) => roleLabel(row.role) },
   { key: 'close', header: '收盤', num: true, cell: closeText },
   { key: 'date', header: '資料日期', cell: (row) => formatDate('latest_bar' in row ? row.latest_bar?.date : undefined) ?? '' },
 ]
