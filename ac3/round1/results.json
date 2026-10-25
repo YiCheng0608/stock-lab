@@ -1,0 +1,1072 @@
+[
+ {
+  "id": 2435,
+  "sample": "N7",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2435,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "專家看台積電法說「已確認訊號」！半導體晶片需求仍強　盤點「8檔ETF」規模、績效雙成長",
+   "summary": "[FTNN新聞網]財經中心／綜合報導10月來外資連續賣超台股，大盤跌得七暈八素，不過，台股ETF中，仍有不少ETF績效搶眼，規模成長異軍突起，根據CMoney統計，截...",
+   "published_at": "2026-10-22T23:55:00+08:00"
+  },
+  "ai": {
+   "id": 2435,
+   "summary": "專家看台積電法說「已確認訊號」；10月來外資連續賣超台股，台股ETF中部分績效與規模雙成長（CMoney統計）。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題點名台積電法說，並稱專家認為已確認訊號",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "標題提及半導體晶片需求仍強"
+    },
+    {
+     "theme": "台股ETF",
+     "reason": "摘要提及台股ETF規模與績效成長"
+    }
+   ],
+   "impact_direction": "mixed",
+   "impact_scope": "market",
+   "impact_rationale": "標題對台積電與半導體需求偏正面，摘要指外資連續賣超、大盤下跌",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2458,
+  "sample": "N7",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2458,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "經濟部樂見美光與台中工會達成協議　盼桃園廠續協商",
+   "summary": "（中央社記者曾筠庭台北22日電）美光（Micron）與台灣美光記憶體工會（台中工會）昨天達成勞資協議且取得多項共識。經濟部今天晚間表示，政府樂見雙方理性溝通、共創雙贏，並指出協議涵蓋調薪、勞退提撥及輪班津貼等3大成果，更盼桃園廠持續溝通協商。",
+   "published_at": "2026-10-22T23:37:08+08:00"
+  },
+  "ai": {
+   "id": 2458,
+   "summary": "經濟部樂見美光與台中工會達成勞資協議，涵蓋調薪、勞退提撥及輪班津貼等3大成果，盼桃園廠續協商。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "記憶體",
+     "reason": "標題涉及美光與台灣美光記憶體工會的勞資協議"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "theme",
+   "impact_rationale": "勞資協議與台股公司營運的關聯，原文未說明，無法判斷方向",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2459,
+  "sample": "N7",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2459,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "91APP公布遭自動化攻擊階段調查　承諾補償消費者財損",
+   "summary": "（中央社記者趙敏雅台北22日電）電商技術服務公司91APP今天表示，Commerce Cloud其中一座訂單資料庫遭AI自動化滲透工具攻擊而被非法存取，這次事件僅涉及該座資料庫，遭存取的是訂單資訊，不包含信用卡等支付工具資訊。91APP表示，對經確認因此事件遭詐騙而受有財產損失的消費者，提供全面補償。",
+   "published_at": "2026-10-22T23:06:01+08:00"
+  },
+  "ai": {
+   "id": 2459,
+   "summary": "電商技術服務公司91APP表示，Commerce Cloud訂單資料庫遭AI自動化滲透工具攻擊，僅涉訂單資訊，並承諾補償受財損消費者。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "資安",
+     "reason": "摘要提及資料庫遭AI自動化滲透工具攻擊而被非法存取"
+    },
+    {
+     "theme": "電商",
+     "reason": "91APP為電商技術服務公司"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "theme",
+   "impact_rationale": "資料庫遭非法存取並承諾補償消費者，屬負面資安事件，摘要未涉及上市個股",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2436,
+  "sample": "N7",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2436,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台積電產能供不應求　耗材6檔必收",
+   "summary": "台積電上修資本支出並擴大先進製程與封裝布局，帶動半導體耗材與測試介面需求迎來歷史性爆發期。中砂、昇陽半導體、旺矽、精測、穎崴及環球晶等供應鏈台廠受惠於訂單滲透率提升、產能倍增及產品價格調漲，營運成長動",
+   "published_at": "2026-10-22T23:05:00+08:00"
+  },
+  "ai": {
+   "id": 2436,
+   "summary": "台積電上修資本支出並擴大先進製程與封裝布局，中砂、旺矽、精測、穎崴、環球晶等供應鏈台廠受惠於訂單、產能與價格調漲。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "文中指台積電上修資本支出並擴大先進製程與封裝布局",
+     "confidence": "high"
+    },
+    {
+     "symbol": "TWSE:1560",
+     "reason": "文中點名中砂受惠於訂單滲透率與產能倍增",
+     "confidence": "medium"
+    },
+    {
+     "symbol": "TPEx:6223",
+     "reason": "文中點名旺矽受惠於訂單滲透率與產能倍增",
+     "confidence": "medium"
+    },
+    {
+     "symbol": "TPEx:6510",
+     "reason": "文中點名精測受惠於訂單滲透率與產能倍增",
+     "confidence": "medium"
+    },
+    {
+     "symbol": "TPEx:6515",
+     "reason": "文中點名穎崴受惠於訂單滲透率與產能倍增",
+     "confidence": "medium"
+    },
+    {
+     "symbol": "TPEx:6488",
+     "reason": "文中點名環球晶受惠於訂單滲透率與產能倍增",
+     "confidence": "medium"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "半導體耗材",
+     "reason": "摘要提及半導體耗材與測試介面需求爆發"
+    },
+    {
+     "theme": "先進封裝",
+     "reason": "摘要提及台積電擴大封裝布局"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "instrument",
+   "impact_rationale": "文中指供應鏈台廠受惠於訂單、產能倍增與產品價格調漲",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2437,
+  "sample": "N7",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2437,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "AI龍頭Meta帶領科技股下殺　美股週四開盤重挫、台積電暴跌逾4%",
+   "summary": "由於市場對人工智慧（AI）企業巨額資本支出的疑慮重燃，加上地緣政治局勢升溫推升原油價格，科技股為主的那斯達克綜合指數週四（22日）開盤重挫，美股大盤指標亦同步下滑。",
+   "published_at": "2026-10-22T22:59:45+08:00"
+  },
+  "ai": {
+   "id": 2437,
+   "summary": "美股週四（22日）那斯達克開盤重挫，AI龍頭Meta帶領科技股下殺，台積電暴跌逾4%；市場對AI巨額資本支出疑慮重燃。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題寫台積電暴跌逾4%",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "AI 資本支出",
+     "reason": "摘要指市場對AI企業巨額資本支出的疑慮重燃"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "標題與摘要顯示美股科技股開盤重挫，台積電暴跌逾4%",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2871,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2871,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台積電上看4000元？先進製程爆動能　專家揭「AI定海神針生態系」選股策略",
+   "summary": "晶圓代工龍頭台積電15日召開第三季法人說明會，單季營收達1兆4942億元，市場關注財測是否上修、2027年成長動能，以及先進製程、封裝的擴產進度，對台積電短期營運及中長期展望均持高度樂觀態度，外資更上",
+   "published_at": "2026-10-24T23:00:00+08:00"
+  },
+  "ai": {
+   "id": 2871,
+   "summary": "台積電第三季法說會單季營收1兆4942億元，市場關注財測是否上修、2027年成長動能及先進製程與封裝擴產進度。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題點名台積電，摘要寫其第三季法說會與單季營收",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "晶圓代工",
+     "reason": "摘要提及台積電法說與先進製程、封裝擴產"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "instrument",
+   "impact_rationale": "摘要稱市場對台積電短期與中長期展望持高度樂觀態度",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2872,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2872,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "下週台股若偏空「恐再挫1000點」　分析師點名5大未爆彈",
+   "summary": "聯準會利率決策與美股多數收跌，牽動台股後市。分析師指出，台股短線多方尚未取得主導權，面臨上檔賣壓與修正壓力。下週盤勢震盪，可能面臨AI資本支出獲利兌現、Fed政策偏鷹、反彈遭賣壓壓制、外資流向及新興題",
+   "published_at": "2026-10-24T22:53:00+08:00"
+  },
+  "ai": {
+   "id": 2872,
+   "summary": "聯準會利率決策與美股多數收跌，分析師指台股短線多方尚未主導，面臨上檔賣壓與修正壓力，下週盤勢可能震盪。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "台股盤勢",
+     "reason": "分析師評估下週台股震盪與賣壓風險"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "分析師指台股短線多方未主導，面臨上檔賣壓與修正壓力",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2874,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2874,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股季線失守可以進場買了嗎？法人只說了這幾個字",
+   "summary": "台股22日開高走低，終場收在本波下跌以來的最低，以46,041.43點，下跌846.34點，季線失守，到底在短線急挫3,927.49點之後可以進場買了嗎？法人坦言，下周是很關鍵的一周，首要觀察能否快速",
+   "published_at": "2026-10-24T22:10:23+08:00"
+  },
+  "ai": {
+   "id": 2874,
+   "summary": "台股22日收46,041.43點，跌846.34點、季線失守；法人稱下周是關鍵一周，首要觀察能否快速止穩。",
+   "symbol_candidates": [],
+   "theme_candidates": [],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "大盤收跌846.34點並失守季線，屬負面方向",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2873,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2873,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "聯發科連四周收黑、4,000元關卡拉警報！台股十大權值股誰逆勢抗跌？",
+   "summary": "本周台股受颱風薔琵影響僅4個交易日，集中市場指數累計下跌1,069.83點、跌幅2.27%，周線連兩黑。十大權值股僅鴻海（2317）逆勢上漲0.41%，聯發科（2454）周跌5.65%、連四周收黑，4",
+   "published_at": "2026-10-24T22:10:23+08:00"
+  },
+  "ai": {
+   "id": 2873,
+   "summary": "本周台股僅4個交易日，指數累計跌1,069.83點、跌2.27%，周線連兩黑；鴻海逆勢周漲0.41%，聯發科周跌5.65%、連四周收黑。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2317",
+     "reason": "摘要指鴻海（2317）逆勢上漲0.41%",
+     "confidence": "high"
+    },
+    {
+     "symbol": "TWSE:2454",
+     "reason": "摘要指聯發科（2454）周跌5.65%、連四周收黑",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "集中市場指數周跌2.27%、周線連兩黑，鴻海逆勢上漲而聯發科周跌",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2858,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2858,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股只跌4%、韓股慘崩40%！達人看清了「不會是我們要補跌 」網：第四法人還有錢",
+   "summary": "[FTNN新聞網]實習記者周宗怡／綜合報導全球股市震盪，各市場自6月高點以來的修正幅度卻大不相同。投資達人股添樂指出，截至10月22日，台股自高點以來僅下跌約...",
+   "published_at": "2026-10-24T21:45:00+08:00"
+  },
+  "ai": {
+   "id": 2858,
+   "summary": "標題稱台股只跌4%、韓股慘崩40%；投資達人股添樂指出，各市場自6月高點以來的修正幅度不同。",
+   "symbol_candidates": [],
+   "theme_candidates": [],
+   "impact_direction": "unknown",
+   "impact_scope": "market",
+   "impact_rationale": "摘要僅比較各市場修正幅度，未說明台股後續方向",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2857,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2857,
+   "source": "鉅亨網",
+   "category": "domestic",
+   "title": "〈熱門股〉防詐業務需求強勁 GOGOLOOK股價周漲2成",
+   "summary": "GOGOLOOK受海外市場擴張與防詐、金融科技布局帶動，本周股價大漲20%，周線連2紅，續戰歷史前高。 公司看好下半年獲利優於上半年，ASI在日本推廣順利，JUJI營收比重可望上看30%。",
+   "published_at": "2026-10-24T21:18:53+08:00"
+  },
+  "ai": {
+   "id": 2857,
+   "summary": "GOGOLOOK受海外市場擴張與防詐、金融科技布局帶動，本周股價大漲20%；公司看好下半年獲利優於上半年。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "防詐科技",
+     "reason": "標題與摘要提及防詐業務需求強勁"
+    },
+    {
+     "theme": "金融科技",
+     "reason": "摘要提及公司金融科技布局帶動股價"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "instrument",
+   "impact_rationale": "股價本周大漲20%，公司看好下半年獲利優於上半年",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2859,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2859,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "擊敗主動式ETF！今年台股最飆基金竟是「它」　 報酬率狂衝96%",
+   "summary": "[FTNN新聞網]實習記者藍彥欣／台北報導今年全球主要股市多頭氣勢如虹，帶動股票型基金繳出亮眼成績單。其中，亞洲股市表現最為亮眼，台股更以強勁漲幅勇奪亞...",
+   "published_at": "2026-10-24T20:45:00+08:00"
+  },
+  "ai": {
+   "id": 2859,
+   "summary": "標題稱今年台股最飆基金報酬率達96%；摘要指今年亞洲股市表現最亮眼，台股漲幅強勁。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "台股基金",
+     "reason": "標題指今年台股最飆基金報酬率96%"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "market",
+   "impact_rationale": "標題與摘要顯示今年台股漲幅強勁、基金報酬率亮眼",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2855,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2855,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "菲律賓力拚發展半導體產業　周民淦：台灣可助攻",
+   "summary": "（中央社記者林行健馬尼拉24日專電）菲律賓力拚發展半導體產業，駐菲代表周民淦今天表示，台灣在半導體製造、研發等方面的優勢，可與菲律賓既有電子產業基礎互補，透過串聯經濟走廊，化互補優勢為實際合作。",
+   "published_at": "2026-10-24T20:10:11+08:00"
+  },
+  "ai": {
+   "id": 2855,
+   "summary": "菲律賓力拚發展半導體產業，駐菲代表周民淦表示，台灣半導體製造與研發優勢可與菲律賓電子產業基礎互補。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "摘要提及台灣半導體製造與研發優勢"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "theme",
+   "impact_rationale": "為外交代表表態，未涉及具體台股公司或訂單，無法判斷方向",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2860,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2860,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股連假後危險了？16檔績優股遭錯殺　反攻名單曝光",
+   "summary": "美股費城半導體指數22日重挫近7%，雖然23日小幅反彈0.44%，台積電ADR也上漲1.49%，但台股在外資大舉提款下，加權指數連假前收在46,021點，跌破季線46,207點，下周二（27日）恢復交",
+   "published_at": "2026-10-24T20:07:09+08:00"
+  },
+  "ai": {
+   "id": 2860,
+   "summary": "美股費城半導體指數22日重挫近7%，23日反彈0.44%；加權指數連假前收46,021點，跌破季線46,207點。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "摘要提及費城半導體指數重挫近7%"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "費城半導體指數重挫，加權指數跌破季線，摘要稱外資大舉提款",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2861,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2861,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台積電獲利連6季創新高！股價卻不漲反跌　外媒揭市場擔憂",
+   "summary": "[FTNN新聞網]記者周雅琦／綜合報導晶圓代工龍頭台積電（2330）第3季獲利再創新高，營收年增50%、稅後淨利年增69%，連續第6季刷新獲利紀錄，不過亮眼財報公布...",
+   "published_at": "2026-10-24T20:00:00+08:00"
+  },
+  "ai": {
+   "id": 2861,
+   "summary": "台積電第3季營收年增50%、稅後淨利年增69%，連續第6季獲利創新高，股價卻不漲反跌。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題與摘要點名台積電（2330）財報與股價表現",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "晶圓代工",
+     "reason": "台積電第3季財報與股價表現"
+    }
+   ],
+   "impact_direction": "mixed",
+   "impact_scope": "instrument",
+   "impact_rationale": "獲利創高為正面，但股價不漲反跌，摘要未說明原因",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2856,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2856,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "菲律賓台商總會首辦台灣連結展　擴大台菲企業交流",
+   "summary": "（中央社記者林行健馬尼拉24日專電）菲律賓台商總會首次舉辦的「2026年台灣連結展」（TaiwanLink Fair 2026）今天登場，30多家台灣廠商擺出逾50個攤位，盼擴大台菲企業交流，拓展商機，把台灣的優良產品帶進菲律賓家庭。",
+   "published_at": "2026-10-24T19:11:51+08:00"
+  },
+  "ai": {
+   "id": 2856,
+   "summary": "菲律賓台商總會首辦「2026年台灣連結展」，30多家台灣廠商擺出逾50個攤位，盼擴大台菲企業交流。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "台菲貿易",
+     "reason": "台菲企業交流展會，30多家台灣廠商參展"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "theme",
+   "impact_rationale": "展會報導未涉及個股或營運數據，影響方向無法判斷",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2848,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2848,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股下周又崩盤？「16檔錯殺股」底氣爆表 內行曝KD超賣別亂砍",
+   "summary": "美股費城半導體指數22日重挫近7%後，周五（23日）小幅反彈0.44%，台積電ADR也上漲1.49%。不過，台股在外資大舉提款下，加權指數在連假前收在46021點、已失守季線46207點，下周二（27",
+   "published_at": "2026-10-24T18:15:37+08:00"
+  },
+  "ai": {
+   "id": 2848,
+   "summary": "美股費城半導體指數22日重挫近7%，周五（23日）反彈0.44%；加權指數連假前收46021點、失守季線46207點。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "摘要提及費城半導體指數重挫近7%"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "費城半導體指數重挫後，加權指數連假前失守季線",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2849,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2849,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "英特爾非技術落後台積電 坦言硬傷在規模與設備",
+   "summary": "英特爾技術長Pushkar Ranade近日在科技訪談節目 Dwarkesh Podcast 中坦言，英特爾與晶圓代工龍頭台積電的差距，並非外界所認定的「落後整整一個世代」，雙方在效能與功耗等指標僅差",
+   "published_at": "2026-10-24T18:01:12+08:00"
+  },
+  "ai": {
+   "id": 2849,
+   "summary": "英特爾技術長Pushkar Ranade在Dwarkesh Podcast坦言，英特爾與台積電差距並非「落後整整一個世代」。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "摘要比較英特爾與台積電（同業）的技術差距",
+     "confidence": "medium"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "晶圓代工",
+     "reason": "摘要比較英特爾與台積電的製程技術差距"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "theme",
+   "impact_rationale": "摘要僅比較技術差距，未說明對台積電股價或營運的影響",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2850,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2850,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "半導體霸主移防「工程師舉家赴美」　台積電家庭異鄉扎根的挑戰",
+   "summary": "隨著全球半導體戰略布局重塑，台積電在美國亞利桑那州鳳凰城的建廠進程成為全球科技業矚目的焦點。史丹福大學胡佛研究所研究員Dan Wang在紐約時報發表專欄文章指出，這座位於鳳凰城郊區的晶圓廠，正肩負起重",
+   "published_at": "2026-10-24T17:39:00+08:00"
+  },
+  "ai": {
+   "id": 2850,
+   "summary": "史丹福大學胡佛研究所Dan Wang在紐約時報專欄，談台積電亞利桑那州鳳凰城建廠與工程師舉家赴美的挑戰。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題與摘要點名台積電在亞利桑那州鳳凰城的建廠",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "半導體海外布局",
+     "reason": "摘要提及台積電在美國亞利桑那州建廠"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "instrument",
+   "impact_rationale": "專欄談建廠與人員赴美的挑戰，摘要未說明對營運或股價的影響",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2845,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2845,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "颱風假台股該不該開盤？政大教授點出交易真相  網友反問：誰要當韭菜",
+   "summary": "[FTNN新聞網]實習記者林妤蓁／綜合報導颱風來襲時，台股是否應配合放假暫停交易，再度成為討論焦點。政大財務管理學系教授周冠男近日透過臉書分享看法，認為...",
+   "published_at": "2026-10-24T16:45:00+08:00"
+  },
+  "ai": {
+   "id": 2845,
+   "summary": "政大財務管理學系教授周冠男在臉書分享看法，討論颱風來襲時台股是否應配合放假暫停交易。",
+   "symbol_candidates": [],
+   "theme_candidates": [],
+   "impact_direction": "unknown",
+   "impact_scope": "market",
+   "impact_rationale": "摘要只提及颱風期間是否停市的討論，未給出市場方向",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2841,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2841,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "美股下跌Fed開會在即　學者看連假過後新台幣短線貶勢居多",
+   "summary": "（中央社記者呂晏慈台北24日電）台灣連假期間美股再遇AI科技股拋售潮，以及美國聯準會開會在即，不僅影響台北股市表現，更牽動新台幣走勢。學者指出，受到外資提款、企業赴美投資與台美利差等3大因素影響，短線觀察新台幣仍以貶勢居多，且若美國聯準會10月再釋鷹派訊號，亦將牽動後續走勢。",
+   "published_at": "2026-10-24T16:12:52+08:00"
+  },
+  "ai": {
+   "id": 2841,
+   "summary": "學者指出，受外資提款、企業赴美投資與台美利差影響，短線新台幣仍以貶勢居多。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "新台幣匯率",
+     "reason": "學者認為短線新台幣仍以貶勢居多"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "學者指新台幣短線仍以貶勢居多，受外資提款與台美利差影響",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2834,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2834,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "哈佛校務基金狂押AI！75％持股集中5大企業　台積電、SpaceX都入列",
+   "summary": "[FTNN新聞網]實習記者林妤蓁／綜合報導全球頂尖學府哈佛大學（HarvardUniversity）校務基金投資布局引發關注。根據外媒報導，哈佛規模近680億美元、約新台幣2...",
+   "published_at": "2026-10-24T15:50:00+08:00"
+  },
+  "ai": {
+   "id": 2834,
+   "summary": "根據外媒報導，哈佛校務基金規模近680億美元，持股75%集中於5大企業，台積電、SpaceX都入列。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "標題點名台積電為哈佛校務基金持股",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [],
+   "impact_direction": "unknown",
+   "impact_scope": "instrument",
+   "impact_rationale": "持股資訊未說明對台積電股價的影響方向，無法判斷",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2842,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2842,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "亞馬遜雲端運算產能至2027年被訂光　部分訂單排到2028年",
+   "summary": "（中央社舊金山23日綜合外電報導）亞馬遜執行長賈西今天表示，隨著人工智慧（AI）基礎設施需求持續成長，亞馬遜網路服務（AWS）的雲端運算產能至2027年大致已被訂光，部分產能訂單已排到2028年。",
+   "published_at": "2026-10-24T15:44:41+08:00"
+  },
+  "ai": {
+   "id": 2842,
+   "summary": "亞馬遜執行長賈西表示，AWS雲端運算產能至2027年大致已被訂光，部分訂單已排到2028年。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "AI 基礎設施",
+     "reason": "摘要提及AI基礎設施需求持續成長"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "theme",
+   "impact_rationale": "摘要指AWS雲端產能已被訂光，部分訂單排到2028年",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2835,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2835,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股周二壓力大？示警AI股迎股東分歧　阮慕驊揭科技巨頭財報3關鍵：有錢但沒人敢借",
+   "summary": "美股科技股近期遭遇賣壓，台股光復節連假前也重挫800多點！下周微軟、Alphabet（Google母公司）、亞馬遜將陸續公布財報，市場也開始重新檢視AI投資成本與獲利前景。對此，財經專家阮慕驊今（24",
+   "published_at": "2026-10-24T15:37:03+08:00"
+  },
+  "ai": {
+   "id": 2835,
+   "summary": "美股科技股遭賣壓，台股光復節連假前重挫800多點；下周微軟、Alphabet、亞馬遜將陸續公布財報。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "AI 投資",
+     "reason": "摘要提及市場重新檢視AI投資成本與獲利前景"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "摘要指美股科技股遭賣壓，台股連假前重挫800多點",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2833,
+  "sample": "recent_domestic",
+  "call": 1,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2833,
+   "source": "工商時報",
+   "category": "domestic",
+   "title": "AI投資疑慮升溫！阮慕驊：市場不是缺錢 下周科技巨頭財報緊盯3件事",
+   "summary": "AI投資回報與融資疑慮持續籠罩市場，CoreWeave債券殖利率飆升，更引發信用風險擴散的擔憂。財經專家阮慕驊指出，當前問題並非市場全面缺錢，而是投資人對特定企業的償債能力轉趨謹慎；下周微軟、Alphabet及亞馬遜公布財報，資本支出、自由現金流與資金來源，將比每股盈餘更值得關注。 阮慕驊在臉書發文，以借錢給兄弟為例指出，即使對方承諾支付7％利息，若出借者擔心本金拿不回來，再高的利息也失去吸",
+   "published_at": "2026-10-24T15:14:29+08:00"
+  },
+  "ai": {
+   "id": 2833,
+   "summary": "CoreWeave債券殖利率飆升，引發信用風險擴散擔憂；阮慕驊指出市場不是全面缺錢，而是對特定企業償債能力轉趨謹慎。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "AI 投資",
+     "reason": "摘要提及AI投資回報與融資疑慮"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "theme",
+   "impact_rationale": "摘要指CoreWeave債券殖利率飆升、信用風險擴散擔憂",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2846,
+  "sample": "recent_domestic",
+  "call": 2,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2846,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "高股息ETF漲跌1表看》台股2週跌7％它們卻上漲！00907、00713⋯6檔逆勢紅 這檔漲3.5％贏大盤逾10個百分點",
+   "summary": "台股10月中旬連續重挫，電子與AI權值股成為主要賣壓來源，但同一期間部分高股息ETF卻逆勢上漲。",
+   "published_at": "2026-10-24T14:56:41+08:00"
+  },
+  "ai": {
+   "id": 2846,
+   "summary": "台股10月中旬連續重挫，電子與AI權值股為主要賣壓，部分高股息ETF同期逆勢上漲。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "高股息ETF",
+     "reason": "原文提及00907、00713等6檔高股息ETF在台股重挫期間逆勢收紅"
+    }
+   ],
+   "impact_direction": "positive",
+   "impact_scope": "theme",
+   "impact_rationale": "原文顯示高股息ETF在台股重挫期間逆勢上漲，相對表現偏正面。",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2831,
+  "sample": "recent_domestic",
+  "call": 2,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2831,
+   "source": "中央社",
+   "category": "domestic",
+   "title": "越南GDP成長估最高9.7% 專家：資金不足恐形式主義增長",
+   "summary": "（中央社記者曾婷瑄河內24日專電）國有越南投資發展銀行預測越南今年經濟成長9.5%至9.7%，恐與雙位數目標失之交臂。專家指出，龐大基建計畫凸顯雄心與所需資金不匹配的困境，融資過度依賴銀行且分配不均。若過快推進基建恐導致形式主義增長，使整體經濟承受風險。",
+   "published_at": "2026-10-24T14:48:59+08:00"
+  },
+  "ai": {
+   "id": 2831,
+   "summary": "國有越南投資發展銀行預測今年經濟成長9.5%至9.7%，恐與雙位數目標失之交臂；專家示警資金不足恐致形式主義增長。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "越南經濟",
+     "reason": "報導為越南今年經濟成長預測與基建融資問題"
+    }
+   ],
+   "impact_direction": "unknown",
+   "impact_scope": "market",
+   "impact_rationale": "僅為越南經濟預測，原文未提及台灣市場或個股影響，無法判讀方向。",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2836,
+  "sample": "recent_domestic",
+  "call": 2,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2836,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台積電Q3獲利新高股價卻跌 市場聚焦AI需求隱憂",
+   "summary": "圖／示意圖商傳媒｜何映辰／台北報導晶圓代工龍頭台積電（TSMC）於10月15日公布第三季財報，營收與淨利雙雙較去年同期大漲50%及69%，創下歷史新高紀錄，這已是台積電連續第六個季度實現獲利成長。然而",
+   "published_at": "2026-10-24T14:38:25+08:00"
+  },
+  "ai": {
+   "id": 2836,
+   "summary": "台積電第三季營收與淨利雙雙較去年同期大漲50%及69%，創歷史新高，為連續第六個季度獲利成長；股價卻下跌，市場聚焦AI需求隱憂。",
+   "symbol_candidates": [
+    {
+     "symbol": "TWSE:2330",
+     "reason": "新聞直接點名台積電第三季財報創新高，但股價下跌",
+     "confidence": "high"
+    }
+   ],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "台積電為晶圓代工龍頭，財報與股價為報導主題"
+    },
+    {
+     "theme": "AI 需求",
+     "reason": "報導指市場聚焦AI需求隱憂"
+    }
+   ],
+   "impact_direction": "mixed",
+   "impact_scope": "instrument",
+   "impact_rationale": "財報創新高為正面，但股價下跌且市場關注AI需求隱憂，正負並存。",
+   "unsupported": false
+  }
+ },
+ {
+  "id": 2837,
+  "sample": "recent_domestic",
+  "call": 2,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2837,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "台股跌到不想看！他打算刪App等2年再看賺賠　網曝真實經驗",
+   "summary": "[FTNN新聞網]實習記者王保伶／綜合報導台股近期走勢讓部分投資人備感煎熬，一名網友考慮將看盤軟體刪掉，過一段時間再回來檢視投資成果。他也好奇，是否真的...",
+   "published_at": "2026-10-24T14:05:00+08:00"
+  },
+  "ai": {
+   "id": 2837,
+   "summary": "一名網友表示台股近期走勢令人煎熬，考慮刪除看盤App、等2年再看賺賠。",
+   "symbol_candidates": [],
+   "theme_candidates": [],
+   "impact_direction": "unknown",
+   "impact_scope": "market",
+   "impact_rationale": "僅為個別網友的情緒描述，未提供具體市場數據，無法判讀方向。",
+   "unsupported": true
+  }
+ },
+ {
+  "id": 2826,
+  "sample": "recent_domestic",
+  "call": 2,
+  "model": "claude-haiku-5-5",
+  "prompt_version": "news_v2",
+  "prompt_sha256": "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f",
+  "status": "done",
+  "summary_check_missing": [],
+  "input": {
+   "id": 2826,
+   "source": "Yahoo奇摩股市",
+   "category": "domestic",
+   "title": "股民連假難安心！費半一度重挫逾6%、台股失守季線　週二開盤盯2訊號",
+   "summary": "[FTNN新聞網]記者陳雅婷／綜合報導台股連假前重挫846.34點，收在46,041.43點，單日震盪達1,290點，不僅收在當日最低點，也跌破季線。美股半導體族群同步走弱...",
+   "published_at": "2026-10-24T13:45:00+08:00"
+  },
+  "ai": {
+   "id": 2826,
+   "summary": "台股連假前重挫846.34點收46,041.43點，單日震盪1,290點並跌破季線；美股半導體同步走弱，費半一度重挫逾6%。",
+   "symbol_candidates": [],
+   "theme_candidates": [
+    {
+     "theme": "半導體",
+     "reason": "原文提及美股半導體族群同步走弱，費半一度重挫逾6%"
+    }
+   ],
+   "impact_direction": "negative",
+   "impact_scope": "market",
+   "impact_rationale": "台股重挫並跌破季線，美股半導體族群同步走弱，對市場偏負面。",
+   "unsupported": false
+  }
+ }
+]
