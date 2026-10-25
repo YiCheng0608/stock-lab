@@ -14,12 +14,12 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from .strategies import LEGACY_RISK_LEVELS_FORMULA, REGISTRY
+
 
 LEVEL_SEMANTICS_VERSION = "signal-level-semantics/v1"
-KNOWN_RULE_STRATEGIES = frozenset({"breakout_v1", "pullback_v1"})
-KNOWN_RULE_STRATEGY_VERSION = "1.0.0"
-KNOWN_FORMULA_VERSION = "legacy-risk-levels/v1"
-KNOWN_FORMULA_SOURCE = "backend.worker.pipeline._risk_levels"
+KNOWN_FORMULA_VERSION = LEGACY_RISK_LEVELS_FORMULA
+KNOWN_FORMULA_SOURCE = "backend.app.strategies.base.risk_levels"
 
 SIGNAL_FIELD_DEFINITIONS: dict[str, dict[str, str]] = {
     "breakout_price": {
@@ -68,11 +68,14 @@ def utc_now_iso() -> str:
 
 
 def _known_strategy(strategy_name: object, strategy_version: object) -> bool:
+    """A registered strategy, at its registered version, on the v1 levels."""
+
+    strategy = REGISTRY.get(strategy_name) if isinstance(strategy_name, str) else None
     return (
-        isinstance(strategy_name, str)
-        and strategy_name in KNOWN_RULE_STRATEGIES
+        strategy is not None
+        and strategy.level_formula_version == KNOWN_FORMULA_VERSION
         and isinstance(strategy_version, str)
-        and strategy_version == KNOWN_RULE_STRATEGY_VERSION
+        and strategy_version == strategy.version
     )
 
 

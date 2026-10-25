@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .strategies import REGISTRY, strategy_by_kind
+
 
 DISPLAY_ACTION_LABELS = {
     "conditional_entry": "符合條件後可研究進場",
@@ -96,8 +98,9 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
             return REASON_LABELS[base]
     if "=" in value:
         key, raw_value = (part.strip() for part in value.split("=", 1))
-        if key in {"breakout", "pullback"}:
-            strategy = "突破研究條件" if key == "breakout" else "回踩研究條件"
+        rule = strategy_by_kind(key)
+        if rule is not None:
+            strategy = rule.research_label_zh
             state, _, reasons = raw_value.partition(":")
             state_label = {
                 "passed": "已成立",
@@ -154,11 +157,5 @@ def primary_reason(
         else (reasons[0] if reasons else action_state)
     )
     label = display_reason(source)
-    scope = (
-        "breakout"
-        if strategy == "breakout_v1"
-        else "pullback"
-        if strategy == "pullback_v1"
-        else "research"
-    )
+    scope = REGISTRY[strategy].entry_type if strategy in REGISTRY else "research"
     return {"label": label, "scope": scope}
