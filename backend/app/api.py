@@ -1051,11 +1051,33 @@ def _news_theme_ids(
     ]
 
 
+def _candidate_instrument(
+    rows: list[tuple[str, str, str]], written: str
+) -> tuple[str, str | None]:
+    """The (exchange, name) an AI symbol candidate is shown with.
+
+    ``rows`` are the master's (exchange, name, status) for the candidate's code and
+    ``written`` is the exchange the model wrote.  The model often gets the exchange
+    wrong (#264), so a code whose master has exactly one active row is shown with
+    that row's exchange; any other master state keeps the written exchange and only
+    looks up its row (no row: ``None``).
+    """
+
+    exact = next((row for row in rows if row[0] == written), None)
+    if exact is not None and exact[2] == "active":
+        return written, exact[1]
+    active = [row for row in rows if row[2] == "active"]
+    if len(active) == 1:
+        return active[0][0], active[0][1]
+    return written, exact[1] if exact is not None else None
+
+
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
     """Latest done LLM result per news item (worker.news_llm), in two queries.
 
     The result is inference, kept apart from source facts; symbol candidates are
-    unverified and rule relations stay in ``symbols``.  An item whose latest
+    unverified (their exchange follows the master, ``_candidate_instrument``) and
+    rule relations stay in ``symbols``.  An item whose latest
     done-or-rejected result is ``rejected`` (failed the summary check) has no
     AI block, so an older prompt version's result is not shown in its place.
     """
@@ -1080,28 +1102,29 @@ def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, A
         for row in latest.values()
         for candidate in row.ai_symbol_candidates_json or []
     } - {""}
-    names = (
-        {
-            (exchange, symbol): name
-            for exchange, symbol, name in db.execute(
-                select(Instrument.exchange, Instrument.symbol, Instrument.name).where(
-                    Instrument.symbol.in_(codes)
-                )
-            ).all()
-        }
-        if codes
-        else {}
-    )
+    listed: dict[str, list[tuple[str, str, str]]] = {}
+    if codes:
+        for exchange, symbol, name, status in db.execute(
+            select(
+                Instrument.exchange,
+                Instrument.symbol,
+                Instrument.name,
+                Instrument.status,
+            ).where(Instrument.symbol.in_(codes))
+        ).all():
+            listed.setdefault(symbol, []).append((exchange, name, status))
     result: dict[int, dict[str, Any]] = {}
     for news_id, row in latest.items():
         symbol_candidates = []
         for candidate in row.ai_symbol_candidates_json or []:
-            exchange, _, symbol = str(candidate.get("symbol", "")).partition(":")
+            written, _, symbol = str(candidate.get("symbol", "")).partition(":")
+            exchange, name = _candidate_instrument(listed.get(symbol, []), written)
             symbol_candidates.append(
                 {
                     "exchange": exchange,
                     "symbol": symbol,
-                    "name": names.get((exchange, symbol)),
+                    "name": name,
+                    "exchange_corrected": exchange != written,
                     "reason": candidate.get("reason"),
                     "confidence": candidate.get("confidence"),
                     "verified": False,
