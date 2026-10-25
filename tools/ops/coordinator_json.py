@@ -183,11 +183,13 @@ def _one_line(text: str, width: int = 80) -> str:
 def _check_state(rollup) -> str:
     # A newer run of the same check replaces the older one (a cancelled run or an
     # earlier failure of a re-run job must not decide the state, #286). A check
-    # with no time yet is queued, so it counts as the newest.
+    # with no time yet is queued, so it counts as the newest; gh --json prints a
+    # missing time as the zero time 0001-01-01T00:00:00Z, not null.
     latest: dict = {}
     for i, c in enumerate(rollup or []):
-        key = c.get("name") or c.get("context") or i
-        when = c.get("startedAt") or c.get("completedAt") or c.get("createdAt") or "~"
+        key = (c.get("workflowName"), c.get("name") or c.get("context") or i)
+        times = [c.get(k) for k in ("startedAt", "completedAt", "createdAt")]
+        when = next((t for t in times if t and not t.startswith("0001-")), "~")
         if key not in latest or when >= latest[key][0]:
             latest[key] = (when, c)
     states = [

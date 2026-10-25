@@ -1235,8 +1235,40 @@ def _check(name: str, started: str, **state: str) -> dict:
             ],
             "pending",
         ),
+        (
+            [
+                _check("required", "04:41", conclusion="SUCCESS"),
+                {
+                    "name": "required",
+                    "status": "QUEUED",
+                    "conclusion": "",
+                    "startedAt": "0001-01-01T00:00:00Z",
+                    "completedAt": "0001-01-01T00:00:00Z",
+                },
+            ],
+            "pending",
+        ),
+        (
+            [
+                {
+                    **_check("required", "04:41", conclusion="FAILURE"),
+                    "workflowName": "A",
+                },
+                {
+                    **_check("required", "13:23", conclusion="SUCCESS"),
+                    "workflowName": "B",
+                },
+            ],
+            "failure",
+        ),
     ],
-    ids=["superseded-failure", "latest-failure", "latest-running"],
+    ids=[
+        "superseded-failure",
+        "latest-failure",
+        "latest-running",
+        "queued-zero-time",
+        "same-name-other-workflow",
+    ],
 )
 def test_patrol_reads_only_the_latest_run_of_each_check(
     patrol: Harness, rollup: list[dict], expected: str
