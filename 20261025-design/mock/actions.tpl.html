@@ -1,0 +1,24 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>#277 行動頁線框稿</title><link rel="stylesheet" href="base.css"></head><body>
+<div class="nav"><span class="logo"></span><span class="brand">台股研究台</span><a>今日</a><a>新聞</a><a>族群</a><a>個股</a><a class="on">行動</a><span class="sp"></span><span class="search"></span><span class="badge">資料 2026-10-22</span></div>
+<div class="wrap">
+ <div class="shead"><div><div class="eyebrow">行動判斷 · 資料 2026/10/22</div><h1>行動中心</h1></div></div>
+ <p class="note">先看持倉風險，再看今日候選與成立條件，最後是接近成立的標的。條件成立後最早下一個交易日（T+1）才可研究進場；不是買賣建議。</p>
+ <div class="filters"><span class="badge on">重點 {{N_DEFAULT}}</span><span class="badge">含其他觀察 {{N_WITH_OBS}}</span><span class="badge">全部 1,867</span><label class="chk"><input type="checkbox"> 含 ETF（186）</label><span class="sp"></span><span class="search desk" style="width:240px"></span></div>
+ <div class="hint">預設隱藏：ETF 186 檔、其他觀察 1,308 檔、策略判斷資料待補 129 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。</div>
+ <div class="mini" style="margin-top:12px"><b>我的庫存</b><span class="sub">尚未建立庫存 · 有持倉風險時列在最上方</span><a class="lnk" style="margin-left:auto">新增庫存 ▸</a></div>
+ <div class="lbl">（持倉風險區：只有已驗證持倉風險或庫存數量待核實時出現；10/22 正式 DB 沒有庫存，本稿不畫）</div>
+ <div class="shead"><div><div class="eyebrow">第一優先 · 依候選名次</div><h2>今日候選</h2></div><span class="badge">{{N_C}} 檔</span></div>
+ <div class="tbl"><table><thead><tr><th>名次</th><th>股票</th><th>策略</th><th class="num">最近收盤</th><th class="num">進場</th><th class="num">停損</th><th class="num">目標</th><th class="num">總分</th><th></th></tr></thead><tbody>{{CAND_ROWS}}</tbody></table><details class="more"><summary>顯示其餘 12 檔</summary></details></div>
+ <div class="cards">{{CAND_CARDS}}<details class="more"><summary>顯示其餘 17 檔</summary></details></div>
+ <div class="shead"><div><div class="eyebrow">第二優先 · 依所屬族群名次</div><h2>其他成立條件</h2></div><span class="badge">{{N_O}} 檔</span></div>
+ <p class="note">條件成立，但候選清單依評分只取前 20 檔。</p>
+ <div class="tbl"><table><thead><tr><th>股票</th><th>策略</th><th class="num">最近收盤</th><th class="num">進場</th><th class="num">停損</th><th class="num">目標</th><th></th></tr></thead><tbody>{{OTHER_ROWS}}</tbody></table><details class="more"><summary>顯示其餘 {{N_O_REST}} 檔</summary></details></div>
+ <div class="cards"><details class="more"><summary>展開 {{N_O}} 檔（卡片同今日候選，沒有名次與總分）</summary></details></div>
+ <div class="shead"><div><div class="eyebrow">第三優先 · 依價格差距由小到大</div><h2>接近成立</h2></div><span class="badge">{{N_N}} 檔</span></div>
+ <p class="note">只差價格或量能、其餘條件都已達成，且價格差距在 3%（突破）／2%（回踩）以內。差距以 10/22 收盤計算；要到幾元、量要多大，看個股頁策略總表的觀察價位。</p>
+ <div class="tbl"><table><thead><tr><th>股票</th><th>接近</th><th>差哪個條件</th><th class="num">最近收盤</th><th class="num">價格差距</th><th></th></tr></thead><tbody>{{NEAR_ROWS}}</tbody></table><details class="more"><summary>顯示更多（每次 20 檔）</summary></details></div>
+ <div class="cards">{{NEAR_CARDS}}<details class="more"><summary>顯示更多（每次 20 檔）</summary></details></div>
+ <div class="shead"><div><div class="eyebrow">預設隱藏</div><h2>其他觀察</h2></div><span class="badge">1,308 檔</span></div>
+ <div class="tbl" style="display:block;padding:4px 16px"><ul class="olist">{{OBS}}</ul><div class="sub" style="padding:8px 0">（切到「含其他觀察」才出現；依差的條件數、再依價格差距排序）</div></div>
+ <div style="height:40px"></div>
+</div></body></html>
