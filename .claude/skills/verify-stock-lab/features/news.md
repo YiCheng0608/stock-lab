@@ -49,8 +49,8 @@
 | N4 | CI | AI 標記 | 各分頁整行 `AI 推論` 的行數 = API `items` 中 `ai.status` 為 `done` 且 `ai.inference` 為 true 的數量 |
 | N5 | CI | 新聞日期合理 | `facts.json` 的 `news_latest_published_at`（UTC，加 8 小時）不晚於現在的台北時間；國內第一則的時間行日期不晚於今天 |
 | N6 | CI | 詳情分欄 | `news-detail-1280.txt` 有整行 `來源事實` 與 `AI 摘要與判讀`，`AI 摘要與判讀` 下一行是 `AI 推論`；`ai` 為 done 時有 `模型 <ai.model> · 提示版本 <ai.prompt_version>` 開頭的行，同一行有 `產生時間 <ai.generated_at 的台北時間 YYYY/MM/DD HH:mm>`（`generated_at` 沒有時區為失敗，#234），否則有 `此則尚未產生 AI 摘要與判讀。` |
-| N7 | 人工 | AI 摘要忠於原文 | 樣本：`/news?category=domestic&limit=100`（依 `meta.next_cursor` 往後翻到 `D` 之前為止，最多 5 頁）中台北發布日等於 `D`、有 AI 判讀的前 5 則，API 順序（`manual/N7.json`，含 `/news/<id>` 的 `title`、`summary`、`description`、`source` 與 `ai`）。每則 `ai.summary` 的主體、數字、時間與事件都能在 `title`／`summary`／`description` 找到，沒有原文沒有的事實或結論；原文只有標題、無從核對的那則記無法判定。一則不符即失敗，證據寫 id、摘要原句與原文 |
-| N8 | 人工 | AI 方向與關聯有原文依據 | 樣本同 N7（`manual/N8.json`）。每則 `ai.impact_direction` 與 `ai.impact_rationale` 能由原文推得（`ai.unsupported` 為 true 時方向應是未判定）；`ai.symbol_candidates`、`ai.theme_candidates` 的每一項在原文有提及或可直接推得。一則不符即失敗，證據寫 id、AI 的方向或候選與原文 |
+| N7 | 人工 | AI 摘要忠於原文 | 樣本：`/news?category=domestic&limit=100`（依 `meta.next_cursor` 往後翻到 `D` 之前為止，最多 5 頁）中台北發布日等於 `D`、有 AI 判讀的前 5 則，API 順序（`manual/N7.json`，含 `/news/<id>` 的 `title`、`summary`、`description`、`source` 與 `ai`）。每則 `ai.summary` 的主體、數字、時間與事件都能在 `title`／`summary`／`description` 找到，沒有原文沒有的事實或結論；原文只有標題、無從核對的那則記無法判定。來源摘要被截斷（以「...」或半句結尾）時：摘要補完的內容若在同一則的 `title`／`summary`／`description` 找得到相同的主體、數字與時間，記符合；只補完被截斷的詞語、沒有新增主體、數字、時間或事件，記符合；補出三個欄位都沒有的內容（例如原文停在「能否快速」、摘要寫「能否快速止穩」），或把標題的內容寫成受訪者、機構說的，記不符。一則不符即失敗，證據寫 id、摘要原句與原文 |
+| N8 | 人工 | AI 方向與關聯有原文依據 | 樣本同 N7（`manual/N8.json`）。每則 `ai.impact_direction` 與 `ai.impact_rationale` 能由原文推得（`ai.unsupported` 為 true 時方向應是未判定）；`ai.symbol_candidates`、`ai.theme_candidates` 的每一項在原文有提及或可直接推得；個股候選判的是原文有沒有提及該公司，代號與 `name` 對得上原文提及的公司就算有依據，交易所不在判準內（交易所與主檔不符時在證據附記代號與兩邊的交易所）。一則不符即失敗，證據寫 id、AI 的方向或候選與原文 |
 
 ## 陷阱
 
