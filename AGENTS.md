@@ -99,6 +99,8 @@
 | 官方行情的普通股列不悄悄丟掉：主檔外的列寫入既有標的或記 `unmatched_bar`（#212） | 後端測試 `test_collect_has_no_silent_skip_of_a_quote_row`、`test_collect_writes_quotes_of_a_stored_instrument_missing_from_the_lists`、`test_tpex_quotes_keep_ordinary_shares_outside_the_lists` | `backend/worker/pipeline.py`（`collect`）、`backend/worker/sources.py`（`is_common_stock_code`）、`backend/tests/test_instrument_lifecycle.py` |
 | 標的狀態同步被 5% 防呆略過時由統籌處理（#212） | 看門狗資料不變量 `invariant_status_sync`；後端測試 `test_a_skipped_status_sync_is_commented_until_a_later_sync_applies` | `tools/ops/watchdog_helper.py`、`tools/ops/watchdog.sh`、`docs/OPERATIONS.md`（§6.1） |
 | verify 假資料庫的下市／轉市列與 worker 寫出的一致（#212） | 後端測試 `test_the_verify_fixture_lifecycle_rows_are_what_the_worker_writes` | `tools/verify/fixture_data.py`（`LIFECYCLE`）、`backend/tests/test_instrument_lifecycle.py` |
+| 結案腳本在 PR 未合併或 master CI 非綠時零刪除；`--extra-dir` 不得是 repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data`、`STOCK_DATA_DIR`，刪除前再查一次；junction 先拆（#282） | 後端測試 `test_coordinator_scripts.py`（假 orca／gh／git，路徑一律 `tmp_path` 替身） | `tools/ops/close_task.sh`、`tools/ops/coordinator_lib.sh`（`guard_dir`）、`backend/tests/test_coordinator_scripts.py` |
+| 派工只在 `orca terminal wait --for tui-idle` 回 `satisfied:true` 後送任務；巡檢的 gh 呼叫不超過上限（#282） | 後端測試 `test_coordinator_scripts.py` | `tools/ops/dispatch.sh`、`tools/ops/patrol.sh` |
 
 ## 上下文壓縮時保留
 
