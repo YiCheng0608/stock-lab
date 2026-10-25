@@ -181,9 +181,18 @@ def _one_line(text: str, width: int = 80) -> str:
 
 
 def _check_state(rollup) -> str:
+    # A newer run of the same check replaces the older one (a cancelled run or an
+    # earlier failure of a re-run job must not decide the state, #286). A check
+    # with no time yet is queued, so it counts as the newest.
+    latest: dict = {}
+    for i, c in enumerate(rollup or []):
+        key = c.get("name") or c.get("context") or i
+        when = c.get("startedAt") or c.get("completedAt") or c.get("createdAt") or "~"
+        if key not in latest or when >= latest[key][0]:
+            latest[key] = (when, c)
     states = [
         (c.get("conclusion") or c.get("state") or c.get("status") or "").upper()
-        for c in rollup or []
+        for _, c in latest.values()
     ]
     if not states:
         return "none"

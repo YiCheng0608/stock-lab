@@ -1203,3 +1203,58 @@ def test_patrol_keeps_a_heartbeat_it_cannot_read(patrol: Harness, content: str) 
     result = _patrol(patrol, "--take-over")
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"
+
+
+def _check(name: str, started: str, **state: str) -> dict:
+    return {"name": name, "startedAt": f"2026-10-25T20:{started}Z", **state}
+
+
+@pytest.mark.parametrize(
+    ("rollup", "expected"),
+    [
+        (
+            [
+                _check("backend", "04:13", conclusion="CANCELLED"),
+                _check("backend", "04:55", conclusion="SUCCESS"),
+                _check("required", "04:41", conclusion="FAILURE"),
+                _check("required", "13:23", conclusion="SUCCESS"),
+            ],
+            "success",
+        ),
+        (
+            [
+                _check("required", "04:41", conclusion="SUCCESS"),
+                _check("required", "13:23", conclusion="FAILURE"),
+            ],
+            "failure",
+        ),
+        (
+            [
+                _check("required", "04:41", conclusion="FAILURE"),
+                _check("required", "13:23", status="IN_PROGRESS"),
+            ],
+            "pending",
+        ),
+    ],
+    ids=["superseded-failure", "latest-failure", "latest-running"],
+)
+def test_patrol_reads_only_the_latest_run_of_each_check(
+    patrol: Harness, rollup: list[dict], expected: str
+) -> None:
+    """#286: a run replaced by a newer one of the same check no longer decides ci=."""
+    patrol.answer(
+        "gh_pr_list",
+        [
+            {
+                "number": 285,
+                "title": "策略框架",
+                "isDraft": False,
+                "mergeStateStatus": "CLEAN",
+                "statusCheckRollup": rollup,
+                "labels": [],
+            }
+        ],
+    )
+    result = _patrol(patrol)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"PR #285 ci={expected} merge=CLEAN" in result.stdout
