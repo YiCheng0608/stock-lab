@@ -3,10 +3,11 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
-import { Badge, Card, DateBadge, EmptyState, Skeleton, Stat, Table, Tabs, tabId, tabPanelId } from '../components/ui'
+import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
 import { readChartTheme, type ChartTheme } from '../stock/stockBars'
+import { formatTableNumber } from '../units'
 import type {
   NewsItem,
   ThemeBoard,
@@ -81,36 +82,22 @@ export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_
 
 const BOARD_TABLE_NOTE = '分數 0–100；五分項為同榜百分位（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。'
 
+const BOARD_COLUMNS: ReadonlyArray<Column<ThemeBoardItem>> = [
+  { key: 'rank', header: '排名', num: true, cell: (item) => item.rank },
+  {
+    key: 'name', header: '族群', cellClassName: 'board-name-cell', cell: (item) => <>
+      <Link className="symbol-link" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
+      <QualityBadge quality={item.quality} compact />
+    </>,
+  },
+  { key: 'score', header: '分數', num: true, cellClassName: 'board-score', cell: (item) => formatScore(item.score) },
+  ...BOARD_COMPONENTS.map((component): Column<ThemeBoardItem> => ({ key: component.key, header: component.label, num: true, cell: (item) => formatComponent(item.components[component.key]) })),
+  ...RETURN_WINDOWS.map((window): Column<ThemeBoardItem> => ({ key: window.key, header: window.label, num: true, cell: (item) => <ReturnValue value={item.relative_returns[window.key]} /> })),
+  { key: 'members', header: '成員', num: true, cell: (item) => formatMembers(item.eligible_members, item.member_count) },
+]
+
 function BoardTable({ items }: { items: readonly ThemeBoardItem[] }) {
-  return (
-    <Table wrapClassName="board-table-wrap" className="board-table" note={BOARD_TABLE_NOTE}>
-      <thead>
-        <tr>
-          <th className="num">排名</th>
-          <th>族群</th>
-          <th className="num">分數</th>
-          {BOARD_COMPONENTS.map((component) => <th className="num" key={component.key}>{component.label}</th>)}
-          {RETURN_WINDOWS.map((window) => <th className="num" key={window.key}>{window.label}</th>)}
-          <th className="num">成員</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => (
-          <tr key={item.theme_id} data-theme-id={item.theme_id}>
-            <td className="num">{item.rank}</td>
-            <td className="board-name-cell">
-              <Link className="symbol-link" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
-              <QualityBadge quality={item.quality} compact />
-            </td>
-            <td className="num board-score">{formatScore(item.score)}</td>
-            {BOARD_COMPONENTS.map((component) => <td className="num" key={component.key}>{formatComponent(item.components[component.key])}</td>)}
-            {RETURN_WINDOWS.map((window) => <td className="num" key={window.key}><ReturnValue value={item.relative_returns[window.key]} /></td>)}
-            <td className="num">{formatMembers(item.eligible_members, item.member_count)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
-  )
+  return <DataTable wrapClassName="board-table-wrap" className="board-table" note={BOARD_TABLE_NOTE} columns={BOARD_COLUMNS} rows={items} rowKey={(item) => item.theme_id} rowProps={(item) => ({ 'data-theme-id': item.theme_id })} />
 }
 
 function BoardCards({ items }: { items: readonly ThemeBoardItem[] }) {
@@ -266,6 +253,14 @@ export function HotGroupsSection({
 
 // ---- /themes/:id ----
 
+const TREND_COLUMNS: ReadonlyArray<Column<ThemeTrendPoint>> = [
+  { key: 'date', header: '日期', cell: (point) => formatDate(point.trading_date) ?? point.trading_date },
+  { key: 'score', header: '分數', num: true, cell: (point) => formatScore(point.score) },
+  { key: 'rank', header: '排名', num: true, cell: (point) => formatRank(point.rank) },
+  { key: 'quality', header: '品質', cell: (point) => qualityLabel(point.quality) },
+  { key: 'members', header: '有效成員', num: true, cell: (point) => point.eligible_members ?? '—' },
+]
+
 function TrendCard({ trend, dataDate }: { trend: readonly ThemeTrendPoint[]; dataDate: string | null }) {
   const theme = useMemo(documentTheme, [])
   const enough = trendHasEnoughPoints(trend)
@@ -279,18 +274,7 @@ function TrendCard({ trend, dataDate }: { trend: readonly ThemeTrendPoint[]; dat
           </div>
           <details className="details chart-data-table">
             <summary>查看走勢資料表</summary>
-            <Table note="分數 0–100；「—」表示當日無分數或未排名。">
-              <thead><tr><th>日期</th><th className="num">分數</th><th className="num">排名</th><th>品質</th><th className="num">有效成員</th></tr></thead>
-              <tbody>{[...trend].reverse().map((point) => (
-                <tr key={point.trading_date}>
-                  <td>{formatDate(point.trading_date) ?? point.trading_date}</td>
-                  <td className="num">{formatScore(point.score)}</td>
-                  <td className="num">{formatRank(point.rank)}</td>
-                  <td>{qualityLabel(point.quality)}</td>
-                  <td className="num">{point.eligible_members ?? '—'}</td>
-                </tr>
-              ))}</tbody>
-            </Table>
+            <DataTable note="分數 0–100；「—」表示當日無分數或未排名。" columns={TREND_COLUMNS} rows={[...trend].reverse()} rowKey={(point) => point.trading_date} />
           </details>
         </>
       ) : <EmptyState reason="走勢資料不足（需至少 2 個交易日的分數）" />}
@@ -333,32 +317,32 @@ function roleLabel(role: string | undefined): string {
   return role === 'leader' ? '領先成員' : role === 'member' ? '成員' : '角色待核實'
 }
 
+// A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
 function closeText(row: ThemeMemberRow | ThemeInlineMember): string {
   const close = 'latest_bar' in row ? row.latest_bar?.close : undefined
-  return typeof close === 'number' && Number.isFinite(close) ? close.toLocaleString('zh-TW', { maximumFractionDigits: 2 }) : ''
+  return formatTableNumber(close, 2)
 }
 
-export function ThemeMemberTable({ rows, withEvidence }: { rows: ReadonlyArray<ThemeMemberRow | ThemeInlineMember>; withEvidence: boolean }) {
-  return (
-    <Table wrapClassName="member-table-wrap" note="單位：收盤為各標的報價幣別的元。空白表示未提供資料或數值待核實。">
-      <thead><tr><th>代號</th><th>名稱</th><th>市場</th><th>角色</th><th className="num">收盤</th><th>資料日期</th>{withEvidence && <th>證據</th>}</tr></thead>
-      <tbody>{rows.map((row) => {
-        const path = '/stocks/' + encodeURIComponent(row.exchange) + '/' + encodeURIComponent(row.symbol)
-        const barDate = 'latest_bar' in row ? row.latest_bar?.date : undefined
-        return (
-          <tr key={row.exchange + row.symbol}>
-            <td><Link className="symbol-link" to={path}>{row.symbol}</Link></td>
-            <td><Link className="symbol-link" to={path}>{row.name}</Link></td>
-            <td>{marketLabel(row.exchange)}</td>
-            <td>{roleLabel(row.role)}</td>
-            <td className="num">{closeText(row)}</td>
-            <td>{formatDate(barDate) ?? ''}</td>
-            {withEvidence && <td><EvidenceCell evidence={row.theme_evidence} /></td>}
-          </tr>
-        )
-      })}</tbody>
-    </Table>
-  )
+type MemberRow = ThemeMemberRow | ThemeInlineMember
+const memberPath = (row: MemberRow) => '/stocks/' + encodeURIComponent(row.exchange) + '/' + encodeURIComponent(row.symbol)
+const MEMBER_COLUMNS: ReadonlyArray<Column<MemberRow>> = [
+  { key: 'symbol', header: '代號', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.symbol}</Link> },
+  { key: 'name', header: '名稱', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.name}</Link> },
+  { key: 'market', header: '市場', cell: (row) => marketLabel(row.exchange) },
+  { key: 'role', header: '角色', cell: (row) => roleLabel(row.role) },
+  { key: 'close', header: '收盤', num: true, cell: closeText },
+  { key: 'date', header: '資料日期', cell: (row) => formatDate('latest_bar' in row ? row.latest_bar?.date : undefined) ?? '' },
+]
+const EVIDENCE_COLUMN: Column<MemberRow> = { key: 'evidence', header: '證據', cell: (row) => <EvidenceCell evidence={row.theme_evidence} /> }
+
+export function ThemeMemberTable({ rows, withEvidence }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean }) {
+  return <DataTable
+    wrapClassName="member-table-wrap"
+    note="單位：收盤為各標的報價幣別的元。空白表示未提供資料或數值待核實。"
+    columns={withEvidence ? [...MEMBER_COLUMNS, EVIDENCE_COLUMN] : MEMBER_COLUMNS}
+    rows={rows}
+    rowKey={(row) => row.exchange + row.symbol}
+  />
 }
 
 function MemberPager({ meta, onPageChange }: { meta: Record<string, unknown>; onPageChange: (page: number) => void }) {

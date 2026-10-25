@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 
-import { Badge, Card, DateBadge, EmptyState, Skeleton, Table } from '../components/ui'
+import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
-import type { CandidateComponentKey, CandidateItem, CandidatesResponse } from '../types'
+import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
 import {
   CANDIDATE_COMPONENTS,
   CANDIDATE_DISCLAIMER,
@@ -60,28 +60,34 @@ function ComponentScores({ item }: { item: CandidateItem }) {
   )
 }
 
+type SubItemRow = { key: CandidateComponentKey; label: string; component: CandidateComponent | undefined; name: string; sub: CandidateSubItem; first: boolean }
+
+// Four columns at most inside a card; the component title is its own row (DESIGN_SYSTEM §5.1).
+const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
+  { key: 'sub', header: '子項', cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
+  { key: 'value', header: '原值', num: true, cell: ({ name, sub }) => formatSubItemValue(name, sub.value) },
+  { key: 'percentile', header: 'percentile', num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
+  { key: 'weight', header: '子項權重', num: true, cell: ({ sub }) => `${Math.round(sub.weight * 100)}%` },
+]
+
 function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
+  const rows = CANDIDATE_COMPONENTS.flatMap(({ key, label }) => {
+    const component = item.components[key]
+    return Object.entries(component?.items ?? {}).map(([name, sub], index): SubItemRow => ({ key, label, component, name, sub, first: index === 0 }))
+  })
   return (
     <details className="details candidate-details" open={open}>
       <summary>評分細節、資料日期與來源</summary>
-      <Table note="分數與 percentile 為 0–100，越高越好（「較低為佳」的子項已反向）；「—」表示無資料，不以 0 計。">
-        <thead><tr><th>分項</th><th>子項</th><th className="num">原值</th><th className="num">percentile</th><th className="num">子項權重</th></tr></thead>
-        <tbody>
-          {CANDIDATE_COMPONENTS.flatMap(({ key, label }) => {
-            const component = item.components[key]
-            const entries = Object.entries(component?.items ?? {})
-            return entries.map(([name, sub], index) => (
-              <tr key={key + name} data-sub-item={name}>
-                {index === 0 && <td rowSpan={entries.length}>{label}（{formatCandidateScore(component?.score)}，權重 {Math.round((component?.weight ?? 0) * 100)}%）{component?.inference && <> <InferenceBadge /></>}</td>}
-                <td>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</td>
-                <td className="num">{formatSubItemValue(name, sub.value)}</td>
-                <td className="num">{formatCandidateScore(sub.percentile)}</td>
-                <td className="num">{Math.round(sub.weight * 100)}%</td>
-              </tr>
-            ))
-          })}
-        </tbody>
-      </Table>
+      <DataTable
+        note="分數與 percentile 為 0–100，越高越好（「較低為佳」的子項已反向）；「—」表示無資料，不以 0 計。"
+        columns={SUB_ITEM_COLUMNS}
+        rows={rows}
+        rowKey={(row) => row.key + row.name}
+        rowProps={(row) => ({ 'data-sub-item': row.name })}
+        groupTitle={({ first, label, component }) => first
+          ? <>{label}（{formatCandidateScore(component?.score)}，權重 {Math.round((component?.weight ?? 0) * 100)}%）{component?.inference && <> <InferenceBadge /></>}</>
+          : null}
+      />
       {item.alternatives.length > 0 && (
         <div className="small-note">同檔另一策略：{item.alternatives.map((alt) => `${candidateStrategyLabel(alt.strategy)} 總分 ${formatCandidateScore(alt.total_score)}`).join('、')}（只留總分高者）</div>
       )}
@@ -129,7 +135,7 @@ export function CandidateCard({ item, linkToStock = true, detailsOpen = false }:
       <dl className="candidate-levels">
         <div><dt>進場區</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
         <div><dt>停損</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt>目標</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">／{formatPrice(levels.target_2)}</span>}</dd></div>
+        <div><dt>目標</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2"><wbr />／{formatPrice(levels.target_2)}</span>}</dd></div>
         <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
       <ComponentScores item={item} />

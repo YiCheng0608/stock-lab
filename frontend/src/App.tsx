@@ -35,6 +35,7 @@ import {
 } from './api'
 import type {
   ActionSummary,
+  BackfillRun,
   BacktestSummary,
   CursorMeta,
   Dashboard,
@@ -42,6 +43,7 @@ import type {
   GlossaryTerm,
   GroupDetail,
   GroupMember,
+  IngestionRun,
   InstrumentDetail,
   Pagination,
   Position,
@@ -59,11 +61,12 @@ import type {
 import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
-import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
+import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
 import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
-import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
+import { Card, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
+import { priceDigits } from './stock/stockBars'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
@@ -74,28 +77,17 @@ import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMI
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
 
+// Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
 function formatNumber(value: unknown, digits = 2): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toLocaleString('zh-TW', { maximumFractionDigits: digits })
-    : '未提供'
-}
-
-function formatPercent(value: unknown, digits = 2): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? (value * 100).toFixed(digits)
-    : '未提供'
+  return typeof value === 'number' && Number.isFinite(value) ? formatFixed(value, digits) : '未提供'
 }
 
 function formatSignedNumber(value: unknown, digits = 2): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '未提供'
-  const formatted = formatNumber(Math.abs(value), digits)
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
+  return typeof value === 'number' && Number.isFinite(value) ? formatFixed(value, digits, true) : '未提供'
 }
 
 function formatSignedPercent(value: unknown, digits = 2): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '未提供'
-  const formatted = formatPercent(Math.abs(value), digits)
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
+  return typeof value === 'number' && Number.isFinite(value) && Number.isFinite(value * 100) ? `${formatFixed(value * 100, digits, true)}%` : '未提供'
 }
 
 function compactText(value: string | null | undefined, maxLength = 120): string | null {
@@ -213,20 +205,6 @@ function strategyLabel(strategy: string | null | undefined): string {
 function priceChangeTone(value: number | null | undefined): 'positive' | 'negative' | '' {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return ''
   return value > 0 ? 'positive' : 'negative'
-}
-
-function chipSourceHasShareUnit(source: string | null | undefined): boolean {
-  return isVerifiedChipFlowSource(source)
-}
-
-function formatChipFlow(value: number | null, source: string | null | undefined): string {
-  if (value == null) return '未提供'
-  return chipSourceHasShareUnit(source) ? formatSignedShareLots(value) : `${formatSignedNumber(value)}（單位待提供）`
-}
-
-function formatChipMarginChange(value: number | null, source: string | null | undefined): string {
-  if (value == null) return '未提供'
-  return isVerifiedMarginSource(source) ? `${formatSignedNumber(value)} 張` : `${formatSignedNumber(value)}（單位待提供）`
 }
 
 const fieldNames: Record<string, string> = {
@@ -510,15 +488,17 @@ export function CompactActionCard({ action }: { action: ActionSummary }) {
   const title = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
   const validChange = validRead && price !== null && typeof action.price_change === 'number' && Number.isFinite(action.price_change)
     && typeof action.price_change_pct === 'number' && Number.isFinite(action.price_change_pct) && Number.isFinite(action.price_change_pct * 100)
+  // Change keeps the close's tick decimals (DESIGN_SYSTEM §3).
+  const digits = priceDigits(price, instrument.instrument_type)
   const change = validChange
-    ? `漲跌（元／%） ${formatSignedNumber(action.price_change)}（${formatSignedPercent(action.price_change_pct)}）`
+    ? `漲跌（元） ${formatSignedNumber(action.price_change, digits)}（${formatSignedPercent(action.price_change_pct)}）`
     : '漲跌待核實'
   return (
     <Link className="panel compact-action-card" to={actionPath(action)} aria-label={`${instrument.symbol} ${title}`}>
       <div className="position-head"><span className="symbol-link"><strong>{instrument.symbol}</strong> {instrument.name}</span><span className="pill action-status-pill">{title}</span></div>
       <div className="small-note">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
       {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">庫存數量待核實</span>}
-      <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={priceChangeTone(validChange ? action.price_change : null)}>{change}</span></div>
+      <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price, digits) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={cx('compact-change', priceChangeTone(validChange ? action.price_change : null))}>{change}</span></div>
       {explicitRead && !validRead && read?.status !== 'missing' && <div className="small-note">行情讀值無效，先核對原記錄。</div>}
       {read?.status === 'missing' && <div className="small-note">尚無行情記錄。</div>}
       <div className="small-note">資料日 {formatTaiwanDateTime(action.data_cutoff ?? action.price_as_of, true)}</div>
@@ -550,7 +530,7 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {action.primary_strategy && <div className="small-note">主條件：{strategyLabel(action.primary_strategy)}{action.alternative_strategies.length ? ' · 替代：' + action.alternative_strategies.map(strategyLabel).join('、') : ''}</div>}
       <div className="action-instruction">{action.display_instruction ?? action.action_instruction ?? (incomplete ? '現在：先不行動' : actionLabel(action.action_state))}</div>
-      {action.current_price != null && <div className="metric-row"><span>最近收盤／漲跌幅（報價幣別元／%，{formatTaiwanDateTime(action.price_as_of, true)}）</span><b>{formatNumber(action.current_price)}{action.price_change_pct != null ? ' · ' + formatSignedPercent(action.price_change_pct) : ' · 漲跌幅待核實'}</b></div>}
+      {action.current_price != null && <div className="metric-row"><span>最近收盤／漲跌幅（報價幣別元／%，{formatTaiwanDateTime(action.price_as_of, true)}）</span><b>{formatNumber(action.current_price, priceDigits(action.current_price, instrument.instrument_type))}{action.price_change_pct != null ? ' · ' + formatSignedPercent(action.price_change_pct) : ' · 漲跌幅待核實'}</b></div>}
       {incomplete ? (
         <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>
       ) : showLevels ? (
@@ -690,13 +670,33 @@ function ThemePage() {
   />
 }
 
-function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
+function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<StockDirectoryRow>> {
+  const instrumentOf = (row: StockDirectoryRow) => row.instrument ?? row
+  return [
+    { key: 'symbol', header: '代號', cell: (row) => { const instrument = instrumentOf(row); return <Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link> } },
+    { key: 'name', header: '名稱', cell: (row) => instrumentOf(row).name },
+    { key: 'exchange', header: '交易所', cell: (row) => marketDisplayLabel(instrumentOf(row).exchange) },
+    { key: 'type', header: '類型', cell: (row) => instrumentTypeLabel(instrumentOf(row).instrument_type) },
+    {
+      // A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
+      key: 'close', header: '最近收盤', num: true, cell: (row) => {
+        const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
+        return <>{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</>
+      },
+    },
+    { key: 'action', header: '目前研究動作', cell: (row) => stockDirectoryActionLabel(row.action_state, row.action_label_zh) },
+    { key: 'quality', header: '策略判斷資料', cell: (row) => <span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span> },
+  ]
+}
+
+export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
   if (!rows.length) return <div className="empty panel">沒有符合條件的股票。</div>
-  return <div className="table-wrap"><p className="small-note">單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。</p><table><thead><tr><th>代號</th><th>名稱</th><th>交易所</th><th>類型</th><th>最近收盤</th><th>目前研究動作</th><th>策略判斷資料</th></tr></thead><tbody>{rows.map((row) => {
-    const instrument = row.instrument ?? row
-    const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
-    return <tr key={instrument.exchange + instrument.symbol}><td><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link></td><td>{instrument.name}</td><td>{marketDisplayLabel(instrument.exchange)}</td><td>{instrumentTypeLabel(instrument.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</td><td>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</td><td><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></td></tr>
-  })}</tbody></table></div>
+  return <DataTable
+    note="單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。"
+    columns={stockDirectoryColumns(dataAsOf)}
+    rows={rows}
+    rowKey={(row) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol}
+  />
 }
 
 function StocksPage() {
@@ -779,7 +779,7 @@ function StockPage() {
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
       {tab === 'research' && <>{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}<StockCandidatePanel candidate={data.candidate} /><ActionDetailPanel action={data.decision_summary ?? null} /><Card eyebrow="研究條件 · 只讀快照" title="族群與策略條件"><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></Card></>}
-      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></Card></>}
+      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
@@ -815,29 +815,42 @@ function BrokerBranchEntry({ exchange }: { exchange: string }) {
   </section>
 }
 
-function BarTable({ rows }: { rows: InstrumentDetail['bars'] }) {
-  return <div className="table-wrap compact-table"><p className="small-note">單位：股價為各標的報價幣別的元，指數為點；成交量為張。空白表示未提供資料、數值無效或成交量來源單位待核實。</p><table><thead><tr><th>日期</th><th>收盤</th><th>最高</th><th>最低</th><th>成交量</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}><td>{formatTaiwanDateTime(row.date, true)}</td><td className="numeric-cell">{formatTableNumber(row.close, 2)}</td><td className="numeric-cell">{formatTableNumber(row.high, 2)}</td><td className="numeric-cell">{formatTableNumber(row.low, 2)}</td><td className="numeric-cell">{formatTableVolume(row.volume, row.source, row.volume_exact)}</td></tr>)}</tbody></table></div>
+// One stock's prices share its latest close's tick decimals; lots are whole, the exact shares sit beside them.
+export function BarTable({ rows, instrumentType }: { rows: InstrumentDetail['bars']; instrumentType: string }) {
+  const digits = priceDigits(rows.find((row) => typeof row.close === 'number' && Number.isFinite(row.close))?.close, instrumentType)
+  const columns: ReadonlyArray<Column<InstrumentDetail['bars'][number]>> = [
+    { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
+    { key: 'close', header: '收盤', num: true, cell: (row) => formatTableNumber(row.close, digits) },
+    { key: 'high', header: '最高', num: true, cell: (row) => formatTableNumber(row.high, digits) },
+    { key: 'low', header: '最低', num: true, cell: (row) => formatTableNumber(row.low, digits) },
+    { key: 'volume', header: '成交量', num: true, cell: (row) => formatTableVolume(row.volume, row.source, row.volume_exact) },
+    { key: 'shares', header: '成交股數', num: true, cell: (row) => formatTableVolumeShares(row.volume, row.source, row.volume_exact) },
+  ]
+  return <DataTable
+    wrapClassName="compact-table"
+    note="單位：股價為各標的報價幣別的元，指數為點；成交量為張（股數 ÷ 1,000 四捨五入），成交股數為來源原值（股）。空白表示未提供資料、數值無效或成交量來源單位待核實。"
+    columns={columns}
+    rows={rows}
+    rowKey={(row, index) => row.id ?? row.date ?? index}
+  />
 }
 
 function formatRawChipValue(value: number | null): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-TW', { maximumFractionDigits: 3 }) : '未提供'
 }
 
+const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
+  { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
+  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.source) },
+  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.source) },
+  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.source) },
+  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.source, true) },
+]
+
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
-    <div className="small-note chip-unit-note">單位：張。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始值與來源見下方說明。</div>
-    <div className="table-wrap compact-table">
-      <table>
-        <thead><tr><th>日期</th><th><Term id="foreign_flow">外資買賣超</Term></th><th><Term id="trust_flow">投信</Term></th><th><Term id="dealer_flow">自營商</Term></th><th><Term id="margin">融資增減</Term></th></tr></thead>
-        <tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}>
-          <td>{formatTaiwanDateTime(row.date, true)}</td>
-          <td className="numeric-cell">{formatTableChip(row.foreign_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.trust_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.dealer_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.margin_change, row.source, true)}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>
+    <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始股數與來源見下方說明。</div>
+    <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
     <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
 }
@@ -986,7 +999,7 @@ export function PortfolioSubsection() {
 
 function ResearchBacktestPage() {
   const query = useQuery<BacktestSummary>({ queryKey: ['backtest-summary'], queryFn: () => getBacktestSummary() })
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span></div><div className="table-wrap"><p className="small-note">期限為訊號日之後的交易日數；樣本、可比與不可比的單位為筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>策略</th><th>類型</th><th>期限</th><th>樣本</th><th>可比</th><th>不可比</th><th>評估</th></tr></thead><tbody>{query.data.groups.map((row) => <tr key={backtestGroupKey(row)}><td>{strategyLabel(row.strategy)} · 規則版本 {row.version}</td><td>{instrumentTypeLabel(row.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.horizon, 0)}</td><td className="numeric-cell">{formatTableNumber(row.sample, 0)}</td><td className="numeric-cell">{formatTableNumber(row.comparable, 0)}</td><td className="numeric-cell">{formatTableNumber(row.incomparable, 0)}</td><td><QualityBadge status={row.assessment} /></td></tr>)}</tbody></table></div></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
+  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span></div><BacktestTable groups={query.data.groups} /></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
 }
 
 function readMetadataRecord(value: unknown): Record<string, unknown> {
@@ -1015,7 +1028,7 @@ function BackfillCoveragePage() {
   const summary = coverage.data?.summary
   const coverageStatus = summary?.coverage_status ?? coverage.data?.baseline?.status ?? 'unknown'
   const coverageBadge = coverageStatus === 'manifest' ? 'complete' : coverageStatus === 'snapshot' ? 'official_snapshot' : 'unknown'
-  return <div className="page"><PageTitle eyebrow="研究詳細" title="官方資料回補與覆蓋度" description="此頁只讀取回補稽核紀錄與目前資料覆蓋度，不提供直接啟動正式回補的操作。"><Link className="text-link" to="/system/data-quality">前往系統資料品質</Link></PageTitle><section className="panel"><div className="section-head"><div><h2>最近一次回補</h2><div className="small-note">回補由受控工作流程執行，日期與來源均保留稽核紀錄。</div></div>{latest && <QualityBadge status={latest.status} />}</div>{latest ? <div className="metric-grid"><div className="metric-card"><span>日期範圍</span><b>{latest.metadata.start_date as string}～{latest.metadata.end_date as string}</b></div><div className="metric-card"><span>原定日曆日期</span><b>{requested} 日</b></div><div className="metric-card"><span>已驗證交易日</span><b>{verified}／{target} 日</b></div><div className="metric-card"><span>延伸補抓</span><b>{extensions} 日</b></div><div className="metric-card"><span>明確休市／無資料</span><b>{skipped} 日</b></div><div className="metric-card"><span>覆蓋目標</span><b>{manifest.target_met === true ? '已達成' : '尚未達成'}</b></div></div> : <div className="empty">尚無官方回補稽核紀錄。</div>}{latest?.error && <div className="data-gap">最近一次狀態說明：{latest.error}</div>}</section><section className="panel"><div className="section-head"><div><h2>目前市場資料覆蓋度</h2><div className="small-note">{summary?.baseline_message ?? coverage.data?.baseline?.message ?? '尚無可核實的官方交易日基準。'}</div></div>{summary && <QualityBadge kind="generic" status={coverageBadge} />}</div>{summary?.coverage_status === 'unknown' ? <div className="empty">尚未建立回補涵蓋基準；因此不計算全市場缺口原因。請先由受控流程產生回補稽核紀錄。</div> : summary ? <><div className="metric-grid"><div className="metric-card"><span>加權指數 已核實交易日</span><b>{summary.verified_taiex_sessions} 日{coverageStatus === 'snapshot' ? '（官方快照）' : ''}</b></div><div className="metric-card"><span>行情未滿 20 日</span><b>{summary.incomplete_to_20} 個標的</b></div><div className="metric-card"><span>行情未滿 60 日</span><b>{summary.incomplete_to_60} 個標的</b></div><div className="metric-card"><span>籌碼未滿 20 日</span><b>{summary.incomplete_chips_to_20} 個標的</b></div></div>{Object.keys(summary.coverage_reason_counts).length > 0 && <div className="tag-list">{Object.entries(summary.coverage_reason_counts).map(([reason, count]) => <span className="tag" key={reason}>{coverageReasonLabels[reason] ?? '其他資料缺口'}：{count}</span>)}</div>}<div className="small-note">回補目標：{summary.target_met === null ? '尚無回補稽核基準' : summary.target_met ? '已達成' : '尚未達成'}；事件資料：{summary.verified_event_sessions} 個已核實查詢日。</div></> : <div className="empty">尚無覆蓋度摘要。</div>}</section><section className="panel"><h2>回補紀錄</h2>{runs.data?.items.length ? <div className="table-wrap"><p className="small-note">資料量單位：筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>更新時間</th><th>資料範圍</th><th>狀態</th><th>筆數</th><th>錯誤</th></tr></thead><tbody>{runs.data.items.map((run) => <tr key={run.id}><td>{formatTaiwanDateTime(run.updated_at)}</td><td>{run.metadata.start_date as string}～{run.metadata.end_date as string}</td><td><QualityBadge status={run.status} /></td><td className="numeric-cell">{formatTableNumber(run.records, 0)}</td><td>{run.error ?? '—'}</td></tr>)}</tbody></table></div> : <div className="empty">尚無回補紀錄。</div>}</section></div>
+  return <div className="page"><PageTitle eyebrow="研究詳細" title="官方資料回補與覆蓋度" description="此頁只讀取回補稽核紀錄與目前資料覆蓋度，不提供直接啟動正式回補的操作。"><Link className="text-link" to="/system/data-quality">前往系統資料品質</Link></PageTitle><section className="panel"><div className="section-head"><div><h2>最近一次回補</h2><div className="small-note">回補由受控工作流程執行，日期與來源均保留稽核紀錄。</div></div>{latest && <QualityBadge status={latest.status} />}</div>{latest ? <div className="metric-grid"><div className="metric-card"><span>日期範圍</span><b>{latest.metadata.start_date as string}～{latest.metadata.end_date as string}</b></div><div className="metric-card"><span>原定日曆日期</span><b>{requested} 日</b></div><div className="metric-card"><span>已驗證交易日</span><b>{verified}／{target} 日</b></div><div className="metric-card"><span>延伸補抓</span><b>{extensions} 日</b></div><div className="metric-card"><span>明確休市／無資料</span><b>{skipped} 日</b></div><div className="metric-card"><span>覆蓋目標</span><b>{manifest.target_met === true ? '已達成' : '尚未達成'}</b></div></div> : <div className="empty">尚無官方回補稽核紀錄。</div>}{latest?.error && <div className="data-gap">最近一次狀態說明：{latest.error}</div>}</section><section className="panel"><div className="section-head"><div><h2>目前市場資料覆蓋度</h2><div className="small-note">{summary?.baseline_message ?? coverage.data?.baseline?.message ?? '尚無可核實的官方交易日基準。'}</div></div>{summary && <QualityBadge kind="generic" status={coverageBadge} />}</div>{summary?.coverage_status === 'unknown' ? <div className="empty">尚未建立回補涵蓋基準；因此不計算全市場缺口原因。請先由受控流程產生回補稽核紀錄。</div> : summary ? <><div className="metric-grid"><div className="metric-card"><span>加權指數 已核實交易日</span><b>{summary.verified_taiex_sessions} 日{coverageStatus === 'snapshot' ? '（官方快照）' : ''}</b></div><div className="metric-card"><span>行情未滿 20 日</span><b>{summary.incomplete_to_20} 個標的</b></div><div className="metric-card"><span>行情未滿 60 日</span><b>{summary.incomplete_to_60} 個標的</b></div><div className="metric-card"><span>籌碼未滿 20 日</span><b>{summary.incomplete_chips_to_20} 個標的</b></div></div>{Object.keys(summary.coverage_reason_counts).length > 0 && <div className="tag-list">{Object.entries(summary.coverage_reason_counts).map(([reason, count]) => <span className="tag" key={reason}>{coverageReasonLabels[reason] ?? '其他資料缺口'}：{count}</span>)}</div>}<div className="small-note">回補目標：{summary.target_met === null ? '尚無回補稽核基準' : summary.target_met ? '已達成' : '尚未達成'}；事件資料：{summary.verified_event_sessions} 個已核實查詢日。</div></> : <div className="empty">尚無覆蓋度摘要。</div>}</section><section className="panel"><h2>回補紀錄</h2>{runs.data?.items.length ? <BackfillRunTable runs={runs.data.items} /> :<div className="empty">尚無回補紀錄。</div>}</section></div>
 }
 
 function SystemDataPage() {
@@ -1026,12 +1039,62 @@ function SystemDataPage() {
   const error = quality.error ?? raw.error ?? runs.error ?? strategies.error
   if (quality.isLoading || raw.isLoading || runs.isLoading || strategies.isLoading) return <Loading />
   if (error) return <ErrorBox error={error} />
-  return <div className="page"><PageTitle eyebrow="系統頁" title="資料品質" description="管理型檢視：原始資料、擷取工作、資料品質與固定規則設定快照。"><div className="source-banner"><strong>官方資料</strong><span>此頁不在主導航，供稽核使用。</span></div><Link className="text-link" to="/research/coverage">查看官方資料回補與覆蓋度</Link></PageTitle><section className="panel"><h2>擷取狀態</h2><div className="table-wrap"><p className="small-note">資料量單位：筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>更新</th><th>來源</th><th>資料日</th><th>狀態</th><th>筆數</th><th>資料截至</th><th>錯誤</th></tr></thead><tbody>{runs.data?.items.map((run) => <tr key={run.id}><td>{formatTaiwanDateTime(run.updated_at)}</td><td>{sourceLabel(run.source)}</td><td>{run.run_date}</td><td><QualityBadge status={run.status} /></td><td className="numeric-cell">{formatTableNumber(run.records, 0)}</td><td>{formatTaiwanDateTime(run.data_as_of, true)}</td><td>{run.error ?? '—'}</td></tr>)}</tbody></table></div></section><section className="panel"><h2>原始來源</h2><RawTable rows={raw.data?.items ?? []} /></section><section className="panel"><h2>資料品質</h2><QualityTable rows={quality.data?.items ?? []} /></section><section className="panel"><h2>策略版本</h2><StrategyVersionList items={strategies.data?.items ?? []} variant="condition" labelFor={strategyLabel} badgeFor={(item) => <QualityBadge status={item.active ? 'complete' : 'inactive'} />} /></section></div>
+  return <div className="page"><PageTitle eyebrow="系統頁" title="資料品質" description="管理型檢視：原始資料、擷取工作、資料品質與固定規則設定快照。"><div className="source-banner"><strong>官方資料</strong><span>此頁不在主導航，供稽核使用。</span></div><Link className="text-link" to="/research/coverage">查看官方資料回補與覆蓋度</Link></PageTitle><section className="panel"><h2>擷取狀態</h2><IngestionRunTable rows={runs.data?.items ?? []} /></section><section className="panel"><h2>原始來源</h2><RawTable rows={raw.data?.items ?? []} /></section><section className="panel"><h2>資料品質</h2><QualityTable rows={quality.data?.items ?? []} /></section><section className="panel"><h2>策略版本</h2><StrategyVersionList items={strategies.data?.items ?? []} variant="condition" labelFor={strategyLabel} badgeFor={(item) => <QualityBadge status={item.active ? 'complete' : 'inactive'} />} /></section></div>
 }
 
-function RawTable({ rows }: { rows: RawPayload[] }) {
+const RAW_COLUMNS: ReadonlyArray<Column<RawPayload>> = [
+  { key: 'collected', header: '擷取時間', cell: (row) => row.collected_at ?? '—' },
+  { key: 'run', header: '資料批次', num: true, cell: (row) => formatTableNumber(row.ingestion_run_id, 0) },
+  { key: 'source', header: '來源', cell: (row) => sourceLabel(row.source) },
+  { key: 'date', header: '資料日', cell: (row) => row.data_as_of ?? '—' },
+  { key: 'endpoint', header: '來源位置', cell: (row) => row.endpoint },
+  { key: 'sha', header: '內容校驗碼', cellClassName: 'hash-cell', cell: (row) => row.sha256 ?? '—' },
+]
+
+export function RawTable({ rows }: { rows: RawPayload[] }) {
   if (!rows.length) return <div className="empty">尚無原始來源資料。</div>
-  return <div className="table-wrap"><table><thead><tr><th>擷取時間</th><th>資料批次</th><th>來源</th><th>資料日</th><th>來源位置</th><th>內容校驗碼</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.collected_at ?? '—'}</td><td className="numeric-cell">{formatTableNumber(row.ingestion_run_id, 0)}</td><td>{sourceLabel(row.source)}</td><td>{row.data_as_of ?? '—'}</td><td>{row.endpoint}</td><td className="hash-cell">{row.sha256 ?? '—'}</td></tr>)}</tbody></table></div>
+  return <DataTable columns={RAW_COLUMNS} rows={rows} rowKey={(row) => row.id} />
+}
+
+type BacktestGroup = BacktestSummary['groups'][number]
+const BACKTEST_COLUMNS: ReadonlyArray<Column<BacktestGroup>> = [
+  { key: 'strategy', header: '策略', cell: (row) => `${strategyLabel(row.strategy)} · 規則版本 ${row.version}` },
+  { key: 'type', header: '類型', cell: (row) => instrumentTypeLabel(row.instrument_type) },
+  { key: 'horizon', header: '期限', num: true, cell: (row) => formatTableNumber(row.horizon, 0) },
+  { key: 'sample', header: '樣本', num: true, cell: (row) => formatTableNumber(row.sample, 0) },
+  { key: 'comparable', header: '可比', num: true, cell: (row) => formatTableNumber(row.comparable, 0) },
+  { key: 'incomparable', header: '不可比', num: true, cell: (row) => formatTableNumber(row.incomparable, 0) },
+  { key: 'assessment', header: '評估', cell: (row) => <QualityBadge status={row.assessment} /> },
+]
+
+export function BacktestTable({ groups }: { groups: BacktestGroup[] }) {
+  return <DataTable note="期限為訊號日之後的交易日數；樣本、可比與不可比的單位為筆。空白表示未提供資料或數值待核實。" columns={BACKTEST_COLUMNS} rows={groups} rowKey={backtestGroupKey} />
+}
+
+const BACKFILL_COLUMNS: ReadonlyArray<Column<BackfillRun>> = [
+  { key: 'updated', header: '更新時間', cell: (run) => formatTaiwanDateTime(run.updated_at) },
+  { key: 'range', header: '資料範圍', cell: (run) => `${run.metadata.start_date as string}～${run.metadata.end_date as string}` },
+  { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
+  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
+]
+
+export function BackfillRunTable({ runs }: { runs: BackfillRun[] }) {
+  return <DataTable note="資料量單位：筆。空白表示未提供資料或數值待核實。" columns={BACKFILL_COLUMNS} rows={runs} rowKey={(run) => run.id} />
+}
+
+const INGESTION_COLUMNS: ReadonlyArray<Column<IngestionRun>> = [
+  { key: 'updated', header: '更新', cell: (run) => formatTaiwanDateTime(run.updated_at) },
+  { key: 'source', header: '來源', cell: (run) => sourceLabel(run.source) },
+  { key: 'date', header: '資料日', cell: (run) => run.run_date },
+  { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
+  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'asOf', header: '資料截至', cell: (run) => formatTaiwanDateTime(run.data_as_of, true) },
+  { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
+]
+
+export function IngestionRunTable({ rows }: { rows: IngestionRun[] }) {
+  return <DataTable note="資料量單位：筆。空白表示未提供資料或數值待核實。" columns={INGESTION_COLUMNS} rows={rows} rowKey={(run) => run.id} />
 }
 
 function QualityTable({ rows }: { rows: DataQualityRow[] }) {

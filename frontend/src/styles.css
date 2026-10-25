@@ -97,14 +97,16 @@ pre { max-height: 300px; overflow: auto; margin: var(--space-4) 0 0; padding: va
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .table-note, .table-wrap > .small-note { margin: 0; padding: var(--space-3) var(--space-4); color: var(--color-text-muted); font-size: 12px; }
-table { width: 100%; border-collapse: collapse; min-width: 720px; font-size: 14px; }
+/* DESIGN_SYSTEM §5 / §5.1: width follows the content (no fixed minimum); numeric th and td share `num`. */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { color: var(--color-text-muted); font-size: 14px; font-weight: 500; text-align: left; }
-th, td { height: 56px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); text-align: left; white-space: nowrap; }
+th, td { height: 56px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); text-align: left; }
 tbody tr { transition: var(--transition); }
 tbody tr:hover { background: var(--color-bg-elevated); }
 tr:last-child td { border-bottom: 0; }
-.num, .numeric-cell { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 th.num { font-family: var(--font-body); }
+.table-group-row td { height: 40px; background: var(--color-bg-alt); color: var(--color-text); font-weight: 600; }
 
 .tabs, .stock-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); border-bottom: 1px solid var(--color-border); }
 .tab { margin-bottom: -1px; padding: var(--space-3) var(--space-4); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); font-size: 15px; font-weight: 500; cursor: pointer; transition: var(--transition); }
@@ -270,6 +272,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .compact-price > div { min-width: 0; flex: 1 1 140px; overflow-wrap: anywhere; }
 .compact-price strong { font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; }
 .compact-price > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: var(--color-text-muted); font-size: 12px; }
+.compact-price > .compact-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .compact-label { display: block; margin-bottom: var(--space-1); color: var(--color-text-muted); font-size: 12px; }
 .compact-detail-link { display: inline-block; margin-top: var(--space-3); color: var(--color-primary); font-size: 14px; }
 .action-state { margin: var(--space-4) 0 var(--space-1); color: var(--color-text); font-size: 18px; font-weight: 700; }
@@ -301,7 +304,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .chip-source-row { display: grid; gap: 3px; padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
 .broker-branch-entry { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
 .broker-branch-entry h3 { margin-top: 0; }
-.hash-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.hash-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-button { padding: 0 2px; border: 0; border-bottom: 1px dashed var(--color-primary); background: transparent; cursor: pointer; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: var(--space-6); background: var(--color-overlay); }
 .glossary-modal { width: min(620px, 100%); max-height: 90vh; overflow: auto; padding: var(--space-6); border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-card); }
@@ -431,7 +434,8 @@ a.symbol-link:hover { color: var(--color-primary); }
 .candidate-levels, .candidate-components { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-3) 0 0; }
 .candidate-levels > div, .candidate-components > div { min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg-alt); }
 .candidate-levels dt, .candidate-components dt { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: 12px; }
-.candidate-levels dd, .candidate-components dd { margin: var(--space-1) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* Prices break only at ～ or ／, never inside a number. */
+.candidate-levels dd, .candidate-components dd { margin: var(--space-1) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .candidate-components dd { font-size: 18px; font-weight: 600; }
 .level-entry { color: var(--color-text); }
 .level-stop { color: var(--color-error); }
@@ -509,6 +513,10 @@ a.symbol-link:hover { color: var(--color-primary); }
   .stat-grid, .three-stats, .level-grid { grid-template-columns: 1fr; }
   .candidate-card { padding: var(--space-4); }
   .candidate-levels, .candidate-components { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  th, td { height: 44px; padding: 0 var(--space-2); }
+  .table-wrap th:first-child, .table-wrap td:first-child { position: sticky; left: 0; z-index: 1; background: var(--color-bg-card); }
+  .table-wrap tbody tr:hover td:first-child { background: var(--color-bg-elevated); }
+  .table-wrap .table-group-row td:first-child { position: static; background: var(--color-bg-alt); }
   .board-table-wrap { display: none; }
   .board-cards { display: grid; }
   .board-controls .board-search { flex: 1 1 100%; max-width: none; }
