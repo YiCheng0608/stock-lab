@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#269 首頁線框稿</title>
+<style>
+:root{--color-primary:#3b82f6;--color-accent:#8b5cf6;--color-success:#22c55e;--color-warning:#f59e0b;--color-error:#ef4444;--color-up:#ef4444;--color-down:#22c55e;--color-flat:#9ca3af;--color-bg:#0b0f1a;--color-bg-alt:#111827;--color-bg-card:#1f2937;--color-bg-elevated:#374151;--color-border:rgba(255,255,255,.10);--color-text:#f9fafb;--color-text-muted:#9ca3af;--color-text-subtle:#6b7280;--color-nav-bg:rgba(11,15,26,.95);
+--font-body:"Inter","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;--font-mono:"JetBrains Mono",Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px}
+.nav{height:64px;display:flex;align-items:center;gap:24px;padding:0 32px;background:var(--color-nav-bg);border-bottom:1px solid var(--color-border)}
+.logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--color-primary),var(--color-accent))}
+.brand{font-weight:700;font-size:18px}.nav a{color:var(--color-text-muted)}.nav a.on{color:var(--color-text);border-bottom:2px solid var(--color-primary);padding-bottom:18px;margin-top:20px}
+.nav .sp{flex:1}.search{width:200px;height:40px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-bg-alt)}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:50px;padding:3px 10px;font-size:13px;background:var(--color-bg-card);white-space:nowrap}
+.badge.primary{border-color:var(--color-primary);color:var(--color-primary)}.badge.success{border-color:var(--color-success);color:var(--color-success)}.badge.warning{border-color:var(--color-warning);color:var(--color-warning)}
+.badge.accent i{width:8px;height:8px;border-radius:50%;background:var(--color-accent)}.badge.accent{border-color:var(--color-accent)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+.phead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 0 12px;color:var(--color-text-muted);font-size:14px}
+.phead b{color:var(--color-text);font-family:var(--font-mono)}.phead summary{color:var(--color-primary);cursor:pointer}
+.market{display:grid;grid-template-columns:1fr 1fr 1.25fr 1.5fr;gap:12px}
+.mw{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;padding:12px 16px}
+.mw .l{color:var(--color-text-muted);font-size:13px;display:flex;justify-content:space-between}.mw .v{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-top:2px}
+.mw .c{font-family:var(--font-mono);font-size:14px;font-weight:600}.mw .two{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:14px;margin-top:4px}.mw .two span{color:var(--color-text-muted)}.mw .two b{font-family:var(--font-mono);font-weight:600}
+.tone-up{color:var(--color-up)}.tone-down{color:var(--color-down)}.tone-flat{color:var(--color-flat)}
+.shead{display:flex;justify-content:space-between;align-items:flex-end;margin:22px 0 6px}.eyebrow{color:var(--color-text-muted);font-size:13px}
+h1{font-size:28px;margin:2px 0 0}h2{font-size:22px;margin:2px 0 0}.fine{color:var(--color-text-subtle);font-size:12px;margin:4px 0}
+.note{color:var(--color-text-muted);font-size:13px;margin:0 0 8px}
+.tbl{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}th{font-size:13px;color:var(--color-text-muted);font-weight:500;text-align:left;padding:10px 10px;border-bottom:1px solid var(--color-border);white-space:nowrap}
+th.num,td.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+td{padding:8px 10px;border-bottom:1px solid var(--color-border);vertical-align:top;height:56px}tr:last-child td{border-bottom:0}
+.term{border-bottom:1px dotted var(--color-text-muted);cursor:help}
+.rank{font-family:var(--font-mono);color:var(--color-text-muted);width:40px}.sym{color:var(--color-text);font-weight:600;white-space:nowrap}.sub{color:var(--color-text-muted);font-size:13px;margin-top:2px}
+.grp{font-size:14px;white-space:nowrap}.muted{color:var(--color-text-muted)}.score{font-weight:700;font-size:16px}
+.stop{color:var(--color-warning)}.target{color:var(--color-primary)}.reason{font-size:13px;color:var(--color-text);max-width:250px}
+details.ai-row summary{color:var(--color-primary);font-size:13px;cursor:pointer;white-space:nowrap}
+.ai-block{border-left:2px solid var(--color-accent);padding:4px 0 4px 12px;margin-top:8px;font-size:13px;max-width:560px}
+.ai-head{display:flex;justify-content:space-between}.ai-block .k{color:var(--color-text-muted);margin-top:6px}.ai-block p{margin:2px 0}
+details.more>summary{color:var(--color-primary);padding:12px 16px;cursor:pointer;font-size:14px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:16px;padding:16px 20px}
+.glist,.nlist{list-style:none;margin:0;padding:0}.glist li{display:grid;grid-template-columns:36px 1fr 64px 64px 64px 72px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--color-border)}
+.glist li:last-child,.nlist li:last-child{border-bottom:0}.glist .hd{color:var(--color-text-muted);font-size:12px;padding:0 0 6px}.glist .num{text-align:right;font-family:var(--font-mono)}
+.nlist li{padding:10px 0;border-bottom:1px solid var(--color-border)}.ntitle{font-weight:600;margin:4px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.dot.up{background:var(--color-up)}.dot.down{background:var(--color-down)}.dot.flat{background:var(--color-flat)}
+.alert{display:flex;gap:12px;align-items:center;margin-top:12px;background:var(--color-bg-card);border:1px solid var(--color-border);border-left:4px solid var(--color-warning);border-radius:12px;padding:10px 16px;font-size:14px}
+.alert a{color:var(--color-primary);margin-left:auto}
+.cards{display:none}.lbl{color:var(--color-text-subtle);font-size:12px;margin:28px 0 8px;border-top:1px dashed var(--color-border);padding-top:8px}
+@media (max-width:640px){
+ .nav{padding:0 16px}.nav a,.search{display:none}.wrap{padding:0 16px}
+ .phead{padding:10px 0 8px;font-size:13px;gap:6px}.src{display:none}.alert{flex-wrap:wrap;gap:4px 8px;padding:8px 12px}.alert a{margin-left:0}
+ .ccard{padding:10px 12px}
+ .market{grid-template-columns:1fr 1fr;gap:8px}.mw{padding:8px 12px}.mw .v{font-size:18px}.mw.wide{display:none}
+ details.mkt-more{grid-column:1/3}
+ .tbl{display:none}.cards{display:block}
+ .ccard{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;padding:12px;margin-bottom:8px}
+ .crow{display:flex;align-items:center;gap:8px}.rk{font-family:var(--font-mono);color:var(--color-text-muted)}.cscore{margin-left:auto;font-family:var(--font-mono);font-weight:700;font-size:18px}.cscore small{font-size:12px;color:var(--color-text-muted);font-weight:400}
+ .lv{display:grid;grid-template-columns:.8fr 1.3fr .8fr 1.2fr;gap:6px;margin-top:8px}.lv small{display:block;color:var(--color-text-muted);font-size:12px}.lv b{font-family:var(--font-mono);font-size:13px}.lv em{display:block;font-style:normal;font-family:var(--font-mono);font-size:12px}
+ .creason{font-size:13px;margin-top:6px}.two-col{grid-template-columns:1fr}
+ h1{font-size:22px}.glist li{grid-template-columns:28px 1fr 56px 60px}.glist li>span:nth-child(5),.glist li>span:nth-child(6){display:none}
+}
+@media (min-width:641px){.mkt-more{display:none}}
+.tog{cursor:pointer;font-size:12px}tr.detail td{height:auto;background:var(--color-bg-alt)}.dgrid{display:grid;grid-template-columns:1fr 1.4fr .9fr;gap:20px;padding:6px 0}.dgrid .k{color:var(--color-text-muted);font-size:12px;margin-top:6px}.rl{margin:4px 0;padding-left:18px;font-size:13px}.cps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}.cp{background:var(--color-bg-card);border-radius:8px;padding:6px 8px}.cp small{display:block;color:var(--color-text-muted);font-size:11px}.cp b{font-family:var(--font-mono)}.lnk{color:var(--color-primary);font-size:13px}.dgrid .ai-block{margin-top:0;max-width:none}</style></head><body>
+<div class="nav"><span class="logo"></span><span class="brand">台股研究台</span><a class="on">今日</a><a>新聞</a><a>族群</a><a>個股</a><a>行動</a><span class="sp"></span><span class="search"></span><span class="badge">資料 2026-10-22</span></div>
+<div class="wrap">
+ <div class="phead">資料截至 <b>2026/10/22</b><span class="src"> · TWSE／TPEx 官方資料 · 官方單日快照</span> <span class="badge success">行情來源完整</span><details class="dx"><summary>資料說明</summary><span class="fine">官方標的範圍；只有資料完整的項目可進入行動摘要 · 2,349 檔標的</span></details></div>
+ <section class="market" aria-label="大盤概況">
+  <div class="mw"><div class="l">加權指數<span>點</span></div><div class="v">46,041.43</div><div class="c tone-down">−846.34（−1.81%）</div></div>
+  <div class="mw"><div class="l">櫃買指數<span>點</span></div><div class="v">381.69</div><div class="c tone-down">−13.73（−3.47%）</div></div>
+  <div class="mw wide"><div class="l">成交金額<span>億元</span></div><div class="two"><span>上市</span><b>9,334.37</b><span>上櫃</span><b>2,255.45</b></div></div>
+  <div class="mw wide"><div class="l">漲跌家數（股票）<span>漲停／跌停</span></div><div class="two"><span>上市</span><b><span class="tone-up">上漲 247</span> · <span class="tone-down">下跌 756</span> · 平盤 74 <span class="muted">（3／5）</span></b><span>上櫃</span><b><span class="tone-up">上漲 146</span> · <span class="tone-down">下跌 659</span> · 平盤 63 <span class="muted">（17／11）</span></b></div></div>
+  <details class="mkt-more"><summary class="fine" style="color:var(--color-primary)">成交金額與漲跌家數</summary><div class="fine">上市 9,334.37 億元 · 上漲 247 下跌 756 平盤 74；上櫃 2,255.45 億元 · 上漲 146 下跌 659 平盤 63</div></details>
+ </section>
+ <div class="alert" aria-label="持倉風險">（示意，只在有持倉風險時出現）<b>持倉風險 1 檔</b>（2330 台積電：已碰到使用者停損）<a>查看行動中心 →</a></div>
+ <div class="shead"><div><div class="eyebrow">每日候選 · 依評分排序</div><h1>明日候選</h1></div><div><span class="badge">資料 2026/10/22</span> <span class="badge">20 檔</span></div></div>
+ <p class="note">10/22 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。評分只用於排序，不代表勝率或預期報酬。<span class="src">價格單位：元。</span></p>
+ <div class="tbl"><table><thead><tr><th>名次</th><th>股票 · 策略</th><th>所屬族群</th><th class="num">最近收盤</th><th class="num"><span class="term">進場區</span></th><th class="num"><span class="term">停損</span></th><th class="num"><span class="term">目標</span></th><th class="num"><span class="term">RR</span></th><th class="num"><span class="term">總分</span></th><th>主要理由</th><th></th></tr></thead>
+ <tbody><tr><td class='rank'>#1</td><td><a class='sym'>1712 興農</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>化學<span class='muted'>（產業，第 8 名）</span></td><td class='num'>40.25<div class='sub tone-flat'>0.00%</div></td>
+<td class='num'>39.87～40.31</td><td class='num stop'>39.81</td><td class='num target'>40.95／41.57</td><td class='num'><span class='badge primary'>1.59</span></td>
+<td class='num score'>79</td><td class='reason'>回測 20 日均線，距均線 0.4%，量比 0.7</td><td><span class='badge accent tog'><i></i>AI 推論 ▾</span></td></tr><tr class='detail'><td></td><td colspan='10'><div class='dgrid'><div><div class='k'>理由（全部）</div><ul class='rl'><li>回測 20 日均線，距均線 0.4%，量比 0.7</li><li>三大法人 5 日淨買超，約 20 日均量的 1.07 倍</li><li>所屬產業「化學」熱度第 8</li><li>三大法人 20 日淨買超</li></ul><div class='k'>四分項（0–100）</div><div class='cps'><div class='cp'><small>技術</small><b>82</b></div><div class='cp'><small>籌碼</small><b>90</b></div><div class='cp'><small>族群</small><b>79</b></div><div class='cp'><small>新聞情緒（推論）</small><b>47</b></div></div></div>
+<div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div><div class='k'>為何入選</div><p>回測 20 日均線、距均線 0.4%，籌碼分項 90 分最高：三大法人 5 日與 20 日皆淨買超。技術 82 分，所屬「化學」產業熱度第 8。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 39.87～40.31，條件失效的停損 39.81 僅略低於進場區下緣，距離很近。第一目標 40.95、第二目標 41.57，第一目標 RR 約 1.59。</p><div class='k'>需留意的風險</div><p>新聞情緒 47 分且近 3 日無關聯新聞，該分項缺乏實質依據。回踩當日量比僅 0.7，停損距離很窄。</p><p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。<br>模型 claude-sonnet-5-5 · 提示版本 candidate_notes_v1</p></div>
+<div><div class='k'>資料日期與來源</div><p class='fine'>資料日期 2026/10/22 · 權重涵蓋 100%<br>來源：訊號 pullback_v1 · 行情 臺灣證券交易所 · 籌碼 臺灣證券交易所 · 族群 hot_group_v1 · 新聞方向 LLM 判讀 news_v1（推論）</p><a class='lnk'>評分細節與策略總表 → 個股頁</a></div></div></td></tr><tr><td class='rank'>#2</td><td><a class='sym'>6416 瑞祺電通</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>通信網路<span class='muted'>（產業，第 15 名）</span></td><td class='num'>119.50<div class='sub tone-down'>−2.05%</div></td>
+<td class='num'>116.72～121.47</td><td class='num stop'>114.75</td><td class='num target'>127.10／133.75</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>74</td><td class='reason'>回測 20 日均線，距均線 0.3%，量比 0.6</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#3</td><td><a class='sym'>2880 華南金</a><div class='sub'>上市 · 突破條件</div></td>
+<td class='grp'>金融<span class='muted'>（產業，第 7 名）</span></td><td class='num'>50.30<div class='sub tone-up'>+1.00%</div></td>
+<td class='num'>50.30</td><td class='num stop'>48.89</td><td class='num target'>52.55／54.52</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>73</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 1.08 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#4</td><td><a class='sym'>2637 慧洋-KY</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>航運<span class='muted'>（產業，當日未排名）</span></td><td class='num'>100.50<div class='sub tone-flat'>0.00%</div></td>
+<td class='num'>97.93～101.17</td><td class='num stop'>97.26</td><td class='num target'>105.68／110.21</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>72</td><td class='reason'>外資＋投信 5 日淨買超</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#5</td><td><a class='sym'>6668 中揚光</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>光電<span class='muted'>（產業，第 14 名）</span></td><td class='num'>53.70<div class='sub tone-down'>−8.36%</div></td>
+<td class='num'>51.39～56.28</td><td class='num stop'>48.81</td><td class='num target'>61.52／68.37</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>71</td><td class='reason'>回測 20 日均線，距均線 0.3%，量比 0.6</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#6</td><td><a class='sym'>1102 亞泥</a><div class='sub'>上市 · 突破條件</div></td>
+<td class='grp'>水泥<span class='muted'>（產業，當日未排名）</span></td><td class='num'>38.55<div class='sub tone-up'>+1.31%</div></td>
+<td class='num'>38.55</td><td class='num stop'>37.94</td><td class='num target'>39.52／40.37</td><td class='num'><span class='badge primary'>1.59</span></td>
+<td class='num score'>70</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 1.65 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#7</td><td><a class='sym'>9945 潤泰新</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>其他<span class='muted'>（產業，第 13 名）</span></td><td class='num'>29.60<div class='sub tone-up'>+1.02%</div></td>
+<td class='num'>29.13～29.64</td><td class='num stop'>29.09</td><td class='num target'>30.42／31.13</td><td class='num'><span class='badge primary'>1.61</span></td>
+<td class='num score'>70</td><td class='reason'>外資＋投信 5 日淨買超</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#8</td><td><a class='sym'>1101 台泥</a><div class='sub'>上市 · 突破條件</div></td>
+<td class='grp'>水泥<span class='muted'>（產業，當日未排名）</span></td><td class='num'>27.95<div class='sub tone-up'>+4.29%</div></td>
+<td class='num'>27.95</td><td class='num stop'>27.30</td><td class='num target'>28.99／29.90</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>70</td><td class='reason'>外資＋投信 5 日淨買超</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#9</td><td><a class='sym'>3325 旭品</a><div class='sub'>上櫃 · 突破條件</div></td>
+<td class='grp'>電腦及週邊<span class='muted'>（產業，第 17 名）</span></td><td class='num'>12.80<div class='sub tone-up'>+9.87%</div></td>
+<td class='num'>12.80</td><td class='num stop'>12.45</td><td class='num target'>13.36／13.85</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>69</td><td class='reason'>突破 20 日高點，量比 9.9</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr></tbody></table>
+ <details class="more"><summary>顯示其餘 10 檔</summary><table><tbody><tr><td class='rank'>#10</td><td><a class='sym'>1702 南僑</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>食品<span class='muted'>（產業，當日未排名）</span></td><td class='num'>33.15<div class='sub tone-down'>−0.15%</div></td>
+<td class='num'>33.05～33.44</td><td class='num stop'>32.76</td><td class='num target'>33.77／34.31</td><td class='num'><span class='badge primary'>1.59</span></td>
+<td class='num score'>69</td><td class='reason'>回測 20 日均線，距均線 0.3%，量比 0.8</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#11</td><td><a class='sym'>2207 和泰車</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>汽車<span class='muted'>（產業，當日未排名）</span></td><td class='num'>530.00<div class='sub tone-up'>+0.76%</div></td>
+<td class='num'>519.17～529.53</td><td class='num stop'>519.64</td><td class='num target'>546.57／561.07</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>69</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 0.76 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#12</td><td><a class='sym'>6028 公勝保經</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>金融<span class='muted'>（產業，第 7 名）</span></td><td class='num'>107.50<div class='sub tone-flat'>0.00%</div></td>
+<td class='num'>103.97～107.62</td><td class='num stop'>103.84</td><td class='num target'>113.35／118.47</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>69</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 0.14 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#13</td><td><a class='sym'>8446 華研</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>文化創意<span class='muted'>（產業，第 12 名）</span></td><td class='num'>85.80<div class='sub tone-down'>−0.35%</div></td>
+<td class='num'>85.07～85.92</td><td class='num stop'>84.94</td><td class='num target'>87.17／88.37</td><td class='num'><span class='badge primary'>1.59</span></td>
+<td class='num score'>68</td><td class='reason'>回測 20 日均線，距均線 0.4%，量比 0.8</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#14</td><td><a class='sym'>6263 普萊德</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>通信網路<span class='muted'>（產業，第 15 名）</span></td><td class='num'>169.00<div class='sub tone-down'>−1.46%</div></td>
+<td class='num'>165.64～170.71</td><td class='num stop'>163.93</td><td class='num target'>177.11／184.21</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>66</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 0.39 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#15</td><td><a class='sym'>3546 宇峻</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>文化創意<span class='muted'>（產業，第 12 名）</span></td><td class='num'>73.10<div class='sub tone-up'>+0.41%</div></td>
+<td class='num'>72.67～73.60</td><td class='num stop'>72.16</td><td class='num target'>74.60／75.91</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>66</td><td class='reason'>回測 20 日均線，距均線 0.0%，量比 0.8</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#16</td><td><a class='sym'>6499 益安</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>生技醫療<span class='muted'>（產業，第 22 名）</span></td><td class='num'>79.20<div class='sub tone-down'>−5.38%</div></td>
+<td class='num'>77.71～80.66</td><td class='num stop'>76.26</td><td class='num target'>83.91／88.03</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>65</td><td class='reason'>回測 20 日均線，距均線 0.0%，量比 0.7</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#17</td><td><a class='sym'>4743 合一</a><div class='sub'>上櫃 · 回踩條件</div></td>
+<td class='grp'>生技製藥<span class='muted'>（題材，第 4 名）</span></td><td class='num'>48.15<div class='sub tone-down'>−0.52%</div></td>
+<td class='num'>46.52～48.10</td><td class='num stop'>46.57</td><td class='num target'>50.67／52.88</td><td class='num'><span class='badge primary'>1.59</span></td>
+<td class='num score'>65</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 0.55 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#18</td><td><a class='sym'>4766 南寶</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>化學<span class='muted'>（產業，第 8 名）</span></td><td class='num'>357.50<div class='sub tone-down'>−0.69%</div></td>
+<td class='num'>348.76～356.69</td><td class='num stop'>349.57</td><td class='num target'>370.19／381.29</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>65</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 1.46 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#19</td><td><a class='sym'>2460 建通</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>電子零組件<span class='muted'>（產業，第 16 名）</span></td><td class='num'>30.65<div class='sub tone-down'>−2.54%</div></td>
+<td class='num'>30.47～31.39</td><td class='num stop'>29.73</td><td class='num target'>32.12／33.41</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>65</td><td class='reason'>回測 20 日均線，距均線 0.9%，量比 0.7</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr><tr><td class='rank'>#20</td><td><a class='sym'>2753 八方雲集</a><div class='sub'>上市 · 回踩條件</div></td>
+<td class='grp'>觀光餐旅<span class='muted'>（產業，第 18 名）</span></td><td class='num'>182.50<div class='sub tone-down'>−0.54%</div></td>
+<td class='num'>181.77～183.98</td><td class='num stop'>180.29</td><td class='num target'>186.04／189.14</td><td class='num'><span class='badge primary'>1.60</span></td>
+<td class='num score'>65</td><td class='reason'>三大法人 5 日淨買超，約 20 日均量的 0.35 倍</td><td><span class='badge accent tog'><i></i>AI 推論 ▸</span></td></tr></tbody></table></details></div>
+ <div class="cards"><div class='ccard'><div class='crow'><span class='rk'>#1</span><a class='sym'>1712 興農</a><span class='cscore'><small>總分</small> 79</span></div>
+<div class='sub'>上市 · 回踩條件 · 化學<span class='muted'>（產業，第 8 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>40.25</b><em class='tone-flat'>0.00%</em></div><div><small>進場區</small><b>39.87～40.31</b></div><div><small>停損</small><b class='stop'>39.81</b></div><div><small>目標</small><b class='target'>40.95／41.57</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.4%，量比 0.7</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測 20 日均線、距均線 0.4%，籌碼分項 90 分最高：三大法人 5 日與 20 日皆淨買超。技術 82 分，所屬「化學」產業熱度第 8。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 39.87～40.31，條件失效的停損 39.81 僅略低於進場區下緣，距離很近。第一目標 40.95、第二目標 41.57，第一目標 RR 約 1.59。</p><div class='k'>需留意的風險</div><p>新聞情緒 47 分且近 3 日無關聯新聞，該分項缺乏實質依據。回踩當日量比僅 0.7，停損距離很窄。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#2</span><a class='sym'>6416 瑞祺電通</a><span class='cscore'><small>總分</small> 74</span></div>
+<div class='sub'>上市 · 回踩條件 · 通信網路<span class='muted'>（產業，第 15 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>119.50</b><em class='tone-down'>−2.05%</em></div><div><small>進場區</small><b>116.72～121.47</b></div><div><small>停損</small><b class='stop'>114.75</b></div><div><small>目標</small><b class='target'>127.10／133.75</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.3%，量比 0.6</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>技術分項 92 分最高，回測 20 日均線、距均線 0.3%；三大法人 5 日與 20 日淨買超，籌碼 76 分。所屬「通信網路」熱度第 15。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 116.72～121.47，條件失效的停損 114.75 低於進場區下緣。第一目標 127.1、第二目標 133.75，第一目標 RR 為 1.6。</p><div class='k'>需留意的風險</div><p>族群分項僅 58 分，產業熱度排名偏後。近 5 日法人買超僅約 20 日均量的 0.55 倍，新聞無關聯資料，情緒 47 分缺乏依據。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#3</span><a class='sym'>2880 華南金</a><span class='cscore'><small>總分</small> 73</span></div>
+<div class='sub'>上市 · 突破條件 · 金融<span class='muted'>（產業，第 7 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>50.30</b><em class='tone-up'>+1.00%</em></div><div><small>進場區</small><b>50.30</b></div><div><small>停損</small><b class='stop'>48.89</b></div><div><small>目標</small><b class='target'>52.55／54.52</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 1.08 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>突破 20 日高點、量比 1.4，籌碼 93 分、新聞情緒 95 分、族群 82 分偏高；所屬「金融」熱度第 7，三大法人 5 日淨買超。</p><div class='k'>進場區、停損與目標</div><p>突破條件的規則進場區為單一價 50.3，條件失效的停損 48.89，兩者有一段距離。第一目標 52.55、第二目標 54.52，第一目標 RR 約 1.6。</p><div class='k'>需留意的風險</div><p>技術分項僅 40 分偏低。新聞情緒高分來自 AI 推論，而關聯新聞方向有 mixed、positive、unknown 並存，且整併案仍待主管機關核准。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#4</span><a class='sym'>2637 慧洋-KY</a><span class='cscore'><small>總分</small> 72</span></div>
+<div class='sub'>上市 · 回踩條件 · 航運<span class='muted'>（產業，當日未排名）</span></div>
+<div class='lv'><div><small>收盤</small><b>100.50</b><em class='tone-flat'>0.00%</em></div><div><small>進場區</small><b>97.93～101.17</b></div><div><small>停損</small><b class='stop'>97.26</b></div><div><small>目標</small><b class='target'>105.68／110.21</b></div></div>
+<div class='creason'>外資＋投信 5 日淨買超</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>外資與投信 5 日淨買超，籌碼 88 分為主要依據；回測 20 日均線、距均線 1.0%，融資 5 日減少 9.0%，技術 68 分。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 97.93～101.17，條件失效的停損 97.26 略低於進場區下緣。第一目標 105.68、第二目標 110.21，第一目標 RR 約 1.6。</p><div class='k'>需留意的風險</div><p>族群分項無資料，「航運」當日未排名，權重涵蓋僅 80。新聞情緒 47 分且近 3 日無關聯新聞，參考性有限。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#5</span><a class='sym'>6668 中揚光</a><span class='cscore'><small>總分</small> 71</span></div>
+<div class='sub'>上市 · 回踩條件 · 光電<span class='muted'>（產業，第 14 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>53.70</b><em class='tone-down'>−8.36%</em></div><div><small>進場區</small><b>51.39～56.28</b></div><div><small>停損</small><b class='stop'>48.81</b></div><div><small>目標</small><b class='target'>61.52／68.37</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.3%，量比 0.6</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>技術分項 89 分，回測 20 日均線、距均線 0.3%；三大法人 20 日淨買超，籌碼 68 分。所屬「光電」熱度第 14。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 51.39～56.28，區間較寬；條件失效的停損 48.81 低於下緣。第一目標 61.52、第二目標 68.37，第一目標 RR 約 1.6。</p><div class='k'>需留意的風險</div><p>近 5 日法人買超僅約 20 日均量的 0.05 倍，力道很弱。族群 61 分、產業熱度偏後，新聞無關聯資料，情緒 47 分缺乏依據。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#6</span><a class='sym'>1102 亞泥</a><span class='cscore'><small>總分</small> 70</span></div>
+<div class='sub'>上市 · 突破條件 · 水泥<span class='muted'>（產業，當日未排名）</span></div>
+<div class='lv'><div><small>收盤</small><b>38.55</b><em class='tone-up'>+1.31%</em></div><div><small>進場區</small><b>38.55</b></div><div><small>停損</small><b class='stop'>37.94</b></div><div><small>目標</small><b class='target'>39.52／40.37</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 1.65 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>突破 20 日高點且量比 1.6，三大法人 5 日與 20 日皆淨買超，籌碼分項 97、新聞情緒分項 95 為主要依據。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為單一價 38.55，條件失效的停損 37.94，距離約 0.61。第一目標 39.52、第二目標 40.37，第一目標 RR 約 1.59。</p><div class='k'>需留意的風險</div><p>技術分項僅 35，且族群當日未排名而無資料，涵蓋 80%。新聞情緒僅 1 則 AI 推論的偏多新聞。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#7</span><a class='sym'>9945 潤泰新</a><span class='cscore'><small>總分</small> 70</span></div>
+<div class='sub'>上市 · 回踩條件 · 其他<span class='muted'>（產業，第 13 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>29.60</b><em class='tone-up'>+1.02%</em></div><div><small>進場區</small><b>29.13～29.64</b></div><div><small>停損</small><b class='stop'>29.09</b></div><div><small>目標</small><b class='target'>30.42／31.13</b></div></div>
+<div class='creason'>外資＋投信 5 日淨買超</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>外資與投信 5 日淨買超、20 日三大法人淨買超，籌碼分項 94；回測 20 日均線距 0.7%，族群分項 64。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區 29.13～29.64，條件失效的停損 29.09 緊貼進場區下緣。第一目標 30.42、第二目標 31.13，第一目標 RR 約 1.61。</p><div class='k'>需留意的風險</div><p>新聞分項 47 且近 3 日無關聯新聞，所屬產業「其他」熱度第 13（共 34）。回踩時量比僅 0.8。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#8</span><a class='sym'>1101 台泥</a><span class='cscore'><small>總分</small> 70</span></div>
+<div class='sub'>上市 · 突破條件 · 水泥<span class='muted'>（產業，當日未排名）</span></div>
+<div class='lv'><div><small>收盤</small><b>27.95</b><em class='tone-up'>+4.29%</em></div><div><small>進場區</small><b>27.95</b></div><div><small>停損</small><b class='stop'>27.30</b></div><div><small>目標</small><b class='target'>28.99／29.90</b></div></div>
+<div class='creason'>外資＋投信 5 日淨買超</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>突破 20 日高點且量比 2.1，外資與投信 5 日淨買超，籌碼分項 91、新聞情緒分項 95。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為單一價 27.95，條件失效的停損 27.3，距離約 0.65。第一目標 28.99、第二目標 29.9，第一目標 RR 為 1.6。</p><div class='k'>需留意的風險</div><p>技術分項 40 偏低，族群當日未排名而無資料，涵蓋 80%。新聞含一則混合方向，方向判讀皆屬 AI 推論。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#9</span><a class='sym'>3325 旭品</a><span class='cscore'><small>總分</small> 69</span></div>
+<div class='sub'>上櫃 · 突破條件 · 電腦及週邊<span class='muted'>（產業，第 17 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>12.80</b><em class='tone-up'>+9.87%</em></div><div><small>進場區</small><b>12.80</b></div><div><small>停損</small><b class='stop'>12.45</b></div><div><small>目標</small><b class='target'>13.36／13.85</b></div></div>
+<div class='creason'>突破 20 日高點，量比 9.9</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>突破 20 日高點且量比 9.9，技術分項 90；三大法人 5 日淨買超、融資 5 日減少 3.3%，產業熱度第 17。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為單一價 12.8，條件失效的停損 12.45，距離約 0.35。第一目標 13.36、第二目標 13.85，第一目標 RR 為 1.6。</p><div class='k'>需留意的風險</div><p>法人買超僅約 20 日均量的 0.42 倍，新聞分項 47 且無關聯新聞。產業熱度排名在中後段（17／34）。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#10</span><a class='sym'>1702 南僑</a><span class='cscore'><small>總分</small> 69</span></div>
+<div class='sub'>上市 · 回踩條件 · 食品<span class='muted'>（產業，當日未排名）</span></div>
+<div class='lv'><div><small>收盤</small><b>33.15</b><em class='tone-down'>−0.15%</em></div><div><small>進場區</small><b>33.05～33.44</b></div><div><small>停損</small><b class='stop'>32.76</b></div><div><small>目標</small><b class='target'>33.77／34.31</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.3%，量比 0.8</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測 20 日均線距 0.3%，三大法人 5 日與 20 日淨買超，籌碼分項 80、技術分項 69。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區 33.05～33.44，條件失效的停損 32.76 位於區間下方。第一目標 33.77、第二目標 34.31，第一目標 RR 約 1.59。</p><div class='k'>需留意的風險</div><p>族群當日未排名而無資料，涵蓋 80%。新聞分項 47 且無關聯新聞，回測量比 0.8，法人買超僅約均量 0.40 倍。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><details class="more"><summary>顯示其餘 10 檔</summary><div class='ccard'><div class='crow'><span class='rk'>#11</span><a class='sym'>2207 和泰車</a><span class='cscore'><small>總分</small> 69</span></div>
+<div class='sub'>上市 · 回踩條件 · 汽車<span class='muted'>（產業，當日未排名）</span></div>
+<div class='lv'><div><small>收盤</small><b>530.00</b><em class='tone-up'>+0.76%</em></div><div><small>進場區</small><b>519.17～529.53</b></div><div><small>停損</small><b class='stop'>519.64</b></div><div><small>目標</small><b class='target'>546.57／561.07</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 0.76 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測 20 日均線且距均線 1.1%，籌碼分項 93 最高，三大法人 5 日與 20 日皆淨買超，融資 5 日減少 23.1%。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 519.17～529.53，條件失效的停損 519.64 落在進場區內，與區間下緣幾乎重疊。第一目標 546.57、第二目標 561.07，第一目標 RR 約 1.60。</p><div class='k'>需留意的風險</div><p>族群分項無資料，所屬汽車、電動車當日皆未排名；權重涵蓋僅 80。新聞情緒 47 屬 AI 推論，且近 3 日無關聯新聞。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#12</span><a class='sym'>6028 公勝保經</a><span class='cscore'><small>總分</small> 69</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 金融<span class='muted'>（產業，第 7 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>107.50</b><em class='tone-flat'>0.00%</em></div><div><small>進場區</small><b>103.97～107.62</b></div><div><small>停損</small><b class='stop'>103.84</b></div><div><small>目標</small><b class='target'>113.35／118.47</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 0.14 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測 20 日均線，距均線 1.6%，籌碼分項 80、族群分項 82 較高。所屬金融產業熱度第 7，法人 5 日淨買超，融資 5 日減少 20.0%。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 103.97～107.62，條件失效的停損 103.84 略低於區間下緣，距離很近。第一目標 113.35、第二目標 118.47，第一目標 RR 約 1.60。</p><div class='k'>需留意的風險</div><p>法人 5 日淨買超僅約 20 日均量的 0.14 倍，力道偏小。新聞情緒 47 為 AI 推論，近 3 日無關聯新聞可佐證。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#13</span><a class='sym'>8446 華研</a><span class='cscore'><small>總分</small> 68</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 文化創意<span class='muted'>（產業，第 12 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>85.80</b><em class='tone-down'>−0.35%</em></div><div><small>進場區</small><b>85.07～85.92</b></div><div><small>停損</small><b class='stop'>84.94</b></div><div><small>目標</small><b class='target'>87.17／88.37</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.4%，量比 0.8</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測 20 日均線，距均線僅 0.4%，技術分項 69、籌碼分項 78。法人 5 日與 20 日皆淨買超，所屬文化創意產業熱度第 12。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 85.07～85.92，區間很窄，條件失效的停損 84.94 略低於下緣。第一目標 87.17、第二目標 88.37，第一目標 RR 約 1.59。</p><div class='k'>需留意的風險</div><p>文化創意產業在 34 個榜內排第 12，熱度居中。新聞情緒 47 屬 AI 推論，近 3 日無關聯新聞。進場區與停損價差小，條件容易失效。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#14</span><a class='sym'>6263 普萊德</a><span class='cscore'><small>總分</small> 66</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 通信網路<span class='muted'>（產業，第 15 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>169.00</b><em class='tone-down'>−1.46%</em></div><div><small>進場區</small><b>165.64～170.71</b></div><div><small>停損</small><b class='stop'>163.93</b></div><div><small>目標</small><b class='target'>177.11／184.21</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 0.39 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>籌碼分項 83 最高，法人 5 日與 20 日皆淨買超。回測 20 日均線，距均線 0.5%，技術分項 64。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 165.64～170.71，條件失效的停損 163.93 低於下緣，約有一段緩衝。第一目標 177.11、第二目標 184.21，第一目標 RR 約 1.60。</p><div class='k'>需留意的風險</div><p>所屬通信網路產業熱度第 15，族群分項僅 58。法人 5 日淨買超約為 20 日均量的 0.39 倍。新聞情緒 47 為 AI 推論，近 3 日無關聯新聞。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#15</span><a class='sym'>3546 宇峻</a><span class='cscore'><small>總分</small> 66</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 文化創意<span class='muted'>（產業，第 12 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>73.10</b><em class='tone-up'>+0.41%</em></div><div><small>進場區</small><b>72.67～73.60</b></div><div><small>停損</small><b class='stop'>72.16</b></div><div><small>目標</small><b class='target'>74.60／75.91</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.0%，量比 0.8</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>技術分項 73 最高，回測 20 日均線且距均線 0.0%。法人 5 日與 20 日皆淨買超，所屬文化創意產業熱度第 12。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為 72.67～73.6，條件失效的停損 72.16 低於下緣。第一目標 74.6、第二目標 75.91，第一目標 RR 約 1.60，價位區間偏窄。</p><div class='k'>需留意的風險</div><p>籌碼分項 65 較低，法人 5 日淨買超僅約 20 日均量的 0.31 倍。新聞情緒 47 為 AI 推論，近 3 日無關聯新聞。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#16</span><a class='sym'>6499 益安</a><span class='cscore'><small>總分</small> 65</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 生技醫療<span class='muted'>（產業，第 22 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>79.20</b><em class='tone-down'>−5.38%</em></div><div><small>進場區</small><b>77.71～80.66</b></div><div><small>停損</small><b class='stop'>76.26</b></div><div><small>目標</small><b class='target'>83.91／88.03</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.0%，量比 0.7</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>規則為回測20日均線，距均線0.0%；技術82、籌碼74為較高分項，三大法人5日與20日皆淨買超。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為77.71～80.66，條件失效的停損76.26，低於進場區下緣約1.45。第一目標83.91、RR約1.60，第二目標88.03。</p><div class='k'>需留意的風險</div><p>族群分項僅36，生技醫療當日排第22／34；新聞情緒47且近3日無關聯新聞，該分項屬AI推論。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#17</span><a class='sym'>4743 合一</a><span class='cscore'><small>總分</small> 65</span></div>
+<div class='sub'>上櫃 · 回踩條件 · 生技製藥<span class='muted'>（題材，第 4 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>48.15</b><em class='tone-down'>−0.52%</em></div><div><small>進場區</small><b>46.52～48.10</b></div><div><small>停損</small><b class='stop'>46.57</b></div><div><small>目標</small><b class='target'>50.67／52.88</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 0.55 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回踩20日均線（距均線1.8%），籌碼78、族群73較高；生技製藥題材熱度第4，三大法人5日與20日淨買超。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為46.52～48.10，條件失效的停損46.57落在區間內、略高於下緣，下段與停損幾乎重疊。第一目標50.67、RR約1.59，第二目標52.88。</p><div class='k'>需留意的風險</div><p>技術分項58偏低；近3日無關聯新聞，新聞情緒47屬AI推論；生技醫療產業榜排第22／34。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#18</span><a class='sym'>4766 南寶</a><span class='cscore'><small>總分</small> 65</span></div>
+<div class='sub'>上市 · 回踩條件 · 化學<span class='muted'>（產業，第 8 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>357.50</b><em class='tone-down'>−0.69%</em></div><div><small>進場區</small><b>348.76～356.69</b></div><div><small>停損</small><b class='stop'>349.57</b></div><div><small>目標</small><b class='target'>370.19／381.29</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 1.46 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>籌碼96、族群79為主要依據：三大法人5日淨買超約20日均量1.46倍，化學產業熱度第8，並回踩20日均線。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為348.76～356.69，條件失效的停損349.57位於區間內、接近下緣。第一目標370.19、RR約1.60，第二目標381.29。</p><div class='k'>需留意的風險</div><p>技術分項僅39，明顯偏弱；近3日無關聯新聞，新聞情緒47屬AI推論。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#19</span><a class='sym'>2460 建通</a><span class='cscore'><small>總分</small> 65</span></div>
+<div class='sub'>上市 · 回踩條件 · 電子零組件<span class='muted'>（產業，第 16 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>30.65</b><em class='tone-down'>−2.54%</em></div><div><small>進場區</small><b>30.47～31.39</b></div><div><small>停損</small><b class='stop'>29.73</b></div><div><small>目標</small><b class='target'>32.12／33.41</b></div></div>
+<div class='creason'>回測 20 日均線，距均線 0.9%，量比 0.7</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>回測20日均線（距均線0.9%），技術68、籌碼77；三大法人20日淨買超，電子零組件產業熱度第16。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為30.47～31.39，條件失效的停損29.73，低於進場區下緣約0.74。第一目標32.12、RR約1.60，第二目標33.41。</p><div class='k'>需留意的風險</div><p>三大法人5日淨買超僅約20日均量0.06倍，力道很小；族群分項55居中，新聞情緒47屬AI推論且無關聯新聞。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div><div class='ccard'><div class='crow'><span class='rk'>#20</span><a class='sym'>2753 八方雲集</a><span class='cscore'><small>總分</small> 65</span></div>
+<div class='sub'>上市 · 回踩條件 · 觀光餐旅<span class='muted'>（產業，第 18 名）</span></div>
+<div class='lv'><div><small>收盤</small><b>182.50</b><em class='tone-down'>−0.54%</em></div><div><small>進場區</small><b>181.77～183.98</b></div><div><small>停損</small><b class='stop'>180.29</b></div><div><small>目標</small><b class='target'>186.04／189.14</b></div></div>
+<div class='creason'>三大法人 5 日淨買超，約 20 日均量的 0.35 倍</div><details class='ai-row'><summary>AI 說明</summary><div class='ai-block'><div class='ai-head'><b>AI 進出點說明</b><span class='badge accent'><i></i>AI 推論</span></div>
+<div class='k'>為何入選</div><p>籌碼81最高，技術68，回測20日均線且距均線僅0.2%；三大法人5日與20日皆淨買超。</p><div class='k'>進場區、停損與目標</div><p>規則的進場區為181.77～183.98，條件失效的停損180.29，低於下緣約1.48。第一目標186.04距進場區上緣不遠，RR約1.60；第二目標189.14。</p><div class='k'>需留意的風險</div><p>族群分項48偏低，觀光餐旅產業榜排第18／34；近3日無關聯新聞，新聞情緒47屬AI推論。</p>
+<p class='fine'>由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。</p></div></details></div></details></div>
+ <div class="two-col" style="margin-top:24px">
+  <section class="panel"><div class="shead" style="margin-top:0"><div><div class="eyebrow">族群發現 · 各榜前 5 名</div><h2>熱門族群</h2></div><a class="fine" style="color:var(--color-primary)">查看完整排行</a></div>
+   <div class="sub">產業｜題材 · 資料 2026/10/22 · 相對加權指數</div>
+   <ul class="glist"><li class="hd"><span></span><span>族群</span><span class="num">分數</span><span class="num">1 日</span><span class="num">5 日</span><span class="num">20 日</span></li><li><span class='rk'>#1</span><span class='gname'>鋼鐵<div class='sub'>技術與籌碼觀察（事件資料待補）</div></span><span class='num'>94.90</span><span class='num tone-up'>+2.02%</span><span class='num tone-up'>+3.92%</span><span class='num tone-up'>+10.53%</span></li><li><span class='rk'>#2</span><span class='gname'>資訊服務<div class='sub'>熱門族群</div></span><span class='num'>94.35</span><span class='num tone-up'>+3.46%</span><span class='num tone-up'>+5.41%</span><span class='num tone-up'>+8.12%</span></li><li><span class='rk'>#3</span><span class='gname'>水泥<div class='sub'>技術與籌碼觀察（事件資料待補）</div></span><span class='num'>92.29</span><span class='num tone-up'>+3.06%</span><span class='num tone-up'>+3.05%</span><span class='num tone-up'>+6.25%</span></li><li><span class='rk'>#4</span><span class='gname'>玻璃陶瓷<div class='sub'>技術與籌碼觀察（事件資料待補）</div></span><span class='num'>79.97</span><span class='num tone-up'>+1.09%</span><span class='num tone-up'>+5.31%</span><span class='num tone-up'>+7.94%</span></li><li><span class='rk'>#5</span><span class='gname'>數位雲端<div class='sub'>熱門族群</div></span><span class='num'>79.80</span><span class='num tone-up'>+1.26%</span><span class='num tone-up'>+2.94%</span><span class='num tone-up'>+3.32%</span></li></ul></section>
+  <section class="panel"><div class="shead" style="margin-top:0"><div><div class="eyebrow">市場基礎層 · 重大事件</div><h2>重點新聞</h2></div><a class="fine" style="color:var(--color-primary)">查看全部新聞</a></div>
+   <ul class="nlist"><li><div class='sub'><span class='badge'>工商時報</span> 國內 · 媒體報導 · 發布於 2026/10/25 09:27</div><div class='ntitle'>輝達砸40億美元引爆封測產能大戰 美銀點名「這家」台灣封測廠受惠大 CPO設備2027年迎十倍成長</div><div class='sub'><i class='dot up'></i>可能正向 <span class='badge accent'><i></i>AI 推論</span></div></li><li><div class='sub'><span class='badge'>Yahoo奇摩股市</span> 國內 · 媒體報導 · 發布於 2026/10/25 09:22</div><div class='ntitle'>越跌越要買！13檔台股ETF規模逆勢創高　 「這檔正2」今年狂炸118%奪冠</div><div class='sub'><i class='dot up'></i>可能正向 <span class='badge accent'><i></i>AI 推論</span></div></li><li><div class='sub'><span class='badge'>鉅亨網</span> 國內 · 媒體報導 · 發布於 2026/10/25 09:20</div><div class='ntitle'>胡連斥2.5億元收購LA PUNTA 8成股權 跨足高端重機與頂級超跑供應鏈</div><div class='sub'>影響尚未判定 <span class='badge accent'><i></i>AI 推論</span></div></li></ul></section>
+ </div>
+ <div class="shead"><div><div class="eyebrow">使用者行動</div><h2>關注標的</h2></div><a class="fine" style="color:var(--color-primary)">查看行動中心</a></div>
+ <p class="note">（沿用現行 CompactActionCard 網格，最多 6 張；本線框稿省略）</p>
+ <div style="height:40px"></div>
+</div></body></html>

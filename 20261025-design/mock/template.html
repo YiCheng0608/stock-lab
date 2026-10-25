@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#269 首頁線框稿</title>
+<style>
+:root{--color-primary:#3b82f6;--color-accent:#8b5cf6;--color-success:#22c55e;--color-warning:#f59e0b;--color-error:#ef4444;--color-up:#ef4444;--color-down:#22c55e;--color-flat:#9ca3af;--color-bg:#0b0f1a;--color-bg-alt:#111827;--color-bg-card:#1f2937;--color-bg-elevated:#374151;--color-border:rgba(255,255,255,.10);--color-text:#f9fafb;--color-text-muted:#9ca3af;--color-text-subtle:#6b7280;--color-nav-bg:rgba(11,15,26,.95);
+--font-body:"Inter","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;--font-mono:"JetBrains Mono",Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px}
+.nav{height:64px;display:flex;align-items:center;gap:24px;padding:0 32px;background:var(--color-nav-bg);border-bottom:1px solid var(--color-border)}
+.logo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--color-primary),var(--color-accent))}
+.brand{font-weight:700;font-size:18px}.nav a{color:var(--color-text-muted)}.nav a.on{color:var(--color-text);border-bottom:2px solid var(--color-primary);padding-bottom:18px;margin-top:20px}
+.nav .sp{flex:1}.search{width:200px;height:40px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-bg-alt)}
+.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:50px;padding:3px 10px;font-size:13px;background:var(--color-bg-card);white-space:nowrap}
+.badge.primary{border-color:var(--color-primary);color:var(--color-primary)}.badge.success{border-color:var(--color-success);color:var(--color-success)}.badge.warning{border-color:var(--color-warning);color:var(--color-warning)}
+.badge.accent i{width:8px;height:8px;border-radius:50%;background:var(--color-accent)}.badge.accent{border-color:var(--color-accent)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+.phead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 0 12px;color:var(--color-text-muted);font-size:14px}
+.phead b{color:var(--color-text);font-family:var(--font-mono)}.phead summary{color:var(--color-primary);cursor:pointer}
+.market{display:grid;grid-template-columns:1fr 1fr 1.25fr 1.5fr;gap:12px}
+.mw{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;padding:12px 16px}
+.mw .l{color:var(--color-text-muted);font-size:13px;display:flex;justify-content:space-between}.mw .v{font-family:var(--font-mono);font-size:22px;font-weight:700;margin-top:2px}
+.mw .c{font-family:var(--font-mono);font-size:14px;font-weight:600}.mw .two{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:14px;margin-top:4px}.mw .two span{color:var(--color-text-muted)}.mw .two b{font-family:var(--font-mono);font-weight:600}
+.tone-up{color:var(--color-up)}.tone-down{color:var(--color-down)}.tone-flat{color:var(--color-flat)}
+.shead{display:flex;justify-content:space-between;align-items:flex-end;margin:22px 0 6px}.eyebrow{color:var(--color-text-muted);font-size:13px}
+h1{font-size:28px;margin:2px 0 0}h2{font-size:22px;margin:2px 0 0}.fine{color:var(--color-text-subtle);font-size:12px;margin:4px 0}
+.note{color:var(--color-text-muted);font-size:13px;margin:0 0 8px}
+.tbl{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}th{font-size:13px;color:var(--color-text-muted);font-weight:500;text-align:left;padding:10px 10px;border-bottom:1px solid var(--color-border);white-space:nowrap}
+th.num,td.num{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+td{padding:8px 10px;border-bottom:1px solid var(--color-border);vertical-align:top;height:56px}tr:last-child td{border-bottom:0}
+.term{border-bottom:1px dotted var(--color-text-muted);cursor:help}
+.rank{font-family:var(--font-mono);color:var(--color-text-muted);width:40px}.sym{color:var(--color-text);font-weight:600;white-space:nowrap}.sub{color:var(--color-text-muted);font-size:13px;margin-top:2px}
+.grp{font-size:14px;white-space:nowrap}.muted{color:var(--color-text-muted)}.score{font-weight:700;font-size:16px}
+.stop{color:var(--color-warning)}.target{color:var(--color-primary)}.reason{font-size:13px;color:var(--color-text);max-width:250px}
+details.ai-row summary{color:var(--color-primary);font-size:13px;cursor:pointer;white-space:nowrap}
+.ai-block{border-left:2px solid var(--color-accent);padding:4px 0 4px 12px;margin-top:8px;font-size:13px;max-width:560px}
+.ai-head{display:flex;justify-content:space-between}.ai-block .k{color:var(--color-text-muted);margin-top:6px}.ai-block p{margin:2px 0}
+details.more>summary{color:var(--color-primary);padding:12px 16px;cursor:pointer;font-size:14px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:16px;padding:16px 20px}
+.glist,.nlist{list-style:none;margin:0;padding:0}.glist li{display:grid;grid-template-columns:36px 1fr 64px 64px 64px 72px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--color-border)}
+.glist li:last-child,.nlist li:last-child{border-bottom:0}.glist .hd{color:var(--color-text-muted);font-size:12px;padding:0 0 6px}.glist .num{text-align:right;font-family:var(--font-mono)}
+.nlist li{padding:10px 0;border-bottom:1px solid var(--color-border)}.ntitle{font-weight:600;margin:4px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}.dot.up{background:var(--color-up)}.dot.down{background:var(--color-down)}.dot.flat{background:var(--color-flat)}
+.alert{display:flex;gap:12px;align-items:center;margin-top:12px;background:var(--color-bg-card);border:1px solid var(--color-border);border-left:4px solid var(--color-warning);border-radius:12px;padding:10px 16px;font-size:14px}
+.alert a{color:var(--color-primary);margin-left:auto}
+.cards{display:none}.lbl{color:var(--color-text-subtle);font-size:12px;margin:28px 0 8px;border-top:1px dashed var(--color-border);padding-top:8px}
+@media (max-width:640px){
+ .nav{padding:0 16px}.nav a,.search{display:none}.wrap{padding:0 16px}
+ .phead{padding:10px 0 8px;font-size:13px;gap:6px}.src{display:none}.alert{flex-wrap:wrap;gap:4px 8px;padding:8px 12px}.alert a{margin-left:0}
+ .ccard{padding:10px 12px}
+ .market{grid-template-columns:1fr 1fr;gap:8px}.mw{padding:8px 12px}.mw .v{font-size:18px}.mw.wide{display:none}
+ details.mkt-more{grid-column:1/3}
+ .tbl{display:none}.cards{display:block}
+ .ccard{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:12px;padding:12px;margin-bottom:8px}
+ .crow{display:flex;align-items:center;gap:8px}.rk{font-family:var(--font-mono);color:var(--color-text-muted)}.cscore{margin-left:auto;font-family:var(--font-mono);font-weight:700;font-size:18px}.cscore small{font-size:12px;color:var(--color-text-muted);font-weight:400}
+ .lv{display:grid;grid-template-columns:.8fr 1.3fr .8fr 1.2fr;gap:6px;margin-top:8px}.lv small{display:block;color:var(--color-text-muted);font-size:12px}.lv b{font-family:var(--font-mono);font-size:13px}.lv em{display:block;font-style:normal;font-family:var(--font-mono);font-size:12px}
+ .creason{font-size:13px;margin-top:6px}.two-col{grid-template-columns:1fr}
+ h1{font-size:22px}.glist li{grid-template-columns:28px 1fr 56px 60px}.glist li>span:nth-child(5),.glist li>span:nth-child(6){display:none}
+}
+@media (min-width:641px){.mkt-more{display:none}}
+.tog{cursor:pointer;font-size:12px}tr.detail td{height:auto;background:var(--color-bg-alt)}.dgrid{display:grid;grid-template-columns:1fr 1.4fr .9fr;gap:20px;padding:6px 0}.dgrid .k{color:var(--color-text-muted);font-size:12px;margin-top:6px}.rl{margin:4px 0;padding-left:18px;font-size:13px}.cps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}.cp{background:var(--color-bg-card);border-radius:8px;padding:6px 8px}.cp small{display:block;color:var(--color-text-muted);font-size:11px}.cp b{font-family:var(--font-mono)}.lnk{color:var(--color-primary);font-size:13px}.dgrid .ai-block{margin-top:0;max-width:none}</style></head><body>
+<div class="nav"><span class="logo"></span><span class="brand">台股研究台</span><a class="on">今日</a><a>新聞</a><a>族群</a><a>個股</a><a>行動</a><span class="sp"></span><span class="search"></span><span class="badge">資料 2026-10-22</span></div>
+<div class="wrap">
+ <div class="phead">資料截至 <b>2026/10/22</b><span class="src"> · TWSE／TPEx 官方資料 · 官方單日快照</span> <span class="badge success">行情來源完整</span><details class="dx"><summary>資料說明</summary><span class="fine">官方標的範圍；只有資料完整的項目可進入行動摘要 · 2,349 檔標的</span></details></div>
+ <section class="market" aria-label="大盤概況">
+  <div class="mw"><div class="l">加權指數<span>點</span></div><div class="v">46,041.43</div><div class="c tone-down">−846.34（−1.81%）</div></div>
+  <div class="mw"><div class="l">櫃買指數<span>點</span></div><div class="v">381.69</div><div class="c tone-down">−13.73（−3.47%）</div></div>
+  <div class="mw wide"><div class="l">成交金額<span>億元</span></div><div class="two"><span>上市</span><b>9,334.37</b><span>上櫃</span><b>2,255.45</b></div></div>
+  <div class="mw wide"><div class="l">漲跌家數（股票）<span>漲停／跌停</span></div><div class="two"><span>上市</span><b><span class="tone-up">上漲 247</span> · <span class="tone-down">下跌 756</span> · 平盤 74 <span class="muted">（3／5）</span></b><span>上櫃</span><b><span class="tone-up">上漲 146</span> · <span class="tone-down">下跌 659</span> · 平盤 63 <span class="muted">（17／11）</span></b></div></div>
+  <details class="mkt-more"><summary class="fine" style="color:var(--color-primary)">成交金額與漲跌家數</summary><div class="fine">上市 9,334.37 億元 · 上漲 247 下跌 756 平盤 74；上櫃 2,255.45 億元 · 上漲 146 下跌 659 平盤 63</div></details>
+ </section>
+ <div class="alert" aria-label="持倉風險">（示意，只在有持倉風險時出現）<b>持倉風險 1 檔</b>（2330 台積電：已碰到使用者停損）<a>查看行動中心 →</a></div>
+ <div class="shead"><div><div class="eyebrow">每日候選 · 依評分排序</div><h1>明日候選</h1></div><div><span class="badge">資料 2026/10/22</span> <span class="badge">20 檔</span></div></div>
+ <p class="note">10/22 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。評分只用於排序，不代表勝率或預期報酬。<span class="src">價格單位：元。</span></p>
+ <div class="tbl"><table><thead><tr><th>名次</th><th>股票 · 策略</th><th>所屬族群</th><th class="num">最近收盤</th><th class="num"><span class="term">進場區</span></th><th class="num"><span class="term">停損</span></th><th class="num"><span class="term">目標</span></th><th class="num"><span class="term">RR</span></th><th class="num"><span class="term">總分</span></th><th>主要理由</th><th></th></tr></thead>
+ <tbody>{{TOP_ROWS}}</tbody></table>
+ <details class="more"><summary>顯示其餘 10 檔</summary><table><tbody>{{MORE_ROWS}}</tbody></table></details></div>
+ <div class="cards">{{TOP_CARDS}}<details class="more"><summary>顯示其餘 10 檔</summary>{{MORE_CARDS}}</details></div>
+ <div class="two-col" style="margin-top:24px">
+  <section class="panel"><div class="shead" style="margin-top:0"><div><div class="eyebrow">族群發現 · 各榜前 5 名</div><h2>熱門族群</h2></div><a class="fine" style="color:var(--color-primary)">查看完整排行</a></div>
+   <div class="sub">產業｜題材 · 資料 2026/10/22 · 相對加權指數</div>
+   <ul class="glist"><li class="hd"><span></span><span>族群</span><span class="num">分數</span><span class="num">1 日</span><span class="num">5 日</span><span class="num">20 日</span></li>{{GROUPS}}</ul></section>
+  <section class="panel"><div class="shead" style="margin-top:0"><div><div class="eyebrow">市場基礎層 · 重大事件</div><h2>重點新聞</h2></div><a class="fine" style="color:var(--color-primary)">查看全部新聞</a></div>
+   <ul class="nlist">{{NEWS}}</ul></section>
+ </div>
+ <div class="shead"><div><div class="eyebrow">使用者行動</div><h2>關注標的</h2></div><a class="fine" style="color:var(--color-primary)">查看行動中心</a></div>
+ <p class="note">（沿用現行 CompactActionCard 網格，最多 6 張；本線框稿省略）</p>
+ <div style="height:40px"></div>
+</div></body></html>
