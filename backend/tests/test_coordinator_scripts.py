@@ -1055,3 +1055,52 @@ def test_patrol_takes_over_a_heartbeat_when_allowed(patrol: Harness, how: str) -
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"
     assert not list((patrol.data / "logs").glob("*.tmp*"))
+
+
+def test_guard_dir_refuses_any_path_through_a_link(h: Harness) -> None:
+    """A link on the way is refused whatever it points at, with or without the tail.
+
+    cygpath -m resolves junctions itself, so a path converted with it no longer shows
+    the link: <x>/lnk/sub came out as <target>/sub and was allowed (AC-2 rerun, #283).
+    """
+    target = h.root / "anywhere"
+    (target / "exists").mkdir(parents=True)
+    hop = h.root / "hop"
+    hop.mkdir()
+    _link(target, hop / "lnk")
+    try:
+        spellings = [(hop / "lnk").as_posix()]
+        if os.name == "nt":
+            spellings += [str(hop / "lnk"), _bash_path(hop / "lnk")]
+        for base in spellings:
+            for tail in ("", "/exists", "/missing", "/missing/deeper"):
+                assert _guard(h, base + tail), base + tail
+        assert _guard(h, target.as_posix() + "/exists") == ""
+    finally:
+        link = hop / "lnk"
+        if link.is_symlink():
+            link.unlink()
+        elif link.is_junction():
+            os.rmdir(link)
+
+
+def test_close_task_never_takes_the_pr_head_as_the_branch_of_another_task(
+    close: Harness,
+) -> None:
+    """With the worktree gone, --pr's head task/264-… is not this task's branch."""
+    close.answer("orca_worktree_list", _ok({"worktrees": []}))
+    close.write("branches.txt", "master\ntask/264-news-candidate-exchange\n")
+    close.answer(
+        "gh_pr_view",
+        {
+            "number": 271,
+            "state": "MERGED",
+            "mergeCommit": {"oid": MERGE_SHA},
+            "headRefName": "task/264-news-candidate-exchange",
+        },
+    )
+    args = ("--slug", "dryrun", "--pr", "271", "--allow-pr-head-mismatch", "--no-board")
+    result = close.run("close_task.sh", "282", *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "task/264-news-candidate-exchange" in close.branches()
+    assert not [c for c in close.calls("git") if " branch -D " in f" {c} "]

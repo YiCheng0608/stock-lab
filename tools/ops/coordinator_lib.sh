@@ -80,10 +80,27 @@ board_set() {
 # --- paths close_task.sh must never delete (tested on their own: guard_dir deletes nothing)
 is_windows() { case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) return 0 ;; esac; return 1; }
 
-# native PATH: the one spelling Python compares on Windows. `cygpath -m` gives C:/… for
-# /c/…, /tmp/… and C:\… alike (cygpath -u turned C:/…/AppData/Local/Temp into /tmp but
-# left /c/… as it was, so two spellings of one path did not match: #283 review M4).
-native() { if is_windows; then cygpath -m -- "$1"; else printf '%s' "$1"; fi; }
+# native PATH: the one spelling Python compares on Windows, C:/…, for C:\…, /c/… and
+# mounts such as /tmp/… alike (cygpath -u turned C:/…/AppData/Local/Temp into /tmp but
+# left /c/… as it was: #283 review M4). Only the spelling changes: cygpath resolves
+# junctions, so it is used for nothing but a mount's own top directory, and a link in
+# the path stays visible to `guard` in coordinator_json.py.
+native() {
+  local p="$1" top
+  is_windows || { printf '%s' "$p"; return; }
+  case "$p" in
+    [A-Za-z]:[\\/]* | [A-Za-z]:) printf '%s' "${p//\\//}"; return ;;
+    /*) ;;
+    *) p="$PWD/$p" ;;
+  esac
+  if [[ "$p" =~ ^/([A-Za-z])(/.*)?$ ]]; then
+    printf '%s:%s' "${BASH_REMATCH[1]^^}" "${BASH_REMATCH[2]:-/}"
+    return
+  fi
+  top="/${p#/}"
+  top="/$(printf '%s' "${top#/}" | cut -d/ -f1)"
+  printf '%s%s' "$(cygpath -m -- "$top")" "${p#"$top"}"
+}
 
 # within A B: A is B or under B, as written and as resolved. Anything but a clear "no"
 # (Python failed) counts as inside, so a check built on it refuses.

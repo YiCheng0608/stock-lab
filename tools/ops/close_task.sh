@@ -143,9 +143,17 @@ fi
 pr="$(printf '%s' "$out" | cj get 0.number)"
 merge_sha="$(printf '%s' "$out" | cj get 0.mergeCommit.oid)" || refuse "PR #$pr 沒有 merge commit"
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
-[ -n "$branch" ] || branch="$head_ref"
+# The PR's head stands in for a branch not found locally only when it is this task's:
+# another task's branch is never deleted here.
+ours=0
+if [ -n "$slug" ]; then
+  [ "$head_ref" = "$prefix$slug" ] && ours=1
+else
+  case "$head_ref" in "$prefix"*) ours=1 ;; esac
+fi
+[ -n "$branch" ] || [ "$ours" = 0 ] || branch="$head_ref"
 [ "$head_ref" = "$branch" ] || [ "$allow_head_mismatch" = 1 ] \
-  || refuse "PR #$pr 的 head 是 $head_ref，不是 $branch（確定要借用這個 PR 才加 --allow-pr-head-mismatch）"
+  || refuse "PR #$pr 的 head 是 $head_ref，不是 ${branch:-$prefix$slug*}（確定要借用這個 PR 才加 --allow-pr-head-mismatch）"
 
 out="$(gh run list --repo "$GH_REPO" --branch master --event push --workflow CI --limit 20 \
   --json headSha,status,conclusion)" || refuse "gh run list 失敗"
