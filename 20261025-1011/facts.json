@@ -1,0 +1,12 @@
+{
+  "market_latest_trading_date": "2026-10-22",
+  "group_scores_latest_trading_date": "2026-10-22",
+  "candidate_run_latest_trading_date": "2026-10-22",
+  "candidate_count_latest": 20,
+  "news_items": 2911,
+  "news_latest_published_at": "2026-10-25 01:27:58.000000",
+  "news_llm_done": 2621,
+  "theme_suggestions": 610,
+  "portfolio_positions": 0,
+  "alembic_version": "0017_tracking_plans"
+}

@@ -1,0 +1,317 @@
+{
+  "id": "2436",
+  "canonical_key": "news:yahoo_tw:e37e206d6d540018f99fee17cc99f1b5253838ff79dbb77916983280eb8eeb26",
+  "dedupe_cluster_id": "news-title:41d2952c9c941551bc4ea2d32d76065e",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/%E5%8F%B0%E7%A9%8D%E9%9B%BB%E7%94%A2%E8%83%BD%E4%BE%9B%E4%B8%8D%E6%87%89%E6%B1%82-%E8%80%97%E6%9D%906%E6%AA%94%E5%BF%85%E6%94%B6-150500113.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "台積電產能供不應求　耗材6檔必收",
+  "summary": "台積電上修資本支出並擴大先進製程與封裝布局，帶動半導體耗材與測試介面需求迎來歷史性爆發期。中砂、昇陽半導體、旺矽、精測、穎崴及環球晶等供應鏈台廠受惠於訂單滲透率提升、產能倍增及產品價格調漲，營運成長動",
+  "description": "台積電上修資本支出並擴大先進製程與封裝布局，帶動半導體耗材與測試介面需求迎來歷史性爆發期。中砂、昇陽半導體、旺矽、精測、穎崴及環球晶等供應鏈台廠受惠於訂單滲透率提升、產能倍增及產品價格調漲，營運成長動",
+  "summary_preview": "台積電上修資本支出並擴大先進製程與封裝布局，帶動半導體耗材與測試介面需求迎來歷史性爆發期。中砂、昇陽半導體、旺矽、精測、穎崴及環球晶等供應鏈台廠受惠於訂單滲透率提升、產能倍增及產品價格調漲，營運成長動",
+  "language": "zh-Hant",
+  "published_at": "2026-10-22T15:05:00+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-22T15:05:00+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T15:05:00+00:00",
+        "utc": "2026-10-22T15:05:00+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T16:00:10.322152+00:00",
+        "utc": "2026-10-22T16:00:10.322152+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-25T02:18:12.546660+00:00",
+    "legacy": {
+      "published_at": "2026-10-22T15:05:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T15:05:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-22T16:00:10.322152+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-25T02:18:12.546660+00:00",
+  "collected_at": "2026-10-22T16:00:10.322152+00:00",
+  "symbols": [
+    "TPEx:6488",
+    "TWSE:2330",
+    "TWSE:8028"
+  ],
+  "instruments": [
+    {
+      "exchange": "TPEx",
+      "symbol": "6488",
+      "name": "環球晶"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "8028",
+      "name": "昇陽半導體"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "bc93e8e252fb7d483c806e752a3721b66410e512a0d8601ad6a77a2d9af055b9",
+  "detail_url": "/news/2436",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台積電上修資本支出，供應鏈耗材與測試介面需求強，相關台廠訂單與價格有望成長。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "reason": "新聞點名台積電上修資本支出，為需求來源。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "1560",
+        "name": "中砂",
+        "reason": "新聞點名中砂為受惠之半導體耗材供應商。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TPEx",
+        "symbol": "6223",
+        "name": "旺矽",
+        "reason": "新聞點名旺矽為受惠之測試介面供應商。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TPEx",
+        "symbol": "6510",
+        "name": "精測",
+        "reason": "新聞點名精測為受惠之測試介面供應商。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TPEx",
+        "symbol": "6515",
+        "name": null,
+        "reason": "新聞點名穎崴為受惠之測試介面供應商。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TPEx",
+        "symbol": "6488",
+        "name": "環球晶",
+        "reason": "新聞點名環球晶為受惠之供應鏈台廠。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "半導體耗材",
+        "reason": "台積電擴產帶動耗材需求。"
+      },
+      {
+        "theme": "測試介面",
+        "reason": "先進製程與封裝布局帶動測試介面需求。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "文中點名供應鏈台廠受惠於訂單成長與產能倍增，方向偏正面。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "01bc1c7d2df09976052fe3ab0a4bf9b0b5354e27289a18efa99140a33a93f9ac",
+    "generated_at": "2026-10-22T16:01:13.489117+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7195,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-10-22T16:00:10.322152"
+  }
+}

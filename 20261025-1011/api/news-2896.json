@@ -1,0 +1,279 @@
+{
+  "id": "2896",
+  "canonical_key": "news:ctee:5035ddfc9c845918fcd3e4403415dcc5863f2332bb586f4274d8f3690e051d1b",
+  "dedupe_cluster_id": "news-title:f70c994246eba658631b30e89a73b43e",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "工商時報",
+  "source": {
+    "name": "工商時報",
+    "url": "https://www.ctee.com.tw/news/20261025700239-430201",
+    "url_kind": "item"
+  },
+  "source_item_id": "20261025700239",
+  "title": "輝達砸40億美元引爆封測產能大戰 美銀點名「這家」台灣封測廠受惠大 CPO設備2027年迎十倍成長",
+  "summary": "輝達在柏林GTC大會上大手筆鎖定半導體後端產能，與日月光投控旗下矽品、京元電子及Amkor簽署重大產能協議，涉及資金規模逾40億美元。美銀證券指出，隨著AI晶片持續升級，產業瓶頸已從晶片設計轉向先進封裝與測試，共封裝光學（CPO）更成為下一波成長引擎，相關設備需求有望在2027年暴增10倍，預計第四季迎來拐點。 美銀證券發布最新研究報告指出，輝達在柏林GTC大會確認Vera Rubin GPU及",
+  "description": "輝達在柏林GTC大會上大手筆鎖定半導體後端產能，與日月光投控旗下矽品、京元電子及Amkor簽署重大產能協議，涉及資金規模逾40億美元。美銀證券指出，隨著AI晶片持續升級，產業瓶頸已從晶片設計轉向先進封裝與測試，共封裝光學（CPO）更成為下一波成長引擎，相關設備需求有望在2027年暴增10倍，預計第四季迎來拐點。 美銀證券發布最新研究報告指出，輝達在柏林GTC大會確認Vera Rubin GPU及",
+  "summary_preview": "輝達在柏林GTC大會上大手筆鎖定半導體後端產能，與日月光投控旗下矽品、京元電子及Amkor簽署重大產能協議，涉及資金規模逾40億美元。美銀證券指出，隨著AI晶片持續升級，產業瓶頸已從晶片設計轉向先進封裝與測試，共封裝光學（CPO）更成為下…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-25T01:27:58+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-25T01:27:58+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-25T01:27:58+00:00",
+        "utc": "2026-10-25T01:27:58+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-25T02:00:05.331380+00:00",
+        "utc": "2026-10-25T02:00:05.331380+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-25T02:17:45.810371+00:00",
+    "legacy": {
+      "published_at": "2026-10-25T01:27:58+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-25T01:27:58",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-25T02:00:05.331380+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-25T02:17:45.810371+00:00",
+  "collected_at": "2026-10-25T02:00:05.331380+00:00",
+  "symbols": [
+    "TWSE:2449",
+    "TWSE:3711"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2449",
+      "name": "京元電子"
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "3711",
+      "name": "日月光投控"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "133d268da16e9d4c8be2b422119661c37e309eaedd32e43f33887c7b75d39a52",
+  "detail_url": "/news/2896",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "輝達與日月光投控（矽品）、京元電子及Amkor簽署產能協議，金額逾40億美元；美銀看好CPO設備2027年大增。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "3711",
+        "name": "日月光投控",
+        "reason": "文中點名日月光投控（矽品母公司）為輝達產能協議對象",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "2449",
+        "name": "京元電子",
+        "reason": "文中點名京元電子為輝達產能協議對象",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "先進封裝",
+        "reason": "文章指產業瓶頸已轉向先進封裝與測試"
+      },
+      {
+        "theme": "CPO",
+        "reason": "共封裝光學設備需求預期2027年大幅成長"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "輝達鎖定封測產能並預期CPO設備需求成長，對受點名的封測廠屬正面。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "a8916a551f41adbba01f178acc328224bb29a8b7c48aac67c6cd6932e9a53b50",
+    "generated_at": "2026-10-25T02:01:30.047527+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7519,
+    "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+    "data_as_of": "2026-10-25T02:00:05.331380"
+  }
+}

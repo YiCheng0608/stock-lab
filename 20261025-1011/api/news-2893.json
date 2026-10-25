@@ -1,0 +1,265 @@
+{
+  "id": "2893",
+  "canonical_key": "news:cnyes:1c797e2dd7f889bd053096e9bfeff1c4de2962036f8b9d9e2a1cce9c64ef68ba",
+  "dedupe_cluster_id": "news-title:f093181c38ce0d35319e45b1fc66b31c",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6637238",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6637238",
+  "title": "胡連斥2.5億元收購LA PUNTA 8成股權 跨足高端重機與頂級超跑供應鏈",
+  "summary": "連接器廠胡連(6279-TW)今(24)日公告，旗下義大利子公司Hu Lane Associate Europe S.r.l.已簽署股權買賣合約，將以688萬歐元(約新台幣2.5億元)收購義大利公司LA PUNTA S.R.L. 80%股權，跨足高端重機與頂級超跑供應鏈，交易預計於明年1月底完成。",
+  "description": "連接器廠胡連(6279-TW)今(24)日公告，旗下義大利子公司Hu Lane Associate Europe S.r.l.已簽署股權買賣合約，將以688萬歐元(約新台幣2.5億元)收購義大利公司LA PUNTA S.R.L. 80%股權，跨足高端重機與頂級超跑供應鏈，交易預計於明年1月底完成。",
+  "summary_preview": "連接器廠胡連(6279-TW)今(24)日公告，旗下義大利子公司Hu Lane Associate Europe S.r.l.已簽署股權買賣合約，將以688萬歐元(約新台幣2.5億元)收購義大利公司LA PUNTA S.R.L. 80%股…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-25T01:20:03+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-25T01:20:03+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-25T01:20:03+00:00",
+        "utc": "2026-10-25T01:20:03+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-25T02:00:03.215266+00:00",
+        "utc": "2026-10-25T02:00:03.215266+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-25T02:17:45.996312+00:00",
+    "legacy": {
+      "published_at": "2026-10-25T01:20:03+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-25T01:20:03",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-25T02:00:03.215266+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-25T02:17:45.996312+00:00",
+  "collected_at": "2026-10-25T02:00:03.215266+00:00",
+  "symbols": [
+    "TPEx:6279"
+  ],
+  "instruments": [
+    {
+      "exchange": "TPEx",
+      "symbol": "6279",
+      "name": "胡連"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "e4eac246739513b181829d855d9e941771e5c2943f8cdca870bf1a2ec71a331c",
+  "detail_url": "/news/2893",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "胡連以688萬歐元（約2.5億台幣）收購義大利LA PUNTA 80%股權，跨足高端重機與超跑供應鏈。",
+    "symbol_candidates": [
+      {
+        "exchange": "TPEx",
+        "symbol": "6279",
+        "name": "胡連",
+        "reason": "文中直接點名胡連為收購方（子公司執行）",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "連接器",
+        "reason": "胡連本業為連接器廠"
+      },
+      {
+        "theme": "高端重機與超跑供應鏈",
+        "reason": "收購標的所屬供應鏈"
+      }
+    ],
+    "impact_direction": "unknown",
+    "impact_scope": "instrument",
+    "impact_rationale": "僅公告收購條件與業務範圍，未提供獲利或營收影響，無法判斷方向。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "6e39517071fc5db9a6a02c7dc2b60a37ba85f6053cba1156cb1fd262a7864872",
+    "generated_at": "2026-10-25T02:01:30.047527+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7518,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-10-25T02:00:03.215266"
+  }
+}

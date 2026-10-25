@@ -1,0 +1,261 @@
+{
+  "id": "2437",
+  "canonical_key": "news:yahoo_tw:5f34a9785937976c4d3579d2d9cacecbfa4b0410ad1e94006f07371641e44f33",
+  "dedupe_cluster_id": "news-title:0350fb337a4d0934e9a0a70c5381c5fa",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/ai%E9%BE%8D%E9%A0%ADmeta%E5%B8%B6%E9%A0%98%E7%A7%91%E6%8A%80%E8%82%A1%E4%B8%8B%E6%AE%BA-%E7%BE%8E%E8%82%A1%E9%80%B1%E5%9B%9B%E9%96%8B%E7%9B%A4%E9%87%8D%E6%8C%AB-%E5%8F%B0%E7%A9%8D%E9%9B%BB%E6%9A%B4%E8%B7%8C%E9%80%BE4-145945970.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "AI龍頭Meta帶領科技股下殺　美股週四開盤重挫、台積電暴跌逾4%",
+  "summary": "由於市場對人工智慧（AI）企業巨額資本支出的疑慮重燃，加上地緣政治局勢升溫推升原油價格，科技股為主的那斯達克綜合指數週四（22日）開盤重挫，美股大盤指標亦同步下滑。",
+  "description": "由於市場對人工智慧（AI）企業巨額資本支出的疑慮重燃，加上地緣政治局勢升溫推升原油價格，科技股為主的那斯達克綜合指數週四（22日）開盤重挫，美股大盤指標亦同步下滑。",
+  "summary_preview": "由於市場對人工智慧（AI）企業巨額資本支出的疑慮重燃，加上地緣政治局勢升溫推升原油價格，科技股為主的那斯達克綜合指數週四（22日）開盤重挫，美股大盤指標亦同步下滑。",
+  "language": "zh-Hant",
+  "published_at": "2026-10-22T14:59:45+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-22T14:59:45+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T14:59:45+00:00",
+        "utc": "2026-10-22T14:59:45+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T16:00:10.322152+00:00",
+        "utc": "2026-10-22T16:00:10.322152+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-25T02:18:12.649127+00:00",
+    "legacy": {
+      "published_at": "2026-10-22T14:59:45+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T14:59:45",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-22T16:00:10.322152+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-25T02:18:12.649127+00:00",
+  "collected_at": "2026-10-22T16:00:10.322152+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "e1c509df22ced03b80ca034da72de38e5abf5badc254bef0f39d4ece2d168da5",
+  "detail_url": "/news/2437",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "AI 疑慮重燃加上油價上漲，美股科技股開盤重挫，台積電同步大跌逾 4%。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "reason": "新聞點名台積電暴跌逾 4%。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "半導體",
+        "reason": "科技股整體下殺，台積電為半導體權值股。"
+      }
+    ],
+    "impact_direction": "negative",
+    "impact_scope": "instrument",
+    "impact_rationale": "標題點名台積電暴跌逾 4%，受 AI 資本支出疑慮與科技股拋售影響。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "b272ab57ce4a29ddf35ba2d901fb5b2ad365cfe92996ee9251d613735c52d46e",
+    "generated_at": "2026-10-22T16:01:13.489117+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7195,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-10-22T16:00:10.322152"
+  }
+}
