@@ -848,6 +848,8 @@ def test_current_prompt_states_the_faithfulness_rules():
         "數字照原文的寫法抄",
         "原文寫在甲身上的成果、數字或動作，不得移到乙身上",
         "不補原文沒寫的因果",
+        # AC-3 round 1 (news 2874) completed a source cut off mid-sentence.
+        "不要替沒寫完的句子補上後半句",
     ):
         assert rule in text
 

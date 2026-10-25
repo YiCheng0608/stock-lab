@@ -47,7 +47,7 @@ PROMPT_VERSION = "news_v2"
 PROMPT_PATH = Path(__file__).with_name("prompts") / f"{PROMPT_VERSION}.md"
 # Pinned hash of the prompt text (LF line endings).  Editing the prompt
 # without a new PROMPT_VERSION fails the prompt version test.
-PROMPT_SHA256 = "3caa9cbb8dd933d91e3b545d21d0e54d59093b4c0adeed35e8332511cda3029f"
+PROMPT_SHA256 = "53c986c613b08e0a5336ad6c3248b19985ffcf76272144256a948b6bc7dddb47"
 MODEL = "haiku"
 BATCH_SIZE = 25
 DEFAULT_LIMIT = 50
