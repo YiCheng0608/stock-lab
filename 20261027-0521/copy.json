@@ -1,0 +1,8 @@
+{
+  "copy": "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-307-db-facts-empty/.local/verify/stock.db",
+  "source": "C:/Users/YiCheng/stock-lab-data/stock.db",
+  "source_latest_trading_date": "2026-10-22",
+  "alembic_version": "0017_tracking_plans",
+  "bytes": 2385940480,
+  "seconds": 8.4
+}
