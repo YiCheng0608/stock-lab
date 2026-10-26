@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { StockBarsChart } from './StockBarsChart'
+import { StockCutoffControl } from './StockCutoffControl'
 import { StockQuoteLine } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
@@ -155,3 +156,10 @@ const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onInte
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
 check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期待核實'), 'no bars → empty state and pending date badge')
+
+// ---- #300 研究截止日期 (DESIGN_SYSTEM §4 手機第一屏): one toggle line on phones, open when a cutoff is applied ----
+const latestCutoff = renderToStaticMarkup(<StockCutoffControl asOf="" onApply={() => undefined} />)
+check(latestCutoff.includes('class="cutoff-panel"') && latestCutoff.includes('aria-expanded="false"') && latestCutoff.includes('研究截止日期：最新資料 ▸'), `no cutoff: the panel starts folded and names 最新資料: ${latestCutoff.slice(0, 200)}`)
+check(latestCutoff.indexOf('cutoff-toggle') < latestCutoff.indexOf('<form id="stock-cutoff-form" class="overview-cutoff-control"') && latestCutoff.includes('套用截止'), 'the toggle precedes the unchanged cutoff form')
+const appliedCutoff = renderToStaticMarkup(<StockCutoffControl asOf="2026-10-20" onApply={() => undefined} />)
+check(appliedCutoff.includes('class="cutoff-panel open"') && appliedCutoff.includes('aria-expanded="true"') && appliedCutoff.includes('研究截止日期：2026/10/20 ▾') && appliedCutoff.includes('value="2026-10-20"'), 'an applied cutoff starts open and shows its date')

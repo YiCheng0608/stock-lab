@@ -69,7 +69,7 @@ check(partialRow.replace(/<[^>]+>/g, '').includes('技術與籌碼觀察（事�
 check(count(partialRow, '>—<') === 3, `null breadth, catalyst and 20d return show 「—」: ${partialRow}`)
 check(industryMarkup.includes('資料 2026/09/08') && !industryMarkup.includes('官方資料 '), 'board date badge')
 check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('class="data-gap"'), 'industry board shows no temporary verification notice')
-check(industryMarkup.includes('class="board-cards"') && count(industryMarkup, 'class="board-card"') === 2, 'phone cards render every row')
+check(industryMarkup.includes('class="card-list board-cards"') && count(industryMarkup, 'class="board-card"') === 2 && !industryMarkup.includes('card-list-rest'), 'phone cards render every row; ten or fewer fold nothing')
 
 const themeMarkup = render(<ThemesBoardView board="theme" onBoardChange={noop} search="" onSearchChange={noop} data={themeBoard()} loading={false} error={null} />)
 check(themeMarkup.includes('id="board-tab-theme" aria-selected="true"') && themeMarkup.includes('id="board-tab-industry" aria-selected="false"') && themeMarkup.includes('id="board-panel-theme"'), 'theme tab selected')
@@ -192,7 +192,7 @@ check(!leader.includes('資料 2026/09/08'), 'a same-day member has no date mark
 check(!cellsOf(rowOf(detailMarkup, '6640'))[3], 'a member without any bar has a blank close')
 // Units and blank reasons outside the table (shown above both the table and the phone cards), only for what this page shows.
 const noteAt = detailMarkup.indexOf('class="table-note member-note"')
-check(noteAt >= 0 && noteAt < detailMarkup.indexOf('member-table-wrap') && noteAt < detailMarkup.indexOf('class="member-cards"'), 'the member note precedes the table and the cards')
+check(noteAt >= 0 && noteAt < detailMarkup.indexOf('member-table-wrap') && noteAt < detailMarkup.indexOf('class="card-list member-cards"'), 'the member note precedes the table and the cards')
 const memberNote = strip(detailMarkup.slice(detailMarkup.indexOf('>', noteAt) + 1, detailMarkup.indexOf('</p>', noteAt)))
 check(memberNote.startsWith('單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。'), `member unit note: ${memberNote.slice(0, 80)}`)
 for (const sentence of ['漲跌幅空白表示漲跌待核實。', '成交值空白表示成交金額未取得。', '5／20 日相對空白表示未列入當日族群計分。', '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交值留空。', '收盤空白表示該檔尚無日線。']) {
@@ -206,13 +206,29 @@ const industryMembers = render(<ThemeDetailView detail={industryDetail} board={l
 check(headersOf(industryMembers).join('|') === '代號|名稱|市場|收盤|漲跌幅|成交值|5 日相對|20 日相對', `industry member headers: ${headersOf(industryMembers).join('|')}`)
 check(!cellsOf(rowOf(industryMembers, '2330'))[1].includes('領先成員') && cellsOf(rowOf(industryMembers, '2330'))[1].includes('候選 #3'), 'industries show no role, keep the candidate badge')
 // 390: one card per member, title row with close and change, then three cells.
-const cards = detailMarkup.slice(detailMarkup.indexOf('class="member-cards"'), detailMarkup.indexOf('pagination-controls', detailMarkup.indexOf('class="member-cards"')))
+const cards = detailMarkup.slice(detailMarkup.indexOf('class="card-list member-cards"'), detailMarkup.indexOf('pagination-controls', detailMarkup.indexOf('class="card-list member-cards"')))
 check(count(cards, 'class="member-card"') === membersPage().items.length, 'one phone card per member')
 const leaderCard = cards.slice(cards.indexOf('class="member-card"'), cards.indexOf('class="member-card"', cards.indexOf('class="member-card"') + 1))
 check(strip(leaderCard).includes('2330 台積電') && leaderCard.includes('1,085.00') && leaderCard.includes('tone-up">+1.40%<'), `card title row: ${strip(leaderCard)}`)
 check(['成交值', '5 日相對', '20 日相對'].every((label) => leaderCard.includes(`<dt>${label}</dt>`)) && leaderCard.includes('<dd>325.12</dd>'), 'card has the three cells')
 check(leaderCard.includes('主要業務 · 關聯度高'), 'theme cards keep the evidence')
 check(strip(cards).includes('資料 2026/09/05'), 'a stale card shows its bar date')
+
+// ---- #300 phone cards past the first ten fold into <details> (DESIGN_SYSTEM §5.1); the desktop table keeps every row ----
+const twelveGroups = { ...industryBoard(), items: Array.from({ length: 12 }, (_, i) => boardItem({ theme_id: `industry-${i + 1}`, rank: i + 1, display_name: `族群${i + 1}` })) }
+twelveGroups.meta = { ...twelveGroups.meta, total: 12 }
+const longBoard = render(<ThemesBoardView board="industry" onBoardChange={noop} search="" onSearchChange={noop} data={twelveGroups} loading={false} error={null} />)
+const boardPhone = longBoard.slice(longBoard.indexOf('class="card-list board-cards"'))
+const boardRest = boardPhone.slice(boardPhone.indexOf('<details class="details card-list-rest">'))
+check(count(longBoard, 'data-theme-id=') === 12, 'the desktop board keeps all 12 rows')
+check(count(boardPhone, 'class="board-card"') === 12 && count(boardRest, 'class="board-card"') === 2, `phone board: 10 cards open, 2 folded, got ${count(boardPhone, 'class="board-card"') - count(boardRest, 'class="board-card"')} open`)
+check(boardRest.includes('<summary>顯示其餘 2 個族群</summary>') && boardRest.indexOf('族群11') < boardRest.indexOf('族群12') && !boardPhone.slice(0, boardPhone.indexOf('<details')).includes('族群11'), 'the folded groups keep the rank order behind 「顯示其餘 2 個族群」')
+const twelveMembers = { ...membersPage(), items: Array.from({ length: 12 }, (_, i) => ({ ...membersPage().items[0], symbol: String(2400 + i), name: `成員${i + 1}`, candidate_rank: null, conditional: false })) }
+const longMembers = render(<ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(twelveMembers)} onMemberPageChange={noop} news={loaded({ items: [] })} />)
+const memberPhone = longMembers.slice(longMembers.indexOf('class="card-list member-cards"'))
+const memberRest = memberPhone.slice(memberPhone.indexOf('<details class="details card-list-rest">'), memberPhone.indexOf('</details>') + 10)
+check(count(memberPhone, 'class="member-card"') === 12 && count(memberRest, 'class="member-card"') === 2 && memberRest.includes('<summary>顯示其餘 2 檔</summary>'), 'phone members: 10 cards open, 「顯示其餘 2 檔」 folds the last 2')
+check(memberRest.includes('2410 成員11') && memberRest.includes('2411 成員12'), 'the folded members are the last two in API order')
 
 check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
