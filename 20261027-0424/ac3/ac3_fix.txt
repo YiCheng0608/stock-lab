@@ -1,0 +1,5 @@
+db C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-308-hide-stale-news-ai\.local\verify\stock.db
+2435 200 Yahoo奇摩股市 專家看台積電法說「已確認訊號」！半導體晶片需求仍強　盤點「8檔ETF」規模、績效雙成長
+  ai = null
+2458 200 中央社 經濟部樂見美光與台中工會達成協議　盼桃園廠續協商
+  ai = null

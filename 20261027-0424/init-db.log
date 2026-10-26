@@ -1,0 +1,8 @@
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0017_tracking_plans -> 0018_market_summaries, Add the market summary table.
+INFO  [alembic.runtime.migration] Running upgrade 0018_market_summaries -> 0019_strategy_levels, Add the observation price level table.
+INFO  [alembic.runtime.migration] Running upgrade 0019_strategy_levels -> 0020_trading_calendar, Add the trading calendar table.
+{
+  "status": "success"
+}

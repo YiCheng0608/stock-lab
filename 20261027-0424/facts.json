@@ -1,0 +1,13 @@
+{
+  "market_latest_trading_date": "2026-10-22",
+  "group_scores_latest_trading_date": "2026-10-22",
+  "candidate_run_latest_trading_date": null,
+  "candidate_count_latest": null,
+  "news_items": 3143,
+  "news_latest_published_at": "2026-10-26 19:42:00.000000",
+  "news_llm_done": 3230,
+  "theme_suggestions": 610,
+  "portfolio_positions": 0,
+  "alembic_version": "0020_trading_calendar",
+  "market_summary_latest": {}
+}

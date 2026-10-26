@@ -1,0 +1,4 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-10-22）且有 AI 判讀的前 5 則，API 順序",
+  "items": []
+}

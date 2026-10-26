@@ -1,0 +1,19 @@
+# ac3_counts.py on the copy (copy_db.py 2026-10-27 04:18 Taipei, alembic 0017_tracking_plans before init-db)
+alembic [('0017_tracking_plans',)]
+by version/status [('news_v1', 'done', 2621), ('news_v1', 'skipped_stale', 59), ('news_v2', 'done', 609), ('news_v2', 'rejected', 1), ('news_v2', 'skipped_stale', 2288)]
+base shows (latest done/rejected per item) [('news_v1', 'done', 2235), ('news_v2', 'done', 609), ('news_v2', 'rejected', 1)]
+items with v1 done and no v2 done [(2236,)]
+items with v2 done [(609,)]
+2435 [(2137, 'news_v1', 'done', 'claude-haiku-5-5', '2026-10-22 16:01:13.489117', '專家認為台積電法說已有確認訊號，半導體需求仍強，並盤點八檔台股ETF規模與績效成長。'), (5214, 'news_v2', 'skipped_stale', 'sonnet', '2026-10-25 16:00:29.878276', None)]
+2458 [(2198, 'news_v1', 'done', 'claude-haiku-5-5', '2026-10-22 18:01:09.235381', '經濟部樂見美光與台中工會達成協議，盼桃園廠續協商調薪與勞退等議題。'), (5233, 'news_v2', 'skipped_stale', 'sonnet', '2026-10-25 16:00:29.878276', None)]
+
+# ac3_map.py: news_ai_map over all news_items
+== base 72f5529
+news_items 3143 with ai 2844 Counter({'news_v1': 2235, 'news_v2': 609})
+== fix 87109af
+news_items 3143 with ai 609 Counter({'news_v2': 609})
+
+# N7 sample day (after init-db, before deleting the copy)
+domestic active news published 2026-10-22 (Taipei) by result: [('news_v1', 'done', 358), ('news_v2', 'skipped_stale', 358)]
+v2 done by Taipei publish date: [('2026-10-23', 215), ('2026-10-24', 115), ('2026-10-25', 88), ('2026-10-26', 168), ('2026-10-27', 23)]
+first v2 run: [('2026-10-25 04:00:57.224497',)]
