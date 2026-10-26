@@ -6,7 +6,9 @@ import { productTime, unknownRole } from '../news/news.fixtures'
 import { readChartTheme } from '../stock/stockBars'
 import type { ThemeBoardEmptyReason } from '../types'
 import {
+  DEFAULT_MEMBER_SORT,
   MEMBER_PAGE_SIZE,
+  MEMBER_SORTS,
   THEME_BOARD_LIMIT,
   TODAY_BOARD_LIMIT,
   boardDates,
@@ -16,6 +18,8 @@ import {
   filterBoardItems,
   formatComponent,
   formatTrendTooltip,
+  memberQuery,
+  memberTableNote,
   memberTableRows,
   parseBoard,
   qualityLabel,
@@ -108,7 +112,7 @@ check(detailMarkup.includes('台積電') && detailMarkup.includes('1,085') && de
 check(detailMarkup.includes('<th>證據</th>') && detailMarkup.includes('主要業務 · 關聯度高') && detailMarkup.includes('產品線 · 關聯度低'), 'theme members carry an evidence column')
 check(detailMarkup.includes('href="https://example.test/cowos" target="_blank" rel="noopener noreferrer"'), 'evidence link opens a new tab')
 check(!detailMarkup.includes('javascript:') && detailMarkup.includes('來源連結未提供'), 'non-http evidence is not linked')
-check(detailMarkup.includes('第 2／2 頁') && detailMarkup.includes('共 32 檔'), 'member pagination')
+check(detailMarkup.includes('第 2／2 頁') && detailMarkup.includes('共 34 檔'), 'member pagination')
 check(!detailMarkup.includes('弘塑'), 'inline members are not shown once a page arrived')
 check(count(detailMarkup, 'href="/news/') === 3 && detailMarkup.includes('公開資訊觀測站公告'), 'related news list')
 // #203 AC-1: related news time reads product_time like the news page — Taipei time for a known instant, the event day for date-only.
@@ -150,6 +154,66 @@ const industryDetail = { ...themeDetail(), board: 'industry', theme: { ...themeD
 const offBoard = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded({ ...membersPage(), items: [] })} onMemberPageChange={noop} news={loaded({ items: [] })} />)
 check(offBoard.includes('未列入本日榜單') && offBoard.includes('不在本日產業榜') && !offBoard.includes('<th>證據</th>'), 'a group off the board: no rank, no evidence column for industries')
 check(!offBoard.includes('待重新核實') && !offBoard.includes('class="data-gap"') && !offBoard.includes('題材表版本'), 'industry detail shows no temporary verification notice and no theme table version')
+// ---- #280 member table: columns, sort, stale day, blanks and phone cards (UI_COPY_SPEC §8.5) ----
+const strip = (markup: string) => markup.replace(/<[^>]+>/g, '')
+const tableOf = (markup: string) => markup.slice(markup.indexOf('member-table-wrap'), markup.indexOf('</table>', markup.indexOf('member-table-wrap')))
+const headersOf = (markup: string) => [...tableOf(markup).matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map((match) => strip(match[1]))
+const rowOf = (markup: string, symbol: string) => {
+  const table = tableOf(markup)
+  const at = table.indexOf(`/${symbol}"`)
+  return table.slice(table.lastIndexOf('<tr', at), table.indexOf('</tr>', at))
+}
+const cellsOf = (row: string) => [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((match) => strip(match[1]))
+// Default sort and the request: turnover first, page and sort travel together, the options name every sort.
+check(DEFAULT_MEMBER_SORT === 'turnover', 'the member table sorts by turnover by default')
+check(JSON.stringify(memberQuery(2, 'return_5d')) === JSON.stringify({ page: 2, page_size: MEMBER_PAGE_SIZE, sort: 'return_5d' }), 'a member page asks for its sort')
+check(MEMBER_SORTS.map((option) => option.id).join() === 'turnover,change_pct,return_5d,return_20d,symbol', 'sort options')
+check(MEMBER_SORTS.map((option) => option.label).join() === '成交值,漲跌幅,5 日相對,20 日相對,代號', 'sort option labels')
+check(detailMarkup.includes('aria-label="成員排序"') && detailMarkup.includes('<option value="turnover" selected="">成交值</option>'), 'the sort select shows turnover by default')
+const bySort = render(<ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(membersPage())} memberSort="change_pct" onMemberSortChange={noop} onMemberPageChange={noop} news={loaded({ items: [] })} />)
+check(bySort.includes('<option value="change_pct" selected="">漲跌幅</option>') && !bySort.includes('<option value="turnover" selected="">'), 'another sort is selected when chosen')
+check(bySort.includes('第 2／2 頁') && bySort.includes('下一頁'), 'paging stays under a chosen sort')
+// Theme board: role only as the 領先成員 badge in the name cell, evidence stays last.
+check(headersOf(detailMarkup).join('|') === '代號|名稱|市場|收盤|漲跌幅|成交值|5 日相對|20 日相對|證據', `theme member headers: ${headersOf(detailMarkup).join('|')}`)
+const leader = rowOf(detailMarkup, '2330')
+const leaderCells = cellsOf(leader)
+check(leaderCells[1].includes('台積電') && leaderCells[1].includes('候選 #3') && leaderCells[1].includes('領先成員'), `leader name cell carries its badges: ${leaderCells[1]}`)
+check(leaderCells.slice(3, 8).join('|') === '1,085.00|+1.40|325.12|+1.23|-0.45', `leader numbers: ${leaderCells.join('|')}`)
+check(leader.includes('tone-up">+1.40<') && leader.includes('tone-down">-0.45<'), 'change and returns are red up, green down')
+check(leaderCells[8].includes('主要業務 · 關聯度高'), 'evidence column unchanged')
+check(cellsOf(rowOf(detailMarkup, '3711'))[1].includes('條件成立') && !cellsOf(rowOf(detailMarkup, '3711'))[1].includes('候選'), 'a conditional member that is not a candidate reads 條件成立')
+check(!cellsOf(rowOf(detailMarkup, '6187'))[1].includes('條件成立') && !cellsOf(rowOf(detailMarkup, '6187'))[1].includes('領先成員'), 'no badge without a status')
+const unverified = cellsOf(rowOf(detailMarkup, '3711'))
+check(unverified.slice(3, 8).join('|') === '151.50|||-0.20|0.00', `unverified change and unavailable turnover are blank: ${unverified.join('|')}`)
+// A member whose latest bar is older than members_as_of: its date under the close, change and turnover blank.
+const stale = cellsOf(rowOf(detailMarkup, '6187'))
+check(stale[3] === '210.50資料 2026/09/05' && stale.slice(4, 8).join('|') === '|||', `stale member: ${stale.join('|')}`)
+check(!leader.includes('資料 2026/09/08'), 'a same-day member has no date mark')
+check(!cellsOf(rowOf(detailMarkup, '6640'))[3], 'a member without any bar has a blank close')
+// Units and blank reasons outside the table (shown above both the table and the phone cards), only for what this page shows.
+const noteAt = detailMarkup.indexOf('class="table-note member-note"')
+check(noteAt >= 0 && noteAt < detailMarkup.indexOf('member-table-wrap') && noteAt < detailMarkup.indexOf('class="member-cards"'), 'the member note precedes the table and the cards')
+const memberNote = strip(detailMarkup.slice(detailMarkup.indexOf('>', noteAt) + 1, detailMarkup.indexOf('</p>', noteAt)))
+check(memberNote.startsWith('單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。'), `member unit note: ${memberNote.slice(0, 80)}`)
+for (const sentence of ['漲跌幅空白表示漲跌待核實。', '成交值空白表示成交金額未取得。', '5／20 日相對空白表示未列入當日族群計分。', '收盤下方的「資料 YYYY/MM/DD」表示該檔沒有成員資料日的日線，漲跌幅與成交值留空。', '收盤空白表示該檔尚無日線。']) {
+  check(memberNote.includes(sentence), `member note says ${sentence}`)
+}
+check(!memberNote.includes('成交金額待核實'), 'an unknown turnover sentence only when a row is unknown')
+check(memberTableNote([{ ...membersPage().items[0] }], '2026-09-08') === '單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。', 'no blank, no blank sentence')
+check(memberTableNote([{ ...membersPage().items[0], turnover: null, turnover_status: 'unknown' }], '2026-09-08').endsWith('成交值空白表示成交金額待核實。'), 'unknown turnover reads 待核實')
+// Industry board: no role column, no evidence column.
+const industryMembers = render(<ThemeDetailView detail={industryDetail} board={loaded(industryBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
+check(headersOf(industryMembers).join('|') === '代號|名稱|市場|收盤|漲跌幅|成交值|5 日相對|20 日相對', `industry member headers: ${headersOf(industryMembers).join('|')}`)
+check(!cellsOf(rowOf(industryMembers, '2330'))[1].includes('領先成員') && cellsOf(rowOf(industryMembers, '2330'))[1].includes('候選 #3'), 'industries show no role, keep the candidate badge')
+// 390: one card per member, title row with close and change, then three cells.
+const cards = detailMarkup.slice(detailMarkup.indexOf('class="member-cards"'), detailMarkup.indexOf('pagination-controls', detailMarkup.indexOf('class="member-cards"')))
+check(count(cards, 'class="member-card"') === membersPage().items.length, 'one phone card per member')
+const leaderCard = cards.slice(cards.indexOf('class="member-card"'), cards.indexOf('class="member-card"', cards.indexOf('class="member-card"') + 1))
+check(strip(leaderCard).includes('2330 台積電') && leaderCard.includes('1,085.00') && leaderCard.includes('tone-up">+1.40%<'), `card title row: ${strip(leaderCard)}`)
+check(['成交值', '5 日相對', '20 日相對'].every((label) => leaderCard.includes(`<dt>${label}</dt>`)) && leaderCard.includes('<dd>325.12</dd>'), 'card has the three cells')
+check(leaderCard.includes('主要業務 · 關聯度高'), 'theme cards keep the evidence')
+check(strip(cards).includes('資料 2026/09/05'), 'a stale card shows its bar date')
+
 check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
 

@@ -147,11 +147,12 @@ checkAligned('個股清單', directory, ['最近收盤'])
 check(bodyText(directory).includes('21.10') && bodyText(directory).includes('2,510.00'), '個股清單: a column across stocks keeps two decimals')
 
 const members = render('ThemeMemberTable', () => <ThemeMemberTable rows={[
-  { exchange: 'TWSE', symbol: '1742', name: '台蠟', role: 'member', latest_bar: { date: '2026-10-22', close: 21.1 } },
-  { exchange: 'TWSE', symbol: '2330', name: '台積電', role: 'leader', latest_bar: { date: '2026-10-22', close: 2510 } },
-] as never} withEvidence={false} />)
-checkAligned('族群成員', members, ['收盤'])
+  { exchange: 'TWSE', symbol: '1742', name: '台蠟', role: 'member', latest_bar: { date: '2026-10-22', close: 21.1 }, change: 0.1, change_pct: 0.0047619, change_status: 'known', turnover: 1.2e8, turnover_status: 'available', excess_return_5d: 0.01, excess_return_20d: -0.1 },
+  { exchange: 'TWSE', symbol: '2330', name: '台積電', role: 'leader', latest_bar: { date: '2026-10-22', close: 2510 }, change: -10, change_pct: -0.0039683, change_status: 'known', turnover: 4.5e10, turnover_status: 'available', excess_return_5d: 0.002, excess_return_20d: 0.03 },
+] as never} withEvidence={false} membersAsOf="2026-10-22" />)
+checkAligned('族群成員', members, ['收盤', '漲跌幅', '成交值', '5 日相對', '20 日相對'])
 check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.00'), '族群成員: closes keep two decimals')
+check(['+0.48', '-0.40', '1.20', '450.00', '+1.00', '-10.00', '+0.20', '+3.00'].every((value) => bodyText(members).includes(value)), `族群成員: percent and 億元 keep two decimals, got ${bodyText(members).join('|')}`)
 
 const card = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
 const details = /<details class="details candidate-details"[\s\S]*?<\/details>/.exec(card)?.[0] ?? ''
