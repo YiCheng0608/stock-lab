@@ -612,19 +612,31 @@ def test_a_skipped_status_sync_is_commented_until_a_later_sync_applies(wd):
     assert wd.text("gh_calls.log") == ""
 
 
-def _signal_rows(path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+CALENDAR_EVIDENCE = (
+    '{"execution": {"earliest": null, "calendar": {"source": "twse_holiday_schedule",'
+    ' "raw_payload_ids": [7676], "missing_reason": null}}}'
+)
+# A signal written before the calendar-based analyze (no execution.calendar).
+OLD_EVIDENCE = '{"execution": {"earliest": null}}'
+
+
+def _signal_rows(path: Path, rows: list[tuple[str, str, str | None, str]]) -> None:
     """trading_calendar_days (empty: the table marks a migrated database) and
-    signals (signal_key, signal_date, earliest_execution_date) rows."""
+    signals (signal_key, signal_date, earliest_execution_date,
+    rule_evidence_json) rows."""
 
     with sqlite3.connect(path) as conn:
-        conn.execute("CREATE TABLE trading_calendar_days (id INTEGER PRIMARY KEY)")
         conn.execute(
-            "CREATE TABLE signals (id INTEGER PRIMARY KEY, signal_key VARCHAR(220),"
-            " signal_date DATE, earliest_execution_date DATE)"
+            "CREATE TABLE IF NOT EXISTS trading_calendar_days (id INTEGER PRIMARY KEY)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS signals (id INTEGER PRIMARY KEY,"
+            " signal_key VARCHAR(220), signal_date DATE, earliest_execution_date DATE,"
+            " rule_evidence_json JSON)"
         )
         conn.executemany(
-            "INSERT INTO signals (signal_key, signal_date, earliest_execution_date)"
-            " VALUES (?, ?, ?)",
+            "INSERT INTO signals (signal_key, signal_date, earliest_execution_date,"
+            " rule_evidence_json) VALUES (?, ?, ?, ?)",
             rows,
         )
     conn.close()
@@ -637,14 +649,38 @@ def test_signals_without_an_execution_date_are_commented(wd):
     assert "invariant execution_calendar skip reason=no_trading_calendar" in (
         wd.run("--dry-run").stdout
     )
+    # Migrated to 0020, but the latest signals predate the calendar and are
+    # never backfilled: not a violation (#294 review L3).
     _signal_rows(
         db,
         [
-            # An older day and another namespace are outside the check.
-            ("analysis-TWSE-2330-2026-10-16-a", "2026-10-16", None),
-            ("backtest-7-TWSE-2330-2026-10-19-a", "2026-10-19", None),
-            ("analysis-TWSE-2330-2026-10-19-a", "2026-10-19", "2026-10-20"),
-            ("analysis-TWSE-2330-2026-10-19-b", "2026-10-19", None),
+            ("analysis-TWSE-2330-2026-10-16-a", "2026-10-16", None, OLD_EVIDENCE),
+            ("analysis-TWSE-2330-2026-10-16-b", "2026-10-16", None, OLD_EVIDENCE),
+        ],
+    )
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant execution_calendar skip reason=signals_before_calendar"
+        " signal_date=2026-10-16 signals=2"
+    ) in dry.stdout
+    assert "待使用者" not in dry.stdout
+    _signal_rows(
+        db,
+        [
+            # Another namespace is outside the check.
+            (
+                "backtest-7-TWSE-2330-2026-10-19-a",
+                "2026-10-19",
+                None,
+                CALENDAR_EVIDENCE,
+            ),
+            (
+                "analysis-TWSE-2330-2026-10-19-a",
+                "2026-10-19",
+                "2026-10-20",
+                CALENDAR_EVIDENCE,
+            ),
+            ("analysis-TWSE-2330-2026-10-19-b", "2026-10-19", None, CALENDAR_EVIDENCE),
         ],
     )
     dry = wd.run("--dry-run")

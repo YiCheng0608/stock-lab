@@ -573,6 +573,37 @@ def test_the_real_trading_calendar_step_stores_the_target_year_and_the_next(
     ]
 
 
+def test_a_real_trading_calendar_failure_keeps_its_reason_on_the_step(
+    database, monkeypatch
+):
+    # #294 review L1: the reason shows in schedule-runs, not only in details.
+    import worker.trading_calendar as trading_calendar
+    from test_trading_calendar import Fetcher
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(
+        schedule_runs, "_trading_calendar_step", REAL_TRADING_CALENDAR_STEP
+    )
+    down = sources.OfficialDataError("fixture schedule endpoint down")
+    fetcher = Fetcher({2026: down, 2027: down})
+    real = trading_calendar.run_trading_calendar
+    monkeypatch.setattr(
+        trading_calendar,
+        "run_trading_calendar",
+        lambda target: real(target, fetcher=fetcher),
+    )
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["trading_calendar"]
+    assert step.status == "failed"
+    assert step.error == "; ".join(
+        f"holiday schedule {year} unavailable: official endpoint failed:"
+        f" {trading_calendar.year_endpoint(year)}: fixture schedule endpoint down"
+        for year in (2026, 2027)
+    )
+    assert by_run[rows[0].id]["analyze"].status == "success"
+
+
 def test_plan_tracking_without_any_plan_is_a_successful_empty_step(
     database, monkeypatch
 ):

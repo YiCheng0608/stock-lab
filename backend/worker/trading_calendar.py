@@ -268,6 +268,8 @@ def store_trading_calendar(
     return {
         "status": status,
         "run_id": run.id,
+        # The daily step row keeps this as its error (schedule_runs._run_step).
+        "error": run.error,
         "years": results,
         "warnings": warnings,
         "records": records,

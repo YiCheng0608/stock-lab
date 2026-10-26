@@ -155,9 +155,9 @@ TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易�
 
 - **端點**：`https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?date=<西元年>0101&response=json`，和 `MI_INDEX`、OpenAPI 休市表同屬 TWSE 官方免費網站。回傳 `stat`、`queryYear`、`total`、`fields`（`日期`、`名稱`、`說明`）與 `data`（日期為 ISO）。OpenAPI 版只有當年度，查不到下一年，所以推算用網站版。
 - **請求**：daily 的 trading_calendar 步驟（collect 成功後、analyze 之前，結果不影響 run 狀態，[OPERATIONS §6.3](OPERATIONS.md#63-日誌與-run-記錄)）與 `worker.cli trading-calendar`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)），每次抓目標日的年度與下一年度，每天 2 個請求。不屬於 collect，不影響 collect 的核心／非核心狀態。
-- **驗證與拒收**：`stat` 不是 `ok`、`queryYear` 不等於請求年度、`fields` 缺這三欄、某列欄數不符、日期無法解析或不在該年度、同一日期出現兩次、名稱為空，整份拒收，該年度不寫入，記在 run 的 `warnings` 與 `years.<年>`。`total=0`、`data` 為空代表該年度尚未公告（2026-10-26 查 2027 年即是如此），不寫入。
+- **驗證與拒收**：`stat` 不是 `ok`、`queryYear` 不等於請求年度、`fields` 缺這三欄、某列欄數不符、日期無法解析或不在該年度、同一日期出現兩次、名稱為空，整份拒收，該年度不寫入，記在 run 的 `warnings` 與 `years.<年>`。`total=0`、`data` 為空代表該年度尚未公告（2026-10-26 查 2027 年即是如此），不寫入。被拒收或空的回應仍照常存 raw 當證據，只是不寫入日曆表。
 - **分類**：名稱含「開始交易」「最後交易」為交易日提示（例：國曆新年開始交易日）；名稱或說明含「放假」「補假」「休市」「無交易」「不交易」為休市（含「市場無交易，僅辦理結算交割作業」與補假日）；兩者都不是記 `unknown` 並警告。2024～2026 年 71 列全部能分類。休市表沒有列出的週間日就是交易日。
-- **保存**：`trading_calendar_days` 每個（`exchange`、`calendar_date`）一列：`year`、`kind`（`closed`／`trading`／`unknown`）、`name`、`description`、`source`（`twse_holiday_schedule`）、`collected_at` 與 `raw_payload_id`。raw 照一般規則保存（`run_type=trading_calendar` 的 ingestion run）；回應的 SHA-256 與該端點最近一次已存的 raw 相同時不另存。內容有差異時整年改寫，該年所有列改指向這份 raw，新增、改分類與移除的日期記在 run 的 `years.<年>`；內容相同時列不動。已有列的年度回應變成空的，保留舊列並警告。
+- **保存**：`trading_calendar_days` 每個（`exchange`、`calendar_date`）一列：`year`、`kind`（`closed`／`trading`／`unknown`）、`name`、`description`、`source`（`twse_holiday_schedule`）、`collected_at` 與 `raw_payload_id`。raw 照一般規則保存（`run_type=trading_calendar` 的 ingestion run）；回應的 SHA-256 與該端點最近一次已存的 raw 相同時不另存；因為只比最近一份，內容在「有效、空或拒收、有效」之間交替時，同樣的有效內容會再存一份 raw（日曆列內容沒變，仍指向第一份）。內容有差異時整年改寫，該年所有列改指向這份 raw，新增、改分類與移除的日期記在 run 的 `years.<年>`；內容相同時列不動。已有列的年度回應變成空的，保留舊列並警告。
 - **推算**：從 T 的隔天往後找第一個不是週末、也不是休市列的日期（最多 31 天）；碰到沒有列的年度（尚未公告或沒抓到）或 `unknown` 列就沒有答案，訊號的日期留空（規則見 [V1_SPEC](V1_SPEC.md#價位etf-與生命週期)）。
 - **限制**：颱風等臨時休市不在休市表（2024 年 5 天颱風停市與 2026-10-23 都沒有列入），推算不知道，事後也不改寫；確認的臨時休市只記在 daily run 的 `non_trading_day`。官方年中修訂休市表時（例如新增假日），之後算的日期跟著新內容，之前存的訊號不改。
 

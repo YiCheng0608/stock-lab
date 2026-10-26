@@ -147,37 +147,60 @@ def test_a_payload_that_is_not_the_year_schedule_is_rejected(change, message):
         trading_calendar.parse_schedule(payload, 2026)
 
 
-def test_the_backfill_exclusion_list_uses_the_same_rule():
-    # The OpenAPI feed the backfill reads (ROC dates); its old markers missed
-    # the eight make-up holidays (補假) of 2025 and 2026.
-    make_up = [
-        row
-        for year in (2025, 2026)
-        for row in schedule(year)["data"]
-        if "補假" in row[2] and "放假" not in row[2]
-    ]
-    assert [row[0] for row in make_up] == [
-        "2025-05-30",
-        "2025-09-29",
-        "2025-10-24",
-        "2026-02-27",
-        "2026-04-03",
-        "2026-04-06",
-        "2026-10-09",
-        "2026-10-26",
-    ]
-    openapi = [
+TRADING_NOTICES = [
+    "2025-01-02",  # 國曆新年開始交易日
+    "2025-01-22",  # 農曆春節前最後交易日
+    "2025-02-03",  # 農曆春節後開始交易日
+    "2026-01-02",
+    "2026-02-11",
+    "2026-02-23",
+]
+# The eight make-up holidays (補假, no 放假) the old markers missed.
+MAKE_UP_HOLIDAYS = [
+    "2025-05-30",
+    "2025-09-29",
+    "2025-10-24",
+    "2026-02-27",
+    "2026-04-03",
+    "2026-04-06",
+    "2026-10-09",
+    "2026-10-26",
+]
+
+
+def openapi_rows(rows: list[list[str]]) -> list[dict[str, str]]:
+    """The OpenAPI holidaySchedule shape the backfill reads (ROC dates)."""
+
+    return [
         {
             "Name": name,
             "Date": f"{int(day[:4]) - 1911}{day[5:7]}{day[8:]}",
             "Weekday": "",
             "Description": description,
         }
-        for day, name, description in make_up
+        for day, name, description in rows
     ]
-    assert sources._official_non_trading_dates(
-        openapi, date(2025, 1, 1), date(2026, 12, 31)
-    ) == {date.fromisoformat(row[0]) for row in make_up}
+
+
+def test_the_backfill_excludes_exactly_the_closed_days_of_the_schedule():
+    rows = [row for year in (2025, 2026) for row in schedule(year)["data"]]
+    assert len(rows) == 51
+    assert [
+        row[0] for row in rows if "補假" in row[2] and "放假" not in row[2]
+    ] == MAKE_UP_HOLIDAYS
+    # A row neither closed nor a trading notice is not a closure (#294 review M1).
+    unknown = ["2026-07-15", "颱風", ""]
+    excluded = sources._official_non_trading_dates(
+        openapi_rows([*rows, unknown]), date(2025, 1, 1), date(2026, 12, 31)
+    )
+    closed = {date.fromisoformat(row[0]) for row in rows} - {
+        date.fromisoformat(day) for day in TRADING_NOTICES
+    }
+    assert len(closed) == 45
+    assert excluded == closed
+    assert {date.fromisoformat(day) for day in MAKE_UP_HOLIDAYS} <= excluded
+    assert not {date.fromisoformat(day) for day in TRADING_NOTICES} & excluded
+    assert date(2026, 7, 15) not in excluded
 
 
 # ---- storing ----
