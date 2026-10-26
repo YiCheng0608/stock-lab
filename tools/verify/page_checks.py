@@ -1660,15 +1660,95 @@ def s5(run: Run, stock: Stock) -> str:
                 f"缺 `{prefix}` 開頭的行",
             )
         note = f"`資料日期：{slash(i)}`、`資料日：{slash(i)} · 價位語意：`"
-    if payload.get("candidate") is not None:
-        expect(text.has("明日候選"), "candidate 非 null，缺整行 `明日候選`")
-        expect(text.has("AI 推論"), "candidate 非 null，缺 `AI 推論`")
+    # The candidate row of the strategy board (#274): only the board's as-of candidate.
+    if (payload.get("strategy_board") or {}).get("candidate") is not None:
+        expect(text.has("每日候選"), "策略總表有候選，缺整行 `每日候選`")
+        expect(text.has("AI 推論"), "策略總表有候選，缺 `AI 推論`")
         rows = source_lines(text)
-        expect(rows, "candidate 非 null，缺 `來源：` 行")
+        expect(rows, "策略總表有候選，缺 `來源：` 行")
         bad = [text.at(row) for row in rows if not text.lines[row].endswith("（推論）")]
         expect(not bad, f"`來源：` 行沒有以 `（推論）` 結尾：{'、'.join(bad)}")
-        note += f"；候選 #{payload['candidate'].get('rank')}：`明日候選`、`AI 推論`、`（推論）`"
+        note += f"；候選 #{payload['candidate'].get('rank')}：`每日候選`、`AI 推論`、`（推論）`"
     return note
+
+
+# frontend/src/stock/strategyBoard.ts STATUS_LABELS and OBSERVATION_LABEL (#274).
+BOARD_STATUS = {
+    "conditional": "成立",
+    "observation": "觀察",
+    "data_incomplete": "資料不足",
+    "not_applicable": "不適用",
+}
+OBSERVATION_LABEL = "條件未成立・觀察價位"
+
+
+@check("stocks", "S10", per_stock=True)
+def s10(run: Run, stock: Stock) -> str:
+    text = stock_text(run, stock, "research")
+    board = stock_payload(run, stock).get("strategy_board")
+    expect(isinstance(board, dict), "stock.json 沒有 strategy_board")
+    k = text.find("策略總表")
+    expect(k >= 0, "缺整行 `策略總表`")
+    as_of = board.get("as_of")
+    if as_of:
+        expect(
+            text.after(k) == f"資料 {slash(as_of)}",
+            f"`策略總表` 下一行是 {text.after(k)!r}，預期 `資料 {slash(as_of)}`",
+        )
+    else:
+        expect(
+            text.has("此股尚無策略判定資料。"),
+            "as_of null，缺 `此股尚無策略判定資料。`",
+        )
+    rows = board.get("strategies") or []
+    expect(bool(rows), "strategy_board.strategies 是空的")
+    # The 1280 text is the desktop table (the phone cards are display:none): each
+    # strategy's row starts with its label cell, the status badge opens the next line.
+    starts = []
+    for row in rows:
+        i = text.find(f"{row['label']}\t")
+        expect(i >= 0, f"缺 `{row['label']}<TAB>` 開頭的表格列")
+        status = BOARD_STATUS.get(row["status"], "?")
+        line = text.after(i) or ""
+        # A passed row puts its earliest execution date under the badge.
+        expect(
+            line == status or line.startswith(f"{status}\t"),
+            f"{row['label']} 的狀態行是 {line!r}，預期是 `{status}` 或以 `{status}<TAB>` 開頭（{text.at(i)}）",
+        )
+        starts.append(i)
+    observed = [
+        row for row in rows if (row.get("levels") or {}).get("kind") == "observation"
+    ]
+    labels = text.count(lambda line: line == OBSERVATION_LABEL)
+    expect(
+        labels == len(observed),
+        f"`{OBSERVATION_LABEL}` {labels} 行，API 有 {len(observed)} 列觀察價位",
+    )
+    # Actionable levels never sit under the observation label.
+    for row, start in zip(rows, starts):
+        if row["status"] != "conditional":
+            continue
+        end = min((s for s in starts if s > start), default=len(text.lines))
+        segment = text.lines[start:end]
+        expect(
+            OBSERVATION_LABEL not in segment,
+            f"{row['label']} 成立，但它的列有 `{OBSERVATION_LABEL}`",
+        )
+    candidate = board.get("candidate")
+    if candidate:
+        line = f"第 {candidate['rank']} 名 · 總分 {round(candidate['total_score'] * 100)} · "
+        expect(
+            text.find_where(lambda value: value.startswith(line)) >= 0,
+            f"候選列缺 `{line}…`",
+        )
+    else:
+        expect(not text.has("每日候選"), "策略總表沒有候選，卻有 `每日候選`")
+    statuses = "、".join(
+        f"{row['label']} {BOARD_STATUS.get(row['status'])}" for row in rows
+    )
+    return f"`策略總表` 資料 {as_of}；{statuses}；觀察價位 {len(observed)} 列；" + (
+        f"候選第 {candidate['rank']} 名" if candidate else "非候選"
+    )
 
 
 @check("stocks", "S6", per_stock=True)

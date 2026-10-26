@@ -286,7 +286,7 @@ def compute_strategy_levels(
             values = {
                 **levels.as_json(observation),
                 "next_session_date": next_date,
-                "conditions_json": [item.as_json() for item in conditions],
+                "conditions_json": levels.compact_conditions(strategy, conditions),
                 "price_basis": next_inputs.price_basis,
             }
             written += int(_write(db, signal, values, stamp))

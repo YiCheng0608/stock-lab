@@ -32,7 +32,8 @@ import {
   subItemLabel,
 } from './candidates'
 
-// Daily candidate list (candidate_score_v1, #215): the today list (#276) and the stock page panel.
+// Daily candidate list (candidate_score_v1, #215): the today list (#276); the stock strategy board (#274) reuses the
+// note, reasons and score details.
 // Copy follows UI_COPY_SPEC §10; reason dots and level colours follow DESIGN_SYSTEM §7; in-place terms follow §7;
 // the today table and phone cards follow DESIGN_SYSTEM §5 候選列表.
 
@@ -78,7 +79,7 @@ const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
   { key: 'weight', header: '子項權重', num: true, cell: ({ sub }) => `${Math.round(sub.weight * 100)}%` },
 ]
 
-function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
+export function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
   const rows = CANDIDATE_COMPONENTS.flatMap(({ key, label }) => {
     const component = item.components[key]
     return Object.entries(component?.items ?? {}).map(([name, sub], index): SubItemRow => ({ key, label, component, name, sub, first: index === 0 }))
@@ -106,7 +107,7 @@ function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
 }
 
 // LLM note (#220): DESIGN_SYSTEM §7 inference block, apart from the rule values; never part of the score.
-function CandidateNote({ item }: { item: CandidateItem }) {
+export function CandidateNote({ item }: { item: CandidateItem }) {
   const view = candidateNoteView(item.llm_note)
   return (
     <section className="ai-inference candidate-note" aria-label={NOTE_TITLE} data-note-state={view.kind}>
@@ -126,7 +127,7 @@ function CandidateNote({ item }: { item: CandidateItem }) {
 
 const REASON_COMPONENTS: ReadonlySet<string> = new Set<CandidateComponentKey>(['technical', 'chips', 'news_sentiment', 'group'])
 
-function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
+export function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
   if (reasons.length === 0) return null
   return (
     <ul className="candidate-reasons">
@@ -324,21 +325,6 @@ export function CandidatesSection({ data, loading, error }: { data: CandidatesRe
             : state.kind === 'list'
               ? <TodayCandidateList items={state.items} />
               : <Card><EmptyState title={state.kind === 'zero' ? '當日零候選' : '尚無候選清單'} reason={state.text} /></Card>}
-    </section>
-  )
-}
-
-// Stock page: only rendered when the stock is in the latest run on or before the cutoff.
-export function StockCandidatePanel({ candidate }: { candidate: CandidateItem | null | undefined }) {
-  if (!candidate) return null
-  return (
-    <section className="candidates-section stock-candidate" aria-labelledby="stock-candidate-title">
-      <div className="section-head">
-        <div><div className="eyebrow">每日候選 · 第 {candidate.rank} 名</div><h2 id="stock-candidate-title">明日候選</h2></div>
-        <DateBadge date={formatDate(candidate.trading_date)} />
-      </div>
-      <p className="small-note candidate-disclaimer">{CANDIDATE_DISCLAIMER}</p>
-      <CandidateCard item={candidate} linkToStock={false} detailsOpen />
     </section>
   )
 }

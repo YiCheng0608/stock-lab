@@ -707,6 +707,70 @@ def test_signals_without_an_execution_date_are_commented(wd):
     assert wd.events()[-1] == "schedules_ok"
 
 
+def _levels_steps(path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+    """Daily runs of 2026-10-19 with a strategy_levels step: (run status, step
+    status, finished_at)."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schedule_runs (id INTEGER PRIMARY KEY, job TEXT,"
+            " target_date DATE, status TEXT, started_at DATETIME, finished_at DATETIME,"
+            " summary_json TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schedule_run_steps (id INTEGER PRIMARY KEY,"
+            " schedule_run_id INTEGER, step VARCHAR(40), status VARCHAR(30))"
+        )
+        for run_status, step_status, finished in rows:
+            run_id = conn.execute(
+                "INSERT INTO schedule_runs (job, target_date, status, started_at,"
+                " finished_at, summary_json) VALUES ('daily', '2026-10-19', ?, ?, ?, '{}')",
+                (run_status, _utc_text(NIGHT - 3600), finished),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO schedule_run_steps (schedule_run_id, step, status)"
+                " VALUES (?, 'strategy_levels', ?)",
+                (run_id, step_status),
+            )
+    conn.close()
+
+
+def test_a_failed_strategy_levels_step_is_commented(wd):
+    # #274 (#293 review L2): the step never changes the run status.
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    assert "invariant strategy_levels skip reason=no_schedule_run_steps" in (
+        wd.run("--dry-run").stdout
+    )
+    done = _utc_text(NIGHT - 1800)
+    _levels_steps(db, [("success", "failed", done)])
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant strategy_levels violation target_date=2026-10-19 run_id=1"
+        " status=failed"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：daily run 1（目標日 2026-10-19）的 strategy_levels"
+        " 步驟是 `failed`"
+    ) in dry.stdout
+    # A run still in progress is not judged; the last finished one still is.
+    _levels_steps(db, [("running", "running", None)])
+    assert "invariant strategy_levels violation target_date=2026-10-19 run_id=1" in (
+        wd.run("--dry-run").stdout
+    )
+    # skipped (analyze failed) is the run's own anomaly, not this line's.
+    _levels_steps(db, [("failed", "skipped", done)])
+    assert (
+        "invariant strategy_levels ok target_date=2026-10-19 run_id=3 status=skipped"
+    ) in wd.run("--dry-run").stdout
+    _levels_steps(db, [("success", "success", done)])
+    result = wd.run()
+    assert (
+        "invariant strategy_levels ok target_date=2026-10-19 run_id=4 status=success"
+    ) in result.stdout
+    assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")

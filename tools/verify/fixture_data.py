@@ -37,9 +37,18 @@ from app.domain import (
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
+    STRATEGY_LEVELS_VERSION,
+    RuleEvaluation,
     calculate_group_score,
 )
-from app.strategies import canonical_config_snapshot, canonical_configs
+from app.strategies import (
+    REGISTRY,
+    NextSessionInputs,
+    StrategyInputs,
+    canonical_config_snapshot,
+    canonical_configs,
+)
+from app.strategies import levels as strategy_levels
 from app.indicators import (
     FIELDS,
     INDICATOR_VERSION,
@@ -715,6 +724,87 @@ def _signal_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def _strategy_level_rows() -> list[dict[str, Any]]:
+    """strategy_levels of every signal (#274), computed by the strategies' own
+    formulas from the series: T's evaluation, the next session's close and
+    volume, and the compact condition list the levels step stores."""
+
+    rows = []
+    for signal in _signal_rows():
+        symbol = next(
+            s for s, i in INSTRUMENT_IDS.items() if i == signal["instrument_id"]
+        )
+        instrument = next(row for row in _INSTRUMENTS if row[2] == symbol)
+        strategy = REGISTRY[
+            next(
+                k for k, v in STRATEGY_IDS.items() if v == signal["strategy_version_id"]
+            )
+        ]
+        bars = SERIES[symbol]
+        evidence = signal["rule_evidence_json"]["inputs"]
+        inputs = StrategyInputs(
+            bar_count=evidence["bar_count_60d"],
+            close=bars[-1]["close"],
+            volume=bars[-1]["volume"],
+            ma20=evidence["ma20"],
+            ma60=evidence["ma60"],
+            atr14=None,
+            prior_highs=evidence["prior_20_highs"],
+            prior_volumes=evidence["prior_20_volumes"],
+            group_excess_return_20d=evidence["group_excess_return_20d"],
+            institutional_flow_ratio_5d=evidence[
+                "institutional_flow_to_turnover_ratio_5d"
+            ],
+            margin_change_ratio_5d=evidence["margin_balance_change_ratio_5d"],
+        )
+        evaluation = (
+            RuleEvaluation(True, "passed")
+            if signal["status"] == "conditional"
+            else strategy.evaluate(inputs)
+        )
+        observation = strategy.observation_levels(
+            NextSessionInputs(
+                instrument_type=instrument[4],
+                etf_category=instrument[5],
+                bar_count=inputs.bar_count,
+                is_suspended=False,
+                close=inputs.close,
+                atr14=None,
+                closes=tuple(bar["close"] for bar in bars[-59:]),
+                highs=tuple(bar["high"] for bar in bars[-20:]),
+                volumes=tuple(bar["volume"] for bar in bars[-20:]),
+                group_excess_return_20d=inputs.group_excess_return_20d,
+                institutional_flow_ratio_5d=inputs.institutional_flow_ratio_5d,
+                margin_change_ratio_5d=inputs.margin_change_ratio_5d,
+            )
+        )
+        conditions = [
+            *strategy_levels.common_conditions(
+                instrument_type=instrument[4],
+                etf_category=instrument[5],
+                bar_count=inputs.bar_count,
+                is_suspended=False,
+                evaluation=evaluation,
+            ),
+            *strategy.conditions(inputs, evaluation, observation),
+        ]
+        rows.append(
+            {
+                "id": signal["id"],
+                "signal_id": signal["id"],
+                "levels_version": STRATEGY_LEVELS_VERSION,
+                **strategy_levels.as_json(observation),
+                "next_session_date": NEXT_SESSION,
+                "conditions_json": strategy_levels.compact_conditions(
+                    strategy, conditions
+                ),
+                "price_basis": strategy_levels.PRICE_BASIS_SIGNAL_DAY,
+                "computed_at": COLLECTED_AT,
+            }
+        )
+    return rows
+
+
 # ---- runs and payloads ----
 
 
@@ -1279,6 +1369,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "data_quality": _data_quality_rows(),
     "group_daily_scores": _score_rows(),
     "signals": _signal_rows(),
+    "strategy_levels": _strategy_level_rows(),
     "news_items": _news_rows(),
     "news_llm_results": _llm_rows(),
     "theme_suggestions": _suggestion_rows(),
@@ -1334,7 +1425,6 @@ OMITTED_TABLES: dict[str, str] = {
     "schedule_run_steps": "同 schedule_runs",
     "signal_evaluations": "訊號在最後一個交易日產生，還沒有後續交易日可評估",
     "signal_settlements": "同 signal_evaluations，尚無結算",
-    "strategy_levels": "條件價位還沒有頁面與 API（#274 策略總表加 API 時一起加假資料）",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
     "trading_calendar_days": (
         "休市表只給 analyze 推算規則最早執行日；API 不讀，"
@@ -1470,6 +1560,24 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"stocks/{E}/{S}", "chips", 25),
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
+        # The strategy board (#274): signal levels for the breakout, strategy_levels for the pullback.
+        (f"stocks/{E}/{S}", "strategy_board.as_of", D),
+        (f"stocks/{E}/{S}", "strategy_board.candidate.rank", 1),
+        (
+            f"stocks/{E}/{S}",
+            "strategy_board.strategies[].status",
+            ["conditional", "observation"],
+        ),
+        (
+            f"stocks/{E}/{S}",
+            "strategy_board.strategies[].levels.kind",
+            ["actionable", "observation"],
+        ),
+        (
+            "stocks/{}/{}".format(*NO_DATA_STOCK),
+            "strategy_board.strategies[].status",
+            ["data_incomplete", "data_incomplete"],
+        ),
         (f"stocks/{E}/{S}", "decision_summary.action_state", "conditional_entry"),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars", SESSION_COUNT),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars.-1.date", D),

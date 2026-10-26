@@ -21,7 +21,7 @@ import {
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
-import { CandidateCard, CandidatesSection, StockCandidatePanel } from './CandidateViews'
+import { CandidateCard, CandidatesSection, ScoreDetails } from './CandidateViews'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the candidate card, partial components, zero and not-computed runs, and the stock page panel.
@@ -107,7 +107,6 @@ check(pending.meta === '提示版本 candidate_notes_v1 · 嘗試於 2026/10/16 
 check(candidateNoteView({ ...doneNote(), risks: '' }).kind === 'empty', 'a done note missing a part is not shown half-filled')
 check(candidateNoteView(null).kind === 'empty' && candidateNoteView(undefined).kind === 'empty', 'null and missing notes use the fixed copy')
 check(candidateNoteMeta({ ...doneNote(), model: null, generated_at: '2026-10-16T11:05:00' }) === '模型 未記錄 · 提示版本 candidate_notes_v1', 'unknown model and a time without offset')
-check(render(<StockCandidatePanel candidate={completeItem()} />).includes('data-note-state="done"'), 'stock panel shows the note too')
 
 // ---- zero candidates and not computed ----
 for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
@@ -125,13 +124,10 @@ check(notComputed.includes(CANDIDATE_DISCLAIMER), 'disclaimer stays on top for e
 check(render(<CandidatesSection data={undefined} loading error={null} />).includes('明日候選載入中…'), 'loading skeleton')
 check(render(<CandidatesSection data={undefined} loading={false} error={new Error('API 500: boom')} />).includes('API 500: boom'), 'error reason shown')
 
-// ---- stock page ----
-check(render(<StockCandidatePanel candidate={null} />) === '' && render(<StockCandidatePanel candidate={undefined} />) === '', 'no candidate renders nothing on the stock page')
-const panel = render(<StockCandidatePanel candidate={partialItem()} />)
-check(panel.includes('每日候選 · 第 2 名') && panel.includes('明日候選') && panel.includes(CANDIDATE_DISCLAIMER), 'stock panel heading with rank and disclaimer')
-check(panel.includes('<details class="details candidate-details" open="">'), 'stock panel opens the score details')
-check(!panel.includes('href="/stocks/'), 'stock panel does not link to itself')
-check(panel.includes(PARTIAL_NOTE) && panel.includes('資料 2026/10/16'), 'stock panel keeps partial note and date')
+// ---- stock page: the strategy board's candidate row reuses the score details (stock/strategyBoard.test.tsx) ----
+const details = render(<ScoreDetails item={partialItem()} open={false} />)
+check(details.includes('<details class="details candidate-details">') && details.includes('評分細節、資料日期與來源'), 'score details stay collapsed on the board')
+check(!details.includes('href="/stocks/'), 'score details do not link to the stock page')
 
 // The card alone stays usable without a router link.
 check(render(<CandidateCard item={completeItem()} linkToStock={false} />).includes('<span><strong>2377</strong> 微星</span>'), 'card renders the name without a link')

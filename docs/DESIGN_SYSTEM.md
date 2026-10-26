@@ -127,6 +127,7 @@
 | `feature-card` | 同 card，可點擊；hover 邊線轉主色、上移 4px、陰影 `--shadow-hover`。左上 48px 圓角 12px 圖示底（主色 20% 透明），圖示用主色線條。 |
 | `market-widget` | 小型數據方塊：底 card 色、圓角 12px、padding 16px；上方 muted 標籤，中間 mono 主數字，下方漲跌。**雙列變體**（今日頁大盤概況）：標籤右側放單位，內容分上市、上櫃兩行，每行前置 muted 的「上市」「上櫃」，數字 mono、不換行，成交金額的金額後接 muted 短範圍（[UI_COPY_SPEC §11](UI_COPY_SPEC.md#11-今日頁頁首與大盤概況)）；某一邊沒有資料時該行改為 muted 文案，另一行照常。 |
 | 候選列表 | 今日頁「明日候選」。桌面（641px 以上）用共用 `DataTable`：一檔一列，數字欄（收盤、進場區、停損、目標、RR、總分）不換行；每列最後一欄是「AI 推論 ▸」accent badge 按鈕，展開時在該列下方插入一列整列寬（`colSpan`）的明細列，明細列內容放在 `<details>` 裡（按鈕切換它，未展開時明細列沒有高度）。640px 以下改為一檔一張卡片，不用橫向捲動表格：名次＋代號名稱＋總分 → 市場 · 策略 · 族群 → 收盤／進場區／停損／目標四格（價位不換行；目標放不下時整格自成一列）→ 主要理由 → 「AI 說明」`<details>`。預設列前 10 檔，其餘收進「顯示其餘 N 檔」`<details>`。 |
+| 策略總表 | 個股頁「研究條件」分頁最上方的 `panel`。桌面（641px 以上）用共用 `DataTable`：每個策略一列（策略、狀態、差哪個條件、價位），列下方整列寬的明細列放「條件明細」`<details>`；640px 以下改為每策略一張 card（標題列＝策略＋狀態 badge → 差哪個條件 → 價位區塊 → 條件明細），不用橫向捲動。狀態 badge 變體：成立 success、觀察 primary、資料不足 warning、不適用為預設（muted）；條件明細的「已達成／未達成／無資料」同樣用 success／warning／預設。候選列（該股是資料日候選時）放在表格上方，底色 `--color-bg-alt`、圓角 12px，內含理由、AI 推論區與收合的評分細節。 |
 | 提示列 | 整列寬的 card（圓角 12px、padding 12px 16px），左側 4px 色條（同 Toast，持倉風險用 warning）；一行文字加右側 ghost 連結，窄版可換行。用於今日頁持倉風險提示，有資料才出現。 |
 | `stat-value` | 統計數字：mono、24px、600。 |
 | `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error；`accent` 變體（只用於「AI 推論」）邊線與圓點用 `--color-accent`、文字維持主文字色以保對比。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
@@ -165,8 +166,9 @@
 - 每張資料卡右上角 badge 顯示資料日期（如「資料 10/17」）；排程更新中顯示 warning badge「更新中」。
 - 無資料：欄位留空顯示「—」加 muted 原因，不顯示 0。
 - LLM 推論內容：左側 2px 強調色（`--color-accent`）豎線加「AI 推論」小 badge，與事實分區。
-- 進出點（全站：今日候選、個股頁候選面板與研究條件、行動頁卡片與行動詳情）：進場區主文字色 mono（`.level-entry`）；停損 `--color-warning`（`.level-stop`）；目標 `--color-primary`（`.level-target`）；RR 用 badge；每個價位都帶文字標籤。紅綠只用於漲跌，進出點不用 `--color-error`／`--color-success`，以免讀成漲跌。
-- 候選清單理由：照 API 順序（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。今日頁列表只顯示第一條，展開明細顯示全部；個股頁候選面板顯示全部。
+- 進出點（全站：今日候選、個股頁策略總表與研究動作、行動頁卡片與行動詳情）：進場區主文字色 mono（`.level-entry`）；停損 `--color-warning`（`.level-stop`）；目標 `--color-primary`（`.level-target`）；RR 用 badge；每個價位都帶文字標籤。紅綠只用於漲跌，進出點不用 `--color-error`／`--color-success`，以免讀成漲跌。
+- 觀察價位（個股頁策略總表，條件未成立時的參考價與量）：放在 1px 虛線（`--color-border-hover`）、圓角 8px 的區塊內，區塊第一行是 muted 小字標籤「條件未成立・觀察價位」，區塊文字 muted、價位字重 400；參考停損與參考目標沿用 `.level-stop`／`.level-target` 色並帶「參考」字樣。成立價位不加框、不加此標籤，兩者不放在同一個區塊。觀察價位未產生時區塊改為 warning 色邊與文字。不顯示勝率或成立機率。
+- 候選清單理由：照 API 順序（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。今日頁列表只顯示第一條，展開明細顯示全部；個股頁策略總表的候選列顯示全部。
 
 ## 8. 無障礙與動效
 

@@ -102,6 +102,7 @@ from .units import (
     volume_exact_text,
 )
 from .strategies import REGISTRY
+from .strategy_board import strategy_board
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
     MAX_LIMIT as BARS_MAX_LIMIT,
@@ -2374,6 +2375,12 @@ def stock_detail(
     # The stock's row in the latest daily candidate list on or before the cutoff.
     payload["candidate"] = (
         candidate_for_instrument(db, instrument_row.id, cutoff)
+        if instrument_row
+        else None
+    )
+    # One row per registered strategy on the latest signal date (#274).
+    payload["strategy_board"] = (
+        strategy_board(db, instrument_row, cutoff, payload["candidate"])
         if instrument_row
         else None
     )

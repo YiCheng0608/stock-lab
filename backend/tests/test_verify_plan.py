@@ -61,6 +61,11 @@ TREE = {
     "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
     "stock/StockHeader.tsx": "import { quote } from './stockBars'\n",
     "stock/stockBars.ts": "export const bars = 1\n",
+    "stock/StrategyBoardPanel.tsx": (
+        "import { ScoreDetails } from '../candidates/CandidateViews'\n"
+        "import { unmetText } from './strategyBoard'\n"
+    ),
+    "stock/strategyBoard.ts": "export const unmetText = 1\n",
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
     "candidates/CandidateViews.tsx": "import { AiBadge } from '../news/NewsViews'\n",
     "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",

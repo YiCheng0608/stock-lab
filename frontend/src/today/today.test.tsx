@@ -10,6 +10,8 @@ import { completeItem, listResponse, longList, notComputedResponse, partialItem,
 import type { ActionSummary } from '../types'
 import * as TodayModule from './TodayViews'
 import { overviewBoth, overviewNone, overviewTwseOnly, riskActions } from './today.fixtures'
+import { StrategyBoardPanel } from '../stock/StrategyBoardPanel'
+import { board, conditionalBreakout, observationPullback } from '../stock/strategyBoard.fixtures'
 
 // The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
 declare const require: (id: string) => unknown
@@ -160,8 +162,9 @@ const rule = (selector: string) => new RegExp(`(^|\\n)\\${selector}\\s*\\{([^}]*
 check(/color:\s*var\(--color-warning\)/.test(rule('.level-stop')), `.level-stop uses --color-warning, got 「${rule('.level-stop').trim()}」`)
 check(/color:\s*var\(--color-primary\)/.test(rule('.level-target')), `.level-target uses --color-primary, got 「${rule('.level-target').trim()}」`)
 check(!/--color-(error|success)/.test(rule('.level-stop') + rule('.level-target')), 'levels: no --color-error／--color-success')
-const panel = render('StockCandidatePanel', () => <CandidateModule.StockCandidatePanel candidate={partialItem()} />)
-check(panel.includes('class="level-stop">12.75') && panel.includes('class="level-target">13.92'), '個股頁候選面板: stop and target carry the level classes')
+const boardPanel = render('StrategyBoardPanel', () => <StrategyBoardPanel board={board([conditionalBreakout(), observationPullback()])} candidate={null} />)
+check(boardPanel.includes('class="level-stop">2,364.00') && boardPanel.includes('class="level-target">2,458.00／2,508.00'), '個股頁策略總表: stop and target carry the level classes')
+check(boardPanel.includes('class="level-stop">2,399.64') && boardPanel.includes('class="level-target">2,478.57／2,521.07'), '個股頁觀察價位: reference stop and target carry the level classes')
 const conditional = {
   instrument: { id: 1, exchange: 'TWSE', symbol: '1742', name: '台蠟', instrument_type: 'stock', etf_category: null },
   action_state: 'conditional_entry', primary_strategy: 'breakout_v1', current_price: 21.1, price_as_of: '2026-10-22', data_cutoff: '2026-10-22', data_quality: 'complete',

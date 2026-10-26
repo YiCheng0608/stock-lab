@@ -24,7 +24,7 @@ from app.models import (
     StrategyVersion,
     TechnicalFeature,
 )
-from app.strategies import REGISTRY, NextSessionInputs
+from app.strategies import REGISTRY, Condition, NextSessionInputs
 from app.strategies import levels
 from app.tracking_plans import PlanRequestError, create_plan
 from worker import pipeline
@@ -436,6 +436,12 @@ def level_of(db, signal) -> StrategyLevel:
     return db.scalar(select(StrategyLevel).where(StrategyLevel.signal_id == signal.id))
 
 
+def conditions_of(db, signal, strategy) -> list[dict]:
+    """The full condition list of a stored row (conditions_json is compact)."""
+
+    return levels.expand_conditions(strategy, level_of(db, signal).conditions_json)
+
+
 def test_a_stored_next_session_ex_dividend_rebases_the_trigger(db):
     _instrument, signals = seed(db)
     result = compute_strategy_levels(db, T, now=datetime(2026, 10, 21, 22, 0))
@@ -485,7 +491,7 @@ def test_a_suspended_day_is_recorded_in_levels_and_conditions(db):
     compute_strategy_levels(db, T)
     row = level_of(db, signals["breakout"])
     assert row.availability == "suspended"
-    eligibility = row.conditions_json[0]
+    eligibility = conditions_of(db, signals["breakout"], BREAKOUT)[0]
     assert eligibility["code"] == "eligibility"
     assert eligibility["satisfied"] is False
     assert eligibility["reasons"] == ["signal_day_suspended"]
@@ -495,7 +501,7 @@ def test_conditions_carry_t_results_and_the_next_session_requirement(db):
     _instrument, signals = seed(db)
     compute_strategy_levels(db, T)
     by_code = {
-        item["code"]: item for item in level_of(db, signals["breakout"]).conditions_json
+        item["code"]: item for item in conditions_of(db, signals["breakout"], BREAKOUT)
     }
     assert list(by_code) == [
         "eligibility",
@@ -524,12 +530,155 @@ def test_conditions_carry_t_results_and_the_next_session_requirement(db):
     assert volume["next_session"] == {"min_volume": 557757}
     assert by_code["group_relative_strength"]["satisfied"] is True
     pullback = {
-        item["code"]: item for item in level_of(db, signals["pullback"]).conditions_json
+        item["code"]: item for item in conditions_of(db, signals["pullback"], PULLBACK)
     }
     assert pullback["required_inputs"]["satisfied"] is False
     assert pullback["required_inputs"]["reasons"] == ["history_under_60_bars"]
     assert pullback["pullback_history"]["satisfied"] is False
     assert pullback["pullback_trend"]["satisfied"] is None
+
+
+# ---- conditions_json is stored without each strategy's defaults (#274, L3) ----
+
+
+def test_the_condition_defaults_are_pinned():
+    # The fields a stored row omits: changing them changes how every stored
+    # row reads back, so it comes with a new STRATEGY_LEVELS_VERSION.
+    def filled(strategy):
+        return {
+            code: {k: v for k, v in item.items() if v not in (None, [])}
+            for code, item in levels.condition_defaults(strategy).items()
+        }
+
+    common = {
+        "eligibility": {
+            "code": "eligibility",
+            "kind": "eligibility",
+            "satisfied": True,
+        },
+        "required_inputs": {
+            "code": "required_inputs",
+            "kind": "data",
+            "satisfied": False,
+        },
+    }
+    confirmations = {
+        "group_relative_strength": {
+            "code": "group_relative_strength",
+            "kind": "confirmation",
+            "threshold": 0.0,
+            "operator": "gt",
+        },
+        "institutional_flow": {
+            "code": "institutional_flow",
+            "kind": "confirmation",
+            "threshold": -0.003,
+            "operator": "gte",
+        },
+        "margin_financing": {
+            "code": "margin_financing",
+            "kind": "confirmation",
+            "threshold": 0.05,
+            "operator": "lte",
+        },
+    }
+    assert filled(BREAKOUT) == {
+        **common,
+        "breakout_price": {"code": "breakout_price", "kind": "price", "operator": "gt"},
+        "breakout_volume": {
+            "code": "breakout_volume",
+            "kind": "volume",
+            "threshold": 1.2,
+            "operator": "gte",
+        },
+        **confirmations,
+    }
+    assert filled(PULLBACK) == {
+        **common,
+        "pullback_history": {
+            "code": "pullback_history",
+            "kind": "data",
+            "satisfied": False,
+            "actual": 0,
+            "threshold": 60,
+            "operator": "gte",
+            "next_session": {"bar_count": 1},
+        },
+        "pullback_trend": {"code": "pullback_trend", "kind": "trend", "operator": "gt"},
+        "pullback_above_ma60": {
+            "code": "pullback_above_ma60",
+            "kind": "trend",
+            "operator": "gte",
+        },
+        "pullback_support_zone": {
+            "code": "pullback_support_zone",
+            "kind": "price",
+            "operator": "between",
+        },
+        "pullback_volume": {
+            "code": "pullback_volume",
+            "kind": "volume",
+            "threshold": 0.6,
+            "threshold_high": 1.2,
+            "operator": "between",
+        },
+        **confirmations,
+    }
+
+
+def test_stored_conditions_omit_the_defaults_and_read_back_whole(db):
+    _instrument, signals = seed(db)
+    compute_strategy_levels(db, T)
+    for entry_type, strategy in (("breakout", BREAKOUT), ("pullback", PULLBACK)):
+        stored = level_of(db, signals[entry_type]).conditions_json
+        defaults = levels.condition_defaults(strategy)
+        # No stored field repeats the strategy's default, and no field is null.
+        for item in stored:
+            for key, value in item.items():
+                if key != "code":
+                    assert value != defaults[item["code"]][key], (item["code"], key)
+                    assert value is not None, (item["code"], key)
+            assert "kind" not in item and "operator" not in item
+        full = levels.expand_conditions(strategy, stored)
+        assert [set(item) for item in full] == [set(defaults["eligibility"])] * len(
+            full
+        )
+        # Compacting the full list gives the stored one back, and an older
+        # full row reads the same as its compact form.
+        assert (
+            levels.compact_conditions(
+                strategy, [Condition(**_condition_args(item)) for item in full]
+            )
+            == stored
+        )
+        assert levels.expand_conditions(strategy, full) == full
+    price = {
+        item["code"]: item for item in level_of(db, signals["breakout"]).conditions_json
+    }["breakout_price"]
+    # T's prior high is per row, so it stays; the operator is the default.
+    assert price["threshold"] == 8.93 and "operator" not in price
+
+
+def _condition_args(item: dict) -> dict:
+    return {**item, "reasons": tuple(item["reasons"])}
+
+
+def test_conditions_of_an_unknown_code_are_kept_whole():
+    unknown = {"code": "future_condition", "kind": "price", "satisfied": True}
+    assert levels.expand_conditions(BREAKOUT, [unknown, "noise"]) == [
+        {
+            "code": "future_condition",
+            "kind": "price",
+            "satisfied": True,
+            "actual": None,
+            "threshold": None,
+            "threshold_high": None,
+            "operator": None,
+            "reasons": [],
+            "next_session": None,
+        }
+    ]
+    assert levels.expand_conditions(BREAKOUT, None) == []
 
 
 def signal_rows(db) -> list[dict]:
