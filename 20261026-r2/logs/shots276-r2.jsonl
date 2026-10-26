@@ -1,0 +1,6 @@
+{"name":"r2-fixture-overview-1280","url":"http://127.0.0.1:60009/","width":1280,"ready":true,"png":"r2-fixture-overview-1280.png"}
+{"name":"r2-fixture-overview-390","url":"http://127.0.0.1:60009/","width":390,"ready":true,"png":"r2-fixture-overview-390.png"}
+{"name":"r2-today-first-1280","url":"http://127.0.0.1:60009/","width":1280,"ready":true,"probe":"PROBE first_screen=1280x800 fully_visible_rows=7 of 10 shown wrapped_num_cells=0/60 scrollWidth=1280 clientWidth=1280 overflow=false","png":"r2-today-first-1280.png"}
+{"name":"r2-today-first-390","url":"http://127.0.0.1:60009/","width":390,"ready":true,"probe":"PROBE first_screen=390x844 fully_visible_rows=2 of 10 shown wrapped_num_cells=0/40 scrollWidth=390 clientWidth=390 overflow=false","png":"r2-today-first-390.png"}
+{"name":"r2-real-overview-1280","url":"http://127.0.0.1:60009/","width":1280,"ready":true,"png":"r2-real-overview-1280.png"}
+{"name":"r2-real-overview-390","url":"http://127.0.0.1:60009/","width":390,"ready":true,"png":"r2-real-overview-390.png"}

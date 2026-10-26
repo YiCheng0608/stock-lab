@@ -1,0 +1,7 @@
+6 of 116 today checks failed:
+- 大盤概況（兩邊都有）: shows 「上市 9,334.37 集中市場總計」
+- 大盤概況（兩邊都有）: shows 「上櫃 2,255.45 上櫃股票」
+- 大盤概況: each turnover row carries its short scope
+- 大盤概況: an unknown scope shows the API scope_label
+- header: the page still has an h1 for assistive tech
+- header: a failed load reads 「資料截至 未提供」, got 「class="home-dataline-text">資料截至 未提供 ·  · 」

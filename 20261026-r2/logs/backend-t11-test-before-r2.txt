@@ -1,0 +1,19 @@
+E           page_checks.Fail: TWSE 缺整行 `上市 9,334.37`；TPEx 缺整行 `上櫃 2,255.45`
+E           page_checks.Fail: TWSE 缺整行 `上市 9,334.37`；TPEx 缺整行 `上櫃 2,255.45`
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'TWSE 缺整行 `上市 9,334.37 集中市場總計`'
+E        Input: 'TWSE 缺整行 `上市 9,334.37`；TPEx 缺整行 `上櫃 2,255.45`'
+E           page_checks.Fail: TWSE 缺整行 `上市 9,334.37`
+E       AssertionError: assert '1.12' == '1.13'
+E         
+E         - 1.13
+E         ?    ^
+E         + 1.12
+E         ?    ^
+E           page_checks.Fail: TWSE 缺整行 `+1.12（0.00%）`；TWSE 缺整行 `上市 9,334.37`；TPEx 缺整行 `上櫃 2,255.45`
+FAILED tests/test_verify_checks.py::test_t11_passes_when_the_widgets_show_the_api_and_db_values
+FAILED tests/test_verify_checks.py::test_t11_fails_on_a_widget_that_differs_from_the_api
+FAILED tests/test_verify_checks.py::test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day
+FAILED tests/test_verify_checks.py::test_fixed_rounds_like_the_page - Asserti...
+FAILED tests/test_verify_checks.py::test_t11_passes_on_a_change_that_rounds_at_a_half
+5 failed, 2 passed, 33 deselected in 1.57s

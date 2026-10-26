@@ -1,0 +1,60 @@
+screenshots: 58.0 s
+today: 0.1 s
+news: 0.0 s
+themes: 0.1 s
+stocks: 0.3 s
+actions: 0.1 s
+today API 通過 25 項 = fixture_data.EXPECTED
+today T1 通過 2 張截圖 ready，無錯誤，無橫向捲動
+today T2 通過 `資料 2026/10/16` = facts 2026-10-16
+today T3 通過 `資料截至 2026/10/16 · TWSE／TPEx 官方資料 · 官方單日快照`
+today T4 通過 `資料 2026/10/16`；B = facts 2026-10-16
+today T5 通過 2 張卡 `資料 2026/10/16 · 相對加權指數`；#1 `半導體`
+today T6 通過 前 3 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`：1 `可能正向`、5 `可能負向`
+today T7 通過 `資料 2026/10/16`、`3 檔`；名次列 3、來源行 3 = items；C = facts
+today T8 通過 3 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 5 行；免責句 3 行；入口 `AI 推論 ▸` 3、`AI 說明 ▸` 0
+today T9 通過 6 張卡各有 `資料日`
+today T11 通過 2026-10-16：TWSE 24,012.35、TPEx 251.20；範圍 `上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票`
+today T12 通過 `明日候選`（today-1280.txt 第 33 行）→ `熱門族群`（today-1280.txt 第 157 行）、`重點新聞`（today-1280.txt 第 187 行）
+news API 通過 9 項 = fixture_data.EXPECTED
+news N1 通過 6 張截圖 ready，無錯誤，無橫向捲動
+news N2 通過 domestic 前 3 則、international 前 2 則、official 前 1 則依序出現
+news N3 通過 時間行 domestic 3／3、international 2／2、official 1／1
+news N4 通過 `AI 推論`／AI 判讀 domestic 2／2、international 2／2、official 0／0
+news N5 通過 最新新聞 2026-10-16 09:30（台北）≤ 現在；國內第一則 `發布於 2026/10/16 09:30`
+news N6 通過 id 1：來源事實／AI 摘要與判讀分欄，`模型 claude-sonnet-5-5 · 提示版本 news_v2 · 產生時間 2026/10/16 11:01`
+themes API 通過 13 項 = fixture_data.EXPECTED
+themes G1 通過 5 張截圖 ready，無錯誤，無橫向捲動
+themes G2 通過 `產業榜 · 共 2 個族群` → `資料 2026/10/16`、`題材榜 · 共 2 個族群` → `資料 2026/10/16`；= facts 2026-10-16
+themes G3 通過 1280 表頭與 `半導體`…`電腦及週邊`；390 `#1` → `半導體`
+themes G4 通過 2 個建議：`待核實` 2、`AI 推論` 2 行，`2 個建議`
+themes G5 通過 熱度走勢、五分項皆 `資料 2026/10/16`；`成員資料截至 2026/10/16`
+themes G6 通過 表頭、第一個成員 9101 示範晶圓、`共 3 檔`
+themes G7 通過 今日 #1 = 產業榜 #1 = 詳情 = `半導體`
+stocks API 通過 16 項 = fixture_data.EXPECTED
+stocks S1（TWSE 9101） 通過 8 張截圖 ready，無錯誤，無橫向捲動
+stocks S1（TPEx 9204） 通過 6 張截圖 ready，無錯誤，無橫向捲動
+stocks S2 通過 表頭、第一列、`第 1／1 頁 · 共 8 筆`
+stocks S3（TWSE 9101） 通過 頁首 `資料 2026/10/16`、`來源 臺灣證券交易所`；bars data_as_of 2026-10-16
+stocks S3（TPEx 9204） 通過 頁首 `資料 2026/10/16`、`來源 證券櫃檯買賣中心`；bars data_as_of 2026-10-16
+stocks S4（TWSE 9101） 通過 K 線卡 `資料 2026/10/16`、來源與批次時間
+stocks S4（TPEx 9204） 通過 K 線卡 `資料 2026/10/16`、來源與批次時間
+stocks S5（TWSE 9101） 通過 `資料日期：2026/10/16`、`資料日：2026/10/16 · 價位語意：`；候選 #1：`明日候選`、`AI 推論`、`（推論）`
+stocks S5（TPEx 9204） 通過 `資料日期：2026/10/16`、`資料日：2026/10/16 · 價位語意：`
+stocks S6（TWSE 9101） 通過 1 則相符新聞，時間行 1
+stocks S6（TPEx 9204） 通過 0 則相符新聞，顯示 `尚無與此股已核實關聯的新聞或公告。`
+stocks S7（TWSE 9101） 通過 K 線資料日期 2026/10/16、行情來源 `臺灣證券交易所`、`…資料日 2026/10/16`
+stocks S7（TPEx 9204） 通過 K 線資料日期 2026/10/16、行情來源 `證券櫃檯買賣中心`、`…資料日 2026/10/16`
+stocks S8（TWSE 9101） 通過 facts I 2026-10-16 = API；source `twse`
+stocks S8（TPEx 9204） 通過 facts I 2026-10-16 = API；source `tpex`
+stocks S9（TWSE 9101） 通過 最新一列 2026/10/16；來源行 25 = min(30, 25)
+stocks S9（TPEx 9204） 通過 chips 空，顯示 `尚無可核實的籌碼資料。`
+actions API 通過 8 項 = fixture_data.EXPECTED
+actions A1 通過 3 張截圖 ready，無錯誤，無橫向捲動
+actions A2 通過 1 筆庫存各有 `記錄來源`
+actions A3 通過 `第 1 頁 · 本頁 7 筆 · 共 7 筆`
+actions A4 通過 7 張卡、7 行資料日 ≤ 2026/10/16；data_as_of = facts
+actions A5 通過 7 張卡，沒有 `AI 推論` 與 `（推論）`
+actions A6 通過 TWSE 9101：`資料日：2026/10/16` = data_cutoff
+actions A7 通過 頁首 `9101`／`示範晶圓` = stock.json
+53 checks, 0 failed, 0 undetermined
