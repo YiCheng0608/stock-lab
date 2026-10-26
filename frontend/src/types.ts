@@ -968,10 +968,27 @@ export type ThemeDetail = {
   members: ThemeInlineMember[]
 }
 
-export type ThemeMemberRow = StockDirectoryRow & { theme_evidence?: ThemeEvidence | null }
+// GET /themes/{id}/members sorts (#280); the API also keeps price and name.
+export type ThemeMemberSort = 'turnover' | 'change_pct' | 'return_5d' | 'return_20d' | 'symbol'
+
+export type ThemeMemberRow = StockDirectoryRow & {
+  theme_evidence?: ThemeEvidence | null
+  // Change against the previous session, same rule as the candidate market (#280, UI_COPY_SPEC §8.5).
+  change?: number | null
+  change_pct?: number | null
+  change_status?: 'known' | 'unverified' | 'missing' | string
+  // Only on members_as_of; missing when the member has no bar that day.
+  turnover?: number | null
+  turnover_status?: 'available' | 'unavailable' | 'unknown' | 'missing' | string
+  excess_return_5d?: number | null
+  excess_return_20d?: number | null
+  candidate_rank?: number | null
+  conditional?: boolean
+}
 
 export type ThemeMembersResponse = {
   theme: ThemeSummary
+  members_as_of?: string | null
   items: ThemeMemberRow[]
   meta: Record<string, unknown>
 }

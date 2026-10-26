@@ -55,6 +55,7 @@ import type {
   StockBarsInterval,
   StockBarsResponse,
   ThemeBoard,
+  ThemeMemberSort,
   TrackingResponse,
   ProductTime,
 } from './types'
@@ -76,7 +77,7 @@ import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/The
 import { ThemeSuggestionsSection, type SuggestionNewsState } from './themes/ThemeSuggestionViews'
 import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection } from './candidates/CandidateViews'
-import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
+import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
@@ -597,13 +598,14 @@ function ThemesPage() {
 function ThemePage() {
   const { themeId = '' } = useParams()
   const [memberPage, setMemberPage] = useState(1)
+  const [memberSort, setMemberSort] = useState<ThemeMemberSort>(DEFAULT_MEMBER_SORT)
   useEffect(() => setMemberPage(1), [themeId])
   const detail = useQuery({ queryKey: ['theme', themeId], queryFn: () => getTheme(themeId), enabled: Boolean(themeId) })
   const detailBoard = detail.data?.board
   const board: ThemeBoard | null = detailBoard === 'industry' || detailBoard === 'theme' ? detailBoard : null
   // Rank, quality and the same-board percentiles come from the board itself (shared cache with /themes).
   const boardQuery = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board as ThemeBoard), enabled: board !== null })
-  const members = useQuery({ queryKey: ['theme-members', themeId, memberPage], queryFn: () => getThemeMembers(themeId, { page: memberPage, page_size: MEMBER_PAGE_SIZE, sort: 'price' }), enabled: Boolean(themeId) })
+  const members = useQuery({ queryKey: ['theme-members', themeId, memberSort, memberPage], queryFn: () => getThemeMembers(themeId, memberQuery(memberPage, memberSort)), enabled: Boolean(themeId) })
   const news = useQuery({ queryKey: ['theme-news', themeId], queryFn: () => getNews({ theme_id: themeId, limit: THEME_NEWS_LIMIT }), enabled: Boolean(themeId) })
   if (detail.isLoading) return <Loading />
   if (detail.error) return <ErrorBox error={detail.error} />
@@ -612,6 +614,8 @@ function ThemePage() {
     detail={detail.data}
     board={{ data: boardQuery.data, loading: boardQuery.isLoading && board !== null, error: boardQuery.error }}
     members={{ data: members.data, loading: members.isLoading, error: members.error }}
+    memberSort={memberSort}
+    onMemberSortChange={(sort) => { setMemberSort(sort); setMemberPage(1) }}
     onMemberPageChange={setMemberPage}
     news={{ data: news.data, loading: news.isLoading, error: news.error }}
   />

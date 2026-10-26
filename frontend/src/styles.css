@@ -435,6 +435,20 @@ a.symbol-link:hover { color: var(--color-primary); }
 .trend-stage { width: 100%; height: 240px; }
 .components-returns { margin-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .evidence-cell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+/* Member table (#280, DESIGN_SYSTEM §5): sort select, badges after the name, a stale bar's date under its close. */
+.member-sort { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; white-space: nowrap; }
+.member-sort .filter-select { width: auto; padding: var(--space-2) var(--space-3); }
+.member-note { padding-left: 0; padding-right: 0; }
+.member-name-cell { min-width: 140px; }
+.member-name-cell .badge, .member-card-name .badge { margin: 2px var(--space-1) 0 0; vertical-align: middle; }
+.member-bar-date { display: block; color: var(--color-text-muted); font: 400 12px var(--font-body); }
+.member-cards { display: none; gap: var(--space-3); }
+.member-card { padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.member-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.member-card-name { min-width: 0; font-weight: 600; }
+.member-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.member-card .board-card-grid { margin-top: var(--space-2); }
+.member-card-evidence { margin-top: var(--space-2); font-size: 14px; }
 .theme-news-list { margin: 0; padding: 0; overflow: hidden; list-style: none; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .theme-news-list li { display: grid; grid-template-columns: 176px minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
 .theme-news-list li:last-child { border-bottom: 0; }
@@ -613,6 +627,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   .table-wrap .cell-wrap { min-width: 0; }
   .board-table-wrap { display: none; }
   .board-cards { display: grid; }
+  .member-table-wrap { display: none; }
+  .member-cards { display: grid; }
   .board-controls .board-search { flex: 1 1 100%; max-width: none; }
   .theme-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
   .theme-stats .stat { padding: var(--space-3); }

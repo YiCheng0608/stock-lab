@@ -539,6 +539,18 @@ def _score_rows() -> list[dict[str, Any]]:
                 if ranked
                 else []
             )
+            # Per-member excess returns spread around the group's (#280 member table).
+            member_returns = [
+                {
+                    "instrument_id": INSTRUMENT_IDS[symbol],
+                    "exchange": SYMBOL_EXCHANGE[symbol],
+                    "symbol": symbol,
+                    "excess_return_5d": round(relative["5d"] + 0.01 * (1 - index), 6),
+                    "excess_return_20d": round(relative["20d"] + 0.02 * (1 - index), 6),
+                }
+                for index, symbol in enumerate(members)
+                if ranked
+            ]
             rows.append(
                 {
                     "id": next_id,
@@ -563,6 +575,8 @@ def _score_rows() -> list[dict[str, Any]]:
                         "candidate_identity_version": "instrument-id-v1",
                         "candidate_instruments": candidates,
                         "candidate_symbols": [item["symbol"] for item in candidates],
+                        "member_return_identity_version": "instrument-id-v1",
+                        "member_returns": member_returns,
                         "minimum_candidate_policy": [2, 4],
                         "normalized_values": normalized,
                         "institutional_flow_coverage": {
@@ -1534,11 +1548,21 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"themes/{BIOTECH_ID}", "members_total", 1),
         (f"themes/{COMPUTER_ID}", "members_total", 3),
         (f"themes/{TOP_THEME}", "trend", 5),
-        (f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=price", "meta.total", 3),
         (
-            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=price",
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "meta.total",
+            3,
+        ),
+        # By turnover on T, largest first (#280).
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
             "items[].symbol",
             ["9101", "9102", "9201"],
+        ),
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "items[].candidate_rank",
+            [1, None, 3],
         ),
     ],
     "stocks": [
