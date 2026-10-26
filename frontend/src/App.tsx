@@ -67,9 +67,10 @@ import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeSha
 import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
 import { Term } from './components/Term'
-import { Card, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
+import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { priceDigits } from './stock/stockBars'
+import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
 import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
@@ -549,14 +550,37 @@ function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<St
   ]
 }
 
+const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
+const stockDirectoryKey = (row: StockDirectoryRow) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol
+
+// 640px and below (DESIGN_SYSTEM §5 個股清單, §5.1): symbol and name with the close → 市場 · 類型 → research action and data quality.
+function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsOf: string | null }) {
+  const instrument = row.instrument ?? row
+  const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
+  return (
+    <div className="stock-card">
+      <div className="stock-card-head">
+        <Link className="symbol-link stock-card-name" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol} {instrument.name}</Link>
+        <div className="stock-card-price">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <span className="small-note">{closeDate}</span>}</div>
+      </div>
+      <div className="stock-card-meta">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
+      <div className="stock-card-action"><span>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</span><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></div>
+    </div>
+  )
+}
+
 export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
   if (!rows.length) return <div className="empty panel">沒有符合條件的股票。</div>
-  return <DataTable
-    note="單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。"
-    columns={stockDirectoryColumns(dataAsOf)}
-    rows={rows}
-    rowKey={(row) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol}
-  />
+  return <>
+    <DataTable
+      wrapClassName="stock-table-wrap"
+      note={STOCK_DIRECTORY_NOTE}
+      columns={stockDirectoryColumns(dataAsOf)}
+      rows={rows}
+      rowKey={stockDirectoryKey}
+    />
+    <CardList className="stock-cards" note={<p className="table-note">{STOCK_DIRECTORY_NOTE}</p>} items={rows} itemKey={stockDirectoryKey} renderCard={(row) => <StockDirectoryCard row={row} dataAsOf={dataAsOf} />} />
+  </>
 }
 
 function StocksPage() {
@@ -585,14 +609,12 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
-  const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const enabled = Boolean(exchange && symbol)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled })
   const [barsInterval, setBarsInterval] = useState<StockBarsInterval>('day')
   // The header always reads the daily series; the chart reads the selected interval (same cache entry for 'day').
   const dayBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, 'day'], queryFn: () => getStockBars(exchange, symbol, 'day'), enabled })
   const chartBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, barsInterval], queryFn: () => getStockBars(exchange, symbol, barsInterval), enabled })
-  useEffect(() => setCutoffDraft(asOf), [asOf])
   const tab = parseStockTab(searchParams.get('tab'))
   const setTab = (next: StockTab) => setSearchParams(stockTabSearch(searchParams, next), { replace: true })
   const stockNews = useQuery({ queryKey: ['stock-news', exchange, symbol], queryFn: () => getNews(stockNewsParams(symbol)), enabled: enabled && tab === 'news' })
@@ -625,7 +647,7 @@ function StockPage() {
   return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} loading={dayBars.isLoading}>
-      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" className="input" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="btn btn-secondary btn-sm">套用截止</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期；截止日期不影響頁首收盤、K 線與新聞時間線。</span></form>
+      <StockCutoffControl asOf={asOf} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
     <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>

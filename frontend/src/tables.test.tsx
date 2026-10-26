@@ -145,6 +145,23 @@ const StockTable = component('StockTable')
 const directory = render('StockTable', () => <StockTable {...{ rows: directoryRows, dataAsOf: '2026-10-22' }} />)
 checkAligned('個股清單', directory, ['最近收盤'])
 check(bodyText(directory).includes('21.10') && bodyText(directory).includes('2,510.00'), '個股清單: a column across stocks keeps two decimals')
+// #300 phone cards (DESIGN_SYSTEM §5 個股清單, §5.1): name and close → 市場 · 類型 → action and quality; no table to scroll.
+const count = (markup: string, needle: string) => markup.split(needle).length - 1
+const plain = (markup: string) => markup.replace(/<!-- -->/g, '').replace(/<[^>]+>/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean)
+const directoryCards = directory.slice(directory.indexOf('class="card-list stock-cards"'))
+const stockCards = directoryCards.split('<div class="stock-card">').slice(1)
+check(stockCards.length === 2 && !/<table/.test(directoryCards), `個股清單手機卡: one card per row and no table, got ${stockCards.length}`)
+check(plain(stockCards[0]).join('|') === '1742 台蠟|21.10|上市 · 股票|尚無研究動作|待補', `個股清單手機卡: field order, got ${plain(stockCards[0]).join('|')}`)
+check(plain(stockCards[1]).slice(0, 2).join('|') === '2330 台積電|2,510.00', `個股清單手機卡: two decimals with thousands, got ${plain(stockCards[1]).join('|')}`)
+check(/<div class="stock-card-price">[^<]*<\/div>/.test(stockCards[0]) && directoryCards.indexOf('class="table-note"') < directoryCards.indexOf('class="stock-card"'), '個股清單手機卡: the close is one text run and the unit note leads the cards')
+const staleDirectory = render('StockTable stale', () => <StockTable {...{ rows: [{ ...directoryRows[0], price_as_of: '2026-10-20' }], dataAsOf: '2026-10-22' }} />)
+const staleCard = staleDirectory.slice(staleDirectory.indexOf('<div class="stock-card">'))
+check(plain(staleCard).slice(0, 3).join('|') === '1742 台蠟|21.10|（2026/10/20）', `個股清單手機卡: an older close carries its date under it, got ${plain(staleCard).join('|')}`)
+const manyRows = Array.from({ length: 12 }, (_, i) => ({ ...directoryRows[0], symbol: String(1100 + i), name: `標的${i + 1}` })) as StockDirectoryRow[]
+const manyDirectory = render('StockTable 12', () => <StockTable {...{ rows: manyRows, dataAsOf: '2026-10-22' }} />)
+const manyCards = manyDirectory.slice(manyDirectory.indexOf('class="card-list stock-cards"'))
+const foldedCards = manyCards.slice(manyCards.indexOf('<details class="details card-list-rest">'))
+check(count(manyCards, '<div class="stock-card">') === 12 && count(foldedCards, '<div class="stock-card">') === 2 && foldedCards.includes('<summary>顯示其餘 2 檔</summary>') && count(manyDirectory, '<tr') === 13, '個股清單: the table keeps 12 rows, the phone shows 10 cards and folds 2')
 
 const members = render('ThemeMemberTable', () => <ThemeMemberTable rows={[
   { exchange: 'TWSE', symbol: '1742', name: '台蠟', role: 'member', latest_bar: { date: '2026-10-22', close: 21.1 }, change: 0.1, change_pct: 0.0047619, change_status: 'known', turnover: 1.2e8, turnover_status: 'available', excess_return_5d: 0.01, excess_return_20d: -0.1 },

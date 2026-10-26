@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Term } from '../components/Term'
-import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
+import { Badge, Card, CardList, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
 import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
@@ -116,11 +116,11 @@ function BoardTable({ items }: { items: readonly ThemeBoardItem[] }) {
   return <DataTable wrapClassName="board-table-wrap" className="board-table" note={BOARD_TABLE_NOTE} columns={BOARD_COLUMNS} rows={items} rowKey={(item) => item.theme_id} rowProps={(item) => ({ 'data-theme-id': item.theme_id })} />
 }
 
+// 640px and below: one card per group, the first ten open (DESIGN_SYSTEM §5.1).
 function BoardCards({ items }: { items: readonly ThemeBoardItem[] }) {
   return (
-    <div className="board-cards">
-      {items.map((item) => (
-        <Link className="board-card" key={item.theme_id} to={themeDetailPath(item.theme_id)}>
+    <CardList className="board-cards" items={items} itemKey={(item) => item.theme_id} restLabel={(count) => `顯示其餘 ${count} 個族群`} renderCard={(item) => (
+        <Link className="board-card" to={themeDetailPath(item.theme_id)}>
           <div className="board-card-head">
             <span className="rank">#{item.rank}</span>
             <strong>{item.display_name}</strong>
@@ -133,8 +133,7 @@ function BoardCards({ items }: { items: readonly ThemeBoardItem[] }) {
             <div><dt>成員</dt><dd>{formatMembers(item.eligible_members, item.member_count)}</dd></div>
           </dl>
         </Link>
-      ))}
-    </div>
+    )} />
   )
 }
 
@@ -380,12 +379,11 @@ export function ThemeMemberTable({ rows, withEvidence, membersAsOf = null }: { r
   />
 }
 
-// 640px and below: one card per member, title row with close and change, then turnover and the two returns (DESIGN_SYSTEM §5).
+// 640px and below: one card per member, title row with close and change, then turnover and the two returns; the first ten open (DESIGN_SYSTEM §5, §5.1).
 function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean; membersAsOf: string | null }) {
   return (
-    <div className="member-cards">
-      {rows.map((row) => (
-        <div className="member-card" key={row.exchange + row.symbol}>
+    <CardList className="member-cards" items={rows} itemKey={(row) => row.exchange + row.symbol} renderCard={(row) => (
+        <div className="member-card">
           <div className="member-card-head">
             <div className="member-card-name"><Link className="symbol-link" to={memberPath(row)}>{row.symbol} {row.name}</Link> <MemberBadges row={row} withRole={withEvidence} /></div>
             <div className="member-card-price">
@@ -400,8 +398,7 @@ function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyA
           </dl>
           {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
         </div>
-      ))}
-    </div>
+    )} />
   )
 }
 
