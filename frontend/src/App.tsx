@@ -846,7 +846,7 @@ export function ActionsPage() {
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">
-    <PageTitle eyebrow="行動判斷" title="行動中心" description="依級別排序：持倉風險、今日候選、其他成立條件、接近成立在前；每個標的與資料日最多一列。">
+    <PageTitle eyebrow="行動判斷" title="行動中心" description="依級別排序：持倉風險、今日候選、成立與接近成立在前；每個標的與資料日最多一列。">
       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
       {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
