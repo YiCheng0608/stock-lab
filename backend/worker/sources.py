@@ -141,6 +141,38 @@ class EventRecord:
     payload_sha256: str | None = None
 
 
+@dataclass(frozen=True)
+class MarketSummaryRecord:
+    """One exchange's official market summary for a session (Issue #275).
+
+    A value the source did not supply, or supplied in a shape that cannot be
+    read without guessing, is None; nothing is filled with 0.
+    """
+
+    exchange: str
+    trading_date: date
+    index_name: str
+    index_close: float | None
+    index_change: float | None
+    # A ratio: -0.0181 is -1.81%.
+    index_change_pct: float | None
+    change_pct_method: str
+    # Yuan.
+    turnover: int | None
+    turnover_scope: str
+    advancers: int | None
+    decliners: int | None
+    unchanged: int | None
+    limit_up: int | None
+    limit_down: int | None
+    unmatched: int | None
+    not_comparable: int | None
+    breadth_scope: str
+    source: str
+    data_as_of: str | None = None
+    payload_sha256: str | None = None
+
+
 @dataclass
 class OfficialBatch:
     instruments: list[InstrumentRecord] = field(default_factory=list)
@@ -171,6 +203,8 @@ class OfficialBatch:
     # feeds; the collector then records no current industry observation for
     # the historical session.
     snapshot_feeds: bool = True
+    # Display-only market summaries; a failure is a non-core warning.
+    market_summaries: list[MarketSummaryRecord] = field(default_factory=list)
 
 
 def _merge_event_coverage(values: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -302,6 +336,9 @@ TPEX_SUSPEND_ENDPOINT = f"{TPEX_API}/tpex_spendi_today"
 TPEX_SUSPEND_HISTORY_ENDPOINT = f"{TPEX_API}/tpex_spendi_history"
 TPEX_EVENT_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap04_O"
 TPEX_FUNDAMENTAL_ENDPOINT = f"{TPEX_API}/mopsfin_t187ap14_O"
+# 上櫃股票市場現況: the latest session only.  The official path is spelled
+# ``mainborad``.
+TPEX_HIGHLIGHT_ENDPOINT = f"{TPEX_API}/tpex_mainborad_highlight"
 
 
 # Minimum spacing between requests to one official host.  TWSE's web
@@ -1786,6 +1823,284 @@ def parse_twse_index_history_payload(
     return result
 
 
+# ---- market summaries (Issue #275) ----
+
+TWSE_MARKET_SUMMARY_SOURCE = "twse_mi_index"
+TPEX_MARKET_SUMMARY_SOURCE = "tpex_mainborad_highlight"
+TWSE_INDEX_NAME = "發行量加權股價指數"
+TPEX_INDEX_NAME = "櫃買指數"
+_ROC_TITLE_PREFIX = re.compile(r"^\d{3,4}年\d{1,2}月\d{1,2}日")
+_HTML_TAG = re.compile(r"<[^>]*>")
+_COUNT_TEXT = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
+_COUNT = re.compile(_COUNT_TEXT)
+_COUNT_WITH_LIMIT = re.compile(rf"({_COUNT_TEXT})\(({_COUNT_TEXT})\)")
+_DECIMAL = re.compile(rf"[+-]?{_COUNT_TEXT}(?:\.\d+)?")
+
+
+def market_summary_warning(exchange: str, trading_date: date, exc: Exception) -> str:
+    """The non-core warning for a summary that could not be fetched or read."""
+
+    return (
+        f"{exchange} market summary unavailable for {trading_date.isoformat()}: "
+        f"{type(exc).__name__}: {exc}"
+    )
+
+
+def _count(value: Any) -> int | None:
+    """A non-negative count such as ``1,234``; any other shape is None."""
+
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    text_value = str(value).strip()
+    if not _COUNT.fullmatch(text_value):
+        return None
+    return int(text_value.replace(",", ""))
+
+
+def _count_with_limit(value: Any) -> tuple[int | None, int | None]:
+    """Split TWSE breadth ``247(3)``: 247 issues, 3 of them at the price limit."""
+
+    text_value = "" if value is None else str(value).strip()
+    match = _COUNT_WITH_LIMIT.fullmatch(text_value)
+    if match:
+        return _count(match.group(1)), _count(match.group(2))
+    return _count(text_value), None
+
+
+def _decimal(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        text_value = str(value).strip()
+        if not _DECIMAL.fullmatch(text_value):
+            return None
+        number = float(text_value.replace(",", ""))
+    return number if math.isfinite(number) else None
+
+
+def _positive(value: Any) -> float | None:
+    number = _decimal(value)
+    return number if number is not None and number > 0 else None
+
+
+def _twse_signed_change(sign_cell: Any, points_cell: Any) -> float | None:
+    """TWSE prints the sign as HTML (``<p style ='color:green'>-</p>``) beside
+    unsigned points; an empty mark is a flat close, ``X`` or anything else is
+    not a comparable change."""
+
+    points = _decimal(points_cell)
+    if sign_cell is None or points is None or points < 0:
+        return None
+    sign = _HTML_TAG.sub("", str(sign_cell)).strip()
+    if sign == "+":
+        return points
+    if sign == "-":
+        return -points
+    if sign == "" and points == 0:
+        return 0.0
+    return None
+
+
+def _report_table(
+    tables: list[dict[str, Any]], title: str
+) -> tuple[list[str], list[Any]] | None:
+    """The one table with this title (its ROC date prefix removed), or None."""
+
+    matches = [
+        table
+        for table in tables
+        if _ROC_TITLE_PREFIX.sub("", re.sub(r"\s+", "", str(table.get("title") or "")))
+        == title
+    ]
+    if len(matches) != 1:
+        return None
+    fields = matches[0].get("fields")
+    data = matches[0].get("data")
+    if not isinstance(fields, list) or not isinstance(data, list):
+        return None
+    return [str(item) for item in fields], data
+
+
+def _report_row(
+    table: tuple[list[str], list[Any]] | None, key_field: str, key: str
+) -> dict[str, Any] | None:
+    """The one row whose ``key_field`` is ``key``, by field name; None otherwise.
+
+    A field the table repeats is dropped, so it reads as missing.
+    """
+
+    if table is None:
+        return None
+    fields, data = table
+    if fields.count(key_field) != 1:
+        return None
+    position = fields.index(key_field)
+    rows = [
+        values
+        for values in data
+        if isinstance(values, (list, tuple))
+        and len(values) == len(fields)
+        and str(values[position]).strip() == key
+    ]
+    if len(rows) != 1:
+        return None
+    return {
+        name: value for name, value in zip(fields, rows[0]) if fields.count(name) == 1
+    }
+
+
+def parse_twse_market_summary(
+    payload: Any,
+    *,
+    requested_date: date,
+    data_as_of: str | None = None,
+    payload_sha256: str | None = None,
+) -> MarketSummaryRecord:
+    """Read the TWSE market summary from the date-scoped MI_INDEX report.
+
+    - 價格指數(臺灣證券交易所), row 發行量加權股價指數: close, signed change
+      points and the official percentage.
+    - 大盤統計資訊, row 總計(1~15): turnover of all securities in yuan.
+    - 漲跌證券數合計, column 股票: advancers/decliners with their limit counts
+      (``247(3)``), unchanged, unmatched and 無比價.
+
+    Tables are selected by title, rows by label and values by field name, as
+    the TAIEX parser does.  A missing or ambiguous table, row or field leaves
+    its values None.  A report for another date, or one with none of the
+    three tables, raises.
+    """
+
+    if not isinstance(payload, dict):
+        raise OfficialDataError("TWSE MI_INDEX payload is not a report object")
+    if parse_roc_date(payload.get("date")) != requested_date:
+        raise OfficialDataError(
+            f"TWSE MI_INDEX reported {payload.get('date')!r}, "
+            f"requested {requested_date.isoformat()}"
+        )
+    raw_tables = payload.get("tables")
+    tables = (
+        [table for table in raw_tables if isinstance(table, dict)]
+        if isinstance(raw_tables, list)
+        else []
+    )
+    index_row = _report_row(
+        _report_table(tables, "價格指數(臺灣證券交易所)"), "指數", TWSE_INDEX_NAME
+    )
+    total_row = _report_row(
+        _report_table(tables, "大盤統計資訊"), "成交統計", "總計(1~15)"
+    )
+    breadth_table = _report_table(tables, "漲跌證券數合計")
+    breadth_rows = {
+        label: _report_row(breadth_table, "類型", label)
+        for label in ("上漲(漲停)", "下跌(跌停)", "持平", "未成交", "無比價")
+    }
+    if index_row is None and total_row is None and not any(breadth_rows.values()):
+        raise OfficialDataError(
+            "TWSE MI_INDEX has no index, turnover or breadth table for "
+            f"{requested_date.isoformat()}"
+        )
+
+    index_row = index_row or {}
+    change = _twse_signed_change(index_row.get("漲跌(+/-)"), index_row.get("漲跌點數"))
+    percent = _decimal(index_row.get("漲跌百分比(%)"))
+    change_pct = round(percent / 100, 6) if percent is not None else None
+    if change is not None and change_pct is not None and change * change_pct < 0:
+        # The sign mark and the percentage disagree; neither is trusted.
+        change = change_pct = None
+
+    def stocks(label: str) -> Any:
+        return (breadth_rows[label] or {}).get("股票")
+
+    advancers, limit_up = _count_with_limit(stocks("上漲(漲停)"))
+    decliners, limit_down = _count_with_limit(stocks("下跌(跌停)"))
+    return MarketSummaryRecord(
+        exchange="TWSE",
+        trading_date=requested_date,
+        index_name=TWSE_INDEX_NAME,
+        index_close=_positive(index_row.get("收盤指數")),
+        index_change=change,
+        index_change_pct=change_pct,
+        change_pct_method="official",
+        turnover=_count((total_row or {}).get("成交金額(元)")),
+        turnover_scope="twse_all_securities",
+        advancers=advancers,
+        decliners=decliners,
+        unchanged=_count(stocks("持平")),
+        limit_up=limit_up,
+        limit_down=limit_down,
+        unmatched=_count(stocks("未成交")),
+        not_comparable=_count(stocks("無比價")),
+        breadth_scope="twse_stocks",
+        source=TWSE_MARKET_SUMMARY_SOURCE,
+        data_as_of=data_as_of or requested_date.isoformat(),
+        payload_sha256=payload_sha256,
+    )
+
+
+def parse_tpex_market_highlight(
+    payload: Any,
+    *,
+    requested_date: date,
+    data_as_of: str | None = None,
+    payload_sha256: str | None = None,
+) -> MarketSummaryRecord:
+    """Read TPEx ``tpex_mainborad_highlight`` (上櫃股票市場現況).
+
+    The feed has one row for the latest session.  ``Date`` is ROC
+    (``1151022``) and must equal the requested session; an older row (not yet
+    updated) is rejected, never mapped to another date.  ``DailyTradingValue``
+    is in millions of yuan.  TPEx publishes no percentage, so it is derived
+    from the previous close: ``IndexChange / (CloseIndex - IndexChange)``.
+    """
+
+    if (
+        not isinstance(payload, list)
+        or len(payload) != 1
+        or not isinstance(payload[0], dict)
+    ):
+        raise OfficialDataError("TPEx highlight did not contain exactly one row")
+    row = payload[0]
+    if parse_roc_date(row.get("Date")) != requested_date:
+        raise OfficialDataError(
+            f"TPEx highlight reported Date {row.get('Date')!r}, "
+            f"requested {requested_date.isoformat()}"
+        )
+    close = _positive(row.get("CloseIndex"))
+    change = _decimal(row.get("IndexChange"))
+    change_pct = (
+        round(change / (close - change), 6)
+        if close is not None and change is not None and close - change > 0
+        else None
+    )
+    millions = _count(row.get("DailyTradingValue"))
+    return MarketSummaryRecord(
+        exchange="TPEx",
+        trading_date=requested_date,
+        index_name=TPEX_INDEX_NAME,
+        index_close=close,
+        index_change=change,
+        index_change_pct=change_pct,
+        change_pct_method="derived",
+        turnover=millions * 1_000_000 if millions is not None else None,
+        turnover_scope="tpex_stocks",
+        advancers=_count(row.get("PriceRiseCompanyNumbers")),
+        decliners=_count(row.get("PriceDeclineCompanyNumbers")),
+        unchanged=_count(row.get("PriceFlatCompanyNumbers")),
+        limit_up=_count(row.get("LimitUpCompanyNumbers")),
+        limit_down=_count(row.get("LimitDownCompanyNumbers")),
+        unmatched=_count(row.get("UnmatchedCompanyNumbersSuspensionStocksIncluded")),
+        not_comparable=None,
+        breadth_scope="tpex_stocks",
+        source=TPEX_MARKET_SUMMARY_SOURCE,
+        data_as_of=data_as_of or requested_date.isoformat(),
+        payload_sha256=payload_sha256,
+    )
+
+
 def parse_mops_event_rows(
     payload: Any,
     *,
@@ -2164,6 +2479,8 @@ class TwseAdapter:
         # partial backfill, while the latter must still fail closed below.
         self.fetch_warnings: list[str] = []
         self.no_data_dates: list[date] = []
+        # Read from the same MI_INDEX captures as the TAIEX bars (Issue #275).
+        self.market_summaries: list[MarketSummaryRecord] = []
 
     def _fetch(
         self,
@@ -2194,6 +2511,7 @@ class TwseAdapter:
         _ensure_backfill_window(start, end)
         self.fetch_warnings = []
         self.no_data_dates = []
+        self.market_summaries = []
         self.stock_day_unavailable = []
         self.holiday_unknown = []
         self.holiday_closed_dates = set()
@@ -2350,11 +2668,29 @@ class TwseAdapter:
                     f"price-index TAIEX row for {trading_date.isoformat()}: {endpoint}"
                 )
             bars.extend(taiex_rows)
+            self._read_market_summary(payload, trading_date)
 
         # Keep the newest occurrence for a symbol/day; a current all-feed row
         # and a month-history row are the same official observation.
         unique = {(bar.exchange, bar.symbol, bar.trading_date): bar for bar in bars}
         return list(unique.values()), payloads
+
+    def _read_market_summary(self, payload: FetchedPayload, trading_date: date) -> None:
+        # Display only: a summary that cannot be read is a non-core warning and
+        # never holds back the session's bars.
+        try:
+            self.market_summaries.append(
+                parse_twse_market_summary(
+                    payload.payload,
+                    requested_date=trading_date,
+                    data_as_of=trading_date.isoformat(),
+                    payload_sha256=payload.sha256,
+                )
+            )
+        except Exception as exc:
+            self.fetch_warnings.append(
+                market_summary_warning("TWSE", trading_date, exc)
+            )
 
     def _check_holiday_conflicts(self, bars: Iterable[BarRecord]) -> None:
         for bar in bars:
@@ -2595,6 +2931,7 @@ class TwseAdapter:
                     end, "TWSE MOPS material-information feed"
                 ),
                 snapshot_feeds=False,
+                market_summaries=list(self.market_summaries),
             )
         actions, action_payloads = self.fetch_actions(end)
         # TAIEX is parsed from each date-validated MI_INDEX payload in
@@ -2674,6 +3011,7 @@ class TwseAdapter:
             data_as_of=end.isoformat(),
             no_data_dates=sorted(set(self.no_data_dates)),
             event_coverage=event_coverage,
+            market_summaries=list(self.market_summaries),
         )
 
 
@@ -3007,6 +3345,24 @@ class TpexAdapter:
         suspension_payloads: list[FetchedPayload] = []
         warnings: list[str] = list(chip_warnings)
         notices: list[str] = []
+        # The highlight has only the latest session, so a historical batch
+        # never requests it and a verified no-data day has nothing to read.
+        market_summaries: list[MarketSummaryRecord] = []
+        highlight_payloads: list[FetchedPayload] = []
+        if end not in self.no_data_dates:
+            try:
+                highlight = self._fetch(TPEX_HIGHLIGHT_ENDPOINT, end.isoformat())
+                highlight_payloads.append(highlight)
+                market_summaries.append(
+                    parse_tpex_market_highlight(
+                        highlight.payload,
+                        requested_date=end,
+                        data_as_of=end.isoformat(),
+                        payload_sha256=highlight.sha256,
+                    )
+                )
+            except Exception as exc:
+                warnings.append(market_summary_warning("TPEx", end, exc))
         try:
             suspension_payload = self._fetch(TPEX_SUSPEND_ENDPOINT, end.isoformat())
             suspension_payloads.append(suspension_payload)
@@ -3091,6 +3447,7 @@ class TpexAdapter:
             + bar_payloads
             + chip_payloads
             + action_payloads
+            + highlight_payloads
             + suspension_payloads
             + mops_payloads,
             warnings=warnings,
@@ -3098,6 +3455,7 @@ class TpexAdapter:
             no_data_dates=sorted(set(self.no_data_dates)),
             event_coverage=event_coverage,
             notices=notices,
+            market_summaries=market_summaries,
         )
 
 
@@ -3174,4 +3532,5 @@ class OfficialMarketDataAdapter:
             ),
             notices=twse_batch.notices + tpex_batch.notices,
             snapshot_feeds=twse_batch.snapshot_feeds and tpex_batch.snapshot_feeds,
+            market_summaries=twse_batch.market_summaries + tpex_batch.market_summaries,
         )
