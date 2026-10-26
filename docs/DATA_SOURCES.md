@@ -18,9 +18,10 @@
 | --- | --- | --- | --- |
 | TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。`company/newlisting` 列出 2011 年起所有上市案，只把 60 天內生效、主檔還沒有的列當新上市（`ipo`）。 | 名單是取得當下狀態，不含歷史上下市版本；用法見[標的狀態同步](#標的狀態同步)。 |
 | TPEx universe | [issuer master `mopsfin_t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)、[ETF allowlist `etfFilter`](https://info.tpex.org.tw/api/etfFilter)（POST） | 建立上櫃普通股與 ETF allowlist。 | 混合行情中的權證、CB、ETN、興櫃不當成股票；興櫃 feed 不用來建 universe。 |
-| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
+| TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。同一份 `MI_INDEX`（`type=ALLBUT0999`，當日 collect 也會抓）另讀大盤統計資訊與漲跌證券數，寫[大盤概況](#大盤概況)；成交金額取「總計(1~15)」（含 ETF、權證等全部證券）。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
 | TWSE 交易日曆 | [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule) | 多日回補時作正面排除清單：明列休市日不送 `MI_INDEX`。 | 取得失敗不推論休市，該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本。 |
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。 | 只有收盤值；合成的 O／H／L、成交量與成交額不是真實欄位。 |
+| TPEx 大盤概況 | [`tpex_mainborad_highlight`](https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight)（上櫃股票市場現況；官方路徑拼作 `mainborad`） | 當日 collect 每天 1 個請求，寫[大盤概況](#大盤概況)：`CloseIndex`、`IndexChange`、`DailyTradingValue`（**百萬元**，×1,000,000 存成元，只算上櫃股票）與 `PriceRise`／`PriceDecline`／`PriceFlat`／`LimitUp`／`LimitDown` 各 `…CompanyNumbers`、`UnmatchedCompanyNumbersSuspensionStocksIncluded`；`DailyTradingVolume`（**千股**）、`ListedCompanyNumbers`、`MarketCapitalization` 等不保存。 | 只有最新一天，沒有歷史：`Date` 是民國日期（`1151022`），不等於請求的交易日（例如還沒更新）時不寫並記 warning，不映射到其他日期；漏抓的日子不回補，那天沒有上櫃列。 |
 | TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
 | TWSE 籌碼 | 法人 [`T86`](https://www.twse.com.tw/rwd/zh/fund/T86)；融資 [`MI_MARGN`](https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN) | 法人依外資及陸資、投信、自營商分類；融資讀餘額與增減。 | 請求可能被限流、重導或缺可驗證日期。 |
 | TPEx 籌碼 | 法人 [`insti/dailyTrade`](https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade)；融資 [`margin/balance`](https://www.tpex.org.tw/www/zh-tw/margin/balance) | 同 TWSE 口徑；[三大法人買賣明細](https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html)明列外資及陸資、投信、自營商及合計。 | 缺資料時不補 0；官方檔未列的語意見[法人口徑](#法人口徑)。 |
@@ -32,7 +33,7 @@
 
 ### 核心與非核心來源
 
-collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`）及 TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
+collect 的狀態只看核心來源：日行情（`STOCK_DAY_ALL`、`MI_INDEX`、`dailyQuotes`）、TAIEX、交易日曆、法人與融資。它們的 warning 讓 collect 變 `partial`，daily 不跑 analyze。重大訊息與基本面（`t187ap04_L`、`t187ap14_L`、`mopsfin_t187ap04_O`、`mopsfin_t187ap14_O`）、TPEx 停復牌（`tpex_spendi_today`、`tpex_spendi_history`）及[大盤概況](#大盤概況)（TWSE `MI_INDEX` 的大盤統計與漲跌證券數、TPEx `tpex_mainborad_highlight`；`MI_INDEX` 的日行情與 TAIEX 仍是核心）是非核心：取得失敗記為 `noncore_warnings`，collect 仍為 `success`；被防呆略過的[標的狀態同步](#標的狀態同步)也記為 `noncore_warnings`。缺的事件與基本面照「缺資料留空」處理（`mops_events`／`mops_fundamentals` 的資料品質列為 `partial`）。分類依 warning 文字（`pipeline.NONCORE_WARNING_PATTERN`），新增來源的 warning 未列入前一律算核心。
 
 ### 標的狀態同步
 
@@ -131,6 +132,22 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 ### TAIEX 交易日基準
 
 [`verified_taiex_sessions`](../backend/app/coverage.py) 與 backfill 日期報表的 `taiex_rows` 只計 `exchange=TWSE` 的 TAIEX／TWII index bar；TPEx 同名 index 不增加交易日分母、`taiex_rows` 或普通股票有效 bar 日。交易日校驗要求 active index、日期範圍與 provenance，並可回退到來源與日期相符的 raw `MI_INDEX`。TWSE 基準是兩市場普通股票共用的日期基準，沒有兩市場各自的交易日曆；session 列數不代表欄位可用。
+
+### 大盤概況
+
+`market_summaries` 每個交易所每個交易日一列（unique `exchange + trading_date`），回指 raw（`raw_payload_id`），經 `GET /api/dashboard` 的 `market_overview` 提供（契約見 [V1_SPEC](V1_SPEC.md#大盤概況)）；只用於顯示，不是策略或候選的輸入（[#275](https://github.com/YiCheng0608/stock-lab/issues/275)）。
+
+| 欄位 | 上市（TWSE `MI_INDEX`） | 上櫃（TPEx `tpex_mainborad_highlight`） |
+| --- | --- | --- |
+| 指數 | 「價格指數(臺灣證券交易所)」的「發行量加權股價指數」列：`收盤指數`；漲跌點數是未帶正負號的 `漲跌點數` 加上 `漲跌(+/-)` 欄的 HTML 標記（`<p style ='color:green'>-</p>`）；漲跌幅是官方 `漲跌百分比(%)`，`change_pct_method=official`。標記為空且點數為 0 是平盤，`X` 或其他標記為 null；標記與百分比正負相反時兩者都存 null | `CloseIndex`、`IndexChange`（帶正負號）；官方沒有漲跌幅，以 `IndexChange ÷ (CloseIndex − IndexChange)`（前一日收市指數）計算，`change_pct_method=derived` |
+| 成交金額（元，整數） | 「大盤統計資訊」的「總計(1~15)」，含 ETF、權證等全部證券，`turnover_scope=twse_all_securities`；即一般網站的大盤成交值，等於 OpenAPI `FMTQIK` 的 `TradeValue`（只算股票的「證券合計(1+6+14+15)」不用） | `DailyTradingValue` × 1,000,000，只算上櫃股票，`turnover_scope=tpex_stocks`（10/22 為 225,545 百萬元，等於已收 `dailyQuotes` 四碼普通股成交金額合計） |
+| 漲跌家數 | 「漲跌證券數合計」的「股票」欄（不是「整體市場」）：`247(3)` 拆成上漲 247、漲停 3，跌停同理；持平、未成交、無比價（`not_comparable`）；`breadth_scope=twse_stocks` | 上漲、下跌、平盤、漲停、跌停、未成交（含暫停交易）；沒有無比價；`breadth_scope=tpex_stocks` |
+
+- **選表**：依表名（去掉民國日期前綴）、列名與欄名找，不依表格順序或欄位位置；同名的表、列或欄出現兩次就不取。報酬指數表的同名列不用。
+- **缺值**：缺表、缺列、缺欄或無法解析的值存 null，不補 0；三張表都沒有才整份拒收。整數只接受數字與正確的千分位。
+- **日期**：`MI_INDEX` 的 `date` 與 highlight 的 `Date` 都必須等於請求的交易日，否則整份拒收，不映射到其他日期。
+- **寫入**：上市列與 TAIEX bar 由同一次 collect、同一份 `MI_INDEX` raw 寫入（`raw_payload_id` 相同），不另發請求；歷史回補與 catchup 也寫上市列，highlight 只在抓當日快照的 collect 請求。重抓與日行情相同：值相同不改、只補空欄、不同值保留第一次寫入的值（`--force` 才改寫並改指向新的 raw）；寫入筆數記在 collect run 的 `market_summaries`。擷取、解析或寫入失敗記 `noncore_warnings`（`… market summary unavailable for <日期>: …`），collect 狀態與其他步驟不受影響。
+- **回補**：`python -m worker.cli market-summary --from --to` 只讀已存的上市 `MI_INDEX` raw（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）；上櫃沒有歷史，上線前的日期沒有上櫃列。
 
 ### TPEx 停復牌規則
 

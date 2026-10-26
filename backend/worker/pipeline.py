@@ -77,6 +77,7 @@ from app.tracking import (
     settle,
     track_path,
 )
+from worker.market_summary import store_market_summaries
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -3593,13 +3594,15 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # Warnings from sources the daily analysis does not depend on: MOPS material
-# events and EPS, and the TPEx suspension announcement/history feeds (events
-# only; they never set bar flags), and a skipped instrument status sync (the
-# watchdog reports it).  Every other warning, including any not
-# matched here, concerns OHLCV, the TAIEX baseline, the holiday calendar or
-# chips, and keeps the collect partial.
+# events and EPS, the TPEx suspension announcement/history feeds (events
+# only; they never set bar flags), the display-only market summaries (the
+# TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), and a
+# skipped instrument status sync (the watchdog reports it).  Every other
+# warning, including any not matched here, concerns OHLCV, the TAIEX
+# baseline, the holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
-    r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history) unavailable"
+    r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
+    r"|market summary) unavailable"
     r"|instrument status sync skipped)"
 )
 
@@ -3868,6 +3871,15 @@ def collect(
                     instruments,
                     _raw_id_for_digest(raw_ids, event.payload_sha256),
                 )
+            market_summaries = store_market_summaries(
+                db,
+                list(getattr(batch, "market_summaries", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+                start=start_date,
+                end=score_date,
+                overwrite=force,
+            )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
                 event_coverage = {
@@ -4098,6 +4110,7 @@ def collect(
                 "actions": len(batch.actions),
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
+                "market_summaries": market_summaries,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -4179,6 +4192,7 @@ def collect(
                 "actions": len(batch.actions),
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
+                "market_summaries": market_summaries,
                 "event_coverage": event_coverage,
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,

@@ -88,6 +88,11 @@ TWSE_DAILY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_A
 TPEX_DAILY_ENDPOINT = (
     "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 )
+TWSE_MI_INDEX_ENDPOINT = (
+    "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
+    f"?date={TRADING_DATE:%Y%m%d}&type=ALLBUT0999&response=json"
+)
+TPEX_HIGHLIGHT_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight"
 OFFICIAL_INDUSTRY_SOURCE = "TWSE/TPEx official OpenAPI"
 
 # id, exchange, symbol, name, type, etf_category, industry code, listing date
@@ -812,6 +817,65 @@ def _raw_payload_rows() -> list[dict[str, Any]]:
         raw(
             5, 1, "mops", "https://example.net/mops/material-information", T.isoformat()
         ),
+        raw(6, 1, "twse", TWSE_MI_INDEX_ENDPOINT, T.isoformat()),
+        raw(7, 1, "tpex", TPEX_HIGHLIGHT_ENDPOINT, T.isoformat()),
+    ]
+
+
+# ---- market summaries (dashboard.market_overview, Issue #275) ----
+
+
+def _market_summary_rows() -> list[dict[str, Any]]:
+    """Both exchanges on T with invented values; TPEx has no 無比價 count."""
+
+    common = {"trading_date": T, "data_as_of": T.isoformat()}
+    return [
+        {
+            "id": 1,
+            "exchange": "TWSE",
+            **common,
+            "index_name": "發行量加權股價指數",
+            "index_close": 24012.35,
+            "index_change": -118.4,
+            "index_change_pct": -0.0049,
+            "change_pct_method": "official",
+            "turnover": 412345678901,
+            "turnover_scope": "twse_all_securities",
+            "advancers": 312,
+            "decliners": 655,
+            "unchanged": 98,
+            "limit_up": 4,
+            "limit_down": 2,
+            "unmatched": 9,
+            "not_comparable": 1,
+            "breadth_scope": "twse_stocks",
+            "source": "twse_mi_index",
+            "collected_at": COLLECTED_AT,
+            "raw_payload_id": 6,
+        },
+        {
+            "id": 2,
+            "exchange": "TPEx",
+            **common,
+            "index_name": "櫃買指數",
+            "index_close": 251.2,
+            "index_change": 1.6,
+            "index_change_pct": 0.00641,
+            "change_pct_method": "derived",
+            "turnover": 98765000000,
+            "turnover_scope": "tpex_stocks",
+            "advancers": 420,
+            "decliners": 380,
+            "unchanged": 61,
+            "limit_up": 7,
+            "limit_down": 1,
+            "unmatched": 22,
+            "not_comparable": None,
+            "breadth_scope": "tpex_stocks",
+            "source": "tpex_mainborad_highlight",
+            "collected_at": COLLECTED_AT,
+            "raw_payload_id": 7,
+        },
     ]
 
 
@@ -1205,6 +1269,7 @@ def _portfolio_rows() -> list[dict[str, Any]]:
 TABLES: dict[str, list[dict[str, Any]]] = {
     "ingestion_runs": _ingestion_rows(),
     "raw_payloads": _raw_payload_rows(),
+    "market_summaries": _market_summary_rows(),
     "instruments": _instrument_rows(),
     "strategy_versions": _strategy_rows(),
     "theme_groups": GROUPS,
@@ -1309,6 +1374,18 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),  # 4 conditional entries (one is the ETF) + held 9102
         ("dashboard", "actions", 7),
         ("dashboard", "action_counts.held", 1),
+        ("dashboard", "market_overview.trading_date", D),
+        (
+            "dashboard",
+            "market_overview.exchanges[].status",
+            ["available", "available"],
+        ),
+        ("dashboard", "market_overview.exchanges.0.turnover.value", 412345678901),
+        (
+            "dashboard",
+            "market_overview.exchanges[].turnover.scope_label",
+            ["集中市場總計（含 ETF、權證等）", "上櫃股票"],
+        ),
         ("themes?board=industry&limit=10", "meta.trading_date", D),
         ("themes?board=industry&limit=10", "items", 2),
         ("themes?board=industry&limit=10", "items.0.theme_id", TOP_THEME),

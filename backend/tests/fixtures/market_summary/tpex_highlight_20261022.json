@@ -1,0 +1,18 @@
+[
+ {
+  "Date": "1151022",
+  "ListedCompanyNumbers": "894",
+  "AuthorizedCapital": "845781",
+  "MarketCapitalization": "10667169",
+  "DailyTradingValue": "225545",
+  "DailyTradingVolume": "1018893",
+  "CloseIndex": "381.69",
+  "IndexChange": "-13.73",
+  "PriceRiseCompanyNumbers": "146",
+  "LimitUpCompanyNumbers": "17",
+  "PriceDeclineCompanyNumbers": "659",
+  "LimitDownCompanyNumbers": "11",
+  "PriceFlatCompanyNumbers": "63",
+  "UnmatchedCompanyNumbersSuspensionStocksIncluded": "26"
+ }
+]

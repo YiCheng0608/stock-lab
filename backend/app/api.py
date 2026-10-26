@@ -75,6 +75,7 @@ from .decision import (
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
+from .market_overview import market_overview
 from .theme_table import parse_membership_source
 from .theme_suggestions import (
     DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT,
@@ -1682,6 +1683,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "error": run.error if run else None,
             "updated_at": as_utc_datetime(run.updated_at) if run else None,
         },
+        "market_overview": market_overview(db, verified_as_of),
         "groups": group_rows,
         "signals": [
             signal_dict(db, item, include_evidence=False) for item in signal_rows

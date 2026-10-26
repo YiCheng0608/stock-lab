@@ -152,6 +152,48 @@ class ChipSnapshot(Base):
     )
 
 
+class MarketSummary(Base):
+    """One exchange's official market summary for a session (Issue #275).
+
+    Written by collect from the same MI_INDEX capture as the TAIEX bar (TWSE)
+    and from ``tpex_mainborad_highlight`` (TPEx); a missing value stays null.
+    """
+
+    __tablename__ = "market_summaries"
+    __table_args__ = (
+        UniqueConstraint("exchange", "trading_date", name="uq_market_summary_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(20))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    index_name: Mapped[str] = mapped_column(String(60))
+    index_close: Mapped[float | None] = mapped_column(Float, nullable=True)
+    index_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # A ratio (-0.0181 is -1.81%); official from TWSE, derived for TPEx.
+    index_change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    change_pct_method: Mapped[str] = mapped_column(String(20))
+    # Yuan, an integer; the scope says which securities it counts.
+    turnover: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    turnover_scope: Mapped[str] = mapped_column(String(40))
+    advancers: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decliners: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unchanged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_up: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_down: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unmatched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # TWSE 無比價; TPEx does not publish it.
+    not_comparable: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    breadth_scope: Mapped[str] = mapped_column(String(40))
+    source: Mapped[str] = mapped_column(String(120))
+    data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # The capture time of the raw payload the values came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    raw_payload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_payloads.id"), nullable=True, index=True
+    )
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (
