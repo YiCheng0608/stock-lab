@@ -851,7 +851,7 @@ def _strategy_result(
 def _fewest_unmet(
     strategy_results: dict[str, dict[str, Any]],
 ) -> tuple[str, list[str]] | None:
-    """The judged strategy with the fewest unmet conditions, and their short names.
+    """The judged strategy with the fewest unmet short names, and those names.
 
     Reads only the signals' stored evaluation (``rule_evidence_json``), never
     ``strategy_levels``, so the summary is the same with or without that
@@ -859,7 +859,6 @@ def _fewest_unmet(
     """
 
     best: tuple[str, list[str]] | None = None
-    fewest = 0
     for name, result in strategy_results.items():
         if result.get("status") != "observation" or result.get("data_quality") != (
             "complete"
@@ -878,19 +877,19 @@ def _fewest_unmet(
         ):
             continue
         evaluation = RuleEvaluation(False, "rejected", tuple(judged["reasons"]))
-        unmet = [
-            item["code"]
-            for item in level_rules.judged_conditions(
-                strategy, evaluation, bar_count=bar_count
+        labels = list(
+            dict.fromkeys(
+                strategy.short_label(item["code"]) or "研究條件需要人工核對"
+                for item in level_rules.judged_conditions(
+                    strategy, evaluation, bar_count=bar_count
+                )
+                if item["satisfied"] is False
             )
-            if item["satisfied"] is False
-        ]
-        # Fewest unmet conditions, as the action list's tiers count them.
-        if unmet and (best is None or len(unmet) < fewest):
-            labels = [
-                strategy.short_label(code) or "研究條件需要人工核對" for code in unmet
-            ]
-            best, fewest = (name, labels), len(unmet)
+        )
+        # Fewest short names, the N the line shows (#303 review L1); the
+        # action list's tiers sort by condition count (action_tier_v1).
+        if labels and (best is None or len(labels) < len(best[1])):
+            best = (name, labels)
     return best
 
 

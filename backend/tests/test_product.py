@@ -1844,6 +1844,21 @@ def test_no_condition_ties_keep_the_registry_order(product_api):
     assert summary["primary_reason"]["label"] == "突破條件差 1 項：融資"
 
 
+def test_no_condition_compares_the_short_names_it_shows(product_api):
+    """#303 review L1: two unmet trend conditions are one item, 「趨勢」."""
+
+    summary = _no_condition_summary(
+        product_api,
+        ["close_not_above_prior_20_day_high", "volume_ratio_below_1_20"],
+        ["ma20_not_above_ma60", "close_below_ma60"],
+    )
+    # Two conditions each, but the pullback shows one item: it is the nearer.
+    assert summary["primary_reason"] == {
+        "label": "回踩條件差 1 項：趨勢",
+        "scope": "pullback",
+    }
+
+
 def test_no_condition_without_a_judged_strategy_keeps_its_reason(product_api):
     # Without the stored bar count the pullback history cannot be read.
     summary = _no_condition_summary(
