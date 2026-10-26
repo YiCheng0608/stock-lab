@@ -1,0 +1,12 @@
+== styles.css from e7b25d4
+FAIL news/news.test.tsx: Error: .news-filters needs align-items:\s*stretch, got 「display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-3);」
+    at check (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:735:25)
+    at has (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:780:45)
+    at Object.<anonymous> (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:784:3)
+Failed 1: news/news.test.tsx
+== styles.css from 36caf91
+FAIL news/news.test.tsx: Error: .news-filters needs flex-wrap:\s*nowrap, got 「display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-3);」
+    at check (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:735:25)
+    at has (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:780:45)
+    at Object.<anonymous> (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-300-mobile-layout\frontend\src\news\news.test.tsx:783:3)
+Failed 2: news/news.test.tsx, today/today.test.tsx
