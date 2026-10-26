@@ -315,24 +315,38 @@ def test_undetermined_fails_only_a_fixture_run():
     assert page_checks.blocking(results, fixture=True) == results[1:]
 
 
-def _git(status="", ancestor=0):
+HEAD_SHA = "61714f5" + "0" * 33
+RELEASE_SHA = "8a2b3c4" + "0" * 33
+
+
+def _git(status="", release=HEAD_SHA):
     def git(*args, check=True):
-        out = {"status": status, "rev-parse": "61714f5" + "0" * 33 + "\n"}.get(
-            args[0], ""
-        )
-        code = ancestor if args[0] == "merge-base" else 0
-        return subprocess.CompletedProcess(args, code, out, "")
+        if args[0] == "status":
+            out = status
+        elif args[:2] == ("rev-parse", "HEAD"):
+            out = HEAD_SHA + "\n"
+        elif args[0] == "rev-parse" and args[-1] == page_checks.G7_REF:
+            out = release + "\n"
+        else:
+            out = ""
+        return subprocess.CompletedProcess(args, 0, out, "")
 
     return git
 
 
-def test_g7_needs_committed_master_code(monkeypatch):
+def test_g7_needs_the_committed_release_branch(monkeypatch):
+    """#288: G7 evidence is the program the schedule runs, origin/release/v1."""
     monkeypatch.setattr(page_checks, "git", _git())
     assert page_checks.g7_problems() == []
-    monkeypatch.setattr(page_checks, "git", _git(" M tools/verify/page_checks.py\n", 1))
+    monkeypatch.setattr(
+        page_checks,
+        "git",
+        _git(" M tools/verify/page_checks.py\n", release=RELEASE_SHA),
+    )
     assert page_checks.g7_problems() == [
         "工作樹有未 commit 的檔：tools/verify/page_checks.py",
-        "HEAD 61714f5 不在 origin/master 上（先 git fetch origin master，從它建 worktree）",
+        "HEAD 61714f5 不是 origin/release/v1（8a2b3c4）："
+        "先 git fetch origin release/v1，從它建 worktree",
     ]
 
 

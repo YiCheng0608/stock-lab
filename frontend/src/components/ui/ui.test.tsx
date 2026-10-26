@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import { Navbar, stockSearchPath } from '../Navbar'
-import { Badge, Button, Card, DateBadge, EmptyState, MarketWidget, Skeleton, Stat, Table, Tabs } from '.'
+import { Badge, Button, Card, DataTable, DateBadge, EmptyState, MarketWidget, Skeleton, Stat, Tabs } from '.'
 
 // Standalone regression module (no browser, no server): one minimal render check per ui component
 // (DESIGN_SYSTEM §5) and the navbar (§4).
@@ -25,9 +25,9 @@ check(html(<Button variant="primary">送出</Button>) === '<button type="button"
 check(html(<Button>取消</Button>).includes('btn btn-secondary'), 'Button defaults to secondary')
 check(html(<Button variant="ghost" size="sm" type="submit">更多</Button>).includes('type="submit" class="btn btn-ghost btn-sm"'), 'Button ghost small submit')
 
-// Table: card container, note above, table children.
-const table = html(<Table note="單位：張"><tbody><tr><td className="num">1</td></tr></tbody></Table>)
-check(table.startsWith('<div class="table-wrap"><p class="table-note">單位：張</p><table>') && table.includes('class="num"'), `Table: ${table}`)
+// DataTable: card container, note above, one column definition puts num on th and td.
+const table = html(<DataTable note="單位：張" rows={[1]} rowKey={(row) => row} columns={[{ key: 'v', header: '數值', num: true, cell: (row) => row }]} />)
+check(table.startsWith('<div class="table-wrap"><p class="table-note">單位：張</p><table>') && table.includes('<th class="num">數值</th>') && table.includes('<td class="num">1</td>'), `DataTable: ${table}`)
 
 // Tabs: tablist, selected tab, aria wiring.
 const tabs = html(<Tabs items={[{ id: 'macd', label: 'MACD' }, { id: 'rsi', label: 'RSI' }]} value="rsi" onChange={() => undefined} label="指標面板" idPrefix="indicator" />)

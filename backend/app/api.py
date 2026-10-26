@@ -101,6 +101,7 @@ from .units import (
     trusted_position_shares,
     volume_exact_text,
 )
+from .strategies import REGISTRY
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
     MAX_LIMIT as BARS_MAX_LIMIT,
@@ -3070,38 +3071,16 @@ def instrument_detail(
         "response_generated_at": decision.get("response_generated_at"),
         "quality_summary": _instrument_quality_summary(db, instrument, bars, decision),
         "strategy_conditions": {
-            "breakout": {
-                "label": "突破條件",
-                "requires": [
-                    "20 日前期高點",
-                    "20 日前期成交量",
-                    "族群相對 TAIEX 的 20 日超額報酬",
-                    "5 日法人流向",
-                    "5 日融資餘額變化率",
-                ],
+            strategy.kind: {
+                "label": strategy.label_zh,
+                "requires": list(strategy.requires_zh),
                 "source": "系統固定研究規則",
                 "technical": {
-                    "rule_label": "突破條件固定版本",
+                    "rule_label": f"{strategy.label_zh}固定版本",
                     "basis_label": "只使用資料日以前的已驗證資料",
                 },
-            },
-            "pullback": {
-                "label": "回踩條件",
-                "requires": [
-                    "60 日有效行情日數",
-                    "MA20",
-                    "MA60",
-                    "20 日前期成交量",
-                    "族群相對 TAIEX 的 20 日超額報酬",
-                    "5 日法人流向",
-                    "5 日融資餘額變化率",
-                ],
-                "source": "系統固定研究規則",
-                "technical": {
-                    "rule_label": "回踩條件固定版本",
-                    "basis_label": "只使用資料日以前的已驗證資料",
-                },
-            },
+            }
+            for strategy in REGISTRY.values()
         },
         "signals": [signal_dict(db, item) for item in signals],
     }

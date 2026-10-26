@@ -32,15 +32,14 @@ from app.domain import (
     CANDIDATE_NOTE_PROMPT_VERSION,
     CANDIDATE_SCORE,
     CANDIDATE_SCORE_VERSION,
-    CANONICAL_CONFIGS,
     GROUP_SCORE_WEIGHTS,
     HOT_GROUP_CONFIG,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
     calculate_group_score,
-    canonical_config_snapshot,
 )
+from app.strategies import canonical_config_snapshot, canonical_configs
 from app.indicators import (
     FIELDS,
     INDICATOR_VERSION,
@@ -596,7 +595,7 @@ def _strategy_rows() -> list[dict[str, Any]]:
             "active": True,
             "created_at": CREATED_AT,
         }
-        for key, config in CANONICAL_CONFIGS.items()
+        for key, config in canonical_configs().items()
     ]
 
 

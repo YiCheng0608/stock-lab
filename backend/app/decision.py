@@ -32,6 +32,7 @@ from .level_semantics import (
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
+from .strategies import REGISTRY
 from .units import position_held
 from .models import (
     ChipSnapshot,
@@ -271,7 +272,7 @@ def _prepare_decision_context(
         for signal, strategy_version in db.execute(
             signal_query.order_by(desc(Signal.signal_date), desc(Signal.id))
         ).all():
-            if strategy_version.name in {"breakout_v1", "pullback_v1"}:
+            if strategy_version.name in REGISTRY:
                 signals_by_instrument[signal.instrument_id].setdefault(
                     strategy_version.name, signal
                 )
@@ -589,7 +590,7 @@ def _latest_strategy_signals(
     rows = db.execute(query.order_by(desc(Signal.signal_date), desc(Signal.id))).all()
     result: dict[str, Signal] = {}
     for signal, name in rows:
-        if name in {"breakout_v1", "pullback_v1"}:
+        if name in REGISTRY:
             result.setdefault(name, signal)
     return result
 
@@ -688,21 +689,17 @@ def _qualified_groups_for_instrument(
 
 
 def _signal_levels(signal: Signal, strategy_name: str) -> dict[str, float | None]:
+    fields = REGISTRY[strategy_name].level_fields
     return {
-        "trigger_price": _finite(
-            signal.breakout_price
-            if strategy_name == "breakout_v1"
-            else signal.reference_entry
-        ),
-        "entry_low": _finite(
-            signal.pullback_low if strategy_name == "pullback_v1" else None
-        ),
-        "entry_high": _finite(
-            signal.pullback_high if strategy_name == "pullback_v1" else None
-        ),
-        "invalid_price": _finite(signal.invalid_price),
-        "target_1": _finite(signal.target_1),
-        "target_2": _finite(signal.target_2),
+        key: _finite(getattr(signal, fields[key])) if key in fields else None
+        for key in (
+            "trigger_price",
+            "entry_low",
+            "entry_high",
+            "invalid_price",
+            "target_1",
+            "target_2",
+        )
     }
 
 
@@ -754,11 +751,7 @@ def _strategy_result(
         missing.append("signal_data_quality")
     if signal.status in {"data_incomplete", "invalid_levels"}:
         missing.append(signal.status)
-    required_level_keys = (
-        ("trigger_price", "invalid_price", "target_1")
-        if name == "breakout_v1"
-        else ("entry_low", "entry_high", "invalid_price", "target_1")
-    )
+    required_level_keys = REGISTRY[name].required_levels
     level_missing: list[str] = []
     for key in required_level_keys:
         value = levels.get(key)
@@ -798,23 +791,7 @@ def _strategy_result(
     level_semantics = build_level_semantics(
         strategy_name=name,
         strategy_version=strategy_version.version if strategy_version else None,
-        field_mapping=(
-            {
-                "trigger_price": "breakout_price",
-                "invalid_price": "invalid_price",
-                "target_1": "target_1",
-                "target_2": "target_2",
-            }
-            if name == "breakout_v1"
-            else {
-                "trigger_price": "reference_entry",
-                "entry_low": "pullback_low",
-                "entry_high": "pullback_high",
-                "invalid_price": "invalid_price",
-                "target_1": "target_1",
-                "target_2": "target_2",
-            }
-        ),
+        field_mapping=REGISTRY[name].level_fields,
         response_generated_at=response_generated_at,
     )
     product_time = build_signal_product_time(
@@ -1040,7 +1017,7 @@ def build_decision_summary(
             strategy_version=strategy_versions.get(name),
             response_generated_at=generated_at,
         )
-        for name in ("breakout_v1", "pullback_v1")
+        for name in REGISTRY
     }
     strategy_results = {
         name: result for name, result in strategy_results.items() if result is not None
@@ -1164,10 +1141,20 @@ def build_decision_summary(
             conflicts.append("兩個策略的觸發價差異超過 5%")
     if conditional and observation:
         breakout = next(
-            (item for item in valid_results if item["strategy"] == "breakout_v1"), None
+            (
+                item
+                for item in valid_results
+                if REGISTRY[item["strategy"]].entry_type == "breakout"
+            ),
+            None,
         )
         pullback = next(
-            (item for item in valid_results if item["strategy"] == "pullback_v1"), None
+            (
+                item
+                for item in valid_results
+                if REGISTRY[item["strategy"]].entry_type == "pullback"
+            ),
+            None,
         )
         if (
             breakout
@@ -1178,24 +1165,25 @@ def build_decision_summary(
             if breakout["levels"]["trigger_price"] < pullback["levels"]["entry_low"]:
                 conflicts.append("突破觸發價低於回踩區")
 
+    # A conditional setup is taken in REGISTRY order; a wait prefers the
+    # pullback entry type.
     selected: dict[str, Any] | None = None
     if conditional:
-        selected = next(
-            (item for item in conditional if item["strategy"] == "breakout_v1"),
-            conditional[0],
-        )
+        selected = conditional[0]
     elif observation:
         selected = next(
-            (item for item in observation if item["strategy"] == "pullback_v1"),
+            (
+                item
+                for item in observation
+                if REGISTRY[item["strategy"]].entry_type == "pullback"
+            ),
             observation[0],
         )
     if complete and selected:
         selected_levels = selected["levels"]
         levels.update(
             {
-                "trigger_kind": "breakout"
-                if selected["strategy"] == "breakout_v1"
-                else "pullback",
+                "trigger_kind": REGISTRY[selected["strategy"]].entry_type,
                 "trigger_price": selected_levels.get("trigger_price"),
                 "entry_low": selected_levels.get("entry_low"),
                 "entry_high": selected_levels.get("entry_high"),
@@ -1265,7 +1253,7 @@ def build_decision_summary(
     elif observation:
         action_state = (
             "wait_pullback"
-            if selected and selected["strategy"] == "pullback_v1"
+            if selected and REGISTRY[selected["strategy"]].entry_type == "pullback"
             else "wait_breakout"
         )
     else:
@@ -1408,10 +1396,8 @@ def build_decision_summary(
 
     action_field_mapping = {
         "trigger_price": (
-            "breakout_price"
-            if selected and selected.get("strategy") == "breakout_v1"
-            else "reference_entry"
-            if selected and selected.get("strategy") == "pullback_v1"
+            REGISTRY[selected["strategy"]].level_fields["trigger_price"]
+            if selected and selected.get("strategy") in REGISTRY
             else "trigger_price"
         ),
         "entry_low": "pullback_low",
@@ -1792,7 +1778,7 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
                 Signal.signal_date == as_of,
                 Signal.status == "conditional",
                 Signal.data_quality == "complete",
-                StrategyVersion.name.in_({"breakout_v1", "pullback_v1"}),
+                StrategyVersion.name.in_(list(REGISTRY)),
             )
         ).all()
     )
@@ -1806,7 +1792,7 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
                 Signal.signal_date == as_of,
                 Signal.status == "observation",
                 Signal.data_quality == "complete",
-                StrategyVersion.name.in_({"breakout_v1", "pullback_v1"}),
+                StrategyVersion.name.in_(list(REGISTRY)),
             )
         ).all()
     )

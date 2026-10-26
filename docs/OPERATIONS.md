@@ -164,8 +164,8 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 位置 | 路徑 | 說明 |
 | --- | --- | --- |
 | 資料目錄 | `C:/Users/YiCheng/stock-lab-data/` | 正式 `stock.db`、`raw/`、`logs/`。排程以 `-DataDir` 傳入並設成子行程的 `STOCK_DATA_DIR`（預設依序為 `STOCK_DATA_DIR`、`%USERPROFILE%\stock-lab-data`），不由 cwd 推導。 |
-| 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` | repo 的獨立 clone，跟著發佈 branch：平常是 `master`；版本驗收窗口（V1 G7）期間是 `release/v1`，master 合併的新版本改動不會進排程，由統籌依[工作手冊](GITHUB_WORKFLOW.md#任務流程)第 6 步推進（使用者 2026-10-26 決定）。排程**只**從這裡執行，不從 `master` 管理 checkout 或任務 worktree。每次執行先 `git pull --ff-only`（拉目前 branch 的 upstream）。切換：`git fetch origin` 後 `git checkout -b release/v1 --track origin/release/v1`，回到平常用 `git checkout master`；兩者都在排程沒在跑時做，`git status -sb` 核對。 |
-| Python | `C:/Users/YiCheng/stock-lab-release/.venv` | 依 `backend/validation-requirements.lock.txt` 安裝；依賴變更的 PR 合併後由統籌在此 venv 重裝。預設依序為 `-PythonPath`（別名 `-Python`）、`STOCK_PYTHON`、發佈 checkout 的 `.venv`。 |
+| 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` | repo 的獨立 clone，跟著發佈 branch：平常是 `master`；版本驗收窗口（V1 G7）期間是 `release/v1`，master 合併的新版本改動不會進排程；V1 的改動以 PR 進 `release/v1`（受 ruleset 保護，[工作手冊](GITHUB_WORKFLOW.md#任務流程)第 6 步，使用者 2026-10-26 決定）。排程**只**從這裡執行，不從 `master` 管理 checkout 或任務 worktree。每次執行先 `git pull --ff-only`（拉目前 branch 的 upstream）。切換：`git fetch origin` 後 `git checkout -b release/v1 --track origin/release/v1`，回到平常用 `git checkout master`；兩者都在排程沒在跑時做，`git status -sb` 核對。 |
+| Python | `C:/Users/YiCheng/stock-lab-release/.venv` | 依發佈 branch 的 `backend/validation-requirements.lock.txt` 安裝；發佈 branch 收到依賴變更（或切換發佈 branch）後由統籌在排程閒置時重裝。窗口期間 master 上的依賴變更不裝進這個 venv。預設依序為 `-PythonPath`（別名 `-Python`）、`STOCK_PYTHON`、發佈 checkout 的 `.venv`。 |
 
 首次建立：`git clone` 到發佈 checkout，建 `.venv` 並安裝依賴；以 SQLite backup API 把已初始化的 DB 複製成資料目錄的 `stock.db`（有 WAL 時不裸複製主檔），再於發佈 checkout 註冊工作。daily 開頭只在 DB 的 Alembic revision 不是程式 head 時才跑 `init_db`（含整庫 migration 完整性檢查，多年 DB 上要數分鐘）；已在 head 時直接開始。
 
