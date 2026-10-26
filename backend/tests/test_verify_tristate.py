@@ -12,6 +12,7 @@ replays one of these with the run's values.
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 
 import pytest
@@ -242,6 +243,56 @@ def test_zero_candidates_fail_when_the_db_has_them(tmp_path):
     run = _run(tmp_path, payloads, {"today-1280": "明日候選\n當日零候選\n"})
     with pytest.raises(page_checks.Fail, match="DB candidate_runs 2026-10-22 有 20 檔"):
         page_checks.t7(run)
+
+
+class CopyRun(FakeRun):
+    """Reads its facts with db_facts.py from a DB file, as the real run does."""
+
+    facts = page_checks.Run.facts
+
+
+def test_a_copy_without_a_current_version_run_runs_to_the_end(tmp_path, monkeypatch):
+    # #307: the #306 copy had only candidate_score_v1 runs, and the first
+    # run.facts() raised TypeError, so no check of any page had a result.
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE candidate_runs (id INTEGER PRIMARY KEY, trading_date TEXT,"
+            " score_version TEXT, candidate_count INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO candidate_runs VALUES (1, ?, 'candidate_score_v1', 20)", (DAY,)
+        )
+    conn.close()
+    payloads = {
+        "candidates": {"status": "not_computed", "trading_date": None, "items": []},
+        "actions?limit=20": {
+            "items": [],
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": [{"tier": 1, "label": "今日候選", "shown": 0}]},
+        },
+        "actions?tier=0&limit=100": {"items": []},
+    }
+    pages = {
+        "today-1280": "明日候選\n尚無候選清單\n",
+        "actions-1280": "第 1 級\n今日候選\n顯示 0／0 檔\n",
+    }
+    run = CopyRun(tmp_path, payloads, pages)
+    run.db = db
+    _only(monkeypatch, "today", "T7")
+    _only(monkeypatch, "actions", "A8")
+    t7, a8 = [
+        *page_checks.run_page(run, "today", []),
+        *page_checks.run_page(run, "actions", []),
+    ]
+    assert (t7.status, a8.status) == ("通過", "通過")
+    assert "DB 也沒有當日候選" in t7.detail
+    assert "沒有今日候選列" in a8.detail
+    facts = json.loads((tmp_path / "out" / "facts.json").read_text(encoding="utf-8"))
+    assert (
+        facts["candidate_run_latest_trading_date"],
+        facts["candidate_count_latest"],
+    ) == (None, None)
 
 
 def test_actions_without_cards_fail_when_the_api_has_items(tmp_path):
