@@ -1,0 +1,248 @@
+{
+  "id": "2459",
+  "canonical_key": "news:cna:601f9ce960657036f680991782d4563a255cfe4a97874ab3e7843a9ba822f03c",
+  "dedupe_cluster_id": "news-title:43d5ac221751e2385fced42b1f50b3a3",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "中央社",
+  "source": {
+    "name": "中央社",
+    "url": "https://www.cna.com.tw/news/afe/202610220434.aspx",
+    "url_kind": "item"
+  },
+  "source_item_id": "CNA/2026-10-22/202610220434",
+  "title": "91APP公布遭自動化攻擊階段調查　承諾補償消費者財損",
+  "summary": "（中央社記者趙敏雅台北22日電）電商技術服務公司91APP今天表示，Commerce Cloud其中一座訂單資料庫遭AI自動化滲透工具攻擊而被非法存取，這次事件僅涉及該座資料庫，遭存取的是訂單資訊，不包含信用卡等支付工具資訊。91APP表示，對經確認因此事件遭詐騙而受有財產損失的消費者，提供全面補償。",
+  "description": "（中央社記者趙敏雅台北22日電）電商技術服務公司91APP今天表示，Commerce Cloud其中一座訂單資料庫遭AI自動化滲透工具攻擊而被非法存取，這次事件僅涉及該座資料庫，遭存取的是訂單資訊，不包含信用卡等支付工具資訊。91APP表示，對經確認因此事件遭詐騙而受有財產損失的消費者，提供全面補償。",
+  "summary_preview": "（中央社記者趙敏雅台北22日電）電商技術服務公司91APP今天表示，Commerce Cloud其中一座訂單資料庫遭AI自動化滲透工具攻擊而被非法存取，這次事件僅涉及該座資料庫，遭存取的是訂單資訊，不包含信用卡等支付工具資訊。91APP表…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-22T15:06:01+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-22T15:06:01+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T15:06:01+00:00",
+        "utc": "2026-10-22T15:06:01+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-22T18:00:03.187473+00:00",
+        "utc": "2026-10-22T18:00:03.187473+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-26T20:03:08.420879+00:00",
+    "legacy": {
+      "published_at": "2026-10-22T15:06:01+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T15:06:01",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-22T18:00:03.187473+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-26T20:03:08.420879+00:00",
+  "collected_at": "2026-10-22T18:00:03.187473+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "2582aef3b79d485cd914f603e1a3bf125004eb866137498f6f79591bb2c03e9d",
+  "detail_url": "/news/2459",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "電商技術公司91APP訂單資料庫遭AI自動化工具入侵，承諾補償受詐消費者。",
+    "symbol_candidates": [],
+    "theme_candidates": [
+      {
+        "theme": "電商技術服務",
+        "reason": "91APP 為電商技術服務商，資料外洩事件影響其商譽與客戶信任。"
+      },
+      {
+        "theme": "資安",
+        "reason": "事件凸顯 AI 自動化攻擊對企業資料庫的威脅。"
+      }
+    ],
+    "impact_direction": "negative",
+    "impact_scope": "theme",
+    "impact_rationale": "資料外洩與賠償承諾對相關服務商形成負面衝擊，但來源未提及上市公司。",
+    "unsupported": false,
+    "model": "claude-haiku-5-5",
+    "prompt_version": "news_v1",
+    "input_hash": "2a2b6552869540d8fe8dd3c8e39036fb085ef183a5452f03f14a49b1f6ba0368",
+    "generated_at": "2026-10-22T18:01:09.235381+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7203,
+    "endpoint": "https://feeds.feedburner.com/rsscna/finance",
+    "data_as_of": "2026-10-22T18:00:03.187473"
+  }
+}

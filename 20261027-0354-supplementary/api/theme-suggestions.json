@@ -1,0 +1,1214 @@
+{
+  "items": [
+    {
+      "id": 44,
+      "theme_key": "pcb",
+      "display_name": "PCB",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 60,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2752,
+          "title": "下周觀盤重點、個股機會、以及該留意提防的風險",
+          "source_name": "鉅亨網",
+          "news_date": "2026-10-23",
+          "theme_text": "PCB",
+          "reason": "來源列為中長線成長動能之一"
+        },
+        {
+          "news_id": 2290,
+          "title": "台股PCB類抽籤拚賺9萬元價差！4檔承銷價、申購日整理",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "PCB",
+          "reason": "標題點名PCB類抽籤"
+        },
+        {
+          "news_id": 2224,
+          "title": "狂殺1300點破季線！台股收跌846點 PCB、記憶體齊翻黑",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "PCB",
+          "reason": "報導指PCB族群開高走低。"
+        },
+        {
+          "news_id": 2148,
+          "title": "國票證券：台股短線仍以震盪整理為主",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "PCB",
+          "reason": "券商建議留意PCB族群"
+        },
+        {
+          "news_id": 2142,
+          "title": "〈台股開盤〉外資翻多激勵大盤開高漲逾400點 CCL、PCB強勢噴出",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "PCB",
+          "reason": "電路板族群標題點名強勢"
+        }
+      ]
+    },
+    {
+      "id": 92,
+      "theme_key": "台股大盤",
+      "display_name": "台股大盤",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 43,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2822,
+          "title": "台股暴跌不用慌　杜金龍曝「這時」上看5萬3",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股大盤",
+          "reason": "評論台股近期修正幅度與後續可能的利空時點"
+        },
+        {
+          "news_id": 2821,
+          "title": "台股重挫846點跌破季線！杜金龍曝「關鍵轉折日」主升段上看5萬3　點名2檔＋1族群",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股大盤",
+          "reason": "加權指數大跌並跌破季線，反映市場整體走弱"
+        },
+        {
+          "news_id": 2820,
+          "title": "別被台積電ADR反彈騙了？專家爆下周恐再崩1000點 5大未爆彈還沒拆",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股大盤",
+          "reason": "專家對台股短線走勢的判斷影響整體市場"
+        },
+        {
+          "news_id": 2593,
+          "title": "台股中小、科技基金 　今年績效暴衝９成旺",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "台股大盤",
+          "reason": "加權指數今年漲幅居亞股首位。"
+        },
+        {
+          "news_id": 2550,
+          "title": "台股暴跌846點免驚？ 郭哲榮：4天後將大逆轉",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "台股大盤",
+          "reason": "評論對象為加權指數後市走勢"
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "theme_key": "外資動向",
+      "display_name": "外資動向",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 39,
+      "first_news_date": "2026-10-18",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2802,
+          "title": "外資倒貨錯殺好股？台股失守季線 法人點出反攻條件 看好聯電、南亞科等16檔",
+          "source_name": "工商時報",
+          "news_date": "2026-10-24",
+          "theme_text": "外資動向",
+          "reason": "外資10月大幅賣超台股。"
+        },
+        {
+          "news_id": 2544,
+          "title": "外資千億爆砍後接「4天空窗期」...台股玩完了？野村曬數據搖頭：還有戲",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "外資動向",
+          "reason": "外資大舉賣超為新聞核心"
+        },
+        {
+          "news_id": 2384,
+          "title": "外資轉賣超816億元　提款ETF居多",
+          "source_name": "中央社",
+          "news_date": "2026-10-22",
+          "theme_text": "外資動向",
+          "reason": "外資由終止連賣轉為再度賣超"
+        },
+        {
+          "news_id": 2361,
+          "title": "台股失守季線下探46K 外資砍816.56億元期貨同步轉空",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "外資動向",
+          "reason": "外資大幅賣超台股與期貨轉空。"
+        },
+        {
+          "news_id": 2358,
+          "title": "台股失守季線！三大法人賣超千億、外資狂砍816億台積電也遭調節",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "外資動向",
+          "reason": "三大法人與外資大幅賣超台股。"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "theme_key": "ai概念股",
+      "display_name": "AI 概念股",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 32,
+      "first_news_date": "2026-10-18",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2589,
+          "title": "黃仁勳一句話引爆賣壓？陳重銘揭3大利空：台股要小心",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI 概念股",
+          "reason": "原文提及 AI 概念股面臨修正壓力"
+        },
+        {
+          "news_id": 2568,
+          "title": "費半狂跌6%！台股連假後恐迎震撼彈？周代運曝週二開盤「2大觀察指標」",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI 概念股",
+          "reason": "AI投資疑慮是此次修正的主要因素"
+        },
+        {
+          "news_id": 2566,
+          "title": "AI投資疑慮加劇美科技股重挫　油價上漲拖累日股收低",
+          "source_name": "中央社",
+          "news_date": "2026-10-23",
+          "theme_text": "AI 概念股",
+          "reason": "美科技股因AI投資疑慮重挫，影響全球科技股情緒"
+        },
+        {
+          "news_id": 2453,
+          "title": "AI stocks tumble as the defensives rise. What it says about this uneasy market",
+          "source_name": "CNBC",
+          "news_date": "2026-10-22",
+          "theme_text": "AI 概念股",
+          "reason": "標題指 AI 股票下跌，為本則主要題材。"
+        },
+        {
+          "news_id": 2417,
+          "title": "科技巨頭財報未能消除AI前景疑慮　美國股市開低",
+          "source_name": "中央社",
+          "news_date": "2026-10-22",
+          "theme_text": "AI 概念股",
+          "reason": "AI 前景疑慮是本則下跌主因。"
+        }
+      ]
+    },
+    {
+      "id": 176,
+      "theme_key": "被動元件",
+      "display_name": "被動元件",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 32,
+      "first_news_date": "2026-10-19",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2692,
+          "title": "被動元件還能起舞！「這檔」逢台股震盪下殺轉機來了　法人送暖：評價緊追日韓同業",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "被動元件",
+          "reason": "報導談被動元件的訂單與漲價"
+        },
+        {
+          "news_id": 2241,
+          "title": "急殺翻黑兇手抓到了！PCB界台積電飆漲停也救不回「被動元件、光通訊慘遭血洗」專家驚爆：這群人悄悄跑了",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "被動元件",
+          "reason": "標題指被動元件族群遭大幅賣壓。"
+        },
+        {
+          "news_id": 2207,
+          "title": "台股震盪1,100點 國巨、群創還能抱？分析師揭防守關卡：別急著攤平",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "被動元件",
+          "reason": "文中指被動元件族群盤中再度遭血洗"
+        },
+        {
+          "news_id": 2005,
+          "title": "台股狂飆962點又收斂！江國中曝「關鍵訊號」：大軋空行情來了",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "被動元件",
+          "reason": "分析師看好的低檔卡位題材"
+        },
+        {
+          "news_id": 1949,
+          "title": "台股大漲594點！郭哲榮預告「最後買點」：第四季不做空",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-21",
+          "theme_text": "被動元件",
+          "reason": "點名華新科等被動元件概念股"
+        }
+      ]
+    },
+    {
+      "id": 82,
+      "theme_key": "匯率",
+      "display_name": "匯率",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 28,
+      "first_news_date": "2026-10-19",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2530,
+          "title": "台股暴跌4000點別只盯台積電！杜金龍曝11月反攻時間點 欣興上看1775元、「這檔封測大廠」有望戰千金",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "匯率",
+          "reason": "新台幣貶至32元關卡影響市場"
+        },
+        {
+          "news_id": 1876,
+          "title": "新台幣強升1.29角　收32.488元",
+          "source_name": "中央社",
+          "news_date": "2026-10-21",
+          "theme_text": "匯率",
+          "reason": "匯率變動影響外銷與進口成本"
+        },
+        {
+          "news_id": 1863,
+          "title": "股匯強勢反攻　新台幣強升1.29角創逾2個月最大升幅",
+          "source_name": "中央社",
+          "news_date": "2026-10-21",
+          "theme_text": "匯率",
+          "reason": "匯率變動影響外銷與進口成本"
+        },
+        {
+          "news_id": 1654,
+          "title": "新台幣午盤大升1.07角　暫收32.51元",
+          "source_name": "中央社",
+          "news_date": "2026-10-21",
+          "theme_text": "匯率",
+          "reason": "報導為新台幣匯價變動"
+        },
+        {
+          "news_id": 1395,
+          "title": "〈台幣〉外資提款台股並匯出一度重貶2.27角 失守32.6元關卡",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-20",
+          "theme_text": "匯率",
+          "reason": "外資匯出造成新台幣重貶"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "theme_key": "ai",
+      "display_name": "AI",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 24,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2804,
+          "title": "AI趨勢不變 台股修正後仍有反彈契機",
+          "source_name": "工商時報",
+          "news_date": "2026-10-24",
+          "theme_text": "AI",
+          "reason": "標題指AI趨勢不變，但摘要未點名具體個股。"
+        },
+        {
+          "news_id": 2506,
+          "title": "The U.S. stock market is fracturing into two camps, and it’s leaving investors with a brutal case of whiplash",
+          "source_name": "MarketWatch",
+          "news_date": "2026-10-23",
+          "theme_text": "AI",
+          "reason": "文中指AI交易處於弱勢，投資人情緒轉為恐懼。"
+        },
+        {
+          "news_id": 2500,
+          "title": "台積電ADR22日下跌19.54美元跌幅4.52%折台股2680.93元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI",
+          "reason": "台積電ADR下跌與AI支出疑慮相關。"
+        },
+        {
+          "news_id": 2499,
+          "title": "名師操盤》台股崩盤怎麼辦？蔡正華：鎖定3大多頭火種",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI",
+          "reason": "摘要指台股反映投資人對AI產業的疑慮。"
+        },
+        {
+          "news_id": 2495,
+          "title": "〈美股盤後〉Meta重燃AI交易恐慌 費半狂瀉近7% 台積電ADR跌超4.5%",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI",
+          "reason": "Meta財報引發市場對AI支出的恐慌。"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "theme_key": "ai供應鏈",
+      "display_name": "AI 供應鏈",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 23,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2563,
+          "title": "昨日利多今日變利空？Meta加碼AI反遭砍7％ 台積電、鴻海下週迎考驗",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI 供應鏈",
+          "reason": "Meta、輝達大跌連帶影響AI供應鏈情緒"
+        },
+        {
+          "news_id": 2558,
+          "title": "OpenAI募資協商進入尾聲　目標估值下調至1.25兆美元",
+          "source_name": "中央社",
+          "news_date": "2026-10-23",
+          "theme_text": "AI 供應鏈",
+          "reason": "OpenAI估值與募資進度影響AI產業情緒"
+        },
+        {
+          "news_id": 2526,
+          "title": "AI支出疑慮升溫 費半暴跌近7％、台積電ADR挫4.52％",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI供應鏈",
+          "reason": "AI投資效益疑慮引發族群賣壓"
+        },
+        {
+          "news_id": 2524,
+          "title": "費半崩近7％台股剉咧等！黃仁勳戳中AI痛點 說出市場最怕的事",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI供應鏈",
+          "reason": "黃仁勳對AI痛點的言論引發拋售"
+        },
+        {
+          "news_id": 2521,
+          "title": "Meta自由現金流轉負！ 費半慘崩逾6% 台積電ADR也跌4.5%",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "AI供應鏈",
+          "reason": "AI成本支出疑慮拖累相關族群"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "theme_key": "ai資料中心",
+      "display_name": "AI 資料中心",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 22,
+      "first_news_date": "2026-10-16",
+      "last_news_date": "2026-10-22",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2354,
+          "title": "川普恐失國會優勢、台股AI多頭變天？ 鉅亨買基金：選舉未必利空、3類基金分散布局",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "AI 資料中心",
+          "reason": "若民主黨拿下國會，恐衝擊AI資料中心建設。"
+        },
+        {
+          "news_id": 2342,
+          "title": "《航運股》漢翔9MW/54MWh電力島啟用 年省能源成本近4成",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "AI資料中心",
+          "reason": "文中提到未來鎖定AI資料中心等大型用戶。"
+        },
+        {
+          "news_id": 2268,
+          "title": "《半導體》神盾CPU布局火力全開！攜SiPearl、鎖定全球AI資料中心",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "AI資料中心",
+          "reason": "目標市場為AI與資料中心"
+        },
+        {
+          "news_id": 1910,
+          "title": "Opposition to data centers will drive up inflation, says BlackRock’s Larry Fink",
+          "source_name": "MarketWatch",
+          "news_date": "2026-10-21",
+          "theme_text": "AI 資料中心",
+          "reason": "資料中心建設遭反對被視為推高通膨的因素。"
+        },
+        {
+          "news_id": 1576,
+          "title": "Elice's huge stock swings show AI's spending boom is getting more investor scrutiny",
+          "source_name": "CNBC",
+          "news_date": "2026-10-21",
+          "theme_text": "AI資料中心",
+          "reason": "來源指出市場開始質疑資料中心投資報酬"
+        }
+      ]
+    },
+    {
+      "id": 70,
+      "theme_key": "先進封裝",
+      "display_name": "先進封裝",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 21,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-22",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2239,
+          "title": "先進封裝進度分歧 台積電CoPoS拚2028年量產、三星玻璃基板卡關",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "先進封裝",
+          "reason": "CoPoS與玻璃基板皆屬先進封裝技術"
+        },
+        {
+          "news_id": 2183,
+          "title": "黃仁勳德國GTC供應鏈名單曝　台積電、台達電、欣興等台廠入列",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "先進封裝",
+          "reason": "共同封裝光學（CPO）技術"
+        },
+        {
+          "news_id": 2057,
+          "title": "《熱門族群》輝達AI供應鏈大擴產！京元電赴美設廠、矽品CPO15倍",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "先進封裝",
+          "reason": "新聞點出先進封裝產能擴充。"
+        },
+        {
+          "news_id": 2030,
+          "title": "東捷 轉型題材受矚",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "先進封裝",
+          "reason": "雷射與電漿製程應用於先進封裝工序。"
+        },
+        {
+          "news_id": 2023,
+          "title": "外資升創意目標價 劍指萬元",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "先進封裝",
+          "reason": "創意受惠於SoIC大趨勢。"
+        }
+      ]
+    },
+    {
+      "id": 270,
+      "theme_key": "台股etf",
+      "display_name": "台股ETF",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 20,
+      "first_news_date": "2026-10-20",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2806,
+          "title": "台股10月震盪　8檔台股ETF規模與績效逆勢成長",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股ETF",
+          "reason": "文中統計台股ETF規模與績效。"
+        },
+        {
+          "news_id": 2775,
+          "title": "台股震盪回測季線！這3檔受益人增萬人　1年含息報酬全翻倍",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股 ETF",
+          "reason": "受益人數創新高，除息行情帶動買氣"
+        },
+        {
+          "news_id": 2756,
+          "title": "台股大洗牌！12檔規模創高　這3檔好猛翻倍成長",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "台股ETF",
+          "reason": "新聞統計ETF規模與績效變化"
+        },
+        {
+          "news_id": 2553,
+          "title": "台股血崩846點！「7檔ETF」逆勢翻紅　0055、00701、00713還創新高",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "台股 ETF",
+          "reason": "新聞以ETF逆勢收紅為主題"
+        },
+        {
+          "news_id": 2545,
+          "title": "台股殺近千點也擋不住！「這檔」今年含息報酬飆83％　背後關鍵曝光",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "台股 ETF",
+          "reason": "新聞以ETF績效為主題"
+        }
+      ]
+    },
+    {
+      "id": 198,
+      "theme_key": "金融股",
+      "display_name": "金融股",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 19,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2746,
+          "title": "鉅亨速報 - Factset 最新調查：中信金(2891-TW)EPS預估下修至4.28元，預估目標價為74元",
+          "source_name": "鉅亨網",
+          "news_date": "2026-10-23",
+          "theme_text": "金融股",
+          "reason": "金控獲利預估調整"
+        },
+        {
+          "news_id": 2745,
+          "title": "鉅亨速報 - Factset 最新調查：玉山金(2884-TW)EPS預估下修至2.49元，預估目標價為40元",
+          "source_name": "鉅亨網",
+          "news_date": "2026-10-23",
+          "theme_text": "金融股",
+          "reason": "金控獲利預估調整"
+        },
+        {
+          "news_id": 2548,
+          "title": "台股46K攻防戰開打！八大公股出清「6檔金融股」抱回7.3億　台泥大漲4%也遭提款2億",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "金融股",
+          "reason": "公股出清6檔金融股"
+        },
+        {
+          "news_id": 2278,
+          "title": "法人提款千億台股颳大風！重挫846點險守4萬6 資安揪金融當抗跌靠山｜Yahoo財經掃描",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "金融股",
+          "reason": "金融股被視為賣壓下的相對抗跌族群"
+        },
+        {
+          "news_id": 2226,
+          "title": "台股震盪逾千點收跌846點　金融股撐盤",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "金融股",
+          "reason": "報導指金融股表現相對強勢、撐盤。"
+        }
+      ]
+    },
+    {
+      "id": 75,
+      "theme_key": "光通訊",
+      "display_name": "光通訊",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 19,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-22",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2241,
+          "title": "急殺翻黑兇手抓到了！PCB界台積電飆漲停也救不回「被動元件、光通訊慘遭血洗」專家驚爆：這群人悄悄跑了",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "光通訊",
+          "reason": "標題指光通訊族群遭大幅賣壓。"
+        },
+        {
+          "news_id": 2207,
+          "title": "台股震盪1,100點 國巨、群創還能抱？分析師揭防守關卡：別急著攤平",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "光通訊",
+          "reason": "文中指光通訊族群盤中再度遭血洗"
+        },
+        {
+          "news_id": 2202,
+          "title": "蔡慶龍｜光通訊出貨增溫 雷射封裝迎接擴產商機",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "光通訊",
+          "reason": "報導指光學引擎擴產，高速連線需求增加。"
+        },
+        {
+          "news_id": 2175,
+          "title": "Meta擴大AI資本支出 緯穎、廣達、鴻海及矽力-KY受惠",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "光通訊",
+          "reason": "摘要提及光通訊供應鏈成長"
+        },
+        {
+          "news_id": 2018,
+          "title": "10／22盤前｜輝達強攻光通訊、AI工廠 4＋3＋3台廠財源滾滾來",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "光通訊",
+          "reason": "AI競賽延伸至光通訊產能。"
+        }
+      ]
+    },
+    {
+      "id": 145,
+      "theme_key": "玻纖布",
+      "display_name": "玻纖布",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 17,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-22",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2143,
+          "title": "台股這檔非賣不可！玻纖布續飆看南亞 CCL鎖定台光電等3大廠",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "玻纖布",
+          "reason": "玻纖布概念股走勢成為焦點"
+        },
+        {
+          "news_id": 2120,
+          "title": "富喬急漲28％後該落袋？分析師點名南亞當指標 CCL優先看這三檔",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "玻纖布",
+          "reason": "富喬、台光電等玻纖布概念股，漲勢已趨緩"
+        },
+        {
+          "news_id": 2113,
+          "title": "10／22盤中熱門焦點股",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "玻纖布",
+          "reason": "AI 玻纖布需求升溫"
+        },
+        {
+          "news_id": 2053,
+          "title": "台積股漲 台股開盤續揚重返47K PCB、玻纖布族群強勢",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "玻纖布",
+          "reason": "新聞指玻纖布族群強勢"
+        },
+        {
+          "news_id": 2052,
+          "title": "台玻不到3個月狂飆74％！外資狂掃2.8萬張 林伯豐曝AI訂單看到2028年",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "玻纖布",
+          "reason": "AI 伺服器帶動高階玻纖布需求"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "theme_key": "ai基礎建設",
+      "display_name": "AI 基礎建設",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 15,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2778,
+          "title": "Turmoil hits AI buildout as neoclouds face pressure, credit risks mount and Solidigm pulls IPO",
+          "source_name": "CNBC",
+          "news_date": "2026-10-24",
+          "theme_text": "AI 基礎建設",
+          "reason": "新雲端業者承壓、AI 資料中心相關融資與 IPO 受挫"
+        },
+        {
+          "news_id": 2117,
+          "title": "PCB設備需求爆發！東台連2天漲停 恩德爆量亮燈",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "AI 基礎建設",
+          "reason": "AI 擴張帶動PCB與載板需求"
+        },
+        {
+          "news_id": 2051,
+          "title": "10／22群益早安｜全球財經時事深度解說",
+          "source_name": "工商時報",
+          "news_date": "2026-10-22",
+          "theme_text": "AI 基礎建設",
+          "reason": "評論提到 AI 算力需求與資料中心投資報酬率的討論"
+        },
+        {
+          "news_id": 1942,
+          "title": "Investors are questioning neoclouds' business model but Nebius says AI computing prices are rising",
+          "source_name": "CNBC",
+          "news_date": "2026-10-21",
+          "theme_text": "AI基礎建設",
+          "reason": "新雲端公司的債務與借貸成本受關注"
+        },
+        {
+          "news_id": 1526,
+          "title": "AI行情全面引爆！00888今年大漲87.68% 配息率衝17%",
+          "source_name": "鉅亨網",
+          "news_date": "2026-10-21",
+          "theme_text": "AI 基礎建設",
+          "reason": "資料中心與AI伺服器需求持續升溫"
+        }
+      ]
+    },
+    {
+      "id": 158,
+      "theme_key": "科技股",
+      "display_name": "科技股",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 15,
+      "first_news_date": "2026-10-19",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2789,
+          "title": "川普再提對伊朗動武！美股道瓊大跌652點、台積電ADR漲1.49％",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "科技股",
+          "reason": "報導提及科技股拋售潮蔓延"
+        },
+        {
+          "news_id": 2716,
+          "title": "台股休市躲崩？美股科技股賣壓再起　道瓊、那指雙雙大跌",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "科技股",
+          "reason": "美股科技股賣壓是主要下跌因素"
+        },
+        {
+          "news_id": 2578,
+          "title": "亞股收盤互有漲跌　科技股收復早盤部分失土",
+          "source_name": "中央社",
+          "news_date": "2026-10-23",
+          "theme_text": "科技股",
+          "reason": "摘要提及科技股反彈與整體市場謹慎情緒"
+        },
+        {
+          "news_id": 2507,
+          "title": "台股靠颱風躲過美股暴跌...下周補跌？散戶操盤有2種解法",
+          "source_name": "工商時報",
+          "news_date": "2026-10-23",
+          "theme_text": "科技股",
+          "reason": "Meta、亞馬遜等大型科技股同步重挫"
+        },
+        {
+          "news_id": 2373,
+          "title": "Sellers are back in tech, while bear market grips Chinese stocks",
+          "source_name": "CNBC",
+          "news_date": "2026-10-22",
+          "theme_text": "科技股",
+          "reason": "標題指科技股重新出現賣壓"
+        }
+      ]
+    },
+    {
+      "id": 216,
+      "theme_key": "面板",
+      "display_name": "面板",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 15,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2810,
+          "title": "友達ADR23日上漲0.065美元漲幅0.61%折台股34.90元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "面板",
+          "reason": "友達為面板廠。"
+        },
+        {
+          "news_id": 2496,
+          "title": "友達ADR22日下跌0.81美元跌幅7.06%折台股34.69元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "面板",
+          "reason": "友達為面板廠，ADR大跌反映該公司股價在美股的表現。"
+        },
+        {
+          "news_id": 2131,
+          "title": "友達開高翻黑跌逾1% 成交量衝14萬張居台股第三大 分析師曝進場時機",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "面板",
+          "reason": "友達為面板大廠，面板族群盤中走弱"
+        },
+        {
+          "news_id": 2040,
+          "title": "友達ADR21日上漲0.51美元漲幅4.65%折台股37.30元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-22",
+          "theme_text": "面板",
+          "reason": "友達為面板廠。"
+        },
+        {
+          "news_id": 1821,
+          "title": "【Follow法人】外資終止連10賣！買超友達4.4萬張居冠 再砸75億元加碼鴻海3萬張",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-21",
+          "theme_text": "面板",
+          "reason": "友達為面板業者。"
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "theme_key": "總體經濟",
+      "display_name": "總體經濟",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2790,
+          "title": "台股季線保衛戰登場 六利多拚測底後逆轉勝",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "總體經濟",
+          "reason": "論點涉及美債殖利率回落與外銷訂單創高"
+        },
+        {
+          "news_id": 2729,
+          "title": "Surging economy gets off to a good start in the fourth quarter — but there’s one big problem",
+          "source_name": "MarketWatch",
+          "news_date": "2026-10-23",
+          "theme_text": "總體經濟",
+          "reason": "經濟動能與物價走勢同時影響市場預期"
+        },
+        {
+          "news_id": 2534,
+          "title": "10-year Treasury yield tumbles below 5% to lowest level in nearly a month",
+          "source_name": "CNBC",
+          "news_date": "2026-10-23",
+          "theme_text": "總體經濟",
+          "reason": "油價上漲與股市賣壓並存"
+        },
+        {
+          "news_id": 1776,
+          "title": "台股最壞情況已過去？國家隊豪砸歷史新高1.3兆護盤「老AI滿血復活」Q4要暴賺還有這幾檔",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-21",
+          "theme_text": "總體經濟",
+          "reason": "中東局勢與油價變化影響股市情緒"
+        },
+        {
+          "news_id": 1483,
+          "title": "市場聚焦財報 台股釀反彈行情",
+          "source_name": "工商時報",
+          "news_date": "2026-10-21",
+          "theme_text": "總體經濟",
+          "reason": "9月美國CPI年增率升至3.7%，能源商品推升通膨"
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "theme_key": "電信",
+      "display_name": "電信",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-24",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2811,
+          "title": "中華電信ADR23日下跌0.21美元跌幅0.43%折台股157.70元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-24",
+          "theme_text": "電信",
+          "reason": "中華電信為電信業者。"
+        },
+        {
+          "news_id": 2602,
+          "title": "The mobile ambitions of SpaceX see telecom stocks get hit again. What the latest developments mean.",
+          "source_name": "MarketWatch",
+          "news_date": "2026-10-23",
+          "theme_text": "電信",
+          "reason": "Starlink 行動通訊布局引發電信股賣壓"
+        },
+        {
+          "news_id": 2512,
+          "title": "資金轉防禦 電信三雄逆勢衝",
+          "source_name": "工商時報",
+          "news_date": "2026-10-23",
+          "theme_text": "電信",
+          "reason": "電信三雄股價與市值同步創高"
+        },
+        {
+          "news_id": 2510,
+          "title": "電信三雄悍 股價逆勢創高",
+          "source_name": "工商時報",
+          "news_date": "2026-10-23",
+          "theme_text": "電信",
+          "reason": "電信三大業者股價同步走強，法人提及5G用戶與ARPU穩步成長。"
+        },
+        {
+          "news_id": 2497,
+          "title": "中華電信ADR22日上漲1.22美元漲幅2.57%折台股158.38元",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-23",
+          "theme_text": "電信",
+          "reason": "中華電信為電信業者，ADR價格變動反映其在美股的表現。"
+        }
+      ]
+    },
+    {
+      "id": 149,
+      "theme_key": "生技醫藥",
+      "display_name": "生技醫藥",
+      "status": "pending_verification",
+      "inference": true,
+      "news_count": 14,
+      "first_news_date": "2026-10-17",
+      "last_news_date": "2026-10-23",
+      "confidence": "not_provided",
+      "matched_group": null,
+      "prompt_version": "news_v1",
+      "aggregation_version": "theme_suggestions_v1",
+      "llm_models": [
+        "claude-haiku-5-5"
+      ],
+      "computed_at": "2026-10-24T06:53:58.233599+00:00",
+      "news": [
+        {
+          "news_id": 2479,
+          "title": "Moderna’s cancer vaccine hits its targets, but an embargo breach rattles investors and the stock tumbles",
+          "source_name": "MarketWatch",
+          "news_date": "2026-10-23",
+          "theme_text": "生技醫藥",
+          "reason": "mRNA 癌症疫苗的臨床數據與股價反應。"
+        },
+        {
+          "news_id": 2472,
+          "title": "Moderna shares plunge after leak of cancer vaccine data despite positive results",
+          "source_name": "CNBC",
+          "news_date": "2026-10-23",
+          "theme_text": "生技醫藥",
+          "reason": "mRNA 癌症疫苗的數據外洩與股價反應。"
+        },
+        {
+          "news_id": 2389,
+          "title": "瑩碩力拚今年轉虧為盈　擬明年送件上櫃",
+          "source_name": "中央社",
+          "news_date": "2026-10-22",
+          "theme_text": "生技醫藥",
+          "reason": "海外拓展與新品銷售帶動營收，預計今年轉虧為盈。"
+        },
+        {
+          "news_id": 2372,
+          "title": "New bipartisan bill aims to speed up clinical trials for rare disease treatments",
+          "source_name": "CNBC",
+          "news_date": "2026-10-22",
+          "theme_text": "生技醫藥",
+          "reason": "法案若通過可能加速罕病藥物開發。"
+        },
+        {
+          "news_id": 1820,
+          "title": "千金生技股王藥華藥專訪／國發基金起手1億滾出300億！　神績效僅次台積電",
+          "source_name": "Yahoo奇摩股市",
+          "news_date": "2026-10-21",
+          "theme_text": "生技醫藥",
+          "reason": "報導為生技公司的投資績效專訪。"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 587,
+    "limit": 20,
+    "include_matched": false,
+    "matched_total": 23,
+    "news_per_suggestion": 5,
+    "aggregation_version": "theme_suggestions_v1",
+    "updated_at": "2026-10-24T06:53:58.233599+00:00",
+    "sort": "news_count desc, last_news_date desc, theme_key asc"
+  }
+}

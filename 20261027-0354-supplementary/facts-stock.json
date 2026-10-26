@@ -1,0 +1,19 @@
+{
+  "market_latest_trading_date": "2026-10-22",
+  "group_scores_latest_trading_date": "2026-10-22",
+  "candidate_run_latest_trading_date": null,
+  "candidate_count_latest": null,
+  "news_items": 3131,
+  "news_latest_published_at": "2026-10-26 17:36:55.000000",
+  "news_llm_done": 3218,
+  "theme_suggestions": 610,
+  "portfolio_positions": 0,
+  "alembic_version": "0020_trading_calendar",
+  "market_summary_latest": {},
+  "instrument": {
+    "exchange": "TWSE",
+    "symbol": "2002",
+    "latest_trading_date": "2026-10-22",
+    "source": "twse"
+  }
+}

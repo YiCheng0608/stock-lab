@@ -1,0 +1,56 @@
+patched candidate_count_latest: SELECT (SELECT candidate_count FROM candidate_runs WHERE score_version = 'candidate_score_v2' ORDER BY trading_date DESC, id DESC LIMIT 1)
+screenshots: 96.9 s
+today: 2.4 s
+news: 0.6 s
+themes: 0.9 s
+stocks: 2.3 s
+actions: 2.3 s
+today T1 通過 2 張截圖 ready，無錯誤，無橫向捲動
+today T2 通過 `資料 2026/10/22` = facts 2026-10-22
+today T3 通過 `資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照`
+today T4 通過 `資料 2026/10/22`；B = facts 2026-10-22
+today T5 通過 5 張卡 `資料 2026/10/22 · 相對加權指數`；#1 `鋼鐵`
+today T6 通過 前 3 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`：3123 `影響尚未判定`、3128 `影響尚未判定`、3125 `影響尚未判定`
+today T7 通過 not_computed，DB 也沒有當日候選，顯示 `尚無候選清單`
+today T8 通過 沒有候選，不適用
+today T9 通過 6 張卡各有 `資料日`
+today T11 通過 2026-10-22：TWSE 未取得、TPEx 未取得
+today T12 通過 `明日候選`（today-1280.txt 第 29 行）→ `熱門族群`（today-1280.txt 第 36 行）、`重點新聞`（today-1280.txt 第 102 行）
+news N1 通過 6 張截圖 ready，無錯誤，無橫向捲動
+news N2 通過 domestic 前 3 則、international 前 3 則、official 前 3 則依序出現
+news N3 通過 時間行 domestic 20／20、international 20／20、official 20／20
+news N4 通過 `AI 推論`／AI 判讀 domestic 20／20、international 20／20、official 19／19
+news N5 通過 最新新聞 2026-10-27 01:36（台北）≤ 現在；國內第一則 `發布於 2026/10/27 01:21`
+news N6 通過 id 3121：來源事實／AI 摘要與判讀分欄，`模型 claude-sonnet-5-5 · 提示版本 news_v2 · 產生時間 2026/10/27 02:00`
+themes G1 通過 5 張截圖 ready，無錯誤，無橫向捲動
+themes G2 通過 `產業榜 · 共 34 個族群` → `資料 2026/10/22`、`題材榜 · 共 12 個族群` → `資料 2026/10/22`；= facts 2026-10-22
+themes G3 通過 1280 表頭與 `鋼鐵`…`電子通路`；390 `#1` → `鋼鐵`
+themes G4 通過 20 個建議：`待核實` 20、`AI 推論` 20 行，`587 個建議`
+themes G5 通過 熱度走勢、五分項皆 `資料 2026/10/22`；`成員資料截至 2026/10/22`
+themes G6 通過 表頭、第一個成員 2002 中鋼、`第 1／2 頁 · 共 48 檔`
+themes G7 通過 今日 #1 = 產業榜 #1 = 詳情 = `鋼鐵`
+themes G8 通過 成員依成交值：2002、2027、2069、2030、2033、2006、5013、2034、9958、5009、2211、2031、2014、2009、2023、2010、2020、2032、3004、8415、2015、2025、5011、2038、2029、2028、8349、2013、2017、2065
+stocks S1 通過 8 張截圖 ready，無錯誤，無橫向捲動
+stocks S2 通過 表頭、第一列、`第 1／79 頁 · 共 2,349 筆`
+stocks S3 通過 頁首 `資料 2026/10/22`、`來源 臺灣證券交易所`；bars data_as_of 2026-10-22
+stocks S4 通過 K 線卡 `資料 2026/10/22`、來源與批次時間
+stocks S5 通過 `資料日期：2026/10/22`、`資料日：2026/10/22 · 價位語意：`
+stocks S10 通過 `策略總表` 資料 2026-10-22；突破條件 觀察、回踩條件 觀察；觀察價位 0 列；非候選
+stocks S6 通過 2 則相符新聞，時間行 2
+stocks S7 通過 K 線資料日期 2026/10/22、行情來源 `臺灣證券交易所`、`…資料日 2026/10/22`
+stocks S8 通過 facts I 2026-10-22 = API；source `twse`
+stocks S9 通過 最新一列 2026/10/22；來源行 30 = min(30, 120)
+actions A1 通過 3 張截圖 ready，無錯誤，無橫向捲動
+actions A2 通過 沒有庫存，顯示 `尚未建立庫存。`
+actions A3 通過 其他成立條件 `顯示 20／70 檔`；其他觀察 `顯示 3／3 檔`
+actions A4 通過 23 列各有資料日 ≤ 2026/10/22；data_as_of = facts
+actions A5 通過 23 列，沒有 `AI 推論` 與 `（推論）`
+actions A6 通過 TWSE 2002：`資料日：2026/10/22` = data_cutoff
+actions A7 通過 頁首 `2002`／`中鋼` = stock.json
+actions A8 通過 candidates.json None ≠ 資料日 2026-10-22，沒有今日候選列
+actions A9 通過 預設清單沒有 ETF（持倉／自選 ETF 0 列）；隱藏 ETF 186 檔
+actions A10 通過 `預設隱藏：ETF 186 檔、其他觀察 1,479 檔、策略判斷資料待補 129 檔；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。`
+actions A11 無法判定 無法判定：第 3 級（接近成立）沒有標的，沒有可查的接近卡
+actions A12 無法判定 無法判定：第 3 級（接近成立）沒有標的，沒有可查的接近卡
+actions A13 無法判定 無法判定：第 3 級（接近成立）沒有標的，沒有可查的接近卡
+48 checks, 0 failed, 3 undetermined

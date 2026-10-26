@@ -1,0 +1,46 @@
+{
+  "status": "not_computed",
+  "trading_date": null,
+  "score_version": "candidate_score_v2",
+  "candidate_count": 0,
+  "zero_reason": null,
+  "zero_reason_text": null,
+  "methodology": {
+    "score_version": "candidate_score_v2",
+    "purpose": "評分只用於排序，不代表勝率或預期報酬，不改變策略判定",
+    "weights": null,
+    "minimum_weight_coverage": null,
+    "components": {
+      "technical": {
+        "label": "技術",
+        "weight": null,
+        "inference": false
+      },
+      "chips": {
+        "label": "籌碼",
+        "weight": null,
+        "inference": false
+      },
+      "group": {
+        "label": "族群",
+        "weight": null,
+        "inference": false
+      },
+      "news_sentiment": {
+        "label": "新聞情緒",
+        "weight": null,
+        "inference": false
+      }
+    },
+    "null_explanations": {
+      "signal_evidence_missing": "訊號依據缺少前 20 日高點、量或均線，無法計算",
+      "technical_inputs_missing": "技術子項皆無資料",
+      "chip_or_volume_sessions_incomplete": "近 20 個交易日的籌碼或成交量不完整，或當日無交易",
+      "chip_inputs_missing": "籌碼子項皆無資料",
+      "news_collection_missing": "近 3 日沒有成功的新聞收集，新聞分項無資料",
+      "instrument_not_in_universe": "標的不在當日普通股母體內",
+      "no_qualified_group": "當日沒有已排名且資料完整的所屬產業或題材"
+    }
+  },
+  "items": []
+}
