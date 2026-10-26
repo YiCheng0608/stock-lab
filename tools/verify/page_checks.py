@@ -1889,8 +1889,10 @@ def a2(run: Run) -> str:
 
 # Each tier section opens with `第 N 級`, its label and `顯示 k／N 檔` (UI_COPY_SPEC §5, #278).
 TIER_HEAD = re.compile(r"^第 ([0-5]) 級$")
-# A table row of the action list ends with its 資料日 cell and the link cell.
-ACTION_ROW = re.compile(r"\t([0-9]{4}/[0-9]{2}/[0-9]{2})\t策略總表 →$")
+# A table row of the action list ends with its 資料日 cell and the link cell; a
+# tier 3 row's link says 價位見策略總表 → (UI_COPY_SPEC §6, #277-B).
+NEAR_ROW_LINK = "價位見策略總表 →"
+ACTION_ROW = re.compile(r"\t([0-9]{4}/[0-9]{2}/[0-9]{2})\t(?:價位見)?策略總表 →$")
 ACTIONS_EMPTY = "目前沒有符合篩選的標的。"
 
 
@@ -2180,6 +2182,82 @@ def a10(run: Run) -> str:
         return "summary.hidden 都是 0，沒有隱藏句"
     expect(text.has(line), f"缺整行 `{line}`")
     return f"`{line}`"
+
+
+# ---- tier 3 接近成立 (#277-B) ----
+
+# A near card's numbers that are not prices: ratios (「1.20 倍」「0.60～1.20 倍」)
+# and percents (the price gap, the day's change).
+NOT_PRICE = re.compile(r"[0-9][0-9.,]*(?:～[0-9][0-9.,]*)? 倍|[+-]?[0-9][0-9.,]*%")
+PRICE_NUMBER = re.compile(r"(?<![0-9.,])[0-9][0-9,]*\.[0-9]{2}(?![0-9])")
+NEAR_LINE = re.compile(r"(?:^|\t)差：")
+
+
+def near_rows(run: Run) -> tuple[list[list[str]], list[dict]]:
+    """The tier 3 block's table rows (their lines) and the loaded tier 3 items."""
+
+    payload, text = actions_payload(run), run.text(ACTIONS)
+    tier = tier_of(payload, 3)
+    expect(bool(tier), "actions.json summary.tiers 沒有第 3 級")
+    items = [item for item in loaded_actions(run) if item.get("tier") == 3]
+    if not tier.get("shown"):
+        # A check of what near cards show proves nothing without one (#251).
+        raise Undetermined("第 3 級（接近成立）沒有標的，沒有可查的接近卡")
+    start, end = tier_block(text, tier)
+    expect(start >= 0, f"缺 `第 3 級`／`{tier.get('label')}` 區塊")
+    rows, current = [], []
+    for line in text.lines[start + 2 : end]:
+        current.append(line)
+        if ACTION_ROW.search(line):
+            rows.append(current)
+            current = []
+    return rows, items
+
+
+@check("actions", "A11")
+def a11(run: Run) -> str:
+    rows, items = near_rows(run)
+    expect(
+        len(rows) == len(items),
+        f"接近成立區 {len(rows)} 列，actions.json 第 3 級 {len(items)} 列",
+    )
+    links = [row[-1] for row in rows if not row[-1].endswith(NEAR_ROW_LINK)]
+    expect(not links, f"接近成立列的連結不是 `{NEAR_ROW_LINK}`：{'；'.join(links)}")
+    flat = [
+        (item.get("instrument") or {}).get("symbol")
+        for item in items
+        if not (item.get("nearness") or {}).get("near")
+    ]
+    expect(not flat, f"第 3 級的列沒有 nearness.near：{'、'.join(map(str, flat))}")
+    return f"接近成立 {len(rows)} 列 = actions.json 第 3 級，連結 `{NEAR_ROW_LINK}`"
+
+
+@check("actions", "A12", after=("A11",))
+def a12(run: Run) -> str:
+    rows, _items = near_rows(run)
+    bare = [row[0] for row in rows if not any(NEAR_LINE.search(line) for line in row)]
+    expect(not bare, f"接近成立列沒有 `差：` 行：{'；'.join(bare)}")
+    lines = sum(len(NEAR_LINE.findall(line)) for row in rows for line in row)
+    return f"{len(rows)} 列各有 `差：`，共 {lines} 行"
+
+
+@check("actions", "A13", after=("A11",))
+def a13(run: Run) -> str:
+    rows, items = near_rows(run)
+    # The row's own close is the only price a near row shows (DESIGN_SYSTEM §7).
+    closes = {
+        f"{item['current_price']:,.2f}"
+        for item in items
+        if isinstance(item.get("current_price"), (int, float))
+    }
+    found = []
+    for row in rows:
+        for line in row:
+            for number in PRICE_NUMBER.findall(NOT_PRICE.sub("", line)):
+                if number not in closes:
+                    found.append(f"{number}（{line}）")
+    expect(not found, f"接近成立列有收盤以外的價格：{'；'.join(found)}")
+    return f"{len(rows)} 列除了最近收盤沒有價格（收盤 {'、'.join(sorted(closes))}）"
 
 
 # ---- manual checks: samples picked by fixed rules, judged by an agent ----
