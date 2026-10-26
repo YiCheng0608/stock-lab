@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。設定來源是 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
+本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。策略設定來源是 `backend/app/strategies/`（[策略框架與 registry](#策略框架與-registry)），`hot_group_v1` 與 `candidate_score` 的設定在 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
 ## 共通原則
 
@@ -78,7 +78,7 @@ membership 必須在 score date 有效；每個股票榜或 ETF 類別分區至�
 | --- | --- | --- | --- | --- |
 | technical | 0.35 | 量比（0.5） | `volume[T]/mean(volume[T-20:T-1])`；breakout 越高越好、pullback 越低越好（量縮回檔） | 同日同策略的候選池 |
 | | | 距離（0.5） | breakout `close[T]/max(high[T-20:T-1])−1`；pullback `abs(close[T]/MA20[T]−1)`；越小越好 | 同上 |
-| | | RR（0） | `(target_1−entry)/(entry−invalid)`；只顯示不計分：`_risk_levels` 以固定 1.6R 設目標，RR 只差四捨五入，沒有鑑別力 | — |
+| | | RR（0） | `(target_1−entry)/(entry−invalid)`；只顯示不計分：`risk_levels` 以固定 1.6R 設目標，RR 只差四捨五入，沒有鑑別力 | — |
 | chips | 0.30 | 法人 5 日（0.4） | 三大法人 5 日淨股數／20 日均量（與策略同公式） | 同日 active stock／ipo 全市場有值者 |
 | | | 法人 20 日（0.3） | 三大法人 20 日淨股數／20 日均量；20 個有效交易日都要有籌碼列 | 同上 |
 | | | 融資 5 日（0.3） | 5 日融資餘額變動比（與策略同）；越低越好 | 同上 |
@@ -202,9 +202,18 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 - `_ensure_strategies` 只取（名稱、版本、目前公式）的列或新建，取到的列與 canonical 不符時以 `strategy_snapshot_mismatch` 拒用；`signal_key` 不含公式，同鍵訊號屬於其他公式時以 `signal_formula_conflict` 拒絕覆寫，`analyze` 不提交該次結果，`daily` 不進入 evaluate。
 - `GET /api/strategies` 每列含 `id`（整數主鍵）與庫內原值 `formula_version`（含 `unclassified/<reason>`）。
 
+### 策略框架與 registry
+
+- `backend/app/strategies/` 的 `REGISTRY` 是策略清單唯一的宣告處，宣告順序為 `breakout_v1`、`pullback_v1`。`backend/app`、`backend/worker` 其他非測試程式不寫策略名稱，一律讀 registry；例外只有歷史資料與版本化快照，列在 `backend/tests/test_strategy_registry.py` 的白名單並寫理由，該測試掃描原始碼，出現白名單外的策略名稱就失敗。
+- `StrategyInputs`：analyze 每檔每日建一次、所有策略共用。欄位為 `bar_count`、`close`、`volume`、`ma20`、`ma60`、`atr14`、`prior_highs`／`prior_volumes`（T 之前最多 20 根，與 `rule_evidence_json.inputs` 相同）、`group_excess_return_20d`、`institutional_flow_ratio_5d`、`margin_change_ratio_5d`。
+- `Strategy`：`config` 是 canonical 設定（`name`、`version`、`kind` 取自它，快照存成 `StrategyVersion`）；`rule` 是純函式判定，`arguments(inputs)` 給它的參數；`actionable_levels(inputs)` 是判定成立時寫入 `signals` 的價位；`entry_type` 決定價位欄（`app.domain.ENTRY_LEVEL_FIELDS`，只能是既有的 breakout／pullback）；`label_zh`、`research_label_zh`、`requires_zh` 是顯示文案；`level_formula_version` 是價位公式識別；`candidate_distance`、`candidate_reason` 供候選評分的技術分項與理由使用。
+- analyze 對每檔每日：建一次輸入，依宣告順序判定每個策略，再為每個策略各寫一列 `signals`；每列的 `rationale` 與 `rule_evidence_json` 以 `kind` 為鍵記錄全部策略的判定。決策摘要取宣告順序中第一個 conditional 策略；只有 observation 時優先 pullback entry type。
+- 新增策略：在 `app/strategies/` 新增模組（canonical 設定用新的 `name`／`version`、`rule`、`arguments`、`actionable_levels`、`entry_type` 與文案），登錄到 `REGISTRY`，補單元測試與本文件的策略章節。`kind` 必須和其他已登錄策略不同（例如和 `breakout_v1` 同時登錄的 `breakout_v2` 不能沿用 `breakout`），也不得是證據與 rationale 的固定鍵（`app.strategies.RESERVED_KINDS`：`strategy`、`strategy_version`、`group_member_return_lookup`、`confidence_semantics`、`actionable`、`inputs`、`risk_validation`、`execution`、`group`、`missing`），否則會無聲蓋掉同鍵的內容。`test_strategy_registry.py` 以 `registry_problems` 檢查，並核對保留鍵就是 analyze 實際寫出的固定鍵。登錄後 analyze 就為每檔寫出它的 signal 列，`_ensure_strategies` 新建它的 `StrategyVersion`，個股頁條件清單出現它；不需改 decision、API 或候選程式。
+- 候選池不跟著 registry：每個 `candidate_score` 版本在 `pool.strategies` 列出入池策略，並以策略名稱為鍵定義量比方向與距離公式。新策略要進候選池，必須另升一個 `candidate_score` 版本（新設定快照，舊版的 runs 保留），不改現行版本。
+
 ## 現行限制
 
 1. worker 的 `atr14` 是最多 14 根 high-low 的平均，不含前收盤的 True Range，不是 Wilder ATR。
 2. conditional 訊號的 `confidence=0.75` 是沒有校準證據的固定值，不得稱 75% 勝率；rule-only 的數值為 null。
-3. `_risk_levels` 以固定風險倍數產生 1.6R／3R，合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
+3. `risk_levels`（`backend/app/strategies/base.py`）以固定風險倍數產生 1.6R／3R，合法 RR 只證明算術關係，不代表可成交、壓力位或預測。
 4. 法人比率（`worker.pipeline._validated_flow_and_volume_inputs`）以 T（含）以前最後 20 根非停牌 bar 計算、最後 5 根須有籌碼列，不核對交易所日曆，也不要求最後一根就是 T。

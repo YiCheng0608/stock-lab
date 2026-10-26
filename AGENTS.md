@@ -34,7 +34,7 @@
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
-並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個。衝突由後合併者在自己的 branch 解決，不全選一方。
+並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）。衝突由後合併者在自己的 branch 解決，不全選一方。
 
 ## 工程原則
 
@@ -89,7 +89,8 @@
 | 空狀態與 DB／其他 API 交叉核對，另一處有資料就判失敗；個股選股依序備援（#251） | 後端測試 `test_verify_tristate.py`；CI `verify` job | `tools/verify/page_checks.py`（`empty_board`、T7、T9、A4、`Run.stock`） |
 | master 每晚與手動觸發跑 CI 全套，`verify` 驗五頁（#251） | CI `schedule`、`workflow_dispatch`；後端測試 `test_nightly_and_manual_runs_verify_every_page` | `.github/workflows/ci.yml`、`tools/verify/verify_plan.py`（`FULL_EVENTS`） |
 | features 標「人工」的檢查有寫死的抽樣規則（#251） | `page_checks.py` exit 2；後端測試 `test_every_manual_check_has_a_sampler` | `tools/verify/page_checks.py`（`MANUAL`、`registry_problems`） |
-| G7 真資料 verify 用 master 上已 commit 的程式，5 日窗口頭尾各跑一次；人工檢查由另一個 session 判讀（#251） | 部分：`page_checks.py --g7` 在有未 commit 改動或 HEAD 不在 origin/master 時 exit 2；時點與獨立判讀無 | `tools/verify/page_checks.py`（`g7_problems`）、`docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/verify-stock-lab/SKILL.md` |
+| G7 真資料 verify 用發佈 branch `release/v1` 上已 commit 的程式，5 日窗口頭尾各跑一次；人工檢查由另一個 session 判讀（#251、#260） | 部分：`page_checks.py --g7` 在有未 commit 改動或 HEAD 不等於 `origin/release/v1`（`G7_REF`）時 exit 2（#288）；時點與獨立判讀無 | `tools/verify/page_checks.py`（`g7_problems`、`G7_REF`）、`docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/verify-stock-lab/SKILL.md` |
+| 發佈 branch `release/*` 不能刪、不能強推，只經 PR（merge commit）且 CI `required` 綠才合併；CI 對 `release/**` 的 PR 與 push 都跑（#288） | GitHub ruleset（`release/*`）；CI `pull_request`／`push` 的 branches | repo ruleset、`.github/workflows/ci.yml` |
 | features 標「CI」的檢查都有實作、有實作的都標「CI」（#243） | CI `verify` job（`page_checks.py` 不一致就 exit 2）；後端測試 `test_every_ci_check_in_features_is_implemented` | `tools/verify/page_checks.py`（`registry_problems`）、`backend/tests/test_verify_checks.py` |
 | `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
 | CI `verify` job 只驗改動影響的頁，依 features「驗證範圍」選頁；不驗時 job 仍 success（#245） | CI `verify` job 的 Plan step；後端測試 `test_verify_plan.py`（各類改動的頁面範圍、前端檔清單涵蓋 import 它的檔） | `tools/verify/verify_plan.py`、`.claude/skills/verify-stock-lab/features/README.md`（驗證範圍）、`.github/workflows/ci.yml`（`verify` job） |
@@ -100,6 +101,8 @@
 | 官方行情的普通股列不悄悄丟掉：主檔外的列寫入既有標的或記 `unmatched_bar`（#212） | 後端測試 `test_collect_has_no_silent_skip_of_a_quote_row`、`test_collect_writes_quotes_of_a_stored_instrument_missing_from_the_lists`、`test_tpex_quotes_keep_ordinary_shares_outside_the_lists` | `backend/worker/pipeline.py`（`collect`）、`backend/worker/sources.py`（`is_common_stock_code`）、`backend/tests/test_instrument_lifecycle.py` |
 | 標的狀態同步被 5% 防呆略過時由統籌處理（#212） | 看門狗資料不變量 `invariant_status_sync`；後端測試 `test_a_skipped_status_sync_is_commented_until_a_later_sync_applies` | `tools/ops/watchdog_helper.py`、`tools/ops/watchdog.sh`、`docs/OPERATIONS.md`（§6.1） |
 | verify 假資料庫的下市／轉市列與 worker 寫出的一致（#212） | 後端測試 `test_the_verify_fixture_lifecycle_rows_are_what_the_worker_writes` | `tools/verify/fixture_data.py`（`LIFECYCLE`）、`backend/tests/test_instrument_lifecycle.py` |
+| 結案腳本在 PR 未合併或 master CI 非綠時零刪除；`--extra-dir` 不得是 repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data`、`STOCK_DATA_DIR`，字面與解析連結後的實際路徑都比、兩者不同（經過 junction／symlink、8.3 短檔名）就拒絕，刪除前再查一次；junction 先拆；orca／gh／git 讀取失敗也拒絕（#282、#283 review） | 後端測試 `test_coordinator_scripts.py`（假 orca／gh／git，路徑一律 `tmp_path` 替身） | `tools/ops/close_task.sh`、`tools/ops/coordinator_lib.sh`（`guard_dir`）、`backend/tests/test_coordinator_scripts.py` |
+| 派工只在 `orca terminal wait --for tui-idle` 回 `satisfied:true` 後送任務；巡檢的 gh 呼叫不超過上限，不覆寫別的統籌一小時內的心跳（#282） | 後端測試 `test_coordinator_scripts.py` | `tools/ops/dispatch.sh`、`tools/ops/patrol.sh` |
 
 ## 上下文壓縮時保留
 

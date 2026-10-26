@@ -2,18 +2,23 @@ import json
 import math
 
 from app.domain import (
-    CANONICAL_CONFIGS,
     HOT_GROUP_CONFIG,
-    STRATEGY_CONFIGS,
     calculate_group_score,
-    canonical_config_snapshot,
-    evaluate_breakout_v1,
-    evaluate_pullback_v1,
     group_score_quality,
     instrument_eligibility,
     validate_signal_levels,
     validate_signal_status_transition,
 )
+from app.strategies import (
+    canonical_config_snapshot,
+    canonical_configs,
+    evaluate_breakout_v1,
+    evaluate_pullback_v1,
+    strategy_configs,
+)
+
+CANONICAL_CONFIGS = canonical_configs()
+STRATEGY_CONFIGS = strategy_configs()
 
 
 def test_canonical_v1_configs_are_json_serializable_and_numeric():
