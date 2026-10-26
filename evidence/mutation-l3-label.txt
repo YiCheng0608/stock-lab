@@ -1,0 +1,2 @@
+FAIL stock/strategyBoard.test.tsx: Error: a new threshold shows as the API sends it
+Failed 1: stock/strategyBoard.test.tsx

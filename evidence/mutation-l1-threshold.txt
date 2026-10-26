@@ -1,0 +1,2 @@
+FAILED tests/test_strategy_levels.py::test_the_condition_defaults_are_pinned_to_the_levels_version
+1 failed, 2 passed, 51 deselected in 1.43s

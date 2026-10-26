@@ -1,0 +1,3 @@
+FAILED tests/test_strategy_levels.py::test_a_signal_of_another_formula_version_is_skipped
+FAILED tests/test_strategy_board.py::test_a_row_of_another_formula_version_is_not_read
+2 failed, 1 passed, 62 deselected in 1.45s

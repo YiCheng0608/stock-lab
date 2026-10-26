@@ -1,0 +1,2 @@
+FAIL stock/strategyBoard.test.tsx: Error: 15,110,400 shares is at least 15,111 lots
+Failed 1: stock/strategyBoard.test.tsx
