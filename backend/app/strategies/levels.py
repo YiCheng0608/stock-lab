@@ -298,6 +298,37 @@ def condition_defaults(strategy: Strategy) -> dict[str, dict[str, Any]]:
     return {item.code: item.as_json() for item in conditions}
 
 
+def judged_conditions(
+    strategy: Strategy, evaluation: RuleEvaluation, *, bar_count: int
+) -> list[dict[str, Any]]:
+    """T's strategy conditions as a stored evaluation alone judges them.
+
+    The strategy maps its reason codes to its conditions, so a reader of a
+    signal's ``rule_evidence_json`` needs no list of its own; values are
+    empty.  ``bar_count`` is the signal's stored ``bar_count_60d``.
+    """
+
+    inputs = StrategyInputs(
+        bar_count=bar_count,
+        close=None,
+        volume=None,
+        ma20=None,
+        ma60=None,
+        atr14=None,
+        prior_highs=None,
+        prior_volumes=None,
+        group_excess_return_20d=None,
+        institutional_flow_ratio_5d=None,
+        margin_change_ratio_5d=None,
+    )
+    return [
+        item.as_json()
+        for item in strategy.conditions(
+            inputs, evaluation, ObservationLevels("data_incomplete")
+        )
+    ]
+
+
 def compact_conditions(
     strategy: Strategy, conditions: Iterable[Condition]
 ) -> list[dict[str, Any]]:

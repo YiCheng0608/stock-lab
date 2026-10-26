@@ -1564,6 +1564,12 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             "items[].candidate_rank",
             [1, None, 3],
         ),
+        # The held 9102 is near a breakout (the action list's tier 3 rule, #277-B).
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "items[].near",
+            [False, True, False],
+        ),
     ],
     "stocks": [
         ("stocks?page=1&page_size=30", "meta.total", 8),
@@ -1616,23 +1622,36 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
     ],
     "actions": [
-        # action_tier_v1 (#278): the held 9102, then the three candidates by rank; the
-        # default view hides the ETF's conditional breakout and the two observations.
-        ("actions?limit=20", "meta.total", 4),
+        # action_tier_v1 (#278): the held 9102, then the three candidates by rank, then
+        # the two observations near a breakout (tier 3, #277-B) by price gap; the
+        # default view hides the ETF's conditional breakout.
+        ("actions?limit=20", "meta.total", 6),
         (
             "actions?limit=20",
             "items[].instrument.symbol",
-            ["9102", "9101", "9103", "9201"],
+            ["9102", "9101", "9103", "9201", "9202", "9203"],
         ),
-        ("actions?limit=20", "items[].tier", [0, 1, 1, 1]),
-        ("actions?limit=20", "items[].candidate.rank", [None, 1, 2, 3]),
+        ("actions?limit=20", "items[].tier", [0, 1, 1, 1, 3, 3]),
+        ("actions?limit=20", "items[].candidate.rank", [None, 1, 2, 3, None, None]),
+        (
+            "actions?limit=20",
+            "items[].nearness.near",
+            [None, None, None, None, True, True],
+        ),
+        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v1"),
+        ("actions?limit=20", "items.4.nearness.unmet[].short_label", ["價格", "量能"]),
+        (
+            "actions?limit=20",
+            "items.4.nearness.met_short_labels",
+            ["族群", "法人", "融資"],
+        ),
         ("actions?limit=20", "summary.held", 1),
         ("actions?limit=20", "summary.tier_version", "action_tier_v1"),
-        ("actions?limit=20", "summary.tiers[].shown", [1, 3, 0, 0, 0, 0]),
+        ("actions?limit=20", "summary.tiers[].shown", [1, 3, 0, 2, 0, 0]),
         (
             "actions?limit=20",
             "summary.hidden",
-            {"etf": 1, "observation": 2, "data_insufficient": 0},
+            {"etf": 1, "observation": 0, "data_insufficient": 0},
         ),
         ("actions?limit=20&view=all&include_etf=true", "meta.total", 7),
         # A tier's first rows (the page's preview of a tier missing from page 1)

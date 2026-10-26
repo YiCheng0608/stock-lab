@@ -52,6 +52,8 @@ NEW_KEYS = {
     "excess_return_20d",
     "candidate_rank",
     "conditional",
+    # The action list's tier 3 rule (#277-B).
+    "near",
 }
 # The fields every member row carried before #280.
 OLD_KEYS = {

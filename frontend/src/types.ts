@@ -986,6 +986,8 @@ export type ThemeMemberRow = StockDirectoryRow & {
   excess_return_20d?: number | null
   candidate_rank?: number | null
   conditional?: boolean
+  // The action list's tier 3 (接近成立, #277-B).
+  near?: boolean
 }
 
 export type ThemeMembersResponse = {
@@ -1119,6 +1121,31 @@ export type ActionSummary = {
   // GET /api/actions rows only (action_tier_v1, UI_COPY_SPEC §5).
   tier?: ActionTierNumber
   candidate?: { rank: number; total_score: number } | null
+  // Tiers 3 and 4 (#277-B): the nearest strategy's conditions, no level; null without a strategy_levels row.
+  nearness?: ActionNearness | null
+}
+
+// One unmet condition of a near card: a price condition carries its gap, a volume condition its ratio; never a price.
+export type ActionNearnessItem = {
+  code: string
+  kind: string
+  short_label: string | null
+  gap: number | null
+  position: 'below' | 'above' | 'inside' | string | null
+  actual: number | null
+  threshold: number | null
+  threshold_high: number | null
+  operator: string | null
+}
+
+export type ActionNearness = {
+  strategy: string
+  label: string
+  near: boolean
+  unmet_count: number
+  price_gap: number | null
+  unmet: ActionNearnessItem[]
+  met_short_labels: string[]
 }
 
 export type ActionTierNumber = 0 | 1 | 2 | 3 | 4 | 5
@@ -1131,6 +1158,8 @@ export type ActionTierSummary = {
   held_unknown?: number
   scope?: string
   tier_version: string
+  // Tier 2's 「未進今日候選前 N」.
+  candidate_list_size?: number
   view: ActionView
   include_etf: boolean
   tiers: Array<{ tier: ActionTierNumber; key: string; label: string; stock: number; etf: number; shown: number }>
