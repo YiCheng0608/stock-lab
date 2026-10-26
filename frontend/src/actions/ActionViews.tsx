@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { formatCandidateScore } from '../candidates/candidates'
 import { Term } from '../components/Term'
-import { Badge, DataTable, Skeleton, cx, type Column } from '../components/ui'
+import { Badge, CardList, DataTable, Skeleton, cx, type Column } from '../components/ui'
 import type { ActionSummary, ActionTierSummary, ActionView } from '../types'
 import {
   ACTION_VIEWS,
@@ -80,13 +80,14 @@ function StockCell({ action }: { action: ActionSummary }) {
 // The row's tier context: tier 3 words its nearest strategy, tier 2 says why it is not a candidate (UI_COPY_SPEC §6).
 type RowContext = { tier: number; candidateListSize: number | null }
 
-function StatusCell({ action, context }: { action: ActionSummary; context: RowContext }) {
+// The phone card puts tier 2's line with the other text (DESIGN_SYSTEM §5.1 ④), not under the badge.
+function StatusCell({ action, context, withNote = true }: { action: ActionSummary; context: RowContext; withNote?: boolean }) {
   const near = context.tier === 3 ? nearCopy(action.nearness) : null
   if (near) return <Badge tone="primary" className="badge-compact">{near.title}</Badge>
   return <>
     <Badge tone={action.action_state === 'conditional_entry' ? 'primary' : action.action_state === 'reduce_exit' ? 'warning' : 'default'} className="badge-compact">{actionStateLabel(action)}</Badge>
     {action.position_quantity_status === 'unknown' && <div><span className="pill ambiguous badge-compact">庫存數量待核實</span></div>}
-    {context.tier === 2 && <div className="small-note action-tier-note">{conditionalNote(action, context.candidateListSize)}</div>}
+    {withNote && context.tier === 2 && <div className="small-note action-tier-note">{conditionalNote(action, context.candidateListSize)}</div>}
   </>
 }
 
@@ -147,15 +148,17 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
   // Tier 3 never shows a level (DESIGN_SYSTEM §7 接近成立).
   const levels = tier <= 2 ? actionLevels(action) : null
   return (
+    // DESIGN_SYSTEM §5.1: ① name and badge, the close on the right → ② market · type → ③ levels → ④ text → ⑤ day and link.
     <article className="card action-card-mini" data-action-card={actionKey(action)}>
       <div className="action-card-head">
-        <Link className="symbol-link" to={researchPath(action)}><strong>{action.instrument.symbol}</strong> {action.instrument.name}</Link>
-        <StatusCell action={action} context={context} />
+        <div className="action-card-title">
+          <Link className="symbol-link" to={researchPath(action)}><strong>{action.instrument.symbol}</strong> {action.instrument.name}</Link>
+          <StatusCell action={action} context={context} withNote={false} />
+        </div>
+        {close.close !== null && <div className="action-card-price">{close.close}<span className={cx('action-change', close.tone)}>{close.change}</span></div>}
       </div>
       <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
-      {close.close === null
-        ? <div className="small-note">價格資料尚未完整，暫不顯示最近收盤</div>
-        : <div className="action-card-close"><span className="small-note">最近收盤</span> <b>{close.close}</b> <span className={cx('action-change', close.tone)}>{close.change}</span></div>}
+      {close.close === null && <div className="small-note">價格資料尚未完整，暫不顯示最近收盤</div>}
       {levels && (
         // Only the levels the row has; a blank level is left out, not shown as 0 or a dash (UI_COPY_SPEC §5).
         <dl className="candidate-mini-levels">
@@ -164,6 +167,7 @@ function ActionCard({ action, context }: { action: ActionSummary; context: RowCo
           {levels.target && <div><dt>目標</dt><dd className="level-target">{levels.target}</dd></div>}
         </dl>
       )}
+      {tier === 2 && <div className="small-note">{conditionalNote(action, context.candidateListSize)}</div>}
       {tier === 3 && <NearLines action={action} />}
       {tier >= 4 && <div className="small-note action-card-note"><NoteLines action={action} tier={tier} /></div>}
       <div className="action-card-foot"><span className="small-note">資料日 {actionDataDay(action)}</span><Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link></div>
@@ -198,7 +202,8 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
           rowKey={actionKey}
           rowProps={(action) => ({ 'data-action-row': actionKey(action) })}
         />
-        <div className="action-cards">{section.items.map((action) => <ActionCard key={actionKey(action)} action={action} context={context} />)}</div>
+        {/* The tier pages with 顯示更多 (UI_COPY_SPEC §5), not the ten-card fold (DESIGN_SYSTEM §5.1). */}
+        <CardList className="action-cards" items={section.items} itemKey={actionKey} preview={null} renderCard={(action) => <ActionCard action={action} context={context} />} />
       </>}
       {remaining > 0 && canLoadMore && (
         <button type="button" className="btn btn-secondary btn-sm action-more" disabled={loading} onClick={onMore}>{loading ? '載入中…' : moreText(remaining)}</button>

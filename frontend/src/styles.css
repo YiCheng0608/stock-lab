@@ -488,10 +488,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-no-close { white-space: normal; text-align: left; }
 .action-cards { display: none; gap: var(--space-3); }
 .action-card-mini { display: grid; gap: var(--space-1); min-width: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
-.action-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
-.action-card-head .symbol-link { min-width: 0; overflow-wrap: anywhere; }
-.action-card-close b { font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; }
-.action-card-close .action-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.action-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.action-card-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-width: 0; }
+.action-card-title .symbol-link { min-width: 0; overflow-wrap: anywhere; }
+.action-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.action-card-price .action-change { font-family: var(--font-mono); font-weight: 400; }
 .action-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
 .action-more { margin-top: var(--space-3); }
 /* Tier 3 接近成立: text only, no level (DESIGN_SYSTEM §7). */

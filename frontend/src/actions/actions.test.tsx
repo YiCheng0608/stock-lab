@@ -175,6 +175,13 @@ const observation = tierMarkup(4)
 check(text(observation).includes('突破條件差 3 項：價格、量能、法人') && text(observation).includes('回踩條件差 1 項：趨勢'), '其他觀察: the 差 N 項 line')
 check(count(observation, CONDITIONS_PENDING_TEXT) === 2, `其他觀察: 條件明細尚未產生 only without a strategy_levels row (table and card), got ${count(observation, CONDITIONS_PENDING_TEXT)}`)
 
+// ---- phone cards: CardList without its ten-card fold, the close on the title row (DESIGN_SYSTEM §5.1) ----
+const twelve = Array.from({ length: 12 }, (_, index) => row(String(3000 + index), 3, 'no_condition', { nearness: volumeNear }))
+const twelvePage = page(twelve, { tiers: summary().tiers.map((tier) => ({ ...tier, shown: tier.tier === 3 ? 12 : 0 })) })
+const phone = render('ActionTierList phone', () => <ActionTierList sections={tierSections(twelvePage)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
+check(phone.includes('class="card-list action-cards"') && count(phone, 'data-action-card=') === 12 && !phone.includes('card-list-rest'), '手機卡片: CardList, every loaded row a card, no 顯示其餘 fold (the tier pages instead)')
+check(/<div class="action-card-head"><div class="action-card-title">.*?<\/div><div class="action-card-price">21\.10<span class="action-change positive">\+2\.43%<\/span><\/div><\/div>/.test(phone), '手機卡片: name and badge on the left, the close and change on the right of the title row')
+
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')
 const emptyPortfolio = render('PortfolioSubsection empty', () => <PortfolioSubsection />, [[['portfolio-subsection'], { items: [], pagination: {} }]])

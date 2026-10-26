@@ -14,12 +14,15 @@ type CardListProps<T> = {
   className?: string
   // Shown above the cards (e.g. the unit note the hidden desktop table carries).
   note?: ReactNode
+  // Cards shown before the fold; null for a list with its own paging (the action tiers' 顯示更多).
+  preview?: number | null
 }
 
 // The phone rendering of a desktop DataTable: one card per row, the first CARD_LIST_PREVIEW open, the rest in <details>.
-export function CardList<T>({ items, itemKey, renderCard, restLabel = (count) => `顯示其餘 ${count} 檔`, className, note }: CardListProps<T>) {
-  const shown = items.slice(0, CARD_LIST_PREVIEW)
-  const rest = items.slice(CARD_LIST_PREVIEW)
+export function CardList<T>({ items, itemKey, renderCard, restLabel = (count) => `顯示其餘 ${count} 檔`, className, note, preview = CARD_LIST_PREVIEW }: CardListProps<T>) {
+  const limit = preview ?? items.length
+  const shown = items.slice(0, limit)
+  const rest = items.slice(limit)
   return (
     <div className={cx('card-list', className)}>
       {note}
