@@ -154,6 +154,7 @@ DATE_LINE = re.compile(r"^資料日 ([0-9]{4}/[0-9]{2}/[0-9]{2})$")
 CANDIDATE_DISCLAIMER = (
     "由 AI 依上方規則數值、理由與關聯新聞撰寫的推論，不是買賣建議；價位以規則數值為準。"
 )
+AI_ENTRY, AI_ENTRY_NONE = "AI 推論 ▸", "AI 說明 ▸"  # candidateAiEntry (#276)
 
 
 @dataclass
@@ -464,7 +465,7 @@ class Run:
         return self.get("dashboard", "dashboard.json")
 
     def today_board(self) -> dict:
-        return self.get("themes?board=industry&limit=10", "today-board.json")
+        return self.get("themes?board=industry&limit=5", "today-board.json")
 
     def needs(self, value: str, found: Any, missing: str, subject: str = "") -> Any:
         """``found`` for a check that uses ``value``; Upstream when the owner did not pass or it is missing."""
@@ -686,6 +687,7 @@ def check(
 
 TODAY = Shot("today", "/")
 PENDING_DATE = "資料日期待核實"  # DateBadge without a date
+TODAY_GROUPS = 5  # TODAY_BOARD_LIMIT in frontend/src/themes/themeBoards.ts (#276)
 
 
 @check("today", "T1")
@@ -713,19 +715,23 @@ def t2(run: Run) -> str:
 
 @check("today", "T3")
 def t3(run: Run) -> str:
+    """#276: one header line 「資料截至 <D/> · <source_label> · <mode>」 instead of the hero card."""
+
     text, d = run.text(TODAY), run.D()
-    i = text.find("資料截至")
-    expect(i >= 0, f"缺整行 `資料截至`（{text.name}）")
+    prefix = f"資料截至 {slash(d)} · "
+    i = text.find_where(lambda line: line.startswith("資料截至 "))
+    expect(i >= 0, f"缺 `資料截至 ` 開頭的頁首資料列（{text.name}）")
+    line = text.lines[i]
     expect(
-        text.after(i) == slash(d),
-        f"`資料截至` 下一行是 {text.after(i)!r}，預期 {slash(d)!r}（{text.at(i)}）",
+        line.startswith(prefix),
+        f"頁首資料列是 {line!r}，預期以 `{prefix}` 開頭（{text.at(i)}）",
     )
-    source = text.after(i, 2)
+    parts = line[len(prefix) :].split(" · ")
     label = (run.dashboard().get("market") or {}).get("source_label")
-    expect(bool(source), f"`資料截至` 之後缺來源行（{text.at(i)}）")
+    expect(len(parts) >= 2 and all(parts), f"頁首資料列缺來源或模式：{line!r}")
     if label is not None:
-        expect(source == label, f"來源行 {source!r} ≠ market.source_label {label!r}")
-    return f"`資料截至` → {slash(d)} → {source}"
+        expect(parts[0] == label, f"來源 {parts[0]!r} ≠ market.source_label {label!r}")
+    return f"`{line}`"
 
 
 def first_data_line_after(text: Text, title: str) -> tuple[int, str | None]:
@@ -799,8 +805,8 @@ def t5(run: Run) -> str:
     marker = f"資料 {slash(b)} · 相對加權指數"
     cards = text.count(lambda line: line == marker)
     expect(
-        cards == min(10, len(items)),
-        f"`{marker}` {cards} 行，預期 {min(10, len(items))}",
+        cards == min(TODAY_GROUPS, len(items)),
+        f"`{marker}` {cards} 行，預期 {min(TODAY_GROUPS, len(items))}",
     )
     name = items[0]["display_name"]
     expect(text.has(name), f"缺整行 items[0].display_name `{name}`")
@@ -840,7 +846,7 @@ def t6(run: Run) -> str:
         i = text.find(item["title"])
         expect(i >= 0, f"缺新聞標題整行 `{item['title']}`（id {item['id']}）")
         starts.append(i)
-    end = text.find("熱門族群")
+    end = text.find("關注標的", max(starts))
     bounds = sorted(starts) + [end if end >= 0 else len(text.lines)]
     problems, marked = [], []
     for item, start in zip(news, starts):
@@ -882,6 +888,22 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
+# A candidate table row starts with its rank cell (#276): `#1<TAB>…`.
+RANK_ROW = re.compile(r"^#([0-9]+)(\t|$)")
+
+
+def candidate_ranks(text: Text) -> list[int]:
+    """Rank cells between 明日候選 and 熱門族群 (the group rows have their own `#n`)."""
+
+    start, end = text.find("明日候選"), text.find("熱門族群")
+    end = end if end > start else len(text.lines)
+    return [
+        int(match.group(1))
+        for line in text.lines[start + 1 : end]
+        if (match := RANK_ROW.match(line))
+    ]
+
+
 @check("today", "T7")
 def t7(run: Run) -> str:
     text, payload = run.text(TODAY), candidates(run)
@@ -917,11 +939,14 @@ def t7(run: Run) -> str:
         text.after(i, 2) == count_line,
         f"再下一行是 {text.after(i, 2)!r}，預期 `{count_line}`",
     )
+    ranks = candidate_ranks(text)
+    want = [item["rank"] for item in items]
+    expect(ranks == want, f"`#n` 名次列 {ranks}，預期依 items {want}")
     sources = len(source_lines(text))
     expect(sources == len(items), f"`來源：` 行 {sources}，items {len(items)}")
     latest = run.facts()["candidate_run_latest_trading_date"]
     expect(c == latest, f"C {c} ≠ facts candidate_run_latest_trading_date {latest}")
-    return f"`資料 {slash(c)}`、`{count_line}`；來源行 {sources} = items；C = facts"
+    return f"`資料 {slash(c)}`、`{count_line}`；名次列 {len(ranks)}、來源行 {sources} = items；C = facts"
 
 
 def news_inference(item: dict) -> bool:
@@ -948,8 +973,20 @@ def t8(run: Run) -> str:
     expect(notes >= len(items), f"`AI 推論` {notes} 行 < items {len(items)}")
     disclaimers = text.count(lambda line: line == CANDIDATE_DISCLAIMER)
     expect(disclaimers == len(items), f"免責句 {disclaimers} 行，items {len(items)}")
+    # #276: each row's AI entry says whether a note exists (done or pending) or not.
+    with_note = sum(bool(item.get("llm_note")) for item in items)
+    entries = sum(line.count(AI_ENTRY) for line in text.lines)
+    plain = sum(line.count(AI_ENTRY_NONE) for line in text.lines)
+    expect(
+        (entries, plain) == (with_note, len(items) - with_note),
+        f"`{AI_ENTRY}` {entries} 個、`{AI_ENTRY_NONE}` {plain} 個，"
+        f"預期 {with_note}／{len(items) - with_note}（llm_note 存在的檔數）",
+    )
     inferred = sum(news_inference(item) for item in items)
-    return f"{inferred} 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` {notes} 行；免責句 {disclaimers} 行"
+    return (
+        f"{inferred} 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` {notes} 行；"
+        f"免責句 {disclaimers} 行；入口 `{AI_ENTRY}` {entries}、`{AI_ENTRY_NONE}` {plain}"
+    )
 
 
 def home_actions(dashboard: dict) -> list[dict]:
@@ -1000,6 +1037,134 @@ def t9(run: Run) -> str:
     dates = text.count(lambda line: bool(DATE_LINE.match(line)))
     expect(dates == k, f"`查看個股詳情 →` {k} 行，`資料日 YYYY/MM/DD` {dates} 行")
     return f"{k} 張卡各有 `資料日`"
+
+
+# ---- T11 market overview (#276, UI_COPY_SPEC §11) ----
+
+OVERVIEW_EXCHANGES = (("TWSE", "上市"), ("TPEx", "上櫃"))
+
+
+def fixed(value: float, digits: int, signed: bool = False) -> str:
+    """formatFixed in frontend/src/units.ts: thousands separators, `-` or (signed) `+`."""
+
+    rounded = round(value, digits)
+    text = f"{abs(rounded):,.{digits}f}"
+    if rounded < 0:
+        return "-" + text
+    return "+" + text if signed and rounded > 0 else text
+
+
+def dash(value: Any) -> str:
+    return "—" if value is None else fixed(value, 0)
+
+
+def overview_lines(exchange: dict, label: str) -> list[str]:
+    """The lines the four widgets show for one available exchange (TodayViews.tsx)."""
+
+    index, turnover = exchange.get("index") or {}, exchange.get("turnover") or {}
+    breadth = exchange.get("breadth") or {}
+    lines = []
+    if index.get("close") is not None:
+        lines.append(fixed(index["close"], 2))
+    if index.get("change") is not None and index.get("change_pct") is not None:
+        lines.append(
+            f"{fixed(index['change'], 2, True)}（{fixed(index['change_pct'] * 100, 2, True)}%）"
+        )
+    if turnover.get("value") is not None:
+        lines.append(f"{label} {fixed(turnover['value'] / 1e8, 2)}")
+    limits = (
+        ""
+        if breadth.get("limit_up") is None and breadth.get("limit_down") is None
+        else f"（{dash(breadth.get('limit_up'))}／{dash(breadth.get('limit_down'))}）"
+    )
+    lines.append(
+        f"{label} 上漲 {dash(breadth.get('advancers'))} · 下跌 {dash(breadth.get('decliners'))}"
+        f" · 平盤 {dash(breadth.get('unchanged'))}{limits}"
+    )
+    return lines
+
+
+SUMMARY_FIELDS = {
+    "index_close": ("index", "close"),
+    "index_change": ("index", "change"),
+    "turnover": ("turnover", "value"),
+    "advancers": ("breadth", "advancers"),
+    "decliners": ("breadth", "decliners"),
+}
+
+
+@check("today", "T11")
+def t11(run: Run) -> str:
+    """Market overview values equal dashboard.market_overview and the DB rows; scope labels in 資料說明."""
+
+    text, overview = run.text(TODAY), run.dashboard().get("market_overview") or {}
+    rows = {item.get("exchange"): item for item in overview.get("exchanges") or []}
+    latest = run.facts().get("market_summary_latest") or {}
+    day = overview.get("trading_date")
+    problems, shown, scopes = [], [], []
+    for code, label in OVERVIEW_EXCHANGES:
+        exchange, stored = rows.get(code) or {}, latest.get(code)
+        if exchange.get("status") != "available":
+            # #251: an unavailable exchange passes only when the DB has no row of that day either.
+            if stored and day and stored.get("trading_date") == day:
+                problems.append(
+                    f"{code} 為 unavailable，但 DB market_summaries 有 {day} 的列"
+                )
+            missing = f"{label}大盤資料未取得"
+            if not text.has(missing):
+                problems.append(f"{code} unavailable，缺整行 `{missing}`")
+            shown.append(f"{code} 未取得")
+            continue
+        if not stored or stored.get("trading_date") != day:
+            problems.append(
+                f"{code} available {day}，但 DB 最新列 {stored and stored.get('trading_date')}"
+            )
+        else:
+            for field, (group, key) in SUMMARY_FIELDS.items():
+                if stored.get(field) != (exchange.get(group) or {}).get(key):
+                    problems.append(
+                        f"{code} {group}.{key} {(exchange.get(group) or {}).get(key)!r} ≠ DB {field} {stored.get(field)!r}"
+                    )
+        for line in overview_lines(exchange, label):
+            if not text.has(line):
+                problems.append(f"{code} 缺整行 `{line}`")
+        scope = (exchange.get("turnover") or {}).get("scope_label")
+        if scope:
+            scopes.append(f"{label}為{scope}")
+        shown.append(
+            f"{code} {fixed((exchange.get('index') or {}).get('close') or 0, 2)}"
+        )
+    if scopes:
+        line = "成交金額範圍：" + "；".join(scopes)
+        if not text.has(line):
+            problems.append(f"資料說明缺整行 `{line}`")
+    expect(not problems, "；".join(problems))
+    return (
+        f"{day}："
+        + "、".join(shown)
+        + (f"；範圍 `{'；'.join(scopes)}`" if scopes else "")
+    )
+
+
+@check("today", "T12")
+def t12(run: Run) -> str:
+    """#276: candidates come before the groups and the news (PRODUCT_SPEC §2)."""
+
+    text = run.text(TODAY)
+    found = {title: text.find(title) for title in ("明日候選", "熱門族群", "重點新聞")}
+    missing = [title for title, i in found.items() if i < 0]
+    expect(not missing, "缺整行 " + "、".join(f"`{title}`" for title in missing))
+    expect(
+        found["明日候選"] < found["熱門族群"] and found["明日候選"] < found["重點新聞"],
+        "區塊順序 "
+        + " → ".join(
+            title for title, _ in sorted(found.items(), key=lambda item: item[1])
+        )
+        + "，預期 `明日候選` 在 `熱門族群` 與 `重點新聞` 之前",
+    )
+    return "`明日候選`（{0}）→ `熱門族群`（{1}）、`重點新聞`（{2}）".format(
+        *(text.at(i) for i in found.values())
+    )
 
 
 # ---- news ----

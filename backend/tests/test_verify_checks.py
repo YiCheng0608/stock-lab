@@ -209,18 +209,26 @@ def _candidates(count=2, inference=True):
         "candidate_count": count,
         "items": [
             {
+                "rank": n + 1,
                 "instrument": {"symbol": f"910{n}"},
                 "components": {"news_sentiment": {"inference": inference}},
+                # #1 has a note, #2 none: their entries read AI 推論 ▸ and AI 說明 ▸.
+                "llm_note": {"status": "done"} if n == 0 else None,
             }
             for n in range(count)
         ],
     }
 
 
+# The 1280 table (#276): rank cell first, tab-separated cells, then the opened detail row.
 TODAY_CANDIDATES = (
     "明日候選\n資料 2026/10/16\n2 檔\n"
+    "名次\t股票\t所屬族群（名次）\t最近收盤\n"
+    "#1\t9100 示範一\n上市 · 突破條件\t半導體（產業，第 1 名／9）\t21.10\n+0.48%\tAI 推論 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a（推論）\n"
+    "#2\t9101 示範二\n上櫃 · 回踩條件\t無所屬產業或題材\t13.20\n漲跌待核實\tAI 說明 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b（推論）\n"
+    "熱門族群\n#1\n半導體\n"
 )
 
 
@@ -231,8 +239,47 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
         {"today-1280": TODAY_CANDIDATES},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    assert "來源行 2 = items" in page_checks.t7(run)
-    assert "`AI 推論` 2 行" in page_checks.t8(run)
+    assert "名次列 2、來源行 2 = items" in page_checks.t7(run)
+    result = page_checks.t8(run)
+    assert "`AI 推論` 2 行" in result and "`AI 推論 ▸` 1、`AI 說明 ▸` 1" in result
+
+
+def test_t7_fails_on_the_old_candidate_cards(tmp_path):
+    # Before #276 each candidate was a card without a rank cell starting a table row.
+    page = TODAY_CANDIDATES.replace("#1\t", "").replace("#2\t", "")
+    run = FakeRun(
+        tmp_path,
+        {"candidates": _candidates()},
+        {"today-1280": page},
+        {"candidate_run_latest_trading_date": "2026-10-16"},
+    )
+    with pytest.raises(
+        page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items \[1, 2\]"
+    ):
+        page_checks.t7(run)
+
+
+def test_t7_counts_only_the_rank_rows_before_the_groups(tmp_path):
+    # The group rows' `#1` after 熱門族群 is not a candidate row.
+    run = FakeRun(
+        tmp_path,
+        {"candidates": _candidates(count=1)},
+        {"today-1280": TODAY_CANDIDATES.replace("2 檔", "1 檔")},
+        {"candidate_run_latest_trading_date": "2026-10-16"},
+    )
+    with pytest.raises(
+        page_checks.Fail, match=r"`#n` 名次列 \[1, 2\]，預期依 items \[1\]"
+    ):
+        page_checks.t7(run)
+
+
+def test_t8_fails_when_an_ai_entry_does_not_match_the_note(tmp_path):
+    page = TODAY_CANDIDATES.replace("AI 說明 ▸", "AI 推論 ▸")
+    run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
+    with pytest.raises(
+        page_checks.Fail, match="`AI 推論 ▸` 2 個、`AI 說明 ▸` 0 個，預期 1／1"
+    ):
+        page_checks.t8(run)
 
 
 def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
@@ -242,7 +289,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
         {"today-1280": "明日候選\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`來源：` 行 0，items 2"):
+    with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
         page_checks.t7(run)
 
 
@@ -251,6 +298,162 @@ def test_t8_fails_without_the_inference_mark(tmp_path):
     run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
     with pytest.raises(page_checks.Fail, match="#2 9101 來源行沒有以 `（推論）` 結尾"):
         page_checks.t8(run)
+
+
+# ---- T11 market overview, T12 block order (#276) ----
+
+
+def _overview(tpex_status="available"):
+    twse = {
+        "exchange": "TWSE",
+        "status": "available",
+        "index": {"close": 46041.43, "change": -846.34, "change_pct": -0.0181},
+        "turnover": {
+            "value": 933437473560,
+            "scope_label": "集中市場總計（含 ETF、權證等）",
+        },
+        "breadth": {
+            "advancers": 247,
+            "decliners": 756,
+            "unchanged": 74,
+            "limit_up": 3,
+            "limit_down": 5,
+        },
+    }
+    tpex = (
+        {
+            "exchange": "TPEx",
+            "status": "available",
+            "index": {"close": 381.69, "change": -13.73, "change_pct": -0.0347},
+            "turnover": {"value": 225545000000, "scope_label": "上櫃股票"},
+            "breadth": {
+                "advancers": 146,
+                "decliners": 659,
+                "unchanged": 63,
+                "limit_up": 17,
+                "limit_down": 11,
+            },
+        }
+        if tpex_status == "available"
+        else {"exchange": "TPEx", "status": "unavailable", "reason": "not_collected"}
+    )
+    return {
+        "market_overview": {"trading_date": "2026-10-22", "exchanges": [twse, tpex]}
+    }
+
+
+def _summary(**extra):
+    row = {
+        "trading_date": "2026-10-22",
+        "index_close": 46041.43,
+        "index_change": -846.34,
+        "turnover": 933437473560,
+        "advancers": 247,
+        "decliners": 756,
+    }
+    return {**row, **extra}
+
+
+TPEX_SUMMARY = {
+    "trading_date": "2026-10-22",
+    "index_close": 381.69,
+    "index_change": -13.73,
+    "turnover": 225545000000,
+    "advancers": 146,
+    "decliners": 659,
+}
+OVERVIEW_PAGE = (
+    "資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n資料說明\n"
+    "成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票\n"
+    "加權指數\n點\n46,041.43\n-846.34（-1.81%）\n"
+    "櫃買指數\n點\n381.69\n-13.73（-3.47%）\n"
+    "成交金額\n億元\n上市 9,334.37\n上櫃 2,255.45\n"
+    "漲跌家數（股票）\n括號為漲停／跌停\n"
+    "上市 上漲 247 · 下跌 756 · 平盤 74（3／5）\n"
+    "上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）\n"
+)
+
+
+def test_t11_passes_when_the_widgets_show_the_api_and_db_values(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    assert "TWSE 46,041.43、TPEx 381.69" in page_checks.t11(run)
+
+
+def test_t11_fails_on_a_widget_that_differs_from_the_api(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE.replace("上市 9,334.37", "上市 9,334.38")},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    with pytest.raises(page_checks.Fail, match="TWSE 缺整行 `上市 9,334.37`"):
+        page_checks.t11(run)
+
+
+def test_t11_fails_on_an_api_value_that_differs_from_the_db(tmp_path):
+    facts = {"TWSE": _summary(advancers=248), "TPEx": TPEX_SUMMARY}
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE},
+        {"market_summary_latest": facts},
+    )
+    with pytest.raises(
+        page_checks.Fail, match="TWSE breadth.advancers 247 ≠ DB advancers 248"
+    ):
+        page_checks.t11(run)
+
+
+def test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day(tmp_path):
+    page = (
+        OVERVIEW_PAGE.replace("；上櫃為上櫃股票", "")
+        .replace("381.69\n-13.73（-3.47%）", "上櫃大盤資料未取得")
+        .replace("上櫃 2,255.45", "上櫃大盤資料未取得")
+    )
+    facts = {"market_summary_latest": {"TWSE": _summary()}}
+    run = FakeRun(
+        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+    )
+    assert "TPEx 未取得" in page_checks.t11(run)
+    facts = {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}}
+    run = FakeRun(
+        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+    )
+    with pytest.raises(
+        page_checks.Fail,
+        match="TPEx 為 unavailable，但 DB market_summaries 有 2026-10-22 的列",
+    ):
+        page_checks.t11(run)
+
+
+def test_t11_fails_on_the_old_page_without_an_overview(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": "資料截至\n2026/10/22\nTWSE／TPEx 官方資料\n"},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    with pytest.raises(page_checks.Fail, match="TWSE 缺整行 `46,041.43`"):
+        page_checks.t11(run)
+
+
+def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
+    page = "明日候選\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n關注標的\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": page})
+    assert "`明日候選`" in page_checks.t12(run)
+    old = "今日市場／重大事件\n熱門族群\n明日候選\n關注標的\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": old})
+    with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
+        page_checks.t12(run)
+    swapped = "熱門族群\n重點新聞\n明日候選\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": swapped})
+    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 明日候選"):
+        page_checks.t12(run)
 
 
 def test_a_missing_api_makes_the_check_undetermined(tmp_path):
@@ -280,7 +483,7 @@ def _theme_run(tmp_path, total, pager):
     return FakeRun(
         tmp_path,
         {
-            "themes?board=industry&limit=10": board,
+            "themes?board=industry&limit=5": board,
             f"themes/{theme}": {"theme": {"display_name": "半導體"}},
             f"themes/{theme}/members?page=1&page_size=30&sort=price": members,
         },

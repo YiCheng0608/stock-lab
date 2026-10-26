@@ -65,7 +65,7 @@ TODAY_PAGE = (
 def _run(tmp_path, payloads=None, pages=None, facts=None):
     base = {
         "dashboard": DASHBOARD,
-        "themes?board=industry&limit=10": EMPTY_BOARD,
+        "themes?board=industry&limit=5": EMPTY_BOARD,
         "themes?board=industry&limit=100": EMPTY_BOARD,
         "candidates": CANDIDATES,
     }
@@ -137,10 +137,11 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         "candidates": {
             **CANDIDATES,
             "candidate_count": 1,
-            "items": [{"instrument": {"symbol": "2301"}, "components": {}}],
+            "items": [{"rank": 1, "instrument": {"symbol": "2301"}, "components": {}}],
         }
     }
-    pages = {"today-1280": "明日候選\n資料 2026/10/22\n1 檔\n"}
+    # The row is there (#276 table) but its detail lost the 來源 line.
+    pages = {"today-1280": "明日候選\n資料 2026/10/22\n1 檔\n#1\t2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
