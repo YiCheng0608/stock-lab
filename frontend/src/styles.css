@@ -226,9 +226,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* ---- news (DESIGN_SYSTEM §5 card／tabs, §7 AI 推論) ------------------------------------------------ */
 .news-controls { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
 .news-controls .tabs { border-bottom: 0; }
-.news-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-3); }
-.news-filters .search-input { width: 240px; }
-.news-filters .news-symbol-input { width: 140px; }
+/* One row above 640px (UI_COPY_SPEC §4): the inputs shrink, the buttons never drop to a second line. */
+.news-filters { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-3); }
+.news-filters .search-input { flex: 0 1 240px; width: 240px; min-width: 0; }
+.news-filters .news-symbol-input { flex: 0 1 140px; width: 140px; }
+.news-filters button { flex: none; }
 .news-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .news-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .news-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; }
@@ -529,6 +531,7 @@ a.symbol-link:hover { color: var(--color-primary); }
   .home-hero { padding-top: var(--space-6); }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
+  .news-filters { flex-wrap: wrap; }
   .news-filters, .news-filters .search-input { flex: 1 1 100%; width: 100%; }
   .news-filters .news-symbol-input { flex: 1 1 0; width: auto; }
   .news-detail-title { font-size: 24px; }

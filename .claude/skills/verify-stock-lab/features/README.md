@@ -14,7 +14,7 @@
 
 | 值 | 定義 | 負責的檢查（上游） | 使用的檔 |
 | --- | --- | --- | --- |
-| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today T2 | stocks S3（導覽列的 `資料 <D>`）；news N7、N8 的抽樣日 |
+| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today T2 | stocks S3（導覽列的 `資料 <D/>`）；news N7、N8 的抽樣日 |
 | `B` | `today-board.json` 的 `meta.trading_date` | today T4 | today T5；themes（族群榜 `B` 指各榜自己的 `meta.trading_date`，與今日的 `B` 應同一天） |
 | `T`、名稱 | `today-board.json` 的 `items[0].theme_id` 與 `display_name` | today T5 | themes 的 `theme-detail`／`theme-members` URL 與 G5～G7 |
 | `E`、`S` | 見下方[選股](#選股) | — | stocks 的 API、截圖與 S1、S3～S9；actions 的 `action-detail` 與 A6、A7 |

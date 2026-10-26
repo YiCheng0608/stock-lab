@@ -12,6 +12,7 @@ import {
   aiDirection,
   candidateConfidenceLabel,
   directionView,
+  sourceDirectionView,
   formatTaipeiInstant,
   impactScopeLabel,
   matchesInstrument,
@@ -255,7 +256,7 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
               <p className="news-detail-body">{description}</p>
             </details>
           )}
-          <div className="news-detail-section"><span className="news-detail-label">影響</span><DirectionText view={directionView(item.impact_direction)} /></div>
+          <div className="news-detail-section"><span className="news-detail-label">影響</span><DirectionText view={sourceDirectionView(item.impact_direction)} /></div>
           <div className="news-detail-section"><span className="news-detail-label">已核實關聯</span><RelationChips item={item} /></div>
           <SourceLinkLine item={item} />
           <details className="technical-details">

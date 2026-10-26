@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ReactEChartsModule from 'echarts-for-react'
 
 import { Card, DataTable, DateBadge, EmptyState, Skeleton, Tabs, tabPanelId, type Column } from '../components/ui'
+import { formatDay } from '../dates'
 import type { StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import {
   INDICATOR_PANELS,
@@ -65,7 +66,7 @@ function indicatorSourceLabel(response: StockBarsResponse): string {
 function barColumns(digits: number): ReadonlyArray<Column<StockBarRow>> {
   const price = (field: 'open' | 'high' | 'low' | 'close') => (bar: StockBarRow) => isDrawableBar(bar) ? formatPrice(bar[field], digits) : ''
   return [
-    { key: 'date', header: '日期', cell: (bar) => `${bar.date}${bar.is_suspended ? '（停牌）' : ''}` },
+    { key: 'date', header: '日期', cell: (bar) => `${formatDay(bar.date) ?? bar.date}${bar.is_suspended ? '（停牌）' : ''}` },
     { key: 'open', header: '開', num: true, cell: price('open') },
     { key: 'high', header: '高', num: true, cell: price('high') },
     { key: 'low', header: '低', num: true, cell: price('low') },

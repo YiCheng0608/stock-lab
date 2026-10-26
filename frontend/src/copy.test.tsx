@@ -49,6 +49,7 @@ const loaded = <T,>(data: T) => ({ data, loading: false, error: null })
 const termLabels = (markup: string): string[] =>
   (markup.match(/<button[^>]*class="term-button"[^>]*>[\s\S]*?<\/button>/g) ?? []).map((button) => text(button))
 const hasTerm = (markup: string, label: string) => termLabels(markup).some((found) => found.includes(label))
+const hasTermId = (markup: string, id: string) => markup.includes(`data-term="${id}"`)
 
 // ---- glossary: every in-place term exists with all five fields (UI_COPY_SPEC §7 就地說明) ----
 const IN_PLACE_TERMS: Record<string, string> = {
@@ -96,8 +97,8 @@ const action = {
 } as unknown as ActionSummary
 const ActionDetailPanel = component('ActionDetailPanel')
 const research = render('ActionDetailPanel', () => <ActionDetailPanel {...{ action }} />)
-check(termLabels(research).some((label) => /失效|停損/.test(label)), `研究條件: the invalidation／stop level opens 停損／條件失效價 (found ${termLabels(research).join('、') || 'none'})`)
-check(termLabels(research).some((label) => label.includes('目標')), '研究條件: the target level opens 目標價')
+check(hasTermId(research, 'support'), `研究條件: the invalidation／stop level opens 停損／條件失效價 (found ${termLabels(research).join('、') || 'none'})`)
+check(hasTermId(research, 'target'), '研究條件: the target level opens 目標價')
 check(hasTerm(research, '風險報酬比'), '研究條件: 風險報酬比 stays a term')
 
 // ---- news detail: the facts column never reads like a verdict next to the AI direction (UI_COPY_SPEC §4) ----

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ReactEChartsModule from 'echarts-for-react'
 
+import { Term } from '../components/Term'
 import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
@@ -59,8 +60,16 @@ function errorReason(error: unknown): string {
   return error instanceof Error ? error.message : '請稍後重新整理'
 }
 
-export function QualityBadge({ quality, compact = false }: { quality: string | null | undefined; compact?: boolean }) {
-  return <Badge tone={qualityTone(quality)} className={compact ? 'badge-compact' : undefined}>{qualityLabel(quality)}</Badge>
+// `explain` makes 「事件資料待補」 a glossary term; leave it off inside a link (UI_COPY_SPEC §7).
+export function QualityBadge({ quality, compact = false, explain = false }: { quality: string | null | undefined; compact?: boolean; explain?: boolean }) {
+  const label = qualityLabel(quality)
+  const pending = '事件資料待補'
+  const at = explain ? label.indexOf(pending) : -1
+  return (
+    <Badge tone={qualityTone(quality)} className={compact ? 'badge-compact' : undefined}>
+      {at < 0 ? label : <>{label.slice(0, at)}<Term id="event_data_pending">{pending}</Term>{label.slice(at + pending.length)}</>}
+    </Badge>
+  )
 }
 
 function ReturnValue({ value, unit = '' }: { value: number | null | undefined; unit?: string }) {
@@ -80,17 +89,17 @@ export function BoardDateBadges({ meta }: { meta: Pick<ThemeBoardMeta, 'trading_
 
 // ---- /themes: one board as a desktop table and phone cards ----
 
-const BOARD_TABLE_NOTE = '分數 0–100；五分項為同榜百分位（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。'
+const BOARD_TABLE_NOTE = <>分數 0–100；五分項為<Term id="percentile">同榜百分位</Term>（0–100）；1／5／20 日為相對加權指數的報酬（%）；成員為有效／總數（檔）；「—」表示該項無資料。</>
 
 const BOARD_COLUMNS: ReadonlyArray<Column<ThemeBoardItem>> = [
-  { key: 'rank', header: '排名', num: true, cell: (item) => item.rank },
+  { key: 'rank', header: <Term id="heat_rank">排名</Term>, num: true, cell: (item) => item.rank },
   {
     key: 'name', header: '族群', cellClassName: 'board-name-cell', cell: (item) => <>
       <Link className="symbol-link" to={themeDetailPath(item.theme_id)}>{item.display_name}</Link>
-      <QualityBadge quality={item.quality} compact />
+      <QualityBadge quality={item.quality} compact explain />
     </>,
   },
-  { key: 'score', header: '分數', num: true, cellClassName: 'board-score', cell: (item) => formatScore(item.score) },
+  { key: 'score', header: <Term id="heat_rank">分數</Term>, num: true, cellClassName: 'board-score', cell: (item) => formatScore(item.score) },
   ...BOARD_COMPONENTS.map((component): Column<ThemeBoardItem> => ({ key: component.key, header: component.label, num: true, cell: (item) => formatComponent(item.components[component.key]) })),
   ...RETURN_WINDOWS.map((window): Column<ThemeBoardItem> => ({ key: window.key, header: window.label, num: true, cell: (item) => <ReturnValue value={item.relative_returns[window.key]} /> })),
   { key: 'members', header: '成員', num: true, cell: (item) => formatMembers(item.eligible_members, item.member_count) },
@@ -286,7 +295,7 @@ function ComponentsCard({ detail, item }: { detail: ThemeDetail; item: ThemeBoar
   const metrics = detail.theme.metrics ?? {}
   const returns = item?.relative_returns ?? { '1d': metrics.relative_return_1d ?? null, '5d': metrics.relative_return_5d ?? null, '20d': metrics.relative_return_20d ?? null }
   return (
-    <Card className="components-card" eyebrow="同榜百分位 0–100" title="五分項" aside={<DateBadge date={formatDate(item?.trading_date ?? detail.theme.trading_date)} />}>
+    <Card className="components-card" eyebrow={<><Term id="percentile">同榜百分位</Term> 0–100</>} title={<Term id="group_components">五分項</Term>} aside={<DateBadge date={formatDate(item?.trading_date ?? detail.theme.trading_date)} />}>
       {!item && <p className="small-note">此族群不在本日{boardLabel(detail.board)}榜（有效成員未達 3 檔或資料不足以計分），五分項沒有同榜百分位。</p>}
       <div className="metric-list">
         {BOARD_COMPONENTS.map((component) => <div className="metric-row" key={component.key}><span>{component.label}</span><b>{formatComponent(item?.components[component.key])}</b></div>)}
@@ -409,14 +418,14 @@ export function ThemeDetailView({
       <section className="theme-header">
         <div className="theme-header-badges">
           <Badge tone="primary">{boardLabel(detail.board)}</Badge>
-          <QualityBadge quality={item?.quality ?? detail.theme.data_quality} />
+          <QualityBadge quality={item?.quality ?? detail.theme.data_quality} explain />
           <DateBadge date={scoreDate} />
         </div>
         <h1>{detail.theme.display_name}</h1>
         <p>{detail.theme.description}</p>
         <div className="theme-stats">
-          <Stat label="排名" value={formatRank(item?.rank)} detail={item ? `${boardLabel(detail.board)}榜共 ${board.data?.meta.total ?? '—'} 個族群` : board.loading ? '榜單載入中' : '未列入本日榜單'} />
-          <Stat label="分數（0–100）" value={formatScore(item?.score ?? detail.theme.score)} />
+          <Stat label={<Term id="heat_rank">排名</Term>} value={formatRank(item?.rank)} detail={item ? `${boardLabel(detail.board)}榜共 ${board.data?.meta.total ?? '—'} 個族群` : board.loading ? '榜單載入中' : '未列入本日榜單'} />
+          <Stat label={<><Term id="heat_rank">分數</Term>（0–100）</>} value={formatScore(item?.score ?? detail.theme.score)} />
           <Stat label="有效成員／成員" value={formatMembers(item?.eligible_members ?? detail.theme.eligible_members, item?.member_count ?? detail.members_total)} detail="檔" />
         </div>
         {version && <div className="small-note">題材表版本 {version}</div>}
