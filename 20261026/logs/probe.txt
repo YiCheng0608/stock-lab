@@ -1,0 +1,6 @@
+today-first-1280: PROBE first_screen=1280x800 fully_visible_rows=7 of 10 shown wrapped_num_cells=0/60 scrollWidth=1280 clientWidth=1280 overflow=false
+today-first-390: PROBE first_screen=390x844 fully_visible_rows=2 of 10 shown wrapped_num_cells=0/40 scrollWidth=390 clientWidth=390 overflow=false
+today-page-1280: PROBE first_screen=1280x800 fully_visible_rows=7 of 10 shown wrapped_num_cells=0/60 scrollWidth=1280 clientWidth=1280 overflow=false
+today-page-390: PROBE first_screen=390x844 fully_visible_rows=2 of 10 shown wrapped_num_cells=0/40 scrollWidth=390 clientWidth=390 overflow=false
+today-first-1280-alert: PROBE first_screen=1280x800 fully_visible_rows=6 of 10 shown wrapped_num_cells=0/60 scrollWidth=1280 clientWidth=1280 overflow=false
+today-first-390-alert: PROBE first_screen=390x844 fully_visible_rows=2 of 10 shown wrapped_num_cells=0/40 scrollWidth=390 clientWidth=390 overflow=false

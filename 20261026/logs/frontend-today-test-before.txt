@@ -1,0 +1,111 @@
+110 of 110 today checks failed:
+- MarketOverviewView both: render failed (does not export MarketOverviewView)
+- 大盤概況（兩邊都有）: shows 「加權指數」
+- 大盤概況（兩邊都有）: shows 「46,041.43」
+- 大盤概況（兩邊都有）: shows 「-846.34（-1.81%）」
+- 大盤概況（兩邊都有）: shows 「櫃買指數」
+- 大盤概況（兩邊都有）: shows 「381.69」
+- 大盤概況（兩邊都有）: shows 「-13.73（-3.47%）」
+- 大盤概況（兩邊都有）: shows 「成交金額」
+- 大盤概況（兩邊都有）: shows 「億元」
+- 大盤概況（兩邊都有）: shows 「上市 9,334.37」
+- 大盤概況（兩邊都有）: shows 「上櫃 2,255.45」
+- 大盤概況（兩邊都有）: shows 「漲跌家數（股票）」
+- 大盤概況（兩邊都有）: shows 「括號為漲停／跌停」
+- 大盤概況（兩邊都有）: shows 「上市 上漲 247 · 下跌 756 · 平盤 74（3／5）」
+- 大盤概況（兩邊都有）: shows 「上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）」
+- 大盤概況: four widgets, turnover and breadth are the dual-row variant
+- 大盤概況: a falling index change is green (tone-down)
+- 大盤概況: phones fold turnover and breadth into 「成交金額與漲跌家數」
+- MarketOverviewView TWSE only: render failed (does not export MarketOverviewView)
+- 大盤概況（只有上市）: the TPEx cells read 「上櫃大盤資料未取得」
+- 大盤概況（只有上市）: TWSE shows as usual
+- MarketOverviewView 都沒有: render failed (does not export MarketOverviewView)
+- 大盤概況（都沒有）: both read 未取得 and show no number
+- MarketOverviewView 欄位不存在: render failed (does not export MarketOverviewView)
+- 大盤概況（欄位不存在）: both read 未取得 and show no number
+- TodayHeader: render failed (does not export TodayHeader)
+- header: one line 「資料截至 2026/10/22 · 來源 · 模式」
+- 資料說明: the turnover scope of both exchanges, got 
+- 資料說明: the derived TPEx change says how it was computed
+- 資料說明: red is up and green is down
+- TodayHeader TWSE only: render failed (does not export TodayHeader)
+- 資料說明（只有上市）: only the TWSE scope, no TPEx note
+- HoldingAlert: render failed (does not export HoldingAlert)
+- 持倉提示列: count, first three holdings and reasons, got 
+- 持倉提示列: links to /actions
+- HoldingAlert none: render failed (does not export HoldingAlert)
+- table: one row per candidate
+- table: the first 10 rows show, got 0
+- cards: one per candidate, the last 2 hidden
+- list: 「顯示其餘 2 檔」 folds the rest
+- list: the T+1 sentence and the disclaimer
+- list: the today page no longer stacks full candidate cards
+- table head: entry_zone opens its glossary term (found percentile)
+- table head: support opens its glossary term (found percentile)
+- table head: target opens its glossary term (found percentile)
+- table head: rr opens its glossary term (found percentile)
+- table head: candidate_score opens its glossary term (found percentile)
+- table head: heat_rank opens its glossary term (found percentile)
+- table head: 「名次」
+- table head: 「股票」
+- table head: 「所屬族群」
+- table head: 「最近收盤」
+- table head: 「主要理由」
+- row #1: shows 「#1」
+- row #1: shows 「2377」
+- row #1: shows 「微星」
+- row #1: shows 「上市 · 突破條件」
+- row #1: shows 「AI 伺服器（題材，第 2 名／11）」
+- row #1: shows 「162.00」
+- row #1: shows 「+2.21%」
+- row #1: shows 「161.50」
+- row #1: shows 「157.82」
+- row #1: shows 「167.39」
+- row #1: shows 「172.54」
+- row #1: shows 「1.60」
+- row #1: shows 「83」
+- row #1: shows 「三大法人 5 日淨買超，約 20 日均量的 2.59 倍」
+- row #1: the name links to the stock page
+- row #1: stop and target carry the level classes
+- row #1: numeric cells are num
+- row #2: an unverified change reads 漲跌待核實
+- row #4: a falling close shows a signed change
+- row #5: no bar on the day reads 待核實
+- AI entry: done note → 「AI 推論 ▸」
+- AI entry: no note → 「AI 說明 ▸」
+- AI entry: pending note → 「AI 推論 ▸」
+- detail #1: every reason and the four components
+- detail #1: the done AI note with its disclaimer
+- detail #1: data date and 來源 line
+- detail #1: score details link to the stock page
+- detail #2: no note → fixed copy
+- detail #3: pending note → fixed copy
+- table: one 來源 line and one AI disclaimer per candidate
+- card #1: shows 「#1」
+- card #1: shows 「2377」
+- card #1: shows 「微星」
+- card #1: shows 「83」
+- card #1: shows 「上市 · 突破條件 · AI 伺服器（題材，第 2 名／11）」
+- card #1: shows 「收盤」
+- card #1: shows 「162.00」
+- card #1: shows 「進場區」
+- card #1: shows 「161.50」
+- card #1: shows 「停損」
+- card #1: shows 「157.82」
+- card #1: shows 「目標」
+- card #1: shows 「167.39」
+- card #1: shows 「三大法人 5 日淨買超，約 20 日均量的 2.59 倍」
+- card #1: shows 「AI 說明」
+- card #1: stop and target carry the level classes
+- card #1: 「AI 說明」 opens the same detail content
+- list of 2: no fold
+- .level-stop uses --color-warning, got 「color: var(--color-error);」
+- .level-target uses --color-primary, got 「color: var(--color-success);」
+- levels: no --color-error／--color-success
+- ProductActionCard: render failed (does not export ProductActionCard)
+- 行動頁卡片: stop and target carry the level classes
+- 行動頁卡片: the trigger is the entry level
+- 行動詳情: stop and target carry the level classes
+- ProductActionCard held: render failed (does not export ProductActionCard)
+- 行動頁卡片: a holding stop is a stop level too

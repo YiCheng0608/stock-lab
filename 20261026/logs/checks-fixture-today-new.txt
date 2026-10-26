@@ -1,0 +1,15 @@
+screenshots: 11.3 s
+today: 0.2 s
+today API 通過 25 項 = fixture_data.EXPECTED
+today T1 通過 2 張截圖 ready，無錯誤，無橫向捲動
+today T2 通過 `資料 2026/10/16` = facts 2026-10-16
+today T3 通過 `資料截至 2026/10/16 · TWSE／TPEx 官方資料 · 官方單日快照`
+today T4 通過 `資料 2026/10/16`；B = facts 2026-10-16
+today T5 通過 2 張卡 `資料 2026/10/16 · 相對加權指數`；#1 `半導體`
+today T6 通過 前 3 則標題都在；有 AI 判讀的卡片方向與 AI 相同並標 `AI 推論`：1 `可能正向`、5 `可能負向`
+today T7 通過 `資料 2026/10/16`、`3 檔`；名次列 3、來源行 3 = items；C = facts
+today T8 通過 3 檔新聞情緒推論的來源行以 `（推論）` 結尾；`AI 推論` 5 行；免責句 3 行；入口 `AI 推論 ▸` 3、`AI 說明 ▸` 0
+today T9 通過 6 張卡各有 `資料日`
+today T11 通過 2026-10-16：TWSE 24,012.35、TPEx 251.20；範圍 `上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票`
+today T12 通過 `明日候選`（today-1280.txt 第 32 行）→ `熱門族群`（today-1280.txt 第 156 行）、`重點新聞`（today-1280.txt 第 186 行）
+12 checks, 0 failed, 0 undetermined

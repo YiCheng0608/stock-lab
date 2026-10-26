@@ -1,0 +1,18 @@
+E       KeyError: 'market'
+tests\test_candidates.py:846: KeyError
+E       KeyError: 'market'
+tests\test_candidates.py:846: KeyError
+E       KeyError: 'market'
+tests\test_candidates.py:846: KeyError
+E       KeyError: 'market'
+tests\test_candidates.py:846: KeyError
+E       AssertionError: assert {'alternative...'levels', ...} == {'alternative...'levels', ...}
+E         
+E         Extra items in the right set:
+E         'market'
+E         Use -v to get more diff
+FAILED tests/test_candidates.py::test_candidate_market_has_the_close_and_its_change
+FAILED tests/test_candidates.py::test_candidate_market_change_needs_the_same_source_previous_session
+FAILED tests/test_candidates.py::test_candidate_market_change_needs_the_adjacent_session
+FAILED tests/test_candidates.py::test_candidate_market_without_a_bar_on_the_day
+FAILED tests/test_candidates.py::test_candidate_market_keeps_every_existing_field

@@ -1,0 +1,25 @@
+units exact volume cases passed
+units exact position and raw input boundaries passed
+units canonical lots 55 checks passed
+PASS units.test.ts
+PASS search.test.ts
+PASS presentation.test.ts
+PASS noHardcodedColors.test.ts
+PASS stock/stockBars.test.tsx
+PASS components/StrategyVersionCard.test.tsx
+PASS components/ui/ui.test.tsx
+PASS themes/themeBoards.test.tsx
+PASS themes/themeSuggestions.test.tsx
+PASS news/news.test.tsx
+PASS candidates/candidates.test.tsx
+FAIL today/today.test.tsx: Error: 110 of 110 today checks failed:
+- MarketOverviewView both: render failed (does not export MarketOverviewView)
+- 大盤概況（兩邊都有）: shows 「加權指數」
+- 大盤概況（兩邊都有）: shows 「46,041.43」
+- 大盤概況（兩邊都有）: shows 「-846.34（-1.81%）」
+- 大盤概況（兩邊都有）: shows 「櫃買指數」
+tables 277 checks passed
+PASS tables.test.tsx
+copy 51 checks passed
+PASS copy.test.tsx
+Failed 1: today/today.test.tsx
