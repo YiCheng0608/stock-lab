@@ -59,6 +59,7 @@ from .models import (
     ThemeGroup,
 )
 from worker.pipeline import _group_board, summarize_backtest
+from worker.news_llm import PROMPT_VERSION as NEWS_PROMPT_VERSION
 from worker.backfill import (
     BACKFILL_SCOPES,
     backfill_run_dict,
@@ -1108,30 +1109,29 @@ def _candidate_instrument(
 
 
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
-    """Latest done LLM result per news item (worker.news_llm), in two queries.
+    """Done LLM result of the current prompt per news item, in two queries.
 
     The result is inference, kept apart from source facts; symbol candidates are
     unverified (their exchange follows the master, ``_candidate_instrument``) and
-    rule relations stay in ``symbols``.  An item whose latest
-    done-or-rejected result is ``rejected`` (failed the summary check) has no
-    AI block, so an older prompt version's result is not shown in its place.
+    rule relations stay in ``symbols``.  Only the prompt version
+    ``worker.news_llm`` writes now counts (#308): older versions never had its
+    summary check, so an item without a done result of that version (none yet,
+    pending, stale, or ``rejected``) has no AI block on any page.
     """
 
     ids = [item.id for item in items]
     if not ids:
         return {}
-    rows = db.scalars(
-        select(NewsLlmResult)
-        .where(
-            NewsLlmResult.news_item_id.in_(ids),
-            NewsLlmResult.llm_status.in_(("done", "rejected")),
+    latest: dict[int, NewsLlmResult] = {
+        row.news_item_id: row
+        for row in db.scalars(
+            select(NewsLlmResult).where(
+                NewsLlmResult.news_item_id.in_(ids),
+                NewsLlmResult.prompt_version == NEWS_PROMPT_VERSION,
+                NewsLlmResult.llm_status == "done",
+            )
         )
-        .order_by(NewsLlmResult.llm_run_at.desc(), NewsLlmResult.id.desc())
-    ).all()
-    latest: dict[int, NewsLlmResult] = {}
-    for row in rows:
-        latest.setdefault(row.news_item_id, row)
-    latest = {key: row for key, row in latest.items() if row.llm_status == "done"}
+    }
     codes = {
         str(candidate.get("symbol", "")).partition(":")[2]
         for row in latest.values()
