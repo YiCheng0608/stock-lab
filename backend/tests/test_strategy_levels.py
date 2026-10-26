@@ -173,6 +173,10 @@ def test_an_etf_reachability_is_not_judged():
         ((90.0,) * 40 + (100.0,) * 18 + (110.0,), 110.0, 97.4, 102.5, "above", 102.5),
         # S19 = 1894, S59 = 5494: L = 96.6 (96.541), U = 101.5 (101.785)
         ((90.0,) * 40 + (100.0,) * 18 + (94.0,), 94.0, 96.6, 101.5, "below", 96.6),
+        # MA60 bound wins: S19 = 1919, S59 = 5900 (means 101 and 100), so
+        # close >= S59/59 = 100.0 beats the zone's 97.9 (97.815) and the trend's
+        # 71.6 (71.5); U = 103.0 (103.128)
+        ((99.525,) * 40 + (101.0,) * 19, 101.0, 100.0, 103.0, "inside", 101.0),
     ],
 )
 def test_pullback_close_range_and_reference_entry(
@@ -202,6 +206,18 @@ def test_pullback_close_range_and_reference_entry(
             "below": round(96.6 / 94 - 1, 6),
         }[position]
     )
+
+
+def test_a_pullback_range_beyond_the_daily_limit_is_not_reachable():
+    # S19 = 1940, S59 = 5540: L = 98.9 (98.896), U = 104.0 (104.257).  From
+    # close 140.0 the limit down is 126.0, above U: no close in range next session.
+    result = PULLBACK.observation_levels(
+        next_inputs(closes=(90.0,) * 40 + (100.0,) * 18 + (140.0,), close=140.0)
+    )
+    assert result.availability == "levels"
+    assert (result.zone_low, result.zone_high) == (98.9, 104.0)
+    assert levels.price_limits(next_inputs(close=140.0)) == (126.0, 154.0)
+    assert result.reachable_next_session is False
 
 
 def test_a_pullback_whose_trend_cannot_pass_gets_no_price_levels():
