@@ -2,11 +2,11 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, 'release/**']
     # edited and (un)labeled rerun the pr gate when the body or labels change.
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
-    branches: [master]
+    branches: [master, 'release/**']
   # Master's full suite every night (22:40 Taipei) and on demand: changes, backend and
   # frontend run on every file, verify on all five pages (verify_plan.py --event, #251).
   schedule:
