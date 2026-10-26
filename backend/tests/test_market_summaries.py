@@ -489,6 +489,10 @@ def _collect_and_analyze(tmp_path, monkeypatch, name, fetcher, *, patch=None):
                 select(DataQuality).where(DataQuality.entity_type == "ingestion_run")
             )
             state = (bars, quality.status, quality.missing_fields_json)
+            collected["_rows"] = {
+                row.exchange: row.index_close
+                for row in db.scalars(select(MarketSummary))
+            }
     engine.dispose()
     return collected, analyzed, state
 
@@ -524,6 +528,67 @@ def test_summary_failures_change_neither_collect_nor_analyze(tmp_path, monkeypat
     for key in ("records", "taiex_records", "chips", "actions", "events"):
         assert collected[key] == baseline[0][key], key
     assert analyzed["status"] == baseline[1]["status"]
+    assert {k: v for k, v in analyzed.items() if k != "run_id"} == {
+        k: v for k, v in baseline[1].items() if k != "run_id"
+    }
+    assert state == baseline[2] and state[1] == "success" and state[2] == []
+
+
+def _report_without_summary_tables(base):
+    """A 09/04 MI_INDEX whose TAIEX row still reads but whose summary does not.
+
+    The 大盤統計資訊 and 漲跌證券數合計 tables are gone and every price-index
+    row has one cell more than its fields: the TAIEX parser reads the close by
+    position, the summary parser needs a row as long as the fields, so
+    ``parse_twse_market_summary`` finds none of its three tables and raises.
+    """
+
+    report = _twse_1022()
+    report["date"] = "20260904"
+    price = _table(report, "價格指數(臺灣證券交易所)")
+    for row in price["data"]:
+        row.append("")
+    report["tables"] = [price, base["tables"][1]]
+    return report
+
+
+def test_an_unreadable_twse_summary_is_noncore_and_changes_nothing_else(
+    tmp_path, monkeypatch
+):
+    # Review L1 (#291): the TWSE half of AC-A2, through collect and analyze.
+    baseline = _collect_and_analyze(tmp_path, monkeypatch, "a.db", _summary_fetcher())
+    broken = _summary_fetcher(mi_index=_report_without_summary_tables)
+    report = _report_without_summary_tables(
+        FixtureFetcher()(f"{sources.TWSE_DAILY_HISTORY_ENDPOINT}?date=20260904")
+    )
+    with pytest.raises(sources.OfficialDataError, match="no index, turnover"):
+        sources.parse_twse_market_summary(report, requested_date=DAY)
+    assert (
+        sources.parse_twse_taiex_from_all_daily_payload(report, requested_date=DAY)[
+            0
+        ].close
+        == 46041.43
+    )
+
+    collected, analyzed, state = _collect_and_analyze(
+        tmp_path, monkeypatch, "b.db", broken
+    )
+
+    assert collected["status"] == baseline[0]["status"] == "success"
+    assert collected["core_warnings"] == []
+    (warning,) = collected["noncore_warnings"]
+    assert warning.startswith(
+        "TWSE market summary unavailable for 2026-09-04: OfficialDataError: "
+        "TWSE MI_INDEX has no index, turnover or breadth table"
+    )
+    # Only the TPEx row is written; the TAIEX bar comes from the same report.
+    assert collected["market_summaries"] == {"inserted": 1}
+    assert collected["_rows"] == {"TPEx": 381.69}
+    assert baseline[0]["_rows"] == {"TWSE": 46041.43, "TPEx": 381.69}
+    assert collected["taiex_records"] == baseline[0]["taiex_records"] == 1
+    for key in ("records", "chips", "actions", "events"):
+        assert collected[key] == baseline[0][key], key
+    assert analyzed["status"] == baseline[1]["status"] == "success"
     assert {k: v for k, v in analyzed.items() if k != "run_id"} == {
         k: v for k, v in baseline[1].items() if k != "run_id"
     }
