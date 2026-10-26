@@ -37,7 +37,7 @@ const count = (markup: string, needle: string) => markup.split(needle).length - 
 // ---- AC-1 request parameters: each tab asks for its own board ----
 check(themeBoardPath('industry') === `/themes?board=industry&limit=${THEME_BOARD_LIMIT}` && THEME_BOARD_LIMIT === 100, 'board page asks for the whole industry board')
 check(themeBoardPath('theme') === '/themes?board=theme&limit=100', 'theme tab switches only the board parameter')
-check(themeBoardPath('theme', TODAY_BOARD_LIMIT) === '/themes?board=theme&limit=10', 'today asks for the Top 10')
+check(themeBoardPath('theme', TODAY_BOARD_LIMIT) === '/themes?board=theme&limit=5', 'today asks for the Top 5')
 check(parseBoard(null) === 'industry' && parseBoard('theme') === 'theme' && parseBoard('etf') === 'industry', 'industry is the default board; unknown values fall back to it')
 check(boardPagePath('industry') === '/themes' && boardPagePath('theme') === '/themes?board=theme', 'full-ranking link keeps the current tab')
 
@@ -153,15 +153,16 @@ check(!offBoard.includes('待重新核實') && !offBoard.includes('class="data-g
 check(themeDefinitionVersion({ ...themeDetail(), theme: { ...themeDetail().theme, definition_version: 'themes_v1:2026.10.18' } }) === 'themes_v1:2026.10.18', 'theme.definition_version wins when present')
 check(evidenceUrl({ kind: null, url: 'http://x.test', relation: null, relevance: null, theme_version: null }) === 'http://x.test' && evidenceUrl(null) === null, 'evidence url rule')
 
-// ---- AC-3 today Top 10 ----
-const topTen = { ...industryBoard(), items: Array.from({ length: 10 }, (_, index) => boardItem({ theme_id: `industry-${index + 1}`, display_name: `產業 ${index + 1}`, rank: index + 1 })) }
+// ---- today Top 5 compact rows (#276; UI_COPY_SPEC §8.5) ----
+const topTen = { ...industryBoard(), items: Array.from({ length: 5 }, (_, index) => boardItem({ theme_id: `industry-${index + 1}`, display_name: `產業 ${index + 1}`, rank: index + 1 })) }
 const today = render(<HotGroupsSection board="industry" onBoardChange={noop} data={topTen} loading={false} error={null} />)
-check(count(today, 'class="feature-card hot-group-card"') === 10, 'ten cards')
-check(today.includes('href="/themes/industry-1"') && today.includes('href="/themes/industry-10"'), 'cards link to the detail page')
+check(count(today, 'class="hot-group-row"') === 5 && !today.includes('feature-card'), 'five compact rows, no feature cards')
+check(today.includes('各榜前 5 名'), 'eyebrow says Top 5')
+check(today.includes('href="/themes/industry-1"') && today.includes('href="/themes/industry-5"'), 'rows link to the detail page')
 check(today.includes('href="/themes">查看完整排行'), 'full ranking link for the industry tab')
 const firstCard = today.slice(today.indexOf('data-theme-id="industry-1"'), today.indexOf('data-theme-id="industry-2"'))
 for (const text of ['第 1 名', '產業 1', '熱門族群', '81.25', '+1.23%', '-0.45%', '0.00%', '資料 2026/09/08']) check(firstCard.includes(text), `today card shows ${text}: ${firstCard}`)
 const todayTheme = render(<HotGroupsSection board="theme" onBoardChange={noop} data={themeBoard()} loading={false} error={null} />)
 check(todayTheme.includes('id="today-board-tab-theme" aria-selected="true"') && todayTheme.includes('href="/themes?board=theme">查看完整排行') && todayTheme.includes('CoWoS 先進封裝'), 'theme tab and its full-ranking link')
 const todayEmpty = render(<HotGroupsSection board="industry" onBoardChange={noop} data={emptyBoard('industry', 'no_ranked_groups')} loading={false} error={null} />)
-check(todayEmpty.includes(EMPTY_MESSAGES.no_ranked_groups) && !todayEmpty.includes('hot-group-card'), 'today empty board shows empty_message')
+check(todayEmpty.includes(EMPTY_MESSAGES.no_ranked_groups) && !todayEmpty.includes('hot-group-row'), 'today empty board shows empty_message')

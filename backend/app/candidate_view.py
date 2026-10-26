@@ -3,16 +3,19 @@
 Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidates`` and the ``candidate_llm_notes`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
+Each item's ``market`` is the stored close of its trading date (#276).
 """
 
 from __future__ import annotations
 
+import math
 from datetime import date, timezone
 from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from .coverage import verified_taiex_sessions
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
 from .models import (
     CandidateLlmNote,
@@ -138,8 +141,69 @@ def _note(db: Session, row: DailyCandidate) -> dict[str, Any] | None:
     }
 
 
+def _traded_close(bar: MarketBar | None) -> float | None:
+    if bar is None or bar.is_suspended:
+        return None
+    close = bar.close
+    return close if close is not None and math.isfinite(close) and close > 0 else None
+
+
+def _market(
+    db: Session,
+    instrument_id: int,
+    trading_date: date,
+    bar: MarketBar | None,
+    sessions: dict[date, list[date]],
+) -> dict[str, Any]:
+    """The close of the candidate's trading date and its change (#276).
+
+    The change is ``known`` only against the stock's bar on the previous
+    verified TAIEX session from the same source (UI_COPY_SPEC §8.2); a holiday
+    gap, missing or suspended bar, or another source is ``unverified``.
+    ``missing`` means no traded bar on the day.
+    """
+
+    close = _traded_close(bar)
+    market: dict[str, Any] = {
+        "trading_date": trading_date.isoformat(),
+        "close": close,
+        "change": None,
+        "change_pct": None,
+        "change_status": "missing" if close is None else "unverified",
+        "source": bar.source if bar is not None else None,
+    }
+    if close is None:
+        return market
+    if trading_date not in sessions:
+        sessions[trading_date] = verified_taiex_sessions(
+            db, end_date=trading_date, limit=2
+        )
+    days = sessions[trading_date]
+    if len(days) < 2 or days[-1] != trading_date:
+        return market
+    previous = db.scalar(
+        select(MarketBar).where(
+            MarketBar.instrument_id == instrument_id,
+            MarketBar.trading_date == days[-2],
+        )
+    )
+    previous_close = _traded_close(previous)
+    if previous_close is None or previous.source != bar.source:
+        return market
+    change = round(close - previous_close, 6)
+    market.update(
+        change=change,
+        change_pct=change / previous_close,
+        change_status="known",
+    )
+    return market
+
+
 def candidate_item(
-    db: Session, row: DailyCandidate, run: CandidateRun
+    db: Session,
+    row: DailyCandidate,
+    run: CandidateRun,
+    sessions: dict[date, list[date]] | None = None,
 ) -> dict[str, Any]:
     instrument = db.get(Instrument, row.instrument_id)
     signal = db.get(Signal, row.signal_id)
@@ -182,6 +246,13 @@ def candidate_item(
         "groups": row.groups_json or [],
         "data_as_of": row.data_as_of.isoformat(),
         "llm_note": _note(db, row),
+        "market": _market(
+            db,
+            row.instrument_id,
+            row.trading_date,
+            bar,
+            {} if sessions is None else sessions,
+        ),
         "sources": {
             "signal": f"analysis:{row.strategy}",
             "market_bar": bar.source if bar else None,
@@ -245,6 +316,7 @@ def candidate_list(
             "methodology": _methodology(None),
             "items": [],
         }
+    sessions: dict[date, list[date]] = {}
     rows = db.scalars(
         select(DailyCandidate)
         .where(DailyCandidate.candidate_run_id == run.id)
@@ -270,7 +342,8 @@ def candidate_list(
         "data_as_of": run.trading_date.isoformat(),
         "news_coverage": (run.summary_json or {}).get("news"),
         "methodology": _methodology(run),
-        "items": [candidate_item(db, row, run) for row in rows],
+        # One TAIEX session lookup for the whole list.
+        "items": [candidate_item(db, row, run, sessions) for row in rows],
     }
 
 

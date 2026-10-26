@@ -77,6 +77,7 @@ import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
 import { CandidatesSection, StockCandidatePanel } from './candidates/CandidateViews'
 import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
 
 // Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
@@ -453,7 +454,7 @@ export function CompactActionCard({ action }: { action: ActionSummary }) {
   )
 }
 
-function ProductActionCard({ action }: { action: ActionSummary }) {
+export function ProductActionCard({ action }: { action: ActionSummary }) {
   const instrument = action.instrument
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
   const actionTitle = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
@@ -481,14 +482,14 @@ function ProductActionCard({ action }: { action: ActionSummary }) {
         <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>
       ) : showLevels ? (
         <><p className="small-note">價位單位：各標的報價幣別的元；風險報酬比為倍。</p><div className="level-grid">
-          {['conditional_entry', 'wait_breakout'].includes(action.action_state) && action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b>{formatNumber(action.trigger_price)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.primary_strategy === 'pullback_v1' && (action.entry_low != null || action.entry_high != null) && <div><span>{levelObservationZoneLabel(action.level_semantics)}</span><b>{formatNumber(action.entry_low)}～{formatNumber(action.entry_high)}</b></div>}
-          {action.action_state === 'wait_pullback' && action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b>{formatNumber(action.entry_low)}</b></div>}
-          {action.action_state === 'wait_pullback' && action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b>{formatNumber(action.entry_high)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.invalid_price != null && <div><span>{levelFieldLabel('invalid_price', action.level_semantics)}</span><b>{formatNumber(action.invalid_price)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.target_1 != null && <div><span>{levelFieldLabel('target_1', action.level_semantics)}</span><b>{formatNumber(action.target_1)}</b></div>}
+          {['conditional_entry', 'wait_breakout'].includes(action.action_state) && action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.trigger_price)}</b></div>}
+          {action.action_state === 'conditional_entry' && action.primary_strategy === 'pullback_v1' && (action.entry_low != null || action.entry_high != null) && <div><span>{levelObservationZoneLabel(action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_low)}～{formatNumber(action.entry_high)}</b></div>}
+          {action.action_state === 'wait_pullback' && action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_low)}</b></div>}
+          {action.action_state === 'wait_pullback' && action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_high)}</b></div>}
+          {action.action_state === 'conditional_entry' && action.invalid_price != null && <div><span>{levelFieldLabel('invalid_price', action.level_semantics)}</span><b className="level-stop">{formatNumber(action.invalid_price)}</b></div>}
+          {action.action_state === 'conditional_entry' && action.target_1 != null && <div><span>{levelFieldLabel('target_1', action.level_semantics)}</span><b className="level-target">{formatNumber(action.target_1)}</b></div>}
           {action.action_state === 'conditional_entry' && action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward, 2)}</b></div>}
-           {['hold_observe', 'reduce_exit'].includes(action.action_state) && action.stop_price != null && <div><span>{stopPriceFieldLabel(action.stop_price_semantics)}</span><b>{formatNumber(action.stop_price)}</b></div>}
+           {['hold_observe', 'reduce_exit'].includes(action.action_state) && action.stop_price != null && <div><span>{stopPriceFieldLabel(action.stop_price_semantics)}</span><b className="level-stop">{formatNumber(action.stop_price)}</b></div>}
          </div></>
        ) : null}
       {(action.display_reasons ?? action.reasons).length > 0 && <ul className="reason-list">{(action.display_reasons ?? action.reasons).map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
@@ -516,42 +517,41 @@ export function TodayPage() {
   const [board, setBoard] = useState<ThemeBoard>('industry')
   const hotGroups = useQuery({ queryKey: ['theme-board', board, TODAY_BOARD_LIMIT], queryFn: () => getThemeBoard(board, TODAY_BOARD_LIMIT) })
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
+  const data = query.data
   const homeActions = Array.from(new Map(
-    [...(query.data?.actions ?? []), ...(query.data?.candidates ?? [])]
+    [...(data?.actions ?? []), ...(data?.candidates ?? [])]
       .filter((action) => action.action_state !== 'data_insufficient' || action.held === true || action.position_quantity_status === 'unknown')
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
+  const modeLabel = data?.mode === 'official' ? '官方單日快照' : data?.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
+  // PRODUCT_SPEC §2: header line → market overview → holding-risk alert → candidates → groups and news → watched stocks.
   return (
     <div className="page home-page">
-      <section className="hero home-hero">
-        <span className="hero-glow hero-glow-primary" aria-hidden="true" />
-        <span className="hero-glow hero-glow-accent" aria-hidden="true" />
-        <div className="hero-text">
-          <div className="eyebrow">今日市場</div>
-          <h1>今日<span className="gradient-text">市場</span>總覽</h1>
-          <p>掌握公告、熱門族群與關注標的。</p>
-        </div>
-        <Card as="div" className="hero-card" eyebrow="資料截至" title={<span className="hero-card-date">{query.data ? formatTaiwanDateTime(query.data.as_of, true) : '載入中…'}</span>}>
-          {query.data && <>
-            <div className="hero-card-source">{query.data.market.source_label ?? sourceLabel(query.data.market.source)}</div>
-            <div className={'hero-card-mode ' + query.data.mode}>
-              <strong>{query.data.mode === 'official' ? '官方單日快照' : query.data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'}</strong>
-              <QualityBadge kind="market" status={query.data.data_quality.latest_run} />
-            </div>
-            <details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
-          </>}
-        </Card>
-      </section>
+      <TodayHeader
+        loading={query.isLoading}
+        asOf={data?.as_of}
+        sourceLabel={data ? data.market.source_label ?? sourceLabel(data.market.source) : ''}
+        modeLabel={modeLabel}
+        badge={data && <QualityBadge kind="market" status={data.data_quality.latest_run} />}
+        scopeText={data && `${data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · ${data.market.instruments.toLocaleString()} 檔標的 · ${data.market.bars.toLocaleString()} 筆日行情 · ${homeActions.length.toLocaleString()} 筆行動摘要`}
+        overview={data?.market_overview}
+      />
     <QueryState loading={query.isLoading} error={query.error}>
-      {query.data && (
+      {data && (
         <>
-          <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
-          {query.data.news?.length ? <div className="news-cards">{query.data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
-          <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
+          <MarketOverviewView overview={data.market_overview} />
+          <HoldingAlert actions={data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
+          <div className="home-columns">
+            <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
+            <section className="home-news" aria-labelledby="home-news-title">
+              <div className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2 id="home-news-title">重點新聞</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></div>
+              {data.news?.length ? <div className="news-list-compact">{data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} compact />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
+            </section>
+          </div>
           <section className="section-head"><div><div className="eyebrow">使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
-          {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{query.data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
-          {query.data.data_quality.error && <div className="warning-box">官方擷取警告：{query.data.data_quality.error}</div>}
+          {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
+          {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
       )}
     </QueryState>
@@ -847,11 +847,11 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
     <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {showLevels && <div className="level-grid stock-detail-levels">
-        {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b>{formatNumber(action.trigger_price)}</b></div>}
-        {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b>{formatNumber(action.entry_low)}</b></div>}
-        {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b>{formatNumber(action.entry_high)}</b></div>}
-        {action.invalid_price != null && <div><span><Term id="support">{levelFieldLabel('invalid_price', action.level_semantics)}</Term></span><b>{formatNumber(action.invalid_price)}</b></div>}
-        {action.target_1 != null && <div><span><Term id="target">{levelFieldLabel('target_1', action.level_semantics)}</Term></span><b>{formatNumber(action.target_1)}</b></div>}
+        {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.trigger_price)}</b></div>}
+        {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_low)}</b></div>}
+        {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_high)}</b></div>}
+        {action.invalid_price != null && <div><span><Term id="support">{levelFieldLabel('invalid_price', action.level_semantics)}</Term></span><b className="level-stop">{formatNumber(action.invalid_price)}</b></div>}
+        {action.target_1 != null && <div><span><Term id="target">{levelFieldLabel('target_1', action.level_semantics)}</Term></span><b className="level-target">{formatNumber(action.target_1)}</b></div>}
         {action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward)}</b></div>}
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}

@@ -1,5 +1,5 @@
 import { formatTaipeiInstant } from '../news/newsView'
-import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidatesResponse } from '../types'
+import type { CandidateComponentKey, CandidateGroup, CandidateItem, CandidateLevels, CandidateLlmNote, CandidateMarket, CandidatesResponse } from '../types'
 
 // Pure helpers for the daily candidate list (candidate_score_v1, #215); copy follows UI_COPY_SPEC §10.
 
@@ -52,6 +52,31 @@ export function formatEntryZone(levels: CandidateLevels): string {
   if (low === high || !isFiniteNumber(high)) return formatPrice(low)
   if (!isFiniteNumber(low)) return formatPrice(high)
   return `${formatPrice(low)}～${formatPrice(high)}`
+}
+
+// Today list (#276): latest close of the run date and its change; an unverified change is not shown.
+export const TODAY_VISIBLE = 10
+
+export function formatCandidateClose(market: CandidateMarket | undefined): string {
+  return market && isFiniteNumber(market.close) ? formatPrice(market.close) : '待核實'
+}
+
+export function candidateChange(market: CandidateMarket | undefined): { text: string; tone: 'up' | 'down' | 'flat' | null } {
+  if (!market || market.change_status !== 'known' || !isFiniteNumber(market.change_pct)) return { text: '漲跌待核實', tone: null }
+  const percent = market.change_pct * 100
+  const rounded = Number(percent.toFixed(2))
+  return { text: `${rounded > 0 ? '+' : ''}${percent.toFixed(2)}%`, tone: rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat' }
+}
+
+// The latest run's earliest execution date is always null (it needs the next bar), so the sentence names no date.
+export function candidateT1Text(tradingDate: string | null | undefined): string | null {
+  const day = formatDate(tradingDate)
+  return day ? `${day} 收盤後條件成立，最早下一個交易日（T+1）才可研究進場。` : null
+}
+
+// A note (done or pending) is inference to open; without one the entry only explains that none exists yet.
+export function candidateAiEntry(note: CandidateLlmNote | null | undefined): string {
+  return note ? 'AI 推論 ▸' : 'AI 說明 ▸'
 }
 
 export function formatRiskReward(value: number | null | undefined): string {

@@ -166,6 +166,32 @@ export type Signal = {
   } | null
 }
 
+// dashboard.market_overview (#275): each exchange for dashboard.as_of only, never another day's row.
+export type MarketOverviewExchange = {
+  exchange: 'TWSE' | 'TPEx' | string
+  status: 'available' | 'unavailable' | string
+  reason?: string
+  latest_trading_date?: string | null
+  index?: { name: string; close: number | null; change: number | null; change_pct: number | null; change_pct_method: 'official' | 'derived' | string | null }
+  turnover?: { value: number | null; scope: 'twse_all_securities' | 'tpex_stocks' | string | null; scope_label: string | null }
+  breadth?: {
+    advancers: number | null
+    decliners: number | null
+    unchanged: number | null
+    limit_up: number | null
+    limit_down: number | null
+    unmatched: number | null
+    not_comparable?: number | null
+    scope: string | null
+  }
+  source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
+}
+
+export type MarketOverview = {
+  trading_date: string | null
+  exchanges: MarketOverviewExchange[]
+}
+
 export type Dashboard = {
   as_of: string | null
   mode: string
@@ -195,6 +221,7 @@ export type Dashboard = {
   actions?: ActionSummary[]
   action_counts?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string }
   empty_states?: Record<string, string | null>
+  market_overview?: MarketOverview
 }
 
 export type Bar = {
@@ -1149,6 +1176,18 @@ export type CandidateItem = {
   // Missing on responses from before #220; null when no note was attempted.
   llm_note?: CandidateLlmNote | null
   sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
+  // Close of trading_date and its change (#276); missing on responses from before #276.
+  market?: CandidateMarket
+}
+
+// known: against the previous verified session from the same source; unverified: change not shown; missing: no traded bar.
+export type CandidateMarket = {
+  trading_date: string
+  close: number | null
+  change: number | null
+  change_pct: number | null
+  change_status: 'known' | 'unverified' | 'missing' | string
+  source: string | null
 }
 
 export type CandidateZeroReason = 'no_actionable_signals' | 'all_excluded'
