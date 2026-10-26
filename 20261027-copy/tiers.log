@@ -1,0 +1,104 @@
+{
+  "as_of": "2026-10-22",
+  "tiers": {
+    "0": {
+      "stock": 0,
+      "etf": 0
+    },
+    "1": {
+      "stock": 0,
+      "etf": 0
+    },
+    "2": {
+      "stock": 70,
+      "etf": 8
+    },
+    "3": {
+      "stock": 169,
+      "etf": 30
+    },
+    "4": {
+      "stock": 1313,
+      "etf": 140
+    },
+    "5": {
+      "stock": 129,
+      "etf": 8
+    }
+  },
+  "tier3_by_strategy_unmet_etf": {
+    "breakout_v1/1/stock": 23,
+    "breakout_v1/1/etf": 4,
+    "breakout_v1/2/stock": 47,
+    "breakout_v1/2/etf": 10,
+    "pullback_v1/1/stock": 82,
+    "pullback_v1/1/etf": 11,
+    "pullback_v1/2/stock": 17,
+    "pullback_v1/2/etf": 5
+  },
+  "tier4_without_strategy_levels": 0,
+  "tier3_first10": [
+    "00898 pullback_v1 unmet=1 gap=0.0",
+    "00916 pullback_v1 unmet=1 gap=0.0",
+    "00919 pullback_v1 unmet=1 gap=0.0",
+    "00926 pullback_v1 unmet=1 gap=0.0",
+    "00940 pullback_v1 unmet=1 gap=0.0",
+    "00961 pullback_v1 unmet=1 gap=0.0",
+    "00971 pullback_v1 unmet=1 gap=0.0",
+    "009810 pullback_v1 unmet=1 gap=0.0",
+    "009812 pullback_v1 unmet=1 gap=0.0",
+    "009814 pullback_v1 unmet=1 gap=0.0"
+  ]
+}
+{
+  "as_of": "2026-10-21",
+  "tiers": {
+    "0": {
+      "stock": 0,
+      "etf": 0
+    },
+    "1": {
+      "stock": 0,
+      "etf": 0
+    },
+    "2": {
+      "stock": 8,
+      "etf": 6
+    },
+    "3": {
+      "stock": 204,
+      "etf": 28
+    },
+    "4": {
+      "stock": 1343,
+      "etf": 144
+    },
+    "5": {
+      "stock": 118,
+      "etf": 9
+    }
+  },
+  "tier3_by_strategy_unmet_etf": {
+    "breakout_v1/1/stock": 30,
+    "breakout_v1/1/etf": 6,
+    "breakout_v1/2/stock": 46,
+    "breakout_v1/2/etf": 8,
+    "pullback_v1/1/stock": 107,
+    "pullback_v1/1/etf": 10,
+    "pullback_v1/2/stock": 21,
+    "pullback_v1/2/etf": 4
+  },
+  "tier4_without_strategy_levels": 0,
+  "tier3_first10": [
+    "00668 breakout_v1 unmet=1 gap=0.0",
+    "00714 breakout_v1 unmet=1 gap=0.0",
+    "00898 pullback_v1 unmet=1 gap=0.0",
+    "00926 pullback_v1 unmet=1 gap=0.0",
+    "00932 pullback_v1 unmet=1 gap=0.0",
+    "009800 pullback_v1 unmet=1 gap=0.0",
+    "009810 pullback_v1 unmet=1 gap=0.0",
+    "009813 pullback_v1 unmet=1 gap=0.0",
+    "009814 pullback_v1 unmet=1 gap=0.0",
+    "009820 pullback_v1 unmet=1 gap=0.0"
+  ]
+}

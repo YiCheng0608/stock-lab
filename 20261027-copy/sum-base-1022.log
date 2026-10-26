@@ -1,0 +1,21 @@
+{
+  "as_of": "2026-10-22",
+  "strategy_levels_rows_of_the_day": 0,
+  "summaries": 1867,
+  "action_state": {
+    "conditional_entry": 78,
+    "no_condition": 1652,
+    "data_insufficient": 137
+  },
+  "no_condition_primary_reason_unknown": 429,
+  "no_condition_primary_reason_kinds": {
+    "至少一個有效族群具備 TAIEX 相對強弱與成員門檻": 1223,
+    "研究條件需要人工核對": 429
+  },
+  "no_condition_examples": [
+    "至少一個有效族群具備 TAIEX 相對強弱與成員門檻",
+    "研究條件需要人工核對"
+  ],
+  "sha256": "f8233104031aef1048cd2fc45e5490af435ebef15359467aff9267705262a14a",
+  "seconds": 165.2
+}

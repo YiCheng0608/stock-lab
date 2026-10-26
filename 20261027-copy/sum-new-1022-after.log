@@ -1,0 +1,23 @@
+{
+  "as_of": "2026-10-22",
+  "strategy_levels_rows_of_the_day": 4622,
+  "summaries": 1867,
+  "action_state": {
+    "conditional_entry": 78,
+    "no_condition": 1652,
+    "data_insufficient": 137
+  },
+  "no_condition_primary_reason_unknown": 0,
+  "no_condition_primary_reason_kinds": {
+    "差 N 項": 1652
+  },
+  "no_condition_examples": [
+    "突破條件差 4 項：價格、量能、族群、法人",
+    "突破條件差 3 項：價格、量能、法人",
+    "突破條件差 3 項：價格、量能、族群",
+    "突破條件差 2 項：價格、量能",
+    "突破條件差 2 項：價格、法人"
+  ],
+  "sha256": "beacf9ad59113ac43eda26992061ab2a69eaaf7d3be56c8b62dd0b44dc0c711f",
+  "seconds": 146.1
+}
