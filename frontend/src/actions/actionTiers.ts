@@ -1,6 +1,7 @@
 import { formatDay } from '../dates'
 import { productActionReasonLabel } from '../presentation'
-import type { ActionSummary, ActionTierNumber, ActionTierSummary, ActionView, ActionsResponse } from '../types'
+import { nearLine } from '../stock/strategyBoard'
+import type { ActionNearness, ActionSummary, ActionTierNumber, ActionTierSummary, ActionView, ActionsResponse } from '../types'
 import { formatFixed, formatTableNumber } from '../units'
 
 // Action centre tiers (action_tier_v1, #278): the API orders and counts; this module only words and groups.
@@ -21,6 +22,9 @@ export const SEARCH_NOTE = '搜尋不受篩選限制，結果依級別列出。'
 export const EMPTY_TEXT = '目前沒有符合篩選的標的。'
 export const LEVELS_NOTE = '單位：價格為各標的報價幣別的元。空白表示沒有成立的價位。'
 export const RESEARCH_LINK = '策略總表 →'
+// Tier 3 shows no level; its levels are on the stock's strategy board (DESIGN_SYSTEM §7 接近成立).
+export const NEAR_RESEARCH_LINK = '價位見策略總表 →'
+export const CONDITIONS_PENDING_TEXT = '條件明細尚未產生'
 
 export const ACTION_STATE_LABELS: Record<string, string> = {
   conditional_entry: '條件進場',
@@ -78,7 +82,7 @@ export function previewTiers(data: ActionsResponse): number[] {
   return data.summary.tiers.filter((tier) => tier.shown > 0 && !data.items.some((item) => item.tier === tier.tier)).map((tier) => tier.tier)
 }
 
-export type TierSection = { tier: ActionTierNumber; key: string; label: string; shown: number; items: ActionSummary[] }
+export type TierSection = { tier: ActionTierNumber; key: string; label: string; shown: number; items: ActionSummary[]; candidateListSize: number | null }
 
 // One section per tier with rows in the current filter: the first page's rows of that tier, then the tier pages
 // loaded by 顯示更多 (which start from the tier's top, so repeated rows are dropped).
@@ -88,7 +92,7 @@ export function tierSections(data: ActionsResponse, tierPages: Partial<Record<nu
     const items = new Map<string, ActionSummary>()
     for (const item of data.items) if (item.tier === tier.tier) items.set(actionKey(item), item)
     for (const page of tierPages[tier.tier] ?? []) for (const item of page.items) if (!items.has(actionKey(item))) items.set(actionKey(item), item)
-    return [{ tier: tier.tier, key: tier.key, label: tier.label, shown: tier.shown, items: [...items.values()] }]
+    return [{ tier: tier.tier, key: tier.key, label: tier.label, shown: tier.shown, items: [...items.values()], candidateListSize: data.summary.candidate_list_size ?? null }]
   })
 }
 
@@ -133,6 +137,27 @@ export function actionLevels(action: ActionSummary): ActionLevels | null {
 export function actionNote(action: ActionSummary): string | null {
   if (INCOMPLETE_STATES.includes(action.action_state)) return productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')
   return action.primary_reason?.label ?? null
+}
+
+// Tier 4 without a strategy_levels row: its conditions are not known yet (UI_COPY_SPEC §6).
+export const conditionsPending = (action: ActionSummary, tier: number) => tier === 4 && action.nearness == null && !INCOMPLETE_STATES.includes(action.action_state)
+
+// Tier 2: why a passed condition is not in today's candidates (UI_COPY_SPEC §6).
+export function conditionalNote(action: ActionSummary, candidateListSize: number | null): string {
+  if (action.instrument.instrument_type === 'etf') return '條件成立，ETF 不列入候選評分'
+  return candidateListSize ? `條件成立，未進今日候選前 ${candidateListSize}` : '條件成立，未進今日候選'
+}
+
+export type NearCopy = { title: string; lines: string[]; met: string | null }
+
+// Tier 3: the badge, one 「差：」 line per unmet condition and the met short names; no level (DESIGN_SYSTEM §7).
+export function nearCopy(nearness: ActionNearness | null | undefined): NearCopy | null {
+  if (!nearness?.near) return null
+  return {
+    title: `接近${nearness.label}`,
+    lines: nearness.unmet.map(nearLine),
+    met: nearness.met_short_labels.length ? `${nearness.met_short_labels.join('、')}已達成` : null,
+  }
 }
 
 export const actionDataDay = (action: ActionSummary) => formatDay(action.data_cutoff ?? action.price_as_of) ?? '待核實'

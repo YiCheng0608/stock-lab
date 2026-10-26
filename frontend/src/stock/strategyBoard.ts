@@ -1,8 +1,9 @@
 import { formatPrice } from '../candidates/candidates'
-import type { StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
+import type { ActionNearnessItem, StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
 import { LOT_SIZE, formatFixed } from '../units'
 
 // Pure helpers for the stock strategy board (#274); copy follows UI_COPY_SPEC §10.1, visuals DESIGN_SYSTEM §7.
+// CONDITIONS is the frontend's one condition table: the action list's 「差：…」 lines read it too (#277-B).
 
 export const BOARD_TITLE = '策略總表'
 export const BOARD_NOTE = '每個研究條件各自判定；「觀察價位」是條件尚未成立時，下一交易日收盤與成交量要達到的參考值，不是建議進出點。'
@@ -49,7 +50,8 @@ const OPERATORS: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '
 
 // A condition's rule bound from the API's own threshold and operator (#274 review L3): no rule number is written here,
 // so a new strategy version's thresholds show as they are. null when the condition carries none.
-function bound(item: StrategyCondition | undefined, format: (value: number) => string, unit: string): string | null {
+type Bounded = Pick<StrategyCondition, 'threshold' | 'threshold_high' | 'operator'>
+function bound(item: Bounded | undefined, format: (value: number) => string, unit: string): string | null {
   if (!item || !isNumber(item.threshold)) return null
   if (item.operator === 'between') return isNumber(item.threshold_high) ? `${format(item.threshold)}～${format(item.threshold_high)}${unit}` : null
   const symbol = OPERATORS[item.operator ?? '']
@@ -58,16 +60,25 @@ function bound(item: StrategyCondition | undefined, format: (value: number) => s
 const two = (value: number) => formatFixed(value, 2)
 const share = (value: number) => formatFixed(value * 100, 2)
 
-type ConditionCopy = { label: (item?: StrategyCondition) => string; unmet: (item?: StrategyCondition) => string }
+// near: the action list's 「差：」 line of a near card (UI_COPY_SPEC §10.1), only for the conditions that can be near.
+type ConditionCopy = {
+  label: (item?: StrategyCondition) => string
+  unmet: (item?: StrategyCondition) => string
+  near?: (item: ActionNearnessItem) => string
+}
 const fixed = (label: string, unmet: string): ConditionCopy => ({ label: () => label, unmet: () => unmet })
+// A near card's price gap: the next session's distance, unsigned (the sentence says the side).
+const gapText = (gap: unknown) => isNumber(gap) ? `${formatFixed(Math.abs(gap) * 100, 2)}%` : '差距待核實'
+const nearVolume = (item: ActionNearnessItem) => `量能 ${bound(item, two, ' 倍') ?? '達規則門檻'}（今日 ${ratio(item.actual)}）`
 
 const CONDITIONS: Record<string, ConditionCopy> = {
   eligibility: fixed('適用標的', '標的不適用'),
   required_inputs: fixed('必要資料齊備', '資料待補'),
-  breakout_price: fixed('收盤突破前 20 日高點', '收盤未突破前 20 日高點'),
+  breakout_price: { ...fixed('收盤突破前 20 日高點', '收盤未突破前 20 日高點'), near: (item) => `收盤站上前 20 日高點（還差 ${gapText(item.gap)}）` },
   breakout_volume: {
     label: (item) => `量比 ${bound(item, two, ' 倍') ?? '達規則門檻'}`,
     unmet: (item) => isNumber(item?.threshold) ? `量比未達 ${two(item.threshold)} 倍` : '量比未達規則門檻',
+    near: nearVolume,
   },
   pullback_history: {
     label: (item) => isNumber(item?.threshold) ? `日線滿 ${item.threshold} 日` : '日線達規則日數',
@@ -75,10 +86,17 @@ const CONDITIONS: Record<string, ConditionCopy> = {
   },
   pullback_trend: fixed('20 日均線在 60 日均線之上', '20 日均線未站上 60 日均線'),
   pullback_above_ma60: fixed('收盤不低於 60 日均線', '收盤低於 60 日均線'),
-  pullback_support_zone: fixed('收盤在 20 日均線支撐區', '收盤不在支撐區'),
+  pullback_support_zone: {
+    ...fixed('收盤在 20 日均線支撐區', '收盤不在支撐區'),
+    near: (item) => {
+      const side = item.position === 'above' ? '高於上緣' : item.position === 'below' ? '低於下緣' : null
+      return `收盤回到 20 日均線支撐區${side ? `（${side} ${gapText(item.gap)}）` : ''}`
+    },
+  },
   pullback_volume: {
     label: (item) => `量比 ${bound(item, two, ' 倍') ?? '在規則區間'}`,
     unmet: (item) => { const range = bound(item, two, ' 倍'); return range ? `量比不在 ${range}` : '量比不在規則區間' },
+    near: nearVolume,
   },
   group_relative_strength: { label: (item) => `族群 20 日超額報酬 ${bound(item, share, '%') ?? '達規則門檻'}`, unmet: () => '族群未強於大盤' },
   institutional_flow: { label: (item) => `法人 5 日淨額 ÷ 20 日均量 ${bound(item, share, '%') ?? '達規則門檻'}`, unmet: () => '法人籌碼未達要求' },
@@ -92,6 +110,12 @@ export function conditionLabel(item: StrategyCondition): string {
 
 export function unmetLabel(code: string, item?: StrategyCondition): string {
   return CONDITIONS[code]?.unmet(item) ?? UNKNOWN_CONDITION
+}
+
+// 「差：…」 of one unmet condition of a near action card; a condition without a near sentence uses its unmet phrase.
+export function nearLine(item: ActionNearnessItem): string {
+  const copy = CONDITIONS[item.code]
+  return `差：${copy?.near ? copy.near(item) : copy ? copy.unmet() : UNKNOWN_CONDITION}`
 }
 
 // 「差哪個條件」: one line per row.

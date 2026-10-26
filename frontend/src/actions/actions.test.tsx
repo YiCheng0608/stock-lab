@@ -4,14 +4,15 @@ import { StaticRouter } from 'react-router-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from '../App'
-import type { ActionSummary, ActionTierSummary, ActionsResponse, Dashboard, Position } from '../types'
+import type { ActionNearness, ActionNearnessItem, ActionSummary, ActionTierSummary, ActionsResponse, Dashboard, Position } from '../types'
 import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { ACTION_TIER_PREVIEW, EMPTY_TEXT, SEARCH_NOTE, hiddenSentence, previewTiers, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, CONDITIONS_PENDING_TEXT, EMPTY_TEXT, NEAR_RESEARCH_LINK, SEARCH_NOTE, hiddenSentence, nearCopy, previewTiers, tierSections } from './actionTiers'
 
-// Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行) and the today page's
-// holding line reading every holding (#297 review L1). Every check runs and the failures are listed together.
+// Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行), the tier 3 接近成立 cards
+// and the tier 2／4 lines (#277-B, UI_COPY_SPEC §6, DESIGN_SYSTEM §7), and the today page's holding line reading every
+// holding (#297 review L1). Every check runs and the failures are listed together.
 const failures: string[] = []
 let checks = 0
 const check = (condition: boolean, message: string) => { checks++; if (!condition) failures.push(message) }
@@ -32,7 +33,7 @@ const render = (name: string, element: () => ReactElement, cache: Array<[unknown
 const text = (markup: string) => markup.replace(/<[^>]+>/g, '')
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 
-const row = (symbol: string, tier: 0 | 1 | 2 | 4 | 5, state: string, extra: Partial<ActionSummary> = {}) =>
+const row = (symbol: string, tier: 0 | 1 | 2 | 3 | 4 | 5, state: string, extra: Partial<ActionSummary> = {}) =>
   action(symbol, `名稱${symbol}`, state, { tier, data_cutoff: '2026-10-22', current_price: 21.1, price_change: 0.5, price_change_pct: 0.0243, ...extra })
 
 function summary(extra: Partial<ActionTierSummary> = {}): ActionTierSummary {
@@ -113,8 +114,65 @@ const previewPage = render('ActionsPage preview', () => <ActionsPage />, [
 check(text(previewPage).includes('顯示 5／50 檔') && text(previewPage).includes('顯示更多（還有 45 檔）'), `首屏: 其他成立條件 shows its first five rows, got ${text(previewPage).slice(text(previewPage).indexOf('第 2 級'), text(previewPage).indexOf('第 2 級') + 160)}`)
 check(count(previewPage, 'data-action-row=') === 2 + ACTION_TIER_PREVIEW + 1, '首屏: candidate rows, five tier-2 rows and the tier-4 row')
 check(!text(previewPage).includes('顯示 0／'), '首屏: no listed tier shows 0 rows')
-const loadingTier = render('ActionTierSectionView loading', () => <ActionTierSectionView section={{ tier: 2, key: 'conditional', label: '其他成立條件', shown: 50, items: [] }} loading canLoadMore={false} onMore={() => {}} />)
+const loadingTier = render('ActionTierSectionView loading', () => <ActionTierSectionView section={{ tier: 2, key: 'conditional', label: '其他成立條件', shown: 50, items: [], candidateListSize: 20 }} loading canLoadMore={false} onMore={() => {}} />)
 check(loadingTier.includes('aria-busy="true"') && loadingTier.includes('class="card skeleton'), '首屏: a tier whose first rows are loading shows a skeleton, so screenshots wait for it')
+
+// ---- tier 3 接近成立: the badge, 「差：」 lines and met short names, no level (#277-B) ----
+const unmet = (item: Partial<ActionNearnessItem> & { code: string; kind: string }): ActionNearnessItem => ({
+  short_label: null, gap: null, position: null, actual: null, threshold: null, threshold_high: null, operator: null, ...item,
+})
+const nearness = (extra: Partial<ActionNearness>): ActionNearness => ({
+  strategy: 'breakout_v1', label: '突破條件', near: true, unmet_count: 1, price_gap: 0, unmet: [], met_short_labels: ['族群', '法人', '融資'], ...extra,
+})
+const breakoutNear = nearness({
+  unmet_count: 2, price_gap: 0.021,
+  unmet: [
+    unmet({ code: 'breakout_price', kind: 'price', short_label: '價格', gap: 0.021, position: 'below' }),
+    unmet({ code: 'breakout_volume', kind: 'volume', short_label: '量能', actual: 0.8, threshold: 1.2, operator: 'gte' }),
+  ],
+})
+const pullbackNear = nearness({
+  strategy: 'pullback_v1', label: '回踩條件', price_gap: 0.012, met_short_labels: ['趨勢', '族群', '法人', '融資'],
+  unmet: [unmet({ code: 'pullback_support_zone', kind: 'price', short_label: '支撐區', gap: 0.012, position: 'above' })],
+})
+const volumeNear = nearness({
+  strategy: 'pullback_v1', label: '回踩條件', met_short_labels: ['趨勢', '族群', '法人', '融資'],
+  unmet: [unmet({ code: 'pullback_volume', kind: 'volume', short_label: '量能', actual: 1.3245, threshold: 0.6, threshold_high: 1.2, operator: 'between' })],
+})
+check(JSON.stringify(nearCopy(breakoutNear)) === JSON.stringify({ title: '接近突破條件', lines: ['差：收盤站上前 20 日高點（還差 2.10%）', '差：量能 ≥ 1.20 倍（今日 0.80 倍）'], met: '族群、法人、融資已達成' }), `接近突破: ${JSON.stringify(nearCopy(breakoutNear))}`)
+check(JSON.stringify(nearCopy(pullbackNear)?.lines) === JSON.stringify(['差：收盤回到 20 日均線支撐區（高於上緣 1.20%）']), `接近回踩: ${JSON.stringify(nearCopy(pullbackNear))}`)
+check(nearCopy({ ...pullbackNear, unmet: [{ ...pullbackNear.unmet[0], position: 'below', gap: 0.005 }] })?.lines[0] === '差：收盤回到 20 日均線支撐區（低於下緣 0.50%）', '接近回踩: below the zone says 低於下緣')
+check(JSON.stringify(nearCopy(volumeNear)) === JSON.stringify({ title: '接近回踩條件', lines: ['差：量能 0.60～1.20 倍（今日 1.32 倍）'], met: '趨勢、族群、法人、融資已達成' }), `接近回踩量能: ${JSON.stringify(nearCopy(volumeNear))}`)
+check(nearCopy(nearness({ near: false })) === null && nearCopy(null) === null, '接近: a tier 4 nearness or none is not a near card')
+check(nearCopy(nearness({ unmet: [unmet({ code: 'margin_financing', kind: 'confirmation' })] }))?.lines[0] === '差：融資增加超過上限', '接近: a condition without a near sentence uses its unmet phrase')
+
+const nearPage = page([
+  row('2010', 2, 'conditional_entry', { trigger_price: 30, invalid_price: 28, target_1: 33 }),
+  row('0050', 2, 'conditional_entry', { trigger_price: 30, invalid_price: 28, target_1: 33, instrument: { ...action('0050', 'ETF', 'x').instrument, instrument_type: 'etf' } }),
+  // The summary's own levels are present on purpose: a near row must still not show them.
+  row('1295', 3, 'no_condition', { nearness: volumeNear, trigger_price: 45.55, invalid_price: 44.12, target_1: 49.99 }),
+  row('2330', 3, 'no_condition', { nearness: breakoutNear }),
+  row('1234', 4, 'no_condition', { nearness: nearness({ near: false }), primary_reason: { label: '突破條件差 3 項：價格、量能、法人', scope: 'breakout' } }),
+  row('5678', 4, 'no_condition', { nearness: null, primary_reason: { label: '回踩條件差 1 項：趨勢', scope: 'pullback' } }),
+], {
+  candidate_list_size: 20,
+  tiers: summary().tiers.map((tier) => ({ ...tier, shown: tier.tier === 2 ? 2 : tier.tier === 3 ? 2 : tier.tier === 4 ? 2 : 0 })),
+})
+const nearList = render('ActionTierList near', () => <ActionTierList sections={tierSections(nearPage)} loadingTiers={new Set()} canLoadMore={() => true} onMore={() => {}} />)
+const tierMarkup = (tier: number) => nearList.slice(nearList.indexOf(`data-tier="${tier}"`), nearList.indexOf('</section>', nearList.indexOf(`data-tier="${tier}"`)))
+const near = tierMarkup(3)
+check(count(near, 'data-action-row=') === 2 && count(near, 'data-action-card=') === 2, '接近成立: one row and one card per near stock')
+for (const line of ['接近回踩條件', '差：量能 0.60～1.20 倍（今日 1.32 倍）', '趨勢、族群、法人、融資已達成', '接近突破條件', '差：收盤站上前 20 日高點（還差 2.10%）', '族群、法人、融資已達成', '差哪個條件']) check(text(near).includes(line), `接近成立: shows 「${line}」`)
+check(count(near, '>差：') === 6, `接近成立: every 「差：」 line in the table and the card, got ${count(near, '>差：')}`)
+check(count(near, NEAR_RESEARCH_LINK) === 4 && !near.includes('>策略總表 →<'), '接近成立: the link says 價位見策略總表 →')
+check(!/level-(entry|stop|target)/.test(near) && !near.includes('candidate-mini-levels'), '接近成立: no level cell or level box')
+check(!/45\.55|44\.12|49\.99/.test(near) && !near.includes('單位：價格'), '接近成立: none of the row levels, no level unit note')
+check(near.includes('class="badge badge-primary badge-compact">接近回踩條件'), `接近成立: a primary badge, got ${near.slice(near.indexOf('接近回踩') - 80, near.indexOf('接近回踩'))}`)
+const conditional = tierMarkup(2)
+check(text(conditional).includes('條件成立，未進今日候選前 20') && text(conditional).includes('條件成立，ETF 不列入候選評分'), `其他成立條件: why it is not a candidate, got ${text(conditional).slice(0, 300)}`)
+const observation = tierMarkup(4)
+check(text(observation).includes('突破條件差 3 項：價格、量能、法人') && text(observation).includes('回踩條件差 1 項：趨勢'), '其他觀察: the 差 N 項 line')
+check(count(observation, CONDITIONS_PENDING_TEXT) === 2, `其他觀察: 條件明細尚未產生 only without a strategy_levels row (table and card), got ${count(observation, CONDITIONS_PENDING_TEXT)}`)
 
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')

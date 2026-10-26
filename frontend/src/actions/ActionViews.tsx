@@ -6,8 +6,10 @@ import { Badge, DataTable, Skeleton, cx, type Column } from '../components/ui'
 import type { ActionSummary, ActionTierSummary, ActionView } from '../types'
 import {
   ACTION_VIEWS,
+  CONDITIONS_PENDING_TEXT,
   EMPTY_TEXT,
   LEVELS_NOTE,
+  NEAR_RESEARCH_LINK,
   RESEARCH_LINK,
   SEARCH_NOTE,
   actionClose,
@@ -16,9 +18,12 @@ import {
   actionLevels,
   actionNote,
   actionStateLabel,
+  conditionalNote,
+  conditionsPending,
   etfLabel,
   hiddenSentence,
   moreText,
+  nearCopy,
   shownText,
   stockResearchPath,
   viewChipLabel,
@@ -72,10 +77,34 @@ function StockCell({ action }: { action: ActionSummary }) {
   </>
 }
 
-function StatusCell({ action }: { action: ActionSummary }) {
+// The row's tier context: tier 3 words its nearest strategy, tier 2 says why it is not a candidate (UI_COPY_SPEC §6).
+type RowContext = { tier: number; candidateListSize: number | null }
+
+function StatusCell({ action, context }: { action: ActionSummary; context: RowContext }) {
+  const near = context.tier === 3 ? nearCopy(action.nearness) : null
+  if (near) return <Badge tone="primary" className="badge-compact">{near.title}</Badge>
   return <>
     <Badge tone={action.action_state === 'conditional_entry' ? 'primary' : action.action_state === 'reduce_exit' ? 'warning' : 'default'} className="badge-compact">{actionStateLabel(action)}</Badge>
     {action.position_quantity_status === 'unknown' && <div><span className="pill ambiguous badge-compact">庫存數量待核實</span></div>}
+    {context.tier === 2 && <div className="small-note action-tier-note">{conditionalNote(action, context.candidateListSize)}</div>}
+  </>
+}
+
+// Tier 3's 差哪個條件: one 「差：」 line per unmet condition, then the met short names; never a level.
+function NearLines({ action }: { action: ActionSummary }) {
+  const near = nearCopy(action.nearness)
+  if (!near) return null
+  return <div className="action-near" data-near-lines="">
+    {near.lines.map((line) => <div key={line} className="action-near-line">{line}</div>)}
+    {near.met && <div className="small-note">{near.met}</div>}
+  </div>
+}
+
+function NoteLines({ action, tier }: { action: ActionSummary; tier: number }) {
+  const note = actionNote(action)
+  return <>
+    {note && <div>{note}</div>}
+    {conditionsPending(action, tier) && <div className="small-note">{CONDITIONS_PENDING_TEXT}</div>}
   </>
 }
 
@@ -87,9 +116,10 @@ function CloseCell({ action }: { action: ActionSummary }) {
 
 const rankLabel = (action: ActionSummary) => action.candidate ? `#${action.candidate.rank}` : ''
 
-function tierColumns(tier: number): ReadonlyArray<Column<ActionSummary>> {
+function tierColumns(context: RowContext): ReadonlyArray<Column<ActionSummary>> {
+  const { tier } = context
   const stock: Column<ActionSummary> = { key: 'stock', header: '股票', cell: (action) => <StockCell action={action} /> }
-  const status: Column<ActionSummary> = { key: 'status', header: '狀態', cell: (action) => <StatusCell action={action} /> }
+  const status: Column<ActionSummary> = { key: 'status', header: '狀態', cell: (action) => <StatusCell action={action} context={context} /> }
   const close: Column<ActionSummary> = { key: 'close', header: '最近收盤', num: true, cell: (action) => <CloseCell action={action} /> }
   const levels: Array<Column<ActionSummary>> = [
     { key: 'entry', header: <Term id="entry_zone">進場區</Term>, num: true, cellClassName: 'level-entry', cell: (action) => actionLevels(action)?.entry ?? '' },
@@ -97,7 +127,7 @@ function tierColumns(tier: number): ReadonlyArray<Column<ActionSummary>> {
     { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (action) => actionLevels(action)?.target ?? '' },
   ]
   const day: Column<ActionSummary> = { key: 'day', header: '資料日', num: true, cell: actionDataDay }
-  const link: Column<ActionSummary> = { key: 'link', header: <span className="sr-only">策略總表</span>, cell: (action) => <Link className="text-link" to={researchPath(action)}>{RESEARCH_LINK}</Link> }
+  const link: Column<ActionSummary> = { key: 'link', header: <span className="sr-only">策略總表</span>, cell: (action) => <Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link> }
   if (tier === 1) {
     return [
       { key: 'rank', header: '名次', cell: (action) => <span className="candidate-rank" aria-label={`第 ${action.candidate?.rank ?? ''} 名`}>{rankLabel(action)}</span> },
@@ -106,19 +136,21 @@ function tierColumns(tier: number): ReadonlyArray<Column<ActionSummary>> {
       day, link,
     ]
   }
-  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => actionNote(action) ?? '' }, day, link]
+  if (tier === 3) return [stock, status, close, { key: 'near', header: '差哪個條件', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NearLines action={action} /> }, day, link]
+  if (tier >= 4) return [stock, status, close, { key: 'note', header: '說明', wrap: true, cellClassName: 'action-note-cell', cell: (action) => <NoteLines action={action} tier={tier} /> }, day, link]
   return [stock, status, close, ...levels, day, link]
 }
 
-function ActionCard({ action, tier }: { action: ActionSummary; tier: number }) {
+function ActionCard({ action, context }: { action: ActionSummary; context: RowContext }) {
+  const { tier } = context
   const close = actionClose(action)
-  const levels = tier <= 3 ? actionLevels(action) : null
-  const note = tier >= 4 ? actionNote(action) : null
+  // Tier 3 never shows a level (DESIGN_SYSTEM §7 接近成立).
+  const levels = tier <= 2 ? actionLevels(action) : null
   return (
     <article className="card action-card-mini" data-action-card={actionKey(action)}>
       <div className="action-card-head">
         <Link className="symbol-link" to={researchPath(action)}><strong>{action.instrument.symbol}</strong> {action.instrument.name}</Link>
-        <StatusCell action={action} />
+        <StatusCell action={action} context={context} />
       </div>
       <div className="small-note">{action.candidate ? `#${action.candidate.rank} · ` : ''}{marketLabel(action.instrument.exchange)} · {typeLabel(action.instrument.instrument_type)}</div>
       {close.close === null
@@ -132,8 +164,9 @@ function ActionCard({ action, tier }: { action: ActionSummary; tier: number }) {
           {levels.target && <div><dt>目標</dt><dd className="level-target">{levels.target}</dd></div>}
         </dl>
       )}
-      {note && <p className="small-note">{note}</p>}
-      <div className="action-card-foot"><span className="small-note">資料日 {actionDataDay(action)}</span><Link className="text-link" to={researchPath(action)}>{RESEARCH_LINK}</Link></div>
+      {tier === 3 && <NearLines action={action} />}
+      {tier >= 4 && <div className="small-note action-card-note"><NoteLines action={action} tier={tier} /></div>}
+      <div className="action-card-foot"><span className="small-note">資料日 {actionDataDay(action)}</span><Link className="text-link" to={researchPath(action)}>{tier === 3 ? NEAR_RESEARCH_LINK : RESEARCH_LINK}</Link></div>
     </article>
   )
 }
@@ -146,6 +179,7 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
 }) {
   const remaining = Math.max(0, section.shown - section.items.length)
   const titleId = `action-tier-${section.tier}`
+  const context: RowContext = { tier: section.tier, candidateListSize: section.candidateListSize }
   return (
     <section className="action-tier" data-tier={section.tier} aria-labelledby={titleId}>
       <div className="section-head">
@@ -158,13 +192,13 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
         <DataTable
           wrapClassName="action-table-wrap"
           className="action-table"
-          note={section.tier <= 3 ? LEVELS_NOTE : undefined}
-          columns={tierColumns(section.tier)}
+          note={section.tier <= 2 ? LEVELS_NOTE : undefined}
+          columns={tierColumns(context)}
           rows={section.items}
           rowKey={actionKey}
           rowProps={(action) => ({ 'data-action-row': actionKey(action) })}
         />
-        <div className="action-cards">{section.items.map((action) => <ActionCard key={actionKey(action)} action={action} tier={section.tier} />)}</div>
+        <div className="action-cards">{section.items.map((action) => <ActionCard key={actionKey(action)} action={action} context={context} />)}</div>
       </>}
       {remaining > 0 && canLoadMore && (
         <button type="button" className="btn btn-secondary btn-sm action-more" disabled={loading} onClick={onMore}>{loading ? '載入中…' : moreText(remaining)}</button>

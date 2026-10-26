@@ -486,6 +486,11 @@ a.symbol-link:hover { color: var(--color-primary); }
 .action-card-close .action-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .action-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
 .action-more { margin-top: var(--space-3); }
+/* Tier 3 接近成立: text only, no level (DESIGN_SYSTEM §7). */
+.action-near { display: grid; gap: 2px; }
+.action-near-line { color: var(--color-text); overflow-wrap: anywhere; }
+.action-tier-note { margin-top: 2px; white-space: normal; }
+.action-card-note { display: grid; gap: 2px; }
 
 /* ---- daily candidates (DESIGN_SYSTEM §7) -------------------------------------------------------- */
 .candidates-section .section-head { flex-wrap: wrap; }

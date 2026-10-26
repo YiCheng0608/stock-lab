@@ -330,11 +330,14 @@ type MemberRow = ThemeMemberRow | ThemeInlineMember
 const memberPath = (row: MemberRow) => '/stocks/' + encodeURIComponent(row.exchange) + '/' + encodeURIComponent(row.symbol)
 const values = (row: MemberRow): Partial<ThemeMemberRow> => ('latest_bar' in row ? row : {})
 
-// 候選 #N before 條件成立 (a candidate is always conditional); the theme board adds 領先成員 (UI_COPY_SPEC §8.5).
+// 候選 #N before 條件成立 (a candidate is always conditional) before 接近成立 (#277-B); the theme board adds 領先成員
+// (UI_COPY_SPEC §8.5).
 function MemberBadges({ row, withRole }: { row: MemberRow; withRole: boolean }) {
-  const { candidate_rank: rank, conditional } = values(row)
+  const { candidate_rank: rank, conditional, near } = values(row)
   return <>
-    {isFiniteNumber(rank) ? <Badge tone="primary" className="badge-compact">候選 #{rank}</Badge> : conditional && <Badge className="badge-compact">條件成立</Badge>}
+    {isFiniteNumber(rank)
+      ? <Badge tone="primary" className="badge-compact">候選 #{rank}</Badge>
+      : conditional ? <Badge className="badge-compact">條件成立</Badge> : near && <Badge tone="primary" className="badge-compact">接近成立</Badge>}
     {withRole && row.role === 'leader' && <Badge className="badge-compact">領先成員</Badge>}
   </>
 }
