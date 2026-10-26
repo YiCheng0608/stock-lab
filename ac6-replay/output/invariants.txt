@@ -1,0 +1,4 @@
+future_trading_date ok max_trading_date=2026-10-22 today=2026-10-26
+latest_bar_provenance ok trading_date=2026-10-22 bars=2312 unknown_source=0 null_data_as_of=0
+llm_done_provenance ok done=3122 missing_model=0 empty_prompt_version=0
+instrument_status_sync ok exchanges=2 skipped=none

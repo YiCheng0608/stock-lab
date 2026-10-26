@@ -1,0 +1,93 @@
+2026-10-19 OK   v2 run exists, status success
+2026-10-19 OK   config name candidate_score_v2
+2026-10-19 OK   config weights per spec — {'technical': 0.35, 'chips': 0.3, 'group': 0.2, 'news_sentiment': 0.15}
+2026-10-19 OK   news uses news_v2 — {"window": ["2026-10-17", "2026-10-19"], "llm_prompt_version": "news_v2", "news_collection_runs": 161, "news_items_in_window": 676, "llm_scored_items": 0, "instruments_with_news": 139}
+2026-10-19 OK   evaluated_signals = signals of the day — 4628 vs 4628
+2026-10-19 OK   actionable_signals — 66 vs 66
+2026-10-19 OK   pool_count — 62 vs 62
+2026-10-19 OK   pool exclusions — run {'below_list_cutoff': 42, 'instrument_type_excluded:etf': 4} / mine {'instrument_type_excluded:etf': 4}
+2026-10-19 OK   candidate_count = rows, ≤ 20 — 20
+2026-10-19 OK   ranks 1..n
+2026-10-19 OK   one row per instrument
+2026-10-19 OK   every candidate's signal is in the pool
+2026-10-19 OK   strategy matches the signal
+2026-10-19 OK   total = Σw·s/Σw over non-null components
+2026-10-19 OK   weight_coverage = Σw, technical non-null, ≥ 0.65
+2026-10-19 OK   component = weighted mean of item percentiles
+2026-10-19 OK   technical values and mid-rank percentiles (rebuilt from bars/features)
+2026-10-19 OK   group = max board percentile of qualified groups (vs group_daily_scores)
+2026-10-19 OK   ≤ 4 reasons, news reasons inference, active stock/ipo
+2026-10-19 OK   sort order total→technical→chips→exchange→symbol
+2026-10-19 v1→v2: evaluated 4628→4628, pool 62→62, candidates 20→20, same set 17/20, same rank 1
+    v1 exclusions {"below_list_cutoff": 42, "instrument_type_excluded:etf": 4}  v2 exclusions {"below_list_cutoff": 42, "instrument_type_excluded:etf": 4}
+    only v1 ['2753', '6751', '8074']  only v2 ['2402', '2476', '8089']
+2026-10-20 OK   v2 run exists, status success
+2026-10-20 OK   config name candidate_score_v2
+2026-10-20 OK   config weights per spec — {'technical': 0.35, 'chips': 0.3, 'group': 0.2, 'news_sentiment': 0.15}
+2026-10-20 OK   news uses news_v2 — {"window": ["2026-10-18", "2026-10-20"], "llm_prompt_version": "news_v2", "news_collection_runs": 245, "news_items_in_window": 1059, "llm_scored_items": 0, "instruments_with_news": 175}
+2026-10-20 OK   evaluated_signals = signals of the day — 4634 vs 4634
+2026-10-20 OK   actionable_signals — 60 vs 60
+2026-10-20 OK   pool_count — 53 vs 53
+2026-10-20 OK   pool exclusions — run {'below_list_cutoff': 33, 'instrument_type_excluded:etf': 7} / mine {'instrument_type_excluded:etf': 7}
+2026-10-20 OK   candidate_count = rows, ≤ 20 — 20
+2026-10-20 OK   ranks 1..n
+2026-10-20 OK   one row per instrument
+2026-10-20 OK   every candidate's signal is in the pool
+2026-10-20 OK   strategy matches the signal
+2026-10-20 OK   total = Σw·s/Σw over non-null components
+2026-10-20 OK   weight_coverage = Σw, technical non-null, ≥ 0.65
+2026-10-20 OK   component = weighted mean of item percentiles
+2026-10-20 OK   technical values and mid-rank percentiles (rebuilt from bars/features)
+2026-10-20 OK   group = max board percentile of qualified groups (vs group_daily_scores)
+2026-10-20 OK   ≤ 4 reasons, news reasons inference, active stock/ipo
+2026-10-20 OK   sort order total→technical→chips→exchange→symbol
+2026-10-20 v1→v2: evaluated 4632→4634, pool 53→53, candidates 20→20, same set 18/20, same rank 4
+    v1 exclusions {"below_list_cutoff": 33, "instrument_type_excluded:etf": 7}  v2 exclusions {"below_list_cutoff": 33, "instrument_type_excluded:etf": 7}
+    only v1 ['1773', '2753']  only v2 ['2362', '3293']
+2026-10-21 OK   v2 run exists, status success
+2026-10-21 OK   config name candidate_score_v2
+2026-10-21 OK   config weights per spec — {'technical': 0.35, 'chips': 0.3, 'group': 0.2, 'news_sentiment': 0.15}
+2026-10-21 OK   news uses news_v2 — {"window": ["2026-10-19", "2026-10-21"], "llm_prompt_version": "news_v2", "news_collection_runs": 252, "news_items_in_window": 1473, "llm_scored_items": 0, "instruments_with_news": 221}
+2026-10-21 OK   evaluated_signals = signals of the day — 4638 vs 4638
+2026-10-21 OK   actionable_signals — 64 vs 64
+2026-10-21 OK   pool_count — 53 vs 53
+2026-10-21 OK   pool exclusions — run {'below_list_cutoff': 33, 'instrument_type_excluded:etf': 11} / mine {'instrument_type_excluded:etf': 11}
+2026-10-21 OK   candidate_count = rows, ≤ 20 — 20
+2026-10-21 OK   ranks 1..n
+2026-10-21 OK   one row per instrument
+2026-10-21 OK   every candidate's signal is in the pool
+2026-10-21 OK   strategy matches the signal
+2026-10-21 OK   total = Σw·s/Σw over non-null components
+2026-10-21 OK   weight_coverage = Σw, technical non-null, ≥ 0.65
+2026-10-21 OK   component = weighted mean of item percentiles
+2026-10-21 OK   technical values and mid-rank percentiles (rebuilt from bars/features)
+2026-10-21 OK   group = max board percentile of qualified groups (vs group_daily_scores)
+2026-10-21 OK   ≤ 4 reasons, news reasons inference, active stock/ipo
+2026-10-21 OK   sort order total→technical→chips→exchange→symbol
+2026-10-21 v1→v2: evaluated 4638→4638, pool 53→53, candidates 20→20, same set 19/20, same rank 1
+    v1 exclusions {"below_list_cutoff": 33, "instrument_type_excluded:etf": 11}  v2 exclusions {"below_list_cutoff": 33, "instrument_type_excluded:etf": 11}
+    only v1 ['6154']  only v2 ['2890']
+2026-10-22 OK   v2 run exists, status success
+2026-10-22 OK   config name candidate_score_v2
+2026-10-22 OK   config weights per spec — {'technical': 0.35, 'chips': 0.3, 'group': 0.2, 'news_sentiment': 0.15}
+2026-10-22 OK   news uses news_v2 — {"window": ["2026-10-20", "2026-10-22"], "llm_prompt_version": "news_v2", "news_collection_runs": 247, "news_items_in_window": 1497, "llm_scored_items": 5, "instruments_with_news": 228}
+2026-10-22 OK   evaluated_signals = signals of the day — 4622 vs 4622
+2026-10-22 OK   actionable_signals — 79 vs 79
+2026-10-22 OK   pool_count — 71 vs 71
+2026-10-22 OK   pool exclusions — run {'below_list_cutoff': 51, 'instrument_type_excluded:etf': 8} / mine {'instrument_type_excluded:etf': 8}
+2026-10-22 OK   candidate_count = rows, ≤ 20 — 20
+2026-10-22 OK   ranks 1..n
+2026-10-22 OK   one row per instrument
+2026-10-22 OK   every candidate's signal is in the pool
+2026-10-22 OK   strategy matches the signal
+2026-10-22 OK   total = Σw·s/Σw over non-null components
+2026-10-22 OK   weight_coverage = Σw, technical non-null, ≥ 0.65
+2026-10-22 OK   component = weighted mean of item percentiles
+2026-10-22 OK   technical values and mid-rank percentiles (rebuilt from bars/features)
+2026-10-22 OK   group = max board percentile of qualified groups (vs group_daily_scores)
+2026-10-22 OK   ≤ 4 reasons, news reasons inference, active stock/ipo
+2026-10-22 OK   sort order total→technical→chips→exchange→symbol
+2026-10-22 v1→v2: evaluated 4622→4622, pool 71→71, candidates 20→20, same set 18/20, same rank 2
+    v1 exclusions {"below_list_cutoff": 51, "instrument_type_excluded:etf": 8}  v2 exclusions {"below_list_cutoff": 51, "instrument_type_excluded:etf": 8}
+    only v1 ['1101', '1102']  only v2 ['5438', '6742']
+failures 0

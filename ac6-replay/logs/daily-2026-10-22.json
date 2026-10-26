@@ -1,0 +1,102 @@
+{
+  "schedule_run_id": 16,
+  "date": "2026-10-22",
+  "trigger": "simulation",
+  "collect": {
+    "status": "success",
+    "date": "2026-10-22",
+    "data_as_of": "2026-10-22",
+    "records": 2312,
+    "taiex_records": 1,
+    "chips": 2307,
+    "actions": 0,
+    "events": 0,
+    "fundamentals": 0,
+    "raw_payloads": 27,
+    "run_id": 1009,
+    "idempotent_reuse": true,
+    "industry_membership_observations": {
+      "status": "not_requested",
+      "reason": "historical batch without current snapshot feeds"
+    },
+    "warnings": [],
+    "core_warnings": [],
+    "noncore_warnings": [],
+    "notices": [],
+    "no_data_dates": []
+  },
+  "analyze": {
+    "status": "success",
+    "date": "2026-10-22",
+    "signals_upserted": 2311
+  },
+  "evaluate": {
+    "status": "success",
+    "date": "2026-10-22",
+    "signals_checked": 18174,
+    "evaluations_written": 36950,
+    "settlements_written": 29090
+  },
+  "candidates": {
+    "status": "success",
+    "already_complete": false,
+    "candidate_run_id": 8,
+    "trading_date": "2026-10-22",
+    "score_version": "candidate_score_v2",
+    "evaluated_signals": 4622,
+    "pool_count": 71,
+    "candidate_count": 20,
+    "records": 20,
+    "zero_reason": null,
+    "exclusions": {
+      "below_list_cutoff": 51,
+      "instrument_type_excluded:etf": 8
+    },
+    "elapsed_seconds": 4.055
+  },
+  "indicators": {
+    "status": "success",
+    "date": "2026-10-22",
+    "formula_version": "indicators/v1",
+    "mode": "daily",
+    "instruments": 2350,
+    "latest_day_rows": 0,
+    "instruments_rewritten": 0,
+    "rows_written": 0,
+    "elapsed_seconds": 33.501
+  },
+  "theme_suggestions": {
+    "status": "success",
+    "aggregation_version": "theme_suggestions_v1",
+    "source_results": 2275,
+    "records": 743,
+    "new_themes": 710,
+    "matched_existing": 33,
+    "links": 2587,
+    "inserted": 0,
+    "updated": 0,
+    "deleted": 0
+  },
+  "plan_tracking": {
+    "status": "success",
+    "date": "2026-10-22",
+    "plans_checked": 0,
+    "sessions_written": 0,
+    "transition_conflicts": 0,
+    "transitions": {},
+    "records": 0
+  },
+  "candidate_notes": {
+    "run_date": "2026-10-26",
+    "prompt_version": "candidate_notes_v1",
+    "records": 0,
+    "trading_date": "2026-10-22",
+    "candidate_run_id": 8,
+    "candidates": 20,
+    "already_done": 0,
+    "status": "failed",
+    "reason": "cli_not_found: C:/Users/YiCheng/AppData/Local/Temp/t260r/no-claude/claude.exe",
+    "run_id": 1384
+  },
+  "status": "success"
+}

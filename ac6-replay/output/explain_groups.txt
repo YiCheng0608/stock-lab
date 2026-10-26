@@ -1,0 +1,24 @@
+production analyze finished (UTC): {'2026-10-19': '2026-10-19 13:34:30.876077', '2026-10-20': '2026-10-20 13:33:33.584749', '2026-10-21': '2026-10-21 13:34:34.012046', '2026-10-22': '2026-10-24 06:52:01.192189'}
+('2026-10-19', ('catalyst_late_events',)) 9
+('2026-10-19', ('catalyst_late_events', 'data_quality:partial->complete:catalyst_was_null')) 5
+('2026-10-19', ('catalyst_late_events', 'data_quality:partial->complete:catalyst_was_null', 'member_count')) 2
+('2026-10-19', ('member_count',)) 5
+('2026-10-19', ('rank_only',)) 10
+('2026-10-20', ('catalyst_late_events',)) 5
+('2026-10-20', ('catalyst_late_events', 'data_quality:partial->complete:catalyst_was_null')) 3
+('2026-10-20', ('catalyst_late_events', 'member_count')) 3
+('2026-10-20', ('member_count',)) 4
+('2026-10-20', ('rank_only',)) 10
+('2026-10-21', ('catalyst_late_events',)) 3
+('2026-10-21', ('catalyst_late_events', 'data_quality:partial->complete:catalyst_was_null')) 1
+('2026-10-21', ('member_count',)) 7
+('2026-10-21', ('rank_only',)) 6
+MISMATCH official-industry-5d53b598ae47c823 2026-10-19 13 12 0 0
+MISMATCH official-industry-5d53b598ae47c823 2026-10-20 13 12 0 0
+MISMATCH official-industry-5d53b598ae47c823 2026-10-21 13 12 0 0
+member_count diffs explained by status changes of instruments_repair run 1236 (2026-10-24 18:16 UTC): 18 ok, 3 mismatch
+note: the 3 mismatches are official-industry-5d53b598ae47c823 (Oil, Gas and Electricity) on 10/19-10/21: TPEx:8908 欣雄 was
+moved to transferred by instruments repair run 1236 and its TPEx membership closed with valid_to=2026-10-15
+(data_quality instrument_status TPEx:8908, closed_memberships), so the query above (valid_to >= D) does not count it;
+at the production runs both TPEx:8908 (active, open membership) and TWSE:8908 were members (13), now only TWSE:8908 (12).
+Same cause: the status changes of run 1236. 21/21 member_count differences explained.
