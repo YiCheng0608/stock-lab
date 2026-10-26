@@ -7,8 +7,8 @@ import { Term } from '../components/Term'
 import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, Stat, Tabs, tabId, tabPanelId, type Column } from '../components/ui'
 import { newsSourceName, newsTime } from '../news/newsView'
 import { officialEventDisplayTitle } from '../presentation'
-import { readChartTheme, type ChartTheme } from '../stock/stockBars'
-import { formatTableNumber } from '../units'
+import { isFiniteNumber, readChartTheme, type ChartTheme } from '../stock/stockBars'
+import { formatFixed, formatTableNumber } from '../units'
 import type {
   NewsItem,
   ThemeBoard,
@@ -19,11 +19,14 @@ import type {
   ThemeEvidence,
   ThemeInlineMember,
   ThemeMemberRow,
+  ThemeMemberSort,
   ThemeMembersResponse,
   ThemeTrendPoint,
 } from '../types'
 import {
   BOARD_COMPONENTS,
+  DEFAULT_MEMBER_SORT,
+  MEMBER_SORTS,
   RETURN_WINDOWS,
   TODAY_BOARD_LIMIT,
   THEME_BOARDS,
@@ -38,6 +41,8 @@ import {
   formatMembers,
   formatRank,
   formatScore,
+  memberStaleDate,
+  memberTableNote,
   memberTableRows,
   qualityLabel,
   qualityTone,
@@ -320,36 +325,95 @@ function marketLabel(exchange: string): string {
   return exchange === 'TWSE' ? '上市' : exchange === 'TPEx' ? '上櫃' : '市場待核實'
 }
 
-function roleLabel(role: string | undefined): string {
-  return role === 'leader' ? '領先成員' : role === 'member' ? '成員' : '角色待核實'
-}
-
-// A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
-function closeText(row: ThemeMemberRow | ThemeInlineMember): string {
-  const close = 'latest_bar' in row ? row.latest_bar?.close : undefined
-  return formatTableNumber(close, 2)
-}
-
+// Member rows: the paginated endpoint's rows, or the detail's inline rows (no values) until a page arrives.
 type MemberRow = ThemeMemberRow | ThemeInlineMember
 const memberPath = (row: MemberRow) => '/stocks/' + encodeURIComponent(row.exchange) + '/' + encodeURIComponent(row.symbol)
-const MEMBER_COLUMNS: ReadonlyArray<Column<MemberRow>> = [
-  { key: 'symbol', header: '代號', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.symbol}</Link> },
-  { key: 'name', header: '名稱', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.name}</Link> },
-  { key: 'market', header: '市場', wideOnly: true, cell: (row) => marketLabel(row.exchange) },
-  { key: 'role', header: '角色', wideOnly: true, cell: (row) => roleLabel(row.role) },
-  { key: 'close', header: '收盤', num: true, cell: closeText },
-  { key: 'date', header: '資料日期', cell: (row) => formatDate('latest_bar' in row ? row.latest_bar?.date : undefined) ?? '' },
-]
-const EVIDENCE_COLUMN: Column<MemberRow> = { key: 'evidence', header: '證據', cell: (row) => <EvidenceCell evidence={row.theme_evidence} /> }
+const values = (row: MemberRow): Partial<ThemeMemberRow> => ('latest_bar' in row ? row : {})
 
-export function ThemeMemberTable({ rows, withEvidence }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean }) {
+// 候選 #N before 條件成立 (a candidate is always conditional); the theme board adds 領先成員 (UI_COPY_SPEC §8.5).
+function MemberBadges({ row, withRole }: { row: MemberRow; withRole: boolean }) {
+  const { candidate_rank: rank, conditional } = values(row)
+  return <>
+    {isFiniteNumber(rank) ? <Badge tone="primary" className="badge-compact">候選 #{rank}</Badge> : conditional && <Badge className="badge-compact">條件成立</Badge>}
+    {withRole && row.role === 'leader' && <Badge className="badge-compact">領先成員</Badge>}
+  </>
+}
+
+// A column across stocks keeps two decimals (DESIGN_SYSTEM §3); an older bar carries its date on the next line.
+function MemberClose({ row, membersAsOf }: { row: MemberRow; membersAsOf: string | null }) {
+  const stale = memberStaleDate(values(row), membersAsOf)
+  return <>{formatTableNumber(values(row).latest_bar?.close, 2)}{stale && <span className="member-bar-date">資料 {stale}</span>}</>
+}
+
+// Percent of the change or a relative return; a blank cell instead of 「—」 in this table (UI_COPY_SPEC §8.4).
+function MemberPercent({ value, unit = '' }: { value: number | null | undefined; unit?: string }) {
+  if (!isFiniteNumber(value)) return null
+  return <ReturnValue value={value} unit={unit} />
+}
+
+// Turnover in 億元, only when the source stated it (turnover_status available).
+const turnoverText = (row: MemberRow) => {
+  const { turnover, turnover_status: status } = values(row)
+  return status === 'available' && isFiniteNumber(turnover) ? formatFixed(turnover / 1e8, 2) : ''
+}
+
+function memberColumns(withEvidence: boolean, membersAsOf: string | null): ReadonlyArray<Column<MemberRow>> {
+  return [
+    { key: 'symbol', header: '代號', cell: (row) => <Link className="symbol-link" to={memberPath(row)}>{row.symbol}</Link> },
+    { key: 'name', header: '名稱', wrap: true, cellClassName: 'member-name-cell', cell: (row) => <><Link className="symbol-link" to={memberPath(row)}>{row.name}</Link> <MemberBadges row={row} withRole={withEvidence} /></> },
+    { key: 'market', header: '市場', wideOnly: true, cell: (row) => marketLabel(row.exchange) },
+    { key: 'close', header: '收盤', num: true, cell: (row) => <MemberClose row={row} membersAsOf={membersAsOf} /> },
+    { key: 'change', header: '漲跌幅', num: true, cell: (row) => <MemberPercent value={values(row).change_status === 'known' ? values(row).change_pct : null} /> },
+    { key: 'turnover', header: '成交值', num: true, cell: turnoverText },
+    { key: 'return5', header: '5 日相對', num: true, cell: (row) => <MemberPercent value={values(row).excess_return_5d} /> },
+    { key: 'return20', header: '20 日相對', num: true, cell: (row) => <MemberPercent value={values(row).excess_return_20d} /> },
+    ...(withEvidence ? [{ key: 'evidence', header: '證據', cell: (row: MemberRow) => <EvidenceCell evidence={row.theme_evidence} /> }] : []),
+  ]
+}
+
+export function ThemeMemberTable({ rows, withEvidence, membersAsOf = null }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean; membersAsOf?: string | null }) {
   return <DataTable
     wrapClassName="member-table-wrap"
-    note="單位：收盤為各標的報價幣別的元。空白表示未提供資料或數值待核實。"
-    columns={withEvidence ? [...MEMBER_COLUMNS, EVIDENCE_COLUMN] : MEMBER_COLUMNS}
+    columns={memberColumns(withEvidence, membersAsOf)}
     rows={rows}
     rowKey={(row) => row.exchange + row.symbol}
   />
+}
+
+// 640px and below: one card per member, title row with close and change, then turnover and the two returns (DESIGN_SYSTEM §5).
+function ThemeMemberCards({ rows, withEvidence, membersAsOf }: { rows: ReadonlyArray<MemberRow>; withEvidence: boolean; membersAsOf: string | null }) {
+  return (
+    <div className="member-cards">
+      {rows.map((row) => (
+        <div className="member-card" key={row.exchange + row.symbol}>
+          <div className="member-card-head">
+            <div className="member-card-name"><Link className="symbol-link" to={memberPath(row)}>{row.symbol} {row.name}</Link> <MemberBadges row={row} withRole={withEvidence} /></div>
+            <div className="member-card-price">
+              <MemberClose row={row} membersAsOf={membersAsOf} />
+              <MemberPercent value={values(row).change_status === 'known' ? values(row).change_pct : null} unit="%" />
+            </div>
+          </div>
+          <dl className="board-card-grid">
+            <div><dt>成交值</dt><dd>{turnoverText(row)}</dd></div>
+            <div><dt>5 日相對</dt><dd><MemberPercent value={values(row).excess_return_5d} unit="%" /></dd></div>
+            <div><dt>20 日相對</dt><dd><MemberPercent value={values(row).excess_return_20d} unit="%" /></dd></div>
+          </dl>
+          {withEvidence && <div className="member-card-evidence"><EvidenceCell evidence={row.theme_evidence} /></div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MemberSortSelect({ value, onChange }: { value: ThemeMemberSort; onChange: (sort: ThemeMemberSort) => void }) {
+  return (
+    <label className="member-sort">
+      <span>排序</span>
+      <select className="filter-select" aria-label="成員排序" value={value} onChange={(event) => onChange(event.target.value as ThemeMemberSort)}>
+        {MEMBER_SORTS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+      </select>
+    </label>
+  )
 }
 
 function MemberPager({ meta, onPageChange }: { meta: Record<string, unknown>; onPageChange: (page: number) => void }) {
@@ -395,18 +459,24 @@ export function ThemeDetailView({
   detail,
   board,
   members,
+  memberSort = DEFAULT_MEMBER_SORT,
+  onMemberSortChange = () => undefined,
   onMemberPageChange,
   news,
 }: {
   detail: ThemeDetail
   board: QueryView<ThemeBoardResponse>
   members: QueryView<ThemeMembersResponse>
+  // The page owns the sort with the page number; a new sort starts at page 1 (#280).
+  memberSort?: ThemeMemberSort
+  onMemberSortChange?: (sort: ThemeMemberSort) => void
   onMemberPageChange: (page: number) => void
   news: QueryView<{ items: NewsItem[] }>
 }) {
   const item = board.data?.items.find((row) => row.theme_id === detail.theme.theme_id) ?? null
   const isTheme = detail.board === 'theme'
   const rows = memberTableRows(detail, members.data)
+  const membersAsOf = members.data?.members_as_of ?? detail.members_as_of
   const version = isTheme ? themeDefinitionVersion(detail, members.data?.items) : null
   const scoreDate = formatDate(item?.trading_date ?? detail.theme.trading_date)
   const backBoard: ThemeBoard = isTheme ? 'theme' : 'industry'
@@ -432,14 +502,21 @@ export function ThemeDetailView({
         <TrendCard trend={detail.trend} dataDate={formatDate(detail.trend.at(-1)?.trading_date ?? detail.data_as_of)} />
         <ComponentsCard detail={detail} item={item} />
       </div>
-      <section className="section-head"><div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期待核實'}</div><h2>族群成員</h2></div></section>
+      <section className="section-head">
+        <div><div className="eyebrow">成員資料截至 {formatDate(detail.members_as_of) ?? '日期待核實'}</div><h2>族群成員</h2></div>
+        <MemberSortSelect value={memberSort} onChange={onMemberSortChange} />
+      </section>
       {members.error
         ? <Card><EmptyState title="成員資料暫時無法載入" reason={errorReason(members.error)} /></Card>
         : rows === null
           ? <Skeleton lines={5} label="成員載入中…" />
           : rows.length === 0
             ? <Card><EmptyState reason="此日期沒有有效成員" /></Card>
-            : <ThemeMemberTable rows={rows} withEvidence={isTheme} />}
+            : <>
+              <p className="table-note member-note">{memberTableNote(rows.map(values), membersAsOf)}</p>
+              <ThemeMemberTable rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
+              <ThemeMemberCards rows={rows} withEvidence={isTheme} membersAsOf={membersAsOf} />
+            </>}
       {members.data && <MemberPager meta={members.data.meta} onPageChange={onMemberPageChange} />}
       <section className="section-head"><div><div className="eyebrow">最多 10 則</div><h2>相關新聞</h2></div></section>
       {news.loading

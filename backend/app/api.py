@@ -76,6 +76,7 @@ from .decision import (
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
 from .market_overview import market_overview
+from .theme_member_view import member_columns, member_context, sort_members
 from .theme_table import parse_membership_source
 from .theme_suggestions import (
     DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT,
@@ -2118,6 +2119,7 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
 def theme_members(
     theme_id: str,
     q: str | None = Query(default=None),
+    # turnover, change_pct, return_5d, return_20d, price, name or symbol (#280).
     sort: str = Query(default="symbol"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
@@ -2141,6 +2143,14 @@ def theme_members(
             Instrument.status == "active",
         )
     ).all()
+    score = (
+        scores_as_of(db, as_of).get(theme_id)
+        if run and run.status == "success"
+        else None
+    )
+    context = member_context(
+        db, as_of, score, (instrument.id for _membership, instrument in memberships)
+    )
     members: list[dict[str, Any]] = []
     for membership, instrument in memberships:
         if (
@@ -2168,30 +2178,15 @@ def theme_members(
                 "valid_to": as_date(membership.valid_to),
                 **_theme_evidence(membership),
                 "latest_bar": bar_dict(latest_bar),
+                **member_columns(db, instrument, latest_bar, context),
             }
         )
-    if sort == "price":
-        members.sort(
-            key=lambda item: (
-                item["latest_bar"] is None,
-                -(item["latest_bar"]["close"] if item["latest_bar"] else 0),
-                item["symbol"],
-            )
-        )
-    elif sort == "name":
-        members.sort(key=lambda item: (item["name"], item["symbol"]))
-    else:
-        members.sort(key=lambda item: (item["exchange"], item["symbol"]))
+    sort_members(members, sort)
     total = len(members)
     start = (page - 1) * page_size
     return {
-        "theme": theme_product_dict(
-            group,
-            scores_as_of(db, as_of).get(theme_id)
-            if run and run.status == "success"
-            else None,
-            db,
-        ),
+        "theme": theme_product_dict(group, score, db),
+        "members_as_of": as_date(effective_date),
         **_directory_response(
             members[start : start + page_size],
             page=page,

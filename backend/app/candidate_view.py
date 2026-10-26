@@ -8,15 +8,14 @@ Each item's ``market`` is the stored close of its trading date (#276).
 
 from __future__ import annotations
 
-import math
 from datetime import date, timezone
 from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from .coverage import verified_taiex_sessions
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
+from .market_change import adjacent_change
 from .models import (
     CandidateLlmNote,
     CandidateRun,
@@ -141,64 +140,6 @@ def _note(db: Session, row: DailyCandidate) -> dict[str, Any] | None:
     }
 
 
-def _traded_close(bar: MarketBar | None) -> float | None:
-    if bar is None or bar.is_suspended:
-        return None
-    close = bar.close
-    return close if close is not None and math.isfinite(close) and close > 0 else None
-
-
-def _market(
-    db: Session,
-    instrument_id: int,
-    trading_date: date,
-    bar: MarketBar | None,
-    sessions: dict[date, list[date]],
-) -> dict[str, Any]:
-    """The close of the candidate's trading date and its change (#276).
-
-    The change is ``known`` only against the stock's bar on the previous
-    verified TAIEX session from the same source (UI_COPY_SPEC §8.2); a holiday
-    gap, missing or suspended bar, or another source is ``unverified``.
-    ``missing`` means no traded bar on the day.
-    """
-
-    close = _traded_close(bar)
-    market: dict[str, Any] = {
-        "trading_date": trading_date.isoformat(),
-        "close": close,
-        "change": None,
-        "change_pct": None,
-        "change_status": "missing" if close is None else "unverified",
-        "source": bar.source if bar is not None else None,
-    }
-    if close is None:
-        return market
-    if trading_date not in sessions:
-        sessions[trading_date] = verified_taiex_sessions(
-            db, end_date=trading_date, limit=2
-        )
-    days = sessions[trading_date]
-    if len(days) < 2 or days[-1] != trading_date:
-        return market
-    previous = db.scalar(
-        select(MarketBar).where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date == days[-2],
-        )
-    )
-    previous_close = _traded_close(previous)
-    if previous_close is None or previous.source != bar.source:
-        return market
-    change = round(close - previous_close, 6)
-    market.update(
-        change=change,
-        change_pct=change / previous_close,
-        change_status="known",
-    )
-    return market
-
-
 def candidate_item(
     db: Session,
     row: DailyCandidate,
@@ -246,7 +187,7 @@ def candidate_item(
         "groups": row.groups_json or [],
         "data_as_of": row.data_as_of.isoformat(),
         "llm_note": _note(db, row),
-        "market": _market(
+        "market": adjacent_change(
             db,
             row.instrument_id,
             row.trading_date,
