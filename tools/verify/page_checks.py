@@ -503,7 +503,7 @@ class Run:
     def theme_members(self) -> dict:
         theme_id, _ = self.T()
         return self.get(
-            f"themes/{theme_id}/members?page=1&page_size=30&sort=price",
+            f"themes/{theme_id}/members?page=1&page_size=30&sort=turnover",
             "theme-members.json",
         )
 
@@ -1485,7 +1485,8 @@ def g5(run: Run) -> str:
 @check("themes", "G6")
 def g6(run: Run) -> str:
     _payload, text = theme_detail(run)
-    header = "代號\t名稱\t市場\t角色\t收盤\t資料日期"
+    # The theme board appends 證據 (UI_COPY_SPEC §8.5).
+    header = "代號\t名稱\t市場\t收盤\t漲跌幅\t成交值\t5 日相對\t20 日相對"
     expect(text.find_where(lambda line: line.startswith(header)) >= 0, "缺成員表頭")
     payload = members(run)
     items, total = (
@@ -1531,6 +1532,37 @@ def g7(run: Run) -> str:
         f"詳情 `{text.lines[back]}` 與 `排名` 之間沒有整行 `{detail_name}`",
     )
     return f"今日 #1 = 產業榜 #1 = 詳情 = `{detail_name}`"
+
+
+def turnover_order(item: dict) -> tuple:
+    """The API's sort=turnover key: largest first, null last, then symbol (#280)."""
+
+    value = item.get("turnover")
+    return (value is None, -(value or 0), item["symbol"], item.get("exchange") or "")
+
+
+@check("themes", "G8")
+def g8(run: Run) -> str:
+    _payload, text = theme_detail(run)
+    items = members(run).get("items") or []
+    symbols = [item["symbol"] for item in items]
+    expected = [item["symbol"] for item in sorted(items, key=turnover_order)]
+    expect(
+        symbols == expected,
+        f"theme-members.json 不是依成交值由大到小：{'、'.join(symbols)}，預期 {'、'.join(expected)}",
+    )
+    # Member rows of the 1280 table start with the symbol cell.
+    shown = [
+        symbol
+        for line in text.lines
+        for symbol in symbols
+        if line.startswith(f"{symbol}\t")
+    ]
+    expect(
+        shown == symbols,
+        f"頁面成員順序 {'、'.join(shown) or '（無）'} ≠ sort=turnover 的 {'、'.join(symbols)}",
+    )
+    return f"成員依成交值：{'、'.join(symbols) or '（無成員）'}"
 
 
 # ---- stocks ----

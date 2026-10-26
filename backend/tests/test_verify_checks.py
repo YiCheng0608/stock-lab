@@ -112,11 +112,11 @@ def test_a_sampler_without_a_manual_label_fails(tmp_path):
 
 
 def test_a_check_without_a_type_fails(tmp_path):
-    features = _features_with(tmp_path, "themes", "| G8 | 新檢查 | 某條件 |")
+    features = _features_with(tmp_path, "themes", "| G9 | 新檢查 | 某條件 |")
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["themes.md G8: 類型 is '新檢查', not CI or 人工"]
+    assert problems == ["themes.md G9: 類型 is '新檢查', not CI or 人工"]
 
 
 def test_code_that_features_label_manual_fails(tmp_path):
@@ -505,23 +505,40 @@ def test_a5_reports_the_line_of_an_inference_mark(tmp_path):
         page_checks.a5(run)
 
 
-def _theme_run(tmp_path, total, pager):
+MEMBER_HEADER = "代號\t名稱\t市場\t收盤\t漲跌幅\t成交值\t5 日相對\t20 日相對\n"
+# 9102 has the most turnover, 9101 the highest close, 9201 no turnover.
+MEMBERS = [
+    {"symbol": "9102", "exchange": "TWSE", "name": "示範封測", "turnover": 5e9},
+    {"symbol": "9101", "exchange": "TWSE", "name": "示範晶圓", "turnover": 1e9},
+    {"symbol": "9201", "exchange": "TPEx", "name": "示範矽材", "turnover": None},
+]
+# The 1280 rows as innerText: the stale 9201 has its bar date under the close.
+MEMBER_ROWS = {
+    "9101": "9101\t示範晶圓 候選 #1\t上市\t1,085.00\t+3.63%\t10.00\t+4.50%\t+10.00%\n",
+    "9102": "9102\t示範封測\t上市\t52.30\t-0.24%\t50.00\t+3.50%\t+8.00%\n",
+    "9201": "9201\t示範矽材\t上櫃\t25.10\n資料 2026/10/15\t\t\t+2.50%\t+6.00%\n",
+}
+
+
+def _theme_run(tmp_path, total, pager, items=None, rows=None):
     theme = "official-industry-x"
+    items = MEMBERS if items is None else items
     members = {
         "meta": {"total": total, "data_as_of": "2026-10-16"},
-        "items": [{"symbol": "9101", "name": "示範晶圓"}],
+        "items": items,
     }
     board = {
         "meta": {"trading_date": "2026-10-16"},
         "items": [{"theme_id": theme, "display_name": "半導體"}],
     }
-    page = "代號\t名稱\t市場\t角色\t收盤\t資料日期\n9101\t示範晶圓\t上市\n" + pager
+    rows = [item["symbol"] for item in items] if rows is None else rows
+    page = MEMBER_HEADER + "".join(MEMBER_ROWS[symbol] for symbol in rows) + pager
     return FakeRun(
         tmp_path,
         {
             "themes?board=industry&limit=5": board,
             f"themes/{theme}": {"theme": {"display_name": "半導體"}},
-            f"themes/{theme}/members?page=1&page_size=30&sort=price": members,
+            f"themes/{theme}/members?page=1&page_size=30&sort=turnover": members,
         },
         {"theme-detail-1280": page},
     )
@@ -537,6 +554,40 @@ def test_g6_follows_the_member_pager(tmp_path, total, pager):
 def test_g6_fails_on_the_wrong_pager(tmp_path):
     with pytest.raises(page_checks.Fail, match="缺整行 `第 1／2 頁 · 共 31 檔`"):
         page_checks.g6(_theme_run(tmp_path, 31, "共 31 檔"))
+
+
+def test_g6_fails_on_the_old_member_header(tmp_path):
+    run = _theme_run(tmp_path, 3, "共 3 檔")
+    old = "代號\t名稱\t市場\t角色\t收盤\t資料日期\n"
+    run.pages["theme-detail-1280"] = run.pages["theme-detail-1280"].replace(
+        MEMBER_HEADER, old
+    )
+    with pytest.raises(page_checks.Fail, match="缺成員表頭"):
+        page_checks.g6(run)
+
+
+def test_g8_passes_when_the_page_lists_members_by_turnover(tmp_path):
+    detail = page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔"))
+    assert "9102、9101、9201" in detail
+
+
+def test_g8_fails_on_the_old_page_sorted_by_close(tmp_path):
+    # Before #280 the page asked for sort=price: the highest close came first.
+    run = _theme_run(tmp_path, 3, "共 3 檔", rows=["9101", "9102", "9201"])
+    with pytest.raises(page_checks.Fail, match="頁面成員順序"):
+        page_checks.g8(run)
+
+
+def test_g8_fails_when_the_api_is_not_sorted_by_turnover(tmp_path):
+    items = [MEMBERS[1], MEMBERS[0], MEMBERS[2]]
+    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+        page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
+
+
+def test_g8_needs_a_member_without_turnover_last(tmp_path):
+    items = [MEMBERS[2], MEMBERS[0], MEMBERS[1]]
+    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+        page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
 
 
 def test_page_usable_reports_errors_and_overflow(tmp_path):
