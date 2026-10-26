@@ -1,0 +1,49 @@
+units exact volume cases passed
+units exact position and raw input boundaries passed
+units canonical lots 55 checks passed
+PASS units.test.ts
+PASS search.test.ts
+PASS presentation.test.ts
+PASS noHardcodedColors.test.ts
+PASS stock/stockBars.test.tsx
+PASS components/StrategyVersionCard.test.tsx
+PASS components/ui/ui.test.tsx
+PASS themes/themeBoards.test.tsx
+PASS themes/themeSuggestions.test.tsx
+PASS news/news.test.tsx
+PASS candidates/candidates.test.tsx
+X [ERROR] Could not resolve "./strategyBoard"
+
+    src/stock/strategyBoard.test.tsx:15:7:
+      15 │ } from './strategyBoard'
+         ╵        ~~~~~~~~~~~~~~~~~
+
+X [ERROR] Could not resolve "./StrategyBoardPanel"
+
+    src/stock/strategyBoard.test.tsx:26:35:
+      26 │ import { StrategyBoardPanel } from './StrategyBoardPanel'
+         ╵                                    ~~~~~~~~~~~~~~~~~~~~~~
+
+FAIL stock/strategyBoard.test.tsx: Error: Build failed with 2 errors:
+src/stock/strategyBoard.test.tsx:15:7: ERROR: Could not resolve "./strategyBoard"
+src/stock/strategyBoard.test.tsx:26:35: ERROR: Could not resolve "./StrategyBoardPanel"
+    at failureErrorWithLog (C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:1467:15)
+    at C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:926:25
+    at C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:878:52
+X [ERROR] Could not resolve "../stock/StrategyBoardPanel"
+
+    src/today/today.test.tsx:13:35:
+      13 │ import { StrategyBoardPanel } from '../stock/StrategyBoardPanel'
+         ╵                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+FAIL today/today.test.tsx: Error: Build failed with 1 error:
+src/today/today.test.tsx:13:35: ERROR: Could not resolve "../stock/StrategyBoardPanel"
+    at failureErrorWithLog (C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:1467:15)
+    at C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:926:25
+    at C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:878:52
+    at buildResponseToResult (C:\Users\YiCheng\Desktop\taiwan-stock-research\frontend\node_modules\.pnpm\esbuild@0.25.12\node_modules\esbuild\lib\main.js:924:7)
+tables 429 checks passed
+PASS tables.test.tsx
+copy 51 checks passed
+PASS copy.test.tsx
+Failed 2: stock/strategyBoard.test.tsx, today/today.test.tsx
