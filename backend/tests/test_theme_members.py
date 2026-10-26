@@ -309,6 +309,24 @@ def test_every_sort_puts_null_last_and_breaks_ties_by_symbol(db, client, sort, o
     assert body["meta"]["sort"] == sort
 
 
+def test_price_puts_a_member_without_a_close_last(db, client):
+    _seed(db)
+    # market_bars.close is NOT NULL: a member without a close has no bar at all.
+    lonely = _instrument(db, "1000")
+    db.add(GroupMembership(group_id=GROUP, instrument_id=lonely.id, valid_from=DAYS[0]))
+    db.commit()
+    items = _members(client, sort="price")["items"]
+    assert [item["symbol"] for item in items] == [
+        "1101",
+        "1100",
+        "1103",
+        "1104",
+        "1102",
+        "1000",
+    ]
+    assert items[-1]["latest_bar"] is None
+
+
 def test_a_sorted_page_continues_the_same_order(db, client):
     _seed(db)
     second = _members(client, sort="turnover", page=2, page_size=2)

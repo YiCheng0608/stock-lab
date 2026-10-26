@@ -1,3 +1,4 @@
+import { formatDay } from '../dates'
 import type { ChartTheme } from '../stock/stockBars'
 import type {
   ThemeBoard,
@@ -180,7 +181,7 @@ type MemberValues = Partial<ThemeMemberRow>
 // The bar date when the member's latest bar is older than members_as_of; a same-day bar is not marked.
 export function memberStaleDate(row: MemberValues, membersAsOf: string | null | undefined): string | null {
   const day = row.latest_bar?.date
-  return day && membersAsOf && day < membersAsOf ? formatDate(day) : null
+  return day && membersAsOf && day < membersAsOf ? formatDay(day) : null
 }
 
 export const MEMBER_UNIT_NOTE = '單位：收盤為各標的報價幣別的元，成交值為億元；漲跌幅與 5／20 日相對加權指數的報酬為 %。'
