@@ -4,7 +4,10 @@ The strategies declare their conditions (``Strategy.conditions``) and each
 condition's short name (``Strategy.short_label``); the frontend words them in
 one table, ``CONDITIONS`` of ``frontend/src/stock/strategyBoard.ts``.  The
 action list's short names and 「差：…」 lines read those two, so no other
-module may hold a list of condition codes.
+module may hold a list of condition codes.  This file checks the backend and
+that the frontend table has the registry's codes; the frontend test
+copy.test.tsx scans the frontend sources.  It reads only the table file,
+which tools/ci/checks.py routes to the backend job (BACKEND_READ_FILES).
 """
 
 from __future__ import annotations
@@ -55,22 +58,6 @@ def backend_literals(codes: set[str], root: Path = BACKEND) -> list[tuple[str, i
     return found
 
 
-def frontend_literals(codes: set[str], root: Path = FRONTEND_SRC) -> set[str]:
-    """Non-test modules with a quoted code or a code as an object key."""
-
-    names = "|".join(sorted(map(re.escape, codes)))
-    pattern = re.compile(
-        rf"""['"`]({names})['"`]|(?:^|[{{,\s])({names})\s*:""", re.MULTILINE
-    )
-    return {
-        path.relative_to(root).as_posix()
-        for path in sorted(root.rglob("*.ts*"))
-        if ".test." not in path.name
-        and ".fixtures." not in path.name
-        and pattern.search(path.read_text(encoding="utf-8"))
-    }
-
-
 def frontend_table_codes(root: Path = FRONTEND_SRC) -> set[str]:
     """The keys of ``CONDITIONS`` in the frontend condition table."""
 
@@ -99,7 +86,7 @@ def test_condition_codes_are_listed_only_in_the_strategies_and_the_table():
     assert set(SHARED_NAMES) <= codes
     own = codes - set(SHARED_NAMES)
     assert backend_literals(own) == []
-    assert frontend_literals(own) == {CONDITION_TABLE}
+    # The frontend half (only stock/strategyBoard.ts lists codes) is copy.test.tsx.
 
 
 def test_the_scans_find_a_second_condition_list(tmp_path):
@@ -113,17 +100,3 @@ def test_the_scans_find_a_second_condition_list(tmp_path):
     )
     (tmp_path / "worker" / "job.py").write_text("X = 1\n", encoding="utf-8")
     assert backend_literals({"probe_zone"}, tmp_path) == [("app/copy.py", 1)]
-    (tmp_path / "src" / "actions").mkdir(parents=True)
-    (tmp_path / "src" / "actions" / "near.ts").write_text(
-        "const SHORT = { probe_zone: '支撐區' }\n", encoding="utf-8"
-    )
-    (tmp_path / "src" / "actions" / "near.test.ts").write_text(
-        "check('probe_zone')\n", encoding="utf-8"
-    )
-    (tmp_path / "src" / "other.ts").write_text(
-        "const x = item.code === `probe_zone`\n", encoding="utf-8"
-    )
-    assert frontend_literals({"probe_zone"}, tmp_path / "src") == {
-        "actions/near.ts",
-        "other.ts",
-    }

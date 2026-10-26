@@ -104,6 +104,8 @@ const CONDITIONS: Record<string, ConditionCopy> = {
   margin_financing: { label: (item) => `融資 5 日變動 ${bound(item, share, '%') ?? '在規則上限內'}`, unmet: () => '融資增加超過上限' },
 }
 const UNKNOWN_CONDITION = '研究條件需要人工核對'
+// The registry's condition codes as this table words them (backend/tests/test_condition_copy_source.py checks the set).
+export const CONDITION_CODES: readonly string[] = Object.keys(CONDITIONS)
 
 export function conditionLabel(item: StrategyCondition): string {
   return CONDITIONS[item.code]?.label(item) ?? UNKNOWN_CONDITION

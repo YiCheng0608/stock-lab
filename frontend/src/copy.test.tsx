@@ -11,6 +11,7 @@ import { GLOSSARY } from './glossary'
 import { NewsDetailView, NewsCard } from './news/NewsViews'
 import { aiResult, newsItem } from './news/news.fixtures'
 import { StockBarsChart } from './stock/StockBarsChart'
+import { CONDITION_CODES } from './stock/strategyBoard'
 import { barsResponse, tradedBar } from './stock/stockBars.fixtures'
 import { ThemeBoardPanel, ThemeDetailView } from './themes/ThemeViews'
 import { industryBoard, membersPage, themeBoard, themeDetail } from './themes/themeBoards.fixtures'
@@ -135,6 +136,22 @@ const intlUsers = sources(srcRoot)
   .filter((file) => fs.readFileSync(file, 'utf8').includes('Intl.DateTimeFormat'))
   .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))
 check(intlUsers.length === 1 && intlUsers[0] === 'dates.ts', `dates: only dates.ts uses Intl.DateTimeFormat, found ${intlUsers.join('、') || 'none'}`)
+// One condition table (#277-B AC-B3, UI_COPY_SPEC §10.1): a condition code is quoted or used as a key only in
+// stock/strategyBoard.ts, so the action list's 「差：」 lines and every other copy read that table. Codes that also
+// name something else are left out of the scan.
+const SHARED_CODE_NAMES: Record<string, string> = {
+  institutional_flow: 'a hot_group_v1 component and a glossary term id',
+  breakout_price: 'a signals column and its level field',
+  eligibility: 'a condition kind as well as a code',
+}
+const ownCodes = CONDITION_CODES.filter((code) => !(code in SHARED_CODE_NAMES))
+const codeLiteral = new RegExp(`['"\`](${ownCodes.join('|')})['"\`]|(?:^|[{,\\s])(${ownCodes.join('|')})\\s*:`, 'm')
+// Test fixtures carry sample API rows, not copy.
+const conditionLists = sources(srcRoot)
+  .filter((file) => !/\.fixtures\.tsx?$/.test(file) && codeLiteral.test(fs.readFileSync(file, 'utf8')))
+  .map((file) => path.relative(srcRoot, file).split(path.sep).join('/'))
+check(ownCodes.length >= 8 && Object.keys(SHARED_CODE_NAMES).every((code) => CONDITION_CODES.includes(code)), `conditions: the table has the registry's codes, got ${CONDITION_CODES.join('、')}`)
+check(conditionLists.length === 1 && conditionLists[0] === 'stock/strategyBoard.ts', `conditions: only stock/strategyBoard.ts lists condition codes, found ${conditionLists.join('、') || 'none'}`)
 
 // ---- portfolio form: the int64 share limit stays in code, not on screen (UI_COPY_SPEC §8.3) ----
 const PortfolioSubsection = component('PortfolioSubsection')

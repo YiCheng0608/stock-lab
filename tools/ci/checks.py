@@ -33,10 +33,12 @@ def changed_paths(base: str, cwd: Path = ROOT, worktree: bool = False) -> list[s
 
 
 # Working-tree paths outside backend/ and tools/ that the backend job reads; a change must run it.
-# Keep in step with backend/tests. No backend test reads frontend/ since #179 removed the App.tsx
-# renderer check; test_database_readiness reads the Alembic head stated in docs/OPERATIONS.md.
+# Keep in step with backend/tests. test_database_readiness reads the Alembic head stated in
+# docs/OPERATIONS.md; test_condition_copy_source reads the frontend condition table (#279).
 BACKEND_READ_DIRS: tuple[str, ...] = ()
-BACKEND_READ_FILES: frozenset[str] = frozenset({"docs/OPERATIONS.md"})
+BACKEND_READ_FILES: frozenset[str] = frozenset(
+    {"docs/OPERATIONS.md", "frontend/src/stock/strategyBoard.ts"}
+)
 
 
 # Every Python file under backend/ and tools/, not only the changed ones, with the root ruff.toml.
