@@ -60,10 +60,12 @@ import type {
 } from './types'
 import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
+import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
 import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
 import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
+import { Term } from './components/Term'
 import { Card, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { priceDigits } from './stock/stockBars'
@@ -99,16 +101,9 @@ function compactText(value: string | null | undefined, maxLength = 120): string 
 
 function formatTaiwanDateTime(value: string | null | undefined, dateOnly = false): string {
   if (!value) return '未提供'
-  const normalized = /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z'
-  const parsed = new Date(normalized)
-  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10)
-  return new Intl.DateTimeFormat('zh-TW', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    ...(dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }),
-  }).format(parsed)
+  // A plain trading date is a calendar day, not an instant.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDay(value) ?? value
+  return (dateOnly ? formatTaipeiDay(value) : formatTaipeiMinute(value)) ?? formatDay(value) ?? value
 }
 
 const statusNames: Record<string, string> = {
@@ -374,55 +369,6 @@ function CursorControls({ meta, page, itemCount, onNext, onPrevious, onReset }: 
         <button type="button" className="secondary-button" disabled={page <= 1} onClick={onReset}>回到第一頁</button>
       </div>
     </div>
-  )
-}
-
-function Term({ id, children }: { id: string; children?: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const term = GLOSSARY.find((item) => item.term_id === id)
-  useEffect(() => {
-    if (!open) return
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-        buttonRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open])
-  if (!term) return <span>{children ?? id}</span>
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="term-button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            setOpen(true)
-          }
-        }}
-      >
-        {children ?? term.name}
-      </button>
-      {open && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
-          <section className="glossary-modal" role="dialog" aria-modal="true" aria-label={term.name} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="position-head"><strong>{term.name}</strong><button type="button" className="secondary-button" onClick={() => { setOpen(false); buttonRef.current?.focus() }}>關閉</button></div>
-            <p><b>白話定義：</b>{term.plain_definition.replaceAll('外陸資', '外資')}</p>
-            <p><b>用途：</b>{term.use}</p>
-            <p><b>如何解讀：</b>{term.how_to_read}</p>
-            <p><b>限制：</b>{term.limitations}</p>
-          </section>
-        </div>
-        )}
-    </>
   )
 }
 
@@ -786,14 +732,14 @@ function StockPage() {
 }
 
 // Indicator provenance from the daily bars API (docs/V1_SPEC.md 技術指標): version, price basis and batch time.
-function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
+export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
   if (!bars) return <div className="metric-row"><span>技術指標</span><b>待核實</b></div>
   const meta = bars.indicators
   return <>
     <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
     <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
     <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
-    <div className="metric-row"><span>K 線資料日期</span><b>{bars.data_as_of ?? '待核實'}</b></div>
+    <div className="metric-row"><span>K 線資料日期</span><b>{formatDay(bars.data_as_of) ?? '待核實'}</b></div>
   </>
 }
 
@@ -904,8 +850,8 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
         {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b>{formatNumber(action.trigger_price)}</b></div>}
         {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b>{formatNumber(action.entry_low)}</b></div>}
         {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b>{formatNumber(action.entry_high)}</b></div>}
-        {action.invalid_price != null && <div><span>{levelFieldLabel('invalid_price', action.level_semantics)}</span><b>{formatNumber(action.invalid_price)}</b></div>}
-        {action.target_1 != null && <div><span>{levelFieldLabel('target_1', action.level_semantics)}</span><b>{formatNumber(action.target_1)}</b></div>}
+        {action.invalid_price != null && <div><span><Term id="support">{levelFieldLabel('invalid_price', action.level_semantics)}</Term></span><b>{formatNumber(action.invalid_price)}</b></div>}
+        {action.target_1 != null && <div><span><Term id="target">{levelFieldLabel('target_1', action.level_semantics)}</Term></span><b>{formatNumber(action.target_1)}</b></div>}
         {action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward)}</b></div>}
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
@@ -984,7 +930,7 @@ export function PortfolioSubsection() {
     setBusy(id); setMessage('')
     try { await deletePortfolio(id); await query.refetch(); setMessage('庫存已刪除。') } catch (error) { setMessage(error instanceof Error ? error.message : '刪除失敗。') } finally { setBusy(null) }
   }
-  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
+  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股，可輸入整數張或零股股數。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
         <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>核對庫存原股數、本地行情與試算</summary>
           <div className="small-note">來源稽核原股數 {formatPositionShares(position.shares, position.shares_exact)}</div>
           <p className="small-note">本地記錄；來源／日期待核實。記錄日期不表示交易日或原件證據已核實。</p>

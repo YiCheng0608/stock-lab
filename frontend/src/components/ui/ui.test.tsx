@@ -17,7 +17,7 @@ check(!html(<Card>x</Card>).includes('card-head'), 'Card without header renders 
 // Badge: tone variants, dot, data-date badge.
 check(html(<Badge>上市</Badge>) === '<span class="badge">上市</span>', 'Badge default')
 check(html(<Badge tone="warning" dot pulse>更新中</Badge>).includes('class="badge badge-warning"') && html(<Badge tone="warning" dot pulse>更新中</Badge>).includes('badge-dot badge-dot-pulse'), 'Badge tone + pulsing dot')
-check(html(<DateBadge date="2026-10-16" />).includes('資料 2026-10-16'), 'DateBadge shows the data date')
+check(html(<DateBadge date="2026-10-16" />).includes('資料 2026/10/16'), 'DateBadge shows the API date as YYYY/MM/DD')
 check(html(<DateBadge date={null} />).includes('badge-warning') && html(<DateBadge date={null} />).includes('資料日期待核實'), 'DateBadge without a date warns instead of inventing one')
 
 // Button: variants, size, default type=button.
@@ -53,6 +53,6 @@ check(skeleton.includes('aria-busy="true"') && skeleton.split('skeleton-bar').le
 const navbar = html(<StaticRouter location="/stocks/TWSE/2330"><Navbar dataDate="2026-10-16" /></StaticRouter>)
 check(['今日', '新聞', '族群', '個股', '行動'].every((label) => navbar.includes(`>${label}</a>`)), 'Navbar has the five main links')
 check(navbar.includes('class="active" href="/stocks"') || navbar.includes('href="/stocks" class="active"') || /<a[^>]*aria-current="page"[^>]*href="\/stocks"/.test(navbar), `Navbar marks the current section: ${navbar}`)
-check(navbar.includes('role="search"') && navbar.includes('資料 2026-10-16') && navbar.includes('aria-expanded="false"'), 'Navbar search, data date and menu toggle')
+check(navbar.includes('role="search"') && navbar.includes('資料 2026/10/16') && navbar.includes('aria-expanded="false"'), 'Navbar search, data date and menu toggle')
 check(!html(<StaticRouter location="/"><Navbar dataDate={null} dataDateLoading /></StaticRouter>).includes('date-badge'), 'Navbar hides the badge while loading')
 check(stockSearchPath(' 2330 ') === '/stocks?q=2330' && stockSearchPath('台積 電') === '/stocks?q=%E5%8F%B0%E7%A9%8D%20%E9%9B%BB' && stockSearchPath('  ') === null, 'Navbar search path')

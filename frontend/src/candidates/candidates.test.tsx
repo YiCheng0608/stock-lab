@@ -83,7 +83,7 @@ check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null 
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
 check(second.includes('13.05～13.35') && second.includes('上櫃') && second.includes('回踩條件'), 'pullback zone and TPEx label')
 check(!second.includes('level-target-2'), 'missing target 2 is not rendered')
-check(second.includes('權重涵蓋 65%'), 'weight coverage in details')
+check(second.replace(/<[^>]+>/g, '').includes('權重涵蓋 65%'), 'weight coverage in details')
 check(count(second, 'data-reason=') === 2, 'fewer reasons are not padded')
 
 // ---- LLM note (#220): inference block apart from the rule values ----

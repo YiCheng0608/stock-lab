@@ -29,6 +29,7 @@ const SUITES = [
   { file: 'news/news.test.tsx' },
   { file: 'candidates/candidates.test.tsx' },
   { file: 'tables.test.tsx' },
+  { file: 'copy.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and

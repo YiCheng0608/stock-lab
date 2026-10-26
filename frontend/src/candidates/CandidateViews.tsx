@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 
+import { Term } from '../components/Term'
 import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
 import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
@@ -26,7 +27,7 @@ import {
 } from './candidates'
 
 // Daily candidate list (candidate_score_v1, #215): the today section and the stock page panel.
-// Copy follows UI_COPY_SPEC §10; reason dots and level colours follow DESIGN_SYSTEM §7.
+// Copy follows UI_COPY_SPEC §10; reason dots and level colours follow DESIGN_SYSTEM §7; in-place terms follow §7.
 
 function errorReason(error: unknown): string {
   return error instanceof Error ? error.message : '請稍後重新整理'
@@ -66,7 +67,7 @@ type SubItemRow = { key: CandidateComponentKey; label: string; component: Candid
 const SUB_ITEM_COLUMNS: ReadonlyArray<Column<SubItemRow>> = [
   { key: 'sub', header: '子項', wrap: true, cell: ({ name, sub }) => <>{subItemLabel(name)}{sub.null_explanation && <div className="small-note">{sub.null_explanation}</div>}</> },
   { key: 'value', header: '原值', num: true, cell: ({ name, sub }) => formatSubItemValue(name, sub.value) },
-  { key: 'percentile', header: 'percentile', num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
+  { key: 'percentile', header: <Term id="percentile">百分位</Term>, num: true, cell: ({ sub }) => formatCandidateScore(sub.percentile) },
   { key: 'weight', header: '子項權重', num: true, cell: ({ sub }) => `${Math.round(sub.weight * 100)}%` },
 ]
 
@@ -79,7 +80,7 @@ function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
     <details className="details candidate-details" open={open}>
       <summary>評分細節、資料日期與來源</summary>
       <DataTable
-        note="分數與 percentile 為 0–100，越高越好（「較低為佳」的子項已反向）；「—」表示無資料，不以 0 計。"
+        note="分數與百分位為 0–100，越高越好（「較低為佳」的子項已反向）；「—」表示無資料，不以 0 計。"
         columns={SUB_ITEM_COLUMNS}
         rows={rows}
         rowKey={(row) => row.key + row.name}
@@ -91,7 +92,7 @@ function ScoreDetails({ item, open }: { item: CandidateItem; open: boolean }) {
       {item.alternatives.length > 0 && (
         <div className="small-note">同檔另一策略：{item.alternatives.map((alt) => `${candidateStrategyLabel(alt.strategy)} 總分 ${formatCandidateScore(alt.total_score)}`).join('、')}（只留總分高者）</div>
       )}
-      <div className="small-note">權重涵蓋 {Math.round(item.weight_coverage * 100)}% · 資料日期 {formatDate(item.data_as_of) ?? '待核實'}{item.levels.earliest_execution_date ? ` · 規則最早執行日 ${formatDate(item.levels.earliest_execution_date)}` : ''}</div>
+      <div className="small-note"><Term id="candidate_score">權重涵蓋</Term> {Math.round(item.weight_coverage * 100)}% · 資料日期 {formatDate(item.data_as_of) ?? '待核實'}{item.levels.earliest_execution_date ? ` · 規則最早執行日 ${formatDate(item.levels.earliest_execution_date)}` : ''}</div>
       <div className="small-note">來源：{candidateSourceText(item)}</div>
     </details>
   )
@@ -129,14 +130,14 @@ export function CandidateCard({ item, linkToStock = true, detailsOpen = false }:
           {linkToStock ? <Link className="symbol-link" to={stockPath(item)}>{name}</Link> : <span>{name}</span>}
           <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)}</div>
         </div>
-        <div className="candidate-total"><span>總分</span><b>{formatCandidateScore(item.total_score)}</b></div>
+        <div className="candidate-total"><span><Term id="candidate_score">總分</Term></span><b>{formatCandidateScore(item.total_score)}</b></div>
       </div>
       {item.partial_components && <div className="candidate-partial small-note">{PARTIAL_NOTE}</div>}
       <dl className="candidate-levels">
-        <div><dt>進場區</dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt>停損</dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt>目標</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2"><wbr />／{formatPrice(levels.target_2)}</span>}</dd></div>
-        <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
+        <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
+        <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
+        <div><dt><Term id="target">目標</Term></dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2"><wbr />／{formatPrice(levels.target_2)}</span>}</dd></div>
+        <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
       <ComponentScores item={item} />
       {item.reasons.length > 0 && (
