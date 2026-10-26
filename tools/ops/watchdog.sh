@@ -193,6 +193,7 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
         future_trading_date) anomaly invariant_future_date "資料不變量：\`market_bars\` 最新 \`trading_date\` 是 $(value max_trading_date)，晚於台北今日 $(value today)（日期解析或來源錯誤），請查最近的 daily 日誌與 \`/api/ingestion-runs\`。" ;;
         latest_bar_provenance) anomaly invariant_bar_provenance "資料不變量：最新交易日 $(value trading_date) 的 $(value bars) 列 \`market_bars\` 中，$(value unknown_source) 列 \`source\` 是 \`unknown\` 或空、$(value null_data_as_of) 列沒有 \`data_as_of\`，請查該日的 daily 日誌與寫入來源。" ;;
         instrument_status_sync) anomaly invariant_status_sync "資料不變量：最近一次標的狀態同步被防呆略過（$(value skipped)；absent 為官方清單缺席、dormant 為 60 個交易日沒有行情列）：兩者合計超過該交易所現行標的的 5%，標的狀態沒有更新。請依 OPERATIONS §6.1 查該日 collect run 的 \`instrument_status_sync\`。" ;;
+        execution_calendar) anomaly invariant_execution_calendar "資料不變量：最新訊號日 $(value signal_date) 的 $(value signals) 筆 analysis 訊號中，$(value without_date) 筆沒有規則最早執行日（\`earliest_execution_date\` 為空）：官方休市表缺該年度，或 daily 的 trading_calendar 步驟失敗。請依 OPERATIONS §6.3 查該日 analyze 步驟的 \`execution_calendar\` 與 trading_calendar 步驟，必要時跑 \`python -m worker.cli trading-calendar\`。" ;;
         llm_done_provenance) anomaly invariant_llm_provenance "資料不變量：\`news_llm_results\` 的 $(value done) 列 \`llm_status=done\` 中，$(value missing_model) 列沒有 \`llm_model\`、$(value empty_prompt_version) 列 \`prompt_version\` 為空，請查 news 日誌的 news-llm 段落。" ;;
       esac
     done <<<"$checks"

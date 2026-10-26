@@ -18,6 +18,7 @@ import httpx
 
 from app.config import OFFICIAL_MAX_BACKFILL_DAYS, RAW_DIR
 from app.domain import ETF_CATEGORIES
+from app.trading_calendar import classify
 
 
 class OfficialDataError(RuntimeError):
@@ -917,23 +918,20 @@ def _weekday_dates(start: date, end: date) -> Iterable[date]:
 
 
 def _official_non_trading_dates(payload: Any, start: date, end: date) -> set[date]:
-    """Return only dates the official calendar explicitly marks closed."""
+    """Return only dates the official calendar explicitly marks closed.
+
+    The classification is app.trading_calendar's, the one rule for every
+    reader of the schedule; it also knows the make-up holiday rows (#294).
+    """
 
     result: set[date] = set()
-    closed_markers = (
-        "\u653e\u5047",  # holiday
-        "\u7121\u4ea4\u6613",  # no trading
-        "\u4f11\u5e02",  # market closed
-    )
     for row in _rows(payload):
         holiday_date = _date_from_row(row, "Date", "\u65e5\u671f")
         if holiday_date is None or not start <= holiday_date <= end:
             continue
-        text = " ".join(
-            str(row.get(key, ""))
-            for key in ("Name", "Description", "\u540d\u7a31", "\u8aaa\u660e")
-        )
-        if any(marker in text for marker in closed_markers):
+        name = _text(row, "Name", "\u540d\u7a31")
+        description = _text(row, "Description", "\u8aaa\u660e")
+        if classify(name, description) == "closed":
             result.add(holiday_date)
     return result
 
