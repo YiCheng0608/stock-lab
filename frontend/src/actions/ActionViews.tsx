@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { formatCandidateScore } from '../candidates/candidates'
 import { Term } from '../components/Term'
-import { Badge, DataTable, cx, type Column } from '../components/ui'
+import { Badge, DataTable, Skeleton, cx, type Column } from '../components/ui'
 import type { ActionSummary, ActionTierSummary, ActionView } from '../types'
 import {
   ACTION_VIEWS,
@@ -152,6 +152,8 @@ export function ActionTierSectionView({ section, loading, canLoadMore, onMore }:
         <div><div className="eyebrow">第 {section.tier} 級</div><h2 id={titleId}>{section.label}</h2></div>
         <span className="small-note">{shownText(section.items.length, section.shown)}</span>
       </div>
+      {/* A tier's first rows still loading: a skeleton, not an empty section (the screenshot tools wait for it). */}
+      {loading && section.items.length === 0 && <Skeleton lines={2} label={`${section.label}載入中…`} />}
       {section.items.length > 0 && <>
         <DataTable
           wrapClassName="action-table-wrap"

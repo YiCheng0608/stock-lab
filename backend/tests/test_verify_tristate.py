@@ -420,3 +420,75 @@ def test_the_news_sample_pages_back_to_the_data_date(tmp_path):
     }
     sample = page_checks.news_sample(_run(tmp_path, payloads))
     assert [item["id"] for item in sample["items"]] == ["1"]
+
+
+def _action_item(symbol, tier, rank=None):
+    return {
+        "instrument": {
+            "exchange": "TWSE",
+            "symbol": symbol,
+            "instrument_type": "stock",
+        },
+        "tier": tier,
+        "candidate": {"rank": rank, "total_score": 0.5} if rank else None,
+    }
+
+
+def test_a_held_candidate_is_not_missing_from_todays_candidates(tmp_path):
+    """#301 review M1: holding the rank-2 candidate moves it to tier 0."""
+
+    held = _action_item("2302", 0)
+    rows = [_action_item(f"23{n:02d}", 1, n) for n in range(1, 21) if n != 2]
+    tiers = [
+        {"tier": 0, "label": "持倉風險", "shown": 1},
+        {"tier": 1, "label": "今日候選", "shown": 19},
+    ]
+    payloads = {
+        # The first page: the holding, then 19 of the 20 candidates.
+        "actions?limit=20": {
+            "items": [held, *rows],
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": tiers},
+        },
+        "actions?tier=0&limit=100": {"items": [held]},
+    }
+    page = (
+        "第 0 級\n持倉風險\n顯示 1／1 檔\n第 1 級\n今日候選\n顯示 19／19 檔\n"
+        + "".join(f"#{n}\t23{n:02d} 名稱\n" for n in range(1, 21) if n != 2)
+    )
+    run = _run(tmp_path, payloads, {"actions-1280": page})
+    assert "去掉持倉" in page_checks.a8(run)
+
+
+def test_a_tier_without_rows_on_the_first_page_shows_its_first_rows(tmp_path):
+    """#301 review M2: tier 2 loads its first five rows when tier 1 fills page 1."""
+
+    rows = [_action_item(f"23{n:02d}", 1, n) for n in range(1, 21)]
+    preview = [_action_item(f"24{n:02d}", 2) for n in range(1, 6)]
+    tiers = [
+        {"tier": 1, "label": "今日候選", "shown": 20},
+        {"tier": 2, "label": "其他成立條件", "shown": 50},
+    ]
+    payloads = {
+        "actions?limit=20": {
+            "items": rows,
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": tiers},
+        },
+        "actions?tier=2&limit=5": {"items": preview},
+    }
+    row = "\t2026/10/22\t策略總表 →\n"
+    page = (
+        "第 1 級\n今日候選\n顯示 20／20 檔\n"
+        + "".join(f"#{n}\t23{n:02d} 名稱{row}" for n in range(1, 21))
+        + "第 2 級\n其他成立條件\n顯示 5／50 檔\n"
+        + "".join(f"24{n:02d} 名稱{row}" for n in range(1, 6))
+        + "顯示更多（還有 45 檔）\n"
+    )
+    run = _run(tmp_path, payloads, {"actions-1280": page})
+    assert "其他成立條件 `顯示 5／50 檔`" in page_checks.a3(run)
+    assert page_checks.a4(run).startswith("25 列")
+    # The first page alone is not what the page shows: an empty tier 2 fails.
+    empty = page.replace("顯示 5／50 檔", "顯示 0／50 檔")
+    with pytest.raises(page_checks.Fail, match="顯示 5／50 檔"):
+        page_checks.a3(_run(tmp_path, payloads, {"actions-1280": empty}))

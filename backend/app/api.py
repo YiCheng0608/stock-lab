@@ -2662,7 +2662,9 @@ def actions(
         # A state filter depends on the composed decision and therefore cannot
         # be answered from the cheap projection.  It is a research query kept
         # for compatibility (it builds every searched row); the daily page
-        # does not send it.
+        # does not send it.  It ignores ``view``, ``include_etf`` and ``tier``,
+        # and ``summary`` (tiers, hidden, views) still counts the projection,
+        # not the rows of this state (#301 review L2).
         searched = listed if needle else list(base)
         built = order_holdings(db, as_of, searched)
         rows_by_id = {row.instrument_id: row for row in searched}

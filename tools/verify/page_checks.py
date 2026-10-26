@@ -1912,10 +1912,36 @@ def listed_tiers(payload: dict) -> list[dict]:
     ]
 
 
+# A tier with rows but none on the first page loads its first rows on its own
+# (ACTION_TIER_PREVIEW in frontend/src/actions/actionTiers.ts, UI_COPY_SPEC §5).
+ACTION_TIER_PREVIEW = 5
+MAX_ACTION_PAGE = 100  # backend/app/api.py MAX_PAGE_SIZE
+
+
+def loaded_actions(run: Run) -> list[dict]:
+    """The rows the actions page shows on load, in page order of their tiers."""
+
+    payload = actions_payload(run)
+    items = list(payload.get("items") or [])
+    for tier in listed_tiers(payload):
+        if not any(item.get("tier") == tier["tier"] for item in items):
+            preview = run.get(
+                f"actions?tier={tier['tier']}&limit={ACTION_TIER_PREVIEW}",
+                f"actions-tier{tier['tier']}.json",
+            )
+            items += preview.get("items") or []
+    return items
+
+
+def instrument_key(item: dict) -> tuple:
+    instrument = item.get("instrument") or {}
+    return (instrument.get("exchange"), instrument.get("symbol"))
+
+
 @check("actions", "A3")
 def a3(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
-    items = payload.get("items") or []
+    items = loaded_actions(run)
     tiers = listed_tiers(payload)
     if not tiers:
         expect(text.has(ACTIONS_EMPTY), f"summary 沒有列出的級別，缺 `{ACTIONS_EMPTY}`")
@@ -1949,12 +1975,12 @@ def a4(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
     dates = [m.group(1) for line in text.lines if (m := ACTION_ROW.search(line))]
     k = len(dates)
-    items = payload.get("items") or []
+    items = loaded_actions(run)
     # #251: zero rows against a non-empty API is a page that lost its rows, not a pass.
     expect(k > 0 or not items, f"actions.json items {len(items)}，頁面沒有任何行動列")
     expect(
         k == len(items),
-        f"以 `策略總表 →` 結尾的列 {k}，actions.json items {len(items)}",
+        f"以 `策略總表 →` 結尾的列 {k}，actions.json 與各級首批 items {len(items)}",
     )
     as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
     expect(bool(as_of), "actions.json 沒有 meta.data_as_of")
@@ -2034,7 +2060,7 @@ def a8(run: Run) -> str:
     listed = candidates(run)
     tier = tier_of(payload, 1)
     expect(bool(tier), "actions.json summary.tiers 沒有第 1 級")
-    rows = [item for item in payload.get("items") or [] if item.get("tier") == 1]
+    rows = [item for item in loaded_actions(run) if item.get("tier") == 1]
     start, end = tier_block(text, tier)
     ranks = [
         int(match.group(1))
@@ -2046,7 +2072,19 @@ def a8(run: Run) -> str:
         ranks == loaded, f"今日候選區的 `#n` 列 {ranks}，actions.json 第 1 級 {loaded}"
     )
     as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
-    want = [item["rank"] for item in listed.get("items") or []]
+    # A held candidate is listed in tier 0 (持倉風險), not in 今日候選.
+    held = {
+        instrument_key(item)
+        for item in run.get(
+            f"actions?tier=0&limit={MAX_ACTION_PAGE}", "actions-holdings.json"
+        ).get("items")
+        or []
+    }
+    want = [
+        item["rank"]
+        for item in listed.get("items") or []
+        if instrument_key(item) not in held
+    ]
     if listed.get("trading_date") != as_of:
         # Candidates of another day are not today's tier 1.
         expect(
@@ -2055,11 +2093,16 @@ def a8(run: Run) -> str:
         )
         return f"candidates.json {listed.get('trading_date')} ≠ 資料日 {as_of}，沒有今日候選列"
     if tier.get("shown") == len(rows):
-        expect(
-            ranks == want and len(ranks) == (listed.get("candidate_count") or 0),
-            f"今日候選區 {ranks}，預期 candidates.json 的 {want}（candidate_count {listed.get('candidate_count')}）",
+        count = (listed.get("candidate_count") or 0) - (
+            len(listed.get("items") or []) - len(want)
         )
-        return f"今日候選 {len(ranks)} 列 = candidates.json，依名次 {ranks}"
+        expect(
+            ranks == want and len(ranks) == count,
+            f"今日候選區 {ranks}，預期 candidates.json 去掉持倉後的 {want}"
+            f"（candidate_count {listed.get('candidate_count')}，持倉中的候選 "
+            f"{len(listed.get('items') or []) - len(want)} 檔）",
+        )
+        return f"今日候選 {len(ranks)} 列 = candidates.json 去掉持倉，依名次 {ranks}"
     # Holdings took the first page: the loaded rows are the top of the list.
     expect(
         ranks == want[: len(ranks)],
@@ -2078,7 +2121,7 @@ def a9(run: Run) -> str:
     summary = payload.get("summary") or {}
     etfs = [
         item
-        for item in payload.get("items") or []
+        for item in loaded_actions(run)
         if (item.get("instrument") or {}).get("instrument_type") == "etf"
     ]
     # Holdings and the watchlist are listed in every view.

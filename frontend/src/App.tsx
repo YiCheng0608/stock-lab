@@ -81,7 +81,7 @@ import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_L
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
 import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
-import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, DEFAULT_ACTION_VIEW, stockResearchPath, tierSections } from './actions/actionTiers'
+import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
 import { ActionFilters, ActionTierList } from './actions/ActionViews'
 import { STOCK_TABS, parseStockTab, stockTabSearch, type StockTab } from './stock/stockTabs'
 
@@ -792,11 +792,16 @@ export function ActionsPage() {
   const [tierCursors, setTierCursors] = useState<Record<number, Array<string | null>>>({})
   const filters: ActionFilterState = { q: search || undefined, view, include_etf: includeEtf || undefined }
   const query = useQuery({ queryKey: ['actions', filters], queryFn: () => getActions({ ...filters, limit: ACTIONS_PAGE_LIMIT }) })
-  const requested = Object.entries(tierCursors).flatMap(([tier, cursors]) => cursors.map((cursor) => ({ tier: Number(tier), cursor })))
+  // A tier with rows but none on the first page shows its first rows on load (#301 review M2); 顯示更多 continues after them.
+  const previews = query.data ? previewTiers(query.data) : []
+  const requested = [
+    ...previews.map((tier) => ({ tier, cursor: null, limit: ACTION_TIER_PREVIEW, preview: true })),
+    ...Object.entries(tierCursors).flatMap(([tier, cursors]) => cursors.map((cursor) => ({ tier: Number(tier), cursor, limit: ACTIONS_PAGE_LIMIT, preview: false }))),
+  ]
   const tierQueries = useQueries({
-    queries: requested.map(({ tier, cursor }) => ({
-      queryKey: ['actions', filters, 'tier', tier, cursor],
-      queryFn: () => getActions({ ...filters, tier, cursor: cursor ?? undefined, limit: ACTIONS_PAGE_LIMIT }),
+    queries: requested.map(({ tier, cursor, limit, preview }) => ({
+      queryKey: ['actions', filters, 'tier', tier, preview ? 'preview' : cursor],
+      queryFn: () => getActions({ ...filters, tier, cursor: cursor ?? undefined, limit }),
     })),
   })
   const tierPages: Record<number, ActionsResponse[]> = {}
@@ -810,11 +815,12 @@ export function ActionsPage() {
   const submit = (value = draft.trim()) => { setSearch(value); resetTiers() }
   const clear = () => { setDraft(''); setSearch(''); resetTiers() }
   const lastPage = (tier: number) => tierPages[tier]?.[tierPages[tier].length - 1]
-  const canLoadMore = (tier: number) => !tierCursors[tier] || loadingTiers.has(tier) || Boolean(lastPage(tier)?.meta.next_cursor)
+  const canLoadMore = (tier: number) => (!tierCursors[tier] && !previews.includes(tier)) || loadingTiers.has(tier) || Boolean(lastPage(tier)?.meta.next_cursor)
   const loadMore = (tier: number) => setTierCursors((current) => {
     const cursors = current[tier]
-    if (!cursors) return { ...current, [tier]: [null] }
     const next = lastPage(tier)?.meta.next_cursor
+    // After a preview the next page starts where the preview ended.
+    if (!cursors) return previews.includes(tier) ? (next ? { ...current, [tier]: [next] } : current) : { ...current, [tier]: [null] }
     return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
   })
   return <div className="page actions-page">

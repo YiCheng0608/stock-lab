@@ -7,6 +7,8 @@ import { formatFixed, formatTableNumber } from '../units'
 // Copy follows UI_COPY_SPEC §5; the list follows DESIGN_SYSTEM §5 行動列表.
 
 export const ACTIONS_PAGE_LIMIT = 20
+// First rows of a tier that has rows but none on the first page (tools/verify/page_checks.py ACTION_TIER_PREVIEW).
+export const ACTION_TIER_PREVIEW = 5
 
 export const ACTION_VIEWS: ReadonlyArray<{ id: ActionView; label: string }> = [
   { id: 'focus', label: '重點' },
@@ -70,6 +72,11 @@ export function hiddenSentence(summary: ActionTierSummary): string | null {
 
 export const shownText = (loaded: number, shown: number) => `顯示 ${count(loaded)}／${count(shown)} 檔`
 export const moreText = (remaining: number) => `顯示更多（還有 ${count(remaining)} 檔）`
+
+// Tiers listed in the current filter whose rows are not on the first page: each loads its first rows on its own.
+export function previewTiers(data: ActionsResponse): number[] {
+  return data.summary.tiers.filter((tier) => tier.shown > 0 && !data.items.some((item) => item.tier === tier.tier)).map((tier) => tier.tier)
+}
 
 export type TierSection = { tier: ActionTierNumber; key: string; label: string; shown: number; items: ActionSummary[] }
 

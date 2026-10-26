@@ -8,7 +8,7 @@ import type { ActionSummary, ActionTierSummary, ActionsResponse, Dashboard, Posi
 import { action } from '../today/today.fixtures'
 import { parseStockTab, stockTabSearch } from '../stock/stockTabs'
 import { ActionFilters, ActionTierList, ActionTierSectionView } from './ActionViews'
-import { EMPTY_TEXT, SEARCH_NOTE, hiddenSentence, tierSections } from './actionTiers'
+import { ACTION_TIER_PREVIEW, EMPTY_TEXT, SEARCH_NOTE, hiddenSentence, previewTiers, tierSections } from './actionTiers'
 
 // Action centre tiers (#278, UI_COPY_SPEC §5, DESIGN_SYSTEM §5 行動列表／篩選膠囊／庫存一行) and the today page's
 // holding line reading every holding (#297 review L1). Every check runs and the failures are listed together.
@@ -98,6 +98,23 @@ const actionsPage = render('ActionsPage', () => <ActionsPage />, [[['actions', {
 check(!actionsPage.includes('value="conditional_entry"') && !text(actionsPage).includes('全部行動狀態'), '行動頁: the state dropdown is gone')
 check(text(actionsPage).includes('重點 54') && text(actionsPage).includes(sentence), '行動頁: chips and the hidden line render from the first page')
 check(text(actionsPage).includes('顯示 2／2 檔') && actionsPage.indexOf('今日候選') < actionsPage.indexOf('其他成立條件'), '行動頁: tier sections in tier order')
+
+// ---- a tier with no row on the first page shows its first rows on load (#301 review M2) ----
+const candidatesOnly = () => page([candidate('1712', 1), candidate('6416', 2)])
+check(previewTiers(candidatesOnly()).join(',') === '2,4', `首屏: tiers 2 and 4 have rows but none on the first page, got ${previewTiers(candidatesOnly()).join(',')}`)
+check(previewTiers(firstPage()).length === 0, '首屏: every listed tier already has rows on the first page')
+const tier2Rows = Array.from({ length: ACTION_TIER_PREVIEW }, (_, index) => row(String(2010 + index), 2, 'conditional_entry'))
+const previewPage = render('ActionsPage preview', () => <ActionsPage />, [
+  [['actions', { view: 'focus' }], candidatesOnly()],
+  [['actions', { view: 'focus' }, 'tier', 2, 'preview'], { ...page(tier2Rows), meta: { ...page(tier2Rows).meta, next_cursor: 'tier-2-after-5', has_more: true } }],
+  [['actions', { view: 'focus' }, 'tier', 4, 'preview'], page([row('1234', 4, 'no_condition', { watchlisted: true })])],
+  [['portfolio-subsection'], { items: [], pagination: {} }],
+])
+check(text(previewPage).includes('顯示 5／50 檔') && text(previewPage).includes('顯示更多（還有 45 檔）'), `首屏: 其他成立條件 shows its first five rows, got ${text(previewPage).slice(text(previewPage).indexOf('第 2 級'), text(previewPage).indexOf('第 2 級') + 160)}`)
+check(count(previewPage, 'data-action-row=') === 2 + ACTION_TIER_PREVIEW + 1, '首屏: candidate rows, five tier-2 rows and the tier-4 row')
+check(!text(previewPage).includes('顯示 0／'), '首屏: no listed tier shows 0 rows')
+const loadingTier = render('ActionTierSectionView loading', () => <ActionTierSectionView section={{ tier: 2, key: 'conditional', label: '其他成立條件', shown: 50, items: [] }} loading canLoadMore={false} onMore={() => {}} />)
+check(loadingTier.includes('aria-busy="true"') && loadingTier.includes('class="card skeleton'), '首屏: a tier whose first rows are loading shows a skeleton, so screenshots wait for it')
 
 // ---- 我的庫存: one line without holdings, the full section with them ----
 const PortfolioSubsection = appComponent('PortfolioSubsection')

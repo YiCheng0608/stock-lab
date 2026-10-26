@@ -1635,6 +1635,10 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
             {"etf": 1, "observation": 2, "data_insufficient": 0},
         ),
         ("actions?limit=20&view=all&include_etf=true", "meta.total", 7),
+        # A tier's first rows (the page's preview of a tier missing from page 1)
+        # and every holding (A8 drops held candidates).
+        ("actions?tier=1&limit=5", "items[].candidate.rank", [1, 2, 3]),
+        ("actions?tier=0&limit=100", "items[].instrument.symbol", ["9102"]),
         ("portfolio?page=1&page_size=20", "pagination.total", 1),
         ("portfolio?page=1&page_size=20", "items", 1),
         (f"actions/{E}/{S}", "decision_summary.action_state", "conditional_entry"),
