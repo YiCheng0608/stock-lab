@@ -1060,7 +1060,75 @@ def test_rejected_item_is_settled_and_not_sent_again(db, fake, monkeypatch):
     assert len(fake()) == 1
 
 
-def test_latest_rejected_result_hides_an_older_done_one(db, fake, client, monkeypatch):
+def _done(item, prompt_version, summary, *, run_at=BASE_TIME):
+    return NewsLlmResult(
+        news_item_id=item.id,
+        prompt_version=prompt_version,
+        llm_model="claude-haiku-5-5",
+        llm_input_hash="x" * 64,
+        llm_run_at=run_at,
+        llm_status="done",
+        ai_summary=summary,
+        ai_symbol_candidates_json=[],
+        ai_theme_candidates_json=[],
+        ai_impact_direction="positive",
+    )
+
+
+def test_only_the_current_prompt_version_result_reaches_any_page(db, client):
+    # #308: news 2458's news_v1 summary wrote what the source did not say (the
+    # Taichung deal's pay and pension terms as Taoyuan's open issues).  Results
+    # of an older prompt never had the news_v2 summary check, so no page shows
+    # them, even when one was written after the current version's result.
+    stale, both, newer_stale = _add_news(
+        db,
+        3,
+        title="經濟部樂見美光與台中工會達成協議",
+        summary="美光台中廠與工會就調薪、勞退達成協議",
+        symbols_json=["TWSE:2409"],
+    )
+    db.add_all(
+        [
+            _done(
+                stale,
+                "news_v1",
+                "經濟部樂見美光與台中工會達成協議，盼桃園廠續協商調薪與勞退等議題。",
+            ),
+            _done(both, "news_v1", "舊版摘要"),
+            _done(both, PROMPT_VERSION, "新版摘要", run_at=BASE_TIME + timedelta(1)),
+            _done(newer_stale, PROMPT_VERSION, "新版摘要"),
+            _done(newer_stale, "news_v1", "舊版摘要", run_at=BASE_TIME + timedelta(1)),
+        ]
+    )
+    db.commit()
+    expected = {stale.id: None, both.id: "新版摘要", newer_stale.id: "新版摘要"}
+
+    def summaries(items):
+        return {
+            int(item["id"]): (item["ai"] or {}).get("summary")
+            for item in items
+            if int(item["id"]) in expected
+        }
+
+    details = [
+        client.get(f"{router.prefix}/news/{news_id}").json() for news_id in expected
+    ]
+    assert summaries(details) == expected
+    assert all(
+        detail["ai"]["prompt_version"] == PROMPT_VERSION
+        for detail in details
+        if detail["ai"]
+    )
+    assert summaries(client.get(f"{router.prefix}/news").json()["items"]) == expected
+    dashboard = client.get(f"{router.prefix}/dashboard").json()
+    assert summaries(dashboard["news"]) == expected
+    stock = client.get(
+        f"{router.prefix}/stocks/TWSE/2409", params={"as_of": "2026-10-17"}
+    ).json()
+    assert summaries(stock["news"]) == expected
+
+
+def test_a_rejected_result_leaves_no_ai_block(db, fake, client, monkeypatch):
     item = _add_news(db, 1, summary="營收年增44.28%")[0]
     db.add(
         NewsLlmResult(
@@ -1076,9 +1144,8 @@ def test_latest_rejected_result_hides_an_older_done_one(db, fake, client, monkey
         )
     )
     db.commit()
-    assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"]["summary"] == (
-        "營收年增44%"
-    )
+    # An older prompt's done result is not shown (#308), before or after.
+    assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
     monkeypatch.setenv("FAKE_CLAUDE_MODES", "rounded_number")
     _run(db)
     assert _results(db, prompt_version=PROMPT_VERSION)[0].llm_status == "rejected"
