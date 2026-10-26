@@ -1,0 +1,24 @@
+screenshots: 100.4 s
+Traceback (most recent call last):
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 2727, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 2622, in main
+    results += run_page(run, page, stocks)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 2469, in run_page
+    results.append(judge(run, page, code, stock, label))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 2430, in judge
+    detail = fn(run, stock) if page == "stocks" else fn(run)
+                                                     ^^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 699, in t2
+    latest = run.facts()["market_latest_trading_date"]
+             ^^^^^^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\tools\verify\page_checks.py", line 379, in facts
+    self._facts[key] = db_facts.facts(self.db, key or None)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-306-v11-real-verify\.claude\skills\verify-stock-lab\db_facts.py", line 111, in facts
+    key: conn.execute(sql).fetchone()[0] if table in tables else None
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
