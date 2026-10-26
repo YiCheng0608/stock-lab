@@ -68,6 +68,11 @@ check(card.includes('href="/stocks/TWSE/2330"') && card.includes('2330 台積電
 const longSummary = '字'.repeat(130)
 check(summaryPreview({ summary_preview: longSummary, summary: null }) === '字'.repeat(119) + '…' && summaryPreview({ summary_preview: null, summary: null, description: null }) === null, 'preview is cut at 120 characters')
 check(render(<NewsCard item={internationalItem()} />).includes('來源未提供摘要'), 'missing summary says so')
+// Today page compact row (#276, UI_COPY_SPEC §4): no summary and no source link; the rest keeps its order.
+const compact = render(<NewsCard item={newsItem()} compact />)
+const compactOrder = ['news-source-badge', 'class="news-card-title"', 'class="news-card-time"', 'class="news-card-impact"', 'class="news-chips"']
+check(compactOrder.every((name, index) => compact.includes(name) && (index === 0 || compact.indexOf(name) > compact.indexOf(compactOrder[index - 1]))), `compact card order: ${compact}`)
+check(!compact.includes('news-card-summary') && !compact.includes('class="news-source"') && compact.includes('news-card-compact'), 'compact card drops the summary and source link')
 check(render(<NewsCard item={officialItem()} />).includes('<span class="tag">3666</span>'), 'bare official code is a plain chip')
 
 // ---- AC-1 unknown direction never gets up／down colors ----

@@ -44,25 +44,33 @@ type DataTableProps<T> = {
   rowProps?: (row: T, index: number) => HTMLAttributes<HTMLTableRowElement> & Record<`data-${string}`, string | number | undefined>
   // A title row spanning the table before this row (e.g. a component name above its sub-items), instead of a column.
   groupTitle?: (row: T, index: number) => ReactNode
+  // A detail row spanning the table after this row (e.g. a candidate's expanded notes); it follows the row's `hidden`.
+  detailRow?: (row: T, index: number) => { content: ReactNode; props?: Record<`data-${string}`, string | number | undefined> } | null
   note?: ReactNode
   wrapClassName?: string
   className?: string
 }
 
 // Every table goes through here, so a numeric column's header and cells cannot disagree on alignment.
-export function DataTable<T>({ columns, rows, rowKey, rowProps, groupTitle, note, wrapClassName, className }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, rowKey, rowProps, groupTitle, detailRow, note, wrapClassName, className }: DataTableProps<T>) {
   return (
     <Table note={note} wrapClassName={wrapClassName} className={className}>
       <thead><tr>{columns.map((column) => <th key={column.key} className={columnClass(column)}>{column.header}</th>)}</tr></thead>
       <tbody>{rows.flatMap((row, index) => {
         const key = rowKey(row, index)
         const title = groupTitle?.(row, index)
+        const props = rowProps?.(row, index)
+        const detail = detailRow?.(row, index)
         const body = (
-          <tr key={key} {...rowProps?.(row, index)}>
+          <tr key={key} {...props}>
             {columns.map((column) => <td key={column.key} className={cx(columnClass(column), column.cellClassName) || undefined}>{column.cell(row, index)}</td>)}
           </tr>
         )
-        return title == null ? [body] : [<tr key={`${key}-group`} className="table-group-row"><td colSpan={columns.length}>{title}</td></tr>, body]
+        return [
+          ...(title == null ? [] : [<tr key={`${key}-group`} className="table-group-row"><td colSpan={columns.length}>{title}</td></tr>]),
+          body,
+          ...(detail == null ? [] : [<tr key={`${key}-detail`} hidden={props?.hidden} className="table-detail-row" {...detail.props}><td colSpan={columns.length}>{detail.content}</td></tr>]),
+        ]
       })}</tbody>
     </Table>
   )

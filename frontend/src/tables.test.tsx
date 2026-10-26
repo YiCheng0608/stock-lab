@@ -3,8 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
 import * as AppModule from './App'
-import { CandidateCard } from './candidates/CandidateViews'
-import { completeItem } from './candidates/candidates.fixtures'
+import { CandidateCard, CandidatesSection } from './candidates/CandidateViews'
+import { completeItem, longList } from './candidates/candidates.fixtures'
 import * as ui from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
 import { barsResponse, tradedBar } from './stock/stockBars.fixtures'
@@ -155,9 +155,12 @@ check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.0
 
 const card = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
 const details = /<details class="details candidate-details"[\s\S]*?<\/details>/.exec(card)?.[0] ?? ''
-checkAligned('今日候選評分細節', details, ['原值', '百分位', '子項權重'])
+checkAligned('個股頁候選評分細節', details, ['原值', '百分位', '子項權重'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
-check(detailHeaders.length <= 4, `今日候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
+check(detailHeaders.length <= 4, `個股頁候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
+// Today list (#276): the levels, close, RR and total are numeric in th and every row.
+const todayList = render('CandidatesSection', () => <CandidatesSection data={longList()} loading={false} error={null} />)
+checkAligned('今日候選表', todayList, ['最近收盤', '進場區', '停損', '目標', 'RR', '總分'])
 
 const chart = render('StockBarsChart', () => <StockBarsChart data={barsResponse([tradedBar('2026-10-21', 21.1, 70), tradedBar('2026-10-22', 21.15, 71)])} interval="day" onIntervalChange={() => undefined} loading={false} error={null} />)
 checkAligned('K 線資料', chart, ['開', '高', '低', '收', '成交量'])

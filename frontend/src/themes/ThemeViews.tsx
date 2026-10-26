@@ -25,6 +25,7 @@ import type {
 import {
   BOARD_COMPONENTS,
   RETURN_WINDOWS,
+  TODAY_BOARD_LIMIT,
   THEME_BOARDS,
   boardDates,
   boardLabel,
@@ -199,17 +200,13 @@ export function ThemesBoardView({
   )
 }
 
-// ---- today: Top 10 per board ----
+// ---- today: Top 5 per board ----
 
-function HotGroupCard({ item }: { item: ThemeBoardItem }) {
+// Today page compact row (#276, UI_COPY_SPEC §8.5): rank, name, quality, score, relative returns and date on one row.
+function HotGroupRow({ item }: { item: ThemeBoardItem }) {
   return (
-    <Link className="feature-card hot-group-card" to={themeDetailPath(item.theme_id)} data-theme-id={item.theme_id}>
-      <div className="feature-card-head">
-        <span className="feature-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>
-        </span>
-        <span className="rank hot-group-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
-      </div>
+    <Link className="hot-group-row" to={themeDetailPath(item.theme_id)} data-theme-id={item.theme_id}>
+      <span className="rank hot-group-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
       <h3>{item.display_name}</h3>
       <QualityBadge quality={item.quality} compact />
       <div className="hot-group-score"><span>分數</span><b>{formatScore(item.score)}</b></div>
@@ -239,7 +236,7 @@ export function HotGroupsSection({
   return (
     <section className="hot-groups" aria-labelledby="hot-groups-title">
       <div className="section-head">
-        <div><div className="eyebrow">族群發現 · 各榜前 10 名</div><h2 id="hot-groups-title">{title}</h2></div>
+        <div><div className="eyebrow">族群發現 · 各榜前 {TODAY_BOARD_LIMIT} 名</div><h2 id="hot-groups-title">{title}</h2></div>
         <Link to={boardPagePath(board)} className="text-link">查看完整排行</Link>
       </div>
       <div className="board-controls">
@@ -255,7 +252,7 @@ export function HotGroupsSection({
               ? null
               : data.items.length === 0
                 ? <Card><EmptyState reason={data.meta.empty_message ?? '此榜目前沒有族群'} /></Card>
-                : <div className="hot-group-grid">{data.items.map((item) => <HotGroupCard key={item.theme_id} item={item} />)}</div>}
+                : <div className="hot-group-list">{data.items.map((item) => <HotGroupRow key={item.theme_id} item={item} />)}</div>}
       </div>
     </section>
   )

@@ -8,8 +8,8 @@
 
 - **深色金融儀表板**：近黑的藍灰底、分層的卡片、細白邊線、單一藍色主色，資料數字用等寬字。安靜、專業、以數字為主角，不用插圖與大面積彩色。
 - **層次靠底色而非陰影**：頁面底 → 區塊底 → 卡片 → 浮起元素四層底色；陰影只在 hover 與主按鈕出現。
-- **點綴而非裝飾**：漸層只用在 logo、標題關鍵字（`gradient-text`）與主按鈕；背景柔光（blur 光暈）只在首頁 hero 一處。
-- **一眼可讀的漲跌**：漲跌只靠顏色與正負號，不加箭頭圖示或閃爍。
+- **點綴而非裝飾**：漸層只用在 logo、標題關鍵字（`gradient-text`）與主按鈕；不用背景柔光（blur 光暈）。
+- **一眼可讀的漲跌**：漲跌只靠顏色與正負號，不加箭頭圖示或閃爍。數值與價位的紅綠只用於漲跌（台股慣例紅漲綠跌）；進出點等其他數值與價位語意不用紅綠（§7）。例外：狀態 badge 的 success／error 變體（§5，如「行情來源完整」）與籌碼理由色點的 `--color-secondary`（§7）表示狀態或分類，不是數值方向。
 - **桌面優先、窄版可用**：內容寬 1280px 居中，16px 側邊留白，手機單欄。
 
 ## 2. Design tokens
@@ -92,7 +92,7 @@
 
 | 用途 | 字級／字重 | 說明 |
 | --- | --- | --- |
-| 頁面大標（hero） | 36–60px／700，`leading-tight` | 只在首頁；關鍵字用 `gradient-text` |
+| 頁面標題 h1 | 28px／700 | 今日頁不放頁面大標，第一行是頁首資料列（§4） |
 | 區塊標題 h2 | 30–36px／700 | 置中或靠左，下方 8px 說明文字（muted，18px） |
 | 卡片標題 h3 | 20px／600 | |
 | 內文 | 16px／400 | 說明文字用 `--color-text-muted` |
@@ -117,7 +117,7 @@
 - **內容容器**：`max-width: var(--content-max)`，左右 padding 16／24／32px（手機／平板／桌面）。
 - **區塊**：垂直 padding 64px，桌面 96px；相鄰區塊以 `--color-bg` 與 `--color-bg-alt` 交錯。
 - **網格**：卡片列用 CSS grid，桌面 2–4 欄、平板 2 欄、手機 1 欄，gap 16–24px。
-- **Hero（僅首頁）**：左文右卡的雙欄；背景兩顆 400–500px 的圓形光暈（主色 10% 與強調色 10%，`blur(120px)`），其餘頁面不用光暈。
+- **今日頁頁首**：沒有 hero 與光暈。第一行是一行資料列（資料截至日期 · 來源 · 快照模式 · 品質 badge · 「資料說明」展開），其下是大盤概況列：四個雙列 `market-widget`（加權指數、櫃買指數、成交金額、漲跌家數），桌面一列四格（約 90px 高）；640px 以下只顯示兩個指數，成交金額與漲跌家數收進「成交金額與漲跌家數」`<details>`。之後依序為持倉風險提示列（有才出現）、明日候選、熱門族群與重點新聞（桌面兩欄）、關注標的（[PRODUCT_SPEC §2](PRODUCT_SPEC.md#2-主導航與資訊順序)）。全部收合時，1280×800 第一屏要看到至少 6 列候選、390×844 至少 2 張候選卡。
 
 ## 5. 元件
 
@@ -125,7 +125,9 @@
 | --- | --- |
 | `card` | 底 `--color-bg-card`、1px `--color-border`、圓角 16px、padding 24px；hover 邊線轉 `--color-border-hover`。資料卡用它。 |
 | `feature-card` | 同 card，可點擊；hover 邊線轉主色、上移 4px、陰影 `--shadow-hover`。左上 48px 圓角 12px 圖示底（主色 20% 透明），圖示用主色線條。 |
-| `market-widget` | 小型數據方塊：底 card 色、圓角 12px、padding 16px；上方 muted 標籤，中間 mono 主數字，下方漲跌。 |
+| `market-widget` | 小型數據方塊：底 card 色、圓角 12px、padding 16px；上方 muted 標籤，中間 mono 主數字，下方漲跌。**雙列變體**（今日頁大盤概況）：標籤右側放單位，內容分上市、上櫃兩行，每行前置 muted 的「上市」「上櫃」，數字 mono、不換行，成交金額的金額後接 muted 短範圍（[UI_COPY_SPEC §11](UI_COPY_SPEC.md#11-今日頁頁首與大盤概況)）；某一邊沒有資料時該行改為 muted 文案，另一行照常。 |
+| 候選列表 | 今日頁「明日候選」。桌面（641px 以上）用共用 `DataTable`：一檔一列，數字欄（收盤、進場區、停損、目標、RR、總分）不換行；每列最後一欄是「AI 推論 ▸」accent badge 按鈕，展開時在該列下方插入一列整列寬（`colSpan`）的明細列，明細列內容放在 `<details>` 裡（按鈕切換它，未展開時明細列沒有高度）。640px 以下改為一檔一張卡片，不用橫向捲動表格：名次＋代號名稱＋總分 → 市場 · 策略 · 族群 → 收盤／進場區／停損／目標四格（價位不換行；目標放不下時整格自成一列）→ 主要理由 → 「AI 說明」`<details>`。預設列前 10 檔，其餘收進「顯示其餘 N 檔」`<details>`。 |
+| 提示列 | 整列寬的 card（圓角 12px、padding 12px 16px），左側 4px 色條（同 Toast，持倉風險用 warning）；一行文字加右側 ghost 連結，窄版可換行。用於今日頁持倉風險提示，有資料才出現。 |
 | `stat-value` | 統計數字：mono、24px、600。 |
 | `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error；`accent` 變體（只用於「AI 推論」）邊線與圓點用 `--color-accent`、文字維持主文字色以保對比。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
 | `btn-primary` | 漸層 `135deg, --color-primary → --color-primary-dark`，白字 600，圓角 10px，padding 14px 28px；hover 上移 2px 加 `--shadow-btn`。每個畫面最多一個主按鈕。 |
@@ -163,8 +165,8 @@
 - 每張資料卡右上角 badge 顯示資料日期（如「資料 10/17」）；排程更新中顯示 warning badge「更新中」。
 - 無資料：欄位留空顯示「—」加 muted 原因，不顯示 0。
 - LLM 推論內容：左側 2px 強調色（`--color-accent`）豎線加「AI 推論」小 badge，與事實分區。
-- 進出點卡：進場區主文字色 mono；停損 `--color-error`；目標 `--color-success`；RR 用 badge。
-- 候選清單理由：照 API 順序全部顯示（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。
+- 進出點（全站：今日候選、個股頁候選面板與研究條件、行動頁卡片與行動詳情）：進場區主文字色 mono（`.level-entry`）；停損 `--color-warning`（`.level-stop`）；目標 `--color-primary`（`.level-target`）；RR 用 badge；每個價位都帶文字標籤。紅綠只用於漲跌，進出點不用 `--color-error`／`--color-success`，以免讀成漲跌。
+- 候選清單理由：照 API 順序（`candidate_score_v1` 每檔最多四條），每條一行，前綴 8px 色點（技術 primary、籌碼 secondary、新聞 accent、族群 `--color-text-muted`）；`inference=true` 的理由同列加「推論」badge（accent 變體）。今日頁列表只顯示第一條，展開明細顯示全部；個股頁候選面板顯示全部。
 
 ## 8. 無障礙與動效
 

@@ -47,6 +47,7 @@ TREE = {
         "import { HotGroupsSection } from './themes/ThemeViews'\n"
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
+        "import { TodayHeader } from './today/TodayViews'\n"
     ),
     "styles.css": "body {}\n",
     "components/ui/index.ts": "export { Card } from './Card'\n",
@@ -62,6 +63,7 @@ TREE = {
     "stock/stockBars.ts": "export const bars = 1\n",
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
     "candidates/CandidateViews.tsx": "import { AiBadge } from '../news/NewsViews'\n",
+    "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",
 }
 
 

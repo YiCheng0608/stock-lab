@@ -94,6 +94,7 @@ export function completeItem(): CandidateItem {
     data_as_of: '2026-10-16',
     llm_note: doneNote(),
     sources,
+    market: { trading_date: '2026-10-16', close: 162, change: 3.5, change_pct: 0.022082, change_status: 'known', source: 'twse' },
   }
 }
 
@@ -140,7 +141,29 @@ export function partialItem(): CandidateItem {
     ],
     data_as_of: '2026-10-16',
     sources: { ...sources, signal: 'analysis:pullback_v1', market_bar: 'tpex', chips: 'tpex_3insti+tpex_margin' },
+    // The previous session's bar came from another source, so the change is not shown.
+    market: { trading_date: '2026-10-16', close: 13.2, change: null, change_pct: null, change_status: 'unverified', source: 'tpex' },
   }
+}
+
+// A note that was attempted and failed: no text, no model.
+export function pendingNote(): CandidateLlmNote {
+  return { ...doneNote(), status: 'pending', selection: null, levels: null, risks: null, model: null }
+}
+
+// Twelve rows for the today list (top 10 plus 「顯示其餘 2 檔」): #1 has a done note, #2 none, #3 a pending note,
+// #4 a falling close, #5 no bar on the day; the rest copy #1 under other symbols.
+export function longList(): CandidatesResponse {
+  const items = Array.from({ length: 12 }, (_, index): CandidateItem => {
+    const base = index === 1 ? partialItem() : completeItem()
+    const rank = index + 1
+    const symbol = index <= 1 ? base.instrument.symbol : String(2400 + rank)
+    return { ...base, rank, instrument: { ...base.instrument, id: 9000 + rank, symbol } }
+  })
+  items[2] = { ...items[2], llm_note: pendingNote() }
+  items[3] = { ...items[3], market: { trading_date: '2026-10-16', close: 98.5, change: -1.5, change_pct: -0.015, change_status: 'known', source: 'twse' } }
+  items[4] = { ...items[4], market: { trading_date: '2026-10-16', close: null, change: null, change_pct: null, change_status: 'missing', source: null } }
+  return { ...run(items), candidate_count: items.length }
 }
 
 const methodology: CandidatesResponse['methodology'] = {

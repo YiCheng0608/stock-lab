@@ -24,7 +24,8 @@ import { completeItem, doneNote, listResponse, notComputedResponse, partialItem,
 import { CandidateCard, CandidatesSection, StockCandidatePanel } from './CandidateViews'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
-// the today section, partial components, zero and not-computed runs, and the stock page panel.
+// the candidate card, partial components, zero and not-computed runs, and the stock page panel.
+// The today list (table rows and phone cards, #276) is checked in today/today.test.tsx.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
 const render = (element: ReactElement) => renderToStaticMarkup(<StaticRouter location="/">{element}</StaticRouter>)
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
@@ -48,10 +49,8 @@ check(candidateGroupText(completeItem().groups[0]) === 'AI 伺服器（題材，
 check(candidateGroupText(completeItem().groups[1]) === '電腦及週邊（產業，當日未排名）', 'unranked group says so')
 check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
 
-// ---- normal list ----
-const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
-check(list.includes('明日候選') && list.includes(CANDIDATE_DISCLAIMER), 'section title and the fixed disclaimer')
-check(list.includes('資料 2026/10/16') && list.includes('2 檔'), 'run date badge and candidate count')
+// ---- full cards (the stock page panel) ----
+const list = render(<>{listResponse().items.map((item) => <CandidateCard key={item.rank} item={item} />)}</>)
 check(count(list, 'class="card candidate-card"') === 2, 'one card per candidate')
 const first = slice(list, 'data-candidate-rank="1"', '</article>')
 for (const text of ['#1', '2377', '微星', '上市', '突破條件', '>83<', '161.50', '157.82', '167.39', '172.54', '1.60', 'href="/stocks/TWSE/2377"']) {
@@ -71,7 +70,7 @@ for (const [code, dot] of [['breakout_20d_high', 'technical'], ['institutional_n
 check(slice(first, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'inference reason carries the 推論 badge on its row')
 check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('badge-accent'), 'fact reasons carry no 推論 badge')
 check(first.includes('族群：AI 伺服器（題材，第 2 名／11）、電腦及週邊（產業，當日未排名）'), 'groups listed')
-check(first.includes('<details class="details candidate-details">'), 'score details collapsed on the today list')
+check(first.includes('<details class="details candidate-details">'), 'score details collapsed unless asked open')
 check(first.includes('同檔另一策略：回踩條件 總分 61') && first.includes('規則最早執行日 2026/10/19'), 'alternatives and earliest execution date in details')
 check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in details')
 
