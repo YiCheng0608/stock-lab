@@ -34,7 +34,7 @@
 5. **Review 與合併**：統籌 review（必要時獨立 review），以 merge commit 合併；不 squash／rebase、不直接 push master。
 6. **結案**：合併後 master CI 綠即關 Issue、移除 worktree；遠端 branch 由 GitHub 自動刪。master CI 紅就先修，不開新功能。
 
-並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個。衝突由後合併者在自己的 branch 解決，不全選一方。
+並行以不互改同一組檔案為原則，建議同時進行的任務不超過 3 個；「做完、只等合併」的任務（PR CI 綠、review 完、工程師不再改）不算在內（使用者 2026-10-26 決定）。衝突由後合併者在自己的 branch 解決，不全選一方。
 
 ## 工程原則
 
@@ -89,7 +89,8 @@
 | 空狀態與 DB／其他 API 交叉核對，另一處有資料就判失敗；個股選股依序備援（#251） | 後端測試 `test_verify_tristate.py`；CI `verify` job | `tools/verify/page_checks.py`（`empty_board`、T7、T9、A4、`Run.stock`） |
 | master 每晚與手動觸發跑 CI 全套，`verify` 驗五頁（#251） | CI `schedule`、`workflow_dispatch`；後端測試 `test_nightly_and_manual_runs_verify_every_page` | `.github/workflows/ci.yml`、`tools/verify/verify_plan.py`（`FULL_EVENTS`） |
 | features 標「人工」的檢查有寫死的抽樣規則（#251） | `page_checks.py` exit 2；後端測試 `test_every_manual_check_has_a_sampler` | `tools/verify/page_checks.py`（`MANUAL`、`registry_problems`） |
-| G7 真資料 verify 用發佈 branch `release/v1` 上已 commit 的程式，5 日窗口頭尾各跑一次；人工檢查由另一個 session 判讀（#251、#260） | 部分：`page_checks.py --g7` 在有未 commit 改動或 HEAD 不在 origin/master 時 exit 2；時點與獨立判讀無 | `tools/verify/page_checks.py`（`g7_problems`）、`docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/verify-stock-lab/SKILL.md` |
+| G7 真資料 verify 用發佈 branch `release/v1` 上已 commit 的程式，5 日窗口頭尾各跑一次；人工檢查由另一個 session 判讀（#251、#260） | 部分：`page_checks.py --g7` 在有未 commit 改動或 HEAD 不等於 `origin/release/v1`（`G7_REF`）時 exit 2（#288）；時點與獨立判讀無 | `tools/verify/page_checks.py`（`g7_problems`、`G7_REF`）、`docs/GITHUB_WORKFLOW.md`（任務流程第 6 步）、`.claude/skills/verify-stock-lab/SKILL.md` |
+| 發佈 branch `release/*` 不能刪、不能強推，只經 PR（merge commit）且 CI `required` 綠才合併；CI 對 `release/**` 的 PR 與 push 都跑（#288） | GitHub ruleset（`release/*`）；CI `pull_request`／`push` 的 branches | repo ruleset、`.github/workflows/ci.yml` |
 | features 標「CI」的檢查都有實作、有實作的都標「CI」（#243） | CI `verify` job（`page_checks.py` 不一致就 exit 2）；後端測試 `test_every_ci_check_in_features_is_implemented` | `tools/verify/page_checks.py`（`registry_problems`）、`backend/tests/test_verify_checks.py` |
 | `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
 | CI `verify` job 只驗改動影響的頁，依 features「驗證範圍」選頁；不驗時 job 仍 success（#245） | CI `verify` job 的 Plan step；後端測試 `test_verify_plan.py`（各類改動的頁面範圍、前端檔清單涵蓋 import 它的檔） | `tools/verify/verify_plan.py`、`.claude/skills/verify-stock-lab/features/README.md`（驗證範圍）、`.github/workflows/ci.yml`（`verify` job） |

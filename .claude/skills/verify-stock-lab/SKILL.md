@@ -51,7 +51,7 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 1. **停止條件**（任一成立就不跑，直接回覆原因）：
    - 台北時間 18:30～21:30（排程 `daily` 時段，不碰正式 DB）：`TZ=UTC-8 date +%H%M` 在 `1830`～`2130` 之間（POSIX 寫法的 UTC+8；Git Bash 沒有時區資料庫，`Asia/Taipei` 會被當成 UTC）。
    - 目前分支是 `master`（`git rev-parse --abbrev-ref HEAD`）：管理 checkout 不跑，請在任務 worktree 執行。
-   - G7 的那兩次：G7 證據必須是排程正在跑的發佈 branch 程式。先 `git fetch origin master release/v1`；worktree 要從當時的 `origin/release/v1` 建（它的 commit 都在 master 上），沒有額外 commit、沒有未 commit 的改動。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
+   - G7 的那兩次：G7 證據必須是排程正在跑的發佈 branch 程式。先 `git fetch origin master release/v1`；worktree 要從當時的 `origin/release/v1` 建，沒有額外 commit、沒有未 commit 的改動（`--g7` 要求 HEAD 等於 `origin/release/v1`）。第 2 步加 `--g7`，`page_checks.py` 不符合就 exit 2 並寫明原因，不跑任何檢查。
 2. **變數**（Bash 工具不保留 shell 狀態，每個命令開頭重設）：
 
    ```bash
