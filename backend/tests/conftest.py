@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -51,6 +52,48 @@ def pytest_unconfigure(config):
         failures.append((path, error))
 
     shutil.rmtree(_TEST_ROOT, onexc=remember)
+    for path, error in failures:
+        sys.stderr.write(
+            f"warning: could not remove {path}: {type(error).__name__}: {error}\n"
+        )
+
+
+def _retry_writable(function, path, failures):
+    """rmtree's onexc: make PATH writable and retry once; what still fails is recorded.
+
+    A link is retried as it is: chmod follows a symlink on POSIX and would change the
+    permissions of its target outside the basetemp (#290 review L2).
+    """
+
+    try:
+        if not (os.path.islink(path) or os.path.isjunction(path)):
+            os.chmod(path, os.lstat(path).st_mode | stat.S_IWRITE)
+        function(path)
+    except OSError as again:
+        failures.append((path, again))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """After a green run remove the run's basetemp, a ``--basetemp`` one included (#290).
+
+    Tests build repositories under tmp_path, fake (``repo/.git``, ``project/.git``) and
+    real (``git init``). Left in an engineer's temp directory outside the worktree they
+    make ``tools/ops/close_task.sh --extra-dir`` refuse it, and pytest keeps them even
+    under tmp_path_retention_policy = "failed" (a skipped test's tmp_path, git's
+    read-only object files). A run that fails keeps everything for debugging; pytest
+    empties a given basetemp when the next run starts. rmtree does not follow junctions
+    or symlinks, so nothing outside the basetemp is reached.
+    """
+
+    factory = getattr(session.config, "_tmp_path_factory", None)
+    basetemp = getattr(factory, "_basetemp", None)
+    if exitstatus != 0 or basetemp is None or not basetemp.is_dir():
+        return
+    failures = []
+    shutil.rmtree(
+        basetemp,
+        onexc=lambda function, path, _: _retry_writable(function, path, failures),
+    )
     for path, error in failures:
         sys.stderr.write(
             f"warning: could not remove {path}: {type(error).__name__}: {error}\n"
