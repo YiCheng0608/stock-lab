@@ -841,6 +841,29 @@ def _encode_cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
+def _encode_action_cursor(offset: int, holdings: list[int] | None) -> str:
+    """An action-list cursor; ``holdings`` is the tier-0 order an earlier page built."""
+
+    payload: dict[str, Any] = {"offset": max(0, int(offset))}
+    if holdings is not None:
+        payload["holdings"] = holdings
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _action_cursor_holdings(cursor: str | None) -> list[int] | None:
+    """The holding order carried by an action-list cursor (#278), if any."""
+
+    if not cursor:
+        return None
+    _decode_cursor(cursor)
+    padded = cursor + "=" * (-len(cursor) % 4)
+    value = json.loads(base64.urlsafe_b64decode(padded.encode("ascii"))).get("holdings")
+    if isinstance(value, list) and all(type(item) is int for item in value):
+        return value
+    return None
+
+
 def _decode_cursor(cursor: str | None) -> int:
     if not cursor:
         return 0
@@ -2633,6 +2656,7 @@ def actions(
         )
     ]
     offset = _decode_cursor(cursor)
+    carried = _action_cursor_holdings(cursor)
     built: dict[int, dict[str, Any]] = {}
     if state:
         # A state filter depends on the composed decision and therefore cannot
@@ -2650,10 +2674,25 @@ def actions(
         built = {item["instrument"]["id"]: item for item in matched}
     else:
         selected = [row for row in listed if tier is None or row.tier == tier]
-        # Tier 0 is ordered by its summaries: build them only when this page
-        # reaches it (a holding page builds every holding once).
+        holdings = [row for row in selected if row.tier == 0]
+        if carried is not None and sorted(carried) != sorted(
+            row.instrument_id for row in holdings
+        ):
+            carried = None
+        # Tier 0 is ordered by its summaries.  The first page that reaches it
+        # builds every holding once (at most the holdings plus the limit) and
+        # passes the order on in its cursor, so a later page builds only its
+        # own rows (#278 統籌 6420102565).
         if any(row.tier == 0 for row in selected[offset : offset + limit]):
-            built = order_holdings(db, as_of, selected)
+            if carried is None:
+                built = order_holdings(db, as_of, selected)
+                carried = [row.instrument_id for row in selected if row.tier == 0]
+            else:
+                order = {item_id: index for index, item_id in enumerate(carried)}
+                selected = (
+                    sorted(holdings, key=lambda row: order[row.instrument_id])
+                    + selected[len(holdings) :]
+                )
     page_rows = selected[offset : offset + limit]
     page = summaries_in_order(
         db, as_of, [row.instrument_id for row in page_rows], built
@@ -2675,14 +2714,19 @@ def actions(
             }
         )
     total = len(selected)
-    return _cursor_response(
+    response = _cursor_response(
         items,
         offset=offset,
         limit=limit,
         total=total,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
         sort=ACTION_TIER_SORT,
-    ) | {
+    )
+    if response["meta"]["next_cursor"] and carried is not None and not state:
+        response["meta"]["next_cursor"] = _encode_action_cursor(
+            offset + len(items), carried
+        )
+    return response | {
         "taxonomy": ACTION_LABELS,
         "summary": {
             "total": total,

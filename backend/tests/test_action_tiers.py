@@ -386,6 +386,8 @@ def test_the_tier_rules_are_pinned_to_the_version():
         "all": (0, 1, 2, 3, 4, 5),
     }
     assert decision.DEFAULT_ACTION_VIEW == "focus"
+    # Tiers 2 and 4 need a bar on each of the last 60 verified sessions.
+    assert decision.ACTION_TIER_BAR_SESSIONS == 60
     assert set(decision.ACTION_TIER_SORT_FIELDS) == {
         field for tier in decision.ACTION_TIERS for field in tier.order
     }
@@ -412,6 +414,25 @@ def test_the_projection_orders_every_tier(factory):
     # Complete signals without a bar on each of the last 60 sessions: the
     # summary says data_insufficient (bars_60d), so the projection does too.
     assert by_symbol["B1"].tier == 5 and by_symbol["B2"].tier == 5
+
+
+def test_the_60_session_bar_rule(factory):
+    """action_tier_v1: a missing day or a listing within the window is tier 5."""
+
+    with factory() as db:
+        market = build_market(db)
+        for symbol, kwargs in (
+            ("F1", {}),  # every one of the 60 sessions
+            ("M1", {"bars": 59}),  # one day missing
+            ("N1", {"listed": SESSIONS[59] + timedelta(days=1)}),  # 59 sessions
+            ("N2", {"listed": SESSIONS[59]}),  # listed on the window's first day
+        ):
+            market.stock(symbol, **kwargs)
+            market.signal(symbol, "observation")
+        db.commit()
+        tiers = {row.symbol: row.tier for row in decision.action_tier_rows(db, AS_OF)}
+    assert (tiers["F1"], tiers["N2"]) == (4, 4)
+    assert (tiers["M1"], tiers["N1"]) == (5, 5)
 
 
 def test_without_60_verified_sessions_tiers_2_and_4_are_data_insufficient(factory):
@@ -612,17 +633,47 @@ def test_a_request_builds_at_most_limit_summaries(
                     f"&cursor={cursor}" if cursor else ""
                 )
                 body = client.get(url).json()
-                # A page that reaches tier 0 builds every holding once to order
-                # them (five here) and reuses them for its rows.  With no more
-                # holdings than the limit a cursor page is within the limit;
-                # a smaller limit adds at most the holdings.
-                reached = any(item["tier"] == 0 for item in body["items"])
-                bound = limit if limit >= 5 or not reached else limit + 5
+                # AC-A3 as confirmed (#278 6420102565): the first page that
+                # reaches tier 0 builds every holding once (five here), so it
+                # stays within holdings + limit; every later page passes the
+                # order on in its cursor and stays within the limit.
+                bound = limit + 5 if cursor is None else limit
                 assert len(stub_summaries) <= bound, url
                 assert len(set(stub_summaries)) == len(stub_summaries), url
                 cursor = body["meta"]["next_cursor"]
                 if not cursor:
                     break
+
+
+def test_more_holdings_than_the_limit_build_them_once(factory, stub_summaries):
+    with factory() as db:
+        build_market(db)
+    builds, symbols, cursor = [], [], None
+    with TestClient(app) as client:
+        while True:
+            stub_summaries.clear()
+            body = client.get(
+                "/api/actions?view=all&include_etf=true&limit=2"
+                + (f"&cursor={cursor}" if cursor else "")
+            ).json()
+            builds.append(len(stub_summaries))
+            symbols += _symbols(body["items"])
+            cursor = body["meta"]["next_cursor"]
+            if not cursor:
+                break
+        # A cursor whose holdings no longer match is ignored, not trusted.
+        stale = api_module._encode_action_cursor(2, [1, 2])
+        stub_summaries.clear()
+        rebuilt = client.get(
+            f"/api/actions?view=all&include_etf=true&limit=2&cursor={stale}"
+        ).json()
+    # Five holdings, limit 2: the first page builds the five (<= 5 + 2), the
+    # holding pages after it build their own rows only.
+    assert builds[0] == 5
+    assert all(count <= 2 for count in builds[1:])
+    assert symbols == FULL_ORDER
+    assert _symbols(rebuilt["items"]) == ["H2", "H1"]
+    assert len(stub_summaries) == 5
 
 
 def test_holdings_ignore_the_etf_filter(factory, stub_summaries):

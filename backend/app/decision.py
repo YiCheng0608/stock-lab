@@ -206,8 +206,10 @@ def latest_official_run(db: Session) -> IngestionRun | None:
     the same row into "success".
     """
 
-    return db.scalar(
-        select(IngestionRun)
+    # Sort ids only, then load the one row: sorting whole rows carries every
+    # run's metadata_json (about 100 MB on the production copy, 2.4 s, #278).
+    run_id = db.scalar(
+        select(IngestionRun.id)
         .where(
             IngestionRun.run_type == "collect",
             IngestionRun.source == "official",
@@ -217,6 +219,7 @@ def latest_official_run(db: Session) -> IngestionRun | None:
         .order_by(desc(IngestionRun.updated_at), desc(IngestionRun.id))
         .limit(1)
     )
+    return db.get(IngestionRun, run_id) if run_id is not None else None
 
 
 def latest_official_as_of(db: Session) -> tuple[IngestionRun | None, date | None]:
@@ -1781,6 +1784,10 @@ ACTION_VIEWS: dict[str, tuple[int, ...]] = {
     "all": (0, 1, 2, 3, 4, 5),
 }
 DEFAULT_ACTION_VIEW = "focus"
+# Tiers 2 and 4 need a bar row on each of the last 60 verified sessions (the
+# summary's 60-day readiness, _instrument_coverage); without them the row is
+# tier 5, as its summary is data_insufficient.
+ACTION_TIER_BAR_SESSIONS = 60
 
 
 @dataclass
@@ -1889,10 +1896,6 @@ def _unmet_condition_counts(
         instrument_id = instrument_of[signal_id]
         counts[instrument_id] = min(unmet, counts.get(instrument_id, unmet))
     return counts
-
-
-# The summary's 60-day bar readiness (_instrument_coverage) as the projection reads it.
-ACTION_TIER_BAR_SESSIONS = 60
 
 
 def _short_of_bars(db: Session, ids: set[int], as_of: date) -> set[int]:
