@@ -523,7 +523,7 @@ export function TodayPage() {
       .filter((action) => action.action_state !== 'data_insufficient' || action.held === true || action.position_quantity_status === 'unknown')
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
-  const modeLabel = data?.mode === 'official' ? '官方單日快照' : data?.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
+  const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
   // PRODUCT_SPEC §2: header line → market overview → holding-risk alert → candidates → groups and news → watched stocks.
   return (
     <div className="page home-page">

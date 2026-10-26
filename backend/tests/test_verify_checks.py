@@ -310,6 +310,7 @@ def _overview(tpex_status="available"):
         "index": {"close": 46041.43, "change": -846.34, "change_pct": -0.0181},
         "turnover": {
             "value": 933437473560,
+            "scope": "twse_all_securities",
             "scope_label": "集中市場總計（含 ETF、權證等）",
         },
         "breadth": {
@@ -325,7 +326,11 @@ def _overview(tpex_status="available"):
             "exchange": "TPEx",
             "status": "available",
             "index": {"close": 381.69, "change": -13.73, "change_pct": -0.0347},
-            "turnover": {"value": 225545000000, "scope_label": "上櫃股票"},
+            "turnover": {
+                "value": 225545000000,
+                "scope": "tpex_stocks",
+                "scope_label": "上櫃股票",
+            },
             "breadth": {
                 "advancers": 146,
                 "decliners": 659,
@@ -367,7 +372,7 @@ OVERVIEW_PAGE = (
     "成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票\n"
     "加權指數\n點\n46,041.43\n-846.34（-1.81%）\n"
     "櫃買指數\n點\n381.69\n-13.73（-3.47%）\n"
-    "成交金額\n億元\n上市 9,334.37\n上櫃 2,255.45\n"
+    "成交金額\n億元\n上市 9,334.37 集中市場總計\n上櫃 2,255.45 上櫃股票\n"
     "漲跌家數（股票）\n括號為漲停／跌停\n"
     "上市 上漲 247 · 下跌 756 · 平盤 74（3／5）\n"
     "上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）\n"
@@ -391,7 +396,9 @@ def test_t11_fails_on_a_widget_that_differs_from_the_api(tmp_path):
         {"today-1280": OVERVIEW_PAGE.replace("上市 9,334.37", "上市 9,334.38")},
         {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
     )
-    with pytest.raises(page_checks.Fail, match="TWSE 缺整行 `上市 9,334.37`"):
+    with pytest.raises(
+        page_checks.Fail, match="TWSE 缺整行 `上市 9,334.37 集中市場總計`"
+    ):
         page_checks.t11(run)
 
 
@@ -413,7 +420,7 @@ def test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day(tmp_path):
     page = (
         OVERVIEW_PAGE.replace("；上櫃為上櫃股票", "")
         .replace("381.69\n-13.73（-3.47%）", "上櫃大盤資料未取得")
-        .replace("上櫃 2,255.45", "上櫃大盤資料未取得")
+        .replace("上櫃 2,255.45 上櫃股票", "上櫃大盤資料未取得")
     )
     facts = {"market_summary_latest": {"TWSE": _summary()}}
     run = FakeRun(
@@ -429,6 +436,35 @@ def test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day(tmp_path):
         match="TPEx 為 unavailable，但 DB market_summaries 有 2026-10-22 的列",
     ):
         page_checks.t11(run)
+
+
+def test_fixed_rounds_like_the_page():
+    # formatFixed rounds with JS toFixed: the exact binary value, a tie away from
+    # zero. Python round() keeps a tie even (1.125 -> 1.12) and would fail T11.
+    assert page_checks.fixed(1.125, 2) == "1.13"
+    assert page_checks.fixed(-1.125, 2, True) == "-1.13"
+    assert page_checks.fixed(1234.5, 0) == "1,235"
+    assert page_checks.fixed(2.675, 2) == "2.67"  # 2.67499999… in binary, as toFixed
+    assert page_checks.fixed(0.004, 2, True) == "0.00"  # rounds to zero: no sign
+
+
+def test_t11_passes_on_a_change_that_rounds_at_a_half(tmp_path):
+    overview = _overview()
+    twse = overview["market_overview"]["exchanges"][0]
+    twse["index"] = {"close": 46041.43, "change": 1.125, "change_pct": 0.0000244}
+    page = OVERVIEW_PAGE.replace("-846.34（-1.81%）", "+1.13（0.00%）")
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": overview},
+        {"today-1280": page},
+        {
+            "market_summary_latest": {
+                "TWSE": _summary(index_change=1.125),
+                "TPEx": TPEX_SUMMARY,
+            }
+        },
+    )
+    assert "TWSE 46,041.43" in page_checks.t11(run)
 
 
 def test_t11_fails_on_the_old_page_without_an_overview(tmp_path):

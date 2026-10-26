@@ -49,6 +49,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, Callable
 
@@ -1043,12 +1044,19 @@ def t9(run: Run) -> str:
 # ---- T11 market overview (#276, UI_COPY_SPEC §11) ----
 
 OVERVIEW_EXCHANGES = (("TWSE", "上市"), ("TPEx", "上櫃"))
+# SHORT_SCOPE_LABELS in frontend/src/today/TodayViews.tsx; other scopes show scope_label.
+SHORT_SCOPES = {"twse_all_securities": "集中市場總計", "tpex_stocks": "上櫃股票"}
 
 
 def fixed(value: float, digits: int, signed: bool = False) -> str:
-    """formatFixed in frontend/src/units.ts: thousands separators, `-` or (signed) `+`."""
+    """formatFixed in frontend/src/units.ts: thousands separators, `-` or (signed) `+`.
 
-    rounded = round(value, digits)
+    It rounds like JS ``toFixed``: the float's exact binary value, a tie away from
+    zero (``Decimal(float)`` is exact; ROUND_HALF_UP rounds a tie away from zero).
+    Python ``round()`` keeps a tie even and would make T11 fail on a correct page.
+    """
+
+    rounded = Decimal(value).quantize(Decimal(1).scaleb(-digits), ROUND_HALF_UP)
     text = f"{abs(rounded):,.{digits}f}"
     if rounded < 0:
         return "-" + text
@@ -1072,7 +1080,10 @@ def overview_lines(exchange: dict, label: str) -> list[str]:
             f"{fixed(index['change'], 2, True)}（{fixed(index['change_pct'] * 100, 2, True)}%）"
         )
     if turnover.get("value") is not None:
-        lines.append(f"{label} {fixed(turnover['value'] / 1e8, 2)}")
+        # The short scope stays next to the amount (#276 review L6, UI_COPY_SPEC §11).
+        short = SHORT_SCOPES.get(turnover.get("scope")) or turnover.get("scope_label")
+        amount = f"{label} {fixed(turnover['value'] / 1e8, 2)}"
+        lines.append(f"{amount} {short}" if short else amount)
     limits = (
         ""
         if breadth.get("limit_up") is None and breadth.get("limit_down") is None

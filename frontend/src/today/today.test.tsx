@@ -51,12 +51,16 @@ const CandidatesSection = component(CandidateModule, 'CandidatesSection')
 // ---- market overview: four widgets, both / one / no exchange (UI_COPY_SPEC §11) ----
 const both = render('MarketOverviewView both', () => <MarketOverviewView overview={overviewBoth()} />)
 const wide = slice(both, 'class="market-overview-grid"', '<details')
-for (const value of ['加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '成交金額', '億元', '上市 9,334.37', '上櫃 2,255.45',
+for (const value of ['加權指數', '46,041.43', '-846.34（-1.81%）', '櫃買指數', '381.69', '-13.73（-3.47%）', '成交金額', '億元', '上市 9,334.37 集中市場總計', '上櫃 2,255.45 上櫃股票',
   '漲跌家數（股票）', '括號為漲停／跌停', '上市 上漲 247 · 下跌 756 · 平盤 74（3／5）', '上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）']) {
   check(text(wide).includes(value), `大盤概況（兩邊都有）: shows 「${value}」`)
 }
 check(count(wide, 'market-widget') >= 4 && count(wide, 'market-widget-dual') === 2, '大盤概況: four widgets, turnover and breadth are the dual-row variant')
 check(/class="market-widget-change[^"]*tone-down"/.test(wide), '大盤概況: a falling index change is green (tone-down)')
+// The turnover scope stays on screen next to each amount (#1 6394637858 point 2); the full wording is in 資料說明.
+check(count(slice(wide, 'market-turnover', 'market-breadth'), 'class="market-row-scope"') === 2, '大盤概況: each turnover row carries its short scope')
+const otherScope = { ...overviewBoth(), exchanges: overviewBoth().exchanges.map((row) => row.exchange === 'TPEx' ? { ...row, turnover: { value: 1e8, scope: 'tpex_all', scope_label: '上櫃全部證券' } } : row) }
+check(text(render('MarketOverviewView other scope', () => <MarketOverviewView overview={otherScope} />)).includes('上櫃 1.00 上櫃全部證券'), '大盤概況: an unknown scope shows the API scope_label')
 check(text(slice(both, '<details', '</details>')).includes('成交金額與漲跌家數'), '大盤概況: phones fold turnover and breadth into 「成交金額與漲跌家數」')
 const one = text(render('MarketOverviewView TWSE only', () => <MarketOverviewView overview={overviewTwseOnly()} />))
 check(one.includes('上櫃大盤資料未取得') && !one.includes('381.69') && !one.includes('2,255.45'), '大盤概況（只有上市）: the TPEx cells read 「上櫃大盤資料未取得」')
@@ -77,6 +81,10 @@ check(explanation.includes('紅色為上漲、綠色為下跌（台股慣例）'
 const headerTwse = text(render('TodayHeader TWSE only', () => <TodayHeader {...headerProps} overview={overviewTwseOnly()} />))
 check(headerTwse.includes('成交金額範圍：上市為集中市場總計（含 ETF、權證等）') && !headerTwse.includes('上櫃為') && !headerTwse.includes('依前一日收市指數'), '資料說明（只有上市）: only the TWSE scope, no TPEx note')
 check(!/hero|glow/.test(header), 'header: no hero or glow (DESIGN_SYSTEM §1)')
+check(/<h1 class="sr-only">今日<\/h1>/.test(header), 'header: the page still has an h1 for assistive tech')
+// Without a dashboard (load failed) the line has no empty source or mode parts.
+const failed = text(slice(render('TodayHeader failed', () => <TodayHeader asOf={null} sourceLabel="" modeLabel="" overview={undefined} />), 'class="home-dataline-text"', '</span>'))
+check(failed.endsWith('資料截至 未提供') && !failed.includes('·'), `header: a failed load reads 「資料截至 未提供」, got 「${failed}」`)
 
 // ---- holding-risk alert row: only verified holding risks, linked to the action centre ----
 const alert = render('HoldingAlert', () => <HoldingAlert actions={riskActions()} />)

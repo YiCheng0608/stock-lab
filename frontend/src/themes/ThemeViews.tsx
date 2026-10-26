@@ -200,7 +200,7 @@ export function ThemesBoardView({
   )
 }
 
-// ---- today: Top 10 per board ----
+// ---- today: Top 5 per board ----
 
 // Today page compact row (#276, UI_COPY_SPEC §8.5): rank, name, quality, score, relative returns and date on one row.
 function HotGroupRow({ item }: { item: ThemeBoardItem }) {

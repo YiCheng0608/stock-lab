@@ -12,7 +12,7 @@ import type {
 } from '../types'
 
 // Group boards (docs/V1_SPEC.md hot_group_v1): industries and themes are ranked separately, one request per board.
-// The board page takes the whole board (MAX_PAGE_SIZE) and filters names locally; the today page shows the Top 10.
+// The board page takes the whole board (MAX_PAGE_SIZE) and filters names locally; the today page shows the Top 5 (#276).
 export const THEME_BOARD_LIMIT = 100
 export const TODAY_BOARD_LIMIT = 5
 export const MEMBER_PAGE_SIZE = 30

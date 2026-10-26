@@ -19,6 +19,11 @@ const SCOPE_LABELS: Record<string, string> = {
   twse_all_securities: '集中市場總計（含 ETF、權證等）',
   tpex_stocks: '上櫃股票',
 }
+// Shown next to each turnover amount, so the scope is on screen without opening 資料說明 (UI_COPY_SPEC §11).
+const SHORT_SCOPE_LABELS: Record<string, string> = {
+  twse_all_securities: '集中市場總計',
+  tpex_stocks: '上櫃股票',
+}
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const dash = (value: number | null | undefined, digits = 0) => isFiniteNumber(value) ? formatFixed(value, digits) : '—'
@@ -49,10 +54,11 @@ function IndexWidget({ spec, row }: { spec: ExchangeSpec; row: MarketOverviewExc
   )
 }
 
-// Turnover is stored in 元 and shown in 億元 with two decimals.
-const turnoverText = (row: MarketOverviewExchange) => {
-  const value = row.turnover?.value
-  return isFiniteNumber(value) ? formatFixed(value / 1e8, 2) : '—'
+// Turnover is stored in 元 and shown in 億元 with two decimals, followed by its short scope.
+function turnoverText(row: MarketOverviewExchange): ReactNode {
+  const { value, scope, scope_label: scopeLabel } = row.turnover ?? { value: null, scope: null, scope_label: null }
+  const short = (scope ? SHORT_SCOPE_LABELS[scope] : undefined) ?? scopeLabel
+  return <>{isFiniteNumber(value) ? formatFixed(value / 1e8, 2) : '—'}{short && <> <span className="market-row-scope">{short}</span></>}</>
 }
 
 function breadthText(row: MarketOverviewExchange): string {
@@ -62,7 +68,7 @@ function breadthText(row: MarketOverviewExchange): string {
   return `上漲 ${dash(breadth.advancers)} · 下跌 ${dash(breadth.decliners)} · 平盤 ${dash(breadth.unchanged)}${limits}`
 }
 
-function DualWidget({ className, label, unit, overview, value }: { className: string; label: string; unit: string; overview: MarketOverview | undefined; value: (row: MarketOverviewExchange) => string }) {
+function DualWidget({ className, label, unit, overview, value }: { className: string; label: string; unit: string; overview: MarketOverview | undefined; value: (row: MarketOverviewExchange) => ReactNode }) {
   return (
     <div className={cx('market-widget market-widget-dual', className)}>
       <div className="market-widget-head"><span className="market-widget-label">{label}</span><span className="market-widget-unit">{unit}</span></div>
@@ -129,8 +135,11 @@ export function TodayHeader({ loading = false, asOf, sourceLabel, modeLabel, bad
   const day = !asOf ? null : /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? formatDay(asOf) : formatTaipeiDay(asOf) ?? formatDay(asOf)
   return (
     <section className="home-header" aria-label="資料狀態">
+      {/* No visible page title (DESIGN_SYSTEM §3); assistive tech still gets one. */}
+      <h1 className="sr-only">今日</h1>
       <div className="home-dataline">
-        <span className="home-dataline-text">{loading ? '資料截至 載入中…' : `資料截至 ${day ?? '未提供'} · ${sourceLabel} · ${modeLabel}`}</span>
+        {/* A failed load has no source or mode: the line is only 「資料截至 未提供」. */}
+        <span className="home-dataline-text">{loading ? '資料截至 載入中…' : [`資料截至 ${day ?? '未提供'}`, sourceLabel, modeLabel].filter(Boolean).join(' · ')}</span>
         {badge}
       </div>
       <details className="data-explanation">
