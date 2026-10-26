@@ -111,7 +111,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 
 每日排程以 Windows 工作排程器執行 `worker.cli daily` 與 `worker.cli news`（news 之後接著 `worker.cli news-llm`）（[ROADMAP V1-G1](ROADMAP.md#v1-範圍基線2026-10-17-核定)）；註冊、查詢、停用與移除見 [§6.2](#62-dailynews-工作的註冊與管理)，日誌與 run 記錄見 [§6.3](#63-日誌與-run-記錄)。自動下單不在第一版範圍。
 
-位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，停在 `origin/master`，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
+位置（使用者 2026-10-17 決定）：正式資料目錄 `C:/Users/YiCheng/stock-lab-data/`（`stock.db`、`raw/`、`logs/`），以 `STOCK_DATA_DIR` 指向；排程只從發佈 checkout `C:/Users/YiCheng/stock-lab-release/`（repo 的獨立 clone，跟著發佈 branch，排程起跑前 `git pull --ff-only`）及其 `.venv` 執行，不從 `master` 管理 checkout。統籌心跳檔、換手標記與壓縮計數檔都在資料目錄的 `logs/` 下（[工作手冊](GITHUB_WORKFLOW.md#統籌-session)）。
 
 新聞任務與 `daily` 分開排程，不掛在 `daily` 之後：
 
@@ -163,7 +163,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 位置 | 路徑 | 說明 |
 | --- | --- | --- |
 | 資料目錄 | `C:/Users/YiCheng/stock-lab-data/` | 正式 `stock.db`、`raw/`、`logs/`。排程以 `-DataDir` 傳入並設成子行程的 `STOCK_DATA_DIR`（預設依序為 `STOCK_DATA_DIR`、`%USERPROFILE%\stock-lab-data`），不由 cwd 推導。 |
-| 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` | repo 的獨立 clone，停在 `origin/master`；排程**只**從這裡執行，不從 `master` 管理 checkout 或任務 worktree。每次執行先 `git pull --ff-only`。 |
+| 發佈 checkout | `C:/Users/YiCheng/stock-lab-release/` | repo 的獨立 clone，跟著發佈 branch：平常是 `master`；版本驗收窗口（V1 G7）期間是 `release/v1`，master 合併的新版本改動不會進排程，由統籌依[工作手冊](GITHUB_WORKFLOW.md#任務流程)第 6 步推進（使用者 2026-10-26 決定）。排程**只**從這裡執行，不從 `master` 管理 checkout 或任務 worktree。每次執行先 `git pull --ff-only`（拉目前 branch 的 upstream）。切換：`git fetch origin` 後 `git checkout -b release/v1 --track origin/release/v1`，回到平常用 `git checkout master`；兩者都在排程沒在跑時做，`git status -sb` 核對。 |
 | Python | `C:/Users/YiCheng/stock-lab-release/.venv` | 依 `backend/validation-requirements.lock.txt` 安裝；依賴變更的 PR 合併後由統籌在此 venv 重裝。預設依序為 `-PythonPath`（別名 `-Python`）、`STOCK_PYTHON`、發佈 checkout 的 `.venv`。 |
 
 首次建立：`git clone` 到發佈 checkout，建 `.venv` 並安裝依賴；以 SQLite backup API 把已初始化的 DB 複製成資料目錄的 `stock.db`（有 WAL 時不裸複製主檔），再於發佈 checkout 註冊工作。daily 開頭只在 DB 的 Alembic revision 不是程式 head 時才跑 `init_db`（含整庫 migration 完整性檢查，多年 DB 上要數分鐘）；已在 head 時直接開始。
