@@ -1616,11 +1616,29 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
     ],
     "actions": [
-        ("actions?limit=20", "meta.total", 7),
-        ("actions?limit=20", "items", 7),
-        ("actions?limit=20", "items.0.instrument.symbol", "9102"),  # the held position
+        # action_tier_v1 (#278): the held 9102, then the three candidates by rank; the
+        # default view hides the ETF's conditional breakout and the two observations.
+        ("actions?limit=20", "meta.total", 4),
+        (
+            "actions?limit=20",
+            "items[].instrument.symbol",
+            ["9102", "9101", "9103", "9201"],
+        ),
+        ("actions?limit=20", "items[].tier", [0, 1, 1, 1]),
+        ("actions?limit=20", "items[].candidate.rank", [None, 1, 2, 3]),
         ("actions?limit=20", "summary.held", 1),
-        ("actions?limit=20", "summary.actionable", 5),
+        ("actions?limit=20", "summary.tier_version", "action_tier_v1"),
+        ("actions?limit=20", "summary.tiers[].shown", [1, 3, 0, 0, 0, 0]),
+        (
+            "actions?limit=20",
+            "summary.hidden",
+            {"etf": 1, "observation": 2, "data_insufficient": 0},
+        ),
+        ("actions?limit=20&view=all&include_etf=true", "meta.total", 7),
+        # A tier's first rows (the page's preview of a tier missing from page 1)
+        # and every holding (A8 drops held candidates).
+        ("actions?tier=1&limit=5", "items[].candidate.rank", [1, 2, 3]),
+        ("actions?tier=0&limit=100", "items[].instrument.symbol", ["9102"]),
         ("portfolio?page=1&page_size=20", "pagination.total", 1),
         ("portfolio?page=1&page_size=20", "items", 1),
         (f"actions/{E}/{S}", "decision_summary.action_state", "conditional_entry"),

@@ -69,6 +69,9 @@ TREE = {
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
     "candidates/CandidateViews.tsx": "import { AiBadge } from '../news/NewsViews'\n",
     "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",
+    "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
+    "actions/actionTiers.ts": "export const actionKey = 1\n",
+    "stock/stockTabs.ts": "export const STOCK_TABS = 1\n",
 }
 
 

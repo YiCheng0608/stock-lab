@@ -616,12 +616,9 @@ def stocks_shots(run: Run, stocks: list[Stock]) -> list[Shot]:
 
 
 def action_detail_shot(stock: Stock) -> Shot:
-    return Shot(
-        "action-detail",
-        f"/actions/{stock.exchange}/{stock.symbol}",
-        (1280,),
-        ("#stock-tab-research",),
-    )
+    """No click: /actions/E/S must land on the stock page's research tab (#278)."""
+
+    return Shot("action-detail", f"/actions/{stock.exchange}/{stock.symbol}", (1280,))
 
 
 def actions_shots(run: Run) -> list[Shot]:
@@ -1890,35 +1887,111 @@ def a2(run: Run) -> str:
     return f"{rows} 筆庫存各有 `記錄來源`"
 
 
+# Each tier section opens with `第 N 級`, its label and `顯示 k／N 檔` (UI_COPY_SPEC §5, #278).
+TIER_HEAD = re.compile(r"^第 ([0-5]) 級$")
+# A table row of the action list ends with its 資料日 cell and the link cell.
+ACTION_ROW = re.compile(r"\t([0-9]{4}/[0-9]{2}/[0-9]{2})\t策略總表 →$")
+ACTIONS_EMPTY = "目前沒有符合篩選的標的。"
+
+
+def tier_block(text: Text, tier: dict) -> tuple[int, int]:
+    """(label line, end) of a tier section; (-1, -1) when the page has none."""
+
+    for i, line in enumerate(text.lines[:-1]):
+        if line == f"第 {tier['tier']} 級" and text.lines[i + 1] == tier["label"]:
+            end = text.find_where(lambda line: bool(TIER_HEAD.match(line)), i + 1)
+            return i + 1, end if end > 0 else len(text.lines)
+    return -1, -1
+
+
+def listed_tiers(payload: dict) -> list[dict]:
+    return [
+        tier
+        for tier in (payload.get("summary") or {}).get("tiers") or []
+        if tier.get("shown")
+    ]
+
+
+# A tier with rows but none on the first page loads its first rows on its own
+# (ACTION_TIER_PREVIEW in frontend/src/actions/actionTiers.ts, UI_COPY_SPEC §5).
+ACTION_TIER_PREVIEW = 5
+MAX_ACTION_PAGE = 100  # backend/app/api.py MAX_PAGE_SIZE
+
+
+def loaded_actions(run: Run) -> list[dict]:
+    """The rows the actions page shows on load, in page order of their tiers."""
+
+    payload = actions_payload(run)
+    items = list(payload.get("items") or [])
+    for tier in listed_tiers(payload):
+        if not any(item.get("tier") == tier["tier"] for item in items):
+            preview = run.get(
+                f"actions?tier={tier['tier']}&limit={ACTION_TIER_PREVIEW}",
+                f"actions-tier{tier['tier']}.json",
+            )
+            items += preview.get("items") or []
+    return items
+
+
+def instrument_key(item: dict) -> tuple:
+    instrument = item.get("instrument") or {}
+    return (instrument.get("exchange"), instrument.get("symbol"))
+
+
 @check("actions", "A3")
 def a3(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
-    items = payload.get("items") or []
-    total = (payload.get("meta") or {}).get("total") or 0
-    pager = f"第 1 頁 · 本頁 {len(items)} 筆 · 共 {total:,} 筆"
-    expect(text.has(pager), f"缺整行 `{pager}`")
-    return f"`{pager}`"
+    items = loaded_actions(run)
+    tiers = listed_tiers(payload)
+    if not tiers:
+        expect(text.has(ACTIONS_EMPTY), f"summary 沒有列出的級別，缺 `{ACTIONS_EMPTY}`")
+        return f"沒有列出的級別，顯示 `{ACTIONS_EMPTY}`"
+    shown = []
+    for tier in tiers:
+        start, end = tier_block(text, tier)
+        expect(start >= 0, f"缺 `第 {tier['tier']} 級`／`{tier['label']}` 區塊")
+        k = sum(item.get("tier") == tier["tier"] for item in items)
+        line = f"顯示 {k:,}／{tier['shown']:,} 檔"
+        expect(
+            text.after(start) == line,
+            f"`{tier['label']}` 下一行是 {text.after(start)!r}，預期 `{line}`（{text.at(start)}）",
+        )
+        rest = tier["shown"] - k
+        if rest > 0:
+            more = f"顯示更多（還有 {rest:,} 檔）"
+            expect(more in text.lines[start:end], f"`{tier['label']}` 缺 `{more}`")
+        shown.append(f"{tier['label']} `{line}`")
+    hidden = [
+        tier["label"]
+        for tier in (payload.get("summary") or {}).get("tiers") or []
+        if not tier.get("shown") and tier_block(text, tier)[0] >= 0
+    ]
+    expect(not hidden, f"shown 為 0 的級別仍有區塊：{'、'.join(hidden)}")
+    return "；".join(shown)
 
 
 @check("actions", "A4")
 def a4(run: Run) -> str:
     payload, text = actions_payload(run), run.text(ACTIONS)
-    k = text.count(lambda line: line == "查看個股詳情 →")
-    items = payload.get("items") or []
-    # #251: zero cards against a non-empty API is a page that lost its cards, not a pass.
-    expect(k > 0 or not items, f"actions.json items {len(items)}，頁面沒有任何行動卡")
-    dates = [m.group(1) for line in text.lines if (m := DATE_LINE.match(line))]
-    expect(len(dates) == k, f"`查看個股詳情 →` {k} 行，`資料日` {len(dates)} 行")
+    dates = [m.group(1) for line in text.lines if (m := ACTION_ROW.search(line))]
+    k = len(dates)
+    items = loaded_actions(run)
+    # #251: zero rows against a non-empty API is a page that lost its rows, not a pass.
+    expect(k > 0 or not items, f"actions.json items {len(items)}，頁面沒有任何行動列")
+    expect(
+        k == len(items),
+        f"以 `策略總表 →` 結尾的列 {k}，actions.json 與各級首批 items {len(items)}",
+    )
     as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
     expect(bool(as_of), "actions.json 沒有 meta.data_as_of")
     late = sorted({day for day in dates if day > slash(as_of)})
-    expect(not late, f"卡片資料日 {late} 晚於 data_as_of {slash(as_of)}")
+    expect(not late, f"列的資料日 {late} 晚於 data_as_of {slash(as_of)}")
     latest = run.facts()["market_latest_trading_date"]
     expect(
         as_of == latest,
         f"data_as_of {as_of} ≠ facts market_latest_trading_date {latest}",
     )
-    return f"{k} 張卡、{len(dates)} 行資料日 ≤ {slash(as_of)}；data_as_of = facts"
+    return f"{k} 列各有資料日 ≤ {slash(as_of)}；data_as_of = facts"
 
 
 @check("actions", "A5")
@@ -1930,11 +2003,11 @@ def a5(run: Run) -> str:
         if "AI 推論" in line or "（推論）" in line
     ]
     expect(not hits, f"出現 LLM 推論標記：{'、'.join(hits)}")
-    # #251: a check for what must be absent proves nothing on a page without cards.
-    k = text.count(lambda line: line == "查看個股詳情 →")
+    # #251: a check for what must be absent proves nothing on a page without rows.
+    k = text.count(lambda line: bool(ACTION_ROW.search(line)))
     if k == 0:
-        raise Undetermined("頁面沒有行動卡，沒有可查的內容")
-    return f"{k} 張卡，沒有 `AI 推論` 與 `（推論）`"
+        raise Undetermined("頁面沒有行動列，沒有可查的內容")
+    return f"{k} 列，沒有 `AI 推論` 與 `（推論）`"
 
 
 def action_detail(run: Run) -> tuple[Stock, dict, Text]:
@@ -1946,6 +2019,8 @@ def action_detail(run: Run) -> tuple[Stock, dict, Text]:
 @check("actions", "A6")
 def a6(run: Run) -> str:
     stock, payload, text = action_detail(run)
+    # The shot clicks nothing: 研究動作 shows only on the research tab, so it proves
+    # /actions/E/S landed on /stocks/E/S?tab=research (#278).
     for line in (stock.symbol, "研究動作"):
         expect(text.has(line), f"缺整行 `{line}`")
     summary = payload.get("decision_summary")
@@ -1972,6 +2047,139 @@ def a7(run: Run) -> str:
         f"頁首 `{symbol}` 下一行是 {text.after(i)!r}，預期個股名稱 `{name}`（{text.at(i)}）",
     )
     return f"頁首 `{symbol}`／`{name}` = stock.json"
+
+
+def tier_of(payload: dict, number: int) -> dict:
+    tiers = (payload.get("summary") or {}).get("tiers") or []
+    return next((tier for tier in tiers if tier.get("tier") == number), {})
+
+
+@check("actions", "A8")
+def a8(run: Run) -> str:
+    payload, text = actions_payload(run), run.text(ACTIONS)
+    listed = candidates(run)
+    tier = tier_of(payload, 1)
+    expect(bool(tier), "actions.json summary.tiers 沒有第 1 級")
+    rows = [item for item in loaded_actions(run) if item.get("tier") == 1]
+    start, end = tier_block(text, tier)
+    ranks = [
+        int(match.group(1))
+        for line in text.lines[max(start, 0) : end if start >= 0 else 0]
+        if (match := RANK_ROW.match(line))
+    ]
+    loaded = [(item.get("candidate") or {}).get("rank") for item in rows]
+    expect(
+        ranks == loaded, f"今日候選區的 `#n` 列 {ranks}，actions.json 第 1 級 {loaded}"
+    )
+    as_of = ((payload.get("meta") or {}).get("data_as_of") or "")[:10]
+    # A held candidate is listed in tier 0 (持倉風險), not in 今日候選.
+    held = {
+        instrument_key(item)
+        for item in run.get(
+            f"actions?tier=0&limit={MAX_ACTION_PAGE}", "actions-holdings.json"
+        ).get("items")
+        or []
+    }
+    want = [
+        item["rank"]
+        for item in listed.get("items") or []
+        if instrument_key(item) not in held
+    ]
+    if listed.get("trading_date") != as_of:
+        # Candidates of another day are not today's tier 1.
+        expect(
+            not ranks,
+            f"candidates.json 是 {listed.get('trading_date')}，資料日 {as_of} 卻有今日候選列",
+        )
+        return f"candidates.json {listed.get('trading_date')} ≠ 資料日 {as_of}，沒有今日候選列"
+    if tier.get("shown") == len(rows):
+        count = (listed.get("candidate_count") or 0) - (
+            len(listed.get("items") or []) - len(want)
+        )
+        expect(
+            ranks == want and len(ranks) == count,
+            f"今日候選區 {ranks}，預期 candidates.json 去掉持倉後的 {want}"
+            f"（candidate_count {listed.get('candidate_count')}，持倉中的候選 "
+            f"{len(listed.get('items') or []) - len(want)} 檔）",
+        )
+        return f"今日候選 {len(ranks)} 列 = candidates.json 去掉持倉，依名次 {ranks}"
+    # Holdings took the first page: the loaded rows are the top of the list.
+    expect(
+        ranks == want[: len(ranks)],
+        f"今日候選區 {ranks} 不是 candidates.json {want} 的前段",
+    )
+    return f"今日候選已載入 {len(ranks)}／{tier.get('shown')} 列，依名次 = candidates.json 前段"
+
+
+# An action row's market line: `上市 · ETF` and the next cells (UI_COPY_SPEC §5).
+ETF_ROW = re.compile(r"^(上市|上櫃|市場待核實) · ETF(\t|$)")
+
+
+@check("actions", "A9")
+def a9(run: Run) -> str:
+    payload, text = actions_payload(run), run.text(ACTIONS)
+    summary = payload.get("summary") or {}
+    etfs = [
+        item
+        for item in loaded_actions(run)
+        if (item.get("instrument") or {}).get("instrument_type") == "etf"
+    ]
+    # Holdings and the watchlist are listed in every view.
+    listed = [
+        (item.get("instrument") or {}).get("symbol")
+        for item in etfs
+        if item.get("tier") != 0 and not item.get("watchlisted")
+    ]
+    expect(not listed, f"預設清單列出 ETF：{'、'.join(map(str, listed))}")
+    expect(
+        (summary.get("view"), summary.get("include_etf")) == ("focus", False),
+        f"actions.json 不是預設篩選：view {summary.get('view')}、include_etf {summary.get('include_etf')}",
+    )
+    rows = text.count(lambda line: bool(ETF_ROW.match(line)))
+    expect(
+        rows == len(etfs),
+        f"頁面 `· ETF` 列 {rows}，actions.json 的持倉／自選 ETF {len(etfs)}",
+    )
+    hidden = (summary.get("hidden") or {}).get("etf")
+    return f"預設清單沒有 ETF（持倉／自選 ETF {len(etfs)} 列）；隱藏 ETF {hidden} 檔"
+
+
+def hidden_line(summary: dict) -> str | None:
+    """The hidden-rows line of UI_COPY_SPEC §5 for the default filter."""
+
+    hidden = summary.get("hidden") or {}
+    parts = [
+        f"{label} {hidden.get(key) or 0:,} 檔"
+        for label, key in (
+            ("ETF", "etf"),
+            ("其他觀察", "observation"),
+            ("策略判斷資料待補", "data_insufficient"),
+        )
+        if hidden.get(key)
+    ]
+    if not parts:
+        return None
+    return f"預設隱藏：{'、'.join(parts)}；自選標的一律顯示。隱藏不刪資料，切換上方篩選即可看到。"
+
+
+@check("actions", "A10")
+def a10(run: Run) -> str:
+    payload, text = actions_payload(run), run.text(ACTIONS)
+    summary = payload.get("summary") or {}
+    expect(
+        isinstance(summary.get("hidden"), dict),
+        "actions.json 沒有 summary.hidden（頁首隱藏數的來源）",
+    )
+    line = hidden_line(summary)
+    if line is None:
+        found = text.find_where(lambda value: value.startswith("預設隱藏："))
+        expect(
+            found < 0,
+            f"summary.hidden 都是 0，頁面仍有 `預設隱藏：`（{text.at(found)}）",
+        )
+        return "summary.hidden 都是 0，沒有隱藏句"
+    expect(text.has(line), f"缺整行 `{line}`")
+    return f"`{line}`"
 
 
 # ---- manual checks: samples picked by fixed rules, judged by an agent ----

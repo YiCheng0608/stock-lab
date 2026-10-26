@@ -4,6 +4,7 @@ import { StaticRouter } from 'react-router-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import * as AppModule from '../App'
+import * as ActionModule from '../actions/ActionViews'
 import * as CandidateModule from '../candidates/CandidateViews'
 import { CANDIDATE_DISCLAIMER, NOTE_DISCLAIMER, NOTE_MISSING_TEXT, NOTE_PENDING_TEXT, NOT_COMPUTED_TEXT, candidateSourceText } from '../candidates/candidates'
 import { completeItem, listResponse, longList, notComputedResponse, partialItem, zeroResponse } from '../candidates/candidates.fixtures'
@@ -171,13 +172,16 @@ const conditional = {
   trigger_price: 21.5, invalid_price: 20.1, target_1: 23.8, risk_reward: 1.6, reasons: [], conflicts: [], strategies: [], missing_data_priority: [], alternative_strategies: [],
   level_semantics: { version: 'signal-level-semantics/v1', kind: 'rule_reference' },
 } as unknown as ActionSummary
-const actionCard = render('ProductActionCard', () => { const Card = component(AppModule as Record<string, unknown>, 'ProductActionCard'); return <Card action={conditional} /> })
-check(/<b class="level-stop">20\.10<\/b>/.test(actionCard) && /<b class="level-target">23\.80<\/b>/.test(actionCard), `行動頁卡片: stop and target carry the level classes`)
-check(/<b class="level-entry">21\.50<\/b>/.test(actionCard), '行動頁卡片: the trigger is the entry level')
+// The action list shows the levels now (#278; #297 review L5 removed the unused ProductActionCard).
+const tierSection = (tier: number, item: ActionSummary) => ({ tier: tier as 0 | 1 | 2, key: 'k', label: 'L', shown: 1, items: [{ ...item, tier }] as ActionSummary[] })
+const actionCard = render('ActionTierSectionView', () => { const View = component(ActionModule as Record<string, unknown>, 'ActionTierSectionView'); return <View section={tierSection(2, conditional)} canLoadMore onMore={() => {}} /> })
+check(/<td class="num level-stop">20\.10<\/td>/.test(actionCard) && /<td class="num level-target">23\.80<\/td>/.test(actionCard), `行動頁列表: stop and target carry the level classes`)
+check(/<td class="num level-entry">21\.50<\/td>/.test(actionCard), '行動頁列表: the trigger is the entry level')
+check(/<dd class="level-stop">20\.10<\/dd>/.test(actionCard) && /<dd class="level-target">23\.80<\/dd>/.test(actionCard), '行動頁手機卡: stop and target carry the level classes')
 const actionDetail = render('ActionDetailPanel', () => { const Panel = component(AppModule as Record<string, unknown>, 'ActionDetailPanel'); return <Panel action={conditional} /> })
 check(/<b class="level-stop">20\.10<\/b>/.test(actionDetail) && /<b class="level-target">23\.80<\/b>/.test(actionDetail), '行動詳情: stop and target carry the level classes')
 const held = { ...conditional, action_state: 'reduce_exit', held: true, stop_price: 19.5, stop_price_semantics: { kind: 'user_position_risk_input' } } as unknown as ActionSummary
-const heldCard = render('ProductActionCard held', () => { const Card = component(AppModule as Record<string, unknown>, 'ProductActionCard'); return <Card action={held} /> })
-check(/<b class="level-stop">19\.50<\/b>/.test(heldCard), '行動頁卡片: a holding stop is a stop level too')
+const heldCard = render('ActionTierSectionView held', () => { const View = component(ActionModule as Record<string, unknown>, 'ActionTierSectionView'); return <View section={tierSection(0, held)} canLoadMore onMore={() => {}} /> })
+check(/<td class="num level-stop">19\.50<\/td>/.test(heldCard), '行動頁列表: a holding stop is a stop level too')
 
 if (failures.length) throw new Error(`${failures.length} of ${checks} today checks failed:\n- ${failures.join('\n- ')}`)

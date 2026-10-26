@@ -202,6 +202,12 @@ a.symbol-link:hover { color: var(--color-primary); }
 .quality-line:first-of-type { margin-top: var(--space-2); }
 
 .portfolio-subsection { margin-bottom: var(--space-5); }
+/* DESIGN_SYSTEM §5 庫存一行: no holdings, one row; the form opens inside the same card. */
+.portfolio-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
+.portfolio-line-head { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; }
+.portfolio-line-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.portfolio-line .portfolio-editor { margin: 0; }
+.portfolio-line .portfolio-editor[open] { flex: 1 1 100%; }
 .portfolio-editor { margin: 0 0 var(--space-3); }
 .portfolio-editor > summary, .detail-disclosure > summary, .deferred-list > summary, .news-full summary, .technical-details summary, .details > summary, .data-explanation summary { color: var(--color-primary); cursor: pointer; font-size: 14px; }
 .portfolio-editor[open] > summary, .details[open] > summary { margin-bottom: var(--space-3); }
@@ -455,6 +461,32 @@ a.symbol-link:hover { color: var(--color-primary); }
 .theme-news-title { overflow: hidden; color: var(--color-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .theme-news-title:hover { color: var(--color-primary); }
 
+/* ---- action centre tiers (DESIGN_SYSTEM §5 行動列表、篩選膠囊) ------------------------------------- */
+.action-filters { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.filter-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.filter-chip { cursor: pointer; font-variant-numeric: tabular-nums; }
+.filter-chip:hover { border-color: var(--color-border-hover); color: var(--color-text); }
+.filter-chip-selected, .filter-chip-selected:hover { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
+.action-hidden-note, .page-title .action-hidden-note { margin: 0; font-size: 14px; line-height: 1.6; }
+.action-tier { margin-top: var(--space-8); }
+.action-tier .section-head { flex-wrap: wrap; }
+.action-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.action-table th, .action-table td { height: auto; padding: var(--space-2) var(--space-3); }
+.action-table th { height: 40px; }
+.action-table td { line-height: 1.45; }
+.action-table .candidate-rank { display: inline-block; min-width: 36px; font-size: 14px; }
+.action-table .action-note-cell { min-width: 10em; max-width: 22em; font-size: 13px; }
+.action-change { font-size: 12px; }
+.action-no-close { white-space: normal; text-align: left; }
+.action-cards { display: none; gap: var(--space-3); }
+.action-card-mini { display: grid; gap: var(--space-1); min-width: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
+.action-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
+.action-card-head .symbol-link { min-width: 0; overflow-wrap: anywhere; }
+.action-card-close b { font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; }
+.action-card-close .action-change { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.action-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.action-more { margin-top: var(--space-3); }
+
 /* ---- daily candidates (DESIGN_SYSTEM §7) -------------------------------------------------------- */
 .candidates-section .section-head { flex-wrap: wrap; }
 .candidate-t1 { margin: 0; }
@@ -638,6 +670,9 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-more { display: block; }
   .candidate-table-wrap { display: none; }
   .candidate-cards { display: grid; }
+  .action-table-wrap { display: none; }
+  .action-cards { display: grid; }
+  .action-tier { margin-top: var(--space-6); }
   .strategy-table-wrap { display: none; }
   .strategy-cards { display: grid; }
   /* Phones keep at least two candidate cards on the first screen (DESIGN_SYSTEM §4): the header text takes its own

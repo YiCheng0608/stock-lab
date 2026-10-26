@@ -16,7 +16,9 @@
 | `/news`、`/news/:id` | 新聞 | 新資訊、來源、相關標的與已知／推論／未知的影響。 |
 | `/themes`、`/themes/:id` | 族群 | 官方產業與題材、熱度、廣度、集中度及資料限制。 |
 | `/stocks`、`/stocks/:exchange/:symbol` | 個股 | 四個判斷面向、條件計畫與完整證據。 |
-| `/actions` | 行動 | 持倉風險、有效計畫、待觸發／到期／暫無條件與資料待補。 |
+| `/actions` | 行動 | 持倉風險、今日候選與其他成立條件、接近成立的標的；其他觀察與資料待補預設收合（[UI_COPY_SPEC §5](UI_COPY_SPEC.md#5-行動中心的分級與預設篩選)）。 |
+
+行動頁的分級是列表排序，不改變 [§6](#action-merge) 的行動摘要判定；每列的狀態、價位與理由仍來自該檔的行動摘要。`/actions/:exchange/:symbol` 轉到個股頁的「研究條件」分頁（`/stocks/:exchange/:symbol?tab=research`），不另設行動詳情頁。
 
 主導航維持五個；研究（`/research/*`）、系統資料品質（`/system/data-quality`）與詞彙（`/glossary`）為次要入口，不另設第二套主導航。
 
