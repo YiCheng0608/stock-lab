@@ -67,7 +67,8 @@ export function QualityBadge({ quality, compact = false, explain = false }: { qu
   const at = explain ? label.indexOf(pending) : -1
   return (
     <Badge tone={qualityTone(quality)} className={compact ? 'badge-compact' : undefined}>
-      {at < 0 ? label : <>{label.slice(0, at)}<Term id="event_data_pending">{pending}</Term>{label.slice(at + pending.length)}</>}
+      {/* One inline span: the badge is a flex box, and bare children would each become a separate item. */}
+      {at < 0 ? label : <span>{label.slice(0, at)}<Term id="event_data_pending">{pending}</Term>{label.slice(at + pending.length)}</span>}
     </Badge>
   )
 }

@@ -83,6 +83,7 @@ const tableHead = /<thead>[\s\S]*?<\/thead>/.exec(tableMarkup)?.[0] ?? ''
 check(hasTerm(tableHead, '排名') && hasTerm(tableHead, '分數'), `族群榜: 「排名」「分數」 headers open 熱度分數與排名 (found ${termLabels(tableHead).join('、') || 'none'})`)
 check(hasTerm(boardMarkup, '同榜百分位'), '族群榜: the table note explains 「同榜百分位」')
 check(hasTerm(tableMarkup, '事件資料待補'), '族群榜: the partial-quality badge in the table explains 「事件資料待補」')
+check(/<span>技術與籌碼觀察（<button[^>]*>事件資料待補<\/button>）<\/span>/.test(tableMarkup), '族群榜: the badge label stays one inline span, so the flex badge does not split it into three items')
 const links = boardMarkup.match(/<a [\s\S]*?<\/a>/g) ?? []
 check(links.every((link) => !link.includes('<button')), '族群榜: no term button sits inside a link (the phone cards stay plain)')
 const detailMarkup = render('ThemeDetailView', () => <ThemeDetailView detail={themeDetail()} board={loaded(themeBoard())} members={loaded(membersPage())} onMemberPageChange={noop} news={loaded({ items: [] })} />)
