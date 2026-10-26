@@ -13,8 +13,8 @@ moving averages, confirmations, each strategy's state), T's bar and feature,
 the bars through T and the corporate actions stored so far.  When an action
 dated after T up to the next session is stored, the prices are converted to
 the next session's basis (``price_basis``).  The next session is the
-instrument's next stored bar when one exists, else the next weekday (no
-holiday calendar is stored).
+official calendar's (the signals' earliest execution date, #294), else the
+next weekday when the stored calendar cannot answer.
 
 ``signals`` is never written.  The same date gives the same rows: a row is
 written, and ``computed_at`` moved, only when a value changes.
@@ -266,8 +266,8 @@ def compute_strategy_levels(
         bar = bars[-1]
         inputs = _strategy_inputs(evidence.get("inputs") or {}, bar, atr14)
         next_date = pipeline._next_execution_date(
-            db, instrument.id, signal_date
-        ) or _next_weekday(signal_date)
+            db, signal_date
+        ).date or _next_weekday(signal_date)
         next_inputs = _next_session_inputs(db, instrument, bars, next_date, inputs)
         for signal, strategy in current:
             signal_evidence = signal.rule_evidence_json or {}

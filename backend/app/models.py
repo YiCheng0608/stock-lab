@@ -194,6 +194,36 @@ class MarketSummary(Base):
     )
 
 
+class TradingCalendarDay(Base):
+    """One row of TWSE's yearly official holiday schedule (Issue #294).
+
+    Written by ``worker.trading_calendar``; every row of a year points at the
+    capture that brought the year's current content.  A year with rows is a
+    published year; a weekday it does not list as closed is a session.
+    """
+
+    __tablename__ = "trading_calendar_days"
+    __table_args__ = (
+        UniqueConstraint("exchange", "calendar_date", name="uq_trading_calendar_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(20))
+    calendar_date: Mapped[date] = mapped_column(Date)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    # closed, trading (a notice such as the first session after New Year) or
+    # unknown (neither marker; app.trading_calendar.classify).
+    kind: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    source: Mapped[str] = mapped_column(String(120))
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (

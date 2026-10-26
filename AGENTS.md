@@ -104,6 +104,7 @@
 | 標的狀態同步被 5% 防呆略過時由統籌處理（#212） | 看門狗資料不變量 `invariant_status_sync`；後端測試 `test_a_skipped_status_sync_is_commented_until_a_later_sync_applies` | `tools/ops/watchdog_helper.py`、`tools/ops/watchdog.sh`、`docs/OPERATIONS.md`（§6.1） |
 | verify 假資料庫的下市／轉市列與 worker 寫出的一致（#212） | 後端測試 `test_the_verify_fixture_lifecycle_rows_are_what_the_worker_writes` | `tools/verify/fixture_data.py`（`LIFECYCLE`）、`backend/tests/test_instrument_lifecycle.py` |
 | 結案腳本在 PR 未合併或 master CI 非綠時零刪除；`--extra-dir` 不得是 repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data`、`STOCK_DATA_DIR`，字面與解析連結後的實際路徑都比、兩者不同（經過 junction／symlink、8.3 短檔名）就拒絕，刪除前再查一次；junction 先拆；orca／gh／git 讀取失敗也拒絕（#282、#283 review） | 後端測試 `test_coordinator_scripts.py`（假 orca／gh／git，路徑一律 `tmp_path` 替身） | `tools/ops/close_task.sh`、`tools/ops/coordinator_lib.sh`（`guard_dir`）、`backend/tests/test_coordinator_scripts.py` |
+| 訊號的規則最早執行日只由官方休市表推算，不讀之後的日線；休市表只有一套分類規則；最新訊號日有訊號缺這個日期時由統籌處理（#294） | 後端測試 `test_trading_calendar.py`（有／沒有後續日線結果相同、缺年度留空並計入 `signals_without_date`、補假日分類）；看門狗資料不變量 `invariant_execution_calendar` | `backend/app/trading_calendar.py`、`backend/worker/pipeline.py`（`_next_execution_date`）、`tools/ops/watchdog_helper.py`、`tools/ops/watchdog.sh` |
 | 派工只在 `orca terminal wait --for tui-idle` 回 `satisfied:true` 後送任務；巡檢的 gh 呼叫不超過上限，不覆寫別的統籌一小時內的心跳（#282） | 後端測試 `test_coordinator_scripts.py` | `tools/ops/dispatch.sh`、`tools/ops/patrol.sh` |
 
 ## 上下文壓縮時保留

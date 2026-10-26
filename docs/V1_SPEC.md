@@ -34,6 +34,10 @@
 - `invalid_price < entry < target_1`；第一目標 RR 必須 `>= 1.5`；存在的 `target_2 > target_1`。
 - IPO 少於 20 根不觀察，20–59 根只可 observation，至少 60 根才可 actionable。
 - ETF 全部收集、分類並進 ETF 分榜。broad_market、dividend、sector、thematic、commodity 可套一般策略；bond、leveraged、inverse 回傳 `etf_category_excluded_from_actionable_signals:<category>`，仍可收集與排行。
+- **規則最早執行日**（`signals.earliest_execution_date`、`rule_evidence_json.execution.earliest`，[#294](https://github.com/YiCheng0608/stock-lab/issues/294)）：依 T 當晚已存的[官方休市表](DATA_SOURCES.md#交易日曆)推算 T 之後第一個交易日（週間日、且休市表沒有列為休市；上市與上櫃共用）。只讀休市表、不讀 T 之後的日線，所以當晚與之後重算的結果相同；個股隔天停牌不影響這個日期。`execution.calendar` 記來源 `twse_holiday_schedule`、讀到的休市表 raw（`raw_payload_ids`）與留空原因 `missing_reason`。
+  - 休市表缺所需年度（`calendar_year_missing`，例如年底時明年尚未公告）或碰到無法分類的列（`calendar_row_unknown`）時留空，不猜、不退回週間日；analyze 步驟記 `execution_calendar`，看門狗留言（[OPERATIONS §6.1](OPERATIONS.md#61-排程看門狗)）。
+  - 颱風等臨時休市不在休市表裡，T 當晚無法得知，所以不納入，事後也不改寫。例如 2026-10-22 的訊號得到 10/23，而 10/23 實際上臨時休市。
+  - 成交判定（訊號追蹤與[使用者追蹤計畫](#使用者追蹤計畫)）讀實際日線（T 之後第一根），不讀這個欄位；追蹤計畫只快照它。改用休市表以前寫入的訊號這欄為空，沒有回填。
 
     observation -> conditional -> active -> target_1_hit -> target_2_hit -> settled
                       |              +-> invalidated / expired / incomparable -> settled
@@ -200,7 +204,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 條件價位：以 T 日收盤後已知的資料，反推下一個交易日（T+1）的收盤與成交量要落在哪裡，T+1 的 analyze 才會判該策略的價格與量能條件成立。T+1 的前 20 日窗口是 T−19～T，所以門檻是已知數，不是預測；族群、法人、融資無法反推，只列 T 日實際值與門檻。版本 `levels_version = "strategy_levels_v1"`（`app.domain.STRATEGY_LEVELS_VERSION`），公式、升降單位表（`app.strategies.levels.TICK_LADDERS`）與漲跌幅由 `backend/tests/test_strategy_levels.py` 釘住；改任何一項要升版另寫新列，舊列保留。觀察價位**不是**成立的價位：`signals` 不改，決策摘要、今日頁、候選與使用者追蹤計畫都不讀這張表（行動頁列表只讀 `conditions_json` 與價格差距，不顯示觀察價位），追蹤計畫仍只收 conditional 訊號。
 
-**價格基準**：價格用 T 日價格基準的還原序列（與 `technical_features`、`rule_evidence_json.inputs` 相同）。T 之後到下一交易日（含）的公司行動若已存入 `corporate_actions`，全部價格乘上該段的換算因子，改用下一交易日的基準（`price_basis = next_session_raw_basis`；現金股利沒有參考價時以 T 收盤代替，同 analyze）；沒有存入時維持 `score_date_raw_basis`，T+1 除權息時門檻會偏差。下一交易日取該股 T 之後已存的第一根日線，沒有時取 T 之後第一個週間日（未存休市日曆，`next_session_date` 記用哪一天）。量用原始股數。
+**價格基準**：價格用 T 日價格基準的還原序列（與 `technical_features`、`rule_evidence_json.inputs` 相同）。T 之後到下一交易日（含）的公司行動若已存入 `corporate_actions`，全部價格乘上該段的換算因子，改用下一交易日的基準（`price_basis = next_session_raw_basis`；現金股利沒有參考價時以 T 收盤代替，同 analyze）；沒有存入時維持 `score_date_raw_basis`，T+1 除權息時門檻會偏差。下一交易日同[規則最早執行日](#價位etf-與生命週期)（官方休市表推算，連假後第一天的除權息也會換算）；休市表答不出來時取 T 之後第一個週間日。`next_session_date` 記用哪一天。量用原始股數。
 
 **升降單位**：股票與 IPO：未滿 10 元 0.01、10～50 元 0.05、50～100 元 0.1、100～500 元 0.5、500～1,000 元 1、1,000 元以上 5；ETF：未滿 50 元 0.01、50 元以上 0.05。價格先四捨五入到小數 6 位再取整（與 `prior_20_highs` 相同）；嚴格大於取「下一個合法價位」，下界往上取、上界往下取。最小量無條件進位、最大量無條件捨去，到整數股（張數顯示由前端依 UI_COPY_SPEC 換算）。
 

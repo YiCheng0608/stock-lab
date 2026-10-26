@@ -2281,10 +2281,9 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
         pipeline, "_calculate_group_scores", lambda *_args, **_kwargs: None
     )
 
-    def fake_generate(
-        db, score_date, strategies, *, namespace="analysis", data_cutoff=None
-    ):
-        assert data_cutoff == end_date
+    # Signals no longer take a data cutoff: the earliest execution date comes
+    # from the official calendar, never from later bars (#294).
+    def fake_generate(db, score_date, strategies, *, namespace="analysis"):
         if score_date != start_date:
             return 0
         strategy = strategies["breakout_v1"]

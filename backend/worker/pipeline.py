@@ -82,6 +82,7 @@ from app.tracking import (
     settle,
     track_path,
 )
+from app.trading_calendar import NextSession, next_session
 from worker.market_summary import store_market_summaries
 from worker.sources import (
     ActionRecord,
@@ -1378,23 +1379,15 @@ def _require_same_formula(
     )
 
 
-def _next_execution_date(
-    db: Session,
-    instrument_id: int,
-    signal_date: date,
-    *,
-    max_date: date | None = None,
-) -> date | None:
-    return db.scalar(
-        select(MarketBar.trading_date)
-        .where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date > signal_date,
-            *([MarketBar.trading_date <= max_date] if max_date is not None else []),
-        )
-        .order_by(MarketBar.trading_date)
-        .limit(1)
-    )
+def _next_execution_date(db: Session, signal_date: date) -> NextSession:
+    """The market's next session after the signal day (#294).
+
+    Read from the stored official schedule only (app.trading_calendar), never
+    from later bars, so the night of the signal and any later replay agree.
+    No date (and the reason) when the schedule cannot answer.
+    """
+
+    return next_session(db, signal_date)
 
 
 def _best_group_for_signal(
@@ -1708,7 +1701,6 @@ def _write_strategy_signal(
     context: _SignalContext,
     evaluations: dict[str, RuleEvaluation],
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
 ) -> None:
     rule = REGISTRY[strategy_key]
@@ -1822,12 +1814,8 @@ def _write_strategy_signal(
     )
     signal.data_cutoff = f"{signal_date.isoformat()} 13:30 Asia/Taipei"
     signal.source_report = context.bar.source
-    signal.earliest_execution_date = _next_execution_date(
-        db,
-        instrument.id,
-        signal_date,
-        max_date=data_cutoff,
-    )
+    execution = _next_execution_date(db, signal_date)
+    signal.earliest_execution_date = execution.date
     signal.data_quality = (
         "complete"
         if status in {"conditional", "observation"} and not missing_reasons
@@ -1870,6 +1858,7 @@ def _write_strategy_signal(
             "earliest": signal.earliest_execution_date.isoformat()
             if signal.earliest_execution_date
             else None,
+            "calendar": execution.evidence(),
             "fill_policy": "next_session_open_or_better_plus_adverse_slippage",
             "execution_slippage_bps": EXECUTION_SLIPPAGE_BPS,
             "round_trip_transaction_cost_bps": ROUND_TRIP_TRANSACTION_COST_BPS,
@@ -1895,7 +1884,6 @@ def _upsert_signal_for_strategy(
     strategies: dict[str, StrategyVersion],
     strategy_key: str,
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
 ) -> bool:
     """Write one strategy's row; every strategy is evaluated for the rationale."""
@@ -1914,7 +1902,6 @@ def _upsert_signal_for_strategy(
         context=context,
         evaluations=_evaluate_strategies(context, capture),
         namespace=namespace,
-        data_cutoff=data_cutoff,
         capture=capture,
     )
     return True
@@ -1927,7 +1914,6 @@ def _upsert_signal(
     signal_date: date,
     strategies: dict[str, StrategyVersion],
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
 ) -> bool:
     """Persist one auditable result per registered strategy and session.
@@ -1952,7 +1938,6 @@ def _upsert_signal(
             context=context,
             evaluations=evaluations,
             namespace=namespace,
-            data_cutoff=data_cutoff,
             capture=capture,
         )
     return True
@@ -1964,7 +1949,6 @@ def _generate_signals(
     strategies: dict[str, StrategyVersion],
     *,
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
 ) -> int:
     instruments = db.scalars(
@@ -1982,7 +1966,6 @@ def _generate_signals(
                 signal_date=signal_date,
                 strategies=strategies,
                 namespace=namespace,
-                data_cutoff=data_cutoff,
                 capture=capture,
             )
         )
@@ -4428,10 +4411,37 @@ def _analyze_session(
     if checkpoint is not None:
         checkpoint()
     signals_upserted = _generate_signals(db, score_date, strategies, capture=capture)
+    db.flush()
     return {
         "status": "success",
         "date": score_date.isoformat(),
         "signals_upserted": signals_upserted,
+        "execution_calendar": _execution_calendar_summary(db, score_date),
+    }
+
+
+def _execution_calendar_summary(db: Session, score_date: date) -> dict[str, Any]:
+    """Whether the day's signals got an earliest execution date (#294).
+
+    Kept in the analyze step's details: an empty date never fails analyze,
+    so the reason and the count of signals without one are what show it
+    (and the watchdog's execution_calendar invariant).
+    """
+
+    answer = _next_execution_date(db, score_date)
+    return {
+        "status": "available" if answer.date else "unavailable",
+        "reason": answer.reason,
+        "missing_year": answer.missing_year,
+        "next_session": answer.date.isoformat() if answer.date else None,
+        "raw_payload_ids": list(answer.raw_payload_ids),
+        "signals_without_date": db.scalar(
+            select(func.count(Signal.id)).where(
+                Signal.signal_date == score_date,
+                Signal.signal_key.like("analysis-%"),
+                Signal.earliest_execution_date.is_(None),
+            )
+        ),
     }
 
 
@@ -5086,7 +5096,6 @@ def backtest(
                     score_date,
                     strategies,
                     namespace=f"backtest-{run.id}",
-                    data_cutoff=end_date,
                 )
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last

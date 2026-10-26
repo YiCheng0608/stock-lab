@@ -612,6 +612,65 @@ def test_a_skipped_status_sync_is_commented_until_a_later_sync_applies(wd):
     assert wd.text("gh_calls.log") == ""
 
 
+def _signal_rows(path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+    """trading_calendar_days (empty: the table marks a migrated database) and
+    signals (signal_key, signal_date, earliest_execution_date) rows."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("CREATE TABLE trading_calendar_days (id INTEGER PRIMARY KEY)")
+        conn.execute(
+            "CREATE TABLE signals (id INTEGER PRIMARY KEY, signal_key VARCHAR(220),"
+            " signal_date DATE, earliest_execution_date DATE)"
+        )
+        conn.executemany(
+            "INSERT INTO signals (signal_key, signal_date, earliest_execution_date)"
+            " VALUES (?, ?, ?)",
+            rows,
+        )
+    conn.close()
+
+
+def test_signals_without_an_execution_date_are_commented(wd):
+    # #294: the calendar step is non-blocking, so a missing year shows here.
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    assert "invariant execution_calendar skip reason=no_trading_calendar" in (
+        wd.run("--dry-run").stdout
+    )
+    _signal_rows(
+        db,
+        [
+            # An older day and another namespace are outside the check.
+            ("analysis-TWSE-2330-2026-10-16-a", "2026-10-16", None),
+            ("backtest-7-TWSE-2330-2026-10-19-a", "2026-10-19", None),
+            ("analysis-TWSE-2330-2026-10-19-a", "2026-10-19", "2026-10-20"),
+            ("analysis-TWSE-2330-2026-10-19-b", "2026-10-19", None),
+        ],
+    )
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant execution_calendar violation signal_date=2026-10-19"
+        " signals=2 without_date=1"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：最新訊號日 2026-10-19 的 2 筆 analysis 訊號中，"
+        "1 筆沒有規則最早執行日"
+    ) in dry.stdout
+
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "UPDATE signals SET earliest_execution_date='2026-10-20'"
+            " WHERE signal_key='analysis-TWSE-2330-2026-10-19-b'"
+        )
+    conn.close()
+    result = wd.run()
+    assert (
+        "invariant execution_calendar ok signal_date=2026-10-19"
+        " signals=2 without_date=0"
+    ) in result.stdout
+    assert wd.events()[-1] == "schedules_ok"
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")

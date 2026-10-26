@@ -23,7 +23,10 @@ The result goes to stdout without a trailing newline.
                                    trading_date with an unknown or empty source
                                    or no data_as_of), llm_done_provenance
                                    (done news_llm_results without llm_model or
-                                   prompt_version)
+                                   prompt_version), instrument_status_sync,
+                                   execution_calendar (analysis signals of the
+                                   latest signal date without
+                                   earliest_execution_date)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -232,7 +235,29 @@ def invariants(db: str, today: str) -> str:
                 f"instrument_status_sync {_state(len(skipped))}"
                 f" exchanges={len(rows)} skipped={','.join(skipped) or 'none'}"
             )
+        lines.append(_execution_calendar(conn))
     return "\n".join(lines)
+
+
+def _execution_calendar(conn: sqlite3.Connection) -> str:
+    """Analysis signals of the latest signal date without an earliest execution
+    date (Issue #294): the holiday schedule lacks the year or its step failed.
+    A database before the calendar migration is skipped."""
+
+    if not _has_table(conn, "trading_calendar_days"):
+        return "execution_calendar skip reason=no_trading_calendar"
+    day, signals, without = conn.execute(
+        "SELECT max(signal_date), count(*),"
+        " coalesce(sum(earliest_execution_date IS NULL), 0)"
+        " FROM signals WHERE signal_key LIKE 'analysis-%' AND signal_date=("
+        "SELECT max(signal_date) FROM signals WHERE signal_key LIKE 'analysis-%')"
+    ).fetchone()
+    if day is None:
+        return "execution_calendar skip reason=no_analysis_signals"
+    return (
+        f"execution_calendar {_state(without)} signal_date={str(day)[:10]}"
+        f" signals={signals} without_date={without}"
+    )
 
 
 def main(argv: list[str]) -> int:
