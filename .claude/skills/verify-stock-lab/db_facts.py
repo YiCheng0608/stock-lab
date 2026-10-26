@@ -3,8 +3,9 @@
 Usage: python db_facts.py <copy stock.db> [<exchange> <symbol>]
 
 Opens the copy with mode=ro and query_only and prints one JSON object with the
-latest dates and counts the feature checks compare against. A missing table
-gives null. ``market_summary_latest`` is each exchange's newest market_summaries
+latest dates and counts the feature checks compare against. A missing table,
+or a query without a row, gives null; a count of an empty table is 0.
+``market_summary_latest`` is each exchange's newest market_summaries
 row (the values of dashboard.market_overview). With an instrument, also its
 latest market bar date and source.
 Candidate facts only count runs of the current score version, as the API does
@@ -99,6 +100,12 @@ ORDER BY b.trading_date DESC LIMIT 1
 """
 
 
+def _value(conn: sqlite3.Connection, sql: str) -> object:
+    # A latest-row query has no row before its first run of the version (#307).
+    row = conn.execute(sql).fetchone()
+    return row[0] if row else None
+
+
 def facts(db: Path, instrument: tuple[str, str] | None = None) -> dict[str, object]:
     uri = db.resolve().as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True)) as conn:
@@ -108,7 +115,7 @@ def facts(db: Path, instrument: tuple[str, str] | None = None) -> dict[str, obje
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         result: dict[str, object] = {
-            key: conn.execute(sql).fetchone()[0] if table in tables else None
+            key: _value(conn, sql) if table in tables else None
             for key, (table, sql) in QUERIES.items()
         }
         result["market_summary_latest"] = (
