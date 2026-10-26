@@ -21,6 +21,12 @@ import {
   usableAi,
 } from './newsView'
 
+// The frontend ships no Node typings; scripts/ci-test.cjs runs this module under Node, so declare what it uses.
+declare const require: (id: string) => unknown
+declare const __dirname: string
+const fs = require('node:fs') as { readFileSync(file: string, encoding: 'utf8'): string }
+const path = require('node:path') as { join(...parts: string[]): string }
+
 // Standalone regression module (no browser, no server, no network) for Issue 164: /news tabs and cards, /news/:id facts vs
 // AI inference, and the stock news timeline.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
@@ -57,6 +63,40 @@ const errored = render(<NewsListView filters={{ tab: 'domestic', q: '', symbol: 
 check(errored.includes('新聞暫時無法載入') && errored.includes('API 503'), 'API error is shown, not an empty list')
 const paged = render(<NewsListView filters={{ tab: 'domestic', q: '', symbol: '' }} onFiltersChange={noop} query={loaded(newsPage([newsItem()], { next_cursor: 'abc', has_more: true, total: 63 }))} page={2} onNext={noop} onPrevious={noop} onReset={noop} />)
 check(paged.includes('第 2 頁') && paged.includes('共 63 則') && paged.includes('class="secondary-button">下一頁</button>') && !paged.includes('disabled="">上一頁'), 'cursor pager: previous and next enabled on page 2')
+
+// ---- #300 search bars (DESIGN_SYSTEM §5 搜尋列): one row, buttons as tall as the inputs, never alone on a line ----
+// The news bar is the same form on every tab: the two inputs, 搜尋, and 清除 once a filter is set, with no wrapper between.
+const formControls = (markup: string) => {
+  const form = /<form class="news-filters"[^>]*>([\s\S]*?)<\/form>/.exec(markup)?.[1] ?? ''
+  const controls = form.match(/<input[^>]*>|<button[^>]*>[^<]*<\/button>/g) ?? []
+  return { leftover: controls.reduce((rest, control) => rest.replace(control, ''), form), labels: controls.map((control) => /aria-label="([^"]*)"/.exec(control)?.[1] ?? />([^<]*)<\/button>/.exec(control)?.[1] ?? '?') }
+}
+for (const tab of ['domestic', 'international', 'official'] as const) {
+  const bar = formControls(listView(tab, [newsItem()]))
+  check(bar.leftover === '' && bar.labels.join('|') === '搜尋新聞|依股票代號篩選|搜尋', `${tab} search bar: inputs and 搜尋 are the form's only children, got ${bar.labels.join('|')} + 「${bar.leftover}」`)
+}
+const filteredBar = formControls(render(<NewsListView filters={{ tab: 'official', q: '董事會', symbol: '' }} onFiltersChange={noop} query={loaded(newsPage([officialItem()]))} page={1} onNext={noop} onPrevious={noop} onReset={noop} />))
+check(filteredBar.labels.join('|') === '搜尋新聞|依股票代號篩選|搜尋|清除', `official search bar with a filter adds 清除 last, got ${filteredBar.labels.join('|')}`)
+// The layout lives in styles.css; this reads its rules (outside and inside the 640px block) instead of a browser.
+const css = fs.readFileSync(path.join(__dirname, '..', 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+const phoneStart = css.indexOf('@media (max-width: 640px) {')
+const phoneCss = css.slice(phoneStart, css.indexOf('\n}', phoneStart))
+const wideCss = css.replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*\s*\}/g, '')
+const declarations = (sheet: string, selector: string) => [...sheet.matchAll(/(?:^|\n)\s*([^{}\n][^{}]*)\{([^}]*)\}/g)]
+  .filter((match) => match[1].split(',').some((part) => part.trim() === selector)).map((match) => match[2]).join(';')
+const has = (sheet: string, selector: string, declaration: RegExp) => check(declaration.test(declarations(sheet, selector)), `${selector} needs ${declaration.source}, got 「${declarations(sheet, selector).trim()}」`)
+for (const bar of ['.news-filters', '.search-controls']) {
+  has(wideCss, bar, /display:\s*flex/)
+  has(wideCss, bar, /flex-wrap:\s*nowrap/)
+  has(wideCss, bar, /align-items:\s*stretch/)
+  has(wideCss, `${bar} button`, /flex:\s*none/)
+  has(wideCss, `${bar} .search-input`, /min-width:\s*0/)
+}
+has(wideCss, '.search-controls .search-input', /flex:\s*1 1 auto/)
+check(!/flex-wrap:\s*wrap/.test(declarations(phoneCss, '.search-controls')), 'the stock and action search box keeps its buttons on the input row at 640px')
+has(phoneCss, '.news-filters', /flex-wrap:\s*wrap/)
+has(phoneCss, '.news-filters .search-input', /flex:\s*1 1 100%/)
+has(phoneCss, '.news-filters .news-symbol-input', /flex:\s*1 1 0/)
 
 // ---- AC-1 card order and copy (UI_COPY §4) ----
 const card = render(<NewsCard item={newsItem()} />)

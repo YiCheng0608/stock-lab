@@ -179,7 +179,10 @@ th.num { font-family: var(--font-body); }
 .symbol-link, .symbol-tag { color: var(--color-text); font-weight: 600; }
 a.symbol-link:hover { color: var(--color-primary); }
 
-.search-controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); }
+/* Search bars (DESIGN_SYSTEM §5 搜尋列): input and buttons on one row and one height; the input shrinks, the buttons do not. */
+.search-controls { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--space-2); margin-top: var(--space-4); }
+.search-controls .search-input { flex: 1 1 auto; min-width: 0; }
+.search-controls button, .news-filters button { flex: none; }
 .search-input { display: block; max-width: 360px; }
 .filter-select { display: block; max-width: 230px; }
 .filter-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
@@ -232,11 +235,10 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* ---- news (DESIGN_SYSTEM §5 card／tabs, §7 AI 推論) ------------------------------------------------ */
 .news-controls { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
 .news-controls .tabs { border-bottom: 0; }
-/* One row above 640px (UI_COPY_SPEC §4): the inputs shrink, the buttons never drop to a second line. */
-.news-filters { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-3); }
+/* One row above 640px (DESIGN_SYSTEM §5 搜尋列): the inputs shrink, the buttons never drop to a second line. */
+.news-filters { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--space-2); padding-bottom: var(--space-3); }
 .news-filters .search-input { flex: 0 1 240px; width: 240px; min-width: 0; }
 .news-filters .news-symbol-input { flex: 0 1 140px; width: 140px; }
-.news-filters button { flex: none; }
 .news-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .news-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .news-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 14px; }
@@ -321,6 +323,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .overview-cutoff-control { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
 .overview-cutoff-control label { color: var(--color-text-muted); font-size: 14px; }
 .overview-cutoff-control input { width: auto; padding: var(--space-2) var(--space-3); }
+.cutoff-toggle { display: none; }
 
 /* ---- stock page --------------------------------------------------------------------------------- */
 .stock-header { margin-bottom: var(--space-6); }
@@ -404,7 +407,7 @@ a.symbol-link:hover { color: var(--color-primary); }
 .badge-compact { padding: 2px 10px; font-size: 12px; white-space: normal; }
 .board-score { color: var(--color-text); font-weight: 600; }
 .board-cards { display: none; gap: var(--space-3); }
-.board-card { display: block; padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); transition: var(--transition); }
+.board-card { display: block; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); transition: var(--transition); }
 .board-card:hover { border-color: var(--color-primary); }
 .board-card-head { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-2); }
 .board-card-head strong { flex: 1; min-width: 0; font-size: 16px; }
@@ -448,13 +451,18 @@ a.symbol-link:hover { color: var(--color-primary); }
 .member-name-cell { min-width: 140px; }
 .member-name-cell .badge, .member-card-name .badge { margin: 2px var(--space-1) 0 0; vertical-align: middle; }
 .member-bar-date { display: block; color: var(--color-text-muted); font: 400 12px var(--font-body); }
-.member-cards { display: none; gap: var(--space-3); }
-.member-card { padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
-.member-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-.member-card-name { min-width: 0; font-weight: 600; }
-.member-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.member-cards, .stock-cards { display: none; gap: var(--space-3); }
+.member-card, .stock-card { padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.member-card-head, .stock-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.member-card-name, .stock-card-name { min-width: 0; font-weight: 600; }
+.member-card-price, .stock-card-price { display: flex; flex-direction: column; align-items: flex-end; font: 600 16px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .member-card .board-card-grid { margin-top: var(--space-2); }
 .member-card-evidence { margin-top: var(--space-2); font-size: 14px; }
+.stock-card-meta { margin-top: var(--space-1); color: var(--color-text-muted); font-size: 14px; }
+.stock-card-action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-2); font-size: 14px; }
+.stock-cards .table-note { padding: 0; }
+/* DESIGN_SYSTEM §5.1: the cards past the first ten fold into <details>; open, they keep the list's gap. */
+.card-list-rest-items { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 .theme-news-list { margin: 0; padding: 0; overflow: hidden; list-style: none; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
 .theme-news-list li { display: grid; grid-template-columns: 176px minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
 .theme-news-list li:last-child { border-bottom: 0; }
@@ -661,6 +669,13 @@ a.symbol-link:hover { color: var(--color-primary); }
   .board-cards { display: grid; }
   .member-table-wrap { display: none; }
   .member-cards { display: grid; }
+  .stock-table-wrap { display: none; }
+  /* 研究截止日期 folds behind a one-line toggle so the stock header and tabs fit the first screen (DESIGN_SYSTEM §4). */
+  .cutoff-panel { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+  .cutoff-toggle { display: inline-flex; padding: var(--space-1) 0; }
+  .cutoff-panel:not(.open) .overview-cutoff-control { display: none; }
+  .cutoff-panel .overview-cutoff-control { margin-top: var(--space-2); padding-top: 0; border-top: 0; }
+  .stock-cards { display: grid; }
   .board-controls .board-search { flex: 1 1 100%; max-width: none; }
   .theme-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
   .theme-stats .stat { padding: var(--space-3); }
