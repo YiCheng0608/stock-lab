@@ -237,9 +237,10 @@ class GroupCandidateIdentityTest(unittest.TestCase):
                 self.assertEqual(
                     score.details_json["candidate_symbols"], ["SAME", "SAME", "A", "B"]
                 )
+                # action_tier_v1 (#278): code, then exchange.
                 self.assertEqual(
                     self.decision(db, day),
-                    self.expected(stocks, "TPEX:SAME", "TWSE:A", "TWSE:B", "TWSE:SAME"),
+                    self.expected(stocks, "TWSE:A", "TWSE:B", "TPEX:SAME", "TWSE:SAME"),
                 )
 
     def test_malformed_versioned_sources_fail_closed(self):
@@ -471,11 +472,18 @@ class GroupCandidateIdentityTest(unittest.TestCase):
                             data_quality="complete",
                         )
                     )
-                self.assertEqual(
-                    self.decision(db, day),
-                    [excluded.id]
-                    + self.expected(stocks, "TWSE:A", "TWSE:B", "TWSE:C", "TWSE:SAME"),
+                others = self.expected(
+                    stocks, "TWSE:A", "TWSE:B", "TWSE:C", "TWSE:SAME"
                 )
+                # action_tier_v1 (#278): a holding is tier 0 and the watchlist
+                # leads its tier; a signal without 60 days of bars or a recent
+                # event does not raise a tier, so the row keeps code order.
+                expected = (
+                    [excluded.id] + others
+                    if bucket in ("held", "watch")
+                    else others[:3] + [excluded.id] + others[3:]
+                )
+                self.assertEqual(self.decision(db, day), expected)
                 score.details_json = {
                     "benchmark": "TAIEX",
                     "candidate_identity_version": "unsupported",
