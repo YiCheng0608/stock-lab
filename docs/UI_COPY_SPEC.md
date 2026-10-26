@@ -268,7 +268,7 @@ reason code 的日常文案由 `backend/app/presentation.py`（`REASON_LABELS`�
   | `pullback_history` | 日線 | 日線未滿 {threshold} 日 | 日線滿 {threshold} 日 | — |
   | `pullback_trend` | 趨勢 | 20 日均線未站上 60 日均線 | 20 日均線在 60 日均線之上 | — |
   | `pullback_above_ma60` | 趨勢 | 收盤低於 60 日均線 | 收盤不低於 60 日均線 | — |
-  | `pullback_support_zone` | 支撐區 | 收盤不在支撐區 | 收盤在 20 日均線支撐區 | 差：收盤回到 20 日均線支撐區（高於上緣 {價格差距}%）；低於下緣時寫「低於下緣」 |
+  | `pullback_support_zone` | 支撐區 | 收盤不在支撐區 | 收盤在 20 日均線支撐區 | 差：收盤回到 20 日均線支撐區（高於上緣 {價格差距}%）；低於下緣時寫「低於下緣」；資料日收盤不在當日支撐區、但已在下一交易日的區間內（`position=inside`，差距 0）時括號寫「最近收盤已在下一交易日的區間內」 |
   | `pullback_volume` | 量能 | 量比不在 {threshold}～{threshold_high} 倍 | 量比 {門檻} 倍 | 差：量能 {門檻} 倍（今日 {量比} 倍） |
   | `group_relative_strength` | 族群 | 族群未強於大盤 | 族群 20 日超額報酬 {門檻}% | — |
   | `institutional_flow` | 法人 | 法人籌碼未達要求 | 法人 5 日淨額 ÷ 20 日均量 {門檻}% | — |

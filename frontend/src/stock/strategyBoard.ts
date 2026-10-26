@@ -88,9 +88,10 @@ const CONDITIONS: Record<string, ConditionCopy> = {
   pullback_above_ma60: fixed('收盤不低於 60 日均線', '收盤低於 60 日均線'),
   pullback_support_zone: {
     ...fixed('收盤在 20 日均線支撐區', '收盤不在支撐區'),
+    // inside: T's close was outside T's zone but is inside the next session's (the zone moves with MA20).
     near: (item) => {
-      const side = item.position === 'above' ? '高於上緣' : item.position === 'below' ? '低於下緣' : null
-      return `收盤回到 20 日均線支撐區${side ? `（${side} ${gapText(item.gap)}）` : ''}`
+      const side = item.position === 'above' ? `高於上緣 ${gapText(item.gap)}` : item.position === 'below' ? `低於下緣 ${gapText(item.gap)}` : item.position === 'inside' ? '最近收盤已在下一交易日的區間內' : null
+      return `收盤回到 20 日均線支撐區${side ? `（${side}）` : ''}`
     },
   },
   pullback_volume: {

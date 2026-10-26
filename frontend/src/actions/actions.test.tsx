@@ -142,6 +142,7 @@ const volumeNear = nearness({
 check(JSON.stringify(nearCopy(breakoutNear)) === JSON.stringify({ title: '接近突破條件', lines: ['差：收盤站上前 20 日高點（還差 2.10%）', '差：量能 ≥ 1.20 倍（今日 0.80 倍）'], met: '族群、法人、融資已達成' }), `接近突破: ${JSON.stringify(nearCopy(breakoutNear))}`)
 check(JSON.stringify(nearCopy(pullbackNear)?.lines) === JSON.stringify(['差：收盤回到 20 日均線支撐區（高於上緣 1.20%）']), `接近回踩: ${JSON.stringify(nearCopy(pullbackNear))}`)
 check(nearCopy({ ...pullbackNear, unmet: [{ ...pullbackNear.unmet[0], position: 'below', gap: 0.005 }] })?.lines[0] === '差：收盤回到 20 日均線支撐區（低於下緣 0.50%）', '接近回踩: below the zone says 低於下緣')
+check(nearCopy({ ...pullbackNear, unmet: [{ ...pullbackNear.unmet[0], position: 'inside', gap: 0 }] })?.lines[0] === '差：收盤回到 20 日均線支撐區（最近收盤已在下一交易日的區間內）', '接近回踩: inside the next session zone says so')
 check(JSON.stringify(nearCopy(volumeNear)) === JSON.stringify({ title: '接近回踩條件', lines: ['差：量能 0.60～1.20 倍（今日 1.32 倍）'], met: '趨勢、族群、法人、融資已達成' }), `接近回踩量能: ${JSON.stringify(nearCopy(volumeNear))}`)
 check(nearCopy(nearness({ near: false })) === null && nearCopy(null) === null, '接近: a tier 4 nearness or none is not a near card')
 check(nearCopy(nearness({ unmet: [unmet({ code: 'margin_financing', kind: 'confirmation' })] }))?.lines[0] === '差：融資增加超過上限', '接近: a condition without a near sentence uses its unmet phrase')
