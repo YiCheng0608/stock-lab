@@ -28,6 +28,7 @@ const SUITES = [
   { file: 'themes/themeSuggestions.test.tsx' },
   { file: 'news/news.test.tsx' },
   { file: 'candidates/candidates.test.tsx' },
+  { file: 'tables.test.tsx' },
 ]
 
 // Test files that cannot run here: path relative to src -> why (needs a browser/DOM or a guarded environment) and
@@ -47,6 +48,7 @@ function loadModule(filename) {
   const result = esbuild.buildSync({
     entryPoints: [filename], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'error',
     jsx: 'automatic', packages: 'external', loader: { '.css': 'empty' }, // page styles do not affect the assertions
+    define: { 'import.meta.env': '{}' }, // api.ts reads the Vite env at load; App tables render without a server
   })
   const testModule = new Module(filename, module)
   testModule.filename = filename
