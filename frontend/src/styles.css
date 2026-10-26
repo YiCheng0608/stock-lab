@@ -589,7 +589,27 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-more { display: block; }
   .candidate-table-wrap { display: none; }
   .candidate-cards { display: grid; }
+  /* Phones keep at least two candidate cards on the first screen (DESIGN_SYSTEM §4): the header text takes its own
+     line with the badge and 資料說明 sharing the next, the run badges sit beside the title, level cells stay on one row. */
+  .home-dataline { display: contents; }
+  .home-dataline-text { flex: 1 1 100%; font-size: 12px; }
+  .home-header { gap: var(--space-1) var(--space-3); }
   .home-header .data-explanation { margin-left: 0; }
+  .market-overview .market-widget { padding: var(--space-2) var(--space-3); }
+  .market-overview .market-widget-value { font-size: 16px; }
+  .market-overview-more { margin-top: var(--space-1); }
+  .home-page .candidates-section .section-head { flex-wrap: nowrap; align-items: flex-end; margin: var(--space-3) 0 var(--space-2); }
+  .candidates-section .section-head h2 { font-size: 22px; }
+  .candidates-section .board-dates { flex-wrap: nowrap; gap: var(--space-1); }
+  .candidates-section .board-dates .badge { padding: 2px 8px; font-size: 12px; }
+  .candidate-mini { padding: var(--space-3); }
+  .candidate-mini-levels { gap: var(--space-1) var(--space-3); margin-top: var(--space-1); }
+  .candidate-mini-levels dd { font-size: 12px; }
+  .candidate-mini-reason, .candidate-mini-ai { margin-top: var(--space-1); }
+  .home-page { padding-top: var(--space-3); }
+  .alert-row { gap: 2px var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3); font-size: 13px; line-height: 1.5; }
+  .candidate-t1, .candidate-disclaimer { line-height: 1.5; }
+  .candidate-disclaimer { margin-bottom: var(--space-2); }
   .tab { padding: var(--space-2) var(--space-3); font-size: 14px; }
   .filter-row .search-controls, .filter-row .filter-select { flex: 1 1 100%; max-width: none; }
   .news-filters { flex-wrap: wrap; }
