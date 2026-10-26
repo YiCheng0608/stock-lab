@@ -25,6 +25,7 @@
 | 前端檔 | `frontend/src/stock/StockHeader.tsx` |
 | 前端檔 | `frontend/src/stock/StrategyBoardPanel.tsx` |
 | 前端檔 | `frontend/src/stock/strategyBoard.ts` |
+| 前端檔 | `frontend/src/stock/stockTabs.ts` |
 | API route | `GET /dashboard` |
 | API route | `GET /stocks` |
 | API route | `GET /stocks/{exchange}/{symbol}` |

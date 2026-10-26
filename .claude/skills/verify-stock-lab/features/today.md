@@ -21,6 +21,7 @@
 | 前端檔 | `frontend/src/today/TodayViews.tsx` |
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/themes/ThemeViews.tsx` |
+| 前端檔 | `frontend/src/actions/actionTiers.ts` |
 | API route | `GET /dashboard` |
 | API route | `GET /themes` |
 | API route | `GET /candidates` |

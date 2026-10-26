@@ -248,14 +248,14 @@ def test_actions_without_cards_fail_when_the_api_has_items(tmp_path):
     payloads = {
         "actions?limit=20": {"items": [{}, {}, {}], "meta": {"data_as_of": DAY}}
     }
-    page = "我的庫存\n尚未建立庫存。\n第 1 頁 · 本頁 3 筆 · 共 3 筆\n"
+    page = "我的庫存\n尚未建立庫存。\n第 1 級\n今日候選\n顯示 3／3 檔\n"
     run = _run(tmp_path, payloads, {"actions-1280": page})
     with pytest.raises(
-        page_checks.Fail, match="actions.json items 3，頁面沒有任何行動卡"
+        page_checks.Fail, match="actions.json items 3，頁面沒有任何行動列"
     ):
         page_checks.a4(run)
-    # A5 looks for what must be absent; a page without cards proves nothing.
-    with pytest.raises(page_checks.Undetermined, match="頁面沒有行動卡"):
+    # A5 looks for what must be absent; a page without rows proves nothing.
+    with pytest.raises(page_checks.Undetermined, match="頁面沒有行動列"):
         page_checks.a5(run)
 
 

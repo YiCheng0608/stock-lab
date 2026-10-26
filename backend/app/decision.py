@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session
 
 from .coverage import verified_taiex_sessions
@@ -23,7 +24,12 @@ from .decision_market_reads import (
     market_read_status,
 )
 from .config import MAX_GROUP_CANDIDATES
-from .domain import ETF_CATEGORIES, signal_confidence_semantics
+from .domain import (
+    CANDIDATE_SCORE_VERSION,
+    ETF_CATEGORIES,
+    STRATEGY_LEVELS_VERSION,
+    signal_confidence_semantics,
+)
 from .level_semantics import (
     build_level_semantics,
     build_stop_price_semantics,
@@ -32,18 +38,23 @@ from .level_semantics import (
 from .presentation import display_action_label, display_reason, primary_reason
 from .product_time import build_action_product_time, build_signal_product_time
 from .portfolio_values import read_portfolio_value
-from .strategies import REGISTRY
+from .strategies import REGISTRY, current_strategy
+from .strategies import levels as level_rules
 from .units import position_held
 from .models import (
+    CandidateRun,
     ChipSnapshot,
+    DailyCandidate,
     DataQuality,
     Event,
     GroupDailyScore,
     GroupMembership,
     IngestionRun,
     Instrument,
+    MarketBar,
     PortfolioPosition,
     Signal,
+    StrategyLevel,
     StrategyVersion,
     ThemeGroup,
 )
@@ -1573,11 +1584,28 @@ def _latest_group_scores(
 ) -> list[tuple[ThemeGroup, GroupDailyScore]]:
     if not as_of:
         return []
+    # Only each group's latest day is loaded: the scores carry large JSON.
+    latest = (
+        select(
+            GroupDailyScore.group_id,
+            func.max(GroupDailyScore.trading_date).label("day"),
+        )
+        .where(GroupDailyScore.trading_date <= as_of)
+        .group_by(GroupDailyScore.group_id)
+        .subquery()
+    )
     rows = db.execute(
         select(ThemeGroup, GroupDailyScore)
         .join(GroupDailyScore, GroupDailyScore.group_id == ThemeGroup.id)
-        .where(ThemeGroup.active.is_(True), GroupDailyScore.trading_date <= as_of)
-        .order_by(desc(GroupDailyScore.trading_date), desc(GroupDailyScore.id))
+        .join(
+            latest,
+            and_(
+                latest.c.group_id == GroupDailyScore.group_id,
+                latest.c.day == GroupDailyScore.trading_date,
+            ),
+        )
+        .where(ThemeGroup.active.is_(True))
+        .order_by(desc(GroupDailyScore.id))
     ).all()
     result: list[tuple[ThemeGroup, GroupDailyScore]] = []
     seen: set[str] = set()
@@ -1712,51 +1740,222 @@ def position_holding_ids(
     return held_ids, unknown_ids, recorded_ids
 
 
-def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
-    """Return a deterministic, cheap action-center candidate order.
+@dataclass(frozen=True)
+class ActionTier:
+    tier: int
+    key: str
+    label: str
+    # In-tier sort fields, in order (ACTION_TIER_SORT_FIELDS); a None value sorts last.
+    order: tuple[str, ...]
+
+
+# action_tier_v1 (#277-A, UI_COPY_SPEC §5): the action list is a cheap projection
+# sorted by tier, then by each tier's own fields.  It orders the list only; the
+# action summary of each row is built afterwards and is not changed (PRODUCT_SPEC
+# §6).  Pinned by tests: a rule or order change is a new version.
+ACTION_TIER_VERSION = "action_tier_v1"
+ACTION_TIERS: tuple[ActionTier, ...] = (
+    ActionTier(0, "holding_risk", "持倉風險", ("holding_state", "symbol", "exchange")),
+    ActionTier(1, "candidate", "今日候選", ("candidate_rank", "symbol", "exchange")),
+    ActionTier(2, "conditional", "其他成立條件", ("group_rank", "symbol", "exchange")),
+    # Filled by #277-B (strategy_levels nearness); until then these rows are tier 4.
+    ActionTier(3, "near", "接近成立", ("symbol", "exchange")),
+    ActionTier(
+        4, "observation", "其他觀察", ("unmet_conditions", "symbol", "exchange")
+    ),
+    ActionTier(
+        5, "data_insufficient", "資料待補", ("watchlist_first", "symbol", "exchange")
+    ),
+)
+# Tier 0 by the holding's action summary; any other state follows these.
+HOLDING_STATE_ORDER = (
+    "reduce_exit",
+    "manual_review",
+    "data_insufficient",
+    "hold_observe",
+)
+# The tiers each list view shows; holdings (tier 0) and the watchlist show in every view.
+ACTION_VIEWS: dict[str, tuple[int, ...]] = {
+    "focus": (0, 1, 2, 3),
+    "with_observation": (0, 1, 2, 3, 4),
+    "all": (0, 1, 2, 3, 4, 5),
+}
+DEFAULT_ACTION_VIEW = "focus"
+
+
+@dataclass
+class ActionTierRow:
+    """One instrument of the action-center projection (no decision summary)."""
+
+    instrument_id: int
+    exchange: str
+    symbol: str
+    name: str
+    is_etf: bool
+    watchlisted: bool
+    tier: int
+    candidate_rank: int | None = None
+    candidate_score: float | None = None
+    group_rank: int | None = None
+    unmet_conditions: int | None = None
+    holding_state: str | None = None
+
+
+def _holding_state_index(row: ActionTierRow) -> int:
+    if row.holding_state in HOLDING_STATE_ORDER:
+        return HOLDING_STATE_ORDER.index(row.holding_state)
+    return len(HOLDING_STATE_ORDER)
+
+
+ACTION_TIER_SORT_FIELDS: dict[str, Callable[[ActionTierRow], Any]] = {
+    "holding_state": _holding_state_index,
+    "candidate_rank": lambda row: row.candidate_rank,
+    "group_rank": lambda row: row.group_rank,
+    "unmet_conditions": lambda row: row.unmet_conditions,
+    "watchlist_first": lambda row: not row.watchlisted,
+    "symbol": lambda row: row.symbol,
+    "exchange": lambda row: row.exchange,
+}
+
+
+def action_tier_sort_key(row: ActionTierRow) -> tuple[Any, ...]:
+    key: list[Any] = [row.tier]
+    for field in ACTION_TIERS[row.tier].order:
+        value = ACTION_TIER_SORT_FIELDS[field](row)
+        key.extend((value is None, value if value is not None else 0))
+    return (*key, row.instrument_id)
+
+
+def _best_group_ranks(db: Session, ids: set[int], as_of: date) -> dict[int, int]:
+    """Each instrument's best rank among its active groups' scores of ``as_of``."""
+
+    if not ids:
+        return {}
+    ranks: dict[int, int] = {}
+    for instrument_id, rank in db.execute(
+        select(GroupMembership.instrument_id, GroupDailyScore.rank)
+        .join(GroupDailyScore, GroupDailyScore.group_id == GroupMembership.group_id)
+        .join(ThemeGroup, ThemeGroup.id == GroupMembership.group_id)
+        .where(
+            ThemeGroup.active.is_(True),
+            GroupMembership.instrument_id.in_(list(ids)),
+            GroupMembership.valid_from <= as_of,
+            GroupMembership.valid_to.is_(None) | (GroupMembership.valid_to >= as_of),
+            GroupDailyScore.trading_date == as_of,
+            GroupDailyScore.rank.is_not(None),
+        )
+    ).all():
+        ranks[instrument_id] = min(rank, ranks.get(instrument_id, rank))
+    return ranks
+
+
+def _unmet_condition_counts(
+    db: Session, signals: list[tuple[int, int, tuple[str, str, str]]]
+) -> dict[int, int]:
+    """Per instrument, the fewest unmet conditions among its observation signals.
+
+    Reads ``strategy_levels.conditions_json`` of the current levels version
+    (#273); a signal without its row contributes nothing.
+    """
+
+    strategies = {
+        signal_id: strategy
+        for signal_id, _instrument_id, version in signals
+        if (strategy := current_strategy(*version)) is not None
+    }
+    if not strategies:
+        return {}
+    instrument_of = {
+        signal_id: instrument_id for signal_id, instrument_id, _ in signals
+    }
+    defaults = {
+        strategy.key: level_rules.condition_defaults(strategy)
+        for strategy in {
+            strategy.key: strategy for strategy in strategies.values()
+        }.values()
+    }
+    counts: dict[int, int] = {}
+    for signal_id, stored in db.execute(
+        select(StrategyLevel.signal_id, StrategyLevel.conditions_json).where(
+            StrategyLevel.signal_id.in_(list(strategies)),
+            StrategyLevel.levels_version == STRATEGY_LEVELS_VERSION,
+        )
+    ).all():
+        strategy = strategies[signal_id]
+        conditions = level_rules.expand_conditions(
+            strategy, stored, defaults=defaults[strategy.key]
+        )
+        unmet = sum(item["satisfied"] is False for item in conditions)
+        instrument_id = instrument_of[signal_id]
+        counts[instrument_id] = min(unmet, counts.get(instrument_id, unmet))
+    return counts
+
+
+# The summary's 60-day bar readiness (_instrument_coverage) as the projection reads it.
+ACTION_TIER_BAR_SESSIONS = 60
+
+
+def _short_of_bars(db: Session, ids: set[int], as_of: date) -> set[int]:
+    """Instruments without a bar row on each of the last 60 verified sessions.
+
+    A missing row is a missing valid bar, so the summary of each of these is
+    data_insufficient (bars_60d): a cheap sufficient condition of that blocker,
+    read with one count instead of building the summaries.
+    """
+
+    if not ids:
+        return set()
+    cache = db.info.setdefault("_decision_taiex_dates", {})
+    key = as_of.isoformat()
+    if key not in cache:
+        cache[key] = verified_taiex_sessions(
+            db, end_date=as_of, require_provenance=True, limit=120
+        )
+    window = list(dict.fromkeys(cache[key]))[-ACTION_TIER_BAR_SESSIONS:]
+    if len(window) < ACTION_TIER_BAR_SESSIONS:
+        return set(ids)
+    covered = dict(
+        db.execute(
+            select(
+                MarketBar.instrument_id, func.count(MarketBar.trading_date.distinct())
+            )
+            .where(
+                MarketBar.instrument_id.in_(list(ids)),
+                MarketBar.trading_date.in_(window),
+            )
+            .group_by(MarketBar.instrument_id)
+        ).all()
+    )
+    listed = dict(
+        db.execute(
+            select(Instrument.id, Instrument.listing_date).where(
+                Instrument.id.in_(list(ids))
+            )
+        ).all()
+    )
+    return {
+        item_id
+        for item_id in ids
+        # Listed after the window opened: fewer than 60 eligible sessions.
+        if (listed.get(item_id) is not None and listed[item_id] > window[0])
+        or covered.get(item_id, 0) < ACTION_TIER_BAR_SESSIONS
+    }
+
+
+def action_tier_rows(
+    db: Session, as_of: date | None, holding_states: dict[int, str] | None = None
+) -> list[ActionTierRow]:
+    """Return the action-center projection in action_tier_v1 order.
 
     Only small identity/status projections run here.  The expensive decision
     builder is called after the API has selected a page, so a 20-row request
-    never evaluates every scoped instrument.
+    never evaluates every scoped instrument.  ``holding_states`` (instrument
+    id -> action_state of its summary) orders tier 0; without it tier 0 is in
+    code order.
     """
 
-    def sort_ids(ids: set[int], keys: dict[int, tuple[str, str, int]]) -> list[int]:
-        return sorted(ids, key=lambda item_id: keys.get(item_id, ("", "", item_id)))
-
     held_ids, unknown_ids, recorded_ids = position_holding_ids(db)
-    if not as_of:
-        rows = db.execute(
-            select(Instrument.id, Instrument.exchange, Instrument.symbol)
-            .join(
-                PortfolioPosition,
-                PortfolioPosition.instrument_id == Instrument.id,
-                isouter=True,
-            )
-            .where(
-                Instrument.status == "active",
-                (
-                    PortfolioPosition.id.is_not(None)
-                    | Instrument.is_watchlisted.is_(True)
-                ),
-            )
-        ).all()
-        keys = {
-            int(item_id): (str(exchange), str(symbol), int(item_id))
-            for item_id, exchange, symbol in rows
-        }
-        return sorted(
-            keys,
-            key=lambda item_id: (
-                0
-                if item_id in held_ids
-                else 1
-                if item_id in unknown_ids
-                else 3
-                if item_id in recorded_ids
-                else 2,
-                keys[item_id],
-            ),
-        )
+    holding_ids = held_ids | unknown_ids
     watch_ids: set[int] = set(
         db.scalars(
             select(Instrument.id).where(
@@ -1764,99 +1963,170 @@ def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
             )
         ).all()
     )
-    # A canonical conditional signal is an action candidate even when its
-    # instrument is not one of the currently qualified theme's displayed
-    # candidates.  Theme ranking is discovery context and must not hide a
-    # valid individual setup from the action center.
-    conditional_ids: set[int] = set(
-        db.scalars(
-            select(Signal.instrument_id)
+    conditional_ids: set[int] = set()
+    observation_ids: set[int] = set()
+    observation_signals: list[tuple[int, int, tuple[str, str, str]]] = []
+    candidate_rows: dict[int, tuple[int, float]] = {}
+    group_candidate_ids: set[int] = set()
+    event_ids: set[int] = set()
+    if as_of:
+        # Column projections only: a StrategyVersion row carries config JSON.
+        for signal_id, instrument_id, status, name, version, formula in db.execute(
+            select(
+                Signal.id,
+                Signal.instrument_id,
+                Signal.status,
+                StrategyVersion.name,
+                StrategyVersion.version,
+                StrategyVersion.formula_version,
+            )
             .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
             .join(Instrument, Instrument.id == Signal.instrument_id)
             .where(
                 Instrument.status == "active",
                 Signal.signal_date == as_of,
-                Signal.status == "conditional",
+                Signal.status.in_(("conditional", "observation")),
                 Signal.data_quality == "complete",
                 StrategyVersion.name.in_(list(REGISTRY)),
             )
-        ).all()
-    )
-    observation_ids: set[int] = set(
-        db.scalars(
-            select(Signal.instrument_id)
-            .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-            .join(Instrument, Instrument.id == Signal.instrument_id)
-            .where(
-                Instrument.status == "active",
-                Signal.signal_date == as_of,
-                Signal.status == "observation",
-                Signal.data_quality == "complete",
-                StrategyVersion.name.in_(list(REGISTRY)),
+        ).all():
+            # A canonical conditional signal is an action candidate even when
+            # its instrument is not one of the currently qualified theme's
+            # displayed candidates.
+            if status == "conditional":
+                conditional_ids.add(instrument_id)
+            else:
+                observation_ids.add(instrument_id)
+                observation_signals.append(
+                    (signal_id, instrument_id, (name, version, formula))
+                )
+        run = db.scalar(
+            select(CandidateRun).where(
+                CandidateRun.trading_date == as_of,
+                CandidateRun.score_version == CANDIDATE_SCORE_VERSION,
             )
-        ).all()
-    )
-    candidate_ids: set[int] = set()
-    for group, score in _latest_group_scores(db, as_of):
-        if (
-            score.data_quality != "complete"
-            or (score.eligible_members or 0) < 3
-            or score.rank is None
-        ):
-            continue
-        details = score.details_json
-        if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
-            continue
-        candidate_ids.update(_group_candidate_ids(db, group, score, as_of))
-    # Events are useful context but should not elevate the whole market.  Keep
-    # only recent official event-linked instruments.
-    recent_cutoff = as_of - timedelta(days=7)
-    event_ids: set[int] = set(
-        db.scalars(
-            select(Event.instrument_id).where(
-                Event.instrument_id.is_not(None),
-                Event.event_date >= recent_cutoff,
-                Event.event_date <= as_of,
-            )
-        ).all()
-    )
+        )
+        if run is not None:
+            for instrument_id, rank, score in db.execute(
+                select(
+                    DailyCandidate.instrument_id,
+                    DailyCandidate.rank,
+                    DailyCandidate.total_score,
+                ).where(DailyCandidate.candidate_run_id == run.id)
+            ).all():
+                candidate_rows[instrument_id] = (rank, score)
+        for group, score in _latest_group_scores(db, as_of):
+            if (
+                score.data_quality != "complete"
+                or (score.eligible_members or 0) < 3
+                or score.rank is None
+            ):
+                continue
+            details = score.details_json
+            if not isinstance(details, dict) or details.get("benchmark") != "TAIEX":
+                continue
+            group_candidate_ids.update(_group_candidate_ids(db, group, score, as_of))
+        # Recent official events keep an instrument in the list but never raise
+        # its tier (action_tier_v1).
+        event_ids = set(
+            db.scalars(
+                select(Event.instrument_id).where(
+                    Event.instrument_id.is_not(None),
+                    Event.event_date >= as_of - timedelta(days=7),
+                    Event.event_date <= as_of,
+                )
+            ).all()
+        )
     all_ids = (
         recorded_ids
         | watch_ids
         | conditional_ids
         | observation_ids
-        | candidate_ids
+        | set(candidate_rows)
+        | group_candidate_ids
         | event_ids
     )
     if not all_ids:
         return []
-    rows = db.execute(
-        select(Instrument.id, Instrument.exchange, Instrument.symbol).where(
-            Instrument.id.in_(all_ids), Instrument.status == "active"
+    # Tiers 2 and 4 need the summary's 60-day bars; without them the row is tier 5.
+    short = (
+        _short_of_bars(
+            db,
+            (conditional_ids | observation_ids) - holding_ids - set(candidate_rows),
+            as_of,
         )
-    ).all()
-    keys = {
-        int(item_id): (str(exchange), str(symbol), int(item_id))
-        for item_id, exchange, symbol in rows
-    }
-    # Approximate the exact product order using persisted state categories;
-    # stable secondary keys keep cursor traversal deterministic.
-    ordered_ids: list[int] = []
-    seen: set[int] = set()
-    for bucket in (
-        held_ids,
-        unknown_ids,
-        conditional_ids,
-        observation_ids,
-        event_ids | watch_ids,
-        candidate_ids,
-        recorded_ids,
-        all_ids,
-    ):
-        for item_id in sort_ids(bucket - seen, keys):
-            seen.add(item_id)
-            ordered_ids.append(item_id)
-    return ordered_ids
+        if as_of
+        else set()
+    )
+    conditional_ids -= short
+    observation_ids -= short
+    group_ranks = _best_group_ranks(db, conditional_ids - set(candidate_rows), as_of)
+    unmet = _unmet_condition_counts(
+        db,
+        [
+            item
+            for item in observation_signals
+            if item[1] not in conditional_ids and item[1] not in candidate_rows
+        ],
+    )
+    rows: list[ActionTierRow] = []
+    for item_id, exchange, symbol, name, kind in db.execute(
+        select(
+            Instrument.id,
+            Instrument.exchange,
+            Instrument.symbol,
+            Instrument.name,
+            Instrument.instrument_type,
+        ).where(Instrument.id.in_(all_ids), Instrument.status == "active")
+    ).all():
+        row = ActionTierRow(
+            instrument_id=int(item_id),
+            exchange=str(exchange),
+            symbol=str(symbol),
+            name=str(name),
+            is_etf=kind == "etf",
+            watchlisted=item_id in watch_ids,
+            tier=5,
+        )
+        if item_id in holding_ids:
+            row.tier = 0
+            row.holding_state = (holding_states or {}).get(item_id)
+        elif item_id in candidate_rows:
+            row.tier = 1
+            row.candidate_rank, row.candidate_score = candidate_rows[item_id]
+        elif item_id in conditional_ids:
+            row.tier = 2
+            row.group_rank = group_ranks.get(item_id)
+        elif item_id in observation_ids:
+            row.tier = 4
+            row.unmet_conditions = unmet.get(item_id)
+        rows.append(row)
+    rows.sort(key=action_tier_sort_key)
+    return rows
+
+
+def action_view_hidden_reason(
+    row: ActionTierRow, view: str, include_etf: bool
+) -> str | None:
+    """Why ``view`` hides ``row`` (``etf``, or the tier key), None when listed.
+
+    Holdings and the watchlist are listed in every view.  An ETF outside them
+    is hidden first as an ETF, so each hidden row is counted once.
+    """
+
+    if row.tier == 0 or row.watchlisted:
+        return None
+    if row.is_etf and not include_etf:
+        return "etf"
+    if row.tier not in ACTION_VIEWS[view]:
+        return ACTION_TIERS[row.tier].key
+    return None
+
+
+def prioritized_instrument_ids(db: Session, as_of: date | None) -> list[int]:
+    """The action-center order (action_tier_v1) with tier 0 in code order."""
+
+    return [row.instrument_id for row in action_tier_rows(db, as_of)]
 
 
 def build_action_summaries(
@@ -1875,19 +2145,14 @@ def build_action_summaries(
         select(Instrument).where(Instrument.id.in_(ids), Instrument.status == "active")
     ).all()
     _prepare_decision_context(db, as_of, ids)
+    by_id = {instrument.id: instrument for instrument in instruments}
+    # The caller's order is the list order (action_tier_v1); a page is not
+    # re-sorted, so pages concatenate to the whole list.
     summaries = [
-        build_decision_summary(db, instrument, as_of) for instrument in instruments
+        build_decision_summary(db, by_id[item_id], as_of)
+        for item_id in dict.fromkeys(ids)
+        if item_id in by_id
     ]
-    summaries.sort(
-        key=lambda item: (
-            item.get("priority", 99),
-            not item.get("held", False),
-            item.get("position_quantity_status") != "unknown",
-            not item.get("watchlisted", False),
-            (item.get("instrument") or {}).get("exchange", ""),
-            (item.get("instrument") or {}).get("symbol", ""),
-        )
-    )
     # Defensive dedupe guarantees the product invariant even if a legacy
     # database contains overlapping membership or strategy rows.
     unique: dict[tuple[str, str, str | None], dict[str, Any]] = {}

@@ -318,10 +318,19 @@ def compact_conditions(
     return stored
 
 
-def expand_conditions(strategy: Strategy, stored: Any) -> list[dict[str, Any]]:
-    """Full condition dicts from ``conditions_json`` (compact or not)."""
+def expand_conditions(
+    strategy: Strategy,
+    stored: Any,
+    defaults: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Full condition dicts from ``conditions_json`` (compact or not).
 
-    defaults = condition_defaults(strategy)
+    ``defaults`` is ``condition_defaults(strategy)`` computed once by a caller
+    expanding many rows of the same strategy.
+    """
+
+    if defaults is None:
+        defaults = condition_defaults(strategy)
     return [
         {**_BLANK_CONDITION, **defaults.get(item.get("code"), {}), **item}
         for item in (stored if isinstance(stored, list) else [])

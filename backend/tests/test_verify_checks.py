@@ -618,7 +618,9 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
         ("actions", "A5"),
         page_checks.Known("https://example/1", "出現 LLM 推論標記"),
     )
-    clean = FakeRun(tmp_path, {}, {"actions-1280": "我的庫存\n查看個股詳情 →\n"})
+    clean = FakeRun(
+        tmp_path, {}, {"actions-1280": "我的庫存\n2330\t2026/10/22\t策略總表 →\n"}
+    )
     marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
     monkeypatch.setitem(page_checks.CHECKS, "actions", {"A5": page_checks.a5})
     (failing,) = page_checks.run_page(marked, "actions", [])

@@ -219,6 +219,8 @@ export type Dashboard = {
   news?: NewsItem[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
+  // Every holding's summary, ordered by risk (#297 review L1); actions has the first 8 rows only.
+  holding_actions?: ActionSummary[]
   action_counts?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string }
   empty_states?: Record<string, string | null>
   market_overview?: MarketOverview
@@ -1114,7 +1116,30 @@ export type ActionSummary = {
   theme_ids: string[]
   event_ids: number[]
   data_cutoff: string | null
+  // GET /api/actions rows only (action_tier_v1, UI_COPY_SPEC §5).
+  tier?: ActionTierNumber
+  candidate?: { rank: number; total_score: number } | null
 }
+
+export type ActionTierNumber = 0 | 1 | 2 | 3 | 4 | 5
+export type ActionView = 'focus' | 'with_observation' | 'all'
+
+// GET /api/actions summary: counts of the action_tier_v1 projection, not of one page.
+export type ActionTierSummary = {
+  total: number
+  held: number
+  held_unknown?: number
+  scope?: string
+  tier_version: string
+  view: ActionView
+  include_etf: boolean
+  tiers: Array<{ tier: ActionTierNumber; key: string; label: string; stock: number; etf: number; shown: number }>
+  hidden: { etf: number; observation: number; data_insufficient: number }
+  views: Record<ActionView, number>
+  etf: number
+}
+
+export type ActionsResponse = CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary: ActionTierSummary }
 
 export type GlossaryTerm = {
   term_id: string
