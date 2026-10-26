@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .decision import near_instrument_ids
 from .domain import CANDIDATE_SCORE_VERSION
 from .market_change import adjacent_change
 from .models import (
@@ -76,6 +77,7 @@ def member_context(
     ids = list(instrument_ids)
     ranks: dict[int, int] = {}
     conditional: set[int] = set()
+    near: set[int] = set()
     if as_of is not None and ids:
         run = db.scalar(
             select(CandidateRun).where(
@@ -106,11 +108,14 @@ def member_context(
                 )
             ).all()
         )
+        # The action list's tier 3 rule (接近成立, #277-B).
+        near = near_instrument_ids(db, as_of, ids)
     return {
         "as_of": as_of,
         "returns": _member_returns(score, as_of),
         "ranks": ranks,
         "conditional": conditional,
+        "near": near,
         # One TAIEX session lookup for the whole table.
         "sessions": {},
     }
@@ -154,6 +159,7 @@ def member_columns(
         "excess_return_20d": _finite(row.get("excess_return_20d")) if row else None,
         "candidate_rank": context["ranks"].get(instrument.id),
         "conditional": instrument.id in context["conditional"],
+        "near": instrument.id in context["near"],
     }
 
 

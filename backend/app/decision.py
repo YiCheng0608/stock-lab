@@ -28,6 +28,7 @@ from .domain import (
     CANDIDATE_SCORE_VERSION,
     ETF_CATEGORIES,
     STRATEGY_LEVELS_VERSION,
+    RuleEvaluation,
     signal_confidence_semantics,
 )
 from .level_semantics import (
@@ -847,6 +848,52 @@ def _strategy_result(
     }
 
 
+def _fewest_unmet(
+    strategy_results: dict[str, dict[str, Any]],
+) -> tuple[str, list[str]] | None:
+    """The judged strategy with the fewest unmet conditions, and their short names.
+
+    Reads only the signals' stored evaluation (``rule_evidence_json``), never
+    ``strategy_levels``, so the summary is the same with or without that
+    table (#277-B).  Ties keep REGISTRY order.
+    """
+
+    best: tuple[str, list[str]] | None = None
+    fewest = 0
+    for name, result in strategy_results.items():
+        if result.get("status") != "observation" or result.get("data_quality") != (
+            "complete"
+        ):
+            continue
+        strategy = REGISTRY[name]
+        evidence = result.get("evidence")
+        judged = evidence.get(strategy.kind) if isinstance(evidence, dict) else None
+        inputs = evidence.get("inputs") if isinstance(evidence, dict) else None
+        bar_count = inputs.get("bar_count_60d") if isinstance(inputs, dict) else None
+        if (
+            not isinstance(judged, dict)
+            or judged.get("state") != "rejected"
+            or not isinstance(judged.get("reasons"), list)
+            or type(bar_count) is not int
+        ):
+            continue
+        evaluation = RuleEvaluation(False, "rejected", tuple(judged["reasons"]))
+        unmet = [
+            item["code"]
+            for item in level_rules.judged_conditions(
+                strategy, evaluation, bar_count=bar_count
+            )
+            if item["satisfied"] is False
+        ]
+        # Fewest unmet conditions, as the action list's tiers count them.
+        if unmet and (best is None or len(unmet) < fewest):
+            labels = [
+                strategy.short_label(code) or "研究條件需要人工核對" for code in unmet
+            ]
+            best, fewest = (name, labels), len(unmet)
+    return best
+
+
 def _strategy_has_valid_levels(result: dict[str, Any] | None) -> bool:
     return bool(
         result
@@ -1532,6 +1579,9 @@ def build_decision_summary(
             reasons=reasons,
             missing=missing,
             strategy=selected_strategy,
+            unmet=_fewest_unmet(strategy_results)
+            if action_state == "no_condition"
+            else None,
         ),
         "primary_levels": primary_levels,
         "data_status": {
@@ -1761,8 +1811,9 @@ ACTION_TIERS: tuple[ActionTier, ...] = (
     ActionTier(0, "holding_risk", "持倉風險", ("holding_state", "symbol", "exchange")),
     ActionTier(1, "candidate", "今日候選", ("candidate_rank", "symbol", "exchange")),
     ActionTier(2, "conditional", "其他成立條件", ("group_rank", "symbol", "exchange")),
-    # Filled by #277-B (strategy_levels nearness); until then these rows are tier 4.
-    ActionTier(3, "near", "接近成立", ("symbol", "exchange")),
+    ActionTier(
+        3, "near", "接近成立", ("unmet_conditions", "price_gap", "symbol", "exchange")
+    ),
     ActionTier(
         4, "observation", "其他觀察", ("unmet_conditions", "symbol", "exchange")
     ),
@@ -1788,6 +1839,13 @@ DEFAULT_ACTION_VIEW = "focus"
 # summary's 60-day readiness, _instrument_coverage); without them the row is
 # tier 5, as its summary is data_insufficient.
 ACTION_TIER_BAR_SESSIONS = 60
+# Tier 3 接近成立 (#277-B): an observation whose strategy_levels row has levels
+# the next session can reach, whose only unmet conditions are of these kinds,
+# and whose price gap (next session basis) is at most the entry type's bound.
+ACTION_NEAR_UNMET_KINDS = ("price", "volume")
+ACTION_NEAR_PRICE_GAP = {"breakout": 0.03, "pullback": 0.02}
+# Met conditions of these kinds are not named on a card (「…已達成」).
+ACTION_NEAR_SILENT_KINDS = ("eligibility", "data", *ACTION_NEAR_UNMET_KINDS)
 
 
 @dataclass
@@ -1805,7 +1863,11 @@ class ActionTierRow:
     candidate_score: float | None = None
     group_rank: int | None = None
     unmet_conditions: int | None = None
+    price_gap: float | None = None
     holding_state: str | None = None
+    # Tiers 3 and 4: the strategy_nearness of the nearest strategy; None
+    # without a strategy_levels row.
+    nearness: dict[str, Any] | None = None
 
 
 def _holding_state_index(row: ActionTierRow) -> int:
@@ -1819,6 +1881,7 @@ ACTION_TIER_SORT_FIELDS: dict[str, Callable[[ActionTierRow], Any]] = {
     "candidate_rank": lambda row: row.candidate_rank,
     "group_rank": lambda row: row.group_rank,
     "unmet_conditions": lambda row: row.unmet_conditions,
+    "price_gap": lambda row: row.price_gap,
     "watchlist_first": lambda row: not row.watchlisted,
     "symbol": lambda row: row.symbol,
     "exchange": lambda row: row.exchange,
@@ -1856,13 +1919,115 @@ def _best_group_ranks(db: Session, ids: set[int], as_of: date) -> dict[int, int]
     return ranks
 
 
-def _unmet_condition_counts(
-    db: Session, signals: list[tuple[int, int, tuple[str, str, str]]]
-) -> dict[int, int]:
-    """Per instrument, the fewest unmet conditions among its observation signals.
+def _price_gap(condition: dict[str, Any] | None) -> float | None:
+    """The price condition's distance to the next session's close (0 when met on T)."""
 
-    Reads ``strategy_levels.conditions_json`` of the current levels version
-    (#273); a signal without its row contributes nothing.
+    if condition is None:
+        return None
+    if condition.get("satisfied") is True:
+        return 0.0
+    next_session = condition.get("next_session")
+    gap = next_session.get("gap") if isinstance(next_session, dict) else None
+    if isinstance(gap, bool) or not isinstance(gap, (int, float)):
+        return None
+    if not math.isfinite(gap):
+        return None
+    return round(abs(gap), 6)
+
+
+def _nearness_item(strategy: Any, condition: dict[str, Any]) -> dict[str, Any]:
+    """One unmet condition of a card: its short name and a gap or a ratio, no price."""
+
+    kind = condition.get("kind")
+    next_session = condition.get("next_session")
+    volume = kind == "volume"
+    return {
+        "code": condition.get("code"),
+        "kind": kind,
+        "short_label": strategy.short_label(str(condition.get("code"))),
+        "gap": _price_gap(condition) if kind == "price" else None,
+        "position": next_session.get("position")
+        if kind == "price" and isinstance(next_session, dict)
+        else None,
+        # Ratios of volume only: a price condition's values are prices (AC-B3).
+        "actual": condition.get("actual") if volume else None,
+        "threshold": condition.get("threshold") if volume else None,
+        "threshold_high": condition.get("threshold_high") if volume else None,
+        "operator": condition.get("operator") if volume else None,
+    }
+
+
+def strategy_nearness(
+    strategy: Any,
+    availability: str | None,
+    reachable_next_session: bool | None,
+    conditions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """How near one observation is to passing, from its strategy_levels row.
+
+    ``near`` is the tier 3 rule of action_tier_v1 (UI_COPY_SPEC §5).  Only
+    the condition list and the price gap are read; the row's price levels
+    never enter the action list (#277-B AC-B3).
+    """
+
+    unmet = [item for item in conditions if item.get("satisfied") is False]
+    gap = _price_gap(
+        next((item for item in conditions if item.get("kind") == "price"), None)
+    )
+    bound = ACTION_NEAR_PRICE_GAP.get(strategy.entry_type)
+    near = (
+        availability == "levels"
+        and reachable_next_session is not False
+        and bool(unmet)
+        and all(item.get("satisfied") is not None for item in conditions)
+        and all(item.get("kind") in ACTION_NEAR_UNMET_KINDS for item in unmet)
+        and gap is not None
+        and bound is not None
+        and gap <= bound
+    )
+    return {
+        "strategy": strategy.key,
+        "label": strategy.label_zh,
+        "near": near,
+        "unmet_count": len(unmet),
+        "price_gap": gap,
+        "unmet": [_nearness_item(strategy, item) for item in unmet],
+        "met_short_labels": list(
+            dict.fromkeys(
+                label
+                for item in conditions
+                if item.get("satisfied") is True
+                and item.get("kind") not in ACTION_NEAR_SILENT_KINDS
+                and (label := strategy.short_label(str(item.get("code"))))
+            )
+        ),
+    }
+
+
+def nearest_strategy(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Fewest unmet conditions, then the smaller price gap, then REGISTRY order."""
+
+    if not items:
+        return None
+    order = list(REGISTRY)
+    return min(
+        items,
+        key=lambda item: (
+            item["unmet_count"],
+            item["price_gap"] is None,
+            item["price_gap"] or 0,
+            order.index(item["strategy"]) if item["strategy"] in order else len(order),
+        ),
+    )
+
+
+def _observation_nearness(
+    db: Session, signals: list[tuple[int, int, tuple[str, str, str]]]
+) -> dict[int, list[dict[str, Any]]]:
+    """Per instrument, the strategy_nearness of each observation signal with a row.
+
+    Reads ``strategy_levels`` of the current levels version (#273); a signal
+    without its row contributes nothing.
     """
 
     strategies = {
@@ -1881,9 +2046,14 @@ def _unmet_condition_counts(
             strategy.key: strategy for strategy in strategies.values()
         }.values()
     }
-    counts: dict[int, int] = {}
-    for signal_id, stored in db.execute(
-        select(StrategyLevel.signal_id, StrategyLevel.conditions_json).where(
+    found: dict[int, list[dict[str, Any]]] = {}
+    for signal_id, availability, reachable, stored in db.execute(
+        select(
+            StrategyLevel.signal_id,
+            StrategyLevel.availability,
+            StrategyLevel.reachable_next_session,
+            StrategyLevel.conditions_json,
+        ).where(
             StrategyLevel.signal_id.in_(list(strategies)),
             StrategyLevel.levels_version == STRATEGY_LEVELS_VERSION,
         )
@@ -1892,10 +2062,83 @@ def _unmet_condition_counts(
         conditions = level_rules.expand_conditions(
             strategy, stored, defaults=defaults[strategy.key]
         )
-        unmet = sum(item["satisfied"] is False for item in conditions)
-        instrument_id = instrument_of[signal_id]
-        counts[instrument_id] = min(unmet, counts.get(instrument_id, unmet))
-    return counts
+        found.setdefault(instrument_of[signal_id], []).append(
+            strategy_nearness(strategy, availability, reachable, conditions)
+        )
+    return found
+
+
+def _tier_signals(
+    db: Session, as_of: date, instrument_ids: Iterable[int] | None = None
+) -> tuple[set[int], list[tuple[int, int, tuple[str, str, str]]]]:
+    """Instruments with a complete conditional signal on ``as_of``, and the
+    complete observation signals (id, instrument id, strategy version)."""
+
+    query = (
+        select(
+            Signal.id,
+            Signal.instrument_id,
+            Signal.status,
+            StrategyVersion.name,
+            StrategyVersion.version,
+            StrategyVersion.formula_version,
+        )
+        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(
+            Instrument.status == "active",
+            Signal.signal_date == as_of,
+            Signal.status.in_(("conditional", "observation")),
+            Signal.data_quality == "complete",
+            StrategyVersion.name.in_(list(REGISTRY)),
+        )
+    )
+    if instrument_ids is not None:
+        query = query.where(Signal.instrument_id.in_(list(instrument_ids)))
+    conditional_ids: set[int] = set()
+    observation_signals: list[tuple[int, int, tuple[str, str, str]]] = []
+    # Column projections only: a StrategyVersion row carries config JSON.
+    for signal_id, instrument_id, status, name, version, formula in db.execute(
+        query
+    ).all():
+        # A canonical conditional signal is an action candidate even when
+        # its instrument is not one of the currently qualified theme's
+        # displayed candidates.
+        if status == "conditional":
+            conditional_ids.add(instrument_id)
+        else:
+            observation_signals.append(
+                (signal_id, instrument_id, (name, version, formula))
+            )
+    return conditional_ids, observation_signals
+
+
+def near_instrument_ids(
+    db: Session, as_of: date | None, instrument_ids: Iterable[int]
+) -> set[int]:
+    """Instruments of ``instrument_ids`` the action list puts in tier 3 when
+    not held: no conditional signal, 60 sessions of bars, a near strategy.
+
+    The theme member table's 接近成立 badge (#277-B); a candidate is always
+    conditional, so it is never here.
+    """
+
+    if as_of is None:
+        return set()
+    ids = list(instrument_ids)
+    if not ids:
+        return set()
+    conditional_ids, observation_signals = _tier_signals(db, as_of, ids)
+    observed = {item[1] for item in observation_signals} - conditional_ids
+    observed -= _short_of_bars(db, observed, as_of)
+    nearness = _observation_nearness(
+        db, [item for item in observation_signals if item[1] in observed]
+    )
+    return {
+        instrument_id
+        for instrument_id, items in nearness.items()
+        if any(item["near"] for item in items)
+    }
 
 
 def _short_of_bars(db: Session, ids: set[int], as_of: date) -> set[int]:
@@ -1973,36 +2216,8 @@ def action_tier_rows(
     group_candidate_ids: set[int] = set()
     event_ids: set[int] = set()
     if as_of:
-        # Column projections only: a StrategyVersion row carries config JSON.
-        for signal_id, instrument_id, status, name, version, formula in db.execute(
-            select(
-                Signal.id,
-                Signal.instrument_id,
-                Signal.status,
-                StrategyVersion.name,
-                StrategyVersion.version,
-                StrategyVersion.formula_version,
-            )
-            .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
-            .join(Instrument, Instrument.id == Signal.instrument_id)
-            .where(
-                Instrument.status == "active",
-                Signal.signal_date == as_of,
-                Signal.status.in_(("conditional", "observation")),
-                Signal.data_quality == "complete",
-                StrategyVersion.name.in_(list(REGISTRY)),
-            )
-        ).all():
-            # A canonical conditional signal is an action candidate even when
-            # its instrument is not one of the currently qualified theme's
-            # displayed candidates.
-            if status == "conditional":
-                conditional_ids.add(instrument_id)
-            else:
-                observation_ids.add(instrument_id)
-                observation_signals.append(
-                    (signal_id, instrument_id, (name, version, formula))
-                )
+        conditional_ids, observation_signals = _tier_signals(db, as_of)
+        observation_ids = {item[1] for item in observation_signals}
         run = db.scalar(
             select(CandidateRun).where(
                 CandidateRun.trading_date == as_of,
@@ -2064,7 +2279,7 @@ def action_tier_rows(
     conditional_ids -= short
     observation_ids -= short
     group_ranks = _best_group_ranks(db, conditional_ids - set(candidate_rows), as_of)
-    unmet = _unmet_condition_counts(
+    nearness = _observation_nearness(
         db,
         [
             item
@@ -2101,8 +2316,13 @@ def action_tier_rows(
             row.tier = 2
             row.group_rank = group_ranks.get(item_id)
         elif item_id in observation_ids:
-            row.tier = 4
-            row.unmet_conditions = unmet.get(item_id)
+            items = nearness.get(item_id, [])
+            near = nearest_strategy([item for item in items if item["near"]])
+            row.tier = 3 if near else 4
+            row.nearness = near or nearest_strategy(items)
+            if row.nearness is not None:
+                row.unmet_conditions = row.nearness["unmet_count"]
+                row.price_gap = row.nearness["price_gap"]
         rows.append(row)
     rows.sort(key=action_tier_sort_key)
     return rows

@@ -34,7 +34,7 @@ from .candidate_view import (
 from .candidate_view import candidate_for_instrument, candidate_list
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
-from .domain import ETF_CATEGORIES, signal_confidence_semantics
+from .domain import CANDIDATE_SCORE, ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
     ChipSnapshot,
@@ -1635,6 +1635,8 @@ def action_tier_summary(
             hidden[reason] = hidden.get(reason, 0) + 1
     return {
         "tier_version": ACTION_TIER_VERSION,
+        # Tier 2's 「未進今日候選前 N」 (UI_COPY_SPEC §6).
+        "candidate_list_size": CANDIDATE_SCORE["list_size"]["maximum"],
         "view": view,
         "include_etf": include_etf,
         "tiers": [
@@ -2713,6 +2715,9 @@ def actions(
                 }
                 if row.candidate_rank is not None
                 else None,
+                # Tiers 3 and 4: conditions and price gap only, no level
+                # (#277-B); null without a strategy_levels row.
+                "nearness": row.nearness if row.tier in (3, 4) else None,
             }
         )
     total = len(selected)

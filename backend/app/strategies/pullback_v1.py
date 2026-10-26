@@ -165,6 +165,13 @@ class PullbackV1(Strategy):
     entry_type = "pullback"
     label_zh = "回踩條件"
     research_label_zh = "回踩研究條件"
+    condition_short_labels_zh = {
+        "pullback_history": "日線",
+        "pullback_trend": "趨勢",
+        "pullback_above_ma60": "趨勢",
+        "pullback_support_zone": "支撐區",
+        "pullback_volume": "量能",
+    }
     requires_zh = (
         "60 日有效行情日數",
         "MA20",

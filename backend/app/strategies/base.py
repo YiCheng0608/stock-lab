@@ -80,6 +80,16 @@ COMMON_CONFIRMATIONS = {
     },
 }
 
+# Short names of the conditions every strategy has (UI_COPY_SPEC §10.1 條件表
+# 「短名」); each strategy adds its own in ``condition_short_labels_zh``.
+COMMON_CONDITION_SHORT_LABELS = {
+    "eligibility": "適用標的",
+    "required_inputs": "必要資料",
+    "group_relative_strength": "族群",
+    "institutional_flow": "法人",
+    "margin_financing": "融資",
+}
+
 COMMON_RISK_MANAGEMENT = {
     "first_target_minimum_risk_reward": MINIMUM_FIRST_TARGET_RISK_REWARD,
     "invalid_price_must_be_below_entry": True,
@@ -289,6 +299,8 @@ class Strategy:
     level_formula_version: str = LEGACY_RISK_LEVELS_FORMULA
     # REASON_TEMPLATES code (worker.candidates) for the technical reason.
     candidate_reason: str | None = None
+    # Short names of this strategy's own conditions (UI_COPY_SPEC §10.1).
+    condition_short_labels_zh: Mapping[str, str] = {}
 
     @property
     def key(self) -> str:
@@ -309,6 +321,13 @@ class Strategy:
     @property
     def required_levels(self) -> tuple[str, ...]:
         return ENTRY_REQUIRED_LEVELS[self.entry_type]
+
+    def short_label(self, code: str) -> str | None:
+        """A condition's short name (「價格」「法人」); None for an unknown code."""
+
+        return self.condition_short_labels_zh.get(
+            code, COMMON_CONDITION_SHORT_LABELS.get(code)
+        )
 
     def arguments(self, inputs: StrategyInputs) -> dict[str, Any]:
         raise NotImplementedError

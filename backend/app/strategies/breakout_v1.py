@@ -137,6 +137,7 @@ class BreakoutV1(Strategy):
     entry_type = "breakout"
     label_zh = "突破條件"
     research_label_zh = "突破研究條件"
+    condition_short_labels_zh = {"breakout_price": "價格", "breakout_volume": "量能"}
     requires_zh = (
         "20 日前期高點",
         "20 日前期成交量",

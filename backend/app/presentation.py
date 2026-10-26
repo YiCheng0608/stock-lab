@@ -8,6 +8,7 @@ meaning were known.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from .strategies import REGISTRY, strategy_by_kind
@@ -147,13 +148,33 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
     return value
 
 
+def unmet_conditions_line(strategy: str, short_labels: Iterable[str]) -> str:
+    """「突破條件差 3 項：價格、量能、法人」: each short name once (UI_COPY_SPEC §6)."""
+
+    labels = list(dict.fromkeys(short_labels))
+    return f"{REGISTRY[strategy].label_zh}差 {len(labels)} 項：{'、'.join(labels)}"
+
+
 def primary_reason(
     *,
     action_state: str,
     reasons: list[Any],
     missing: list[Any],
     strategy: str | None = None,
+    unmet: tuple[str, list[str]] | None = None,
 ) -> dict[str, str]:
+    """The summary's main reason.
+
+    ``unmet`` is (strategy, short names of its unmet conditions) of the
+    judged strategy with the fewest; a ``no_condition`` summary says that
+    instead of its first raw reason.
+    """
+
+    if action_state == "no_condition" and unmet and unmet[0] in REGISTRY:
+        return {
+            "label": unmet_conditions_line(*unmet),
+            "scope": REGISTRY[unmet[0]].entry_type,
+        }
     source = (
         missing[0]
         if action_state == "data_insufficient" and missing
