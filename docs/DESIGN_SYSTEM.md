@@ -127,6 +127,7 @@
 | `feature-card` | 同 card，可點擊；hover 邊線轉主色、上移 4px、陰影 `--shadow-hover`。左上 48px 圓角 12px 圖示底（主色 20% 透明），圖示用主色線條。 |
 | `market-widget` | 小型數據方塊：底 card 色、圓角 12px、padding 16px；上方 muted 標籤，中間 mono 主數字，下方漲跌。**雙列變體**（今日頁大盤概況）：標籤右側放單位，內容分上市、上櫃兩行，每行前置 muted 的「上市」「上櫃」，數字 mono、不換行，成交金額的金額後接 muted 短範圍（[UI_COPY_SPEC §11](UI_COPY_SPEC.md#11-今日頁頁首與大盤概況)）；某一邊沒有資料時該行改為 muted 文案，另一行照常。 |
 | 候選列表 | 今日頁「明日候選」。桌面（641px 以上）用共用 `DataTable`：一檔一列，數字欄（收盤、進場區、停損、目標、RR、總分）不換行；每列最後一欄是「AI 推論 ▸」accent badge 按鈕，展開時在該列下方插入一列整列寬（`colSpan`）的明細列，明細列內容放在 `<details>` 裡（按鈕切換它，未展開時明細列沒有高度）。640px 以下改為一檔一張卡片，不用橫向捲動表格：名次＋代號名稱＋總分 → 市場 · 策略 · 族群 → 收盤／進場區／停損／目標四格（價位不換行；目標放不下時整格自成一列）→ 主要理由 → 「AI 說明」`<details>`。預設列前 10 檔，其餘收進「顯示其餘 N 檔」`<details>`。 |
+| 族群成員表 | 族群詳情「族群成員」（文案與欄位見 [UI_COPY_SPEC §8.5](UI_COPY_SPEC.md#85-族群榜與族群詳情)）。表上方右側一個「排序」`filter-select`。桌面（641px 以上）用共用 `DataTable`：數字欄（收盤、漲跌幅、成交值、5 日相對、20 日相對）不換行，名稱欄可換行，狀態 badge 用 compact 尺寸接在名稱後（「候選 #N」primary，「條件成立」「領先成員」預設樣式）；不同日的「資料 YYYY/MM/DD」放在收盤格第二行，12px muted。640px 以下一檔一張卡片，不用橫向捲動表格：標題列左側代號名稱與 badge、右側收盤與漲跌幅（mono，不換行；不同日的日期在收盤下）→ 第二列成交值、5 日相對、20 日相對三格（muted 標籤在上、mono 數字在下）→ 題材榜另一行證據。卡片沿用 card 的底色與邊線，圓角 12px、padding 12px 16px。 |
 | 提示列 | 整列寬的 card（圓角 12px、padding 12px 16px），左側 4px 色條（同 Toast，持倉風險用 warning）；一行文字加右側 ghost 連結，窄版可換行。用於今日頁持倉風險提示，有資料才出現。 |
 | `stat-value` | 統計數字：mono、24px、600。 |
 | `badge` | 膠囊：底 card 色、1px 邊、圓角 50px、padding 6px 14px、14px 字；狀態變體把文字與邊線改成 success／primary／warning／error；`accent` 變體（只用於「AI 推論」）邊線與圓點用 `--color-accent`、文字維持主文字色以保對比。前面可放 8px 圓點（活躍狀態加 `animate-pulse`）。 |
