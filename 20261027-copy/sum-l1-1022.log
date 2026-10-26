@@ -1,0 +1,29 @@
+{
+  "as_of": "2026-10-22",
+  "strategy_levels_rows_of_the_day": 4622,
+  "summaries": 1867,
+  "action_state": {
+    "conditional_entry": 78,
+    "no_condition": 1652,
+    "data_insufficient": 137
+  },
+  "no_condition_primary_reason_unknown": 0,
+  "no_condition_primary_reason_kinds": {
+    "差 N 項": 1652
+  },
+  "no_condition_examples": [
+    "突破條件差 4 項：價格、量能、族群、法人",
+    "突破條件差 3 項：價格、量能、族群",
+    "突破條件差 3 項：價格、量能、法人",
+    "突破條件差 2 項：價格、量能",
+    "回踩條件差 2 項：趨勢、法人"
+  ],
+  "sha256": "0901cabfa2ae96f2544fe86fbc91ae7780b2b58fedaabe438eb4d87aa4b60ef6",
+  "seconds": 118.8
+}
+primary_reason changed 209 other fields changed 0
+('1006', '突破條件差 2 項：價格、量能', '回踩條件差 1 項：趨勢')
+('1007', '突破條件差 2 項：價格、量能', '回踩條件差 1 項：趨勢')
+('1016', '突破條件差 3 項：價格、量能、族群', '回踩條件差 2 項：趨勢、族群')
+('1017', '突破條件差 2 項：價格、量能', '回踩條件差 1 項：趨勢')
+('102', '突破條件差 3 項：價格、量能、法人', '回踩條件差 2 項：趨勢、法人')
