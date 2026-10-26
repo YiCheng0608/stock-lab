@@ -141,8 +141,9 @@ function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
   )
 }
 
-function Targets({ levels }: { levels: CandidateItem['levels'] }) {
-  return <>{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2"><wbr />／{formatPrice(levels.target_2)}</span>}</>
+// The stock-page card may break before 「／」; the today table and phone card keep a target on one line (DESIGN_SYSTEM §5).
+function Targets({ levels, breakable = true }: { levels: CandidateItem['levels']; breakable?: boolean }) {
+  return <>{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">{breakable && <wbr />}／{formatPrice(levels.target_2)}</span>}</>
 }
 
 export function CandidateCard({ item, linkToStock = true, detailsOpen = false }: { item: CandidateItem; linkToStock?: boolean; detailsOpen?: boolean }) {
@@ -221,7 +222,7 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
     { key: 'close', header: '最近收盤', num: true, cell: (item) => <CloseValue item={item} /> },
     { key: 'entry', header: <Term id="entry_zone">進場區</Term>, num: true, cellClassName: 'level-entry', cell: (item) => formatEntryZone(item.levels) },
     { key: 'stop', header: <Term id="support">停損</Term>, num: true, cellClassName: 'level-stop', cell: (item) => formatPrice(item.levels.invalid_price) },
-    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} /> },
+    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} breakable={false} /> },
     { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
     { key: 'total', header: <Term id="candidate_score">總分</Term>, num: true, cell: (item) => formatCandidateScore(item.total_score) },
     { key: 'reason', header: '主要理由', wrap: true, cellClassName: 'candidate-reason-cell', cell: (item) => <FirstReason item={item} /> },
@@ -249,7 +250,7 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <div><dt>收盤</dt><dd><CloseValue item={item} /></dd></div>
         <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
         <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} /></dd></div>
+        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} breakable={false} /></dd></div>
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>

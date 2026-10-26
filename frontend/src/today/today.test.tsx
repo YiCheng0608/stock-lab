@@ -107,6 +107,7 @@ check(row1.includes('href="/stocks/TWSE/2377"'), 'row #1: the name links to the 
 check(!text(row1).includes('突破 20 日高點'), 'row #1: only the first reason on the row (DESIGN_SYSTEM §7)')
 check(/class="[^"]*level-stop[^"]*">157\.82/.test(row1) && /class="[^"]*level-target[^"]*">167\.39/.test(row1), 'row #1: stop and target carry the level classes')
 check(/class="num[^"]*"/.test(row1), 'row #1: numeric cells are num')
+check(!row1.includes('<wbr'), 'row #1: the target never breaks before 「／」 (numeric cells do not wrap)')
 const row2 = slice(table, 'data-candidate-rank="2"', '</tr>')
 check(text(row2).includes('13.20') && text(row2).includes('漲跌待核實') && text(row2).includes('13.05～13.35'), 'row #2: an unverified change reads 漲跌待核實')
 check(text(slice(table, 'data-candidate-rank="4"', '</tr>')).includes('-1.50%'), 'row #4: a falling close shows a signed change')
@@ -131,6 +132,7 @@ for (const value of ['#1', '2377', '微星', '83', '上市 · 突破條件 · AI
   check(text(card1).includes(value), `card #1: shows 「${value}」`)
 }
 check(/class="[^"]*level-stop[^"]*">157\.82/.test(card1) && /class="[^"]*level-target[^"]*">167\.39/.test(card1), 'card #1: stop and target carry the level classes')
+check(!slice(card1, '<dl', '</dl>').includes('<wbr'), 'card #1: level cells never break inside')
 check(card1.includes('<details') && card1.includes('data-note-state="done"') && text(card1).includes('來源：'), 'card #1: 「AI 說明」 opens the same detail content')
 const short = render('CandidatesSection two', () => <CandidatesSection data={listResponse()} loading={false} error={null} />)
 check(!short.includes('candidate-more') && count(short, '<tr data-candidate-rank=') === 2, 'list of 2: no fold')
