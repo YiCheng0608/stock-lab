@@ -23,6 +23,7 @@ REVISIONS = (
     "0015_candidate_llm_notes",
     "0016_group_score_archive",
     "0017_tracking_plans",
+    "0018_strategy_levels",
 )
 # The instrument identity gates match 0002 onward and never 0001.
 INSTRUMENT_IDENTITY_REVISIONS = REVISIONS[1:]

@@ -3,7 +3,7 @@
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
 ``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
 -> candidates -> indicators -> theme_suggestions -> plan_tracking ->
-candidate_notes).  catchup
+strategy_levels -> candidate_notes).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -14,10 +14,11 @@ updates); indicators depend on stored bars alone, so they run after every
 successful collect, and so does theme_suggestions, which only regroups stored
 news LLM results, and plan_tracking, which tracks the user plans' own copy of
 their levels on the stored bars.  A failure keeps its error text and the
-dependent steps are recorded as skipped.  candidate_notes (LLM explanations
-of the day's candidates) runs last after a successful candidates step;
-whatever its status, it only stays on its step row and never changes the run
-status.
+dependent steps are recorded as skipped.  strategy_levels (the observation
+price levels of the day's signals) runs after a successful analyze, and
+candidate_notes (LLM explanations of the day's candidates) last after a
+successful candidates step; whatever their status, they only stay on their
+step rows and never change the run status.
 
 A first "no session" answer for today's target is recorded as
 ``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
@@ -58,6 +59,7 @@ DAILY_STEPS = (
     "indicators",
     "theme_suggestions",
     "plan_tracking",
+    "strategy_levels",
     "candidate_notes",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
@@ -68,12 +70,16 @@ STEP_REQUIRES = {
     "indicators": (),
     "theme_suggestions": (),
     "plan_tracking": (),
+    "strategy_levels": ("analyze",),
     "candidate_notes": ("candidates",),
 }
-# LLM steps whose failure (timeout, claude missing, quota) is kept on the step
-# row only: the run stays success.  Pending notes are not retried by a later
-# daily (it targets its own date); worker.cli candidate-notes --date fills them.
-NON_BLOCKING_STEPS = frozenset({"candidate_notes"})
+# Steps whose failure is kept on the step row only: the run stays success, so
+# the run's success definition does not depend on them.  The LLM notes
+# (timeout, claude missing, quota) and the observation price levels, which
+# nothing else in the run reads.  A later daily does not retry them (it
+# targets its own date); worker.cli candidate-notes / strategy-levels --date
+# fill them.
+NON_BLOCKING_STEPS = frozenset({"candidate_notes", "strategy_levels"})
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -102,6 +108,8 @@ CANDIDATE_NOTE_MODULE = "worker.candidate_notes"
 CANDIDATE_NOTE_FUNCTION = "run_candidate_notes_batch"
 PLAN_TRACKING_MODULE = "worker.plan_tracking"
 PLAN_TRACKING_FUNCTION = "run_plan_tracking"
+STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
+STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
 
 
 def _utcnow() -> datetime:
@@ -187,6 +195,11 @@ def _candidate_note_step(target: date) -> dict[str, Any]:
 def _plan_tracking_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(PLAN_TRACKING_MODULE)
     return getattr(module, PLAN_TRACKING_FUNCTION)(target)
+
+
+def _strategy_levels_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(STRATEGY_LEVELS_MODULE)
+    return getattr(module, STRATEGY_LEVELS_FUNCTION)(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -624,7 +637,8 @@ def run_daily_job(
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
         ("plan_tracking", 7, lambda: _plan_tracking_step(target)),
-        ("candidate_notes", 8, lambda: _candidate_note_step(target)),
+        ("strategy_levels", 8, lambda: _strategy_levels_step(target)),
+        ("candidate_notes", 9, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -664,9 +678,9 @@ def run_daily_job(
     for step, sequence, action in later:
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
-        # block them; theme_suggestions and plan_tracking need neither.  A
-        # candidates failure blocks only candidate_notes, whose own result
-        # never fails the run.
+        # block them; theme_suggestions and plan_tracking need neither.  An
+        # analyze failure also skips strategy_levels, and a candidates failure
+        # candidate_notes; their own results never fail the run.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
         if blocked_by:
             reason = f"{blocked_by}_not_successful"

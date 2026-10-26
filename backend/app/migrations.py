@@ -616,6 +616,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0017_tracking_plans', CURRENT_TIMESTAMP)"
         )
     )
+    # 0018 only adds strategy_levels, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0018_strategy_levels', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

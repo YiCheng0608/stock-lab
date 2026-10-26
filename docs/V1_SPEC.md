@@ -1,6 +1,6 @@
 # Canonical v1 規格
 
-本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。策略設定來源是 `backend/app/strategies/`（[策略框架與 registry](#策略框架與-registry)），`hot_group_v1` 與 `candidate_score` 的設定在 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
+本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[條件價位 `strategy_levels_v1`](#strategy_levels_v1)、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。策略設定來源是 `backend/app/strategies/`（[策略框架與 registry](#策略框架與-registry)），`hot_group_v1` 與 `candidate_score` 的設定在 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。
 
 ## 共通原則
 
@@ -196,6 +196,48 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 - **冪等**：同一目標日重跑寫出相同的列，值沒變就不改寫、`updated_at` 不動。重算出不允許的轉換（例如行情更正後原本的成交不成立）時保留原狀態與明細，`data_quality` 記 `transition_conflict`、`status_reason` 記 `transition_conflict:<原>-><新>`，不倒退。這種計畫仍是 `pending`／`triggered`，之後每次執行都照常重算：行情恢復到允許的轉換時就照新結果更新，`data_quality` 也改回；在那之前一直標 `transition_conflict`。`GET /tracking`（#253 實作）照常回傳這筆計畫與原狀態，並帶 `data_quality` 與 `status_reason`；行動頁在該張卡標示「行情有更正，狀態待核對」，不顯示重算出的新狀態。
 - **取消**（`app.tracking_plans.cancel_plan`）：只能取消 `pending`／`triggered` 的計畫，記 `cancelled_at` 與 `status_reason=cancelled_while_<原狀態>`；已結束的計畫回 `plan_already_closed`。計畫與明細都不刪。
 
+## strategy_levels_v1
+
+條件價位：以 T 日收盤後已知的資料，反推下一個交易日（T+1）的收盤與成交量要落在哪裡，T+1 的 analyze 才會判該策略的價格與量能條件成立。T+1 的前 20 日窗口是 T−19～T，所以門檻是已知數，不是預測；族群、法人、融資無法反推，只列 T 日實際值與門檻。版本 `levels_version = "strategy_levels_v1"`（`app.domain.STRATEGY_LEVELS_VERSION`），公式、升降單位表（`app.strategies.levels.TICK_LADDERS`）與漲跌幅由 `backend/tests/test_strategy_levels.py` 釘住；改任何一項要升版另寫新列，舊列保留。觀察價位**不是**成立的價位：`signals` 不改，決策摘要、今日頁、候選與使用者追蹤計畫都不讀這張表（行動頁列表只讀 `conditions_json` 與價格差距，不顯示觀察價位），追蹤計畫仍只收 conditional 訊號。
+
+**價格基準**：價格用 T 日價格基準的還原序列（與 `technical_features`、`rule_evidence_json.inputs` 相同）。T 之後到下一交易日（含）的公司行動若已存入 `corporate_actions`，全部價格乘上該段的換算因子，改用下一交易日的基準（`price_basis = next_session_raw_basis`；現金股利沒有參考價時以 T 收盤代替，同 analyze）；沒有存入時維持 `score_date_raw_basis`，T+1 除權息時門檻會偏差。下一交易日取該股 T 之後已存的第一根日線，沒有時取 T 之後第一個週間日（未存休市日曆，`next_session_date` 記用哪一天）。量用原始股數。
+
+**升降單位**：股票與 IPO：未滿 10 元 0.01、10～50 元 0.05、50～100 元 0.1、100～500 元 0.5、500～1,000 元 1、1,000 元以上 5；ETF：未滿 50 元 0.01、50 元以上 0.05。價格先四捨五入到小數 6 位再取整（與 `prior_20_highs` 相同）；嚴格大於取「下一個合法價位」，下界往上取、上界往下取。最小量無條件進位、最大量無條件捨去，到整數股（張數顯示由前端依 UI_COPY_SPEC 換算）。
+
+**breakout_v1**：H＝T−19～T 的最高價（下一交易日基準）。`trigger_price`＝H 之上的下一個合法價位；`min_volume`＝⌈1.2 × T−19～T 均量⌉。參考價位：`reference_entry`＝trigger，停損與目標＝`risk_levels(trigger, ATR14[T])`（[價位](#價位etf-與生命週期)的 1.6R／3R，ATR 也乘換算因子），`risk_reward` 為 (target_1 − entry)／(entry − invalid)。
+
+**pullback_v1**：S19、S59＝最後 19、59 根收盤之和（T−18～T、T−58～T）。下一交易日收盤 c 使 MA20＝(S19+c)/20、MA60＝(S59+c)/60，條件都是 c 的一次式：
+
+| 條件 | 下一交易日 |
+| --- | --- |
+| 歷史 | T 日已有 ≥ 59 根（T+1 才滿 60 根） |
+| MA20 > MA60 | c > (S59 − 3·S19)/2 |
+| 收盤 ≥ MA60 | c ≥ S59/59 |
+| 支撐區 0.97～1.02×MA20 | 0.97·S19/19.03 ≤ c ≤ 1.02·S19/18.98 |
+| 量能 0.6～1.2 倍 | ⌈0.6 × 均量⌉ ≤ volume ≤ ⌊1.2 × 均量⌋ |
+
+收盤區間 `zone_low`＝L（前三個下界取整後的最大值）、`zone_high`＝U（支撐區上界取整）。L > U 時記 `trend_unreachable`，不給任何價位與量，`conditions_json` 的趨勢條件與支撐區條件仍列出兩個數字。否則參考 `reference_entry`＝T 收盤夾在 [L, U] 內最近的點（收盤在區間內／上方／下方分別記 `position` inside／above／below），停損與目標＝`risk_levels(entry, ATR14[T])`，參考進場區 `entry_low`／`entry_high`＝MA20' ± max(0.5·ATR14, 0.5%·entry)，MA20'＝(S19+entry)/20（同成立價位的算法）。
+
+**可達性** `reachable_next_session`：股票與 IPO 以 T 收盤（下一交易日基準）±10% 依升降單位取整為漲跌停；breakout 為 trigger ≤ 漲停，pullback 為 L ≤ 漲停且 U ≥ 跌停。ETF 的漲跌幅因商品而異（例：00967B 官方 LimitUp 9999.95），一律 null。
+
+**availability**：
+
+| 值 | 條件 | 價位 |
+| --- | --- | --- |
+| `levels` | 下列情況以外 | 有 |
+| `trend_unreachable` | pullback 的 L > U | 無；`missing_inputs_json` 為 `trend_cannot_pass_within_support_zone` |
+| `suspended` | T 日停牌 | 無；`signal_day_suspended` |
+| `not_applicable` | 排除的 ETF 類別（`etf_category_excluded_from_actionable_signals:<類別>`） | 無 |
+| `data_incomplete` | 以下一交易日的根數（T 的根數＋1）判定 eligibility 不通過（例：IPO 未滿 60 根 `ipo_observation_only_under_60_bars`），或缺下一交易日要的輸入：前 20 根最高價／成交量、59 根收盤、T 收盤，以及 T 日的族群、法人、融資值；`missing_inputs_json` 用 evaluator 的原因碼 | 無 |
+
+T 日沒有日線的標的沒有 signal，也就沒有列。
+
+**`conditions_json`**：每個策略一份條件清單，前兩條共通：`eligibility`（T 日 eligibility 與停牌，`reasons` 列原因）、`required_inputs`（T 日判定是否 `data_incomplete`，`reasons` 列缺項）；接著是策略自己的條件（breakout：`breakout_price`、`breakout_volume`；pullback：`pullback_history`、`pullback_trend`、`pullback_above_ma60`、`pullback_support_zone`、`pullback_volume`）與三個確認條件（`group_relative_strength`、`institutional_flow`、`margin_financing`）。每條有 `kind`（eligibility／data／price／volume／trend／confirmation）、`satisfied`（T 日 analyze 存的判定，`data_incomplete` 時為 null）、`actual`、`threshold`、`threshold_high`、`operator`、`reasons`、`next_session`（可反推的條件才有：`min_close`、`max_close`、`min_volume`、`max_volume`，價格條件另有 `gap`＝目標價／T 收盤 − 1，支撐區另有 `position`）。
+
+**表** `strategy_levels`（migration `0018_strategy_levels`）：每個 signal 與 `levels_version` 一列（unique），欄位為 `availability`、`next_session_date`、`trigger_price`、`zone_low`、`zone_high`、`min_volume`、`max_volume`、`reference_entry`、`entry_low`、`entry_high`、`invalid_price`、`target_1`、`target_2`、`risk_reward`、`reachable_next_session`、`conditions_json`、`missing_inputs_json`、`price_basis`、`computed_at`；策略、標的、日期與 `strategy_version_id` 經 signal 取得。conditional 的訊號也有列（下一交易日再次成立的門檻），成立價位仍以 `signals` 為準。只處理 `analysis` 訊號，且策略版本須等於 registry 的現行版本，其他版本略過並計入 `signals_skipped`。每日保存全部列（2026-10-16～10-22 副本約 4,600 列／日、約 8 MB／日）。
+
+**冪等與回補**：daily 的 `strategy_levels` 步驟（[OPERATIONS §6.3](OPERATIONS.md#63-日誌與-run-記錄)）與 `worker.cli strategy-levels --date`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）是同一個函式；同日重跑值相同就不改寫（`computed_at` 不動），值不同才更新。資料可由 `market_bars`、`corporate_actions`、`technical_features` 與 `signals` 完整重建。
+
 ## 策略版本識別
 
 - 唯一鍵為（`name`、`version`、`formula_version`）。`init-db` 依快照把既存列標為已知公式（與固定 SHA-256 清單內 canonical 快照相同者為 `institutional-flow/v1-shares-per-twd-turnover`），其餘標 `unclassified/<reason>`；非現行公式的列設 `active=false`，id、`version`、`config_json`、快照與指向它的訊號不改。
@@ -206,7 +248,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 - `backend/app/strategies/` 的 `REGISTRY` 是策略清單唯一的宣告處，宣告順序為 `breakout_v1`、`pullback_v1`。`backend/app`、`backend/worker` 其他非測試程式不寫策略名稱，一律讀 registry；例外只有歷史資料與版本化快照，列在 `backend/tests/test_strategy_registry.py` 的白名單並寫理由，該測試掃描原始碼，出現白名單外的策略名稱就失敗。
 - `StrategyInputs`：analyze 每檔每日建一次、所有策略共用。欄位為 `bar_count`、`close`、`volume`、`ma20`、`ma60`、`atr14`、`prior_highs`／`prior_volumes`（T 之前最多 20 根，與 `rule_evidence_json.inputs` 相同）、`group_excess_return_20d`、`institutional_flow_ratio_5d`、`margin_change_ratio_5d`。
-- `Strategy`：`config` 是 canonical 設定（`name`、`version`、`kind` 取自它，快照存成 `StrategyVersion`）；`rule` 是純函式判定，`arguments(inputs)` 給它的參數；`actionable_levels(inputs)` 是判定成立時寫入 `signals` 的價位；`entry_type` 決定價位欄（`app.domain.ENTRY_LEVEL_FIELDS`，只能是既有的 breakout／pullback）；`label_zh`、`research_label_zh`、`requires_zh` 是顯示文案；`level_formula_version` 是價位公式識別；`candidate_distance`、`candidate_reason` 供候選評分的技術分項與理由使用。
+- `Strategy`：`config` 是 canonical 設定（`name`、`version`、`kind` 取自它，快照存成 `StrategyVersion`）；`rule` 是純函式判定，`arguments(inputs)` 給它的參數；`actionable_levels(inputs)` 是判定成立時寫入 `signals` 的價位；`entry_type` 決定價位欄（`app.domain.ENTRY_LEVEL_FIELDS`，只能是既有的 breakout／pullback）；`label_zh`、`research_label_zh`、`requires_zh` 是顯示文案；`level_formula_version` 是價位公式識別；`candidate_distance`、`candidate_reason` 供候選評分的技術分項與理由使用。`observation_levels(next_inputs)` 與 `conditions(inputs, evaluation, levels)` 給[條件價位](#strategy_levels_v1)：前者以 `NextSessionInputs`（T 日收盤後已知、換算到下一交易日基準的序列）解出下一交易日的收盤與量，後者列出 T 日的條件清單；未實作的策略記 `not_applicable`（`observation_levels_not_defined`）。
 - analyze 對每檔每日：建一次輸入，依宣告順序判定每個策略，再為每個策略各寫一列 `signals`；每列的 `rationale` 與 `rule_evidence_json` 以 `kind` 為鍵記錄全部策略的判定。決策摘要取宣告順序中第一個 conditional 策略；只有 observation 時優先 pullback entry type。
 - 新增策略：在 `app/strategies/` 新增模組（canonical 設定用新的 `name`／`version`、`rule`、`arguments`、`actionable_levels`、`entry_type` 與文案），登錄到 `REGISTRY`，補單元測試與本文件的策略章節。`kind` 必須和其他已登錄策略不同（例如和 `breakout_v1` 同時登錄的 `breakout_v2` 不能沿用 `breakout`），也不得是證據與 rationale 的固定鍵（`app.strategies.RESERVED_KINDS`：`strategy`、`strategy_version`、`group_member_return_lookup`、`confidence_semantics`、`actionable`、`inputs`、`risk_validation`、`execution`、`group`、`missing`），否則會無聲蓋掉同鍵的內容。`test_strategy_registry.py` 以 `registry_problems` 檢查，並核對保留鍵就是 analyze 實際寫出的固定鍵。登錄後 analyze 就為每檔寫出它的 signal 列，`_ensure_strategies` 新建它的 `StrategyVersion`，個股頁條件清單出現它；不需改 decision、API 或候選程式。
 - 候選池不跟著 registry：每個 `candidate_score` 版本在 `pool.strategies` 列出入池策略，並以策略名稱為鍵定義量比方向與距離公式。新策略要進候選池，必須另升一個 `candidate_score` 版本（新設定快照，舊版的 runs 保留），不改現行版本。
