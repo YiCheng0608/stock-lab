@@ -370,6 +370,83 @@ export type InstrumentDetail = {
   signals: Signal[]
   // The stock's row in the latest candidate run on or before the cutoff; null when it is not a candidate.
   candidate?: CandidateItem | null
+  // One row per registered strategy on the latest signal date (#274).
+  strategy_board?: StrategyBoard | null
+}
+
+export type StrategyBoardStatus = 'conditional' | 'observation' | 'data_incomplete' | 'not_applicable'
+
+export type StrategyCondition = {
+  code: string
+  kind: string
+  satisfied: boolean | null
+  actual: number | null
+  threshold: number | null
+  threshold_high: number | null
+  operator: string | null
+  reasons: string[]
+  next_session: Record<string, number | string | null> | null
+}
+
+// Levels never mix: actionable reads the signal, observation reads strategy_levels.
+export type StrategyActionableLevels = {
+  kind: 'actionable'
+  entry_type: string
+  trigger_price: number | null
+  reference_entry: number | null
+  entry_low: number | null
+  entry_high: number | null
+  invalid_price: number | null
+  target_1: number | null
+  target_2: number | null
+  risk_reward: number | null
+}
+
+export type StrategyObservationLevels = {
+  kind: 'observation'
+  display_label: string
+  availability: 'levels' | 'trend_unreachable' | 'data_incomplete' | 'not_applicable' | 'suspended' | string
+  next_session_date: string | null
+  trigger_price: number | null
+  zone_low: number | null
+  zone_high: number | null
+  min_volume: number | null
+  max_volume: number | null
+  reference_entry: number | null
+  entry_low: number | null
+  entry_high: number | null
+  invalid_price: number | null
+  target_1: number | null
+  target_2: number | null
+  risk_reward: number | null
+  reachable_next_session: boolean | null
+  price_basis: string
+  missing_inputs: string[]
+  missing_labels: string[]
+}
+
+export type StrategyBoardRow = {
+  strategy: string
+  label: string
+  version: string
+  entry_type: string
+  status: StrategyBoardStatus
+  signal_id: number | null
+  signal_date: string | null
+  earliest_execution_date: string | null
+  levels: StrategyActionableLevels | StrategyObservationLevels | null
+  levels_missing: boolean
+  unmet: string[]
+  missing: string[]
+  missing_labels: string[]
+  conditions: StrategyCondition[]
+}
+
+export type StrategyBoard = {
+  as_of: string | null
+  levels_version: string
+  candidate: { rank: number; total_score: number; score_version: string; strategy: string; llm_note?: CandidateLlmNote | null } | null
+  strategies: StrategyBoardRow[]
 }
 
 export type InstrumentCoverage = {

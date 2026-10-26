@@ -14,7 +14,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from app.domain import HOT_GROUP_CONFIG
+from app.domain import HOT_GROUP_CONFIG, INSTITUTIONAL_FLOW_FORMULA_VERSION
 
 from .base import (
     ENTRY_LEVEL_FIELDS,
@@ -82,6 +82,24 @@ def strategy_by_kind(kind: str) -> Strategy | None:
     )
 
 
+def current_strategy(name: str, version: str, formula_version: str) -> Strategy | None:
+    """The registered strategy a StrategyVersion row is the current version of.
+
+    A row of another version or institutional-flow formula is history: its
+    stored levels and conditions follow that version's rules, not today's
+    defaults (#274 review L1).
+    """
+
+    strategy = REGISTRY.get(name)
+    if (
+        strategy is None
+        or strategy.version != version
+        or formula_version != INSTITUTIONAL_FLOW_FORMULA_VERSION
+    ):
+        return None
+    return strategy
+
+
 def strategy_configs() -> dict[str, Mapping[str, Any]]:
     return {key: strategy.config for key, strategy in REGISTRY.items()}
 
@@ -112,6 +130,7 @@ __all__ = [
     "StrategyInputs",
     "canonical_config_snapshot",
     "canonical_configs",
+    "current_strategy",
     "evaluate_breakout_v1",
     "evaluate_pullback_v1",
     "finite_number",

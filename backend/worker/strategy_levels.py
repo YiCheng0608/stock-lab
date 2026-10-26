@@ -3,10 +3,11 @@
 The ``strategy_levels`` step of ``worker.cli daily`` (after a successful
 analyze; its failure never changes the run status) and ``worker.cli
 strategy-levels``.  For every analysis signal of the date whose strategy
-version is the registered one, the strategy solves its conditions for the
-next session's close and volume (``Strategy.observation_levels``) and lists
-T's conditions (``Strategy.conditions``); the result is one ``strategy_levels``
-row per signal and STRATEGY_LEVELS_VERSION.
+version and formula version are the registered ones, the strategy solves its
+conditions for the next session's close and volume
+(``Strategy.observation_levels``) and lists T's conditions
+(``Strategy.conditions``); the result is one ``strategy_levels`` row per
+signal and STRATEGY_LEVELS_VERSION.
 
 Inputs are T's stored data only: the signal's own evidence (prior windows,
 moving averages, confirmations, each strategy's state), T's bar and feature,
@@ -40,7 +41,7 @@ from app.models import (
     StrategyVersion,
     TechnicalFeature,
 )
-from app.strategies import REGISTRY, NextSessionInputs, StrategyInputs
+from app.strategies import NextSessionInputs, StrategyInputs, current_strategy
 from app.strategies import levels
 from worker import pipeline
 
@@ -242,8 +243,12 @@ def compute_strategy_levels(
         current = [
             (signal, strategy)
             for signal, version, _instrument in group
-            if (strategy := REGISTRY.get(version.name)) is not None
-            and strategy.version == version.version
+            if (
+                strategy := current_strategy(
+                    version.name, version.version, version.formula_version
+                )
+            )
+            is not None
         ]
         skipped += len(group) - len(current)
         if not current:
@@ -286,7 +291,7 @@ def compute_strategy_levels(
             values = {
                 **levels.as_json(observation),
                 "next_session_date": next_date,
-                "conditions_json": [item.as_json() for item in conditions],
+                "conditions_json": levels.compact_conditions(strategy, conditions),
                 "price_basis": next_inputs.price_basis,
             }
             written += int(_write(db, signal, values, stamp))

@@ -26,7 +26,9 @@ The result goes to stdout without a trailing newline.
                                    prompt_version), instrument_status_sync,
                                    execution_calendar (analysis signals of the
                                    latest signal date written with the calendar
-                                   but without earliest_execution_date)
+                                   but without earliest_execution_date),
+                                   strategy_levels (the latest finished daily
+                                   run's strategy_levels step did not succeed)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -236,6 +238,7 @@ def invariants(db: str, today: str) -> str:
                 f" exchanges={len(rows)} skipped={','.join(skipped) or 'none'}"
             )
         lines.append(_execution_calendar(conn))
+        lines.append(_strategy_levels(conn))
     return "\n".join(lines)
 
 
@@ -272,6 +275,33 @@ def _execution_calendar(conn: sqlite3.Connection) -> str:
     return (
         f"execution_calendar {_state(without)} signal_date={day}"
         f" signals={judged} without_date={without}"
+    )
+
+
+def _strategy_levels(conn: sqlite3.Connection) -> str:
+    """The strategy_levels step of the latest finished daily run that has one
+    (Issue #274, #293 review L2).
+
+    The step is non-blocking: its failure leaves the run a success, so only
+    this line reports it.  ``skipped`` (analyze did not succeed) is not judged:
+    the run's own outcome reports that.  A database without the step (before
+    0019, or a release without it) is skipped."""
+
+    if not _has_table(conn, "schedule_run_steps"):
+        return "strategy_levels skip reason=no_schedule_run_steps"
+    row = conn.execute(
+        "SELECT r.id, r.target_date, s.status FROM schedule_run_steps s"
+        " JOIN schedule_runs r ON r.id = s.schedule_run_id"
+        " WHERE r.job='daily' AND s.step='strategy_levels'"
+        " AND r.finished_at IS NOT NULL ORDER BY r.id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return "strategy_levels skip reason=no_strategy_levels_step"
+    run_id, target, status = row
+    failed = status not in ("success", "no_data", "skipped")
+    return (
+        f"strategy_levels {_state(failed)} target_date={str(target)[:10]}"
+        f" run_id={run_id} status={status}"
     )
 
 

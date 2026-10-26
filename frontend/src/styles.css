@@ -508,6 +508,38 @@ a.symbol-link:hover { color: var(--color-primary); }
 /* Prices break only at ～ or ／, never inside a number. */
 .candidate-levels dd, .candidate-components dd { margin: var(--space-1) 0 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; }
 .candidate-components dd { font-size: 18px; font-weight: 600; }
+/* ---- stock strategy board (#274, DESIGN_SYSTEM §5 策略總表, §7 觀察價位) ------------------------------- */
+.strategy-board .section-head { flex-wrap: wrap; }
+.strategy-candidate { display: grid; gap: var(--space-3); margin: var(--space-3) 0 var(--space-4); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-alt); }
+.strategy-candidate-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.strategy-candidate .candidate-note { margin-top: 0; padding: var(--space-4); }
+.strategy-table-wrap { border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-card); }
+.strategy-table th, .strategy-table td { height: auto; padding: var(--space-3); vertical-align: top; }
+.strategy-table th { height: 40px; vertical-align: middle; }
+.strategy-table .strategy-unmet { min-width: 10em; max-width: 18em; font-size: 14px; line-height: 1.5; }
+.strategy-table .strategy-levels-cell { min-width: 18em; }
+.strategy-table .table-detail-row > td { padding: 0 var(--space-3) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.strategy-table tbody tr:not(.table-detail-row) td { border-bottom: 0; }
+.strategy-cards { display: none; gap: var(--space-3); }
+.strategy-card { min-width: 0; padding: var(--space-4); }
+.strategy-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.strategy-card .strategy-unmet { margin: var(--space-2) 0; font-size: 14px; line-height: 1.5; }
+.strategy-levels { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; }
+.strategy-levels > div { flex: 0 0 auto; }
+.strategy-levels dt { color: var(--color-text-muted); font-size: 12px; }
+.strategy-levels dd { margin: 0; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Observation levels: dashed frame, muted text and their own label, apart from passed levels (DESIGN_SYSTEM §7). */
+.strategy-observation { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--color-border-hover); border-radius: var(--radius-sm); color: var(--color-text-muted); }
+.strategy-observation-label { color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
+.strategy-observation .strategy-levels dd { font-weight: 400; }
+.strategy-observation .level-entry { color: var(--color-text-muted); }
+.strategy-missing { border-color: var(--color-warning); color: var(--color-warning); font-size: 14px; }
+.strategy-unreachable { color: var(--color-warning); }
+.strategy-conditions { margin-top: var(--space-2); }
+.strategy-condition-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.strategy-condition-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: 14px; }
+.strategy-condition-label { font-weight: 500; }
+.strategy-condition-next { flex-basis: 100%; padding-left: var(--space-2); }
 .level-entry { color: var(--color-text); }
 .level-stop { color: var(--color-warning); }
 .level-target { color: var(--color-primary); }
@@ -606,6 +638,8 @@ a.symbol-link:hover { color: var(--color-primary); }
   .market-overview-more { display: block; }
   .candidate-table-wrap { display: none; }
   .candidate-cards { display: grid; }
+  .strategy-table-wrap { display: none; }
+  .strategy-cards { display: grid; }
   /* Phones keep at least two candidate cards on the first screen (DESIGN_SYSTEM §4): the header text takes its own
      line with the badge and 資料說明 sharing the next, the run badges sit beside the title, level cells stay on one row. */
   .home-dataline { display: contents; }

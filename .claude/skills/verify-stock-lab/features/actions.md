@@ -20,6 +20,8 @@
 | 前端檔 | `frontend/src/news/NewsViews.tsx` |
 | 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
 | 前端檔 | `frontend/src/stock/StockHeader.tsx` |
+| 前端檔 | `frontend/src/stock/StrategyBoardPanel.tsx` |
+| 前端檔 | `frontend/src/stock/strategyBoard.ts` |
 | API route | `GET /dashboard` |
 | API route | `GET /actions` |
 | API route | `GET /actions/{exchange}/{symbol}` |

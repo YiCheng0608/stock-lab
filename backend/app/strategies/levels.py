@@ -23,6 +23,7 @@ from .base import (
     Condition,
     NextSessionInputs,
     ObservationLevels,
+    Strategy,
     StrategyInputs,
     finite_number,
     risk_levels,
@@ -255,6 +256,76 @@ def common_conditions(
             evaluation.state != "data_incomplete",
             reasons=evaluation.reasons if evaluation.state == "data_incomplete" else (),
         ),
+    ]
+
+
+_BLANK_CONDITION = Condition("", "", None).as_json()
+
+
+def condition_defaults(strategy: Strategy) -> dict[str, dict[str, Any]]:
+    """Each condition of ``strategy`` as it reads without any input.
+
+    Kind, operator, the configured thresholds and the empty values are the
+    same on every row of one strategy version; ``conditions_json`` stores only
+    what differs from this (#274 review L3).  Pinned by tests: a change here
+    changes how stored rows read back.
+    """
+
+    empty = RuleEvaluation(False, "data_incomplete")
+    inputs = StrategyInputs(
+        bar_count=0,
+        close=None,
+        volume=None,
+        ma20=None,
+        ma60=None,
+        atr14=None,
+        prior_highs=None,
+        prior_volumes=None,
+        group_excess_return_20d=None,
+        institutional_flow_ratio_5d=None,
+        margin_change_ratio_5d=None,
+    )
+    conditions = [
+        *common_conditions(
+            instrument_type="stock",
+            etf_category=None,
+            bar_count=0,
+            is_suspended=False,
+            evaluation=empty,
+        ),
+        *strategy.conditions(inputs, empty, ObservationLevels("data_incomplete")),
+    ]
+    return {item.code: item.as_json() for item in conditions}
+
+
+def compact_conditions(
+    strategy: Strategy, conditions: Iterable[Condition]
+) -> list[dict[str, Any]]:
+    """The stored ``conditions_json``: each condition without its default fields."""
+
+    defaults = condition_defaults(strategy)
+    stored = []
+    for condition in conditions:
+        item = condition.as_json()
+        default = defaults.get(item["code"], {})
+        stored.append(
+            {
+                key: value
+                for key, value in item.items()
+                if key == "code" or key not in default or default[key] != value
+            }
+        )
+    return stored
+
+
+def expand_conditions(strategy: Strategy, stored: Any) -> list[dict[str, Any]]:
+    """Full condition dicts from ``conditions_json`` (compact or not)."""
+
+    defaults = condition_defaults(strategy)
+    return [
+        {**_BLANK_CONDITION, **defaults.get(item.get("code"), {}), **item}
+        for item in (stored if isinstance(stored, list) else [])
+        if isinstance(item, dict)
     ]
 
 
