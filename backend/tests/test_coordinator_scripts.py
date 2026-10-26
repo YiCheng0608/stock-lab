@@ -751,8 +751,9 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
 
 # Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
 # tmp_path as this file's Harness, test_worker_job_scripts and test_verify_tools build
-# them (an empty .git directory, a read-only git object file), one in a test that then
-# skips.
+# them (an empty .git directory, a .git file, a read-only git object file), one in a
+# test that then skips; with INNER_KILL=1 the last test exits the process before
+# pytest's teardown, as a killed run does.
 INNER_TESTS = r"""
 import os
 import stat
@@ -762,22 +763,35 @@ import pytest
 
 def test_builds_repositories(tmp_path):
     (tmp_path / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / "linked").mkdir()
+    (tmp_path / "linked" / ".git").write_text("gitdir: x\n")
     obj = tmp_path / "work" / ".git" / "objects" / "ab" / "cdef"
     obj.parent.mkdir(parents=True)
     obj.write_text("x")
     os.chmod(obj, stat.S_IREAD)
+    (tmp_path / "work" / "debug.txt").write_text("kept")
     assert os.environ["INNER_FAIL"] == "0"
 
 
 def test_skips_after_building_one(tmp_path):
     (tmp_path / "project" / ".git").mkdir(parents=True)
     pytest.skip("skipped with a .git in its tmp_path")
+
+
+def test_killed_after_building_one(tmp_path):
+    if os.environ["INNER_KILL"] != "1":
+        pytest.skip("not killed")
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    os._exit(3)
 """
 
 
-def _inner_pytest(h: Harness, fail: bool) -> tuple[Path, subprocess.CompletedProcess]:
+def _inner_pytest(
+    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
+) -> tuple[Path, subprocess.CompletedProcess]:
     """A pytest run with --basetemp in an engineer's temp directory outside the worktree,
-    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run."""
+    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run. Runs
+    with another BASETEMP name go to the same directory, as #279's t279/b1, bf did."""
     inner = h.root / "inner"
     inner.mkdir(exist_ok=True)
     shutil.copyfile(Path(__file__).with_name("conftest.py"), inner / "conftest.py")
@@ -790,10 +804,11 @@ def _inner_pytest(h: Harness, fail: bool) -> tuple[Path, subprocess.CompletedPro
         TEMP=str(temp / "tmp"),
         TMP=str(temp / "tmp"),
         INNER_FAIL="1" if fail else "0",
+        INNER_KILL="1" if kill else "0",
     )
     command = [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
     command += ["--rootdir", str(inner), "--confcutdir", str(inner)]
-    command += ["--basetemp", str(temp / "b"), str(inner)]
+    command += ["--basetemp", str(temp / basetemp), str(inner)]
     # cwd backend: the copied conftest imports app and worker, as under CI.
     result = subprocess.run(
         command,
@@ -813,21 +828,104 @@ def test_a_green_pytest_run_leaves_no_repository_in_its_basetemp(h: Harness) -> 
     of a green run, so the directory passes guard_dir as it is."""
     temp, result = _inner_pytest(h, fail=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "1 passed, 1 skipped" in result.stdout
-    assert not (temp / "b").exists(), sorted(p.as_posix() for p in temp.rglob(".git"))
+    assert "1 passed, 2 skipped" in result.stdout
+    assert not (temp / "b").exists(), _repositories(temp)
     assert _guard(h, temp.as_posix()) == ""
 
 
-def test_a_failed_pytest_run_keeps_its_basetemp_and_guard_dir_refuses_it(
+def _repositories(top: Path) -> list[str]:
+    return sorted(p.relative_to(top).as_posix() for p in top.rglob(".git"))
+
+
+def test_a_failed_run_then_a_green_run_on_another_basetemp_leave_no_repository(
     h: Harness,
 ) -> None:
-    """#290: a failed run keeps its tmp_path for debugging, and guard_dir is not loosened
-    for a basetemp: it still refuses the directory and names the .git it found."""
-    temp, result = _inner_pytest(h, fail=True)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert (temp / "b").is_dir()
+    """#304: a failed run kept its basetemp with the repositories in it, and the green
+    run that followed took another basetemp and never cleared it (#278's s/b, #279's
+    t279/bf). The failed run keeps its debug files but no .git, so the directory
+    passes guard_dir as it is."""
+    temp, failed = _inner_pytest(h, fail=True, basetemp="b1")
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    temp, green = _inner_pytest(h, fail=False, basetemp="b2")
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _repositories(temp) == []
+    assert not (temp / "b2").exists()
+    [debug] = (temp / "b1").rglob("debug.txt")
+    assert debug.read_text(encoding="utf-8") == "kept"
+    assert (debug.parent.parent / "repo").is_dir()
+    assert _guard(h, temp.as_posix()) == ""
+
+
+def test_a_killed_pytest_run_leaves_only_the_repository_of_the_test_it_was_in(
+    h: Harness,
+) -> None:
+    """#304: a run killed before pytest_sessionfinish (a command timeout) has deleted the
+    repositories of every test that finished; that of the test it was in stays, and
+    guard_dir is not loosened for a basetemp: it refuses the directory and names it."""
+    temp, result = _inner_pytest(h, fail=True, kill=True)
+    assert result.returncode == 3, result.stdout + result.stderr
+    [left] = _repositories(temp)
+    assert left.startswith("b/test_killed_after_building_on"), left
     reason = _guard(h, temp.as_posix())
-    assert reason.startswith("裡面有 .git（") and "/b/" in reason.replace("\\", "/")
+    assert reason.startswith("裡面有 .git（") and "test_killed" in reason, reason
+
+
+def test_a_failed_session_keeps_its_basetemp_without_a_repository(
+    request, tmp_path: Path, capsys
+) -> None:
+    """#304: what no test's teardown reached (a module or session fixture's
+    tmp_path_factory directory) loses its .git when the session ends unsuccessful;
+    the rest of the basetemp stays for debugging."""
+    basetemp = tmp_path / "basetemp"
+    (basetemp / "fixture0" / "repo" / ".git").mkdir(parents=True)
+    (basetemp / "fixture0" / "debug.txt").write_text("kept", encoding="utf-8")
+    factory = SimpleNamespace(_basetemp=basetemp)
+    session = SimpleNamespace(config=SimpleNamespace(_tmp_path_factory=factory))
+    _conftest(request).pytest_sessionfinish(session, 1)
+    assert _repositories(basetemp) == []
+    assert (basetemp / "fixture0" / "repo").is_dir()
+    assert (basetemp / "fixture0" / "debug.txt").read_text(encoding="utf-8") == "kept"
+    assert "without its 1 .git (#304)" in capsys.readouterr().err
+
+
+def test_dropping_repositories_does_not_follow_a_link(request, tmp_path: Path) -> None:
+    """#304: the .git removal of a failed run does not enter a junction or symlink and
+    deletes a .git that is a link as the link itself: what lies outside the basetemp
+    stays as it was. Stand-ins under tmp_path only (#282)."""
+    outside = tmp_path / "outside"
+    (outside / ".git").mkdir(parents=True)
+    (outside / "file.txt").write_text("k", encoding="utf-8")
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "file.txt").write_text("k", encoding="utf-8")
+    basetemp = tmp_path / "basetemp"
+    (basetemp / "a" / ".git" / "objects").mkdir(parents=True)
+    obj = basetemp / "a" / ".git" / "objects" / "cdef"
+    obj.write_text("x", encoding="utf-8")
+    obj.chmod(stat.S_IREAD)
+    (basetemp / "b").mkdir()
+    (basetemp / "b" / ".git").write_text("gitdir: x\n", encoding="utf-8")
+    (basetemp / "c").mkdir()
+    _link(outside, basetemp / "c" / "link")
+    (basetemp / "d").mkdir()
+    _link(target, basetemp / "d" / ".git")
+    (basetemp / "a" / "debug.txt").write_text("kept", encoding="utf-8")
+
+    failures: list = []
+    assert _conftest(request)._drop_repositories(basetemp, failures) == 3
+    assert failures == []
+    # Path.rglob enters a junction, so the deleted paths are named one by one.
+    for gone in ("a", "b", "d"):
+        assert not os.path.lexists(basetemp / gone / ".git"), gone
+    assert (basetemp / "a" / "debug.txt").read_text(encoding="utf-8") == "kept"
+    assert (outside / ".git").is_dir() and (outside / "file.txt").is_file()
+    assert (target / "file.txt").read_text(encoding="utf-8") == "k"
+    link = basetemp / "c" / "link"
+    assert (link / ".git").is_dir()
+    if link.is_junction():
+        os.rmdir(link)
+    else:
+        link.unlink()
 
 
 def _conftest(request):
