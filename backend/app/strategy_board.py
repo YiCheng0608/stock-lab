@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from .domain import CANDIDATE_SCORE, STRATEGY_LEVELS_VERSION
 from .models import Instrument, Signal, StrategyLevel, StrategyVersion
 from .presentation import display_reason
-from .strategies import REGISTRY, Strategy
+from .strategies import REGISTRY, Strategy, current_strategy
 from .strategies import levels as level_rules
 
 SIGNAL_NAMESPACE = "analysis"
@@ -229,8 +229,10 @@ def strategy_board(
             .where(*analysis, Signal.signal_date == day)
             .order_by(desc(Signal.id))
         ).all():
-            strategy = REGISTRY.get(version.name)
-            if strategy is not None and strategy.version == version.version:
+            strategy = current_strategy(
+                version.name, version.version, version.formula_version
+            )
+            if strategy is not None:
                 signals.setdefault(strategy.key, signal)
     return {
         "as_of": day.isoformat() if day else None,

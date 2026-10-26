@@ -1,6 +1,6 @@
 import { formatPrice } from '../candidates/candidates'
 import type { StrategyBoardRow, StrategyBoardStatus, StrategyCondition, StrategyObservationLevels } from '../types'
-import { formatCanonicalShareLots, formatFixed } from '../units'
+import { LOT_SIZE, formatFixed } from '../units'
 
 // Pure helpers for the stock strategy board (#274); copy follows UI_COPY_SPEC §10.1, visuals DESIGN_SYSTEM §7.
 
@@ -34,39 +34,65 @@ export function levelsVersionLabel(version: string): string {
   return match ? `價位規則 v${match[1]}` : '價位規則待核實'
 }
 
-type ConditionCopy = { label: string; unmet: string }
-
-const CONDITIONS: Record<string, ConditionCopy> = {
-  eligibility: { label: '適用標的', unmet: '標的不適用' },
-  required_inputs: { label: '必要資料齊備', unmet: '資料待補' },
-  breakout_price: { label: '收盤突破前 20 日高點', unmet: '收盤未突破前 20 日高點' },
-  breakout_volume: { label: '量比 ≥ 1.20 倍', unmet: '量比未達 1.20 倍' },
-  pullback_history: { label: '日線滿 60 日', unmet: '日線未滿 60 日' },
-  pullback_trend: { label: '20 日均線在 60 日均線之上', unmet: '20 日均線未站上 60 日均線' },
-  pullback_above_ma60: { label: '收盤不低於 60 日均線', unmet: '收盤低於 60 日均線' },
-  pullback_support_zone: { label: '收盤在 20 日均線支撐區（0.97～1.02 倍）', unmet: '收盤不在支撐區' },
-  pullback_volume: { label: '量比 0.6～1.2 倍', unmet: '量比不在 0.6～1.2 倍' },
-  group_relative_strength: { label: '族群 20 日超額報酬 > 0', unmet: '族群未強於大盤' },
-  institutional_flow: { label: '法人 5 日淨額 ≥ −0.3% 均量', unmet: '法人籌碼未達要求' },
-  margin_financing: { label: '融資 5 日變動 ≤ 5%', unmet: '融資增加超過上限' },
-}
-const UNKNOWN_CONDITION = '研究條件需要人工核對'
-
-export function conditionLabel(code: string): string {
-  return CONDITIONS[code]?.label ?? UNKNOWN_CONDITION
-}
-
-export function unmetLabel(code: string): string {
-  return CONDITIONS[code]?.unmet ?? UNKNOWN_CONDITION
-}
-
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 const percent = (value: unknown, signed = true) => isNumber(value) ? `${formatFixed(value * 100, 2, signed)}%` : '—'
 const ratio = (value: unknown) => isNumber(value) ? `${formatFixed(value, 2)} 倍` : '—'
-// Whole lots, rounded half away from zero on the exact share count (UI_COPY_SPEC §8.3).
-const lotNumber = (value: unknown) => isNumber(value) && Number.isSafeInteger(value) ? formatCanonicalShareLots(String(value), 1, true) ?? '—' : '—'
-const lots = (value: unknown) => `${lotNumber(value)} 張`
-const lotRange = (low: unknown, high: unknown) => `${lotNumber(low)}～${lotNumber(high)} 張`
+// Whole lots for a volume bound: a minimum rounds up and a maximum down, so the shown bound is never looser than the
+// rule's share count (#274 review L2); flows and holdings round as UI_COPY_SPEC §8.3.
+const lotBound = (value: unknown, round: 'up' | 'down') => isNumber(value) && Number.isSafeInteger(value) && value >= 0
+  ? (round === 'up' ? Math.ceil(value / LOT_SIZE) : Math.floor(value / LOT_SIZE)).toLocaleString('zh-TW')
+  : '—'
+const minLots = (value: unknown) => `${lotBound(value, 'up')} 張`
+const lotRange = (low: unknown, high: unknown) => `${lotBound(low, 'up')}～${lotBound(high, 'down')} 張`
+
+const OPERATORS: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
+
+// A condition's rule bound from the API's own threshold and operator (#274 review L3): no rule number is written here,
+// so a new strategy version's thresholds show as they are. null when the condition carries none.
+function bound(item: StrategyCondition | undefined, format: (value: number) => string, unit: string): string | null {
+  if (!item || !isNumber(item.threshold)) return null
+  if (item.operator === 'between') return isNumber(item.threshold_high) ? `${format(item.threshold)}～${format(item.threshold_high)}${unit}` : null
+  const symbol = OPERATORS[item.operator ?? '']
+  return symbol ? `${symbol} ${format(item.threshold)}${unit}` : null
+}
+const two = (value: number) => formatFixed(value, 2)
+const share = (value: number) => formatFixed(value * 100, 2)
+
+type ConditionCopy = { label: (item?: StrategyCondition) => string; unmet: (item?: StrategyCondition) => string }
+const fixed = (label: string, unmet: string): ConditionCopy => ({ label: () => label, unmet: () => unmet })
+
+const CONDITIONS: Record<string, ConditionCopy> = {
+  eligibility: fixed('適用標的', '標的不適用'),
+  required_inputs: fixed('必要資料齊備', '資料待補'),
+  breakout_price: fixed('收盤突破前 20 日高點', '收盤未突破前 20 日高點'),
+  breakout_volume: {
+    label: (item) => `量比 ${bound(item, two, ' 倍') ?? '達規則門檻'}`,
+    unmet: (item) => isNumber(item?.threshold) ? `量比未達 ${two(item.threshold)} 倍` : '量比未達規則門檻',
+  },
+  pullback_history: {
+    label: (item) => isNumber(item?.threshold) ? `日線滿 ${item.threshold} 日` : '日線達規則日數',
+    unmet: (item) => isNumber(item?.threshold) ? `日線未滿 ${item.threshold} 日` : '日線未達規則日數',
+  },
+  pullback_trend: fixed('20 日均線在 60 日均線之上', '20 日均線未站上 60 日均線'),
+  pullback_above_ma60: fixed('收盤不低於 60 日均線', '收盤低於 60 日均線'),
+  pullback_support_zone: fixed('收盤在 20 日均線支撐區', '收盤不在支撐區'),
+  pullback_volume: {
+    label: (item) => `量比 ${bound(item, two, ' 倍') ?? '在規則區間'}`,
+    unmet: (item) => { const range = bound(item, two, ' 倍'); return range ? `量比不在 ${range}` : '量比不在規則區間' },
+  },
+  group_relative_strength: { label: (item) => `族群 20 日超額報酬 ${bound(item, share, '%') ?? '達規則門檻'}`, unmet: () => '族群未強於大盤' },
+  institutional_flow: { label: (item) => `法人 5 日淨額 ÷ 20 日均量 ${bound(item, share, '%') ?? '達規則門檻'}`, unmet: () => '法人籌碼未達要求' },
+  margin_financing: { label: (item) => `融資 5 日變動 ${bound(item, share, '%') ?? '在規則上限內'}`, unmet: () => '融資增加超過上限' },
+}
+const UNKNOWN_CONDITION = '研究條件需要人工核對'
+
+export function conditionLabel(item: StrategyCondition): string {
+  return CONDITIONS[item.code]?.label(item) ?? UNKNOWN_CONDITION
+}
+
+export function unmetLabel(code: string, item?: StrategyCondition): string {
+  return CONDITIONS[code]?.unmet(item) ?? UNKNOWN_CONDITION
+}
 
 // 「差哪個條件」: one line per row.
 export function unmetText(row: StrategyBoardRow): string {
@@ -76,7 +102,7 @@ export function unmetText(row: StrategyBoardRow): string {
     return row.status === 'not_applicable' ? labels : `缺：${labels}`
   }
   if (row.levels_missing && row.conditions.length === 0) return '條件明細未產生'
-  return row.unmet.length ? row.unmet.map(unmetLabel).join('、') : '條件明細待核實'
+  return row.unmet.length ? row.unmet.map((code) => unmetLabel(code, row.conditions.find((item) => item.code === code))).join('、') : '條件明細待核實'
 }
 
 export type ConditionView = { code: string; state: 'met' | 'unmet' | 'unknown'; stateText: string; label: string; value: string; next: string | null }
@@ -121,7 +147,7 @@ function nextSession(item: StrategyCondition): string | null {
     case 'breakout_price':
       return `下一交易日收盤 ≥ ${formatPrice(next.min_close as number)}${gap}`
     case 'breakout_volume':
-      return `下一交易日成交量 ≥ ${lots(next.min_volume)}`
+      return `下一交易日成交量 ≥ ${minLots(next.min_volume)}`
     case 'pullback_trend':
       return `下一交易日收盤 > ${formatPrice(next.min_close as number)}`
     case 'pullback_above_ma60':
@@ -140,7 +166,7 @@ export function conditionViews(row: StrategyBoardRow, reasonLabel: (code: string
     const state = item.satisfied === true ? 'met' : item.satisfied === false ? 'unmet' : 'unknown'
     const reasons = item.reasons.length ? item.reasons.map(reasonLabel).join('、') : ''
     const value = conditionValue(item) || reasons
-    return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item.code), value, next: state === 'met' ? null : nextSession(item) }
+    return { code: item.code, state, stateText: STATE_TEXT[state], label: conditionLabel(item), value, next: state === 'met' ? null : nextSession(item) }
   })
 }
 
@@ -155,13 +181,13 @@ export function trendUnreachableText(row: StrategyBoardRow): string {
 
 export type LevelLine = { key: string; label: string; value: string; className?: string }
 
-// The observation box lines (UI_COPY_SPEC §10.1); prices two decimals, volume whole lots (§8.3).
+// The observation box lines (UI_COPY_SPEC §10.1); prices two decimals, volume bounds whole lots (minimum up, maximum down).
 export function observationLines(levels: StrategyObservationLevels): LevelLine[] {
   const lines: LevelLine[] = []
   if (isNumber(levels.trigger_price)) lines.push({ key: 'trigger', label: '收盤 ≥', value: formatPrice(levels.trigger_price), className: 'level-entry' })
   if (isNumber(levels.zone_low) && isNumber(levels.zone_high)) lines.push({ key: 'zone', label: '收盤', value: `${formatPrice(levels.zone_low)}～${formatPrice(levels.zone_high)}`, className: 'level-entry' })
   if (isNumber(levels.min_volume) && isNumber(levels.max_volume)) lines.push({ key: 'volume', label: '成交量', value: lotRange(levels.min_volume, levels.max_volume) })
-  else if (isNumber(levels.min_volume)) lines.push({ key: 'volume', label: '成交量 ≥', value: lots(levels.min_volume) })
+  else if (isNumber(levels.min_volume)) lines.push({ key: 'volume', label: '成交量 ≥', value: minLots(levels.min_volume) })
   if (isNumber(levels.invalid_price)) lines.push({ key: 'stop', label: '參考停損', value: formatPrice(levels.invalid_price), className: 'level-stop' })
   if (isNumber(levels.target_1)) lines.push({ key: 'target', label: '參考目標', value: formatPrice(levels.target_1) + (isNumber(levels.target_2) ? `／${formatPrice(levels.target_2)}` : ''), className: 'level-target' })
   return lines

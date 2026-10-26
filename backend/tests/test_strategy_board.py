@@ -22,6 +22,7 @@ from app.models import (
     MarketBar,
     Signal,
     StrategyLevel,
+    StrategyVersion,
 )
 from app.strategies import REGISTRY, ObservationLevels, StrategyInputs
 from app.strategies import levels
@@ -432,3 +433,17 @@ def test_the_board_reads_only_current_strategy_versions(db, client):
     assert db.scalar(select(Signal).where(Signal.id == old.id)) is not None
     row = rows(board(client, "1109"))["breakout_v1"]
     assert row["missing"] == ["signal_not_computed"]
+
+
+def test_a_row_of_another_formula_version_is_not_read(db, client):
+    # #274 review L1: an older institutional-flow formula's rows follow that
+    # formula's defaults; the board does not expand them with today's.
+    iota = stock(db, "1110")
+    row = signal(db, iota, status="observation")
+    level_row(db, row, BREAKOUT, availability="levels", trigger_price=101.0)
+    version = db.get(StrategyVersion, row.strategy_version_id)
+    version.formula_version = "institutional-flow/v1-old"
+    db.commit()
+    breakout = rows(board(client, "1110"))["breakout_v1"]
+    assert breakout["missing"] == ["signal_not_computed"]
+    assert breakout["levels"] is None and breakout["conditions"] == []

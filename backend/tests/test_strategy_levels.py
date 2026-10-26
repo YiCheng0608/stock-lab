@@ -541,89 +541,109 @@ def test_conditions_carry_t_results_and_the_next_session_requirement(db):
 # ---- conditions_json is stored without each strategy's defaults (#274, L3) ----
 
 
-def test_the_condition_defaults_are_pinned():
-    # The fields a stored row omits: changing them changes how every stored
-    # row reads back, so it comes with a new STRATEGY_LEVELS_VERSION.
-    def filled(strategy):
-        return {
+# Each levels version's condition defaults: the fields a stored row omits.
+# Rows of a version read back with that version's defaults, so changing a
+# default without a new STRATEGY_LEVELS_VERSION key here fails (#274 review L1).
+_COMMON_DEFAULTS = {
+    "eligibility": {
+        "code": "eligibility",
+        "kind": "eligibility",
+        "satisfied": True,
+    },
+    "required_inputs": {
+        "code": "required_inputs",
+        "kind": "data",
+        "satisfied": False,
+    },
+}
+_CONFIRMATION_DEFAULTS = {
+    "group_relative_strength": {
+        "code": "group_relative_strength",
+        "kind": "confirmation",
+        "threshold": 0.0,
+        "operator": "gt",
+    },
+    "institutional_flow": {
+        "code": "institutional_flow",
+        "kind": "confirmation",
+        "threshold": -0.003,
+        "operator": "gte",
+    },
+    "margin_financing": {
+        "code": "margin_financing",
+        "kind": "confirmation",
+        "threshold": 0.05,
+        "operator": "lte",
+    },
+}
+PINNED_CONDITION_DEFAULTS = {
+    "strategy_levels_v1": {
+        "breakout_v1": {
+            **_COMMON_DEFAULTS,
+            "breakout_price": {
+                "code": "breakout_price",
+                "kind": "price",
+                "operator": "gt",
+            },
+            "breakout_volume": {
+                "code": "breakout_volume",
+                "kind": "volume",
+                "threshold": 1.2,
+                "operator": "gte",
+            },
+            **_CONFIRMATION_DEFAULTS,
+        },
+        "pullback_v1": {
+            **_COMMON_DEFAULTS,
+            "pullback_history": {
+                "code": "pullback_history",
+                "kind": "data",
+                "satisfied": False,
+                "actual": 0,
+                "threshold": 60,
+                "operator": "gte",
+                "next_session": {"bar_count": 1},
+            },
+            "pullback_trend": {
+                "code": "pullback_trend",
+                "kind": "trend",
+                "operator": "gt",
+            },
+            "pullback_above_ma60": {
+                "code": "pullback_above_ma60",
+                "kind": "trend",
+                "operator": "gte",
+            },
+            "pullback_support_zone": {
+                "code": "pullback_support_zone",
+                "kind": "price",
+                "operator": "between",
+            },
+            "pullback_volume": {
+                "code": "pullback_volume",
+                "kind": "volume",
+                "threshold": 0.6,
+                "threshold_high": 1.2,
+                "operator": "between",
+            },
+            **_CONFIRMATION_DEFAULTS,
+        },
+    },
+}
+
+
+def test_the_condition_defaults_are_pinned_to_the_levels_version():
+    assert STRATEGY_LEVELS_VERSION in PINNED_CONDITION_DEFAULTS, (
+        "a new levels version needs its condition defaults pinned here"
+    )
+    filled = {
+        key: {
             code: {k: v for k, v in item.items() if v not in (None, [])}
             for code, item in levels.condition_defaults(strategy).items()
         }
-
-    common = {
-        "eligibility": {
-            "code": "eligibility",
-            "kind": "eligibility",
-            "satisfied": True,
-        },
-        "required_inputs": {
-            "code": "required_inputs",
-            "kind": "data",
-            "satisfied": False,
-        },
+        for key, strategy in REGISTRY.items()
     }
-    confirmations = {
-        "group_relative_strength": {
-            "code": "group_relative_strength",
-            "kind": "confirmation",
-            "threshold": 0.0,
-            "operator": "gt",
-        },
-        "institutional_flow": {
-            "code": "institutional_flow",
-            "kind": "confirmation",
-            "threshold": -0.003,
-            "operator": "gte",
-        },
-        "margin_financing": {
-            "code": "margin_financing",
-            "kind": "confirmation",
-            "threshold": 0.05,
-            "operator": "lte",
-        },
-    }
-    assert filled(BREAKOUT) == {
-        **common,
-        "breakout_price": {"code": "breakout_price", "kind": "price", "operator": "gt"},
-        "breakout_volume": {
-            "code": "breakout_volume",
-            "kind": "volume",
-            "threshold": 1.2,
-            "operator": "gte",
-        },
-        **confirmations,
-    }
-    assert filled(PULLBACK) == {
-        **common,
-        "pullback_history": {
-            "code": "pullback_history",
-            "kind": "data",
-            "satisfied": False,
-            "actual": 0,
-            "threshold": 60,
-            "operator": "gte",
-            "next_session": {"bar_count": 1},
-        },
-        "pullback_trend": {"code": "pullback_trend", "kind": "trend", "operator": "gt"},
-        "pullback_above_ma60": {
-            "code": "pullback_above_ma60",
-            "kind": "trend",
-            "operator": "gte",
-        },
-        "pullback_support_zone": {
-            "code": "pullback_support_zone",
-            "kind": "price",
-            "operator": "between",
-        },
-        "pullback_volume": {
-            "code": "pullback_volume",
-            "kind": "volume",
-            "threshold": 0.6,
-            "threshold_high": 1.2,
-            "operator": "between",
-        },
-        **confirmations,
-    }
+    assert filled == PINNED_CONDITION_DEFAULTS[STRATEGY_LEVELS_VERSION]
 
 
 def test_stored_conditions_omit_the_defaults_and_read_back_whole(db):
@@ -712,6 +732,17 @@ def test_a_signal_of_another_strategy_version_is_skipped(db):
     _instrument, signals = seed(db)
     version = signals["breakout"].strategy_version_id
     db.get(StrategyVersion, version).version = "0.9.0"
+    db.flush()
+    result = compute_strategy_levels(db, T)
+    assert (result["signals"], result["signals_skipped"]) == (1, 1)
+    assert level_of(db, signals["breakout"]) is None
+
+
+def test_a_signal_of_another_formula_version_is_skipped(db):
+    # #274 review L1: today's condition defaults are not that formula's.
+    _instrument, signals = seed(db)
+    version = signals["breakout"].strategy_version_id
+    db.get(StrategyVersion, version).formula_version = "institutional-flow/v1-old"
     db.flush()
     result = compute_strategy_levels(db, T)
     assert (result["signals"], result["signals_skipped"]) == (1, 1)

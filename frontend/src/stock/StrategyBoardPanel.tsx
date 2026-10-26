@@ -1,5 +1,5 @@
 import { CandidateNote, ReasonList, ScoreDetails } from '../candidates/CandidateViews'
-import { candidateStrategyLabel, formatCandidateScore, formatDate, formatPrice, formatRiskReward } from '../candidates/candidates'
+import { CANDIDATE_DISCLAIMER, candidateStrategyLabel, formatCandidateScore, formatDate, formatPrice, formatRiskReward } from '../candidates/candidates'
 import { Term } from '../components/Term'
 import { Badge, DataTable, DateBadge, EmptyState, type Column } from '../components/ui'
 import { productActionReasonLabel } from '../presentation'
@@ -120,6 +120,7 @@ function CandidateRow({ board, candidate }: { board: Board; candidate: Candidate
       <div className="strategy-candidate-head">
         <Badge tone="primary" className="badge-compact">每日候選</Badge>
         <strong>第 {summary.rank} 名 · <Term id="candidate_score">總分</Term> {formatCandidateScore(summary.total_score)} · {candidateStrategyLabel(summary.strategy)}</strong>
+        <span className="small-note strategy-candidate-disclaimer">{CANDIDATE_DISCLAIMER}</span>
       </div>
       {candidate && <ReasonList reasons={candidate.reasons} />}
       {candidate && <CandidateNote item={candidate} />}
