@@ -26,6 +26,7 @@ from .schedule_runs import (
 from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
+from .trading_calendar import run_trading_calendar
 
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
@@ -150,6 +151,17 @@ def main() -> None:
     )
     levels_parser.add_argument(
         "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
+    )
+    calendar_parser = subparsers.add_parser(
+        "trading-calendar",
+        help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
+    )
+    calendar_parser.add_argument(
+        "--year",
+        dest="years",
+        type=int,
+        action="append",
+        help="西元年度，可重複；未指定為今年與明年",
     )
     notes_parser = subparsers.add_parser(
         "candidate-notes",
@@ -292,6 +304,8 @@ def main() -> None:
         result = run_plan_tracking(parse_date(args.run_date))
     elif args.command == "strategy-levels":
         result = run_strategy_levels(parse_date(args.run_date))
+    elif args.command == "trading-calendar":
+        result = run_trading_calendar(years=args.years)
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -348,6 +362,7 @@ def main() -> None:
         "track-plans",
         "market-summary",
         "strategy-levels",
+        "trading-calendar",
     } and result.get("status") not in {
         "success",
         "no_data",

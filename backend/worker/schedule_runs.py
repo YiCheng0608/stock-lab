@@ -1,9 +1,9 @@
 """Scheduled daily job with an auditable run log.
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
-``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
--> candidates -> indicators -> theme_suggestions -> plan_tracking ->
-strategy_levels -> candidate_notes).  catchup
+``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
+analyze -> evaluate -> candidates -> indicators -> theme_suggestions ->
+plan_tracking -> strategy_levels -> candidate_notes).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -18,7 +18,10 @@ dependent steps are recorded as skipped.  strategy_levels (the observation
 price levels of the day's signals) runs after a successful analyze, and
 candidate_notes (LLM explanations of the day's candidates) last after a
 successful candidates step; whatever their status, they only stay on their
-step rows and never change the run status.
+step rows and never change the run status.  So does trading_calendar, which
+refreshes the official holiday schedule after a successful collect and before
+analyze (the signals' earliest execution date reads it); when it fails,
+analyze uses the calendar already stored.
 
 A first "no session" answer for today's target is recorded as
 ``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
@@ -53,6 +56,7 @@ DAILY_JOB = "daily"
 DAILY_STEPS = (
     "catchup",
     "collect",
+    "trading_calendar",
     "analyze",
     "evaluate",
     "candidates",
@@ -64,6 +68,7 @@ DAILY_STEPS = (
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
+    "trading_calendar": (),
     "analyze": (),
     "evaluate": ("analyze",),
     "candidates": ("analyze",),
@@ -78,8 +83,12 @@ STEP_REQUIRES = {
 # (timeout, claude missing, quota) and the observation price levels, which
 # nothing else in the run reads.  A later daily does not retry them (it
 # targets its own date); worker.cli candidate-notes / strategy-levels --date
-# fill them.
-NON_BLOCKING_STEPS = frozenset({"candidate_notes", "strategy_levels"})
+# fill them.  The holiday schedule refresh (#294): analyze then reads the
+# calendar already stored and records in its own details whether the day's
+# signals got an earliest execution date (the watchdog checks that).
+NON_BLOCKING_STEPS = frozenset(
+    {"trading_calendar", "candidate_notes", "strategy_levels"}
+)
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -110,6 +119,8 @@ PLAN_TRACKING_MODULE = "worker.plan_tracking"
 PLAN_TRACKING_FUNCTION = "run_plan_tracking"
 STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
 STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
+TRADING_CALENDAR_MODULE = "worker.trading_calendar"
+TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 
 
 def _utcnow() -> datetime:
@@ -200,6 +211,11 @@ def _plan_tracking_step(target: date) -> dict[str, Any]:
 def _strategy_levels_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(STRATEGY_LEVELS_MODULE)
     return getattr(module, STRATEGY_LEVELS_FUNCTION)(target)
+
+
+def _trading_calendar_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(TRADING_CALENDAR_MODULE)
+    return getattr(module, TRADING_CALENDAR_FUNCTION)(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -623,22 +639,23 @@ def run_daily_job(
     collect_status = str(collected.get("status"))
     summary_steps["collect"] = collect_status
     later: list[tuple[str, int, Callable[[], dict[str, Any]]]] = [
+        ("trading_calendar", 2, lambda: _trading_calendar_step(target)),
         (
             "analyze",
-            2,
+            3,
             lambda: pipeline.analyze(
                 init_schema=False, collect_run_id=collected.get("run_id")
             ),
         ),
-        ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
-        ("candidates", 4, lambda: _candidate_step(target)),
-        ("indicators", 5, lambda: _indicator_step(target)),
-        ("theme_suggestions", 6, _theme_suggestion_step),
+        ("evaluate", 4, lambda: pipeline.evaluate(init_schema=False)),
+        ("candidates", 5, lambda: _candidate_step(target)),
+        ("indicators", 6, lambda: _indicator_step(target)),
+        ("theme_suggestions", 7, _theme_suggestion_step),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 7, lambda: _plan_tracking_step(target)),
-        ("strategy_levels", 8, lambda: _strategy_levels_step(target)),
-        ("candidate_notes", 9, lambda: _candidate_note_step(target)),
+        ("plan_tracking", 8, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 9, lambda: _strategy_levels_step(target)),
+        ("candidate_notes", 10, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):

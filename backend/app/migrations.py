@@ -630,6 +630,13 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0019_strategy_levels', CURRENT_TIMESTAMP)"
         )
     )
+    # 0020 only adds trading_calendar_days, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0020_trading_calendar', CURRENT_TIMESTAMP)"
+        )
+    )
 
 
 def _fallback_upgrade(target_engine: Engine) -> None:

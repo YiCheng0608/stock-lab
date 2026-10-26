@@ -19,7 +19,7 @@
 | TWSE universe | [上市公司 `t187ap03_L`](https://openapi.twse.com.tw/v1/opendata/t187ap03_L)、[ETF `t187ap47_L`](https://openapi.twse.com.tw/v1/opendata/t187ap47_L)、[新上市 `company/newlisting`](https://openapi.twse.com.tw/v1/company/newlisting) | 建立上市普通股與 ETF allowlist；數字代號 ETF 以 `t187ap47_L` 辨識。`company/newlisting` 列出 2011 年起所有上市案，只把 60 天內生效、主檔還沒有的列當新上市（`ipo`）。 | 名單是取得當下狀態，不含歷史上下市版本；用法見[標的狀態同步](#標的狀態同步)。 |
 | TPEx universe | [issuer master `mopsfin_t187ap03_O`](https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap03_O)、[ETF allowlist `etfFilter`](https://info.tpex.org.tw/api/etfFilter)（POST） | 建立上櫃普通股與 ETF allowlist。 | 混合行情中的權證、CB、ETN、興櫃不當成股票；興櫃 feed 不用來建 universe。 |
 | TWSE 日行情 | 當日 [`STOCK_DAY_ALL`](https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL)；歷史 [`MI_INDEX`](https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX)（單日全市場表） | 保留 allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradeVolume`（股）、`TradeValue`。歷史以逐日全市場表回補，不逐檔逐月請求。同一份 `MI_INDEX`（`type=ALLBUT0999`，當日 collect 也會抓）另讀大盤統計資訊與漲跌證券數，寫[大盤概況](#大盤概況)；成交金額取「總計(1~15)」（含 ETF、權證等全部證券）。 | 明確 no-data 且無列可略過；錯日、缺日或日期不可驗的 payload fail-closed，不映射到其他交易日。 |
-| TWSE 交易日曆 | [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule) | 多日回補時作正面排除清單：明列休市日不送 `MI_INDEX`。 | 取得失敗不推論休市，該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本。 |
+| TWSE 交易日曆 | OpenAPI [`holidaySchedule`](https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule)；網站版逐年 [`holidaySchedule?date=YYYY0101`](https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?date=20260101&response=json) | OpenAPI 版：多日回補時作正面排除清單，明列休市日不送 `MI_INDEX`。網站版：daily 的 trading_calendar 步驟存成 `trading_calendar_days`，推算訊號的規則最早執行日（見[交易日曆](#交易日曆)）。兩者的休市判定是同一個分類規則。 | 取得失敗不推論休市，回補該日照常請求並 fail-closed；只描述年度最新版本，不是歷史版本；颱風等臨時休市不會列入。 |
 | TAIEX | 當日 [`exchangeReport/MI_INDEX`](https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX)；歷史取自 `MI_INDEX` 全市場表 | 加權指數作 hot-group 超額報酬基準與交易日基準（見 [TAIEX 交易日基準](#taiex-交易日基準)）。 | 只有收盤值；合成的 O／H／L、成交量與成交額不是真實欄位。 |
 | TPEx 大盤概況 | [`tpex_mainborad_highlight`](https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight)（上櫃股票市場現況；官方路徑拼作 `mainborad`） | 當日 collect 每天 1 個請求，寫[大盤概況](#大盤概況)：`CloseIndex`、`IndexChange`、`DailyTradingValue`（**百萬元**，×1,000,000 存成元，只算上櫃股票）與 `PriceRise`／`PriceDecline`／`PriceFlat`／`LimitUp`／`LimitDown` 各 `…CompanyNumbers`、`UnmatchedCompanyNumbersSuspensionStocksIncluded`；`DailyTradingVolume`（**千股**）、`ListedCompanyNumbers`、`MarketCapitalization` 等不保存。 | 只有最新一天，沒有歷史：`Date` 是民國日期（`1151022`），不等於請求的交易日（例如還沒更新）時不寫並記 warning，不映射到其他日期；漏抓的日子不回補，那天沒有上櫃列。 |
 | TPEx 日行情 | [`dailyQuotes`](https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes)（POST） | 逐日擷取，保留股票／ETF allowlist 與普通股代號（[標的狀態同步](#標的狀態同步)），讀 OHLC、`TradingShares`（股）、`TransactionAmount`。 | 回報日期須等於請求日期；非空但全部被拒收的表格不算合法空日。 |
@@ -148,6 +148,18 @@ UI 空白與合法零的顯示規則見 [UI 文案規格](UI_COPY_SPEC.md)。
 - **日期**：`MI_INDEX` 的 `date` 與 highlight 的 `Date` 都必須等於請求的交易日，否則整份拒收，不映射到其他日期。
 - **寫入**：上市列與 TAIEX bar 由同一次 collect、同一份 `MI_INDEX` raw 寫入（`raw_payload_id` 相同），不另發請求；歷史回補與 catchup 也寫上市列，highlight 只在抓當日快照的 collect 請求。重抓與日行情相同：值相同不改、只補空欄、不同值保留第一次寫入的值（`--force` 才改寫並改指向新的 raw）；寫入筆數記在 collect run 的 `market_summaries`。擷取、解析或寫入失敗記 `noncore_warnings`（`… market summary unavailable for <日期>: …`），collect 狀態與其他步驟不受影響。
 - **回補**：`python -m worker.cli market-summary --from --to` 只讀已存的上市 `MI_INDEX` raw（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）；上櫃沒有歷史，上線前的日期沒有上櫃列。
+
+### 交易日曆
+
+TWSE 的年度市場開休市日期，上市與上櫃共用（同 [TAIEX 交易日基準](#taiex-交易日基準)）。實作在 [`worker/trading_calendar.py`](../backend/worker/trading_calendar.py)（抓取與保存）與 [`app/trading_calendar.py`](../backend/app/trading_calendar.py)（分類與推算），[#294](https://github.com/YiCheng0608/stock-lab/issues/294)。
+
+- **端點**：`https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule?date=<西元年>0101&response=json`，和 `MI_INDEX`、OpenAPI 休市表同屬 TWSE 官方免費網站。回傳 `stat`、`queryYear`、`total`、`fields`（`日期`、`名稱`、`說明`）與 `data`（日期為 ISO）。OpenAPI 版只有當年度，查不到下一年，所以推算用網站版。
+- **請求**：daily 的 trading_calendar 步驟（collect 成功後、analyze 之前，結果不影響 run 狀態，[OPERATIONS §6.3](OPERATIONS.md#63-日誌與-run-記錄)）與 `worker.cli trading-calendar`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)），每次抓目標日的年度與下一年度，每天 2 個請求。不屬於 collect，不影響 collect 的核心／非核心狀態。
+- **驗證與拒收**：`stat` 不是 `ok`、`queryYear` 不等於請求年度、`fields` 缺這三欄、某列欄數不符、日期無法解析或不在該年度、同一日期出現兩次、名稱為空，整份拒收，該年度不寫入，記在 run 的 `warnings` 與 `years.<年>`。`total=0`、`data` 為空代表該年度尚未公告（2026-10-26 查 2027 年即是如此），不寫入。被拒收或空的回應仍照常存 raw 當證據，只是不寫入日曆表。
+- **分類**：名稱含「開始交易」「最後交易」為交易日提示（例：國曆新年開始交易日）；名稱或說明含「放假」「補假」「休市」「無交易」「不交易」為休市（含「市場無交易，僅辦理結算交割作業」與補假日）；兩者都不是記 `unknown` 並警告。2024～2026 年 71 列全部能分類。休市表沒有列出的週間日就是交易日。
+- **保存**：`trading_calendar_days` 每個（`exchange`、`calendar_date`）一列：`year`、`kind`（`closed`／`trading`／`unknown`）、`name`、`description`、`source`（`twse_holiday_schedule`）、`collected_at` 與 `raw_payload_id`。raw 照一般規則保存（`run_type=trading_calendar` 的 ingestion run）；回應的 SHA-256 與該端點最近一次已存的 raw 相同時不另存；因為只比最近一份，內容在「有效、空或拒收、有效」之間交替時，同樣的有效內容會再存一份 raw（日曆列內容沒變，仍指向第一份）。內容有差異時整年改寫，該年所有列改指向這份 raw，新增、改分類與移除的日期記在 run 的 `years.<年>`；內容相同時列不動。已有列的年度回應變成空的，保留舊列並警告。
+- **推算**：從 T 的隔天往後找第一個不是週末、也不是休市列的日期（最多 31 天）；碰到沒有列的年度（尚未公告或沒抓到）或 `unknown` 列就沒有答案，訊號的日期留空（規則見 [V1_SPEC](V1_SPEC.md#價位etf-與生命週期)）。
+- **限制**：颱風等臨時休市不在休市表（2024 年 5 天颱風停市與 2026-10-23 都沒有列入），推算不知道，事後也不改寫；確認的臨時休市只記在 daily run 的 `non_trading_day`。官方年中修訂休市表時（例如新增假日），之後算的日期跟著新內容，之前存的訊號不改。
 
 ### TPEx 停復牌規則
 
