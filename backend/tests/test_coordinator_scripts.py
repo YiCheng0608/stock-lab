@@ -21,10 +21,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -107,7 +109,9 @@ esac
 # git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line.
 # branch -D fails when <fake>/git_branch_in_use exists (the branch stays), and when
 # <fake>/git_branch_gone_at_delete exists it fails with the branch already gone: orca
-# worktree rm deleted it after close_task's show-ref had seen it (#290).
+# worktree rm deleted it after close_task's show-ref had seen it (#290). With
+# <fake>/git_unreadable_after_delete, show-ref answers 128 (git could not read the repo)
+# once branch -D has run.
 FAKE_GIT = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/git_calls.log"
@@ -116,12 +120,15 @@ touch "$d/branches.txt"
 case "$1" in
   fetch) exit 0 ;;
   rev-parse) echo "${FAKE_SHA}" ;;
-  show-ref) grep -qxF "${4#refs/heads/}" "$d/branches.txt"; exit ;;
+  show-ref)
+    [ -f "$d/git_unreadable_after_delete" ] && [ -f "$d/git_branch_D_ran" ] && exit 128
+    grep -qxF "${4#refs/heads/}" "$d/branches.txt"; exit ;;
   for-each-ref) pat="${*: -1}"; pat="${pat#refs/heads/}"; grep -x "${pat%\*}.*" "$d/branches.txt" || true ;;
   branch)
     if [ "$2" = -m ]; then
       grep -vxF "$3" "$d/branches.txt" >"$d/b.tmp"; echo "$4" >>"$d/b.tmp"; mv "$d/b.tmp" "$d/branches.txt"
     elif [ "$2" = -D ]; then
+      touch "$d/git_branch_D_ran"
       if [ -f "$d/git_branch_in_use" ]; then
         echo "error: cannot delete branch '$3' used by worktree at '$d'" >&2; exit 1
       fi
@@ -823,6 +830,71 @@ def test_a_failed_pytest_run_keeps_its_basetemp_and_guard_dir_refuses_it(
     assert reason.startswith("裡面有 .git（") and "/b/" in reason.replace("\\", "/")
 
 
+def _conftest(request):
+    """backend/tests/conftest.py as pytest loaded it for this run."""
+    here = Path(__file__).with_name("conftest.py").resolve()
+    return next(
+        plugin
+        for plugin in request.config.pluginmanager.get_plugins()
+        if getattr(plugin, "__file__", None) and Path(plugin.__file__).resolve() == here
+    )
+
+
+def test_basetemp_cleanup_does_not_chmod_a_link(
+    request, tmp_path: Path, monkeypatch
+) -> None:
+    """#290 review L2: the retry after a failed delete makes the path writable, but never
+    through a link (a junction on Windows, a symlink elsewhere): chmod would reach its
+    target outside the basetemp."""
+    target = tmp_path / "outside"
+    target.mkdir()
+    link = tmp_path / "basetemp" / "link"
+    link.parent.mkdir()
+    _link(target, link)
+    chmods: list[str] = []
+    monkeypatch.setattr(os, "chmod", lambda path, *a, **k: chmods.append(str(path)))
+
+    def delete_fails(path):
+        raise PermissionError(path)
+
+    failures: list = []
+    _conftest(request)._retry_writable(delete_fails, str(link), failures)
+    assert chmods == [] and [str(p) for p, _ in failures] == [str(link)]
+    monkeypatch.undo()
+    if link.is_junction():
+        os.rmdir(link)
+    else:
+        link.unlink()
+    assert target.is_dir()
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="os.chmod follows a symlink on POSIX; Windows' Python 3.12 does not, and an "
+    "unprivileged Windows user cannot make the read-only directory below",
+)
+def test_a_green_run_leaves_a_symlink_target_outside_the_basetemp_as_it_was(
+    request, tmp_path: Path
+) -> None:
+    """#290 review L2 on a real tree: the symlink in a directory rmtree cannot write to
+    fails to unlink and goes to the retry, which must not chmod its target."""
+    target = tmp_path / "outside.txt"
+    target.write_text("k", encoding="utf-8")
+    target.chmod(0o644)
+    sub = tmp_path / "basetemp" / "sub"
+    sub.mkdir(parents=True)
+    (sub / "link").symlink_to(target)
+    sub.chmod(0o500)
+    factory = SimpleNamespace(_basetemp=sub.parent)
+    session = SimpleNamespace(config=SimpleNamespace(_tmp_path_factory=factory))
+    try:
+        _conftest(request).pytest_sessionfinish(session, 0)
+    finally:
+        sub.chmod(0o700)
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.read_text(encoding="utf-8") == "k"
+
+
 @pytest.mark.parametrize(
     "state", ["dirty", "unmerged-commit", "busy-agent", "own-terminal"]
 )
@@ -860,10 +932,16 @@ def test_close_task_takes_a_branch_orca_already_deleted_as_done(close: Harness) 
     assert any("updateProjectV2" in c and "o=OPT-DONE" in c for c in close.calls("gh"))
 
 
-def test_close_task_stops_when_the_branch_cannot_be_deleted(close: Harness) -> None:
+@pytest.mark.parametrize("state", ["in-use", "unreadable"])
+def test_close_task_stops_when_the_branch_cannot_be_deleted(
+    close: Harness, state: str
+) -> None:
     """#290: a branch that is still there after branch -D (checked out elsewhere) is a
-    failed step: exit 3, the extra dirs stay and the board is not set to 完成."""
+    failed step: exit 3, the extra dirs stay and the board is not set to 完成. So is one
+    show-ref then cannot read (128): only its 1 means the branch is gone (review L1)."""
     close.write("git_branch_in_use", "")
+    if state == "unreadable":
+        close.write("git_unreadable_after_delete", "")
     result = close.close_task(close.extra)
     assert result.returncode == 3, result.stdout + result.stderr
     line = _json_line(result)

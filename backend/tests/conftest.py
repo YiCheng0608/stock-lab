@@ -58,6 +58,21 @@ def pytest_unconfigure(config):
         )
 
 
+def _retry_writable(function, path, failures):
+    """rmtree's onexc: make PATH writable and retry once; what still fails is recorded.
+
+    A link is retried as it is: chmod follows a symlink on POSIX and would change the
+    permissions of its target outside the basetemp (#290 review L2).
+    """
+
+    try:
+        if not (os.path.islink(path) or os.path.isjunction(path)):
+            os.chmod(path, os.lstat(path).st_mode | stat.S_IWRITE)
+        function(path)
+    except OSError as again:
+        failures.append((path, again))
+
+
 def pytest_sessionfinish(session, exitstatus):
     """After a green run remove the run's basetemp, a ``--basetemp`` one included (#290).
 
@@ -75,15 +90,10 @@ def pytest_sessionfinish(session, exitstatus):
     if exitstatus != 0 or basetemp is None or not basetemp.is_dir():
         return
     failures = []
-
-    def writable(function, path, error):
-        try:
-            os.chmod(path, stat.S_IWRITE)
-            function(path)
-        except OSError as again:
-            failures.append((path, again))
-
-    shutil.rmtree(basetemp, onexc=writable)
+    shutil.rmtree(
+        basetemp,
+        onexc=lambda function, path, _: _retry_writable(function, path, failures),
+    )
     for path, error in failures:
         sys.stderr.write(
             f"warning: could not remove {path}: {type(error).__name__}: {error}\n"
