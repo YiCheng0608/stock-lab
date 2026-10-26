@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -51,6 +52,38 @@ def pytest_unconfigure(config):
         failures.append((path, error))
 
     shutil.rmtree(_TEST_ROOT, onexc=remember)
+    for path, error in failures:
+        sys.stderr.write(
+            f"warning: could not remove {path}: {type(error).__name__}: {error}\n"
+        )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """After a green run remove the run's basetemp, a ``--basetemp`` one included (#290).
+
+    Tests build repositories under tmp_path, fake (``repo/.git``, ``project/.git``) and
+    real (``git init``). Left in an engineer's temp directory outside the worktree they
+    make ``tools/ops/close_task.sh --extra-dir`` refuse it, and pytest keeps them even
+    under tmp_path_retention_policy = "failed" (a skipped test's tmp_path, git's
+    read-only object files). A run that fails keeps everything for debugging; pytest
+    empties a given basetemp when the next run starts. rmtree does not follow junctions
+    or symlinks, so nothing outside the basetemp is reached.
+    """
+
+    factory = getattr(session.config, "_tmp_path_factory", None)
+    basetemp = getattr(factory, "_basetemp", None)
+    if exitstatus != 0 or basetemp is None or not basetemp.is_dir():
+        return
+    failures = []
+
+    def writable(function, path, error):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            function(path)
+        except OSError as again:
+            failures.append((path, again))
+
+    shutil.rmtree(basetemp, onexc=writable)
     for path, error in failures:
         sys.stderr.write(
             f"warning: could not remove {path}: {type(error).__name__}: {error}\n"

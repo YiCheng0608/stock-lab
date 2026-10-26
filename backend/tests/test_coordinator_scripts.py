@@ -105,6 +105,9 @@ esac
 """
 
 # git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line.
+# branch -D fails when <fake>/git_branch_in_use exists (the branch stays), and when
+# <fake>/git_branch_gone_at_delete exists it fails with the branch already gone: orca
+# worktree rm deleted it after close_task's show-ref had seen it (#290).
 FAKE_GIT = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/git_calls.log"
@@ -119,7 +122,13 @@ case "$1" in
     if [ "$2" = -m ]; then
       grep -vxF "$3" "$d/branches.txt" >"$d/b.tmp"; echo "$4" >>"$d/b.tmp"; mv "$d/b.tmp" "$d/branches.txt"
     elif [ "$2" = -D ]; then
+      if [ -f "$d/git_branch_in_use" ]; then
+        echo "error: cannot delete branch '$3' used by worktree at '$d'" >&2; exit 1
+      fi
       grep -vxF "$3" "$d/branches.txt" >"$d/b.tmp"; mv "$d/b.tmp" "$d/branches.txt"
+      if [ -f "$d/git_branch_gone_at_delete" ]; then
+        echo "error: branch '$3' not found." >&2; exit 1
+      fi
     fi ;;
   merge-base) exit "$(cat "$d/git_ancestor_exit" 2>/dev/null || echo 0)" ;;
   status) cat "$d/git_status.txt" 2>/dev/null ;;
@@ -733,6 +742,87 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
     assert _guard(h, gone.as_posix(), "residual") == ""
 
 
+# Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
+# tmp_path as this file's Harness, test_worker_job_scripts and test_verify_tools build
+# them (an empty .git directory, a read-only git object file), one in a test that then
+# skips.
+INNER_TESTS = r"""
+import os
+import stat
+
+import pytest
+
+
+def test_builds_repositories(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    obj = tmp_path / "work" / ".git" / "objects" / "ab" / "cdef"
+    obj.parent.mkdir(parents=True)
+    obj.write_text("x")
+    os.chmod(obj, stat.S_IREAD)
+    assert os.environ["INNER_FAIL"] == "0"
+
+
+def test_skips_after_building_one(tmp_path):
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    pytest.skip("skipped with a .git in its tmp_path")
+"""
+
+
+def _inner_pytest(h: Harness, fail: bool) -> tuple[Path, subprocess.CompletedProcess]:
+    """A pytest run with --basetemp in an engineer's temp directory outside the worktree,
+    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run."""
+    inner = h.root / "inner"
+    inner.mkdir(exist_ok=True)
+    shutil.copyfile(Path(__file__).with_name("conftest.py"), inner / "conftest.py")
+    (inner / "test_inner.py").write_text(INNER_TESTS, encoding="utf-8")
+    temp = h.root / "t290"
+    (temp / "tmp").mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
+    env.update(
+        TMPDIR=str(temp / "tmp"),
+        TEMP=str(temp / "tmp"),
+        TMP=str(temp / "tmp"),
+        INNER_FAIL="1" if fail else "0",
+    )
+    command = [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
+    command += ["--rootdir", str(inner), "--confcutdir", str(inner)]
+    command += ["--basetemp", str(temp / "b"), str(inner)]
+    # cwd backend: the copied conftest imports app and worker, as under CI.
+    result = subprocess.run(
+        command,
+        cwd=ROOT / "backend",
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+    return temp, result
+
+
+def test_a_green_pytest_run_leaves_no_repository_in_its_basetemp(h: Harness) -> None:
+    """#290: the repositories tests build in tmp_path made close_task.sh refuse an
+    engineer's temp directory holding the --basetemp. conftest.py removes the basetemp
+    of a green run, so the directory passes guard_dir as it is."""
+    temp, result = _inner_pytest(h, fail=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "1 passed, 1 skipped" in result.stdout
+    assert not (temp / "b").exists(), sorted(p.as_posix() for p in temp.rglob(".git"))
+    assert _guard(h, temp.as_posix()) == ""
+
+
+def test_a_failed_pytest_run_keeps_its_basetemp_and_guard_dir_refuses_it(
+    h: Harness,
+) -> None:
+    """#290: a failed run keeps its tmp_path for debugging, and guard_dir is not loosened
+    for a basetemp: it still refuses the directory and names the .git it found."""
+    temp, result = _inner_pytest(h, fail=True)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (temp / "b").is_dir()
+    reason = _guard(h, temp.as_posix())
+    assert reason.startswith("裡面有 .git（") and "/b/" in reason.replace("\\", "/")
+
+
 @pytest.mark.parametrize(
     "state", ["dirty", "unmerged-commit", "busy-agent", "own-terminal"]
 )
@@ -751,6 +841,38 @@ def test_close_task_deletes_nothing_when_the_worktree_is_in_use(
     result = close.close_task(close.extra, **env)
     assert result.returncode == 1, result.stdout + result.stderr
     _assert_nothing_deleted(close)
+
+
+def test_close_task_takes_a_branch_orca_already_deleted_as_done(close: Harness) -> None:
+    """#290: show-ref saw the branch, orca worktree rm deleted it, branch -D said "not
+    found": the branch is gone, so the extra dirs and the board still follow."""
+    close.write("git_branch_gone_at_delete", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    steps = line["steps"]
+    assert "branch_already_gone" in steps and "branch_deleted" not in steps
+    assert steps.index("branch_already_gone") < steps.index(
+        f"extra_removed:{close.extra.as_posix()}"
+    )
+    assert "task/282-dryrun" not in close.branches() and not close.extra.exists()
+    assert line["board"] == "完成"
+    assert any("updateProjectV2" in c and "o=OPT-DONE" in c for c in close.calls("gh"))
+
+
+def test_close_task_stops_when_the_branch_cannot_be_deleted(close: Harness) -> None:
+    """#290: a branch that is still there after branch -D (checked out elsewhere) is a
+    failed step: exit 3, the extra dirs stay and the board is not set to 完成."""
+    close.write("git_branch_in_use", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 3, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["error"] == "刪本地 branch 失敗：task/282-dryrun"
+    assert not [s for s in line["steps"] if s.startswith(("branch_", "extra_"))]
+    assert line["board"] == ""
+    assert not [c for c in close.calls("gh") if "updateProjectV2" in c]
+    assert "task/282-dryrun" in close.branches()
+    assert (close.extra / "deps" / "a.txt").is_file()
 
 
 # --- patrol.sh ---------------------------------------------------------------------

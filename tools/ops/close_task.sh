@@ -17,8 +17,9 @@
 # Deleting checks guard_dir again (remove_tree), so one broken check is not enough to
 # delete a protected path.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
-# local branch, delete each --extra-dir (junctions and symlinks unlinked first, never
-# followed), set the board to 完成, and read back that all of it is gone.
+# local branch (one orca already deleted counts: step branch_already_gone, #290), delete
+# each --extra-dir (junctions and symlinks unlinked first, never followed), set the board
+# to 完成, and read back that all of it is gone.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
@@ -79,6 +80,14 @@ report() { # report EXIT [ERROR]
   exit "$1"
 }
 refuse() { report 1 "$1（未刪除任何東西）"; }
+
+# branch_gone: show-ref answers 1 for a missing ref; any other failure (128: git could
+# not read the repo) is not proof that the branch is gone (#290).
+branch_gone() {
+  local rc=0
+  git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" || rc=$?
+  [ "$rc" = 1 ]
+}
 
 # unlink_one LINK: remove a junction or symlink itself, never what it points to; the
 # JSON steps list each one. Git Bash's and GNU rm -rf do not follow them either (#282),
@@ -221,8 +230,14 @@ if [ -n "$wt_path" ]; then
   fi
 fi
 if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-  git -C "$repo_root" branch -D "$branch" >/dev/null || report 3 "刪本地 branch 失敗：$branch"
-  steps+=("branch_deleted")
+  if git -C "$repo_root" branch -D "$branch" >/dev/null; then
+    steps+=("branch_deleted")
+  elif branch_gone; then
+    # orca worktree rm deletes the branch too, at times after the show-ref above (#290).
+    steps+=("branch_already_gone")
+  else
+    report 3 "刪本地 branch 失敗：$branch"
+  fi
 fi
 for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   remove_tree "$dir" || report 3 "刪不掉 --extra-dir $dir"
@@ -231,7 +246,7 @@ done
 
 # --- read back ---------------------------------------------------------------------
 [ -z "$wt_path" ] || [ ! -e "$wt_path" ] || report 3 "讀回：worktree 目錄仍在 $wt_path"
-! git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" || report 3 "讀回：branch $branch 仍在"
+branch_gone || report 3 "讀回：branch $branch 仍在或讀不到"
 for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   [ ! -e "$dir" ] && [ ! -L "$dir" ] || report 3 "讀回：$dir 仍在"
 done
