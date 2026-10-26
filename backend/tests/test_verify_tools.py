@@ -224,6 +224,7 @@ def test_db_facts_reads_the_copy_without_writing(tmp_path: Path) -> None:
     assert (
         out["news_items"] is None and out["candidate_run_latest_trading_date"] is None
     )
+    assert out["market_summary_latest"] is None
     assert out["instrument"] == {
         "exchange": "TWSE",
         "symbol": "2330",
@@ -233,6 +234,41 @@ def test_db_facts_reads_the_copy_without_writing(tmp_path: Path) -> None:
     assert _digest(db) == before
     assert sorted(p.name for p in db.parent.iterdir()) == ["stock.db"]
     assert _run([sys.executable, "-B", str(DB_FACTS)]).returncode == 2
+
+
+def test_db_facts_market_summary_latest_is_each_exchanges_newest_row(
+    tmp_path: Path,
+) -> None:
+    # T11 compares dashboard.market_overview with these values (#275).
+    db = tmp_path / "stock.db"
+    spec = importlib.util.spec_from_file_location("db_facts", DB_FACTS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    columns = ("exchange",) + module.MARKET_SUMMARY_FIELDS
+    with sqlite3.connect(db) as conn:
+        conn.execute(f"CREATE TABLE market_summaries ({', '.join(columns)})")
+        for exchange, day, close in (
+            ("TWSE", "2026-10-21", 46887.77),
+            ("TWSE", "2026-10-22", 46041.43),
+            ("TPEx", "2026-10-21", 395.42),
+        ):
+            values = dict.fromkeys(columns)
+            values.update(exchange=exchange, trading_date=day, index_close=close)
+            conn.execute(
+                f"INSERT INTO market_summaries VALUES ({', '.join('?' * len(columns))})",
+                [values[name] for name in columns],
+            )
+    conn.close()
+    result = _run([sys.executable, "-B", str(DB_FACTS), str(db)])
+    assert result.returncode == 0, result.stderr
+    latest = json.loads(result.stdout)["market_summary_latest"]
+    assert sorted(latest) == ["TPEx", "TWSE"]
+    assert (latest["TWSE"]["trading_date"], latest["TWSE"]["index_close"]) == (
+        "2026-10-22",
+        46041.43,
+    )
+    assert latest["TPEx"]["trading_date"] == "2026-10-21"
+    assert set(latest["TWSE"]) == set(module.MARKET_SUMMARY_FIELDS)
 
 
 def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> None:

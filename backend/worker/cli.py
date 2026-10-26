@@ -13,6 +13,7 @@ from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair
+from .market_summary import backfill_market_summaries
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
@@ -103,6 +104,15 @@ def main() -> None:
     )
     backfill_parser.add_argument(
         "--force", action="store_true", help="重新擷取已完成日期"
+    )
+    summary_parser = subparsers.add_parser(
+        "market-summary",
+        help="以已存的 TWSE MI_INDEX raw 回補大盤概況（不發網路請求；TPEx 無歷史不回補）",
+    )
+    summary_parser.add_argument("--from", dest="start_date", required=True)
+    summary_parser.add_argument("--to", dest="end_date", required=True)
+    summary_parser.add_argument(
+        "--force", action="store_true", help="與已存值不同時改寫並改指向這份 raw"
     )
     backtest_parser = subparsers.add_parser(
         "backtest", help="replay canonical rules on an as-of date range"
@@ -260,6 +270,14 @@ def main() -> None:
             scope=args.scope,
             force=args.force,
         )
+    elif args.command == "market-summary":
+        start, end = (
+            date.fromisoformat(args.start_date),
+            date.fromisoformat(args.end_date),
+        )
+        if end < start:
+            parser.error("--to must not be before --from")
+        result = backfill_market_summaries(start, end, force=args.force)
     elif args.command == "schedule-runs":
         result = list_schedule_runs(args.limit, parse_date(args.run_date))
     elif args.command == "backtest":
@@ -328,6 +346,7 @@ def main() -> None:
     if args.command in {
         "candidates",
         "track-plans",
+        "market-summary",
         "strategy-levels",
     } and result.get("status") not in {
         "success",

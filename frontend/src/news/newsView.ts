@@ -135,6 +135,13 @@ export function directionView(direction: string | null | undefined): DirectionVi
   return { label: '影響尚未判定', tone: null }
 }
 
+// The detail page's source-facts column (UI_COPY_SPEC §4): news collection stores no direction, so unknown says the
+// source did not mark one instead of reading like a verdict beside the AI direction.
+export function sourceDirectionView(direction: string | null | undefined): DirectionView {
+  const view = directionView(direction)
+  return view.tone ? view : { label: '來源未標示影響', tone: null }
+}
+
 export function impactScopeLabel(scope: string | null | undefined): string {
   return ({ instrument: '個股', theme: '族群', market: '整體市場' } as Record<string, string>)[scope ?? ''] ?? '範圍待核實'
 }

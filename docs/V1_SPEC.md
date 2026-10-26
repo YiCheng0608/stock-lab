@@ -234,9 +234,32 @@ T 日沒有日線的標的沒有 signal，也就沒有列。
 
 **`conditions_json`**：每個策略一份條件清單，前兩條共通：`eligibility`（T 日 eligibility 與停牌，`reasons` 列原因）、`required_inputs`（T 日判定是否 `data_incomplete`，`reasons` 列缺項）；接著是策略自己的條件（breakout：`breakout_price`、`breakout_volume`；pullback：`pullback_history`、`pullback_trend`、`pullback_above_ma60`、`pullback_support_zone`、`pullback_volume`）與三個確認條件（`group_relative_strength`、`institutional_flow`、`margin_financing`）。每條有 `kind`（eligibility／data／price／volume／trend／confirmation）、`satisfied`（T 日 analyze 存的判定，`data_incomplete` 時為 null）、`actual`、`threshold`、`threshold_high`、`operator`、`reasons`、`next_session`（可反推的條件才有：`min_close`、`max_close`、`min_volume`、`max_volume`，價格條件另有 `gap`＝目標價／T 收盤 − 1，支撐區另有 `position`）。
 
-**表** `strategy_levels`（migration `0018_strategy_levels`）：每個 signal 與 `levels_version` 一列（unique），欄位為 `availability`、`next_session_date`、`trigger_price`、`zone_low`、`zone_high`、`min_volume`、`max_volume`、`reference_entry`、`entry_low`、`entry_high`、`invalid_price`、`target_1`、`target_2`、`risk_reward`、`reachable_next_session`、`conditions_json`、`missing_inputs_json`、`price_basis`、`computed_at`；策略、標的、日期與 `strategy_version_id` 經 signal 取得。conditional 的訊號也有列（下一交易日再次成立的門檻），成立價位仍以 `signals` 為準。只處理 `analysis` 訊號，且策略版本須等於 registry 的現行版本，其他版本略過並計入 `signals_skipped`。每日保存全部列（2026-10-16～10-22 副本約 4,600 列／日、約 8 MB／日）。
+**表** `strategy_levels`（migration `0019_strategy_levels`）：每個 signal 與 `levels_version` 一列（unique），欄位為 `availability`、`next_session_date`、`trigger_price`、`zone_low`、`zone_high`、`min_volume`、`max_volume`、`reference_entry`、`entry_low`、`entry_high`、`invalid_price`、`target_1`、`target_2`、`risk_reward`、`reachable_next_session`、`conditions_json`、`missing_inputs_json`、`price_basis`、`computed_at`；策略、標的、日期與 `strategy_version_id` 經 signal 取得。conditional 的訊號也有列（下一交易日再次成立的門檻），成立價位仍以 `signals` 為準。只處理 `analysis` 訊號，且策略版本須等於 registry 的現行版本，其他版本略過並計入 `signals_skipped`。每日保存全部列（2026-10-16～10-22 副本約 4,600 列／日、約 8 MB／日）。
 
 **冪等與回補**：daily 的 `strategy_levels` 步驟（[OPERATIONS §6.3](OPERATIONS.md#63-日誌與-run-記錄)）與 `worker.cli strategy-levels --date`（[OPERATIONS §3](OPERATIONS.md#3-現有-worker-cli)）是同一個函式；同日重跑值相同就不改寫（`computed_at` 不動），值不同才更新。資料可由 `market_bars`、`corporate_actions`、`technical_features` 與 `signals` 完整重建。
+
+## 大盤概況
+
+`GET /api/dashboard` 的 `market_overview` 只讀 `market_summaries`（來源與欄位規則見 [DATA_SOURCES](DATA_SOURCES.md#大盤概況)），不新增 route：
+
+```json
+"market_overview": {
+  "trading_date": "2026-10-22",
+  "exchanges": [
+    { "exchange": "TWSE", "status": "available",
+      "index": { "name": "加權指數", "close": 46041.43, "change": -846.34, "change_pct": -0.0181, "change_pct_method": "official" },
+      "turnover": { "value": 933437473560, "scope": "twse_all_securities", "scope_label": "集中市場總計（含 ETF、權證等）" },
+      "breadth": { "advancers": 247, "decliners": 756, "unchanged": 74, "limit_up": 3, "limit_down": 5, "unmatched": 7, "not_comparable": 0, "scope": "twse_stocks" },
+      "source": { "label": "臺灣證券交易所 MI_INDEX", "collected_at": "2026-10-22T10:30:05+00:00", "data_as_of": "2026-10-22", "raw_payload_id": 1 } },
+    { "exchange": "TPEx", "status": "unavailable", "reason": "row_date_mismatch", "latest_trading_date": "2026-10-21" }
+  ]
+}
+```
+
+- `trading_date` 等於 `dashboard.as_of`；`exchanges` 固定是 TWSE、TPEx 兩項，各自判斷，一邊沒有不影響另一邊。
+- 只顯示 `as_of` 當日的列，其他日期的列不代替。`unavailable` 的 `reason`：`no_verified_session`（`as_of` 為 null）、`row_date_mismatch`（該交易所最新一列不是 `as_of`，附 `latest_trading_date`）、`not_collected`（沒有任何列）。
+- `change_pct` 是比例（−0.0181 即 −1.81%）；`change_pct_method` 為 `official`（TWSE 官方）或 `derived`（TPEx 依前一日收市指數計算）。`turnover.value` 單位元；`scope` 只有 `twse_all_securities`（`scope_label`「集中市場總計（含 ETF、權證等）」）與 `tpex_stocks`（「上櫃股票」）。上櫃沒有無比價，`not_comparable` 為 null。
+- 缺值為 null（`status` 仍為 `available`），不補 0；`source.collected_at` 是該份 raw 的擷取時間（UTC）。
 
 ## 策略版本識別
 

@@ -705,9 +705,10 @@ def t2(run: Run) -> str:
         )
         expect(text.has(PENDING_DATE), f"as_of 為 null，缺整行 `{PENDING_DATE}`")
         return f"DB 與 dashboard 都沒有資料日，顯示 `{PENDING_DATE}`"
-    expect(text.has(f"資料 {d}"), f"缺整行 `資料 {d}`（{text.name}）")
+    # #270: every date badge reads YYYY/MM/DD, the navbar included.
+    expect(text.has(f"資料 {slash(d)}"), f"缺整行 `資料 {slash(d)}`（{text.name}）")
     expect(d == latest, f"D {d} ≠ facts market_latest_trading_date {latest}")
-    return f"`資料 {d}` = facts {latest}"
+    return f"`資料 {slash(d)}` = facts {latest}"
 
 
 @check("today", "T3")
@@ -1433,12 +1434,12 @@ def s3(run: Run, stock: Stock) -> str:
     expect(len(data) >= 2, f"`資料 ` 開頭的行只有 {len(data)} 行")
     d = run.D()
     expect(
-        text.lines[data[0]] == f"資料 {d}",
-        f"第一個資料行 {text.lines[data[0]]!r}，預期導覽列 `資料 {d}`",
+        text.lines[data[0]] == f"資料 {slash(d)}",
+        f"第一個資料行 {text.lines[data[0]]!r}，預期導覽列 `資料 {slash(d)}`",
     )
     expect(
-        text.lines[data[1]] == f"資料 {i}",
-        f"第二個資料行 {text.lines[data[1]]!r}，預期 `資料 {i}`（{text.at(data[1])}）",
+        text.lines[data[1]] == f"資料 {slash(i)}",
+        f"第二個資料行 {text.lines[data[1]]!r}，預期 `資料 {slash(i)}`（{text.at(data[1])}）",
     )
     source = text.after(data[1]) or ""
     expect(
@@ -1447,7 +1448,7 @@ def s3(run: Run, stock: Stock) -> str:
     )
     bars_as_of = stock_bars(run, stock).get("data_as_of")
     expect(i == bars_as_of, f"I {i} ≠ stock-bars data_as_of {bars_as_of}")
-    return f"頁首 `資料 {i}`、`{source}`；bars data_as_of {bars_as_of}"
+    return f"頁首 `資料 {slash(i)}`、`{source}`；bars data_as_of {bars_as_of}"
 
 
 @check("stocks", "S4", per_stock=True)
@@ -1456,15 +1457,15 @@ def s4(run: Run, stock: Stock) -> str:
     k = text.find("K 線與技術指標")
     expect(k >= 0, "缺整行 `K 線與技術指標`")
     expect(
-        text.after(k) == f"資料 {i}",
-        f"`K 線與技術指標` 下一行是 {text.after(k)!r}，預期 `資料 {i}`",
+        text.after(k) == f"資料 {slash(i)}",
+        f"`K 線與技術指標` 下一行是 {text.after(k)!r}，預期 `資料 {slash(i)}`",
     )
     for prefix in ("來源 ", "日線批次計算於"):
         expect(
             text.find_where(lambda line: line.startswith(prefix)) >= 0,
             f"缺 `{prefix}` 開頭的行",
         )
-    return f"K 線卡 `資料 {i}`、來源與批次時間"
+    return f"K 線卡 `資料 {slash(i)}`、來源與批次時間"
 
 
 @check("stocks", "S5", per_stock=True)
@@ -1519,7 +1520,10 @@ def s7(run: Run, stock: Stock) -> str:
     text, i = stock_text(run, stock, "data"), stock_I(run, stock)
     k = text.find("K 線資料日期")
     expect(k >= 0, "缺整行 `K 線資料日期`")
-    expect(text.after(k) == i, f"`K 線資料日期` 下一行是 {text.after(k)!r}，預期 `{i}`")
+    expect(
+        text.after(k) == slash(i),
+        f"`K 線資料日期` 下一行是 {text.after(k)!r}，預期 `{slash(i)}`",
+    )
     s = text.find("行情來源")
     expect(s >= 0, "缺整行 `行情來源`")
     source = text.after(s)
@@ -1529,7 +1533,7 @@ def s7(run: Run, stock: Stock) -> str:
         text.find_where(lambda line: line.endswith(suffix)) >= 0,
         f"缺 `{suffix}` 結尾的行",
     )
-    return f"K 線資料日期 {i}、行情來源 `{source}`、`…{suffix}`"
+    return f"K 線資料日期 {slash(i)}、行情來源 `{source}`、`…{suffix}`"
 
 
 @check("stocks", "S8", per_stock=True)

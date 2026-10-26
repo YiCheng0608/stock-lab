@@ -416,6 +416,21 @@ class FixtureFetcher:
             sources.TWSE_INDEX_HISTORY_API
         ):
             return []
+        if url == sources.TPEX_HIGHLIGHT_ENDPOINT:
+            return [
+                {
+                    "Date": "1150904",
+                    "CloseIndex": "260.00",
+                    "IndexChange": "1.20",
+                    "DailyTradingValue": "1",
+                    "PriceRiseCompanyNumbers": "1",
+                    "PriceDeclineCompanyNumbers": "0",
+                    "PriceFlatCompanyNumbers": "1",
+                    "LimitUpCompanyNumbers": "0",
+                    "LimitDownCompanyNumbers": "0",
+                    "UnmatchedCompanyNumbersSuspensionStocksIncluded": "0",
+                }
+            ]
         raise AssertionError(f"unexpected endpoint: {url}")
 
 

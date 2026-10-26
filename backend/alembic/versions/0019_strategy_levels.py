@@ -1,7 +1,7 @@
 """Add the observation price level table.
 
-Revision ID: 0018_strategy_levels
-Revises: 0017_tracking_plans
+Revision ID: 0019_strategy_levels
+Revises: 0018_market_summaries
 
 ``strategy_levels`` keeps, per signal and levels version, the close and
 volume the next session needs for the signal's strategy to pass, with
@@ -26,8 +26,8 @@ from sqlalchemy import (
     inspect,
 )
 
-revision = "0018_strategy_levels"
-down_revision = "0017_tracking_plans"
+revision = "0019_strategy_levels"
+down_revision = "0018_market_summaries"
 branch_labels = None
 depends_on = None
 

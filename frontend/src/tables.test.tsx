@@ -155,7 +155,7 @@ check(bodyText(members).includes('21.10') && bodyText(members).includes('2,510.0
 
 const card = render('CandidateCard', () => <CandidateCard item={completeItem()} detailsOpen />)
 const details = /<details class="details candidate-details"[\s\S]*?<\/details>/.exec(card)?.[0] ?? ''
-checkAligned('今日候選評分細節', details, ['原值', 'percentile', '子項權重'])
+checkAligned('今日候選評分細節', details, ['原值', '百分位', '子項權重'])
 const detailHeaders = (/<thead>([\s\S]*?)<\/thead>/.exec(details)?.[1] ?? '').match(/<th[\s>]/g) ?? []
 check(detailHeaders.length <= 4, `今日候選評分細節: ${detailHeaders.length} columns in a card; the group title belongs on its own row (§5.1)`)
 

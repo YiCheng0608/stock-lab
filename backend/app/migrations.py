@@ -616,11 +616,18 @@ def _fallback_upgrade_on_connection(connection) -> None:
             "VALUES ('0017_tracking_plans', CURRENT_TIMESTAMP)"
         )
     )
-    # 0018 only adds strategy_levels, also made by create_all.
+    # 0018 only adds market_summaries, also made by create_all.
     connection.execute(
         text(
             "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
-            "VALUES ('0018_strategy_levels', CURRENT_TIMESTAMP)"
+            "VALUES ('0018_market_summaries', CURRENT_TIMESTAMP)"
+        )
+    )
+    # 0019 only adds strategy_levels, also made by create_all.
+    connection.execute(
+        text(
+            "INSERT OR REPLACE INTO schema_migrations(version, applied_at) "
+            "VALUES ('0019_strategy_levels', CURRENT_TIMESTAMP)"
         )
     )
 

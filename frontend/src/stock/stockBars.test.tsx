@@ -63,14 +63,14 @@ for (const panel of INDICATOR_PANELS) {
   check(state.kind === 'not_computed' && state.title === '指標尚未計算', `${panel.id}: not_computed state`)
 }
 check(fieldsState(notComputed.bars[1], ['ma5'], notComputed).kind === 'not_computed', 'not_computed field state')
-check(maNotes(notComputed, new Set<MaField>(['ma5']))[0] === 'MA5 指標尚未計算：2026-10-16 的指標尚未由批次計算', 'MA note for not_computed')
+check(maNotes(notComputed, new Set<MaField>(['ma5']))[0] === 'MA5 指標尚未計算：2026/10/16 的指標尚未由批次計算', 'MA note for not_computed')
 
 // ---- suspended day + missing calendar day ----
 const suspended = suspendedWithGapDaily()
 const dates = suspended.bars.map((bar) => bar.date)
 check(dates.length === 40 && !dates.includes('2026-09-07') && dates.includes('2026-09-08'), 'the missing calendar day is not filled in')
 const suspendedState = indicatorPanelState(suspended, 'rsi')
-check(suspendedState.kind === 'chart' && suspendedState.note === `${dates[39]} RSI無資料：停牌，當日不計算`, `latest suspended bar keeps the chart and explains the gap: ${JSON.stringify(suspendedState)}`)
+check(suspendedState.kind === 'chart' && suspendedState.note === `${dates[39].replaceAll('-', '/')} RSI無資料：停牌，當日不計算`, `latest suspended bar keeps the chart and explains the gap: ${JSON.stringify(suspendedState)}`)
 const suspendedQuote = stockQuote(suspended.bars)
 check(suspendedQuote.date === dates[38] && suspendedQuote.close === suspended.bars[38].close, 'latest close skips the suspended last row')
 check(suspendedQuote.change != null && Math.abs(suspendedQuote.change - 0.5) < 1e-9, 'change uses the adjacent traded row before it')
@@ -91,14 +91,14 @@ const downMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-1
 check(downMarkup.includes('tone-down') && downMarkup.includes('-10（-1.67%）') && !downMarkup.includes('tone-up'), `down markup: ${downMarkup}`)
 const emptyMarkup = renderToStaticMarkup(<StockQuoteLine bars={[]} />)
 check(emptyMarkup.includes('待核實') && emptyMarkup.includes('漲跌待核實') && emptyMarkup.includes('tone-flat') && !emptyMarkup.includes('>0<'), 'no bars → 待核實, never 0')
-check(upMarkup.includes('資料 2026-10-16') && upMarkup.includes('臺灣證券交易所'), 'header shows data date badge and source')
+check(upMarkup.includes('資料 2026/10/16') && upMarkup.includes('臺灣證券交易所'), 'header shows data date badge and source')
 
 // ---- weekly series ----
 const weekly = weeklySeries()
 const weeklyMacd = indicatorPanelState(weekly, 'macd')
 check(weeklyMacd.kind === 'empty' && weeklyMacd.reason === '週線不足 34 根，現有 3 根', `weekly reason counts weeks: ${JSON.stringify(weeklyMacd)}`)
 const weeklyTooltip = formatBarsTooltip(weekly, 2, 'macd', allMa, 0)
-check(weeklyTooltip.includes('2026-10-12～2026-10-16（5 個交易日）') && weeklyTooltip.includes('成交量（張） 105,000'), `weekly tooltip: ${weeklyTooltip}`)
+check(weeklyTooltip.includes('2026/10/12～2026/10/16（5 個交易日）') && weeklyTooltip.includes('成交量（張） 105,000'), `weekly tooltip: ${weeklyTooltip}`)
 check(stockQuote(weekly.bars).sources.join() === 'twse', 'weekly rows read their sources list')
 
 // ---- chart option: K line, volume, five MAs, four indicator panels ----
@@ -142,9 +142,9 @@ check(Math.abs(zoomDefault.start - 52) < 1e-9 && zoomDefault.end === 100, 'first
 const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => renderToStaticMarkup(<StockBarsChart interval={interval} onIntervalChange={() => undefined} data={data} loading={false} error={null} />)
 const insufficientMarkup = render(insufficient)
 check(insufficientMarkup.includes('無資料') && insufficientMarkup.includes('日線不足 34 根，現有 20 根'), 'rendered MACD panel shows 無資料 with the reason')
-check(insufficientMarkup.includes('資料 2026-09-20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
-check(insufficientMarkup.includes('日線批次計算於 2026-10-16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
-check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026-10-17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026-10-17 23:30', 'computed_at time zone handling')
+check(insufficientMarkup.includes('資料 2026/09/20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
+check(insufficientMarkup.includes('日線批次計算於 2026/10/16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
+check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026/10/17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026/10/17 23:30', 'computed_at time zone handling')
 check(formatTaipeiDateTime(null) === null && formatTaipeiDateTime('not a date') === null, 'missing or invalid computed_at')
 check(['MACD', 'RSI', 'KD', '布林'].every((label) => insufficientMarkup.includes(`>${label}</button>`)), 'four indicator tabs are rendered')
 check(MA_LINES.every((line) => insufficientMarkup.includes(`ma-swatch-${line.color}`)), 'five MA toggles are rendered')

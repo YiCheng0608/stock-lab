@@ -61,7 +61,7 @@ for (const text of ['>1<', '半導體業', '熱門族群', '81.25', '>90<', '>75
 }
 check(industryRow.includes('href="/themes/industry-24"'), 'row links to the detail page')
 const partialRow = industryMarkup.slice(industryMarkup.indexOf('data-theme-id="industry-28"'), industryMarkup.indexOf('</tr>', industryMarkup.indexOf('data-theme-id="industry-28"')))
-check(partialRow.includes('技術與籌碼觀察（事件資料待補）') && !partialRow.includes('熱門族群'), 'partial row is not called a hot group')
+check(partialRow.replace(/<[^>]+>/g, '').includes('技術與籌碼觀察（事件資料待補）') && !partialRow.includes('熱門族群'), 'partial row is not called a hot group')
 check(count(partialRow, '>—<') === 3, `null breadth, catalyst and 20d return show 「—」: ${partialRow}`)
 check(industryMarkup.includes('資料 2026/09/08') && !industryMarkup.includes('官方資料 '), 'board date badge')
 check(!industryMarkup.includes('待重新核實') && !industryMarkup.includes('class="data-gap"'), 'industry board shows no temporary verification notice')
