@@ -272,7 +272,7 @@ def _assert_head(engine, entry):
         if entry == "fallback":
             assert (
                 len(c.exec_driver_sql("SELECT version FROM schema_migrations").all())
-                == 18
+                == 19
             )
             assert (
                 c.exec_driver_sql(

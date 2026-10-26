@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.domain import (
@@ -127,6 +127,93 @@ class SignalLevels:
     target_2: float | None = None
 
 
+@dataclass(frozen=True)
+class NextSessionInputs:
+    """What is known after T's close, in the next session's price basis.
+
+    The next session's prior windows end on T, so its thresholds are known
+    numbers.  Prices are T's raw-basis history multiplied by the factor of the
+    corporate actions dated after T up to the next session (1.0 when none is
+    stored, ``price_basis`` then stays the signal day's).  Volumes are raw
+    shares.  The confirmations are T's values: the next session's are unknown.
+    """
+
+    instrument_type: str
+    etf_category: str | None
+    bar_count: int  # bars through T
+    is_suspended: bool
+    close: float | None  # T's close
+    atr14: float | None
+    closes: tuple[float, ...]  # last up to 59 closes through T
+    highs: tuple[float, ...]  # last up to 20 highs through T
+    volumes: tuple[int, ...]  # last up to 20 volumes through T
+    group_excess_return_20d: float | int | None
+    institutional_flow_ratio_5d: float | None
+    margin_change_ratio_5d: float | None
+    price_basis: str = "score_date_raw_basis"
+
+
+@dataclass(frozen=True)
+class ObservationLevels:
+    """``strategy_levels_v1`` result of one strategy (a ``strategy_levels`` row).
+
+    Prices are reference levels for the next session, not levels of a passed
+    signal.  ``next_session`` maps a condition code to what the next session
+    must reach for it; it is kept even when no price level is given (a
+    pullback whose trend cannot pass shows both numbers).
+    """
+
+    availability: str
+    missing_inputs: tuple[str, ...] = ()
+    trigger_price: float | None = None
+    zone_low: float | None = None
+    zone_high: float | None = None
+    min_volume: int | None = None
+    max_volume: int | None = None
+    reference_entry: float | None = None
+    entry_low: float | None = None
+    entry_high: float | None = None
+    invalid_price: float | None = None
+    target_1: float | None = None
+    target_2: float | None = None
+    risk_reward: float | None = None
+    reachable_next_session: bool | None = None
+    next_session: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Condition:
+    """One line of a strategy's condition list (``conditions_json``).
+
+    ``satisfied`` and ``actual``/``threshold`` are T's judgement as analyze
+    stored it (None: no data); ``next_session`` is what the next session must
+    reach, for the conditions that can be solved for a close or a volume.
+    """
+
+    code: str
+    kind: str  # eligibility, data, price, volume, trend, confirmation
+    satisfied: bool | None
+    actual: float | None = None
+    threshold: float | None = None
+    threshold_high: float | None = None
+    operator: str | None = None
+    reasons: tuple[str, ...] = ()
+    next_session: Mapping[str, Any] | None = None
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "kind": self.kind,
+            "satisfied": self.satisfied,
+            "actual": self.actual,
+            "threshold": self.threshold,
+            "threshold_high": self.threshold_high,
+            "operator": self.operator,
+            "reasons": list(self.reasons),
+            "next_session": dict(self.next_session) if self.next_session else None,
+        }
+
+
 def risk_levels(entry: float, atr: float | None) -> tuple[float, float, float, float]:
     """Entry, invalidation and the 1.6R/3R targets (``legacy-risk-levels/v1``)."""
 
@@ -240,3 +327,18 @@ class Strategy:
         """candidate_score technical ``distance`` from a stored signal."""
 
         return None
+
+    def observation_levels(self, inputs: NextSessionInputs) -> ObservationLevels:
+        """``strategy_levels_v1``: the next session's close and volume to pass."""
+
+        return ObservationLevels("not_applicable", ("observation_levels_not_defined",))
+
+    def conditions(
+        self,
+        inputs: StrategyInputs,
+        evaluation: RuleEvaluation,
+        levels: ObservationLevels,
+    ) -> list[Condition]:
+        """T's condition list, each with the next session's requirement."""
+
+        return []

@@ -1031,3 +1031,45 @@ class TrackingPlanSession(Base):
     execution_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
     data_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+class StrategyLevel(Base):
+    """Observation price levels of one signal (V1_SPEC strategy_levels_v1).
+
+    Written by ``worker.strategy_levels`` after analyze: from T's data, the
+    close and volume the next session needs for the signal's strategy to pass,
+    with reference stop and targets.  Never a passed signal's levels: the
+    decision summary, the today page and the tracking plans do not read it,
+    and ``signals`` is never changed.  One row per signal and levels version;
+    a new formula version adds rows and keeps the old ones.
+    """
+
+    __tablename__ = "strategy_levels"
+    __table_args__ = (
+        UniqueConstraint(
+            "signal_id", "levels_version", name="uq_strategy_level_signal_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    signal_id: Mapped[int] = mapped_column(ForeignKey("signals.id"), index=True)
+    levels_version: Mapped[str] = mapped_column(String(40))
+    availability: Mapped[str] = mapped_column(String(30))
+    next_session_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trigger_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reference_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invalid_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reachable_next_session: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    conditions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    missing_inputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    price_basis: Mapped[str] = mapped_column(String(40))
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

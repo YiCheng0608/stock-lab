@@ -1334,6 +1334,7 @@ OMITTED_TABLES: dict[str, str] = {
     "schedule_run_steps": "同 schedule_runs",
     "signal_evaluations": "訊號在最後一個交易日產生，還沒有後續交易日可評估",
     "signal_settlements": "同 signal_evaluations，尚無結算",
+    "strategy_levels": "條件價位還沒有頁面與 API（#274 策略總表加 API 時一起加假資料）",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
     "tracking_plans": "使用者追蹤計畫還沒有頁面與 API（#253 加頁面時一起加假資料）",
     "tracking_plan_sessions": "同 tracking_plans",

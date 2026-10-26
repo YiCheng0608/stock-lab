@@ -634,6 +634,21 @@ def validate_signal_status_transition(
     return ValidationResult(False, ("illegal_signal_status_transition",))
 
 
+# Observation price levels (V1_SPEC strategy_levels_v1, worker.strategy_levels):
+# from the data known after T's close, the close and volume the next session
+# needs for each strategy to pass.  A change to the formulas or to the tick
+# ladder (app.strategies.levels.TICK_LADDERS) needs a new version; the rows of
+# an older version stay as they are.
+STRATEGY_LEVELS_VERSION = "strategy_levels_v1"
+STRATEGY_LEVEL_AVAILABILITY = (
+    "levels",
+    "trend_unreachable",
+    "data_incomplete",
+    "not_applicable",
+    "suspended",
+)
+
+
 # User tracking plans (V1_SPEC 使用者追蹤計畫).  pending may jump straight to an
 # outcome: a fill and its exit can happen in the same session, and a run that
 # follows missed daily runs can see a fill and the end of the window at once.

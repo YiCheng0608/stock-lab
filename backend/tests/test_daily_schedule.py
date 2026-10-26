@@ -33,6 +33,7 @@ DAY = date(2026, 9, 4)
 # Captured before Steps replaces it with a no-op.
 REAL_CATCHUP_STEP = schedule_runs._catchup_step
 REAL_PLAN_TRACKING_STEP = schedule_runs._plan_tracking_step
+REAL_STRATEGY_LEVELS_STEP = schedule_runs._strategy_levels_step
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +75,7 @@ class Steps:
             "indicators": {"status": "not_configured", "reason": "fixture"},
             "theme_suggestions": {"status": "success", "records": 4},
             "plan_tracking": {"status": "success", "records": 0},
+            "strategy_levels": {"status": "success", "records": 6},
             "candidate_notes": {"status": "success", "records": 3},
         }
         self.results.update(results)
@@ -97,6 +99,9 @@ class Steps:
             schedule_runs, "_theme_suggestion_step", make("theme_suggestions")
         )
         monkeypatch.setattr(schedule_runs, "_plan_tracking_step", make("plan_tracking"))
+        monkeypatch.setattr(
+            schedule_runs, "_strategy_levels_step", make("strategy_levels")
+        )
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
         )
@@ -139,6 +144,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -155,6 +161,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators": ("not_configured", None),
         "theme_suggestions": ("success", 4),
         "plan_tracking": ("success", 0),
+        "strategy_levels": ("success", 6),
         "candidate_notes": ("success", 3),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
@@ -171,6 +178,7 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -207,6 +215,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "indicators": "skipped",
         "theme_suggestions": "skipped",
         "plan_tracking": "skipped",
+        "strategy_levels": "skipped",
         "candidate_notes": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
@@ -221,6 +230,7 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
 
@@ -272,6 +282,10 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
     assert logged["indicators"].status == "not_configured"
     assert logged["theme_suggestions"].status == "success"
     assert (
+        logged["strategy_levels"].status == "skipped"
+        and logged["strategy_levels"].error == "analyze_not_successful"
+    )
+    assert (
         logged["candidate_notes"].status == "skipped"
         and logged["candidate_notes"].error == "candidates_not_successful"
     )
@@ -292,6 +306,7 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -313,6 +328,7 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -400,6 +416,7 @@ def test_failed_theme_suggestions_fail_the_run_after_every_other_step(
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -415,17 +432,75 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-2:] == ["plan_tracking", "candidate_notes"]
+    assert steps.calls[-3:] == ["plan_tracking", "strategy_levels", "candidate_notes"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert "plan_tracking" in rows[0].error and "fixture plan crash" in rows[0].error
     assert logged["plan_tracking"].status == "failed"
     assert logged["candidate_notes"].status == "success"
     # Rows are found by step name; the sequence only orders them.
-    assert [logged[name].sequence for name in ("plan_tracking", "candidate_notes")] == [
-        7,
-        8,
-    ]
+    assert [
+        logged[name].sequence
+        for name in ("plan_tracking", "strategy_levels", "candidate_notes")
+    ] == [7, 8, 9]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "failed", "error": "fixture levels failure"},
+        {"status": "partial", "error": "fixture partial levels", "records": 2},
+        RuntimeError("fixture levels crash"),
+    ],
+)
+def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
+    database, monkeypatch, outcome
+):
+    # The run's success definition does not depend on strategy_levels (#273).
+    steps = Steps(monkeypatch, strategy_levels=outcome)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert steps.calls[-2:] == ["strategy_levels", "candidate_notes"]
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]
+    assert rows[0].status == "success" and rows[0].error is None
+    step = logged["strategy_levels"]
+    assert step.status in {"failed", "partial"}
+    assert "fixture" in step.error and "levels" in step.error
+    assert rows[0].summary_json["steps"]["strategy_levels"] == step.status
+    assert logged["candidate_notes"].status == "success"
+
+
+def test_the_real_strategy_level_step_records_the_signals_it_processed(
+    database, monkeypatch
+):
+    from test_strategy_levels import T, seed
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(
+        schedule_runs, "_strategy_levels_step", REAL_STRATEGY_LEVELS_STEP
+    )
+    with database() as db:
+        seed(db)
+        db.commit()
+    assert pipeline.run_daily(T)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["strategy_levels"]
+    assert (step.status, step.records, step.error) == ("success", 2, None)
+    assert step.details_json["rows_written"] == 2
+    assert step.details_json["date"] == T.isoformat()
+    assert (
+        sum(
+            sum(counts.values())
+            for counts in step.details_json["availability"].values()
+        )
+        == 2
+    )
+    # An analyze that wrote no signals for the date leaves an acceptable empty step.
+    assert pipeline.run_daily(date(2026, 10, 23))["status"] == "success"
+    rows, by_run = runs(database)
+    empty = by_run[rows[-1].id]["strategy_levels"]
+    assert (empty.status, empty.records) == ("no_data", 0)
 
 
 def test_plan_tracking_without_any_plan_is_a_successful_empty_step(
@@ -506,6 +581,7 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
 
@@ -895,6 +971,7 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, _ = runs(database)
@@ -1204,6 +1281,7 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     caught = result["catchup"]
