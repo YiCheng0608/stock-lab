@@ -888,8 +888,9 @@ def source_lines(text: Text) -> list[int]:
     return [i for i, line in enumerate(text.lines) if line.startswith("來源：")]
 
 
-# A candidate table row starts with its rank cell (#276): `#1<TAB>…`.
-RANK_ROW = re.compile(r"^#([0-9]+)(\t|$)")
+# A candidate table row starts with its rank cell and a tab (#276): `#1<TAB>…`. The old
+# cards put `#1` on a line of its own, so the tab tells a table row from a card.
+RANK_ROW = re.compile(r"^#([0-9]+)\t")
 
 
 def candidate_ranks(text: Text) -> list[int]:

@@ -245,8 +245,8 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
 
 
 def test_t7_fails_on_the_old_candidate_cards(tmp_path):
-    # Before #276 each candidate was a card without a rank cell starting a table row.
-    page = TODAY_CANDIDATES.replace("#1\t", "").replace("#2\t", "")
+    # Before #276 each candidate was a card: its rank `#1` on a line of its own.
+    page = TODAY_CANDIDATES.replace("#1\t", "#1\n").replace("#2\t", "#2\n")
     run = FakeRun(
         tmp_path,
         {"candidates": _candidates()},
