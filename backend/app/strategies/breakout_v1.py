@@ -7,11 +7,15 @@ from typing import Any
 
 from app.domain import RuleEvaluation
 
+from . import levels
 from .base import (
     COMMON_CONFIRMATIONS,
     COMMON_EXECUTION,
     COMMON_RISK_MANAGEMENT,
     COMMON_UNIVERSE,
+    Condition,
+    NextSessionInputs,
+    ObservationLevels,
     SignalLevels,
     Strategy,
     StrategyInputs,
@@ -178,6 +182,83 @@ class BreakoutV1(Strategy):
         if len(highs) == 20 and all(item is not None and item > 0 for item in highs):
             return close / max(highs) - 1
         return None
+
+    def observation_levels(self, inputs: NextSessionInputs) -> ObservationLevels:
+        """Next close above the 20-session high through T, on 1.2x its average volume.
+
+        The trigger is the first legal price above that high (``gt``); the
+        minimum volume is rounded up to a whole share.
+        """
+
+        unavailable = levels.unavailable(inputs)
+        if unavailable is not None:
+            return unavailable
+        highs = levels.positive_window(inputs.highs, 20)
+        average = levels.average_volume(inputs.volumes)
+        missing = [
+            *([] if highs is not None else ["prior_20_highs_missing_or_invalid"]),
+            *([] if average is not None else ["prior_20_volumes_missing_or_invalid"]),
+            *(
+                []
+                if inputs.close and inputs.close > 0
+                else ["close_missing_or_non_finite"]
+            ),
+            *levels.missing_confirmations(inputs),
+        ]
+        if missing:
+            return ObservationLevels("data_incomplete", tuple(missing))
+        trigger = levels.tick_ceil(max(highs), inputs.instrument_type, strict=True)
+        min_volume = levels.volume_at_least(
+            CONFIG["volume"]["minimum_signal_to_average_ratio"], average
+        )
+        limits = levels.price_limits(inputs)
+        return ObservationLevels(
+            "levels",
+            trigger_price=trigger,
+            min_volume=min_volume,
+            **levels.reference_levels(trigger, inputs.atr14),
+            reachable_next_session=None if limits is None else trigger <= limits[1],
+            next_session={
+                "breakout_price": {
+                    "min_close": trigger,
+                    "gap": levels.gap(trigger, inputs.close),
+                },
+                "breakout_volume": {"min_volume": min_volume},
+            },
+        )
+
+    def conditions(
+        self,
+        inputs: StrategyInputs,
+        evaluation: RuleEvaluation,
+        observation: ObservationLevels,
+    ) -> list[Condition]:
+        highs = levels.positive_window(inputs.prior_highs, 20)
+        average = levels.average_volume(inputs.prior_volumes)
+        volume = finite_number(inputs.volume)
+        return [
+            Condition(
+                "breakout_price",
+                "price",
+                levels.satisfied(evaluation, ("close_not_above_prior_20_day_high",)),
+                actual=finite_number(inputs.close),
+                threshold=max(highs) if highs else None,
+                operator=CONFIG["price"]["breakout_operator"],
+                next_session=observation.next_session.get("breakout_price"),
+            ),
+            Condition(
+                "breakout_volume",
+                "volume",
+                levels.satisfied(evaluation, ("volume_ratio_below_1_20",)),
+                actual=round(volume / float(average), 6)
+                if volume is not None and average
+                else None,
+                threshold=CONFIG["volume"]["minimum_signal_to_average_ratio"],
+                operator=CONFIG["volume"]["operator"],
+                next_session=observation.next_session.get("breakout_volume"),
+            ),
+            *levels.confirmation_conditions(inputs, evaluation),
+        ]
 
 
 BREAKOUT_V1 = BreakoutV1()

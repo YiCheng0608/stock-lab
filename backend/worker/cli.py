@@ -23,6 +23,7 @@ from .schedule_runs import (
     list_schedule_runs,
     record_preflight_skip,
 )
+from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
 
@@ -142,6 +143,13 @@ def main() -> None:
         "--date",
         dest="run_date",
         help="YYYY-MM-DD 目標交易日；未指定使用 DB 最新日線日",
+    )
+    levels_parser = subparsers.add_parser(
+        "strategy-levels",
+        help="計算訊號的條件價位 strategy_levels_v1（daily 的 strategy_levels 步驟；同日重跑冪等）",
+    )
+    levels_parser.add_argument(
+        "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
     )
     notes_parser = subparsers.add_parser(
         "candidate-notes",
@@ -282,6 +290,8 @@ def main() -> None:
         result = run_candidates(parse_date(args.run_date))
     elif args.command == "track-plans":
         result = run_plan_tracking(parse_date(args.run_date))
+    elif args.command == "strategy-levels":
+        result = run_strategy_levels(parse_date(args.run_date))
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -337,6 +347,7 @@ def main() -> None:
         "candidates",
         "track-plans",
         "market-summary",
+        "strategy-levels",
     } and result.get("status") not in {
         "success",
         "no_data",
