@@ -1,6 +1,7 @@
 import type { EChartsOption } from 'echarts'
 
 import type { ChangeTone } from '../components/ui/Stat'
+import { formatDay, formatTaipeiMinute } from '../dates'
 import type { IndicatorField, StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import { formatTableVolume, isVerifiedShareSource } from '../units'
 
@@ -77,13 +78,7 @@ export function sourcesLabel(sources: readonly string[]): string {
 
 // `indicators.computed_at` is UTC with its offset (a naive value is read as UTC too); show Taiwan time.
 export function formatTaipeiDateTime(value: string | null | undefined): string | null {
-  if (!value) return null
-  const parsed = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z')
-  if (Number.isNaN(parsed.getTime())) return null
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(parsed).map((part) => [part.type, part.value]))
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+  return formatTaipeiMinute(value)
 }
 
 // ---- null reasons -------------------------------------------------------------------------------
@@ -118,7 +113,7 @@ export function fieldsState(bar: StockBarRow | undefined, fields: readonly Indic
   if (!bar) return { kind: 'missing', reason: '來源未提供行情' }
   if (fields.some((field) => isFiniteNumber(bar[field]))) return { kind: 'value' }
   const codes = fields.map((field) => bar.reasons?.[field])
-  if (codes.every((code) => code === 'not_computed')) return { kind: 'not_computed', reason: `${bar.date} 的指標尚未由批次計算` }
+  if (codes.every((code) => code === 'not_computed')) return { kind: 'not_computed', reason: `${formatDay(bar.date) ?? bar.date} 的指標尚未由批次計算` }
   const insufficient = fields.filter((_, index) => codes[index] === 'insufficient_bars')
   if (insufficient.length) {
     const required = insufficient.map((field) => response.indicators.required_bars[field]).filter(isFiniteNumber)
@@ -140,7 +135,7 @@ export function indicatorPanelState(response: StockBarsResponse, panelId: Indica
   const state = fieldsState(latest, panel.fields, response)
   if (state.kind === 'value') return { kind: 'chart', note: null }
   const hasAny = response.bars.some((bar) => panel.fields.some((field) => isFiniteNumber(bar[field])))
-  if (hasAny) return { kind: 'chart', note: `${latest.date} ${panel.label}無資料：${state.reason}` }
+  if (hasAny) return { kind: 'chart', note: `${formatDay(latest.date) ?? latest.date} ${panel.label}無資料：${state.reason}` }
   if (state.kind === 'not_computed') return { kind: 'not_computed', title: '指標尚未計算', reason: state.reason }
   return { kind: 'empty', title: '無資料', reason: state.reason }
 }
@@ -299,8 +294,8 @@ export function formatBarsTooltip(response: StockBarsResponse, index: number, pa
   const bar = response.bars[index]
   if (!bar) return ''
   const heading = response.interval === 'week' && bar.week_start
-    ? `${bar.week_start}～${bar.week_end ?? bar.date}（${bar.trading_days ?? '—'} 個交易日）`
-    : bar.date
+    ? `${formatDay(bar.week_start) ?? bar.week_start}～${formatDay(bar.week_end ?? bar.date) ?? bar.week_end ?? bar.date}（${bar.trading_days ?? '—'} 個交易日）`
+    : formatDay(bar.date) ?? bar.date
   const lines = [`<strong>${escapeHtml(heading)}</strong>`]
   if (!isDrawableBar(bar)) {
     lines.push(bar.is_suspended ? '停牌，無 K 線' : '此根行情不完整，不繪製')
@@ -399,7 +394,7 @@ export type BarsChartOptions = {
 export function buildBarsChartOption(response: StockBarsResponse, options: BarsChartOptions): EChartsOption {
   const { theme, layout, zoom, digits } = options
   const bars = response.bars
-  const dates = bars.map((bar) => bar.date)
+  const dates = bars.map((bar) => formatDay(bar.date) ?? bar.date)
   const axisLabel = { color: theme.muted, fontSize: 12, fontFamily: theme.fontMono }
   const splitLine = { lineStyle: { color: theme.grid } }
   const gridBase = { left: layout.left, right: layout.right }

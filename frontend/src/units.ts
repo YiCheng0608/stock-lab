@@ -169,7 +169,7 @@ export function positionQuantityFromText(unit: ShareUnit, raw: string): string {
   const text = raw.replace(/^0+/, '')
   const maximum = unit === 'lot' ? '9223372036854775' : '9223372036854775807'
   if (!text || text.length > maximum.length || (text.length === maximum.length && text > maximum)) {
-    throw new Error('總股數須為 1 至 9,223,372,036,854,775,807 股。')
+    throw new Error('數量超過可保存的上限，請確認張數或股數。')
   }
   return text
 }

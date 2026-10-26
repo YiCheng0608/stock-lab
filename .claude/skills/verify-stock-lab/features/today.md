@@ -33,7 +33,7 @@
 
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
-| 導覽列 | `dashboard.as_of` | `資料 <D>`（右上 badge） | — | `資料日期待核實` |
+| 導覽列 | `dashboard.as_of` | `資料 <D/>`（右上 badge） | — | `資料日期待核實` |
 | 資料截至卡 | `dashboard.as_of`、`market.source_label` | `資料截至` 下一行 `<D/>`，再下一行來源名稱 | — | `尚無官方快照` |
 | 今日市場／重大事件 | `dashboard.news` 前 3 則 | 每張卡：來源 badge、`發布於／事件於／事件日 …` 時間 | 有 AI 判讀的卡在方向後接 `AI 推論` | `市場新聞區尚無可顯示內容。` |
 | 熱門族群 | `today-board.json` | 榜別分頁下一行 `資料 <B/>`；每張卡 `資料 <B/> · 相對加權指數` | — | `meta.empty_message` 或 `此榜目前沒有族群` |
@@ -47,7 +47,7 @@
 | 編號 | 類型 | 檢查 | 怎麼判 |
 | --- | --- | --- | --- |
 | T1 | CI | 頁面可用 | 兩個寬度 `ready` true、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
-| T2 | CI | 導覽列資料日 | `today-1280.txt` 有整行 `資料 <D>`，且 `D` 等於 `facts.json` 的 `market_latest_trading_date`。`D` 缺少時：`market_latest_trading_date` 非 null 判失敗（DB 有行情、頁面沒有資料日），兩邊都沒有才查整行 `資料日期待核實`。`D` 的上游 |
+| T2 | CI | 導覽列資料日 | `today-1280.txt` 有整行 `資料 <D/>`，且 `D` 等於 `facts.json` 的 `market_latest_trading_date`。`D` 缺少時：`market_latest_trading_date` 非 null 判失敗（DB 有行情、頁面沒有資料日），兩邊都沒有才查整行 `資料日期待核實`。`D` 的上游 |
 | T3 | CI | 資料截至卡 | 整行 `資料截至` 的下一行是 `<D/>`，再下一行非空且等於 `market.source_label`（null 時只要求非空） |
 | T4 | CI | 熱門族群日期 | 整行 `熱門族群` 之後第一個 `資料 ` 開頭的行是 `資料 <B/>`；`B` 等於 `facts.json` 的 `group_scores_latest_trading_date`。`B` 缺少時：`group_scores_latest_trading_date` 非 null 判失敗，兩邊都沒有才查整行 `資料日期待核實`。`B` 的上游 |
 | T5 | CI | 熱門族群卡 | 整行 `資料 <B/> · 相對加權指數` 的行數 = `min(10, items 數)`；`items[0].display_name` 為整行出現。`items` 空時：`facts.json` 的 `group_scores_latest_trading_date` 非 null 且等於該榜 `meta.trading_date`（或後者為 null），或 `dashboard.json` 的 `groups` 有該日 `rank` 非 null 的族群，判失敗；都沒有才查空資料文案。`T` 的上游；`B` 用 T4 |
@@ -60,7 +60,7 @@
 ## 陷阱
 
 - 「有 AI 判讀」的定義見 [news.md 陷阱](news.md#陷阱)（T6）。
-- `dashboard.as_of` 帶時間，`D` 只取前 10 字。導覽列 badge 是 `資料 <D>`（`-` 分隔），各卡片是 `資料 <B/>`、`資料 <C/>` 等（`/` 分隔），兩種寫法不要混用。
+- `dashboard.as_of` 帶時間，`D` 只取前 10 字。`D` 本身是 API 的 `-` 分隔日期，頁面上的 badge 一律是 `/` 分隔：導覽列 `資料 <D/>`、各卡片 `資料 <B/>`、`資料 <C/>` 等（UI_COPY_SPEC §1，#270）。
 
 ## 判定
 
