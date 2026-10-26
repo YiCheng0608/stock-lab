@@ -1452,12 +1452,8 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         rejected = SimpleNamespace(
             passed=False, state="rejected", reasons=("rule_not_met",)
         )
-        monkeypatch.setattr(
-            pipeline, "evaluate_breakout_v1", lambda **_kwargs: rejected
-        )
-        monkeypatch.setattr(
-            pipeline, "evaluate_pullback_v1", lambda **_kwargs: rejected
-        )
+        for rule in pipeline.REGISTRY.values():
+            monkeypatch.setattr(rule, "rule", lambda **_kwargs: rejected)
         strategies = pipeline._ensure_strategies(db)
         assert pipeline._upsert_signal(
             db, instrument=instrument, signal_date=score_date, strategies=strategies

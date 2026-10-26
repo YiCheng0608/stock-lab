@@ -318,163 +318,15 @@ HOT_GROUP_CONFIG: dict[str, Any] = {
 }
 
 
-_COMMON_UNIVERSE = {
-    "instrument_types": ["stock", "etf", "ipo"],
-    "etf_categories": sorted(ETF_CATEGORIES),
-    "etf_policy": {
-        "collect_and_classify_categories": sorted(ETF_CATEGORIES),
-        "hot_group_rank_categories": sorted(ETF_CATEGORIES),
-        "actionable_signal_categories": sorted(ACTIONABLE_ETF_CATEGORIES),
-        "excluded_from_general_breakout_pullback": {
-            "bond": "non_actionable_etf_category",
-            "leveraged": "non_actionable_etf_category",
-            "inverse": "non_actionable_etf_category",
-        },
-    },
-    "ipo_observation_minimum_bars": 20,
-    "ipo_actionable_minimum_bars": 60,
-}
-
-_COMMON_EXECUTION = {
-    "signal_time": "T_close",
-    "earliest_execution": "T+1",
-    "execution_price_field": "next_session_open_or_better_documented_fill",
-    "no_same_day_fill": True,
-}
-
-_COMMON_CONFIRMATIONS = {
-    "group_relative_strength": {
-        "benchmark_id": "TAIEX",
-        "return_window_trading_days": 20,
-        "minimum_excess_return": 0.0,
-        "operator": "gt",
-    },
-    "institutional_flow": {
-        "formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
-        "flow_window_trading_days": 5,
-        "flow_unit": "shares",
-        "normalizer": "average_daily_volume_20d",
-        "normalizer_window_trading_days": 20,
-        "normalizer_window_basis": "inclusive_signal_day",
-        "normalizer_unit": "shares",
-        # The key name predates the v2 formula and is kept for stored-contract
-        # compatibility; the ratio is now net shares / average share volume.
-        "minimum_net_flow_to_turnover_ratio": -0.003,
-        "operator": "gte",
-    },
-    "margin_financing": {
-        "change_window_trading_days": 5,
-        "maximum_balance_change_ratio": 0.05,
-        "operator": "lte",
-    },
-}
-
-_COMMON_RISK_MANAGEMENT = {
-    "first_target_minimum_risk_reward": MINIMUM_FIRST_TARGET_RISK_REWARD,
-    "invalid_price_must_be_below_entry": True,
-    "target_1_must_exceed_entry": True,
-    "target_2_must_exceed_target_1_when_present": True,
-}
-
-
-STRATEGY_CONFIGS: dict[str, dict[str, Any]] = {
-    "breakout_v1": {
-        "name": "breakout_v1",
-        "version": "1.0.0",
-        "schema_version": "strategy-config/v1",
-        "kind": "breakout",
-        "universe": _COMMON_UNIVERSE,
-        "execution": _COMMON_EXECUTION,
-        "price": {
-            "signal_price_field": "close",
-            "reference_price_field": "high",
-            "prior_high_lookback_trading_days": 20,
-            "reference_excludes_signal_day": True,
-            "breakout_operator": "gt",
-        },
-        "volume": {
-            "signal_volume_field": "volume",
-            "average_lookback_trading_days": 20,
-            "average_excludes_signal_day": True,
-            "minimum_signal_to_average_ratio": 1.20,
-            "operator": "gte",
-        },
-        "confirmations": _COMMON_CONFIRMATIONS,
-        "risk_management": _COMMON_RISK_MANAGEMENT,
-        "data_policy": {
-            "required_inputs": [
-                "close",
-                "prior_20_highs",
-                "volume",
-                "prior_20_volumes",
-                "group_excess_return_20d",
-                "institutional_flow_to_turnover_ratio_5d",
-                "margin_balance_change_ratio_5d",
-            ],
-            "on_missing_required_input": "fail_closed_data_incomplete",
-        },
-    },
-    "pullback_v1": {
-        "name": "pullback_v1",
-        "version": "1.0.0",
-        "schema_version": "strategy-config/v1",
-        "kind": "pullback",
-        "universe": _COMMON_UNIVERSE,
-        "execution": _COMMON_EXECUTION,
-        "trend": {
-            "minimum_history_trading_days": 60,
-            "fast_ma_window_trading_days": 20,
-            "slow_ma_window_trading_days": 60,
-            "ma_alignment": "ma20_gt_ma60",
-            "close_must_be_at_or_above": "ma60",
-        },
-        "support_zone": {
-            "reference": "ma20",
-            "minimum_close_to_ma20_ratio": 0.97,
-            "maximum_close_to_ma20_ratio": 1.02,
-            "bounds_inclusive": True,
-        },
-        "volume": {
-            "signal_volume_field": "volume",
-            "average_lookback_trading_days": 20,
-            "average_excludes_signal_day": True,
-            "minimum_signal_to_average_ratio": 0.60,
-            "maximum_signal_to_average_ratio": 1.20,
-            "bounds_inclusive": True,
-        },
-        "confirmations": _COMMON_CONFIRMATIONS,
-        "risk_management": _COMMON_RISK_MANAGEMENT,
-        "data_policy": {
-            "required_inputs": [
-                "bar_count_60d",
-                "close",
-                "ma20",
-                "ma60",
-                "volume",
-                "prior_20_volumes",
-                "group_excess_return_20d",
-                "institutional_flow_to_turnover_ratio_5d",
-                "margin_balance_change_ratio_5d",
-            ],
-            "on_missing_required_input": "fail_closed_data_incomplete",
-        },
-    },
-}
-
-
-CANONICAL_CONFIGS: dict[str, dict[str, Any]] = {
-    **STRATEGY_CONFIGS,
-    "hot_group_v1": HOT_GROUP_CONFIG,
-}
-
-
 # Daily candidate ranking (V1_SPEC candidate_score_v1, candidate_score_v2).
 # The score only orders signals the strategies already judged conditional; it
 # never changes a strategy decision and is not a win rate or expected return.
 # Any change to these dictionaries requires a new version: stored candidates
 # keep the version and a snapshot of the configuration they were scored with.
-# They are kept out of CANONICAL_CONFIGS, whose snapshot identifies strategy
-# rows.  CANDIDATE_SCORE is the current version.
+# They are kept out of the canonical strategy snapshots (app.strategies),
+# which identify strategy rows.  CANDIDATE_SCORE is the current version.
+# The pool lists its strategies by name: a strategy added to the registry
+# enters the candidate list only with a new score version.
 CANDIDATE_SCORE_VERSION = "candidate_score_v2"
 # Prompt version of the candidate LLM notes (worker.candidate_notes); the
 # API shows this version first.
@@ -527,7 +379,7 @@ CANDIDATE_SCORE_V1: dict[str, Any] = {
                     },
                     "better": "lower",
                 },
-                # _risk_levels sets every target at 1.6R, so RR has no ranking
+                # risk_levels sets every target at 1.6R, so RR has no ranking
                 # power today; it is reported but carries no weight.
                 "risk_reward": {
                     "weight": 0.0,
@@ -652,7 +504,31 @@ SIGNAL_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     "settled": frozenset(),
 }
 
-VALID_ENTRY_TYPES = frozenset({"breakout", "pullback"})
+# Signal columns behind each public level key, per entry type.  The entry
+# type is the shape of the stored levels (validate_signal_levels), shared by
+# every strategy that declares it.
+ENTRY_LEVEL_FIELDS: dict[str, dict[str, str]] = {
+    "breakout": {
+        "trigger_price": "breakout_price",
+        "invalid_price": "invalid_price",
+        "target_1": "target_1",
+        "target_2": "target_2",
+    },
+    "pullback": {
+        "trigger_price": "reference_entry",
+        "entry_low": "pullback_low",
+        "entry_high": "pullback_high",
+        "invalid_price": "invalid_price",
+        "target_1": "target_1",
+        "target_2": "target_2",
+    },
+}
+# Public level keys a conditional signal of the entry type must carry.
+ENTRY_REQUIRED_LEVELS: dict[str, tuple[str, ...]] = {
+    "breakout": ("trigger_price", "invalid_price", "target_1"),
+    "pullback": ("entry_low", "entry_high", "invalid_price", "target_1"),
+}
+VALID_ENTRY_TYPES = frozenset(ENTRY_LEVEL_FIELDS)
 VALID_INSTRUMENT_TYPES = frozenset({"stock", "etf", "ipo"})
 
 
@@ -670,45 +546,6 @@ def _finite(value: object) -> bool:
 
 def _positive(value: object) -> bool:
     return _finite(value) and float(value) > 0.0
-
-
-def _trailing_positive_history(
-    values: Iterable[float] | None,
-    *,
-    window: int,
-    reason: str,
-) -> tuple[list[float] | None, tuple[str, ...]]:
-    if values is None:
-        return None, (reason,)
-    try:
-        data = list(values)
-    except TypeError:
-        return None, (reason,)
-    if len(data) < window:
-        return None, (reason,)
-    trailing = data[-window:]
-    if not all(_positive(value) for value in trailing):
-        return None, (reason,)
-    return [float(value) for value in trailing], ()
-
-
-def _required_finite(
-    values: Mapping[str, object],
-) -> tuple[dict[str, float], tuple[str, ...]]:
-    parsed: dict[str, float] = {}
-    errors: list[str] = []
-    for key, value in values.items():
-        if not _finite(value):
-            errors.append(f"{key}_missing_or_non_finite")
-        else:
-            parsed[key] = float(value)
-    return parsed, tuple(errors)
-
-
-def canonical_config_snapshot() -> dict[str, dict[str, Any]]:
-    """Return a JSON round-tripped copy suitable for database persistence."""
-
-    return json.loads(json.dumps(CANONICAL_CONFIGS, sort_keys=True))
 
 
 def validate_signal_levels(
@@ -900,8 +737,8 @@ def instrument_eligibility(
     """Validate classification, ETF policy, and IPO 20/60-day guardrails.
 
     Every recognised ETF remains collectable and rankable in ``hot_group_v1``.
-    ``bond``, ``leveraged``, and ``inverse`` are only excluded from actionable
-    ``breakout_v1``/``pullback_v1`` signals.
+    ``bond``, ``leveraged``, and ``inverse`` are only excluded from the
+    actionable signals of the registered rule strategies (app.strategies).
     """
 
     if instrument_type not in VALID_INSTRUMENT_TYPES:
@@ -924,161 +761,6 @@ def instrument_eligibility(
         if bar_count < 60:
             return False, "ipo_observation_only_under_60_bars"
     return True, None
-
-
-def evaluate_breakout_v1(
-    *,
-    close: float | None,
-    prior_highs: Iterable[float] | None,
-    volume: float | None,
-    prior_volumes: Iterable[float] | None,
-    group_excess_return_20d: float | None,
-    institutional_flow_to_turnover_ratio_5d: float | None,
-    margin_balance_change_ratio_5d: float | None,
-) -> RuleEvaluation:
-    """Evaluate ``breakout_v1`` using only the prior 20 trading sessions.
-
-    Any missing, non-finite, or inadequate required input returns
-    ``data_incomplete`` rather than an actionable pass.
-    """
-
-    highs, high_errors = _trailing_positive_history(
-        prior_highs, window=20, reason="prior_20_highs_missing_or_invalid"
-    )
-    volumes, volume_errors = _trailing_positive_history(
-        prior_volumes, window=20, reason="prior_20_volumes_missing_or_invalid"
-    )
-    metrics, metric_errors = _required_finite(
-        {
-            "close": close,
-            "volume": volume,
-            "group_excess_return_20d": group_excess_return_20d,
-            "institutional_flow_to_turnover_ratio_5d": institutional_flow_to_turnover_ratio_5d,
-            "margin_balance_change_ratio_5d": margin_balance_change_ratio_5d,
-        }
-    )
-    missing = high_errors + volume_errors + metric_errors
-    if missing:
-        return RuleEvaluation(False, "data_incomplete", missing)
-    if metrics["close"] <= 0 or metrics["volume"] <= 0:
-        return RuleEvaluation(
-            False, "data_incomplete", ("close_or_volume_must_be_positive",)
-        )
-
-    config = STRATEGY_CONFIGS["breakout_v1"]
-    failures: list[str] = []
-    if metrics["close"] <= max(highs):
-        failures.append("close_not_above_prior_20_day_high")
-    volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
-    if volume_ratio < config["volume"]["minimum_signal_to_average_ratio"]:
-        failures.append("volume_ratio_below_1_20")
-    if (
-        metrics["group_excess_return_20d"]
-        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
-    ):
-        failures.append("group_relative_strength_not_positive")
-    if (
-        metrics["institutional_flow_to_turnover_ratio_5d"]
-        < config["confirmations"]["institutional_flow"][
-            "minimum_net_flow_to_turnover_ratio"
-        ]
-    ):
-        failures.append("institutional_flow_materially_adverse")
-    if (
-        metrics["margin_balance_change_ratio_5d"]
-        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
-    ):
-        failures.append("margin_financing_increase_abnormal")
-    if failures:
-        return RuleEvaluation(False, "rejected", tuple(failures))
-    return RuleEvaluation(True, "passed")
-
-
-def evaluate_pullback_v1(
-    *,
-    bar_count: int | None,
-    close: float | None,
-    ma20: float | None,
-    ma60: float | None,
-    volume: float | None,
-    prior_volumes: Iterable[float] | None,
-    group_excess_return_20d: float | None,
-    institutional_flow_to_turnover_ratio_5d: float | None,
-    margin_balance_change_ratio_5d: float | None,
-) -> RuleEvaluation:
-    """Evaluate ``pullback_v1`` with explicit trend, support, and data guards."""
-
-    config = STRATEGY_CONFIGS["pullback_v1"]
-    if not isinstance(bar_count, int) or isinstance(bar_count, bool):
-        return RuleEvaluation(
-            False, "data_incomplete", ("bar_count_missing_or_invalid",)
-        )
-    if bar_count < config["trend"]["minimum_history_trading_days"]:
-        return RuleEvaluation(False, "data_incomplete", ("history_under_60_bars",))
-
-    volumes, volume_errors = _trailing_positive_history(
-        prior_volumes, window=20, reason="prior_20_volumes_missing_or_invalid"
-    )
-    metrics, metric_errors = _required_finite(
-        {
-            "close": close,
-            "ma20": ma20,
-            "ma60": ma60,
-            "volume": volume,
-            "group_excess_return_20d": group_excess_return_20d,
-            "institutional_flow_to_turnover_ratio_5d": institutional_flow_to_turnover_ratio_5d,
-            "margin_balance_change_ratio_5d": margin_balance_change_ratio_5d,
-        }
-    )
-    missing = volume_errors + metric_errors
-    if missing:
-        return RuleEvaluation(False, "data_incomplete", missing)
-    if any(metrics[key] <= 0 for key in ("close", "ma20", "ma60", "volume")):
-        return RuleEvaluation(
-            False, "data_incomplete", ("price_and_volume_inputs_must_be_positive",)
-        )
-
-    failures: list[str] = []
-    if metrics["ma20"] <= metrics["ma60"]:
-        failures.append("ma20_not_above_ma60")
-    if metrics["close"] < metrics["ma60"]:
-        failures.append("close_below_ma60")
-    close_to_ma20 = metrics["close"] / metrics["ma20"]
-    support_zone = config["support_zone"]
-    if (
-        not support_zone["minimum_close_to_ma20_ratio"]
-        <= close_to_ma20
-        <= support_zone["maximum_close_to_ma20_ratio"]
-    ):
-        failures.append("close_outside_ma20_support_zone")
-    volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
-    volume_config = config["volume"]
-    if (
-        not volume_config["minimum_signal_to_average_ratio"]
-        <= volume_ratio
-        <= volume_config["maximum_signal_to_average_ratio"]
-    ):
-        failures.append("pullback_volume_ratio_outside_range")
-    if (
-        metrics["group_excess_return_20d"]
-        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
-    ):
-        failures.append("group_relative_strength_not_positive")
-    if (
-        metrics["institutional_flow_to_turnover_ratio_5d"]
-        < config["confirmations"]["institutional_flow"][
-            "minimum_net_flow_to_turnover_ratio"
-        ]
-    ):
-        failures.append("institutional_flow_materially_adverse")
-    if (
-        metrics["margin_balance_change_ratio_5d"]
-        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
-    ):
-        failures.append("margin_financing_increase_abnormal")
-    if failures:
-        return RuleEvaluation(False, "rejected", tuple(failures))
-    return RuleEvaluation(True, "passed")
 
 
 def moving_average(values: Iterable[float], window: int) -> float | None:

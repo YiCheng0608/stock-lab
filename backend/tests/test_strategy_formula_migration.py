@@ -14,7 +14,13 @@ import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
-from app import api as api_module, database_readiness as readiness, domain, migrations
+from app import (
+    api as api_module,
+    database_readiness as readiness,
+    domain,
+    migrations,
+    strategies,
+)
 from app.db import enable_sqlite_foreign_keys
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, Instrument, MarketBar, Signal
@@ -71,7 +77,7 @@ def raw_row(row_id, name, version, kind, config, snapshot, active=1):
 
 
 def legacy_rows():
-    old, new = pre_v2(), domain.canonical_config_snapshot()
+    old, new = pre_v2(), strategies.canonical_config_snapshot()
     drifted = copy.deepcopy(old["breakout_v1"])
     drifted["volume"]["minimum_signal_to_average_ratio"] = 1.5
     future = copy.deepcopy(new["breakout_v1"])
@@ -485,7 +491,7 @@ def snapshot_case(name, version, config, snapshot):
 
 
 def classification_cases():
-    old, new = pre_v2(), domain.canonical_config_snapshot()
+    old, new = pre_v2(), strategies.canonical_config_snapshot()
     bool_for_float = json.dumps(old["breakout_v1"]).replace(
         '"minimum_excess_return": 0.0', '"minimum_excess_return": false'
     )
@@ -603,7 +609,7 @@ def test_pre_v2_digest_list_matches_the_fixture_snapshots():
         for snapshot in pre_v2().values()
     }
     assert digests == migrations._PRE_V2_CANONICAL_DIGESTS
-    current = domain.canonical_config_snapshot()
+    current = strategies.canonical_config_snapshot()
     assert not {name for name, _ in digests.values()} - set(current)
     assert all(
         migrations.classify_strategy_formula(
@@ -743,7 +749,7 @@ def test_ensure_strategies_creates_current_rows_and_never_touches_older_ones(mig
         assert (
             json.loads(stored[0])
             == json.loads(stored[1])
-            == domain.canonical_config_snapshot()[key]
+            == strategies.canonical_config_snapshot()[key]
         )
 
 
@@ -777,7 +783,7 @@ def test_ensure_strategies_refuses_a_current_row_that_differs_from_canonical(
     with Session(engine) as db:
         row_id = pipeline._ensure_strategies(db)["breakout_v1"].id
         db.commit()
-    canonical = json.dumps(domain.canonical_config_snapshot()["breakout_v1"])
+    canonical = json.dumps(strategies.canonical_config_snapshot()["breakout_v1"])
     with closing(sqlite3.connect(path)) as raw:
         if tamper == "kind":
             raw.execute(
@@ -964,7 +970,7 @@ def test_worker_runs_on_v2_rows_and_keeps_older_dates_on_their_v1_rows(
         "FROM signals s JOIN strategy_versions v ON v.id = s.strategy_version_id WHERE s.id > 2",
     )
     assert len(new) == 4
-    canonical = domain.canonical_config_snapshot()
+    canonical = strategies.canonical_config_snapshot()
     for key, version_id, formula, active, snapshot in new:
         assert key.startswith("analysis-") and latest.isoformat() in key
         assert version_id > 3 and formula == V2 and active == 1
