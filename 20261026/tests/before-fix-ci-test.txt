@@ -1,0 +1,70 @@
+
+> taiwan-stock-research-ui@0.1.0 test:ci C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend
+> node scripts/ci-test.cjs
+
+units exact volume cases passed
+units exact position and raw input boundaries passed
+units canonical lots 55 checks passed
+PASS units.test.ts
+PASS search.test.ts
+PASS presentation.test.ts
+PASS noHardcodedColors.test.ts
+PASS stock/stockBars.test.tsx
+PASS components/StrategyVersionCard.test.tsx
+PASS components/ui/ui.test.tsx
+PASS themes/themeBoards.test.tsx
+PASS themes/themeSuggestions.test.tsx
+PASS news/news.test.tsx
+PASS candidates/candidates.test.tsx
+tables 273 checks passed
+PASS tables.test.tsx
+copy checks failed:
+- glossary candidate_score: name is 「候選總分」, got no term
+- glossary candidate_score: definition, use, reading and limits are all written
+- glossary entry_zone: name is 「進場區」, got no term
+- glossary entry_zone: definition, use, reading and limits are all written
+- glossary support: name is 「停損／條件失效價」, got 「支撐／失效價」
+- glossary percentile: name is 「百分位」, got no term
+- glossary percentile: definition, use, reading and limits are all written
+- glossary heat_rank: name is 「熱度分數與排名」, got no term
+- glossary heat_rank: definition, use, reading and limits are all written
+- glossary group_components: name is 「五分項」, got no term
+- glossary group_components: definition, use, reading and limits are all written
+- glossary event_data_pending: name is 「事件資料待補」, got no term
+- glossary event_data_pending: definition, use, reading and limits are all written
+- 候選卡: 「總分」 opens its glossary term (found none)
+- 候選卡: 「進場區」 opens its glossary term (found none)
+- 候選卡: 「停損」 opens its glossary term (found none)
+- 候選卡: 「目標」 opens its glossary term (found none)
+- 候選卡: 「RR」 opens its glossary term (found none)
+- 候選卡: 「百分位」 opens its glossary term (found none)
+- 候選卡: 「percentile」 is not shown; the details read 「百分位」
+- 候選卡: the details note reads 「分數與百分位為 0–100」
+- 族群榜: 「排名」「分數」 headers open 熱度分數與排名 (found none)
+- 族群榜: the table note explains 「同榜百分位」
+- 族群榜: the partial-quality badge in the table explains 「事件資料待補」
+- 族群詳情: 「排名」 opens its glossary term (found none)
+- 族群詳情: 「五分項」 opens its glossary term (found none)
+- 族群詳情: 「同榜百分位」 opens its glossary term (found none)
+- 族群詳情: 「事件資料待補」 opens its glossary term (found none)
+- 研究條件: the invalidation／stop level opens 停損／條件失效價 (found 風險報酬比)
+- 研究條件: the target level opens 目標價
+- 新聞詳情: facts read 「來源未標示影響」, got news-detail-label">影響影響尚未判定
+- DateBadge: an API date reads 資料 2026/10/22, got 資料 2026-10-22
+- K 線: no YYYY-MM-DD on the chart card, got 2026-10-22日K週KMA、2026-10-16 、2026-10-22、2026-10-21
+- K 線: bar dates and the batch time read 2026/10/22 and 2026/10/16 18:00
+- IndicatorMetaRows: render failed (App does not export IndicatorMetaRows)
+- 資料說明: computed time and K 線資料日期 are 24-hour slashed dates, got 
+- 回補紀錄: update time is 2026/10/22 18:00, got 資料量單位：筆。空白表示未提供資料或數值待核實。更新時間資料範圍狀態筆數錯誤2026/10/22 下午06:00undefined～undefined成功9—
+- dates: only dates.ts uses Intl.DateTimeFormat, found App.tsx、presentation.ts、stock/stockBars.ts
+- 我的庫存: the form hint reads 「每張為 1,000 股，可輸入整數張或零股股數。」
+- 我的庫存: the int64 limit is not shown
+- 我的庫存: over the limit says so without the number, got 「總股數須為 1 至 9,223,372,036,854,775,807 股。」
+FAIL copy.test.tsx: Error: 41 of 50 copy checks failed (listed above)
+    at Object.<anonymous> (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend\src\copy.test.tsx:5506:9)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at loadModule (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend\scripts\ci-test.cjs:57:14)
+    at runSuite (C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend\scripts\ci-test.cjs:81:20)
+    at C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend\scripts\ci-test.cjs:114:56
+Failed 1: copy.test.tsx
+ ELIFECYCLE  Command failed with exit code 1.

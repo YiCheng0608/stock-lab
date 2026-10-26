@@ -1,0 +1,23 @@
+
+> taiwan-stock-research-ui@0.1.0 test:ci C:\Users\YiCheng\orca\workspaces\taiwan-stock-research\task-270-glossary-copy\frontend
+> node scripts/ci-test.cjs
+
+units exact volume cases passed
+units exact position and raw input boundaries passed
+units canonical lots 55 checks passed
+PASS units.test.ts
+PASS search.test.ts
+PASS presentation.test.ts
+PASS noHardcodedColors.test.ts
+PASS stock/stockBars.test.tsx
+PASS components/StrategyVersionCard.test.tsx
+PASS components/ui/ui.test.tsx
+PASS themes/themeBoards.test.tsx
+PASS themes/themeSuggestions.test.tsx
+PASS news/news.test.tsx
+PASS candidates/candidates.test.tsx
+tables 275 checks passed
+PASS tables.test.tsx
+copy 51 checks passed
+PASS copy.test.tsx
+Passed 13 test modules, 0 excluded; this is not browser or full product QA.

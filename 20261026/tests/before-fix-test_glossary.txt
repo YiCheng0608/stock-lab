@@ -1,0 +1,10 @@
+E           KeyError: 'candidate_score'
+E               KeyError: 'candidate_score'
+E       AssertionError: assert [] == ['support']
+E         
+E         Right contains one more item: 'support'
+E         Use -v to get more diff
+FAILED tests/test_glossary.py::test_in_place_terms_are_in_the_api_glossary_with_all_fields
+FAILED tests/test_glossary.py::test_the_frontend_copy_matches_the_api_for_in_place_terms
+FAILED tests/test_glossary.py::test_search_finds_a_term_by_its_chinese_alias
+3 failed in 0.25s
