@@ -1,0 +1,51 @@
+===== 2026-10-28T01:59:22.2414082+08:00 start job=news trigger=scheduler date=default force=False db=C:\stock-lab-data\stock.db free_mb=5383 news_llm=on
+--- news stdout
+{"status":"success","step":"news"}
+
+--- news stderr
+news-stderr-line
+
+--- news end exit=0 seconds=1
+--- news-llm start claude_cli=C:\tools\claude.exe
+--- news-llm stdout
+{"status":"failed","step":"news-llm"}
+
+--- news-llm stderr
+llm-stderr-line
+
+--- news-llm end exit=1 seconds=1
+===== 2026-10-28T01:59:24.5079584+08:00 end exit=0 seconds=2 news_llm_exit=1
+===== 2026-10-28T01:59:24.8011886+08:00 start job=news trigger=scheduler date=default force=False db=C:\stock-lab-data\stock.db free_mb=5300 news_llm=on
+--- news stdout
+{"status":"success","step":"news"}
+
+--- news stderr
+news-stderr-line
+
+--- news end exit=0 seconds=1
+--- news-llm start claude_cli=C:\tools\claude.exe
+--- news-llm stdout
+{"status":"failed","step":"news-llm"}
+
+--- news-llm stderr
+llm-stderr-line
+
+--- news-llm end exit=1 seconds=1
+===== 2026-10-28T01:59:27.0670170+08:00 end exit=0 seconds=2 news_llm_exit=1
+===== 2026-10-28T01:59:27.3613495+08:00 start job=news trigger=scheduler date=default force=False db=C:\stock-lab-data\stock.db free_mb=5297 news_llm=on
+--- news stdout
+{"status":"success","step":"news"}
+
+--- news stderr
+news-stderr-line
+
+--- news end exit=0 seconds=1
+--- news-llm start claude_cli=C:\tools\claude.exe
+--- news-llm stdout
+{"status":"failed","step":"news-llm"}
+
+--- news-llm stderr
+llm-stderr-line
+
+--- news-llm end exit=1 seconds=1
+===== 2026-10-28T01:59:29.6231049+08:00 end exit=0 seconds=2 news_llm_exit=1

@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -254,16 +255,86 @@ def test_missing_python_still_checks_logs(wd):
     assert "news_llm：最近" not in result.stdout
 
 
-def test_lock_prevents_reentry_and_stale_lock_is_removed(wd):
-    lock = wd.logs / "watchdog.lock"
-    lock.mkdir()
+# The base interpreter: worker.job is standard library only, and under a Windows
+# venv sys.executable is a launcher in front of the process that holds the lock.
+BASE_PYTHON = getattr(sys, "_base_executable", None) or sys.executable
+
+
+def _hold_lock(wd: Watchdog) -> tuple[subprocess.Popen, int]:
+    """A process holding the watchdog lock (worker.job lock), and its child's pid."""
+
+    started = wd.root / "holder.pid"
+    child = (
+        "import os, time; open(os.environ['HOLDER_PID'], 'w').write(str(os.getpid()));"
+        " time.sleep(120)"
+    )
+    holder = subprocess.Popen(
+        [
+            BASE_PYTHON,
+            "-m",
+            "worker.job",
+            "lock",
+            str(wd.data / "locks" / "watchdog.lock"),
+            "--",
+            BASE_PYTHON,
+            "-c",
+            child,
+        ],
+        cwd=ROOT / "backend",
+        env={**os.environ, "HOLDER_PID": str(started)},
+    )
+    deadline = time.monotonic() + 60
+    while not (started.exists() and started.read_text()):
+        assert time.monotonic() < deadline, "the lock holder did not start"
+        time.sleep(0.05)
+    return holder, int(started.read_text())
+
+
+def _force_kill(pid: int) -> None:
+    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
+
+    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
+    itself goes through WMI, and a busy machine cancels it ("call cancelled",
+    the #246 failure), so the tests call TerminateProcess directly.
+    """
+
+    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+
+
+def test_a_running_watchdog_keeps_the_next_one_out(wd):
+    holder, _child = _hold_lock(wd)
+    try:
+        result = wd.run()
+    finally:
+        holder.kill()
+        holder.wait(timeout=30)
+    assert wd.events() == ["locked"], result.stdout + result.stderr
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_a_killed_watchdog_leaves_no_lock_behind(wd):
+    # #224: a run killed by the task's time limit left logs/watchdog.lock/ and
+    # every run for the next 30 minutes was skipped. The OS drops a file lock
+    # with its holder, and the holder's child goes with it.
+    from worker.schedule_runs import _pid_alive
+
+    holder, child = _hold_lock(wd)
+    _force_kill(holder.pid)
+    holder.wait(timeout=30)
+    deadline = time.monotonic() + 15
+    while _pid_alive(child):
+        assert time.monotonic() < deadline, "the holder's child outlived it"
+        time.sleep(0.1)
+    # A lock directory left by the old watchdog does not count either.
+    (wd.logs / "watchdog.lock").mkdir()
     wd.run()
-    assert wd.events() == ["locked"]
-    old = time.time() - 31 * 60
-    os.utime(lock, (old, old))
+    assert wd.events() == ["schedules_ok"]
+
+
+def test_a_run_leaves_no_work_directory(wd):
+    _anomaly_fixtures(wd)
     wd.run()
-    assert wd.events()[1:] == ["lock_stale_removed", "schedules_ok"]
-    assert not lock.exists()
+    assert [path.name for path in wd.logs.iterdir() if path.name.startswith(".")] == []
 
 
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
