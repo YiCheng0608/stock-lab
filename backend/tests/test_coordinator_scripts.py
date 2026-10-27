@@ -458,9 +458,8 @@ def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
 
 
 def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
-    """#315 AC-3: --help and GITHUB_WORKFLOW 任務流程第 2 步 quote the sent line.
-    A pull request changing only the workflow doc does not run this test: tools/ci/checks.py
-    routes docs/GITHUB_WORKFLOW.md to no backend job (it is not in BACKEND_READ_FILES)."""
+    """#315 AC-3: --help and GITHUB_WORKFLOW 任務流程第 2 步 quote the sent line. The doc is
+    in BACKEND_READ_FILES (tools/ci/checks.py), so a change to it alone runs this test."""
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
