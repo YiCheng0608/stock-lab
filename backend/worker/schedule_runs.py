@@ -46,6 +46,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from sqlalchemy import desc, inspect, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
@@ -577,12 +578,34 @@ def _start_run(
 def record_preflight_skip(
     end_date: date | None, *, reason: str, trigger: str = "scheduler"
 ) -> dict[str, Any]:
-    """Log a run the scheduled job declined to start; no step runs."""
+    """Log a run the scheduled job declined to start; no step runs.
+
+    For ``already_running`` the job lock is held by a daily that may be
+    migrating this database at that moment, so the schema is left alone and a
+    row that cannot be written then (database locked, schema between
+    revisions) is reported in the result instead of raised; the job's log
+    keeps the skip either way.
+    """
 
     if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
         raise ValueError(f"unknown preflight skip reason: {reason}")
-    _ensure_schema()
     target = pipeline.latest_weekday(end_date)
+    if reason != LOCK_SKIP_REASON:
+        _ensure_schema()
+        return _insert_skip(target, reason, trigger)
+    try:
+        return _insert_skip(target, reason, trigger)
+    except SQLAlchemyError as exc:
+        return {
+            "status": "skipped",
+            "reason": reason,
+            "schedule_run_id": None,
+            "date": target.isoformat(),
+            "error": f"skip row not written: {type(exc).__name__}: {exc}"[:500],
+        }
+
+
+def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
     now = _utcnow()
     with pipeline.SessionLocal() as db:
         summary: dict[str, Any] = {"reason": reason}

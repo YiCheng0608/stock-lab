@@ -1036,6 +1036,61 @@ def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_th
         schedule_runs.record_preflight_skip(DAY, reason="unknown")
 
 
+def test_a_lock_skip_points_at_the_running_row_and_never_migrates(
+    database, monkeypatch
+):
+    # #313: the daily holding the job lock may be migrating this database, so the
+    # already_running skip of a second job must not start a second migration.
+    from sqlalchemy import text
+
+    from app.migration_revisions import REVISIONS
+
+    def migrate():
+        raise AssertionError("the lock skip ran init_db")
+
+    monkeypatch.setattr(pipeline, "init_db", migrate)
+    with database() as db:
+        db.execute(
+            text("UPDATE alembic_version SET version_num = :value"),
+            {"value": REVISIONS[-2]},
+        )
+        running = ScheduleRun(
+            job="daily",
+            target_date=DAY,
+            trigger="scheduler",
+            status="running",
+            started_at=datetime.utcnow(),
+            host=socket.gethostname(),
+            pid=os.getpid(),
+        )
+        db.add(running)
+        db.commit()
+        running_id = running.id
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["reason"] == "already_running"
+    assert skipped["related_run_id"] == running_id
+    rows, _ = runs(database)
+    assert [(row.status, row.summary_json) for row in rows][-1] == (
+        "skipped",
+        {"reason": "already_running", "related_run_id": running_id},
+    )
+
+
+def test_a_lock_skip_that_cannot_write_its_row_reports_it(database, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    def locked():
+        raise OperationalError("INSERT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(pipeline, "SessionLocal", locked)
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["schedule_run_id"] is None
+    assert "database is locked" in skipped["error"]
+    # Any other skip reason still raises: its row is the only trace in the DB.
+    with pytest.raises(OperationalError):
+        schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+
+
 def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkeypatch):
     steps = Steps(monkeypatch)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
