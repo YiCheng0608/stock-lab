@@ -1,5 +1,8 @@
 """tools/ops/dispatch.sh, close_task.sh and patrol.sh with fake orca, gh and git (Issue #282).
 
+The event monitor (monitor.sh, event_queue.py, #316) has its own tests in
+test_event_monitor.py on the same harness.
+
 Each test copies the scripts into a sandbox repository under tmp_path, puts a bin
 directory holding fake ``orca``, ``gh`` and ``git`` scripts in front of PATH, points HOME
 and STOCK_DATA_DIR into tmp_path and runs the copy through bash. The fakes record every
@@ -38,6 +41,9 @@ SCRIPTS = (
     "dispatch.sh",
     "close_task.sh",
     "patrol.sh",
+    "event_queue.py",
+    "monitor.sh",
+    "compact_hook.sh",
 )
 REPO_ID = "repo-1"
 SHA = "a" * 40
@@ -91,9 +97,13 @@ grep -q '"ok": *false' "$d/$key.json" 2>/dev/null && exit 1
 exit 0
 """
 
+# A <fake>/<key>.fail file makes that call exit 1 (key gh_comments for the comments
+# listing, else gh_<sub1>_<sub2>).
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
+case "$1 $2" in "api repos/"*) k=gh_comments ;; *) k="gh_$1_$2" ;; esac
+[ -f "$d/$k.fail" ] && exit 1
 case "$1 $2" in
   "api graphql")
     case "$*" in
@@ -1060,36 +1070,54 @@ def _patrol(h: Harness, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _queue_event(seq: int, id_: str, kind: str = "comment", **extra) -> dict:
+    return {
+        "type": "event",
+        "seq": seq,
+        "id": id_,
+        "kind": kind,
+        "detected_at": "2026-10-25T11:50:00Z",
+        "at": "2026-10-25T11:30:00Z",
+        "ref": "#282",
+        "summary": "提問： 要不要加旗標？",
+        "url": "https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-9",
+        **extra,
+    }
+
+
 @pytest.fixture
 def patrol(h: Harness) -> Harness:
-    h.answer(
-        "gh_pr_list",
-        [
-            {
-                "number": 290,
-                "title": "統籌操作腳本",
-                "isDraft": False,
-                "mergeStateStatus": "BLOCKED",
-                "statusCheckRollup": [
-                    {"conclusion": "SUCCESS"},
-                    {"status": "IN_PROGRESS"},
-                ],
-                "labels": [{"name": "independent-review"}],
-            }
-        ],
-    )
-    h.answer(
-        "gh_comments",
-        [
-            {
-                "issue_url": "https://api.github.com/repos/YiCheng0608/stock-lab/issues/282",
-                "created_at": "2026-10-25T11:30:00Z",
-                "body": "提問：\n要不要加旗標？",
-                "html_url": "https://github.com/YiCheng0608/stock-lab/issues/282#issuecomment-9",
-            }
-        ],
-    )
+    # What patrol.sh asked gh before #316 is still answered by the fake: the tests
+    # assert that patrol asks nothing.
+    h.answer("gh_pr_list", [])
     logs = h.data / "logs"
+    (logs / "events.jsonl").write_text(
+        "".join(
+            json.dumps(e, ensure_ascii=False) + "\n"
+            for e in (
+                _queue_event(1, "comment:9"),
+                _queue_event(2, "ci:290:abc:success:1", "ci", ref="PR #290", url=""),
+                _queue_event(3, "comment:10"),
+            )
+        ),
+        encoding="utf-8",
+    )
+    (logs / "monitor-heartbeat.json").write_text(
+        '{"written_at":"2026-10-25T11:59:00Z","pid":"1","mode":"wake","gh_calls":2}',
+        encoding="utf-8",
+    )
+    (logs / "monitor-state.json").write_text(
+        json.dumps(
+            {
+                "prs_at": "2026-10-25T11:59:00Z",
+                "prs": [
+                    "PR #290 ci=pending merge=BLOCKED labels=independent-review 統籌操作腳本"
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     (logs / "daily-20261024.log").write_text(
         "===== 2026-10-24T13:30:00Z end exit=0\n", encoding="utf-8"
     )
@@ -1110,7 +1138,7 @@ def _files(root: Path) -> dict[str, bytes]:
     }
 
 
-def test_patrol_writes_only_the_heartbeat_and_summarises(patrol: Harness) -> None:
+def test_patrol_writes_only_the_heartbeat_and_reads_the_queue(patrol: Harness) -> None:
     before = _files(patrol.data)
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1125,26 +1153,58 @@ def test_patrol_writes_only_the_heartbeat_and_summarises(patrol: Harness) -> Non
         "logs/coordinator-heartbeat.json"
     }
     out = result.stdout
+    assert "monitor：2026-10-25T11:59:00Z（60 秒前，mode=wake）" in out
+    assert "open PR（monitor 2026-10-25T11:59:00Z）：1 個" in out
     assert "PR #290 ci=pending merge=BLOCKED" in out
-    assert "#282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
+    assert "未處理事件：3 個（seq 1～3）" in out
+    assert "[1] comment #282 2026-10-25T11:30:00Z 提問： 要不要加旗標？" in out
     assert "daily-20261024.log ===== 2026-10-24T13:30:00Z end exit=0" in out
     assert "schedules_ok" in out
-    # No --since and no earlier heartbeat: one hour before now.
-    assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
+    # #316 AC-2: the closing hint points at the queue, not at a monitor the session keeps.
+    last = out.strip().splitlines()[-1]
+    assert "--done" in last and "監看" not in last
 
 
-@pytest.mark.parametrize("cap", [None, "1", "0"])
-def test_patrol_stays_within_the_gh_call_cap(patrol: Harness, cap: str | None) -> None:
-    result = _patrol(patrol, *(["--max-gh", cap] if cap else []))
+def test_patrol_makes_no_gh_call(patrol: Harness) -> None:
+    """#316 AC-4, AC-5: GitHub is the monitor's; patrol reads the queue only."""
+    for args in ((), ("--done", "2"), ("--take-over",)):
+        result = _patrol(patrol, *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert patrol.calls("gh") == []
+
+
+def test_patrol_done_marks_up_to_a_seq_or_one_id(patrol: Harness) -> None:
+    result = _patrol(patrol, "--done", "2")
     assert result.returncode == 0, result.stdout + result.stderr
-    limit = int(cap) if cap else 2
-    assert len(patrol.calls("gh")) <= limit
-    assert f"gh 呼叫：{len(patrol.calls('gh'))}／上限 {limit}" in result.stdout
+    assert "標記已處理：2 個" in result.stdout
+    assert "未處理事件：1 個（seq 3～3）" in result.stdout
+    done_file = patrol.data / "logs" / "events-done.jsonl"
+    assert [json.loads(line) for line in done_file.read_text("utf-8").splitlines()] == [
+        {
+            "type": "done",
+            "at": "2026-10-25T12:00:00Z",
+            "session_id": "sess-1",
+            "ids": ["comment:9", "ci:290:abc:success:1"],
+        }
+    ]
+    assert "未處理事件：0 個" in _patrol(patrol, "--done", "comment:10").stdout
+    result = _patrol(patrol, "--done", "comment:404")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "沒有這個事件：comment:404" in result.stderr
 
 
-def test_patrol_reads_compactions_handoff_and_the_previous_heartbeat(
-    patrol: Harness,
-) -> None:
+def test_patrol_says_when_the_monitor_has_stopped(patrol: Harness) -> None:
+    logs = patrol.data / "logs"
+    (logs / "monitor-heartbeat.json").write_text(
+        '{"written_at":"2026-10-25T11:40:00Z","pid":"1","mode":"wake","gh_calls":2}',
+        encoding="utf-8",
+    )
+    assert "已停擺超過 10 分鐘" in _patrol(patrol).stdout
+    (logs / "monitor-heartbeat.json").unlink()
+    assert "monitor：沒有心跳" in _patrol(patrol).stdout
+
+
+def test_patrol_reads_compactions_and_handoff(patrol: Harness) -> None:
     logs = patrol.data / "logs"
     (logs / "compactions" / "sess-1.count").write_text("2\n", encoding="utf-8")
     (logs / "handoff-sess-1.json").write_text("{}", encoding="utf-8")
@@ -1157,17 +1217,6 @@ def test_patrol_reads_compactions_handoff_and_the_previous_heartbeat(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "壓縮 2 次：已達換手條件" in result.stdout
     assert "換手標記存在" in result.stdout
-    assert any("since=2026-10-25T11:40:00Z" in c for c in patrol.calls("gh"))
-
-
-def test_patrol_ignores_another_sessions_heartbeat_for_since(patrol: Harness) -> None:
-    (patrol.data / "logs" / "coordinator-heartbeat.json").write_text(
-        '{"session_id":"old","terminal_handle":"t","written_at":"2026-10-20T00:00:00Z"}',
-        encoding="utf-8",
-    )
-    result = _patrol(patrol)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert any("since=2026-10-25T11:00:00Z" in c for c in patrol.calls("gh"))
 
 
 # --- review of PR #283 -------------------------------------------------------------
@@ -1342,7 +1391,6 @@ def test_patrol_does_not_overwrite_another_live_coordinators_heartbeat(
     result = _patrol(patrol)
     assert result.returncode != 0, result.stdout + result.stderr
     assert path.read_bytes() == before
-    assert not patrol.calls("gh")
 
 
 @pytest.mark.parametrize("how", ["handoff-marker", "take-over", "stale"])
@@ -1497,7 +1545,7 @@ def test_patrol_keeps_a_heartbeat_it_cannot_read(patrol: Harness, content: str) 
     before = path.read_bytes()
     result = _patrol(patrol)
     assert result.returncode == 3, result.stdout + result.stderr
-    assert path.read_bytes() == before and not patrol.calls("gh")
+    assert path.read_bytes() == before
     result = _patrol(patrol, "--take-over")
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "sess-1"
@@ -1571,7 +1619,8 @@ def _check(name: str, started: str, **state: str) -> dict:
 def test_patrol_reads_only_the_latest_run_of_each_check(
     patrol: Harness, rollup: list[dict], expected: str
 ) -> None:
-    """#286: a run replaced by a newer one of the same check no longer decides ci=."""
+    """#286: a run replaced by a newer one of the same check no longer decides ci=.
+    Since #316 the PR line comes from the monitor's last poll."""
     patrol.answer(
         "gh_pr_list",
         [
@@ -1585,6 +1634,8 @@ def test_patrol_reads_only_the_latest_run_of_each_check(
             }
         ],
     )
+    polled = patrol.run("monitor.sh", "--once", "--record-only", MONITOR_NOW=str(NOW))
+    assert polled.returncode == 0, polled.stdout + polled.stderr
     result = _patrol(patrol)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"PR #285 ci={expected} merge=CLEAN" in result.stdout
