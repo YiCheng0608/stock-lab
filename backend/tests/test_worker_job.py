@@ -446,9 +446,12 @@ def test_a_killed_job_takes_its_worker_along_and_leaves_no_lock(tree):
     # worker's parent are launchers in front of the real interpreters.
     (job_pid,) = tree.job_pids()
     force_kill(job_pid)
-    assert wait_dead(job_pid)
-    assert wait_dead(worker["pid"]), "the worker outlived the killed job"
+    # Reap it first: on Linux job_pid is this test's own child (no launcher), a
+    # zombie until waited for, and a zombie still answers os.kill(pid, 0).
     first.wait(timeout=30)
+    assert wait_dead(job_pid)
+    # The worker's parent was the job; once orphaned, init reaps it.
+    assert wait_dead(worker["pid"]), "the worker outlived the killed job"
     started = time.monotonic()
     again = tree.run("daily")
     assert time.monotonic() - started < 60
