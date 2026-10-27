@@ -105,8 +105,11 @@ NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
 CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
-# Reasons the scheduler wrapper may pass to record a run it declined to start.
+# Reasons the scheduled job (worker.job) may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
+# The job lock is held by another daily job: the same reason as a running row
+# found by _start_run, pointing at that row when it is already written.
+LOCK_SKIP_REASON = "already_running"
 # The indicator batch (V1-G2).  A checkout without the module records the
 # step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
@@ -574,14 +577,26 @@ def _start_run(
 def record_preflight_skip(
     end_date: date | None, *, reason: str, trigger: str = "scheduler"
 ) -> dict[str, Any]:
-    """Log a run the scheduler wrapper declined to start; no step runs."""
+    """Log a run the scheduled job declined to start; no step runs."""
 
-    if reason not in PREFLIGHT_SKIP_REASONS:
+    if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
         raise ValueError(f"unknown preflight skip reason: {reason}")
     _ensure_schema()
     target = pipeline.latest_weekday(end_date)
     now = _utcnow()
     with pipeline.SessionLocal() as db:
+        summary: dict[str, Any] = {"reason": reason}
+        if reason == LOCK_SKIP_REASON:
+            summary["related_run_id"] = db.scalar(
+                select(ScheduleRun.id)
+                .where(
+                    ScheduleRun.job == DAILY_JOB,
+                    ScheduleRun.target_date == target,
+                    ScheduleRun.status == "running",
+                )
+                .order_by(desc(ScheduleRun.id))
+                .limit(1)
+            )
         run = ScheduleRun(
             job=DAILY_JOB,
             target_date=target,
@@ -589,13 +604,13 @@ def record_preflight_skip(
             status="skipped",
             started_at=now,
             finished_at=now,
-            summary_json={"reason": reason},
+            summary_json=summary,
         )
         db.add(run)
         db.commit()
         return {
             "status": "skipped",
-            "reason": reason,
+            **summary,
             "schedule_run_id": run.id,
             "date": target.isoformat(),
         }
