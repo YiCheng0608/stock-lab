@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Start an engineer session on an Issue (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 2 步):
 # Orca worktree from the latest origin/master, branch task/<issue>-<slug>, a visible
-# terminal running claude, and the task text from a UTF-8 file sent only after
-# `orca terminal wait --for tui-idle` reports satisfied:true. Sets the board to 開發中.
+# terminal running claude, and, only after `orca terminal wait --for tui-idle` reports
+# satisfied:true, one line pointing at the UTF-8 task file outside the worktree (#315):
+#   請用 Read 工具讀取任務檔 <path>（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。
+# <path> is the task file's absolute path (C:/… on Windows). The task text is never typed
+# into the terminal, so it has no size limit and no character in it needs escaping.
+# Sets the board to 開發中.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
@@ -12,7 +16,8 @@
 #   --submit-wait S   seconds to watch for turn_started after sending, default 30
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
 #   --no-board        leave the board alone (a dry run on a throwaway branch)
-# Prints one JSON line (worktree, branch, head, terminal, sent, turn_started, board, error).
+# Prints one JSON line (worktree, branch, head, terminal, task_file, sent, turn_started,
+# board, error).
 # Exit 0 when sent and started; 1 before sending (nothing was sent); 3 the text may be
 # in the terminal but the turn was not seen starting, or the send itself failed or was
 # not accepted ("sent": null, read the terminal, do not resend); 4 board update failed;
@@ -57,9 +62,14 @@ case "$slug" in '' | -* | *[!a-z0-9-]*) die "<slug> uses a-z, 0-9 and '-' only" 
 case "$model$effort" in *[!A-Za-z0-9._-]*) die "--model/--effort: letters, digits, '.', '_', '-' only" 64 ;; esac
 case "$wait_ms$submit_wait" in *[!0-9]*) die "--wait-ms/--submit-wait must be numbers" 64 ;; esac
 [ -n "$task_file" ] || die "--task-file is required" 64
+case "$task_file" in *$'\n'* | *$'\r'*) die "任務檔路徑不能有換行" 64 ;; esac
 find_python
 cj utf8 "$task_file" || die "任務檔不存在、是空的或不是 UTF-8：$task_file" 64
-[ "$(wc -c <"$task_file")" -le 30000 ] || die "任務檔超過 30000 bytes（Windows 命令列上限）" 64
+# The engineer session opens the file itself: an absolute path in the spelling a Windows
+# program opens (C:/…, not /c/…).
+task_path="$(cd "$(dirname -- "$task_file")" && pwd)/$(basename -- "$task_file")" \
+  && task_path="$(native "$task_path")" || die "任務檔路徑無法轉成絕對路徑：$task_file" 64
+notice="請用 Read 工具讀取任務檔 $task_path（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。"
 
 branch="task/$issue-$slug"
 name="task-$issue-$slug"
@@ -68,9 +78,9 @@ path="" head="" base="" handle="" sent=false started=false board=""
 report() { # report EXIT [ERROR]
   local error=null
   [ -n "${2:-}" ] && error="$(json_str "$2")"
-  printf '{"issue":%s,"worktree":%s,"branch":%s,"head":%s,"base":%s,"terminal":%s,"sent":%s,"turn_started":%s,"board":%s,"error":%s}\n' \
+  printf '{"issue":%s,"worktree":%s,"branch":%s,"head":%s,"base":%s,"terminal":%s,"task_file":%s,"sent":%s,"turn_started":%s,"board":%s,"error":%s}\n' \
     "$issue" "$(json_str "$path")" "$(json_str "$branch")" "$(json_str "$head")" "$(json_str "$base")" \
-    "$(json_str "$handle")" "$sent" "$started" "$(json_str "$board")" "$error"
+    "$(json_str "$handle")" "$(json_str "$task_path")" "$sent" "$started" "$(json_str "$board")" "$error"
   [ -n "${2:-}" ] && printf 'dispatch.sh: %s\n' "$2" >&2
   exit "$1"
 }
@@ -100,8 +110,7 @@ handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca
 out="$(orca terminal wait --terminal "$handle" --for tui-idle --timeout-ms "$wait_ms" --json)"
 printf '%s' "$out" | cj satisfied || report 1 "terminal 未就緒（wait 沒有 satisfied:true），任務未送出"
 
-# No CR: in Claude Code's prompt a carriage return is Enter and would submit early.
-out="$(orca terminal send --terminal "$handle" --text "$(tr -d '\r' <"$task_file")" --enter \
+out="$(orca terminal send --terminal "$handle" --text "$notice" --enter \
   --wait-submit "$submit_wait" --json)" \
   || { sent=null; report 3 "orca terminal send 失敗，文字可能已送出：先 orca terminal read，不要重送"; }
 [ "$(printf '%s' "$out" | cj get result.send.accepted)" = true ] \
