@@ -2283,7 +2283,9 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
 
     # Signals no longer take a data cutoff: the earliest execution date comes
     # from the official calendar, never from later bars (#294).
-    def fake_generate(db, score_date, strategies, *, namespace="analysis"):
+    def fake_generate(
+        db, score_date, strategies, *, namespace="analysis", registry=None
+    ):
         if score_date != start_date:
             return 0
         strategy = strategies["breakout_v1"]

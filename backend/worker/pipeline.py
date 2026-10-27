@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -63,6 +63,7 @@ from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
     SignalLevels,
+    Strategy,
     StrategyInputs,
     canonical_config_snapshot,
     canonical_configs,
@@ -1311,17 +1312,21 @@ def _exact_json(left: Any, right: Any) -> bool:
     )
 
 
-def _ensure_strategies(db: Session) -> dict[str, StrategyVersion]:
+def _ensure_strategies(
+    db: Session, registry: Mapping[str, Strategy] | None = None
+) -> dict[str, StrategyVersion]:
     """Return the canonical row for each strategy under the current formula.
 
     A row is identified by (name, version, formula_version); rows stored under
     another formula, or unclassified by the 0009 migration, are never reused or
     modified, so signals written under them keep their original configuration.
+    ``registry`` replaces REGISTRY only for a research backtest
+    (``app.strategies.ablation``).
     """
 
-    snapshots = canonical_config_snapshot()
+    snapshots = canonical_config_snapshot(registry)
     versions: dict[str, StrategyVersion] = {}
-    for key, config in canonical_configs().items():
+    for key, config in canonical_configs(registry).items():
         snapshot = snapshots[key]
         strategy = db.scalar(
             select(StrategyVersion).where(
@@ -1671,12 +1676,14 @@ def _signal_context(
 
 
 def _evaluate_strategies(
-    context: _SignalContext, capture: Any = None
+    context: _SignalContext,
+    capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> dict[str, RuleEvaluation]:
     """Every registered strategy's rule on the shared inputs, in REGISTRY order."""
 
     evaluations: dict[str, RuleEvaluation] = {}
-    for key, strategy in REGISTRY.items():
+    for key, strategy in (REGISTRY if registry is None else registry).items():
         arguments = strategy.arguments(context.inputs)
         if capture is not None:
             if context.input_provenance is None:
@@ -1702,8 +1709,10 @@ def _write_strategy_signal(
     evaluations: dict[str, RuleEvaluation],
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> None:
-    rule = REGISTRY[strategy_key]
+    registry = REGISTRY if registry is None else registry
+    rule = registry[strategy_key]
     inputs = context.inputs
     group_score = context.group_score
     selected = evaluations[strategy_key]
@@ -1799,7 +1808,7 @@ def _write_strategy_signal(
             strategy_version=strategy.version,
         )
     # Every row records every registered strategy's state, keyed by its kind.
-    states = {REGISTRY[key].kind: evaluation for key, evaluation in evaluations.items()}
+    states = {registry[key].kind: evaluation for key, evaluation in evaluations.items()}
     signal.rationale = "; ".join(
         [
             *(
@@ -1915,6 +1924,7 @@ def _upsert_signal(
     strategies: dict[str, StrategyVersion],
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> bool:
     """Persist one auditable result per registered strategy and session.
 
@@ -1927,8 +1937,8 @@ def _upsert_signal(
     )
     if context is None:
         return False
-    evaluations = _evaluate_strategies(context, capture)
-    for strategy_key in REGISTRY:
+    evaluations = _evaluate_strategies(context, capture, registry)
+    for strategy_key in REGISTRY if registry is None else registry:
         _write_strategy_signal(
             db,
             instrument=instrument,
@@ -1939,6 +1949,7 @@ def _upsert_signal(
             evaluations=evaluations,
             namespace=namespace,
             capture=capture,
+            registry=registry,
         )
     return True
 
@@ -1950,6 +1961,7 @@ def _generate_signals(
     *,
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> int:
     instruments = db.scalars(
         select(Instrument).where(
@@ -1967,6 +1979,7 @@ def _generate_signals(
                 strategies=strategies,
                 namespace=namespace,
                 capture=capture,
+                registry=registry,
             )
         )
     return count
@@ -4967,6 +4980,14 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
                 row["comparable"] += 1
             else:
                 row["incomparable"] += 1
+    return _backtest_summary(run, grouped, zero_actionable_count)
+
+
+def _backtest_summary(
+    run: IngestionRun,
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]],
+    zero_actionable_count: int,
+) -> dict[str, Any]:
     metadata = dict(run.metadata_json or {})
     assessment = _backtest_assessment(metadata, status=run.status)
     for row in grouped.values():
@@ -4997,13 +5018,132 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     }
 
 
+# Signals a research backtest tracks per committed batch.
+RESEARCH_TRACKING_BATCH = 2000
+
+
+def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, Any]:
+    """``summarize_backtest`` of one research run, counted in SQL.
+
+    A research run has hundreds of thousands of signals per strategy;
+    ``summarize_backtest`` loads every backtest signal into memory.
+    """
+
+    prefix = f"backtest-{run.id}-%"
+    actionable = func.json_extract(Signal.rule_evidence_json, "$.actionable") == 1
+    signal_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix))
+    )
+    actionable_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix), actionable)
+    )
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    for name, version, instrument_type, horizon, comparable, count in db.execute(
+        select(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+            func.count(SignalSettlement.id),
+        )
+        .join(Signal, Signal.id == SignalSettlement.signal_id)
+        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(Signal.signal_key.like(prefix), actionable)
+        .group_by(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+        )
+    ):
+        row = grouped.setdefault(
+            (name, version, instrument_type, horizon),
+            {
+                "strategy": name,
+                "version": version,
+                "instrument_type": instrument_type,
+                "horizon": horizon,
+                "sample": 0,
+                "comparable": 0,
+                "incomparable": 0,
+            },
+        )
+        row["sample"] += count
+        row["comparable" if comparable else "incomparable"] += count
+    return _backtest_summary(run, grouped, signal_total - actionable_total)
+
+
+class BacktestPaused(RuntimeError):
+    """A research backtest stopped by its ``should_stop`` check after a commit."""
+
+
+def _pause_if(should_stop: Callable[[], str | None] | None) -> None:
+    reason = should_stop() if should_stop is not None else None
+    if reason:
+        raise BacktestPaused(reason)
+
+
+def _track_research_signals(
+    db: Session,
+    run_id: int,
+    evaluation_cutoff: date,
+    should_stop: Callable[[], str | None] | None = None,
+) -> tuple[int, int, int, int]:
+    """Track a research run's signals one committed batch at a time.
+
+    Returns the signal, evaluation, settlement and non-actionable counts;
+    ``should_stop`` is asked after each batch's commit.
+    """
+
+    prefix = f"backtest-{run_id}-%"
+    signals = evaluations = settlements = zero_actionable = 0
+    last_id = 0
+    while True:
+        batch = db.scalars(
+            select(Signal)
+            .where(Signal.signal_key.like(prefix), Signal.id > last_id)
+            .order_by(Signal.id)
+            .limit(RESEARCH_TRACKING_BATCH)
+        ).all()
+        if not batch:
+            return signals, evaluations, settlements, zero_actionable
+        for signal in batch:
+            if not (signal.rule_evidence_json or {}).get("actionable"):
+                zero_actionable += 1
+                continue
+            current_evaluations, current_settlements = _evaluate_signal_tracking(
+                db, signal, evaluation_cutoff=evaluation_cutoff
+            )
+            evaluations += current_evaluations
+            settlements += current_settlements
+        signals += len(batch)
+        last_id = batch[-1].id
+        db.commit()
+        _pause_if(should_stop)
+
+
 def backtest(
     start_date: date,
     end_date: date,
     *,
     force: bool = False,
+    registry: Mapping[str, Strategy] | None = None,
+    should_stop: Callable[[], str | None] | None = None,
 ) -> dict[str, Any]:
-    """Replay canonical fixed-version rules with a strict daily as-of cutoff."""
+    """Replay canonical fixed-version rules with a strict daily as-of cutoff.
+
+    ``registry`` replaces REGISTRY only for a research run on an isolated
+    database (``app.strategies.ablation``, ``tools/research``): its strategies
+    are evaluated and their StrategyVersion rows written, and the request key
+    names them so the run never reuses or is reused as a canonical run.
+    A research run asks ``should_stop`` after each score date's and each
+    tracking batch's commit; a reason stops it as a failed run
+    (``BacktestPaused``) that a rerun completes.  Without ``registry`` it is
+    never asked.
+    """
 
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
@@ -5011,12 +5151,18 @@ def backtest(
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )
+    if registry is not None:
+        request_key += ":research:" + ",".join(registry)
     with SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
         if run and run.status == "success" and not force:
-            summary = summarize_backtest(db, run.id)
+            summary = (
+                summarize_backtest(db, run.id)
+                if registry is None
+                else _summarize_research_backtest(db, run)
+            )
             summary["idempotent_reuse"] = True
             return summary
         if not run:
@@ -5048,10 +5194,12 @@ def backtest(
             "execution": "signal at T close; earliest fill T+1; settlement T+5/T+20",
             "signal_confidence_semantics": dict(SIGNAL_CONFIDENCE_SEMANTICS),
         }
+        if registry is not None:
+            metadata["research_registry"] = list(registry)
         run.metadata_json = metadata
         db.commit()
         try:
-            strategies = _ensure_strategies(db)
+            strategies = _ensure_strategies(db, registry)
             metadata["strategy_versions"] = {
                 key: {
                     "name": strategy.name,
@@ -5074,6 +5222,10 @@ def backtest(
             # derived as-of features visible to the subsequent group/signal
             # queries before replaying each score date.
             db.flush()
+            # A research run commits as it goes so the transaction (the WAL)
+            # stays one session's size; a failed one keeps what it committed.
+            if registry is not None:
+                db.commit()
             score_dates = db.scalars(
                 select(MarketBar.trading_date)
                 .where(
@@ -5096,35 +5248,50 @@ def backtest(
                     score_date,
                     strategies,
                     namespace=f"backtest-{run.id}",
+                    registry=registry,
                 )
+                if registry is not None:
+                    db.flush()
+                    db.commit()
+                    _pause_if(should_stop)
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last
             # day's strategy rows disappear from signal_count and
             # zero_actionable_count until after the run has been committed.
             db.flush()
-            backtest_signals = db.scalars(
-                select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
-            ).all()
-            signal_count = len(backtest_signals)
-            evaluations = 0
-            settlements = 0
-            for signal in backtest_signals:
-                if not (signal.rule_evidence_json or {}).get("actionable"):
-                    continue
-                current_evaluations, current_settlements = _evaluate_signal_tracking(
-                    db,
-                    signal,
-                    evaluation_cutoff=end_date,
+            if registry is not None:
+                (
+                    signal_count,
+                    evaluations,
+                    settlements,
+                    zero_actionable_count,
+                ) = _track_research_signals(db, run.id, end_date, should_stop)
+            else:
+                backtest_signals = db.scalars(
+                    select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
+                ).all()
+                signal_count = len(backtest_signals)
+                evaluations = 0
+                settlements = 0
+                for signal in backtest_signals:
+                    if not (signal.rule_evidence_json or {}).get("actionable"):
+                        continue
+                    current_evaluations, current_settlements = (
+                        _evaluate_signal_tracking(
+                            db,
+                            signal,
+                            evaluation_cutoff=end_date,
+                        )
+                    )
+                    evaluations += current_evaluations
+                    settlements += current_settlements
+                zero_actionable_count = sum(
+                    1
+                    for signal in backtest_signals
+                    if not (signal.rule_evidence_json or {}).get("actionable")
                 )
-                evaluations += current_evaluations
-                settlements += current_settlements
-            zero_actionable_count = sum(
-                1
-                for signal in backtest_signals
-                if not (signal.rule_evidence_json or {}).get("actionable")
-            )
             run.status = "success"
-            run.records = len(backtest_signals)
+            run.records = signal_count
             run.data_as_of = end_date.isoformat()
             run.metadata_json = {
                 **metadata,
@@ -5139,6 +5306,8 @@ def backtest(
             )
             run.finished_at = datetime.utcnow()
             db.commit()
+            if registry is not None:
+                return _summarize_research_backtest(db, run)
             return summarize_backtest(db, run.id)
         except Exception as exc:
             db.rollback()
