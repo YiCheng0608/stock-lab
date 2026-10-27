@@ -13,10 +13,14 @@ from checks import (
     LINT_COMMANDS,
     ROOT,
     ac_results,
+    anchors,
     change_flags,
     changed_paths,
+    documentation_errors,
+    heading_slug,
     high_risk,
     markdown_errors,
+    owns_errors,
     pr_changes,
     pr_errors,
 )
@@ -128,7 +132,7 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(
             markdown_errors(
                 "README.md",
-                "[ok](docs/ROADMAP.md) [web](https://example.com) [anchor](#x)",
+                "# X\n[ok](docs/ROADMAP.md) [web](https://example.com) [anchor](#x)",
             ),
             [],
         )
@@ -167,6 +171,120 @@ class RoutingTests(unittest.TestCase):
                 "README.md", "```md\n[example](nonexistent-ci-link-target.md)\n```"
             ),
             [],
+        )
+        # A fence indented under a list item is still a fence.
+        self.assertEqual(
+            markdown_errors(
+                "README.md",
+                "1. Step\n\n   ```text\n   [x](nonexistent-ci-link-target.md)\n   ```",
+            ),
+            [],
+        )
+
+
+class AnchorTests(unittest.TestCase):
+    def test_slugs_of_headings_the_docs_link_to(self):
+        # Each heading as written in docs/, and the anchor an existing link uses for it.
+        for heading, anchor in [
+            ("V1 範圍基線（2026-10-17 核定）", "v1-範圍基線2026-10-17-核定"),  # ROADMAP
+            ("統籌 session", "統籌-session"),  # GITHUB_WORKFLOW
+            ("Review 與合併", "review-與合併"),  # GITHUB_WORKFLOW
+            (
+                "6.2 daily／news 工作的註冊與管理",
+                "62-dailynews-工作的註冊與管理",
+            ),  # OPERATIONS
+            (
+                "2. 資料庫、migration 與 readiness",
+                "2-資料庫migration-與-readiness",
+            ),  # OPERATIONS
+            ("8.1 今日／個股清單壓縮卡", "81-今日個股清單壓縮卡"),  # UI_COPY_SPEC
+            ("8.4 數值表格、單位與空白", "84-數值表格單位與空白"),  # UI_COPY_SPEC
+            ("價位、ETF 與生命週期", "價位etf-與生命週期"),  # V1_SPEC
+            ("strategy_levels_v1", "strategy_levels_v1"),  # V1_SPEC
+            ("策略框架與 registry", "策略框架與-registry"),  # V1_SPEC
+        ]:
+            self.assertEqual(heading_slug(heading), anchor, heading)
+
+    def test_inline_markup_leaves_its_text(self):
+        self.assertEqual(
+            heading_slug("`breakout_v1` 與 [連結](x.md)"), "breakout_v1-與-連結"
+        )
+        self.assertEqual(heading_slug('<a id="x"></a>A／B'), "ab")
+
+    def test_repeated_headings_html_ids_and_fences(self):
+        text = '# 限制\n## 限制\n<a id="action-merge"></a>\n```md\n# 範例\n```\n'
+        self.assertEqual(anchors(text), {"限制", "限制-1", "action-merge"})
+
+    def test_anchors_into_markdown_files(self):
+        roadmap = "docs/ROADMAP.md#v1-範圍基線2026-10-17-核定"
+        self.assertEqual(
+            markdown_errors(
+                "README.md",
+                f"[a]({roadmap}) [b](docs/GITHUB_WORKFLOW.md#%E7%B5%B1%E7%B1%8C-session) "
+                "[c](tools/ci/checks.py#L1) [d](docs/PRODUCT_SPEC.md#action-merge)",
+            ),
+            [],
+        )
+        self.assertEqual(
+            markdown_errors(
+                "README.md", "[a](docs/ROADMAP.md#v1-範圍基線) [b](#nowhere)"
+            ),
+            [
+                "README.md: no heading makes the anchor of docs/ROADMAP.md#v1-範圍基線",
+                "README.md: no heading makes the anchor of #nowhere",
+            ],
+        )
+
+    def test_absolute_links_into_master(self):
+        repo = "https://github.com/YiCheng0608/stock-lab"
+        self.assertEqual(
+            markdown_errors(
+                "docs/x.md",
+                f"[a]({repo}/blob/master/docs/GITHUB_WORKFLOW.md#統籌-session) "
+                f"[b]({repo}/tree/master/tools/ci) [c]({repo}/blob/pr-assets/gone.png) "
+                f"[d]({repo}/issues/312)",
+            ),
+            [],
+        )
+        self.assertEqual(
+            len(
+                markdown_errors(
+                    "docs/x.md",
+                    f"[a]({repo}/blob/master/docs/GONE.md) "
+                    f"[b]({repo}/blob/master/docs/ROADMAP.md#gone)",
+                )
+            ),
+            2,
+        )
+
+    def test_every_document_link_and_owns_line_holds(self):
+        self.assertEqual(documentation_errors(), [])
+
+
+class OwnsTests(unittest.TestCase):
+    def test_every_doc_has_an_owns_line(self):
+        docs = sorted(p.name for p in (ROOT / "docs").glob("*.md"))
+        self.assertTrue(docs)
+        for name in [f"docs/{d}" for d in docs] + ["AGENTS.md"]:
+            first = (ROOT / name).read_text(encoding="utf-8").split("\n", 1)[0]
+            self.assertTrue(first.startswith("<!-- owns: "), name)
+
+    def test_missing_empty_and_repeated_concepts(self):
+        self.assertEqual(
+            owns_errors(
+                {
+                    "AGENTS.md": "<!-- owns: 角色、流程變更 -->\n# A",
+                    "docs/a.md": "# A\n<!-- owns: x -->",
+                    "docs/b.md": "<!-- owns: 排程, Review -->\n",
+                    "docs/c.md": "<!-- owns: review、、流程變更 -->\n",
+                }
+            ),
+            [
+                "docs/a.md: the first line is not <!-- owns: <concepts> -->",
+                "docs/c.md: concept 'review' already owned by docs/b.md",
+                "docs/c.md: empty concept in the owns line",
+                "docs/c.md: concept '流程變更' already owned by AGENTS.md",
+            ],
         )
 
 
@@ -513,9 +631,10 @@ class RepositoryWorkingTree(unittest.TestCase):
         commit("tools/ci/checks.py", (ROOT / "tools/ci/checks.py").read_text("utf-8"))
         commit("README.md", "start\n")
         git("checkout", "-q", "-b", "pr")
-        commit("docs/x.md", "x\n")
+        commit("docs/x.md", "<!-- owns: x -->\n# X\n")
         git("checkout", "-q", "master")
-        self.master = commit("docs/m.md", "m\n")
+        # Unchanged against the base, yet its link into the branch's file is checked.
+        self.master = commit("docs/m.md", "<!-- owns: m -->\n[x](x.md#x)\n")
         git("checkout", "-q", "pr")
         # Quiet: -q still prints "stopped before committing" to stderr.
         subprocess.run(
@@ -541,6 +660,10 @@ class RepositoryWorkingTree(unittest.TestCase):
         (self.repo / "README.md").write_text(text, encoding="utf-8")
         self.git("add", "README.md")
 
+    def edit(self, path: str, text: str) -> subprocess.CompletedProcess:
+        (self.repo / path).write_text(text, encoding="utf-8")
+        return self.run_check()
+
     def test_clean_merge_result_has_only_the_branch_change(self):
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -557,6 +680,23 @@ class RepositoryWorkingTree(unittest.TestCase):
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("README.md: missing relative link missing.md", result.stderr)
+
+    def test_a_renamed_heading_breaks_the_link_of_an_unchanged_file(self):
+        result = self.edit("docs/x.md", "<!-- owns: x -->\n# Y\n")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("docs/m.md: no heading makes the anchor of x.md#x", result.stderr)
+
+    def test_a_concept_owned_twice_fails(self):
+        result = self.edit("docs/x.md", "<!-- owns: M -->\n# X\n")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "docs/x.md: concept 'M' already owned by docs/m.md", result.stderr
+        )
+
+    def test_a_doc_without_an_owns_line_fails(self):
+        result = self.edit("docs/x.md", "# X\n")
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("docs/x.md: the first line is not <!-- owns:", result.stderr)
 
 
 if __name__ == "__main__":

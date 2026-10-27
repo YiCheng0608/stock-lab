@@ -168,7 +168,7 @@ def test_a_different_failure_of_a_known_check_fails(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("today", "T6"),
-        page_checks.Known(issue, "卡片沒有 `AI 推論`"),
+        page_checks.Known(issue, "卡片沒有 `AI 推論`", "2026-11-20"),
     )
     _only(monkeypatch, "today", "T6")
     (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
@@ -182,7 +182,7 @@ def test_the_known_failure_itself_stays_known(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("today", "T6"),
-        page_checks.Known("#233", "缺新聞標題整行"),
+        page_checks.Known("#233", "缺新聞標題整行", "2026-11-20"),
     )
     _only(monkeypatch, "today", "T6")
     (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])

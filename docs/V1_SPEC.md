@@ -1,3 +1,4 @@
+<!-- owns: v1 共通原則、breakout_v1、pullback_v1、價位／ETF／生命週期、hot_group_v1、candidate_score_v1、candidate_score_v2、候選 AI 進出點說明、新聞題材建議彙整、技術指標、technical backtest 口徑、使用者追蹤計畫、strategy_levels_v1、大盤概況 API 契約、策略版本識別、策略 registry、v1 現行限制 -->
 # Canonical v1 規格
 
 本文只保存 `breakout_v1`、`pullback_v1`、`hot_group_v1`、[條件價位 `strategy_levels_v1`](#strategy_levels_v1)、[`candidate_score_v1`](#candidate_score_v1)／[`candidate_score_v2`](#candidate_score_v2)、[技術指標](#技術指標) `indicators/v1`、價位、eligibility、生命週期與回測的 canonical 基準；實作狀態與排程見 [ROADMAP](ROADMAP.md)。修改公式、時間、成本或機率語意時必須升版並保留舊 run、輸入、設定與結果。`StrategyVersion` 以（`name`、`version`、`formula_version`）識別；config 的 `formula_version` 子版本另建一列，`version` 不變，原列與指向它的訊號不改（規則見[策略版本識別](#策略版本識別)）。策略設定來源是 `backend/app/strategies/`（[策略框架與 registry](#策略框架與-registry)），`hot_group_v1` 與 `candidate_score` 的設定在 `backend/app/domain.py`；worker 保存可序列化設定、rule evidence、data cutoff 與 raw provenance。此規格用於重現和稽核，不證明策略已採用或有效。

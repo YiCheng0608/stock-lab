@@ -8,10 +8,13 @@ job runs them on real screenshots of the fixture database.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import shutil
+import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -616,7 +619,7 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("actions", "A5"),
-        page_checks.Known("https://example/1", "出現 LLM 推論標記"),
+        page_checks.Known("https://example/1", "出現 LLM 推論標記", "2026-11-20"),
     )
     clean = FakeRun(
         tmp_path, {}, {"actions-1280": "我的庫存\n2330\t2026/10/22\t策略總表 →\n"}
@@ -631,6 +634,142 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
     )
     (passing,) = page_checks.run_page(clean, "actions", [])
     assert passing.failed and "從 KNOWN_FAILURES 移除 actions A5" in passing.detail
+
+
+# ---- KNOWN_FAILURES expire (#311) ----
+
+ISSUE = "https://github.com/YiCheng0608/stock-lab/issues/311"
+PAGE_CHECKS = "tools/verify/page_checks.py"
+
+
+def _entry_sources(text: str) -> dict[tuple[str, str], str]:
+    """(page, code) -> the source of its ``Known(...)`` in KNOWN_FAILURES."""
+
+    for node in ast.parse(text).body:
+        target = (
+            getattr(node, "target", None)
+            or (getattr(node, "targets", None) or [None])[0]
+        )
+        if getattr(target, "id", None) == "KNOWN_FAILURES":
+            return {
+                ast.literal_eval(key): ast.get_source_segment(text, value)
+                for key, value in zip(node.value.keys, node.value.values)
+            }
+    raise AssertionError("KNOWN_FAILURES not found")
+
+
+def _added(source: str) -> date:
+    """The day of the commit that added ``source`` to page_checks.py; today when uncommitted."""
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, encoding="utf-8", check=True
+        ).stdout
+
+    if source not in git("show", f"HEAD:{PAGE_CHECKS}"):
+        return datetime.now(page_checks.TAIPEI).date()
+    day = git("log", "-1", "--format=%cs", "-S", source, "--", PAGE_CHECKS).strip()
+    return date.fromisoformat(day)
+
+
+def test_known_failures_expire_within_30_days_of_the_commit_that_added_them():
+    sources = _entry_sources((ROOT / PAGE_CHECKS).read_text(encoding="utf-8"))
+    assert sources.keys() == page_checks.KNOWN_FAILURES.keys()
+    assert (
+        page_checks.known_problems(
+            page_checks.KNOWN_FAILURES, lambda key: _added(sources[key])
+        )
+        == []
+    )
+
+
+def test_an_entry_is_read_from_the_source_and_dated_today_until_committed():
+    text = (
+        "KNOWN_FAILURES: dict[tuple[str, str], Known] = {\n"
+        '    ("today", "T6"): Known(\n'
+        f'        "{ISSUE}", "缺新聞標題整行", "2026-11-20"\n'
+        "    ),\n"
+        "}\n"
+    )
+    (source,) = _entry_sources(text).values()
+    assert source.startswith("Known(") and source.endswith(")")
+    assert _added(source) == datetime.now(page_checks.TAIPEI).date()
+    # Committed text gets the day of the commit that added it.
+    committed = "KNOWN_FAILURES: dict[tuple[str, str], Known] = {}"
+    assert _added(committed) <= datetime.now(page_checks.TAIPEI).date()
+
+
+def test_known_requires_expires():
+    with pytest.raises(TypeError):
+        page_checks.Known(ISSUE, "缺新聞標題整行")
+
+
+def test_known_problems_flag_a_missing_or_late_expires():
+    def problems(entry, key=("today", "T6")):
+        return page_checks.known_problems({key: entry}, lambda key: date(2026, 10, 28))
+
+    assert page_checks.known_problems({}, lambda key: date(2026, 10, 28)) == []
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-27")) == []
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-28")) == []
+    assert problems(SimpleNamespace(issue=ISSUE, match="缺新聞標題整行")) == [
+        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（None）"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-28")) == [
+        "KNOWN_FAILURES today T6：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-27")) == [
+        "KNOWN_FAILURES today T6：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026/11/20")) == [
+        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
+    ]
+    assert problems(page_checks.Known("#233", "", "2026-11-20"), ("today", "T99")) == [
+        "KNOWN_FAILURES today T99：不是 CHECKS 裡的檢查",
+        "KNOWN_FAILURES today T99：issue 要是 stock-lab 的 Issue 連結",
+        "KNOWN_FAILURES today T99：缺 match",
+    ]
+
+
+def _a5_known(monkeypatch, expires):
+    monkeypatch.setitem(
+        page_checks.KNOWN_FAILURES,
+        ("actions", "A5"),
+        page_checks.Known(ISSUE, "出現 LLM 推論標記", expires),
+    )
+    monkeypatch.setitem(page_checks.CHECKS, "actions", {"A5": page_checks.a5})
+
+
+def test_an_expired_known_failure_fails_as_usual(tmp_path, monkeypatch):
+    # FakeRun runs on 2026-10-24 (Taipei): the entry counts through its expires day.
+    marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
+    _a5_known(monkeypatch, "2026-10-24")
+    (known,) = page_checks.run_page(marked, "actions", [])
+    assert (known.status, known.failed, known.known) == ("失敗（已知）", False, ISSUE)
+    _a5_known(monkeypatch, "2026-10-23")
+    (expired,) = page_checks.run_page(marked, "actions", [])
+    assert (expired.status, expired.failed, expired.known) == ("失敗", True, None)
+    assert expired.detail.endswith(f"（已知失敗 {ISSUE} 已於 2026-10-23 到期）")
+    clean = FakeRun(
+        tmp_path, {}, {"actions-1280": "我的庫存\n2330\t2026/10/22\t策略總表 →\n"}
+    )
+    (passing,) = page_checks.run_page(clean, "actions", [])
+    assert (passing.status, passing.failed) == ("通過", False)
+    assert passing.detail.endswith("；KNOWN_FAILURES 的 actions A5 已到期，移除")
+
+
+def test_page_checks_exits_1_on_an_expired_known_failure(tmp_path, monkeypatch):
+    marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
+    monkeypatch.setattr(page_checks, "Run", lambda *args: marked)
+    monkeypatch.setattr(page_checks, "stocks_for", lambda run, fixture: [])
+    monkeypatch.setattr(page_checks, "prefetch", lambda *args: None)
+    monkeypatch.setattr(page_checks, "write_samples", lambda run, pages: [])
+    monkeypatch.setattr(page_checks, "registry_problems", lambda *args: [])
+    argv = ["--api", "http://api", "--web", "http://web", "--db", str(tmp_path / "db")]
+    argv += ["--out", str(tmp_path / "out"), "--pages", "actions"]
+    _a5_known(monkeypatch, "2026-10-24")
+    assert page_checks.main(argv) == 0
+    _a5_known(monkeypatch, "2026-10-23")
+    assert page_checks.main(argv) == 1
 
 
 def _t6_run(tmp_path, ai, card_ai, card):
