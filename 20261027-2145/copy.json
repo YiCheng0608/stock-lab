@@ -1,0 +1,8 @@
+{
+  "copy": "C:/Users/YiCheng/orca/workspaces/taiwan-stock-research/task-260-g7-replay/.local/verify/stock.db",
+  "source": "C:/Users/YiCheng/stock-lab-data/stock.db",
+  "source_latest_trading_date": "2026-10-27",
+  "alembic_version": "0017_tracking_plans",
+  "bytes": 2427219968,
+  "seconds": 8.5
+}

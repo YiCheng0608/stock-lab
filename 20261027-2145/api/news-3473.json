@@ -1,0 +1,254 @@
+{
+  "id": "3473",
+  "canonical_key": "news:cnyes:98132f014c52e8028c16d57e695e5035226e85469ab14a73de1db0aa11cd6745",
+  "dedupe_cluster_id": "news-title:18b4376a0965c69281b8e17b1fffcaea",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6638435",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6638435",
+  "title": "〈旺宏法說〉不再擴產NOR Flash 新產能全力衝刺eMMC、3D NAND",
+  "summary": "吳敏求稱旺宏從未簽長約，與客戶僅在互利、公平下合作，漲價與需求有關，上漲是必然。 旺宏將把新產能轉向eMMC與NAND，尤其3D eMMC NAND，NOR有限產能優先供工控、車用、醫療、太空通訊。 第一階段設備今年進廠，量產估明年下半年；158億元投資設備將於明年底進廠，量產可能落在2028年。",
+  "description": "吳敏求稱旺宏從未簽長約，與客戶僅在互利、公平下合作，漲價與需求有關，上漲是必然。 旺宏將把新產能轉向eMMC與NAND，尤其3D eMMC NAND，NOR有限產能優先供工控、車用、醫療、太空通訊。 第一階段設備今年進廠，量產估明年下半年；158億元投資設備將於明年底進廠，量產可能落在2028年。",
+  "summary_preview": "吳敏求稱旺宏從未簽長約，與客戶僅在互利、公平下合作，漲價與需求有關，上漲是必然。 旺宏將把新產能轉向eMMC與NAND，尤其3D eMMC NAND，NOR有限產能優先供工控、車用、醫療、太空通訊。 第一階段設備今年進廠，量產估明年下半年…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-27T11:47:07+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-27T11:47:07+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-27T11:47:07+00:00",
+        "utc": "2026-10-27T11:47:07+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-27T12:00:04.155108+00:00",
+        "utc": "2026-10-27T12:00:04.155108+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-27T13:50:06.482648+00:00",
+    "legacy": {
+      "published_at": "2026-10-27T11:47:07+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-27T11:47:07",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-27T12:00:04.155108+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-27T13:50:06.482648+00:00",
+  "collected_at": "2026-10-27T12:00:04.155108+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "836e0faf2535dfed7d81129be73ef40f3d33bf15a2a3e448f108474db70b5c2b",
+  "detail_url": "/news/3473",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "旺宏不再擴產NOR Flash，新產能轉向eMMC與3D NAND；第一階段設備今年進廠，量產估明年下半年；158億元投資設備明年底進廠。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2337",
+        "name": "旺宏",
+        "exchange_corrected": false,
+        "reason": "旺宏法說，新產能轉向eMMC與NAND。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "記憶體",
+        "reason": "旺宏稱漲價與需求有關，新產能衝刺eMMC、3D NAND。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "旺宏稱漲價與需求有關、上漲是必然，並規劃新產能與158億元投資。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "e8aff6c9c683e4703a3e0786a80ad93e7ef46b513e48a1e35d242f287abab6b5",
+    "generated_at": "2026-10-27T12:00:57.811012+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7859,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-10-27T12:00:04.155108"
+  }
+}

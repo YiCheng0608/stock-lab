@@ -1,0 +1,263 @@
+{
+  "id": "3474",
+  "canonical_key": "news:cnyes:af93e260a5fffa17c9493821f8e07e16245c3172402ac513ffce0b0866539730",
+  "dedupe_cluster_id": "news-title:ca0cff02373174bbee5cccd7bf825f4a",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "鉅亨網",
+  "source": {
+    "name": "鉅亨網",
+    "url": "https://news.cnyes.com/news/id/6638608",
+    "url_kind": "item"
+  },
+  "source_item_id": "https://news.cnyes.com/news/id/6638608",
+  "title": "台灣大林之晨：收購精誠信心十足 公開收購時程不再延後",
+  "summary": "台灣大收購精誠資訊案，公平會決議不禁止結合，公開收購至11月5日不再延後。 本案尚待有效應賣股數達106,174,796股、約占39%成就條件，精誠股價因通過審議走揚。 電信族群受AI算力需求帶動，台灣大盤中創135元新高；iPhone Duo銷售良好但仍缺貨，1599元以上方案申辦比重近增1成。",
+  "description": "台灣大收購精誠資訊案，公平會決議不禁止結合，公開收購至11月5日不再延後。 本案尚待有效應賣股數達106,174,796股、約占39%成就條件，精誠股價因通過審議走揚。 電信族群受AI算力需求帶動，台灣大盤中創135元新高；iPhone Duo銷售良好但仍缺貨，1599元以上方案申辦比重近增1成。",
+  "summary_preview": "台灣大收購精誠資訊案，公平會決議不禁止結合，公開收購至11月5日不再延後。 本案尚待有效應賣股數達106,174,796股、約占39%成就條件，精誠股價因通過審議走揚。 電信族群受AI算力需求帶動，台灣大盤中創135元新高；iPhone…",
+  "language": "zh-Hant",
+  "published_at": "2026-10-27T11:43:08+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-27T11:43:08+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-27T11:43:08+00:00",
+        "utc": "2026-10-27T11:43:08+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-27T12:00:04.155108+00:00",
+        "utc": "2026-10-27T12:00:04.155108+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-27T13:50:06.607856+00:00",
+    "legacy": {
+      "published_at": "2026-10-27T11:43:08+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-27T11:43:08",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-27T12:00:04.155108+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-27T13:50:06.607856+00:00",
+  "collected_at": "2026-10-27T12:00:04.155108+00:00",
+  "symbols": [],
+  "instruments": [],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "unknown",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "unknown",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "bbfed6451b53263736c6dd49afbf281ee528ab7a0f3a5c999ca233a847cc72ff",
+  "detail_url": "/news/3474",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "台灣大收購精誠案獲公平會不禁止結合，公開收購至11月5日不再延後；尚待應賣股數達106,174,796股、約占39%；台灣大盤中創135元新高。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "3045",
+        "name": "台灣大",
+        "exchange_corrected": false,
+        "reason": "台灣大公開收購精誠，公平會不禁止結合，盤中創135元新高。",
+        "confidence": "high",
+        "verified": false
+      },
+      {
+        "exchange": "TWSE",
+        "symbol": "6214",
+        "name": "精誠",
+        "exchange_corrected": false,
+        "reason": "精誠為被收購標的，股價因通過審議走揚。",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "電信",
+        "reason": "電信族群受AI算力需求帶動。"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "instrument",
+    "impact_rationale": "收購案通過公平會審議，精誠股價走揚，台灣大盤中創新高。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "3a230f847b8897fd151b7b23d6307bd07bf34ad002a14983f103bcd49b295fdb",
+    "generated_at": "2026-10-27T12:00:57.811012+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 7859,
+    "endpoint": "https://news.cnyes.com/rss/v1/news/category/tw_stock",
+    "data_as_of": "2026-10-27T12:00:04.155108"
+  }
+}

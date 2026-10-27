@@ -1,0 +1,248 @@
+{
+  "rule": "/news?category=domestic&limit=100（依 next_cursor 往後最多 5 頁）中台北發布日 = D（2026-10-27）且有 AI 判讀的前 5 則，API 順序",
+  "items": [
+    {
+      "id": "3470",
+      "title": "PwC解析亞太碳定價 台灣300元天花板價格與國際差在哪？",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6638619",
+        "url_kind": "item"
+      },
+      "published_at": "2026-10-27T11:56:08+00:00",
+      "summary": "台灣2026年首次碳費繳納，240家企業461座工廠共繳49.7億元，費率每噸50至300元。 韓國K-ETS第四階段拍賣比重提高，加權平均價約每噸29,974韓元；日本GX-ETS今年改強制+每噸289日圓地球暖化對策稅。 台灣採雙軌制，李宗哲籲企業除繳碳費，也應及早準備ETS配額與交易管理。",
+      "description": "台灣2026年首次碳費繳納，240家企業461座工廠共繳49.7億元，費率每噸50至300元。 韓國K-ETS第四階段拍賣比重提高，加權平均價約每噸29,974韓元；日本GX-ETS今年改強制+每噸289日圓地球暖化對策稅。 台灣採雙軌制，李宗哲籲企業除繳碳費，也應及早準備ETS配額與交易管理。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台灣2026年首次碳費繳納，240家企業461座工廠共繳49.7億元，費率每噸50至300元；李宗哲籲企業也應準備ETS配額與交易管理。",
+        "symbol_candidates": [],
+        "theme_candidates": [
+          {
+            "theme": "碳費與碳交易",
+            "reason": "台灣首次碳費繳納，費率每噸50至300元，並談及ETS配額管理。"
+          }
+        ],
+        "impact_direction": "unknown",
+        "impact_scope": "theme",
+        "impact_rationale": "原文為碳定價制度比較，未指明對特定個股或產業的方向。",
+        "unsupported": true,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "3c93812a620eadca3b6d4217bd9cdef2e84cb0b0d644b85f650506a9b11e4b52",
+        "generated_at": "2026-10-27T12:00:57.811012+00:00"
+      }
+    },
+    {
+      "id": "3471",
+      "title": "台股大吸金 9月散戶風向球創新紀錄",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6638621",
+        "url_kind": "item"
+      },
+      "published_at": "2026-10-27T11:54:58+00:00",
+      "summary": "9月證券劃撥存款餘額達4兆6981億元，連2月上升並創單月新高，連6個月維持4兆元以上。 本國自然人占集中市場成交比重升至51.1%，融資餘額9月底增至8343億元。 外匯存款也創高至10兆591億元。",
+      "description": "9月證券劃撥存款餘額達4兆6981億元，連2月上升並創單月新高，連6個月維持4兆元以上。 本國自然人占集中市場成交比重升至51.1%，融資餘額9月底增至8343億元。 外匯存款也創高至10兆591億元。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "9月證券劃撥存款餘額達4兆6981億元，創單月新高；本國自然人占集中市場成交比重升至51.1%，融資餘額9月底增至8343億元。",
+        "symbol_candidates": [],
+        "theme_candidates": [
+          {
+            "theme": "券商",
+            "reason": "散戶資金與成交比重上升，融資餘額增至8343億元。"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "market",
+        "impact_rationale": "劃撥餘額創高、散戶占成交比重升至51.1%，顯示市場資金活絡。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "291eec5b786dea846d089a35db1b1e690dda18841ed652950020c9fe080fff23",
+        "generated_at": "2026-10-27T12:00:57.811012+00:00"
+      }
+    },
+    {
+      "id": "3472",
+      "title": "外資大砍友達9.6萬張最凶 倒貨3檔主動式ETF、連12賣調節0050",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6638620",
+        "url_kind": "item"
+      },
+      "published_at": "2026-10-27T11:54:02+00:00",
+      "summary": "台股連假後首日收紅漲54點、成交量9,765億元，盤面以記憶體、機器人、金融族群強勢。 外資賣超81.03億元、倒貨友達9.59萬張，買超力積電5.6萬張；投信買超236.45億元、連7買台積電。 法人指本周聚焦微軟、Alphabet、亞馬遜財報與FOMC，台股仍在季線上下震盪整理。",
+      "description": "台股連假後首日收紅漲54點、成交量9,765億元，盤面以記憶體、機器人、金融族群強勢。 外資賣超81.03億元、倒貨友達9.59萬張，買超力積電5.6萬張；投信買超236.45億元、連7買台積電。 法人指本周聚焦微軟、Alphabet、亞馬遜財報與FOMC，台股仍在季線上下震盪整理。",
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6770",
+          "name": "力積電"
+        }
+      ],
+      "themes": [
+        {
+          "theme_id": "official-industry-94d658309b8d4f69",
+          "display_name": "金融"
+        }
+      ],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台股連假後首日收紅漲54點、成交量9,765億元；外資賣超81.03億元、賣友達9.59萬張，買超力積電5.6萬張；投信買超236.45億元。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2409",
+            "name": "友達",
+            "exchange_corrected": false,
+            "reason": "外資大砍友達9.59萬張。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "6770",
+            "name": "力積電",
+            "exchange_corrected": false,
+            "reason": "外資買超力積電5.6萬張。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2330",
+            "name": "台積電",
+            "exchange_corrected": false,
+            "reason": "投信連7買台積電。",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "記憶體",
+            "reason": "盤面以記憶體、機器人、金融族群強勢。"
+          }
+        ],
+        "impact_direction": "mixed",
+        "impact_scope": "market",
+        "impact_rationale": "大盤收紅但外資賣超，法人指台股仍在季線上下震盪整理。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "e8f32781b33e2409207526607c13d1cb592e3d39fd793d3b1bb1ec6e61ed5830",
+        "generated_at": "2026-10-27T12:00:57.811012+00:00"
+      }
+    },
+    {
+      "id": "3473",
+      "title": "〈旺宏法說〉不再擴產NOR Flash 新產能全力衝刺eMMC、3D NAND",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6638435",
+        "url_kind": "item"
+      },
+      "published_at": "2026-10-27T11:47:07+00:00",
+      "summary": "吳敏求稱旺宏從未簽長約，與客戶僅在互利、公平下合作，漲價與需求有關，上漲是必然。 旺宏將把新產能轉向eMMC與NAND，尤其3D eMMC NAND，NOR有限產能優先供工控、車用、醫療、太空通訊。 第一階段設備今年進廠，量產估明年下半年；158億元投資設備將於明年底進廠，量產可能落在2028年。",
+      "description": "吳敏求稱旺宏從未簽長約，與客戶僅在互利、公平下合作，漲價與需求有關，上漲是必然。 旺宏將把新產能轉向eMMC與NAND，尤其3D eMMC NAND，NOR有限產能優先供工控、車用、醫療、太空通訊。 第一階段設備今年進廠，量產估明年下半年；158億元投資設備將於明年底進廠，量產可能落在2028年。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "旺宏不再擴產NOR Flash，新產能轉向eMMC與3D NAND；第一階段設備今年進廠，量產估明年下半年；158億元投資設備明年底進廠。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "2337",
+            "name": "旺宏",
+            "exchange_corrected": false,
+            "reason": "旺宏法說，新產能轉向eMMC與NAND。",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "記憶體",
+            "reason": "旺宏稱漲價與需求有關，新產能衝刺eMMC、3D NAND。"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "旺宏稱漲價與需求有關、上漲是必然，並規劃新產能與158億元投資。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "e8aff6c9c683e4703a3e0786a80ad93e7ef46b513e48a1e35d242f287abab6b5",
+        "generated_at": "2026-10-27T12:00:57.811012+00:00"
+      }
+    },
+    {
+      "id": "3474",
+      "title": "台灣大林之晨：收購精誠信心十足 公開收購時程不再延後",
+      "source": {
+        "name": "鉅亨網",
+        "url": "https://news.cnyes.com/news/id/6638608",
+        "url_kind": "item"
+      },
+      "published_at": "2026-10-27T11:43:08+00:00",
+      "summary": "台灣大收購精誠資訊案，公平會決議不禁止結合，公開收購至11月5日不再延後。 本案尚待有效應賣股數達106,174,796股、約占39%成就條件，精誠股價因通過審議走揚。 電信族群受AI算力需求帶動，台灣大盤中創135元新高；iPhone Duo銷售良好但仍缺貨，1599元以上方案申辦比重近增1成。",
+      "description": "台灣大收購精誠資訊案，公平會決議不禁止結合，公開收購至11月5日不再延後。 本案尚待有效應賣股數達106,174,796股、約占39%成就條件，精誠股價因通過審議走揚。 電信族群受AI算力需求帶動，台灣大盤中創135元新高；iPhone Duo銷售良好但仍缺貨，1599元以上方案申辦比重近增1成。",
+      "instruments": [],
+      "themes": [],
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "台灣大收購精誠案獲公平會不禁止結合，公開收購至11月5日不再延後；尚待應賣股數達106,174,796股、約占39%；台灣大盤中創135元新高。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "3045",
+            "name": "台灣大",
+            "exchange_corrected": false,
+            "reason": "台灣大公開收購精誠，公平會不禁止結合，盤中創135元新高。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "6214",
+            "name": "精誠",
+            "exchange_corrected": false,
+            "reason": "精誠為被收購標的，股價因通過審議走揚。",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "電信",
+            "reason": "電信族群受AI算力需求帶動。"
+          }
+        ],
+        "impact_direction": "positive",
+        "impact_scope": "instrument",
+        "impact_rationale": "收購案通過公平會審議，精誠股價走揚，台灣大盤中創新高。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "3a230f847b8897fd151b7b23d6307bd07bf34ad002a14983f103bcd49b295fdb",
+        "generated_at": "2026-10-27T12:00:57.811012+00:00"
+      }
+    }
+  ]
+}

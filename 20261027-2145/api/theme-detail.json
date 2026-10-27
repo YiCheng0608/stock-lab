@@ -1,0 +1,966 @@
+{
+  "theme": {
+    "theme_id": "official-industry-3dc064dd4f87e891",
+    "display_name": "資訊服務",
+    "description": "依官方共同產業分類建立的市場族群。",
+    "category": "股票族群",
+    "name_status": "official",
+    "qualified": true,
+    "score": 90.58,
+    "rank": 1,
+    "trading_date": "2026-10-27",
+    "data_quality": "complete",
+    "eligible_members": 45,
+    "minimum_members": 3,
+    "metrics": {
+      "relative_return_1d": 0.008149305516500031,
+      "relative_return_5d": 0.0528441665096293,
+      "relative_return_20d": 0.0993519221945852,
+      "breadth": 0.7866666666666666,
+      "volume_strength": 1.0,
+      "institutional_flow": 0.7272727272727273
+    },
+    "why_hot": [
+      "20 日相對 TAIEX 9.94%",
+      "成員上漲廣度 79%",
+      "成交量強度 100.00%"
+    ],
+    "missing_reasons": [],
+    "candidate_symbols": [
+      "6751",
+      "8099",
+      "6240",
+      "6221"
+    ],
+    "public_candidate_identity_version": "instrument-id-string-v1",
+    "candidate_instruments": [
+      {
+        "instrument_id": "2071",
+        "exchange": "TPEx",
+        "symbol": "6751"
+      },
+      {
+        "instrument_id": "2203",
+        "exchange": "TPEx",
+        "symbol": "8099"
+      },
+      {
+        "instrument_id": "1947",
+        "exchange": "TPEx",
+        "symbol": "6240"
+      },
+      {
+        "instrument_id": "1936",
+        "exchange": "TPEx",
+        "symbol": "6221"
+      }
+    ],
+    "benchmark": "TAIEX",
+    "benchmark_returns": {
+      "1": 0.0011902323624615185,
+      "5": -0.021545380021676275,
+      "20": -0.03564715355614834
+    },
+    "leaderboard": "equity",
+    "methodology": {
+      "relative_return": {
+        "weight": 0.35,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile_of_weighted_sum",
+          "member_aggregation": "equal_weight_mean",
+          "terms": [
+            {
+              "weight": 0.2,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.5,
+              "metric": "group_return_minus_benchmark_return",
+              "window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "breadth": {
+        "weight": 0.25,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "weighted_mean",
+          "member_aggregation": "share_of_members_with_positive_excess_return",
+          "terms": [
+            {
+              "weight": 0.2,
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.5,
+              "window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "volume_strength": {
+        "weight": 0.15,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile_of_weighted_sum",
+          "member_aggregation": "median",
+          "terms": [
+            {
+              "weight": 0.5,
+              "metric": "volume_1d / mean(volume_prior_20d)",
+              "signal_window_trading_days": 1,
+              "baseline_window_trading_days": 20
+            },
+            {
+              "weight": 0.5,
+              "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+              "signal_window_trading_days": 5,
+              "baseline_window_trading_days": 20
+            }
+          ]
+        }
+      },
+      "institutional_flow": {
+        "weight": 0.15,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "cross_sectional_percentile",
+          "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+          "formula_version": "institutional-flow/v2-shares-per-share-volume",
+          "flow_window_trading_days": 5,
+          "flow_unit": "shares",
+          "denominator_window_trading_days": 20,
+          "denominator_window_basis": "inclusive_signal_day",
+          "denominator_unit": "shares"
+        },
+        "coverage": {
+          "member_base": "eligible_members",
+          "required_ratio": 1.0,
+          "member_aggregation": "sum_over_eligible_members",
+          "absent_from_official_file": "net_zero_with_evidence",
+          "official_file_evidence": "same_exchange_same_day_chip_row_from_official_institutional_source_linked_to_raw_payload_of_that_endpoint_and_date",
+          "official_sources": {
+            "TWSE": "twse_t86",
+            "TPEx": "tpex_3insti"
+          },
+          "official_file_missing": "member_flow_unavailable",
+          "official_row_with_null_component": "member_flow_unavailable",
+          "applies_to": "hot_group_only"
+        }
+      },
+      "catalyst": {
+        "weight": 0.1,
+        "value_range": [
+          0.0,
+          1.0
+        ],
+        "formula": {
+          "operation": "weighted_capped_distinct_verified_events",
+          "terms": [
+            {
+              "weight": 0.5,
+              "window_trading_days": 1
+            },
+            {
+              "weight": 0.3,
+              "window_trading_days": 5
+            },
+            {
+              "weight": 0.2,
+              "window_trading_days": 20
+            }
+          ],
+          "normalization": {
+            "cap_distinct_events": 3
+          },
+          "accepted_source_types": [
+            "mops_material_information",
+            "twse_tpex_official_announcement",
+            "issuer_filing"
+          ]
+        },
+        "missing_value": null,
+        "missing_policy": "component_null_and_data_quality_partial"
+      }
+    }
+  },
+  "members_total": 46,
+  "members_truncated": false,
+  "members_endpoint": "/api/themes/official-industry-3dc064dd4f87e891/members",
+  "board": "industry",
+  "methodology": {
+    "relative_return": {
+      "weight": 0.35,
+      "value_range": [
+        0.0,
+        1.0
+      ],
+      "formula": {
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "member_aggregation": "equal_weight_mean",
+        "terms": [
+          {
+            "weight": 0.2,
+            "metric": "group_return_minus_benchmark_return",
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "metric": "group_return_minus_benchmark_return",
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.5,
+            "metric": "group_return_minus_benchmark_return",
+            "window_trading_days": 20
+          }
+        ]
+      }
+    },
+    "breadth": {
+      "weight": 0.25,
+      "value_range": [
+        0.0,
+        1.0
+      ],
+      "formula": {
+        "operation": "weighted_mean",
+        "member_aggregation": "share_of_members_with_positive_excess_return",
+        "terms": [
+          {
+            "weight": 0.2,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.5,
+            "window_trading_days": 20
+          }
+        ]
+      }
+    },
+    "volume_strength": {
+      "weight": 0.15,
+      "value_range": [
+        0.0,
+        1.0
+      ],
+      "formula": {
+        "operation": "cross_sectional_percentile_of_weighted_sum",
+        "member_aggregation": "median",
+        "terms": [
+          {
+            "weight": 0.5,
+            "metric": "volume_1d / mean(volume_prior_20d)",
+            "signal_window_trading_days": 1,
+            "baseline_window_trading_days": 20
+          },
+          {
+            "weight": 0.5,
+            "metric": "mean(volume_5d) / mean(volume_prior_20d)",
+            "signal_window_trading_days": 5,
+            "baseline_window_trading_days": 20
+          }
+        ]
+      }
+    },
+    "institutional_flow": {
+      "weight": 0.15,
+      "value_range": [
+        0.0,
+        1.0
+      ],
+      "formula": {
+        "operation": "cross_sectional_percentile",
+        "metric": "sum(foreign_buy + trust_buy + dealer_buy, 5d) / sum(volume, 20d)",
+        "formula_version": "institutional-flow/v2-shares-per-share-volume",
+        "flow_window_trading_days": 5,
+        "flow_unit": "shares",
+        "denominator_window_trading_days": 20,
+        "denominator_window_basis": "inclusive_signal_day",
+        "denominator_unit": "shares"
+      },
+      "coverage": {
+        "member_base": "eligible_members",
+        "required_ratio": 1.0,
+        "member_aggregation": "sum_over_eligible_members",
+        "absent_from_official_file": "net_zero_with_evidence",
+        "official_file_evidence": "same_exchange_same_day_chip_row_from_official_institutional_source_linked_to_raw_payload_of_that_endpoint_and_date",
+        "official_sources": {
+          "TWSE": "twse_t86",
+          "TPEx": "tpex_3insti"
+        },
+        "official_file_missing": "member_flow_unavailable",
+        "official_row_with_null_component": "member_flow_unavailable",
+        "applies_to": "hot_group_only"
+      }
+    },
+    "catalyst": {
+      "weight": 0.1,
+      "value_range": [
+        0.0,
+        1.0
+      ],
+      "formula": {
+        "operation": "weighted_capped_distinct_verified_events",
+        "terms": [
+          {
+            "weight": 0.5,
+            "window_trading_days": 1
+          },
+          {
+            "weight": 0.3,
+            "window_trading_days": 5
+          },
+          {
+            "weight": 0.2,
+            "window_trading_days": 20
+          }
+        ],
+        "normalization": {
+          "cap_distinct_events": 3
+        },
+        "accepted_source_types": [
+          "mops_material_information",
+          "twse_tpex_official_announcement",
+          "issuer_filing"
+        ]
+      },
+      "missing_value": null,
+      "missing_policy": "component_null_and_data_quality_partial"
+    }
+  },
+  "data_as_of": "2026-10-27",
+  "trend": [
+    {
+      "trading_date": "2026-09-23",
+      "score": 58.43,
+      "rank": 4,
+      "quality": "complete",
+      "eligible_members": 43
+    },
+    {
+      "trading_date": "2026-09-24",
+      "score": 66.46,
+      "rank": 3,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-09-29",
+      "score": 57.33,
+      "rank": 8,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-09-30",
+      "score": 53.01,
+      "rank": 10,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-01",
+      "score": 53.17,
+      "rank": 9,
+      "quality": "complete",
+      "eligible_members": 44
+    },
+    {
+      "trading_date": "2026-10-02",
+      "score": 50.88,
+      "rank": 14,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-05",
+      "score": 45.01,
+      "rank": 13,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-06",
+      "score": 45.85,
+      "rank": 14,
+      "quality": "complete",
+      "eligible_members": 43
+    },
+    {
+      "trading_date": "2026-10-07",
+      "score": 47.53,
+      "rank": 14,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-08",
+      "score": 42.58,
+      "rank": 19,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-12",
+      "score": 48.6,
+      "rank": 15,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-13",
+      "score": 70.43,
+      "rank": 5,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-14",
+      "score": 54.11,
+      "rank": 13,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-15",
+      "score": 65.15,
+      "rank": 8,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-16",
+      "score": 64.94,
+      "rank": 10,
+      "quality": "partial",
+      "eligible_members": 44
+    },
+    {
+      "trading_date": "2026-10-19",
+      "score": 62.17,
+      "rank": 8,
+      "quality": "partial",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-20",
+      "score": 62.05,
+      "rank": 11,
+      "quality": "complete",
+      "eligible_members": 44
+    },
+    {
+      "trading_date": "2026-10-21",
+      "score": 61.86,
+      "rank": 11,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-22",
+      "score": 94.35,
+      "rank": 2,
+      "quality": "complete",
+      "eligible_members": 45
+    },
+    {
+      "trading_date": "2026-10-27",
+      "score": 90.58,
+      "rank": 1,
+      "quality": "complete",
+      "eligible_members": 45
+    }
+  ],
+  "members_as_of": "2026-10-27",
+  "members": [
+    {
+      "exchange": "TPEx",
+      "symbol": "3147",
+      "name": "大綜",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "3158",
+      "name": "嘉實",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "3570",
+      "name": "大塚",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "4953",
+      "name": "緯致",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5201",
+      "name": "凱衛",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5202",
+      "name": "力新",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5210",
+      "name": "寶碩",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5211",
+      "name": "蒙恬",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5212",
+      "name": "凌網",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5310",
+      "name": "天剛",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5403",
+      "name": "中菲",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "5410",
+      "name": "國眾",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6123",
+      "name": "上奇",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6140",
+      "name": "訊達電腦",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6148",
+      "name": "驊宏資",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6163",
+      "name": "華電網",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6221",
+      "name": "晉泰",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6231",
+      "name": "系微",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6240",
+      "name": "松崗",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6516",
+      "name": "勤崴國際",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6590",
+      "name": "普鴻",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6593",
+      "name": "台灣銘板",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6697",
+      "name": "東捷資訊",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6751",
+      "name": "智聯服務",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6752",
+      "name": "叡揚",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6791",
+      "name": "虎門科技",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6874",
+      "name": "倍力",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6884",
+      "name": "海柏特",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "6898",
+      "name": "程曦資訊",
+      "instrument_type": "ipo",
+      "role": "member",
+      "valid_from": "2026-10-27",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "7767",
+      "name": "仁大資訊",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "7819",
+      "name": "精誠金融",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "8099",
+      "name": "大世科",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "8272",
+      "name": "全景軟體",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "8284",
+      "name": "三竹",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TPEx",
+      "symbol": "8416",
+      "name": "實威",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2427",
+      "name": "三商電",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2453",
+      "name": "凌群",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2468",
+      "name": "華經",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2471",
+      "name": "資通",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "2480",
+      "name": "敦陽科",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "3029",
+      "name": "零壹",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "4994",
+      "name": "傳奇",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "5203",
+      "name": "訊連",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "6112",
+      "name": "邁達特",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "6183",
+      "name": "關貿",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    },
+    {
+      "exchange": "TWSE",
+      "symbol": "6214",
+      "name": "精誠",
+      "instrument_type": "stock",
+      "role": "member",
+      "valid_from": "2026-09-08",
+      "valid_to": null,
+      "theme_evidence": null
+    }
+  ]
+}

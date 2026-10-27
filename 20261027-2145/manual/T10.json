@@ -1,0 +1,111 @@
+{
+  "rule": "candidates.json 依名次前 3 檔",
+  "trading_date": "2026-10-27",
+  "items": [
+    {
+      "rank": 1,
+      "instrument": {
+        "id": 770,
+        "exchange": "TWSE",
+        "symbol": "5876",
+        "name": "上海商銀",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 55.4,
+        "entry_zone": {
+          "low": 55.4,
+          "high": 55.4
+        },
+        "invalid_price": 53.99,
+        "target_1": 57.65,
+        "target_2": 59.62,
+        "risk_reward": 1.5957,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "外資與投信 5 日淨買超，籌碼分項 99、新聞情緒 97、族群 88 偏高，且突破 20 日高點、量比 2.0。",
+        "levels": "規則的進場區為單一價 55.4，條件失效的停損 53.99，距進場價約 1.41。第一目標 57.65、第二目標 59.62，第一目標 RR 約 1.60。",
+        "risks": "技術分項僅 41，相對偏弱。新聞情緒的偏多只是 AI 推論，且僅 1 則新聞。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-27T13:37:21.464976+00:00",
+        "input_hash": "101962cb1c960fb9b599d27825860e5351aca10d39f20d8ef42f7c8cbda102b8"
+      }
+    },
+    {
+      "rank": 2,
+      "instrument": {
+        "id": 248,
+        "exchange": "TWSE",
+        "symbol": "2207",
+        "name": "和泰車",
+        "instrument_type": "stock"
+      },
+      "strategy": "breakout_v1",
+      "levels": {
+        "entry_type": "breakout",
+        "entry": 551.0,
+        "entry_zone": {
+          "low": 551.0,
+          "high": 551.0
+        },
+        "invalid_price": 540.29,
+        "target_1": 568.14,
+        "target_2": 583.14,
+        "risk_reward": 1.6004,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "突破 20 日高點、量比 2.3，三大法人 5 日與 20 日皆淨買超，融資 5 日減少 6.5%，籌碼分項 92 為主要依據。",
+        "levels": "規則的進場區為單一價 551.0，條件失效的停損 540.29，距進場價約 10.71。第一目標 568.14、第二目標 583.14，第一目標 RR 約 1.60。",
+        "risks": "族群分項無資料，所屬產業與題材當日未排名，權重涵蓋僅 80。新聞情緒 48 偏中性，該則新聞未有 AI 方向判讀。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-27T13:37:21.464976+00:00",
+        "input_hash": "856f5ec1c849781cad8e877fca3b37878180438e0d18ee349115c86d52a5aa2e"
+      }
+    },
+    {
+      "rank": 3,
+      "instrument": {
+        "id": 199,
+        "exchange": "TWSE",
+        "symbol": "1904",
+        "name": "正隆",
+        "instrument_type": "stock"
+      },
+      "strategy": "pullback_v1",
+      "levels": {
+        "entry_type": "pullback",
+        "entry": 24.75,
+        "entry_zone": {
+          "low": 24.55,
+          "high": 25.07
+        },
+        "invalid_price": 24.24,
+        "target_1": 25.57,
+        "target_2": 26.29,
+        "risk_reward": 1.6078,
+        "earliest_execution_date": null
+      },
+      "llm_note": {
+        "status": "done",
+        "inference": true,
+        "selection": "回測 20 日均線、距均線 0.2%，三大法人 5 日與 20 日淨買超，融資 5 日減少 12.1%，技術 72、籌碼 83。",
+        "levels": "規則的進場區 24.55～25.07，條件失效的停損 24.24，在進場區下緣之下約 0.31。第一目標 25.57、第二目標 26.29，第一目標 RR 約 1.61。",
+        "risks": "族群分項無資料，造紙產業當日未排名，權重涵蓋僅 80。近 3 日無關聯新聞，新聞情緒 48 資訊有限，回測量比僅 0.8。",
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "candidate_notes_v1",
+        "generated_at": "2026-10-27T13:37:21.464976+00:00",
+        "input_hash": "f84e1723bc49d8b7818361de190ec6c468e89b365bfd66c6665ab3d305c7daac"
+      }
+    }
+  ]
+}

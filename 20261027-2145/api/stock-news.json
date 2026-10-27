@@ -1,0 +1,11 @@
+{
+  "items": [],
+  "meta": {
+    "limit": 50,
+    "next_cursor": null,
+    "has_more": false,
+    "sort": "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc",
+    "data_as_of": "2026-10-27",
+    "total": 0
+  }
+}
