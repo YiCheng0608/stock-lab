@@ -1,3 +1,4 @@
+<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制 -->
 # 操作手冊
 
 本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](ROADMAP.md)。
