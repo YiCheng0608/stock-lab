@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import unicodedata
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,10 +66,55 @@ def change_flags(paths: list[str]) -> dict[str, bool]:
     }
 
 
+def markdown_prose(text: str) -> str:
+    """Text without fenced code examples, which hold neither links nor headings."""
+    return re.sub(
+        r"^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?^[ \t]*\1[^\n]*$", "", text, flags=re.M | re.S
+    )
+
+
+def heading_slug(heading: str) -> str:
+    """The anchor GitHub gives a heading: downcase, drop all but word characters, `-` and
+    spaces, then spaces to `-`. Word characters are letters, marks, digits and `_`, so CJK
+    stays and full-width punctuation such as 「」（）／ goes."""
+    text = re.sub(r"<[^>]*>", "", heading)  # inline HTML renders no text
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text).replace("`", "")
+    return "".join(
+        c
+        for c in text.strip().lower()
+        if c in "- "
+        or unicodedata.category(c)[0] in "LM"
+        or unicodedata.category(c) in {"Nd", "Pc"}
+    ).replace(" ", "-")
+
+
+def anchors(text: str) -> set[str]:
+    """Heading anchors (a repeated one gets -1, -2, ...) and HTML id/name attributes."""
+    prose = markdown_prose(text)
+    found: set[str] = set(re.findall(r"<a\s[^>]*\b(?:id|name)=\"([^\"]+)\"", prose))
+    counts: dict[str, int] = {}
+    for heading in re.findall(
+        r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$", prose, flags=re.M
+    ):
+        slug = heading_slug(heading)
+        found.add(f"{slug}-{counts[slug]}" if slug in counts else slug)
+        counts[slug] = counts.get(slug, 0) + 1
+    return found
+
+
+# Absolute links into this repository's master are checked like relative ones.
+REPO_LINK = re.compile(
+    r"https://github\.com/YiCheng0608/stock-lab/(?:blob|tree)/master/"
+)
+
+
 def markdown_errors(path: str, text: str) -> list[str]:
-    # Only repository-relative file links; external URLs and heading anchors
-    # remain the local reviewer's responsibility. Ignore fenced code examples.
-    prose = re.sub(r"^(`{3,}|~{3,}).*?^\1[^\n]*$", "", text, flags=re.M | re.S)
+    """Links whose file is missing, or whose anchor no heading of a Markdown file makes.
+
+    Covers relative links and absolute links into master; other URLs are not fetched.
+    Fenced code examples are ignored.
+    """
+    prose = markdown_prose(text)
     errors = []
     targets = re.findall(
         r"\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^)]*\)))?\s*\)", prose
@@ -78,13 +124,72 @@ def markdown_errors(path: str, text: str) -> list[str]:
     )
     for raw in targets:
         link = raw.strip("<>")
-        parsed = urlsplit(link)
-        if parsed.scheme or parsed.netloc or not parsed.path or link.startswith("/"):
+        repo = REPO_LINK.match(link)
+        parsed = urlsplit(link[repo.end() :] if repo else link)
+        if not repo and (parsed.scheme or parsed.netloc or link.startswith("/")):
             continue
-        target = (ROOT / path).parent / unquote(parsed.path)
+        if repo:
+            target = ROOT / unquote(parsed.path)
+        elif parsed.path:
+            target = (ROOT / path).parent / unquote(parsed.path)
+        else:
+            target = ROOT / path
         if not target.exists():
             errors.append(f"{path}: missing relative link {link}")
+        elif parsed.fragment and target.suffix.lower() == ".md":
+            same = target.resolve() == (ROOT / path).resolve()
+            made = anchors(text if same else target.read_text(encoding="utf-8"))
+            if unquote(parsed.fragment) not in made:
+                errors.append(f"{path}: no heading makes the anchor of {link}")
     return errors
+
+
+# Each doc's first line names the concepts it is the one source for (#312).
+OWNS = re.compile(r"<!-- owns: (.*) -->")
+
+
+def owns_errors(docs: dict[str, str]) -> list[str]:
+    """docs maps docs/**/*.md and AGENTS.md to their text; no concept is owned twice."""
+    errors = []
+    owner: dict[str, str] = {}
+    for name, text in sorted(docs.items()):
+        line = OWNS.fullmatch(text.split("\n", 1)[0].rstrip("\r"))
+        if not line:
+            errors.append(f"{name}: the first line is not <!-- owns: <concepts> -->")
+            continue
+        for concept in re.split(r"[、,，]", line.group(1)):
+            key = concept.strip().casefold()
+            if not key:
+                errors.append(f"{name}: empty concept in the owns line")
+            elif key in owner:
+                errors.append(
+                    f"{name}: concept '{concept.strip()}' already owned by {owner[key]}"
+                )
+            else:
+                owner[key] = name
+    return errors
+
+
+def documentation_errors() -> list[str]:
+    """Links and anchors of every Markdown file, and the owns lines, in the working tree.
+
+    Every file, not only changed ones: moving a heading breaks links in files left alone.
+    """
+    listed = git("ls-files", "-z", "--cached", "--others", "--exclude-standard", "*.md")
+    texts = {
+        name: (ROOT / name).read_text(encoding="utf-8")
+        for name in sorted({n.decode("utf-8") for n in listed.split(b"\0") if n})
+        if (ROOT / name).is_file()
+    }
+    errors = [
+        error for name, text in texts.items() for error in markdown_errors(name, text)
+    ]
+    docs = {
+        name: text
+        for name, text in texts.items()
+        if name == "AGENTS.md" or (name.startswith("docs/") and name.endswith(".md"))
+    }
+    return errors + owns_errors(docs)
 
 
 def repository_checks(paths: list[str], base: str) -> None:
@@ -118,14 +223,14 @@ def repository_checks(paths: list[str], base: str) -> None:
                 import yaml
 
                 yaml.load(text, Loader=yaml.BaseLoader)
-            elif path.suffix == ".md":
-                errors.extend(markdown_errors(name, text))
         except (ValueError, SyntaxError, UnicodeError) as exc:
             errors.append(f"{name}: {exc}")
+    errors.extend(documentation_errors())
     if errors:
         raise ValueError("\n".join(errors))
     print(
-        f"Repository checks passed for {len(paths)} changed paths (external links/anchors not checked)."
+        f"Repository checks passed for {len(paths)} changed paths and the links of every "
+        "Markdown file (external links not checked)."
     )
 
 

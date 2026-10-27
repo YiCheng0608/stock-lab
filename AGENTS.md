@@ -1,3 +1,4 @@
+<!-- owns: 協作角色、任務生命週期、並行上限、工程原則、文件原則、規則與強制手段、上下文壓縮保留、流程變更 -->
 # 專案協作規則
 
 本文管角色與原則；操作、欄位與模板見[GitHub 工作手冊](docs/GITHUB_WORKFLOW.md)；產品方向與版本範圍見[ROADMAP](docs/ROADMAP.md)；前端視覺見[設計規範](docs/DESIGN_SYSTEM.md)。
@@ -94,6 +95,7 @@
 | 發佈 branch `release/*` 不能刪、不能強推，只經 PR（merge commit）且 CI `required` 綠才合併；CI 對 `release/**` 的 PR 與 push 都跑（#288） | GitHub ruleset（`release/*`）；CI `pull_request`／`push` 的 branches | repo ruleset、`.github/workflows/ci.yml` |
 | features 標「CI」的檢查都有實作、有實作的都標「CI」（#243） | CI `verify` job（`page_checks.py` 不一致就 exit 2）；後端測試 `test_every_ci_check_in_features_is_implemented` | `tools/verify/page_checks.py`（`registry_problems`）、`backend/tests/test_verify_checks.py` |
 | `checks.py repository` 檢查工作樹，含未 commit 的合併結果（#228） | CI `repository` job 的 unittest `RepositoryWorkingTree` | `tools/ci/checks.py`（`repository_checks`、`changed_paths`）、`tools/ci/test_checks.py` |
+| 每份 Markdown（不只改到的）的相對連結與指向 master 的絕對連結要找得到檔案，錨點要有標題或 HTML id 產生；`docs/**/*.md` 與 `AGENTS.md` 第一行是 `<!-- owns: … -->`，概念在全部文件間不重複（#319） | CI `repository` job 的 `repository` step；unittest `AnchorTests`、`OwnsTests`、`RepositoryWorkingTree` | `tools/ci/checks.py`（`markdown_errors`、`heading_slug`、`owns_errors`、`documentation_errors`）、`tools/ci/test_checks.py` |
 | CI `verify` job 只驗改動影響的頁，依 features「驗證範圍」選頁；不驗時 job 仍 success（#245） | CI `verify` job 的 Plan step；後端測試 `test_verify_plan.py`（各類改動的頁面範圍、前端檔清單涵蓋 import 它的檔） | `tools/verify/verify_plan.py`、`.claude/skills/verify-stock-lab/features/README.md`（驗證範圍）、`.github/workflows/ci.yml`（`verify` job） |
 | `backend/app/api.py` 每個 route 對到某頁或寫明排除與理由（#245） | 後端測試 `test_every_api_route_is_on_a_page_or_excluded`、`test_api_routes_match_the_router` | `tools/verify/verify_plan.py`（`route_problems`）、`backend/tests/test_verify_plan.py` |
 | verify 抓到的 bug，修的同一個 PR 要加一條會失敗的檢查（#245） | 無（統籌 review） | `docs/GITHUB_WORKFLOW.md`（任務流程第 6 步） |

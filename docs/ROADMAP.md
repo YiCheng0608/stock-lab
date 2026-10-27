@@ -1,3 +1,4 @@
+<!-- owns: 產品方向、目前產品能力、近期產品里程碑、V1 範圍基線、V1 gate、顯示原則、產品取捨 -->
 # 產品路線與能力邊界
 
 本文件管理產品方向、已驗能力及未完成核心；版本任務在 GitHub milestone，排序與狀態在 Issues／Projects（入口見[工作手冊](GITHUB_WORKFLOW.md#欄位與唯一來源)）。流程依 [AGENTS](../AGENTS.md)。

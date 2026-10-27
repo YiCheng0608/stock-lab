@@ -1,3 +1,4 @@
+<!-- owns: 新聞目標與來源政策、新聞資料契約、新聞去重與事件影響、新聞時間與排序、新聞 AI 摘要與推論、新聞 UI 與 API 契約 -->
 # 新聞與市場事件規格
 
 本文定義新聞來源、事件、時間與呈現的目標契約；實作狀態見 [ROADMAP](ROADMAP.md)，來源 coverage 見 [DATA_SOURCES](DATA_SOURCES.md)。
