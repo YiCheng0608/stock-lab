@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
 import json
 import random
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -499,3 +501,39 @@ def test_a_research_run_commits_each_score_date(use_copy, monkeypatch):
     per_day = committed[1] - committed[0]
     assert per_day > 0
     assert committed == [committed[0] + per_day * day for day in range(len(committed))]
+
+
+def test_a_research_run_stops_at_the_daily_window_and_a_rerun_completes_it(
+    use_copy, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "backtest_research", ROOT / "tools" / "research" / "backtest_research.py"
+    )
+    research = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(research)
+    monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
+    registry = research_registry([("breakout_v1", "volume")], canonical=False)
+    whole = use_copy("whole.db")
+    start, end = _window(whole, 25)
+    expected_rows, expected_groups = _research_result(whole, registry, start, end)
+
+    # A fake clock one minute per check from 18:20 Taipei: the 11th check is 18:30.
+    minutes = iter(range(20, 90))
+    clock = research.window_check(
+        lambda: datetime(2026, 10, 28, 10, 0, tzinfo=timezone.utc)
+        + timedelta(minutes=next(minutes))
+    )
+    factory = use_copy("paused.db")
+    stopped = pipeline.backtest(start, end, registry=registry, should_stop=clock)
+
+    assert research.paused(stopped) and "18:30" in stopped["error"]
+    assert stopped["run"]["status"] == "failed"
+    with factory() as db:
+        committed_days = db.scalar(
+            select(func.count(func.distinct(Signal.signal_date))).where(
+                Signal.signal_key.like(f"backtest-{stopped['run']['id']}-%")
+            )
+        )
+    assert committed_days == 11  # stopped after the 11th score date's commit
+    rows, groups = _research_result(factory, registry, start, end)
+    assert rows == expected_rows and groups == expected_groups

@@ -9,9 +9,13 @@ isolated database; the backtest writes signals, settlements and a
 of each instrument and session are built once.
 
 Refuses before importing the app when ``--db`` is the production database
-(inside ``stock-lab-data`` or ``STOCK_DATA_DIR``), when Taipei time is between
-18:30 and 21:30 (the daily job), or when free physical memory is under
-``--min-free-gb``.  Prints one JSON object: the run, the registry, elapsed
+(inside ``stock-lab-data`` or ``STOCK_DATA_DIR``, or the same file as its
+``stock.db``, a hard link included), when Taipei time is between 18:30 and
+21:30 (the daily job), or when free physical memory is under
+``--min-free-gb``.  A replay that reaches 18:30 stops after the score date or
+tracking batch it was committing and exits 3 with ``rerun``, the command that
+completes it (a rerun ends with the rows of one uninterrupted run).
+Otherwise it prints one JSON object: the run, the registry, elapsed
 seconds of the migration check and the replay, peak working set, the largest
 WAL size, and per strategy the signal, conditional and settlement counts.
 """
@@ -60,7 +64,18 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def production_problem(db: Path, environ: dict[str, str]) -> str | None:
+def production_files(environ: dict[str, str]) -> list[Path]:
+    """Where the production stock.db is: the home data directory and STOCK_DATA_DIR."""
+
+    files = [Path.home() / PRODUCTION_DIR_NAME / "stock.db"]
+    if environ.get("STOCK_DATA_DIR"):
+        files.append(Path(environ["STOCK_DATA_DIR"]) / "stock.db")
+    return files
+
+
+def production_problem(
+    db: Path, environ: dict[str, str], production: list[Path] | None = None
+) -> str | None:
     resolved = db.resolve()
     if PRODUCTION_DIR_NAME in (part.lower() for part in resolved.parts):
         return f"{db} is inside {PRODUCTION_DIR_NAME}"
@@ -69,6 +84,14 @@ def production_problem(db: Path, environ: dict[str, str]) -> str | None:
         root = Path(data_dir).resolve()
         if resolved == root or root in resolved.parents:
             return f"{db} is inside STOCK_DATA_DIR ({root})"
+    # A hard link to the production file passes every path check above.
+    for path in production_files(environ) if production is None else production:
+        try:
+            same = os.path.samefile(db, path)
+        except OSError:  # either file missing
+            continue
+        if same:
+            return f"{db} is the same file as the production {path}"
     return None
 
 
@@ -217,7 +240,30 @@ def counts(run_id: int) -> dict[str, dict[str, int]]:
     return result
 
 
+def window_check(clock=lambda: datetime.now(timezone.utc)):
+    """The replay's ``should_stop``: the daily-window reason at ``clock()``."""
+
+    return lambda: daily_window_problem(clock())
+
+
+def paused(result: dict) -> bool:
+    return str(result.get("error") or "").startswith("BacktestPaused")
+
+
+def rerun_command(argv: list[str]) -> list[str]:
+    """The command that completes a paused run: the same arguments without --force.
+
+    The paused run is ``failed``, which a rerun of the same request key resumes
+    without ``--force``.
+    """
+
+    return [sys.executable, str(Path(__file__).resolve())] + [
+        arg for arg in argv if arg != "--force"
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
     args = _parser().parse_args(argv)
     db = Path(args.db)
     problems = [
@@ -253,7 +299,11 @@ def main(argv: list[str] | None = None) -> int:
     init_db()
     migrated = time.perf_counter()
     result = pipeline.backtest(
-        args.start, args.end, force=args.force, registry=registry
+        args.start,
+        args.end,
+        force=args.force,
+        registry=registry,
+        should_stop=window_check(),
     )
     finished = time.perf_counter()
     peak = peak_memory_gb()
@@ -280,11 +330,14 @@ def main(argv: list[str] | None = None) -> int:
                 "largest_wal_gb": round(wal_largest, 3),
                 "free_memory_gb_at_start": round(free, 2),
                 "strategies": counts(run["id"]),
+                **({"rerun": rerun_command(argv)} if paused(result) else {}),
             },
             ensure_ascii=False,
             indent=2,
         )
     )
+    if paused(result):
+        return 3
     return 0 if run["status"] == "success" else 1
 
 

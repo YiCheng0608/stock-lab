@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -49,6 +50,42 @@ def test_the_production_database_is_refused(tmp_path):
 def test_the_daily_window_is_refused(utc, refused):
     now = datetime(2026, 10, 28, *utc, tzinfo=timezone.utc)
     assert (research.daily_window_problem(now) is not None) is refused
+
+
+def test_a_hard_link_to_the_production_file_is_refused(tmp_path):
+    # Stand-ins only: the real production file is never linked or opened.
+    production = tmp_path / "prod" / "stock.db"
+    production.parent.mkdir()
+    production.write_bytes(b"production")
+    link = tmp_path / "other" / "hard.db"
+    link.parent.mkdir()
+    os.link(production, link)
+    copy = tmp_path / "other" / "copy.db"
+    copy.write_bytes(production.read_bytes())
+
+    assert "same file" in research.production_problem(link, {}, [production])
+    assert research.production_problem(copy, {}, [production]) is None
+    # A missing production file (or --db) falls back to the path checks.
+    missing = [tmp_path / "gone" / "stock.db"]
+    assert research.production_problem(link, {}, missing) is None
+    assert research.production_problem(tmp_path / "none.db", {}, [production]) is None
+    assert research.production_files({"STOCK_DATA_DIR": "D:/data"})[1] == Path(
+        "D:/data/stock.db"
+    )
+
+
+def test_the_window_check_follows_its_clock_and_a_pause_prints_the_rerun():
+    times = iter(
+        datetime(2026, 10, 28, 10, minute, tzinfo=timezone.utc) for minute in (29, 30)
+    )
+    check = research.window_check(lambda: next(times))
+
+    assert check() is None and "18:30" in check()
+    assert research.paused({"error": "BacktestPaused: Taipei time 18:30 ..."})
+    assert not research.paused({"error": "RuntimeError: boom"})
+    assert research.rerun_command(["--db", "x.db", "--force", "--ablate", "all"])[
+        2:
+    ] == ["--db", "x.db", "--ablate", "all"]
 
 
 def test_a_refused_run_writes_nothing(tmp_path):

@@ -5076,12 +5076,26 @@ def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, An
     return _backtest_summary(run, grouped, signal_total - actionable_total)
 
 
+class BacktestPaused(RuntimeError):
+    """A research backtest stopped by its ``should_stop`` check after a commit."""
+
+
+def _pause_if(should_stop: Callable[[], str | None] | None) -> None:
+    reason = should_stop() if should_stop is not None else None
+    if reason:
+        raise BacktestPaused(reason)
+
+
 def _track_research_signals(
-    db: Session, run_id: int, evaluation_cutoff: date
+    db: Session,
+    run_id: int,
+    evaluation_cutoff: date,
+    should_stop: Callable[[], str | None] | None = None,
 ) -> tuple[int, int, int, int]:
     """Track a research run's signals one committed batch at a time.
 
-    Returns the signal, evaluation, settlement and non-actionable counts.
+    Returns the signal, evaluation, settlement and non-actionable counts;
+    ``should_stop`` is asked after each batch's commit.
     """
 
     prefix = f"backtest-{run_id}-%"
@@ -5108,6 +5122,7 @@ def _track_research_signals(
         signals += len(batch)
         last_id = batch[-1].id
         db.commit()
+        _pause_if(should_stop)
 
 
 def backtest(
@@ -5116,6 +5131,7 @@ def backtest(
     *,
     force: bool = False,
     registry: Mapping[str, Strategy] | None = None,
+    should_stop: Callable[[], str | None] | None = None,
 ) -> dict[str, Any]:
     """Replay canonical fixed-version rules with a strict daily as-of cutoff.
 
@@ -5123,6 +5139,10 @@ def backtest(
     database (``app.strategies.ablation``, ``tools/research``): its strategies
     are evaluated and their StrategyVersion rows written, and the request key
     names them so the run never reuses or is reused as a canonical run.
+    A research run asks ``should_stop`` after each score date's and each
+    tracking batch's commit; a reason stops it as a failed run
+    (``BacktestPaused``) that a rerun completes.  Without ``registry`` it is
+    never asked.
     """
 
     if start_date > end_date:
@@ -5233,6 +5253,7 @@ def backtest(
                 if registry is not None:
                     db.flush()
                     db.commit()
+                    _pause_if(should_stop)
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last
             # day's strategy rows disappear from signal_count and
@@ -5244,7 +5265,7 @@ def backtest(
                     evaluations,
                     settlements,
                     zero_actionable_count,
-                ) = _track_research_signals(db, run.id, end_date)
+                ) = _track_research_signals(db, run.id, end_date, should_stop)
             else:
                 backtest_signals = db.scalars(
                     select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
