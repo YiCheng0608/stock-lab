@@ -199,7 +199,9 @@ log start "interval_s=$interval pid=$$" >/dev/null
 while :; do
   poll
   [ "$once" = 1 ] && break
-  sleep "$interval"
+  # In the background, so a TERM ends the monitor now, not after the sleep.
+  sleep "$interval" &
+  wait $!
   if [ -e "$stop_file" ]; then
     rm -f "$stop_file"
     log stopped "by=$stop_file"

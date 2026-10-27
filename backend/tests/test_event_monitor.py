@@ -20,7 +20,7 @@ from test_coordinator_scripts import NOW, ROOT, Harness, _ok
 CI_RUN = "https://github.com/YiCheng0608/stock-lab/actions/runs/{}/job/{}"
 
 
-def _pr(job: int = 11, conclusion: str = "SUCCESS", merge: str = "BLOCKED") -> dict:
+def _pr(run: int = 1, conclusion: str = "SUCCESS", merge: str = "BLOCKED") -> dict:
     return {
         "number": 324,
         "title": "排程 wrapper 吸進 Python worker",
@@ -35,7 +35,7 @@ def _pr(job: int = 11, conclusion: str = "SUCCESS", merge: str = "BLOCKED") -> d
                 "startedAt": "2026-10-25T11:00:00Z",
                 "status": "COMPLETED",
                 "conclusion": conclusion,
-                "detailsUrl": CI_RUN.format(1, job),
+                "detailsUrl": CI_RUN.format(run, run * 10),
             }
         ],
         "labels": [],
@@ -135,7 +135,7 @@ def test_one_poll_records_each_event_once_and_wakes_once(mon: Harness) -> None:
     result = _monitor(mon)
     assert _ids(mon) == [
         "pr:324",
-        f"ci:324:{'c' * 12}:success:" + _ids(mon)[1].rsplit(":", 1)[1],
+        f"ci:324:{'c' * 12}:1:success",
         "comment:9",
     ]
     assert len(_sends(mon)) == 1
@@ -170,7 +170,7 @@ def test_a_restarted_monitor_does_not_wake_for_handled_events(mon: Harness) -> N
 def test_a_new_ci_run_is_a_new_event_and_an_edited_comment_is_not(mon: Harness) -> None:
     _monitor(mon)
     _done(mon, "3")
-    mon.answer("gh_pr_list", [_pr(job=12, conclusion="FAILURE", merge="DIRTY")])
+    mon.answer("gh_pr_list", [_pr(run=2, conclusion="FAILURE", merge="DIRTY")])
     mon.answer(
         "gh_comments",
         [
@@ -182,11 +182,53 @@ def test_a_new_ci_run_is_a_new_event_and_an_edited_comment_is_not(mon: Harness) 
     _monitor(mon, at=NOW + 60)
     new = _ids(mon)[3:]
     assert [i.split(":")[0] for i in new] == ["ci", "merge"], new
-    assert ":failure:" in new[0] and new[1] == f"merge:324:{'c' * 12}:DIRTY"
+    assert new == [f"ci:324:{'c' * 12}:2:failure", f"merge:324:{'c' * 12}:DIRTY"]
     assert len(_sends(mon)) == 2
     # The same failed run polled again: no event, no wake.
     _monitor(mon, at=NOW + 120)
     assert len(_ids(mon)) == 5 and len(_sends(mon)) == 2
+
+
+def _check(name: str, run: int, status: str, conclusion: str = "") -> dict:
+    return {
+        "name": name,
+        "workflowName": "CI",
+        "startedAt": f"2026-10-25T11:{run:02d}:00Z",
+        "status": status,
+        "conclusion": conclusion,
+        "detailsUrl": CI_RUN.format(run, run * 10 + len(name)),
+    }
+
+
+def test_a_run_cancelled_by_a_newer_one_is_no_ci_result(mon: Harness) -> None:
+    """PR #328, 2026-10-28: the push's first run was cancelled by the run of the PR
+    edit, leaving required=FAILURE; the newer run lists its required job only once
+    backend is done. Before the fix every poll recorded another "CI failure"."""
+    pr = _pr()
+    pr["statusCheckRollup"] = [
+        _check("backend", 40, "COMPLETED", "CANCELLED"),
+        _check("required", 40, "COMPLETED", "FAILURE"),
+        _check("changes", 47, "COMPLETED", "SUCCESS"),
+        _check("backend", 47, "IN_PROGRESS"),
+    ]
+    mon.answer("gh_pr_list", [pr])
+    _monitor(mon)
+    pr["statusCheckRollup"].append(_check("frontend", 47, "COMPLETED", "SUCCESS"))
+    mon.answer("gh_pr_list", [pr])
+    _monitor(mon, at=NOW + 60)
+    assert not [i for i in _ids(mon) if i.startswith("ci:")]
+    pr["statusCheckRollup"][3] = _check("backend", 47, "COMPLETED", "SUCCESS")
+    pr["statusCheckRollup"].append(_check("required", 47, "IN_PROGRESS"))
+    mon.answer("gh_pr_list", [pr])
+    _monitor(mon, at=NOW + 120)
+    assert not [i for i in _ids(mon) if i.startswith("ci:")]
+    pr["statusCheckRollup"][-1] = _check("required", 47, "COMPLETED", "SUCCESS")
+    mon.answer("gh_pr_list", [pr])
+    for minute in (3, 4):
+        _monitor(mon, at=NOW + 60 * minute)
+    assert [i for i in _ids(mon) if i.startswith("ci:")] == [
+        f"ci:324:{'c' * 12}:47:success"
+    ]
 
 
 def test_the_comment_cursor_moves_only_with_what_was_read(mon: Harness) -> None:

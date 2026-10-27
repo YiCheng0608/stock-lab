@@ -10,9 +10,9 @@ Files, all in <data>/logs/, each with a single writer:
 
   events.jsonl            monitor.sh; one JSON object per line, appended:
     {"type": "event", "seq", "id", "kind", "detected_at", "at", "ref", "summary", "url"}
-        a new event. ``id`` is the dedup key: one PR's CI result on one head commit and
-        one set of check jobs, one comment id, one end line of a job log. ``seq`` counts
-        up from 1. ``at`` is the source's own time (or null).
+        a new event. ``id`` is the dedup key: one PR's CI run (head commit, workflow run
+        id, conclusion of its required check), one comment id, one end line of a job
+        log. ``seq`` counts up from 1. ``at`` is the source's own time (or null).
     {"type": "wake", "at", "ok", "terminal", "upto", "detail"}
         the coordinator terminal was sent "有 N 個事件…" (ok) or the send failed; a
         successful wake covers every event up to seq ``upto``.
@@ -50,7 +50,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from coordinator_json import check_state, latest_checks, one_line, pr_line
+from coordinator_json import one_line, pr_line
 
 EVENTS = "events.jsonl"
 DONE = "events-done.jsonl"
@@ -71,6 +71,9 @@ SLOTS = 3
 MERGE_STATES = ("CLEAN", "DIRTY", "BEHIND", "UNSTABLE")
 JOB_FILES = 2  # newest log files read per job
 END_LINE = re.compile(r"^===== (\S+) end (.*)$")
+RUN_ID = re.compile(r"/actions/runs/(\d+)/")
+# The merge gate: CI's required check (docs/GITHUB_WORKFLOW.md, 欄位與唯一來源).
+GATE = "required"
 
 
 def iso(epoch: float) -> str:
@@ -185,9 +188,32 @@ def _short(text: str) -> str:
 # --- events from each source -------------------------------------------------------
 
 
+def ci_result(rollup) -> tuple[str, str] | None:
+    """(run id, conclusion) of the PR's newest CI run once its required check finished.
+
+    Only the newest run of the gate's workflow counts: a run cancelled by a newer one
+    leaves a failed required job behind, and the newer run lists its required job only
+    once the jobs it needs are done (seen on PR #328, 2026-10-28). So while the newest
+    run has no finished required check there is no result yet."""
+    runs = []
+    for c in rollup or []:
+        m = RUN_ID.search(c.get("detailsUrl") or "")
+        if m:
+            runs.append((int(m.group(1)), c))
+    gates = [(r, c) for r, c in runs if c.get("name") == GATE]
+    if not gates:
+        return None
+    workflow = max(gates, key=lambda g: g[0])[1].get("workflowName")
+    newest = max(r for r, c in runs if c.get("workflowName") == workflow)
+    gate = [c for r, c in gates if r == newest]
+    if not gate or (gate[-1].get("status") or "").upper() != "COMPLETED":
+        return None
+    return str(newest), (gate[-1].get("conclusion") or "unknown").lower()
+
+
 def pr_events(prs: list, previous: list) -> list[dict]:
-    """Opened, CI result, merge state, gone. CI is keyed by head commit and check jobs:
-    a re-run is a new job, so it is a new event; the same run polled again is not."""
+    """Open, CI result, merge state, gone. CI is keyed by head commit, workflow run and
+    conclusion: one run polled again is not new; a re-run that ends otherwise is."""
     out = []
     seen = set()
     for pr in prs:
@@ -198,15 +224,19 @@ def pr_events(prs: list, previous: list) -> list[dict]:
         ref, url = f"PR #{n}", pr.get("url") or ""
         sha = (pr.get("headRefOid") or "")[:12] or "-"
         title = one_line(pr.get("title") or "", 50)
-        out.append(_event(f"pr:{n}", "pr_opened", ref, f"新 PR：{title}", url))
-        state = check_state(pr.get("statusCheckRollup"))
-        if state in ("success", "failure"):
-            jobs = sorted(
-                c.get("detailsUrl") or f"{c.get('name')}={c.get('conclusion')}"
-                for c in latest_checks(pr.get("statusCheckRollup"))
+        out.append(_event(f"pr:{n}", "pr_opened", ref, f"open PR：{title}", url))
+        result = ci_result(pr.get("statusCheckRollup"))
+        if result:
+            run, state = result
+            out.append(
+                _event(
+                    f"ci:{n}:{sha}:{run}:{state}",
+                    "ci",
+                    ref,
+                    f"CI {state}（{sha[:7]}，run {run}）：{title}",
+                    url,
+                )
             )
-            key = f"ci:{n}:{sha}:{state}:{_short(' '.join(jobs))}"
-            out.append(_event(key, "ci", ref, f"CI {state}（{sha[:7]}）：{title}", url))
         merge = pr.get("mergeStateStatus") or ""
         if merge in MERGE_STATES:
             out.append(
