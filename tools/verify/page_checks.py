@@ -26,8 +26,8 @@ written in ``MANUAL``, in ``<out>/manual/<code>.json`` for an agent to judge.
 Writes ``<out>/api/*.json``, ``<out>/shots/*.png|txt|jsonl``, ``<out>/manual/``,
 ``<out>/results.json``, ``<out>/summary.md`` and ``<out>/status.md`` (the same
 tables without the evidence, for runs on private data) and prints one line per check.
-Exit 0 when no check failed (a matching ``KNOWN_FAILURES`` entry may fail; with
-``--fixture`` no check may be 無法判定 either), 1 when one did, 2 when the
+Exit 0 when no check failed (a matching, unexpired ``KNOWN_FAILURES`` entry may
+fail; with ``--fixture`` no check may be 無法判定 either), 1 when one did, 2 when the
 features files and ``CHECKS``/``MANUAL`` disagree or ``--g7`` finds the program
 is not the committed tip of G7_REF (the release branch).
 """
@@ -48,7 +48,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, Callable
@@ -65,17 +65,59 @@ TAIPEI = timezone(timedelta(hours=8))
 
 @dataclass(frozen=True)
 class Known:
-    """A known product defect: the Issue and a fragment of the failure message it causes."""
+    """A known product defect: the Issue, a fragment of the failure message it causes
+    and the last Taipei day (ISO date) the entry counts."""
 
     issue: str
     match: str
+    expires: str
+
+    def expired(self, now: datetime) -> bool:
+        return now.astimezone(TAIPEI).date() > date.fromisoformat(self.expires)
 
 
 # A check that fails because of a known product defect: reported, but it does not
 # fail the run.  Only a failure whose message contains ``match`` is the known one;
 # any other failure of the check fails as usual (#251: T6 failed on U+00A0 while
-# listed for #233).  When it passes the run fails, so the entry goes with the fix.
+# listed for #233).  When it passes the run fails, so the entry goes with the fix;
+# after ``expires`` the entry no longer counts, so it cannot stay unfixed (#311).
+# Registering: .claude/skills/verify-stock-lab/features/README.md (已知失敗).
 KNOWN_FAILURES: dict[tuple[str, str], Known] = {}
+KNOWN_ISSUE = re.compile(r"https://github\.com/YiCheng0608/stock-lab/issues/[0-9]+")
+KNOWN_DAYS = 30  # the longest an entry counts after the day it was added
+ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def known_problems(
+    entries: dict[tuple[str, str], Any], added: Callable[[tuple[str, str]], date]
+) -> list[str]:
+    """Each entry names a CI check, an Issue URL, a message fragment and an ISO
+    ``expires`` at most ``KNOWN_DAYS`` after ``added(key)``, the day it was added."""
+
+    problems = []
+    for (page, code), entry in entries.items():
+        name = f"KNOWN_FAILURES {page} {code}"
+        if code not in CHECKS.get(page, {}):
+            problems.append(f"{name}：不是 CHECKS 裡的檢查")
+        if not KNOWN_ISSUE.fullmatch(str(getattr(entry, "issue", ""))):
+            problems.append(f"{name}：issue 要是 stock-lab 的 Issue 連結")
+        if not getattr(entry, "match", ""):
+            problems.append(f"{name}：缺 match")
+        expires = getattr(entry, "expires", None)
+        try:
+            if not ISO_DATE.fullmatch(expires):
+                raise ValueError(expires)
+            last = date.fromisoformat(expires)
+        except (TypeError, ValueError):
+            problems.append(f"{name}：缺 expires 或不是 YYYY-MM-DD（{expires!r}）")
+            continue
+        start = added((page, code))
+        if not start <= last <= start + timedelta(days=KNOWN_DAYS):
+            problems.append(
+                f"{name}：expires {last} 要在加入日 {start} 起 {KNOWN_DAYS} 天內"
+            )
+    return problems
+
 
 API_ATTEMPTS = 3
 API_TIMEOUT_S = 30
@@ -2442,6 +2484,12 @@ def judge(run: Run, page: str, code: str, stock: Stock | None, label: str) -> Re
             detail, state = str(Upstream(upstream, detail)), UNDETERMINED
             break
     known, issue = KNOWN_FAILURES.get((page, code)), None
+    if known and known.expired(run.now):
+        if state == FAIL:
+            detail += f"（已知失敗 {known.issue} 已於 {known.expires} 到期）"
+        else:
+            detail += f"；KNOWN_FAILURES 的 {page} {code} 已到期，移除"
+        known = None
     if known and state == FAIL and known.match in detail:
         issue = known.issue
     elif known and state == PASS:
