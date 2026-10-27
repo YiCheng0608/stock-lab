@@ -163,7 +163,7 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 1. T+1 起依觸發條件成交；買賣各採不利 5 bps 滑價，淨報酬扣預設 30 bps round-trip 成本，並寫入 evidence。成本與滑價是固定假設，不區分商品與情境，不是真實通用費率。
 2. 每筆訊號最多追蹤 20 個交易日；T+5、T+20 各寫一筆 settlement。公司行動需可追溯調整因子；停牌、缺可判定價格或同日 stop／target 皆觸及且順序未知時標 incomparable。
-3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。
+3. replay 固定 canonical version，保存日期範圍、cutoff、設定快照與執行數；相同成功 request key 可重用既有 run。研究用的策略覆寫（`backtest(registry=...)`，逐一移除條件的 ablation 見 `app.strategies.ablation`）只在正式 DB 的副本或隔離 DB 執行：覆寫的策略以自己的名稱與 kind 寫 `strategy_versions`，request key 加 `:research:<策略名稱>`，不重用 canonical run，也不進 `REGISTRY`（[#318](https://github.com/YiCheng0608/stock-lab/issues/318)）。
 4. audit 保存 observation、data_incomplete 等所有規則列；technical summary 只納入 actionable evidence，按策略／標的類型／T+5、T+20 分組。
 5. 三個月或更短一律標 `insufficient_sample`；更長也不等於參數最佳化、walk-forward、獨立 OOS 或策略有效。勝率不能單獨決定採用。
 6. 逐日成交與出場規則只寫在 `app.tracking.track_path`（T+N 結果為 `settle`），系統訊號追蹤（`worker.pipeline._evaluate_signal_tracking`）與[使用者追蹤計畫](#使用者追蹤計畫)共用。

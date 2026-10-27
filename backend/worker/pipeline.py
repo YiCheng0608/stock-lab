@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -63,6 +63,7 @@ from app.news import sync_news_from_events
 from app.strategies import (
     REGISTRY,
     SignalLevels,
+    Strategy,
     StrategyInputs,
     canonical_config_snapshot,
     canonical_configs,
@@ -1311,17 +1312,21 @@ def _exact_json(left: Any, right: Any) -> bool:
     )
 
 
-def _ensure_strategies(db: Session) -> dict[str, StrategyVersion]:
+def _ensure_strategies(
+    db: Session, registry: Mapping[str, Strategy] | None = None
+) -> dict[str, StrategyVersion]:
     """Return the canonical row for each strategy under the current formula.
 
     A row is identified by (name, version, formula_version); rows stored under
     another formula, or unclassified by the 0009 migration, are never reused or
     modified, so signals written under them keep their original configuration.
+    ``registry`` replaces REGISTRY only for a research backtest
+    (``app.strategies.ablation``).
     """
 
-    snapshots = canonical_config_snapshot()
+    snapshots = canonical_config_snapshot(registry)
     versions: dict[str, StrategyVersion] = {}
-    for key, config in canonical_configs().items():
+    for key, config in canonical_configs(registry).items():
         snapshot = snapshots[key]
         strategy = db.scalar(
             select(StrategyVersion).where(
@@ -1671,12 +1676,14 @@ def _signal_context(
 
 
 def _evaluate_strategies(
-    context: _SignalContext, capture: Any = None
+    context: _SignalContext,
+    capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> dict[str, RuleEvaluation]:
     """Every registered strategy's rule on the shared inputs, in REGISTRY order."""
 
     evaluations: dict[str, RuleEvaluation] = {}
-    for key, strategy in REGISTRY.items():
+    for key, strategy in (REGISTRY if registry is None else registry).items():
         arguments = strategy.arguments(context.inputs)
         if capture is not None:
             if context.input_provenance is None:
@@ -1702,8 +1709,10 @@ def _write_strategy_signal(
     evaluations: dict[str, RuleEvaluation],
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> None:
-    rule = REGISTRY[strategy_key]
+    registry = REGISTRY if registry is None else registry
+    rule = registry[strategy_key]
     inputs = context.inputs
     group_score = context.group_score
     selected = evaluations[strategy_key]
@@ -1799,7 +1808,7 @@ def _write_strategy_signal(
             strategy_version=strategy.version,
         )
     # Every row records every registered strategy's state, keyed by its kind.
-    states = {REGISTRY[key].kind: evaluation for key, evaluation in evaluations.items()}
+    states = {registry[key].kind: evaluation for key, evaluation in evaluations.items()}
     signal.rationale = "; ".join(
         [
             *(
@@ -1915,6 +1924,7 @@ def _upsert_signal(
     strategies: dict[str, StrategyVersion],
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> bool:
     """Persist one auditable result per registered strategy and session.
 
@@ -1927,8 +1937,8 @@ def _upsert_signal(
     )
     if context is None:
         return False
-    evaluations = _evaluate_strategies(context, capture)
-    for strategy_key in REGISTRY:
+    evaluations = _evaluate_strategies(context, capture, registry)
+    for strategy_key in REGISTRY if registry is None else registry:
         _write_strategy_signal(
             db,
             instrument=instrument,
@@ -1939,6 +1949,7 @@ def _upsert_signal(
             evaluations=evaluations,
             namespace=namespace,
             capture=capture,
+            registry=registry,
         )
     return True
 
@@ -1950,6 +1961,7 @@ def _generate_signals(
     *,
     namespace: str = "analysis",
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> int:
     instruments = db.scalars(
         select(Instrument).where(
@@ -1967,6 +1979,7 @@ def _generate_signals(
                 strategies=strategies,
                 namespace=namespace,
                 capture=capture,
+                registry=registry,
             )
         )
     return count
@@ -5002,8 +5015,15 @@ def backtest(
     end_date: date,
     *,
     force: bool = False,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> dict[str, Any]:
-    """Replay canonical fixed-version rules with a strict daily as-of cutoff."""
+    """Replay canonical fixed-version rules with a strict daily as-of cutoff.
+
+    ``registry`` replaces REGISTRY only for a research run on an isolated
+    database (``app.strategies.ablation``, ``tools/research``): its strategies
+    are evaluated and their StrategyVersion rows written, and the request key
+    names them so the run never reuses or is reused as a canonical run.
+    """
 
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
@@ -5011,6 +5031,8 @@ def backtest(
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )
+    if registry is not None:
+        request_key += ":research:" + ",".join(registry)
     with SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
@@ -5048,10 +5070,12 @@ def backtest(
             "execution": "signal at T close; earliest fill T+1; settlement T+5/T+20",
             "signal_confidence_semantics": dict(SIGNAL_CONFIDENCE_SEMANTICS),
         }
+        if registry is not None:
+            metadata["research_registry"] = list(registry)
         run.metadata_json = metadata
         db.commit()
         try:
-            strategies = _ensure_strategies(db)
+            strategies = _ensure_strategies(db, registry)
             metadata["strategy_versions"] = {
                 key: {
                     "name": strategy.name,
@@ -5096,6 +5120,7 @@ def backtest(
                     score_date,
                     strategies,
                     namespace=f"backtest-{run.id}",
+                    registry=registry,
                 )
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last

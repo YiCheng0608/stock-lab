@@ -100,20 +100,31 @@ def current_strategy(name: str, version: str, formula_version: str) -> Strategy 
     return strategy
 
 
-def strategy_configs() -> dict[str, Mapping[str, Any]]:
-    return {key: strategy.config for key, strategy in REGISTRY.items()}
+def strategy_configs(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, Mapping[str, Any]]:
+    registry = REGISTRY if registry is None else registry
+    return {key: strategy.config for key, strategy in registry.items()}
 
 
-def canonical_configs() -> dict[str, Mapping[str, Any]]:
-    """Every configuration persisted as a StrategyVersion row."""
+def canonical_configs(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, Mapping[str, Any]]:
+    """Every configuration persisted as a StrategyVersion row.
 
-    return {**strategy_configs(), HOT_GROUP_CONFIG["name"]: HOT_GROUP_CONFIG}
+    ``registry`` replaces REGISTRY only for a research backtest
+    (``app.strategies.ablation``).
+    """
+
+    return {**strategy_configs(registry), HOT_GROUP_CONFIG["name"]: HOT_GROUP_CONFIG}
 
 
-def canonical_config_snapshot() -> dict[str, dict[str, Any]]:
+def canonical_config_snapshot(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Return a JSON round-tripped copy suitable for database persistence."""
 
-    return json.loads(json.dumps(canonical_configs(), sort_keys=True))
+    return json.loads(json.dumps(canonical_configs(registry), sort_keys=True))
 
 
 __all__ = [

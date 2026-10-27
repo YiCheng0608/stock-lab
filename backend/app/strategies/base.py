@@ -266,6 +266,39 @@ def trailing_positive_history(
     return [float(value) for value in trailing], ()
 
 
+def confirmation_failures(
+    metrics: Mapping[str, float], confirmations: Mapping[str, Any]
+) -> list[str]:
+    """Failure reasons of the shared confirmations a configuration lists.
+
+    A confirmation missing from ``confirmations`` is not checked (a research
+    ablation, ``app.strategies.ablation``); every canonical config lists all.
+    """
+
+    failures: list[str] = []
+    group = confirmations.get("group_relative_strength")
+    if (
+        group is not None
+        and metrics["group_excess_return_20d"] <= group["minimum_excess_return"]
+    ):
+        failures.append("group_relative_strength_not_positive")
+    flow = confirmations.get("institutional_flow")
+    if (
+        flow is not None
+        and metrics["institutional_flow_to_turnover_ratio_5d"]
+        < flow["minimum_net_flow_to_turnover_ratio"]
+    ):
+        failures.append("institutional_flow_materially_adverse")
+    margin = confirmations.get("margin_financing")
+    if (
+        margin is not None
+        and metrics["margin_balance_change_ratio_5d"]
+        > margin["maximum_balance_change_ratio"]
+    ):
+        failures.append("margin_financing_increase_abnormal")
+    return failures
+
+
 def required_finite(
     values: Mapping[str, object],
 ) -> tuple[dict[str, float], tuple[str, ...]]:
