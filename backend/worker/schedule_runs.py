@@ -378,19 +378,19 @@ def _ensure_schema() -> str:
     pending, so an up-to-date DB skips it.
     """
 
-    with pipeline.SessionLocal() as db:
-        bind = db.get_bind()
-        current = None
-        if inspect(bind).has_table("alembic_version"):
-            current = (
-                db.execute(text("SELECT version_num FROM alembic_version"))
-                .scalars()
-                .all()
-            )
-    if current == [REVISIONS[-1]]:
+    if _schema_revisions() == [REVISIONS[-1]]:
         return "current"
     pipeline.init_db()
     return "upgraded"
+
+
+def _schema_revisions() -> list[str] | None:
+    with pipeline.SessionLocal() as db:
+        if not inspect(db.get_bind()).has_table("alembic_version"):
+            return None
+        return list(
+            db.execute(text("SELECT version_num FROM alembic_version")).scalars()
+        )
 
 
 def _record_step(
@@ -581,10 +581,13 @@ def record_preflight_skip(
     """Log a run the scheduled job declined to start; no step runs.
 
     For ``already_running`` the job lock is held by a daily that may be
-    migrating this database at that moment, so the schema is left alone and a
-    row that cannot be written then (database locked, schema between
-    revisions) is reported in the result instead of raised; the job's log
-    keeps the skip either way.
+    migrating this database at that moment. The migration reads for minutes
+    inside one transaction before it writes, and any row another connection
+    commits in between makes that write fail ("database is locked", found on
+    a DB copy in #313 AC-7). So the schema is left alone, no row is written
+    unless the database is already at the code head, and a row that cannot be
+    written is reported in the result instead of raised; the job's log keeps
+    the skip either way.
     """
 
     if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
@@ -593,14 +596,24 @@ def record_preflight_skip(
     if reason != LOCK_SKIP_REASON:
         _ensure_schema()
         return _insert_skip(target, reason, trigger)
+    unwritten = {
+        "status": "skipped",
+        "reason": reason,
+        "schedule_run_id": None,
+        "date": target.isoformat(),
+    }
     try:
+        revisions = _schema_revisions()
+        if revisions != [REVISIONS[-1]]:
+            return {
+                **unwritten,
+                "error": f"skip row not written: database at {revisions}, code head"
+                f" {REVISIONS[-1]}; the daily holding the lock migrates it",
+            }
         return _insert_skip(target, reason, trigger)
     except SQLAlchemyError as exc:
         return {
-            "status": "skipped",
-            "reason": reason,
-            "schedule_run_id": None,
-            "date": target.isoformat(),
+            **unwritten,
             "error": f"skip row not written: {type(exc).__name__}: {exc}"[:500],
         }
 

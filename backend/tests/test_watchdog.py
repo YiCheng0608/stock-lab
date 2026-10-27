@@ -291,12 +291,14 @@ def _hold_lock(wd: Watchdog) -> tuple[subprocess.Popen, int]:
 
 
 def _force_kill(pid: int) -> None:
-    if os.name == "nt":
-        subprocess.run(
-            ["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=True
-        )
-    else:
-        os.kill(pid, signal.SIGKILL)
+    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
+
+    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
+    itself goes through WMI, and a busy machine cancels it ("call cancelled",
+    the #246 failure), so the tests call TerminateProcess directly.
+    """
+
+    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
 
 
 def test_a_running_watchdog_keeps_the_next_one_out(wd):

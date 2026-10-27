@@ -1036,24 +1036,8 @@ def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_th
         schedule_runs.record_preflight_skip(DAY, reason="unknown")
 
 
-def test_a_lock_skip_points_at_the_running_row_and_never_migrates(
-    database, monkeypatch
-):
-    # #313: the daily holding the job lock may be migrating this database, so the
-    # already_running skip of a second job must not start a second migration.
-    from sqlalchemy import text
-
-    from app.migration_revisions import REVISIONS
-
-    def migrate():
-        raise AssertionError("the lock skip ran init_db")
-
-    monkeypatch.setattr(pipeline, "init_db", migrate)
+def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
     with database() as db:
-        db.execute(
-            text("UPDATE alembic_version SET version_num = :value"),
-            {"value": REVISIONS[-2]},
-        )
         running = ScheduleRun(
             job="daily",
             target_date=DAY,
@@ -1074,6 +1058,34 @@ def test_a_lock_skip_points_at_the_running_row_and_never_migrates(
         "skipped",
         {"reason": "already_running", "related_run_id": running_id},
     )
+
+
+def test_a_lock_skip_writes_nothing_while_the_database_awaits_migration(
+    database, monkeypatch
+):
+    # #313 AC-7: the daily holding the job lock may be migrating this database.
+    # The migration reads inside one transaction for minutes before it writes; a
+    # row committed meanwhile (or a second migration) made its write fail.
+    from sqlalchemy import text
+
+    from app.migration_revisions import REVISIONS
+
+    def migrate():
+        raise AssertionError("the lock skip ran init_db")
+
+    monkeypatch.setattr(pipeline, "init_db", migrate)
+    with database() as db:
+        db.execute(
+            text("UPDATE alembic_version SET version_num = :value"),
+            {"value": REVISIONS[-2]},
+        )
+        db.commit()
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["schedule_run_id"] is None
+    assert skipped["error"].startswith(
+        f"skip row not written: database at ['{REVISIONS[-2]}']"
+    )
+    assert runs(database)[0] == []
 
 
 def test_a_lock_skip_that_cannot_write_its_row_reports_it(database, monkeypatch):
