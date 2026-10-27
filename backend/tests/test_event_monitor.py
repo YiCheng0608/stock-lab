@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from datetime import datetime, timezone
 
 import pytest
 
-from test_coordinator_scripts import NOW, Harness, _ok
+from test_coordinator_scripts import NOW, ROOT, Harness, _ok
 
 CI_RUN = "https://github.com/YiCheng0608/stock-lab/actions/runs/{}/job/{}"
 
@@ -408,3 +409,84 @@ def test_compaction_hook_logs_each_compaction_time(tmp_path) -> None:
     assert (folder / "sess-9.log").read_text(encoding="utf-8") == (
         "2026-10-25T12:00:00Z trigger=auto\n2026-10-25T12:01:30Z trigger=manual\n"
     )
+
+
+def test_a_stop_file_ends_the_loop_after_its_poll(mon: Harness) -> None:
+    logs = mon.data / "logs"
+    stop = logs / "monitor.stop"
+    stop.write_text("", encoding="utf-8")  # left for an earlier monitor: removed
+    # The fake sleep asks the monitor to stop while it waits for the next poll.
+    fake_sleep = mon.bin / "sleep"
+    fake_sleep.write_text(
+        f'#!/usr/bin/env bash\ntouch "{stop.as_posix()}"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    fake_sleep.chmod(0o755)
+    result = mon.run("monitor.sh")
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = (logs / "monitor.log").read_text(encoding="utf-8")
+    assert [line.split()[1] for line in log.splitlines()] == [
+        "stop_file_removed",
+        "start",
+        "poll",
+        "stopped",
+    ]
+    assert not stop.exists() and not (logs / "monitor.lock").exists()
+
+
+def _section(text: str, heading: str) -> str:
+    start = text.index(f"\n## {heading}\n")
+    end = text.find("\n## ", start + 1)
+    return text[start : end if end > 0 else None]
+
+
+def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
+    """AC-2: the handbook's 統籌 session (with the handoff text) and 無人值守運作 no
+    longer tell the coordinator to keep a GitHub watch or a patrol cron."""
+    text = (ROOT / "docs" / "GITHUB_WORKFLOW.md").read_text(encoding="utf-8")
+    for heading in ("統籌 session", "無人值守運作"):
+        section = _section(text, heading)
+        for word in ("監看", "巡檢 cron", "定時巡檢", "cron"):
+            assert word not in section, (heading, word)
+        assert "patrol.sh" in section
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (None, "none"),
+        ('{"written_at": "2026-10-25T11:50:00Z"}', "ok 600"),
+        ('{"written_at": "2026-10-25T11:49:59Z"}', "stale 601 2026-10-25T11:49:59Z"),
+        ('{"written_at": "2026-10-25T19:51:00+08:00"}', "ok 540"),
+        ("{", "unreadable"),
+        ('{"pid": 1}', "unreadable"),
+    ],
+    ids=[
+        "no-monitor",
+        "ten-minutes",
+        "past-ten-minutes",
+        "offset",
+        "partial",
+        "no-time",
+    ],
+)
+def test_the_watchdog_reads_the_monitor_heartbeat(tmp_path, content, expected) -> None:
+    """AC-3: more than 10 minutes without a poll is a stop; no file is no monitor yet."""
+    path = tmp_path / "monitor-heartbeat.json"
+    if content is not None:
+        path.write_text(content, encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "ops" / "watchdog_helper.py"),
+            "monitor-beat",
+            str(path),
+            str(NOW),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected

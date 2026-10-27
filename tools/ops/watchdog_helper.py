@@ -30,6 +30,11 @@ The result goes to stdout without a trailing newline.
                                    strategy_levels (the latest finished daily
                                    run's strategy_levels step did not succeed)
 
+  monitor-beat <file> <now>        the event monitor's heartbeat (#316):
+                                   "none" without the file (no monitor yet),
+                                   "ok <age_s>", "stale <age_s> <written_at>"
+                                   past MONITOR_STALE_SECONDS, or "unreadable"
+
 <now> is the watchdog clock in epoch seconds.
 """
 
@@ -305,6 +310,27 @@ def _strategy_levels(conn: sqlite3.Connection) -> str:
     )
 
 
+# The monitor polls every minute; ten minutes without a poll is a stop (#316 AC-3).
+MONITOR_STALE_SECONDS = 600
+
+
+def monitor_beat(path: str, now: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except FileNotFoundError:
+        return "none"
+    try:
+        written = json.loads(text)["written_at"]
+        at = datetime.fromisoformat(written.replace("Z", "+00:00"))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return "unreadable"
+    if at.tzinfo is not None:
+        at = at.astimezone(timezone.utc).replace(tzinfo=None)
+    age = int((_utc(now) - at).total_seconds())
+    return f"stale {age} {written}" if age > MONITOR_STALE_SECONDS else f"ok {age}"
+
+
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     command, args = argv[0], argv[1:]
@@ -316,6 +342,8 @@ def main(argv: list[str]) -> int:
         out = daily_result(args[0], args[1], args[2])
     elif command == "invariants":
         out = invariants(args[0], args[1])
+    elif command == "monitor-beat":
+        out = monitor_beat(args[0], args[1])
     else:
         raise SystemExit(f"unknown command: {command}")
     sys.stdout.write(out)

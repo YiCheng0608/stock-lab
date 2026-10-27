@@ -12,6 +12,9 @@
 # gh: at most 2 calls per poll (open PRs, then comments; the #1 comment takes the
 # comments' turn) and polls at least 60 seconds apart: the 5000/hour API limit is
 # shared by every session on the account. One monitor at a time (logs/monitor.lock/).
+# To stop it, create <data>/logs/monitor.stop: the monitor removes it and exits after
+# the poll it is in (Register-Monitor.ps1 -Unregister does so; stopping the scheduled
+# task may end only the PowerShell that hosts bash).
 # Each poll appends a line to <data>/logs/monitor.log and rewrites
 # <data>/logs/monitor-heartbeat.json, which the watchdog reads.
 #
@@ -189,9 +192,17 @@ poll() {
   echo "poll $(iso "$now") gh_calls=$gh_calls ${summary}${notes}"
 }
 
+# A stop file left from before this start was meant for an earlier monitor.
+stop_file="$logs/monitor.stop"
+[ -e "$stop_file" ] && rm -f "$stop_file" && log stop_file_removed "" >/dev/null
 log start "interval_s=$interval pid=$$" >/dev/null
 while :; do
   poll
   [ "$once" = 1 ] && break
   sleep "$interval"
+  if [ -e "$stop_file" ]; then
+    rm -f "$stop_file"
+    log stopped "by=$stop_file"
+    break
+  fi
 done
