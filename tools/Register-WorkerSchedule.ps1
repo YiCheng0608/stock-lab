@@ -3,11 +3,13 @@
 Create, update or remove the Windows Task Scheduler task for one worker job.
 
 .DESCRIPTION
-Registers \stock-lab\<Job>, which runs tools/Invoke-WorkerJob.ps1 -GitPull
-from this checkout. Register only from the release checkout (a clone that
-stays on origin/master), never from a working or task checkout: every run
-first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
-%USERPROFILE%\stock-lab-data.
+Registers \stock-lab\<Job>, which runs `python -m worker.cli job <Job> --git-pull`
+(backend/worker/job.py) from this checkout. Register only from the release
+checkout, never from a working or task checkout: every run first
+fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
+%USERPROFILE%\stock-lab-data. The task starts pythonw.exe next to PythonPath
+when there is one, so no console window opens; the job runs the worker with
+python.exe and no window.
 
   daily  Monday to Friday at the given Taipei times (default 18:30, retried at
          21:30 because institutional and margin data publish late). Exchange
@@ -23,7 +25,7 @@ first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
   news   Every IntervalHours hours (default 2), every day, starting at the
          next whole interval in Taipei time. After `worker.cli news` the
          same run executes `worker.cli news-llm` (AI summaries of the stored
-         news; see Invoke-WorkerJob.ps1 for the log layout and exit codes).
+         news; see backend/worker/job.py for the log layout and exit codes).
          news-llm needs the native claude executable of a signed-in Claude
          Code; the scheduler's PATH differs from an interactive shell's, so
          the task is registered with the explicit path: -ClaudeCli, else
@@ -33,8 +35,10 @@ first fast-forwards it. DataDir defaults to STOCK_DATA_DIR, then
 
 The task runs as the current user with an interactive logon (no stored
 password), so it only runs while that user is signed in; StartWhenAvailable
-runs a missed trigger after sign-in. A new instance is not started while the
-previous one is still running.
+runs a missed trigger after sign-in. The job itself keeps one run of each job
+at a time (a file lock) and stops the worker at its time limit; the task's
+IgnoreNew and ExecutionTimeLimit (a little longer than the job's limit) stay
+as a second line.
 
 Add -WhatIf to print what would be registered without changing anything.
 
@@ -65,7 +69,7 @@ param(
     [string[]]$TaipeiTimes = @('18:30', '21:30'),
     [ValidateRange(1, 12)]
     [int]$IntervalHours = 2,
-    # Passed to Invoke-WorkerJob.ps1 -MinFreeMemoryGB; a full-market daily
+    # Passed to the job's --min-free-memory-gb; a full-market daily
     # (analyze through indicators) peaks around 0.3 GB, while news is light.
     [ValidateRange(0, 1024)]
     [double]$DailyMinFreeMemoryGB = 2,
@@ -81,7 +85,6 @@ $ErrorActionPreference = 'Stop'
 $taskPath = '\stock-lab\'
 $taskName = $Job
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$invokeScript = Join-Path $PSScriptRoot 'Invoke-WorkerJob.ps1'
 
 if ($Unregister) {
     $existing = Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue
@@ -161,9 +164,9 @@ if ($Job -eq 'daily') {
         $triggers += New-ScheduledTaskTrigger -Weekly -DaysOfWeek $weekdays -At $local
     }
     $when = "Mon-Fri Taipei {0} (local {1})" -f ($TaipeiTimes -join ', '), ($localTimes -join ', ')
-    # Same as the abandoned-run limit in worker.schedule_runs and clearly
-    # shorter than the 3 hours between the default triggers.
-    $timeLimit = New-TimeSpan -Hours 2 -Minutes 30
+    # The job stops the worker at 2.5 hours (worker.job.TIME_LIMIT_MINUTES, the
+    # abandoned-run limit in worker.schedule_runs); the task limit is a backstop.
+    $jobLimit = New-TimeSpan -Hours 2 -Minutes 30
     $minFreeMemoryGB = $DailyMinFreeMemoryGB
 } else {
     $nowTaipei = [TimeZoneInfo]::ConvertTime([DateTime]::Now, $taipei)
@@ -172,28 +175,31 @@ if ($Job -eq 'daily') {
     $triggers += New-ScheduledTaskTrigger -Once -At $startLocal -RepetitionInterval (New-TimeSpan -Hours $IntervalHours) `
         -RepetitionDuration (New-TimeSpan -Days 3650)
     $when = "every $IntervalHours h from Taipei $($startTaipei.ToString('yyyy-MM-dd HH:mm')) (local $($startLocal.ToString('yyyy-MM-dd HH:mm')))"
-    $timeLimit = New-TimeSpan -Minutes 90
+    $jobLimit = New-TimeSpan -Minutes 90
     $minFreeMemoryGB = $NewsMinFreeMemoryGB
 }
+$timeLimit = $jobLimit + (New-TimeSpan -Minutes 10)
 
+# pythonw.exe has no console window; same interpreter and venv as python.exe.
+$taskPython = Join-Path (Split-Path -Parent $PythonPath) 'pythonw.exe'
+if (-not (Test-Path -LiteralPath $taskPython -PathType Leaf)) { $taskPython = $PythonPath }
 $argumentList = @(
-    '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass',
-    '-File', ('"' + $invokeScript + '"'),
-    '-Job', $Job,
-    '-PythonPath', ('"' + $PythonPath + '"'),
-    '-DataDir', ('"' + $DataDir + '"'),
-    '-LogDir', ('"' + $LogDir + '"'),
-    '-Trigger', 'scheduler',
-    '-MinFreeMemoryGB', ([string]$minFreeMemoryGB),
-    '-GitPull'
+    '-m', 'worker.cli', 'job', $Job,
+    '--trigger', 'scheduler',
+    '--data-dir', ('"' + $DataDir + '"'),
+    '--log-dir', ('"' + $LogDir + '"'),
+    '--min-free-memory-gb', $minFreeMemoryGB.ToString([Globalization.CultureInfo]::InvariantCulture),
+    '--git-pull'
 )
 if ($Job -eq 'news') {
-    if ($NoNewsLlm) { $argumentList += '-SkipNewsLlm' } else { $argumentList += @('-ClaudeCli', ('"' + $ClaudeCli + '"')) }
+    if ($NoNewsLlm) { $argumentList += '--skip-news-llm' } else { $argumentList += @('--claude-cli', ('"' + $ClaudeCli + '"')) }
 } elseif ($ClaudeCli) {
-    $argumentList += @('-ClaudeCli', ('"' + $ClaudeCli + '"'))
+    $argumentList += @('--claude-cli', ('"' + $ClaudeCli + '"'))
 }
 $arguments = $argumentList -join ' '
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $projectRoot
+# `-m worker.cli` resolves from the working directory.
+$workingDirectory = Join-Path $projectRoot 'backend'
+$action = New-ScheduledTaskAction -Execute $taskPython -Argument $arguments -WorkingDirectory $workingDirectory
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
     -ExecutionTimeLimit $timeLimit -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) `
@@ -210,9 +216,10 @@ if ($Job -eq 'news') { Write-Output ("Claude:   " + $(if ($NoNewsLlm) { '(news-l
 if ($Job -eq 'daily') { Write-Output ("Claude:   " + $(if ($ClaudeCli) { "$ClaudeCli (candidate_notes)" } else { '(not set; candidate_notes uses STOCK_CLAUDE_CLI or claude on the task PATH)' })) }
 Write-Output "Data:     $DataDir"
 Write-Output "Logs:     $LogDir\$Job-YYYYMMDD.log"
-Write-Output "Command:  powershell.exe $arguments"
+Write-Output "Command:  `"$taskPython`" $arguments"
+Write-Output "WorkDir:  $workingDirectory"
 Write-Output "Trigger:  $when"
-Write-Output "Limits:   run at most $timeLimit; skip below $minFreeMemoryGB GB free memory"
+Write-Output "Limits:   job stops the worker at $jobLimit (task limit $timeLimit); skip below $minFreeMemoryGB GB free memory"
 if ($PSCmdlet.ShouldProcess("$taskPath$taskName", 'Register scheduled task')) {
     Register-ScheduledTask -TaskPath $taskPath -TaskName $taskName -Action $action -Trigger $triggers `
         -Settings $settings -Principal $principal -Description $description -Force | Out-Null
