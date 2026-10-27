@@ -12,8 +12,8 @@ Refuses before importing the app when ``--db`` is the production database
 (inside ``stock-lab-data`` or ``STOCK_DATA_DIR``), when Taipei time is between
 18:30 and 21:30 (the daily job), or when free physical memory is under
 ``--min-free-gb``.  Prints one JSON object: the run, the registry, elapsed
-seconds of the migration check and the replay, peak working set, and per
-strategy the signal, conditional and settlement counts.
+seconds of the migration check and the replay, peak working set, the largest
+WAL size, and per strategy the signal, conditional and settlement counts.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import ctypes
 import json
 import os
 import sys
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -144,6 +145,33 @@ def peak_memory_gb() -> float | None:
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20  # KiB on Linux
 
 
+class WalSampler(threading.Thread):
+    """The largest ``<db>-wal`` size seen, sampled every ``interval`` seconds."""
+
+    def __init__(self, db: Path, interval: float = 5.0) -> None:
+        super().__init__(daemon=True)
+        self.path = db.with_name(db.name + "-wal")
+        self.interval = interval
+        self.largest = 0
+        self.done = threading.Event()
+
+    def sample(self) -> None:
+        try:
+            self.largest = max(self.largest, self.path.stat().st_size)
+        except OSError:
+            pass
+
+    def run(self) -> None:
+        while not self.done.wait(self.interval):
+            self.sample()
+
+    def stop(self) -> float:
+        self.done.set()
+        self.join()
+        self.sample()
+        return self.largest / 2**30
+
+
 def ablation_items(names: list[str]) -> list[tuple[str, str]]:
     from app.strategies.ablation import ABLATIONS, all_ablations
 
@@ -219,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
     except (Refused, ValueError) as exc:
         print(json.dumps({"refused": [str(exc)]}, ensure_ascii=False))
         return 2
+    wal = WalSampler(db.resolve())
+    wal.start()
     started = time.perf_counter()
     init_db()
     migrated = time.perf_counter()
@@ -227,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     finished = time.perf_counter()
     peak = peak_memory_gb()
+    wal_largest = wal.stop()
     run = result["run"]
     print(
         json.dumps(
@@ -246,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
                 "init_db_seconds": round(migrated - started, 1),
                 "backtest_seconds": round(finished - migrated, 1),
                 "peak_working_set_gb": None if peak is None else round(peak, 2),
+                "largest_wal_gb": round(wal_largest, 3),
                 "free_memory_gb_at_start": round(free, 2),
                 "strategies": counts(run["id"]),
             },

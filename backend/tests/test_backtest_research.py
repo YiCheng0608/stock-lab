@@ -106,3 +106,4 @@ def test_a_run_on_the_fixture_database_reports_each_strategy(tmp_path):
     assert set(report["strategies"]) == set(report["registry"])
     assert len({item["signals"] for item in report["strategies"].values()}) == 1
     assert report["peak_working_set_gb"] > 0
+    assert report["largest_wal_gb"] >= 0

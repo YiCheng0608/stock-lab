@@ -11,12 +11,18 @@ import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 import worker.pipeline as pipeline
 from app.db import enable_sqlite_foreign_keys
-from app.models import IngestionRun, Signal, SignalSettlement, StrategyVersion
+from app.models import (
+    IngestionRun,
+    Signal,
+    SignalEvaluation,
+    SignalSettlement,
+    StrategyVersion,
+)
 from app.strategies import REGISTRY, canonical_config_snapshot
 from app.strategies.ablation import (
     ABLATIONS,
@@ -188,16 +194,30 @@ def fixture_db(tmp_path_factory):
 
 
 @pytest.fixture
-def backtest_db(fixture_db, tmp_path, monkeypatch):
-    path = tmp_path / "stock.db"
-    shutil.copyfile(fixture_db, path)
-    engine = create_engine(f"sqlite:///{path.as_posix()}")
-    enable_sqlite_foreign_keys(engine)
-    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    monkeypatch.setattr(pipeline, "SessionLocal", factory)
+def use_copy(fixture_db, tmp_path, monkeypatch):
+    """Point the pipeline at a fresh copy of the fixture; returns its session factory."""
+
+    engines = []
+
+    def use(name: str = "stock.db"):
+        path = tmp_path / name
+        shutil.copyfile(fixture_db, path)
+        engine = create_engine(f"sqlite:///{path.as_posix()}")
+        enable_sqlite_foreign_keys(engine)
+        engines.append(engine)
+        factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+        monkeypatch.setattr(pipeline, "SessionLocal", factory)
+        return factory
+
     monkeypatch.setattr(pipeline, "init_db", lambda: None)
-    yield factory
-    engine.dispose()
+    yield use
+    for engine in engines:
+        engine.dispose()
+
+
+@pytest.fixture
+def backtest_db(use_copy):
+    return use_copy()
 
 
 @pytest.fixture
@@ -232,14 +252,22 @@ def varied_inputs(monkeypatch):
     monkeypatch.setattr(pipeline, "_signal_context", varied)
 
 
-def _window(factory) -> tuple:
+def _window(factory, sessions: int = 45) -> tuple:
     from app.models import MarketBar
 
     with factory() as db:
         days = db.scalars(
             select(MarketBar.trading_date).distinct().order_by(MarketBar.trading_date)
         ).all()
-    return days[-45], days[-1]
+    return days[-sessions], days[-1]
+
+
+def _columns(item) -> tuple:
+    return tuple(
+        (column.name, json.dumps(getattr(item, column.name), default=str))
+        for column in item.__table__.columns
+        if column.name not in {"id", "signal_id", "created_at", "updated_at"}
+    )
 
 
 def _rows(factory, run_id: int) -> dict[tuple, dict]:
@@ -257,6 +285,14 @@ def _rows(factory, run_id: int) -> dict[tuple, dict]:
                 for s in db.scalars(
                     select(SignalSettlement).where(
                         SignalSettlement.signal_id == signal.id
+                    )
+                )
+            )
+            evaluations = sorted(
+                _columns(item)
+                for item in db.scalars(
+                    select(SignalEvaluation).where(
+                        SignalEvaluation.signal_id == signal.id
                     )
                 )
             )
@@ -280,6 +316,7 @@ def _rows(factory, run_id: int) -> dict[tuple, dict]:
                 "evidence": signal.rule_evidence_json,
                 "rationale": signal.rationale,
                 "settlements": settlements,
+                "evaluations": evaluations,
             }
     return rows
 
@@ -375,3 +412,90 @@ def test_a_research_backtest_writes_its_versions_and_no_canonical_row(backtest_d
     assert names == {"breakout_v1_ablate_group"}
     # A second research run of the same registry reuses the run.
     assert pipeline.backtest(start, end, registry=registry)["run"]["id"] == run.id
+
+
+# ---- research runs commit as they go ----
+
+
+class _Boom(RuntimeError):
+    pass
+
+
+def _fail_once(monkeypatch, name: str, *, after: int):
+    """Make ``pipeline.<name>`` raise on its ``after``-th call, once."""
+
+    original = getattr(pipeline, name)
+    calls = {"n": 0}
+
+    def wrapper(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == after:
+            raise _Boom(f"{name} fails on call {after}")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, name, wrapper)
+
+
+def _research_result(factory, registry, start, end, **kwargs):
+    result = pipeline.backtest(start, end, registry=registry, **kwargs)
+    assert result["run"]["status"] == "success", result.get("error")
+    with factory() as db:
+        expected = pipeline.summarize_backtest(db, result["run"]["id"])
+    # The SQL summary is summarize_backtest's.
+    assert {
+        key: value for key, value in result.items() if key != "idempotent_reuse"
+    } == expected
+    return _rows(factory, result["run"]["id"]), result["groups"]
+
+
+@pytest.mark.parametrize(
+    ("failing", "after"),
+    [("_generate_signals", 20), ("_evaluate_signal_tracking", 30)],
+)
+def test_a_failed_research_run_rerun_matches_one_uninterrupted_run(
+    use_copy, monkeypatch, failing, after
+):
+    monkeypatch.setattr(pipeline, "RESEARCH_TRACKING_BATCH", 37)
+    registry = research_registry([("pullback_v1", "volume")])
+    whole = use_copy("whole.db")
+    start, end = _window(whole, 25)
+    expected_rows, expected_groups = _research_result(whole, registry, start, end)
+
+    factory = use_copy("failed.db")
+    _fail_once(monkeypatch, failing, after=after)
+    failed = pipeline.backtest(start, end, registry=registry)
+    assert failed["run"]["status"] == "failed" and "_Boom" in failed["error"]
+    # What the failed run committed stays (V1_SPEC 3).
+    assert _rows(factory, failed["run"]["id"])
+
+    rows, groups = _research_result(factory, registry, start, end)
+    assert rows == expected_rows and groups == expected_groups
+    forced_rows, forced_groups = _research_result(
+        factory, registry, start, end, force=True
+    )
+    assert forced_rows == expected_rows and forced_groups == expected_groups
+
+
+def test_a_research_run_commits_each_score_date(use_copy, monkeypatch):
+    factory = use_copy()
+    start, end = _window(factory)
+    registry = research_registry([("breakout_v1", "margin")], canonical=False)
+    committed = []
+    original = pipeline._generate_signals
+
+    def spy(db, score_date, strategies, **kwargs):
+        with factory() as probe:  # another connection sees only committed rows
+            committed.append(
+                probe.scalar(
+                    select(func.count(Signal.id)).where(
+                        Signal.signal_key.like("backtest-%")
+                    )
+                )
+            )
+        return original(db, score_date, strategies, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_generate_signals", spy)
+    pipeline.backtest(start, end, registry=registry)
+    per_day = committed[1] - committed[0]
+    assert per_day > 0
+    assert committed == [committed[0] + per_day * day for day in range(len(committed))]

@@ -4980,6 +4980,14 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
                 row["comparable"] += 1
             else:
                 row["incomparable"] += 1
+    return _backtest_summary(run, grouped, zero_actionable_count)
+
+
+def _backtest_summary(
+    run: IngestionRun,
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]],
+    zero_actionable_count: int,
+) -> dict[str, Any]:
     metadata = dict(run.metadata_json or {})
     assessment = _backtest_assessment(metadata, status=run.status)
     for row in grouped.values():
@@ -5010,6 +5018,98 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     }
 
 
+# Signals a research backtest tracks per committed batch.
+RESEARCH_TRACKING_BATCH = 2000
+
+
+def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, Any]:
+    """``summarize_backtest`` of one research run, counted in SQL.
+
+    A research run has hundreds of thousands of signals per strategy;
+    ``summarize_backtest`` loads every backtest signal into memory.
+    """
+
+    prefix = f"backtest-{run.id}-%"
+    actionable = func.json_extract(Signal.rule_evidence_json, "$.actionable") == 1
+    signal_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix))
+    )
+    actionable_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix), actionable)
+    )
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    for name, version, instrument_type, horizon, comparable, count in db.execute(
+        select(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+            func.count(SignalSettlement.id),
+        )
+        .join(Signal, Signal.id == SignalSettlement.signal_id)
+        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(Signal.signal_key.like(prefix), actionable)
+        .group_by(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+        )
+    ):
+        row = grouped.setdefault(
+            (name, version, instrument_type, horizon),
+            {
+                "strategy": name,
+                "version": version,
+                "instrument_type": instrument_type,
+                "horizon": horizon,
+                "sample": 0,
+                "comparable": 0,
+                "incomparable": 0,
+            },
+        )
+        row["sample"] += count
+        row["comparable" if comparable else "incomparable"] += count
+    return _backtest_summary(run, grouped, signal_total - actionable_total)
+
+
+def _track_research_signals(
+    db: Session, run_id: int, evaluation_cutoff: date
+) -> tuple[int, int, int, int]:
+    """Track a research run's signals one committed batch at a time.
+
+    Returns the signal, evaluation, settlement and non-actionable counts.
+    """
+
+    prefix = f"backtest-{run_id}-%"
+    signals = evaluations = settlements = zero_actionable = 0
+    last_id = 0
+    while True:
+        batch = db.scalars(
+            select(Signal)
+            .where(Signal.signal_key.like(prefix), Signal.id > last_id)
+            .order_by(Signal.id)
+            .limit(RESEARCH_TRACKING_BATCH)
+        ).all()
+        if not batch:
+            return signals, evaluations, settlements, zero_actionable
+        for signal in batch:
+            if not (signal.rule_evidence_json or {}).get("actionable"):
+                zero_actionable += 1
+                continue
+            current_evaluations, current_settlements = _evaluate_signal_tracking(
+                db, signal, evaluation_cutoff=evaluation_cutoff
+            )
+            evaluations += current_evaluations
+            settlements += current_settlements
+        signals += len(batch)
+        last_id = batch[-1].id
+        db.commit()
+
+
 def backtest(
     start_date: date,
     end_date: date,
@@ -5038,7 +5138,11 @@ def backtest(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
         if run and run.status == "success" and not force:
-            summary = summarize_backtest(db, run.id)
+            summary = (
+                summarize_backtest(db, run.id)
+                if registry is None
+                else _summarize_research_backtest(db, run)
+            )
             summary["idempotent_reuse"] = True
             return summary
         if not run:
@@ -5098,6 +5202,10 @@ def backtest(
             # derived as-of features visible to the subsequent group/signal
             # queries before replaying each score date.
             db.flush()
+            # A research run commits as it goes so the transaction (the WAL)
+            # stays one session's size; a failed one keeps what it committed.
+            if registry is not None:
+                db.commit()
             score_dates = db.scalars(
                 select(MarketBar.trading_date)
                 .where(
@@ -5122,34 +5230,47 @@ def backtest(
                     namespace=f"backtest-{run.id}",
                     registry=registry,
                 )
+                if registry is not None:
+                    db.flush()
+                    db.commit()
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last
             # day's strategy rows disappear from signal_count and
             # zero_actionable_count until after the run has been committed.
             db.flush()
-            backtest_signals = db.scalars(
-                select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
-            ).all()
-            signal_count = len(backtest_signals)
-            evaluations = 0
-            settlements = 0
-            for signal in backtest_signals:
-                if not (signal.rule_evidence_json or {}).get("actionable"):
-                    continue
-                current_evaluations, current_settlements = _evaluate_signal_tracking(
-                    db,
-                    signal,
-                    evaluation_cutoff=end_date,
+            if registry is not None:
+                (
+                    signal_count,
+                    evaluations,
+                    settlements,
+                    zero_actionable_count,
+                ) = _track_research_signals(db, run.id, end_date)
+            else:
+                backtest_signals = db.scalars(
+                    select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
+                ).all()
+                signal_count = len(backtest_signals)
+                evaluations = 0
+                settlements = 0
+                for signal in backtest_signals:
+                    if not (signal.rule_evidence_json or {}).get("actionable"):
+                        continue
+                    current_evaluations, current_settlements = (
+                        _evaluate_signal_tracking(
+                            db,
+                            signal,
+                            evaluation_cutoff=end_date,
+                        )
+                    )
+                    evaluations += current_evaluations
+                    settlements += current_settlements
+                zero_actionable_count = sum(
+                    1
+                    for signal in backtest_signals
+                    if not (signal.rule_evidence_json or {}).get("actionable")
                 )
-                evaluations += current_evaluations
-                settlements += current_settlements
-            zero_actionable_count = sum(
-                1
-                for signal in backtest_signals
-                if not (signal.rule_evidence_json or {}).get("actionable")
-            )
             run.status = "success"
-            run.records = len(backtest_signals)
+            run.records = signal_count
             run.data_as_of = end_date.isoformat()
             run.metadata_json = {
                 **metadata,
@@ -5164,6 +5285,8 @@ def backtest(
             )
             run.finished_at = datetime.utcnow()
             db.commit()
+            if registry is not None:
+                return _summarize_research_backtest(db, run)
             return summarize_backtest(db, run.id)
         except Exception as exc:
             db.rollback()
