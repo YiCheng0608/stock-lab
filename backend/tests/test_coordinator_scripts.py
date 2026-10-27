@@ -369,6 +369,11 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
     assert sent == _notice(dispatch.task.as_posix())
     assert line["task_file"] == dispatch.task.as_posix()
+    terminal = next(c for c in orca if c.startswith("terminal create"))
+    assert terminal.endswith(
+        "--command claude --model claude-opus-5-5 --effort high"
+        f' --add-dir "{dispatch.root.as_posix()}" --json'
+    )
     assert "branch -m YiCheng0608/task-282-dryrun task/282-dryrun" in " ".join(
         dispatch.calls("git")
     )
@@ -402,12 +407,68 @@ def test_dispatch_sends_the_absolute_path_of_a_relative_task_file(
     assert sent == _notice(dispatch.task.as_posix())
 
 
+def test_dispatch_lets_claude_read_a_task_file_under_spaces_and_cjk(
+    dispatch: Harness,
+) -> None:
+    """#327 review A: the directory goes to --add-dir in double quotes."""
+    folder = dispatch.root / "t282" / "任務 檔"
+    folder.mkdir(parents=True)
+    task = folder / "task.md"
+    shutil.copyfile(dispatch.task, task)
+    result = _dispatch(dispatch, task.as_posix())
+    assert result.returncode == 0, result.stdout + result.stderr
+    terminal = next(
+        c for c in dispatch.calls("orca") if c.startswith("terminal create")
+    )
+    assert f'--add-dir "{folder.as_posix()}" --json' in terminal
+    sent = (dispatch.fake / "sent_text.txt").read_bytes().decode("utf-8")
+    assert sent == _notice(task.as_posix())
+
+
+@pytest.mark.parametrize(
+    "where, error",
+    [
+        ("a\nb.md", "任務檔路徑不能有換行"),
+        ("a\rb.md", "任務檔路徑不能有換行"),
+        ("a$b/task.md", "任務檔目錄不能含"),
+        ("a%b/task.md", "任務檔目錄不能含"),
+        ("a!b/task.md", "任務檔目錄不能含"),
+        ("a`b/task.md", "任務檔目錄不能含"),
+    ],
+    ids=["lf", "cr", "dollar", "percent", "bang", "backtick"],
+)
+def test_dispatch_refuses_a_task_path_it_cannot_pass_on(
+    dispatch: Harness, where: str, error: str
+) -> None:
+    """A newline would end the sent line; these characters expand in the shell that
+    runs --command (cmd, PowerShell or bash). Refused before anything is created."""
+    task = dispatch.root / where
+    if "\n" not in where and "\r" not in where:  # Windows file names cannot hold either
+        task.parent.mkdir(parents=True)
+        shutil.copyfile(dispatch.task, task)
+    # Through the environment: Windows splits a command-line argument at a newline.
+    result = dispatch.run_bash(
+        'exec bash "$1" 282 dryrun --task-file "$TASK"',
+        (dispatch.ops / "dispatch.sh").as_posix(),
+        TASK=task.as_posix(),
+    )
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert error in result.stderr
+    assert not dispatch.calls("orca") and not dispatch.calls("git")
+
+
 def test_dispatch_help_shows_the_line_it_sends(dispatch: Harness) -> None:
-    """#315 AC-3: --help (and GITHUB_WORKFLOW 任務流程第 2 步) quote the sent line."""
+    """#315 AC-3: --help and GITHUB_WORKFLOW 任務流程第 2 步 quote the sent line.
+    A pull request changing only the workflow doc does not run this test: tools/ci/checks.py
+    routes docs/GITHUB_WORKFLOW.md to no backend job (it is not in BACKEND_READ_FILES)."""
     help_text = dispatch.run("dispatch.sh", "--help")
     assert help_text.returncode == 0, help_text.stderr
     assert _notice("<path>") in help_text.stdout
+    assert "--add-dir" in help_text.stdout
     assert "30000" not in help_text.stdout
+    workflow = (ROOT / "docs" / "GITHUB_WORKFLOW.md").read_text(encoding="utf-8")
+    assert _notice("<path>") in workflow
+    assert '--effort <effort> --add-dir "<任務檔目錄>"' in workflow
 
 
 @pytest.mark.parametrize(

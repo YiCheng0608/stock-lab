@@ -6,6 +6,8 @@
 #   請用 Read 工具讀取任務檔 <path>（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。
 # <path> is the task file's absolute path (C:/… on Windows). The task text is never typed
 # into the terminal, so it has no size limit and no character in it needs escaping.
+# claude starts with --add-dir "<the task file's directory>", so reading it needs no
+# permission prompt whatever the session's permission mode.
 # Sets the board to 開發中.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
@@ -69,6 +71,11 @@ cj utf8 "$task_file" || die "任務檔不存在、是空的或不是 UTF-8：$ta
 # program opens (C:/…, not /c/…).
 task_path="$(cd "$(dirname -- "$task_file")" && pwd)/$(basename -- "$task_file")" \
   && task_path="$(native "$task_path")" || die "任務檔路徑無法轉成絕對路徑：$task_file" 64
+task_dir="${task_path%/*}"
+case "$task_dir" in '' | *:) task_dir="$task_dir/" ;; esac
+# --command is typed into the terminal's shell (cmd, PowerShell or bash); inside double
+# quotes none of them expands a path free of these characters.
+case "$task_dir" in *['"$`%!']*) die "任務檔目錄不能含 \" \$ \` % !（會進 claude 的 --add-dir）：$task_dir" 64 ;; esac
 notice="請用 Read 工具讀取任務檔 $task_path（UTF-8），依其內容開工；開工留言回貼任務檔裡的 Issue 連結與 AC 數。"
 
 branch="task/$issue-$slug"
@@ -102,7 +109,7 @@ if [ "$orca_branch" != "$branch" ]; then
 fi
 
 out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" \
-  --command "claude --model $model --effort $effort" --json)" || report 1 "orca terminal create 失敗"
+  --command "claude --model $model --effort $effort --add-dir \"$task_dir\"" --json)" || report 1 "orca terminal create 失敗"
 handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca terminal create 沒有回傳 handle"
 
 # The flag is --timeout-ms: with a wrong flag wait returns ok:false at once and the text
