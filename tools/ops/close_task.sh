@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Clean up a merged task (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 6 步). Checks first,
 # deletes nothing unless every check passes:
-#   - the task's PR is merged and CI on master is green for its merge commit (and the
-#     newest master run is not red);
+#   - the task's PR is merged and CI on its target branch (the PR's baseRefName: master,
+#     or a long-lived integration branch such as feat/docker, #332) is green for its
+#     merge commit (and the newest run on that branch is not red);
 #   - the worktree on task/<issue>-* has no uncommitted changes and its branch is in
-#     origin/master; this shell does not run inside it;
+#     origin/<target branch>; this shell does not run inside it;
 #   - every terminal of the worktree is idle (agents: tui-idle; shells: no output for
 #     --idle-seconds), and none is the caller's own;
 #   - no --extra-dir is protected (guard_dir in coordinator_lib.sh): the repo root and
@@ -67,14 +68,14 @@ case "$slug" in -* | *[!a-z0-9-]*) die "--slug uses a-z, 0-9 and '-' only" 64 ;;
 prefix="task/$issue-"
 find_python
 
-wt_path="" wt_id="" branch="" merge_sha="" board="" steps=()
+wt_path="" wt_id="" branch="" base_branch="" merge_sha="" board="" steps=()
 
 report() { # report EXIT [ERROR]
   local error=null done_steps="" s
   [ -n "${2:-}" ] && error="$(json_str "$2")"
   for s in "${steps[@]+"${steps[@]}"}"; do done_steps="$done_steps${done_steps:+,}$(json_str "$s")"; done
-  printf '{"issue":%s,"pr":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"steps":[%s],"board":%s,"error":%s}\n' \
-    "$issue" "${pr:-null}" "$(json_str "$merge_sha")" "$(json_str "$wt_path")" "$(json_str "$branch")" \
+  printf '{"issue":%s,"pr":%s,"base":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"steps":[%s],"board":%s,"error":%s}\n' \
+    "$issue" "${pr:-null}" "$(json_str "$base_branch")" "$(json_str "$merge_sha")" "$(json_str "$wt_path")" "$(json_str "$branch")" \
     "$done_steps" "$(json_str "$board")" "$error"
   [ -n "${2:-}" ] && printf 'close_task.sh: %s\n' "$2" >&2
   exit "$1"
@@ -142,15 +143,18 @@ fi
 [ -n "$branch" ] || [ -n "$pr" ] || refuse "找不到 $prefix$slug* 的 worktree 或 branch；用 --pr 指定 PR"
 
 if [ -n "$pr" ]; then
-  out="$(gh pr view "$pr" --repo "$GH_REPO" --json number,state,mergeCommit,headRefName)" || refuse "讀不到 PR #$pr"
+  out="$(gh pr view "$pr" --repo "$GH_REPO" --json number,state,mergeCommit,headRefName,baseRefName)" || refuse "讀不到 PR #$pr"
   out="[$out]"
 else
-  out="$(gh pr list --repo "$GH_REPO" --head "$branch" --state merged --limit 1 --json number,state,mergeCommit,headRefName)" \
+  out="$(gh pr list --repo "$GH_REPO" --head "$branch" --state merged --limit 1 --json number,state,mergeCommit,headRefName,baseRefName)" \
     || refuse "gh pr list 失敗"
 fi
 [ "$(printf '%s' "$out" | cj get 0.state)" = MERGED ] || refuse "PR 尚未合併（${branch:-#$pr}）"
 pr="$(printf '%s' "$out" | cj get 0.number)"
 merge_sha="$(printf '%s' "$out" | cj get 0.mergeCommit.oid)" || refuse "PR #$pr 沒有 merge commit"
+# The branch the PR merged into: its CI and its history are what is checked below (#332).
+base_branch="$(printf '%s' "$out" | cj get 0.baseRefName)" || refuse "PR #$pr 讀不到目標分支（baseRefName）"
+case "$base_branch" in '' | -* | /* | */ | *..* | *[!A-Za-z0-9._/-]*) refuse "PR #$pr 的目標分支名稱不合規則：$base_branch" ;; esac
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
 # The PR's head stands in for a branch not found locally only when it is this task's:
 # another task's branch is never deleted here.
@@ -164,16 +168,16 @@ fi
 [ "$head_ref" = "$branch" ] || [ "$allow_head_mismatch" = 1 ] \
   || refuse "PR #$pr 的 head 是 $head_ref，不是 ${branch:-$prefix$slug*}（確定要借用這個 PR 才加 --allow-pr-head-mismatch）"
 
-out="$(gh run list --repo "$GH_REPO" --branch master --event push --workflow CI --limit 20 \
+out="$(gh run list --repo "$GH_REPO" --branch "$base_branch" --event push --workflow CI --limit 20 \
   --json headSha,status,conclusion)" || refuse "gh run list 失敗"
 read -r mine newest <<<"$(printf '%s' "$out" | cj ci-state "$merge_sha")"
-[ "$mine" = success ] || refuse "master 上 merge commit ${merge_sha:0:9} 的 CI 是 $mine，不是 success"
-[ "$newest" != failure ] || refuse "master 最新一次 CI 是 failure，先修 master"
+[ "$mine" = success ] || refuse "$base_branch 上 merge commit ${merge_sha:0:9} 的 CI 是 $mine，不是 success"
+[ "$newest" != failure ] || refuse "$base_branch 最新一次 CI 是 failure，先修 $base_branch"
 
-git -C "$repo_root" fetch --quiet origin master || refuse "git fetch origin master 失敗"
+git -C "$repo_root" fetch --quiet origin "$base_branch" || refuse "git fetch origin $base_branch 失敗"
 if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-  git -C "$repo_root" merge-base --is-ancestor "refs/heads/$branch" origin/master \
-    || refuse "本地 branch $branch 有不在 origin/master 的 commit"
+  git -C "$repo_root" merge-base --is-ancestor "refs/heads/$branch" "origin/$base_branch" \
+    || refuse "本地 branch $branch 有不在 origin/$base_branch 的 commit"
 fi
 
 terminals=()
