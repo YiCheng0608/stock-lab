@@ -5,9 +5,10 @@
 #   docker build -f backend/Dockerfile -t stock-lab-backend .
 #
 # No command of its own: compose (#335) starts the api and the scheduler. Versions are
-# pinned here and in backend/validation-requirements.lock.txt; node follows CI (22).
-ARG PYTHON_IMAGE=python:3.12.14-slim-bookworm
-ARG NODE_IMAGE=node:22-bookworm-slim
+# pinned here (base images by tag and digest, gh, Claude Code) and in
+# backend/validation-requirements.lock.txt, which also lists the Linux-only uvloop.
+ARG PYTHON_IMAGE=python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+ARG NODE_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 
 FROM ${NODE_IMAGE} AS node
 
@@ -29,6 +30,9 @@ ENV TZ=Asia/Taipei \
 
 # tzdata for TZ; git for the job's checks and the tests; chromium and a CJK font for
 # screenshot.cjs (without the font Chinese text renders as boxes, #243); tini as PID 1.
+# apt packages are not pinned: Debian drops superseded versions from the mirror, so a
+# pinned version stops building; the base digest fixes the release (bookworm) and the
+# CI docker job builds from scratch and prints the chromium version it got.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl git tzdata tini chromium fonts-noto-cjk \

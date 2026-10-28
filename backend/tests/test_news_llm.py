@@ -306,8 +306,9 @@ def test_cli_prefix_accepts_a_path_or_a_json_list(monkeypatch):
 
 
 def test_any_cli_file_is_accepted_without_a_native_exe_check(monkeypatch, tmp_path):
-    # #333: the image runs the npm-installed claude (a script); the Windows
-    # requirement of a native claude.exe (#313 AC-5) went with Task Scheduler.
+    # #333: the image runs the native binary the npm package installs (no shim);
+    # the Windows requirement of a native claude.exe (#313 AC-5) went with Task
+    # Scheduler, so the CLI's file name is not checked.
     script = tmp_path / "claude"
     script.write_text("#!/bin/sh\n", encoding="utf-8")
     for key in news_llm.API_KEY_ENV:

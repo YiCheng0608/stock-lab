@@ -86,6 +86,13 @@ class RoutingTests(unittest.TestCase):
                 change_flags([name]), {"python": True, "frontend": True}, name
             )
 
+    def test_the_image_build_context_requires_python(self):
+        # The docker job runs with the python flag (#333 review S4).
+        self.assertEqual(
+            change_flags([".dockerignore"]), {"python": True, "frontend": False}
+        )
+        self.assertTrue(change_flags(["backend/Dockerfile"])["python"])
+
     def test_dependency_constraints_require_python(self):
         self.assertTrue(
             change_flags(["backend/validation-requirements.lock.txt"])["python"]
