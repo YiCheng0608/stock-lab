@@ -2,8 +2,9 @@
 # Start an engineer session on an Issue (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 2 步):
 # Orca worktree from the latest base (origin/master, or --base: a long-lived integration
 # branch such as origin/feat/docker, #332), branch task/<issue>-<slug>, a visible
-# terminal running claude, and the task text from a UTF-8 file sent only after
-# `orca terminal wait --for tui-idle` reports satisfied:true. Sets the board to 開發中.
+# terminal running claude with COMPOSE_PROJECT_NAME=task-<issue> (#339), and the task
+# text from a UTF-8 file sent only after `orca terminal wait --for tui-idle` reports
+# satisfied:true. Sets the board to 開發中.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
@@ -105,8 +106,13 @@ if [ "$orca_branch" != "$branch" ]; then
   git -C "$path" branch -m "$orca_branch" "$branch" || report 1 "branch 改名失敗：$orca_branch → $branch"
 fi
 
+# The task's compose project (docs/GITHUB_WORKFLOW.md 本機檢查, #339): a docker compose run
+# without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, for
+# Orca's default Git Bash; in another shell claude does not start, the wait below is not
+# satisfied and nothing is sent.
 out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" \
-  --command "claude --model $model --effort $effort" --json)" || report 1 "orca terminal create 失敗"
+  --command "COMPOSE_PROJECT_NAME=task-$issue claude --model $model --effort $effort" --json)" \
+  || report 1 "orca terminal create 失敗"
 handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca terminal create 沒有回傳 handle"
 
 # The flag is --timeout-ms: with a wrong flag wait returns ok:false at once and the text

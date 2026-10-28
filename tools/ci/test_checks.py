@@ -321,6 +321,23 @@ class LintTests(unittest.TestCase):
             )
         self.assertTrue((ROOT / "ruff.toml").is_file())
 
+    def test_the_backend_image_has_the_repository_job_tools(self):
+        """The local checks run in the backend image (#339) with the pins CI's repository
+        job installs."""
+
+        def pins(path: str) -> list[list[str]]:
+            text = (ROOT / path).read_text(encoding="utf-8")
+            return [
+                re.findall(r"\S+==\S+", line)
+                for line in text.splitlines()
+                if "pip install" in line and "ruff==" in line
+            ]
+
+        ci = pins(".github/workflows/ci.yml")
+        self.assertEqual(len(ci), 1, ci)
+        self.assertIn("PyYAML==6.0.3", ci[0])
+        self.assertEqual(pins("backend/Dockerfile"), ci)
+
 
 # Real merged PRs (body, changed paths, labels, non-merge commit messages) from the GitHub API.
 SAMPLES = json.loads((ROOT / "tools/ci/pr_samples.json").read_text(encoding="utf-8"))
