@@ -30,6 +30,8 @@ os.environ["STOCK_RAW_DIR"] = str(_TEST_RAW_DIR)
 # The api container sets these (Issue 343); tests of app.main expect the defaults, so they never leak in.
 os.environ.pop("STOCK_API_PUBLIC_HOSTS", None)
 os.environ.pop("STOCK_API_ALLOWED_ORIGINS", None)
+# Set by worker.job for the worker it runs (Issue 336); never inherited by a test.
+os.environ.pop("STOCK_JOB_LOCK", None)
 
 
 def pytest_configure(config):

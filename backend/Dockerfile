@@ -70,6 +70,12 @@ RUN useradd --create-home --uid "${APP_UID}" --shell /bin/bash app \
 
 WORKDIR /app
 COPY --chown=app:app . /app
+# What schedule_runs records of the code a run used (#336); the context has no .git:
+#   docker build --build-arg STOCK_IMAGE_TAG=<tag> --build-arg STOCK_GIT_HEAD="$(git rev-parse HEAD)" ...
+ARG STOCK_IMAGE_TAG=""
+ARG STOCK_GIT_HEAD=""
+ENV STOCK_IMAGE_TAG=${STOCK_IMAGE_TAG} \
+    STOCK_GIT_HEAD=${STOCK_GIT_HEAD}
 USER app
 # PID 1 reaps orphans: a killed job's worker is re-parented to it, and without a reaper it
 # stays a zombie whose PID still looks alive (schedule_runs._pid_alive, the run row).
