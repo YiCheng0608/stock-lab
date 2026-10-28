@@ -93,6 +93,13 @@ class RoutingTests(unittest.TestCase):
         )
         self.assertTrue(change_flags(["backend/Dockerfile"])["python"])
 
+    def test_the_compose_files_require_python(self):
+        # The compose job runs with the python or the frontend flag (#335).
+        for name in ["docker-compose.yml", "docker-compose.dev.yml"]:
+            self.assertEqual(
+                change_flags([name]), {"python": True, "frontend": False}, name
+            )
+
     def test_dependency_constraints_require_python(self):
         self.assertTrue(
             change_flags(["backend/validation-requirements.lock.txt"])["python"]
@@ -726,6 +733,31 @@ class WorkflowTriggers(unittest.TestCase):
         for event in ("pull_request", "push"):
             with self.subTest(event=event):
                 self.assertEqual(workflow["on"][event]["branches"], long_lived)
+
+
+class ShellLineEndings(unittest.TestCase):
+    """Scripts run in Linux containers stay LF on a Windows checkout (#335).
+
+    A CRLF shell script fails there, and a bind-mounted one has no execute bit, so the
+    compose entrypoint is also executable in Git (the image chmods it besides).
+    """
+
+    def test_every_shell_script_is_lf_in_the_index_and_by_attribute(self):
+        listed = subprocess.check_output(
+            ["git", "ls-files", "--eol", "-s", "--", "*.sh"], cwd=ROOT, text=True
+        )
+        # <mode> <sha> <stage>, then i/<eol> w/<eol> attr/<attributes>, then the path.
+        rows = {
+            name: (stage, eol)
+            for stage, eol, name in (line.split("\t") for line in listed.splitlines())
+        }
+        self.assertIn("backend/docker/entrypoint.sh", rows)
+        for name, (stage, eol) in rows.items():
+            with self.subTest(name=name):
+                self.assertEqual(eol.split()[0], "i/lf")
+                self.assertIn("eol=lf", eol.split())
+                if name == "backend/docker/entrypoint.sh":
+                    self.assertEqual(stage.split()[0], "100755")
 
 
 if __name__ == "__main__":

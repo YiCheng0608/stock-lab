@@ -1,2 +1,5 @@
 # Preserve the LF source bytes required by rule_replay implementation binding.
 * text=auto eol=lf
+# Shell scripts and container entrypoints run in Linux containers, where a CRLF one fails
+# (#335). Kept apart from the line above so a change there cannot drop it.
+*.sh text eol=lf
