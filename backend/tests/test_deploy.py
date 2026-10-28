@@ -163,10 +163,15 @@ class Harness:
         git(self.origin, "commit", "--quiet", "-m", "commit")
 
     def ci(self, *conclusions: str, status: str = "completed") -> None:
-        """CI runs of every tagged commit, newest first."""
+        """CI runs of every tagged commit, newest (highest run id) first."""
         runs = [
-            {"headSha": sha, "status": status, "conclusion": conclusion}
-            for conclusion in conclusions
+            {
+                "databaseId": 1000 - n,
+                "headSha": sha,
+                "status": status,
+                "conclusion": conclusion,
+            }
+            for n, conclusion in enumerate(conclusions)
             for sha in self.sha.values()
         ]
         (self.fake / "gh_run_list.json").write_text(json.dumps(runs), encoding="utf-8")
@@ -336,6 +341,35 @@ def test_a_tag_whose_ci_is_not_green_is_refused(harness, conclusions, status, sh
     assert harness.state() == before
     assert not [c for c in harness.calls("git") if c.split()[2:3] == ["fetch"]]
     assert not [c for c in harness.calls("gh") if c.startswith("issue")]
+
+
+@pytest.mark.parametrize("cancelled_id,code", [(1, 0), (3, 1)], ids=["older", "newer"])
+def test_the_latest_run_is_the_highest_run_id_not_the_first_listed(
+    harness, cancelled_id, code
+):
+    # Two runs created at the same second: gh lists them in any order, and the
+    # concurrency group cancels the older one (PR #330's own CI).
+    sha = harness.sha["v1"]
+    runs = [
+        {
+            "databaseId": cancelled_id,
+            "headSha": sha,
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "databaseId": 2,
+            "headSha": sha,
+            "status": "completed",
+            "conclusion": "success",
+        },
+    ]
+    (harness.fake / "gh_run_list.json").write_text(json.dumps(runs), encoding="utf-8")
+    result = harness.deploy("v1", "--no-comment")
+    assert result.code == code, result.out
+    assert (harness.head() == sha) is (code == 0)
+    if code:
+        assert "CI 是 cancelled" in result.out
 
 
 @pytest.mark.parametrize("held", ["daily", "news", "watchdog"])

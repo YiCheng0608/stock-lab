@@ -11,7 +11,9 @@ value is missing or the condition is false, so a script can test the exit code.
   repo-id KEY         id of the orca repo whose remote canonicalKey is KEY
   terminals PATH      "handle agent lastOutputAt" per terminal of the worktree at PATH
   worktrees PREFIX    "path<TAB>branch<TAB>id" per orca worktree on branch refs/heads/PREFIX*
-  ci-state SHA        CI runs (newest first): "<state of SHA's newest run> <state of the newest run>"
+  ci-state SHA        CI state of master: "<state of SHA> <state of the newest run>"
+  commit-ci SHA       state of SHA's latest CI run: the highest databaseId, since runs
+                      created together (a cancelled duplicate) list in any order (#314)
   board               "itemId projectId fieldId optionId=name,..." of project 1 from the
                       issue query (item "-" and the issue node id last when the issue is
                       not on the board)
@@ -285,6 +287,16 @@ def main(argv: list[str]) -> int:
         mine = next((r for r in runs if r.get("headSha") == args[0]), None)
         newest = runs[0] if runs else None
         print(_run_state(mine), _run_state(newest))
+        return 0
+    if command == "commit-ci":
+        runs = [
+            r
+            for r in (doc if isinstance(doc, list) else [])
+            if isinstance(r, dict) and r.get("headSha") == args[0]
+        ]
+        print(
+            _run_state(max(runs, key=lambda r: r.get("databaseId") or 0, default=None))
+        )
         return 0
     if command == "board":
         issue = get(doc, "data.repository.issue") or {}

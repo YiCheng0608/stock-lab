@@ -28,7 +28,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 | --- | --- |
 | 工作樹 | 有未 commit 的改動（含未追蹤的檔），或有 `index.lock`／`MERGE_HEAD` |
 | tag | `git ls-remote origin` 沒有這個 tag |
-| CI | tag 所在 commit **自己的** CI（`gh run list --commit <sha> --workflow CI`）最新一次不是 success：紅、執行中或沒有都拒絕。不要求是 master 的祖先（`release/v1` 的 commit 有自己的 CI） |
+| CI | tag 所在 commit **自己的** CI（`gh run list --commit <sha> --workflow CI`）最新一次（run id 最大的，同時建立的 run 列出順序不定）不是 success：紅、執行中或沒有都拒絕。不要求是 master 的祖先（`release/v1` 的 commit 有自己的 CI） |
 | 排程 | 資料目錄 `locks/` 的 daily、news、watchdog 鎖（[OPERATIONS §6.2](OPERATIONS.md#62-dailynews-工作的註冊與管理)，與 job 同一套檔案鎖）有任一被持有。三把鎖在之後的 checkout、venv 重裝與寫記錄期間一直持有，job 在這段時間起跑會記 `already_running` |
 | 版本 | tag 早於 #314（tag 裡沒有 `tools/ops/deploy.sh`）：那一版的 job 起跑前會 `git pull`，在 detached HEAD 上每次都記 `git_pull_failed`。`v1.0`（`release/v1` 沒有 #314）屬於這種，第一次部署要用含 #314 的 tag |
 

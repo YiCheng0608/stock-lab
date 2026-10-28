@@ -8,8 +8,8 @@
 #   - the checkout has uncommitted changes (untracked files count) or a git operation
 #     in progress (index.lock, MERGE_HEAD);
 #   - origin has no such tag;
-#   - the newest CI run of the tag's own commit is not success (`gh run list --commit`;
-#     the commit need not be on master: a release/v1 commit has its own CI);
+#   - the latest CI run of the tag's own commit (`gh run list --commit`, highest run id)
+#     is not success; the commit need not be on master (a release/v1 commit has its own CI);
 #   - a scheduled job is running: the daily, news and watchdog locks of the data
 #     directory (backend/worker/job.py) are taken for the whole checkout, so no job
 #     starts until it is done, and a held one refuses the deploy;
@@ -101,8 +101,8 @@ if [ -z "${DEPLOY_LOCKS_HELD:-}" ]; then
   [ -n "$sha" ] || sha="$(printf '%s\n' "$refs" | awk -v r="refs/tags/$tag" '$2 == r { print $1 }')"
   [ -n "$sha" ] || refuse "origin 沒有 tag $tag"
   out="$(gh run list --repo "$GH_REPO" --commit "$sha" --workflow CI --limit 20 \
-    --json headSha,status,conclusion)" || refuse "gh run list 失敗"
-  read -r ci _ <<<"$(printf '%s' "$out" | cj ci-state "$sha")"
+    --json databaseId,headSha,status,conclusion)" || refuse "gh run list 失敗"
+  ci="$(printf '%s' "$out" | cj commit-ci "$sha")"
   [ "$ci" = success ] || refuse "tag $tag 的 commit ${sha:0:9} 最新一次 CI 是 $ci，不是 success"
 
   # The job locks, held for the rest of the deploy: Python takes each and runs the
