@@ -121,6 +121,7 @@
 | 派工只在 `orca terminal wait --for tui-idle` 回 `satisfied:true` 後送任務；`patrol.sh` 不覆寫別的統籌一小時內的心跳（#282） | 後端測試 `test_coordinator_scripts.py` | `tools/ops/dispatch.sh`、`tools/ops/patrol.sh` |
 | GitHub 只由事件 monitor 輪詢：每輪最多 2 次 gh、兩輪至少隔 60 秒；同一事件（同 PR 同 CI run、同留言 id）只記一次、只喚醒一次，monitor 重啟後已記或已處理的事件不再出現；`--record-only` 不喚醒也不留言；佇列等 60 分鐘沒有統籌心跳只在 #1 留言、不開 session（#316） | 後端測試 `test_event_monitor.py`（`test_a_poll_makes_at_most_two_gh_calls`、`test_one_poll_records_each_event_once_and_wakes_once`、`test_a_restarted_monitor_does_not_wake_for_handled_events`、`test_record_only_never_wakes_or_comments`、`test_no_heartbeat_for_an_hour_asks_the_user_once_on_1`、`test_the_queue_format`） | `tools/ops/monitor.sh`、`tools/ops/event_queue.py` |
 | `patrol.sh` 不呼叫 gh，改讀事件佇列；手冊「統籌 session」（含接手文）與「無人值守運作」不叫統籌自己掛 GitHub 監看或定時工作（#316） | 後端測試 `test_patrol_makes_no_gh_call`、`test_the_coordinator_keeps_no_polling_of_its_own` | `tools/ops/patrol.sh`、`docs/GITHUB_WORKFLOW.md` |
+| 事件 monitor 的心跳超過 10 分鐘沒更新或讀不出時間，看門狗在 #1 留言，每台北日一則；心跳檔不存在（monitor 未註冊）不判定（#316） | 看門狗檢查 `monitor_stale`；後端測試 `test_a_stopped_event_monitor_is_commented_once_a_day`、`test_an_unreadable_monitor_heartbeat_is_commented`、`test_the_watchdog_reads_the_monitor_heartbeat` | `tools/ops/watchdog.sh`、`tools/ops/watchdog_helper.py`（`monitor_beat`）、`docs/OPERATIONS.md`（§6.1） |
 | 每次壓縮的時間記在 `<session id>.log`，供以心跳的 session id 統計統籌的壓縮（#316） | 後端測試 `test_compaction_hook_logs_each_compaction_time` | `tools/ops/compact_hook.sh` |
 
 ## 上下文壓縮時保留

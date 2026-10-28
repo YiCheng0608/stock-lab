@@ -138,7 +138,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 - `daily`：週一至週五台北 21:30 後，當日 `logs/daily-YYYYMMDD.log` 不存在或沒有 `end` 列。
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
-- `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json` 超過 10 分鐘沒有更新（[§6.6](#66-統籌事件-monitor)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。
+- `monitor_stale`：事件 monitor 的 `logs/monitor-heartbeat.json` 超過 10 分鐘沒有更新，或讀不出輪詢時間（[§6.6](#66-統籌事件-monitor)；monitor 每分鐘寫一次）；檔案不存在（monitor 尚未註冊）時不判定。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
 - 資料不變量（每輪、不分時段，唯讀查 `stock.db`；各條數字印在 stdout，`--dry-run` 可看）：
   - `invariant_future_date`：`market_bars` 最新 `trading_date` 晚於台北今日。
@@ -257,7 +257,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 - **gh**：每輪最多 2 次，`gh pr list`（open PR 的 CI 與 `mergeStateStatus`）與 repo 層級 `issues/comments?since=`（游標存在 `logs/monitor-state.json`，第一輪往回 1 小時）；要在 #1 留言的那一輪以留言取代查留言。約 120 次／小時，帳號的 5000 次／小時由所有 session 共用。
 - **其他來源**：`orca worktree list`（task worktree 少於 3 個時記並行名額事件）、daily 每一個 `end` 列、news 的 news 或 news-llm 失敗的 `end` 列（各讀最新兩個日誌檔）。
-- **事件**：去重後附加到 `logs/events.jsonl`（格式寫在 [`event_queue.py`](../tools/ops/event_queue.py) 開頭）。去重鍵：PR 的 CI 結果以 PR、head commit 與檢查 job 為鍵（同一 run 不重記，re-run 是新事件）；`mergeStateStatus` 為 `CLEAN`／`DIRTY`／`BEHIND`／`UNSTABLE` 時以 PR、commit 與狀態為鍵；留言以留言 id 為鍵（編輯不重記，monitor 第一輪之前建立的留言不記）；新 PR、PR 離開 open 清單、名額以 task worktree 組合為鍵。重啟後以 `events.jsonl` 去重，已記過與已標記處理（`logs/events-done.jsonl`，統籌以 `patrol.sh --done` 寫入）的事件都不會再出現。
+- **事件**：去重後附加到 `logs/events.jsonl`（格式寫在 [`event_queue.py`](../tools/ops/event_queue.py) 開頭）。去重鍵：PR 的 CI 結果以 PR、head commit、最新 workflow run 的 run id 與其 `required` 檢查的結論為鍵（同一 run 不重記，re-run 是新事件；被新 run 取消的舊 run 不算，最新 run 的 `required` 跑完才記）；`mergeStateStatus` 為 `CLEAN`／`DIRTY`／`BEHIND`／`UNSTABLE` 時以 PR、commit 與狀態為鍵；留言以留言 id 為鍵（編輯不重記，monitor 第一輪之前建立的留言不記）；新 PR、PR 離開 open 清單、名額以 task worktree 組合為鍵。重啟後以 `events.jsonl` 去重，已記過與已標記處理（`logs/events-done.jsonl`，統籌以 `patrol.sh --done` 寫入）的事件都不會再出現。
 - **喚醒**：有新事件就對心跳檔（`logs/coordinator-heartbeat.json`）記的 terminal `orca terminal send` 一句「有 N 個事件，請處理佇列：bash tools/ops/patrol.sh」，結果記成 `events.jsonl` 的 `wake` 列；同一事件只在第一次成功送出時喚醒，送出失敗（沒有心跳、terminal 不存在、Orca 拒收）每 10 分鐘再試。
 - **請開統籌**：佇列有事件已 60 分鐘、期間統籌心跳都沒更新時，在 #1 留言「待使用者：請開統籌」，同一心跳只留一則（`stale` 列）；不開 session。
 - **自身狀態**：每輪寫 `logs/monitor-heartbeat.json` 並在 `logs/monitor.log` 記一列（UTC 時間、`poll`、`gh_calls`、新事件與未處理數、喚醒結果）；看門狗在心跳超過 10 分鐘時留言（[§6.1](#61-排程看門狗)）。同時只跑一個（`logs/monitor.lock/`，持有者的 pid 已不在或心跳超過 10 分鐘就視為殘留接手）。
