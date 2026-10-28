@@ -45,7 +45,7 @@ python -m uvicorn app.main:app --reload --port 8000
 | `STOCK_API_PUBLIC_HOSTS` | Host | `localhost:<port>` 或 `127.0.0.1:<port>` | 瀏覽器看到的 API 埠不是監聽埠：nginx 反代 `/api` 並轉送瀏覽器的 Host（`proxy_set_header Host $http_host`），或容器埠對映到另一個主機埠 |
 | `STOCK_API_ALLOWED_ORIGINS` | Origin 允許清單與 CORS（`configure_cors`，同一份清單） | `http://localhost:<port>` 或 `http://127.0.0.1:<port>` | 前端開發服務不在 5173（例如 dev 換 `WEB_PORT`） |
 
-多個值以逗號分隔，前後空白會去掉。`<port>` 是 1～65535、不補前導 0；主機名只收小寫的 `localhost` 與 `127.0.0.1`。萬用字元、空項目、`https` 或其他 scheme，以及帶 path、query、fragment、userinfo 的值都不接受。值不符時，`app.main` 匯入就丟 `ValueError`，訊息寫出變數名與那個值，API 不會啟動。worker 不讀這兩個變數。Host 與 Origin 各自比對：列在 `STOCK_API_ALLOWED_ORIGINS` 的埠不會因此成為可接受的 Host，反之亦然。由同一個反代送出的頁面，Origin 等於自身 `http://<Host>`，不必再列進 `STOCK_API_ALLOWED_ORIGINS`。
+多個值以逗號分隔，前後空白會去掉。`<port>` 是 1～65535、不補前導 0，而且一定要寫：瀏覽器連 80 埠時送出的 Host 不帶 port，列不進清單，寫入會被拒，所以反代或前端對外的埠（`WEB_PORT`）不能用 80。主機名只收小寫的 `localhost` 與 `127.0.0.1`。萬用字元、空項目、`https` 或其他 scheme，以及帶 path、query、fragment、userinfo 的值都不接受。值不符時，`app.main` 匯入就丟 `ValueError`，訊息寫出變數名與那個值，API 不會啟動。worker 不讀這兩個變數。Host 與 Origin 各自比對：列在 `STOCK_API_ALLOWED_ORIGINS` 的埠不會因此成為可接受的 Host，反之亦然。由同一個反代送出的頁面，Origin 等於自身 `http://<Host>`，不必再列進 `STOCK_API_ALLOWED_ORIGINS`。
 
 寫入會被拒的情況：以 LAN IP、機器名稱、IPv6 `[::1]` 或經代理改寫的 Host 連線（例如反代沒轉送 Host，API 看到 `api:8000`）；Host 大小寫變體，或 port 不符、省略且不在 `STOCK_API_PUBLIC_HOSTS`；Unix socket；`VITE_API_BASE` 不符 Host 規則；前端開發服務改用 5173 以外的埠，而該 origin 不在 `STOCK_API_ALLOWED_ORIGINS`。這不是身分驗證，同機其他程式送出符合規則的請求一樣放行。
 

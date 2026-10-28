@@ -249,6 +249,13 @@ def test_a_set_public_host_admits_that_host_only(method):
     assert outcome(gate, inner, foreign, method=method) == "origin_not_admitted"
     cross = foreign + [("Sec-Fetch-Site", "cross-site")]
     assert outcome(gate, inner, cross, method=method) == "cross_site_rejected"
+    # A public host is not an allowed Origin: a page on it calling the listening port directly is cross-site.
+    direct = [
+        ("Host", "localhost:8000"),
+        ("Origin", "http://localhost:8080"),
+        ("Sec-Fetch-Site", "same-site"),
+    ]
+    assert outcome(gate, inner, direct, method=method) == "cross_site_rejected"
     duplicated = [("Host", "localhost:8080"), ("Host", "localhost:8080")]
     assert outcome(gate, inner, duplicated, method=method) == "host_not_admitted"
     # A public host does not lift the rule that the server must listen on a TCP port.
@@ -452,6 +459,17 @@ def test_the_api_does_not_start_with_a_malformed_setting(tmp_path, settings):
     bad = [v for v in value.split(",") if v not in ("localhost:8080",)][0]
     assert repr(bad) in result.stderr, result.stderr
     assert "Uvicorn running" not in result.stderr
+
+
+def test_a_malformed_setting_stops_only_the_api_not_the_worker(tmp_path):
+    settings = {
+        config.PUBLIC_HOSTS_ENV: "localhost:8080,evil.example:8080",
+        config.ALLOWED_ORIGINS_ENV: "http://*",
+    }
+    worker = _app_main(tmp_path, ["-c", "import worker.cli"], **settings)
+    assert worker.returncode == 0, worker.stdout + worker.stderr
+    api = _app_main(tmp_path, ["-c", "import app.main"], **settings)
+    assert api.returncode != 0 and "ValueError: STOCK_API_" in api.stderr, api.stderr
 
 
 def test_the_product_app_gives_the_set_values_to_both_gate_and_cors(tmp_path):
