@@ -97,8 +97,9 @@ CI `verify` job 先跑 [`tools/verify/verify_plan.py`](../../../../tools/verify/
 | `GET /signals` | 訊號 API，前端未使用 |
 | `GET /signals/{signal_id}` | 訊號 API，前端未使用 |
 | `GET /events` | 事件 API，前端未使用 |
-| `GET /tracking` | 追蹤 API，前端未使用 |
-| `GET /tracking/{signal_key}` | 追蹤 API，前端未使用 |
+| `GET /tracking/{signal_key}` | 系統訊號的單筆追蹤 API，前端未使用（使用者追蹤計畫見 actions） |
+| `POST /tracking` | 寫入追蹤計畫；verify 不送 POST |
+| `POST /tracking/plans/{plan_id}/cancel` | 取消追蹤計畫；verify 不送 POST |
 | `POST /portfolio` | 寫入庫存；verify 不送 POST |
 | `DELETE /portfolio/{position_id}` | 刪除庫存；verify 不送 DELETE |
 | `GET /data-quality` | 系統資料頁，不在主導航 |

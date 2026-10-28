@@ -1001,6 +1001,34 @@ def t9(run: Run) -> str:
     return f"{k} 張卡各有 `資料日`"
 
 
+ADD_PLAN, TRACKED_PLAN = "加入追蹤", "已在追蹤"  # frontend/src/tracking/tracking.ts
+
+
+# One button or link per card, counted on the same cards as T7 (#253).
+@check("today", "T11", after=("T7",))
+def t11(run: Run) -> str:
+    text, payload = run.text(TODAY), candidates(run)
+    items = payload.get("items") or []
+    add = text.count(lambda line: line == ADD_PLAN)
+    tracked = text.count(lambda line: line == TRACKED_PLAN)
+    if payload.get("status") == "not_computed" or not items:
+        expect(
+            add + tracked == 0,
+            f"沒有候選，卻有 `{ADD_PLAN}` {add} 行、`{TRACKED_PLAN}` {tracked} 行",
+        )
+        return "沒有候選，也沒有加入追蹤按鈕"
+    expect(
+        add + tracked == len(items),
+        f"`{ADD_PLAN}` {add} 行＋`{TRACKED_PLAN}` {tracked} 行，items {len(items)}",
+    )
+    want = sum(item.get("open_plan_id") is not None for item in items)
+    expect(
+        tracked == want,
+        f"`{TRACKED_PLAN}` {tracked} 行，open_plan_id 非 null {want} 筆",
+    )
+    return f"{len(items)} 張卡：`{ADD_PLAN}` {add}、`{TRACKED_PLAN}` {tracked} = open_plan_id 非 null"
+
+
 # ---- news ----
 
 NEWS_TABS = {
@@ -1679,6 +1707,235 @@ def a7(run: Run) -> str:
         f"頁首 `{symbol}` 下一行是 {text.after(i)!r}，預期個股名稱 `{name}`（{text.at(i)}）",
     )
     return f"頁首 `{symbol}`／`{name}` = stock.json"
+
+
+# User tracking plans (#253): copy of frontend/src/tracking/tracking.ts.
+TRACKING_TITLE, HISTORY_TITLE = "追蹤計畫", "追蹤回看"
+EMPTY_OPEN_PLANS = "尚未建立追蹤計畫。可從今日候選或個股研究條件加入。"
+EMPTY_CLOSED_PLANS = "尚無已結束的計畫。"
+TRACKING_NOTE_START = "計畫價位來自建立當日的研究條件"
+CONFLICT_NOTE = "行情有更正，狀態待核對"
+HISTORY_SUMMARY = "版本、來源與逐日明細"
+PLAN_STATUS_LABELS = {
+    "pending": "待觸發",
+    "triggered": "已觸發",
+    "target_hit": "達標",
+    "invalidated": "失效",
+    "incomparable": "無法比較",
+    "expired": "到期",
+    "closed": "期滿結算",
+    "cancelled": "已取消",
+}
+SESSION_STATUS_LABELS = {
+    "not_triggered": "未觸發",
+    "active": "已模擬成交",
+    "target_1_hit": "達標",
+    "invalidated": "失效",
+    "ambiguous": "順序不明",
+    "suspended": "停牌",
+}
+PLAN_DATE_LINE = re.compile(r"^計畫資料日 (\S+) · 建立 (\S+)$")
+BADGE_DATE_LINE = re.compile(r"^資料 [0-9]{4}/[0-9]{2}/[0-9]{2}$")
+HISTORY_ROW = re.compile(r"^([0-9]{4}/[0-9]{2}/[0-9]{2})\t第 ([0-9]+) 日\t([^\t]+)")
+
+
+def plans(run: Run) -> tuple[list[dict], list[dict]]:
+    """The first page of open and of ended plans, as the actions page reads them."""
+
+    opened = run.get("tracking?status=open&page=1&page_size=20", "tracking-open.json")
+    closed = run.get(
+        "tracking?status=closed&page=1&page_size=20", "tracking-closed.json"
+    )
+    return opened.get("items") or [], closed.get("items") or []
+
+
+def signed_return(value: float) -> str:
+    """``formatSignedReturn``: 0.0123 -> ``+1.23%``, no negative zero."""
+
+    percent = f"{value * 100:.2f}"
+    return (
+        ("+" if value > 0 else "") + ("0.00" if percent == "-0.00" else percent) + "%"
+    )
+
+
+def plan_cards(text: Text) -> list[int]:
+    """The `計畫資料日` line of every plan card, in page order."""
+
+    return [i for i, line in enumerate(text.lines) if PLAN_DATE_LINE.match(line)]
+
+
+def card_body(text: Text, card: int) -> list[str]:
+    """A card's lines after its `計畫資料日` line, up to its details summary."""
+
+    end = text.find(HISTORY_SUMMARY, card)
+    return text.lines[card + 1 : end if end >= 0 else len(text.lines)]
+
+
+@check("actions", "A8")
+def a8(run: Run) -> str:
+    text, (opened, closed) = run.text(ACTIONS), plans(run)
+    for line in (TRACKING_TITLE, HISTORY_TITLE):
+        expect(text.has(line), f"缺整行 `{line}`")
+    facts = run.facts()
+    for items, fact, empty in (
+        (opened, "tracking_plans_open", EMPTY_OPEN_PLANS),
+        (closed, "tracking_plans_closed", EMPTY_CLOSED_PLANS),
+    ):
+        if not items:
+            # #251: an empty section passes only when the DB has no such plan either.
+            expect(
+                not facts.get(fact),
+                f"API 沒有計畫，但 DB {fact} 有 {facts.get(fact)} 筆",
+            )
+            expect(text.has(empty), f"API 沒有計畫，缺 `{empty}`")
+    items, cards = opened + closed, plan_cards(text)
+    expect(
+        len(cards) == len(items),
+        f"`計畫資料日` {len(cards)} 行，進行中 {len(opened)}＋已結束 {len(closed)} 筆",
+    )
+    problems = []
+    for item, card in zip(items, cards):
+        got = PLAN_DATE_LINE.match(text.lines[card]).groups()
+        want = (
+            slash(item.get("plan_date") or ""),
+            slash(taipei_day(item.get("created_at")) or "待核實"),
+        )
+        if got != want:
+            problems.append(
+                f"計畫 {item.get('id')} 為 {got}，預期 {want}（{text.at(card)}）"
+            )
+    expect(not problems, "；".join(problems))
+    return f"進行中 {len(opened)}＋已結束 {len(closed)} 張卡，計畫資料日與建立日 = API"
+
+
+@check("actions", "A9", after=("A8",))
+def a9(run: Run) -> str:
+    text, (opened, closed) = run.text(ACTIONS), plans(run)
+    items, cards = opened + closed, plan_cards(text)
+    expect(
+        len(cards) == len(items), f"`計畫資料日` {len(cards)} 行，計畫 {len(items)} 筆"
+    )
+    problems = []
+    for item, card in zip(items, cards):
+        name = f"計畫 {item.get('id')}"
+        badge = next(
+            (i for i in range(card - 1, 0, -1) if BADGE_DATE_LINE.match(text.lines[i])),
+            -1,
+        )
+        status = text.lines[badge - 1] if badge > 0 else None
+        want = PLAN_STATUS_LABELS.get(item.get("status"), "狀態待核實")
+        if status != want:
+            problems.append(
+                f"{name} 狀態標籤 {status!r}，預期 `{want}`（{text.at(card)}）"
+            )
+        conflict = CONFLICT_NOTE in text.lines[badge + 1 : card]
+        if conflict != (item.get("data_quality") == "transition_conflict"):
+            problems.append(
+                f"{name} data_quality {item.get('data_quality')}，`{CONFLICT_NOTE}` {'有' if conflict else '沒有'}"
+            )
+        body = card_body(text, card)
+        results = [line for line in body if line.startswith("模擬報酬")]
+        if item.get("open"):
+            if results:
+                problems.append(f"{name} 進行中卻有 {results}")
+        elif (
+            item.get("result_comparable") is True
+            and item.get("result_return") is not None
+        ):
+            line = f"模擬報酬 {signed_return(item['result_return'])}"
+            if line not in body:
+                problems.append(f"{name} 缺整行 `{line}`，實際 {results}")
+        elif not any(line.startswith("模擬報酬：無法比較") for line in results):
+            problems.append(
+                f"{name} 已結束不可比較，缺 `模擬報酬：無法比較`，實際 {results}"
+            )
+    rate = [
+        text.at(i)
+        for i, line in enumerate(text.lines)
+        if "勝率" in line and not line.startswith(TRACKING_NOTE_START)
+    ]
+    if rate:
+        problems.append(f"出現 `勝率`：{'、'.join(rate)}")
+    expect(not problems, "；".join(problems))
+    return (
+        f"{len(opened) + len(closed)} 張卡的狀態、更正標示與模擬報酬 = API；沒有 `勝率`"
+    )
+
+
+@check("actions", "A10")
+def a10(run: Run) -> str:
+    text = run.text(ACTIONS)
+    heads = {
+        line: text.find(line) for line in ("我的庫存", TRACKING_TITLE, HISTORY_TITLE)
+    }
+    missing = [line for line, i in heads.items() if i < 0]
+    expect(not missing, f"缺整行 {missing}")
+    stock, plan, history = heads.values()
+    expect(
+        stock < plan < history,
+        f"行序 我的庫存 {stock}、追蹤計畫 {plan}、追蹤回看 {history}",
+    )
+    first_action = text.find("查看個股詳情 →")
+    end = first_action if first_action >= 0 else len(text.lines)
+    expect(history < end, f"行動卡（{text.at(first_action)}）在 `追蹤回看` 之前")
+    problems = [
+        f"`記錄來源` 在庫存區外（{text.at(i)}）"
+        for i, line in enumerate(text.lines)
+        if line.startswith("記錄來源 ") and not stock < i < plan
+    ] + [
+        f"`{line[:4]}` 在追蹤區外（{text.at(i)}）"
+        for i, line in enumerate(text.lines)
+        if line.startswith(("模擬成交", "模擬出場", "模擬報酬")) and not plan < i < end
+    ]
+    expect(not problems, "；".join(problems))
+    return "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動卡；庫存與模擬的行各在自己的區塊"
+
+
+@check("actions", "A11", after=("A8",))
+def a11(run: Run) -> str:
+    text, (opened, closed) = run.text(ACTIONS), plans(run)
+    items, cards = opened + closed, plan_cards(text)
+    expect(
+        len(cards) == len(items), f"`計畫資料日` {len(cards)} 行，計畫 {len(items)} 筆"
+    )
+    rows_of: list[list[tuple[str, str, str]]] = []
+    for n, card in enumerate(cards):
+        end = cards[n + 1] if n + 1 < len(cards) else len(text.lines)
+        rows_of.append(
+            [
+                m.groups()
+                for line in text.lines[card:end]
+                if (m := HISTORY_ROW.match(line))
+            ]
+        )
+    problems = [
+        f"計畫 {item.get('id')} 明細 {len(rows)} 列，sessions_observed {item.get('sessions_observed')}"
+        for item, rows in zip(items, rows_of)
+        if len(rows) != item.get("sessions_observed")
+    ]
+    expect(not problems, "；".join(problems))
+    total = sum(len(rows) for rows in rows_of)
+    if not closed:
+        return f"{total} 列明細 = 各卡 sessions_observed；沒有已結束的計畫，不取 tracking-plan.json"
+    plan_id = closed[0].get("id")
+    detail = run.get(f"tracking/plans/{plan_id}", "tracking-plan.json")
+    sessions = detail.get("sessions") or []
+    want = [
+        (
+            slash(session["session_date"]),
+            str(session["session_no"]),
+            SESSION_STATUS_LABELS.get(session["status"], "狀態待核實"),
+        )
+        for session in sessions
+    ]
+    got = rows_of[len(opened)]
+    expect(got == want, f"計畫 {plan_id} 明細 {got}，預期 {want}")
+    last = (detail.get("plan") or {}).get("last_session_date")
+    expect(
+        not sessions or sessions[-1]["session_date"] == last,
+        f"最後一列 {sessions[-1]['session_date'] if sessions else None}，last_session_date {last}",
+    )
+    return f"{total} 列明細 = 各卡 sessions_observed；計畫 {plan_id} 的 {len(want)} 列 = tracking-plan.json"
 
 
 # ---- manual checks: samples picked by fixed rules, judged by an agent ----

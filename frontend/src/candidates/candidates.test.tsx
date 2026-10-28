@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
@@ -26,7 +27,8 @@ import { CandidateCard, CandidatesSection, StockCandidatePanel } from './Candida
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
 // the today section, partial components, zero and not-computed runs, and the stock page panel.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
-const render = (element: ReactElement) => renderToStaticMarkup(<StaticRouter location="/">{element}</StaticRouter>)
+// The card's "加入追蹤" button (#253) reads the query client.
+const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element}</StaticRouter></QueryClientProvider>)
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const slice = (markup: string, start: string, end: string) => {
   const from = markup.indexOf(start)
@@ -133,6 +135,12 @@ check(panel.includes('每日候選 · 第 2 名') && panel.includes('明日候�
 check(panel.includes('<details class="details candidate-details" open="">'), 'stock panel opens the score details')
 check(!panel.includes('href="/stocks/'), 'stock panel does not link to itself')
 check(panel.includes(PARTIAL_NOTE) && panel.includes('資料 2026/10/16'), 'stock panel keeps partial note and date')
+
+// ---- 加入追蹤 (#253): one button or link per card, after the levels ----
+check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button')
+check(first.indexOf('candidate-levels') < first.indexOf('plan-add') && first.indexOf('plan-add') < first.indexOf('candidate-components'), 'the button sits after the levels')
+const tracked = render(<CandidateCard item={{ ...completeItem(), candidate_id: 11, open_plan_id: 7 }} />)
+check(tracked.includes('href="/actions#plan-7">已在追蹤</a>') && !tracked.includes('加入追蹤'), 'a tracked candidate links to its plan')
 
 // The card alone stays usable without a router link.
 check(render(<CandidateCard item={completeItem()} linkToStock={false} />).includes('<span><strong>2377</strong> 微星</span>'), 'card renders the name without a link')

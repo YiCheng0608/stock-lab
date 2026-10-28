@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { Badge, Card, DateBadge, EmptyState, Skeleton, Table } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
+import { AddPlanButton } from '../tracking/TrackingViews'
 import type { CandidateComponentKey, CandidateItem, CandidatesResponse } from '../types'
 import {
   CANDIDATE_COMPONENTS,
@@ -132,6 +133,7 @@ export function CandidateCard({ item, linkToStock = true, detailsOpen = false }:
         <div><dt>目標</dt><dd className="level-target">{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">／{formatPrice(levels.target_2)}</span>}</dd></div>
         <div><dt>RR</dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
+      <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
       <ComponentScores item={item} />
       {item.reasons.length > 0 && (
         <ul className="candidate-reasons">

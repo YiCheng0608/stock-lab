@@ -16,8 +16,8 @@ Three lists keep the data honest against the schema
 
 ``EXPECTED`` holds what each of the five main pages' APIs return for this data.
 
-Imports app.domain, app.indicators and app.taxonomy, which do no I/O; the
-caller puts ``backend/`` on ``sys.path``.
+Imports app.domain, app.indicators, app.taxonomy and app.tracking, which do no
+I/O; the caller puts ``backend/`` on ``sys.path``.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from app.domain import (
     HOT_GROUP_CONFIG,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
+    PLAN_TRACKING_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
     calculate_group_score,
     canonical_config_snapshot,
@@ -49,6 +50,13 @@ from app.indicators import (
     compute_indicators,
 )
 from app.taxonomy import INDUSTRY_DISPLAY_ZH, canonical_group_id
+from app.tracking import (
+    TRACKING_WINDOW_SESSIONS,
+    TrackBar,
+    TrackLevels,
+    settle,
+    track_path,
+)
 
 # ---- calendar ----
 
@@ -648,6 +656,9 @@ def _signal_rows() -> list[dict[str, Any]]:
                     "status": status,
                     "entry_type": "breakout" if breakout else "pullback",
                     "breakout_price": entry if conditional else None,
+                    "reference_entry": None,
+                    "pullback_low": None,
+                    "pullback_high": None,
                     "invalid_price": invalid,
                     "target_1": target_1,
                     "target_2": target_2,
@@ -1200,6 +1211,316 @@ def _portfolio_rows() -> list[dict[str, Any]]:
     ]
 
 
+# ---- user tracking plans (#253) ----
+#
+# Plan 1 comes from today's rank-1 candidate (no session after T yet); plans
+# 2-6 come from earlier signals of their own, so the look-back has history.
+# The sessions and results are app.tracking.track_path / settle on SERIES, the
+# rules the daily plan_tracking step uses; a backend test runs that step on
+# the fixture database and requires no change.
+
+PLAN_SIGNAL_FIRST_ID = 17  # after the 16 signals of T
+# id, symbol, strategy, plan date, status, levels
+_PLANS = (
+    (
+        2,
+        "9103",
+        "breakout_v1",
+        SESSIONS[-4],
+        "triggered",
+        {"breakout_price": 98.7, "invalid_price": 94.0, "target_1": 106.0},
+    ),
+    (
+        3,
+        "9201",
+        "pullback_v1",
+        SESSIONS[-12],
+        "target_hit",
+        {
+            "reference_entry": 71.1,
+            "pullback_low": 70.8,
+            "pullback_high": 71.4,
+            "invalid_price": 69.5,
+            "target_1": 74.5,
+        },
+    ),
+    (
+        4,
+        "9202",
+        "breakout_v1",
+        SESSIONS[-25],
+        "expired",
+        {"breakout_price": 52.0, "invalid_price": 49.0, "target_1": 57.0},
+    ),
+    (
+        5,
+        "9203",
+        "breakout_v1",
+        SESSIONS[-10],
+        "invalidated",
+        {"breakout_price": 117.0, "invalid_price": 115.0, "target_1": 121.0},
+    ),
+    (
+        6,
+        "9102",
+        "breakout_v1",
+        SESSIONS[-6],
+        "cancelled",
+        {"breakout_price": 177.0, "invalid_price": 165.0, "target_1": 196.0},
+    ),
+)
+PLAN_CANCELLED_AFTER = SESSIONS[-4]  # plan 6 was cancelled after two sessions
+PLAN_STATUS_REASONS = {
+    "pending": "awaiting_entry",
+    "triggered": "entry_filled",
+    "target_hit": "target_1_touched",
+    "invalidated": "invalid_price_touched",
+    "expired": "window_ended_without_entry",
+    "cancelled": "cancelled_while_pending",
+}
+LEVEL_KEYS = (
+    "breakout_price",
+    "reference_entry",
+    "pullback_low",
+    "pullback_high",
+    "invalid_price",
+    "target_1",
+    "target_2",
+)
+
+
+def _next_session(day: date) -> date:
+    return NEXT_SESSION if day == T else SESSIONS[SESSIONS.index(day) + 1]
+
+
+def _plan_levels(levels: dict[str, float]) -> dict[str, float | None]:
+    full = {key: levels.get(key) for key in LEVEL_KEYS}
+    entry = full["breakout_price"] or full["reference_entry"]
+    full["target_2"] = round(entry + 2.4 * (entry - full["invalid_price"]), 2)
+    return full
+
+
+def _plan_signal_rows() -> list[dict[str, Any]]:
+    """The earlier signals plans 2-6 were made from (expired since)."""
+
+    rows = []
+    for offset, (_plan_id, symbol, strategy, day, _status, levels) in enumerate(_PLANS):
+        exchange = SYMBOL_EXCHANGE[symbol]
+        kind = "breakout" if strategy == "breakout_v1" else "pullback"
+        rows.append(
+            {
+                "id": PLAN_SIGNAL_FIRST_ID + offset,
+                "signal_key": f"analysis-{exchange}-{symbol}-{day.isoformat()}-{strategy}-1.0.0",
+                "signal_date": day,
+                "instrument_id": INSTRUMENT_IDS[symbol],
+                "strategy_version_id": STRATEGY_IDS[strategy],
+                "status": "expired",
+                "entry_type": kind,
+                **_plan_levels(levels),
+                "rationale": f"{kind}=passed; required inputs complete",
+                "data_cutoff": f"{day.isoformat()} 13:30 Asia/Taipei",
+                "source_report": "twse" if exchange == "TWSE" else "tpex",
+                "earliest_execution_date": _next_session(day),
+                "data_quality": "complete",
+                "rule_evidence_json": {
+                    "strategy": strategy,
+                    "strategy_version": "1.0.0",
+                    "confidence_semantics": SIGNAL_CONFIDENCE_SEMANTICS,
+                    "actionable": True,
+                },
+                "created_at": _at(day, 10),
+            }
+        )
+    return rows
+
+
+def _plan_bars(symbol: str, day: date, cutoff: date) -> list[TrackBar]:
+    """The stock's first bars after ``day``, as worker.pipeline._tracking_inputs reads them."""
+
+    source = "twse" if SYMBOL_EXCHANGE[symbol] == "TWSE" else "tpex"
+    return [
+        TrackBar(
+            trading_date=bar["day"],
+            open=bar["open"],
+            high=bar["high"],
+            low=bar["low"],
+            close=bar["close"],
+            adj_close=bar["close"],
+            volume=bar["volume"],
+            is_suspended=False,
+            source=source,
+            data_time=_at(bar["day"], 6).isoformat(),
+            factor=1.0,
+            action_applied=False,
+            suspension_gap=False,
+        )
+        for bar in SERIES[symbol]
+        if day < bar["day"] <= cutoff
+    ][:TRACKING_WINDOW_SESSIONS]
+
+
+def _plan_specs() -> list[dict[str, Any]]:
+    """Every plan's signal, status, bars and tracked path."""
+
+    candidate = _daily_candidate_rows()[0]
+    signal = next(row for row in _signal_rows() if row["id"] == candidate["signal_id"])
+    specs = [
+        {
+            "id": 1,
+            "symbol": next(
+                row[2] for row in _INSTRUMENTS if row[0] == signal["instrument_id"]
+            ),
+            "strategy": candidate["strategy"],
+            "status": "pending",
+            "signal": signal,
+            "daily_candidate_id": candidate["id"],
+        }
+    ]
+    for (plan_id, symbol, strategy, _day, status, _levels), row in zip(
+        _PLANS, _plan_signal_rows()
+    ):
+        specs.append(
+            {
+                "id": plan_id,
+                "symbol": symbol,
+                "strategy": strategy,
+                "status": status,
+                "signal": row,
+                "daily_candidate_id": None,
+            }
+        )
+    for spec in specs:
+        signal = spec["signal"]
+        levels = TrackLevels(
+            entry_type=signal["entry_type"],
+            breakout_price=signal["breakout_price"],
+            pullback_low=signal["pullback_low"],
+            pullback_high=signal["pullback_high"],
+            invalid_price=signal["invalid_price"],
+            target_1=signal["target_1"],
+        )
+        cutoff = PLAN_CANCELLED_AFTER if spec["status"] == "cancelled" else T
+        bars = _plan_bars(spec["symbol"], signal["signal_date"], cutoff)
+        path = track_path(levels, bars)
+        if path.outcome_session_no:
+            # The daily run of the exit session ended the plan; it is not tracked after.
+            bars = bars[: path.outcome_session_no]
+            path = track_path(levels, bars)
+        spec["bars"], spec["path"] = bars, path
+    return specs
+
+
+PLAN_EXITS = {"target_hit": "target_1_hit", "invalidated": "invalidated"}
+
+
+def _plan_outcome(spec: dict[str, Any]) -> dict[str, Any]:
+    """The status fields worker.plan_tracking.plan_outcome writes for this path."""
+
+    path, status = spec["path"], spec["status"]
+    sessions = path.sessions
+    # The levels above were picked for these outcomes; a changed rule or series fails here.
+    assert path.first_outcome == PLAN_EXITS.get(status), spec["id"]
+    assert path.executed == (status in {"triggered", *PLAN_EXITS}), spec["id"]
+    values: dict[str, Any] = {
+        "status": status,
+        "status_reason": PLAN_STATUS_REASONS[status],
+        "sessions_observed": len(sessions),
+        "last_session_date": sessions[-1].trading_date if sessions else None,
+        "execution_date": path.execution_date if path.executed else None,
+        "execution_price": path.execution_price if path.executed else None,
+        "outcome_date": None,
+        "outcome_price": None,
+        "result_return": None,
+        "result_comparable": None,
+        "incomparable_reason": None,
+        "data_quality": "complete",
+    }
+    if status in PLAN_EXITS:
+        number = path.outcome_session_no
+        result = settle(path, number)
+        values.update(
+            outcome_date=sessions[number - 1].trading_date,
+            outcome_price=path.outcome_price,
+            result_return=result["return_or_risk"],
+            result_comparable=result["comparable"],
+            incomparable_reason=result["incomparable_reason"],
+        )
+    return values
+
+
+def _tracking_plan_rows() -> list[dict[str, Any]]:
+    rows = []
+    for spec in _plan_specs():
+        signal, outcome = spec["signal"], _plan_outcome(spec)
+        # Every ended plan is comparable (INTENTIONALLY_EMPTY).
+        assert outcome.pop("incomparable_reason") is None, spec["id"]
+        created = _at(T, 13, 40) if spec["id"] == 1 else _at(signal["signal_date"], 13)
+        cancelled = (
+            _at(PLAN_CANCELLED_AFTER, 4) if spec["status"] == "cancelled" else None
+        )
+        last = outcome["last_session_date"]
+        from_candidate = spec["daily_candidate_id"] is not None
+        rows.append(
+            {
+                "id": spec["id"],
+                "instrument_id": signal["instrument_id"],
+                "signal_id": signal["id"],
+                "daily_candidate_id": spec["daily_candidate_id"],
+                "source_kind": "candidate" if from_candidate else "stock",
+                "strategy": spec["strategy"],
+                "strategy_version_id": signal["strategy_version_id"],
+                "formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
+                "score_version": CANDIDATE_SCORE_VERSION if from_candidate else None,
+                "tracking_version": PLAN_TRACKING_VERSION,
+                "plan_date": signal["signal_date"],
+                "earliest_execution_date": signal["earliest_execution_date"],
+                "entry_type": signal["entry_type"],
+                **{key: signal[key] for key in LEVEL_KEYS},
+                "window_sessions": TRACKING_WINDOW_SESSIONS,
+                **outcome,
+                "created_at": created,
+                # The daily step (20:30 Taipei) last changed the plan on its last session.
+                "updated_at": cancelled or (_at(last, 12, 30) if last else created),
+                "cancelled_at": cancelled,
+            }
+        )
+    return rows
+
+
+def _tracking_plan_session_rows() -> list[dict[str, Any]]:
+    rows = []
+    for spec in _plan_specs():
+        for bar, session in zip(spec["bars"], spec["path"].sessions):
+            rows.append(
+                {
+                    "id": len(rows) + 1,
+                    "plan_id": spec["id"],
+                    "session_date": session.trading_date,
+                    "session_no": session.session_no,
+                    "status": session.status,
+                    "reason": session.reason,
+                    "ohlc_json": {
+                        "open": bar.open,
+                        "high": bar.high,
+                        "low": bar.low,
+                        "close": bar.close,
+                        "adj_close": bar.adj_close,
+                    },
+                    "adjusted_ohlc_json": session.adjusted,
+                    "entry_trigger": session.breakout_trigger
+                    or session.pullback_trigger,
+                    "target_trigger": session.target_trigger,
+                    "invalid_trigger": session.invalid_trigger,
+                    "suspended": session.suspended,
+                    "comparable": session.comparable,
+                    "execution_price": session.execution_price,
+                    "source": session.source,
+                    "data_time": session.data_time,
+                }
+            )
+    return rows
+
+
 # ---- assembled tables (insertion order respects foreign keys) ----
 
 TABLES: dict[str, list[dict[str, Any]]] = {
@@ -1214,7 +1535,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "chip_snapshots": _chip_rows(),
     "data_quality": _data_quality_rows(),
     "group_daily_scores": _score_rows(),
-    "signals": _signal_rows(),
+    "signals": _signal_rows() + _plan_signal_rows(),
     "news_items": _news_rows(),
     "news_llm_results": _llm_rows(),
     "theme_suggestions": _suggestion_rows(),
@@ -1222,6 +1543,8 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "candidate_runs": _candidate_run_rows(),
     "daily_candidates": _daily_candidate_rows(),
     "candidate_llm_notes": _candidate_note_rows(),
+    "tracking_plans": _tracking_plan_rows(),
+    "tracking_plan_sessions": _tracking_plan_session_rows(),
     "portfolio_positions": _portfolio_rows(),
 }
 
@@ -1247,14 +1570,14 @@ INTENTIONALLY_EMPTY: dict[str, dict[str, str]] = {
         "raw_payload_id": "LLM 判讀不保存原始回應檔",
     },
     "signals": {
-        "reference_entry": "沒有成立的拉回訊號；拉回價位只在 pullback 成立時寫",
-        "pullback_low": "同 reference_entry",
-        "pullback_high": "同 reference_entry",
         "confidence": "新訊號不寫信心值（SIGNAL_CONFIDENCE_SEMANTICS：未校準）",
         "execution_date": "最早可成交日 2026-10-19 休市（ingestion_runs id 5 skipped），還沒有成交",
         "execution_price": "同 execution_date",
     },
     "theme_suggestions": {"matched_group_id": "兩個建議都是新題材，未對應既有族群"},
+    "tracking_plans": {
+        "incomparable_reason": "結束的計畫都可比較；「無法比較」的文案由到期與已取消的計畫驗"
+    },
 }
 
 OMITTED_TABLES: dict[str, str] = {
@@ -1268,11 +1591,9 @@ OMITTED_TABLES: dict[str, str] = {
     "group_daily_score_archive": "只在 hot_group 版本升級時封存舊分數；假資料只有現行版本",
     "schedule_runs": "排程紀錄只給看門狗與系統頁",
     "schedule_run_steps": "同 schedule_runs",
-    "signal_evaluations": "訊號在最後一個交易日產生，還沒有後續交易日可評估",
-    "signal_settlements": "同 signal_evaluations，尚無結算",
+    "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
+    "signal_settlements": "同 signal_evaluations",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
-    "tracking_plans": "使用者追蹤計畫還沒有頁面與 API（#253 加頁面時一起加假資料）",
-    "tracking_plan_sessions": "同 tracking_plans",
 }
 
 # ---- expected API results per main page ----
@@ -1288,6 +1609,9 @@ D = T.isoformat()  # dashboard as_of, every board's trading_date, candidates' da
 TOP_THEME = SEMICONDUCTOR_ID
 E, S = "TWSE", "9101"
 NO_DATA_STOCK = ("TPEx", "9204")
+OPEN_PLANS = "tracking?status=open&page=1&page_size=20"
+CLOSED_PLANS = "tracking?status=closed&page=1&page_size=20"
+TARGET_PLAN = next(row for row in TABLES["tracking_plans"] if row["id"] == 3)
 
 EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
     "today": [
@@ -1318,6 +1642,7 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("candidates", "candidate_count", 3),
         ("candidates", "items[].instrument.symbol", ["9101", "9103", "9201"]),
         ("candidates", "items[].llm_note.status", ["done", "done", "done"]),
+        ("candidates", "items[].open_plan_id", [1, None, None]),  # plan 1
         ("news/1", "ai.status", "done"),
         ("news/5", "ai.status", "done"),
         ("news/6", "ai", None),
@@ -1389,6 +1714,7 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"stocks/{E}/{S}", "chips", 25),
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
+        (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),
         (f"stocks/{E}/{S}", "decision_summary.action_state", "conditional_entry"),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars", SESSION_COUNT),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars.-1.date", D),
@@ -1411,6 +1737,18 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ("portfolio?page=1&page_size=20", "pagination.total", 1),
         ("portfolio?page=1&page_size=20", "items", 1),
         (f"actions/{E}/{S}", "decision_summary.action_state", "conditional_entry"),
+        # Open plans by plan date; ended ones by the date they ended (#253).
+        (OPEN_PLANS, "pagination.total", 2),
+        (OPEN_PLANS, "items[].id", [1, 2]),
+        (OPEN_PLANS, "items[].status", ["pending", "triggered"]),
+        (CLOSED_PLANS, "items[].id", [3, 6, 4, 5]),
+        (
+            CLOSED_PLANS,
+            "items[].status",
+            ["target_hit", "cancelled", "expired", "invalidated"],
+        ),
+        (CLOSED_PLANS, "items.0.result_return", TARGET_PLAN["result_return"]),
+        ("tracking/plans/3", "sessions", TARGET_PLAN["sessions_observed"]),
     ],
 }
 

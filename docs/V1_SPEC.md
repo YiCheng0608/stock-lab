@@ -193,8 +193,20 @@ EMA 與 Wilder 平滑依賴全部可用歷史，起算點是該股在 DB 的第�
 
 - **模擬報酬**（`result_return`）：達標、失效、期滿結算才有，＝出場價÷成交價（兩者都換回計畫資料日的價格基準）− 1 − 30 bps；從第 1 根日線到出場（期滿結算為第 20 根）之間有停牌或其他不可比較的日線時（含成交前的停牌日），`result_comparable=false`、報酬為 null 並寫原因，狀態不變。
 - **停牌**：停牌日（`is_suspended`、零量一字線、或官方停牌區間內缺日線）記一列 `suspended`，不推論觸發，狀態不變。
-- **冪等**：同一目標日重跑寫出相同的列，值沒變就不改寫、`updated_at` 不動。重算出不允許的轉換（例如行情更正後原本的成交不成立）時保留原狀態與明細，`data_quality` 記 `transition_conflict`、`status_reason` 記 `transition_conflict:<原>-><新>`，不倒退。這種計畫仍是 `pending`／`triggered`，之後每次執行都照常重算：行情恢復到允許的轉換時就照新結果更新，`data_quality` 也改回；在那之前一直標 `transition_conflict`。`GET /tracking`（#253 實作）照常回傳這筆計畫與原狀態，並帶 `data_quality` 與 `status_reason`；行動頁在該張卡標示「行情有更正，狀態待核對」，不顯示重算出的新狀態。
+- **冪等**：同一目標日重跑寫出相同的列，值沒變就不改寫、`updated_at` 不動。重算出不允許的轉換（例如行情更正後原本的成交不成立）時保留原狀態與明細，`data_quality` 記 `transition_conflict`、`status_reason` 記 `transition_conflict:<原>-><新>`，不倒退。這種計畫仍是 `pending`／`triggered`，之後每次執行都照常重算：行情恢復到允許的轉換時就照新結果更新，`data_quality` 也改回；在那之前一直標 `transition_conflict`。`GET /tracking` 照常回傳這筆計畫與原狀態，並帶 `data_quality` 與 `status_reason`；行動頁在該張卡標示「行情有更正，狀態待核對」，不顯示重算出的新狀態。
 - **取消**（`app.tracking_plans.cancel_plan`）：只能取消 `pending`／`triggered` 的計畫，記 `cancelled_at` 與 `status_reason=cancelled_while_<原狀態>`；已結束的計畫回 `plan_already_closed`。計畫與明細都不刪。
+- **取消與每日更新同時寫入**：API 與 `plan_tracking` 從不同連線寫同一個計畫，兩邊的寫入都只在計畫仍是讀到時的狀態且未取消時才生效（`app.tracking_plans.claim_plan`，UPDATE 以 `status`、`cancelled_at IS NULL` 為條件）。每日更新讀完計畫後使用者才取消時，取消保留，這次更新不寫該計畫的狀態與明細；取消讀到的狀態已被每日更新改掉時，依新的狀態重新判斷（已結束就回 `plan_already_closed`，`triggered` 就記 `cancelled_while_triggered`）。SQLite 上條件 UPDATE 同時取得寫入鎖，另一方等到這筆交易結束（`busy_timeout`）才寫。
+
+**API**（`/api` 之下，[`app.tracking_plan_view`](../backend/app/tracking_plan_view.py)）：
+
+| route | 說明 |
+| --- | --- |
+| `GET /tracking?status=open\|closed\|all&page&page_size` | 計畫清單（預設 `all`，`page_size` 1～100、預設 50）：進行中在前（依 `plan_date` 新到舊），已結束與已取消的依 `outcome_date`、否則 `last_session_date`、否則 `plan_date` 新到舊；同日依 `id` 新到舊。每筆含標的、來源、版本、價位（與候選相同的 `levels` 形狀，含 RR）、狀態、`open`、模擬成交與結果、`data_quality`、`created_at`（UTC，帶時區）；`summary` 為進行中與已結束的筆數，`meta` 為 `tracking_version`、視窗、滑價與成本假設、`simulated: true` |
+| `POST /tracking` body `{signal_id, daily_candidate_id?}` | 建立，回 `{created, plan}`；同一訊號已有未取消的計畫時回原計畫與 `created: false`。拒絕時 `detail` 為規則碼：404 `signal_not_found`／`candidate_not_found`，422 `signal_not_conditional`／`invalid_levels`／`candidate_signal_mismatch`，409 `stale_signal` |
+| `GET /tracking/plans/{plan_id}` | 單一計畫與逐日 `sessions`（日期、第幾日、狀態、原始與還原 OHLC、觸發、停牌、可比較、模擬成交價、來源）；404 `plan_not_found` |
+| `POST /tracking/plans/{plan_id}/cancel` | 取消（冪等），回 `{plan}`；404 `plan_not_found`、409 `plan_already_closed`。409 `plan_changed`：條件寫入連續失敗、依重讀的狀態重判（每個進行中狀態最多一次）後仍沒寫進去，例如這次取消期間 daily 又改了計畫兩次，或舊資料留下 `cancelled_at` 有值、狀態卻仍是 `pending`／`triggered` 的列；計畫不改，重新整理後再取消 |
+
+系統訊號的單筆追蹤留在 `GET /tracking/{signal_key}`。`/api/candidates` 的每筆候選另帶 `candidate_id`（`daily_candidates.id`）與 `open_plan_id`（該訊號未取消的計畫，沒有為 null），個股 API 的 `decision_summary.strategies[]` 也帶 `open_plan_id`。畫面文案見 [UI_COPY_SPEC §11](UI_COPY_SPEC.md#11-追蹤計畫)。
 
 ## 策略版本識別
 
