@@ -108,6 +108,15 @@ def main() -> int:
             )
         )
         return 1
+    if mode == "token_expired":
+        # An expired CLAUDE_CODE_OAUTH_TOKEN in -p (code.claude.com/docs/en/errors).
+        envelope = _envelope(
+            None,
+            is_error=True,
+            result="Failed to authenticate. API Error: 401 OAuth token has expired",
+        )
+        _out(json.dumps({**envelope, "api_error_status": 401}))
+        return 1
     if mode == "rate_limited":
         _out(
             json.dumps(

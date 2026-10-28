@@ -10,6 +10,8 @@
 #    the api restarts after its process ends; the scheduler's serve starts.
 # 3. Dev topology (Vite on WEB_PORT, calling API_PORT): the same writes with the pages' Origin.
 # 4. The env file reaches the api and the scheduler; without one both still start.
+# 5. Without one, news-llm leaves its batch pending and the watchdog holds back its comment
+#    (tools/compose/no_env_llm.sh, #337).
 #
 # Its own project (SMOKE_PROJECT, default stock-lab-smoke) and ports (SMOKE_WEB_PORT 18080,
 # SMOKE_API_PORT 18000) and a throwaway env file; it never reads .env. SMOKE_BASE_FILE replaces
@@ -135,5 +137,9 @@ for service in api scheduler; do
     [ "$got" = unset ] || fail "$service without an env file: SMOKE_MARK=$got"
     echo "ok $service starts without an env file"
 done
+
+# Still no env file: the real claude and gh with no tokens (#337 AC-4).
+echo "== 5. LLM step and watchdog without an env file"
+"${base[@]}" run --rm --no-deps -T scheduler bash /app/tools/compose/no_env_llm.sh < /dev/null
 
 echo "compose smoke passed"

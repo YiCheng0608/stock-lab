@@ -735,6 +735,40 @@ class WorkflowTriggers(unittest.TestCase):
                 self.assertEqual(workflow["on"][event]["branches"], long_lived)
 
 
+class EnvExample(unittest.TestCase):
+    """.env.example holds keys and comments only; .env stays out of Git (#337)."""
+
+    def test_env_example_has_only_empty_keys_and_comments(self):
+        text = (ROOT / ".env.example").read_text(encoding="utf-8")
+        active = {}
+        for line in text.splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            key, sep, value = line.partition("=")
+            self.assertEqual((sep, value), ("=", ""), line)
+            active[key] = value
+        self.assertEqual(sorted(active), ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN"])
+        commented = set(re.findall(r"^# ([A-Z][A-Z0-9_]*)=", text, re.M))
+        self.assertLessEqual({"TZ", "STOCK_DATA_DIR"}, commented)
+        # Compose fixes TZ and STOCK_DATA_DIR in the containers: comments only.
+        self.assertNotRegex(text, r"(?m)^(TZ|STOCK_DATA_DIR)=")
+        # The key news-llm and candidate-notes keep in the claude -p environment.
+        news_llm = (ROOT / "backend/worker/news_llm.py").read_text(encoding="utf-8")
+        self.assertIn('OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"', news_llm)
+
+    def test_env_files_are_ignored_and_the_example_is_not(self):
+        def ignored(path: str) -> bool:
+            result = subprocess.run(
+                ["git", "check-ignore", "--no-index", "-q", path], cwd=ROOT
+            )
+            self.assertIn(result.returncode, (0, 1), path)
+            return result.returncode == 0
+
+        for path in (".env", ".env.local", ".env.production"):
+            self.assertTrue(ignored(path), path)
+        self.assertFalse(ignored(".env.example"))
+
+
 class ShellLineEndings(unittest.TestCase):
     """Scripts run in Linux containers stay LF on a Windows checkout (#335).
 

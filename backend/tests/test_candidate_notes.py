@@ -541,3 +541,24 @@ def test_a_failed_write_closes_the_run_as_failed_with_its_calls(db, fake, monkey
     assert run.metadata_json["calls"] == 1 and run.finished_at is not None
     # The call still counts toward the day's limit.
     assert candidate_notes._calls_today(db, RUN_DATE) == 1
+
+
+def test_an_expired_oauth_token_leaves_the_notes_pending_and_stops_the_run(
+    db, fake, monkeypatch
+):
+    # #337 AC-1: the -p answer to an expired CLAUDE_CODE_OAUTH_TOKEN; the
+    # watchdog side is test_watchdog's
+    # test_an_expired_claude_token_leaves_the_notes_pending_and_comments_on_1.
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "token_expired")
+    monkeypatch.setenv(news_llm.OAUTH_TOKEN_ENV, "fake-expired-token")
+    _candidates(db, BATCH_SIZE + 2)
+    result = _run(db)
+    calls = fake()
+    assert result["status"] == "failed" and len(calls) == 1
+    assert calls[0]["leaked_env"] == ["CLAUDE_CODE_OAUTH_TOKEN"]
+    assert result["batches"][0]["reason"] == "not_logged_in"
+    assert result["skipped_batches"][0]["reason"] == "stopped_after_not_logged_in"
+    notes = _notes(db)
+    assert len(notes) == BATCH_SIZE
+    assert {note.llm_status for note in notes} == {"pending"}
+    assert all("401 OAuth token has expired" in note.llm_error for note in notes)
