@@ -22,13 +22,14 @@ import {
   marketSourceLabel,
 } from './candidates'
 import { completeItem, doneNote, listResponse, notComputedResponse, partialItem, zeroResponse } from './candidates.fixtures'
-import { CandidateCard, CandidatesSection, ScoreDetails } from './CandidateViews'
+import { CandidatesSection, ScoreDetails } from './CandidateViews'
 
 // Standalone regression module (no browser, no server, no network) for the daily candidate list (#215):
-// the candidate card, partial components, zero and not-computed runs, and the stock page panel.
+// the detail content under each today row (components, reasons, AI note), partial components, the score details
+// the stock page shows, and zero and not-computed runs.
 // The today list (table rows and phone cards, #276) is checked in today/today.test.tsx.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
-// The card's "加入追蹤" button (#253) reads the query client.
+// The "加入追蹤" button (#253) reads the query client.
 const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element}</StaticRouter></QueryClientProvider>)
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const slice = (markup: string, start: string, end: string) => {
@@ -51,14 +52,11 @@ check(candidateGroupText(completeItem().groups[0]) === 'AI 伺服器（題材，
 check(candidateGroupText(completeItem().groups[1]) === '電腦及週邊（產業，當日未排名）', 'unranked group says so')
 check(candidateSourceText(completeItem()).includes('新聞方向 LLM 判讀 news_v1（推論）'), 'news source names the prompt version and is inference')
 
-// ---- full cards (the stock page panel) ----
-const list = render(<>{listResponse().items.map((item) => <CandidateCard key={item.rank} item={item} />)}</>)
-check(count(list, 'class="card candidate-card"') === 2, 'one card per candidate')
-const first = slice(list, 'data-candidate-rank="1"', '</article>')
-for (const text of ['#1', '2377', '微星', '上市', '突破條件', '>83<', '161.50', '157.82', '167.39', '172.54', '1.60', 'href="/stocks/TWSE/2377"']) {
-  check(first.includes(text), `complete row shows ${text}`)
-}
-check(first.includes('class="level-stop">157.82') && first.includes('class="level-target">167.39'), 'stop and target carry their colours')
+// ---- detail content under each today row (the table's levels and total are checked in today/today.test.tsx) ----
+const list = render(<CandidatesSection data={listResponse()} loading={false} error={null} />)
+const table = slice(list, '<table', '</table>')
+const first = slice(table, 'data-candidate-detail="1"', '</tr>')
+check(count(table, 'data-candidate-detail=') === 2, 'one detail row per candidate')
 check(!first.includes(PARTIAL_NOTE) && !first.includes('candidate-null-notes'), 'complete row has no partial note')
 for (const [component, score] of [['technical', '74'], ['chips', '92'], ['news_sentiment', '81'], ['group', '90']]) {
   check(slice(first, `data-component="${component}"`, '</div>').includes(`>${score}<`), `component ${component} shows ${score}`)
@@ -71,20 +69,17 @@ for (const [code, dot] of [['breakout_20d_high', 'technical'], ['institutional_n
 }
 check(slice(first, 'data-reason="news_positive_3d"', '</li>').includes('badge-accent'), 'inference reason carries the 推論 badge on its row')
 check(!slice(first, 'data-reason="breakout_20d_high"', '</li>').includes('badge-accent'), 'fact reasons carry no 推論 badge')
-check(first.includes('族群：AI 伺服器（題材，第 2 名／11）、電腦及週邊（產業，當日未排名）'), 'groups listed')
-check(first.includes('<details class="details candidate-details">'), 'score details collapsed unless asked open')
-check(first.includes('同檔另一策略：回踩條件 總分 61') && first.includes('規則最早執行日 2026/10/19'), 'alternatives and earliest execution date in details')
-check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in details')
+check(first.includes('資料日期 2026/10/16') && first.includes('臺灣證券交易所'), 'data date and sources in the detail')
 
 // ---- partial components ----
-const second = slice(list, 'data-candidate-rank="2"', '</article>')
+const second = slice(table, 'data-candidate-detail="2"', '</tr>')
 check(second.includes(PARTIAL_NOTE), 'partial row explains the renormalised score')
 check(slice(second, 'data-component="group"', '</div>').includes('>—<') && slice(second, 'data-component="news_sentiment"', '</div>').includes('>—<'), 'null components show 「—」')
 check(!slice(second, 'data-component="group"', '</div>').includes('>0<'), 'null component is never 0')
 check(second.includes('族群：當日沒有已排名且資料完整的所屬產業或題材') && second.includes('新聞情緒：近 3 日沒有成功的新聞收集，新聞分項無資料'), 'null_explanation shown next to the scores')
-check(second.includes('13.05～13.35') && second.includes('上櫃') && second.includes('回踩條件'), 'pullback zone and TPEx label')
-check(!second.includes('level-target-2'), 'missing target 2 is not rendered')
-check(second.replace(/<[^>]+>/g, '').includes('權重涵蓋 65%'), 'weight coverage in details')
+const row2 = slice(table, '<tr data-candidate-rank="2"', '</tr>')
+check(row2.includes('13.05～13.35') && row2.includes('上櫃') && row2.includes('回踩條件'), 'pullback zone and TPEx label')
+check(!row2.includes('level-target-2'), 'missing target 2 is not rendered')
 check(count(second, 'data-reason=') === 2, 'fewer reasons are not padded')
 
 // ---- LLM note (#220): inference block apart from the rule values ----
@@ -99,8 +94,8 @@ for (const [part, label, text] of [
 }
 check(note.includes(NOTE_DISCLAIMER), 'note says it is inference, not advice')
 check(note.includes('模型 claude-sonnet-5-5 · 提示版本 candidate_notes_v1 · 產生於 2026/10/16 19:05'), 'model, prompt version and Taipei time')
-check(first.indexOf('candidate-groups') < first.indexOf('candidate-note') && first.indexOf('candidate-note') < first.indexOf('candidate-details'), 'note sits after the rule reasons and groups, before the score details')
-check(!slice(first, 'class="candidate-levels"', '</dl>').includes('ai-inference'), 'rule levels stay outside the AI block')
+check(first.indexOf('candidate-reasons') < first.indexOf('candidate-note') && first.indexOf('candidate-note') < first.indexOf('candidate-detail-source'), 'note sits after the rule components and reasons, before the date and sources')
+check(!slice(list, 'class="candidate-mini-levels"', '</dl>').includes('ai-inference'), 'rule levels stay outside the AI block')
 const missing = slice(second, 'class="ai-inference candidate-note"', '</section>')
 check(missing.includes('data-note-state="empty"') && missing.includes(NOTE_MISSING_TEXT) && !missing.includes('data-note-part') && !missing.includes('ai-meta'), 'a row without a note shows the fixed copy')
 const pending = candidateNoteView({ ...doneNote(), status: 'pending', model: null, selection: null, levels: null, risks: null })
@@ -115,7 +110,7 @@ for (const reason of ['no_actionable_signals', 'all_excluded'] as const) {
   const data = zeroResponse(reason)
   const markup = render(<CandidatesSection data={data} loading={false} error={null} />)
   check(markup.includes(data.zero_reason_text ?? '?') && markup.includes('當日零候選'), `zero run ${reason} shows zero_reason_text`)
-  check(!markup.includes('candidate-card') && markup.includes('資料 2026/10/16') && !markup.includes('0 檔'), `zero run ${reason} keeps the date badge only`)
+  check(!markup.includes('data-candidate-rank') && markup.includes('資料 2026/10/16') && !markup.includes('0 檔'), `zero run ${reason} keeps the date badge only`)
   check(candidatesState({ ...data, zero_reason_text: null }).kind === 'zero' && (candidatesState({ ...data, zero_reason_text: null }) as { text: string }).text === data.zero_reason_text, `zero ${reason} falls back to the §10 copy`)
 }
 const notComputed = render(<CandidatesSection data={notComputedResponse()} loading={false} error={null} />)
@@ -130,12 +125,14 @@ check(render(<CandidatesSection data={undefined} loading={false} error={new Erro
 const details = render(<ScoreDetails item={partialItem()} open={false} />)
 check(details.includes('<details class="details candidate-details">') && details.includes('評分細節、資料日期與來源'), 'score details stay collapsed on the board')
 check(!details.includes('href="/stocks/'), 'score details do not link to the stock page')
+check(details.replace(/<[^>]+>/g, '').includes('權重涵蓋 65%'), 'weight coverage in details')
+check(render(<ScoreDetails item={partialItem()} open />).includes('<details class="details candidate-details" open="">'), 'score details open when asked')
+const completeDetails = render(<ScoreDetails item={completeItem()} open={false} />)
+check(completeDetails.includes('同檔另一策略：回踩條件 總分 61') && completeDetails.includes('規則最早執行日 2026/10/19'), 'alternatives and earliest execution date in details')
+check(completeDetails.includes('資料日期 2026/10/16') && completeDetails.includes('臺灣證券交易所'), 'data date and sources in details')
 
-// ---- 加入追蹤 (#253): one button or link per card, after the levels ----
-check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button')
-check(first.indexOf('candidate-levels') < first.indexOf('plan-add') && first.indexOf('plan-add') < first.indexOf('candidate-components'), 'the button sits after the levels')
-const tracked = render(<CandidateCard item={{ ...completeItem(), candidate_id: 11, open_plan_id: 7 }} />)
-check(tracked.includes('href="/actions#plan-7">已在追蹤</a>') && !tracked.includes('加入追蹤'), 'a tracked candidate links to its plan')
+// ---- 加入追蹤 (#253): one button or link per candidate ----
+check(count(list, '>加入追蹤</button>') === 4 && !list.includes('已在追蹤'), 'every untracked candidate has the add button, in its detail row and its phone card')
 // The today list (#276) puts it in each candidate's detail: once in the desktop detail row, once in the phone card.
 const todayItems = listResponse().items.map((item, index) => index === 0 ? { ...item, candidate_id: 11, open_plan_id: 7 } : item)
 const today = render(<CandidatesSection data={{ ...listResponse(), items: todayItems }} loading={false} error={null} />)
@@ -144,6 +141,5 @@ const miniCards = today.split('class="card candidate-mini"').slice(1)
 check(detailRows.length === todayItems.length && miniCards.length === todayItems.length, 'one detail row and one phone card per candidate')
 check(detailRows.every((row, index) => slice(row, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail row has the plan button or link')
 check(miniCards.every((card, index) => slice(card, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
-
-// The card alone stays usable without a router link.
-check(render(<CandidateCard item={completeItem()} linkToStock={false} />).includes('<span><strong>2377</strong> 微星</span>'), 'card renders the name without a link')
+const trackedDetail = slice(detailRows[0], '<details', '</details>')
+check(trackedDetail.includes('href="/actions#plan-7">已在追蹤</a>') && !trackedDetail.includes('加入追蹤'), 'a tracked candidate links to its plan')
