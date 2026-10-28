@@ -24,12 +24,13 @@ work="$(mktemp -d)"
 base=(docker compose -p "$project" --project-directory . -f "${SMOKE_BASE_FILE:-docker-compose.yml}")
 dev=("${base[@]}" -f docker-compose.dev.yml)
 export STOCK_ENV_FILE="$work/smoke.env" WEB_PORT="$web_port" API_PORT="$api_port"
-printf '# compose smoke test (tools/compose/smoke.sh): no secrets\nSMOKE_MARK=from-env-file\n' > "$STOCK_ENV_FILE"
+# Empty WEB_PORT and API_PORT reach only the scheduler (the api's come from compose); its
+# entrypoint takes them as unset (review S7), or its serve would never start in step 2.
+printf '# compose smoke test (tools/compose/smoke.sh): no secrets\nSMOKE_MARK=from-env-file\nWEB_PORT=\nAPI_PORT=\n' > "$STOCK_ENV_FILE"
 
 cleanup() {
     STOCK_ENV_FILE="$work/smoke.env" "${dev[@]}" --profile scheduler down --volumes --remove-orphans > /dev/null 2>&1 || true
-    rm -f "$STOCK_ENV_FILE"
-    rmdir "$work" 2> /dev/null || true
+    rm -rf -- "$work"
 }
 trap cleanup EXIT
 
@@ -117,8 +118,10 @@ expect 200 "$pages/"
 grep -F '/@vite/client' "$work/body" > /dev/null || fail "the dev pages are not Vite's"
 write "$pages" same-site "http://localhost:$api_port/api"
 expect 403 -X POST -H "Origin: http://localhost:9" -H "Sec-Fetch-Site: cross-site" "${json[@]}" -d "$position" "http://localhost:$api_port/api/portfolio"
-"${dev[@]}" down
+# --volumes: the dev override's anonymous .venv and node_modules volumes go with the containers.
+"${dev[@]}" down --volumes
 
+# Only echo, on a fresh empty stock-data: no database needed.
 echo "== 4. env file"
 for service in api scheduler; do
     got="$("${base[@]}" run --rm --no-deps "$service" sh -c 'echo "${SMOKE_MARK:-unset}"')"

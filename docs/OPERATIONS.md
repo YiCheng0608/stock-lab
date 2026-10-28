@@ -72,9 +72,9 @@ python -m uvicorn app.main:app --reload --port 8000
 
 **變數**（從 shell 或根目錄 `.env` 讀，見 [`.env.example`](../.env.example)）：
 
-- `WEB_PORT`、`API_PORT`：主機埠。api 的 `STOCK_API_PUBLIC_HOSTS` 由 compose 設成 `localhost`／`127.0.0.1` 加這兩個埠；dev 另把 `STOCK_API_ALLOWED_ORIGINS` 設成 `WEB_PORT` 的兩個 origin（§1.1）。entrypoint 以 exit 64 拒絕三種值：`WEB_PORT`、`API_PORT` 是 80（瀏覽器在 80 埠送的 Host 不帶埠，寫入一律被拒）；`WEB_PORT` 是 8000（api 的監聽埠，即使沒有允許清單 Host `localhost:8000` 也會放行，PR #349 review S2）；兩者相同。
+- `WEB_PORT`、`API_PORT`：主機埠。api 的 `STOCK_API_PUBLIC_HOSTS` 由 compose 設成 `localhost`／`127.0.0.1` 加這兩個埠；dev 另把 `STOCK_API_ALLOWED_ORIGINS` 設成 `WEB_PORT` 的兩個 origin（§1.1）。entrypoint 以 exit 64 拒絕三種值：`WEB_PORT`、`API_PORT` 是 80（瀏覽器在 80 埠送的 Host 不帶埠，寫入一律被拒）；`WEB_PORT` 是 8000（api 的監聽埠，即使沒有允許清單 Host `localhost:8000` 也會放行，PR #349 review S2）；兩者相同。空值視為沒設：scheduler 只從 env file 拿到這兩個變數，`.env` 裡的 `WEB_PORT=` 不會讓它停下（#335 review S7）。
 - `-p <project>`：project 名稱，預設是目錄名。image、容器、網路與 volume（`<project>_stock-data`）都以它開頭，所以兩個 worktree 各用自己的 project 與埠就能同時 `up` 或 `run`，互不影響。
-- `STOCK_ENV_FILE`：api 與 scheduler 的 env file，預設根目錄 `.env`。使用者手動建立、不進 Git（#337）；agent 不讀它的內容。檔案不存在時照常啟動，只是沒有 token，`claude -p` 與 `gh` 會在各自的步驟失敗。web 不讀 env file。
+- `STOCK_ENV_FILE`：api 與 scheduler 的 env file，預設根目錄 `.env`。使用者手動建立、不進 Git（#337）；agent 不讀它的內容。檔案不存在時照常啟動，只是沒有 token，`claude -p` 與 `gh` 會在各自的步驟失敗。web 不讀 env file。compose 會把 env file 的值展開進 api 與 scheduler 的 `environment`，所以有真 `.env` 時：`docker compose config` 一定要加 `-q` 或 `--no-interpolate`（不加會原樣印出 token）；`docker inspect`、`docker compose run … env` 等列出容器環境變數的命令同樣會顯示 token，這些輸出都不貼到 GitHub（Issue、PR、留言與 `pr-assets`）。
 - `STOCK_GIT_HEAD`：build 時寫進 image 的 commit（§6.6），compose 讀不到 git，由 shell 帶入：`STOCK_GIT_HEAD="$(git rev-parse HEAD)" docker compose build`。
 
 **Windows 側**（repo 留在 Windows，使用者決定 [#1](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6465043664)）：

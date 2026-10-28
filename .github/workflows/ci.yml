@@ -228,7 +228,8 @@ jobs:
   # docker-compose.yml and docker-compose.dev.yml (#335): tools/compose/smoke.sh builds the
   # images, then in both topologies (nginx web; Vite web calling the api) checks health, writes
   # sent as a browser sends them (2xx) and from a foreign Origin (403), the ports the entrypoint
-  # refuses, the api's restart, the scheduler's serve and that a missing env file stops compose.
+  # refuses, the api's restart, the scheduler's serve, and that the env file reaches the api and
+  # the scheduler while both still start without one.
   compose:
     name: compose
     needs: changes
