@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -1167,6 +1169,39 @@ def test_a_rejected_result_leaves_no_ai_block(db, fake, client, monkeypatch):
 
 
 # Container authentication (#337) ---------------------------------------------------
+
+
+def test_tokens_in_the_environment_never_reach_the_tests(tmp_path):
+    """#339 review S1: the local checks run pytest in the api container, which gets the env
+    file's tokens; conftest drops them, so the tests asserting no leaked token stay green."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
+    temp = tmp_path / "tmp"
+    temp.mkdir()
+    env.update(
+        CLAUDE_CODE_OAUTH_TOKEN="fake-not-a-token",
+        GH_TOKEN="fake-not-a-token",
+        TMPDIR=str(temp),
+        TEMP=str(temp),
+        TMP=str(temp),
+    )
+    tests = Path(__file__).parent
+    result = subprocess.run(
+        [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
+        + ["--basetemp", str(tmp_path / "b")]
+        + [
+            f"{tests / 'test_news_llm.py'}::test_batches_are_split_and_results_saved",
+            f"{tests / 'test_candidate_notes.py'}"
+            "::test_batches_are_split_and_notes_saved_with_versions",
+        ],
+        cwd=tests.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert "2 passed" in result.stdout
 
 
 def test_the_oauth_token_reaches_the_cli_and_no_other_claude_code_variable(

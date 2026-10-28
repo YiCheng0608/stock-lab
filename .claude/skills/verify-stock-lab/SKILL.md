@@ -1,6 +1,6 @@
 ---
 name: verify-stock-lab
-description: 對 stock-lab 五個主導航（今日、新聞、族群、個股、行動）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾與 G7 窗口頭尾時於本機用正式 DB 的唯讀副本跑 `page_checks.py`，agent 只判讀標「人工」的檢查（樣本由程式依規則抽好）與失敗原因，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。G7 驗收、gate 收尾或使用者說「跑 verify-stock-lab」時使用。
+description: 對 stock-lab 五個主導航（今日、新聞、族群、個股、行動）做端到端驗證並留下可重跑的證據。兩種模式：CI 模式由 CI `verify` job 在假資料庫上自動跑（本機可重跑）；真資料模式在 gate 收尾與 G7 窗口頭尾時用正式 DB 的唯讀副本跑 `page_checks.py`（容器內；G7 在本機），agent 只判讀標「人工」的檢查（樣本由程式依規則抽好）與失敗原因，輸出每個導覽的三態結果（通過／失敗／無法判定）與截圖、API 回應、DB 查詢。G7 驗收、gate 收尾或使用者說「跑 verify-stock-lab」時使用。
 ---
 
 # verify-stock-lab
@@ -10,7 +10,7 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 | 模式 | 什麼時候 | 資料 | 誰跑 |
 | --- | --- | --- | --- |
 | [CI 模式](#ci-模式) | 每個 PR 與 master push；master 每晚 22:40（台北）與手動觸發（`workflow_dispatch`）跑五頁全套 | 假資料庫（[`fixture_db.py`](../../../tools/verify/fixture_db.py)），數值固定 | CI `verify` job，自動 |
-| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`） | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
+| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`），容器跑法放在 compose volume | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
 
 回覆使用者一律繁體中文。所有命令在 Git Bash（Claude Code 的 Bash 工具）執行，cwd 為 worktree 根目錄。
 
@@ -46,6 +46,15 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 
 ## 真資料模式
 
+### 容器或本機
+
+| 跑法 | 什麼時候 | API、前端、`page_checks.py` 與截圖 | 副本 |
+| --- | --- | --- | --- |
+| 容器（預設） | checkout 有 `docker-compose.yml`，而且不是 G7 的那兩次 | compose project `$P`（`task-<n>-verify`）：api（後端 image）、web（nginx 前端 image）；`page_checks.py` 以 `run --rm api` 在同一個網路跑，截圖用後端 image 內的 Chromium | 該 project 的 volume `task-<n>-verify_stock-data` |
+| 本機 | G7 的兩次（`release/v1` 沒有 compose 檔，`--g7` 照 [#260](https://github.com/YiCheng0608/stock-lab/issues/260) 在本機跑），或 checkout 沒有 compose 檔 | 本機的 Python、vite preview、Edge／Chrome（[起服務](#起服務)） | `$V/stock.db` |
+
+同一份副本兩種跑法的三態結果相同（#339 比對兩邊的 `results.json`）。`<n>` 是分支名 `task/<n>-...` 的數字。下面各步標「容器」或「本機」的只照所選跑法做，沒標的兩種都做。compose 檔要 Docker Compose 2.24 以上（[OPERATIONS §1.2](../../../docs/OPERATIONS.md#12-docker-compose)）。
+
 ### 1. 前置
 
 1. **停止條件**（任一成立就不跑，直接回覆原因）：
@@ -59,6 +68,9 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    PY=C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe
    export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site-packages" PYTHONUTF8=1
    OUT=$(cat "$V/current")   # 第 3 步寫入
+   # 容器：project 名稱與 compose 命令（Git Bash 不改寫 -v 的容器路徑）
+   n="$(git rev-parse --abbrev-ref HEAD)"; n="${n#task/}"; P="task-${n%%-*}-verify"
+   dc() { MSYS_NO_PATHCONV=1 docker compose -p "$P" "$@"; }
    ```
 
    `$PY` 是 release venv 的基底直譯器（同為 3.12.14），借 venv 的套件跑 API；不直接執行 venv 的 `python.exe`，因為它是啟動器，真正監聽的是它的子程序，收尾時關不乾淨。`PYTHONUTF8=1`：Windows 的 stdout 預設是 cp950，`page_checks.py` 印到含 `\xa0` 等字元的新聞標題會在寫完 summary 前中斷。
@@ -75,12 +87,31 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
    ```
 
    失敗（exit 非 0）→ 五個導覽全部無法判定，原因寫 stderr，跳到[證據](#4-證據)。
-5. **副本 revision**：`copy.json` 的 `alembic_version` 必須等於 `backend/app/migration_revisions.py` 的 `REVISIONS` 最後一項，不相等 API 會拒絕啟動。本分支新增了 migration 時可以只對副本跑 `init-db`（`STOCK_DATA_DIR="$V" STOCK_DB_PATH="$V/stock.db" STOCK_RAW_DIR="$V/raw" "$PY" -B -m worker.cli init-db`，2 GB 副本約 36 分鐘，三個 `STOCK_*` 必須都指向 `$V`），否則全部無法判定。
+
+   容器：再把副本複製進 volume（2.4 GB 約 1 分鐘）：
+
+   ```bash
+   dc run --rm --no-deps -v "$V:/src:ro" scheduler cp /src/stock.db /data/stock.db
+   ```
+5. **副本 revision**：`copy.json` 的 `alembic_version` 必須等於 `backend/app/migration_revisions.py` 的 `REVISIONS` 最後一項，不相等 API 會拒絕啟動。本分支新增了 migration 時可以只對副本跑 `init-db`（`STOCK_DATA_DIR="$V" STOCK_DB_PATH="$V/stock.db" STOCK_RAW_DIR="$V/raw" "$PY" -B -m worker.cli init-db`，2 GB 副本約 36 分鐘，三個 `STOCK_*` 必須都指向 `$V`），否則全部無法判定。容器：改對 volume 跑 `dc run --rm --no-deps scheduler python -B -m worker.cli init-db`（compose 把三個 `STOCK_*` 固定在 `/data`；用 scheduler 是因為它的記憶體上限 2 GB；0017→0020 在 2.4 GB 副本上約 3 分鐘，#339），`$V/stock.db` 不升級。
 6. **私人資料**：`"$PY" -B "$WT/.claude/skills/verify-stock-lab/db_facts.py" "$V/stock.db" > "$OUT/facts.json"`。`portfolio_positions` 大於 0 時今日與行動頁會出現庫存，本次是私人模式，見[私人資料](#私人資料)。
 
 ### 2. 起服務並跑 CI 檢查
 
-照[起服務](#起服務)（`DB="$V/stock.db"`），再跑（私人模式把 `--out "$OUT"` 換成 `--out "$OUT/.private"`）：
+**容器**：埠向作業系統要空埠（`free` 見[起服務](#起服務)第 1 步），image 從工作樹 build（`STOCK_GIT_HEAD` 是 summary 與 run 記錄的程式版本），`--wait` 等 api 與 web 都 healthy；容器裡的 git 照[工作手冊「本機檢查」](../../../docs/GITHUB_WORKFLOW.md#本機檢查)的掛法讀這個 worktree。私人模式把 `--out /out` 換成 `--out /out/.private`：
+
+```bash
+printf 'API_PORT=%s\nWEB_PORT=%s\n' "$(free)" "$(free)" > "$V/ports"; set -a; . "$V/ports"; set +a
+printf 'gitdir: /repo.git/worktrees/%s\n' "$(basename "$(git rev-parse --git-dir)")" > "$V/gitfile"
+STOCK_GIT_HEAD="$(git rev-parse HEAD)" dc up -d --build --wait api web > "$V/logs/up.log" 2>&1 || dc logs api > "$V/logs/api.log" 2>&1
+dc run --rm --no-deps -v "$(git rev-parse --git-common-dir):/repo.git:ro" -v "$V/gitfile:/app/.git:ro" -v "$OUT:/out" \
+  api python -B tools/verify/page_checks.py --db /data/stock.db --out /out \
+  --api http://api:8000 --web http://web:8080 > "$V/logs/checks.log" 2>&1
+```
+
+`up` 失敗時 `$V/logs/api.log` 出現 `Database is not ready` 就抄該行；五個導覽全部無法判定，跳到收尾。之後的命令開頭都要先 `set -a; . "$V/ports"; set +a`（compose 檔的埠從環境變數讀）。
+
+**本機**：照[起服務](#起服務)（`DB="$V/stock.db"`），再跑（私人模式把 `--out "$OUT"` 換成 `--out "$OUT/.private"`）：
 
 ```bash
 "$PY" -B "$WT/tools/verify/page_checks.py" --db "$V/stock.db" --out "$OUT" [--g7] \
@@ -186,7 +217,11 @@ export PYTHONPATH="$WT/backend;C:/Users/YiCheng/stock-lab-release/.venv/Lib/site
 
 ## 收尾
 
-只關本 skill 啟動的程序、只刪本 skill 的暫存：
+只關本 skill 啟動的程序、只刪本 skill 的暫存。
+
+**容器**：`set -a; . "$V/ports"; set +a; dc down --volumes --rmi all > "$V/logs/down.log" 2>&1` 刪掉 `$P` 的容器、網路、volume（含副本）與 image，再 `docker ps -a -q --filter "label=com.docker.compose.project=$P"` 與 `docker volume ls -q --filter "label=com.docker.compose.project=$P"` 確認兩個都沒有輸出；接著刪 `$V/ports`、`$V/gitfile` 與 `$V/stock.db`（各用一行 `rm -f` 寫完整路徑），再照下面第 3、4 步。
+
+**本機**：
 
 1. `kill $(cat "$V/api.pid") $(cat "$V/web.pid")`，再 `. "$V/ports"; curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$API_PORT/api/health" "http://127.0.0.1:$WEB_PORT/api/health"` 確認兩個都印 `000`（連不上；程序約 1 秒後才結束，緊接著查可能還是 200，另起一個命令再查）；背景工作因此回報 failed 屬預期。再查還有回應就是服務沒關到，用 PowerShell `Get-NetTCPConnection -State Listen -LocalPort <埠>` 找出 `OwningProcess` 再 `Stop-Process`。之後刪 `$V/api.pid`、`$V/web.pid`、`$V/ports`。
 2. 刪 `$V/dist`；CI 模式另刪 `$V/db`；真資料模式另刪 `$V/raw`（API 啟動時建的空目錄）與 `$V/stock.db`（含同名 `-wal`、`-shm`、`-journal`、`.partial`），各用一行 `rm -rf` 寫完整路徑。保留 `$V/out/`（證據）與 `$V/logs/`。

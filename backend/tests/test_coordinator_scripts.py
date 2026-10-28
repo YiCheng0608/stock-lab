@@ -85,6 +85,17 @@ if [ "$1 $2" = "worktree create" ] && [ ! -f "$d/worktree_head.txt" ]; then
   sha="$(awk -v r="$ref" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
   echo "${sha:-$FAKE_SHA}" >"$d/worktree_head.txt"
 fi
+# With <fake>/run_terminal_command, terminal create runs its --command in bash, as Orca types
+# it into the terminal's Git Bash; the fake bin directory (a test's fake claude) comes first.
+# The terminal's shell does not inherit dispatch.sh's environment, so neither does this one's
+# COMPOSE_PROJECT_NAME (#339 review S2).
+if [ "$1 $2" = "terminal create" ] && [ -f "$d/run_terminal_command" ]; then
+  prev=""
+  for a in "$@"; do
+    [ "$prev" = --command ] && env -u COMPOSE_PROJECT_NAME PATH="$FAKE_BIN:$PATH" bash -c "$a"
+    prev="$a"
+  done
+fi
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
 fi
@@ -385,6 +396,35 @@ def test_dispatch_sends_only_after_tui_idle_is_satisfied(dispatch: Harness) -> N
     )
     update = [c for c in dispatch.calls("gh") if "updateProjectV2ItemFieldValue" in c]
     assert len(update) == 1 and "o=OPT-DEV" in update[0] and "i=ITEM-1" in update[0]
+
+
+def test_dispatch_starts_claude_with_the_task_compose_project(
+    dispatch: Harness,
+) -> None:
+    """AC-3 (#339): the terminal's claude runs with COMPOSE_PROJECT_NAME=task-<issue>, not
+    the coordinator's."""
+    claude = dispatch.bin / "claude"
+    claude.write_text(
+        '#!/usr/bin/env bash\nprintf "%s|%s" "$COMPOSE_PROJECT_NAME" "$*" >"$FAKE_DIR/claude.txt"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    claude.chmod(0o755)
+    dispatch.write("run_terminal_command", "")
+    result = dispatch.run(
+        "dispatch.sh",
+        "282",
+        "dryrun",
+        "--task-file",
+        dispatch.task.as_posix(),
+        COMPOSE_PROJECT_NAME="stock-lab",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
+    assert ran == "task-282|--model claude-opus-5-5 --effort high"
+    # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
+    (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
+    assert " --shell git-bash " in create
 
 
 @pytest.mark.parametrize(

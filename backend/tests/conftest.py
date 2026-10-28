@@ -32,6 +32,11 @@ os.environ.pop("STOCK_API_PUBLIC_HOSTS", None)
 os.environ.pop("STOCK_API_ALLOWED_ORIGINS", None)
 # Set by worker.job for the worker it runs (Issue 336); never inherited by a test.
 os.environ.pop("STOCK_JOB_LOCK", None)
+# compose hands the env file's tokens to the api container (Issue 337), where the local checks
+# run the tests (Issue 339): a real token never reaches a test, and the tests see what CI's
+# docker job (no env file) does.
+os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+os.environ.pop("GH_TOKEN", None)
 
 
 def pytest_configure(config):
