@@ -115,6 +115,57 @@ jobs:
           set -euo pipefail
           python -B -m pytest -p no:cacheprovider -q -rA tests
 
+  # The backend image (backend/Dockerfile, #333): build it, then in a container the tools it
+  # must hold, one screenshot of a local page with tools/ops/screenshot.cjs (its memory peak
+  # from the container's cgroup) and the whole backend/tests. The tests read git history
+  # (KNOWN_FAILURES dates), so the checkout's .git is mounted read-only; the image has none.
+  docker:
+    name: docker
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      IMAGE: stock-lab-backend:ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: docker build
+        run: docker build -f backend/Dockerfile -t "$IMAGE" .
+      - name: Image size
+        run: |
+          docker image inspect "$IMAGE" --format 'size_bytes={{.Size}}' | tee -a "$GITHUB_STEP_SUMMARY"
+          docker history --format '{{.Size}}\t{{.CreatedBy}}' "$IMAGE" | cut -c1-160
+      - name: Tools in the container
+        run: |
+          docker run --rm "$IMAGE" bash -c '
+            set -eux
+            python -c "import app, worker" && echo "import app, worker: ok"
+            gh --version
+            claude --version
+            node --version
+            chromium --version
+            date "+%F %T %Z %z"
+            cat ~/.claude.json
+            id
+            cat /proc/1/cmdline | tr "\0" " "; echo'
+      - name: Screenshot in the container
+        run: |
+          docker run --rm "$IMAGE" bash -c '
+            set -eu
+            mkdir -p /tmp/page
+            printf "<!doctype html><meta charset=utf-8><meta name=viewport content=width=device-width><title>stock-lab</title><main>stock-lab 截圖測試</main>\n" > /tmp/page/index.html
+            python -m http.server 8765 --bind 127.0.0.1 --directory /tmp/page > /tmp/http.log 2>&1 &
+            curl -fsS -o /dev/null --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8765/
+            node tools/ops/screenshot.cjs --url http://127.0.0.1:8765/ --out /tmp/shot --name local --widths 1280,390
+            ls -l /tmp/shot
+            cat /tmp/shot/local-1280.txt
+            echo "memory_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unknown)"' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: pytest in the container
+        run: docker run --rm -v "$PWD/.git:/app/.git:ro" "$IMAGE" python -B -m pytest -p no:cacheprovider -q backend/tests
+
   frontend:
     name: frontend
     needs: changes
@@ -226,7 +277,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, frontend, verify]
+    needs: [changes, repository, pr, backend, docker, frontend, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -243,7 +294,7 @@ jobs:
           assert jobs['verify']['result'] == 'success', jobs
           pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
           assert jobs['pr']['result'] == pr, jobs
-          for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
+          for job, flag in [('backend', 'python'), ('docker', 'python'), ('frontend', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'
