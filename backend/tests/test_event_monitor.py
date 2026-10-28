@@ -433,7 +433,7 @@ def test_gh_failures_in_a_row_are_counted_in_the_heartbeat(mon: Harness) -> None
     """Review S2: the heartbeat counts polls in a row with a failed gh call; the
     watchdog comments at 10 (test_watchdog). One good poll starts the count over."""
     beat_file = mon.data / "logs" / "monitor-heartbeat.json"
-    mon.write("gh_comments.fail", "")
+    mon.write("gh_comments.fail", "HTTP 401: Bad credentials\n")
     _monitor(mon)
     _monitor(mon, at=NOW + 60)
     beat = json.loads(beat_file.read_text("utf-8"))
@@ -441,7 +441,7 @@ def test_gh_failures_in_a_row_are_counted_in_the_heartbeat(mon: Harness) -> None
         2,
         "2026-10-25T12:00:00Z",
     )
-    assert beat["gh_error"] == "HTTP 401: Bad credentials"
+    assert beat["gh_error"] == "gh api: HTTP 401: Bad credentials"
     out = mon.run(
         "patrol.sh",
         "--session-id",
@@ -450,7 +450,14 @@ def test_gh_failures_in_a_row_are_counted_in_the_heartbeat(mon: Harness) -> None
         "term_coord",
         PATROL_NOW=str(NOW + 90),
     )
-    assert "gh 連續 2 輪失敗：HTTP 401: Bad credentials" in out.stdout
+    assert "gh 連續 2 輪失敗：gh api: HTTP 401: Bad credentials" in out.stdout
+    # Review S-c: the error is the failed call's own stderr, here none, not a warning
+    # the poll's earlier call wrote.
+    mon.write("gh_pr_list.stderr", "A new release of gh is available\n")
+    mon.write("gh_comments.fail", "")
+    _monitor(mon, at=NOW + 90)
+    beat = json.loads(beat_file.read_text("utf-8"))
+    assert (beat["gh_failed_polls"], beat["gh_error"]) == (3, "gh api: exit 1")
     (mon.fake / "gh_comments.fail").unlink()
     _monitor(mon, at=NOW + 120)
     beat = json.loads(beat_file.read_text("utf-8"))
@@ -469,6 +476,68 @@ def test_a_monitor_whose_lock_was_taken_over_stops_and_keeps_it(mon: Harness) ->
     assert "lock_lost" in (mon.data / "logs" / "monitor.log").read_text("utf-8")
     assert _ids(mon) == [] and _sends(mon) == []
     assert (lock / "pid").read_text(encoding="utf-8") == "1 other\n", result.stdout
+
+
+def test_a_monitor_taken_over_mid_poll_does_not_comment_again(mon: Harness) -> None:
+    """Review S-a: monitor A hangs in gh pr list; B takes the lock over and comments
+    "請開統籌" on #1. A, back from gh, stops before its own comment: one comment."""
+    (mon.data / "logs" / "coordinator-heartbeat.json").unlink()
+    mon.write(
+        "gh_issue_comment.json", "https://github.com/x/issues/1#issuecomment-77\n"
+    )
+    _monitor(mon)
+    # A's beat (MONITOR_NOW, 2026-10-25) is days old by the clock B reads: B takes over.
+    # Taking over removes the lock directory; on Windows A's work directory, a file of
+    # it open in A's gh call, stays: the hook puts it back.
+    lock = (mon.data / "logs" / "monitor.lock").as_posix()
+    mon.write(
+        "gh_pr_list.hook",
+        '[ -e "$FAKE_DIR/b_ran" ] && exit 0\n'
+        'touch "$FAKE_DIR/b_ran"\n'
+        f'read -r a _ <"{lock}/pid"\n'
+        f'MONITOR_NOW={NOW + 3610} bash "{(mon.ops / "monitor.sh").as_posix()}" --once'
+        ' >"$FAKE_DIR/b.out" 2>&1\n'
+        f'mkdir -p "{lock}/work.$a"\n',
+    )
+    _monitor(mon, at=NOW + 3600)
+    comments = [c for c in mon.calls("gh") if c.startswith("issue comment 1 ")]
+    b_out = (mon.fake / "b.out").read_text(encoding="utf-8")
+    assert len(comments) == 1, b_out
+    assert "stale=commented" in b_out
+    assert [r["key"] for r in _records(mon, "stale")] == ["heartbeat:none"]
+    log = (mon.data / "logs" / "monitor.log").read_text(encoding="utf-8")
+    events = [line.split()[1] for line in log.splitlines()]
+    # B: takes over, polls; A: stops before its comment.
+    assert events[-4:] == ["lock_stale_removed", "start", "poll", "lock_lost"]
+
+
+def test_a_monitor_taken_over_between_polls_leaves_the_new_one_alone(
+    mon: Harness,
+) -> None:
+    """Review S-a: the lock is taken over while A sleeps between polls. A's next poll
+    stops at its start: no gh call, the new owner's lock and work directory stay."""
+    lock = mon.data / "logs" / "monitor.lock"
+    fake_sleep = mon.bin / "sleep"
+    fake_sleep.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "1 other\\n" >"{(lock / "pid").as_posix()}"\n'
+        f'mkdir -p "{(lock / "work.1").as_posix()}"\n'
+        f'touch "{(lock / "work.1" / "keep").as_posix()}"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    fake_sleep.chmod(0o755)
+    result = mon.run("monitor.sh", MONITOR_CALL_TIMEOUT="30")
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = (mon.data / "logs" / "monitor.log").read_text(encoding="utf-8")
+    assert [line.split()[1] for line in log.splitlines()] == [
+        "start",
+        "poll",
+        "lock_lost",
+    ]
+    assert _gh_per_poll(mon) == 2  # the first poll only
+    assert (lock / "pid").read_text(encoding="utf-8") == "1 other\n"
+    assert (lock / "work.1" / "keep").exists()
 
 
 def test_slots_and_job_logs_become_events(mon: Harness) -> None:

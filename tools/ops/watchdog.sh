@@ -207,7 +207,7 @@ if [ -n "$python" ]; then
       anomaly monitor_stale "事件 monitor：最後一次輪詢在 $at（$((age / 60)) 分鐘前），停擺超過 10 分鐘，統籌不會被喚醒。請依 OPERATIONS §6.6 查 \`$logs/monitor.log\` 與工作 \`\\stock-lab\\monitor\`，必要時重新啟動。" ;;
     gh_failed\ *)
       read -r _ polls since error <<<"$beat"
-      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。請查 \`gh auth status\` 與 \`$logs/monitor.log\`（OPERATIONS §6.6）。" ;;
+      anomaly monitor_gh_failed "事件 monitor：gh 從 $since 起連續 $polls 輪失敗（最後的錯誤：$error），佇列收不到 PR 與留言的事件。可能是 gh 登入過期（\`gh auth status\`），或帳號共用的 5000 次／小時限流已用完（\`gh api rate_limit\`）；請一併查 \`$logs/monitor.log\`（OPERATIONS §6.6）。" ;;
     unreadable) anomaly monitor_stale "事件 monitor：\`$logs/monitor-heartbeat.json\` 讀不出輪詢時間，統籌可能不會被喚醒。請依 OPERATIONS §6.6 查 \`$logs/monitor.log\`。" ;;
     error) found=1; log monitor_check_failed "" "讀取 monitor 心跳失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)" ;;
   esac

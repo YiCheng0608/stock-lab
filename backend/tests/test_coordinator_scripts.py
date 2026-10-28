@@ -99,14 +99,18 @@ grep -q '"ok": *false' "$d/$key.json" 2>/dev/null && exit 1
 exit 0
 """
 
-# A <fake>/<key>.fail file makes that call exit 1 (key gh_comments for the comments
-# listing, else gh_<sub1>_<sub2>); a <key>.sleep file holding N makes it hang N seconds.
+# A <fake>/<key>.fail file makes that call exit 1 with the file's text on stderr (key
+# gh_comments for the comments listing, else gh_<sub1>_<sub2>). <key>.sleep holding N
+# makes it hang N seconds, <key>.stderr is written to stderr, <key>.hook is run (bash)
+# first.
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
 case "$1 $2" in "api repos/"*) k=gh_comments ;; *) k="gh_$1_$2" ;; esac
+[ -f "$d/$k.hook" ] && bash "$d/$k.hook"
 [ -f "$d/$k.sleep" ] && sleep "$(cat "$d/$k.sleep")"
-[ -f "$d/$k.fail" ] && { echo "HTTP 401: Bad credentials" >&2; exit 1; }
+[ -f "$d/$k.stderr" ] && cat "$d/$k.stderr" >&2
+[ -f "$d/$k.fail" ] && { cat "$d/$k.fail" >&2; exit 1; }
 case "$1 $2" in
   "api graphql")
     case "$*" in

@@ -90,10 +90,16 @@ log() { # log EVENT TEXT
 
 # --- one monitor at a time. A lock whose pid is gone, or whose monitor has not beaten
 # for 10 minutes, was left by a killed or hung run and is taken over. The lock holds
-# "pid token": a monitor whose lock was taken over stops before its next write and
-# leaves the new owner's lock alone (#316 review S3).
+# "pid token": a monitor whose lock was taken over stops at its next check (each poll's
+# start, before the #1 comment, before the queue) and leaves the new owner's lock and
+# work directory alone (#316 review S3, S-a).
 token="$$ $(date +%s%N)$RANDOM"
 owns_lock() { [ "$(cat "$lock_dir/pid" 2>/dev/null)" = "$token" ]; }
+keep_lock() {
+  owns_lock && return 0
+  log lock_lost "pid=$$ owner=$(cat "$lock_dir/pid" 2>/dev/null)"
+  exit 0
+}
 if ! mkdir "$lock_dir" 2>/dev/null; then
   read -r owner _ <"$lock_dir/pid" 2>/dev/null || owner=""
   beat_age="$("$python" -X utf8 -c '
@@ -119,22 +125,32 @@ trap 'owns_lock && rm -rf "$lock_dir"' EXIT
 trap 'exit 143' INT TERM
 
 gh_call() { # gh_call OUT ARGS...: one gh call of this poll, within the timeout
-  local out="$1" status
+  local out="$1" err label status
   shift
   gh_calls=$((gh_calls + 1))
-  call gh "$@" >"$out" 2>>"$work/gh.err"
+  err="$work/gh-$gh_calls.err"
+  label="gh $1"
+  [ "$1" = api ] || label="$label $2"
+  call gh "$@" >"$out" 2>"$err"
   status=$?
   [ "$status" = 0 ] && return 0
-  [ "$status" = 124 ] && printf 'gh %s %s: timeout %ss\n' "$1" "$2" "$call_timeout" >>"$work/gh.err"
   gh_failed=1
+  # The error of this call, not a warning an earlier call of the poll wrote (S-c).
+  if [ "$status" = 124 ]; then
+    gh_error="$label: timeout ${call_timeout}s"
+  else
+    gh_error="$(tr -d '\r' <"$err" | grep -v '^[[:space:]]*$' | tail -n 1)"
+    gh_error="$label: ${gh_error:-exit $status}"
+  fi
   return "$status"
 }
 
 poll() {
-  local now gh_calls=0 gh_failed=0 since summary new pending wake terminal stale_line key body url
-  local args=() ro=() work notes="" text out
+  local now gh_calls=0 gh_failed=0 gh_error="" since summary new pending wake terminal
+  local stale_line key body url args=() ro=() work notes="" text out
+  keep_lock
   now="$(clock)"
-  work="$lock_dir/work"
+  work="$lock_dir/work.$$"
   rm -rf "$work" && mkdir -p "$work"
 
   # 1. the #1 comment, when due, takes the comments' gh call this poll
@@ -159,6 +175,7 @@ poll() {
     eq note-stale "$logs" "$now" "$key" -
     notes="$notes stale=planned"
   elif [ -n "$key" ]; then
+    keep_lock
     printf '%s\n' "$body" >"$work/comment.md"
     if gh_call "$work/comment.out" issue comment 1 --repo "$GH_REPO" --body-file "$work/comment.md"; then
       url="$(tr -d '\r' <"$work/comment.out" | tail -n 1)"
@@ -186,10 +203,7 @@ poll() {
   fi
 
   # 5. queue, then wake; not if another monitor took the lock over meanwhile
-  if ! owns_lock; then
-    log lock_lost "pid=$$ owner=$(cat "$lock_dir/pid" 2>/dev/null)"
-    exit 0
-  fi
+  keep_lock
   out="$(eq record "$logs" "$now" "${args[@]}")" || { log poll_failed "gh_calls=$gh_calls$notes"; return; }
   summary="$(printf '%s\n' "$out" | tail -n 1)"
   printf '%s\n' "$out" | grep '^event ' | sed 's/^/  /'
@@ -218,8 +232,8 @@ poll() {
       notes="$notes wake=failed terminal=$terminal"
     fi
   fi
-  eq beat "$logs" "$now" "$mode" "$gh_calls" "$$" "$gh_failed" "$(tail -n 1 "$work/gh.err" 2>/dev/null)"
-  [ "$gh_failed" = 1 ] && notes="$notes gh_error=$(tail -n 1 "$work/gh.err" 2>/dev/null | tr -s ' \r' ' ' | cut -c1-120)"
+  eq beat "$logs" "$now" "$mode" "$gh_calls" "$$" "$gh_failed" "$gh_error"
+  [ "$gh_failed" = 1 ] && notes="$notes gh_error=$(printf '%s' "$gh_error" | cut -c1-120)"
   log poll "gh_calls=$gh_calls $summary$notes" >/dev/null
   echo "poll $(iso "$now") gh_calls=$gh_calls ${summary}${notes}"
 }

@@ -895,6 +895,7 @@ def test_a_monitor_whose_gh_calls_keep_failing_is_commented(wd):
         "待使用者：事件 monitor：gh 從 2026-10-19T13:50:00Z 起連續 10 輪失敗"
         "（最後的錯誤：HTTP 401: Bad credentials）"
     ) in body
+    assert "`gh auth status`" in body and "`gh api rate_limit`" in body
     assert "key=monitor_gh_failed" in wd.log()
     beat.update(json.loads(_beat_at(NIGHT + 14 * 60)), gh_failed_polls=25)
     _monitor_beat(wd, json.dumps(beat))
