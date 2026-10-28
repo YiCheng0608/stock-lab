@@ -27,6 +27,9 @@ _TEST_RAW_DIR = _TEST_DATA_DIR / "raw"
 os.environ["STOCK_DATA_DIR"] = str(_TEST_DATA_DIR)
 os.environ["STOCK_DB_PATH"] = str(_TEST_DATA_DIR / "stock.db")
 os.environ["STOCK_RAW_DIR"] = str(_TEST_RAW_DIR)
+# The api container sets these (Issue 343); tests of app.main expect the defaults, so they never leak in.
+os.environ.pop("STOCK_API_PUBLIC_HOSTS", None)
+os.environ.pop("STOCK_API_ALLOWED_ORIGINS", None)
 
 
 def pytest_configure(config):
