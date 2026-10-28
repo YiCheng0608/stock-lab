@@ -27,7 +27,7 @@ export STOCK_ENV_FILE="$work/smoke.env" WEB_PORT="$web_port" API_PORT="$api_port
 printf '# compose smoke test (tools/compose/smoke.sh): no secrets\nSMOKE_MARK=from-env-file\n' > "$STOCK_ENV_FILE"
 
 cleanup() {
-    "${dev[@]}" --profile scheduler down --volumes --remove-orphans > /dev/null 2>&1 || true
+    STOCK_ENV_FILE="$work/smoke.env" "${dev[@]}" --profile scheduler down --volumes --remove-orphans > /dev/null 2>&1 || true
     rm -f "$STOCK_ENV_FILE"
     rmdir "$work" 2> /dev/null || true
 }
