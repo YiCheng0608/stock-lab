@@ -143,39 +143,9 @@ export function ReasonList({ reasons }: { reasons: CandidateItem['reasons'] }) {
   )
 }
 
-// The stock-page card may break before 「／」; the today table and phone card keep a target on one line (DESIGN_SYSTEM §5).
-function Targets({ levels, breakable = true }: { levels: CandidateItem['levels']; breakable?: boolean }) {
-  return <>{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">{breakable && <wbr />}／{formatPrice(levels.target_2)}</span>}</>
-}
-
-export function CandidateCard({ item, linkToStock = true, detailsOpen = false }: { item: CandidateItem; linkToStock?: boolean; detailsOpen?: boolean }) {
-  const { instrument, levels } = item
-  const name = <><strong>{instrument.symbol}</strong> {instrument.name}</>
-  return (
-    <article className="card candidate-card" data-candidate-rank={item.rank}>
-      <div className="candidate-head">
-        <span className="candidate-rank" aria-label={`第 ${item.rank} 名`}>#{item.rank}</span>
-        <div className="candidate-name">
-          {linkToStock ? <Link className="symbol-link" to={stockPath(item)}>{name}</Link> : <span>{name}</span>}
-          <div className="small-note">{exchangeLabel(instrument.exchange)} · {candidateStrategyLabel(item.strategy)}</div>
-        </div>
-        <div className="candidate-total"><span><Term id="candidate_score">總分</Term></span><b>{formatCandidateScore(item.total_score)}</b></div>
-      </div>
-      {item.partial_components && <div className="candidate-partial small-note">{PARTIAL_NOTE}</div>}
-      <dl className="candidate-levels">
-        <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
-        <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} /></dd></div>
-        <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
-      </dl>
-      <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
-      <ComponentScores item={item} />
-      <ReasonList reasons={item.reasons} />
-      <div className="small-note candidate-groups">族群：{item.groups.length ? item.groups.map(candidateGroupText).join('、') : '無所屬產業或題材'}</div>
-      <CandidateNote item={item} />
-      <ScoreDetails item={item} open={detailsOpen} />
-    </article>
-  )
+// The today table and phone card keep a target on one line (DESIGN_SYSTEM §5).
+function Targets({ levels }: { levels: CandidateItem['levels'] }) {
+  return <>{formatPrice(levels.target_1)}{levels.target_2 != null && <span className="level-target-2">／{formatPrice(levels.target_2)}</span>}</>
 }
 
 // ---- today list (#276): desktop table with a detail row per candidate, phone cards ----
@@ -226,7 +196,7 @@ function candidateColumns(open: ReadonlySet<number>, toggle: (rank: number) => v
     { key: 'close', header: '最近收盤', num: true, cell: (item) => <CloseValue item={item} /> },
     { key: 'entry', header: <Term id="entry_zone">進場區</Term>, num: true, cellClassName: 'level-entry', cell: (item) => formatEntryZone(item.levels) },
     { key: 'stop', header: <Term id="support">停損</Term>, num: true, cellClassName: 'level-stop', cell: (item) => formatPrice(item.levels.invalid_price) },
-    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} breakable={false} /> },
+    { key: 'target', header: <Term id="target">目標</Term>, num: true, cellClassName: 'level-target', cell: (item) => <Targets levels={item.levels} /> },
     { key: 'rr', header: <Term id="rr">RR</Term>, num: true, cell: (item) => <Badge tone="primary" className="badge-compact">{formatRiskReward(item.levels.risk_reward)}</Badge> },
     { key: 'total', header: <Term id="candidate_score">總分</Term>, num: true, cell: (item) => formatCandidateScore(item.total_score) },
     { key: 'reason', header: '主要理由', wrap: true, cellClassName: 'candidate-reason-cell', cell: (item) => <FirstReason item={item} /> },
@@ -254,7 +224,7 @@ function CandidateMiniCard({ item, hidden }: { item: CandidateItem; hidden: bool
         <div><dt>收盤</dt><dd><CloseValue item={item} /></dd></div>
         <div><dt><Term id="entry_zone">進場區</Term></dt><dd className="level-entry">{formatEntryZone(levels)}</dd></div>
         <div><dt><Term id="support">停損</Term></dt><dd className="level-stop">{formatPrice(levels.invalid_price)}</dd></div>
-        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} breakable={false} /></dd></div>
+        <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} /></dd></div>
       </dl>
       <p className="candidate-mini-reason"><FirstReason item={item} /></p>
       <details className="details candidate-mini-ai"><summary>AI 說明</summary><CandidateDetail item={item} /></details>
