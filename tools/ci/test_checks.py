@@ -699,5 +699,27 @@ class RepositoryWorkingTree(unittest.TestCase):
         self.assertIn("docs/x.md: the first line is not <!-- owns:", result.stderr)
 
 
+class WorkflowTriggers(unittest.TestCase):
+    """CI runs on PRs into and pushes to every long-lived branch (#288, #332).
+
+    The integration branches come from close_task.sh, the one list of them.
+    """
+
+    def test_ci_runs_on_every_long_lived_branch(self):
+        import yaml
+
+        close_task = (ROOT / "tools/ops/close_task.sh").read_text(encoding="utf-8")
+        (listed,) = re.findall(r"^integration_branches=\((.*)\)$", close_task, re.M)
+        self.assertTrue(listed.split())
+        long_lived = ["master", "release/**", *listed.split()]
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        for event in ("pull_request", "push"):
+            with self.subTest(event=event):
+                self.assertEqual(workflow["on"][event]["branches"], long_lived)
+
+
 if __name__ == "__main__":
     unittest.main()
