@@ -3923,10 +3923,10 @@ def strategies(
     return _page_response(items, page=page, page_size=page_size, total=total)
 
 
-def configure_cors(app) -> None:
+def configure_cors(app, origins=DEFAULT_CORS_ORIGINS) -> None:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=DEFAULT_CORS_ORIGINS,
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

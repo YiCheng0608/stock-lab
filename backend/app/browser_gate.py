@@ -9,9 +9,10 @@ any state, quota, source or private file.
 Checked for every POST, PUT, PATCH and DELETE (decided on ``method.upper()``); any other method (GET, HEAD, OPTIONS) is not:
 
 * ``Host`` must be a single ``127.0.0.1:<port>`` or ``localhost:<port>``, ``<port>`` being the one the server listens on
-  (``scope["server"]``); a rebound name, a missing port or a duplicated Host is refused.
-* ``Origin`` (when sent) must be single and either in the allow list (the origins ``configure_cors`` admits) or this
-  server's own origin ``http://<Host>``.
+  (``scope["server"]``), or one of ``public_hosts`` (``config.public_hosts``: loopback names on another port, such as a proxy's
+  or a mapped container port); a rebound name, a missing port or a duplicated Host is refused.
+* ``Origin`` (when sent) must be single and either in the allow list (the origins ``configure_cors`` admits,
+  ``config.allowed_origins``) or this server's own origin ``http://<Host>``.
 * ``Sec-Fetch-Site`` (when sent) must be single: ``same-origin`` and ``none`` pass; ``same-site`` and ``cross-site`` pass only
   with an admitted Origin; anything else is refused.
 * POST, PUT and PATCH must declare a single ``application/json`` (optional ``charset=utf-8``) Content-Type; DELETE carries none.
@@ -47,7 +48,7 @@ def _listen_port(server):
     return port if type(port) is int and 1 <= port <= 65535 else None
 
 
-def refusal(method, raw_headers, server, allowed_origins):
+def refusal(method, raw_headers, server, allowed_origins, public_hosts=()):
     """(status, reason) to refuse a request, else None. Pure over ASGI ``(name, value)`` byte pairs and ``scope["server"]``."""
     method = method.upper()
     if method not in GATED_METHODS:
@@ -56,7 +57,10 @@ def refusal(method, raw_headers, server, allowed_origins):
     if (
         port is None
         or len(host) != 1
-        or host[0] not in ("%s:%d" % (name, port) for name in LOCAL_NAMES)
+        or (
+            host[0] not in ("%s:%d" % (name, port) for name in LOCAL_NAMES)
+            and host[0] not in public_hosts
+        )
     ):
         return 403, "host_not_admitted"
     origins = _values(raw_headers, "origin")
@@ -82,10 +86,11 @@ def refusal(method, raw_headers, server, allowed_origins):
 class BrowserGate:
     """ASGI middleware: refuse before the wrapped app sees the request; lifespan and websocket scopes pass through."""
 
-    def __init__(self, app, *, allowed_origins):
-        self.app, self.allowed_origins, self.refusals = (
+    def __init__(self, app, *, allowed_origins, public_hosts=()):
+        self.app, self.allowed_origins, self.public_hosts, self.refusals = (
             app,
             frozenset(allowed_origins),
+            frozenset(public_hosts),
             {},
         )
 
@@ -93,7 +98,11 @@ class BrowserGate:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         refused = refusal(
-            scope["method"], scope["headers"], scope.get("server"), self.allowed_origins
+            scope["method"],
+            scope["headers"],
+            scope.get("server"),
+            self.allowed_origins,
+            self.public_hosts,
         )
         if refused is None:
             return await self.app(scope, receive, send)
