@@ -5,9 +5,10 @@
 #
 # The default (last) stage serves the production build with nginx and reverse proxies /api
 # to API_UPSTREAM (default api:8000, the compose service name, #335); docker/nginx.conf.template
-# holds the rules. Versions follow CI: node 22, pnpm 10.18.3, the lock file.
-ARG NODE_IMAGE=node:22-bookworm-slim
-ARG NGINX_IMAGE=nginx:1.28-alpine
+# holds the rules. Versions follow CI (node 22, pnpm 10.18.3, the lock file); the base images
+# are pinned by tag and digest, node to the same one as backend/Dockerfile.
+ARG NODE_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
+ARG NGINX_IMAGE=nginx:1.28.3-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
 
 FROM ${NODE_IMAGE} AS deps
 ARG PNPM_VERSION=10.18.3
