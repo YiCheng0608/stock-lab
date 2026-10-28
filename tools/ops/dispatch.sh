@@ -107,10 +107,10 @@ if [ "$orca_branch" != "$branch" ]; then
 fi
 
 # The task's compose project (docs/GITHUB_WORKFLOW.md 本機檢查, #339): a docker compose run
-# without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, for
-# Orca's default Git Bash; in another shell claude does not start, the wait below is not
-# satisfied and nothing is sent.
-out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" \
+# without -p uses task-<issue>, not the directory name. The prefix is POSIX shell syntax, so the
+# terminal's shell is pinned to Git Bash (#339 review S3); Orca refuses the create on a host
+# that cannot give it, and nothing is sent.
+out="$(orca terminal create --worktree "id:$repo_id::$path" --title "#$issue $slug" --shell git-bash \
   --command "COMPOSE_PROJECT_NAME=task-$issue claude --model $model --effort $effort" --json)" \
   || report 1 "orca terminal create 失敗"
 handle="$(printf '%s' "$out" | cj get result.terminal.handle)" || report 1 "orca terminal create 沒有回傳 handle"

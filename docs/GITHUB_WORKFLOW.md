@@ -49,7 +49,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
    ```text
    orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip [--base-branch origin/<branch>] --json
    git -C <path> branch -m <orca-branch> task/<issue>-<slug>
-   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --command "COMPOSE_PROJECT_NAME=task-<issue> claude --model <model> --effort <effort>" --json
+   orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --shell git-bash --command "COMPOSE_PROJECT_NAME=task-<issue> claude --model <model> --effort <effort>" --json
    orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
    orca terminal send --terminal <handle> --text "<任務全文>" --enter --wait-submit 30 --json
    ```
@@ -71,7 +71,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 
 ## 本機檢查
 
-在容器內跑，用 CI 同一套 image 與依賴（[OPERATIONS §1.2](OPERATIONS.md#12-docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 開的 terminal 另設了 `COMPOSE_PROJECT_NAME=task-<issue>`，漏了 `-p` 也落在同一個 project。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
+在容器內跑，用 CI 同一套 image 與依賴（[OPERATIONS §1.2](OPERATIONS.md#12-docker-compose)；需要 Docker Compose 2.24 以上）。Git Bash、worktree 根目錄執行。`-p task-<issue>` 是任務的 compose project，image、容器與 volume 都以它開頭，各 worktree 互不影響；`dispatch.sh` 以 Git Bash（`--shell git-bash`，前綴是 POSIX 寫法）開 terminal，並用 `COMPOSE_PROJECT_NAME=task-<issue> claude …` 啟動，漏了 `-p` 也落在同一個 project。這個變數只跟著那一次 `claude`：resume 工程師 session 時寫成 `COMPOSE_PROJECT_NAME=task-<issue> claude --resume <ID> --effort <原 level>`；Orca 自己 resume 的 session 沒有它，只靠命令裡的 `-p`。`--build` 從工作樹（含未 commit 的改動）重建 image，沒改的層走快取。
 
 測試與 `checks.py` 讀 git，而 image 不含 `.git`；worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到。所以唯讀掛進共用的 git 目錄，再掛一個指向其中 `worktrees/<worktree 名>` 的 `.git` 檔，容器裡的 git 讀到的就是這個 worktree 的 branch、HEAD 與 index。每個新 shell 先跑（`$T` 是 worktree 外暫存目錄，寫進 PR）：
 

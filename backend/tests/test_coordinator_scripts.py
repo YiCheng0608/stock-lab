@@ -87,9 +87,14 @@ if [ "$1 $2" = "worktree create" ] && [ ! -f "$d/worktree_head.txt" ]; then
 fi
 # With <fake>/run_terminal_command, terminal create runs its --command in bash, as Orca types
 # it into the terminal's Git Bash; the fake bin directory (a test's fake claude) comes first.
+# The terminal's shell does not inherit dispatch.sh's environment, so neither does this one's
+# COMPOSE_PROJECT_NAME (#339 review S2).
 if [ "$1 $2" = "terminal create" ] && [ -f "$d/run_terminal_command" ]; then
   prev=""
-  for a in "$@"; do [ "$prev" = --command ] && PATH="$FAKE_BIN:$PATH" bash -c "$a"; prev="$a"; done
+  for a in "$@"; do
+    [ "$prev" = --command ] && env -u COMPOSE_PROJECT_NAME PATH="$FAKE_BIN:$PATH" bash -c "$a"
+    prev="$a"
+  done
 fi
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
@@ -417,6 +422,9 @@ def test_dispatch_starts_claude_with_the_task_compose_project(
     assert result.returncode == 0, result.stdout + result.stderr
     ran = (dispatch.fake / "claude.txt").read_text(encoding="utf-8")
     assert ran == "task-282|--model claude-opus-5-5 --effort high"
+    # The prefix is POSIX syntax: the terminal's shell is Git Bash whatever Orca's default.
+    (create,) = [c for c in dispatch.calls("orca") if c.startswith("terminal create")]
+    assert " --shell git-bash " in create
 
 
 @pytest.mark.parametrize(
