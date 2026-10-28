@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Start an engineer session on an Issue (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 2 步):
-# Orca worktree from the latest origin/master, branch task/<issue>-<slug>, a visible
+# Orca worktree from the latest base (origin/master, or --base: a long-lived integration
+# branch such as origin/feat/docker, #332), branch task/<issue>-<slug>, a visible
 # terminal running claude, and the task text from a UTF-8 file sent only after
 # `orca terminal wait --for tui-idle` reports satisfied:true. Sets the board to 開發中.
 #
 # Usage: dispatch.sh <issue> <slug> --task-file <path> [options]
 #   --model M         default claude-opus-5-5
 #   --effort E        default high
+#   --base REF        origin/<branch> to start from, default origin/master; fetched first,
+#                     and the new worktree's HEAD must be its tip
 #   --repo-id ID      Orca repo id; default: the repo whose remote is YiCheng0608/stock-lab
 #   --wait-ms N       tui-idle wait, default 60000
 #   --submit-wait S   seconds to watch for turn_started after sending, default 30
@@ -22,17 +25,19 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
 
 issue="" slug="" task_file="" model="claude-opus-5-5" effort="high" repo_id=""
+base_ref="origin/master"
 wait_ms=60000 submit_wait=30 set_board=1
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
     --no-board) set_board=0 ;;
-    --task-file | --model | --effort | --repo-id | --wait-ms | --submit-wait | --python)
+    --task-file | --model | --effort | --base | --repo-id | --wait-ms | --submit-wait | --python)
       [ $# -ge 2 ] || die "$1 needs a value" 64
       case "$1" in
         --task-file) task_file="$2" ;;
         --model) model="$2" ;;
         --effort) effort="$2" ;;
+        --base) base_ref="$2" ;;
         --repo-id) repo_id="$2" ;;
         --wait-ms) wait_ms="$2" ;;
         --submit-wait) submit_wait="$2" ;;
@@ -56,6 +61,10 @@ case "$issue" in '' | *[!0-9]*) die "<issue> must be a number" 64 ;; esac
 case "$slug" in '' | -* | *[!a-z0-9-]*) die "<slug> uses a-z, 0-9 and '-' only" 64 ;; esac
 case "$model$effort" in *[!A-Za-z0-9._-]*) die "--model/--effort: letters, digits, '.', '_', '-' only" 64 ;; esac
 case "$wait_ms$submit_wait" in *[!0-9]*) die "--wait-ms/--submit-wait must be numbers" 64 ;; esac
+# A ref git and orca take as one argument: origin/<branch>, no option or range spelling.
+base_branch="${base_ref#origin/}"
+case "$base_ref" in origin/?*) ;; *) die "--base must be origin/<branch>: $base_ref" 64 ;; esac
+case "$base_branch" in -* | /* | */ | *..* | *[!A-Za-z0-9._/-]*) die "--base: bad branch name: $base_ref" 64 ;; esac
 [ -n "$task_file" ] || die "--task-file is required" 64
 find_python
 cj utf8 "$task_file" || die "任務檔不存在、是空的或不是 UTF-8：$task_file" 64
@@ -76,17 +85,22 @@ report() { # report EXIT [ERROR]
 }
 
 git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" && report 1 "branch $branch 已存在，未建 worktree"
-git -C "$repo_root" fetch --quiet origin master || report 1 "git fetch origin master 失敗"
-base="$(git -C "$repo_root" rev-parse origin/master)" || report 1 "讀不到 origin/master"
+git -C "$repo_root" fetch --quiet origin "$base_branch" || report 1 "git fetch origin $base_branch 失敗"
+base="$(git -C "$repo_root" rev-parse "$base_ref")" || report 1 "讀不到 $base_ref"
 orca_repo_id
 
-out="$(orca worktree create --repo "id:$repo_id" --name "$name" --no-parent --setup skip --json)" \
+# Without --base orca uses the repo's default base, as before #332; the HEAD check below
+# holds either way.
+from_base=()
+[ "$base_ref" = origin/master ] || from_base=(--base-branch "$base_ref")
+out="$(orca worktree create --repo "id:$repo_id" --name "$name" --no-parent --setup skip \
+  "${from_base[@]+"${from_base[@]}"}" --json)" \
   || report 1 "orca worktree create 失敗：$(printf '%s' "$out" | cj get error.message)"
 path="$(printf '%s' "$out" | cj get result.worktree.path)" || report 1 "orca worktree create 沒有回傳 path"
 orca_branch="$(printf '%s' "$out" | cj get result.worktree.branch)" || report 1 "orca worktree create 沒有回傳 branch"
 orca_branch="${orca_branch#refs/heads/}"
 head="$(git -C "$path" rev-parse HEAD)" || report 1 "讀不到新 worktree 的 HEAD"
-[ "$head" = "$base" ] || report 1 "新 worktree 的 HEAD 不是最新 origin/master，未開 terminal"
+[ "$head" = "$base" ] || report 1 "新 worktree 的 HEAD 不是最新 $base_ref，未開 terminal"
 if [ "$orca_branch" != "$branch" ]; then
   git -C "$path" branch -m "$orca_branch" "$branch" || report 1 "branch 改名失敗：$orca_branch → $branch"
 fi

@@ -42,6 +42,8 @@ SCRIPTS = (
 REPO_ID = "repo-1"
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
+# The tip of origin/feat/docker, the Docker integration branch (#332).
+DOCKER_SHA = "d" * 40
 # 2026-10-25 12:00:00 UTC
 NOW = int(datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc).timestamp())
 
@@ -70,11 +72,19 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 
 # Answers come from <fake>/<name>_<sub1>_<sub2>.json (orca, gh) and the exit code is 1
 # when the answer says "ok": false. Send texts are kept for asserts; worktree rm deletes
-# the directory it names, as Orca does.
+# the directory it names, as Orca does. worktree create starts the new worktree at its
+# --base-branch (origin/master without one) as <fake>/refs.txt names it, unless a test
+# wrote <fake>/worktree_head.txt first; git rev-parse HEAD answers from that file.
 FAKE_ORCA = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/orca_calls.log"
 key="orca_$1_$2"
+if [ "$1 $2" = "worktree create" ] && [ ! -f "$d/worktree_head.txt" ]; then
+  ref=origin/master prev=""
+  for a in "$@"; do [ "$prev" = --base-branch ] && ref="$a"; prev="$a"; done
+  sha="$(awk -v r="$ref" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
+  echo "${sha:-$FAKE_SHA}" >"$d/worktree_head.txt"
+fi
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
 fi
@@ -94,6 +104,11 @@ exit 0
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
+# With <fake>/gh_issue_close_sets_closed, issue close closes the Issue (issue view then
+# answers CLOSED) even when the call itself fails.
+if [ "$1 $2" = "issue close" ] && [ -f "$d/gh_issue_close_sets_closed" ]; then
+  echo '{"state": "CLOSED"}' >"$d/gh_issue_view.json"
+fi
 case "$1 $2" in
   "api graphql")
     case "$*" in
@@ -102,11 +117,22 @@ case "$1 $2" in
       *) cat "$d/gh_board.json" ;;
     esac ;;
   "api repos/"*) cat "$d/gh_comments.json" 2>/dev/null || echo '[]' ;;
-  *) key="gh_$1_$2"; [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
+  # run list --branch B answers from gh_run_list_<B, / as _>.json when the test wrote
+  # one, else from gh_run_list.json.
+  "run list")
+    b="" prev=""
+    for a in "$@"; do [ "$prev" = --branch ] && b="$a"; prev="$a"; done
+    f="$d/gh_run_list_$(printf '%s' "$b" | tr / _).json"
+    [ -f "$f" ] || f="$d/gh_run_list.json"
+    if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi ;;
+  # <fake>/gh_<sub1>_<sub2>_fails makes that call exit 1.
+  *) key="gh_$1_$2"; [ -f "$d/${key}_fails" ] && exit 1
+     [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
 esac
 """
 
-# git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line.
+# git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line, and
+# rev-parse answers from <fake>/refs.txt ("<ref> <sha>" lines; $FAKE_SHA when unlisted).
 # branch -D fails when <fake>/git_branch_in_use exists (the branch stays), and when
 # <fake>/git_branch_gone_at_delete exists it fails with the branch already gone: orca
 # worktree rm deleted it after close_task's show-ref had seen it (#290). With
@@ -119,7 +145,10 @@ printf '%s\n' "$*" >>"$d/git_calls.log"
 touch "$d/branches.txt"
 case "$1" in
   fetch) exit 0 ;;
-  rev-parse) echo "${FAKE_SHA}" ;;
+  rev-parse)
+    if [ "$2" = HEAD ] && [ -f "$d/worktree_head.txt" ]; then cat "$d/worktree_head.txt"; exit 0; fi
+    sha="$(awk -v r="$2" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
+    echo "${sha:-$FAKE_SHA}" ;;
   show-ref)
     [ -f "$d/git_unreadable_after_delete" ] && [ -f "$d/git_branch_D_ran" ] && exit 128
     grep -qxF "${4#refs/heads/}" "$d/branches.txt"; exit ;;
@@ -427,6 +456,111 @@ def test_dispatch_adds_an_issue_missing_from_the_board(dispatch: Harness) -> Non
     assert any("updateProjectV2" in c and "i=ITEM-NEW" in c for c in gh)
 
 
+def _git_subcommands(h: Harness) -> list[str]:
+    """The git calls without their leading ``-C <dir>``."""
+    return [c.split(" ", 2)[2] if c.startswith("-C ") else c for c in h.calls("git")]
+
+
+def _dispatch_from(h: Harness, base: str | None) -> subprocess.CompletedProcess:
+    args = ["282", "dryrun", "--task-file", h.task.as_posix()]
+    if base is not None:
+        args += ["--base", base]
+    return h.run("dispatch.sh", *args)
+
+
+def test_dispatch_without_base_fetches_and_checks_origin_master(
+    dispatch: Harness,
+) -> None:
+    """#332: no --base runs the commands dispatch.sh ran before --base existed."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    result = _dispatch_from(dispatch, None)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["head"] == SHA and line["base"] == SHA
+    assert _git_subcommands(dispatch) == [
+        "show-ref --verify --quiet refs/heads/task/282-dryrun",
+        "fetch --quiet origin master",
+        "rev-parse origin/master",
+        "rev-parse HEAD",
+        "branch -m YiCheng0608/task-282-dryrun task/282-dryrun",
+    ]
+    create = [c for c in dispatch.calls("orca") if c.startswith("worktree create")]
+    assert create == [
+        f"worktree create --repo id:{REPO_ID} --name task-282-dryrun --no-parent "
+        "--setup skip --json"
+    ]
+
+
+def test_dispatch_from_another_base_starts_the_worktree_at_its_tip(
+    dispatch: Harness,
+) -> None:
+    """AC-1 (#332): --base origin/feat/docker fetches it and the new HEAD is its tip."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    result = _dispatch_from(dispatch, "origin/feat/docker")
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["head"] == DOCKER_SHA and line["base"] == DOCKER_SHA
+    assert line["sent"] is True and line["branch"] == "task/282-dryrun"
+    git = _git_subcommands(dispatch)
+    assert "fetch --quiet origin feat/docker" in git
+    assert "rev-parse origin/feat/docker" in git
+    assert not [c for c in git if "master" in c]
+    (create,) = [c for c in dispatch.calls("orca") if c.startswith("worktree create")]
+    assert create.endswith("--setup skip --base-branch origin/feat/docker --json")
+
+
+@pytest.mark.parametrize(
+    "base, worktree_head, named",
+    [
+        (None, DOCKER_SHA, "origin/master"),
+        ("origin/feat/docker", SHA, "origin/feat/docker"),
+    ],
+    ids=["master-worktree-elsewhere", "docker-worktree-on-master"],
+)
+def test_dispatch_opens_no_terminal_when_the_worktree_is_not_at_the_base(
+    dispatch: Harness, base: str | None, worktree_head: str, named: str
+) -> None:
+    """The HEAD check compares with the --base tip, not always origin/master (#332)."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    # Orca started the worktree somewhere other than the base asked for.
+    dispatch.write("worktree_head.txt", worktree_head + "\n")
+    result = _dispatch_from(dispatch, base)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"HEAD 不是最新 {named}" in result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and line["head"] == worktree_head
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal")]
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        "feat/docker",
+        "origin/",
+        "origin/-x",
+        "origin//x",
+        "origin/x/",
+        "origin/a..b",
+        "origin/a b",
+        "origin/a;b",
+    ],
+)
+def test_dispatch_refuses_a_base_that_is_not_origin_branch(
+    dispatch: Harness, base: str
+) -> None:
+    result = _dispatch_from(dispatch, base)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "--base" in result.stderr
+    assert not dispatch.calls("git") and not dispatch.calls("orca")
+
+
 # --- close_task.sh -----------------------------------------------------------------
 
 
@@ -502,6 +636,7 @@ def close(h: Harness):
                 "state": "MERGED",
                 "mergeCommit": {"oid": MERGE_SHA},
                 "headRefName": "task/282-dryrun",
+                "baseRefName": "master",
             }
         ],
     )
@@ -544,6 +679,7 @@ def _assert_nothing_deleted(h: Harness) -> None:
     assert not [c for c in h.calls("orca") if c.startswith(DELETING)]
     assert not [c for c in h.calls("git") if " branch -D " in f" {c} " or "prune" in c]
     assert not [c for c in h.calls("gh") if "updateProjectV2" in c]
+    assert not _issue_closes(h)
     assert h.wt.is_dir() and (h.extra / "deps" / "a.txt").is_file()
     assert "task/282-dryrun" in h.branches()
     assert (h.target / "keep.txt").is_file()
@@ -648,6 +784,260 @@ def test_close_task_deletes_nothing_when_master_ci_is_not_green(
     close.answer("gh_run_list", runs)
     result = close.close_task(close.extra)
     assert result.returncode == 1, result.stdout + result.stderr
+    _assert_nothing_deleted(close)
+
+
+def _merged_into(h: Harness, base: str, state: str = "MERGED") -> None:
+    h.answer(
+        "gh_pr_list",
+        [
+            {
+                "number": 290,
+                "state": state,
+                "mergeCommit": {"oid": MERGE_SHA},
+                "headRefName": "task/282-dryrun",
+                "baseRefName": base,
+            }
+        ],
+    )
+
+
+def _issue_closes(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("issue close")]
+
+
+def _docker_green(h: Harness) -> None:
+    """A PR into feat/docker whose merge commit's CI on feat/docker is green."""
+    _merged_into(h, "feat/docker")
+    h.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+
+
+def _run_branches(h: Harness) -> list[str]:
+    """The --branch of every gh run list call."""
+    return [
+        c.split("--branch ", 1)[1].split()[0]
+        for c in h.calls("gh")
+        if c.startswith("run list")
+    ]
+
+
+def test_close_task_checks_ci_on_the_branch_the_pr_merged_into(close: Harness) -> None:
+    """AC-2 (#332): a PR into feat/docker is judged by feat/docker's CI and history."""
+    _merged_into(close, "feat/docker")
+    # master has no run of the merge commit and its newest run is red: only feat/docker's
+    # runs may decide.
+    close.answer(
+        "gh_run_list",
+        [{"headSha": "c" * 40, "status": "completed", "conclusion": "failure"}],
+    )
+    close.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["base"] == "feat/docker" and line["merge_commit"] == MERGE_SHA
+    assert _run_branches(close) == ["feat/docker"]
+    git = _git_subcommands(close)
+    assert "fetch --quiet origin feat/docker" in git
+    assert (
+        "merge-base --is-ancestor refs/heads/task/282-dryrun origin/feat/docker" in git
+    )
+    assert not [
+        c for c in git if c.startswith(("fetch", "merge-base")) and "master" in c
+    ]
+    assert not close.wt.exists() and not close.extra.exists()
+    # AC-5: GitHub does not act on Closes #282 in a PR into feat/docker.
+    assert line["issue_close"] == "closed"
+    assert _issue_closes(close) == [
+        "issue close 282 --repo YiCheng0608/stock-lab --comment PR #290 已合併進 "
+        "feat/docker，merge commit bbbbbbbbb 的 CI 綠（close_task.sh）"
+    ]
+
+
+def test_close_task_checks_master_ci_for_a_pr_into_master(close: Harness) -> None:
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["base"] == "master" and line["issue_close"] == "not_needed"
+    assert _run_branches(close) == ["master"]
+    git = _git_subcommands(close)
+    assert "fetch --quiet origin master" in git
+    assert "merge-base --is-ancestor refs/heads/task/282-dryrun origin/master" in git
+    # AC-5: merging into master closed the Issue already.
+    assert not _issue_closes(close)
+
+
+@pytest.mark.parametrize(
+    "why", ["dirty-worktree", "busy-terminal", "protected-extra-dir"]
+)
+def test_close_task_leaves_the_issue_open_when_a_later_check_fails(
+    close: Harness, why: str
+) -> None:
+    """AC-5 (#332): feat/docker's CI is green, yet a check after it refuses."""
+    _docker_green(close)
+    dirs = [close.extra]
+    if why == "dirty-worktree":
+        close.write("git_status.txt", " M file.txt\n")
+    elif why == "busy-terminal":
+        close.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    else:
+        dirs = [close.data]
+    result = close.close_task(*dirs)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == ""
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_deletes_nothing_when_the_issue_cannot_be_closed(
+    close: Harness,
+) -> None:
+    _docker_green(close)
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "gh issue close #282 失敗" in result.stderr
+    assert "未刪除任何東西" in result.stderr
+    assert _json_line(result)["issue_close"] == "failed"
+    assert not [c for c in close.calls("orca") if c.startswith(DELETING)]
+    assert close.wt.is_dir() and "task/282-dryrun" in close.branches()
+
+
+def test_close_task_rerun_goes_on_when_the_issue_is_already_closed(
+    close: Harness,
+) -> None:
+    """#332 review 3: a rerun after a failed delete step finds the Issue closed."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "CLOSED"})
+    # Were the close tried, it would fail: it must not be.
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["issue_close"] == "already_closed" and line["board"] == "完成"
+    assert not _issue_closes(close)
+    assert not close.wt.exists() and not close.extra.exists()
+    assert "task/282-dryrun" not in close.branches()
+
+
+def test_close_task_takes_a_failed_close_of_an_issue_now_closed_as_closed(
+    close: Harness,
+) -> None:
+    """The close errs, yet the Issue reads back closed: cleanup goes on."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "OPEN"})
+    close.write("gh_issue_close_fails", "")
+    close.write("gh_issue_close_sets_closed", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "closed"
+    assert len(_issue_closes(close)) == 1
+    assert not close.wt.exists() and not close.extra.exists()
+
+
+@pytest.mark.parametrize("base", ["release/v1", "task/999-other", "feat/other"])
+def test_close_task_refuses_a_pr_into_a_branch_that_is_not_long_lived(
+    close: Harness, base: str
+) -> None:
+    """#332 review 2: only master and the integration branches are cleanup targets."""
+    _merged_into(close, base)
+    close.answer(
+        f"gh_run_list_{base.replace('/', '_')}",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"目標分支 {base} 不是 master 或長期整合分支（feat/docker）" in result.stderr
+    assert not _run_branches(close)
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
+    _docker_green(close)
+    result = close.run(
+        "close_task.sh", "282", "--no-board", "--extra-dir", close.extra.as_posix()
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "skipped"
+    assert not _issue_closes(close)
+
+
+@pytest.mark.parametrize(
+    "state, runs, error",
+    [
+        ("OPEN", None, "PR 尚未合併"),
+        ("MERGED", [], "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 missing"),
+        (
+            "MERGED",
+            [{"headSha": MERGE_SHA, "status": "in_progress", "conclusion": ""}],
+            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 pending",
+        ),
+        (
+            "MERGED",
+            [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "failure"}],
+            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 failure",
+        ),
+        (
+            "MERGED",
+            [
+                {"headSha": "c" * 40, "status": "completed", "conclusion": "failure"},
+                {"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"},
+            ],
+            "feat/docker 最新一次 CI 是 failure",
+        ),
+    ],
+    ids=["not-merged", "no-run", "pending", "failure", "newer-run-red"],
+)
+def test_close_task_deletes_nothing_when_a_pr_into_feat_docker_is_not_done(
+    close: Harness, state: str, runs: list | None, error: str
+) -> None:
+    """AC-2 (#332): master's CI is green for the merge commit, feat/docker's is not."""
+    _merged_into(close, "feat/docker", state)
+    if runs is not None:
+        close.answer("gh_run_list_feat_docker", runs)
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stderr and "未刪除任何東西" in result.stderr
+    assert _run_branches(close) == ([] if state == "OPEN" else ["feat/docker"])
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_deletes_nothing_when_the_branch_is_not_in_feat_docker(
+    close: Harness,
+) -> None:
+    _merged_into(close, "feat/docker")
+    close.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    close.write("git_ancestor_exit", "1")
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "不在 origin/feat/docker 的 commit" in result.stderr
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize("base", [None, "", "-x", "a..b", "a b"])
+def test_close_task_deletes_nothing_without_a_readable_target_branch(
+    close: Harness, base: str | None
+) -> None:
+    pr = {
+        "number": 290,
+        "state": "MERGED",
+        "mergeCommit": {"oid": MERGE_SHA},
+        "headRefName": "task/282-dryrun",
+    }
+    if base is not None:
+        pr["baseRefName"] = base
+    close.answer("gh_pr_list", [pr])
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "目標分支" in result.stderr
+    assert not _run_branches(close)
     _assert_nothing_deleted(close)
 
 
@@ -1297,6 +1687,7 @@ def test_close_task_refuses_a_pr_whose_head_is_another_branch(close: Harness) ->
             "state": "MERGED",
             "mergeCommit": {"oid": MERGE_SHA},
             "headRefName": "task/264-news-candidate-exchange",
+            "baseRefName": "master",
         },
     )
     result = close.run(
@@ -1400,6 +1791,7 @@ def test_close_task_never_takes_the_pr_head_as_the_branch_of_another_task(
             "state": "MERGED",
             "mergeCommit": {"oid": MERGE_SHA},
             "headRefName": "task/264-news-candidate-exchange",
+            "baseRefName": "master",
         },
     )
     args = ("--slug", "dryrun", "--pr", "271", "--allow-pr-head-mismatch", "--no-board")
