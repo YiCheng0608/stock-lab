@@ -77,10 +77,12 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 # Answers come from <fake>/<name>_<sub1>_<sub2>.json (orca, gh) and the exit code is 1
 # when the answer says "ok": false. Send texts are kept for asserts; worktree rm deletes
 # the directory it names, as Orca does.
+# A <fake>/orca_<sub1>_<sub2>.hook file is run (bash) before that call answers.
 FAKE_ORCA = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/orca_calls.log"
 key="orca_$1_$2"
+[ -f "$d/$key.hook" ] && bash "$d/$key.hook"
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
 fi
@@ -98,12 +100,13 @@ exit 0
 """
 
 # A <fake>/<key>.fail file makes that call exit 1 (key gh_comments for the comments
-# listing, else gh_<sub1>_<sub2>).
+# listing, else gh_<sub1>_<sub2>); a <key>.sleep file holding N makes it hang N seconds.
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
 case "$1 $2" in "api repos/"*) k=gh_comments ;; *) k="gh_$1_$2" ;; esac
-[ -f "$d/$k.fail" ] && exit 1
+[ -f "$d/$k.sleep" ] && sleep "$(cat "$d/$k.sleep")"
+[ -f "$d/$k.fail" ] && { echo "HTTP 401: Bad credentials" >&2; exit 1; }
 case "$1 $2" in
   "api graphql")
     case "$*" in

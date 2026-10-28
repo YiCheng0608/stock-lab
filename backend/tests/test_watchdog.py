@@ -881,6 +881,27 @@ def test_an_unreadable_monitor_heartbeat_is_commented(wd):
     assert "monitor-heartbeat.json` 讀不出輪詢時間" in result.stdout
 
 
+def test_a_monitor_whose_gh_calls_keep_failing_is_commented(wd):
+    beat = json.loads(_beat_at(NIGHT - 60))
+    beat.update(gh_failed_polls=9, gh_failed_since="2026-10-19T13:50:00Z")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    assert wd.text("gh_calls.log") == ""
+    beat.update(gh_failed_polls=10, gh_error="HTTP 401: Bad credentials")
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run()
+    body = wd.text("gh_bodies.txt")
+    assert (
+        "待使用者：事件 monitor：gh 從 2026-10-19T13:50:00Z 起連續 10 輪失敗"
+        "（最後的錯誤：HTTP 401: Bad credentials）"
+    ) in body
+    assert "key=monitor_gh_failed" in wd.log()
+    beat.update(json.loads(_beat_at(NIGHT + 14 * 60)), gh_failed_polls=25)
+    _monitor_beat(wd, json.dumps(beat))
+    wd.run(now=NIGHT + 15 * 60)
+    assert len(wd.text("gh_calls.log").splitlines()) == 1
+
+
 def _helper_module():
     spec = importlib.util.spec_from_file_location(
         "watchdog_helper", SCRIPT.with_name("watchdog_helper.py")

@@ -20,9 +20,12 @@ Files, all in <data>/logs/, each with a single writer:
         the #1 comment asking the user to open a coordinator; one per ``key``.
   events-done.jsonl       patrol.sh --done: {"type": "done", "at", "session_id", "ids"}
   monitor-state.json      monitor.sh: comment cursor, last poll, open PR snapshot
-  monitor-heartbeat.json  monitor.sh, every poll: {"written_at", "pid", "mode", "gh_calls"}
+  monitor-heartbeat.json  monitor.sh, every poll: {"written_at", "pid", "mode", "gh_calls",
+                          "gh_failed_polls", "gh_failed_since", "gh_error"}: polls in a
+                          row with a failed gh call, since when, the last gh error
 
-A line that cannot be read (a partial last line) is skipped. Times are UTC ISO
+A line that cannot be read (a partial last line) is skipped; an append after one
+starts on a new line, so only the partial line is lost. Times are UTC ISO
 (2026-10-28T01:23:45Z); NOW is epoch seconds.
 
 Subcommands (LOGS is <data>/logs):
@@ -33,7 +36,7 @@ Subcommands (LOGS is <data>/logs):
                                   "new=N pending=P unnotified=U wake=0|1 terminal=H"
   note-wake LOGS NOW OK TERMINAL DETAIL     OK is 1 or 0
   note-stale LOGS NOW KEY URL     URL "-" in record-only mode: kept in the state only
-  beat LOGS NOW MODE GH_CALLS PID
+  beat LOGS NOW MODE GH_CALLS PID GH_FAILED [GH_ERROR]   GH_FAILED is 1 or 0
   pending LOGS                    the events not done yet
   status LOGS NOW                 the monitor's heartbeat and its last open PR snapshot
   done LOGS NOW SESSION X...      mark done; X is an event id, or a seq for every pending
@@ -116,6 +119,15 @@ def _append(path: Path, items: list[dict]) -> None:
     if not items:
         return
     text = "".join(json.dumps(i, ensure_ascii=False) + "\n" for i in items)
+    # A run killed in the middle of a write leaves a partial last line. Start on a new
+    # line, or the first item joins it and is skipped with it (#316 review B2).
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(-1, os.SEEK_END)
+            if handle.read(1) != b"\n":
+                text = "\n" + text
+    except OSError:  # no file yet, or an empty one
+        pass
     with open(path, "a", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
 
@@ -474,11 +486,30 @@ def note_stale(logs: Path, now: float, key: str, url: str) -> None:
     _append(logs / EVENTS, [{"type": "stale", "at": iso(now), "key": key, "url": url}])
 
 
-def beat(logs: Path, now: float, mode: str, gh_calls: str, pid: str) -> None:
-    _write_json(
-        logs / BEAT,
-        {"written_at": iso(now), "pid": pid, "mode": mode, "gh_calls": int(gh_calls)},
-    )
+def beat(
+    logs: Path, now: float, mode: str, gh_calls: str, pid: str, failed: bool, error: str
+) -> None:
+    """The watchdog reads it: a stale beat is a stopped monitor, and gh_failed_polls a
+    monitor that polls but gets nothing from GitHub (logged out, say)."""
+    previous = _read_json(logs / BEAT)
+    previous = previous if isinstance(previous, dict) else {}
+    value = {
+        "written_at": iso(now),
+        "pid": pid,
+        "mode": mode,
+        "gh_calls": int(gh_calls),
+    }
+    count = previous.get("gh_failed_polls")
+    count = count if isinstance(count, int) and count > 0 else 0
+    if failed:
+        value["gh_failed_polls"] = count + 1
+        value["gh_failed_since"] = (count and previous.get("gh_failed_since")) or iso(
+            now
+        )
+        value["gh_error"] = one_line(error, 200)
+    else:
+        value["gh_failed_polls"] = 0
+    _write_json(logs / BEAT, value)
 
 
 def pending_lines(logs: Path) -> list[str]:
@@ -505,6 +536,9 @@ def status_lines(logs: Path, now: float) -> list[str]:
     else:
         age = int(now - at)
         late = "，已停擺超過 10 分鐘" if age > 600 else ""
+        failed = beat_doc.get("gh_failed_polls")
+        if isinstance(failed, int) and failed > 0:
+            late += f"，gh 連續 {failed} 輪失敗：{beat_doc.get('gh_error') or '?'}"
         out = [
             f"monitor：{beat_doc['written_at']}（{age} 秒前，mode={beat_doc.get('mode')}）{late}"
         ]
@@ -569,7 +603,7 @@ def main(argv: list[str]) -> int:
     elif command == "note-stale":
         note_stale(logs, now, rest[0], rest[1])
     elif command == "beat":
-        beat(logs, now, *rest[:3])
+        beat(logs, now, rest[0], rest[1], rest[2], rest[3] == "1", " ".join(rest[4:]))
     elif command == "status":
         print("\n".join(status_lines(logs, now)))
     elif command == "done":

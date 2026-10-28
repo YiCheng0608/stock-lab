@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -72,6 +73,7 @@ def mon(tmp_path) -> Harness:
     h.answer("gh_pr_list", [_pr()])
     h.answer("gh_comments", [_comment(9, "2026-10-25T11:50:00Z")])
     h.answer("orca_worktree_list", _worktrees("task/316-a", "task/313-b", "task/315-c"))
+    h.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
     h.answer("orca_terminal_send", _ok({"send": {}}))
     _coordinator(h, "2026-10-25T11:55:00Z")
     return h
@@ -96,13 +98,19 @@ def _monitor(h: Harness, *args: str, at: int = NOW) -> subprocess.CompletedProce
     return result
 
 
+def _rows(path) -> list[dict]:
+    """The readable lines, as event_queue.py reads them: a partial line is skipped."""
+    out = []
+    for line in path.read_text("utf-8").splitlines() if path.exists() else []:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
 def _records(h: Harness, kind: str | None = None) -> list[dict]:
-    path = h.data / "logs" / "events.jsonl"
-    rows = (
-        [json.loads(x) for x in path.read_text("utf-8").splitlines()]
-        if path.exists()
-        else []
-    )
+    rows = _rows(h.data / "logs" / "events.jsonl")
     return [r for r in rows if kind is None or r["type"] == kind]
 
 
@@ -328,6 +336,141 @@ def test_a_failed_wake_is_retried_after_ten_minutes(mon: Harness) -> None:
     ]
 
 
+def test_a_busy_coordinator_terminal_is_not_woken(mon: Harness) -> None:
+    """Review B1: the wake waits for tui-idle (AGENTS #282); not idle, nothing is sent."""
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    result = _monitor(mon)
+    waits = [c for c in mon.calls("orca") if c.startswith("terminal wait")]
+    assert waits == [
+        "terminal wait --terminal term_coord --for tui-idle --timeout-ms 15000 --json"
+    ]
+    assert _sends(mon) == []
+    assert "wake=failed(not_idle) terminal=term_coord" in result.stdout
+    assert [(w["ok"], w["detail"]) for w in _records(mon, "wake")] == [
+        (False, "not_idle")
+    ]
+    # A wait that answers nothing readable (orca gone, timed out) does not send either.
+    mon.answer("orca_terminal_wait", {"ok": False, "error": "timeout"})
+    _monitor(mon, at=NOW + 600)
+    assert _sends(mon) == []
+    # Idle at the retry ten minutes later: sent once, for all three events.
+    mon.answer("orca_terminal_wait", _ok({"wait": {"satisfied": True}}))
+    _monitor(mon, at=NOW + 1200)
+    assert len(_sends(mon)) == 1
+    assert [(w["ok"], w["upto"]) for w in _records(mon, "wake")][-1] == (True, 3)
+
+
+def test_a_record_after_a_partial_line_is_read_back(mon: Harness) -> None:
+    """Review B2: a write cut off in the middle leaves a partial line; the next
+    event, wake, stale and done records start on a new line and are read back."""
+    logs = mon.data / "logs"
+    events = logs / "events.jsonl"
+    _monitor(mon)
+    partial = '{"type": "event", "seq": 4, "id": "comm'
+
+    def cut(path) -> None:
+        with open(path, "a", encoding="utf-8", newline="\n") as handle:
+            handle.write(partial)
+
+    cut(events)
+    mon.answer(
+        "gh_comments",
+        [_comment(301, "2026-10-25T12:00:10Z"), _comment(302, "2026-10-25T12:00:50Z")],
+    )
+    _monitor(mon, at=NOW + 120)
+    assert _ids(mon)[-2:] == ["comment:301", "comment:302"]
+    assert [e["seq"] for e in _records(mon, "event")] == [1, 2, 3, 4, 5]
+    assert partial in events.read_text("utf-8").splitlines()
+    out = mon.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(NOW + 180),
+    )
+    assert "[4] comment #316" in out.stdout and "[5] comment #316" in out.stdout
+
+    def queue(*args: str) -> None:
+        result = subprocess.run(
+            [sys.executable, str(mon.ops / "event_queue.py"), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        assert result.returncode == 0, result.stderr
+
+    cut(events)
+    queue("note-wake", logs.as_posix(), str(NOW + 240), "1", "term_coord", "sent")
+    assert _records(mon, "wake")[-1]["at"] == "2026-10-25T12:04:00Z"
+    cut(events)
+    queue("note-stale", logs.as_posix(), str(NOW + 300), "heartbeat:x", "https://u")
+    assert [r["key"] for r in _records(mon, "stale")] == ["heartbeat:x"]
+    cut(logs / "events-done.jsonl")
+    _done(mon, "comment:301")
+    assert [r["ids"] for r in _rows(logs / "events-done.jsonl")] == [["comment:301"]]
+
+
+def test_a_hung_gh_call_does_not_hold_up_the_poll(mon: Harness) -> None:
+    """Review S1: each gh call ends within MONITOR_CALL_TIMEOUT; the poll goes on."""
+    mon.write("gh_pr_list.sleep", "60")
+    started = time.monotonic()
+    result = mon.run(
+        "monitor.sh", "--once", MONITOR_NOW=str(NOW), MONITOR_CALL_TIMEOUT="2"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert time.monotonic() - started < 30
+    assert (
+        "prs=failed" in result.stdout
+        and "gh_error=gh pr list: timeout 2s" in result.stdout
+    )
+    assert _ids(mon) == ["comment:9"]
+    beat = json.loads((mon.data / "logs" / "monitor-heartbeat.json").read_text("utf-8"))
+    assert beat["written_at"] == "2026-10-25T12:00:00Z" and beat["gh_failed_polls"] == 1
+
+
+def test_gh_failures_in_a_row_are_counted_in_the_heartbeat(mon: Harness) -> None:
+    """Review S2: the heartbeat counts polls in a row with a failed gh call; the
+    watchdog comments at 10 (test_watchdog). One good poll starts the count over."""
+    beat_file = mon.data / "logs" / "monitor-heartbeat.json"
+    mon.write("gh_comments.fail", "")
+    _monitor(mon)
+    _monitor(mon, at=NOW + 60)
+    beat = json.loads(beat_file.read_text("utf-8"))
+    assert (beat["gh_failed_polls"], beat["gh_failed_since"]) == (
+        2,
+        "2026-10-25T12:00:00Z",
+    )
+    assert beat["gh_error"] == "HTTP 401: Bad credentials"
+    out = mon.run(
+        "patrol.sh",
+        "--session-id",
+        "coord",
+        "--terminal",
+        "term_coord",
+        PATROL_NOW=str(NOW + 90),
+    )
+    assert "gh 連續 2 輪失敗：HTTP 401: Bad credentials" in out.stdout
+    (mon.fake / "gh_comments.fail").unlink()
+    _monitor(mon, at=NOW + 120)
+    beat = json.loads(beat_file.read_text("utf-8"))
+    assert beat["gh_failed_polls"] == 0 and "gh_error" not in beat
+
+
+def test_a_monitor_whose_lock_was_taken_over_stops_and_keeps_it(mon: Harness) -> None:
+    """Review S3: while this monitor waits on a call, another takes the lock over; this
+    one records nothing more and does not remove the other's lock."""
+    lock = mon.data / "logs" / "monitor.lock"
+    mon.write(
+        "orca_worktree_list.hook",
+        f'printf "1 other\\n" >"{(lock / "pid").as_posix()}"\n',
+    )
+    result = _monitor(mon)
+    assert "lock_lost" in (mon.data / "logs" / "monitor.log").read_text("utf-8")
+    assert _ids(mon) == [] and _sends(mon) == []
+    assert (lock / "pid").read_text(encoding="utf-8") == "1 other\n", result.stdout
+
+
 def test_slots_and_job_logs_become_events(mon: Harness) -> None:
     logs = mon.data / "logs"
     mon.answer("orca_worktree_list", _worktrees("task/316-a"))
@@ -503,6 +646,15 @@ def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
         ('{"written_at": "2026-10-25T19:51:00+08:00"}', "ok 540"),
         ("{", "unreadable"),
         ('{"pid": 1}', "unreadable"),
+        (
+            '{"written_at": "2026-10-25T11:59:00Z", "gh_failed_polls": 9}',
+            "ok 60",
+        ),
+        (
+            '{"written_at": "2026-10-25T11:59:00Z", "gh_failed_polls": 10,'
+            ' "gh_failed_since": "2026-10-25T11:50:00Z", "gh_error": "HTTP 401: `x`"}',
+            "gh_failed 10 2026-10-25T11:50:00Z HTTP 401: 'x'",
+        ),
     ],
     ids=[
         "no-monitor",
@@ -511,6 +663,8 @@ def test_the_coordinator_keeps_no_polling_of_its_own() -> None:
         "offset",
         "partial",
         "no-time",
+        "nine-gh-failures",
+        "ten-gh-failures",
     ],
 )
 def test_the_watchdog_reads_the_monitor_heartbeat(tmp_path, content, expected) -> None:
