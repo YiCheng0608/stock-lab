@@ -120,7 +120,9 @@ case "$1 $2" in
     f="$d/gh_run_list_$(printf '%s' "$b" | tr / _).json"
     [ -f "$f" ] || f="$d/gh_run_list.json"
     if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi ;;
-  *) key="gh_$1_$2"; [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
+  # <fake>/gh_<sub1>_<sub2>_fails makes that call exit 1.
+  *) key="gh_$1_$2"; [ -f "$d/${key}_fails" ] && exit 1
+     [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
 esac
 """
 
@@ -672,6 +674,7 @@ def _assert_nothing_deleted(h: Harness) -> None:
     assert not [c for c in h.calls("orca") if c.startswith(DELETING)]
     assert not [c for c in h.calls("git") if " branch -D " in f" {c} " or "prune" in c]
     assert not [c for c in h.calls("gh") if "updateProjectV2" in c]
+    assert not _issue_closes(h)
     assert h.wt.is_dir() and (h.extra / "deps" / "a.txt").is_file()
     assert "task/282-dryrun" in h.branches()
     assert (h.target / "keep.txt").is_file()
@@ -794,6 +797,19 @@ def _merged_into(h: Harness, base: str, state: str = "MERGED") -> None:
     )
 
 
+def _issue_closes(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("issue close")]
+
+
+def _docker_green(h: Harness) -> None:
+    """A PR into feat/docker whose merge commit's CI on feat/docker is green."""
+    _merged_into(h, "feat/docker")
+    h.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+
+
 def _run_branches(h: Harness) -> list[str]:
     """The --branch of every gh run list call."""
     return [
@@ -830,16 +846,70 @@ def test_close_task_checks_ci_on_the_branch_the_pr_merged_into(close: Harness) -
         c for c in git if c.startswith(("fetch", "merge-base")) and "master" in c
     ]
     assert not close.wt.exists() and not close.extra.exists()
+    # AC-5: GitHub does not act on Closes #282 in a PR into feat/docker.
+    assert line["issue_close"] == "closed"
+    assert _issue_closes(close) == [
+        "issue close 282 --repo YiCheng0608/stock-lab --comment PR #290 已合併進 "
+        "feat/docker，merge commit bbbbbbbbb 的 CI 綠（close_task.sh）"
+    ]
 
 
 def test_close_task_checks_master_ci_for_a_pr_into_master(close: Harness) -> None:
     result = close.close_task(close.extra)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _json_line(result)["base"] == "master"
+    line = _json_line(result)
+    assert line["base"] == "master" and line["issue_close"] == "not_needed"
     assert _run_branches(close) == ["master"]
     git = _git_subcommands(close)
     assert "fetch --quiet origin master" in git
     assert "merge-base --is-ancestor refs/heads/task/282-dryrun origin/master" in git
+    # AC-5: merging into master closed the Issue already.
+    assert not _issue_closes(close)
+
+
+@pytest.mark.parametrize(
+    "why", ["dirty-worktree", "busy-terminal", "protected-extra-dir"]
+)
+def test_close_task_leaves_the_issue_open_when_a_later_check_fails(
+    close: Harness, why: str
+) -> None:
+    """AC-5 (#332): feat/docker's CI is green, yet a check after it refuses."""
+    _docker_green(close)
+    dirs = [close.extra]
+    if why == "dirty-worktree":
+        close.write("git_status.txt", " M file.txt\n")
+    elif why == "busy-terminal":
+        close.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    else:
+        dirs = [close.data]
+    result = close.close_task(*dirs)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == ""
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_deletes_nothing_when_the_issue_cannot_be_closed(
+    close: Harness,
+) -> None:
+    _docker_green(close)
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "gh issue close #282 失敗" in result.stderr
+    assert "未刪除任何東西" in result.stderr
+    assert _json_line(result)["issue_close"] == "failed"
+    assert not [c for c in close.calls("orca") if c.startswith(DELETING)]
+    assert close.wt.is_dir() and "task/282-dryrun" in close.branches()
+
+
+def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
+    _docker_green(close)
+    result = close.run(
+        "close_task.sh", "282", "--no-board", "--extra-dir", close.extra.as_posix()
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "skipped"
+    assert not _issue_closes(close)
 
 
 @pytest.mark.parametrize(

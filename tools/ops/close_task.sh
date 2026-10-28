@@ -17,6 +17,9 @@
 #     8.3 short name) is refused outright. A failed orca, gh or git read refuses too.
 # Deleting checks guard_dir again (remove_tree), so one broken check is not enough to
 # delete a protected path.
+# Then, for a PR into a branch other than master, close the Issue (`gh issue close`):
+# GitHub acts on `Closes #<issue>` only in a PR into the default branch (#332). A failed
+# close stops here, nothing deleted.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
 # local branch (one orca already deleted counts: step branch_already_gone, #290), delete
 # each --extra-dir (junctions and symlinks unlinked first, never followed), set the board
@@ -26,7 +29,7 @@
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
 #   --pr N            the task's PR; default: the merged PR whose head is the branch
 #   --allow-pr-head-mismatch  accept a --pr whose head is another branch (a dry run)
-#   --no-board        leave the board alone (a dry run on a throwaway branch)
+#   --no-board        leave the board and the Issue alone (a dry run on a throwaway branch)
 #   --repo-id ID      Orca repo id; default: the repo whose remote is YiCheng0608/stock-lab
 #   --idle-seconds N  a shell terminal is idle after N seconds without output, default 30
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
@@ -68,15 +71,15 @@ case "$slug" in -* | *[!a-z0-9-]*) die "--slug uses a-z, 0-9 and '-' only" 64 ;;
 prefix="task/$issue-"
 find_python
 
-wt_path="" wt_id="" branch="" base_branch="" merge_sha="" board="" steps=()
+wt_path="" wt_id="" branch="" base_branch="" merge_sha="" issue_close="" board="" steps=()
 
 report() { # report EXIT [ERROR]
   local error=null done_steps="" s
   [ -n "${2:-}" ] && error="$(json_str "$2")"
   for s in "${steps[@]+"${steps[@]}"}"; do done_steps="$done_steps${done_steps:+,}$(json_str "$s")"; done
-  printf '{"issue":%s,"pr":%s,"base":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"steps":[%s],"board":%s,"error":%s}\n' \
+  printf '{"issue":%s,"pr":%s,"base":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"issue_close":%s,"steps":[%s],"board":%s,"error":%s}\n' \
     "$issue" "${pr:-null}" "$(json_str "$base_branch")" "$(json_str "$merge_sha")" "$(json_str "$wt_path")" "$(json_str "$branch")" \
-    "$done_steps" "$(json_str "$board")" "$error"
+    "$(json_str "$issue_close")" "$done_steps" "$(json_str "$board")" "$error"
   [ -n "${2:-}" ] && printf 'close_task.sh: %s\n' "$2" >&2
   exit "$1"
 }
@@ -210,6 +213,18 @@ for dir in "${extra[@]+"${extra[@]}"}"; do
   [ -z "$reason" ] || refuse "--extra-dir $dir $reason"
   if [ -e "$dir" ] || [ -L "$dir" ]; then extra_live+=("$dir"); else steps+=("extra_absent:$dir"); fi
 done
+
+# --- close the Issue: every check above passed -------------------------------------
+if [ "$base_branch" = master ]; then
+  issue_close=not_needed
+elif [ "$set_board" = 0 ]; then
+  issue_close=skipped
+else
+  gh issue close "$issue" --repo "$GH_REPO" \
+    --comment "PR #$pr 已合併進 $base_branch，merge commit ${merge_sha:0:9} 的 CI 綠（close_task.sh）" >/dev/null \
+    || { issue_close=failed; refuse "gh issue close #$issue 失敗（PR #$pr 進 $base_branch，GitHub 不會自動關）"; }
+  issue_close=closed
+fi
 
 # --- delete ------------------------------------------------------------------------
 for handle in "${terminals[@]+"${terminals[@]}"}"; do
