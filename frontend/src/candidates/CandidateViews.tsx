@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Term } from '../components/Term'
 import { Badge, Card, DataTable, DateBadge, EmptyState, Skeleton, cx, type Column } from '../components/ui'
 import { AiBadge } from '../news/NewsViews'
+import { AddPlanButton } from '../tracking/TrackingViews'
 import type { CandidateComponent, CandidateComponentKey, CandidateItem, CandidateSubItem, CandidatesResponse } from '../types'
 import {
   CANDIDATE_COMPONENTS,
@@ -167,6 +168,7 @@ export function CandidateCard({ item, linkToStock = true, detailsOpen = false }:
         <div><dt><Term id="target">目標</Term></dt><dd className="level-target"><Targets levels={levels} /></dd></div>
         <div><dt><Term id="rr">RR</Term></dt><dd><Badge tone="primary" className="badge-compact">{formatRiskReward(levels.risk_reward)}</Badge></dd></div>
       </dl>
+      <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
       <ComponentScores item={item} />
       <ReasonList reasons={item.reasons} />
       <div className="small-note candidate-groups">族群：{item.groups.length ? item.groups.map(candidateGroupText).join('、') : '無所屬產業或題材'}</div>
@@ -202,6 +204,7 @@ function CandidateDetail({ item }: { item: CandidateItem }) {
       </div>
       <CandidateNote item={item} />
       <div className="candidate-detail-source">
+        <AddPlanButton signalId={item.signal_id} candidateId={item.candidate_id} openPlanId={item.open_plan_id} />
         <div className="small-note">資料日期 {formatDate(item.data_as_of) ?? '待核實'}</div>
         <div className="small-note">來源：{candidateSourceText(item)}</div>
         <Link className="text-link" to={stockPath(item)}>評分細節 → 個股頁</Link>

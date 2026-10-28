@@ -1352,20 +1352,19 @@ def test_nonempty_tracking_projects_signal_product_time(product_api):
         )
         db.commit()
 
+    # /tracking lists user plans (#253); a signal's tracking is /tracking/{signal_key}.
     with TestClient(app) as client:
-        tracking = client.get("/api/tracking")
         scoped = client.get("/api/tracking/fixture-AAA-breakout")
 
-    assert tracking.status_code == 200
-    assert tracking.json()["rows"]
-    row_signal = tracking.json()["rows"][0]["signal"]
+    assert scoped.status_code == 200
+    assert scoped.json()["evaluations"]
+    row_signal = scoped.json()["evaluations"][0]["signal"]
     assert row_signal["product_time"]["version"] == "product-time/v1"
     assert row_signal["product_time"]["roles"]["market_date"]["status"] == "known"
     assert (
         row_signal["product_time"]["roles"]["earliest_execution_at"]["status"]
         == "unknown"
     )
-    assert scoped.status_code == 200
     assert scoped.json()["signal"]["product_time"]["version"] == "product-time/v1"
 
 

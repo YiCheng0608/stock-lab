@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom/server'
 
@@ -27,7 +28,8 @@ import { CandidateCard, CandidatesSection, ScoreDetails } from './CandidateViews
 // the candidate card, partial components, zero and not-computed runs, and the stock page panel.
 // The today list (table rows and phone cards, #276) is checked in today/today.test.tsx.
 const check = (condition: boolean, message: string) => { if (!condition) throw new Error(message) }
-const render = (element: ReactElement) => renderToStaticMarkup(<StaticRouter location="/">{element}</StaticRouter>)
+// The card's "加入追蹤" button (#253) reads the query client.
+const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><StaticRouter location="/">{element}</StaticRouter></QueryClientProvider>)
 const count = (markup: string, needle: string) => markup.split(needle).length - 1
 const slice = (markup: string, start: string, end: string) => {
   const from = markup.indexOf(start)
@@ -128,6 +130,20 @@ check(render(<CandidatesSection data={undefined} loading={false} error={new Erro
 const details = render(<ScoreDetails item={partialItem()} open={false} />)
 check(details.includes('<details class="details candidate-details">') && details.includes('評分細節、資料日期與來源'), 'score details stay collapsed on the board')
 check(!details.includes('href="/stocks/'), 'score details do not link to the stock page')
+
+// ---- 加入追蹤 (#253): one button or link per card, after the levels ----
+check(count(list, '>加入追蹤</button>') === 2 && !list.includes('已在追蹤'), 'every untracked candidate has the add button')
+check(first.indexOf('candidate-levels') < first.indexOf('plan-add') && first.indexOf('plan-add') < first.indexOf('candidate-components'), 'the button sits after the levels')
+const tracked = render(<CandidateCard item={{ ...completeItem(), candidate_id: 11, open_plan_id: 7 }} />)
+check(tracked.includes('href="/actions#plan-7">已在追蹤</a>') && !tracked.includes('加入追蹤'), 'a tracked candidate links to its plan')
+// The today list (#276) puts it in each candidate's detail: once in the desktop detail row, once in the phone card.
+const todayItems = listResponse().items.map((item, index) => index === 0 ? { ...item, candidate_id: 11, open_plan_id: 7 } : item)
+const today = render(<CandidatesSection data={{ ...listResponse(), items: todayItems }} loading={false} error={null} />)
+const detailRows = today.split('data-candidate-detail=').slice(1)
+const miniCards = today.split('class="card candidate-mini"').slice(1)
+check(detailRows.length === todayItems.length && miniCards.length === todayItems.length, 'one detail row and one phone card per candidate')
+check(detailRows.every((row, index) => slice(row, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every detail row has the plan button or link')
+check(miniCards.every((card, index) => slice(card, '<details', '</details>').includes(index === 0 ? '>已在追蹤</a>' : '>加入追蹤</button>')), 'every phone card detail has the plan button or link')
 
 // The card alone stays usable without a router link.
 check(render(<CandidateCard item={completeItem()} linkToStock={false} />).includes('<span><strong>2377</strong> 微星</span>'), 'card renders the name without a link')

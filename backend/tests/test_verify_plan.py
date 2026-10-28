@@ -67,7 +67,12 @@ TREE = {
     ),
     "stock/strategyBoard.ts": "export const unmetText = 1\n",
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
-    "candidates/CandidateViews.tsx": "import { AiBadge } from '../news/NewsViews'\n",
+    "candidates/CandidateViews.tsx": (
+        "import { AiBadge } from '../news/NewsViews'\n"
+        "import { AddPlanButton } from '../tracking/TrackingViews'\n"
+    ),
+    "tracking/TrackingViews.tsx": "import { planStatus } from './tracking'\n",
+    "tracking/tracking.ts": "export const planStatus = 1\n",
     "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",
     "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
     "actions/actionTiers.ts": "export const actionKey = 1\n",

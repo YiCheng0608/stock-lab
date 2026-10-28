@@ -24,6 +24,9 @@ from pathlib import Path
 # them equal. This script runs on the stdlib-only tool Python, so it cannot
 # import the backend (#237).
 CANDIDATE_SCORE_VERSION = "candidate_score_v2"
+# Same as backend/app/domain.py PLAN_OPEN_STATUSES (kept equal by the same test).
+PLAN_OPEN_STATUSES = ("pending", "triggered")
+_OPEN = ", ".join(f"'{status}'" for status in PLAN_OPEN_STATUSES)
 
 QUERIES = {
     "market_latest_trading_date": (
@@ -57,6 +60,15 @@ QUERIES = {
     "theme_suggestions": (
         "theme_suggestions",
         "SELECT count(*) FROM theme_suggestions",
+    ),
+    # User tracking plans: the actions page's 追蹤計畫 and 追蹤回看 (A8).
+    "tracking_plans_open": (
+        "tracking_plans",
+        f"SELECT count(*) FROM tracking_plans WHERE status IN ({_OPEN})",
+    ),
+    "tracking_plans_closed": (
+        "tracking_plans",
+        f"SELECT count(*) FROM tracking_plans WHERE status NOT IN ({_OPEN})",
     ),
     # Private: when non-zero the today and actions pages show holdings, so the run's
     # screenshots and API JSON stay local (SKILL.md, Doctor step 4).
