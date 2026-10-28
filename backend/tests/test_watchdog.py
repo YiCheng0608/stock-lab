@@ -64,7 +64,8 @@ fi
 mode="$(cat "$d/gh_mode_$1" 2>/dev/null || cat "$d/gh_mode" 2>/dev/null)"
 case "$mode" in
   401) echo 'HTTP 401: Bad credentials (https://api.github.com/repos/YiCheng0608/stock-lab)' >&2; exit 1 ;;
-  no_token) printf 'To get started with GitHub CLI, please run:  gh auth login\n' >&2; exit 4 ;;
+  # Only exit 4 tells: the line naming gh auth login is left out.
+  no_token) echo 'Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.' >&2; exit 4 ;;
   down) echo 'error connecting to api.github.com' >&2; exit 1 ;;
 esac
 [ "$1" = api ] && { echo 'YiCheng0608/stock-lab'; exit 0; }
@@ -930,17 +931,15 @@ def test_an_auth_error_of_the_latest_llm_run_is_commented_once_a_taipei_day(wd):
     assert "anomaly_already_commented" in wd.events()
 
 
-def test_an_llm_auth_error_that_a_later_run_cleared_or_older_than_a_day_is_not_commented(
-    wd,
-):
+def test_an_llm_auth_error_that_a_later_run_of_its_step_cleared_is_not_commented(wd):
     db = wd.data / "stock.db"
     _llm_runs(
         db,
         [
             ("candidate_notes", 3600, ["not_logged_in"]),
             ("candidate_notes", 1800, [None]),
-            ("news_llm", 25 * 3600, ["not_logged_in"]),
-            ("news_llm", 24 * 3600 + 60, ["rate_limited"]),
+            ("news_llm", 7200, ["not_logged_in"]),
+            ("news_llm", 600, ["rate_limited"]),
         ],
     )
     result = wd.run()
@@ -949,6 +948,25 @@ def test_an_llm_auth_error_that_a_later_run_cleared_or_older_than_a_day_is_not_c
     empty = wd.root / "empty.db"
     sqlite3.connect(empty).close()
     assert _helper_module().llm_auth(str(empty), str(NIGHT)) == "skip"
+
+
+def test_an_llm_auth_error_older_than_a_day_is_not_commented(wd):
+    # The latest run of each step failed authentication; only the window keeps
+    # a step that stopped running (news-llm switched off) from a comment a day.
+    db = wd.data / "stock.db"
+    _llm_runs(
+        db,
+        [
+            ("news_llm", 24 * 3600 + 60, ["not_logged_in"]),
+            ("candidate_notes", 24 * 3600 - 60, ["not_logged_in"]),
+        ],
+    )
+    helper = _helper_module()
+    assert helper.llm_auth(str(db), str(NIGHT)) == "candidate_notes run_id=2"
+    assert helper.llm_auth(str(db), str(NIGHT + 120)) == ""
+    wd.run(now=NIGHT + 120)
+    assert "Claude Code 認證" not in wd.text("gh_bodies.txt")
+    assert wd.events() == ["schedules_ok"]
 
 
 @pytest.mark.parametrize("mode,code", [("401", 1), ("no_token", 4)])

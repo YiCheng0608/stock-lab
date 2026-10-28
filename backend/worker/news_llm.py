@@ -79,15 +79,16 @@ STRIPPED_ENV_PREFIXES = ("CLAUDE_CODE_", "ANTHROPIC_")
 OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 # The batch uses the subscription login only; with these set it refuses to run.
 API_KEY_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
-# A failed call whose result, api_error_status or stderr has one of these is an
-# authentication failure (not_logged_in): no login, or a login or
-# CLAUDE_CODE_OAUTH_TOKEN that expired or was revoked.  The -p messages of
-# code.claude.com/docs/en/errors (read 2026-10-29, #337): "Not logged in ·
-# Please run /login", "Failed to authenticate. API Error: 401 OAuth token has
-# expired", "Failed to authenticate: OAuth token revoked. Please log in
-# again", "Failed to authenticate: OAuth session expired and could not be
-# refreshed", "API Error: 401 Invalid authentication credentials"; the
-# structured error code is authentication_failed.
+# A failed call is an authentication failure (not_logged_in: no login, or a
+# login or CLAUDE_CODE_OAUTH_TOKEN that expired or was revoked) when its
+# api_error_status is 401, or its stderr or error result (is_error) has one of
+# these.  The -p messages of code.claude.com/docs/en/errors (read 2026-10-29,
+# #337): "Not logged in · Please run /login", "Failed to authenticate. API
+# Error: 401 OAuth token has expired", "Failed to authenticate: OAuth token
+# revoked. Please log in again", "Failed to authenticate: OAuth session
+# expired and could not be refreshed", "API Error: 401 Invalid authentication
+# credentials"; the structured error code is authentication_failed.  A bare
+# 401 is not enough: a stack trace line or model text can have one.
 AUTH_ERROR_TEXT = (
     "not logged in",
     "/login",
@@ -96,8 +97,8 @@ AUTH_ERROR_TEXT = (
     "authentication_failed",
     "oauth token",
     "invalid authentication credentials",
+    "api error: 401",
 )
-_HTTP_401 = re.compile(r"\b401\b")
 # Failures every later call in the same run would repeat.
 FATAL_REASONS = frozenset({"not_logged_in", "rate_limited", "cli_not_started"})
 # A rejected item failed the summary check; like done and skipped_stale it is
@@ -427,16 +428,20 @@ def _calls_today(db: Session, run_date: date) -> int:
 
 
 def _failure_reason(result: CliResult, envelope: dict[str, Any] | None) -> str:
+    envelope = envelope or {}
+    status = envelope.get("api_error_status")
+    # The result is the CLI's error message only when is_error is set; else it
+    # is model text.
     text = " ".join(
         str(part)
         for part in (
-            (envelope or {}).get("result"),
-            (envelope or {}).get("api_error_status"),
+            envelope.get("result") if envelope.get("is_error") else None,
+            status,
             result.stderr,
         )
         if part
     ).lower()
-    if any(part in text for part in AUTH_ERROR_TEXT) or _HTTP_401.search(text):
+    if str(status) == "401" or any(part in text for part in AUTH_ERROR_TEXT):
         return "not_logged_in"
     if (
         "429" in text

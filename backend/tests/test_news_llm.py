@@ -1235,6 +1235,27 @@ def test_other_cli_errors_are_not_taken_for_an_auth_error(result, reason):
     assert caught.value.reason == reason
 
 
+def test_a_401_in_a_stack_trace_is_not_an_auth_error():
+    # A crashed CLI: no JSON on stdout, a line number 401 in the trace.
+    trace = "TypeError: x is undefined\n    at run (/$bunfs/root/claude:401:12)"
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, "", trace))
+    assert caught.value.reason == "cli_error"
+
+
+def test_model_text_of_a_failed_call_without_is_error_is_not_read():
+    # is_error false: the result is model text, here a news figure and words
+    # of the auth messages, not the CLI's error.
+    envelope = {
+        "type": "result",
+        "is_error": False,
+        "result": "營收 401 億元，OAuth token 外洩事件，please log in",
+    }
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, json.dumps(envelope), ""))
+    assert caught.value.reason == "cli_error"
+
+
 def test_an_expired_oauth_token_stops_the_run_and_leaves_the_batch_pending(
     db, fake, monkeypatch
 ):
