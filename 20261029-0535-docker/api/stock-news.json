@@ -1,0 +1,1419 @@
+{
+  "items": [
+    {
+      "id": "2905",
+      "canonical_key": "news:ctee:1c09a3e7ca392f119cf5caa01c2bbd37e6aafbe2eed7d058862699e48dfad14b",
+      "dedupe_cluster_id": "news-title:9affe88715917e7a3e9bffe13ee81e81",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "工商時報",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261025700105-430206",
+        "url_kind": "item"
+      },
+      "source_item_id": "20261025700105",
+      "title": "謝逸文︱高檔換手 資金匯聚三風口",
+      "summary": "美股第三季超級財報周正式開跑，全球金融市場正經歷一輪顯著的評價面重新修訂與籌碼高檔沉澱，本周國際市場關注的核心焦點，全面鎖定在美系科技巨頭對未來AI伺服器資本支出的續航力，以及貨幣政策走勢。本周大來國際投顧分析師謝逸文選入安克（4188）、碩禾（3691）、華經（2468）、GIS-KY（6456）及玉晶光（3406）等五檔。 　謝逸文表示，受制美債殖利率高檔震盪與外資在期現貨市場的避險性調節，",
+      "description": "美股第三季超級財報周正式開跑，全球金融市場正經歷一輪顯著的評價面重新修訂與籌碼高檔沉澱，本周國際市場關注的核心焦點，全面鎖定在美系科技巨頭對未來AI伺服器資本支出的續航力，以及貨幣政策走勢。本周大來國際投顧分析師謝逸文選入安克（4188）、碩禾（3691）、華經（2468）、GIS-KY（6456）及玉晶光（3406）等五檔。 　謝逸文表示，受制美債殖利率高檔震盪與外資在期現貨市場的避險性調節，",
+      "summary_preview": "美股第三季超級財報周正式開跑，全球金融市場正經歷一輪顯著的評價面重新修訂與籌碼高檔沉澱，本周國際市場關注的核心焦點，全面鎖定在美系科技巨頭對未來AI伺服器資本支出的續航力，以及貨幣政策走勢。本周大來國際投顧分析師謝逸文選入安克（4188）…",
+      "language": "zh-Hant",
+      "published_at": "2026-10-24T19:00:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-24T19:00:00+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-24T19:00:00+00:00",
+            "utc": "2026-10-24T19:00:00+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-25T02:00:05.331380+00:00",
+            "utc": "2026-10-25T02:00:05.331380+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:33.005263+00:00",
+        "legacy": {
+          "published_at": "2026-10-24T19:00:00+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-24T19:00:00",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-25T02:00:05.331380+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:33.005263+00:00",
+      "collected_at": "2026-10-25T02:00:05.331380+00:00",
+      "symbols": [
+        "TPEx:3691",
+        "TPEx:4188",
+        "TWSE:2468",
+        "TWSE:3406",
+        "TWSE:6456"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3691",
+          "name": "碩禾"
+        },
+        {
+          "exchange": "TPEx",
+          "symbol": "4188",
+          "name": "安克"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2468",
+          "name": "華經"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "3406",
+          "name": "玉晶光"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6456",
+          "name": "GIS-KY"
+        }
+      ],
+      "themes": [],
+      "theme_ids": [],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "4d3da4cd101c0ff7be947f5bd432aa7ae473297094a9b24e6bd7dab02adef40f",
+      "detail_url": "/news/2905",
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "大來國際投顧謝逸文指出市場關注美系科技巨頭AI伺服器資本支出續航力與貨幣政策；本周選入安克、碩禾、華經、GIS-KY及玉晶光。",
+        "symbol_candidates": [
+          {
+            "exchange": "TPEx",
+            "symbol": "4188",
+            "name": "安克",
+            "exchange_corrected": true,
+            "reason": "被選入本周五檔。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TPEx",
+            "symbol": "3691",
+            "name": "碩禾",
+            "exchange_corrected": true,
+            "reason": "被選入本周五檔。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2468",
+            "name": "華經",
+            "exchange_corrected": false,
+            "reason": "被選入本周五檔。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "6456",
+            "name": "GIS-KY",
+            "exchange_corrected": false,
+            "reason": "被選入本周五檔。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "3406",
+            "name": "玉晶光",
+            "exchange_corrected": false,
+            "reason": "被選入本周五檔。",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [
+          {
+            "theme": "AI 伺服器",
+            "reason": "原文提到市場關注美系科技巨頭對AI伺服器資本支出的續航力。"
+          }
+        ],
+        "impact_direction": "mixed",
+        "impact_scope": "market",
+        "impact_rationale": "美債殖利率高檔震盪與外資避險調節，但摘要未給明確方向。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "adf25bfe992addfe2276bcc500ac38f7eef92a8cf8b4d20d850e073b44991081",
+        "generated_at": "2026-10-25T04:01:30.967663+00:00"
+      },
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 7519,
+        "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+        "data_as_of": "2026-10-25T02:00:05.331380"
+      }
+    },
+    {
+      "id": "2908",
+      "canonical_key": "news:ctee:16df18753894bd0e48a99f5da3e9bdb06f954b86e8e5392b0e2c7a380a373f5b",
+      "dedupe_cluster_id": "news-title:49f6fba4d6eb64830b62317339a445fc",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "工商時報",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261025700120-430206",
+        "url_kind": "item"
+      },
+      "source_item_id": "20261025700120",
+      "title": "林鈺凱︱短線急跌莫慌 基本面仍強",
+      "summary": "台股上周劇烈震盪，摩爾投顧林鈺凱指出，台股基本面並未透露敗象，預期在短線急跌後，台股仍有機會迅速重返多頭軌道，加權指數直衝50,000點整數大關的目標依舊不變，投資人可把握錯殺機會進場逢低布局。本周投組選入高力（8996）、華新科（2492）、台光電（2383）、華經（2468）、誠美材（4960）及冠西電（2466）等六檔。 　台股加權指數22日呈現開高走低的劇烈洗盤格局，終場大跌846點並跌",
+      "description": "台股上周劇烈震盪，摩爾投顧林鈺凱指出，台股基本面並未透露敗象，預期在短線急跌後，台股仍有機會迅速重返多頭軌道，加權指數直衝50,000點整數大關的目標依舊不變，投資人可把握錯殺機會進場逢低布局。本周投組選入高力（8996）、華新科（2492）、台光電（2383）、華經（2468）、誠美材（4960）及冠西電（2466）等六檔。 　台股加權指數22日呈現開高走低的劇烈洗盤格局，終場大跌846點並跌",
+      "summary_preview": "台股上周劇烈震盪，摩爾投顧林鈺凱指出，台股基本面並未透露敗象，預期在短線急跌後，台股仍有機會迅速重返多頭軌道，加權指數直衝50,000點整數大關的目標依舊不變，投資人可把握錯殺機會進場逢低布局。本周投組選入高力（8996）、華新科（249…",
+      "language": "zh-Hant",
+      "published_at": "2026-10-24T19:00:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-24T19:00:00+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-24T19:00:00+00:00",
+            "utc": "2026-10-24T19:00:00+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-25T02:00:05.331380+00:00",
+            "utc": "2026-10-25T02:00:05.331380+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:33.006763+00:00",
+        "legacy": {
+          "published_at": "2026-10-24T19:00:00+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-24T19:00:00",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-25T02:00:05.331380+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:33.006763+00:00",
+      "collected_at": "2026-10-25T02:00:05.331380+00:00",
+      "symbols": [
+        "TWSE:2383",
+        "TWSE:2466",
+        "TWSE:2468",
+        "TWSE:2492",
+        "TWSE:4960",
+        "TWSE:8996"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2383",
+          "name": "台光電"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2466",
+          "name": "冠西電"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2468",
+          "name": "華經"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2492",
+          "name": "華新科"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "4960",
+          "name": "誠美材"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "8996",
+          "name": "高力"
+        }
+      ],
+      "themes": [],
+      "theme_ids": [],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "5b6c50bf8cea4e7203fea1dbad285af4a606c96dff7e3949efbbd668d0c2db30",
+      "detail_url": "/news/2908",
+      "ai": {
+        "inference": true,
+        "status": "done",
+        "summary": "摩爾投顧林鈺凱指出台股基本面未透露敗象，目標直衝50,000點不變；本周選入高力、華新科、台光電、華經、誠美材及冠西電六檔。",
+        "symbol_candidates": [
+          {
+            "exchange": "TWSE",
+            "symbol": "8996",
+            "name": "高力",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2492",
+            "name": "華新科",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2383",
+            "name": "台光電",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2468",
+            "name": "華經",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "4960",
+            "name": "誠美材",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          },
+          {
+            "exchange": "TWSE",
+            "symbol": "2466",
+            "name": "冠西電",
+            "exchange_corrected": false,
+            "reason": "被選入本周投組。",
+            "confidence": "high",
+            "verified": false
+          }
+        ],
+        "theme_candidates": [],
+        "impact_direction": "positive",
+        "impact_scope": "market",
+        "impact_rationale": "分析師看法偏多，認為短線急跌後有機會重返多頭。",
+        "unsupported": false,
+        "model": "claude-sonnet-5-5",
+        "prompt_version": "news_v2",
+        "input_hash": "1c55321b772cf9cf4063ee34a83c84c0057e0499b536eb2c04835bf941c43f56",
+        "generated_at": "2026-10-25T04:01:30.967663+00:00"
+      },
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 7519,
+        "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+        "data_as_of": "2026-10-25T02:00:05.331380"
+      }
+    },
+    {
+      "id": "2513",
+      "canonical_key": "news:ctee:4ac760455f2d1ca189a155106b747f3e93c7e90a4501ab82965a1e618e8eded9",
+      "dedupe_cluster_id": "news-title:b831f3bc492a532c84f4769f75723a01",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "工商時報",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261023700235-430204",
+        "url_kind": "item"
+      },
+      "source_item_id": "20261023700235",
+      "title": "華經 價量齊揚攻漲停",
+      "summary": "華經（2468）22日以51.4元開盤，早盤震盪整理後走高，近11點攻上漲停，終場收在漲停價55元，創波段新高。華經連兩交易日價量齊揚，累計漲幅達12.82％，22日三大法人合計買超2,010張。 　華經9月合併營收3.08億元，年增68.77％，創2024年5月以來單月新高；第三季營收6.81億元，年增11.29％，營運逐步回溫。前三季累計營收19.72億元，年減4.02％。展望第四季，隨企業",
+      "description": "華經（2468）22日以51.4元開盤，早盤震盪整理後走高，近11點攻上漲停，終場收在漲停價55元，創波段新高。華經連兩交易日價量齊揚，累計漲幅達12.82％，22日三大法人合計買超2,010張。 　華經9月合併營收3.08億元，年增68.77％，創2024年5月以來單月新高；第三季營收6.81億元，年增11.29％，營運逐步回溫。前三季累計營收19.72億元，年減4.02％。展望第四季，隨企業",
+      "summary_preview": "華經（2468）22日以51.4元開盤，早盤震盪整理後走高，近11點攻上漲停，終場收在漲停價55元，創波段新高。華經連兩交易日價量齊揚，累計漲幅達12.82％，22日三大法人合計買超2,010張。 華經9月合併營收3.08億元，年增68.…",
+      "language": "zh-Hant",
+      "published_at": "2026-10-22T19:00:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-22T19:00:00+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-22T19:00:00+00:00",
+            "utc": "2026-10-22T19:00:00+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-23T02:00:06.447026+00:00",
+            "utc": "2026-10-23T02:00:06.447026+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:33.008172+00:00",
+        "legacy": {
+          "published_at": "2026-10-22T19:00:00+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-22T19:00:00",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-23T02:00:06.447026+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:33.008172+00:00",
+      "collected_at": "2026-10-23T02:00:06.447026+00:00",
+      "symbols": [
+        "TWSE:2468"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2468",
+          "name": "華經"
+        }
+      ],
+      "themes": [],
+      "theme_ids": [],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "ce27c85fe728cb9e7f7a4285e5c28f805a84e23cfc7c84dc00e4af3792948ca2",
+      "detail_url": "/news/2513",
+      "ai": null,
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 7248,
+        "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+        "data_as_of": "2026-10-23T02:00:06.447026"
+      }
+    },
+    {
+      "id": "462",
+      "canonical_key": "news:yahoo_tw:cf903bc3f7f5c765e821e1b9c31c57ff44bd9f1a25281165ba84aa762976d592",
+      "dedupe_cluster_id": "news-title:d08c5b48482b5c9240a9e1c978256e82",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "Yahoo奇摩股市",
+      "source": {
+        "name": "Yahoo奇摩股市",
+        "url": "https://tw.news.yahoo.com/%E5%8F%B0%E8%82%A1%E9%87%8D%E6%8C%AB%E6%80%8E%E9%BA%BC%E8%B2%B7-%E6%B1%9F%E5%9C%8B%E4%B8%AD%E6%9B%9D2%E5%A4%A7%E6%AD%A2%E8%B7%8C%E8%A8%8A%E8%99%9F-%E9%BB%9E%E5%90%8D%E9%80%995%E6%AA%94%E4%BD%8E%E5%9F%BA%E6%9C%9F%E8%82%A1-190500220.html",
+        "url_kind": "item"
+      },
+      "source_item_id": null,
+      "title": "台股重挫怎麼買？江國中曝2大止跌訊號：點名這5檔低基期股",
+      "summary": "台股修正如何布局？摩爾證券投顧分析師江國中提醒，避開高基期股票，留意今國光（6209）、台表科（6278）、友威科（3580）、華經（2468）、正文（4906），並觀察技術面與籌碼面止跌訊號，採取分",
+      "description": "台股修正如何布局？摩爾證券投顧分析師江國中提醒，避開高基期股票，留意今國光（6209）、台表科（6278）、友威科（3580）、華經（2468）、正文（4906），並觀察技術面與籌碼面止跌訊號，採取分",
+      "summary_preview": "台股修正如何布局？摩爾證券投顧分析師江國中提醒，避開高基期股票，留意今國光（6209）、台表科（6278）、友威科（3580）、華經（2468）、正文（4906），並觀察技術面與籌碼面止跌訊號，採取分",
+      "language": "zh-Hant",
+      "published_at": "2026-10-18T19:05:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-18T19:05:00+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-18T19:05:00+00:00",
+            "utc": "2026-10-18T19:05:00+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-18T20:00:07.741928+00:00",
+            "utc": "2026-10-18T20:00:07.741928+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:33.008742+00:00",
+        "legacy": {
+          "published_at": "2026-10-18T19:05:00+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-18T19:05:00",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-18T20:00:07.741928+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:33.008742+00:00",
+      "collected_at": "2026-10-18T20:00:07.741928+00:00",
+      "symbols": [
+        "TPEx:3580",
+        "TWSE:2468",
+        "TWSE:4906",
+        "TWSE:6209",
+        "TWSE:6278"
+      ],
+      "instruments": [
+        {
+          "exchange": "TPEx",
+          "symbol": "3580",
+          "name": "友威科"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2468",
+          "name": "華經"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "4906",
+          "name": "正文"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6209",
+          "name": "今國光"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6278",
+          "name": "台表科"
+        }
+      ],
+      "themes": [],
+      "theme_ids": [],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "40915f1afe7b1c74644ecbc6ee726170e1d5730c52348892fe27a2ce2a21310e",
+      "detail_url": "/news/462",
+      "ai": null,
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 6598,
+        "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+        "data_as_of": "2026-10-18T20:00:07.741928"
+      }
+    },
+    {
+      "id": "369",
+      "canonical_key": "news:ctee:d9fbc8d5bee7398b3e9427cdb1d0332147a347320dd646a3746b72cbb878687f",
+      "dedupe_cluster_id": "news-title:850bd06c71be198c70884b3cb721efb6",
+      "category": "domestic",
+      "source_kind": "media",
+      "source_name": "工商時報",
+      "source": {
+        "name": "工商時報",
+        "url": "https://www.ctee.com.tw/news/20261018700131-430206",
+        "url_kind": "item"
+      },
+      "source_item_id": "20261018700131",
+      "title": "林鈺凱︱AI支撐 指數反彈行情可期",
+      "summary": "台股上周遭逢通膨升溫、外資賣壓加劇等利空夾擊，加權指數由挑戰50,000點轉為高檔劇烈修正，惟台積電法說會釋出強勁展望，顯示AI產業基本面仍具支撐，摩爾投顧分析師林鈺凱指出，本周若外資賣壓收斂、新台幣止貶，仍有機會醞釀反彈行情，本周投組選入晶心科（6533）、AMAX-KY（6933）、台郡（6269）、大眾控（3701）及華經（2468）。 進入第四季第三周，台股由挑戰50,000點，快速",
+      "description": "台股上周遭逢通膨升溫、外資賣壓加劇等利空夾擊，加權指數由挑戰50,000點轉為高檔劇烈修正，惟台積電法說會釋出強勁展望，顯示AI產業基本面仍具支撐，摩爾投顧分析師林鈺凱指出，本周若外資賣壓收斂、新台幣止貶，仍有機會醞釀反彈行情，本周投組選入晶心科（6533）、AMAX-KY（6933）、台郡（6269）、大眾控（3701）及華經（2468）。 進入第四季第三周，台股由挑戰50,000點，快速",
+      "summary_preview": "台股上周遭逢通膨升溫、外資賣壓加劇等利空夾擊，加權指數由挑戰50,000點轉為高檔劇烈修正，惟台積電法說會釋出強勁展望，顯示AI產業基本面仍具支撐，摩爾投顧分析師林鈺凱指出，本周若外資賣壓收斂、新台幣止貶，仍有機會醞釀反彈行情，本周投組選…",
+      "language": "zh-Hant",
+      "published_at": "2026-10-17T19:00:00+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-17T19:00:00+00:00",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "news_item",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_market_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "event.event_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item.event_at",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_event_at_not_display_basis",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-17T19:00:00+00:00",
+            "utc": "2026-10-17T19:00:00+00:00",
+            "date": null,
+            "source": "news_item.published_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "known",
+            "precision": "instant",
+            "value": "2026-10-18T02:00:05.950928+00:00",
+            "utc": "2026-10-18T02:00:05.950928+00:00",
+            "date": null,
+            "source": "news_item.collected_at",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "source_offset_normalized_to_UTC"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_generated_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_at_not_applicable",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "news_item",
+            "evidence": null,
+            "ref": null,
+            "reason": "news_earliest_execution_date_not_applicable",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:33.010021+00:00",
+        "legacy": {
+          "published_at": "2026-10-17T19:00:00+00:00",
+          "event_at": null,
+          "event_date": null,
+          "display_time": "2026-10-17T19:00:00",
+          "time_basis": "published",
+          "time_precision": "datetime",
+          "time_consistency": "verified",
+          "collected_at": "2026-10-18T02:00:05.950928+00:00"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+          "A collection timestamp does not prove when the source first became available.",
+          "Historical decision and generation times are not persisted by the NewsItem projection."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:33.010021+00:00",
+      "collected_at": "2026-10-18T02:00:05.950928+00:00",
+      "symbols": [
+        "TWSE:2330",
+        "TWSE:2468",
+        "TWSE:3701",
+        "TWSE:6269",
+        "TWSE:6533",
+        "TWSE:6933"
+      ],
+      "instruments": [
+        {
+          "exchange": "TWSE",
+          "symbol": "2330",
+          "name": "台積電"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "2468",
+          "name": "華經"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "3701",
+          "name": "大眾控"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6269",
+          "name": "台郡"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6533",
+          "name": "晶心科"
+        },
+        {
+          "exchange": "TWSE",
+          "symbol": "6933",
+          "name": "AMAX-KY"
+        }
+      ],
+      "themes": [],
+      "theme_ids": [],
+      "impact": {
+        "scope": "instrument",
+        "direction": "unknown",
+        "rationale": null,
+        "method": "rule:exact-name-code/v1",
+        "confidence": "unknown"
+      },
+      "impact_scope": "instrument",
+      "impact_direction": "unknown",
+      "confidence": "unknown",
+      "status": "active",
+      "content_hash": "057115e695c3f1db4cdb4807bf10e01b82c43a1589f1d4bc51a71bb6fe44c13e",
+      "detail_url": "/news/369",
+      "ai": null,
+      "provenance": {
+        "event_id": null,
+        "raw_payload_id": 6504,
+        "endpoint": "https://www.ctee.com.tw/rss_web/livenews/stock",
+        "data_as_of": "2026-10-18T02:00:05.950928"
+      }
+    }
+  ],
+  "meta": {
+    "limit": 50,
+    "next_cursor": null,
+    "has_more": false,
+    "sort": "display_time_desc,time_basis_desc,time_precision_desc,canonical_key_desc,id_desc",
+    "data_as_of": "2026-10-28",
+    "total": 5
+  }
+}

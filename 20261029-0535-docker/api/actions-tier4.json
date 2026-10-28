@@ -1,0 +1,1085 @@
+{
+  "items": [
+    {
+      "instrument": {
+        "id": 281,
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "instrument_type": "stock",
+        "etf_category": null
+      },
+      "as_of": "2026-10-28",
+      "generated_at": "2026-10-28T21:40:35.316411+00:00",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "action_summary",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-10-28",
+            "utc": null,
+            "date": "2026-10-28",
+            "source": "market_bar.trading_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision.events",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_published_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_collected_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_generated_at_not_persisted_with_timezone",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:35.316411+00:00",
+        "legacy": {
+          "as_of": "2026-10-28",
+          "data_cutoff": "2026-10-28",
+          "price_as_of": "2026-10-28",
+          "earliest_execution_date": null,
+          "generated_at": "2026-10-28T21:40:35.316411+00:00",
+          "generated_at_role": "legacy_response_assembly_time",
+          "run_finished_at": "2026-10-28T13:31:00.381874"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "Decision data_cutoff/as_of and earliest_execution_date are calendar dates; they do not establish an instant.",
+          "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+          "A unique related event is required before an action can expose an event date; multiple events fail closed.",
+          "An ingestion run finished_at is retained as a legacy run timestamp and is not promoted to collected_at for an action.",
+          "Historical decision and generation times are not persisted by the legacy action projection.",
+          "The legacy generated_at field is retained as a response-assembly compatibility value; response_generated_at is not historical generated_at."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:35.316411+00:00",
+      "level_semantics": {
+        "version": "signal-level-semantics/v1",
+        "kind": "unknown",
+        "reason": "strategy_or_version_not_allowlisted",
+        "strategy": {
+          "name": null,
+          "version": null
+        },
+        "formula": {
+          "version": null,
+          "source": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "fields": {
+          "trigger_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "trigger_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_low": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_low",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_high": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_high",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "invalid_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "invalid_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_1": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_1",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_2": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_2",
+            "reason": "strategy_or_version_not_allowlisted"
+          }
+        },
+        "price_basis": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "cost_included": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "decision_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "generated_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "response_generated_at": "2026-10-28T21:40:35.316411+00:00"
+      },
+      "stop_price_semantics": {
+        "kind": "unknown",
+        "label": "價位（語意未確認）",
+        "origin": null,
+        "source_field": null,
+        "is_rule_reference": false,
+        "reason": "no_rule_or_position_stop"
+      },
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "display_action": "暫無研究條件",
+      "action_instruction": "現在：先觀察，尚無成立條件。",
+      "display_instruction": "資料足夠，但目前尚未符合研究條件；持續觀察。",
+      "display_reasons": [
+        "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+      ],
+      "primary_reason": {
+        "label": "回踩條件差 3 項：趨勢、族群、法人",
+        "scope": "pullback"
+      },
+      "primary_levels": {},
+      "data_status": {
+        "source": "official_snapshot",
+        "market": "complete",
+        "strategy": "complete"
+      },
+      "context_badges": [
+        "自選",
+        "族群觀察"
+      ],
+      "detail_url": "/stocks/TWSE/2330",
+      "data_gap": null,
+      "priority": 5,
+      "held": false,
+      "position_quantity_status": "absent",
+      "watchlisted": true,
+      "current_price": 2425.0,
+      "market_read": {
+        "status": "known",
+        "invalid_fields": []
+      },
+      "price_as_of": "2026-10-28",
+      "previous_close": 2400.0,
+      "price_change": 25.0,
+      "price_change_pct": 0.010416666666666666,
+      "trigger_kind": null,
+      "trigger_price": null,
+      "entry_low": null,
+      "entry_high": null,
+      "invalid_price": null,
+      "stop_price": null,
+      "target_1": null,
+      "target_2": null,
+      "risk_reward": null,
+      "earliest_execution_date": null,
+      "primary_strategy": null,
+      "alternative_strategies": [
+        "breakout_v1",
+        "pullback_v1"
+      ],
+      "reasons": [
+        "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+      ],
+      "conflicts": [],
+      "data_quality": "complete",
+      "blocking_reasons": [],
+      "missing_data_priority": [],
+      "theme_ids": [
+        "theme-cowos",
+        "official-industry-1858340d045a575f"
+      ],
+      "event_ids": [],
+      "data_cutoff": "2026-10-28",
+      "tier": 4,
+      "candidate": null,
+      "nearness": null
+    },
+    {
+      "instrument": {
+        "id": 430,
+        "exchange": "TWSE",
+        "symbol": "2603",
+        "name": "長榮",
+        "instrument_type": "stock",
+        "etf_category": null
+      },
+      "as_of": "2026-10-28",
+      "generated_at": "2026-10-28T21:40:35.317278+00:00",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "action_summary",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-10-28",
+            "utc": null,
+            "date": "2026-10-28",
+            "source": "market_bar.trading_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision.events",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_published_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_collected_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_generated_at_not_persisted_with_timezone",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:35.317278+00:00",
+        "legacy": {
+          "as_of": "2026-10-28",
+          "data_cutoff": "2026-10-28",
+          "price_as_of": "2026-10-28",
+          "earliest_execution_date": null,
+          "generated_at": "2026-10-28T21:40:35.317278+00:00",
+          "generated_at_role": "legacy_response_assembly_time",
+          "run_finished_at": "2026-10-28T13:31:00.381874"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "Decision data_cutoff/as_of and earliest_execution_date are calendar dates; they do not establish an instant.",
+          "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+          "A unique related event is required before an action can expose an event date; multiple events fail closed.",
+          "An ingestion run finished_at is retained as a legacy run timestamp and is not promoted to collected_at for an action.",
+          "Historical decision and generation times are not persisted by the legacy action projection.",
+          "The legacy generated_at field is retained as a response-assembly compatibility value; response_generated_at is not historical generated_at."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:35.317278+00:00",
+      "level_semantics": {
+        "version": "signal-level-semantics/v1",
+        "kind": "unknown",
+        "reason": "strategy_or_version_not_allowlisted",
+        "strategy": {
+          "name": null,
+          "version": null
+        },
+        "formula": {
+          "version": null,
+          "source": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "fields": {
+          "trigger_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "trigger_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_low": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_low",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_high": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_high",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "invalid_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "invalid_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_1": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_1",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_2": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_2",
+            "reason": "strategy_or_version_not_allowlisted"
+          }
+        },
+        "price_basis": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "cost_included": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "decision_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "generated_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "response_generated_at": "2026-10-28T21:40:35.317278+00:00"
+      },
+      "stop_price_semantics": {
+        "kind": "unknown",
+        "label": "價位（語意未確認）",
+        "origin": null,
+        "source_field": null,
+        "is_rule_reference": false,
+        "reason": "no_rule_or_position_stop"
+      },
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "display_action": "暫無研究條件",
+      "action_instruction": "現在：先觀察，尚無成立條件。",
+      "display_instruction": "資料足夠，但目前尚未符合研究條件；持續觀察。",
+      "display_reasons": [],
+      "primary_reason": {
+        "label": "突破條件差 2 項：價格、量能",
+        "scope": "breakout"
+      },
+      "primary_levels": {},
+      "data_status": {
+        "source": "official_snapshot",
+        "market": "complete",
+        "strategy": "complete"
+      },
+      "context_badges": [
+        "自選"
+      ],
+      "detail_url": "/stocks/TWSE/2603",
+      "data_gap": null,
+      "priority": 5,
+      "held": false,
+      "position_quantity_status": "absent",
+      "watchlisted": true,
+      "current_price": 263.0,
+      "market_read": {
+        "status": "known",
+        "invalid_fields": []
+      },
+      "price_as_of": "2026-10-28",
+      "previous_close": 261.5,
+      "price_change": 1.5,
+      "price_change_pct": 0.0057361376673040155,
+      "trigger_kind": null,
+      "trigger_price": null,
+      "entry_low": null,
+      "entry_high": null,
+      "invalid_price": null,
+      "stop_price": null,
+      "target_1": null,
+      "target_2": null,
+      "risk_reward": null,
+      "earliest_execution_date": null,
+      "primary_strategy": null,
+      "alternative_strategies": [
+        "breakout_v1",
+        "pullback_v1"
+      ],
+      "reasons": [],
+      "conflicts": [],
+      "data_quality": "complete",
+      "blocking_reasons": [],
+      "missing_data_priority": [],
+      "theme_ids": [
+        "official-industry-0435ae1f54a7615d"
+      ],
+      "event_ids": [],
+      "data_cutoff": "2026-10-28",
+      "tier": 4,
+      "candidate": null,
+      "nearness": null
+    },
+    {
+      "instrument": {
+        "id": 483,
+        "exchange": "TWSE",
+        "symbol": "2881",
+        "name": "富邦金",
+        "instrument_type": "stock",
+        "etf_category": null
+      },
+      "as_of": "2026-10-28",
+      "generated_at": "2026-10-28T21:40:35.317922+00:00",
+      "product_time": {
+        "version": "product-time/v1",
+        "scope": "action_summary",
+        "availability_truth": "not_asserted",
+        "timezone_policy": {
+          "display_timezone": "Asia/Taipei",
+          "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+          "date_only": "calendar_date_without_timezone_conversion",
+          "naive_or_missing": "unknown_with_reason"
+        },
+        "roles": {
+          "market_date": {
+            "role": "market_date",
+            "status": "known",
+            "precision": "date",
+            "value": "2026-10-28",
+            "utc": null,
+            "date": "2026-10-28",
+            "source": "market_bar.trading_date",
+            "evidence": null,
+            "ref": null,
+            "reason": null,
+            "timezone_policy": "calendar_date_no_timezone_conversion"
+          },
+          "event_date": {
+            "role": "event_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision.events",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "event_at": {
+            "role": "event_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_event_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "published_at": {
+            "role": "published_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_published_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "first_available_at": {
+            "role": "first_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_first_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "collected_at": {
+            "role": "collected_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_collected_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "revision_available_at": {
+            "role": "revision_available_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_revision_available_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "decision_at": {
+            "role": "decision_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_decision_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "generated_at": {
+            "role": "generated_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "decision",
+            "evidence": null,
+            "ref": null,
+            "reason": "legacy_generated_at_not_persisted_with_timezone",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_at": {
+            "role": "earliest_execution_at",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_at_not_persisted",
+            "timezone_policy": "not_applicable"
+          },
+          "earliest_execution_date": {
+            "role": "earliest_execution_date",
+            "status": "unknown",
+            "precision": "none",
+            "value": null,
+            "utc": null,
+            "date": null,
+            "source": "signal.earliest_execution_date",
+            "evidence": null,
+            "ref": null,
+            "reason": "action_earliest_execution_date_not_persisted",
+            "timezone_policy": "not_applicable"
+          }
+        },
+        "response_generated_at": "2026-10-28T21:40:35.317922+00:00",
+        "legacy": {
+          "as_of": "2026-10-28",
+          "data_cutoff": "2026-10-28",
+          "price_as_of": "2026-10-28",
+          "earliest_execution_date": null,
+          "generated_at": "2026-10-28T21:40:35.317922+00:00",
+          "generated_at_role": "legacy_response_assembly_time",
+          "run_finished_at": "2026-10-28T13:31:00.381874"
+        },
+        "limitations": [
+          "This is a read-time product projection; it does not assert source availability truth.",
+          "Decision data_cutoff/as_of and earliest_execution_date are calendar dates; they do not establish an instant.",
+          "earliest_execution_at remains unknown until an actual timezone-aware execution instant is persisted.",
+          "A unique related event is required before an action can expose an event date; multiple events fail closed.",
+          "An ingestion run finished_at is retained as a legacy run timestamp and is not promoted to collected_at for an action.",
+          "Historical decision and generation times are not persisted by the legacy action projection.",
+          "The legacy generated_at field is retained as a response-assembly compatibility value; response_generated_at is not historical generated_at."
+        ]
+      },
+      "response_generated_at": "2026-10-28T21:40:35.317922+00:00",
+      "level_semantics": {
+        "version": "signal-level-semantics/v1",
+        "kind": "unknown",
+        "reason": "strategy_or_version_not_allowlisted",
+        "strategy": {
+          "name": null,
+          "version": null
+        },
+        "formula": {
+          "version": null,
+          "source": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "fields": {
+          "trigger_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "trigger_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_low": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_low",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "entry_high": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "pullback_high",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "invalid_price": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "invalid_price",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_1": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_1",
+            "reason": "strategy_or_version_not_allowlisted"
+          },
+          "target_2": {
+            "role": "unknown",
+            "label_zh": "價位（語意未確認）",
+            "source_field": "target_2",
+            "reason": "strategy_or_version_not_allowlisted"
+          }
+        },
+        "price_basis": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "cost_included": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "decision_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "generated_at": {
+          "value": null,
+          "reason": "strategy_or_version_not_allowlisted"
+        },
+        "response_generated_at": "2026-10-28T21:40:35.317922+00:00"
+      },
+      "stop_price_semantics": {
+        "kind": "unknown",
+        "label": "價位（語意未確認）",
+        "origin": null,
+        "source_field": null,
+        "is_rule_reference": false,
+        "reason": "no_rule_or_position_stop"
+      },
+      "action_state": "no_condition",
+      "action_label_zh": "暫無條件",
+      "display_action": "暫無研究條件",
+      "action_instruction": "現在：先觀察，尚無成立條件。",
+      "display_instruction": "資料足夠，但目前尚未符合研究條件；持續觀察。",
+      "display_reasons": [
+        "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+      ],
+      "primary_reason": {
+        "label": "回踩條件差 1 項：支撐區",
+        "scope": "pullback"
+      },
+      "primary_levels": {},
+      "data_status": {
+        "source": "official_snapshot",
+        "market": "complete",
+        "strategy": "complete"
+      },
+      "context_badges": [
+        "自選",
+        "族群觀察"
+      ],
+      "detail_url": "/stocks/TWSE/2881",
+      "data_gap": null,
+      "priority": 5,
+      "held": false,
+      "position_quantity_status": "absent",
+      "watchlisted": true,
+      "current_price": 161.0,
+      "market_read": {
+        "status": "known",
+        "invalid_fields": []
+      },
+      "price_as_of": "2026-10-28",
+      "previous_close": 162.0,
+      "price_change": -1.0,
+      "price_change_pct": -0.006172839506172839,
+      "trigger_kind": null,
+      "trigger_price": null,
+      "entry_low": null,
+      "entry_high": null,
+      "invalid_price": null,
+      "stop_price": null,
+      "target_1": null,
+      "target_2": null,
+      "risk_reward": null,
+      "earliest_execution_date": null,
+      "primary_strategy": null,
+      "alternative_strategies": [
+        "breakout_v1",
+        "pullback_v1"
+      ],
+      "reasons": [
+        "至少一個有效族群具備 TAIEX 相對強弱與成員門檻"
+      ],
+      "conflicts": [],
+      "data_quality": "complete",
+      "blocking_reasons": [],
+      "missing_data_priority": [],
+      "theme_ids": [
+        "official-industry-94d658309b8d4f69"
+      ],
+      "event_ids": [],
+      "data_cutoff": "2026-10-28",
+      "tier": 4,
+      "candidate": null,
+      "nearness": null
+    }
+  ],
+  "meta": {
+    "limit": 5,
+    "next_cursor": null,
+    "has_more": false,
+    "sort": "action_tier_v1: tier asc; 0 holding_risk: holding_state (reduce_exit > manual_review > data_insufficient > hold_observe), symbol, exchange; 1 candidate: candidate_rank, symbol, exchange; 2 conditional: group_rank, symbol, exchange; 3 near: unmet_conditions, price_gap, symbol, exchange; 4 observation: unmet_conditions, symbol, exchange; 5 data_insufficient: watchlist_first, symbol, exchange",
+    "data_as_of": "2026-10-28",
+    "total": 3
+  },
+  "taxonomy": {
+    "conditional_entry": "條件進場",
+    "wait_breakout": "等待突破",
+    "wait_pullback": "等待回踩",
+    "hold_observe": "持有觀察",
+    "reduce_exit": "減碼／退場",
+    "data_insufficient": "資料不足",
+    "no_condition": "暫無條件",
+    "manual_review": "需人工判讀"
+  },
+  "summary": {
+    "total": 3,
+    "held": 0,
+    "held_unknown": 0,
+    "scope": "filtered_results",
+    "tier_version": "action_tier_v1",
+    "candidate_list_size": 20,
+    "view": "focus",
+    "include_etf": false,
+    "tiers": [
+      {
+        "tier": 0,
+        "key": "holding_risk",
+        "label": "持倉風險",
+        "stock": 0,
+        "etf": 0,
+        "shown": 0
+      },
+      {
+        "tier": 1,
+        "key": "candidate",
+        "label": "今日候選",
+        "stock": 20,
+        "etf": 0,
+        "shown": 20
+      },
+      {
+        "tier": 2,
+        "key": "conditional",
+        "label": "其他成立條件",
+        "stock": 37,
+        "etf": 7,
+        "shown": 37
+      },
+      {
+        "tier": 3,
+        "key": "near",
+        "label": "接近成立",
+        "stock": 0,
+        "etf": 0,
+        "shown": 0
+      },
+      {
+        "tier": 4,
+        "key": "observation",
+        "label": "其他觀察",
+        "stock": 1501,
+        "etf": 171,
+        "shown": 3
+      },
+      {
+        "tier": 5,
+        "key": "data_insufficient",
+        "label": "資料待補",
+        "stock": 124,
+        "etf": 8,
+        "shown": 0
+      }
+    ],
+    "hidden": {
+      "etf": 186,
+      "observation": 1498,
+      "data_insufficient": 124
+    },
+    "views": {
+      "focus": 60,
+      "with_observation": 1558,
+      "all": 1682
+    },
+    "etf": 7
+  }
+}

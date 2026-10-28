@@ -1,0 +1,5 @@
+docker 48 {'通過': 45, '無法判定': 3}
+host   48 {'通過': 45, '無法判定': 3}
+same keys: True
+state differences: none
+detail text differs on 0 checks: []

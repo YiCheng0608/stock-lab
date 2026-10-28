@@ -1,0 +1,266 @@
+{
+  "id": "4110",
+  "canonical_key": "news:yahoo_tw:9d713e909b0f22dd559ee35f3a3a9cac1b84c45fedeefb8447dc9323084184c2",
+  "dedupe_cluster_id": "news-title:c32997b528100e3229d28f9096ee2f0c",
+  "category": "domestic",
+  "source_kind": "media",
+  "source_name": "Yahoo奇摩股市",
+  "source": {
+    "name": "Yahoo奇摩股市",
+    "url": "https://tw.news.yahoo.com/%E7%9C%8B%E5%A5%BD%E5%8F%B0%E8%82%A1ai%E7%B4%85%E5%88%A9%E5%8F%88%E6%80%95%E9%AB%98%E9%BB%9E-%E7%B4%80%E5%BE%8B%E5%88%86%E6%89%B9%E5%8B%9D%E9%81%8E%E7%8C%9C%E9%A0%82-190432122.html",
+    "url_kind": "item"
+  },
+  "source_item_id": null,
+  "title": "看好台股AI紅利又怕高點？紀律分批勝過猜頂",
+  "summary": "【記者柯安聰台北報導】全球AI產業迎來10年一遇的技術換代潮，台灣身為供應鏈核心引擎，從台積電先進製程、CoWoS到伺服器與散熱陣營，領軍台股挑戰5萬點關卡，投資人資產配置明顯傾斜台股。根據投...",
+  "description": "【記者柯安聰台北報導】全球AI產業迎來10年一遇的技術換代潮，台灣身為供應鏈核心引擎，從台積電先進製程、CoWoS到伺服器與散熱陣營，領軍台股挑戰5萬點關卡，投資人資產配置明顯傾斜台股。根據投...",
+  "summary_preview": "【記者柯安聰台北報導】全球AI產業迎來10年一遇的技術換代潮，台灣身為供應鏈核心引擎，從台積電先進製程、CoWoS到伺服器與散熱陣營，領軍台股挑戰5萬點關卡，投資人資產配置明顯傾斜台股。根據投...",
+  "language": "zh-Hant",
+  "published_at": "2026-10-28T19:04:32+00:00",
+  "event_at": null,
+  "event_date": null,
+  "display_time": "2026-10-28T19:04:32+00:00",
+  "time_basis": "published",
+  "time_precision": "datetime",
+  "time_consistency": "verified",
+  "product_time": {
+    "version": "product-time/v1",
+    "scope": "news_item",
+    "availability_truth": "not_asserted",
+    "timezone_policy": {
+      "display_timezone": "Asia/Taipei",
+      "known_instant": "UTC_normalized_then_displayed_in_Asia_Taipei",
+      "date_only": "calendar_date_without_timezone_conversion",
+      "naive_or_missing": "unknown_with_reason"
+    },
+    "roles": {
+      "market_date": {
+        "role": "market_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_market_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_date": {
+        "role": "event_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "event.event_date",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_date_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "event_at": {
+        "role": "event_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item.event_at",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_event_at_not_display_basis",
+        "timezone_policy": "not_applicable"
+      },
+      "published_at": {
+        "role": "published_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T19:04:32+00:00",
+        "utc": "2026-10-28T19:04:32+00:00",
+        "date": null,
+        "source": "news_item.published_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "first_available_at": {
+        "role": "first_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_first_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "collected_at": {
+        "role": "collected_at",
+        "status": "known",
+        "precision": "instant",
+        "value": "2026-10-28T20:00:30.227581+00:00",
+        "utc": "2026-10-28T20:00:30.227581+00:00",
+        "date": null,
+        "source": "news_item.collected_at",
+        "evidence": null,
+        "ref": null,
+        "reason": null,
+        "timezone_policy": "source_offset_normalized_to_UTC"
+      },
+      "revision_available_at": {
+        "role": "revision_available_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_revision_available_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "decision_at": {
+        "role": "decision_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_decision_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "generated_at": {
+        "role": "generated_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_generated_at_not_persisted",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_at": {
+        "role": "earliest_execution_at",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_at_not_applicable",
+        "timezone_policy": "not_applicable"
+      },
+      "earliest_execution_date": {
+        "role": "earliest_execution_date",
+        "status": "unknown",
+        "precision": "none",
+        "value": null,
+        "utc": null,
+        "date": null,
+        "source": "news_item",
+        "evidence": null,
+        "ref": null,
+        "reason": "news_earliest_execution_date_not_applicable",
+        "timezone_policy": "not_applicable"
+      }
+    },
+    "response_generated_at": "2026-10-28T21:40:29.950975+00:00",
+    "legacy": {
+      "published_at": "2026-10-28T19:04:32+00:00",
+      "event_at": null,
+      "event_date": null,
+      "display_time": "2026-10-28T19:04:32",
+      "time_basis": "published",
+      "time_precision": "datetime",
+      "time_consistency": "verified",
+      "collected_at": "2026-10-28T20:00:30.227581+00:00"
+    },
+    "limitations": [
+      "This is a read-time product projection; it does not assert source availability truth.",
+      "News display_time and date-only event_date remain legacy-compatible values and are not promoted to an instant.",
+      "A collection timestamp does not prove when the source first became available.",
+      "Historical decision and generation times are not persisted by the NewsItem projection."
+    ]
+  },
+  "response_generated_at": "2026-10-28T21:40:29.950975+00:00",
+  "collected_at": "2026-10-28T20:00:30.227581+00:00",
+  "symbols": [
+    "TWSE:2330"
+  ],
+  "instruments": [
+    {
+      "exchange": "TWSE",
+      "symbol": "2330",
+      "name": "台積電"
+    }
+  ],
+  "themes": [],
+  "theme_ids": [],
+  "impact": {
+    "scope": "instrument",
+    "direction": "unknown",
+    "rationale": null,
+    "method": "rule:exact-name-code/v1",
+    "confidence": "unknown"
+  },
+  "impact_scope": "instrument",
+  "impact_direction": "unknown",
+  "confidence": "unknown",
+  "status": "active",
+  "content_hash": "cdc0e13131fa5b01db4358bea7b768c7250c60b6d2d88d41346dec208d187601",
+  "detail_url": "/news/4110",
+  "ai": {
+    "inference": true,
+    "status": "done",
+    "summary": "報導指全球AI產業迎來10年一遇技術換代潮，台灣為供應鏈核心，台股挑戰5萬點，投資人資產配置傾斜台股。",
+    "symbol_candidates": [
+      {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "name": "台積電",
+        "exchange_corrected": false,
+        "reason": "原文提到台積電先進製程、CoWoS為台灣AI供應鏈核心",
+        "confidence": "high",
+        "verified": false
+      }
+    ],
+    "theme_candidates": [
+      {
+        "theme": "AI 伺服器",
+        "reason": "原文提到伺服器與散熱陣營領軍台股"
+      },
+      {
+        "theme": "半導體",
+        "reason": "原文提到台積電先進製程、CoWoS"
+      }
+    ],
+    "impact_direction": "positive",
+    "impact_scope": "market",
+    "impact_rationale": "原文指AI供應鏈領軍台股挑戰5萬點，資產配置傾斜台股。",
+    "unsupported": false,
+    "model": "claude-sonnet-5-5",
+    "prompt_version": "news_v2",
+    "input_hash": "7468ba3f308c49299cbafd0bdda19395ad803024b2a69cb43db9ec412ef4c420",
+    "generated_at": "2026-10-28T20:01:03.991626+00:00"
+  },
+  "provenance": {
+    "event_id": null,
+    "raw_payload_id": 8070,
+    "endpoint": "https://tw.stock.yahoo.com/rss?category=tw-market",
+    "data_as_of": "2026-10-28T20:00:30.227581"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "items": [],
+  "meta": {
+    "limit": 100,
+    "next_cursor": null,
+    "has_more": false,
+    "sort": "action_tier_v1: tier asc; 0 holding_risk: holding_state (reduce_exit > manual_review > data_insufficient > hold_observe), symbol, exchange; 1 candidate: candidate_rank, symbol, exchange; 2 conditional: group_rank, symbol, exchange; 3 near: unmet_conditions, price_gap, symbol, exchange; 4 observation: unmet_conditions, symbol, exchange; 5 data_insufficient: watchlist_first, symbol, exchange",
+    "data_as_of": "2026-10-28",
+    "total": 0
+  },
+  "taxonomy": {
+    "conditional_entry": "條件進場",
+    "wait_breakout": "等待突破",
+    "wait_pullback": "等待回踩",
+    "hold_observe": "持有觀察",
+    "reduce_exit": "減碼／退場",
+    "data_insufficient": "資料不足",
+    "no_condition": "暫無條件",
+    "manual_review": "需人工判讀"
+  },
+  "summary": {
+    "total": 0,
+    "held": 0,
+    "held_unknown": 0,
+    "scope": "filtered_results",
+    "tier_version": "action_tier_v1",
+    "candidate_list_size": 20,
+    "view": "focus",
+    "include_etf": false,
+    "tiers": [
+      {
+        "tier": 0,
+        "key": "holding_risk",
+        "label": "持倉風險",
+        "stock": 0,
+        "etf": 0,
+        "shown": 0
+      },
+      {
+        "tier": 1,
+        "key": "candidate",
+        "label": "今日候選",
+        "stock": 20,
+        "etf": 0,
+        "shown": 20
+      },
+      {
+        "tier": 2,
+        "key": "conditional",
+        "label": "其他成立條件",
+        "stock": 37,
+        "etf": 7,
+        "shown": 37
+      },
+      {
+        "tier": 3,
+        "key": "near",
+        "label": "接近成立",
+        "stock": 0,
+        "etf": 0,
+        "shown": 0
+      },
+      {
+        "tier": 4,
+        "key": "observation",
+        "label": "其他觀察",
+        "stock": 1501,
+        "etf": 171,
+        "shown": 3
+      },
+      {
+        "tier": 5,
+        "key": "data_insufficient",
+        "label": "資料待補",
+        "stock": 124,
+        "etf": 8,
+        "shown": 0
+      }
+    ],
+    "hidden": {
+      "etf": 186,
+      "observation": 1498,
+      "data_insufficient": 124
+    },
+    "views": {
+      "focus": 60,
+      "with_observation": 1558,
+      "all": 1682
+    },
+    "etf": 7
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "market_latest_trading_date": "2026-10-28",
+  "group_scores_latest_trading_date": "2026-10-28",
+  "candidate_run_latest_trading_date": "2026-10-28",
+  "candidate_count_latest": 20,
+  "news_items": 4123,
+  "news_latest_published_at": "2026-10-28 19:56:00.000000",
+  "news_llm_done": 4149,
+  "theme_suggestions": 871,
+  "portfolio_positions": 0,
+  "alembic_version": "0020_trading_calendar",
+  "market_summary_latest": {},
+  "instrument": {
+    "exchange": "TWSE",
+    "symbol": "2468",
+    "latest_trading_date": "2026-10-28",
+    "source": "twse"
+  }
+}
