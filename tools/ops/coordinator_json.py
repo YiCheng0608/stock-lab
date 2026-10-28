@@ -11,7 +11,7 @@ value is missing or the condition is false, so a script can test the exit code.
   repo-id KEY         id of the orca repo whose remote canonicalKey is KEY
   terminals PATH      "handle agent lastOutputAt" per terminal of the worktree at PATH
   worktrees PREFIX    "path<TAB>branch<TAB>id" per orca worktree on branch refs/heads/PREFIX*
-  ci-state SHA        CI state of master: "<state of SHA> <state of the newest run>"
+  ci-state SHA        CI state of the target branch: "<state of SHA> <state of the newest run>"
   commit-ci SHA       state of SHA's latest CI run: the highest databaseId, since runs
                       created together (a cancelled duplicate) list in any order (#314)
   board               "itemId projectId fieldId optionId=name,..." of project 1 from the

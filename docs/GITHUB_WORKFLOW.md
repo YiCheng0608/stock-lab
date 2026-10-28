@@ -1,4 +1,4 @@
-<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、本機檢查、review 與合併、PR 檢查規則、統籌 session、無人值守運作、失敗處理、程式索引 -->
+<!-- owns: 唯一來源對照、Issue 標題前綴、版本完成判定、資料與功能拆線、分流、任務流程、本機檢查、review 與合併、PR 檢查規則、長期整合分支、統籌 session、無人值守運作、失敗處理、程式索引 -->
 # GitHub 工作手冊
 
 [AGENTS](../AGENTS.md) 管角色與原則，本文管操作細節與模板。
@@ -42,13 +42,13 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 2. **開工**：統籌把任務全文（Issue 連結、AC、白名單、驗證方式）寫成 UTF-8 檔（放 scratchpad，不經 PowerShell 管線），再跑一行：
 
    ```text
-   bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>]
+   bash tools/ops/dispatch.sh <issue> <slug> --task-file <任務全文檔> [--model <model> --effort <effort>] [--base origin/<branch>]
    ```
 
-   [`dispatch.sh`](../tools/ops/dispatch.sh) 從最新 `origin/master` 建 worktree，依序等於下列手動命令（模型預設 `claude-opus-5-5`／`high`）：
+   [`dispatch.sh`](../tools/ops/dispatch.sh) 先 fetch 再從最新 `origin/master` 建 worktree；子單的 PR 目標是[長期整合分支](#長期整合分支)時加 `--base origin/<該分支>`，fetch 與「新 worktree 的 HEAD 等於最新 base」的核對都改用它。依序等於下列手動命令（模型預設 `claude-opus-5-5`／`high`；`--base-branch` 只在 `--base` 不等於 `origin/master` 時加）：
 
    ```text
-   orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip --json
+   orca worktree create --repo id:<repoId> --name task-<issue>-<slug> --no-parent --setup skip [--base-branch origin/<branch>] --json
    git -C <path> branch -m <orca-branch> task/<issue>-<slug>
    orca terminal create --worktree id:<repoId>::<path> --title "#<issue> <slug>" --command "claude --model <model> --effort <effort>" --json
    orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
@@ -60,7 +60,7 @@ ROADMAP 的 V1 基線列出七個 gate（V1-G1～G7）；每個 gate 由一到�
 3. **實作**：只改任務需要的檔案；共用檔案（如 `frontend/src/App.tsx`、`backend/app/api.py`）改動前先看是否有其他進行中的任務也在改，有就在 Issue 協調。
 4. **本機檢查**：見下節；全部通過才開 PR。
 5. **PR**：套 [PR 模板](../.github/pull_request_template.md)（`gh pr create --body-file` 不會自動帶入模板，先複製模板再填），`Closes #<issue>`，附驗證結果與截圖（前端）。看板設待整合。
-6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、master 上它的 merge commit CI 綠（最新一次也不是紅）、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有「統籌承諾」留言時依承諾的順序與時點清理。
+6. **Review 與合併**：見下節。合併後 master CI 綠 → Issue 自動關閉、看板完成（PR 進[長期整合分支](#長期整合分支)時 GitHub 不自動關，由 `close_task.sh` 關）；遠端 branch 由 GitHub 自動刪（repo 設定 `delete_branch_on_merge`）；統籌在 `master` 管理 checkout 跑 `bash tools/ops/close_task.sh <issue> [--extra-dir <PR 本文寫的 worktree 外暫存目錄>]...`（同一 Issue 有多個 `task/<issue>-*` worktree 時加 `--slug <slug>`），再刷新程式索引。[`close_task.sh`](../tools/ops/close_task.sh) 先確認 PR 已合併、PR 目標分支（`baseRefName`：master 或[長期整合分支](#長期整合分支)）上它的 merge commit CI 綠（該分支最新一次也不是紅）、本地 branch 已在 `origin/<目標分支>` 裡、worktree 沒有未 commit 的改動、terminal 都閒置，才關 terminal、`orca worktree rm --force`＋`git worktree prune`（殘留目錄一併刪）、刪本地 branch、刪暫存目錄（裡面的 junction／symlink 先拆，不跟隨）、看板設完成並讀回；任一前提不符就不刪任何東西並非 0 結束。repo 與各 worktree、`$HOME`、磁碟根、`stock-lab-data` 與 `STOCK_DATA_DIR` 不能當 `--extra-dir`；路徑中間經過 junction／symlink 或用了 8.3 短檔名也拒絕，請給實際路徑。Issue 有「統籌承諾」留言時依承諾的順序與時點清理。
    結案時對照本次 review 留言、CI 失敗與使用者糾正，用一次 `gh search issues "<關鍵字>" --repo YiCheng0608/stock-lab --match comments` 查同關鍵字的「第一次」留言（留言格式見 [encode-lesson skill](../.claude/skills/encode-lesson/SKILL.md) 第 1 步），不用 `--paginate` 翻全部留言；有重複就是第二次，另建一張 `[任務]` 把它編成會失敗的檢查（[#228](https://github.com/YiCheng0608/stock-lab/issues/228)），並更新 [AGENTS](../AGENTS.md#規則與強制手段) 對照表。
    每個 gate 收尾、或每合併約 3 個 PR 後，統籌在以最新 `origin/master` 為底的 worktree 跑一次 [verify-stock-lab 真資料模式](../.claude/skills/verify-stock-lab/SKILL.md#真資料模式)（五頁全套，正式 DB 唯讀副本），結果貼在該 gate 的 Issue。verify（CI 或真資料）抓到的 bug，修的同一個 PR 要加一條會先失敗的檢查（測試或 verify 檢查項），不能只修不加。worktree 的 branch 命名 `task/<貼結果的 Issue>-...`（否則 Evidence 不推 `pr-assets`），並在該 worktree 另開 session 執行（skill 拒絕在 `master` 分支跑）。發佈與部署（tag、`deploy.sh`）見 [RELEASE](RELEASE.md)；V1 G7 窗口的五點（兩條 branch、V1 改動兩個 PR、真資料 verify、每日核對、窗口結束）見 [RELEASE 的 V1 發佈隔離](RELEASE.md#v1-發佈隔離g7-窗口專用)。
    master 另有 CI 每晚全套（`schedule`，台北 22:40；也可手動 `workflow_dispatch`）：後端、前端全部跑，`verify` 驗五頁。紅了照 master CI 紅處理（見 [Review 與合併](#review-與合併)）。
@@ -89,6 +89,20 @@ Python 用 `C:/Users/YiCheng/.cache/codex-runtimes/codex-primary-runtime/depende
 - 改到 [`HIGH_RISK_PATHS`](../tools/ci/checks.py) 的 PR 加一次獨立 review（`/code-review` 或另開 session）並加 `independent-review` label。獨立 review 要寫出「這個變更安全是因為哪一個事實」，以及證明它的方式（命令與輸出、查詢或測試名稱）。
 - 合併用 merge commit，不 squash／rebase；衝突由 PR 作者在自己 branch 解決。主線規則要求 PR 分支跟上 master：master 前進後統籌以 `gh api -X PUT repos/YiCheng0608/stock-lab/pulls/<n>/update-branch -f expected_head_sha=<head>` 把 master 併入（merge commit），CI 重跑綠再合併。
 - master CI 紅：先修 master（fix-forward PR），修好前不合併其他 PR。
+
+## 長期整合分支
+
+多張子單要整批進 master 時，子單的 PR 先進一條長期整合分支。目前只有 `feat/docker`（Docker 母單 [#331](https://github.com/YiCheng0608/stock-lab/issues/331)）。
+
+- **建立與保護**：統籌從最新 `origin/master` 切出、推上 GitHub，再建 ruleset。ruleset 內容與 master 的[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026)相同，只換目標分支：禁止刪除、禁止強推、只經 PR 以 merge commit 合併、CI `required` 綠才合併。另有兩項也相同：PR 分支要跟上目標分支，review 討論要全部解決。`feat/docker` 從 `5c8deb0` 切出，ruleset 是 [26027657](https://github.com/YiCheng0608/stock-lab/rules/26027657)，可用 `gh api repos/YiCheng0608/stock-lab/rulesets/<id>` 對照兩份的 `rules`。長期整合分支的清單只寫在 [`close_task.sh`](../tools/ops/close_task.sh) 的 `integration_branches`。CI 對它的 PR 與 push 都要跑，所以每個分支也要列在 `.github/workflows/ci.yml` 的 `pull_request`／`push` branches；`tools/ci/test_checks.py` 的 `WorkflowTriggers` 會核對兩邊一致。新增長期整合分支時，同一個 PR 改這兩處。
+- **第一次派工之前**：PR 的 CI 讀的是 merge ref 裡的 `ci.yml`。整合分支如果是在 `ci.yml` 列入它之前切出的，從它開的 PR 不會跑 CI，`required` 不會回報，PR 就合不進去；push 也沒有 run，`close_task.sh` 會讀到 `missing`。這種情況要先開一次「master → 整合分支」的同步 PR（做法見下方「跟上 master」），合併後才派子單。`feat/docker` 就是這種情況：它從 `5c8deb0` 切出，早於 #332。
+- **派工**：`dispatch.sh … --base origin/feat/docker`（[任務流程](#任務流程)第 2 步）。工程師以 `gh pr create --base feat/docker` 開 PR，跟上目標分支時合併 `origin/feat/docker`。
+- **結案**：`close_task.sh` 讀 PR 的 `baseRefName`，查的是目標分支的 CI 與歷史（[任務流程](#任務流程)第 6 步）。目標只接受 master 與 `integration_branches`；進 `release/*` 或其他分支的 PR 會被拒絕，什麼都不刪，要結案就用 `--pr` 指定進 master 的那個 PR。
+- **關 Issue**：PR 合併進非預設分支時，GitHub 不會依 `Closes #<issue>` 關 Issue。所以目標不是 master 時，close_task 在全部前提成立後、刪除任何東西之前，執行 `gh issue close <issue>`，並留言 PR 與 merge commit。
+  - 關不掉，而且讀回 Issue 仍是開的：停下，不刪任何東西。
+  - Issue 已經關了（例如刪除步驟失敗後重跑）：不再呼叫 `gh issue close`，照常清理。
+  - 目標是 master 時不呼叫；`--no-board` 的試跑也不關。
+- **跟上 master 與收尾**：master 每週至少合併進整合分支一次。因為整合分支只收 PR，做法是從 `origin/feat/docker` 開 branch、合併 `origin/master` 後開 PR。全部子單完成後，整合分支開一個 PR 進 master；Docker 另要等 G7 通過，見 #331。合併後統籌移除它的 ruleset 與分支，並把分支從 `integration_branches` 與 `ci.yml` 移除。
 
 ## 統籌 session
 

@@ -1,12 +1,15 @@
 name: CI
 
 on:
+  # master, the V1 release branch and the Docker integration branch feat/docker (#332);
+  # tools/ci/test_checks.py (WorkflowTriggers) pins both lists to master, release/** and
+  # integration_branches in tools/ops/close_task.sh.
   pull_request:
-    branches: [master, 'release/**']
+    branches: [master, 'release/**', feat/docker]
     # edited and (un)labeled rerun the pr gate when the body or labels change.
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
-    branches: [master, 'release/**']
+    branches: [master, 'release/**', feat/docker]
   # Master's full suite every night (22:40 Taipei) and on demand: changes, backend and
   # frontend run on every file, verify on all five pages (verify_plan.py --event, #251).
   schedule:
