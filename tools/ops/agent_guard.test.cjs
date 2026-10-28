@@ -16,7 +16,7 @@ const SCRIPT = path.join(__dirname, 'agent_guard.cjs');
 const ROOT = path.resolve(__dirname, '..', '..');
 // Tools .claude/settings.json must route through this script; the .env rules need every one
 // that reads, searches or writes a file.
-const MATCHED_TOOLS = ['Bash', 'Edit', 'Glob', 'Grep', 'NotebookEdit', 'PowerShell', 'Read', 'Write'];
+const MATCHED_TOOLS = ['Artifact', 'ArtifactData', 'Bash', 'DesignSync', 'Edit', 'Glob', 'Grep', 'Monitor', 'NotebookEdit', 'PowerShell', 'Read', 'Write'];
 
 function hook(input, env = process.env) {
   const result = spawnSync(process.execPath, [SCRIPT], {
@@ -205,11 +205,11 @@ describe('hook process', () => {
     assert.equal(hook({ tool_name: 'PowerShell', tool_input: { command: 'git stash pop' } }).code, 2);
   });
 
-  test('other tools pass and broken input is a non-blocking error', () => {
+  test('other tools pass and broken input blocks the call', () => {
     assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: path.join(master, 'README.md') } }, env).code, 0);
     const broken = hook('not json');
-    assert.equal(broken.code, 1);
-    assert.match(broken.stderr, /hook error/);
+    assert.equal(broken.code, 2);
+    assert.match(broken.stderr, /hook error, call blocked/);
   });
 
   test('.claude/settings.json runs this script for every matched tool', { skip: process.platform === 'win32' && 'Git Bash vs WSL bash on PATH; checked by hand' }, () => {
@@ -421,6 +421,92 @@ describe('.env rules', () => {
       assert.doesNotMatch(result.stderr, /not-a-real-token/);
     }
     assert.equal(hook({ tool_name: 'Read', tool_input: { file_path: path.join(plain, '.env.example') } }).code, 0);
+  });
+
+  test('a hook error or malformed input blocks the call', () => {
+    for (const [label, input] of [
+      ['glob that is no valid regex', { tool_name: 'Bash', tool_input: { command: 'cat .[z-a] .e?v' }, cwd: plain }],
+      ['Grep glob that is no valid regex', { tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: plain, glob: '![z-a]' } }],
+      ['Grep path of the wrong type', { tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: 42 } }],
+      ['stdin that is not JSON', 'not json'],
+      ['tool_input that is not an object', { tool_name: 'Read', tool_input: 'x' }],
+      ['Read file_path of the wrong type', { tool_name: 'Read', tool_input: { file_path: 42 } }],
+    ]) {
+      const result = hook(input);
+      assert.equal(result.code, 2, label);
+      assert.doesNotMatch(result.stderr, /not-a-real-token/, label);
+    }
+    assert.ok(commandDenial('cat .[z-a] .e?v', 'bash', [], plain));
+    assert.ok(commandDenial('cat .[z-a]', 'bash', [], plain), 'a glob that does not compile counts as a match');
+  });
+
+  test('Monitor runs its command through the Bash rules', () => {
+    blocked({ tool_name: 'Monitor', tool_input: { command: 'tail -f frontend/.env.local', description: 'x', timeout_ms: 1000 } });
+    blocked({ tool_name: 'Monitor', tool_input: { command: 'grep -r TOKEN .', description: 'x', timeout_ms: 1000 }, cwd: plain });
+    assert.match(denial({ tool_name: 'Monitor', tool_input: { command: 'git stash', description: 'x', timeout_ms: 1000 } }), /裸 git stash/);
+    allowed({ tool_name: 'Monitor', tool_input: { command: 'tail -f run.log', description: '.env check', timeout_ms: 1000 }, cwd: clean });
+    allowed({ tool_name: 'Monitor', tool_input: { ws: { url: 'wss://example.com/x' }, description: 'x', timeout_ms: 1000 } });
+  });
+
+  test('Artifact, ArtifactData and DesignSync block an upload of a .env file', () => {
+    const url = 'https://claude.ai/artifact/x';
+    blocked({ tool_name: 'Artifact', tool_input: { url, asset: true, file_path: 'C:/Users/YiCheng/stock-lab-release/.env' } });
+    blocked({ tool_name: 'Artifact', tool_input: { url, asset: true, file_paths: ['a.png', '.env'] } });
+    blocked({ tool_name: 'Artifact', tool_input: { file_path: 'page.html', files: { 'notes.txt': 'frontend/.env.local' } } });
+    blocked({ tool_name: 'Artifact', tool_input: { file_path: 'page.html', files: { 'notes.txt': { from: '.env.production' } } } });
+    blocked({ tool_name: 'ArtifactData', tool_input: { url, action: 'set', collection: 'c', doc_id: 'd', file_path: '.env' } });
+    blocked({ tool_name: 'DesignSync', tool_input: { method: 'write_files', files: [{ path: 'a', localPath: '.env' }] } });
+    allowed({ tool_name: 'Artifact', tool_input: { file_path: 'page.html', files: { 'a.js': 'a.js' }, description: 'x' } });
+    allowed({ tool_name: 'ArtifactData', tool_input: { url, action: 'get', collection: 'c', doc_id: 'd' } });
+  });
+
+  test('a short 8.3 name of a .env file is blocked', { skip: process.platform !== 'win32' && 'Windows only' }, (t) => {
+    const file = path.join(plain, '.env');
+    const result = spawnSync('cmd.exe', ['/d', '/s', '/c', `"for %I in ("${file}") do @echo %~sI"`], {
+      encoding: 'utf8',
+      windowsVerbatimArguments: true,
+    });
+    const short = result.stdout.trim();
+    if (result.status !== 0 || !short || path.basename(short).toLowerCase() === '.env') {
+      t.skip('8.3 names are off on this volume');
+      return;
+    }
+    blocked({ tool_name: 'Read', tool_input: { file_path: short } });
+    blocked({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: short } });
+    assert.ok(commandDenial(`cat ${path.basename(short)}`, 'bash', [], plain), short);
+  });
+
+  test('git grep over untracked files and find -exec are recursive reads', () => {
+    assert.ok(commandDenial('git grep --no-index TOKEN', 'bash', [], repo));
+    assert.ok(commandDenial(`git -C ${unix(repo)} grep --untracked TOKEN`, 'bash', [], clean));
+    assert.ok(commandDenial('find . -type f -exec cat {} +', 'bash', [], plain));
+    assert.ok(commandDenial('find . -name "*.txt" -execdir grep TOKEN {} ;', 'bash', [], plain));
+    assert.equal(commandDenial('git grep TOKEN', 'bash', [], repo), null, 'tracked files only');
+    assert.equal(commandDenial('find . -type f -exec cat {} +', 'bash', [], clean), null);
+  });
+
+  test('a Grep walk that cannot finish blocks; node_modules counts unless git ignores it', () => {
+    const deep = path.join(tmp, 'deep');
+    fs.mkdirSync(path.join(deep, ...Array.from({ length: 14 }, (_, i) => `d${i}`)), { recursive: true });
+    blocked({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: deep } });
+    const modules = path.join(tmp, 'modules');
+    fake(path.join(modules, 'node_modules', 'pkg', '.env'));
+    blocked({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: modules } });
+    fake(path.join(repo, 'node_modules', 'pkg', '.env'));
+    fs.appendFileSync(path.join(repo, '.gitignore'), 'node_modules/\n');
+    allowed({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: repo } });
+  });
+
+  test('powershell -EncodedCommand is blocked', () => {
+    for (const [shell, command] of [
+      ['powershell', 'powershell -enc SQBFAFgA'],
+      ['bash', 'pwsh -NoProfile -EncodedCommand SQBFAFgA'],
+      ['bash', 'powershell.exe -e SQBFAFgA'],
+      ['powershell', 'pwsh -ec SQBFAFgA'],
+    ]) {
+      assert.ok(commandDenial(command, shell, [], clean), command);
+    }
+    assert.equal(commandDenial('powershell -NoProfile -ExecutionPolicy Bypass -File x.ps1', 'bash', [], clean), null);
   });
 
   test('.claude/settings.json routes every file-reading tool to this script', () => {

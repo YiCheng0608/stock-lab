@@ -12,7 +12,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|Bash|PowerShell|Read|Grep|Glob|NotebookEdit|mcp__codebase-memory-mcp__.*",
+        "matcher": "Edit|Write|Bash|PowerShell|Read|Grep|Glob|NotebookEdit|Monitor|Artifact|ArtifactData|DesignSync|mcp__codebase-memory-mcp__.*",
         "hooks": [
           {
             "type": "command",

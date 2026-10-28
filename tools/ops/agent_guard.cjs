@@ -3,10 +3,11 @@
 // - Edit/Write: the target file's checkout is on branch master (the management checkout).
 // - Bash/PowerShell: git clean -x/-X, bare git stash, git stash pop/clear, git push --force/-f/
 //   --force-with-lease/+refspec, recursive rm of the data directory.
-// - Every file tool, Bash/PowerShell and codebase-memory: a .env file (`.env`, or `.env.*` not
+// - Every file tool, Bash/PowerShell/Monitor, Artifact uploads and codebase-memory: a .env file (`.env`, or `.env.*` not
 //   ending in `.example`, in any directory). See ENV RULES below for what each check covers.
 // Reads the hook JSON on stdin; exit 2 with the reason on stderr blocks the call, exit 0 allows
-// it, any other exit is a hook error Claude Code shows without blocking. Rollback: revert
+// it. Any other exit would be a hook error Claude Code shows without blocking, so this script
+// exits 2 on its own errors and on malformed input as well. Rollback: revert
 // .claude/settings.json. Tests: tools/ops/agent_guard.test.cjs (node --test).
 'use strict';
 
@@ -145,9 +146,8 @@ const ENV_REASON = '不得讀取、複製或改動 .env（agent 只看 .env.exam
 // (process.env, .envrc). A trailing * or ? counts: `.env*` matches the file.
 const ENV_NAME = /(?:^|[\s'"`=:/\\<>(,@{[])(\.env(?:\.[\w.*?-]*)?)(?=$|[\s'"`/\\)>,;:|&}\]*?])/gi;
 const isEnvName = (name) => /^\.env(?:\..*)?$/i.test(name) && !/\.example$/i.test(name);
-// Directories a walk skips: not where a user keeps a .env, and too large to walk on every call.
-const WALK_SKIP = new Set(['.git', 'node_modules']);
-const WALK_DEPTH = 8;
+// A walk for .env files under a search root gives up (and blocks) past these.
+const WALK_DEPTH = 12;
 const WALK_LIMIT = 50000;
 
 // The first .env name in `text`, or null.
@@ -186,9 +186,14 @@ function globRegex(glob) {
 }
 
 // Whether a glob over file names matches `name`. Bash leaves a leading dot to an explicit `.`.
+// A glob that is no valid regex here ([z-a]) counts as a match: the shell may still expand it.
 function globMatches(glob, name, shell) {
   if (shell === 'bash' && name.startsWith('.') && !glob.startsWith('.')) return false;
-  return new RegExp(globRegex(glob), 'i').test(name);
+  try {
+    return new RegExp(globRegex(glob), 'i').test(name);
+  } catch {
+    return true;
+  }
 }
 
 // Shell words of a segment: quotes removed, `quoted` set when any part was quoted.
@@ -247,8 +252,9 @@ function envNamesIn(dir) {
   }
 }
 
-// .env files under `root` (links not followed), or 'too large' past WALK_LIMIT entries.
-function envFilesUnder(root) {
+// .env files under `root`, skipping the paths in `skip` and .git (links not followed); 'too
+// large' past WALK_LIMIT entries or below WALK_DEPTH levels, where the walk cannot vouch.
+function envFilesUnder(root, skip = new Set()) {
   const found = [];
   let seen = 0;
   const walk = (dir, depth) => {
@@ -256,14 +262,16 @@ function envFilesUnder(root) {
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-      return true;
+      return true; // unreadable to the search too
     }
     for (const entry of entries) {
       seen += 1;
       if (seen > WALK_LIMIT) return false;
-      if (entry.isFile() && isEnvName(entry.name)) found.push(path.join(dir, entry.name));
-      if (entry.isDirectory() && !WALK_SKIP.has(entry.name) && depth < WALK_DEPTH) {
-        if (!walk(path.join(dir, entry.name), depth + 1)) return false;
+      const full = path.join(dir, entry.name);
+      if (skip.has(full)) continue;
+      if (entry.isFile() && isEnvName(entry.name)) found.push(full);
+      if (entry.isDirectory() && entry.name !== '.git') {
+        if (depth >= WALK_DEPTH || !walk(full, depth + 1)) return false;
       }
     }
     return true;
@@ -271,33 +279,42 @@ function envFilesUnder(root) {
   return walk(root, 0) ? found : 'too large';
 }
 
-// Whether git (and so ripgrep, which honours .gitignore) leaves `file` out of a search.
-function gitIgnored(file) {
-  const result = spawnSync('git', ['-C', path.dirname(file), 'check-ignore', '-q', path.basename(file)], {
+// The files and whole directories git ignores under `root`, which ripgrep (and so Grep) leaves
+// out; empty outside a repository.
+function gitIgnoredUnder(root) {
+  const result = spawnSync('git', ['-C', root, 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], {
+    encoding: 'utf8',
     timeout: 10000,
+    maxBuffer: 64 * 1024 * 1024,
   });
-  return result.status === 0;
+  if (result.status !== 0) return new Set();
+  return new Set(result.stdout.split('\0').filter(Boolean).map((p) => path.resolve(root, p.replace(/\/$/, ''))));
 }
 
-// The reason a search over `roots` would read a .env file, or null. `ignored` skips the files
+// The reason a search over `roots` would read a .env file, or null. `ignored` skips the paths
 // git ignores; `keep` filters the file names the search would open.
 function searchDenial(roots, { ignored = false, keep = () => true } = {}) {
   for (const root of roots) {
     if (!root) return `${ENV_REASON}；搜尋目錄含變數或無法解析，看不出會不會碰到 .env`;
     if (!isDir(root)) continue;
-    const files = envFilesUnder(root);
-    if (files === 'too large') return `${ENV_REASON}；${root} 太大，無法確認底下沒有 .env，請改搜較小的目錄`;
-    const hit = files.find((file) => keep(path.basename(file)) && !(ignored && gitIgnored(file)));
+    const files = envFilesUnder(root, ignored ? gitIgnoredUnder(root) : undefined);
+    if (files === 'too large') {
+      return `${ENV_REASON}；${root} 超過 ${WALK_LIMIT} 個項目或 ${WALK_DEPTH} 層，無法確認底下沒有 .env，請改搜較小的目錄`;
+    }
+    const hit = files.find((file) => keep(path.basename(file)));
     if (hit) return `${ENV_REASON}；${root} 底下有 ${hit}，遞迴搜尋或複製會讀到它`;
   }
   return null;
 }
 
 // Commands that read every file under a directory: [command regex, recursive flag regex or null
-// when the command always recurses]. ripgrep skips hidden files such as .env unless told not to.
+// when the command always recurses, subcommand regex]. ripgrep skips hidden files such as .env
+// unless told not to; git grep reads untracked and ignored files with --no-index/--untracked.
 const RECURSIVE_READERS = [
   [/^(?:e|f|z)?grep$/i, /^(?:-[A-Za-z]*[rR][A-Za-z]*|--(?:dereference-)?recursive|--directories=recurse)$/],
   [/^(?:rg|ripgrep)$/i, /^(?:-[A-Za-z]*(?:u[A-Za-z]*u|\.)[A-Za-z]*|--hidden|--no-ignore[\w-]*)$/],
+  [/^git$/i, /^--(?:no-index|untracked)$/, /^grep$/],
+  [/^find$/i, /^-(?:exec|execdir|ok|okdir)$/],
   [/^findstr$/i, /^\/s$/i],
   [/^(?:cp|Copy-Item|copy|cpi)$/i, /^(?:-[A-Za-z]*[rRa][A-Za-z]*|--recursive|--archive|-rec\w*)$/i],
   [/^(?:robocopy|xcopy|tar|zip|7z|Compress-Archive|rsync|scp)$/i, null],
@@ -311,6 +328,18 @@ const PIPE_READERS = /^(?:Select-String|sls|Get-Content|gc|cat|type|Copy-Item|cp
 const COMPOSE_CONFIG = /(?:^|[\s(])(?:docker(?:\.exe)?\s+(?:compose|stack)|docker-compose)\b.*\s(?:config|convert)(?=\s|$)/i;
 const CHDIR = /^(?:cd|pushd|Set-Location|sl|chdir)$/i;
 const INTERPRETER = /^(?:python[\d.]*|py|node|deno|bun|bash|sh|zsh|pwsh|powershell|ruby|perl|php)(?:\.exe)?$/i;
+// powershell -EncodedCommand (and its -e/-ec/-enc abbreviations) hides the script in base64.
+const POWERSHELL = /^(?:pwsh|powershell)(?:\.exe)?$/i;
+const ENCODED = /^-(?:e|ec|en\w*)$/i;
+
+// The target of `file` with links and 8.3 short names (ENV~1) resolved, or null.
+function realName(file) {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    return null;
+  }
+}
 
 // The reason one Bash/PowerShell segment reads or writes a .env file, or null. `ctx` carries the
 // session cwd (null when a `cd` made it unknown) and whether a later segment reads piped input.
@@ -321,7 +350,18 @@ function envSegmentDenial(segment, shell, ctx) {
   const list = words(segment.raw, shell).filter((w) => !/^[<>]|^\d?>/.test(w.text));
   const [head, ...args] = list.map((w) => w.text.replace(/^\(+/, ''));
   if (!head) return null;
-  const matches = ([command, flag]) => command.test(head) && (!flag || args.some((a) => flag.test(a)));
+  const texts = words(segment.raw, shell).map((w) => w.text.replace(/^\d*[<>]+&?/, ''));
+  const shellAt = texts.findIndex((t) => POWERSHELL.test(path.basename(normalizeTarget(t))));
+  if (shellAt >= 0 && texts.slice(shellAt + 1).some((t) => ENCODED.test(t))) {
+    return `${ENV_REASON}；-EncodedCommand 的內容看不出會不會讀 .env，改用明文 -Command`;
+  }
+  for (const text of texts) {
+    const file = resolveWord(text, ctx.cwd);
+    const real = file && realName(file);
+    if (real && isEnvName(path.basename(real))) return `${ENV_REASON}（${text} 就是 ${real}）`;
+  }
+  const matches = ([command, flag, sub]) =>
+    command.test(head) && (!flag || args.some((a) => flag.test(a))) && (!sub || args.some((a) => sub.test(a)));
   // A listing prints names, not contents: its globs matter only when its output is read on.
   const listing = LISTERS.some(([command]) => command.test(head));
   for (const word of listing && !ctx.piped ? [] : list.slice(1)) {
@@ -372,13 +412,15 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
   return null;
 }
 
-// The reason a file tool's path is a .env file, or null; a link is judged by its target too.
+// The reason a file tool's path is a .env file, or null; a link or short name is judged by the
+// file it names.
 function envFileDenial(file, cwd) {
   if (typeof file !== 'string' || !file) return null;
   const named = envMention(file);
   if (named) return `${file}：${ENV_REASON}`;
   try {
-    const real = fs.realpathSync(path.resolve(normalizeTarget(cwd || process.cwd()), normalizeTarget(file)));
+    // .native also expands 8.3 short names (ENV~1), which fs.realpathSync leaves as given.
+    const real = fs.realpathSync.native(path.resolve(normalizeTarget(cwd || process.cwd()), normalizeTarget(file)));
     if (isEnvName(path.basename(real))) return `${file} 連到 ${real}：${ENV_REASON}`;
   } catch {
     // not there yet: the name above is all there is to judge
@@ -396,6 +438,14 @@ function grepDenial(tool, cwd) {
   if (!isDir(root)) return envFileDenial(tool.path, cwd);
   if (typeof tool.type === 'string' && tool.type && !/env/i.test(tool.type)) return null;
   const globs = typeof tool.glob === 'string' ? tool.glob.split(/\s+/).filter(Boolean) : [];
+  const compiles = (glob) => {
+    try {
+      return Boolean(new RegExp(globRegex(glob.replace(/^!/, '').split('/').pop())));
+    } catch {
+      return false;
+    }
+  };
+  if (!globs.every(compiles)) return `${ENV_REASON}；glob ${tool.glob} 無法解析，看不出會不會搜到 .env`;
   const hits = (glob, name) => globMatches(glob.split('/').pop(), name, 'grep');
   const only = globs.filter((g) => !g.startsWith('!'));
   const not = globs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
@@ -458,9 +508,21 @@ function fileDenial(file, cwd) {
   return null;
 }
 
+// Tool input fields this script reads as text. Any other type is malformed input, which blocks.
+const TEXT_FIELDS = ['file_path', 'notebook_path', 'path', 'glob', 'type', 'pattern', 'command'];
+// Tools that upload or read local files under keys of their own: every string is checked.
+const UPLOADERS = /^(?:Artifact|ArtifactData|DesignSync|mcp__codebase-memory-mcp__.*)$/;
+
 function denial(input) {
-  const tool = input.tool_input || {};
+  if (!input || typeof input !== 'object') throw new TypeError('hook input is not an object');
+  const tool = input.tool_input ?? {};
+  if (typeof tool !== 'object') throw new TypeError('tool_input is not an object');
   const name = input.tool_name;
+  if (!UPLOADERS.test(name || '')) {
+    for (const field of TEXT_FIELDS) {
+      if (tool[field] != null && typeof tool[field] !== 'string') throw new TypeError(`tool_input.${field} is not a string`);
+    }
+  }
   switch (name) {
     case 'Edit':
     case 'Write':
@@ -477,11 +539,12 @@ function denial(input) {
     }
     case 'Bash':
     case 'PowerShell':
+    case 'Monitor': // runs its command in the Bash tool's shell
       return typeof tool.command === 'string'
-        ? commandDenial(tool.command, name === 'Bash' ? 'bash' : 'powershell', ALLOW, input.cwd || process.cwd())
+        ? commandDenial(tool.command, name === 'PowerShell' ? 'powershell' : 'bash', ALLOW, input.cwd || process.cwd())
         : null;
     default: {
-      if (!/^mcp__codebase-memory/.test(name || '')) return null;
+      if (!UPLOADERS.test(name || '')) return null;
       const named = envInInput(tool);
       return named ? `${named}：${ENV_REASON}` : null;
     }
@@ -493,8 +556,9 @@ function main() {
   try {
     reason = denial(JSON.parse(fs.readFileSync(0, 'utf8')));
   } catch (error) {
-    process.stderr.write(`agent_guard: hook error, call not checked: ${error.message}\n`);
-    process.exit(1);
+    // Only exit 2 blocks: any other exit lets the call run unchecked, so an error blocks too.
+    process.stderr.write(`agent_guard: hook error, call blocked: ${error.message}\n`);
+    process.exit(2);
   }
   if (reason) {
     process.stderr.write(`agent_guard: ${reason}。\n`);
