@@ -4,9 +4,8 @@ What tools/Invoke-WorkerJob.ps1 did, together with what the Task Scheduler task
 settings did (a run time limit, one instance at a time), so that any scheduler
 only has to start one command:
 
-- One job of each kind at a time per data directory: an exclusive lock on
-  ``<data>/locks/<job>.lock`` (``msvcrt`` on Windows, ``fcntl`` elsewhere). The
-  OS drops it when its holder ends, however it ends, so a killed job leaves
+- One job of each kind at a time per data directory: an exclusive ``fcntl``
+  lock on ``<data>/locks/<job>.lock``. The OS drops it when its holder ends, however it ends, so a killed job leaves
   nothing to clean up. A second job is skipped with reason ``already_running``;
   daily also records that row in schedule_runs.
 - The checks before a run: free physical memory below --min-free-memory-gb
@@ -16,9 +15,8 @@ only has to start one command:
   ``worker.cli daily --skip-reason``; news only logs it.
 - The worker CLI runs as a child process within the job's time limit (daily
   2.5 hours; news 90 minutes for news and news-llm together). The child and
-  everything it starts end with the job: on Windows they are in a job object
-  that is killed when its last handle closes, on Linux the child gets SIGKILL
-  when the job dies (PR_SET_PDEATHSIG). The run row of a killed daily therefore
+  everything it starts end with the job: the child gets SIGKILL when the job
+  dies (PR_SET_PDEATHSIG). The run row of a killed daily therefore
   names a dead PID, and the next run closes it at once (schedule_runs).
 - The dated log ``<logs>/<job>-YYYYMMDD.log`` (Taipei date) with the layout of
   docs/OPERATIONS.md §6.3, the exit code, and removing logs older than
@@ -28,16 +26,19 @@ The news job runs ``worker.cli news`` and then ``worker.cli news-llm``; the
 job's exit code is news's alone, news-llm's goes to the log as
 ``news_llm_exit``.
 
-Only the standard library is imported here: the watchdog (Git Bash) takes its
-lock through the same code without the backend's dependencies, with
+Only the standard library is imported here: the watchdog takes its lock
+through the same code without the backend's dependencies, with
 ``python -m worker.job lock <file> -- <command> ...``.
+
+Linux only, as in the backend image (#333): the Windows branches (msvcrt, job
+objects, GlobalMemoryStatusEx, pythonw.exe) went with the Task Scheduler
+wrapper. Elsewhere ``job`` and ``lock`` refuse to start (``PLATFORM_EXIT``).
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
-import functools
 import os
 import signal
 import subprocess
@@ -48,7 +49,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, Sequence
 
-IS_WINDOWS = sys.platform == "win32"
 ROOT = Path(__file__).resolve().parents[2]
 TAIPEI = timezone(timedelta(hours=8))
 JOBS = ("daily", "news")
@@ -64,10 +64,17 @@ LOCK_SKIP_REASON = "already_running"
 LOCK_BUSY_EXIT = 75
 # A step killed at the time limit counts as failed.
 TIMEOUT_EXIT = 1
+# `job` and `lock` on a system other than Linux (EX_UNAVAILABLE).
+PLATFORM_EXIT = 69
 NEWLINE = os.linesep
 
-CREATE_SUSPENDED = 0x00000004
-CREATE_NO_WINDOW = 0x08000000
+
+def platform_problem() -> str | None:
+    if sys.platform.startswith("linux"):
+        return None
+    return (
+        f"worker.job runs on Linux only (the backend image, #333), not {sys.platform}"
+    )
 
 
 def default_data_dir() -> Path:
@@ -119,16 +126,11 @@ class FileLock:
 
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        import fcntl
+
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
         try:
-            if IS_WINDOWS:
-                import msvcrt
-
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             os.close(fd)
             return False
@@ -137,48 +139,22 @@ class FileLock:
 
     def release(self) -> None:
         fd, self._fd = self._fd, None
-        if fd is None:
-            return
-        try:
-            if IS_WINDOWS:
-                import msvcrt
-
-                os.lseek(fd, 0, os.SEEK_SET)
-                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-        finally:
+        if fd is not None:
             os.close(fd)
 
 
 class _ProcessTree:
     """Start one child; it and everything it starts end when this process ends."""
 
-    def __init__(self) -> None:
-        self._job = _windows_job() if IS_WINDOWS else None
-
-    def start(self, argv: list[str], *, hidden: bool, **kwargs) -> subprocess.Popen:
-        if IS_WINDOWS:
-            # Suspended until it is in the job object, so nothing it starts escapes.
-            flags = CREATE_SUSPENDED | (CREATE_NO_WINDOW if hidden else 0)
-            process = subprocess.Popen(argv, creationflags=flags, **kwargs)
-            try:
-                _windows_adopt(self._job, process.pid)
-            except OSError:
-                process.kill()
-                process.wait()
-                raise
-            return process
-        if sys.platform.startswith("linux"):
-            kwargs["preexec_fn"] = _die_with_parent(os.getpid())
+    def start(self, argv: list[str], **kwargs) -> subprocess.Popen:
+        kwargs["preexec_fn"] = _die_with_parent(os.getpid())
         return subprocess.Popen(argv, start_new_session=True, **kwargs)
 
     def kill(self, process: subprocess.Popen) -> None:
-        if IS_WINDOWS:
-            _kernel32().TerminateJobObject(self._job, TIMEOUT_EXIT)
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         process.wait()
 
 
@@ -192,121 +168,9 @@ def _die_with_parent(parent: int):
     return preexec
 
 
-@functools.cache
-def _kernel32():
-    from ctypes import wintypes
-
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
-    kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
-    kernel32.SetInformationJobObject.argtypes = (
-        wintypes.HANDLE,
-        ctypes.c_int,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-    )
-    kernel32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
-    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    kernel32.GlobalMemoryStatusEx.argtypes = (ctypes.c_void_p,)
-    return kernel32
-
-
-def _windows_job() -> int:
-    from ctypes import wintypes
-
-    class BasicLimits(ctypes.Structure):
-        _fields_ = [
-            ("PerProcessUserTimeLimit", ctypes.c_int64),
-            ("PerJobUserTimeLimit", ctypes.c_int64),
-            ("LimitFlags", wintypes.DWORD),
-            ("MinimumWorkingSetSize", ctypes.c_size_t),
-            ("MaximumWorkingSetSize", ctypes.c_size_t),
-            ("ActiveProcessLimit", wintypes.DWORD),
-            ("Affinity", ctypes.c_size_t),
-            ("PriorityClass", wintypes.DWORD),
-            ("SchedulingClass", wintypes.DWORD),
-        ]
-
-    class ExtendedLimits(ctypes.Structure):
-        _fields_ = [
-            ("BasicLimitInformation", BasicLimits),
-            ("IoInfo", ctypes.c_uint64 * 6),
-            ("ProcessMemoryLimit", ctypes.c_size_t),
-            ("JobMemoryLimit", ctypes.c_size_t),
-            ("PeakProcessMemoryUsed", ctypes.c_size_t),
-            ("PeakJobMemoryUsed", ctypes.c_size_t),
-        ]
-
-    kernel32 = _kernel32()
-    job = kernel32.CreateJobObjectW(None, None)
-    if not job:
-        raise ctypes.WinError(ctypes.get_last_error())
-    limits = ExtendedLimits()
-    job_object_limit_kill_on_job_close = 0x2000
-    limits.BasicLimitInformation.LimitFlags = job_object_limit_kill_on_job_close
-    job_object_extended_limit_information = 9
-    if not kernel32.SetInformationJobObject(
-        job,
-        job_object_extended_limit_information,
-        ctypes.byref(limits),
-        ctypes.sizeof(limits),
-    ):
-        raise ctypes.WinError(ctypes.get_last_error())
-    # The handle stays open for the life of this process; when the process
-    # ends, however it ends, the system closes it and kills the job.
-    return job
-
-
-def _windows_adopt(job: int, pid: int) -> None:
-    """Put the suspended process PID in JOB, then let it run."""
-
-    from ctypes import wintypes
-
-    kernel32 = _kernel32()
-    ntdll = ctypes.WinDLL("ntdll")
-    ntdll.NtResumeProcess.argtypes = (wintypes.HANDLE,)
-    process_terminate, process_set_quota, process_suspend_resume = 0x1, 0x100, 0x800
-    handle = kernel32.OpenProcess(
-        process_terminate | process_set_quota | process_suspend_resume, False, pid
-    )
-    if not handle:
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:
-        if not kernel32.AssignProcessToJobObject(job, handle):
-            raise ctypes.WinError(ctypes.get_last_error())
-        status = ntdll.NtResumeProcess(handle)
-        if status != 0:
-            raise OSError(f"NtResumeProcess failed: NTSTATUS {status & 0xFFFFFFFF:#x}")
-    finally:
-        kernel32.CloseHandle(handle)
-
-
 def free_memory_mb() -> int | None:
-    """Available physical memory, never through WMI (#246); None when unknown."""
+    """MemAvailable in /proc/meminfo, never through WMI (#246); None when unknown."""
 
-    if IS_WINDOWS:
-        from ctypes import wintypes
-
-        class MemoryStatus(ctypes.Structure):
-            _fields_ = [
-                ("dwLength", wintypes.DWORD),
-                ("dwMemoryLoad", wintypes.DWORD),
-                ("ullTotalPhys", ctypes.c_uint64),
-                ("ullAvailPhys", ctypes.c_uint64),
-                ("ullTotalPageFile", ctypes.c_uint64),
-                ("ullAvailPageFile", ctypes.c_uint64),
-                ("ullTotalVirtual", ctypes.c_uint64),
-                ("ullAvailVirtual", ctypes.c_uint64),
-                ("ullAvailExtendedVirtual", ctypes.c_uint64),
-            ]
-
-        status = MemoryStatus(dwLength=ctypes.sizeof(MemoryStatus))
-        if not _kernel32().GlobalMemoryStatusEx(ctypes.byref(status)):
-            return None
-        return int(status.ullAvailPhys // 2**20)
     try:
         with open("/proc/meminfo", encoding="ascii") as meminfo:
             for line in meminfo:
@@ -330,19 +194,8 @@ def git_dir(root: Path) -> Path | None:
     return None
 
 
-def child_python() -> str:
-    """The console interpreter: the registered task may run pythonw.exe (no window)."""
-
-    executable = Path(sys.executable)
-    if executable.name.lower() == "pythonw.exe":
-        console = executable.with_name("python.exe")
-        if console.is_file():
-            return str(console)
-    return str(executable)
-
-
 def worker_command(step_args: list[str]) -> list[str]:
-    return [child_python(), "-X", "utf8", "-m", "worker.cli", *step_args]
+    return [sys.executable, "-X", "utf8", "-m", "worker.cli", *step_args]
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -364,7 +217,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="起跑前在這個 checkout 跑 git pull --ff-only",
     )
     parser.add_argument(
-        "--claude-cli", help="原生 claude.exe，以 STOCK_CLAUDE_CLI 傳給子程序"
+        "--claude-cli", help="Claude Code CLI，以 STOCK_CLAUDE_CLI 傳給子程序"
     )
     parser.add_argument(
         "--skip-news-llm", action="store_true", help="只給 news：不跑 news-llm"
@@ -440,7 +293,6 @@ class _Job:
         ):
             process = self.tree.start(
                 worker_command(step_args),
-                hidden=True,
                 stdin=subprocess.DEVNULL,
                 stdout=out,
                 stderr=err,
@@ -471,7 +323,6 @@ class _Job:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0,
                 timeout=max(1.0, min(600.0, self.deadline - time.monotonic())),
                 check=False,
             )
@@ -620,29 +471,34 @@ def _minutes(limit: timedelta) -> str:
 def run(args: argparse.Namespace) -> int:
     """``worker.cli job``: run one job and return its exit code."""
 
+    problem = platform_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return PLATFORM_EXIT
     job = _Job(args)
     code, news_llm_exit = job.run()
     summary = f"{args.job} exit={code}"
     if news_llm_exit is not None:
         summary += f" news_llm_exit={news_llm_exit}"
-    if sys.stdout is not None:  # pythonw.exe has none
-        print(f"{summary} log={job.log_path}", flush=True)
+    print(f"{summary} log={job.log_path}", flush=True)
     return code
 
 
 def run_locked(path: Path, command: list[str]) -> int:
     """``worker.job lock``: run COMMAND while holding the lock on PATH."""
 
+    problem = platform_problem()
+    if problem:
+        print(problem, file=sys.stderr)
+        return PLATFORM_EXIT
     lock = FileLock(path)
     if not lock.acquire():
         print(f"locked: {path}", file=sys.stderr)
         return LOCK_BUSY_EXIT
     try:
         tree = _ProcessTree()
-        # Explicit handles: without them a Windows child gets none of a pipe's.
         process = tree.start(
             command,
-            hidden=False,
             stdin=subprocess.DEVNULL,
             stdout=sys.stdout,
             stderr=sys.stderr,

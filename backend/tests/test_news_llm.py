@@ -305,39 +305,15 @@ def test_cli_prefix_accepts_a_path_or_a_json_list(monkeypatch):
         cli_prefix()
 
 
-@pytest.mark.parametrize("name", ["claude.cmd", "claude.bat", "claude"])
-def test_a_non_exe_cli_on_windows_fails_closed_without_a_call(
-    db, fake, monkeypatch, tmp_path, name
-):
-    # #313 AC-5: like candidate_notes; a timeout would kill an npm shim's cmd.exe
-    # but not its node child, and the job would hang until its time limit.
-    shim = tmp_path / name
-    shim.write_text("@echo off\n", encoding="utf-8")
-    monkeypatch.setenv(news_llm.CLI_ENV, str(shim))
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", True)
-    _add_news(db, 2)
-    result = run_news_llm(db, run_date=RUN_DATE)
-    assert result["status"] == "failed"
-    assert result["reason"] == f"cli_not_found: {shim} is not a native .exe"
-    assert fake() == [] and _results(db) == []
-    run = db.get(IngestionRun, result["run_id"])
-    assert run.run_type == "news_llm" and run.status == "failed"
-
-
-def test_the_native_exe_check_is_for_windows_only(monkeypatch, tmp_path):
+def test_any_cli_file_is_accepted_without_a_native_exe_check(monkeypatch, tmp_path):
+    # #333: the image runs the npm-installed claude (a script); the Windows
+    # requirement of a native claude.exe (#313 AC-5) went with Task Scheduler.
     script = tmp_path / "claude"
     script.write_text("#!/bin/sh\n", encoding="utf-8")
-    exe = tmp_path / "Claude.EXE"
-    exe.write_bytes(b"")
     for key in news_llm.API_KEY_ENV:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv(news_llm.CLI_ENV, str(script))
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", False)
-    assert news_llm.cli_problem() == ([str(script)], None)
-    monkeypatch.setattr(news_llm, "IS_WINDOWS", True)
-    assert news_llm.cli_problem()[1] == f"cli_not_found: {script} is not a native .exe"
-    monkeypatch.setenv(news_llm.CLI_ENV, str(exe))
-    assert news_llm.cli_problem() == ([str(exe)], None)
+    assert news_llm.preflight() == ([str(script)], None)
 
 
 # AC-2 ------------------------------------------------------------------------

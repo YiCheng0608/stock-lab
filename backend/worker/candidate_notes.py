@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -58,8 +57,8 @@ from .news_llm import (
     _usage,
     cli_arguments,
     input_hash,
-    cli_problem as news_cli_problem,
     parse_envelope,
+    preflight,
     run_claude_cli,
 )
 from .news_sources import TAIPEI
@@ -87,16 +86,6 @@ RUN_TYPE = "candidate_notes"
 RAW_SOURCE = "candidate_notes"
 RAW_ENDPOINT = f"claude -p --model {MODEL}"
 BOARD_LABELS = {"industry": "產業", "theme": "題材"}
-# Only the native claude.exe on Windows, like news-llm (news_llm.cli_problem).
-IS_WINDOWS = sys.platform == "win32"
-
-
-def cli_problem() -> tuple[list[str] | None, str | None]:
-    """news_llm.cli_problem for this module's platform."""
-
-    return news_cli_problem(windows=IS_WINDOWS)
-
-
 _NOTE_FIELDS = ("id", "selection", "levels", "risks")
 _NOTE_LIMITS = {
     "selection": SELECTION_MAX_CHARS,
@@ -559,7 +548,7 @@ def run_candidate_notes(
     if not todo:
         # Same date and prompt version: nothing is sent or rewritten.
         return {**base, "status": "success", "already_complete": True}
-    command, problem = cli_problem()
+    command, problem = preflight()
     if problem is not None:
         # A configuration error writes no note rows.
         if dry_run:
