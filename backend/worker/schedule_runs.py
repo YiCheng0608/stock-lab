@@ -46,6 +46,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from sqlalchemy import desc, inspect, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
@@ -105,8 +106,11 @@ NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
 CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
-# Reasons the scheduler wrapper may pass to record a run it declined to start.
+# Reasons the scheduled job (worker.job) may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
+# The job lock is held by another daily job: the same reason as a running row
+# found by _start_run, pointing at that row when it is already written.
+LOCK_SKIP_REASON = "already_running"
 # The indicator batch (V1-G2).  A checkout without the module records the
 # step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
@@ -374,19 +378,19 @@ def _ensure_schema() -> str:
     pending, so an up-to-date DB skips it.
     """
 
-    with pipeline.SessionLocal() as db:
-        bind = db.get_bind()
-        current = None
-        if inspect(bind).has_table("alembic_version"):
-            current = (
-                db.execute(text("SELECT version_num FROM alembic_version"))
-                .scalars()
-                .all()
-            )
-    if current == [REVISIONS[-1]]:
+    if _schema_revisions() == [REVISIONS[-1]]:
         return "current"
     pipeline.init_db()
     return "upgraded"
+
+
+def _schema_revisions() -> list[str] | None:
+    with pipeline.SessionLocal() as db:
+        if not inspect(db.get_bind()).has_table("alembic_version"):
+            return None
+        return list(
+            db.execute(text("SELECT version_num FROM alembic_version")).scalars()
+        )
 
 
 def _record_step(
@@ -574,14 +578,61 @@ def _start_run(
 def record_preflight_skip(
     end_date: date | None, *, reason: str, trigger: str = "scheduler"
 ) -> dict[str, Any]:
-    """Log a run the scheduler wrapper declined to start; no step runs."""
+    """Log a run the scheduled job declined to start; no step runs.
 
-    if reason not in PREFLIGHT_SKIP_REASONS:
+    For ``already_running`` the job lock is held by a daily that may be
+    migrating this database at that moment. The migration reads for minutes
+    inside one transaction before it writes, and any row another connection
+    commits in between makes that write fail ("database is locked", found on
+    a DB copy in #313 AC-7). So the schema is left alone, no row is written
+    unless the database is already at the code head, and a row that cannot be
+    written is reported in the result instead of raised; the job's log keeps
+    the skip either way.
+    """
+
+    if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
         raise ValueError(f"unknown preflight skip reason: {reason}")
-    _ensure_schema()
     target = pipeline.latest_weekday(end_date)
+    if reason != LOCK_SKIP_REASON:
+        _ensure_schema()
+        return _insert_skip(target, reason, trigger)
+    unwritten = {
+        "status": "skipped",
+        "reason": reason,
+        "schedule_run_id": None,
+        "date": target.isoformat(),
+    }
+    try:
+        revisions = _schema_revisions()
+        if revisions != [REVISIONS[-1]]:
+            return {
+                **unwritten,
+                "error": f"skip row not written: database at {revisions}, code head"
+                f" {REVISIONS[-1]}; the daily holding the lock migrates it",
+            }
+        return _insert_skip(target, reason, trigger)
+    except SQLAlchemyError as exc:
+        return {
+            **unwritten,
+            "error": f"skip row not written: {type(exc).__name__}: {exc}"[:500],
+        }
+
+
+def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
     now = _utcnow()
     with pipeline.SessionLocal() as db:
+        summary: dict[str, Any] = {"reason": reason}
+        if reason == LOCK_SKIP_REASON:
+            summary["related_run_id"] = db.scalar(
+                select(ScheduleRun.id)
+                .where(
+                    ScheduleRun.job == DAILY_JOB,
+                    ScheduleRun.target_date == target,
+                    ScheduleRun.status == "running",
+                )
+                .order_by(desc(ScheduleRun.id))
+                .limit(1)
+            )
         run = ScheduleRun(
             job=DAILY_JOB,
             target_date=target,
@@ -589,13 +640,13 @@ def record_preflight_skip(
             status="skipped",
             started_at=now,
             finished_at=now,
-            summary_json={"reason": reason},
+            summary_json=summary,
         )
         db.add(run)
         db.commit()
         return {
             "status": "skipped",
-            "reason": reason,
+            **summary,
             "schedule_run_id": run.id,
             "date": target.isoformat(),
         }

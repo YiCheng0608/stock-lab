@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
@@ -69,6 +70,10 @@ REASON_MAX_CHARS = 120
 THEME_MAX_CHARS = 40
 RATIONALE_MAX_CHARS = 120
 CLI_ENV = "STOCK_CLAUDE_CLI"
+# On Windows only the native claude.exe is run: on a timeout subprocess kills
+# an npm .cmd shim's cmd.exe but not its node child, which keeps the pipes
+# open and would hang the step until the job's time limit.
+IS_WINDOWS = sys.platform == "win32"
 # Removed from the child environment: session variables of a parent Claude
 # Code process (the CLI refuses to start as a nested session) and any
 # Anthropic API setting.  CLAUDE_CONFIG_DIR is kept so the login is found.
@@ -222,6 +227,17 @@ def preflight() -> tuple[list[str] | None, str | None]:
     if found is None:
         return None, f"cli_not_found: {executable}"
     return [found, *prefix[1:]], None
+
+
+def cli_problem(*, windows: bool | None = None) -> tuple[list[str] | None, str | None]:
+    """preflight, failing closed on a non-.exe CLI on Windows (not elsewhere)."""
+
+    command, problem = preflight()
+    if windows is None:
+        windows = IS_WINDOWS
+    if problem is None and windows and Path(command[0]).suffix.lower() != ".exe":
+        return None, f"cli_not_found: {command[0]} is not a native .exe"
+    return command, problem
 
 
 def cli_arguments(
@@ -833,7 +849,7 @@ def run_news_llm(
         abandoned = close_abandoned_runs(db)
         if abandoned:
             base["abandoned_runs"] = abandoned
-    command, problem = preflight()
+    command, problem = cli_problem()
     if problem is not None:
         # A configuration error writes no pending rows.
         if dry_run:

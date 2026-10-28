@@ -148,4 +148,4 @@ orca terminal rename --terminal <handle> --title "統籌" --json
 
 ## 排程
 
-V1 的每日排程在本機以 Windows 工作排程器執行 `python -m backend.worker.cli daily` 與新聞任務；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。
+V1 的每日排程在本機以 Windows 工作排程器執行 `python -m worker.cli job daily` 與 `job news`；設定方式與日誌位置寫在 [OPERATIONS §6](OPERATIONS.md#6-排程)。排程失敗以 Issue 追蹤。

@@ -19,6 +19,7 @@ from .base import (
     SignalLevels,
     Strategy,
     StrategyInputs,
+    confirmation_failures,
     finite_number,
     required_finite,
     risk_levels,
@@ -83,10 +84,14 @@ def evaluate_pullback_v1(
     group_excess_return_20d: float | None,
     institutional_flow_to_turnover_ratio_5d: float | None,
     margin_balance_change_ratio_5d: float | None,
+    config: Mapping[str, Any] = CONFIG,
 ) -> RuleEvaluation:
-    """Evaluate ``pullback_v1`` with explicit trend, support, and data guards."""
+    """Evaluate ``pullback_v1`` with explicit trend, support, and data guards.
 
-    config = CONFIG
+    ``config`` is only overridden by research ablations: a condition whose
+    keys it lacks is not checked, while the required inputs stay the same.
+    """
+
     if not isinstance(bar_count, int) or isinstance(bar_count, bool):
         return RuleEvaluation(
             False, "data_incomplete", ("bar_count_missing_or_invalid",)
@@ -117,43 +122,28 @@ def evaluate_pullback_v1(
         )
 
     failures: list[str] = []
-    if metrics["ma20"] <= metrics["ma60"]:
+    trend = config["trend"]
+    if "ma_alignment" in trend and metrics["ma20"] <= metrics["ma60"]:
         failures.append("ma20_not_above_ma60")
-    if metrics["close"] < metrics["ma60"]:
+    if "close_must_be_at_or_above" in trend and metrics["close"] < metrics["ma60"]:
         failures.append("close_below_ma60")
     close_to_ma20 = metrics["close"] / metrics["ma20"]
-    support_zone = config["support_zone"]
-    if (
+    support_zone = config.get("support_zone")
+    if support_zone is not None and (
         not support_zone["minimum_close_to_ma20_ratio"]
         <= close_to_ma20
         <= support_zone["maximum_close_to_ma20_ratio"]
     ):
         failures.append("close_outside_ma20_support_zone")
     volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
-    volume_config = config["volume"]
-    if (
+    volume_config = config.get("volume")
+    if volume_config is not None and (
         not volume_config["minimum_signal_to_average_ratio"]
         <= volume_ratio
         <= volume_config["maximum_signal_to_average_ratio"]
     ):
         failures.append("pullback_volume_ratio_outside_range")
-    if (
-        metrics["group_excess_return_20d"]
-        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
-    ):
-        failures.append("group_relative_strength_not_positive")
-    if (
-        metrics["institutional_flow_to_turnover_ratio_5d"]
-        < config["confirmations"]["institutional_flow"][
-            "minimum_net_flow_to_turnover_ratio"
-        ]
-    ):
-        failures.append("institutional_flow_materially_adverse")
-    if (
-        metrics["margin_balance_change_ratio_5d"]
-        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
-    ):
-        failures.append("margin_financing_increase_abnormal")
+    failures += confirmation_failures(metrics, config["confirmations"])
     if failures:
         return RuleEvaluation(False, "rejected", tuple(failures))
     return RuleEvaluation(True, "passed")
