@@ -85,7 +85,7 @@ services:
     command: ["python", "-m", "worker.cli", "serve"]
     environment:
       <<: *backend-environment
-    # Above the daily peak (docs/OPERATIONS.md §6.5) with room for collect and `claude -p`.
+    # A daily on a copy of the production DB peaked at about 0.95 GB rss (docs/OPERATIONS.md §1.2).
     mem_limit: 2g
 
 volumes:

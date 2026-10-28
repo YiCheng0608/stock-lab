@@ -81,7 +81,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 - `.gitattributes` 把 `*.sh` 固定為 LF：CRLF 的腳本在容器裡跑不動。entrypoint 在 Git 裡是 100755，image 另外 `chmod 0755`。dev 的 bind mount 不保證保留執行權限位元，所以 dev 以 `sh /app/backend/docker/entrypoint.sh` 呼叫。
 - 匿名 volume 蓋住 checkout 的 `.venv` 與 `frontend/node_modules`（Windows 版），容器用 image 內的依賴。依賴改了、image 重新 build 之後要 `up --renew-anon-volumes`，否則沿用舊的匿名 volume。
-- WSL 2 的記憶體上限在 `%UserProfile%\.wslconfig`（`[wsl2]` 下 `memory=6GB`）。它要高於同時執行的容器上限總和：正式拓撲約 3.3 GB，dev 加 scheduler 約 4 GB。daily 的峰值約 0.3 GB（§6.5），scheduler 的 2 GB 另外留給 collect 與 `claude -p`。改完執行 `wsl --shutdown`，Docker Desktop 重開後生效。
+- WSL 2 的記憶體上限在 `%UserProfile%\.wslconfig`（`[wsl2]` 下 `memory=6GB`）。它要高於同時執行的容器上限總和：正式拓撲約 3.3 GB，dev 加 scheduler 約 4 GB。scheduler 的 2 GB 依實測：在容器內對正式 DB 副本（2.4 GB）以 `--force` 重跑一次 daily，rss 峰值約 0.95 GB（cgroup `failcnt` 0）；同一份副本由 0017 migrate 到 0020 時，`docker stats` 讀到 1.8 GiB（含 page cache）（2026-10-29，#335）。改完執行 `wsl --shutdown`，Docker Desktop 重開後生效。
 
 ## 2. 資料庫、migration 與 readiness
 
