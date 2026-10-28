@@ -29,6 +29,10 @@ The result goes to stdout without a trailing newline.
                                    but without earliest_execution_date),
                                    strategy_levels (the latest finished daily
                                    run's strategy_levels step did not succeed)
+  deploy-head <deploy.json>        "deploy_head ok|violation|skip key=value ...":
+                                   the HEAD of the checkout the record names
+                                   against the HEAD tools/ops/deploy.sh
+                                   recorded (#314); skip without a record
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -37,6 +41,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -305,6 +310,42 @@ def _strategy_levels(conn: sqlite3.Connection) -> str:
     )
 
 
+def deploy_head(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except FileNotFoundError:
+        return "deploy_head skip reason=no_deploy_record"
+    try:
+        record = json.loads(text)
+        recorded, tag, checkout = record["HEAD"], record["tag"], record["checkout"]
+    except (ValueError, KeyError, TypeError):
+        return "deploy_head violation reason=unreadable_record"
+    head = _git_head(Path(checkout))
+    return (
+        f"deploy_head {_state(head != recorded)} head={head or 'unknown'}"
+        f" recorded={recorded} tag={tag}"
+    )
+
+
+def _git_head(checkout: Path) -> str | None:
+    """HEAD of CHECKOUT from its own .git, never a repository above it."""
+
+    try:
+        completed = subprocess.run(
+            ["git", f"--git-dir={checkout / '.git'}", "rev-parse", "--verify", "HEAD"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    head = completed.stdout.strip()
+    return head if completed.returncode == 0 and head else None
+
+
 def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     command, args = argv[0], argv[1:]
@@ -316,6 +357,8 @@ def main(argv: list[str]) -> int:
         out = daily_result(args[0], args[1], args[2])
     elif command == "invariants":
         out = invariants(args[0], args[1])
+    elif command == "deploy-head":
+        out = deploy_head(args[0])
     else:
         raise SystemExit(f"unknown command: {command}")
     sys.stdout.write(out)

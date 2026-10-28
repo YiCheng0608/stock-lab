@@ -10,10 +10,13 @@ only has to start one command:
   nothing to clean up. A second job is skipped with reason ``already_running``;
   daily also records that row in schedule_runs.
 - The checks before a run: free physical memory below --min-free-memory-gb
-  (``low_memory``), a git operation in progress in this checkout, i.e.
-  index.lock or MERGE_HEAD (``git_busy``), and with --git-pull a failed
-  ``git pull --ff-only`` (``git_pull_failed``). daily records the skip through
+  (``low_memory``) and a git operation in progress in this checkout, i.e.
+  index.lock or MERGE_HEAD (``git_busy``). daily records the skip through
   ``worker.cli daily --skip-reason``; news only logs it.
+- The checkout is never updated here: it runs the tag tools/ops/deploy.sh
+  checked out (#314). The job reads its HEAD and tag, logs them, and gives them
+  to daily (``--git-head``/``--git-tag``) for the run's summary_json. A task
+  registered before #314 still passes --git-pull; it is accepted and ignored.
 - The worker CLI runs as a child process within the job's time limit (daily
   2.5 hours; news 90 minutes for news and news-llm together). The child and
   everything it starts end with the job: on Windows they are in a job object
@@ -330,6 +333,45 @@ def git_dir(root: Path) -> Path | None:
     return None
 
 
+def git_executable() -> str:
+    return os.environ.get("STOCK_GIT") or "git"
+
+
+def _git(directory: Path, *args: str) -> str | None:
+    """One read-only git command on DIRECTORY; its output, or None when it fails."""
+
+    try:
+        completed = subprocess.run(
+            [git_executable(), f"--git-dir={directory}", *args],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    output = completed.stdout.decode("utf-8", errors="replace").strip()
+    return output if completed.returncode == 0 and output else None
+
+
+def checkout_version(root: Path) -> tuple[str | None, str | None]:
+    """HEAD and the tag at HEAD of the checkout at ROOT; None for what is unknown.
+
+    git is given the checkout's own git dir, so a tree that is no repository
+    never reads one above it (#207).
+    """
+
+    directory = git_dir(root)
+    if directory is None:
+        return None, None
+    head = _git(directory, "rev-parse", "--verify", "HEAD")
+    if head is None:
+        return None, None
+    return head, _git(directory, "describe", "--tags", "--exact-match", "HEAD")
+
+
 def child_python() -> str:
     """The console interpreter: the registered task may run pythonw.exe (no window)."""
 
@@ -358,11 +400,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--trigger", choices=TRIGGERS, default="scheduler")
     parser.add_argument("--force", action="store_true", help="只給 daily")
-    parser.add_argument(
-        "--git-pull",
-        action="store_true",
-        help="起跑前在這個 checkout 跑 git pull --ff-only",
-    )
+    # Passed by tasks registered before #314; the checkout is no longer pulled.
+    parser.add_argument("--git-pull", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--claude-cli", help="原生 claude.exe，以 STOCK_CLAUDE_CLI 傳給子程序"
     )
@@ -464,22 +503,6 @@ class _Job:
             )
         return code
 
-    def git_pull(self) -> tuple[str, bool]:
-        try:
-            completed = subprocess.run(
-                ["git", "-C", str(ROOT), "pull", "--ff-only"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0,
-                timeout=max(1.0, min(600.0, self.deadline - time.monotonic())),
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return f"git pull failed to run: {exc}", False
-        output = completed.stdout.decode("utf-8", errors="replace").strip()
-        return output, completed.returncode == 0
-
     def run(self) -> tuple[int, str | None]:
         """Run the job; returns its exit code and, for news, ``news_llm_exit``."""
 
@@ -523,12 +546,6 @@ class _Job:
             (checkout_git / marker).exists() for marker in ("index.lock", "MERGE_HEAD")
         ):
             return "git_busy", detail
-        if self.args.git_pull:
-            output, pulled = self.git_pull()
-            if output:
-                self.log(f"--- git pull --ff-only{NEWLINE}{output}")
-            if not pulled:
-                return "git_pull_failed", detail
         return None, detail
 
     def _run(self, locked: bool, lock_file: Path, free_mb: int | None):
@@ -537,6 +554,12 @@ class _Job:
         news_llm_exit = None
         if job == "news":
             news_llm_exit = "not_run" if run_news_llm else "disabled"
+        head, tag = checkout_version(ROOT)
+        self.log(f"--- checkout HEAD={head or 'unknown'} tag={tag or 'none'}")
+        if args.git_pull:
+            self.log(
+                "--- --git-pull ignored: the checkout stays at its deployed tag (#314)"
+            )
         skip_reason, detail = self._skip_reason(locked, lock_file, free_mb)
         if skip_reason:
             self.log(f"===== skipped reason={skip_reason} ({detail})")
@@ -549,6 +572,10 @@ class _Job:
                 step_args += ["--trigger", args.trigger]
                 if args.force:
                     step_args.append("--force")
+                if head:
+                    step_args += ["--git-head", head]
+                if tag:
+                    step_args += ["--git-tag", tag]
                 if skip_reason:
                     step_args += ["--skip-reason", skip_reason]
             if args.run_date:
