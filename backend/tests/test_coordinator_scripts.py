@@ -104,6 +104,11 @@ exit 0
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
+# With <fake>/gh_issue_close_sets_closed, issue close closes the Issue (issue view then
+# answers CLOSED) even when the call itself fails.
+if [ "$1 $2" = "issue close" ] && [ -f "$d/gh_issue_close_sets_closed" ]; then
+  echo '{"state": "CLOSED"}' >"$d/gh_issue_view.json"
+fi
 case "$1 $2" in
   "api graphql")
     case "$*" in
@@ -900,6 +905,55 @@ def test_close_task_deletes_nothing_when_the_issue_cannot_be_closed(
     assert _json_line(result)["issue_close"] == "failed"
     assert not [c for c in close.calls("orca") if c.startswith(DELETING)]
     assert close.wt.is_dir() and "task/282-dryrun" in close.branches()
+
+
+def test_close_task_rerun_goes_on_when_the_issue_is_already_closed(
+    close: Harness,
+) -> None:
+    """#332 review 3: a rerun after a failed delete step finds the Issue closed."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "CLOSED"})
+    # Were the close tried, it would fail: it must not be.
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["issue_close"] == "already_closed" and line["board"] == "完成"
+    assert not _issue_closes(close)
+    assert not close.wt.exists() and not close.extra.exists()
+    assert "task/282-dryrun" not in close.branches()
+
+
+def test_close_task_takes_a_failed_close_of_an_issue_now_closed_as_closed(
+    close: Harness,
+) -> None:
+    """The close errs, yet the Issue reads back closed: cleanup goes on."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "OPEN"})
+    close.write("gh_issue_close_fails", "")
+    close.write("gh_issue_close_sets_closed", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "closed"
+    assert len(_issue_closes(close)) == 1
+    assert not close.wt.exists() and not close.extra.exists()
+
+
+@pytest.mark.parametrize("base", ["release/v1", "task/999-other", "feat/other"])
+def test_close_task_refuses_a_pr_into_a_branch_that_is_not_long_lived(
+    close: Harness, base: str
+) -> None:
+    """#332 review 2: only master and the integration branches are cleanup targets."""
+    _merged_into(close, base)
+    close.answer(
+        f"gh_run_list_{base.replace('/', '_')}",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"目標分支 {base} 不是 master 或長期整合分支（feat/docker）" in result.stderr
+    assert not _run_branches(close)
+    _assert_nothing_deleted(close)
 
 
 def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:

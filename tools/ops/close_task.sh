@@ -2,8 +2,8 @@
 # Clean up a merged task (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 6 步). Checks first,
 # deletes nothing unless every check passes:
 #   - the task's PR is merged and CI on its target branch (the PR's baseRefName: master,
-#     or a long-lived integration branch such as feat/docker, #332) is green for its
-#     merge commit (and the newest run on that branch is not red);
+#     or one of integration_branches below, #332; any other target is refused) is green
+#     for its merge commit (and the newest run on that branch is not red);
 #   - the worktree on task/<issue>-* has no uncommitted changes and its branch is in
 #     origin/<target branch>; this shell does not run inside it;
 #   - every terminal of the worktree is idle (agents: tui-idle; shells: no output for
@@ -18,8 +18,9 @@
 # Deleting checks guard_dir again (remove_tree), so one broken check is not enough to
 # delete a protected path.
 # Then, for a PR into a branch other than master, close the Issue (`gh issue close`):
-# GitHub acts on `Closes #<issue>` only in a PR into the default branch (#332). A failed
-# close stops here, nothing deleted.
+# GitHub acts on `Closes #<issue>` only in a PR into the default branch (#332). An Issue
+# already closed (a rerun) is left as it is; a failed close of an open Issue stops here,
+# nothing deleted.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
 # local branch (one orca already deleted counts: step branch_already_gone, #290), delete
 # each --extra-dir (junctions and symlinks unlinked first, never followed), set the board
@@ -39,6 +40,12 @@
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
+
+# The long-lived integration branches a task PR may merge into besides master (#332;
+# docs/GITHUB_WORKFLOW.md 長期整合分支); a PR into any other branch (release/*) is refused.
+# tools/ci/test_checks.py (WorkflowTriggers) reads this line: CI runs on PRs into and
+# pushes to master, release/** and each of these.
+integration_branches=(feat/docker)
 
 issue="" slug="" pr="" repo_id="" idle_seconds=30 set_board=1 allow_head_mismatch=0
 extra=()
@@ -158,6 +165,10 @@ merge_sha="$(printf '%s' "$out" | cj get 0.mergeCommit.oid)" || refuse "PR #$pr 
 # The branch the PR merged into: its CI and its history are what is checked below (#332).
 base_branch="$(printf '%s' "$out" | cj get 0.baseRefName)" || refuse "PR #$pr 讀不到目標分支（baseRefName）"
 case "$base_branch" in '' | -* | /* | */ | *..* | *[!A-Za-z0-9._/-]*) refuse "PR #$pr 的目標分支名稱不合規則：$base_branch" ;; esac
+case " master ${integration_branches[*]} " in
+  *" $base_branch "*) ;;
+  *) refuse "PR #$pr 的目標分支 $base_branch 不是 master 或長期整合分支（${integration_branches[*]}）" ;;
+esac
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
 # The PR's head stands in for a branch not found locally only when it is this task's:
 # another task's branch is never deleted here.
@@ -220,10 +231,21 @@ if [ "$base_branch" = master ]; then
 elif [ "$set_board" = 0 ]; then
   issue_close=skipped
 else
-  gh issue close "$issue" --repo "$GH_REPO" \
-    --comment "PR #$pr 已合併進 $base_branch，merge commit ${merge_sha:0:9} 的 CI 綠（close_task.sh）" >/dev/null \
-    || { issue_close=failed; refuse "gh issue close #$issue 失敗（PR #$pr 進 $base_branch，GitHub 不會自動關）"; }
-  issue_close=closed
+  # A rerun (a delete step failed after the Issue was closed) finds it closed already and
+  # goes on; a close that fails counts only when the Issue reads back closed. An
+  # unreadable state is not "closed": the close is tried.
+  issue_state() { gh issue view "$issue" --repo "$GH_REPO" --json state | cj get state; }
+  if [ "$(issue_state)" = CLOSED ]; then
+    issue_close=already_closed
+  elif gh issue close "$issue" --repo "$GH_REPO" \
+    --comment "PR #$pr 已合併進 $base_branch，merge commit ${merge_sha:0:9} 的 CI 綠（close_task.sh）" >/dev/null; then
+    issue_close=closed
+  elif [ "$(issue_state)" = CLOSED ]; then
+    issue_close=closed
+  else
+    issue_close=failed
+    refuse "gh issue close #$issue 失敗（PR #$pr 進 $base_branch，GitHub 不會自動關）"
+  fi
 fi
 
 # --- delete ------------------------------------------------------------------------

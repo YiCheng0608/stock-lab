@@ -2,7 +2,8 @@ name: CI
 
 on:
   # master, the V1 release branch and the Docker integration branch feat/docker (#332);
-  # tools/ci/test_checks.py (WorkflowTriggers) pins both lists.
+  # tools/ci/test_checks.py (WorkflowTriggers) pins both lists to master, release/** and
+  # integration_branches in tools/ops/close_task.sh.
   pull_request:
     branches: [master, 'release/**', feat/docker]
     # edited and (un)labeled rerun the pr gate when the body or labels change.
