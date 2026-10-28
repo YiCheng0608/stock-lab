@@ -144,19 +144,21 @@ def command_line(stdout):
 
 
 def test_the_old_daily_task_command_runs_the_python_job(harness):
-    # The parameters of a daily task registered before #313, minus -GitPull (the
-    # tree is no repository to pull) and with this test's paths.
+    # The parameters of a daily task registered before #313, with this test's paths.
+    # -GitPull is accepted and pulls nothing (#314).
     result = harness.invoke(
         "daily",
         "-LogDir",
         str(harness.tree.logs),
         "-Trigger",
         "scheduler",
+        "-GitPull",
         "-ClaudeCli",
         CLAUDE,
     )
     assert result.code == 0, result.stdout + result.stderr
     assert result.steps == ["daily"]
+    assert "--git-pull ignored" not in result.log  # the wrapper no longer passes it
     call = result.calls[0]
     assert call["argv"] == ["daily", "--trigger", "scheduler"]
     assert call["env"]["STOCK_CLAUDE_CLI"] == CLAUDE
@@ -280,7 +282,7 @@ def test_the_registered_command_is_the_python_job(harness):
     assert re.fullmatch(
         rf'Command:  "{python_dir}\\pythonw?\.exe" -m worker\.cli job daily'
         r' --trigger scheduler --data-dir "[^"]+" --log-dir "[^"]+"'
-        r" --min-free-memory-gb 2 --git-pull",
+        r" --min-free-memory-gb 2",
         command,
         re.IGNORECASE,
     ), command
@@ -299,7 +301,8 @@ def test_news_registration_names_the_claude_executable(harness):
     assert f'--claude-cli "{claude}"'.lower() in command.lower()
     assert "--skip-news-llm" not in command
     assert " job news " in command and command.endswith(f'"{claude}"')
-    assert "--min-free-memory-gb 1 --git-pull" in command
+    assert "--min-free-memory-gb 1 --claude-cli" in command
+    assert "--git-pull" not in command
     assert "job stops the worker at 01:30:00 (task limit 01:40:00)" in result.stdout
 
 

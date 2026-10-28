@@ -5344,6 +5344,8 @@ def run_daily(
     trigger: str = "manual",
     force: bool = False,
     catchup_sessions: int | None = None,
+    git_head: str | None = None,
+    git_tag: str | None = None,
 ) -> dict[str, Any]:
     """catchup -> collect -> analyze -> evaluate -> candidates -> indicators, logged in schedule_runs."""
 
@@ -5360,4 +5362,6 @@ def run_daily(
         catchup_sessions=CATCHUP_SESSIONS
         if catchup_sessions is None
         else catchup_sessions,
+        git_head=git_head,
+        git_tag=git_tag,
     )

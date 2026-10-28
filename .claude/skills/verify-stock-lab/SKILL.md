@@ -10,7 +10,7 @@ description: 對 stock-lab 五個主導航（今日、新聞、族群、個股�
 | 模式 | 什麼時候 | 資料 | 誰跑 |
 | --- | --- | --- | --- |
 | [CI 模式](#ci-模式) | 每個 PR 與 master push；master 每晚 22:40（台北）與手動觸發（`workflow_dispatch`）跑五頁全套 | 假資料庫（[`fixture_db.py`](../../../tools/verify/fixture_db.py)），數值固定 | CI `verify` job，自動 |
-| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`） | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
+| [真資料模式](#真資料模式) | 每個 gate 收尾、每合併約 3 個 PR、G7 的 5 個交易日窗口開頭與結尾各一次（[工作手冊](../../../docs/GITHUB_WORKFLOW.md#任務流程)第 6 步、[RELEASE 的 V1 發佈隔離](../../../docs/RELEASE.md#v1-發佈隔離g7-窗口專用)） | 正式 DB 的唯讀副本（`tools/ops/copy_db.py`） | 統籌在以最新 `origin/master` 為底的任務 worktree 另開 session |
 
 回覆使用者一律繁體中文。所有命令在 Git Bash（Claude Code 的 Bash 工具）執行，cwd 為 worktree 根目錄。
 
