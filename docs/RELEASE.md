@@ -22,7 +22,7 @@ V1 之後的發佈（使用者 2026-10-28 決定，取代 [V1 發佈隔離](#v1-
 
 `deploy.sh <tag> [--checkout DIR] [--data-dir DIR] [--operator NAME] [--reinstall] [--no-comment] [--python EXE]`。發佈 checkout 預設 `STOCK_RELEASE_DIR`、再來是 `~/stock-lab-release`；資料目錄預設 `STOCK_DATA_DIR`、再來是 `~/stock-lab-data`。要從另一個 checkout 執行：checkout tag 會改寫發佈 checkout 的檔案，腳本在發佈 checkout 裡就拒絕。
 
-下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag 都不變：
+下列任一情況拒絕並 exit 1，發佈 checkout 的 HEAD、工作樹與 tag 都不變（在 fetch 之後才發現的拒絕，會刪掉 fetch 新建的 tag ref；部署前就有的同名 tag 保留）：
 
 | 檢查 | 拒絕條件 |
 | --- | --- |
@@ -63,5 +63,7 @@ V1 G7 窗口專用（使用者 2026-10-26 決定，#288）；窗口結束後不�
 - **真資料 verify** 在窗口的開頭與結尾各跑一次，兩次都用當時 `origin/release/v1` 的程式：worktree 從它建、不加 commit、不留未 commit 的改動（`page_checks.py --g7` 要求 HEAD 等於 `origin/release/v1`，不符合就拒跑）；人工檢查由另一個 session 依寫死的樣本判讀，整份證據再由另一個 session 獨立 review。
 - **每日核對**記發佈 checkout 當時的 branch 與 HEAD（`git -C <發佈 checkout> rev-parse --abbrev-ref HEAD` 與 `--short HEAD`），證明窗口每天跑的是 `release/v1`。
 - **窗口結束**（使用者確認 G7 後）：`git log origin/master..origin/release/v1 --no-merges` 必須為空（V1 改動都已在 master）；在排程閒置時把發佈 checkout 切回 master、依 master 的 lock 檔重裝 venv（下一次 daily 會升 V1.1 的 migration）；`release/v1` 最後一個 commit 打 `v1.0` tag。三項結果記在 G7 Issue。
+
+若窗口結束時 #314 已在 master 上（原定順序是 `v1.0` 之後才合併 #314；這段只在順序倒過來時適用），「窗口結束」不手動把發佈 checkout 切回 master，也不重裝 venv。改在 master 上含 #314 的 merge commit 打 tag，排程閒置時從 master 管理 checkout 以 `deploy.sh <該 tag>` 直接從 `release/v1` 部署過去：lock 檔有變時 `deploy.sh` 會重裝 venv，下一次 daily 照常升 migration。前兩項（`git log` 為空、打 `v1.0`）照做。
 
 窗口結束後到第一次部署之間：發佈 checkout 在 master 上，#314 前的 job 仍在起跑前 pull；#314 合併進 master 後，下一次 pull 就帶進不 pull 的 job，發佈 checkout 從此停在那個 commit，直到第一次以 `deploy.sh` 部署含 #314 的 tag。這段期間還沒有部署記錄，看門狗的 `invariant_deploy_head` 印 `skip`、不留言。

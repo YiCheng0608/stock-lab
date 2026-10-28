@@ -196,7 +196,9 @@ class Harness:
     def record(self) -> Path:
         return self.data / "logs" / "deploy.json"
 
-    def deploy(self, tag: str, *args: str) -> SimpleNamespace:
+    def deploy(
+        self, tag: str, *args: str, extra_env: dict[str, str] | None = None
+    ) -> SimpleNamespace:
         env = {
             k: v
             for k, v in os.environ.items()
@@ -211,6 +213,7 @@ class Harness:
             STOCK_DATA_DIR=self.data.as_posix(),
             STOCK_PYTHON=Path(sys.executable).as_posix(),
         )
+        env.update(extra_env or {})
         # Git for Windows' bin/bash.exe puts /mingw64/bin (the real git) in front of
         # PATH, so the fake bin directory is put first again inside bash.
         completed = subprocess.run(
@@ -422,9 +425,32 @@ def test_a_tag_missing_on_origin_is_refused(harness):
 
 def test_a_tag_before_314_is_refused(harness):
     git(harness.checkout, "checkout", "--quiet", "--detach", harness.sha["v1"])
+    before = harness.state()
     result = harness.deploy("v0")
     assert result.code == 1 and "早於 #314" in result.out, result.out
-    assert harness.head() == harness.sha["v1"] and not harness.record.exists()
+    # Refused after the fetch: the tag ref the fetch created is deleted again.
+    assert harness.state() == before
+    assert any(c.split()[2:3] == ["fetch"] for c in harness.calls("git"))
+
+
+def test_a_refusal_after_the_fetch_keeps_a_tag_that_was_there(harness):
+    git(harness.checkout, "fetch", "--quiet", "origin", "refs/tags/v0:refs/tags/v0")
+    before = harness.state()
+    assert "v0" in before[2]
+    result = harness.deploy("v0")
+    assert result.code == 1 and "早於 #314" in result.out, result.out
+    assert harness.state() == before
+
+
+def test_a_tag_that_moved_after_the_ci_check_is_refused(harness):
+    # The locked phase gets the SHA the CI check passed; origin's tag now points
+    # elsewhere (moved between ls-remote and fetch).
+    before = harness.state()
+    result = harness.deploy(
+        "v1", extra_env={"DEPLOY_LOCKS_HELD": "1", "DEPLOY_SHA": harness.sha["v2"]}
+    )
+    assert result.code == 1 and "不是 CI 核對過的" in result.out, result.out
+    assert harness.state() == before
 
 
 def test_a_deploy_from_inside_the_checkout_is_refused(harness):

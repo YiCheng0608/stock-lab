@@ -148,12 +148,21 @@ fi
 sha="${DEPLOY_SHA:?}"
 clean
 previous="$(git -C "$checkout" rev-parse --verify HEAD)" || refuse "讀不到發佈 checkout 的 HEAD"
+# A refusal after the fetch deletes the tag ref the fetch created, so a refused deploy
+# leaves the checkout's tags as they were; a tag that was already there stays.
+had_tag=0
+git -C "$checkout" rev-parse --verify --quiet "refs/tags/$tag" >/dev/null && had_tag=1
+refuse_fetched() {
+  [ "$had_tag" = 1 ] || git -C "$checkout" update-ref -d "refs/tags/$tag" \
+    || printf '%s: 刪不掉剛 fetch 的 tag %s\n' "$(basename "$0")" "$tag" >&2
+  refuse "$1"
+}
 git -C "$checkout" fetch --quiet --no-tags origin "refs/tags/$tag:refs/tags/$tag" \
   || refuse "git fetch 不到 tag $tag（本機已有同名但指向別處的 tag 時也會失敗）"
 [ "$(git -C "$checkout" rev-parse --verify --quiet "refs/tags/$tag^{commit}")" = "$sha" ] \
-  || refuse "fetch 到的 tag $tag 不是 CI 核對過的 ${sha:0:9}"
+  || refuse_fetched "fetch 到的 tag $tag 不是 CI 核對過的 ${sha:0:9}"
 git -C "$checkout" cat-file -e "$sha:tools/ops/deploy.sh" 2>/dev/null \
-  || refuse "tag $tag 早於 #314：它的 job 起跑前會 git pull，在 detached HEAD 上會記 git_pull_failed"
+  || refuse_fetched "tag $tag 早於 #314：它的 job 起跑前會 git pull，在 detached HEAD 上會記 git_pull_failed"
 venv_reinstalled=false
 lock_files=(backend/requirements.txt backend/validation-requirements.lock.txt)
 git -C "$checkout" diff --quiet "$previous" "$sha" -- "${lock_files[@]}" || reinstall=1
