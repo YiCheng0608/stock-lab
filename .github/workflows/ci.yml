@@ -134,6 +134,34 @@ jobs:
       - run: pnpm --dir frontend run test:ci
       - run: pnpm --dir frontend run build
 
+  # The frontend image (frontend/Dockerfile, #334): the nginx stage and the dev target build;
+  # test:ci and build pass in the dev container; frontend/docker/smoke.sh checks the pages,
+  # the single-page fallback and that /api reaches the upstream with the browser's Host.
+  frontend-image:
+    name: frontend-image
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      WEB_IMAGE: stock-lab-web:ci
+      DEV_IMAGE: stock-lab-web-dev:ci
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: docker build
+        run: |
+          docker build -t "$WEB_IMAGE" frontend
+          docker build --target dev -t "$DEV_IMAGE" frontend
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep ':ci ' | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: test:ci and build in the dev container
+        run: |
+          docker run --rm "$DEV_IMAGE" pnpm run test:ci
+          docker run --rm "$DEV_IMAGE" pnpm run build
+      - name: smoke
+        run: bash frontend/docker/smoke.sh "$WEB_IMAGE" "$DEV_IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
   # Only the pages the change needs (tools/verify/verify_plan.py, #245); with none, every later
@@ -226,7 +254,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, frontend, verify]
+    needs: [changes, repository, pr, backend, frontend, frontend-image, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -243,7 +271,7 @@ jobs:
           assert jobs['verify']['result'] == 'success', jobs
           pr = 'success' if os.environ['EVENT'] == 'pull_request' else 'skipped'
           assert jobs['pr']['result'] == pr, jobs
-          for job, flag in [('backend', 'python'), ('frontend', 'frontend')]:
+          for job, flag in [('backend', 'python'), ('frontend', 'frontend'), ('frontend-image', 'frontend')]:
               required = jobs['changes']['outputs'].get(flag)
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'

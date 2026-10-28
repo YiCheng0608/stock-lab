@@ -1,0 +1,7 @@
+# Build context of frontend/Dockerfile (#334): sources and the lock file, without installed
+# dependencies or build output.
+node_modules
+dist
+.vite
+*.tsbuildinfo
+*.log
