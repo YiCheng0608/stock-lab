@@ -8,7 +8,9 @@
 # holds the rules. Versions follow CI (node 22, pnpm 10.18.3, the lock file); the base images
 # are pinned by tag and digest, node to the same one as backend/Dockerfile.
 ARG NODE_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
-ARG NGINX_IMAGE=nginx:1.28.3-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+# nginx-unprivileged runs master and workers as nginx (uid 101) and listens on 8080; 1.28.2 is
+# its newest 1.28 release.
+ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.28.2-alpine@sha256:7377697a821c131a924a7105fafbe7414db4e9fcc77a6f08f776f33f141ec3f8
 
 FROM ${NODE_IMAGE} AS deps
 ARG PNPM_VERSION=10.18.3
@@ -44,4 +46,6 @@ ENV API_UPSTREAM=api:8000 \
     NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
-EXPOSE 80
+# Not root: the port inside the container is above 1024, and compose maps WEB_PORT to it.
+USER 101
+EXPOSE 8080

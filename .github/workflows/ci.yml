@@ -187,13 +187,19 @@ jobs:
 
   # The frontend image (frontend/Dockerfile, #334): the nginx stage and the dev target build;
   # test:ci and build pass in the dev container; frontend/docker/smoke.sh checks the pages,
-  # the single-page fallback and that /api reaches the upstream with the browser's Host.
+  # the single-page fallback, that /api reaches the upstream with the browser's Host and that
+  # nothing in the web container runs as root; frontend/docker/context_check.sh that
+  # frontend/.dockerignore keeps secrets, dependencies and build output out at any depth.
   frontend-image:
     name: frontend-image
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # shell: bash runs with -o pipefail, so a failing script piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
     env:
       WEB_IMAGE: stock-lab-web:ci
       DEV_IMAGE: stock-lab-web-dev:ci
@@ -212,6 +218,8 @@ jobs:
           docker run --rm "$DEV_IMAGE" pnpm run build
       - name: smoke
         run: bash frontend/docker/smoke.sh "$WEB_IMAGE" "$DEV_IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: build context
+        run: bash frontend/docker/context_check.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.

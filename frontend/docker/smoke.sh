@@ -6,8 +6,9 @@
 #
 # A stub upstream from the dev image (node) answers on a user-defined network under the
 # alias api, the name API_UPSTREAM defaults to, and echoes what reached it. The web
-# container publishes SMOKE_PORT (default 18080) on 127.0.0.1, so curl sends the Host a
-# browser would: localhost:<port>. The stub must see that Host, not api:8000.
+# container (nginx on 8080, no process as root) publishes SMOKE_PORT (default 18080) on
+# 127.0.0.1, so curl sends the Host a browser would: localhost:<port>. The stub must see
+# that Host, not api:8000.
 set -euo pipefail
 
 web=${1:?usage: smoke.sh <web image> <dev image>}
@@ -45,9 +46,15 @@ require("node:http").createServer((req, res) => {
 
 docker network create "$name" > /dev/null
 docker run -d --name "$name-api" --network "$name" --network-alias api "$dev" node -e "$stub" > /dev/null
-docker run -d --name "$name-web" --network "$name" -p "127.0.0.1:$port:80" "$web" > /dev/null
+docker run -d --name "$name-web" --network "$name" -p "127.0.0.1:$port:8080" "$web" > /dev/null
 curl -fsS -o /dev/null --retry 30 --retry-delay 1 --retry-connrefused --retry-all-errors "http://localhost:$port/" \
   || fail "the web container does not answer on $port"
+
+# No process in the web container runs as root: the uid of every one, master and workers.
+uids=$(MSYS_NO_PATHCONV=1 docker exec "$name-web" sh -c 'for f in /proc/[0-9]*/status; do grep "^Uid:" "$f" 2>/dev/null; done; true' | awk '{print $2}' | sort -u | tr '\n' ' ')
+[ -n "$uids" ] || fail "no process found in the web container"
+case " $uids" in *" 0 "*) fail "a process in the web container runs as root (uids: $uids)" ;; esac
+printf 'web container process uids: %s\n' "$uids"
 
 # MSYS_NO_PATHCONV: Git Bash would rewrite the container path.
 MSYS_NO_PATHCONV=1 docker run --rm --entrypoint cat "$web" /usr/share/nginx/html/index.html > "$work/index.html"

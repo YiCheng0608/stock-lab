@@ -1,7 +1,7 @@
 # nginx in the frontend image (frontend/Dockerfile, #334). The entrypoint fills ${API_UPSTREAM}
 # and ${NGINX_LOCAL_RESOLVERS}; every other $name is nginx's own.
 server {
-    listen 80;
+    listen 8080;
     server_name _;
     root /usr/share/nginx/html;
 

@@ -16,14 +16,14 @@ pnpm run dev
 
 ## Docker image
 
-[`Dockerfile`](Dockerfile)（#334）以 `frontend/` 為 build context（排除清單在 [`.dockerignore`](.dockerignore)），node 22、pnpm 10.18.3 與 lock 檔同 CI：
+[`Dockerfile`](Dockerfile)（#334）以 `frontend/` 為 build context，node 22、pnpm 10.18.3 與 lock 檔同 CI，base image 以 tag 加 digest 釘住。[`.dockerignore`](.dockerignore) 在任何深度排除 `.env`／`.env.*`（`.env.example`、`.env.*.example` 保留）、`node_modules`、`dist`、`.vite`、`*.tsbuildinfo`、`*.log`；[`docker/context_check.sh`](docker/context_check.sh) 在副本裡放這些檔案、build dev target，有一個進了 image（或 example 沒進）就失敗：
 
 | target | 命令（repo 根目錄） | 內容 |
 | --- | --- | --- |
-| `web`（預設） | `docker build -t stock-lab-web frontend` | `VITE_API_BASE=/api` 的 production build，由 nginx 在容器 80 埠服務 |
+| `web`（預設） | `docker build -t stock-lab-web frontend` | `VITE_API_BASE=/api` 的 production build，由 `nginxinc/nginx-unprivileged` 在容器 8080 埠服務，master 與 worker 都以 `nginx`（uid 101）執行，沒有 root 程序 |
 | `dev` | `docker build --target dev -t stock-lab-web-dev frontend` | 裝好依賴的原始碼，預設命令 `pnpm run dev --host 0.0.0.0 --port 5173`；`pnpm run test:ci`、`pnpm run build` 也在這裡跑。以 image 的 `node` 使用者（uid 1000）執行 |
 
-nginx 規則在 [`docker/nginx.conf.template`](docker/nginx.conf.template)：`/api/` 反代到 `API_UPSTREAM`（預設 `api:8000`，即 compose 的 api 服務），帶 `proxy_set_header Host $http_host` 轉送瀏覽器的 Host 與埠，Origin 等 header 原樣轉送；上游名稱每次請求才查 DNS，api 還沒起來時 nginx 照樣啟動（`/api` 回 502）。`/assets/` 下找不到的檔案回 404，其他路徑一律回 `index.html`（SPA）。api 要把瀏覽器連的位址列進 `STOCK_API_PUBLIC_HOSTS`，否則經反代的寫入會被拒（[OPERATIONS §1.1](../docs/OPERATIONS.md#11-產品-api-的跨站請求防護)），所以對外的 `WEB_PORT` 不能用 80。dev target 的 `VITE_API_BASE` 與 api 要設的值依同一節。[`docker/smoke.sh`](docker/smoke.sh) 檢查頁面、SPA fallback 與 upstream 收到的 Host：`bash frontend/docker/smoke.sh <web image> <dev image>`（CI `frontend-image` job 同命令）。
+nginx 規則在 [`docker/nginx.conf.template`](docker/nginx.conf.template)：`/api/` 反代到 `API_UPSTREAM`（預設 `api:8000`，即 compose 的 api 服務），帶 `proxy_set_header Host $http_host` 轉送瀏覽器的 Host 與埠，Origin 等 header 原樣轉送；上游名稱每次請求才查 DNS，api 還沒起來時 nginx 照樣啟動（`/api` 回 502）。`/assets/` 下找不到的檔案回 404，其他路徑一律回 `index.html`（SPA）。api 要把瀏覽器連的位址列進 `STOCK_API_PUBLIC_HOSTS`，否則經反代的寫入會被拒（[OPERATIONS §1.1](../docs/OPERATIONS.md#11-產品-api-的跨站請求防護)），所以對外的 `WEB_PORT`（compose 對映到容器的 8080）不能用 80。dev target 的 `VITE_API_BASE` 與 api 要設的值依同一節。[`docker/smoke.sh`](docker/smoke.sh) 檢查頁面、SPA fallback、upstream 收到的 Host，以及 web 容器沒有 uid 0 的程序：`bash frontend/docker/smoke.sh <web image> <dev image>`；`bash frontend/docker/context_check.sh` 檢查 `.dockerignore`（CI `frontend-image` job 同兩個命令）。
 
 所有頁面共用 `components/Shell.tsx`（固定頂部 Navbar、搜尋導向 `/stocks?q=`、資料日期 badge、窄版漢堡選單）；個股頁「圖表與指標」讀 bars API（[V1_SPEC 技術指標](../docs/V1_SPEC.md#技術指標)），「新聞與公告」見下段，其餘分頁讀 `GET /api/stocks/{exchange}/{symbol}`。
 
