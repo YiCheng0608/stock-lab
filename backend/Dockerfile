@@ -28,10 +28,10 @@ ENV TZ=Asia/Taipei \
     SCREENSHOT_BROWSER=/usr/bin/chromium
 
 # tzdata for TZ; git for the job's checks and the tests; chromium and a CJK font for
-# screenshot.cjs (without the font Chinese text renders as boxes, #243).
+# screenshot.cjs (without the font Chinese text renders as boxes, #243); tini as PID 1.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl git tzdata chromium fonts-noto-cjk \
+        ca-certificates curl git tzdata tini chromium fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
@@ -67,3 +67,6 @@ RUN useradd --create-home --uid "${APP_UID}" --shell /bin/bash app \
 WORKDIR /app
 COPY --chown=app:app . /app
 USER app
+# PID 1 reaps orphans: a killed job's worker is re-parented to it, and without a reaper it
+# stays a zombie whose PID still looks alive (schedule_runs._pid_alive, the run row).
+ENTRYPOINT ["/usr/bin/tini", "--"]

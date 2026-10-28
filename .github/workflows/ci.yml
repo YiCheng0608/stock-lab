@@ -147,15 +147,16 @@ jobs:
             claude --version
             node --version
             chromium --version
-            date
+            date "+%F %T %Z %z"
             cat ~/.claude.json
-            id'
+            id
+            cat /proc/1/cmdline | tr "\0" " "; echo'
       - name: Screenshot in the container
         run: |
           docker run --rm "$IMAGE" bash -c '
             set -eu
             mkdir -p /tmp/page
-            printf "<!doctype html><meta charset=utf-8><title>stock-lab</title><main>stock-lab 截圖測試</main>\n" > /tmp/page/index.html
+            printf "<!doctype html><meta charset=utf-8><meta name=viewport content=width=device-width><title>stock-lab</title><main>stock-lab 截圖測試</main>\n" > /tmp/page/index.html
             python -m http.server 8765 --bind 127.0.0.1 --directory /tmp/page > /tmp/http.log 2>&1 &
             curl -fsS -o /dev/null --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:8765/
             node tools/ops/screenshot.cjs --url http://127.0.0.1:8765/ --out /tmp/shot --name local --widths 1280,390
