@@ -19,6 +19,7 @@ from .base import (
     SignalLevels,
     Strategy,
     StrategyInputs,
+    confirmation_failures,
     finite_number,
     required_finite,
     risk_levels,
@@ -72,11 +73,14 @@ def evaluate_breakout_v1(
     group_excess_return_20d: float | None,
     institutional_flow_to_turnover_ratio_5d: float | None,
     margin_balance_change_ratio_5d: float | None,
+    config: Mapping[str, Any] = CONFIG,
 ) -> RuleEvaluation:
     """Evaluate ``breakout_v1`` using only the prior 20 trading sessions.
 
     Any missing, non-finite, or inadequate required input returns
-    ``data_incomplete`` rather than an actionable pass.
+    ``data_incomplete`` rather than an actionable pass.  ``config`` is only
+    overridden by research ablations: a condition whose section it lacks is
+    not checked, while the required inputs stay the same.
     """
 
     highs, high_errors = trailing_positive_history(
@@ -102,30 +106,16 @@ def evaluate_breakout_v1(
             False, "data_incomplete", ("close_or_volume_must_be_positive",)
         )
 
-    config = CONFIG
     failures: list[str] = []
-    if metrics["close"] <= max(highs):
+    if "price" in config and metrics["close"] <= max(highs):
         failures.append("close_not_above_prior_20_day_high")
     volume_ratio = metrics["volume"] / (sum(volumes) / len(volumes))
-    if volume_ratio < config["volume"]["minimum_signal_to_average_ratio"]:
+    if (
+        "volume" in config
+        and volume_ratio < config["volume"]["minimum_signal_to_average_ratio"]
+    ):
         failures.append("volume_ratio_below_1_20")
-    if (
-        metrics["group_excess_return_20d"]
-        <= config["confirmations"]["group_relative_strength"]["minimum_excess_return"]
-    ):
-        failures.append("group_relative_strength_not_positive")
-    if (
-        metrics["institutional_flow_to_turnover_ratio_5d"]
-        < config["confirmations"]["institutional_flow"][
-            "minimum_net_flow_to_turnover_ratio"
-        ]
-    ):
-        failures.append("institutional_flow_materially_adverse")
-    if (
-        metrics["margin_balance_change_ratio_5d"]
-        > config["confirmations"]["margin_financing"]["maximum_balance_change_ratio"]
-    ):
-        failures.append("margin_financing_increase_abnormal")
+    failures += confirmation_failures(metrics, config["confirmations"])
     if failures:
         return RuleEvaluation(False, "rejected", tuple(failures))
     return RuleEvaluation(True, "passed")

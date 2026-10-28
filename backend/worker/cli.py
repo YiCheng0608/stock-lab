@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date
+
+from . import job as scheduled_job
+
+# Before app.config is imported: it reads STOCK_DATA_DIR and creates that
+# directory, and a scheduled `job` has only --data-dir.
+os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
 from app.db import init_db
 
@@ -19,6 +26,7 @@ from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batc
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .schedule_runs import (
+    LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
     list_schedule_runs,
     record_preflight_skip,
@@ -81,9 +89,14 @@ def main() -> None:
     )
     daily_parser.add_argument(
         "--skip-reason",
-        choices=sorted(PREFLIGHT_SKIP_REASONS),
-        help="排程包裝腳本起跑前檢查未通過：只記一列 skipped，不執行任何步驟",
+        choices=sorted(PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}),
+        help="job 起跑前檢查未通過或另一個 daily job 持有鎖：只記一列 skipped，不執行任何步驟",
     )
+    job_parser = subparsers.add_parser(
+        "job",
+        help="排程工作：鎖、起跑前檢查、逾時與日誌後執行 daily 或 news（＋news-llm）",
+    )
+    scheduled_job.add_arguments(job_parser)
     runs_parser = subparsers.add_parser(
         "schedule-runs", help="列出 daily 排程 run 記錄與各步驟"
     )
@@ -266,6 +279,11 @@ def main() -> None:
         and args.catchup_sessions < 0
     ):
         parser.error("--catchup-sessions must not be negative")
+    if args.command == "job":
+        problem = scheduled_job.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(scheduled_job.run(args))
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}
