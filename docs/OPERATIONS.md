@@ -21,7 +21,7 @@ python -m worker.cli init-db   # 明確初始化／升級指定 DB 後再啟動 
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-**後端 image**（#333，母單 #331）：[`backend/Dockerfile`](../backend/Dockerfile) 是 api 與 scheduler 共用的 image，從 repo 根目錄 `docker build -f backend/Dockerfile -t stock-lab-backend .`。內含 Python 依賴（`backend/requirements.txt`＋lock）、`tzdata`（`TZ=Asia/Taipei`）、git、`gh`、Node 22、Claude Code CLI（`~/.claude.json` 已標記 onboarding 完成）與 Chromium＋CJK 字型（`tools/ops/screenshot.cjs` 用，`SCREENSHOT_BROWSER=/usr/bin/chromium`）；以非 root 使用者 `app` 執行，PID 1 是 `tini`（回收被殺 job 留下的孤兒程序，否則 zombie 的 PID 看起來仍在、run 列不會立即記 abandoned），`STOCK_DATA_DIR=/data`，`PYTHONPATH=/app/backend`。image 本身不帶啟動命令，api 與 scheduler 的命令由 compose 給。build context 排除的檔案見根目錄 `.dockerignore`（含 `.git`）；測試讀 git 歷史，所以容器內跑測試時把 checkout 的 `.git` 唯讀掛進去：`docker run --rm -v "$PWD/.git:/app/.git:ro" stock-lab-backend pytest backend/tests -q`（CI `docker` job 同命令）。執行層（`worker.job` 的 `job` 與 `lock`）只在 Linux 執行，其他系統以 exit 69 拒絕。
+**後端 image**（#333，母單 #331）：[`backend/Dockerfile`](../backend/Dockerfile) 是 api 與 scheduler 共用的 image，從 repo 根目錄 `docker build -f backend/Dockerfile -t stock-lab-backend .`。內含 Python 依賴（`backend/requirements.txt`＋lock）、`tzdata`（`TZ=Asia/Taipei`）、git、`gh`、Node 22、Claude Code CLI（`~/.claude.json` 已標記 onboarding 完成）與 Chromium＋CJK 字型（`tools/ops/screenshot.cjs` 用，`SCREENSHOT_BROWSER=/usr/bin/chromium`）；以非 root 使用者 `app` 執行，PID 1 是 `tini`（回收被殺 job 留下的孤兒程序，否則 zombie 的 PID 看起來仍在、run 列不會立即記 abandoned），`STOCK_DATA_DIR=/data`，`PYTHONPATH=/app/backend`。image 本身不帶啟動命令，api 與 scheduler 的命令由 compose 給（[§1.2](#12-docker-compose)）。build context 排除的檔案見根目錄 `.dockerignore`（含 `.git`）；測試讀 git 歷史，所以容器內跑測試時把 checkout 的 `.git` 唯讀掛進去：`docker run --rm -v "$PWD/.git:/app/.git:ro" stock-lab-backend pytest backend/tests -q`（CI `docker` job 同命令）。執行層（`worker.job` 的 `job` 與 `lock`）只在 Linux 執行，其他系統以 exit 69 拒絕。
 
 `init-db` 會改 schema，執行前先解析三個路徑並為既有 DB 備份（[§2.1](#21-安全升級與復原順序)）。API startup 只跑 `check_database_readiness()`，不會自動建庫、migration、repair 或 stamp；缺檔、空檔、不可讀或不符契約時拒絕啟動。已啟動的 process 不會因 source 更新而改變 lifespan。
 
@@ -50,6 +50,38 @@ python -m uvicorn app.main:app --reload --port 8000
 多個值以逗號分隔，前後空白會去掉。`<port>` 是 1～65535、不補前導 0，而且一定要寫：瀏覽器連 80 埠時送出的 Host 不帶 port，列不進清單，寫入會被拒，所以反代或前端對外的埠（`WEB_PORT`）不能用 80。主機名只收小寫的 `localhost` 與 `127.0.0.1`。萬用字元、空項目、`https` 或其他 scheme，以及帶 path、query、fragment、userinfo 的值都不接受。值不符時，`app.main` 匯入就丟 `ValueError`，訊息寫出變數名與那個值，API 不會啟動。worker 不讀這兩個變數。Host 與 Origin 各自比對：列在 `STOCK_API_ALLOWED_ORIGINS` 的埠不會因此成為可接受的 Host，反之亦然。由同一個反代送出的頁面，Origin 等於自身 `http://<Host>`，不必再列進 `STOCK_API_ALLOWED_ORIGINS`。
 
 寫入會被拒的情況：以 LAN IP、機器名稱、IPv6 `[::1]` 或經代理改寫的 Host 連線（例如反代沒轉送 Host，API 看到 `api:8000`）；Host 大小寫變體，或 port 不符、省略且不在 `STOCK_API_PUBLIC_HOSTS`；Unix socket；`VITE_API_BASE` 不符 Host 規則；前端開發服務改用 5173 以外的埠，而該 origin 不在 `STOCK_API_ALLOWED_ORIGINS`。這不是身分驗證，同機其他程式送出符合規則的請求一樣放行。
+
+### 1.2 Docker compose
+
+（#335，母單 #331）根目錄的 [`docker-compose.yml`](../docker-compose.yml) 是基底，[`docker-compose.dev.yml`](../docker-compose.dev.yml) 是開發 override。從 repo 根目錄執行，需要 Docker Compose 2.24 以上（`env_file` 的 `required: false`）。
+
+| 服務 | image（以 project 名稱開頭） | 命令 | 主機埠（只綁 `127.0.0.1`） | `mem_limit` | 健康檢查 |
+| --- | --- | --- | --- | --- | --- |
+| api | `<project>-backend`（[後端 image](#1-工作目錄環境與啟停)） | `uvicorn app.main:app --port 8000`；dev 加 `--reload` | `API_PORT`（預設 8000）→ 8000 | 1 GB | `GET /api/health` |
+| web | `<project>-web`（nginx，[前端 image](../frontend/README.md#docker-image)）；dev 是 `<project>-web-dev`（Vite） | nginx，`/api` 反代到 `api:8000`；dev 是 `pnpm run dev`，直接呼叫 `API_PORT` | `WEB_PORT`（預設 8080）→ 8080 | 256 MB；dev 1 GB | `GET /` |
+| scheduler | 同 api | `python -m worker.cli serve`（[§6.6](#66-scheduler-容器的排程serve)） | 無 | 2 GB | 無（serve 結束時容器跟著結束、自動重啟） |
+
+三個服務都是 `restart: unless-stopped`、`TZ=Asia/Taipei`。api 與 scheduler 以 tini 執行 [`backend/docker/entrypoint.sh`](../backend/docker/entrypoint.sh) 再接命令。資料目錄是 named volume `stock-data`（容器內 `/data`：`stock.db`、`logs/`、`exports/`），不 bind mount；`STOCK_DATA_DIR`、`STOCK_DB_PATH`、`STOCK_RAW_DIR` 由 compose 固定成 `/data` 下的路徑，env file 裡的值蓋不過去。scheduler 不設固定 `hostname:`：abandoned 改以鎖判定（§6.3），固定 hostname 反而會讓沒帶鎖的列以主機＋PID 跨 PID namespace 判定（#336 review 建議 3）。
+
+| 用途 | 命令 |
+| --- | --- |
+| 開發 | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`：bind mount 整個 checkout，api 以 `uvicorn --reload`、web 以 Vite HMR 即時套用修改（Windows bind mount 不送檔案事件，兩者都以輪詢偵測：`WATCHFILES_FORCE_POLLING`、`CHOKIDAR_USEPOLLING`）。`stock-data` 沒有 `stock.db` 時，api 啟動前寫入 verify 假資料庫（`tools/verify/fixture_db.py`）；已有的 `stock.db` 不動。scheduler 只在加 `--profile scheduler` 時啟動，開發用的 checkout 不會自己跑 daily、news |
+| 正式拓撲 | `docker compose up -d --build`：web 經 nginx 服務 build 好的頁面。api 在空的 `stock-data` 上會拒絕啟動（[§2](#2-資料庫migration-與-readiness)），要先 `docker compose run --rm api python -m worker.cli init-db`，或把 `copy_db.py` 做的副本放進 volume |
+| 後端測試 | `docker compose run --rm -v <clone>/.git:/app/.git:ro api python -B -m pytest -p no:cacheprovider -q backend/tests`。測試讀 git 歷史，而 image 不含 `.git`，所以掛一個 `.git` 是目錄的 checkout（Orca worktree 的 `.git` 是指向 Windows 路徑的檔案，容器裡讀不到；用 `git clone --no-hardlinks` 做一份） |
+| 狀態與停止 | `docker compose ps`（健康狀態）、`docker compose logs <服務>`、`docker compose down`（`--volumes` 會連 `stock-data` 一起刪） |
+
+**變數**（從 shell 或根目錄 `.env` 讀，見 [`.env.example`](../.env.example)）：
+
+- `WEB_PORT`、`API_PORT`：主機埠。api 的 `STOCK_API_PUBLIC_HOSTS` 由 compose 設成 `localhost`／`127.0.0.1` 加這兩個埠；dev 另把 `STOCK_API_ALLOWED_ORIGINS` 設成 `WEB_PORT` 的兩個 origin（§1.1）。entrypoint 以 exit 64 拒絕三種值：`WEB_PORT`、`API_PORT` 是 80（瀏覽器在 80 埠送的 Host 不帶埠，寫入一律被拒）；`WEB_PORT` 是 8000（api 的監聽埠，即使沒有允許清單 Host `localhost:8000` 也會放行，PR #349 review S2）；兩者相同。空值視為沒設：scheduler 只從 env file 拿到這兩個變數，`.env` 裡的 `WEB_PORT=` 不會讓它停下（#335 review S7）。
+- `-p <project>`：project 名稱，預設是目錄名。image、容器、網路與 volume（`<project>_stock-data`）都以它開頭，所以兩個 worktree 各用自己的 project 與埠就能同時 `up` 或 `run`，互不影響。
+- `STOCK_ENV_FILE`：api 與 scheduler 的 env file，預設根目錄 `.env`。使用者手動建立、不進 Git（#337）；agent 不讀它的內容。檔案不存在時照常啟動，只是沒有 token，`claude -p` 與 `gh` 會在各自的步驟失敗。web 不讀 env file。compose 會把 env file 的值展開進 api 與 scheduler 的 `environment`，所以有真 `.env` 時：`docker compose config` 一定要加 `-q` 或 `--no-interpolate`（不加會原樣印出 token）；`docker inspect`、`docker compose run … env` 等列出容器環境變數的命令同樣會顯示 token，這些輸出都不貼到 GitHub（Issue、PR、留言與 `pr-assets`）。
+- `STOCK_GIT_HEAD`：build 時寫進 image 的 commit（§6.6），compose 讀不到 git，由 shell 帶入：`STOCK_GIT_HEAD="$(git rev-parse HEAD)" docker compose build`。
+
+**Windows 側**（repo 留在 Windows，使用者決定 [#1](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6465043664)）：
+
+- `.gitattributes` 把 `*.sh` 固定為 LF：CRLF 的腳本在容器裡跑不動。entrypoint 在 Git 裡是 100755，image 另外 `chmod 0755`。dev 的 bind mount 不保證保留執行權限位元，所以 dev 以 `sh /app/backend/docker/entrypoint.sh` 呼叫。
+- 匿名 volume 蓋住 checkout 的 `.venv` 與 `frontend/node_modules`（Windows 版），容器用 image 內的依賴。依賴改了、image 重新 build 之後要 `up --renew-anon-volumes`，否則沿用舊的匿名 volume。
+- WSL 2 的記憶體上限在 `%UserProfile%\.wslconfig`（`[wsl2]` 下 `memory=6GB`）。它要高於同時執行的容器上限總和：正式拓撲約 3.3 GB，dev 加 scheduler 約 4 GB。scheduler 的 2 GB 依實測：在容器內對正式 DB 副本（2.4 GB）以 `--force` 重跑一次 daily，rss 峰值約 0.95 GB（cgroup `failcnt` 0）；同一份副本由 0017 migrate 到 0020 時，`docker stats` 讀到 1.8 GiB（含 page cache）（2026-10-29，#335）。改完執行 `wsl --shutdown`，Docker Desktop 重開後生效。
 
 ## 2. 資料庫、migration 與 readiness
 
@@ -264,7 +296,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 ### 6.6 scheduler 容器的排程（serve）
 
-`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定（#335）、`claude`／`gh` 的認證（#337）與正式切換（#342）不在這裡。
+`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定見 [§1.2](#12-docker-compose)（#335）；`claude`／`gh` 的認證（#337）與正式切換（#342）不在這裡。
 
 | 工作 | 觸發（預設） | 命令 |
 | --- | --- | --- |

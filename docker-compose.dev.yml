@@ -1,0 +1,51 @@
+# Development override (#335), on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# - The checkout is bind mounted: uvicorn --reload for the api, Vite with HMR for the pages
+#   (web on WEB_PORT, calling the api straight at API_PORT). Both poll for changes, as a
+#   Windows bind mount sends no file events into the container.
+# - Anonymous volumes hide the checkout's .venv and frontend/node_modules (Windows builds),
+#   so the containers use the image's; `up --renew-anon-volumes` takes a rebuilt image's.
+# - The api writes the verify fixture database when stock-data has no stock.db
+#   (backend/docker/entrypoint.sh); an existing stock.db stays.
+# - The scheduler only starts with `--profile scheduler`, so a development checkout runs no
+#   daily or news by itself.
+# docs/OPERATIONS.md §1.2 has the rest.
+
+services:
+  api:
+    # A bind-mounted file has no execute bit (Windows), hence sh.
+    entrypoint: ["/usr/bin/tini", "--", "sh", "/app/backend/docker/entrypoint.sh"]
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/backend"]
+    environment:
+      STOCK_SEED_FIXTURE: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+      # The pages come from WEB_PORT and call the api on another port (docs/OPERATIONS.md §1.1).
+      STOCK_API_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-8080},http://127.0.0.1:${WEB_PORT:-8080}
+    volumes:
+      - .:/app
+      - /app/.venv
+
+  scheduler:
+    profiles: ["scheduler"]
+    entrypoint: ["/usr/bin/tini", "--", "sh", "/app/backend/docker/entrypoint.sh"]
+    volumes:
+      - .:/app
+      - /app/.venv
+
+  web:
+    build:
+      target: dev
+    image: ${COMPOSE_PROJECT_NAME}-web-dev
+    # Port 8080 in the container, as the nginx stage, so the base's WEB_PORT mapping holds.
+    command: ["pnpm", "run", "dev", "--host", "0.0.0.0", "--port", "8080", "--strictPort"]
+    environment:
+      VITE_API_BASE: http://localhost:${API_PORT:-8000}/api
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
