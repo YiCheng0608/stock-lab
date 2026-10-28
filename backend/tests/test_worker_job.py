@@ -77,7 +77,7 @@ def main():
         sys.exit(job.run(args))
     step = argv[0]
     names = ("STOCK_DATA_DIR", "STOCK_DB_PATH", "STOCK_RAW_DIR", "STOCK_CLAUDE_CLI",
-             "PYTHONPATH", "PYTHONIOENCODING")
+             "PYTHONPATH", "PYTHONIOENCODING", "STOCK_JOB_LOCK")
     record = {"step": step, "argv": argv, "pid": os.getpid(), "ppid": os.getppid(),
               "cwd": os.getcwd(), "utf8": sys.flags.utf8_mode,
               "env": {name: os.environ.get(name) for name in names}}
@@ -121,6 +121,8 @@ class Tree:
         env = {**os.environ, "FAKE_LOG": str(self.calls_file)}
         for name in ("STOCK_CLAUDE_CLI", "PYTHONPATH", "STOCK_DATA_DIR"):
             env.pop(name, None)
+        # Inherited from a job of the caller's, it must not reach the worker.
+        env["STOCK_JOB_LOCK"] = "/inherited/daily.lock"
         env.update({f"FAKE_{key.upper()}": str(value) for key, value in fake.items()})
         env.update(extra_env or {})
         return env
@@ -414,6 +416,9 @@ def test_a_second_daily_job_records_already_running(tree):
         second = tree.run("daily", daily_until=release, daily_sleep=90)
         assert second.code == 0, second.stderr
         assert tree.calls()[1]["argv"][-2:] == ["--skip-reason", "already_running"]
+        # Only the worker of the job holding the lock is told its path (#336).
+        lock = str(job.lock_path(tree.data, "daily"))
+        assert [call["env"]["STOCK_JOB_LOCK"] for call in tree.calls()] == [lock, None]
         skipped = skipped_line(second.log)
         assert skipped.group(1) == "already_running"
         assert skipped.group(2) == f"lock={job.lock_path(tree.data, 'daily')}"

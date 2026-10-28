@@ -6,10 +6,10 @@ import os
 import sys
 from datetime import date
 
-from . import job as scheduled_job
+from . import job as scheduled_job, serve as scheduler
 
 # Before app.config is imported: it reads STOCK_DATA_DIR and creates that
-# directory, and a scheduled `job` has only --data-dir.
+# directory, and a scheduled `job` (or `serve`) has only --data-dir.
 os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
 from app.db import init_db
@@ -97,6 +97,11 @@ def main() -> None:
         help="排程工作：鎖、起跑前檢查、逾時與日誌後執行 daily 或 news（＋news-llm）",
     )
     scheduled_job.add_arguments(job_parser)
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="scheduler 容器的常駐排程：定時執行 job daily、job news 與看門狗（取代工作排程器）",
+    )
+    scheduler.add_arguments(serve_parser)
     runs_parser = subparsers.add_parser(
         "schedule-runs", help="列出 daily 排程 run 記錄與各步驟"
     )
@@ -284,6 +289,11 @@ def main() -> None:
         if problem:
             parser.error(problem)
         sys.exit(scheduled_job.run(args))
+    if args.command == "serve":
+        problem = scheduler.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(scheduler.run(args))
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}

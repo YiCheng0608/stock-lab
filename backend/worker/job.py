@@ -17,7 +17,10 @@ only has to start one command:
   2.5 hours; news 90 minutes for news and news-llm together). The child and
   everything it starts end with the job: the child gets SIGKILL when the job
   dies (PR_SET_PDEATHSIG). The run row of a killed daily therefore
-  names a dead PID, and the next run closes it at once (schedule_runs).
+  names a dead PID, and the next run closes it at once (schedule_runs). The
+  worker gets the lock's path in ``STOCK_JOB_LOCK`` while the job holds it:
+  whoever holds that lock next knows the row's process is gone, even in a
+  restarted container with another hostname (#336).
 - The dated log ``<logs>/<job>-YYYYMMDD.log`` (Taipei date) with the layout of
   docs/OPERATIONS.md §6.3, the exit code, and removing logs older than
   --log-retention-days.
@@ -67,14 +70,14 @@ TIMEOUT_EXIT = 1
 # `job` and `lock` on a system other than Linux (EX_UNAVAILABLE).
 PLATFORM_EXIT = 69
 NEWLINE = os.linesep
+# worker.schedule_runs.JOB_LOCK_ENV: this module imports only the standard library.
+JOB_LOCK_ENV = "STOCK_JOB_LOCK"
 
 
-def platform_problem() -> str | None:
+def platform_problem(module: str = "worker.job") -> str | None:
     if sys.platform.startswith("linux"):
         return None
-    return (
-        f"worker.job runs on Linux only (the backend image, #333), not {sys.platform}"
-    )
+    return f"{module} runs on Linux only (the backend image, #333), not {sys.platform}"
 
 
 def default_data_dir() -> Path:
@@ -95,14 +98,14 @@ def data_environment(data_dir: Path) -> dict[str, str]:
 
 
 def cli_environment(argv: Sequence[str]) -> dict[str, str]:
-    """For ``worker.cli job``: the data paths app.config must see when imported.
+    """For ``worker.cli job`` and ``serve``: the data paths app.config must see.
 
     app.config reads STOCK_DATA_DIR and creates that directory on import; without
     this a scheduled task (no STOCK_* in its environment) would create ``data/``
     in the checkout. Any other command gets nothing.
     """
 
-    if not argv or argv[0] != "job":
+    if not argv or argv[0] not in ("job", "serve"):
         return {}
     value = None
     for index, arg in enumerate(argv):
@@ -275,6 +278,7 @@ class _Job:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONIOENCODING": "utf-8",
         }
+        environment.pop(JOB_LOCK_ENV, None)
         if args.claude_cli:
             environment["STOCK_CLAUDE_CLI"] = args.claude_cli
         self.environment = environment
@@ -337,6 +341,8 @@ class _Job:
         free_mb = free_memory_mb()
         lock = FileLock(lock_path(self.data_dir, self.job))
         locked = lock.acquire()
+        if locked:
+            self.environment[JOB_LOCK_ENV] = str(lock.path)
         try:
             self.log(self._header(free_mb))
             try:

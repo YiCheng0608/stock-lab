@@ -6,12 +6,17 @@ fixture's own collect run of the target date instead of fetching, catch-up repor
 success, the trading calendar is not downloaded and candidate_notes never starts
 claude. Everything else (schedule_runs, analyze,
 evaluate, candidates, ...) runs for real on the database the job points it at.
+With JOB_DAILY_CHILD_HOLD set, collect waits until that file exists, so that a
+test can kill the run while its row is ``running`` (test_worker_serve).
 """
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
+import time
+from pathlib import Path
 
 from sqlalchemy import desc, select
 
@@ -28,6 +33,9 @@ def _forbidden(*_args, **_kwargs):
 def _collect(target, **_kwargs):
     """The fixture's own successful official collect of TARGET, fetched before."""
 
+    hold = os.environ.get("JOB_DAILY_CHILD_HOLD")
+    while hold and not Path(hold).exists():
+        time.sleep(0.05)
     with pipeline.SessionLocal() as db:
         run_id = db.scalar(
             select(IngestionRun.id)

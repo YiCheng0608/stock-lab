@@ -1054,7 +1054,9 @@ def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
     assert skipped["status"] == "skipped" and skipped["reason"] == "already_running"
     assert skipped["related_run_id"] == running_id
     rows, _ = runs(database)
-    assert [(row.status, row.summary_json) for row in rows][-1] == (
+    summary = dict(rows[-1].summary_json)
+    assert summary.pop("runtime") == schedule_runs.runtime()
+    assert (rows[-1].status, summary) == (
         "skipped",
         {"reason": "already_running", "related_run_id": running_id},
     )
@@ -1165,6 +1167,87 @@ def test_running_row_from_another_host_waits_for_the_time_limit(database, monkey
         )
         db.commit()
     assert pipeline.run_daily(DAY)["reason"] == "already_running"
+
+
+def _running_row(database, **values) -> int:
+    with database() as db:
+        row = ScheduleRun(
+            job="daily",
+            target_date=DAY,
+            trigger="scheduler",
+            status="running",
+            started_at=datetime.utcnow(),
+            **values,
+        )
+        db.add(row)
+        db.commit()
+        return row.id
+
+
+def test_a_row_of_the_lock_now_held_is_abandoned_at_once_on_any_host(
+    database, monkeypatch
+):
+    # #336: docker kill, then a new scheduler container. Its hostname is a new
+    # container id, and its fresh PID namespace may hand the killed worker's PID
+    # to a live process (here this test's own PID).
+    Steps(monkeypatch)
+    lock = "/data/locks/daily.lock"
+    killed = _running_row(
+        database,
+        host="0123456789ab",
+        pid=os.getpid(),
+        summary_json={"runtime": {"image": "t1", "head": "a" * 40, "job_lock": lock}},
+    )
+    # Without the lock (worker.cli daily by hand) the row still blocks.
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+    # Holding another lock (another data directory) does not count either.
+    monkeypatch.setenv(schedule_runs.JOB_LOCK_ENV, "/other/locks/daily.lock")
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+    monkeypatch.setenv(schedule_runs.JOB_LOCK_ENV, lock)
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, _ = runs(database)
+    assert rows[0].id == killed and rows[0].status == "failed"
+    assert rows[0].error == (
+        f"abandoned: process {os.getpid()} on 0123456789ab no longer holds {lock}"
+    )
+    assert rows[0].finished_at is not None
+    assert rows[-1].summary_json["runtime"]["job_lock"] == lock
+
+
+def test_a_row_started_without_the_lock_waits_for_its_process(database, monkeypatch):
+    # A worker.cli daily started by hand (no job lock) on another host, or a
+    # row from before #336: the lock says nothing about its process.
+    Steps(monkeypatch)
+    _running_row(database, host="other-host", pid=1, summary_json={})
+    monkeypatch.setenv(schedule_runs.JOB_LOCK_ENV, "/data/locks/daily.lock")
+    assert pipeline.run_daily(DAY)["reason"] == "already_running"
+
+
+def test_every_run_row_records_the_image_and_head(database, monkeypatch):
+    Steps(monkeypatch)
+    monkeypatch.setenv(schedule_runs.IMAGE_TAG_ENV, "stock-lab-backend:t336")
+    monkeypatch.setenv(schedule_runs.GIT_HEAD_ENV, "b" * 40)
+    expected = {"image": "stock-lab-backend:t336", "head": "b" * 40}
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    assert pipeline.run_daily(DAY)["reason"] == "already_complete"
+    schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+    rows, _ = runs(database)
+    assert [row.summary_json["runtime"] for row in rows] == [expected] * 3
+    # The run's own summary is kept next to it.
+    assert rows[0].summary_json["steps"]["collect"] == "success"
+    assert rows[1].summary_json["reason"] == "already_complete"
+    assert rows[2].summary_json["reason"] == "low_memory"
+
+
+def test_without_the_variables_the_runtime_is_the_checkout_head(monkeypatch):
+    monkeypatch.delenv(schedule_runs.IMAGE_TAG_ENV, raising=False)
+    monkeypatch.delenv(schedule_runs.GIT_HEAD_ENV, raising=False)
+    monkeypatch.setattr(schedule_runs, "_git_head", lambda: "c" * 40)
+    assert schedule_runs.runtime() == {"image": None, "head": "c" * 40}
+    # Empty, as the image's build arguments leave them when not given.
+    monkeypatch.setenv(schedule_runs.IMAGE_TAG_ENV, "")
+    monkeypatch.setenv(schedule_runs.GIT_HEAD_ENV, "")
+    assert schedule_runs.runtime() == {"image": None, "head": "c" * 40}
 
 
 def test_cli_schedule_runs_and_daily_exit_codes(monkeypatch, capsys):
