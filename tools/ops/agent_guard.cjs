@@ -63,11 +63,18 @@ function segments(command, shell = 'bash') {
   const out = [];
   let raw = '';
   let bare = '';
+  let last = ''; // last character of `bare`: reading bare[bare.length - 1] flattens it, quadratic
   const heredocs = [];
+  const add = (r, b = r) => {
+    raw += r;
+    bare += b;
+    if (b) last = b[b.length - 1];
+  };
   const flush = () => {
     if (raw.trim()) out.push({ raw: raw.trim(), bare: bare.trim() });
     raw = '';
     bare = '';
+    last = '';
   };
   const escape = shell === 'powershell' ? '`' : '\\';
   let i = 0;
@@ -75,8 +82,7 @@ function segments(command, shell = 'bash') {
     const ch = command[i];
     const rest = command.slice(i);
     if (ch === escape) {
-      raw += command.slice(i, i + 2);
-      bare += command.slice(i, i + 2);
+      add(command.slice(i, i + 2));
       i += 2;
       continue;
     }
@@ -84,28 +90,25 @@ function segments(command, shell = 'bash') {
     if (here) {
       const close = command.indexOf(`\n${here[1]}@`, i);
       const end = close < 0 ? command.length : close + 3;
-      raw += command.slice(i, end);
-      bare += '""';
+      add(command.slice(i, end), '""');
       i = end;
       continue;
     }
     if (ch === "'" || ch === '"') {
       let j = i + 1;
       while (j < command.length && command[j] !== ch) j += ch === '"' && command[j] === escape ? 2 : 1;
-      raw += command.slice(i, j + 1);
-      bare += ch + ch;
+      add(command.slice(i, j + 1), ch + ch);
       i = j + 1;
       continue;
     }
     const heredoc = shell === 'bash' && /^<<(-?)\s*(['"]?)([A-Za-z_][\w-]*)\2/.exec(rest);
     if (heredoc) {
       heredocs.push({ strip: heredoc[1] === '-', word: heredoc[3] });
-      raw += '<<' + heredoc[3];
-      bare += '<<' + heredoc[3];
+      add('<<' + heredoc[3]);
       i += heredoc[0].length;
       continue;
     }
-    if (ch === '#' && /(^|\s)$/.test(bare)) {
+    if (ch === '#' && (last === '' || /\s/.test(last))) {
       while (i < command.length && command[i] !== '\n') i += 1;
       continue;
     }
@@ -128,8 +131,7 @@ function segments(command, shell = 'bash') {
       i += command[i + 1] === ch ? 2 : 1;
       continue;
     }
-    raw += ch;
-    bare += ch;
+    add(ch);
     i += 1;
   }
   flush();
@@ -254,7 +256,7 @@ function envNamesIn(dir) {
 
 // .env files under `root`, skipping the paths in `skip` and .git (links not followed); 'too
 // large' past WALK_LIMIT entries or below WALK_DEPTH levels, where the walk cannot vouch.
-function envFilesUnder(root, skip = new Set()) {
+function envFilesUnder(root, skip = new Set(), limit = WALK_LIMIT) {
   const found = [];
   let seen = 0;
   const walk = (dir, depth) => {
@@ -266,7 +268,7 @@ function envFilesUnder(root, skip = new Set()) {
     }
     for (const entry of entries) {
       seen += 1;
-      if (seen > WALK_LIMIT) return false;
+      if (seen > limit) return false;
       const full = path.join(dir, entry.name);
       if (skip.has(full)) continue;
       if (entry.isFile() && isEnvName(entry.name)) found.push(full);
@@ -315,6 +317,7 @@ const RECURSIVE_READERS = [
   [/^(?:rg|ripgrep)$/i, /^(?:-[A-Za-z]*(?:u[A-Za-z]*u|\.)[A-Za-z]*|--hidden|--no-ignore[\w-]*)$/],
   [/^git$/i, /^--(?:no-index|untracked)$/, /^grep$/],
   [/^find$/i, /^-(?:exec|execdir|ok|okdir)$/],
+  [/^(?:fd|fdfind)$/i, /^(?:-[A-Za-z]*[xX]|--exec(?:-batch)?)$/],
   [/^findstr$/i, /^\/s$/i],
   [/^(?:cp|Copy-Item|copy|cpi)$/i, /^(?:-[A-Za-z]*[rRa][A-Za-z]*|--recursive|--archive|-rec\w*)$/i],
   [/^(?:robocopy|xcopy|tar|zip|7z|Compress-Archive|rsync|scp)$/i, null],
@@ -328,9 +331,10 @@ const PIPE_READERS = /^(?:Select-String|sls|Get-Content|gc|cat|type|Copy-Item|cp
 const COMPOSE_CONFIG = /(?:^|[\s(])(?:docker(?:\.exe)?\s+(?:compose|stack)|docker-compose)\b.*\s(?:config|convert)(?=\s|$)/i;
 const CHDIR = /^(?:cd|pushd|Set-Location|sl|chdir)$/i;
 const INTERPRETER = /^(?:python[\d.]*|py|node|deno|bun|bash|sh|zsh|pwsh|powershell|ruby|perl|php)(?:\.exe)?$/i;
-// powershell -EncodedCommand (and its -e/-ec/-enc abbreviations) hides the script in base64.
+// powershell -EncodedCommand (and its -e/-ec/-enc abbreviations, with -, -- or / in front)
+// hides the script in base64; a quoted '-enc ...' passed on (Start-Process -ArgumentList) too.
 const POWERSHELL = /^(?:pwsh|powershell)(?:\.exe)?$/i;
-const ENCODED = /^-(?:e|ec|en\w*)$/i;
+const ENCODED = /^(?:--?|\/)(?:e|ec|en\w*)(?=\s|$)/i;
 
 // The target of `file` with links and 8.3 short names (ENV~1) resolved, or null.
 function realName(file) {
@@ -382,12 +386,24 @@ function envSegmentDenial(segment, shell, ctx) {
   return null;
 }
 
+// Past these sizes the checks could outrun the hook timeout, and Claude Code runs a call whose
+// hook timed out (checked by hand, #353): block instead. Heredoc bodies count only toward the
+// first; they are dropped before the per-word checks.
+const MAX_COMMAND = 5000000;
+const MAX_CHECKED = 100000;
+const TOO_LONG = '命令太長，hook 無法在逾時前檢查完；長內容請先用 Write 寫檔';
+
 // The reason a Bash/PowerShell command is blocked, or null. `cwd` is the session's directory.
 function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd()) {
+  if (command.length > MAX_COMMAND) return `擋下：${TOO_LONG}（${command.length} 字元，上限 ${MAX_COMMAND}）`;
   const list = segments(command, shell);
+  const checked = list.reduce((sum, s) => sum + s.raw.length, 0);
+  if (checked > MAX_CHECKED) return `擋下：${TOO_LONG}（heredoc 以外 ${checked} 字元，上限 ${MAX_CHECKED}）`;
   const ctx = { cwd: normalizeTarget(cwd), piped: false };
+  const heads = list.map((s) => words(s.raw, shell)[0]?.text || '');
+  const lastReader = heads.findLastIndex((head) => PIPE_READERS.test(head));
   // Heredoc and here-string bodies are dropped from segments; fed to an interpreter they are code.
-  const script = list.find((s) => INTERPRETER.test(path.basename(normalizeTarget(words(s.raw, shell)[0]?.text || ''))));
+  const script = list.find((s, i) => INTERPRETER.test(path.basename(normalizeTarget(heads[i]))));
   const inBody = script && !allow.some((re) => re.test(script.raw)) && envMention(command);
   if (inBody) return `擋下「${script.raw}」：${ENV_REASON}（交給直譯器的內容提到 ${inBody}）。真的需要時請使用者執行`;
   for (const [index, segment] of list.entries()) {
@@ -400,7 +416,7 @@ function commandDenial(command, shell = 'bash', allow = ALLOW, cwd = process.cwd
         );
       }
     }
-    ctx.piped = list.slice(index + 1).some((later) => PIPE_READERS.test(words(later.raw, shell)[0]?.text || ''));
+    ctx.piped = index < lastReader;
     const reason = envSegmentDenial(segment, shell, ctx);
     if (reason) return `擋下「${segment.raw}」：${reason}。真的需要時請使用者執行`;
     const [head, ...rest] = words(segment.raw, shell).map((w) => w.text);
@@ -453,13 +469,27 @@ function grepDenial(tool, cwd) {
   return searchDenial([root], { ignored: true, keep });
 }
 
-// Every string in a tool input that names a .env file (MCP tools take paths under many keys).
-function envInInput(value) {
-  if (typeof value === 'string') return envMention(value);
-  if (value && typeof value === 'object') {
-    for (const item of Object.values(value)) {
-      const named = envInInput(item);
-      if (named) return named;
+// Upload and MCP tools take local paths under keys of their own, relative to the session cwd or
+// to their `root`/`localDir`: every string is judged by name and, when it is an existing path,
+// by the file it names (links, 8.3 short names). Too many strings block (hook timeout).
+const MAX_STRINGS = 5000;
+function uploadDenial(tool, cwd) {
+  const strings = [];
+  const collect = (value) => {
+    if (typeof value === 'string') strings.push(value);
+    else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+  };
+  collect(tool);
+  if (strings.length > MAX_STRINGS) return `${ENV_REASON}；輸入有 ${strings.length} 個字串，hook 無法在逾時前檢查完`;
+  const base = normalizeTarget(cwd || process.cwd());
+  const bases = [base, ...[tool.root, tool.localDir].filter((b) => typeof b === 'string' && b).map((b) => path.resolve(base, normalizeTarget(b)))];
+  for (const text of strings) {
+    const named = envMention(text);
+    if (named) return `${named}：${ENV_REASON}`;
+    if (!text || text.length > 1024 || /[\r\n\0]/.test(text)) continue;
+    for (const dir of bases) {
+      const real = realName(path.resolve(dir, normalizeTarget(text)));
+      if (real && isEnvName(path.basename(real))) return `${text} 就是 ${real}：${ENV_REASON}`;
     }
   }
   return null;
@@ -514,11 +544,13 @@ const TEXT_FIELDS = ['file_path', 'notebook_path', 'path', 'glob', 'type', 'patt
 const UPLOADERS = /^(?:Artifact|ArtifactData|DesignSync|mcp__codebase-memory-mcp__.*)$/;
 
 function denial(input) {
-  if (!input || typeof input !== 'object') throw new TypeError('hook input is not an object');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('hook input is not an object');
   const tool = input.tool_input ?? {};
-  if (typeof tool !== 'object') throw new TypeError('tool_input is not an object');
+  if (typeof tool !== 'object' || Array.isArray(tool)) throw new TypeError('tool_input is not an object');
   const name = input.tool_name;
-  if (!UPLOADERS.test(name || '')) {
+  if (typeof name !== 'string') throw new TypeError('tool_name is not a string');
+  if (input.cwd != null && typeof input.cwd !== 'string') throw new TypeError('cwd is not a string');
+  if (!UPLOADERS.test(name)) {
     for (const field of TEXT_FIELDS) {
       if (tool[field] != null && typeof tool[field] !== 'string') throw new TypeError(`tool_input.${field} is not a string`);
     }
@@ -544,9 +576,7 @@ function denial(input) {
         ? commandDenial(tool.command, name === 'PowerShell' ? 'powershell' : 'bash', ALLOW, input.cwd || process.cwd())
         : null;
     default: {
-      if (!UPLOADERS.test(name || '')) return null;
-      const named = envInInput(tool);
-      return named ? `${named}：${ENV_REASON}` : null;
+      return UPLOADERS.test(name) ? uploadDenial(tool, input.cwd) : null;
     }
   }
 }
@@ -568,4 +598,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { ALLOW, commandDenial, denial, envMention, normalizeTarget, segments };
+module.exports = { ALLOW, commandDenial, denial, envFilesUnder, envMention, normalizeTarget, segments };

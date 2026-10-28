@@ -10,7 +10,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { after, before, describe, test } = require('node:test');
 
-const { commandDenial, denial, normalizeTarget } = require('./agent_guard.cjs');
+const { commandDenial, denial, envFilesUnder, normalizeTarget, segments } = require('./agent_guard.cjs');
 
 const SCRIPT = path.join(__dirname, 'agent_guard.cjs');
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -431,6 +431,11 @@ describe('.env rules', () => {
       ['stdin that is not JSON', 'not json'],
       ['tool_input that is not an object', { tool_name: 'Read', tool_input: 'x' }],
       ['Read file_path of the wrong type', { tool_name: 'Read', tool_input: { file_path: 42 } }],
+      ['JSON null', 'null'],
+      ['JSON array', '[]'],
+      ['tool_input that is an array', { tool_name: 'Read', tool_input: [] }],
+      ['tool_name that is not a string', { tool_name: 5, tool_input: {} }],
+      ['cwd that is not a string', { tool_name: 'Read', tool_input: { file_path: 'a.md' }, cwd: 5 }],
     ]) {
       const result = hook(input);
       assert.equal(result.code, 2, label);
@@ -460,14 +465,47 @@ describe('.env rules', () => {
     allowed({ tool_name: 'ArtifactData', tool_input: { url, action: 'get', collection: 'c', doc_id: 'd' } });
   });
 
-  test('a short 8.3 name of a .env file is blocked', { skip: process.platform !== 'win32' && 'Windows only' }, (t) => {
-    const file = path.join(plain, '.env');
+  // Aliases of plain/.env: its 8.3 short name (Windows) and a link (where links can be made).
+  test('uploads through a short name or a link to a .env file are blocked', (t) => {
+    const aliases = [];
+    const short = shortName(path.join(plain, '.env'));
+    if (short) aliases.push(short);
+    const link = path.join(tmp, 'upload-link.txt');
+    try {
+      fs.symlinkSync(path.join(plain, '.env'), link);
+      aliases.push(link);
+    } catch {
+      // no symlink permission (Windows without developer mode)
+    }
+    if (!aliases.length) {
+      t.skip('neither 8.3 names nor symlinks here');
+      return;
+    }
+    const url = 'https://claude.ai/artifact/x';
+    for (const alias of aliases) {
+      const name = path.basename(alias);
+      blocked({ tool_name: 'Artifact', tool_input: { url, asset: true, file_path: alias } });
+      blocked({ tool_name: 'Artifact', tool_input: { file_path: 'page.html', root: path.dirname(alias), files: { 'n.txt': name } } });
+      blocked({ tool_name: 'ArtifactData', tool_input: { url, action: 'set', collection: 'c', doc_id: 'd', file_path: name }, cwd: path.dirname(alias) });
+      blocked({ tool_name: 'DesignSync', tool_input: { method: 'write_files', localDir: path.dirname(alias), files: [{ path: 'a', localPath: name }] } });
+    }
+    allowed({ tool_name: 'Artifact', tool_input: { url, asset: true, file_path: path.join(clean, 'a.py') } });
+  });
+
+  // The 8.3 short name of `file` (Windows), or null when the volume has none.
+  const shortName = (file) => {
+    if (process.platform !== 'win32') return null;
     const result = spawnSync('cmd.exe', ['/d', '/s', '/c', `"for %I in ("${file}") do @echo %~sI"`], {
       encoding: 'utf8',
       windowsVerbatimArguments: true,
     });
     const short = result.stdout.trim();
-    if (result.status !== 0 || !short || path.basename(short).toLowerCase() === '.env') {
+    return result.status === 0 && short && path.basename(short) !== path.basename(file) ? short : null;
+  };
+
+  test('a short 8.3 name of a .env file is blocked', { skip: process.platform !== 'win32' && 'Windows only' }, (t) => {
+    const short = shortName(path.join(plain, '.env'));
+    if (!short) {
       t.skip('8.3 names are off on this volume');
       return;
     }
@@ -483,6 +521,15 @@ describe('.env rules', () => {
     assert.ok(commandDenial('find . -name "*.txt" -execdir grep TOKEN {} ;', 'bash', [], plain));
     assert.equal(commandDenial('git grep TOKEN', 'bash', [], repo), null, 'tracked files only');
     assert.equal(commandDenial('find . -type f -exec cat {} +', 'bash', [], clean), null);
+    assert.equal(commandDenial('git diff --no-index a.txt b.txt', 'bash', [], repo), null, 'not git grep');
+  });
+
+  test('fd -x/-X/--exec are recursive reads', () => {
+    for (const command of ['fd -H -x cat', 'fd -HX cat', 'fd --exec cat', 'fd -t f --exec-batch grep TOKEN']) {
+      assert.ok(commandDenial(command, 'bash', [], plain), command);
+    }
+    assert.equal(commandDenial('fd -H -x cat', 'bash', [], clean), null);
+    assert.equal(commandDenial('fd -e py', 'bash', [], plain), null, 'names only');
   });
 
   test('a Grep walk that cannot finish blocks; node_modules counts unless git ignores it', () => {
@@ -492,6 +539,9 @@ describe('.env rules', () => {
     const modules = path.join(tmp, 'modules');
     fake(path.join(modules, 'node_modules', 'pkg', '.env'));
     blocked({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: modules } });
+    for (let i = 0; i < 6; i += 1) fs.writeFileSync(path.join(clean, `f${i}.txt`), 'x\n');
+    assert.equal(envFilesUnder(clean, undefined, 5), 'too large', 'past the entry limit');
+    assert.deepEqual(envFilesUnder(clean, undefined, 50), [], 'under the entry limit');
     fake(path.join(repo, 'node_modules', 'pkg', '.env'));
     fs.appendFileSync(path.join(repo, '.gitignore'), 'node_modules/\n');
     allowed({ tool_name: 'Grep', tool_input: { pattern: 'TOKEN', path: repo } });
@@ -503,14 +553,35 @@ describe('.env rules', () => {
       ['bash', 'pwsh -NoProfile -EncodedCommand SQBFAFgA'],
       ['bash', 'powershell.exe -e SQBFAFgA'],
       ['powershell', 'pwsh -ec SQBFAFgA'],
+      ['powershell', 'powershell /enc SQBFAFgA'],
+      ['bash', 'pwsh --EncodedCommand SQBFAFgA'],
+      ['powershell', "Start-Process powershell -ArgumentList '-enc SQBFAFgA'"],
     ]) {
       assert.ok(commandDenial(command, shell, [], clean), command);
     }
     assert.equal(commandDenial('powershell -NoProfile -ExecutionPolicy Bypass -File x.ps1', 'bash', [], clean), null);
   });
 
+  // Claude Code runs a call whose hook timed out, so the checks must finish well inside it.
+  test('long commands finish fast: no quadratic scan, and the size caps block', () => {
+    const start = Date.now();
+    segments(`echo ${'a#'.repeat(100000)}`);
+    assert.ok(Date.now() - start < 1500, `segments of 200k a#: ${Date.now() - start} ms`);
+    for (const command of [`echo ${'a#'.repeat(100000)}`, 'true; '.repeat(100000), `echo ${'x'.repeat(6000000)}`]) {
+      const t0 = Date.now();
+      assert.match(commandDenial(command, 'bash', [], clean), /命令太長/);
+      assert.ok(Date.now() - t0 < 3000, `${command.length} chars: ${Date.now() - t0} ms`);
+    }
+    const heredoc = "cat > a.txt <<'EOF'\n" + 'line of text\n'.repeat(80000) + 'EOF';
+    assert.equal(commandDenial(heredoc, 'bash', [], clean), null, 'a long heredoc body is not checked word by word');
+    const huge = "cat > a.txt <<'EOF'\n" + 'l\n'.repeat(3000000) + 'EOF';
+    assert.match(commandDenial(huge, 'bash', [], clean), /命令太長/, 'past 5 MB with the heredoc body');
+  });
+
   test('.claude/settings.json routes every file-reading tool to this script', () => {
     const settings = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude', 'settings.json'), 'utf8'));
+    const [{ timeout }] = settings.hooks.PreToolUse[0].hooks;
+    assert.ok(Number.isFinite(timeout) && timeout >= 30, `explicit hook timeout: ${timeout}`);
     const matcher = new RegExp(`^(?:${settings.hooks.PreToolUse[0].matcher})$`);
     for (const tool of [...MATCHED_TOOLS, 'mcp__codebase-memory-mcp__search_code', 'mcp__codebase-memory-mcp__get_code_snippet']) {
       assert.ok(matcher.test(tool), tool);
