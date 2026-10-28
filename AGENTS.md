@@ -76,6 +76,7 @@
 | 不用裸 `git stash`、`git stash pop`、`git stash clear` | PreToolUse hook（Bash、PowerShell） | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
 | 不強推（含 `--force-with-lease`） | PreToolUse hook（Bash、PowerShell）；master 另有主線規則 | `tools/ops/agent_guard.cjs`、[主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026) |
 | 不刪資料目錄 | PreToolUse hook：遞迴刪除且命令含 `stock-lab-data`／`STOCK_DATA_DIR` | `tools/ops/agent_guard.cjs`、`.claude/settings.json` |
+| agent 不讀、不搜、不複製、不改 `.env`（檔名 `.env` 或不以 `.example` 結尾的 `.env.*`，任何目錄）；`.env.example` 放行（#353） | PreToolUse hook（Read、Edit、Write、NotebookEdit、Grep、Glob、codebase-memory、Bash、PowerShell）：路徑或命令提到 `.env`、glob 會展開到 `.env`、遞迴讀取的目錄底下有 `.env`（Grep 略過 git ignore 的）、`docker compose config`；node 測試 `.env rules` | `tools/ops/agent_guard.cjs`（`envFileDenial`、`grepDenial`、`envSegmentDenial`）、`.claude/settings.json`、`tools/ops/agent_guard.test.cjs`、`docs/GITHUB_WORKFLOW.md`（任務流程第 3 步） |
 | 經 PR、只用 merge commit、CI `required` 綠才合併 | 主線規則 | [主線規則](https://github.com/YiCheng0608/stock-lab/rules/24769026) |
 | 合併後刪遠端 branch | GitHub repo 設定 `delete_branch_on_merge=true` | repo 設定（`gh api repos/YiCheng0608/stock-lab --jq .delete_branch_on_merge`） |
 | 依分流決定是否建 Issue | 部分：第 1、2 類由 CI `pr` 規則 a、d | `docs/GITHUB_WORKFLOW.md`（分流） |
