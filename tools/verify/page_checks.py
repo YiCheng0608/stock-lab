@@ -29,7 +29,7 @@ tables without the evidence, for runs on private data) and prints one line per c
 Exit 0 when no check failed (a matching ``KNOWN_FAILURES`` entry may fail; with
 ``--fixture`` no check may be 無法判定 either), 1 when one did, 2 when the
 features files and ``CHECKS``/``MANUAL`` disagree or ``--g7`` finds the program
-is not committed on origin/master.
+is not the committed tip of G7_REF (the release branch).
 """
 
 from __future__ import annotations
@@ -57,6 +57,8 @@ SKILL = ROOT / ".claude" / "skills" / "verify-stock-lab"
 FEATURES = SKILL / "features"
 SCREENSHOT = ROOT / "tools" / "ops" / "screenshot.cjs"
 PAGES = ("today", "news", "themes", "stocks", "actions")
+# The branch the scheduled jobs run during the V1 acceptance window (docs/OPERATIONS.md §6).
+G7_REF = "origin/release/v1"
 TAIPEI = timezone(timedelta(hours=8))
 
 
@@ -2259,7 +2261,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--g7",
         action="store_true",
-        help="refuse unless the program is committed on origin/master (G7 evidence)",
+        help="refuse unless HEAD is the committed tip of G7_REF (G7 evidence)",
     )
     args = parser.parse_args(argv)
     if not args.api or not args.web:
@@ -2378,22 +2380,23 @@ def program() -> str:
 
 
 def g7_problems() -> list[str]:
-    """Why this checkout cannot give G7 evidence: it must be master's committed code (#251)."""
+    """Why this checkout cannot give G7 evidence: it must be the committed program the
+    schedule runs, the tip of the release branch (#251, #288)."""
 
     try:
         dirty = dirty_files()
         head = git("rev-parse", "HEAD").stdout.strip()
-        ancestor = git(
-            "merge-base", "--is-ancestor", head, "origin/master", check=False
-        )
+        release = git("rev-parse", "--verify", "--quiet", G7_REF, check=False)
     except (OSError, subprocess.CalledProcessError) as error:
         return [f"git 不可用：{error}"]
     problems = []
     if dirty:
         problems.append(f"工作樹有未 commit 的檔：{'、'.join(dirty)}")
-    if ancestor.returncode != 0:
+    tip = release.stdout.strip()
+    if head != tip:
         problems.append(
-            f"HEAD {head[:7]} 不在 origin/master 上（先 git fetch origin master，從它建 worktree）"
+            f"HEAD {head[:7]} 不是 {G7_REF}（{tip[:7] or '不存在'}）："
+            f"先 git fetch origin {G7_REF.removeprefix('origin/')}，從它建 worktree"
         )
     return problems
 
