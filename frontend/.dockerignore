@@ -1,0 +1,12 @@
+# Build context of frontend/Dockerfile (#334): sources and the lock file, without secrets,
+# installed dependencies or build output at any depth (the dev and build stages COPY . .).
+# frontend/docker/context_check.sh fails when one of these reaches the image.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/node_modules
+**/dist
+**/.vite
+**/*.tsbuildinfo
+**/*.log
