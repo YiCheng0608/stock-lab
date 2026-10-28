@@ -1,0 +1,12 @@
+{
+  "status": "success",
+  "date": "2026-10-28",
+  "plans_checked": 3,
+  "sessions_written": 3,
+  "transition_conflicts": 0,
+  "transitions": {
+    "pending->invalidated": 1,
+    "pending->triggered": 1
+  },
+  "records": 3
+}
