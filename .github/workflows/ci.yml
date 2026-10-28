@@ -225,6 +225,29 @@ jobs:
       - name: build context
         run: bash frontend/docker/context_check.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # docker-compose.yml and docker-compose.dev.yml (#335): tools/compose/smoke.sh builds the
+  # images, then in both topologies (nginx web; Vite web calling the api) checks health, writes
+  # sent as a browser sends them (2xx) and from a foreign Origin (403), the ports the entrypoint
+  # refuses, the api's restart, the scheduler's serve, and that the env file reaches the api and
+  # the scheduler while both still start without one.
+  compose:
+    name: compose
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # shell: bash runs with -o pipefail, so a failing script piped to tee fails its step.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - run: docker compose version
+      - name: smoke
+        run: bash tools/compose/smoke.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The five main pages end to end on the fixture database (tools/verify/page_checks.py, #243):
   # API and vite preview on local ports, Chrome screenshots, every features check labeled CI.
   # Only the pages the change needs (tools/verify/verify_plan.py, #245); with none, every later
@@ -317,7 +340,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [changes, repository, pr, backend, docker, frontend, frontend-image, verify]
+    needs: [changes, repository, pr, backend, docker, frontend, frontend-image, compose, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -339,5 +362,8 @@ jobs:
               assert required in ('true', 'false'), jobs
               expected = 'success' if required == 'true' else 'skipped'
               assert jobs[job]['result'] == expected, jobs
+          flags = jobs['changes']['outputs']
+          compose = 'success' if 'true' in (flags.get('python'), flags.get('frontend')) else 'skipped'
+          assert jobs['compose']['result'] == compose, jobs
           print('All applicable CI checks passed; local QA is a separate requirement.')
           PY
