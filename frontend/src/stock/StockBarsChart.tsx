@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactEChartsModule from 'echarts-for-react'
 
-import { Card, DateBadge, EmptyState, Skeleton, Table, Tabs, tabPanelId } from '../components/ui'
-import type { StockBarsInterval, StockBarsResponse } from '../types'
+import { Card, DataTable, DateBadge, EmptyState, Skeleton, Tabs, tabPanelId, type Column } from '../components/ui'
+import { formatDay } from '../dates'
+import type { StockBarRow, StockBarsInterval, StockBarsResponse } from '../types'
 import {
   INDICATOR_PANELS,
   INTERVALS,
@@ -59,6 +60,20 @@ function indicatorSourceLabel(response: StockBarsResponse): string {
   if (response.interval === 'week') return '週線依日線聚合後即時計算'
   const computedAt = formatTaipeiDateTime(response.indicators.computed_at)
   return computedAt ? `日線批次計算於 ${computedAt}（台灣時間）` : '日線批次尚未計算'
+}
+
+// Prices and moving averages share the latest close's tick decimals (DESIGN_SYSTEM §3).
+function barColumns(digits: number): ReadonlyArray<Column<StockBarRow>> {
+  const price = (field: 'open' | 'high' | 'low' | 'close') => (bar: StockBarRow) => isDrawableBar(bar) ? formatPrice(bar[field], digits) : ''
+  return [
+    { key: 'date', header: '日期', cell: (bar) => `${formatDay(bar.date) ?? bar.date}${bar.is_suspended ? '（停牌）' : ''}` },
+    { key: 'open', header: '開', num: true, cell: price('open') },
+    { key: 'high', header: '高', num: true, cell: price('high') },
+    { key: 'low', header: '低', num: true, cell: price('low') },
+    { key: 'close', header: '收', num: true, cell: price('close') },
+    { key: 'volume', header: '成交量', num: true, cell: (bar) => isDrawableBar(bar) ? formatBarVolume(bar) : '' },
+    ...MA_LINES.map((line): Column<StockBarRow> => ({ key: line.field, header: line.label, num: true, cell: (bar) => typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : '' })),
+  ]
 }
 
 export function StockBarsChart({
@@ -161,21 +176,12 @@ export function StockBarsChart({
             </div>
             <details className="details chart-data-table">
               <summary>查看圖表資料表（最近 30 根）</summary>
-              <Table note="單位：價格與均線為各標的報價幣別的元；成交量為張。空白表示來源未提供、停牌或指標無資料。">
-                <thead><tr><th>日期</th><th className="num">開</th><th className="num">高</th><th className="num">低</th><th className="num">收</th><th className="num">成交量</th>{MA_LINES.map((line) => <th className="num" key={line.field}>{line.label}</th>)}</tr></thead>
-                <tbody>{data.bars.slice(-30).reverse().map((bar) => {
-                  const drawable = isDrawableBar(bar)
-                  return <tr key={bar.date}>
-                    <td>{bar.date}{bar.is_suspended ? '（停牌）' : ''}</td>
-                    <td className="num">{drawable ? formatPrice(bar.open, digits) : ''}</td>
-                    <td className="num">{drawable ? formatPrice(bar.high, digits) : ''}</td>
-                    <td className="num">{drawable ? formatPrice(bar.low, digits) : ''}</td>
-                    <td className="num">{drawable ? formatPrice(bar.close, digits) : ''}</td>
-                    <td className="num">{drawable ? formatBarVolume(bar) : ''}</td>
-                    {MA_LINES.map((line) => <td className="num" key={line.field}>{typeof bar[line.field] === 'number' ? formatPrice(bar[line.field], digits) : ''}</td>)}
-                  </tr>
-                })}</tbody>
-              </Table>
+              <DataTable
+                note="單位：價格與均線為各標的報價幣別的元；成交量為張。空白表示來源未提供、停牌或指標無資料。"
+                columns={barColumns(digits)}
+                rows={data.bars.slice(-30).reverse()}
+                rowKey={(bar) => bar.date}
+              />
             </details>
           </>
         )}

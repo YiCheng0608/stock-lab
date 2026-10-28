@@ -12,6 +12,7 @@ replays one of these with the run's values.
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 
 import pytest
@@ -65,7 +66,7 @@ TODAY_PAGE = (
 def _run(tmp_path, payloads=None, pages=None, facts=None):
     base = {
         "dashboard": DASHBOARD,
-        "themes?board=industry&limit=10": EMPTY_BOARD,
+        "themes?board=industry&limit=5": EMPTY_BOARD,
         "themes?board=industry&limit=100": EMPTY_BOARD,
         "candidates": CANDIDATES,
     }
@@ -137,10 +138,11 @@ def test_a_failure_after_a_failed_check_of_the_same_rows_is_undetermined(
         "candidates": {
             **CANDIDATES,
             "candidate_count": 1,
-            "items": [{"instrument": {"symbol": "2301"}, "components": {}}],
+            "items": [{"rank": 1, "instrument": {"symbol": "2301"}, "components": {}}],
         }
     }
-    pages = {"today-1280": "明日候選\n資料 2026/10/22\n1 檔\n"}
+    # The row is there (#276 table) but its detail lost the 來源 line.
+    pages = {"today-1280": "明日候選\n資料 2026/10/22\n1 檔\n#1\t2301 光寶科\n"}
     _only(monkeypatch, "today", "T7", "T8")
     t7, t8 = page_checks.run_page(_run(tmp_path, payloads, pages), "today", [])
     assert (t7.status, t8.status) == ("失敗", "無法判定")
@@ -166,7 +168,7 @@ def test_a_different_failure_of_a_known_check_fails(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("today", "T6"),
-        page_checks.Known(issue, "卡片沒有 `AI 推論`"),
+        page_checks.Known(issue, "卡片沒有 `AI 推論`", "2026-11-20"),
     )
     _only(monkeypatch, "today", "T6")
     (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
@@ -180,7 +182,7 @@ def test_the_known_failure_itself_stays_known(tmp_path, monkeypatch):
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("today", "T6"),
-        page_checks.Known("#233", "缺新聞標題整行"),
+        page_checks.Known("#233", "缺新聞標題整行", "2026-11-20"),
     )
     _only(monkeypatch, "today", "T6")
     (t6,) = page_checks.run_page(_t6_run(tmp_path), "today", [])
@@ -243,18 +245,68 @@ def test_zero_candidates_fail_when_the_db_has_them(tmp_path):
         page_checks.t7(run)
 
 
+class CopyRun(FakeRun):
+    """Reads its facts with db_facts.py from a DB file, as the real run does."""
+
+    facts = page_checks.Run.facts
+
+
+def test_a_copy_without_a_current_version_run_runs_to_the_end(tmp_path, monkeypatch):
+    # #307: the #306 copy had only candidate_score_v1 runs, and the first
+    # run.facts() raised TypeError, so no check of any page had a result.
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE candidate_runs (id INTEGER PRIMARY KEY, trading_date TEXT,"
+            " score_version TEXT, candidate_count INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO candidate_runs VALUES (1, ?, 'candidate_score_v1', 20)", (DAY,)
+        )
+    conn.close()
+    payloads = {
+        "candidates": {"status": "not_computed", "trading_date": None, "items": []},
+        "actions?limit=20": {
+            "items": [],
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": [{"tier": 1, "label": "今日候選", "shown": 0}]},
+        },
+        "actions?tier=0&limit=100": {"items": []},
+    }
+    pages = {
+        "today-1280": "明日候選\n尚無候選清單\n",
+        "actions-1280": "第 1 級\n今日候選\n顯示 0／0 檔\n",
+    }
+    run = CopyRun(tmp_path, payloads, pages)
+    run.db = db
+    _only(monkeypatch, "today", "T7")
+    _only(monkeypatch, "actions", "A8")
+    t7, a8 = [
+        *page_checks.run_page(run, "today", []),
+        *page_checks.run_page(run, "actions", []),
+    ]
+    assert (t7.status, a8.status) == ("通過", "通過")
+    assert "DB 也沒有當日候選" in t7.detail
+    assert "沒有今日候選列" in a8.detail
+    facts = json.loads((tmp_path / "out" / "facts.json").read_text(encoding="utf-8"))
+    assert (
+        facts["candidate_run_latest_trading_date"],
+        facts["candidate_count_latest"],
+    ) == (None, None)
+
+
 def test_actions_without_cards_fail_when_the_api_has_items(tmp_path):
     payloads = {
         "actions?limit=20": {"items": [{}, {}, {}], "meta": {"data_as_of": DAY}}
     }
-    page = "我的庫存\n尚未建立庫存。\n第 1 頁 · 本頁 3 筆 · 共 3 筆\n"
+    page = "我的庫存\n尚未建立庫存。\n第 1 級\n今日候選\n顯示 3／3 檔\n"
     run = _run(tmp_path, payloads, {"actions-1280": page})
     with pytest.raises(
-        page_checks.Fail, match="actions.json items 3，頁面沒有任何行動卡"
+        page_checks.Fail, match="actions.json items 3，頁面沒有任何行動列"
     ):
         page_checks.a4(run)
-    # A5 looks for what must be absent; a page without cards proves nothing.
-    with pytest.raises(page_checks.Undetermined, match="頁面沒有行動卡"):
+    # A5 looks for what must be absent; a page without rows proves nothing.
+    with pytest.raises(page_checks.Undetermined, match="頁面沒有行動列"):
         page_checks.a5(run)
 
 
@@ -419,3 +471,75 @@ def test_the_news_sample_pages_back_to_the_data_date(tmp_path):
     }
     sample = page_checks.news_sample(_run(tmp_path, payloads))
     assert [item["id"] for item in sample["items"]] == ["1"]
+
+
+def _action_item(symbol, tier, rank=None):
+    return {
+        "instrument": {
+            "exchange": "TWSE",
+            "symbol": symbol,
+            "instrument_type": "stock",
+        },
+        "tier": tier,
+        "candidate": {"rank": rank, "total_score": 0.5} if rank else None,
+    }
+
+
+def test_a_held_candidate_is_not_missing_from_todays_candidates(tmp_path):
+    """#301 review M1: holding the rank-2 candidate moves it to tier 0."""
+
+    held = _action_item("2302", 0)
+    rows = [_action_item(f"23{n:02d}", 1, n) for n in range(1, 21) if n != 2]
+    tiers = [
+        {"tier": 0, "label": "持倉風險", "shown": 1},
+        {"tier": 1, "label": "今日候選", "shown": 19},
+    ]
+    payloads = {
+        # The first page: the holding, then 19 of the 20 candidates.
+        "actions?limit=20": {
+            "items": [held, *rows],
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": tiers},
+        },
+        "actions?tier=0&limit=100": {"items": [held]},
+    }
+    page = (
+        "第 0 級\n持倉風險\n顯示 1／1 檔\n第 1 級\n今日候選\n顯示 19／19 檔\n"
+        + "".join(f"#{n}\t23{n:02d} 名稱\n" for n in range(1, 21) if n != 2)
+    )
+    run = _run(tmp_path, payloads, {"actions-1280": page})
+    assert "去掉持倉" in page_checks.a8(run)
+
+
+def test_a_tier_without_rows_on_the_first_page_shows_its_first_rows(tmp_path):
+    """#301 review M2: tier 2 loads its first five rows when tier 1 fills page 1."""
+
+    rows = [_action_item(f"23{n:02d}", 1, n) for n in range(1, 21)]
+    preview = [_action_item(f"24{n:02d}", 2) for n in range(1, 6)]
+    tiers = [
+        {"tier": 1, "label": "今日候選", "shown": 20},
+        {"tier": 2, "label": "其他成立條件", "shown": 50},
+    ]
+    payloads = {
+        "actions?limit=20": {
+            "items": rows,
+            "meta": {"data_as_of": DAY},
+            "summary": {"tiers": tiers},
+        },
+        "actions?tier=2&limit=5": {"items": preview},
+    }
+    row = "\t2026/10/22\t策略總表 →\n"
+    page = (
+        "第 1 級\n今日候選\n顯示 20／20 檔\n"
+        + "".join(f"#{n}\t23{n:02d} 名稱{row}" for n in range(1, 21))
+        + "第 2 級\n其他成立條件\n顯示 5／50 檔\n"
+        + "".join(f"24{n:02d} 名稱{row}" for n in range(1, 6))
+        + "顯示更多（還有 45 檔）\n"
+    )
+    run = _run(tmp_path, payloads, {"actions-1280": page})
+    assert "其他成立條件 `顯示 5／50 檔`" in page_checks.a3(run)
+    assert page_checks.a4(run).startswith("25 列")
+    # The first page alone is not what the page shows: an empty tier 2 fails.
+    empty = page.replace("顯示 5／50 檔", "顯示 0／50 檔")
+    with pytest.raises(page_checks.Fail, match="顯示 5／50 檔"):
+        page_checks.a3(_run(tmp_path, payloads, {"actions-1280": empty}))

@@ -32,16 +32,24 @@ from app.domain import (
     CANDIDATE_NOTE_PROMPT_VERSION,
     CANDIDATE_SCORE,
     CANDIDATE_SCORE_VERSION,
-    CANONICAL_CONFIGS,
     GROUP_SCORE_WEIGHTS,
     HOT_GROUP_CONFIG,
     HOT_GROUP_VERSION,
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     PLAN_TRACKING_VERSION,
     SIGNAL_CONFIDENCE_SEMANTICS,
+    STRATEGY_LEVELS_VERSION,
+    RuleEvaluation,
     calculate_group_score,
-    canonical_config_snapshot,
 )
+from app.strategies import (
+    REGISTRY,
+    NextSessionInputs,
+    StrategyInputs,
+    canonical_config_snapshot,
+    canonical_configs,
+)
+from app.strategies import levels as strategy_levels
 from app.indicators import (
     FIELDS,
     INDICATOR_VERSION,
@@ -96,6 +104,11 @@ TWSE_DAILY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_A
 TPEX_DAILY_ENDPOINT = (
     "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
 )
+TWSE_MI_INDEX_ENDPOINT = (
+    "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
+    f"?date={TRADING_DATE:%Y%m%d}&type=ALLBUT0999&response=json"
+)
+TPEX_HIGHLIGHT_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/tpex_mainborad_highlight"
 OFFICIAL_INDUSTRY_SOURCE = "TWSE/TPEx official OpenAPI"
 
 # id, exchange, symbol, name, type, etf_category, industry code, listing date
@@ -534,6 +547,18 @@ def _score_rows() -> list[dict[str, Any]]:
                 if ranked
                 else []
             )
+            # Per-member excess returns spread around the group's (#280 member table).
+            member_returns = [
+                {
+                    "instrument_id": INSTRUMENT_IDS[symbol],
+                    "exchange": SYMBOL_EXCHANGE[symbol],
+                    "symbol": symbol,
+                    "excess_return_5d": round(relative["5d"] + 0.01 * (1 - index), 6),
+                    "excess_return_20d": round(relative["20d"] + 0.02 * (1 - index), 6),
+                }
+                for index, symbol in enumerate(members)
+                if ranked
+            ]
             rows.append(
                 {
                     "id": next_id,
@@ -558,6 +583,8 @@ def _score_rows() -> list[dict[str, Any]]:
                         "candidate_identity_version": "instrument-id-v1",
                         "candidate_instruments": candidates,
                         "candidate_symbols": [item["symbol"] for item in candidates],
+                        "member_return_identity_version": "instrument-id-v1",
+                        "member_returns": member_returns,
                         "minimum_candidate_policy": [2, 4],
                         "normalized_values": normalized,
                         "institutional_flow_coverage": {
@@ -599,7 +626,7 @@ def _strategy_rows() -> list[dict[str, Any]]:
             "active": True,
             "created_at": CREATED_AT,
         }
-        for key, config in CANONICAL_CONFIGS.items()
+        for key, config in canonical_configs().items()
     ]
 
 
@@ -722,6 +749,87 @@ def _signal_rows() -> list[dict[str, Any]]:
     return rows
 
 
+def _strategy_level_rows() -> list[dict[str, Any]]:
+    """strategy_levels of every signal (#274), computed by the strategies' own
+    formulas from the series: T's evaluation, the next session's close and
+    volume, and the compact condition list the levels step stores."""
+
+    rows = []
+    for signal in _signal_rows():
+        symbol = next(
+            s for s, i in INSTRUMENT_IDS.items() if i == signal["instrument_id"]
+        )
+        instrument = next(row for row in _INSTRUMENTS if row[2] == symbol)
+        strategy = REGISTRY[
+            next(
+                k for k, v in STRATEGY_IDS.items() if v == signal["strategy_version_id"]
+            )
+        ]
+        bars = SERIES[symbol]
+        evidence = signal["rule_evidence_json"]["inputs"]
+        inputs = StrategyInputs(
+            bar_count=evidence["bar_count_60d"],
+            close=bars[-1]["close"],
+            volume=bars[-1]["volume"],
+            ma20=evidence["ma20"],
+            ma60=evidence["ma60"],
+            atr14=None,
+            prior_highs=evidence["prior_20_highs"],
+            prior_volumes=evidence["prior_20_volumes"],
+            group_excess_return_20d=evidence["group_excess_return_20d"],
+            institutional_flow_ratio_5d=evidence[
+                "institutional_flow_to_turnover_ratio_5d"
+            ],
+            margin_change_ratio_5d=evidence["margin_balance_change_ratio_5d"],
+        )
+        evaluation = (
+            RuleEvaluation(True, "passed")
+            if signal["status"] == "conditional"
+            else strategy.evaluate(inputs)
+        )
+        observation = strategy.observation_levels(
+            NextSessionInputs(
+                instrument_type=instrument[4],
+                etf_category=instrument[5],
+                bar_count=inputs.bar_count,
+                is_suspended=False,
+                close=inputs.close,
+                atr14=None,
+                closes=tuple(bar["close"] for bar in bars[-59:]),
+                highs=tuple(bar["high"] for bar in bars[-20:]),
+                volumes=tuple(bar["volume"] for bar in bars[-20:]),
+                group_excess_return_20d=inputs.group_excess_return_20d,
+                institutional_flow_ratio_5d=inputs.institutional_flow_ratio_5d,
+                margin_change_ratio_5d=inputs.margin_change_ratio_5d,
+            )
+        )
+        conditions = [
+            *strategy_levels.common_conditions(
+                instrument_type=instrument[4],
+                etf_category=instrument[5],
+                bar_count=inputs.bar_count,
+                is_suspended=False,
+                evaluation=evaluation,
+            ),
+            *strategy.conditions(inputs, evaluation, observation),
+        ]
+        rows.append(
+            {
+                "id": signal["id"],
+                "signal_id": signal["id"],
+                "levels_version": STRATEGY_LEVELS_VERSION,
+                **strategy_levels.as_json(observation),
+                "next_session_date": NEXT_SESSION,
+                "conditions_json": strategy_levels.compact_conditions(
+                    strategy, conditions
+                ),
+                "price_basis": strategy_levels.PRICE_BASIS_SIGNAL_DAY,
+                "computed_at": COLLECTED_AT,
+            }
+        )
+    return rows
+
+
 # ---- runs and payloads ----
 
 
@@ -823,6 +931,65 @@ def _raw_payload_rows() -> list[dict[str, Any]]:
         raw(
             5, 1, "mops", "https://example.net/mops/material-information", T.isoformat()
         ),
+        raw(6, 1, "twse", TWSE_MI_INDEX_ENDPOINT, T.isoformat()),
+        raw(7, 1, "tpex", TPEX_HIGHLIGHT_ENDPOINT, T.isoformat()),
+    ]
+
+
+# ---- market summaries (dashboard.market_overview, Issue #275) ----
+
+
+def _market_summary_rows() -> list[dict[str, Any]]:
+    """Both exchanges on T with invented values; TPEx has no 無比價 count."""
+
+    common = {"trading_date": T, "data_as_of": T.isoformat()}
+    return [
+        {
+            "id": 1,
+            "exchange": "TWSE",
+            **common,
+            "index_name": "發行量加權股價指數",
+            "index_close": 24012.35,
+            "index_change": -118.4,
+            "index_change_pct": -0.0049,
+            "change_pct_method": "official",
+            "turnover": 412345678901,
+            "turnover_scope": "twse_all_securities",
+            "advancers": 312,
+            "decliners": 655,
+            "unchanged": 98,
+            "limit_up": 4,
+            "limit_down": 2,
+            "unmatched": 9,
+            "not_comparable": 1,
+            "breadth_scope": "twse_stocks",
+            "source": "twse_mi_index",
+            "collected_at": COLLECTED_AT,
+            "raw_payload_id": 6,
+        },
+        {
+            "id": 2,
+            "exchange": "TPEx",
+            **common,
+            "index_name": "櫃買指數",
+            "index_close": 251.2,
+            "index_change": 1.6,
+            "index_change_pct": 0.00641,
+            "change_pct_method": "derived",
+            "turnover": 98765000000,
+            "turnover_scope": "tpex_stocks",
+            "advancers": 420,
+            "decliners": 380,
+            "unchanged": 61,
+            "limit_up": 7,
+            "limit_down": 1,
+            "unmatched": 22,
+            "not_comparable": None,
+            "breadth_scope": "tpex_stocks",
+            "source": "tpex_mainborad_highlight",
+            "collected_at": COLLECTED_AT,
+            "raw_payload_id": 7,
+        },
     ]
 
 
@@ -1526,6 +1693,7 @@ def _tracking_plan_session_rows() -> list[dict[str, Any]]:
 TABLES: dict[str, list[dict[str, Any]]] = {
     "ingestion_runs": _ingestion_rows(),
     "raw_payloads": _raw_payload_rows(),
+    "market_summaries": _market_summary_rows(),
     "instruments": _instrument_rows(),
     "strategy_versions": _strategy_rows(),
     "theme_groups": GROUPS,
@@ -1536,6 +1704,7 @@ TABLES: dict[str, list[dict[str, Any]]] = {
     "data_quality": _data_quality_rows(),
     "group_daily_scores": _score_rows(),
     "signals": _signal_rows() + _plan_signal_rows(),
+    "strategy_levels": _strategy_level_rows(),
     "news_items": _news_rows(),
     "news_llm_results": _llm_rows(),
     "theme_suggestions": _suggestion_rows(),
@@ -1594,6 +1763,10 @@ OMITTED_TABLES: dict[str, str] = {
     "signal_evaluations": "較早的訊號只當追蹤計畫的來源；系統訊號追蹤不在五頁顯示",
     "signal_settlements": "同 signal_evaluations",
     "technical_features": "舊版特徵表；K 線與指標讀 technical_indicators",
+    "trading_calendar_days": (
+        "休市表只給 analyze 推算規則最早執行日；API 不讀，"
+        "假資料的訊號直接寫好 earliest_execution_date"
+    ),
 }
 
 # ---- expected API results per main page ----
@@ -1633,10 +1806,22 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),  # 4 conditional entries (one is the ETF) + held 9102
         ("dashboard", "actions", 7),
         ("dashboard", "action_counts.held", 1),
-        ("themes?board=industry&limit=10", "meta.trading_date", D),
-        ("themes?board=industry&limit=10", "items", 2),
-        ("themes?board=industry&limit=10", "items.0.theme_id", TOP_THEME),
-        ("themes?board=industry&limit=10", "items.0.display_name", "半導體"),
+        ("dashboard", "market_overview.trading_date", D),
+        (
+            "dashboard",
+            "market_overview.exchanges[].status",
+            ["available", "available"],
+        ),
+        ("dashboard", "market_overview.exchanges.0.turnover.value", 412345678901),
+        (
+            "dashboard",
+            "market_overview.exchanges[].turnover.scope_label",
+            ["集中市場總計（含 ETF、權證等）", "上櫃股票"],
+        ),
+        ("themes?board=industry&limit=5", "meta.trading_date", D),
+        ("themes?board=industry&limit=5", "items", 2),
+        ("themes?board=industry&limit=5", "items.0.theme_id", TOP_THEME),
+        ("themes?board=industry&limit=5", "items.0.display_name", "半導體"),
         ("candidates", "status", "success"),
         ("candidates", "trading_date", D),
         ("candidates", "candidate_count", 3),
@@ -1688,11 +1873,27 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"themes/{BIOTECH_ID}", "members_total", 1),
         (f"themes/{COMPUTER_ID}", "members_total", 3),
         (f"themes/{TOP_THEME}", "trend", 5),
-        (f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=price", "meta.total", 3),
         (
-            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=price",
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "meta.total",
+            3,
+        ),
+        # By turnover on T, largest first (#280).
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
             "items[].symbol",
             ["9101", "9102", "9201"],
+        ),
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "items[].candidate_rank",
+            [1, None, 3],
+        ),
+        # The held 9102 is near a breakout (the action list's tier 3 rule, #277-B).
+        (
+            f"themes/{TOP_THEME}/members?page=1&page_size=30&sort=turnover",
+            "items[].near",
+            [False, True, False],
         ),
     ],
     "stocks": [
@@ -1715,6 +1916,24 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         (f"stocks/{E}/{S}", "news", 1),
         (f"stocks/{E}/{S}", "candidate.rank", 1),
         (f"stocks/{E}/{S}", "candidate.open_plan_id", 1),
+        # The strategy board (#274): signal levels for the breakout, strategy_levels for the pullback.
+        (f"stocks/{E}/{S}", "strategy_board.as_of", D),
+        (f"stocks/{E}/{S}", "strategy_board.candidate.rank", 1),
+        (
+            f"stocks/{E}/{S}",
+            "strategy_board.strategies[].status",
+            ["conditional", "observation"],
+        ),
+        (
+            f"stocks/{E}/{S}",
+            "strategy_board.strategies[].levels.kind",
+            ["actionable", "observation"],
+        ),
+        (
+            "stocks/{}/{}".format(*NO_DATA_STOCK),
+            "strategy_board.strategies[].status",
+            ["data_incomplete", "data_incomplete"],
+        ),
         (f"stocks/{E}/{S}", "decision_summary.action_state", "conditional_entry"),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars", SESSION_COUNT),
         (f"stocks/{E}/{S}/bars?interval=day&limit=250", "bars.-1.date", D),
@@ -1729,11 +1948,42 @@ EXPECTED: dict[str, list[tuple[str, str, Any]]] = {
         ),
     ],
     "actions": [
-        ("actions?limit=20", "meta.total", 7),
-        ("actions?limit=20", "items", 7),
-        ("actions?limit=20", "items.0.instrument.symbol", "9102"),  # the held position
+        # action_tier_v1 (#278): the held 9102, then the three candidates by rank, then
+        # the two observations near a breakout (tier 3, #277-B) by price gap; the
+        # default view hides the ETF's conditional breakout.
+        ("actions?limit=20", "meta.total", 6),
+        (
+            "actions?limit=20",
+            "items[].instrument.symbol",
+            ["9102", "9101", "9103", "9201", "9202", "9203"],
+        ),
+        ("actions?limit=20", "items[].tier", [0, 1, 1, 1, 3, 3]),
+        ("actions?limit=20", "items[].candidate.rank", [None, 1, 2, 3, None, None]),
+        (
+            "actions?limit=20",
+            "items[].nearness.near",
+            [None, None, None, None, True, True],
+        ),
+        ("actions?limit=20", "items.4.nearness.strategy", "breakout_v1"),
+        ("actions?limit=20", "items.4.nearness.unmet[].short_label", ["價格", "量能"]),
+        (
+            "actions?limit=20",
+            "items.4.nearness.met_short_labels",
+            ["族群", "法人", "融資"],
+        ),
         ("actions?limit=20", "summary.held", 1),
-        ("actions?limit=20", "summary.actionable", 5),
+        ("actions?limit=20", "summary.tier_version", "action_tier_v1"),
+        ("actions?limit=20", "summary.tiers[].shown", [1, 3, 0, 2, 0, 0]),
+        (
+            "actions?limit=20",
+            "summary.hidden",
+            {"etf": 1, "observation": 0, "data_insufficient": 0},
+        ),
+        ("actions?limit=20&view=all&include_etf=true", "meta.total", 7),
+        # A tier's first rows (the page's preview of a tier missing from page 1)
+        # and every holding (A8 drops held candidates).
+        ("actions?tier=1&limit=5", "items[].candidate.rank", [1, 2, 3]),
+        ("actions?tier=0&limit=100", "items[].instrument.symbol", ["9102"]),
         ("portfolio?page=1&page_size=20", "pagination.total", 1),
         ("portfolio?page=1&page_size=20", "items", 1),
         (f"actions/{E}/{S}", "decision_summary.action_state", "conditional_entry"),

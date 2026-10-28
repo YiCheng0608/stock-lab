@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Link, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 
 import {
   deletePortfolio,
-  getAction,
   getActions,
   getCandidates,
   getBackfillRuns,
@@ -38,13 +37,16 @@ import {
 } from './api'
 import type {
   ActionSummary,
+  ActionView,
+  ActionsResponse,
+  BackfillRun,
   BacktestSummary,
-  CursorMeta,
   Dashboard,
   DataQualityRow,
   GlossaryTerm,
   GroupDetail,
   GroupMember,
+  IngestionRun,
   InstrumentDetail,
   Pagination,
   Position,
@@ -56,49 +58,48 @@ import type {
   StockBarsInterval,
   StockBarsResponse,
   ThemeBoard,
+  ThemeMemberSort,
   ProductTime,
 } from './types'
 import { commitSearchOnEnter } from './search'
 import { GLOSSARY } from './glossary'
+import { formatDay, formatTaipeiDay, formatTaipeiMinute } from './dates'
 import { formatPortfolioValue, formatPositionValuation, formatLocalPositionValuation, formatPortfolioClose, formatQuoteRecord, portfolioValueFromText } from './portfolioValues'
-import { formatTableNumber, formatTableVolume, formatTableChip, formatShareLots, formatSignedShareLots, formatSourceAwareShareLots, formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
-import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelObservationZoneLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, signalConfidenceLabel, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, stopPriceFieldLabel, type ProductQualityKind } from './presentation'
+import { formatFixed, formatTableNumber, formatTableVolume, formatTableVolumeShares, formatTableChip,formatShareQuantity, formatPositionShares, positionQuantityFromText, isVerifiedChipFlowSource, isVerifiedMarginSource, isVerifiedShareSource, type ShareUnit } from './units'
+import { officialEventDisplayTitle, formatProductTimeRole, levelFieldLabel, levelSemanticsLabel, productActionReasonLabel, productQualityLabel, productResearchDescription, productTimeRoleDateTime, staleCloseDateLabel, stockDirectoryActionLabel, stockDirectoryQualityLabel, stockGroupLabel, type ProductQualityKind } from './presentation'
 import { Shell } from './components/Shell'
-import { Card, EmptyState, Skeleton, Tabs, tabId, tabPanelId } from './components/ui'
+import { Term } from './components/Term'
+import { Card, CardList, DataTable, EmptyState, Skeleton, Tabs, cx, tabId, tabPanelId, type Column } from './components/ui'
 import { StockBarsChart } from './stock/StockBarsChart'
+import { priceDigits } from './stock/stockBars'
+import { StockCutoffControl } from './stock/StockCutoffControl'
 import { StockHeader } from './stock/StockHeader'
+import { StrategyBoardPanel } from './stock/StrategyBoardPanel'
 import { StrategyVersionList, backtestGroupKey } from './components/StrategyVersionCard'
 import { HotGroupsSection, ThemeDetailView, ThemesBoardView } from './themes/ThemeViews'
 import { ThemeSuggestionsSection, type SuggestionNewsState } from './themes/ThemeSuggestionViews'
 import { THEME_SUGGESTION_LIMIT } from './themes/themeSuggestions'
-import { CandidatesSection, StockCandidatePanel } from './candidates/CandidateViews'
+import { CandidatesSection } from './candidates/CandidateViews'
 import { StockPlanPanel, TrackingClientProvider, TrackingSection, type TrackingClient } from './tracking/TrackingViews'
-import { MEMBER_PAGE_SIZE, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, parseBoard } from './themes/themeBoards'
+import { DEFAULT_MEMBER_SORT, THEME_BOARD_LIMIT, THEME_NEWS_LIMIT, TODAY_BOARD_LIMIT, memberQuery, parseBoard } from './themes/themeBoards'
 import { NewsCard, NewsDetailView, NewsListView, StockNewsTimeline } from './news/NewsViews'
+import { HoldingAlert, MarketOverviewView, TodayHeader } from './today/TodayViews'
 import { newsListParams, newsPageSearch, parseNewsTab, stockNewsParams, type NewsFilters } from './news/newsView'
+import { ACTIONS_PAGE_LIMIT, ACTION_STATE_LABELS, ACTION_TIER_PREVIEW, DEFAULT_ACTION_VIEW, previewTiers, stockResearchPath, tierSections } from './actions/actionTiers'
+import { ActionFilters, ActionTierList } from './actions/ActionViews'
+import { STOCK_TABS, parseStockTab, stockTabSearch, type StockTab } from './stock/stockTabs'
 
+// Fixed decimals (DESIGN_SYSTEM §3): rule levels and ratios 2, counts 0, a stock's own price by its tick.
 function formatNumber(value: unknown, digits = 2): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toLocaleString('zh-TW', { maximumFractionDigits: digits })
-    : '未提供'
-}
-
-function formatPercent(value: unknown, digits = 2): string {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? (value * 100).toFixed(digits)
-    : '未提供'
+  return typeof value === 'number' && Number.isFinite(value) ? formatFixed(value, digits) : '未提供'
 }
 
 function formatSignedNumber(value: unknown, digits = 2): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '未提供'
-  const formatted = formatNumber(Math.abs(value), digits)
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
+  return typeof value === 'number' && Number.isFinite(value) ? formatFixed(value, digits, true) : '未提供'
 }
 
 function formatSignedPercent(value: unknown, digits = 2): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '未提供'
-  const formatted = formatPercent(Math.abs(value), digits)
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
+  return typeof value === 'number' && Number.isFinite(value) && Number.isFinite(value * 100) ? `${formatFixed(value * 100, digits, true)}%` : '未提供'
 }
 
 function compactText(value: string | null | undefined, maxLength = 120): string | null {
@@ -110,16 +111,9 @@ function compactText(value: string | null | undefined, maxLength = 120): string 
 
 function formatTaiwanDateTime(value: string | null | undefined, dateOnly = false): string {
   if (!value) return '未提供'
-  const normalized = /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z'
-  const parsed = new Date(normalized)
-  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10)
-  return new Intl.DateTimeFormat('zh-TW', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    ...(dateOnly ? {} : { hour: '2-digit', minute: '2-digit' }),
-  }).format(parsed)
+  // A plain trading date is a calendar day, not an instant.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDay(value) ?? value
+  return (dateOnly ? formatTaipeiDay(value) : formatTaipeiMinute(value)) ?? formatDay(value) ?? value
 }
 
 const statusNames: Record<string, string> = {
@@ -149,17 +143,6 @@ const statusNames: Record<string, string> = {
   unknown: '未知',
 }
 
-const actionNames: Record<string, string> = {
-  conditional_entry: '條件進場',
-  wait_breakout: '等待突破',
-  wait_pullback: '等待回踩',
-  hold_observe: '持有觀察',
-  reduce_exit: '庫存風險：減碼／退場條件',
-  data_insufficient: '策略判斷資料待補',
-  no_condition: '暫無研究條件',
-  manual_review: '需人工判讀',
-}
-
 function statusLabel(status: string | null | undefined): string {
   return statusNames[status ?? 'unknown'] ?? '待確認'
 }
@@ -169,7 +152,7 @@ function uiStatusLabel(status: string | null | undefined): string {
 }
 
 function actionLabel(state: string): string {
-  return actionNames[state] ?? '待判定'
+  return ACTION_STATE_LABELS[state] ?? '待判定'
 }
 
 function sourceLabel(source: string | null | undefined | readonly string[]): string {
@@ -216,20 +199,6 @@ function strategyLabel(strategy: string | null | undefined): string {
 function priceChangeTone(value: number | null | undefined): 'positive' | 'negative' | '' {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return ''
   return value > 0 ? 'positive' : 'negative'
-}
-
-function chipSourceHasShareUnit(source: string | null | undefined): boolean {
-  return isVerifiedChipFlowSource(source)
-}
-
-function formatChipFlow(value: number | null, source: string | null | undefined): string {
-  if (value == null) return '未提供'
-  return chipSourceHasShareUnit(source) ? formatSignedShareLots(value) : `${formatSignedNumber(value)}（單位待提供）`
-}
-
-function formatChipMarginChange(value: number | null, source: string | null | undefined): string {
-  if (value == null) return '未提供'
-  return isVerifiedMarginSource(source) ? `${formatSignedNumber(value)} 張` : `${formatSignedNumber(value)}（單位待提供）`
 }
 
 const fieldNames: Record<string, string> = {
@@ -388,88 +357,8 @@ function DirectoryPagination({ meta, onPageChange }: { meta: Record<string, unkn
   )
 }
 
-function CursorControls({ meta, page, itemCount, onNext, onPrevious, onReset }: { meta: CursorMeta; page: number; itemCount: number; onNext: (cursor: string) => void; onPrevious: () => void; onReset: () => void }) {
-  if (!meta.total && !meta.has_more && !meta.next_cursor && page === 1) return <div className="empty">沒有符合條件的資料。</div>
-  return (
-    <div className="pagination-controls">
-      <span>第 {page} 頁 · 本頁 {itemCount} 筆{meta.total == null ? '' : ` · 共 ${meta.total.toLocaleString()} 筆`}</span>
-      <div>
-        <button type="button" className="secondary-button" disabled={page <= 1} onClick={onPrevious}>上一頁</button>
-        <button type="button" className="secondary-button" disabled={!meta.next_cursor} onClick={() => meta.next_cursor && onNext(meta.next_cursor)}>下一頁</button>
-        <button type="button" className="secondary-button" disabled={page <= 1} onClick={onReset}>回到第一頁</button>
-      </div>
-    </div>
-  )
-}
-
-function Term({ id, children }: { id: string; children?: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const term = GLOSSARY.find((item) => item.term_id === id)
-  useEffect(() => {
-    if (!open) return
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-        buttonRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open])
-  if (!term) return <span>{children ?? id}</span>
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="term-button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            setOpen(true)
-          }
-        }}
-      >
-        {children ?? term.name}
-      </button>
-      {open && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
-          <section className="glossary-modal" role="dialog" aria-modal="true" aria-label={term.name} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="position-head"><strong>{term.name}</strong><button type="button" className="secondary-button" onClick={() => { setOpen(false); buttonRef.current?.focus() }}>關閉</button></div>
-            <p><b>白話定義：</b>{term.plain_definition.replaceAll('外陸資', '外資')}</p>
-            <p><b>用途：</b>{term.use}</p>
-            <p><b>如何解讀：</b>{term.how_to_read}</p>
-            <p><b>限制：</b>{term.limitations}</p>
-          </section>
-        </div>
-        )}
-    </>
-  )
-}
-
 function actionPath(action: ActionSummary): string {
-  return '/actions/' + encodeURIComponent(action.instrument.exchange) + '/' + encodeURIComponent(action.instrument.symbol)
-}
-
-function importantActionLevel(action: ActionSummary): string | null {
-  if (['data_insufficient', 'data_incomplete', 'insufficient_data', 'no_condition', 'manual_review'].includes(action.action_state)) return null
-  if (action.action_state === 'conditional_entry') {
-    const levels = [
-      action.trigger_price == null ? null : levelFieldLabel('trigger_price', action.level_semantics) + ' ' + formatNumber(action.trigger_price),
-      action.invalid_price == null ? null : levelFieldLabel('invalid_price', action.level_semantics) + ' ' + formatNumber(action.invalid_price),
-    ].filter(Boolean)
-    return levels.length ? levels.join('／') : null
-  }
-  if (action.action_state === 'wait_breakout' && action.trigger_price != null) return levelFieldLabel('trigger_price', action.level_semantics) + ' ' + formatNumber(action.trigger_price)
-  if (action.action_state === 'wait_pullback' && (action.entry_low != null || action.entry_high != null)) {
-    return levelObservationZoneLabel(action.level_semantics) + ' ' + formatNumber(action.entry_low) + '～' + formatNumber(action.entry_high)
-  }
-  if (['hold_observe', 'reduce_exit'].includes(action.action_state) && action.stop_price != null) return stopPriceFieldLabel(action.stop_price_semantics) + ' ' + formatNumber(action.stop_price)
-  return null
+  return stockResearchPath(action.instrument.exchange, action.instrument.symbol)
 }
 
 function ProductTimeSummary({
@@ -513,72 +402,22 @@ export function CompactActionCard({ action }: { action: ActionSummary }) {
   const title = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
   const validChange = validRead && price !== null && typeof action.price_change === 'number' && Number.isFinite(action.price_change)
     && typeof action.price_change_pct === 'number' && Number.isFinite(action.price_change_pct) && Number.isFinite(action.price_change_pct * 100)
+  // Change keeps the close's tick decimals (DESIGN_SYSTEM §3).
+  const digits = priceDigits(price, instrument.instrument_type)
   const change = validChange
-    ? `漲跌（元／%） ${formatSignedNumber(action.price_change)}（${formatSignedPercent(action.price_change_pct)}）`
+    ? `漲跌（元） ${formatSignedNumber(action.price_change, digits)}（${formatSignedPercent(action.price_change_pct)}）`
     : '漲跌待核實'
   return (
     <Link className="panel compact-action-card" to={actionPath(action)} aria-label={`${instrument.symbol} ${title}`}>
       <div className="position-head"><span className="symbol-link"><strong>{instrument.symbol}</strong> {instrument.name}</span><span className="pill action-status-pill">{title}</span></div>
       <div className="small-note">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
       {action.position_quantity_status === 'unknown' && <span className="pill ambiguous">庫存數量待核實</span>}
-      <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={priceChangeTone(validChange ? action.price_change : null)}>{change}</span></div>
+      <div className="compact-price" style={{ minWidth: 0, flexWrap: 'wrap' }}><div style={{ minWidth: 0, flex: '1 1 140px', overflowWrap: 'anywhere' }}><span className="compact-label">最近收盤（報價幣別元）</span><strong>{price !== null ? formatNumber(price, digits) : '待核實'}</strong></div><span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }} className={cx('compact-change', priceChangeTone(validChange ? action.price_change : null))}>{change}</span></div>
       {explicitRead && !validRead && read?.status !== 'missing' && <div className="small-note">行情讀值無效，先核對原記錄。</div>}
       {read?.status === 'missing' && <div className="small-note">尚無行情記錄。</div>}
       <div className="small-note">資料日 {formatTaiwanDateTime(action.data_cutoff ?? action.price_as_of, true)}</div>
       <span className="compact-detail-link">查看個股詳情 →</span>
     </Link>
-  )
-}
-
-function ProductActionCard({ action }: { action: ActionSummary }) {
-  const instrument = action.instrument
-  const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
-  const actionTitle = incomplete ? '策略判斷資料待補' : action.display_action || actionLabel(action.action_state)
-  const visibleMissing = action.missing_data_priority.slice(0, 4)
-  const remainingMissing = action.missing_data_priority.slice(4)
-  const showLevels = ['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit'].includes(action.action_state)
-  const primaryConfidenceSemantics = action.strategies.find((strategy) => strategy.strategy === action.primary_strategy)?.confidence_semantics ?? action.strategies[0]?.confidence_semantics
-  return (
-    <article className="panel action-card">
-      <div className="position-head">
-        <Link to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)} className="symbol-link">
-          <strong>{instrument.symbol}</strong> {instrument.name}
-        </Link>
-        <span className="pill action-status-pill">{actionTitle}</span>
-      </div>
-      {incomplete && <div className="action-state">目前無法產生研究動作</div>}
-      {action.action_state === 'conditional_entry' && action.primary_strategy && <div className="action-state">今日{strategyLabel(action.primary_strategy)}成立</div>}
-      <div className="small-note">{instrument.exchange} · {instrumentTypeLabel(instrument.instrument_type)}</div>
-      {action.position_quantity_status === 'unknown' && <div className="small-note"><span className="pill ambiguous">庫存數量待核實</span> 庫存數量待核實，先核對原記錄。</div>}
-      <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
-      {action.primary_strategy && <div className="small-note">主條件：{strategyLabel(action.primary_strategy)}{action.alternative_strategies.length ? ' · 替代：' + action.alternative_strategies.map(strategyLabel).join('、') : ''}</div>}
-      <div className="action-instruction">{action.display_instruction ?? action.action_instruction ?? (incomplete ? '現在：先不行動' : actionLabel(action.action_state))}</div>
-      {action.current_price != null && <div className="metric-row"><span>最近收盤／漲跌幅（報價幣別元／%，{formatTaiwanDateTime(action.price_as_of, true)}）</span><b>{formatNumber(action.current_price)}{action.price_change_pct != null ? ' · ' + formatSignedPercent(action.price_change_pct) : ' · 漲跌幅待核實'}</b></div>}
-      {incomplete ? (
-        <div className="data-gap">{productActionReasonLabel(action.data_gap ?? '研究資料尚未完整，尚不能計算進場、失效與目標價。')}</div>
-      ) : showLevels ? (
-        <><p className="small-note">價位單位：各標的報價幣別的元；風險報酬比為倍。</p><div className="level-grid">
-          {['conditional_entry', 'wait_breakout'].includes(action.action_state) && action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b>{formatNumber(action.trigger_price)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.primary_strategy === 'pullback_v1' && (action.entry_low != null || action.entry_high != null) && <div><span>{levelObservationZoneLabel(action.level_semantics)}</span><b>{formatNumber(action.entry_low)}～{formatNumber(action.entry_high)}</b></div>}
-          {action.action_state === 'wait_pullback' && action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b>{formatNumber(action.entry_low)}</b></div>}
-          {action.action_state === 'wait_pullback' && action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b>{formatNumber(action.entry_high)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.invalid_price != null && <div><span>{levelFieldLabel('invalid_price', action.level_semantics)}</span><b>{formatNumber(action.invalid_price)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.target_1 != null && <div><span>{levelFieldLabel('target_1', action.level_semantics)}</span><b>{formatNumber(action.target_1)}</b></div>}
-          {action.action_state === 'conditional_entry' && action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward, 2)}</b></div>}
-           {['hold_observe', 'reduce_exit'].includes(action.action_state) && action.stop_price != null && <div><span>{stopPriceFieldLabel(action.stop_price_semantics)}</span><b>{formatNumber(action.stop_price)}</b></div>}
-         </div></>
-       ) : null}
-      {(action.display_reasons ?? action.reasons).length > 0 && <ul className="reason-list">{(action.display_reasons ?? action.reasons).map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
-      {action.conflicts.length > 0 && <div className="warning-box">{action.conflicts.join('；')}</div>}
-      {visibleMissing.length > 0 && (
-        <div className="missing-list">
-          <div className="small-note">缺少資料與補齊優先級</div>
-          {visibleMissing.map((item) => <div key={item.field}><span>{fieldLabel(item.field)}</span><span className="pill priority-pill">{item.priority_label}</span></div>)}
-          {remainingMissing.length > 0 && <details className="technical-details"><summary>查看完整缺口（{remainingMissing.length} 項）</summary>{remainingMissing.map((item) => <div key={item.field}><span>{fieldLabel(item.field)}</span><span>{item.priority_label}</span></div>)}</details>}
-        </div>
-      )}
-      <details className="technical-details"><summary>技術資訊</summary><div>策略判斷資料：{productQualityLabel(action.data_quality, 'research')}</div><div>資料日：{formatTaiwanDateTime(action.data_cutoff, true)}</div><div>價位語意：{levelSemanticsLabel(action.level_semantics)}</div>{action.strategies.length > 0 && <div>訊號信心欄位：{signalConfidenceLabel(primaryConfidenceSemantics)}</div>}{action.stop_price_semantics?.kind === 'user_position_risk_input' && <div>風險價來源：庫存設定，不是規則失效參考價。</div>}<div>策略結果與官方行情、籌碼來源已保留供稽核。</div></details>
-    </article>
   )
 }
 
@@ -593,42 +432,41 @@ export function TodayPage() {
   const [board, setBoard] = useState<ThemeBoard>('industry')
   const hotGroups = useQuery({ queryKey: ['theme-board', board, TODAY_BOARD_LIMIT], queryFn: () => getThemeBoard(board, TODAY_BOARD_LIMIT) })
   const candidates = useQuery({ queryKey: ['candidates', 'latest'], queryFn: () => getCandidates() })
+  const data = query.data
   const homeActions = Array.from(new Map(
-    [...(query.data?.actions ?? []), ...(query.data?.candidates ?? [])]
+    [...(data?.actions ?? []), ...(data?.candidates ?? [])]
       .filter((action) => action.action_state !== 'data_insufficient' || action.held === true || action.position_quantity_status === 'unknown')
       .map((action) => [`${action.instrument.exchange}:${action.instrument.symbol}:${action.as_of ?? ''}`, action] as const),
   ).values())
+  const modeLabel = !data ? '' : data.mode === 'official' ? '官方單日快照' : data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'
+  // PRODUCT_SPEC §2: header line → market overview → holding-risk alert → candidates → groups and news → watched stocks.
   return (
     <div className="page home-page">
-      <section className="hero home-hero">
-        <span className="hero-glow hero-glow-primary" aria-hidden="true" />
-        <span className="hero-glow hero-glow-accent" aria-hidden="true" />
-        <div className="hero-text">
-          <div className="eyebrow">今日市場</div>
-          <h1>今日<span className="gradient-text">市場</span>總覽</h1>
-          <p>掌握公告、熱門族群與關注標的。</p>
-        </div>
-        <Card as="div" className="hero-card" eyebrow="資料截至" title={<span className="hero-card-date">{query.data ? formatTaiwanDateTime(query.data.as_of, true) : '載入中…'}</span>}>
-          {query.data && <>
-            <div className="hero-card-source">{query.data.market.source_label ?? sourceLabel(query.data.market.source)}</div>
-            <div className={'hero-card-mode ' + query.data.mode}>
-              <strong>{query.data.mode === 'official' ? '官方單日快照' : query.data.mode === 'official_partial' ? '官方單日快照（資料仍待補）' : '尚無官方快照'}</strong>
-              <QualityBadge kind="market" status={query.data.data_quality.latest_run} />
-            </div>
-            <details className="data-explanation"><summary>資料說明</summary><span>{query.data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · {query.data.market.instruments.toLocaleString()} 檔標的 · {query.data.market.bars.toLocaleString()} 筆日行情 · {homeActions.length.toLocaleString()} 筆行動摘要</span></details>
-          </>}
-        </Card>
-      </section>
+      <TodayHeader
+        loading={query.isLoading}
+        asOf={data?.as_of}
+        sourceLabel={data ? data.market.source_label ?? sourceLabel(data.market.source) : ''}
+        modeLabel={modeLabel}
+        badge={data && <QualityBadge kind="market" status={data.data_quality.latest_run} />}
+        scopeText={data && `${data.scan_scope_label ?? '官方標的範圍；只有研究資料足夠的項目可進入行動摘要'} · ${data.market.instruments.toLocaleString()} 檔標的 · ${data.market.bars.toLocaleString()} 筆日行情 · ${homeActions.length.toLocaleString()} 筆行動摘要`}
+        overview={data?.market_overview}
+      />
     <QueryState loading={query.isLoading} error={query.error}>
-      {query.data && (
+      {data && (
         <>
-          <section className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2>今日市場／重大事件</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></section>
-          {query.data.news?.length ? <div className="news-cards">{query.data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
-          <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
+          <MarketOverviewView overview={data.market_overview} />
+          <HoldingAlert actions={data.holding_actions ?? data.actions ?? []} />
           <CandidatesSection data={candidates.data} loading={candidates.isLoading} error={candidates.error} />
+          <div className="home-columns">
+            <HotGroupsSection title={<Term id="hot_group">熱門族群</Term>} board={board} onBoardChange={setBoard} data={hotGroups.data} loading={hotGroups.isLoading} error={hotGroups.error} />
+            <section className="home-news" aria-labelledby="home-news-title">
+              <div className="section-head"><div><div className="eyebrow">市場基礎層 · 重大事件</div><h2 id="home-news-title">重點新聞</h2></div><Link to="/news" className="text-link">查看全部新聞</Link></div>
+              {data.news?.length ? <div className="news-list-compact">{data.news.slice(0, 3).map((item) => <NewsCard key={item.id} item={item} compact />)}</div> : <div className="empty panel">市場新聞區尚無可顯示內容。</div>}
+            </section>
+          </div>
           <section className="section-head"><div><div className="eyebrow">使用者行動</div><h2>關注標的</h2></div><Link to="/actions" className="text-link">查看行動中心</Link></section>
-          {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{query.data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
-          {query.data.data_quality.error && <div className="warning-box">官方擷取警告：{query.data.data_quality.error}</div>}
+          {homeActions.length ? <div className="action-grid">{homeActions.slice(0, 6).map((action) => <CompactActionCard key={action.instrument.exchange + action.instrument.symbol + (action.as_of ?? '')} action={action} />)}</div> : <div className="empty panel">{data.empty_states?.actions ?? '目前沒有可顯示的行動摘要。'}</div>}
+          {data.data_quality.error && <div className="warning-box">官方擷取警告：{data.data_quality.error}</div>}
         </>
       )}
     </QueryState>
@@ -673,13 +511,14 @@ function ThemesPage() {
 function ThemePage() {
   const { themeId = '' } = useParams()
   const [memberPage, setMemberPage] = useState(1)
+  const [memberSort, setMemberSort] = useState<ThemeMemberSort>(DEFAULT_MEMBER_SORT)
   useEffect(() => setMemberPage(1), [themeId])
   const detail = useQuery({ queryKey: ['theme', themeId], queryFn: () => getTheme(themeId), enabled: Boolean(themeId) })
   const detailBoard = detail.data?.board
   const board: ThemeBoard | null = detailBoard === 'industry' || detailBoard === 'theme' ? detailBoard : null
   // Rank, quality and the same-board percentiles come from the board itself (shared cache with /themes).
   const boardQuery = useQuery({ queryKey: ['theme-board', board, THEME_BOARD_LIMIT], queryFn: () => getThemeBoard(board as ThemeBoard), enabled: board !== null })
-  const members = useQuery({ queryKey: ['theme-members', themeId, memberPage], queryFn: () => getThemeMembers(themeId, { page: memberPage, page_size: MEMBER_PAGE_SIZE, sort: 'price' }), enabled: Boolean(themeId) })
+  const members = useQuery({ queryKey: ['theme-members', themeId, memberSort, memberPage], queryFn: () => getThemeMembers(themeId, memberQuery(memberPage, memberSort)), enabled: Boolean(themeId) })
   const news = useQuery({ queryKey: ['theme-news', themeId], queryFn: () => getNews({ theme_id: themeId, limit: THEME_NEWS_LIMIT }), enabled: Boolean(themeId) })
   if (detail.isLoading) return <Loading />
   if (detail.error) return <ErrorBox error={detail.error} />
@@ -688,18 +527,63 @@ function ThemePage() {
     detail={detail.data}
     board={{ data: boardQuery.data, loading: boardQuery.isLoading && board !== null, error: boardQuery.error }}
     members={{ data: members.data, loading: members.isLoading, error: members.error }}
+    memberSort={memberSort}
+    onMemberSortChange={(sort) => { setMemberSort(sort); setMemberPage(1) }}
     onMemberPageChange={setMemberPage}
     news={{ data: news.data, loading: news.isLoading, error: news.error }}
   />
 }
 
-function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
+function stockDirectoryColumns(dataAsOf: string | null): ReadonlyArray<Column<StockDirectoryRow>> {
+  const instrumentOf = (row: StockDirectoryRow) => row.instrument ?? row
+  return [
+    { key: 'symbol', header: '代號', cell: (row) => { const instrument = instrumentOf(row); return <Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link> } },
+    { key: 'name', header: '名稱', cell: (row) => instrumentOf(row).name },
+    { key: 'exchange', header: '交易所', wideOnly: true, cell: (row) => marketDisplayLabel(instrumentOf(row).exchange) },
+    { key: 'type', header: '類型', wideOnly: true, cell: (row) => instrumentTypeLabel(instrumentOf(row).instrument_type) },
+    {
+      // A column across stocks keeps two decimals (DESIGN_SYSTEM §3).
+      key: 'close', header: '最近收盤', num: true, cell: (row) => {
+        const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
+        return <>{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</>
+      },
+    },
+    { key: 'action', header: '目前研究動作', cell: (row) => stockDirectoryActionLabel(row.action_state, row.action_label_zh) },
+    { key: 'quality', header: '策略判斷資料', cell: (row) => <span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span> },
+  ]
+}
+
+const STOCK_DIRECTORY_NOTE = '單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。'
+const stockDirectoryKey = (row: StockDirectoryRow) => (row.instrument ?? row).exchange + (row.instrument ?? row).symbol
+
+// 640px and below (DESIGN_SYSTEM §5 個股清單, §5.1): symbol and name with the close → 市場 · 類型 → research action and data quality.
+function StockDirectoryCard({ row, dataAsOf }: { row: StockDirectoryRow; dataAsOf: string | null }) {
+  const instrument = row.instrument ?? row
+  const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
+  return (
+    <div className="stock-card">
+      <div className="stock-card-head">
+        <Link className="symbol-link stock-card-name" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol} {instrument.name}</Link>
+        <div className="stock-card-price">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <span className="small-note">{closeDate}</span>}</div>
+      </div>
+      <div className="stock-card-meta">{marketDisplayLabel(instrument.exchange)} · {instrumentTypeLabel(instrument.instrument_type)}</div>
+      <div className="stock-card-action"><span>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</span><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></div>
+    </div>
+  )
+}
+
+export function StockTable({ rows, dataAsOf }: { rows: StockDirectoryRow[]; dataAsOf: string | null }) {
   if (!rows.length) return <div className="empty panel">沒有符合條件的股票。</div>
-  return <div className="table-wrap"><p className="small-note">單位：價格為各標的報價幣別的元，指數為點。空白表示未提供資料或數值待核實；最近收盤早於最新交易日時，下方括號標出它的日期。</p><table><thead><tr><th>代號</th><th>名稱</th><th>交易所</th><th>類型</th><th>最近收盤</th><th>目前研究動作</th><th>策略判斷資料</th></tr></thead><tbody>{rows.map((row) => {
-    const instrument = row.instrument ?? row
-    const closeDate = row.latest_price != null ? staleCloseDateLabel(row.price_as_of, dataAsOf) : null
-    return <tr key={instrument.exchange + instrument.symbol}><td><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(instrument.exchange) + '/' + encodeURIComponent(instrument.symbol)}>{instrument.symbol}</Link></td><td>{instrument.name}</td><td>{marketDisplayLabel(instrument.exchange)}</td><td>{instrumentTypeLabel(instrument.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.latest_price ?? row.latest_bar?.close, 2)}{closeDate && <div className="small-note">{closeDate}</div>}</td><td>{stockDirectoryActionLabel(row.action_state, row.action_label_zh)}</td><td><span className="pill">{stockDirectoryQualityLabel(row.data_quality)}</span></td></tr>
-  })}</tbody></table></div>
+  return <>
+    <DataTable
+      wrapClassName="stock-table-wrap"
+      note={STOCK_DIRECTORY_NOTE}
+      columns={stockDirectoryColumns(dataAsOf)}
+      rows={rows}
+      rowKey={stockDirectoryKey}
+    />
+    <CardList className="stock-cards" note={<p className="table-note">{STOCK_DIRECTORY_NOTE}</p>} items={rows} itemKey={stockDirectoryKey} renderCard={(row) => <StockDirectoryCard row={row} dataAsOf={dataAsOf} />} />
+  </>
 }
 
 function StocksPage() {
@@ -728,15 +612,14 @@ function StockPage() {
   const { exchange = '', symbol = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const asOf = searchParams.get('as_of') ?? ''
-  const [cutoffDraft, setCutoffDraft] = useState(asOf)
   const enabled = Boolean(exchange && symbol)
   const query = useQuery({ queryKey: ['stock', exchange, symbol, asOf], queryFn: () => getStock(exchange, symbol, asOf || undefined), enabled })
   const [barsInterval, setBarsInterval] = useState<StockBarsInterval>('day')
   // The header always reads the daily series; the chart reads the selected interval (same cache entry for 'day').
   const dayBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, 'day'], queryFn: () => getStockBars(exchange, symbol, 'day'), enabled })
   const chartBars = useQuery({ queryKey: ['stock-bars', exchange, symbol, barsInterval], queryFn: () => getStockBars(exchange, symbol, barsInterval), enabled })
-  useEffect(() => setCutoffDraft(asOf), [asOf])
-  const [tab, setTab] = useState<StockTab>('chart')
+  const tab = parseStockTab(searchParams.get('tab'))
+  const setTab = (next: StockTab) => setSearchParams(stockTabSearch(searchParams, next), { replace: true })
   const stockNews = useQuery({ queryKey: ['stock-news', exchange, symbol], queryFn: () => getNews(stockNewsParams(symbol)), enabled: enabled && tab === 'news' })
   if (query.isLoading) return <Loading />
   if (query.error) return <ErrorBox error={query.error} />
@@ -764,39 +647,32 @@ function StockPage() {
     },
     instrument: data.instrument.exchange + ':' + data.instrument.symbol,
   }
-  const tabs: Array<{ id: StockTab; label: string }> = [
-    { id: 'chart', label: '圖表與指標' },
-    { id: 'chips', label: '法人籌碼' },
-    { id: 'news', label: '新聞與公告' },
-    { id: 'research', label: '研究條件' },
-    { id: 'data', label: '資料說明' },
-  ]
   return <div className="page stock-page">
     <Link to="/stocks" className="back-link">← 回到個股</Link>
     <StockHeader symbol={data.instrument.symbol} name={data.instrument.name} exchange={data.instrument.exchange} typeLabel={instrumentTypeLabel(data.instrument.instrument_type)} instrumentType={data.instrument.instrument_type} dailyBars={dayBars.data?.bars} loading={dayBars.isLoading}>
-      <form className="overview-cutoff-control" onSubmit={(event) => { event.preventDefault(); const submitted = String(new FormData(event.currentTarget).get('as_of') ?? ''); const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }}><label htmlFor="stock-cutoff">研究截止日期</label><input id="stock-cutoff" name="as_of" type="date" className="input" value={cutoffDraft} onInput={(event) => setCutoffDraft(event.currentTarget.value)} onChange={(event) => setCutoffDraft(event.target.value)} /><button type="submit" className="btn btn-secondary btn-sm">套用截止</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('as_of'); setSearchParams(next); setCutoffDraft('') }}>最新資料</button><span className="small-note">空白日期會使用最新資料日期；截止日期不影響頁首收盤、K 線與新聞時間線。</span></form>
+      <StockCutoffControl asOf={asOf} onApply={(submitted) => { const next = new URLSearchParams(searchParams); if (submitted) next.set('as_of', submitted); else next.delete('as_of'); setSearchParams(next) }} />
     </StockHeader>
-    <Tabs items={tabs} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
+    <Tabs items={STOCK_TABS} value={tab} onChange={setTab} label="個股詳情分頁" idPrefix="stock" className="stock-tabs" />
     <div className="stock-tab-content" id={tabPanelId('stock', tab)} role="tabpanel" aria-labelledby={tabId('stock', tab)}>
       {tab === 'chart' && <StockBarsChart interval={barsInterval} onIntervalChange={setBarsInterval} data={chartBars.data} loading={chartBars.isLoading} error={chartBars.error} instrumentType={data.instrument.instrument_type} />}
       {tab === 'chips' && <Card eyebrow="籌碼資料" title="法人與融資">{data.chips.length ? <ChipTable rows={data.chips.slice(-30).reverse()} /> : <EmptyState reason="尚無可核實的籌碼資料。" />}<BrokerBranchEntry exchange={data.instrument.exchange} /></Card>}
       {tab === 'news' && <><StockNewsTimeline exchange={data.instrument.exchange} symbol={data.instrument.symbol} query={{ data: stockNews.data, loading: stockNews.isLoading, error: stockNews.error }} /><StockEventList events={data.events} /></>}
-      {tab === 'research' && <>{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}<StockCandidatePanel candidate={data.candidate} /><ActionDetailPanel action={data.decision_summary ?? null} /><StockPlanPanel strategies={data.decision_summary?.strategies} /><Card eyebrow="研究條件 · 只讀快照" title="族群與策略條件"><GroupList groups={data.groups} /><ConditionList conditions={data.strategy_conditions} /></Card></>}
-      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} /></details></Card></>}
+      {tab === 'research' && <><StrategyBoardPanel board={data.strategy_board} candidate={data.candidate} />{fallbackResearchIncomplete && <div className="data-gap stock-data-gap">研究資料待補：{qualitySummary.research.missing_fields.map(fieldLabel).join('、') || '尚不能形成完整策略判斷'}。</div>}<ActionDetailPanel action={data.decision_summary ?? null} /><StockPlanPanel strategies={data.decision_summary?.strategies} /><Card eyebrow="研究條件 · 只讀快照" title="所屬族群"><GroupList groups={data.groups} /></Card></>}
+      {tab === 'data' && <><CoveragePanel coverage={data.coverage} /><QualityPanel summary={qualitySummary} rows={data.data_quality} /><Card className="stock-source-panel" eyebrow="資料說明" title="原始時間、來源與技術指標"><div className="metric-row"><span>行情來源</span><b>{sourceLabel([...new Set(data.bars.map((bar) => bar.source).filter((source): source is string => typeof source === 'string'))])}</b></div><div className="metric-row"><span>回應產生時間</span><b>{formatTaiwanDateTime(data.response_generated_at)}</b></div><IndicatorMetaRows bars={dayBars.data} /><details className="technical-details"><summary>查看原始行情表</summary><BarTable rows={data.bars.slice(-30).reverse()} instrumentType={data.instrument.instrument_type} /></details></Card></>}
     </div>
     <p className="disclaimer">此為研究工具與資料摘要，不構成投資建議、報酬保證或自動下單指令。</p>
   </div>
 }
 
 // Indicator provenance from the daily bars API (docs/V1_SPEC.md 技術指標): version, price basis and batch time.
-function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
+export function IndicatorMetaRows({ bars }: { bars: StockBarsResponse | undefined }) {
   if (!bars) return <div className="metric-row"><span>技術指標</span><b>待核實</b></div>
   const meta = bars.indicators
   return <>
     <div className="metric-row"><span>技術指標版本</span><b>{meta.formula_version}</b></div>
     <div className="metric-row"><span>價格基準</span><b>{meta.price_basis === 'as_of_date_raw_basis' ? '資料日原始價（前期依除權息換算）' : '待核實'}</b></div>
     <div className="metric-row"><span>日線指標計算時間</span><b>{meta.computed_at ? formatTaiwanDateTime(meta.computed_at) : '尚未計算'}</b></div>
-    <div className="metric-row"><span>K 線資料日期</span><b>{bars.data_as_of ?? '待核實'}</b></div>
+    <div className="metric-row"><span>K 線資料日期</span><b>{formatDay(bars.data_as_of) ?? '待核實'}</b></div>
   </>
 }
 
@@ -818,35 +694,44 @@ function BrokerBranchEntry({ exchange }: { exchange: string }) {
   </section>
 }
 
-function BarTable({ rows }: { rows: InstrumentDetail['bars'] }) {
-  return <div className="table-wrap compact-table"><p className="small-note">單位：股價為各標的報價幣別的元，指數為點；成交量為張。空白表示未提供資料、數值無效或成交量來源單位待核實。</p><table><thead><tr><th>日期</th><th>收盤</th><th>最高</th><th>最低</th><th>成交量</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}><td>{formatTaiwanDateTime(row.date, true)}</td><td className="numeric-cell">{formatTableNumber(row.close, 2)}</td><td className="numeric-cell">{formatTableNumber(row.high, 2)}</td><td className="numeric-cell">{formatTableNumber(row.low, 2)}</td><td className="numeric-cell">{formatTableVolume(row.volume, row.source, row.volume_exact)}</td></tr>)}</tbody></table></div>
+// One stock's prices share its latest close's tick decimals; lots are whole, the exact shares sit beside them.
+export function BarTable({ rows, instrumentType }: { rows: InstrumentDetail['bars']; instrumentType: string }) {
+  const digits = priceDigits(rows.find((row) => typeof row.close === 'number' && Number.isFinite(row.close))?.close, instrumentType)
+  const columns: ReadonlyArray<Column<InstrumentDetail['bars'][number]>> = [
+    { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
+    { key: 'close', header: '收盤', num: true, cell: (row) => formatTableNumber(row.close, digits) },
+    { key: 'high', header: '最高', num: true, cell: (row) => formatTableNumber(row.high, digits) },
+    { key: 'low', header: '最低', num: true, cell: (row) => formatTableNumber(row.low, digits) },
+    { key: 'volume', header: '成交量', num: true, cell: (row) => formatTableVolume(row.volume, row.source, row.volume_exact) },
+    { key: 'shares', header: '成交股數', num: true, cell: (row) => formatTableVolumeShares(row.volume, row.source, row.volume_exact) },
+  ]
+  return <DataTable
+    wrapClassName="compact-table"
+    note="單位：股價為各標的報價幣別的元，指數為點；成交量為張（股數 ÷ 1,000 四捨五入），成交股數為來源原值（股）。空白表示未提供資料、數值無效或成交量來源單位待核實。"
+    columns={columns}
+    rows={rows}
+    rowKey={(row, index) => row.id ?? row.date ?? index}
+  />
 }
 
 function formatRawChipValue(value: number | null): string {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-TW', { maximumFractionDigits: 3 }) : '未提供'
 }
 
+const CHIP_COLUMNS: ReadonlyArray<Column<InstrumentDetail['chips'][number]>> = [
+  { key: 'date', header: '日期', cell: (row) => formatTaiwanDateTime(row.date, true) },
+  { key: 'foreign', header: <Term id="foreign_flow">外資買賣超</Term>, num: true, cell: (row) => formatTableChip(row.foreign_buy, row.source) },
+  { key: 'trust', header: <Term id="trust_flow">投信</Term>, num: true, cell: (row) => formatTableChip(row.trust_buy, row.source) },
+  { key: 'dealer', header: <Term id="dealer_flow">自營商</Term>, num: true, cell: (row) => formatTableChip(row.dealer_buy, row.source) },
+  { key: 'margin', header: <Term id="margin">融資增減</Term>, num: true, cell: (row) => formatTableChip(row.margin_change, row.source, true) },
+]
+
 export function ChipTable({ rows }: { rows: InstrumentDetail['chips'] }) {
   return <>
-    <div className="small-note chip-unit-note">單位：張。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始值與來源見下方說明。</div>
-    <div className="table-wrap compact-table">
-      <table>
-        <thead><tr><th>日期</th><th><Term id="foreign_flow">外資買賣超</Term></th><th><Term id="trust_flow">投信</Term></th><th><Term id="dealer_flow">自營商</Term></th><th><Term id="margin">融資增減</Term></th></tr></thead>
-        <tbody>{rows.map((row, index) => <tr key={row.id ?? row.date ?? index}>
-          <td>{formatTaiwanDateTime(row.date, true)}</td>
-          <td className="numeric-cell">{formatTableChip(row.foreign_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.trust_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.dealer_buy, row.source)}</td>
-          <td className="numeric-cell">{formatTableChip(row.margin_change, row.source, true)}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>
+    <div className="small-note chip-unit-note">單位：張（三大法人為股數 ÷ 1,000 四捨五入，不足 500 股為 0）。三大法人為外資、投信、自營商；正值為買超，負值為賣超。融資正值為餘額增加，負值為減少。空白表示未提供資料、數值無效或來源單位待核實；原始股數與來源見下方說明。</div>
+    <DataTable wrapClassName="compact-table" columns={CHIP_COLUMNS} rows={rows} rowKey={(row, index) => row.id ?? row.date ?? index} />
     <details className="technical-details chip-source-details"><summary>資料來源與原始值</summary><div className="chip-source-list">{rows.map((row) => <div className="chip-source-row" key={`${row.date}-${row.source}`}><strong>{formatTaiwanDateTime(row.date, true)}</strong><span>來源：{sourceLabel(row.source)}（{row.source || '來源未提供'}） · 資料截至：{formatTaiwanDateTime(row.data_as_of, true)} · 收集：{formatTaiwanDateTime(row.collected_at)}</span><span>來源稽核原值：外資（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.foreign_buy)} · 投信（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.trust_buy)} · 自營商（{isVerifiedChipFlowSource(row.source) ? '股' : '單位待核實'}） {formatRawChipValue(row.dealer_buy)} · 融資（{isVerifiedMarginSource(row.source) ? '張' : '單位待核實'}） {formatRawChipValue(row.margin_change)}</span></div>)}</div></details>
   </>
-}
-
-function ConditionList({ conditions }: { conditions: InstrumentDetail['strategy_conditions'] }) {
-  return <div className="condition-list">{Object.entries(conditions).map(([name, condition]) => <div className="condition" key={name}><div className="condition-head"><strong><Term id={name === 'breakout' ? 'breakout' : 'pullback'}>{condition.label ?? strategyLabel(name)}</Term></strong><span className="muted">{researchSourceLabel(condition.source)}</span></div><div className="tag-list">{condition.requires.map((field) => <span className="tag" key={field}>{fieldLabel(field)}</span>)}</div>{condition.technical && <details className="technical-details"><summary>技術資訊</summary>{Object.values(condition.technical).map((value) => <div key={value}>{value}</div>)}</details>}</div>)}</div>
 }
 
 function QualityPanel({ summary, rows }: { summary: InstrumentDetail['quality_summary']; rows: DataQualityRow[] }) {
@@ -875,8 +760,6 @@ function CoveragePanel({ coverage }: { coverage: InstrumentDetail['coverage'] })
   return <section className="panel coverage-panel"><div className="section-head"><div><div className="eyebrow">研究資料覆蓋</div><h2>距離策略判斷還缺幾個有效交易日</h2></div><span className="small-note">基準 {baselineLabel}</span></div><div className="metric-row"><span>有效行情交易日</span><b>{barCountLabel}</b></div><div className="metric-row"><span>距離 20 日條件</span><b>{missing20Label}</b></div><div className="metric-row"><span>距離 60 日條件</span><b>{missing60Label}</b></div><div className="metric-row"><span>籌碼資料</span><b>{missingChipLabel}</b></div>{labels.length ? <div className="data-gap">目前原因：{labels.join('、')}</div> : <div className="small-note">目前沒有已知資料覆蓋缺口。</div>}<details className="technical-details"><summary>查看缺口日期與資料明細</summary><div className="small-note">20 日行情缺口：{coverage.missing_bar_dates_to_20.length ? coverage.missing_bar_dates_to_20.join('、') : '無'}</div><div className="small-note">60 日行情缺口：{coverage.missing_bar_dates_to_60.length ? coverage.missing_bar_dates_to_60.join('、') : '無'}</div><div className="small-note">20 日籌碼缺口：{coverage.missing_chip_dates_to_20.length ? coverage.missing_chip_dates_to_20.join('、') : '無'}</div></details></section>
 }
 
-type StockTab = 'chart' | 'chips' | 'news' | 'research' | 'data'
-
 export function ActionDetailPanel({ action }: { action: ActionSummary | null }) {
   if (!action) return <section className="panel stock-action-detail"><h2>研究條件</h2><div className="empty">尚無行動摘要。</div></section>
   const incomplete = ['data_insufficient', 'data_incomplete', 'insufficient_data'].includes(action.action_state)
@@ -891,11 +774,11 @@ export function ActionDetailPanel({ action }: { action: ActionSummary | null }) 
     <details className="technical-details"><summary>查看風險提醒、時間與價位</summary>
       <ProductTimeSummary time={action.product_time} fallbackDate={action.data_cutoff} fallbackEarliestDate={action.earliest_execution_date} />
       {showLevels && <div className="level-grid stock-detail-levels">
-        {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b>{formatNumber(action.trigger_price)}</b></div>}
-        {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b>{formatNumber(action.entry_low)}</b></div>}
-        {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b>{formatNumber(action.entry_high)}</b></div>}
-        {action.invalid_price != null && <div><span>{levelFieldLabel('invalid_price', action.level_semantics)}</span><b>{formatNumber(action.invalid_price)}</b></div>}
-        {action.target_1 != null && <div><span>{levelFieldLabel('target_1', action.level_semantics)}</span><b>{formatNumber(action.target_1)}</b></div>}
+        {action.trigger_price != null && <div><span>{levelFieldLabel('trigger_price', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.trigger_price)}</b></div>}
+        {action.entry_low != null && <div><span>{levelFieldLabel('entry_low', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_low)}</b></div>}
+        {action.entry_high != null && <div><span>{levelFieldLabel('entry_high', action.level_semantics)}</span><b className="level-entry">{formatNumber(action.entry_high)}</b></div>}
+        {action.invalid_price != null && <div><span><Term id="support">{levelFieldLabel('invalid_price', action.level_semantics)}</Term></span><b className="level-stop">{formatNumber(action.invalid_price)}</b></div>}
+        {action.target_1 != null && <div><span><Term id="target">{levelFieldLabel('target_1', action.level_semantics)}</Term></span><b className="level-target">{formatNumber(action.target_1)}</b></div>}
         {action.risk_reward != null && <div><span><Term id="rr">風險報酬比</Term></span><b>{formatNumber(action.risk_reward)}</b></div>}
       </div>}
       {detailReasons.length > 0 && <ul className="reason-list">{detailReasons.map((reason) => <li key={reason}>{action.display_reasons ? reason : productActionReasonLabel(reason)}</li>)}</ul>}
@@ -911,40 +794,71 @@ function StockEventList({ events }: { events: InstrumentDetail['events'] }) {
   </>
 }
 
+// /actions/:exchange/:symbol is the stock page's research tab (#278); old links keep working.
+export function actionDetailRedirectPath(exchange: string, symbol: string): string {
+  return stockResearchPath(exchange, symbol)
+}
+
+function ActionDetailRedirect() {
+  const { exchange = '', symbol = '' } = useParams()
+  return <Navigate replace to={actionDetailRedirectPath(exchange, symbol)} />
+}
+
+type ActionFilterState = { q?: string; view: ActionView; include_etf?: boolean }
+
+// Action centre (action_tier_v1, UI_COPY_SPEC §5): one first-page request for the counts and the top rows; each tier's
+// 顯示更多 pages that tier only.
 export function ActionsPage() {
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined])
-  const [state, setState] = useState('')
-  const cursor = pageCursors[page - 1]
-  const query = useQuery({ queryKey: ['actions', { search, cursor, state }], queryFn: () => getActions({ q: search || undefined, cursor, limit: 20, state: state || undefined }) })
-  const resetPage = () => { setPage(1); setPageCursors([undefined]) }
-  const submit = (value = draft.trim()) => { setSearch(value); resetPage() }
-  const clear = () => { setDraft(''); setSearch(''); resetPage() }
-  const nextPage = (nextCursor: string) => { setPageCursors((current) => [...current.slice(0, page), nextCursor]); setPage(page + 1) }
-  const previousPage = () => { if (page > 1) setPage(page - 1) }
-  return <div className="page">
-    <PageTitle eyebrow="行動判斷" title="行動中心" description="每個標的與資料日最多一張摘要；先看庫存風險，再看可執行條件與官方事件。">
-       <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /><select className="filter-select" value={state} onChange={(event) => { setState(event.target.value); resetPage() }}><option value="">全部行動狀態</option>{Object.entries(actionNames).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+  const [view, setView] = useState<ActionView>(DEFAULT_ACTION_VIEW)
+  const [includeEtf, setIncludeEtf] = useState(false)
+  // Requested tier pages: per tier, the cursor of each page (null for the tier's first page).
+  const [tierCursors, setTierCursors] = useState<Record<number, Array<string | null>>>({})
+  const filters: ActionFilterState = { q: search || undefined, view, include_etf: includeEtf || undefined }
+  const query = useQuery({ queryKey: ['actions', filters], queryFn: () => getActions({ ...filters, limit: ACTIONS_PAGE_LIMIT }) })
+  // A tier with rows but none on the first page shows its first rows on load (#301 review M2); 顯示更多 continues after them.
+  const previews = query.data ? previewTiers(query.data) : []
+  const requested = [
+    ...previews.map((tier) => ({ tier, cursor: null, limit: ACTION_TIER_PREVIEW, preview: true })),
+    ...Object.entries(tierCursors).flatMap(([tier, cursors]) => cursors.map((cursor) => ({ tier: Number(tier), cursor, limit: ACTIONS_PAGE_LIMIT, preview: false }))),
+  ]
+  const tierQueries = useQueries({
+    queries: requested.map(({ tier, cursor, limit, preview }) => ({
+      queryKey: ['actions', filters, 'tier', tier, preview ? 'preview' : cursor],
+      queryFn: () => getActions({ ...filters, tier, cursor: cursor ?? undefined, limit }),
+    })),
+  })
+  const tierPages: Record<number, ActionsResponse[]> = {}
+  const loadingTiers = new Set<number>()
+  requested.forEach(({ tier }, index) => {
+    const result = tierQueries[index]
+    if (result?.data) (tierPages[tier] ??= []).push(result.data)
+    if (result?.isLoading) loadingTiers.add(tier)
+  })
+  const resetTiers = () => setTierCursors({})
+  const submit = (value = draft.trim()) => { setSearch(value); resetTiers() }
+  const clear = () => { setDraft(''); setSearch(''); resetTiers() }
+  const lastPage = (tier: number) => tierPages[tier]?.[tierPages[tier].length - 1]
+  const canLoadMore = (tier: number) => (!tierCursors[tier] && !previews.includes(tier)) || loadingTiers.has(tier) || Boolean(lastPage(tier)?.meta.next_cursor)
+  const loadMore = (tier: number) => setTierCursors((current) => {
+    const cursors = current[tier]
+    const next = lastPage(tier)?.meta.next_cursor
+    // After a preview the next page starts where the preview ended.
+    if (!cursors) return previews.includes(tier) ? (next ? { ...current, [tier]: [next] } : current) : { ...current, [tier]: [null] }
+    return next && !cursors.includes(next) ? { ...current, [tier]: [...cursors, next] } : current
+  })
+  return <div className="page actions-page">
+    <PageTitle eyebrow="行動判斷" title="行動中心" description="依級別排序：持倉風險、今日候選、成立與接近成立在前；每個標的與資料日最多一列。">
+      <div className="filter-row"><SearchBox draft={draft} query={search} placeholder="搜尋代號或名稱" onDraftChange={setDraft} onSubmit={submit} onClear={clear} /></div>
+      {query.data && <ActionFilters summary={query.data.summary} view={view} includeEtf={includeEtf} searching={Boolean(search)} onViewChange={(next) => { setView(next); resetTiers() }} onIncludeEtfChange={(next) => { setIncludeEtf(next); resetTiers() }} />}
     </PageTitle>
     <PortfolioSubsection />
     <TrackingSection />
-    <QueryState loading={query.isLoading} error={query.error}>{query.data && (() => {
-      const executableStates = new Set(['conditional_entry', 'wait_breakout', 'wait_pullback', 'hold_observe', 'reduce_exit', 'manual_review'])
-      const priorityItems = query.data.items.filter((item) => item.held === true || item.position_quantity_status === 'unknown' || executableStates.has(item.action_state))
-      const eventOrWatchlistWaiting = query.data.items.filter((item) => item.held === false && item.action_state === 'data_insufficient' && (item.watchlisted || (item.event_ids ?? []).length > 0))
-      const ordinaryWaiting = query.data.items.filter((item) => item.held === false && item.action_state === 'data_insufficient' && !item.watchlisted && (item.event_ids ?? []).length === 0)
-      const otherSummaries = query.data.items.filter((item) => item.held === false && item.action_state === 'no_condition')
-      return <>
-        {query.data.summary?.held_unknown !== undefined && <p className="small-note">本次篩選庫存數量待核實 {query.data.summary.held_unknown.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
-        {priorityItems.length > 0 ? <section><div className="section-head"><div><div className="eyebrow">優先處理</div><h2>庫存風險／可執行條件</h2></div><span className="small-note">{priorityItems.length} 筆</span></div><div className="action-grid">{priorityItems.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></section> : (eventOrWatchlistWaiting.length === 0 && <div className="empty panel">目前沒有庫存風險或可執行條件。</div>)}
-        {eventOrWatchlistWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">事件／自選</div><h2>優先補齊資料</h2></div><span className="small-note">{eventOrWatchlistWaiting.length} 筆</span></div><p className="small-note">有官方事件或自選標的的研究資料尚未齊備，優先於一般市場標的處理。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{eventOrWatchlistWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
-        {ordinaryWaiting.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">資料補齊</div><h2>一般標的待補資料</h2></div><span className="small-note">本批 {ordinaryWaiting.length} 筆／共 {query.data.summary?.data_insufficient ?? ordinaryWaiting.length} 筆</span></div><p className="small-note">一般標的一日研究資料尚未齊備集中在這裡，不會淹沒庫存與可執行條件。</p><details className="deferred-list"><summary>展開待補標的</summary><div className="action-grid">{ordinaryWaiting.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></details></section>}
-        {otherSummaries.length > 0 && <section className="deferred-section"><div className="section-head"><div><div className="eyebrow">其他摘要</div><h2>目前沒有成立條件</h2></div><span className="small-note">{otherSummaries.length} 筆</span></div><div className="action-grid">{otherSummaries.map((item) => <CompactActionCard key={item.instrument.exchange + item.instrument.symbol + (item.as_of ?? '')} action={item} />)}</div></section>}
-         <CursorControls meta={query.data.meta} page={page} itemCount={query.data.items.length} onNext={nextPage} onPrevious={previousPage} onReset={resetPage} />
-      </>
-    })()}</QueryState>
+    <QueryState loading={query.isLoading} error={query.error}>{query.data && <>
+      {(query.data.summary.held_unknown ?? 0) > 0 && <p className="small-note">庫存數量待核實 {query.data.summary.held_unknown?.toLocaleString()} 筆；這些記錄尚未計入已核實持倉。</p>}
+      <ActionTierList sections={tierSections(query.data, tierPages)} loadingTiers={loadingTiers} canLoadMore={canLoadMore} onMore={loadMore} />
+    </>}</QueryState>
   </div>
 }
 
@@ -975,7 +889,11 @@ export function PortfolioSubsection() {
     setBusy(id); setMessage('')
     try { await deletePortfolio(id); await query.refetch(); setMessage('庫存已刪除。') } catch (error) { setMessage(error instanceof Error ? error.message : '刪除失敗。') } finally { setBusy(null) }
   }
-  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">庫存風險會優先於一般市場標的</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p><details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股；可保存的總股數為 1 至 9,223,372,036,854,775,807 股。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>{message && <div className="small-note">{message}</div>}{query.data?.items.length ? <div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
+  const editor = <details className="portfolio-editor"><summary>新增庫存</summary><p className="small-note">每張為 1,000 股，可輸入整數張或零股股數。</p><form className="inline-form" onSubmit={save}><input aria-label="庫存代號" placeholder="代號" value={draft.symbol} onChange={(event) => setDraft({ ...draft, symbol: event.target.value })} /><select aria-label="交易所" className="filter-select" value={draft.exchange} onChange={(event) => setDraft({ ...draft, exchange: event.target.value })}><option value="">交易所</option><option value="TWSE">上市（TWSE）</option><option value="TPEx">上櫃（TPEx）</option></select><select aria-label="交易單位" className="filter-select" value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value as ShareUnit })}><option value="lot">單位：張</option><option value="odd_lot">單位：零股</option></select><input aria-label={draft.unit === 'lot' ? '張數' : '股數'} type="text" inputMode="numeric" placeholder={draft.unit === 'lot' ? '張數' : '股數'} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /><input aria-label="平均成本／每股" type="text" inputMode="decimal" placeholder="平均成本／每股" value={draft.average_cost} onChange={(event) => setDraft({ ...draft, average_cost: event.target.value })} /><input aria-label="停損價" type="text" inputMode="decimal" placeholder="停損價" value={draft.stop_price} onChange={(event) => setDraft({ ...draft, stop_price: event.target.value })} /><button type="submit" className="secondary-button" disabled={busy !== null}>{busy === 'save' ? '儲存中…' : '儲存'}</button></form></details>
+  const notice = message && <div className="small-note">{message}</div>
+  // Without holdings the section is one line (DESIGN_SYSTEM §5 庫存一行), so the tiers start on the first screen.
+  if (!query.data?.items.length) return <section className="card portfolio-line"><div className="portfolio-line-head"><h2>我的庫存</h2><div className="small-note">{query.isLoading ? '庫存載入中…' : query.error ? '庫存暫時無法載入，請稍後重新整理。' : '尚未建立庫存。'}</div><div className="small-note">有持倉風險時列在最上方。</div></div>{editor}{notice}</section>
+  return <section className="panel portfolio-subsection"><div className="section-head"><div><div className="eyebrow">行動優先級</div><h2>我的庫存</h2></div><span className="small-note">持倉風險列在行動列表最上方</span></div><p className="small-note">未核實行情的本地記錄與試算，可展開每筆庫存核對。</p>{editor}{notice}<div className="position-list">{query.data.items.map((position) => <div className="position-card" key={position.id}><div className="position-head"><Link className="symbol-link" to={'/stocks/' + encodeURIComponent(position.instrument?.exchange ?? '') + '/' + encodeURIComponent(position.instrument?.symbol ?? '')}>{position.instrument?.symbol ?? '—'} {position.instrument?.name ?? ''}</Link><button type="button" className="delete-button" disabled={busy !== null} onClick={() => remove(position.id)}>{busy === position.id ? '刪除中…' : '刪除'}</button></div><div className="position-quantity"><div>持有 {formatShareQuantity(position.shares, position.shares_exact)}</div></div><div className="small-note">平均成本（報價幣別元／股） {formatPortfolioValue(position.average_cost, position.portfolio_value_status, 'average_cost')} · 停損價（報價幣別元／股） {formatPortfolioValue(position.stop_price, position.portfolio_value_status, 'stop_price')} · 收盤狀態 {formatPortfolioClose(position.portfolio_quote)} · 市值（報價幣別元） {formatPositionValuation(position.market_value, position.valuation_status, 'market_value')} · 未實現損益（報價幣別元） {formatPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
         <details className="portfolio-quote-review" style={{ overflowWrap: 'anywhere' }}><summary>核對庫存原股數、本地行情與試算</summary>
           <div className="small-note">來源稽核原股數 {formatPositionShares(position.shares, position.shares_exact)}</div>
           <p className="small-note">本地記錄；來源／日期待核實。記錄日期不表示交易日或原件證據已核實。</p>
@@ -985,12 +903,12 @@ export function PortfolioSubsection() {
           <p className="small-note">本地試算，行情來源／日期尚未核實。停牌、行情整體一致性與可交易用途尚未核對。</p>
           <div className="small-note">市值本地試算（股數 × 本地收盤，報價幣別元） {formatLocalPositionValuation(position.market_value, position.valuation_status, 'market_value')}</div>
           <div className="small-note">未實現損益本地試算（市值 − 平均成本 × 股數，報價幣別元） {formatLocalPositionValuation(position.unrealized_pnl, position.valuation_status, 'unrealized_pnl')}</div>
-        </details></div>)}</div> : <div className="empty">尚未建立庫存。</div>}</section>
+        </details></div>)}</div></section>
 }
 
 function ResearchBacktestPage() {
   const query = useQuery<BacktestSummary>({ queryKey: ['backtest-summary'], queryFn: () => getBacktestSummary() })
-  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span></div><div className="table-wrap"><p className="small-note">期限為訊號日之後的交易日數；樣本、可比與不可比的單位為筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>策略</th><th>類型</th><th>期限</th><th>樣本</th><th>可比</th><th>不可比</th><th>評估</th></tr></thead><tbody>{query.data.groups.map((row) => <tr key={backtestGroupKey(row)}><td>{strategyLabel(row.strategy)} · 規則版本 {row.version}</td><td>{instrumentTypeLabel(row.instrument_type)}</td><td className="numeric-cell">{formatTableNumber(row.horizon, 0)}</td><td className="numeric-cell">{formatTableNumber(row.sample, 0)}</td><td className="numeric-cell">{formatTableNumber(row.comparable, 0)}</td><td className="numeric-cell">{formatTableNumber(row.incomparable, 0)}</td><td><QualityBadge status={row.assessment} /></td></tr>)}</tbody></table></div></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
+  return <QueryState loading={query.isLoading} error={query.error}>{query.data && <div className="page"><PageTitle eyebrow="研究詳細" title="技術回測" description="此頁只呈現固定規則的技術驗證；樣本不足時不輸出勝率或採用結論。" />{query.data.run ? <><div className="source-banner"><strong>{statusLabel(query.data.run.status)}</strong><span>資料截至 {formatTaiwanDateTime(query.data.run.data_as_of, true)}</span><QualityBadge status={query.data.run.assessment} /><span>可行動樣本 {query.data.run.zero_actionable_count}</span></div><BacktestTable groups={query.data.groups} /></> : <div className="empty panel">尚無回測紀錄。</div>}</div>}</QueryState>
 }
 
 function readMetadataRecord(value: unknown): Record<string, unknown> {
@@ -1019,7 +937,7 @@ function BackfillCoveragePage() {
   const summary = coverage.data?.summary
   const coverageStatus = summary?.coverage_status ?? coverage.data?.baseline?.status ?? 'unknown'
   const coverageBadge = coverageStatus === 'manifest' ? 'complete' : coverageStatus === 'snapshot' ? 'official_snapshot' : 'unknown'
-  return <div className="page"><PageTitle eyebrow="研究詳細" title="官方資料回補與覆蓋度" description="此頁只讀取回補稽核紀錄與目前資料覆蓋度，不提供直接啟動正式回補的操作。"><Link className="text-link" to="/system/data-quality">前往系統資料品質</Link></PageTitle><section className="panel"><div className="section-head"><div><h2>最近一次回補</h2><div className="small-note">回補由受控工作流程執行，日期與來源均保留稽核紀錄。</div></div>{latest && <QualityBadge status={latest.status} />}</div>{latest ? <div className="metric-grid"><div className="metric-card"><span>日期範圍</span><b>{latest.metadata.start_date as string}～{latest.metadata.end_date as string}</b></div><div className="metric-card"><span>原定日曆日期</span><b>{requested} 日</b></div><div className="metric-card"><span>已驗證交易日</span><b>{verified}／{target} 日</b></div><div className="metric-card"><span>延伸補抓</span><b>{extensions} 日</b></div><div className="metric-card"><span>明確休市／無資料</span><b>{skipped} 日</b></div><div className="metric-card"><span>覆蓋目標</span><b>{manifest.target_met === true ? '已達成' : '尚未達成'}</b></div></div> : <div className="empty">尚無官方回補稽核紀錄。</div>}{latest?.error && <div className="data-gap">最近一次狀態說明：{latest.error}</div>}</section><section className="panel"><div className="section-head"><div><h2>目前市場資料覆蓋度</h2><div className="small-note">{summary?.baseline_message ?? coverage.data?.baseline?.message ?? '尚無可核實的官方交易日基準。'}</div></div>{summary && <QualityBadge kind="generic" status={coverageBadge} />}</div>{summary?.coverage_status === 'unknown' ? <div className="empty">尚未建立回補涵蓋基準；因此不計算全市場缺口原因。請先由受控流程產生回補稽核紀錄。</div> : summary ? <><div className="metric-grid"><div className="metric-card"><span>加權指數 已核實交易日</span><b>{summary.verified_taiex_sessions} 日{coverageStatus === 'snapshot' ? '（官方快照）' : ''}</b></div><div className="metric-card"><span>行情未滿 20 日</span><b>{summary.incomplete_to_20} 個標的</b></div><div className="metric-card"><span>行情未滿 60 日</span><b>{summary.incomplete_to_60} 個標的</b></div><div className="metric-card"><span>籌碼未滿 20 日</span><b>{summary.incomplete_chips_to_20} 個標的</b></div></div>{Object.keys(summary.coverage_reason_counts).length > 0 && <div className="tag-list">{Object.entries(summary.coverage_reason_counts).map(([reason, count]) => <span className="tag" key={reason}>{coverageReasonLabels[reason] ?? '其他資料缺口'}：{count}</span>)}</div>}<div className="small-note">回補目標：{summary.target_met === null ? '尚無回補稽核基準' : summary.target_met ? '已達成' : '尚未達成'}；事件資料：{summary.verified_event_sessions} 個已核實查詢日。</div></> : <div className="empty">尚無覆蓋度摘要。</div>}</section><section className="panel"><h2>回補紀錄</h2>{runs.data?.items.length ? <div className="table-wrap"><p className="small-note">資料量單位：筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>更新時間</th><th>資料範圍</th><th>狀態</th><th>筆數</th><th>錯誤</th></tr></thead><tbody>{runs.data.items.map((run) => <tr key={run.id}><td>{formatTaiwanDateTime(run.updated_at)}</td><td>{run.metadata.start_date as string}～{run.metadata.end_date as string}</td><td><QualityBadge status={run.status} /></td><td className="numeric-cell">{formatTableNumber(run.records, 0)}</td><td>{run.error ?? '—'}</td></tr>)}</tbody></table></div> : <div className="empty">尚無回補紀錄。</div>}</section></div>
+  return <div className="page"><PageTitle eyebrow="研究詳細" title="官方資料回補與覆蓋度" description="此頁只讀取回補稽核紀錄與目前資料覆蓋度，不提供直接啟動正式回補的操作。"><Link className="text-link" to="/system/data-quality">前往系統資料品質</Link></PageTitle><section className="panel"><div className="section-head"><div><h2>最近一次回補</h2><div className="small-note">回補由受控工作流程執行，日期與來源均保留稽核紀錄。</div></div>{latest && <QualityBadge status={latest.status} />}</div>{latest ? <div className="metric-grid"><div className="metric-card"><span>日期範圍</span><b>{latest.metadata.start_date as string}～{latest.metadata.end_date as string}</b></div><div className="metric-card"><span>原定日曆日期</span><b>{requested} 日</b></div><div className="metric-card"><span>已驗證交易日</span><b>{verified}／{target} 日</b></div><div className="metric-card"><span>延伸補抓</span><b>{extensions} 日</b></div><div className="metric-card"><span>明確休市／無資料</span><b>{skipped} 日</b></div><div className="metric-card"><span>覆蓋目標</span><b>{manifest.target_met === true ? '已達成' : '尚未達成'}</b></div></div> : <div className="empty">尚無官方回補稽核紀錄。</div>}{latest?.error && <div className="data-gap">最近一次狀態說明：{latest.error}</div>}</section><section className="panel"><div className="section-head"><div><h2>目前市場資料覆蓋度</h2><div className="small-note">{summary?.baseline_message ?? coverage.data?.baseline?.message ?? '尚無可核實的官方交易日基準。'}</div></div>{summary && <QualityBadge kind="generic" status={coverageBadge} />}</div>{summary?.coverage_status === 'unknown' ? <div className="empty">尚未建立回補涵蓋基準；因此不計算全市場缺口原因。請先由受控流程產生回補稽核紀錄。</div> : summary ? <><div className="metric-grid"><div className="metric-card"><span>加權指數 已核實交易日</span><b>{summary.verified_taiex_sessions} 日{coverageStatus === 'snapshot' ? '（官方快照）' : ''}</b></div><div className="metric-card"><span>行情未滿 20 日</span><b>{summary.incomplete_to_20} 個標的</b></div><div className="metric-card"><span>行情未滿 60 日</span><b>{summary.incomplete_to_60} 個標的</b></div><div className="metric-card"><span>籌碼未滿 20 日</span><b>{summary.incomplete_chips_to_20} 個標的</b></div></div>{Object.keys(summary.coverage_reason_counts).length > 0 && <div className="tag-list">{Object.entries(summary.coverage_reason_counts).map(([reason, count]) => <span className="tag" key={reason}>{coverageReasonLabels[reason] ?? '其他資料缺口'}：{count}</span>)}</div>}<div className="small-note">回補目標：{summary.target_met === null ? '尚無回補稽核基準' : summary.target_met ? '已達成' : '尚未達成'}；事件資料：{summary.verified_event_sessions} 個已核實查詢日。</div></> : <div className="empty">尚無覆蓋度摘要。</div>}</section><section className="panel"><h2>回補紀錄</h2>{runs.data?.items.length ? <BackfillRunTable runs={runs.data.items} /> :<div className="empty">尚無回補紀錄。</div>}</section></div>
 }
 
 function SystemDataPage() {
@@ -1030,12 +948,62 @@ function SystemDataPage() {
   const error = quality.error ?? raw.error ?? runs.error ?? strategies.error
   if (quality.isLoading || raw.isLoading || runs.isLoading || strategies.isLoading) return <Loading />
   if (error) return <ErrorBox error={error} />
-  return <div className="page"><PageTitle eyebrow="系統頁" title="資料品質" description="管理型檢視：原始資料、擷取工作、資料品質與固定規則設定快照。"><div className="source-banner"><strong>官方資料</strong><span>此頁不在主導航，供稽核使用。</span></div><Link className="text-link" to="/research/coverage">查看官方資料回補與覆蓋度</Link></PageTitle><section className="panel"><h2>擷取狀態</h2><div className="table-wrap"><p className="small-note">資料量單位：筆。空白表示未提供資料或數值待核實。</p><table><thead><tr><th>更新</th><th>來源</th><th>資料日</th><th>狀態</th><th>筆數</th><th>資料截至</th><th>錯誤</th></tr></thead><tbody>{runs.data?.items.map((run) => <tr key={run.id}><td>{formatTaiwanDateTime(run.updated_at)}</td><td>{sourceLabel(run.source)}</td><td>{run.run_date}</td><td><QualityBadge status={run.status} /></td><td className="numeric-cell">{formatTableNumber(run.records, 0)}</td><td>{formatTaiwanDateTime(run.data_as_of, true)}</td><td>{run.error ?? '—'}</td></tr>)}</tbody></table></div></section><section className="panel"><h2>原始來源</h2><RawTable rows={raw.data?.items ?? []} /></section><section className="panel"><h2>資料品質</h2><QualityTable rows={quality.data?.items ?? []} /></section><section className="panel"><h2>策略版本</h2><StrategyVersionList items={strategies.data?.items ?? []} variant="condition" labelFor={strategyLabel} badgeFor={(item) => <QualityBadge status={item.active ? 'complete' : 'inactive'} />} /></section></div>
+  return <div className="page"><PageTitle eyebrow="系統頁" title="資料品質" description="管理型檢視：原始資料、擷取工作、資料品質與固定規則設定快照。"><div className="source-banner"><strong>官方資料</strong><span>此頁不在主導航，供稽核使用。</span></div><Link className="text-link" to="/research/coverage">查看官方資料回補與覆蓋度</Link></PageTitle><section className="panel"><h2>擷取狀態</h2><IngestionRunTable rows={runs.data?.items ?? []} /></section><section className="panel"><h2>原始來源</h2><RawTable rows={raw.data?.items ?? []} /></section><section className="panel"><h2>資料品質</h2><QualityTable rows={quality.data?.items ?? []} /></section><section className="panel"><h2>策略版本</h2><StrategyVersionList items={strategies.data?.items ?? []} variant="condition" labelFor={strategyLabel} badgeFor={(item) => <QualityBadge status={item.active ? 'complete' : 'inactive'} />} /></section></div>
 }
 
-function RawTable({ rows }: { rows: RawPayload[] }) {
+const RAW_COLUMNS: ReadonlyArray<Column<RawPayload>> = [
+  { key: 'collected', header: '擷取時間', cell: (row) => row.collected_at ?? '—' },
+  { key: 'run', header: '資料批次', num: true, cell: (row) => formatTableNumber(row.ingestion_run_id, 0) },
+  { key: 'source', header: '來源', cell: (row) => sourceLabel(row.source) },
+  { key: 'date', header: '資料日', cell: (row) => row.data_as_of ?? '—' },
+  { key: 'endpoint', header: '來源位置', cell: (row) => row.endpoint },
+  { key: 'sha', header: '內容校驗碼', cellClassName: 'hash-cell', cell: (row) => row.sha256 ?? '—' },
+]
+
+export function RawTable({ rows }: { rows: RawPayload[] }) {
   if (!rows.length) return <div className="empty">尚無原始來源資料。</div>
-  return <div className="table-wrap"><table><thead><tr><th>擷取時間</th><th>資料批次</th><th>來源</th><th>資料日</th><th>來源位置</th><th>內容校驗碼</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.collected_at ?? '—'}</td><td className="numeric-cell">{formatTableNumber(row.ingestion_run_id, 0)}</td><td>{sourceLabel(row.source)}</td><td>{row.data_as_of ?? '—'}</td><td>{row.endpoint}</td><td className="hash-cell">{row.sha256 ?? '—'}</td></tr>)}</tbody></table></div>
+  return <DataTable columns={RAW_COLUMNS} rows={rows} rowKey={(row) => row.id} />
+}
+
+type BacktestGroup = BacktestSummary['groups'][number]
+const BACKTEST_COLUMNS: ReadonlyArray<Column<BacktestGroup>> = [
+  { key: 'strategy', header: '策略', cell: (row) => `${strategyLabel(row.strategy)} · 規則版本 ${row.version}` },
+  { key: 'type', header: '類型', cell: (row) => instrumentTypeLabel(row.instrument_type) },
+  { key: 'horizon', header: '期限', num: true, cell: (row) => formatTableNumber(row.horizon, 0) },
+  { key: 'sample', header: '樣本', num: true, cell: (row) => formatTableNumber(row.sample, 0) },
+  { key: 'comparable', header: '可比', num: true, cell: (row) => formatTableNumber(row.comparable, 0) },
+  { key: 'incomparable', header: '不可比', num: true, cell: (row) => formatTableNumber(row.incomparable, 0) },
+  { key: 'assessment', header: '評估', cell: (row) => <QualityBadge status={row.assessment} /> },
+]
+
+export function BacktestTable({ groups }: { groups: BacktestGroup[] }) {
+  return <DataTable note="期限為訊號日之後的交易日數；樣本、可比與不可比的單位為筆。空白表示未提供資料或數值待核實。" columns={BACKTEST_COLUMNS} rows={groups} rowKey={backtestGroupKey} />
+}
+
+const BACKFILL_COLUMNS: ReadonlyArray<Column<BackfillRun>> = [
+  { key: 'updated', header: '更新時間', cell: (run) => formatTaiwanDateTime(run.updated_at) },
+  { key: 'range', header: '資料範圍', cell: (run) => `${run.metadata.start_date as string}～${run.metadata.end_date as string}` },
+  { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
+  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
+]
+
+export function BackfillRunTable({ runs }: { runs: BackfillRun[] }) {
+  return <DataTable note="資料量單位：筆。空白表示未提供資料或數值待核實。" columns={BACKFILL_COLUMNS} rows={runs} rowKey={(run) => run.id} />
+}
+
+const INGESTION_COLUMNS: ReadonlyArray<Column<IngestionRun>> = [
+  { key: 'updated', header: '更新', cell: (run) => formatTaiwanDateTime(run.updated_at) },
+  { key: 'source', header: '來源', cell: (run) => sourceLabel(run.source) },
+  { key: 'date', header: '資料日', cell: (run) => run.run_date },
+  { key: 'status', header: '狀態', cell: (run) => <QualityBadge status={run.status} /> },
+  { key: 'records', header: '筆數', num: true, cell: (run) => formatTableNumber(run.records, 0) },
+  { key: 'asOf', header: '資料截至', cell: (run) => formatTaiwanDateTime(run.data_as_of, true) },
+  { key: 'error', header: '錯誤', cell: (run) => run.error ?? '—' },
+]
+
+export function IngestionRunTable({ rows }: { rows: IngestionRun[] }) {
+  return <DataTable note="資料量單位：筆。空白表示未提供資料或數值待核實。" columns={INGESTION_COLUMNS} rows={rows} rowKey={(run) => run.id} />
 }
 
 function QualityTable({ rows }: { rows: DataQualityRow[] }) {
@@ -1070,7 +1038,7 @@ export default function App() {
     <Route path="/stocks" element={<StocksPage />} />
     <Route path="/stocks/:exchange/:symbol" element={<StockPage />} />
     <Route path="/actions" element={<ActionsPage />} />
-    <Route path="/actions/:exchange/:symbol" element={<StockPage />} />
+    <Route path="/actions/:exchange/:symbol" element={<ActionDetailRedirect />} />
     <Route path="/system/data-quality" element={<SystemDataPage />} />
     <Route path="/research/backtest" element={<ResearchBacktestPage />} />
     <Route path="/research/coverage" element={<BackfillCoveragePage />} />

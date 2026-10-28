@@ -1452,12 +1452,8 @@ def test_signal_results_are_distinct_per_strategy_and_rejected_rules_are_observa
         rejected = SimpleNamespace(
             passed=False, state="rejected", reasons=("rule_not_met",)
         )
-        monkeypatch.setattr(
-            pipeline, "evaluate_breakout_v1", lambda **_kwargs: rejected
-        )
-        monkeypatch.setattr(
-            pipeline, "evaluate_pullback_v1", lambda **_kwargs: rejected
-        )
+        for rule in pipeline.REGISTRY.values():
+            monkeypatch.setattr(rule, "rule", lambda **_kwargs: rejected)
         strategies = pipeline._ensure_strategies(db)
         assert pipeline._upsert_signal(
             db, instrument=instrument, signal_date=score_date, strategies=strategies
@@ -2285,10 +2281,11 @@ def test_backtest_cutoff_and_summary_exclude_future_bars_and_non_actionable_rows
         pipeline, "_calculate_group_scores", lambda *_args, **_kwargs: None
     )
 
+    # Signals no longer take a data cutoff: the earliest execution date comes
+    # from the official calendar, never from later bars (#294).
     def fake_generate(
-        db, score_date, strategies, *, namespace="analysis", data_cutoff=None
+        db, score_date, strategies, *, namespace="analysis", registry=None
     ):
-        assert data_cutoff == end_date
         if score_date != start_date:
             return 0
         strategy = strategies["breakout_v1"]

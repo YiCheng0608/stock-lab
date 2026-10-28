@@ -14,7 +14,7 @@
 
 | 值 | 定義 | 負責的檢查（上游） | 使用的檔 |
 | --- | --- | --- | --- |
-| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today T2 | stocks S3（導覽列的 `資料 <D>`）；news N7、N8 的抽樣日 |
+| `D` | `dashboard.json` 的 `as_of` 前 10 字 | today T2 | stocks S3（導覽列的 `資料 <D/>`）；news N7、N8 的抽樣日 |
 | `B` | `today-board.json` 的 `meta.trading_date` | today T4 | today T5；themes（族群榜 `B` 指各榜自己的 `meta.trading_date`，與今日的 `B` 應同一天） |
 | `T`、名稱 | `today-board.json` 的 `items[0].theme_id` 與 `display_name` | today T5 | themes 的 `theme-detail`／`theme-members` URL 與 G5～G7 |
 | `E`、`S` | 見下方[選股](#選股) | — | stocks 的 API、截圖與 S1、S3～S9；actions 的 `action-detail` 與 A6、A7 |
@@ -45,7 +45,15 @@
 
 ## 已知失敗
 
-`page_checks.py` 的 `KNOWN_FAILURES` 以（頁、編號）為鍵，值是 Issue 連結與該缺陷的失敗訊息片段（`Known(issue, match)`）。失敗訊息含這個片段才算已知失敗（照報、不讓 run 失敗）；同一條檢查的其他失敗照常判失敗；已知失敗卻通過時 run 失敗，修好的 PR 同時移除該列。
+`page_checks.py` 的 `KNOWN_FAILURES` 以（頁、編號）為鍵，值是 Issue 連結、該缺陷的失敗訊息片段與到期日（`Known(issue, match, expires)`）。失敗訊息含這個片段才算已知失敗（照報、不讓 run 失敗）；同一條檢查的其他失敗照常判失敗；已知失敗卻通過時 run 失敗，修好的 PR 同時移除該列。`expires`（台北日期 `YYYY-MM-DD`）當天仍算，隔天起該列視為不存在：本機與 CI 都只看日期、不查 Issue 狀態，再命中就照常判失敗（#311）。
+
+登記新的一列：
+
+1. 先建 Issue，寫缺陷、哪一條檢查失敗與完整失敗訊息；沒有 Issue 不登記。
+2. 在 `KNOWN_FAILURES` 加 `("<頁>", "<編號>"): Known("<Issue 連結>", "<失敗訊息片段>", "<YYYY-MM-DD>")`：鍵是 `CHECKS` 裡的檢查，Issue 連結寫完整的 `https://github.com/YiCheng0608/stock-lab/issues/<n>`，片段取只有這個缺陷才會出現的字，`expires` 最晚是加入那個 commit 的日期（`git log --format=%cs`，未 commit 時算今天）起 30 天。
+3. 登記的 PR 本文與該 Issue 都寫明登記的列與到期日。到期還沒修好時 verify 會紅，由統籌決定修或延期；延期是改這一列的 `expires`，加入日改從這次改動的 commit 起算，PR 與 Issue 寫明延期理由。
+
+`backend/tests/test_verify_checks.py` 會擋下鍵不是 `CHECKS` 裡的檢查、`issue` 不是 stock-lab Issue 連結、缺 `match`、缺 `expires` 或格式不對、`expires` 早於加入日或晚於加入日起 30 天的列。
 
 ## 檢查類型
 

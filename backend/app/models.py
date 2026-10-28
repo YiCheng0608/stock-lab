@@ -152,6 +152,78 @@ class ChipSnapshot(Base):
     )
 
 
+class MarketSummary(Base):
+    """One exchange's official market summary for a session (Issue #275).
+
+    Written by collect from the same MI_INDEX capture as the TAIEX bar (TWSE)
+    and from ``tpex_mainborad_highlight`` (TPEx); a missing value stays null.
+    """
+
+    __tablename__ = "market_summaries"
+    __table_args__ = (
+        UniqueConstraint("exchange", "trading_date", name="uq_market_summary_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(20))
+    trading_date: Mapped[date] = mapped_column(Date, index=True)
+    index_name: Mapped[str] = mapped_column(String(60))
+    index_close: Mapped[float | None] = mapped_column(Float, nullable=True)
+    index_change: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # A ratio (-0.0181 is -1.81%); official from TWSE, derived for TPEx.
+    index_change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    change_pct_method: Mapped[str] = mapped_column(String(20))
+    # Yuan, an integer; the scope says which securities it counts.
+    turnover: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    turnover_scope: Mapped[str] = mapped_column(String(40))
+    advancers: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decliners: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unchanged: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_up: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_down: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unmatched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # TWSE 無比價; TPEx does not publish it.
+    not_comparable: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    breadth_scope: Mapped[str] = mapped_column(String(40))
+    source: Mapped[str] = mapped_column(String(120))
+    data_as_of: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # The capture time of the raw payload the values came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    raw_payload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("raw_payloads.id"), nullable=True, index=True
+    )
+
+
+class TradingCalendarDay(Base):
+    """One row of TWSE's yearly official holiday schedule (Issue #294).
+
+    Written by ``worker.trading_calendar``; every row of a year points at the
+    capture that brought the year's current content.  A year with rows is a
+    published year; a weekday it does not list as closed is a session.
+    """
+
+    __tablename__ = "trading_calendar_days"
+    __table_args__ = (
+        UniqueConstraint("exchange", "calendar_date", name="uq_trading_calendar_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(20))
+    calendar_date: Mapped[date] = mapped_column(Date)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    # closed, trading (a notice such as the first session after New Year) or
+    # unknown (neither marker; app.trading_calendar.classify).
+    kind: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(1000), default="")
+    source: Mapped[str] = mapped_column(String(120))
+    # The capture time of the raw payload the row came from.
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    raw_payload_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_payloads.id"), index=True
+    )
+
+
 class TechnicalFeature(Base):
     __tablename__ = "technical_features"
     __table_args__ = (
@@ -989,3 +1061,45 @@ class TrackingPlanSession(Base):
     execution_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str | None] = mapped_column(String(500), nullable=True)
     data_time: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+class StrategyLevel(Base):
+    """Observation price levels of one signal (V1_SPEC strategy_levels_v1).
+
+    Written by ``worker.strategy_levels`` after analyze: from T's data, the
+    close and volume the next session needs for the signal's strategy to pass,
+    with reference stop and targets.  Never a passed signal's levels: the
+    decision summary, the today page and the tracking plans do not read it,
+    and ``signals`` is never changed.  One row per signal and levels version;
+    a new formula version adds rows and keeps the old ones.
+    """
+
+    __tablename__ = "strategy_levels"
+    __table_args__ = (
+        UniqueConstraint(
+            "signal_id", "levels_version", name="uq_strategy_level_signal_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    signal_id: Mapped[int] = mapped_column(ForeignKey("signals.id"), index=True)
+    levels_version: Mapped[str] = mapped_column(String(40))
+    availability: Mapped[str] = mapped_column(String(30))
+    next_session_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trigger_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    zone_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reference_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    entry_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invalid_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reachable_next_session: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    conditions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    missing_inputs_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    price_basis: Mapped[str] = mapped_column(String(40))
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -21,10 +21,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -40,6 +42,8 @@ SCRIPTS = (
 REPO_ID = "repo-1"
 SHA = "a" * 40
 MERGE_SHA = "b" * 40
+# The tip of origin/feat/docker, the Docker integration branch (#332).
+DOCKER_SHA = "d" * 40
 # 2026-10-25 12:00:00 UTC
 NOW = int(datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc).timestamp())
 
@@ -68,11 +72,19 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 
 # Answers come from <fake>/<name>_<sub1>_<sub2>.json (orca, gh) and the exit code is 1
 # when the answer says "ok": false. Send texts are kept for asserts; worktree rm deletes
-# the directory it names, as Orca does.
+# the directory it names, as Orca does. worktree create starts the new worktree at its
+# --base-branch (origin/master without one) as <fake>/refs.txt names it, unless a test
+# wrote <fake>/worktree_head.txt first; git rev-parse HEAD answers from that file.
 FAKE_ORCA = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/orca_calls.log"
 key="orca_$1_$2"
+if [ "$1 $2" = "worktree create" ] && [ ! -f "$d/worktree_head.txt" ]; then
+  ref=origin/master prev=""
+  for a in "$@"; do [ "$prev" = --base-branch ] && ref="$a"; prev="$a"; done
+  sha="$(awk -v r="$ref" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
+  echo "${sha:-$FAKE_SHA}" >"$d/worktree_head.txt"
+fi
 if [ "$1 $2" = "terminal send" ]; then
   while [ $# -gt 0 ]; do [ "$1" = --text ] && printf '%s' "$2" >"$d/sent_text.txt"; shift; done
 fi
@@ -92,6 +104,11 @@ exit 0
 FAKE_GH = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/gh_calls.log"
+# With <fake>/gh_issue_close_sets_closed, issue close closes the Issue (issue view then
+# answers CLOSED) even when the call itself fails.
+if [ "$1 $2" = "issue close" ] && [ -f "$d/gh_issue_close_sets_closed" ]; then
+  echo '{"state": "CLOSED"}' >"$d/gh_issue_view.json"
+fi
 case "$1 $2" in
   "api graphql")
     case "$*" in
@@ -100,11 +117,27 @@ case "$1 $2" in
       *) cat "$d/gh_board.json" ;;
     esac ;;
   "api repos/"*) cat "$d/gh_comments.json" 2>/dev/null || echo '[]' ;;
-  *) key="gh_$1_$2"; [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
+  # run list --branch B answers from gh_run_list_<B, / as _>.json when the test wrote
+  # one, else from gh_run_list.json.
+  "run list")
+    b="" prev=""
+    for a in "$@"; do [ "$prev" = --branch ] && b="$a"; prev="$a"; done
+    f="$d/gh_run_list_$(printf '%s' "$b" | tr / _).json"
+    [ -f "$f" ] || f="$d/gh_run_list.json"
+    if [ -f "$f" ]; then cat "$f"; else echo '[]'; fi ;;
+  # <fake>/gh_<sub1>_<sub2>_fails makes that call exit 1.
+  *) key="gh_$1_$2"; [ -f "$d/${key}_fails" ] && exit 1
+     [ -f "$d/$key.json" ] && cat "$d/$key.json" || echo '[]' ;;
 esac
 """
 
-# git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line.
+# git -C <dir> <subcommand> ...: branches live in <fake>/branches.txt, one per line, and
+# rev-parse answers from <fake>/refs.txt ("<ref> <sha>" lines; $FAKE_SHA when unlisted).
+# branch -D fails when <fake>/git_branch_in_use exists (the branch stays), and when
+# <fake>/git_branch_gone_at_delete exists it fails with the branch already gone: orca
+# worktree rm deleted it after close_task's show-ref had seen it (#290). With
+# <fake>/git_unreadable_after_delete, show-ref answers 128 (git could not read the repo)
+# once branch -D has run.
 FAKE_GIT = r"""#!/usr/bin/env bash
 d="$FAKE_DIR"
 printf '%s\n' "$*" >>"$d/git_calls.log"
@@ -112,14 +145,26 @@ printf '%s\n' "$*" >>"$d/git_calls.log"
 touch "$d/branches.txt"
 case "$1" in
   fetch) exit 0 ;;
-  rev-parse) echo "${FAKE_SHA}" ;;
-  show-ref) grep -qxF "${4#refs/heads/}" "$d/branches.txt"; exit ;;
+  rev-parse)
+    if [ "$2" = HEAD ] && [ -f "$d/worktree_head.txt" ]; then cat "$d/worktree_head.txt"; exit 0; fi
+    sha="$(awk -v r="$2" '$1 == r { print $2 }' "$d/refs.txt" 2>/dev/null)"
+    echo "${sha:-$FAKE_SHA}" ;;
+  show-ref)
+    [ -f "$d/git_unreadable_after_delete" ] && [ -f "$d/git_branch_D_ran" ] && exit 128
+    grep -qxF "${4#refs/heads/}" "$d/branches.txt"; exit ;;
   for-each-ref) pat="${*: -1}"; pat="${pat#refs/heads/}"; grep -x "${pat%\*}.*" "$d/branches.txt" || true ;;
   branch)
     if [ "$2" = -m ]; then
       grep -vxF "$3" "$d/branches.txt" >"$d/b.tmp"; echo "$4" >>"$d/b.tmp"; mv "$d/b.tmp" "$d/branches.txt"
     elif [ "$2" = -D ]; then
+      touch "$d/git_branch_D_ran"
+      if [ -f "$d/git_branch_in_use" ]; then
+        echo "error: cannot delete branch '$3' used by worktree at '$d'" >&2; exit 1
+      fi
       grep -vxF "$3" "$d/branches.txt" >"$d/b.tmp"; mv "$d/b.tmp" "$d/branches.txt"
+      if [ -f "$d/git_branch_gone_at_delete" ]; then
+        echo "error: branch '$3' not found." >&2; exit 1
+      fi
     fi ;;
   merge-base) exit "$(cat "$d/git_ancestor_exit" 2>/dev/null || echo 0)" ;;
   status) cat "$d/git_status.txt" 2>/dev/null ;;
@@ -411,6 +456,111 @@ def test_dispatch_adds_an_issue_missing_from_the_board(dispatch: Harness) -> Non
     assert any("updateProjectV2" in c and "i=ITEM-NEW" in c for c in gh)
 
 
+def _git_subcommands(h: Harness) -> list[str]:
+    """The git calls without their leading ``-C <dir>``."""
+    return [c.split(" ", 2)[2] if c.startswith("-C ") else c for c in h.calls("git")]
+
+
+def _dispatch_from(h: Harness, base: str | None) -> subprocess.CompletedProcess:
+    args = ["282", "dryrun", "--task-file", h.task.as_posix()]
+    if base is not None:
+        args += ["--base", base]
+    return h.run("dispatch.sh", *args)
+
+
+def test_dispatch_without_base_fetches_and_checks_origin_master(
+    dispatch: Harness,
+) -> None:
+    """#332: no --base runs the commands dispatch.sh ran before --base existed."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    result = _dispatch_from(dispatch, None)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["head"] == SHA and line["base"] == SHA
+    assert _git_subcommands(dispatch) == [
+        "show-ref --verify --quiet refs/heads/task/282-dryrun",
+        "fetch --quiet origin master",
+        "rev-parse origin/master",
+        "rev-parse HEAD",
+        "branch -m YiCheng0608/task-282-dryrun task/282-dryrun",
+    ]
+    create = [c for c in dispatch.calls("orca") if c.startswith("worktree create")]
+    assert create == [
+        f"worktree create --repo id:{REPO_ID} --name task-282-dryrun --no-parent "
+        "--setup skip --json"
+    ]
+
+
+def test_dispatch_from_another_base_starts_the_worktree_at_its_tip(
+    dispatch: Harness,
+) -> None:
+    """AC-1 (#332): --base origin/feat/docker fetches it and the new HEAD is its tip."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    result = _dispatch_from(dispatch, "origin/feat/docker")
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["head"] == DOCKER_SHA and line["base"] == DOCKER_SHA
+    assert line["sent"] is True and line["branch"] == "task/282-dryrun"
+    git = _git_subcommands(dispatch)
+    assert "fetch --quiet origin feat/docker" in git
+    assert "rev-parse origin/feat/docker" in git
+    assert not [c for c in git if "master" in c]
+    (create,) = [c for c in dispatch.calls("orca") if c.startswith("worktree create")]
+    assert create.endswith("--setup skip --base-branch origin/feat/docker --json")
+
+
+@pytest.mark.parametrize(
+    "base, worktree_head, named",
+    [
+        (None, DOCKER_SHA, "origin/master"),
+        ("origin/feat/docker", SHA, "origin/feat/docker"),
+    ],
+    ids=["master-worktree-elsewhere", "docker-worktree-on-master"],
+)
+def test_dispatch_opens_no_terminal_when_the_worktree_is_not_at_the_base(
+    dispatch: Harness, base: str | None, worktree_head: str, named: str
+) -> None:
+    """The HEAD check compares with the --base tip, not always origin/master (#332)."""
+    dispatch.write(
+        "refs.txt", f"origin/master {SHA}\norigin/feat/docker {DOCKER_SHA}\n"
+    )
+    # Orca started the worktree somewhere other than the base asked for.
+    dispatch.write("worktree_head.txt", worktree_head + "\n")
+    result = _dispatch_from(dispatch, base)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"HEAD 不是最新 {named}" in result.stderr
+    line = _json_line(result)
+    assert line["sent"] is False and line["head"] == worktree_head
+    assert not [c for c in dispatch.calls("orca") if c.startswith("terminal")]
+    assert not [c for c in dispatch.calls("gh") if "updateProjectV2" in c]
+
+
+@pytest.mark.parametrize(
+    "base",
+    [
+        "feat/docker",
+        "origin/",
+        "origin/-x",
+        "origin//x",
+        "origin/x/",
+        "origin/a..b",
+        "origin/a b",
+        "origin/a;b",
+    ],
+)
+def test_dispatch_refuses_a_base_that_is_not_origin_branch(
+    dispatch: Harness, base: str
+) -> None:
+    result = _dispatch_from(dispatch, base)
+    assert result.returncode == 64, result.stdout + result.stderr
+    assert "--base" in result.stderr
+    assert not dispatch.calls("git") and not dispatch.calls("orca")
+
+
 # --- close_task.sh -----------------------------------------------------------------
 
 
@@ -486,6 +636,7 @@ def close(h: Harness):
                 "state": "MERGED",
                 "mergeCommit": {"oid": MERGE_SHA},
                 "headRefName": "task/282-dryrun",
+                "baseRefName": "master",
             }
         ],
     )
@@ -528,6 +679,7 @@ def _assert_nothing_deleted(h: Harness) -> None:
     assert not [c for c in h.calls("orca") if c.startswith(DELETING)]
     assert not [c for c in h.calls("git") if " branch -D " in f" {c} " or "prune" in c]
     assert not [c for c in h.calls("gh") if "updateProjectV2" in c]
+    assert not _issue_closes(h)
     assert h.wt.is_dir() and (h.extra / "deps" / "a.txt").is_file()
     assert "task/282-dryrun" in h.branches()
     assert (h.target / "keep.txt").is_file()
@@ -635,6 +787,260 @@ def test_close_task_deletes_nothing_when_master_ci_is_not_green(
     _assert_nothing_deleted(close)
 
 
+def _merged_into(h: Harness, base: str, state: str = "MERGED") -> None:
+    h.answer(
+        "gh_pr_list",
+        [
+            {
+                "number": 290,
+                "state": state,
+                "mergeCommit": {"oid": MERGE_SHA},
+                "headRefName": "task/282-dryrun",
+                "baseRefName": base,
+            }
+        ],
+    )
+
+
+def _issue_closes(h: Harness) -> list[str]:
+    return [c for c in h.calls("gh") if c.startswith("issue close")]
+
+
+def _docker_green(h: Harness) -> None:
+    """A PR into feat/docker whose merge commit's CI on feat/docker is green."""
+    _merged_into(h, "feat/docker")
+    h.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+
+
+def _run_branches(h: Harness) -> list[str]:
+    """The --branch of every gh run list call."""
+    return [
+        c.split("--branch ", 1)[1].split()[0]
+        for c in h.calls("gh")
+        if c.startswith("run list")
+    ]
+
+
+def test_close_task_checks_ci_on_the_branch_the_pr_merged_into(close: Harness) -> None:
+    """AC-2 (#332): a PR into feat/docker is judged by feat/docker's CI and history."""
+    _merged_into(close, "feat/docker")
+    # master has no run of the merge commit and its newest run is red: only feat/docker's
+    # runs may decide.
+    close.answer(
+        "gh_run_list",
+        [{"headSha": "c" * 40, "status": "completed", "conclusion": "failure"}],
+    )
+    close.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["base"] == "feat/docker" and line["merge_commit"] == MERGE_SHA
+    assert _run_branches(close) == ["feat/docker"]
+    git = _git_subcommands(close)
+    assert "fetch --quiet origin feat/docker" in git
+    assert (
+        "merge-base --is-ancestor refs/heads/task/282-dryrun origin/feat/docker" in git
+    )
+    assert not [
+        c for c in git if c.startswith(("fetch", "merge-base")) and "master" in c
+    ]
+    assert not close.wt.exists() and not close.extra.exists()
+    # AC-5: GitHub does not act on Closes #282 in a PR into feat/docker.
+    assert line["issue_close"] == "closed"
+    assert _issue_closes(close) == [
+        "issue close 282 --repo YiCheng0608/stock-lab --comment PR #290 已合併進 "
+        "feat/docker，merge commit bbbbbbbbb 的 CI 綠（close_task.sh）"
+    ]
+
+
+def test_close_task_checks_master_ci_for_a_pr_into_master(close: Harness) -> None:
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["base"] == "master" and line["issue_close"] == "not_needed"
+    assert _run_branches(close) == ["master"]
+    git = _git_subcommands(close)
+    assert "fetch --quiet origin master" in git
+    assert "merge-base --is-ancestor refs/heads/task/282-dryrun origin/master" in git
+    # AC-5: merging into master closed the Issue already.
+    assert not _issue_closes(close)
+
+
+@pytest.mark.parametrize(
+    "why", ["dirty-worktree", "busy-terminal", "protected-extra-dir"]
+)
+def test_close_task_leaves_the_issue_open_when_a_later_check_fails(
+    close: Harness, why: str
+) -> None:
+    """AC-5 (#332): feat/docker's CI is green, yet a check after it refuses."""
+    _docker_green(close)
+    dirs = [close.extra]
+    if why == "dirty-worktree":
+        close.write("git_status.txt", " M file.txt\n")
+    elif why == "busy-terminal":
+        close.answer("orca_terminal_wait", _ok({"wait": {"satisfied": False}}))
+    else:
+        dirs = [close.data]
+    result = close.close_task(*dirs)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == ""
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_deletes_nothing_when_the_issue_cannot_be_closed(
+    close: Harness,
+) -> None:
+    _docker_green(close)
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "gh issue close #282 失敗" in result.stderr
+    assert "未刪除任何東西" in result.stderr
+    assert _json_line(result)["issue_close"] == "failed"
+    assert not [c for c in close.calls("orca") if c.startswith(DELETING)]
+    assert close.wt.is_dir() and "task/282-dryrun" in close.branches()
+
+
+def test_close_task_rerun_goes_on_when_the_issue_is_already_closed(
+    close: Harness,
+) -> None:
+    """#332 review 3: a rerun after a failed delete step finds the Issue closed."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "CLOSED"})
+    # Were the close tried, it would fail: it must not be.
+    close.write("gh_issue_close_fails", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["issue_close"] == "already_closed" and line["board"] == "完成"
+    assert not _issue_closes(close)
+    assert not close.wt.exists() and not close.extra.exists()
+    assert "task/282-dryrun" not in close.branches()
+
+
+def test_close_task_takes_a_failed_close_of_an_issue_now_closed_as_closed(
+    close: Harness,
+) -> None:
+    """The close errs, yet the Issue reads back closed: cleanup goes on."""
+    _docker_green(close)
+    close.answer("gh_issue_view", {"state": "OPEN"})
+    close.write("gh_issue_close_fails", "")
+    close.write("gh_issue_close_sets_closed", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "closed"
+    assert len(_issue_closes(close)) == 1
+    assert not close.wt.exists() and not close.extra.exists()
+
+
+@pytest.mark.parametrize("base", ["release/v1", "task/999-other", "feat/other"])
+def test_close_task_refuses_a_pr_into_a_branch_that_is_not_long_lived(
+    close: Harness, base: str
+) -> None:
+    """#332 review 2: only master and the integration branches are cleanup targets."""
+    _merged_into(close, base)
+    close.answer(
+        f"gh_run_list_{base.replace('/', '_')}",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"目標分支 {base} 不是 master 或長期整合分支（feat/docker）" in result.stderr
+    assert not _run_branches(close)
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_no_board_leaves_the_issue_open(close: Harness) -> None:
+    _docker_green(close)
+    result = close.run(
+        "close_task.sh", "282", "--no-board", "--extra-dir", close.extra.as_posix()
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _json_line(result)["issue_close"] == "skipped"
+    assert not _issue_closes(close)
+
+
+@pytest.mark.parametrize(
+    "state, runs, error",
+    [
+        ("OPEN", None, "PR 尚未合併"),
+        ("MERGED", [], "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 missing"),
+        (
+            "MERGED",
+            [{"headSha": MERGE_SHA, "status": "in_progress", "conclusion": ""}],
+            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 pending",
+        ),
+        (
+            "MERGED",
+            [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "failure"}],
+            "feat/docker 上 merge commit bbbbbbbbb 的 CI 是 failure",
+        ),
+        (
+            "MERGED",
+            [
+                {"headSha": "c" * 40, "status": "completed", "conclusion": "failure"},
+                {"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"},
+            ],
+            "feat/docker 最新一次 CI 是 failure",
+        ),
+    ],
+    ids=["not-merged", "no-run", "pending", "failure", "newer-run-red"],
+)
+def test_close_task_deletes_nothing_when_a_pr_into_feat_docker_is_not_done(
+    close: Harness, state: str, runs: list | None, error: str
+) -> None:
+    """AC-2 (#332): master's CI is green for the merge commit, feat/docker's is not."""
+    _merged_into(close, "feat/docker", state)
+    if runs is not None:
+        close.answer("gh_run_list_feat_docker", runs)
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stderr and "未刪除任何東西" in result.stderr
+    assert _run_branches(close) == ([] if state == "OPEN" else ["feat/docker"])
+    _assert_nothing_deleted(close)
+
+
+def test_close_task_deletes_nothing_when_the_branch_is_not_in_feat_docker(
+    close: Harness,
+) -> None:
+    _merged_into(close, "feat/docker")
+    close.answer(
+        "gh_run_list_feat_docker",
+        [{"headSha": MERGE_SHA, "status": "completed", "conclusion": "success"}],
+    )
+    close.write("git_ancestor_exit", "1")
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "不在 origin/feat/docker 的 commit" in result.stderr
+    _assert_nothing_deleted(close)
+
+
+@pytest.mark.parametrize("base", [None, "", "-x", "a..b", "a b"])
+def test_close_task_deletes_nothing_without_a_readable_target_branch(
+    close: Harness, base: str | None
+) -> None:
+    pr = {
+        "number": 290,
+        "state": "MERGED",
+        "mergeCommit": {"oid": MERGE_SHA},
+        "headRefName": "task/282-dryrun",
+    }
+    if base is not None:
+        pr["baseRefName"] = base
+    close.answer("gh_pr_list", [pr])
+    result = close.close_task(close.extra)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "目標分支" in result.stderr
+    assert not _run_branches(close)
+    _assert_nothing_deleted(close)
+
+
 @pytest.mark.parametrize(
     "which",
     [
@@ -733,6 +1139,250 @@ def test_guard_dir_names_every_protected_path(h: Harness) -> None:
     assert _guard(h, gone.as_posix(), "residual") == ""
 
 
+# Run by _inner_pytest beside a copy of backend/tests/conftest.py: repositories in
+# tmp_path as this file's Harness, test_worker_job_scripts and test_verify_tools build
+# them (an empty .git directory, a .git file, a read-only git object file), one in a
+# test that then skips; with INNER_KILL=1 the last test exits the process before
+# pytest's teardown, as a killed run does.
+INNER_TESTS = r"""
+import os
+import stat
+
+import pytest
+
+
+def test_builds_repositories(tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / "linked").mkdir()
+    (tmp_path / "linked" / ".git").write_text("gitdir: x\n")
+    obj = tmp_path / "work" / ".git" / "objects" / "ab" / "cdef"
+    obj.parent.mkdir(parents=True)
+    obj.write_text("x")
+    os.chmod(obj, stat.S_IREAD)
+    (tmp_path / "work" / "debug.txt").write_text("kept")
+    assert os.environ["INNER_FAIL"] == "0"
+
+
+def test_skips_after_building_one(tmp_path):
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    pytest.skip("skipped with a .git in its tmp_path")
+
+
+def test_killed_after_building_one(tmp_path):
+    if os.environ["INNER_KILL"] != "1":
+        pytest.skip("not killed")
+    (tmp_path / "project" / ".git").mkdir(parents=True)
+    os._exit(3)
+"""
+
+
+def _inner_pytest(
+    h: Harness, fail: bool, basetemp: str = "b", kill: bool = False
+) -> tuple[Path, subprocess.CompletedProcess]:
+    """A pytest run with --basetemp in an engineer's temp directory outside the worktree,
+    as #272 and #270 had it (C:/v270/pt/b): returns that directory and the run. Runs
+    with another BASETEMP name go to the same directory, as #279's t279/b1, bf did."""
+    inner = h.root / "inner"
+    inner.mkdir(exist_ok=True)
+    shutil.copyfile(Path(__file__).with_name("conftest.py"), inner / "conftest.py")
+    (inner / "test_inner.py").write_text(INNER_TESTS, encoding="utf-8")
+    temp = h.root / "t290"
+    (temp / "tmp").mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("STOCK_")}
+    env.update(
+        TMPDIR=str(temp / "tmp"),
+        TEMP=str(temp / "tmp"),
+        TMP=str(temp / "tmp"),
+        INNER_FAIL="1" if fail else "0",
+        INNER_KILL="1" if kill else "0",
+    )
+    command = [sys.executable, "-B", "-m", "pytest", "-p", "no:cacheprovider", "-q"]
+    command += ["--rootdir", str(inner), "--confcutdir", str(inner)]
+    command += ["--basetemp", str(temp / basetemp), str(inner)]
+    # cwd backend: the copied conftest imports app and worker, as under CI.
+    result = subprocess.run(
+        command,
+        cwd=ROOT / "backend",
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+    return temp, result
+
+
+def test_a_green_pytest_run_leaves_no_repository_in_its_basetemp(h: Harness) -> None:
+    """#290: the repositories tests build in tmp_path made close_task.sh refuse an
+    engineer's temp directory holding the --basetemp. conftest.py removes the basetemp
+    of a green run, so the directory passes guard_dir as it is."""
+    temp, result = _inner_pytest(h, fail=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "1 passed, 2 skipped" in result.stdout
+    assert not (temp / "b").exists(), _repositories(temp)
+    assert _guard(h, temp.as_posix()) == ""
+
+
+def _repositories(top: Path) -> list[str]:
+    return sorted(p.relative_to(top).as_posix() for p in top.rglob(".git"))
+
+
+def test_a_failed_run_then_a_green_run_on_another_basetemp_leave_no_repository(
+    h: Harness,
+) -> None:
+    """#304: a failed run kept its basetemp with the repositories in it, and the green
+    run that followed took another basetemp and never cleared it (#278's s/b, #279's
+    t279/bf). The failed run keeps its debug files but no .git, so the directory
+    passes guard_dir as it is."""
+    temp, failed = _inner_pytest(h, fail=True, basetemp="b1")
+    assert failed.returncode == 1, failed.stdout + failed.stderr
+    temp, green = _inner_pytest(h, fail=False, basetemp="b2")
+    assert green.returncode == 0, green.stdout + green.stderr
+    assert _repositories(temp) == []
+    assert not (temp / "b2").exists()
+    [debug] = (temp / "b1").rglob("debug.txt")
+    assert debug.read_text(encoding="utf-8") == "kept"
+    assert (debug.parent.parent / "repo").is_dir()
+    assert _guard(h, temp.as_posix()) == ""
+
+
+def test_a_killed_pytest_run_leaves_only_the_repository_of_the_test_it_was_in(
+    h: Harness,
+) -> None:
+    """#304: a run killed before pytest_sessionfinish (a command timeout) has deleted the
+    repositories of every test that finished; that of the test it was in stays, and
+    guard_dir is not loosened for a basetemp: it refuses the directory and names it."""
+    temp, result = _inner_pytest(h, fail=True, kill=True)
+    assert result.returncode == 3, result.stdout + result.stderr
+    [left] = _repositories(temp)
+    assert left.startswith("b/test_killed_after_building_on"), left
+    reason = _guard(h, temp.as_posix())
+    assert reason.startswith("裡面有 .git（") and "test_killed" in reason, reason
+
+
+def test_a_failed_session_keeps_its_basetemp_without_a_repository(
+    request, tmp_path: Path, capsys
+) -> None:
+    """#304: what no test's teardown reached (a module or session fixture's
+    tmp_path_factory directory) loses its .git when the session ends unsuccessful;
+    the rest of the basetemp stays for debugging."""
+    basetemp = tmp_path / "basetemp"
+    (basetemp / "fixture0" / "repo" / ".git").mkdir(parents=True)
+    (basetemp / "fixture0" / "debug.txt").write_text("kept", encoding="utf-8")
+    factory = SimpleNamespace(_basetemp=basetemp)
+    session = SimpleNamespace(config=SimpleNamespace(_tmp_path_factory=factory))
+    _conftest(request).pytest_sessionfinish(session, 1)
+    assert _repositories(basetemp) == []
+    assert (basetemp / "fixture0" / "repo").is_dir()
+    assert (basetemp / "fixture0" / "debug.txt").read_text(encoding="utf-8") == "kept"
+    assert "without its 1 .git (#304)" in capsys.readouterr().err
+
+
+def test_dropping_repositories_does_not_follow_a_link(request, tmp_path: Path) -> None:
+    """#304: the .git removal of a failed run does not enter a junction or symlink and
+    deletes a .git that is a link as the link itself: what lies outside the basetemp
+    stays as it was. Stand-ins under tmp_path only (#282)."""
+    outside = tmp_path / "outside"
+    (outside / ".git").mkdir(parents=True)
+    (outside / "file.txt").write_text("k", encoding="utf-8")
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "file.txt").write_text("k", encoding="utf-8")
+    basetemp = tmp_path / "basetemp"
+    (basetemp / "a" / ".git" / "objects").mkdir(parents=True)
+    obj = basetemp / "a" / ".git" / "objects" / "cdef"
+    obj.write_text("x", encoding="utf-8")
+    obj.chmod(stat.S_IREAD)
+    (basetemp / "b").mkdir()
+    (basetemp / "b" / ".git").write_text("gitdir: x\n", encoding="utf-8")
+    (basetemp / "c").mkdir()
+    _link(outside, basetemp / "c" / "link")
+    (basetemp / "d").mkdir()
+    _link(target, basetemp / "d" / ".git")
+    (basetemp / "a" / "debug.txt").write_text("kept", encoding="utf-8")
+
+    failures: list = []
+    assert _conftest(request)._drop_repositories(basetemp, failures) == 3
+    assert failures == []
+    # Path.rglob enters a junction, so the deleted paths are named one by one.
+    for gone in ("a", "b", "d"):
+        assert not os.path.lexists(basetemp / gone / ".git"), gone
+    assert (basetemp / "a" / "debug.txt").read_text(encoding="utf-8") == "kept"
+    assert (outside / ".git").is_dir() and (outside / "file.txt").is_file()
+    assert (target / "file.txt").read_text(encoding="utf-8") == "k"
+    link = basetemp / "c" / "link"
+    assert (link / ".git").is_dir()
+    if link.is_junction():
+        os.rmdir(link)
+    else:
+        link.unlink()
+
+
+def _conftest(request):
+    """backend/tests/conftest.py as pytest loaded it for this run."""
+    here = Path(__file__).with_name("conftest.py").resolve()
+    return next(
+        plugin
+        for plugin in request.config.pluginmanager.get_plugins()
+        if getattr(plugin, "__file__", None) and Path(plugin.__file__).resolve() == here
+    )
+
+
+def test_basetemp_cleanup_does_not_chmod_a_link(
+    request, tmp_path: Path, monkeypatch
+) -> None:
+    """#290 review L2: the retry after a failed delete makes the path writable, but never
+    through a link (a junction on Windows, a symlink elsewhere): chmod would reach its
+    target outside the basetemp."""
+    target = tmp_path / "outside"
+    target.mkdir()
+    link = tmp_path / "basetemp" / "link"
+    link.parent.mkdir()
+    _link(target, link)
+    chmods: list[str] = []
+    monkeypatch.setattr(os, "chmod", lambda path, *a, **k: chmods.append(str(path)))
+
+    def delete_fails(path):
+        raise PermissionError(path)
+
+    failures: list = []
+    _conftest(request)._retry_writable(delete_fails, str(link), failures)
+    assert chmods == [] and [str(p) for p, _ in failures] == [str(link)]
+    monkeypatch.undo()
+    if link.is_junction():
+        os.rmdir(link)
+    else:
+        link.unlink()
+    assert target.is_dir()
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="os.chmod follows a symlink on POSIX; Windows' Python 3.12 does not, and an "
+    "unprivileged Windows user cannot make the read-only directory below",
+)
+def test_a_green_run_leaves_a_symlink_target_outside_the_basetemp_as_it_was(
+    request, tmp_path: Path
+) -> None:
+    """#290 review L2 on a real tree: the symlink in a directory rmtree cannot write to
+    fails to unlink and goes to the retry, which must not chmod its target."""
+    target = tmp_path / "outside.txt"
+    target.write_text("k", encoding="utf-8")
+    target.chmod(0o644)
+    sub = tmp_path / "basetemp" / "sub"
+    sub.mkdir(parents=True)
+    (sub / "link").symlink_to(target)
+    sub.chmod(0o500)
+    factory = SimpleNamespace(_basetemp=sub.parent)
+    session = SimpleNamespace(config=SimpleNamespace(_tmp_path_factory=factory))
+    try:
+        _conftest(request).pytest_sessionfinish(session, 0)
+    finally:
+        sub.chmod(0o700)
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.read_text(encoding="utf-8") == "k"
+
+
 @pytest.mark.parametrize(
     "state", ["dirty", "unmerged-commit", "busy-agent", "own-terminal"]
 )
@@ -751,6 +1401,44 @@ def test_close_task_deletes_nothing_when_the_worktree_is_in_use(
     result = close.close_task(close.extra, **env)
     assert result.returncode == 1, result.stdout + result.stderr
     _assert_nothing_deleted(close)
+
+
+def test_close_task_takes_a_branch_orca_already_deleted_as_done(close: Harness) -> None:
+    """#290: show-ref saw the branch, orca worktree rm deleted it, branch -D said "not
+    found": the branch is gone, so the extra dirs and the board still follow."""
+    close.write("git_branch_gone_at_delete", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 0, result.stdout + result.stderr
+    line = _json_line(result)
+    steps = line["steps"]
+    assert "branch_already_gone" in steps and "branch_deleted" not in steps
+    assert steps.index("branch_already_gone") < steps.index(
+        f"extra_removed:{close.extra.as_posix()}"
+    )
+    assert "task/282-dryrun" not in close.branches() and not close.extra.exists()
+    assert line["board"] == "完成"
+    assert any("updateProjectV2" in c and "o=OPT-DONE" in c for c in close.calls("gh"))
+
+
+@pytest.mark.parametrize("state", ["in-use", "unreadable"])
+def test_close_task_stops_when_the_branch_cannot_be_deleted(
+    close: Harness, state: str
+) -> None:
+    """#290: a branch that is still there after branch -D (checked out elsewhere) is a
+    failed step: exit 3, the extra dirs stay and the board is not set to 完成. So is one
+    show-ref then cannot read (128): only its 1 means the branch is gone (review L1)."""
+    close.write("git_branch_in_use", "")
+    if state == "unreadable":
+        close.write("git_unreadable_after_delete", "")
+    result = close.close_task(close.extra)
+    assert result.returncode == 3, result.stdout + result.stderr
+    line = _json_line(result)
+    assert line["error"] == "刪本地 branch 失敗：task/282-dryrun"
+    assert not [s for s in line["steps"] if s.startswith(("branch_", "extra_"))]
+    assert line["board"] == ""
+    assert not [c for c in close.calls("gh") if "updateProjectV2" in c]
+    assert "task/282-dryrun" in close.branches()
+    assert (close.extra / "deps" / "a.txt").is_file()
 
 
 # --- patrol.sh ---------------------------------------------------------------------
@@ -999,6 +1687,7 @@ def test_close_task_refuses_a_pr_whose_head_is_another_branch(close: Harness) ->
             "state": "MERGED",
             "mergeCommit": {"oid": MERGE_SHA},
             "headRefName": "task/264-news-candidate-exchange",
+            "baseRefName": "master",
         },
     )
     result = close.run(
@@ -1102,6 +1791,7 @@ def test_close_task_never_takes_the_pr_head_as_the_branch_of_another_task(
             "state": "MERGED",
             "mergeCommit": {"oid": MERGE_SHA},
             "headRefName": "task/264-news-candidate-exchange",
+            "baseRefName": "master",
         },
     )
     args = ("--slug", "dryrun", "--pr", "271", "--allow-pr-head-mismatch", "--no-board")

@@ -772,6 +772,147 @@ def test_api_reports_the_zero_reason(db, client):
     assert body["zero_reason_text"] == "當日沒有成立（條件成立）的策略訊號"
 
 
+# ---- item market: latest close and its change (#276) ----
+
+ITEM_KEYS = {
+    "rank",
+    "trading_date",
+    "score_version",
+    "instrument",
+    "strategy",
+    "signal_id",
+    "signal_status",
+    "levels",
+    "total_score",
+    "weight_coverage",
+    "partial_components",
+    "components",
+    "alternatives",
+    "reasons",
+    "groups",
+    "data_as_of",
+    "llm_note",
+    "sources",
+    # User tracking plans (#253).
+    "candidate_id",
+    "open_plan_id",
+}
+
+
+def taiex(db, days=DAYS):
+    """TAIEX sessions; a ``fixture`` source counts as a verified session."""
+
+    index = Instrument(
+        exchange="TWSE",
+        symbol="TAIEX",
+        name="加權指數",
+        instrument_type="index",
+        status="active",
+    )
+    db.add(index)
+    db.flush()
+    for day in days:
+        db.add(
+            MarketBar(
+                instrument_id=index.id,
+                trading_date=day,
+                open=20000.0,
+                high=20000.0,
+                low=20000.0,
+                close=20000.0,
+                adj_close=20000.0,
+                source="twse_fixture",
+            )
+        )
+    db.flush()
+
+
+def bar(db, instrument, day):
+    return db.scalar(
+        select(MarketBar).where(
+            MarketBar.instrument_id == instrument.id, MarketBar.trading_date == day
+        )
+    )
+
+
+def listed_market(db, client, change=None):
+    """Compute the list on T, apply ``change`` to the stored bars, read the API."""
+
+    a = stock(db, "1101")
+    signal(db, a)
+    taiex(db)
+    db.commit()
+    compute_daily_candidates(db, T)
+    if change:
+        change(a)
+    db.commit()
+    return client.get("/api/candidates").json()["items"][0]["market"]
+
+
+def test_candidate_market_has_the_close_and_its_change(db, client):
+    def rise(a):
+        current = bar(db, a, T)
+        current.close = current.adj_close = 102.0
+
+    assert listed_market(db, client, rise) == {
+        "trading_date": T.isoformat(),
+        "close": 102.0,
+        "change": 2.0,
+        "change_pct": pytest.approx(0.02),
+        "change_status": "known",
+        "source": "fixture-bars",
+    }
+
+
+def test_candidate_market_change_needs_the_same_source_previous_session(db, client):
+    def other_source(a):
+        bar(db, a, DAYS[-2]).source = "tpex"
+
+    market = listed_market(db, client, other_source)
+    assert market["close"] == CLOSE and market["source"] == "fixture-bars"
+    assert market["change"] is None and market["change_pct"] is None
+    assert market["change_status"] == "unverified"
+
+
+def test_candidate_market_change_needs_the_adjacent_session(db, client):
+    # No bar on the previous TAIEX session: the bar before it is two sessions
+    # back, so its close is not the previous close.
+    def gap(a):
+        db.delete(bar(db, a, DAYS[-2]))
+
+    market = listed_market(db, client, gap)
+    assert market["close"] == CLOSE
+    assert market["change"] is None and market["change_status"] == "unverified"
+
+
+def test_candidate_market_without_a_bar_on_the_day(db, client):
+    def missing(a):
+        db.delete(bar(db, a, T))
+
+    assert listed_market(db, client, missing) == {
+        "trading_date": T.isoformat(),
+        "close": None,
+        "change": None,
+        "change_pct": None,
+        "change_status": "missing",
+        "source": None,
+    }
+
+
+def test_candidate_market_keeps_every_existing_field(db, client):
+    a = stock(db, "1101")
+    signal(db, a)
+    db.commit()
+    compute_daily_candidates(db, T)
+    item = client.get("/api/candidates").json()["items"][0]
+    assert set(item) == ITEM_KEYS | {"market"}
+    # Without verified TAIEX sessions the change cannot be checked.
+    assert item["market"]["close"] == CLOSE
+    assert item["market"]["change_status"] == "unverified"
+    detail = client.get("/api/stocks/TWSE/1101").json()["candidate"]
+    assert set(detail) == ITEM_KEYS | {"market"}
+
+
 def _snapshot(db):
     db.expire_all()
     return [

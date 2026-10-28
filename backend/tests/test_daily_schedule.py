@@ -33,6 +33,8 @@ DAY = date(2026, 9, 4)
 # Captured before Steps replaces it with a no-op.
 REAL_CATCHUP_STEP = schedule_runs._catchup_step
 REAL_PLAN_TRACKING_STEP = schedule_runs._plan_tracking_step
+REAL_STRATEGY_LEVELS_STEP = schedule_runs._strategy_levels_step
+REAL_TRADING_CALENDAR_STEP = schedule_runs._trading_calendar_step
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +66,7 @@ class Steps:
         self.calls: list[str] = []
         self.results = {
             "collect": {"status": "success", "records": 12, "run_id": None},
+            "trading_calendar": {"status": "success", "records": 0},
             "analyze": {"status": "success", "signals_upserted": 3},
             "evaluate": {
                 "status": "success",
@@ -74,6 +77,7 @@ class Steps:
             "indicators": {"status": "not_configured", "reason": "fixture"},
             "theme_suggestions": {"status": "success", "records": 4},
             "plan_tracking": {"status": "success", "records": 0},
+            "strategy_levels": {"status": "success", "records": 6},
             "candidate_notes": {"status": "success", "records": 3},
         }
         self.results.update(results)
@@ -89,6 +93,9 @@ class Steps:
             return step
 
         monkeypatch.setattr(pipeline, "collect", make("collect"))
+        monkeypatch.setattr(
+            schedule_runs, "_trading_calendar_step", make("trading_calendar")
+        )
         monkeypatch.setattr(pipeline, "analyze", make("analyze"))
         monkeypatch.setattr(pipeline, "evaluate", make("evaluate"))
         monkeypatch.setattr(schedule_runs, "_candidate_step", make("candidates"))
@@ -97,6 +104,9 @@ class Steps:
             schedule_runs, "_theme_suggestion_step", make("theme_suggestions")
         )
         monkeypatch.setattr(schedule_runs, "_plan_tracking_step", make("plan_tracking"))
+        monkeypatch.setattr(
+            schedule_runs, "_strategy_levels_step", make("strategy_levels")
+        )
         monkeypatch.setattr(
             schedule_runs, "_candidate_note_step", make("candidate_notes")
         )
@@ -133,12 +143,14 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
     assert first["status"] == "success"
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -149,12 +161,14 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
     assert {name: (step.status, step.records) for name, step in logged.items()} == {
         "catchup": ("success", 0),
         "collect": ("success", 12),
+        "trading_calendar": ("success", 0),
         "analyze": ("success", 3),
         "evaluate": ("success", 5),
         "candidates": ("success", 2),
         "indicators": ("not_configured", None),
         "theme_suggestions": ("success", 4),
         "plan_tracking": ("success", 0),
+        "strategy_levels": ("success", 6),
         "candidate_notes": ("success", 3),
     }
     assert all(step.started_at and step.finished_at for step in logged.values())
@@ -165,12 +179,14 @@ def test_daily_logs_every_step_and_a_rerun_is_recorded_without_running_again(
     assert again["related_run_id"] == rows[0].id
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -201,12 +217,14 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
     assert {name: step.status for name, step in by_run[rows[0].id].items()} == {
         "catchup": "success",
         "collect": "partial",
+        "trading_calendar": "skipped",
         "analyze": "skipped",
         "evaluate": "skipped",
         "candidates": "skipped",
         "indicators": "skipped",
         "theme_suggestions": "skipped",
         "plan_tracking": "skipped",
+        "strategy_levels": "skipped",
         "candidate_notes": "skipped",
     }
     # A partial day is retried by the next trigger instead of being reused.
@@ -215,12 +233,14 @@ def test_partial_collect_stops_later_steps_and_keeps_the_warning(database, monke
     assert steps.calls == [
         "collect",
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
 
@@ -249,6 +269,7 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
     # own levels, so they still run.
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "indicators",
         "theme_suggestions",
@@ -272,6 +293,10 @@ def test_step_exception_is_recorded_and_dependent_steps_are_skipped(
     assert logged["indicators"].status == "not_configured"
     assert logged["theme_suggestions"].status == "success"
     assert (
+        logged["strategy_levels"].status == "skipped"
+        and logged["strategy_levels"].error == "analyze_not_successful"
+    )
+    assert (
         logged["candidate_notes"].status == "skipped"
         and logged["candidate_notes"].error == "candidates_not_successful"
     )
@@ -286,12 +311,14 @@ def test_failed_evaluate_still_runs_candidates_and_indicators(database, monkeypa
     # candidates read the trading date's signals, which analyze already stored.
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -307,12 +334,14 @@ def test_failed_candidates_fail_the_run_without_blocking_indicators(
     assert result["status"] == "failed"
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
     ]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
@@ -394,12 +423,14 @@ def test_failed_theme_suggestions_fail_the_run_after_every_other_step(
     assert result["status"] == "failed"
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, by_run = runs(database)
@@ -415,17 +446,162 @@ def test_failed_plan_tracking_fails_the_run_but_the_notes_still_run(
     steps = Steps(monkeypatch, plan_tracking=RuntimeError("fixture plan crash"))
     result = pipeline.run_daily(DAY)
     assert result["status"] == "failed"
-    assert steps.calls[-2:] == ["plan_tracking", "candidate_notes"]
+    assert steps.calls[-3:] == ["plan_tracking", "strategy_levels", "candidate_notes"]
     rows, by_run = runs(database)
     logged = by_run[rows[0].id]
     assert "plan_tracking" in rows[0].error and "fixture plan crash" in rows[0].error
     assert logged["plan_tracking"].status == "failed"
     assert logged["candidate_notes"].status == "success"
     # Rows are found by step name; the sequence only orders them.
-    assert [logged[name].sequence for name in ("plan_tracking", "candidate_notes")] == [
-        7,
-        8,
+    assert [
+        logged[name].sequence
+        for name in ("plan_tracking", "strategy_levels", "candidate_notes")
+    ] == [8, 9, 10]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "failed", "error": "fixture levels failure"},
+        {"status": "partial", "error": "fixture partial levels", "records": 2},
+        RuntimeError("fixture levels crash"),
+    ],
+)
+def test_strategy_level_failures_stay_on_the_step_and_the_run_succeeds(
+    database, monkeypatch, outcome
+):
+    # The run's success definition does not depend on strategy_levels (#273).
+    steps = Steps(monkeypatch, strategy_levels=outcome)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert steps.calls[-2:] == ["strategy_levels", "candidate_notes"]
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]
+    assert rows[0].status == "success" and rows[0].error is None
+    step = logged["strategy_levels"]
+    assert step.status in {"failed", "partial"}
+    assert "fixture" in step.error and "levels" in step.error
+    assert rows[0].summary_json["steps"]["strategy_levels"] == step.status
+    assert logged["candidate_notes"].status == "success"
+
+
+def test_the_real_strategy_level_step_records_the_signals_it_processed(
+    database, monkeypatch
+):
+    from test_strategy_levels import T, seed
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(
+        schedule_runs, "_strategy_levels_step", REAL_STRATEGY_LEVELS_STEP
+    )
+    with database() as db:
+        seed(db)
+        db.commit()
+    assert pipeline.run_daily(T)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["strategy_levels"]
+    assert (step.status, step.records, step.error) == ("success", 2, None)
+    assert step.details_json["rows_written"] == 2
+    assert step.details_json["date"] == T.isoformat()
+    assert (
+        sum(
+            sum(counts.values())
+            for counts in step.details_json["availability"].values()
+        )
+        == 2
+    )
+    # An analyze that wrote no signals for the date leaves an acceptable empty step.
+    assert pipeline.run_daily(date(2026, 10, 23))["status"] == "success"
+    rows, by_run = runs(database)
+    empty = by_run[rows[-1].id]["strategy_levels"]
+    assert (empty.status, empty.records) == ("no_data", 0)
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "failed", "error": "fixture calendar failure"},
+        {"status": "partial", "error": "fixture partial calendar", "records": 0},
+        RuntimeError("fixture calendar crash"),
+    ],
+)
+def test_a_trading_calendar_failure_stays_on_the_step_and_analyze_runs(
+    database, monkeypatch, outcome
+):
+    # #294: analyze then reads the calendar already stored.
+    steps = Steps(monkeypatch, trading_calendar=outcome)
+    result = pipeline.run_daily(DAY)
+    assert result["status"] == "success"
+    assert steps.calls[1:3] == ["trading_calendar", "analyze"]
+    rows, by_run = runs(database)
+    logged = by_run[rows[0].id]
+    assert rows[0].status == "success" and rows[0].error is None
+    step = logged["trading_calendar"]
+    assert step.status in {"failed", "partial"}
+    assert "fixture" in step.error and "calendar" in step.error
+    assert rows[0].summary_json["steps"]["trading_calendar"] == step.status
+    assert (logged["trading_calendar"].sequence, logged["analyze"].sequence) == (2, 3)
+    assert logged["analyze"].status == "success"
+
+
+def test_the_real_trading_calendar_step_stores_the_target_year_and_the_next(
+    database, monkeypatch
+):
+    import worker.trading_calendar as trading_calendar
+    from test_trading_calendar import Fetcher, schedule
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(
+        schedule_runs, "_trading_calendar_step", REAL_TRADING_CALENDAR_STEP
+    )
+    fetcher = Fetcher({2026: schedule(2026), 2027: schedule(2027)})
+    real = trading_calendar.run_trading_calendar
+    monkeypatch.setattr(
+        trading_calendar,
+        "run_trading_calendar",
+        lambda target: real(target, fetcher=fetcher),
+    )
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["trading_calendar"]
+    assert (step.status, step.records, step.error) == ("success", 27, None)
+    assert step.details_json["years"]["2026"]["status"] == "inserted"
+    assert step.details_json["years"]["2027"]["status"] == "unpublished"
+    assert fetcher.urls == [
+        trading_calendar.year_endpoint(2026),
+        trading_calendar.year_endpoint(2027),
     ]
+
+
+def test_a_real_trading_calendar_failure_keeps_its_reason_on_the_step(
+    database, monkeypatch
+):
+    # #294 review L1: the reason shows in schedule-runs, not only in details.
+    import worker.trading_calendar as trading_calendar
+    from test_trading_calendar import Fetcher
+
+    Steps(monkeypatch)
+    monkeypatch.setattr(
+        schedule_runs, "_trading_calendar_step", REAL_TRADING_CALENDAR_STEP
+    )
+    down = sources.OfficialDataError("fixture schedule endpoint down")
+    fetcher = Fetcher({2026: down, 2027: down})
+    real = trading_calendar.run_trading_calendar
+    monkeypatch.setattr(
+        trading_calendar,
+        "run_trading_calendar",
+        lambda target: real(target, fetcher=fetcher),
+    )
+    assert pipeline.run_daily(DAY)["status"] == "success"
+    rows, by_run = runs(database)
+    step = by_run[rows[0].id]["trading_calendar"]
+    assert step.status == "failed"
+    assert step.error == "; ".join(
+        f"holiday schedule {year} unavailable: official endpoint failed:"
+        f" {trading_calendar.year_endpoint(year)}: fixture schedule endpoint down"
+        for year in (2026, 2027)
+    )
+    assert by_run[rows[0].id]["analyze"].status == "success"
 
 
 def test_plan_tracking_without_any_plan_is_a_successful_empty_step(
@@ -500,12 +676,14 @@ def test_list_schedule_runs_reports_steps(database, monkeypatch):
     assert [step["step"] for step in listed[0]["steps"]] == [
         "catchup",
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
 
@@ -858,6 +1036,73 @@ def test_preflight_skip_is_logged_without_running_steps_and_does_not_complete_th
         schedule_runs.record_preflight_skip(DAY, reason="unknown")
 
 
+def test_a_lock_skip_points_at_the_running_row(database, monkeypatch):
+    with database() as db:
+        running = ScheduleRun(
+            job="daily",
+            target_date=DAY,
+            trigger="scheduler",
+            status="running",
+            started_at=datetime.utcnow(),
+            host=socket.gethostname(),
+            pid=os.getpid(),
+        )
+        db.add(running)
+        db.commit()
+        running_id = running.id
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["reason"] == "already_running"
+    assert skipped["related_run_id"] == running_id
+    rows, _ = runs(database)
+    assert [(row.status, row.summary_json) for row in rows][-1] == (
+        "skipped",
+        {"reason": "already_running", "related_run_id": running_id},
+    )
+
+
+def test_a_lock_skip_writes_nothing_while_the_database_awaits_migration(
+    database, monkeypatch
+):
+    # #313 AC-7: the daily holding the job lock may be migrating this database.
+    # The migration reads inside one transaction for minutes before it writes; a
+    # row committed meanwhile (or a second migration) made its write fail.
+    from sqlalchemy import text
+
+    from app.migration_revisions import REVISIONS
+
+    def migrate():
+        raise AssertionError("the lock skip ran init_db")
+
+    monkeypatch.setattr(pipeline, "init_db", migrate)
+    with database() as db:
+        db.execute(
+            text("UPDATE alembic_version SET version_num = :value"),
+            {"value": REVISIONS[-2]},
+        )
+        db.commit()
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["schedule_run_id"] is None
+    assert skipped["error"].startswith(
+        f"skip row not written: database at ['{REVISIONS[-2]}']"
+    )
+    assert runs(database)[0] == []
+
+
+def test_a_lock_skip_that_cannot_write_its_row_reports_it(database, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    def locked():
+        raise OperationalError("INSERT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(pipeline, "SessionLocal", locked)
+    skipped = schedule_runs.record_preflight_skip(DAY, reason="already_running")
+    assert skipped["status"] == "skipped" and skipped["schedule_run_id"] is None
+    assert "database is locked" in skipped["error"]
+    # Any other skip reason still raises: its row is the only trace in the DB.
+    with pytest.raises(OperationalError):
+        schedule_runs.record_preflight_skip(DAY, reason="low_memory")
+
+
 def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkeypatch):
     steps = Steps(monkeypatch)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
@@ -889,12 +1134,14 @@ def test_running_row_whose_process_is_gone_is_abandoned_at_once(database, monkey
     assert pipeline.run_daily(DAY)["status"] == "success"
     assert steps.calls == [
         "collect",
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     rows, _ = runs(database)
@@ -1198,12 +1445,14 @@ def test_daily_collects_missed_sessions_oldest_first_then_the_target(
         (MONDAY, "snapshot"),
     ]
     assert steps.calls == [
+        "trading_calendar",
         "analyze",
         "evaluate",
         "candidates",
         "indicators",
         "theme_suggestions",
         "plan_tracking",
+        "strategy_levels",
         "candidate_notes",
     ]
     caught = result["catchup"]
@@ -1380,15 +1629,17 @@ def test_noncore_source_warnings_keep_the_collect_successful(database):
         sources.TPEX_FUNDAMENTAL_ENDPOINT,
         sources.TPEX_SUSPEND_ENDPOINT,
         sources.TPEX_SUSPEND_HISTORY_ENDPOINT,
+        # The display-only market summary (Issue #275).
+        sources.TPEX_HIGHLIGHT_ENDPOINT,
     )
     result = pipeline.collect(DAY, adapter=combined(OutageFetcher(failing)))
     assert result["status"] == "success", result
-    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 6
+    assert result["core_warnings"] == [] and len(result["noncore_warnings"]) == 7
     assert result["warnings"] == result["noncore_warnings"]
     with database() as db:
         run = db.get(IngestionRun, result["run_id"])
         assert (
-            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 6
+            run.status == "success" and len(run.metadata_json["noncore_warnings"]) == 7
         )
 
 

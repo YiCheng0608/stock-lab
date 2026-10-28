@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { StockBarsChart } from './StockBarsChart'
+import { StockCutoffControl } from './StockCutoffControl'
 import { StockQuoteLine } from './StockHeader'
 import {
   CHART_THEME_TOKENS,
@@ -63,14 +64,14 @@ for (const panel of INDICATOR_PANELS) {
   check(state.kind === 'not_computed' && state.title === '指標尚未計算', `${panel.id}: not_computed state`)
 }
 check(fieldsState(notComputed.bars[1], ['ma5'], notComputed).kind === 'not_computed', 'not_computed field state')
-check(maNotes(notComputed, new Set<MaField>(['ma5']))[0] === 'MA5 指標尚未計算：2026-10-16 的指標尚未由批次計算', 'MA note for not_computed')
+check(maNotes(notComputed, new Set<MaField>(['ma5']))[0] === 'MA5 指標尚未計算：2026/10/16 的指標尚未由批次計算', 'MA note for not_computed')
 
 // ---- suspended day + missing calendar day ----
 const suspended = suspendedWithGapDaily()
 const dates = suspended.bars.map((bar) => bar.date)
 check(dates.length === 40 && !dates.includes('2026-09-07') && dates.includes('2026-09-08'), 'the missing calendar day is not filled in')
 const suspendedState = indicatorPanelState(suspended, 'rsi')
-check(suspendedState.kind === 'chart' && suspendedState.note === `${dates[39]} RSI無資料：停牌，當日不計算`, `latest suspended bar keeps the chart and explains the gap: ${JSON.stringify(suspendedState)}`)
+check(suspendedState.kind === 'chart' && suspendedState.note === `${dates[39].replaceAll('-', '/')} RSI無資料：停牌，當日不計算`, `latest suspended bar keeps the chart and explains the gap: ${JSON.stringify(suspendedState)}`)
 const suspendedQuote = stockQuote(suspended.bars)
 check(suspendedQuote.date === dates[38] && suspendedQuote.close === suspended.bars[38].close, 'latest close skips the suspended last row')
 check(suspendedQuote.change != null && Math.abs(suspendedQuote.change - 0.5) < 1e-9, 'change uses the adjacent traded row before it')
@@ -91,14 +92,14 @@ const downMarkup = renderToStaticMarkup(<StockQuoteLine bars={[tradedBar('2026-1
 check(downMarkup.includes('tone-down') && downMarkup.includes('-10（-1.67%）') && !downMarkup.includes('tone-up'), `down markup: ${downMarkup}`)
 const emptyMarkup = renderToStaticMarkup(<StockQuoteLine bars={[]} />)
 check(emptyMarkup.includes('待核實') && emptyMarkup.includes('漲跌待核實') && emptyMarkup.includes('tone-flat') && !emptyMarkup.includes('>0<'), 'no bars → 待核實, never 0')
-check(upMarkup.includes('資料 2026-10-16') && upMarkup.includes('臺灣證券交易所'), 'header shows data date badge and source')
+check(upMarkup.includes('資料 2026/10/16') && upMarkup.includes('臺灣證券交易所'), 'header shows data date badge and source')
 
 // ---- weekly series ----
 const weekly = weeklySeries()
 const weeklyMacd = indicatorPanelState(weekly, 'macd')
 check(weeklyMacd.kind === 'empty' && weeklyMacd.reason === '週線不足 34 根，現有 3 根', `weekly reason counts weeks: ${JSON.stringify(weeklyMacd)}`)
 const weeklyTooltip = formatBarsTooltip(weekly, 2, 'macd', allMa, 0)
-check(weeklyTooltip.includes('2026-10-12～2026-10-16（5 個交易日）') && weeklyTooltip.includes('成交量（張） 105,000'), `weekly tooltip: ${weeklyTooltip}`)
+check(weeklyTooltip.includes('2026/10/12～2026/10/16（5 個交易日）') && weeklyTooltip.includes('成交量（張） 105,000'), `weekly tooltip: ${weeklyTooltip}`)
 check(stockQuote(weekly.bars).sources.join() === 'twse', 'weekly rows read their sources list')
 
 // ---- chart option: K line, volume, five MAs, four indicator panels ----
@@ -142,9 +143,9 @@ check(Math.abs(zoomDefault.start - 52) < 1e-9 && zoomDefault.end === 100, 'first
 const render = (data: StockBarsResponse, interval: 'day' | 'week' = 'day') => renderToStaticMarkup(<StockBarsChart interval={interval} onIntervalChange={() => undefined} data={data} loading={false} error={null} />)
 const insufficientMarkup = render(insufficient)
 check(insufficientMarkup.includes('無資料') && insufficientMarkup.includes('日線不足 34 根，現有 20 根'), 'rendered MACD panel shows 無資料 with the reason')
-check(insufficientMarkup.includes('資料 2026-09-20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
-check(insufficientMarkup.includes('日線批次計算於 2026-10-16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
-check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026-10-17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026-10-17 23:30', 'computed_at time zone handling')
+check(insufficientMarkup.includes('資料 2026/09/20') && insufficientMarkup.includes('indicators/v1'), 'chart card shows its data date badge and formula version')
+check(insufficientMarkup.includes('日線批次計算於 2026/10/16 18:00（台灣時間）'), 'naive UTC computed_at is shown in Taiwan time')
+check(formatTaipeiDateTime('2026-10-17T11:39:37.362391') === '2026/10/17 19:39' && formatTaipeiDateTime('2026-10-17T23:30:00+08:00') === '2026/10/17 23:30', 'computed_at time zone handling')
 check(formatTaipeiDateTime(null) === null && formatTaipeiDateTime('not a date') === null, 'missing or invalid computed_at')
 check(['MACD', 'RSI', 'KD', '布林'].every((label) => insufficientMarkup.includes(`>${label}</button>`)), 'four indicator tabs are rendered')
 check(MA_LINES.every((line) => insufficientMarkup.includes(`ma-swatch-${line.color}`)), 'five MA toggles are rendered')
@@ -155,3 +156,10 @@ const loadingMarkup = renderToStaticMarkup(<StockBarsChart interval="day" onInte
 check(loadingMarkup.includes('aria-busy="true"') && loadingMarkup.includes('skeleton'), 'loading shows a skeleton')
 const emptyChart = renderToStaticMarkup(<StockBarsChart interval="day" onIntervalChange={() => undefined} data={barsResponse([])} loading={false} error={null} />)
 check(emptyChart.includes('來源未提供日線') && emptyChart.includes('資料日期待核實'), 'no bars → empty state and pending date badge')
+
+// ---- #300 研究截止日期 (DESIGN_SYSTEM §4 手機第一屏): one toggle line on phones, open when a cutoff is applied ----
+const latestCutoff = renderToStaticMarkup(<StockCutoffControl asOf="" onApply={() => undefined} />)
+check(latestCutoff.includes('class="cutoff-panel"') && latestCutoff.includes('aria-expanded="false"') && latestCutoff.includes('研究截止日期：最新資料 ▸'), `no cutoff: the panel starts folded and names 最新資料: ${latestCutoff.slice(0, 200)}`)
+check(latestCutoff.indexOf('cutoff-toggle') < latestCutoff.indexOf('<form id="stock-cutoff-form" class="overview-cutoff-control"') && latestCutoff.includes('套用截止'), 'the toggle precedes the unchanged cutoff form')
+const appliedCutoff = renderToStaticMarkup(<StockCutoffControl asOf="2026-10-20" onApply={() => undefined} />)
+check(appliedCutoff.includes('class="cutoff-panel open"') && appliedCutoff.includes('aria-expanded="true"') && appliedCutoff.includes('研究截止日期：2026/10/20 ▾') && appliedCutoff.includes('value="2026-10-20"'), 'an applied cutoff starts open and shows its date')

@@ -1,4 +1,4 @@
-"""verify checks of the user tracking plans (#253): today T11, actions A8-A11.
+"""verify checks of the user tracking plans (#253): today T13, actions A14-A17.
 
 The page text is written the way the browser's innerText lays out
 the tracking views (TrackingViews.tsx; one line per block, table cells
@@ -86,9 +86,7 @@ def card(item, status_label, created, *body, conflict=False):
     return "\n".join(lines)
 
 
-def page(
-    cards_open, cards_closed, *, before="", after="查看個股詳情 →\n資料日 2026/10/16"
-):
+def page(cards_open, cards_closed, *, before="", after="第 1 級\n今日候選"):
     return "\n".join(
         [
             "行動中心",
@@ -145,64 +143,64 @@ def actions_run(tmp_path, text=GOOD, payloads=PAYLOADS, facts=None):
 
 def test_the_tracking_checks_pass_on_matching_text(tmp_path):
     run = actions_run(tmp_path)
-    assert "進行中 2＋已結束 2 張卡" in page_checks.a8(run)
-    assert "沒有 `勝率`" in page_checks.a9(run)
-    assert "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動卡" in page_checks.a10(run)
-    assert "計畫 3 的 2 列 = tracking-plan.json" in page_checks.a11(run)
+    assert "進行中 2＋已結束 2 張卡" in page_checks.a14(run)
+    assert "沒有 `勝率`" in page_checks.a15(run)
+    assert "我的庫存 < 追蹤計畫 < 追蹤回看 < 行動列表" in page_checks.a16(run)
+    assert "計畫 3 的 2 列 = tracking-plan.json" in page_checks.a17(run)
 
 
-def test_a8_compares_the_plan_and_creation_dates(tmp_path):
+def test_a14_compares_the_plan_and_creation_dates(tmp_path):
     # The creation date is the Taipei date of created_at (16:30 UTC is the next day).
     text = GOOD.replace("· 建立 2026/10/17", "· 建立 2026/10/16")
     with pytest.raises(
         page_checks.Fail, match="計畫 1 為 .*預期 \\('2026/10/16', '2026/10/17'\\)"
     ):
-        page_checks.a8(actions_run(tmp_path, text))
+        page_checks.a14(actions_run(tmp_path, text))
 
 
-def test_a8_fails_when_the_page_drops_a_card(tmp_path):
+def test_a14_fails_when_the_page_drops_a_card(tmp_path):
     payloads = {**PAYLOADS, OPEN: {"items": [PENDING, TRIGGERED, plan(9, "pending")]}}
     with pytest.raises(
         page_checks.Fail, match="`計畫資料日` 4 行，進行中 3＋已結束 2 筆"
     ):
-        page_checks.a8(actions_run(tmp_path, payloads=payloads))
+        page_checks.a14(actions_run(tmp_path, payloads=payloads))
 
 
-def test_a8_empty_sections_pass_only_without_plans_in_the_db(tmp_path):
+def test_a14_empty_sections_pass_only_without_plans_in_the_db(tmp_path):
     empty = page([page_checks.EMPTY_OPEN_PLANS], [page_checks.EMPTY_CLOSED_PLANS])
     payloads = {OPEN: {"items": []}, CLOSED: {"items": []}}
-    assert "進行中 0＋已結束 0" in page_checks.a8(
+    assert "進行中 0＋已結束 0" in page_checks.a14(
         actions_run(tmp_path, empty, payloads)
     )
     run = actions_run(tmp_path, empty, payloads, {"tracking_plans_closed": 2})
     with pytest.raises(page_checks.Fail, match="DB tracking_plans_closed 有 2 筆"):
-        page_checks.a8(run)
+        page_checks.a14(run)
 
 
-def test_a9_reads_the_status_badge_of_each_card(tmp_path):
+def test_a15_reads_the_status_badge_of_each_card(tmp_path):
     text = GOOD.replace("達標\n資料 2026/10/16", "失效\n資料 2026/10/16")
     with pytest.raises(page_checks.Fail, match="計畫 3 狀態標籤 '失效'，預期 `達標`"):
-        page_checks.a9(actions_run(tmp_path, text))
+        page_checks.a15(actions_run(tmp_path, text))
 
 
-def test_a9_needs_the_simulated_return_of_an_ended_plan(tmp_path):
+def test_a15_needs_the_simulated_return_of_an_ended_plan(tmp_path):
     with pytest.raises(page_checks.Fail, match="計畫 3 缺整行 `模擬報酬 \\+4.08%`"):
-        page_checks.a9(
+        page_checks.a15(
             actions_run(tmp_path, GOOD.replace("模擬報酬 +4.08%", "模擬報酬 +4.10%"))
         )
     text = GOOD.replace("模擬報酬：無法比較（視窗內未模擬成交）", "")
     with pytest.raises(page_checks.Fail, match="計畫 4 已結束不可比較"):
-        page_checks.a9(actions_run(tmp_path, text))
+        page_checks.a15(actions_run(tmp_path, text))
 
 
-def test_a9_marks_a_transition_conflict(tmp_path):
+def test_a15_marks_a_transition_conflict(tmp_path):
     conflict = {**TRIGGERED, "data_quality": "transition_conflict"}
     payloads = {**PAYLOADS, OPEN: {"items": [PENDING, conflict]}}
     with pytest.raises(
         page_checks.Fail,
         match="計畫 2 data_quality transition_conflict，`行情有更正，狀態待核對` 沒有",
     ):
-        page_checks.a9(actions_run(tmp_path, payloads=payloads))
+        page_checks.a15(actions_run(tmp_path, payloads=payloads))
     text = GOOD.replace(
         card(
             TRIGGERED, "已觸發", "2026/10/13", "模擬成交 2026/10/14 98.75", "取消追蹤"
@@ -216,66 +214,69 @@ def test_a9_marks_a_transition_conflict(tmp_path):
             conflict=True,
         ),
     )
-    assert "更正標示" in page_checks.a9(actions_run(tmp_path, text, payloads))
+    assert "更正標示" in page_checks.a15(actions_run(tmp_path, text, payloads))
 
 
-def test_a9_fails_on_a_win_rate_outside_the_note(tmp_path):
+def test_a15_fails_on_a_win_rate_outside_the_note(tmp_path):
     text = GOOD.replace("模擬報酬 +4.08%", "模擬報酬 +4.08%\n勝率 60%")
     with pytest.raises(page_checks.Fail, match="出現 `勝率`"):
-        page_checks.a9(actions_run(tmp_path, text))
+        page_checks.a15(actions_run(tmp_path, text))
 
 
-def test_a10_keeps_positions_plans_and_actions_apart(tmp_path):
+def test_a16_keeps_positions_plans_and_actions_apart(tmp_path):
     with pytest.raises(page_checks.Fail, match="`記錄來源` 在庫存區外"):
-        page_checks.a10(
+        page_checks.a16(
             actions_run(tmp_path, GOOD + "\n記錄來源 本地 · 記錄日期 待核實")
         )
     with pytest.raises(page_checks.Fail, match="`模擬成交` 在追蹤區外"):
-        page_checks.a10(
+        page_checks.a16(
             actions_run(tmp_path, page([], [], before="模擬成交 2026/10/14 98.75"))
         )
     reordered = GOOD.replace("追蹤計畫\n", "", 1).replace(
         "追蹤回看\n", "追蹤回看\n追蹤計畫\n", 1
     )
     with pytest.raises(page_checks.Fail, match="行序"):
-        page_checks.a10(actions_run(tmp_path, reordered))
+        page_checks.a16(actions_run(tmp_path, reordered))
+    # The action list starts at its first tier heading.
+    with pytest.raises(page_checks.Fail, match="`模擬報酬` 在追蹤區外"):
+        page_checks.a16(actions_run(tmp_path, GOOD + "\n模擬報酬 +1.00%"))
 
 
-def test_a11_counts_the_history_rows_of_every_card(tmp_path):
+def test_a17_counts_the_history_rows_of_every_card(tmp_path):
     text = GOOD.replace("\n2026/10/14\t第 1 日\t未觸發\t50.04", "")
     with pytest.raises(page_checks.Fail, match="計畫 4 明細 0 列，sessions_observed 1"):
-        page_checks.a11(actions_run(tmp_path, text))
+        page_checks.a17(actions_run(tmp_path, text))
     text = GOOD.replace("2026/10/15\t第 2 日\t達標", "2026/10/15\t第 2 日\t失效")
     with pytest.raises(page_checks.Fail, match="計畫 3 明細"):
-        page_checks.a11(actions_run(tmp_path, text))
+        page_checks.a17(actions_run(tmp_path, text))
 
 
-def test_t11_counts_one_add_or_tracked_line_per_candidate(tmp_path):
+def test_t13_counts_one_add_or_tracked_line_per_candidate(tmp_path):
     payload = _candidates()
     payload["items"][0]["open_plan_id"] = 1
     payload["items"][1]["open_plan_id"] = None
     good = "明日候選\n已在追蹤\n加入追蹤\n"
     run = FakeRun(tmp_path, {"candidates": payload}, {"today-1280": good})
-    assert "`已在追蹤` 1 = open_plan_id" in page_checks.t11(run)
+    assert "`已在追蹤` 1 = open_plan_id" in page_checks.t13(run)
     run = FakeRun(
         tmp_path, {"candidates": payload}, {"today-1280": "加入追蹤\n加入追蹤\n"}
     )
     with pytest.raises(
         page_checks.Fail, match="`已在追蹤` 0 行，open_plan_id 非 null 1 筆"
     ):
-        page_checks.t11(run)
+        page_checks.t13(run)
     run = FakeRun(tmp_path, {"candidates": payload}, {"today-1280": "加入追蹤\n"})
     with pytest.raises(page_checks.Fail, match="items 2"):
-        page_checks.t11(run)
+        page_checks.t13(run)
 
 
-def test_a11_fails_instead_of_crashing_when_the_page_has_no_plan_cards(tmp_path):
-    # The page from before #253 has no plan cards: a failure (then 無法判定 after A8), not an IndexError.
+def test_a17_fails_instead_of_crashing_when_the_page_has_no_plan_cards(tmp_path):
+    # The page from before #253 has no plan cards: a failure (then 無法判定 after A14), not an IndexError.
     with pytest.raises(page_checks.Fail, match="`計畫資料日` 0 行，計畫 4 筆"):
-        page_checks.a11(actions_run(tmp_path, "我的庫存\n查看個股詳情 →"))
+        page_checks.a17(actions_run(tmp_path, "我的庫存\n第 1 級"))
 
 
-def test_a9_does_not_pass_a_page_without_the_plan_cards(tmp_path):
+def test_a15_does_not_pass_a_page_without_the_plan_cards(tmp_path):
     # Found on the page from before #253: zip() over no cards checked nothing and passed.
     with pytest.raises(page_checks.Fail, match="`計畫資料日` 0 行，計畫 4 筆"):
-        page_checks.a9(actions_run(tmp_path, "我的庫存\n查看個股詳情 →"))
+        page_checks.a15(actions_run(tmp_path, "我的庫存\n第 1 級"))

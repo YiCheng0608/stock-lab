@@ -15,6 +15,7 @@ export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
+arguments=("$@")
 dry_run=0
 data_dir="${STOCK_DATA_DIR:-$HOME/stock-lab-data}"
 python="${STOCK_PYTHON:-}"
@@ -30,7 +31,6 @@ while [ $# -gt 0 ]; do
 done
 
 GH_REPO='YiCheng0608/stock-lab'
-LOCK_STALE_SECONDS=1800
 NEWS_INTERVAL_SECONDS=7200
 # The daily result is read from 22:00 Taipei: by then the 21:30 trigger has
 # written its schedule_runs row, so an 18:30 partial is not reported early.
@@ -39,7 +39,6 @@ DAILY_RESULT_AFTER_HM=2200
 now="${WATCHDOG_NOW:-$(date -u +%s)}"
 logs="$data_dir/logs"
 log_file="$logs/watchdog.log"
-lock_dir="$logs/watchdog.lock"
 mkdir -p "$logs" || exit 1
 
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
@@ -55,30 +54,44 @@ log() {
   printf '%s\n' "$line"
 }
 
-# --- lock ---------------------------------------------------------------
-if ! mkdir "$lock_dir" 2>/dev/null; then
-  lock_age=$(( $(date -u +%s) - $(stat -c %Y "$lock_dir" 2>/dev/null || date -u +%s) ))
-  if [ "$lock_age" -lt "$LOCK_STALE_SECONDS" ]; then
-    log locked "lock_age_s=$lock_age" "上一次執行仍持有 lock，本次略過"
-    exit 0
-  fi
-  rm -rf "$lock_dir"
-  mkdir "$lock_dir" 2>/dev/null || { log locked "" "無法取得 lock，本次略過"; exit 0; }
-  log lock_stale_removed "lock_age_s=$lock_age" "lock 已超過 30 分鐘，視為殘留並移除"
-fi
-trap 'rm -rf "$lock_dir"' EXIT
-work="$lock_dir"
-
-# --- python helper (read-only database check) ----------------------------------
+# --- python (lock and read-only database checks) --------------------------------
 found=0  # 1 once an anomaly is reported or a check could not run
+python_missing=""
 if [ -z "$python" ]; then
   for candidate in "$repo_root/.venv/Scripts/python.exe" "$repo_root/.venv/bin/python" python3 python; do
     if "$candidate" -c 'import sys' >/dev/null 2>&1; then python="$candidate"; break; fi
   done
 fi
 if [ -z "$python" ] || ! "$python" -c 'import sys' >/dev/null 2>&1; then
-  log python_missing "python=${python:-none}" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm、資料不變量）；日誌檢查照做"
+  python_missing="${python:-none}"
   python=""
+fi
+
+# --- lock -----------------------------------------------------------------------
+# The file lock of the scheduled jobs (backend/worker/job.py): Python holds it
+# and runs this script again as its child; the OS drops it when Python ends,
+# killed or not, and the child ends with it (#313; replaces the lock directory
+# that a killed run left behind for 30 minutes, #224). Without Python the run
+# goes unlocked; the task's IgnoreNew still keeps scheduled runs apart.
+if [ -n "$python" ] && [ -z "${WATCHDOG_LOCK_HELD:-}" ]; then
+  case "$data_dir" in
+    /*|[A-Za-z]:*) lock_file="$data_dir/locks/watchdog.lock" ;;
+    *) lock_file="$PWD/$data_dir/locks/watchdog.lock" ;;
+  esac
+  (cd "$repo_root/backend" && WATCHDOG_LOCK_HELD=1 exec "$python" -X utf8 -m worker.job \
+    lock "$lock_file" -- "$BASH" "$script_dir/watchdog.sh" "${arguments[@]}")
+  status=$?
+  if [ "$status" = 75 ]; then
+    log locked "" "上一次執行仍持有 lock，本次略過"
+    exit 0
+  fi
+  exit "$status"
+fi
+work="$(mktemp -d "$logs/.watchdog.XXXXXX")" || exit 1
+trap 'rm -rf "$work"' EXIT
+
+if [ -n "$python_missing" ]; then
+  log python_missing "python=$python_missing" "找不到可用的 Python，跳過 DB 檢查（daily 結果、news_llm、資料不變量）；日誌檢查照做"
   found=1
 fi
 helper() { "$python" -X utf8 "$script_dir/watchdog_helper.py" "$@"; }
@@ -193,6 +206,8 @@ if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
         future_trading_date) anomaly invariant_future_date "資料不變量：\`market_bars\` 最新 \`trading_date\` 是 $(value max_trading_date)，晚於台北今日 $(value today)（日期解析或來源錯誤），請查最近的 daily 日誌與 \`/api/ingestion-runs\`。" ;;
         latest_bar_provenance) anomaly invariant_bar_provenance "資料不變量：最新交易日 $(value trading_date) 的 $(value bars) 列 \`market_bars\` 中，$(value unknown_source) 列 \`source\` 是 \`unknown\` 或空、$(value null_data_as_of) 列沒有 \`data_as_of\`，請查該日的 daily 日誌與寫入來源。" ;;
         instrument_status_sync) anomaly invariant_status_sync "資料不變量：最近一次標的狀態同步被防呆略過（$(value skipped)；absent 為官方清單缺席、dormant 為 60 個交易日沒有行情列）：兩者合計超過該交易所現行標的的 5%，標的狀態沒有更新。請依 OPERATIONS §6.1 查該日 collect run 的 \`instrument_status_sync\`。" ;;
+        execution_calendar) anomaly invariant_execution_calendar "資料不變量：最新訊號日 $(value signal_date) 的 $(value signals) 筆 analysis 訊號中，$(value without_date) 筆沒有規則最早執行日（\`earliest_execution_date\` 為空）：官方休市表缺該年度，或 daily 的 trading_calendar 步驟失敗。請依 OPERATIONS §6.3 查該日 analyze 步驟的 \`execution_calendar\` 與 trading_calendar 步驟，必要時跑 \`python -m worker.cli trading-calendar\`。" ;;
+        strategy_levels) anomaly invariant_strategy_levels "資料不變量：daily run $(value run_id)（目標日 $(value target_date)）的 strategy_levels 步驟是 \`$(value status)\`：這一步不影響 run 狀態，個股頁策略總表的觀察價位不會更新。請依 OPERATIONS §6.3 查該 run 的 \`schedule_run_steps\` 錯誤，修正後跑 \`python -m worker.cli strategy-levels --date $(value target_date)\`。" ;;
         llm_done_provenance) anomaly invariant_llm_provenance "資料不變量：\`news_llm_results\` 的 $(value done) 列 \`llm_status=done\` 中，$(value missing_model) 列沒有 \`llm_model\`、$(value empty_prompt_version) 列 \`prompt_version\` 為空，請查 news 日誌的 news-llm 段落。" ;;
       esac
     done <<<"$checks"

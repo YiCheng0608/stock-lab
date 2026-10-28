@@ -11,7 +11,7 @@ value is missing or the condition is false, so a script can test the exit code.
   repo-id KEY         id of the orca repo whose remote canonicalKey is KEY
   terminals PATH      "handle agent lastOutputAt" per terminal of the worktree at PATH
   worktrees PREFIX    "path<TAB>branch<TAB>id" per orca worktree on branch refs/heads/PREFIX*
-  ci-state SHA        CI state of master: "<state of SHA> <state of the newest run>"
+  ci-state SHA        CI state of the target branch: "<state of SHA> <state of the newest run>"
   board               "itemId projectId fieldId optionId=name,..." of project 1 from the
                       issue query (item "-" and the issue node id last when the issue is
                       not on the board)
@@ -80,8 +80,8 @@ def _overlaps(a: str, b: str) -> bool:
     return any(_inside(x, y) or _inside(y, x) for x in _forms(a) for y in _forms(b))
 
 
-def _has_git_inside(top: str) -> bool:
-    """A .git anywhere under top, without entering a junction or symlink."""
+def _git_inside(top: str) -> str:
+    """The first .git under top, without entering a junction or symlink, or ""."""
     stack = [top]
     while stack:
         try:
@@ -90,12 +90,12 @@ def _has_git_inside(top: str) -> bool:
             continue
         for entry in entries:
             if entry.name == ".git":
-                return True
+                return entry.path
             if entry.is_junction() or entry.is_symlink():
                 continue
             if entry.is_dir(follow_symlinks=False):
                 stack.append(entry.path)
-    return False
+    return ""
 
 
 def guard(
@@ -134,8 +134,11 @@ def guard(
         if parent == d:
             break
         d = parent
-    if os.path.isdir(real) and _has_git_inside(real):
-        return "裡面有 .git"
+    # The path names the repo to look at: a fake one a failed pytest run left in its
+    # basetemp is cleared by the next green run on that basetemp (#290).
+    found = _git_inside(real) if os.path.isdir(real) else ""
+    if found:
+        return f"裡面有 .git（{found}）"
     return ""
 
 

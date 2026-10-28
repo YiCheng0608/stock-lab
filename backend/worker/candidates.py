@@ -1,11 +1,11 @@
 """Daily candidate list scored with the current candidate_score version (V1_SPEC).
 
-Runs after ``analyze``: it reads the trading date's ``breakout_v1`` /
-``pullback_v1`` signals, keeps the ones analyze judged actionable
-(conditional) on that date, whatever tracking status they reached since, with
-legal price levels
-on common stocks, scores them on four components (technical, chips, news
-sentiment, group) and stores the top of the list with rule-based reasons.
+Runs after ``analyze``: it reads the trading date's signals of the
+strategies the score version's pool lists, keeps the ones analyze judged
+actionable (conditional) on that date, whatever tracking status they reached
+since, with legal price levels on common stocks, scores them on four
+components (technical, chips, news sentiment, group) and stores the top of
+the list with rule-based reasons.
 
 The score only orders signals the strategies already judged; it never
 changes a strategy decision and is not a win rate or expected return.
@@ -21,6 +21,7 @@ version returns the stored run without adding or rewriting rows.
 from __future__ import annotations
 
 import math
+import string
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -52,16 +53,18 @@ from app.models import (
     StrategyVersion,
     ThemeGroup,
 )
+from app.strategies import REGISTRY
 
 from . import pipeline
 from .pipeline import _group_board, _percentile, _safe_float
 
-STRATEGY_ENTRY_TYPES = {"breakout_v1": "breakout", "pullback_v1": "pullback"}
 GROUP_BOARD_LABELS = {"industry": "產業", "theme": "題材"}
 NEWS_TIME_BASES = ("published", "event", "event_date")
 
 # Rule-based reason codes; the Chinese copy is UI_COPY_SPEC §10.  Every code
-# belongs to one component, which orders it by weighted contribution.
+# belongs to one component, which orders it by weighted contribution.  A
+# strategy names its technical code (Strategy.candidate_reason); the code is
+# given only when every value its template needs is available.
 REASON_TEMPLATES: dict[str, tuple[str, str]] = {
     "breakout_20d_high": ("technical", "突破 20 日高點，量比 {volume_ratio}"),
     "pullback_ma20_support": (
@@ -136,21 +139,9 @@ def _technical_inputs(
     ):
         average = sum(prior_volumes) / 20
         volume_ratio = volume / average if average > 0 else None
-    distance = None
-    if close is not None:
-        if strategy == "breakout_v1":
-            highs = [_finite(item) for item in inputs.get("prior_20_highs") or []]
-            if len(highs) == 20 and all(
-                item is not None and item > 0 for item in highs
-            ):
-                distance = close / max(highs) - 1
-        else:
-            ma20 = _finite(inputs.get("ma20"))
-            if ma20 is not None and ma20 > 0:
-                distance = abs(close / ma20 - 1)
-    entry = _finite(
-        signal.breakout_price if strategy == "breakout_v1" else signal.reference_entry
-    )
+    rule = REGISTRY[strategy]
+    distance = rule.candidate_distance(close, inputs) if close is not None else None
+    entry = _finite(getattr(signal, rule.level_fields["trigger_price"]))
     invalid = _finite(signal.invalid_price)
     target = _finite(signal.target_1)
     risk_reward = None
@@ -500,22 +491,21 @@ def _reasons(entry: _PoolEntry, config: dict[str, Any]) -> list[dict[str, Any]]:
     found: list[tuple[str, dict[str, Any]]] = []
     volume_ratio = technical["volume_ratio"]["value"]
     distance = technical["distance"]["value"]
-    if entry.strategy == "breakout_v1" and volume_ratio is not None:
-        found.append(("breakout_20d_high", {"volume_ratio": f"{volume_ratio:.1f}"}))
-    if (
-        entry.strategy == "pullback_v1"
-        and volume_ratio is not None
-        and distance is not None
-    ):
-        found.append(
-            (
-                "pullback_ma20_support",
-                {
-                    "distance": _format_percent(distance),
-                    "volume_ratio": f"{volume_ratio:.1f}",
-                },
+    technical_code = REGISTRY[entry.strategy].candidate_reason
+    if technical_code is not None:
+        values = {
+            "volume_ratio": None if volume_ratio is None else f"{volume_ratio:.1f}",
+            "distance": None if distance is None else _format_percent(distance),
+        }
+        fields = [
+            name
+            for _text, name, _spec, _conversion in string.Formatter().parse(
+                REASON_TEMPLATES[technical_code][1]
             )
-        )
+            if name
+        ]
+        if all(values[name] is not None for name in fields):
+            found.append((technical_code, {name: values[name] for name in fields}))
     foreign, trust = chip_raw.get("foreign_5d"), chip_raw.get("trust_5d")
     flow5 = chips["institutional_flow_5d"]["value"]
     if foreign is not None and trust is not None and foreign > 0 and trust > 0:
@@ -675,7 +665,7 @@ def compute_daily_candidates(
             target_2=signal.target_2,
         )
         if (
-            signal.entry_type != STRATEGY_ENTRY_TYPES[strategy.name]
+            signal.entry_type != REGISTRY[strategy.name].entry_type
             or not validation.valid
         ):
             exclusions["invalid_levels"] += 1

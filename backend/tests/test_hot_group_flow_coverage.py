@@ -24,8 +24,8 @@ from app.domain import (
     HOT_GROUP_CONFIG,
     HOT_GROUP_LEGACY_VERSION,
     HOT_GROUP_VERSION,
-    canonical_config_snapshot,
 )
+from app.strategies import canonical_config_snapshot
 from app.main import app
 from app.migrations import upgrade_database
 from app.models import (

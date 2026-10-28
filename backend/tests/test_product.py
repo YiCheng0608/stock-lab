@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 import app.api as api_module
 import app.main as main_module
 from app.db import enable_sqlite_foreign_keys
+from app.domain import STRATEGY_LEVELS_VERSION
 from app.migrations import upgrade_database
 from app.models import (
     ChipSnapshot,
@@ -22,6 +23,7 @@ from app.models import (
     RawPayload,
     Signal,
     SignalEvaluation,
+    StrategyLevel,
     StrategyVersion,
     ThemeGroup,
 )
@@ -1747,3 +1749,190 @@ def test_product_redirect_targets_are_available_in_api_surface(product_api):
         assert client.get("/api/stocks?page=1&page_size=1").status_code == 200
         assert client.get("/api/actions?limit=1").status_code == 200
         assert client.get("/api/system/data-quality?limit=1").status_code == 200
+
+
+def _judge_signal_pair(db, instrument, breakout, pullback, *, bar_count=60):
+    """Store each strategy's evaluation as analyze does (rule_evidence_json)."""
+
+    states = {
+        "breakout": {"state": "rejected", "reasons": breakout},
+        "pullback": {"state": "rejected", "reasons": pullback},
+    }
+    for signal in db.scalars(
+        select(Signal).where(Signal.instrument_id == instrument.id)
+    ).all():
+        signal.rule_evidence_json = {
+            **signal.rule_evidence_json,
+            **states,
+            "inputs": {
+                **signal.rule_evidence_json["inputs"],
+                "bar_count_60d": bar_count,
+            },
+        }
+        signal.rationale = "; ".join(
+            f"{kind}=rejected:{','.join(state['reasons'])}"
+            for kind, state in states.items()
+        )
+
+
+def _no_condition_summary(product_api, breakout, pullback, **kwargs):
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        _add_decision_history(db, alpha, as_of)
+        _add_signal_pair(
+            db,
+            alpha,
+            as_of,
+            breakout_status="observation",
+            pullback_status="observation",
+            breakout_levels=False,
+        )
+        db.flush()
+        _judge_signal_pair(db, alpha, breakout, pullback, **kwargs)
+        db.commit()
+        return build_action_summaries(db, instrument_ids=[alpha.id])[0]
+
+
+def test_no_condition_names_the_strategy_with_the_fewest_unmet(product_api):
+    """#277-B AC-B3: not the raw rationale (研究條件需要人工核對)."""
+
+    summary = _no_condition_summary(
+        product_api,
+        [
+            "close_not_above_prior_20_day_high",
+            "volume_ratio_below_1_20",
+            "institutional_flow_materially_adverse",
+        ],
+        [
+            "ma20_not_above_ma60",
+            "close_below_ma60",
+            "close_outside_ma20_support_zone",
+            "pullback_volume_ratio_outside_range",
+        ],
+    )
+    assert summary["action_state"] == "no_condition"
+    assert summary["primary_reason"] == {
+        "label": "突破條件差 3 項：價格、量能、法人",
+        "scope": "breakout",
+    }
+
+
+def test_no_condition_names_each_short_name_once(product_api):
+    summary = _no_condition_summary(
+        product_api,
+        [
+            "close_not_above_prior_20_day_high",
+            "volume_ratio_below_1_20",
+            "group_relative_strength_not_positive",
+        ],
+        ["ma20_not_above_ma60", "close_below_ma60"],
+    )
+    # Both trend conditions are 「趨勢」: one name, one item.
+    assert summary["primary_reason"] == {
+        "label": "回踩條件差 1 項：趨勢",
+        "scope": "pullback",
+    }
+
+
+def test_no_condition_ties_keep_the_registry_order(product_api):
+    summary = _no_condition_summary(
+        product_api,
+        ["margin_financing_increase_abnormal"],
+        ["pullback_volume_ratio_outside_range"],
+    )
+    assert summary["primary_reason"]["label"] == "突破條件差 1 項：融資"
+
+
+def test_no_condition_compares_the_short_names_it_shows(product_api):
+    """#303 review L1: two unmet trend conditions are one item, 「趨勢」."""
+
+    summary = _no_condition_summary(
+        product_api,
+        ["close_not_above_prior_20_day_high", "volume_ratio_below_1_20"],
+        ["ma20_not_above_ma60", "close_below_ma60"],
+    )
+    # Two conditions each, but the pullback shows one item: it is the nearer.
+    assert summary["primary_reason"] == {
+        "label": "回踩條件差 1 項：趨勢",
+        "scope": "pullback",
+    }
+
+
+def test_no_condition_without_a_judged_strategy_keeps_its_reason(product_api):
+    # Without the stored bar count the pullback history cannot be read.
+    summary = _no_condition_summary(
+        product_api,
+        ["volume_ratio_below_1_20"],
+        ["close_below_ma60"],
+        bar_count=None,
+    )
+    assert summary["primary_reason"]["label"] != "研究條件需要人工核對"
+    assert "差" not in summary["primary_reason"]["label"]
+
+
+def _without_times(value):
+    """A summary without its generation clock (the only per-call fields)."""
+
+    if isinstance(value, dict):
+        return {
+            key: _without_times(item)
+            for key, item in value.items()
+            if key not in {"generated_at", "response_generated_at"}
+        }
+    if isinstance(value, list):
+        return [_without_times(item) for item in value]
+    return value
+
+
+@pytest.mark.parametrize("breakout_status", ["observation", "conditional"])
+def test_the_decision_summary_does_not_read_strategy_levels(
+    product_api, breakout_status
+):
+    """#277-B AC-B3 (#273 AC-B3 as rewritten): every field is the same."""
+
+    with product_api() as db:
+        as_of, alpha, _beta, _etf = _add_base_fixture(db)
+        _add_decision_history(db, alpha, as_of)
+        _add_signal_pair(
+            db,
+            alpha,
+            as_of,
+            breakout_status=breakout_status,
+            pullback_status="observation",
+            breakout_levels=breakout_status == "conditional",
+        )
+        db.flush()
+        _judge_signal_pair(
+            db,
+            alpha,
+            ["close_not_above_prior_20_day_high"],
+            ["pullback_volume_ratio_outside_range"],
+        )
+        db.commit()
+        before = build_action_summaries(db, instrument_ids=[alpha.id])[0]
+        for signal in db.scalars(
+            select(Signal).where(Signal.instrument_id == alpha.id)
+        ).all():
+            db.add(
+                StrategyLevel(
+                    signal_id=signal.id,
+                    levels_version=STRATEGY_LEVELS_VERSION,
+                    availability="levels",
+                    reachable_next_session=True,
+                    trigger_price=99.99,
+                    zone_low=88.88,
+                    zone_high=89.99,
+                    invalid_price=77.77,
+                    target_1=111.11,
+                    target_2=122.22,
+                    conditions_json=[
+                        {"code": "breakout_price", "satisfied": True},
+                        {"code": "pullback_volume", "satisfied": True},
+                    ],
+                    price_basis="next_session_raw_basis",
+                )
+            )
+        db.commit()
+        db.expire_all()
+        after = build_action_summaries(db, instrument_ids=[alpha.id])[0]
+    assert _without_times(after) == _without_times(before)

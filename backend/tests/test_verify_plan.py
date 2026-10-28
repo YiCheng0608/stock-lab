@@ -47,6 +47,7 @@ TREE = {
         "import { HotGroupsSection } from './themes/ThemeViews'\n"
         "import { StockBarsChart } from './stock/StockBarsChart'\n"
         "import { NewsCard } from './news/NewsViews'\n"
+        "import { TodayHeader } from './today/TodayViews'\n"
     ),
     "styles.css": "body {}\n",
     "components/ui/index.ts": "export { Card } from './Card'\n",
@@ -60,6 +61,11 @@ TREE = {
     "stock/StockBarsChart.tsx": "import { bars } from './stockBars'\n",
     "stock/StockHeader.tsx": "import { quote } from './stockBars'\n",
     "stock/stockBars.ts": "export const bars = 1\n",
+    "stock/StrategyBoardPanel.tsx": (
+        "import { ScoreDetails } from '../candidates/CandidateViews'\n"
+        "import { unmetText } from './strategyBoard'\n"
+    ),
+    "stock/strategyBoard.ts": "export const unmetText = 1\n",
     "news/NewsViews.tsx": "export const AiBadge = 1\n",
     "candidates/CandidateViews.tsx": (
         "import { AiBadge } from '../news/NewsViews'\n"
@@ -67,6 +73,10 @@ TREE = {
     ),
     "tracking/TrackingViews.tsx": "import { planStatus } from './tracking'\n",
     "tracking/tracking.ts": "export const planStatus = 1\n",
+    "today/TodayViews.tsx": "import { Card } from '../components/ui'\n",
+    "actions/ActionViews.tsx": "import { actionKey } from './actionTiers'\n",
+    "actions/actionTiers.ts": "export const actionKey = 1\n",
+    "stock/stockTabs.ts": "export const STOCK_TABS = 1\n",
 }
 
 

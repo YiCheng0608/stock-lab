@@ -5,6 +5,8 @@ import type {
   CoverageReport,
   Dashboard,
   ActionSummary,
+  ActionsResponse,
+  ActionView,
   CursorPage,
   DataQualityRow,
   EventListRow,
@@ -209,6 +211,9 @@ export type CursorParams = {
   state?: string
   held_only?: boolean
   watchlist_only?: boolean
+  view?: ActionView
+  include_etf?: boolean
+  tier?: number
 }
 
 export const getNews = (params: CursorParams = {}) =>
@@ -238,7 +243,7 @@ export const getStockBars = (exchange: string, symbol: string, interval: StockBa
   get<StockBarsResponse>(stockBarsPath(exchange, symbol, interval, limit))
 
 export const getActions = (params: CursorParams = {}) =>
-  get<CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string } }>(`/actions${queryString(params)}`)
+  get<ActionsResponse>(`/actions${queryString(params)}`)
 
 export const getAction = (exchange: string, symbol: string) =>
   get<{ decision_summary: ActionSummary }>(

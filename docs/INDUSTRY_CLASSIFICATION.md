@@ -1,3 +1,4 @@
+<!-- owns: 官方產業代碼、市場別代碼對照、mapper fail-closed、membership 日期語意、membership 期間轉換、錯配 membership 修復、群組成員與候選身分、題材表 -->
 # TWSE／TPEx 產業分類契約
 
 本文規範官方產業代碼對照、mapper 的 fail-closed 規則、collector 對一般產業／ETF／新上市 membership 的期間轉換，群組成員與候選的身分契約，以及人工維護的[題材表](#7-題材表)。Mapper 在 `backend/app/taxonomy.py`，membership 轉換在 `backend/worker/pipeline.py`。

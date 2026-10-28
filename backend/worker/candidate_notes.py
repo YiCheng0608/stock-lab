@@ -44,6 +44,7 @@ from app.models import (
     NewsLlmResult,
     Signal,
 )
+from app.strategies import REGISTRY
 
 from . import pipeline, sources
 from .candidates import _taipei_news_date
@@ -57,8 +58,8 @@ from .news_llm import (
     _usage,
     cli_arguments,
     input_hash,
+    cli_problem as news_cli_problem,
     parse_envelope,
-    preflight,
     run_claude_cli,
 )
 from .news_sources import TAIPEI
@@ -85,21 +86,15 @@ RISKS_MAX_CHARS = 120
 RUN_TYPE = "candidate_notes"
 RAW_SOURCE = "candidate_notes"
 RAW_ENDPOINT = f"claude -p --model {MODEL}"
-STRATEGY_LABELS = {"breakout_v1": "突破條件", "pullback_v1": "回踩條件"}
 BOARD_LABELS = {"industry": "產業", "theme": "題材"}
-# On Windows only the native claude.exe is run: on a timeout subprocess kills
-# an npm .cmd shim's cmd.exe but not its node child, which keeps the pipes
-# open and would hang the daily step until the task limit.
+# Only the native claude.exe on Windows, like news-llm (news_llm.cli_problem).
 IS_WINDOWS = sys.platform == "win32"
 
 
 def cli_problem() -> tuple[list[str] | None, str | None]:
-    """news_llm.preflight, failing closed on a non-.exe CLI on Windows."""
+    """news_llm.cli_problem for this module's platform."""
 
-    command, problem = preflight()
-    if problem is None and IS_WINDOWS and Path(command[0]).suffix.lower() != ".exe":
-        return None, f"cli_not_found: {command[0]} is not a native .exe"
-    return command, problem
+    return news_cli_problem(windows=IS_WINDOWS)
 
 
 _NOTE_FIELDS = ("id", "selection", "levels", "risks")
@@ -215,7 +210,9 @@ def candidate_input(
         "rank": row.rank,
         "symbol": f"{instrument.exchange}:{instrument.symbol}",
         "name": instrument.name,
-        "strategy": STRATEGY_LABELS.get(row.strategy, row.strategy),
+        "strategy": REGISTRY[row.strategy].label_zh
+        if row.strategy in REGISTRY
+        else row.strategy,
         "trading_date": row.trading_date.isoformat(),
         "levels": {
             "entry_zone": levels["entry_zone"],

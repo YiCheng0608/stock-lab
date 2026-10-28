@@ -1,9 +1,9 @@
 """Scheduled daily job with an auditable run log.
 
 Every ``worker.cli daily`` invocation writes one ``schedule_runs`` row and one
-``schedule_run_steps`` row per step (catchup -> collect -> analyze -> evaluate
--> candidates -> indicators -> theme_suggestions -> plan_tracking ->
-candidate_notes).  catchup
+``schedule_run_steps`` row per step (catchup -> collect -> trading_calendar ->
+analyze -> evaluate -> candidates -> indicators -> theme_suggestions ->
+plan_tracking -> strategy_levels -> candidate_notes).  catchup
 first collects recent official
 sessions that have no successful collect yet (the machine was off, or every
 trigger of that day failed); its outcome never blocks the target date.
@@ -14,10 +14,14 @@ updates); indicators depend on stored bars alone, so they run after every
 successful collect, and so does theme_suggestions, which only regroups stored
 news LLM results, and plan_tracking, which tracks the user plans' own copy of
 their levels on the stored bars.  A failure keeps its error text and the
-dependent steps are recorded as skipped.  candidate_notes (LLM explanations
-of the day's candidates) runs last after a successful candidates step;
-whatever its status, it only stays on its step row and never changes the run
-status.
+dependent steps are recorded as skipped.  strategy_levels (the observation
+price levels of the day's signals) runs after a successful analyze, and
+candidate_notes (LLM explanations of the day's candidates) last after a
+successful candidates step; whatever their status, they only stay on their
+step rows and never change the run status.  So does trading_calendar, which
+refreshes the official holiday schedule after a successful collect and before
+analyze (the signals' earliest execution date reads it); when it fails,
+analyze uses the calendar already stored.
 
 A first "no session" answer for today's target is recorded as
 ``non_trading_unconfirmed``, which is not complete: the next trigger (21:30)
@@ -42,6 +46,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from sqlalchemy import desc, inspect, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.migration_revisions import REVISIONS
 from app.models import IngestionRun, ScheduleRun, ScheduleRunStep
@@ -52,28 +57,39 @@ DAILY_JOB = "daily"
 DAILY_STEPS = (
     "catchup",
     "collect",
+    "trading_calendar",
     "analyze",
     "evaluate",
     "candidates",
     "indicators",
     "theme_suggestions",
     "plan_tracking",
+    "strategy_levels",
     "candidate_notes",
 )
 # Steps after collect and the earlier steps each needs to have succeeded.
 STEP_REQUIRES = {
+    "trading_calendar": (),
     "analyze": (),
     "evaluate": ("analyze",),
     "candidates": ("analyze",),
     "indicators": (),
     "theme_suggestions": (),
     "plan_tracking": (),
+    "strategy_levels": ("analyze",),
     "candidate_notes": ("candidates",),
 }
-# LLM steps whose failure (timeout, claude missing, quota) is kept on the step
-# row only: the run stays success.  Pending notes are not retried by a later
-# daily (it targets its own date); worker.cli candidate-notes --date fills them.
-NON_BLOCKING_STEPS = frozenset({"candidate_notes"})
+# Steps whose failure is kept on the step row only: the run stays success, so
+# the run's success definition does not depend on them.  The LLM notes
+# (timeout, claude missing, quota) and the observation price levels, which
+# nothing else in the run reads.  A later daily does not retry them (it
+# targets its own date); worker.cli candidate-notes / strategy-levels --date
+# fill them.  The holiday schedule refresh (#294): analyze then reads the
+# calendar already stored and records in its own details whether the day's
+# signals got an earliest execution date (the watchdog checks that).
+NON_BLOCKING_STEPS = frozenset(
+    {"trading_calendar", "candidate_notes", "strategy_levels"}
+)
 # A run still marked running after this long has lost its process (killed,
 # rebooted); the next invocation records it as abandoned instead of waiting.
 # Equal to the scheduled task's execution limit and clearly shorter than the
@@ -90,8 +106,11 @@ NON_TRADING_UNCONFIRMED = "non_trading_unconfirmed"
 CATCHUP_SESSIONS = 5
 CATCHUP_MAX_WEEKDAYS = 15
 TAIPEI_UTC_OFFSET = timedelta(hours=8)
-# Reasons the scheduler wrapper may pass to record a run it declined to start.
+# Reasons the scheduled job (worker.job) may pass to record a run it declined to start.
 PREFLIGHT_SKIP_REASONS = frozenset({"low_memory", "git_busy", "git_pull_failed"})
+# The job lock is held by another daily job: the same reason as a running row
+# found by _start_run, pointing at that row when it is already written.
+LOCK_SKIP_REASON = "already_running"
 # The indicator batch (V1-G2).  A checkout without the module records the
 # step as not_configured instead of failing the run.
 INDICATOR_MODULE = "worker.indicator_batch"
@@ -102,6 +121,10 @@ CANDIDATE_NOTE_MODULE = "worker.candidate_notes"
 CANDIDATE_NOTE_FUNCTION = "run_candidate_notes_batch"
 PLAN_TRACKING_MODULE = "worker.plan_tracking"
 PLAN_TRACKING_FUNCTION = "run_plan_tracking"
+STRATEGY_LEVELS_MODULE = "worker.strategy_levels"
+STRATEGY_LEVELS_FUNCTION = "run_strategy_levels"
+TRADING_CALENDAR_MODULE = "worker.trading_calendar"
+TRADING_CALENDAR_FUNCTION = "run_trading_calendar"
 
 
 def _utcnow() -> datetime:
@@ -187,6 +210,16 @@ def _candidate_note_step(target: date) -> dict[str, Any]:
 def _plan_tracking_step(target: date) -> dict[str, Any]:
     module = importlib.import_module(PLAN_TRACKING_MODULE)
     return getattr(module, PLAN_TRACKING_FUNCTION)(target)
+
+
+def _strategy_levels_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(STRATEGY_LEVELS_MODULE)
+    return getattr(module, STRATEGY_LEVELS_FUNCTION)(target)
+
+
+def _trading_calendar_step(target: date) -> dict[str, Any]:
+    module = importlib.import_module(TRADING_CALENDAR_MODULE)
+    return getattr(module, TRADING_CALENDAR_FUNCTION)(target)
 
 
 def _theme_suggestion_step() -> dict[str, Any]:
@@ -345,19 +378,19 @@ def _ensure_schema() -> str:
     pending, so an up-to-date DB skips it.
     """
 
-    with pipeline.SessionLocal() as db:
-        bind = db.get_bind()
-        current = None
-        if inspect(bind).has_table("alembic_version"):
-            current = (
-                db.execute(text("SELECT version_num FROM alembic_version"))
-                .scalars()
-                .all()
-            )
-    if current == [REVISIONS[-1]]:
+    if _schema_revisions() == [REVISIONS[-1]]:
         return "current"
     pipeline.init_db()
     return "upgraded"
+
+
+def _schema_revisions() -> list[str] | None:
+    with pipeline.SessionLocal() as db:
+        if not inspect(db.get_bind()).has_table("alembic_version"):
+            return None
+        return list(
+            db.execute(text("SELECT version_num FROM alembic_version")).scalars()
+        )
 
 
 def _record_step(
@@ -545,14 +578,61 @@ def _start_run(
 def record_preflight_skip(
     end_date: date | None, *, reason: str, trigger: str = "scheduler"
 ) -> dict[str, Any]:
-    """Log a run the scheduler wrapper declined to start; no step runs."""
+    """Log a run the scheduled job declined to start; no step runs.
 
-    if reason not in PREFLIGHT_SKIP_REASONS:
+    For ``already_running`` the job lock is held by a daily that may be
+    migrating this database at that moment. The migration reads for minutes
+    inside one transaction before it writes, and any row another connection
+    commits in between makes that write fail ("database is locked", found on
+    a DB copy in #313 AC-7). So the schema is left alone, no row is written
+    unless the database is already at the code head, and a row that cannot be
+    written is reported in the result instead of raised; the job's log keeps
+    the skip either way.
+    """
+
+    if reason not in PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}:
         raise ValueError(f"unknown preflight skip reason: {reason}")
-    _ensure_schema()
     target = pipeline.latest_weekday(end_date)
+    if reason != LOCK_SKIP_REASON:
+        _ensure_schema()
+        return _insert_skip(target, reason, trigger)
+    unwritten = {
+        "status": "skipped",
+        "reason": reason,
+        "schedule_run_id": None,
+        "date": target.isoformat(),
+    }
+    try:
+        revisions = _schema_revisions()
+        if revisions != [REVISIONS[-1]]:
+            return {
+                **unwritten,
+                "error": f"skip row not written: database at {revisions}, code head"
+                f" {REVISIONS[-1]}; the daily holding the lock migrates it",
+            }
+        return _insert_skip(target, reason, trigger)
+    except SQLAlchemyError as exc:
+        return {
+            **unwritten,
+            "error": f"skip row not written: {type(exc).__name__}: {exc}"[:500],
+        }
+
+
+def _insert_skip(target: date, reason: str, trigger: str) -> dict[str, Any]:
     now = _utcnow()
     with pipeline.SessionLocal() as db:
+        summary: dict[str, Any] = {"reason": reason}
+        if reason == LOCK_SKIP_REASON:
+            summary["related_run_id"] = db.scalar(
+                select(ScheduleRun.id)
+                .where(
+                    ScheduleRun.job == DAILY_JOB,
+                    ScheduleRun.target_date == target,
+                    ScheduleRun.status == "running",
+                )
+                .order_by(desc(ScheduleRun.id))
+                .limit(1)
+            )
         run = ScheduleRun(
             job=DAILY_JOB,
             target_date=target,
@@ -560,13 +640,13 @@ def record_preflight_skip(
             status="skipped",
             started_at=now,
             finished_at=now,
-            summary_json={"reason": reason},
+            summary_json=summary,
         )
         db.add(run)
         db.commit()
         return {
             "status": "skipped",
-            "reason": reason,
+            **summary,
             "schedule_run_id": run.id,
             "date": target.isoformat(),
         }
@@ -610,21 +690,23 @@ def run_daily_job(
     collect_status = str(collected.get("status"))
     summary_steps["collect"] = collect_status
     later: list[tuple[str, int, Callable[[], dict[str, Any]]]] = [
+        ("trading_calendar", 2, lambda: _trading_calendar_step(target)),
         (
             "analyze",
-            2,
+            3,
             lambda: pipeline.analyze(
                 init_schema=False, collect_run_id=collected.get("run_id")
             ),
         ),
-        ("evaluate", 3, lambda: pipeline.evaluate(init_schema=False)),
-        ("candidates", 4, lambda: _candidate_step(target)),
-        ("indicators", 5, lambda: _indicator_step(target)),
-        ("theme_suggestions", 6, _theme_suggestion_step),
+        ("evaluate", 4, lambda: pipeline.evaluate(init_schema=False)),
+        ("candidates", 5, lambda: _candidate_step(target)),
+        ("indicators", 6, lambda: _indicator_step(target)),
+        ("theme_suggestions", 7, _theme_suggestion_step),
         # Before the LLM notes, which can take long; the sequence only orders
         # the step rows (rows are found by step name).
-        ("plan_tracking", 7, lambda: _plan_tracking_step(target)),
-        ("candidate_notes", 8, lambda: _candidate_note_step(target)),
+        ("plan_tracking", 8, lambda: _plan_tracking_step(target)),
+        ("strategy_levels", 9, lambda: _strategy_levels_step(target)),
+        ("candidate_notes", 10, lambda: _candidate_note_step(target)),
     ]
     if collect_status != "success":
         if collect_status == "skipped" and _no_session_confirmed(run_id, target):
@@ -664,9 +746,9 @@ def run_daily_job(
     for step, sequence, action in later:
         # evaluate and candidates need a successful analyze; indicators only
         # need the bars collect just stored, so an analyze failure does not
-        # block them; theme_suggestions and plan_tracking need neither.  A
-        # candidates failure blocks only candidate_notes, whose own result
-        # never fails the run.
+        # block them; theme_suggestions and plan_tracking need neither.  An
+        # analyze failure also skips strategy_levels, and a candidates failure
+        # candidate_notes; their own results never fail the run.
         blocked_by = next((name for name in failed if name in STEP_REQUIRES[step]), "")
         if blocked_by:
             reason = f"{blocked_by}_not_successful"

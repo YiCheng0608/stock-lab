@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date
+
+from . import job as scheduled_job
+
+# Before app.config is imported: it reads STOCK_DATA_DIR and creates that
+# directory, and a scheduled `job` has only --data-dir.
+os.environ.update(scheduled_job.cli_environment(sys.argv[1:]))
 
 from app.db import init_db
 
@@ -13,17 +20,21 @@ from .candidates import run_candidates
 from .indicator_batch import run_indicator_batch
 from .industry_repair import run_industry_repair
 from .instrument_repair import run_instrument_repair
+from .market_summary import backfill_market_summaries
 from .news_batch import run_news_batch
 from .news_llm import DEFAULT_LIMIT as NEWS_LLM_DEFAULT_LIMIT, run_news_llm_batch
 from .pipeline import analyze, backtest, collect, evaluate, run_daily
 from .plan_tracking import run_plan_tracking
 from .schedule_runs import (
+    LOCK_SKIP_REASON,
     PREFLIGHT_SKIP_REASONS,
     list_schedule_runs,
     record_preflight_skip,
 )
+from .strategy_levels import run_strategy_levels
 from .theme_suggestions import run_theme_suggestions
 from .themes import sync_themes
+from .trading_calendar import run_trading_calendar
 
 
 # daily exit codes, so Task Scheduler's "Last Run Result" shows an incomplete day.
@@ -78,9 +89,14 @@ def main() -> None:
     )
     daily_parser.add_argument(
         "--skip-reason",
-        choices=sorted(PREFLIGHT_SKIP_REASONS),
-        help="排程包裝腳本起跑前檢查未通過：只記一列 skipped，不執行任何步驟",
+        choices=sorted(PREFLIGHT_SKIP_REASONS | {LOCK_SKIP_REASON}),
+        help="job 起跑前檢查未通過或另一個 daily job 持有鎖：只記一列 skipped，不執行任何步驟",
     )
+    job_parser = subparsers.add_parser(
+        "job",
+        help="排程工作：鎖、起跑前檢查、逾時與日誌後執行 daily 或 news（＋news-llm）",
+    )
+    scheduled_job.add_arguments(job_parser)
     runs_parser = subparsers.add_parser(
         "schedule-runs", help="列出 daily 排程 run 記錄與各步驟"
     )
@@ -102,6 +118,15 @@ def main() -> None:
     )
     backfill_parser.add_argument(
         "--force", action="store_true", help="重新擷取已完成日期"
+    )
+    summary_parser = subparsers.add_parser(
+        "market-summary",
+        help="以已存的 TWSE MI_INDEX raw 回補大盤概況（不發網路請求；TPEx 無歷史不回補）",
+    )
+    summary_parser.add_argument("--from", dest="start_date", required=True)
+    summary_parser.add_argument("--to", dest="end_date", required=True)
+    summary_parser.add_argument(
+        "--force", action="store_true", help="與已存值不同時改寫並改指向這份 raw"
     )
     backtest_parser = subparsers.add_parser(
         "backtest", help="replay canonical rules on an as-of date range"
@@ -132,6 +157,24 @@ def main() -> None:
         "--date",
         dest="run_date",
         help="YYYY-MM-DD 目標交易日；未指定使用 DB 最新日線日",
+    )
+    levels_parser = subparsers.add_parser(
+        "strategy-levels",
+        help="計算訊號的條件價位 strategy_levels_v1（daily 的 strategy_levels 步驟；同日重跑冪等）",
+    )
+    levels_parser.add_argument(
+        "--date", dest="run_date", help="YYYY-MM-DD 訊號日；未指定使用最新訊號日"
+    )
+    calendar_parser = subparsers.add_parser(
+        "trading-calendar",
+        help="抓 TWSE 官方休市表存入 trading_calendar_days（daily 的 trading_calendar 步驟；預設今年與明年，內容沒變不改寫）",
+    )
+    calendar_parser.add_argument(
+        "--year",
+        dest="years",
+        type=int,
+        action="append",
+        help="西元年度，可重複；未指定為今年與明年",
     )
     notes_parser = subparsers.add_parser(
         "candidate-notes",
@@ -236,6 +279,11 @@ def main() -> None:
         and args.catchup_sessions < 0
     ):
         parser.error("--catchup-sessions must not be negative")
+    if args.command == "job":
+        problem = scheduled_job.argument_problem(args)
+        if problem:
+            parser.error(problem)
+        sys.exit(scheduled_job.run(args))
     if args.command == "init-db":
         init_db()
         result = {"status": "success"}
@@ -252,6 +300,14 @@ def main() -> None:
             scope=args.scope,
             force=args.force,
         )
+    elif args.command == "market-summary":
+        start, end = (
+            date.fromisoformat(args.start_date),
+            date.fromisoformat(args.end_date),
+        )
+        if end < start:
+            parser.error("--to must not be before --from")
+        result = backfill_market_summaries(start, end, force=args.force)
     elif args.command == "schedule-runs":
         result = list_schedule_runs(args.limit, parse_date(args.run_date))
     elif args.command == "backtest":
@@ -264,6 +320,10 @@ def main() -> None:
         result = run_candidates(parse_date(args.run_date))
     elif args.command == "track-plans":
         result = run_plan_tracking(parse_date(args.run_date))
+    elif args.command == "strategy-levels":
+        result = run_strategy_levels(parse_date(args.run_date))
+    elif args.command == "trading-calendar":
+        result = run_trading_calendar(years=args.years)
     elif args.command == "candidate-notes":
         if args.limit is not None and args.limit < 1:
             parser.error("--limit must be at least 1")
@@ -315,7 +375,13 @@ def main() -> None:
         sys.exit(DAILY_EXIT_CODES.get(str(result.get("status")), 1))
     if args.command in {"news-llm", "candidate-notes"}:
         sys.exit(NEWS_LLM_EXIT_CODES.get(str(result.get("status")), 1))
-    if args.command in {"candidates", "track-plans"} and result.get("status") not in {
+    if args.command in {
+        "candidates",
+        "track-plans",
+        "market-summary",
+        "strategy-levels",
+        "trading-calendar",
+    } and result.get("status") not in {
         "success",
         "no_data",
     }:

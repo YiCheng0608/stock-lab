@@ -1,0 +1,152 @@
+"""Strategy registry (V1_SPEC 策略版本識別).
+
+``REGISTRY`` is the only place that declares which strategies exist.  analyze
+writes one ``signals`` row per registered strategy for every instrument and
+session; the decision summary, the API and the candidate list read the
+registry for entry types, labels and level fields.  The candidate pool is
+not derived from it: each ``candidate_score`` version lists its strategies,
+so a new strategy enters the candidate list only with a new score version.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from typing import Any
+
+from app.domain import HOT_GROUP_CONFIG, INSTITUTIONAL_FLOW_FORMULA_VERSION
+
+from .base import (
+    ENTRY_LEVEL_FIELDS,
+    ENTRY_REQUIRED_LEVELS,
+    LEGACY_RISK_LEVELS_FORMULA,
+    Condition,
+    NextSessionInputs,
+    ObservationLevels,
+    SignalLevels,
+    Strategy,
+    StrategyInputs,
+    finite_number,
+    risk_levels,
+)
+from .breakout_v1 import BREAKOUT_V1, evaluate_breakout_v1
+from .pullback_v1 import PULLBACK_V1, evaluate_pullback_v1
+
+# Declaration order is the product order: the decision summary takes the
+# first conditional strategy in this order, and every signal's rationale and
+# evidence list the strategies in it.
+REGISTRY: dict[str, Strategy] = {
+    strategy.key: strategy for strategy in (BREAKOUT_V1, PULLBACK_V1)
+}
+
+# ``kind`` keys each strategy's state in every signal's rule_evidence_json
+# and rationale, next to these fixed keys (worker.pipeline writes them; the
+# rationale's ``group=`` and ``missing=`` parts are read by presentation).
+# A kind equal to one of them, or to another strategy's kind, would silently
+# overwrite that entry.
+RESERVED_KINDS = frozenset(
+    {
+        "strategy",
+        "strategy_version",
+        "group_member_return_lookup",
+        "confidence_semantics",
+        "actionable",
+        "inputs",
+        "risk_validation",
+        "execution",
+        "group",
+        "missing",
+    }
+)
+
+
+def registry_problems(registry: Mapping[str, Strategy]) -> list[str]:
+    """Kinds that are reused or reserved; empty for a usable registry."""
+
+    problems = []
+    seen: dict[str, str] = {}
+    for key, strategy in registry.items():
+        if strategy.kind in RESERVED_KINDS:
+            problems.append(f"{key}: kind {strategy.kind!r} is a reserved key")
+        if strategy.kind in seen:
+            problems.append(
+                f"{key}: kind {strategy.kind!r} is already used by {seen[strategy.kind]}"
+            )
+        seen.setdefault(strategy.kind, key)
+    return problems
+
+
+def strategy_by_kind(kind: str) -> Strategy | None:
+    return next(
+        (strategy for strategy in REGISTRY.values() if strategy.kind == kind), None
+    )
+
+
+def current_strategy(name: str, version: str, formula_version: str) -> Strategy | None:
+    """The registered strategy a StrategyVersion row is the current version of.
+
+    A row of another version or institutional-flow formula is history: its
+    stored levels and conditions follow that version's rules, not today's
+    defaults (#274 review L1).
+    """
+
+    strategy = REGISTRY.get(name)
+    if (
+        strategy is None
+        or strategy.version != version
+        or formula_version != INSTITUTIONAL_FLOW_FORMULA_VERSION
+    ):
+        return None
+    return strategy
+
+
+def strategy_configs(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, Mapping[str, Any]]:
+    registry = REGISTRY if registry is None else registry
+    return {key: strategy.config for key, strategy in registry.items()}
+
+
+def canonical_configs(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, Mapping[str, Any]]:
+    """Every configuration persisted as a StrategyVersion row.
+
+    ``registry`` replaces REGISTRY only for a research backtest
+    (``app.strategies.ablation``).
+    """
+
+    return {**strategy_configs(registry), HOT_GROUP_CONFIG["name"]: HOT_GROUP_CONFIG}
+
+
+def canonical_config_snapshot(
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return a JSON round-tripped copy suitable for database persistence."""
+
+    return json.loads(json.dumps(canonical_configs(registry), sort_keys=True))
+
+
+__all__ = [
+    "ENTRY_LEVEL_FIELDS",
+    "ENTRY_REQUIRED_LEVELS",
+    "LEGACY_RISK_LEVELS_FORMULA",
+    "Condition",
+    "NextSessionInputs",
+    "ObservationLevels",
+    "REGISTRY",
+    "RESERVED_KINDS",
+    "SignalLevels",
+    "Strategy",
+    "StrategyInputs",
+    "canonical_config_snapshot",
+    "canonical_configs",
+    "current_strategy",
+    "evaluate_breakout_v1",
+    "evaluate_pullback_v1",
+    "finite_number",
+    "registry_problems",
+    "risk_levels",
+    "strategy_by_kind",
+    "strategy_configs",
+]

@@ -22,7 +22,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine
 
+import app.models  # noqa: F401  (registers every table on Base.metadata)
+from app.db import Base
 from app.domain import CANDIDATE_SCORE_VERSION, PLAN_OPEN_STATUSES
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +95,13 @@ def _wal_source(path: Path) -> sqlite3.Connection:
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _db_facts():
+    spec = importlib.util.spec_from_file_location("db_facts", DB_FACTS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_copy_db_help() -> None:
@@ -224,6 +234,7 @@ def test_db_facts_reads_the_copy_without_writing(tmp_path: Path) -> None:
     assert (
         out["news_items"] is None and out["candidate_run_latest_trading_date"] is None
     )
+    assert out["market_summary_latest"] is None
     assert out["instrument"] == {
         "exchange": "TWSE",
         "symbol": "2330",
@@ -233,6 +244,39 @@ def test_db_facts_reads_the_copy_without_writing(tmp_path: Path) -> None:
     assert _digest(db) == before
     assert sorted(p.name for p in db.parent.iterdir()) == ["stock.db"]
     assert _run([sys.executable, "-B", str(DB_FACTS)]).returncode == 2
+
+
+def test_db_facts_market_summary_latest_is_each_exchanges_newest_row(
+    tmp_path: Path,
+) -> None:
+    # T11 compares dashboard.market_overview with these values (#275).
+    db = tmp_path / "stock.db"
+    module = _db_facts()
+    columns = ("exchange",) + module.MARKET_SUMMARY_FIELDS
+    with sqlite3.connect(db) as conn:
+        conn.execute(f"CREATE TABLE market_summaries ({', '.join(columns)})")
+        for exchange, day, close in (
+            ("TWSE", "2026-10-21", 46887.77),
+            ("TWSE", "2026-10-22", 46041.43),
+            ("TPEx", "2026-10-21", 395.42),
+        ):
+            values = dict.fromkeys(columns)
+            values.update(exchange=exchange, trading_date=day, index_close=close)
+            conn.execute(
+                f"INSERT INTO market_summaries VALUES ({', '.join('?' * len(columns))})",
+                [values[name] for name in columns],
+            )
+    conn.close()
+    result = _run([sys.executable, "-B", str(DB_FACTS), str(db)])
+    assert result.returncode == 0, result.stderr
+    latest = json.loads(result.stdout)["market_summary_latest"]
+    assert sorted(latest) == ["TPEx", "TWSE"]
+    assert (latest["TWSE"]["trading_date"], latest["TWSE"]["index_close"]) == (
+        "2026-10-22",
+        46041.43,
+    )
+    assert latest["TPEx"]["trading_date"] == "2026-10-21"
+    assert set(latest["TWSE"]) == set(module.MARKET_SUMMARY_FIELDS)
 
 
 def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> None:
@@ -260,11 +304,95 @@ def test_db_facts_candidates_use_the_current_score_version(tmp_path: Path) -> No
     assert out["candidate_count_latest"] == 5
 
     # db_facts.py runs on the stdlib-only tool Python and keeps its own copy.
-    spec = importlib.util.spec_from_file_location("db_facts", DB_FACTS)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert module.CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
-    assert set(module.PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
+    assert _db_facts().CANDIDATE_SCORE_VERSION == CANDIDATE_SCORE_VERSION
+    assert set(_db_facts().PLAN_OPEN_STATUSES) == PLAN_OPEN_STATUSES
+
+
+# The 2026-10-27 #306 copy: four candidate_score_v1 runs, none of the current version.
+V1_RUNS = [
+    (n, f"2026-10-{day}", "candidate_score_v1", count)
+    for n, (day, count) in enumerate(
+        (("16", 18), ("20", 20), ("21", 19), ("22", 20)), start=1
+    )
+]
+
+
+@pytest.mark.parametrize("runs", [V1_RUNS, []], ids=["v1-only", "no-run"])
+def test_db_facts_without_a_current_version_run_gives_null(
+    tmp_path: Path, runs: list[tuple]
+) -> None:
+    # #307: facts() raised TypeError on fetchone()[0] and the #306 run stopped at T2.
+    db = tmp_path / "stock.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE candidate_runs (id INTEGER PRIMARY KEY, trading_date TEXT,
+                score_version TEXT, candidate_count INTEGER);
+            CREATE TABLE market_bars (trading_date TEXT);
+            CREATE TABLE portfolio_positions (id INTEGER);
+            CREATE TABLE alembic_version (version_num TEXT);
+            INSERT INTO market_bars VALUES ('2026-10-22');
+            INSERT INTO alembic_version VALUES ('0020_trading_calendar');
+            """
+        )
+        conn.executemany("INSERT INTO candidate_runs VALUES (?, ?, ?, ?)", runs)
+    conn.close()
+    assert _db_facts().facts(db) == {
+        "market_latest_trading_date": "2026-10-22",
+        "group_scores_latest_trading_date": None,
+        "candidate_run_latest_trading_date": None,
+        "candidate_count_latest": None,
+        "news_items": None,
+        "news_latest_published_at": None,
+        "news_llm_done": None,
+        "theme_suggestions": None,
+        "tracking_plans_open": None,
+        "tracking_plans_closed": None,
+        "portfolio_positions": 0,
+        "alembic_version": "0020_trading_calendar",
+        "market_summary_latest": None,
+    }
+
+
+def test_db_facts_every_query_on_an_empty_table(tmp_path: Path) -> None:
+    # #307 AC-2: every table of the real schema exists and has no row.
+    db = tmp_path / "stock.db"
+    engine = create_engine(f"sqlite:///{db.as_posix()}")
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32))")
+        tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    conn.close()
+    module = _db_facts()
+    assert {table for table, _ in module.QUERIES.values()} <= tables
+    out = module.facts(db, ("TWSE", "2330"))
+    # A count of an empty table is the fact 0; every other query has no value.
+    expected = {
+        "market_latest_trading_date": None,
+        "group_scores_latest_trading_date": None,
+        "candidate_run_latest_trading_date": None,
+        "candidate_count_latest": None,
+        "news_items": 0,
+        "news_latest_published_at": None,
+        "news_llm_done": 0,
+        "theme_suggestions": 0,
+        "tracking_plans_open": 0,
+        "tracking_plans_closed": 0,
+        "portfolio_positions": 0,
+        "alembic_version": None,
+    }
+    assert {key: out[key] for key in module.QUERIES} == expected
+    assert out["market_summary_latest"] == {}
+    assert out["instrument"] == {
+        "exchange": "TWSE",
+        "symbol": "2330",
+        "latest_trading_date": None,
+        "source": None,
+    }
 
 
 # ---- screenshot.cjs ----

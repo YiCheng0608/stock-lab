@@ -24,6 +24,9 @@
 | 前端檔 | `frontend/src/stock/StockBarsChart.tsx` |
 | 前端檔 | `frontend/src/stock/StockHeader.tsx` |
 | 前端檔 | `frontend/src/tracking/TrackingViews.tsx` |
+| 前端檔 | `frontend/src/stock/StrategyBoardPanel.tsx` |
+| 前端檔 | `frontend/src/stock/strategyBoard.ts` |
+| 前端檔 | `frontend/src/stock/stockTabs.ts` |
 | API route | `GET /dashboard` |
 | API route | `GET /stocks` |
 | API route | `GET /stocks/{exchange}/{symbol}` |
@@ -46,10 +49,10 @@
 | 區塊 | 資料來源 | 必須顯示的來源與資料日期 | 「推論」位置 | 空資料文案 |
 | --- | --- | --- | --- | --- |
 | 目錄表 | `stocks.json` | 表頭說明單位；`第 1／<total_pages> 頁 · 共 <total> 筆` | — | `沒有符合條件的標的。` |
-| 頁首 | `stock-bars.json`（日線） | `資料 <I>` badge 與 `來源 <交易所名稱>` | — | `資料日期待核實`、`尚無已核對的價格來源` |
-| K 線與技術指標 | `stock-bars.json` | 卡片標題下 `資料 <I>`、`來源 …`、`日線批次計算於 …` | — | 無日線時的 EmptyState |
+| 頁首 | `stock-bars.json`（日線） | `資料 <I/>` badge 與 `來源 <交易所名稱>` | — | `資料日期待核實`、`尚無已核對的價格來源` |
+| K 線與技術指標 | `stock-bars.json` | 卡片標題下 `資料 <I/>`、`來源 …`、`日線批次計算於 …` | — | 無日線時的 EmptyState |
 | 法人籌碼 | `stock.json` 的 `chips`（日期由舊到新，表格只列最近 30 筆、由新到舊） | 卡片 `法人與融資`；每筆來源說明 `來源：… · 資料截至：…`；`券商／分點` 區塊 | — | `尚無可核實的籌碼資料。` |
-| 研究條件 | `stock.json` 的 `decision_summary`、`candidate` | `資料日期：<I/>`（時間摘要）、`資料日：<I/> · 價位語意：…` | 本股在最新候選內時，`明日候選` 區的 `推論`、`AI 推論` 與來源行 `（推論）`（同今日 T8） | `尚無行動摘要。` |
+| 研究條件 | `stock.json` 的 `strategy_board`、`decision_summary`、`candidate` | 策略總表 `資料 <strategy_board.as_of/>`；`資料日期：<I/>`（時間摘要）、`資料日：<I/> · 價位語意：…` | 策略總表有候選列（`strategy_board.candidate` 非 null）時，候選列的 `AI 推論` 與來源行 `（推論）`（同今日 T8）；觀察價位在 `條件未成立・觀察價位` 標籤之下，不是推論 | `此股尚無策略判定資料。`、`尚無行動摘要。` |
 | 新聞與公告 | `stock-news.json`（只留交易所＋代號相符） | 每張卡時間行與來源 | 有 AI 判讀的卡接 `AI 推論` | `尚無與此股已核實關聯的新聞或公告。` |
 | 資料說明 | `stock.json`、`stock-bars.json` | `行情來源`、`K 線資料日期` 兩列與當日行情來源品質行 `<品質說明> · 資料日 <I/>`（例如 `行情來源完整 · 資料日 2026/10/21`） | — | `待核實` |
 
@@ -59,24 +62,28 @@
 | --- | --- | --- | --- |
 | S1 | CI | 頁面可用 | 不依賴選股：沒有 `E`、`S` 時只驗 `stocks` 兩張截圖。每張截圖 `ready` true、`missingClicks` 空、`httpErrors` 與 `consoleErrors` 空、`overflow` false |
 | S2 | CI | 目錄（不依賴選股） | `stocks-1280.txt` 有表頭整行 `代號\t名稱\t交易所\t類型\t最近收盤\t目前研究動作\t策略判斷資料`；`items[0].instrument.symbol` 開頭的列存在；`第 1／<total_pages> 頁 · 共 <total 千分位> 筆` 為整行 |
-| S3 | CI | 頁首資料日與來源 | `stock-1280.txt` 有整行 `<S>`；第一個 `資料 ` 開頭的行在導覽列（`資料 <facts D>`），第二個是 `資料 <I>`，其下一行以 `來源 ` 開頭且不是 `來源 尚無已核對的價格來源`；`I` 等於 `stock-bars.json` 的 `data_as_of` |
-| S4 | CI | K 線卡 | 整行 `K 線與技術指標` 的下一行是 `資料 <I>`；有 `來源 ` 開頭的行與 `日線批次計算於` 開頭的行 |
-| S5 | CI | 研究條件 | `stock-research-1280.txt` 有整行 `研究動作`；有 `資料日期：<I/>` 開頭的行與 `資料日：<I/> · 價位語意：` 開頭的行（`decision_summary` 為 null 時改查 `尚無行動摘要。`）；`stock.json` 的 `candidate` 非 null 時再查整行 `明日候選`、`AI 推論` 至少 1 行、`^來源：` 行結尾為 `（推論）` |
+| S3 | CI | 頁首資料日與來源 | `stock-1280.txt` 有整行 `<S>`；第一個 `資料 ` 開頭的行在導覽列（`資料 <facts D/>`），第二個是 `資料 <I/>`，其下一行以 `來源 ` 開頭且不是 `來源 尚無已核對的價格來源`；`I` 等於 `stock-bars.json` 的 `data_as_of` |
+| S4 | CI | K 線卡 | 整行 `K 線與技術指標` 的下一行是 `資料 <I/>`；有 `來源 ` 開頭的行與 `日線批次計算於` 開頭的行 |
+| S5 | CI | 研究條件 | `stock-research-1280.txt` 有整行 `研究動作`；有 `資料日期：<I/>` 開頭的行與 `資料日：<I/> · 價位語意：` 開頭的行（`decision_summary` 為 null 時改查 `尚無行動摘要。`）；`strategy_board.candidate` 非 null 時再查整行 `每日候選`、`AI 推論` 至少 1 行、`^來源：` 行結尾為 `（推論）`（#274 起候選資訊在策略總表的候選列，不再有 `明日候選` 區） |
 | S6 | CI | 新聞與公告 | `stock-news-1280.txt` 有整行 `<S> 相關新聞`；`stock-news.json` 中 `instruments[]` 有 `exchange` = `<E>` 且 `symbol` = `<S>` 的則數為 0 時有 `尚無與此股已核實關聯的新聞或公告。`，否則時間行數（同新聞 N3 的規則）≥ 1 |
-| S7 | CI | 資料說明 | `stock-data-1280.txt` 整行 `K 線資料日期` 的下一行是 `<I>`；整行 `行情來源` 的下一行非空且不是 `待核實`；有 `資料日 <I/>` 結尾的行 |
+| S7 | CI | 資料說明 | `stock-data-1280.txt` 整行 `K 線資料日期` 的下一行是 `<I/>`；整行 `行情來源` 的下一行非空且不是 `待核實`；有 `資料日 <I/>` 結尾的行 |
 | S8 | CI | 資料日與 DB 一致 | `I` 的上游，先於 S3～S7 跑；`I` 缺少（該股沒有日線）判無法判定。`I` 等於 `facts-stock.json` 的 `instrument.latest_trading_date`；`instrument.source` 非空 |
 | S9 | CI | 法人籌碼 | `stock-chips-1280.txt` 有整行 `法人與融資` 與 `券商／分點`；`stock.json` 的 `chips` 空時有整行 `尚無可核實的籌碼資料。`，否則有以 `<chips[-1].date 的 YYYY/MM/DD>\t` 開頭的行（表格第一列是最新一筆），且含 ` · 資料截至：` 的行數 = `min(30, chips 數)` |
+| S10 | CI | 策略總表（#274） | `stock-research-1280.txt` 有整行 `策略總表`，下一行是 `資料 <strategy_board.as_of 的 YYYY/MM/DD>`（`as_of` 為 null 時改查 `此股尚無策略判定資料。`）；`strategies` 每一列在桌面表格有 `<label><TAB>` 開頭的行，下一行是 `<狀態>` 或以 `<狀態><TAB>` 開頭（成立列的最早執行日在 badge 下方另起一行；`conditional` 成立、`observation` 觀察、`data_incomplete` 資料不足、`not_applicable` 不適用）；整行 `條件未成立・觀察價位` 的行數等於 `levels.kind=observation` 的列數，而且不出現在成立列的範圍內（成立價位與觀察價位不混）；`candidate` 非 null 時有 `第 <rank> 名 · 總分 <round(total_score×100)> · ` 開頭的行，null 時沒有整行 `每日候選` |
 
 ## 陷阱
 
-- 頁面文字裡第一個 `資料 ` 開頭的行是導覽列的 `資料 <D>`，頁首的 `資料 <I>` 是第二個（S3）。
+- 頁面文字裡第一個 `資料 ` 開頭的行是導覽列的 `資料 <D/>`，頁首的 `資料 <I/>` 是第二個（S3）。
 - 預設分頁是「圖表與指標」，其他四個分頁靠 `--click '#stock-tab-<分頁>'` 切換；按鈕找不到會列在 `missingClicks`。
 - `screenshot.cjs` 會展開所有 `<details>`，籌碼的「資料來源與原始值」、資料說明的「查看原始行情表」內容都在頁面文字裡（S9 的來源行數靠這點）。
 - 「有 AI 判讀」的定義見 [news.md 陷阱](news.md#陷阱)。
+- 個股清單在 640px 以下改成每檔一張卡（表格 `display:none`，超過 10 張的其餘收在「顯示其餘 N 檔」`<details>`，#300），`stocks-390.txt` 沒有以 tab 分欄的表格列；目前沒有檢查讀它的文字，只有 S1 看版面。
+- 個股頁頁首的研究截止日期在 640px 以下收成「研究截止日期：…」開關（#300），`stock-390.txt` 只有這一行，表單在 1280。
+- 策略總表在 640px 以下改成每策略一張卡（表格 `display:none`），所以 S10 只讀 1280 的文字；`screenshot.cjs` 展開的 `<details>`（條件明細、評分細節）也在文字裡，S10 只比對表格列、狀態行與觀察價位標籤。
 
 ## 判定
 
-- 通過：S1～S9 全部通過。
+- 通過：S1～S10 全部通過。
 - 失敗：任一條失敗，列出編號、預期與實際。
 - 無法判定：沒有失敗，但有檢查無法判定（截圖未 ready、分頁按鈕找不到（`missingClicks`）、API 非 200、沒有選到個股，或上游沒通過，見 [README 三態與上游](README.md#三態與上游)）；列出 URL 或上游編號。
 

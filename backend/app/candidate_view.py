@@ -3,6 +3,7 @@
 Only reads ``candidate_runs`` / ``daily_candidates`` written by
 ``worker.candidates`` and the ``candidate_llm_notes`` written by
 ``worker.candidate_notes``; nothing is scored or generated at request time.
+Each item's ``market`` is the stored close of its trading date (#276).
 ``open_plan_id`` is the candidate signal's user tracking plan, if any.
 """
 
@@ -15,6 +16,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .domain import CANDIDATE_NOTE_PROMPT_VERSION, CANDIDATE_SCORE_VERSION
+from .market_change import adjacent_change
 from .models import (
     CandidateLlmNote,
     CandidateRun,
@@ -141,7 +143,10 @@ def _note(db: Session, row: DailyCandidate) -> dict[str, Any] | None:
 
 
 def candidate_item(
-    db: Session, row: DailyCandidate, run: CandidateRun
+    db: Session,
+    row: DailyCandidate,
+    run: CandidateRun,
+    sessions: dict[date, list[date]] | None = None,
 ) -> dict[str, Any]:
     instrument = db.get(Instrument, row.instrument_id)
     signal = db.get(Signal, row.signal_id)
@@ -187,6 +192,13 @@ def candidate_item(
         "groups": row.groups_json or [],
         "data_as_of": row.data_as_of.isoformat(),
         "llm_note": _note(db, row),
+        "market": adjacent_change(
+            db,
+            row.instrument_id,
+            row.trading_date,
+            bar,
+            {} if sessions is None else sessions,
+        ),
         "sources": {
             "signal": f"analysis:{row.strategy}",
             "market_bar": bar.source if bar else None,
@@ -250,6 +262,7 @@ def candidate_list(
             "methodology": _methodology(None),
             "items": [],
         }
+    sessions: dict[date, list[date]] = {}
     rows = db.scalars(
         select(DailyCandidate)
         .where(DailyCandidate.candidate_run_id == run.id)
@@ -275,7 +288,8 @@ def candidate_list(
         "data_as_of": run.trading_date.isoformat(),
         "news_coverage": (run.summary_json or {}).get("news"),
         "methodology": _methodology(run),
-        "items": [candidate_item(db, row, run) for row in rows],
+        # One TAIEX session lookup for the whole list.
+        "items": [candidate_item(db, row, run, sessions) for row in rows],
     }
 
 

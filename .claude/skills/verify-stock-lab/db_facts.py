@@ -3,8 +3,11 @@
 Usage: python db_facts.py <copy stock.db> [<exchange> <symbol>]
 
 Opens the copy with mode=ro and query_only and prints one JSON object with the
-latest dates and counts the feature checks compare against. A missing table
-gives null. With an instrument, also its latest market bar date and source.
+latest dates and counts the feature checks compare against. A missing table,
+or a query without a row, gives null; a count of an empty table is 0.
+``market_summary_latest`` is each exchange's newest market_summaries
+row (the values of dashboard.market_overview). With an instrument, also its
+latest market bar date and source.
 Candidate facts only count runs of the current score version, as the API does
 (backend/app/candidate_view.py, _run_for).
 """
@@ -76,12 +79,43 @@ QUERIES = {
     "alembic_version": ("alembic_version", "SELECT version_num FROM alembic_version"),
 }
 
+MARKET_SUMMARY_FIELDS = (
+    "trading_date",
+    "index_close",
+    "index_change",
+    "index_change_pct",
+    "change_pct_method",
+    "turnover",
+    "turnover_scope",
+    "advancers",
+    "decliners",
+    "unchanged",
+    "limit_up",
+    "limit_down",
+    "unmatched",
+    "not_comparable",
+    "breadth_scope",
+    "source",
+    "raw_payload_id",
+)
+MARKET_SUMMARY_LATEST = (
+    f"SELECT exchange, {', '.join(MARKET_SUMMARY_FIELDS)} FROM market_summaries m"
+    " WHERE trading_date = (SELECT max(trading_date) FROM market_summaries"
+    " WHERE exchange = m.exchange) ORDER BY exchange"
+)
+
 INSTRUMENT_BAR = """
 SELECT b.trading_date, b.source FROM market_bars b
 JOIN instruments i ON i.id = b.instrument_id
 WHERE i.exchange = ? AND i.symbol = ?
 ORDER BY b.trading_date DESC LIMIT 1
 """
+
+
+def _value(conn: sqlite3.Connection, sql: str) -> object:
+    # A latest-row query has no row before its first run of the version (#307).
+    row = conn.execute(sql).fetchone()
+    return row[0] if row else None
 
 
 def facts(db: Path, instrument: tuple[str, str] | None = None) -> dict[str, object]:
@@ -93,9 +127,17 @@ def facts(db: Path, instrument: tuple[str, str] | None = None) -> dict[str, obje
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         result: dict[str, object] = {
-            key: conn.execute(sql).fetchone()[0] if table in tables else None
+            key: _value(conn, sql) if table in tables else None
             for key, (table, sql) in QUERIES.items()
         }
+        result["market_summary_latest"] = (
+            {
+                row[0]: dict(zip(MARKET_SUMMARY_FIELDS, row[1:]))
+                for row in conn.execute(MARKET_SUMMARY_LATEST)
+            }
+            if "market_summaries" in tables
+            else None
+        )
         if instrument:
             row = conn.execute(INSTRUMENT_BAR, instrument).fetchone()
             result["instrument"] = {

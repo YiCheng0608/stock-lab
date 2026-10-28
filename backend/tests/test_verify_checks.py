@@ -8,10 +8,13 @@ job runs them on real screenshots of the fixture database.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import shutil
+import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -112,11 +115,11 @@ def test_a_sampler_without_a_manual_label_fails(tmp_path):
 
 
 def test_a_check_without_a_type_fails(tmp_path):
-    features = _features_with(tmp_path, "themes", "| G8 | 新檢查 | 某條件 |")
+    features = _features_with(tmp_path, "themes", "| G9 | 新檢查 | 某條件 |")
     problems = page_checks.registry_problems(
         page_checks.feature_checks(features), page_checks.CHECKS
     )
-    assert problems == ["themes.md G8: 類型 is '新檢查', not CI or 人工"]
+    assert problems == ["themes.md G9: 類型 is '新檢查', not CI or 人工"]
 
 
 def test_code_that_features_label_manual_fails(tmp_path):
@@ -209,18 +212,26 @@ def _candidates(count=2, inference=True):
         "candidate_count": count,
         "items": [
             {
+                "rank": n + 1,
                 "instrument": {"symbol": f"910{n}"},
                 "components": {"news_sentiment": {"inference": inference}},
+                # #1 has a note, #2 none: their entries read AI 推論 ▸ and AI 說明 ▸.
+                "llm_note": {"status": "done"} if n == 0 else None,
             }
             for n in range(count)
         ],
     }
 
 
+# The 1280 table (#276): rank cell first, tab-separated cells, then the opened detail row.
 TODAY_CANDIDATES = (
     "明日候選\n資料 2026/10/16\n2 檔\n"
+    "名次\t股票\t所屬族群（名次）\t最近收盤\n"
+    "#1\t9100 示範一\n上市 · 突破條件\t半導體（產業，第 1 名／9）\t21.10\n+0.48%\tAI 推論 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 a（推論）\n"
+    "#2\t9101 示範二\n上櫃 · 回踩條件\t無所屬產業或題材\t13.20\n漲跌待核實\tAI 說明 ▸\n"
     "AI 推論\n" + page_checks.CANDIDATE_DISCLAIMER + "\n來源：訊號 b（推論）\n"
+    "熱門族群\n#1\n半導體\n"
 )
 
 
@@ -231,8 +242,47 @@ def test_t7_and_t8_pass_on_matching_text(tmp_path):
         {"today-1280": TODAY_CANDIDATES},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    assert "來源行 2 = items" in page_checks.t7(run)
-    assert "`AI 推論` 2 行" in page_checks.t8(run)
+    assert "名次列 2、來源行 2 = items" in page_checks.t7(run)
+    result = page_checks.t8(run)
+    assert "`AI 推論` 2 行" in result and "`AI 推論 ▸` 1、`AI 說明 ▸` 1" in result
+
+
+def test_t7_fails_on_the_old_candidate_cards(tmp_path):
+    # Before #276 each candidate was a card: its rank `#1` on a line of its own.
+    page = TODAY_CANDIDATES.replace("#1\t", "#1\n").replace("#2\t", "#2\n")
+    run = FakeRun(
+        tmp_path,
+        {"candidates": _candidates()},
+        {"today-1280": page},
+        {"candidate_run_latest_trading_date": "2026-10-16"},
+    )
+    with pytest.raises(
+        page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items \[1, 2\]"
+    ):
+        page_checks.t7(run)
+
+
+def test_t7_counts_only_the_rank_rows_before_the_groups(tmp_path):
+    # The group rows' `#1` after 熱門族群 is not a candidate row.
+    run = FakeRun(
+        tmp_path,
+        {"candidates": _candidates(count=1)},
+        {"today-1280": TODAY_CANDIDATES.replace("2 檔", "1 檔")},
+        {"candidate_run_latest_trading_date": "2026-10-16"},
+    )
+    with pytest.raises(
+        page_checks.Fail, match=r"`#n` 名次列 \[1, 2\]，預期依 items \[1\]"
+    ):
+        page_checks.t7(run)
+
+
+def test_t8_fails_when_an_ai_entry_does_not_match_the_note(tmp_path):
+    page = TODAY_CANDIDATES.replace("AI 說明 ▸", "AI 推論 ▸")
+    run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
+    with pytest.raises(
+        page_checks.Fail, match="`AI 推論 ▸` 2 個、`AI 說明 ▸` 0 個，預期 1／1"
+    ):
+        page_checks.t8(run)
 
 
 def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
@@ -242,7 +292,7 @@ def test_t7_fails_when_the_page_drops_the_candidates(tmp_path):
         {"today-1280": "明日候選\n資料 2026/10/16\n2 檔\n"},
         {"candidate_run_latest_trading_date": "2026-10-16"},
     )
-    with pytest.raises(page_checks.Fail, match="`來源：` 行 0，items 2"):
+    with pytest.raises(page_checks.Fail, match=r"`#n` 名次列 \[\]，預期依 items"):
         page_checks.t7(run)
 
 
@@ -251,6 +301,198 @@ def test_t8_fails_without_the_inference_mark(tmp_path):
     run = FakeRun(tmp_path, {"candidates": _candidates()}, {"today-1280": page})
     with pytest.raises(page_checks.Fail, match="#2 9101 來源行沒有以 `（推論）` 結尾"):
         page_checks.t8(run)
+
+
+# ---- T11 market overview, T12 block order (#276) ----
+
+
+def _overview(tpex_status="available"):
+    twse = {
+        "exchange": "TWSE",
+        "status": "available",
+        "index": {"close": 46041.43, "change": -846.34, "change_pct": -0.0181},
+        "turnover": {
+            "value": 933437473560,
+            "scope": "twse_all_securities",
+            "scope_label": "集中市場總計（含 ETF、權證等）",
+        },
+        "breadth": {
+            "advancers": 247,
+            "decliners": 756,
+            "unchanged": 74,
+            "limit_up": 3,
+            "limit_down": 5,
+        },
+    }
+    tpex = (
+        {
+            "exchange": "TPEx",
+            "status": "available",
+            "index": {"close": 381.69, "change": -13.73, "change_pct": -0.0347},
+            "turnover": {
+                "value": 225545000000,
+                "scope": "tpex_stocks",
+                "scope_label": "上櫃股票",
+            },
+            "breadth": {
+                "advancers": 146,
+                "decliners": 659,
+                "unchanged": 63,
+                "limit_up": 17,
+                "limit_down": 11,
+            },
+        }
+        if tpex_status == "available"
+        else {"exchange": "TPEx", "status": "unavailable", "reason": "not_collected"}
+    )
+    return {
+        "market_overview": {"trading_date": "2026-10-22", "exchanges": [twse, tpex]}
+    }
+
+
+def _summary(**extra):
+    row = {
+        "trading_date": "2026-10-22",
+        "index_close": 46041.43,
+        "index_change": -846.34,
+        "turnover": 933437473560,
+        "advancers": 247,
+        "decliners": 756,
+    }
+    return {**row, **extra}
+
+
+TPEX_SUMMARY = {
+    "trading_date": "2026-10-22",
+    "index_close": 381.69,
+    "index_change": -13.73,
+    "turnover": 225545000000,
+    "advancers": 146,
+    "decliners": 659,
+}
+OVERVIEW_PAGE = (
+    "資料截至 2026/10/22 · TWSE／TPEx 官方資料 · 官方單日快照\n資料說明\n"
+    "成交金額範圍：上市為集中市場總計（含 ETF、權證等）；上櫃為上櫃股票\n"
+    "加權指數\n點\n46,041.43\n-846.34（-1.81%）\n"
+    "櫃買指數\n點\n381.69\n-13.73（-3.47%）\n"
+    "成交金額\n億元\n上市 9,334.37 集中市場總計\n上櫃 2,255.45 上櫃股票\n"
+    "漲跌家數（股票）\n括號為漲停／跌停\n"
+    "上市 上漲 247 · 下跌 756 · 平盤 74（3／5）\n"
+    "上櫃 上漲 146 · 下跌 659 · 平盤 63（17／11）\n"
+)
+
+
+def test_t11_passes_when_the_widgets_show_the_api_and_db_values(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    assert "TWSE 46,041.43、TPEx 381.69" in page_checks.t11(run)
+
+
+def test_t11_fails_on_a_widget_that_differs_from_the_api(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE.replace("上市 9,334.37", "上市 9,334.38")},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    with pytest.raises(
+        page_checks.Fail, match="TWSE 缺整行 `上市 9,334.37 集中市場總計`"
+    ):
+        page_checks.t11(run)
+
+
+def test_t11_fails_on_an_api_value_that_differs_from_the_db(tmp_path):
+    facts = {"TWSE": _summary(advancers=248), "TPEx": TPEX_SUMMARY}
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": OVERVIEW_PAGE},
+        {"market_summary_latest": facts},
+    )
+    with pytest.raises(
+        page_checks.Fail, match="TWSE breadth.advancers 247 ≠ DB advancers 248"
+    ):
+        page_checks.t11(run)
+
+
+def test_t11_unavailable_needs_its_copy_and_no_db_row_of_the_day(tmp_path):
+    page = (
+        OVERVIEW_PAGE.replace("；上櫃為上櫃股票", "")
+        .replace("381.69\n-13.73（-3.47%）", "上櫃大盤資料未取得")
+        .replace("上櫃 2,255.45 上櫃股票", "上櫃大盤資料未取得")
+    )
+    facts = {"market_summary_latest": {"TWSE": _summary()}}
+    run = FakeRun(
+        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+    )
+    assert "TPEx 未取得" in page_checks.t11(run)
+    facts = {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}}
+    run = FakeRun(
+        tmp_path, {"dashboard": _overview("unavailable")}, {"today-1280": page}, facts
+    )
+    with pytest.raises(
+        page_checks.Fail,
+        match="TPEx 為 unavailable，但 DB market_summaries 有 2026-10-22 的列",
+    ):
+        page_checks.t11(run)
+
+
+def test_fixed_rounds_like_the_page():
+    # formatFixed rounds with JS toFixed: the exact binary value, a tie away from
+    # zero. Python round() keeps a tie even (1.125 -> 1.12) and would fail T11.
+    assert page_checks.fixed(1.125, 2) == "1.13"
+    assert page_checks.fixed(-1.125, 2, True) == "-1.13"
+    assert page_checks.fixed(1234.5, 0) == "1,235"
+    assert page_checks.fixed(2.675, 2) == "2.67"  # 2.67499999… in binary, as toFixed
+    assert page_checks.fixed(0.004, 2, True) == "0.00"  # rounds to zero: no sign
+
+
+def test_t11_passes_on_a_change_that_rounds_at_a_half(tmp_path):
+    overview = _overview()
+    twse = overview["market_overview"]["exchanges"][0]
+    twse["index"] = {"close": 46041.43, "change": 1.125, "change_pct": 0.0000244}
+    page = OVERVIEW_PAGE.replace("-846.34（-1.81%）", "+1.13（0.00%）")
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": overview},
+        {"today-1280": page},
+        {
+            "market_summary_latest": {
+                "TWSE": _summary(index_change=1.125),
+                "TPEx": TPEX_SUMMARY,
+            }
+        },
+    )
+    assert "TWSE 46,041.43" in page_checks.t11(run)
+
+
+def test_t11_fails_on_the_old_page_without_an_overview(tmp_path):
+    run = FakeRun(
+        tmp_path,
+        {"dashboard": _overview()},
+        {"today-1280": "資料截至\n2026/10/22\nTWSE／TPEx 官方資料\n"},
+        {"market_summary_latest": {"TWSE": _summary(), "TPEx": TPEX_SUMMARY}},
+    )
+    with pytest.raises(page_checks.Fail, match="TWSE 缺整行 `46,041.43`"):
+        page_checks.t11(run)
+
+
+def test_t12_needs_the_candidates_before_groups_and_news(tmp_path):
+    page = "明日候選\n資料 2026/10/16\n熱門族群\n資料 2026/10/16\n重點新聞\n關注標的\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": page})
+    assert "`明日候選`" in page_checks.t12(run)
+    old = "今日市場／重大事件\n熱門族群\n明日候選\n關注標的\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": old})
+    with pytest.raises(page_checks.Fail, match="缺整行 `重點新聞`"):
+        page_checks.t12(run)
+    swapped = "熱門族群\n重點新聞\n明日候選\n"
+    run = FakeRun(tmp_path, {}, {"today-1280": swapped})
+    with pytest.raises(page_checks.Fail, match="熱門族群 → 重點新聞 → 明日候選"):
+        page_checks.t12(run)
 
 
 def test_a_missing_api_makes_the_check_undetermined(tmp_path):
@@ -266,23 +508,40 @@ def test_a5_reports_the_line_of_an_inference_mark(tmp_path):
         page_checks.a5(run)
 
 
-def _theme_run(tmp_path, total, pager):
+MEMBER_HEADER = "代號\t名稱\t市場\t收盤\t漲跌幅\t成交值\t5 日相對\t20 日相對\n"
+# 9102 has the most turnover, 9101 the highest close, 9201 no turnover.
+MEMBERS = [
+    {"symbol": "9102", "exchange": "TWSE", "name": "示範封測", "turnover": 5e9},
+    {"symbol": "9101", "exchange": "TWSE", "name": "示範晶圓", "turnover": 1e9},
+    {"symbol": "9201", "exchange": "TPEx", "name": "示範矽材", "turnover": None},
+]
+# The 1280 rows as innerText: the stale 9201 has its bar date under the close.
+MEMBER_ROWS = {
+    "9101": "9101\t示範晶圓 候選 #1\t上市\t1,085.00\t+3.63\t10.00\t+4.50\t+10.00\n",
+    "9102": "9102\t示範封測\t上市\t52.30\t-0.24\t50.00\t+3.50\t+8.00\n",
+    "9201": "9201\t示範矽材\t上櫃\t25.10\n資料 2026/10/15\t\t\t+2.50\t+6.00\n",
+}
+
+
+def _theme_run(tmp_path, total, pager, items=None, rows=None):
     theme = "official-industry-x"
+    items = MEMBERS if items is None else items
     members = {
         "meta": {"total": total, "data_as_of": "2026-10-16"},
-        "items": [{"symbol": "9101", "name": "示範晶圓"}],
+        "items": items,
     }
     board = {
         "meta": {"trading_date": "2026-10-16"},
         "items": [{"theme_id": theme, "display_name": "半導體"}],
     }
-    page = "代號\t名稱\t市場\t角色\t收盤\t資料日期\n9101\t示範晶圓\t上市\n" + pager
+    rows = [item["symbol"] for item in items] if rows is None else rows
+    page = MEMBER_HEADER + "".join(MEMBER_ROWS[symbol] for symbol in rows) + pager
     return FakeRun(
         tmp_path,
         {
-            "themes?board=industry&limit=10": board,
+            "themes?board=industry&limit=5": board,
             f"themes/{theme}": {"theme": {"display_name": "半導體"}},
-            f"themes/{theme}/members?page=1&page_size=30&sort=price": members,
+            f"themes/{theme}/members?page=1&page_size=30&sort=turnover": members,
         },
         {"theme-detail-1280": page},
     )
@@ -298,6 +557,40 @@ def test_g6_follows_the_member_pager(tmp_path, total, pager):
 def test_g6_fails_on_the_wrong_pager(tmp_path):
     with pytest.raises(page_checks.Fail, match="缺整行 `第 1／2 頁 · 共 31 檔`"):
         page_checks.g6(_theme_run(tmp_path, 31, "共 31 檔"))
+
+
+def test_g6_fails_on_the_old_member_header(tmp_path):
+    run = _theme_run(tmp_path, 3, "共 3 檔")
+    old = "代號\t名稱\t市場\t角色\t收盤\t資料日期\n"
+    run.pages["theme-detail-1280"] = run.pages["theme-detail-1280"].replace(
+        MEMBER_HEADER, old
+    )
+    with pytest.raises(page_checks.Fail, match="缺成員表頭"):
+        page_checks.g6(run)
+
+
+def test_g8_passes_when_the_page_lists_members_by_turnover(tmp_path):
+    detail = page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔"))
+    assert "9102、9101、9201" in detail
+
+
+def test_g8_fails_on_the_old_page_sorted_by_close(tmp_path):
+    # Before #280 the page asked for sort=price: the highest close came first.
+    run = _theme_run(tmp_path, 3, "共 3 檔", rows=["9101", "9102", "9201"])
+    with pytest.raises(page_checks.Fail, match="頁面成員順序"):
+        page_checks.g8(run)
+
+
+def test_g8_fails_when_the_api_is_not_sorted_by_turnover(tmp_path):
+    items = [MEMBERS[1], MEMBERS[0], MEMBERS[2]]
+    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+        page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
+
+
+def test_g8_needs_a_member_without_turnover_last(tmp_path):
+    items = [MEMBERS[2], MEMBERS[0], MEMBERS[1]]
+    with pytest.raises(page_checks.Fail, match="不是依成交值由大到小"):
+        page_checks.g8(_theme_run(tmp_path, 3, "共 3 檔", items=items))
 
 
 def test_page_usable_reports_errors_and_overflow(tmp_path):
@@ -326,9 +619,11 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
     monkeypatch.setitem(
         page_checks.KNOWN_FAILURES,
         ("actions", "A5"),
-        page_checks.Known("https://example/1", "出現 LLM 推論標記"),
+        page_checks.Known("https://example/1", "出現 LLM 推論標記", "2026-11-20"),
     )
-    clean = FakeRun(tmp_path, {}, {"actions-1280": "我的庫存\n查看個股詳情 →\n"})
+    clean = FakeRun(
+        tmp_path, {}, {"actions-1280": "我的庫存\n2330\t2026/10/22\t策略總表 →\n"}
+    )
     marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
     monkeypatch.setitem(page_checks.CHECKS, "actions", {"A5": page_checks.a5})
     (failing,) = page_checks.run_page(marked, "actions", [])
@@ -339,6 +634,142 @@ def test_known_failures_do_not_fail_the_run_until_they_pass(tmp_path, monkeypatc
     )
     (passing,) = page_checks.run_page(clean, "actions", [])
     assert passing.failed and "從 KNOWN_FAILURES 移除 actions A5" in passing.detail
+
+
+# ---- KNOWN_FAILURES expire (#311) ----
+
+ISSUE = "https://github.com/YiCheng0608/stock-lab/issues/311"
+PAGE_CHECKS = "tools/verify/page_checks.py"
+
+
+def _entry_sources(text: str) -> dict[tuple[str, str], str]:
+    """(page, code) -> the source of its ``Known(...)`` in KNOWN_FAILURES."""
+
+    for node in ast.parse(text).body:
+        target = (
+            getattr(node, "target", None)
+            or (getattr(node, "targets", None) or [None])[0]
+        )
+        if getattr(target, "id", None) == "KNOWN_FAILURES":
+            return {
+                ast.literal_eval(key): ast.get_source_segment(text, value)
+                for key, value in zip(node.value.keys, node.value.values)
+            }
+    raise AssertionError("KNOWN_FAILURES not found")
+
+
+def _added(source: str) -> date:
+    """The day of the commit that added ``source`` to page_checks.py; today when uncommitted."""
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, encoding="utf-8", check=True
+        ).stdout
+
+    if source not in git("show", f"HEAD:{PAGE_CHECKS}"):
+        return datetime.now(page_checks.TAIPEI).date()
+    day = git("log", "-1", "--format=%cs", "-S", source, "--", PAGE_CHECKS).strip()
+    return date.fromisoformat(day)
+
+
+def test_known_failures_expire_within_30_days_of_the_commit_that_added_them():
+    sources = _entry_sources((ROOT / PAGE_CHECKS).read_text(encoding="utf-8"))
+    assert sources.keys() == page_checks.KNOWN_FAILURES.keys()
+    assert (
+        page_checks.known_problems(
+            page_checks.KNOWN_FAILURES, lambda key: _added(sources[key])
+        )
+        == []
+    )
+
+
+def test_an_entry_is_read_from_the_source_and_dated_today_until_committed():
+    text = (
+        "KNOWN_FAILURES: dict[tuple[str, str], Known] = {\n"
+        '    ("today", "T6"): Known(\n'
+        f'        "{ISSUE}", "缺新聞標題整行", "2026-11-20"\n'
+        "    ),\n"
+        "}\n"
+    )
+    (source,) = _entry_sources(text).values()
+    assert source.startswith("Known(") and source.endswith(")")
+    assert _added(source) == datetime.now(page_checks.TAIPEI).date()
+    # Committed text gets the day of the commit that added it.
+    committed = "KNOWN_FAILURES: dict[tuple[str, str], Known] = {}"
+    assert _added(committed) <= datetime.now(page_checks.TAIPEI).date()
+
+
+def test_known_requires_expires():
+    with pytest.raises(TypeError):
+        page_checks.Known(ISSUE, "缺新聞標題整行")
+
+
+def test_known_problems_flag_a_missing_or_late_expires():
+    def problems(entry, key=("today", "T6")):
+        return page_checks.known_problems({key: entry}, lambda key: date(2026, 10, 28))
+
+    assert page_checks.known_problems({}, lambda key: date(2026, 10, 28)) == []
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-27")) == []
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-28")) == []
+    assert problems(SimpleNamespace(issue=ISSUE, match="缺新聞標題整行")) == [
+        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（None）"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-11-28")) == [
+        "KNOWN_FAILURES today T6：expires 2026-11-28 要在加入日 2026-10-28 起 30 天內"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026-10-27")) == [
+        "KNOWN_FAILURES today T6：expires 2026-10-27 要在加入日 2026-10-28 起 30 天內"
+    ]
+    assert problems(page_checks.Known(ISSUE, "缺新聞標題整行", "2026/11/20")) == [
+        "KNOWN_FAILURES today T6：缺 expires 或不是 YYYY-MM-DD（'2026/11/20'）"
+    ]
+    assert problems(page_checks.Known("#233", "", "2026-11-20"), ("today", "T99")) == [
+        "KNOWN_FAILURES today T99：不是 CHECKS 裡的檢查",
+        "KNOWN_FAILURES today T99：issue 要是 stock-lab 的 Issue 連結",
+        "KNOWN_FAILURES today T99：缺 match",
+    ]
+
+
+def _a5_known(monkeypatch, expires):
+    monkeypatch.setitem(
+        page_checks.KNOWN_FAILURES,
+        ("actions", "A5"),
+        page_checks.Known(ISSUE, "出現 LLM 推論標記", expires),
+    )
+    monkeypatch.setitem(page_checks.CHECKS, "actions", {"A5": page_checks.a5})
+
+
+def test_an_expired_known_failure_fails_as_usual(tmp_path, monkeypatch):
+    # FakeRun runs on 2026-10-24 (Taipei): the entry counts through its expires day.
+    marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
+    _a5_known(monkeypatch, "2026-10-24")
+    (known,) = page_checks.run_page(marked, "actions", [])
+    assert (known.status, known.failed, known.known) == ("失敗（已知）", False, ISSUE)
+    _a5_known(monkeypatch, "2026-10-23")
+    (expired,) = page_checks.run_page(marked, "actions", [])
+    assert (expired.status, expired.failed, expired.known) == ("失敗", True, None)
+    assert expired.detail.endswith(f"（已知失敗 {ISSUE} 已於 2026-10-23 到期）")
+    clean = FakeRun(
+        tmp_path, {}, {"actions-1280": "我的庫存\n2330\t2026/10/22\t策略總表 →\n"}
+    )
+    (passing,) = page_checks.run_page(clean, "actions", [])
+    assert (passing.status, passing.failed) == ("通過", False)
+    assert passing.detail.endswith("；KNOWN_FAILURES 的 actions A5 已到期，移除")
+
+
+def test_page_checks_exits_1_on_an_expired_known_failure(tmp_path, monkeypatch):
+    marked = FakeRun(tmp_path, {}, {"actions-1280": "AI 推論\n"})
+    monkeypatch.setattr(page_checks, "Run", lambda *args: marked)
+    monkeypatch.setattr(page_checks, "stocks_for", lambda run, fixture: [])
+    monkeypatch.setattr(page_checks, "prefetch", lambda *args: None)
+    monkeypatch.setattr(page_checks, "write_samples", lambda run, pages: [])
+    monkeypatch.setattr(page_checks, "registry_problems", lambda *args: [])
+    argv = ["--api", "http://api", "--web", "http://web", "--db", str(tmp_path / "db")]
+    argv += ["--out", str(tmp_path / "out"), "--pages", "actions"]
+    _a5_known(monkeypatch, "2026-10-24")
+    assert page_checks.main(argv) == 0
+    _a5_known(monkeypatch, "2026-10-23")
+    assert page_checks.main(argv) == 1
 
 
 def _t6_run(tmp_path, ai, card_ai, card):

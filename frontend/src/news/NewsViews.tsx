@@ -12,6 +12,7 @@ import {
   aiDirection,
   candidateConfidenceLabel,
   directionView,
+  sourceDirectionView,
   formatTaipeiInstant,
   impactScopeLabel,
   matchesInstrument,
@@ -83,24 +84,25 @@ function RelationChips({ item }: { item: NewsItem }) {
 
 // One card for /news, the stock timeline and the today page (DESIGN_SYSTEM §5 card, UI_COPY §4 order):
 // category and source → title → summary preview → source time → impact → verified relations → source link.
-export function NewsCard({ item }: { item: NewsItem }) {
+// compact: the today page row (#276, UI_COPY_SPEC §4), without the summary and the source link.
+export function NewsCard({ item, compact = false }: { item: NewsItem; compact?: boolean }) {
   const time = newsTime(item)
   const ai = usableAi(item)
   const preview = summaryPreview(item)
   return (
-    <article className="card news-card" data-testid="news-card" data-news-id={item.id}>
+    <article className={compact ? 'card news-card news-card-compact' : 'card news-card'} data-testid="news-card" data-news-id={item.id}>
       <div className="news-card-meta">
         <Badge className="badge-compact news-source-badge">{newsSourceName(item)}</Badge>
         <span>{newsCategoryLabel(item.category)} · {sourceKindLabel(item.source_kind)}</span>
       </div>
       <h3 className="news-card-title"><Link to={'/news/' + encodeURIComponent(item.id)}>{newsTitle(item)}</Link></h3>
-      <p className={preview ? 'news-card-summary' : 'news-card-summary muted'}>{preview ?? NO_SUMMARY_TEXT}</p>
+      {!compact && <p className={preview ? 'news-card-summary' : 'news-card-summary muted'}>{preview ?? NO_SUMMARY_TEXT}</p>}
       <div className="news-card-time">{time.dateTime ? <time dateTime={time.dateTime}>{time.text}</time> : time.text}</div>
       <div className="news-card-impact">
         {ai ? <><DirectionText view={aiDirection(ai)} /><AiBadge /></> : <DirectionText view={directionView(item.impact_direction)} />}
       </div>
       <RelationChips item={item} />
-      <SourceLinkLine item={item} />
+      {!compact && <SourceLinkLine item={item} />}
     </article>
   )
 }
@@ -255,7 +257,7 @@ export function NewsDetailView({ item }: { item: NewsItem }) {
               <p className="news-detail-body">{description}</p>
             </details>
           )}
-          <div className="news-detail-section"><span className="news-detail-label">影響</span><DirectionText view={directionView(item.impact_direction)} /></div>
+          <div className="news-detail-section"><span className="news-detail-label">影響</span><DirectionText view={sourceDirectionView(item.impact_direction)} /></div>
           <div className="news-detail-section"><span className="news-detail-label">已核實關聯</span><RelationChips item={item} /></div>
           <SourceLinkLine item={item} />
           <details className="technical-details">

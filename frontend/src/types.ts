@@ -166,6 +166,32 @@ export type Signal = {
   } | null
 }
 
+// dashboard.market_overview (#275): each exchange for dashboard.as_of only, never another day's row.
+export type MarketOverviewExchange = {
+  exchange: 'TWSE' | 'TPEx' | string
+  status: 'available' | 'unavailable' | string
+  reason?: string
+  latest_trading_date?: string | null
+  index?: { name: string; close: number | null; change: number | null; change_pct: number | null; change_pct_method: 'official' | 'derived' | string | null }
+  turnover?: { value: number | null; scope: 'twse_all_securities' | 'tpex_stocks' | string | null; scope_label: string | null }
+  breadth?: {
+    advancers: number | null
+    decliners: number | null
+    unchanged: number | null
+    limit_up: number | null
+    limit_down: number | null
+    unmatched: number | null
+    not_comparable?: number | null
+    scope: string | null
+  }
+  source?: { label: string | null; collected_at: string | null; data_as_of?: string | null; raw_payload_id?: number | null }
+}
+
+export type MarketOverview = {
+  trading_date: string | null
+  exchanges: MarketOverviewExchange[]
+}
+
 export type Dashboard = {
   as_of: string | null
   mode: string
@@ -193,8 +219,11 @@ export type Dashboard = {
   news?: NewsItem[]
   candidates?: ActionSummary[]
   actions?: ActionSummary[]
+  // Every holding's summary, ordered by risk (#297 review L1); actions has the first 8 rows only.
+  holding_actions?: ActionSummary[]
   action_counts?: { total: number; actionable: number; data_insufficient: number; held: number; held_unknown?: number; scope?: string }
   empty_states?: Record<string, string | null>
+  market_overview?: MarketOverview
 }
 
 export type Bar = {
@@ -343,6 +372,83 @@ export type InstrumentDetail = {
   signals: Signal[]
   // The stock's row in the latest candidate run on or before the cutoff; null when it is not a candidate.
   candidate?: CandidateItem | null
+  // One row per registered strategy on the latest signal date (#274).
+  strategy_board?: StrategyBoard | null
+}
+
+export type StrategyBoardStatus = 'conditional' | 'observation' | 'data_incomplete' | 'not_applicable'
+
+export type StrategyCondition = {
+  code: string
+  kind: string
+  satisfied: boolean | null
+  actual: number | null
+  threshold: number | null
+  threshold_high: number | null
+  operator: string | null
+  reasons: string[]
+  next_session: Record<string, number | string | null> | null
+}
+
+// Levels never mix: actionable reads the signal, observation reads strategy_levels.
+export type StrategyActionableLevels = {
+  kind: 'actionable'
+  entry_type: string
+  trigger_price: number | null
+  reference_entry: number | null
+  entry_low: number | null
+  entry_high: number | null
+  invalid_price: number | null
+  target_1: number | null
+  target_2: number | null
+  risk_reward: number | null
+}
+
+export type StrategyObservationLevels = {
+  kind: 'observation'
+  display_label: string
+  availability: 'levels' | 'trend_unreachable' | 'data_incomplete' | 'not_applicable' | 'suspended' | string
+  next_session_date: string | null
+  trigger_price: number | null
+  zone_low: number | null
+  zone_high: number | null
+  min_volume: number | null
+  max_volume: number | null
+  reference_entry: number | null
+  entry_low: number | null
+  entry_high: number | null
+  invalid_price: number | null
+  target_1: number | null
+  target_2: number | null
+  risk_reward: number | null
+  reachable_next_session: boolean | null
+  price_basis: string
+  missing_inputs: string[]
+  missing_labels: string[]
+}
+
+export type StrategyBoardRow = {
+  strategy: string
+  label: string
+  version: string
+  entry_type: string
+  status: StrategyBoardStatus
+  signal_id: number | null
+  signal_date: string | null
+  earliest_execution_date: string | null
+  levels: StrategyActionableLevels | StrategyObservationLevels | null
+  levels_missing: boolean
+  unmet: string[]
+  missing: string[]
+  missing_labels: string[]
+  conditions: StrategyCondition[]
+}
+
+export type StrategyBoard = {
+  as_of: string | null
+  levels_version: string
+  candidate: { rank: number; total_score: number; score_version: string; strategy: string; llm_note?: CandidateLlmNote | null } | null
+  strategies: StrategyBoardRow[]
 }
 
 export type InstrumentCoverage = {
@@ -931,10 +1037,29 @@ export type ThemeDetail = {
   members: ThemeInlineMember[]
 }
 
-export type ThemeMemberRow = StockDirectoryRow & { theme_evidence?: ThemeEvidence | null }
+// GET /themes/{id}/members sorts (#280); the API also keeps price and name.
+export type ThemeMemberSort = 'turnover' | 'change_pct' | 'return_5d' | 'return_20d' | 'symbol'
+
+export type ThemeMemberRow = StockDirectoryRow & {
+  theme_evidence?: ThemeEvidence | null
+  // Change against the previous session, same rule as the candidate market (#280, UI_COPY_SPEC §8.5).
+  change?: number | null
+  change_pct?: number | null
+  change_status?: 'known' | 'unverified' | 'missing' | string
+  // Only on members_as_of; missing when the member has no bar that day.
+  turnover?: number | null
+  turnover_status?: 'available' | 'unavailable' | 'unknown' | 'missing' | string
+  excess_return_5d?: number | null
+  excess_return_20d?: number | null
+  candidate_rank?: number | null
+  conditional?: boolean
+  // The action list's tier 3 (接近成立, #277-B).
+  near?: boolean
+}
 
 export type ThemeMembersResponse = {
   theme: ThemeSummary
+  members_as_of?: string | null
   items: ThemeMemberRow[]
   meta: Record<string, unknown>
 }
@@ -1062,7 +1187,57 @@ export type ActionSummary = {
   theme_ids: string[]
   event_ids: number[]
   data_cutoff: string | null
+  // GET /api/actions rows only (action_tier_v1, UI_COPY_SPEC §5).
+  tier?: ActionTierNumber
+  candidate?: { rank: number; total_score: number } | null
+  // Tiers 3 and 4 (#277-B): the nearest strategy's conditions, no level; null without a strategy_levels row.
+  nearness?: ActionNearness | null
 }
+
+// One unmet condition of a near card: a price condition carries its gap, a volume condition its ratio; never a price.
+export type ActionNearnessItem = {
+  code: string
+  kind: string
+  short_label: string | null
+  gap: number | null
+  position: 'below' | 'above' | 'inside' | string | null
+  actual: number | null
+  threshold: number | null
+  threshold_high: number | null
+  operator: string | null
+}
+
+export type ActionNearness = {
+  strategy: string
+  label: string
+  near: boolean
+  unmet_count: number
+  price_gap: number | null
+  unmet: ActionNearnessItem[]
+  met_short_labels: string[]
+}
+
+export type ActionTierNumber = 0 | 1 | 2 | 3 | 4 | 5
+export type ActionView = 'focus' | 'with_observation' | 'all'
+
+// GET /api/actions summary: counts of the action_tier_v1 projection, not of one page.
+export type ActionTierSummary = {
+  total: number
+  held: number
+  held_unknown?: number
+  scope?: string
+  tier_version: string
+  // Tier 2's 「未進今日候選前 N」.
+  candidate_list_size?: number
+  view: ActionView
+  include_etf: boolean
+  tiers: Array<{ tier: ActionTierNumber; key: string; label: string; stock: number; etf: number; shown: number }>
+  hidden: { etf: number; observation: number; data_insufficient: number }
+  views: Record<ActionView, number>
+  etf: number
+}
+
+export type ActionsResponse = CursorPage<ActionSummary> & { taxonomy?: Record<string, string>; summary: ActionTierSummary }
 
 export type GlossaryTerm = {
   term_id: string
@@ -1221,6 +1396,18 @@ export type CandidateItem = {
   // Missing on responses from before #220; null when no note was attempted.
   llm_note?: CandidateLlmNote | null
   sources: { signal: string; market_bar: string | null; chips: string | null; groups: string; news: string }
+  // Close of trading_date and its change (#276); missing on responses from before #276.
+  market?: CandidateMarket
+}
+
+// known: against the previous verified session from the same source; unverified: change not shown; missing: no traded bar.
+export type CandidateMarket = {
+  trading_date: string
+  close: number | null
+  change: number | null
+  change_pct: number | null
+  change_status: 'known' | 'unverified' | 'missing' | string
+  source: string | null
 }
 
 export type CandidateZeroReason = 'no_actionable_signals' | 'all_excluded'

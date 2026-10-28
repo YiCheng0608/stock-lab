@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -254,16 +255,86 @@ def test_missing_python_still_checks_logs(wd):
     assert "news_llm：最近" not in result.stdout
 
 
-def test_lock_prevents_reentry_and_stale_lock_is_removed(wd):
-    lock = wd.logs / "watchdog.lock"
-    lock.mkdir()
+# The base interpreter: worker.job is standard library only, and under a Windows
+# venv sys.executable is a launcher in front of the process that holds the lock.
+BASE_PYTHON = getattr(sys, "_base_executable", None) or sys.executable
+
+
+def _hold_lock(wd: Watchdog) -> tuple[subprocess.Popen, int]:
+    """A process holding the watchdog lock (worker.job lock), and its child's pid."""
+
+    started = wd.root / "holder.pid"
+    child = (
+        "import os, time; open(os.environ['HOLDER_PID'], 'w').write(str(os.getpid()));"
+        " time.sleep(120)"
+    )
+    holder = subprocess.Popen(
+        [
+            BASE_PYTHON,
+            "-m",
+            "worker.job",
+            "lock",
+            str(wd.data / "locks" / "watchdog.lock"),
+            "--",
+            BASE_PYTHON,
+            "-c",
+            child,
+        ],
+        cwd=ROOT / "backend",
+        env={**os.environ, "HOLDER_PID": str(started)},
+    )
+    deadline = time.monotonic() + 60
+    while not (started.exists() and started.read_text()):
+        assert time.monotonic() < deadline, "the lock holder did not start"
+        time.sleep(0.05)
+    return holder, int(started.read_text())
+
+
+def _force_kill(pid: int) -> None:
+    """``taskkill /F`` on Windows, ``kill -9`` elsewhere.
+
+    taskkill /F is TerminateProcess, which os.kill calls on Windows; taskkill
+    itself goes through WMI, and a busy machine cancels it ("call cancelled",
+    the #246 failure), so the tests call TerminateProcess directly.
+    """
+
+    os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+
+
+def test_a_running_watchdog_keeps_the_next_one_out(wd):
+    holder, _child = _hold_lock(wd)
+    try:
+        result = wd.run()
+    finally:
+        holder.kill()
+        holder.wait(timeout=30)
+    assert wd.events() == ["locked"], result.stdout + result.stderr
+    assert wd.text("gh_calls.log") == ""
+
+
+def test_a_killed_watchdog_leaves_no_lock_behind(wd):
+    # #224: a run killed by the task's time limit left logs/watchdog.lock/ and
+    # every run for the next 30 minutes was skipped. The OS drops a file lock
+    # with its holder, and the holder's child goes with it.
+    from worker.schedule_runs import _pid_alive
+
+    holder, child = _hold_lock(wd)
+    _force_kill(holder.pid)
+    holder.wait(timeout=30)
+    deadline = time.monotonic() + 15
+    while _pid_alive(child):
+        assert time.monotonic() < deadline, "the holder's child outlived it"
+        time.sleep(0.1)
+    # A lock directory left by the old watchdog does not count either.
+    (wd.logs / "watchdog.lock").mkdir()
     wd.run()
-    assert wd.events() == ["locked"]
-    old = time.time() - 31 * 60
-    os.utime(lock, (old, old))
+    assert wd.events() == ["schedules_ok"]
+
+
+def test_a_run_leaves_no_work_directory(wd):
+    _anomaly_fixtures(wd)
     wd.run()
-    assert wd.events()[1:] == ["lock_stale_removed", "schedules_ok"]
-    assert not lock.exists()
+    assert [path.name for path in wd.logs.iterdir() if path.name.startswith(".")] == []
 
 
 def test_unreadable_database_is_logged_and_not_reported_ok(wd):
@@ -610,6 +681,165 @@ def test_a_skipped_status_sync_is_commented_until_a_later_sync_applies(wd):
     )
     assert wd.events()[-1] == "schedules_ok"
     assert wd.text("gh_calls.log") == ""
+
+
+CALENDAR_EVIDENCE = (
+    '{"execution": {"earliest": null, "calendar": {"source": "twse_holiday_schedule",'
+    ' "raw_payload_ids": [7676], "missing_reason": null}}}'
+)
+# A signal written before the calendar-based analyze (no execution.calendar).
+OLD_EVIDENCE = '{"execution": {"earliest": null}}'
+
+
+def _signal_rows(path: Path, rows: list[tuple[str, str, str | None, str]]) -> None:
+    """trading_calendar_days (empty: the table marks a migrated database) and
+    signals (signal_key, signal_date, earliest_execution_date,
+    rule_evidence_json) rows."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS trading_calendar_days (id INTEGER PRIMARY KEY)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS signals (id INTEGER PRIMARY KEY,"
+            " signal_key VARCHAR(220), signal_date DATE, earliest_execution_date DATE,"
+            " rule_evidence_json JSON)"
+        )
+        conn.executemany(
+            "INSERT INTO signals (signal_key, signal_date, earliest_execution_date,"
+            " rule_evidence_json) VALUES (?, ?, ?, ?)",
+            rows,
+        )
+    conn.close()
+
+
+def test_signals_without_an_execution_date_are_commented(wd):
+    # #294: the calendar step is non-blocking, so a missing year shows here.
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    assert "invariant execution_calendar skip reason=no_trading_calendar" in (
+        wd.run("--dry-run").stdout
+    )
+    # Migrated to 0020, but the latest signals predate the calendar and are
+    # never backfilled: not a violation (#294 review L3).
+    _signal_rows(
+        db,
+        [
+            ("analysis-TWSE-2330-2026-10-16-a", "2026-10-16", None, OLD_EVIDENCE),
+            ("analysis-TWSE-2330-2026-10-16-b", "2026-10-16", None, OLD_EVIDENCE),
+        ],
+    )
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant execution_calendar skip reason=signals_before_calendar"
+        " signal_date=2026-10-16 signals=2"
+    ) in dry.stdout
+    assert "待使用者" not in dry.stdout
+    _signal_rows(
+        db,
+        [
+            # Another namespace is outside the check.
+            (
+                "backtest-7-TWSE-2330-2026-10-19-a",
+                "2026-10-19",
+                None,
+                CALENDAR_EVIDENCE,
+            ),
+            (
+                "analysis-TWSE-2330-2026-10-19-a",
+                "2026-10-19",
+                "2026-10-20",
+                CALENDAR_EVIDENCE,
+            ),
+            ("analysis-TWSE-2330-2026-10-19-b", "2026-10-19", None, CALENDAR_EVIDENCE),
+        ],
+    )
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant execution_calendar violation signal_date=2026-10-19"
+        " signals=2 without_date=1"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：最新訊號日 2026-10-19 的 2 筆 analysis 訊號中，"
+        "1 筆沒有規則最早執行日"
+    ) in dry.stdout
+
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "UPDATE signals SET earliest_execution_date='2026-10-20'"
+            " WHERE signal_key='analysis-TWSE-2330-2026-10-19-b'"
+        )
+    conn.close()
+    result = wd.run()
+    assert (
+        "invariant execution_calendar ok signal_date=2026-10-19"
+        " signals=2 without_date=0"
+    ) in result.stdout
+    assert wd.events()[-1] == "schedules_ok"
+
+
+def _levels_steps(path: Path, rows: list[tuple[str, str, str | None]]) -> None:
+    """Daily runs of 2026-10-19 with a strategy_levels step: (run status, step
+    status, finished_at)."""
+
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schedule_runs (id INTEGER PRIMARY KEY, job TEXT,"
+            " target_date DATE, status TEXT, started_at DATETIME, finished_at DATETIME,"
+            " summary_json TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schedule_run_steps (id INTEGER PRIMARY KEY,"
+            " schedule_run_id INTEGER, step VARCHAR(40), status VARCHAR(30))"
+        )
+        for run_status, step_status, finished in rows:
+            run_id = conn.execute(
+                "INSERT INTO schedule_runs (job, target_date, status, started_at,"
+                " finished_at, summary_json) VALUES ('daily', '2026-10-19', ?, ?, ?, '{}')",
+                (run_status, _utc_text(NIGHT - 3600), finished),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO schedule_run_steps (schedule_run_id, step, status)"
+                " VALUES (?, 'strategy_levels', ?)",
+                (run_id, step_status),
+            )
+    conn.close()
+
+
+def test_a_failed_strategy_levels_step_is_commented(wd):
+    # #274 (#293 review L2): the step never changes the run status.
+    db = wd.data / "stock.db"
+    _invariant_db(db, HEALTHY_BARS, HEALTHY_LLM)
+    assert "invariant strategy_levels skip reason=no_schedule_run_steps" in (
+        wd.run("--dry-run").stdout
+    )
+    done = _utc_text(NIGHT - 1800)
+    _levels_steps(db, [("success", "failed", done)])
+    dry = wd.run("--dry-run")
+    assert (
+        "invariant strategy_levels violation target_date=2026-10-19 run_id=1"
+        " status=failed"
+    ) in dry.stdout
+    assert (
+        "待使用者：資料不變量：daily run 1（目標日 2026-10-19）的 strategy_levels"
+        " 步驟是 `failed`"
+    ) in dry.stdout
+    # A run still in progress is not judged; the last finished one still is.
+    _levels_steps(db, [("running", "running", None)])
+    assert "invariant strategy_levels violation target_date=2026-10-19 run_id=1" in (
+        wd.run("--dry-run").stdout
+    )
+    # skipped (analyze failed) is the run's own anomaly, not this line's.
+    _levels_steps(db, [("failed", "skipped", done)])
+    assert (
+        "invariant strategy_levels ok target_date=2026-10-19 run_id=3 status=skipped"
+    ) in wd.run("--dry-run").stdout
+    _levels_steps(db, [("success", "success", done)])
+    result = wd.run()
+    assert (
+        "invariant strategy_levels ok target_date=2026-10-19 run_id=4 status=success"
+    ) in result.stdout
+    assert "invariant_strategy_levels" not in wd.text("gh_calls.log")
 
 
 def _helper_module():

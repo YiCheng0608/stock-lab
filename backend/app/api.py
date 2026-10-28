@@ -34,7 +34,7 @@ from .candidate_view import (
 from .candidate_view import candidate_for_instrument, candidate_list
 from .coverage import has_backfill_manifest
 from .db import SessionLocal
-from .domain import ETF_CATEGORIES, signal_confidence_semantics
+from .domain import CANDIDATE_SCORE, ETF_CATEGORIES, signal_confidence_semantics
 from .level_semantics import build_level_semantics, canonical_evidence
 from .models import (
     ChipSnapshot,
@@ -60,6 +60,7 @@ from .models import (
     TrackingPlan,
 )
 from worker.pipeline import _group_board, summarize_backtest
+from worker.news_llm import PROMPT_VERSION as NEWS_PROMPT_VERSION
 from worker.backfill import (
     BACKFILL_SCOPES,
     backfill_run_dict,
@@ -69,13 +70,23 @@ from worker.backfill import (
 )
 from .decision import (
     ACTION_LABELS,
+    ACTION_TIER_VERSION,
+    ACTION_TIERS,
+    ACTION_VIEWS,
+    DEFAULT_ACTION_VIEW,
+    HOLDING_STATE_ORDER,
+    ActionTierRow,
+    action_tier_rows,
+    action_tier_sort_key,
+    action_view_hidden_reason,
     build_action_summaries,
     build_decision_summary,
     latest_official_as_of,
-    prioritized_instrument_ids,
     position_holding_ids,
 )
 from .glossary import GLOSSARY_VERSION, glossary_terms
+from .market_overview import market_overview
+from .theme_member_view import member_columns, member_context, sort_members
 from .theme_table import parse_membership_source
 from .theme_suggestions import (
     DEFAULT_LIMIT as THEME_SUGGESTIONS_DEFAULT_LIMIT,
@@ -101,6 +112,8 @@ from .units import (
     trusted_position_shares,
     volume_exact_text,
 )
+from .strategies import REGISTRY
+from .strategy_board import strategy_board
 from .stock_bars import (
     DEFAULT_LIMIT as BARS_DEFAULT_LIMIT,
     MAX_LIMIT as BARS_MAX_LIMIT,
@@ -839,6 +852,29 @@ def _encode_cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
+def _encode_action_cursor(offset: int, holdings: list[int] | None) -> str:
+    """An action-list cursor; ``holdings`` is the tier-0 order an earlier page built."""
+
+    payload: dict[str, Any] = {"offset": max(0, int(offset))}
+    if holdings is not None:
+        payload["holdings"] = holdings
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _action_cursor_holdings(cursor: str | None) -> list[int] | None:
+    """The holding order carried by an action-list cursor (#278), if any."""
+
+    if not cursor:
+        return None
+    _decode_cursor(cursor)
+    padded = cursor + "=" * (-len(cursor) % 4)
+    value = json.loads(base64.urlsafe_b64decode(padded.encode("ascii"))).get("holdings")
+    if isinstance(value, list) and all(type(item) is int for item in value):
+        return value
+    return None
+
+
 def _decode_cursor(cursor: str | None) -> int:
     if not cursor:
         return 0
@@ -1083,30 +1119,29 @@ def _candidate_instrument(
 
 
 def news_ai_map(db: Session, items: Iterable[NewsItem]) -> dict[int, dict[str, Any]]:
-    """Latest done LLM result per news item (worker.news_llm), in two queries.
+    """Done LLM result of the current prompt per news item, in two queries.
 
     The result is inference, kept apart from source facts; symbol candidates are
     unverified (their exchange follows the master, ``_candidate_instrument``) and
-    rule relations stay in ``symbols``.  An item whose latest
-    done-or-rejected result is ``rejected`` (failed the summary check) has no
-    AI block, so an older prompt version's result is not shown in its place.
+    rule relations stay in ``symbols``.  Only the prompt version
+    ``worker.news_llm`` writes now counts (#308): older versions never had its
+    summary check, so an item without a done result of that version (none yet,
+    pending, stale, or ``rejected``) has no AI block on any page.
     """
 
     ids = [item.id for item in items]
     if not ids:
         return {}
-    rows = db.scalars(
-        select(NewsLlmResult)
-        .where(
-            NewsLlmResult.news_item_id.in_(ids),
-            NewsLlmResult.llm_status.in_(("done", "rejected")),
+    latest: dict[int, NewsLlmResult] = {
+        row.news_item_id: row
+        for row in db.scalars(
+            select(NewsLlmResult).where(
+                NewsLlmResult.news_item_id.in_(ids),
+                NewsLlmResult.prompt_version == NEWS_PROMPT_VERSION,
+                NewsLlmResult.llm_status == "done",
+            )
         )
-        .order_by(NewsLlmResult.llm_run_at.desc(), NewsLlmResult.id.desc())
-    ).all()
-    latest: dict[int, NewsLlmResult] = {}
-    for row in rows:
-        latest.setdefault(row.news_item_id, row)
-    latest = {key: row for key, row in latest.items() if row.llm_status == "done"}
+    }
     codes = {
         str(candidate.get("symbol", "")).partition(":")[2]
         for row in latest.values()
@@ -1499,27 +1534,20 @@ def compact_news_dict(
     }
 
 
-def action_candidate_ids(
+def action_list_rows(
     db: Session,
     as_of: date | None,
     *,
-    q: str | None = None,
     held_only: bool = False,
     watchlist_only: bool = False,
     theme_id: str | None = None,
-) -> tuple[list[int], set[int], set[int]]:
-    """Filter the cheap action candidate projection before decision building."""
+) -> tuple[list[ActionTierRow], set[int], set[int]]:
+    """The action_tier_v1 projection narrowed by the research filters."""
 
-    ordered_ids = prioritized_instrument_ids(db, as_of)
-    if not ordered_ids:
+    rows = action_tier_rows(db, as_of)
+    if not rows:
         return [], set(), set()
-    instruments = db.scalars(
-        select(Instrument).where(
-            Instrument.id.in_(ordered_ids), Instrument.status == "active"
-        )
-    ).all()
-    by_id = {item.id: item for item in instruments}
-    held_ids, unknown_ids, _recorded_ids = position_holding_ids(db, ordered_ids)
+    held_ids, unknown_ids, _recorded_ids = position_holding_ids(db)
     theme_ids: set[int] | None = None
     if theme_id:
         effective_date = as_of or date.today()
@@ -1527,7 +1555,9 @@ def action_candidate_ids(
             db.scalars(
                 select(GroupMembership.instrument_id).where(
                     GroupMembership.group_id == theme_id,
-                    GroupMembership.instrument_id.in_(ordered_ids),
+                    GroupMembership.instrument_id.in_(
+                        [row.instrument_id for row in rows]
+                    ),
                     GroupMembership.valid_from <= effective_date,
                     (
                         GroupMembership.valid_to.is_(None)
@@ -1536,22 +1566,116 @@ def action_candidate_ids(
                 )
             ).all()
         )
-    needle = q.strip().casefold() if q and q.strip() else None
-    filtered: list[int] = []
-    for instrument_id in ordered_ids:
-        instrument = by_id.get(instrument_id)
-        if not instrument:
-            continue
-        if held_only and instrument_id not in held_ids:
-            continue
-        if watchlist_only and not instrument.is_watchlisted:
-            continue
-        if theme_ids is not None and instrument_id not in theme_ids:
-            continue
-        if needle and needle not in f"{instrument.symbol} {instrument.name}".casefold():
-            continue
-        filtered.append(instrument_id)
+    filtered = [
+        row
+        for row in rows
+        if (not held_only or row.instrument_id in held_ids)
+        and (not watchlist_only or row.watchlisted)
+        and (theme_ids is None or row.instrument_id in theme_ids)
+    ]
     return filtered, held_ids, unknown_ids
+
+
+def order_holdings(
+    db: Session, as_of: date | None, rows: list[ActionTierRow]
+) -> dict[int, dict[str, Any]]:
+    """Build the holdings' summaries and sort tier 0 by their action state.
+
+    Returns the built summaries by instrument id so a page reuses them; rows
+    of other tiers keep their order and are not built here.
+    """
+
+    holdings = [row.instrument_id for row in rows if row.tier == 0]
+    if not holdings:
+        return {}
+    built = {
+        item["instrument"]["id"]: item
+        for item in build_action_summaries(db, as_of, instrument_ids=holdings)
+    }
+    for row in rows:
+        if row.tier == 0 and row.instrument_id in built:
+            row.holding_state = built[row.instrument_id].get("action_state")
+    rows.sort(key=action_tier_sort_key)
+    return built
+
+
+def summaries_in_order(
+    db: Session,
+    as_of: date | None,
+    ids: list[int],
+    built: dict[int, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Summaries of ``ids`` in that order, building only those not in ``built``."""
+
+    built = dict(built or {})
+    missing = [item_id for item_id in ids if item_id not in built]
+    if missing:
+        for item in build_action_summaries(db, as_of, instrument_ids=missing):
+            built[item["instrument"]["id"]] = item
+    return [built[item_id] for item_id in ids if item_id in built]
+
+
+ACTION_TIER_SORT = f"{ACTION_TIER_VERSION}: tier asc; " + "; ".join(
+    f"{tier.tier} {tier.key}: "
+    + ", ".join(
+        f"holding_state ({' > '.join(HOLDING_STATE_ORDER)})"
+        if field == "holding_state"
+        else field
+        for field in tier.order
+    )
+    for tier in ACTION_TIERS
+)
+
+
+def action_tier_summary(
+    base: list[ActionTierRow],
+    listed: list[ActionTierRow],
+    view: str,
+    include_etf: bool,
+) -> dict[str, Any]:
+    """Counts of the projection for the page header (UI_COPY_SPEC §5)."""
+
+    shown = {tier.tier: 0 for tier in ACTION_TIERS}
+    for row in listed:
+        shown[row.tier] += 1
+    hidden = {"etf": 0, "observation": 0, "data_insufficient": 0}
+    for row in base:
+        reason = action_view_hidden_reason(row, view, include_etf)
+        if reason is not None:
+            hidden[reason] = hidden.get(reason, 0) + 1
+    return {
+        "tier_version": ACTION_TIER_VERSION,
+        # Tier 2's 「未進今日候選前 N」 (UI_COPY_SPEC §6).
+        "candidate_list_size": CANDIDATE_SCORE["list_size"]["maximum"],
+        "view": view,
+        "include_etf": include_etf,
+        "tiers": [
+            {
+                "tier": tier.tier,
+                "key": tier.key,
+                "label": tier.label,
+                "stock": sum(row.tier == tier.tier and not row.is_etf for row in base),
+                "etf": sum(row.tier == tier.tier and row.is_etf for row in base),
+                "shown": shown[tier.tier],
+            }
+            for tier in ACTION_TIERS
+        ],
+        "hidden": hidden,
+        "views": {
+            name: sum(
+                action_view_hidden_reason(row, name, include_etf) is None
+                for row in base
+            )
+            for name in ACTION_VIEWS
+        },
+        # ETFs that 含 ETF adds to (or, when on, has added to) this view.
+        "etf": sum(
+            row.is_etf
+            and action_view_hidden_reason(row, view, True) is None
+            and action_view_hidden_reason(row, view, False) == "etf"
+            for row in base
+        ),
+    }
 
 
 @router.get("/health")
@@ -1639,9 +1763,12 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
     product_themes = product_themes[:8]
     # Build only the compact first page for the home dashboard.  Full
     # strategies/evidence/coverage are reserved for stock/action detail.
-    action_candidate_ids = prioritized_instrument_ids(db, official_as_of)
-    action_rows = build_action_summaries(
-        db, official_as_of, instrument_ids=action_candidate_ids[:8]
+    tier_rows = action_tier_rows(db, official_as_of)
+    # Every holding is built, not only the first page: the holding-risk line
+    # counts all of them (#297 review L1).
+    holdings = order_holdings(db, official_as_of, tier_rows)
+    action_rows = summaries_in_order(
+        db, official_as_of, [row.instrument_id for row in tier_rows[:8]], holdings
     )
     product_news = db.scalars(
         select(NewsItem)
@@ -1692,6 +1819,7 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
             "error": run.error if run else None,
             "updated_at": as_utc_datetime(run.updated_at) if run else None,
         },
+        "market_overview": market_overview(db, verified_as_of),
         "groups": group_rows,
         "signals": [
             signal_dict(db, item, include_evidence=False) for item in signal_rows
@@ -1703,8 +1831,13 @@ def dashboard(db: Session = Depends(get_db)) -> dict[str, Any]:
         "themes": product_themes,
         "candidates": [compact_action_summary(item) for item in actionable[:8]],
         "actions": [compact_action_summary(item) for item in display_actions[:8]],
+        "holding_actions": [
+            compact_action_summary(holdings[row.instrument_id])
+            for row in tier_rows
+            if row.instrument_id in holdings
+        ],
         "action_counts": {
-            "total": len(action_candidate_ids),
+            "total": len(tier_rows),
             "actionable": len(actionable),
             "data_insufficient": sum(
                 item["action_state"] == "data_insufficient" for item in action_rows
@@ -2125,6 +2258,7 @@ def theme_detail(theme_id: str, db: Session = Depends(get_db)) -> dict[str, Any]
 def theme_members(
     theme_id: str,
     q: str | None = Query(default=None),
+    # turnover, change_pct, return_5d, return_20d, price, name or symbol (#280).
     sort: str = Query(default="symbol"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
@@ -2148,6 +2282,14 @@ def theme_members(
             Instrument.status == "active",
         )
     ).all()
+    score = (
+        scores_as_of(db, as_of).get(theme_id)
+        if run and run.status == "success"
+        else None
+    )
+    context = member_context(
+        db, as_of, score, (instrument.id for _membership, instrument in memberships)
+    )
     members: list[dict[str, Any]] = []
     for membership, instrument in memberships:
         if (
@@ -2175,30 +2317,15 @@ def theme_members(
                 "valid_to": as_date(membership.valid_to),
                 **_theme_evidence(membership),
                 "latest_bar": bar_dict(latest_bar),
+                **member_columns(db, instrument, latest_bar, context),
             }
         )
-    if sort == "price":
-        members.sort(
-            key=lambda item: (
-                item["latest_bar"] is None,
-                -(item["latest_bar"]["close"] if item["latest_bar"] else 0),
-                item["symbol"],
-            )
-        )
-    elif sort == "name":
-        members.sort(key=lambda item: (item["name"], item["symbol"]))
-    else:
-        members.sort(key=lambda item: (item["exchange"], item["symbol"]))
+    sort_members(members, sort)
     total = len(members)
     start = (page - 1) * page_size
     return {
-        "theme": theme_product_dict(
-            group,
-            scores_as_of(db, as_of).get(theme_id)
-            if run and run.status == "success"
-            else None,
-            db,
-        ),
+        "theme": theme_product_dict(group, score, db),
+        "members_as_of": as_date(effective_date),
         **_directory_response(
             members[start : start + page_size],
             page=page,
@@ -2389,6 +2516,12 @@ def stock_detail(
         if instrument_row
         else None
     )
+    # One row per registered strategy on the latest signal date (#274).
+    payload["strategy_board"] = (
+        strategy_board(db, instrument_row, cutoff, payload["candidate"])
+        if instrument_row
+        else None
+    )
     return payload
 
 
@@ -2511,6 +2644,9 @@ def actions(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=MAX_PAGE_SIZE),
     q: str | None = Query(default=None),
+    view: Literal["focus", "with_observation", "all"] = DEFAULT_ACTION_VIEW,
+    include_etf: bool = False,
+    tier: int | None = Query(default=None, ge=0, le=len(ACTION_TIERS) - 1),
     state: str | None = None,
     held_only: bool = False,
     watchlist_only: bool = False,
@@ -2518,90 +2654,109 @@ def actions(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     run, as_of = latest_official_as_of(db)
-    filtered_ids, held_ids, unknown_ids = action_candidate_ids(
+    base, held_ids, unknown_ids = action_list_rows(
         db,
         as_of,
-        q=q,
         held_only=held_only,
         watchlist_only=watchlist_only,
         theme_id=theme_id,
     )
+    needle = q.strip().casefold() if q and q.strip() else None
+    # A search reaches every tier: the view and ETF filters are for browsing.
+    listed = [
+        row
+        for row in base
+        if (
+            needle in f"{row.symbol} {row.name}".casefold()
+            if needle
+            else action_view_hidden_reason(row, view, include_etf) is None
+        )
+    ]
     offset = _decode_cursor(cursor)
-    # A state filter depends on the composed decision and therefore cannot be
-    # answered from the cheap identity projection alone.  It is an explicit
-    # narrow query, so preserve its exact old semantics; the default list path
-    # below only builds the requested page.
+    carried = _action_cursor_holdings(cursor)
+    built: dict[int, dict[str, Any]] = {}
     if state:
-        state_rows = build_action_summaries(db, as_of, instrument_ids=filtered_ids)
-        state_rows = [item for item in state_rows if item.get("action_state") == state]
-        state_rows.sort(
-            key=lambda item: filtered_ids.index(item["instrument"]["id"])
-            if item.get("instrument", {}).get("id") in filtered_ids
-            else len(filtered_ids)
+        # A state filter depends on the composed decision and therefore cannot
+        # be answered from the cheap projection.  It is a research query kept
+        # for compatibility (it builds every searched row); the daily page
+        # does not send it.  It ignores ``view``, ``include_etf`` and ``tier``,
+        # and ``summary`` (tiers, hidden, views) still counts the projection,
+        # not the rows of this state (#301 review L2).
+        searched = listed if needle else list(base)
+        built = order_holdings(db, as_of, searched)
+        rows_by_id = {row.instrument_id: row for row in searched}
+        summaries = summaries_in_order(
+            db, as_of, [row.instrument_id for row in searched], built
         )
-        total = len(state_rows)
-        page = state_rows[offset : offset + limit]
-        held_count = sum(item.get("held") is True for item in state_rows)
-        held_unknown_count = sum(
-            item.get("position_quantity_status") == "unknown" for item in state_rows
-        )
-        actionable_count = sum(
-            item.get("action_state")
-            in {
-                "conditional_entry",
-                "wait_breakout",
-                "wait_pullback",
-                "hold_observe",
-                "reduce_exit",
-                "manual_review",
-            }
-            for item in state_rows
-        )
-        data_insufficient_count = sum(
-            item.get("action_state") == "data_insufficient" for item in state_rows
-        )
+        matched = [item for item in summaries if item.get("action_state") == state]
+        selected = [rows_by_id[item["instrument"]["id"]] for item in matched]
+        built = {item["instrument"]["id"]: item for item in matched}
     else:
-        page_ids = filtered_ids[offset : offset + limit]
-        page = build_action_summaries(db, as_of, instrument_ids=page_ids)
-        by_id = {item.get("instrument", {}).get("id"): item for item in page}
-        page = [by_id[item_id] for item_id in page_ids if item_id in by_id]
-        total = len(filtered_ids)
-        held_count = sum(item_id in held_ids for item_id in filtered_ids)
-        held_unknown_count = sum(item_id in unknown_ids for item_id in filtered_ids)
-        actionable_count = sum(
-            item.get("action_state")
-            in {
-                "conditional_entry",
-                "wait_breakout",
-                "wait_pullback",
-                "hold_observe",
-                "reduce_exit",
-                "manual_review",
+        selected = [row for row in listed if tier is None or row.tier == tier]
+        holdings = [row for row in selected if row.tier == 0]
+        if carried is not None and sorted(carried) != sorted(
+            row.instrument_id for row in holdings
+        ):
+            carried = None
+        # Tier 0 is ordered by its summaries.  The first page that reaches it
+        # builds every holding once (at most the holdings plus the limit) and
+        # passes the order on in its cursor, so a later page builds only its
+        # own rows (#278 統籌 6420102565).
+        if any(row.tier == 0 for row in selected[offset : offset + limit]):
+            if carried is None:
+                built = order_holdings(db, as_of, selected)
+                carried = [row.instrument_id for row in selected if row.tier == 0]
+            else:
+                order = {item_id: index for index, item_id in enumerate(carried)}
+                selected = (
+                    sorted(holdings, key=lambda row: order[row.instrument_id])
+                    + selected[len(holdings) :]
+                )
+    page_rows = selected[offset : offset + limit]
+    page = summaries_in_order(
+        db, as_of, [row.instrument_id for row in page_rows], built
+    )
+    tier_of = {row.instrument_id: row for row in page_rows}
+    items = []
+    for item in page:
+        row = tier_of[item["instrument"]["id"]]
+        items.append(
+            compact_action_summary(item)
+            | {
+                "tier": row.tier,
+                "candidate": {
+                    "rank": row.candidate_rank,
+                    "total_score": row.candidate_score,
+                }
+                if row.candidate_rank is not None
+                else None,
+                # Tiers 3 and 4: conditions and price gap only, no level
+                # (#277-B); null without a strategy_levels row.
+                "nearness": row.nearness if row.tier in (3, 4) else None,
             }
-            for item in page
         )
-        data_insufficient_count = sum(
-            item.get("action_state") == "data_insufficient" for item in page
-        )
-    return _cursor_response(
-        [compact_action_summary(item) for item in page],
+    total = len(selected)
+    response = _cursor_response(
+        items,
         offset=offset,
         limit=limit,
         total=total,
         data_as_of=run.data_as_of if run else (as_of.isoformat() if as_of else None),
-        sort="priority asc, held desc, watchlisted desc, exchange asc, symbol asc",
-    ) | {
+        sort=ACTION_TIER_SORT,
+    )
+    if response["meta"]["next_cursor"] and carried is not None and not state:
+        response["meta"]["next_cursor"] = _encode_action_cursor(
+            offset + len(items), carried
+        )
+    return response | {
         "taxonomy": ACTION_LABELS,
         "summary": {
             "total": total,
-            "actionable": actionable_count,
-            "data_insufficient": data_insufficient_count,
-            "held": held_count,
-            "held_unknown": held_unknown_count,
-            "scope": "filtered_results"
-            if state
-            else "page_for_actionable_and_data_insufficient_counts",
-        },
+            "held": sum(row.instrument_id in held_ids for row in base),
+            "held_unknown": sum(row.instrument_id in unknown_ids for row in base),
+            "scope": "filtered_results",
+        }
+        | action_tier_summary(base, listed, view, include_etf),
     }
 
 
@@ -3083,38 +3238,16 @@ def instrument_detail(
         "response_generated_at": decision.get("response_generated_at"),
         "quality_summary": _instrument_quality_summary(db, instrument, bars, decision),
         "strategy_conditions": {
-            "breakout": {
-                "label": "突破條件",
-                "requires": [
-                    "20 日前期高點",
-                    "20 日前期成交量",
-                    "族群相對 TAIEX 的 20 日超額報酬",
-                    "5 日法人流向",
-                    "5 日融資餘額變化率",
-                ],
+            strategy.kind: {
+                "label": strategy.label_zh,
+                "requires": list(strategy.requires_zh),
                 "source": "系統固定研究規則",
                 "technical": {
-                    "rule_label": "突破條件固定版本",
+                    "rule_label": f"{strategy.label_zh}固定版本",
                     "basis_label": "只使用資料日以前的已驗證資料",
                 },
-            },
-            "pullback": {
-                "label": "回踩條件",
-                "requires": [
-                    "60 日有效行情日數",
-                    "MA20",
-                    "MA60",
-                    "20 日前期成交量",
-                    "族群相對 TAIEX 的 20 日超額報酬",
-                    "5 日法人流向",
-                    "5 日融資餘額變化率",
-                ],
-                "source": "系統固定研究規則",
-                "technical": {
-                    "rule_label": "回踩條件固定版本",
-                    "basis_label": "只使用資料日以前的已驗證資料",
-                },
-            },
+            }
+            for strategy in REGISTRY.values()
         },
         "signals": [signal_dict(db, item) for item in signals],
     }

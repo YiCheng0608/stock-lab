@@ -5,10 +5,11 @@ import json
 import math
 import re
 from collections import defaultdict
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -21,7 +22,6 @@ from app.config import (
 )
 from app.db import SessionLocal, init_db
 from app.domain import (
-    CANONICAL_CONFIGS,
     ETF_CATEGORIES,
     GROUP_SCORE_WEIGHTS,
     HOT_GROUP_CONFIG,
@@ -30,10 +30,8 @@ from app.domain import (
     INSTITUTIONAL_FLOW_FORMULA_VERSION,
     OFFICIAL_INSTITUTIONAL_CHIP_SOURCES,
     SIGNAL_CONFIDENCE_SEMANTICS,
+    RuleEvaluation,
     calculate_group_score,
-    canonical_config_snapshot,
-    evaluate_breakout_v1,
-    evaluate_pullback_v1,
     group_score_quality,
     instrument_eligibility,
     moving_average,
@@ -62,6 +60,14 @@ from app.models import (
     ThemeGroup,
 )
 from app.news import sync_news_from_events
+from app.strategies import (
+    REGISTRY,
+    SignalLevels,
+    Strategy,
+    StrategyInputs,
+    canonical_config_snapshot,
+    canonical_configs,
+)
 from app.taxonomy import (
     INDUSTRY_DISPLAY_ZH,
     canonical_group_id,
@@ -77,6 +83,8 @@ from app.tracking import (
     settle,
     track_path,
 )
+from app.trading_calendar import NextSession, next_session
+from worker.market_summary import store_market_summaries
 from worker.sources import (
     ActionRecord,
     BarRecord,
@@ -1304,17 +1312,21 @@ def _exact_json(left: Any, right: Any) -> bool:
     )
 
 
-def _ensure_strategies(db: Session) -> dict[str, StrategyVersion]:
+def _ensure_strategies(
+    db: Session, registry: Mapping[str, Strategy] | None = None
+) -> dict[str, StrategyVersion]:
     """Return the canonical row for each strategy under the current formula.
 
     A row is identified by (name, version, formula_version); rows stored under
     another formula, or unclassified by the 0009 migration, are never reused or
     modified, so signals written under them keep their original configuration.
+    ``registry`` replaces REGISTRY only for a research backtest
+    (``app.strategies.ablation``).
     """
 
-    snapshots = canonical_config_snapshot()
+    snapshots = canonical_config_snapshot(registry)
     versions: dict[str, StrategyVersion] = {}
-    for key, config in CANONICAL_CONFIGS.items():
+    for key, config in canonical_configs(registry).items():
         snapshot = snapshots[key]
         strategy = db.scalar(
             select(StrategyVersion).where(
@@ -1372,23 +1384,15 @@ def _require_same_formula(
     )
 
 
-def _next_execution_date(
-    db: Session,
-    instrument_id: int,
-    signal_date: date,
-    *,
-    max_date: date | None = None,
-) -> date | None:
-    return db.scalar(
-        select(MarketBar.trading_date)
-        .where(
-            MarketBar.instrument_id == instrument_id,
-            MarketBar.trading_date > signal_date,
-            *([MarketBar.trading_date <= max_date] if max_date is not None else []),
-        )
-        .order_by(MarketBar.trading_date)
-        .limit(1)
-    )
+def _next_execution_date(db: Session, signal_date: date) -> NextSession:
+    """The market's next session after the signal day (#294).
+
+    Read from the stored official schedule only (app.trading_calendar), never
+    from later bars, so the night of the signal and any later replay agree.
+    No date (and the reason) when the schedule cannot answer.
+    """
+
+    return next_session(db, signal_date)
 
 
 def _best_group_for_signal(
@@ -1530,14 +1534,6 @@ def _resolve_group_member_return(
     return finish("matched", value)
 
 
-def _risk_levels(entry: float, atr: float | None) -> tuple[float, float, float, float]:
-    risk = max((atr or entry * 0.02) * 1.0, entry * 0.01)
-    invalid = max(0.01, entry - risk)
-    target_1 = entry + risk * 1.6
-    target_2 = entry + risk * 3.0
-    return round(entry, 2), round(invalid, 2), round(target_1, 2), round(target_2, 2)
-
-
 def _set_signal_status(signal: Signal, next_status: str) -> None:
     if signal.status == next_status:
         return
@@ -1571,17 +1567,28 @@ def _set_signal_status(signal: Signal, next_status: str) -> None:
         signal.status = next_status
 
 
-def _upsert_signal_for_strategy(
+@dataclass(frozen=True)
+class _SignalContext:
+    """One instrument's session: the shared strategy inputs and their audit."""
+
+    bar: MarketBar
+    inputs: StrategyInputs
+    eligible: bool
+    eligibility_reason: str | None
+    group_score: GroupDailyScore | None
+    group_member_return_lookup: dict[str, Any]
+    input_provenance: Any
+
+
+def _signal_context(
     db: Session,
     *,
     instrument: Instrument,
     signal_date: date,
-    strategies: dict[str, StrategyVersion],
-    strategy_key: str,
-    namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
-) -> bool:
+) -> _SignalContext | None:
+    """Build the strategy inputs once; None when the session has no bar."""
+
     bar = db.scalar(
         select(MarketBar).where(
             MarketBar.instrument_id == instrument.id,
@@ -1589,7 +1596,7 @@ def _upsert_signal_for_strategy(
         )
     )
     if not bar:
-        return False
+        return None
     feature = db.scalar(
         select(TechnicalFeature).where(
             TechnicalFeature.instrument_id == instrument.id,
@@ -1618,20 +1625,18 @@ def _upsert_signal_for_strategy(
     )
     margin_ratio = _margin_change_ratio(db, instrument.id, signal_date)
     prior_window = _prior_20_window(db, instrument.id, signal_date) if feature else {}
-    prior_highs = prior_window.get("highs")
-    prior_volumes = prior_window.get("volumes")
-    close = _safe_float(bar.close)
-    volume = _safe_float(bar.volume)
-    ma20 = _safe_float(values.get("ma20"))
-    ma60 = _safe_float(values.get("ma60"))
-    breakout_arguments = dict(
-        close=close,
-        prior_highs=prior_highs,
-        volume=volume,
-        prior_volumes=prior_volumes,
+    inputs = StrategyInputs(
+        bar_count=bar_count,
+        close=_safe_float(bar.close),
+        volume=_safe_float(bar.volume),
+        ma20=_safe_float(values.get("ma20")),
+        ma60=_safe_float(values.get("ma60")),
+        atr14=_safe_float(values.get("atr14")),
+        prior_highs=prior_window.get("highs"),
+        prior_volumes=prior_window.get("volumes"),
         group_excess_return_20d=group_excess,
-        institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
-        margin_balance_change_ratio_5d=margin_ratio,
+        institutional_flow_ratio_5d=strategy_flow_ratio,
+        margin_change_ratio_5d=margin_ratio,
     )
     input_provenance = None
     capture_mode = (
@@ -1643,8 +1648,8 @@ def _upsert_signal_for_strategy(
             bar=bar,
             instrument=instrument,
             signal_date=signal_date,
-            close=close,
-            volume=volume,
+            close=inputs.close,
+            volume=inputs.volume,
         )
         input_provenance = selected_bar
         if capture_mode == "selected-bar-prior-volumes/v1":
@@ -1653,112 +1658,93 @@ def _upsert_signal_for_strategy(
                 instrument=instrument,
                 feature=feature,
                 signal_date=signal_date,
-                arguments=breakout_arguments,
+                arguments=asdict(inputs),
             )
             input_provenance = {
                 "selected_bar": selected_bar,
                 "prior_volumes": prior_input,
             }
-    if capture is not None:
-        if input_provenance is None:
-            capture.before("breakout_v1", breakout_arguments)
-        else:
-            capture.before(
-                "breakout_v1", breakout_arguments, input_provenance=input_provenance
-            )
-    breakout = evaluate_breakout_v1(**breakout_arguments)
-    if capture is not None:
-        capture.after("breakout_v1", breakout)
-    pullback_arguments = dict(
-        bar_count=bar_count,
-        close=close,
-        ma20=ma20,
-        ma60=ma60,
-        volume=volume,
-        prior_volumes=prior_volumes,
-        group_excess_return_20d=group_excess,
-        institutional_flow_to_turnover_ratio_5d=strategy_flow_ratio,
-        margin_balance_change_ratio_5d=margin_ratio,
+    return _SignalContext(
+        bar=bar,
+        inputs=inputs,
+        eligible=eligible,
+        eligibility_reason=eligibility_reason,
+        group_score=group_score,
+        group_member_return_lookup=group_member_return_lookup,
+        input_provenance=input_provenance,
     )
-    if capture is not None:
-        if input_provenance is None:
-            capture.before("pullback_v1", pullback_arguments)
-        else:
-            capture.before(
-                "pullback_v1", pullback_arguments, input_provenance=input_provenance
-            )
-    pullback = evaluate_pullback_v1(**pullback_arguments)
-    if capture is not None:
-        capture.after("pullback_v1", pullback)
-    chosen_kind = "breakout" if strategy_key == "breakout_v1" else "pullback"
-    selected = breakout if strategy_key == "breakout_v1" else pullback
-    chosen = selected
-    if not chosen.passed:
-        chosen = None
 
-    atr = _safe_float(values.get("atr14"))
-    reference_entry: float | None = None
-    breakout_price: float | None = None
-    pullback_low: float | None = None
-    pullback_high: float | None = None
-    invalid_price: float | None = None
-    target_1: float | None = None
-    target_2: float | None = None
-    if chosen is not None and close is not None:
-        if chosen_kind == "breakout":
-            prior_high = (
-                max(prior_highs[-20:])
-                if prior_highs and len(prior_highs) >= 20
-                else close
-            )
-            entry, invalid_price, target_1, target_2 = _risk_levels(
-                max(close, float(prior_high)), atr
-            )
-            breakout_price = entry
-        else:
-            entry = round(close, 2)
-            support = ma20 or close
-            zone_width = max((atr or close * 0.01) * 0.5, close * 0.005)
-            pullback_low = round(max(0.01, support - zone_width), 2)
-            pullback_high = round(support + zone_width, 2)
-            reference_entry, invalid_price, target_1, target_2 = _risk_levels(
-                entry, atr
-            )
-    entry_type = chosen_kind
+
+def _evaluate_strategies(
+    context: _SignalContext,
+    capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
+) -> dict[str, RuleEvaluation]:
+    """Every registered strategy's rule on the shared inputs, in REGISTRY order."""
+
+    evaluations: dict[str, RuleEvaluation] = {}
+    for key, strategy in (REGISTRY if registry is None else registry).items():
+        arguments = strategy.arguments(context.inputs)
+        if capture is not None:
+            if context.input_provenance is None:
+                capture.before(key, arguments)
+            else:
+                capture.before(
+                    key, arguments, input_provenance=context.input_provenance
+                )
+        evaluations[key] = strategy.rule(**arguments)
+        if capture is not None:
+            capture.after(key, evaluations[key])
+    return evaluations
+
+
+def _write_strategy_signal(
+    db: Session,
+    *,
+    instrument: Instrument,
+    signal_date: date,
+    strategies: dict[str, StrategyVersion],
+    strategy_key: str,
+    context: _SignalContext,
+    evaluations: dict[str, RuleEvaluation],
+    namespace: str = "analysis",
+    capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
+) -> None:
+    registry = REGISTRY if registry is None else registry
+    rule = registry[strategy_key]
+    inputs = context.inputs
+    group_score = context.group_score
+    selected = evaluations[strategy_key]
+    levels = (
+        rule.actionable_levels(inputs)
+        if selected.passed and inputs.close is not None
+        else SignalLevels()
+    )
+    entry_type = rule.entry_type
     validation = validate_signal_levels(
         entry_type=entry_type,
-        reference_entry=reference_entry,
-        breakout_price=breakout_price,
-        invalid_price=invalid_price,
-        target_1=target_1,
-        target_2=target_2,
+        reference_entry=levels.reference_entry,
+        breakout_price=levels.breakout_price,
+        invalid_price=levels.invalid_price,
+        target_1=levels.target_1,
+        target_2=levels.target_2,
     )
-    missing_reasons = list(
-        dict.fromkeys(
-            list(
-                chosen.reasons
-                if chosen is not None and chosen.state == "data_incomplete"
-                else ()
-            )
-            + list(
-                breakout.reasons
-                if strategy_key == "breakout_v1" and breakout.state == "data_incomplete"
-                else pullback.reasons
-                if strategy_key == "pullback_v1" and pullback.state == "data_incomplete"
-                else ()
-            )
-        )
+    missing_reasons = (
+        list(dict.fromkeys(selected.reasons))
+        if selected.state == "data_incomplete"
+        else []
     )
-    if not eligible and eligibility_reason:
-        missing_reasons.insert(0, eligibility_reason)
+    if not context.eligible and context.eligibility_reason:
+        missing_reasons.insert(0, context.eligibility_reason)
     if group_score is None:
         missing_reasons.append("effective_group_score_missing_or_under_minimum_members")
-    if bar.is_suspended:
+    if context.bar.is_suspended:
         missing_reasons.append("signal_day_suspended")
 
-    if not validation.valid and chosen is not None:
+    if not validation.valid and selected.passed:
         status = "invalid_levels"
-    elif chosen is not None and chosen.passed and eligible and not missing_reasons:
+    elif selected.passed and context.eligible and not missing_reasons:
         status = "conditional"
     elif missing_reasons or selected.state == "data_incomplete":
         status = "data_incomplete"
@@ -1767,8 +1753,7 @@ def _upsert_signal_for_strategy(
     # An observation with no actionable setup is still a valid contract output;
     # it must not receive fabricated price levels or a confidence score.
     if status == "observation":
-        reference_entry = breakout_price = pullback_low = pullback_high = None
-        invalid_price = target_1 = target_2 = None
+        levels = SignalLevels()
 
     strategy = strategies[strategy_key]
     signal_key = (
@@ -1798,15 +1783,15 @@ def _upsert_signal_for_strategy(
     _set_signal_status(signal, status)
     signal.signal_date = signal_date
     signal.instrument_id = instrument.id
-    signal.strategy_version_id = strategies[strategy_key].id
+    signal.strategy_version_id = strategy.id
     signal.entry_type = entry_type
-    signal.reference_entry = reference_entry
-    signal.pullback_low = pullback_low
-    signal.pullback_high = pullback_high
-    signal.breakout_price = breakout_price
-    signal.invalid_price = invalid_price
-    signal.target_1 = target_1
-    signal.target_2 = target_2
+    signal.reference_entry = levels.reference_entry
+    signal.pullback_low = levels.pullback_low
+    signal.pullback_high = levels.pullback_high
+    signal.breakout_price = levels.breakout_price
+    signal.invalid_price = levels.invalid_price
+    signal.target_1 = levels.target_1
+    signal.target_2 = levels.target_2
     # New rows deliberately leave the nullable legacy field empty.  If a
     # same-key historical row already has a numeric value, keep it intact so a
     # rerun cannot rewrite v1's stored result; the evidence marker makes its
@@ -1822,10 +1807,14 @@ def _upsert_signal_for_strategy(
             strategy_name=strategy.name,
             strategy_version=strategy.version,
         )
+    # Every row records every registered strategy's state, keyed by its kind.
+    states = {registry[key].kind: evaluation for key, evaluation in evaluations.items()}
     signal.rationale = "; ".join(
         [
-            f"breakout={breakout.state}:{','.join(breakout.reasons)}",
-            f"pullback={pullback.state}:{','.join(pullback.reasons)}",
+            *(
+                f"{kind}={evaluation.state}:{','.join(evaluation.reasons)}"
+                for kind, evaluation in states.items()
+            ),
             f"group={group_score.group_id if group_score else 'missing'}",
             f"missing={','.join(missing_reasons)}"
             if missing_reasons
@@ -1833,13 +1822,9 @@ def _upsert_signal_for_strategy(
         ]
     )
     signal.data_cutoff = f"{signal_date.isoformat()} 13:30 Asia/Taipei"
-    signal.source_report = bar.source
-    signal.earliest_execution_date = _next_execution_date(
-        db,
-        instrument.id,
-        signal_date,
-        max_date=data_cutoff,
-    )
+    signal.source_report = context.bar.source
+    execution = _next_execution_date(db, signal_date)
+    signal.earliest_execution_date = execution.date
     signal.data_quality = (
         "complete"
         if status in {"conditional", "observation"} and not missing_reasons
@@ -1851,28 +1836,30 @@ def _upsert_signal_for_strategy(
         **existing_evidence,
         "strategy": strategy_key,
         "strategy_version": strategy.version,
-        "group_member_return_lookup": group_member_return_lookup,
+        "group_member_return_lookup": context.group_member_return_lookup,
         "confidence_semantics": confidence_semantics,
         "actionable": status == "conditional",
-        "breakout": {"state": breakout.state, "reasons": breakout.reasons},
-        "pullback": {"state": pullback.state, "reasons": pullback.reasons},
+        **{
+            kind: {"state": evaluation.state, "reasons": evaluation.reasons}
+            for kind, evaluation in states.items()
+        },
         "inputs": {
-            "prior_20_highs": prior_highs,
-            "prior_20_volumes": prior_volumes,
-            "group_excess_return_20d": group_excess,
+            "prior_20_highs": inputs.prior_highs,
+            "prior_20_volumes": inputs.prior_volumes,
+            "group_excess_return_20d": inputs.group_excess_return_20d,
             # The strategy contract normalizes five-day institutional flow
             # (shares) by average daily volume (shares) across the twenty
             # sessions ending on the signal day.  This is intentionally
             # different from hot_group_v1's sum-volume denominator, and the
             # denominator and formula version are persisted with the evidence.
-            "institutional_flow_to_turnover_ratio_5d": strategy_flow_ratio,
-            "strategy_institutional_flow_to_average_volume_ratio_5d": strategy_flow_ratio,
+            "institutional_flow_to_turnover_ratio_5d": inputs.institutional_flow_ratio_5d,
+            "strategy_institutional_flow_to_average_volume_ratio_5d": inputs.institutional_flow_ratio_5d,
             "institutional_flow_ratio_denominator": "average_daily_volume_20d",
             "institutional_flow_formula_version": INSTITUTIONAL_FLOW_FORMULA_VERSION,
-            "margin_balance_change_ratio_5d": margin_ratio,
-            "bar_count_60d": bar_count,
-            "ma20": ma20,
-            "ma60": ma60,
+            "margin_balance_change_ratio_5d": inputs.margin_change_ratio_5d,
+            "bar_count_60d": inputs.bar_count,
+            "ma20": inputs.ma20,
+            "ma60": inputs.ma60,
         },
         "risk_validation": {"valid": validation.valid, "errors": validation.errors},
         "execution": {
@@ -1880,6 +1867,7 @@ def _upsert_signal_for_strategy(
             "earliest": signal.earliest_execution_date.isoformat()
             if signal.earliest_execution_date
             else None,
+            "calendar": execution.evidence(),
             "fill_policy": "next_session_open_or_better_plus_adverse_slippage",
             "execution_slippage_bps": EXECUTION_SLIPPAGE_BPS,
             "round_trip_transaction_cost_bps": ROUND_TRIP_TRANSACTION_COST_BPS,
@@ -1895,6 +1883,36 @@ def _upsert_signal_for_strategy(
             strategy_key=strategy_key,
             namespace=namespace,
         )
+
+
+def _upsert_signal_for_strategy(
+    db: Session,
+    *,
+    instrument: Instrument,
+    signal_date: date,
+    strategies: dict[str, StrategyVersion],
+    strategy_key: str,
+    namespace: str = "analysis",
+    capture: Any = None,
+) -> bool:
+    """Write one strategy's row; every strategy is evaluated for the rationale."""
+
+    context = _signal_context(
+        db, instrument=instrument, signal_date=signal_date, capture=capture
+    )
+    if context is None:
+        return False
+    _write_strategy_signal(
+        db,
+        instrument=instrument,
+        signal_date=signal_date,
+        strategies=strategies,
+        strategy_key=strategy_key,
+        context=context,
+        evaluations=_evaluate_strategies(context, capture),
+        namespace=namespace,
+        capture=capture,
+    )
     return True
 
 
@@ -1905,27 +1923,35 @@ def _upsert_signal(
     signal_date: date,
     strategies: dict[str, StrategyVersion],
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> bool:
-    """Persist one auditable result per canonical strategy and session."""
+    """Persist one auditable result per registered strategy and session.
 
-    written = False
-    for strategy_key in ("breakout_v1", "pullback_v1"):
-        written = (
-            _upsert_signal_for_strategy(
-                db,
-                instrument=instrument,
-                signal_date=signal_date,
-                strategies=strategies,
-                strategy_key=strategy_key,
-                namespace=namespace,
-                data_cutoff=data_cutoff,
-                capture=capture,
-            )
-            or written
+    The inputs are built and every strategy evaluated once per instrument;
+    each strategy's row then records all of their states.
+    """
+
+    context = _signal_context(
+        db, instrument=instrument, signal_date=signal_date, capture=capture
+    )
+    if context is None:
+        return False
+    evaluations = _evaluate_strategies(context, capture, registry)
+    for strategy_key in REGISTRY if registry is None else registry:
+        _write_strategy_signal(
+            db,
+            instrument=instrument,
+            signal_date=signal_date,
+            strategies=strategies,
+            strategy_key=strategy_key,
+            context=context,
+            evaluations=evaluations,
+            namespace=namespace,
+            capture=capture,
+            registry=registry,
         )
-    return written
+    return True
 
 
 def _generate_signals(
@@ -1934,8 +1960,8 @@ def _generate_signals(
     strategies: dict[str, StrategyVersion],
     *,
     namespace: str = "analysis",
-    data_cutoff: date | None = None,
     capture: Any = None,
+    registry: Mapping[str, Strategy] | None = None,
 ) -> int:
     instruments = db.scalars(
         select(Instrument).where(
@@ -1952,8 +1978,8 @@ def _generate_signals(
                 signal_date=signal_date,
                 strategies=strategies,
                 namespace=namespace,
-                data_cutoff=data_cutoff,
                 capture=capture,
+                registry=registry,
             )
         )
     return count
@@ -3593,13 +3619,15 @@ def _json_safe(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 # Warnings from sources the daily analysis does not depend on: MOPS material
-# events and EPS, and the TPEx suspension announcement/history feeds (events
-# only; they never set bar flags), and a skipped instrument status sync (the
-# watchdog reports it).  Every other warning, including any not
-# matched here, concerns OHLCV, the TAIEX baseline, the holiday calendar or
-# chips, and keeps the collect partial.
+# events and EPS, the TPEx suspension announcement/history feeds (events
+# only; they never set bar flags), the display-only market summaries (the
+# TWSE MI_INDEX summary tables and the TPEx highlight, Issue #275), and a
+# skipped instrument status sync (the watchdog reports it).  Every other
+# warning, including any not matched here, concerns OHLCV, the TAIEX
+# baseline, the holiday calendar or chips, and keeps the collect partial.
 NONCORE_WARNING_PATTERN = re.compile(
-    r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history) unavailable"
+    r"^((TWSE|TPEx) (MOPS events|MOPS fundamentals|suspension feed|suspension history"
+    r"|market summary) unavailable"
     r"|instrument status sync skipped)"
 )
 
@@ -3868,6 +3896,15 @@ def collect(
                     instruments,
                     _raw_id_for_digest(raw_ids, event.payload_sha256),
                 )
+            market_summaries = store_market_summaries(
+                db,
+                list(getattr(batch, "market_summaries", []) or []),
+                lambda digest: _raw_id_for_digest(raw_ids, digest),
+                batch.warnings,
+                start=start_date,
+                end=score_date,
+                overwrite=force,
+            )
             event_coverage = dict(batch.event_coverage or {})
             if not event_coverage:
                 event_coverage = {
@@ -4098,6 +4135,7 @@ def collect(
                 "actions": len(batch.actions),
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
+                "market_summaries": market_summaries,
                 "raw_payloads": raw_payload_count,
                 "warnings": list(batch.warnings),
                 "core_warnings": core_warnings,
@@ -4179,6 +4217,7 @@ def collect(
                 "actions": len(batch.actions),
                 "events": len(batch.events),
                 "fundamentals": len(batch.fundamentals),
+                "market_summaries": market_summaries,
                 "event_coverage": event_coverage,
                 "run_id": run.id,
                 "industry_membership_observations": industry_result,
@@ -4385,10 +4424,37 @@ def _analyze_session(
     if checkpoint is not None:
         checkpoint()
     signals_upserted = _generate_signals(db, score_date, strategies, capture=capture)
+    db.flush()
     return {
         "status": "success",
         "date": score_date.isoformat(),
         "signals_upserted": signals_upserted,
+        "execution_calendar": _execution_calendar_summary(db, score_date),
+    }
+
+
+def _execution_calendar_summary(db: Session, score_date: date) -> dict[str, Any]:
+    """Whether the day's signals got an earliest execution date (#294).
+
+    Kept in the analyze step's details: an empty date never fails analyze,
+    so the reason and the count of signals without one are what show it
+    (and the watchdog's execution_calendar invariant).
+    """
+
+    answer = _next_execution_date(db, score_date)
+    return {
+        "status": "available" if answer.date else "unavailable",
+        "reason": answer.reason,
+        "missing_year": answer.missing_year,
+        "next_session": answer.date.isoformat() if answer.date else None,
+        "raw_payload_ids": list(answer.raw_payload_ids),
+        "signals_without_date": db.scalar(
+            select(func.count(Signal.id)).where(
+                Signal.signal_date == score_date,
+                Signal.signal_key.like("analysis-%"),
+                Signal.earliest_execution_date.is_(None),
+            )
+        ),
     }
 
 
@@ -4914,6 +4980,14 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
                 row["comparable"] += 1
             else:
                 row["incomparable"] += 1
+    return _backtest_summary(run, grouped, zero_actionable_count)
+
+
+def _backtest_summary(
+    run: IngestionRun,
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]],
+    zero_actionable_count: int,
+) -> dict[str, Any]:
     metadata = dict(run.metadata_json or {})
     assessment = _backtest_assessment(metadata, status=run.status)
     for row in grouped.values():
@@ -4944,13 +5018,132 @@ def summarize_backtest(db: Session, run_id: int | None = None) -> dict[str, Any]
     }
 
 
+# Signals a research backtest tracks per committed batch.
+RESEARCH_TRACKING_BATCH = 2000
+
+
+def _summarize_research_backtest(db: Session, run: IngestionRun) -> dict[str, Any]:
+    """``summarize_backtest`` of one research run, counted in SQL.
+
+    A research run has hundreds of thousands of signals per strategy;
+    ``summarize_backtest`` loads every backtest signal into memory.
+    """
+
+    prefix = f"backtest-{run.id}-%"
+    actionable = func.json_extract(Signal.rule_evidence_json, "$.actionable") == 1
+    signal_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix))
+    )
+    actionable_total = db.scalar(
+        select(func.count(Signal.id)).where(Signal.signal_key.like(prefix), actionable)
+    )
+    grouped: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    for name, version, instrument_type, horizon, comparable, count in db.execute(
+        select(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+            func.count(SignalSettlement.id),
+        )
+        .join(Signal, Signal.id == SignalSettlement.signal_id)
+        .join(StrategyVersion, StrategyVersion.id == Signal.strategy_version_id)
+        .join(Instrument, Instrument.id == Signal.instrument_id)
+        .where(Signal.signal_key.like(prefix), actionable)
+        .group_by(
+            StrategyVersion.name,
+            StrategyVersion.version,
+            Instrument.instrument_type,
+            SignalSettlement.horizon,
+            SignalSettlement.comparable,
+        )
+    ):
+        row = grouped.setdefault(
+            (name, version, instrument_type, horizon),
+            {
+                "strategy": name,
+                "version": version,
+                "instrument_type": instrument_type,
+                "horizon": horizon,
+                "sample": 0,
+                "comparable": 0,
+                "incomparable": 0,
+            },
+        )
+        row["sample"] += count
+        row["comparable" if comparable else "incomparable"] += count
+    return _backtest_summary(run, grouped, signal_total - actionable_total)
+
+
+class BacktestPaused(RuntimeError):
+    """A research backtest stopped by its ``should_stop`` check after a commit."""
+
+
+def _pause_if(should_stop: Callable[[], str | None] | None) -> None:
+    reason = should_stop() if should_stop is not None else None
+    if reason:
+        raise BacktestPaused(reason)
+
+
+def _track_research_signals(
+    db: Session,
+    run_id: int,
+    evaluation_cutoff: date,
+    should_stop: Callable[[], str | None] | None = None,
+) -> tuple[int, int, int, int]:
+    """Track a research run's signals one committed batch at a time.
+
+    Returns the signal, evaluation, settlement and non-actionable counts;
+    ``should_stop`` is asked after each batch's commit.
+    """
+
+    prefix = f"backtest-{run_id}-%"
+    signals = evaluations = settlements = zero_actionable = 0
+    last_id = 0
+    while True:
+        batch = db.scalars(
+            select(Signal)
+            .where(Signal.signal_key.like(prefix), Signal.id > last_id)
+            .order_by(Signal.id)
+            .limit(RESEARCH_TRACKING_BATCH)
+        ).all()
+        if not batch:
+            return signals, evaluations, settlements, zero_actionable
+        for signal in batch:
+            if not (signal.rule_evidence_json or {}).get("actionable"):
+                zero_actionable += 1
+                continue
+            current_evaluations, current_settlements = _evaluate_signal_tracking(
+                db, signal, evaluation_cutoff=evaluation_cutoff
+            )
+            evaluations += current_evaluations
+            settlements += current_settlements
+        signals += len(batch)
+        last_id = batch[-1].id
+        db.commit()
+        _pause_if(should_stop)
+
+
 def backtest(
     start_date: date,
     end_date: date,
     *,
     force: bool = False,
+    registry: Mapping[str, Strategy] | None = None,
+    should_stop: Callable[[], str | None] | None = None,
 ) -> dict[str, Any]:
-    """Replay canonical fixed-version rules with a strict daily as-of cutoff."""
+    """Replay canonical fixed-version rules with a strict daily as-of cutoff.
+
+    ``registry`` replaces REGISTRY only for a research run on an isolated
+    database (``app.strategies.ablation``, ``tools/research``): its strategies
+    are evaluated and their StrategyVersion rows written, and the request key
+    names them so the run never reuses or is reused as a canonical run.
+    A research run asks ``should_stop`` after each score date's and each
+    tracking batch's commit; a reason stops it as a failed run
+    (``BacktestPaused``) that a rerun completes.  Without ``registry`` it is
+    never asked.
+    """
 
     if start_date > end_date:
         raise ValueError("backtest start date must not be after end date")
@@ -4958,12 +5151,18 @@ def backtest(
     request_key = (
         f"technical-backtest:v1:{start_date.isoformat()}:{end_date.isoformat()}"
     )
+    if registry is not None:
+        request_key += ":research:" + ",".join(registry)
     with SessionLocal() as db:
         run = db.scalar(
             select(IngestionRun).where(IngestionRun.request_key == request_key)
         )
         if run and run.status == "success" and not force:
-            summary = summarize_backtest(db, run.id)
+            summary = (
+                summarize_backtest(db, run.id)
+                if registry is None
+                else _summarize_research_backtest(db, run)
+            )
             summary["idempotent_reuse"] = True
             return summary
         if not run:
@@ -4995,10 +5194,12 @@ def backtest(
             "execution": "signal at T close; earliest fill T+1; settlement T+5/T+20",
             "signal_confidence_semantics": dict(SIGNAL_CONFIDENCE_SEMANTICS),
         }
+        if registry is not None:
+            metadata["research_registry"] = list(registry)
         run.metadata_json = metadata
         db.commit()
         try:
-            strategies = _ensure_strategies(db)
+            strategies = _ensure_strategies(db, registry)
             metadata["strategy_versions"] = {
                 key: {
                     "name": strategy.name,
@@ -5021,6 +5222,10 @@ def backtest(
             # derived as-of features visible to the subsequent group/signal
             # queries before replaying each score date.
             db.flush()
+            # A research run commits as it goes so the transaction (the WAL)
+            # stays one session's size; a failed one keeps what it committed.
+            if registry is not None:
+                db.commit()
             score_dates = db.scalars(
                 select(MarketBar.trading_date)
                 .where(
@@ -5043,36 +5248,50 @@ def backtest(
                     score_date,
                     strategies,
                     namespace=f"backtest-{run.id}",
-                    data_cutoff=end_date,
+                    registry=registry,
                 )
+                if registry is not None:
+                    db.flush()
+                    db.commit()
+                    _pause_if(should_stop)
             # The session intentionally uses autoflush=False.  Flush the
             # final score date before auditing the run, otherwise the last
             # day's strategy rows disappear from signal_count and
             # zero_actionable_count until after the run has been committed.
             db.flush()
-            backtest_signals = db.scalars(
-                select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
-            ).all()
-            signal_count = len(backtest_signals)
-            evaluations = 0
-            settlements = 0
-            for signal in backtest_signals:
-                if not (signal.rule_evidence_json or {}).get("actionable"):
-                    continue
-                current_evaluations, current_settlements = _evaluate_signal_tracking(
-                    db,
-                    signal,
-                    evaluation_cutoff=end_date,
+            if registry is not None:
+                (
+                    signal_count,
+                    evaluations,
+                    settlements,
+                    zero_actionable_count,
+                ) = _track_research_signals(db, run.id, end_date, should_stop)
+            else:
+                backtest_signals = db.scalars(
+                    select(Signal).where(Signal.signal_key.like(f"backtest-{run.id}-%"))
+                ).all()
+                signal_count = len(backtest_signals)
+                evaluations = 0
+                settlements = 0
+                for signal in backtest_signals:
+                    if not (signal.rule_evidence_json or {}).get("actionable"):
+                        continue
+                    current_evaluations, current_settlements = (
+                        _evaluate_signal_tracking(
+                            db,
+                            signal,
+                            evaluation_cutoff=end_date,
+                        )
+                    )
+                    evaluations += current_evaluations
+                    settlements += current_settlements
+                zero_actionable_count = sum(
+                    1
+                    for signal in backtest_signals
+                    if not (signal.rule_evidence_json or {}).get("actionable")
                 )
-                evaluations += current_evaluations
-                settlements += current_settlements
-            zero_actionable_count = sum(
-                1
-                for signal in backtest_signals
-                if not (signal.rule_evidence_json or {}).get("actionable")
-            )
             run.status = "success"
-            run.records = len(backtest_signals)
+            run.records = signal_count
             run.data_as_of = end_date.isoformat()
             run.metadata_json = {
                 **metadata,
@@ -5087,6 +5306,8 @@ def backtest(
             )
             run.finished_at = datetime.utcnow()
             db.commit()
+            if registry is not None:
+                return _summarize_research_backtest(db, run)
             return summarize_backtest(db, run.id)
         except Exception as exc:
             db.rollback()

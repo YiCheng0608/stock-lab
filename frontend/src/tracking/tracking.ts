@@ -1,6 +1,7 @@
 import type { BadgeTone } from '../components/ui'
 import type { TrackingMeta, TrackingPlan, TrackingPlanSession } from '../types'
 import { formatDate, formatPrice } from '../candidates/candidates'
+import { formatTaipeiDay } from '../dates'
 
 // User tracking plans (plan_tracking_v1, #253): labels, formatting and copy for the actions page and the
 // "加入追蹤" buttons. Copy follows UI_COPY_SPEC §11; status badges follow DESIGN_SYSTEM §7.
@@ -73,18 +74,9 @@ export function formatSignedReturn(value: number | null | undefined): string {
   return (value > 0 ? '+' : '') + (percent === '-0.00' ? '0.00' : percent) + '%'
 }
 
-// UTC instant -> Asia/Taipei YYYY/MM/DD (UI_COPY_SPEC §1).
-export function formatTaipeiDate(instant: string | null | undefined): string | null {
-  if (!instant) return null
-  const time = new Date(instant)
-  if (Number.isNaN(time.getTime())) return null
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(time)
-  const part = (type: string) => parts.find((item) => item.type === type)?.value
-  return `${part('year')}/${part('month')}/${part('day')}`
-}
-
+// The created date is the Taipei day of the UTC instant (UI_COPY_SPEC §1).
 export function planDateLine(plan: Pick<TrackingPlan, 'plan_date' | 'created_at'>): string {
-  return `計畫資料日 ${formatDate(plan.plan_date) ?? '待核實'} · 建立 ${formatTaipeiDate(plan.created_at) ?? '待核實'}`
+  return `計畫資料日 ${formatDate(plan.plan_date) ?? '待核實'} · 建立 ${formatTaipeiDay(plan.created_at) ?? '待核實'}`
 }
 
 export function planProgressLine(plan: Pick<TrackingPlan, 'sessions_observed' | 'window_sessions'>): string {

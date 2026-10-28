@@ -8,7 +8,10 @@ meaning were known.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
+
+from .strategies import REGISTRY, strategy_by_kind
 
 
 DISPLAY_ACTION_LABELS = {
@@ -65,6 +68,9 @@ REASON_LABELS = {
     "minimum_first_target_risk_reward_must_be_finite_and_positive": "風險報酬門檻設定待核實",
     "target_1_risk_reward_below_minimum": "第一目標的風險報酬未達規則門檻",
     "signal_day_suspended": "訊號日交易狀態不適合計算",
+    "signal_not_computed": "此資料日尚未計算這個研究條件",
+    "etf_category_excluded_from_actionable_signals": "債券、槓桿或反向 ETF 不適用一般突破／回踩研究條件",
+    "trend_cannot_pass_within_support_zone": "下一交易日收盤無法同時讓 20 日均線站上 60 日均線並落在支撐區",
     "unsupported_current_status": "研究追蹤狀態無法驗證",
     "unsupported_next_status": "研究追蹤狀態無法驗證",
     "illegal_signal_status_transition": "研究追蹤狀態無法驗證",
@@ -96,8 +102,9 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
             return REASON_LABELS[base]
     if "=" in value:
         key, raw_value = (part.strip() for part in value.split("=", 1))
-        if key in {"breakout", "pullback"}:
-            strategy = "突破研究條件" if key == "breakout" else "回踩研究條件"
+        rule = strategy_by_kind(key)
+        if rule is not None:
+            strategy = rule.research_label_zh
             state, _, reasons = raw_value.partition(":")
             state_label = {
                 "passed": "已成立",
@@ -141,24 +148,38 @@ def display_reason(reason: Any, *, fallback: str = "研究條件需要人工核�
     return value
 
 
+def unmet_conditions_line(strategy: str, short_labels: Iterable[str]) -> str:
+    """「突破條件差 3 項：價格、量能、法人」: each short name once (UI_COPY_SPEC §6)."""
+
+    labels = list(dict.fromkeys(short_labels))
+    return f"{REGISTRY[strategy].label_zh}差 {len(labels)} 項：{'、'.join(labels)}"
+
+
 def primary_reason(
     *,
     action_state: str,
     reasons: list[Any],
     missing: list[Any],
     strategy: str | None = None,
+    unmet: tuple[str, list[str]] | None = None,
 ) -> dict[str, str]:
+    """The summary's main reason.
+
+    ``unmet`` is (strategy, short names of its unmet conditions) of the
+    judged strategy with the fewest; a ``no_condition`` summary says that
+    instead of its first raw reason.
+    """
+
+    if action_state == "no_condition" and unmet and unmet[0] in REGISTRY:
+        return {
+            "label": unmet_conditions_line(*unmet),
+            "scope": REGISTRY[unmet[0]].entry_type,
+        }
     source = (
         missing[0]
         if action_state == "data_insufficient" and missing
         else (reasons[0] if reasons else action_state)
     )
     label = display_reason(source)
-    scope = (
-        "breakout"
-        if strategy == "breakout_v1"
-        else "pullback"
-        if strategy == "pullback_v1"
-        else "research"
-    )
+    scope = REGISTRY[strategy].entry_type if strategy in REGISTRY else "research"
     return {"label": label, "scope": scope}

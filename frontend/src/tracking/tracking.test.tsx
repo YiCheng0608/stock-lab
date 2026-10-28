@@ -12,7 +12,6 @@ import {
   addPlanErrorText,
   cancelPlanErrorText,
   formatSignedReturn,
-  formatTaipeiDate,
   planDateLine,
   planResultLine,
   trackingNote,
@@ -38,9 +37,9 @@ function render(element: ReactElement, cache: Array<[readonly unknown[], unknown
 // ---- formatting ----
 check(formatSignedReturn(0.0939) === '+9.39%' && formatSignedReturn(-0.0268) === '-2.68%' && formatSignedReturn(0) === '0.00%', 'signed returns, two decimals')
 check(formatSignedReturn(-0.00001) === '0.00%' && formatSignedReturn(null) === '—', 'no negative zero, null is 「—」')
-check(formatTaipeiDate('2026-10-16T15:30:00+00:00') === '2026/10/16' && formatTaipeiDate('2026-10-16T16:30:00+00:00') === '2026/10/17', 'created date is the Taipei date')
-check(formatTaipeiDate(null) === null && formatTaipeiDate('nope') === null, 'missing or bad instants')
 check(planDateLine(plan()) === '計畫資料日 2026/10/16 · 建立 2026/10/16', 'plan date and creation date line')
+check(planDateLine({ ...plan(), created_at: '2026-10-16T16:30:00+00:00' }).endsWith('建立 2026/10/17'), 'created date is the Taipei date')
+check(planDateLine({ ...plan(), created_at: 'nope' }).endsWith('建立 待核實'), 'a bad instant is 待核實')
 check(trackingNote(meta()).includes('買賣各 5 bps 滑價、來回 30 bps 成本假設') && trackingNote(undefined).includes('不是實際成交'), 'note names the assumptions')
 
 // ---- status badges (DESIGN_SYSTEM §7) ----
@@ -97,6 +96,9 @@ for (const text of ['2026/10/02', '第 1 日', '已模擬成交', '>13.20<', '>1
 check(slice(history, 'data-session-no="4"', '</tr>').includes('達標') && slice(history, 'data-session-no="4"', '</tr>').includes('目標'), 'target row')
 check(slice(history, 'data-session-no="2"', '</tr>').includes('>—<'), 'no trigger is 「—」')
 check(history.includes('class="num">13.30') && history.includes('<th class="num">收</th>'), 'numbers are right-aligned mono cells')
+// DESIGN_SYSTEM §5.1: a table in a card keeps at most 4 columns on a phone.
+const heads = slice(history, '<thead>', '</thead>').match(/<th(?: [^>]*)?>/g) ?? []
+check(heads.length === 8 && heads.filter((th) => !th.includes('wide-only')).length === 4, 'the phone keeps date, status, close and triggers')
 check(!render(<PlanHistory plan={detail.plan} />).includes('data-session-no'), 'closed history fetches nothing')
 
 // ---- actions page sections ----

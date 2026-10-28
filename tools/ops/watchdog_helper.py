@@ -23,7 +23,12 @@ The result goes to stdout without a trailing newline.
                                    trading_date with an unknown or empty source
                                    or no data_as_of), llm_done_provenance
                                    (done news_llm_results without llm_model or
-                                   prompt_version)
+                                   prompt_version), instrument_status_sync,
+                                   execution_calendar (analysis signals of the
+                                   latest signal date written with the calendar
+                                   but without earliest_execution_date),
+                                   strategy_levels (the latest finished daily
+                                   run's strategy_levels step did not succeed)
 
 <now> is the watchdog clock in epoch seconds.
 """
@@ -232,7 +237,72 @@ def invariants(db: str, today: str) -> str:
                 f"instrument_status_sync {_state(len(skipped))}"
                 f" exchanges={len(rows)} skipped={','.join(skipped) or 'none'}"
             )
+        lines.append(_execution_calendar(conn))
+        lines.append(_strategy_levels(conn))
     return "\n".join(lines)
+
+
+def _execution_calendar(conn: sqlite3.Connection) -> str:
+    """Analysis signals of the latest signal date without an earliest execution
+    date (Issue #294): the holiday schedule lacks the year or its step failed.
+
+    Only signals written by the calendar-based analyze are judged (their
+    evidence has ``execution.calendar``): the older ones stay empty for good
+    (no backfill), so a database before the calendar migration, or one whose
+    latest signals predate it, is skipped."""
+
+    if not _has_table(conn, "trading_calendar_days"):
+        return "execution_calendar skip reason=no_trading_calendar"
+    day = conn.execute(
+        "SELECT max(signal_date) FROM signals WHERE signal_key LIKE 'analysis-%'"
+    ).fetchone()[0]
+    if day is None:
+        return "execution_calendar skip reason=no_analysis_signals"
+    signals, judged, without = conn.execute(
+        "SELECT count(*), coalesce(sum(calendar IS NOT NULL), 0),"
+        " coalesce(sum(calendar IS NOT NULL AND earliest_execution_date IS NULL), 0)"
+        " FROM (SELECT earliest_execution_date, CASE WHEN json_valid(rule_evidence_json)"
+        " THEN json_extract(rule_evidence_json, '$.execution.calendar') END AS calendar"
+        " FROM signals WHERE signal_key LIKE 'analysis-%' AND signal_date=?)",
+        (day,),
+    ).fetchone()
+    day = str(day)[:10]
+    if not judged:
+        return (
+            "execution_calendar skip reason=signals_before_calendar"
+            f" signal_date={day} signals={signals}"
+        )
+    return (
+        f"execution_calendar {_state(without)} signal_date={day}"
+        f" signals={judged} without_date={without}"
+    )
+
+
+def _strategy_levels(conn: sqlite3.Connection) -> str:
+    """The strategy_levels step of the latest finished daily run that has one
+    (Issue #274, #293 review L2).
+
+    The step is non-blocking: its failure leaves the run a success, so only
+    this line reports it.  ``skipped`` (analyze did not succeed) is not judged:
+    the run's own outcome reports that.  A database without the step (before
+    0019, or a release without it) is skipped."""
+
+    if not _has_table(conn, "schedule_run_steps"):
+        return "strategy_levels skip reason=no_schedule_run_steps"
+    row = conn.execute(
+        "SELECT r.id, r.target_date, s.status FROM schedule_run_steps s"
+        " JOIN schedule_runs r ON r.id = s.schedule_run_id"
+        " WHERE r.job='daily' AND s.step='strategy_levels'"
+        " AND r.finished_at IS NOT NULL ORDER BY r.id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return "strategy_levels skip reason=no_strategy_levels_step"
+    run_id, target, status = row
+    failed = status not in ("success", "no_data", "skipped")
+    return (
+        f"strategy_levels {_state(failed)} target_date={str(target)[:10]}"
+        f" run_id={run_id} status={status}"
+    )
 
 
 def main(argv: list[str]) -> int:

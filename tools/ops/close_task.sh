@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Clean up a merged task (Issue #282; docs/GITHUB_WORKFLOW.md 任務流程第 6 步). Checks first,
 # deletes nothing unless every check passes:
-#   - the task's PR is merged and CI on master is green for its merge commit (and the
-#     newest master run is not red);
+#   - the task's PR is merged and CI on its target branch (the PR's baseRefName: master,
+#     or one of integration_branches below, #332; any other target is refused) is green
+#     for its merge commit (and the newest run on that branch is not red);
 #   - the worktree on task/<issue>-* has no uncommitted changes and its branch is in
-#     origin/master; this shell does not run inside it;
+#     origin/<target branch>; this shell does not run inside it;
 #   - every terminal of the worktree is idle (agents: tui-idle; shells: no output for
 #     --idle-seconds), and none is the caller's own;
 #   - no --extra-dir is protected (guard_dir in coordinator_lib.sh): the repo root and
@@ -16,15 +17,20 @@
 #     8.3 short name) is refused outright. A failed orca, gh or git read refuses too.
 # Deleting checks guard_dir again (remove_tree), so one broken check is not enough to
 # delete a protected path.
+# Then, for a PR into a branch other than master, close the Issue (`gh issue close`):
+# GitHub acts on `Closes #<issue>` only in a PR into the default branch (#332). An Issue
+# already closed (a rerun) is left as it is; a failed close of an open Issue stops here,
+# nothing deleted.
 # Then: close the terminals, `orca worktree rm --force`, `git worktree prune`, delete the
-# local branch, delete each --extra-dir (junctions and symlinks unlinked first, never
-# followed), set the board to 完成, and read back that all of it is gone.
+# local branch (one orca already deleted counts: step branch_already_gone, #290), delete
+# each --extra-dir (junctions and symlinks unlinked first, never followed), set the board
+# to 完成, and read back that all of it is gone.
 #
 # Usage: close_task.sh <issue> [--extra-dir <path>]... [options]
 #   --slug S          the task is task/<issue>-S (needed when an issue has several)
 #   --pr N            the task's PR; default: the merged PR whose head is the branch
 #   --allow-pr-head-mismatch  accept a --pr whose head is another branch (a dry run)
-#   --no-board        leave the board alone (a dry run on a throwaway branch)
+#   --no-board        leave the board and the Issue alone (a dry run on a throwaway branch)
 #   --repo-id ID      Orca repo id; default: the repo whose remote is YiCheng0608/stock-lab
 #   --idle-seconds N  a shell terminal is idle after N seconds without output, default 30
 #   --python EXE      default $STOCK_PYTHON, then this checkout's .venv, then python3
@@ -34,6 +40,12 @@
 set -u
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$script_dir/coordinator_lib.sh"
+
+# The long-lived integration branches a task PR may merge into besides master (#332;
+# docs/GITHUB_WORKFLOW.md 長期整合分支); a PR into any other branch (release/*) is refused.
+# tools/ci/test_checks.py (WorkflowTriggers) reads this line: CI runs on PRs into and
+# pushes to master, release/** and each of these.
+integration_branches=(feat/docker)
 
 issue="" slug="" pr="" repo_id="" idle_seconds=30 set_board=1 allow_head_mismatch=0
 extra=()
@@ -66,19 +78,27 @@ case "$slug" in -* | *[!a-z0-9-]*) die "--slug uses a-z, 0-9 and '-' only" 64 ;;
 prefix="task/$issue-"
 find_python
 
-wt_path="" wt_id="" branch="" merge_sha="" board="" steps=()
+wt_path="" wt_id="" branch="" base_branch="" merge_sha="" issue_close="" board="" steps=()
 
 report() { # report EXIT [ERROR]
   local error=null done_steps="" s
   [ -n "${2:-}" ] && error="$(json_str "$2")"
   for s in "${steps[@]+"${steps[@]}"}"; do done_steps="$done_steps${done_steps:+,}$(json_str "$s")"; done
-  printf '{"issue":%s,"pr":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"steps":[%s],"board":%s,"error":%s}\n' \
-    "$issue" "${pr:-null}" "$(json_str "$merge_sha")" "$(json_str "$wt_path")" "$(json_str "$branch")" \
-    "$done_steps" "$(json_str "$board")" "$error"
+  printf '{"issue":%s,"pr":%s,"base":%s,"merge_commit":%s,"worktree":%s,"branch":%s,"issue_close":%s,"steps":[%s],"board":%s,"error":%s}\n' \
+    "$issue" "${pr:-null}" "$(json_str "$base_branch")" "$(json_str "$merge_sha")" "$(json_str "$wt_path")" "$(json_str "$branch")" \
+    "$(json_str "$issue_close")" "$done_steps" "$(json_str "$board")" "$error"
   [ -n "${2:-}" ] && printf 'close_task.sh: %s\n' "$2" >&2
   exit "$1"
 }
 refuse() { report 1 "$1（未刪除任何東西）"; }
+
+# branch_gone: show-ref answers 1 for a missing ref; any other failure (128: git could
+# not read the repo) is not proof that the branch is gone (#290).
+branch_gone() {
+  local rc=0
+  git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" || rc=$?
+  [ "$rc" = 1 ]
+}
 
 # unlink_one LINK: remove a junction or symlink itself, never what it points to; the
 # JSON steps list each one. Git Bash's and GNU rm -rf do not follow them either (#282),
@@ -133,15 +153,22 @@ fi
 [ -n "$branch" ] || [ -n "$pr" ] || refuse "找不到 $prefix$slug* 的 worktree 或 branch；用 --pr 指定 PR"
 
 if [ -n "$pr" ]; then
-  out="$(gh pr view "$pr" --repo "$GH_REPO" --json number,state,mergeCommit,headRefName)" || refuse "讀不到 PR #$pr"
+  out="$(gh pr view "$pr" --repo "$GH_REPO" --json number,state,mergeCommit,headRefName,baseRefName)" || refuse "讀不到 PR #$pr"
   out="[$out]"
 else
-  out="$(gh pr list --repo "$GH_REPO" --head "$branch" --state merged --limit 1 --json number,state,mergeCommit,headRefName)" \
+  out="$(gh pr list --repo "$GH_REPO" --head "$branch" --state merged --limit 1 --json number,state,mergeCommit,headRefName,baseRefName)" \
     || refuse "gh pr list 失敗"
 fi
 [ "$(printf '%s' "$out" | cj get 0.state)" = MERGED ] || refuse "PR 尚未合併（${branch:-#$pr}）"
 pr="$(printf '%s' "$out" | cj get 0.number)"
 merge_sha="$(printf '%s' "$out" | cj get 0.mergeCommit.oid)" || refuse "PR #$pr 沒有 merge commit"
+# The branch the PR merged into: its CI and its history are what is checked below (#332).
+base_branch="$(printf '%s' "$out" | cj get 0.baseRefName)" || refuse "PR #$pr 讀不到目標分支（baseRefName）"
+case "$base_branch" in '' | -* | /* | */ | *..* | *[!A-Za-z0-9._/-]*) refuse "PR #$pr 的目標分支名稱不合規則：$base_branch" ;; esac
+case " master ${integration_branches[*]} " in
+  *" $base_branch "*) ;;
+  *) refuse "PR #$pr 的目標分支 $base_branch 不是 master 或長期整合分支（${integration_branches[*]}）" ;;
+esac
 head_ref="$(printf '%s' "$out" | cj get 0.headRefName)"
 # The PR's head stands in for a branch not found locally only when it is this task's:
 # another task's branch is never deleted here.
@@ -155,16 +182,16 @@ fi
 [ "$head_ref" = "$branch" ] || [ "$allow_head_mismatch" = 1 ] \
   || refuse "PR #$pr 的 head 是 $head_ref，不是 ${branch:-$prefix$slug*}（確定要借用這個 PR 才加 --allow-pr-head-mismatch）"
 
-out="$(gh run list --repo "$GH_REPO" --branch master --event push --workflow CI --limit 20 \
+out="$(gh run list --repo "$GH_REPO" --branch "$base_branch" --event push --workflow CI --limit 20 \
   --json headSha,status,conclusion)" || refuse "gh run list 失敗"
 read -r mine newest <<<"$(printf '%s' "$out" | cj ci-state "$merge_sha")"
-[ "$mine" = success ] || refuse "master 上 merge commit ${merge_sha:0:9} 的 CI 是 $mine，不是 success"
-[ "$newest" != failure ] || refuse "master 最新一次 CI 是 failure，先修 master"
+[ "$mine" = success ] || refuse "$base_branch 上 merge commit ${merge_sha:0:9} 的 CI 是 $mine，不是 success"
+[ "$newest" != failure ] || refuse "$base_branch 最新一次 CI 是 failure，先修 $base_branch"
 
-git -C "$repo_root" fetch --quiet origin master || refuse "git fetch origin master 失敗"
+git -C "$repo_root" fetch --quiet origin "$base_branch" || refuse "git fetch origin $base_branch 失敗"
 if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-  git -C "$repo_root" merge-base --is-ancestor "refs/heads/$branch" origin/master \
-    || refuse "本地 branch $branch 有不在 origin/master 的 commit"
+  git -C "$repo_root" merge-base --is-ancestor "refs/heads/$branch" "origin/$base_branch" \
+    || refuse "本地 branch $branch 有不在 origin/$base_branch 的 commit"
 fi
 
 terminals=()
@@ -198,6 +225,29 @@ for dir in "${extra[@]+"${extra[@]}"}"; do
   if [ -e "$dir" ] || [ -L "$dir" ]; then extra_live+=("$dir"); else steps+=("extra_absent:$dir"); fi
 done
 
+# --- close the Issue: every check above passed -------------------------------------
+if [ "$base_branch" = master ]; then
+  issue_close=not_needed
+elif [ "$set_board" = 0 ]; then
+  issue_close=skipped
+else
+  # A rerun (a delete step failed after the Issue was closed) finds it closed already and
+  # goes on; a close that fails counts only when the Issue reads back closed. An
+  # unreadable state is not "closed": the close is tried.
+  issue_state() { gh issue view "$issue" --repo "$GH_REPO" --json state | cj get state; }
+  if [ "$(issue_state)" = CLOSED ]; then
+    issue_close=already_closed
+  elif gh issue close "$issue" --repo "$GH_REPO" \
+    --comment "PR #$pr 已合併進 $base_branch，merge commit ${merge_sha:0:9} 的 CI 綠（close_task.sh）" >/dev/null; then
+    issue_close=closed
+  elif [ "$(issue_state)" = CLOSED ]; then
+    issue_close=closed
+  else
+    issue_close=failed
+    refuse "gh issue close #$issue 失敗（PR #$pr 進 $base_branch，GitHub 不會自動關）"
+  fi
+fi
+
 # --- delete ------------------------------------------------------------------------
 for handle in "${terminals[@]+"${terminals[@]}"}"; do
   orca terminal close --terminal "$handle" --json | cj ok || report 3 "terminal close 失敗：$handle"
@@ -221,8 +271,14 @@ if [ -n "$wt_path" ]; then
   fi
 fi
 if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-  git -C "$repo_root" branch -D "$branch" >/dev/null || report 3 "刪本地 branch 失敗：$branch"
-  steps+=("branch_deleted")
+  if git -C "$repo_root" branch -D "$branch" >/dev/null; then
+    steps+=("branch_deleted")
+  elif branch_gone; then
+    # orca worktree rm deletes the branch too, at times after the show-ref above (#290).
+    steps+=("branch_already_gone")
+  else
+    report 3 "刪本地 branch 失敗：$branch"
+  fi
 fi
 for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   remove_tree "$dir" || report 3 "刪不掉 --extra-dir $dir"
@@ -231,7 +287,7 @@ done
 
 # --- read back ---------------------------------------------------------------------
 [ -z "$wt_path" ] || [ ! -e "$wt_path" ] || report 3 "讀回：worktree 目錄仍在 $wt_path"
-! git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch" || report 3 "讀回：branch $branch 仍在"
+branch_gone || report 3 "讀回：branch $branch 仍在或讀不到"
 for dir in "${extra_live[@]+"${extra_live[@]}"}"; do
   [ ! -e "$dir" ] && [ ! -L "$dir" ] || report 3 "讀回：$dir 仍在"
 done

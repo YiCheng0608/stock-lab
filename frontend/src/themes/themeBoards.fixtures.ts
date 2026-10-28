@@ -155,23 +155,47 @@ export function themeDetail(options: { trendDays?: number; truncated?: boolean }
   }
 }
 
+type MemberBar = ThemeMembersResponse['items'][number]['latest_bar']
+
+// GET /themes/{id}/members page 2 with sort=turnover (#280): a leader that is candidate #3 with every column, a stale
+// member whose latest bar is older than members_as_of, an unverified change with unavailable turnover, and a member
+// without any bar.
 export function membersPage(): ThemeMembersResponse {
   const detail = themeDetail()
   return {
     theme: detail.theme,
+    members_as_of: '2026-09-08',
     items: [
       {
-        exchange: 'TWSE', symbol: '2330', name: '台積電', instrument_type: 'stock', is_watchlisted: false, status: 'active', role: 'member',
+        exchange: 'TWSE', symbol: '2330', name: '台積電', instrument_type: 'stock', is_watchlisted: false, status: 'active', role: 'leader',
         theme_evidence: evidence(),
-        latest_bar: { date: '2026-09-08', close: 1085 } as ThemeMembersResponse['items'][number]['latest_bar'],
+        latest_bar: { date: '2026-09-08', close: 1085 } as MemberBar,
+        change: 15, change_pct: 0.014019, change_status: 'known', turnover: 32512345678, turnover_status: 'available',
+        excess_return_5d: 0.0123, excess_return_20d: -0.0045, candidate_rank: 3, conditional: true,
+      },
+      {
+        exchange: 'TWSE', symbol: '3711', name: '日月光投控', instrument_type: 'stock', is_watchlisted: false, status: 'active', role: 'member',
+        theme_evidence: evidence({ relation: 'supply_chain', relevance: 'medium' }),
+        latest_bar: { date: '2026-09-08', close: 151.5 } as MemberBar,
+        change: null, change_pct: null, change_status: 'unverified', turnover: null, turnover_status: 'unavailable',
+        excess_return_5d: -0.002, excess_return_20d: 0, candidate_rank: null, conditional: true,
       },
       {
         exchange: 'TPEx', symbol: '6187', name: '萬潤', instrument_type: 'stock', is_watchlisted: false, status: 'active', role: 'member',
         theme_evidence: evidence({ relation: 'product_line', relevance: 'low', url: 'javascript:alert(1)' }),
+        latest_bar: { date: '2026-09-05', close: 210.5 } as MemberBar,
+        change: null, change_pct: null, change_status: 'missing', turnover: null, turnover_status: 'missing',
+        excess_return_5d: null, excess_return_20d: null, candidate_rank: null, conditional: false,
+      },
+      {
+        exchange: 'TPEx', symbol: '6640', name: '均華', instrument_type: 'stock', is_watchlisted: false, status: 'active', role: 'member',
+        theme_evidence: evidence(),
         latest_bar: null,
+        change: null, change_pct: null, change_status: 'missing', turnover: null, turnover_status: 'missing',
+        excess_return_5d: null, excess_return_20d: null, candidate_rank: null, conditional: false,
       },
     ],
-    meta: { page: 2, page_size: 30, total: 32, total_pages: 2, has_previous: true, has_next: false },
+    meta: { page: 2, page_size: 30, total: 34, total_pages: 2, has_previous: true, has_next: false, sort: 'turnover' },
   }
 }
 

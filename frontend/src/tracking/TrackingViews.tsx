@@ -2,9 +2,9 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 
-import { Badge, Button, Card, DateBadge, EmptyState, Skeleton, Table } from '../components/ui'
+import { Badge, Button, Card, DataTable, DateBadge, EmptyState, Skeleton, type Column } from '../components/ui'
 import { candidateStrategyLabel, exchangeLabel, formatDate, formatEntryZone, formatPrice, formatRiskReward } from '../candidates/candidates'
-import type { AddPlanResponse, StrategyDecision, TrackingPlan, TrackingPlanDetail, TrackingPlansResponse } from '../types'
+import type { AddPlanResponse, StrategyDecision, TrackingPlan, TrackingPlanDetail, TrackingPlanSession, TrackingPlansResponse } from '../types'
 import {
   ADD_LABEL,
   CONFLICT_TEXT,
@@ -137,6 +137,18 @@ function CancelPlan({ plan }: { plan: TrackingPlan }) {
   )
 }
 
+// A table in a card has at most 4 columns on a phone (DESIGN_SYSTEM §5.1): date, status, close and triggers.
+const SESSION_COLUMNS: ReadonlyArray<Column<TrackingPlanSession>> = [
+  { key: 'date', header: '日期', cell: (session) => formatDate(session.session_date) },
+  { key: 'no', header: '第幾日', wideOnly: true, cell: (session) => `第 ${session.session_no} 日` },
+  { key: 'status', header: '狀態', cell: (session) => sessionStatusLabel(session.status) },
+  { key: 'open', header: '開', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.open) },
+  { key: 'high', header: '高', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.high) },
+  { key: 'low', header: '低', num: true, wideOnly: true, cell: (session) => formatPrice(session.ohlc.low) },
+  { key: 'close', header: '收', num: true, cell: (session) => formatPrice(session.ohlc.close) },
+  { key: 'triggers', header: '觸發', cell: (session) => sessionTriggers(session) },
+]
+
 // The sessions are fetched when the details first open (verify's screenshot opens every <details>).
 export function PlanHistory({ plan, initiallyOpen = false }: { plan: TrackingPlan; initiallyOpen?: boolean }) {
   const client = useContext(TrackingClientContext)
@@ -154,23 +166,13 @@ export function PlanHistory({ plan, initiallyOpen = false }: { plan: TrackingPla
             ? <EmptyState title="明細暫時無法載入" reason="請稍後重新整理" />
             : detail.data && (detail.data.sessions.length
               ? (
-                <Table note="價格為當日原始日線（報價幣別元），觸發依計畫價位換算到當日價格基準判定；成交為模擬。">
-                  <thead><tr><th>日期</th><th>第幾日</th><th>狀態</th><th className="num">開</th><th className="num">高</th><th className="num">低</th><th className="num">收</th><th>觸發</th></tr></thead>
-                  <tbody>
-                    {detail.data.sessions.map((session) => (
-                      <tr key={session.session_date} data-session-no={session.session_no}>
-                        <td>{formatDate(session.session_date)}</td>
-                        <td>第 {session.session_no} 日</td>
-                        <td>{sessionStatusLabel(session.status)}</td>
-                        <td className="num">{formatPrice(session.ohlc.open)}</td>
-                        <td className="num">{formatPrice(session.ohlc.high)}</td>
-                        <td className="num">{formatPrice(session.ohlc.low)}</td>
-                        <td className="num">{formatPrice(session.ohlc.close)}</td>
-                        <td>{sessionTriggers(session)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                <DataTable
+                  note="價格為當日原始日線（報價幣別元），觸發依計畫價位換算到當日價格基準判定；成交為模擬。"
+                  columns={SESSION_COLUMNS}
+                  rows={detail.data.sessions}
+                  rowKey={(session) => session.session_date}
+                  rowProps={(session) => ({ 'data-session-no': session.session_no })}
+                />
               )
               : <p className="small-note">尚無追蹤的交易日。</p>)}
     </details>
