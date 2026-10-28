@@ -1,0 +1,3 @@
+result {"page":"http://localhost:18280/stocks/TWSE/9101","post":200,"id":2,"delete":200,"deleted":{"status":"deleted","id":2}}
+request POST http://localhost:18280/api/portfolio {"content-type":"application/json","host":"localhost:18280","origin":"http://localhost:18280","sec-fetch-site":"same-origin"}
+request DELETE http://localhost:18280/api/portfolio/2 {"host":"localhost:18280","origin":"http://localhost:18280","sec-fetch-site":"same-origin"}

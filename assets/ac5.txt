@@ -1,0 +1,19 @@
+$ docker compose -p t335-b ps
+NAME                 IMAGE               COMMAND                  SERVICE             CREATED              STATUS                        PORTS
+t335-b-api-1         t335-b-backend      "/usr/bin/tini -- /a…"   api                 About a minute ago   Up About a minute (healthy)   127.0.0.1:18200->8000/tcp
+t335-b-scheduler-1   t335-b-backend      "/usr/bin/tini -- /a…"   scheduler           About a minute ago   Up About a minute             
+t335-b-web-1         t335-b-web          "/docker-entrypoint.…"   web                 About a minute ago   Up About a minute (healthy)   127.0.0.1:18280->8080/tcp
+api: restart=unless-stopped count=0 health=healthy
+web: restart=unless-stopped count=0 health=healthy
+scheduler: restart=unless-stopped count=0 health=none
+$ docker compose -p t335-b exec -T api kill -TERM 1; docker compose -p t335-b exec -T web kill -TERM 1
+$ docker compose -p t335-b ps (45 s later)
+NAME                 IMAGE               COMMAND                  SERVICE             CREATED              STATUS                    PORTS
+t335-b-api-1         t335-b-backend      "/usr/bin/tini -- /a…"   api                 About a minute ago   Up 43 seconds (healthy)   127.0.0.1:18200->8000/tcp
+t335-b-scheduler-1   t335-b-backend      "/usr/bin/tini -- /a…"   scheduler           About a minute ago   Up About a minute         
+t335-b-web-1         t335-b-web          "/docker-entrypoint.…"   web                 About a minute ago   Up 42 seconds (healthy)   127.0.0.1:18280->8080/tcp
+api: count=1 health=healthy started=2026-10-28T18:44:36.210852467Z
+web: count=1 health=healthy started=2026-10-28T18:44:36.778741453Z
+$ curl /api/health
+{"status":"ok","service":"taiwan-stock-research"}
+web 200

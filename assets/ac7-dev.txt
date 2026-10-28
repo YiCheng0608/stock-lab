@@ -1,0 +1,6 @@
+result {"page":"http://localhost:18180/stocks/TWSE/9101","post":200,"id":2,"delete":200,"deleted":{"status":"deleted","id":2}}
+request GET http://localhost:18180/src/portfolioValues.ts {"host":"localhost:18180","origin":"http://localhost:18180","sec-fetch-site":"same-origin"}
+request OPTIONS http://localhost:18100/api/portfolio {"host":"localhost:18100","origin":"http://localhost:18180","sec-fetch-site":"same-site"}
+request POST http://localhost:18100/api/portfolio {"content-type":"application/json","host":"localhost:18100","origin":"http://localhost:18180","sec-fetch-site":"same-site"}
+request OPTIONS http://localhost:18100/api/portfolio/2 {"host":"localhost:18100","origin":"http://localhost:18180","sec-fetch-site":"same-site"}
+request DELETE http://localhost:18100/api/portfolio/2 {"host":"localhost:18100","origin":"http://localhost:18180","sec-fetch-site":"same-site"}
