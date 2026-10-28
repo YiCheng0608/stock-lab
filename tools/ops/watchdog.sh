@@ -2,11 +2,13 @@
 # Schedule watchdog, run every 15 minutes by Windows Task Scheduler
 # (tools/ops/Register-Watchdog.ps1). Checks the daily, news and news-llm jobs
 # for anomalies from their logs and the read-only database, and the data
-# invariants in that database, and comments on #1. Operation:
-# docs/OPERATIONS.md §6.1. Every run appends to <data>/logs/watchdog.log.
+# invariants in that database, and comments on #1; also whether claude -p and
+# gh were refused for their credentials (CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN;
+# #337). Operation: docs/OPERATIONS.md §6.1. Every run appends to
+# <data>/logs/watchdog.log.
 #
 # Usage: watchdog.sh [--dry-run] [--data-dir DIR] [--python EXE]
-#   --dry-run       decide and print the actions; no comment
+#   --dry-run       decide and print the actions; no gh call, no comment
 #   --data-dir      default $STOCK_DATA_DIR, then $HOME/stock-lab-data
 #   --python        default $STOCK_PYTHON, then this checkout's .venv, then python3
 # Test hook: WATCHDOG_NOW (epoch seconds).
@@ -24,7 +26,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry_run=1 ;;
     --data-dir) data_dir="${2:?--data-dir needs a value}"; shift ;;
     --python) python="${2:?--python needs a value}"; shift ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 64 ;;
   esac
   shift
@@ -103,8 +105,23 @@ taipei_iso="$(date -u -d "@$taipei" +%Y-%m-%d)"
 taipei_hm="$(date -u -d "@$taipei" +%H%M)"
 taipei_dow="$(date -u -d "@$taipei" +%u)"
 
+# gh_auth_error EXIT ERR_FILE: a failed gh call was refused for its credentials:
+# exit 4 is "requires authentication" (no GH_TOKEN and no login;
+# cli.github.com/manual/gh_help_exit-codes), and an expired or revoked GH_TOKEN
+# gets "HTTP 401: Bad credentials" with exit 1 (#337).
+gh_auth_error() {
+  [ "$1" = 4 ] || grep -qiE 'HTTP 401|Bad credentials|gh auth login' "$2" 2>/dev/null
+}
+gh_state=ok  # unauthorized once GitHub refuses gh's credentials in this run
+
+gh_refused() { # gh_refused EXIT ERR_FILE: log a refused gh call
+  gh_state=unauthorized
+  found=1
+  log gh_auth_failed "exit=$1 date=$taipei_date" "GitHub 拒絕 gh 的認證（$(tail -n 1 "$2" 2>/dev/null)）：本次異常無法在 #1 留言，恢復後補留；請更新 .env 的 GH_TOKEN"
+}
+
 anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
-  local key="$1" body
+  local key="$1" body status
   found=1
   if grep -qF " anomaly_commented key=$key date=$taipei_date" "$log_file" 2>/dev/null; then
     log anomaly_already_commented "key=$key date=$taipei_date" "今日已就此異常留言，不再留"
@@ -118,13 +135,59 @@ anomaly() { # anomaly KEY SUMMARY: at most one #1 comment per key per Taipei day
     printf '將在 #1 留言：\n%s\n' "$body"
     return
   fi
+  # Not marked commented: the next run after gh is accepted again posts it.
+  if [ "$gh_state" = unauthorized ]; then
+    log anomaly_not_commented "key=$key date=$taipei_date" "gh 未通過認證，未在 #1 留言：$2"
+    return
+  fi
   printf '%s\n' "$body" >"$work/comment.md"
-  if gh issue comment 1 --repo "$GH_REPO" --body-file "$work/comment.md" >"$work/gh.out" 2>>"$work/gh.err"; then
+  gh issue comment 1 --repo "$GH_REPO" --body-file "$work/comment.md" >"$work/gh.out" 2>"$work/gh.err"
+  status=$?
+  if [ "$status" = 0 ]; then
     log anomaly_commented "key=$key date=$taipei_date url=$(tail -n 1 "$work/gh.out")" "已在 #1 留言：$2"
+  elif gh_auth_error "$status" "$work/gh.err"; then
+    gh_refused "$status" "$work/gh.err"
+    log anomaly_not_commented "key=$key date=$taipei_date" "gh 未通過認證，未在 #1 留言：$2"
   else
     log anomaly_comment_failed "key=$key" "#1 留言失敗：$(tail -n 1 "$work/gh.err" 2>/dev/null)"
   fi
 }
+
+# gh: one read of the repository each run, so an expired GH_TOKEN is found on a
+# run without anomalies too. A refusal is logged every run; once gh is accepted
+# again, one #1 comment (key gh_auth) covers the runs since the last one.
+if [ "$dry_run" = 0 ]; then
+  gh api "repos/$GH_REPO" --jq .full_name >"$work/probe.out" 2>"$work/probe.err"
+  status=$?
+  if [ "$status" != 0 ]; then
+    if gh_auth_error "$status" "$work/probe.err"; then
+      gh_refused "$status" "$work/probe.err"
+    else
+      log gh_probe_failed "exit=$status" "讀取 repo 失敗（不是認證錯誤）：$(tail -n 1 "$work/probe.err" 2>/dev/null)；照常嘗試留言"
+    fi
+  fi
+fi
+if [ "$gh_state" = ok ]; then
+  # "<runs> <first> <last> <keys>" of the gh_auth_failed lines after the last
+  # gh_auth comment; keys are the anomalies not commented meanwhile.
+  outage="$(awk '
+    / anomaly_commented key=gh_auth / { n = 0; first = ""; split("", seen); keys = "" }
+    / gh_auth_failed / { n++; if (first == "") first = $1; last = $1 }
+    / anomaly_not_commented / && n {
+      for (i = 2; i <= NF; i++) if ($i ~ /^key=/) {
+        k = substr($i, 5)
+        if (k != "gh_auth" && !(k in seen)) { seen[k] = 1; keys = keys (keys == "" ? "" : ",") k }
+      }
+    }
+    END { if (n) print n, first, last, (keys == "" ? "-" : keys) }
+  ' "$log_file" 2>/dev/null)"
+  if [ -n "$outage" ]; then
+    read -r outage_runs outage_first outage_last outage_keys <<<"$outage"
+    missed="期間沒有其他異常"
+    [ "$outage_keys" != - ] && missed="期間沒能留言的異常：\`${outage_keys//,/\`、\`}\`，仍存在的本次照常留言"
+    anomaly gh_auth "gh 認證：$outage_first 到 $outage_last 的 $outage_runs 次看門狗執行，GitHub 都拒絕了 gh 的認證（\`HTTP 401\` 或沒有 token），這段期間看門狗無法在 #1 留言；$missed。請確認 \`.env\` 的 \`GH_TOKEN\`（fine-grained PAT）的到期日，換新 token 後重啟 scheduler 容器。"
+  fi
+fi
 
 # daily: a weekday's log needs an end line by 21:30 Taipei (only once daily logs exist).
 if compgen -G "$logs/daily-*.log" >/dev/null && [ "$taipei_dow" -le 5 ] && [ $((10#$taipei_hm)) -ge 2130 ]; then
@@ -191,6 +254,20 @@ llm_exits="$(for file in "$logs/news-$yesterday.log" "$logs/news-$taipei_date.lo
   done | tail -n 3 | tr '\n' ' ')"
 if [ "$(printf '%s' "$llm_exits" | wc -w)" -eq 3 ] && ! printf '%s' "$llm_exits" | grep -qvE '^((1|wrapper_error) )+$'; then
   llm_failed="${llm_failed:+$llm_failed；}news 日誌 24 小時內最後 3 次的 \`news_llm_exit\` 是 ${llm_exits% }"
+fi
+# claude -p authentication (read-only database): the latest news_llm or
+# candidate_notes run of the last 24 hours had a batch refused for its login
+# or CLAUDE_CODE_OAUTH_TOKEN (#337). Its items stay pending until a later run.
+if [ -n "$python" ] && [ -f "$data_dir/stock.db" ]; then
+  if auth="$(helper llm-auth "$data_dir/stock.db" "$now" 2>>"$work/helper.err")"; then
+    case "$auth" in
+      ""|skip) ;;
+      *) anomaly llm_auth "Claude Code 認證：\`claude -p\` 回 auth error（未登入，或 \`CLAUDE_CODE_OAUTH_TOKEN\` 過期或被撤銷），最近一次 run：$(printf '%s\n' "$auth" | awk '{ sub(/ run_id=/, " run "); printf "%s%s", (NR > 1 ? "、" : ""), $0 }')。該批新聞判讀與候選說明是 \`pending\`，其餘批次跳過，下次執行重試。請在有瀏覽器的本機跑 \`claude setup-token\`，把印出的 token 填進 \`.env\` 的 \`CLAUDE_CODE_OAUTH_TOKEN\`，再重啟 scheduler 容器。" ;;
+    esac
+  else
+    found=1
+    log llm_auth_check_failed "" "讀取 stock.db 的 LLM run 失敗：$(tail -n 1 "$work/helper.err" 2>/dev/null)"
+  fi
 fi
 [ -n "$llm_failed" ] && anomaly news_llm_failed "news_llm：$llm_failed（可能找不到 claude、環境有 API 金鑰、表未建立或被排程逾時終止），請查 news 日誌的 news-llm 段落與 \`/api/ingestion-runs?q=news_llm\`。"
 

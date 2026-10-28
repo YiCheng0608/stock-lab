@@ -74,8 +74,30 @@ CLI_ENV = "STOCK_CLAUDE_CLI"
 # Anthropic API setting.  CLAUDE_CONFIG_DIR is kept so the login is found.
 STRIPPED_ENV = frozenset({"CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT"})
 STRIPPED_ENV_PREFIXES = ("CLAUDE_CODE_", "ANTHROPIC_")
+# Kept although it has a stripped prefix: the one-year subscription token of
+# ``claude setup-token``, which the scheduler container gets from .env (#337).
+OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 # The batch uses the subscription login only; with these set it refuses to run.
 API_KEY_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+# A failed call whose result, api_error_status or stderr has one of these is an
+# authentication failure (not_logged_in): no login, or a login or
+# CLAUDE_CODE_OAUTH_TOKEN that expired or was revoked.  The -p messages of
+# code.claude.com/docs/en/errors (read 2026-10-29, #337): "Not logged in ·
+# Please run /login", "Failed to authenticate. API Error: 401 OAuth token has
+# expired", "Failed to authenticate: OAuth token revoked. Please log in
+# again", "Failed to authenticate: OAuth session expired and could not be
+# refreshed", "API Error: 401 Invalid authentication credentials"; the
+# structured error code is authentication_failed.
+AUTH_ERROR_TEXT = (
+    "not logged in",
+    "/login",
+    "please log in",
+    "failed to authenticate",
+    "authentication_failed",
+    "oauth token",
+    "invalid authentication credentials",
+)
+_HTTP_401 = re.compile(r"\b401\b")
 # Failures every later call in the same run would repeat.
 FATAL_REASONS = frozenset({"not_logged_in", "rate_limited", "cli_not_started"})
 # A rejected item failed the summary check; like done and skipped_stale it is
@@ -250,7 +272,8 @@ def child_env() -> dict[str, str]:
     return {
         key: value
         for key, value in os.environ.items()
-        if key not in STRIPPED_ENV and not key.startswith(STRIPPED_ENV_PREFIXES)
+        if key == OAUTH_TOKEN_ENV
+        or (key not in STRIPPED_ENV and not key.startswith(STRIPPED_ENV_PREFIXES))
     }
 
 
@@ -413,7 +436,7 @@ def _failure_reason(result: CliResult, envelope: dict[str, Any] | None) -> str:
         )
         if part
     ).lower()
-    if "not logged in" in text or "/login" in text or "please log in" in text:
+    if any(part in text for part in AUTH_ERROR_TEXT) or _HTTP_401.search(text):
         return "not_logged_in"
     if (
         "429" in text

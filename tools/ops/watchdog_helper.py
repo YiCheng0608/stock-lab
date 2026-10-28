@@ -10,6 +10,13 @@ The result goes to stdout without a trailing newline.
                                    in the last 24 hours failed in a row (a run
                                    still running after 90 minutes counts as
                                    failed), or "skip"
+  llm-auth <db> <now>              one line "<run_type> run_id=<id>" per LLM
+                                   run type (news_llm, candidate_notes) whose
+                                   latest run, started in the last 24 hours,
+                                   had a batch fail authentication
+                                   (not_logged_in: no login, or an expired or
+                                   revoked CLAUDE_CODE_OAUTH_TOKEN), else
+                                   nothing; "skip" without the table
   daily-result <db> <date> <now>   the outcome of the daily runs for target
                                    <date> (YYYY-MM-DD): success,
                                    non_trading_day, running, none, skip, a
@@ -49,6 +56,10 @@ NEWS_LLM_RUNNING_LIMIT = timedelta(minutes=90)
 # news-llm-failed counts only runs started within this window.
 RECENT_WINDOW = timedelta(hours=24)
 COMPLETE = ("success", "non_trading_day")
+# The LLM steps that call claude -p, and their reason for a failed
+# authentication (worker.news_llm.AUTH_ERROR_TEXT).
+LLM_RUN_TYPES = ("news_llm", "candidate_notes")
+AUTH_REASON = "not_logged_in"
 # Skipped rows that only point at another run of the same date.
 REFERENCE_SKIPS = ("already_complete", "already_running")
 
@@ -132,6 +143,34 @@ def news_llm_failed(db: str, limit: int, now: str) -> str:
             break
         streak += 1
     return str(streak)
+
+
+def llm_auth(db: str, now: str) -> str:
+    current = _utc(now)
+    lines = []
+    with _connect(db) as conn:
+        if not _has_table(conn, "ingestion_runs"):
+            return "skip"
+        for run_type in LLM_RUN_TYPES:
+            row = conn.execute(
+                "SELECT id, started_at, metadata_json FROM ingestion_runs"
+                " WHERE run_type=? ORDER BY id DESC LIMIT 1",
+                (run_type,),
+            ).fetchone()
+            if row is None:
+                continue
+            run_id, started, raw = row
+            started_at = _started(started)
+            # A run of a step that stopped is not reported again every day.
+            if started_at is None or current - started_at > RECENT_WINDOW:
+                continue
+            batches = _json(raw).get("batches") or []
+            if any(
+                isinstance(batch, dict) and batch.get("reason") == AUTH_REASON
+                for batch in batches
+            ):
+                lines.append(f"{run_type} run_id={run_id}")
+    return "\n".join(lines)
 
 
 def daily_result(db: str, day: str, now: str) -> str:
@@ -312,6 +351,8 @@ def main(argv: list[str]) -> int:
         out = news_llm_pending(args[0], int(args[1]))
     elif command == "news-llm-failed":
         out = news_llm_failed(args[0], int(args[1]), args[2])
+    elif command == "llm-auth":
+        out = llm_auth(args[0], args[1])
     elif command == "daily-result":
         out = daily_result(args[0], args[1], args[2])
     elif command == "invariants":

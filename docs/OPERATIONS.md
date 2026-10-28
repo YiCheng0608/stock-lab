@@ -1,4 +1,4 @@
-<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制 -->
+<!-- owns: 工作目錄與環境、服務啟停、API 跨站請求防護、資料庫 migration 與 readiness、Alembic head、worker CLI、資料品質與研究結果、worker 測試與驗證、排程、排程看門狗、排程註冊與管理、日誌與 run 記錄、重跑與回補、排程限制、容器內的 claude 與 gh 認證 -->
 # 操作手冊
 
 本文件只保留可操作入口、安全邊界與診斷順序；本機檢查命令見[工作手冊](GITHUB_WORKFLOW.md#本機檢查)，能力狀態見 [ROADMAP](ROADMAP.md)。
@@ -139,7 +139,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 - **錯誤**：每個來源的結果寫入 `run_type=news` 的 ingestion run，可用 `/api/ingestion-runs?q=news` 查；CLI 也把同一份結果以 JSON 印到 stdout，排程把 stdout／stderr 導到日誌檔保存（[§6.3](#63-日誌與-run-記錄)）。
 - **LLM 判讀**：`\stock-lab\news` 每輪在 `worker.cli news` 結束後，於同一次執行接著跑 `python -m worker.cli news-llm`（環境變數相同、不帶 `--date`），把新收的新聞做 AI 摘要與判讀。每輪最多 50 則（2 次 `sonnet` 呼叫，25 則一批實測約 32 秒），同一台北日所有 run 合計最多 20 次呼叫，超過的批次等下一個台北日（[§3](#3-現有-worker-cli)）。
   - news 失敗時仍會跑（news-llm 只讀已入庫的新聞）；news-llm 失敗不改變 news 的結果，也不改變工作的結束碼。失敗只留在日誌的 news-llm 段落與 `run_type=news_llm` 的 ingestion run（`status=failed`、`error` 寫原因），可用 `/api/ingestion-runs?q=news_llm` 查；日誌格式見 [§6.3](#63-日誌與-run-記錄)。
-  - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。排程環境的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。執行期不檢查副檔名：後端 image 的 `claude` 是 npm 套件安裝的原生檔（ELF，`@anthropic-ai/claude-code/bin/claude.exe`），不是 shim；#333 移除了 Windows 只收原生 `.exe` 的檢查。找不到 claude、未登入或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
+  - 執行機器須已登入 Claude Code 且環境沒有 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`（有就拒絕執行）。排程環境的 PATH 與互動 shell 不同，所以註冊時以 `-ClaudeCli` 寫入原生 `claude.exe` 的完整路徑（[§6.2](#62-dailynews-工作的註冊與管理)）。執行期不檢查副檔名：後端 image 的 `claude` 是 npm 套件安裝的原生檔（ELF，`@anthropic-ai/claude-code/bin/claude.exe`），不是 shim；#333 移除了 Windows 只收原生 `.exe` 的檢查。找不到 claude、未登入（含 token 過期或被撤銷，[§6.7](#67-容器內的-claude-與-gh-認證env)）或額度用盡時，當輪記 `failed`（或該批 `pending`）並停止，下一輪重試。
   - 看門狗在最近 3 批判讀都是 `pending`，或最近 3 筆 news_llm run 都是 `failed`（找不到 claude、API 金鑰這類沒有批次的設定錯誤，以及被逾時終止的 run），或 news 日誌最後 3 次 `news_llm_exit` 都是 `1`／`wrapper_error` 時留言（[§6.1](#61-排程看門狗)）。
   - **停用／恢復**：只停 news-llm 用 `-NoNewsLlm` 重新註冊 news（[§6.2](#62-dailynews-工作的註冊與管理)）；整個 news 停用用 `Disable-ScheduledTask`。額度吃緊時先停 news-llm，news 照常收稿。
 
@@ -151,6 +151,8 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 - `daily` 結果：週一至週五台北 22:00 後（21:30 那次已寫入 run 列）唯讀查當日目標的 `schedule_runs`：當天有 `success`／`non_trading_day` 就算完成（之後的 `skipped` 不影響）；否則取最後一筆（略過只指向別列的 `already_complete`／`already_running`），是 `partial`、`failed`、`non_trading_unconfirmed` 或 `skipped:<原因>`（例如 `low_memory`）就留言；仍在 `running` 的等下一輪，超過 2.5 小時視為 `failed`；當日 success 但 catchup 沒補齊（`catchup_incomplete`）也留言；有日誌卻沒有任何 run 列（worker 沒能啟動）也留言。
 - `news`：最新的 `logs/news-*.log` 已超過 6 小時（連續 3 次）沒有更新。
 - `news_llm`：`stock.db` 最近 3 批判讀都是 `pending`；或 24 小時內最近 3 筆 `run_type=news_llm` 都是 `failed`（`running` 超過 90 分鐘也算）；或 news 日誌（今昨兩天的檔）24 小時內最後 3 個 `news_llm_exit=` 都是 `1`／`wrapper_error`（涵蓋表不存在等不寫 run 的失敗）。後兩者合為一則 `news_llm_failed` 留言；限 24 小時是為了 news 停擺後不再每天就舊失敗留言，停擺本身由上一條 `news` 判定。
+- `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `claude -p` 認證失敗（`not_logged_in`）的批次，判定與處置見 [§6.7](#67-容器內的-claude-與-gh-認證env)。
+- `gh_auth`：每次執行先讀一次 repo，GitHub 拒絕 gh 的認證（401 或沒有 token）時記 `gh_auth_failed`、當次異常不留言，gh 恢復後補留一則，見 [§6.7](#67-容器內的-claude-與-gh-認證env)。
 - 資料不變量（每輪、不分時段，唯讀查 `stock.db`；各條數字印在 stdout，`--dry-run` 可看）：
   - `invariant_future_date`：`market_bars` 最新 `trading_date` 晚於台北今日。
   - `invariant_bar_provenance`：最新 `trading_date` 的 `market_bars` 有 `source` 為 `unknown`／空，或 `data_as_of` 為空。
@@ -163,7 +165,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
     2. 清單是暫時不完整時（例如官方 payload 截斷），下一次 daily 同步成功後自動恢復，不需處理。
     3. 核對官方公告確認真的有大量下市或轉市時，停用排程，執行 `instruments repair --apply --max-status-share <比例>`，再恢復排程；比例、依據與輸出記在該 Issue。修正資料前先備份 `stock.db`（[§2.1](#21-安全升級與復原順序)）。`market_bars` 不存在或沒有資料時前兩條印 `skip`，`news_llm_results` 不存在時第三條印 `skip`，都不留言。
 
-`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有已登入的 `gh`；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
+`daily`／`news` 還沒有任何日誌時不判定（排程尚未註冊）。執行環境：Git Bash、PATH 上有 `gh`（已登入，或有 `GH_TOKEN`，[§6.7](#67-容器內的-claude-與-gh-認證env)）；Python 只用來唯讀查 DB（找不到時跳過 daily 結果、`news_llm` 與資料不變量的 DB 檢查，日誌檢查照做），預設發佈 checkout 的 `.venv`。以下命令在發佈 checkout 執行：
 
 | 動作 | 命令 |
 | --- | --- |
@@ -174,7 +176,7 @@ collect 只因**核心**來源的 warning 變 `partial`：日行情、`MI_INDEX`
 | 移除 | `powershell -ExecutionPolicy Bypass -File tools/ops/Register-Watchdog.ps1 -Unregister` |
 | 手動判定 | `bash tools/ops/watchdog.sh --dry-run`（只輸出將留的言與資料不變量的數字） |
 
-工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`invariants_check_failed`，不記 `schedules_ok`。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
+工作以目前使用者、Interactive logon、隱藏執行，登入時才跑；同時只跑一個，10 分鐘逾時。日誌 `<資料目錄>/logs/watchdog.log`，每列為 UTC 時間、事件、`key=value` 與說明，沒有異常時記 `schedules_ok`；異常留言（每日一則）的頻率限制以此日誌判斷。同一時間只跑一個：Python 以 job 的同一套檔案鎖（`python -m worker.job lock`）持有 `<資料目錄>/locks/watchdog.lock` 並把腳本當子程序再跑一次，鎖由作業系統在 Python 結束時釋放（被強制終止也一樣，子程序一起結束），下一輪不必等；另一輪仍在跑時記 `locked` 並略過。找不到 Python 時不取鎖（排程的「前一次未結束不另起」仍擋重疊）。舊版的 `logs/watchdog.lock/` 目錄不再使用；DB 檢查因缺 Python 或讀 DB 失敗而沒跑時記 `python_missing`／`daily_check_failed`／`news_llm_check_failed`／`llm_auth_check_failed`／`invariants_check_failed`，不記 `schedules_ok`；gh 被拒時記 `gh_auth_failed`、沒能留的異常記 `anomaly_not_commented`，讀 repo 因其他原因失敗記 `gh_probe_failed`（照常嘗試留言）。腳本路徑寫在工作參數裡，腳本改名或搬移後要在發佈 checkout 重跑「註冊或更新」。舊版（含開統籌）的日誌 `logs/ensure_coordinator.log` 不再寫入。
 
 ### 6.2 daily／news 工作的註冊與管理
 
@@ -264,7 +266,7 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 
 ### 6.6 scheduler 容器的排程（serve）
 
-`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定（#335）、`claude`／`gh` 的認證（#337）與正式切換（#342）不在這裡。
+`python -m worker.cli serve`（[`backend/worker/serve.py`](../backend/worker/serve.py)，#336）是 scheduler 容器的常駐命令，在[後端 image](#1-工作目錄環境與啟停) 內取代工作排程器：APScheduler 依台北時間啟動與 [§6.2](#62-dailynews-工作的註冊與管理) 註冊相同的命令，每次一個子程序。compose 設定（#335）與正式切換（#342）不在這裡；`claude`／`gh` 的認證見 [§6.7](#67-容器內的-claude-與-gh-認證env)。
 
 | 工作 | 觸發（預設） | 命令 |
 | --- | --- | --- |
@@ -282,3 +284,24 @@ candidate_notes 步驟呼叫 `worker.candidate_notes.run_candidate_notes_batch(�
 - 其他選項：`--data-dir`、`--log-dir`、`--claude-cli`、`--daily-min-free-memory-gb`、`--news-min-free-memory-gb`、`--daily-time-limit-minutes`、`--news-time-limit-minutes`（交給 job）。只在 Linux 執行，其他系統 exit 69。
 
 **切換前提**（#342，PR #346 review S1）：#333 起 job 只在 Linux 執行，工作排程器跑到含 #333 的 commit 時 daily、news、看門狗都以 69 結束，不寫日誌也不留言，排程會無聲停擺。所以工作排程器停用、scheduler 容器接手之前，發佈 checkout 不能拉到任何含 #333 的 commit（維持在 `release/v1` 或固定 tag）；切換步驟由 #342 處理。
+
+### 6.7 容器內的 claude 與 gh 認證（.env）
+
+容器內的 `claude -p`（news-llm、candidate_notes）與 `gh`（看門狗）不用互動登入，改讀 token（#337，使用者決定 [#1 6465043664](https://github.com/YiCheng0608/stock-lab/issues/1#issuecomment-6465043664)）。token 放在跑 compose 的 checkout 根目錄的 `.env`（正式排程是發佈 checkout），由使用者手動建立；`.env` 不進 Git（`.gitignore`），compose 以 `env_file` 讀它（#335）。repo 只有 [`.env.example`](../.env.example)：key 與註解，沒有值。agent 不讀、不建、不印 `.env` 與 token。
+
+| key | 用途與產生方式 |
+| --- | --- |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude 訂閱的一年期 token。在有瀏覽器的本機跑 `claude setup-token`（走與 `/login` 相同的瀏覽器授權，印出 token，不存檔；不要在 SSH 或容器裡跑），貼進 `.env`，到期日寫在註解。只能發 model request，需 Pro／Max／Team／Enterprise。`--bare` 不讀這個變數（news-llm 不用 `--bare`）。news-llm 的子程序環境移除 `CLAUDE_CODE_*` 時保留這一個（[NEWS_SPEC §5](NEWS_SPEC.md#5-ai-摘要與推論)）。 |
+| `GH_TOKEN` | GitHub fine-grained PAT，只給 YiCheng0608/stock-lab：Issues 讀寫，Pull requests、Actions、Metadata 唯讀；到期日寫在註解。`gh` 有 `GH_TOKEN` 時優先用它、不用已存的登入。 |
+| `TZ`、`STOCK_DATA_DIR` | image 已設 `Asia/Taipei`、`/data`，要改才寫。不要寫成空值：空的 `TZ` 是 UTC。 |
+
+不要設 `ANTHROPIC_API_KEY`／`ANTHROPIC_AUTH_TOKEN`：Claude Code 的認證優先序是 `ANTHROPIC_AUTH_TOKEN` > `ANTHROPIC_API_KEY` > apiKeyHelper > `CLAUDE_CODE_OAUTH_TOKEN` > `/login`，`-p` 下有 API key 一律使用；news-llm 與 candidate_notes 遇到就拒跑（[§3](#3-現有-worker-cli)）。以上依官方文件 [Authentication](https://code.claude.com/docs/en/authentication)、[Errors](https://code.claude.com/docs/en/errors)、[gh environment](https://cli.github.com/manual/gh_help_environment)、[gh exit codes](https://cli.github.com/manual/gh_help_exit-codes)（2026-10-29 讀）。
+
+- **auth error 的判定**：
+  - `claude -p`：呼叫失敗時，CLI 回應的 `result`、`api_error_status` 或 stderr 有 `not logged in`、`/login`、`please log in`、`failed to authenticate`、`authentication_failed`、`oauth token`、`invalid authentication credentials` 之一（不分大小寫），或有獨立的 `401`，就記 `not_logged_in`（`worker.news_llm.AUTH_ERROR_TEXT`）。涵蓋沒有 token 也沒有登入（`Not logged in · Please run /login`），以及 token 過期或被撤銷（`Failed to authenticate. API Error: 401 OAuth token has expired`、`Failed to authenticate: OAuth token revoked …`）。`not_logged_in` 停止本次 run：送出的那一批記 `pending`，其餘批次跳過（`stopped_after_not_logged_in`），下次執行重試。
+  - `gh`：exit code 4（需要認證，即沒有 token 也沒有登入），或 stderr 有 `HTTP 401`、`Bad credentials`、`gh auth login`。其他失敗（網路等）不算。
+- **看門狗的留言**（[§6.1](#61-排程看門狗)）：
+  - `llm_auth`：24 小時內 news_llm 或 candidate_notes 最近一次 run 有 `not_logged_in` 的批次。每台北日一則；之後一次 run 成功就不再留。
+  - `gh_auth`：看門狗每次執行先讀一次 repo（`gh api repos/YiCheng0608/stock-lab`，`--dry-run` 不讀）。被拒時看門狗無法用 gh 留言，所以每次記 `gh_auth_failed` 到 `watchdog.log` 與 stdout（`docker logs` 看得到）；當次其他異常記 `anomaly_not_commented`，不算已留言。gh 恢復後的第一次執行在 #1 留一則（每台北日一則），寫明被拒的期間、次數與期間沒能留言的異常；仍存在的異常同一輪照常留言。gh 一直被拒時，只有日誌看得到。
+- **沒有 `.env` 或 token 是空的**：程式照常執行，不會崩潰。`claude -p` 回 `Not logged in`，news-llm 與 candidate_notes 該批記 `pending`，run 記 `failed`，daily 與 news 的結果與結束碼不受影響（candidate_notes 見 [§6.3](#63-日誌與-run-記錄)）；`gh` 以 exit 4 結束，看門狗記 `gh_auth_failed`。
+- **換 token**：改 `.env` 後重建 scheduler 容器（`docker compose up -d --force-recreate scheduler`），容器才讀到新值。`pending` 的新聞由下一輪 news-llm 重試；`pending` 的候選說明 daily 不會重跑，以 `python -m worker.cli candidate-notes --date YYYY-MM-DD` 補（[§6.3](#63-日誌與-run-記錄)）。

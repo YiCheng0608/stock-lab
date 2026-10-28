@@ -1164,3 +1164,88 @@ def test_a_rejected_result_leaves_no_ai_block(db, fake, client, monkeypatch):
     assert client.get(f"{router.prefix}/news/{item.id}").json()["ai"] is None
     listed = client.get(f"{router.prefix}/news").json()["items"]
     assert [entry["ai"] for entry in listed] == [None]
+
+
+# Container authentication (#337) ---------------------------------------------------
+
+
+def test_the_oauth_token_reaches_the_cli_and_no_other_claude_code_variable(
+    db, fake, monkeypatch
+):
+    # The fake only records the variable names, never their values.
+    monkeypatch.setenv(news_llm.OAUTH_TOKEN_ENV, "fake-oauth-token")
+    _add_news(db, 1)
+    assert _run(db)["status"] == "success"
+    assert fake()[0]["leaked_env"] == ["CLAUDE_CODE_OAUTH_TOKEN"]
+    assert news_llm.child_env()[news_llm.OAUTH_TOKEN_ENV] == "fake-oauth-token"
+    assert "CLAUDE_CODE_SESSION_ID" not in news_llm.child_env()
+
+
+@pytest.mark.parametrize(
+    "result,stderr,envelope_status",
+    [
+        # The -p messages of code.claude.com/docs/en/errors (read 2026-10-29).
+        ("Not logged in · Please run /login", "", None),
+        ("Failed to authenticate. API Error: 401 OAuth token has expired", "", 401),
+        (
+            "Failed to authenticate: OAuth token revoked. Please log in again or"
+            " contact your administrator.",
+            "",
+            None,
+        ),
+        (
+            "Failed to authenticate: OAuth session expired and could not be refreshed",
+            "",
+            None,
+        ),
+        (
+            "Please run /login · API Error: 401 Invalid authentication credentials",
+            "",
+            None,
+        ),
+        ("", "", 401),
+        (None, "Error: authentication_failed", None),
+    ],
+)
+def test_an_auth_error_of_the_cli_is_not_logged_in(result, stderr, envelope_status):
+    if result is None:
+        cli = news_llm.CliResult(1, "not json", stderr)
+    else:
+        envelope = {"type": "result", "is_error": True, "result": result}
+        if envelope_status is not None:
+            envelope["api_error_status"] = envelope_status
+        cli = news_llm.CliResult(1, json.dumps(envelope), stderr)
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(cli)
+    assert caught.value.reason == "not_logged_in"
+    assert "not_logged_in" in news_llm.FATAL_REASONS
+
+
+@pytest.mark.parametrize(
+    "result,reason",
+    [
+        ("Claude AI usage limit reached", "rate_limited"),
+        ("API Error: 529 Overloaded (request 4012)", "cli_error"),
+    ],
+)
+def test_other_cli_errors_are_not_taken_for_an_auth_error(result, reason):
+    envelope = {"type": "result", "is_error": True, "result": result}
+    with pytest.raises(LlmBatchError) as caught:
+        news_llm.parse_envelope(news_llm.CliResult(1, json.dumps(envelope), ""))
+    assert caught.value.reason == reason
+
+
+def test_an_expired_oauth_token_stops_the_run_and_leaves_the_batch_pending(
+    db, fake, monkeypatch
+):
+    items = _add_news(db, BATCH_SIZE + 1)
+    monkeypatch.setenv("FAKE_CLAUDE_MODES", "token_expired")
+    result = _run(db, limit=60)
+    assert result["status"] == "failed" and len(fake()) == 1
+    assert result["batches"][0]["reason"] == "not_logged_in"
+    assert result["skipped_batches"][0]["reason"] == "stopped_after_not_logged_in"
+    rows = _results(db)
+    assert {row.news_item_id for row in rows} == {
+        item.id for item in items[:BATCH_SIZE]
+    }
+    assert {row.llm_status for row in rows} == {"pending"}
